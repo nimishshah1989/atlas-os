@@ -1,0 +1,112 @@
+[project]
+name = "atlas-os"
+version = "0.1.0"
+description = "Atlas — Adaptive Technical Lens for Asset States. Indian wealth-management decision engine."
+requires-python = ">=3.11"
+dependencies = [
+    # Compute (per architecture 5.1)
+    # pandas-ta bumped 0.3.14b0 → 0.4.71b0 (Py 3.12 + NumPy 2 compat).
+    # empyrical 0.5.5 (Quantopian) is dead on Py 3.12 — uses removed
+    # configparser.SafeConfigParser. Swapped to empyrical-reloaded which is
+    # the maintained fork: same module name `import empyrical`, same API.
+    # See prds/M2_BUILD_PLAN.md §1 R1.
+    "polars>=0.20,<2.0",
+    "pandas>=2.1",
+    "pandas-ta==0.4.71b0",
+    "empyrical-reloaded>=0.5.10",
+    "scipy>=1.11",
+    "numpy>=1.26",
+
+    # Database (per architecture 2.4)
+    "sqlalchemy>=2.0,<3.0",
+    "psycopg2-binary>=2.9,<3.0",
+    "alembic>=1.13",
+
+    # Config + serialization
+    "python-dotenv>=1.0",
+    "pyyaml>=6.0",
+    "pydantic>=2.5",
+    "pydantic-settings>=2.0",
+
+    # Logging
+    "structlog>=24.0",
+
+    # Serving (FastAPI thin layer per architecture 10.1; UI is Streamlit)
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+
+    # External data sources used during M0 gap-fill / M1 reference checks
+    "yfinance>=0.2",
+    "requests>=2.31",
+
+    # Notification (per architecture 7.4)
+    "httpx>=0.26",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=4.1",
+    "ruff>=0.4",
+    "pyright>=1.1",
+    "ipython>=8.0",
+]
+
+ui = [
+    "streamlit>=1.32",
+    "plotly>=5.18",
+    "altair>=5.2",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["atlas*"]
+exclude = ["tests*", "scripts*", "docs*", "migrations*", "src*"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+exclude = [
+    ".venv",
+    "src/atlas_os",     # legacy M0-inventory module — preserved as-is
+    "migrations/versions",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "RUF", "S"]
+ignore = [
+    "S101",   # assert allowed in tests + DoD checks
+    "S608",   # SQL formatted strings — bound parameters used at write time
+    "S110",   # try-except-pass used for defensive connection cleanup
+    "RUF001", # mathematical unicode (σ) in string literals is intentional
+    "RUF002", # mathematical unicode (×, −, σ, –) in docstrings is intentional
+    "RUF003", # mathematical unicode (×) in comments is intentional
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S106"]
+"scripts/**" = ["S101", "E501"]
+"atlas/validation/m1_data_quality.py" = ["E501"]
+"atlas/preflight.py" = ["E501"]
+
+[tool.pyright]
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "standard"
+include = ["atlas", "tests", "scripts"]
+exclude = [".venv", "src/atlas_os", "migrations/versions"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-ra --strict-markers --strict-config"
+markers = [
+    "unit: fast, no I/O",
+    "integration: requires database",
+    "validation: tier 2/3/4 hand-validation checks",
+]

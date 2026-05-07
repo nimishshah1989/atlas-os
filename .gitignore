@@ -1,0 +1,26 @@
+# Secrets & certs
+.env
+global-bundle.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Outputs (regenerated each run)
+output/
+
+# Tool-internal state (not project code)
+.claude/
+.ruflo/

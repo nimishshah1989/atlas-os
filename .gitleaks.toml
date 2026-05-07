@@ -1,0 +1,10 @@
+[allowlist]
+description = "Project infrastructure identifiers that are not secrets"
+regexes = [
+    # RDS instance hostname — not a password; just the AWS-generated instance name
+    "jip-data-engine\\.ctay2iewomaj\\.ap-south-1\\.rds\\.amazonaws\\.com",
+]
+paths = [
+    ".env.example",
+    "docs/",
+]
