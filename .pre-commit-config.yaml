@@ -32,8 +32,8 @@ repos:
         stages: [commit-msg]
         additional_dependencies: ['@commitlint/config-conventional']
 
-  # Local hook: pragma-coverage gate (FIX #4).
-  # Requires nimish-os installed at ~/.claude/ (run claude-config/install.sh).
+  # Local hook: pragma-coverage gate.
+  # Requires the global gates installed at ~/.claude/gates/.
   # entry uses bash -c so $HOME expands at run time (pre-commit does not
   # do shell expansion of ~ or $VAR in entry strings).
   - repo: local
