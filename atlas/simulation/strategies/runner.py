@@ -82,7 +82,7 @@ def _compute_total_value(
     """Compute portfolio total value from holdings + current prices."""
     if not holdings:
         return base_value
-    total = sum(prices.get(iid, h.notional_value) for iid, h in holdings.items())
+    total = sum(prices.get(iid) or h.notional_value for iid, h in holdings.items())
     return total if total > 0 else base_value
 
 

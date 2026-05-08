@@ -3119,3 +3119,948 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{
+  "ts": "2026-05-08T18:33:51Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/regime/SignalGauge.tsx",
+  "lines_changed": 34,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:01:25Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/020_create_strategy_fm_custom_portfolios.py",
+  "lines_changed": 53,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T16:29:54Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/specs/2026-05-08-atlas-m7-simulation-platform-design.md",
+  "lines_changed": 19,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T16:30:08Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/specs/2026-05-08-atlas-m7-simulation-platform-design.md",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T16:30:15Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/specs/2026-05-08-atlas-m7-simulation-platform-design.md",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T16:30:25Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/specs/2026-05-08-atlas-m7-simulation-platform-design.md",
+  "lines_changed": 10,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T16:30:47Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/specs/2026-05-08-atlas-m7-simulation-platform-design.md",
+  "lines_changed": 17,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T16:30:57Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/specs/2026-05-08-atlas-m7-simulation-platform-design.md",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T16:31:26Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/specs/2026-05-08-atlas-m7-simulation-platform-design.md",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T16:32:45Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/specs/2026-05-08-atlas-m7-simulation-platform-design.md",
+  "lines_changed": 55,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T16:39:03Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-08-atlas-m7-phase1-2-infra-strategy-engine.md",
+  "lines_changed": 2969,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T16:44:13Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/ui/TimeRangeToggle.tsx",
+  "lines_changed": 56,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T16:44:21Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/ui/BenchmarkSelector.tsx",
+  "lines_changed": 57,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T16:44:47Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/ui/Sparkline.tsx",
+  "lines_changed": 66,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T16:45:09Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/ui/StateTimeline.tsx",
+  "lines_changed": 87,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T16:45:26Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/ui/DeltaBadge.tsx",
+  "lines_changed": 26,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T16:45:31Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/ui/Commentary.tsx",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T16:45:54Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/ui/LineChart.tsx",
+  "lines_changed": 101,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T16:47:45Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/013_create_strategy_configs.py",
+  "lines_changed": 35,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T16:47:51Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/014_create_strategy_paper_portfolios.py",
+  "lines_changed": 39,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T16:47:57Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/015_create_strategy_paper_trades.py",
+  "lines_changed": 40,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T16:48:04Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/016_create_strategy_paper_performance.py",
+  "lines_changed": 39,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T16:53:02Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/015_create_strategy_paper_trades.py",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T16:53:07Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/016_create_strategy_paper_performance.py",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T16:53:14Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/014_create_strategy_paper_portfolios.py",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T16:58:00Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/ui/LineChart.tsx",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:00:59Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/chunks/chunk-22-25-approach.md",
+  "lines_changed": 53,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:01:02Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/017_create_strategy_overlap_daily.py",
+  "lines_changed": 44,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:01:09Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/018_create_strategy_backtest_results.py",
+  "lines_changed": 48,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:01:16Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/regime/RegimeHeadline.tsx",
+  "lines_changed": 71,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:01:17Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/019_create_strategy_optimization_runs.py",
+  "lines_changed": 50,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:01:58Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/regime/RegimeHistoryTimeline.tsx",
+  "lines_changed": 108,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:02:26Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/regime/BreadthCategory.tsx",
+  "lines_changed": 86,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:03:07Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/regime/BreadthIndicators.tsx",
+  "lines_changed": 281,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:03:31Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/page.tsx",
+  "lines_changed": 60,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:04:11Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/.forge/knowledge/raw/atlas-os/chunk-22-25-learnings.md",
+  "lines_changed": 28,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:04:54Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/playwright/smoke.spec.ts",
+  "lines_changed": 69,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:06:41Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/chunks/chunk-M7-T3-approach.md",
+  "lines_changed": 35,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:06:57Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/unit/simulation/test_overlap.py",
+  "lines_changed": 50,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:11:52Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/eslint.config.mjs",
+  "lines_changed": 14,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:11:52Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/core/overlap.py",
+  "lines_changed": 32,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:15:11Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/eslint.config.mjs",
+  "lines_changed": 10,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:15:29Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/eslint.config.mjs",
+  "lines_changed": 19,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:16:34Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/.forge/knowledge/raw/atlas-os/chunk-M7-T3-learnings.md",
+  "lines_changed": 21,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:20:52Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/unit/simulation/test_walk_forward.py",
+  "lines_changed": 59,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:21:30Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/backtest/walk_forward.py",
+  "lines_changed": 75,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:23:14Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/unit/simulation/test_walk_forward.py",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:23:20Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/backtest/walk_forward.py",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:25:50Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/chunks/chunk-M7-T4-approach.md",
+  "lines_changed": 46,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:26:08Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/.forge/knowledge/raw/atlas-os/chunk-M7-T4-learnings.md",
+  "lines_changed": 35,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:28:11Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/validate_m4.py",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:29:08Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/validate_m4.py",
+  "lines_changed": 21,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:33:00Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/chunks/chunk-M7-T5-approach.md",
+  "lines_changed": 40,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:33:22Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/core/signal_adapter.py",
+  "lines_changed": 181,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:41:35Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/core/signal_adapter.py",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:42:12Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/core/signal_adapter.py",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:42:28Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/core/signal_adapter.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:43:32Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/core/signal_adapter.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:43:39Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/core/signal_adapter.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:46:19Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/chunks/chunk-M7-T6-approach.md",
+  "lines_changed": 39,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:46:41Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/unit/simulation/test_paper_trader.py",
+  "lines_changed": 169,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:47:40Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/db.ts",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T17:53:22Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/core/paper_trader.py",
+  "lines_changed": 413,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:01:28Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/validate_m4.py",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:10:22Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/time-range.ts",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:10:23Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/.forge/knowledge/raw/atlas-os/chunk-M7-T6-learnings.md",
+  "lines_changed": 42,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:10:32Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/ui/TimeRangeToggle.tsx",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:10:38Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/ui/TimeRangeToggle.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:10:42Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/page.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:11:06Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/core/paper_trader.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:11:11Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/core/paper_trader.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:11:16Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/core/paper_trader.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:12:35Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/core/paper_trader.py",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:12:44Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/core/paper_trader.py",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:12:52Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/core/paper_trader.py",
+  "lines_changed": 9,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:13:02Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/unit/simulation/test_paper_trader.py",
+  "lines_changed": 28,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:13:40Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/core/paper_trader.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:14:19Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/core/paper_trader.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:15:23Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/strategies/configs/stocks_momentum_aggressive.yaml",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:15:24Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/strategies/configs/stocks_momentum_moderate.yaml",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:15:25Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/strategies/configs/stocks_momentum_conservative.yaml",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:15:26Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/strategies/configs/stocks_sector_rotation_concentrated.yaml",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:15:27Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/strategies/configs/stocks_sector_rotation_diversified.yaml",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:15:32Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/strategies/configs/blend_momentum_60_40.yaml",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:15:34Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/strategies/configs/blend_balanced_50_50.yaml",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:15:35Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/strategies/configs/blend_etf_led.yaml",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:15:36Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/strategies/configs/blend_defensive.yaml",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:15:37Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/strategies/configs/blend_sector_rotation_etf.yaml",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:15:42Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/strategies/configs/fund_l1_dominant.yaml",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:15:43Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/strategies/configs/fund_l2_dominant.yaml",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:15:44Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/strategies/configs/fund_l3_dominant.yaml",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:15:45Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/strategies/configs/fund_balanced.yaml",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:15:46Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/strategies/configs/fund_defensive.yaml",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:16:40Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/chunks/chunk-M7-T7-approach.md",
+  "lines_changed": 32,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:17:07Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/.forge/knowledge/raw/atlas-os/chunk-M7-T7-learnings.md",
+  "lines_changed": 21,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:18:36Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/chunks/chunk-M7-T8-approach.md",
+  "lines_changed": 32,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:18:49Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/unit/simulation/test_loader.py",
+  "lines_changed": 75,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:19:14Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/strategies/loader.py",
+  "lines_changed": 137,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:24:57Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/.forge/knowledge/raw/atlas-os/chunk-M7-T8-learnings.md",
+  "lines_changed": 29,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:28:40Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/chunks/chunk-M7-T9-approach.md",
+  "lines_changed": 46,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:29:10Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/strategies/runner.py",
+  "lines_changed": 235,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:32:00Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/.forge/knowledge/raw/atlas-os/chunk-M7-T9-learnings.md",
+  "lines_changed": 22,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:32:34Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/strategies/runner.py",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:33:19Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/simulation/strategies/runner.py",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-08T18:33:44Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/regime-narrative.ts",
+  "lines_changed": 130,
+  "session_id": "unknown",
+  "schema_version": 1
+}
