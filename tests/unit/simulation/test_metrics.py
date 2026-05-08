@@ -272,13 +272,13 @@ class TestBackfillDailyReturnsInterface:
 
         mock_conn = MagicMock()
         mock_conn.execute.return_value = mock_result
-        mock_conn.__enter__ = lambda s: s
+        mock_conn.__enter__ = lambda _: mock_conn
         mock_conn.__exit__ = MagicMock(return_value=False)
 
         mock_engine = MagicMock()
 
         with patch("atlas.simulation.core.metrics.open_compute_session") as mock_ctx:
-            mock_ctx.return_value.__enter__ = lambda s: mock_conn
+            mock_ctx.return_value.__enter__ = lambda _: mock_conn
             mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
             result = backfill_daily_returns(mock_engine, date(2026, 5, 8))
 
@@ -293,13 +293,13 @@ class TestBackfillDailyReturnsInterface:
 
         mock_conn = MagicMock()
         mock_conn.execute.return_value = mock_result
-        mock_conn.__enter__ = lambda s: s
+        mock_conn.__enter__ = lambda _: mock_conn
         mock_conn.__exit__ = MagicMock(return_value=False)
 
         mock_engine = MagicMock()
 
         with patch("atlas.simulation.core.metrics.open_compute_session") as mock_ctx:
-            mock_ctx.return_value.__enter__ = lambda s: mock_conn
+            mock_ctx.return_value.__enter__ = lambda _: mock_conn
             mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
             result = backfill_daily_returns(mock_engine, date(2026, 5, 8))
 
@@ -315,7 +315,7 @@ class TestBackfillDailyReturnsInterface:
         mock_conn.execute.return_value = mock_result
 
         with patch("atlas.simulation.core.metrics.open_compute_session") as mock_ctx:
-            mock_ctx.return_value.__enter__ = lambda s: mock_conn
+            mock_ctx.return_value.__enter__ = lambda _: mock_conn
             mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
             backfill_daily_returns(MagicMock(), date(2026, 5, 8))
 
