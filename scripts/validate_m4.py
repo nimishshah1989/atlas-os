@@ -325,8 +325,9 @@ def _tier2_holdings(engine) -> None:
 
         holdings["weight"] = holdings["weight"].astype(float)
 
+        # Per methodology §12.3: weak = {Weak, Laggard} only — not Average.
         strong_states = {"Leader", "Strong", "Emerging"}
-        weak_states = {"Average", "Weak", "Laggard"}
+        weak_states = {"Weak", "Laggard"}
 
         hand_strong = float(holdings[holdings["rs_state"].isin(strong_states)]["weight"].sum())
         hand_weak = float(holdings[holdings["rs_state"].isin(weak_states)]["weight"].sum())
@@ -506,6 +507,12 @@ def _tier3_fund_states(engine) -> None:
 
     for _, row in sample.iterrows():
         prefix = f"fund_state/{row['mstar_id']}/{row['date']}"
+
+        # During market dislocation periods (e.g., COVID 2020), fund_states
+        # is overridden to DISLOCATION_SUSPENDED while fund_metrics retains
+        # the underlying nav_state. Skip the cross-check for those rows.
+        if row["nav_state"] == "DISLOCATION_SUSPENDED":
+            continue
 
         # Check the upstream nav_state in fund_metrics matches
         with open_compute_session(engine) as conn:
