@@ -153,18 +153,22 @@ def assemble_fund_states(
             rows = []
             for d in trading_dates:
                 nav_s = nav_lookup.get(d)
+                # Skip rows with no nav_state — table column is NOT NULL.
+                if nav_s is None:
+                    continue
 
-                # Most recent monthly disclosure on or before d
+                # Most recent monthly disclosure on or before d.
                 avail = monthly_sorted[monthly_sorted["as_of_date"] <= d]
                 if not avail.empty:
                     latest = avail.iloc[-1]
-                    comp_s = latest["composition_state"]
-                    hold_s = latest["holdings_state"]
+                    comp_s = latest["composition_state"] or "NO_DISCLOSURE"
+                    hold_s = latest["holdings_state"] or "NO_DISCLOSURE"
                     comp_as_of = latest["as_of_date"]
                     hold_as_of = latest["as_of_date"]
                 else:
-                    comp_s = None
-                    hold_s = None
+                    # Pre-disclosure dates — schema requires non-null sentinel.
+                    comp_s = "NO_DISCLOSURE"
+                    hold_s = "NO_DISCLOSURE"
                     comp_as_of = None
                     hold_as_of = None
 

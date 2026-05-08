@@ -81,7 +81,7 @@ def load_stock_states_at_date(
                 instrument_id::text AS instrument_id,
                 rs_state
             FROM atlas.atlas_stock_states_daily
-            WHERE instrument_id = ANY(%(ids)s)
+            WHERE instrument_id::text = ANY(%(ids)s)
               AND date <= %(date)s
             ORDER BY instrument_id, date DESC
             """,
