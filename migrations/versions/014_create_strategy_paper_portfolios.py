@@ -1,5 +1,9 @@
 """create strategy_paper_portfolios
 
+Point-in-time current holdings snapshot — one active position per instrument per strategy.
+Rows are deleted on exit (not updated). UNIQUE(strategy_id, instrument_id) enforces
+"one active position" semantics — valid because exits DELETE rows before re-entry INSERTs.
+
 Revision ID: 014
 Revises: 013
 Create Date: 2026-05-08

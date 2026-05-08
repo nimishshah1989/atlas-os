@@ -29,7 +29,8 @@ def upgrade() -> None:
             notional_value NUMERIC(20,4) NOT NULL,
             trade_date DATE NOT NULL,
             regime_at_trade TEXT NOT NULL,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
         );
         CREATE INDEX idx_paper_trades_strategy_date
             ON atlas.strategy_paper_trades(strategy_id, trade_date DESC);
