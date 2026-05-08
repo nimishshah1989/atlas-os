@@ -68,7 +68,7 @@ export function LineChart({
               fontSize: '11px',
               color: 'var(--color-ink-primary)',
             }}
-            labelFormatter={formatDate}
+            labelFormatter={(label) => typeof label === 'string' ? formatDate(label) : label}
           />
           {refLineY !== undefined && (
             <ReferenceLine y={refLineY} stroke="var(--color-paper-rule)" strokeDasharray="3 3" />
