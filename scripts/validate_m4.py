@@ -262,8 +262,11 @@ def _tier2_composition(engine) -> None:
         merged = holdings.merge(sector_states, left_on="sector", right_on="sector_name", how="left")
         merged["weight"] = merged["weight"].astype(float)
 
-        # Recompute aligned (Overweight) + avoid AUM
-        hand_aligned = float(merged[merged["sector_state"] == "Overweight"]["weight"].sum())
+        # Recompute aligned (Overweight + Neutral) + avoid AUM, matching
+        # production code in lens_composition.compute_lens2_for_date.
+        hand_aligned = float(
+            merged[merged["sector_state"].isin(["Overweight", "Neutral"])]["weight"].sum()
+        )
         hand_avoid = float(merged[merged["sector_state"] == "Avoid"]["weight"].sum())
 
         _check(f"{prefix}/aligned_aum_pct", row["aligned_aum_pct"], hand_aligned, atol=2e-2)
