@@ -44,7 +44,7 @@ def _get_regime(engine: Engine, today: date) -> str:
     with open_compute_session(engine) as conn:
         regime = conn.execute(
             text(
-                "SELECT regime FROM atlas.atlas_market_regime_daily "
+                "SELECT regime_state FROM atlas.atlas_market_regime_daily "
                 "WHERE date = :d ORDER BY created_at DESC LIMIT 1"
             ),
             {"d": today},
@@ -68,10 +68,10 @@ def _get_prices_today(engine: Engine, today: date) -> dict[str, float]:
     """Fetch closing prices for today from JIP for use in trade notional values."""
     with open_compute_session(engine) as conn:
         rows = conn.execute(
-            text("SELECT instrument_id, close FROM de_ohlcv_daily WHERE date = :d"),
+            text("SELECT instrument_id, close FROM de_equity_ohlcv WHERE date = :d"),
             {"d": today},
         ).fetchall()
-    return {r.instrument_id: float(r.close) for r in rows if r.close is not None}
+    return {str(r.instrument_id): float(r.close) for r in rows if r.close is not None}
 
 
 def _compute_total_value(

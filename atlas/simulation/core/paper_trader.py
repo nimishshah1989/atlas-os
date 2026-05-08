@@ -221,9 +221,9 @@ def fetch_decisions(conn: Connection, tier: str, today: date) -> pd.DataFrame:
 
     table = table_map[tier]
 
-    if tier in ("stocks", "etf"):
+    if tier == "stocks":
         query = text(f"""
-            SELECT d.instrument_id, s.rs_state,
+            SELECT d.instrument_id::text AS instrument_id, s.rs_state,
                    d.transition_trigger, d.breakout_trigger,
                    d.exit_market_riskoff, d.exit_rs_deteriorate,
                    d.exit_momentum_collapse, d.exit_volume_distrib,
@@ -233,12 +233,24 @@ def fetch_decisions(conn: Connection, tier: str, today: date) -> pd.DataFrame:
                 ON s.instrument_id = d.instrument_id AND s.date = d.date
             WHERE d.date = :today
         """)
+    elif tier == "etf":
+        query = text("""
+            SELECT d.ticker AS instrument_id, s.rs_state,
+                   d.transition_trigger, d.breakout_trigger,
+                   d.exit_market_riskoff, d.exit_rs_deteriorate,
+                   d.exit_momentum_collapse, d.exit_sector_avoid, d.exit_stop_loss
+            FROM atlas.atlas_etf_decisions_daily d
+            JOIN atlas.atlas_etf_states_daily s
+                ON s.ticker = d.ticker AND s.date = d.date
+            WHERE d.date = :today
+        """)
     else:
-        query = text(f"""
-            SELECT instrument_id,
-                   entry_trigger, exit_trigger,
-                   reduce_trigger, add_trigger
-            FROM atlas.{table}
+        query = text("""
+            SELECT mstar_id AS instrument_id,
+                   entry_trigger,
+                   exit_market_riskoff, exit_composition_misaligned,
+                   exit_holdings_weak, exit_nav_deteriorate
+            FROM atlas.atlas_fund_decisions_daily
             WHERE date = :today
         """)
 
