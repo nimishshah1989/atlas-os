@@ -99,7 +99,7 @@ def build_stock_etf_signal_matrix(
             instruments=[],
         )
 
-    missing_price = df[df["price"].isna()]["instrument_id"].unique()
+    missing_price = df.loc[df["price"].isna(), "instrument_id"].unique()
     if len(missing_price) > 0:
         log.warning(
             "signal_adapter_missing_prices",
@@ -168,7 +168,7 @@ def build_fund_signal_matrix(
             instruments=[],
         )
 
-    missing_nav = df[df["price"].isna()]["instrument_id"].unique()
+    missing_nav = df.loc[df["price"].isna(), "instrument_id"].unique()
     if len(missing_nav) > 0:
         log.warning("signal_adapter_missing_nav", instruments=list(missing_nav))
     df = df.dropna(subset=["price"])
