@@ -239,12 +239,12 @@ def run_lens3(
             """
             SELECT DISTINCT as_of_date
             FROM public.de_mf_holdings
-            WHERE (%s IS NULL OR as_of_date >= %s)
-              AND (%s IS NULL OR as_of_date <= %s)
+            WHERE (%(start)s::date IS NULL OR as_of_date >= %(start)s)
+              AND (%(end)s::date   IS NULL OR as_of_date <= %(end)s)
             ORDER BY as_of_date
             """,
             conn,
-            params=[start_date, start_date, end_date, end_date],
+            params={"start": start_date, "end": end_date},
         )
     unique_dates = sorted(disclosure_dates_df["as_of_date"].tolist())
 

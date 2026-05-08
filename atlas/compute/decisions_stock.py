@@ -258,15 +258,20 @@ def compute_entry_triggers(
     )
 
     # --- BREAKOUT trigger ---
-    # Load 63-day high from stock metrics
+    # Close prices live in public.de_equity_ohlcv (not in atlas_stock_metrics_daily).
+    # ema_20_stock is in atlas_stock_metrics_daily.
     lookback_63d = target_date - timedelta(days=100)  # calendar overshoots
     with open_compute_session(engine) as conn:
         price_data = pd.read_sql(
             """
-            SELECT instrument_id::text AS instrument_id,
-                   close, ema_20_stock
-            FROM atlas.atlas_stock_metrics_daily
-            WHERE date = %(target)s
+            SELECT
+                m.instrument_id::text AS instrument_id,
+                p.close,
+                m.ema_20_stock
+            FROM atlas.atlas_stock_metrics_daily m
+            LEFT JOIN public.de_equity_ohlcv p
+                ON p.instrument_id = m.instrument_id AND p.date = m.date
+            WHERE m.date = %(target)s
             """,
             conn,
             params={"target": target_date},
@@ -275,7 +280,7 @@ def compute_entry_triggers(
             """
             SELECT instrument_id::text AS instrument_id,
                    MAX(close) AS high_63d
-            FROM atlas.atlas_stock_metrics_daily
+            FROM public.de_equity_ohlcv
             WHERE date BETWEEN %(start)s AND %(end)s
               AND close IS NOT NULL
             GROUP BY instrument_id

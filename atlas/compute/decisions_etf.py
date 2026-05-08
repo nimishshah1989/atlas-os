@@ -286,14 +286,20 @@ def compute_etf_entry_triggers(
         & (df["volume_state"] == "Accumulation")
     )
 
-    # Breakout trigger
+    # Breakout trigger — close prices live in public.de_etf_ohlcv,
+    # ema_20_etf lives in atlas_etf_metrics_daily.
     lookback_63d = target_date - timedelta(days=100)
     with open_compute_session(engine) as conn:
         price_data = pd.read_sql(
             """
-            SELECT ticker, close, ema_20_etf
-            FROM atlas.atlas_etf_metrics_daily
-            WHERE date = %(target)s
+            SELECT
+                m.ticker,
+                p.close,
+                m.ema_20_etf
+            FROM atlas.atlas_etf_metrics_daily m
+            LEFT JOIN public.de_etf_ohlcv p
+                ON p.ticker = m.ticker AND p.date = m.date
+            WHERE m.date = %(target)s
             """,
             conn,
             params={"target": target_date},
@@ -301,7 +307,7 @@ def compute_etf_entry_triggers(
         high_63d = pd.read_sql(
             """
             SELECT ticker, MAX(close) AS high_63d
-            FROM atlas.atlas_etf_metrics_daily
+            FROM public.de_etf_ohlcv
             WHERE date BETWEEN %(start)s AND %(end)s AND close IS NOT NULL
             GROUP BY ticker
             """,
