@@ -444,10 +444,9 @@ def compute_sector_breadth(
       ``close_approx > ema_50_stock``. Stocks with NULL ``ema_50_stock``
       (warm-up rows before 50 trading days) are excluded from numerator AND
       denominator.
-    * ``participation_rs`` — fraction with ``rs_1m_tier > 1.0``. Used as
-      "positive RS vs tier" per locked decision in M3 spec; the schema field
-      ``participation_rs`` is reused with a slightly looser definition (no
-      need for the full state classification at the breadth-measure layer).
+    * ``participation_rs`` — fraction with ``rs_1m_tier > 0``. ``rs_1m_tier``
+      is a DIFFERENCE (stock_ret − benchmark_ret), not a ratio, so the
+      "positive RS" cut is at 0 (outperforming the tier) not 1.0.
     * ``leadership_concentration`` — share of total ``rs_3m_tier`` magnitude
       held by the top-quintile constituents (top 20% of stocks by
       ``rs_3m_tier`` within the sector that day).
@@ -478,9 +477,11 @@ def compute_sector_breadth(
         .rename("participation_50")
     )
 
-    # ---- participation_rs (rs_1m_tier > 1.0) -------------------------------
+    # ---- participation_rs (rs_1m_tier > 0) ---------------------------------
+    # rs_1m_tier is a DIFFERENCE (stock_ret - benchmark_ret), not a ratio,
+    # so the "positive RS" cut is at 0 not 1.0.
     rs_work = work.dropna(subset=["rs_1m_tier"])
-    is_pos_rs = (rs_work["rs_1m_tier"] > 1.0).astype(int)
+    is_pos_rs = (rs_work["rs_1m_tier"] > 0).astype(int)
     p_rs = (
         is_pos_rs.groupby([rs_work["sector_name"], rs_work["date"]], observed=True)
         .mean()

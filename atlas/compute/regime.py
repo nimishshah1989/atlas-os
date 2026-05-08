@@ -243,7 +243,8 @@ def _compute_strength_breadth(df_stocks: pd.DataFrame) -> pd.DataFrame:
     * ``pct_in_strong_states`` — fraction of stocks with rs_state in
       {Leader, Strong, Emerging} per methodology §11.1 strength breadth.
     * ``pct_weinstein_pass`` — fraction with ``weinstein_gate_pass = True``.
-    * ``pct_stocks_rs_positive`` — fraction with ``rs_1m_tier > 1.0``.
+    * ``pct_stocks_rs_positive`` — fraction with ``rs_1m_tier > 0``
+      (rs_1m_tier is a difference, so positive means outperforming).
     * ``pct_stocks_momentum_positive`` — fraction with momentum_state in
       {Improving, Accelerating}.
     """
@@ -273,7 +274,7 @@ def _compute_strength_breadth(df_stocks: pd.DataFrame) -> pd.DataFrame:
 
     work["is_strong"] = work["rs_state"].isin(strong_set).astype(int)
     work["is_weinstein"] = work["weinstein_gate_pass"].fillna(False).astype(int)
-    work["is_rs_positive"] = (work["rs_1m_tier"] > 1.0).fillna(False).astype(int)
+    work["is_rs_positive"] = (work["rs_1m_tier"] > 0).fillna(False).astype(int)
     work["is_momentum_positive"] = work["momentum_state"].isin(momentum_pos).astype(int)
 
     grouped = work.groupby("date", observed=True)[
