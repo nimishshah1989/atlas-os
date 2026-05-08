@@ -131,6 +131,37 @@ strategy:
   rebalance_trigger: signal_change  # signal_change | weekly | monthly
 ```
 
+### Strategy Config Seeding
+
+`strategies/loader.py` exposes `populate_strategy_configs(engine=None) → int` — mirrors `atlas/universe/thresholds.py:populate_thresholds()` exactly. Called by the deploy runbook after each Alembic migration run (same cadence as `populate_thresholds`).
+
+```python
+def populate_strategy_configs(engine: Engine | None = None) -> int:
+    """Seed atlas.strategy_configs from configs/*.yaml. Idempotent.
+
+    ON CONFLICT (name) DO UPDATE SET config=EXCLUDED.config,
+    tier=EXCLUDED.tier, archetype=EXCLUDED.archetype,
+    variant=EXCLUDED.variant, updated_at=NOW().
+    Does NOT reset is_active — FM may have deactivated a strategy.
+    Returns count of configs upserted (always 15 on a clean run).
+    """
+    eng = engine or get_engine()
+    configs_dir = Path(__file__).parent / "configs"
+    yamls = sorted(configs_dir.glob("*.yaml"))
+    if len(yamls) != 15:
+        raise AssertionError(f"Expected 15 strategy YAMLs, found {len(yamls)}")
+    upserted = 0
+    with eng.begin() as conn:
+        for yml in yamls:
+            cfg = yaml.safe_load(yml.read_text())["strategy"]
+            conn.execute(insert_strategy_sql, {...})
+            upserted += 1
+    log.info("strategy_configs_seeded", count=upserted)
+    return upserted
+```
+
+Deploy sequence: `alembic upgrade head` → `populate_thresholds()` → `populate_strategy_configs()`. The 15 YAML files in `atlas/simulation/strategies/configs/` are the source of truth; `atlas.strategy_configs` is the runtime copy. Re-running is safe (idempotent upsert).
+
 ### Regime Stance Semantics
 
 | Value | On Risk-Off entry | Existing positions | New entries |
@@ -159,11 +190,14 @@ Bridges two DB schemas: JIP price data + Atlas signals.
 
 **Staleness guard (pre-flight, before any paper trading run):**
 ```python
-# SQLAlchemy 2.0 async pattern (matches atlas/compute/_session.py conventions)
+# Sync pattern — matches open_compute_session() in atlas/compute/_session.py
 from sqlalchemy import text
 
 # Abort if JIP data hasn't landed yet for today
-jip_max_date = await session.scalar(text("SELECT MAX(date) FROM de_ohlcv_daily"))
+with open_compute_session(engine) as conn:
+    jip_max_date = conn.execute(
+        text("SELECT MAX(date) FROM de_ohlcv_daily")
+    ).scalar()
 if jip_max_date < today:
     raise StaleJIPDataError(
         f"JIP data last updated {jip_max_date}, expected {today}. "
@@ -188,7 +222,7 @@ class SignalMatrix:
 
 ### 4.2 Backtest Engine (vectorbt)
 
-**Python/library compatibility note:** vectorbt 0.26.x is confirmed working on **Python 3.11**. It has known issues with NumPy 2.x on Python 3.12. This module must be deployed on Python 3.11. If the runtime is 3.12, use `bt` (https://pmorissette.github.io/bt/) as a drop-in backtest alternative — its API is similar; the engine.py adapter abstracts this boundary.
+**Python/library compatibility note:** vectorbt 0.26.x is confirmed working on **Python 3.11**. It has known issues with NumPy 2.x on Python 3.12. This module must be deployed on Python 3.11. If the runtime is 3.12, check vectorbt's release notes for a compatible version before reaching for an alternative — the `bt` library is NOT a drop-in; it uses a different API (`bt.Strategy`/`bt.Backtest.run()` vs `vbt.Portfolio.from_signals()`). If a swap is necessary, it requires an adapter layer that is out of scope for M7.
 
 ```python
 pf = vbt.Portfolio.from_signals(
@@ -216,16 +250,17 @@ pf = vbt.Portfolio.from_signals(
 **Available windows with 12M of signals:**
 Signal history of 12M → **4 OOS windows** (formula: (total_months - train_months - test_months) / slide_months + 1 = (12 - 6 - 3) / 1 + 1 = 4). With 18M → **10 OOS windows**. With slide=1M and test=3M, **consecutive OOS windows overlap by 2 months** (window 1: test months 7-9, window 2: months 8-10). This means Optuna trial scores are not fully independent — a strong month that appears in 3 windows contributes to 3 scores. Optuna's TPE sampler treats each trial's mean OOS Sharpe as a single objective without awareness of this serial correlation. Practical mitigation: `walk_forward.py` raises `InsufficientHistoryError` if `(end_date - start_date).days < 547` (≈18M). This yields ~10 OOS windows and materially dilutes single-month outlier effects. Require 18M of Atlas signal history before enabling the optimizer. More history = more reliable Optuna scoring.
 
-### 4.4 Paper Trading State Machine (nightly, async, separate from vectorbt)
+### 4.4 Paper Trading State Machine (nightly, **sync**, separate from vectorbt)
 
-`paper_trader.py` is fully async (`async def` throughout), matching `atlas/compute/_session.py` conventions. The nightly runner is an async coroutine invoked by the compute orchestration loop. All `await session.scalar(...)` calls in this section are valid async calls.
+`paper_trader.py` is **synchronous**, matching `atlas/compute/_session.py` conventions (psycopg2 + `open_compute_session()` context manager — no asyncpg, no asyncio). DB reads use SQLAlchemy `text()` with `conn.execute()`. Bulk writes use `execute_values` from `atlas.compute._session`. There is no performance reason for async here — paper trading is a nightly batch, not a web handler. All code examples in this section use sync patterns.
 
 **Preflight: Atlas decisions existence check (runs before position processing):**
 ```python
-decisions_today = await session.scalar(
-    text("SELECT COUNT(*) FROM atlas.atlas_stock_decisions_daily WHERE date = :d"),
-    {"d": today}
-)
+with open_compute_session(engine) as conn:
+    decisions_today = conn.execute(
+        text("SELECT COUNT(*) FROM atlas.atlas_stock_decisions_daily WHERE date = :d"),
+        {"d": today}
+    ).scalar()
 if decisions_today == 0:
     raise MissingAtlasDecisionsError(
         f"No stock decisions found for {today} — Atlas compute may have failed. "
@@ -272,11 +307,58 @@ Calculate Jaccard overlap for all 15×15 strategy pairs (set intersection on ins
   → atlas.strategy_overlap_daily
 ```
 
+### 4.4.1 Paper Trader Decomposition (testability requirement)
+
+`paper_trader.py` must expose discrete, unit-testable functions rather than one monolithic nightly pass:
+
+```python
+# atlas/simulation/core/paper_trader.py
+
+def load_current_holdings(conn, strategy_id: UUID) -> dict[str, Holding]:
+    """Read current atlas.strategy_paper_portfolios for one strategy."""
+
+def fetch_decisions(conn, tier: str, date: date) -> pd.DataFrame:
+    """One DB call per tier (stocks/ETF/fund), cached across strategies of same tier."""
+    # Called ONCE per tier per night — not 15 times.
+    # Returns full decision universe for that tier on `date`.
+
+def apply_strategy_filter(
+    decisions: pd.DataFrame,
+    config: StrategyConfig,
+    threshold_overrides: dict[str, float],
+) -> tuple[set[str], set[str]]:
+    """Pure function: decisions + config → (entry_set, exit_set). No DB calls.
+    Applies threshold_overrides in-memory. Fully testable with mocked DataFrames.
+    """
+
+def compute_trades(
+    current_holdings: dict[str, Holding],
+    entries: set[str],
+    exits: set[str],
+    regime: str,
+    config: StrategyConfig,
+) -> list[Trade]:
+    """Pure function: positions + signals + regime → trade list. No DB calls."""
+
+def write_trades(conn, trades: list[Trade], strategy_id: UUID, date: date) -> None:
+    """Bulk-insert to atlas.strategy_paper_trades via execute_values."""
+
+def update_holdings(conn, trades: list[Trade], strategy_id: UUID) -> None:
+    """Upsert to atlas.strategy_paper_portfolios."""
+
+def record_daily_performance(conn, strategy_id: UUID, date: date, ...) -> None:
+    """Write one row to atlas.strategy_paper_performance."""
+```
+
+`runner.py` orchestrates: calls `fetch_decisions` once per tier, then calls the above chain per strategy. The pure functions (`apply_strategy_filter`, `compute_trades`) have no DB dependency and cover the business logic — these are the primary test targets.
+
 ### 4.5 Regime-Split P&L
 
 **Nifty500 benchmark data source:** `atlas.atlas_benchmark_returns_cache` (already in DB, populated by M3+ compute pipeline). Use `benchmark_code = 'NIFTY500'`.
 
 **Naive-Atlas baseline definition:** For each date, include every instrument where `entry_trigger = TRUE` OR `investable = TRUE` in that date's Atlas decisions. Equal-weight across all such instruments. No threshold overrides — pure default Atlas output. This baseline answers: "did the strategy config add alpha beyond what raw Atlas investability produces?"
+
+**SignalMatrix → returns bridge:** `metrics.py` receives `pd.Series` of daily returns (indexed by date), not `SignalMatrix` arrays. The conversion point is `report.py`: extract `pf.daily_returns()` from the vectorbt `Portfolio` object → convert to `pd.Series` indexed by `pf.wrapper.index` (DatetimeIndex). `split_by_regime` receives this Series. For paper trading, daily returns come directly from `strategy_paper_performance.daily_return` (already a float per row) — load them with `pd.read_sql` into a `pd.Series(index=date, data=daily_return)`.
 
 ```python
 def split_by_regime(
@@ -306,18 +388,21 @@ This must execute before Optuna's first `create_study` call. Add to migration 01
 
 ```python
 OPTUNA_DB_URL = os.environ["ATLAS_DB_DIRECT_URL"]  # separate env var — direct psycopg2 URL
+# Embed search_path in URL (more reliable than engine_kwargs in Optuna 3.x):
+OPTUNA_STORAGE_URL = OPTUNA_DB_URL + "?options=-csearch_path%3Doptuna"
+
+STUDY_VERSION = "v1"  # increment to invalidate old studies when search space changes
 
 study = optuna.create_study(
-    study_name=f"atlas_{regime}_{archetype}",
+    study_name=f"atlas_{regime}_{archetype}_{STUDY_VERSION}",
     direction="maximize",               # maximize OOS Sharpe
     sampler=optuna.samplers.TPESampler(seed=42),
-    storage=optuna.storages.RDBStorage(
-        url=OPTUNA_DB_URL,
-        engine_kwargs={"connect_args": {"options": "-csearch_path=optuna"}},
-    ),
+    storage=optuna.storages.RDBStorage(url=OPTUNA_STORAGE_URL),
     load_if_exists=True,                # resume if study already exists
 )
 ```
+
+**Study versioning:** When the constrained search space changes (new threshold added, range changed), increment `STUDY_VERSION` in `regime_optimizer.py`. Optuna's `load_if_exists=True` will create a new study rather than loading the incompatible old one. Old studies remain in the DB but are no longer accessed. The FM-facing study name in `/optimizer` displays the version suffix.
 
 ### Constrained Search Space (5-8 thresholds per archetype)
 
@@ -371,12 +456,17 @@ atlas_threshold_history records: old_value (previous), new_value, changed_by="M7
   (atlas_threshold_history already exists — migration 007; columns: old_value, new_value, changed_by, change_reason)
   ↓
 atlas.strategy_optimization_runs.status = 'approved', approved_by, approved_at set
+  (approved_by = Supabase auth.uid() from the API Route Handler — not a free-text string)
   ↓
 Next Atlas compute uses updated thresholds (no code deploy needed — thresholds are
 read at compute time from atlas_thresholds, not hardcoded)
 ```
 
-**Rollback:** FM can revert within 7 days. `/optimizer` shows each promoted change with a "Revert" button. Revert reads `old_value` from the corresponding `atlas_threshold_history` row and writes it back to `atlas_thresholds.threshold_value`, appending a new history row with `change_reason = "reverted from M7 optimizer study #{id}"` and `changed_by = FM identity`.
+**Auth requirement (SEBI compliance):** The `/api/optimizer/[study_id]/approve` Route Handler must extract the FM's authenticated identity from Supabase `auth.uid()` and write it to `approved_by`. Unauthenticated requests return 403. `approved_by` must store a stable user identifier (Supabase user UUID), not a free-text string — this is the audit trail for SEBI algo threshold change logging.
+
+**Rollback:** FM can revert within 7 days. Revert is **server-enforced**, not just a UI button: the `/api/optimizer/[study_id]/revert` Route Handler checks `(NOW() - approved_at) <= INTERVAL '7 days'` before writing. If outside the window, the Route Handler returns 409 with `"Revert window has expired (7 days)"`. The "Revert" button is hidden in the UI after 7 days, but the server check is the enforcement layer.
+
+Revert reads `old_value` from the corresponding `atlas_threshold_history` row and writes it back to `atlas_thresholds.threshold_value`, appending a new history row with `change_reason = "reverted from M7 optimizer study #{id}"` and `changed_by = FM auth.uid()`.
 
 ---
 
@@ -410,7 +500,12 @@ atlas.strategy_paper_portfolios  -- current holdings per strategy
   notional_value NUMERIC(20,4) NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(strategy_id, instrument_id)  -- one position per instrument per strategy
+  UNIQUE(strategy_id, instrument_id)  -- one active position per instrument per strategy
+  -- Re-entry policy: if a strategy re-enters an instrument already held,
+  -- UPDATE the existing row (weight_pct, notional_value, updated_at).
+  -- Do NOT insert a second row. Record the re-entry as an action='rebalance'
+  -- row in strategy_paper_trades with the new notional_value.
+  -- Position history lives in paper_trades; paper_portfolios = current state only.
 
 -- Migration 015
 atlas.strategy_paper_trades      -- every simulated trade with full signal context
@@ -443,7 +538,10 @@ atlas.strategy_paper_performance -- daily P&L per strategy
 
 -- Migration 017
 atlas.strategy_overlap_daily     -- pairwise portfolio overlap (105 rows/day: upper triangle only)
-  -- Canonical direction enforced: strategy_a_id < strategy_b_id (lexicographic UUID).
+  -- Canonical direction: strategy_a_id < strategy_b_id (PostgreSQL UUID string comparison).
+  -- **Python must enforce this before insert** — `overlap.py` must sort the pair:
+  --   a, b = (id_x, id_y) if str(id_x) < str(id_y) else (id_y, id_x)
+  -- The CHECK constraint catches bugs but is not the primary enforcement.
   -- Diagonal (strategy vs itself, Jaccard=1.0) is omitted — trivially known.
   -- Frontend queries: SELECT * WHERE strategy_a_id = X OR strategy_b_id = X
   id UUID PK DEFAULT gen_random_uuid(),
@@ -454,13 +552,18 @@ atlas.strategy_overlap_daily     -- pairwise portfolio overlap (105 rows/day: up
   common_instruments INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE(date, strategy_a_id, strategy_b_id),
-  CHECK (strategy_a_id < strategy_b_id)  -- enforce canonical upper-triangle ordering
+  CHECK (strategy_a_id < strategy_b_id)  -- catches Python-side ordering bugs
 
 -- Migration 018
 atlas.strategy_backtest_results  -- vectorbt output per strategy or custom portfolio
   id UUID PK DEFAULT gen_random_uuid(),
   strategy_id UUID REFERENCES atlas.strategy_configs(id),    -- null for custom portfolios
-  custom_portfolio_id UUID,  -- null for standard strategies (FK added in migration 020 after strategy_fm_custom_portfolios is created)
+  custom_portfolio_id UUID,  -- null for standard strategies; declared WITHOUT FK constraint here
+  -- FK added in migration 020 via ALTER TABLE:
+  --   op.create_foreign_key('fk_backtest_custom_portfolio',
+  --     'strategy_backtest_results', 'strategy_fm_custom_portfolios',
+  --     ['custom_portfolio_id'], ['id'], source_schema='atlas', referent_schema='atlas')
+  -- This is intentional: strategy_fm_custom_portfolios does not exist yet at migration 018.
   backtest_type TEXT NOT NULL,     -- full | walk_forward | custom
   start_date DATE NOT NULL,
   end_date DATE NOT NULL,
@@ -507,6 +610,42 @@ atlas.strategy_fm_custom_portfolios  -- FM-designed portfolios
     -- DB-level enforcement: cannot activate paper trading without backtest
 ```
 
+### Required Indexes (add to each migration)
+
+Time-range queries on these tables are the dominant access pattern (nightly writes, frontend date-range reads). Without composite indexes, every `/strategies/[id]` page load does a full table scan.
+
+```sql
+-- Migration 014 (strategy_paper_portfolios)
+CREATE INDEX idx_paper_portfolios_strategy ON atlas.strategy_paper_portfolios(strategy_id);
+
+-- Migration 015 (strategy_paper_trades) — date range + strategy filter
+CREATE INDEX idx_paper_trades_strategy_date
+  ON atlas.strategy_paper_trades(strategy_id, trade_date DESC);
+
+-- Migration 016 (strategy_paper_performance) — primary read path: date range per strategy
+CREATE INDEX idx_paper_perf_strategy_date
+  ON atlas.strategy_paper_performance(strategy_id, date DESC);
+
+-- Migration 017 (strategy_overlap_daily) — frontend: last N days of overlap
+CREATE INDEX idx_overlap_date ON atlas.strategy_overlap_daily(date DESC);
+-- frontend queries: WHERE strategy_a_id=X OR strategy_b_id=X
+CREATE INDEX idx_overlap_a ON atlas.strategy_overlap_daily(strategy_a_id, date DESC);
+CREATE INDEX idx_overlap_b ON atlas.strategy_overlap_daily(strategy_b_id, date DESC);
+
+-- Migration 018 (strategy_backtest_results)
+CREATE INDEX idx_backtest_strategy ON atlas.strategy_backtest_results(strategy_id)
+  WHERE strategy_id IS NOT NULL;
+CREATE INDEX idx_backtest_custom ON atlas.strategy_backtest_results(custom_portfolio_id)
+  WHERE custom_portfolio_id IS NOT NULL;
+
+-- Migration 019 (strategy_optimization_runs) — optimizer dashboard: filter by status
+CREATE INDEX idx_optim_status ON atlas.strategy_optimization_runs(status, created_at DESC);
+CREATE INDEX idx_optim_regime_archetype
+  ON atlas.strategy_optimization_runs(regime, archetype, created_at DESC);
+```
+
+All FK columns also get `index=True` per project database conventions (`~/.claude/CLAUDE.md`).
+
 ---
 
 ## 7. Custom Portfolio Builder (builder.py)
@@ -522,8 +661,14 @@ def validate_custom_portfolio(instruments: list[InstrumentWeight]) -> None:
         raise ValidationError("Portfolio must have at least 2 instruments")
 
     # 2. All instruments must exist in an Atlas universe table
+    # exists_in_universe(instrument_id, instrument_type) checks:
+    #   stock → atlas.atlas_universe_stocks WHERE instrument_id=X (any row, active or historical)
+    #   etf   → atlas.atlas_universe_etfs WHERE instrument_id=X
+    #   fund  → atlas.atlas_universe_funds WHERE instrument_id=X
+    # Returns True if found in the appropriate table. Batch the check across all instruments
+    # in a single IN query rather than N individual queries.
     for inst in instruments:
-        if not exists_in_universe(inst.instrument_id, inst.instrument_type):
+        if not exists_in_universe(conn, inst.instrument_id, inst.instrument_type):
             raise ValidationError(f"{inst.instrument_id} not found in Atlas universe")
 
     # 3. Weights must sum to 100% ± 0.01%
@@ -585,6 +730,12 @@ def validate_custom_portfolio(instruments: list[InstrumentWeight]) -> None:
                                  SUBMIT: redirect immediately to /portfolios/custom/[id]
                                    with skeleton loading state; page polls every 5s until
                                    backtest_results populated
+                                   MAX POLL TIME: 5 minutes (60 polls). After timeout,
+                                   show error: "Backtest is taking longer than expected.
+                                   Refresh to check status, or contact support."
+                                   ERROR STATE: if /api/portfolios/[id]/status returns
+                                   status='failed', show: "Backtest failed — [error_message].
+                                   Try again or contact support."
 
 /portfolios/custom/[id]          Custom portfolio detail + backtest results
                                  — Shows "Backtest running…" skeleton until results arrive
@@ -618,7 +769,32 @@ def validate_custom_portfolio(instruments: list[InstrumentWeight]) -> None:
                                  — "Reject" removes from pending queue (no confirmation)
 ```
 
-### 8.1 UI Design Decisions (plan-design-review, 2026-05-08)
+### 8.1 API Route Handlers (Next.js App Router)
+
+The polling pattern on `/portfolios/custom/[id]` requires a Route Handler — Server Components cannot be polled from the client side. Three Route Handlers needed:
+
+```
+app/api/portfolios/[id]/status/route.ts
+  GET → { backtest_id: string | null, status: 'pending' | 'complete' | 'failed' }
+  Polls every 5s from the Client Component on /portfolios/custom/[id]
+  Returns 200 with status='pending' while backtest is running; 200 status='complete' once
+  backtest_id is populated on strategy_fm_custom_portfolios; 200 status='failed' on error.
+
+app/api/strategies/[id]/performance/route.ts
+  GET ?from=YYYY-MM-DD&to=YYYY-MM-DD
+  → { daily: [{date, total_value, daily_return, regime, benchmark_nifty500_return, benchmark_naive_atlas_return}] }
+  Drives P&L chart on /strategies/[id] (1M/3M/6M toggle → different date params)
+
+app/api/optimizer/[study_id]/approve/route.ts
+  POST { threshold_key: string, new_value: number }
+  → 200 { approved_at: string } | 409 { error: 'already_approved' } | 403 (auth check)
+  Writes to atlas_thresholds + atlas_threshold_history; updates optimization_runs.status
+  This is the only write Route Handler — all others are read-only.
+```
+
+All Route Handlers use the existing `createServerClient` Supabase pattern from M6. No new auth infrastructure.
+
+### 8.2 UI Design Decisions (plan-design-review, 2026-05-08)
 
 | # | Screen | Decision | Rationale |
 |---|--------|----------|-----------|
@@ -644,7 +820,7 @@ def validate_custom_portfolio(instruments: list[InstrumentWeight]) -> None:
 
 | Library | Version | Purpose | Notes |
 |---------|---------|---------|-------|
-| vectorbt | 0.26.x | Backtesting + walk-forward | **Python 3.11 only.** Use `bt` as fallback on 3.12. |
+| vectorbt | 0.26.x | Backtesting + walk-forward | **Python 3.11 only.** Check newer releases before considering alternatives on 3.12. |
 | optuna[postgres] | ≥3.0 | Bayesian threshold optimization | RDB storage requires direct (non-pooled) URL |
 | PyPortfolioOpt | ≥1.5 | Optional min-variance weights in custom builder | Only used for weight suggestion, not required path |
 | empyrical-reloaded | (already installed) | Sharpe, Calmar, alpha, drawdown | — |
@@ -686,7 +862,9 @@ simulation = [
 - `/optimizer` frontend routes + threshold promotion workflow + revert button
 
 **Phase 5 — Frontend (all strategy-facing routes)**
-- Can start in parallel with Phase 3 once migration 012-016 are stable
+- `/strategies` and `/strategies/[id]` depend on `strategy_paper_performance` (migration 016) being populated by at least one nightly paper trading run (Phase 2). Frontend for these routes cannot be meaningfully developed until Phase 2 runs at least once.
+- **Mock data fixture:** To unblock frontend work before Phase 2 runs, add `scripts/m7_seed_mock_data.py` — inserts one week of synthetic paper performance rows for all 15 strategies. Run against a dev database only. Purge with `DELETE FROM atlas.strategy_paper_performance WHERE created_by = 'mock'` before going to production.
+- `/portfolios/custom` and `/optimizer` routes have no Phase 2 dependency and can be built in parallel with Phase 3/4 backend work.
 
 ---
 
