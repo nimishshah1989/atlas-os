@@ -1,0 +1,13 @@
+name: blend_etf_led
+tier: blend
+archetype: etf_core_satellite
+variant: etf_led
+state_filter: [leader, strong, emerging]
+regime_stance: hold_risk_off
+position_sizing: equal_weight
+max_positions: 25
+max_sector_pct: 25.0
+stock_allocation_pct: 30.0
+etf_allocation_pct: 70.0
+rebalance_trigger: signal_change
+threshold_overrides: {}

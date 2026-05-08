@@ -1,0 +1,12 @@
+name: fund_balanced
+tier: fund_only
+archetype: fund_balanced
+variant: balanced
+state_filter: [investable]
+regime_stance: scale_risk_off
+position_sizing: equal_weight
+max_positions: 20
+max_sector_pct: 100.0
+fund_tier_filter: [L1, L2, L3]
+rebalance_trigger: signal_change
+threshold_overrides: {}

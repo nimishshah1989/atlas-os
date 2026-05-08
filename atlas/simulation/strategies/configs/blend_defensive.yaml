@@ -1,0 +1,13 @@
+name: blend_defensive
+tier: blend
+archetype: etf_core_satellite
+variant: defensive
+state_filter: [leader, strong, emerging]
+regime_stance: scale_risk_off
+position_sizing: equal_weight
+max_positions: 30
+max_sector_pct: 25.0
+stock_allocation_pct: 20.0
+etf_allocation_pct: 80.0
+rebalance_trigger: signal_change
+threshold_overrides: {}

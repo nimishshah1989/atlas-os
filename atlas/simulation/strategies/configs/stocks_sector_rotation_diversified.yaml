@@ -1,0 +1,11 @@
+name: stocks_sector_rotation_diversified
+tier: stocks_only
+archetype: sector_rotation
+variant: diversified
+state_filter: [leader, strong]
+regime_stance: pause_risk_off
+position_sizing: equal_weight
+max_positions: 20
+max_sector_pct: 30.0
+rebalance_trigger: signal_change
+threshold_overrides: {}

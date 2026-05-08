@@ -1,0 +1,12 @@
+name: fund_l3_dominant
+tier: fund_only
+archetype: fund_momentum
+variant: l3_dominant
+state_filter: [investable]
+regime_stance: hold_risk_off
+position_sizing: equal_weight
+max_positions: 20
+max_sector_pct: 100.0
+fund_tier_filter: [L1, L2, L3]
+rebalance_trigger: signal_change
+threshold_overrides: {}

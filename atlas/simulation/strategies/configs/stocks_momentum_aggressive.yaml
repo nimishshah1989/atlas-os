@@ -1,0 +1,11 @@
+name: stocks_momentum_aggressive
+tier: stocks_only
+archetype: momentum_pure
+variant: aggressive
+state_filter: [leader]
+regime_stance: pause_risk_off
+position_sizing: equal_weight
+max_positions: 15
+max_sector_pct: 40.0
+rebalance_trigger: signal_change
+threshold_overrides: {}

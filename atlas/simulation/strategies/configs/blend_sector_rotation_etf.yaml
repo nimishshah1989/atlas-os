@@ -1,0 +1,13 @@
+name: blend_sector_rotation_etf
+tier: blend
+archetype: sector_rotation_etf
+variant: mixed
+state_filter: [leader, strong]
+regime_stance: pause_risk_off
+position_sizing: equal_weight
+max_positions: 15
+max_sector_pct: 40.0
+stock_allocation_pct: 40.0
+etf_allocation_pct: 60.0
+rebalance_trigger: signal_change
+threshold_overrides: {}
