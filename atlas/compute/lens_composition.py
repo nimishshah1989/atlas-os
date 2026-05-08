@@ -77,7 +77,7 @@ def load_disclosure_dates(
         return pd.read_sql(
             f"""
             SELECT mstar_id, MAX(as_of_date) AS as_of_date,
-                   MAX(last_disclosed_date) AS last_disclosed_date
+                   MAX(as_of_date) AS last_disclosed_date
             FROM public.de_mf_holdings
             WHERE 1=1 {where}
             GROUP BY mstar_id, as_of_date
@@ -99,9 +99,9 @@ def load_holdings_for_date(
             SELECT
                 h.mstar_id,
                 h.as_of_date,
-                h.last_disclosed_date,
+                h.as_of_date AS last_disclosed_date,
                 h.instrument_id,
-                h.weight,
+                (h.weight_pct / 100.0) AS weight,
                 u.sector
             FROM public.de_mf_holdings h
             LEFT JOIN atlas.atlas_universe_stocks u

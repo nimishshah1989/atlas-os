@@ -110,9 +110,9 @@ def compute_lens3_for_date(
             SELECT
                 h.mstar_id,
                 h.as_of_date,
-                h.last_disclosed_date,
+                h.as_of_date AS last_disclosed_date,
                 h.instrument_id::text AS instrument_id,
-                h.weight
+                (h.weight_pct / 100.0) AS weight
             FROM public.de_mf_holdings h
             WHERE h.as_of_date = %(date)s
             """,

@@ -234,12 +234,12 @@ def _tier2_composition(engine) -> None:
         with open_compute_session(engine) as conn:
             holdings = pd.read_sql(
                 """
-                SELECT h.weight, u.sector
-                FROM public.de_fund_holdings h
+                SELECT (h.weight_pct / 100.0) AS weight, u.sector
+                FROM public.de_mf_holdings h
                 LEFT JOIN atlas.atlas_universe_stocks u
                     ON u.instrument_id = h.instrument_id AND u.effective_to IS NULL
                 WHERE h.mstar_id = %(m)s AND h.as_of_date = %(d)s
-                  AND h.weight IS NOT NULL AND u.sector IS NOT NULL
+                  AND h.weight_pct IS NOT NULL AND u.sector IS NOT NULL
                 """,
                 conn,
                 params={"m": mstar_id, "d": disc_date},
@@ -305,8 +305,8 @@ def _tier2_holdings(engine) -> None:
         with open_compute_session(engine) as conn:
             holdings = pd.read_sql(
                 """
-                SELECT h.instrument_id, h.weight, s.rs_state
-                FROM public.de_fund_holdings h
+                SELECT h.instrument_id, (h.weight_pct / 100.0) AS weight, s.rs_state
+                FROM public.de_mf_holdings h
                 LEFT JOIN atlas.atlas_stock_states_daily s
                     ON s.instrument_id = h.instrument_id
                    AND s.date = (
@@ -314,7 +314,7 @@ def _tier2_holdings(engine) -> None:
                        WHERE date <= %(d)s AND instrument_id = h.instrument_id
                    )
                 WHERE h.mstar_id = %(m)s AND h.as_of_date = %(d)s
-                  AND h.weight IS NOT NULL
+                  AND h.weight_pct IS NOT NULL
                 """,
                 conn,
                 params={"m": mstar_id, "d": disc_date},
