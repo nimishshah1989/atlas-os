@@ -82,6 +82,7 @@ def apply_strategy_filter(
     No DB calls. Applies state_filter and entry trigger logic in-memory.
     threshold_overrides are applied by runner.py before calling this function.
     """
+    _ = threshold_overrides  # runner.py applies overrides before this call
     entry_set: set[str] = set()
     exit_set: set[str] = set()
 
@@ -94,7 +95,7 @@ def apply_strategy_filter(
         allowed_states |= mapped  # type: ignore[operator]
 
     for row in decisions.itertuples(index=False):
-        instrument_id = row.instrument_id
+        instrument_id: str = row.instrument_id  # pyright: ignore[reportAttributeAccessIssue]
 
         # Check exits first (highest priority)
         for col in _EXIT_COLUMNS:

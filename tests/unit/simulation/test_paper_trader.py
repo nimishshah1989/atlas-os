@@ -83,7 +83,7 @@ def test_apply_filter_includes_strong_with_state_filter_strong():
         breakout_triggers=[False, False],
     )
     config = MockStrategyConfig(state_filter=["leader", "strong"])
-    entries, exits = apply_strategy_filter(decisions, config, {})
+    entries, _ = apply_strategy_filter(decisions, config, {})
     assert entries == {"INFY", "TCS"}
 
 
@@ -95,7 +95,7 @@ def test_apply_filter_no_entry_without_trigger():
         breakout_triggers=[False],
     )
     config = MockStrategyConfig(state_filter=["leader"])
-    entries, exits = apply_strategy_filter(decisions, config, {})
+    entries, _ = apply_strategy_filter(decisions, config, {})
     assert entries == set()
 
 
@@ -108,7 +108,7 @@ def test_apply_filter_exit_rs_deteriorate_detected():
         exit_rs=[True],
     )
     config = MockStrategyConfig()
-    entries, exits = apply_strategy_filter(decisions, config, {})
+    _, exits = apply_strategy_filter(decisions, config, {})
     assert "INFY" in exits
 
 
