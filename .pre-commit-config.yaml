@@ -18,7 +18,7 @@ repos:
     rev: v1.13.0
     hooks:
       - id: mypy
-        additional_dependencies: [pydantic, types-requests]
+        additional_dependencies: [pydantic, types-requests, types-PyYAML]
 
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.21.2
