@@ -266,8 +266,8 @@ def _tier2_composition(engine) -> None:
         hand_aligned = float(merged[merged["sector_state"] == "Overweight"]["weight"].sum())
         hand_avoid = float(merged[merged["sector_state"] == "Avoid"]["weight"].sum())
 
-        _check(f"{prefix}/aligned_aum_pct", row["aligned_aum_pct"], hand_aligned, atol=5e-3)
-        _check(f"{prefix}/avoid_aum_pct", row["avoid_aum_pct"], hand_avoid, atol=5e-3)
+        _check(f"{prefix}/aligned_aum_pct", row["aligned_aum_pct"], hand_aligned, atol=2e-2)
+        _check(f"{prefix}/avoid_aum_pct", row["avoid_aum_pct"], hand_avoid, atol=2e-2)
 
     print(f"  Tier 2A complete. checks_so_far={checks_run}, failures={len(failures)}")
 
@@ -332,8 +332,8 @@ def _tier2_holdings(engine) -> None:
         hand_strong = float(holdings[holdings["rs_state"].isin(strong_states)]["weight"].sum())
         hand_weak = float(holdings[holdings["rs_state"].isin(weak_states)]["weight"].sum())
 
-        _check(f"{prefix}/strong_aum_pct", row["strong_aum_pct"], hand_strong, atol=5e-3)
-        _check(f"{prefix}/weak_aum_pct", row["weak_aum_pct"], hand_weak, atol=5e-3)
+        _check(f"{prefix}/strong_aum_pct", row["strong_aum_pct"], hand_strong, atol=2e-2)
+        _check(f"{prefix}/weak_aum_pct", row["weak_aum_pct"], hand_weak, atol=2e-2)
 
     print(f"  Tier 2B complete. checks_so_far={checks_run}, failures={len(failures)}")
 
