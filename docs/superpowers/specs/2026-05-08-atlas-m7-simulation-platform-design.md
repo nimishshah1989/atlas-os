@@ -547,13 +547,22 @@ def validate_custom_portfolio(instruments: list[InstrumentWeight]) -> None:
 
 ```
 /strategies                      Strategy comparison board
-                                 — all 15 ranked by regime-adjusted Sharpe
-                                 — 15×15 overlap heatmap (Jaccard)
-                                 — filter by tier (stocks/blend/mf)
+                                 PRIMARY: sortable strategy ranking table (full-width)
+                                   Columns: Name, Tier, Sharpe (sort default desc), Return%,
+                                   Drawdown%, Active Positions, Regime Status badge
+                                   (Active / Paused / Scaled-0.4×)
+                                   Row click → /strategies/[id]
+                                 SECONDARY (below fold, section anchor "Overlap"): 15×15
+                                   Jaccard heatmap — full-width, --radius-card: 2px cells
+                                 PAGE HEADER: current regime badge + nightly run timestamp
+                                 FILTER: tier tabs (All / Stocks-only / Stocks+ETF / MF-only)
+                                 EMPTY STATE (day 1, no paper trading run yet):
+                                   "Paper trading starts tonight — check back after the
+                                   nightly run (approx. 11:30 PM IST)."
 
 /strategies/[id]                 Strategy detail
                                  — current holdings table
-                                 — P&L history chart (1M/3M/6M toggle)
+                                 — P&L history chart (1M/3M/6M toggle, --color-teal series)
                                  — regime-split performance (4-column breakdown)
                                  — recent trades (last 30 days)
 
@@ -562,25 +571,72 @@ def validate_custom_portfolio(instruments: list[InstrumentWeight]) -> None:
                                  — performance table × regime
                                  — vs Nifty500 AND vs naive Atlas baseline
 
-/portfolios/custom               FM custom portfolio builder
-                                 — instrument search + weight assignment
-                                 — real-time weight validation (sum to 100%)
-                                 — triggers vectorbt backtest on submit
+/portfolios/custom               FM custom portfolio builder — SPLIT PANEL layout:
+                                 LEFT PANEL (50%): instrument search input + results list
+                                   (name, type badge, current Atlas state, add button)
+                                 RIGHT PANEL (50%): portfolio composition
+                                   — instrument rows with inline weight % input
+                                   — live weight bar (e.g. "73.5% / 100%")
+                                   — total weight validation: green ✓ at 100% ±0.01%,
+                                     amber warning when > 100%, red error when outside ±0.01%
+                                   — "Suggest equal weights" + "Suggest min-variance weights"
+                                     (min-variance only enabled when ≤ 30 instruments)
+                                   — "Run Backtest" button (disabled until weights = 100%)
+                                 SUBMIT: redirect immediately to /portfolios/custom/[id]
+                                   with skeleton loading state; page polls every 5s until
+                                   backtest_results populated
 
 /portfolios/custom/[id]          Custom portfolio detail + backtest results
+                                 — Shows "Backtest running…" skeleton until results arrive
                                  — "Start paper trading" button
                                    (enabled only when backtest_id is set)
+                                 — Portfolio list at /portfolios/custom shows "Pending"
+                                   status badge for portfolios awaiting backtest
 
 /optimizer                       Optimization results dashboard
-                                 — pending promotions (threshold change + delta alpha)
-                                 — approved promotions with "Revert" option (7-day window)
-                                 — per-regime study status (last run, OOS Sharpe, trial count)
+                                 PRIMARY: 5×4 study status grid (archetype rows × regime cols)
+                                   Each cell: last run date, OOS Sharpe, trial count
+                                   Pending approval count badge on cell (e.g. "2 pending")
+                                   Click cell → /optimizer/[study_id]
+                                 SECONDARY: approved promotions with "Revert" option
+                                   (Revert button visible for 7 days after approval)
+                                 EMPTY STATE (no pending approvals):
+                                   Checkmark icon + "All caught up — no threshold changes
+                                   awaiting your approval." + "Next optimization run:
+                                   [next Sunday 2:00 AM IST]" (computed from last_run_at)
 
 /optimizer/[study_id]            Study detail
-                                 — Optuna trial history chart (Sharpe per trial)
+                                 — Optuna trial history chart (Sharpe per trial,
+                                   --color-teal line, --color-paper-rule axes)
                                  — parameter importance bar chart (fANOVA scores)
-                                 — "Approve promotion" and "Reject" buttons
+                                 — "Approve promotion" triggers confirmation modal:
+                                   "Approve [threshold_key]: [old] → [new]?
+                                   Takes effect on tonight's Atlas compute run.
+                                   You can revert within 7 days." [Confirm] [Cancel]
+                                   Modal: focus-trapped, Escape = cancel, Enter = confirm
+                                   aria-label="Approve threshold promotion for [key]"
+                                 — "Reject" removes from pending queue (no confirmation)
 ```
+
+### 8.1 UI Design Decisions (plan-design-review, 2026-05-08)
+
+| # | Screen | Decision | Rationale |
+|---|--------|----------|-----------|
+| D1 | /strategies | Table primary (full-width), Jaccard heatmap below fold with section anchor | Heatmap (15×15) is diagnostic context, not daily read; table needs full width for 7 columns |
+| D2 | /portfolios/custom | Live canvas split-panel (search left, composition right) | FM needs live weight total while allocating — linear wizard prevents this |
+| D3 | /optimizer | Study status grid (5×4) primary; pending approvals as count badges on cells | FM wants system health overview first; action items discoverable via badge count |
+| D4 | /optimizer empty | "All caught up" + next scheduled run date | Prevents FM from thinking system is broken when no approvals are pending |
+| D5 | Threshold approval | Confirmation modal with "tonight's compute" impact disclosure + 7-day revert notice | Production threshold write — fat-finger protection outweighs one extra click |
+| D6 | Backtest loading | Redirect to /portfolios/custom/[id] immediately; skeleton + 5s polling until done | FM lands on the result page URL (bookmarkable); backtest runs in background |
+| D7 | Navigation | Grouped nav: **Research** (Sectors, Stocks, ETFs, Funds) / **Simulation** (Strategies, Portfolios, Optimizer) | 10+ flat nav items overflow at 1440px |
+| D8 | Mobile | Desktop-only — show "Atlas Simulation is optimized for desktop" at < 768px viewport | Heatmap and split-panel cannot be made mobile-friendly without separate layouts |
+
+**Design system constraints (all M7 routes):**
+- All colors from `globals.css` tokens only. No new CSS variables.
+- Chart series: `--color-teal` (#1D9E75) for primary, `--color-signal-pos` for positive return, `--color-signal-neg` for negative return, `--color-paper-rule` for axes/gridlines.
+- Card/cell radius: `--radius-card: 2px` throughout, including heatmap cells.
+- Fonts: `--font-sans` (Inter) for data, `--font-serif` (Source Serif 4) for large metric display.
+- All numerical data: `font-variant-numeric: tabular-nums` (class `tabular` or `data-numeric` attribute).
 
 ---
 
