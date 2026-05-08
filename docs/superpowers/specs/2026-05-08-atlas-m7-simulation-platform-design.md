@@ -903,7 +903,59 @@ print('Optuna PostgreSQL storage OK')
 
 ---
 
-## 12. Deferred to M8+
+## 12. Performance Constraints
+
+**Runtime environment:** EC2 t3.large (2 vCPU, 8 GB RAM).
+
+**Nightly paper trading:** `fetch_decisions` called once per tier (3 calls total), not 15 times. Bulk writes via `execute_values`. Target: ≤ 60 seconds for full 15-strategy pass.
+
+**vectorbt memory ceiling:** Never hold more than one Portfolio object in memory. `walk_forward.py` must `del pf; gc.collect()` after extracting each OOS window's metrics. Failure = OOM during optimizer's 100-trial loop.
+
+**Optimizer scheduling:** Keep `n_jobs=1` — parallel vectorbt instances OOM on t3.large (8 GB). Weekly = current regime (5 studies, ~3.5 hrs). Monthly = all regimes (20 studies, ~14 hrs). Run as separate script `scripts/m7_optimize.py`, not part of nightly compute. Schedule: Sunday 2:00 AM IST.
+
+**DB scale:** 15 strategies × 365 days = ~5,500 rows/year in `strategy_paper_performance`. Composite index `(strategy_id, date DESC)` is sufficient — no partitioning needed at this scale.
+
+---
+
+## 13. Testing Requirements
+
+**Target:** 80% coverage on new code (`~/.claude/rules/testing.md`). All test files mirror source paths: `atlas/simulation/core/paper_trader.py` → `tests/unit/simulation/test_paper_trader.py`.
+
+**Unit tests (no DB) — `tests/unit/simulation/`:**
+- `test_paper_trader.py`: `apply_strategy_filter`, `compute_trades` — pure function behavior for all regime stances, threshold overrides, exit priority ordering, cold start
+- `test_builder.py`: `validate_custom_portfolio` — weight validation, universe existence, concentration limits
+- `test_overlap.py`: Jaccard similarity math, upper-triangle pair generation (C(15,2)=105), UUID ordering
+- `test_walk_forward.py`: `InsufficientHistoryError` at <547 days, window count formula (12M→4, 18M→10), no IS/OOS data leakage
+- `test_loader.py`: YAML loading, invalid tier/threshold_override keys raise `ValidationError`
+
+**Integration tests (transaction-rollback) — `tests/integration/simulation/`:**
+- `test_paper_trader_integration.py`: full nightly pass for one strategy against fixture data; `MissingAtlasDecisionsError` and `StaleJIPDataError` paths
+- `test_optimizer_integration.py`: Optuna study create/persist (mock objective); FM approval write path; revert path
+
+**Not tested here:** vectorbt internal correctness, Optuna convergence, empyrical metric math — upstream library responsibilities.
+
+---
+
+## 14. GSTACK Review Report
+
+**Reviews completed:** `/plan-design-review` (2026-05-08) + `/plan-eng-review` (2026-05-08)
+
+**Design review outcome (8 binding decisions):** See Section 8.2. All 8 decisions confirmed by FM. Notable: D3 (optimizer primary view = study grid, not pending list) was FM-selected opposite to recommendation — rationale: FM wants system health overview first.
+
+**Engineering review outcome:**
+- Architecture: 5 issues found and fixed (E1 sync/async, E2 seeding, E3 indexes, E4 Route Handlers, E5 FK ordering)
+- Code quality: 3 improvements (CQ1 paper_trader decomposition, CQ2 fetch_decisions batching, CQ3 overlap.py split)
+- Performance: Section 12 added (memory ceiling, n_jobs constraint, DB scale)
+- Tests: Section 13 added (unit + integration coverage diagram)
+- Outside voice: 15 issues reviewed; 13 addressed (2 were false positives — reviewer confused async/sync state before fixes were in place)
+
+**Spec score:** Started at 6/10 (pre-design-review). After all review passes: estimated 9/10. Remaining risk: walk-forward OOS window serial correlation (documented in Section 4.3, mitigated by 547-day guard, no further mitigation available without non-overlapping windows which would require >24M history).
+
+**Status:** Ready for `/writing-plans` — implementation plan can be written from this spec.
+
+---
+
+## 15. Deferred to M8+
 
 - Live execution (requires SEBI algo trader registration)
 - Real-time strategy updates (streaming)
