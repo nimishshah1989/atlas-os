@@ -96,6 +96,14 @@ function StateChip({ rs, mom }: { rs: string | null; mom: string | null }) {
   )
 }
 
+function QualityChip({ ema, wein }: { ema: boolean | null; wein: boolean | null }) {
+  if (ema === true && wein === true)
+    return <span className="inline-flex items-center px-1.5 py-0.5 rounded-[2px] font-sans text-[10px] font-semibold bg-signal-pos/15 text-signal-pos">▲ Strong</span>
+  if (ema === true)
+    return <span className="inline-flex items-center px-1.5 py-0.5 rounded-[2px] font-sans text-[10px] font-semibold bg-signal-warn/15 text-signal-warn">≈ Partial</span>
+  return <span className="font-sans text-[10px] text-ink-tertiary">—</span>
+}
+
 export function StocksTable({
   stocks,
   unit,
@@ -185,6 +193,12 @@ export function StocksTable({
             <Th label={rsColumnLabel} k={rsColumnKey} align="right" />
             <Th label="RS Pctile" k="rs_pctile_3m" align="right"
               tip="Percentile rank within the stock's own RS tier — how it compares to peers at the same level. 90th = top 10% vs peers. Higher is better." />
+            <th className="px-3 py-2 text-right font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary whitespace-nowrap">
+              <span className="inline-flex items-center gap-0.5">
+                Quality
+                <ColTip text="Technical setup quality. Strong = price near 20-day high (EMA-10 confirmation) AND Weinstein stage pass. Partial = EMA-10 criterion met only. — = neither criterion met." />
+              </span>
+            </th>
             <Th label="Deploy %" k="position_size_pct" align="right"
               tip="Position sizing deployment factor (base × market multiplier × risk multiplier). 100% = full standard position in optimal conditions (Risk-On, Low risk). Scales down in Cautious/Risk-Off markets and Elevated/High risk. 0% = avoid entirely." />
             <th className="px-3 py-2 text-center font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary whitespace-nowrap">
@@ -218,6 +232,11 @@ export function StocksTable({
               </td>
               <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums text-ink-secondary">
                 {row.rs_pctile_3m != null ? (parseFloat(row.rs_pctile_3m) * 100).toFixed(0) : '—'}
+              </td>
+              <td className="px-3 py-2.5 text-right">
+                <div className="flex justify-end">
+                  <QualityChip ema={row.ema_10_at_20d_high} wein={row.weinstein_gate_pass} />
+                </div>
               </td>
               <td className="px-3 py-2.5 text-right">
                 <div className="flex justify-end"><PosSizeBar value={row.position_size_pct} /></div>
