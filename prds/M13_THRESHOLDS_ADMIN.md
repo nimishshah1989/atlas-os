@@ -92,16 +92,24 @@ SEBI compliance.
      single shared admin cookie). `user_ip` and `user_agent` columns in
      `atlas_threshold_history` capture per-session forensic info if needed.
 
-3. **Auth = HMAC-token cookie** for v0.
-   - `ATLAS_ADMIN_PASSWORD` env var on both Vercel (login form check) and
-     server (HMAC signing key).
-   - `/admin/login` POST: server checks password; if match, sets cookie
-     `atlas_admin=<token>` where token = `base64(timestamp || hmac_sha256(secret, timestamp))`.
-   - Middleware on `/admin/*`: parses token, verifies HMAC, rejects if
-     timestamp older than 7 days. Plain password never leaves the server.
-   - TODO comment to upgrade to Supabase Auth role check later.
-   - **Rejected**: storing literal password in cookie (visible in dev tools,
-     no revocation path, weaker posture).
+3. **Auth = reuse existing site-wide login** for v0.
+   - The whole site is already gated by `frontend/middleware.ts` matching
+     `/((?!_next/static|_next/image|favicon.ico|robots.txt).*)` — anyone
+     past `/login` carries the `atlas_auth` cookie.
+   - `/admin/*` is implicitly gated by that same matcher — anyone past
+     `/login` can edit thresholds. v0 has one user (Bhaven, the FM); single
+     shared password is acceptable.
+   - **No new HMAC token, no `/admin/login`, no `ATLAS_ADMIN_PASSWORD`
+     env var**. The original eng-review pushed for layered HMAC auth; the
+     user explicitly chose the lighter "you're past /login, you're admin"
+     model for v0 speed.
+   - Add a regression test that verifies the existing middleware
+     redirects `/admin/thresholds` to `/login` when the cookie is missing.
+   - TODO before any second user gets access: layer in role-based check
+     (Supabase Auth role claim, or a second cookie tier) so non-admin
+     viewers can read sectors but cannot edit thresholds.
+   - **Rejected**: HMAC token cookie (deferred to multi-user release).
+     Two-cookie sub-gate (over-engineered for one user).
 
 ---
 
@@ -162,8 +170,6 @@ tests/unit/api/test_internal_recompute.py             [new]
 tests/unit/migrations/test_threshold_audit_trigger.py [new]   # uses pytest-postgresql or live DB
 frontend/src/app/admin/                               [new]
   layout.tsx                                          # admin shell (extends regular layout)
-  login/page.tsx                                      # password form, posts to login Server Action
-  login/actions.ts                                    # validates password, sets HMAC cookie
   thresholds/
     page.tsx                                          # RSC, < 250 LOC: fetch + render <ThresholdsView />
     ThresholdsView.tsx                                # client island holding selection state
@@ -173,12 +179,16 @@ frontend/src/app/admin/                               [new]
     RecomputePanel.tsx                                # 3 buttons + 5s polling on atlas_pipeline_runs
 frontend/src/lib/queries/thresholds.ts                [new]   # SELECT helpers (server-only)
 frontend/src/lib/internal-api.ts                      [new]   # fetch wrapper for EC2 endpoint
-frontend/src/lib/admin-auth.ts                        [new]   # HMAC sign/verify
-frontend/middleware.ts                                [edit]  # gate /admin/* (allow /admin/login)
+frontend/middleware.ts                                [no edit] # existing gate already covers /admin/*
 frontend/src/__tests__/admin/                         [new]
-  middleware.test.ts                                  # cookie validation
+  middleware.test.ts                                  # confirms /admin/* under the existing gate
   actions.test.ts                                     # Server Action branches
   thresholds.e2e.ts                                   # playwright/browse smoke
+
+REMOVED from original spec (reuse existing site auth — see Architecture #3):
+  frontend/src/app/admin/login/page.tsx
+  frontend/src/app/admin/login/actions.ts
+  frontend/src/lib/admin-auth.ts
 ```
 
 Note: `page.tsx` stays a thin Server Component (data fetch + pass to client
