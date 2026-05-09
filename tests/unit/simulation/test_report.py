@@ -28,7 +28,9 @@ class TestWriteBacktestResult:
         from atlas.simulation.backtest.report import write_backtest_result
 
         mock_conn = MagicMock()
-        mock_conn.execute.return_value.scalar.return_value = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        mock_conn.execute.return_value.scalar_one.return_value = (
+            "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        )
 
         with patch("atlas.simulation.backtest.report.open_compute_session") as mock_ctx:
             mock_ctx.return_value.__enter__ = lambda _: mock_conn
@@ -49,7 +51,7 @@ class TestWriteBacktestResult:
         from atlas.simulation.backtest.report import write_backtest_result
 
         mock_conn = MagicMock()
-        mock_conn.execute.return_value.scalar.return_value = "test-uuid"
+        mock_conn.execute.return_value.scalar_one.return_value = "test-uuid"
 
         with patch("atlas.simulation.backtest.report.open_compute_session") as mock_ctx:
             mock_ctx.return_value.__enter__ = lambda _: mock_conn

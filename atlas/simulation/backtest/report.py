@@ -28,7 +28,7 @@ def write_backtest_result(
     backtest_type: 'full' | 'walk_forward' | 'custom'
     """
     with open_compute_session(engine) as conn:
-        row_id = conn.execute(
+        row_id: str = conn.execute(
             text("""
                 INSERT INTO atlas.strategy_backtest_results
                     (strategy_id, custom_portfolio_id, backtest_type,
@@ -50,7 +50,7 @@ def write_backtest_result(
                 "drawdown": result.max_drawdown,
                 "total_return": result.total_return,
             },
-        ).scalar()
+        ).scalar_one()
         conn.commit()
 
     log.info(
