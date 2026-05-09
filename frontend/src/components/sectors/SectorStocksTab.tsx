@@ -7,6 +7,8 @@ import type { TimeRange } from '@/lib/time-range'
 import { StockBubbleChart } from './StockBubbleChart'
 import { StocksTable } from './StocksTable'
 import { TopPicksCallout } from './TopPicksCallout'
+import type { MarketRegimeRow } from '@/lib/queries/regime'
+import { MarketRegimeBanner } from './MarketRegimeBanner'
 
 type Filter = 'all' | 'investable' | 'nifty50' | 'nifty100' | 'nifty500'
 
@@ -22,10 +24,12 @@ export function SectorStocksTab({
   sectorName,
   stocks,
   range,
+  regime,
 }: {
   sectorName: string
   stocks: StockRow[]
   range?: TimeRange
+  regime: MarketRegimeRow | null
 }) {
   const [filter, setFilter] = useState<Filter>('all')
   const [unit, setUnit] = useState<'inr' | 'gold'>('inr')
@@ -45,21 +49,26 @@ export function SectorStocksTab({
 
   if (stocks.length === 0) {
     return (
-      <div className="px-6 py-12 max-w-[920px]">
-        <div className="px-6 py-12 border border-paper-rule rounded-sm text-center">
-          <p className="font-sans text-sm text-ink-secondary mb-1">
-            No stocks classified to {sectorName}.
-          </p>
-          <p className="font-sans text-xs text-ink-tertiary">
-            This sector may have too few constituents or may be a holding-company bucket. See the Methodology tab (coming soon).
-          </p>
+      <div className="max-w-[920px]">
+        {regime && <MarketRegimeBanner regime={regime} />}
+        <div className="px-6 py-12">
+          <div className="px-6 py-12 border border-paper-rule rounded-sm text-center">
+            <p className="font-sans text-sm text-ink-secondary mb-1">
+              No stocks classified to {sectorName}.
+            </p>
+            <p className="font-sans text-xs text-ink-tertiary">
+              This sector may have too few constituents or may be a holding-company bucket. See the Methodology tab (coming soon).
+            </p>
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="px-6 py-6 space-y-5">
+    <div>
+      {regime && <MarketRegimeBanner regime={regime} />}
+      <div className="px-6 py-6 space-y-5">
       {/* Top Picks callout */}
       <TopPicksCallout stocks={stocks} />
 
@@ -123,6 +132,7 @@ export function SectorStocksTab({
 
       {/* Table */}
       <StocksTable stocks={filtered} unit={unit} activeRange={range} />
+    </div>
     </div>
   )
 }

@@ -6,6 +6,8 @@ import type { SectorBriefSnapshot } from '@/lib/queries/sector-deep-dive'
 import type { SectorDecision } from '@/lib/sectors-decision'
 import { SectorDrawerSnapshot } from './SectorDrawerSnapshot'
 import { SectorDrawerStateStats } from './SectorDrawerStateStats'
+import type { MarketRegimeRow } from '@/lib/queries/regime'
+import { MarketRegimeBanner } from './MarketRegimeBanner'
 
 type SnapshotWithDecision = SectorBriefSnapshot & { decision: SectorDecision }
 
@@ -207,11 +209,13 @@ export function SectorOverviewTab({
   metricHistory,
   stateHistory,
   range,
+  regime,
 }: {
   snapshot: SnapshotWithDecision
   metricHistory: SectorMetricHistoryRow[]
   stateHistory: SectorStateRow[]
   range: string
+  regime: MarketRegimeRow | null
 }) {
   const dateStr = (d: Date | string): string =>
     d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10)
@@ -228,7 +232,9 @@ export function SectorOverviewTab({
   const latest = metricHistory[metricHistory.length - 1]
 
   return (
-    <div className="px-6 py-6 space-y-6">
+    <div>
+      {regime && <MarketRegimeBanner regime={regime} />}
+      <div className="px-6 py-6 space-y-6">
       {/* Snapshot tiles */}
       <SectorDrawerSnapshot snapshot={{
         sector_name: snapshot.sector_name,
@@ -367,6 +373,7 @@ export function SectorOverviewTab({
           </div>
         )}
       </div>
+    </div>
     </div>
   )
 }

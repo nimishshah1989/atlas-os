@@ -11,6 +11,7 @@ import {
 } from '@/lib/queries/sectors'
 import { rangeToDays, type TimeRange } from '@/lib/time-range'
 import { getSectorDecision } from '@/lib/sectors-decision'
+import { getCurrentRegime } from '@/lib/queries/regime'
 import { SectorDeepDiveHeader } from '@/components/sectors/SectorDeepDiveHeader'
 import { SectorDeepDiveTabs } from '@/components/sectors/SectorDeepDiveTabs'
 import { SectorOverviewTab } from '@/components/sectors/SectorOverviewTab'
@@ -37,11 +38,12 @@ export default async function SectorDeepDivePage({
   const days = rangeToDays(historyRange)
   const activeTab: 'overview' | 'stocks' = tab === 'stocks' ? 'stocks' : 'overview'
 
-  const [snapshot, metricHistory, stateHistory, stocks] = await Promise.all([
+  const [snapshot, metricHistory, stateHistory, stocks, regime] = await Promise.all([
     getSectorSnapshotByName(sectorName),
     getSectorMetricHistory(sectorName, days),
     getSectorStateHistory(days),
     getStocksInSector(sectorName),
+    getCurrentRegime(),
   ])
 
   if (!snapshot) {
@@ -76,12 +78,14 @@ export default async function SectorDeepDivePage({
           metricHistory={metricHistory}
           stateHistory={sectorStateHistoryForThis}
           range={historyRange}
+          regime={regime}
         />
       ) : (
         <SectorStocksTab
           sectorName={sectorName}
           stocks={stocks}
           range={historyRange}
+          regime={regime}
         />
       )}
     </div>
