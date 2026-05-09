@@ -78,7 +78,7 @@ def build_stock_etf_signal_matrix(
     query = text(f"""
         SELECT
             d.date,
-            d.instrument_id,
+            CAST(d.instrument_id AS text) AS instrument_id,
             p.close                                              AS price,
             (d.transition_trigger OR d.breakout_trigger)        AS entry_signal,
             (
@@ -89,7 +89,7 @@ def build_stock_etf_signal_matrix(
         FROM atlas.{decisions_table} d
         JOIN de_equity_ohlcv p
             ON p.instrument_id = d.instrument_id AND p.date = d.date
-        WHERE d.instrument_id = ANY(:ids)
+        WHERE CAST(d.instrument_id AS text) = ANY(:ids)
           AND d.date BETWEEN :start_date AND :end_date
         ORDER BY d.date, d.instrument_id
     """)
@@ -160,7 +160,7 @@ def build_fund_signal_matrix(
     query = text("""
         SELECT
             d.date,
-            d.mstar_id             AS instrument_id,
+            CAST(d.mstar_id AS text) AS instrument_id,
             n.nav                  AS price,
             d.entry_trigger        AS entry_signal,
             (
@@ -170,7 +170,7 @@ def build_fund_signal_matrix(
         FROM atlas.atlas_fund_decisions_daily d
         JOIN de_mf_nav_history n
             ON n.mstar_id = d.mstar_id AND n.date = d.date
-        WHERE d.mstar_id = ANY(:ids)
+        WHERE CAST(d.mstar_id AS text) = ANY(:ids)
           AND d.date BETWEEN :start_date AND :end_date
         ORDER BY d.date, d.instrument_id
     """)
