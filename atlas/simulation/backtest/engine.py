@@ -99,8 +99,8 @@ def run_backtest(
             n_trades = 0
 
         dates_idx = price_df.index
-        start = dates_idx[0].date() if len(dates_idx) > 0 else None
-        end = dates_idx[-1].date() if len(dates_idx) > 0 else None
+        start = pd.Timestamp(dates_idx[0]).date() if len(dates_idx) > 0 else None
+        end = pd.Timestamp(dates_idx[-1]).date() if len(dates_idx) > 0 else None
 
         result = BacktestResult(
             sharpe_ratio=sharpe,
@@ -140,8 +140,8 @@ def _run_backtest_fallback(
     Simulates equal-weight buy-and-hold between entry and exit signals.
     """
     dates_idx = price_df.index
-    start = dates_idx[0].date() if len(dates_idx) > 0 else None
-    end = dates_idx[-1].date() if len(dates_idx) > 0 else None
+    start = pd.Timestamp(dates_idx[0]).date() if len(dates_idx) > 0 else None
+    end = pd.Timestamp(dates_idx[-1]).date() if len(dates_idx) > 0 else None
 
     # Simple simulation: track portfolio value
     # For each instrument, enter at entry signal price, exit at exit signal price
