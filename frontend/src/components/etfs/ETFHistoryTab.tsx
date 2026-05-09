@@ -1,7 +1,7 @@
 'use client'
 import { useMemo, useState } from 'react'
-import type { StateHistoryRow, MetricHistoryRow } from '@/lib/queries/stocks'
-import type { StockRowWithSector } from '@/lib/queries/stocks'
+import type { ETFStateHistoryRow, ETFMetricHistoryRow } from '@/lib/queries/etfs'
+import type { ETFRow } from '@/lib/queries/etfs'
 import { pct, pctColor } from '@/lib/stock-formatters'
 
 const RS_COLOR: Record<string, string> = {
@@ -30,30 +30,21 @@ const RISK_COLOR: Record<string, string> = {
   'Below Trend':'#7c3aed',
 }
 
-const VOL_COLOR: Record<string, string> = {
-  Accumulation:         '#2F6B43',
-  'Steady-Buying':      '#4CAF78',
-  Neutral:              '#94a3b8',
-  Distribution:         '#ef6644',
-  'Heavy Distribution': '#B0492C',
-}
-
 const ROWS: {
-  key: keyof Pick<StateHistoryRow, 'rs_state' | 'momentum_state' | 'risk_state' | 'volume_state'>
+  key: keyof Pick<ETFStateHistoryRow, 'rs_state' | 'momentum_state' | 'risk_state'>
   label: string
   colorMap: Record<string, string>
 }[] = [
   { key: 'rs_state',       label: 'RS State',  colorMap: RS_COLOR },
   { key: 'momentum_state', label: 'Momentum',  colorMap: MOM_COLOR },
-  { key: 'risk_state',     label: 'Risk',       colorMap: RISK_COLOR },
-  { key: 'volume_state',   label: 'Volume',     colorMap: VOL_COLOR },
+  { key: 'risk_state',     label: 'Risk',      colorMap: RISK_COLOR },
 ]
 
-function StateHeatmap({ history }: { history: StateHistoryRow[] }) {
+function StateHeatmap({ history }: { history: ETFStateHistoryRow[] }) {
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
 
   const { dates, dateMap } = useMemo(() => {
-    const map = new Map<string, StateHistoryRow>()
+    const map = new Map<string, ETFStateHistoryRow>()
     const dateSet = new Set<string>()
     for (const row of history) {
       const d = row.date instanceof Date
@@ -81,22 +72,14 @@ function StateHeatmap({ history }: { history: StateHistoryRow[] }) {
   const labelW = 72
 
   if (history.length === 0) {
-    return (
-      <p className="font-sans text-xs text-ink-tertiary py-4">
-        No state history available for this range.
-      </p>
-    )
+    return <p className="font-sans text-xs text-ink-tertiary py-4">No state history available.</p>
   }
 
   return (
     <div className="relative overflow-x-auto">
-      {/* Month labels */}
       <div className="flex mb-1" style={{ paddingLeft: labelW }}>
         {dates.map((d, i) => (
-          <div
-            key={d}
-            style={{ width: cellW, flexShrink: 0, position: 'relative' }}
-          >
+          <div key={d} style={{ width: cellW, flexShrink: 0, position: 'relative' }}>
             {monthLabels[i] && (
               <span
                 className="absolute font-sans text-[9px] text-ink-tertiary whitespace-nowrap"
@@ -108,7 +91,6 @@ function StateHeatmap({ history }: { history: StateHistoryRow[] }) {
           </div>
         ))}
       </div>
-      {/* State rows */}
       {ROWS.map(row => (
         <div key={row.key} className="flex items-center mb-0.5">
           <div
@@ -167,21 +149,20 @@ function ReturnRow({ label, value }: { label: string; value: string | null }) {
   )
 }
 
-export function StockHistoryTab({
-  stock,
+export function ETFHistoryTab({
+  etf,
   stateHistory,
-  metricHistory: _metricHistory,
 }: {
-  stock: StockRowWithSector
-  stateHistory: StateHistoryRow[]
-  metricHistory: MetricHistoryRow[]
+  etf: ETFRow
+  stateHistory: ETFStateHistoryRow[]
+  metricHistory?: ETFMetricHistoryRow[]
 }) {
   return (
     <div className="px-6 py-6 space-y-6">
       {/* State heatmap */}
       <div>
         <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider mb-3">
-          State History — 6M
+          State History — 6M (3-tuple: RS · Momentum · Risk)
         </div>
         <StateHeatmap history={stateHistory} />
       </div>
@@ -193,9 +174,9 @@ export function StockHistoryTab({
         </div>
         <table className="border-collapse">
           <tbody>
-            <ReturnRow label="1 Month" value={stock.ret_1m} />
-            <ReturnRow label="3 Months" value={stock.ret_3m} />
-            <ReturnRow label="6 Months" value={stock.ret_6m} />
+            <ReturnRow label="1 Month" value={etf.ret_1m} />
+            <ReturnRow label="3 Months" value={etf.ret_3m} />
+            <ReturnRow label="6 Months" value={etf.ret_6m} />
           </tbody>
         </table>
       </div>

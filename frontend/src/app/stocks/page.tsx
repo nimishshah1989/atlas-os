@@ -23,8 +23,8 @@ export default async function StocksPage() {
 
   const above30wMaCount  = stocks.filter(s => s.above_30w_ma).length
   const investableCount  = stocks.filter(s => s.is_investable).length
-  const overweightRsCount = stocks.filter(s => s.rs_state === 'Overweight_RS').length
-  const improvingCount   = stocks.filter(s => s.momentum_state === 'Improving').length
+  const leaderCount      = stocks.filter(s => s.rs_state === 'Leader' || s.rs_state === 'Strong').length
+  const improvingCount   = stocks.filter(s => s.momentum_state === 'Improving' || s.momentum_state === 'Accelerating').length
 
   return (
     <div className="max-w-[1400px] mx-auto">
@@ -41,11 +41,11 @@ export default async function StocksPage() {
             </span>
             <span className="flex items-center gap-1.5 font-sans text-xs text-ink-secondary">
               <span className="inline-block w-2 h-2 rounded-full bg-signal-pos" />
-              {overweightRsCount} Overweight RS
+              {leaderCount} Leader/Strong
             </span>
             <span className="flex items-center gap-1.5 font-sans text-xs text-ink-secondary">
               <span className="inline-block w-2 h-2 rounded-full bg-signal-pos" />
-              {improvingCount} Improving
+              {improvingCount} Accel/Improving
             </span>
           </div>
         </div>

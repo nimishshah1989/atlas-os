@@ -33,19 +33,190 @@ export function RSPctileBar({ value }: { value: string | null }) {
   )
 }
 
+// ---------------------------------------------------------------------------
+// Individual state chip components — 7-level RS, 5-level Momentum/Risk/Volume
+// ---------------------------------------------------------------------------
+
+const RS_STATE_STYLE: Record<string, string> = {
+  Leader:        'bg-signal-pos/20 text-signal-pos',
+  Strong:        'bg-signal-pos/10 text-signal-pos',
+  Consolidating: 'bg-teal/15 text-teal',
+  Emerging:      'bg-signal-warn/15 text-signal-warn',
+  Average:       'bg-ink-tertiary/10 text-ink-secondary',
+  Weak:          'bg-signal-neg/10 text-signal-neg',
+  Laggard:       'bg-signal-neg/20 text-signal-neg',
+}
+
+const RS_STATE_LABEL: Record<string, string> = {
+  Leader:        'Leader',
+  Strong:        'Strong',
+  Consolidating: 'Consol',
+  Emerging:      'Emrg',
+  Average:       'Avg',
+  Weak:          'Weak',
+  Laggard:       'Laggard',
+}
+
+const MOM_STATE_STYLE: Record<string, string> = {
+  Accelerating:  'bg-signal-pos/20 text-signal-pos',
+  Improving:     'bg-signal-pos/10 text-signal-pos',
+  Flat:          'bg-ink-tertiary/10 text-ink-secondary',
+  Deteriorating: 'bg-signal-neg/10 text-signal-neg',
+  Collapsing:    'bg-signal-neg/20 text-signal-neg',
+}
+
+const MOM_STATE_LABEL: Record<string, string> = {
+  Accelerating:  'Accel',
+  Improving:     'Impr',
+  Flat:          'Flat',
+  Deteriorating: 'Det',
+  Collapsing:    'Coll',
+}
+
+const RISK_STATE_STYLE: Record<string, string> = {
+  Low:           'bg-signal-pos/10 text-signal-pos',
+  Normal:        'bg-ink-tertiary/10 text-ink-secondary',
+  Elevated:      'bg-signal-warn/15 text-signal-warn',
+  High:          'bg-signal-neg/15 text-signal-neg',
+  'Below Trend': 'bg-purple-100 text-purple-700',
+}
+
+const RISK_STATE_LABEL: Record<string, string> = {
+  Low:           'Low',
+  Normal:        'Norm',
+  Elevated:      'Elev',
+  High:          'High',
+  'Below Trend': '↓ Trnd',
+}
+
+const VOL_STATE_STYLE: Record<string, string> = {
+  Accumulation:        'bg-signal-pos/20 text-signal-pos',
+  'Steady-Buying':     'bg-signal-pos/10 text-signal-pos',
+  Neutral:             'bg-ink-tertiary/10 text-ink-secondary',
+  Distribution:        'bg-signal-neg/10 text-signal-neg',
+  'Heavy Distribution':'bg-signal-neg/20 text-signal-neg',
+}
+
+const VOL_STATE_LABEL: Record<string, string> = {
+  Accumulation:        'Accum',
+  'Steady-Buying':     'S-Buy',
+  Neutral:             'Neut',
+  Distribution:        'Dist',
+  'Heavy Distribution':'H-Dist',
+}
+
+function StateTag({
+  label,
+  style,
+  raw,
+}: {
+  label: string
+  style: string
+  raw: string | null
+}) {
+  if (!raw || raw.startsWith('INSUFFICIENT') || raw.startsWith('DISLOCATION') || raw.startsWith('ILLIQUID')) {
+    return <span className="font-mono text-[10px] text-ink-tertiary">—</span>
+  }
+  return (
+    <span
+      className={`inline-flex items-center px-1.5 py-0.5 rounded-[2px] font-sans text-[10px] font-semibold whitespace-nowrap ${style}`}
+      title={raw}
+    >
+      {label}
+    </span>
+  )
+}
+
+export function RSStateChip({ value }: { value: string | null }) {
+  const style = value ? (RS_STATE_STYLE[value] ?? 'bg-ink-tertiary/10 text-ink-secondary') : ''
+  const label = value ? (RS_STATE_LABEL[value] ?? value) : ''
+  return <StateTag raw={value} label={label} style={style} />
+}
+
+export function MomentumChip({ value }: { value: string | null }) {
+  const style = value ? (MOM_STATE_STYLE[value] ?? 'bg-ink-tertiary/10 text-ink-secondary') : ''
+  const label = value ? (MOM_STATE_LABEL[value] ?? value) : ''
+  return <StateTag raw={value} label={label} style={style} />
+}
+
+export function RiskChip({ value }: { value: string | null }) {
+  const style = value ? (RISK_STATE_STYLE[value] ?? 'bg-ink-tertiary/10 text-ink-secondary') : ''
+  const label = value ? (RISK_STATE_LABEL[value] ?? value) : ''
+  return <StateTag raw={value} label={label} style={style} />
+}
+
+export function VolumeChip({ value }: { value: string | null }) {
+  const style = value ? (VOL_STATE_STYLE[value] ?? 'bg-ink-tertiary/10 text-ink-secondary') : ''
+  const label = value ? (VOL_STATE_LABEL[value] ?? value) : ''
+  return <StateTag raw={value} label={label} style={style} />
+}
+
+// 4-chip horizontal strip for stocks
+export function StateTuple4({
+  rs,
+  mom,
+  risk,
+  vol,
+}: {
+  rs: string | null
+  mom: string | null
+  risk: string | null
+  vol: string | null
+}) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <RSStateChip value={rs} />
+      <MomentumChip value={mom} />
+      <RiskChip value={risk} />
+      <VolumeChip value={vol} />
+    </span>
+  )
+}
+
+// 3-chip horizontal strip for ETFs (no volume gate)
+export function StateTuple3({
+  rs,
+  mom,
+  risk,
+}: {
+  rs: string | null
+  mom: string | null
+  risk: string | null
+}) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <RSStateChip value={rs} />
+      <MomentumChip value={mom} />
+      <RiskChip value={risk} />
+    </span>
+  )
+}
+
+// Legacy combined chip — updated to use 7-level RS state logic
 export function StateChip({ rs, mom }: { rs: string | null; mom: string | null }) {
   if (!rs) return <span className="font-sans text-[10px] text-ink-tertiary">—</span>
-  const isOver = rs === 'Overweight_RS'
-  const tone = isOver
-    ? mom === 'Improving' ? 'bg-signal-pos/15 text-signal-pos'
-      : mom === 'Deteriorating' ? 'bg-signal-warn/15 text-signal-warn'
+  const isLeader = rs === 'Leader' || rs === 'Strong'
+  const isWeak = rs === 'Weak' || rs === 'Laggard'
+  let tone: string
+  let label: string
+  if (isLeader) {
+    tone = mom === 'Improving' || mom === 'Accelerating'
+      ? 'bg-signal-pos/15 text-signal-pos'
+      : mom === 'Deteriorating' || mom === 'Collapsing'
+      ? 'bg-signal-warn/15 text-signal-warn'
       : 'bg-teal/15 text-teal'
-    : 'bg-signal-neg/15 text-signal-neg'
-  const label = isOver
-    ? mom === 'Improving' ? '↑ Strong'
-      : mom === 'Deteriorating' ? '↓ Fading'
+    label = mom === 'Improving' || mom === 'Accelerating' ? '↑ Strong'
+      : mom === 'Deteriorating' || mom === 'Collapsing' ? '↓ Fading'
       : '→ Stable'
-    : '↓ Weak'
+  } else if (isWeak) {
+    tone = 'bg-signal-neg/15 text-signal-neg'
+    label = '↓ Weak'
+  } else {
+    tone = 'bg-ink-tertiary/10 text-ink-secondary'
+    label = rs === 'Consolidating' ? '→ Consol'
+      : rs === 'Emerging' ? '↑ Emrg'
+      : '→ Avg'
+  }
   return (
     <span className={`inline-flex items-center px-1.5 py-0.5 rounded-[2px] font-sans text-[10px] font-semibold ${tone}`}>
       {label}
@@ -96,21 +267,33 @@ export function interpretRSPctile(v: string | null): ReactNode {
 
 export function interpretMomentumState(state: string | null): ReactNode {
   if (!state) return <p>No momentum data available.</p>
+  if (state === 'Accelerating') return (
+    <>
+      <p><span className="text-signal-pos font-semibold">Accelerating momentum</span> — RS trend at a 20-day high.</p>
+      <p>Strongest signal. Stock is pulling away from peers with rising short-term momentum. High-conviction entry context.</p>
+    </>
+  )
   if (state === 'Improving') return (
     <>
-      <p><span className="text-signal-pos font-semibold">Improving momentum</span> — RS trend is accelerating upward.</p>
-      <p>Strongest entry signal. Improving RS + high pctile = high-conviction setup.</p>
+      <p><span className="text-signal-pos font-semibold">Improving momentum</span> — RS trend is rising.</p>
+      <p>Short-term EMA above 20d EMA. Improving RS + high pctile = high-conviction setup.</p>
     </>
   )
   if (state === 'Deteriorating') return (
     <>
       <p><span className="text-signal-neg font-semibold">Deteriorating momentum</span> — RS trend is weakening.</p>
-      <p>Fading strength. Existing positions: watch closely. New positions: wait for stabilization.</p>
+      <p>Fading strength. Existing positions: watch closely. New positions: wait for stabilisation.</p>
+    </>
+  )
+  if (state === 'Collapsing') return (
+    <>
+      <p><span className="text-signal-neg font-semibold">Collapsing momentum</span> — RS trend at a 20-day low.</p>
+      <p>Momentum in freefall. Exit or avoid. Do not add to a collapsing name regardless of RS rank.</p>
     </>
   )
   return (
     <>
-      <p><span className="text-ink-secondary font-medium">Stable momentum</span> — RS trend holding steady.</p>
+      <p><span className="text-ink-secondary font-medium">Flat momentum</span> — RS trend holding steady.</p>
       <p>No acceleration either way. Acceptable for existing positions; not a trigger for new entries on its own.</p>
     </>
   )
@@ -133,24 +316,24 @@ export function interpretWeinsteinGate(pass: boolean | null, ema20dHigh: boolean
 }
 
 export function interpretEMARatio(v: string | null): ReactNode {
-  if (v == null) return <p>No EMA ratio data available.</p>
+  if (v == null) return <p>No EMA momentum data available.</p>
   const n = parseFloat(v)
-  if (n >= 1.05) return (
+  if (n >= 1.02) return (
     <>
-      <p>EMA ratio <span className="text-signal-pos font-semibold">{n.toFixed(3)}</span> — stock EMA is {((n - 1) * 100).toFixed(1)}% above the benchmark EMA.</p>
-      <p>Strong trend alignment. The stock is leading the benchmark in momentum terms.</p>
+      <p>EMA ratio <span className="text-signal-pos font-semibold">{n.toFixed(3)}</span> — short-term EMA is {((n - 1) * 100).toFixed(1)}% above the 20d EMA.</p>
+      <p>Stock is trending up in the short term. EMA10 above EMA20 signals upward price momentum.</p>
     </>
   )
   if (n >= 0.98) return (
     <>
-      <p>EMA ratio <span className="text-ink-secondary font-medium">{n.toFixed(3)}</span> — roughly at parity with the benchmark.</p>
-      <p>Stock moving broadly with the benchmark. No strong momentum edge in either direction.</p>
+      <p>EMA ratio <span className="text-ink-secondary font-medium">{n.toFixed(3)}</span> — EMAs roughly at parity.</p>
+      <p>No strong directional momentum. Stock moving sideways in the short term.</p>
     </>
   )
   return (
     <>
-      <p>EMA ratio <span className="text-signal-neg font-semibold">{n.toFixed(3)}</span> — stock EMA is below the benchmark.</p>
-      <p>Momentum lagging the index. Consistent with Underweight RS positioning — avoid accumulating.</p>
+      <p>EMA ratio <span className="text-signal-neg font-semibold">{n.toFixed(3)}</span> — short-term EMA is below the 20d EMA.</p>
+      <p>Short-term momentum is down. Consistent with Deteriorating momentum state — avoid accumulating.</p>
     </>
   )
 }

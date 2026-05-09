@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import type { StockRowWithSector } from '@/lib/queries/stocks'
-import { StateChip } from '@/lib/stock-formatters'
+import { StateTuple4 } from '@/lib/stock-formatters'
 import { SectorBadge } from './SectorBadge'
 
 function IndexBadge({ label }: { label: string }) {
@@ -31,7 +31,12 @@ export function StockDeepDiveHeader({ stock }: { stock: StockRowWithSector }) {
             </h1>
             <span className="font-sans text-sm text-ink-secondary">{stock.company_name}</span>
             <SectorBadge sector={stock.sector} />
-            <StateChip rs={stock.rs_state} mom={stock.momentum_state} />
+            <StateTuple4
+              rs={stock.rs_state}
+              mom={stock.momentum_state}
+              risk={stock.risk_state}
+              vol={stock.volume_state}
+            />
             {stock.in_nifty_50 && <IndexBadge label="Nifty 50" />}
             {!stock.in_nifty_50 && stock.in_nifty_100 && <IndexBadge label="Nifty 100" />}
             {!stock.in_nifty_100 && stock.in_nifty_500 && <IndexBadge label="Nifty 500" />}
