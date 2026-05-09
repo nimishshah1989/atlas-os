@@ -11,8 +11,15 @@ export type SectorSnapshot = {
   bottomup_ret_3m: string | null
   bottomup_ret_6m: string | null
   bottomup_rs_3m_nifty500: string | null
+  bottomup_ema_10_ratio: string | null
+  bottomup_ema_20_ratio: string | null
+  topdown_ret_1m: string | null
+  topdown_ret_3m: string | null
+  topdown_rs_3m_nifty500: string | null
+  topdown_index_code: string | null
   participation_50: string | null
   participation_rs: string | null
+  participation_rs_pct: string | null
   leadership_concentration: string | null
   sector_state: string
   bottomup_state: string | null
@@ -32,9 +39,13 @@ export type SectorStateRow = {
 export type SectorMetricHistoryRow = {
   date: Date
   bottomup_rs_3m_nifty500: string | null
+  topdown_rs_3m_nifty500: string | null
+  topdown_ret_3m: string | null
   participation_50: string | null
   participation_rs: string | null
   bottomup_ret_3m: string | null
+  bottomup_ema_10_ratio: string | null
+  bottomup_ema_20_ratio: string | null
   sector_state: string
 }
 
@@ -43,12 +54,19 @@ export async function getCurrentSectors(): Promise<SectorSnapshot[]> {
     SELECT
       m.sector_name,
       m.constituent_count,
-      m.bottomup_ret_1m::text         AS bottomup_ret_1m,
-      m.bottomup_ret_3m::text         AS bottomup_ret_3m,
-      m.bottomup_ret_6m::text         AS bottomup_ret_6m,
-      m.bottomup_rs_3m_nifty500::text AS bottomup_rs_3m_nifty500,
-      m.participation_50::text        AS participation_50,
-      m.participation_rs::text        AS participation_rs,
+      m.bottomup_ret_1m::text          AS bottomup_ret_1m,
+      m.bottomup_ret_3m::text          AS bottomup_ret_3m,
+      m.bottomup_ret_6m::text          AS bottomup_ret_6m,
+      m.bottomup_rs_3m_nifty500::text  AS bottomup_rs_3m_nifty500,
+      m.bottomup_ema_10_ratio::text    AS bottomup_ema_10_ratio,
+      m.bottomup_ema_20_ratio::text    AS bottomup_ema_20_ratio,
+      m.topdown_ret_1m::text           AS topdown_ret_1m,
+      m.topdown_ret_3m::text           AS topdown_ret_3m,
+      m.topdown_rs_3m_nifty500::text   AS topdown_rs_3m_nifty500,
+      m.topdown_index_code,
+      m.participation_50::text         AS participation_50,
+      m.participation_rs::text         AS participation_rs,
+      s.participation_rs_pct::text     AS participation_rs_pct,
       m.leadership_concentration::text AS leadership_concentration,
       s.sector_state,
       s.bottomup_state,
@@ -56,7 +74,7 @@ export async function getCurrentSectors(): Promise<SectorSnapshot[]> {
       s.divergence_flag,
       s.bottomup_rs_state,
       s.bottomup_momentum_state,
-      m.date                          AS data_date
+      m.date                           AS data_date
     FROM atlas.atlas_sector_metrics_daily m
     JOIN atlas.atlas_sector_states_daily s
       ON m.sector_name = s.sector_name
@@ -96,10 +114,14 @@ export async function getSectorMetricHistory(
   return sql<SectorMetricHistoryRow[]>`
     SELECT
       m.date,
-      m.bottomup_rs_3m_nifty500::text AS bottomup_rs_3m_nifty500,
-      m.participation_50::text        AS participation_50,
-      m.participation_rs::text        AS participation_rs,
-      m.bottomup_ret_3m::text         AS bottomup_ret_3m,
+      m.bottomup_rs_3m_nifty500::text  AS bottomup_rs_3m_nifty500,
+      m.topdown_rs_3m_nifty500::text   AS topdown_rs_3m_nifty500,
+      m.topdown_ret_3m::text           AS topdown_ret_3m,
+      m.participation_50::text         AS participation_50,
+      m.participation_rs::text         AS participation_rs,
+      m.bottomup_ret_3m::text          AS bottomup_ret_3m,
+      m.bottomup_ema_10_ratio::text    AS bottomup_ema_10_ratio,
+      m.bottomup_ema_20_ratio::text    AS bottomup_ema_20_ratio,
       s.sector_state
     FROM atlas.atlas_sector_metrics_daily m
     JOIN atlas.atlas_sector_states_daily s
