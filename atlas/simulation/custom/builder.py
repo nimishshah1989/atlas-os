@@ -69,46 +69,80 @@ def validate_custom_portfolio(
             f"Got {total_weight:.4f}%."
         )
 
-    _validate_universe_membership(ids, engine)
+    _validate_universe_membership(instruments, engine)
 
 
-def _validate_universe_membership(instrument_ids: list[str], engine: Engine) -> None:
-    """Check all instruments appear in a recent Atlas stock decisions date.
+def _validate_universe_membership(instruments: list[InstrumentWeight], engine: Engine) -> None:
+    """Check all instruments exist in the appropriate universe table.
 
-    Uses ANY(:ids) with a list parameter — no f-string interpolation of user input.
-    The reference date is the most recent available date in atlas_stock_decisions_daily.
+    Branches by instrument_type:
+    - 'stock' → atlas_stock_decisions_daily (most recent date)
+    - 'etf'   → atlas_universe_etfs (ticker — instrument_id field stores ticker)
+    - 'fund'  → atlas_universe_funds (mstar_id — instrument_id field stores mstar_id)
+
+    Groups instruments by type to minimise SQL round-trips. Uses ANY(:ids) with a
+    list parameter — no f-string interpolation of user input.
 
     Note: CAST(instrument_id AS text) used throughout — not instrument_id::text —
     to avoid the SQLAlchemy text() param-cast collision with :ids parameter.
     """
+    by_type: dict[str, list[str]] = {}
+    for inst in instruments:
+        by_type.setdefault(inst.instrument_type, []).append(inst.instrument_id)
+
     with open_compute_session(engine) as conn:
-        ref_date = conn.execute(
-            text("SELECT MAX(date) FROM atlas.atlas_stock_decisions_daily")
-        ).scalar()
+        for itype, ids in by_type.items():
+            if itype == "stock":
+                ref_date = conn.execute(
+                    text("SELECT MAX(date) FROM atlas.atlas_stock_decisions_daily")
+                ).scalar()
 
-        if ref_date is None:
-            raise ValueError(
-                "Cannot validate universe membership: atlas_stock_decisions_daily is empty. "
-                "Ensure M3 backfill has run before creating custom portfolios."
-            )
+                if ref_date is None:
+                    raise ValueError(
+                        "Cannot validate universe membership: "
+                        "atlas_stock_decisions_daily is empty. "
+                        "Ensure M3 backfill has run before creating custom portfolios."
+                    )
 
-        rows = conn.execute(
-            text("""
-                SELECT CAST(instrument_id AS text)
-                FROM atlas.atlas_stock_decisions_daily
-                WHERE date = :ref_date
-                  AND CAST(instrument_id AS text) = ANY(:ids)
-            """),
-            {"ref_date": ref_date, "ids": instrument_ids},
-        ).fetchall()
+                rows = conn.execute(
+                    text("""
+                        SELECT CAST(instrument_id AS text)
+                        FROM atlas.atlas_stock_decisions_daily
+                        WHERE date = :ref_date
+                          AND CAST(instrument_id AS text) = ANY(:ids)
+                    """),
+                    {"ref_date": ref_date, "ids": ids},
+                ).fetchall()
+            elif itype == "etf":
+                rows = conn.execute(
+                    text("""
+                        SELECT ticker
+                        FROM atlas.atlas_universe_etfs
+                        WHERE ticker = ANY(:ids)
+                          AND effective_to IS NULL
+                    """),
+                    {"ids": ids},
+                ).fetchall()
+            elif itype == "fund":
+                rows = conn.execute(
+                    text("""
+                        SELECT mstar_id
+                        FROM atlas.atlas_universe_funds
+                        WHERE mstar_id = ANY(:ids)
+                          AND effective_to IS NULL
+                    """),
+                    {"ids": ids},
+                ).fetchall()
+            else:
+                raise ValueError(f"unknown instrument_type: {itype}")
 
-    found = {r[0] for r in rows}
-    missing = set(instrument_ids) - found
-    if missing:
-        raise ValueError(
-            f"The following instruments are not in Atlas universe as of {ref_date}: "
-            f"{sorted(missing)}. Only investable instruments may be included."
-        )
+            found = {r[0] for r in rows}
+            missing = set(ids) - found
+            if missing:
+                raise ValueError(
+                    f"The following {itype} instruments are not in the Atlas universe: "
+                    f"{sorted(missing)}"
+                )
 
 
 def suggest_min_variance_weights(

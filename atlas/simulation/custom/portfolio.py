@@ -22,6 +22,7 @@ from concurrent.futures import Future, ProcessPoolExecutor
 from datetime import date, timedelta
 from uuid import UUID
 
+import pandas as pd
 import structlog
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -186,3 +187,74 @@ def _mark_backtest_failed(portfolio_id: str, engine: Engine) -> None:
             {"pid": portfolio_id},
         )
         conn.commit()
+
+
+def _fetch_prices(
+    instrument_id: str,
+    instrument_type: str,
+    start_date: date,
+    end_date: date,
+    engine: Engine,
+) -> pd.Series:  # type: ignore[type-arg]
+    """Return a date-indexed price Series for a single instrument.
+
+    Branches by instrument_type:
+    - 'stock': de_ohlcv_daily.adj_close (or close if adj_close missing)
+    - 'etf':   de_etf_ohlcv.close (queries by ticker)
+    - 'fund':  de_mf_nav_daily.nav_adj — early date filter enables partition pruning
+               (de_mf_nav_daily is year-partitioned; WHERE nav_date >= :sd is required)
+
+    All SQL uses parameterized queries (no f-string interpolation of user input).
+    Empty result → empty pd.Series (caller handles missing data).
+    """
+    if instrument_type == "stock":
+        sql = text("""
+            SELECT date, adj_close
+            FROM public.de_ohlcv_daily
+            WHERE instrument_id = :id
+              AND date >= :sd
+              AND date <= :ed
+            ORDER BY date
+        """)
+        params: dict[str, object] = {
+            "id": instrument_id,
+            "sd": start_date,
+            "ed": end_date,
+        }
+        date_col = 0
+        price_col = 1
+    elif instrument_type == "etf":
+        sql = text("""
+            SELECT date, close
+            FROM public.de_etf_ohlcv
+            WHERE ticker = :id
+              AND date >= :sd
+              AND date <= :ed
+            ORDER BY date
+        """)
+        params = {"id": instrument_id, "sd": start_date, "ed": end_date}
+        date_col = 0
+        price_col = 1
+    elif instrument_type == "fund":
+        # Partition pruning: early date filter on nav_date so Postgres only
+        # scans the year-partitions that overlap the requested range.
+        sql = text("""
+            SELECT nav_date, nav_adj
+            FROM public.de_mf_nav_daily
+            WHERE mstar_id = :id
+              AND nav_date >= :sd
+              AND nav_date <= :ed
+            ORDER BY nav_date
+        """)
+        params = {"id": instrument_id, "sd": start_date, "ed": end_date}
+        date_col = 0
+        price_col = 1
+    else:
+        raise ValueError(f"unknown instrument_type: {instrument_type}")
+
+    with engine.connect() as conn:
+        rows = conn.execute(sql, params).fetchall()
+
+    if not rows:
+        return pd.Series(dtype=float)
+    return pd.Series({r[date_col]: float(r[price_col]) for r in rows})

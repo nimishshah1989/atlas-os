@@ -8,10 +8,13 @@ Endpoints:
 - GET    /api/portfolios/custom/{id}/status  poll for backtest completion
 - GET    /api/portfolios/custom/{id}         full portfolio detail incl. backtest
 - GET    /api/portfolios/custom              list all custom portfolios
+- POST   /api/portfolios/rule-based          FM-authored rule-based portfolio (M15)
 """
 
 from __future__ import annotations
 
+import json
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -19,12 +22,16 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from atlas.api._rule_allowlist import ConfigValidationError, validate_config
 from atlas.compute._session import open_compute_session
 from atlas.db import get_engine
 from atlas.simulation.custom.builder import InstrumentWeight
 from atlas.simulation.custom.portfolio import create_custom_portfolio
 
 router = APIRouter(prefix="/api/portfolios/custom", tags=["custom-portfolio"])
+
+# Separate router for rule-based portfolios (different URL prefix)
+rule_based_router = APIRouter(prefix="/api/portfolios", tags=["rule-based-portfolio"])
 
 
 class InstrumentWeightRequest(BaseModel):
@@ -158,3 +165,77 @@ def list_portfolios(
         }
         for r in rows
     ]
+
+
+# ---------------------------------------------------------------------------
+# Rule-based portfolio endpoints (M15)
+# ---------------------------------------------------------------------------
+
+
+class RuleBasedPortfolioRequest(BaseModel):
+    name: str
+    description: str | None = None
+    config: dict  # type: ignore[type-arg]
+
+
+@rule_based_router.post("/rule-based", status_code=201)
+def create_rule_based_portfolio(
+    body: RuleBasedPortfolioRequest,
+    engine: Engine = Depends(get_engine),  # noqa: B008
+) -> dict:  # type: ignore[type-arg]
+    """Create an FM-authored rule-based portfolio (lives in strategy_configs).
+
+    Validates config against the _rule_allowlist security boundary, then
+    INSERTs into atlas.strategy_configs with is_fm_authored=TRUE.
+    The audit trigger (migration 025) captures the creation context.
+    Returns 201 with strategy_id + status.
+    """
+    try:
+        validate_config(body.config)
+    except ConfigValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error_code": "invalid_config",
+                "message": str(exc),
+                "context": {},
+            },
+        ) from exc
+
+    if not body.name.strip():
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error_code": "name_required",
+                "message": "name is required",
+                "context": {},
+            },
+        )
+
+    new_strategy_id = uuid.uuid4()
+    with engine.begin() as conn:
+        reason = body.description or "FM-authored rule-based portfolio creation"
+        conn.execute(text("SET LOCAL atlas.change_reason = :r"), {"r": reason})
+        conn.execute(
+            text("""
+                INSERT INTO atlas.strategy_configs
+                  (id, name, tier, archetype, variant, config,
+                   is_active, is_fm_authored, created_by)
+                VALUES
+                  (:id, :name, 'fm', 'fm_authored', 'custom',
+                   CAST(:cfg AS jsonb), TRUE, TRUE, 'fund-manager')
+            """),
+            {
+                "id": str(new_strategy_id),
+                "name": body.name.strip(),
+                "cfg": json.dumps(body.config),
+            },
+        )
+    return {
+        "data": {
+            "strategy_id": str(new_strategy_id),
+            "name": body.name.strip(),
+            "status": "created",
+        },
+        "meta": {"source": "atlas-api"},
+    }

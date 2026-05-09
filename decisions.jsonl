@@ -8375,3 +8375,66 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{
+  "ts": "2026-05-09T20:16:26Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/strategies/[id]/EquityCurveChart.tsx",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T20:16:30Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/strategies/[id]/DrawdownChart.tsx",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T20:15:30Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/specs/2026-05-10-m16-states-etf-design.md",
+  "lines_changed": 103,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T20:15:39Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/chunks/chunk-m15-p3-approach.md",
+  "lines_changed": 91,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T20:16:05Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/charts/EquityCurveChart.tsx",
+  "lines_changed": 147,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T20:16:21Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/charts/DrawdownChart.tsx",
+  "lines_changed": 122,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T20:16:58Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/portfolios.ts",
+  "lines_changed": 221,
+  "session_id": "unknown",
+  "schema_version": 1
+}

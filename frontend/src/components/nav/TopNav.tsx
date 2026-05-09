@@ -9,6 +9,8 @@ const NAV_LINKS = [
   { href: '/stocks',         label: 'Stocks' },
   { href: '/etfs',           label: 'ETFs' },
   { href: '/funds',          label: 'Funds' },
+  { href: '/strategies',     label: 'Strategies' },
+  { href: '/portfolios',     label: 'Portfolios' },
   { href: '/health',         label: 'Health' },
   { href: '/admin/policies', label: 'Policies' },
 ]
