@@ -86,6 +86,35 @@ def get_real_instruments(engine: Engine, n: int = 3) -> list[str]:
     return [r[0] for r in rows]
 
 
+def get_trigger_instruments(engine: Engine) -> tuple[list[str], date, date]:
+    """Return instruments with ≥1 entry trigger, plus the date range that covers them.
+
+    The Atlas methodology has very strict multi-gate entry criteria, so triggers are
+    sparse (~7 across 909K rows). For backtest validation we need to target these
+    specific instruments.
+    """
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                """
+                SELECT CAST(instrument_id AS text) AS iid,
+                       MIN(date) AS first_trigger
+                FROM atlas.atlas_stock_decisions_daily
+                WHERE transition_trigger = true OR breakout_trigger = true
+                GROUP BY instrument_id
+                ORDER BY first_trigger
+                """
+            )
+        ).fetchall()
+    if not rows:
+        return [], date.today() - timedelta(days=365), date.today()
+    iids = [r[0] for r in rows]
+    # Start 30 days before the earliest trigger so the portfolio has context
+    earliest = min(r[1] for r in rows)
+    start = earliest - timedelta(days=30)
+    return iids, start, date.today()
+
+
 # -----------------------------------------------------------------------------
 # checks
 # -----------------------------------------------------------------------------
@@ -227,43 +256,49 @@ def check_3_signal_matrix(engine: Engine, real_ids: list[str]) -> Result:
     return r
 
 
-def check_4_backtest_engine(engine: Engine, real_ids: list[str]) -> Result:
-    r = Result("Backtest engine (vectorbt vs real prices)")
+def check_4_backtest_engine(engine: Engine) -> Result:
+    r = Result("Backtest engine (vectorbt, instruments with known entry triggers)")
     try:
         from atlas.simulation.backtest.engine import run_backtest
         from atlas.simulation.core.signal_adapter import build_stock_etf_signal_matrix
 
-        end = date.today()
-        start = end - timedelta(days=365)
+        trigger_ids, start, end = get_trigger_instruments(engine)
+        if not trigger_ids:
+            return r.fail(
+                "no entry triggers found in atlas_stock_decisions_daily — run M5 backfill"
+            )
+
         sm = build_stock_etf_signal_matrix(
             engine=engine,
-            instrument_ids=real_ids,
+            instrument_ids=trigger_ids,
             start_date=start,
             end_date=end,
             decisions_table="atlas_stock_decisions_daily",
         )
+        if len(sm.instruments) == 0:
+            return r.fail(f"empty signal matrix for trigger instruments {trigger_ids}")
+
         result = run_backtest(sm, init_cash=10_000_000.0, fees_pct=0.001)
         if result.total_return is None:
             return r.fail("total_return is None on real data")
         if result.start_date is None or result.end_date is None:
             return r.fail("start_date/end_date is None on non-empty matrix")
-        # Sanity: Sharpe in plausible range, drawdown ≤ 0
         sharpe_str = f"{result.sharpe_ratio:.2f}" if result.sharpe_ratio is not None else "None"
         dd = result.max_drawdown
         if dd is not None and dd > 0:
             return r.fail(f"max_drawdown should be ≤ 0, got {dd}")
         r.ok(
-            f"sharpe={sharpe_str}, dd={dd:.2%} if dd else None, "
-            f"total_return={result.total_return:.2%}, n_trades={result.n_trades}"
-            if dd is not None
-            else f"sharpe={sharpe_str}, dd=None, total_return={result.total_return:.2%}"
+            f"n_instruments={len(sm.instruments)}, n_trades={result.n_trades}, "
+            f"sharpe={sharpe_str}, "
+            + (f"dd={dd:.2%}, " if dd is not None else "dd=None, ")
+            + f"total_return={result.total_return:.2%}"
         )
     except Exception as e:
         r.fail(f"{type(e).__name__}: {e}\n{traceback.format_exc()[-500:]}")
     return r
 
 
-def check_5_full_lifecycle(engine: Engine, real_ids: list[str]) -> Result:
+def check_5_full_lifecycle(engine: Engine) -> Result:
     r = Result("Full lifecycle synchronously (create → backtest → DB write)")
     portfolio_id_to_cleanup: str | None = None
     try:
@@ -273,10 +308,14 @@ def check_5_full_lifecycle(engine: Engine, real_ids: list[str]) -> Result:
             run_custom_portfolio_backtest,
         )
 
+        trigger_ids, _start, _end = get_trigger_instruments(engine)
+        if len(trigger_ids) < 2:
+            return r.fail("need ≥2 instruments with entry triggers; run M5 backfill first")
+
+        weights = [60.0, 40.0] if len(trigger_ids) == 2 else [40.0, 35.0, 25.0]
         instruments = [
-            InstrumentWeight(real_ids[0], "stock", 40.0),
-            InstrumentWeight(real_ids[1], "stock", 35.0),
-            InstrumentWeight(real_ids[2], "stock", 25.0),
+            InstrumentWeight(iid, "stock", w)
+            for iid, w in zip(trigger_ids[:3], weights, strict=False)
         ]
         validate_custom_portfolio(instruments, engine)
         portfolio_id_str = _save_portfolio_record(
@@ -458,10 +497,10 @@ def main() -> int:
     results.append(check_3_signal_matrix(engine, real_ids))
     print(results[-1])
     print("[4/6] backtest engine ...")
-    results.append(check_4_backtest_engine(engine, real_ids))
+    results.append(check_4_backtest_engine(engine))
     print(results[-1])
     print("[5/6] full lifecycle ...")
-    results.append(check_5_full_lifecycle(engine, real_ids))
+    results.append(check_5_full_lifecycle(engine))
     print(results[-1])
     print("[6/6] api e2e ...")
     results.append(check_6_api_e2e(engine, real_ids))
