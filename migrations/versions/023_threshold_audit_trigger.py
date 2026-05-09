@@ -65,10 +65,6 @@ AFTER UPDATE ON atlas.atlas_thresholds
 FOR EACH ROW EXECUTE FUNCTION atlas.fn_threshold_audit();
 """
 
-_DROP_TRIGGER_DOWN_SQL = """\
-DROP TRIGGER IF EXISTS trg_threshold_audit ON atlas.atlas_thresholds;
-"""
-
 _DROP_FUNCTION_SQL = """\
 DROP FUNCTION IF EXISTS atlas.fn_threshold_audit();
 """
@@ -82,5 +78,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute(sa.text(_DROP_TRIGGER_DOWN_SQL))
+    op.execute(sa.text(_DROP_TRIGGER_SQL))
     op.execute(sa.text(_DROP_FUNCTION_SQL))

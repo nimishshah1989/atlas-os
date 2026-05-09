@@ -87,9 +87,11 @@ class TestUpgradeSQLContent:
     def test_upgrade_emits_current_setting_call(self) -> None:
         sqls = self._run_upgrade_and_collect()
         combined = "\n".join(sqls)
-        assert (
-            "current_setting" in combined
-        ), "upgrade() SQL must use current_setting() to read the atlas.change_reason GUC"
+        assert "current_setting('atlas.change_reason', true)" in combined, (
+            "upgrade() SQL must use current_setting('atlas.change_reason', true)"
+            " — the 'true' argument is required so an unset GUC returns NULL"
+            " rather than raising"
+        )
 
     def test_upgrade_emits_distinct_guard(self) -> None:
         sqls = self._run_upgrade_and_collect()
@@ -113,6 +115,14 @@ class TestUpgradeSQLContent:
         assert (
             mock_exec.call_count == 3
         ), f"upgrade() should emit 3 op.execute() calls, got {mock_exec.call_count}"
+
+    def test_downgrade_emits_two_statements(self) -> None:
+        mod = _load_migration()
+        with patch("alembic.op.execute") as mock_exec:
+            mod.downgrade()
+        assert (
+            mock_exec.call_count == 2
+        ), f"downgrade() should emit 2 op.execute() calls, got {mock_exec.call_count}"
 
     def test_downgrade_emits_drop_trigger(self) -> None:
         mod = _load_migration()
