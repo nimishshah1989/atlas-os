@@ -37,7 +37,7 @@ export type RecentRunRow = {
   status: string // 'running' | 'success' | 'failed'
   started_at: Date
   ended_at: Date | null
-  rows_written: number | null
+  rows_written: string | null // BIGINT returned as string by postgres.js (avoids Number.MAX_SAFE_INTEGER overflow)
   error_message: string | null
 }
 

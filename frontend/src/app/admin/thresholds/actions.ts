@@ -41,10 +41,15 @@ export async function updateThreshold(
     })
   } catch (err) {
     // CHECK constraint (chk_threshold_in_range) violation arrives here.
-    const msg = err instanceof Error ? err.message : String(err)
-    if (msg.includes('chk_threshold_in_range')) {
+    // postgres.js exposes constraint_name as a typed field on PostgresError —
+    // use that instead of fragile string-match on err.message.
+    const isPostgresError = (e: unknown): e is { constraint_name?: string; message: string } =>
+      e instanceof Error && 'constraint_name' in e
+
+    if (isPostgresError(err) && err.constraint_name === 'chk_threshold_in_range') {
       return { ok: false, error: 'Value is outside the allowed [min, max] range' }
     }
+    const msg = err instanceof Error ? err.message : String(err)
     return { ok: false, error: msg }
   }
 

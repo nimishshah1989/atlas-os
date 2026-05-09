@@ -109,7 +109,10 @@ describe('updateThreshold', () => {
   })
 
   it('surfaces CHECK constraint violation as a friendly error', async () => {
-    makeTxMock(new Error('new row for relation violates check constraint "chk_threshold_in_range"'))
+    // Mimic postgres.js PostgresError: Error subclass with constraint_name field.
+    const pgError = new Error('check constraint violation') as Error & { constraint_name: string }
+    pgError.constraint_name = 'chk_threshold_in_range'
+    makeTxMock(pgError)
 
     const result = await updateThreshold('rs_threshold_min', '999', 'trying an out-of-range value')
 
@@ -186,6 +189,22 @@ describe('triggerRecompute', () => {
       error: 'ATLAS_INTERNAL_SECRET not set on server',
       existing_run_id: undefined,
     })
+    expect(revalidatePath).not.toHaveBeenCalled()
+  })
+
+  it('surfaces EC2 401 (auth mismatch with remote)', async () => {
+    vi.mocked(mockedInternalCall).mockResolvedValueOnce({
+      ok: false,
+      error_code: 'invalid_bearer',
+      message: 'missing or invalid bearer token',
+    })
+
+    const result = await triggerRecompute('m3')
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toBe('missing or invalid bearer token')
+      expect(result.existing_run_id).toBeUndefined()
+    }
     expect(revalidatePath).not.toHaveBeenCalled()
   })
 })
