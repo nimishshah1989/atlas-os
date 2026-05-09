@@ -6,18 +6,13 @@ Integration tests require ATLAS_DB_URL and are skipped without it.
 
 from __future__ import annotations
 
-import os
 import uuid
+from collections.abc import Generator
 from unittest.mock import MagicMock
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
-_SKIP_INTEGRATION = pytest.mark.skipif(
-    os.environ.get("ATLAS_DB_URL") is None,
-    reason="needs ATLAS_DB_URL — integration tests run on EC2 only",
-)
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -30,7 +25,7 @@ def mock_engine() -> MagicMock:
 
 
 @pytest.fixture
-def client(mock_engine: MagicMock) -> TestClient:
+def client(mock_engine: MagicMock) -> Generator[TestClient, None, None]:
     """TestClient with get_engine overridden to a MagicMock."""
     from atlas.api.strategies import router
     from atlas.db import get_engine

@@ -6,6 +6,7 @@ Fixture pattern matches test_portfolios.py (mock engine, dependency_overrides).
 from __future__ import annotations
 
 import uuid
+from collections.abc import Generator
 from unittest.mock import MagicMock
 
 import pytest
@@ -23,7 +24,7 @@ def mock_engine() -> MagicMock:
 
 
 @pytest.fixture
-def client(mock_engine: MagicMock) -> TestClient:
+def client(mock_engine: MagicMock) -> Generator[TestClient, None, None]:
     """TestClient with get_engine overridden to a MagicMock."""
     from atlas.api.portfolios import rule_based_router
     from atlas.db import get_engine
