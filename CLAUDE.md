@@ -63,7 +63,23 @@ or argue the rule out in a plan first.
 
 ### Architectural rules (hook-enforced)
 
-1. **No file > 400 LOC.** Approaching the limit = split into a sub-package.
+1. **Tiered file-size limits.** Different file kinds have different reasonable
+   lengths; one-size-fits-all is the wrong call:
+
+   | File kind | LOC limit |
+   |---|---|
+   | Source files (`atlas/`, `frontend/src/components|lib|hooks/`) | **600** |
+   | Test files (`tests/`, `*test_*.py`, `*.test.ts`, `*.spec.ts`) | **800** |
+   | Page shells (`frontend/src/app/**/page.tsx`, `layout.tsx`) | **250** (thin shells; logic goes in lib/components) |
+   | Migrations / lockfiles / generated | no limit (whitelisted) |
+
+   **Escape valve:** if a file is *genuinely* cohesive at its current size,
+   add `# allow-large: <reason>` (Python) or `// allow-large: <reason>`
+   (TS/JS) anywhere in the file. The reason becomes the load-bearing
+   artifact reviewers can challenge — line count alone is never the smell,
+   *responsibility count* is. The marker forces the author to write the
+   justification down where every reviewer sees it.
+
 2. **No cross-context imports.** `atlas.compute.*` cannot import `atlas.api.*`,
    etc. Exchange happens via the shared kernel (`atlas.primitives`, `atlas.db`,
    `atlas.config`) or a context's public `__init__.py`.
