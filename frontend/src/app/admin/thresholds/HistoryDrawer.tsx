@@ -3,28 +3,23 @@
 import { useEffect, useState } from 'react'
 import { getThresholdHistoryAction } from './actions'
 import type { ThresholdHistoryRow } from '@/lib/queries/thresholds'
+import { formatIST } from '@/lib/format-date'
 
 type Props = {
   thresholdKey: string
   onClose: () => void
 }
 
-function formatIST(date: Date): string {
-  return new Intl.DateTimeFormat('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-    timeZone: 'Asia/Kolkata',
-  }).format(new Date(date)) + ' IST'
-}
-
 export function HistoryDrawer({ thresholdKey, onClose }: Props) {
   const [rows, setRows] = useState<ThresholdHistoryRow[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
 
   useEffect(() => {
     let cancelled = false
@@ -55,11 +50,16 @@ export function HistoryDrawer({ thresholdKey, onClose }: Props) {
       />
 
       {/* Drawer panel */}
-      <div className="fixed top-0 right-0 z-50 h-full w-[480px] max-w-full bg-paper border-l border-paper-rule shadow-lg flex flex-col">
+      <div
+        role="dialog"
+        aria-modal="false"
+        aria-labelledby="history-drawer-title"
+        className="fixed top-0 right-0 z-50 h-full w-[480px] max-w-full bg-paper border-l border-paper-rule shadow-lg flex flex-col"
+      >
         {/* Header */}
         <div className="border-b border-paper-rule px-6 py-4 flex items-start justify-between flex-shrink-0">
           <div>
-            <h2 className="font-serif text-lg text-ink-primary">Threshold History</h2>
+            <h2 id="history-drawer-title" className="font-serif text-lg text-ink-primary">Threshold History</h2>
             <p className="font-mono text-xs text-ink-tertiary mt-0.5">{thresholdKey}</p>
           </div>
           <button
@@ -109,7 +109,7 @@ export function HistoryDrawer({ thresholdKey, onClose }: Props) {
                   <tr key={row.id} className="border-b border-paper-rule/40 hover:bg-paper-rule/10">
                     <td className="py-2.5 pr-3 align-top">
                       <span className="font-sans text-xs text-ink-secondary whitespace-nowrap">
-                        {formatIST(row.changed_at)}
+                        {formatIST(row.changed_at, true)}
                       </span>
                     </td>
                     <td className="py-2.5 pr-3 align-top">

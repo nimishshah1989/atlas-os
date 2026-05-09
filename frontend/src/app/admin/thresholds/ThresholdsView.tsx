@@ -2,24 +2,17 @@
 // allow-large: owns all interactive state for threshold admin — edit modal, history drawer, recompute panel, and grouped table rendering
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import type { ThresholdRow, RecentRunRow } from '@/lib/queries/thresholds'
 import { EditThresholdModal } from './EditThresholdModal'
 import { HistoryDrawer } from './HistoryDrawer'
 import { RecomputePanel } from './RecomputePanel'
+import { formatIST } from '@/lib/format-date'
 
 type Props = {
   byCategory: Record<string, ThresholdRow[]>
   sortedCategories: string[]
   recentRuns: RecentRunRow[]
-}
-
-function formatLastModified(date: Date): string {
-  return new Intl.DateTimeFormat('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'Asia/Kolkata',
-  }).format(new Date(date))
 }
 
 function CategoryTable({
@@ -93,7 +86,7 @@ function CategoryTable({
                 </td>
                 <td className="px-3 py-2.5 align-middle hidden lg:table-cell">
                   <span className="font-sans text-xs text-ink-tertiary">
-                    {formatLastModified(row.last_modified_at)}
+                    {formatIST(row.last_modified_at, true)}
                   </span>
                   <span className="font-sans text-xs text-ink-tertiary block">
                     by {row.last_modified_by}
@@ -130,6 +123,7 @@ function CategoryTable({
 export function ThresholdsView({ byCategory, sortedCategories, recentRuns }: Props) {
   const [editingKey, setEditingKey] = useState<string | null>(null)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  const router = useRouter()
 
   // Flatten the map to find a ThresholdRow by key
   const findRow = (key: string): ThresholdRow | undefined =>
@@ -138,10 +132,8 @@ export function ThresholdsView({ byCategory, sortedCategories, recentRuns }: Pro
   const editingThreshold = editingKey ? findRow(editingKey) : undefined
 
   function handleSaved() {
-    // revalidatePath was called server-side; RSC refresh happens on next navigation.
-    // For immediate feedback without full reload, just close the modal.
-    // The server re-fetch will happen on next hard navigate.
     setEditingKey(null)
+    router.refresh() // re-runs the RSC fetch and updates the table
   }
 
   return (

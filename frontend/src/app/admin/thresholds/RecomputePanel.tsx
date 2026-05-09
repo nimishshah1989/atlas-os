@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { triggerRecompute, getRunStatusAction } from './actions'
 import type { RecentRunRow } from '@/lib/queries/thresholds'
+import { formatIST } from '@/lib/format-date'
 
 type Milestone = 'm3' | 'm4' | 'm5' | 'all'
 
@@ -20,18 +21,6 @@ const STATUS_CLASSES: Record<RunStatus, string> = {
 
 function statusClass(status: string): string {
   return STATUS_CLASSES[status as RunStatus] ?? 'text-ink-secondary bg-paper-rule/20 border-paper-rule'
-}
-
-function formatIST(date: Date): string {
-  return new Intl.DateTimeFormat('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-    timeZone: 'Asia/Kolkata',
-  }).format(new Date(date)) + ' IST'
 }
 
 export function RecomputePanel({ recentRuns: initialRuns }: Props) {
@@ -89,7 +78,10 @@ export function RecomputePanel({ recentRuns: initialRuns }: Props) {
       setMessageKind('ok')
       startPolling(result.compute_run_id)
     } else {
-      setMessage(result.error)
+      const suffix = result.existing_run_id
+        ? ` (run_id=${result.existing_run_id.slice(0, 8)}…)`
+        : ''
+      setMessage(result.error + suffix)
       setMessageKind('err')
       setActiveMilestone(null)
     }
@@ -174,7 +166,7 @@ export function RecomputePanel({ recentRuns: initialRuns }: Props) {
                 )}
                 <span className="font-sans text-xs text-ink-secondary">{run.script_name}</span>
                 <span className="font-sans text-xs text-ink-tertiary">
-                  {formatIST(run.started_at)}
+                  {formatIST(run.started_at, true)}
                 </span>
                 {run.rows_written && (
                   <span className="font-sans text-xs text-ink-tertiary">

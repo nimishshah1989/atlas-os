@@ -1,7 +1,7 @@
 'use client'
 // allow-large: modal owns the full edit UX: form, diff preview, validation, pending state, error display
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { updateThreshold } from './actions'
 import type { ThresholdRow } from '@/lib/queries/thresholds'
 
@@ -16,6 +16,12 @@ export function EditThresholdModal({ threshold, onClose, onSaved }: Props) {
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
 
   const currentNum = parseFloat(threshold.threshold_value)
   const newNum = parseFloat(value)
@@ -59,11 +65,16 @@ export function EditThresholdModal({ threshold, onClose, onSaved }: Props) {
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink-primary/30"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="bg-paper border border-paper-rule rounded-[2px] w-full max-w-md mx-4 shadow-lg">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-threshold-modal-title"
+        className="bg-paper border border-paper-rule rounded-[2px] w-full max-w-md mx-4 shadow-lg"
+      >
         {/* Header */}
         <div className="border-b border-paper-rule px-6 py-4 flex items-start justify-between">
           <div>
-            <h2 className="font-serif text-lg text-ink-primary leading-tight">
+            <h2 id="edit-threshold-modal-title" className="font-serif text-lg text-ink-primary leading-tight">
               Edit Threshold
             </h2>
             <p className="font-mono text-xs text-ink-tertiary mt-0.5">
@@ -96,10 +107,11 @@ export function EditThresholdModal({ threshold, onClose, onSaved }: Props) {
 
           {/* Value input */}
           <div className="flex flex-col gap-1.5">
-            <label className="font-sans text-xs font-medium text-ink-secondary uppercase tracking-wide">
+            <label htmlFor="edit-threshold-value" className="font-sans text-xs font-medium text-ink-secondary uppercase tracking-wide">
               Value{threshold.units ? ` (${threshold.units})` : ''}
             </label>
             <input
+              id="edit-threshold-value"
               type="number"
               step="any"
               value={value}
@@ -132,10 +144,11 @@ export function EditThresholdModal({ threshold, onClose, onSaved }: Props) {
 
           {/* Reason textarea */}
           <div className="flex flex-col gap-1.5">
-            <label className="font-sans text-xs font-medium text-ink-secondary uppercase tracking-wide">
+            <label htmlFor="edit-threshold-reason" className="font-sans text-xs font-medium text-ink-secondary uppercase tracking-wide">
               Change Reason <span className="text-signal-neg">*</span>
             </label>
             <textarea
+              id="edit-threshold-reason"
               value={reason}
               onChange={(e) => { setReason(e.target.value); setError(null) }}
               disabled={isPending}

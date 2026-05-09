@@ -4,6 +4,11 @@
 // These tests require a live Atlas environment. They are automatically
 // skipped when ATLAS_E2E_BASE_URL or ATLAS_PASSWORD is not set, so
 // local and CI unit-test runs pass without a live backend.
+//
+// KNOWN GAPS (intentional): test 1 does not assert atlas_threshold_history row
+// because that requires a Postgres connection in the E2E context. The
+// migration unit test covers the trigger fire path. Test 2 does not poll
+// to success because that requires a live EC2 m3_daily.py run.
 
 import { test, expect } from '@playwright/test'
 

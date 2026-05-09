@@ -20,6 +20,9 @@ export async function updateThreshold(
     return { ok: false, error: 'Change reason is required' }
   }
 
+  if (!newValue.trim()) {
+    return { ok: false, error: 'Value is required' }
+  }
   const parsedValue = Number(newValue)
   if (!Number.isFinite(parsedValue)) {
     return { ok: false, error: 'Value must be a number' }

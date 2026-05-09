@@ -73,6 +73,16 @@ describe('updateThreshold', () => {
     expect(revalidatePath).not.toHaveBeenCalled()
   })
 
+  it('rejects empty value (Number("") would otherwise be 0)', async () => {
+    makeTxMock()
+
+    const result = await updateThreshold('test_key', '', 'reason')
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toMatch(/required|number/i)
+    expect((sql as { begin?: unknown }).begin).not.toHaveBeenCalled()
+  })
+
   it('rejects non-numeric value', async () => {
     const { txCalls } = makeTxMock()
 
