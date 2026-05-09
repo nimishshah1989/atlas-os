@@ -33,7 +33,7 @@ from atlas.db import get_engine
 
 log = structlog.get_logger()
 
-app = FastAPI(title="Atlas Internal Recompute API", version="0.1.0")
+app = FastAPI(title="Atlas Internal API", version="0.2.0")
 
 # Resolved once at import time — atlas/api/internal_recompute.py → atlas-os/
 ATLAS_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -227,3 +227,17 @@ def trigger_recompute(
             "source": "atlas-internal",
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# M15 — wire portfolios + strategies + rule-based routers behind the same
+# bearer auth. The frontend already calls port 8002 with ATLAS_INTERNAL_SECRET.
+# ---------------------------------------------------------------------------
+
+from atlas.api.portfolios import router as _portfolios_router  # noqa: E402
+from atlas.api.portfolios import rule_based_router as _rule_based_router  # noqa: E402
+from atlas.api.strategies import router as _strategies_router  # noqa: E402
+
+app.include_router(_portfolios_router, dependencies=[Depends(verify_bearer)])
+app.include_router(_rule_based_router, dependencies=[Depends(verify_bearer)])
+app.include_router(_strategies_router, dependencies=[Depends(verify_bearer)])
