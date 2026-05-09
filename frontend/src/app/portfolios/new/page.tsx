@@ -1,10 +1,10 @@
 // src/app/portfolios/new/page.tsx
 // RSC — portfolio builder. Tabs: Static | Rule-Based.
-// Static tab is fully built. Rule-Based tab is a Phase 4 placeholder.
 // Shell ≤250 LOC.
 import Link from 'next/link'
 import { getStocksForPicker, getETFsForPicker, getMutualFundsForPicker } from '@/lib/queries/instruments'
 import { StaticBuilder } from './StaticBuilder'
+import { RuleBuilderForm } from '@/components/strategy/RuleBuilderForm'
 
 type SearchParams = {
   type?: string
@@ -66,15 +66,7 @@ export default async function NewPortfolioPage({
       {activeType === 'static' ? (
         <StaticBuilder stocks={stocks} etfs={etfs} funds={funds} />
       ) : (
-        <div className="border border-paper-rule rounded-[2px] p-8 text-center">
-          <p className="font-sans text-base text-ink-secondary mb-2">
-            Rule-Based builder ships in Phase 4.
-          </p>
-          <p className="font-sans text-sm text-ink-tertiary">
-            Define entry/exit rules, regime gates, and market breadth triggers.
-            Available in the next phase of M15.
-          </p>
-        </div>
+        <RuleBuilderForm />
       )}
     </main>
   )

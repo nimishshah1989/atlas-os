@@ -106,6 +106,51 @@ export async function getPortfolioStatusAction(
 }
 
 /**
+ * Create a rule-based portfolio via POST /api/portfolios/rule-based.
+ * Validates: name non-empty.
+ * Sends config + universe_filter to backend for allowlist validation.
+ * Returns { portfolio_id: strategy_id } so caller can use the same polling hook.
+ */
+export async function createRuleBasedPortfolio(payload: {
+  name: string
+  description: string | null
+  config: Record<string, unknown>
+  universe_filter?: { stocks?: boolean; etfs?: boolean; funds?: boolean }
+}): Promise<CreatePortfolioResult> {
+  if (!payload.name.trim()) {
+    return { ok: false, error: 'Portfolio name is required' }
+  }
+
+  const result = await callInternalApi<{ strategy_id: string; compute_run_id?: string }>(
+    '/api/portfolios/rule-based',
+    {
+      method: 'POST',
+      body: {
+        name: payload.name.trim(),
+        description: payload.description ?? null,
+        config: payload.config,
+        universe_filter: payload.universe_filter,
+      },
+    },
+  )
+
+  if (!result.ok) {
+    // Surface HTTP 409 as recognisable message so the client can show a toast
+    if (result.status === 409) {
+      return { ok: false, error: '409: A backtest is already running for this strategy' }
+    }
+    return { ok: false, error: result.message }
+  }
+
+  if (!result.data?.strategy_id) {
+    return { ok: false, error: 'Server returned unexpected response shape' }
+  }
+
+  revalidatePath('/portfolios')
+  return { ok: true, portfolio_id: result.data.strategy_id }
+}
+
+/**
  * Toggle paper trading on a static portfolio.
  * PATCH /api/portfolios/{id}/paper-trading
  */

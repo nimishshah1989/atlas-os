@@ -19,6 +19,7 @@ import {
   createStaticPortfolio,
   getPortfolioStatusAction,
   togglePaperTradingAction,
+  createRuleBasedPortfolio,
 } from '@/app/portfolios/new/actions'
 
 // Helper for typed mock
@@ -203,5 +204,77 @@ describe('togglePaperTradingAction', () => {
     const result = await togglePaperTradingAction('portfolio-xyz', false)
     expect(result).toEqual({ ok: false, error: 'Server error' })
     expect(revalidatePath).not.toHaveBeenCalled()
+  })
+})
+
+const VALID_RULE_PAYLOAD = {
+  name: 'Momentum Leaders',
+  description: 'Top momentum stocks',
+  config: { rs_state_filter: ['Leader', 'Strong'], position_sizing: 'equal_weight' },
+  universe_filter: { stocks: true, etfs: false, funds: false },
+} as const
+
+describe('createRuleBasedPortfolio', () => {
+  it('rejects empty name', async () => {
+    const result = await createRuleBasedPortfolio({ ...VALID_RULE_PAYLOAD, name: '' })
+    expect(result).toEqual({ ok: false, error: 'Portfolio name is required' })
+    expect(mockApi).not.toHaveBeenCalled()
+  })
+
+  it('rejects whitespace-only name', async () => {
+    const result = await createRuleBasedPortfolio({ ...VALID_RULE_PAYLOAD, name: '   ' })
+    expect(result).toEqual({ ok: false, error: 'Portfolio name is required' })
+    expect(mockApi).not.toHaveBeenCalled()
+  })
+
+  it('happy path: calls POST /api/portfolios/rule-based and returns portfolio_id', async () => {
+    mockApi.mockResolvedValueOnce({
+      ok: true,
+      data: { strategy_id: 'strat-abc', compute_run_id: 'run-xyz' },
+      status: 201,
+    })
+    const result = await createRuleBasedPortfolio(VALID_RULE_PAYLOAD)
+    expect(result).toEqual({ ok: true, portfolio_id: 'strat-abc' })
+    expect(mockApi).toHaveBeenCalledWith(
+      '/api/portfolios/rule-based',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(revalidatePath).toHaveBeenCalledWith('/portfolios')
+  })
+
+  it('surfaces 400 allowlist validation error', async () => {
+    mockApi.mockResolvedValueOnce({
+      ok: false,
+      error_code: 'validation_error',
+      message: "unknown config key 'evil_key'",
+      status: 400,
+    })
+    const result = await createRuleBasedPortfolio(VALID_RULE_PAYLOAD)
+    expect(result).toEqual({ ok: false, error: "unknown config key 'evil_key'" })
+    expect(revalidatePath).not.toHaveBeenCalled()
+  })
+
+  it('surfaces 409 conflict as recognisable message', async () => {
+    mockApi.mockResolvedValueOnce({
+      ok: false,
+      error_code: 'conflict',
+      message: 'Backtest already running',
+      status: 409,
+    })
+    const result = await createRuleBasedPortfolio(VALID_RULE_PAYLOAD)
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toContain('409')
+    }
+  })
+
+  it('handles missing strategy_id in response', async () => {
+    mockApi.mockResolvedValueOnce({
+      ok: true,
+      data: {},
+      status: 201,
+    })
+    const result = await createRuleBasedPortfolio(VALID_RULE_PAYLOAD)
+    expect(result).toEqual({ ok: false, error: 'Server returned unexpected response shape' })
   })
 })
