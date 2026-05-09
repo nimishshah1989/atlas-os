@@ -226,16 +226,34 @@ _SEEDS: tuple[tuple[str, str, str, str, str], ...] = (
     ),
 )
 
-_SEED_SQL = """\
+_SEED_SQL_TEMPLATE = """\
 INSERT INTO atlas.atlas_decision_policy (
     policy_key, policy_kind, policy_value, description,
     methodology_section, last_modified_by, is_active
 ) VALUES (
-    :key, :kind, :value::jsonb, :description,
-    :methodology_section, 'migration_024', TRUE
+    '{key}', '{kind}', '{value}'::jsonb, '{description}',
+    {section_sql}, 'migration_024', TRUE
 )
 ON CONFLICT (policy_key) DO NOTHING
 """
+
+
+def _build_seed_sql(
+    key: str, kind: str, value_json: str, description: str, section: str | None
+) -> str:
+    """Render the seed INSERT with single-quote-escaped literal values.
+
+    Pattern matches migration 022 (also static-seed-by-author values, no user
+    input). Avoiding bound params keeps op.execute() one-arg, which keeps the
+    Pyright signature happy and the unit-test SQL inspector simple.
+    """
+    return _SEED_SQL_TEMPLATE.format(
+        key=key.replace("'", "''"),
+        kind=kind.replace("'", "''"),
+        value=value_json.replace("'", "''"),
+        description=description.replace("'", "''"),
+        section_sql=f"'{section}'" if section is not None else "NULL",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -255,18 +273,10 @@ def upgrade() -> None:
     # 4. Create trigger (drop-then-create, idempotent)
     op.execute(sa.text(_DROP_TRIGGER_SQL))
     op.execute(sa.text(_CREATE_TRIGGER_SQL))
-    # 5. Seed rows (idempotent)
+    # 5. Seed rows (idempotent). Static author-controlled values; literal
+    # interpolation matches migration 022's pattern.
     for key, kind, value_json, description, section in _SEEDS:
-        op.execute(
-            sa.text(_SEED_SQL),
-            {
-                "key": key,
-                "kind": kind,
-                "value": value_json,
-                "description": description,
-                "methodology_section": section,
-            },
-        )
+        op.execute(sa.text(_build_seed_sql(key, kind, value_json, description, section)))
 
 
 def downgrade() -> None:
