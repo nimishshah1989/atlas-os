@@ -48,6 +48,16 @@ ALLOWED_EDGES: set[tuple[str, str]] = {
     # pool. Extracting the session manager into the shared kernel (atlas.db) is the
     # long-term fix; for now this explicit edge makes the dependency visible.
     ("atlas.simulation", "atlas.compute"),
+    # api → simulation: the API surface for custom portfolios (M7 Phase 3) is a
+    # thin HTTP wrapper over atlas.simulation.custom orchestrators (validate,
+    # save, trigger background backtest). The simulation context owns the
+    # business logic; api owns the request/response shape.
+    ("atlas.api", "atlas.simulation"),
+    # api → compute: api endpoints read from atlas tables via the same
+    # open_compute_session helper used everywhere else (statement_timeout=0
+    # reset on the pooled connection). Same long-term fix as above — promote
+    # session manager into atlas.db.
+    ("atlas.api", "atlas.compute"),
 }
 
 
