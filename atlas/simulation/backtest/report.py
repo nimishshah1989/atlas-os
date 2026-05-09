@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from typing import Literal
 from uuid import UUID
 
 import structlog
@@ -14,11 +15,14 @@ from atlas.simulation.backtest.engine import BacktestResult
 
 log = structlog.get_logger()
 
+BacktestType = Literal["full", "walk_forward", "custom"]
+_VALID_TYPES: frozenset[str] = frozenset({"full", "walk_forward", "custom"})
+
 
 def write_backtest_result(
     engine: Engine,
     result: BacktestResult,
-    backtest_type: str,
+    backtest_type: BacktestType,
     strategy_id: UUID | None = None,
     custom_portfolio_id: UUID | None = None,
 ) -> str:
@@ -26,7 +30,20 @@ def write_backtest_result(
 
     Returns the new row's UUID as a string.
     backtest_type: 'full' | 'walk_forward' | 'custom'
+
+    Raises ValueError if:
+    - backtest_type is not a valid value
+    - result has no date range (empty signal matrix guard)
     """
+    if backtest_type not in _VALID_TYPES:
+        raise ValueError(
+            f"Invalid backtest_type {backtest_type!r}. Expected one of {sorted(_VALID_TYPES)}."
+        )
+    if result.start_date is None or result.end_date is None:
+        raise ValueError(
+            "Cannot persist a BacktestResult with no date range "
+            "(start_date/end_date are None — likely an empty signal matrix)."
+        )
     with open_compute_session(engine) as conn:
         row_id: str = conn.execute(
             text("""

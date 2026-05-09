@@ -7,6 +7,7 @@ from datetime import date
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
+import pytest
 
 from atlas.simulation.backtest.engine import BacktestResult
 
@@ -59,3 +60,23 @@ class TestWriteBacktestResult:
             write_backtest_result(MagicMock(), _make_result(), "custom")
 
         mock_conn.commit.assert_called_once()
+
+    def test_none_dates_raises_value_error(self):
+        from atlas.simulation.backtest.report import write_backtest_result
+
+        result_no_dates = BacktestResult(
+            sharpe_ratio=None,
+            max_drawdown=None,
+            total_return=0.0,
+            daily_returns=pd.Series(dtype=float),
+            start_date=None,
+            end_date=None,
+        )
+        with pytest.raises(ValueError, match="no date range"):
+            write_backtest_result(MagicMock(), result_no_dates, "custom")
+
+    def test_invalid_backtest_type_raises_value_error(self):
+        from atlas.simulation.backtest.report import write_backtest_result
+
+        with pytest.raises(ValueError, match="Invalid backtest_type"):
+            write_backtest_result(MagicMock(), _make_result(), "bad_type")  # type: ignore[arg-type]
