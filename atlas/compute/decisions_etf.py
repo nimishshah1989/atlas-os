@@ -182,8 +182,15 @@ def _sector_gate_value(theme: str, linked_state: Any, dominant_state: Any) -> bo
 def compute_etf_gates(
     df: pd.DataFrame,
     dominant_sector: pd.DataFrame | None = None,
+    *,
+    engine: Engine | None = None,
 ) -> pd.DataFrame:
-    """Apply 5 ETF gates + is_investable."""
+    """Apply 5 ETF gates + is_investable.
+
+    If engine is provided, gate-policy is loaded from atlas.atlas_decision_policy
+    (with code-default fallback). If engine is None, uses module-level constants
+    (preserves backward compat for tests that don't need DB).
+    """
     if dominant_sector is not None and not dominant_sector.empty:
         df = df.merge(
             dominant_sector[["ticker", "dominant_sector_state"]],
@@ -193,7 +200,20 @@ def compute_etf_gates(
     else:
         df["dominant_sector_state"] = None
 
-    df["market_gate"] = (df["regime_state"] != "Risk-Off") & ~df["dislocation_active"].fillna(False)
+    if engine is not None:
+        from atlas.compute._policy import load_gate_policy
+
+        strength_pass = load_gate_policy("strength_gate_etf", engine)
+        direction_pass = load_gate_policy("direction_gate_etf", engine)
+        market_pass = load_gate_policy("market_gate", engine)
+    else:
+        strength_pass = ETF_STRENGTH_PASS
+        direction_pass = ETF_DIRECTION_PASS
+        market_pass = frozenset({"Risk-On", "Constructive", "Cautious"})
+
+    df["market_gate"] = df["regime_state"].isin(market_pass) & ~df["dislocation_active"].fillna(
+        False
+    )
 
     df["sector_gate"] = df.apply(
         lambda r: _sector_gate_value(
@@ -204,8 +224,8 @@ def compute_etf_gates(
         axis=1,
     )
 
-    df["strength_gate"] = df["rs_state"].isin(ETF_STRENGTH_PASS)
-    df["direction_gate"] = df["momentum_state"].isin(ETF_DIRECTION_PASS)
+    df["strength_gate"] = df["rs_state"].isin(strength_pass)
+    df["direction_gate"] = df["momentum_state"].isin(direction_pass)
     # Risk gate: Elevated is allowed for ETFs (broader diversification reduces single-stock risk)
     df["risk_gate"] = ~df["risk_state"].isin(["High", "Below Trend"])
 
@@ -362,8 +382,8 @@ def run_etf_decisions(
         day_df = df[df["date"] == d].copy()
         try:
             dom_sector = _load_dominant_sector_for_thematic_etfs(engine, d)
-            day_df = compute_etf_gates(day_df, dom_sector)
-            day_df = add_position_sizing(day_df)
+            day_df = compute_etf_gates(day_df, dom_sector, engine=engine)
+            day_df = add_position_sizing(day_df, engine=engine)
             day_df = compute_etf_exit_triggers(day_df)
             day_df = compute_etf_entry_triggers(day_df, engine, d, thresholds)
         except Exception as exc:

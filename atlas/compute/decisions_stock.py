@@ -146,25 +146,53 @@ def _load_stock_state_with_context(
 # --------------------------------------------------------------------------- #
 
 
-def compute_investability_gates(df: pd.DataFrame) -> pd.DataFrame:
-    """Add six gate columns + is_investable + gating_factor to df in-place."""
-    # Gate 1 — Market: regime not Risk-Off and dislocation not active
-    df["market_gate"] = (df["regime_state"] != "Risk-Off") & ~df["dislocation_active"].fillna(False)
+def compute_investability_gates(
+    df: pd.DataFrame,
+    *,
+    engine: Engine | None = None,
+) -> pd.DataFrame:
+    """Add six gate columns + is_investable to df in-place.
 
-    # Gate 2 — Sector: sector_state in {Overweight, Neutral}
-    df["sector_gate"] = df["sector_state"].isin(SECTOR_PASS_STATES)
+    If engine is provided, gate-policy is loaded from atlas.atlas_decision_policy
+    (with code-default fallback). If engine is None, uses module-level constants
+    (preserves backward compat for tests that don't need DB).
+    """
+    if engine is not None:
+        from atlas.compute._policy import load_gate_policy
 
-    # Gate 3 — Strength: rs_state in {Leader, Strong, Emerging}
-    df["strength_gate"] = df["rs_state"].isin(STRENGTH_PASS_STATES)
+        strength_pass = load_gate_policy("strength_gate_stock", engine)
+        direction_pass = load_gate_policy("direction_gate_stock", engine)
+        risk_pass = load_gate_policy("risk_gate_stock", engine)
+        volume_pass = load_gate_policy("volume_gate_stock", engine)
+        sector_pass = load_gate_policy("sector_gate_stock", engine)
+        market_pass = load_gate_policy("market_gate", engine)
+    else:
+        strength_pass = STRENGTH_PASS_STATES
+        direction_pass = DIRECTION_PASS_STATES
+        risk_pass = RISK_PASS_STATES
+        volume_pass = VOLUME_PASS_STATES
+        sector_pass = SECTOR_PASS_STATES
+        market_pass = frozenset({"Risk-On", "Constructive", "Cautious"})
 
-    # Gate 4 — Direction: momentum_state in {Accelerating, Improving}
-    df["direction_gate"] = df["momentum_state"].isin(DIRECTION_PASS_STATES)
+    # Gate 1 — Market: regime in allowed set and dislocation not active
+    df["market_gate"] = df["regime_state"].isin(market_pass) & ~df["dislocation_active"].fillna(
+        False
+    )
 
-    # Gate 5 — Risk: risk_state in {Low, Normal}
-    df["risk_gate"] = df["risk_state"].isin(RISK_PASS_STATES)
+    # Gate 2 — Sector
+    df["sector_gate"] = df["sector_state"].isin(sector_pass)
 
-    # Gate 6 — Volume: volume_state in {Accumulation, Steady-Buying}
-    df["volume_gate"] = df["volume_state"].isin(VOLUME_PASS_STATES)
+    # Gate 3 — Strength
+    df["strength_gate"] = df["rs_state"].isin(strength_pass)
+
+    # Gate 4 — Direction
+    df["direction_gate"] = df["momentum_state"].isin(direction_pass)
+
+    # Gate 5 — Risk
+    df["risk_gate"] = df["risk_state"].isin(risk_pass)
+
+    # Gate 6 — Volume
+    df["volume_gate"] = df["volume_state"].isin(volume_pass)
 
     # All gates must pass
     df["is_investable"] = (
@@ -187,10 +215,29 @@ def compute_investability_gates(df: pd.DataFrame) -> pd.DataFrame:
 def add_position_sizing(
     df: pd.DataFrame,
     base_pct: float = 1.0,
+    *,
+    engine: Engine | None = None,
 ) -> pd.DataFrame:
-    """Compute position_size_pct = base × market_multiplier × risk_multiplier."""
-    df["market_multiplier"] = df["regime_state"].map(MARKET_MULTIPLIERS).fillna(0.0)
-    df["risk_multiplier"] = df["risk_state"].map(RISK_MULTIPLIERS).fillna(0.0)
+    """Compute position_size_pct = base × market_multiplier × risk_multiplier.
+
+    If engine is provided, multiplier maps are loaded from atlas.atlas_decision_policy
+    (with code-default fallback). If engine is None, uses module-level constants.
+    """
+    if engine is not None:
+        from atlas.compute._policy import load_multiplier_map
+
+        market_map: dict[str, Any] = {
+            k: float(v) for k, v in load_multiplier_map("market_multipliers", engine).items()
+        }
+        risk_map: dict[str, Any] = {
+            k: float(v) for k, v in load_multiplier_map("risk_multipliers_stock", engine).items()
+        }
+    else:
+        market_map = MARKET_MULTIPLIERS  # type: ignore[assignment]
+        risk_map = RISK_MULTIPLIERS  # type: ignore[assignment]
+
+    df["market_multiplier"] = df["regime_state"].map(market_map).fillna(0.0)
+    df["risk_multiplier"] = df["risk_state"].map(risk_map).fillna(0.0)
     df["position_size_pct"] = base_pct * df["market_multiplier"] * df["risk_multiplier"]
     return df
 
@@ -372,8 +419,8 @@ def run_stock_decisions(
         log.warning("stock_decisions_empty_load", start=str(start_date), end=str(end_date))
         return {"run_id": run_id, "rows_written": 0, "errors": []}
 
-    df = compute_investability_gates(df)
-    df = add_position_sizing(df)
+    df = compute_investability_gates(df, engine=engine)
+    df = add_position_sizing(df, engine=engine)
     df = compute_exit_triggers(df)
 
     # Entry triggers require per-date price lookups; process date by date
