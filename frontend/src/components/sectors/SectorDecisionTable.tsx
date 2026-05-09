@@ -84,9 +84,12 @@ export function SectorDecisionTable({ data }: { data: Row[] }) {
     } else if (sortKey === 'sector_name') {
       cmp = a.sector_name.localeCompare(b.sector_name)
     } else {
-      const av = a[sortKey] != null ? parseFloat(a[sortKey] as string) : -Infinity
-      const bv = b[sortKey] != null ? parseFloat(b[sortKey] as string) : -Infinity
-      cmp = bv - av
+      const av = a[sortKey] != null ? parseFloat(a[sortKey] as string) : null
+      const bv = b[sortKey] != null ? parseFloat(b[sortKey] as string) : null
+      if (av == null && bv == null) cmp = 0
+      else if (av == null) cmp = 1
+      else if (bv == null) cmp = -1
+      else cmp = av - bv
     }
     return asc ? cmp : -cmp
   })
@@ -165,12 +168,12 @@ export function SectorDecisionTable({ data }: { data: Row[] }) {
                 <ParticipationBar value={row.participation_50} />
               </td>
               <td className="px-3 py-2.5">
-                {row.bottomup_momentum_state != null ? (
-                  <span className={`font-sans text-xs ${row.bottomup_momentum_state === 'Improving' ? 'text-signal-pos' : 'text-signal-neg'}`}>
-                    {row.bottomup_momentum_state === 'Improving' ? '↑ Improving' : '↓ Deteriorating'}
-                  </span>
+                {row.bottomup_momentum_state === 'Improving' ? (
+                  <span className="font-sans text-xs text-signal-pos">&#8593; Improving</span>
+                ) : row.bottomup_momentum_state === 'Deteriorating' ? (
+                  <span className="font-sans text-xs text-signal-neg">&#8595; Deteriorating</span>
                 ) : (
-                  <span className="font-sans text-xs text-ink-tertiary">—</span>
+                  <span className="font-sans text-xs text-ink-tertiary">&#8212;</span>
                 )}
               </td>
               <td className="px-3 py-2.5 text-center">
