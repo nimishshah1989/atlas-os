@@ -1,6 +1,7 @@
 // src/app/strategies/[id]/page.tsx
 // RSC — single strategy long-scroll detail page.
 // Shell ≤250 LOC; each section is a self-contained component or inline block.
+export const dynamic = 'force-dynamic'
 import { notFound } from 'next/navigation'
 import { getStrategyById } from '@/lib/queries/strategies'
 import { getBacktestsForStrategy, getLatestBacktestForStrategy } from '@/lib/queries/backtests'

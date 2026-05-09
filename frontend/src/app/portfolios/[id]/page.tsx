@@ -1,6 +1,7 @@
 // src/app/portfolios/[id]/page.tsx
 // RSC — FM custom portfolio detail (Static or Rule-Based).
 // Shell ≤250 LOC; composition + backtest logic in sub-components.
+export const dynamic = 'force-dynamic'
 import { notFound } from 'next/navigation'
 import {
   getStaticPortfolioById,

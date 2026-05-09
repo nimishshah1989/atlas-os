@@ -1,6 +1,7 @@
 // src/app/portfolios/new/page.tsx
 // RSC — portfolio builder. Tabs: Static | Rule-Based.
 // Shell ≤250 LOC.
+export const dynamic = 'force-dynamic'
 import Link from 'next/link'
 import { getStocksForPicker, getETFsForPicker, getMutualFundsForPicker } from '@/lib/queries/instruments'
 import { StaticBuilder } from './StaticBuilder'

@@ -1,6 +1,7 @@
 // src/app/strategies/page.tsx
 // RSC — systematic strategies dashboard.
 // Shell ≤250 LOC; logic lives in StrategiesView client island.
+export const dynamic = 'force-dynamic'
 import { getAllStrategies } from '@/lib/queries/strategies'
 import { StrategiesView } from './StrategiesView'
 
