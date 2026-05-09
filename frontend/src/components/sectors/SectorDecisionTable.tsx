@@ -41,6 +41,7 @@ const STATE_DOT: Record<string, string> = {
   Overweight:  'bg-signal-pos',
   Neutral:     'bg-signal-warn',
   Underweight: 'bg-signal-neg',
+  Avoid:       'bg-signal-neg',
 }
 
 function pct(v: string | null): string {
@@ -68,7 +69,7 @@ function ParticipationBar({ value }: { value: string | null }) {
   )
 }
 
-export function SectorDecisionTable({ data }: { data: Row[] }) {
+export function SectorDecisionTable({ data, onSelect }: { data: Row[]; onSelect: (name: string) => void }) {
   const [sortKey, setSortKey] = useState<SortKey>('decision')
   const [asc, setAsc] = useState(true)
 
@@ -138,7 +139,8 @@ export function SectorDecisionTable({ data }: { data: Row[] }) {
           {sorted.map((row, i) => (
             <tr
               key={row.sector_name}
-              className={`border-b border-paper-rule last:border-0 hover:bg-paper-rule/20 transition-colors ${i % 2 === 0 ? '' : 'bg-paper-rule/5'}`}
+              className={`border-b border-paper-rule last:border-0 hover:bg-paper-rule/20 transition-colors cursor-pointer ${i % 2 === 0 ? '' : 'bg-paper-rule/5'}`}
+              onClick={() => onSelect(row.sector_name)}
             >
               <td className="px-3 py-2.5 font-sans text-xs font-medium text-ink-primary whitespace-nowrap">
                 {row.sector_name}

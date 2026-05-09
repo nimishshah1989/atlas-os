@@ -67,7 +67,8 @@ export async function getCurrentSectors(): Promise<SectorSnapshot[]> {
         WHEN 'Overweight'  THEN 1
         WHEN 'Neutral'     THEN 2
         WHEN 'Underweight' THEN 3
-        ELSE 4
+        WHEN 'Avoid'       THEN 4
+        ELSE 5
       END,
       m.bottomup_rs_3m_nifty500 DESC NULLS LAST
   `

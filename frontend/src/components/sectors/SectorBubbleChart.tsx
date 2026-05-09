@@ -1,8 +1,7 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import * as d3 from 'd3'
 import type { SectorDecision } from '@/lib/sectors-decision'
-import { SectorDrawer } from './SectorDrawer'
 
 export type SectorPoint = {
   sector_name: string
@@ -18,6 +17,7 @@ const STATE_COLOR: Record<string, string> = {
   Overweight:  '#22c55e',
   Neutral:     '#f59e0b',
   Underweight: '#ef4444',
+  Avoid:       '#ef4444',
 }
 
 const DECISION_COLOR: Record<string, string> = {
@@ -32,13 +32,14 @@ const DECISION_COLOR: Record<string, string> = {
 export function SectorBubbleChart({
   data,
   range,
+  onSelect,
 }: {
   data: SectorPoint[]
   range: string
+  onSelect: (sectorName: string) => void
 }) {
   const svgRef  = useRef<SVGSVGElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
-  const [selected, setSelected] = useState<string | null>(null)
 
   useEffect(() => {
     const container = wrapRef.current
@@ -60,21 +61,27 @@ export function SectorBubbleChart({
 
     const points = data.map(d => ({
       ...d,
-      x: parseFloat(d.bottomup_rs_3m_nifty500 ?? '0'),
-      y: parseFloat(d.participation_50 ?? '0'),
+      x: parseFloat(d.bottomup_rs_3m_nifty500 ?? 'NaN'),
+      y: parseFloat(d.participation_50 ?? 'NaN'),
       r: d.constituent_count,
     }))
 
-    const xExt = d3.extent(points, p => p.x) as [number, number]
+    const validPoints = points.filter(p => !isNaN(p.x) && !isNaN(p.y))
+
+    const xExt = d3.extent(validPoints, p => p.x) as [number, number]
     const xPad = (xExt[1] - xExt[0]) * 0.12
     const xScale = d3.scaleLinear()
       .domain([Math.min(xExt[0] - xPad, -0.08), xExt[1] + xPad])
       .range([0, W])
 
-    const yScale = d3.scaleLinear().domain([0.25, 1.05]).range([H, 0])
+    const yExt = d3.extent(validPoints, p => p.y) as [number, number]
+    const yPad = (yExt[1] - yExt[0]) * 0.12
+    const yScale = d3.scaleLinear()
+      .domain([Math.max(0, yExt[0] - yPad), Math.min(1.0, yExt[1] + yPad)])
+      .range([H, 0])
 
     const rScale = d3.scaleSqrt()
-      .domain([0, d3.max(points, p => p.r) ?? 80])
+      .domain([0, d3.max(validPoints, p => p.r) ?? 80])
       .range([6, 34])
 
     const midX = xScale(0)
@@ -180,8 +187,8 @@ export function SectorBubbleChart({
       .style('box-shadow', '0 2px 8px rgba(0,0,0,0.08)')
       .style('min-width', '160px')
 
-    const node = svg.selectAll<SVGGElement, typeof points[0]>('.sector-node')
-      .data(points)
+    const node = svg.selectAll<SVGGElement, typeof validPoints[0]>('.sector-node')
+      .data(validPoints)
       .enter()
       .append('g')
       .attr('class', 'sector-node')
@@ -246,17 +253,17 @@ export function SectorBubbleChart({
       })
       .on('click', (_, p) => {
         tip.style('opacity', '0')
-        setSelected(p.sector_name)
+        onSelect(p.sector_name)
       })
 
     return () => { tip.remove() }
-  }, [data])
+  }, [data, onSelect])
 
   return (
     <div ref={wrapRef} className="relative">
       <svg ref={svgRef} className="w-full" />
       <div className="flex items-center gap-5 mt-2">
-        {([['Overweight','#22c55e'], ['Neutral','#f59e0b'], ['Underweight','#ef4444']] as [string, string][]).map(([label, color]) => (
+        {([['Overweight', '#22c55e'], ['Neutral', '#f59e0b'], ['Underweight', '#ef4444'], ['Avoid', '#ef4444']] as [string, string][]).map(([label, color]) => (
           <span key={label} className="flex items-center gap-1.5 font-sans text-xs text-ink-secondary">
             <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: color, opacity: 0.7 }} />
             {label}
@@ -264,13 +271,6 @@ export function SectorBubbleChart({
         ))}
         <span className="font-sans text-xs text-ink-tertiary ml-2">Bubble size = number of stocks in sector</span>
       </div>
-      {selected && (
-        <SectorDrawer
-          sectorName={selected}
-          range={range}
-          onClose={() => setSelected(null)}
-        />
-      )}
     </div>
   )
 }

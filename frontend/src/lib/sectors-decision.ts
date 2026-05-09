@@ -8,6 +8,7 @@ export function getSectorDecision(
   rsState: string | null,
   momentumState: string | null,
 ): SectorDecision {
+  if (state === 'Avoid') return 'EXIT'
   if (state === 'Underweight') return 'EXIT'
   if (state === 'Overweight' && momentumState === 'Improving') return 'ENTER'
   if (state === 'Overweight' && momentumState === 'Deteriorating') return 'HOLD'

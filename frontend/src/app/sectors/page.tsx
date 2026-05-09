@@ -4,9 +4,7 @@ import { getCurrentSectors, getSectorStateHistory } from '@/lib/queries/sectors'
 import { rangeToDays, type TimeRange } from '@/lib/time-range'
 import { getSectorDecision } from '@/lib/sectors-decision'
 import { TimeRangeToggle } from '@/components/ui/TimeRangeToggle'
-import { SectorBubbleChart } from '@/components/sectors/SectorBubbleChart'
-import { SectorDecisionTable } from '@/components/sectors/SectorDecisionTable'
-import { SectorHeatmap } from '@/components/sectors/SectorHeatmap'
+import { SectorViews } from '@/components/sectors/SectorViews'
 
 type SearchParams = Promise<{ range?: string }>
 
@@ -23,9 +21,20 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
     getSectorStateHistory(days),
   ])
 
+  if (sectors.length === 0) {
+    return (
+      <div className="p-8">
+        <p className="font-sans text-sm text-ink-secondary">
+          No sector data available. Run the nightly pipeline first.
+        </p>
+      </div>
+    )
+  }
+
   const overweightCount  = sectors.filter(s => s.sector_state === 'Overweight').length
   const neutralCount     = sectors.filter(s => s.sector_state === 'Neutral').length
   const underweightCount = sectors.filter(s => s.sector_state === 'Underweight').length
+  const avoidCount       = sectors.filter(s => s.sector_state === 'Avoid').length
   const dataDate = sectors[0]?.data_date
 
   const sectorsWithDecision = sectors.map(s => ({
@@ -54,6 +63,12 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
               <span className="inline-block w-2 h-2 rounded-full bg-signal-neg" />
               {underweightCount} Underweight
             </span>
+            {avoidCount > 0 && (
+              <span className="flex items-center gap-1.5 font-sans text-xs text-ink-secondary">
+                <span className="inline-block w-2 h-2 rounded-full bg-signal-neg" />
+                {avoidCount} Avoid
+              </span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -68,32 +83,11 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
         </div>
       </div>
 
-      {/* View 1: Bubble Matrix */}
-      <div className="px-6 py-6 border-b border-paper-rule">
-        <h2 className="font-sans text-xs font-medium text-ink-tertiary uppercase tracking-wider mb-4">
-          Sector Positioning Matrix — RS vs Breadth
-        </h2>
-        <SectorBubbleChart data={sectorsWithDecision} range={historyRange} />
-      </div>
-
-      {/* View 2: Decision Table */}
-      <div className="px-6 py-6 border-b border-paper-rule">
-        <h2 className="font-sans text-xs font-medium text-ink-tertiary uppercase tracking-wider mb-4">
-          Sector Decision Table
-        </h2>
-        <SectorDecisionTable data={sectorsWithDecision} />
-      </div>
-
-      {/* View 3: State History Heatmap */}
-      <div className="px-6 py-6">
-        <h2 className="font-sans text-xs font-medium text-ink-tertiary uppercase tracking-wider mb-4">
-          Sector State History — {historyRange}
-        </h2>
-        <SectorHeatmap
-          history={stateHistory}
-          sectors={sectorsWithDecision.map(s => s.sector_name)}
-        />
-      </div>
+      <SectorViews
+        sectors={sectorsWithDecision}
+        stateHistory={stateHistory}
+        range={historyRange}
+      />
     </div>
   )
 }

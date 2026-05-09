@@ -6,6 +6,7 @@ const STATE_COLOR: Record<string, string> = {
   Overweight:  '#22c55e',
   Neutral:     '#f59e0b',
   Underweight: '#ef4444',
+  Avoid:       '#ef4444',
 }
 
 type Props = {
@@ -84,7 +85,7 @@ export function SectorHeatmap({ history, sectors }: Props) {
             </div>
             {dates.map(d => {
               const state = sectorMap.get(d)
-              const color = state ? STATE_COLOR[state] : '#e2e8f0'
+              const color = state ? (STATE_COLOR[state] ?? '#94a3b8') : '#e2e8f0'
               return (
                 <div
                   key={d}
@@ -116,7 +117,7 @@ export function SectorHeatmap({ history, sectors }: Props) {
 
       {/* Legend */}
       <div className="flex items-center gap-5 mt-3" style={{ paddingLeft: 144 }}>
-        {(['Overweight', 'Neutral', 'Underweight'] as const).map(label => (
+        {(['Overweight', 'Neutral', 'Underweight', 'Avoid'] as const).map(label => (
           <span key={label} className="flex items-center gap-1.5 font-sans text-xs text-ink-secondary">
             <span
               className="inline-block w-3 h-3"
