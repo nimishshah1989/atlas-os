@@ -1,8 +1,9 @@
 # atlas/simulation/core/signal_adapter.py
 """Bridges JIP prices and Atlas signals into a SignalMatrix for vectorbt.
 
-Joins de_ohlcv_daily (JIP) + atlas_*_decisions_daily (Atlas) on (instrument_id, date).
-Instruments with no JIP price data are excluded with a structlog warning (never silent).
+Joins de_equity_ohlcv (JIP equity) + atlas_*_decisions_daily (Atlas) on (instrument_id, date).
+Funds join de_mf_nav_history on mstar_id. Instruments with no price data are excluded with
+a structlog warning (never silent).
 """
 
 from __future__ import annotations
@@ -73,7 +74,7 @@ def build_stock_etf_signal_matrix(
                 OR d.exit_sector_avoid OR d.exit_stop_loss
             )                                                    AS exit_signal
         FROM atlas.{decisions_table} d
-        JOIN de_ohlcv_daily p
+        JOIN de_equity_ohlcv p
             ON p.instrument_id = d.instrument_id AND p.date = d.date
         WHERE d.instrument_id IN ({ids_csv})
           AND d.date BETWEEN :start_date AND :end_date
@@ -144,14 +145,17 @@ def build_fund_signal_matrix(
     query = text(f"""
         SELECT
             d.date,
-            d.instrument_id,
+            d.mstar_id             AS instrument_id,
             n.nav                  AS price,
             d.entry_trigger        AS entry_signal,
-            d.exit_trigger         AS exit_signal
+            (
+                d.exit_market_riskoff OR d.exit_composition_misaligned
+                OR d.exit_holdings_weak OR d.exit_nav_deteriorate
+            )                      AS exit_signal
         FROM atlas.atlas_fund_decisions_daily d
         JOIN de_mf_nav_history n
-            ON n.instrument_id = d.instrument_id AND n.date = d.date
-        WHERE d.instrument_id IN ({ids_csv})
+            ON n.mstar_id = d.mstar_id AND n.date = d.date
+        WHERE d.mstar_id IN ({ids_csv})
           AND d.date BETWEEN :start_date AND :end_date
         ORDER BY d.date, d.instrument_id
     """)
