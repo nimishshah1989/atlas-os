@@ -21,6 +21,15 @@ from atlas.compute._session import open_compute_session
 
 log = structlog.get_logger()
 
+# Allowlist guards the f-string table interpolation below.
+# Parameterized table names are not supported in SQL — allowlist is the correct defence.
+_ALLOWED_DECISIONS_TABLES = frozenset(
+    {
+        "atlas_stock_decisions_daily",
+        "atlas_etf_decisions_daily",
+    }
+)
+
 
 class StaleJIPDataError(RuntimeError):
     pass
@@ -60,7 +69,11 @@ def build_stock_etf_signal_matrix(
         decisions_table: 'atlas_stock_decisions_daily' for stocks,
                          'atlas_etf_decisions_daily' for ETFs.
     """
-    ids_csv = ", ".join(f"'{i}'" for i in instrument_ids)
+    if decisions_table not in _ALLOWED_DECISIONS_TABLES:
+        raise ValueError(
+            f"Invalid decisions_table {decisions_table!r}. "
+            f"Allowed: {sorted(_ALLOWED_DECISIONS_TABLES)}"
+        )
 
     query = text(f"""
         SELECT
@@ -76,13 +89,17 @@ def build_stock_etf_signal_matrix(
         FROM atlas.{decisions_table} d
         JOIN de_equity_ohlcv p
             ON p.instrument_id = d.instrument_id AND p.date = d.date
-        WHERE d.instrument_id IN ({ids_csv})
+        WHERE d.instrument_id = ANY(:ids)
           AND d.date BETWEEN :start_date AND :end_date
         ORDER BY d.date, d.instrument_id
     """)
 
     with open_compute_session(engine) as conn:
-        df = pd.read_sql(query, conn, params={"start_date": start_date, "end_date": end_date})
+        df = pd.read_sql(
+            query,
+            conn,
+            params={"ids": instrument_ids, "start_date": start_date, "end_date": end_date},
+        )
 
     if df.empty:
         log.warning(
@@ -140,9 +157,7 @@ def build_fund_signal_matrix(
     end_date: date,
 ) -> SignalMatrix:
     """Load fund signals + NAV prices into a SignalMatrix."""
-    ids_csv = ", ".join(f"'{i}'" for i in instrument_ids)
-
-    query = text(f"""
+    query = text("""
         SELECT
             d.date,
             d.mstar_id             AS instrument_id,
@@ -155,13 +170,17 @@ def build_fund_signal_matrix(
         FROM atlas.atlas_fund_decisions_daily d
         JOIN de_mf_nav_history n
             ON n.mstar_id = d.mstar_id AND n.date = d.date
-        WHERE d.mstar_id IN ({ids_csv})
+        WHERE d.mstar_id = ANY(:ids)
           AND d.date BETWEEN :start_date AND :end_date
         ORDER BY d.date, d.instrument_id
     """)
 
     with open_compute_session(engine) as conn:
-        df = pd.read_sql(query, conn, params={"start_date": start_date, "end_date": end_date})
+        df = pd.read_sql(
+            query,
+            conn,
+            params={"ids": instrument_ids, "start_date": start_date, "end_date": end_date},
+        )
 
     if df.empty:
         return SignalMatrix(

@@ -15,9 +15,10 @@ Why ProcessPoolExecutor not threading:
 
 from __future__ import annotations
 
+import atexit
 import gc
 import json
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import Future, ProcessPoolExecutor
 from datetime import date, timedelta
 from uuid import UUID
 
@@ -34,6 +35,7 @@ from atlas.simulation.custom.builder import InstrumentWeight, validate_custom_po
 log = structlog.get_logger()
 
 _EXECUTOR = ProcessPoolExecutor(max_workers=1)
+atexit.register(_EXECUTOR.shutdown, wait=True)
 _DEFAULT_LOOKBACK_DAYS = 547  # ~18 months of historical data
 
 
@@ -82,9 +84,16 @@ def _save_portfolio_record(
     return row_id
 
 
+def _on_backtest_future_done(future: Future[None]) -> None:
+    exc = future.exception()
+    if exc is not None:
+        log.error("custom_portfolio_backtest_executor_error", exc_info=exc)
+
+
 def _trigger_backtest_background(portfolio_id: str) -> None:
     """Submit the backtest to a background ProcessPoolExecutor."""
-    _EXECUTOR.submit(_run_backtest_subprocess, portfolio_id)
+    future = _EXECUTOR.submit(_run_backtest_subprocess, portfolio_id)
+    future.add_done_callback(_on_backtest_future_done)
 
 
 def _run_backtest_subprocess(portfolio_id: str) -> None:
@@ -137,7 +146,7 @@ def run_custom_portfolio_backtest(portfolio_id: UUID, engine: Engine) -> None:
 
     result = run_backtest(signal_matrix, init_cash=10_000_000.0, fees_pct=0.001)
 
-    backtest_id = write_backtest_result(
+    backtest_id: str = write_backtest_result(
         engine=engine,
         result=result,
         backtest_type="custom",
