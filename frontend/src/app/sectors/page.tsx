@@ -12,7 +12,10 @@ type SearchParams = Promise<{ range?: string }>
 
 export default async function SectorsPage({ searchParams }: { searchParams: SearchParams }) {
   const { range = '6M' } = await searchParams
-  const historyRange = range as TimeRange
+  const VALID_RANGES: TimeRange[] = ['1W', '1M', '3M', '6M', '1Y']
+  const historyRange: TimeRange = VALID_RANGES.includes(range as TimeRange)
+    ? (range as TimeRange)
+    : '6M'
   const days = rangeToDays(historyRange)
 
   const [sectors, stateHistory] = await Promise.all([
@@ -56,10 +59,10 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
         <div className="flex items-center gap-4">
           {dataDate && (
             <span className="font-sans text-xs text-ink-tertiary">
-              Data as of {new Date(dataDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+              Data as of {dataDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
             </span>
           )}
-          <Suspense>
+          <Suspense fallback={null}>
             <TimeRangeToggle value={historyRange} options={['1M', '3M', '6M', '1Y']} />
           </Suspense>
         </div>
