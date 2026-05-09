@@ -2,6 +2,7 @@
 'use client'
 import { useState, useMemo } from 'react'
 import { Info } from 'lucide-react'
+import { RSStateChip } from '@/lib/stock-formatters'
 import type { StockRow } from '@/lib/queries/sector-deep-dive'
 import type { TimeRange } from '@/lib/time-range'
 import { StockBubbleChart } from './StockBubbleChart'
@@ -9,6 +10,51 @@ import { StocksTable } from './StocksTable'
 import { TopPicksCallout } from './TopPicksCallout'
 import type { MarketRegimeRow } from '@/lib/queries/regime'
 import { MarketRegimeBanner } from './MarketRegimeBanner'
+
+const RS_STATES = ['Leader', 'Strong', 'Consolidating', 'Emerging', 'Average', 'Weak', 'Laggard'] as const
+const RS_COLORS: Record<string, string> = {
+  Leader:        '#2F6B43',
+  Strong:        '#4CAF78',
+  Consolidating: '#1D9E75',
+  Emerging:      '#d97706',
+  Average:       '#94a3b8',
+  Weak:          '#ef6644',
+  Laggard:       '#B0492C',
+}
+
+function RSDistributionBar({ stocks }: { stocks: { rs_state: string | null }[] }) {
+  const total = stocks.length
+  if (total === 0) return null
+  const counts = RS_STATES.map(s => ({
+    state: s,
+    count: stocks.filter(st => st.rs_state === s).length,
+  })).filter(x => x.count > 0)
+
+  return (
+    <div className="space-y-2">
+      <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider">
+        RS State Distribution
+      </div>
+      <div className="flex h-3 rounded-sm overflow-hidden gap-px">
+        {counts.map(({ state, count }) => (
+          <div
+            key={state}
+            style={{ width: `${(count / total) * 100}%`, background: RS_COLORS[state] }}
+            title={`${state}: ${count}`}
+          />
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1">
+        {counts.map(({ state, count }) => (
+          <span key={state} className="inline-flex items-center gap-1 font-sans text-[10px] text-ink-secondary">
+            <RSStateChip value={state} />
+            <span className="text-ink-tertiary">{count}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 type Filter = 'all' | 'investable' | 'nifty50' | 'nifty100' | 'nifty500'
 
@@ -129,6 +175,9 @@ export function SectorStocksTab({
           </div>
         )}
       </div>
+
+      {/* RS Distribution */}
+      <RSDistributionBar stocks={filtered} />
 
       {/* Table */}
       <StocksTable stocks={filtered} unit={unit} activeRange={range} />

@@ -7,6 +7,12 @@ export type StockRowWithSector = StockRow & {
   above_30w_ma: boolean | null
 }
 
+export type FullStockRow = StockRowWithSector & {
+  ret_12m?: string | null
+  avg_volume_20?: string | null
+  realized_vol_63?: string | null
+}
+
 export type MetricHistoryRow = {
   date: Date
   rs_pctile_3m: string | null
@@ -104,7 +110,7 @@ export async function getTopPicksAcrossSectors(): Promise<StockRowWithSector[]> 
       ON d.instrument_id = u.instrument_id AND d.date = l.d
     WHERE u.effective_to IS NULL
       AND d.is_investable = true
-      AND s.rs_state = 'Overweight_RS'
+      AND s.rs_state IN ('Leader', 'Strong')
     ORDER BY m.rs_pctile_3m DESC NULLS LAST
     LIMIT 20
   `

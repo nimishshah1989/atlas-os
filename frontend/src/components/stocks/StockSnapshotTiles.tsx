@@ -1,22 +1,28 @@
+import type { ReactNode } from 'react'
 import type { StockRowWithSector } from '@/lib/queries/stocks'
-import { pct, pctColor } from '@/lib/stock-formatters'
+import { pct, pctColor, RSStateChip, MomentumChip, RiskChip, VolumeChip } from '@/lib/stock-formatters'
 
-function Tile({
-  label,
-  value,
-  color,
-}: {
-  label: string
-  value: string
-  color?: string
-}) {
+function Tile({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div className="flex flex-col gap-1 px-4 py-3 border-r border-paper-rule last:border-0">
+    <div className="flex flex-col gap-1.5 px-4 py-3 border-r border-paper-rule last:border-0">
       <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider">
         {label}
       </div>
       <div className={`font-mono text-sm font-semibold tabular-nums ${color ?? 'text-ink-primary'}`}>
         {value}
+      </div>
+    </div>
+  )
+}
+
+function ChipTile({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5 px-4 py-3 border-r border-paper-rule last:border-0">
+      <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider">
+        {label}
+      </div>
+      <div className="flex items-center h-5">
+        {children}
       </div>
     </div>
   )
@@ -34,7 +40,7 @@ export function StockSnapshotTiles({ stock }: { stock: StockRowWithSector }) {
     : 'text-ink-tertiary'
 
   return (
-    <div className="px-6 py-3 border-b border-paper-rule grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+    <div className="px-6 py-3 border-b border-paper-rule grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8">
       <Tile
         label="RS Pctile"
         value={rsPctile}
@@ -51,7 +57,7 @@ export function StockSnapshotTiles({ stock }: { stock: StockRowWithSector }) {
         color={pctColor(stock.ret_6m)}
       />
       <Tile
-        label="RS 3M"
+        label="RS vs Nifty500"
         value={pct(stock.rs_3m_nifty500)}
         color={pctColor(stock.rs_3m_nifty500)}
       />
@@ -65,6 +71,12 @@ export function StockSnapshotTiles({ stock }: { stock: StockRowWithSector }) {
         value={stock.ema_10_at_20d_high == null ? '—' : stock.ema_10_at_20d_high ? 'Yes' : 'No'}
         color={stock.ema_10_at_20d_high == null ? 'text-ink-tertiary' : stock.ema_10_at_20d_high ? 'text-signal-pos' : 'text-ink-tertiary'}
       />
+      <ChipTile label="Risk State">
+        <RiskChip value={stock.risk_state} />
+      </ChipTile>
+      <ChipTile label="Volume State">
+        <VolumeChip value={stock.volume_state} />
+      </ChipTile>
     </div>
   )
 }

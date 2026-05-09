@@ -1,7 +1,9 @@
 'use client'
+import type { ReactNode } from 'react'
 import { ArrowUp, ArrowDown, AlertTriangle, Info } from 'lucide-react'
 import type { SectorDecision } from '@/lib/sectors-decision'
 import type { SectorSnapshot } from '@/lib/queries/sectors'
+import { RSStateChip, MomentumChip, RiskChip, VolumeChip } from '@/lib/stock-formatters'
 
 type SectorWithDecision = SectorSnapshot & { decision: SectorDecision }
 
@@ -53,9 +55,9 @@ function StateBadge({
 }) {
   const colorClass = value && STATE_COLOR[value]
     ? STATE_COLOR[value]
-    : value === 'Improving' || value === 'Overweight_RS'
+    : value === 'Improving' || value === 'Leader' || value === 'Strong'
       ? 'text-signal-pos'
-      : value === 'Deteriorating' || value === 'Underweight_RS'
+      : value === 'Deteriorating' || value === 'Weak' || value === 'Laggard'
         ? 'text-signal-neg'
         : 'text-ink-secondary'
   return (
@@ -71,6 +73,30 @@ function StateBadge({
       <div className={`font-sans text-xs font-semibold ${colorClass}`}>
         {value ?? '—'}
       </div>
+    </div>
+  )
+}
+
+function ChipBadge({
+  label,
+  hint,
+  children,
+}: {
+  label: string
+  hint?: string
+  children: ReactNode
+}) {
+  return (
+    <div className="px-3 py-2 border border-paper-rule rounded-sm bg-paper">
+      <div className="flex items-center gap-1 font-sans text-[10px] text-ink-tertiary uppercase tracking-wider mb-1.5">
+        <span>{label}</span>
+        {hint && (
+          <span title={hint}>
+            <Info className="w-2.5 h-2.5 opacity-60 cursor-help" />
+          </span>
+        )}
+      </div>
+      {children}
     </div>
   )
 }
@@ -157,16 +183,30 @@ export function SectorDrawerSnapshot({ snapshot }: { snapshot: SectorWithDecisio
             value={snapshot.topdown_state}
             hint="State derived from the sector index itself (NSE sector index trend)"
           />
-          <StateBadge
+          <ChipBadge
             label="RS"
-            value={snapshot.bottomup_rs_state}
-            hint="Whether the sector's relative strength vs Nifty 500 is currently overweight or underweight"
-          />
-          <StateBadge
+            hint="7-level relative strength state of sector constituents vs Nifty 500"
+          >
+            <RSStateChip value={snapshot.bottomup_rs_state} />
+          </ChipBadge>
+          <ChipBadge
             label="Momentum"
-            value={snapshot.bottomup_momentum_state}
-            hint="Direction of change in RS — improving means relative strength is rising, deteriorating means it's falling"
-          />
+            hint="Direction of change in RS — improving means relative strength is rising"
+          >
+            <MomentumChip value={snapshot.bottomup_momentum_state} />
+          </ChipBadge>
+          <ChipBadge
+            label="Risk"
+            hint="Aggregate risk state of sector constituents (extension, volatility)"
+          >
+            <RiskChip value={snapshot.bottomup_risk_state} />
+          </ChipBadge>
+          <ChipBadge
+            label="Volume"
+            hint="Volume-weighted buying/selling pressure signal across sector constituents"
+          >
+            <VolumeChip value={snapshot.bottomup_volume_state} />
+          </ChipBadge>
         </div>
       </div>
 

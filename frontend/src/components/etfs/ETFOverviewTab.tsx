@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { IndicatorChart } from '@/components/regime/IndicatorChart'
-import type { MetricHistoryRow, StateHistoryRow } from '@/lib/queries/stocks'
-import type { StockRowWithSector } from '@/lib/queries/stocks'
+import type { ETFMetricHistoryRow } from '@/lib/queries/etfs'
+import type { ETFRow } from '@/lib/queries/etfs'
 import {
   interpretRSPctile,
   interpretMomentumState,
@@ -9,6 +9,7 @@ import {
   interpretEMARatio,
   interpret3MReturn,
 } from '@/lib/stock-formatters'
+import { ETFGatesPanel } from './ETFGatesPanel'
 
 function Commentary({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -38,13 +39,12 @@ function rawPct(v: string | null, digits = 0): string {
   return `${(parseFloat(v) * 100).toFixed(digits)}`
 }
 
-export function StockOverviewTab({
-  stock,
+export function ETFOverviewTab({
+  etf,
   metricHistory,
 }: {
-  stock: StockRowWithSector
-  metricHistory: MetricHistoryRow[]
-  stateHistory?: StateHistoryRow[]
+  etf: ETFRow
+  metricHistory: ETFMetricHistoryRow[]
 }) {
   const rsPctileData = metricHistory.map(r => ({
     date: dateStr(r.date),
@@ -66,16 +66,17 @@ export function StockOverviewTab({
   return (
     <div className="px-6 py-6 space-y-6">
       {/* Weinstein + momentum summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Commentary title="Weinstein Stage">
-          {interpretWeinsteinGate(stock.weinstein_gate_pass, stock.ema_10_at_20d_high)}
+          {interpretWeinsteinGate(etf.weinstein_gate_pass, null)}
         </Commentary>
         <Commentary title="Momentum">
-          {interpretMomentumState(stock.momentum_state)}
+          {interpretMomentumState(etf.momentum_state)}
         </Commentary>
+        <ETFGatesPanel etf={etf} />
       </div>
 
-      {/* Charts + commentary — 2 column layout */}
+      {/* Charts */}
       <div>
         <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider mb-4">
           Metric History — 6M
@@ -89,7 +90,7 @@ export function StockOverviewTab({
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 items-start">
               <IndicatorChart
                 title="RS Percentile (3M)"
-                description="Where this stock ranks within its sector peers on 3-month relative strength. 100th = outperforms all peers. Below 50th = underperforms the majority."
+                description="Where this ETF ranks within its peer group on 3-month relative strength. 100th = outperforms all peers."
                 currentValue={rawPct(latest?.rs_pctile_3m)}
                 isBullish={latest?.rs_pctile_3m != null ? parseFloat(latest.rs_pctile_3m) >= 0.5 : null}
                 data={rsPctileData}
@@ -107,7 +108,7 @@ export function StockOverviewTab({
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 items-start">
               <IndicatorChart
                 title="3-Month Return"
-                description="Rolling 3-month price return. Absolute performance — does not account for market direction. Use RS to judge whether this return beats the market."
+                description="Rolling 3-month price return. Absolute performance — use RS to judge whether it beats the market."
                 currentValue={pctStr(latest?.ret_3m)}
                 isBullish={latest?.ret_3m != null ? parseFloat(latest.ret_3m) >= 0 : null}
                 data={ret3mData}
@@ -125,7 +126,7 @@ export function StockOverviewTab({
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 items-start">
               <IndicatorChart
                 title="Short-term Momentum (EMA10/EMA20)"
-                description="Ratio of this stock's 10-day EMA to its own 20-day EMA. Above 1.0 means short-term price momentum is rising faster than the medium-term trend."
+                description="Ratio of this ETF's 10-day EMA to its own 20-day EMA. Above 1.0 = upward price momentum in the short term."
                 currentValue={latest?.ema_10_ratio != null ? parseFloat(latest.ema_10_ratio).toFixed(3) : '—'}
                 isBullish={latest?.ema_10_ratio != null ? parseFloat(latest.ema_10_ratio) >= 1.0 : null}
                 data={emaData}

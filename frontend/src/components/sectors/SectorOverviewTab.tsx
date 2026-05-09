@@ -252,6 +252,8 @@ export function SectorOverviewTab({
         divergence_flag: snapshot.divergence_flag,
         bottomup_rs_state: snapshot.bottomup_rs_state,
         bottomup_momentum_state: snapshot.bottomup_momentum_state,
+        bottomup_risk_state: snapshot.bottomup_risk_state,
+        bottomup_volume_state: snapshot.bottomup_volume_state,
         data_date: snapshot.data_date,
         bottomup_ema_10_ratio: snapshot.bottomup_ema_10_ratio,
         bottomup_ema_20_ratio: snapshot.bottomup_ema_20_ratio,

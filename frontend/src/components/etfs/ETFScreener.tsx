@@ -2,34 +2,15 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { ChevronUp, ChevronDown } from 'lucide-react'
-import type { StockRowWithSector } from '@/lib/queries/stocks'
+import type { ETFRow } from '@/lib/queries/etfs'
 import {
   pct, pctColor, PosSizeBar, RSPctileBar,
-  RSStateChip, MomentumChip, RiskChip, VolumeChip,
+  RSStateChip, MomentumChip, RiskChip,
 } from '@/lib/stock-formatters'
-import { SectorBadge } from './SectorBadge'
 
 const RS_ORDER = ['Leader', 'Strong', 'Consolidating', 'Emerging', 'Average', 'Weak', 'Laggard']
 const MOM_ORDER = ['Accelerating', 'Improving', 'Flat', 'Deteriorating', 'Collapsing']
 const RISK_ORDER = ['Low', 'Normal', 'Elevated', 'High', 'Below Trend']
-const VOL_ORDER = ['Accumulation', 'Steady-Buying', 'Neutral', 'Distribution', 'Heavy Distribution']
-
-type SortKey =
-  | 'symbol' | 'sector' | 'rs_pctile_3m'
-  | 'ret_1m' | 'ret_3m' | 'ret_6m' | 'position_size_pct'
-  | 'rs_state' | 'momentum_state' | 'risk_state' | 'volume_state'
-
-type FilterChip = 'all' | 'n50' | 'n100' | 'n500' | 'investable' | 'leader' | 'accel'
-
-const CHIPS: { key: FilterChip; label: string }[] = [
-  { key: 'all',        label: 'All' },
-  { key: 'n50',        label: 'Nifty 50' },
-  { key: 'n100',       label: 'Nifty 100' },
-  { key: 'n500',       label: 'Nifty 500' },
-  { key: 'investable', label: 'Investable' },
-  { key: 'leader',     label: 'Leader/Strong' },
-  { key: 'accel',      label: 'Accelerating' },
-]
 
 function stateRank(order: string[], val: string | null): number {
   if (!val) return order.length
@@ -37,7 +18,37 @@ function stateRank(order: string[], val: string | null): number {
   return i === -1 ? order.length : i
 }
 
-export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
+type SortKey =
+  | 'ticker' | 'theme' | 'rs_pctile_3m'
+  | 'ret_1m' | 'ret_3m' | 'position_size_pct'
+  | 'rs_state' | 'momentum_state' | 'risk_state'
+
+type FilterChip = 'all' | 'broad' | 'sectoral' | 'thematic' | 'investable'
+
+const CHIPS: { key: FilterChip; label: string }[] = [
+  { key: 'all',        label: 'All' },
+  { key: 'broad',      label: 'Broad' },
+  { key: 'sectoral',   label: 'Sectoral' },
+  { key: 'thematic',   label: 'Thematic' },
+  { key: 'investable', label: 'Investable' },
+]
+
+const THEME_STYLE: Record<string, string> = {
+  Broad:     'bg-teal/10 text-teal',
+  Sectoral:  'bg-signal-pos/10 text-signal-pos',
+  Thematic:  'bg-signal-warn/10 text-signal-warn',
+}
+
+function ThemeBadge({ theme }: { theme: string }) {
+  const style = THEME_STYLE[theme] ?? 'bg-ink-tertiary/10 text-ink-secondary'
+  return (
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-[2px] font-sans text-[10px] font-semibold whitespace-nowrap ${style}`}>
+      {theme}
+    </span>
+  )
+}
+
+export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
   const [sortKey, setSortKey] = useState<SortKey>('rs_pctile_3m')
   const [asc, setAsc] = useState(false)
   const [chip, setChip] = useState<FilterChip>('all')
@@ -48,43 +59,31 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
     else { setSortKey(key); setAsc(false) }
   }
 
-  function clearFilters() {
-    setChip('all')
-    setSearch('')
-  }
-
   const filtered = useMemo(() => {
-    let result = stocks
+    let result = etfs
 
-    if (chip === 'n50') result = result.filter(s => s.in_nifty_50)
-    else if (chip === 'n100') result = result.filter(s => s.in_nifty_100)
-    else if (chip === 'n500') result = result.filter(s => s.in_nifty_500)
-    else if (chip === 'investable') result = result.filter(s => s.is_investable)
-    else if (chip === 'leader') result = result.filter(
-      s => s.rs_state === 'Leader' || s.rs_state === 'Strong'
-    )
-    else if (chip === 'accel') result = result.filter(
-      s => s.momentum_state === 'Accelerating' || s.momentum_state === 'Improving'
-    )
+    if (chip === 'broad')      result = result.filter(e => e.theme === 'Broad')
+    else if (chip === 'sectoral') result = result.filter(e => e.theme === 'Sectoral')
+    else if (chip === 'thematic') result = result.filter(e => e.theme === 'Thematic')
+    else if (chip === 'investable') result = result.filter(e => e.is_investable)
 
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       result = result.filter(
-        s => s.symbol.toLowerCase().includes(q) || s.company_name.toLowerCase().includes(q)
+        e => e.ticker.toLowerCase().includes(q) || (e.etf_name ?? '').toLowerCase().includes(q)
       )
     }
 
     return [...result].sort((a, b) => {
       let cmp = 0
-      if (sortKey === 'symbol') cmp = a.symbol.localeCompare(b.symbol)
-      else if (sortKey === 'sector') cmp = a.sector.localeCompare(b.sector)
+      if (sortKey === 'ticker') cmp = a.ticker.localeCompare(b.ticker)
+      else if (sortKey === 'theme') cmp = a.theme.localeCompare(b.theme)
       else if (sortKey === 'rs_state') cmp = stateRank(RS_ORDER, a.rs_state) - stateRank(RS_ORDER, b.rs_state)
       else if (sortKey === 'momentum_state') cmp = stateRank(MOM_ORDER, a.momentum_state) - stateRank(MOM_ORDER, b.momentum_state)
       else if (sortKey === 'risk_state') cmp = stateRank(RISK_ORDER, a.risk_state) - stateRank(RISK_ORDER, b.risk_state)
-      else if (sortKey === 'volume_state') cmp = stateRank(VOL_ORDER, a.volume_state) - stateRank(VOL_ORDER, b.volume_state)
       else {
-        const av = a[sortKey as keyof typeof a] != null ? parseFloat(a[sortKey as keyof typeof a] as string) : null
-        const bv = b[sortKey as keyof typeof b] != null ? parseFloat(b[sortKey as keyof typeof b] as string) : null
+        const av = a[sortKey as keyof ETFRow] != null ? parseFloat(a[sortKey as keyof ETFRow] as string) : null
+        const bv = b[sortKey as keyof ETFRow] != null ? parseFloat(b[sortKey as keyof ETFRow] as string) : null
         if (av == null && bv == null) cmp = 0
         else if (av == null) cmp = 1
         else if (bv == null) cmp = -1
@@ -92,16 +91,14 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
       }
       return asc ? cmp : -cmp
     })
-  }, [stocks, chip, search, sortKey, asc])
+  }, [etfs, chip, search, sortKey, asc])
 
   function SortIcon({ k }: { k: SortKey }) {
     if (sortKey !== k) return <ChevronUp className="w-3 h-3 opacity-20" />
     return asc ? <ChevronUp className="w-3 h-3 text-teal" /> : <ChevronDown className="w-3 h-3 text-teal" />
   }
 
-  function Th({
-    label, k, align = 'left',
-  }: { label: string; k: SortKey; align?: 'left' | 'right' }) {
+  function Th({ label, k, align = 'left' }: { label: string; k: SortKey; align?: 'left' | 'right' }) {
     const active = sortKey === k
     return (
       <th
@@ -122,7 +119,7 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
       <div className="flex flex-wrap items-center gap-2">
         <input
           type="search"
-          placeholder="Search symbol or company..."
+          placeholder="Search ticker or name..."
           value={search}
           onChange={e => setSearch(e.target.value)}
           className="px-3 py-1.5 border border-paper-rule rounded-sm font-sans text-sm text-ink-primary bg-paper placeholder:text-ink-tertiary focus:outline-none focus:ring-1 focus:ring-teal/50 w-56"
@@ -145,7 +142,7 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
           ))}
         </div>
         <span className="ml-auto font-sans text-xs text-ink-tertiary whitespace-nowrap">
-          Showing {filtered.length} of {stocks.length} stocks
+          Showing {filtered.length} of {etfs.length} ETFs
         </span>
       </div>
 
@@ -154,12 +151,11 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
         <table className="w-full border-collapse">
           <thead>
             <tr className="border-b border-paper-rule bg-paper">
-              <Th label="Symbol" k="symbol" />
-              <Th label="Sector" k="sector" />
+              <Th label="Ticker" k="ticker" />
+              <Th label="Theme" k="theme" />
               <Th label="RS State" k="rs_state" />
               <Th label="Mom" k="momentum_state" />
               <Th label="Risk" k="risk_state" />
-              <Th label="Vol" k="volume_state" />
               <Th label="1M" k="ret_1m" align="right" />
               <Th label="3M" k="ret_3m" align="right" />
               <Th label="RS Pctile" k="rs_pctile_3m" align="right" />
@@ -169,31 +165,26 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-6 py-10 text-center">
-                  <p className="font-sans text-sm text-ink-secondary mb-2">
-                    No stocks match the current filter.
-                  </p>
-                  <button onClick={clearFilters} className="font-sans text-xs text-teal hover:underline">
-                    Clear filters
-                  </button>
+                <td colSpan={9} className="px-6 py-10 text-center">
+                  <p className="font-sans text-sm text-ink-secondary">No ETFs match the current filter.</p>
                 </td>
               </tr>
             ) : (
               filtered.map((row, i) => (
                 <tr
-                  key={row.instrument_id}
+                  key={row.ticker}
                   className={`border-b border-paper-rule last:border-0 hover:bg-paper-rule/20 transition-colors ${i % 2 === 0 ? '' : 'bg-paper-rule/5'}`}
                 >
                   <td className="px-3 py-2.5 whitespace-nowrap">
-                    <Link href={`/stocks/${encodeURIComponent(row.symbol)}`} className="hover:opacity-80">
-                      <div className="font-sans text-xs font-semibold text-ink-primary">{row.symbol}</div>
-                      <div className="font-sans text-[10px] text-ink-tertiary truncate max-w-[160px]" title={row.company_name}>
-                        {row.company_name}
+                    <Link href={`/etfs/${encodeURIComponent(row.ticker)}`} className="hover:opacity-80">
+                      <div className="font-sans text-xs font-semibold text-ink-primary">{row.ticker}</div>
+                      <div className="font-sans text-[10px] text-ink-tertiary truncate max-w-[200px]" title={row.etf_name ?? ''}>
+                        {row.etf_name ?? '—'}
                       </div>
                     </Link>
                   </td>
                   <td className="px-3 py-2.5">
-                    <SectorBadge sector={row.sector} />
+                    <ThemeBadge theme={row.theme} />
                   </td>
                   <td className="px-3 py-2.5">
                     <RSStateChip value={row.rs_state} />
@@ -203,9 +194,6 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
                   </td>
                   <td className="px-3 py-2.5">
                     <RiskChip value={row.risk_state} />
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <VolumeChip value={row.volume_state} />
                   </td>
                   <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(row.ret_1m)}`}>
                     {pct(row.ret_1m)}

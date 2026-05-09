@@ -27,6 +27,8 @@ export type SectorSnapshot = {
   divergence_flag: boolean
   bottomup_rs_state: string | null
   bottomup_momentum_state: string | null
+  bottomup_risk_state: string | null
+  bottomup_volume_state: string | null
   data_date: Date
 }
 
@@ -74,6 +76,8 @@ export async function getCurrentSectors(): Promise<SectorSnapshot[]> {
       s.divergence_flag,
       s.bottomup_rs_state,
       s.bottomup_momentum_state,
+      s.bottomup_risk_state,
+      s.bottomup_volume_state,
       m.date                           AS data_date
     FROM atlas.atlas_sector_metrics_daily m
     JOIN atlas.atlas_sector_states_daily s
