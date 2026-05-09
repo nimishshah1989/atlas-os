@@ -43,13 +43,6 @@ LOG_DIR = Path("/var/log/atlas")
 
 _ALLOWED_MILESTONES: set[str] = {"m3", "m4", "m5", "all"}
 
-# Maps each single-milestone key to its script relative to ATLAS_ROOT.
-_MILESTONE_SCRIPTS: dict[str, list[str]] = {
-    "m3": ["scripts/m3_daily.py"],
-    "m4": ["scripts/m4_daily.py"],
-    "m5": ["scripts/m5_daily.py"],
-}
-
 
 # ---------------------------------------------------------------------------
 # Auth dependency
@@ -88,7 +81,7 @@ def trigger_recompute(
     milestone: str,
     request: Request,
     engine: Engine = Depends(get_engine),  # noqa: B008
-    _auth: None = Depends(verify_bearer),
+    _auth: None = Depends(verify_bearer),  # pyright: ignore[reportUnusedParameter]
 ) -> dict[str, Any]:
     """Spawn a pipeline recompute for the requested milestone.
 

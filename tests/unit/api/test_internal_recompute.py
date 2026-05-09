@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -27,7 +27,7 @@ def mock_engine() -> MagicMock:
 
 
 @pytest.fixture
-def client(mock_engine: MagicMock) -> TestClient:
+def client(mock_engine: MagicMock) -> Generator[TestClient, None, None]:
     """TestClient with get_engine overridden to a MagicMock."""
     from atlas.api.internal_recompute import app
     from atlas.db import get_engine
@@ -47,7 +47,7 @@ def _patch_db_no_running_row() -> Callable[..., Any]:
     conn.execute.return_value = execute_result
 
     @contextmanager
-    def _cm(_engine: Any) -> Any:
+    def _cm(_engine: Any) -> Any:  # pyright: ignore[reportUnusedParameter]
         yield conn
 
     return _cm
@@ -58,12 +58,12 @@ def _patch_db_running_row(existing_run_id: str) -> Callable[..., Any]:
     conn = MagicMock()
     execute_result = MagicMock()
     row = MagicMock()
-    row.__getitem__ = lambda self, idx: existing_run_id if idx == 0 else None  # type: ignore[misc]
+    row.__getitem__ = lambda _, idx: existing_run_id if idx == 0 else None  # type: ignore[misc]
     execute_result.fetchone.return_value = row
     conn.execute.return_value = execute_result
 
     @contextmanager
-    def _cm(_engine: Any) -> Any:
+    def _cm(_engine: Any) -> Any:  # pyright: ignore[reportUnusedParameter]
         yield conn
 
     return _cm
