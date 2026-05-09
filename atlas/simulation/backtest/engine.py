@@ -20,11 +20,17 @@ from atlas.simulation.core.signal_adapter import SignalMatrix
 log = structlog.get_logger()
 
 _INIT_CASH = 10_000_000.0  # ₹1 crore default
-_FEES_PCT = 0.001  # 0.1% round-trip
+_FEES_PCT = 0.001  # 0.1% per leg (~0.2% round-trip)
 
 
 @dataclass
 class BacktestResult:
+    """Backtest output.
+
+    max_drawdown: negative float (e.g. -0.15 = 15% peak-to-trough drawdown).
+    sharpe_ratio / max_drawdown / total_return are None when non-finite (NaN, ±inf).
+    """
+
     sharpe_ratio: float | None
     max_drawdown: float | None
     total_return: float | None
@@ -34,6 +40,25 @@ class BacktestResult:
     n_trades: int = 0
 
 
+def _extract_date_range(idx: pd.DatetimeIndex) -> tuple[date | None, date | None]:
+    """Return (start, end) as date objects. Returns (None, None) for empty index."""
+    if len(idx) == 0:
+        return None, None
+    return pd.Timestamp(idx[0]).date(), pd.Timestamp(idx[-1]).date()  # type: ignore[arg-type]
+
+
+def _finite_or_none(val: float) -> float | None:
+    """Map NaN / ±inf to None. Preserves valid floats unchanged."""
+    return float(val) if np.isfinite(val) else None
+
+
+def _scalar_metric(val: float | pd.Series) -> float:  # type: ignore[type-arg]
+    """Reduce a per-instrument Series to a portfolio-level scalar by mean."""
+    if isinstance(val, pd.Series):
+        return float(val.mean())
+    return float(val)
+
+
 def run_backtest(
     signal_matrix: SignalMatrix,
     init_cash: float = _INIT_CASH,
@@ -41,7 +66,7 @@ def run_backtest(
 ) -> BacktestResult:
     """Run vectorbt backtest on a SignalMatrix. No DB calls.
 
-    Memory discipline: del pf; gc.collect() after use — vectorbt Portfolio
+    Memory discipline: pf deleted in finally block — vectorbt Portfolio
     objects hold full price history in RAM.
     """
     if signal_matrix.prices.size == 0 or len(signal_matrix.instruments) == 0:
@@ -83,44 +108,38 @@ def run_backtest(
             freq="D",
         )
 
-        daily_rets = pf.daily_returns()
-        if isinstance(daily_rets, pd.DataFrame):
-            daily_rets = daily_rets.mean(axis=1)
-
-        sharpe_val = pf.sharpe_ratio()
-        sharpe = float(sharpe_val) if not np.isnan(float(sharpe_val)) else None
-        drawdown = float(pf.max_drawdown())
-        total_ret = float(pf.total_return())
-
         try:
-            stats = pf.stats()
-            n_trades = int(stats.get("Total Trades", 0)) if hasattr(stats, "get") else 0
-        except Exception:
-            log.warning("backtest_stats_failed", exc_info=True)
-            n_trades = 0
+            daily_rets = pf.daily_returns()
+            if isinstance(daily_rets, pd.DataFrame):
+                daily_rets = daily_rets.mean(axis=1)
 
-        dates_idx = pd.DatetimeIndex(price_df.index)
-        if len(dates_idx) > 0:
-            _t0: pd.Timestamp = dates_idx[0]  # type: ignore[assignment]
-            _t1: pd.Timestamp = dates_idx[-1]  # type: ignore[assignment]
-            start: date | None = _t0.date()
-            end: date | None = _t1.date()
-        else:
-            start = None
-            end = None
+            # Multi-instrument vbt returns per-instrument Series; reduce to scalar.
+            # _finite_or_none maps NaN/±inf → None (financial domain: NULL not NaN).
+            sharpe = _finite_or_none(_scalar_metric(pf.sharpe_ratio()))
+            drawdown = _finite_or_none(_scalar_metric(pf.max_drawdown()))
+            total_ret = _finite_or_none(_scalar_metric(pf.total_return()))
 
-        result = BacktestResult(
-            sharpe_ratio=sharpe,
-            max_drawdown=drawdown,
-            total_return=total_ret,
-            daily_returns=daily_rets,
-            start_date=start,
-            end_date=end,
-            n_trades=n_trades,
-        )
+            try:
+                stats = pf.stats()
+                n_trades = int(stats.get("Total Trades", 0)) if hasattr(stats, "get") else 0
+            except Exception:
+                log.warning("backtest_stats_failed", exc_info=True)
+                n_trades = 0
 
-        del pf
-        gc.collect()
+            start, end = _extract_date_range(pd.DatetimeIndex(price_df.index))
+
+            result = BacktestResult(
+                sharpe_ratio=sharpe,
+                max_drawdown=drawdown,
+                total_return=total_ret,
+                daily_returns=daily_rets,
+                start_date=start,
+                end_date=end,
+                n_trades=n_trades,
+            )
+        finally:
+            del pf
+            gc.collect()
 
     except ImportError:
         # vectorbt not installed — use pandas/numpy fallback
@@ -145,19 +164,13 @@ def _run_backtest_fallback(
     """Pure pandas/numpy fallback when vectorbt is unavailable.
 
     Simulates equal-weight buy-and-hold between entry and exit signals.
+
+    NOTE: O(n_days * n_instruments) Python loop. Acceptable only as a
+    development fallback; never call in production — vectorbt runs on EC2.
     """
     dates_idx = pd.DatetimeIndex(price_df.index)
-    if len(dates_idx) > 0:
-        _t0: pd.Timestamp = dates_idx[0]  # type: ignore[assignment]
-        _t1: pd.Timestamp = dates_idx[-1]  # type: ignore[assignment]
-        start: date | None = _t0.date()
-        end: date | None = _t1.date()
-    else:
-        start = None
-        end = None
+    start, end = _extract_date_range(dates_idx)
 
-    # Simple simulation: track portfolio value
-    # For each instrument, enter at entry signal price, exit at exit signal price
     portfolio_values = pd.Series(index=dates_idx, dtype=float)
     portfolio_values.iloc[0] = init_cash
 
@@ -166,38 +179,34 @@ def _run_backtest_fallback(
     allocation_per_inst = init_cash / max(n_instruments, 1)
 
     cash = init_cash
-    holdings = {col: 0.0 for col in price_df.columns}  # shares held
+    holdings = {col: 0.0 for col in price_df.columns}
 
     for i, dt in enumerate(dates_idx):
         for col in price_df.columns:
             price = price_df.loc[dt, col]
             if entry_df.loc[dt, col] and not in_position[col]:
-                # Buy
                 shares = (allocation_per_inst * (1 - fees_pct)) / price
                 holdings[col] = shares
                 cash -= allocation_per_inst
                 in_position[col] = True
             elif exit_df.loc[dt, col] and in_position[col]:
-                # Sell
                 proceeds = holdings[col] * price * (1 - fees_pct)
                 cash += proceeds
                 holdings[col] = 0.0
                 in_position[col] = False
 
-        # Portfolio value = cash + mark-to-market
         mtm = sum(holdings[col] * price_df.iloc[i][col] for col in price_df.columns)
         portfolio_values.iloc[i] = cash + mtm
 
     daily_rets = portfolio_values.pct_change().fillna(0.0)
     total_ret = (portfolio_values.iloc[-1] / init_cash) - 1.0
 
-    # Sharpe ratio (annualized, risk-free=0)
+    sharpe: float | None
     if daily_rets.std() > 0:
         sharpe = float((daily_rets.mean() / daily_rets.std()) * np.sqrt(252))
     else:
         sharpe = None
 
-    # Max drawdown
     running_max = portfolio_values.cummax()
     drawdown_series = (portfolio_values - running_max) / running_max
     max_dd = float(drawdown_series.min())

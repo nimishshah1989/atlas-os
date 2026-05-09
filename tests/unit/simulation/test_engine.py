@@ -26,7 +26,7 @@ def _make_synthetic_signal_matrix(n_days: int = 60, n_instruments: int = 3) -> S
         entries=entries,
         exits=exits,
         dates=dates,
-        instruments=["INST_A", "INST_B", "INST_C"],
+        instruments=[f"INST_{chr(65 + i)}" for i in range(n_instruments)],
     )
 
 
