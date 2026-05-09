@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import sql from '@/lib/db'
 import { triggerRecompute as callInternal } from '@/lib/internal-api'
+import { getThresholdHistory, getRunStatus } from '@/lib/queries/thresholds'
 
 // Hardcoded identity for v0 — see PRD §Architecture #2.
 // Full RBAC is deferred until auth layer is extended beyond the single-password gate.
@@ -76,4 +77,12 @@ export async function triggerRecompute(
     error: result.message,
     existing_run_id: 'existing_run_id' in result ? result.existing_run_id : undefined,
   }
+}
+
+export async function getThresholdHistoryAction(thresholdKey: string) {
+  return getThresholdHistory(thresholdKey, 20)
+}
+
+export async function getRunStatusAction(runId: string) {
+  return getRunStatus(runId)
 }

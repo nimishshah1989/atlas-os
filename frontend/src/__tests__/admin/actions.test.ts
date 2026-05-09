@@ -17,6 +17,11 @@ vi.mock('@/lib/internal-api', () => ({
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }))
+// queries/thresholds is server-only — mock to avoid 'server-only' guard in Vitest (jsdom env)
+vi.mock('@/lib/queries/thresholds', () => ({
+  getThresholdHistory: vi.fn().mockResolvedValue([]),
+  getRunStatus: vi.fn().mockResolvedValue(null),
+}))
 
 import sql from '@/lib/db'
 import { triggerRecompute as mockedInternalCall } from '@/lib/internal-api'
