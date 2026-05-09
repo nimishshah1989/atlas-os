@@ -6,7 +6,7 @@ const STATE_COLOR: Record<string, string> = {
   Overweight:  '#22c55e',
   Neutral:     '#f59e0b',
   Underweight: '#ef4444',
-  Avoid:       '#ef4444',
+  Avoid:       '#7c2d12',
 }
 
 type Props = {
@@ -50,28 +50,6 @@ export function SectorHeatmap({ history, sectors }: Props) {
 
   return (
     <div className="relative overflow-x-auto">
-      {/* Month label row */}
-      <div className="flex mb-1" style={{ paddingLeft: 144 }}>
-        {dates.map((d, i) => (
-          <div key={d} style={{ width: cellW, flexShrink: 0, position: 'relative' }}>
-            {monthLabels[i] && (
-              <span
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 8,
-                  color: '#94a3b8',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {monthLabels[i]}
-              </span>
-            )}
-          </div>
-        ))}
-      </div>
-
       {/* Sector rows */}
       {sectors.map(sector => {
         const sectorMap = cellMap.get(sector) ?? new Map<string, string>()
@@ -114,6 +92,28 @@ export function SectorHeatmap({ history, sectors }: Props) {
           </div>
         )
       })}
+
+      {/* Month label row — below all sector rows so labels are never covered */}
+      <div className="flex mt-1" style={{ paddingLeft: 144, height: 20 }}>
+        {dates.map((d, i) => (
+          <div key={d} style={{ width: cellW, flexShrink: 0, position: 'relative' }}>
+            {monthLabels[i] && (
+              <span
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 9,
+                  color: '#94a3b8',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {monthLabels[i]}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
 
       {/* Legend */}
       <div className="flex items-center gap-5 mt-3" style={{ paddingLeft: 144 }}>

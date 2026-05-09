@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react'
 import * as d3 from 'd3'
 import type { SectorDecision } from '@/lib/sectors-decision'
 
+
 export type SectorPoint = {
   sector_name: string
   constituent_count: number
@@ -38,8 +39,10 @@ export function SectorBubbleChart({
   range: string
   onSelect: (sectorName: string) => void
 }) {
-  const svgRef  = useRef<SVGSVGElement>(null)
-  const wrapRef = useRef<HTMLDivElement>(null)
+  const svgRef    = useRef<SVGSVGElement>(null)
+  const wrapRef   = useRef<HTMLDivElement>(null)
+  const selectRef = useRef(onSelect)
+  selectRef.current = onSelect
 
   useEffect(() => {
     const container = wrapRef.current
@@ -171,9 +174,11 @@ export function SectorBubbleChart({
       .attr('font-size', 10).attr('fill', '#64748b')
       .text('↑ Breadth — % Stocks Above 50-Day EMA')
 
-    const tip = d3.select(container)
+    // Append tooltip to document.body with position:fixed so it escapes
+    // any overflow:hidden ancestor in the page layout.
+    const tip = d3.select(document.body)
       .append('div')
-      .style('position', 'absolute')
+      .style('position', 'fixed')
       .style('pointer-events', 'none')
       .style('opacity', '0')
       .style('background', '#fff')
@@ -183,7 +188,7 @@ export function SectorBubbleChart({
       .style('font-family', 'var(--font-sans)')
       .style('font-size', '11px')
       .style('color', '#1e293b')
-      .style('z-index', '10')
+      .style('z-index', '9999')
       .style('box-shadow', '0 2px 8px rgba(0,0,0,0.08)')
       .style('min-width', '160px')
 
@@ -220,14 +225,10 @@ export function SectorBubbleChart({
           .attr('fill-opacity', 0.25)
           .attr('stroke-width', 2.5)
 
-        const rect = container.getBoundingClientRect()
-        const ex   = event.clientX - rect.left
-        const ey   = event.clientY - rect.top
-
         tip
           .style('opacity', '1')
-          .style('left', `${ex + 14}px`)
-          .style('top',  `${ey - 30}px`)
+          .style('left', `${(event.clientX as number) + 14}px`)
+          .style('top',  `${(event.clientY as number) - 30}px`)
           .html(`
             <div style="font-weight:700;margin-bottom:4px">${p.sector_name}</div>
             <div style="color:#64748b;margin-bottom:2px">
@@ -240,10 +241,9 @@ export function SectorBubbleChart({
           `)
       })
       .on('mousemove', function (event) {
-        const rect = container.getBoundingClientRect()
         tip
-          .style('left', `${event.clientX - rect.left + 14}px`)
-          .style('top',  `${event.clientY - rect.top  - 30}px`)
+          .style('left', `${(event.clientX as number) + 14}px`)
+          .style('top',  `${(event.clientY as number) - 30}px`)
       })
       .on('mouseleave', function () {
         d3.select(this).select('circle')
@@ -253,11 +253,11 @@ export function SectorBubbleChart({
       })
       .on('click', (_, p) => {
         tip.style('opacity', '0')
-        onSelect(p.sector_name)
+        selectRef.current(p.sector_name)
       })
 
     return () => { tip.remove() }
-  }, [data, onSelect])
+  }, [data]) // onSelect excluded — stable via selectRef, prevents D3 full-redraw on drawer open
 
   return (
     <div ref={wrapRef} className="relative">

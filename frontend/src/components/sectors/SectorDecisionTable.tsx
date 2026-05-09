@@ -1,6 +1,6 @@
 'use client'
-import { useState } from 'react'
-import { ChevronUp, ChevronDown, AlertTriangle } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { ChevronUp, ChevronDown, AlertTriangle, Info } from 'lucide-react'
 import type { SectorDecision } from '@/lib/sectors-decision'
 
 type Row = {
@@ -11,13 +11,14 @@ type Row = {
   bottomup_ret_6m: string | null
   bottomup_rs_3m_nifty500: string | null
   participation_50: string | null
+  leadership_concentration: string | null
   sector_state: string
   bottomup_momentum_state: string | null
   divergence_flag: boolean
   decision: SectorDecision
 }
 
-type SortKey = 'decision' | 'bottomup_ret_1m' | 'bottomup_ret_3m' | 'bottomup_rs_3m_nifty500' | 'participation_50' | 'sector_name'
+type SortKey = 'decision' | 'bottomup_ret_1m' | 'bottomup_ret_3m' | 'bottomup_ret_6m' | 'bottomup_rs_3m_nifty500' | 'participation_50' | 'leadership_concentration' | 'sector_name'
 
 const DECISION_ORDER: Record<SectorDecision, number> = {
   'ENTER':     1,
@@ -69,6 +70,58 @@ function ParticipationBar({ value }: { value: string | null }) {
   )
 }
 
+function ColTip({ text }: { text: string }) {
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  return (
+    <span className="inline-flex items-center">
+      <button
+        ref={btnRef}
+        type="button"
+        onMouseEnter={() => {
+          const r = btnRef.current?.getBoundingClientRect()
+          if (r) setPos({ x: r.left + r.width / 2, y: r.top - 6 })
+        }}
+        onMouseLeave={() => setPos(null)}
+        onFocus={() => {
+          const r = btnRef.current?.getBoundingClientRect()
+          if (r) setPos({ x: r.left + r.width / 2, y: r.top - 6 })
+        }}
+        onBlur={() => setPos(null)}
+        className="ml-1 text-ink-tertiary/60 hover:text-ink-secondary transition-colors"
+        aria-label="Column info"
+      >
+        <Info className="w-2.5 h-2.5" />
+      </button>
+      {pos && (
+        <span
+          role="tooltip"
+          className="fixed z-[9999] w-56 px-2.5 py-2 bg-paper border border-paper-rule rounded-sm shadow-md font-sans text-[11px] text-ink-secondary leading-relaxed normal-case tracking-normal font-normal pointer-events-none whitespace-normal -translate-x-1/2 -translate-y-full"
+          style={{ left: pos.x, top: pos.y }}
+        >
+          {text}
+        </span>
+      )}
+    </span>
+  )
+}
+
+function ConcentrationCell({ value }: { value: string | null }) {
+  if (value == null) return <span className="font-mono text-xs text-ink-tertiary">—</span>
+  const n = parseFloat(value)
+  const pctStr = `${(n * 100).toFixed(0)}%`
+  // Higher = worse (narrower leadership)
+  const color = n >= 0.6 ? '#B0492C' : n >= 0.4 ? '#B8860B' : '#2F6B43'
+  return (
+    <div className="flex items-center gap-2">
+      <div className="w-12 h-1.5 bg-paper-rule rounded-full overflow-hidden">
+        <div className="h-full rounded-full" style={{ width: `${Math.min(100, n * 100)}%`, background: color }} />
+      </div>
+      <span className="font-mono text-xs tabular-nums" style={{ color }}>{pctStr}</span>
+    </div>
+  )
+}
+
 export function SectorDecisionTable({ data, onSelect }: { data: Row[]; onSelect: (name: string) => void }) {
   const [sortKey, setSortKey] = useState<SortKey>('decision')
   const [asc, setAsc] = useState(true)
@@ -102,13 +155,17 @@ export function SectorDecisionTable({ data, onSelect }: { data: Row[]; onSelect:
       : <ChevronDown className="w-3 h-3 text-teal" />
   }
 
-  function Th({ label, k }: { label: string; k: SortKey }) {
+  function Th({ label, k, tip }: { label: string; k: SortKey; tip?: string }) {
     return (
       <th
         className="px-3 py-2 text-left font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary cursor-pointer hover:text-ink-secondary select-none whitespace-nowrap"
         onClick={() => handleSort(k)}
       >
-        <span className="flex items-center gap-1">{label} <SortIcon k={k} /></span>
+        <span className="flex items-center gap-0.5">
+          {label}
+          {tip && <ColTip text={tip} />}
+          {' '}<SortIcon k={k} />
+        </span>
       </th>
     )
   }
@@ -119,18 +176,31 @@ export function SectorDecisionTable({ data, onSelect }: { data: Row[]; onSelect:
         <thead>
           <tr className="border-b border-paper-rule bg-paper">
             <Th label="Sector"   k="sector_name" />
-            <Th label="Decision" k="decision" />
+            <Th label="Decision" k="decision"
+              tip="ENTER = strong buy setup (Overweight + improving momentum). ROTATE IN = sector is turning, not yet confirmed. HOLD = stay positioned. WATCH = on radar, not actionable. PASS = avoid. EXIT = close positions — state has broken down." />
             <th className="px-3 py-2 text-left font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary whitespace-nowrap">
-              State
+              <span className="flex items-center gap-0.5">
+                State
+                <ColTip text="Overweight = majority of stocks in this sector are outperforming + breadth is expanding. Neutral = mixed signals. Underweight = broad underperformance. Avoid = severe weakness — capital preservation mode." />
+              </span>
             </th>
             <Th label="1M Ret"  k="bottomup_ret_1m" />
             <Th label="3M Ret"  k="bottomup_ret_3m" />
-            <Th label="RS 3M"   k="bottomup_rs_3m_nifty500" />
-            <Th label="Breadth" k="participation_50" />
+            <Th label="6M Ret"  k="bottomup_ret_6m" />
+            <Th label="RS 3M"   k="bottomup_rs_3m_nifty500"
+              tip="3-month relative strength vs Nifty 500 — aggregate of all stocks in the sector. +5% means sector stocks on average outperformed Nifty 500 by 5pp over 3 months. Negative = lagging the index." />
+            <Th label="Breadth" k="participation_50"
+              tip="% of stocks in the sector currently trading ABOVE their 50-day EMA. 100% = every stock is in a medium-term uptrend. 50% = half and half. Below 30% signals broad deterioration — even if the sector index looks fine, most stocks are weak." />
+            <Th label="Concen." k="leadership_concentration"
+              tip="Share of the sector's positive RS attributable to just the top 1–2 stocks. 5% = leadership is broad (good). 80% = 1 or 2 names are carrying the whole sector (fragile — if they crack, the sector cracks). Green below 40%, amber 40–60%, red above 60%." />
             <th className="px-3 py-2 text-left font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary">
-              Momentum
+              <span className="flex items-center gap-0.5">
+                Momentum
+                <ColTip text="Direction of change in the sector's RS over the last few weeks. Improving = RS is rising (stocks gaining vs index). Deteriorating = RS is falling (stocks losing ground vs index). Stable = no meaningful change." />
+              </span>
             </th>
-            <th className="px-3 py-2 text-center font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary">
+            <th className="px-3 py-2 text-center font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary"
+                title="Top-down / bottom-up divergence flag">
               &#9888;
             </th>
           </tr>
@@ -163,11 +233,17 @@ export function SectorDecisionTable({ data, onSelect }: { data: Row[]; onSelect:
               <td className={`px-3 py-2.5 font-mono text-xs tabular-nums ${pctColor(row.bottomup_ret_3m)}`}>
                 {pct(row.bottomup_ret_3m)}
               </td>
+              <td className={`px-3 py-2.5 font-mono text-xs tabular-nums ${pctColor(row.bottomup_ret_6m)}`}>
+                {pct(row.bottomup_ret_6m)}
+              </td>
               <td className={`px-3 py-2.5 font-mono text-xs tabular-nums ${pctColor(row.bottomup_rs_3m_nifty500)}`}>
                 {pct(row.bottomup_rs_3m_nifty500)}
               </td>
               <td className="px-3 py-2.5">
                 <ParticipationBar value={row.participation_50} />
+              </td>
+              <td className="px-3 py-2.5">
+                <ConcentrationCell value={row.leadership_concentration} />
               </td>
               <td className="px-3 py-2.5">
                 {row.bottomup_momentum_state === 'Improving' ? (

@@ -3,8 +3,10 @@ import { Suspense } from 'react'
 import { getCurrentSectors, getSectorStateHistory } from '@/lib/queries/sectors'
 import { rangeToDays, type TimeRange } from '@/lib/time-range'
 import { getSectorDecision } from '@/lib/sectors-decision'
+import { filterSectors } from '@/lib/sectors-filter'
 import { TimeRangeToggle } from '@/components/ui/TimeRangeToggle'
 import { SectorViews } from '@/components/sectors/SectorViews'
+import { SectorRiskWatch } from '@/components/sectors/SectorRiskWatch'
 
 type SearchParams = Promise<{ range?: string }>
 
@@ -16,12 +18,12 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
     : '6M'
   const days = rangeToDays(historyRange)
 
-  const [sectors, stateHistory] = await Promise.all([
+  const [allRaw, stateHistory] = await Promise.all([
     getCurrentSectors(),
     getSectorStateHistory(days),
   ])
 
-  if (sectors.length === 0) {
+  if (allRaw.length === 0) {
     return (
       <div className="p-8">
         <p className="font-sans text-sm text-ink-secondary">
@@ -31,16 +33,20 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
     )
   }
 
-  const overweightCount  = sectors.filter(s => s.sector_state === 'Overweight').length
-  const neutralCount     = sectors.filter(s => s.sector_state === 'Neutral').length
-  const underweightCount = sectors.filter(s => s.sector_state === 'Underweight').length
-  const avoidCount       = sectors.filter(s => s.sector_state === 'Avoid').length
-  const dataDate = sectors[0]?.data_date
+  const { actionable, excluded } = filterSectors(allRaw)
 
-  const sectorsWithDecision = sectors.map(s => ({
+  const withDecision = (s: typeof allRaw[number]) => ({
     ...s,
     decision: getSectorDecision(s.sector_state, s.bottomup_rs_state, s.bottomup_momentum_state),
-  }))
+  })
+  const actionableWithDecision = actionable.map(withDecision)
+  const allWithDecision = allRaw.map(withDecision)
+
+  const overweightCount  = actionableWithDecision.filter(s => s.sector_state === 'Overweight').length
+  const neutralCount     = actionableWithDecision.filter(s => s.sector_state === 'Neutral').length
+  const underweightCount = actionableWithDecision.filter(s => s.sector_state === 'Underweight').length
+  const avoidCount       = actionableWithDecision.filter(s => s.sector_state === 'Avoid').length
+  const dataDate = allRaw[0]?.data_date
 
   return (
     <div className="max-w-[1400px] mx-auto">
@@ -83,8 +89,12 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
         </div>
       </div>
 
+      <SectorRiskWatch sectors={actionableWithDecision} />
+
       <SectorViews
-        sectors={sectorsWithDecision}
+        actionable={actionableWithDecision}
+        allSectors={allWithDecision}
+        excluded={excluded}
         stateHistory={stateHistory}
         range={historyRange}
       />
