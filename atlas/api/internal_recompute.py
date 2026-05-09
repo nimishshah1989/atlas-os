@@ -29,7 +29,6 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-from atlas.compute._session import open_compute_session
 from atlas.db import get_engine
 
 log = structlog.get_logger()
@@ -67,7 +66,13 @@ def verify_bearer(authorization: str = Header(default="")) -> None:
 
 @contextmanager
 def _db(engine: Engine) -> Generator[Any, None, None]:
-    with open_compute_session(engine) as conn:
+    """Open a read-only DB connection.
+
+    Concurrency check is per-milestone (running m3 does not block m4 — they
+    write to different tables). For milestone='all', the check widens to
+    M3+M4+M5 since "all" launches all three sequentially.
+    """
+    with engine.connect() as conn:
         yield conn
 
 
@@ -177,16 +182,20 @@ def trigger_recompute(
     )
 
     # 5. Spawn.
+    # The `with` block closes the parent's file handle once Popen returns.
+    # The subprocess has already inherited the fd via dup2; the kernel's
+    # per-fd reference count keeps the underlying file alive as long as the
+    # child holds it open, even after the parent closes its handle.
     try:
-        logfile = log_path.open("w")
-        subprocess.Popen(  # noqa: S603
-            cmd,
-            stdout=logfile,
-            stderr=subprocess.STDOUT,
-            env=child_env,
-            cwd=str(ATLAS_ROOT),
-            shell=use_shell,
-        )
+        with log_path.open("w") as logfile:
+            subprocess.Popen(  # noqa: S603
+                cmd,
+                stdout=logfile,
+                stderr=subprocess.STDOUT,
+                env=child_env,
+                cwd=str(ATLAS_ROOT),
+                shell=use_shell,
+            )
     except (FileNotFoundError, PermissionError) as exc:
         log.error(
             "recompute_spawn_failed",
