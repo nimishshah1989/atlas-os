@@ -15,6 +15,7 @@ all three runs; the run_id in ATLAS_PIPELINE_RUN_ID covers the aggregate.
 from __future__ import annotations
 
 import os
+import shlex
 import subprocess
 import sys
 import uuid
@@ -53,10 +54,26 @@ def verify_bearer(authorization: str = Header(default="")) -> None:
     secret = os.environ.get("ATLAS_INTERNAL_SECRET", "")
     if not secret:
         # Misconfiguration — fail safe.
-        raise HTTPException(status_code=500, detail="ATLAS_INTERNAL_SECRET not configured")
+        # spec: structured error envelope per CLAUDE.md API design rule
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error_code": "secret_not_configured",
+                "message": "ATLAS_INTERNAL_SECRET env var is not set on the server",
+                "context": {},
+            },
+        )
     expected = f"Bearer {secret}"
     if authorization != expected:
-        raise HTTPException(status_code=401, detail="Invalid or missing bearer token")
+        # spec: structured error envelope per CLAUDE.md API design rule
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "error_code": "invalid_bearer",
+                "message": "missing or invalid bearer token",
+                "context": {},
+            },
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -158,11 +175,13 @@ def trigger_recompute(
     if milestone == "all":
         # Sequential: m3 must succeed before m4, m4 before m5 (data dependency).
         # One shell invocation, one logfile capturing all three scripts.
+        # shlex.quote protects against sys.executable paths with spaces.
         cmd: list[str] | str
+        exe = shlex.quote(sys.executable)
         cmd = (
-            f"{sys.executable} scripts/m3_daily.py"
-            f" && {sys.executable} scripts/m4_daily.py"
-            f" && {sys.executable} scripts/m5_daily.py"
+            f"{exe} scripts/m3_daily.py"
+            f" && {exe} scripts/m4_daily.py"
+            f" && {exe} scripts/m5_daily.py"
         )
         use_shell = True
     else:
@@ -175,7 +194,7 @@ def trigger_recompute(
 
     log.info(
         "recompute_spawning",
-        run_id=str(run_id),
+        compute_run_id=str(run_id),
         milestone=milestone,
         log_file=str(log_path),
         source_ip=source_ip,
@@ -214,9 +233,10 @@ def trigger_recompute(
         ) from exc
 
     # 6. Return 202 immediately.
+    # spec: data.compute_run_id per M13_THRESHOLDS_ADMIN.md §response-envelope
     return {
         "data": {
-            "run_id": str(run_id),
+            "compute_run_id": str(run_id),
             "milestone": milestone,
             "status": "running",
             "log_file": str(log_path),

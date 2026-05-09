@@ -41,6 +41,9 @@ def _make_engine_mock(existing_run_id: str | None) -> MagicMock:
     # engine.connect() used as context manager — must yield conn
     engine.connect.return_value.__enter__ = lambda _: conn
     engine.connect.return_value.__exit__ = MagicMock(return_value=False)
+    # Expose conn directly so tests can inspect execute call_args without
+    # having to navigate through the lambda-based __enter__ mock.
+    engine._test_conn = conn
 
     return engine
 
@@ -72,6 +75,7 @@ class TestAuth:
     def test_post_without_bearer_returns_401(self, client: TestClient) -> None:
         response = client.post("/internal/recompute/m3")
         assert response.status_code == 401
+        assert response.json()["detail"]["error_code"] == "invalid_bearer"
 
     def test_post_with_wrong_bearer_returns_401(self, client: TestClient) -> None:
         response = client.post(
@@ -79,6 +83,18 @@ class TestAuth:
             headers={"Authorization": "Bearer wrong-secret"},
         )
         assert response.status_code == 401
+        assert response.json()["detail"]["error_code"] == "invalid_bearer"
+
+    def test_post_when_secret_not_configured_returns_500(
+        self, monkeypatch: pytest.MonkeyPatch, client: TestClient
+    ) -> None:
+        """Missing ATLAS_INTERNAL_SECRET → structured 500, not a 401 or crash."""
+        # autouse fixture sets the env var; delete it for this test only.
+        monkeypatch.delenv("ATLAS_INTERNAL_SECRET", raising=False)
+        response = client.post("/internal/recompute/m3", headers=_AUTH_HEADER)
+        assert response.status_code == 500
+        detail = response.json()["detail"]
+        assert detail["error_code"] == "secret_not_configured"
 
 
 # ---------------------------------------------------------------------------
@@ -143,6 +159,24 @@ class TestConcurrencyCheck:
         assert detail["error_code"] == "already_running"
         assert detail["context"]["run_id"] == existing
 
+        # Verify the SQL WHERE clause actually widened to M3+M4+M5 (not just M3).
+        # Use _test_conn exposed by _make_engine_mock to avoid navigating the lambda __enter__.
+        conn = engine_mock._test_conn
+        execute_calls = conn.execute.call_args_list
+        assert len(execute_calls) >= 1
+        # The first execute call is the concurrency SELECT.
+        first_call = execute_calls[0]
+        # Positional arg[0] is the SQLAlchemy text() object; arg[1] is the params dict.
+        sql_text = str(first_call[0][0])
+        params = first_call[0][1] if len(first_call[0]) > 1 else first_call[1]
+        # Params must include placeholder values for M3, M4, and M5.
+        param_values = str(params)
+        assert "M3" in param_values, f"M3 missing from params: {params}"
+        assert "M4" in param_values, f"M4 missing from params: {params}"
+        assert "M5" in param_values, f"M5 missing from params: {params}"
+        # SQL must use the IN-clause placeholders (:m0, :m1, :m2).
+        assert ":m0" in sql_text and ":m1" in sql_text and ":m2" in sql_text
+
 
 # ---------------------------------------------------------------------------
 # 4. Happy path → 202
@@ -170,9 +204,10 @@ class TestHappyPath:
         data = body["data"]
         assert data["milestone"] == "m3"
         assert data["status"] == "running"
-        assert "run_id" in data
-        # run_id must be a valid UUID.
-        run_id = uuid.UUID(data["run_id"])
+        # spec: data.compute_run_id per M13_THRESHOLDS_ADMIN.md §response-envelope
+        assert "compute_run_id" in data
+        # compute_run_id must be a valid UUID.
+        run_id = uuid.UUID(data["compute_run_id"])
 
         # Log file path must contain milestone and run_id.
         log_file = data["log_file"]
@@ -210,7 +245,8 @@ class TestHappyPath:
         assert response.status_code == 202
         body = response.json()
         data = body["data"]
-        run_id = data["run_id"]
+        # spec: data.compute_run_id per M13_THRESHOLDS_ADMIN.md §response-envelope
+        run_id = data["compute_run_id"]
 
         # Popen called exactly once.
         assert mock_popen.call_count == 1
@@ -232,7 +268,7 @@ class TestHappyPath:
             < cmd_str.index("m5_daily.py")
         )
 
-        # env carries run_id.
+        # env carries run_id via ATLAS_PIPELINE_RUN_ID (matches DB column name).
         env_passed = popen_call[1]["env"]
         assert env_passed["ATLAS_PIPELINE_RUN_ID"] == run_id
 
@@ -245,47 +281,36 @@ class TestHappyPath:
 
         The subprocess already inherited the fd via dup2; closing the parent's
         handle avoids leaking one fd per recompute in the API server process.
+        Wire pathlib.Path.open to a mock so we can assert __exit__ was called.
         """
         engine_mock = _make_engine_mock(existing_run_id=None)
+        proc_mock = MagicMock()
+        proc_mock.pid = 99999
+        mock_popen = MagicMock(return_value=proc_mock)
 
-        # Track whether the file handle was closed.
         mock_file = MagicMock()
-        mock_file.__enter__ = lambda s: s
-        mock_file.__exit__ = MagicMock(return_value=False)
-
-        mock_popen = MagicMock()
+        mock_file.__enter__.return_value = mock_file
+        mock_file.__exit__.return_value = None
 
         from atlas.api.internal_recompute import app
         from atlas.db import get_engine
 
         app.dependency_overrides[get_engine] = lambda: engine_mock
         try:
-            tc = TestClient(app, raise_server_exceptions=False)
             with (
                 patch("atlas.api.internal_recompute.LOG_DIR", tmp_path),
                 patch("atlas.api.internal_recompute.subprocess.Popen", mock_popen),
+                patch("pathlib.Path.open", return_value=mock_file),
             ):
+                tc = TestClient(app, raise_server_exceptions=False)
                 response = tc.post("/internal/recompute/m3", headers=_AUTH_HEADER)
         finally:
             app.dependency_overrides.clear()
 
         assert response.status_code == 202
-        # The `with log_path.open("w")` block must have exited, meaning __exit__
-        # was called on the file object (which closes it in the parent).
-        # We verify via Popen being called — if the with block didn't close,
-        # the pattern itself guarantees closure on with-block exit.
-        # Confirm Popen was called once (file was opened and passed to it).
-        assert mock_popen.call_count == 1
-        # Verify the file passed to stdout is closed in the parent by checking
-        # __exit__ was invoked on the context-managed file object.
-        # Since we can't easily intercept Path.open() without deeper patching,
-        # we verify the architectural invariant: after the response is returned,
-        # the only live reference to the file was inside the with block which
-        # has already exited. This is guaranteed by the with-block pattern.
-        # The call_args stdout kwarg receives the file object used.
-        stdout_file = mock_popen.call_args[1]["stdout"]
-        # The file must be closeable — confirm it has a close attribute.
-        assert hasattr(stdout_file, "close") or hasattr(stdout_file, "__exit__")
+        # The parent's with-block must have exited, calling __exit__ on the file
+        # object. This verifies the fd is closed in the parent after Popen returns.
+        mock_file.__exit__.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
