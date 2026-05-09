@@ -15,11 +15,11 @@ export type SectorSnapshot = {
   participation_rs: string | null
   leadership_concentration: string | null
   sector_state: string
-  bottomup_state: string
-  topdown_state: string
+  bottomup_state: string | null
+  topdown_state: string | null
   divergence_flag: boolean
-  bottomup_rs_state: string
-  bottomup_momentum_state: string
+  bottomup_rs_state: string | null
+  bottomup_momentum_state: string | null
   data_date: Date
 }
 
@@ -74,6 +74,9 @@ export async function getCurrentSectors(): Promise<SectorSnapshot[]> {
 }
 
 export async function getSectorStateHistory(days: number): Promise<SectorStateRow[]> {
+  if (!Number.isInteger(days) || days < 1 || days > 3650) {
+    throw new Error(`days must be an integer between 1 and 3650, got: ${days}`)
+  }
   return sql<SectorStateRow[]>`
     SELECT date, sector_name, sector_state
     FROM atlas.atlas_sector_states_daily
@@ -86,6 +89,9 @@ export async function getSectorMetricHistory(
   sectorName: string,
   days: number,
 ): Promise<SectorMetricHistoryRow[]> {
+  if (!Number.isInteger(days) || days < 1 || days > 3650) {
+    throw new Error(`days must be an integer between 1 and 3650, got: ${days}`)
+  }
   return sql<SectorMetricHistoryRow[]>`
     SELECT
       m.date,
