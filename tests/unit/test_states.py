@@ -211,3 +211,48 @@ def test_suspension_dislocation_lowest_priority() -> None:
     dislocation = pd.Series([True], index=df.index)
     out = apply_suspension_overrides(df, market_dislocation=dislocation)
     assert out["rs_state"].iloc[0] == "DISLOCATION_SUSPENDED"
+
+
+# --------------------------------------------------------------------------- #
+# RS momentum ratio regression — ETF price vs Nifty level                     #
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.unit
+def test_etf_momentum_improving_not_flat_when_ema10_above_ema20() -> None:
+    """Regression: ETF-priced instruments must not collapse to Flat because ETF price < Nifty.
+
+    add_rs_momentum previously divided ema_10_stock by ema_10_benchmark (price ratio),
+    so ETFs at ~₹200 always produced r10 ≈ 0.009 < 1.  The fix computes
+    r10 = ema10_stock/ema20_stock and r20 = ema10_benchmark/ema20_benchmark.
+    """
+    from atlas.compute.primitives import add_rs_momentum
+
+    df = pd.DataFrame(
+        [
+            # Earlier row so the test row is not at the 20-day high (avoids
+            # the vacuously-true at_20d_high single-row edge case).
+            {
+                "instrument_id": "ETF_TEST",
+                "date": pd.Timestamp("2024-01-01"),
+                "ema_10_stock": 210.0,
+                "ema_20_stock": 196.0,
+                "ema_10_benchmark": 22200.0,
+                "ema_20_benchmark": 21950.0,
+            },
+            {
+                "instrument_id": "ETF_TEST",
+                "date": pd.Timestamp("2024-01-02"),
+                "ema_10_stock": 205.0,
+                "ema_20_stock": 198.0,
+                "ema_10_benchmark": 22100.0,
+                "ema_20_benchmark": 22000.0,
+            },
+        ]
+    )
+    df_with_ratios = add_rs_momentum(df)
+    mask = df_with_ratios["date"] == pd.Timestamp("2024-01-02")
+    row = df_with_ratios.loc[mask].copy()
+    # r10 = 205/198 ≈ 1.035 > 1; r20 = 22100/22000 ≈ 1.0045; r10 > r20 → Improving
+    result = classify_momentum_state(row, THRESHOLDS)
+    assert result["momentum_state"].iloc[0] == "Improving"

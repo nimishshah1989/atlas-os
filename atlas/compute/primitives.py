@@ -273,15 +273,19 @@ def add_rs_momentum(
 
     Methodology §7.2:
 
-    * ``ema_10_ratio = ema_10_stock / ema_10_benchmark``
-    * ``ema_20_ratio = ema_20_stock / ema_20_benchmark``
+    * ``ema_10_ratio = ema_10_stock / ema_20_stock``   — stock trending up short-term (> 1)
+    * ``ema_20_ratio = ema_10_benchmark / ema_20_benchmark`` — benchmark trending up (> 1)
     * ``ema_10_at_20d_high`` = today's ``ema_10_ratio`` ties the 20-day max
     * ``ema_10_at_20d_low``  = today's ``ema_10_ratio`` ties the 20-day min
+
+    Note: ratios compare EMA10 vs EMA20 *within* the same entity, not across
+    entities.  Dividing stock EMA by benchmark EMA (a price-level ratio) broke
+    ETFs because their price (~₹200) was always far below Nifty (~22,000).
     """
     out = df.copy().sort_values([group_col, "date"])
 
-    out["ema_10_ratio"] = out["ema_10_stock"] / out["ema_10_benchmark"]
-    out["ema_20_ratio"] = out["ema_20_stock"] / out["ema_20_benchmark"]
+    out["ema_10_ratio"] = out["ema_10_stock"] / out["ema_20_stock"]
+    out["ema_20_ratio"] = out["ema_10_benchmark"] / out["ema_20_benchmark"]
 
     grouped = out.groupby(group_col, group_keys=False, observed=True)["ema_10_ratio"]
     rolling_max = grouped.transform(lambda s: s.rolling(20, min_periods=1).max())
