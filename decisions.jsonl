@@ -4577,3 +4577,66 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{
+  "ts": "2026-05-09T03:49:46Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/regime/IndicatorChart.tsx",
+  "lines_changed": 296,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T03:49:57Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/regime/CategorySummary.tsx",
+  "lines_changed": 42,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T03:50:07Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/021_create_health_observability_tables.py",
+  "lines_changed": 9,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T03:50:13Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/021_create_health_observability_tables.py",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T03:50:14Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/regime/HighsLowsChart.tsx",
+  "lines_changed": 105,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T03:50:22Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/page.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T03:50:37Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/regime/BreadthSection.tsx",
+  "lines_changed": 24,
+  "session_id": "unknown",
+  "schema_version": 1
+}
