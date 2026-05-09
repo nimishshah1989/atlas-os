@@ -1,0 +1,34 @@
+/* src/app/globals.css */
+@import "tailwindcss";
+
+@theme {
+  /* ── Atlas DS color palette ── */
+  --color-paper:         #F8F4EC;
+  --color-ink-primary:   #1A1714;
+  --color-ink-secondary: #5A5248;
+  --color-ink-tertiary:  #8C8278;
+  --color-paper-rule:    #C2B8A8;
+  --color-signal-pos:    #2F6B43;
+  --color-signal-neg:    #B0492C;
+  --color-signal-warn:   #B8860B;
+  --color-accent:        #25394A;
+  --color-teal:          #1D9E75;
+
+  /* ── Typography — set by next/font CSS variables ── */
+  --font-serif: var(--font-source-serif-4, "Georgia", serif);
+  --font-sans:  var(--font-inter, system-ui, sans-serif);
+  --font-mono:  var(--font-jetbrains-mono, "Menlo", monospace);
+
+  /* ── Radii ── */
+  --radius-card: 2px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-family: var(--font-sans);
+  background-color: var(--color-paper);
+  color: var(--color-ink-primary);
+}
+
+[data-numeric], .tabular { font-variant-numeric: tabular-nums; }

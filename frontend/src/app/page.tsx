@@ -1,27 +1,25 @@
 // frontend/src/app/page.tsx
 import { Suspense } from 'react'
 import { getCurrentRegime, getRegimeHistory } from '@/lib/queries/regime'
-import { getBenchmarkHistory } from '@/lib/queries/benchmarks'
 import { RegimeHeadline } from '@/components/regime/RegimeHeadline'
-import { RegimeHistoryTimeline } from '@/components/regime/RegimeHistoryTimeline'
-import { BreadthIndicators } from '@/components/regime/BreadthIndicators'
-import { rangeToDays, type TimeRange } from '@/components/ui/TimeRangeToggle'
+import { RegimeOverlayChart } from '@/components/regime/RegimeOverlayChart'
+import { TrendSection } from '@/components/regime/TrendSection'
+import { BreadthSection } from '@/components/regime/BreadthSection'
+import { MomentumSection } from '@/components/regime/MomentumSection'
+import { ParticipationSection } from '@/components/regime/ParticipationSection'
+import { TimeRangeToggle } from '@/components/ui/TimeRangeToggle'
+import { rangeToDays, type TimeRange } from '@/lib/time-range'
 
-type SearchParams = Promise<{ range?: string; benchmark?: string; breadth_range?: string }>
+type SearchParams = Promise<{ range?: string }>
 
 export default async function RegimePage({ searchParams }: { searchParams: SearchParams }) {
-  const { range = '6M', benchmark = 'NIFTY500', breadth_range = '3M' } = await searchParams
-
+  const { range = '6M' } = await searchParams
   const historyRange = range as TimeRange
-  const breadthRange = breadth_range as TimeRange
   const historyDays = rangeToDays(historyRange)
-  const breadthDays = rangeToDays(breadthRange)
 
-  const [current, historyFull, breadthHistory, benchmarkData] = await Promise.all([
+  const [current, history] = await Promise.all([
     getCurrentRegime(),
     getRegimeHistory(historyDays),
-    getRegimeHistory(breadthDays),
-    getBenchmarkHistory(benchmark, historyDays),
   ])
 
   if (!current) {
@@ -35,26 +33,28 @@ export default async function RegimePage({ searchParams }: { searchParams: Searc
   }
 
   return (
-    <div className="max-w-6xl mx-auto">
-      {/* Band 1 — Current regime state */}
+    <div className="max-w-[1400px] mx-auto">
+      {/* Compact regime headline — unchanged */}
       <RegimeHeadline regime={current} />
 
-      {/* Band 2 — History timeline */}
-      <Suspense fallback={<div className="px-8 py-6 border-b border-paper-rule h-48 animate-pulse bg-paper-rule/10" />}>
-        <RegimeHistoryTimeline
-          history={historyFull}
-          benchmarkData={benchmarkData}
-          benchmarkCode={benchmark}
-          range={historyRange}
-        />
-      </Suspense>
+      {/* Nifty 500 with regime background shading + master time range toggle */}
+      <div className="px-6 py-5 border-b border-paper-rule">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-sans text-xs font-medium text-ink-tertiary uppercase tracking-wider">
+            Nifty 500 — Regime History
+          </h2>
+          <Suspense>
+            <TimeRangeToggle value={historyRange} options={['1M', '3M', '6M', '1Y']} />
+          </Suspense>
+        </div>
+        <RegimeOverlayChart history={history} />
+      </div>
 
-      {/* Band 3 — Breadth indicators */}
-      <BreadthIndicators
-        current={current}
-        history={breadthHistory}
-        range={breadthRange}
-      />
+      {/* Four category sections */}
+      <TrendSection current={current} history={history} />
+      <BreadthSection current={current} history={history} />
+      <MomentumSection current={current} history={history} />
+      <ParticipationSection current={current} history={history} />
     </div>
   )
 }

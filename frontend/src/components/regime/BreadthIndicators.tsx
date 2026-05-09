@@ -216,64 +216,46 @@ export function BreadthIndicators({ current, history, range }: Props) {
     },
   ]
 
-  const allIndicators = [
-    ...trendIndicators,
-    ...breadthIndicators,
-    ...momentumIndicators,
-    ...participationIndicators,
-  ]
-  const totalBullish = allIndicators.filter((i) => i.isBullish === true).length
-  const total = allIndicators.filter((i) => i.isBullish !== null).length
-
   const countBullish = (inds: IndicatorRow[]) => inds.filter((i) => i.isBullish === true).length
 
   return (
-    <div className="px-8 py-6">
-      {/* Overall corroboration header */}
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-3">
-          <h2 className="font-sans text-sm font-medium text-ink-primary">Breadth indicators</h2>
-          <span className={`font-mono text-xs tabular-nums font-medium ${
-            total > 0 && totalBullish / total < 0.3 ? 'text-signal-neg' :
-            total > 0 && totalBullish / total > 0.7 ? 'text-signal-pos' : 'text-signal-warn'
-          }`}>
-            {totalBullish} of {total} bullish
-          </span>
+    <div>
+      {/* Section header */}
+      <div className="flex items-center justify-between px-6 py-3 border-b border-paper-rule">
+        <h2 className="font-sans text-xs font-medium text-ink-tertiary uppercase tracking-wider">
+          Signal Details
           <InfoTooltip content="Breadth indicators measure market participation. When multiple independent measures align, the regime signal has higher conviction." />
-        </div>
+        </h2>
         <Suspense>
           <TimeRangeToggle value={range} paramName="breadth_range" />
         </Suspense>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      {/* 4-column signal breakdown */}
+      <div className="grid grid-cols-4 divide-x divide-paper-rule">
         <BreadthCategory
           title="Trend"
           indicators={trendIndicators}
           bullishCount={countBullish(trendIndicators)}
           totalCount={trendIndicators.length}
-          commentary="Nifty 500 position and slope relative to key EMAs."
         />
         <BreadthCategory
           title="Breadth"
           indicators={breadthIndicators}
           bullishCount={countBullish(breadthIndicators)}
           totalCount={breadthIndicators.length}
-          commentary="Advance/decline dynamics and participation across the 750-stock universe."
         />
         <BreadthCategory
           title="Momentum"
           indicators={momentumIndicators}
           bullishCount={countBullish(momentumIndicators)}
           totalCount={momentumIndicators.length}
-          commentary="McClellan oscillator and net new highs measure momentum of market breadth."
         />
         <BreadthCategory
           title="Participation"
           indicators={participationIndicators}
           bullishCount={countBullish(participationIndicators)}
           totalCount={participationIndicators.length}
-          commentary="Quality of participation — Leader/Strong/Emerging stocks and Weinstein gate pass rate."
         />
       </div>
     </div>

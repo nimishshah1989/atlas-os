@@ -69,7 +69,7 @@ export function RegimeHistoryTimeline({ history, benchmarkData, benchmarkCode, r
   }
 
   return (
-    <div className="px-8 py-6 border-b border-paper-rule">
+    <div className="px-6 py-5 border-b border-paper-rule">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
           <h2 className="font-sans text-sm font-medium text-ink-primary">Regime history</h2>
