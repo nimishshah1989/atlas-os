@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from atlas.compute.funds import run_m4_daily  # noqa: E402
+from atlas.health.runs import safe_finish, safe_record  # noqa: E402
 
 
 def _parse_date(s: str) -> date:
@@ -34,11 +35,19 @@ def main() -> None:
     target = args.date or date.today()
     print(f"M4 daily run for {target}")
 
-    result = run_m4_daily(target_date=target)
+    run_id = safe_record("m4_daily", milestone="M4")
+    try:
+        result = run_m4_daily(target_date=target)
+    except Exception as exc:
+        safe_finish(run_id, status="failed", error=exc)
+        raise
 
     if result.get("status") == "no_states":
+        safe_finish(run_id, status="failed", error="no fund states assembled")
         print("WARNING: No fund states assembled — check fund universe and NAV data.")
         sys.exit(1)
+
+    safe_finish(run_id, status="success", rows_written=int(result.get("rows_written", 0)))
 
     lens1 = result.get("lens1", {})
     lens2 = result.get("lens2", {})

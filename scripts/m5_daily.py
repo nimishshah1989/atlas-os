@@ -22,6 +22,7 @@ from atlas.compute.decisions_etf import run_etf_decisions  # noqa: E402
 from atlas.compute.decisions_fund import run_fund_decisions  # noqa: E402
 from atlas.compute.decisions_stock import run_stock_decisions  # noqa: E402
 from atlas.db import get_engine  # noqa: E402
+from atlas.health.runs import safe_finish, safe_record  # noqa: E402
 
 
 def _parse_date(s: str) -> date:
@@ -38,11 +39,15 @@ def main() -> None:
 
     engine = get_engine()
     errors: list[str] = []
+    run_id = safe_record("m5_daily", milestone="M5", engine=engine)
+    total_rows = 0
 
     print("\n[1/3] Stock decisions…")
     try:
         result = run_stock_decisions(target, target, engine=engine)
-        print(f"      ✓ {result['rows_written']:,} rows  run_id={result['run_id']}")
+        rows = int(result["rows_written"])
+        total_rows += rows
+        print(f"      ✓ {rows:,} rows  run_id={result['run_id']}")
     except Exception as exc:
         msg = f"stock decisions failed: {exc}"
         print(f"      ✗ {msg}")
@@ -51,7 +56,9 @@ def main() -> None:
     print("\n[2/3] ETF decisions…")
     try:
         result = run_etf_decisions(target, target, engine=engine)
-        print(f"      ✓ {result['rows_written']:,} rows  run_id={result['run_id']}")
+        rows = int(result["rows_written"])
+        total_rows += rows
+        print(f"      ✓ {rows:,} rows  run_id={result['run_id']}")
     except Exception as exc:
         msg = f"ETF decisions failed: {exc}"
         print(f"      ✗ {msg}")
@@ -60,18 +67,28 @@ def main() -> None:
     print("\n[3/3] Fund decisions…")
     try:
         result = run_fund_decisions(target, target, engine=engine)
-        print(f"      ✓ {result['rows_written']:,} rows  run_id={result['run_id']}")
+        rows = int(result["rows_written"])
+        total_rows += rows
+        print(f"      ✓ {rows:,} rows  run_id={result['run_id']}")
     except Exception as exc:
         msg = f"fund decisions failed: {exc}"
         print(f"      ✗ {msg}")
         errors.append(msg)
 
     if errors:
+        safe_finish(
+            run_id,
+            status="failed",
+            rows_written=total_rows,
+            error="\n".join(errors),
+            engine=engine,
+        )
         print(f"\nErrors ({len(errors)}):")
         for e in errors:
             print(f"  • {e}")
         sys.exit(1)
 
+    safe_finish(run_id, status="success", rows_written=total_rows, engine=engine)
     print("\nDone.")
 
 
