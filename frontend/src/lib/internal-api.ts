@@ -9,7 +9,7 @@ export type RecomputeResponse =
   | { ok: false; error_code: string; message: string; existing_run_id?: string }
 
 export async function triggerRecompute(
-  milestone: 'm3' | 'm4' | 'm5' | 'all',
+  milestone: 'm3' | 'm4' | 'm5',
 ): Promise<RecomputeResponse> {
   const secret = process.env.ATLAS_INTERNAL_SECRET
   if (!secret) {

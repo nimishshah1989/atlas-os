@@ -5,7 +5,7 @@ import { triggerRecompute, getRunStatusAction } from './actions'
 import type { RecentRunRow } from '@/lib/queries/thresholds'
 import { formatIST } from '@/lib/format-date'
 
-type Milestone = 'm3' | 'm4' | 'm5' | 'all'
+type Milestone = 'm3' | 'm4' | 'm5'
 
 type Props = {
   recentRuns: RecentRunRow[]
@@ -95,7 +95,6 @@ export function RecomputePanel({ recentRuns: initialRuns }: Props) {
     { label: 'M3', milestone: 'm3' },
     { label: 'M4', milestone: 'm4' },
     { label: 'M5', milestone: 'm5' },
-    { label: 'All', milestone: 'all' },
   ]
 
   return (

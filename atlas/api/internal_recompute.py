@@ -5,17 +5,16 @@ Runs on .214:8002 behind ATLAS_INTERNAL_SECRET. Public-port siblings
 (atlas.api.app) are NOT the same app — keeps internal-only endpoints
 isolated from anything that might leak into the public API surface.
 
-For milestone="all": spawns m3, m4, m5 sequentially in a single shell
-command joined by &&. This ensures each script must succeed before the
-next starts, which matches the natural data dependency (m4 needs m3
-output, m5 needs m4 output). The trade-off is that one logfile captures
-all three runs; the run_id in ATLAS_PIPELINE_RUN_ID covers the aggregate.
+Milestone 'all' is NOT supported in v0 — see M13 PRD failure modes.
+The shared ATLAS_PIPELINE_RUN_ID env across an m3 && m4 && m5 shell chain
+causes PK collision in atlas_pipeline_runs (m3 inserts; m4/m5 collide on
+safe_record's silent failure path → no audit row → SEBI gap). v0.1 will
+return a batch_id and spawn three independent processes with separate UUIDs.
 """
 
 from __future__ import annotations
 
 import os
-import shlex
 import subprocess
 import sys
 import uuid
@@ -41,7 +40,7 @@ ATLAS_ROOT = Path(__file__).resolve().parent.parent.parent
 
 LOG_DIR = Path("/var/log/atlas")
 
-_ALLOWED_MILESTONES: set[str] = {"m3", "m4", "m5", "all"}
+_ALLOWED_MILESTONES: set[str] = {"m3", "m4", "m5"}  # "all" deferred — see M13 PRD failure modes
 
 
 # ---------------------------------------------------------------------------
@@ -83,12 +82,7 @@ def verify_bearer(authorization: str = Header(default="")) -> None:
 
 @contextmanager
 def _db(engine: Engine) -> Generator[Any, None, None]:
-    """Open a read-only DB connection.
-
-    Concurrency check is per-milestone (running m3 does not block m4 — they
-    write to different tables). For milestone='all', the check widens to
-    M3+M4+M5 since "all" launches all three sequentially.
-    """
+    """Open a read-only DB connection for the concurrency check."""
     with engine.connect() as conn:
         yield conn
 
@@ -128,8 +122,8 @@ def trigger_recompute(
             },
         )
 
-    # 2. Concurrency check — any of M3/M4/M5 running in the last 6 hours?
-    milestones_to_check = ["M3", "M4", "M5"] if milestone == "all" else [milestone.upper()]
+    # 2. Concurrency check — is this milestone running in the last 6 hours?
+    milestones_to_check = [milestone.upper()]
     placeholders = ", ".join(f":m{i}" for i in range(len(milestones_to_check)))
     params: dict[str, Any] = {f"m{i}": v for i, v in enumerate(milestones_to_check)}
 
@@ -172,21 +166,7 @@ def trigger_recompute(
     log_path = LOG_DIR / f"recompute-{milestone}-{run_id}.log"
 
     # 4. Build subprocess command.
-    if milestone == "all":
-        # Sequential: m3 must succeed before m4, m4 before m5 (data dependency).
-        # One shell invocation, one logfile capturing all three scripts.
-        # shlex.quote protects against sys.executable paths with spaces.
-        cmd: list[str] | str
-        exe = shlex.quote(sys.executable)
-        cmd = (
-            f"{exe} scripts/m3_daily.py"
-            f" && {exe} scripts/m4_daily.py"
-            f" && {exe} scripts/m5_daily.py"
-        )
-        use_shell = True
-    else:
-        cmd = [sys.executable, f"scripts/{milestone}_daily.py"]
-        use_shell = False
+    cmd = [sys.executable, f"scripts/{milestone}_daily.py"]
 
     child_env = {**os.environ, "ATLAS_PIPELINE_RUN_ID": str(run_id)}
 
@@ -213,7 +193,7 @@ def trigger_recompute(
                 stderr=subprocess.STDOUT,
                 env=child_env,
                 cwd=str(ATLAS_ROOT),
-                shell=use_shell,
+                shell=False,
             )
     except (FileNotFoundError, PermissionError) as exc:
         log.error(

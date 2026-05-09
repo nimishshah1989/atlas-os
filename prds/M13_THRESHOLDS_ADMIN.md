@@ -34,7 +34,8 @@ SEBI compliance.
    - Shared secret in env on both Vercel and EC2.
    - EC2 endpoint exec's `m3_daily.py` / `m4_daily.py` / `m5_daily.py` via
      `subprocess.Popen` (non-blocking), returns `run_id` immediately.
-   - **Milestone allowlist**: path param must be in `{m3, m4, m5, all}`.
+   - **Milestone allowlist**: path param must be in `{m3, m4, m5}`.
+     The 'all' batch path is deferred — see Failure Modes.
      Anything else → 400. No string interpolation into the subprocess
      argv beyond the allowlisted milestone → script-name mapping.
    - **Run-log table is `atlas.atlas_pipeline_runs`** (created by
@@ -310,6 +311,11 @@ Full coverage of all 22 code paths + user flows from the eng-review diagram.
 
 ## NOT in scope (deferred)
 
+- **'all' batch recompute path**: deferred. With a shared `ATLAS_PIPELINE_RUN_ID`
+  env, m4/m5 collide on PK with m3's row in `atlas_pipeline_runs` and produce
+  no audit row (safe_record's silent failure path → SEBI gap). v0.1 will either
+  spawn three independent processes with separate UUIDs and return a batch_id,
+  or chain via a wrapper script that re-generates the UUID per child.
 - **Per-user identity**: `last_modified_by` is hardcoded to `'fund-manager'`.
   Upgrade to Supabase Auth + role-based admin check is a follow-on.
 - **Threshold preview / dry-run**: PRD originally hinted at "diff preview
@@ -341,6 +347,7 @@ Full coverage of all 22 code paths + user flows from the eng-review diagram.
 | FM clicks Re-run while nightly cron mid-flight | ✓ test_internal_recompute.py | 409 surfaces existing run_id | UI shows "already running, run_id=X" |
 | Threshold UPDATE rejected by CHECK constraint | ✓ test_actions.ts | Server Action catches PostgresError | Modal inline error |
 | Subprocess output exceeds disk on .214 | ✗ (no test) | logrotate runs nightly via systemd | TODO: add logrotate config |
+| milestone='all' shell chain | not in v0 (allowlist excludes) | shared ATLAS_PIPELINE_RUN_ID causes PK collision; m4/m5 produce no audit row → SEBI gap | 400 returned; FM uses M3/M4/M5 buttons individually |
 
 **Critical gap flagged**: subprocess output disk-fill is the only failure
 mode without test + with potentially-silent failure (logfile fills, future

@@ -111,7 +111,16 @@ class TestMilestoneAllowlist:
         detail = body["detail"]
         assert detail["error_code"] == "invalid_milestone"
         allowed = detail["context"]["allowed"]
-        assert sorted(allowed) == ["all", "m3", "m4", "m5"]
+        # "all" is deferred in v0 — allowlist is only m3/m4/m5
+        assert sorted(allowed) == ["m3", "m4", "m5"]
+
+    def test_post_all_milestone_returns_400_in_v0(self, client: TestClient) -> None:
+        """'all' is not in the v0 allowlist — allowlist check fires before concurrency check."""
+        response = client.post("/internal/recompute/all", headers=_AUTH_HEADER)
+        assert response.status_code == 400
+        detail = response.json()["detail"]
+        assert detail["error_code"] == "invalid_milestone"
+        assert "all" not in detail["context"]["allowed"]
 
 
 # ---------------------------------------------------------------------------
@@ -139,8 +148,12 @@ class TestConcurrencyCheck:
         assert detail["error_code"] == "already_running"
         assert detail["context"]["run_id"] == existing
 
-    def test_post_all_blocked_when_m3_running_returns_409(self) -> None:
-        """When milestone='all', concurrency check widens to M3+M4+M5."""
+    def test_post_all_returns_400_even_when_m3_running(self) -> None:
+        """'all' is not in the v0 allowlist — allowlist check fires before concurrency check.
+
+        Even if M3 is running, posting /all must return 400 (not 409), because
+        the allowlist guard short-circuits before the DB concurrency check.
+        """
         existing = str(uuid.uuid4())
         engine_mock = _make_engine_mock(existing_run_id=existing)
 
@@ -154,28 +167,12 @@ class TestConcurrencyCheck:
         finally:
             app.dependency_overrides.clear()
 
-        assert response.status_code == 409
+        # Allowlist check fires first — returns 400, not 409.
+        assert response.status_code == 400
         detail = response.json()["detail"]
-        assert detail["error_code"] == "already_running"
-        assert detail["context"]["run_id"] == existing
-
-        # Verify the SQL WHERE clause actually widened to M3+M4+M5 (not just M3).
-        # Use _test_conn exposed by _make_engine_mock to avoid navigating the lambda __enter__.
-        conn = engine_mock._test_conn
-        execute_calls = conn.execute.call_args_list
-        assert len(execute_calls) >= 1
-        # The first execute call is the concurrency SELECT.
-        first_call = execute_calls[0]
-        # Positional arg[0] is the SQLAlchemy text() object; arg[1] is the params dict.
-        sql_text = str(first_call[0][0])
-        params = first_call[0][1] if len(first_call[0]) > 1 else first_call[1]
-        # Params must include placeholder values for M3, M4, and M5.
-        param_values = str(params)
-        assert "M3" in param_values, f"M3 missing from params: {params}"
-        assert "M4" in param_values, f"M4 missing from params: {params}"
-        assert "M5" in param_values, f"M5 missing from params: {params}"
-        # SQL must use the IN-clause placeholders (:m0, :m1, :m2).
-        assert ":m0" in sql_text and ":m1" in sql_text and ":m2" in sql_text
+        assert detail["error_code"] == "invalid_milestone"
+        # DB must NOT have been queried (allowlist guard is pre-DB).
+        engine_mock._test_conn.execute.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -222,59 +219,6 @@ class TestHappyPath:
         # env must contain the pre-allocated run_id.
         env_passed = popen_call[1]["env"]
         assert env_passed["ATLAS_PIPELINE_RUN_ID"] == str(run_id)
-
-    def test_post_all_spawns_combined_command(self, tmp_path: Any) -> None:
-        """milestone='all' must join m3/m4/m5 with && and use shell=True."""
-        engine_mock = _make_engine_mock(existing_run_id=None)
-        mock_popen = MagicMock()
-
-        from atlas.api.internal_recompute import app
-        from atlas.db import get_engine
-
-        app.dependency_overrides[get_engine] = lambda: engine_mock
-        try:
-            tc = TestClient(app, raise_server_exceptions=False)
-            with (
-                patch("atlas.api.internal_recompute.LOG_DIR", tmp_path),
-                patch("atlas.api.internal_recompute.subprocess.Popen", mock_popen),
-            ):
-                response = tc.post("/internal/recompute/all", headers=_AUTH_HEADER)
-        finally:
-            app.dependency_overrides.clear()
-
-        assert response.status_code == 202
-        body = response.json()
-        data = body["data"]
-        # spec: data.compute_run_id per M13_THRESHOLDS_ADMIN.md §response-envelope
-        run_id = data["compute_run_id"]
-
-        # Popen called exactly once.
-        assert mock_popen.call_count == 1
-        popen_call = mock_popen.call_args
-
-        # shell=True for combined command.
-        assert popen_call[1]["shell"] is True
-
-        # Shell command string must contain all three scripts joined by &&.
-        cmd_str: str = popen_call[0][0]
-        assert "m3_daily.py" in cmd_str
-        assert "m4_daily.py" in cmd_str
-        assert "m5_daily.py" in cmd_str
-        assert "&&" in cmd_str
-        # Order matters: m3 before m4 before m5.
-        assert (
-            cmd_str.index("m3_daily.py")
-            < cmd_str.index("m4_daily.py")
-            < cmd_str.index("m5_daily.py")
-        )
-
-        # env carries run_id via ATLAS_PIPELINE_RUN_ID (matches DB column name).
-        env_passed = popen_call[1]["env"]
-        assert env_passed["ATLAS_PIPELINE_RUN_ID"] == run_id
-
-        # log_file path has correct shape.
-        log_file = data["log_file"]
-        assert f"recompute-all-{run_id}" in log_file
 
     def test_post_closes_parent_logfile_handle_after_popen(self, tmp_path: Any) -> None:
         """Parent process must close its logfile fd after Popen succeeds.

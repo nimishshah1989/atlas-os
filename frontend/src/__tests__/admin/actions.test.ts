@@ -197,7 +197,7 @@ describe('triggerRecompute', () => {
       message: 'ATLAS_INTERNAL_SECRET not set on server',
     })
 
-    const result = await triggerRecompute('all')
+    const result = await triggerRecompute('m3')
 
     expect(result).toEqual({
       ok: false,

@@ -66,7 +66,7 @@ export type TriggerRecomputeResult =
   | { ok: false; error: string; existing_run_id?: string }
 
 export async function triggerRecompute(
-  milestone: 'm3' | 'm4' | 'm5' | 'all',
+  milestone: 'm3' | 'm4' | 'm5',
 ): Promise<TriggerRecomputeResult> {
   const result = await callInternal(milestone)
 
