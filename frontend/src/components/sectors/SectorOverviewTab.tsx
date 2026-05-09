@@ -208,6 +208,13 @@ export function SectorOverviewTab({
         bottomup_rs_state: snapshot.bottomup_rs_state,
         bottomup_momentum_state: snapshot.bottomup_momentum_state,
         data_date: snapshot.data_date,
+        bottomup_ema_10_ratio: snapshot.bottomup_ema_10_ratio,
+        bottomup_ema_20_ratio: snapshot.bottomup_ema_20_ratio,
+        topdown_ret_1m: snapshot.topdown_ret_1m,
+        topdown_ret_3m: snapshot.topdown_ret_3m,
+        topdown_rs_3m_nifty500: snapshot.topdown_rs_3m_nifty500,
+        topdown_index_code: snapshot.topdown_index_code,
+        participation_rs_pct: snapshot.participation_rs_pct,
         decision: snapshot.decision,
       }} />
 

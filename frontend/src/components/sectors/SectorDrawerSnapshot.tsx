@@ -128,6 +128,19 @@ export function SectorDrawerSnapshot({ snapshot }: { snapshot: SectorWithDecisio
         </div>
       </div>
 
+      {snapshot.topdown_index_code && (
+        <div>
+          <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider mb-1.5">
+            Top-down Returns ({snapshot.topdown_index_code} index)
+          </div>
+          <div className="flex items-stretch gap-2">
+            <ReturnTile label="1 Month" value={snapshot.topdown_ret_1m} />
+            <ReturnTile label="3 Month" value={snapshot.topdown_ret_3m} />
+            <ReturnTile label="RS 3M" value={snapshot.topdown_rs_3m_nifty500} />
+          </div>
+        </div>
+      )}
+
       {/* State badges grid */}
       <div>
         <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider mb-1.5">
