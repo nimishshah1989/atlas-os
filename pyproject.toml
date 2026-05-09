@@ -53,6 +53,15 @@ dev = [
     "ipython>=8.0",
 ]
 
+simulation = [
+    "vectorbt>=0.26",
+    "PyPortfolioOpt>=1.5",
+]
+
+optimizer = [
+    "optuna[postgres]>=3.0",
+]
+
 ui = [
     "streamlit>=1.32",
     "plotly>=5.18",
