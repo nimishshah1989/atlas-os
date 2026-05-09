@@ -458,3 +458,88 @@ Same as M13/M14:
 
 None. All eng-review questions auto-decided per user's standing directive.
 
+---
+
+## Plan-design-review — auto-decisions (2026-05-10)
+
+App UI rule set (internal FM tool, not marketing). M6/M13/M14 pages are the de facto design system. All findings auto-decided per user directive.
+
+**Initial rating: 6/10 → Final: 9/10**
+
+### Pass 1 — Information Architecture (7→9)
+- `/strategies/[id]` adds in-page anchor nav at top (jumps to Equity / Backtests / Paper / Config) — same pattern as `/sectors/[name]`.
+
+### Pass 2 — Interaction State Coverage (4→9)
+
+| Feature | Loading | Empty | Error | Success | Partial |
+|---|---|---|---|---|---|
+| /strategies table | skeleton 15 rows `animate-pulse` | n/a | retry button | rendered | n/a |
+| /strategies/[id] equity curve | skeleton chart | "No backtests yet" + Re-run CTA | "Couldn't load — Retry" | rendered | "Backtest in progress" w/ pulse dot |
+| /strategies/[id] paper trades | skeleton rows | "Paper trading not active" + activate hint | inline error | rendered | n/a |
+| /portfolios list | skeleton rows | "No portfolios yet" + "+ New Portfolio" CTA | retry | rendered | n/a |
+| /portfolios/new picker | skeleton chips | "No matches — try fewer filters" | inline error | rendered | n/a |
+| /portfolios/new submit | "Creating…" disabled | n/a | inline form error | redirect w/ "Backtest running" badge | n/a |
+| Re-run backtest button | "Running…" + spinner | n/a | error toast | results refresh | "Polling… (3m)" w/ elapsed |
+
+### Pass 3 — User Journey & Emotional Arc (6→9)
+
+- /strategies: 5s "system alive" → 5m "drill into top performer" → 5y "compare quarters"
+- /portfolios/new Static: 5s "asset tabs" → 5m "filter sector + state, weight" → 5y "see what worked"
+- /portfolios/new Rule-Based: 5s "rule cards visible" → 5m "compose rules + breadth gate" → 5y "iterate, paper-trade winners (M16)"
+
+### Pass 4 — AI Slop Risk (8→9)
+
+App UI rules — already disciplined. CTAs use `bg-accent` (existing deep blue), no purple anywhere.
+
+### Pass 5 — Design System Alignment (8→10)
+
+Tokens to reuse:
+
+| Token | Use |
+|---|---|
+| `bg-paper` | Page background |
+| `border-paper-rule rounded-[2px]` | Cards/tables/modals |
+| `text-ink-primary` / `text-ink-secondary` / `text-ink-tertiary` | Text hierarchy |
+| `text-signal-pos` (green) / `text-signal-neg` (red) / `text-signal-warn` (amber) | Returns + states |
+| `bg-accent` (deep blue) | CTAs |
+| `font-serif` (Source_Serif_4) | Headings |
+| `font-sans` (Inter) | Body |
+| `font-mono` (JetBrains_Mono) | Numbers, tickers, JSON |
+
+Components to reuse: M14's `EditGatePolicyModal` (rule cards), M13's `RecomputePanel` (polling), M14's `formatThreshold` + `formatIST` (display).
+
+### Pass 6 — Responsive & Accessibility (5→9)
+
+Mobile breakpoint **768px**:
+- Tables → stacked cards
+- Multi-tab pickers stack vertically
+- Charts shrink 500×300 → 320×200, lose secondary lines
+- Side drawers → full-screen modals
+
+A11y:
+- **44×44 touch targets** on all clickable rows + checkboxes
+- **Keyboard**: Escape closes modals, Tab cycles, Enter submits (M14 pattern)
+- **WCAG AA** color contrast — paper/ink-primary at 11.4:1 confirmed
+- **ARIA**: every modal `role=dialog aria-modal aria-labelledby`; every chart has `sr-only` data-table fallback
+
+### Pass 7 — Resolved design decisions
+
+| Decision | Auto-pick |
+|---|---|
+| Equity curve y-axis | % return (comparable across strategies) |
+| Drawdown fill | `bg-signal-neg/50` |
+| Regime breakdown colors | Risk-On=`signal-pos/20`, Constructive=`accent/15`, Cautious=`signal-warn/15`, Risk-Off=`signal-neg/20` |
+| InstrumentPicker tabs | Horizontal pill tabs: `Stocks (750) · ETFs (100) · Mutual Funds (592)` |
+| Re-run modal default dates | Last 5 years |
+| WeightTable sum indicator | Inline: green `✓ Sums to 100%` or amber `⚠ 87% allocated` |
+| Empty rule-based holdings | "Holdings will appear after the first nightly run (M16)" + greyed paper toggle |
+| Loading skeleton style | `animate-pulse` on `bg-paper-rule/30 rounded-[2px]` |
+| Error retry button | `text-accent underline decoration-dotted` |
+
+### Design completion
+
+- Initial: 6/10 → Final: 9/10
+- 18 decisions added to spec
+- 0 decisions deferred
+- 0 mockups (App UI alignment to existing system)
+
