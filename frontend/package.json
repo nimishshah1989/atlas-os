@@ -21,6 +21,7 @@
     "postgres": "3.4.5",
     "react": "19.0.0",
     "react-dom": "19.0.0",
+    "react-is": "^19.2.6",
     "recharts": "^3.8.1",
     "server-only": "^0.0.1"
   },
