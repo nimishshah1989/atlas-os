@@ -54,3 +54,27 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-commit]
+
+  # Modulith discipline: enforce architectural rules.
+  - repo: local
+    hooks:
+      - id: file-size-limit
+        name: file size limit (no file > 400 LOC)
+        entry: python scripts/hooks/check_file_size.py
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: module-boundaries
+        name: bounded-context import boundaries
+        entry: python scripts/hooks/check_module_boundaries.py
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: no-magic-thresholds
+        name: thresholds live in atlas_thresholds, not in code
+        entry: python scripts/hooks/check_no_magic_thresholds.py
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
