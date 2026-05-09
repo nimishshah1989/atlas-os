@@ -1,10 +1,12 @@
 """create health observability tables
 
-Revision ID: 013
-Revises: 012
+Revision ID: 016
+Revises: 015
 Create Date: 2026-05-09 00:00:00.000000
 
 M12 — Backend Data Health Observability.
+Renumbered from 013 to 016 because parallel M7 work landed migrations
+013/014/015 (strategy configs, paper portfolios, paper trades) first.
 
 Three append-only operational tables:
   atlas_pipeline_runs       — every script invocation
@@ -18,8 +20,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "013"
-down_revision = "012"
+revision = "016"
+down_revision = "015"
 branch_labels = None
 depends_on = None
 
