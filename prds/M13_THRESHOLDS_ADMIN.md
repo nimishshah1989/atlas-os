@@ -37,14 +37,29 @@ SEBI compliance.
    - **Milestone allowlist**: path param must be in `{m3, m4, m5, all}`.
      Anything else → 400. No string interpolation into the subprocess
      argv beyond the allowlisted milestone → script-name mapping.
-   - **Concurrency guard**: before Popen, `SELECT 1 FROM atlas_run_log
-     WHERE status='RUNNING' AND business_date=CURRENT_DATE`. If a row
-     exists, return 409 with the existing `compute_run_id`. UI surfaces
+   - **Run-log table is `atlas.atlas_pipeline_runs`** (created by
+     migration 021, used by every `m*_daily.py` via `atlas.health.runs.
+     record_run` / `safe_record`). Schema: `run_id UUID PK`,
+     `script_name VARCHAR(64)`, `milestone VARCHAR(8)`, `phase VARCHAR(32)`,
+     `started_at`, `ended_at`, `status` ∈ `{running, success, failed}`,
+     `rows_written`, `error_message`, `host`, `git_sha`. The earlier
+     `atlas_run_log` (migration 007) is superseded; ignore it for M13.
+   - **Concurrency guard**: before Popen, `SELECT run_id FROM
+     atlas.atlas_pipeline_runs WHERE milestone IN ('M3','M4','M5')
+     AND status='running' AND started_at > NOW() - INTERVAL '6 hours'
+     LIMIT 1`. If a row exists, return 409 with that `run_id`. UI surfaces
      "already running" instead of spawning a duplicate process.
+   - **Run-id injection**: FastAPI generates a UUID4, passes it to the
+     subprocess via env var `ATLAS_PIPELINE_RUN_ID`. Patch
+     `atlas/health/runs.py:record_run` (5 lines) to honor the env var if
+     set: parse the UUID, use it instead of `uuid.uuid4()`. Subprocess
+     inserts its own `atlas_pipeline_runs` row using the injected id.
+     FastAPI returns the same id in the response so the UI can poll
+     directly. Avoids a race window without touching the daily scripts.
    - **Subprocess output**: stdout+stderr redirected to
      `/var/log/atlas/recompute-{milestone}-{run_id}.log` (mkdir -p the
      directory in the systemd unit's `ExecStartPre`). Logfile name is
-     grep-able from the run_id surfaced in `atlas_run_log`.
+     grep-able from the `run_id` returned by the API.
    - **Network exposure**: bind to `0.0.0.0:8002`; bearer secret is the
      auth boundary. Tool is internal-only for now; no SG tightening for
      v0. TODO before any external user gets access: lock SG to Vercel
@@ -58,9 +73,9 @@ SEBI compliance.
      No `print()`. Per `~/.claude/rules/python-backend.md`.
    - **Sets us up for M6** (full API) — same pattern, scoped down.
    - **Rejected**: SSH-from-Vercel (couples key to deploy). Job queue
-     (overkill for 3 users). flock-based lockfile (atlas_run_log check
-     is sufficient for v0; flock added if duplicate-run becomes a real
-     pattern).
+     (overkill for 3 users). flock-based lockfile (atlas_pipeline_runs
+     soft-check is sufficient for v0; flock added if duplicate-run
+     becomes a real pattern).
 
 2. **Threshold UPDATE = Server Action**, not API.
    - `frontend/src/app/admin/thresholds/actions.ts` exports
@@ -155,7 +170,7 @@ frontend/src/app/admin/                               [new]
     actions.ts                                        # Server Actions: updateThreshold, triggerRecompute
     EditThresholdModal.tsx
     HistoryDrawer.tsx
-    RecomputePanel.tsx                                # 3 buttons + 5s polling on atlas_run_log
+    RecomputePanel.tsx                                # 3 buttons + 5s polling on atlas_pipeline_runs
 frontend/src/lib/queries/thresholds.ts                [new]   # SELECT helpers (server-only)
 frontend/src/lib/internal-api.ts                      [new]   # fetch wrapper for EC2 endpoint
 frontend/src/lib/admin-auth.ts                        [new]   # HMAC sign/verify
@@ -213,7 +228,7 @@ the test diagram. Adds ~2.5 hr to the original 5.5 hr estimate.
 2. Sees all thresholds grouped by category, with descriptions
 3. Edits `sector_rs_quintile_top_pct` from 80 → 75, reason "tighter Overweight cutoff for current market"
 4. Audit row appears in `atlas_threshold_history` with old=80, new=75, reason captured
-5. Clicks "Re-run sector states" → sees `atlas_run_log` row appear with status=running, reclassify=TRUE
+5. Clicks "Re-run sector states" → sees `atlas_pipeline_runs` row appear with `script_name='m3_daily'`, `milestone='M3'`, `status='running'`
 6. Within 5 min, status flips to success, `atlas_sector_states_daily` reflects new cutoffs
 7. Public dashboard at `atlas.jslwealth.in/sectors` shows the recomputed states
 8. Concurrency check: clicking "Re-run sector states" again while one is running returns 409 + UI surfaces the existing run_id
@@ -237,9 +252,9 @@ Full coverage of all 22 code paths + user flows from the eng-review diagram.
 1. POST without bearer → 401
 2. POST with wrong bearer → 401
 3. POST `/m99` (out of allowlist) → 400
-4. POST `/m3` while atlas_run_log has RUNNING row for today → 409 with existing run_id
+4. POST `/m3` while atlas_pipeline_runs has running row for milestone='M3' within last 6h → 409 with existing run_id
 5. POST `/m3` happy path → 202, run_id returned, Popen called with correct args, log dir created
-6. POST `/m3` with Popen raising FileNotFoundError → 500, atlas_run_log row marked FAILED
+6. POST `/m3` with Popen raising FileNotFoundError → 500, no atlas_pipeline_runs row inserted by FastAPI (subprocess never started)
 
 **`frontend/src/__tests__/admin/middleware.test.ts`** — auth gate:
 1. No cookie on /admin/thresholds → redirect /admin/login
@@ -261,7 +276,7 @@ Full coverage of all 22 code paths + user flows from the eng-review diagram.
 
 **`frontend/src/__tests__/admin/thresholds.e2e.ts`**:
 1. Full FM flow: login → /admin/thresholds → click row → edit modal → save with reason → assert audit row in DB
-2. Recompute flow: click "Re-run sectors" → poll atlas_run_log → assert status flips to running then success
+2. Recompute flow: click "Re-run sectors" → poll atlas_pipeline_runs by run_id → assert status flips from running to success
 3. Out-of-range entry → modal surfaces error inline, no DB mutation
 
 ---
@@ -272,9 +287,10 @@ Full coverage of all 22 code paths + user flows from the eng-review diagram.
   `min_allowed`/`max_allowed` CHECK constraints. UI consumes; no DDL changes.
 - `atlas.atlas_threshold_history` table: append-only, has `user_ip` + `user_agent`
   columns (forensics) and `reclassify_run_id` (links audit to recompute).
-- `atlas_run_log` table: already has a `reclassify BOOLEAN DEFAULT FALSE` column
-  (migration 007), so partial-recompute runs can be filtered out of nightly
-  status queries by `WHERE reclassify = FALSE`.
+- `atlas.atlas_pipeline_runs` table (migration 021): already used by every
+  `m*_daily.py` via `atlas.health.runs.record_run`. The `milestone` column
+  (`M3`/`M4`/`M5`) lets the FastAPI concurrency check filter cleanly. The
+  earlier `atlas_run_log` from migration 007 is superseded — do not use it.
 - `m3_daily.py` / `m4_daily.py` / `m5_daily.py` exist on `.214` — no
   changes; FastAPI invokes them as-is.
 - `ATLAS_DB_URL` Supabase pooler env exists on Vercel. M6 frontend already
@@ -297,9 +313,9 @@ Full coverage of all 22 code paths + user flows from the eng-review diagram.
 - **Network-level lockdown of port 8002**: open to 0.0.0.0 with bearer
   secret. SG tightening (Vercel CIDR allowlist or Cloudflare Tunnel) deferred
   until external users access the tool.
-- **flock-based concurrency guard**: atlas_run_log soft-check is the v0
-  guard. flock on `/var/run/atlas-recompute.lock` is the upgrade if duplicate
-  runs become a real problem.
+- **flock-based concurrency guard**: atlas_pipeline_runs soft-check is the
+  v0 guard. flock on `/var/run/atlas-recompute.lock` is the upgrade if
+  duplicate runs become a real problem.
 - **Live diff preview of which thresholds are stale vs. the current
   classification run**: would be lovely UX ("you changed this 2 hours ago,
   the latest nightly is from yesterday") but not on the critical path.
@@ -309,7 +325,7 @@ Full coverage of all 22 code paths + user flows from the eng-review diagram.
 | Failure | Test? | Error handling? | User experience? |
 |---|---|---|---|
 | Vercel→.214 network timeout during recompute trigger | ✗ (Server Action throws) | Surface generic error in UI | Toast "couldn't reach compute server" |
-| .214 returns 500 (Popen exception) | ✓ test_internal_recompute.py | atlas_run_log marked FAILED with stderr | UI polls, sees FAILED, shows logfile path |
+| .214 returns 500 (Popen exception) | ✓ test_internal_recompute.py | FastAPI returns 500; subprocess never started so no atlas_pipeline_runs row | UI surfaces toast "couldn't start recompute" |
 | `SET LOCAL` outside txn → silent NULL change_reason | ✓ test_actions.ts (CRITICAL) | n/a — covered by test | Audit row has NULL reason → SEBI gap |
 | HMAC cookie tamper | ✓ test middleware.ts | Redirect + clear cookie | Forced re-login |
 | FM clicks Re-run while nightly cron mid-flight | ✓ test_internal_recompute.py | 409 surfaces existing run_id | UI shows "already running, run_id=X" |
@@ -318,7 +334,7 @@ Full coverage of all 22 code paths + user flows from the eng-review diagram.
 
 **Critical gap flagged**: subprocess output disk-fill is the only failure
 mode without test + with potentially-silent failure (logfile fills, future
-recompute fails to write start log, but atlas_run_log still gets a row).
+recompute fails to write start log, but atlas_pipeline_runs still gets a row).
 Mitigation in Phase 1: logrotate config in the systemd unit's deploy script.
 
 ## TODOS.md updates
