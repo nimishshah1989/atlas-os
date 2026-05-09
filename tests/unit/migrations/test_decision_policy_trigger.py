@@ -61,21 +61,31 @@ def _load_migration():  # type: ignore[return]
 
 
 def _captured_sql_strings(mock_execute: MagicMock) -> list[str]:
-    """Return the raw SQL text from every op.execute(sa.text(...)) call.
+    """Return the raw SQL text + bound-param values from every op.execute call.
 
-    Also appends any string parameter values passed as the second positional
-    argument (a dict) so that parameterized seed calls are searchable.
+    Two shapes captured:
+    - op.execute(sa.text(SQL)) — appends str(textclause)
+    - op.execute(sa.text(SQL).bindparams(...)) — appends str(textclause) AND
+      any string values from the bindparams (so seed keys are searchable).
+    - op.execute(sa.text(SQL), {params}) — legacy two-arg shape; also captures.
     """
     result: list[str] = []
     for c in mock_execute.call_args_list:
         arg = c.args[0] if c.args else None
         if arg is None:
             continue
-        # sa.text returns a TextClause whose string repr is the SQL.
         result.append(str(arg))
-        # Include parameter dict values so seed keys are visible in combined.
+        # Two-arg form: dict in second position
         if len(c.args) >= 2 and isinstance(c.args[1], dict):
             for v in c.args[1].values():
+                if isinstance(v, str):
+                    result.append(v)
+        # bindparams form: TextClause carries _bindparams attribute
+        bindparams = getattr(arg, "_bindparams", None)
+        if isinstance(bindparams, dict):
+            for bp in bindparams.values():
+                # BindParameter objects have a .value attr
+                v = getattr(bp, "value", None)
                 if isinstance(v, str):
                     result.append(v)
     return result
