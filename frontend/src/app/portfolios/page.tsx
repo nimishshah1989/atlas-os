@@ -1,6 +1,7 @@
 // src/app/portfolios/page.tsx
 // RSC — FM custom portfolios list (Static + Rule-Based).
 // Shell ≤250 LOC; logic lives in PortfoliosView client island.
+export const dynamic = 'force-dynamic'
 import Link from 'next/link'
 import { getAllPortfolios } from '@/lib/queries/portfolios'
 import { PortfoliosView } from './PortfoliosView'
