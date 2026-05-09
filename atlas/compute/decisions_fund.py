@@ -119,8 +119,25 @@ def _load_fund_states_with_regime(
 # --------------------------------------------------------------------------- #
 
 
-def compute_fund_recommendations(df: pd.DataFrame) -> pd.DataFrame:
-    """Apply fund recommendation taxonomy per methodology §13.6."""
+def compute_fund_recommendations(
+    df: pd.DataFrame,
+    *,
+    engine: Engine | None = None,
+) -> pd.DataFrame:
+    """Apply fund recommendation taxonomy per methodology §13.6.
+
+    If engine is provided, nav state sets are loaded from atlas.atlas_decision_policy
+    (with code-default fallback). If engine is None, uses module-level constants
+    (preserves backward compat for tests that don't need DB).
+    """
+    if engine is not None:
+        from atlas.compute._policy import load_gate_policy
+
+        nav_strong = load_gate_policy("nav_strong_states_fund", engine)
+        # nav_positive_states_fund loaded for completeness; used in future gate columns
+        load_gate_policy("nav_positive_states_fund", engine)
+    else:
+        nav_strong = NAV_STRONG_STATES
 
     def _recommend(row: Any) -> str:
         if row.get("dislocation_active"):
@@ -134,7 +151,7 @@ def compute_fund_recommendations(df: pd.DataFrame) -> pd.DataFrame:
         if row["composition_state"] == "Misaligned" and row["holdings_state"] == "Weak-Holdings":
             return "Reduce"
         if (
-            row["nav_state"] in NAV_STRONG_STATES
+            row["nav_state"] in nav_strong
             and row["composition_state"] == "Aligned"
             and row["holdings_state"] == "Strong-Holdings"
         ):
@@ -145,7 +162,7 @@ def compute_fund_recommendations(df: pd.DataFrame) -> pd.DataFrame:
     df["is_investable"] = df["recommendation"] == "Recommended"
 
     # Gate breakdown (for UI transparency)
-    df["performance_gate"] = df["nav_state"].isin(NAV_STRONG_STATES)
+    df["performance_gate"] = df["nav_state"].isin(nav_strong)
     df["sectors_gate"] = df["composition_state"] != "Misaligned"
     df["stocks_gate"] = df["holdings_state"] != "Weak-Holdings"
     df["market_gate"] = (df["regime_state"] != "Risk-Off") & ~df["dislocation_active"].fillna(False)
@@ -286,7 +303,7 @@ def run_fund_decisions(
         log.warning("fund_decisions_empty_load")
         return {"run_id": run_id, "rows_written": 0, "errors": []}
 
-    df = compute_fund_recommendations(df)
+    df = compute_fund_recommendations(df, engine=engine)
     df = compute_fund_exit_triggers(df)
     df = compute_recommendation_transitions(df, engine, start_date, end_date)
     df = compute_weeks_in_state(df)
