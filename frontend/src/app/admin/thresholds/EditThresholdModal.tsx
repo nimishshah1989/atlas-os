@@ -4,6 +4,7 @@
 import { useEffect, useState, useTransition } from 'react'
 import { updateThreshold } from './actions'
 import type { ThresholdRow } from '@/lib/queries/thresholds'
+import { formatThreshold } from '@/lib/format-number'
 
 type Props = {
   threshold: ThresholdRow
@@ -44,7 +45,7 @@ export function EditThresholdModal({ threshold, onClose, onSaved }: Props) {
       return
     }
     if (outOfRange) {
-      setError(`Value must be between ${threshold.min_allowed} and ${threshold.max_allowed}`)
+      setError(`Value must be between ${formatThreshold(threshold.min_allowed)} and ${formatThreshold(threshold.max_allowed)}`)
       return
     }
 
@@ -120,8 +121,8 @@ export function EditThresholdModal({ threshold, onClose, onSaved }: Props) {
               className="border border-paper-rule rounded-[2px] px-3 py-2 text-sm font-mono bg-paper text-ink-primary focus:outline-none focus:border-accent disabled:opacity-60"
             />
             <p className="font-sans text-xs text-ink-tertiary">
-              Allowed range: [{threshold.min_allowed}, {threshold.max_allowed}]
-              {' '}· Default: {threshold.default_value}
+              Allowed range: [{formatThreshold(threshold.min_allowed)}, {formatThreshold(threshold.max_allowed)}]
+              {' '}· Default: {formatThreshold(threshold.default_value)}
             </p>
           </div>
 
@@ -130,7 +131,7 @@ export function EditThresholdModal({ threshold, onClose, onSaved }: Props) {
             <div className="bg-accent/5 border border-accent/20 rounded-[2px] px-3 py-2">
               <p className="font-sans text-xs text-ink-secondary">
                 Diff preview:{' '}
-                <span className="font-mono text-signal-neg">{threshold.threshold_value}</span>
+                <span className="font-mono text-signal-neg">{formatThreshold(threshold.threshold_value)}</span>
                 {' → '}
                 <span className={`font-mono ${outOfRange ? 'text-signal-neg' : 'text-signal-pos'}`}>
                   {value}

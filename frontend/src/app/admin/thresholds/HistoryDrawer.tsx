@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { getThresholdHistoryAction } from './actions'
 import type { ThresholdHistoryRow } from '@/lib/queries/thresholds'
 import { formatIST } from '@/lib/format-date'
+import { formatThreshold } from '@/lib/format-number'
 
 type Props = {
   thresholdKey: string
@@ -114,11 +115,11 @@ export function HistoryDrawer({ thresholdKey, onClose }: Props) {
                     </td>
                     <td className="py-2.5 pr-3 align-top">
                       <span className="font-mono text-xs text-signal-neg">
-                        {row.old_value ?? '—'}
+                        {row.old_value == null ? '—' : formatThreshold(row.old_value)}
                       </span>
                       <span className="font-sans text-xs text-ink-tertiary mx-1">→</span>
                       <span className="font-mono text-xs text-signal-pos">
-                        {row.new_value}
+                        {formatThreshold(row.new_value)}
                       </span>
                     </td>
                     <td className="py-2.5 pr-3 align-top">

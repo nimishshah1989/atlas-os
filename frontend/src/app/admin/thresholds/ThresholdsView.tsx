@@ -8,6 +8,7 @@ import { EditThresholdModal } from './EditThresholdModal'
 import { HistoryDrawer } from './HistoryDrawer'
 import { RecomputePanel } from './RecomputePanel'
 import { formatIST } from '@/lib/format-date'
+import { formatThreshold } from '@/lib/format-number'
 
 type Props = {
   byCategory: Record<string, ThresholdRow[]>
@@ -66,7 +67,7 @@ function CategoryTable({
                 </td>
                 <td className="px-3 py-2.5 align-middle text-right">
                   <span className="font-mono text-xs text-ink-primary font-medium">
-                    {row.threshold_value}
+                    {formatThreshold(row.threshold_value)}
                   </span>
                   {row.units && (
                     <span className="font-sans text-xs text-ink-tertiary ml-1">
@@ -76,7 +77,7 @@ function CategoryTable({
                 </td>
                 <td className="px-3 py-2.5 align-middle hidden sm:table-cell">
                   <span className="font-mono text-xs text-ink-tertiary">
-                    [{row.min_allowed}, {row.max_allowed}]
+                    [{formatThreshold(row.min_allowed)}, {formatThreshold(row.max_allowed)}]
                   </span>
                 </td>
                 <td className="px-3 py-2.5 align-middle hidden md:table-cell">
