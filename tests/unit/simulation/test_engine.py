@@ -67,3 +67,21 @@ class TestRunBacktest:
         assert result.start_date == date(2024, 1, 2)
         assert result.end_date is not None
         assert result.end_date >= result.start_date
+
+    def test_fallback_produces_valid_result(self):
+        """_run_backtest_fallback called directly — covers the pandas/numpy path."""
+        from atlas.simulation.backtest.engine import BacktestResult, _run_backtest_fallback
+
+        sm = _make_synthetic_signal_matrix(n_days=30)
+        price_df = pd.DataFrame(sm.prices, index=sm.dates, columns=sm.instruments)
+        entry_df = pd.DataFrame(sm.entries, index=sm.dates, columns=sm.instruments)
+        exit_df = pd.DataFrame(sm.exits, index=sm.dates, columns=sm.instruments)
+
+        result = _run_backtest_fallback(price_df, entry_df, exit_df, 1_000_000.0, 0.001)
+
+        assert isinstance(result, BacktestResult)
+        assert result.total_return is not None
+        assert result.max_drawdown is not None
+        assert result.max_drawdown <= 0.0
+        assert len(result.daily_returns) == 30
+        assert result.start_date == date(2024, 1, 2)

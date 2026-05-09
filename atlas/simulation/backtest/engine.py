@@ -96,6 +96,7 @@ def run_backtest(
             stats = pf.stats()
             n_trades = int(stats.get("Total Trades", 0)) if hasattr(stats, "get") else 0
         except Exception:
+            log.warning("backtest_stats_failed", exc_info=True)
             n_trades = 0
 
         dates_idx = pd.DatetimeIndex(price_df.index)
