@@ -104,7 +104,7 @@ class TestMilestoneAllowlist:
 
 
 class TestConcurrencyCheck:
-    def test_post_when_concurrent_run_returns_409(self, tmp_path: Any) -> None:
+    def test_post_when_concurrent_run_returns_409(self) -> None:
         existing = str(uuid.uuid4())
         engine_mock = _make_engine_mock(existing_run_id=existing)
 
@@ -123,7 +123,7 @@ class TestConcurrencyCheck:
         assert detail["error_code"] == "already_running"
         assert detail["context"]["run_id"] == existing
 
-    def test_post_all_blocked_when_m3_running_returns_409(self, tmp_path: Any) -> None:
+    def test_post_all_blocked_when_m3_running_returns_409(self) -> None:
         """When milestone='all', concurrency check widens to M3+M4+M5."""
         existing = str(uuid.uuid4())
         engine_mock = _make_engine_mock(existing_run_id=existing)
