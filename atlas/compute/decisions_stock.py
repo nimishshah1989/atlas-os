@@ -160,19 +160,21 @@ def compute_investability_gates(
     if engine is not None:
         from atlas.compute._policy import load_gate_policy
 
-        strength_pass = load_gate_policy("strength_gate_stock", engine)
-        direction_pass = load_gate_policy("direction_gate_stock", engine)
-        risk_pass = load_gate_policy("risk_gate_stock", engine)
-        volume_pass = load_gate_policy("volume_gate_stock", engine)
-        sector_pass = load_gate_policy("sector_gate_stock", engine)
-        market_pass = load_gate_policy("market_gate", engine)
+        # Convert to list[str] at the boundary — pandas .isin() type stubs reject
+        # frozenset, even though it works at runtime. Lists are the lingua franca.
+        strength_pass = list(load_gate_policy("strength_gate_stock", engine))
+        direction_pass = list(load_gate_policy("direction_gate_stock", engine))
+        risk_pass = list(load_gate_policy("risk_gate_stock", engine))
+        volume_pass = list(load_gate_policy("volume_gate_stock", engine))
+        sector_pass = list(load_gate_policy("sector_gate_stock", engine))
+        market_pass = list(load_gate_policy("market_gate", engine))
     else:
-        strength_pass = STRENGTH_PASS_STATES
-        direction_pass = DIRECTION_PASS_STATES
-        risk_pass = RISK_PASS_STATES
-        volume_pass = VOLUME_PASS_STATES
-        sector_pass = SECTOR_PASS_STATES
-        market_pass = frozenset({"Risk-On", "Constructive", "Cautious"})
+        strength_pass = list(STRENGTH_PASS_STATES)
+        direction_pass = list(DIRECTION_PASS_STATES)
+        risk_pass = list(RISK_PASS_STATES)
+        volume_pass = list(VOLUME_PASS_STATES)
+        sector_pass = list(SECTOR_PASS_STATES)
+        market_pass = ["Risk-On", "Constructive", "Cautious"]
 
     # Gate 1 — Market: regime in allowed set and dislocation not active
     df["market_gate"] = df["regime_state"].isin(market_pass) & ~df["dislocation_active"].fillna(

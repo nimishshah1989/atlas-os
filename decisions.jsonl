@@ -8141,3 +8141,237 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{
+  "ts": "2026-05-09T10:51:39Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/024_create_decision_policy.py",
+  "lines_changed": 281,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T10:52:28Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/unit/migrations/test_decision_policy_trigger.py",
+  "lines_changed": 409,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T10:52:43Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/unit/migrations/test_decision_policy_trigger.py",
+  "lines_changed": 19,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T10:55:55Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/unit/migrations/test_decision_policy_trigger.py",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T10:59:30Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/stocks.ts",
+  "lines_changed": 285,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T11:01:41Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/024_create_decision_policy.py",
+  "lines_changed": 14,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T11:02:47Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/024_create_decision_policy.py",
+  "lines_changed": 28,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T11:02:54Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/024_create_decision_policy.py",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T11:02:57Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/stocks/StockBubbleChart.tsx",
+  "lines_changed": 242,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T11:04:19Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 379,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T11:06:48Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/stocks/StockDeepDiveContent.tsx",
+  "lines_changed": 810,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T11:07:03Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/stocks/page.tsx",
+  "lines_changed": 80,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T11:07:11Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/stocks/[symbol]/page.tsx",
+  "lines_changed": 34,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T11:08:39Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/compute/_policy.py",
+  "lines_changed": 148,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T11:08:57Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/compute/decisions_stock.py",
+  "lines_changed": 56,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T11:09:08Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/compute/decisions_stock.py",
+  "lines_changed": 27,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T11:09:14Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/compute/decisions_stock.py",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T11:09:31Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/compute/decisions_etf.py",
+  "lines_changed": 55,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T11:09:38Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/compute/decisions_etf.py",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T11:09:55Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/compute/decisions_fund.py",
+  "lines_changed": 48,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T11:10:00Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/compute/decisions_fund.py",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T11:10:18Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/unit/compute/__init__.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T11:10:39Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/unit/compute/test_policy_loader.py",
+  "lines_changed": 111,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T11:10:56Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/unit/compute/test_decisions_with_policy.py",
+  "lines_changed": 89,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T11:21:23Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/compute/decisions_fund.py",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-09T11:23:22Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/compute/decisions_stock.py",
+  "lines_changed": 38,
+  "session_id": "unknown",
+  "schema_version": 1
+}
