@@ -14,13 +14,16 @@ type Props = {
 export function SectorDrawer({ sectorName, range, onClose }: Props) {
   const [history, setHistory] = useState<SectorMetricHistoryRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    const controller = new AbortController()
     setLoading(true)
-    setError(false)
+    setError(null)
     const days = rangeToDays(range as TimeRange)
-    fetch(`/api/sectors/${encodeURIComponent(sectorName)}/history?days=${days}`)
+    fetch(`/api/sectors/${encodeURIComponent(sectorName)}/history?days=${days}`, {
+      signal: controller.signal,
+    })
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
         return r.json()
@@ -29,10 +32,12 @@ export function SectorDrawer({ sectorName, range, onClose }: Props) {
         setHistory(data)
         setLoading(false)
       })
-      .catch(() => {
-        setError(true)
+      .catch((e: unknown) => {
+        if (e instanceof Error && e.name === 'AbortError') return
+        setError(e instanceof Error ? e.message : 'Unknown error')
         setLoading(false)
       })
+    return () => controller.abort()
   }, [sectorName, range])
 
   const dateStr = (row: SectorMetricHistoryRow): string =>
@@ -78,7 +83,7 @@ export function SectorDrawer({ sectorName, range, onClose }: Props) {
               <div key={i} className="h-48 bg-paper-rule/20 rounded-sm animate-pulse" />
             ))}
           </div>
-        ) : error ? (
+        ) : error !== null ? (
           <div className="p-6">
             <p className="font-sans text-xs text-signal-neg">Failed to load sector history. Please try again.</p>
           </div>

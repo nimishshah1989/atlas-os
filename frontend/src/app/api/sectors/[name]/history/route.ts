@@ -10,6 +10,11 @@ export async function GET(
   const days = daysParam != null && /^\d+$/.test(daysParam)
     ? Math.min(Math.max(parseInt(daysParam, 10), 1), 3650)
     : 180
-  const data = await getSectorMetricHistory(decodeURIComponent(name), days)
-  return NextResponse.json(data)
+  try {
+    const data = await getSectorMetricHistory(decodeURIComponent(name), days)
+    return NextResponse.json(data)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Query failed'
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
 }
