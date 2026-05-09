@@ -8,6 +8,7 @@ import {
   getBacktestsForPortfolio,
 } from '@/lib/queries/portfolios'
 import { KPICard } from '@/components/strategy/KPICard'
+import { ReRunBacktestButton } from '@/components/strategy/ReRunBacktestButton'
 import { EquityCurveChart } from '@/components/charts/EquityCurveChart'
 import { DrawdownChart } from '@/components/charts/DrawdownChart'
 import { PaperTradingToggle } from './PaperTradingToggle'
@@ -78,6 +79,16 @@ export default async function PortfolioDetailPage({ params }: Props) {
         </div>
         <p className="font-sans text-xs text-ink-tertiary">Created {fmtDate(portfolio.created_at)}</p>
       </header>
+
+      {/* Action bar — Re-run Backtest (rule-based portfolios only) */}
+      {type === 'rule-based' && ruleBasedPortfolio && (
+        <section className="mb-8 flex items-center gap-3">
+          <ReRunBacktestButton
+            strategyId={ruleBasedPortfolio.id}
+            strategyName={portfolio.name}
+          />
+        </section>
+      )}
 
       <section id="kpis" className="mb-8">
         <h2 className="font-sans text-xs font-semibold uppercase tracking-wide text-ink-secondary mb-3">Performance Metrics</h2>

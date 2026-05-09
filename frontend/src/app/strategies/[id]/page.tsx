@@ -6,6 +6,7 @@ import { getStrategyById } from '@/lib/queries/strategies'
 import { getBacktestsForStrategy, getLatestBacktestForStrategy } from '@/lib/queries/backtests'
 import { getPaperPerformance, getRecentPaperTrades } from '@/lib/queries/paper_perf'
 import { KPICard } from '@/components/strategy/KPICard'
+import { ReRunBacktestButton } from '@/components/strategy/ReRunBacktestButton'
 import { EquityCurveChart } from './EquityCurveChart'
 import { DrawdownChart } from './DrawdownChart'
 import { RegimeBreakdownChart } from './RegimeBreakdownChart'
@@ -100,15 +101,9 @@ export default async function StrategyDetailPage({ params }: Props) {
         </div>
       </section>
 
-      {/* 3. Action bar — Re-run Backtest placeholder (Phase 5) */}
+      {/* 3. Action bar — Re-run Backtest */}
       <section className="mb-8 flex items-center gap-3">
-        <button
-          disabled
-          className="font-sans text-sm px-4 py-2 rounded-[2px] border border-paper-rule text-ink-tertiary cursor-not-allowed bg-paper-rule/10"
-          title="Re-run Backtest is coming in Phase 5"
-        >
-          Re-run Backtest (Phase 5)
-        </button>
+        <ReRunBacktestButton strategyId={strategy.id} strategyName={strategy.name} />
         {latestBt && (
           <span className="font-sans text-xs text-ink-tertiary">
             Last backtest: {fmtDate(latestBt.created_at)}&nbsp;·&nbsp;
