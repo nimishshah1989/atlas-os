@@ -88,5 +88,6 @@ export async function getPolicyHistoryAction(policyKey: string) {
   return getPolicyHistory(policyKey, 20)
 }
 
-// Re-export M13's recompute trigger so RecomputePanel works on the policies page
-export { triggerRecompute, getRunStatusAction } from '../thresholds/actions'
+// Note: RecomputePanel imports triggerRecompute + getRunStatusAction directly
+// from ../thresholds/actions. Next.js 'use server' files only allow
+// async-function exports — re-exporting named bindings is a compile error.
