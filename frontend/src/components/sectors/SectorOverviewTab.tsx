@@ -167,6 +167,41 @@ function interpret3MReturn(v: string | null | undefined): ReactNode {
   )
 }
 
+function interpretEMA(v10: string | null | undefined, v20: string | null | undefined): ReactNode {
+  if (v10 == null) return <p>No EMA momentum data available for this period.</p>
+  const r10 = (parseFloat(v10) - 1) * 100
+  const r20 = v20 != null ? (parseFloat(v20) - 1) * 100 : null
+  const aboveBoth = r10 > 0 && (r20 == null || r20 > 0)
+  const belowBoth = r10 < 0 && (r20 == null || r20 < 0)
+  const golden = r20 != null && r10 > r20
+
+  if (aboveBoth && golden) return (
+    <>
+      <p>Stocks are <span className="text-signal-pos font-semibold">{r10.toFixed(1)}% above</span> their 10-day EMA and {r20!.toFixed(1)}% above the 20-day.</p>
+      <p>The 10-day leading the 20-day confirms momentum building. This is the strongest EMA setup — price is extended above both short-term trend lines.</p>
+    </>
+  )
+  if (aboveBoth) return (
+    <>
+      <p>Stocks are <span className="text-signal-pos font-medium">{r10.toFixed(1)}% above</span> their 10-day EMA.</p>
+      <p>Above both trend lines but the 10-day is no longer leading — momentum may be cooling. Still constructive but watch for the 10d crossing below the 20d.</p>
+    </>
+  )
+  if (!belowBoth && r10 > 0) return (
+    <>
+      <p>Stocks are <span className="text-signal-warn font-medium">{r10.toFixed(1)}% above</span> the 10-day EMA but {r20 != null ? Math.abs(r20).toFixed(1) + '% below' : 'near'} the 20-day.</p>
+      <p>Mixed momentum — the sector is in transition. The 10-day crossing the 20-day from below would be the first meaningful bullish signal.</p>
+    </>
+  )
+  if (belowBoth) return (
+    <>
+      <p>Stocks are <span className="text-signal-neg font-semibold">{Math.abs(r10).toFixed(1)}% below</span> their 10-day EMA.</p>
+      <p>Broad technical deterioration. Stocks trading below both short-term EMAs are in a downtrend — do not chase bounces until both are recaptured.</p>
+    </>
+  )
+  return <p>EMA signal mixed — {r10.toFixed(1)}% vs 10-day EMA.</p>
+}
+
 export function SectorOverviewTab({
   snapshot,
   metricHistory,
@@ -185,6 +220,10 @@ export function SectorOverviewTab({
   const breadthData  = metricHistory.map(r => ({ date: dateStr(r.date), value: r.participation_50        != null ? parseFloat(r.participation_50)        : null }))
   const rsParticData = metricHistory.map(r => ({ date: dateStr(r.date), value: r.participation_rs        != null ? parseFloat(r.participation_rs)        : null }))
   const ret3mData    = metricHistory.map(r => ({ date: dateStr(r.date), value: r.bottomup_ret_3m         != null ? parseFloat(r.bottomup_ret_3m)         : null }))
+  const ema10Data    = metricHistory.map(r => ({
+    date: dateStr(r.date),
+    value: r.bottomup_ema_10_ratio != null ? (parseFloat(r.bottomup_ema_10_ratio) - 1) * 100 : null,
+  }))
 
   const latest = metricHistory[metricHistory.length - 1]
 
@@ -300,6 +339,29 @@ export function SectorOverviewTab({
               />
               <Commentary title={`3M Return Today · ${pctStr(latest?.bottomup_ret_3m)}`}>
                 {interpret3MReturn(latest?.bottomup_ret_3m)}
+              </Commentary>
+            </div>
+
+            {/* EMA Momentum Quality */}
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 items-start">
+              <IndicatorChart
+                title="EMA Momentum Quality — Avg % Above 10-Day EMA"
+                description="Average percentage by which sector stocks trade above (or below) their 10-day EMA. Positive = stocks trending up short-term. Negative = short-term downtrend. Complements RS by showing price momentum rather than relative strength."
+                currentValue={latest?.bottomup_ema_10_ratio != null
+                  ? `${((parseFloat(latest.bottomup_ema_10_ratio) - 1) * 100).toFixed(1)}%`
+                  : '—'}
+                isBullish={latest?.bottomup_ema_10_ratio != null
+                  ? parseFloat(latest.bottomup_ema_10_ratio) > 1
+                  : null}
+                data={ema10Data}
+                refLine={0}
+                refLabel="0"
+                variant="area"
+              />
+              <Commentary title={`EMA Quality · ${latest?.bottomup_ema_10_ratio != null
+                ? ((parseFloat(latest.bottomup_ema_10_ratio) - 1) * 100).toFixed(1) + '% vs 10d'
+                : '—'}`}>
+                {interpretEMA(latest?.bottomup_ema_10_ratio, latest?.bottomup_ema_20_ratio)}
               </Commentary>
             </div>
           </div>
