@@ -225,8 +225,20 @@ export function StocksTable({
               <td className="px-3 py-2.5 text-center">
                 {row.is_investable ? (
                   <CheckCircle2 className="w-3.5 h-3.5 text-signal-pos mx-auto" />
+                ) : row.market_gate == null ? (
+                  <span className="font-sans text-[10px] text-ink-tertiary">—</span>
+                ) : !row.market_gate ? (
+                  <span className="font-sans text-[10px] text-signal-neg" title="Market regime is Risk-Off">mkt off</span>
+                ) : !row.sector_gate ? (
+                  <span className="font-sans text-[10px] text-signal-warn" title="Sector is Underweight or Avoid">sector ↓</span>
+                ) : !row.strength_gate ? (
+                  <span className="font-sans text-[10px] text-signal-neg" title="RS state is Underweight — stock lagging peers">RS weak</span>
+                ) : !row.direction_gate ? (
+                  <span className="font-sans text-[10px] text-ink-tertiary" title="Momentum is not Improving or Accelerating">mom flat</span>
+                ) : !row.risk_gate ? (
+                  <span className="font-sans text-[10px] text-signal-warn" title="Risk state is High or Below Trend">risk ↑</span>
                 ) : (
-                  <span className="text-ink-tertiary">—</span>
+                  <span className="font-sans text-[10px] text-signal-warn" title="Volume pattern is Distribution">dist vol</span>
                 )}
               </td>
             </tr>

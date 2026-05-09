@@ -20,6 +20,12 @@ export type StockRow = {
   risk_state: string | null
   volume_state: string | null
   is_investable: boolean | null
+  market_gate: boolean | null
+  sector_gate: boolean | null
+  strength_gate: boolean | null
+  direction_gate: boolean | null
+  risk_gate: boolean | null
+  volume_gate: boolean | null
   position_size_pct: string | null
   ema_10_at_20d_high: boolean | null
   weinstein_gate_pass: boolean | null
@@ -48,6 +54,12 @@ export async function getStocksInSector(sectorName: string): Promise<StockRow[]>
       s.risk_state,
       s.volume_state,
       d.is_investable,
+      d.market_gate,
+      d.sector_gate,
+      d.strength_gate,
+      d.direction_gate,
+      d.risk_gate,
+      d.volume_gate,
       d.position_size_pct::text AS position_size_pct,
       m.ema_10_at_20d_high,
       m.weinstein_gate_pass

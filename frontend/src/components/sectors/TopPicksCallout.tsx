@@ -25,6 +25,13 @@ export function TopPicksCallout({ stocks }: { stocks: StockRow[] }) {
     .slice(0, 5)
 
   if (picks.length === 0) {
+    const noDecisionData = stocks.every(s => s.market_gate == null)
+    const marketOff = stocks.some(s => s.market_gate === false)
+    const reason = noDecisionData
+      ? 'Decision pipeline data not available for this sector.'
+      : marketOff
+        ? 'Market regime is Risk-Off — no deployment currently.'
+        : 'No stocks have sufficient momentum (Improving / Accelerating) to pass all 6 investability gates right now.'
     return (
       <div className="px-4 py-3 border border-paper-rule bg-paper-rule/10 rounded-sm">
         <div className="flex items-center gap-2 mb-1">
@@ -33,9 +40,7 @@ export function TopPicksCallout({ stocks }: { stocks: StockRow[] }) {
             Top Picks
           </span>
         </div>
-        <p className="font-sans text-xs text-ink-tertiary">
-          No investable stocks meet the picks criteria today (investable · Overweight RS · ranked by 3M RS percentile).
-        </p>
+        <p className="font-sans text-xs text-ink-tertiary">{reason}</p>
       </div>
     )
   }
