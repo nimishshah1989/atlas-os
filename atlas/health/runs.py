@@ -17,6 +17,7 @@ Writes one row per invocation to ``atlas.atlas_pipeline_runs``.
 
 from __future__ import annotations
 
+import os
 import platform
 import socket
 import subprocess
@@ -29,7 +30,6 @@ import structlog
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-from atlas.compute._session import open_compute_session
 from atlas.db import get_engine
 
 log = structlog.get_logger()
@@ -72,9 +72,21 @@ def record_run(
     engine: Engine | None = None,
 ) -> uuid.UUID:
     """Insert a row with status=running. Returns the run_id."""
-    run_id = uuid.uuid4()
+    env_run_id = os.environ.get("ATLAS_PIPELINE_RUN_ID")
+    if env_run_id:
+        try:
+            run_id = uuid.UUID(env_run_id)
+        except ValueError:
+            log.warning("invalid_pipeline_run_id_env", value=env_run_id)
+            run_id = uuid.uuid4()
+    else:
+        run_id = uuid.uuid4()
     eng = engine or get_engine()
-    with open_compute_session(eng) as conn:
+    # Plain connect() is fine here — INSERT/UPDATE on atlas_pipeline_runs
+    # are short-lived (<1 ms) and do not need statement_timeout disabled.
+    # Using eng.connect() directly avoids importing atlas.compute._session,
+    # which would cross a bounded-context boundary.
+    with eng.connect() as conn:
         conn.execute(
             text("""
                 INSERT INTO atlas.atlas_pipeline_runs (
@@ -95,6 +107,7 @@ def record_run(
                 "git_sha": _git_sha(),
             },
         )
+        conn.commit()
     log.info("pipeline_run_started", run_id=str(run_id), script=script_name)
     return run_id
 
@@ -124,7 +137,7 @@ def finish_run(
             error_text = error_text[:4096] + "\n...(truncated)"
 
     eng = engine or get_engine()
-    with open_compute_session(eng) as conn:
+    with eng.connect() as conn:
         conn.execute(
             text("""
                 UPDATE atlas.atlas_pipeline_runs
@@ -142,6 +155,7 @@ def finish_run(
                 "error_message": error_text,
             },
         )
+        conn.commit()
     log.info(
         "pipeline_run_finished",
         run_id=str(run_id),
