@@ -33,3 +33,5 @@ frontend/out/
 frontend/.env.local
 frontend/.env.production
 frontend/.vercel
+DESIGN.md
+TODOS.md
