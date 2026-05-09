@@ -58,6 +58,11 @@ ALLOWED_EDGES: set[tuple[str, str]] = {
     # reset on the pooled connection). Same long-term fix as above — promote
     # session manager into atlas.db.
     ("atlas.api", "atlas.compute"),
+    # health → compute: atlas.health.runs uses open_compute_session to write
+    # pipeline run rows with statement_timeout=0 (avoids Supabase pooler
+    # timeout on run-log inserts). Pre-existing edge; documented here so
+    # staged edits to runs.py don't trip the boundary check.
+    ("atlas.health", "atlas.compute"),
 }
 
 
