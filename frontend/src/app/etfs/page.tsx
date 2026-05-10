@@ -1,12 +1,13 @@
 export const dynamic = 'force-dynamic'
 
 import { getAllETFs } from '@/lib/queries/etfs'
+import { getCurrentRegime } from '@/lib/queries/regime'
 import { ETFScreener } from '@/components/etfs/ETFScreener'
 import { ETFMetricTiles } from '@/components/etfs/ETFMetricTiles'
 import { ETFIntelligencePanel } from '@/components/etfs/ETFIntelligencePanel'
 
 export default async function ETFsPage() {
-  const etfs = await getAllETFs()
+  const [etfs, regime] = await Promise.all([getAllETFs(), getCurrentRegime()])
 
   if (etfs.length === 0) {
     return (
@@ -57,8 +58,8 @@ export default async function ETFsPage() {
           </div>
           <ETFIntelligencePanel
             etfs={etfs}
-            regimeState="Cautious"
-            deploymentMultiplier={0.6}
+            regimeState={regime?.regime_state ?? 'Unknown'}
+            deploymentMultiplier={parseFloat(regime?.deployment_multiplier ?? '0')}
           />
         </div>
       </div>
