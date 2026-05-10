@@ -26,13 +26,13 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
     : '6M'
   const days = rangeToDays(historyRange)
 
-  // 5 parallel queries — server-side rendering
+  // 5 parallel queries — server-side rendering; non-critical queries degrade to empty arrays
   const [allRaw, stateHistory, rrgHistory, breadthData, daysInState] = await Promise.all([
     getSectorsWithMomentum(),
-    getSectorStateHistory(days),
-    getRRGHistory(30),
-    getBreadthWaterfallData(null, 1095),
-    getDaysInStateForAllSectors(),
+    getSectorStateHistory(days).catch(() => [] as Awaited<ReturnType<typeof getSectorStateHistory>>),
+    getRRGHistory(30).catch(() => [] as Awaited<ReturnType<typeof getRRGHistory>>),
+    getBreadthWaterfallData(null, 1095).catch(() => [] as Awaited<ReturnType<typeof getBreadthWaterfallData>>),
+    getDaysInStateForAllSectors().catch(() => [] as Awaited<ReturnType<typeof getDaysInStateForAllSectors>>),
   ])
 
   if (allRaw.length === 0) {
@@ -154,16 +154,23 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
 
       <SectorRiskWatch sectors={actionableWithDecision} />
 
-      <SectorViews
-        actionable={actionableWithDecision}
-        allSectors={allWithDecision}
-        excluded={excluded}
-        stateHistory={stateHistory}
-        rrgHistory={rrgHistory}
-        breadthData={breadthData}
-        daysInState={daysInState}
-        range={historyRange}
-      />
+      <Suspense fallback={
+        <div className="px-6 py-8 animate-pulse space-y-3">
+          <div className="h-8 bg-paper-rule/30 rounded w-1/3" />
+          <div className="h-64 bg-paper-rule/20 rounded" />
+        </div>
+      }>
+        <SectorViews
+          actionable={actionableWithDecision}
+          allSectors={allWithDecision}
+          excluded={excluded}
+          stateHistory={stateHistory}
+          rrgHistory={rrgHistory}
+          breadthData={breadthData}
+          daysInState={daysInState}
+          range={historyRange}
+        />
+      </Suspense>
     </div>
   )
 }

@@ -151,7 +151,7 @@ export function SectorViews({
   function setTab(tab: Tab) {
     const params = new URLSearchParams(searchParams.toString())
     params.set('tab', tab)
-    router.push(`${pathname}?${params.toString()}`)
+    router.replace(`${pathname}?${params.toString()}`)
   }
 
   const onSelect = (name: string) => {

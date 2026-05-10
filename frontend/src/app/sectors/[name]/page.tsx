@@ -41,11 +41,11 @@ export default async function SectorDeepDivePage({
 
   const [snapshot, metricHistory, stateHistory, stocks, regime, breadthData] = await Promise.all([
     getSectorSnapshotByName(sectorName),
-    getSectorMetricHistory(sectorName, days),
-    getSectorStateHistory(days),
-    getStocksInSector(sectorName),
+    getSectorMetricHistory(sectorName, days).catch(() => [] as Awaited<ReturnType<typeof getSectorMetricHistory>>),
+    getSectorStateHistory(days).catch(() => [] as Awaited<ReturnType<typeof getSectorStateHistory>>),
+    getStocksInSector(sectorName).catch(() => [] as Awaited<ReturnType<typeof getStocksInSector>>),
     getCurrentRegime(),
-    getBreadthWaterfallData(sectorName, 1095),
+    getBreadthWaterfallData(sectorName, 1095).catch(() => [] as Awaited<ReturnType<typeof getBreadthWaterfallData>>),
   ])
 
   if (!snapshot) {

@@ -141,11 +141,15 @@ function TopPicksPopover({
   useEffect(() => {
     if (!visible || loaded === sectorName) return
     setLoading(true)
-    getTopPicksAction(sectorName).then(result => {
-      setPicks(result)
-      setLoaded(sectorName)
-      setLoading(false)
-    })
+    getTopPicksAction(sectorName)
+      .then(result => {
+        setPicks(result)
+        setLoaded(sectorName)
+        setLoading(false)
+      })
+      .catch(() => {
+        setLoading(false)
+      })
   }, [visible, sectorName, loaded])
 
   if (!visible) return null
@@ -189,6 +193,8 @@ export function SectorDecisionTable({ data, onSelect }: { data: Row[]; onSelect:
   const [asc, setAsc] = useState(true)
   const [hoveredSector, setHoveredSector] = useState<string | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current) }, [])
 
   function handleEnterHover(name: string) {
     if (debounceRef.current) clearTimeout(debounceRef.current)
