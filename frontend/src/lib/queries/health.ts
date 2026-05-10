@@ -75,43 +75,87 @@ export async function getFreshness(): Promise<TableFreshness[]> {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
-  const out: TableFreshness[] = []
-  for (const { name, date_col } of TRACKED_TABLES) {
-    if (date_col) {
+  return Promise.all(
+    TRACKED_TABLES.map(async ({ name, date_col }) => {
+      if (date_col) {
+        const rows = await sql<{ row_count: string; latest_date: Date | null }[]>`
+          SELECT
+            COUNT(*)::text AS row_count,
+            MAX(${sql(date_col)}) AS latest_date
+          FROM atlas.${sql(name)}
+        `
+        const r = rows[0]
+        const latest = r?.latest_date ? new Date(r.latest_date) : null
+        const lag = latest
+          ? Math.floor((today.getTime() - latest.getTime()) / (1000 * 60 * 60 * 24))
+          : null
+        return {
+          table_name: name,
+          row_count: Number(r?.row_count ?? 0),
+          latest_date: latest,
+          lag_days: lag,
+        }
+      } else {
+        const rows = await sql<{ row_count: string }[]>`
+          SELECT COUNT(*)::text AS row_count FROM atlas.${sql(name)}
+        `
+        return {
+          table_name: name,
+          row_count: Number(rows[0]?.row_count ?? 0),
+          latest_date: null,
+          lag_days: null,
+        }
+      }
+    }),
+  )
+}
+
+export function lagThresholdDays(table: string): number {
+  return table === 'atlas_fund_lens_monthly' ? 35 : 2
+}
+
+// ---------------------------------------------------------------------------
+// JIP source sync freshness — public.de_* tables
+// ---------------------------------------------------------------------------
+
+const JIP_TABLES: { name: string; date_col: string }[] = [
+  { name: 'de_source_files', date_col: 'created_at' },
+  { name: 'de_equity_ohlcv', date_col: 'date' },
+  { name: 'de_index_prices', date_col: 'date' },
+  { name: 'de_mf_nav_daily', date_col: 'nav_date' },
+  { name: 'de_etf_ohlcv',    date_col: 'date' },
+  { name: 'de_cron_run',     date_col: 'started_at' },
+]
+
+export async function getJipFreshness(): Promise<TableFreshness[]> {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  return Promise.all(
+    JIP_TABLES.map(async ({ name, date_col }) => {
       const rows = await sql<{ row_count: string; latest_date: Date | null }[]>`
         SELECT
           COUNT(*)::text AS row_count,
           MAX(${sql(date_col)}) AS latest_date
-        FROM atlas.${sql(name)}
+        FROM public.${sql(name)}
       `
       const r = rows[0]
       const latest = r?.latest_date ? new Date(r.latest_date) : null
       const lag = latest
         ? Math.floor((today.getTime() - latest.getTime()) / (1000 * 60 * 60 * 24))
         : null
-      out.push({
+      return {
         table_name: name,
         row_count: Number(r?.row_count ?? 0),
         latest_date: latest,
         lag_days: lag,
-      })
-    } else {
-      const rows = await sql<{ row_count: string }[]>`
-        SELECT COUNT(*)::text AS row_count FROM atlas.${sql(name)}
-      `
-      out.push({
-        table_name: name,
-        row_count: Number(rows[0]?.row_count ?? 0),
-        latest_date: null,
-        lag_days: null,
-      })
-    }
-  }
-  return out
+      }
+    }),
+  )
 }
 
-export function lagThresholdDays(table: string): number {
-  return table === 'atlas_fund_lens_monthly' ? 35 : 2
+export function jipLagThresholdDays(_table: string): number {
+  return 2
 }
 
 // ---------------------------------------------------------------------------
