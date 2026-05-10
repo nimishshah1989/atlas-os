@@ -38,7 +38,7 @@ Implementation: `StateValuePair` component (chip left, scalar right, same line, 
 ### 2c. All Time Periods, Both Benchmarks
 Period selector (1W / 1M / 3M / 6M / 1Y) lives in every page header and drives:
 - Return columns (shows the selected period's return)
-- RS pctile column (switches to `rs_pctile_1w/1m/3m` accordingly)
+- RS pctile column (switches to `rs_pctile_1w/1m/3m` for those periods; for 6M and 1Y, falls back to `rs_pctile_3m` with a "(3M)" label suffix indicating the closest available window)
 - Bubble chart Y-axis
 
 Benchmark selector (Nifty 500 ₹ / Gold) drives RS comparative columns.
@@ -620,9 +620,9 @@ The commentary is always honest about signal quality. Weak or ambiguous signals 
 
 1. **Forward Return Distribution chart** — data query strategy: precompute nightly vs query on demand. On-demand query against 10Y state history could be slow for complex filter combinations. Recommend nightly precompute for common combinations (Leader+Accel+Low / Leader+Flat+Normal / etc.) with on-demand fallback.
 
-2. **Market Structure Treemap** — market cap data: stocks currently do not have market cap in the Atlas DB. RS pctile or position_size_pct could substitute for size. Confirm which is appropriate.
+2. **Market Structure Treemap** — market cap data: stocks currently do not have market cap in the Atlas DB. **Decision: use `position_size_pct` as bubble size for v1.** This reflects the strategy's conviction weighting, which is arguably more useful than raw market cap for a relative-strength tool. Market cap can be added in a future migration if needed.
 
-3. **Commentary engine ownership** — this is a new code module (`lib/commentary/`). Should it be a server-side function (runs at page load, data fetched server-side) or client-side (data already loaded, runs in browser)? Recommend server-side for the historical context cards (requires DB queries), client-side for the current-data narrative sentences.
+3. **Commentary engine ownership** — **Decision: hybrid.** Current-data sentences run client-side (data already loaded in page props). Historical context cards (transition probabilities, forward return lookups, precedent queries) run server-side as a dedicated `getCommentaryContext(instrumentType, currentState)` async function called during page server-rendering. This avoids client-side DB queries and keeps the commentary deterministic at render time.
 
 4. **Days in state** — computed as a subquery in `getAllStocks()`. The query logic: `MIN(date) WHERE the rs_state first became current value` using LAG window function over last 90 days of state history. This adds ~50ms to the query. Acceptable given the value.
 
