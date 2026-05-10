@@ -38,7 +38,7 @@ const ALL_COLS: ColumnDef[] = [
   { key: 'comp_bar',        label: 'Comp Bar',        defaultVisible: true },
   { key: 'holdings_bar',    label: 'Holdings Bar',    defaultVisible: true },
   { key: 'weeks_in_state',  label: 'Weeks',           defaultVisible: true },
-  { key: 'drawdown',        label: 'Drawdown',        defaultVisible: true },
+  { key: 'drawdown',        label: '1Y Ret',          defaultVisible: true },
 ]
 
 const COL_STORAGE_KEY = 'atlas-column-prefs-funds'
@@ -67,7 +67,7 @@ function getSortValue(col: SortCol, f: FundRow, period: Period): number | string
     case 'rs_pctile':      return buildSortKey('rs_pctile',      { rs_pctile: f[PCTILE_KEY[period]] as string | null })
     case 'rs_category':    return buildSortKey('rs_category',    { rs_category: (f[RSCAT_KEY[period]] as string | null) ?? '' })
     case 'weeks_in_state': return buildSortKey('weeks_in_state', { weeks_in_state: f.weeks_in_current_state })
-    case 'drawdown':       return buildSortKey('drawdown',       { drawdown: f.drawdown_ratio_252 })
+    case 'drawdown':       return buildSortKey('drawdown',       { drawdown: f.ret_12m })
   }
 }
 
@@ -158,11 +158,11 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
               {visibleCols.has('recommendation') && <Th label="Rec"            k="recommendation" />}
               {visibleCols.has('ret')            && <Th label={`Ret ${period}`} k="ret"        align="right" />}
               {visibleCols.has('rs_pctile')      && <Th label="RS Pctile"      k="rs_pctile"   align="right" />}
-              {visibleCols.has('rs_category')    && <Th label="RS Cat"         k="rs_category" />}
+              {visibleCols.has('rs_category')    && <Th label="RS Cat"         k="rs_category" align="right" />}
               {visibleCols.has('comp_bar')       && <PlainTh label="Comp Bar" />}
               {visibleCols.has('holdings_bar')   && <PlainTh label="Holdings Bar" />}
               {visibleCols.has('weeks_in_state') && <Th label="Weeks"          k="weeks_in_state" align="right" />}
-              {visibleCols.has('drawdown')       && <Th label="Drawdown"       k="drawdown"       align="right" />}
+              {visibleCols.has('drawdown')       && <Th label="1Y Ret"         k="drawdown"       align="right" />}
             </tr>
           </thead>
           <tbody>
@@ -224,7 +224,9 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
                       <td className="px-3 py-2.5 text-right"><RSPctileBar value={f[pctileKey] as string | null} /></td>
                     )}
                     {visibleCols.has('rs_category') && (
-                      <td className="px-3 py-2.5 font-sans text-xs text-ink-secondary">{(f[rsCatKey] as string | null) ?? '—'}</td>
+                      <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(f[rsCatKey] as string | null)}`}>
+                        {pct(f[rsCatKey] as string | null)}
+                      </td>
                     )}
                     {visibleCols.has('comp_bar') && (
                       <td className="px-3 py-2.5 w-24">
@@ -240,8 +242,8 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
                       <td className="px-3 py-2.5 text-right font-mono text-xs text-ink-secondary">{formatWeeksInState(f.weeks_in_current_state)}</td>
                     )}
                     {visibleCols.has('drawdown') && (
-                      <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(f.drawdown_ratio_252)}`}>
-                        {pct(f.drawdown_ratio_252)}
+                      <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(f.ret_12m)}`}>
+                        {pct(f.ret_12m)}
                       </td>
                     )}
                   </tr>

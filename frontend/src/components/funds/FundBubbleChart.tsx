@@ -16,7 +16,6 @@ import {
 import type { FundRow } from '@/lib/queries/funds'
 import type { Period } from '@/lib/url-params'
 import type { FilterChip } from '@/components/funds/FundPageClient'
-import { navStateChipValue } from '@/lib/fund-formatters'
 import { CHART_COLORS } from '@/lib/chart-colors'
 
 // allow-large: single cohesive component — axes, quadrants, tooltip, legend, filter chips all belong together (mirrors StockBubbleChart pattern)
@@ -39,12 +38,10 @@ const BUBBLE_FILTERS: { key: FilterChip; label: string }[] = [
 ]
 
 const LEGEND = [
-  { color: CHART_COLORS.rsLeader,    label: 'Leader NAV' },
-  { color: CHART_COLORS.rsStrong,    label: 'Strong NAV' },
-  { color: CHART_COLORS.rsEmerging,  label: 'Emerging NAV' },
-  { color: CHART_COLORS.rsAverage,   label: 'Average NAV' },
-  { color: CHART_COLORS.rsWeak,      label: 'Weak/Laggard NAV' },
-  { color: CHART_COLORS.inkTertiary, label: 'Suspended/N/A' },
+  { color: CHART_COLORS.rsLeader,    label: 'Recommended' },
+  { color: '#1D9E75',                label: 'Hold' },
+  { color: CHART_COLORS.rsWeak,      label: 'Reduce / Exit' },
+  { color: CHART_COLORS.inkTertiary, label: 'No Rating' },
 ]
 
 type BubblePoint = {
@@ -59,16 +56,13 @@ type BubblePoint = {
   recommendation: string | null
 }
 
-function navStateColor(navState: string | null): string {
-  const chip = navStateChipValue(navState)
-  switch (chip) {
-    case 'Leader':   return CHART_COLORS.rsLeader
-    case 'Strong':   return CHART_COLORS.rsStrong
-    case 'Emerging': return CHART_COLORS.rsEmerging
-    case 'Average':  return CHART_COLORS.rsAverage
-    case 'Weak':
-    case 'Laggard':  return CHART_COLORS.rsWeak
-    default:         return CHART_COLORS.inkTertiary
+function recColor(recommendation: string | null): string {
+  switch (recommendation) {
+    case 'Recommended': return CHART_COLORS.rsLeader
+    case 'Hold':        return '#1D9E75'
+    case 'Reduce':      return CHART_COLORS.rsWeak
+    case 'Exit':        return CHART_COLORS.rsWeak
+    default:            return CHART_COLORS.inkTertiary
   }
 }
 
@@ -186,7 +180,7 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange }:
         mstarId: f.mstar_id,
         schemeName: f.scheme_name,
         amc: f.amc,
-        color: navStateColor(f.nav_state),
+        color: recColor(f.recommendation),
         rsPctile: rsPctileRaw,
         recommendation: f.recommendation,
       }]
@@ -270,7 +264,7 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange }:
       {/* Description */}
       <div className="px-5 py-2 border-b border-paper-rule/40 bg-paper-rule/5">
         <p className="font-sans text-[11px] text-ink-secondary leading-relaxed">
-          X = annualized vol · Y = {period} return · Larger bubble = higher RS pctile.
+          X = annualized vol · Y = {period} return · Larger bubble = higher RS pctile · Color = recommendation.
           Click bubble for deep-dive.
         </p>
       </div>

@@ -1,4 +1,5 @@
 import type { FundDecisionRow } from '@/lib/queries/funds'
+import { formatWeeksInState } from '@/lib/fund-formatters'
 
 function formatDecisionDate(d: Date): string {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -48,7 +49,7 @@ export function FundDecisionHistory({ decisions }: { decisions: FundDecisionRow[
                 {row.reduce_trigger ? '●' : ''}
               </td>
               <td className="px-3 py-2 font-mono text-xs text-ink-secondary text-right">
-                {row.weeks_in_current_state ?? '—'}
+                {formatWeeksInState(row.weeks_in_current_state)}
               </td>
             </tr>
           ))}
