@@ -104,6 +104,7 @@ export function FundPageClient({
           period={period}
           activeFilter={activeFilter}
           onFilterChange={handleFilterChange}
+          onPeriodChange={handlePeriodChange}
         />
       </div>
 

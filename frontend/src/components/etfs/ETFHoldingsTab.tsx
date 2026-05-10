@@ -1,11 +1,15 @@
 import type { ETFHoldingRow } from '@/lib/queries/etfs'
 
 const RS_STYLE: Record<string, string> = {
-  Leader:   'bg-teal/20 text-teal',
-  Strong:   'bg-signal-pos/20 text-signal-pos',
-  Average:  'bg-paper-rule/40 text-ink-secondary',
-  Weak:     'bg-signal-neg/10 text-signal-neg',
-  Laggard:  'bg-signal-neg/20 text-signal-neg',
+  Leader:               'bg-signal-pos/20 text-signal-pos',
+  Strong:               'bg-signal-pos/10 text-signal-pos',
+  Consolidating:        'bg-teal/15 text-teal',
+  Emerging:             'bg-signal-warn/15 text-signal-warn',
+  Average:              'bg-paper-rule/40 text-ink-secondary',
+  Weak:                 'bg-signal-neg/10 text-signal-neg',
+  Laggard:              'bg-signal-neg/20 text-signal-neg',
+  ILLIQUID:             'bg-paper-rule/20 text-ink-tertiary',
+  INSUFFICIENT_HISTORY: 'bg-paper-rule/20 text-ink-tertiary',
 }
 
 const MOM_STYLE: Record<string, string> = {
@@ -64,8 +68,8 @@ export function ETFHoldingsTab({ holdings }: { holdings: ETFHoldingRow[] }) {
         <span>
           Top <span className="font-semibold text-ink-primary">{totalShown}</span> holdings
         </span>
-        <span className="text-signal-pos font-semibold">{strongCount} Leader/Strong</span>
-        <span className="text-signal-neg font-semibold">{weakCount} Weak/Laggard</span>
+        <span className={`font-semibold ${strongCount > 0 ? 'text-signal-pos' : 'text-ink-tertiary'}`}>{strongCount} Leader/Strong</span>
+        <span className={`font-semibold ${weakCount > 0 ? 'text-signal-neg' : 'text-ink-tertiary'}`}>{weakCount} Weak/Laggard</span>
         {holdingsDate && (
           <span className="ml-auto text-ink-tertiary text-[10px]">
             Holdings as of{' '}

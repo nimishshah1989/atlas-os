@@ -151,9 +151,10 @@ type Props = {
   period: Period
   activeFilter: FilterChip
   onFilterChange: (f: FilterChip) => void
+  onPeriodChange: (p: Period) => void
 }
 
-export function FundBubbleChart({ funds, period, activeFilter, onFilterChange }: Props) {
+export function FundBubbleChart({ funds, period, activeFilter, onFilterChange, onPeriodChange }: Props) {
   const router = useRouter()
 
   // Apply bubble-level filter (subset of FundPageClient's full filter logic)
@@ -250,11 +251,24 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange }:
 
   return (
     <div className="border border-paper-rule rounded-sm bg-paper">
-      {/* Header: title + filter chips */}
+      {/* Header: title + period selector + filter chips */}
       <div className="px-5 py-3 border-b border-paper-rule flex flex-wrap items-center gap-4">
         <span className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider">
           Fund Map
         </span>
+        {/* Period selector — controls Y-axis return + bubble size (RS pctile) */}
+        <div className="flex items-center gap-0.5 border border-paper-rule rounded-sm overflow-hidden">
+          {(['1M', '3M', '6M', '1Y'] as Period[]).map(p => (
+            <button key={p} type="button" onClick={() => onPeriodChange(p)}
+              className={`px-2.5 py-0.5 font-sans text-[11px] font-medium transition-colors ${
+                period === p
+                  ? 'bg-teal text-white'
+                  : 'text-ink-secondary hover:bg-paper-rule/30'
+              }`}>
+              {p}
+            </button>
+          ))}
+        </div>
         <div className="flex gap-1">
           {BUBBLE_FILTERS.map(f => (
             <button key={f.key} type="button" onClick={() => onFilterChange(f.key)}
