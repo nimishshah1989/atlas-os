@@ -1,3 +1,4 @@
+# allow-large: single-pipeline script combining BHAV ingestion, sector mapping, ticker upsert, and verification; splitting would break cohesion
 """ETF sector backfill — NSE BHAV copy ingestion.
 
 Seeds de_etf_master with 10 missing-sector canonical NSE tickers and
@@ -90,8 +91,8 @@ def build_bhav_url(trade_date: date, fallback: bool = False) -> str:
     Returns:
         Full URL string for the BHAV copy ZIP.
     """
-    mon = trade_date.strftime("%b").upper()   # JAN, FEB, ...
-    dd = trade_date.strftime("%d")            # zero-padded day
+    mon = trade_date.strftime("%b").upper()  # JAN, FEB, ...
+    dd = trade_date.strftime("%d")  # zero-padded day
     year = trade_date.strftime("%Y")
     template = BHAV_FALLBACK_URL_TEMPLATE if fallback else BHAV_URL_TEMPLATE
     return template.format(mon=mon, dd=dd, year=year)
@@ -272,7 +273,7 @@ def download_bhav_zip(
 
 TARGET_ETFS: list[dict[str, str]] = [
     {
-        "ticker": "NETFMID150",
+        "ticker": "MID150BEES",
         "name": "Nippon India ETF Nifty Midcap 150",
         "sector": "Midcap",
         "benchmark": "NIFTY MIDCAP 150",
@@ -308,7 +309,7 @@ TARGET_ETFS: list[dict[str, str]] = [
         "benchmark": "NIFTY FINANCIAL SERVICES",
     },
     {
-        "ticker": "NETFIT",
+        "ticker": "ITBEES",
         "name": "Nippon India ETF Nifty IT",
         "sector": "IT",
         "benchmark": "NIFTY IT",
@@ -326,12 +327,21 @@ TARGET_ETFS: list[dict[str, str]] = [
         "benchmark": "NIFTY REALTY",
     },
     {
-        "ticker": "NETFMETAL",
+        "ticker": "METALIETF",
         "name": "Nippon India ETF Nifty Metal",
         "sector": "Metals",
         "benchmark": "NIFTY METAL",
     },
 ]
+
+# NSE renamed several Nippon ETF symbols around June 2022.
+# Maps current canonical ticker → [old BHAV symbol(s)] so the backfill
+# can search old BHAV archives under the old name and store under the
+# canonical name, giving continuous price history.
+TICKER_BHAV_ALIASES: dict[str, list[str]] = {
+    "ITBEES": ["NETFIT"],  # Nippon India ETF Nifty IT, renamed ~Jun 2022
+    "MID150BEES": ["NETFMID150"],  # Nippon India ETF Nifty Midcap 150, renamed ~Jun 2022
+}
 
 
 def safe_int_volume(value: str) -> int:
@@ -526,15 +536,15 @@ def build_master_upsert_params(etf: dict[str, str]) -> dict:
         Dict matching de_etf_master columns for use with executemany.
     """
     return {
-        "ticker":    etf["ticker"],
-        "name":      etf["name"],
-        "exchange":  "NSE",
-        "country":   "IN",
-        "currency":  "INR",
-        "sector":    etf.get("sector"),
+        "ticker": etf["ticker"],
+        "name": etf["name"],
+        "exchange": "NSE",
+        "country": "IN",
+        "currency": "INR",
+        "sector": etf.get("sector"),
         "benchmark": etf.get("benchmark"),
         "is_active": True,
-        "source":    "nse_bhav",
+        "source": "nse_bhav",
     }
 
 
@@ -575,20 +585,14 @@ def seed_etf_master(
 
     with engine.begin() as conn:
         before = conn.execute(
-            text(
-                "SELECT COUNT(*) FROM public.de_etf_master "
-                "WHERE ticker = ANY(:tickers)"
-            ),
+            text("SELECT COUNT(*) FROM public.de_etf_master " "WHERE ticker = ANY(:tickers)"),
             {"tickers": tickers},
         ).scalar_one()
 
         conn.execute(upsert_sql, params_list)
 
         after = conn.execute(
-            text(
-                "SELECT COUNT(*) FROM public.de_etf_master "
-                "WHERE ticker = ANY(:tickers)"
-            ),
+            text("SELECT COUNT(*) FROM public.de_etf_master " "WHERE ticker = ANY(:tickers)"),
             {"tickers": tickers},
         ).scalar_one()
 
@@ -611,11 +615,11 @@ def build_ohlcv_insert_params(row: dict) -> dict:
     """
     return {
         "ticker": row["ticker"],
-        "date":   row["date"],
-        "open":   row["open"],
-        "high":   row["high"],
-        "low":    row["low"],
-        "close":  row["close"],
+        "date": row["date"],
+        "open": row["open"],
+        "high": row["high"],
+        "low": row["low"],
+        "close": row["close"],
         "volume": row["volume"],
     }
 
@@ -726,6 +730,17 @@ def run_backfill(
     all_dates = trading_dates(start, end)
     rows_by_ticker: dict[str, list[dict]] = {t: [] for t in tickers}
 
+    # Build reverse alias map: old_bhav_symbol → canonical ticker.
+    # The BHAV search set expands to include old symbols so parse_bhav_*
+    # picks them up; rows are then stored under the canonical ticker.
+    alias_to_canonical: dict[str, str] = {
+        alias: canonical
+        for canonical, aliases in TICKER_BHAV_ALIASES.items()
+        for alias in aliases
+        if canonical in target_set
+    }
+    search_set = target_set | set(alias_to_canonical)
+
     log.info(
         "backfill_start",
         tickers=tickers,
@@ -744,8 +759,8 @@ def run_backfill(
             return []
         content, fmt = result
         if fmt == "new":
-            return parse_bhav_csv(content, target_set)
-        return parse_bhav_zip(content, target_set)
+            return parse_bhav_csv(content, search_set)
+        return parse_bhav_zip(content, search_set)
 
     completed = 0
     with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -755,7 +770,11 @@ def run_backfill(
             try:
                 parsed = future.result()
                 for row in parsed:
-                    rows_by_ticker[row["ticker"]].append(row)
+                    # Remap old alias → canonical before bucketing.
+                    canonical = alias_to_canonical.get(row["ticker"], row["ticker"])
+                    if canonical in target_set:
+                        row["ticker"] = canonical
+                        rows_by_ticker[canonical].append(row)
             except Exception as exc:
                 log.warning(
                     "bhav_fetch_failed",
@@ -809,7 +828,7 @@ def main() -> None:
     args = parser.parse_args()
 
     start = date.fromisoformat(args.start)
-    end   = date.fromisoformat(args.end)
+    end = date.fromisoformat(args.end)
     engine = get_engine()
     tickers = [etf["ticker"] for etf in TARGET_ETFS]
 
