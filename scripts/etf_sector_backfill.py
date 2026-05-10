@@ -11,22 +11,14 @@ Usage:
 
 from __future__ import annotations
 
-import argparse  # noqa: F401 — used in Task 2 CLI entry point
 import csv
 import io
-import time  # noqa: F401 — used in Task 3 rate-limiting
 import zipfile
-from concurrent.futures import ThreadPoolExecutor, as_completed  # noqa: F401 — Task 4
-from datetime import date, datetime, timedelta  # noqa: F401 — timedelta used in Task 2
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-import requests  # noqa: F401 — used in Task 3 HTTP download
 import structlog
-from sqlalchemy import text  # noqa: F401 — used in Task 5 DB writes
-
-from atlas.config import Config  # noqa: F401 — used in Task 5
-from atlas.db import get_engine  # noqa: F401 — used in Task 5
 
 log = structlog.get_logger()
 
@@ -148,17 +140,23 @@ def parse_bhav_zip(zip_bytes: bytes, targets: set[str]) -> list[dict[str, Any]]:
         List of dicts with keys: ticker, date, open, high, low, close, volume.
         Returns an empty list on any archive / parsing error.
     """
+    rows: list[dict[str, Any]] = []
     try:
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-            csv_name = next(n for n in zf.namelist() if n.endswith(".csv"))
+            csv_name = next(
+                (n for n in zf.namelist() if n.endswith(".csv")),
+                None,
+            )
+            if csv_name is None:
+                return rows
             with zf.open(csv_name) as csv_file:
-                reader = csv.DictReader(io.TextIOWrapper(csv_file, encoding="utf-8"))
-                rows: list[dict[str, Any]] = []
+                reader = csv.DictReader(
+                    io.TextIOWrapper(csv_file, encoding="utf-8", errors="replace")
+                )
                 for row in reader:
                     symbol = row["SYMBOL"].strip().upper()
-                    if symbol not in targets:
-                        continue
-                    if row["SERIES"].strip() != "EQ":
+                    series = row.get("SERIES", "").strip().upper()
+                    if symbol not in targets or series != "EQ":
                         continue
                     trade_date = parse_bhav_date(row["TIMESTAMP"])
                     if trade_date is None:
@@ -178,5 +176,5 @@ def parse_bhav_zip(zip_bytes: bytes, targets: set[str]) -> list[dict[str, Any]]:
                         }
                     )
                 return rows
-    except (zipfile.BadZipFile, KeyError, StopIteration):
+    except (zipfile.BadZipFile, KeyError):
         return []
