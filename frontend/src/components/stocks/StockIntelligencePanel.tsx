@@ -66,26 +66,38 @@ export function StockIntelligencePanel({ stocks, regimeState = 'Cautious', deplo
   const commentary = buildStocksCommentary(aggregates)
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
+    <div className="border border-paper-rule rounded-sm bg-paper px-5 py-4">
+      <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-3">
+        Stock Intelligence
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* RS Distribution */}
         <div className="space-y-1.5">
-          <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-2">RS Distribution</div>
+          <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-2">
+            RS Distribution
+          </div>
           {RS_STATES.map(s => (
             <DistBar key={s} label={s} count={rsCounts[s] ?? 0} total={n} color={rsStateColor(s)} />
           ))}
         </div>
+
+        {/* Momentum Distribution */}
         <div className="space-y-1.5">
-          <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-2">Momentum</div>
+          <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-2">
+            Momentum
+          </div>
           {MOM_STATES.map(s => (
             <DistBar key={s} label={s} count={momCounts[s] ?? 0} total={n} color={MOM_COLORS[s] ?? CHART_COLORS.inkTertiary} />
           ))}
         </div>
-      </div>
-      <div className="border-t border-paper-rule pt-3">
-        <CommentaryBlock
-          narrative={commentary.narrative}
-          contextCards={commentary.contextCards}
-        />
+
+        {/* Commentary */}
+        <div className="border-t md:border-t-0 md:border-l border-paper-rule pt-3 md:pt-0 md:pl-6">
+          <CommentaryBlock
+            narrative={commentary.narrative}
+            contextCards={commentary.contextCards}
+          />
+        </div>
       </div>
     </div>
   )
