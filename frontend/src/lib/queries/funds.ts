@@ -1,0 +1,243 @@
+import 'server-only'
+import sql from '@/lib/db'
+
+export type FundRow = {
+  // Identity
+  mstar_id: string
+  scheme_name: string
+  amc: string
+  category_name: string
+  broad_category: string
+  // Metrics (all ::text casts → string | null)
+  ret_1m: string | null
+  ret_3m: string | null
+  ret_6m: string | null
+  ret_12m: string | null
+  rs_1m_category: string | null
+  rs_3m_category: string | null
+  rs_6m_category: string | null
+  rs_pctile_1m: string | null
+  rs_pctile_3m: string | null
+  rs_pctile_6m: string | null
+  realized_vol_63: string | null
+  drawdown_ratio_252: string | null
+  nav_date: Date | null
+  // States
+  nav_state: string | null
+  composition_state: string | null
+  holdings_state: string | null
+  // Decisions
+  recommendation: string | null
+  weeks_in_current_state: string | null
+  performance_gate: boolean | null
+  sectors_gate: boolean | null
+  stocks_gate: boolean | null
+  market_gate: boolean | null
+  entry_trigger: boolean | null
+  exit_trigger: boolean | null
+  reduce_trigger: boolean | null
+  // Lens (LEFT JOIN — all nullable)
+  aligned_aum_pct: string | null
+  avoid_aum_pct: string | null
+  neutral_aum_pct: string | null   // computed in SQL
+  strong_aum_pct: string | null
+  weak_aum_pct: string | null
+  unknown_aum_pct: string | null   // computed in SQL
+  lens_as_of_date: Date | null
+}
+
+export type FundMasterRow = {
+  mstar_id: string
+  scheme_name: string
+  amc: string
+  category_name: string
+  broad_category: string
+  inception_date: Date | null
+  nav_state: string | null
+  composition_state: string | null
+  holdings_state: string | null
+  recommendation: string | null
+  weeks_in_current_state: string | null
+  performance_gate: boolean | null
+  sectors_gate: boolean | null
+  stocks_gate: boolean | null
+  market_gate: boolean | null
+  entry_trigger: boolean | null
+  exit_trigger: boolean | null
+  reduce_trigger: boolean | null
+}
+
+export type FundMetricHistoryRow = {
+  nav_date: Date
+  ret_1m: string | null
+  ret_3m: string | null
+  ret_6m: string | null
+  ret_12m: string | null
+  rs_pctile_1m: string | null
+  rs_pctile_3m: string | null
+  rs_pctile_6m: string | null
+  rs_1m_category: string | null
+  rs_3m_category: string | null
+  rs_6m_category: string | null
+  realized_vol_63: string | null
+  drawdown_ratio_252: string | null
+}
+
+export type FundLensRow = {
+  aligned_aum_pct: string | null
+  avoid_aum_pct: string | null
+  neutral_aum_pct: string | null
+  strong_aum_pct: string | null
+  weak_aum_pct: string | null
+  unknown_aum_pct: string | null
+  sector_concentration: string | null
+  holdings_concentration: string | null
+  last_disclosed_date: Date | null
+  as_of_date: Date | null
+}
+
+export type FundDecisionRow = {
+  date: Date
+  recommendation: string | null
+  entry_trigger: boolean | null
+  exit_trigger: boolean | null
+  reduce_trigger: boolean | null
+  performance_gate: boolean | null
+  sectors_gate: boolean | null
+  stocks_gate: boolean | null
+  market_gate: boolean | null
+  weeks_in_current_state: string | null
+}
+
+// Assumes nightly compute runs atomically; all computed funds share the same latest nav_date
+export async function getAllFunds(): Promise<FundRow[]> {
+  return sql<FundRow[]>`
+    WITH latest AS (
+      SELECT
+        (SELECT MAX(nav_date) FROM atlas.atlas_fund_metrics_daily)   AS metrics_date,
+        (SELECT MAX(date)     FROM atlas.atlas_fund_states_daily)    AS states_date,
+        (SELECT MAX(date)     FROM atlas.atlas_fund_decisions_daily) AS decisions_date,
+        (SELECT MAX(as_of_date) FROM atlas.atlas_fund_lens_monthly)  AS lens_date
+    )
+    SELECT
+      uf.mstar_id, uf.scheme_name, uf.amc, uf.category_name, uf.broad_category,
+      fm.ret_1m::text AS ret_1m, fm.ret_3m::text AS ret_3m,
+      fm.ret_6m::text AS ret_6m, fm.ret_12m::text AS ret_12m,
+      fm.rs_1m_category::text AS rs_1m_category,
+      fm.rs_3m_category::text AS rs_3m_category,
+      fm.rs_6m_category::text AS rs_6m_category,
+      fm.rs_pctile_1m::text AS rs_pctile_1m,
+      fm.rs_pctile_3m::text AS rs_pctile_3m,
+      fm.rs_pctile_6m::text AS rs_pctile_6m,
+      fm.realized_vol_63::text AS realized_vol_63,
+      fm.drawdown_ratio_252::text AS drawdown_ratio_252,
+      fm.nav_date,
+      fs.nav_state, fs.composition_state, fs.holdings_state,
+      fd.recommendation,
+      fd.weeks_in_current_state::text AS weeks_in_current_state,
+      fd.performance_gate, fd.sectors_gate, fd.stocks_gate, fd.market_gate,
+      fd.entry_trigger, fd.exit_trigger, fd.reduce_trigger,
+      fl.aligned_aum_pct::text AS aligned_aum_pct,
+      fl.avoid_aum_pct::text AS avoid_aum_pct,
+      GREATEST(0, 100 - COALESCE(fl.aligned_aum_pct, 0) - COALESCE(fl.avoid_aum_pct, 0))::text AS neutral_aum_pct,
+      fl.strong_aum_pct::text AS strong_aum_pct,
+      fl.weak_aum_pct::text AS weak_aum_pct,
+      GREATEST(0, 100 - COALESCE(fl.strong_aum_pct, 0) - COALESCE(fl.weak_aum_pct, 0))::text AS unknown_aum_pct,
+      fl.as_of_date AS lens_as_of_date
+    FROM atlas.atlas_universe_funds uf
+    JOIN atlas.atlas_fund_metrics_daily fm
+      ON fm.mstar_id = uf.mstar_id AND fm.nav_date = (SELECT metrics_date FROM latest)
+    JOIN atlas.atlas_fund_states_daily fs
+      ON fs.mstar_id = uf.mstar_id AND fs.date = (SELECT states_date FROM latest)
+    JOIN atlas.atlas_fund_decisions_daily fd
+      ON fd.mstar_id = uf.mstar_id AND fd.date = (SELECT decisions_date FROM latest)
+    LEFT JOIN atlas.atlas_fund_lens_monthly fl
+      ON fl.mstar_id = uf.mstar_id AND fl.as_of_date = (SELECT lens_date FROM latest)
+    ORDER BY fm.rs_pctile_3m DESC NULLS LAST
+  `
+}
+
+export async function getFundMaster(mstar_id: string): Promise<FundMasterRow | null> {
+  const rows = await sql<FundMasterRow[]>`
+    SELECT
+      uf.mstar_id, uf.scheme_name, uf.amc, uf.category_name, uf.broad_category,
+      uf.inception_date,
+      fs.nav_state, fs.composition_state, fs.holdings_state,
+      fd.recommendation,
+      fd.weeks_in_current_state::text AS weeks_in_current_state,
+      fd.performance_gate, fd.sectors_gate, fd.stocks_gate, fd.market_gate,
+      fd.entry_trigger, fd.exit_trigger, fd.reduce_trigger
+    FROM atlas.atlas_universe_funds uf
+    JOIN atlas.atlas_fund_states_daily fs
+      ON fs.mstar_id = uf.mstar_id
+      AND fs.date = (SELECT MAX(date) FROM atlas.atlas_fund_states_daily)
+    JOIN atlas.atlas_fund_decisions_daily fd
+      ON fd.mstar_id = uf.mstar_id
+      AND fd.date = (SELECT MAX(date) FROM atlas.atlas_fund_decisions_daily)
+    WHERE uf.mstar_id = ${mstar_id}
+    LIMIT 1
+  `
+  return rows[0] ?? null
+}
+
+export async function getFundMetricHistory(
+  mstar_id: string,
+  days = 180,
+): Promise<FundMetricHistoryRow[]> {
+  if (!Number.isInteger(days) || days < 1 || days > 3650) {
+    throw new Error(`days must be an integer between 1 and 3650, got: ${days}`)
+  }
+  return sql<FundMetricHistoryRow[]>`
+    SELECT
+      nav_date,
+      ret_1m::text, ret_3m::text, ret_6m::text, ret_12m::text,
+      rs_pctile_1m::text AS rs_pctile_1m,
+      rs_pctile_3m::text AS rs_pctile_3m,
+      rs_pctile_6m::text AS rs_pctile_6m,
+      rs_1m_category::text AS rs_1m_category,
+      rs_3m_category::text AS rs_3m_category,
+      rs_6m_category::text AS rs_6m_category,
+      realized_vol_63::text AS realized_vol_63,
+      drawdown_ratio_252::text AS drawdown_ratio_252
+    FROM atlas.atlas_fund_metrics_daily
+    WHERE mstar_id = ${mstar_id}
+      AND nav_date >= CURRENT_DATE - (${days} || ' days')::interval
+    ORDER BY nav_date ASC
+  `
+}
+
+export async function getFundLens(mstar_id: string): Promise<FundLensRow | null> {
+  const rows = await sql<FundLensRow[]>`
+    SELECT
+      aligned_aum_pct::text AS aligned_aum_pct,
+      avoid_aum_pct::text AS avoid_aum_pct,
+      GREATEST(0, 100 - COALESCE(aligned_aum_pct, 0) - COALESCE(avoid_aum_pct, 0))::text AS neutral_aum_pct,
+      strong_aum_pct::text AS strong_aum_pct,
+      weak_aum_pct::text AS weak_aum_pct,
+      GREATEST(0, 100 - COALESCE(strong_aum_pct, 0) - COALESCE(weak_aum_pct, 0))::text AS unknown_aum_pct,
+      sector_concentration::text AS sector_concentration,
+      holdings_concentration::text AS holdings_concentration,
+      last_disclosed_date,
+      as_of_date
+    FROM atlas.atlas_fund_lens_monthly
+    WHERE mstar_id = ${mstar_id}
+    ORDER BY as_of_date DESC
+    LIMIT 1
+  `
+  return rows[0] ?? null
+}
+
+export async function getFundDecisionHistory(mstar_id: string): Promise<FundDecisionRow[]> {
+  return sql<FundDecisionRow[]>`
+    SELECT
+      date,
+      recommendation,
+      entry_trigger, exit_trigger, reduce_trigger,
+      performance_gate, sectors_gate, stocks_gate, market_gate,
+      weeks_in_current_state::text AS weeks_in_current_state
+    FROM atlas.atlas_fund_decisions_daily
+    WHERE mstar_id = ${mstar_id}
+    ORDER BY date DESC
+    LIMIT 52
+  `
+}
