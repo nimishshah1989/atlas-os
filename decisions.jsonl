@@ -10256,3 +10256,93 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{
+  "ts": "2026-05-10T06:36:30Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/sectors/SectorDecisionTable.tsx",
+  "lines_changed": 26,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T06:36:41Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/sectors/SectorDecisionTable.tsx",
+  "lines_changed": 58,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T06:36:55Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/sectors/SectorDecisionTable.tsx",
+  "lines_changed": 43,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T06:37:24Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/sectors/SectorDecisionTable.tsx",
+  "lines_changed": 14,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T06:37:30Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/028_add_etf_state_since_date.py",
+  "lines_changed": 69,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T06:38:49Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/stocks.ts",
+  "lines_changed": 14,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T06:38:56Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/sectors/SectorDecisionTable.tsx",
+  "lines_changed": 57,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T06:39:01Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/stocks.ts",
+  "lines_changed": 31,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T06:40:02Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/etfs.ts",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T06:40:12Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/etfs.ts",
+  "lines_changed": 27,
+  "session_id": "unknown",
+  "schema_version": 1
+}

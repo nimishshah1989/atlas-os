@@ -15,6 +15,10 @@ export type ETFRow = {
   rs_pctile_3m: string | null
   ema_10_ratio: string | null
   extension_pct: string | null
+  ret_1w: string | null
+  vol_63: string | null
+  drawdown: string | null
+  days_in_state: number | null
   // States (3-tuple)
   rs_state: string | null
   momentum_state: string | null
@@ -64,6 +68,10 @@ export async function getAllETFs(): Promise<ETFRow[]> {
       m.rs_pctile_3m::text    AS rs_pctile_3m,
       m.ema_10_ratio::text    AS ema_10_ratio,
       m.extension_pct::text   AS extension_pct,
+      m.ret_1w::text              AS ret_1w,
+      m.realized_vol_63::text     AS vol_63,
+      m.drawdown_ratio_252::text  AS drawdown,
+      (CURRENT_DATE - s.state_since_date)::int AS days_in_state,
       s.rs_state,
       s.momentum_state,
       s.risk_state,
