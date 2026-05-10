@@ -57,6 +57,10 @@ function formatPrice(v: number): string {
   return v.toLocaleString('en-IN', { maximumFractionDigits: 0 })
 }
 
+function formatYAxisPrice(v: number): string {
+  return `₹${(v / 1000).toFixed(0)}k`
+}
+
 function formatTooltipDate(dateStr: string): string {
   try {
     const d = new Date(dateStr)
@@ -140,11 +144,11 @@ export function RegimeOverlayChart({ history }: Props) {
             interval="preserveStartEnd"
           />
           <YAxis
-            tickFormatter={formatPrice}
+            tickFormatter={formatYAxisPrice}
             tick={{ fontSize: 9, fill: '#94a3b8' }}
             tickLine={false}
             axisLine={false}
-            width={50}
+            width={52}
             domain={['auto', 'auto']}
           />
           <Tooltip

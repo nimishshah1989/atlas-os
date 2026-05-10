@@ -90,18 +90,20 @@ export function SectorBubbleChart({
     const midX = xScale(0)
     const midY = yScale(0.5)
 
+    // Quadrant backgrounds use neutral slate tones — deliberately separate from bubble state colors
+    // so that sector state (bubble fill) doesn't visually fight with quadrant position.
     const quads = [
-      { x: midX, y: 0,    w: W - midX,  h: midY,     label: 'LEADERS',    color: '#22c55e' },
-      { x: 0,    y: 0,    w: midX,      h: midY,     label: 'RECOVERING', color: '#f59e0b' },
-      { x: midX, y: midY, w: W - midX,  h: H - midY, label: 'NARROWING',  color: '#f59e0b' },
-      { x: 0,    y: midY, w: midX,      h: H - midY, label: 'LAGGARDS',   color: '#ef4444' },
+      { x: midX, y: 0,    w: W - midX,  h: midY,     label: 'LEADERS',    bg: '#e2f0e8', text: '#2F6B43' },
+      { x: 0,    y: 0,    w: midX,      h: midY,     label: 'RECOVERING', bg: '#e8f0f5', text: '#25394A' },
+      { x: midX, y: midY, w: W - midX,  h: H - midY, label: 'NARROWING',  bg: '#f5f0e8', text: '#B8860B' },
+      { x: 0,    y: midY, w: midX,      h: H - midY, label: 'LAGGARDS',   bg: '#f5e8e8', text: '#B0492C' },
     ]
 
     quads.forEach(q => {
       svg.append('rect')
         .attr('x', q.x).attr('y', q.y)
         .attr('width', q.w).attr('height', q.h)
-        .attr('fill', q.color).attr('opacity', 0.04)
+        .attr('fill', q.bg).attr('opacity', 0.45)
 
       svg.append('text')
         .attr('x', q.x + q.w / 2)
@@ -110,7 +112,7 @@ export function SectorBubbleChart({
         .attr('font-family', 'var(--font-sans)')
         .attr('font-size', 8).attr('font-weight', 700)
         .attr('letter-spacing', 1.5)
-        .attr('fill', q.color).attr('opacity', 0.5)
+        .attr('fill', q.text).attr('opacity', 0.55)
         .text(q.label)
     })
 

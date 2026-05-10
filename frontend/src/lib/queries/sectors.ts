@@ -205,6 +205,9 @@ export type BreadthWaterfallRow = {
   sector: string
   leader_pct: number
   strong_pct: number
+  neutral_pct: number
+  weak_pct: number
+  laggard_pct: number
   sector_state: string
 }
 
@@ -220,9 +223,15 @@ export async function getBreadthWaterfallData(
       sst.date::text AS date,
       sst.sector,
       COUNT(*) FILTER (WHERE sst.rs_state = 'Leader')::float
-        / NULLIF(COUNT(*), 0)                                     AS leader_pct,
+        / NULLIF(COUNT(*), 0)                                                               AS leader_pct,
       COUNT(*) FILTER (WHERE sst.rs_state = 'Strong')::float
-        / NULLIF(COUNT(*), 0)                                     AS strong_pct,
+        / NULLIF(COUNT(*), 0)                                                               AS strong_pct,
+      COUNT(*) FILTER (WHERE sst.rs_state IN ('Emerging', 'Consolidating', 'Average'))::float
+        / NULLIF(COUNT(*), 0)                                                               AS neutral_pct,
+      COUNT(*) FILTER (WHERE sst.rs_state = 'Weak')::float
+        / NULLIF(COUNT(*), 0)                                                               AS weak_pct,
+      COUNT(*) FILTER (WHERE sst.rs_state = 'Laggard')::float
+        / NULLIF(COUNT(*), 0)                                                               AS laggard_pct,
       sec.sector_state
     FROM atlas.atlas_stock_states_daily sst
     JOIN atlas.atlas_sector_states_daily sec

@@ -5,6 +5,7 @@ import { getCurrentRegime } from '@/lib/queries/regime'
 import { StockScreener } from '@/components/stocks/StockScreener'
 import { StockBreadthPanel } from '@/components/stocks/StockBreadthPanel'
 import { StockIntelligencePanel } from '@/components/stocks/StockIntelligencePanel'
+import { StockBubbleChart } from '@/components/sectors/StockBubbleChart'
 
 export default async function StocksPage() {
   const [stocks, regime] = await Promise.all([
@@ -55,6 +56,17 @@ export default async function StocksPage() {
       {/* Main content */}
       <div className="px-6 py-6 flex flex-col gap-6">
         <StockBreadthPanel stocks={stocks} above30wMaCount={above30wMaCount} />
+
+        {/* Bubble chart: 3M return vs RS percentile, sized by position */}
+        <div className="border border-paper-rule rounded-sm p-4">
+          <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-1">
+            Positioning Map — 3M Return vs RS Percentile
+          </div>
+          <p className="font-sans text-[11px] text-ink-tertiary mb-3">
+            Each bubble is a stock. X = 3-month return, Y = RS percentile vs peers. Color = RS + momentum state. Click any bubble to deep-dive.
+          </p>
+          <StockBubbleChart stocks={stocks} />
+        </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6">
           <StockScreener stocks={stocks} />
