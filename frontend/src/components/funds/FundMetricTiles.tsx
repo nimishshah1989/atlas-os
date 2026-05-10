@@ -1,3 +1,4 @@
+import React from 'react'
 import type { FundRow } from '@/lib/queries/funds'
 import type { Period } from '@/lib/url-params'
 import type { TileCounts, FilterChip } from '@/components/funds/FundPageClient'
@@ -31,6 +32,13 @@ function Tile({ label, value, sub, tone = 'neutral', filter, activeFilter, onTil
       onClick={clickable ? () => onTileClick(filter) : undefined}
       role={clickable ? 'button' : undefined}
       aria-pressed={clickable ? isActive : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={clickable ? (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onTileClick(filter)
+        }
+      } : undefined}
     >
       <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider whitespace-nowrap">{label}</div>
       <div className={`font-mono text-sm font-semibold tabular-nums ${valueColor}`}>{value}</div>
