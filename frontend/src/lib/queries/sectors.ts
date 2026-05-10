@@ -227,7 +227,7 @@ export async function getBreadthWaterfallData(
         ''::text                                                                            AS sector,
         COUNT(*) FILTER (WHERE rs_state = 'Leader')::float / NULLIF(COUNT(*), 0)           AS leader_pct,
         COUNT(*) FILTER (WHERE rs_state = 'Strong')::float / NULLIF(COUNT(*), 0)           AS strong_pct,
-        COUNT(*) FILTER (WHERE rs_state IN ('Emerging','Consolidating','Average'))::float
+        COUNT(*) FILTER (WHERE rs_state IN ('Emerging','Consolidating','Average','ILLIQUID','INSUFFICIENT_HISTORY'))::float
           / NULLIF(COUNT(*), 0)                                                             AS neutral_pct,
         COUNT(*) FILTER (WHERE rs_state = 'Weak')::float / NULLIF(COUNT(*), 0)             AS weak_pct,
         COUNT(*) FILTER (WHERE rs_state = 'Laggard')::float / NULLIF(COUNT(*), 0)          AS laggard_pct,
@@ -247,7 +247,7 @@ export async function getBreadthWaterfallData(
         / NULLIF(COUNT(*), 0)                                                               AS leader_pct,
       COUNT(*) FILTER (WHERE sst.rs_state = 'Strong')::float
         / NULLIF(COUNT(*), 0)                                                               AS strong_pct,
-      COUNT(*) FILTER (WHERE sst.rs_state IN ('Emerging', 'Consolidating', 'Average'))::float
+      COUNT(*) FILTER (WHERE sst.rs_state IN ('Emerging', 'Consolidating', 'Average', 'ILLIQUID', 'INSUFFICIENT_HISTORY'))::float
         / NULLIF(COUNT(*), 0)                                                               AS neutral_pct,
       COUNT(*) FILTER (WHERE sst.rs_state = 'Weak')::float
         / NULLIF(COUNT(*), 0)                                                               AS weak_pct,

@@ -82,29 +82,19 @@ export function SectorDrawerStateStats({
         })}
       </div>
 
-      {/* Inline legend — each row: dot · label · mini-bar · pct */}
-      <div className="space-y-1.5">
+      {/* Compact legend — dot · label · pct · days */}
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
         {STATES.map(s => {
           const c = counts[s]
           if (c === 0) return null
           const pct = (c / total) * 100
           return (
-            <div key={s} className="flex items-center gap-2 font-sans text-[11px]">
-              <span
-                className="inline-block w-2 h-2 rounded-full flex-shrink-0"
-                style={{ background: STATE_COLOR[s] }}
-              />
-              <span className="text-ink-secondary w-20 flex-shrink-0">{s}</span>
-              <div className="flex-1 h-1.5 bg-paper-rule rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full"
-                  style={{ width: `${pct}%`, background: STATE_COLOR[s] }}
-                />
-              </div>
-              <span className="font-mono tabular-nums text-ink-tertiary w-8 text-right flex-shrink-0">
-                {pct.toFixed(0)}%
-              </span>
-            </div>
+            <span key={s} className="flex items-center gap-1.5 font-sans text-[11px]">
+              <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ background: STATE_COLOR[s] }} />
+              <span className="text-ink-secondary">{s}</span>
+              <span className="font-mono text-ink-tertiary">{pct.toFixed(0)}%</span>
+              <span className="text-ink-tertiary/60">({c}d)</span>
+            </span>
           )
         })}
       </div>
@@ -124,22 +114,30 @@ export function SectorDrawerStateStats({
       <div>
         <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider mb-1.5">Timeline</div>
         <div className="flex w-full h-5 overflow-hidden rounded-sm border border-paper-rule">
-          {history.map((row, i) => (
-            <div
-              key={i}
-              className="flex-1 min-w-[1px] cursor-crosshair"
-              style={{ background: STATE_COLOR[row.sector_state] ?? '#94a3b8' }}
-              onMouseEnter={e => {
-                const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
-                setTip({
-                  text: `${formatDate(row.date)} · ${row.sector_state}`,
-                  x: r.left + r.width / 2,
-                  y: r.top - 6,
-                })
-              }}
-              onMouseLeave={() => setTip(null)}
-            />
-          ))}
+          {history.map((row, i) => {
+            // compute run length ending at this index
+            let runLen = 1
+            for (let j = i - 1; j >= 0; j--) {
+              if (history[j].sector_state === row.sector_state) runLen++
+              else break
+            }
+            return (
+              <div
+                key={i}
+                className="flex-1 min-w-[1px] cursor-crosshair"
+                style={{ background: STATE_COLOR[row.sector_state] ?? '#94a3b8' }}
+                onMouseEnter={e => {
+                  const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                  setTip({
+                    text: `${formatDate(row.date)} · ${row.sector_state} · ${runLen}d in state`,
+                    x: r.left + r.width / 2,
+                    y: r.top - 6,
+                  })
+                }}
+                onMouseLeave={() => setTip(null)}
+              />
+            )
+          })}
         </div>
         <div className="flex justify-between mt-1 font-sans text-[10px] text-ink-tertiary">
           <span>{dateOf(history[0].date)}</span>

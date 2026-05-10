@@ -218,6 +218,53 @@ export function RRGChart({
       })
     }
 
+    // ---- Tooltip (portal to body) ----
+    const tip = d3.select(document.body)
+      .append('div')
+      .style('position', 'fixed')
+      .style('pointer-events', 'none')
+      .style('opacity', '0')
+      .style('background', '#fff')
+      .style('border', '1px solid #e2e8f0')
+      .style('border-radius', '2px')
+      .style('padding', '10px 12px')
+      .style('font-family', 'var(--font-sans)')
+      .style('font-size', '11px')
+      .style('color', '#1e293b')
+      .style('z-index', '9999')
+      .style('box-shadow', '0 2px 8px rgba(0,0,0,0.10)')
+      .style('min-width', '180px')
+      .style('max-width', '220px')
+
+    function quadrantLabel(x: number, y: number): string {
+      if (x >= 0 && y >= 0) return 'Leading ↗'
+      if (x >= 0 && y <  0) return 'Weakening ↘'
+      if (x <  0 && y >= 0) return 'Improving ↖'
+      return 'Lagging ↙'
+    }
+
+    function trailSummary(sectorName: string, currentX: number, currentY: number): string {
+      const trail = historyBySector.get(sectorName)
+      if (!trail || trail.length < 2) return 'Insufficient trail data'
+      const oldest = trail[Math.max(0, trail.length - 5)]
+      const dx = currentX - (oldest.x - meanX)
+      const dy = currentY - (oldest.y - meanY)
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      const speed = dist < 0.01 ? 'stationary' : dist < 0.03 ? 'slow' : dist < 0.06 ? 'moderate' : 'fast'
+      // Cross product z-component to detect clockwise vs counter-clockwise
+      // Using two consecutive vectors from trail
+      const mid = trail[Math.floor(trail.length / 2)]
+      const v1x = mid.x - meanX - (oldest.x - meanX)
+      const v1y = mid.y - meanY - (oldest.y - meanY)
+      const v2x = dx
+      const v2y = dy
+      const cross = v1x * v2y - v1y * v2x
+      const rotation = cross > 0 ? 'clockwise' : 'counter-clockwise'
+      const dirText = dx > 0.01 ? 'gaining RS' : dx < -0.01 ? 'losing RS' : 'RS stable'
+      const momText = dy > 0.005 ? 'momentum rising' : dy < -0.005 ? 'momentum fading' : 'flat momentum'
+      return `${dirText}, ${momText} · ${speed} ${rotation}`
+    }
+
     // ---- Main dots ----
     const plottable = chartData.filter(
       (s): s is ChartDatum & { x: number; y: number } => s.x != null && s.y != null,
@@ -239,6 +286,35 @@ export function RRGChart({
           event.preventDefault()
           selectRef.current(s.sector_name)
         }
+      })
+      .on('mouseenter', (event: MouseEvent, s) => {
+        const color = MOM_COLOR[s.bottomup_momentum_state ?? ''] ?? FALLBACK_COLOR
+        const qLabel = quadrantLabel(s.x, s.y)
+        const summary = trailSummary(s.sector_name, s.x, s.y)
+        const rsStr = `${s.x >= 0 ? '+' : ''}${(s.x * 100).toFixed(1)}%`
+        const momStr = s.yRaw != null ? `${s.yRaw >= 0 ? '+' : ''}${(s.yRaw).toFixed(3)}` : '—'
+        tip
+          .style('opacity', '1')
+          .style('left', `${(event.clientX as number) + 14}px`)
+          .style('top',  `${(event.clientY as number) - 30}px`)
+          .html(`
+            <div style="font-weight:700;font-size:12px;margin-bottom:6px">${s.sector_name}</div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+              <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0"></span>
+              <span style="font-weight:600;color:#1e293b">${qLabel}</span>
+            </div>
+            <div style="color:#64748b;margin-bottom:2px;line-height:1.5">${summary}</div>
+            <div style="border-top:1px solid #e2e8f0;margin:6px 0 4px"></div>
+            <div style="color:#64748b">RS 3M: <span style="color:#1e293b;font-weight:600">${rsStr} vs Nifty500</span></div>
+            <div style="color:#64748b">Momentum: <span style="color:#1e293b">${momStr}</span> · <span style="color:${color}">${s.bottomup_momentum_state ?? '—'}</span></div>
+            <div style="margin-top:4px;color:#94a3b8;font-size:10px">Click to open sector deep dive</div>
+          `)
+      })
+      .on('mousemove', (event: MouseEvent) => {
+        tip.style('left', `${(event.clientX as number) + 14}px`).style('top', `${(event.clientY as number) - 30}px`)
+      })
+      .on('mouseleave', () => {
+        tip.style('opacity', '0')
       })
 
     dots
@@ -343,6 +419,7 @@ export function RRGChart({
             : s.sector_name,
         )
     })
+    return () => { tip.remove() }
   }, [current, history, height])
 
   if (current.length === 0) {

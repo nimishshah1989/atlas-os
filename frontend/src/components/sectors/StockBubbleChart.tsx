@@ -4,19 +4,20 @@ import { useEffect, useRef } from 'react'
 import * as d3 from 'd3'
 import type { StockRow } from '@/lib/queries/sector-deep-dive'
 
-const STATE_COLOR: Record<string, string> = {
-  Overweight_RS:  '#22c55e',
-  Underweight_RS: '#ef4444',
-}
-
 function colorFor(row: StockRow): string {
-  const rs = row.rs_state ?? ''
+  const rs  = row.rs_state ?? ''
   const mom = row.momentum_state ?? ''
-  if (rs === 'Underweight_RS') return '#ef4444'
-  if (rs === 'Overweight_RS' && mom === 'Improving') return '#22c55e'
-  if (rs === 'Overweight_RS' && mom === 'Deteriorating') return '#f59e0b'
-  if (rs === 'Overweight_RS') return '#1D9E75'
-  return '#94a3b8'
+  if (rs === 'Leader') {
+    if (mom === 'Accelerating' || mom === 'Improving') return '#22c55e'
+    if (mom === 'Deteriorating' || mom === 'Collapsing') return '#f59e0b'
+    return '#16a34a'
+  }
+  if (rs === 'Strong')        return '#22c55e'
+  if (rs === 'Emerging')      return '#0d9488'
+  if (rs === 'Consolidating') return '#1D9E75'
+  if (rs === 'Weak')          return '#f59e0b'
+  if (rs === 'Laggard')       return '#ef4444'
+  return '#94a3b8' // Average, ILLIQUID, INSUFFICIENT_HISTORY
 }
 
 export function StockBubbleChart({
@@ -221,21 +222,25 @@ export function StockBubbleChart({
       <div className="flex items-center gap-4 mt-2 font-sans text-[11px] text-ink-tertiary flex-wrap">
         <span className="flex items-center gap-1.5">
           <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#22c55e' }} />
-          Overweight + Improving
+          Leader / Strong
         </span>
         <span className="flex items-center gap-1.5">
           <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#1D9E75' }} />
-          Overweight + Stable
+          Emerging / Consolidating
         </span>
         <span className="flex items-center gap-1.5">
           <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#f59e0b' }} />
-          Overweight + Deteriorating
+          Weak
         </span>
         <span className="flex items-center gap-1.5">
           <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#ef4444' }} />
-          Underweight
+          Laggard
         </span>
-        <span className="ml-auto text-ink-tertiary/70">X = 3M return · Y = RS percentile vs peers · Size = position size</span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#94a3b8' }} />
+          Average
+        </span>
+        <span className="ml-auto text-ink-tertiary/70">X = 3M return · Y = RS percentile · Size = position size</span>
       </div>
     </div>
   )

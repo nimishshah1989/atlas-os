@@ -176,18 +176,16 @@ function RSStateBadge({ value }: { value: string | null }) {
   )
 }
 
-function EMABreadthCell({ r10, r20 }: { r10: string | null; r20: string | null }) {
-  function miniBar(val: string | null, label: string) {
+function EMAPosCell({ r10, r20 }: { r10: string | null; r20: string | null }) {
+  function emaRow(val: string | null, label: string) {
     if (val == null) return null
-    const n = parseFloat(val)
-    const pctStr = `${(n * 100).toFixed(0)}%`
-    const color = n >= 0.7 ? '#22c55e' : n >= 0.5 ? '#f59e0b' : '#ef4444'
+    const ratio = parseFloat(val)
+    const pct = (ratio - 1) * 100
+    const pctStr = `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`
+    const color = pct >= 2 ? '#22c55e' : pct >= 0 ? '#16a34a' : pct >= -2 ? '#f59e0b' : '#ef4444'
     return (
       <div className="flex items-center gap-1.5">
         <span className="font-sans text-[9px] text-ink-tertiary w-5 flex-shrink-0">{label}</span>
-        <div className="w-10 h-1 bg-paper-rule rounded-full overflow-hidden">
-          <div className="h-full rounded-full" style={{ width: `${n * 100}%`, background: color }} />
-        </div>
         <span className="font-mono text-[10px] tabular-nums" style={{ color }}>{pctStr}</span>
       </div>
     )
@@ -197,8 +195,8 @@ function EMABreadthCell({ r10, r20 }: { r10: string | null; r20: string | null }
   }
   return (
     <div className="space-y-0.5">
-      {miniBar(r10, '10d')}
-      {miniBar(r20, '20d')}
+      {emaRow(r10, '10d')}
+      {emaRow(r20, '20d')}
     </div>
   )
 }
@@ -381,7 +379,6 @@ export function SectorDecisionTable({
                 <ColTip text="Overweight = majority of stocks in this sector are outperforming + breadth is expanding. Neutral = mixed signals. Underweight = broad underperformance. Avoid = severe weakness — capital preservation mode." />
               </span>
             </th>
-            <Th label="1W Ret"  k="bottomup_ret_1w" />
             <Th label="1M Ret"  k="bottomup_ret_1m" />
             <Th label="3M Ret"  k="bottomup_ret_3m" />
             <Th label="6M Ret"  k="bottomup_ret_6m" />
@@ -405,12 +402,12 @@ export function SectorDecisionTable({
               tip="RS sub-classification of the sector. Leader = highest relative strength vs Nifty 500; Laggard = lowest. More granular than Overweight/Underweight — Leader/Strong = buy-side quality; Weak/Laggard = avoid." />
             <th className="px-3 py-2 text-left font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary whitespace-nowrap">
               <span className="flex items-center gap-0.5">
-                EMA Breadth
-                <ColTip text="% of sector stocks above their 10-day and 20-day EMAs. Short-term internal health. If the 10d bar collapses before the 20d — momentum is fading. Green ≥ 70%, amber 50–70%, red < 50%." />
+                EMA Pos
+                <ColTip text="Average sector-stock price vs its 10-day / 20-day EMA, expressed as % above or below. +4.5% = stocks are on average 4.5% above their 10-day EMA. Negative = below EMA (sector fading). 10d reacts faster than 20d — if 10d turns negative before 20d, it's an early warning." />
               </span>
             </th>
             <Th label="TD RS" k="topdown_rs_3m_nifty500"
-              tip="Top-down 3M RS — from the NSE sector index (e.g. Nifty Bank). ✓ = agrees with constituent aggregate. ≠ = diverges (index distorted by a few large caps). Both positive with ✓ = highest conviction entry." />
+              tip="Top-down RS: (NSE sector index 3M return) − (Nifty500 3M return). +5% = sector index beat Nifty500 by 5pp. Computed from the NSE benchmark index (e.g. Nifty Bank for Banking), NOT from constituents. ✓ = top-down and bottom-up RS agree in direction → high conviction. ≠ = they diverge → index is being distorted by 1–2 large-cap names, bottom-up aggregate is the better read." />
             <th className="px-3 py-2 text-center font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary"
                 title="Top-down / bottom-up divergence flag">
               &#9888;
@@ -469,9 +466,6 @@ export function SectorDecisionTable({
                   <span className="font-sans text-xs text-ink-secondary">{row.sector_state}</span>
                 </span>
               </td>
-              <td className={`px-3 py-2.5 font-mono text-xs tabular-nums ${pctColor(row.bottomup_ret_1w)}`}>
-                {pct(row.bottomup_ret_1w)}
-              </td>
               <td className={`px-3 py-2.5 font-mono text-xs tabular-nums ${pctColor(row.bottomup_ret_1m)}`}>
                 {pct(row.bottomup_ret_1m)}
               </td>
@@ -511,7 +505,7 @@ export function SectorDecisionTable({
                 <RSStateBadge value={row.bottomup_rs_state} />
               </td>
               <td className="px-3 py-2.5">
-                <EMABreadthCell r10={row.bottomup_ema_10_ratio} r20={row.bottomup_ema_20_ratio} />
+                <EMAPosCell r10={row.bottomup_ema_10_ratio} r20={row.bottomup_ema_20_ratio} />
               </td>
               <td className="px-3 py-2.5">
                 <TopDownCell tdRs={row.topdown_rs_3m_nifty500} buRs={row.bottomup_rs_3m_nifty500} />
