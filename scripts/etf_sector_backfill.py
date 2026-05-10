@@ -11,10 +11,12 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import csv
 import io
 import time
 import zipfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -419,3 +421,274 @@ def seed_etf_master(
         inserted=after - before,
         updated=before,
     )
+
+
+def build_ohlcv_insert_params(row: dict) -> dict:
+    """Map a parsed BHAV row to de_etf_ohlcv insert params.
+
+    Args:
+        row: Dict from parse_bhav_zip with keys: ticker, date, open, high, low, close, volume.
+
+    Returns:
+        Dict ready for executemany insert into de_etf_ohlcv.
+    """
+    return {
+        "ticker": row["ticker"],
+        "date":   row["date"],
+        "open":   row["open"],
+        "high":   row["high"],
+        "low":    row["low"],
+        "close":  row["close"],
+        "volume": row["volume"],
+    }
+
+
+def get_tickers_needing_backfill(
+    engine: Engine,
+    tickers: list[str],
+    min_days: int = 30,
+    lookback_days: int = 90,
+) -> list[str]:
+    """Return tickers that have fewer than min_days of OHLCV in the last lookback_days.
+
+    Args:
+        engine: SQLAlchemy engine.
+        tickers: Candidate tickers to check.
+        min_days: Minimum required trading days in lookback window.
+        lookback_days: How many calendar days back to look.
+
+    Returns:
+        Subset of tickers that need backfill.
+    """
+    sql = text(f"""
+        SELECT m.ticker
+        FROM public.de_etf_master m
+        LEFT JOIN (
+            SELECT ticker, COUNT(*) AS day_count
+            FROM public.de_etf_ohlcv
+            WHERE date >= CURRENT_DATE - INTERVAL '{lookback_days} days'
+            GROUP BY ticker
+        ) o ON m.ticker = o.ticker
+        WHERE m.ticker = ANY(:tickers)
+          AND COALESCE(o.day_count, 0) < :min_days
+    """)
+    with engine.connect() as conn:
+        rows = conn.execute(sql, {"tickers": tickers, "min_days": min_days}).fetchall()
+    return [r[0] for r in rows]
+
+
+def bulk_insert_ohlcv(
+    engine: Engine,
+    rows: list[dict],
+    dry_run: bool = False,
+) -> int:
+    """Insert OHLCV rows into public.de_etf_ohlcv using ON CONFLICT DO UPDATE.
+
+    Args:
+        engine: SQLAlchemy engine.
+        rows: List of dicts from parse_bhav_zip.
+        dry_run: If True, log count but make no DB changes.
+
+    Returns:
+        Number of rows inserted/updated.
+    """
+    if not rows:
+        return 0
+
+    insert_sql = text("""
+        INSERT INTO public.de_etf_ohlcv
+            (ticker, date, open, high, low, close, volume)
+        VALUES
+            (:ticker, :date, :open, :high, :low, :close, :volume)
+        ON CONFLICT (ticker, date) DO UPDATE SET
+            open   = EXCLUDED.open,
+            high   = EXCLUDED.high,
+            low    = EXCLUDED.low,
+            close  = EXCLUDED.close,
+            volume = EXCLUDED.volume
+    """)
+    params = [build_ohlcv_insert_params(r) for r in rows]
+
+    if dry_run:
+        log.info("dry_run_bulk_insert", row_count=len(params))
+        return len(params)
+
+    with engine.begin() as conn:
+        conn.execute(insert_sql, params)
+
+    return len(params)
+
+
+def run_backfill(
+    engine: Engine,
+    tickers: list[str],
+    start: date,
+    end: date,
+    workers: int = 8,
+    dry_run: bool = False,
+) -> dict[str, int]:
+    """Download BHAV copies in parallel and insert OHLCV for target tickers.
+
+    Args:
+        engine: SQLAlchemy engine.
+        tickers: Canonical NSE ticker symbols to backfill.
+        start: First date to download (inclusive).
+        end: Last date to download (inclusive).
+        workers: Parallel download threads.
+        dry_run: If True, count rows but do not write.
+
+    Returns:
+        Dict of ticker -> row count inserted. Zero means no data found in BHAV.
+    """
+    target_set = set(tickers)
+    all_dates = trading_dates(start, end)
+    rows_by_ticker: dict[str, list[dict]] = {t: [] for t in tickers}
+
+    log.info(
+        "backfill_start",
+        tickers=tickers,
+        date_count=len(all_dates),
+        start=start.isoformat(),
+        end=end.isoformat(),
+        workers=workers,
+    )
+
+    session = make_nse_session()
+
+    def fetch_one(trade_date: date) -> list[dict]:
+        zip_bytes = download_bhav_zip(session, trade_date)
+        if zip_bytes is None:
+            return []
+        return parse_bhav_zip(zip_bytes, target_set)
+
+    completed = 0
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(fetch_one, d): d for d in all_dates}
+        for future in as_completed(futures):
+            trade_date = futures[future]
+            try:
+                parsed = future.result()
+                for row in parsed:
+                    rows_by_ticker[row["ticker"]].append(row)
+            except Exception as exc:
+                log.warning(
+                    "bhav_fetch_failed",
+                    date=trade_date.isoformat(),
+                    error=str(exc),
+                )
+            completed += 1
+            if completed % 100 == 0:
+                log.info("backfill_progress", completed=completed, total=len(all_dates))
+
+    results: dict[str, int] = {}
+    for ticker, rows in rows_by_ticker.items():
+        if not rows:
+            log.warning(
+                "ticker_no_data",
+                ticker=ticker,
+                reason="UNRESOLVED — ticker not found in any BHAV file",
+            )
+            results[ticker] = 0
+            continue
+        n = bulk_insert_ohlcv(engine, rows, dry_run=dry_run)
+        log.info("ticker_inserted", ticker=ticker, rows=n)
+        results[ticker] = n
+
+    return results
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="ETF sector BHAV backfill")
+    parser.add_argument(
+        "--start",
+        default=Config.HISTORICAL_START_DATE,
+        help="Start date YYYY-MM-DD (default: HISTORICAL_START_DATE)",
+    )
+    parser.add_argument(
+        "--end",
+        default=date.today().isoformat(),
+        help="End date YYYY-MM-DD (default: today)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate without writing to DB",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=8,
+        help="Parallel download threads (default: 8)",
+    )
+    args = parser.parse_args()
+
+    start = date.fromisoformat(args.start)
+    end   = date.fromisoformat(args.end)
+    engine = get_engine()
+    tickers = [etf["ticker"] for etf in TARGET_ETFS]
+
+    # Phase 1: Seed de_etf_master
+    log.info("phase1_seed_master")
+    seed_etf_master(engine, TARGET_ETFS, dry_run=args.dry_run)
+
+    # Phase 2: Verify tickers against most-recent BHAV
+    log.info("phase2_verify_tickers")
+    session = make_nse_session()
+    recent_bhav_bytes: bytes | None = None
+    for days_back in range(1, 8):
+        check_date = date.today() - timedelta(days=days_back)
+        if check_date.weekday() >= 5:
+            continue
+        recent_bhav_bytes = download_bhav_zip(session, check_date)
+        if recent_bhav_bytes:
+            break
+
+    if recent_bhav_bytes:
+        found, missing = verify_tickers(recent_bhav_bytes, set(tickers))
+        if missing:
+            log.warning(
+                "tickers_not_in_bhav",
+                missing=sorted(missing),
+                action="These tickers returned no rows — verify NSE symbol spelling",
+            )
+        log.info("ticker_verification", found=sorted(found), missing=sorted(missing))
+    else:
+        log.warning("could_not_fetch_recent_bhav")
+
+    # Phase 3: Gap check
+    log.info("phase3_gap_check")
+    needs_backfill = get_tickers_needing_backfill(engine, tickers)
+    if not needs_backfill:
+        log.info("all_tickers_sufficient", tickers=tickers)
+        return
+
+    log.info("tickers_needing_backfill", count=len(needs_backfill), tickers=needs_backfill)
+
+    # Phase 4: Download and insert
+    log.info("phase4_backfill", start=start.isoformat(), end=end.isoformat())
+    results = run_backfill(
+        engine,
+        needs_backfill,
+        start=start,
+        end=end,
+        workers=args.workers,
+        dry_run=args.dry_run,
+    )
+
+    # Phase 5: Summary
+    total = sum(results.values())
+    unresolved = [t for t, n in results.items() if n == 0]
+    log.info(
+        "backfill_complete",
+        total_rows_inserted=total,
+        unresolved_tickers=unresolved,
+        per_ticker=results,
+    )
+    if unresolved:
+        print(f"\nWARNING: {len(unresolved)} tickers returned 0 rows from BHAV:")
+        for t in unresolved:
+            print(f"  {t} — verify at nseindia.com/market-data/all-etf")
+
+
+if __name__ == "__main__":
+    main()

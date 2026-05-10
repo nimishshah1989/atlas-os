@@ -9,6 +9,7 @@ sys.path.insert(0, ".")
 from scripts.etf_sector_backfill import (
     build_bhav_url,
     build_master_upsert_params,
+    build_ohlcv_insert_params,
     download_bhav_zip,
     parse_bhav_date,
     parse_bhav_zip,
@@ -255,3 +256,46 @@ class TestBuildMasterUpsertParams:
         params = build_master_upsert_params(etf)
         assert params["sector"] is None
         assert params["benchmark"] is None
+
+
+class TestBuildOhlcvInsertParams:
+    def test_maps_all_fields(self):
+        from decimal import Decimal
+        from datetime import date as date_type
+        row = {
+            "ticker": "PHARMABEES",
+            "date":   date_type(2023, 1, 3),
+            "open":   Decimal("101.00"),
+            "high":   Decimal("103.00"),
+            "low":    Decimal("100.00"),
+            "close":  Decimal("102.50"),
+            "volume": 50000,
+        }
+        params = build_ohlcv_insert_params(row)
+        assert params["ticker"] == "PHARMABEES"
+        assert params["date"]   == date_type(2023, 1, 3)
+        assert params["close"]  == Decimal("102.50")
+        assert params["volume"] == 50000
+
+    def test_preserves_decimal_type(self):
+        from decimal import Decimal
+        row = {
+            "ticker": "X", "date": date(2023, 1, 3),
+            "open": Decimal("1.00"), "high": Decimal("2.00"),
+            "low": Decimal("0.50"), "close": Decimal("1.50"),
+            "volume": 100,
+        }
+        params = build_ohlcv_insert_params(row)
+        assert isinstance(params["close"], Decimal)
+        assert isinstance(params["open"],  Decimal)
+
+    def test_none_prices_preserved(self):
+        # open/high/low can be None for some ETFs
+        row = {
+            "ticker": "X", "date": date(2023, 1, 3),
+            "open": None, "high": None, "low": None,
+            "close": Decimal("1.50"), "volume": 0,
+        }
+        params = build_ohlcv_insert_params(row)
+        assert params["open"] is None
+        assert params["high"] is None
