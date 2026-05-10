@@ -782,7 +782,9 @@ def main() -> None:
         start_date = date.fromisoformat(start_str)
         end_date = date.fromisoformat(end_str)
 
-        print(f"\nAtlas Strategy Backtest Seed  [{backtest_type.upper()}]  (RS state-transition signals)")
+        print(
+            f"\nAtlas Strategy Backtest Seed  [{backtest_type.upper()}]  (RS state-transition signals)"
+        )
         print(f"  Date range : {start_date} → {end_date}")
         print(f"  Started    : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print()
