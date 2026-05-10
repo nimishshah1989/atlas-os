@@ -20,7 +20,7 @@ jobs:
       - name: Sync source to EC2
         uses: burnett01/rsync-deployments@7.0.1
         with:
-          switches: -az --delete --exclude='.git' --exclude='node_modules' --exclude='.next' --exclude='standalone'
+          switches: -az --delete --exclude='.git' --exclude='node_modules' --exclude='.next' --exclude='standalone' --exclude='.env*'
           path: frontend/
           remote_path: /home/ubuntu/atlas-frontend/
           remote_host: ${{ secrets.EC2_HOST }}
