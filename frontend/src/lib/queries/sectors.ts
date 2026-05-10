@@ -218,6 +218,26 @@ export async function getBreadthWaterfallData(
   if (!Number.isInteger(days) || days < 1 || days > 3650) {
     throw new Error(`days must be an integer between 1 and 3650, got: ${days}`)
   }
+  if (sectorName === null) {
+    // Market-wide: one row per date aggregating ALL stocks across all sectors
+    return sql<BreadthWaterfallRow[]>`
+      SELECT
+        date::text                                                                          AS date,
+        ''::text                                                                            AS sector,
+        COUNT(*) FILTER (WHERE rs_state = 'Leader')::float / NULLIF(COUNT(*), 0)           AS leader_pct,
+        COUNT(*) FILTER (WHERE rs_state = 'Strong')::float / NULLIF(COUNT(*), 0)           AS strong_pct,
+        COUNT(*) FILTER (WHERE rs_state IN ('Emerging','Consolidating','Average'))::float
+          / NULLIF(COUNT(*), 0)                                                             AS neutral_pct,
+        COUNT(*) FILTER (WHERE rs_state = 'Weak')::float / NULLIF(COUNT(*), 0)             AS weak_pct,
+        COUNT(*) FILTER (WHERE rs_state = 'Laggard')::float / NULLIF(COUNT(*), 0)          AS laggard_pct,
+        ''::text                                                                            AS sector_state
+      FROM atlas.atlas_stock_states_daily
+      WHERE date >= CURRENT_DATE - (${days} || ' days')::interval
+      GROUP BY date
+      ORDER BY date ASC
+    `
+  }
+  // Per-sector: join to sector states table to include sector_state coloring
   return sql<BreadthWaterfallRow[]>`
     SELECT
       sst.date::text AS date,
@@ -237,7 +257,7 @@ export async function getBreadthWaterfallData(
     JOIN atlas.atlas_sector_states_daily sec
       ON sst.sector = sec.sector_name AND sst.date = sec.date
     WHERE sst.date >= CURRENT_DATE - (${days} || ' days')::interval
-      AND (${sectorName}::text IS NULL OR sst.sector = ${sectorName}::text)
+      AND sst.sector = ${sectorName}
     GROUP BY sst.date, sst.sector, sec.sector_state
     ORDER BY sst.date ASC
   `

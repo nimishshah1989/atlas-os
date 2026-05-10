@@ -63,8 +63,16 @@ function SectionDivider({ title, subtitle }: { title: string; subtitle?: string 
   )
 }
 
-function BubbleHowToRead() {
-  const [open, setOpen] = useState(false)
+function Collapsible({
+  label,
+  defaultOpen = false,
+  children,
+}: {
+  label: string
+  defaultOpen?: boolean
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
   return (
     <div className="mb-4">
       <button
@@ -73,44 +81,12 @@ function BubbleHowToRead() {
         aria-expanded={open}
       >
         <Info className="w-3 h-3" />
-        How to read this matrix
+        {label}
         {open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
       </button>
       {open && (
         <div className="mt-2 px-3.5 py-3 bg-paper-rule/10 border border-paper-rule rounded-sm grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1.5 font-sans text-[11px] text-ink-secondary leading-relaxed">
-          <div><span className="font-semibold text-ink-primary">X-axis (horizontal):</span> 3-month relative strength vs Nifty 500. Right of zero = outperforming the index; left = underperforming.</div>
-          <div><span className="font-semibold text-ink-primary">Y-axis (vertical):</span> Breadth — % of stocks in the sector above their 50-day EMA. Higher = broader internal participation.</div>
-          <div><span className="font-semibold text-ink-primary">Bubble size:</span> Number of stocks in the sector (larger = more constituents).</div>
-          <div><span className="font-semibold text-ink-primary">Bubble color:</span> Sector state — green (Overweight), amber (Neutral), red (Underweight/Avoid).</div>
-          <div className="sm:col-span-2"><span className="font-semibold text-ink-primary">Quadrant logic:</span> Top-right (Leaders) = strong RS + broad participation — the ideal position. Top-left (Recovering) = breadth solid but RS lagging — watch for rotation. Bottom-right (Narrowing) = RS positive but few stocks participating — fragile leadership. Bottom-left (Laggards) = avoid, capital preservation only. Click any bubble for the full sector deep-dive.</div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function RRGHowToRead() {
-  const [open, setOpen] = useState(false)
-  return (
-    <div className="mb-4">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="inline-flex items-center gap-1.5 font-sans text-[11px] text-ink-tertiary hover:text-ink-primary transition-colors"
-        aria-expanded={open}
-      >
-        <Info className="w-3 h-3" />
-        How to read the RRG
-        {open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-      </button>
-      {open && (
-        <div className="mt-2 px-3.5 py-3 bg-paper-rule/10 border border-paper-rule rounded-sm grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1.5 font-sans text-[11px] text-ink-secondary leading-relaxed">
-          <div><span className="font-semibold text-ink-primary">X-axis — RS Strength:</span> How far to the right a sector sits = how much it has outperformed the Nifty 500 over 3 months. Zero is the average — right is better, left is worse. Mean-centered so the cross is always at (0,0).</div>
-          <div><span className="font-semibold text-ink-primary">Y-axis — RS Momentum:</span> The change in 3-month RS over the last 20 trading days. Above zero = sector is gaining ground vs the index. Below zero = losing ground, even if RS is still positive.</div>
-          <div><span className="font-semibold text-ink-primary">Leading (top-right):</span> Strong RS + improving momentum. Best sectors to own. Stay positioned here.</div>
-          <div><span className="font-semibold text-ink-primary">Weakening (bottom-right):</span> RS still positive but momentum fading. Start rotating out before it crosses zero.</div>
-          <div><span className="font-semibold text-ink-primary">Lagging (bottom-left):</span> Underperforming and losing further ground. Avoid or exit. Recovery takes time.</div>
-          <div><span className="font-semibold text-ink-primary">Improving (top-left):</span> RS negative but momentum turning. Early rotation signal — watch closely for a cross into Leading.</div>
-          <div className="sm:col-span-2"><span className="font-semibold text-ink-primary">Typical rotation:</span> Sectors move clockwise — Leading → Weakening → Lagging → Improving → Leading. Trailing dots show the last 5 trading days; the solid bubble is today. Fast-moving trails signal accelerating sector rotation.</div>
+          {children}
         </div>
       )}
     </div>
@@ -164,6 +140,43 @@ const HEATMAP_RANGES = [
   { label: '12M', days: 365 },
 ] as const
 
+const BREADTH_RANGES = [
+  { label: '3M',  days: 90 },
+  { label: '6M',  days: 180 },
+  { label: '1Y',  days: 365 },
+  { label: '2Y',  days: 730 },
+  { label: '3Y',  days: 1095 },
+] as const
+
+function RangeToggle<T extends number>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T
+  options: readonly { label: string; days: number }[]
+  onChange: (days: T) => void
+}) {
+  return (
+    <div className="flex items-center gap-0.5 bg-paper-rule/20 rounded-sm p-0.5">
+      {options.map(({ label, days }) => (
+        <button
+          key={label}
+          onClick={() => onChange(days as T)}
+          className={
+            'px-2.5 py-0.5 font-sans text-[10px] rounded-[2px] transition-colors ' +
+            (value === days
+              ? 'bg-paper text-ink-primary font-medium shadow-sm'
+              : 'text-ink-tertiary hover:text-ink-secondary')
+          }
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function SectorViews({
   actionable,
   excluded,
@@ -177,6 +190,7 @@ export function SectorViews({
   const router = useRouter()
   const [showAll, setShowAll] = useState(false)
   const [heatmapRange, setHeatmapRange] = useState<90 | 180 | 270 | 365>(180)
+  const [breadthRange, setBreadthRange] = useState<90 | 180 | 365 | 730 | 1095>(365)
 
   const visible = showAll ? allSectors : actionable
 
@@ -191,7 +205,7 @@ export function SectorViews({
   }))
 
   // Filter heatmap history to selected range
-  const cutoff = useMemo(() => {
+  const heatmapCutoff = useMemo(() => {
     const d = new Date()
     d.setDate(d.getDate() - heatmapRange)
     return d.toISOString().slice(0, 10)
@@ -202,9 +216,21 @@ export function SectorViews({
       const d = row.date instanceof Date
         ? row.date.toISOString().slice(0, 10)
         : String(row.date).slice(0, 10)
-      return d >= cutoff
+      return d >= heatmapCutoff
     }),
-    [stateHistory, cutoff],
+    [stateHistory, heatmapCutoff],
+  )
+
+  // Filter breadth data to selected range
+  const breadthCutoff = useMemo(() => {
+    const d = new Date()
+    d.setDate(d.getDate() - breadthRange)
+    return d.toISOString().slice(0, 10)
+  }, [breadthRange])
+
+  const filteredBreadthData = useMemo(
+    () => breadthData.filter(row => String(row.date).slice(0, 10) >= breadthCutoff),
+    [breadthData, breadthCutoff],
   )
 
   return (
@@ -220,7 +246,13 @@ export function SectorViews({
           title="Positioning Matrix — RS vs Breadth"
           subtitle="Current snapshot · click any bubble for the sector deep dive"
         />
-        <BubbleHowToRead />
+        <Collapsible label="How to read this matrix" defaultOpen>
+          <div><span className="font-semibold text-ink-primary">X-axis (horizontal):</span> 3-month relative strength vs Nifty 500. Right of zero = outperforming the index; left = underperforming.</div>
+          <div><span className="font-semibold text-ink-primary">Y-axis (vertical):</span> Breadth — % of stocks in the sector above their 50-day EMA. Higher = broader internal participation.</div>
+          <div><span className="font-semibold text-ink-primary">Bubble size:</span> Number of stocks in the sector (larger = more constituents).</div>
+          <div><span className="font-semibold text-ink-primary">Bubble color:</span> Sector state — green (Overweight), amber (Neutral), red (Underweight/Avoid).</div>
+          <div className="sm:col-span-2"><span className="font-semibold text-ink-primary">Quadrant logic:</span> Top-right (Leaders) = strong RS + broad participation — the ideal position. Top-left (Recovering) = breadth solid but RS lagging — watch for rotation. Bottom-right (Narrowing) = RS positive but few stocks participating — fragile leadership. Bottom-left (Laggards) = avoid, capital preservation only. Click any bubble for the full sector deep-dive.</div>
+        </Collapsible>
         <SectorBubbleChart data={visible} range={range} onSelect={onSelect} />
         <ExcludedNote
           excluded={excluded}
@@ -235,7 +267,18 @@ export function SectorViews({
           title="Relative Rotation Graph"
           subtitle="RS Strength vs RS Momentum — trailing dots show last 5 days"
         />
-        <RRGHowToRead />
+        <p className="font-sans text-[11px] text-ink-secondary mb-3 max-w-3xl leading-relaxed">
+          The RRG plots where each sector sits relative to the Nifty 500 on two axes: how much it has outperformed (X) and whether that outperformance is accelerating or fading (Y). Sectors rotate clockwise through four quadrants — <span className="font-medium text-signal-pos">Leading</span> → <span className="font-medium text-signal-warn">Weakening</span> → <span className="font-medium text-ink-tertiary">Lagging</span> → <span className="font-medium text-teal">Improving</span> → Leading. Trailing dots show the last 5 trading days; fast-moving trails signal active sector rotation. Use this to get ahead of transitions before they show up in price.
+        </p>
+        <Collapsible label="Detailed axis and quadrant guide" defaultOpen>
+          <div><span className="font-semibold text-ink-primary">X-axis — RS Strength:</span> How far to the right a sector sits = how much it has outperformed the Nifty 500 over 3 months. Zero is the average — right is better, left is worse. Mean-centered so the cross is always at (0,0).</div>
+          <div><span className="font-semibold text-ink-primary">Y-axis — RS Momentum:</span> The change in 3-month RS over the last 20 trading days. Above zero = sector is gaining ground vs the index. Below zero = losing ground, even if RS is still positive.</div>
+          <div><span className="font-semibold text-ink-primary">Leading (top-right):</span> Strong RS + improving momentum. Best sectors to own. Stay positioned here.</div>
+          <div><span className="font-semibold text-ink-primary">Weakening (bottom-right):</span> RS still positive but momentum fading. Start rotating out before it crosses zero.</div>
+          <div><span className="font-semibold text-ink-primary">Lagging (bottom-left):</span> Underperforming and losing further ground. Avoid or exit. Recovery takes time.</div>
+          <div><span className="font-semibold text-ink-primary">Improving (top-left):</span> RS negative but momentum turning. Early rotation signal — watch closely for a cross into Leading.</div>
+          <div className="sm:col-span-2"><span className="font-semibold text-ink-primary">How to act on it:</span> Own Leading sectors with broad RS breadth. Trim Weakening positions. Avoid Lagging. Watch Improving sectors — they are tomorrow&apos;s Leading if the regime supports risk. Fast clockwise rotation with large trailing dots = conviction. Slow or counter-clockwise = indecision.</div>
+        </Collapsible>
         <RRGChart current={visible} history={rrgHistory} onSelect={onSelect} />
       </div>
 
@@ -248,49 +291,54 @@ export function SectorViews({
         <SectorDecisionTable data={visibleWithDays} onSelect={onSelect} />
       </div>
 
-      {/* ── Section 4: State History ── */}
+      {/* ── Section 4: Breadth + State History ── */}
       <div className="px-6 py-6">
         {/* Breadth Waterfall */}
         <div className="mb-10">
-          <div className="flex items-baseline gap-3 mb-4">
+          <div className="flex items-center justify-between mb-1">
             <h2 className="font-sans text-xs font-semibold text-ink-tertiary uppercase tracking-wider flex items-center gap-1.5">
               Breadth by RS State
-              <span title="Share of stocks in each RS classification across all sectors, stacked over time. Green tones = Leader/Strong; gray = Neutral; red/orange = Weak/Laggard.">
+              <span title="Share of ALL stocks in the universe in each RS classification, stacked over time. Green tones = Leader/Strong; gray = Neutral; red/orange = Weak/Laggard. Regime health = how much green sits at the top.">
                 <Info className="w-3 h-3 opacity-60 cursor-help" />
               </span>
             </h2>
-            <span className="font-sans text-[11px] text-ink-tertiary">Stacked share of universe by RS classification</span>
+            <RangeToggle
+              value={breadthRange}
+              options={BREADTH_RANGES}
+              onChange={setBreadthRange}
+            />
           </div>
-          <BreadthWaterfall data={breadthData} />
+          <p className="font-sans text-[11px] text-ink-secondary mb-4 max-w-3xl leading-relaxed">
+            Each stacked bar shows the proportion of all universe stocks in each RS classification on that date.
+            A healthy market has a thick green band (Leader + Strong) at the top. Watch for the green band expanding after risk-off periods — that&apos;s the first sign of a broadening recovery.
+            Rising Laggard + Weak (red/orange) below the midline signals deteriorating breadth before price follows.
+          </p>
+          <BreadthWaterfall data={filteredBreadthData} />
         </div>
 
         {/* Sector State Heatmap */}
         <div>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-1">
             <h2 className="font-sans text-xs font-semibold text-ink-tertiary uppercase tracking-wider flex items-center gap-1.5">
               Sector State History
-              <span title="Daily sector classification over the selected range. Green = Overweight, Amber = Neutral, Red = Underweight/Avoid. Look for sectors that flipped recently.">
+              <span title="Daily sector classification over the selected range. Green = Overweight, Amber = Neutral, Red = Underweight/Avoid.">
                 <Info className="w-3 h-3 opacity-60 cursor-help" />
               </span>
             </h2>
-            {/* Time range toggle */}
-            <div className="flex items-center gap-0.5 bg-paper-rule/20 rounded-sm p-0.5">
-              {HEATMAP_RANGES.map(({ label, days }) => (
-                <button
-                  key={label}
-                  onClick={() => setHeatmapRange(days as 90 | 180 | 270 | 365)}
-                  className={
-                    'px-2.5 py-0.5 font-sans text-[10px] rounded-[2px] transition-colors ' +
-                    (heatmapRange === days
-                      ? 'bg-paper text-ink-primary font-medium shadow-sm'
-                      : 'text-ink-tertiary hover:text-ink-secondary')
-                  }
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <RangeToggle
+              value={heatmapRange}
+              options={HEATMAP_RANGES}
+              onChange={setHeatmapRange}
+            />
           </div>
+          <p className="font-sans text-[11px] text-ink-secondary mb-4 max-w-3xl leading-relaxed">
+            Each cell shows a sector&apos;s classification for that day.{' '}
+            <span className="text-signal-pos font-medium">Green = Overweight</span>,{' '}
+            <span className="text-signal-warn font-medium">Amber = Neutral</span>,{' '}
+            <span className="text-signal-neg font-medium">Red = Underweight/Avoid</span>.
+            Sustained runs signal conviction and momentum alignment. Fresh color flips — especially sector → Overweight — signal active rotations worth investigating in the bubble chart.
+            A sector that has stayed Overweight for 60+ days is a core position; one that flipped in the last 5 is a new entry candidate.
+          </p>
           <SectorHeatmap
             history={filteredHistory}
             sectors={visible.map(s => s.sector_name)}
