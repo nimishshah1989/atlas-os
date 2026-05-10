@@ -308,3 +308,24 @@ def parse_bhav_zip(zip_bytes: bytes, targets: set[str]) -> list[dict[str, Any]]:
     except (zipfile.BadZipFile, KeyError):
         pass
     return rows
+
+
+def verify_tickers(
+    zip_bytes: bytes,
+    targets: set[str],
+) -> tuple[set[str], set[str]]:
+    """Check which target tickers appear in a BHAV copy ZIP.
+
+    Used before full backfill to catch typos in NSE ticker symbols.
+
+    Args:
+        zip_bytes: Raw bytes of a BHAV copy ZIP (any trading day).
+        targets: Set of canonical NSE ticker symbols to verify.
+
+    Returns:
+        (found, missing) where found ∩ missing == ∅ and found ∪ missing == targets.
+    """
+    rows = parse_bhav_zip(zip_bytes, targets)
+    found = {r["ticker"] for r in rows}
+    missing = targets - found
+    return found, missing

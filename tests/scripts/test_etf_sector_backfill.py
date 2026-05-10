@@ -13,6 +13,7 @@ from scripts.etf_sector_backfill import (
     parse_bhav_zip,
     safe_decimal,
     trading_dates,
+    verify_tickers,
 )
 
 
@@ -174,3 +175,48 @@ class TestDownloadBhavZip:
 
         result = download_bhav_zip(mock_session, date(2023, 1, 3), retry=0)
         assert result is None
+
+
+class TestVerifyTickers:
+    def _make_zip_bytes(self, symbols: list[str]) -> bytes:
+        lines = [
+            "SYMBOL,SERIES,OPEN,HIGH,LOW,CLOSE,LAST,PREVCLOSE,"
+            "TOTTRDQTY,TOTTRDVAL,TIMESTAMP,TOTALTRADES,ISIN"
+        ]
+        for sym in symbols:
+            lines.append(
+                f"{sym},EQ,100.00,102.00,99.00,101.50,101.50,100.20,"
+                f"50000,5075000.00,09-MAY-2026,500,INE001"
+            )
+        csv_content = "\n".join(lines)
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("bhav.csv", csv_content)
+        return buf.getvalue()
+
+    def test_found_and_missing_split(self):
+        zip_bytes = self._make_zip_bytes(["PHARMABEES", "AUTOBEES"])
+        found, missing = verify_tickers(
+            zip_bytes, {"PHARMABEES", "AUTOBEES", "NETFMETAL"}
+        )
+        assert "PHARMABEES" in found
+        assert "AUTOBEES" in found
+        assert "NETFMETAL" in missing
+
+    def test_all_present(self):
+        zip_bytes = self._make_zip_bytes(["PHARMABEES", "AUTOBEES"])
+        found, missing = verify_tickers(zip_bytes, {"PHARMABEES", "AUTOBEES"})
+        assert missing == set()
+        assert found == {"PHARMABEES", "AUTOBEES"}
+
+    def test_all_missing(self):
+        zip_bytes = self._make_zip_bytes([])
+        found, missing = verify_tickers(zip_bytes, {"PHARMABEES"})
+        assert found == set()
+        assert "PHARMABEES" in missing
+
+    def test_returns_disjoint_sets(self):
+        zip_bytes = self._make_zip_bytes(["PHARMABEES"])
+        found, missing = verify_tickers(zip_bytes, {"PHARMABEES", "NETFMETAL"})
+        assert found & missing == set()  # disjoint
+        assert found | missing == {"PHARMABEES", "NETFMETAL"}  # complete
