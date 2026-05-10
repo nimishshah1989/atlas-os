@@ -27,7 +27,8 @@ function navStateColor(state: string): string {
   if (state === 'Strong NAV')   return CHART_COLORS.rsStrong
   if (state === 'Emerging NAV') return CHART_COLORS.rsEmerging
   if (state === 'Average NAV')  return CHART_COLORS.rsAverage
-  if (state === 'Weak NAV' || state === 'Laggard NAV') return CHART_COLORS.rsWeak
+  if (state === 'Weak NAV')    return CHART_COLORS.rsWeak
+  if (state === 'Laggard NAV') return CHART_COLORS.rsLaggard
   return CHART_COLORS.inkTertiary  // DISLOCATION_SUSPENDED
 }
 
