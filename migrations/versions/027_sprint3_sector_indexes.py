@@ -20,7 +20,7 @@ def upgrade() -> None:
     # New index with sector as leading column is ~10x faster for sector-specific queries.
     op.execute(
         sa.text("""
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_stock_states_sector_date
+        CREATE INDEX IF NOT EXISTS idx_stock_states_sector_date
         ON atlas.atlas_stock_states_daily (sector, date)
     """)
     )
@@ -35,7 +35,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute(sa.text("DROP INDEX CONCURRENTLY IF EXISTS atlas.idx_stock_states_sector_date"))
+    op.execute(sa.text("DROP INDEX IF EXISTS atlas.idx_stock_states_sector_date"))
     op.execute(
         sa.text(
             "ALTER TABLE atlas.atlas_sector_metrics_daily DROP COLUMN IF EXISTS bottomup_ret_1w"
