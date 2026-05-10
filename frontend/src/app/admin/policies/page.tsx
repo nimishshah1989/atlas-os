@@ -1,5 +1,6 @@
 // src/app/admin/policies/page.tsx
 // RSC — fetches all decision policies + all atlas_thresholds + recent runs, hands to client island.
+export const dynamic = 'force-dynamic'
 import { getAllDecisionPolicies } from '@/lib/queries/policies'
 import { getAllThresholds, getRecentRuns } from '@/lib/queries/thresholds'
 import { PoliciesView } from './PoliciesView'
