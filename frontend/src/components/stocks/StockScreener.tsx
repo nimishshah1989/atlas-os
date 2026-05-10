@@ -36,9 +36,11 @@ const CHIPS: { key: FilterChip; label: string }[] = [
 
 // Optional columns. 1W, 6M, 12M visible by default.
 const OPTIONAL_COLS: ColumnDef[] = [
+  { key: 'ret_1d',        label: '1D',        defaultVisible: false },
   { key: 'ret_1w',        label: '1W',        defaultVisible: true },
   { key: 'ret_6m',        label: '6M',        defaultVisible: true },
   { key: 'ret_12m',       label: '12M',       defaultVisible: true },
+  { key: 'rs_pctile_1w',  label: 'RS 1W',     defaultVisible: false },
   { key: 'extension_pct', label: 'Ext %',     defaultVisible: false },
   { key: 'vol_63',        label: 'Vol (63D)', defaultVisible: false },
   { key: 'drawdown',      label: 'Drawdown',  defaultVisible: false },
@@ -47,9 +49,7 @@ const OPTIONAL_COLS: ColumnDef[] = [
 
 const COL_STORAGE_KEY = 'atlas-stock-screener-cols'
 
-// Always-visible columns (used for totalCols calculation):
-//   Symbol, Cap, Sector, Gates, RS State, Mom, Risk, Vol, 1M, 3M, RS Pctile  = 11
-//   (Deploy % removed; Cap added in Task 2 kept)
+// Always-visible columns: Symbol, Cap, Sector, Gates, RS State, Mom, Risk, Vol, 1M, 3M, RS Pctile = 11
 const ALWAYS_VISIBLE_COL_COUNT = 11
 
 function stateRank(order: string[], val: string | null): number {
@@ -324,7 +324,7 @@ export function StockScreener({
               type="button"
               aria-pressed={chip === c.key}
               onClick={() => setChip(c.key)}
-              className={`px-2.5 py-1 rounded-sm font-sans text-xs font-medium transition-colors ${
+              className={`px-2.5 py-1 min-h-[44px] rounded-sm font-sans text-xs font-medium transition-colors ${
                 chip === c.key
                   ? 'bg-teal text-paper'
                   : 'bg-paper-rule/20 text-ink-secondary hover:bg-paper-rule/40'
@@ -365,11 +365,13 @@ export function StockScreener({
               <Th label="Mom" k="momentum_state" />
               <Th label="Risk" k="risk_state" />
               <Th label="Vol" k="volume_state" />
+              {visibleCols.has('ret_1d') && <PlainTh label="1D" align="right" />}
               {visibleCols.has('ret_1w') && <PlainTh label="1W" align="right" />}
               <Th label="1M" k="ret_1m" align="right" />
               <Th label="3M" k="ret_3m" align="right" />
               {visibleCols.has('ret_6m') && <Th label="6M" k="ret_6m" align="right" />}
               {visibleCols.has('ret_12m') && <PlainTh label="12M" align="right" />}
+              {visibleCols.has('rs_pctile_1w') && <PlainTh label="RS 1W" align="right" />}
               {visibleCols.has('extension_pct') && <PlainTh label="Ext %" align="right" />}
               {visibleCols.has('vol_63') && <PlainTh label="Vol 63D" align="right" />}
               {visibleCols.has('drawdown') && <PlainTh label="Drawdown" align="right" />}
@@ -392,9 +394,11 @@ export function StockScreener({
             ) : (
               pagedRows.map((row, i) => {
                 const isExpanded = expandedSymbol === row.symbol
+                const ret1d = optStr(row, 'ret_1d')
                 const ret1w = optStr(row, 'ret_1w')
                 const ret6m = optStr(row, 'ret_6m')
                 const ret12m = optStr(row, 'ret_12m')
+                const rsPctile1w = optStr(row, 'rs_pctile_1w')
                 const extPct = optStr(row, 'extension_pct')
                 const vol63 = optStr(row, 'vol_63')
                 const drawdown = optStr(row, 'drawdown')
@@ -441,6 +445,11 @@ export function StockScreener({
                       <td className="px-3 py-2.5">
                         <VolumeChip value={row.volume_state} />
                       </td>
+                      {visibleCols.has('ret_1d') && (
+                        <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(ret1d)}`}>
+                          {pct(ret1d)}
+                        </td>
+                      )}
                       {visibleCols.has('ret_1w') && (
                         <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(ret1w)}`}>
                           {pct(ret1w)}
@@ -460,6 +469,11 @@ export function StockScreener({
                       {visibleCols.has('ret_12m') && (
                         <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(ret12m)}`}>
                           {pct(ret12m)}
+                        </td>
+                      )}
+                      {visibleCols.has('rs_pctile_1w') && (
+                        <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums text-ink-secondary">
+                          {rsPctile1w != null ? `${Math.round(parseFloat(rsPctile1w) * 100)}%` : '—'}
                         </td>
                       )}
                       {visibleCols.has('extension_pct') && (

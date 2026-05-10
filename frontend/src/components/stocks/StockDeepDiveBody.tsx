@@ -8,6 +8,9 @@ import {
   interpretWeinsteinGate,
   interpretEMARatio,
   interpret3MReturn,
+  interpretDrawdown,
+  interpretExtension,
+  interpretVolumeRatio,
   pct,
   pctColor,
 } from '@/lib/stock-formatters'
@@ -50,17 +53,6 @@ function SectionLabel({ children }: { children: ReactNode }) {
   )
 }
 
-function ReturnRow({ label, value }: { label: string; value: string | null }) {
-  return (
-    <tr className="border-b border-paper-rule last:border-0">
-      <td className="py-2 pr-8 font-sans text-xs text-ink-secondary">{label}</td>
-      <td className={`py-2 text-right font-mono text-xs tabular-nums font-semibold ${pctColor(value)}`}>
-        {pct(value)}
-      </td>
-    </tr>
-  )
-}
-
 export function StockDeepDiveBody({
   stock,
   metricHistory,
@@ -84,10 +76,26 @@ export function StockDeepDiveBody({
     date: dateStr(r.date),
     value: r.ema_10_ratio != null ? parseFloat(r.ema_10_ratio) : null,
   }))
+  const drawdownData = metricHistory.map(r => ({
+    date: dateStr(r.date),
+    value: r.drawdown_ratio_252 != null ? parseFloat(r.drawdown_ratio_252) : null,
+  }))
+  const extensionData = metricHistory.map(r => ({
+    date: dateStr(r.date),
+    value: r.extension_pct != null ? parseFloat(r.extension_pct) : null,
+  }))
+  const volumeData = metricHistory.map(r => ({
+    date: dateStr(r.date),
+    value: r.avg_volume_20 != null ? parseFloat(r.avg_volume_20) / 1_000_000 : null,
+  }))
+
+  const latestVolumeM = latest?.avg_volume_20 != null
+    ? (parseFloat(latest.avg_volume_20) / 1_000_000).toFixed(2)
+    : '—'
 
   return (
     <div className="px-6 py-6 space-y-8">
-      {/* State journey compact strip — quick overview of last 6M */}
+      {/* State journey compact strip */}
       <div className="border border-paper-rule rounded-sm bg-paper px-4 py-3">
         <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-2">
           State Journey — 6M
@@ -105,7 +113,7 @@ export function StockDeepDiveBody({
         </Commentary>
       </div>
 
-      {/* State history heatmap — daily granularity */}
+      {/* State history heatmap */}
       <div>
         <SectionLabel>State History — Daily Heatmap (6M)</SectionLabel>
         <div className="mt-3">
@@ -193,6 +201,57 @@ export function StockDeepDiveBody({
             />
             <Commentary title={`EMA Ratio · ${latest?.ema_10_ratio != null ? parseFloat(latest.ema_10_ratio).toFixed(3) : '—'}`}>
               {interpretEMARatio(latest?.ema_10_ratio ?? null)}
+            </Commentary>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 items-start">
+            <IndicatorChart
+              title="Drawdown from 252D Peak"
+              description="How far the stock has fallen from its 252-day high. 0 = at peak. Negative = percentage below peak."
+              currentValue={latest?.drawdown_ratio_252 != null ? `${(parseFloat(latest.drawdown_ratio_252) * 100).toFixed(1)}%` : '—'}
+              isBullish={latest?.drawdown_ratio_252 != null ? parseFloat(latest.drawdown_ratio_252) > -0.1 : null}
+              data={drawdownData}
+              refLine={0}
+              refLabel="0 = at peak"
+              variant="area"
+              yFormat="pct"
+            />
+            <Commentary title={`Drawdown · ${latest?.drawdown_ratio_252 != null ? `${(parseFloat(latest.drawdown_ratio_252) * 100).toFixed(1)}%` : '—'}`}>
+              {interpretDrawdown(latest?.drawdown_ratio_252 ?? null)}
+            </Commentary>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 items-start">
+            <IndicatorChart
+              title="Extension vs 200D EMA"
+              description="How far the stock is above or below its 200-day EMA. Positive = above (uptrend). Negative = below (downtrend)."
+              currentValue={latest?.extension_pct != null ? `${(parseFloat(latest.extension_pct) * 100).toFixed(1)}%` : '—'}
+              isBullish={latest?.extension_pct != null ? parseFloat(latest.extension_pct) > 0 : null}
+              data={extensionData}
+              refLine={0}
+              refLabel="0 = at 200D EMA"
+              variant="area"
+              yFormat="pct"
+            />
+            <Commentary title={`Extension · ${latest?.extension_pct != null ? `${(parseFloat(latest.extension_pct) * 100).toFixed(1)}%` : '—'}`}>
+              {interpretExtension(latest?.extension_pct ?? null)}
+            </Commentary>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 items-start">
+            <IndicatorChart
+              title="Average Volume (20D) — Millions"
+              description="20-day average trading volume in millions of shares. Rising volume on up days = accumulation. Falling on up days = fading interest."
+              currentValue={`${latestVolumeM}M`}
+              isBullish={latest?.avg_volume_20 != null ? parseFloat(latest.avg_volume_20) >= 500000 : null}
+              data={volumeData}
+              refLine={0}
+              refLabel=""
+              variant="area"
+              yFormat="ratio"
+            />
+            <Commentary title={`Volume · ${latestVolumeM}M`}>
+              {interpretVolumeRatio(latest?.avg_volume_20 ?? null)}
             </Commentary>
           </div>
         </div>

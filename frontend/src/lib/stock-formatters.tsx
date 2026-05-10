@@ -339,6 +339,87 @@ export function interpretEMARatio(v: string | null): ReactNode {
   )
 }
 
+export function interpretDrawdown(v: string | null): ReactNode {
+  if (v == null) return <p>No drawdown data available.</p>
+  const n = parseFloat(v) * 100
+  if (n >= -5) return (
+    <>
+      <p>Drawdown <span className="text-signal-pos font-semibold">{n.toFixed(1)}%</span> — near 52-week peak.</p>
+      <p>Stock is trading close to its annual high. Minimal drawdown is a sign of sustained buying pressure.</p>
+    </>
+  )
+  if (n >= -15) return (
+    <>
+      <p>Drawdown <span className="text-signal-warn font-medium">{n.toFixed(1)}%</span> — moderate pullback from peak.</p>
+      <p>Normal correction range. Whether this is buyable depends on RS and momentum trend — is it a healthy consolidation or the start of deterioration?</p>
+    </>
+  )
+  if (n >= -30) return (
+    <>
+      <p>Drawdown <span className="text-signal-neg font-semibold">{n.toFixed(1)}%</span> — significant decline from peak.</p>
+      <p>Stock has lost significant ground. Only investable if RS and momentum are turning around, not during the fall.</p>
+    </>
+  )
+  return (
+    <>
+      <p>Drawdown <span className="text-signal-neg font-semibold">{n.toFixed(1)}%</span> — deep drawdown from 52-week peak.</p>
+      <p>Capital destruction territory. Avoid unless there is a clear structural recovery thesis with RS turning positive.</p>
+    </>
+  )
+}
+
+export function interpretExtension(v: string | null): ReactNode {
+  if (v == null) return <p>No extension data available.</p>
+  const n = parseFloat(v) * 100
+  if (n >= 20) return (
+    <>
+      <p>Extension <span className="text-signal-warn font-semibold">+{n.toFixed(1)}%</span> above 200D EMA — stretched.</p>
+      <p>Stock is extended from its long-term mean. Chasing at these levels adds risk — wait for a pullback toward the EMA before adding.</p>
+    </>
+  )
+  if (n >= 5) return (
+    <>
+      <p>Extension <span className="text-signal-pos font-medium">+{n.toFixed(1)}%</span> above 200D EMA — healthy uptrend.</p>
+      <p>Above the long-term trend with reasonable distance. This is the normal zone for a Weinstein Stage 2 stock.</p>
+    </>
+  )
+  if (n >= -5) return (
+    <>
+      <p>Extension <span className="text-ink-secondary font-medium">{n.toFixed(1)}%</span> — near 200D EMA.</p>
+      <p>At a critical decision zone. A bounce here with improving RS could be a re-entry; a break below could signal a stage change.</p>
+    </>
+  )
+  return (
+    <>
+      <p>Extension <span className="text-signal-neg font-semibold">{n.toFixed(1)}%</span> — below 200D EMA.</p>
+      <p>Stock is in Stage 3 or Stage 4. The Weinstein gate fails here — not investable for new positions.</p>
+    </>
+  )
+}
+
+export function interpretVolumeRatio(v: string | null): ReactNode {
+  if (v == null) return <p>No volume data available.</p>
+  const n = parseFloat(v)
+  if (n >= 2000000) return (
+    <>
+      <p>Average volume <span className="text-signal-pos font-semibold">{(n / 1000000).toFixed(1)}M shares</span> — high liquidity.</p>
+      <p>Institutional-grade liquidity. Sufficient for significant position sizing without meaningful market impact.</p>
+    </>
+  )
+  if (n >= 500000) return (
+    <>
+      <p>Average volume <span className="text-signal-pos font-medium">{(n / 1000).toFixed(0)}K shares</span> — adequate liquidity.</p>
+      <p>Sufficient for retail-to-mid-size positions. Monitor for volume spikes that confirm accumulation.</p>
+    </>
+  )
+  return (
+    <>
+      <p>Average volume <span className="text-signal-warn font-medium">{(n / 1000).toFixed(0)}K shares</span> — thin liquidity.</p>
+      <p>Low-volume stock. Price can move sharply on moderate orders. Apply a liquidity discount to position sizing.</p>
+    </>
+  )
+}
+
 export function interpret3MReturn(v: string | null): ReactNode {
   if (v == null) return <p>No return data available.</p>
   const n = parseFloat(v) * 100

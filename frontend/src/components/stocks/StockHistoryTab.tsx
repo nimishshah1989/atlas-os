@@ -76,9 +76,9 @@ export function StateHeatmap({ history }: { history: StateHistoryRow[] }) {
     })
   }, [dates])
 
-  const cellW = Math.max(3, Math.min(14, Math.floor(900 / Math.max(dates.length, 1))))
-  const cellH = 16
-  const labelW = 72
+  const cellW = Math.max(5, Math.min(14, Math.floor(900 / Math.max(dates.length, 1))))
+  const cellH = 18
+  const labelW = 78
 
   if (history.length === 0) {
     return (
@@ -91,7 +91,7 @@ export function StateHeatmap({ history }: { history: StateHistoryRow[] }) {
   return (
     <div className="relative overflow-x-auto">
       {/* Month labels */}
-      <div className="flex mb-1" style={{ paddingLeft: labelW }}>
+      <div className="flex mb-2" style={{ paddingLeft: labelW }}>
         {dates.map((d, i) => (
           <div
             key={d}
@@ -99,7 +99,7 @@ export function StateHeatmap({ history }: { history: StateHistoryRow[] }) {
           >
             {monthLabels[i] && (
               <span
-                className="absolute font-sans text-[9px] text-ink-tertiary whitespace-nowrap"
+                className="absolute font-sans text-[9px] font-medium text-ink-tertiary whitespace-nowrap"
                 style={{ left: 0, top: 0 }}
               >
                 {monthLabels[i]}
@@ -110,7 +110,7 @@ export function StateHeatmap({ history }: { history: StateHistoryRow[] }) {
       </div>
       {/* State rows */}
       {ROWS.map(row => (
-        <div key={row.key} className="flex items-center mb-0.5">
+        <div key={row.key} className="flex items-center mb-1">
           <div
             className="font-sans text-[10px] text-ink-secondary shrink-0 pr-2 text-right"
             style={{ width: labelW }}
@@ -128,9 +128,11 @@ export function StateHeatmap({ history }: { history: StateHistoryRow[] }) {
                   width: cellW,
                   height: cellH,
                   background: color,
-                  opacity: state ? 0.75 : 0.3,
+                  opacity: state ? 0.85 : 0.2,
                   flexShrink: 0,
                   cursor: state ? 'pointer' : 'default',
+                  borderRadius: 2,
+                  marginRight: 1,
                 }}
                 onMouseEnter={e => {
                   if (!state) return

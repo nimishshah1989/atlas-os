@@ -12,12 +12,13 @@ export type StockRowWithSector = StockRow & {
   days_in_state: number | null
   history_gate_pass: boolean | null
   liquidity_gate_pass: boolean | null
-  stage1_base_qualifies: boolean | null
   strength_gate: boolean | null
   direction_gate: boolean | null
   above_50d_ma: boolean | null
   above_200d_ma: boolean | null
   ret_12m: string | null
+  ret_1d: string | null
+  rs_pctile_1w: string | null
   realized_vol_63: string | null
   avg_volume_20: string | null
 }
@@ -27,9 +28,11 @@ export type FullStockRow = StockRowWithSector
 export type MetricHistoryRow = {
   date: Date
   rs_pctile_3m: string | null
-  rs_3m_nifty500: string | null
   ret_3m: string | null
   ema_10_ratio: string | null
+  drawdown_ratio_252: string | null
+  avg_volume_20: string | null
+  extension_pct: string | null
 }
 
 export type StateHistoryRow = {
@@ -56,9 +59,7 @@ export async function getAllStocks(): Promise<StockRowWithSector[]> {
       m.ret_1m::text                  AS ret_1m,
       m.ret_3m::text                  AS ret_3m,
       m.ret_6m::text                  AS ret_6m,
-      m.rs_3m_tier::text              AS rs_3m_nifty500,
       m.rs_pctile_3m::text            AS rs_pctile_3m,
-      m.rs_3m_tier_gold::text         AS rs_3m_tier_gold,
       m.above_30w_ma,
       m.ema_10_at_20d_high,
       m.weinstein_gate_pass,
@@ -68,6 +69,8 @@ export async function getAllStocks(): Promise<StockRowWithSector[]> {
       m.realized_vol_63::text              AS realized_vol_63,
       m.avg_volume_20::text                AS avg_volume_20,
       m.ret_12m::text                      AS ret_12m,
+      m.ret_1d::text                       AS ret_1d,
+      m.rs_pctile_1w::text                 AS rs_pctile_1w,
       (m.extension_pct IS NOT NULL AND m.extension_pct > 0) AS above_200d_ma,
       (
         m.ema_200_stock IS NOT NULL
@@ -79,15 +82,13 @@ export async function getAllStocks(): Promise<StockRowWithSector[]> {
       (CURRENT_DATE - s.state_since_date)::int AS days_in_state,
       s.history_gate_pass,
       s.liquidity_gate_pass,
-      s.stage1_base_qualifies,
       d.strength_gate,
       d.direction_gate,
       s.rs_state,
       s.momentum_state,
       s.risk_state,
       s.volume_state,
-      d.is_investable,
-      d.position_size_pct::text       AS position_size_pct
+      d.is_investable
     FROM atlas.atlas_universe_stocks u
     JOIN latest l ON TRUE
     LEFT JOIN atlas.atlas_stock_metrics_daily m
@@ -119,9 +120,7 @@ export async function getTopPicksAcrossSectors(): Promise<StockRowWithSector[]> 
       m.ret_1m::text                  AS ret_1m,
       m.ret_3m::text                  AS ret_3m,
       m.ret_6m::text                  AS ret_6m,
-      m.rs_3m_tier::text              AS rs_3m_nifty500,
       m.rs_pctile_3m::text            AS rs_pctile_3m,
-      m.rs_3m_tier_gold::text         AS rs_3m_tier_gold,
       m.above_30w_ma,
       m.ema_10_at_20d_high,
       m.weinstein_gate_pass,
@@ -131,6 +130,8 @@ export async function getTopPicksAcrossSectors(): Promise<StockRowWithSector[]> 
       m.realized_vol_63::text              AS realized_vol_63,
       m.avg_volume_20::text                AS avg_volume_20,
       m.ret_12m::text                      AS ret_12m,
+      m.ret_1d::text                       AS ret_1d,
+      m.rs_pctile_1w::text                 AS rs_pctile_1w,
       (m.extension_pct IS NOT NULL AND m.extension_pct > 0) AS above_200d_ma,
       (
         m.ema_200_stock IS NOT NULL
@@ -142,15 +143,13 @@ export async function getTopPicksAcrossSectors(): Promise<StockRowWithSector[]> 
       (CURRENT_DATE - s.state_since_date)::int AS days_in_state,
       s.history_gate_pass,
       s.liquidity_gate_pass,
-      s.stage1_base_qualifies,
       d.strength_gate,
       d.direction_gate,
       s.rs_state,
       s.momentum_state,
       s.risk_state,
       s.volume_state,
-      d.is_investable,
-      d.position_size_pct::text       AS position_size_pct
+      d.is_investable
     FROM atlas.atlas_universe_stocks u
     JOIN latest l ON TRUE
     JOIN atlas.atlas_stock_metrics_daily m
@@ -183,9 +182,7 @@ export async function getStockBySymbol(symbol: string): Promise<StockRowWithSect
       m.ret_1m::text                  AS ret_1m,
       m.ret_3m::text                  AS ret_3m,
       m.ret_6m::text                  AS ret_6m,
-      m.rs_3m_tier::text              AS rs_3m_nifty500,
       m.rs_pctile_3m::text            AS rs_pctile_3m,
-      m.rs_3m_tier_gold::text         AS rs_3m_tier_gold,
       m.above_30w_ma,
       m.ema_10_at_20d_high,
       m.weinstein_gate_pass,
@@ -195,6 +192,8 @@ export async function getStockBySymbol(symbol: string): Promise<StockRowWithSect
       m.realized_vol_63::text              AS realized_vol_63,
       m.avg_volume_20::text                AS avg_volume_20,
       m.ret_12m::text                      AS ret_12m,
+      m.ret_1d::text                       AS ret_1d,
+      m.rs_pctile_1w::text                 AS rs_pctile_1w,
       (m.extension_pct IS NOT NULL AND m.extension_pct > 0) AS above_200d_ma,
       (
         m.ema_200_stock IS NOT NULL
@@ -206,15 +205,13 @@ export async function getStockBySymbol(symbol: string): Promise<StockRowWithSect
       (CURRENT_DATE - s.state_since_date)::int AS days_in_state,
       s.history_gate_pass,
       s.liquidity_gate_pass,
-      s.stage1_base_qualifies,
       d.strength_gate,
       d.direction_gate,
       s.rs_state,
       s.momentum_state,
       s.risk_state,
       s.volume_state,
-      d.is_investable,
-      d.position_size_pct::text       AS position_size_pct
+      d.is_investable
     FROM atlas.atlas_universe_stocks u
     JOIN latest l ON TRUE
     LEFT JOIN atlas.atlas_stock_metrics_daily m
@@ -240,10 +237,12 @@ export async function getStockMetricHistory(
   return sql<MetricHistoryRow[]>`
     SELECT
       date,
-      rs_pctile_3m::text   AS rs_pctile_3m,
-      rs_3m_tier::text     AS rs_3m_nifty500,
-      ret_3m::text         AS ret_3m,
-      ema_10_ratio::text   AS ema_10_ratio
+      rs_pctile_3m::text        AS rs_pctile_3m,
+      ret_3m::text              AS ret_3m,
+      ema_10_ratio::text        AS ema_10_ratio,
+      drawdown_ratio_252::text  AS drawdown_ratio_252,
+      avg_volume_20::text       AS avg_volume_20,
+      extension_pct::text       AS extension_pct
     FROM atlas.atlas_stock_metrics_daily
     WHERE instrument_id = ${instrumentId}
       AND date >= CURRENT_DATE - (${days} || ' days')::interval
