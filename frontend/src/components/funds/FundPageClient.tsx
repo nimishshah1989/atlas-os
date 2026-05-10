@@ -8,6 +8,7 @@ import type { FundRow } from '@/lib/queries/funds'
 import type { CommentaryResult } from '@/lib/commentary/stocks'
 import type { Period } from '@/lib/url-params'
 import { matchesFundSearch } from '@/lib/fund-formatters'
+import { FundMetricTiles } from '@/components/funds/FundMetricTiles'
 
 // Placeholder imports — these components are created in Tasks 3.3-3.6
 // They will be replaced by real imports once those tasks complete
@@ -44,8 +45,8 @@ export function FundPageClient({
   period,
   tileCounts,
   commentary,
-  medianRsPctile: _medianRsPctile,  // consumed in Task 3.5 (FundIntelligencePanel)
-  medianReturn: _medianReturn,       // consumed in Task 3.5
+  medianRsPctile,                    // consumed in FundMetricTiles (Task 3.3) + Task 3.5
+  medianReturn,                      // consumed in FundMetricTiles (Task 3.3) + Task 3.5
   topCategory: _topCategory,         // consumed in Task 3.5
 }: Props) {
   const [activeFilter, setActiveFilter] = useState<FilterChip>('all')
@@ -80,18 +81,17 @@ export function FundPageClient({
 
   return (
     <div className="flex flex-col">
-      {/* Band 1: Metric tiles — placeholder until Task 3.3 */}
+      {/* Band 1: Metric tiles */}
       <div className="px-6 py-3 border-b border-paper-rule">
-        <div className="flex items-center gap-4 text-xs text-ink-tertiary font-sans">
-          <span>{tileCounts.n_recommended} Recommended</span>
-          <span>{tileCounts.n_hold} Hold</span>
-          <span>{tileCounts.n_leader_nav} Leader/Strong NAV</span>
-          <span>{tileCounts.n_aligned} Aligned</span>
-          <span>{tileCounts.n_strong_hold} Strong Holdings</span>
-          <span>{tileCounts.n_suspended} Suspended</span>
-          <span>{tileCounts.n_weak_hold} Weak Holdings</span>
-          <span className="ml-auto">{funds.length} of 592 computed</span>
-        </div>
+        <FundMetricTiles
+          tileCounts={tileCounts}
+          medianRsPctile={medianRsPctile}
+          medianReturn={medianReturn}
+          period={period}
+          funds={funds}
+          activeFilter={activeFilter}
+          onTileClick={handleFilterChange}
+        />
       </div>
 
       {/* Band 2: Bubble + Intelligence panel — placeholder until Tasks 3.4-3.5 */}
