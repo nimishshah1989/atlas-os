@@ -2,7 +2,24 @@ import Link from 'next/link'
 import { NavStateChip, RecommendationChip, formatWeeksInState } from '@/lib/fund-formatters'
 import type { FundMasterRow } from '@/lib/queries/funds'
 
+type TriggerBadgeProps = { label: string; active: boolean | null; tone: 'pos' | 'neg' | 'warn' }
+function TriggerBadge({ label, active, tone }: TriggerBadgeProps) {
+  if (!active) return null
+  const colors = {
+    pos:  'bg-signal-pos/15 text-signal-pos',
+    neg:  'bg-signal-neg/15 text-signal-neg',
+    warn: 'bg-signal-warn/15 text-signal-warn',
+  }
+  return (
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-[2px] font-sans text-[10px] font-semibold ${colors[tone]}`}>
+      {label}
+    </span>
+  )
+}
+
 export function FundDeepDiveHeader({ master }: { master: FundMasterRow }) {
+  const hasTrigger = master.entry_trigger || master.exit_trigger || master.reduce_trigger || master.add_trigger
+
   return (
     <div className="px-6 py-4 border-b border-paper-rule">
       {/* Breadcrumb */}
@@ -32,6 +49,16 @@ export function FundDeepDiveHeader({ master }: { master: FundMasterRow }) {
           {formatWeeksInState(master.weeks_in_current_state)} in current state
         </span>
       </div>
+      {/* Trigger indicators — only shown when at least one is active */}
+      {hasTrigger && (
+        <div className="flex items-center gap-1.5 mt-2">
+          <span className="font-sans text-[10px] text-ink-tertiary mr-0.5">Triggers:</span>
+          <TriggerBadge label="Entry" active={master.entry_trigger} tone="pos" />
+          <TriggerBadge label="Add" active={master.add_trigger} tone="pos" />
+          <TriggerBadge label="Reduce" active={master.reduce_trigger} tone="warn" />
+          <TriggerBadge label="Exit" active={master.exit_trigger} tone="neg" />
+        </div>
+      )}
     </div>
   )
 }

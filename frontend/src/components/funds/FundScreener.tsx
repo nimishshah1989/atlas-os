@@ -181,6 +181,8 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
               {visibleCols.has('ret')            && <Th label={`Ret ${period}`} k="ret"        align="right" />}
               {visibleCols.has('rs_pctile')      && <Th label="RS Pctile"      k="rs_pctile"   align="right" />}
               {visibleCols.has('rs_category')    && <Th label="RS Cat"         k="rs_category" align="right" />}
+              {visibleCols.has('vol')            && <Th label="Vol 63D"        k="vol"          align="right" />}
+              {visibleCols.has('gates')          && <PlainTh label="Gates" />}
               {visibleCols.has('comp_bar')       && <PlainTh label="Comp Bar" />}
               {visibleCols.has('holdings_bar')   && <PlainTh label="Holdings Bar" />}
               {visibleCols.has('weeks_in_state') && <Th label="Weeks"          k="weeks_in_state" align="right" />}
@@ -248,6 +250,18 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
                     {visibleCols.has('rs_category') && (
                       <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(f[rsCatKey] as string | null)}`}>
                         {pct(f[rsCatKey] as string | null)}
+                      </td>
+                    )}
+                    {visibleCols.has('vol') && (
+                      <td className="px-3 py-2.5 text-right font-mono text-xs text-ink-secondary tabular-nums">
+                        {f.realized_vol_63 != null
+                          ? `${(parseFloat(f.realized_vol_63) * 100).toFixed(0)}%`
+                          : '—'}
+                      </td>
+                    )}
+                    {visibleCols.has('gates') && (
+                      <td className="px-3 py-2.5">
+                        <GateDots f={f} />
                       </td>
                     )}
                     {visibleCols.has('comp_bar') && (
