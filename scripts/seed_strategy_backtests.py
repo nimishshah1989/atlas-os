@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# allow-large: one-shot seed script; each strategy branch is self-contained, splitting would lose cohesion
 """Bulk-seed backtest results for all 15 systematic strategies.
 
 Signal approach: RS STATE TRANSITIONS (not nightly trigger booleans).
@@ -395,6 +396,64 @@ def _combine_pivots(
 
 
 # ---------------------------------------------------------------------------
+# Benchmark helpers
+# ---------------------------------------------------------------------------
+
+
+def _nifty500_cagr(engine: Engine, start_date: date, end_date: date) -> float | None:
+    """Return Nifty 500 annualized return (CAGR) for the given date range.
+
+    Uses de_index_prices.close for index_code = 'NIFTY 500'.
+    Picks the nearest available date on or after start_date and on or before end_date.
+    Returns None if insufficient data.
+    """
+    sql = text("""
+        SELECT
+          (SELECT close FROM de_index_prices
+           WHERE index_code = 'NIFTY 500' AND date >= :start ORDER BY date ASC LIMIT 1)
+            AS start_close,
+          (SELECT close FROM de_index_prices
+           WHERE index_code = 'NIFTY 500' AND date <= :end   ORDER BY date DESC LIMIT 1)
+            AS end_close,
+          (SELECT date FROM de_index_prices
+           WHERE index_code = 'NIFTY 500' AND date >= :start ORDER BY date ASC LIMIT 1)
+            AS actual_start,
+          (SELECT date FROM de_index_prices
+           WHERE index_code = 'NIFTY 500' AND date <= :end   ORDER BY date DESC LIMIT 1)
+            AS actual_end
+    """)
+    with engine.connect() as conn:
+        row = conn.execute(sql, {"start": start_date, "end": end_date}).fetchone()
+
+    if row is None or row[0] is None or row[1] is None:
+        return None
+
+    start_close, end_close, actual_start, actual_end = (
+        float(row[0]),
+        float(row[1]),
+        row[2],
+        row[3],
+    )
+    days = (actual_end - actual_start).days
+    if days <= 0 or start_close <= 0:
+        return None
+
+    return (end_close / start_close) ** (365.25 / days) - 1
+
+
+def _write_alpha(engine: Engine, backtest_id: str, alpha: float) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            text("""
+                UPDATE atlas.strategy_backtest_results
+                SET alpha_vs_nifty500 = :alpha
+                WHERE id = CAST(:bid AS uuid)
+            """),
+            {"alpha": alpha, "bid": backtest_id},
+        )
+
+
+# ---------------------------------------------------------------------------
 # Per-strategy orchestration
 # ---------------------------------------------------------------------------
 
@@ -482,12 +541,22 @@ def run_strategy_backtest(
             strategy_id=UUID(strategy_id),
         )
 
+        # Compute and store alpha vs Nifty 500
+        n500_cagr = _nifty500_cagr(engine, start_date, end_date)
+        alpha_str = "—"
+        if n500_cagr is not None and result.total_return is not None and result.total_return > -1:
+            days = (end_date - start_date).days
+            strat_cagr = (1 + result.total_return) ** (365.25 / days) - 1
+            alpha = strat_cagr - n500_cagr
+            _write_alpha(engine, backtest_id, alpha)
+            alpha_str = f"{alpha:+.3f}"
+
         elapsed = time.time() - t0
         sharpe_str = f"{result.sharpe_ratio:.3f}" if result.sharpe_ratio is not None else "None"
         ret_str = f"{result.total_return:.3f}" if result.total_return is not None else "None"
         print(
             f"  ✓ {cfg.name:45s}  "
-            f"sharpe={sharpe_str:>7}  ret={ret_str:>7}  "
+            f"sharpe={sharpe_str:>7}  ret={ret_str:>7}  alpha={alpha_str:>8}  "
             f"instruments={len(instruments):>4}  entries={n_entries:>5}  {elapsed:.1f}s"
         )
         log.info(

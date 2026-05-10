@@ -2,6 +2,11 @@ name: blend_sector_rotation_etf
 tier: blend
 archetype: sector_rotation_etf
 variant: mixed
+description: >
+  Sector rotation expressed through both ETFs (60%) and stocks (40%). Leader and Strong
+  filter with 15 positions and up to 40% sector concentration. Combines the precision of
+  sector ETFs with individual stock picks within the same sector, allowing nuanced
+  expression of sector themes. Pauses in risk-off.
 state_filter: [leader, strong]
 regime_stance: pause_risk_off
 position_sizing: equal_weight

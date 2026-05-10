@@ -37,6 +37,8 @@ class StrategyConfig:
     etf_allocation_pct: float | None = None
     # Optional fund-tier fields
     fund_tier_filter: list[str] | None = None
+    # Human-readable description (shown on strategy detail page)
+    description: str = ""
 
 
 def load_config(name: str) -> StrategyConfig:
@@ -63,6 +65,7 @@ def load_config(name: str) -> StrategyConfig:
         stock_allocation_pct=raw.get("stock_allocation_pct"),
         etf_allocation_pct=raw.get("etf_allocation_pct"),
         fund_tier_filter=raw.get("fund_tier_filter"),
+        description=raw.get("description", ""),
     )
 
 
@@ -126,6 +129,7 @@ def populate_strategy_configs(engine: Engine | None = None) -> int:
                     "stock_allocation_pct": cfg.stock_allocation_pct,
                     "etf_allocation_pct": cfg.etf_allocation_pct,
                     "fund_tier_filter": cfg.fund_tier_filter,
+                    "description": cfg.description,
                 }
             )
             conn.execute(

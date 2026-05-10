@@ -2,6 +2,12 @@ name: fund_l1_dominant
 tier: fund_only
 archetype: fund_momentum
 variant: l1_dominant
+description: >
+  Large-cap fund strategy — concentrates in the top 10 Leader-state large-cap equity
+  funds (L1 tier). Lowest volatility in the fund stack given the quality and liquidity
+  of large-cap underlying portfolios. Holds through risk-off. Best suited as a stable
+  core allocation with predictable behaviour; alpha comes from momentum within large-caps
+  rather than from tier diversification.
 state_filter: [investable]
 regime_stance: hold_risk_off
 position_sizing: equal_weight

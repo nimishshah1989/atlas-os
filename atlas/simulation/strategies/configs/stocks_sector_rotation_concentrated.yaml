@@ -2,6 +2,11 @@ name: stocks_sector_rotation_concentrated
 tier: stocks_only
 archetype: sector_rotation
 variant: concentrated
+description: >
+  Sector rotation in Leader-only stocks with high sector concentration — up to 60% in a
+  single sector, 10 positions total. Designed to ride dominant sector themes aggressively
+  when market leadership is clear. Pauses in risk-off. Highest sector concentration of
+  any strategy in the stack; suits periods of strong, directional sector leadership.
 state_filter: [leader]
 regime_stance: pause_risk_off
 position_sizing: equal_weight

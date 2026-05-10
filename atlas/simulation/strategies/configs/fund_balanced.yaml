@@ -2,6 +2,12 @@ name: fund_balanced
 tier: fund_only
 archetype: fund_balanced
 variant: balanced
+description: >
+  Diversified mutual fund strategy across large, mid, and small-cap equity categories.
+  Enters when a fund's NAV relative strength reaches Leader state; exits on NAV
+  deterioration. Equal-weight up to 20 funds. Scales back exposure in risk-off market
+  regimes. Broadest fund coverage; suitable as a core allocation for growth-oriented
+  investors who prefer fund wrappers over direct stock exposure.
 state_filter: [investable]
 regime_stance: scale_risk_off
 position_sizing: equal_weight

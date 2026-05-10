@@ -2,6 +2,11 @@ name: stocks_momentum_aggressive
 tier: stocks_only
 archetype: momentum_pure
 variant: aggressive
+description: >
+  Targets only Leader-state stocks — the top decile of relative strength in the Nifty 500
+  universe. Concentrates in 15 positions with up to 40% in a single sector. Fully pauses
+  in risk-off market regimes rather than scaling down. Highest-conviction momentum play;
+  best when market leadership is clear and sustained.
 state_filter: [leader]
 regime_stance: pause_risk_off
 position_sizing: equal_weight

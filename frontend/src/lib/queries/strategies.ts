@@ -32,6 +32,7 @@ export type StrategyDetailRow = {
   archetype: string
   variant: string
   config: Record<string, unknown>
+  description: string | null
   is_active: boolean
   is_fm_authored: boolean
   created_by: string | null
@@ -116,6 +117,7 @@ export async function getStrategyById(id: string): Promise<StrategyDetailRow | n
       sc.archetype,
       sc.variant,
       sc.config,
+      sc.config->>'description'           AS description,
       sc.is_active,
       sc.is_fm_authored,
       sc.created_by,

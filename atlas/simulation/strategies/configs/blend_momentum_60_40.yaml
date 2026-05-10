@@ -2,6 +2,11 @@ name: blend_momentum_60_40
 tier: blend
 archetype: momentum_blend
 variant: 60_40
+description: >
+  Stock-tilted blend: 60% individual stocks, 40% sector ETFs, both filtered for Leader
+  and Strong states. 20 positions with a 35% sector cap. ETFs act as a volatility buffer
+  while the majority allocation remains in high-conviction stock positions. Pauses fully
+  in risk-off; higher return potential than 50/50 at the cost of more single-stock risk.
 state_filter: [leader, strong]
 regime_stance: pause_risk_off
 position_sizing: equal_weight

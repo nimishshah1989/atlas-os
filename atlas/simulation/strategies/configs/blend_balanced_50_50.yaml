@@ -2,6 +2,11 @@ name: blend_balanced_50_50
 tier: blend
 archetype: momentum_blend
 variant: 50_50
+description: >
+  Equal 50/50 split between individual stocks and sector ETFs, both filtered for Leader
+  and Strong states. 20 positions, 30% sector cap. The ETF sleeve smooths single-stock
+  volatility while the stock sleeve provides alpha potential. Scales down in risk-off
+  rather than fully pausing.
 state_filter: [leader, strong]
 regime_stance: scale_risk_off
 position_sizing: equal_weight

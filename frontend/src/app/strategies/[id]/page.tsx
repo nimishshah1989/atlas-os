@@ -82,6 +82,11 @@ export default async function StrategyDetailPage({ params }: Props) {
         <p className="font-sans text-xs text-ink-tertiary">
           Variant: <span className="font-mono">{strategy.variant}</span>
         </p>
+        {strategy.description && (
+          <p className="font-sans text-sm text-ink-secondary mt-3 max-w-2xl leading-relaxed">
+            {strategy.description}
+          </p>
+        )}
       </header>
 
       {/* 2. KPI cards */}
@@ -212,7 +217,7 @@ export default async function StrategyDetailPage({ params }: Props) {
 
       {/* 9. Config viewer */}
       <section id="config" className="mb-8">
-        <h2 className="font-sans text-xs font-semibold uppercase tracking-wide text-ink-secondary mb-3">Strategy Config</h2>
+        <h2 className="font-sans text-xs font-semibold uppercase tracking-wide text-ink-secondary mb-3">Strategy Parameters</h2>
         <ConfigJSONViewer config={strategy.config} />
       </section>
     </main>

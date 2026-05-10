@@ -2,6 +2,11 @@ name: fund_defensive
 tier: fund_only
 archetype: fund_balanced
 variant: defensive
+description: >
+  Conservative mutual fund strategy across large, mid, and small-cap categories. Holds
+  through risk-off market conditions without reducing exposure — stays fully invested
+  across market cycles. Equal-weight up to 25 funds. Suited for investors who want
+  fund-universe diversification without active market-timing on the risk-off signal.
 state_filter: [investable]
 regime_stance: hold_risk_off
 position_sizing: equal_weight

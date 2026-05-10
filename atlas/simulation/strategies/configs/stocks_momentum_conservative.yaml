@@ -2,6 +2,11 @@ name: stocks_momentum_conservative
 tier: stocks_only
 archetype: momentum_pure
 variant: conservative
+description: >
+  Broadest momentum strategy — includes Leader, Strong, and Emerging-state stocks. Runs up to
+  25 positions with a 30% sector cap. Unlike the other momentum variants, it scales down
+  partially in risk-off markets rather than pausing fully, staying invested with reduced
+  exposure. Captures early-stage momentum names at the cost of lower signal purity.
 state_filter: [leader, strong, emerging]
 regime_stance: scale_risk_off
 position_sizing: equal_weight

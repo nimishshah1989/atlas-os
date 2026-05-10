@@ -2,6 +2,11 @@ name: stocks_sector_rotation_diversified
 tier: stocks_only
 archetype: sector_rotation
 variant: diversified
+description: >
+  Sector rotation across Leader and Strong stocks, capped at 30% per sector with 20
+  positions. More even sector distribution than the concentrated variant; better when
+  market leadership rotates frequently across sectors rather than concentrating in one.
+  Pauses in risk-off.
 state_filter: [leader, strong]
 regime_stance: pause_risk_off
 position_sizing: equal_weight
