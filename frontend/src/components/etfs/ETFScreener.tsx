@@ -50,6 +50,8 @@ const OPTIONAL_COLS: ColumnDef[] = [
   { key: 'drawdown',         label: 'Drawdown',     defaultVisible: false },
   { key: 'volume_expansion', label: 'Vol Expansion', defaultVisible: false },
   { key: 'ema_quality',      label: 'EMA Quality',  defaultVisible: false },
+  { key: 'above_30w_ma',     label: '30W MA',       defaultVisible: false },
+  { key: 'effort_ratio',     label: 'Effort Ratio', defaultVisible: false },
   { key: 'days_in_state',    label: 'Days (RS)',    defaultVisible: false },
 ]
 
@@ -260,6 +262,8 @@ export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
               {visibleCols.has('drawdown') && <PlainTh label="Drawdown" align="right" />}
               {visibleCols.has('volume_expansion') && <PlainTh label="Vol Exp" align="right" title="Volume expansion: current vol vs 63-day avg. ≥1.5x = institutional accumulation" />}
               {visibleCols.has('ema_quality') && <PlainTh label="EMA Quality" align="right" title="Whether the 10-day EMA is at a 20-day high — short-term upward momentum signal" />}
+              {visibleCols.has('above_30w_ma') && <PlainTh label="30W MA" align="right" title="Price above 30-week (150-day) moving average — Weinstein Stage 2 indicator" />}
+              {visibleCols.has('effort_ratio') && <PlainTh label="Effort" align="right" title="Effort ratio: price range vs volume ratio vs 63-day average. >1.2 = price moving efficiently on volume" />}
               {visibleCols.has('days_in_state') && <PlainTh label="Days (RS)" align="right" />}
               <Th label="1M" k="ret_1m" align="right" />
               <Th label="3M" k="ret_3m" align="right" />
@@ -350,6 +354,21 @@ export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
                       {visibleCols.has('ema_quality') && (
                         <td className={`px-3 py-2.5 text-right font-sans text-[10px] ${row.ema_10_at_20d_high ? 'text-signal-pos' : 'text-ink-tertiary'}`}>
                           {row.ema_10_at_20d_high == null ? '—' : row.ema_10_at_20d_high ? 'High ✓' : 'Normal'}
+                        </td>
+                      )}
+                      {visibleCols.has('above_30w_ma') && (
+                        <td className={`px-3 py-2.5 text-right font-sans text-[10px] ${row.above_30w_ma === true ? 'text-signal-pos' : row.above_30w_ma === false ? 'text-signal-neg' : 'text-ink-tertiary'}`}>
+                          {row.above_30w_ma == null ? '—' : row.above_30w_ma ? 'Above ✓' : 'Below ✗'}
+                        </td>
+                      )}
+                      {visibleCols.has('effort_ratio') && (
+                        <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${
+                          row.effort_ratio_63 == null ? 'text-ink-tertiary'
+                          : parseFloat(row.effort_ratio_63) >= 1.2 ? 'text-signal-pos'
+                          : parseFloat(row.effort_ratio_63) < 0.8 ? 'text-signal-neg'
+                          : 'text-ink-secondary'
+                        }`}>
+                          {row.effort_ratio_63 != null ? `${parseFloat(row.effort_ratio_63).toFixed(2)}x` : '—'}
                         </td>
                       )}
                       {visibleCols.has('days_in_state') && (

@@ -41,6 +41,7 @@ const ALL_COLS: ColumnDef[] = [
   { key: 'holdings_bar',    label: 'Holdings Bar',    defaultVisible: true },
   { key: 'weeks_in_state',  label: 'Weeks',           defaultVisible: true },
   { key: 'drawdown',        label: '1Y Ret',          defaultVisible: true },
+  { key: 'max_drawdown',    label: 'Max DD (1Y)',      defaultVisible: false },
 ]
 
 const COL_STORAGE_KEY = 'atlas-column-prefs-funds'
@@ -53,7 +54,7 @@ type SortCol =
   | 'scheme_name' | 'amc' | 'category'
   | 'nav_state' | 'composition' | 'holdings' | 'recommendation'
   | 'ret' | 'rs_pctile' | 'rs_category'
-  | 'vol' | 'weeks_in_state' | 'drawdown'
+  | 'vol' | 'weeks_in_state' | 'drawdown' | 'max_drawdown'
 
 // 4 coloured dots: Perf · Sectors · Stocks · Market
 function GateDots({ f }: { f: FundRow }) {
@@ -90,6 +91,7 @@ function getSortValue(col: SortCol, f: FundRow, period: Period): number | string
     case 'vol':            return buildSortKey('ret',            { ret: f.realized_vol_63 })
     case 'weeks_in_state': return buildSortKey('weeks_in_state', { weeks_in_state: f.weeks_in_current_state })
     case 'drawdown':       return buildSortKey('drawdown',       { drawdown: f.ret_12m })
+    case 'max_drawdown':   return buildSortKey('drawdown',       { drawdown: f.drawdown_ratio_252 })
   }
 }
 
@@ -131,12 +133,13 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
     return sortAsc ? <ChevronUp className="w-3 h-3 text-teal" /> : <ChevronDown className="w-3 h-3 text-teal" />
   }
 
-  function Th({ label, k, align = 'left' }: { label: string; k: SortCol; align?: 'left' | 'right' }) {
+  function Th({ label, k, align = 'left', title }: { label: string; k: SortCol; align?: 'left' | 'right'; title?: string }) {
     const active = sortCol === k
     return (
       <th
         onClick={() => handleSort(k)}
-        className={`px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider cursor-pointer hover:text-ink-secondary select-none whitespace-nowrap text-${align} ${active ? 'text-teal' : 'text-ink-tertiary'}`}
+        title={title}
+        className={`px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider cursor-pointer hover:text-ink-secondary select-none whitespace-nowrap text-${align} ${active ? 'text-teal' : 'text-ink-tertiary'}${title ? ' cursor-help' : ''}`}
       >
         <span className={`inline-flex items-center gap-1 ${align === 'right' ? 'flex-row-reverse' : ''}`}>
           {label}
@@ -187,6 +190,7 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
               {visibleCols.has('holdings_bar')   && <PlainTh label="Holdings Bar" />}
               {visibleCols.has('weeks_in_state') && <Th label="Weeks"          k="weeks_in_state" align="right" />}
               {visibleCols.has('drawdown')       && <Th label="1Y Ret"         k="drawdown"       align="right" />}
+              {visibleCols.has('max_drawdown')   && <Th label="Max DD (1Y)"    k="max_drawdown"   align="right" title="Maximum drawdown over 252 trading days (1 year)" />}
             </tr>
           </thead>
           <tbody>
@@ -280,6 +284,11 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
                     {visibleCols.has('drawdown') && (
                       <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(f.ret_12m)}`}>
                         {pct(f.ret_12m)}
+                      </td>
+                    )}
+                    {visibleCols.has('max_drawdown') && (
+                      <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${f.drawdown_ratio_252 != null ? 'text-signal-neg' : 'text-ink-tertiary'}`}>
+                        {f.drawdown_ratio_252 != null ? pct(f.drawdown_ratio_252) : '—'}
                       </td>
                     )}
                   </tr>

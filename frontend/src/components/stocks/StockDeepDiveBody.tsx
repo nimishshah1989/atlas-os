@@ -183,7 +183,7 @@ export function StockDeepDiveBody({
   }))
   const ema20Data = metricHistory.map(r => ({
     date: dateStr(r.date),
-    value: r.ema_20_ratio != null ? (parseFloat(r.ema_20_ratio) - 1) * 100 : null,
+    value: r.ema_20_ratio != null ? parseFloat(r.ema_20_ratio) - 1 : null,
   }))
   const drawdownData = metricHistory.map(r => ({
     date: dateStr(r.date),

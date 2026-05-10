@@ -66,7 +66,7 @@ export function ETFSnapshotTiles({ etf }: { etf: ETFRow }) {
 
   return (
     <div className="px-6 py-3 border-b border-paper-rule grid grid-cols-2 sm:grid-cols-5 xl:grid-cols-10">
-      <Tile label="RS Pctile" value={rsPctile} color={rsPctileColor} subtitle="3-month vs peers" />
+      <Tile label="RS Pctile" value={rsPctile} color={rsPctileColor} subtitle={etf.rs_3m_benchmark ? `vs ${etf.rs_3m_benchmark}` : '3-month vs peers'} />
       <Tile label="3M Return" value={pct(etf.ret_3m)} color={pctColor(etf.ret_3m)} />
       <Tile label="12M Return" value={pct(etf.ret_12m)} color={pctColor(etf.ret_12m)} />
       <Tile label="6M Return" value={pct(etf.ret_6m)} color={pctColor(etf.ret_6m)} />
