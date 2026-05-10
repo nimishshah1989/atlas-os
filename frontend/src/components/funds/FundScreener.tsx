@@ -133,13 +133,12 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
     return sortAsc ? <ChevronUp className="w-3 h-3 text-teal" /> : <ChevronDown className="w-3 h-3 text-teal" />
   }
 
-  function Th({ label, k, align = 'left', title }: { label: string; k: SortCol; align?: 'left' | 'right'; title?: string }) {
+  function Th({ label, k, align = 'left' }: { label: string; k: SortCol; align?: 'left' | 'right' }) {
     const active = sortCol === k
     return (
       <th
         onClick={() => handleSort(k)}
-        title={title}
-        className={`px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider cursor-pointer hover:text-ink-secondary select-none whitespace-nowrap text-${align} ${active ? 'text-teal' : 'text-ink-tertiary'}${title ? ' cursor-help' : ''}`}
+        className={`px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider cursor-pointer hover:text-ink-secondary select-none whitespace-nowrap text-${align} ${active ? 'text-teal' : 'text-ink-tertiary'}`}
       >
         <span className={`inline-flex items-center gap-1 ${align === 'right' ? 'flex-row-reverse' : ''}`}>
           {label}

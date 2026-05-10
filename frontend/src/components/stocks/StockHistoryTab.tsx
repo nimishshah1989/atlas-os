@@ -76,10 +76,10 @@ export function StateHeatmap({ history }: { history: StateHistoryRow[] }) {
     })
   }, [dates])
 
-  const CELL_W = 10
-  const CELL_H = 22
+  const CELL_W = 6
+  const CELL_H = 20
   const CELL_GAP = 1
-  const labelW = 76
+  const labelW = 90
 
   if (history.length === 0) {
     return (
