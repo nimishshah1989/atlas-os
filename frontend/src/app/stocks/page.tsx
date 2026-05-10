@@ -1,14 +1,15 @@
 export const dynamic = 'force-dynamic'
 
-import { getAllStocks, getTopPicksAcrossSectors } from '@/lib/queries/stocks'
+import { getAllStocks } from '@/lib/queries/stocks'
+import { getCurrentRegime } from '@/lib/queries/regime'
 import { StockScreener } from '@/components/stocks/StockScreener'
 import { StockBreadthPanel } from '@/components/stocks/StockBreadthPanel'
-import { StockTopPicks } from '@/components/stocks/StockTopPicks'
+import { StockIntelligencePanel } from '@/components/stocks/StockIntelligencePanel'
 
 export default async function StocksPage() {
-  const [stocks, topPicks] = await Promise.all([
+  const [stocks, regime] = await Promise.all([
     getAllStocks(),
-    getTopPicksAcrossSectors(),
+    getCurrentRegime(),
   ])
 
   if (stocks.length === 0) {
@@ -53,9 +54,24 @@ export default async function StocksPage() {
 
       {/* Main content */}
       <div className="px-6 py-6 flex flex-col gap-6">
-        <StockScreener stocks={stocks} />
         <StockBreadthPanel stocks={stocks} above30wMaCount={above30wMaCount} />
-        <StockTopPicks picks={topPicks} />
+
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6">
+          <StockScreener stocks={stocks} />
+
+          <div>
+            <div className="border border-paper-rule rounded-sm p-4 bg-paper sticky top-4">
+              <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-3">
+                Stock Intelligence
+              </div>
+              <StockIntelligencePanel
+                stocks={stocks}
+                regimeState={regime?.regime_state ?? 'Unknown'}
+                deploymentMultiplier={parseFloat(regime?.deployment_multiplier ?? '0')}
+              />
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )
