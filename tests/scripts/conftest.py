@@ -17,6 +17,24 @@ def _stub_requests() -> None:
         stub = types.ModuleType("requests")
         stub.get = lambda *a, **kw: None  # type: ignore[attr-defined]
         stub.Session = object  # type: ignore[attr-defined]
+
+        # Exception hierarchy needed by production code and tests
+        class RequestException(Exception):
+            pass
+
+        class ConnectionError(RequestException):  # noqa: A001
+            pass
+
+        class HTTPError(RequestException):
+            pass
+
+        class Timeout(RequestException):
+            pass
+
+        stub.RequestException = RequestException  # type: ignore[attr-defined]
+        stub.ConnectionError = ConnectionError  # type: ignore[attr-defined]
+        stub.HTTPError = HTTPError  # type: ignore[attr-defined]
+        stub.Timeout = Timeout  # type: ignore[attr-defined]
         sys.modules["requests"] = stub
 
 

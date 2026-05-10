@@ -3,9 +3,17 @@ import sys
 import zipfile
 from datetime import date
 from decimal import Decimal
+from unittest.mock import MagicMock
 
 sys.path.insert(0, ".")
-from scripts.etf_sector_backfill import parse_bhav_date, parse_bhav_zip, safe_decimal
+from scripts.etf_sector_backfill import (
+    build_bhav_url,
+    download_bhav_zip,
+    parse_bhav_date,
+    parse_bhav_zip,
+    safe_decimal,
+    trading_dates,
+)
 
 
 class TestSafeDecimal:
@@ -83,3 +91,86 @@ class TestParseBhavZip:
     def test_handles_bad_zip(self):
         rows = parse_bhav_zip(b"not a zip", {"PHARMABEES"})
         assert rows == []
+
+
+class TestBuildBhavUrl:
+    def test_known_date_primary(self):
+        d = date(2023, 1, 2)
+        url = build_bhav_url(d)
+        assert url == (
+            "https://archives.nseindia.com/content/historical/"
+            "EQUITIES/2023/JAN/cm02JAN2023bhav.csv.zip"
+        )
+
+    def test_december(self):
+        d = date(2022, 12, 30)
+        url = build_bhav_url(d)
+        assert "DEC" in url
+        assert "2022" in url
+        assert "30DEC2022" in url
+
+    def test_fallback_uses_different_subdomain(self):
+        d = date(2023, 1, 2)
+        primary = build_bhav_url(d, fallback=False)
+        fallback = build_bhav_url(d, fallback=True)
+        assert "archives.nseindia.com" in primary
+        assert "nsearchives.nseindia.com" in fallback
+        # Path component should be identical
+        assert primary.split(".com")[1] == fallback.split(".com")[1]
+
+    def test_single_digit_day_is_zero_padded(self):
+        d = date(2023, 4, 5)
+        url = build_bhav_url(d)
+        assert "05APR2023" in url
+
+
+class TestTradingDates:
+    def test_excludes_saturday(self):
+        # 2023-01-07 is a Saturday
+        dates = trading_dates(date(2023, 1, 6), date(2023, 1, 9))
+        weekdays = {d.weekday() for d in dates}
+        assert 5 not in weekdays  # no Saturday
+        assert 6 not in weekdays  # no Sunday
+
+    def test_includes_all_weekdays_in_range(self):
+        # Mon 2023-01-02 to Fri 2023-01-06 = 5 days
+        dates = trading_dates(date(2023, 1, 2), date(2023, 1, 6))
+        assert len(dates) == 5
+
+    def test_single_day_range(self):
+        d = date(2023, 1, 3)  # Tuesday
+        dates = trading_dates(d, d)
+        assert dates == [d]
+
+    def test_ascending_order(self):
+        dates = trading_dates(date(2023, 1, 2), date(2023, 1, 6))
+        assert dates == sorted(dates)
+
+
+class TestDownloadBhavZip:
+    def test_returns_bytes_on_200(self):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.content = b"PK\x03\x04fake_zip"
+        mock_session = MagicMock()
+        mock_session.get.return_value = mock_resp
+
+        result = download_bhav_zip(mock_session, date(2023, 1, 3))
+        assert result == b"PK\x03\x04fake_zip"
+
+    def test_returns_none_on_404(self):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 404
+        mock_session = MagicMock()
+        mock_session.get.return_value = mock_resp
+
+        result = download_bhav_zip(mock_session, date(2023, 1, 1), retry=0)
+        assert result is None
+
+    def test_returns_none_when_all_retries_fail(self):
+        import requests as req
+        mock_session = MagicMock()
+        mock_session.get.side_effect = req.ConnectionError("timeout")
+
+        result = download_bhav_zip(mock_session, date(2023, 1, 3), retry=0)
+        assert result is None
