@@ -252,7 +252,7 @@ export function StockBubbleChart({ stocks }: { stocks: StockRowWithSector[] }) {
       </div>
 
       {/* Chart */}
-      <div className="px-2 py-4" style={{ height: 480, minWidth: 0 }}>
+      <div className="px-2 py-4" style={{ height: 480 }}>
         <ResponsiveContainer width="100%" height="100%">
           <ScatterChart margin={{ top: 10, right: 24, bottom: 42, left: 36 }}>
 
