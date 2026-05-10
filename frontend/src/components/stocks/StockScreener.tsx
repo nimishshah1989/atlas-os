@@ -1,5 +1,6 @@
+// allow-large: Sprint 2 screener — sector filter, col toggle, gate dots, expandable rows
 'use client'
-import { useState, useMemo } from 'react'
+import { Fragment, useState, useMemo } from 'react'
 import Link from 'next/link'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import type { StockRowWithSector } from '@/lib/queries/stocks'
@@ -8,6 +9,8 @@ import {
   RSStateChip, MomentumChip, RiskChip, VolumeChip,
 } from '@/lib/stock-formatters'
 import { SectorBadge } from './SectorBadge'
+import { ColumnToggle, useColumnVisibility, type ColumnDef } from '@/components/ui/ColumnToggle'
+import { StateJourneyCompact } from '@/components/ui/StateJourneyCompact'
 
 const RS_ORDER = ['Leader', 'Strong', 'Consolidating', 'Emerging', 'Average', 'Weak', 'Laggard']
 const MOM_ORDER = ['Accelerating', 'Improving', 'Flat', 'Deteriorating', 'Collapsing']
@@ -31,10 +34,83 @@ const CHIPS: { key: FilterChip; label: string }[] = [
   { key: 'accel',      label: 'Accelerating' },
 ]
 
+// Optional columns. All default to hidden (defaultVisible: false).
+const OPTIONAL_COLS: ColumnDef[] = [
+  { key: 'ret_1w',        label: '1W Return',  defaultVisible: false },
+  { key: 'ret_6m',        label: '6M Return',  defaultVisible: false },
+  { key: 'extension_pct', label: 'Ext %',      defaultVisible: false },
+  { key: 'vol_63',        label: 'Vol 63D',    defaultVisible: false },
+  { key: 'drawdown',      label: 'Drawdown',   defaultVisible: false },
+  { key: 'days_in_state', label: 'Days',       defaultVisible: false },
+]
+
+const COL_STORAGE_KEY = 'atlas-stock-screener-cols'
+
+// Always-visible columns (used for totalCols calculation):
+//   Symbol, Sector, Gates, RS State, Mom, Risk, Vol, 1M, 3M, RS Pctile, Deploy %  = 11
+const ALWAYS_VISIBLE_COL_COUNT = 11
+
 function stateRank(order: string[], val: string | null): number {
   if (!val) return order.length
   const i = order.indexOf(val)
   return i === -1 ? order.length : i
+}
+
+// Safely read an optional field that may not exist on the row type.
+function optField(row: StockRowWithSector, key: string): unknown {
+  return (row as unknown as Record<string, unknown>)[key]
+}
+
+function optStr(row: StockRowWithSector, key: string): string | null {
+  const v = optField(row, key)
+  if (v == null) return null
+  return typeof v === 'string' ? v : String(v)
+}
+
+function optBool(row: StockRowWithSector, key: string): boolean | null {
+  const v = optField(row, key)
+  if (v === true || v === false) return v
+  return null
+}
+
+function optNum(row: StockRowWithSector, key: string): number | null {
+  const v = optField(row, key)
+  if (v == null) return null
+  if (typeof v === 'number') return v
+  if (typeof v === 'string') {
+    const n = parseFloat(v)
+    return Number.isFinite(n) ? n : null
+  }
+  return null
+}
+
+function GateDot({ value }: { value: boolean | null }) {
+  const color = value === true
+    ? 'bg-teal'
+    : value === false
+      ? 'bg-signal-neg'
+      : 'bg-paper-rule'
+  return <span className={`w-1.5 h-1.5 rounded-full ${color}`} />
+}
+
+function GateDots({ row }: { row: StockRowWithSector }) {
+  const h = optBool(row, 'history_gate_pass')
+  const l = optBool(row, 'liquidity_gate_pass')
+  const w = optBool(row, 'weinstein_gate_pass')
+  const s = optBool(row, 'strength_gate')
+  const d = optBool(row, 'direction_gate')
+  return (
+    <span
+      className="inline-flex items-center gap-0.5"
+      title={`H:${h ?? '?'} L:${l ?? '?'} W:${w ?? '?'} S:${s ?? '?'} D:${d ?? '?'}`}
+    >
+      <GateDot value={h} />
+      <GateDot value={l} />
+      <GateDot value={w} />
+      <GateDot value={s} />
+      <GateDot value={d} />
+    </span>
+  )
 }
 
 export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
@@ -42,6 +118,18 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
   const [asc, setAsc] = useState(false)
   const [chip, setChip] = useState<FilterChip>('all')
   const [search, setSearch] = useState('')
+  const [sectorFilter, setSectorFilter] = useState<string>('All Sectors')
+  const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null)
+  const [visibleCols, setVisibleCols] = useColumnVisibility(COL_STORAGE_KEY, OPTIONAL_COLS)
+
+  // Sorted, deduped sector list for the dropdown.
+  const sectorOptions = useMemo(() => {
+    const set = new Set<string>()
+    for (const s of stocks) {
+      if (s.sector) set.add(s.sector)
+    }
+    return ['All Sectors', ...[...set].sort((a, b) => a.localeCompare(b))]
+  }, [stocks])
 
   function handleSort(key: SortKey) {
     if (sortKey === key) setAsc(a => !a)
@@ -51,6 +139,11 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
   function clearFilters() {
     setChip('all')
     setSearch('')
+    setSectorFilter('All Sectors')
+  }
+
+  function toggleExpanded(symbol: string) {
+    setExpandedSymbol(prev => prev === symbol ? null : symbol)
   }
 
   const filtered = useMemo(() => {
@@ -66,6 +159,10 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
     else if (chip === 'accel') result = result.filter(
       s => s.momentum_state === 'Accelerating' || s.momentum_state === 'Improving'
     )
+
+    if (sectorFilter !== 'All Sectors') {
+      result = result.filter(s => s.sector === sectorFilter)
+    }
 
     if (search.trim()) {
       const q = search.trim().toLowerCase()
@@ -92,7 +189,11 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
       }
       return asc ? cmp : -cmp
     })
-  }, [stocks, chip, search, sortKey, asc])
+  }, [stocks, chip, sectorFilter, search, sortKey, asc])
+
+  // Total visible columns = always-visible + optional columns currently selected.
+  const optionalVisibleCount = OPTIONAL_COLS.filter(c => visibleCols.has(c.key)).length
+  const totalCols = ALWAYS_VISIBLE_COL_COUNT + optionalVisibleCount
 
   function SortIcon({ k }: { k: SortKey }) {
     if (sortKey !== k) return <ChevronUp className="w-3 h-3 opacity-20" />
@@ -116,6 +217,17 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
     )
   }
 
+  // Plain (non-sortable) header for optional columns and Gates column.
+  function PlainTh({ label, align = 'left' }: { label: string; align?: 'left' | 'right' }) {
+    return (
+      <th
+        className={`px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap text-${align} text-ink-tertiary`}
+      >
+        {label}
+      </th>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-3">
       {/* Controls */}
@@ -127,6 +239,16 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
           onChange={e => setSearch(e.target.value)}
           className="px-3 py-1.5 border border-paper-rule rounded-sm font-sans text-sm text-ink-primary bg-paper placeholder:text-ink-tertiary focus:outline-none focus:ring-1 focus:ring-teal/50 w-56"
         />
+        <select
+          value={sectorFilter}
+          onChange={e => setSectorFilter(e.target.value)}
+          aria-label="Filter by sector"
+          className="px-2 py-1.5 border border-paper-rule rounded-sm font-sans text-sm text-ink-primary bg-paper focus:outline-none focus:ring-1 focus:ring-teal/50"
+        >
+          {sectorOptions.map(s => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
         <div className="flex flex-wrap gap-1.5">
           {CHIPS.map(c => (
             <button
@@ -144,9 +266,12 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
             </button>
           ))}
         </div>
-        <span className="ml-auto font-sans text-xs text-ink-tertiary whitespace-nowrap">
-          Showing {filtered.length} of {stocks.length} stocks
-        </span>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="font-sans text-xs text-ink-tertiary whitespace-nowrap">
+            Showing {filtered.length} of {stocks.length} stocks
+          </span>
+          <ColumnToggle columns={OPTIONAL_COLS} visible={visibleCols} onChange={setVisibleCols} />
+        </div>
       </div>
 
       {/* Table */}
@@ -156,12 +281,19 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
             <tr className="border-b border-paper-rule bg-paper">
               <Th label="Symbol" k="symbol" />
               <Th label="Sector" k="sector" />
+              <PlainTh label="Gates" />
               <Th label="RS State" k="rs_state" />
               <Th label="Mom" k="momentum_state" />
               <Th label="Risk" k="risk_state" />
               <Th label="Vol" k="volume_state" />
+              {visibleCols.has('ret_1w') && <PlainTh label="1W" align="right" />}
               <Th label="1M" k="ret_1m" align="right" />
               <Th label="3M" k="ret_3m" align="right" />
+              {visibleCols.has('ret_6m') && <Th label="6M" k="ret_6m" align="right" />}
+              {visibleCols.has('extension_pct') && <PlainTh label="Ext %" align="right" />}
+              {visibleCols.has('vol_63') && <PlainTh label="Vol 63D" align="right" />}
+              {visibleCols.has('drawdown') && <PlainTh label="Drawdown" align="right" />}
+              {visibleCols.has('days_in_state') && <PlainTh label="Days" align="right" />}
               <Th label="RS Pctile" k="rs_pctile_3m" align="right" />
               <Th label="Deploy %" k="position_size_pct" align="right" />
             </tr>
@@ -169,7 +301,7 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-6 py-10 text-center">
+                <td colSpan={totalCols} className="px-6 py-10 text-center">
                   <p className="font-sans text-sm text-ink-secondary mb-2">
                     No stocks match the current filter.
                   </p>
@@ -179,50 +311,106 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
                 </td>
               </tr>
             ) : (
-              filtered.map((row, i) => (
-                <tr
-                  key={row.instrument_id}
-                  className={`border-b border-paper-rule last:border-0 hover:bg-paper-rule/20 transition-colors ${i % 2 === 0 ? '' : 'bg-paper-rule/5'}`}
-                >
-                  <td className="px-3 py-2.5 whitespace-nowrap">
-                    <Link href={`/stocks/${encodeURIComponent(row.symbol)}`} className="hover:opacity-80">
-                      <div className="font-sans text-xs font-semibold text-ink-primary">{row.symbol}</div>
-                      <div className="font-sans text-[10px] text-ink-tertiary truncate max-w-[160px]" title={row.company_name}>
-                        {row.company_name}
-                      </div>
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <SectorBadge sector={row.sector} />
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <RSStateChip value={row.rs_state} />
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <MomentumChip value={row.momentum_state} />
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <RiskChip value={row.risk_state} />
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <VolumeChip value={row.volume_state} />
-                  </td>
-                  <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(row.ret_1m)}`}>
-                    {pct(row.ret_1m)}
-                  </td>
-                  <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(row.ret_3m)}`}>
-                    {pct(row.ret_3m)}
-                  </td>
-                  <td className="px-3 py-2.5 text-right">
-                    <RSPctileBar value={row.rs_pctile_3m} />
-                  </td>
-                  <td className="px-3 py-2.5 text-right">
-                    <div className="flex justify-end">
-                      <PosSizeBar value={row.position_size_pct} />
-                    </div>
-                  </td>
-                </tr>
-              ))
+              filtered.map((row, i) => {
+                const isExpanded = expandedSymbol === row.symbol
+                const ret1w = optStr(row, 'ret_1w')
+                const ret6m = optStr(row, 'ret_6m')
+                const extPct = optStr(row, 'extension_pct')
+                const vol63 = optStr(row, 'vol_63')
+                const drawdown = optStr(row, 'drawdown')
+                const daysInState = optNum(row, 'days_in_state')
+
+                return (
+                  <Fragment key={row.instrument_id}>
+                    <tr
+                      onClick={() => toggleExpanded(row.symbol)}
+                      className={`border-b border-paper-rule hover:bg-paper-rule/20 transition-colors cursor-pointer ${i % 2 === 0 ? '' : 'bg-paper-rule/5'} ${isExpanded ? 'bg-paper-rule/30' : ''}`}
+                    >
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <Link
+                          href={`/stocks/${encodeURIComponent(row.symbol)}`}
+                          onClick={e => e.stopPropagation()}
+                          className="hover:opacity-80"
+                        >
+                          <div className="font-sans text-xs font-semibold text-ink-primary">{row.symbol}</div>
+                          <div className="font-sans text-[10px] text-ink-tertiary truncate max-w-[160px]" title={row.company_name}>
+                            {row.company_name}
+                          </div>
+                        </Link>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <SectorBadge sector={row.sector} />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <GateDots row={row} />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <RSStateChip value={row.rs_state} />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <MomentumChip value={row.momentum_state} />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <RiskChip value={row.risk_state} />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <VolumeChip value={row.volume_state} />
+                      </td>
+                      {visibleCols.has('ret_1w') && (
+                        <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(ret1w)}`}>
+                          {pct(ret1w)}
+                        </td>
+                      )}
+                      <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(row.ret_1m)}`}>
+                        {pct(row.ret_1m)}
+                      </td>
+                      <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(row.ret_3m)}`}>
+                        {pct(row.ret_3m)}
+                      </td>
+                      {visibleCols.has('ret_6m') && (
+                        <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(ret6m)}`}>
+                          {pct(ret6m)}
+                        </td>
+                      )}
+                      {visibleCols.has('extension_pct') && (
+                        <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(extPct)}`}>
+                          {pct(extPct)}
+                        </td>
+                      )}
+                      {visibleCols.has('vol_63') && (
+                        <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums text-ink-secondary">
+                          {pct(vol63)}
+                        </td>
+                      )}
+                      {visibleCols.has('drawdown') && (
+                        <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(drawdown)}`}>
+                          {pct(drawdown)}
+                        </td>
+                      )}
+                      {visibleCols.has('days_in_state') && (
+                        <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums text-ink-secondary">
+                          {daysInState != null ? daysInState : '—'}
+                        </td>
+                      )}
+                      <td className="px-3 py-2.5 text-right">
+                        <RSPctileBar value={row.rs_pctile_3m} />
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <div className="flex justify-end">
+                          <PosSizeBar value={row.position_size_pct} />
+                        </div>
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr className="border-b border-paper-rule bg-paper-rule/10">
+                        <td colSpan={totalCols} className="px-4 py-3">
+                          <StateJourneyCompact symbol={row.symbol} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })
             )}
           </tbody>
         </table>
