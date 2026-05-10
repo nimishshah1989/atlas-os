@@ -185,8 +185,8 @@ def download_bhav_data(
             resp = session.get(new_url, timeout=(5, 20))
             if resp.status_code == 200:
                 return resp.content, "new"
-            if resp.status_code == 404:
-                break  # Not a trading day or pre-2020 date — try old format
+            if resp.status_code in (403, 404):
+                break  # 404 = holiday/pre-2020; 403 = not in coverage range — try old
             log.warning(
                 "bhav_new_download_unexpected_status",
                 date=trade_date.isoformat(),

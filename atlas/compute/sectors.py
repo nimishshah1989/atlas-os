@@ -41,6 +41,7 @@ log = structlog.get_logger()
 METRICS_COLUMNS: tuple[str, ...] = (
     "sector_name",
     "date",
+    "bottomup_ret_1w",       # added: 1-week bottom-up return
     "bottomup_ret_1m",
     "bottomup_ret_3m",
     "bottomup_ret_6m",
