@@ -6,6 +6,7 @@ import {
   getStocksInSector,
 } from '@/lib/queries/sector-deep-dive'
 import {
+  getBreadthWaterfallData,
   getSectorMetricHistory,
   getSectorStateHistory,
 } from '@/lib/queries/sectors'
@@ -38,12 +39,13 @@ export default async function SectorDeepDivePage({
   const days = rangeToDays(historyRange)
   const activeTab: 'overview' | 'stocks' = tab === 'stocks' ? 'stocks' : 'overview'
 
-  const [snapshot, metricHistory, stateHistory, stocks, regime] = await Promise.all([
+  const [snapshot, metricHistory, stateHistory, stocks, regime, breadthData] = await Promise.all([
     getSectorSnapshotByName(sectorName),
-    getSectorMetricHistory(sectorName, days),
-    getSectorStateHistory(days),
-    getStocksInSector(sectorName),
+    getSectorMetricHistory(sectorName, days).catch(() => [] as Awaited<ReturnType<typeof getSectorMetricHistory>>),
+    getSectorStateHistory(days).catch(() => [] as Awaited<ReturnType<typeof getSectorStateHistory>>),
+    getStocksInSector(sectorName).catch(() => [] as Awaited<ReturnType<typeof getStocksInSector>>),
     getCurrentRegime(),
+    getBreadthWaterfallData(sectorName, 1095).catch(() => [] as Awaited<ReturnType<typeof getBreadthWaterfallData>>),
   ])
 
   if (!snapshot) {
@@ -79,6 +81,7 @@ export default async function SectorDeepDivePage({
           stateHistory={sectorStateHistoryForThis}
           range={historyRange}
           regime={regime}
+          breadthData={breadthData}
         />
       ) : (
         <SectorStocksTab
