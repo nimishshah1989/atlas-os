@@ -72,13 +72,14 @@ export function StateHeatmap({ history }: { history: StateHistoryRow[] }) {
       if (seen.has(m)) return null
       seen.add(m)
       const dt = new Date(d)
-      return dt.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }).replace(' ', " '")
+      return dt.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' })
     })
   }, [dates])
 
-  const cellW = Math.max(5, Math.min(14, Math.floor(900 / Math.max(dates.length, 1))))
-  const cellH = 18
-  const labelW = 78
+  const CELL_W = 10
+  const CELL_H = 22
+  const CELL_GAP = 1
+  const labelW = 76
 
   if (history.length === 0) {
     return (
@@ -88,63 +89,79 @@ export function StateHeatmap({ history }: { history: StateHistoryRow[] }) {
     )
   }
 
+  const totalW = dates.length * (CELL_W + CELL_GAP) + labelW
+
   return (
-    <div className="relative overflow-x-auto">
-      {/* Month labels */}
-      <div className="flex mb-2" style={{ paddingLeft: labelW }}>
-        {dates.map((d, i) => (
-          <div
-            key={d}
-            style={{ width: cellW, flexShrink: 0, position: 'relative' }}
-          >
-            {monthLabels[i] && (
-              <span
-                className="absolute font-sans text-[9px] font-medium text-ink-tertiary whitespace-nowrap"
-                style={{ left: 0, top: 0 }}
-              >
-                {monthLabels[i]}
-              </span>
-            )}
-          </div>
-        ))}
-      </div>
-      {/* State rows */}
-      {ROWS.map(row => (
-        <div key={row.key} className="flex items-center mb-1">
-          <div
-            className="font-sans text-[10px] text-ink-secondary shrink-0 pr-2 text-right"
-            style={{ width: labelW }}
-          >
-            {row.label}
-          </div>
-          {dates.map(d => {
-            const stateRow = dateMap.get(d)
-            const state = stateRow?.[row.key] ?? null
-            const color = state ? (row.colorMap[state] ?? '#94a3b8') : '#e2e8f0'
-            return (
-              <div
-                key={d}
-                style={{
-                  width: cellW,
-                  height: cellH,
-                  background: color,
-                  opacity: state ? 0.85 : 0.2,
-                  flexShrink: 0,
-                  cursor: state ? 'pointer' : 'default',
-                  borderRadius: 2,
-                  marginRight: 1,
-                }}
-                onMouseEnter={e => {
-                  if (!state) return
-                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-                  setTooltip({ text: `${d}: ${state}`, x: rect.left + rect.width / 2, y: rect.top - 6 })
-                }}
-                onMouseLeave={() => setTooltip(null)}
-              />
-            )
-          })}
+    <div className="relative overflow-x-auto pb-1">
+      <div style={{ minWidth: totalW }}>
+        {/* Month labels row */}
+        <div className="flex mb-1" style={{ paddingLeft: labelW }}>
+          {dates.map((d, i) => (
+            <div
+              key={d}
+              style={{ width: CELL_W + CELL_GAP, flexShrink: 0, position: 'relative' }}
+            >
+              {monthLabels[i] && (
+                <span
+                  className="absolute font-sans text-[9px] font-medium text-ink-tertiary whitespace-nowrap"
+                  style={{ left: 0, top: 0 }}
+                >
+                  {monthLabels[i]}
+                </span>
+              )}
+            </div>
+          ))}
         </div>
-      ))}
+        {/* State rows */}
+        {ROWS.map(row => {
+          const latestState = dateMap.get(dates[dates.length - 1])?.[row.key] ?? null
+          return (
+            <div key={row.key} className="flex items-center mb-1.5">
+              <div
+                className="font-sans text-[10px] font-medium text-ink-secondary shrink-0 pr-2 text-right"
+                style={{ width: labelW }}
+              >
+                <span>{row.label}</span>
+                {latestState && (
+                  <span
+                    className="ml-1 font-sans text-[9px] font-semibold"
+                    style={{ color: row.colorMap[latestState] ?? '#94a3b8' }}
+                  >
+                    · {latestState}
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-[1px]">
+                {dates.map(d => {
+                  const stateRow = dateMap.get(d)
+                  const state = stateRow?.[row.key] ?? null
+                  const color = state ? (row.colorMap[state] ?? '#94a3b8') : '#e2e8f0'
+                  return (
+                    <div
+                      key={d}
+                      style={{
+                        width: CELL_W,
+                        height: CELL_H,
+                        background: color,
+                        opacity: state ? 0.88 : 0.15,
+                        flexShrink: 0,
+                        cursor: state ? 'pointer' : 'default',
+                        borderRadius: 2,
+                      }}
+                      onMouseEnter={e => {
+                        if (!state) return
+                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                        setTooltip({ text: `${d}: ${state}`, x: rect.left + rect.width / 2, y: rect.top - 6 })
+                      }}
+                      onMouseLeave={() => setTooltip(null)}
+                    />
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+      </div>
       {tooltip && (
         <div
           role="tooltip"

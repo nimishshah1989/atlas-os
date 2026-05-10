@@ -75,65 +75,74 @@ function MaTile({
   )
 }
 
-// Full RS + Momentum composition double-bar for each index group
+// Full RS + Momentum composition stacked bars with % labels
 function CompositionBars({ label, arr }: { label: string; arr: StockRowWithSector[] }) {
   const n = arr.length
   if (n === 0) return null
 
   const rsCounts = RS_STATES.map(s => ({ state: s, count: arr.filter(r => r.rs_state === s).length }))
   const momCounts = MOM_STATES.map(s => ({ state: s, count: arr.filter(r => r.momentum_state === s).length }))
+  const rsPositive = rsCounts.filter(r => r.state === 'Leader' || r.state === 'Strong').reduce((a, r) => a + r.count, 0)
+  const momPositive = momCounts.filter(r => r.state === 'Accelerating' || r.state === 'Improving').reduce((a, r) => a + r.count, 0)
 
   return (
-    <div className="flex flex-col gap-1 min-w-[110px] flex-1">
-      <div className="font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary flex items-center gap-1">
+    <div className="flex flex-col gap-2 min-w-[120px] flex-1">
+      <div className="font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary flex items-center gap-1.5">
         {label}
         <span className="font-normal normal-case tracking-normal text-ink-tertiary/60">({n})</span>
       </div>
 
-      <div className="flex flex-col gap-1">
-        <span className="font-sans text-[9px] text-ink-tertiary/60 uppercase tracking-wide">RS</span>
-        <div
-          className="flex h-3 rounded-sm overflow-hidden w-full bg-paper-rule/30"
-          title={rsCounts.map(r => `${r.state}: ${r.count} (${Math.round((r.count / n) * 100)}%)`).join(' · ')}
-        >
-          {rsCounts.filter(r => r.count > 0).map(r => (
-            <div
-              key={r.state}
-              className="h-full"
-              style={{ width: `${(r.count / n) * 100}%`, background: RS_COLORS[r.state] }}
-              title={`${r.state}: ${r.count} (${Math.round((r.count / n) * 100)}%)`}
-            />
-          ))}
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-2">
+          <span className="font-sans text-[9px] text-ink-tertiary/60 uppercase tracking-wide w-6 shrink-0">RS</span>
+          <div
+            className="flex h-4 rounded-sm overflow-hidden flex-1 bg-paper-rule/30"
+            title={rsCounts.map(r => `${r.state}: ${r.count} (${Math.round((r.count / n) * 100)}%)`).join(' · ')}
+          >
+            {rsCounts.filter(r => r.count > 0).map(r => (
+              <div
+                key={r.state}
+                className="h-full flex items-center justify-center"
+                style={{ width: `${(r.count / n) * 100}%`, background: RS_COLORS[r.state] }}
+                title={`${r.state}: ${r.count} (${Math.round((r.count / n) * 100)}%)`}
+              >
+                {(r.count / n) >= 0.12 && (
+                  <span className="font-mono text-[8px] text-white/90 font-semibold leading-none">
+                    {Math.round((r.count / n) * 100)}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+          <span className="font-mono text-[9px] text-ink-tertiary shrink-0 w-8 text-right">
+            {Math.round((rsPositive / n) * 100)}%↑
+          </span>
         </div>
-      </div>
-
-      <div className="flex flex-col gap-1">
-        <span className="font-sans text-[9px] text-ink-tertiary/60 uppercase tracking-wide">Mom</span>
-        <div
-          className="flex h-3 rounded-sm overflow-hidden w-full bg-paper-rule/30"
-          title={momCounts.map(r => `${r.state}: ${r.count} (${Math.round((r.count / n) * 100)}%)`).join(' · ')}
-        >
-          {momCounts.filter(r => r.count > 0).map(r => (
-            <div
-              key={r.state}
-              className="h-full"
-              style={{ width: `${(r.count / n) * 100}%`, background: MOM_COLORS[r.state] }}
-              title={`${r.state}: ${r.count} (${Math.round((r.count / n) * 100)}%)`}
-            />
-          ))}
+        <div className="flex items-center gap-2">
+          <span className="font-sans text-[9px] text-ink-tertiary/60 uppercase tracking-wide w-6 shrink-0">Mom</span>
+          <div
+            className="flex h-4 rounded-sm overflow-hidden flex-1 bg-paper-rule/30"
+            title={momCounts.map(r => `${r.state}: ${r.count} (${Math.round((r.count / n) * 100)}%)`).join(' · ')}
+          >
+            {momCounts.filter(r => r.count > 0).map(r => (
+              <div
+                key={r.state}
+                className="h-full flex items-center justify-center"
+                style={{ width: `${(r.count / n) * 100}%`, background: MOM_COLORS[r.state] }}
+                title={`${r.state}: ${r.count} (${Math.round((r.count / n) * 100)}%)`}
+              >
+                {(r.count / n) >= 0.12 && (
+                  <span className="font-mono text-[8px] text-white/90 font-semibold leading-none">
+                    {Math.round((r.count / n) * 100)}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+          <span className="font-mono text-[9px] text-ink-tertiary shrink-0 w-8 text-right">
+            {Math.round((momPositive / n) * 100)}%↑
+          </span>
         </div>
-      </div>
-
-      <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-0.5">
-        {rsCounts
-          .filter(r => r.count > 0)
-          .slice(0, 4)
-          .map(r => (
-            <span key={r.state} className="flex items-center gap-0.5 font-sans text-[9px] text-ink-tertiary">
-              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: RS_COLORS[r.state] }} />
-              {r.state} {Math.round((r.count / n) * 100)}%
-            </span>
-          ))}
       </div>
     </div>
   )
