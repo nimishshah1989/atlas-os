@@ -1,3 +1,4 @@
+# allow-large: M5 validation covers 3 tiers × stock/ETF/fund — splitting would break the coherent recomputation narrative
 """Atlas-M5 hand-validation script — Tier 2 + Tier 3.
 
 Per ``docs/milestones/ATLAS_M5_DECISION_ENGINE.md`` and
@@ -105,31 +106,51 @@ def _structural_checks(engine) -> None:
     print("\n=== Structural / Row Count Checks ===")
 
     with open_compute_session(engine) as conn:
-        tables = {
-            "atlas_stock_decisions_daily": "atlas.atlas_stock_decisions_daily",
-            "atlas_etf_decisions_daily": "atlas.atlas_etf_decisions_daily",
-            "atlas_fund_decisions_daily": "atlas.atlas_fund_decisions_daily",
+        # Fast catalog estimate — avoids full table COUNT(*) on multi-year tables.
+        table_map = {
+            "atlas_stock_decisions_daily": "atlas_stock_decisions_daily",
+            "atlas_etf_decisions_daily": "atlas_etf_decisions_daily",
+            "atlas_fund_decisions_daily": "atlas_fund_decisions_daily",
         }
         global checks_run, failures
-        for name, table in tables.items():
-            cnt = pd.read_sql(f"SELECT count(*) as c FROM {table}", conn).iloc[0]["c"]
+        for name, relname in table_map.items():
+            cnt = pd.read_sql(
+                """
+                SELECT reltuples::bigint AS c
+                FROM pg_class
+                JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace
+                WHERE nspname = 'atlas' AND relname = %(r)s
+                """,
+                conn,
+                params={"r": relname},
+            ).iloc[0]["c"]
             checks_run += 1
             if cnt == 0:
                 failures.append(f"FAIL  {name}: 0 rows (backfill not complete?)")
                 print(f"  {name}: {cnt:,} rows  ← EMPTY")
             else:
-                print(f"  {name}: {cnt:,} rows  OK")
+                print(f"  {name}: ~{cnt:,} rows  OK")
 
-        # No orphan stock_decisions (every decision row has matching state row)
+        # Latest date — used to scope all date-filtered checks below.
+        latest_d = pd.read_sql(
+            "SELECT MAX(date) AS d FROM atlas.atlas_stock_decisions_daily",
+            conn,
+        ).iloc[0]["d"]
+        if latest_d is None:
+            print("  SKIP orphan/quality checks: no decision rows")
+            return
+
+        # Orphan checks scoped to latest date — avoids full cross-join on history.
         orphan_stock = pd.read_sql(
             """
             SELECT count(*) as c
             FROM atlas.atlas_stock_decisions_daily d
             LEFT JOIN atlas.atlas_stock_states_daily s
                 ON s.instrument_id = d.instrument_id AND s.date = d.date
-            WHERE s.instrument_id IS NULL
+            WHERE d.date = %(d)s AND s.instrument_id IS NULL
             """,
             conn,
+            params={"d": latest_d},
         ).iloc[0]["c"]
         checks_run += 1
         if orphan_stock > 0:
@@ -143,9 +164,10 @@ def _structural_checks(engine) -> None:
             FROM atlas.atlas_etf_decisions_daily d
             LEFT JOIN atlas.atlas_etf_states_daily s
                 ON s.ticker = d.ticker AND s.date = d.date
-            WHERE s.ticker IS NULL
+            WHERE d.date = %(d)s AND s.ticker IS NULL
             """,
             conn,
+            params={"d": latest_d},
         ).iloc[0]["c"]
         checks_run += 1
         if orphan_etf > 0:
@@ -153,14 +175,16 @@ def _structural_checks(engine) -> None:
         else:
             print("  etf_decisions orphan rows: 0  OK")
 
-        # position_size_pct must be in [0, ~1.5]
+        # Quality checks also scoped to latest date.
         bad_size = pd.read_sql(
             """
             SELECT count(*) as c FROM atlas.atlas_stock_decisions_daily
-            WHERE position_size_pct IS NOT NULL
+            WHERE date = %(d)s
+              AND position_size_pct IS NOT NULL
               AND (position_size_pct < 0 OR position_size_pct > 1.5)
             """,
             conn,
+            params={"d": latest_d},
         ).iloc[0]["c"]
         checks_run += 1
         if bad_size > 0:
@@ -168,14 +192,15 @@ def _structural_checks(engine) -> None:
         else:
             print("  stock position_size_pct in [0, 1.5]  OK")
 
-        # Fund recommendation must be one of 4 values
         bad_rec = pd.read_sql(
             """
             SELECT count(*) as c FROM atlas.atlas_fund_decisions_daily
-            WHERE recommendation IS NOT NULL
+            WHERE date = %(d)s
+              AND recommendation IS NOT NULL
               AND recommendation NOT IN ('Recommended','Hold','Reduce','Exit')
             """,
             conn,
+            params={"d": latest_d},
         ).iloc[0]["c"]
         checks_run += 1
         if bad_rec > 0:
