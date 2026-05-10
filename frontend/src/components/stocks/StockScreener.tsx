@@ -18,7 +18,7 @@ const RISK_ORDER = ['Low', 'Normal', 'Elevated', 'High', 'Below Trend']
 const VOL_ORDER = ['Accumulation', 'Steady-Buying', 'Neutral', 'Distribution', 'Heavy Distribution']
 
 type SortKey =
-  | 'symbol' | 'sector' | 'rs_pctile_3m'
+  | 'symbol' | 'sector' | 'rs_pctile_3m' | 'cap_rank'
   | 'ret_1m' | 'ret_3m' | 'ret_6m' | 'position_size_pct'
   | 'rs_state' | 'momentum_state' | 'risk_state' | 'volume_state'
 
@@ -47,13 +47,20 @@ const OPTIONAL_COLS: ColumnDef[] = [
 const COL_STORAGE_KEY = 'atlas-stock-screener-cols'
 
 // Always-visible columns (used for totalCols calculation):
-//   Symbol, Sector, Gates, RS State, Mom, Risk, Vol, 1M, 3M, RS Pctile, Deploy %  = 11
-const ALWAYS_VISIBLE_COL_COUNT = 11
+//   Symbol, Cap, Sector, Gates, RS State, Mom, Risk, Vol, 1M, 3M, RS Pctile, Deploy %  = 12
+const ALWAYS_VISIBLE_COL_COUNT = 12
 
 function stateRank(order: string[], val: string | null): number {
   if (!val) return order.length
   const i = order.indexOf(val)
   return i === -1 ? order.length : i
+}
+
+function capRank(s: StockRowWithSector): number {
+  if (s.in_nifty_50) return 1
+  if (s.in_nifty_100) return 2
+  if (s.in_nifty_500) return 3
+  return 4
 }
 
 // Safely read an optional field that may not exist on the row type.
@@ -114,8 +121,8 @@ function GateDots({ row }: { row: StockRowWithSector }) {
 }
 
 export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
-  const [sortKey, setSortKey] = useState<SortKey>('rs_pctile_3m')
-  const [asc, setAsc] = useState(false)
+  const [sortKey, setSortKey] = useState<SortKey>('cap_rank')
+  const [asc, setAsc] = useState(true)
   const [chip, setChip] = useState<FilterChip>('all')
   const [search, setSearch] = useState('')
   const [sectorFilter, setSectorFilter] = useState<string>('All Sectors')
@@ -172,21 +179,49 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
     }
 
     return [...result].sort((a, b) => {
-      let cmp = 0
-      if (sortKey === 'symbol') cmp = a.symbol.localeCompare(b.symbol)
-      else if (sortKey === 'sector') cmp = a.sector.localeCompare(b.sector)
-      else if (sortKey === 'rs_state') cmp = stateRank(RS_ORDER, a.rs_state) - stateRank(RS_ORDER, b.rs_state)
-      else if (sortKey === 'momentum_state') cmp = stateRank(MOM_ORDER, a.momentum_state) - stateRank(MOM_ORDER, b.momentum_state)
-      else if (sortKey === 'risk_state') cmp = stateRank(RISK_ORDER, a.risk_state) - stateRank(RISK_ORDER, b.risk_state)
-      else if (sortKey === 'volume_state') cmp = stateRank(VOL_ORDER, a.volume_state) - stateRank(VOL_ORDER, b.volume_state)
-      else {
-        const av = a[sortKey as keyof typeof a] != null ? parseFloat(a[sortKey as keyof typeof a] as string) : null
-        const bv = b[sortKey as keyof typeof b] != null ? parseFloat(b[sortKey as keyof typeof b] as string) : null
-        if (av == null && bv == null) cmp = 0
-        else if (av == null) cmp = 1
-        else if (bv == null) cmp = -1
-        else cmp = av - bv
+      // Nulls always last regardless of sort direction.
+      function numVal(row: StockRowWithSector, key: string): number | null {
+        const v = (row as unknown as Record<string, unknown>)[key]
+        if (v == null) return null
+        const n = typeof v === 'string' ? parseFloat(v) : typeof v === 'number' ? v : NaN
+        return Number.isFinite(n) ? n : null
       }
+
+      if (sortKey === 'symbol') {
+        const cmp = a.symbol.localeCompare(b.symbol)
+        return asc ? cmp : -cmp
+      }
+      if (sortKey === 'sector') {
+        const cmp = a.sector.localeCompare(b.sector)
+        return asc ? cmp : -cmp
+      }
+      if (sortKey === 'rs_state') {
+        const cmp = stateRank(RS_ORDER, a.rs_state) - stateRank(RS_ORDER, b.rs_state)
+        return asc ? cmp : -cmp
+      }
+      if (sortKey === 'momentum_state') {
+        const cmp = stateRank(MOM_ORDER, a.momentum_state) - stateRank(MOM_ORDER, b.momentum_state)
+        return asc ? cmp : -cmp
+      }
+      if (sortKey === 'risk_state') {
+        const cmp = stateRank(RISK_ORDER, a.risk_state) - stateRank(RISK_ORDER, b.risk_state)
+        return asc ? cmp : -cmp
+      }
+      if (sortKey === 'volume_state') {
+        const cmp = stateRank(VOL_ORDER, a.volume_state) - stateRank(VOL_ORDER, b.volume_state)
+        return asc ? cmp : -cmp
+      }
+      if (sortKey === 'cap_rank') {
+        const cmp = capRank(a) - capRank(b)
+        return asc ? cmp : -cmp
+      }
+      // Numeric sort — nulls always last regardless of direction
+      const av = numVal(a, sortKey)
+      const bv = numVal(b, sortKey)
+      if (av == null && bv == null) return 0
+      if (av == null) return 1   // null a → always after non-null b
+      if (bv == null) return -1  // null b → always after non-null a
+      const cmp = av - bv
       return asc ? cmp : -cmp
     })
   }, [stocks, chip, sectorFilter, search, sortKey, asc])
@@ -280,6 +315,7 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
           <thead>
             <tr className="border-b border-paper-rule bg-paper">
               <Th label="Symbol" k="symbol" />
+              <Th label="Cap" k="cap_rank" />
               <Th label="Sector" k="sector" />
               <PlainTh label="Gates" />
               <Th label="RS State" k="rs_state" />
@@ -337,6 +373,11 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
                             {row.company_name}
                           </div>
                         </Link>
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <span className="font-mono text-[10px] text-ink-tertiary">
+                          {row.in_nifty_50 ? 'N50' : row.in_nifty_100 ? 'N100' : row.in_nifty_500 ? 'N500' : 'Other'}
+                        </span>
                       </td>
                       <td className="px-3 py-2.5">
                         <SectorBadge sector={row.sector} />
