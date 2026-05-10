@@ -297,17 +297,28 @@ def _build_fund_matrix(
     engine: Engine,
     start_date: date,
     end_date: date,
+    fund_tier_filter: list[str] | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Build fund signal matrix using atlas_fund_states_daily.nav_state transitions.
 
     Entry = fund transitions INTO 'Leader NAV' state.
     Exit  = fund transitions OUT OF 'Leader NAV' state OR hard exit triggers.
 
+    fund_tier_filter: list of L1/L2/L3 tier codes; None = all tiers.
     The is_investable / entry_trigger columns in atlas_fund_decisions_daily are
     unpopulated (pipeline gap). nav_state from atlas_fund_states_daily is the
     correct investability signal for funds.
     """
-    sql = text("""
+    # Resolve tier filter to category names
+    allowed_categories: list[str] | None = None
+    if fund_tier_filter:
+        allowed_categories = []
+        for tier in fund_tier_filter:
+            allowed_categories.extend(_FUND_TIER_CATEGORIES.get(tier, []))
+
+    category_clause = "AND s.category_name = ANY(:categories)" if allowed_categories else ""
+
+    sql = text(f"""
         WITH lagged AS (
           SELECT
             s.date,
@@ -317,6 +328,7 @@ def _build_fund_matrix(
               OVER (PARTITION BY s.mstar_id ORDER BY s.date)    AS prev_in_state
           FROM atlas.atlas_fund_states_daily s
           WHERE s.date BETWEEN :start AND :end
+          {category_clause}
         )
         SELECT
           l.date,
@@ -339,8 +351,12 @@ def _build_fund_matrix(
         ORDER BY l.date, l.instrument_id
     """)
 
+    sql_params: dict = {"start": start_date, "end": end_date}
+    if allowed_categories:
+        sql_params["categories"] = allowed_categories
+
     with open_compute_session(engine) as conn:
-        df = pd.read_sql(sql, conn, params={"start": start_date, "end": end_date})
+        df = pd.read_sql(sql, conn, params=sql_params)
 
     if df.empty:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
@@ -393,6 +409,70 @@ def _combine_pivots(
     exit_p = exit_p.reindex(common_idx).fillna(False)
 
     return price_p, entry_p, exit_p
+
+
+# ---------------------------------------------------------------------------
+# Ranking helpers
+# ---------------------------------------------------------------------------
+
+# Fund tier → atlas_fund_states_daily.category_name mapping
+# L1 = Large-cap core, L2 = blend/mid, L3 = small-cap + sector
+_FUND_TIER_CATEGORIES: dict[str, list[str]] = {
+    "L1": [
+        "India Fund Large-Cap",
+        "India Fund ELSS (Tax Savings)",
+    ],
+    "L2": [
+        "India Fund Large & Mid-Cap",
+        "India Fund Mid-Cap",
+        "India Fund Flexi Cap",
+        "India Fund Multi-Cap",
+    ],
+    "L3": [
+        "India Fund Small-Cap",
+        "India Fund Sector - Financial Services",
+        "India Fund Sector - Healthcare",
+        "India Fund Sector - Technology",
+        "India Fund Sector - Energy",
+        "India Fund Sector - FMCG",
+        "India Fund Equity - Consumption",
+        "India Fund Equity - Infrastructure",
+    ],
+}
+
+
+def _rank_filter_entries(
+    entry_p: pd.DataFrame,
+    price_p: pd.DataFrame,
+    max_positions: int,
+    lookback_days: int = 20,
+) -> pd.DataFrame:
+    """When >max_positions signals fire on the same day, keep top-N by 20d momentum.
+
+    Uses trailing price return as a momentum quality proxy. This handles same-day
+    tie-breaking so the portfolio holds the strongest leaders rather than a
+    column-order-dependent (effectively random) subset.
+
+    Cross-day capacity enforcement is still handled by vectorbt cash_sharing.
+    """
+    if max_positions <= 0:
+        return entry_p
+
+    momentum = price_p.pct_change(lookback_days)
+    entry_p = entry_p.copy()
+
+    for date_idx in entry_p.index:
+        signals = entry_p.loc[date_idx]
+        candidates: list[str] = signals[signals].index.tolist()
+        if len(candidates) <= max_positions:
+            continue
+        mom = momentum.loc[date_idx]
+        scores = mom.reindex(candidates).fillna(-np.inf)
+        top_n: set[str] = set(scores.nlargest(max_positions).index)
+        to_remove = [c for c in candidates if c not in top_n]
+        entry_p.loc[date_idx, to_remove] = False
+
+    return entry_p
 
 
 # ---------------------------------------------------------------------------
@@ -534,7 +614,9 @@ def run_strategy_backtest(
             )
 
         elif tier == "fund_only":
-            price_p, entry_p, exit_p = _build_fund_matrix(engine, start_date, end_date)
+            price_p, entry_p, exit_p = _build_fund_matrix(
+                engine, start_date, end_date, fund_tier_filter=cfg.fund_tier_filter
+            )
 
         else:  # blend
             stock_pivots = _build_stock_matrix(engine, start_date, end_date, allowed_states)
@@ -554,6 +636,18 @@ def run_strategy_backtest(
                 "seed_bt_regime_filter",
                 strategy=cfg.name,
                 risk_off_days=len(risk_off),
+            )
+
+        # Rank-filter entries: on days with >max_positions signals, keep top-N
+        # by 20-day trailing momentum. Prevents FIFO (column-order) selection
+        # when many leaders enter simultaneously.
+        if cfg.max_positions > 0:
+            entry_p = _rank_filter_entries(entry_p, price_p, cfg.max_positions)
+            log.info(
+                "seed_bt_rank_filter",
+                strategy=cfg.name,
+                max_positions=cfg.max_positions,
+                entry_signals_after=int(entry_p.values.sum()),
             )
 
         instruments = list(price_p.columns)
