@@ -45,6 +45,8 @@ const OPTIONAL_COLS: ColumnDef[] = [
   { key: 'vol_63',        label: 'Vol (63D)', defaultVisible: false },
   { key: 'drawdown',      label: 'Drawdown',  defaultVisible: false },
   { key: 'days_in_state', label: 'Days',      defaultVisible: false },
+  { key: 'alpha_3m',     label: 'α 3M',      defaultVisible: false },
+  { key: 'alpha_6m',     label: 'α 6M',      defaultVisible: false },
 ]
 
 const COL_STORAGE_KEY = 'atlas-stock-screener-cols'
@@ -378,6 +380,8 @@ export function StockScreener({
               {visibleCols.has('vol_63') && <PlainTh label="Vol 63D" align="right" />}
               {visibleCols.has('drawdown') && <PlainTh label="Drawdown" align="right" />}
               {visibleCols.has('days_in_state') && <PlainTh label="Days" align="right" />}
+              {visibleCols.has('alpha_3m') && <PlainTh label="α 3M" align="right" />}
+              {visibleCols.has('alpha_6m') && <PlainTh label="α 6M" align="right" />}
               <Th label="RS Pctile" k="rs_pctile_3m" align="right" />
             </tr>
           </thead>
@@ -405,6 +409,8 @@ export function StockScreener({
                 const vol63 = optStr(row, 'vol_63')
                 const drawdown = optStr(row, 'drawdown')
                 const daysInState = optNum(row, 'days_in_state')
+                const alpha3m = optStr(row, 'alpha_3m')
+                const alpha6m = optStr(row, 'alpha_6m')
 
                 return (
                   <Fragment key={row.instrument_id}>
@@ -496,6 +502,16 @@ export function StockScreener({
                       {visibleCols.has('days_in_state') && (
                         <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums text-ink-secondary">
                           {daysInState != null ? daysInState : '—'}
+                        </td>
+                      )}
+                      {visibleCols.has('alpha_3m') && (
+                        <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(alpha3m)}`}>
+                          {pct(alpha3m)}
+                        </td>
+                      )}
+                      {visibleCols.has('alpha_6m') && (
+                        <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(alpha6m)}`}>
+                          {pct(alpha6m)}
                         </td>
                       )}
                       <td className="px-3 py-2.5 text-right">

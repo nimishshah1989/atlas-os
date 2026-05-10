@@ -23,6 +23,8 @@ export type StockRowWithSector = StockRow & {
   rs_pctile_1w: string | null
   realized_vol_63: string | null
   avg_volume_20: string | null
+  alpha_3m: string | null
+  alpha_6m: string | null
 }
 
 export type FullStockRow = StockRowWithSector
@@ -49,6 +51,24 @@ export async function getAllStocks(): Promise<StockRowWithSector[]> {
   return sql<StockRowWithSector[]>`
     WITH latest AS (
       SELECT MAX(date) AS d FROM atlas.atlas_stock_metrics_daily
+    ),
+    benchmark AS (
+      SELECT
+        cur.nifty500_close                          AS n500_now,
+        m3.nifty500_close                           AS n500_3m,
+        m6.nifty500_close                           AS n500_6m
+      FROM atlas.atlas_market_regime_daily cur
+      CROSS JOIN LATERAL (
+        SELECT nifty500_close FROM atlas.atlas_market_regime_daily
+        WHERE date <= cur.date - INTERVAL '63 days'
+        ORDER BY date DESC LIMIT 1
+      ) m3
+      CROSS JOIN LATERAL (
+        SELECT nifty500_close FROM atlas.atlas_market_regime_daily
+        WHERE date <= cur.date - INTERVAL '126 days'
+        ORDER BY date DESC LIMIT 1
+      ) m6
+      WHERE cur.date = (SELECT d FROM latest)
     )
     SELECT
       u.instrument_id::text           AS instrument_id,
@@ -92,9 +112,20 @@ export async function getAllStocks(): Promise<StockRowWithSector[]> {
       s.momentum_state,
       s.risk_state,
       s.volume_state,
-      d.is_investable
+      d.is_investable,
+      CASE
+        WHEN m.ret_3m IS NOT NULL AND b.n500_now IS NOT NULL AND b.n500_3m IS NOT NULL AND b.n500_3m > 0
+        THEN (m.ret_3m - (b.n500_now - b.n500_3m) / b.n500_3m)::text
+        ELSE NULL
+      END AS alpha_3m,
+      CASE
+        WHEN m.ret_6m IS NOT NULL AND b.n500_now IS NOT NULL AND b.n500_6m IS NOT NULL AND b.n500_6m > 0
+        THEN (m.ret_6m - (b.n500_now - b.n500_6m) / b.n500_6m)::text
+        ELSE NULL
+      END AS alpha_6m
     FROM atlas.atlas_universe_stocks u
     JOIN latest l ON TRUE
+    CROSS JOIN benchmark b
     LEFT JOIN atlas.atlas_stock_metrics_daily m
       ON m.instrument_id = u.instrument_id AND m.date = l.d
     LEFT JOIN atlas.atlas_stock_states_daily s
