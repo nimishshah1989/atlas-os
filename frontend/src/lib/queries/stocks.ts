@@ -15,13 +15,14 @@ export type StockRowWithSector = StockRow & {
   stage1_base_qualifies: boolean | null
   strength_gate: boolean | null
   direction_gate: boolean | null
+  above_50d_ma: boolean | null
+  above_200d_ma: boolean | null
+  ret_12m: string | null
+  realized_vol_63: string | null
+  avg_volume_20: string | null
 }
 
-export type FullStockRow = StockRowWithSector & {
-  ret_12m?: string | null
-  avg_volume_20?: string | null
-  realized_vol_63?: string | null
-}
+export type FullStockRow = StockRowWithSector
 
 export type MetricHistoryRow = {
   date: Date
@@ -64,6 +65,16 @@ export async function getAllStocks(): Promise<StockRowWithSector[]> {
       m.ret_1w::text                       AS ret_1w,
       m.extension_pct::text                AS extension_pct,
       m.realized_vol_63::text              AS vol_63,
+      m.realized_vol_63::text              AS realized_vol_63,
+      m.avg_volume_20::text                AS avg_volume_20,
+      m.ret_12m::text                      AS ret_12m,
+      (m.extension_pct > 0)                AS above_200d_ma,
+      (
+        m.ema_200_stock IS NOT NULL
+        AND m.extension_pct IS NOT NULL
+        AND m.ema_50_stock IS NOT NULL
+        AND m.ema_200_stock * (1 + m.extension_pct) > m.ema_50_stock
+      )                                    AS above_50d_ma,
       m.drawdown_ratio_252::text           AS drawdown,
       (CURRENT_DATE - s.state_since_date)::int AS days_in_state,
       s.history_gate_pass,
