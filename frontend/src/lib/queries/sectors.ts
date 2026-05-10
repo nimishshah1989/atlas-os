@@ -1,6 +1,7 @@
 // src/lib/queries/sectors.ts
 import 'server-only'
 import sql from '@/lib/db'
+import { MARKET_EVENTS } from '@/lib/event-library'
 
 // postgres returns NUMERIC as string — keep as string, parse at display time
 
@@ -310,13 +311,11 @@ const RISK_OFF_EVENT_IDS = ['covid-crash-2020', 'rate-hike-cycle-2022', 'adani-c
 const RISK_ON_EVENT_IDS  = ['election-2024']
 
 function pickEvents(regimeState: string) {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { MARKET_EVENTS } = require('@/lib/event-library') as typeof import('@/lib/event-library')
   const lower = regimeState.toLowerCase()
   const isRiskOff = lower.includes('risk-off') || lower.includes('cautious')
   const isRiskOn  = lower.includes('risk-on')  || lower.includes('constructive')
-  if (isRiskOff) return MARKET_EVENTS.filter((e: { id: string }) => RISK_OFF_EVENT_IDS.includes(e.id))
-  if (isRiskOn)  return MARKET_EVENTS.filter((e: { id: string }) => RISK_ON_EVENT_IDS.includes(e.id))
+  if (isRiskOff) return MARKET_EVENTS.filter(e => RISK_OFF_EVENT_IDS.includes(e.id))
+  if (isRiskOn)  return MARKET_EVENTS.filter(e => RISK_ON_EVENT_IDS.includes(e.id))
   return MARKET_EVENTS.slice(-3)
 }
 
@@ -325,7 +324,7 @@ export async function getSectorPlaybook(regimeState: string): Promise<PlaybookEn
   if (events.length === 0) return []
 
   const results = await Promise.all(
-    events.map(async (event: { id: string; label: string; description: string; startDate: string; endDate: string }) => {
+    events.map(async (event) => {
       const [leadRows, lagRows] = await Promise.all([
         sql<Array<{ sector_name: string; avg_rs: number }>>`
           SELECT sector_name, AVG(bottomup_rs_3m_nifty500::float)::float AS avg_rs
