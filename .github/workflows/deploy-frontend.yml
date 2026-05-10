@@ -1,0 +1,59 @@
+name: Deploy Frontend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+
+jobs:
+  deploy:
+    name: Build & deploy to EC2
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sync source to EC2
+        uses: burnett01/rsync-deployments@7.0.1
+        with:
+          switches: -az --delete --exclude='.git' --exclude='node_modules' --exclude='.next' --exclude='standalone'
+          path: frontend/
+          remote_path: /home/ubuntu/atlas-frontend/
+          remote_host: ${{ secrets.EC2_HOST }}
+          remote_user: ubuntu
+          remote_key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+
+      - name: Build and restart
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          command_timeout: 10m
+          script: |
+            set -e
+            cd /home/ubuntu/atlas-frontend
+
+            echo "--- installing deps ---"
+            npm ci --prefer-offline
+
+            echo "--- stopping PM2 ---"
+            pm2 stop atlas-frontend || true
+
+            echo "--- freeing port 3001 ---"
+            lsof -ti:3001 | xargs -r kill -9 2>/dev/null || true
+            sleep 1
+
+            echo "--- building ---"
+            npm run build
+
+            echo "--- starting PM2 ---"
+            pm2 start atlas-frontend
+
+            echo "--- verifying ---"
+            sleep 3
+            pm2 status
+            curl -sf http://localhost:3001/ > /dev/null && echo "✓ site is up" || (echo "✗ site not responding" && exit 1)

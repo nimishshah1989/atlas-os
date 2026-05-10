@@ -75,20 +75,20 @@ export async function getStocksForPicker(
       s.company_name,
       s.tier,
       s.sector,
-      m.rs_state,
+      st.rs_state,
       s.effective_to
     FROM atlas.atlas_universe_stocks s
     LEFT JOIN LATERAL (
       SELECT rs_state
-      FROM atlas.atlas_stock_metrics_daily
+      FROM atlas.atlas_stock_states_daily
       WHERE instrument_id = s.instrument_id
       ORDER BY date DESC
       LIMIT 1
-    ) m ON TRUE
+    ) st ON TRUE
     WHERE s.effective_to IS NULL
       AND (${tier}::text IS NULL OR s.tier = ${tier}::text)
       AND (${sector}::text IS NULL OR s.sector = ${sector}::text)
-      AND (${rsState}::text IS NULL OR m.rs_state = ${rsState}::text)
+      AND (${rsState}::text IS NULL OR st.rs_state = ${rsState}::text)
       AND (
         ${search}::text IS NULL
         OR s.symbol ILIKE ${search}::text
