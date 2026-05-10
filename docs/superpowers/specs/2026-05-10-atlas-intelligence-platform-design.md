@@ -828,3 +828,21 @@ This requires Migration 026 + the nightly job. Both must ship in Sprint 5, migra
 7. **Bubble chart benchmark coloring** — **RESOLVED (design review):** bubble color **always** uses `rs_state` (₹ benchmark classification), regardless of benchmark selector position. When benchmark = Gold, only the screener columns change (RS Gold column, RS pctile bar). No special gold coloring logic in the bubble chart. Rationale: rs_state is the primary signal; gold benchmark is a comparative filter, not a reclassification.
 
 8. **Column show/hide localStorage key** — **RESOLVED (design review):** use key `atlas-column-prefs-${pageId}` where `pageId` is `'stocks' | 'etfs' | 'funds' | 'sectors'`. Stored as `string[]` of hidden column keys. Default: all columns visible. Per-page isolation; no shared state across pages.
+
+9. **Commentary data sharing** — **RESOLVED (eng review):** `buildCommentary(instrumentType, aggregates: PageAggregates)` receives pre-fetched Band 1 aggregates. The Page server component runs ONE aggregation query; the result populates both Band 1 MetricTileRow tiles AND `CommentaryBlock`. No second DB hit. `PageAggregates` type carries: `investable_count`, `pct_leader_strong`, `median_rs_pctile`, `leader_count_trend`, `regime_state`, and any instrument-type-specific counts.
+
+10. **Bubble chart library clarification** — **RESOLVED (eng review):** Existing bubble charts (StockBubbleChart, ETF equivalent) use **Recharts** `ScatterChart` — not D3. Sprint 1 color fix is a function update to `stockColor()` inside those Recharts components. New components (RRGChart, BreadthWaterfall, StateJourneyTimeline, MarketTreemap) use **D3**. The spec's Chart Color Token Map applies to both via `CHART_COLORS` constant.
+
+---
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | CLEAR | 8 scope proposals, 5 accepted, 2 deferred, 1 skipped |
+| Codex Review | — | Independent 2nd opinion | 0 | — | — |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 2 | CLEAR (PLAN) | 8 issues found, 0 critical gaps |
+| Design Review | `/plan-design-review` | UI/UX gaps | 1 | CLEAR (FULL) | score: 5/10 → 9/10, 8 decisions |
+| DX Review | — | Developer experience | 0 | — | — |
+
+- **VERDICT:** CEO + DESIGN + ENG CLEARED — spec ready for implementation plan (`/writing-plans`)
