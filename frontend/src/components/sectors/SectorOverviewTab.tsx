@@ -239,10 +239,12 @@ export function SectorOverviewTab({
       <SectorDrawerSnapshot snapshot={{
         sector_name: snapshot.sector_name,
         constituent_count: snapshot.constituent_count,
+        bottomup_ret_1w: null,
         bottomup_ret_1m: snapshot.bottomup_ret_1m,
         bottomup_ret_3m: snapshot.bottomup_ret_3m,
         bottomup_ret_6m: snapshot.bottomup_ret_6m,
         bottomup_rs_3m_nifty500: snapshot.bottomup_rs_3m_nifty500,
+        rs_momentum: null,
         participation_50: snapshot.participation_50,
         participation_rs: snapshot.participation_rs,
         leadership_concentration: snapshot.leadership_concentration,
