@@ -252,7 +252,7 @@ def _check_new_disclosures(engine: Engine) -> bool:
         result = conn.execute(
             __import__("sqlalchemy").text("""
             SELECT COUNT(*) FROM public.de_mf_holdings
-            WHERE last_disclosed_date >= (
+            WHERE as_of_date > (
                 SELECT COALESCE(MAX(last_disclosed_date), '2014-01-01'::date)
                 FROM atlas.atlas_fund_lens_monthly
             )
