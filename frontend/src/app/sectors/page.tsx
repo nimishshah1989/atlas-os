@@ -1,4 +1,6 @@
 // frontend/src/app/sectors/page.tsx
+export const dynamic = 'force-dynamic'
+
 import { Suspense } from 'react'
 import {
   getSectorsWithMomentum,
@@ -6,7 +8,10 @@ import {
   getRRGHistory,
   getBreadthWaterfallData,
   getDaysInStateForAllSectors,
+  getSectorPlaybook,
+  type PlaybookEntry,
 } from '@/lib/queries/sectors'
+import { getCurrentRegime } from '@/lib/queries/regime'
 import { rangeToDays, type TimeRange } from '@/lib/time-range'
 import { getSectorDecision } from '@/lib/sectors-decision'
 import { filterSectors } from '@/lib/sectors-filter'
@@ -24,13 +29,18 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
     : '6M'
   const days = rangeToDays(historyRange)
 
-  // 5 parallel queries — server-side rendering; non-critical queries degrade to empty arrays
-  const [allRaw, stateHistory, rrgHistory, breadthData, daysInState] = await Promise.all([
+  // Fetch regime first (fast: 1 row, indexed) — used to parameterise getSectorPlaybook
+  const regime = await getCurrentRegime().catch(() => null)
+  const regimeState = regime?.regime_state ?? 'Unknown'
+
+  // 6 parallel queries — non-critical queries degrade to empty arrays
+  const [allRaw, stateHistory, rrgHistory, breadthData, daysInState, playbook] = await Promise.all([
     getSectorsWithMomentum(),
     getSectorStateHistory(days).catch(() => [] as Awaited<ReturnType<typeof getSectorStateHistory>>),
     getRRGHistory(30).catch(() => [] as Awaited<ReturnType<typeof getRRGHistory>>),
     getBreadthWaterfallData(null, 1095).catch(() => [] as Awaited<ReturnType<typeof getBreadthWaterfallData>>),
     getDaysInStateForAllSectors().catch(() => [] as Awaited<ReturnType<typeof getDaysInStateForAllSectors>>),
+    getSectorPlaybook(regimeState).catch(() => [] as PlaybookEntry[]),
   ])
 
   if (allRaw.length === 0) {
@@ -115,6 +125,7 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
           rrgHistory={rrgHistory}
           breadthData={breadthData}
           daysInState={daysInState}
+          playbook={playbook}
           range={historyRange}
         />
       </Suspense>
