@@ -82,10 +82,12 @@ export async function getStocksInSector(sectorName: string): Promise<StockRow[]>
 export type SectorBriefSnapshot = {
   sector_name: string
   constituent_count: number
+  bottomup_ret_1w: string | null
   bottomup_ret_1m: string | null
   bottomup_ret_3m: string | null
   bottomup_ret_6m: string | null
   bottomup_rs_3m_nifty500: string | null
+  rs_momentum: string | null
   bottomup_ema_10_ratio: string | null
   bottomup_ema_20_ratio: string | null
   topdown_ret_1m: string | null
@@ -109,13 +111,26 @@ export type SectorBriefSnapshot = {
 
 export async function getSectorSnapshotByName(name: string): Promise<SectorBriefSnapshot | null> {
   const rows = await sql<SectorBriefSnapshot[]>`
+    WITH ranked AS (
+      SELECT sector_name, date, bottomup_rs_3m_nifty500,
+        LAG(bottomup_rs_3m_nifty500, 20) OVER (PARTITION BY sector_name ORDER BY date) AS rs_20d_ago
+      FROM atlas.atlas_sector_metrics_daily
+      WHERE sector_name = ${name}
+    ),
+    momentum AS (
+      SELECT sector_name, (bottomup_rs_3m_nifty500 - rs_20d_ago) AS rs_momentum
+      FROM ranked
+      WHERE date = (SELECT MAX(date) FROM atlas.atlas_sector_metrics_daily WHERE sector_name = ${name})
+    )
     SELECT
       m.sector_name,
       m.constituent_count,
+      m.bottomup_ret_1w::text          AS bottomup_ret_1w,
       m.bottomup_ret_1m::text          AS bottomup_ret_1m,
       m.bottomup_ret_3m::text          AS bottomup_ret_3m,
       m.bottomup_ret_6m::text          AS bottomup_ret_6m,
       m.bottomup_rs_3m_nifty500::text  AS bottomup_rs_3m_nifty500,
+      mom.rs_momentum::text            AS rs_momentum,
       m.bottomup_ema_10_ratio::text    AS bottomup_ema_10_ratio,
       m.bottomup_ema_20_ratio::text    AS bottomup_ema_20_ratio,
       m.topdown_ret_1m::text           AS topdown_ret_1m,
@@ -138,6 +153,7 @@ export async function getSectorSnapshotByName(name: string): Promise<SectorBrief
     FROM atlas.atlas_sector_metrics_daily m
     JOIN atlas.atlas_sector_states_daily s
       ON m.sector_name = s.sector_name AND m.date = s.date
+    LEFT JOIN momentum mom ON m.sector_name = mom.sector_name
     WHERE m.sector_name = ${name}
       AND m.date = (SELECT MAX(date) FROM atlas.atlas_sector_metrics_daily WHERE sector_name = ${name})
   `

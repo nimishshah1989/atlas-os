@@ -379,13 +379,15 @@ export function SectorDecisionTable({
                 <ColTip text="Overweight = majority of stocks in this sector are outperforming + breadth is expanding. Neutral = mixed signals. Underweight = broad underperformance. Avoid = severe weakness — capital preservation mode." />
               </span>
             </th>
+            <Th label="1W Ret"  k="bottomup_ret_1w"
+              tip="Average 1-week return of all stocks in this sector. Useful for spotting short-term momentum shifts. Compare to 1M to see if the sector is accelerating or decelerating recently." />
             <Th label="1M Ret"  k="bottomup_ret_1m" />
             <Th label="3M Ret"  k="bottomup_ret_3m" />
             <Th label="6M Ret"  k="bottomup_ret_6m" />
             <Th label="RS 3M"   k="bottomup_rs_3m_nifty500"
               tip="3-month relative strength vs Nifty 500 — aggregate of all stocks in the sector. +5% means sector stocks on average outperformed Nifty 500 by 5pp over 3 months. Negative = lagging the index." />
             <Th label="RS Mom"  k="rs_momentum"
-              tip="Change in 3-month RS over the last 20 trading days. Positive = RS is rising (sector gaining vs index). Negative = RS is falling. Magnitude reads as decimal points of RS — 0.040 ≈ a 4-percentage-point improvement in relative strength over 20 days." />
+              tip="Change in 3-month RS over the last 20 trading days, in percentage points (pp). +4.1pp = sector gained 4.1pp of RS vs Nifty 500 in 20 days. Positive = RS accelerating (gaining ground). Best setup: positive RS AND rising RS momentum together." />
             <Th label="Breadth" k="participation_50"
               tip="% of stocks in the sector currently trading ABOVE their 50-day EMA. 100% = every stock is in a medium-term uptrend. 50% = half and half. Below 30% signals broad deterioration — even if the sector index looks fine, most stocks are weak." />
             <Th label="Concen." k="leadership_concentration"
@@ -466,6 +468,9 @@ export function SectorDecisionTable({
                   <span className="font-sans text-xs text-ink-secondary">{row.sector_state}</span>
                 </span>
               </td>
+              <td className={`px-3 py-2.5 font-mono text-xs tabular-nums ${pctColor(row.bottomup_ret_1w)}`}>
+                {pct(row.bottomup_ret_1w)}
+              </td>
               <td className={`px-3 py-2.5 font-mono text-xs tabular-nums ${pctColor(row.bottomup_ret_1m)}`}>
                 {pct(row.bottomup_ret_1m)}
               </td>
@@ -478,10 +483,16 @@ export function SectorDecisionTable({
               <td className={`px-3 py-2.5 font-mono text-xs tabular-nums ${pctColor(row.bottomup_rs_3m_nifty500)}`}>
                 {pct(row.bottomup_rs_3m_nifty500)}
               </td>
-              <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-ink-secondary">
-                {row.rs_momentum != null
-                  ? (parseFloat(row.rs_momentum) >= 0 ? '+' : '') + parseFloat(row.rs_momentum).toFixed(3)
-                  : '—'}
+              <td className="px-3 py-2 text-right">
+                {row.rs_momentum != null ? (() => {
+                  const pp = parseFloat(row.rs_momentum) * 100
+                  const isPos = pp >= 0
+                  return (
+                    <span className={`font-mono text-xs tabular-nums ${isPos ? 'text-signal-pos' : 'text-signal-neg'}`}>
+                      {isPos ? '+' : ''}{pp.toFixed(1)}pp
+                    </span>
+                  )
+                })() : <span className="font-mono text-xs text-ink-tertiary">—</span>}
               </td>
               <td className="px-3 py-2.5">
                 <ParticipationBar value={row.participation_50} />

@@ -128,15 +128,15 @@ export function SectorDrawerSnapshot({ snapshot }: { snapshot: SectorWithDecisio
     <div className="space-y-4 pb-4 border-b border-paper-rule">
       {/* Top row: state + decision + count */}
       <div className="flex items-stretch gap-2">
-        <div className="flex-1 px-3 py-2.5 border border-paper-rule rounded-sm bg-paper">
+        <div className="flex-1 px-3 py-2.5 border border-paper-rule rounded-sm bg-paper" title="Overweight = above-benchmark allocation justified. Neutral = market-weight. Underweight = reduce. Avoid = no new positions.">
           <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider mb-1">State</div>
           <div className={`font-sans text-base font-semibold ${stateColor}`}>{snapshot.sector_state}</div>
         </div>
-        <div className={`flex-1 px-3 py-2.5 border rounded-sm ${DECISION_STYLE[snapshot.decision]}`}>
+        <div className={`flex-1 px-3 py-2.5 border rounded-sm ${DECISION_STYLE[snapshot.decision]}`} title="ENTER = open position. HOLD = maintain. ROTATE IN = shift from weaker sectors. WATCH = improving but not confirmed. PASS = no signal. EXIT = close positions.">
           <div className="font-sans text-[10px] uppercase tracking-wider mb-1 opacity-70">Decision</div>
           <div className="font-sans text-base font-bold">{snapshot.decision}</div>
         </div>
-        <div className="flex-1 px-3 py-2.5 border border-paper-rule rounded-sm bg-paper">
+        <div className="flex-1 px-3 py-2.5 border border-paper-rule rounded-sm bg-paper" title="Number of stocks in the Atlas universe for this sector. Broader coverage = more reliable breadth and RS aggregation.">
           <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider mb-1">Stocks</div>
           <div className="font-sans text-base font-semibold text-ink-primary">{snapshot.constituent_count}</div>
         </div>
@@ -144,20 +144,54 @@ export function SectorDrawerSnapshot({ snapshot }: { snapshot: SectorWithDecisio
 
       {/* Returns row */}
       <div>
-        <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider mb-1.5">
-          Bottom-up Returns (avg of constituents)
+        <div className="flex items-center gap-1 font-sans text-[10px] text-ink-tertiary uppercase tracking-wider mb-1.5">
+          <span>Bottom-up Returns (avg of constituents)</span>
+          <span title="Average return of all stocks in this sector over each period. 'Bottom-up' = aggregated from individual stocks (not the NSE sector index). More representative of what the average stock holder experiences vs top-down index returns skewed by heavyweights.">
+            <Info className="w-2.5 h-2.5 opacity-60 cursor-help" />
+          </span>
         </div>
         <div className="flex items-stretch gap-2">
+          {snapshot.bottomup_ret_1w != null && (
+            <ReturnTile label="1 Week" value={snapshot.bottomup_ret_1w} />
+          )}
           <ReturnTile label="1 Month" value={snapshot.bottomup_ret_1m} />
           <ReturnTile label="3 Month" value={snapshot.bottomup_ret_3m} />
           <ReturnTile label="6 Month" value={snapshot.bottomup_ret_6m} />
         </div>
       </div>
 
+      {/* RS Momentum */}
+      {snapshot.rs_momentum != null && (() => {
+        const mom = parseFloat(snapshot.rs_momentum)
+        const pp = (mom * 100).toFixed(1)
+        const isPos = mom >= 0
+        return (
+          <div>
+            <div className="flex items-center gap-1 font-sans text-[10px] text-ink-tertiary uppercase tracking-wider mb-1.5">
+              <span>RS Momentum (20-day change)</span>
+              <span title="Change in 3-month relative strength over the last 20 trading days, in percentage points. +4pp = sector gained 4pp of RS vs Nifty 500 over 20 days. Positive = RS accelerating (gaining ground). Negative = RS fading. Key for timing: sectors with positive RS AND rising RS momentum have the strongest setup.">
+                <Info className="w-2.5 h-2.5 opacity-60 cursor-help" />
+              </span>
+            </div>
+            <div className={`inline-flex items-center gap-2 px-3 py-2 border rounded-sm ${isPos ? 'border-signal-pos/30 bg-signal-pos/5' : 'border-signal-neg/30 bg-signal-neg/5'}`}>
+              <span className={`font-mono text-sm font-semibold tabular-nums ${isPos ? 'text-signal-pos' : 'text-signal-neg'}`}>
+                {isPos ? '+' : ''}{pp}pp
+              </span>
+              <span className={`font-sans text-xs ${isPos ? 'text-signal-pos' : 'text-signal-neg'}`}>
+                {isPos ? '▲ RS accelerating — gaining vs Nifty 500' : '▼ RS fading — losing vs Nifty 500'}
+              </span>
+            </div>
+          </div>
+        )
+      })()}
+
       {snapshot.topdown_index_code && (
         <div>
-          <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider mb-1.5">
-            Top-down Returns ({snapshot.topdown_index_code} index)
+          <div className="flex items-center gap-1 font-sans text-[10px] text-ink-tertiary uppercase tracking-wider mb-1.5">
+            <span>Top-down Returns ({snapshot.topdown_index_code} index)</span>
+            <span title="Returns computed from the NSE sector benchmark index (e.g. Nifty Bank for Banking). Top-down = index level, driven by the largest-cap stocks. Can diverge from bottom-up when a few heavyweights dominate — divergence signals fragile sector leadership.">
+              <Info className="w-2.5 h-2.5 opacity-60 cursor-help" />
+            </span>
           </div>
           <div className="flex items-stretch gap-2">
             <ReturnTile label="1 Month" value={snapshot.topdown_ret_1m} />
@@ -176,34 +210,34 @@ export function SectorDrawerSnapshot({ snapshot }: { snapshot: SectorWithDecisio
           <StateBadge
             label="Bottom-up"
             value={snapshot.bottomup_state}
-            hint="State derived from this sector's constituent stocks (RS, breadth, momentum)"
+            hint="Derived from constituent stock signals: RS vs Nifty 500, % stocks above 50d EMA, and RS momentum direction. When bottom-up and top-down agree, conviction is highest. When they diverge, wait for confirmation."
           />
           <StateBadge
             label="Top-down"
             value={snapshot.topdown_state}
-            hint="State derived from the sector index itself (NSE sector index trend)"
+            hint="Derived from the NSE sector index itself — its trend, RS vs Nifty 500, and slope of the index. Top-down is more responsive to large-cap moves; bottom-up better reflects the average stock. Both must agree for high-conviction sector calls."
           />
           <ChipBadge
             label="RS"
-            hint="7-level relative strength state of sector constituents vs Nifty 500"
+            hint="7-level relative strength classification of the sector's constituent stocks vs Nifty 500. Leader = top RS decile. Laggard = bottom RS decile. Strong/Weak are mid-tier. Emerging = recently crossed into positive territory. Each level maps to a specific RS percentile band."
           >
             <RSStateChip value={snapshot.bottomup_rs_state} />
           </ChipBadge>
           <ChipBadge
             label="Momentum"
-            hint="Direction of change in RS — improving means relative strength is rising"
+            hint="Direction of change in the sector's RS over the last 20 trading days. Improving = sector is gaining ground vs Nifty 500 (RS rising). Deteriorating = sector is losing ground (RS falling). Stable = no meaningful change. Accelerating = RS improving at a faster rate. Collapsing = RS falling sharply."
           >
             <MomentumChip value={snapshot.bottomup_momentum_state} />
           </ChipBadge>
           <ChipBadge
             label="Risk"
-            hint="Aggregate risk state of sector constituents (extension, volatility)"
+            hint="Aggregate risk posture of sector constituents. Combines extension above moving averages, historical volatility, and recent drawdown. Low/Normal = safe to add. Elevated = overextended, wait for pullback. High = significant extension, avoid new positions. Below Trend = in downtrend, capital at risk. Pipeline WIP — may show '—' until sector-level risk aggregation ships."
           >
             <RiskChip value={snapshot.bottomup_risk_state} />
           </ChipBadge>
           <ChipBadge
             label="Volume"
-            hint="Volume-weighted buying/selling pressure signal across sector constituents"
+            hint="Volume-weighted buying/selling pressure across sector constituents. Accumulation = elevated volume on up-days (institutional buying). Steady-Buying = consistent positive flow. Distribution = elevated volume on down-days (institutional selling). Heavy Distribution = aggressive selling. Pipeline WIP — may show '—' until sector-level volume aggregation ships."
           >
             <VolumeChip value={snapshot.bottomup_volume_state} />
           </ChipBadge>
@@ -214,7 +248,7 @@ export function SectorDrawerSnapshot({ snapshot }: { snapshot: SectorWithDecisio
       <div>
         <div className="flex items-center gap-1 font-sans text-[10px] text-ink-tertiary uppercase tracking-wider mb-1.5">
           <span>Leadership Concentration</span>
-          <span title="What share of the sector's positive RS comes from the top stocks. High = a few names carrying the sector. Low = broad-based leadership.">
+          <span title="What share of the sector's total positive RS comes from just the top 1–2 stocks. Low (green, &lt;40%) = broad leadership — many stocks contributing. Moderate (amber, 40–60%) = concentration building. High (red, &gt;60%) = a few names carrying the sector; if they crack, the sector cracks. A sector with broad participation is more durable.">
             <Info className="w-2.5 h-2.5 opacity-60 cursor-help" />
           </span>
         </div>
