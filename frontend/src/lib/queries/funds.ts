@@ -109,7 +109,8 @@ export type FundDecisionRow = {
   weeks_in_current_state: string | null
 }
 
-// Assumes nightly compute runs atomically; all computed funds share the same latest nav_date
+// LEFT JOINs on metrics/states/decisions so all universe funds appear even if not yet computed.
+// lens aum_pct values are stored as fractions (0-1); multiply by 100 for the LensBar component.
 export async function getAllFunds(): Promise<FundRow[]> {
   return sql<FundRow[]>`
     WITH latest AS (
@@ -137,19 +138,19 @@ export async function getAllFunds(): Promise<FundRow[]> {
       fd.weeks_in_current_state::text AS weeks_in_current_state,
       fd.performance_gate, fd.sectors_gate, fd.stocks_gate, fd.market_gate,
       fd.entry_trigger, fd.exit_trigger, fd.reduce_trigger,
-      fl.aligned_aum_pct::text AS aligned_aum_pct,
-      fl.avoid_aum_pct::text AS avoid_aum_pct,
-      GREATEST(0, 100 - COALESCE(fl.aligned_aum_pct, 0) - COALESCE(fl.avoid_aum_pct, 0))::text AS neutral_aum_pct,
-      fl.strong_aum_pct::text AS strong_aum_pct,
-      fl.weak_aum_pct::text AS weak_aum_pct,
-      GREATEST(0, 100 - COALESCE(fl.strong_aum_pct, 0) - COALESCE(fl.weak_aum_pct, 0))::text AS unknown_aum_pct,
+      (fl.aligned_aum_pct * 100)::text AS aligned_aum_pct,
+      (fl.avoid_aum_pct   * 100)::text AS avoid_aum_pct,
+      GREATEST(0, 100 - COALESCE(fl.aligned_aum_pct * 100, 0) - COALESCE(fl.avoid_aum_pct * 100, 0))::text AS neutral_aum_pct,
+      (fl.strong_aum_pct * 100)::text AS strong_aum_pct,
+      (fl.weak_aum_pct   * 100)::text AS weak_aum_pct,
+      GREATEST(0, 100 - COALESCE(fl.strong_aum_pct * 100, 0) - COALESCE(fl.weak_aum_pct * 100, 0))::text AS unknown_aum_pct,
       fl.as_of_date AS lens_as_of_date
     FROM atlas.atlas_universe_funds uf
-    JOIN atlas.atlas_fund_metrics_daily fm
+    LEFT JOIN atlas.atlas_fund_metrics_daily fm
       ON fm.mstar_id = uf.mstar_id AND fm.nav_date = (SELECT metrics_date FROM latest)
-    JOIN atlas.atlas_fund_states_daily fs
+    LEFT JOIN atlas.atlas_fund_states_daily fs
       ON fs.mstar_id = uf.mstar_id AND fs.date = (SELECT states_date FROM latest)
-    JOIN atlas.atlas_fund_decisions_daily fd
+    LEFT JOIN atlas.atlas_fund_decisions_daily fd
       ON fd.mstar_id = uf.mstar_id AND fd.date = (SELECT decisions_date FROM latest)
     LEFT JOIN atlas.atlas_fund_lens_monthly fl
       ON fl.mstar_id = uf.mstar_id AND fl.as_of_date = (SELECT lens_date FROM latest)
@@ -168,10 +169,10 @@ export async function getFundMaster(mstar_id: string): Promise<FundMasterRow | n
       fd.performance_gate, fd.sectors_gate, fd.stocks_gate, fd.market_gate,
       fd.entry_trigger, fd.exit_trigger, fd.reduce_trigger
     FROM atlas.atlas_universe_funds uf
-    JOIN atlas.atlas_fund_states_daily fs
+    LEFT JOIN atlas.atlas_fund_states_daily fs
       ON fs.mstar_id = uf.mstar_id
       AND fs.date = (SELECT MAX(date) FROM atlas.atlas_fund_states_daily)
-    JOIN atlas.atlas_fund_decisions_daily fd
+    LEFT JOIN atlas.atlas_fund_decisions_daily fd
       ON fd.mstar_id = uf.mstar_id
       AND fd.date = (SELECT MAX(date) FROM atlas.atlas_fund_decisions_daily)
     WHERE uf.mstar_id = ${mstar_id}
@@ -209,12 +210,12 @@ export async function getFundMetricHistory(
 export async function getFundLens(mstar_id: string): Promise<FundLensRow | null> {
   const rows = await sql<FundLensRow[]>`
     SELECT
-      aligned_aum_pct::text AS aligned_aum_pct,
-      avoid_aum_pct::text AS avoid_aum_pct,
-      GREATEST(0, 100 - COALESCE(aligned_aum_pct, 0) - COALESCE(avoid_aum_pct, 0))::text AS neutral_aum_pct,
-      strong_aum_pct::text AS strong_aum_pct,
-      weak_aum_pct::text AS weak_aum_pct,
-      GREATEST(0, 100 - COALESCE(strong_aum_pct, 0) - COALESCE(weak_aum_pct, 0))::text AS unknown_aum_pct,
+      (aligned_aum_pct * 100)::text AS aligned_aum_pct,
+      (avoid_aum_pct   * 100)::text AS avoid_aum_pct,
+      GREATEST(0, 100 - COALESCE(aligned_aum_pct * 100, 0) - COALESCE(avoid_aum_pct * 100, 0))::text AS neutral_aum_pct,
+      (strong_aum_pct * 100)::text AS strong_aum_pct,
+      (weak_aum_pct   * 100)::text AS weak_aum_pct,
+      GREATEST(0, 100 - COALESCE(strong_aum_pct * 100, 0) - COALESCE(weak_aum_pct * 100, 0))::text AS unknown_aum_pct,
       sector_concentration::text AS sector_concentration,
       holdings_concentration::text AS holdings_concentration,
       last_disclosed_date,

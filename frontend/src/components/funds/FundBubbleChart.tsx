@@ -97,7 +97,7 @@ function CustomTooltip({
           RS Pctile: {d.rsPctile != null ? `${(d.rsPctile * 100).toFixed(0)}th` : '—'}
         </div>
         <div className="text-ink-secondary">Recommendation: {d.recommendation ?? '—'}</div>
-        <div className="text-ink-tertiary text-[9px] mt-1">Larger bubble = lower drawdown ratio</div>
+        <div className="text-ink-tertiary text-[9px] mt-1">Larger bubble = higher RS pctile</div>
       </div>
     </div>
   )
@@ -169,17 +169,15 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange }:
     return filteredFunds.flatMap(f => {
       const retRaw = f[retKey] != null ? parseFloat(f[retKey] as string) : null
       const volRaw = f.realized_vol_63 != null ? parseFloat(f.realized_vol_63) * 100 : null
-      const drRaw  = f.drawdown_ratio_252 != null ? parseFloat(f.drawdown_ratio_252) : null
 
       if (retRaw == null || volRaw == null) return []
       if (Math.abs(retRaw) > RET_CAP || volRaw > VOL_CAP) return []
 
-      // Guard against zero / negative drawdown_ratio — would produce inf or negative z
-      const z = (drRaw != null && drRaw > 0)
-        ? Math.max(4, Math.min(800, (1 / drRaw) * 400))
-        : 20
-
       const rsPctileRaw = f.rs_pctile_3m != null ? parseFloat(f.rs_pctile_3m) : null
+      // Bubble size = RS pctile (0–1). Clamp to [6, 600] so low-RS funds remain visible.
+      const z = rsPctileRaw != null
+        ? Math.max(6, Math.min(600, rsPctileRaw * 600))
+        : 20
 
       return [{
         x: volRaw,
@@ -272,7 +270,7 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange }:
       {/* Description */}
       <div className="px-5 py-2 border-b border-paper-rule/40 bg-paper-rule/5">
         <p className="font-sans text-[11px] text-ink-secondary leading-relaxed">
-          X = annualized vol · Y = {period} return · Larger bubble = lower drawdown.
+          X = annualized vol · Y = {period} return · Larger bubble = higher RS pctile.
           Click bubble for deep-dive.
         </p>
       </div>
