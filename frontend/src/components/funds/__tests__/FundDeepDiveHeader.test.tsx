@@ -23,6 +23,7 @@ const BASE_MASTER: FundMasterRow = {
   exit_trigger: false,
   reduce_trigger: false,
   add_trigger: false,
+  data_as_of: null,
 }
 
 describe('FundDeepDiveHeader', () => {

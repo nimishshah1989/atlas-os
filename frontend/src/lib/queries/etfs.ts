@@ -42,6 +42,7 @@ export type ETFRow = {
   exit_sector_avoid: boolean | null
   exit_rs_deteriorate: boolean | null
   exit_momentum_collapse: boolean | null
+  exit_stop_loss: boolean | null
 }
 
 export type ETFMetricHistoryRow = {
@@ -99,7 +100,8 @@ export async function getAllETFs(): Promise<ETFRow[]> {
       d.exit_market_riskoff,
       d.exit_sector_avoid,
       d.exit_rs_deteriorate,
-      d.exit_momentum_collapse
+      d.exit_momentum_collapse,
+      d.exit_stop_loss
     FROM atlas.atlas_universe_etfs u
     JOIN latest l ON TRUE
     LEFT JOIN atlas.atlas_etf_metrics_daily m
@@ -136,6 +138,10 @@ export async function getETFByTicker(ticker: string): Promise<ETFRow | null> {
       m.rs_pctile_3m::text          AS rs_pctile_3m,
       m.ema_10_ratio::text          AS ema_10_ratio,
       m.extension_pct::text         AS extension_pct,
+      m.ret_1w::text                AS ret_1w,
+      m.realized_vol_63::text       AS vol_63,
+      m.drawdown_ratio_252::text    AS drawdown,
+      (CURRENT_DATE - s.state_since_date)::int AS days_in_state,
       s.rs_state,
       s.momentum_state,
       s.risk_state,
@@ -152,7 +158,8 @@ export async function getETFByTicker(ticker: string): Promise<ETFRow | null> {
       d.exit_market_riskoff,
       d.exit_sector_avoid,
       d.exit_rs_deteriorate,
-      d.exit_momentum_collapse
+      d.exit_momentum_collapse,
+      d.exit_stop_loss
     FROM atlas.atlas_universe_etfs u
     JOIN latest l ON TRUE
     LEFT JOIN atlas.atlas_etf_metrics_daily m

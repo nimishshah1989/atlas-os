@@ -146,6 +146,7 @@ describe('buildSingleFundCommentary', () => {
     exit_trigger: false,
     reduce_trigger: false,
     add_trigger: false,
+    data_as_of: null,
   }
 
   it('returns Recommended narrative with all gates passing', () => {

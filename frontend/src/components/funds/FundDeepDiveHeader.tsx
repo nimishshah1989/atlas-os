@@ -2,6 +2,13 @@ import Link from 'next/link'
 import { NavStateChip, RecommendationChip, formatWeeksInState } from '@/lib/fund-formatters'
 import type { FundMasterRow } from '@/lib/queries/funds'
 
+function formatDate(iso: string | null): string {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleDateString('en-IN', {
+    day: '2-digit', month: 'short', year: 'numeric',
+  }).replace(',', '')
+}
+
 type TriggerBadgeProps = { label: string; active: boolean | null; tone: 'pos' | 'neg' | 'warn' }
 function TriggerBadge({ label, active, tone }: TriggerBadgeProps) {
   if (!active) return null
@@ -48,6 +55,11 @@ export function FundDeepDiveHeader({ master }: { master: FundMasterRow }) {
         <span className="font-mono text-[10px] text-ink-tertiary">
           {formatWeeksInState(master.weeks_in_current_state)} in current state
         </span>
+        {master.data_as_of && (
+          <span className="ml-auto font-sans text-[10px] text-ink-tertiary/60">
+            Data as of {formatDate(master.data_as_of)}
+          </span>
+        )}
       </div>
       {/* Trigger indicators — only shown when at least one is active */}
       {hasTrigger && (

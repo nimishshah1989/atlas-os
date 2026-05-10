@@ -77,7 +77,7 @@ export function ETFOverviewTab({
       </div>
 
       {/* Exit triggers — only show if any are active */}
-      {(etf.exit_market_riskoff || etf.exit_sector_avoid || etf.exit_rs_deteriorate || etf.exit_momentum_collapse) && (
+      {(etf.exit_market_riskoff || etf.exit_sector_avoid || etf.exit_rs_deteriorate || etf.exit_momentum_collapse || etf.exit_stop_loss) && (
         <div className="border border-signal-neg/30 bg-signal-neg/5 rounded-sm px-4 py-3">
           <div className="font-sans text-[10px] font-semibold text-signal-neg uppercase tracking-wider mb-2">
             Exit Signals Active
@@ -101,6 +101,11 @@ export function ETFOverviewTab({
             {etf.exit_momentum_collapse && (
               <span className="font-sans text-[11px] text-signal-neg bg-signal-neg/10 px-2 py-0.5 rounded">
                 Momentum Collapse
+              </span>
+            )}
+            {etf.exit_stop_loss && (
+              <span className="font-sans text-[11px] text-signal-neg bg-signal-neg/10 px-2 py-0.5 rounded">
+                Stop-Loss Hit
               </span>
             )}
           </div>

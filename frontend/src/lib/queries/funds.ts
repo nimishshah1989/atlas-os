@@ -54,6 +54,7 @@ export type FundMasterRow = {
   category_name: string
   broad_category: string
   inception_date: Date | null
+  data_as_of: string | null
   nav_state: string | null
   composition_state: string | null
   holdings_state: string | null
@@ -167,6 +168,7 @@ export async function getFundMaster(mstar_id: string): Promise<FundMasterRow | n
     SELECT
       uf.mstar_id, uf.scheme_name, uf.amc, uf.category_name, uf.broad_category,
       uf.inception_date,
+      (SELECT MAX(nav_date)::text FROM atlas.atlas_fund_metrics_daily WHERE mstar_id = ${mstar_id}) AS data_as_of,
       fs.nav_state, fs.composition_state, fs.holdings_state,
       fd.recommendation,
       fd.weeks_in_current_state::text AS weeks_in_current_state,
