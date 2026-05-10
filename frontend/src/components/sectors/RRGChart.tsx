@@ -21,7 +21,6 @@ type Props = {
   current: SectorSnapshot[]
   history: RRGHistoryRow[]
   onSelect: (sectorName: string) => void
-  width?: number
   height?: number
 }
 
@@ -38,20 +37,22 @@ export function RRGChart({
   current,
   history,
   onSelect,
-  width = 720,
-  height = 540,
+  height = 640,
 }: Props) {
-  const svgRef = useRef<SVGSVGElement>(null)
+  const svgRef  = useRef<SVGSVGElement>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
   // Stable handler ref so re-renders don't tear down the SVG.
   const selectRef = useRef(onSelect)
   selectRef.current = onSelect
 
   useEffect(() => {
-    if (!svgRef.current || current.length === 0) return
+    const container = wrapRef.current
+    if (!container || !svgRef.current || current.length === 0) return
 
-    const margin = { top: 40, right: 160, bottom: 50, left: 60 }
-    const innerW = width - margin.left - margin.right
-    const innerH = height - margin.top - margin.bottom
+    const totalW  = container.clientWidth || 720
+    const margin  = { top: 40, right: 160, bottom: 50, left: 60 }
+    const innerW  = totalW - margin.left - margin.right
+    const innerH  = height - margin.top - margin.bottom
 
     // ---- Parse + mean-center ----
     const currentWithFloat: ChartDatum[] = current.map((s) => ({
@@ -116,7 +117,7 @@ export function RRGChart({
     d3.select(svgRef.current).selectAll('*').remove()
     const svg = d3
       .select(svgRef.current)
-      .attr('width', width)
+      .attr('width', totalW)
       .attr('height', height)
       .attr('role', 'img')
       .attr(
@@ -231,7 +232,7 @@ export function RRGChart({
       .attr('font-size', '10px')
       .attr('fill', 'var(--color-ink-primary)')
       .text((s) =>
-        s.sector_name.length > 12 ? s.sector_name.slice(0, 12) + '…' : s.sector_name,
+        s.sector_name.length > 14 ? s.sector_name.slice(0, 14) + '…' : s.sector_name,
       )
 
     // ---- Axes ----
@@ -317,7 +318,7 @@ export function RRGChart({
             : s.sector_name,
         )
     })
-  }, [current, history, width, height])
+  }, [current, history, height])
 
   if (current.length === 0) {
     return (
@@ -328,7 +329,7 @@ export function RRGChart({
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div ref={wrapRef} className="relative w-full overflow-x-auto">
       <svg ref={svgRef} />
     </div>
   )

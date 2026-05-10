@@ -267,19 +267,48 @@ export function SectorViews({
           title="Relative Rotation Graph"
           subtitle="RS Strength vs RS Momentum — trailing dots show last 5 days"
         />
-        <p className="font-sans text-[11px] text-ink-secondary mb-3 max-w-3xl leading-relaxed">
-          The RRG plots where each sector sits relative to the Nifty 500 on two axes: how much it has outperformed (X) and whether that outperformance is accelerating or fading (Y). Sectors rotate clockwise through four quadrants — <span className="font-medium text-signal-pos">Leading</span> → <span className="font-medium text-signal-warn">Weakening</span> → <span className="font-medium text-ink-tertiary">Lagging</span> → <span className="font-medium text-teal">Improving</span> → Leading. Trailing dots show the last 5 trading days; fast-moving trails signal active sector rotation. Use this to get ahead of transitions before they show up in price.
-        </p>
-        <Collapsible label="Detailed axis and quadrant guide" defaultOpen>
-          <div><span className="font-semibold text-ink-primary">X-axis — RS Strength:</span> How far to the right a sector sits = how much it has outperformed the Nifty 500 over 3 months. Zero is the average — right is better, left is worse. Mean-centered so the cross is always at (0,0).</div>
-          <div><span className="font-semibold text-ink-primary">Y-axis — RS Momentum:</span> The change in 3-month RS over the last 20 trading days. Above zero = sector is gaining ground vs the index. Below zero = losing ground, even if RS is still positive.</div>
-          <div><span className="font-semibold text-ink-primary">Leading (top-right):</span> Strong RS + improving momentum. Best sectors to own. Stay positioned here.</div>
-          <div><span className="font-semibold text-ink-primary">Weakening (bottom-right):</span> RS still positive but momentum fading. Start rotating out before it crosses zero.</div>
-          <div><span className="font-semibold text-ink-primary">Lagging (bottom-left):</span> Underperforming and losing further ground. Avoid or exit. Recovery takes time.</div>
-          <div><span className="font-semibold text-ink-primary">Improving (top-left):</span> RS negative but momentum turning. Early rotation signal — watch closely for a cross into Leading.</div>
-          <div className="sm:col-span-2"><span className="font-semibold text-ink-primary">How to act on it:</span> Own Leading sectors with broad RS breadth. Trim Weakening positions. Avoid Lagging. Watch Improving sectors — they are tomorrow&apos;s Leading if the regime supports risk. Fast clockwise rotation with large trailing dots = conviction. Slow or counter-clockwise = indecision.</div>
-        </Collapsible>
-        <RRGChart current={visible} history={rrgHistory} onSelect={onSelect} />
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_260px] gap-6 items-start">
+          {/* Chart — fills the left column */}
+          <RRGChart current={visible} history={rrgHistory} onSelect={onSelect} />
+
+          {/* Commentary panel — always visible on the right */}
+          <div className="font-sans text-[11px] text-ink-secondary space-y-4 pt-1">
+            <p className="leading-relaxed text-ink-tertiary">
+              The RRG plots where each sector sits on two axes: how much it has outperformed the Nifty 500 (X) and whether that outperformance is accelerating or fading (Y). Sectors rotate <span className="font-medium text-ink-primary">clockwise</span>. Trailing dots = last 5 days; fast trails = active rotation.
+            </p>
+
+            <div className="space-y-2">
+              <div className="font-semibold text-[10px] uppercase tracking-wider text-ink-tertiary">Axes</div>
+              <div><span className="font-medium text-ink-primary">X — RS Strength:</span> outperformance vs Nifty 500 over 3M. Mean-centered — zero is the average, right is better.</div>
+              <div><span className="font-medium text-ink-primary">Y — RS Momentum:</span> change in RS over last 20 days. Above zero = gaining ground vs index.</div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="font-semibold text-[10px] uppercase tracking-wider text-ink-tertiary">Quadrants</div>
+              <div className="flex items-start gap-2">
+                <span className="mt-0.5 inline-block w-2 h-2 rounded-full bg-signal-pos flex-shrink-0" />
+                <span><span className="font-medium text-ink-primary">Leading (↗)</span> — strong RS + improving momentum. Own and stay.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="mt-0.5 inline-block w-2 h-2 rounded-full bg-signal-warn flex-shrink-0" />
+                <span><span className="font-medium text-ink-primary">Weakening (↘)</span> — RS positive but fading. Start trimming before it crosses zero.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="mt-0.5 inline-block w-2 h-2 rounded-full bg-ink-tertiary flex-shrink-0" />
+                <span><span className="font-medium text-ink-primary">Lagging (↙)</span> — underperforming and losing further ground. Avoid / exit.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="mt-0.5 inline-block w-2 h-2 rounded-full bg-teal flex-shrink-0" />
+                <span><span className="font-medium text-ink-primary">Improving (↖)</span> — RS negative but momentum turning. Early signal — watch for a Leading cross.</span>
+              </div>
+            </div>
+
+            <div className="space-y-1 border-t border-paper-rule pt-3">
+              <div className="font-semibold text-[10px] uppercase tracking-wider text-ink-tertiary">How to act</div>
+              <div className="leading-relaxed">Own <span className="font-medium text-ink-primary">Leading</span> sectors with broad RS breadth. Trim <span className="font-medium text-ink-primary">Weakening</span> before the X-axis cross. Avoid <span className="font-medium text-ink-primary">Lagging</span>. Watch <span className="font-medium text-ink-primary">Improving</span> — tomorrow&apos;s Leading if the regime supports risk. Fast clockwise trails = conviction; slow or counter-clockwise = indecision.</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* ── Section 3: Decision Table ── */}
@@ -318,7 +347,7 @@ export function SectorViews({
 
         {/* Sector State Heatmap */}
         <div>
-          <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center justify-between mb-4">
             <h2 className="font-sans text-xs font-semibold text-ink-tertiary uppercase tracking-wider flex items-center gap-1.5">
               Sector State History
               <span title="Daily sector classification over the selected range. Green = Overweight, Amber = Neutral, Red = Underweight/Avoid.">
@@ -331,18 +360,49 @@ export function SectorViews({
               onChange={setHeatmapRange}
             />
           </div>
-          <p className="font-sans text-[11px] text-ink-secondary mb-4 max-w-3xl leading-relaxed">
-            Each cell shows a sector&apos;s classification for that day.{' '}
-            <span className="text-signal-pos font-medium">Green = Overweight</span>,{' '}
-            <span className="text-signal-warn font-medium">Amber = Neutral</span>,{' '}
-            <span className="text-signal-neg font-medium">Red = Underweight/Avoid</span>.
-            Sustained runs signal conviction and momentum alignment. Fresh color flips — especially sector → Overweight — signal active rotations worth investigating in the bubble chart.
-            A sector that has stayed Overweight for 60+ days is a core position; one that flipped in the last 5 is a new entry candidate.
-          </p>
-          <SectorHeatmap
-            history={filteredHistory}
-            sectors={visible.map(s => s.sector_name)}
-          />
+          <div className="grid grid-cols-1 xl:grid-cols-[1fr_260px] gap-6 items-start">
+            {/* Heatmap */}
+            <SectorHeatmap
+              history={filteredHistory}
+              sectors={visible.map(s => s.sector_name)}
+            />
+
+            {/* Commentary panel */}
+            <div className="font-sans text-[11px] text-ink-secondary space-y-4 pt-1">
+              <div className="space-y-2">
+                <div className="font-semibold text-[10px] uppercase tracking-wider text-ink-tertiary">Color key</div>
+                <div className="flex items-center gap-2">
+                  <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: '#22c55e' }} />
+                  <span><span className="font-medium" style={{ color: '#22c55e' }}>Overweight</span> — sector meets RS + breadth thresholds. Active position.</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: '#f59e0b' }} />
+                  <span><span className="font-medium" style={{ color: '#f59e0b' }}>Neutral</span> — mixed signals. Hold existing positions; no new adds.</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: '#ef4444' }} />
+                  <span><span className="font-medium" style={{ color: '#ef4444' }}>Underweight</span> — RS or breadth deteriorating. Reduce / exit.</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: '#7c2d12' }} />
+                  <span><span className="font-medium" style={{ color: '#9a3412' }}>Avoid</span> — broad breakdown. No exposure; capital preservation only.</span>
+                </div>
+              </div>
+
+              <div className="space-y-2 border-t border-paper-rule pt-3">
+                <div className="font-semibold text-[10px] uppercase tracking-wider text-ink-tertiary">What to look for</div>
+                <div className="leading-relaxed">
+                  <span className="font-medium text-ink-primary">Sustained runs</span> signal conviction — a sector that has been Overweight for 60+ days is a core position, not a trade.
+                </div>
+                <div className="leading-relaxed">
+                  <span className="font-medium text-ink-primary">Fresh flips to green</span> in the last 1–5 cells are new entry candidates. Cross-check in the bubble chart and RRG before sizing.
+                </div>
+                <div className="leading-relaxed">
+                  <span className="font-medium text-ink-primary">Red runs after green</span> are exits, not dips. The model has seen the breadth data; follow it.
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
