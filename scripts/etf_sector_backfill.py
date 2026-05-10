@@ -21,6 +21,11 @@ from typing import Any
 
 import requests
 import structlog
+from sqlalchemy import text
+from sqlalchemy.engine import Engine
+
+from atlas.config import Config
+from atlas.db import get_engine
 
 log = structlog.get_logger()
 
@@ -329,3 +334,88 @@ def verify_tickers(
     found = {r["ticker"] for r in rows}
     missing = targets - found
     return found, missing
+
+
+def build_master_upsert_params(etf: dict[str, str]) -> dict:
+    """Build the parameter dict for a de_etf_master upsert row.
+
+    Args:
+        etf: One entry from TARGET_ETFS with keys: ticker, name, sector, benchmark.
+
+    Returns:
+        Dict matching de_etf_master columns for use with executemany.
+    """
+    return {
+        "ticker":    etf["ticker"],
+        "name":      etf["name"],
+        "exchange":  "NSE",
+        "country":   "IN",
+        "currency":  "INR",
+        "sector":    etf.get("sector"),
+        "benchmark": etf.get("benchmark"),
+        "is_active": True,
+        "source":    "nse_bhav",
+    }
+
+
+def seed_etf_master(
+    engine: Engine,
+    etfs: list[dict],
+    dry_run: bool = False,
+) -> None:
+    """Ensure all target ETFs have canonical (no .NS) rows in de_etf_master.
+
+    Uses ON CONFLICT (ticker) DO UPDATE, so safe to re-run. Logs inserted
+    vs already-present counts via row count before/after.
+
+    Args:
+        engine: SQLAlchemy engine from get_engine().
+        etfs: List of ETF dicts (same shape as TARGET_ETFS).
+        dry_run: If True, log what would happen but make no DB changes.
+    """
+    upsert_sql = text("""
+        INSERT INTO public.de_etf_master
+            (ticker, name, exchange, country, currency, sector, benchmark, is_active, source)
+        VALUES
+            (:ticker, :name, :exchange, :country, :currency, :sector, :benchmark, :is_active, :source)
+        ON CONFLICT (ticker) DO UPDATE SET
+            name       = EXCLUDED.name,
+            sector     = EXCLUDED.sector,
+            benchmark  = EXCLUDED.benchmark,
+            is_active  = TRUE,
+            source     = EXCLUDED.source
+    """)
+
+    params_list = [build_master_upsert_params(etf) for etf in etfs]
+    tickers = [p["ticker"] for p in params_list]
+
+    if dry_run:
+        log.info("dry_run_seed_etf_master", tickers=tickers)
+        return
+
+    with engine.begin() as conn:
+        before = conn.execute(
+            text(
+                "SELECT COUNT(*) FROM public.de_etf_master "
+                "WHERE ticker = ANY(:tickers)"
+            ),
+            {"tickers": tickers},
+        ).scalar_one()
+
+        conn.execute(upsert_sql, params_list)
+
+        after = conn.execute(
+            text(
+                "SELECT COUNT(*) FROM public.de_etf_master "
+                "WHERE ticker = ANY(:tickers)"
+            ),
+            {"tickers": tickers},
+        ).scalar_one()
+
+    log.info(
+        "seed_etf_master_done",
+        tickers_before=before,
+        tickers_after=after,
+        inserted=after - before,
+        updated=before,
+    )

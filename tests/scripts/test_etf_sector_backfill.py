@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 sys.path.insert(0, ".")
 from scripts.etf_sector_backfill import (
     build_bhav_url,
+    build_master_upsert_params,
     download_bhav_zip,
     parse_bhav_date,
     parse_bhav_zip,
@@ -220,3 +221,37 @@ class TestVerifyTickers:
         found, missing = verify_tickers(zip_bytes, {"PHARMABEES", "NETFMETAL"})
         assert found & missing == set()  # disjoint
         assert found | missing == {"PHARMABEES", "NETFMETAL"}  # complete
+
+
+class TestBuildMasterUpsertParams:
+    def test_required_fields_present(self):
+        etf = {
+            "ticker": "PHARMABEES",
+            "name": "Nippon India ETF Nifty Pharma",
+            "sector": "Pharma",
+            "benchmark": "NIFTY PHARMA",
+        }
+        params = build_master_upsert_params(etf)
+        assert params["ticker"] == "PHARMABEES"
+        assert params["exchange"] == "NSE"
+        assert params["country"] == "IN"
+        assert params["currency"] == "INR"
+        assert params["is_active"] is True
+        assert params["source"] == "nse_bhav"
+
+    def test_sector_and_benchmark_forwarded(self):
+        etf = {
+            "ticker": "MOENERGY",
+            "name": "Motilal Oswal Nifty Energy ETF",
+            "sector": "Energy",
+            "benchmark": "NIFTY ENERGY",
+        }
+        params = build_master_upsert_params(etf)
+        assert params["sector"] == "Energy"
+        assert params["benchmark"] == "NIFTY ENERGY"
+
+    def test_missing_optional_fields_return_none(self):
+        etf = {"ticker": "TEST", "name": "Test ETF"}
+        params = build_master_upsert_params(etf)
+        assert params["sector"] is None
+        assert params["benchmark"] is None
