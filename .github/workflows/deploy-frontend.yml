@@ -34,9 +34,14 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           command_timeout: 10m
+          envs: ATLAS_DB_URL,ATLAS_INTERNAL_API_BASE_URL
           script: |
             set -e
             cd /home/ubuntu/atlas-frontend
+
+            echo "--- writing env ---"
+            printf 'ATLAS_DB_URL=%s\nATLAS_INTERNAL_API_BASE_URL=%s\n' \
+              "$ATLAS_DB_URL" "$ATLAS_INTERNAL_API_BASE_URL" > .env.local
 
             echo "--- installing deps ---"
             npm ci --prefer-offline
