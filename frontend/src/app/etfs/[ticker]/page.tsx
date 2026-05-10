@@ -1,7 +1,12 @@
 export const dynamic = 'force-dynamic'
 
 import { notFound } from 'next/navigation'
-import { getETFByTicker, getETFMetricHistory, getETFStateHistory } from '@/lib/queries/etfs'
+import {
+  getETFByTicker,
+  getETFMetricHistory,
+  getETFStateHistory,
+  getETFHoldings,
+} from '@/lib/queries/etfs'
 import { ETFDeepDiveHeader } from '@/components/etfs/ETFDeepDiveHeader'
 import { ETFSnapshotTiles } from '@/components/etfs/ETFSnapshotTiles'
 import { ETFDeepDiveTabs } from '@/components/etfs/ETFDeepDiveTabs'
@@ -14,10 +19,11 @@ export default async function ETFPage({
   const { ticker } = await params
   const decoded = decodeURIComponent(ticker)
 
-  const [etf, metricHistory, stateHistory] = await Promise.all([
+  const [etf, metricHistory, stateHistory, holdings] = await Promise.all([
     getETFByTicker(decoded),
     getETFMetricHistory(decoded, 180),
     getETFStateHistory(decoded, 180),
+    getETFHoldings(decoded, 20),
   ])
 
   if (!etf) notFound()
@@ -30,6 +36,7 @@ export default async function ETFPage({
         etf={etf}
         metricHistory={metricHistory}
         stateHistory={stateHistory}
+        holdings={holdings}
       />
     </div>
   )

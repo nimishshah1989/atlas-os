@@ -18,6 +18,13 @@ function ThemeBadge({ theme }: { theme: string }) {
   )
 }
 
+function formatDate(iso: string | null): string {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleDateString('en-IN', {
+    day: '2-digit', month: 'short', year: 'numeric',
+  }).replace(',', '')
+}
+
 export function ETFDeepDiveHeader({ etf }: { etf: ETFRow }) {
   return (
     <div className="sticky top-14 bg-paper border-b border-paper-rule z-30">
@@ -40,6 +47,11 @@ export function ETFDeepDiveHeader({ etf }: { etf: ETFRow }) {
             {etf.linked_sector && (
               <span className="font-sans text-xs text-ink-tertiary">{etf.linked_sector}</span>
             )}
+            {etf.linked_index && (
+              <span className="font-sans text-xs text-ink-tertiary bg-paper-rule/30 px-1.5 py-0.5 rounded">
+                {etf.linked_index}
+              </span>
+            )}
             <StateTuple3
               rs={etf.rs_state}
               mom={etf.momentum_state}
@@ -47,6 +59,9 @@ export function ETFDeepDiveHeader({ etf }: { etf: ETFRow }) {
             />
           </div>
           <div className="flex items-center gap-5 font-sans text-xs text-ink-tertiary">
+            {etf.inception_date && (
+              <span>Since <span className="text-ink-secondary">{formatDate(etf.inception_date)}</span></span>
+            )}
             {etf.position_size_pct && (
               <span>
                 Pos Size:{' '}
@@ -60,6 +75,11 @@ export function ETFDeepDiveHeader({ etf }: { etf: ETFRow }) {
             )}
             {etf.fund_house && (
               <span className="text-ink-tertiary">{etf.fund_house}</span>
+            )}
+            {etf.data_as_of && (
+              <span className="text-ink-tertiary/60 text-[10px]">
+                Data as of {formatDate(etf.data_as_of)}
+              </span>
             )}
           </div>
         </div>

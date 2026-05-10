@@ -45,9 +45,10 @@ const THEME_STYLE: Record<string, string> = {
 // Optional columns — all default to hidden.
 const OPTIONAL_COLS: ColumnDef[] = [
   { key: 'ret_1w',        label: '1W Return',  defaultVisible: false },
+  { key: 'ret_6m',        label: '6M Return',  defaultVisible: false },
   { key: 'vol_63',        label: 'Vol 63D',    defaultVisible: false },
   { key: 'drawdown',      label: 'Drawdown',   defaultVisible: false },
-  { key: 'days_in_state', label: 'Days',       defaultVisible: false },
+  { key: 'days_in_state', label: 'Days (RS)',  defaultVisible: false },
 ]
 
 const COL_STORAGE_KEY = 'atlas-etf-screener-cols'
@@ -233,9 +234,10 @@ export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
               <Th label="Mom" k="momentum_state" />
               <Th label="Risk" k="risk_state" />
               {visibleCols.has('ret_1w') && <PlainTh label="1W" align="right" />}
+              {visibleCols.has('ret_6m') && <PlainTh label="6M" align="right" />}
               {visibleCols.has('vol_63') && <PlainTh label="Vol 63D" align="right" />}
               {visibleCols.has('drawdown') && <PlainTh label="Drawdown" align="right" />}
-              {visibleCols.has('days_in_state') && <PlainTh label="Days" align="right" />}
+              {visibleCols.has('days_in_state') && <PlainTh label="Days (RS)" align="right" />}
               <Th label="1M" k="ret_1m" align="right" />
               <Th label="3M" k="ret_3m" align="right" />
               <Th label="RS Pctile" k="rs_pctile_3m" align="right" />
@@ -288,6 +290,11 @@ export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
                       {visibleCols.has('ret_1w') && (
                         <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(row.ret_1w)}`}>
                           {pct(row.ret_1w)}
+                        </td>
+                      )}
+                      {visibleCols.has('ret_6m') && (
+                        <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(row.ret_6m)}`}>
+                          {pct(row.ret_6m)}
                         </td>
                       )}
                       {visibleCols.has('vol_63') && (

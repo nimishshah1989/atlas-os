@@ -1,19 +1,28 @@
 'use client'
 import { useState } from 'react'
-import type { ETFRow, ETFMetricHistoryRow, ETFStateHistoryRow } from '@/lib/queries/etfs'
+import type { ETFRow, ETFMetricHistoryRow, ETFStateHistoryRow, ETFHoldingRow } from '@/lib/queries/etfs'
 import { ETFOverviewTab } from './ETFOverviewTab'
 import { ETFHistoryTab } from './ETFHistoryTab'
+import { ETFHoldingsTab } from './ETFHoldingsTab'
 
-type Tab = 'overview' | 'history'
+type Tab = 'overview' | 'history' | 'holdings'
+
+const TAB_LABELS: Record<Tab, string> = {
+  overview: 'Overview',
+  history: 'State History',
+  holdings: 'Holdings',
+}
 
 export function ETFDeepDiveTabs({
   etf,
   metricHistory,
   stateHistory,
+  holdings,
 }: {
   etf: ETFRow
   metricHistory: ETFMetricHistoryRow[]
   stateHistory: ETFStateHistoryRow[]
+  holdings: ETFHoldingRow[]
 }) {
   const [tab, setTab] = useState<Tab>('overview')
 
@@ -22,7 +31,7 @@ export function ETFDeepDiveTabs({
       {/* Tab bar */}
       <div className="px-6 border-b border-paper-rule">
         <div className="flex items-center gap-0">
-          {(['overview', 'history'] as Tab[]).map(t => (
+          {(['overview', 'history', 'holdings'] as Tab[]).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -32,7 +41,12 @@ export function ETFDeepDiveTabs({
                   : 'border-transparent text-ink-tertiary hover:text-ink-secondary'
               }`}
             >
-              {t === 'overview' ? 'Overview' : 'State History'}
+              {TAB_LABELS[t]}
+              {t === 'holdings' && holdings.length > 0 && (
+                <span className="ml-1.5 font-sans text-[10px] bg-paper-rule/40 px-1 py-0.5 rounded">
+                  {holdings.length}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -44,6 +58,9 @@ export function ETFDeepDiveTabs({
       )}
       {tab === 'history' && (
         <ETFHistoryTab etf={etf} stateHistory={stateHistory} metricHistory={metricHistory} />
+      )}
+      {tab === 'holdings' && (
+        <ETFHoldingsTab holdings={holdings} />
       )}
     </div>
   )

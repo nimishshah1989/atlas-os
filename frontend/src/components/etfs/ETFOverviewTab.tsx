@@ -76,6 +76,37 @@ export function ETFOverviewTab({
         <ETFGatesPanel etf={etf} />
       </div>
 
+      {/* Exit triggers — only show if any are active */}
+      {(etf.exit_market_riskoff || etf.exit_sector_avoid || etf.exit_rs_deteriorate || etf.exit_momentum_collapse) && (
+        <div className="border border-signal-neg/30 bg-signal-neg/5 rounded-sm px-4 py-3">
+          <div className="font-sans text-[10px] font-semibold text-signal-neg uppercase tracking-wider mb-2">
+            Exit Signals Active
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {etf.exit_market_riskoff && (
+              <span className="font-sans text-[11px] text-signal-neg bg-signal-neg/10 px-2 py-0.5 rounded">
+                Market Risk-Off
+              </span>
+            )}
+            {etf.exit_sector_avoid && (
+              <span className="font-sans text-[11px] text-signal-neg bg-signal-neg/10 px-2 py-0.5 rounded">
+                Sector Avoid
+              </span>
+            )}
+            {etf.exit_rs_deteriorate && (
+              <span className="font-sans text-[11px] text-signal-neg bg-signal-neg/10 px-2 py-0.5 rounded">
+                RS Deteriorating
+              </span>
+            )}
+            {etf.exit_momentum_collapse && (
+              <span className="font-sans text-[11px] text-signal-neg bg-signal-neg/10 px-2 py-0.5 rounded">
+                Momentum Collapse
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Charts */}
       <div>
         <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider mb-4">

@@ -8,6 +8,7 @@ export type FundRow = {
   amc: string
   category_name: string
   broad_category: string
+  data_as_of: string | null
   // Metrics (all ::text casts → string | null)
   ret_1m: string | null
   ret_3m: string | null
@@ -124,6 +125,7 @@ export async function getAllFunds(): Promise<FundRow[]> {
     )
     SELECT
       uf.mstar_id, uf.scheme_name, uf.amc, uf.category_name, uf.broad_category,
+      (SELECT metrics_date FROM latest)::text AS data_as_of,
       fm.ret_1m::text AS ret_1m, fm.ret_3m::text AS ret_3m,
       fm.ret_6m::text AS ret_6m, fm.ret_12m::text AS ret_12m,
       fm.rs_1m_category::text AS rs_1m_category,
@@ -242,5 +244,62 @@ export async function getFundDecisionHistory(mstar_id: string): Promise<FundDeci
     WHERE mstar_id = ${mstar_id}
     ORDER BY date DESC
     LIMIT 52
+  `
+}
+
+export type FundHoldingRow = {
+  symbol: string | null
+  company_name: string | null
+  weight: string | null
+  sector: string | null
+  rs_state: string | null
+  momentum_state: string | null
+  risk_state: string | null
+  ret_1m: string | null
+  ret_3m: string | null
+  holdings_date: string | null
+}
+
+export async function getFundHoldings(mstar_id: string, limit = 20): Promise<FundHoldingRow[]> {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    throw new Error(`limit must be between 1 and 100, got: ${limit}`)
+  }
+  return sql<FundHoldingRow[]>`
+    WITH latest_holdings AS (
+      SELECT MAX(as_of_date) AS as_of_date
+      FROM public.de_mf_holdings
+      WHERE mstar_id = ${mstar_id}
+    ),
+    latest_states_date AS (
+      SELECT MAX(date) AS d
+      FROM atlas.atlas_stock_states_daily
+      WHERE date <= COALESCE((SELECT as_of_date FROM latest_holdings), CURRENT_DATE)
+    )
+    SELECT
+      u.symbol,
+      u.company_name,
+      (h.weight_pct / 100.0)::text  AS weight,
+      u.sector,
+      s.rs_state,
+      s.momentum_state,
+      s.risk_state,
+      m.ret_1m::text                AS ret_1m,
+      m.ret_3m::text                AS ret_3m,
+      lh.as_of_date::text           AS holdings_date
+    FROM public.de_mf_holdings h
+    JOIN latest_holdings lh ON h.mstar_id = ${mstar_id}
+      AND h.as_of_date = lh.as_of_date
+    LEFT JOIN atlas.atlas_universe_stocks u
+      ON u.instrument_id = h.instrument_id
+      AND u.effective_to IS NULL
+    LEFT JOIN atlas.atlas_stock_states_daily s
+      ON s.instrument_id = u.instrument_id
+      AND s.date = (SELECT d FROM latest_states_date)
+    LEFT JOIN atlas.atlas_stock_metrics_daily m
+      ON m.instrument_id = u.instrument_id
+      AND m.date = (SELECT d FROM latest_states_date)
+    WHERE h.mstar_id = ${mstar_id}
+    ORDER BY h.weight_pct DESC
+    LIMIT ${limit}
   `
 }

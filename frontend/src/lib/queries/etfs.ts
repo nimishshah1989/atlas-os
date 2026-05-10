@@ -6,8 +6,11 @@ export type ETFRow = {
   etf_name: string | null
   theme: string
   linked_sector: string | null
+  linked_index: string | null
+  inception_date: string | null
   asset_class: string | null
   fund_house: string | null
+  data_as_of: string | null
   // Metrics
   ret_1m: string | null
   ret_3m: string | null
@@ -34,6 +37,11 @@ export type ETFRow = {
   sector_gate: boolean | null
   market_gate: boolean | null
   position_size_pct: string | null
+  // Exit triggers
+  exit_market_riskoff: boolean | null
+  exit_sector_avoid: boolean | null
+  exit_rs_deteriorate: boolean | null
+  exit_momentum_collapse: boolean | null
 }
 
 export type ETFMetricHistoryRow = {
@@ -60,17 +68,20 @@ export async function getAllETFs(): Promise<ETFRow[]> {
       u.etf_name,
       u.theme,
       u.linked_sector,
+      u.linked_index,
+      u.inception_date::text        AS inception_date,
       u.asset_class,
       u.fund_house,
-      m.ret_1m::text          AS ret_1m,
-      m.ret_3m::text          AS ret_3m,
-      m.ret_6m::text          AS ret_6m,
-      m.rs_pctile_3m::text    AS rs_pctile_3m,
-      m.ema_10_ratio::text    AS ema_10_ratio,
-      m.extension_pct::text   AS extension_pct,
-      m.ret_1w::text              AS ret_1w,
-      m.realized_vol_63::text     AS vol_63,
-      m.drawdown_ratio_252::text  AS drawdown,
+      l.d::text                     AS data_as_of,
+      m.ret_1m::text                AS ret_1m,
+      m.ret_3m::text                AS ret_3m,
+      m.ret_6m::text                AS ret_6m,
+      m.rs_pctile_3m::text          AS rs_pctile_3m,
+      m.ema_10_ratio::text          AS ema_10_ratio,
+      m.extension_pct::text         AS extension_pct,
+      m.ret_1w::text                AS ret_1w,
+      m.realized_vol_63::text       AS vol_63,
+      m.drawdown_ratio_252::text    AS drawdown,
       (CURRENT_DATE - s.state_since_date)::int AS days_in_state,
       s.rs_state,
       s.momentum_state,
@@ -84,7 +95,11 @@ export async function getAllETFs(): Promise<ETFRow[]> {
       d.risk_gate,
       d.sector_gate,
       d.market_gate,
-      d.position_size_pct::text AS position_size_pct
+      d.position_size_pct::text     AS position_size_pct,
+      d.exit_market_riskoff,
+      d.exit_sector_avoid,
+      d.exit_rs_deteriorate,
+      d.exit_momentum_collapse
     FROM atlas.atlas_universe_etfs u
     JOIN latest l ON TRUE
     LEFT JOIN atlas.atlas_etf_metrics_daily m
@@ -110,14 +125,17 @@ export async function getETFByTicker(ticker: string): Promise<ETFRow | null> {
       u.etf_name,
       u.theme,
       u.linked_sector,
+      u.linked_index,
+      u.inception_date::text        AS inception_date,
       u.asset_class,
       u.fund_house,
-      m.ret_1m::text          AS ret_1m,
-      m.ret_3m::text          AS ret_3m,
-      m.ret_6m::text          AS ret_6m,
-      m.rs_pctile_3m::text    AS rs_pctile_3m,
-      m.ema_10_ratio::text    AS ema_10_ratio,
-      m.extension_pct::text   AS extension_pct,
+      l.d::text                     AS data_as_of,
+      m.ret_1m::text                AS ret_1m,
+      m.ret_3m::text                AS ret_3m,
+      m.ret_6m::text                AS ret_6m,
+      m.rs_pctile_3m::text          AS rs_pctile_3m,
+      m.ema_10_ratio::text          AS ema_10_ratio,
+      m.extension_pct::text         AS extension_pct,
       s.rs_state,
       s.momentum_state,
       s.risk_state,
@@ -130,7 +148,11 @@ export async function getETFByTicker(ticker: string): Promise<ETFRow | null> {
       d.risk_gate,
       d.sector_gate,
       d.market_gate,
-      d.position_size_pct::text AS position_size_pct
+      d.position_size_pct::text     AS position_size_pct,
+      d.exit_market_riskoff,
+      d.exit_sector_avoid,
+      d.exit_rs_deteriorate,
+      d.exit_momentum_collapse
     FROM atlas.atlas_universe_etfs u
     JOIN latest l ON TRUE
     LEFT JOIN atlas.atlas_etf_metrics_daily m
@@ -183,5 +205,62 @@ export async function getETFStateHistory(
     WHERE ticker = ${ticker}
       AND date >= CURRENT_DATE - (${days} || ' days')::interval
     ORDER BY date ASC
+  `
+}
+
+export type ETFHoldingRow = {
+  symbol: string | null
+  company_name: string | null
+  weight: string | null
+  sector: string | null
+  rs_state: string | null
+  momentum_state: string | null
+  risk_state: string | null
+  ret_1m: string | null
+  ret_3m: string | null
+  holdings_date: string | null
+}
+
+export async function getETFHoldings(ticker: string, limit = 20): Promise<ETFHoldingRow[]> {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    throw new Error(`limit must be between 1 and 100, got: ${limit}`)
+  }
+  return sql<ETFHoldingRow[]>`
+    WITH latest_holdings AS (
+      SELECT MAX(as_of_date) AS as_of_date
+      FROM public.de_etf_holdings
+      WHERE ticker = ${ticker}
+    ),
+    latest_states_date AS (
+      SELECT MAX(date) AS d
+      FROM atlas.atlas_stock_states_daily
+      WHERE date <= COALESCE((SELECT as_of_date FROM latest_holdings), CURRENT_DATE)
+    )
+    SELECT
+      u.symbol,
+      u.company_name,
+      h.weight::text            AS weight,
+      u.sector,
+      s.rs_state,
+      s.momentum_state,
+      s.risk_state,
+      m.ret_1m::text            AS ret_1m,
+      m.ret_3m::text            AS ret_3m,
+      lh.as_of_date::text       AS holdings_date
+    FROM public.de_etf_holdings h
+    JOIN latest_holdings lh ON h.ticker = ${ticker}
+      AND h.as_of_date = lh.as_of_date
+    LEFT JOIN atlas.atlas_universe_stocks u
+      ON u.instrument_id = h.instrument_id
+      AND u.effective_to IS NULL
+    LEFT JOIN atlas.atlas_stock_states_daily s
+      ON s.instrument_id = u.instrument_id
+      AND s.date = (SELECT d FROM latest_states_date)
+    LEFT JOIN atlas.atlas_stock_metrics_daily m
+      ON m.instrument_id = u.instrument_id
+      AND m.date = (SELECT d FROM latest_states_date)
+    WHERE h.ticker = ${ticker}
+    ORDER BY h.weight DESC
+    LIMIT ${limit}
   `
 }
