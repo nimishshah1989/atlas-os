@@ -1,13 +1,14 @@
 // frontend/src/components/sectors/SectorOverviewTab.tsx
 import type { ReactNode } from 'react'
 import { IndicatorChart } from '@/components/regime/IndicatorChart'
-import type { SectorMetricHistoryRow, SectorStateRow } from '@/lib/queries/sectors'
+import type { BreadthWaterfallRow, SectorMetricHistoryRow, SectorStateRow } from '@/lib/queries/sectors'
 import type { SectorBriefSnapshot } from '@/lib/queries/sector-deep-dive'
 import type { SectorDecision } from '@/lib/sectors-decision'
 import { SectorDrawerSnapshot } from './SectorDrawerSnapshot'
 import { SectorDrawerStateStats } from './SectorDrawerStateStats'
 import type { MarketRegimeRow } from '@/lib/queries/regime'
 import { MarketRegimeBanner } from './MarketRegimeBanner'
+import { BreadthWaterfall } from './BreadthWaterfall'
 
 type SnapshotWithDecision = SectorBriefSnapshot & { decision: SectorDecision }
 
@@ -210,19 +211,21 @@ export function SectorOverviewTab({
   stateHistory,
   range,
   regime,
+  breadthData,
 }: {
   snapshot: SnapshotWithDecision
   metricHistory: SectorMetricHistoryRow[]
   stateHistory: SectorStateRow[]
   range: string
   regime: MarketRegimeRow | null
+  breadthData: BreadthWaterfallRow[]
 }) {
   const dateStr = (d: Date | string): string =>
     d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10)
 
-  const rsData       = metricHistory.map(r => ({ date: dateStr(r.date), value: r.bottomup_rs_3m_nifty500 != null ? parseFloat(r.bottomup_rs_3m_nifty500) : null }))
-  const breadthData  = metricHistory.map(r => ({ date: dateStr(r.date), value: r.participation_50        != null ? parseFloat(r.participation_50)        : null }))
-  const rsParticData = metricHistory.map(r => ({ date: dateStr(r.date), value: r.participation_rs        != null ? parseFloat(r.participation_rs)        : null }))
+  const rsData             = metricHistory.map(r => ({ date: dateStr(r.date), value: r.bottomup_rs_3m_nifty500 != null ? parseFloat(r.bottomup_rs_3m_nifty500) : null }))
+  const breadthChartData   = metricHistory.map(r => ({ date: dateStr(r.date), value: r.participation_50        != null ? parseFloat(r.participation_50)        : null }))
+  const rsParticData       = metricHistory.map(r => ({ date: dateStr(r.date), value: r.participation_rs        != null ? parseFloat(r.participation_rs)        : null }))
   const ret3mData    = metricHistory.map(r => ({ date: dateStr(r.date), value: r.bottomup_ret_3m         != null ? parseFloat(r.bottomup_ret_3m)         : null }))
   const ema10Data    = metricHistory.map(r => ({
     date: dateStr(r.date),
@@ -305,7 +308,7 @@ export function SectorOverviewTab({
                 description="Percentage of stocks within this sector currently trading above their 50-day EMA. Above 50% means the majority of the sector is in a medium-term uptrend."
                 currentValue={rawPct(latest?.participation_50)}
                 isBullish={latest?.participation_50 != null ? parseFloat(latest.participation_50) > 0.5 : null}
-                data={breadthData}
+                data={breadthChartData}
                 refLine={0.5}
                 refLabel="50%"
                 variant="area"
@@ -376,6 +379,14 @@ export function SectorOverviewTab({
             </div>
           </div>
         )}
+      </div>
+
+      {/* Breadth History waterfall */}
+      <div className="mt-6">
+        <h3 className="font-sans text-xs font-medium text-ink-tertiary uppercase tracking-wider mb-3">
+          Breadth History
+        </h3>
+        <BreadthWaterfall data={breadthData} sectorName={snapshot.sector_name} />
       </div>
     </div>
     </div>
