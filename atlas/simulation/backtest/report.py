@@ -15,8 +15,8 @@ from atlas.simulation.backtest.engine import BacktestResult
 
 log = structlog.get_logger()
 
-BacktestType = Literal["full", "walk_forward", "custom"]
-_VALID_TYPES: frozenset[str] = frozenset({"full", "walk_forward", "custom"})
+BacktestType = Literal["full", "walk_forward", "custom", "3y", "5y", "7y"]
+_VALID_TYPES: frozenset[str] = frozenset({"full", "walk_forward", "custom", "3y", "5y", "7y"})
 
 
 def write_backtest_result(

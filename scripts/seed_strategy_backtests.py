@@ -13,12 +13,14 @@ Runs on EC2 where vectorbt is installed. Sequential per strategy.
 Results written to atlas.strategy_backtest_results.
 
 Usage:
-    python scripts/seed_strategy_backtests.py [--start YYYY-MM-DD] [--end YYYY-MM-DD]
+    python scripts/seed_strategy_backtests.py                     # all 15 × 3 windows
+    python scripts/seed_strategy_backtests.py --windows 3y        # only 3Y window
     python scripts/seed_strategy_backtests.py --strategy stocks_momentum_aggressive
 
-Defaults:
-    --start 2022-01-01
-    --end   2025-12-31
+Time windows (fixed right-anchor: 2025-12-31):
+    3y  2023-01-01 → 2025-12-31
+    5y  2021-01-01 → 2025-12-31
+    7y  2019-01-01 → 2025-12-31
 
 Re-running is safe: inserts a new row each time.
 """
@@ -594,6 +596,7 @@ def run_strategy_backtest(
     strategy_id: str,
     start_date: date,
     end_date: date,
+    backtest_type: str = "full",
 ) -> str | None:
     """Run one strategy backtest. Returns backtest_id or None on failure/skip."""
     t0 = time.time()
@@ -686,7 +689,7 @@ def run_strategy_backtest(
         backtest_id = write_backtest_result(
             engine=engine,
             result=result,
-            backtest_type="full",
+            backtest_type=backtest_type,  # type: ignore[arg-type]
             strategy_id=UUID(strategy_id),
         )
 
@@ -731,24 +734,37 @@ def run_strategy_backtest(
 # ---------------------------------------------------------------------------
 
 
+# Predefined time windows: (backtest_type, start, end).
+# End is always 2025-12-31 so windows are comparable on a fixed right-anchor.
+_WINDOWS: list[tuple[str, str, str]] = [
+    ("3y", "2023-01-01", "2025-12-31"),
+    ("5y", "2021-01-01", "2025-12-31"),
+    ("7y", "2019-01-01", "2025-12-31"),
+]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Seed historical backtest results for all 15 systematic strategies"
     )
-    parser.add_argument("--start", default="2022-01-01", metavar="YYYY-MM-DD")
-    parser.add_argument("--end", default="2025-12-31", metavar="YYYY-MM-DD")
+    parser.add_argument(
+        "--windows",
+        default="3y,5y,7y",
+        help="Comma-separated time windows to run: 3y,5y,7y (default: all three)",
+    )
     parser.add_argument(
         "--strategy", default=None, help="Single strategy name to run (default: all 15)"
     )
     args = parser.parse_args()
 
-    start_date = date.fromisoformat(args.start)
-    end_date = date.fromisoformat(args.end)
-
-    print("\nAtlas Strategy Backtest Seed  (RS state-transition signals)")
-    print(f"  Date range : {start_date} → {end_date}")
-    print(f"  Started    : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print()
+    requested = {w.strip() for w in args.windows.split(",")}
+    windows_to_run = [(t, s, e) for t, s, e in _WINDOWS if t in requested]
+    if not windows_to_run:
+        print(
+            f"ERROR: no valid windows in {args.windows!r}. Choose from: 3y, 5y, 7y.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     engine = get_engine()
     configs = load_all_configs()
@@ -759,31 +775,49 @@ def main() -> None:
             print(f"ERROR: strategy '{args.strategy}' not found", file=sys.stderr)
             sys.exit(1)
 
-    total = len(configs)
-    succeeded = 0
-    failed = 0
+    total_succeeded = 0
+    total_failed = 0
 
-    for i, cfg in enumerate(configs, 1):
-        print(f"[{i:2d}/{total}] {cfg.name} ({cfg.tier})")
-        strategy_id = _get_strategy_id(engine, cfg.name)
-        if strategy_id is None:
-            print("  ✗ Not in atlas.strategy_configs — run populate_strategy_configs() first")
-            failed += 1
-            print()
-            continue
+    for backtest_type, start_str, end_str in windows_to_run:
+        start_date = date.fromisoformat(start_str)
+        end_date = date.fromisoformat(end_str)
 
-        bt_id = run_strategy_backtest(engine, cfg, strategy_id, start_date, end_date)
-        if bt_id:
-            succeeded += 1
-        else:
-            failed += 1
+        print(f"\nAtlas Strategy Backtest Seed  [{backtest_type.upper()}]  (RS state-transition signals)")
+        print(f"  Date range : {start_date} → {end_date}")
+        print(f"  Started    : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print()
 
-    print("─" * 80)
-    print(f"Done: {succeeded} succeeded, {failed} failed")
+        total = len(configs)
+        succeeded = 0
+        failed = 0
+
+        for i, cfg in enumerate(configs, 1):
+            print(f"[{i:2d}/{total}] {cfg.name} ({cfg.tier})")
+            strategy_id = _get_strategy_id(engine, cfg.name)
+            if strategy_id is None:
+                print("  ✗ Not in atlas.strategy_configs — run populate_strategy_configs() first")
+                failed += 1
+                print()
+                continue
+
+            bt_id = run_strategy_backtest(
+                engine, cfg, strategy_id, start_date, end_date, backtest_type=backtest_type
+            )
+            if bt_id:
+                succeeded += 1
+            else:
+                failed += 1
+            print()
+
+        print("─" * 80)
+        print(f"[{backtest_type.upper()}] Done: {succeeded} succeeded, {failed} failed")
+        total_succeeded += succeeded
+        total_failed += failed
+
+    print(f"\nAll windows finished: {total_succeeded} succeeded, {total_failed} failed")
     print(f"Finished: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-    if failed > 0:
+    if total_failed > 0:
         sys.exit(1)
 
 
