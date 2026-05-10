@@ -1,6 +1,6 @@
 // allow-large: Sprint 2 screener — sector filter, col toggle, gate dots, expandable rows
 'use client'
-import { Fragment, useState, useMemo } from 'react'
+import { Fragment, useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import type { StockRowWithSector } from '@/lib/queries/stocks'
@@ -124,7 +124,13 @@ function GateDots({ row }: { row: StockRowWithSector }) {
   )
 }
 
-export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
+export function StockScreener({
+  stocks,
+  maFilter,
+}: {
+  stocks: StockRowWithSector[]
+  maFilter?: 'above_30w_ma' | 'above_50d_ma' | 'above_200d_ma' | null
+}) {
   const [sortKey, setSortKey] = useState<SortKey>('cap_rank')
   const [asc, setAsc] = useState(true)
   const [chip, setChip] = useState<FilterChip>('all')
@@ -132,6 +138,8 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
   const [sectorFilter, setSectorFilter] = useState<string>('All Sectors')
   const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null)
   const [visibleCols, setVisibleCols] = useColumnVisibility(COL_STORAGE_KEY, OPTIONAL_COLS)
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 50
 
   // Sorted, deduped sector list for the dropdown.
   const sectorOptions = useMemo(() => {
@@ -159,6 +167,11 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
 
   const filtered = useMemo(() => {
     let result = stocks
+
+    // MA breadth filter from parent shell
+    if (maFilter === 'above_30w_ma') result = result.filter(s => s.above_30w_ma === true)
+    else if (maFilter === 'above_50d_ma') result = result.filter(s => optBool(s, 'above_50d_ma') === true)
+    else if (maFilter === 'above_200d_ma') result = result.filter(s => optBool(s, 'above_200d_ma') === true)
 
     if (chip === 'n50') result = result.filter(s => s.in_nifty_50)
     else if (chip === 'n100') result = result.filter(s => s.in_nifty_100)
@@ -228,7 +241,17 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
       const cmp = av - bv
       return asc ? cmp : -cmp
     })
-  }, [stocks, chip, sectorFilter, search, sortKey, asc])
+  }, [stocks, chip, sectorFilter, search, sortKey, asc, maFilter])
+
+  useEffect(() => {
+    setPage(1)
+  }, [chip, sectorFilter, search, sortKey, asc, maFilter])
+
+  const pagedRows = useMemo(
+    () => filtered.slice(0, page * PAGE_SIZE),
+    [filtered, page, PAGE_SIZE]
+  )
+  const hasMore = pagedRows.length < filtered.length
 
   // Total visible columns = always-visible + optional columns currently selected.
   const optionalVisibleCount = OPTIONAL_COLS.filter(c => visibleCols.has(c.key)).length
@@ -307,7 +330,7 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
         </div>
         <div className="ml-auto flex items-center gap-2">
           <span className="font-sans text-xs text-ink-tertiary whitespace-nowrap">
-            Showing {filtered.length} of {stocks.length} stocks
+            {pagedRows.length} of {filtered.length} shown ({stocks.length} total)
           </span>
           <ColumnToggle columns={OPTIONAL_COLS} visible={visibleCols} onChange={setVisibleCols} />
         </div>
@@ -360,7 +383,7 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
                 </td>
               </tr>
             ) : (
-              filtered.map((row, i) => {
+              pagedRows.map((row, i) => {
                 const isExpanded = expandedSymbol === row.symbol
                 const ret1w = optStr(row, 'ret_1w')
                 const ret6m = optStr(row, 'ret_6m')
@@ -464,6 +487,20 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
           </tbody>
         </table>
       </div>
+      {hasMore && (
+        <div className="text-center py-2">
+          <button
+            type="button"
+            onClick={() => setPage(p => p + 1)}
+            className="font-sans text-xs text-teal hover:underline"
+          >
+            Load {Math.min(PAGE_SIZE, filtered.length - pagedRows.length)} more
+            <span className="ml-1 text-ink-tertiary">
+              ({filtered.length - pagedRows.length} remaining)
+            </span>
+          </button>
+        </div>
+      )}
     </div>
   )
 }
