@@ -71,8 +71,8 @@ function getSortValue(col: SortCol, f: FundRow, period: Period): number | string
   }
 }
 
-export function FundScreener({ funds, period, activeFilter }: Props) {
-  // activeFilter accepted as prop for future filter-context display; filter chips themselves live in FundPageClient
+export function FundScreener({ funds, period, activeFilter, onFilterChange: _onFilterChange }: Props) {
+  // filter chips live in FundPageClient; activeFilter is display-only context here
   void activeFilter
   const [sortCol, setSortCol] = useState<SortCol>('rs_pctile')
   const [sortAsc, setSortAsc] = useState(false)
