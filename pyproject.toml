@@ -109,6 +109,7 @@ venv = ".venv"
 typeCheckingMode = "standard"
 include = ["atlas", "tests", "scripts"]
 exclude = [".venv", "src/atlas_os", "migrations/versions"]
+extraPaths = ["."]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
