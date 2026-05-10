@@ -68,7 +68,7 @@ export async function getAllStocks(): Promise<StockRowWithSector[]> {
       m.realized_vol_63::text              AS realized_vol_63,
       m.avg_volume_20::text                AS avg_volume_20,
       m.ret_12m::text                      AS ret_12m,
-      (m.extension_pct > 0)                AS above_200d_ma,
+      (m.extension_pct IS NOT NULL AND m.extension_pct > 0) AS above_200d_ma,
       (
         m.ema_200_stock IS NOT NULL
         AND m.extension_pct IS NOT NULL
@@ -125,6 +125,16 @@ export async function getTopPicksAcrossSectors(): Promise<StockRowWithSector[]> 
       m.above_30w_ma,
       m.ema_10_at_20d_high,
       m.weinstein_gate_pass,
+      m.realized_vol_63::text              AS realized_vol_63,
+      m.avg_volume_20::text                AS avg_volume_20,
+      m.ret_12m::text                      AS ret_12m,
+      (m.extension_pct IS NOT NULL AND m.extension_pct > 0) AS above_200d_ma,
+      (
+        m.ema_200_stock IS NOT NULL
+        AND m.extension_pct IS NOT NULL
+        AND m.ema_50_stock IS NOT NULL
+        AND m.ema_200_stock * (1 + m.extension_pct) > m.ema_50_stock
+      )                                    AS above_50d_ma,
       s.rs_state,
       s.momentum_state,
       s.risk_state,
@@ -169,6 +179,26 @@ export async function getStockBySymbol(symbol: string): Promise<StockRowWithSect
       m.above_30w_ma,
       m.ema_10_at_20d_high,
       m.weinstein_gate_pass,
+      m.ret_1w::text                       AS ret_1w,
+      m.extension_pct::text                AS extension_pct,
+      m.realized_vol_63::text              AS vol_63,
+      m.realized_vol_63::text              AS realized_vol_63,
+      m.avg_volume_20::text                AS avg_volume_20,
+      m.ret_12m::text                      AS ret_12m,
+      (m.extension_pct IS NOT NULL AND m.extension_pct > 0) AS above_200d_ma,
+      (
+        m.ema_200_stock IS NOT NULL
+        AND m.extension_pct IS NOT NULL
+        AND m.ema_50_stock IS NOT NULL
+        AND m.ema_200_stock * (1 + m.extension_pct) > m.ema_50_stock
+      )                                    AS above_50d_ma,
+      m.drawdown_ratio_252::text           AS drawdown,
+      (CURRENT_DATE - s.state_since_date)::int AS days_in_state,
+      s.history_gate_pass,
+      s.liquidity_gate_pass,
+      s.stage1_base_qualifies,
+      d.strength_gate,
+      d.direction_gate,
       s.rs_state,
       s.momentum_state,
       s.risk_state,
