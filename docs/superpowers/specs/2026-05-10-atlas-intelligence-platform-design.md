@@ -76,7 +76,7 @@ All of these live in `frontend/src/components/ui/` and `frontend/src/lib/`.
 
 ### Chart Color Token Map
 
-All D3 charts (bubble charts, RRG, BreadthWaterfall, StateJourneyTimeline) MUST use these exact hex values — sourced from `globals.css` design tokens, NOT from Tailwind's default color palette:
+**Library split:** Bubble charts (Stocks, ETF, Funds, Sectors) use **Recharts** `ScatterChart` — they update the existing `stockColor()` function to return `CHART_COLORS` values. New D3 components (RRGChart, BreadthWaterfall, StateJourneyTimeline, MarketTreemap) use `CHART_COLORS` via `.attr('fill', CHART_COLORS.rs[state])`. All charts MUST use these exact hex values — sourced from `globals.css` design tokens, NOT from Tailwind's default color palette:
 
 ```typescript
 // lib/chart-colors.ts — single source of truth for all D3 charts
@@ -113,7 +113,7 @@ export const CHART_COLORS = {
 }
 ```
 
-**Existing chart fix:** `SectorBubbleChart.tsx` and `StockBubbleChart.tsx` currently use raw Tailwind hex (`#22c55e`, `#ef4444`). These must be updated to `CHART_COLORS` in Sprint 1 (tracked in TODOS.md).
+**Sprint 1 color fix:** `StockBubbleChart.tsx` (stocks/ and sectors/) currently use wrong Tailwind hex in `stockColor()` (`#f59e0b` for Consolidating, `#0ea5e9` for Emerging, `#94a3b8` for Average, `#ef4444` for Weak/Laggard). Update to `CHART_COLORS` values. Also fix `RSPctileBar` + `PosSizeBar` inline style hex in `stock-formatters.tsx`. Note: these are **Recharts** components, not D3 — the fix is a function update, not a library migration.
 
 ### `StateValuePair.tsx`
 ```
@@ -659,26 +659,31 @@ Next run: tonight at 8:00 PM IST.
 *No page rebuilds. All additive. Existing pages still work throughout.*
 - [ ] METRIC_DEFINITIONS config (all metrics, formulas, descriptions)
 - [ ] EVENT_LIBRARY config
-- [ ] `StateValuePair` component
-- [ ] `MetricTooltip` component + integration into all existing column headers
+- [ ] `lib/state-segment-utils.ts` — extract `buildSegments()` from existing `StateTimeline.tsx` into shared util (used by StateJourneyTimeline and StateTimeline)
+- [ ] `lib/chart-colors.ts` — canonical CHART_COLORS constant (Section 3)
+- [ ] **Bubble chart color fix (Sprint 1, not Sprint 2):** update `stockColor()` in `StockBubbleChart.tsx` (stocks/) and `StockBubbleChart.tsx` (sectors/) to use `CHART_COLORS` token map. Also fix `RSPctileBar` and `PosSizeBar` inline `style` hex values in `stock-formatters.tsx`. Note: existing bubble charts use **Recharts** `ScatterChart` (not D3) — color fix is a function update, not a library migration.
+- [ ] `StateValuePair` component (wraps existing `RSStateChip` / `MomentumChip` / `RiskChip` from `stock-formatters.tsx`)
+- [ ] `MetricTooltip` component — wraps existing `InfoTooltip.tsx` (same Radix primitive, adds `metricKey` → `METRIC_DEFINITIONS` lookup). Do NOT re-implement the Radix layer.
+- [ ] `CommentaryBlock.tsx` — rename/replace existing `Commentary.tsx` (12-line stub). Add teal border anatomy, insight cards, action signal. Migrate existing callers from `text: string` → `CommentaryOutput` type.
 - [ ] `InstrumentPageShell` + `MetricTileRow` (replace copy-pasted header bands)
-- [ ] `screener-utils.tsx` + `bubble-chart-utils.ts`
+- [ ] `screener-utils.tsx` — extract `SortTh`, `SortIcon`, `stateRank()` duplicated in StockScreener + ETFScreener
 - [ ] URL-driven period + benchmark (lift from component state to URL params)
 - [ ] URL param validation: allowlist check for `?period` and `?benchmark` in all Page server components
 - [ ] Bubble chart responsive sizing fix (aspect-ratio container, not hardcoded height)
 - [ ] **Portfolio monitoring bug fix:** diagnose and fix equity curve + drawdown chart empty data in `/portfolios/[id]`
+- [ ] **Migration 024:** Add `state_since_date DATE` column to `atlas_stock_states_daily`. Backfill from history (nightly job populates going forward). This gates Sprint 2's days_in_state column.
 
 ### Sprint 2 — Stocks + ETF Page Upgrade
 - [ ] Stocks screener: add 8 new columns (ret_1w, ret_6m, vol_63, extension, drawdown, gold RS, days_in_state, gates)
-- [ ] Stocks screener: column show/hide (settings popover, localStorage persistence — moved from Sprint 6)
+- [ ] Stocks screener: column show/hide (settings popover, localStorage `atlas-column-prefs-stocks` key)
 - [ ] Stocks screener: sector filter dropdown
 - [ ] Stocks screener: StateValuePair on all state chips
-- [ ] Stocks screener: expandable row → StateJourneyTimeline (90D compact variant). Fetches on row-expand via a lightweight `/api/states-compact?symbol=X&days=90` route. Each expand is an independent request — no pre-loading. Compact variant: 4 state lanes, no price overlay, no event markers (those are Sprint 5 deep dive features). Indexed on (instrument_id, date) — query is fast.
+- [ ] Stocks screener: expandable row → StateJourneyTimeline (90D compact variant). Fetches on row-expand via `/api/states-compact?symbol=X&days=90`. **Debounce:** 300ms `setTimeout` before firing; cancel on collapse. Compact variant: 4 state lanes, no price overlay, no event markers. Indexed on (instrument_id, date) — query fast.
 - [ ] Stocks intelligence panel: RS state distribution, momentum distribution, investable cards
-- [ ] Stocks CommentaryBlock: write buildCommentary() as condition array `{ test, generate }[]` (not if/else chain)
-- [ ] Stocks CommentaryBlock: unit tests for every condition branch (given data → expected output lines)
-- [ ] days_in_state: implement as CTE in getAllStocks() (not correlated subquery). Run EXPLAIN ANALYZE; if >100ms, precompute nightly instead.
-- [ ] ETF screener: same column additions, StateValuePair, expandable row, column show/hide
+- [ ] Stocks CommentaryBlock: `buildCommentary(instrumentType, aggregates: PageAggregates)` — condition array pattern. `aggregates` comes from the **same** Band 1 page query (no second DB query). `CommentaryInput` type: `{ investable_count, pct_leader_strong, median_rs_pctile, leader_count_trend, regime_state, ... }`
+- [ ] Stocks CommentaryBlock: unit tests for every condition branch in `tests/lib/commentary/stocks.test.ts`
+- [ ] days_in_state: **precompute-first**. `getAllStocks()` reads `s.state_since_date` column (Migration 024). `days_in_state = CURRENT_DATE - s.state_since_date`. If `state_since_date` IS NULL (pre-backfill), show `—`. No CTE fallback in the hot query path.
+- [ ] ETF screener: same column additions, StateValuePair, expandable row (same 300ms debounce), column show/hide (`atlas-column-prefs-etfs`)
 - [ ] ETF CommentaryBlock (same condition array pattern)
 - [ ] Metric tiles (Band 1) full implementation for both pages
 
@@ -798,7 +803,7 @@ Minimum sample gate: if `sample_count < 10`, do not display distribution. Show "
 3. Compute distribution stats (p25, median, p75, hit rate)
 4. Upsert into `atlas_forward_return_precompute`
 
-On-demand fallback: if `filter_hash` not found in precompute table, compute on-demand with a 5-second timeout. Return empty chart with "Computing historical distribution..." message if timeout exceeded.
+On-demand fallback: if `filter_hash` not found in precompute table, compute on-demand with a 5-second timeout. Return empty chart with "Computing historical distribution..." message if timeout exceeded. **Concurrency limit:** the Python fallback computation must use a DB-backed semaphore (`SELECT pg_try_advisory_lock(12345)`) — only one on-demand computation runs at a time on the t3.large. Concurrent requests wait and retry the precompute table lookup after 2 seconds (the first caller populates it). This prevents two simultaneous on-demand calls from saturating the 2 vCPUs and starving page loads.
 
 ### Sprint task
 
@@ -814,7 +819,7 @@ This requires Migration 026 + the nightly job. Both must ship in Sprint 5, migra
 
 3. **Commentary engine ownership** — **Decision: hybrid.** `getCommentaryContext(instrumentType, currentState)` is called in the **Page server component** (RSC), not in an API route or client component. Its output is passed as props to `CommentaryBlock` (a client component). Historical context cards arrive fully-formed at SSR time — no client-side DB queries, no hydration mismatch. Current-data sentences are computed client-side from page props already in memory.
 
-4. **Days in state** — computed as a CTE in `getAllStocks()` (not a correlated subquery). The correct query logic: use a window function to find the most recent date when the rs_state *changed from a different value*, then compute `CURRENT_DATE - that_date`. Do NOT bound the scan to 90 days — a stock in Leader state for 120 days would show 90 otherwise (wrong). The CTE scans full `atlas_stock_states_daily` for the instrument, applies `LAG(rs_state) OVER (PARTITION BY instrument_id ORDER BY date)` to identify state-change rows, then picks `MAX(change_date) WHERE rs_state = current_rs_state`. This adds ~50-100ms; run EXPLAIN ANALYZE in Sprint 2. If >100ms, precompute nightly as `state_since_date` column.
+4. **Days in state** — **RESOLVED (eng review):** precompute-first. Migration 024 adds `state_since_date DATE` column to `atlas_stock_states_daily`. The nightly pipeline writes this column alongside the state classification. `getAllStocks()` reads `CURRENT_DATE - s.state_since_date AS days_in_state`. If `state_since_date` IS NULL (pre-backfill stocks), show `—`. No hot-path CTE. The CTE approach (LAG scan over full history) was rejected because 1000+ stocks × 2Y of daily data = ~500K rows per page load — unacceptable on a t3.large.
 
 5. **State Journey Timeline — 5Y data volume** — 5 years × 250 trading days = 1,250 rows per instrument. For the screener's expandable row (90-day version), 90 rows. Both are fast. The 5Y version in deep dives should use a lazy-load pattern (loads when History tab is selected, not on page mount).
 
