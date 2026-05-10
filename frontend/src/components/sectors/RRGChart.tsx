@@ -174,19 +174,44 @@ export function RRGChart({
       .attr('aria-hidden', 'true')
       .text((d) => d.text)
 
-    // ---- Trailing dots (oldest → newest, opacity ramps, clipped to chart area) ----
+    // ---- Trailing paths + dots (oldest → newest, opacity ramps, clipped to chart area) ----
     const trailGroup = g.append('g').attr('clip-path', `url(#${clipId})`)
+    const lineGen = d3.line<{ px: number; py: number }>()
+      .x(d => d.px)
+      .y(d => d.py)
+      .curve(d3.curveCatmullRom.alpha(0.5))
+
     for (const [sectorName, sectorHistory] of historyBySector) {
       const last5 = sectorHistory.slice(-5)
       const sectorCurrent = chartData.find((s) => s.sector_name === sectorName)
       const color = sectorCurrent
         ? MOM_COLOR[sectorCurrent.bottomup_momentum_state ?? ''] ?? FALLBACK_COLOR
         : FALLBACK_COLOR
+
+      // Build points: trail history + today's bubble position
+      const trailPoints = last5.map(r => ({ px: xScale(r.x), py: yScale(r.y) }))
+      if (sectorCurrent?.x != null && sectorCurrent?.y != null) {
+        trailPoints.push({ px: xScale(sectorCurrent.x), py: yScale(sectorCurrent.y) })
+      }
+
+      // Draw connecting path
+      if (trailPoints.length >= 2) {
+        trailGroup.append('path')
+          .datum(trailPoints)
+          .attr('d', lineGen)
+          .attr('fill', 'none')
+          .attr('stroke', color)
+          .attr('stroke-width', 1.5)
+          .attr('stroke-opacity', 0.45)
+          .attr('pointer-events', 'none')
+      }
+
+      // Draw trail dots with ramping opacity
       last5.forEach((row, i) => {
         trailGroup.append('circle')
           .attr('cx', xScale(row.x))
           .attr('cy', yScale(row.y))
-          .attr('r', 4)
+          .attr('r', 3.5)
           .attr('fill', color)
           .attr('opacity', TRAIL_OPACITIES[i] ?? 1.0)
           .attr('pointer-events', 'none')

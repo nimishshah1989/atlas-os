@@ -118,7 +118,78 @@ function WatchCard({ spec, sectors }: { spec: CardSpec; sectors: SectorWithDecis
   )
 }
 
+type StateCardSpec = {
+  state: string
+  label: string
+  tone: Tone
+}
+
+const STATE_CARDS: StateCardSpec[] = [
+  { state: 'Overweight',  label: 'Overweight',  tone: 'pos' },
+  { state: 'Neutral',     label: 'Neutral',     tone: 'warn' },
+  { state: 'Underweight', label: 'Underweight', tone: 'neg' },
+  { state: 'Avoid',       label: 'Avoid',       tone: 'neg' },
+]
+
+function StateCountCard({
+  spec,
+  sectors,
+}: {
+  spec: StateCardSpec
+  sectors: SectorWithDecision[]
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const styles = TONE_STYLES[spec.tone]
+  const count  = sectors.length
+  const shown  = expanded ? sectors : sectors.slice(0, 4)
+
+  return (
+    <div className={`flex-1 px-4 py-3.5 border rounded-sm ${styles.card}`}>
+      <div className={`font-sans text-[10px] font-semibold uppercase tracking-wider mb-1 ${styles.icon}`}>
+        {spec.label}
+      </div>
+      <div className={`font-mono text-3xl font-bold tabular-nums leading-none mb-2.5 ${styles.count}`}>
+        {count}
+      </div>
+      <div className="flex flex-col gap-0.5">
+        {count === 0 ? (
+          <span className="font-sans text-[11px] text-ink-tertiary italic">None today.</span>
+        ) : (
+          <>
+            {shown.map(s => (
+              <Link
+                key={s.sector_name}
+                href={`/sectors/${encodeURIComponent(s.sector_name)}`}
+                className={`font-sans text-[11px] hover:underline truncate ${styles.pillText}`}
+              >
+                {s.sector_name}
+              </Link>
+            ))}
+            {count > 4 && (
+              <button
+                onClick={() => setExpanded(e => !e)}
+                className="mt-0.5 inline-flex items-center gap-1 font-sans text-[10px] text-ink-tertiary hover:text-ink-primary transition-colors"
+                aria-expanded={expanded}
+              >
+                {expanded ? (
+                  <><ChevronUp className="w-3 h-3" /> less</>
+                ) : (
+                  <><ChevronDown className="w-3 h-3" /> +{count - 4} more</>
+                )}
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function SectorRiskWatch({ sectors }: { sectors: SectorWithDecision[] }) {
+  const bySector = Object.fromEntries(
+    STATE_CARDS.map(s => [s.state, sectors.filter(sec => sec.sector_state === s.state)])
+  )
+
   const enterCandidates = sectors.filter(s => s.decision === 'ENTER' || s.decision === 'ROTATE IN')
   const divergent       = sectors.filter(s => s.divergence_flag)
   const concentrated    = sectors.filter(s => {
@@ -127,7 +198,7 @@ export function SectorRiskWatch({ sectors }: { sectors: SectorWithDecision[] }) 
   })
   const avoids = sectors.filter(s => s.sector_state === 'Avoid' || s.decision === 'EXIT')
 
-  const cards: { spec: CardSpec; sectors: SectorWithDecision[] }[] = [
+  const watchCards: { spec: CardSpec; sectors: SectorWithDecision[] }[] = [
     {
       spec: {
         id: 'actionable',
@@ -179,14 +250,29 @@ export function SectorRiskWatch({ sectors }: { sectors: SectorWithDecision[] }) 
   ]
 
   return (
-    <div className="px-6 py-4 border-b border-paper-rule bg-paper-rule/5">
-      <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider mb-3">
-        Watchlist — Today
+    <div className="px-6 py-4 border-b border-paper-rule bg-paper-rule/5 space-y-4">
+      {/* Primary: state count cards */}
+      <div>
+        <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider mb-3">
+          Sector State Breakdown
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {STATE_CARDS.map(s => (
+            <StateCountCard key={s.state} spec={s} sectors={bySector[s.state] ?? []} />
+          ))}
+        </div>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {cards.map(c => (
-          <WatchCard key={c.spec.id} spec={c.spec} sectors={c.sectors} />
-        ))}
+
+      {/* Secondary: signal watchlist cards */}
+      <div>
+        <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider mb-3">
+          Signal Watchlist
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {watchCards.map(c => (
+            <WatchCard key={c.spec.id} spec={c.spec} sectors={c.sectors} />
+          ))}
+        </div>
       </div>
     </div>
   )
