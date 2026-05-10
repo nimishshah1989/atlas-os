@@ -56,8 +56,11 @@ export type FundMasterRow = {
   inception_date: Date | null
   data_as_of: string | null
   nav_state: string | null
+  nav_state_as_of: Date | null
   composition_state: string | null
+  composition_as_of: Date | null
   holdings_state: string | null
+  holdings_as_of: Date | null
   recommendation: string | null
   weeks_in_current_state: string | null
   performance_gate: boolean | null
@@ -169,7 +172,9 @@ export async function getFundMaster(mstar_id: string): Promise<FundMasterRow | n
       uf.mstar_id, uf.scheme_name, uf.amc, uf.category_name, uf.broad_category,
       uf.inception_date,
       (SELECT MAX(nav_date)::text FROM atlas.atlas_fund_metrics_daily WHERE mstar_id = ${mstar_id}) AS data_as_of,
-      fs.nav_state, fs.composition_state, fs.holdings_state,
+      fs.nav_state, fs.nav_state_as_of,
+      fs.composition_state, fs.composition_as_of,
+      fs.holdings_state, fs.holdings_as_of,
       fd.recommendation,
       fd.weeks_in_current_state::text AS weeks_in_current_state,
       fd.performance_gate, fd.sectors_gate, fd.stocks_gate, fd.market_gate,
@@ -249,6 +254,26 @@ export async function getFundDecisionHistory(mstar_id: string): Promise<FundDeci
   `
 }
 
+export type FundNavHistoryRow = {
+  nav_date: Date
+  nav: string
+  nav_adj: string
+  nav_change: string | null
+}
+
+export type FundLensHistoryRow = {
+  as_of_date: Date
+  last_disclosed_date: Date | null
+  aligned_aum_pct: string | null
+  avoid_aum_pct: string | null
+  neutral_aum_pct: string | null
+  strong_aum_pct: string | null
+  weak_aum_pct: string | null
+  unknown_aum_pct: string | null
+  sector_concentration: string | null
+  holdings_concentration: string | null
+}
+
 export type FundHoldingRow = {
   symbol: string | null
   company_name: string | null
@@ -260,6 +285,45 @@ export type FundHoldingRow = {
   ret_1m: string | null
   ret_3m: string | null
   holdings_date: string | null
+}
+
+export async function getFundNavHistory(
+  mstar_id: string,
+  days = 365,
+): Promise<FundNavHistoryRow[]> {
+  if (!Number.isInteger(days) || days < 1 || days > 1825) {
+    throw new Error(`days must be between 1 and 1825, got: ${days}`)
+  }
+  return sql<FundNavHistoryRow[]>`
+    SELECT
+      nav_date,
+      nav::text AS nav,
+      COALESCE(nav_adj, nav)::text AS nav_adj,
+      nav_change::text AS nav_change
+    FROM public.de_mf_nav_daily
+    WHERE mstar_id = ${mstar_id}
+      AND nav_date >= CURRENT_DATE - (${days} || ' days')::interval
+    ORDER BY nav_date ASC
+  `
+}
+
+export async function getFundLensHistory(mstar_id: string): Promise<FundLensHistoryRow[]> {
+  return sql<FundLensHistoryRow[]>`
+    SELECT
+      as_of_date,
+      last_disclosed_date,
+      (aligned_aum_pct * 100)::text AS aligned_aum_pct,
+      (avoid_aum_pct   * 100)::text AS avoid_aum_pct,
+      GREATEST(0, 100 - COALESCE(aligned_aum_pct * 100, 0) - COALESCE(avoid_aum_pct * 100, 0))::text AS neutral_aum_pct,
+      (strong_aum_pct * 100)::text AS strong_aum_pct,
+      (weak_aum_pct   * 100)::text AS weak_aum_pct,
+      GREATEST(0, 100 - COALESCE(strong_aum_pct * 100, 0) - COALESCE(weak_aum_pct * 100, 0))::text AS unknown_aum_pct,
+      sector_concentration::text AS sector_concentration,
+      holdings_concentration::text AS holdings_concentration
+    FROM atlas.atlas_fund_lens_monthly
+    WHERE mstar_id = ${mstar_id}
+    ORDER BY as_of_date ASC
+  `
 }
 
 export async function getFundHoldings(mstar_id: string, limit = 20): Promise<FundHoldingRow[]> {

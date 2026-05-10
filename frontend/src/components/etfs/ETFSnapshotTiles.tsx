@@ -52,10 +52,23 @@ export function ETFSnapshotTiles({ etf }: { etf: ETFRow }) {
       : 'text-ink-primary'
     : 'text-ink-tertiary'
 
+  const emaQualityValue = etf.ema_10_at_20d_high == null
+    ? '—'
+    : etf.ema_10_at_20d_high
+    ? 'At 20D High ✓'
+    : 'Below 20D High'
+
+  const emaQualityColor = etf.ema_10_at_20d_high == null
+    ? 'text-ink-tertiary'
+    : etf.ema_10_at_20d_high
+    ? 'text-signal-pos'
+    : 'text-ink-secondary'
+
   return (
-    <div className="px-6 py-3 border-b border-paper-rule grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8">
+    <div className="px-6 py-3 border-b border-paper-rule grid grid-cols-2 sm:grid-cols-5 xl:grid-cols-10">
       <Tile label="RS Pctile" value={rsPctile} color={rsPctileColor} subtitle="3-month vs peers" />
       <Tile label="3M Return" value={pct(etf.ret_3m)} color={pctColor(etf.ret_3m)} />
+      <Tile label="12M Return" value={pct(etf.ret_12m)} color={pctColor(etf.ret_12m)} />
       <Tile label="6M Return" value={pct(etf.ret_6m)} color={pctColor(etf.ret_6m)} />
       <Tile label="1M Return" value={pct(etf.ret_1m)} color={pctColor(etf.ret_1m)} />
       <Tile
@@ -69,6 +82,12 @@ export function ETFSnapshotTiles({ etf }: { etf: ETFRow }) {
         value={extPct}
         color={extColor}
         subtitle="% above/below 200-day MA"
+      />
+      <Tile
+        label="EMA Quality"
+        value={emaQualityValue}
+        color={emaQualityColor}
+        subtitle="EMA10 at 20-day high"
       />
       <ChipTile label="RS State">
         <RSStateChip value={etf.rs_state} />

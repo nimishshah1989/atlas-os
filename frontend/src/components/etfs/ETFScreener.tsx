@@ -23,7 +23,7 @@ function stateRank(order: string[], val: string | null): number {
 
 type SortKey =
   | 'ticker' | 'theme' | 'rs_pctile_3m'
-  | 'ret_1m' | 'ret_3m' | 'position_size_pct'
+  | 'ret_1m' | 'ret_3m' | 'ret_12m' | 'position_size_pct'
   | 'rs_state' | 'momentum_state' | 'risk_state'
 
 type FilterChip = 'all' | 'broad' | 'sectoral' | 'investable'
@@ -43,11 +43,14 @@ const THEME_STYLE: Record<string, string> = {
 
 // Optional columns — all default to hidden.
 const OPTIONAL_COLS: ColumnDef[] = [
-  { key: 'ret_1w',        label: '1W Return',  defaultVisible: false },
-  { key: 'ret_6m',        label: '6M Return',  defaultVisible: false },
-  { key: 'vol_63',        label: 'Vol 63D',    defaultVisible: false },
-  { key: 'drawdown',      label: 'Drawdown',   defaultVisible: false },
-  { key: 'days_in_state', label: 'Days (RS)',  defaultVisible: false },
+  { key: 'ret_1w',           label: '1W Return',    defaultVisible: false },
+  { key: 'ret_12m',          label: '12M Return',   defaultVisible: false },
+  { key: 'ret_6m',           label: '6M Return',    defaultVisible: false },
+  { key: 'vol_63',           label: 'Vol 63D',      defaultVisible: false },
+  { key: 'drawdown',         label: 'Drawdown',     defaultVisible: false },
+  { key: 'volume_expansion', label: 'Vol Expansion', defaultVisible: false },
+  { key: 'ema_quality',      label: 'EMA Quality',  defaultVisible: false },
+  { key: 'days_in_state',    label: 'Days (RS)',    defaultVisible: false },
 ]
 
 const COL_STORAGE_KEY = 'atlas-etf-screener-cols'
@@ -55,6 +58,20 @@ const COL_STORAGE_KEY = 'atlas-etf-screener-cols'
 // Always-visible columns:
 //   Ticker, Theme, Gates, RS State, Mom, Risk, 1M, 3M, RS Pctile, Deploy %  = 10
 const ALWAYS_VISIBLE_COL_COUNT = 10
+
+function TriggerBadges({ row }: { row: ETFRow }) {
+  if (!row.breakout_trigger && !row.transition_trigger) return null
+  return (
+    <div className="flex gap-0.5 mt-0.5">
+      {row.breakout_trigger && (
+        <span className="inline-flex items-center px-1 py-0 rounded-[2px] font-sans text-[9px] font-bold bg-teal/15 text-teal">BRK</span>
+      )}
+      {row.transition_trigger && (
+        <span className="inline-flex items-center px-1 py-0 rounded-[2px] font-sans text-[9px] font-bold bg-signal-pos/15 text-signal-pos">TRN</span>
+      )}
+    </div>
+  )
+}
 
 function ThemeBadge({ theme }: { theme: string }) {
   const style = THEME_STYLE[theme] ?? 'bg-ink-tertiary/10 text-ink-secondary'
@@ -178,10 +195,11 @@ export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
   }
 
   // Plain (non-sortable) header for optional and Gates columns.
-  function PlainTh({ label, align = 'left' }: { label: string; align?: 'left' | 'right' }) {
+  function PlainTh({ label, align = 'left', title }: { label: string; align?: 'left' | 'right'; title?: string }) {
     return (
       <th
-        className={`px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap text-${align} text-ink-tertiary`}
+        title={title}
+        className={`px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap text-${align} text-ink-tertiary${title ? ' cursor-help' : ''}`}
       >
         {label}
       </th>
@@ -236,9 +254,12 @@ export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
               <Th label="Mom" k="momentum_state" />
               <Th label="Risk" k="risk_state" />
               {visibleCols.has('ret_1w') && <PlainTh label="1W" align="right" />}
+              {visibleCols.has('ret_12m') && <Th label="12M" k="ret_12m" align="right" />}
               {visibleCols.has('ret_6m') && <PlainTh label="6M" align="right" />}
               {visibleCols.has('vol_63') && <PlainTh label="Vol 63D" align="right" />}
               {visibleCols.has('drawdown') && <PlainTh label="Drawdown" align="right" />}
+              {visibleCols.has('volume_expansion') && <PlainTh label="Vol Exp" align="right" title="Volume expansion: current vol vs 63-day avg. ≥1.5x = institutional accumulation" />}
+              {visibleCols.has('ema_quality') && <PlainTh label="EMA Quality" align="right" title="Whether the 10-day EMA is at a 20-day high — short-term upward momentum signal" />}
               {visibleCols.has('days_in_state') && <PlainTh label="Days (RS)" align="right" />}
               <Th label="1M" k="ret_1m" align="right" />
               <Th label="3M" k="ret_3m" align="right" />
@@ -256,6 +277,7 @@ export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
             ) : (
               filtered.map((row, i) => {
                 const isExpanded = expandedTicker === row.ticker
+                const volExpRaw = row.volume_expansion != null ? parseFloat(row.volume_expansion) : null
                 return (
                   <Fragment key={row.ticker}>
                     <tr
@@ -272,6 +294,7 @@ export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
                           <div className="font-sans text-[10px] text-ink-tertiary truncate max-w-[200px]" title={row.etf_name ?? ''}>
                             {row.etf_name ?? '—'}
                           </div>
+                          <TriggerBadges row={row} />
                         </Link>
                       </td>
                       <td className="px-3 py-2.5">
@@ -294,6 +317,11 @@ export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
                           {pct(row.ret_1w)}
                         </td>
                       )}
+                      {visibleCols.has('ret_12m') && (
+                        <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(row.ret_12m)}`}>
+                          {pct(row.ret_12m)}
+                        </td>
+                      )}
                       {visibleCols.has('ret_6m') && (
                         <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(row.ret_6m)}`}>
                           {pct(row.ret_6m)}
@@ -307,6 +335,21 @@ export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
                       {visibleCols.has('drawdown') && (
                         <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(row.drawdown)}`}>
                           {pct(row.drawdown)}
+                        </td>
+                      )}
+                      {visibleCols.has('volume_expansion') && (
+                        <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${
+                          volExpRaw == null ? 'text-ink-tertiary'
+                          : volExpRaw >= 1.5 ? 'text-signal-pos'
+                          : volExpRaw < 0.7 ? 'text-signal-neg'
+                          : 'text-ink-secondary'
+                        }`}>
+                          {volExpRaw != null ? `${volExpRaw.toFixed(1)}x` : '—'}
+                        </td>
+                      )}
+                      {visibleCols.has('ema_quality') && (
+                        <td className={`px-3 py-2.5 text-right font-sans text-[10px] ${row.ema_10_at_20d_high ? 'text-signal-pos' : 'text-ink-tertiary'}`}>
+                          {row.ema_10_at_20d_high == null ? '—' : row.ema_10_at_20d_high ? 'High ✓' : 'Normal'}
                         </td>
                       )}
                       {visibleCols.has('days_in_state') && (

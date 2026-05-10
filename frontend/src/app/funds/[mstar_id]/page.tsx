@@ -7,6 +7,8 @@ import {
   getFundLens,
   getFundDecisionHistory,
   getFundHoldings,
+  getFundNavHistory,
+  getFundLensHistory,
 } from '@/lib/queries/funds'
 import { buildSingleFundCommentary } from '@/lib/commentary/funds'
 import { CommentaryBlock } from '@/components/ui/CommentaryBlock'
@@ -16,6 +18,9 @@ import { FundLens2 } from '@/components/funds/FundLens2'
 import { FundLens3 } from '@/components/funds/FundLens3'
 import { FundDecisionHistory } from '@/components/funds/FundDecisionHistory'
 import { FundHoldingsTab } from '@/components/funds/FundHoldingsTab'
+import { FundNavChart } from '@/components/funds/FundNavChart'
+import { FundRiskPanel } from '@/components/funds/FundRiskPanel'
+import { FundLensHistory } from '@/components/funds/FundLensHistory'
 
 export default async function FundDeepDivePage({
   params,
@@ -24,13 +29,16 @@ export default async function FundDeepDivePage({
 }) {
   const { mstar_id } = await params
 
-  const [master, metricHistory, lens, decisionHistory, holdings] = await Promise.all([
-    getFundMaster(mstar_id),
-    getFundMetricHistory(mstar_id, 90),
-    getFundLens(mstar_id),
-    getFundDecisionHistory(mstar_id),
-    getFundHoldings(mstar_id, 20),
-  ])
+  const [master, metricHistory, lens, decisionHistory, holdings, navHistory, lensHistory] =
+    await Promise.all([
+      getFundMaster(mstar_id),
+      getFundMetricHistory(mstar_id, 180),
+      getFundLens(mstar_id),
+      getFundDecisionHistory(mstar_id),
+      getFundHoldings(mstar_id, 20),
+      getFundNavHistory(mstar_id, 1825),   // up to 5Y of NAV price
+      getFundLensHistory(mstar_id),         // all disclosure periods
+    ])
 
   if (!master) notFound()
 
@@ -42,6 +50,13 @@ export default async function FundDeepDivePage({
       <div className="px-6 py-4 border-b border-paper-rule">
         <CommentaryBlock narrative={commentary.narrative} contextCards={commentary.contextCards} />
       </div>
+
+      {/* NAV Price Chart — full width, uses de_mf_nav_daily (previously 0% coverage) */}
+      <div className="px-6 py-5 border-b border-paper-rule">
+        <FundNavChart navHistory={navHistory} />
+      </div>
+
+      {/* Three lens panels — RS pctile trend, Composition, Holdings */}
       <div className="px-6 py-6 grid grid-cols-3 gap-6 border-b border-paper-rule">
         <FundLens1 metricHistory={metricHistory} categoryName={master.category_name} />
         <FundLens2
@@ -54,6 +69,16 @@ export default async function FundDeepDivePage({
           stocksGate={master.stocks_gate}
           marketGate={master.market_gate}
         />
+      </div>
+
+      {/* Risk & Return panel — vol, drawdown, trailing return trends */}
+      <div className="px-6 py-5 border-b border-paper-rule">
+        <FundRiskPanel metricHistory={metricHistory} />
+      </div>
+
+      {/* Lens disclosure history — stacked area over all disclosure periods */}
+      <div className="px-6 py-5 border-b border-paper-rule">
+        <FundLensHistory lensHistory={lensHistory} />
       </div>
 
       {/* Holdings — individual stock states */}

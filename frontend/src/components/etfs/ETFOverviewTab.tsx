@@ -80,6 +80,11 @@ export function ETFOverviewTab({
     value: r.rs_pctile_3m != null ? parseFloat(r.rs_pctile_3m) : null,
   }))
 
+  const ret12mData = metricHistory.map(r => ({
+    date: dateStr(r.date),
+    value: r.ret_12m != null ? parseFloat(r.ret_12m) : null,
+  }))
+
   const ret3mData = metricHistory.map(r => ({
     date: dateStr(r.date),
     value: r.ret_3m != null ? parseFloat(r.ret_3m) : null,
@@ -110,12 +115,19 @@ export function ETFOverviewTab({
     value: r.vol_63 != null ? parseFloat(r.vol_63) : null,
   }))
 
+  const volumeExpansionData = metricHistory.map(r => ({
+    date: dateStr(r.date),
+    value: r.volume_expansion != null ? parseFloat(r.volume_expansion) : null,
+  }))
+
   const drawdownData = metricHistory.map(r => ({
     date: dateStr(r.date),
     value: r.drawdown != null ? parseFloat(r.drawdown) : null,
   }))
 
   const latest = metricHistory[metricHistory.length - 1]
+  const hasEntrySignal = etf.breakout_trigger || etf.transition_trigger
+  const hasExitSignal = etf.exit_market_riskoff || etf.exit_sector_avoid || etf.exit_rs_deteriorate || etf.exit_momentum_collapse || etf.exit_stop_loss
 
   return (
     <div className="px-6 py-6 space-y-6">
@@ -130,37 +142,79 @@ export function ETFOverviewTab({
         <ETFGatesPanel etf={etf} />
       </div>
 
+      {/* Entry signals — only show if any are active */}
+      {hasEntrySignal && (
+        <div className="border border-teal/30 bg-teal/5 rounded-sm px-4 py-3">
+          <div className="font-sans text-[10px] font-semibold text-teal uppercase tracking-wider mb-2">
+            Entry Signals Active
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {etf.breakout_trigger && (
+              <div className="flex flex-col gap-0.5">
+                <span className="font-sans text-[11px] text-teal bg-teal/10 px-2 py-0.5 rounded font-semibold">
+                  Breakout
+                </span>
+                <span className="font-sans text-[10px] text-ink-tertiary">EMA10 at 20-day high — price momentum building</span>
+              </div>
+            )}
+            {etf.transition_trigger && (
+              <div className="flex flex-col gap-0.5">
+                <span className="font-sans text-[11px] text-signal-pos bg-signal-pos/10 px-2 py-0.5 rounded font-semibold">
+                  Transition
+                </span>
+                <span className="font-sans text-[10px] text-ink-tertiary">RS improving and momentum turning positive</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Exit triggers — only show if any are active */}
-      {(etf.exit_market_riskoff || etf.exit_sector_avoid || etf.exit_rs_deteriorate || etf.exit_momentum_collapse || etf.exit_stop_loss) && (
+      {hasExitSignal && (
         <div className="border border-signal-neg/30 bg-signal-neg/5 rounded-sm px-4 py-3">
           <div className="font-sans text-[10px] font-semibold text-signal-neg uppercase tracking-wider mb-2">
             Exit Signals Active
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-3">
             {etf.exit_market_riskoff && (
-              <span className="font-sans text-[11px] text-signal-neg bg-signal-neg/10 px-2 py-0.5 rounded">
-                Market Risk-Off
-              </span>
+              <div className="flex flex-col gap-0.5">
+                <span className="font-sans text-[11px] text-signal-neg bg-signal-neg/10 px-2 py-0.5 rounded">
+                  Market Risk-Off
+                </span>
+                <span className="font-sans text-[10px] text-ink-tertiary">Broad market regime shifted; reduce exposure</span>
+              </div>
             )}
             {etf.exit_sector_avoid && (
-              <span className="font-sans text-[11px] text-signal-neg bg-signal-neg/10 px-2 py-0.5 rounded">
-                Sector Avoid
-              </span>
+              <div className="flex flex-col gap-0.5">
+                <span className="font-sans text-[11px] text-signal-neg bg-signal-neg/10 px-2 py-0.5 rounded">
+                  Sector Avoid
+                </span>
+                <span className="font-sans text-[10px] text-ink-tertiary">Sector lens flagged avoid — structural underperformance</span>
+              </div>
             )}
             {etf.exit_rs_deteriorate && (
-              <span className="font-sans text-[11px] text-signal-neg bg-signal-neg/10 px-2 py-0.5 rounded">
-                RS Deteriorating
-              </span>
+              <div className="flex flex-col gap-0.5">
+                <span className="font-sans text-[11px] text-signal-neg bg-signal-neg/10 px-2 py-0.5 rounded">
+                  RS Deteriorating
+                </span>
+                <span className="font-sans text-[10px] text-ink-tertiary">Relative strength falling vs peers over 3M</span>
+              </div>
             )}
             {etf.exit_momentum_collapse && (
-              <span className="font-sans text-[11px] text-signal-neg bg-signal-neg/10 px-2 py-0.5 rounded">
-                Momentum Collapse
-              </span>
+              <div className="flex flex-col gap-0.5">
+                <span className="font-sans text-[11px] text-signal-neg bg-signal-neg/10 px-2 py-0.5 rounded">
+                  Momentum Collapse
+                </span>
+                <span className="font-sans text-[10px] text-ink-tertiary">Price momentum flipping Deteriorating or Collapsing</span>
+              </div>
             )}
             {etf.exit_stop_loss && (
-              <span className="font-sans text-[11px] text-signal-neg bg-signal-neg/10 px-2 py-0.5 rounded">
-                Stop-Loss Hit
-              </span>
+              <div className="flex flex-col gap-0.5">
+                <span className="font-sans text-[11px] text-signal-neg bg-signal-neg/10 px-2 py-0.5 rounded">
+                  Stop-Loss Hit
+                </span>
+                <span className="font-sans text-[10px] text-ink-tertiary">Price breached the trailing stop-loss level</span>
+              </div>
             )}
           </div>
         </div>
@@ -189,6 +243,34 @@ export function ETFOverviewTab({
               />
               <Commentary title={`RS Pctile Today · ${rawPct(latest?.rs_pctile_3m)}`}>
                 {interpretRSPctile(latest?.rs_pctile_3m ?? null)}
+              </Commentary>
+            </div>
+
+            {/* 12M Return */}
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 items-start">
+              <IndicatorChart
+                title="12-Month Return"
+                description="Rolling 12-month price return. Full-cycle performance — the primary signal for trend persistence."
+                currentValue={pctStr(latest?.ret_12m)}
+                isBullish={latest?.ret_12m != null ? parseFloat(latest.ret_12m) >= 0 : null}
+                data={ret12mData}
+                refLine={0}
+                refLabel="0"
+                variant="area"
+                yFormat="pct"
+              />
+              <Commentary title={`12M Return Today · ${pctStr(latest?.ret_12m)}`}>
+                <p>{latest?.ret_12m != null
+                  ? parseFloat(latest.ret_12m) >= 0.20
+                    ? 'Strong 12-month return. Sustained uptrend with full-cycle momentum.'
+                    : parseFloat(latest.ret_12m) >= 0
+                      ? 'Positive 12-month return. Trend is intact but not yet in breakout territory.'
+                      : 'Negative 12-month return. Sustained underperformance over a full cycle.'
+                  : 'Insufficient data for 12-month calculation.'
+                }</p>
+                <p className="text-ink-tertiary/70 text-[10px]">
+                  12M return ≥20% is the threshold for strong Weinstein Stage 2 uptrend confirmation.
+                </p>
               </Commentary>
             </div>
 
@@ -331,6 +413,34 @@ export function ETFOverviewTab({
                       : 'Low volatility. ETF suitable for full-size positions.'
                   : 'No volatility data.'
                 }</p>
+              </Commentary>
+            </div>
+
+            {/* Volume Expansion */}
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 items-start">
+              <IndicatorChart
+                title="Volume Expansion"
+                description="Ratio of current volume to 63-day average volume. Values ≥1.5x indicate institutional accumulation or distribution — directional confirmation."
+                currentValue={latest?.volume_expansion != null ? `${parseFloat(latest.volume_expansion).toFixed(1)}x` : '—'}
+                isBullish={latest?.volume_expansion != null ? parseFloat(latest.volume_expansion) >= 1.5 : null}
+                data={volumeExpansionData}
+                refLine={1.5}
+                refLabel="1.5x = institutional"
+                variant="line"
+                yFormat="ratio"
+              />
+              <Commentary title={`Vol Expansion · ${latest?.volume_expansion != null ? `${parseFloat(latest.volume_expansion).toFixed(1)}x` : '—'}`}>
+                <p>{latest?.volume_expansion != null
+                  ? parseFloat(latest.volume_expansion) >= 1.5
+                    ? 'High volume expansion. Institutional participation — directional move is likely significant.'
+                    : parseFloat(latest.volume_expansion) >= 1.0
+                      ? 'Volume near or at average. Normal trading conditions.'
+                      : 'Volume below average. Low conviction — wait for volume confirmation before entry.'
+                  : 'No volume expansion data.'
+                }</p>
+                <p className="text-ink-tertiary/70 text-[10px]">
+                  Volume expansion ≥1.5x alongside price gains = accumulation. ≥1.5x alongside price drops = distribution.
+                </p>
               </Commentary>
             </div>
 
