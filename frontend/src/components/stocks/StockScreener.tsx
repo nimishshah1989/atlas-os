@@ -476,7 +476,18 @@ export function StockScreener({
                     {isExpanded && (
                       <tr className="border-b border-paper-rule bg-paper-rule/10">
                         <td colSpan={totalCols} className="px-4 py-3">
-                          <StateJourneyCompact symbol={row.symbol} />
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              <StateJourneyCompact symbol={row.symbol} />
+                            </div>
+                            <Link
+                              href={`/stocks/${encodeURIComponent(row.symbol)}`}
+                              onClick={e => e.stopPropagation()}
+                              className="font-sans text-xs text-teal hover:underline whitespace-nowrap shrink-0"
+                            >
+                              Deep dive →
+                            </Link>
+                          </div>
                         </td>
                       </tr>
                     )}

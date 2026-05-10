@@ -10508,3 +10508,408 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{
+  "ts": "2026-05-10T10:21:43Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/lib/queries/stocks.ts",
+  "lines_changed": 21,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T10:21:49Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/lib/queries/stocks.ts",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T10:24:19Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/lib/queries/stocks.ts",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T10:24:29Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/lib/queries/stocks.ts",
+  "lines_changed": 31,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T10:24:43Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/lib/queries/stocks.ts",
+  "lines_changed": 40,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T10:25:04Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/lib/queries/stocks.ts",
+  "lines_changed": 30,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T10:27:34Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/lib/queries/stocks.ts",
+  "lines_changed": 43,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T10:29:05Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T10:29:10Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T10:29:16Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T10:29:21Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T10:29:36Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 46,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:18:19Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:18:33Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:21:13Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:21:19Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:21:27Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 9,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:21:33Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:21:46Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 31,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:21:52Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:21:57Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:22:07Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:24:12Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:24:17Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:24:22Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:24:28Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 9,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:24:32Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:24:39Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:24:44Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:24:48Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:24:54Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 18,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:27:56Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockBreadthPanel.tsx",
+  "lines_changed": 177,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:28:01Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/app/stocks/page.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:28:08Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/app/stocks/page.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:30:06Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockIntelligencePanel.tsx",
+  "lines_changed": 36,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:33:13Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StocksClientShell.tsx",
+  "lines_changed": 41,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:33:25Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/app/stocks/page.tsx",
+  "lines_changed": 56,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:33:29Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockBubbleChart.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:33:33Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockBubbleChart.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:33:38Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockBubbleChart.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:37:47Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockHistoryTab.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:38:19Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockDeepDiveBody.tsx",
+  "lines_changed": 182,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:38:28Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/app/stocks/[symbol]/page.tsx",
+  "lines_changed": 34,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:43:48Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/ui/StateJourneyCompact.tsx",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-10T11:43:53Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.worktrees/feat/stocks-overhaul/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 18,
+  "session_id": "unknown",
+  "schema_version": 1
+}
