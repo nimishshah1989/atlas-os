@@ -9,8 +9,10 @@ sys.path.insert(0, ".")
 from scripts.etf_sector_backfill import (
     build_bhav_url,
     build_master_upsert_params,
+    build_new_bhav_url,
     build_ohlcv_insert_params,
     download_bhav_zip,
+    parse_bhav_csv,
     parse_bhav_date,
     parse_bhav_zip,
     safe_decimal,
@@ -324,3 +326,65 @@ class TestBuildOhlcvInsertParams:
         params = build_ohlcv_insert_params(row)
         assert params["open"] is None
         assert params["high"] is None
+
+
+class TestBuildNewBhavUrl:
+    def test_ddmmyyyy_format(self):
+        d = date(2026, 5, 8)
+        url = build_new_bhav_url(d)
+        assert url.endswith("sec_bhavdata_full_08052026.csv")
+        assert "nsearchives.nseindia.com" in url
+
+    def test_zero_padded_day_and_month(self):
+        d = date(2025, 1, 2)
+        url = build_new_bhav_url(d)
+        assert "02012025" in url
+
+
+class TestParseBhavCsv:
+    """Tests for the new NSE BHAV CSV format (sec_bhavdata_full_DDMMYYYY.csv)."""
+
+    CSV_HEADER = (
+        "SYMBOL, SERIES, DATE1, PREV_CLOSE, OPEN_PRICE, HIGH_PRICE, LOW_PRICE, "
+        "LAST_PRICE, CLOSE_PRICE, AVG_PRICE, TTL_TRD_QNTY, TURNOVER_LACS, "
+        "NO_OF_TRADES, DELIV_QTY, DELIV_PER\n"
+    )
+
+    def _make_csv(self, rows: list[str]) -> bytes:
+        return (self.CSV_HEADER + "\n".join(rows)).encode("utf-8")
+
+    def test_extracts_target_tickers(self):
+        csv_bytes = self._make_csv([
+            "PHARMABEES, EQ, 08-May-2026, 24.79, 24.81, 24.96, 24.60, 24.89, 24.78, 24.84, 7292625, 1811.59, 10713, 5108757, 70.05",
+            "NIFTYBEES, EQ, 08-May-2026, 245.00, 246.00, 248.00, 244.00, 247.00, 247.00, 246.50, 1000000, 247000.00, 4321, 500000, 50.00",
+        ])
+        rows = parse_bhav_csv(csv_bytes, {"PHARMABEES"})
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["ticker"] == "PHARMABEES"
+        assert row["date"] == date(2026, 5, 8)
+        assert row["close"] == Decimal("24.78")
+        assert row["open"] == Decimal("24.81")
+        assert row["volume"] == 7292625
+
+    def test_skips_non_eq_series(self):
+        csv_bytes = self._make_csv([
+            "PHARMABEES, GS, 08-May-2026, 24.79, 24.81, 24.96, 24.60, 24.89, 24.78, 24.84, 7292625, 1811.59, 10713, 5108757, 70.05",
+        ])
+        rows = parse_bhav_csv(csv_bytes, {"PHARMABEES"})
+        assert rows == []
+
+    def test_returns_empty_for_no_matches(self):
+        csv_bytes = self._make_csv([
+            "NIFTYBEES, EQ, 08-May-2026, 245.00, 246.00, 248.00, 244.00, 247.00, 247.00, 246.50, 1000000, 247000.00, 4321, 500000, 50.00",
+        ])
+        rows = parse_bhav_csv(csv_bytes, {"PHARMABEES"})
+        assert rows == []
+
+    def test_volume_float_format(self):
+        # NSE sometimes emits volume as a float in the new format
+        csv_bytes = self._make_csv([
+            "MOENERGY, EQ, 08-May-2026, 41.30, 41.70, 42.05, 40.74, 40.90, 40.90, 40.95, 198905.00, 81.45, 1320, 145501, 73.15",
+        ])
+        rows = parse_bhav_csv(csv_bytes, {"MOENERGY"})
+        assert rows[0]["volume"] == 198905

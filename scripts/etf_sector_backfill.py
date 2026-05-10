@@ -31,6 +31,7 @@ from atlas.db import get_engine
 
 log = structlog.get_logger()
 
+# Old format: archives.nseindia.com ZIP — available up to ~July 5, 2024
 BHAV_URL_TEMPLATE = (
     "https://archives.nseindia.com/content/historical/EQUITIES"
     "/{year}/{mon}/cm{dd}{mon}{year}bhav.csv.zip"
@@ -39,6 +40,12 @@ BHAV_FALLBACK_URL_TEMPLATE = (
     "https://nsearchives.nseindia.com/content/historical/EQUITIES"
     "/{year}/{mon}/cm{dd}{mon}{year}bhav.csv.zip"
 )
+# New format: nsearchives full bhavcopy CSV — available from 2020-01-01 onwards
+# Uses DDMMYYYY date format in the filename.
+BHAV_NEW_URL_TEMPLATE = (
+    "https://nsearchives.nseindia.com/products/content/sec_bhavdata_full_{ddmmyyyy}.csv"
+)
+
 NSE_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -52,9 +59,29 @@ NSE_HEADERS = {
     "Referer": "https://www.nseindia.com/",
 }
 
+# New format columns differ from old format.
+# Old: SYMBOL, SERIES, OPEN, HIGH, LOW, CLOSE, TOTTRDQTY, TIMESTAMP
+# New: SYMBOL, SERIES, DATE1, OPEN_PRICE, HIGH_PRICE, LOW_PRICE, CLOSE_PRICE, TTL_TRD_QNTY
+_NEW_COL_MAP = {
+    "date_col": "DATE1",
+    "open_col": "OPEN_PRICE",
+    "high_col": "HIGH_PRICE",
+    "low_col": "LOW_PRICE",
+    "close_col": "CLOSE_PRICE",
+    "volume_col": "TTL_TRD_QNTY",
+}
+_OLD_COL_MAP = {
+    "date_col": "TIMESTAMP",
+    "open_col": "OPEN",
+    "high_col": "HIGH",
+    "low_col": "LOW",
+    "close_col": "CLOSE",
+    "volume_col": "TOTTRDQTY",
+}
+
 
 def build_bhav_url(trade_date: date, fallback: bool = False) -> str:
-    """Build the NSE archive URL for a given trading date.
+    """Build the old NSE archive ZIP URL for a given trading date (pre-July 2024).
 
     Args:
         trade_date: The trading date to build the URL for.
@@ -68,6 +95,22 @@ def build_bhav_url(trade_date: date, fallback: bool = False) -> str:
     year = trade_date.strftime("%Y")
     template = BHAV_FALLBACK_URL_TEMPLATE if fallback else BHAV_URL_TEMPLATE
     return template.format(mon=mon, dd=dd, year=year)
+
+
+def build_new_bhav_url(trade_date: date) -> str:
+    """Build the new NSE full-bhavcopy CSV URL for a given trading date (2020+).
+
+    NSE introduced sec_bhavdata_full_{DDMMYYYY}.csv format from 2020 onwards.
+    This URL works without session cookies.
+
+    Args:
+        trade_date: The trading date to build the URL for.
+
+    Returns:
+        Full URL string for the new-format plain CSV.
+    """
+    ddmmyyyy = trade_date.strftime("%d%m%Y")
+    return BHAV_NEW_URL_TEMPLATE.format(ddmmyyyy=ddmmyyyy)
 
 
 def trading_dates(start: date, end: date) -> list[date]:
@@ -92,12 +135,11 @@ def trading_dates(start: date, end: date) -> list[date]:
 
 
 def make_nse_session() -> requests.Session:
-    """Create a requests.Session with NSE cookies.
+    """Create a requests.Session with NSE browser headers.
 
-    Hits nseindia.com once to capture session cookies required for archive
-    downloads. Logs a warning if the cookie fetch fails but returns the
-    session anyway — downloads may still succeed without cookies for recent
-    files.
+    Optionally fetches NSE homepage cookies (required for old-format ZIP
+    archives). Uses a short (5, 10) timeout to avoid hanging when the NSE
+    homepage is unreachable — the new-format CSV downloads work without cookies.
 
     Returns:
         Configured requests.Session.
@@ -105,7 +147,7 @@ def make_nse_session() -> requests.Session:
     session = requests.Session()
     session.headers.update(NSE_HEADERS)
     try:
-        resp = session.get("https://www.nseindia.com/", timeout=15)
+        resp = session.get("https://www.nseindia.com/", timeout=(5, 10))
         resp.raise_for_status()
         log.info("nse_session_created", cookies=list(session.cookies.keys()))
     except requests.RequestException as exc:
@@ -113,34 +155,103 @@ def make_nse_session() -> requests.Session:
     return session
 
 
+def download_bhav_data(
+    session: requests.Session,
+    trade_date: date,
+    retry: int = 2,
+) -> tuple[bytes, str] | None:
+    """Download one day's BHAV data, trying new CSV format then old ZIP format.
+
+    Strategy:
+    1. Try new CSV format (nsearchives sec_bhavdata_full_DDMMYYYY.csv) — works
+       for 2020+ without session cookies.
+    2. Fall back to old ZIP format (archives.nseindia.com, then nsearchives
+       fallback) — works for 2016–July 2024.
+    Returns None for 404 responses (holidays / weekends / pre-listing dates).
+
+    Args:
+        session: requests.Session from make_nse_session().
+        trade_date: The trading date to download.
+        retry: Maximum number of retry attempts per URL.
+
+    Returns:
+        (content_bytes, format_tag) where format_tag is "new" or "old",
+        or None if no data available for this date.
+    """
+    # --- Attempt 1: new CSV format ---
+    new_url = build_new_bhav_url(trade_date)
+    for attempt in range(retry + 1):
+        try:
+            resp = session.get(new_url, timeout=(5, 20))
+            if resp.status_code == 200:
+                return resp.content, "new"
+            if resp.status_code == 404:
+                break  # Not a trading day or pre-2020 date — try old format
+            log.warning(
+                "bhav_new_download_unexpected_status",
+                date=trade_date.isoformat(),
+                status=resp.status_code,
+                attempt=attempt,
+            )
+        except requests.RequestException as exc:
+            log.warning(
+                "bhav_new_download_error",
+                date=trade_date.isoformat(),
+                error=str(exc),
+                attempt=attempt,
+            )
+        if attempt < retry:
+            time.sleep(1)
+
+    # --- Attempt 2: old ZIP format (primary + fallback subdomain) ---
+    for use_fallback in (False, True):
+        url = build_bhav_url(trade_date, fallback=use_fallback)
+        for attempt in range(retry + 1):
+            try:
+                resp = session.get(url, timeout=(5, 20))
+                if resp.status_code == 200:
+                    return resp.content, "old"
+                if resp.status_code == 404:
+                    break
+                log.warning(
+                    "bhav_old_download_unexpected_status",
+                    date=trade_date.isoformat(),
+                    status=resp.status_code,
+                    attempt=attempt,
+                )
+            except requests.RequestException as exc:
+                log.warning(
+                    "bhav_old_download_error",
+                    date=trade_date.isoformat(),
+                    error=str(exc),
+                    attempt=attempt,
+                )
+            if attempt < retry:
+                time.sleep(1)
+
+    return None
+
+
+# Keep old name as a thin wrapper for backwards compatibility with tests.
 def download_bhav_zip(
     session: requests.Session,
     trade_date: date,
     retry: int = 2,
 ) -> bytes | None:
-    """Download one BHAV copy ZIP for a given trading date.
+    """Download BHAV copy ZIP for a given trading date (old format only).
 
-    Tries the primary NSE archive URL first, then the fallback subdomain.
-    Returns None for 404 responses (holidays / weekends / pre-listing dates).
-    Retries up to `retry` times on non-404 errors with a 1-second back-off.
-
-    Args:
-        session: Authenticated requests.Session from make_nse_session().
-        trade_date: The trading date to download.
-        retry: Maximum number of retry attempts per URL variant.
-
-    Returns:
-        Raw ZIP bytes on success, None if not a trading day or all retries fail.
+    Deprecated: use download_bhav_data() which tries both formats.
+    Kept for test compatibility.
     """
     for use_fallback in (False, True):
         url = build_bhav_url(trade_date, fallback=use_fallback)
         for attempt in range(retry + 1):
             try:
-                resp = session.get(url, timeout=20)
+                resp = session.get(url, timeout=(5, 20))
                 if resp.status_code == 200:
                     return resp.content
                 if resp.status_code == 404:
-                    break  # Not available on this URL variant; try fallback
+                    break
                 log.warning(
                     "bhav_download_unexpected_status",
                     date=trade_date.isoformat(),
@@ -280,12 +391,55 @@ def parse_bhav_date(timestamp: str) -> date | None:
     return None
 
 
-def parse_bhav_zip(zip_bytes: bytes, targets: set[str]) -> list[dict[str, Any]]:
-    """Extract OHLCV rows for target tickers from an NSE BHAV copy ZIP.
+def _extract_rows_from_reader(
+    reader: csv.DictReader,  # type: ignore[type-arg]
+    targets: set[str],
+    col: dict[str, str],
+) -> list[dict[str, Any]]:
+    """Shared row-extraction logic for both old and new BHAV CSV formats.
 
-    The ZIP contains a single CSV with one row per traded symbol. This
-    function filters to EQ-series rows whose SYMBOL is in ``targets``,
-    parses date and price columns, and returns a list of normalised dicts.
+    Args:
+        reader: csv.DictReader already positioned at the data rows.
+        targets: Set of NSE ticker symbols to extract (uppercase).
+        col: Column-name mapping (use _OLD_COL_MAP or _NEW_COL_MAP).
+
+    Returns:
+        List of normalised OHLCV dicts.
+    """
+    rows: list[dict[str, Any]] = []
+    try:
+        for row in reader:
+            symbol = row["SYMBOL"].strip().upper()
+            series = row.get("SERIES", "").strip().upper()
+            if symbol not in targets or series != "EQ":
+                continue
+            trade_date = parse_bhav_date(row.get(col["date_col"], ""))
+            if trade_date is None:
+                continue
+            close = safe_decimal(row.get(col["close_col"], ""))
+            if close is None:
+                continue
+            rows.append(
+                {
+                    "ticker": symbol,
+                    "date": trade_date,
+                    "open": safe_decimal(row.get(col["open_col"], "")),
+                    "high": safe_decimal(row.get(col["high_col"], "")),
+                    "low": safe_decimal(row.get(col["low_col"], "")),
+                    "close": close,
+                    "volume": safe_int_volume(row.get(col["volume_col"], "")),
+                }
+            )
+    except KeyError as exc:
+        log.warning("bhav_csv_unexpected_schema", missing_column=str(exc))
+    return rows
+
+
+def parse_bhav_zip(zip_bytes: bytes, targets: set[str]) -> list[dict[str, Any]]:
+    """Extract OHLCV rows for target tickers from an old-format NSE BHAV ZIP.
+
+    The ZIP contains a single CSV with columns: SYMBOL, SERIES, OPEN, HIGH,
+    LOW, CLOSE, TOTTRDQTY, TIMESTAMP. Available for dates up to ~July 2024.
 
     Args:
         zip_bytes: Raw bytes of the downloaded ZIP archive.
@@ -308,51 +462,55 @@ def parse_bhav_zip(zip_bytes: bytes, targets: set[str]) -> list[dict[str, Any]]:
                 reader = csv.DictReader(
                     io.TextIOWrapper(csv_file, encoding="utf-8", errors="replace")
                 )
-                for row in reader:
-                    symbol = row["SYMBOL"].strip().upper()
-                    series = row.get("SERIES", "").strip().upper()
-                    if symbol not in targets or series != "EQ":
-                        continue
-                    trade_date = parse_bhav_date(row["TIMESTAMP"])
-                    if trade_date is None:
-                        continue
-                    close = safe_decimal(row["CLOSE"])
-                    if close is None:
-                        continue
-                    rows.append(
-                        {
-                            "ticker": symbol,
-                            "date": trade_date,
-                            "open": safe_decimal(row["OPEN"]),
-                            "high": safe_decimal(row["HIGH"]),
-                            "low": safe_decimal(row["LOW"]),
-                            "close": close,
-                            "volume": safe_int_volume(row.get("TOTTRDQTY", "")),
-                        }
-                    )
+                rows = _extract_rows_from_reader(reader, targets, _OLD_COL_MAP)
     except zipfile.BadZipFile:
         log.warning("bad_zip_file", zip_size=len(zip_bytes))
-    except KeyError as exc:
-        log.warning("bhav_csv_unexpected_schema", missing_column=str(exc))
     return rows
 
 
+def parse_bhav_csv(csv_bytes: bytes, targets: set[str]) -> list[dict[str, Any]]:
+    """Extract OHLCV rows for target tickers from a new-format NSE BHAV CSV.
+
+    NSE introduced sec_bhavdata_full_DDMMYYYY.csv from 2020 onwards. Columns
+    are: SYMBOL, SERIES, DATE1, OPEN_PRICE, HIGH_PRICE, LOW_PRICE, CLOSE_PRICE,
+    TTL_TRD_QNTY. Headers have trailing spaces that are stripped before parsing.
+
+    Args:
+        csv_bytes: Raw bytes of the downloaded plain CSV file.
+        targets: Set of NSE ticker symbols to extract (uppercase).
+
+    Returns:
+        List of dicts with keys: ticker, date, open, high, low, close, volume.
+    """
+    reader = csv.DictReader(
+        io.TextIOWrapper(io.BytesIO(csv_bytes), encoding="utf-8", errors="replace")
+    )
+    if reader.fieldnames:
+        reader.fieldnames = [f.strip() for f in reader.fieldnames]
+    return _extract_rows_from_reader(reader, targets, _NEW_COL_MAP)
+
+
 def verify_tickers(
-    zip_bytes: bytes,
+    content: bytes,
     targets: set[str],
+    fmt: str = "old",
 ) -> tuple[set[str], set[str]]:
-    """Check which target tickers appear in a BHAV copy ZIP.
+    """Check which target tickers appear in a BHAV data download.
 
     Used before full backfill to catch typos in NSE ticker symbols.
 
     Args:
-        zip_bytes: Raw bytes of a BHAV copy ZIP (any trading day).
+        content: Raw bytes of a BHAV copy (ZIP for old format, CSV for new format).
         targets: Set of canonical NSE ticker symbols to verify.
+        fmt: "old" for ZIP format (pre-July 2024), "new" for plain CSV format.
 
     Returns:
         (found, missing) where found ∩ missing == ∅ and found ∪ missing == targets.
     """
-    rows = parse_bhav_zip(zip_bytes, targets)
+    if fmt == "new":
+        rows = parse_bhav_csv(content, targets)
+    else:
+        rows = parse_bhav_zip(content, targets)
     found = {r["ticker"] for r in rows}
     missing = targets - found
     return found, missing
@@ -581,10 +739,13 @@ def run_backfill(
         session = make_nse_session()
 
     def fetch_one(trade_date: date) -> list[dict]:
-        zip_bytes = download_bhav_zip(session, trade_date)
-        if zip_bytes is None:
+        result = download_bhav_data(session, trade_date)
+        if result is None:
             return []
-        return parse_bhav_zip(zip_bytes, target_set)
+        content, fmt = result
+        if fmt == "new":
+            return parse_bhav_csv(content, target_set)
+        return parse_bhav_zip(content, target_set)
 
     completed = 0
     with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -656,20 +817,21 @@ def main() -> None:
     log.info("phase1_seed_master")
     seed_etf_master(engine, TARGET_ETFS, dry_run=args.dry_run)
 
-    # Phase 2: Verify tickers against most-recent BHAV
+    # Phase 2: Verify tickers against most-recent BHAV (new or old format)
     log.info("phase2_verify_tickers")
     session = make_nse_session()
-    recent_bhav_bytes: bytes | None = None
+    recent_result: tuple[bytes, str] | None = None
     for days_back in range(1, 8):
         check_date = date.today() - timedelta(days=days_back)
         if check_date.weekday() >= 5:
             continue
-        recent_bhav_bytes = download_bhav_zip(session, check_date)
-        if recent_bhav_bytes:
+        recent_result = download_bhav_data(session, check_date)
+        if recent_result:
             break
 
-    if recent_bhav_bytes:
-        found, missing = verify_tickers(recent_bhav_bytes, set(tickers))
+    if recent_result:
+        recent_content, recent_fmt = recent_result
+        found, missing = verify_tickers(recent_content, set(tickers), fmt=recent_fmt)
         if missing:
             log.warning(
                 "tickers_not_in_bhav",
