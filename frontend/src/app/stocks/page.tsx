@@ -23,7 +23,6 @@ export default async function StocksPage() {
     )
   }
 
-  const above30wMaCount  = stocks.filter(s => s.above_30w_ma).length
   const investableCount  = stocks.filter(s => s.is_investable).length
   const leaderCount      = stocks.filter(s => s.rs_state === 'Leader' || s.rs_state === 'Strong').length
   const improvingCount   = stocks.filter(s => s.momentum_state === 'Improving' || s.momentum_state === 'Accelerating').length
@@ -55,7 +54,8 @@ export default async function StocksPage() {
 
       {/* Main content */}
       <div className="px-6 py-6 flex flex-col gap-6">
-        <StockBreadthPanel stocks={stocks} above30wMaCount={above30wMaCount} />
+        {/* TODO(Task-7): activeMaFilter/onMaFilter wired in StocksClientShell */}
+        <StockBreadthPanel stocks={stocks} activeMaFilter={null} onMaFilter={() => {}} />
 
         {/* Bubble chart: 3M return vs RS percentile, sized by position */}
         <div className="border border-paper-rule rounded-sm p-4">
