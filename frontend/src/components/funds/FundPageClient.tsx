@@ -11,6 +11,7 @@ import { matchesFundSearch } from '@/lib/fund-formatters'
 import { FundMetricTiles } from '@/components/funds/FundMetricTiles'
 import { FundBubbleChart } from '@/components/funds/FundBubbleChart'
 import { FundIntelligencePanel } from '@/components/funds/FundIntelligencePanel'
+import { FundScreener } from '@/components/funds/FundScreener'
 
 // Placeholder imports — these components are created in Tasks 3.3-3.6
 // They will be replaced by real imports once those tasks complete
@@ -164,37 +165,14 @@ export function FundPageClient({
         />
       </div>
 
-      {/* Band 4: Fund list — simple table placeholder until Task 3.6 */}
+      {/* Band 4: Fund Screener */}
       <div className="px-6 py-4">
-        <p className="font-sans text-xs text-ink-tertiary">
-          {filteredFunds.length} funds · {search ? `matching "${search}"` : activeFilter !== 'all' ? `filtered: ${activeFilter}` : 'showing all'}
-        </p>
-        <table className="w-full mt-3">
-          <thead>
-            <tr className="border-b border-paper-rule">
-              <th className="text-left font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider py-2 pr-4">Fund</th>
-              <th className="text-left font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider py-2 pr-4">AMC</th>
-              <th className="text-left font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider py-2 pr-4">NAV State</th>
-              <th className="text-right font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider py-2">Recommendation</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredFunds
-              .slice(0, 50)
-              .map(f => (
-                <tr key={f.mstar_id} className="border-b border-paper-rule/40 hover:bg-paper-rule/5">
-                  <td className="py-2 pr-4">
-                    <a href={`/funds/${f.mstar_id}`} className="font-sans text-xs text-ink-primary hover:text-teal">
-                      {f.scheme_name}
-                    </a>
-                  </td>
-                  <td className="py-2 pr-4 font-sans text-xs text-ink-secondary">{f.amc}</td>
-                  <td className="py-2 pr-4 font-sans text-xs text-ink-secondary">{f.nav_state ?? '—'}</td>
-                  <td className="py-2 text-right font-sans text-xs text-ink-secondary">{f.recommendation ?? '—'}</td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
+        <FundScreener
+          funds={filteredFunds}
+          period={period}
+          activeFilter={activeFilter}
+          onFilterChange={handleFilterChange}
+        />
       </div>
     </div>
   )
