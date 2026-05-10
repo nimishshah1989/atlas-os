@@ -143,3 +143,36 @@ export async function getSectorSnapshotByName(name: string): Promise<SectorBrief
   `
   return rows[0] ?? null
 }
+
+export type TopPickRow = {
+  symbol: string
+  company_name: string
+  rs_pctile_3m: string | null
+  rs_state: string | null
+}
+
+export async function getTopPicksBySector(sectorName: string): Promise<TopPickRow[]> {
+  return sql<TopPickRow[]>`
+    WITH latest AS (
+      SELECT MAX(date) AS d FROM atlas.atlas_stock_metrics_daily
+    )
+    SELECT
+      u.symbol,
+      u.company_name,
+      m.rs_pctile_3m::text AS rs_pctile_3m,
+      st.rs_state
+    FROM atlas.atlas_universe_stocks u
+    JOIN latest l ON TRUE
+    LEFT JOIN atlas.atlas_stock_metrics_daily m
+      ON m.instrument_id = u.instrument_id AND m.date = l.d
+    LEFT JOIN atlas.atlas_stock_states_daily st
+      ON st.instrument_id = u.instrument_id AND st.date = l.d
+    LEFT JOIN atlas.atlas_stock_decisions_daily d
+      ON d.instrument_id = u.instrument_id AND d.date = l.d
+    WHERE u.sector = ${sectorName}
+      AND u.effective_to IS NULL
+      AND d.is_investable = TRUE
+    ORDER BY m.rs_pctile_3m DESC NULLS LAST
+    LIMIT 3
+  `
+}
