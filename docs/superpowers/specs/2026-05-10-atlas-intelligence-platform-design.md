@@ -1,6 +1,6 @@
 # Atlas OS — Intelligence Platform Design Spec
 **Date:** 2026-05-10  
-**Status:** Awaiting CEO review + Design review  
+**Status:** CEO review ✓ | Design review ✓ | Ready for implementation plan  
 **Scope:** Stocks, ETFs, Funds, Sectors, Regime pages + shared design system  
 
 ---
@@ -74,11 +74,58 @@ The design system is built so that adding a column, changing a metric, or adding
 
 All of these live in `frontend/src/components/ui/` and `frontend/src/lib/`.
 
+### Chart Color Token Map
+
+All D3 charts (bubble charts, RRG, BreadthWaterfall, StateJourneyTimeline) MUST use these exact hex values — sourced from `globals.css` design tokens, NOT from Tailwind's default color palette:
+
+```typescript
+// lib/chart-colors.ts — single source of truth for all D3 charts
+export const CHART_COLORS = {
+  // RS state colors (bubble chart, screener chips)
+  rs: {
+    Leader:       '#2F6B43',  // --signal-pos (forest green)
+    Strong:       '#1D9E75',  // --teal (product extension)
+    Emerging:     '#25394A',  // --accent (slate)
+    Consolidating:'#B8860B',  // --signal-warn (ochre)
+    Average:      '#9A8F82',  // --ink-4
+    Weak:         '#B0492C',  // --signal-neg (terracotta)
+    Laggard:      '#8B3520',  // --signal-neg darkened
+  },
+  // Momentum state (trajectory arrows, heatmap)
+  momentum: {
+    Accelerating:  '#2F6B43',
+    Improving:     '#1D9E75',
+    Flat:          '#9A8F82',
+    Deteriorating: '#B8860B',
+    Collapsing:    '#B0492C',
+  },
+  // Regime context (ForwardReturnChart regime bands)
+  regime: {
+    'Risk-On':    '#2F6B43',  // forest green fill, opacity 0.15
+    'Cautious':   '#B8860B',  // ochre fill, opacity 0.15
+    'Risk-Off':   '#B0492C',  // terracotta fill, opacity 0.15
+  },
+  // Chart infrastructure
+  axisLine:     '#C2B8A8',  // --paper-rule
+  axisText:     '#9A8F82',  // --ink-4
+  gridLine:     '#DDD3BF',  // --ink-rule (dashed)
+  background:   '#F8F4EC',  // --paper
+}
+```
+
+**Existing chart fix:** `SectorBubbleChart.tsx` and `StockBubbleChart.tsx` currently use raw Tailwind hex (`#22c55e`, `#ef4444`). These must be updated to `CHART_COLORS` in Sprint 1 (tracked in TODOS.md).
+
 ### `StateValuePair.tsx`
 ```
 Props: state, stateKind ('rs'|'momentum'|'risk'|'volume'), value, valueColor
 Renders: [StateChip] [scalar value]
 Used in: all screener tables, deep dive headers
+```
+Visual anatomy (DESIGN.md tokens):
+```
+Container: inline-flex, items-center, gap-1.5  (6px gap)
+  [StateChip: existing pattern — 10px Inter 600, uppercase, 2px radius, tinted bg/text by state]
+  [scalar: JetBrains Mono 12px, tabular-nums, color = valueColor or inherit from chip]
 ```
 
 ### `InstrumentPageShell.tsx`
@@ -96,6 +143,19 @@ Renders: responsive grid of KPI tiles, each clickable
 Used in: top of all 4 instrument pages
 ```
 Replaces hardcoded `StockSnapshotTiles` which is stocks-specific.
+Visual anatomy (DESIGN.md tokens):
+```
+Grid: flex flex-wrap gap-3 (wraps at breakpoints)
+Each tile: 1px --paper-rule border, 2px radius, px-4 py-3, cursor-pointer
+  hover: bg-paper-soft (no shadow, no transform — DESIGN.md motion rules)
+  active: bg-paper-deep
+  Eyebrow label: font-sans text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-tertiary
+  Primary value: font-mono text-xl font-medium text-ink-primary tabular-nums (kind='number')
+              or existing StateChip (kind='chip')
+              or PosSizeBar (kind='bar')
+  Delta text: font-mono text-[11px] text-signal-pos/neg mt-0.5 (sign-colored)
+  Min width: 120px. Max: 180px. At <768px: 4 tiles per row → 2 per row
+```
 
 ### `MetricTooltip.tsx`
 ```
@@ -110,12 +170,23 @@ Props: commentary (CommentaryOutput object with lines[], insightCards[], actionS
 Renders: text block with teal left-border + 1-3 insight cards below
 Used in: stocks, etfs, funds, sectors pages
 ```
+Visual anatomy (DESIGN.md tokens):
+```
+Container: border-l-[3px] border-teal pl-3 py-1
+Commentary lines: font-sans text-[13px] leading-[1.5] text-ink-secondary
+  — each line separated by mt-1
+Action signal (if present): font-sans text-xs font-semibold text-teal mt-2 uppercase tracking-wider
+Insight cards (below, gap-2): 1px --paper-rule border, 2px radius, px-3 py-2
+  Eyebrow: font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary
+  Value: font-mono text-sm font-medium text-ink-primary
+  Label: font-sans text-[11px] text-ink-secondary mt-0.5
+```
 
 ### `ForwardReturnChart.tsx`
 ```
 Props: filterState (active screener filter combination), instrumentType ('stock'|'etf'|'fund')
 Note: no 'period' prop — chart always renders all 4 forward windows (1M/3M/6M/1Y) simultaneously as a grouped box-whisker. Period selector on the parent page does NOT affect this chart.
-Renders: violin/box-whisker chart of historical forward returns for stocks matching this filter, 4 grouped windows, coloured by regime
+Renders: box-whisker chart (approved in DESIGN.md) of historical forward returns for stocks matching this filter, 4 grouped windows side by side (1M/3M/6M/1Y), regime background bands at opacity 0.12
 Data: reads from atlas_forward_return_precompute via filter_hash lookup; on-demand fallback if hash not found
 Used in: stocks page Band 3, ETF page Band 3
 ```
@@ -225,13 +296,13 @@ All tiles show delta vs prior week in small secondary text. All have MetricToolt
 - Click: navigate to stock deep dive
 - Cohort filter (N50 / N100 / N500 / All) syncs with screener
 
-*Intelligence Panel (right side):*
-- RS State Distribution: horizontal stacked bar + list with count and % for each state, bars clickable to filter screener
-- CommentaryBlock: 4-5 sentences on current market breadth, leadership quality, regime context, historical forward return for current conditions
-- Momentum Distribution: Accelerating/Improving/Flat/Deteriorating/Collapsing bars with counts
-- Investable Today: top 3-4 stocks passing all 6 gates, shown as mini cards (ticker, sector, RS pctile, period return, size %)
+*Intelligence Panel (right side) — stacking order top to bottom:*
+1. CommentaryBlock: 4-5 sentences on current market breadth, leadership quality, regime context, historical forward return for current conditions — appears FIRST so the synthesis orients the data below
+2. RS State Distribution: horizontal stacked bar + list with count and % for each state, bars clickable to filter screener
+3. Momentum Distribution: Accelerating/Improving/Flat/Deteriorating/Collapsing bars with counts
+4. Investable Today: top 3-4 stocks passing all 6 gates, shown as mini cards (ticker, sector, RS pctile, period return, size %) — appears last as the call-to-action conclusion
 
-**Band 3 — Forward Return Distribution (collapsible)** *(ships Sprint 5 — show "Historical signal coming soon" placeholder in Sprints 1-4)*
+**Band 3 — Forward Return Distribution (collapsible, collapsed by default)** *(ships Sprint 5 — show "Historical signal coming soon" placeholder in Sprints 1-4)*
 A `ForwardReturnChart` showing: for all stocks currently passing the active screener filters, what were the historical 1M / 3M / 6M / 1Y forward returns? Box-whisker per period, coloured by regime (green = Risk-On, amber = Cautious, red = Risk-Off). Shows median, IQR, hit rate (% positive). Updates as user changes filters. Answers: "if this signal has worked before, what has it produced?"
 
 **Band 4 — Screener Table**
@@ -294,7 +365,7 @@ Intelligence panel:
 - Gold vs ₹ RS comparison: which benchmark is rewarding more right now, with historical context
 - CommentaryBlock: cross-theme RS narrative, defensive vs equity signal, investable count context
 
-**Band 3 — Forward Return Distribution** *(ships Sprint 5 — placeholder in Sprints 1-4)* (same pattern as stocks, ETF-filtered)
+**Band 3 — Forward Return Distribution (collapsible, collapsed by default)** *(ships Sprint 5 — placeholder in Sprints 1-4)* (same pattern as stocks, ETF-filtered)
 
 **Band 4 — Screener**
 | Column | Data |
@@ -334,7 +405,7 @@ Full backend exists (4 tables, ~60 columns). Zero frontend today.
 RECOMMENDED (18) · HOLD (64) · LEADER/STRONG NAV (82) · ALIGNED COMPOSITION (112) · STRONG HOLDINGS (94) · MEDIAN {period} RET · MEDIAN RS PCTILE
 Note: nav_state DB values carry ` NAV` suffix (e.g., `'Leader NAV'`, `'Strong NAV'`) — filter using exact values, not bare `'Leader'`/`'Strong'`
 
-**Period selector note:** `atlas_fund_metrics_daily` has `ret_1m / ret_3m / ret_6m / ret_12m` only — no `ret_1w`. The Funds page period selector is **4M / 3M / 6M / 1Y** (omit 1W). Similarly, `rs_{period}_category` exists for 1m/3m/6m only; for 1Y period selector, fall back to `rs_6m_category` with "(6M)" label. All screener columns show `—` for any missing period.
+**Period selector note:** `atlas_fund_metrics_daily` has `ret_1m / ret_3m / ret_6m / ret_12m` only — no `ret_1w`. The Funds page period selector is **1M / 3M / 6M / 1Y** (omit 1W). Similarly, `rs_{period}_category` exists for 1m/3m/6m only; for 1Y period selector, fall back to `rs_6m_category` with "(6M)" label. All screener columns show `—` for any missing period.
 
 **Band 2 — Bubble Chart + Intelligence Panel**
 - X: realized_vol_63
@@ -348,7 +419,7 @@ Intelligence panel:
 - Category performance: which categories are leading on RS pctile
 - CommentaryBlock: fund universe quality, recommendation distribution context, historical forward return for current Recommended funds
 
-**Band 3 — Forward Return Distribution** *(ships Sprint 5 — placeholder in Sprints 1-4)* (filtered to Recommended funds historically)
+**Band 3 — Forward Return Distribution (collapsible, collapsed by default)** *(ships Sprint 5 — placeholder in Sprints 1-4)* (filtered to Recommended funds historically)
 
 **Band 4 — Screener**
 | Column | Data |
@@ -454,7 +525,7 @@ Breadth numbers (e.g., "214 stocks in Accumulation state") link to the stocks sc
 
 ### 9a. Forward Return Distribution
 **Location:** Stocks page Band 3, ETF page Band 3, accessible from any screener via "Historical Signal" button  
-**How it works:** For the current active filter combination (e.g., rs_state=Leader, momentum_state=Accelerating, risk_state=Low, weinstein_gate_pass=true), query all historical dates when these criteria were met, then compute forward returns at 1M/3M/6M/1Y from each such date. Render as violin or box-whisker chart broken by regime context.  
+**How it works:** For the current active filter combination (e.g., rs_state=Leader, momentum_state=Accelerating, risk_state=Low, weinstein_gate_pass=true), query all historical dates when these criteria were met, then compute forward returns at 1M/3M/6M/1Y from each such date. Render as box-whisker chart (approved in DESIGN.md) broken by regime context.  
 **What it answers:** "If I act on this signal today, what has it historically produced — and does it matter what regime we're in?"
 
 ### 9b. State Journey Timeline
@@ -519,7 +590,33 @@ The commentary is always honest about signal quality. Weak or ambiguous signals 
 
 ---
 
-## 11. Cross-Navigation Map
+## 11. Interaction States
+
+All components must implement four states. Design system convention: all skeletons use `bg-paper-rule/20 animate-pulse rounded-sm`. Error states use `text-signal-neg`. Empty states have warmth + a primary action.
+
+| Component | LOADING | EMPTY | ERROR | NOTES |
+|---|---|---|---|---|
+| MetricTileRow | Skeleton block per tile (same size as tile) | `—` value with no delta | `—` value with tooltip "data unavailable" | Never show 0 for unavailable data |
+| Bubble chart (Stocks/ETF/Funds/Sectors) | Shimmer overlay on chart canvas + "Loading..." text centered | "No stocks match the current filters." + Reset filters link | "Could not load data. Refresh to retry." | Empty = filter state, not data absence |
+| IntelligencePanel CommentaryBlock | Skeleton 4 lines (60%/80%/70%/50% widths) with teal left border | "Insufficient data for commentary." (no card, no border) | "Commentary unavailable." | Never show partial sentences |
+| StateJourneyTimeline | Skeleton 4 horizontal lanes | "No state history available for this instrument." | "Could not load history." | Min 90 days of data needed to render |
+| ForwardReturnChart | "Computing historical distribution..." with subtle spinner (Band 3 expanded state) | "Insufficient historical data (N={N}) for this filter combination." if N<10 | "Historical data unavailable." | Band 3 remains collapsed if data unavailable |
+| RRGChart | Skeleton dots for each sector | "Add at least 3 sectors with 20+ days of history to view the rotation graph." | "Could not render rotation graph." | NULL rs_momentum sectors excluded silently |
+| Screener table | Skeleton rows (10 rows, staggered widths) | "No results match the current filter." + "Clear filters" secondary button | "Could not load data. Refresh to retry." | Skeleton rows match density of live rows |
+| CommentaryInsightCard | Skeleton card | Omit card (don't render empty card) | Omit card | Cards are additive — never show empty card shell |
+
+**Empty state for full page (no pipeline data — first load):** Show page layout skeleton (band structure visible but all content areas are shimmer placeholders). Below the header band, a warm inline notice:
+
+```
+Data is computed nightly and updates automatically.
+Next run: tonight at 8:00 PM IST.
+```
+
+— `font-sans text-sm text-ink-secondary`, centered in the content area, no icon, no button. The layout skeleton ensures the user understands what will appear. Do NOT show "Run the nightly pipeline" — that is engineer language, not fund manager language.
+
+---
+
+## 12. Cross-Navigation Map
 
 | From | To | Action |
 |---|---|---|
@@ -537,7 +634,7 @@ The commentary is always honest about signal quality. Weak or ambiguous signals 
 
 ---
 
-## 12. Data Coverage After This Build
+## 13. Data Coverage After This Build
 
 | Instrument | Computed cols | Currently displayed | After this spec |
 |---|---|---|---|
@@ -556,7 +653,7 @@ The commentary is always honest about signal quality. Weak or ambiguous signals 
 
 ---
 
-## 13. Build Sequence
+## 14. Build Sequence
 
 ### Sprint 1 — Design System Foundation
 *No page rebuilds. All additive. Existing pages still work throughout.*
@@ -616,12 +713,28 @@ The commentary is always honest about signal quality. Weak or ambiguous signals 
 - [ ] Deep dive history tab range selectors (not hardcoded 6M)
 - [ ] All remaining MetricTooltip integrations
 - [ ] Add to Portfolio integration from screener rows
-- [ ] Cross-navigation audit (every path in section 11 tested)
+- [ ] Cross-navigation audit (every path in section 12 tested)
 - [ ] Commentary engine: edge cases, ambiguous signals, honest weak-signal messaging
 
 ---
 
-## 14. What We Are Explicitly Not Building
+## 15. Responsive & Accessibility Conventions
+
+**Desktop-first.** All pages target 1280px+ primary. Responsive behavior (MetricTileRow wrap at <768px, bubble chart min-width 360px) is specified per component; anything not specified defers to implementer judgment.
+
+**Color encoding.** State chips use color + text label — text is the primary signal, color is reinforcement. Bubble charts use color for RS state; the hover tooltip always shows the text state name, satisfying WCAG minimum (color is not the only conveyor of information).
+
+**Keyboard and focus.** Interactive elements (clickable bubbles, metric tiles, screener chips, state chips) must:
+- Be reachable via Tab
+- Show `:focus-visible` ring (Tailwind `focus-visible:ring-2 focus-visible:ring-teal/60`)
+- Trigger the same action on Enter/Space as on click
+- Bubble chart: arrow keys navigate between bubbles when chart has focus; Enter opens deep dive
+
+**ARIA.** Screener table uses `role="grid"`. Metric tiles use `aria-label="{label}: {value}"`. State chips use `aria-label="{state} state"`. All icon-only buttons (+ button, chevron) require `aria-label`.
+
+---
+
+## 16. What We Are Explicitly Not Building
 
 - Separate modes or views per investor type (PMS / MF / RA) — single unified view
 - AI-generated commentary — all commentary is deterministic rule-based
@@ -632,7 +745,7 @@ The commentary is always honest about signal quality. Weak or ambiguous signals 
 
 ---
 
-## 15. ForwardReturnDistribution — Precompute Schema
+## 17. ForwardReturnDistribution — Precompute Schema
 
 The `ForwardReturnChart` requires historical forward returns for arbitrary filter combinations.
 On-demand computation against 10Y × 1000+ stocks is too slow for interactive use. This section
@@ -693,9 +806,9 @@ This requires Migration 026 + the nightly job. Both must ship in Sprint 5, migra
 
 ---
 
-## 16. Open Questions for Review
+## 18. Open Questions for Review
 
-1. ~~**Forward Return Distribution chart** — data query strategy.~~ **RESOLVED (CEO review):** Section 15 defines the precompute table schema, nightly job, filter hash function, and on-demand fallback. Migration 026 required in Sprint 5.
+1. ~~**Forward Return Distribution chart** — data query strategy.~~ **RESOLVED (CEO review):** Section 17 defines the precompute table schema, nightly job, filter hash function, and on-demand fallback. Migration 026 required in Sprint 5.
 
 2. **Market Structure Treemap** — market cap data: stocks currently do not have market cap in the Atlas DB. **Decision: use `position_size_pct` as bubble size for v1.** This reflects the strategy's conviction weighting, which is arguably more useful than raw market cap for a relative-strength tool. Market cap can be added in a future migration if needed.
 
@@ -704,3 +817,9 @@ This requires Migration 026 + the nightly job. Both must ship in Sprint 5, migra
 4. **Days in state** — computed as a CTE in `getAllStocks()` (not a correlated subquery). The correct query logic: use a window function to find the most recent date when the rs_state *changed from a different value*, then compute `CURRENT_DATE - that_date`. Do NOT bound the scan to 90 days — a stock in Leader state for 120 days would show 90 otherwise (wrong). The CTE scans full `atlas_stock_states_daily` for the instrument, applies `LAG(rs_state) OVER (PARTITION BY instrument_id ORDER BY date)` to identify state-change rows, then picks `MAX(change_date) WHERE rs_state = current_rs_state`. This adds ~50-100ms; run EXPLAIN ANALYZE in Sprint 2. If >100ms, precompute nightly as `state_since_date` column.
 
 5. **State Journey Timeline — 5Y data volume** — 5 years × 250 trading days = 1,250 rows per instrument. For the screener's expandable row (90-day version), 90 rows. Both are fast. The 5Y version in deep dives should use a lazy-load pattern (loads when History tab is selected, not on page mount).
+
+6. **Band 3 default state** — **RESOLVED (design review):** collapsed by default. Band 3 renders a compact `"Historical Signal ▸"` expand trigger below the screener. Clicking expands the `ForwardReturnChart`. This keeps the primary Band 2 content as the focus and avoids a loading spinner on every page load, since the distribution computation has latency.
+
+7. **Bubble chart benchmark coloring** — **RESOLVED (design review):** bubble color **always** uses `rs_state` (₹ benchmark classification), regardless of benchmark selector position. When benchmark = Gold, only the screener columns change (RS Gold column, RS pctile bar). No special gold coloring logic in the bubble chart. Rationale: rs_state is the primary signal; gold benchmark is a comparative filter, not a reclassification.
+
+8. **Column show/hide localStorage key** — **RESOLVED (design review):** use key `atlas-column-prefs-${pageId}` where `pageId` is `'stocks' | 'etfs' | 'funds' | 'sectors'`. Stored as `string[]` of hidden column keys. Default: all columns visible. Per-page isolation; no shared state across pages.
