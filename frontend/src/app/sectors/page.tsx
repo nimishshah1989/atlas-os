@@ -6,16 +6,17 @@ import {
   getRRGHistory,
   getBreadthWaterfallData,
   getDaysInStateForAllSectors,
-  type DaysInStateRow,
 } from '@/lib/queries/sectors'
+import { buildSectorCommentary } from '@/lib/commentary/sectors'
 import { rangeToDays, type TimeRange } from '@/lib/time-range'
 import { getSectorDecision } from '@/lib/sectors-decision'
 import { filterSectors } from '@/lib/sectors-filter'
 import { TimeRangeToggle } from '@/components/ui/TimeRangeToggle'
 import { SectorViews } from '@/components/sectors/SectorViews'
 import { SectorRiskWatch } from '@/components/sectors/SectorRiskWatch'
+import { CommentaryBlock } from '@/components/ui/CommentaryBlock'
 
-type SearchParams = Promise<{ range?: string }>
+type SearchParams = Promise<{ range?: string; tab?: string }>
 
 export default async function SectorsPage({ searchParams }: { searchParams: SearchParams }) {
   const { range = '6M' } = await searchParams
@@ -25,9 +26,13 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
     : '6M'
   const days = rangeToDays(historyRange)
 
-  const [allRaw, stateHistory] = await Promise.all([
+  // 5 parallel queries — server-side rendering
+  const [allRaw, stateHistory, rrgHistory, breadthData, daysInState] = await Promise.all([
     getSectorsWithMomentum(),
     getSectorStateHistory(days),
+    getRRGHistory(30),
+    getBreadthWaterfallData(null, 1095),
+    getDaysInStateForAllSectors(),
   ])
 
   if (allRaw.length === 0) {
@@ -54,6 +59,39 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
   const underweightCount = actionableWithDecision.filter(s => s.sector_state === 'Underweight').length
   const avoidCount       = actionableWithDecision.filter(s => s.sector_state === 'Avoid').length
   const dataDate = allRaw[0]?.data_date
+
+  // Compute leading-quadrant count for commentary context
+  const meanX =
+    allRaw.reduce(
+      (s, d) => s + (d.bottomup_rs_3m_nifty500 != null ? parseFloat(d.bottomup_rs_3m_nifty500) : 0),
+      0,
+    ) / (allRaw.length || 1)
+  const meanY =
+    allRaw.reduce(
+      (s, d) => s + (d.rs_momentum != null ? parseFloat(d.rs_momentum) : 0),
+      0,
+    ) / (allRaw.length || 1)
+  const leadingRRGCount = allRaw.filter(
+    s =>
+      s.bottomup_rs_3m_nifty500 != null &&
+      parseFloat(s.bottomup_rs_3m_nifty500) > meanX &&
+      s.rs_momentum != null &&
+      parseFloat(s.rs_momentum) > meanY,
+  ).length
+
+  // Top-ranked sector commentary (decision-table ordering: Overweight first)
+  const topSector = actionableWithDecision[0]
+  const commentary = topSector
+    ? buildSectorCommentary({
+        sectorName:              topSector.sector_name,
+        sectorState:             topSector.sector_state,
+        divergence_flag:         topSector.divergence_flag,
+        bottomup_momentum_state: topSector.bottomup_momentum_state,
+        constituent_count:       topSector.constituent_count,
+        leadingRRGCount,
+        recentlyUpgraded:        false,
+      })
+    : null
 
   return (
     <div className="max-w-[1400px] mx-auto">
@@ -96,6 +134,24 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
         </div>
       </div>
 
+      {commentary && (
+        <div className="px-6 pt-6">
+          <CommentaryBlock
+            narrative={commentary.narrative}
+            contextCards={commentary.contextCards}
+            dataAsOf={
+              dataDate
+                ? dataDate.toLocaleDateString('en-IN', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                  })
+                : undefined
+            }
+          />
+        </div>
+      )}
+
       <SectorRiskWatch sectors={actionableWithDecision} />
 
       <SectorViews
@@ -103,6 +159,9 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
         allSectors={allWithDecision}
         excluded={excluded}
         stateHistory={stateHistory}
+        rrgHistory={rrgHistory}
+        breadthData={breadthData}
+        daysInState={daysInState}
         range={historyRange}
       />
     </div>
