@@ -92,20 +92,16 @@ export function RRGChart({
       (d) => d.sector_name,
     )
 
-    // ---- Scales over union of trails + dots ----
-    const allX: number[] = [
-      ...chartData.filter((s) => s.x != null).map((s) => s.x as number),
-      ...validHistory.map((r) => r.x),
-    ]
-    const allY: number[] = [
-      ...chartData.filter((s) => s.y != null).map((s) => s.y as number),
-      ...validHistory.map((r) => r.y),
-    ]
+    // ---- Scales from current dots only — history trails are clipped, not scaled ----
+    const currentX = chartData.filter((s) => s.x != null).map((s) => s.x as number)
+    const currentY = chartData.filter((s) => s.y != null).map((s) => s.y as number)
 
-    const xExtent = (d3.extent(allX) as [number, number]) ?? [-1, 1]
-    const yExtent = (d3.extent(allY) as [number, number]) ?? [-1, 1]
-    const xPad = (xExtent[1] - xExtent[0]) * 0.15 || 0.1
-    const yPad = (yExtent[1] - yExtent[0]) * 0.15 || 0.1
+    const xExtent = (d3.extent(currentX) as [number, number]) ?? [-1, 1]
+    const yExtent = (d3.extent(currentY) as [number, number]) ?? [-1, 1]
+    const xRange = xExtent[1] - xExtent[0] || 1
+    const yRange = yExtent[1] - yExtent[0] || 1
+    const xPad = xRange * 0.25
+    const yPad = yRange * 0.25
 
     const xScale = d3
       .scaleLinear()
@@ -127,6 +123,10 @@ export function RRGChart({
         'aria-label',
         `Sector Relative Rotation Graph — ${current.length} sectors`,
       )
+
+    const clipId = 'rrg-clip'
+    svg.append('defs').append('clipPath').attr('id', clipId)
+      .append('rect').attr('width', innerW).attr('height', innerH)
 
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`)
 
@@ -173,7 +173,8 @@ export function RRGChart({
       .attr('aria-hidden', 'true')
       .text((d) => d.text)
 
-    // ---- Trailing dots (oldest → newest, opacity ramps) ----
+    // ---- Trailing dots (oldest → newest, opacity ramps, clipped to chart area) ----
+    const trailGroup = g.append('g').attr('clip-path', `url(#${clipId})`)
     for (const [sectorName, sectorHistory] of historyBySector) {
       const last5 = sectorHistory.slice(-5)
       const sectorCurrent = chartData.find((s) => s.sector_name === sectorName)
@@ -181,7 +182,7 @@ export function RRGChart({
         ? MOM_COLOR[sectorCurrent.bottomup_momentum_state ?? ''] ?? FALLBACK_COLOR
         : FALLBACK_COLOR
       last5.forEach((row, i) => {
-        g.append('circle')
+        trailGroup.append('circle')
           .attr('cx', xScale(row.x))
           .attr('cy', yScale(row.y))
           .attr('r', 4)

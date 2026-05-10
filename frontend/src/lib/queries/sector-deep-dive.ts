@@ -132,8 +132,8 @@ export async function getSectorSnapshotByName(name: string): Promise<SectorBrief
       s.divergence_flag,
       s.bottomup_rs_state,
       s.bottomup_momentum_state,
-      s.bottomup_risk_state,
-      s.bottomup_volume_state,
+      NULL::text               AS bottomup_risk_state,
+      NULL::text               AS bottomup_volume_state,
       m.date AS data_date
     FROM atlas.atlas_sector_metrics_daily m
     JOIN atlas.atlas_sector_states_daily s
