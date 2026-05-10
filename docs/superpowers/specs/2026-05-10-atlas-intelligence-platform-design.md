@@ -671,7 +671,7 @@ Next run: tonight at 8:00 PM IST.
 - [ ] URL param validation: allowlist check for `?period` and `?benchmark` in all Page server components
 - [ ] Bubble chart responsive sizing fix (aspect-ratio container, not hardcoded height)
 - [ ] **Portfolio monitoring bug fix:** diagnose and fix equity curve + drawdown chart empty data in `/portfolios/[id]`
-- [ ] **Migration 024:** Add `state_since_date DATE` column to `atlas_stock_states_daily`. Backfill from history (nightly job populates going forward). This gates Sprint 2's days_in_state column.
+- [ ] **Migration 026:** Add `state_since_date DATE` column to `atlas_stock_states_daily`. Backfill from history (nightly job populates going forward). This gates Sprint 2's days_in_state column.
 
 ### Sprint 2 — Stocks + ETF Page Upgrade
 - [ ] Stocks screener: add 8 new columns (ret_1w, ret_6m, vol_63, extension, drawdown, gold RS, days_in_state, gates)
@@ -682,7 +682,7 @@ Next run: tonight at 8:00 PM IST.
 - [ ] Stocks intelligence panel: RS state distribution, momentum distribution, investable cards
 - [ ] Stocks CommentaryBlock: `buildCommentary(instrumentType, aggregates: PageAggregates)` — condition array pattern. `aggregates` comes from the **same** Band 1 page query (no second DB query). `CommentaryInput` type: `{ investable_count, pct_leader_strong, median_rs_pctile, leader_count_trend, regime_state, ... }`
 - [ ] Stocks CommentaryBlock: unit tests for every condition branch in `tests/lib/commentary/stocks.test.ts`
-- [ ] days_in_state: **precompute-first**. `getAllStocks()` reads `s.state_since_date` column (Migration 024). `days_in_state = CURRENT_DATE - s.state_since_date`. If `state_since_date` IS NULL (pre-backfill), show `—`. No CTE fallback in the hot query path.
+- [ ] days_in_state: **precompute-first**. `getAllStocks()` reads `s.state_since_date` column (Migration 026). `days_in_state = CURRENT_DATE - s.state_since_date`. If `state_since_date` IS NULL (pre-backfill), show `—`. No CTE fallback in the hot query path.
 - [ ] ETF screener: same column additions, StateValuePair, expandable row (same 300ms debounce), column show/hide (`atlas-column-prefs-etfs`)
 - [ ] ETF CommentaryBlock (same condition array pattern)
 - [ ] Metric tiles (Band 1) full implementation for both pages
@@ -819,7 +819,7 @@ This requires Migration 026 + the nightly job. Both must ship in Sprint 5, migra
 
 3. **Commentary engine ownership** — **Decision: hybrid.** `getCommentaryContext(instrumentType, currentState)` is called in the **Page server component** (RSC), not in an API route or client component. Its output is passed as props to `CommentaryBlock` (a client component). Historical context cards arrive fully-formed at SSR time — no client-side DB queries, no hydration mismatch. Current-data sentences are computed client-side from page props already in memory.
 
-4. **Days in state** — **RESOLVED (eng review):** precompute-first. Migration 024 adds `state_since_date DATE` column to `atlas_stock_states_daily`. The nightly pipeline writes this column alongside the state classification. `getAllStocks()` reads `CURRENT_DATE - s.state_since_date AS days_in_state`. If `state_since_date` IS NULL (pre-backfill stocks), show `—`. No hot-path CTE. The CTE approach (LAG scan over full history) was rejected because 1000+ stocks × 2Y of daily data = ~500K rows per page load — unacceptable on a t3.large.
+4. **Days in state** — **RESOLVED (eng review):** precompute-first. Migration 026 adds `state_since_date DATE` column to `atlas_stock_states_daily`. The nightly pipeline writes this column alongside the state classification. `getAllStocks()` reads `CURRENT_DATE - s.state_since_date AS days_in_state`. If `state_since_date` IS NULL (pre-backfill stocks), show `—`. No hot-path CTE. The CTE approach (LAG scan over full history) was rejected because 1000+ stocks × 2Y of daily data = ~500K rows per page load — unacceptable on a t3.large.
 
 5. **State Journey Timeline — 5Y data volume** — 5 years × 250 trading days = 1,250 rows per instrument. For the screener's expandable row (90-day version), 90 rows. Both are fast. The 5Y version in deep dives should use a lazy-load pattern (loads when History tab is selected, not on page mount).
 
