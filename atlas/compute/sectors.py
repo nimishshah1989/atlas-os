@@ -19,6 +19,9 @@ foundation for both bottom-up RS-vs-Nifty500 and breadth measures —
 All weighted helpers and orchestration live in this single module — no
 ``aggregation.py`` per locked decision #1.
 """
+# allow-large: single cohesive pipeline module — loaders, bottom-up/top-down
+# aggregation, breadth, state classification, and DB writers form one
+# indivisible computation unit per locked decision #1 (no aggregation.py split).
 
 from __future__ import annotations
 
@@ -41,7 +44,7 @@ log = structlog.get_logger()
 METRICS_COLUMNS: tuple[str, ...] = (
     "sector_name",
     "date",
-    "bottomup_ret_1w",       # added: 1-week bottom-up return
+    "bottomup_ret_1w",  # added: 1-week bottom-up return
     "bottomup_ret_1m",
     "bottomup_ret_3m",
     "bottomup_ret_6m",
