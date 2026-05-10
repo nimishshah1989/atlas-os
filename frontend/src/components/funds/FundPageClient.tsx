@@ -44,6 +44,9 @@ export function FundPageClient({
   period,
   tileCounts,
   commentary,
+  medianRsPctile: _medianRsPctile,  // consumed in Task 3.5 (FundIntelligencePanel)
+  medianReturn: _medianReturn,       // consumed in Task 3.5
+  topCategory: _topCategory,         // consumed in Task 3.5
 }: Props) {
   const [activeFilter, setActiveFilter] = useState<FilterChip>('all')
   const [search, setSearch] = useState('')

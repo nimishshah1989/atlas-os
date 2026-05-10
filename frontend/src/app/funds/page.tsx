@@ -40,9 +40,11 @@ export default async function FundsPage({
     .map(f => parseFloat(f.rs_pctile_3m ?? ''))
     .filter(n => !isNaN(n))
     .sort((a, b) => a - b)
-  const medianRsPctile = pctiles.length > 0
-    ? pctiles[Math.floor(pctiles.length / 2)]
-    : 0
+  const medianRsPctile = (() => {
+    if (pctiles.length === 0) return 0
+    const mid = Math.floor(pctiles.length / 2)
+    return pctiles.length % 2 === 1 ? pctiles[mid] : (pctiles[mid - 1] + pctiles[mid]) / 2
+  })()
 
   // Median return for selected period
   const retKey =
@@ -55,7 +57,11 @@ export default async function FundsPage({
     .map(f => parseFloat((f as Record<string, string | null>)[retKey] ?? ''))
     .filter(n => !isNaN(n))
     .sort((a, b) => a - b)
-  const medianReturn: number | null = rets.length > 0 ? rets[Math.floor(rets.length / 2)] : null
+  const medianReturn: number | null = (() => {
+    if (rets.length === 0) return null
+    const mid = Math.floor(rets.length / 2)
+    return rets.length % 2 === 1 ? rets[mid] : (rets[mid - 1] + rets[mid]) / 2
+  })()
 
   // Top category by mean RS pctile (rs_pctile_3m, stored as fraction 0-1)
   type TopCategory = { name: string; mean: number }
