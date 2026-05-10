@@ -5,6 +5,16 @@ import type { StockRow } from './sector-deep-dive'
 export type StockRowWithSector = StockRow & {
   sector: string
   above_30w_ma: boolean | null
+  ret_1w: string | null
+  extension_pct: string | null
+  vol_63: string | null
+  drawdown: string | null
+  days_in_state: number | null
+  history_gate_pass: boolean | null
+  liquidity_gate_pass: boolean | null
+  stage1_base_qualifies: boolean | null
+  strength_gate: boolean | null
+  direction_gate: boolean | null
 }
 
 export type FullStockRow = StockRowWithSector & {
@@ -51,6 +61,16 @@ export async function getAllStocks(): Promise<StockRowWithSector[]> {
       m.above_30w_ma,
       m.ema_10_at_20d_high,
       m.weinstein_gate_pass,
+      m.ret_1w::text                       AS ret_1w,
+      m.extension_pct::text                AS extension_pct,
+      m.realized_vol_63::text              AS vol_63,
+      m.drawdown_ratio_252::text           AS drawdown,
+      (CURRENT_DATE - s.state_since_date)::int AS days_in_state,
+      s.history_gate_pass,
+      s.liquidity_gate_pass,
+      s.stage1_base_qualifies,
+      d.strength_gate,
+      d.direction_gate,
       s.rs_state,
       s.momentum_state,
       s.risk_state,
