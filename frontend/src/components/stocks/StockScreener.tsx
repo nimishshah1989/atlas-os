@@ -43,7 +43,7 @@ const OPTIONAL_COLS: ColumnDef[] = [
   { key: 'rs_pctile_1w',   label: 'RS 1W',       defaultVisible: false },
   { key: 'rs_pctile_1m',   label: 'RS 1M',       defaultVisible: false },
   { key: 'extension_pct',  label: 'Ext %',       defaultVisible: false },
-  { key: 'ema_20_ratio',   label: 'EMA20 Ratio', defaultVisible: false },
+  { key: 'ema_20_ratio',   label: 'EMA20 %',    defaultVisible: false },
   { key: 'vol_63',         label: 'Vol (63D)',   defaultVisible: false },
   { key: 'vol_ratio_63',   label: 'Vol Ratio',   defaultVisible: false },
   { key: 'max_drawdown_252', label: 'Max DD',    defaultVisible: false },
@@ -221,7 +221,10 @@ export function StockScreener({
       // Push stocks with no metric data (ret_1m is null) to the bottom always.
       const aHasData = a.ret_1m != null
       const bHasData = b.ret_1m != null
-      if (aHasData !== bHasData) return aHasData ? -1 : 1
+      if (!aHasData || !bHasData) {
+        if (aHasData === bHasData) return a.symbol.localeCompare(b.symbol)
+        return aHasData ? -1 : 1
+      }
 
       if (sortKey === 'symbol') {
         const cmp = a.symbol.localeCompare(b.symbol)
@@ -387,7 +390,7 @@ export function StockScreener({
               {visibleCols.has('rs_pctile_1w') && <PlainTh label="RS 1W" align="right" />}
               {visibleCols.has('rs_pctile_1m') && <PlainTh label="RS 1M" align="right" />}
               {visibleCols.has('extension_pct') && <PlainTh label="Ext %" align="right" />}
-              {visibleCols.has('ema_20_ratio') && <PlainTh label="EMA20 Ratio" align="right" />}
+              {visibleCols.has('ema_20_ratio') && <PlainTh label="EMA20 %" align="right" />}
               {visibleCols.has('vol_63') && <PlainTh label="Vol 63D" align="right" />}
               {visibleCols.has('vol_ratio_63') && <PlainTh label="Vol Ratio" align="right" />}
               {visibleCols.has('max_drawdown_252') && <PlainTh label="Max DD" align="right" />}
@@ -518,8 +521,8 @@ export function StockScreener({
                         </td>
                       )}
                       {visibleCols.has('ema_20_ratio') && (
-                        <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(ema20Ratio)}`}>
-                          {ema20Ratio != null ? `${(parseFloat(ema20Ratio) * 100).toFixed(1)}%` : '—'}
+                        <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${ema20Ratio != null ? (parseFloat(ema20Ratio) >= 1.0 ? 'text-signal-pos' : 'text-signal-neg') : 'text-ink-tertiary'}`}>
+                          {ema20Ratio != null ? `${(parseFloat(ema20Ratio) - 1) >= 0 ? '+' : ''}${((parseFloat(ema20Ratio) - 1) * 100).toFixed(2)}%` : '—'}
                         </td>
                       )}
                       {visibleCols.has('vol_63') && (

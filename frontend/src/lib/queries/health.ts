@@ -78,9 +78,12 @@ export async function getFreshness(): Promise<TableFreshness[]> {
   return Promise.all(
     TRACKED_TABLES.map(async ({ name, date_col }) => {
       if (date_col) {
+        // Use pg_stat_user_tables for fast row-count estimate; MAX() is index-backed.
         const rows = await sql<{ row_count: string; latest_date: Date | null }[]>`
           SELECT
-            COUNT(*)::text AS row_count,
+            (SELECT reltuples::bigint FROM pg_class
+              JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace
+              WHERE nspname = 'atlas' AND relname = ${name})::text AS row_count,
             MAX(${sql(date_col)}) AS latest_date
           FROM atlas.${sql(name)}
         `
@@ -97,7 +100,10 @@ export async function getFreshness(): Promise<TableFreshness[]> {
         }
       } else {
         const rows = await sql<{ row_count: string }[]>`
-          SELECT COUNT(*)::text AS row_count FROM atlas.${sql(name)}
+          SELECT reltuples::bigint::text AS row_count
+          FROM pg_class
+          JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace
+          WHERE nspname = 'atlas' AND relname = ${name}
         `
         return {
           table_name: name,
@@ -133,9 +139,12 @@ export async function getJipFreshness(): Promise<TableFreshness[]> {
 
   return Promise.all(
     JIP_TABLES.map(async ({ name, date_col }) => {
+      // Use pg_stat_user_tables estimate for row count; MAX() is index-backed.
       const rows = await sql<{ row_count: string; latest_date: Date | null }[]>`
         SELECT
-          COUNT(*)::text AS row_count,
+          (SELECT reltuples::bigint FROM pg_class
+            JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace
+            WHERE nspname = 'public' AND relname = ${name})::text AS row_count,
           MAX(${sql(date_col)}) AS latest_date
         FROM public.${sql(name)}
       `

@@ -147,9 +147,9 @@ function SignalsSection({ stock }: { stock: StockRowWithSector }) {
           <div className="mt-2 pt-2 border-t border-paper-rule/30">
             <span className="font-sans text-[10px] text-ink-tertiary">
               ATR-21: <span className="font-mono font-semibold text-ink-secondary">
-                {(atrVal * 100).toFixed(1)}%
+                ₹{atrVal.toFixed(1)}
               </span>
-              <span className="ml-1 text-ink-tertiary">daily range</span>
+              <span className="ml-1 text-ink-tertiary">avg daily range</span>
             </span>
           </div>
         )}
@@ -183,7 +183,7 @@ export function StockDeepDiveBody({
   }))
   const ema20Data = metricHistory.map(r => ({
     date: dateStr(r.date),
-    value: r.ema_20_ratio != null ? parseFloat(r.ema_20_ratio) : null,
+    value: r.ema_20_ratio != null ? (parseFloat(r.ema_20_ratio) - 1) * 100 : null,
   }))
   const drawdownData = metricHistory.map(r => ({
     date: dateStr(r.date),
@@ -329,22 +329,23 @@ export function StockDeepDiveBody({
             <IndicatorChart
               title="Price vs EMA20 (Medium-term Trend)"
               description="How far the price is from the 20-day EMA as a ratio. Positive = price above EMA20 (uptrend). Negative = price below (pullback/downtrend)."
-              currentValue={latest?.ema_20_ratio != null ? `${(parseFloat(latest.ema_20_ratio) * 100).toFixed(1)}%` : '—'}
-              isBullish={latest?.ema_20_ratio != null ? parseFloat(latest.ema_20_ratio) >= 0 : null}
+              currentValue={latest?.ema_20_ratio != null ? (() => { const d = (parseFloat(latest.ema_20_ratio) - 1) * 100; return `${d >= 0 ? '+' : ''}${d.toFixed(2)}%` })() : '—'}
+              isBullish={latest?.ema_20_ratio != null ? parseFloat(latest.ema_20_ratio) >= 1.0 : null}
               data={ema20Data}
               refLine={0}
               refLabel="0 = at EMA20"
               variant="area"
               yFormat="pct"
             />
-            <Commentary title={`EMA20 Ratio · ${latest?.ema_20_ratio != null ? `${(parseFloat(latest.ema_20_ratio) * 100).toFixed(1)}%` : '—'}`}>
+            <Commentary title={`EMA20 Dev · ${latest?.ema_20_ratio != null ? (() => { const d = (parseFloat(latest.ema_20_ratio) - 1) * 100; return `${d >= 0 ? '+' : ''}${d.toFixed(2)}%` })() : '—'}`}>
               {(() => {
-                const v = latest?.ema_20_ratio != null ? parseFloat(latest.ema_20_ratio) : null
-                if (v == null) return <p>No data.</p>
-                if (v >= 0.05) return <p>Price is well above EMA20 — strong medium-term trend. Overextension risk if above 10%.</p>
-                if (v >= 0) return <p>Price is near or above EMA20 — trend intact but watch for a re-test of the level.</p>
-                if (v >= -0.05) return <p>Price is slightly below EMA20 — minor pullback. Trend is at risk if price stays below.</p>
-                return <p>Price is significantly below EMA20 — medium-term downtrend. Caution warranted.</p>
+                const ratio = latest?.ema_20_ratio != null ? parseFloat(latest.ema_20_ratio) : null
+                if (ratio == null) return <p>No data.</p>
+                const v = (ratio - 1) * 100
+                if (v >= 5) return <p>Price is well above EMA20 (+{v.toFixed(1)}%) — strong medium-term trend. Overextension risk above +10%.</p>
+                if (v >= 0) return <p>Price is near or above EMA20 (+{v.toFixed(1)}%) — trend intact; watch for a re-test of the level.</p>
+                if (v >= -5) return <p>Price is slightly below EMA20 ({v.toFixed(1)}%) — minor pullback. Trend at risk if price stays below.</p>
+                return <p>Price is significantly below EMA20 ({v.toFixed(1)}%) — medium-term downtrend. Caution warranted.</p>
               })()}
             </Commentary>
           </div>

@@ -12,15 +12,21 @@ export type ETFRow = {
   fund_house: string | null
   data_as_of: string | null
   // Metrics
+  ret_1w: string | null
   ret_1m: string | null
   ret_3m: string | null
   ret_6m: string | null
+  ret_12m: string | null
   rs_pctile_3m: string | null
+  rs_3m_benchmark: string | null
   ema_10_ratio: string | null
   extension_pct: string | null
-  ret_1w: string | null
   vol_63: string | null
   drawdown: string | null
+  volume_expansion: string | null
+  effort_ratio_63: string | null
+  above_30w_ma: boolean | null
+  ema_10_at_20d_high: boolean | null
   days_in_state: number | null
   // States (3-tuple)
   rs_state: string | null
@@ -37,6 +43,8 @@ export type ETFRow = {
   sector_gate: boolean | null
   market_gate: boolean | null
   position_size_pct: string | null
+  breakout_trigger: boolean | null
+  transition_trigger: boolean | null
   // Exit triggers
   exit_market_riskoff: boolean | null
   exit_sector_avoid: boolean | null
@@ -48,14 +56,18 @@ export type ETFRow = {
 export type ETFMetricHistoryRow = {
   date: Date
   rs_pctile_3m: string | null
+  rs_3m_benchmark: string | null
   ret_1m: string | null
   ret_3m: string | null
   ret_6m: string | null
+  ret_12m: string | null
   ema_10_ratio: string | null
   ema_20_ratio: string | null
   extension_pct: string | null
   vol_63: string | null
   drawdown: string | null
+  volume_expansion: string | null
+  above_30w_ma: boolean | null
 }
 
 export type ETFStateHistoryRow = {
@@ -80,15 +92,21 @@ export async function getAllETFs(): Promise<ETFRow[]> {
       u.asset_class,
       u.fund_house,
       l.d::text                     AS data_as_of,
+      m.ret_1w::text                AS ret_1w,
       m.ret_1m::text                AS ret_1m,
       m.ret_3m::text                AS ret_3m,
       m.ret_6m::text                AS ret_6m,
+      m.ret_12m::text               AS ret_12m,
       m.rs_pctile_3m::text          AS rs_pctile_3m,
+      m.rs_3m_benchmark::text       AS rs_3m_benchmark,
       m.ema_10_ratio::text          AS ema_10_ratio,
       m.extension_pct::text         AS extension_pct,
-      m.ret_1w::text                AS ret_1w,
       m.realized_vol_63::text       AS vol_63,
       m.drawdown_ratio_252::text    AS drawdown,
+      m.volume_expansion::text      AS volume_expansion,
+      m.effort_ratio_63::text       AS effort_ratio_63,
+      m.above_30w_ma,
+      m.ema_10_at_20d_high,
       (CURRENT_DATE - s.state_since_date)::int AS days_in_state,
       s.rs_state,
       s.momentum_state,
@@ -103,6 +121,8 @@ export async function getAllETFs(): Promise<ETFRow[]> {
       d.sector_gate,
       d.market_gate,
       d.position_size_pct::text     AS position_size_pct,
+      d.breakout_trigger,
+      d.transition_trigger,
       d.exit_market_riskoff,
       d.exit_sector_avoid,
       d.exit_rs_deteriorate,
@@ -139,15 +159,21 @@ export async function getETFByTicker(ticker: string): Promise<ETFRow | null> {
       u.asset_class,
       u.fund_house,
       l.d::text                     AS data_as_of,
+      m.ret_1w::text                AS ret_1w,
       m.ret_1m::text                AS ret_1m,
       m.ret_3m::text                AS ret_3m,
       m.ret_6m::text                AS ret_6m,
+      m.ret_12m::text               AS ret_12m,
       m.rs_pctile_3m::text          AS rs_pctile_3m,
+      m.rs_3m_benchmark::text       AS rs_3m_benchmark,
       m.ema_10_ratio::text          AS ema_10_ratio,
       m.extension_pct::text         AS extension_pct,
-      m.ret_1w::text                AS ret_1w,
       m.realized_vol_63::text       AS vol_63,
       m.drawdown_ratio_252::text    AS drawdown,
+      m.volume_expansion::text      AS volume_expansion,
+      m.effort_ratio_63::text       AS effort_ratio_63,
+      m.above_30w_ma,
+      m.ema_10_at_20d_high,
       (CURRENT_DATE - s.state_since_date)::int AS days_in_state,
       s.rs_state,
       s.momentum_state,
@@ -162,6 +188,8 @@ export async function getETFByTicker(ticker: string): Promise<ETFRow | null> {
       d.sector_gate,
       d.market_gate,
       d.position_size_pct::text     AS position_size_pct,
+      d.breakout_trigger,
+      d.transition_trigger,
       d.exit_market_riskoff,
       d.exit_sector_avoid,
       d.exit_rs_deteriorate,
@@ -193,14 +221,18 @@ export async function getETFMetricHistory(
     SELECT
       date,
       rs_pctile_3m::text        AS rs_pctile_3m,
+      rs_3m_benchmark::text     AS rs_3m_benchmark,
       ret_1m::text              AS ret_1m,
       ret_3m::text              AS ret_3m,
       ret_6m::text              AS ret_6m,
+      ret_12m::text             AS ret_12m,
       ema_10_ratio::text        AS ema_10_ratio,
       ema_20_ratio::text        AS ema_20_ratio,
       extension_pct::text       AS extension_pct,
       realized_vol_63::text     AS vol_63,
-      drawdown_ratio_252::text  AS drawdown
+      drawdown_ratio_252::text  AS drawdown,
+      volume_expansion::text    AS volume_expansion,
+      above_30w_ma
     FROM atlas.atlas_etf_metrics_daily
     WHERE ticker = ${ticker}
       AND date >= CURRENT_DATE - (${days} || ' days')::interval
@@ -256,15 +288,21 @@ export async function getLinkedETFsForSector(sectorName: string): Promise<ETFRow
       u.asset_class,
       u.fund_house,
       l.d::text                     AS data_as_of,
+      m.ret_1w::text                AS ret_1w,
       m.ret_1m::text                AS ret_1m,
       m.ret_3m::text                AS ret_3m,
       m.ret_6m::text                AS ret_6m,
+      m.ret_12m::text               AS ret_12m,
       m.rs_pctile_3m::text          AS rs_pctile_3m,
+      m.rs_3m_benchmark::text       AS rs_3m_benchmark,
       m.ema_10_ratio::text          AS ema_10_ratio,
       m.extension_pct::text         AS extension_pct,
-      m.ret_1w::text                AS ret_1w,
       m.realized_vol_63::text       AS vol_63,
       m.drawdown_ratio_252::text    AS drawdown,
+      m.volume_expansion::text      AS volume_expansion,
+      m.effort_ratio_63::text       AS effort_ratio_63,
+      m.above_30w_ma,
+      m.ema_10_at_20d_high,
       (CURRENT_DATE - s.state_since_date)::int AS days_in_state,
       s.rs_state,
       s.momentum_state,
@@ -279,6 +317,8 @@ export async function getLinkedETFsForSector(sectorName: string): Promise<ETFRow
       d.sector_gate,
       d.market_gate,
       d.position_size_pct::text     AS position_size_pct,
+      d.breakout_trigger,
+      d.transition_trigger,
       d.exit_market_riskoff,
       d.exit_sector_avoid,
       d.exit_rs_deteriorate,
