@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation'
 import { getStockBySymbol, getStockMetricHistory, getStockStateHistory } from '@/lib/queries/stocks'
 import { StockDeepDiveHeader } from '@/components/stocks/StockDeepDiveHeader'
 import { StockSnapshotTiles } from '@/components/stocks/StockSnapshotTiles'
-import { StockTabs } from '@/components/stocks/StockTabs'
+import { StockDeepDiveBody } from '@/components/stocks/StockDeepDiveBody'
 
 export default async function StockPage({
   params,
@@ -24,7 +24,11 @@ export default async function StockPage({
     <div className="max-w-[1200px] mx-auto">
       <StockDeepDiveHeader stock={stock} />
       <StockSnapshotTiles stock={stock} />
-      <StockTabs stock={stock} metricHistory={metricHistory} stateHistory={stateHistory} />
+      <StockDeepDiveBody
+        stock={stock}
+        metricHistory={metricHistory}
+        stateHistory={stateHistory}
+      />
     </div>
   )
 }

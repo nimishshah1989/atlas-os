@@ -49,7 +49,7 @@ const ROWS: {
   { key: 'volume_state',   label: 'Volume',     colorMap: VOL_COLOR },
 ]
 
-function StateHeatmap({ history }: { history: StateHistoryRow[] }) {
+export function StateHeatmap({ history }: { history: StateHistoryRow[] }) {
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
 
   const { dates, dateMap } = useMemo(() => {
