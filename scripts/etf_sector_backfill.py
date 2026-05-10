@@ -272,12 +272,16 @@ def download_bhav_zip(
 
 
 TARGET_ETFS: list[dict[str, str]] = [
+    # ── Broad ETFs ──────────────────────────────────────────────────────────
+    # sector="" means Broad (no linked_sector in atlas_universe_etfs)
     {
         "ticker": "MID150BEES",
         "name": "Nippon India ETF Nifty Midcap 150",
-        "sector": "Midcap",
+        "sector": "",
         "benchmark": "NIFTY MIDCAP 150",
     },
+    # ── Sectoral ETFs ────────────────────────────────────────────────────────
+    # sector must match atlas_sector_master.sector_name (= de_instrument.sector)
     {
         "ticker": "PHARMABEES",
         "name": "Nippon India ETF Nifty Pharma",
@@ -291,20 +295,14 @@ TARGET_ETFS: list[dict[str, str]] = [
         "benchmark": "NIFTY HEALTHCARE",
     },
     {
-        "ticker": "CONSUMBEES",
-        "name": "Nippon India ETF Nifty Consumption",
-        "sector": "Consumption",
-        "benchmark": "NIFTY INDIA CONSUMPTION",
-    },
-    {
         "ticker": "AUTOBEES",
         "name": "Nippon India ETF Nifty Auto",
-        "sector": "Auto",
+        "sector": "Automobile",  # JIP sector name is "Automobile" not "Auto"
         "benchmark": "NIFTY AUTO",
     },
     {
         "ticker": "FINIETF",
-        "name": "Nippon India ETF Nifty Financial Svcs",
+        "name": "Nippon India ETF Nifty Financial Services",
         "sector": "Financial Services",
         "benchmark": "NIFTY FINANCIAL SERVICES",
     },
@@ -323,14 +321,26 @@ TARGET_ETFS: list[dict[str, str]] = [
     {
         "ticker": "MOREALTY",
         "name": "Motilal Oswal Nifty Realty ETF",
-        "sector": "Real Estate",
+        "sector": "Realty",  # JIP sector name is "Realty" not "Real Estate"
         "benchmark": "NIFTY REALTY",
     },
     {
         "ticker": "METALIETF",
         "name": "Nippon India ETF Nifty Metal",
-        "sector": "Metals",
+        "sector": "Metal",  # JIP sector name is "Metal" not "Metals"
         "benchmark": "NIFTY METAL",
+    },
+    {
+        "ticker": "CONSDURBEES",
+        "name": "Nippon India ETF Nifty Consumer Durables BeES",
+        "sector": "Consumer Durables",
+        "benchmark": "NIFTY CONSR DURBL",
+    },
+    {
+        "ticker": "OILIETF",
+        "name": "Nippon India ETF Nifty Oil & Gas",
+        "sector": "Oil & Gas",
+        "benchmark": "NIFTY OIL AND GAS",
     },
 ]
 
@@ -341,6 +351,12 @@ TARGET_ETFS: list[dict[str, str]] = [
 TICKER_BHAV_ALIASES: dict[str, list[str]] = {
     "ITBEES": ["NETFIT"],  # Nippon India ETF Nifty IT, renamed ~Jun 2022
     "MID150BEES": ["NETFMID150"],  # Nippon India ETF Nifty Midcap 150, renamed ~Jun 2022
+    "PHARMABEES": ["NETFPHARMA"],  # renamed ~Jun 2022
+    "BANKBEES": ["NETFBANKBEES"],  # older BHAV symbol if applicable
+    "HEALTHIETF": ["NETFHLT"],  # older BHAV symbol if applicable
+    "AUTOBEES": ["NETFAUTO"],  # older BHAV symbol if applicable
+    "METALIETF": ["NETFMETAL"],  # older BHAV symbol if applicable
+    "FINIETF": ["NETFFIN"],  # older BHAV symbol if applicable
 }
 
 
@@ -535,13 +551,14 @@ def build_master_upsert_params(etf: dict[str, str]) -> dict:
     Returns:
         Dict matching de_etf_master columns for use with executemany.
     """
+    sector = etf.get("sector") or None  # empty string → NULL (Broad ETFs have no sector)
     return {
         "ticker": etf["ticker"],
         "name": etf["name"],
         "exchange": "NSE",
         "country": "IN",
         "currency": "INR",
-        "sector": etf.get("sector"),
+        "sector": sector,
         "benchmark": etf.get("benchmark"),
         "is_active": True,
         "source": "nse_bhav",
