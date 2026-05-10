@@ -4,6 +4,7 @@ import { ChevronUp, ChevronDown, AlertTriangle, Info } from 'lucide-react'
 import type { SectorDecision } from '@/lib/sectors-decision'
 import { getTopPicksAction } from '@/app/sectors/actions'
 import type { TopPickRow } from '@/lib/queries/sector-deep-dive'
+import { buildSectorCommentary } from '@/lib/commentary/sectors'
 
 type Row = {
   sector_name: string
@@ -18,12 +19,30 @@ type Row = {
   leadership_concentration: string | null
   sector_state: string
   bottomup_momentum_state: string | null
+  bottomup_rs_state: string | null
+  bottomup_ema_10_ratio: string | null
+  bottomup_ema_20_ratio: string | null
+  topdown_rs_3m_nifty500: string | null
   divergence_flag: boolean
   decision: SectorDecision
   days_in_state?: number
 }
 
-type SortKey = 'decision' | 'bottomup_ret_1w' | 'bottomup_ret_1m' | 'bottomup_ret_3m' | 'bottomup_ret_6m' | 'bottomup_rs_3m_nifty500' | 'rs_momentum' | 'participation_50' | 'leadership_concentration' | 'sector_name' | 'days_in_state'
+type SortKey =
+  | 'decision'
+  | 'sector_name'
+  | 'days_in_state'
+  | 'bottomup_ret_1w'
+  | 'bottomup_ret_1m'
+  | 'bottomup_ret_3m'
+  | 'bottomup_ret_6m'
+  | 'bottomup_rs_3m_nifty500'
+  | 'rs_momentum'
+  | 'participation_50'
+  | 'leadership_concentration'
+  | 'bottomup_rs_state'
+  | 'bottomup_ema_10_ratio'
+  | 'topdown_rs_3m_nifty500'
 
 const DECISION_ORDER: Record<SectorDecision, number> = {
   'ENTER':     1,
@@ -48,6 +67,26 @@ const STATE_DOT: Record<string, string> = {
   Neutral:     'bg-signal-warn',
   Underweight: 'bg-signal-neg',
   Avoid:       'bg-signal-neg',
+}
+
+const RS_STATE_ORDER: Record<string, number> = {
+  Leader:        1,
+  Strong:        2,
+  Emerging:      3,
+  Consolidating: 4,
+  Average:       5,
+  Weak:          6,
+  Laggard:       7,
+}
+
+const RS_STATE_STYLE: Record<string, string> = {
+  Leader:        'bg-signal-pos/15 text-signal-pos',
+  Strong:        'bg-signal-pos/8 text-signal-pos',
+  Emerging:      'bg-signal-warn/10 text-signal-warn',
+  Consolidating: 'bg-ink-tertiary/10 text-ink-secondary',
+  Average:       'bg-ink-tertiary/10 text-ink-tertiary',
+  Weak:          'bg-signal-neg/8 text-signal-neg',
+  Laggard:       'bg-signal-neg/15 text-signal-neg',
 }
 
 function pct(v: string | null): string {
@@ -127,6 +166,66 @@ function ConcentrationCell({ value }: { value: string | null }) {
   )
 }
 
+function RSStateBadge({ value }: { value: string | null }) {
+  if (!value) return <span className="font-mono text-xs text-ink-tertiary">—</span>
+  const style = RS_STATE_STYLE[value] ?? 'bg-ink-tertiary/10 text-ink-secondary'
+  return (
+    <span className={`inline-flex px-1.5 py-0.5 rounded-[2px] font-sans text-[10px] font-medium ${style}`}>
+      {value}
+    </span>
+  )
+}
+
+function EMABreadthCell({ r10, r20 }: { r10: string | null; r20: string | null }) {
+  function miniBar(val: string | null, label: string) {
+    if (val == null) return null
+    const n = parseFloat(val)
+    const pctStr = `${(n * 100).toFixed(0)}%`
+    const color = n >= 0.7 ? '#22c55e' : n >= 0.5 ? '#f59e0b' : '#ef4444'
+    return (
+      <div className="flex items-center gap-1.5">
+        <span className="font-sans text-[9px] text-ink-tertiary w-5 flex-shrink-0">{label}</span>
+        <div className="w-10 h-1 bg-paper-rule rounded-full overflow-hidden">
+          <div className="h-full rounded-full" style={{ width: `${n * 100}%`, background: color }} />
+        </div>
+        <span className="font-mono text-[10px] tabular-nums" style={{ color }}>{pctStr}</span>
+      </div>
+    )
+  }
+  if (r10 == null && r20 == null) {
+    return <span className="font-mono text-xs text-ink-tertiary">—</span>
+  }
+  return (
+    <div className="space-y-0.5">
+      {miniBar(r10, '10d')}
+      {miniBar(r20, '20d')}
+    </div>
+  )
+}
+
+function TopDownCell({ tdRs, buRs }: { tdRs: string | null; buRs: string | null }) {
+  if (tdRs == null) return <span className="font-mono text-xs text-ink-tertiary">—</span>
+  const td = parseFloat(tdRs)
+  const bu = buRs != null ? parseFloat(buRs) : null
+  const agree = bu != null ? Math.sign(td) === Math.sign(bu) : null
+  const color = td >= 0 ? '#22c55e' : '#ef4444'
+  const pctStr = `${td >= 0 ? '+' : ''}${(td * 100).toFixed(1)}%`
+  return (
+    <div className="flex items-center gap-1">
+      <span className="font-mono text-[10px] tabular-nums" style={{ color }}>{pctStr}</span>
+      {agree !== null && (
+        <span
+          className="font-sans text-[10px]"
+          style={{ color: agree ? '#22c55e' : '#f59e0b' }}
+          title={agree ? 'Top-down and bottom-up RS agree' : 'Top-down and bottom-up RS diverge — one reading is misleading'}
+        >
+          {agree ? '✓' : '≠'}
+        </span>
+      )}
+    </div>
+  )
+}
+
 function TopPicksPopover({
   sectorName,
   visible,
@@ -188,7 +287,15 @@ function TopPicksPopover({
   )
 }
 
-export function SectorDecisionTable({ data, onSelect }: { data: Row[]; onSelect: (name: string) => void }) {
+export function SectorDecisionTable({
+  data,
+  onSelect,
+  leadingRRGCount,
+}: {
+  data: Row[]
+  onSelect: (name: string) => void
+  leadingRRGCount: number
+}) {
   const [sortKey, setSortKey] = useState<SortKey>('decision')
   const [asc, setAsc] = useState(true)
   const [hoveredSector, setHoveredSector] = useState<string | null>(null)
@@ -223,6 +330,10 @@ export function SectorDecisionTable({ data, onSelect }: { data: Row[]; onSelect:
       else if (av == null) cmp = 1
       else if (bv == null) cmp = -1
       else cmp = av - bv
+    } else if (sortKey === 'bottomup_rs_state') {
+      const ao = RS_STATE_ORDER[a.bottomup_rs_state ?? ''] ?? 99
+      const bo = RS_STATE_ORDER[b.bottomup_rs_state ?? ''] ?? 99
+      cmp = ao - bo
     } else {
       const av = a[sortKey] != null ? parseFloat(a[sortKey] as string) : null
       const bv = b[sortKey] != null ? parseFloat(b[sortKey] as string) : null
@@ -290,6 +401,16 @@ export function SectorDecisionTable({ data, onSelect }: { data: Row[]; onSelect:
                 <ColTip text="Direction of change in the sector's RS over the last few weeks. Improving = RS is rising (stocks gaining vs index). Deteriorating = RS is falling (stocks losing ground vs index). Stable = no meaningful change." />
               </span>
             </th>
+            <Th label="RS State" k="bottomup_rs_state"
+              tip="RS sub-classification of the sector. Leader = highest relative strength vs Nifty 500; Laggard = lowest. More granular than Overweight/Underweight — Leader/Strong = buy-side quality; Weak/Laggard = avoid." />
+            <th className="px-3 py-2 text-left font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary whitespace-nowrap">
+              <span className="flex items-center gap-0.5">
+                EMA Breadth
+                <ColTip text="% of sector stocks above their 10-day and 20-day EMAs. Short-term internal health. If the 10d bar collapses before the 20d — momentum is fading. Green ≥ 70%, amber 50–70%, red < 50%." />
+              </span>
+            </th>
+            <Th label="TD RS" k="topdown_rs_3m_nifty500"
+              tip="Top-down 3M RS — from the NSE sector index (e.g. Nifty Bank). ✓ = agrees with constituent aggregate. ≠ = diverges (index distorted by a few large caps). Both positive with ✓ = highest conviction entry." />
             <th className="px-3 py-2 text-center font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary"
                 title="Top-down / bottom-up divergence flag">
               &#9888;
@@ -303,9 +424,22 @@ export function SectorDecisionTable({ data, onSelect }: { data: Row[]; onSelect:
               className={`border-b border-paper-rule last:border-0 hover:bg-paper-rule/20 transition-colors cursor-pointer ${i % 2 === 0 ? '' : 'bg-paper-rule/5'}`}
               onClick={() => onSelect(row.sector_name)}
             >
-              <td className="px-3 py-2.5 font-sans text-xs font-medium text-ink-primary whitespace-nowrap">
-                {row.sector_name}
-                <span className="ml-1.5 font-sans text-[10px] text-ink-tertiary">({row.constituent_count})</span>
+              <td className="px-3 py-2.5 whitespace-nowrap">
+                <div className="font-sans text-xs font-medium text-ink-primary">
+                  {row.sector_name}
+                  <span className="ml-1.5 font-sans text-[10px] text-ink-tertiary">({row.constituent_count})</span>
+                </div>
+                <div className="font-sans text-[10px] text-ink-tertiary leading-snug mt-0.5 max-w-[200px] whitespace-normal">
+                  {buildSectorCommentary({
+                    sectorName: row.sector_name,
+                    sectorState: row.sector_state,
+                    divergence_flag: row.divergence_flag,
+                    bottomup_momentum_state: row.bottomup_momentum_state,
+                    constituent_count: row.constituent_count,
+                    leadingRRGCount,
+                    recentlyUpgraded: (row.days_in_state ?? 99) <= 5,
+                  }).narrative.split('. ')[0] + '.'}
+                </div>
               </td>
               <td className="px-3 py-2.5">
                 {row.decision === 'ENTER' ? (
@@ -372,6 +506,15 @@ export function SectorDecisionTable({ data, onSelect }: { data: Row[]; onSelect:
                 ) : (
                   <span className="font-sans text-xs text-ink-tertiary">&#8212;</span>
                 )}
+              </td>
+              <td className="px-3 py-2.5">
+                <RSStateBadge value={row.bottomup_rs_state} />
+              </td>
+              <td className="px-3 py-2.5">
+                <EMABreadthCell r10={row.bottomup_ema_10_ratio} r20={row.bottomup_ema_20_ratio} />
+              </td>
+              <td className="px-3 py-2.5">
+                <TopDownCell tdRs={row.topdown_rs_3m_nifty500} buRs={row.bottomup_rs_3m_nifty500} />
               </td>
               <td className="px-3 py-2.5 text-center">
                 {row.divergence_flag && (

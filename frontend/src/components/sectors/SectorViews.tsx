@@ -12,6 +12,7 @@ import type {
   BreadthWaterfallRow,
   DaysInStateRow,
 } from '@/lib/queries/sectors'
+import { EXCLUDED_SECTORS } from '@/lib/sectors-filter'
 import { SectorBubbleChart } from './SectorBubbleChart'
 import { SectorDecisionTable } from './SectorDecisionTable'
 import { SectorHeatmap } from './SectorHeatmap'
@@ -197,7 +198,11 @@ export function SectorViews({
   const [heatmapRange, setHeatmapRange] = useState<90 | 180 | 270 | 365>(180)
   const [breadthRange, setBreadthRange] = useState<90 | 180 | 365 | 730 | 1095>(365)
 
-  const visible = showAll ? allSectors : actionable
+  const filteredAllSectors = useMemo(
+    () => allSectors.filter(s => !EXCLUDED_SECTORS.includes(s.sector_name)),
+    [allSectors],
+  )
+  const visible = showAll ? filteredAllSectors : actionable
 
   const onSelect = (name: string) => {
     router.push(`/sectors/${encodeURIComponent(name)}?range=${range}`)
@@ -240,6 +245,23 @@ export function SectorViews({
   const filteredBreadthData = useMemo(
     () => breadthData.filter(row => String(row.date).slice(0, 10) >= breadthCutoff),
     [breadthData, breadthCutoff],
+  )
+
+  const meanRS = useMemo(() => {
+    const vals = visible
+      .map(s => parseFloat(s.bottomup_rs_3m_nifty500 ?? 'NaN'))
+      .filter(v => !isNaN(v))
+    return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0
+  }, [visible])
+
+  const leadingRRGCount = useMemo(
+    () =>
+      visible.filter(s => {
+        const rs  = parseFloat(s.bottomup_rs_3m_nifty500 ?? 'NaN')
+        const mom = parseFloat(s.rs_momentum ?? 'NaN')
+        return !isNaN(rs) && !isNaN(mom) && rs - meanRS > 0 && mom > 0
+      }).length,
+    [visible, meanRS],
   )
 
   return (
@@ -329,7 +351,7 @@ export function SectorViews({
           title="Sector Decision Table"
           subtitle="Click any row for the full sector deep dive"
         />
-        <SectorDecisionTable data={visibleWithDays} onSelect={onSelect} />
+        <SectorDecisionTable data={visibleWithDays} onSelect={onSelect} leadingRRGCount={leadingRRGCount} />
       </div>
 
       {/* ── Section 4: Breadth + State History ── */}
