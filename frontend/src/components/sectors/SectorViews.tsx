@@ -17,6 +17,9 @@ import { SectorDecisionTable } from './SectorDecisionTable'
 import { SectorHeatmap } from './SectorHeatmap'
 import { StateTransitionCard } from './StateTransitionCard'
 import { BreadthWaterfall } from './BreadthWaterfall'
+import { SectorDualChartGuide } from './SectorDualChartGuide'
+import { SectorEventPlaybook } from './SectorEventPlaybook'
+import type { PlaybookEntry } from '@/lib/queries/sectors'
 
 const RRGChart = dynamic(() => import('./RRGChart').then(m => ({ default: m.RRGChart })), {
   ssr: false,
@@ -47,6 +50,7 @@ type Props = {
   rrgHistory: RRGHistoryRow[]
   breadthData: BreadthWaterfallRow[]
   daysInState: DaysInStateRow[]
+  playbook: PlaybookEntry[]
   range: string
 }
 
@@ -185,6 +189,7 @@ export function SectorViews({
   rrgHistory,
   breadthData,
   daysInState,
+  playbook,
   range,
 }: Props) {
   const router = useRouter()
@@ -203,6 +208,10 @@ export function SectorViews({
     ...s,
     days_in_state: daysMap.get(s.sector_name),
   }))
+
+  const overweightSectors = visible
+    .filter(s => s.sector_state === 'Overweight')
+    .map(s => s.sector_name)
 
   // Filter heatmap history to selected range
   const heatmapCutoff = useMemo(() => {
@@ -260,6 +269,9 @@ export function SectorViews({
           onToggle={() => setShowAll(s => !s)}
         />
       </div>
+
+      {/* ── Dual Chart Reading Guide ── */}
+      <SectorDualChartGuide sectors={visible} />
 
       {/* ── Section 2: Relative Rotation Graph ── */}
       <div className="px-6 py-6 border-b border-paper-rule">
@@ -344,6 +356,16 @@ export function SectorViews({
           </p>
           <BreadthWaterfall data={filteredBreadthData} />
         </div>
+
+        {/* Event Playbook */}
+        {playbook.length > 0 && (
+          <div className="mb-10 -mx-6">
+            <SectorEventPlaybook
+              entries={playbook}
+              currentOverweightSectors={overweightSectors}
+            />
+          </div>
+        )}
 
         {/* Sector State Heatmap */}
         <div>
