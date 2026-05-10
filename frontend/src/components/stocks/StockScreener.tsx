@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import type { StockRowWithSector } from '@/lib/queries/stocks'
 import {
-  pct, pctColor, PosSizeBar, RSPctileBar,
+  pct, pctColor, RSPctileBar,
   RSStateChip, MomentumChip, RiskChip, VolumeChip,
 } from '@/lib/stock-formatters'
 import { SectorBadge } from './SectorBadge'
@@ -19,7 +19,7 @@ const VOL_ORDER = ['Accumulation', 'Steady-Buying', 'Neutral', 'Distribution', '
 
 type SortKey =
   | 'symbol' | 'sector' | 'rs_pctile_3m' | 'cap_rank'
-  | 'ret_1m' | 'ret_3m' | 'ret_6m' | 'position_size_pct'
+  | 'ret_1m' | 'ret_3m' | 'ret_6m'
   | 'rs_state' | 'momentum_state' | 'risk_state' | 'volume_state'
 
 type FilterChip = 'all' | 'n50' | 'n100' | 'n500' | 'investable' | 'leader' | 'accel'
@@ -34,21 +34,22 @@ const CHIPS: { key: FilterChip; label: string }[] = [
   { key: 'accel',      label: 'Accelerating' },
 ]
 
-// Optional columns. All default to hidden (defaultVisible: false).
+// Optional columns. 1W and 6M visible by default.
 const OPTIONAL_COLS: ColumnDef[] = [
-  { key: 'ret_1w',        label: '1W Return',  defaultVisible: false },
-  { key: 'ret_6m',        label: '6M Return',  defaultVisible: false },
-  { key: 'extension_pct', label: 'Ext %',      defaultVisible: false },
-  { key: 'vol_63',        label: 'Vol 63D',    defaultVisible: false },
-  { key: 'drawdown',      label: 'Drawdown',   defaultVisible: false },
-  { key: 'days_in_state', label: 'Days',       defaultVisible: false },
+  { key: 'ret_1w',        label: '1W',        defaultVisible: true },
+  { key: 'ret_6m',        label: '6M',        defaultVisible: true },
+  { key: 'extension_pct', label: 'Ext %',     defaultVisible: false },
+  { key: 'vol_63',        label: 'Vol (63D)', defaultVisible: false },
+  { key: 'drawdown',      label: 'Drawdown',  defaultVisible: false },
+  { key: 'days_in_state', label: 'Days',      defaultVisible: false },
 ]
 
 const COL_STORAGE_KEY = 'atlas-stock-screener-cols'
 
 // Always-visible columns (used for totalCols calculation):
-//   Symbol, Cap, Sector, Gates, RS State, Mom, Risk, Vol, 1M, 3M, RS Pctile, Deploy %  = 12
-const ALWAYS_VISIBLE_COL_COUNT = 12
+//   Symbol, Cap, Sector, Gates, RS State, Mom, Risk, Vol, 1M, 3M, RS Pctile  = 11
+//   (Deploy % removed; Cap added in Task 2 kept)
+const ALWAYS_VISIBLE_COL_COUNT = 11
 
 function stateRank(order: string[], val: string | null): number {
   if (!val) return order.length
@@ -91,31 +92,34 @@ function optNum(row: StockRowWithSector, key: string): number | null {
   return null
 }
 
+const GATE_LEGEND = [
+  { key: 'H', field: 'history_gate_pass',   label: 'History',   desc: 'Stock has ≥6M of price history in our universe' },
+  { key: 'L', field: 'liquidity_gate_pass', label: 'Liquidity', desc: 'Avg daily value traded meets minimum threshold' },
+  { key: 'W', field: 'weinstein_gate_pass', label: 'Weinstein', desc: 'Price is in Weinstein Stage 2 (above rising 30W MA)' },
+  { key: 'S', field: 'strength_gate',       label: 'Strength',  desc: 'RS State is Leader or Strong' },
+  { key: 'D', field: 'direction_gate',      label: 'Direction', desc: 'Momentum is Accelerating or Improving' },
+]
+
 function GateDot({ value }: { value: boolean | null }) {
   const color = value === true
     ? 'bg-teal'
-    : value === false
-      ? 'bg-signal-neg'
-      : 'bg-paper-rule'
-  return <span className={`w-1.5 h-1.5 rounded-full ${color}`} />
+    : value === false ? 'bg-signal-neg' : 'bg-paper-rule'
+  return <span className={`w-1.5 h-1.5 rounded-full ${color} shrink-0`} />
 }
 
 function GateDots({ row }: { row: StockRowWithSector }) {
-  const h = optBool(row, 'history_gate_pass')
-  const l = optBool(row, 'liquidity_gate_pass')
-  const w = optBool(row, 'weinstein_gate_pass')
-  const s = optBool(row, 'strength_gate')
-  const d = optBool(row, 'direction_gate')
+  const vals = GATE_LEGEND.map(g => optBool(row, g.field))
+  const passCount = vals.filter(v => v === true).length
+  const tooltipText = GATE_LEGEND.map((g, i) =>
+    `${g.key}=${g.label}: ${vals[i] === true ? '✓' : vals[i] === false ? '✗' : '?'} — ${g.desc}`
+  ).join('\n')
   return (
     <span
       className="inline-flex items-center gap-0.5"
-      title={`H:${h ?? '?'} L:${l ?? '?'} W:${w ?? '?'} S:${s ?? '?'} D:${d ?? '?'}`}
+      title={tooltipText}
     >
-      <GateDot value={h} />
-      <GateDot value={l} />
-      <GateDot value={w} />
-      <GateDot value={s} />
-      <GateDot value={d} />
+      {vals.map((v, i) => <GateDot key={i} value={v} />)}
+      <span className="ml-1 font-mono text-[10px] text-ink-tertiary tabular-nums">{passCount}/5</span>
     </span>
   )
 }
@@ -317,7 +321,17 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
               <Th label="Symbol" k="symbol" />
               <Th label="Cap" k="cap_rank" />
               <Th label="Sector" k="sector" />
-              <PlainTh label="Gates" />
+              <th className="px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap text-ink-tertiary">
+                <span className="inline-flex items-center gap-1">
+                  Gates
+                  <span
+                    className="cursor-help opacity-50 hover:opacity-100 text-[9px]"
+                    title={GATE_LEGEND.map(g => `${g.key}=${g.label}: ${g.desc}`).join('\n')}
+                  >
+                    ⓘ
+                  </span>
+                </span>
+              </th>
               <Th label="RS State" k="rs_state" />
               <Th label="Mom" k="momentum_state" />
               <Th label="Risk" k="risk_state" />
@@ -331,7 +345,6 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
               {visibleCols.has('drawdown') && <PlainTh label="Drawdown" align="right" />}
               {visibleCols.has('days_in_state') && <PlainTh label="Days" align="right" />}
               <Th label="RS Pctile" k="rs_pctile_3m" align="right" />
-              <Th label="Deploy %" k="position_size_pct" align="right" />
             </tr>
           </thead>
           <tbody>
@@ -435,11 +448,6 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
                       )}
                       <td className="px-3 py-2.5 text-right">
                         <RSPctileBar value={row.rs_pctile_3m} />
-                      </td>
-                      <td className="px-3 py-2.5 text-right">
-                        <div className="flex justify-end">
-                          <PosSizeBar value={row.position_size_pct} />
-                        </div>
                       </td>
                     </tr>
                     {isExpanded && (
