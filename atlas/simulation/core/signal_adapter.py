@@ -161,18 +161,18 @@ def build_fund_signal_matrix(
         SELECT
             d.date,
             CAST(d.mstar_id AS text) AS instrument_id,
-            n.nav                  AS price,
+            COALESCE(n.nav_adj, n.nav) AS price,
             d.entry_trigger        AS entry_signal,
             (
                 d.exit_market_riskoff OR d.exit_composition_misaligned
                 OR d.exit_holdings_weak OR d.exit_nav_deteriorate
             )                      AS exit_signal
         FROM atlas.atlas_fund_decisions_daily d
-        JOIN de_mf_nav_history n
-            ON n.mstar_id = d.mstar_id AND n.date = d.date
+        JOIN de_mf_nav_daily n
+            ON n.mstar_id = d.mstar_id AND n.nav_date = d.date
         WHERE CAST(d.mstar_id AS text) = ANY(:ids)
           AND d.date BETWEEN :start_date AND :end_date
-        ORDER BY d.date, d.instrument_id
+        ORDER BY d.date, d.mstar_id
     """)
 
     with open_compute_session(engine) as conn:
@@ -214,4 +214,36 @@ def build_fund_signal_matrix(
         exits=pivot_exit.values.astype(bool),
         dates=pd.DatetimeIndex(pivot_price.index),
         instruments=list(pivot_price.columns),
+    )
+
+
+def build_buy_and_hold_signal_matrix(
+    price_df: pd.DataFrame,
+    exit_df: pd.DataFrame | None = None,
+) -> SignalMatrix:
+    """Buy all instruments on day 1, hold until optional exit signals.
+
+    Used for model portfolio backtests where the FM has already selected the
+    instruments — we buy on the first available day and exit only when the FM's
+    risk rules fire (RS deterioration, market risk-off, etc.).
+
+    exit_df must be aligned to price_df's index/columns. If None, no exits fire
+    (pure buy-and-hold to end of period).
+    """
+    n_dates, n_instr = price_df.shape
+    entries = np.zeros((n_dates, n_instr), dtype=bool)
+    entries[0, :] = True  # buy everything on day 1
+
+    if exit_df is not None:
+        aligned = exit_df.reindex(price_df.index, columns=price_df.columns).fillna(False)
+        exits = aligned.values.astype(bool)
+    else:
+        exits = np.zeros((n_dates, n_instr), dtype=bool)
+
+    return SignalMatrix(
+        prices=price_df.values.astype(np.float64),
+        entries=entries,
+        exits=exits,
+        dates=pd.DatetimeIndex(price_df.index),
+        instruments=list(price_df.columns),
     )

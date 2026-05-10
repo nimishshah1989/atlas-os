@@ -22,6 +22,7 @@ from concurrent.futures import Future, ProcessPoolExecutor
 from datetime import date, timedelta
 from uuid import UUID
 
+import numpy as np
 import pandas as pd
 import structlog
 from sqlalchemy import text
@@ -30,7 +31,12 @@ from sqlalchemy.engine import Engine
 from atlas.compute._session import open_compute_session
 from atlas.simulation.backtest.engine import run_backtest
 from atlas.simulation.backtest.report import write_backtest_result
-from atlas.simulation.core.signal_adapter import build_stock_etf_signal_matrix
+from atlas.simulation.core.signal_adapter import (
+    SignalMatrix,
+    build_buy_and_hold_signal_matrix,
+    build_fund_signal_matrix,
+    build_stock_etf_signal_matrix,
+)
 from atlas.simulation.custom.builder import InstrumentWeight, validate_custom_portfolio
 
 log = structlog.get_logger()
@@ -109,11 +115,56 @@ def _run_backtest_subprocess(portfolio_id: str) -> None:
         _mark_backtest_failed(portfolio_id, engine)
 
 
+def _merge_signal_matrices(matrices: list[SignalMatrix]) -> SignalMatrix:
+    """Outer-join signal matrices on date index, filling missing entries with False / NaN."""
+    non_empty = [m for m in matrices if len(m.instruments) > 0]
+    if not non_empty:
+        return SignalMatrix(
+            prices=np.empty((0, 0)),
+            entries=np.empty((0, 0), dtype=bool),
+            exits=np.empty((0, 0), dtype=bool),
+            dates=pd.DatetimeIndex([]),
+            instruments=[],
+        )
+    if len(non_empty) == 1:
+        return non_empty[0]
+
+    dfs_price, dfs_entry, dfs_exit = [], [], []
+    for m in non_empty:
+        idx = m.dates
+        dfs_price.append(pd.DataFrame(m.prices, index=idx, columns=m.instruments))  # type: ignore[arg-type]
+        dfs_entry.append(pd.DataFrame(m.entries, index=idx, columns=m.instruments))  # type: ignore[arg-type]
+        dfs_exit.append(pd.DataFrame(m.exits, index=idx, columns=m.instruments))  # type: ignore[arg-type]
+
+    price = pd.concat(dfs_price, axis=1).sort_index()
+    entry = pd.concat(dfs_entry, axis=1).sort_index().fillna(False)
+    exit_ = pd.concat(dfs_exit, axis=1).sort_index().fillna(False)
+
+    # Forward-fill prices per column (funds/equities have different trading calendars).
+    # Then drop any row where at least one instrument still has no price — prevents
+    # NaN propagation into vectorbt which returns NaN portfolio values.
+    price = price.ffill().bfill().dropna(how="any")
+    entry = entry.reindex(price.index).fillna(False)
+    exit_ = exit_.reindex(price.index).fillna(False)
+
+    instruments = list(price.columns)
+    return SignalMatrix(
+        prices=price.values.astype(np.float64),
+        entries=entry.values.astype(bool),
+        exits=exit_.values.astype(bool),
+        dates=pd.DatetimeIndex(price.index),
+        instruments=instruments,
+    )
+
+
 def run_custom_portfolio_backtest(portfolio_id: UUID, engine: Engine) -> None:
     """Run vectorbt backtest for a saved custom portfolio and link the result.
 
     Called by the background process. Writes to strategy_backtest_results and
     updates strategy_fm_custom_portfolios.backtest_id when done.
+
+    Handles mixed portfolios (stocks + funds) by building separate signal matrices
+    per instrument type then merging on the date axis.
     """
     with open_compute_session(engine) as conn:
         row = conn.execute(
@@ -132,20 +183,60 @@ def run_custom_portfolio_backtest(portfolio_id: UUID, engine: Engine) -> None:
     if isinstance(instruments_data, str):
         instruments_data = json.loads(instruments_data)
 
-    instrument_ids = [i["instrument_id"] for i in instruments_data]
-
     end_date = date.today()
     start_date = end_date - timedelta(days=_DEFAULT_LOOKBACK_DAYS)
 
-    signal_matrix = build_stock_etf_signal_matrix(
-        engine=engine,
-        instrument_ids=instrument_ids,
-        start_date=start_date,
-        end_date=end_date,
-        decisions_table="atlas_stock_decisions_daily",
+    # Split by instrument type so each gets the right price table and decisions table.
+    stock_ids = [i["instrument_id"] for i in instruments_data if i["instrument_type"] == "stock"]
+    etf_ids = [i["instrument_id"] for i in instruments_data if i["instrument_type"] == "etf"]
+    fund_ids = [i["instrument_id"] for i in instruments_data if i["instrument_type"] == "fund"]
+
+    # Build per-type signal matrices to get prices and exit signals.
+    # Entry signals from decisions tables are too sparse for historical backtesting
+    # (designed for nightly paper-trading deltas). We use buy-and-hold mode: buy
+    # all instruments on day 1, exit only when FM risk rules fire.
+    matrices: list[SignalMatrix] = []
+    if stock_ids:
+        matrices.append(
+            build_stock_etf_signal_matrix(
+                engine, stock_ids, start_date, end_date, "atlas_stock_decisions_daily"
+            )
+        )
+    if etf_ids:
+        matrices.append(
+            build_stock_etf_signal_matrix(
+                engine, etf_ids, start_date, end_date, "atlas_etf_decisions_daily"
+            )
+        )
+    if fund_ids:
+        matrices.append(build_fund_signal_matrix(engine, fund_ids, start_date, end_date))
+
+    raw = _merge_signal_matrices(matrices)
+    n_instruments = len(raw.instruments)
+
+    if n_instruments == 0:
+        signal_matrix = raw
+    else:
+        # Convert to buy-and-hold: enter all instruments on day 1, keep exit signals.
+        price_df = pd.DataFrame(raw.prices, index=raw.dates, columns=raw.instruments)  # type: ignore[arg-type]
+        exit_df = pd.DataFrame(raw.exits, index=raw.dates, columns=raw.instruments)  # type: ignore[arg-type]
+        signal_matrix = build_buy_and_hold_signal_matrix(price_df, exit_df)
+
+    log.info(
+        "custom_portfolio_backtest_matrix",
+        portfolio_id=str(portfolio_id),
+        stocks=len(stock_ids),
+        etfs=len(etf_ids),
+        funds=len(fund_ids),
+        combined_instruments=n_instruments,
     )
 
-    result = run_backtest(signal_matrix, init_cash=10_000_000.0, fees_pct=0.001)
+    result = run_backtest(
+        signal_matrix,
+        init_cash=10_000_000.0,
+        fees_pct=0.001,
+        max_positions=n_instruments if n_instruments > 0 else 0,
+    )
 
     backtest_id: str = write_backtest_result(
         engine=engine,
@@ -187,74 +278,3 @@ def _mark_backtest_failed(portfolio_id: str, engine: Engine) -> None:
             {"pid": portfolio_id},
         )
         conn.commit()
-
-
-def _fetch_prices(
-    instrument_id: str,
-    instrument_type: str,
-    start_date: date,
-    end_date: date,
-    engine: Engine,
-) -> pd.Series:  # type: ignore[type-arg]
-    """Return a date-indexed price Series for a single instrument.
-
-    Branches by instrument_type:
-    - 'stock': de_ohlcv_daily.adj_close (or close if adj_close missing)
-    - 'etf':   de_etf_ohlcv.close (queries by ticker)
-    - 'fund':  de_mf_nav_daily.nav_adj — early date filter enables partition pruning
-               (de_mf_nav_daily is year-partitioned; WHERE nav_date >= :sd is required)
-
-    All SQL uses parameterized queries (no f-string interpolation of user input).
-    Empty result → empty pd.Series (caller handles missing data).
-    """
-    if instrument_type == "stock":
-        sql = text("""
-            SELECT date, adj_close
-            FROM public.de_ohlcv_daily
-            WHERE instrument_id = :id
-              AND date >= :sd
-              AND date <= :ed
-            ORDER BY date
-        """)
-        params: dict[str, object] = {
-            "id": instrument_id,
-            "sd": start_date,
-            "ed": end_date,
-        }
-        date_col = 0
-        price_col = 1
-    elif instrument_type == "etf":
-        sql = text("""
-            SELECT date, close
-            FROM public.de_etf_ohlcv
-            WHERE ticker = :id
-              AND date >= :sd
-              AND date <= :ed
-            ORDER BY date
-        """)
-        params = {"id": instrument_id, "sd": start_date, "ed": end_date}
-        date_col = 0
-        price_col = 1
-    elif instrument_type == "fund":
-        # Partition pruning: early date filter on nav_date so Postgres only
-        # scans the year-partitions that overlap the requested range.
-        sql = text("""
-            SELECT nav_date, nav_adj
-            FROM public.de_mf_nav_daily
-            WHERE mstar_id = :id
-              AND nav_date >= :sd
-              AND nav_date <= :ed
-            ORDER BY nav_date
-        """)
-        params = {"id": instrument_id, "sd": start_date, "ed": end_date}
-        date_col = 0
-        price_col = 1
-    else:
-        raise ValueError(f"unknown instrument_type: {instrument_type}")
-
-    with engine.connect() as conn:
-        rows = conn.execute(sql, params).fetchall()
-
-    if not rows:
-        return pd.Series(dtype=float)
-    return pd.Series({r[date_col]: float(r[price_col]) for r in rows})
