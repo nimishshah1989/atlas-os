@@ -2,15 +2,18 @@ import type { ReactNode } from 'react'
 import type { ETFRow } from '@/lib/queries/etfs'
 import { pct, pctColor, RSStateChip, MomentumChip, RiskChip } from '@/lib/stock-formatters'
 
-function Tile({ label, value, color }: { label: string; value: string; color?: string }) {
+function Tile({ label, value, color, subtitle }: { label: string; value: string; color?: string; subtitle?: string }) {
   return (
-    <div className="flex flex-col gap-1.5 px-4 py-3 border-r border-paper-rule last:border-0">
+    <div className="flex flex-col gap-1 px-4 py-3 border-r border-paper-rule last:border-0">
       <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider">
         {label}
       </div>
       <div className={`font-mono text-sm font-semibold tabular-nums ${color ?? 'text-ink-primary'}`}>
         {value}
       </div>
+      {subtitle && (
+        <div className="font-sans text-[9px] text-ink-tertiary/60 leading-tight">{subtitle}</div>
+      )}
     </div>
   )
 }
@@ -51,7 +54,7 @@ export function ETFSnapshotTiles({ etf }: { etf: ETFRow }) {
 
   return (
     <div className="px-6 py-3 border-b border-paper-rule grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8">
-      <Tile label="RS Pctile" value={rsPctile} color={rsPctileColor} />
+      <Tile label="RS Pctile" value={rsPctile} color={rsPctileColor} subtitle="3-month vs peers" />
       <Tile label="3M Return" value={pct(etf.ret_3m)} color={pctColor(etf.ret_3m)} />
       <Tile label="6M Return" value={pct(etf.ret_6m)} color={pctColor(etf.ret_6m)} />
       <Tile label="1M Return" value={pct(etf.ret_1m)} color={pctColor(etf.ret_1m)} />
@@ -59,8 +62,14 @@ export function ETFSnapshotTiles({ etf }: { etf: ETFRow }) {
         label="Weinstein"
         value={etf.weinstein_gate_pass == null ? '—' : etf.weinstein_gate_pass ? 'Pass ✓' : 'Fail ✗'}
         color={etf.weinstein_gate_pass == null ? 'text-ink-tertiary' : etf.weinstein_gate_pass ? 'text-signal-pos' : 'text-signal-neg'}
+        subtitle="Price above 30-week MA (Stage 2 uptrend)"
       />
-      <Tile label="Extension" value={extPct} color={extColor} />
+      <Tile
+        label="Extension"
+        value={extPct}
+        color={extColor}
+        subtitle="% above/below 200-day MA"
+      />
       <ChipTile label="RS State">
         <RSStateChip value={etf.rs_state} />
       </ChipTile>

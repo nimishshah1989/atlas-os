@@ -10,6 +10,8 @@ import {
   getSectorMetricHistory,
   getSectorStateHistory,
 } from '@/lib/queries/sectors'
+import { getLinkedETFsForSector } from '@/lib/queries/etfs'
+import { getSectorFunds } from '@/lib/queries/sector-funds'
 import { rangeToDays, type TimeRange } from '@/lib/time-range'
 import { getSectorDecision } from '@/lib/sectors-decision'
 import { getCurrentRegime } from '@/lib/queries/regime'
@@ -17,6 +19,8 @@ import { SectorDeepDiveHeader } from '@/components/sectors/SectorDeepDiveHeader'
 import { SectorDeepDiveTabs } from '@/components/sectors/SectorDeepDiveTabs'
 import { SectorOverviewTab } from '@/components/sectors/SectorOverviewTab'
 import { SectorStocksTab } from '@/components/sectors/SectorStocksTab'
+import { SectorETFTab } from '@/components/sectors/SectorETFTab'
+import { SectorFundsTab } from '@/components/sectors/SectorFundsTab'
 
 type SearchParams = Promise<{ range?: string; tab?: string }>
 type Params = Promise<{ name: string }>
@@ -37,16 +41,23 @@ export default async function SectorDeepDivePage({
     ? (range as TimeRange)
     : '6M'
   const days = rangeToDays(historyRange)
-  const activeTab: 'overview' | 'stocks' = tab === 'stocks' ? 'stocks' : 'overview'
+  const activeTab = (['overview', 'stocks', 'etf', 'funds'] as const).includes(
+    tab as 'overview' | 'stocks' | 'etf' | 'funds',
+  )
+    ? (tab as 'overview' | 'stocks' | 'etf' | 'funds')
+    : 'overview'
 
-  const [snapshot, metricHistory, stateHistory, stocks, regime, breadthData] = await Promise.all([
-    getSectorSnapshotByName(sectorName),
-    getSectorMetricHistory(sectorName, days).catch(() => [] as Awaited<ReturnType<typeof getSectorMetricHistory>>),
-    getSectorStateHistory(days).catch(() => [] as Awaited<ReturnType<typeof getSectorStateHistory>>),
-    getStocksInSector(sectorName).catch(() => [] as Awaited<ReturnType<typeof getStocksInSector>>),
-    getCurrentRegime(),
-    getBreadthWaterfallData(sectorName, 1095).catch(() => [] as Awaited<ReturnType<typeof getBreadthWaterfallData>>),
-  ])
+  const [snapshot, metricHistory, stateHistory, stocks, regime, breadthData, linkedETFs, sectorFunds] =
+    await Promise.all([
+      getSectorSnapshotByName(sectorName),
+      getSectorMetricHistory(sectorName, days).catch(() => [] as Awaited<ReturnType<typeof getSectorMetricHistory>>),
+      getSectorStateHistory(days).catch(() => [] as Awaited<ReturnType<typeof getSectorStateHistory>>),
+      getStocksInSector(sectorName).catch(() => [] as Awaited<ReturnType<typeof getStocksInSector>>),
+      getCurrentRegime(),
+      getBreadthWaterfallData(sectorName, 1095).catch(() => [] as Awaited<ReturnType<typeof getBreadthWaterfallData>>),
+      getLinkedETFsForSector(sectorName).catch(() => []),
+      getSectorFunds(sectorName).catch(() => []),
+    ])
 
   if (!snapshot) {
     notFound()
@@ -74,7 +85,7 @@ export default async function SectorDeepDivePage({
         />
       </Suspense>
 
-      {activeTab === 'overview' ? (
+      {activeTab === 'overview' && (
         <SectorOverviewTab
           snapshot={sectorWithDecision}
           metricHistory={metricHistory}
@@ -83,13 +94,20 @@ export default async function SectorDeepDivePage({
           regime={regime}
           breadthData={breadthData}
         />
-      ) : (
+      )}
+      {activeTab === 'stocks' && (
         <SectorStocksTab
           sectorName={sectorName}
           stocks={stocks}
           range={historyRange}
           regime={regime}
         />
+      )}
+      {activeTab === 'etf' && (
+        <SectorETFTab etfs={linkedETFs} sectorName={sectorName} />
+      )}
+      {activeTab === 'funds' && (
+        <SectorFundsTab funds={sectorFunds} sectorName={sectorName} />
       )}
     </div>
   )

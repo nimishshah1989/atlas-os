@@ -3,11 +3,13 @@
 import Link from 'next/link'
 import type { TimeRange } from '@/lib/time-range'
 
-type Tab = 'overview' | 'stocks'
+type Tab = 'overview' | 'stocks' | 'etf' | 'funds'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'stocks',   label: 'Stocks' },
+  { id: 'etf',      label: 'ETF' },
+  { id: 'funds',    label: 'Funds' },
 ]
 
 export function SectorDeepDiveTabs({

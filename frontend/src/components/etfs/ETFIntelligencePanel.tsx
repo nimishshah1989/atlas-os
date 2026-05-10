@@ -11,7 +11,17 @@ const MOM_COLORS: Record<string, string> = {
   Collapsing:    CHART_COLORS.momCollapsing,
 }
 
-const RS_STATES  = ['Leader', 'Strong', 'Consolidating', 'Emerging', 'Average', 'Weak', 'Laggard']
+const RS_STATES: { key: string; label: string }[] = [
+  { key: 'Leader',               label: 'Leader' },
+  { key: 'Strong',               label: 'Strong' },
+  { key: 'Consolidating',        label: 'Consolidating' },
+  { key: 'Emerging',             label: 'Emerging' },
+  { key: 'Average',              label: 'Average' },
+  { key: 'Weak',                 label: 'Weak' },
+  { key: 'Laggard',              label: 'Laggard' },
+  { key: 'ILLIQUID',             label: 'ILLIQUID' },
+  { key: 'INSUFFICIENT_HISTORY', label: 'Insuf. Hist' },
+]
 const MOM_STATES = ['Accelerating', 'Improving', 'Flat', 'Deteriorating', 'Collapsing']
 
 function DistBar({ label, count, total, color }: { label: string; count: number; total: number; color: string }) {
@@ -37,7 +47,7 @@ export function ETFIntelligencePanel({ etfs, regimeState = 'Cautious', deploymen
   const n = etfs.length
   if (n === 0) return null
 
-  const rsCounts = Object.fromEntries(RS_STATES.map(s => [s, 0])) as Record<string, number>
+  const rsCounts = Object.fromEntries(RS_STATES.map(s => [s.key, 0])) as Record<string, number>
   const momCounts = Object.fromEntries(MOM_STATES.map(s => [s, 0])) as Record<string, number>
   for (const etf of etfs) {
     if (etf.rs_state && rsCounts[etf.rs_state] !== undefined) rsCounts[etf.rs_state]++
@@ -75,7 +85,7 @@ export function ETFIntelligencePanel({ etfs, regimeState = 'Cautious', deploymen
         <div className="space-y-1.5">
           <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-2">RS Distribution</div>
           {RS_STATES.map(s => (
-            <DistBar key={s} label={s} count={rsCounts[s] ?? 0} total={n} color={rsStateColor(s)} />
+            <DistBar key={s.key} label={s.label} count={rsCounts[s.key] ?? 0} total={n} color={rsStateColor(s.key)} />
           ))}
         </div>
         <div className="space-y-1.5">

@@ -45,18 +45,25 @@ export function ETFDeepDiveHeader({ etf }: { etf: ETFRow }) {
             <span className="font-sans text-sm text-ink-secondary">{etf.etf_name ?? ''}</span>
             <ThemeBadge theme={etf.theme} />
             {etf.linked_sector && (
-              <span className="font-sans text-xs text-ink-tertiary">{etf.linked_sector}</span>
+              <span className="font-sans text-xs text-ink-tertiary">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary/70 mr-0.5">Sector:</span>
+                {etf.linked_sector}
+              </span>
             )}
             {etf.linked_index && (
               <span className="font-sans text-xs text-ink-tertiary bg-paper-rule/30 px-1.5 py-0.5 rounded">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary/70 mr-0.5">Tracks:</span>
                 {etf.linked_index}
               </span>
             )}
-            <StateTuple3
-              rs={etf.rs_state}
-              mom={etf.momentum_state}
-              risk={etf.risk_state}
-            />
+            <div className="flex items-center gap-1">
+              <span className="font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary/70">States:</span>
+              <StateTuple3
+                rs={etf.rs_state}
+                mom={etf.momentum_state}
+                risk={etf.risk_state}
+              />
+            </div>
           </div>
           <div className="flex items-center gap-5 font-sans text-xs text-ink-tertiary">
             {etf.inception_date && (

@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import type { ETFRow, ETFMetricHistoryRow, ETFStateHistoryRow, ETFHoldingRow } from '@/lib/queries/etfs'
+import type { TimeRange } from '@/lib/time-range'
 import { ETFOverviewTab } from './ETFOverviewTab'
 import { ETFHistoryTab } from './ETFHistoryTab'
 import { ETFHoldingsTab } from './ETFHoldingsTab'
@@ -18,13 +19,20 @@ export function ETFDeepDiveTabs({
   metricHistory,
   stateHistory,
   holdings,
+  range,
+  initialTab = 'overview',
 }: {
   etf: ETFRow
   metricHistory: ETFMetricHistoryRow[]
   stateHistory: ETFStateHistoryRow[]
   holdings: ETFHoldingRow[]
+  range: TimeRange
+  initialTab?: string
 }) {
-  const [tab, setTab] = useState<Tab>('overview')
+  const validTab = (['overview', 'history', 'holdings'] as Tab[]).includes(initialTab as Tab)
+    ? (initialTab as Tab)
+    : 'overview'
+  const [tab, setTab] = useState<Tab>(validTab)
 
   return (
     <div>
@@ -54,7 +62,7 @@ export function ETFDeepDiveTabs({
 
       {/* Tab content */}
       {tab === 'overview' && (
-        <ETFOverviewTab etf={etf} metricHistory={metricHistory} />
+        <ETFOverviewTab etf={etf} metricHistory={metricHistory} range={range} />
       )}
       {tab === 'history' && (
         <ETFHistoryTab etf={etf} stateHistory={stateHistory} metricHistory={metricHistory} />

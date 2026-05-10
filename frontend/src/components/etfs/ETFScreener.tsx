@@ -26,13 +26,12 @@ type SortKey =
   | 'ret_1m' | 'ret_3m' | 'position_size_pct'
   | 'rs_state' | 'momentum_state' | 'risk_state'
 
-type FilterChip = 'all' | 'broad' | 'sectoral' | 'thematic' | 'investable'
+type FilterChip = 'all' | 'broad' | 'sectoral' | 'investable'
 
 const CHIPS: { key: FilterChip; label: string }[] = [
   { key: 'all',        label: 'All' },
   { key: 'broad',      label: 'Broad' },
   { key: 'sectoral',   label: 'Sectoral' },
-  { key: 'thematic',   label: 'Thematic' },
   { key: 'investable', label: 'Investable' },
 ]
 
@@ -66,36 +65,40 @@ function ThemeBadge({ theme }: { theme: string }) {
   )
 }
 
+const GATE_DEFS: { label: string; title: string; key: keyof ETFRow }[] = [
+  { label: 'H',  title: 'History gate — ETF has ≥52 weeks of price history',                  key: 'history_gate_pass' },
+  { label: 'L',  title: 'Liquidity gate — average daily volume above minimum threshold',       key: 'liquidity_gate_pass' },
+  { label: 'W',  title: 'Weinstein gate — price above 30-week (150-day) moving average',       key: 'weinstein_gate_pass' },
+  { label: 'S',  title: 'Strength gate — RS state is Leader or Strong (top 30th percentile)', key: 'strength_gate' },
+  { label: 'D',  title: 'Direction gate — momentum is Accelerating or Improving',              key: 'direction_gate' },
+  { label: 'Ri', title: 'Risk gate — extension <40% above 200-day MA and volatility normal',  key: 'risk_gate' },
+]
+
 function GateBadge({ row }: { row: ETFRow }) {
-  const gates = [
-    { label: 'H',  pass: row.history_gate_pass },
-    { label: 'L',  pass: row.liquidity_gate_pass },
-    { label: 'W',  pass: row.weinstein_gate_pass },
-    { label: 'S',  pass: row.strength_gate },
-    { label: 'D',  pass: row.direction_gate },
-    { label: 'Ri', pass: row.risk_gate },
-  ]
-  const passing = gates.filter(g => g.pass === true).length
+  const passing = GATE_DEFS.filter(g => row[g.key] === true).length
   return (
-    <div
-      className="flex items-center gap-0.5"
-      title={gates.map(g => `${g.label}:${g.pass === true ? 'pass' : g.pass === false ? 'fail' : '?'}`).join(' ')}
-    >
-      {gates.map(g => (
-        <span
-          key={g.label}
-          className={`inline-flex items-center justify-center px-0.5 py-0.5 rounded-[2px] font-mono text-[8px] font-bold ${
-            g.pass === true
-              ? 'bg-teal/15 text-teal'
-              : g.pass === false
-              ? 'bg-signal-neg/10 text-signal-neg'
-              : 'bg-paper-rule/20 text-ink-tertiary'
-          }`}
-        >
-          {g.label}
-        </span>
-      ))}
-      <span className="font-mono text-[9px] text-ink-tertiary ml-0.5">{passing}/6</span>
+    <div className="flex items-center gap-0.5">
+      <span className={`font-mono text-[9px] mr-0.5 ${passing >= 5 ? 'text-signal-pos' : passing >= 4 ? 'text-signal-warn' : 'text-ink-tertiary'}`}>
+        {passing}/6
+      </span>
+      {GATE_DEFS.map(g => {
+        const pass = row[g.key]
+        return (
+          <span
+            key={g.label}
+            title={g.title}
+            className={`inline-flex items-center justify-center px-0.5 py-0.5 rounded-[2px] font-mono text-[8px] font-bold cursor-help ${
+              pass === true
+                ? 'bg-teal/15 text-teal'
+                : pass === false
+                ? 'bg-signal-neg/10 text-signal-neg'
+                : 'bg-paper-rule/20 text-ink-tertiary'
+            }`}
+          >
+            {g.label}
+          </span>
+        )
+      })}
     </div>
   )
 }
@@ -120,9 +123,8 @@ export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
   const filtered = useMemo(() => {
     let result = etfs
 
-    if (chip === 'broad')      result = result.filter(e => e.theme === 'Broad')
+    if (chip === 'broad')         result = result.filter(e => e.theme === 'Broad')
     else if (chip === 'sectoral') result = result.filter(e => e.theme === 'Sectoral')
-    else if (chip === 'thematic') result = result.filter(e => e.theme === 'Thematic')
     else if (chip === 'investable') result = result.filter(e => e.is_investable)
 
     if (search.trim()) {
