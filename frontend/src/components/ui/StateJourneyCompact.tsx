@@ -93,7 +93,19 @@ export function StateJourneyCompact({ symbol, ticker, days = 90 }: Props) {
     )
   }
 
-  if (rows.length === 0) return <p className="text-xs text-ink-tertiary">No state history</p>
+  if (rows.length === 0) {
+    return (
+      <p className="text-xs text-ink-tertiary">
+        No state history in the last {days}d — data may not yet be backfilled for this stock.{' '}
+        <a
+          href={`/stocks/${encodeURIComponent(symbol ?? ticker ?? '')}`}
+          className="text-teal hover:underline"
+        >
+          Open deep-dive →
+        </a>
+      </p>
+    )
+  }
 
   return (
     <div className="space-y-1">

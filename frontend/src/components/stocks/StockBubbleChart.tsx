@@ -13,13 +13,13 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts'
-import type { FullStockRow } from '@/lib/queries/stocks'
+import type { StockRowWithSector } from '@/lib/queries/stocks'
 import { bubbleColor } from '@/lib/chart-colors'
 
 type Period = '1M' | '3M' | '6M' | '1Y'
 type DisplayFilter = 'n100' | 'n500' | 'all'
 
-const PERIOD_RET_KEY: Record<Period, keyof FullStockRow> = {
+const PERIOD_RET_KEY: Record<Period, keyof StockRowWithSector> = {
   '1M': 'ret_1m',
   '3M': 'ret_3m',
   '6M': 'ret_6m',
@@ -110,7 +110,7 @@ function quadLabel(pos: QuadrantPos, text: string, sub: string, color: string) {
   }
 }
 
-export function StockBubbleChart({ stocks }: { stocks: FullStockRow[] }) {
+export function StockBubbleChart({ stocks }: { stocks: StockRowWithSector[] }) {
   const router = useRouter()
   const [period, setPeriod] = useState<Period>('3M')
   const [displayFilter, setDisplayFilter] = useState<DisplayFilter>('n500')

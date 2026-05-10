@@ -1,11 +1,11 @@
 // allow-large: Sprint 2 screener — sector filter, col toggle, gate dots, expandable rows
 'use client'
-import { Fragment, useState, useMemo } from 'react'
+import { Fragment, useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import type { StockRowWithSector } from '@/lib/queries/stocks'
 import {
-  pct, pctColor, PosSizeBar, RSPctileBar,
+  pct, pctColor, RSPctileBar,
   RSStateChip, MomentumChip, RiskChip, VolumeChip,
 } from '@/lib/stock-formatters'
 import { SectorBadge } from './SectorBadge'
@@ -18,8 +18,8 @@ const RISK_ORDER = ['Low', 'Normal', 'Elevated', 'High', 'Below Trend']
 const VOL_ORDER = ['Accumulation', 'Steady-Buying', 'Neutral', 'Distribution', 'Heavy Distribution']
 
 type SortKey =
-  | 'symbol' | 'sector' | 'rs_pctile_3m'
-  | 'ret_1m' | 'ret_3m' | 'ret_6m' | 'position_size_pct'
+  | 'symbol' | 'sector' | 'rs_pctile_3m' | 'cap_rank'
+  | 'ret_1m' | 'ret_3m' | 'ret_6m'
   | 'rs_state' | 'momentum_state' | 'risk_state' | 'volume_state'
 
 type FilterChip = 'all' | 'n50' | 'n100' | 'n500' | 'investable' | 'leader' | 'accel'
@@ -34,26 +34,34 @@ const CHIPS: { key: FilterChip; label: string }[] = [
   { key: 'accel',      label: 'Accelerating' },
 ]
 
-// Optional columns. All default to hidden (defaultVisible: false).
+// Optional columns. 1W and 6M visible by default.
 const OPTIONAL_COLS: ColumnDef[] = [
-  { key: 'ret_1w',        label: '1W Return',  defaultVisible: false },
-  { key: 'ret_6m',        label: '6M Return',  defaultVisible: false },
-  { key: 'extension_pct', label: 'Ext %',      defaultVisible: false },
-  { key: 'vol_63',        label: 'Vol 63D',    defaultVisible: false },
-  { key: 'drawdown',      label: 'Drawdown',   defaultVisible: false },
-  { key: 'days_in_state', label: 'Days',       defaultVisible: false },
+  { key: 'ret_1w',        label: '1W',        defaultVisible: true },
+  { key: 'ret_6m',        label: '6M',        defaultVisible: true },
+  { key: 'extension_pct', label: 'Ext %',     defaultVisible: false },
+  { key: 'vol_63',        label: 'Vol (63D)', defaultVisible: false },
+  { key: 'drawdown',      label: 'Drawdown',  defaultVisible: false },
+  { key: 'days_in_state', label: 'Days',      defaultVisible: false },
 ]
 
 const COL_STORAGE_KEY = 'atlas-stock-screener-cols'
 
 // Always-visible columns (used for totalCols calculation):
-//   Symbol, Sector, Gates, RS State, Mom, Risk, Vol, 1M, 3M, RS Pctile, Deploy %  = 11
+//   Symbol, Cap, Sector, Gates, RS State, Mom, Risk, Vol, 1M, 3M, RS Pctile  = 11
+//   (Deploy % removed; Cap added in Task 2 kept)
 const ALWAYS_VISIBLE_COL_COUNT = 11
 
 function stateRank(order: string[], val: string | null): number {
   if (!val) return order.length
   const i = order.indexOf(val)
   return i === -1 ? order.length : i
+}
+
+function capRank(s: StockRowWithSector): number {
+  if (s.in_nifty_50) return 1
+  if (s.in_nifty_100) return 2
+  if (s.in_nifty_500) return 3
+  return 4
 }
 
 // Safely read an optional field that may not exist on the row type.
@@ -84,43 +92,54 @@ function optNum(row: StockRowWithSector, key: string): number | null {
   return null
 }
 
+const GATE_LEGEND = [
+  { key: 'H', field: 'history_gate_pass',   label: 'History',   desc: 'Stock has ≥6M of price history in our universe' },
+  { key: 'L', field: 'liquidity_gate_pass', label: 'Liquidity', desc: 'Avg daily value traded meets minimum threshold' },
+  { key: 'W', field: 'weinstein_gate_pass', label: 'Weinstein', desc: 'Price is in Weinstein Stage 2 (above rising 30W MA)' },
+  { key: 'S', field: 'strength_gate',       label: 'Strength',  desc: 'RS State is Leader or Strong' },
+  { key: 'D', field: 'direction_gate',      label: 'Direction', desc: 'Momentum is Accelerating or Improving' },
+]
+
 function GateDot({ value }: { value: boolean | null }) {
   const color = value === true
     ? 'bg-teal'
-    : value === false
-      ? 'bg-signal-neg'
-      : 'bg-paper-rule'
-  return <span className={`w-1.5 h-1.5 rounded-full ${color}`} />
+    : value === false ? 'bg-signal-neg' : 'bg-paper-rule'
+  return <span className={`w-1.5 h-1.5 rounded-full ${color} shrink-0`} />
 }
 
 function GateDots({ row }: { row: StockRowWithSector }) {
-  const h = optBool(row, 'history_gate_pass')
-  const l = optBool(row, 'liquidity_gate_pass')
-  const w = optBool(row, 'weinstein_gate_pass')
-  const s = optBool(row, 'strength_gate')
-  const d = optBool(row, 'direction_gate')
+  const vals = GATE_LEGEND.map(g => optBool(row, g.field))
+  const passCount = vals.filter(v => v === true).length
+  const tooltipText = GATE_LEGEND.map((g, i) =>
+    `${g.key}=${g.label}: ${vals[i] === true ? '✓' : vals[i] === false ? '✗' : '?'} — ${g.desc}`
+  ).join('\n')
   return (
     <span
       className="inline-flex items-center gap-0.5"
-      title={`H:${h ?? '?'} L:${l ?? '?'} W:${w ?? '?'} S:${s ?? '?'} D:${d ?? '?'}`}
+      title={tooltipText}
     >
-      <GateDot value={h} />
-      <GateDot value={l} />
-      <GateDot value={w} />
-      <GateDot value={s} />
-      <GateDot value={d} />
+      {vals.map((v, i) => <GateDot key={i} value={v} />)}
+      <span className="ml-1 font-mono text-[10px] text-ink-tertiary tabular-nums">{passCount}/5</span>
     </span>
   )
 }
 
-export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
-  const [sortKey, setSortKey] = useState<SortKey>('rs_pctile_3m')
-  const [asc, setAsc] = useState(false)
+export function StockScreener({
+  stocks,
+  maFilter,
+}: {
+  stocks: StockRowWithSector[]
+  maFilter?: 'above_30w_ma' | 'above_50d_ma' | 'above_200d_ma' | null
+}) {
+  const [sortKey, setSortKey] = useState<SortKey>('cap_rank')
+  const [asc, setAsc] = useState(true)
   const [chip, setChip] = useState<FilterChip>('all')
   const [search, setSearch] = useState('')
   const [sectorFilter, setSectorFilter] = useState<string>('All Sectors')
   const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null)
   const [visibleCols, setVisibleCols] = useColumnVisibility(COL_STORAGE_KEY, OPTIONAL_COLS)
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 50
 
   // Sorted, deduped sector list for the dropdown.
   const sectorOptions = useMemo(() => {
@@ -149,6 +168,11 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
   const filtered = useMemo(() => {
     let result = stocks
 
+    // MA breadth filter from parent shell
+    if (maFilter === 'above_30w_ma') result = result.filter(s => s.above_30w_ma === true)
+    else if (maFilter === 'above_50d_ma') result = result.filter(s => optBool(s, 'above_50d_ma') === true)
+    else if (maFilter === 'above_200d_ma') result = result.filter(s => optBool(s, 'above_200d_ma') === true)
+
     if (chip === 'n50') result = result.filter(s => s.in_nifty_50)
     else if (chip === 'n100') result = result.filter(s => s.in_nifty_100)
     else if (chip === 'n500') result = result.filter(s => s.in_nifty_500)
@@ -172,24 +196,62 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
     }
 
     return [...result].sort((a, b) => {
-      let cmp = 0
-      if (sortKey === 'symbol') cmp = a.symbol.localeCompare(b.symbol)
-      else if (sortKey === 'sector') cmp = a.sector.localeCompare(b.sector)
-      else if (sortKey === 'rs_state') cmp = stateRank(RS_ORDER, a.rs_state) - stateRank(RS_ORDER, b.rs_state)
-      else if (sortKey === 'momentum_state') cmp = stateRank(MOM_ORDER, a.momentum_state) - stateRank(MOM_ORDER, b.momentum_state)
-      else if (sortKey === 'risk_state') cmp = stateRank(RISK_ORDER, a.risk_state) - stateRank(RISK_ORDER, b.risk_state)
-      else if (sortKey === 'volume_state') cmp = stateRank(VOL_ORDER, a.volume_state) - stateRank(VOL_ORDER, b.volume_state)
-      else {
-        const av = a[sortKey as keyof typeof a] != null ? parseFloat(a[sortKey as keyof typeof a] as string) : null
-        const bv = b[sortKey as keyof typeof b] != null ? parseFloat(b[sortKey as keyof typeof b] as string) : null
-        if (av == null && bv == null) cmp = 0
-        else if (av == null) cmp = 1
-        else if (bv == null) cmp = -1
-        else cmp = av - bv
+      // Nulls always last regardless of sort direction.
+      function numVal(row: StockRowWithSector, key: string): number | null {
+        const v = (row as unknown as Record<string, unknown>)[key]
+        if (v == null) return null
+        const n = typeof v === 'string' ? parseFloat(v) : typeof v === 'number' ? v : NaN
+        return Number.isFinite(n) ? n : null
       }
+
+      if (sortKey === 'symbol') {
+        const cmp = a.symbol.localeCompare(b.symbol)
+        return asc ? cmp : -cmp
+      }
+      if (sortKey === 'sector') {
+        const cmp = a.sector.localeCompare(b.sector)
+        return asc ? cmp : -cmp
+      }
+      if (sortKey === 'rs_state') {
+        const cmp = stateRank(RS_ORDER, a.rs_state) - stateRank(RS_ORDER, b.rs_state)
+        return asc ? cmp : -cmp
+      }
+      if (sortKey === 'momentum_state') {
+        const cmp = stateRank(MOM_ORDER, a.momentum_state) - stateRank(MOM_ORDER, b.momentum_state)
+        return asc ? cmp : -cmp
+      }
+      if (sortKey === 'risk_state') {
+        const cmp = stateRank(RISK_ORDER, a.risk_state) - stateRank(RISK_ORDER, b.risk_state)
+        return asc ? cmp : -cmp
+      }
+      if (sortKey === 'volume_state') {
+        const cmp = stateRank(VOL_ORDER, a.volume_state) - stateRank(VOL_ORDER, b.volume_state)
+        return asc ? cmp : -cmp
+      }
+      if (sortKey === 'cap_rank') {
+        const cmp = capRank(a) - capRank(b)
+        return asc ? cmp : -cmp
+      }
+      // Numeric sort — nulls always last regardless of direction
+      const av = numVal(a, sortKey)
+      const bv = numVal(b, sortKey)
+      if (av == null && bv == null) return 0
+      if (av == null) return 1   // null a → always after non-null b
+      if (bv == null) return -1  // null b → always after non-null a
+      const cmp = av - bv
       return asc ? cmp : -cmp
     })
-  }, [stocks, chip, sectorFilter, search, sortKey, asc])
+  }, [stocks, chip, sectorFilter, search, sortKey, asc, maFilter])
+
+  useEffect(() => {
+    setPage(1)
+  }, [chip, sectorFilter, search, sortKey, asc, maFilter])
+
+  const pagedRows = useMemo(
+    () => filtered.slice(0, page * PAGE_SIZE),
+    [filtered, page, PAGE_SIZE]
+  )
+  const hasMore = pagedRows.length < filtered.length
 
   // Total visible columns = always-visible + optional columns currently selected.
   const optionalVisibleCount = OPTIONAL_COLS.filter(c => visibleCols.has(c.key)).length
@@ -268,7 +330,7 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
         </div>
         <div className="ml-auto flex items-center gap-2">
           <span className="font-sans text-xs text-ink-tertiary whitespace-nowrap">
-            Showing {filtered.length} of {stocks.length} stocks
+            {pagedRows.length} of {filtered.length} shown ({stocks.length} total)
           </span>
           <ColumnToggle columns={OPTIONAL_COLS} visible={visibleCols} onChange={setVisibleCols} />
         </div>
@@ -280,8 +342,19 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
           <thead>
             <tr className="border-b border-paper-rule bg-paper">
               <Th label="Symbol" k="symbol" />
+              <Th label="Cap" k="cap_rank" />
               <Th label="Sector" k="sector" />
-              <PlainTh label="Gates" />
+              <th className="px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap text-ink-tertiary">
+                <span className="inline-flex items-center gap-1">
+                  Gates
+                  <span
+                    className="cursor-help opacity-50 hover:opacity-100 text-[9px]"
+                    title={GATE_LEGEND.map(g => `${g.key}=${g.label}: ${g.desc}`).join('\n')}
+                  >
+                    ⓘ
+                  </span>
+                </span>
+              </th>
               <Th label="RS State" k="rs_state" />
               <Th label="Mom" k="momentum_state" />
               <Th label="Risk" k="risk_state" />
@@ -295,7 +368,6 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
               {visibleCols.has('drawdown') && <PlainTh label="Drawdown" align="right" />}
               {visibleCols.has('days_in_state') && <PlainTh label="Days" align="right" />}
               <Th label="RS Pctile" k="rs_pctile_3m" align="right" />
-              <Th label="Deploy %" k="position_size_pct" align="right" />
             </tr>
           </thead>
           <tbody>
@@ -311,7 +383,7 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
                 </td>
               </tr>
             ) : (
-              filtered.map((row, i) => {
+              pagedRows.map((row, i) => {
                 const isExpanded = expandedSymbol === row.symbol
                 const ret1w = optStr(row, 'ret_1w')
                 const ret6m = optStr(row, 'ret_6m')
@@ -337,6 +409,11 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
                             {row.company_name}
                           </div>
                         </Link>
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <span className="font-mono text-[10px] text-ink-tertiary">
+                          {row.in_nifty_50 ? 'N50' : row.in_nifty_100 ? 'N100' : row.in_nifty_500 ? 'N500' : 'Other'}
+                        </span>
                       </td>
                       <td className="px-3 py-2.5">
                         <SectorBadge sector={row.sector} />
@@ -395,16 +472,22 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
                       <td className="px-3 py-2.5 text-right">
                         <RSPctileBar value={row.rs_pctile_3m} />
                       </td>
-                      <td className="px-3 py-2.5 text-right">
-                        <div className="flex justify-end">
-                          <PosSizeBar value={row.position_size_pct} />
-                        </div>
-                      </td>
                     </tr>
                     {isExpanded && (
                       <tr className="border-b border-paper-rule bg-paper-rule/10">
                         <td colSpan={totalCols} className="px-4 py-3">
-                          <StateJourneyCompact symbol={row.symbol} />
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              <StateJourneyCompact symbol={row.symbol} />
+                            </div>
+                            <Link
+                              href={`/stocks/${encodeURIComponent(row.symbol)}`}
+                              onClick={e => e.stopPropagation()}
+                              className="font-sans text-xs text-teal hover:underline whitespace-nowrap shrink-0"
+                            >
+                              Deep dive →
+                            </Link>
+                          </div>
                         </td>
                       </tr>
                     )}
@@ -415,6 +498,20 @@ export function StockScreener({ stocks }: { stocks: StockRowWithSector[] }) {
           </tbody>
         </table>
       </div>
+      {hasMore && (
+        <div className="text-center py-2">
+          <button
+            type="button"
+            onClick={() => setPage(p => p + 1)}
+            className="font-sans text-xs text-teal hover:underline"
+          >
+            Load {Math.min(PAGE_SIZE, filtered.length - pagedRows.length)} more
+            <span className="ml-1 text-ink-tertiary">
+              ({filtered.length - pagedRows.length} remaining)
+            </span>
+          </button>
+        </div>
+      )}
     </div>
   )
 }
