@@ -2,11 +2,12 @@
 // bands 1-4 are placeholders until Tasks 3.3-3.6 add the real sub-components
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import type { FundRow } from '@/lib/queries/funds'
 import type { CommentaryResult } from '@/lib/commentary/stocks'
 import type { Period } from '@/lib/url-params'
+import { matchesFundSearch } from '@/lib/fund-formatters'
 
 // Placeholder imports — these components are created in Tasks 3.3-3.6
 // They will be replaced by real imports once those tasks complete
@@ -16,10 +17,8 @@ export type TileCounts = {
   n_leader_nav: number
   n_aligned: number
   n_strong_hold: number
-  medianRet: number
-  medianRsPctile: number
-  total: number
-  latestDate: Date | null
+  n_suspended: number
+  n_weak_hold: number
 }
 
 export type FilterChip =
@@ -35,8 +34,9 @@ type Props = {
   period: Period
   tileCounts: TileCounts
   commentary: CommentaryResult
-  topCategory: string | null
-  topCategoryRsPctile: number
+  medianRsPctile: number
+  medianReturn: number | null
+  topCategory: { name: string; mean: number } | null
 }
 
 export function FundPageClient({
@@ -57,14 +57,23 @@ export function FundPageClient({
     setActiveFilter(filter)
   }
 
-  const filteredFunds = funds.filter(f => {
-    if (activeFilter === 'recommended') return f.recommendation === 'Recommended'
-    if (activeFilter === 'hold')        return f.recommendation === 'Hold'
-    if (activeFilter === 'leader_nav')  return f.nav_state === 'Leader NAV' || f.nav_state === 'Strong NAV'
-    if (activeFilter === 'aligned')     return f.composition_state === 'Aligned'
-    if (activeFilter === 'strong_hold') return f.holdings_state === 'Strong-Holdings'
-    return true
-  })
+  const filteredFunds = useMemo(() => {
+    let result = funds
+    if (activeFilter !== 'all') {
+      result = result.filter(f => {
+        if (activeFilter === 'recommended') return f.recommendation === 'Recommended'
+        if (activeFilter === 'hold')        return f.recommendation === 'Hold'
+        if (activeFilter === 'leader_nav')  return f.nav_state === 'Leader NAV'
+        if (activeFilter === 'aligned')     return f.composition_state === 'Aligned'
+        if (activeFilter === 'strong_hold') return f.recommendation === 'Hold' && f.holdings_state === 'Strong-Holdings'
+        return true
+      })
+    }
+    if (search.trim()) {
+      result = result.filter(f => matchesFundSearch(f, search))
+    }
+    return result
+  }, [funds, activeFilter, search])
 
   return (
     <div className="flex flex-col">
@@ -76,7 +85,9 @@ export function FundPageClient({
           <span>{tileCounts.n_leader_nav} Leader/Strong NAV</span>
           <span>{tileCounts.n_aligned} Aligned</span>
           <span>{tileCounts.n_strong_hold} Strong Holdings</span>
-          <span className="ml-auto">{tileCounts.total} of 592 computed</span>
+          <span>{tileCounts.n_suspended} Suspended</span>
+          <span>{tileCounts.n_weak_hold} Weak Holdings</span>
+          <span className="ml-auto">{funds.length} of 592 computed</span>
         </div>
       </div>
 
@@ -156,11 +167,6 @@ export function FundPageClient({
           </thead>
           <tbody>
             {filteredFunds
-              .filter(f => {
-                if (!search.trim()) return true
-                const q = search.trim().toLowerCase()
-                return f.scheme_name.toLowerCase().includes(q) || f.amc.toLowerCase().includes(q)
-              })
               .slice(0, 50)
               .map(f => (
                 <tr key={f.mstar_id} className="border-b border-paper-rule/40 hover:bg-paper-rule/5">

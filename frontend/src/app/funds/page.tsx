@@ -29,22 +29,15 @@ export default async function FundsPage({
   // Tile counts (server-side computation)
   const n_recommended = funds.filter(f => f.recommendation === 'Recommended').length
   const n_hold        = funds.filter(f => f.recommendation === 'Hold').length
-  const n_leader_nav  = funds.filter(
-    f => f.nav_state === 'Leader NAV' || f.nav_state === 'Strong NAV',
-  ).length
+  const n_leader_nav  = funds.filter(f => f.nav_state === 'Leader NAV').length
   const n_aligned     = funds.filter(f => f.composition_state === 'Aligned').length
-  const n_strong_hold = funds.filter(f => f.holdings_state === 'Strong-Holdings').length
+  const n_strong_hold = funds.filter(f => f.recommendation === 'Hold' && f.holdings_state === 'Strong-Holdings').length
   const n_suspended   = funds.filter(f => f.nav_state === 'DISLOCATION_SUSPENDED').length
-  const n_weak_hold   = funds.filter(f => f.holdings_state === 'Weak-Holdings').length
+  const n_weak_hold   = funds.filter(f => f.recommendation === 'Hold' && f.holdings_state === 'Weak-Holdings').length
 
-  // Median RS pctile for selected period
-  const pctileKey =
-    period === '1M' ? 'rs_pctile_1m' :
-    period === '3M' ? 'rs_pctile_3m' :
-    'rs_pctile_6m'  // 6M and 1Y both use 6m column
-
+  // Median RS pctile — always use rs_pctile_3m (90-day equivalent)
   const pctiles = funds
-    .map(f => parseFloat((f as Record<string, string | null>)[pctileKey] ?? ''))
+    .map(f => parseFloat(f.rs_pctile_3m ?? ''))
     .filter(n => !isNaN(n))
     .sort((a, b) => a - b)
   const medianRsPctile = pctiles.length > 0
@@ -62,24 +55,26 @@ export default async function FundsPage({
     .map(f => parseFloat((f as Record<string, string | null>)[retKey] ?? ''))
     .filter(n => !isNaN(n))
     .sort((a, b) => a - b)
-  const medianRet = rets.length > 0 ? rets[Math.floor(rets.length / 2)] : 0
+  const medianReturn: number | null = rets.length > 0 ? rets[Math.floor(rets.length / 2)] : null
 
-  // Top category by mean RS pctile
-  const categoryMap: Record<string, number[]> = {}
-  for (const f of funds) {
-    const pct = parseFloat((f as Record<string, string | null>)[pctileKey] ?? '')
-    if (isNaN(pct) || !f.category_name) continue
-    if (!categoryMap[f.category_name]) categoryMap[f.category_name] = []
-    categoryMap[f.category_name].push(pct)
-  }
-  let topCategory: string | null = null
-  let topCategoryRsPctile = 0
-  for (const [cat, values] of Object.entries(categoryMap)) {
-    const mean = values.reduce((a, b) => a + b, 0) / values.length * 100
-    if (mean > topCategoryRsPctile) {
-      topCategoryRsPctile = mean
-      topCategory = cat
+  // Top category by mean RS pctile (rs_pctile_3m, stored as fraction 0-1)
+  type TopCategory = { name: string; mean: number }
+  let topCategory: TopCategory | null = null
+  {
+    const byCat: Record<string, number[]> = {}
+    for (const f of funds) {
+      if (f.rs_pctile_3m != null && f.category_name) {
+        if (!byCat[f.category_name]) byCat[f.category_name] = []
+        byCat[f.category_name].push(parseFloat(f.rs_pctile_3m))
+      }
     }
+    let bestName: string | null = null
+    let bestMean = -1
+    for (const [cat, vals] of Object.entries(byCat)) {
+      const mean = vals.reduce((a, b) => a + b, 0) / vals.length
+      if (mean > bestMean) { bestMean = mean; bestName = cat }
+    }
+    if (bestName != null) topCategory = { name: bestName, mean: bestMean }
   }
 
   const commentaryCtx: FundCommentaryContext = {
@@ -91,12 +86,10 @@ export default async function FundsPage({
     pct_aligned_composition: n_aligned / funds.length,
     pct_weak_holdings: n_weak_hold / funds.length,
     pct_suspended: n_suspended / funds.length,
-    top_category: topCategory,
-    top_category_rs_pctile: topCategoryRsPctile,
+    top_category: topCategory?.name ?? null,
+    top_category_rs_pctile: topCategory != null ? topCategory.mean * 100 : 0,
   }
   const commentary = buildFundCommentary(commentaryCtx)
-
-  const latestDate = funds[0]?.nav_date
 
   const tileCounts = {
     n_recommended,
@@ -104,10 +97,8 @@ export default async function FundsPage({
     n_leader_nav,
     n_aligned,
     n_strong_hold,
-    medianRet,
-    medianRsPctile,
-    total: funds.length,
-    latestDate,
+    n_suspended,
+    n_weak_hold,
   }
 
   return (
@@ -122,8 +113,9 @@ export default async function FundsPage({
         period={period}
         tileCounts={tileCounts}
         commentary={commentary}
+        medianRsPctile={medianRsPctile}
+        medianReturn={medianReturn}
         topCategory={topCategory}
-        topCategoryRsPctile={topCategoryRsPctile}
       />
     </div>
   )
