@@ -14,6 +14,8 @@ export type StockRowWithSector = StockRow & {
   liquidity_gate_pass: boolean | null
   strength_gate: boolean | null
   direction_gate: boolean | null
+  risk_gate: boolean | null
+  volume_gate: boolean | null
   above_50d_ma: boolean | null
   above_200d_ma: boolean | null
   ret_12m: string | null
@@ -84,6 +86,8 @@ export async function getAllStocks(): Promise<StockRowWithSector[]> {
       s.liquidity_gate_pass,
       d.strength_gate,
       d.direction_gate,
+      d.risk_gate,
+      d.volume_gate,
       s.rs_state,
       s.momentum_state,
       s.risk_state,
@@ -145,6 +149,8 @@ export async function getTopPicksAcrossSectors(): Promise<StockRowWithSector[]> 
       s.liquidity_gate_pass,
       d.strength_gate,
       d.direction_gate,
+      d.risk_gate,
+      d.volume_gate,
       s.rs_state,
       s.momentum_state,
       s.risk_state,
@@ -207,6 +213,8 @@ export async function getStockBySymbol(symbol: string): Promise<StockRowWithSect
       s.liquidity_gate_pass,
       d.strength_gate,
       d.direction_gate,
+      d.risk_gate,
+      d.volume_gate,
       s.rs_state,
       s.momentum_state,
       s.risk_state,

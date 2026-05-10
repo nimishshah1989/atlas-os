@@ -97,8 +97,10 @@ const GATE_LEGEND = [
   { key: 'H', field: 'history_gate_pass',   label: 'History',   desc: 'Stock has ≥6M of price history in our universe' },
   { key: 'L', field: 'liquidity_gate_pass', label: 'Liquidity', desc: 'Avg daily value traded meets minimum threshold' },
   { key: 'W', field: 'weinstein_gate_pass', label: 'Weinstein', desc: 'Price is in Weinstein Stage 2 (above rising 30W MA)' },
-  { key: 'S', field: 'strength_gate',       label: 'Strength',  desc: 'RS State is Leader or Strong' },
+  { key: 'S', field: 'strength_gate',       label: 'Strength',  desc: 'RS State is Leader, Strong, or Emerging' },
   { key: 'D', field: 'direction_gate',      label: 'Direction', desc: 'Momentum is Accelerating or Improving' },
+  { key: 'R', field: 'risk_gate',           label: 'Risk',      desc: 'Risk state is Low or Normal (not Elevated/High/Below Trend)' },
+  { key: 'V', field: 'volume_gate',         label: 'Volume',    desc: 'Volume state is Accumulation or Steady-Buying' },
 ]
 
 function GateDot({ value }: { value: boolean | null }) {
@@ -120,7 +122,7 @@ function GateDots({ row }: { row: StockRowWithSector }) {
       title={tooltipText}
     >
       {vals.map((v, i) => <GateDot key={i} value={v} />)}
-      <span className="ml-1 font-mono text-[10px] text-ink-tertiary tabular-nums">{passCount}/5</span>
+      <span className="ml-1 font-mono text-[10px] text-ink-tertiary tabular-nums">{passCount}/7</span>
     </span>
   )
 }
