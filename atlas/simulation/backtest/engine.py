@@ -21,6 +21,7 @@ log = structlog.get_logger()
 
 _INIT_CASH = 10_000_000.0  # ₹1 crore default
 _FEES_PCT = 0.001  # 0.1% per leg (~0.2% round-trip)
+_INDIA_RF = 0.065  # RBI repo rate (4% early 2022 → 6.5% mid-2022 onward; ~6.5% avg)
 
 
 @dataclass
@@ -59,10 +60,21 @@ def _scalar_metric(val: float | pd.Series) -> float:  # type: ignore[type-arg]
     return float(val)
 
 
+def _sharpe_from_daily(daily_rets: pd.Series, annual_rf: float) -> float | None:
+    """Annualized Sharpe using the given risk-free rate. Returns None when std=0."""
+    daily_rf = (1 + annual_rf) ** (1 / 252) - 1
+    excess = daily_rets - daily_rf
+    std = float(excess.std())
+    if std <= 0:
+        return None
+    return float(excess.mean() / std * np.sqrt(252))
+
+
 def run_backtest(
     signal_matrix: SignalMatrix,
     init_cash: float = _INIT_CASH,
     fees_pct: float = _FEES_PCT,
+    risk_free_rate: float = _INDIA_RF,
 ) -> BacktestResult:
     """Run vectorbt backtest on a SignalMatrix. No DB calls.
 
@@ -113,9 +125,9 @@ def run_backtest(
             if isinstance(daily_rets, pd.DataFrame):
                 daily_rets = daily_rets.mean(axis=1)
 
-            # Multi-instrument vbt returns per-instrument Series; reduce to scalar.
-            # _finite_or_none maps NaN/±inf → None (financial domain: NULL not NaN).
-            sharpe = _finite_or_none(_scalar_metric(pf.sharpe_ratio()))
+            # Sharpe: compute from daily returns using proper Indian risk-free rate.
+            # Do NOT use pf.sharpe_ratio() — it defaults to rf=0% which inflates Sharpe.
+            sharpe = _sharpe_from_daily(daily_rets, risk_free_rate)
             drawdown = _finite_or_none(_scalar_metric(pf.max_drawdown()))
             total_ret = _finite_or_none(_scalar_metric(pf.total_return()))
 
@@ -143,7 +155,9 @@ def run_backtest(
 
     except ImportError:
         # vectorbt not installed — use pandas/numpy fallback
-        result = _run_backtest_fallback(price_df, entry_df, exit_df, init_cash, fees_pct)
+        result = _run_backtest_fallback(
+            price_df, entry_df, exit_df, init_cash, fees_pct, risk_free_rate
+        )
 
     log.info(
         "backtest_engine_done",
@@ -160,6 +174,7 @@ def _run_backtest_fallback(
     exit_df: pd.DataFrame,
     init_cash: float,
     fees_pct: float,
+    risk_free_rate: float = _INDIA_RF,
 ) -> BacktestResult:
     """Pure pandas/numpy fallback when vectorbt is unavailable.
 
@@ -201,11 +216,7 @@ def _run_backtest_fallback(
     daily_rets = portfolio_values.pct_change().fillna(0.0)
     total_ret = (portfolio_values.iloc[-1] / init_cash) - 1.0
 
-    sharpe: float | None
-    if daily_rets.std() > 0:
-        sharpe = float((daily_rets.mean() / daily_rets.std()) * np.sqrt(252))
-    else:
-        sharpe = None
+    sharpe = _sharpe_from_daily(daily_rets, risk_free_rate)
 
     running_max = portfolio_values.cummax()
     drawdown_series = (portfolio_values - running_max) / running_max
