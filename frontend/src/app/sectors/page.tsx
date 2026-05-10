@@ -1,6 +1,13 @@
 // frontend/src/app/sectors/page.tsx
 import { Suspense } from 'react'
-import { getCurrentSectors, getSectorStateHistory } from '@/lib/queries/sectors'
+import {
+  getSectorsWithMomentum,
+  getSectorStateHistory,
+  getRRGHistory,
+  getBreadthWaterfallData,
+  getDaysInStateForAllSectors,
+  type DaysInStateRow,
+} from '@/lib/queries/sectors'
 import { rangeToDays, type TimeRange } from '@/lib/time-range'
 import { getSectorDecision } from '@/lib/sectors-decision'
 import { filterSectors } from '@/lib/sectors-filter'
@@ -19,7 +26,7 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
   const days = rangeToDays(historyRange)
 
   const [allRaw, stateHistory] = await Promise.all([
-    getCurrentSectors(),
+    getSectorsWithMomentum(),
     getSectorStateHistory(days),
   ])
 

@@ -7,6 +7,8 @@ from unittest.mock import MagicMock
 
 sys.path.insert(0, ".")
 from scripts.etf_sector_backfill import (
+    TARGET_ETFS,
+    TICKER_BHAV_ALIASES,
     build_bhav_url,
     build_master_upsert_params,
     build_new_bhav_url,
@@ -199,6 +201,7 @@ class TestDownloadBhavZip:
 
     def test_returns_none_when_all_retries_fail(self):
         import requests as req
+
         mock_session = MagicMock()
         mock_session.get.side_effect = req.ConnectionError("timeout")
 
@@ -225,12 +228,10 @@ class TestVerifyTickers:
 
     def test_found_and_missing_split(self):
         zip_bytes = self._make_zip_bytes(["PHARMABEES", "AUTOBEES"])
-        found, missing = verify_tickers(
-            zip_bytes, {"PHARMABEES", "AUTOBEES", "NETFMETAL"}
-        )
+        found, missing = verify_tickers(zip_bytes, {"PHARMABEES", "AUTOBEES", "METALIETF"})
         assert "PHARMABEES" in found
         assert "AUTOBEES" in found
-        assert "NETFMETAL" in missing
+        assert "METALIETF" in missing
 
     def test_all_present(self):
         zip_bytes = self._make_zip_bytes(["PHARMABEES", "AUTOBEES"])
@@ -246,9 +247,9 @@ class TestVerifyTickers:
 
     def test_returns_disjoint_sets(self):
         zip_bytes = self._make_zip_bytes(["PHARMABEES"])
-        found, missing = verify_tickers(zip_bytes, {"PHARMABEES", "NETFMETAL"})
+        found, missing = verify_tickers(zip_bytes, {"PHARMABEES", "METALIETF"})
         assert found & missing == set()  # disjoint
-        assert found | missing == {"PHARMABEES", "NETFMETAL"}  # complete
+        assert found | missing == {"PHARMABEES", "METALIETF"}  # complete
 
 
 class TestBuildMasterUpsertParams:
@@ -287,41 +288,50 @@ class TestBuildMasterUpsertParams:
 
 class TestBuildOhlcvInsertParams:
     def test_maps_fields_correctly(self):
-        from decimal import Decimal
         from datetime import date as date_type
+        from decimal import Decimal
+
         row = {
             "ticker": "PHARMABEES",
-            "date":   date_type(2023, 1, 3),
-            "open":   Decimal("101.00"),
-            "high":   Decimal("103.00"),
-            "low":    Decimal("100.00"),
-            "close":  Decimal("102.50"),
+            "date": date_type(2023, 1, 3),
+            "open": Decimal("101.00"),
+            "high": Decimal("103.00"),
+            "low": Decimal("100.00"),
+            "close": Decimal("102.50"),
             "volume": 50000,
         }
         params = build_ohlcv_insert_params(row)
         assert params["ticker"] == "PHARMABEES"
-        assert params["date"]   == date_type(2023, 1, 3)
-        assert params["close"]  == Decimal("102.50")
+        assert params["date"] == date_type(2023, 1, 3)
+        assert params["close"] == Decimal("102.50")
         assert params["volume"] == 50000
 
     def test_preserves_decimal_type(self):
         from decimal import Decimal
+
         row = {
-            "ticker": "X", "date": date(2023, 1, 3),
-            "open": Decimal("1.00"), "high": Decimal("2.00"),
-            "low": Decimal("0.50"), "close": Decimal("1.50"),
+            "ticker": "X",
+            "date": date(2023, 1, 3),
+            "open": Decimal("1.00"),
+            "high": Decimal("2.00"),
+            "low": Decimal("0.50"),
+            "close": Decimal("1.50"),
             "volume": 100,
         }
         params = build_ohlcv_insert_params(row)
         assert isinstance(params["close"], Decimal)
-        assert isinstance(params["open"],  Decimal)
+        assert isinstance(params["open"], Decimal)
 
     def test_none_prices_preserved(self):
         # open/high/low can be None for some ETFs
         row = {
-            "ticker": "X", "date": date(2023, 1, 3),
-            "open": None, "high": None, "low": None,
-            "close": Decimal("1.50"), "volume": 0,
+            "ticker": "X",
+            "date": date(2023, 1, 3),
+            "open": None,
+            "high": None,
+            "low": None,
+            "close": Decimal("1.50"),
+            "volume": 0,
         }
         params = build_ohlcv_insert_params(row)
         assert params["open"] is None
@@ -353,11 +363,25 @@ class TestParseBhavCsv:
     def _make_csv(self, rows: list[str]) -> bytes:
         return (self.CSV_HEADER + "\n".join(rows)).encode("utf-8")
 
+    @staticmethod
+    def _row(
+        sym, series="EQ", dt="08-May-2026", o="1.00", h="1.00", lo="1.00", c="1.00", vol="100"
+    ) -> str:
+        """Build a minimal new-format BHAV CSV row (15 columns)."""
+        return (
+            f"{sym}, {series}, {dt}, 0.00, {o}, {h}, {lo}, "
+            f"{c}, {c}, {c}, {vol}, 1.00, 1, 50, 50.00"
+        )
+
     def test_extracts_target_tickers(self):
-        csv_bytes = self._make_csv([
-            "PHARMABEES, EQ, 08-May-2026, 24.79, 24.81, 24.96, 24.60, 24.89, 24.78, 24.84, 7292625, 1811.59, 10713, 5108757, 70.05",
-            "NIFTYBEES, EQ, 08-May-2026, 245.00, 246.00, 248.00, 244.00, 247.00, 247.00, 246.50, 1000000, 247000.00, 4321, 500000, 50.00",
-        ])
+        csv_bytes = self._make_csv(
+            [
+                self._row("PHARMABEES", o="24.81", h="24.96", lo="24.60", c="24.78", vol="7292625"),
+                self._row(
+                    "NIFTYBEES", o="246.00", h="248.00", lo="244.00", c="247.00", vol="1000000"
+                ),
+            ]
+        )
         rows = parse_bhav_csv(csv_bytes, {"PHARMABEES"})
         assert len(rows) == 1
         row = rows[0]
@@ -368,23 +392,67 @@ class TestParseBhavCsv:
         assert row["volume"] == 7292625
 
     def test_skips_non_eq_series(self):
-        csv_bytes = self._make_csv([
-            "PHARMABEES, GS, 08-May-2026, 24.79, 24.81, 24.96, 24.60, 24.89, 24.78, 24.84, 7292625, 1811.59, 10713, 5108757, 70.05",
-        ])
+        csv_bytes = self._make_csv(
+            [
+                self._row("PHARMABEES", series="GS"),
+            ]
+        )
         rows = parse_bhav_csv(csv_bytes, {"PHARMABEES"})
         assert rows == []
 
     def test_returns_empty_for_no_matches(self):
-        csv_bytes = self._make_csv([
-            "NIFTYBEES, EQ, 08-May-2026, 245.00, 246.00, 248.00, 244.00, 247.00, 247.00, 246.50, 1000000, 247000.00, 4321, 500000, 50.00",
-        ])
+        csv_bytes = self._make_csv(
+            [
+                self._row("NIFTYBEES"),
+            ]
+        )
         rows = parse_bhav_csv(csv_bytes, {"PHARMABEES"})
         assert rows == []
 
     def test_volume_float_format(self):
         # NSE sometimes emits volume as a float in the new format
-        csv_bytes = self._make_csv([
-            "MOENERGY, EQ, 08-May-2026, 41.30, 41.70, 42.05, 40.74, 40.90, 40.90, 40.95, 198905.00, 81.45, 1320, 145501, 73.15",
-        ])
+        csv_bytes = self._make_csv(
+            [
+                self._row("MOENERGY", vol="198905.00"),
+            ]
+        )
         rows = parse_bhav_csv(csv_bytes, {"MOENERGY"})
         assert rows[0]["volume"] == 198905
+
+
+class TestTargetEtfs:
+    """Sanity checks on TARGET_ETFS and TICKER_BHAV_ALIASES."""
+
+    def test_ten_etfs_defined(self):
+        assert len(TARGET_ETFS) == 10
+
+    def test_no_invalid_tickers(self):
+        # These symbols never existed on NSE; any of them in TARGET_ETFS is a bug.
+        invalid = {"NETFIT", "NETFMETAL", "NETFMID150"}
+        tickers = {e["ticker"] for e in TARGET_ETFS}
+        assert tickers & invalid == set(), f"Invalid tickers found: {tickers & invalid}"
+
+    def test_correct_current_tickers_present(self):
+        tickers = {e["ticker"] for e in TARGET_ETFS}
+        assert "ITBEES" in tickers
+        assert "MID150BEES" in tickers
+        assert "METALIETF" in tickers
+
+    def test_alias_keys_are_current_tickers(self):
+        current_tickers = {e["ticker"] for e in TARGET_ETFS}
+        for _canonical in TICKER_BHAV_ALIASES:
+            assert _canonical in current_tickers, f"Alias key '{_canonical}' is not in TARGET_ETFS"
+
+    def test_alias_values_are_old_symbols_not_in_target(self):
+        current_tickers = {e["ticker"] for e in TARGET_ETFS}
+        for _canonical, aliases in TICKER_BHAV_ALIASES.items():
+            for alias in aliases:
+                assert (
+                    alias not in current_tickers
+                ), f"Alias '{alias}' should be an old symbol, not a current ticker"
+
+    def test_itbees_alias_includes_netfit(self):
+        assert "NETFIT" in TICKER_BHAV_ALIASES.get("ITBEES", [])
+
+    def test_mid150bees_alias_includes_netfmid150(self):
+        assert "NETFMID150" in TICKER_BHAV_ALIASES.get("MID150BEES", [])

@@ -2,6 +2,8 @@ export const dynamic = 'force-dynamic'
 
 import { getAllETFs } from '@/lib/queries/etfs'
 import { ETFScreener } from '@/components/etfs/ETFScreener'
+import { ETFMetricTiles } from '@/components/etfs/ETFMetricTiles'
+import { ETFIntelligencePanel } from '@/components/etfs/ETFIntelligencePanel'
 
 export default async function ETFsPage() {
   const etfs = await getAllETFs()
@@ -40,9 +42,25 @@ export default async function ETFsPage() {
         </div>
       </div>
 
-      {/* Main content */}
-      <div className="px-6 py-6">
+      {/* Metric tiles strip */}
+      <div className="px-6 pt-4">
+        <ETFMetricTiles etfs={etfs} />
+      </div>
+
+      {/* Main content: screener + intelligence panel */}
+      <div className="px-6 py-4 grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6 items-start">
         <ETFScreener etfs={etfs} />
+
+        <div className="border border-paper-rule rounded-sm p-4 bg-paper sticky top-4">
+          <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-3">
+            ETF Intelligence
+          </div>
+          <ETFIntelligencePanel
+            etfs={etfs}
+            regimeState="Cautious"
+            deploymentMultiplier={0.6}
+          />
+        </div>
       </div>
     </div>
   )
