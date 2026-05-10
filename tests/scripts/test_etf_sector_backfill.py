@@ -14,6 +14,7 @@ from scripts.etf_sector_backfill import (
     parse_bhav_date,
     parse_bhav_zip,
     safe_decimal,
+    safe_int_volume,
     trading_dates,
     verify_tickers,
 )
@@ -32,10 +33,34 @@ class TestSafeDecimal:
     def test_strips_whitespace(self):
         assert safe_decimal("  123.45  ") == Decimal("123.45")
 
+    def test_invalid_string_returns_none(self):
+        assert safe_decimal("N/A") is None
+
+    def test_dash_returns_none(self):
+        assert safe_decimal("-") is None
+
+
+class TestSafeIntVolume:
+    def test_integer_string(self):
+        assert safe_int_volume("50000") == 50000
+
+    def test_float_format_truncates(self):
+        # NSE sometimes emits "12345.00"
+        assert safe_int_volume("12345.00") == 12345
+
+    def test_empty_string_returns_zero(self):
+        assert safe_int_volume("") == 0
+
+    def test_invalid_returns_zero(self):
+        assert safe_int_volume("N/A") == 0
+
 
 class TestParseBhavDate:
     def test_short_month(self):
         assert parse_bhav_date("07-APR-2016") == date(2016, 4, 7)
+
+    def test_full_month_name_fallback(self):
+        assert parse_bhav_date("07-APRIL-2016") == date(2016, 4, 7)
 
     def test_strips_whitespace(self):
         assert parse_bhav_date("  07-APR-2016  ") == date(2016, 4, 7)
@@ -259,7 +284,7 @@ class TestBuildMasterUpsertParams:
 
 
 class TestBuildOhlcvInsertParams:
-    def test_maps_all_fields(self):
+    def test_maps_fields_correctly(self):
         from decimal import Decimal
         from datetime import date as date_type
         row = {

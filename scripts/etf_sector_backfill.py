@@ -223,6 +223,24 @@ TARGET_ETFS: list[dict[str, str]] = [
 ]
 
 
+def safe_int_volume(value: str) -> int:
+    """Parse TOTTRDQTY to int, handling float-format values NSE sometimes emits.
+
+    Args:
+        value: Raw TOTTRDQTY cell value (e.g. "50000" or "12345.00").
+
+    Returns:
+        int volume, or 0 for empty/invalid values.
+    """
+    v = value.strip()
+    if not v:
+        return 0
+    try:
+        return int(Decimal(v))
+    except (InvalidOperation, ValueError):
+        return 0
+
+
 def safe_decimal(value: str) -> Decimal | None:
     """Parse a string into Decimal, returning None for empty or invalid input.
 
@@ -309,11 +327,13 @@ def parse_bhav_zip(zip_bytes: bytes, targets: set[str]) -> list[dict[str, Any]]:
                             "high": safe_decimal(row["HIGH"]),
                             "low": safe_decimal(row["LOW"]),
                             "close": close,
-                            "volume": int(row["TOTTRDQTY"].strip() or "0"),
+                            "volume": safe_int_volume(row.get("TOTTRDQTY", "")),
                         }
                     )
-    except (zipfile.BadZipFile, KeyError):
-        pass
+    except zipfile.BadZipFile:
+        log.warning("bad_zip_file", zip_size=len(zip_bytes))
+    except KeyError as exc:
+        log.warning("bhav_csv_unexpected_schema", missing_column=str(exc))
     return rows
 
 
@@ -416,10 +436,9 @@ def seed_etf_master(
 
     log.info(
         "seed_etf_master_done",
-        tickers_before=before,
+        already_present=before,
         tickers_after=after,
         inserted=after - before,
-        updated=before,
     )
 
 
@@ -460,20 +479,23 @@ def get_tickers_needing_backfill(
     Returns:
         Subset of tickers that need backfill.
     """
-    sql = text(f"""
+    sql = text("""
         SELECT m.ticker
         FROM public.de_etf_master m
         LEFT JOIN (
             SELECT ticker, COUNT(*) AS day_count
             FROM public.de_etf_ohlcv
-            WHERE date >= CURRENT_DATE - INTERVAL '{lookback_days} days'
+            WHERE date >= CURRENT_DATE - (:lookback_days * INTERVAL '1 day')
             GROUP BY ticker
         ) o ON m.ticker = o.ticker
         WHERE m.ticker = ANY(:tickers)
           AND COALESCE(o.day_count, 0) < :min_days
     """)
     with engine.connect() as conn:
-        rows = conn.execute(sql, {"tickers": tickers, "min_days": min_days}).fetchall()
+        rows = conn.execute(
+            sql,
+            {"tickers": tickers, "min_days": min_days, "lookback_days": lookback_days},
+        ).fetchall()
     return [r[0] for r in rows]
 
 
@@ -526,6 +548,7 @@ def run_backfill(
     end: date,
     workers: int = 8,
     dry_run: bool = False,
+    session: requests.Session | None = None,
 ) -> dict[str, int]:
     """Download BHAV copies in parallel and insert OHLCV for target tickers.
 
@@ -536,6 +559,7 @@ def run_backfill(
         end: Last date to download (inclusive).
         workers: Parallel download threads.
         dry_run: If True, count rows but do not write.
+        session: Optional pre-authenticated NSE session. Created internally if None.
 
     Returns:
         Dict of ticker -> row count inserted. Zero means no data found in BHAV.
@@ -553,7 +577,8 @@ def run_backfill(
         workers=workers,
     )
 
-    session = make_nse_session()
+    if session is None:
+        session = make_nse_session()
 
     def fetch_one(trade_date: date) -> list[dict]:
         zip_bytes = download_bhav_zip(session, trade_date)
@@ -664,7 +689,7 @@ def main() -> None:
 
     log.info("tickers_needing_backfill", count=len(needs_backfill), tickers=needs_backfill)
 
-    # Phase 4: Download and insert
+    # Phase 4: Download and insert (reuse the Phase 2 session — one cookie fetch)
     log.info("phase4_backfill", start=start.isoformat(), end=end.isoformat())
     results = run_backfill(
         engine,
@@ -673,6 +698,7 @@ def main() -> None:
         end=end,
         workers=args.workers,
         dry_run=args.dry_run,
+        session=session,
     )
 
     # Phase 5: Summary
