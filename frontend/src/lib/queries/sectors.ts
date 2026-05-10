@@ -295,3 +295,67 @@ export async function getDaysInStateForAllSectors(): Promise<DaysInStateRow[]> {
     GROUP BY ss.sector_name
   `
 }
+
+export type PlaybookEntry = {
+  event_id: string
+  event_label: string
+  event_description: string
+  start_date: string
+  end_date: string
+  leaders: Array<{ sector_name: string; avg_rs: number }>
+  laggards: Array<{ sector_name: string; avg_rs: number }>
+}
+
+const RISK_OFF_EVENT_IDS = ['covid-crash-2020', 'rate-hike-cycle-2022', 'adani-crisis-2023']
+const RISK_ON_EVENT_IDS  = ['election-2024']
+
+function pickEvents(regimeState: string) {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { MARKET_EVENTS } = require('@/lib/event-library') as typeof import('@/lib/event-library')
+  const lower = regimeState.toLowerCase()
+  const isRiskOff = lower.includes('risk-off') || lower.includes('cautious')
+  const isRiskOn  = lower.includes('risk-on')  || lower.includes('constructive')
+  if (isRiskOff) return MARKET_EVENTS.filter((e: { id: string }) => RISK_OFF_EVENT_IDS.includes(e.id))
+  if (isRiskOn)  return MARKET_EVENTS.filter((e: { id: string }) => RISK_ON_EVENT_IDS.includes(e.id))
+  return MARKET_EVENTS.slice(-3)
+}
+
+export async function getSectorPlaybook(regimeState: string): Promise<PlaybookEntry[]> {
+  const events = pickEvents(regimeState).slice(0, 3)
+  if (events.length === 0) return []
+
+  const results = await Promise.all(
+    events.map(async (event: { id: string; label: string; description: string; startDate: string; endDate: string }) => {
+      const [leadRows, lagRows] = await Promise.all([
+        sql<Array<{ sector_name: string; avg_rs: number }>>`
+          SELECT sector_name, AVG(bottomup_rs_3m_nifty500::float)::float AS avg_rs
+          FROM atlas.atlas_sector_metrics_daily
+          WHERE date BETWEEN ${event.startDate}::date AND ${event.endDate}::date
+            AND bottomup_rs_3m_nifty500 IS NOT NULL
+          GROUP BY sector_name
+          ORDER BY avg_rs DESC
+          LIMIT 3
+        `,
+        sql<Array<{ sector_name: string; avg_rs: number }>>`
+          SELECT sector_name, AVG(bottomup_rs_3m_nifty500::float)::float AS avg_rs
+          FROM atlas.atlas_sector_metrics_daily
+          WHERE date BETWEEN ${event.startDate}::date AND ${event.endDate}::date
+            AND bottomup_rs_3m_nifty500 IS NOT NULL
+          GROUP BY sector_name
+          ORDER BY avg_rs ASC
+          LIMIT 3
+        `,
+      ])
+      return {
+        event_id:          event.id,
+        event_label:       event.label,
+        event_description: event.description,
+        start_date:        event.startDate,
+        end_date:          event.endDate,
+        leaders:           leadRows,
+        laggards:          lagRows,
+      } satisfies PlaybookEntry
+    }),
+  )
+  return results
+}
