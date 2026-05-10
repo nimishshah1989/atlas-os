@@ -284,8 +284,8 @@ def _compute_traded_value_weight(df: pd.DataFrame) -> pd.Series:
     """
     vol = pd.to_numeric(df.get("avg_volume_20"), errors="coerce")
     close = pd.to_numeric(df.get("close_approx"), errors="coerce")
-    weight = vol * close
-    weight = weight.where(weight > 0, other=np.nan)
+    weight = vol * close  # type: ignore[operator]
+    weight = weight.where(weight > 0, other=np.nan)  # type: ignore[union-attr]
     return weight
 
 
