@@ -1,11 +1,15 @@
 """Atlas ETF universe builder.
 
-Per methodology Section 3.1: top 100 ETFs by 60-day median traded value
-(close × volume) on NSE. Theme classification per methodology 8.2:
+Per methodology Section 3.1: domestic Indian ETFs by 60-day median traded
+value (close × volume) on NSE. Theme classification per methodology 8.2:
 
 - **Broad** — tracks Nifty 50/100/500/Next 50 / Sensex
 - **Sectoral** — tracks a single NSE sector (Bank, IT, Pharma, etc.)
-- **Thematic** — everything else (factor, smart-beta, gold, international)
+- **Thematic** — everything else (factor, smart-beta, gold, liquid, debt)
+
+Domestic filter: ``country='IN' AND exchange='NSE'`` — excludes US-listed
+India ETFs (INDA, INDY, SMIN) and all foreign ETFs that were previously
+included in the top-100 traded-value universe without a country filter.
 
 Note (verified 2026-05-06 against Supabase):
 - ``de_etf_master.name`` is the ETF name column (not ``etf_name``)
@@ -26,7 +30,7 @@ from atlas.db import get_engine
 log = structlog.get_logger()
 
 
-_TOP_100_BY_TRADED_VALUE_QUERY = """
+_DOMESTIC_BY_TRADED_VALUE_QUERY = """
     WITH recent_volume AS (
         SELECT
             o.ticker,
@@ -49,8 +53,9 @@ _TOP_100_BY_TRADED_VALUE_QUERY = """
     FROM public.de_etf_master m
     JOIN recent_volume rv ON rv.ticker = m.ticker
     WHERE m.is_active = TRUE
+      AND m.country = 'IN'
+      AND m.exchange = 'NSE'
     ORDER BY rv.median_traded_value_60d DESC
-    LIMIT 100
 """
 
 
@@ -121,10 +126,10 @@ def _classify_theme(etf_name: str | None, category: str | None) -> tuple[str, st
 
 
 def build_etf_universe(engine: Engine | None = None) -> list[dict[str, object]]:
-    """Return top-100 ETF universe rows. Asserts count == 100."""
+    """Return domestic Indian ETF universe rows. Asserts count >= 20."""
     eng = engine or get_engine()
     with eng.connect() as conn:
-        raw = conn.execute(text(_TOP_100_BY_TRADED_VALUE_QUERY)).mappings().all()
+        raw = conn.execute(text(_DOMESTIC_BY_TRADED_VALUE_QUERY)).mappings().all()
 
     rows: list[dict[str, object]] = []
     for r in raw:
@@ -143,10 +148,10 @@ def build_etf_universe(engine: Engine | None = None) -> list[dict[str, object]]:
             }
         )
 
-    if len(rows) != 100:
+    if len(rows) < 20:
         raise AssertionError(
-            f"Expected 100 ETFs, got {len(rows)}. "
-            "Check de_etf_ohlcv volume coverage and de_etf_master row count."
+            f"Expected at least 20 domestic Indian ETFs, got {len(rows)}. "
+            "Check de_etf_ohlcv coverage for country=IN, exchange=NSE tickers."
         )
 
     theme_counts: dict[str, int] = {}
@@ -158,9 +163,22 @@ def build_etf_universe(engine: Engine | None = None) -> list[dict[str, object]]:
 
 
 def populate_universe_etfs(engine: Engine | None = None) -> int:
-    """Insert the 100-ETF universe into ``atlas_universe_etfs``."""
+    """Insert the domestic Indian ETF universe into ``atlas_universe_etfs``.
+
+    Also soft-deletes any previously active rows for tickers no longer in the
+    domestic universe (e.g. foreign ETFs that slipped in without the country
+    filter).
+    """
     eng = engine or get_engine()
     rows = build_etf_universe(eng)
+    active_tickers = [r["ticker"] for r in rows]
+
+    retire_sql = text("""
+        UPDATE atlas.atlas_universe_etfs
+        SET effective_to = CURRENT_DATE, updated_at = NOW()
+        WHERE effective_to IS NULL
+          AND ticker != ALL(:keep_tickers)
+    """)
 
     insert_sql = text("""
         INSERT INTO atlas.atlas_universe_etfs
@@ -180,8 +198,10 @@ def populate_universe_etfs(engine: Engine | None = None) -> int:
     """)
 
     with eng.begin() as conn:
+        retired = conn.execute(retire_sql, {"keep_tickers": active_tickers})
+        log.info("universe_etfs_retired", count=retired.rowcount)
         for r in rows:
             conn.execute(insert_sql, {**r, "effective_from": Config.UNIVERSE_LOCK_DATE})
 
-    log.info("universe_etfs_populated", count=len(rows))
+    log.info("universe_etfs_populated", count=len(rows), tickers=active_tickers)
     return len(rows)
