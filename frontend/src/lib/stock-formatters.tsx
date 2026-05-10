@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { CHART_COLORS } from '@/lib/chart-colors'
 
 const DEPLOY_MAX = 1.2
 
@@ -7,7 +8,7 @@ export function PosSizeBar({ value }: { value: string | null }) {
   const n = parseFloat(value)
   const display = `${(n * 100).toFixed(0)}%`
   const widthPct = Math.min(100, (n / DEPLOY_MAX) * 100)
-  const color = n >= 0.7 ? '#2F6B43' : n >= 0.35 ? '#1D9E75' : n > 0 ? '#94a3b8' : '#ef4444'
+  const color = n >= 0.7 ? CHART_COLORS.rsLeader : n >= 0.35 ? CHART_COLORS.rsStrong : n > 0 ? CHART_COLORS.inkTertiary : CHART_COLORS.rsWeak
   return (
     <div className="flex items-center gap-2">
       <div className="w-12 h-1.5 bg-paper-rule rounded-full overflow-hidden">
@@ -22,7 +23,7 @@ export function RSPctileBar({ value }: { value: string | null }) {
   if (value == null) return <span className="font-mono text-xs text-ink-tertiary">—</span>
   const n = parseFloat(value)
   const display = (n * 100).toFixed(0)
-  const color = n >= 0.7 ? '#2F6B43' : n >= 0.4 ? '#f59e0b' : '#ef4444'
+  const color = n >= 0.7 ? CHART_COLORS.rsLeader : n >= 0.4 ? CHART_COLORS.rsConsolidating : CHART_COLORS.rsWeak
   return (
     <div className="flex items-center gap-2 justify-end">
       <div className="w-10 h-1.5 bg-paper-rule rounded-full overflow-hidden">

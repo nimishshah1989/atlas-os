@@ -14,6 +14,7 @@ import {
   Cell,
 } from 'recharts'
 import type { FullStockRow } from '@/lib/queries/stocks'
+import { bubbleColor } from '@/lib/chart-colors'
 
 type Period = '1M' | '3M' | '6M' | '1Y'
 type DisplayFilter = 'n100' | 'n500' | 'all'
@@ -36,15 +37,6 @@ const RET_CAP = 1.5    // 150%
 // Max annualized vol to include
 const VOL_CAP = 120    // 120%
 
-function stockColor(rs: string | null, mom: string | null): string {
-  if (rs === 'Leader') return '#2F6B43'
-  if (rs === 'Strong')
-    return (mom === 'Deteriorating' || mom === 'Collapsing') ? '#f59e0b' : '#1D9E75'
-  if (rs === 'Emerging')      return '#0ea5e9'
-  if (rs === 'Consolidating') return '#f59e0b'
-  if (rs === 'Average')       return '#94a3b8'
-  return '#ef4444'
-}
 
 type BubblePoint = {
   x: number   // annualized vol %
@@ -160,7 +152,7 @@ export function StockBubbleChart({ stocks }: { stocks: FullStockRow[] }) {
         symbol: s.symbol,
         company: s.company_name,
         sector: s.sector,
-        color: stockColor(s.rs_state, s.momentum_state),
+        color: bubbleColor(s.rs_state, s.momentum_state),
         rs_state: s.rs_state,
         mom_state: s.momentum_state,
       }]
@@ -244,10 +236,10 @@ export function StockBubbleChart({ stocks }: { stocks: FullStockRow[] }) {
         {[
           { color: '#2F6B43', label: 'Leader' },
           { color: '#1D9E75', label: 'Strong' },
-          { color: '#0ea5e9', label: 'Emerging' },
-          { color: '#f59e0b', label: 'Consolidating' },
-          { color: '#94a3b8', label: 'Average' },
-          { color: '#ef4444', label: 'Weak / Laggard' },
+          { color: '#25394A', label: 'Emerging' },
+          { color: '#B8860B', label: 'Consolidating' },
+          { color: '#8C8278', label: 'Average' },
+          { color: '#B0492C', label: 'Weak / Laggard' },
         ].map(l => (
           <div key={l.label} className="flex items-center gap-1.5">
             <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: l.color }} />

@@ -8,11 +8,14 @@ from unittest.mock import MagicMock
 sys.path.insert(0, ".")
 from scripts.etf_sector_backfill import (
     build_bhav_url,
+    build_master_upsert_params,
+    build_ohlcv_insert_params,
     download_bhav_zip,
     parse_bhav_date,
     parse_bhav_zip,
     safe_decimal,
     trading_dates,
+    verify_tickers,
 )
 
 
@@ -174,3 +177,125 @@ class TestDownloadBhavZip:
 
         result = download_bhav_zip(mock_session, date(2023, 1, 3), retry=0)
         assert result is None
+
+
+class TestVerifyTickers:
+    def _make_zip_bytes(self, symbols: list[str]) -> bytes:
+        lines = [
+            "SYMBOL,SERIES,OPEN,HIGH,LOW,CLOSE,LAST,PREVCLOSE,"
+            "TOTTRDQTY,TOTTRDVAL,TIMESTAMP,TOTALTRADES,ISIN"
+        ]
+        for sym in symbols:
+            lines.append(
+                f"{sym},EQ,100.00,102.00,99.00,101.50,101.50,100.20,"
+                f"50000,5075000.00,09-MAY-2026,500,INE001"
+            )
+        csv_content = "\n".join(lines)
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("bhav.csv", csv_content)
+        return buf.getvalue()
+
+    def test_found_and_missing_split(self):
+        zip_bytes = self._make_zip_bytes(["PHARMABEES", "AUTOBEES"])
+        found, missing = verify_tickers(
+            zip_bytes, {"PHARMABEES", "AUTOBEES", "NETFMETAL"}
+        )
+        assert "PHARMABEES" in found
+        assert "AUTOBEES" in found
+        assert "NETFMETAL" in missing
+
+    def test_all_present(self):
+        zip_bytes = self._make_zip_bytes(["PHARMABEES", "AUTOBEES"])
+        found, missing = verify_tickers(zip_bytes, {"PHARMABEES", "AUTOBEES"})
+        assert missing == set()
+        assert found == {"PHARMABEES", "AUTOBEES"}
+
+    def test_all_missing(self):
+        zip_bytes = self._make_zip_bytes([])
+        found, missing = verify_tickers(zip_bytes, {"PHARMABEES"})
+        assert found == set()
+        assert "PHARMABEES" in missing
+
+    def test_returns_disjoint_sets(self):
+        zip_bytes = self._make_zip_bytes(["PHARMABEES"])
+        found, missing = verify_tickers(zip_bytes, {"PHARMABEES", "NETFMETAL"})
+        assert found & missing == set()  # disjoint
+        assert found | missing == {"PHARMABEES", "NETFMETAL"}  # complete
+
+
+class TestBuildMasterUpsertParams:
+    def test_required_fields_present(self):
+        etf = {
+            "ticker": "PHARMABEES",
+            "name": "Nippon India ETF Nifty Pharma",
+            "sector": "Pharma",
+            "benchmark": "NIFTY PHARMA",
+        }
+        params = build_master_upsert_params(etf)
+        assert params["ticker"] == "PHARMABEES"
+        assert params["exchange"] == "NSE"
+        assert params["country"] == "IN"
+        assert params["currency"] == "INR"
+        assert params["is_active"] is True
+        assert params["source"] == "nse_bhav"
+
+    def test_sector_and_benchmark_forwarded(self):
+        etf = {
+            "ticker": "MOENERGY",
+            "name": "Motilal Oswal Nifty Energy ETF",
+            "sector": "Energy",
+            "benchmark": "NIFTY ENERGY",
+        }
+        params = build_master_upsert_params(etf)
+        assert params["sector"] == "Energy"
+        assert params["benchmark"] == "NIFTY ENERGY"
+
+    def test_missing_optional_fields_return_none(self):
+        etf = {"ticker": "TEST", "name": "Test ETF"}
+        params = build_master_upsert_params(etf)
+        assert params["sector"] is None
+        assert params["benchmark"] is None
+
+
+class TestBuildOhlcvInsertParams:
+    def test_maps_all_fields(self):
+        from decimal import Decimal
+        from datetime import date as date_type
+        row = {
+            "ticker": "PHARMABEES",
+            "date":   date_type(2023, 1, 3),
+            "open":   Decimal("101.00"),
+            "high":   Decimal("103.00"),
+            "low":    Decimal("100.00"),
+            "close":  Decimal("102.50"),
+            "volume": 50000,
+        }
+        params = build_ohlcv_insert_params(row)
+        assert params["ticker"] == "PHARMABEES"
+        assert params["date"]   == date_type(2023, 1, 3)
+        assert params["close"]  == Decimal("102.50")
+        assert params["volume"] == 50000
+
+    def test_preserves_decimal_type(self):
+        from decimal import Decimal
+        row = {
+            "ticker": "X", "date": date(2023, 1, 3),
+            "open": Decimal("1.00"), "high": Decimal("2.00"),
+            "low": Decimal("0.50"), "close": Decimal("1.50"),
+            "volume": 100,
+        }
+        params = build_ohlcv_insert_params(row)
+        assert isinstance(params["close"], Decimal)
+        assert isinstance(params["open"],  Decimal)
+
+    def test_none_prices_preserved(self):
+        # open/high/low can be None for some ETFs
+        row = {
+            "ticker": "X", "date": date(2023, 1, 3),
+            "open": None, "high": None, "low": None,
+            "close": Decimal("1.50"), "volume": 0,
+        }
+        params = build_ohlcv_insert_params(row)
+        assert params["open"] is None
+        assert params["high"] is None
