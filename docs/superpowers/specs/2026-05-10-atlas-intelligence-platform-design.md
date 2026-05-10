@@ -31,7 +31,7 @@ State chips never appear alone. They always show the most relevant scalar alongs
 - RS State → RS pctile: **`Leader · 89`**
 - Momentum State → period return: **`Accel · +3.2%`**
 - Risk State → realized vol: **`Low · 28%`**
-- Volume State → volume ratio: **`Expand · 1.4×`**
+- Volume State → volume ratio: **`Accum · 1.4×`**
 
 Implementation: `StateValuePair` component (chip left, scalar right, same line, monospaced scalar).
 
@@ -113,10 +113,11 @@ Used in: stocks, etfs, funds, sectors pages
 
 ### `ForwardReturnChart.tsx`
 ```
-Props: filterState (active screener filter combination), period ('1M'|'3M'|'6M'|'1Y')
-Renders: violin/box-whisker chart of historical forward returns for stocks matching this filter
-Data: queries state history + subsequent returns for all matching historical periods
-Used in: stocks page (below screener), ETF page
+Props: filterState (active screener filter combination), instrumentType ('stock'|'etf'|'fund')
+Note: no 'period' prop — chart always renders all 4 forward windows (1M/3M/6M/1Y) simultaneously as a grouped box-whisker. Period selector on the parent page does NOT affect this chart.
+Renders: violin/box-whisker chart of historical forward returns for stocks matching this filter, 4 grouped windows, coloured by regime
+Data: reads from atlas_forward_return_precompute via filter_hash lookup; on-demand fallback if hash not found
+Used in: stocks page Band 3, ETF page Band 3
 ```
 
 ### `StateJourneyTimeline.tsx`
@@ -130,8 +131,10 @@ Used in: stock deep dive, ETF deep dive, fund deep dive history tab
 
 ### `RRGChart.tsx` (Relative Rotation Graph)
 ```
-Props: sectors[] with {name, rs_ratio, rs_momentum, momentum_state, constituent_count}
-Renders: D3 scatter chart, 4 quadrants (Leading/Weakening/Improving/Lagging)
+Props: sectors[] with {name, rs_score, rs_momentum, momentum_state, constituent_count}
+  rs_score: sourced from atlas_sector_metrics_daily.bottomup_rs_3m_nifty500 (normalized around 0 for chart centering)
+  rs_momentum: computed via self-join CTE (bottomup_rs_3m_nifty500_today - bottomup_rs_3m_nifty500_20d_ago)
+Renders: D3 scatter chart, 4 quadrants (Leading=top-right / Weakening=bottom-right / Improving=top-left / Lagging=bottom-left)
 Each sector: dot + 4-week trailing arrow showing direction
 Click: navigates to sector deep dive
 Used in: sectors page (Rotation View tab)
@@ -199,7 +202,7 @@ Maintained as a config file — never hardcoded in components.
 | LEADER / STRONG | count of rs_state in (Leader,Strong) | Filters screener to those states |
 | IMPROVING MOM | count of momentum_state in (Accelerating,Improving) | Filters screener |
 | ABOVE 30W MA | count of above_30w_ma=true | Filters screener |
-| VOL EXPANDING | count of volume_state=Expanding | Filters screener |
+| VOL EXPANDING | count of volume_state IN ('Accumulation','Steady-Buying') | Filters screener to those states |
 | MEDIAN RS PCTILE | median rs_pctile_3m across universe | No filter |
 | MEDIAN {period} RET | median return for selected period | No filter |
 | MEDIAN VOL 63D | median realized_vol_63 | No filter |
@@ -228,7 +231,7 @@ All tiles show delta vs prior week in small secondary text. All have MetricToolt
 - Momentum Distribution: Accelerating/Improving/Flat/Deteriorating/Collapsing bars with counts
 - Investable Today: top 3-4 stocks passing all 6 gates, shown as mini cards (ticker, sector, RS pctile, period return, size %)
 
-**Band 3 — Forward Return Distribution (collapsible)**
+**Band 3 — Forward Return Distribution (collapsible)** *(ships Sprint 5 — show "Historical signal coming soon" placeholder in Sprints 1-4)*
 A `ForwardReturnChart` showing: for all stocks currently passing the active screener filters, what were the historical 1M / 3M / 6M / 1Y forward returns? Box-whisker per period, coloured by regime (green = Risk-On, amber = Cautious, red = Risk-Off). Shows median, IQR, hit rate (% positive). Updates as user changes filters. Answers: "if this signal has worked before, what has it produced?"
 
 **Band 4 — Screener Table**
@@ -243,13 +246,13 @@ Columns:
 | RISK | StateValuePair(risk_state, realized_vol_63) | Chip + vol % |
 | VOL | StateValuePair(volume_state, volume_expansion) | Chip + ratio |
 | {period} RET | ret_1w / ret_1m / ret_3m / ret_6m / ret_12m | Selected by period toggle |
-| RS ₹ | rs_pctile_{period} | Bar visualization |
-| RS GOLD | rs_{period}_tier_gold | Signed number, color-coded |
+| RS ₹ | rs_pctile_{period} — falls back to `rs_pctile_3m` with "(3M)" label for 6M/1Y | Bar visualization |
+| RS GOLD | `rs_{period}_tier_gold` (stocks table column name) — signed number, color-coded; DB only has 1w/1m/3m variants; for 6M/1Y period selector use `rs_3m_tier_gold` with "(3M)" label; null shown as `—` |
 | EXTENSION | extension_pct | % above/below EMA 200 |
 | VOL 63D | realized_vol_63 | Annualised % |
 | DRAWDOWN | drawdown_ratio_252 | vs benchmark drawdown |
 | DAYS IN STATE | computed: days since last rs_state change | Integer |
-| GATES | 6 dots (history, liquidity, weinstein, stage1, strength, direction) | Green/grey per gate pass |
+| GATES | 6 dots (history, liquidity, weinstein, stage1, strength, direction) — history/liquidity/weinstein/stage1 from `atlas_stock_states_daily`; strength/direction from `atlas_stock_decisions_daily` (requires JOIN) | Green/grey per gate pass |
 | DEPLOY % | position_size_pct | Bar visualization |
 | DECISION | derived from states + gates | ENTER / WATCH / PASS / EXIT |
 | + | Add to portfolio | Icon button |
@@ -291,7 +294,7 @@ Intelligence panel:
 - Gold vs ₹ RS comparison: which benchmark is rewarding more right now, with historical context
 - CommentaryBlock: cross-theme RS narrative, defensive vs equity signal, investable count context
 
-**Band 3 — Forward Return Distribution** (same pattern as stocks, ETF-filtered)
+**Band 3 — Forward Return Distribution** *(ships Sprint 5 — placeholder in Sprints 1-4)* (same pattern as stocks, ETF-filtered)
 
 **Band 4 — Screener**
 | Column | Data |
@@ -301,10 +304,11 @@ Intelligence panel:
 | RS STATE | StateValuePair(rs_state, rs_pctile) |
 | MOMENTUM | StateValuePair(momentum_state, ret_period) |
 | RISK | StateValuePair(risk_state, realized_vol_63) |
+| VOL | StateValuePair(volume_state, volume_expansion) — volume_state is computed for ETFs; include chip |
 | {period} RET | period-selected return |
-| RS ₹ | rs_{period}_benchmark, color bar |
-| RS GOLD | rs_{period}_benchmark_gold |
-| RS PCTILE | rs_pctile_{period}, bar |
+| RS ₹ | `rs_{period}_benchmark` (ETF DB column name, distinct from stocks' `rs_{period}_tier`) — color bar |
+| RS GOLD | `rs_{period}_benchmark_gold` (ETF DB column name, distinct from stocks' `rs_{period}_tier_gold`) — ETF DB only stores 1w/1m/3m Gold variants; 6M/1Y period selector shows `—` (no Gold data at those windows) |
+| RS PCTILE | `rs_pctile_{period}`, bar |
 | EXTENSION | extension_pct |
 | REALIZED VOL | realized_vol_63 |
 | DRAWDOWN RATIO | drawdown_ratio_252 |
@@ -328,12 +332,15 @@ Full backend exists (4 tables, ~60 columns). Zero frontend today.
 
 **Band 1 — 7 Metric Tiles**
 RECOMMENDED (18) · HOLD (64) · LEADER/STRONG NAV (82) · ALIGNED COMPOSITION (112) · STRONG HOLDINGS (94) · MEDIAN {period} RET · MEDIAN RS PCTILE
+Note: nav_state DB values carry ` NAV` suffix (e.g., `'Leader NAV'`, `'Strong NAV'`) — filter using exact values, not bare `'Leader'`/`'Strong'`
+
+**Period selector note:** `atlas_fund_metrics_daily` has `ret_1m / ret_3m / ret_6m / ret_12m` only — no `ret_1w`. The Funds page period selector is **4M / 3M / 6M / 1Y** (omit 1W). Similarly, `rs_{period}_category` exists for 1m/3m/6m only; for 1Y period selector, fall back to `rs_6m_category` with "(6M)" label. All screener columns show `—` for any missing period.
 
 **Band 2 — Bubble Chart + Intelligence Panel**
 - X: realized_vol_63
 - Y: selected-period return (ret_1m / ret_3m / ret_6m / ret_12m)
 - Size: drawdown_ratio_252 (inverted: larger bubble = lower drawdown = better risk profile)
-- Colour: nav_state (Leader/Strong/Average/Weak/Laggard/Emerging — same color semantic as stocks)
+- Colour: nav_state (values: `'Leader NAV'`/`'Strong NAV'`/`'Average NAV'`/`'Weak NAV'`/`'Laggard NAV'`/`'Emerging NAV'` — strip ` NAV` suffix for color-map lookup against the standard RS state color table)
 - Filter chips: All / Equity / Hybrid / Debt / Large Cap / Mid Cap / Flexi Cap / Recommended
 
 Intelligence panel:
@@ -341,7 +348,7 @@ Intelligence panel:
 - Category performance: which categories are leading on RS pctile
 - CommentaryBlock: fund universe quality, recommendation distribution context, historical forward return for current Recommended funds
 
-**Band 3 — Forward Return Distribution** (filtered to Recommended funds historically)
+**Band 3 — Forward Return Distribution** *(ships Sprint 5 — placeholder in Sprints 1-4)* (filtered to Recommended funds historically)
 
 **Band 4 — Screener**
 | Column | Data |
@@ -358,7 +365,7 @@ Intelligence panel:
 | DRAWDOWN RATIO | drawdown_ratio_252 |
 | WEEKS IN STATE | weeks_in_current_state |
 | GATES | 4 dots (performance, sectors, stocks, market) |
-| RECOMMENDATION | chip (Recommended/Hold/Reduce/Exit) + trigger flag if entry/exit triggered this week |
+| RECOMMENDATION | chip (Recommended/Hold/Reduce/Exit) + trigger flag if entry/exit triggered this week; `DISLOCATION_SUSPENDED` state shown as grey chip with tooltip "Market dislocation — recommendation suspended" |
 | + | Add to portfolio |
 
 **Fund deep dive:**
@@ -395,14 +402,14 @@ Clickable entries navigate to that sector's decision table row.
 - CommentaryBlock above table: rotation signal narrative + pattern match + action signal
 
 **Tab 3 — State History (existing, enhanced)**
-- Shows RS states (Leader/Strong/etc.) not just Overweight/Neutral decisions
+- Shows `bottomup_rs_state` (Leader/Strong/etc. — column name in `atlas_sector_states_daily`, not `rs_state`) alongside Overweight/Neutral decisions
 - Range selector: 1M / 3M / 6M / 1Y / 3Y — not hardcoded
 - Event markers: vertical lines for COVID crash, 2022 rate cycle, 2023 Adani, 2024 election, Budget dates
 
 **Tab 4 — Relative Rotation Graph (new)**
-X axis: RS ratio vs Nifty 500 (rs_3m_benchmark normalized)
-Y axis: RS momentum (4-week rate of change of RS ratio)
-Quadrants: Leading (top-right) / Weakening (top-left) / Improving (bottom-right) / Lagging (bottom-left)
+X axis: `bottomup_rs_3m_nifty500` — the sector's bottom-up RS vs Nifty 500 (from `atlas_sector_metrics_daily`). Normalized around 0 for chart centering.
+Y axis: RS momentum — computed as `(bottomup_rs_3m_nifty500_today - bottomup_rs_3m_nifty500_20d_ago)`. Self-join in the sectors query CTE. New sectors with <20 days of history will have NULL rs_momentum and are excluded from the RRG with an "insufficient history" note.
+Quadrants: Leading (top-right, high RS + rising momentum) / Weakening (bottom-right, high RS + falling momentum) / Improving (top-left, low RS + rising momentum) / Lagging (bottom-left, low RS + falling momentum)
 Each sector: labelled dot + 4-week trailing arrow showing trajectory direction
 Bubble size: constituent count
 Colour: momentum_state
@@ -419,6 +426,7 @@ This is the institutional rotation tool — tells you which sectors to enter, ho
 
 ## 8. Regime Page — Targeted Additions
 
+**Route:** `/` (root — this is the app homepage, not `/regime`)  
 Current regime page is the strongest in the product. Additions only.
 
 **Duration context (prominent)**
@@ -438,7 +446,7 @@ Rule-based early warning: "3 of 5 early-warning breadth signals have triggered (
 Add named event markers to existing breadth charts (COVID, rate cycles, election dates). The charts already exist — this is annotation only.
 
 **Regime-to-screener links**
-Breadth numbers (e.g., "214 stocks vol expanding") link to the stocks screener filtered to that state. Makes regime page a navigation hub.
+Breadth numbers (e.g., "214 stocks in Accumulation state") link to the stocks screener filtered to that state. Makes regime page a navigation hub.
 
 ---
 
@@ -466,8 +474,9 @@ Breadth numbers (e.g., "214 stocks vol expanding") link to the stocks screener f
 **What it answers:** "Is breadth leading or lagging price? Is deterioration starting? What has this breadth reading historically preceded?"
 
 ### 9e. Market Structure Treemap
-**Location:** Stocks page (additional view, accessible via "Market Map" tab above screener)  
-**How it works:** D3 treemap. Outer = sector (size = constituent count or AUM). Inner = stocks (size = market cap, colour = RS state). Click sector → zoom to constituents. Click stock → deep dive.  
+**Location:** Stocks page (additional view, accessible via view toggle above Band 2 — ships in Sprint 5)  
+**Sprint 2 impact:** The stocks page layout should reserve a view toggle slot above the bubble chart (two-option toggle: "Bubble Chart" / "Market Map"). The Market Map slot shows a "Coming soon" placeholder in Sprints 2-4. The placeholder avoids a layout revision when Sprint 5 ships.  
+**How it works:** D3 treemap. Outer = sector (size = constituent count). Inner = stocks (size = `position_size_pct`, colour = RS state). Click sector → zoom to constituents. Click stock → deep dive.  
 **What it answers:** "Where is strength and weakness concentrated in the market right now? In one visual."
 
 ### 9f. Event Library
@@ -558,23 +567,30 @@ The commentary is always honest about signal quality. Weak or ambiguous signals 
 - [ ] `InstrumentPageShell` + `MetricTileRow` (replace copy-pasted header bands)
 - [ ] `screener-utils.tsx` + `bubble-chart-utils.ts`
 - [ ] URL-driven period + benchmark (lift from component state to URL params)
-- [ ] Bubble chart responsive sizing fix (aspect-ratio container)
+- [ ] URL param validation: allowlist check for `?period` and `?benchmark` in all Page server components
+- [ ] Bubble chart responsive sizing fix (aspect-ratio container, not hardcoded height)
+- [ ] **Portfolio monitoring bug fix:** diagnose and fix equity curve + drawdown chart empty data in `/portfolios/[id]`
 
 ### Sprint 2 — Stocks + ETF Page Upgrade
 - [ ] Stocks screener: add 8 new columns (ret_1w, ret_6m, vol_63, extension, drawdown, gold RS, days_in_state, gates)
+- [ ] Stocks screener: column show/hide (settings popover, localStorage persistence — moved from Sprint 6)
 - [ ] Stocks screener: sector filter dropdown
 - [ ] Stocks screener: StateValuePair on all state chips
-- [ ] Stocks screener: expandable row → StateJourneyTimeline (90D)
+- [ ] Stocks screener: expandable row → StateJourneyTimeline (90D compact variant). Fetches on row-expand via a lightweight `/api/states-compact?symbol=X&days=90` route. Each expand is an independent request — no pre-loading. Compact variant: 4 state lanes, no price overlay, no event markers (those are Sprint 5 deep dive features). Indexed on (instrument_id, date) — query is fast.
 - [ ] Stocks intelligence panel: RS state distribution, momentum distribution, investable cards
-- [ ] Stocks CommentaryBlock: write buildCommentary() for stocks
-- [ ] ETF screener: same column additions, StateValuePair, expandable row
-- [ ] ETF CommentaryBlock
+- [ ] Stocks CommentaryBlock: write buildCommentary() as condition array `{ test, generate }[]` (not if/else chain)
+- [ ] Stocks CommentaryBlock: unit tests for every condition branch (given data → expected output lines)
+- [ ] days_in_state: implement as CTE in getAllStocks() (not correlated subquery). Run EXPLAIN ANALYZE; if >100ms, precompute nightly instead.
+- [ ] ETF screener: same column additions, StateValuePair, expandable row, column show/hide
+- [ ] ETF CommentaryBlock (same condition array pattern)
 - [ ] Metric tiles (Band 1) full implementation for both pages
 
 ### Sprint 3 — Sectors Page Upgrade
 - [ ] Tab navigation (Rotation Matrix / Decision Table / State History / RRG)
 - [ ] StateTransitionCard above tabs
 - [ ] RRGChart component + data query
+  - RRG X-axis = `bottomup_rs_3m_nifty500` (already in DB)
+  - RRG Y-axis = rs_momentum = self-join on `atlas_sector_metrics_daily` at T vs T-20, compute delta. Add to sectors query as a CTE, not a separate endpoint.
 - [ ] BreadthWaterfall component + event annotations
 - [ ] Sector decision table: StateValuePair, new columns, ENTER hover popover
 - [ ] State history: range selector, event markers
@@ -582,11 +598,12 @@ The commentary is always honest about signal quality. Weak or ambiguous signals 
 - [ ] Sector CommentaryBlock
 
 ### Sprint 4 — Funds Page
+- [ ] **Pre-flight:** Verify `mstar_id` is populated in `atlas_universe_funds` table — this is the fund deep dive route key (`/funds/[mstar_id]`). If unpopulated, use `scheme_name` slug as fallback route key.
 - [ ] Funds page shell with all 4 bands
 - [ ] Funds screener with all columns
 - [ ] Funds bubble chart
 - [ ] Fund deep dive: 3-lens view, decision history timeline
-- [ ] Fund CommentaryBlock
+- [ ] Fund CommentaryBlock (condition array pattern, same as stocks)
 
 ### Sprint 5 — Regime Page + Historical Intelligence
 - [ ] Regime: duration context, precedents card, transition signal card, event annotations
@@ -596,7 +613,6 @@ The commentary is always honest about signal quality. Weak or ambiguous signals 
 - [ ] State transition probability queries
 
 ### Sprint 6 — Polish
-- [ ] Column show/hide in screeners
 - [ ] Deep dive history tab range selectors (not hardcoded 6M)
 - [ ] All remaining MetricTooltip integrations
 - [ ] Add to Portfolio integration from screener rows
@@ -616,14 +632,75 @@ The commentary is always honest about signal quality. Weak or ambiguous signals 
 
 ---
 
-## 15. Open Questions for Review
+## 15. ForwardReturnDistribution — Precompute Schema
 
-1. **Forward Return Distribution chart** — data query strategy: precompute nightly vs query on demand. On-demand query against 10Y state history could be slow for complex filter combinations. Recommend nightly precompute for common combinations (Leader+Accel+Low / Leader+Flat+Normal / etc.) with on-demand fallback.
+The `ForwardReturnChart` requires historical forward returns for arbitrary filter combinations.
+On-demand computation against 10Y × 1000+ stocks is too slow for interactive use. This section
+defines the precompute approach agreed during CEO review.
+
+### Precompute table
+
+```sql
+CREATE TABLE atlas.atlas_forward_return_precompute (
+    filter_hash        VARCHAR(16)   NOT NULL,  -- SHA-256 prefix (16 hex chars = 64 bits entropy)
+    period             VARCHAR(4)    NOT NULL,  -- '1M', '3M', '6M', '1Y'
+    instrument_type    VARCHAR(8)    NOT NULL,  -- 'stock', 'etf', 'fund'
+    regime             VARCHAR(20),             -- NULL = all regimes, or specific regime
+    sample_count       INTEGER       NOT NULL,
+    median_return      NUMERIC(10,4),
+    p25_return         NUMERIC(10,4),
+    p75_return         NUMERIC(10,4),
+    hit_rate_pct       NUMERIC(6,2),           -- % of occurrences with positive return
+    last_occurrence    DATE,
+    computed_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (filter_hash, period, instrument_type, regime)
+);
+CREATE INDEX atlas_forward_return_precompute_computed_at_idx
+    ON atlas.atlas_forward_return_precompute (computed_at);  -- nightly job staleness scan
+```
+
+### Filter hash definition
+
+The filter combination is serialized as a canonically sorted JSON string. Key ordering must be deterministic:
+```python
+import hashlib, json
+
+def compute_filter_hash(filters: dict) -> str:
+    # Sort keys alphabetically for canonical serialization
+    canonical = json.dumps(filters, sort_keys=True, separators=(',', ':'))
+    return hashlib.sha256(canonical.encode()).hexdigest()[:16]  # 16-char prefix = 64 bits; sufficient for ~175 precomputed combinations
+
+# Example:
+filters = {'momentum_state': 'Accelerating', 'rs_state': 'Leader', 'risk_state': 'Low'}
+hash = compute_filter_hash(filters)  # always same value regardless of key insertion order
+```
+
+Minimum sample gate: if `sample_count < 10`, do not display distribution. Show "Insufficient historical data (N={sample_count}) for this filter combination" in the chart area.
+
+### Nightly precompute job
+
+`atlas/compute/forward_return_cache.py` — runs nightly after states pipeline:
+1. Enumerate "common" filter combinations: all single-state filters (7 RS × 5 Mom × 5 Risk = 175; Risk states: Low/Normal/Elevated/High/Below Trend) + common multi-state combinations used in practice
+2. For each combination: query `atlas_stock_states_daily` for all historical dates matching, join with `atlas_stock_metrics_daily` at T+21, T+63, T+126, T+252 for forward returns
+3. Compute distribution stats (p25, median, p75, hit rate)
+4. Upsert into `atlas_forward_return_precompute`
+
+On-demand fallback: if `filter_hash` not found in precompute table, compute on-demand with a 5-second timeout. Return empty chart with "Computing historical distribution..." message if timeout exceeded.
+
+### Sprint task
+
+This requires Migration 026 + the nightly job. Both must ship in Sprint 5, migrate-first.
+
+---
+
+## 16. Open Questions for Review
+
+1. ~~**Forward Return Distribution chart** — data query strategy.~~ **RESOLVED (CEO review):** Section 15 defines the precompute table schema, nightly job, filter hash function, and on-demand fallback. Migration 026 required in Sprint 5.
 
 2. **Market Structure Treemap** — market cap data: stocks currently do not have market cap in the Atlas DB. **Decision: use `position_size_pct` as bubble size for v1.** This reflects the strategy's conviction weighting, which is arguably more useful than raw market cap for a relative-strength tool. Market cap can be added in a future migration if needed.
 
-3. **Commentary engine ownership** — **Decision: hybrid.** Current-data sentences run client-side (data already loaded in page props). Historical context cards (transition probabilities, forward return lookups, precedent queries) run server-side as a dedicated `getCommentaryContext(instrumentType, currentState)` async function called during page server-rendering. This avoids client-side DB queries and keeps the commentary deterministic at render time.
+3. **Commentary engine ownership** — **Decision: hybrid.** `getCommentaryContext(instrumentType, currentState)` is called in the **Page server component** (RSC), not in an API route or client component. Its output is passed as props to `CommentaryBlock` (a client component). Historical context cards arrive fully-formed at SSR time — no client-side DB queries, no hydration mismatch. Current-data sentences are computed client-side from page props already in memory.
 
-4. **Days in state** — computed as a subquery in `getAllStocks()`. The query logic: `MIN(date) WHERE the rs_state first became current value` using LAG window function over last 90 days of state history. This adds ~50ms to the query. Acceptable given the value.
+4. **Days in state** — computed as a CTE in `getAllStocks()` (not a correlated subquery). The correct query logic: use a window function to find the most recent date when the rs_state *changed from a different value*, then compute `CURRENT_DATE - that_date`. Do NOT bound the scan to 90 days — a stock in Leader state for 120 days would show 90 otherwise (wrong). The CTE scans full `atlas_stock_states_daily` for the instrument, applies `LAG(rs_state) OVER (PARTITION BY instrument_id ORDER BY date)` to identify state-change rows, then picks `MAX(change_date) WHERE rs_state = current_rs_state`. This adds ~50-100ms; run EXPLAIN ANALYZE in Sprint 2. If >100ms, precompute nightly as `state_since_date` column.
 
 5. **State Journey Timeline — 5Y data volume** — 5 years × 250 trading days = 1,250 rows per instrument. For the screener's expandable row (90-day version), 90 rows. Both are fast. The 5Y version in deep dives should use a lazy-load pattern (loads when History tab is selected, not on page mount).
