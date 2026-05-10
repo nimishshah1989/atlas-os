@@ -57,9 +57,9 @@ export function StockSnapshotTiles({ stock }: { stock: StockRowWithSector }) {
         color={pctColor(stock.ret_6m)}
       />
       <Tile
-        label="RS vs Nifty500"
-        value={pct(stock.rs_3m_nifty500)}
-        color={pctColor(stock.rs_3m_nifty500)}
+        label="α 3M vs N500"
+        value={pct(stock.alpha_3m)}
+        color={pctColor(stock.alpha_3m)}
       />
       <Tile
         label="Weinstein"

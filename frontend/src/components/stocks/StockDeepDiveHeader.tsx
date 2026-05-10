@@ -42,7 +42,7 @@ export function StockDeepDiveHeader({ stock }: { stock: StockRowWithSector }) {
             {!stock.in_nifty_100 && stock.in_nifty_500 && <IndexBadge label="Nifty 500" />}
           </div>
           <div className="flex items-center gap-5 font-sans text-xs text-ink-tertiary">
-            {stock.position_size_pct && (
+            {stock.position_size_pct != null && parseFloat(stock.position_size_pct) > 0 && (
               <span>
                 Pos Size:{' '}
                 <span className="font-mono font-semibold text-ink-primary">

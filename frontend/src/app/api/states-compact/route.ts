@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
       JOIN atlas.atlas_universe_stocks u ON u.instrument_id = s.instrument_id
       WHERE u.symbol = ${symbol}
         AND u.effective_to IS NULL
-        AND s.date >= CURRENT_DATE - (${days} || ' days')::interval
+        AND s.date >= CURRENT_DATE - INTERVAL '1 day' * ${days}
       ORDER BY s.date ASC
     `
     return NextResponse.json({ rows })
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     SELECT date, rs_state, momentum_state, risk_state, volume_state
     FROM atlas.atlas_etf_states_daily
     WHERE ticker = ${ticker!}
-      AND date >= CURRENT_DATE - (${days} || ' days')::interval
+      AND date >= CURRENT_DATE - INTERVAL '1 day' * ${days}
     ORDER BY date ASC
   `
   return NextResponse.json({ rows })

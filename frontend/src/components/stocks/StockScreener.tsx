@@ -36,17 +36,24 @@ const CHIPS: { key: FilterChip; label: string }[] = [
 
 // Optional columns. 1W, 6M, 12M visible by default.
 const OPTIONAL_COLS: ColumnDef[] = [
-  { key: 'ret_1d',        label: '1D',        defaultVisible: false },
-  { key: 'ret_1w',        label: '1W',        defaultVisible: true },
-  { key: 'ret_6m',        label: '6M',        defaultVisible: true },
-  { key: 'ret_12m',       label: '12M',       defaultVisible: true },
-  { key: 'rs_pctile_1w',  label: 'RS 1W',     defaultVisible: false },
-  { key: 'extension_pct', label: 'Ext %',     defaultVisible: false },
-  { key: 'vol_63',        label: 'Vol (63D)', defaultVisible: false },
-  { key: 'drawdown',      label: 'Drawdown',  defaultVisible: false },
-  { key: 'days_in_state', label: 'Days',      defaultVisible: false },
-  { key: 'alpha_3m',     label: 'α 3M',      defaultVisible: false },
-  { key: 'alpha_6m',     label: 'α 6M',      defaultVisible: false },
+  { key: 'ret_1d',          label: '1D',          defaultVisible: false },
+  { key: 'ret_1w',          label: '1W',          defaultVisible: true },
+  { key: 'ret_6m',          label: '6M',          defaultVisible: true },
+  { key: 'ret_12m',         label: '12M',         defaultVisible: true },
+  { key: 'rs_pctile_1w',   label: 'RS 1W',       defaultVisible: false },
+  { key: 'rs_pctile_1m',   label: 'RS 1M',       defaultVisible: false },
+  { key: 'extension_pct',  label: 'Ext %',       defaultVisible: false },
+  { key: 'ema_20_ratio',   label: 'EMA20 Ratio', defaultVisible: false },
+  { key: 'vol_63',         label: 'Vol (63D)',   defaultVisible: false },
+  { key: 'vol_ratio_63',   label: 'Vol Ratio',   defaultVisible: false },
+  { key: 'max_drawdown_252', label: 'Max DD',    defaultVisible: false },
+  { key: 'drawdown',       label: 'Drawdown',    defaultVisible: false },
+  { key: 'effort_ratio_63', label: 'Effort',     defaultVisible: false },
+  { key: 'volume_expansion', label: 'Vol Exp',   defaultVisible: false },
+  { key: 'ma_30w_slope_4w', label: '30W Slope',  defaultVisible: false },
+  { key: 'days_in_state',  label: 'Days',        defaultVisible: false },
+  { key: 'alpha_3m',       label: 'α 3M',        defaultVisible: false },
+  { key: 'alpha_6m',       label: 'α 6M',        defaultVisible: false },
 ]
 
 const COL_STORAGE_KEY = 'atlas-stock-screener-cols'
@@ -103,6 +110,8 @@ const GATE_LEGEND = [
   { key: 'D', field: 'direction_gate',      label: 'Direction', desc: 'Momentum is Accelerating or Improving' },
   { key: 'R', field: 'risk_gate',           label: 'Risk',      desc: 'Risk state is Low or Normal (not Elevated/High/Below Trend)' },
   { key: 'V', field: 'volume_gate',         label: 'Volume',    desc: 'Volume state is Accumulation or Steady-Buying' },
+  { key: 'G', field: 'sector_gate',         label: 'Sector',    desc: 'Sector is not in avoid list (sector momentum is healthy)' },
+  { key: 'M', field: 'market_gate',         label: 'Market',    desc: 'Market regime is Risk-On or Cautious (not Risk-Off)' },
 ]
 
 function GateDot({ value }: { value: boolean | null }) {
@@ -124,7 +133,7 @@ function GateDots({ row }: { row: StockRowWithSector }) {
       title={tooltipText}
     >
       {vals.map((v, i) => <GateDot key={i} value={v} />)}
-      <span className="ml-1 font-mono text-[10px] text-ink-tertiary tabular-nums">{passCount}/7</span>
+      <span className="ml-1 font-mono text-[10px] text-ink-tertiary tabular-nums">{passCount}/9</span>
     </span>
   )
 }
@@ -376,9 +385,16 @@ export function StockScreener({
               {visibleCols.has('ret_6m') && <Th label="6M" k="ret_6m" align="right" />}
               {visibleCols.has('ret_12m') && <PlainTh label="12M" align="right" />}
               {visibleCols.has('rs_pctile_1w') && <PlainTh label="RS 1W" align="right" />}
+              {visibleCols.has('rs_pctile_1m') && <PlainTh label="RS 1M" align="right" />}
               {visibleCols.has('extension_pct') && <PlainTh label="Ext %" align="right" />}
+              {visibleCols.has('ema_20_ratio') && <PlainTh label="EMA20 Ratio" align="right" />}
               {visibleCols.has('vol_63') && <PlainTh label="Vol 63D" align="right" />}
+              {visibleCols.has('vol_ratio_63') && <PlainTh label="Vol Ratio" align="right" />}
+              {visibleCols.has('max_drawdown_252') && <PlainTh label="Max DD" align="right" />}
               {visibleCols.has('drawdown') && <PlainTh label="Drawdown" align="right" />}
+              {visibleCols.has('effort_ratio_63') && <PlainTh label="Effort" align="right" />}
+              {visibleCols.has('volume_expansion') && <PlainTh label="Vol Exp" align="right" />}
+              {visibleCols.has('ma_30w_slope_4w') && <PlainTh label="30W Slope" align="right" />}
               {visibleCols.has('days_in_state') && <PlainTh label="Days" align="right" />}
               {visibleCols.has('alpha_3m') && <PlainTh label="α 3M" align="right" />}
               {visibleCols.has('alpha_6m') && <PlainTh label="α 6M" align="right" />}
@@ -405,9 +421,16 @@ export function StockScreener({
                 const ret6m = optStr(row, 'ret_6m')
                 const ret12m = optStr(row, 'ret_12m')
                 const rsPctile1w = optStr(row, 'rs_pctile_1w')
+                const rsPctile1m = optStr(row, 'rs_pctile_1m')
                 const extPct = optStr(row, 'extension_pct')
+                const ema20Ratio = optStr(row, 'ema_20_ratio')
                 const vol63 = optStr(row, 'vol_63')
+                const volRatio63 = optStr(row, 'vol_ratio_63')
+                const maxDrawdown252 = optStr(row, 'max_drawdown_252')
                 const drawdown = optStr(row, 'drawdown')
+                const effortRatio63 = optStr(row, 'effort_ratio_63')
+                const volumeExpansion = optStr(row, 'volume_expansion')
+                const ma30wSlope4w = optStr(row, 'ma_30w_slope_4w')
                 const daysInState = optNum(row, 'days_in_state')
                 const alpha3m = optStr(row, 'alpha_3m')
                 const alpha6m = optStr(row, 'alpha_6m')
@@ -484,9 +507,19 @@ export function StockScreener({
                           {rsPctile1w != null ? `${Math.round(parseFloat(rsPctile1w) * 100)}%` : '—'}
                         </td>
                       )}
+                      {visibleCols.has('rs_pctile_1m') && (
+                        <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums text-ink-secondary">
+                          {rsPctile1m != null ? `${Math.round(parseFloat(rsPctile1m) * 100)}%` : '—'}
+                        </td>
+                      )}
                       {visibleCols.has('extension_pct') && (
                         <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(extPct)}`}>
                           {pct(extPct)}
+                        </td>
+                      )}
+                      {visibleCols.has('ema_20_ratio') && (
+                        <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(ema20Ratio)}`}>
+                          {ema20Ratio != null ? `${(parseFloat(ema20Ratio) * 100).toFixed(1)}%` : '—'}
                         </td>
                       )}
                       {visibleCols.has('vol_63') && (
@@ -494,9 +527,34 @@ export function StockScreener({
                           {pct(vol63)}
                         </td>
                       )}
+                      {visibleCols.has('vol_ratio_63') && (
+                        <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums text-ink-secondary">
+                          {volRatio63 != null ? parseFloat(volRatio63).toFixed(2) : '—'}
+                        </td>
+                      )}
+                      {visibleCols.has('max_drawdown_252') && (
+                        <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(maxDrawdown252)}`}>
+                          {pct(maxDrawdown252)}
+                        </td>
+                      )}
                       {visibleCols.has('drawdown') && (
                         <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(drawdown)}`}>
                           {pct(drawdown)}
+                        </td>
+                      )}
+                      {visibleCols.has('effort_ratio_63') && (
+                        <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums text-ink-secondary">
+                          {effortRatio63 != null ? parseFloat(effortRatio63).toFixed(2) : '—'}
+                        </td>
+                      )}
+                      {visibleCols.has('volume_expansion') && (
+                        <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(volumeExpansion)}`}>
+                          {volumeExpansion != null ? parseFloat(volumeExpansion).toFixed(2) : '—'}
+                        </td>
+                      )}
+                      {visibleCols.has('ma_30w_slope_4w') && (
+                        <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(ma30wSlope4w)}`}>
+                          {ma30wSlope4w != null ? `${(parseFloat(ma30wSlope4w) * 100).toFixed(2)}%` : '—'}
                         </td>
                       )}
                       {visibleCols.has('days_in_state') && (
