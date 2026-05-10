@@ -9,6 +9,7 @@ import type { CommentaryResult } from '@/lib/commentary/stocks'
 import type { Period } from '@/lib/url-params'
 import { matchesFundSearch } from '@/lib/fund-formatters'
 import { FundMetricTiles } from '@/components/funds/FundMetricTiles'
+import { FundBubbleChart } from '@/components/funds/FundBubbleChart'
 
 // Placeholder imports — these components are created in Tasks 3.3-3.6
 // They will be replaced by real imports once those tasks complete
@@ -94,10 +95,16 @@ export function FundPageClient({
         />
       </div>
 
-      {/* Band 2: Bubble + Intelligence panel — placeholder until Tasks 3.4-3.5 */}
-      <div className="px-6 py-4 border-b border-paper-rule">
+      {/* Band 2: Bubble chart + intelligence narrative */}
+      <div className="px-6 py-4 border-b border-paper-rule space-y-4">
+        <FundBubbleChart
+          funds={funds}
+          period={period}
+          activeFilter={activeFilter}
+          onFilterChange={handleFilterChange}
+        />
         <p className="font-sans text-sm text-ink-secondary leading-relaxed">{commentary.narrative}</p>
-        <div className="flex flex-wrap gap-2 mt-2">
+        <div className="flex flex-wrap gap-2">
           {commentary.contextCards?.map((card, i) => (
             <div key={i} className="bg-paper-rule/10 border border-paper-rule/40 rounded-sm px-2.5 py-1.5">
               <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wide">{card.label}</div>
