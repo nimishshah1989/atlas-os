@@ -64,7 +64,7 @@ type Props = {
   days?: number
 }
 
-export function StateJourneyCompact({ symbol, ticker, days = 90 }: Props) {
+export function StateJourneyCompact({ symbol, ticker, days = 180 }: Props) {
   const [rows, setRows] = useState<StateRow[]>([])
   const [loading, setLoading] = useState(true)
 

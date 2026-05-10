@@ -65,6 +65,7 @@ export type FundMasterRow = {
   entry_trigger: boolean | null
   exit_trigger: boolean | null
   reduce_trigger: boolean | null
+  add_trigger: boolean | null
 }
 
 export type FundMetricHistoryRow = {
@@ -102,6 +103,7 @@ export type FundDecisionRow = {
   entry_trigger: boolean | null
   exit_trigger: boolean | null
   reduce_trigger: boolean | null
+  add_trigger: boolean | null
   performance_gate: boolean | null
   sectors_gate: boolean | null
   stocks_gate: boolean | null
@@ -167,7 +169,7 @@ export async function getFundMaster(mstar_id: string): Promise<FundMasterRow | n
       fd.recommendation,
       fd.weeks_in_current_state::text AS weeks_in_current_state,
       fd.performance_gate, fd.sectors_gate, fd.stocks_gate, fd.market_gate,
-      fd.entry_trigger, fd.exit_trigger, fd.reduce_trigger
+      fd.entry_trigger, fd.exit_trigger, fd.reduce_trigger, fd.add_trigger
     FROM atlas.atlas_universe_funds uf
     LEFT JOIN atlas.atlas_fund_states_daily fs
       ON fs.mstar_id = uf.mstar_id
@@ -233,7 +235,7 @@ export async function getFundDecisionHistory(mstar_id: string): Promise<FundDeci
     SELECT
       date,
       recommendation,
-      entry_trigger, exit_trigger, reduce_trigger,
+      entry_trigger, exit_trigger, reduce_trigger, add_trigger,
       performance_gate, sectors_gate, stocks_gate, market_gate,
       weeks_in_current_state::text AS weeks_in_current_state
     FROM atlas.atlas_fund_decisions_daily

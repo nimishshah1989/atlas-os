@@ -61,6 +61,25 @@ export function FundLens3({
         <Gate label="Stocks" pass={stocksGate} />
         <Gate label="Market" pass={marketGate} />
       </div>
+      {lens?.holdings_concentration != null && (
+        <div className="pt-1 border-t border-paper-rule/40">
+          <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-1">
+            Holdings Concentration
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-1.5 bg-paper-rule rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full bg-teal"
+                style={{ width: `${Math.min(100, parseFloat(lens.holdings_concentration) * 100).toFixed(0)}%` }}
+              />
+            </div>
+            <span className="font-mono text-[10px] text-ink-secondary tabular-nums">
+              {(parseFloat(lens.holdings_concentration) * 100).toFixed(0)}%
+            </span>
+          </div>
+          <p className="font-sans text-[9px] text-ink-tertiary mt-0.5">Top holding % of portfolio</p>
+        </div>
+      )}
     </div>
   )
 }

@@ -30,6 +30,13 @@ const PERIOD_RET_KEY: Record<Period, keyof FundRow> = {
   '1Y': 'ret_12m',
 }
 
+const PERIOD_PCTILE_KEY: Record<Period, keyof FundRow> = {
+  '1M': 'rs_pctile_1m',
+  '3M': 'rs_pctile_3m',
+  '6M': 'rs_pctile_6m',
+  '1Y': 'rs_pctile_6m', // 6M is best available proxy for 1Y
+}
+
 const BUBBLE_FILTERS: { key: FilterChip; label: string }[] = [
   { key: 'all',         label: 'All' },
   { key: 'recommended', label: 'Recommended' },
@@ -160,6 +167,7 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange }:
 
   const data = useMemo<BubblePoint[]>(() => {
     const retKey = PERIOD_RET_KEY[period]
+    const pctileKey = PERIOD_PCTILE_KEY[period]
     return filteredFunds.flatMap(f => {
       const retRaw = f[retKey] != null ? parseFloat(f[retKey] as string) : null
       const volRaw = f.realized_vol_63 != null ? parseFloat(f.realized_vol_63) * 100 : null
@@ -167,7 +175,7 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange }:
       if (retRaw == null || volRaw == null) return []
       if (Math.abs(retRaw) > RET_CAP || volRaw > VOL_CAP) return []
 
-      const rsPctileRaw = f.rs_pctile_3m != null ? parseFloat(f.rs_pctile_3m) : null
+      const rsPctileRaw = f[pctileKey] != null ? parseFloat(f[pctileKey] as string) : null
       // Bubble size = RS pctile (0–1). Clamp to [6, 600] so low-RS funds remain visible.
       const z = rsPctileRaw != null
         ? Math.max(6, Math.min(600, rsPctileRaw * 600))
@@ -264,7 +272,7 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange }:
       {/* Description */}
       <div className="px-5 py-2 border-b border-paper-rule/40 bg-paper-rule/5">
         <p className="font-sans text-[11px] text-ink-secondary leading-relaxed">
-          X = annualized vol · Y = {period} return · Larger bubble = higher RS pctile · Color = recommendation.
+          X = annualized vol · Y = {period} return · Bubble size = {period} RS pctile · Color = recommendation.
           Click bubble for deep-dive.
         </p>
       </div>

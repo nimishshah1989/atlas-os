@@ -12,6 +12,7 @@ import {
   pctColor,
 } from '@/lib/stock-formatters'
 import { StateHeatmap } from './StockHistoryTab'
+import { StateJourneyCompact } from '@/components/ui/StateJourneyCompact'
 
 function Commentary({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -86,6 +87,14 @@ export function StockDeepDiveBody({
 
   return (
     <div className="px-6 py-6 space-y-8">
+      {/* State journey compact strip — quick overview of last 6M */}
+      <div className="border border-paper-rule rounded-sm bg-paper px-4 py-3">
+        <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-2">
+          State Journey — 6M
+        </div>
+        <StateJourneyCompact symbol={stock.symbol} days={180} />
+      </div>
+
       {/* Weinstein + Momentum summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Commentary title="Weinstein Stage">
@@ -96,9 +105,9 @@ export function StockDeepDiveBody({
         </Commentary>
       </div>
 
-      {/* State history heatmap */}
+      {/* State history heatmap — daily granularity */}
       <div>
-        <SectionLabel>State History — 6M</SectionLabel>
+        <SectionLabel>State History — Daily Heatmap (6M)</SectionLabel>
         <div className="mt-3">
           <StateHeatmap history={stateHistory} />
         </div>
@@ -107,15 +116,26 @@ export function StockDeepDiveBody({
       {/* Returns */}
       <div>
         <SectionLabel>Returns</SectionLabel>
-        <table className="border-collapse mt-3">
-          <tbody>
-            <ReturnRow label="1 Week"    value={stock.ret_1w} />
-            <ReturnRow label="1 Month"   value={stock.ret_1m} />
-            <ReturnRow label="3 Months"  value={stock.ret_3m} />
-            <ReturnRow label="6 Months"  value={stock.ret_6m} />
-            <ReturnRow label="12 Months" value={stock.ret_12m} />
-          </tbody>
-        </table>
+        <div className="mt-3 grid grid-cols-2 sm:grid-cols-5 gap-3">
+          {([
+            { label: '1 Week',   value: stock.ret_1w   as string | null },
+            { label: '1 Month',  value: stock.ret_1m   as string | null },
+            { label: '3 Months', value: stock.ret_3m   as string | null },
+            { label: '6 Months', value: stock.ret_6m   as string | null },
+            { label: '12 Months',value: stock.ret_12m  as string | null },
+          ]).map(r => {
+            const n = r.value != null ? parseFloat(r.value) * 100 : null
+            const sign = n != null && n >= 0 ? '+' : ''
+            return (
+              <div key={r.label} className="flex flex-col gap-0.5 px-3 py-2 border border-paper-rule rounded-sm">
+                <span className="font-sans text-[10px] text-ink-tertiary">{r.label}</span>
+                <span className={`font-mono text-sm font-semibold tabular-nums ${pctColor(r.value)}`}>
+                  {n != null ? `${sign}${n.toFixed(1)}%` : '—'}
+                </span>
+              </div>
+            )
+          })}
+        </div>
       </div>
 
       {/* Metric charts */}

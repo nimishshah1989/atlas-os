@@ -34,10 +34,11 @@ const CHIPS: { key: FilterChip; label: string }[] = [
   { key: 'accel',      label: 'Accelerating' },
 ]
 
-// Optional columns. 1W and 6M visible by default.
+// Optional columns. 1W, 6M, 12M visible by default.
 const OPTIONAL_COLS: ColumnDef[] = [
   { key: 'ret_1w',        label: '1W',        defaultVisible: true },
   { key: 'ret_6m',        label: '6M',        defaultVisible: true },
+  { key: 'ret_12m',       label: '12M',       defaultVisible: true },
   { key: 'extension_pct', label: 'Ext %',     defaultVisible: false },
   { key: 'vol_63',        label: 'Vol (63D)', defaultVisible: false },
   { key: 'drawdown',      label: 'Drawdown',  defaultVisible: false },
@@ -204,6 +205,11 @@ export function StockScreener({
         return Number.isFinite(n) ? n : null
       }
 
+      // Push stocks with no metric data (ret_1m is null) to the bottom always.
+      const aHasData = a.ret_1m != null
+      const bHasData = b.ret_1m != null
+      if (aHasData !== bHasData) return aHasData ? -1 : 1
+
       if (sortKey === 'symbol') {
         const cmp = a.symbol.localeCompare(b.symbol)
         return asc ? cmp : -cmp
@@ -363,6 +369,7 @@ export function StockScreener({
               <Th label="1M" k="ret_1m" align="right" />
               <Th label="3M" k="ret_3m" align="right" />
               {visibleCols.has('ret_6m') && <Th label="6M" k="ret_6m" align="right" />}
+              {visibleCols.has('ret_12m') && <PlainTh label="12M" align="right" />}
               {visibleCols.has('extension_pct') && <PlainTh label="Ext %" align="right" />}
               {visibleCols.has('vol_63') && <PlainTh label="Vol 63D" align="right" />}
               {visibleCols.has('drawdown') && <PlainTh label="Drawdown" align="right" />}
@@ -387,6 +394,7 @@ export function StockScreener({
                 const isExpanded = expandedSymbol === row.symbol
                 const ret1w = optStr(row, 'ret_1w')
                 const ret6m = optStr(row, 'ret_6m')
+                const ret12m = optStr(row, 'ret_12m')
                 const extPct = optStr(row, 'extension_pct')
                 const vol63 = optStr(row, 'vol_63')
                 const drawdown = optStr(row, 'drawdown')
@@ -447,6 +455,11 @@ export function StockScreener({
                       {visibleCols.has('ret_6m') && (
                         <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(ret6m)}`}>
                           {pct(ret6m)}
+                        </td>
+                      )}
+                      {visibleCols.has('ret_12m') && (
+                        <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(ret12m)}`}>
+                          {pct(ret12m)}
                         </td>
                       )}
                       {visibleCols.has('extension_pct') && (

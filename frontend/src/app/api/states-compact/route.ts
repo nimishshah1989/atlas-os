@@ -12,8 +12,8 @@ export async function GET(req: NextRequest) {
   const rawDays = searchParams.get('days') ?? '90'
   const days = parseInt(rawDays, 10)
 
-  if (isNaN(days) || days < 1 || days > 365) {
-    return NextResponse.json({ error: 'days must be 1–365' }, { status: 400 })
+  if (isNaN(days) || days < 1 || days > 720) {
+    return NextResponse.json({ error: 'days must be 1–720' }, { status: 400 })
   }
 
   if (!symbol && !ticker) {

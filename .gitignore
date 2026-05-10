@@ -37,3 +37,6 @@ DESIGN.md
 TODOS.md
 .gstack/
 .worktrees/
+node_modules/
+package-lock.json
+.claude-flow/

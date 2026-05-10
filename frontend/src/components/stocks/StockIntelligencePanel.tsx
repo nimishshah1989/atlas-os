@@ -14,15 +14,14 @@ const MOM_COLORS: Record<string, string> = {
 const RS_STATES  = ['Leader', 'Strong', 'Consolidating', 'Emerging', 'Average', 'Weak', 'Laggard']
 const MOM_STATES = ['Accelerating', 'Improving', 'Flat', 'Deteriorating', 'Collapsing']
 
-function DistBar({ label, count, total, color }: { label: string; count: number; total: number; color: string }) {
+function MiniBar({ count, total, color }: { count: number; total: number; color: string }) {
   const pct = total > 0 ? (count / total) * 100 : 0
   return (
-    <div className="flex items-center gap-2 text-[10px]">
-      <span className="w-16 text-ink-tertiary font-mono shrink-0 text-right">{label}</span>
-      <div className="flex-1 h-1.5 bg-paper-rule rounded-full overflow-hidden">
+    <div className="flex items-center gap-1.5 min-w-0">
+      <div className="w-16 h-1.5 bg-paper-rule rounded-full overflow-hidden shrink-0">
         <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
       </div>
-      <span className="w-6 text-ink-tertiary font-mono text-right">{count}</span>
+      <span className="font-mono text-[10px] text-ink-tertiary tabular-nums w-6 text-right shrink-0">{count}</span>
     </div>
   )
 }
@@ -66,33 +65,80 @@ export function StockIntelligencePanel({ stocks, regimeState = 'Cautious', deplo
   const commentary = buildStocksCommentary(aggregates)
 
   return (
-    <div className="border border-paper-rule rounded-sm bg-paper px-5 py-4">
-      <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-3">
-        Stock Intelligence
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* RS Distribution */}
-        <div className="space-y-1.5">
-          <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-2">
+    <div className="border border-paper-rule rounded-sm bg-paper px-5 py-3">
+      <div className="flex flex-wrap gap-6 items-start">
+
+        {/* RS Distribution — compact column */}
+        <div className="flex flex-col gap-1 min-w-[160px]">
+          <div className="font-sans text-[9px] font-semibold text-ink-tertiary uppercase tracking-wider mb-1">
             RS Distribution
           </div>
           {RS_STATES.map(s => (
-            <DistBar key={s} label={s} count={rsCounts[s] ?? 0} total={n} color={rsStateColor(s)} />
+            <div key={s} className="flex items-center gap-1.5">
+              <span className="w-[78px] text-[10px] text-ink-tertiary font-sans text-right shrink-0">{s}</span>
+              <MiniBar count={rsCounts[s] ?? 0} total={n} color={rsStateColor(s)} />
+            </div>
           ))}
         </div>
 
-        {/* Momentum Distribution */}
-        <div className="space-y-1.5">
-          <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-2">
+        {/* Divider */}
+        <div className="w-px self-stretch bg-paper-rule/60 hidden md:block" />
+
+        {/* Momentum Distribution — compact column */}
+        <div className="flex flex-col gap-1 min-w-[160px]">
+          <div className="font-sans text-[9px] font-semibold text-ink-tertiary uppercase tracking-wider mb-1">
             Momentum
           </div>
           {MOM_STATES.map(s => (
-            <DistBar key={s} label={s} count={momCounts[s] ?? 0} total={n} color={MOM_COLORS[s] ?? CHART_COLORS.inkTertiary} />
+            <div key={s} className="flex items-center gap-1.5">
+              <span className="w-[78px] text-[10px] text-ink-tertiary font-sans text-right shrink-0">{s}</span>
+              <MiniBar count={momCounts[s] ?? 0} total={n} color={MOM_COLORS[s] ?? CHART_COLORS.inkTertiary} />
+            </div>
           ))}
         </div>
 
-        {/* Commentary */}
-        <div className="border-t md:border-t-0 md:border-l border-paper-rule pt-3 md:pt-0 md:pl-6">
+        {/* Divider */}
+        <div className="w-px self-stretch bg-paper-rule/60 hidden md:block" />
+
+        {/* Key signals strip */}
+        <div className="flex flex-wrap gap-4 items-start flex-1 min-w-[180px]">
+          <div className="flex flex-col gap-0.5">
+            <span className="font-sans text-[9px] text-ink-tertiary uppercase tracking-wider">Leader/Strong</span>
+            <span className="font-mono text-base font-semibold text-ink-primary tabular-nums">
+              {leaderStrong}
+              <span className="text-xs font-normal text-ink-tertiary ml-1">/ {n}</span>
+            </span>
+            <span className="font-mono text-[10px] text-signal-pos">{n > 0 ? Math.round((leaderStrong / n) * 100) : 0}%</span>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="font-sans text-[9px] text-ink-tertiary uppercase tracking-wider">Investable</span>
+            <span className="font-mono text-base font-semibold text-ink-primary tabular-nums">
+              {investable}
+              <span className="text-xs font-normal text-ink-tertiary ml-1">/ {n}</span>
+            </span>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="font-sans text-[9px] text-ink-tertiary uppercase tracking-wider">Accel/Improving</span>
+            <span className="font-mono text-base font-semibold text-ink-primary tabular-nums">
+              {accelImpr}
+              <span className="text-xs font-normal text-ink-tertiary ml-1">/ {n}</span>
+            </span>
+            <span className="font-mono text-[10px] text-signal-pos">{n > 0 ? Math.round((accelImpr / n) * 100) : 0}%</span>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="font-sans text-[9px] text-ink-tertiary uppercase tracking-wider">Median RS Pctile</span>
+            <span className="font-mono text-base font-semibold text-ink-primary tabular-nums">
+              {Math.round(medianPctile * 100)}
+              <span className="text-xs font-normal text-ink-tertiary ml-0.5">%ile</span>
+            </span>
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div className="w-px self-stretch bg-paper-rule/60 hidden lg:block" />
+
+        {/* Commentary — compact */}
+        <div className="flex-1 min-w-[200px] max-w-[360px]">
           <CommentaryBlock
             narrative={commentary.narrative}
             contextCards={commentary.contextCards}

@@ -1,4 +1,4 @@
-// allow-large: FundScreener — 14 column data table with sort, col-toggle, and lens bars
+// allow-large: FundScreener — 16 column data table with sort, col-toggle, lens bars, vol, and gates
 'use client'
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
@@ -35,6 +35,8 @@ const ALL_COLS: ColumnDef[] = [
   { key: 'ret',             label: 'Return',          defaultVisible: true },
   { key: 'rs_pctile',       label: 'RS Pctile',       defaultVisible: true },
   { key: 'rs_category',     label: 'RS Category',     defaultVisible: true },
+  { key: 'vol',             label: 'Vol (63D)',        defaultVisible: false },
+  { key: 'gates',           label: 'Gates',           defaultVisible: true },
   { key: 'comp_bar',        label: 'Comp Bar',        defaultVisible: true },
   { key: 'holdings_bar',    label: 'Holdings Bar',    defaultVisible: true },
   { key: 'weeks_in_state',  label: 'Weeks',           defaultVisible: true },
@@ -51,7 +53,26 @@ type SortCol =
   | 'scheme_name' | 'amc' | 'category'
   | 'nav_state' | 'composition' | 'holdings' | 'recommendation'
   | 'ret' | 'rs_pctile' | 'rs_category'
-  | 'weeks_in_state' | 'drawdown'
+  | 'vol' | 'weeks_in_state' | 'drawdown'
+
+// 4 coloured dots: Perf · Sectors · Stocks · Market
+function GateDots({ f }: { f: FundRow }) {
+  const gates = [f.performance_gate, f.sectors_gate, f.stocks_gate, f.market_gate]
+  const labels = ['Perf', 'Sectors', 'Stocks', 'Market']
+  return (
+    <span className="flex gap-0.5">
+      {gates.map((g, i) => (
+        <span
+          key={labels[i]}
+          title={`${labels[i]}: ${g === true ? 'Pass' : g === false ? 'Fail' : 'N/A'}`}
+          className={`text-[10px] ${g === true ? 'text-signal-pos' : g === false ? 'text-signal-neg' : 'text-ink-tertiary/40'}`}
+        >
+          ●
+        </span>
+      ))}
+    </span>
+  )
+}
 
 function getSortValue(col: SortCol, f: FundRow, period: Period): number | string {
   // Re-shape the row so buildSortKey() can read the canonical column key it expects.
@@ -66,6 +87,7 @@ function getSortValue(col: SortCol, f: FundRow, period: Period): number | string
     case 'ret':            return buildSortKey('ret',            { ret: f[RET_KEY[period]] as string | null })
     case 'rs_pctile':      return buildSortKey('rs_pctile',      { rs_pctile: f[PCTILE_KEY[period]] as string | null })
     case 'rs_category':    return buildSortKey('rs_category',    { rs_category: (f[RSCAT_KEY[period]] as string | null) ?? '' })
+    case 'vol':            return buildSortKey('ret',            { ret: f.realized_vol_63 })
     case 'weeks_in_state': return buildSortKey('weeks_in_state', { weeks_in_state: f.weeks_in_current_state })
     case 'drawdown':       return buildSortKey('drawdown',       { drawdown: f.ret_12m })
   }
