@@ -1,4 +1,5 @@
 // frontend/src/components/sectors/SectorOverviewTab.tsx
+// allow-large: 8 metric charts with inline commentary functions — each chart+commentary pair is a cohesive unit; splitting would scatter related logic
 import type { ReactNode } from 'react'
 import { IndicatorChart } from '@/components/regime/IndicatorChart'
 import type { BreadthWaterfallRow, SectorMetricHistoryRow, SectorStateRow } from '@/lib/queries/sectors'
@@ -224,9 +225,13 @@ export function SectorOverviewTab({
     d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10)
 
   const rsData             = metricHistory.map(r => ({ date: dateStr(r.date), value: r.bottomup_rs_3m_nifty500 != null ? parseFloat(r.bottomup_rs_3m_nifty500) : null }))
+  const tdRsData           = metricHistory.map(r => ({ date: dateStr(r.date), value: r.topdown_rs_3m_nifty500  != null ? parseFloat(r.topdown_rs_3m_nifty500)  : null }))
   const breadthChartData   = metricHistory.map(r => ({ date: dateStr(r.date), value: r.participation_50        != null ? parseFloat(r.participation_50)        : null }))
   const rsParticData       = metricHistory.map(r => ({ date: dateStr(r.date), value: r.participation_rs        != null ? parseFloat(r.participation_rs)        : null }))
+  const rsParticPctData    = metricHistory.map(r => ({ date: dateStr(r.date), value: r.participation_rs_pct    != null ? parseFloat(r.participation_rs_pct)    : null }))
+  const leaderConcentData  = metricHistory.map(r => ({ date: dateStr(r.date), value: r.leadership_concentration != null ? parseFloat(r.leadership_concentration) : null }))
   const ret3mData    = metricHistory.map(r => ({ date: dateStr(r.date), value: r.bottomup_ret_3m         != null ? parseFloat(r.bottomup_ret_3m)         : null }))
+  const tdRet3mData  = metricHistory.map(r => ({ date: dateStr(r.date), value: r.topdown_ret_3m           != null ? parseFloat(r.topdown_ret_3m)           : null }))
   const ema10Data    = metricHistory.map(r => ({
     date: dateStr(r.date),
     value: r.bottomup_ema_10_ratio != null ? (parseFloat(r.bottomup_ema_10_ratio) - 1) * 100 : null,
@@ -377,6 +382,184 @@ export function SectorOverviewTab({
                 {interpretEMA(latest?.bottomup_ema_10_ratio, latest?.bottomup_ema_20_ratio)}
               </Commentary>
             </div>
+
+            {/* Top-down RS vs Bottom-up RS */}
+            {tdRsData.some(d => d.value != null) && (
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 items-start">
+                <IndicatorChart
+                  title="Top-Down RS (NSE Index) vs Bottom-Up RS (Constituents)"
+                  description="Compares the index ETF/proxy relative strength (top-down) against the median constituent RS (bottom-up). When both are positive and converging, the signal is highest-conviction. Divergence flags disagreement between index and stock-level momentum."
+                  currentValue={pctStr(latest?.topdown_rs_3m_nifty500)}
+                  isBullish={latest?.topdown_rs_3m_nifty500 != null ? parseFloat(latest.topdown_rs_3m_nifty500) > 0 : null}
+                  data={tdRsData}
+                  refLine={0}
+                  refLabel="0"
+                  variant="area"
+                  yFormat="pct"
+                />
+                <Commentary title={`Top-Down RS · ${pctStr(latest?.topdown_rs_3m_nifty500)} (BU: ${pctStr(latest?.bottomup_rs_3m_nifty500)})`}>
+                  {(() => {
+                    const td = latest?.topdown_rs_3m_nifty500 != null ? parseFloat(latest.topdown_rs_3m_nifty500) * 100 : null
+                    const bu = latest?.bottomup_rs_3m_nifty500 != null ? parseFloat(latest.bottomup_rs_3m_nifty500) * 100 : null
+                    if (td == null || bu == null) return <p>No top-down RS data available.</p>
+                    const agree = (td > 0 && bu > 0) || (td < 0 && bu < 0)
+                    const gap = Math.abs(td - bu).toFixed(1)
+                    if (agree && td > 0) return (
+                      <>
+                        <p>Index ({td.toFixed(1)}pp) and constituents ({bu.toFixed(1)}pp) <span className="text-signal-pos font-semibold">both outperforming</span>.</p>
+                        <p>Agreement between top-down and bottom-up RS is the strongest confirmation of genuine sector leadership. {gap}pp spread — {parseFloat(gap) < 5 ? 'tight, high confidence' : 'wide, leadership may be concentrated'}.</p>
+                      </>
+                    )
+                    if (agree && td < 0) return (
+                      <>
+                        <p>Both index ({td.toFixed(1)}pp) and constituents ({bu.toFixed(1)}pp) <span className="text-signal-neg font-semibold">underperforming</span>.</p>
+                        <p>Broad weakness confirmed at both levels. No divergence to exploit — avoid.</p>
+                      </>
+                    )
+                    if (td > 0 && bu < 0) return (
+                      <>
+                        <p><span className="text-signal-warn font-semibold">Divergence:</span> Index outperforming ({td.toFixed(1)}pp) but constituent stocks lagging ({bu.toFixed(1)}pp).</p>
+                        <p>Index strength may be driven by index-heavies masking weak breadth. Check leadership concentration.</p>
+                      </>
+                    )
+                    return (
+                      <>
+                        <p><span className="text-signal-warn font-semibold">Divergence:</span> Stocks outperforming ({bu.toFixed(1)}pp) but index lagging ({td.toFixed(1)}pp).</p>
+                        <p>Stock-level improvement not yet reflected in the index. May indicate early accumulation not captured by index weighting.</p>
+                      </>
+                    )
+                  })()}
+                </Commentary>
+              </div>
+            )}
+
+            {/* Leadership Concentration */}
+            {leaderConcentData.some(d => d.value != null) && (
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 items-start">
+                <IndicatorChart
+                  title="Leadership Concentration — Top-3 Stock RS Share"
+                  description="Share of the sector's total RS score held by the top 3 performing stocks. High concentration (>60%) means sector RS is driven by 2-3 names, making it fragile. Low concentration means breadth-supported leadership."
+                  currentValue={latest?.leadership_concentration != null
+                    ? `${(parseFloat(latest.leadership_concentration) * 100).toFixed(0)}%`
+                    : '—'}
+                  isBullish={latest?.leadership_concentration != null ? parseFloat(latest.leadership_concentration) < 0.5 : null}
+                  data={leaderConcentData}
+                  refLine={0.5}
+                  refLabel="50%"
+                  variant="area"
+                />
+                <Commentary title={`Concentration · ${latest?.leadership_concentration != null ? (parseFloat(latest.leadership_concentration) * 100).toFixed(0) + '%' : '—'} top-3 share`}>
+                  {(() => {
+                    if (latest?.leadership_concentration == null) return <p>No concentration data.</p>
+                    const c = parseFloat(latest.leadership_concentration) * 100
+                    if (c >= 70) return (
+                      <>
+                        <p>Top 3 stocks hold <span className="text-signal-neg font-semibold">{c.toFixed(0)}%</span> of sector RS — extreme concentration.</p>
+                        <p>Sector performance depends almost entirely on 2-3 names. Leadership is fragile; if these rotate out, the sector signal collapses fast.</p>
+                      </>
+                    )
+                    if (c >= 50) return (
+                      <>
+                        <p>Top 3 stocks hold <span className="text-signal-warn font-medium">{c.toFixed(0)}%</span> of sector RS — moderate concentration.</p>
+                        <p>A few leaders are doing the heavy lifting. Viable, but watch whether concentration is rising or falling — rising concentration is a warning sign.</p>
+                      </>
+                    )
+                    return (
+                      <>
+                        <p>Top 3 stocks hold <span className="text-signal-pos font-semibold">{c.toFixed(0)}%</span> of RS — broad-based leadership.</p>
+                        <p>Sector strength is distributed across many names. Durable, institutionally-driven moves typically show this pattern.</p>
+                      </>
+                    )
+                  })()}
+                </Commentary>
+              </div>
+            )}
+
+            {/* RS Participation % (stocks outperforming Nifty500) */}
+            {rsParticPctData.some(d => d.value != null) && (
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 items-start">
+                <IndicatorChart
+                  title="RS Participation — % Stocks Outperforming Nifty 500"
+                  description="Percentage of sector constituents that are individually outperforming the Nifty 500 index on a 3-month RS basis. Differs from participation_rs (which uses an internal benchmark) by using the market-wide benchmark — more demanding."
+                  currentValue={latest?.participation_rs_pct != null
+                    ? `${(parseFloat(latest.participation_rs_pct) * 100).toFixed(0)}%`
+                    : '—'}
+                  isBullish={latest?.participation_rs_pct != null ? parseFloat(latest.participation_rs_pct) > 0.4 : null}
+                  data={rsParticPctData}
+                  refLine={0.4}
+                  refLabel="40%"
+                  variant="area"
+                  yFormat="pct"
+                />
+                <Commentary title={`Nifty500 Beaters · ${latest?.participation_rs_pct != null ? (parseFloat(latest.participation_rs_pct) * 100).toFixed(0) + '%' : '—'} of stocks`}>
+                  {(() => {
+                    if (latest?.participation_rs_pct == null) return <p>No data available.</p>
+                    const p = parseFloat(latest.participation_rs_pct) * 100
+                    if (p >= 60) return (
+                      <>
+                        <p><span className="text-signal-pos font-semibold">{p.toFixed(0)}%</span> of sector stocks are beating Nifty 500 individually.</p>
+                        <p>Broad outperformance — this is not just a few stocks pulling up the average. High-conviction signal for sector allocation.</p>
+                      </>
+                    )
+                    if (p >= 40) return (
+                      <>
+                        <p><span className="text-signal-pos font-medium">{p.toFixed(0)}%</span> of stocks beat Nifty 500 — moderate market-wide participation.</p>
+                        <p>Enough stocks are outperforming to justify sector exposure, but not peak participation. Monitor for trend.</p>
+                      </>
+                    )
+                    if (p >= 25) return (
+                      <>
+                        <p>Only <span className="text-signal-warn font-medium">{p.toFixed(0)}%</span> beat Nifty 500 — weak market-wide participation.</p>
+                        <p>Sector RS may be driven by a minority. Leadership is narrow — wait for broader participation before adding.</p>
+                      </>
+                    )
+                    return (
+                      <>
+                        <p>Only <span className="text-signal-neg font-semibold">{p.toFixed(0)}%</span> of stocks beat Nifty 500 — sector is lagging broadly.</p>
+                        <p>Few individual stocks can overcome market headwinds. Avoid sector exposure until this crosses 35%+.</p>
+                      </>
+                    )
+                  })()}
+                </Commentary>
+              </div>
+            )}
+
+            {/* Top-down 3M Return vs Bottom-up 3M Return */}
+            {tdRet3mData.some(d => d.value != null) && (
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 items-start">
+                <IndicatorChart
+                  title="Top-Down 3M Return (Index) vs Bottom-Up 3M Return (Stocks)"
+                  description="Compares the NSE sector index's 3-month return (top-down) against the average return of constituent stocks (bottom-up). Divergences reveal index-construction distortions — e.g. when the index outperforms because of one heavy-weight but most stocks are flat."
+                  currentValue={pctStr(latest?.topdown_ret_3m)}
+                  isBullish={latest?.topdown_ret_3m != null ? parseFloat(latest.topdown_ret_3m) > 0 : null}
+                  data={tdRet3mData}
+                  refLine={0}
+                  refLabel="0"
+                  variant="area"
+                  yFormat="pct"
+                />
+                <Commentary title={`Index Return · ${pctStr(latest?.topdown_ret_3m)} (Stocks: ${pctStr(latest?.bottomup_ret_3m)})`}>
+                  {(() => {
+                    const td = latest?.topdown_ret_3m != null ? parseFloat(latest.topdown_ret_3m) * 100 : null
+                    const bu = latest?.bottomup_ret_3m != null ? parseFloat(latest.bottomup_ret_3m) * 100 : null
+                    if (td == null) return <p>No top-down return data.</p>
+                    const spread = bu != null ? (bu - td).toFixed(1) : null
+                    if (spread != null && Math.abs(parseFloat(spread)) > 10) return (
+                      <>
+                        <p>Large gap between index ({td.toFixed(1)}%) and stocks ({bu!.toFixed(1)}%) — <span className="text-signal-warn font-semibold">{Math.abs(parseFloat(spread)).toFixed(1)}pp spread</span>.</p>
+                        <p>Index-level data may be misleading. Prefer the bottom-up view for portfolio decisions in this sector.</p>
+                      </>
+                    )
+                    return (
+                      <>
+                        <p>Index return ({td.toFixed(1)}%) and stock average {bu != null ? `(${bu.toFixed(1)}%)` : ''} are broadly aligned.</p>
+                        <p>No significant index-construction distortion. Both signals are reliable for sector decisions.</p>
+                      </>
+                    )
+                  })()}
+                </Commentary>
+              </div>
+            )}
           </div>
         )}
       </div>

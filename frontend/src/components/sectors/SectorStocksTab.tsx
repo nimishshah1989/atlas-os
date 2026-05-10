@@ -8,6 +8,8 @@ import type { TimeRange } from '@/lib/time-range'
 import { StockBubbleChart } from './StockBubbleChart'
 import { StocksTable } from './StocksTable'
 import { TopPicksCallout } from './TopPicksCallout'
+import { SectorMultiStateBreadth } from './SectorMultiStateBreadth'
+import { SectorQualityPanel } from './SectorQualityPanel'
 import type { MarketRegimeRow } from '@/lib/queries/regime'
 import { MarketRegimeBanner } from './MarketRegimeBanner'
 
@@ -176,8 +178,12 @@ export function SectorStocksTab({
         )}
       </div>
 
-      {/* RS Distribution */}
+      {/* RS Distribution + multi-state breadth */}
       <RSDistributionBar stocks={filtered} />
+      <SectorMultiStateBreadth stocks={filtered} />
+
+      {/* Quality & signal funnel */}
+      <SectorQualityPanel stocks={filtered} />
 
       {/* Table */}
       <StocksTable stocks={filtered} unit={unit} activeRange={range} />
