@@ -173,6 +173,7 @@ def _write_row(
                 "computed_at": datetime.now(UTC),
             },
         )
+        conn.commit()
 
 
 def main() -> int:

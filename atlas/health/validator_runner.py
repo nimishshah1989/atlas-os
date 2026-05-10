@@ -127,6 +127,7 @@ def write_result(
                 "git_sha": _git_sha(),
             },
         )
+        conn.commit()
     log.info(
         "validator_result_written",
         validator=result.validator,
