@@ -175,6 +175,6 @@ def parse_bhav_zip(zip_bytes: bytes, targets: set[str]) -> list[dict[str, Any]]:
                             "volume": int(row["TOTTRDQTY"].strip() or "0"),
                         }
                     )
-                return rows
     except (zipfile.BadZipFile, KeyError):
-        return []
+        pass
+    return rows
