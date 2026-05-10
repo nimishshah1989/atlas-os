@@ -396,6 +396,47 @@ def _combine_pivots(
 
 
 # ---------------------------------------------------------------------------
+# Regime helpers
+# ---------------------------------------------------------------------------
+
+# Risk-off = deployment_multiplier = 0 (Risk-Off + DISLOCATION_SUSPENDED states)
+_RISK_OFF_MULTIPLIER = 0
+
+
+def _risk_off_dates_set(engine: Engine, start_date: date, end_date: date) -> set[date]:
+    """Return dates where market is fully risk-off (deployment_multiplier = 0)."""
+    sql = text("""
+        SELECT date FROM atlas.atlas_market_regime_daily
+        WHERE date BETWEEN :start AND :end
+          AND deployment_multiplier = :mult
+        ORDER BY date
+    """)
+    with engine.connect() as conn:
+        rows = conn.execute(
+            sql, {"start": start_date, "end": end_date, "mult": _RISK_OFF_MULTIPLIER}
+        ).fetchall()
+    return {r[0] for r in rows}
+
+
+def _apply_regime_filter(
+    entry_p: pd.DataFrame,
+    exit_p: pd.DataFrame,
+    risk_off_dates: set[date],
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """On risk-off days: block all new entries and force-exit all open positions."""
+    if not risk_off_dates:
+        return entry_p, exit_p
+    risk_off_idx = [ts for ts in entry_p.index if pd.Timestamp(ts).date() in risk_off_dates]
+    if not risk_off_idx:
+        return entry_p, exit_p
+    entry_p = entry_p.copy()
+    exit_p = exit_p.copy()
+    entry_p.loc[risk_off_idx] = False
+    exit_p.loc[risk_off_idx] = True
+    return entry_p, exit_p
+
+
+# ---------------------------------------------------------------------------
 # Benchmark helpers
 # ---------------------------------------------------------------------------
 
@@ -505,6 +546,16 @@ def run_strategy_backtest(
             log.warning("seed_bt_empty_matrix", strategy=cfg.name)
             return None
 
+        # Apply regime filter: on risk-off days block entries and force exits
+        if cfg.regime_stance == "pause_risk_off":
+            risk_off = _risk_off_dates_set(engine, start_date, end_date)
+            entry_p, exit_p = _apply_regime_filter(entry_p, exit_p, risk_off)
+            log.info(
+                "seed_bt_regime_filter",
+                strategy=cfg.name,
+                risk_off_days=len(risk_off),
+            )
+
         instruments = list(price_p.columns)
         dates = pd.DatetimeIndex(price_p.index)
 
@@ -532,7 +583,11 @@ def run_strategy_backtest(
             )
             return None
 
-        result: BacktestResult = run_backtest(signal_matrix, init_cash=10_000_000.0)
+        result: BacktestResult = run_backtest(
+            signal_matrix,
+            init_cash=10_000_000.0,
+            max_positions=cfg.max_positions,
+        )
 
         backtest_id = write_backtest_result(
             engine=engine,

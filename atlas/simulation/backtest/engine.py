@@ -75,8 +75,14 @@ def run_backtest(
     init_cash: float = _INIT_CASH,
     fees_pct: float = _FEES_PCT,
     risk_free_rate: float = _INDIA_RF,
+    max_positions: int = 0,
 ) -> BacktestResult:
     """Run vectorbt backtest on a SignalMatrix. No DB calls.
+
+    max_positions > 0 activates cash-sharing portfolio mode: capital is shared
+    across all columns with 1/max_positions allocated per position. vectorbt
+    naturally skips new entries when all slots are filled (cash exhausted).
+    This is the correct model for a concentrated equal-weight portfolio.
 
     Memory discipline: pf deleted in finally block — vectorbt Portfolio
     objects hold full price history in RAM.
@@ -111,14 +117,30 @@ def run_backtest(
     try:
         import vectorbt as vbt
 
-        pf = vbt.Portfolio.from_signals(
-            close=price_df,
-            entries=entry_df,
-            exits=exit_df,
-            init_cash=init_cash,
-            fees=fees_pct,
-            freq="D",
-        )
+        if max_positions > 0:
+            # Cash-sharing portfolio: 1/max_positions allocated per position.
+            # vectorbt skips entries when cash is exhausted (all slots filled).
+            pf = vbt.Portfolio.from_signals(
+                close=price_df,
+                entries=entry_df,
+                exits=exit_df,
+                init_cash=init_cash,
+                fees=fees_pct,
+                freq="D",
+                size=1.0 / max_positions,
+                size_type="targetpercent",
+                group_by=True,
+                cash_sharing=True,
+            )
+        else:
+            pf = vbt.Portfolio.from_signals(
+                close=price_df,
+                entries=entry_df,
+                exits=exit_df,
+                init_cash=init_cash,
+                fees=fees_pct,
+                freq="D",
+            )
 
         try:
             daily_rets = pf.daily_returns()
