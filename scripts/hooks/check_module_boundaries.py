@@ -72,6 +72,13 @@ ALLOWED_EDGES: set[tuple[str, str]] = {
     # spot-checks. Pre-existing edge (present before 2026-05 health audit).
     # Long-term fix: extract session factory into atlas.db shared kernel.
     ("atlas.validation", "atlas.compute"),
+    # SP07: api → agents. POST /api/agents/invoke is a thin HTTP wrapper
+    # over the specialist invoker. The agents context owns the LLM loop
+    # and tool registry; api owns request/response shape and auth. The
+    # API imports the specialist registry + invoke_routed through the
+    # public __init__.py of atlas.agents.specialists (the package's
+    # public surface) — same pattern as api → simulation above.
+    ("atlas.api", "atlas.agents"),
 }
 
 
