@@ -6,10 +6,13 @@ import {
   getHeaderStatus,
   getJipFreshness,
   getLatestAnomalies,
+  getLatestRunPerScript,
   getRecentRuns,
   getValidatorHistory,
+  getValidatorLatest,
 } from '@/lib/queries/health'
 import { HealthHeader } from '@/components/health/HealthHeader'
+import { HealthSummaryCards } from '@/components/health/HealthSummaryCards'
 import { PipelineRunsTable } from '@/components/health/PipelineRunsTable'
 import { FreshnessTable } from '@/components/health/FreshnessTable'
 import { JipSyncPanel } from '@/components/health/JipSyncPanel'
@@ -20,19 +23,31 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 export default async function HealthPage() {
-  const [status, runs, freshness, jipFreshness, anomalies, validators] = await Promise.all([
-    getHeaderStatus(),
-    getRecentRuns(30),
-    getFreshness(),
-    getJipFreshness(),
-    getLatestAnomalies(),
-    getValidatorHistory(30),
-  ])
+  const [status, latestRuns, allRuns, freshness, jipFreshness, anomalies, validators, validatorLatest] =
+    await Promise.all([
+      getHeaderStatus(),
+      getLatestRunPerScript(),
+      getRecentRuns(30),
+      getFreshness(),
+      getJipFreshness(),
+      getLatestAnomalies(),
+      getValidatorHistory(30),
+      getValidatorLatest(),
+    ])
+
+  const staleTables = freshness.filter((t) => t.lag_days != null && t.lag_days > 2).length
+  const recentFailures = allRuns.filter((r) => r.status === 'failed').length
 
   return (
     <div>
       <HealthHeader status={status} />
-      <PipelineRunsTable runs={runs} />
+      <HealthSummaryCards
+        validators={validatorLatest}
+        staleTables={staleTables}
+        recentFailures={recentFailures}
+        anomalyCount={anomalies.length}
+      />
+      <PipelineRunsTable runs={latestRuns} title="Pipeline · latest run per script" />
       <FreshnessTable rows={freshness} />
       <JipSyncPanel rows={jipFreshness} />
       <AnomaliesPanel anomalies={anomalies} />

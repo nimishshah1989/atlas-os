@@ -43,6 +43,27 @@ export async function getRecentRuns(limit = 30): Promise<PipelineRun[]> {
   return rows
 }
 
+// Latest run per distinct script — deduplicated summary view for the dashboard.
+export async function getLatestRunPerScript(): Promise<PipelineRun[]> {
+  const rows = await sql<PipelineRun[]>`
+    SELECT DISTINCT ON (script_name)
+      run_id::text       AS run_id,
+      script_name,
+      milestone,
+      phase,
+      started_at,
+      ended_at,
+      status,
+      rows_written,
+      error_message,
+      host,
+      EXTRACT(EPOCH FROM (ended_at - started_at))::int AS duration_seconds
+    FROM atlas.atlas_pipeline_runs
+    ORDER BY script_name, started_at DESC
+  `
+  return rows
+}
+
 // ---------------------------------------------------------------------------
 // Freshness — current row counts + latest dates per table
 // ---------------------------------------------------------------------------
@@ -259,6 +280,22 @@ export async function getValidatorHistory(days = 30): Promise<ValidatorRun[]> {
   return rows
 }
 
+// Latest result per validator — used for the summary scorecard cards.
+export async function getValidatorLatest(): Promise<ValidatorRun[]> {
+  const rows = await sql<ValidatorRun[]>`
+    SELECT DISTINCT ON (validator)
+      run_id::text AS run_id,
+      validator,
+      ran_at,
+      total_checks,
+      failures,
+      status
+    FROM atlas.atlas_validator_results
+    ORDER BY validator, ran_at DESC
+  `
+  return rows
+}
+
 // ---------------------------------------------------------------------------
 // Aggregated header status
 // ---------------------------------------------------------------------------
@@ -281,21 +318,20 @@ export async function getHeaderStatus(): Promise<HealthHeaderStatus> {
         AND is_anomaly = TRUE
       GROUP BY severity
     `,
-    sql<{ status: string; n: string }[]>`
-      SELECT status, COUNT(*)::text AS n
+    // Latest result per validator — prevents old test runs from inflating FAIL count.
+    sql<{ validator: string; status: string }[]>`
+      SELECT DISTINCT ON (validator) validator, status
       FROM atlas.atlas_validator_results
-      WHERE ran_at >= NOW() - INTERVAL '36 hours'
-      GROUP BY status
+      ORDER BY validator, ran_at DESC
     `,
   ])
 
   const last = hcRows[0]?.ts ?? null
   const sev: Record<string, number> = {}
   for (const r of anomRows) sev[r.severity] = Number(r.n)
-  const validatorFailures =
-    valRows.find((r) => r.status === 'FAIL')?.n ?? '0'
+  const validatorFailures = valRows.filter((r) => r.status === 'FAIL').length
 
-  if ((sev.critical ?? 0) > 0 || Number(validatorFailures) > 0) {
+  if ((sev.critical ?? 0) > 0 || validatorFailures > 0) {
     return {
       level: 'red',
       message: `${sev.critical ?? 0} critical anomalies · ${validatorFailures} validator FAILs`,

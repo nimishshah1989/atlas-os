@@ -30,11 +30,17 @@ function formatRows(n: number | null): string {
   return n.toLocaleString('en-IN')
 }
 
-export function PipelineRunsTable({ runs }: { runs: PipelineRun[] }) {
+export function PipelineRunsTable({
+  runs,
+  title,
+}: {
+  runs: PipelineRun[]
+  title?: string
+}) {
   return (
     <div className="px-6 py-5 border-b border-paper-rule">
       <h2 className="font-sans text-xs font-medium text-ink-3 uppercase tracking-[0.22em] mb-3">
-        Pipeline runs · last {runs.length}
+        {title ?? `Pipeline runs · last ${runs.length}`}
       </h2>
       <div className="overflow-x-auto">
         <table className="w-full">
