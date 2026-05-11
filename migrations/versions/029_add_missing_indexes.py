@@ -1,4 +1,7 @@
-"""Health audit: add missing FK indexes on atlas_universe_funds and atlas_universe_etfs
+"""Health audit: add missing FK index on atlas_universe_funds.benchmark_code
+
+atlas_universe_etfs uses linked_index (not benchmark_code) for benchmark
+lookups — no index needed there.
 
 Revision ID: 029
 Revises: 028
@@ -15,8 +18,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # atlas_universe_funds.benchmark_code: missing FK index flagged in health audit.
-    # Joins from fund metrics pipeline hit this column on every benchmark merge.
+    # atlas_universe_funds.benchmark_code: missing index flagged in health audit.
+    # Fund metrics pipeline joins on this column for every benchmark merge.
     op.execute(
         sa.text("""
         CREATE INDEX IF NOT EXISTS idx_universe_funds_benchmark_code
@@ -24,15 +27,6 @@ def upgrade() -> None:
         """)
     )
 
-    # atlas_universe_etfs.benchmark_code: same pattern — ETF metrics merge on this.
-    op.execute(
-        sa.text("""
-        CREATE INDEX IF NOT EXISTS idx_universe_etfs_benchmark_code
-        ON atlas.atlas_universe_etfs (benchmark_code)
-        """)
-    )
-
 
 def downgrade() -> None:
     op.execute(sa.text("DROP INDEX IF EXISTS atlas.idx_universe_funds_benchmark_code"))
-    op.execute(sa.text("DROP INDEX IF EXISTS atlas.idx_universe_etfs_benchmark_code"))
