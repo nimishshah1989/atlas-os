@@ -131,6 +131,9 @@ def _run_loop(
             msg_str = str(exc)
             if "tool_use_failed" in msg_str or "Failed to call a function" in msg_str:
                 log.warning("agent_tool_use_failed_fallback", err=msg_str[:200])
+                # SEBI-critical: forbid the model from inventing data on fallback.
+                # Without this guard Llama 3.3 70B will cite training-era tickers
+                # and percentiles as if they were live — compliance failure.
                 response = client.chat.completions.create(
                     model=_MODEL,
                     max_tokens=_MAX_TOKENS,
@@ -139,9 +142,15 @@ def _run_loop(
                         {
                             "role": "system",
                             "content": (
-                                "Continue without calling any more tools. "
-                                "Synthesize an answer from data already available. "
-                                "End with a 'Data as of YYYY-MM-DD' line."
+                                "Continue without calling tools. Tools failed; "
+                                "you have NO live data beyond what's already in "
+                                "this conversation. DO NOT invent stock tickers, "
+                                "sector members, prices, or percentile numbers. "
+                                "If you don't have verified data from prior tool "
+                                "results to answer the question, say exactly: "
+                                "'I couldn't reach the live data layer for this "
+                                "query. Please retry in a moment.' End with "
+                                "'Data unavailable.' on its own line."
                             ),
                         },
                     ],
