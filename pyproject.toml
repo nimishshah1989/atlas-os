@@ -47,8 +47,6 @@ dependencies = [
     # Auth — Supabase JWT verification (HS256)
     "pyjwt>=2.8",
 
-    # SP05 — Claude Sonnet 4.6 daily brief generation
-    "anthropic>=0.40",
 ]
 
 [project.optional-dependencies]
@@ -69,6 +67,10 @@ simulation = [
 intelligence = [
     "alphalens-reloaded>=0.4.5",
     "statsmodels>=0.14",
+    # SP05 — Groq Llama-3.3-70B daily brief generation (OpenAI-compatible API)
+    "openai>=1.50",
+    # Keep anthropic for potential future swap back
+    "anthropic>=0.40",
 ]
 
 optimizer = [

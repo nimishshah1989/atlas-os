@@ -1,8 +1,7 @@
-"""SP05: Claude Sonnet 4.6 wrapper for the daily Atlas brief.
+"""SP05: Groq Llama-3.3-70B wrapper for the daily Atlas brief.
 
-- One Anthropic Messages.create call per brief.
-- System prompt is cached (ephemeral) so re-runs amortise.
-- Structured extraction via the emit_brief tool.
+- One Groq chat.completions call per brief (OpenAI-compatible API).
+- Structured extraction via the emit_brief function tool.
 - Banned-word check on narrative output - fail-loud, never silently persist
   non-SEBI-compliant prose.
 """
@@ -27,13 +26,13 @@ from atlas.intelligence.briefs.prompts import (
 
 log = structlog.get_logger()
 
-_MODEL = "claude-sonnet-4-6"
-_MAX_TOKENS = 400
+_MODEL = "llama-3.3-70b-versatile"
+_MAX_TOKENS = 600
 
 
 @dataclass(frozen=True)
 class DailyBrief:
-    """The output of one Claude generation. Persisted verbatim."""
+    """The output of one Groq generation. Persisted verbatim."""
 
     narrative: str
     key_themes: list[str]
@@ -47,7 +46,7 @@ class DailyBrief:
 
 def _context_is_empty(ctx: DailyMarketContext) -> bool:
     """A context is empty if the regime is Unknown AND every collection is
-    empty. We do not call Claude on an empty context."""
+    empty. We do not call Groq on an empty context."""
     return (
         ctx.regime == "Unknown"
         and not ctx.top_sectors
@@ -57,7 +56,7 @@ def _context_is_empty(ctx: DailyMarketContext) -> bool:
 
 
 def _render_user_message(ctx: DailyMarketContext) -> str:
-    """Format the context as a labelled prose+JSON block for Claude."""
+    """Format the context as a labelled prose+JSON block for the model."""
     lines = [
         "Today's Atlas market state:",
         "",
@@ -130,18 +129,18 @@ def _scan_banned_words(narrative: str) -> list[str]:
 
 
 def _make_client() -> Any:
-    """Construct an Anthropic client from env. Raises if SDK or key missing."""
+    """Construct a Groq-backed OpenAI client from env. Raises if SDK or key missing."""
     try:
-        import anthropic
+        from openai import OpenAI
     except ImportError as e:
-        raise RuntimeError("anthropic SDK not installed. Run: pip install 'anthropic>=0.40'") from e
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        raise RuntimeError("openai SDK not installed. Run: pip install 'openai>=1.50'") from e
+    api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
-        raise RuntimeError(
-            "ANTHROPIC_API_KEY is not set in the environment. "
-            "Export it before running the brief generator."
-        )
-    return anthropic.Anthropic(api_key=api_key)
+        raise RuntimeError("GROQ_API_KEY is not set. Get one at console.groq.com.")
+    return OpenAI(
+        base_url="https://api.groq.com/openai/v1",
+        api_key=api_key,
+    )
 
 
 def generate_brief(
@@ -149,19 +148,18 @@ def generate_brief(
     *,
     client: Any | None = None,
 ) -> DailyBrief:
-    """Generate the daily brief by calling Claude with structured extraction.
+    """Generate the daily brief by calling Groq Llama-3.3-70B with structured extraction.
 
     ``client`` is the injection point: tests pass a MagicMock; production
-    passes None and we construct a real anthropic.Anthropic instance.
+    passes None and we construct a real OpenAI(base_url=groq) instance.
     """
     if _context_is_empty(context):
         raise ValueError(
-            "DailyMarketContext is empty - refusing to call Claude on a "
+            "DailyMarketContext is empty - refusing to call Groq on a "
             "blank market state. Verify SP02 materialized views are refreshed."
         )
 
-    if client is None:
-        client = _make_client()
+    _client: Any = client if client is not None else _make_client()
 
     user_text = _render_user_message(context)
 
@@ -172,40 +170,27 @@ def generate_brief(
         model=_MODEL,
     )
 
-    response = client.messages.create(
+    response = _client.chat.completions.create(
         model=_MODEL,
         max_tokens=_MAX_TOKENS,
-        system=[
-            {
-                "type": "text",
-                "text": SYSTEM_PROMPT,
-                "cache_control": {"type": "ephemeral"},
-            }
-        ],
-        tools=[STRUCTURED_TOOL],
-        tool_choice={"type": "tool", "name": "emit_brief"},
         messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_text},
         ],
+        tools=[STRUCTURED_TOOL],
+        tool_choice={"type": "function", "function": {"name": "emit_brief"}},
     )
 
-    # Find the emit_brief tool_use block.
-    tool_block = None
-    for block in response.content:
-        if (
-            getattr(block, "type", None) == "tool_use"
-            and getattr(block, "name", None) == "emit_brief"
-        ):
-            tool_block = block
-            break
+    # Parse OpenAI-style tool_calls from the first choice.
+    choice = response.choices[0]
+    tool_calls = getattr(choice.message, "tool_calls", None)
+    if not tool_calls or tool_calls[0].function.name != "emit_brief":
+        raise RuntimeError(f"Groq did not call emit_brief. Raw response: {response!r}")
 
-    if tool_block is None:
-        raise RuntimeError(f"Claude did not call emit_brief. Raw response: {response.content!r}")
-
-    payload = tool_block.input
+    # arguments is a JSON string in the OpenAI wire format.
+    payload = json.loads(tool_calls[0].function.arguments)
     if not isinstance(payload, dict):
-        # Some SDKs return JSON-string; parse defensively.
-        payload = json.loads(payload)
+        raise RuntimeError(f"emit_brief arguments did not parse to a dict: {payload!r}")
 
     narrative = str(payload["narrative"])
     banned_hits = _scan_banned_words(narrative)
@@ -221,13 +206,14 @@ def generate_brief(
     top_sector_mentions = [str(s) for s in payload["top_sector_mentions"]]
 
     usage = getattr(response, "usage", None)
-    in_tok = getattr(usage, "input_tokens", None) if usage else None
-    out_tok = getattr(usage, "output_tokens", None) if usage else None
+    in_tok = usage.prompt_tokens if usage else None
+    out_tok = usage.completion_tokens if usage else None
 
     log.info(
         "daily_brief_generated",
         as_of=context.as_of.isoformat(),
         regime=context.regime,
+        model=_MODEL,
         input_tokens=in_tok,
         output_tokens=out_tok,
         word_count=len(narrative.split()),
@@ -238,7 +224,7 @@ def generate_brief(
         key_themes=key_themes,
         regime_summary=regime_summary,
         top_sector_mentions=top_sector_mentions,
-        model=getattr(response, "model", _MODEL),
+        model=_MODEL,
         prompt_version=PROMPT_VERSION,
         input_tokens=in_tok,
         output_tokens=out_tok,

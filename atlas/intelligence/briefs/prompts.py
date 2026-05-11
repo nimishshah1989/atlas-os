@@ -77,46 +77,49 @@ Begin.
 """
 
 # ---------------------------------------------------------------------- #
-# Tool schema - Anthropic tools API forces structured extraction         #
-# alongside the prose. The schema is the contract the generator parses.  #
+# Tool schema - OpenAI function-calling format (compatible with Groq).   #
+# The schema is the contract the generator parses.                        #
 # ---------------------------------------------------------------------- #
 STRUCTURED_TOOL: dict = {
-    "name": "emit_brief",
-    "description": (
-        "Emit the daily Atlas brief with structured fields for audit and UI. "
-        "Call this exactly once at the end of the response."
-    ),
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "narrative": {
-                "type": "string",
-                "description": "200-280 word SEBI-safe prose narrative.",
+    "type": "function",
+    "function": {
+        "name": "emit_brief",
+        "description": (
+            "Emit the daily Atlas brief with structured fields for audit and UI. "
+            "Call this exactly once at the end of the response."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "narrative": {
+                    "type": "string",
+                    "description": "200-280 word SEBI-safe prose narrative.",
+                },
+                "key_themes": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 3,
+                    "maxItems": 3,
+                    "description": "Exactly 3 short theme strings.",
+                },
+                "regime_summary": {
+                    "type": "string",
+                    "enum": ["bullish", "neutral", "cautious", "defensive"],
+                    "description": "One-word framework summary.",
+                },
+                "top_sector_mentions": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Sectors named in the narrative, in order.",
+                },
             },
-            "key_themes": {
-                "type": "array",
-                "items": {"type": "string"},
-                "minItems": 3,
-                "maxItems": 3,
-                "description": "Exactly 3 short theme strings.",
-            },
-            "regime_summary": {
-                "type": "string",
-                "enum": ["bullish", "neutral", "cautious", "defensive"],
-                "description": "One-word framework summary.",
-            },
-            "top_sector_mentions": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Sectors named in the narrative, in order.",
-            },
+            "required": [
+                "narrative",
+                "key_themes",
+                "regime_summary",
+                "top_sector_mentions",
+            ],
         },
-        "required": [
-            "narrative",
-            "key_themes",
-            "regime_summary",
-            "top_sector_mentions",
-        ],
     },
 }
 
