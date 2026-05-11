@@ -18,43 +18,59 @@ contract lives.
 Docs: https://docs.openbb.co/workspace/custom-backend/copilot
 """
 
-from __future__ import annotations
+import os
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from atlas.api.openbb.auth import verify_api_key
 
 router = APIRouter()
 
-# Agent registration payload. Update image URL once the icon is deployed.
-_AGENT_METADATA: dict = {
-    "atlas": {
-        "name": "Atlas Intelligence",
-        "description": (
-            "Indian equity research engine with relative strength ranking, "
-            "momentum classification, market regime detection, and sector "
-            "rotation signals. Data covers Nifty 500 universe. All signals "
-            "are SEBI-compliant research output."
-        ),
-        "image": "https://atlas.jslwealth.in/atlas-icon.png",
-        "endpoints": {
-            "query": "/v1/query",
-        },
-        "features": {
-            "streaming": True,
-            "widgets": False,  # v2: can add widget context support
-            "citations": False,
-        },
-        "sample_queries": [
-            "What is the current market regime?",
-            "Show me the top RS stocks",
-            "Which sectors are in the Leading quadrant?",
-            "Show me breakout candidates for today",
-            "Top RS stocks in the IT sector",
-            "What is the sector rotation state?",
-        ],
+
+def _public_base_url(request: Request) -> str:
+    """Resolve the public base URL OpenBB Workspace should call back to.
+
+    Priority:
+    1. ``OPENBB_PUBLIC_BASE_URL`` env var (set on EC2 in production)
+    2. Reconstructed from request headers (works behind cloudflared)
+    """
+    override = os.environ.get("OPENBB_PUBLIC_BASE_URL", "").rstrip("/")
+    if override:
+        return override
+    forwarded_host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
+    forwarded_proto = request.headers.get("x-forwarded-proto", "https")
+    return f"{forwarded_proto}://{forwarded_host}"
+
+
+def _agent_payload(base_url: str) -> dict:
+    return {
+        "atlas": {
+            "name": "Atlas Intelligence",
+            "description": (
+                "Indian equity research engine with relative strength ranking, "
+                "momentum classification, market regime detection, and sector "
+                "rotation signals. Data covers Nifty 500 universe. All signals "
+                "are SEBI-compliant research output."
+            ),
+            "image": "https://atlas.jslwealth.in/atlas-icon.png",
+            "endpoints": {
+                "query": f"{base_url}/v1/query",
+            },
+            "features": {
+                "streaming": True,
+                "widgets": False,
+                "citations": False,
+            },
+            "sample_queries": [
+                "What is the current market regime?",
+                "Show me the top RS stocks",
+                "Which sectors are in the Leading quadrant?",
+                "Show me breakout candidates for today",
+                "Top RS stocks in the IT sector",
+                "What is the sector rotation state?",
+            ],
+        }
     }
-}
 
 
 @router.get(
@@ -63,9 +79,9 @@ _AGENT_METADATA: dict = {
     summary="OpenBB agent metadata",
     dependencies=[Depends(verify_api_key)],
 )
-def get_agents_metadata() -> dict:
+def get_agents_metadata(request: Request) -> dict:
     """Return the Atlas agent definition for OpenBB Workspace registration."""
-    return _AGENT_METADATA
+    return _agent_payload(_public_base_url(request))
 
 
 @router.get(
