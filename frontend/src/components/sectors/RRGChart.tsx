@@ -188,9 +188,12 @@ export function RRGChart({
     for (const [sectorName, sectorHistory] of historyBySector) {
       const last5 = sectorHistory.slice(-5)
       const sectorCurrent = chartData.find((s) => s.sector_name === sectorName)
-      const color = sectorCurrent
-        ? MOM_COLOR[sectorCurrent.bottomup_momentum_state ?? ''] ?? FALLBACK_COLOR
-        : FALLBACK_COLOR
+
+      // Skip trail entirely when no current bubble exists — excluded/filtered sectors
+      // have history rows but no dot, producing orphaned grey lines.
+      if (!sectorCurrent || sectorCurrent.x == null || sectorCurrent.y == null) continue
+
+      const color = MOM_COLOR[sectorCurrent.bottomup_momentum_state ?? ''] ?? FALLBACK_COLOR
 
       // Build points: trail history + today's bubble position
       const allPoints = last5.map(r => ({ px: xScale(r.x), py: yScale(r.y) }))
