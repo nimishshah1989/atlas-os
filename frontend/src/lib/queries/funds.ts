@@ -154,6 +154,7 @@ export async function getAllFunds(): Promise<FundRow[]> {
       GREATEST(0, 100 - COALESCE(fl.strong_aum_pct * 100, 0) - COALESCE(fl.weak_aum_pct * 100, 0))::text AS unknown_aum_pct,
       fl.as_of_date AS lens_as_of_date
     FROM atlas.atlas_universe_funds uf
+    WHERE uf.plan_type = 'Regular'
     LEFT JOIN atlas.atlas_fund_metrics_daily fm
       ON fm.mstar_id = uf.mstar_id AND fm.nav_date = (SELECT metrics_date FROM latest)
     LEFT JOIN atlas.atlas_fund_states_daily fs
@@ -180,6 +181,7 @@ export async function getFundMaster(mstar_id: string): Promise<FundMasterRow | n
       fd.performance_gate, fd.sectors_gate, fd.stocks_gate, fd.market_gate,
       fd.entry_trigger, fd.exit_trigger, fd.reduce_trigger, fd.add_trigger
     FROM atlas.atlas_universe_funds uf
+    WHERE uf.plan_type = 'Regular'
     LEFT JOIN atlas.atlas_fund_states_daily fs
       ON fs.mstar_id = uf.mstar_id
       AND fs.date = (SELECT MAX(date) FROM atlas.atlas_fund_states_daily)

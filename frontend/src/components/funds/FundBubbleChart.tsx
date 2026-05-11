@@ -46,7 +46,7 @@ const BUBBLE_FILTERS: { key: FilterChip; label: string }[] = [
 
 const LEGEND = [
   { color: CHART_COLORS.rsLeader,    label: 'Recommended' },
-  { color: '#1D9E75',                label: 'Hold' },
+  { color: '#B8860B',                label: 'Hold' },
   { color: CHART_COLORS.rsWeak,      label: 'Reduce / Exit' },
   { color: CHART_COLORS.inkTertiary, label: 'No Rating' },
 ]
@@ -66,7 +66,7 @@ type BubblePoint = {
 function recColor(recommendation: string | null): string {
   switch (recommendation) {
     case 'Recommended': return CHART_COLORS.rsLeader
-    case 'Hold':        return '#1D9E75'
+    case 'Hold':        return '#B8860B'
     case 'Reduce':      return CHART_COLORS.rsWeak
     case 'Exit':        return CHART_COLORS.rsWeak
     default:            return CHART_COLORS.inkTertiary

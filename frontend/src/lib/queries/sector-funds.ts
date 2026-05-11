@@ -95,6 +95,7 @@ export async function getSectorFunds(
       fd.exit_trigger
     FROM qualifying q
     JOIN atlas.atlas_universe_funds uf ON uf.mstar_id = q.mstar_id
+      AND uf.plan_type = 'Regular'
     LEFT JOIN atlas.atlas_fund_metrics_daily fm
       ON fm.mstar_id = uf.mstar_id
       AND fm.nav_date = (SELECT MAX(nav_date) FROM atlas.atlas_fund_metrics_daily)
