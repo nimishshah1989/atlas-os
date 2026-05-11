@@ -34,8 +34,46 @@ const CHIPS: { key: FilterChip; label: string }[] = [
   { key: 'accel',      label: 'Accelerating' },
 ]
 
+// Composite quality grade derived from RS state, momentum, risk, volume, stage, and RS pctile.
+function buildStockGrade(row: StockRowWithSector): { grade: string; color: string; score: number } {
+  let score = 0
+  const rsScore: Record<string, number>   = { Leader: 3, Strong: 2, Consolidating: 1, Emerging: 1, Average: 0, Weak: -1, Laggard: -2 }
+  const momScore: Record<string, number>  = { Accelerating: 2, Improving: 1, Flat: 0, Deteriorating: -1, Collapsing: -2 }
+  const riskScore: Record<string, number> = { Low: 1, Normal: 0, Elevated: -1, High: -2, 'Below Trend': -1 }
+  const volScore: Record<string, number>  = { Accumulation: 2, 'Steady-Buying': 1, Neutral: 0, Distribution: -1, 'Heavy Distribution': -2 }
+  score += rsScore[row.rs_state ?? ''] ?? 0
+  score += momScore[row.momentum_state ?? ''] ?? 0
+  score += riskScore[row.risk_state ?? ''] ?? 0
+  score += volScore[row.volume_state ?? ''] ?? 0
+  if (row.above_30w_ma === true) score += 1
+  const p = row.rs_pctile_3m != null ? parseFloat(row.rs_pctile_3m) : null
+  if (p != null) { if (p >= 0.75) score += 1; else if (p < 0.25) score -= 1 }
+  if (score >= 5) return { grade: 'A', color: '#2F6B43', score }
+  if (score >= 1) return { grade: 'B', color: '#d97706', score }
+  return { grade: 'C', color: '#ef4444', score }
+}
+
+// Deterministic signal string explaining the stock's classification.
+function buildStockSignal(row: StockRowWithSector): { compact: string; tooltip: string } {
+  const parts: string[] = []
+  const tip: string[] = []
+  const p = row.rs_pctile_3m != null ? Math.round(parseFloat(row.rs_pctile_3m) * 100) : null
+  if (p != null) { parts.push(`${p}th%`); tip.push(`RS Pctile (3M): ${p}th percentile`) }
+  if (row.above_30w_ma === true)       { parts.push('Stage2');  tip.push('Stage 2: Above rising 30W MA ✓') }
+  else if (row.above_30w_ma === false) { parts.push('BelowMA'); tip.push('Stage 2: Below 30W MA ✗') }
+  const momShort: Record<string, string> = { Accelerating: 'Accel', Improving: 'Improv', Flat: 'Flat', Deteriorating: 'Detr', Collapsing: 'Coll' }
+  if (row.momentum_state) { parts.push(momShort[row.momentum_state] ?? row.momentum_state); tip.push(`Momentum: ${row.momentum_state}`) }
+  const volShort: Record<string, string> = { Accumulation: 'Accum', 'Steady-Buying': 'Steady', Distribution: 'Distr', 'Heavy Distribution': 'H.Distr' }
+  if (row.volume_state && row.volume_state !== 'Neutral') { parts.push(volShort[row.volume_state] ?? row.volume_state); tip.push(`Volume: ${row.volume_state}`) }
+  if (row.risk_state === 'High')     { parts.push('⚠Risk');  tip.push('Risk: HIGH — risk_gate fails → position_size = 0%') }
+  else if (row.risk_state === 'Elevated') { parts.push('Elev'); tip.push('Risk: Elevated — proceed with caution') }
+  return { compact: parts.join(' · '), tooltip: tip.join('\n') }
+}
+
 // Optional columns. 1W, 6M, 12M visible by default.
 const OPTIONAL_COLS: ColumnDef[] = [
+  { key: 'quality',         label: 'Grade',       defaultVisible: true },
+  { key: 'signal',          label: 'Signal',      defaultVisible: false },
   { key: 'ret_1d',          label: '1D',          defaultVisible: false },
   { key: 'ret_1w',          label: '1W',          defaultVisible: true },
   { key: 'ret_6m',          label: '6M',          defaultVisible: true },
@@ -381,6 +419,8 @@ export function StockScreener({
               <Th label="Mom" k="momentum_state" />
               <Th label="Risk" k="risk_state" />
               <Th label="Vol" k="volume_state" />
+              {visibleCols.has('quality') && <PlainTh label="Grade" />}
+              {visibleCols.has('signal') && <PlainTh label="Signal" />}
               {visibleCols.has('ret_1d') && <PlainTh label="1D" align="right" />}
               {visibleCols.has('ret_1w') && <PlainTh label="1W" align="right" />}
               <Th label="1M" k="ret_1m" align="right" />
@@ -479,6 +519,29 @@ export function StockScreener({
                       <td className="px-3 py-2.5">
                         <VolumeChip value={row.volume_state} />
                       </td>
+                      {visibleCols.has('quality') && (() => {
+                        const g = buildStockGrade(row)
+                        return (
+                          <td className="px-3 py-2.5" title={`Grade ${g.grade} (score ${g.score})`}>
+                            <span
+                              className="inline-flex items-center justify-center w-5 h-5 rounded font-mono text-[11px] font-bold text-white"
+                              style={{ background: g.color }}
+                            >
+                              {g.grade}
+                            </span>
+                          </td>
+                        )
+                      })()}
+                      {visibleCols.has('signal') && (() => {
+                        const sig = buildStockSignal(row)
+                        return (
+                          <td className="px-3 py-2.5 max-w-[200px]" title={sig.tooltip}>
+                            <span className="font-sans text-[10px] text-ink-secondary truncate block">
+                              {sig.compact || '—'}
+                            </span>
+                          </td>
+                        )
+                      })()}
                       {visibleCols.has('ret_1d') && (
                         <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(ret1d)}`}>
                           {pct(ret1d)}
