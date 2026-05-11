@@ -83,7 +83,7 @@
     <span><strong>Created:</strong> 2026-05-11</span>
     <span><strong>Companion to:</strong> <code>00-master-plan.html</code></span>
     <span><strong>Owner:</strong> Atlas Operations</span>
-    <span><strong>Cadence:</strong> Nightly + on-demand + pre-milestone</span>
+    <span><strong>Runs:</strong> Nightly + on-demand + pre-milestone gate</span>
   </div>
 </header>
 
@@ -537,7 +537,7 @@
     <p class="sev-body">Frontend ↔ backend divergence > tolerance. Cross-page inconsistency on a key metric. Calculation error on widely-displayed value. Affects 1-10% of surface.</p>
   </div>
   <div class="sev sev-p2">
-    <div class="sev-title">P2 — Fix this sprint</div>
+    <div class="sev-title">P2 — Fix this batch</div>
     <p class="sev-body">Data gap below tolerance. Missing lineage tag. Stale cache. Affects &lt;1% but should be cleaned.</p>
   </div>
   <div class="sev sev-p3">
@@ -645,7 +645,7 @@ python -m atlas.agents.validator --quick --fail-on=P0,P1
 <h2>10. Implementation plan</h2>
 
 <div class="phase-block">
-  <div class="phase-title">Phase A — Foundation (2 days)</div>
+  <div class="phase-title">Phase A — Foundation</div>
   <p><strong>Deliverable:</strong> Hermes installed; read-only SQL tool registered; simple Sensibility Validator subagent running against existing tables.</p>
   <ul>
     <li>Add <code>hermes-agent</code> to <code>pyproject.toml</code> dependencies</li>
@@ -659,7 +659,7 @@ python -m atlas.agents.validator --quick --fail-on=P0,P1
 </div>
 
 <div class="phase-block">
-  <div class="phase-title">Phase B — Coverage and lineage scaffolding (2 days)</div>
+  <div class="phase-title">Phase B — Coverage and lineage scaffolding</div>
   <p><strong>Deliverable:</strong> Schema Validator subagent operational; expected-coverage YAML in place; lineage tag scaffold in 4 highest-value frontend components.</p>
   <ul>
     <li>Implement <code>tools/coverage_query.py</code></li>
@@ -671,7 +671,7 @@ python -m atlas.agents.validator --quick --fail-on=P0,P1
 </div>
 
 <div class="phase-block">
-  <div class="phase-title">Phase C — Route Crawler + frontend/backend diff (3 days)</div>
+  <div class="phase-title">Phase C — Route Crawler + frontend/backend diff</div>
   <p><strong>Deliverable:</strong> Route Crawler subagent + Cross-page Consistency subagent operational; diffs surfacing on 4 tagged pages.</p>
   <ul>
     <li>Add Playwright to dev dependencies</li>
@@ -684,7 +684,7 @@ python -m atlas.agents.validator --quick --fail-on=P0,P1
 </div>
 
 <div class="phase-block">
-  <div class="phase-title">Phase D — Calc Verifier + cross-source (2 days)</div>
+  <div class="phase-title">Phase D — Calc Verifier + cross-source</div>
   <p><strong>Deliverable:</strong> Calc Verifier subagent re-computes EMA / RS / drawdown / momentum primitives on sampled rows.</p>
   <ul>
     <li>Implement <code>tools/compute_primitive.py</code> as a clean re-implementation of the primitive formulas (not a re-call of production code)</li>
@@ -695,7 +695,7 @@ python -m atlas.agents.validator --quick --fail-on=P0,P1
 </div>
 
 <div class="phase-block">
-  <div class="phase-title">Phase E — Orchestrator + Reporter + admin UI (2 days)</div>
+  <div class="phase-title">Phase E — Orchestrator + Reporter + admin UI</div>
   <p><strong>Deliverable:</strong> Full agent pipeline operational; admin dashboard renders findings; Slack alerts wired.</p>
   <ul>
     <li>Implement Orchestrator agent (Hermes top-level agent that delegates to all subagents)</li>
@@ -708,7 +708,7 @@ python -m atlas.agents.validator --quick --fail-on=P0,P1
 </div>
 
 <div class="phase-block">
-  <div class="phase-title">Phase F — Hardening and rollout (2 days)</div>
+  <div class="phase-title">Phase F — Hardening and rollout</div>
   <p><strong>Deliverable:</strong> First nightly run completes cleanly; findings reviewed and triaged; ongoing operations doc.</p>
   <ul>
     <li>Run the validator nightly for 5 consecutive nights; review every finding</li>
@@ -720,7 +720,7 @@ python -m atlas.agents.validator --quick --fail-on=P0,P1
 </div>
 
 <div class="callout">
-  <strong>Total implementation:</strong> ~13 calendar days (10–11 working days with parallel sub-phases). This runs in parallel with Phase 2 sub-projects 01–03 in week 1–2, since they have no shared file ownership.
+  <strong>Sequencing.</strong> Phases A through E are dependency-ordered (each builds on the previous). Phase F requires real production-data exposure across multiple nights to tune for false positives — that part runs on calendar time regardless of how fast the code lands. The validator can be built in parallel with Phase 2 Wave 1 sub-projects (SP01, SP02, SP03) since they own different files.
 </div>
 </section>
 
@@ -731,7 +731,7 @@ python -m atlas.agents.validator --quick --fail-on=P0,P1
 <ol>
   <li><strong>P0:</strong> Pager-level. Drop current work, investigate immediately. P0 findings should never persist > 1 hour.</li>
   <li><strong>P1:</strong> Same-day fix. Investigate root cause; if it's a data issue re-run pipeline; if code, fix and deploy.</li>
-  <li><strong>P2:</strong> Add to sprint backlog. Group similar findings into one fix.</li>
+  <li><strong>P2:</strong> Add to the next batch. Group similar findings into one fix.</li>
   <li><strong>P3:</strong> Track in dashboard. Bulk-clean monthly.</li>
 </ol>
 

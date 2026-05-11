@@ -86,12 +86,12 @@
 <header>
   <p style="font-size: 12px; color: var(--ink-tertiary); text-transform: uppercase; letter-spacing: 0.12em; margin: 0 0 8px;">ATLAS · PHASE 2 · REFERENCE DOCUMENT</p>
   <h1>From Static Dashboard to Living Intelligence</h1>
-  <p class="lead">The plan to evolve Atlas from a rule-based data presentation layer into a measured, agentic, self-improving research platform. Nine sub-projects across six to eight weeks. This document is the canonical reference — every milestone reads it before starting.</p>
+  <p class="lead">The plan to evolve Atlas from a rule-based data presentation layer into a measured, agentic, self-improving research platform. Nine sub-projects with a defined dependency graph and parallelization strategy. This document is the canonical reference — every milestone reads it before starting.</p>
   <div class="meta-bar">
     <span><strong>Version:</strong> 1.0</span>
     <span><strong>Created:</strong> 2026-05-11</span>
     <span><strong>Baseline:</strong> health-audit-baseline-2026-05 (1e97c72)</span>
-    <span><strong>Status:</strong> Approved · Option B parallel sprint</span>
+    <span><strong>Status:</strong> Approved · Option B parallel build</span>
     <span><strong>Owner:</strong> Nimish</span>
   </div>
 </header>
@@ -103,7 +103,7 @@
     <li><a href="#pillars">The four pillars</a></li>
     <li><a href="#architecture">Target architecture</a></li>
     <li><a href="#subprojects">The nine sub-projects (detailed)</a></li>
-    <li><a href="#sprint">Sprint plan and parallelization</a></li>
+    <li><a href="#sprint">Build order and parallelization</a></li>
     <li><a href="#decisions">Key decisions and tradeoffs</a></li>
     <li><a href="#operating-rules">Operating rules</a></li>
     <li><a href="#how-to-use">How to use this document</a></li>
@@ -231,7 +231,7 @@
       <h3><span class="priority-dot p0"></span>Signal Validation Lab</h3>
       <p class="subtitle">Pillar I · Information Coefficient measurement on the full <code>decision_state</code> composite</p>
     </div>
-    <div class="badges"><span class="badge">1–2 days</span><span class="badge">Week 1 parallel</span><span class="badge">No blockers</span></div>
+    <div class="badges"><span class="badge">Parallel track 1</span><span class="badge">No blockers</span><span class="badge">Unblocks: SP04, SP06</span></div>
   </div>
   <div class="subproject-grid">
     <div>
@@ -292,7 +292,7 @@
       <h3><span class="priority-dot p1"></span>Materialized Views &amp; RRG Velocity</h3>
       <p class="subtitle">Pillar I · Sub-3ms frontend reads + true rotation signals via rate-of-change</p>
     </div>
-    <div class="badges"><span class="badge">1 day</span><span class="badge">Week 1 parallel</span><span class="badge">No blockers</span></div>
+    <div class="badges"><span class="badge">Parallel track 2</span><span class="badge">No blockers</span><span class="badge">Unblocks: SP03, SP05</span></div>
   </div>
   <div class="subproject-grid">
     <div>
@@ -355,7 +355,7 @@
       <h3><span class="priority-dot p1"></span>OpenBB Bring-Your-Own-Copilot Integration</h3>
       <p class="subtitle">Pillar III · Atlas as a first-class analyst agent inside OpenBB Workspace</p>
     </div>
-    <div class="badges"><span class="badge">2–3 days</span><span class="badge">Week 1 parallel</span><span class="badge">Highest leverage</span></div>
+    <div class="badges"><span class="badge">Parallel track 3</span><span class="badge">Soft dep: SP02 mv views</span><span class="badge">Highest external leverage</span></div>
   </div>
   <div class="subproject-grid">
     <div>
@@ -423,7 +423,7 @@
       <h3><span class="priority-dot p1"></span>Signal Intelligence Layer</h3>
       <p class="subtitle">Pillar II · Multi-timeframe RS confluence, IC-weighted composites, regime conditioning</p>
     </div>
-    <div class="badges"><span class="badge">3–4 days</span><span class="badge">Week 2</span><span class="badge">Depends: SP1 (IC measurements)</span></div>
+    <div class="badges"><span class="badge">Wave 2</span><span class="badge">Depends: SP01 (IC weights)</span><span class="badge">Unblocks: SP05, SP06, SP07</span></div>
   </div>
   <div class="subproject-grid">
     <div>
@@ -478,7 +478,7 @@
       <h3><span class="priority-dot p1"></span>Daily Atlas Brief</h3>
       <p class="subtitle">Pillar II · Claude-authored daily market narrative with SEBI-safe language</p>
     </div>
-    <div class="badges"><span class="badge">2 days</span><span class="badge">Week 2</span><span class="badge">Depends: SP2, SP4</span></div>
+    <div class="badges"><span class="badge">Wave 2</span><span class="badge">Depends: SP02 + SP04</span></div>
   </div>
   <div class="subproject-grid">
     <div>
@@ -537,7 +537,7 @@
       <h3><span class="priority-dot p2"></span>Continuous Simulation Engine</h3>
       <p class="subtitle">Pillar IV · Nightly parameter-space tournaments — threshold tuning loop</p>
     </div>
-    <div class="badges"><span class="badge">5–7 days</span><span class="badge">Week 3–4</span><span class="badge">Depends: SP1, SP4</span></div>
+    <div class="badges"><span class="badge">Wave 3</span><span class="badge">Depends: SP01 + SP04</span><span class="badge">Heaviest compute</span></div>
   </div>
   <div class="subproject-grid">
     <div>
@@ -603,7 +603,7 @@
       <h3><span class="priority-dot p2"></span>Hermes-Orchestrated Agent Runtime</h3>
       <p class="subtitle">Pillar III · Tool-using agents that compose Atlas endpoints into research workflows</p>
     </div>
-    <div class="badges"><span class="badge">5–8 days</span><span class="badge">Week 4–5</span><span class="badge">Depends: SP4, SP6</span></div>
+    <div class="badges"><span class="badge">Wave 3</span><span class="badge">Depends: SP04 + SP06</span></div>
   </div>
   <div class="subproject-grid">
     <div>
@@ -678,7 +678,7 @@ explain_state_transition(symbol, from_date, to_date)</pre>
       <h3><span class="priority-dot p2"></span>Intraday Live State Engine</h3>
       <p class="subtitle">Pillar I · KiteConnect feed → 15-minute incremental EMA + RS percentile updates</p>
     </div>
-    <div class="badges"><span class="badge">7–10 days</span><span class="badge">Week 5–7</span><span class="badge">Depends: SP1, SP2, SP4</span><span class="badge badge-warn">Open: TimescaleDB on Supabase</span></div>
+    <div class="badges"><span class="badge">Wave 4</span><span class="badge">Depends: SP01 + SP02 + SP04</span><span class="badge">Needs: KiteConnect subscription</span><span class="badge badge-warn">Open: TimescaleDB on Supabase</span></div>
   </div>
   <div class="subproject-grid">
     <div>
@@ -730,7 +730,7 @@ Frontend polls /api/rs-leaders (30s cache)</pre>
       <h3><span class="priority-dot p2"></span>UI-TARS for AMC Portal Scraping</h3>
       <p class="subtitle">Pillar III · Last-resort data ingestion from AMC portals with no API</p>
     </div>
-    <div class="badges"><span class="badge">3–5 days</span><span class="badge">Deferred</span><span class="badge">As-needed basis</span></div>
+    <div class="badges"><span class="badge">Deferred</span><span class="badge">As-needed basis</span><span class="badge">Triggered by AMC portal blocker</span></div>
   </div>
   <div class="subproject-grid">
     <div>
@@ -761,59 +761,80 @@ Frontend polls /api/rs-leaders (30s cache)</pre>
 </section>
 
 <section id="sprint">
-<h2>5. Sprint plan and parallelization</h2>
-<p>Locked plan: <strong>Option B parallel sprint</strong>. Three sub-projects start simultaneously in week 1.</p>
+<h2>5. Build order and parallelization</h2>
+<p>Sub-projects are organized into <strong>waves</strong> based on dependencies, not calendar time. Each wave starts when its prerequisites are satisfied. Within a wave, sub-projects run in parallel because they touch different files and share no state.</p>
+
+<div class="ascii-diagram">  WAVE 1 (parallel — no blockers)            WAVE 2 (after Wave 1)
+  ┌──────────────────────────────┐           ┌──────────────────────────────┐
+  │ SP01 Signal Validation Lab   │──── IC ──▶│ SP04 Signal Intelligence     │
+  │ SP02 Materialized Views      │──── mv ──▶│ SP05 Daily Atlas Brief       │
+  │ SP03 OpenBB BYO Copilot      │           └──────────────┬───────────────┘
+  └──────────────────────────────┘                          │
+                                                            │
+  WAVE 3 (after SP04 + SP01)                                ▼
+  ┌──────────────────────────────────────────────────────────┐
+  │ SP06 Continuous Simulation Engine                       │
+  │ SP07 Hermes Agent Runtime                               │
+  └──────────────────────────────┬───────────────────────────┘
+                                 │
+  WAVE 4 (after Wave 3 + external)│
+  ┌──────────────────────────────▼───────────────────────────┐
+  │ SP08 Intraday Live State (also needs KiteConnect sub)   │
+  └──────────────────────────────────────────────────────────┘
+
+  ON-DEMAND  ─  SP09 UI-TARS scraping (triggered by AMC portal need)</div>
 
 <div class="week-block">
-  <div class="week-title">Week 1 (Days 1–7) — Three parallel tracks</div>
+  <div class="week-title">Wave 1 — Three parallel tracks (locked plan: Option B)</div>
   <table>
-    <thead><tr><th>Track</th><th>Sub-project</th><th>Owner</th><th>Days</th></tr></thead>
+    <thead><tr><th>Track</th><th>Sub-project</th><th>Why parallelizable</th></tr></thead>
     <tbody>
-      <tr><td>A</td><td>SP01 — Signal Validation Lab (decision_state composite)</td><td>Nimish + Claude</td><td>1–2</td></tr>
-      <tr><td>B</td><td>SP02 — Materialized Views + RRG velocity</td><td>Nimish + Claude</td><td>1</td></tr>
-      <tr><td>C</td><td>SP03 — OpenBB BYO Copilot</td><td>Nimish + Claude</td><td>2–3</td></tr>
+      <tr><td>A</td><td>SP01 — Signal Validation Lab (<code>decision_state</code> composite)</td><td>Pure read-only against existing tables. New module under <code>atlas/intelligence/validation/</code></td></tr>
+      <tr><td>B</td><td>SP02 — Materialized Views + RRG velocity</td><td>Postgres-only. New migration + new column. No code overlap with track A.</td></tr>
+      <tr><td>C</td><td>SP03 — OpenBB BYO Copilot</td><td>New FastAPI surface under <code>atlas/api/openbb/</code>. Soft dep on SP02 views — graceful fallback if not yet ready.</td></tr>
     </tbody>
   </table>
-  <p><strong>End of week 1:</strong> Atlas has measured IC on decision_state, sub-3ms frontend reads, and presence inside OpenBB Workspace.</p>
+  <p><strong>Exit criteria for Wave 1:</strong> measured IC on <code>decision_state</code> in <code>atlas_signal_ic</code> table · 5 materialized views refreshing nightly · Atlas registered as an agent in OpenBB Workspace.</p>
 </div>
 
 <div class="week-block">
-  <div class="week-title">Week 2 (Days 8–14)</div>
+  <div class="week-title">Wave 2 — Intelligence layer</div>
   <table>
+    <thead><tr><th>Sub-project</th><th>Why this wave</th></tr></thead>
     <tbody>
-      <tr><td>SP04 — Signal Intelligence layer (3–4 days)</td><td>Depends on SP01 IC weights</td></tr>
-      <tr><td>SP05 — Daily Atlas Brief (2 days)</td><td>Depends on SP02 mv views + SP04 graded scores</td></tr>
+      <tr><td>SP04 — Signal Intelligence layer</td><td>Reads IC weights from <code>atlas_signal_ic</code> (SP01). Cannot start before SP01 ships.</td></tr>
+      <tr><td>SP05 — Daily Atlas Brief</td><td>Reads materialized views (SP02) and graded scores (SP04). Cannot start before both ship.</td></tr>
     </tbody>
   </table>
 </div>
 
 <div class="week-block">
-  <div class="week-title">Week 3–4 (Days 15–28)</div>
+  <div class="week-title">Wave 3 — Agency + Learning</div>
   <table>
+    <thead><tr><th>Sub-project</th><th>Why this wave</th></tr></thead>
     <tbody>
-      <tr><td>SP06 — Continuous Simulation Engine (5–7 days)</td><td>Depends on SP01 + SP04</td></tr>
-      <tr><td><em>(also begin)</em> SP07 — Hermes Agent Runtime (parallel start once SP04 ships)</td><td>Depends on SP04</td></tr>
+      <tr><td>SP06 — Continuous Simulation Engine</td><td>Tournament scoring uses IC framework (SP01) and graded composites (SP04). Heaviest compute — runs in parallel with SP07 but on different files.</td></tr>
+      <tr><td>SP07 — Hermes Agent Runtime</td><td>Tools registry exposes SP04 composites and SP06 proposal queue. Parallel with SP06.</td></tr>
     </tbody>
   </table>
 </div>
 
 <div class="week-block">
-  <div class="week-title">Week 5–7 (Days 29–49)</div>
+  <div class="week-title">Wave 4 — Live state</div>
   <table>
     <tbody>
-      <tr><td>SP07 — Hermes Agent Runtime completion (5–8 days)</td><td></td></tr>
-      <tr><td>SP08 — Intraday Live State Engine (7–10 days)</td><td>Depends on SP01, SP02, SP04 + KiteConnect subscription</td></tr>
+      <tr><td>SP08 — Intraday Live State Engine</td><td>Depends on validated, graded, agent-orchestrated foundations + external dependency on KiteConnect subscription. Last for a reason — heaviest infrastructure for least incremental intelligence.</td></tr>
     </tbody>
   </table>
 </div>
 
 <div class="week-block">
-  <div class="week-title">Deferred / on-demand</div>
-  <p>SP09 — UI-TARS portal scraping. Activate only when a specific AMC portal blocks ingestion.</p>
+  <div class="week-title">On-demand</div>
+  <p>SP09 — UI-TARS portal scraping. Activate only when a specific AMC portal becomes a blocker. Not scheduled — triggered by need.</p>
 </div>
 
 <div class="callout">
-  <strong>Total active engineering days:</strong> ~28 days for SP01–SP08, distributed across 6–8 calendar weeks with parallelization. SP09 is on-demand, not scheduled.
+  <strong>Cadence philosophy.</strong> Atlas runs on Claude-paced development cycles, not human-team sprints. A sub-project's "duration" is the time between starting and shipping — typically a single focused session. The dependency graph above is what matters; the calendar is whatever it is.
 </div>
 </section>
 
@@ -830,7 +851,7 @@ Frontend polls /api/rs-leaders (30s cache)</pre>
 <p>Haiku misses subtle market nuance — wealth managers will notice. Opus is 3x cost for marginal gain on this constrained narrative task. Sonnet 4.6 is the right model — better than Haiku on financial reasoning, cheaper than Opus, with prompt caching to reduce repeat-run cost.</p>
 
 <h3>6.4 Why Hermes Agent over building our own loop</h3>
-<p>Hermes is a 144K-star production runtime with: tool registry, JSON Schema validation, scheduling, memory layer, subagent delegation, multi-model support (including local Llama for SEBI sensitivity). Building this from scratch is 4–6 weeks. Adopting and registering our tools is 5–8 days.</p>
+<p>Hermes is a 144K-star production runtime with: tool registry, JSON Schema validation, scheduling, memory layer, subagent delegation, multi-model support (including local Llama for SEBI sensitivity). Building this from scratch reinvents a complex production-tested loop. Adopting Hermes and registering Atlas tools as plugins keeps us focused on the financial intelligence layer instead of the agent runtime.</p>
 
 <h3>6.5 Why we propose threshold changes, never auto-apply</h3>
 <p>The audit-trail trigger on <code>atlas_thresholds</code> (migration 023) is the load-bearing compliance artifact. Every change must be human-reviewed and human-applied. The simulation engine is allowed to be smart; it is never allowed to be unilateral. Every accepted proposal carries the simulation evidence, the Claude-authored rationale, and the human approver's identity.</p>
@@ -906,7 +927,7 @@ Frontend polls /api/rs-leaders (30s cache)</pre>
 </section>
 
 <footer class="footer">
-  <p><strong>Atlas Phase 2 Master Plan · v1.0 · 2026-05-11</strong> · Authored during the Phase 2 brainstorm session with research input from two parallel agents (UI-TARS/Hermes/finance frameworks + finance/streaming/Claude-LLM patterns). Approved approach: Option B parallel sprint, decision_state composite as first validation target. Baseline commit: <code>1e97c72</code>, tag <code>health-audit-baseline-2026-05</code>.</p>
+  <p><strong>Atlas Phase 2 Master Plan · v1.0 · 2026-05-11</strong> · Authored during the Phase 2 brainstorm session with research input from two parallel agents (UI-TARS/Hermes/finance frameworks + finance/streaming/Claude-LLM patterns). Approved approach: Option B parallel build, decision_state composite as first validation target. Baseline commit: <code>1e97c72</code>, tag <code>health-audit-baseline-2026-05</code>.</p>
   <p>Co-authored by Nimish + Claude Opus 4.7. See <code>docs/phase2/01-data-validator-agent.html</code> for the companion validator agent design.</p>
 </footer>
 
