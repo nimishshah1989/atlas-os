@@ -55,6 +55,7 @@ jobs:
             sleep 1
 
             echo "--- building ---"
+            rm -rf .next
             npm run build
 
             echo "--- starting PM2 ---"
