@@ -459,6 +459,7 @@ def populate_universe_etfs(engine: Engine | None = None) -> int:
         SET effective_to = CURRENT_DATE, updated_at = NOW()
         WHERE effective_to IS NULL
           AND ticker != ALL(:keep_tickers)
+          AND ticker IN (SELECT ticker FROM public.de_etf_master)
     """)
 
     insert_sql = text("""

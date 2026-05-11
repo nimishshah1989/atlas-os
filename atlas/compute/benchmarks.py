@@ -16,7 +16,13 @@ import structlog
 from sqlalchemy.engine import Engine
 
 from atlas.compute._session import open_compute_session
-from atlas.compute.primitives import WINDOWS, add_emas, add_realized_vol, add_returns
+from atlas.compute.primitives import (
+    WINDOWS,
+    add_emas,
+    add_max_drawdown,
+    add_realized_vol,
+    add_returns,
+)
 
 log = structlog.get_logger()
 
@@ -148,6 +154,12 @@ def materialize_benchmark_cache(
         group_col="benchmark_code",
         return_col="ret_1d",
         window=63,
+    )
+    cache = add_max_drawdown(
+        cache,
+        group_col="benchmark_code",
+        return_col="ret_1d",
+        window=252,
     )
 
     log.info(
