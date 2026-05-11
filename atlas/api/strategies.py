@@ -3,10 +3,15 @@
 Endpoint:
 - POST /api/strategies/{id}/backtest  — trigger a fresh backtest for an existing
   strategy with a custom date range + initial capital. Returns 202 immediately
-  with a compute_run_id; the UI polls atlas.atlas_pipeline_runs by run_id.
+  with a run_id; the UI polls atlas.atlas_pipeline_runs by run_id.
 
-Concurrency guard: 409 if another backtest is already in-flight (script_name
-'backtest_engine', status 'running', started_at > NOW() - INTERVAL '30 minutes').
+Concurrency guard: 409 if another backtest is already queued or in-flight
+(script_name 'backtest_engine', status IN ('queued','running'),
+started_at > NOW() - INTERVAL '30 minutes').
+
+The endpoint inserts status='queued' (not 'running') so the row is honest about
+the actual state — no subprocess is spawned here. A background worker picks up
+queued rows and transitions them to running → success/failed.
 """
 
 from __future__ import annotations
@@ -74,12 +79,12 @@ def trigger_backtest_rerun(
                     "context": {},
                 },
             )
-        # Check no in-flight backtest (any strategy, per spec AD4)
+        # Check no in-flight or queued backtest (any strategy, per spec AD4)
         existing = conn.execute(
             text("""
                 SELECT run_id FROM atlas.atlas_pipeline_runs
                 WHERE script_name = 'backtest_engine'
-                  AND status = 'running'
+                  AND status IN ('queued', 'running')
                   AND started_at > NOW() - INTERVAL '30 minutes'
                 ORDER BY started_at DESC LIMIT 1
             """),
@@ -103,26 +108,23 @@ def trigger_backtest_rerun(
                 INSERT INTO atlas.atlas_pipeline_runs
                   (run_id, script_name, milestone, started_at, status, host, git_sha)
                 VALUES
-                  (:rid, 'backtest_engine', 'M15', NOW(), 'running', 'api', NULL)
+                  (:rid, 'backtest_engine', 'M15', NOW(), 'queued', 'api', NULL)
             """),
             {"rid": str(new_run_id)},
         )
     log.info(
-        "backtest_rerun_requested",
+        "backtest_rerun_queued",
         compute_run_id=str(new_run_id),
         strategy_id=str(strategy_id),
         start_date=body.start_date.isoformat(),
         end_date=body.end_date.isoformat(),
         initial_capital=body.initial_capital,
     )
-    # TODO: spawn subprocess — nightly cron picks up the running row.
-    # For M15 ship, the row is inserted as 'running'; actual subprocess
-    # invocation is a follow-up task per HOLD SCOPE directive.
     return {
         "data": {
             "compute_run_id": str(new_run_id),
             "strategy_id": str(strategy_id),
-            "status": "running",
+            "status": "queued",
         },
         "meta": {
             "data_as_of": fetched_at,

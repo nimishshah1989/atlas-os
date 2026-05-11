@@ -41,6 +41,9 @@ dependencies = [
 
     # Notification (per architecture 7.4)
     "httpx>=0.26",
+
+    # Auth — Supabase JWT verification (HS256)
+    "pyjwt>=2.8",
 ]
 
 [project.optional-dependencies]

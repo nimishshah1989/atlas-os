@@ -23,10 +23,9 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from atlas.api._rule_allowlist import ConfigValidationError, validate_config
-from atlas.compute._session import open_compute_session
+from atlas.compute import open_compute_session
 from atlas.db import get_engine
-from atlas.simulation.custom.builder import InstrumentWeight
-from atlas.simulation.custom.portfolio import create_custom_portfolio
+from atlas.simulation.custom import InstrumentWeight, create_custom_portfolio
 
 router = APIRouter(prefix="/api/portfolios/custom", tags=["custom-portfolio"])
 
