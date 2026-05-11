@@ -72,21 +72,34 @@ const STATE_DOT: Record<string, string> = {
 const RS_STATE_ORDER: Record<string, number> = {
   Leader:        1,
   Strong:        2,
+  Overweight_RS: 2,
   Emerging:      3,
   Consolidating: 4,
   Average:       5,
+  Neutral_RS:    5,
   Weak:          6,
   Laggard:       7,
+  Avoid_RS:      7,
 }
 
 const RS_STATE_STYLE: Record<string, string> = {
   Leader:        'bg-signal-pos/15 text-signal-pos',
   Strong:        'bg-signal-pos/8 text-signal-pos',
+  Overweight_RS: 'bg-signal-pos/8 text-signal-pos',
   Emerging:      'bg-signal-warn/10 text-signal-warn',
   Consolidating: 'bg-ink-tertiary/10 text-ink-secondary',
   Average:       'bg-ink-tertiary/10 text-ink-tertiary',
+  Neutral_RS:    'bg-ink-tertiary/10 text-ink-tertiary',
   Weak:          'bg-signal-neg/8 text-signal-neg',
   Laggard:       'bg-signal-neg/15 text-signal-neg',
+  Avoid_RS:      'bg-signal-neg/8 text-signal-neg',
+}
+
+// Sector-level RS states use a different naming convention — strip _RS suffix for display
+const RS_DISPLAY_LABEL: Record<string, string> = {
+  Overweight_RS: 'Overweight',
+  Neutral_RS:    'Neutral',
+  Avoid_RS:      'Avoid',
 }
 
 function pct(v: string | null): string {
@@ -169,9 +182,13 @@ function ConcentrationCell({ value }: { value: string | null }) {
 function RSStateBadge({ value }: { value: string | null }) {
   if (!value) return <span className="font-mono text-xs text-ink-tertiary">—</span>
   const style = RS_STATE_STYLE[value] ?? 'bg-ink-tertiary/10 text-ink-secondary'
+  const label = RS_DISPLAY_LABEL[value] ?? value
   return (
-    <span className={`inline-flex px-1.5 py-0.5 rounded-[2px] font-sans text-[10px] font-medium ${style}`}>
-      {value}
+    <span
+      className={`inline-flex px-1.5 py-0.5 rounded-[2px] font-sans text-[10px] font-medium ${style}`}
+      title={value !== label ? `Raw: ${value}` : undefined}
+    >
+      {label}
     </span>
   )
 }
@@ -401,7 +418,7 @@ export function SectorDecisionTable({
               </span>
             </th>
             <Th label="RS State" k="bottomup_rs_state"
-              tip="RS sub-classification of the sector. Leader = highest relative strength vs Nifty 500; Laggard = lowest. More granular than Overweight/Underweight — Leader/Strong = buy-side quality; Weak/Laggard = avoid." />
+              tip="Sector aggregate RS vs Nifty 500. Overweight = sector RS in the top tier — most stocks outperforming the index. Neutral = in line with the market. Avoid = sector RS in bottom tier — most stocks underperforming. This is the RS sub-score that feeds into the overall sector state (different from the 7-level stock RS taxonomy used in the stocks tab)." />
             <th className="px-3 py-2 text-left font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary whitespace-nowrap">
               <span className="flex items-center gap-0.5">
                 EMA Pos

@@ -181,6 +181,10 @@ export function RRGChart({
       .y(d => d.py)
       .curve(d3.curveCatmullRom.alpha(0.5))
 
+    // Max pixel distance before we break a trail segment — prevents "teleport" arcs
+    // when RS jumps dramatically (e.g. Defence +30pp in 5 days draws a line across the chart)
+    const MAX_TRAIL_JUMP = Math.min(innerW, innerH) * 0.35
+
     for (const [sectorName, sectorHistory] of historyBySector) {
       const last5 = sectorHistory.slice(-5)
       const sectorCurrent = chartData.find((s) => s.sector_name === sectorName)
@@ -189,15 +193,35 @@ export function RRGChart({
         : FALLBACK_COLOR
 
       // Build points: trail history + today's bubble position
-      const trailPoints = last5.map(r => ({ px: xScale(r.x), py: yScale(r.y) }))
+      const allPoints = last5.map(r => ({ px: xScale(r.x), py: yScale(r.y) }))
       if (sectorCurrent?.x != null && sectorCurrent?.y != null) {
-        trailPoints.push({ px: xScale(sectorCurrent.x), py: yScale(sectorCurrent.y) })
+        allPoints.push({ px: xScale(sectorCurrent.x), py: yScale(sectorCurrent.y) })
       }
 
-      // Draw connecting path
-      if (trailPoints.length >= 2) {
+      // Split into continuous segments — break wherever two consecutive points
+      // are further apart than MAX_TRAIL_JUMP (avoids long "teleport" lines)
+      const segments: Array<Array<{ px: number; py: number }>> = []
+      let current: Array<{ px: number; py: number }> = []
+      for (let i = 0; i < allPoints.length; i++) {
+        if (i === 0) { current.push(allPoints[i]); continue }
+        const prev = allPoints[i - 1]
+        const pt   = allPoints[i]
+        const dx = pt.px - prev.px
+        const dy = pt.py - prev.py
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        if (dist > MAX_TRAIL_JUMP) {
+          if (current.length >= 2) segments.push(current)
+          current = [pt]
+        } else {
+          current.push(pt)
+        }
+      }
+      if (current.length >= 2) segments.push(current)
+
+      // Draw each continuous segment
+      for (const seg of segments) {
         trailGroup.append('path')
-          .datum(trailPoints)
+          .datum(seg)
           .attr('d', lineGen)
           .attr('fill', 'none')
           .attr('stroke', color)

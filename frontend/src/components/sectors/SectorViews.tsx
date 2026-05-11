@@ -13,7 +13,7 @@ import type {
   DaysInStateRow,
 } from '@/lib/queries/sectors'
 import { EXCLUDED_SECTORS } from '@/lib/sectors-filter'
-import { SectorBubbleChart } from './SectorBubbleChart'
+import { SectorBubbleChart, type XView } from './SectorBubbleChart'
 import { SectorDecisionTable } from './SectorDecisionTable'
 import { SectorHeatmap } from './SectorHeatmap'
 import { StateTransitionCard } from './StateTransitionCard'
@@ -195,6 +195,7 @@ export function SectorViews({
 }: Props) {
   const router = useRouter()
   const [showAll, setShowAll] = useState(false)
+  const [bubbleXView, setBubbleXView] = useState<'rs-3m' | 'ret-1m' | 'ret-3m' | 'ret-6m'>('rs-3m')
   const [heatmapRange, setHeatmapRange] = useState<90 | 180 | 270 | 365>(180)
   const [breadthRange, setBreadthRange] = useState<90 | 180 | 365 | 730 | 1095>(365)
 
@@ -273,18 +274,37 @@ export function SectorViews({
 
       {/* ── Section 1: Rotation Matrix ── */}
       <div className="px-6 py-6 border-b border-paper-rule">
-        <SectionDivider
-          title="Positioning Matrix — RS vs Breadth"
-          subtitle="Current snapshot · click any bubble for the sector deep dive"
-        />
+        <div className="flex items-baseline justify-between gap-3 mb-4">
+          <SectionDivider
+            title="Positioning Matrix — RS vs Breadth"
+            subtitle="Current snapshot · click any bubble for the sector deep dive"
+          />
+          {/* X-axis toggle */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <span className="font-sans text-[10px] text-ink-tertiary mr-1">X axis:</span>
+            {([['rs-3m', 'RS 3M'], ['ret-1m', '1M Ret'], ['ret-3m', '3M Ret'], ['ret-6m', '6M Ret']] as [XView, string][]).map(([v, label]) => (
+              <button
+                key={v}
+                onClick={() => setBubbleXView(v)}
+                className={`px-2 py-0.5 rounded-[2px] font-sans text-[10px] transition-colors ${
+                  bubbleXView === v
+                    ? 'bg-ink-primary text-paper'
+                    : 'border border-paper-rule text-ink-tertiary hover:text-ink-primary'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
         <Collapsible label="How to read this matrix" defaultOpen>
-          <div><span className="font-semibold text-ink-primary">X-axis (horizontal):</span> 3-month relative strength vs Nifty 500. Right of zero = outperforming the index; left = underperforming.</div>
+          <div><span className="font-semibold text-ink-primary">X-axis (horizontal):</span> {bubbleXView === 'rs-3m' ? '3-month relative strength vs Nifty 500. Right of zero = outperforming the index; left = underperforming.' : `Bottom-up average return over the selected period. Toggle between RS 3M and 1M/3M/6M returns using the buttons above — RS view shows relative performance; return view shows absolute gains.`}</div>
           <div><span className="font-semibold text-ink-primary">Y-axis (vertical):</span> Breadth — % of stocks in the sector above their 50-day EMA. Higher = broader internal participation.</div>
           <div><span className="font-semibold text-ink-primary">Bubble size:</span> Number of stocks in the sector (larger = more constituents).</div>
           <div><span className="font-semibold text-ink-primary">Bubble color:</span> Sector state — green (Overweight), amber (Neutral), red (Underweight/Avoid).</div>
-          <div className="sm:col-span-2"><span className="font-semibold text-ink-primary">Quadrant logic:</span> Top-right (Leaders) = strong RS + broad participation — the ideal position. Top-left (Recovering) = breadth solid but RS lagging — watch for rotation. Bottom-right (Narrowing) = RS positive but few stocks participating — fragile leadership. Bottom-left (Laggards) = avoid, capital preservation only. Click any bubble for the full sector deep-dive.</div>
+          <div className="sm:col-span-2"><span className="font-semibold text-ink-primary">Note on temporal toggles:</span> The RRG (below) is anchored to 3M RS because relative strength requires a fixed lookback period — 1M RS and 6M RS would need separate backend computation. Use the X-axis toggle above (on this bubble chart) to compare sectors by 1M or 6M absolute returns instead.</div>
         </Collapsible>
-        <SectorBubbleChart data={visible} range={range} onSelect={onSelect} />
+        <SectorBubbleChart data={visible} xView={bubbleXView} onSelect={onSelect} />
         <ExcludedNote
           excluded={excluded}
           showAll={showAll}

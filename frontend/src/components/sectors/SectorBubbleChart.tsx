@@ -4,14 +4,26 @@ import * as d3 from 'd3'
 import type { SectorDecision } from '@/lib/sectors-decision'
 
 
+export type XView = 'rs-3m' | 'ret-1m' | 'ret-3m' | 'ret-6m'
+
 export type SectorPoint = {
   sector_name: string
   constituent_count: number
   bottomup_rs_3m_nifty500: string | null
+  bottomup_ret_1m: string | null
+  bottomup_ret_3m: string | null
+  bottomup_ret_6m: string | null
   participation_50: string | null
   sector_state: string
   bottomup_momentum_state: string | null
   decision: SectorDecision
+}
+
+const X_CONFIG: Record<XView, { field: keyof SectorPoint; label: string; tooltip: string }> = {
+  'rs-3m':  { field: 'bottomup_rs_3m_nifty500', label: '3M Relative Strength vs Nifty 500 →',  tooltip: 'RS 3M' },
+  'ret-1m': { field: 'bottomup_ret_1m',          label: '1M Return (bottom-up avg) →',           tooltip: 'Ret 1M' },
+  'ret-3m': { field: 'bottomup_ret_3m',          label: '3M Return (bottom-up avg) →',           tooltip: 'Ret 3M' },
+  'ret-6m': { field: 'bottomup_ret_6m',          label: '6M Return (bottom-up avg) →',           tooltip: 'Ret 6M' },
 }
 
 const STATE_COLOR: Record<string, string> = {
@@ -32,11 +44,11 @@ const DECISION_COLOR: Record<string, string> = {
 
 export function SectorBubbleChart({
   data,
-  range,
+  xView = 'rs-3m',
   onSelect,
 }: {
   data: SectorPoint[]
-  range: string
+  xView?: XView
   onSelect: (sectorName: string) => void
 }) {
   const svgRef    = useRef<SVGSVGElement>(null)
@@ -62,9 +74,10 @@ export function SectorBubbleChart({
       .append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`)
 
+    const xField = X_CONFIG[xView].field
     const points = data.map(d => ({
       ...d,
-      x: parseFloat(d.bottomup_rs_3m_nifty500 ?? 'NaN'),
+      x: parseFloat((d[xField] as string | null) ?? 'NaN'),
       y: parseFloat(d.participation_50 ?? 'NaN'),
       r: d.constituent_count,
     }))
@@ -166,7 +179,7 @@ export function SectorBubbleChart({
       .attr('text-anchor', 'middle')
       .attr('font-family', 'var(--font-sans)')
       .attr('font-size', 10).attr('fill', '#64748b')
-      .text('3-Month Relative Strength vs Nifty 500 →')
+      .text(X_CONFIG[xView].label)
 
     svg.append('text')
       .attr('transform', 'rotate(-90)')
@@ -236,7 +249,7 @@ export function SectorBubbleChart({
             <div style="color:#64748b;margin-bottom:2px">
               Decision: <span style="font-weight:600;color:${DECISION_COLOR[p.decision]}">${p.decision}</span>
             </div>
-            <div style="color:#64748b">RS (3M): <span style="color:#1e293b">${(p.x * 100).toFixed(1)}%</span></div>
+            <div style="color:#64748b">${X_CONFIG[xView].tooltip}: <span style="color:#1e293b">${(p.x * 100).toFixed(1)}%</span></div>
             <div style="color:#64748b">Breadth: <span style="color:#1e293b">${(p.y * 100).toFixed(0)}%</span></div>
             <div style="color:#64748b">Stocks: <span style="color:#1e293b">${p.constituent_count}</span></div>
             <div style="margin-top:4px;color:#64748b">Momentum: <span style="color:#1e293b">${p.bottomup_momentum_state ?? '—'}</span></div>
@@ -259,7 +272,7 @@ export function SectorBubbleChart({
       })
 
     return () => { tip.remove() }
-  }, [data]) // onSelect excluded — stable via selectRef, prevents D3 full-redraw on drawer open
+  }, [data, xView]) // onSelect excluded — stable via selectRef, prevents D3 full-redraw on drawer open
 
   return (
     <div ref={wrapRef} className="relative">
