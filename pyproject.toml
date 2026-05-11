@@ -61,6 +61,11 @@ simulation = [
     "PyPortfolioOpt>=1.5",
 ]
 
+intelligence = [
+    "alphalens-reloaded>=0.4.5",
+    "statsmodels>=0.14",
+]
+
 optimizer = [
     "optuna[postgres]>=3.0",
 ]

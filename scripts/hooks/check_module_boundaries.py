@@ -33,6 +33,8 @@ CONTEXTS: tuple[str, ...] = (
     "atlas.api",
     # Phase 2: validator agent — read-only DB access via shared kernel only
     "atlas.agents",
+    # Phase 2: signal validation, composites, briefs — Pillars I & II
+    "atlas.intelligence",
 )
 
 SHARED_KERNEL: tuple[str, ...] = (
