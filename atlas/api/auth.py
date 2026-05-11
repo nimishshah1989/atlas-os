@@ -23,7 +23,7 @@ from atlas.config import Config
 
 log = structlog.get_logger()
 
-_EXEMPT_PREFIXES = ("/health", "/docs", "/openapi.json", "/redoc")
+_EXEMPT_PREFIXES = ("/health", "/docs", "/openapi.json", "/redoc", "/v1")
 
 
 class _User:
