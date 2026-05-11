@@ -314,7 +314,8 @@ export type PlaybookEntry = {
 }
 
 const RISK_OFF_EVENT_IDS = ['covid-crash-2020', 'rate-hike-cycle-2022', 'adani-crisis-2023']
-const RISK_ON_EVENT_IDS  = ['election-2024']
+const RISK_ON_EVENT_IDS  = ['post-covid-bull-2020', 'capex-rally-2023', 'post-election-rally-2024']
+const NEUTRAL_EVENT_IDS  = ['rate-hike-cycle-2022', 'election-2024', 'capex-rally-2023']
 
 function pickEvents(regimeState: string) {
   const lower = regimeState.toLowerCase()
@@ -322,7 +323,7 @@ function pickEvents(regimeState: string) {
   const isRiskOn  = lower.includes('risk-on')  || lower.includes('constructive')
   if (isRiskOff) return MARKET_EVENTS.filter(e => RISK_OFF_EVENT_IDS.includes(e.id))
   if (isRiskOn)  return MARKET_EVENTS.filter(e => RISK_ON_EVENT_IDS.includes(e.id))
-  return MARKET_EVENTS.slice(-3)
+  return MARKET_EVENTS.filter(e => NEUTRAL_EVENT_IDS.includes(e.id))
 }
 
 export async function getSectorPlaybook(regimeState: string): Promise<PlaybookEntry[]> {
