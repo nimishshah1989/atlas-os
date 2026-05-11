@@ -12,9 +12,9 @@ from atlas.intelligence.briefs.generator import DailyBrief, generate_brief
 from atlas.intelligence.briefs.prompts import PROMPT_VERSION
 
 __all__ = [
+    "PROMPT_VERSION",
     "DailyBrief",
     "DailyMarketContext",
-    "PROMPT_VERSION",
     "build_daily_context",
     "generate_brief",
     "persist_brief",
