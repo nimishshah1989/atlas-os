@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # allow-large: CLI entry point + inline night-run log; logic lives in atlas.agents.validator
-"""Atlas Data Integrity Validator CLI — Phase A.
+"""Atlas Data Integrity Validator CLI — Phase A + B.
 
 Usage:
     python scripts/run_validator.py [--scope sensibility] [--tables TABLE,...] [--dry-run]
@@ -10,8 +10,9 @@ Options:
     --tables     Comma-separated table names to scan. Default: all whitelisted tables.
     --dry-run    Run checks but skip writing to atlas_validator_runs / findings.
 
-Phase A: only 'sensibility' scope is implemented. 'schema_coverage' and 'full'
-raise NotImplementedError — planned for Phase B and Phase E respectively.
+Phase A: 'sensibility' scope — insensible_value findings.
+Phase B: 'schema_coverage' scope — data_gap findings (missing dates, NULLs, low coverage).
+Phase E: 'full' scope requires Hermes orchestration (not yet implemented).
 
 Exit codes:
     0 — run completed; P0 count printed to stdout.
@@ -46,7 +47,7 @@ structlog.configure(
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Atlas Data Integrity Validator — Phase A CLI")
+    parser = argparse.ArgumentParser(description="Atlas Data Integrity Validator — Phase A+B CLI")
     parser.add_argument(
         "--scope",
         default="sensibility",
@@ -131,11 +132,69 @@ def _run_sensibility(
     return total
 
 
+def _run_schema_coverage(dry_run: bool) -> int:
+    """Run the schema/coverage scanner against the coverage map.
+
+    Returns:
+        Total number of findings (all severities).
+    """
+    from atlas.agents.validator.persistence import finish_run, upsert_finding
+    from atlas.agents.validator.schema_scanner import scan_coverage
+    from atlas.db import get_engine
+
+    engine = get_engine()
+
+    run_id = None
+    if not dry_run:
+        from atlas.agents.validator.persistence import start_run
+
+        run_id = start_run(engine, scope="schema_coverage")
+
+    all_findings = []
+    try:
+        all_findings = scan_coverage(engine)
+    except Exception as exc:
+        log.error("schema_coverage_scan_error", error=str(exc))
+
+    severity_counts = Counter(f.severity for f in all_findings)
+    p0 = severity_counts.get("P0", 0)
+    p1 = severity_counts.get("P1", 0)
+    p2 = severity_counts.get("P2", 0)
+    p3 = severity_counts.get("P3", 0)
+    total = len(all_findings)
+
+    if not dry_run and run_id is not None:
+        for finding in all_findings:
+            upsert_finding(engine, run_id, finding)
+        finish_run(engine, run_id, status="success", n_findings=total)
+
+    print(f"VALIDATOR_RUN scope=schema_coverage total={total} P0={p0} P1={p1} P2={p2} P3={p3}")
+
+    if p0 > 0:
+        print(f"\nP0 data gaps ({min(p0, 20)} of {p0} shown):")
+        shown = 0
+        for f in all_findings:
+            if f.severity == "P0" and shown < 20:
+                print(f"  [P0] {f.surface}  {f.identifier}")
+                print(f"       expected={f.expected_value}  actual={f.actual_value}")
+                shown += 1
+    if p1 > 0:
+        print(f"\nP1 findings ({min(p1, 10)} of {p1} shown):")
+        shown = 0
+        for f in all_findings:
+            if f.severity == "P1" and shown < 10:
+                print(f"  [P1] {f.surface}  {f.identifier}")
+                shown += 1
+
+    return total
+
+
 def _append_night_run_log(
     total: int,
     severity_counts: Counter[str],
     dry_run: bool,
     tables: list[str],
+    scope: str = "sensibility",
 ) -> None:
     """Append one line to scripts/validator_night_run.log."""
     from datetime import UTC, datetime
@@ -144,7 +203,7 @@ def _append_night_run_log(
     ts = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     tables_tag = ",".join(tables) if tables else "ALL"
     line = (
-        f"{ts}  scope=sensibility  tables={tables_tag}  "
+        f"{ts}  scope={scope}  tables={tables_tag}  "
         f"total={total}  P0={severity_counts.get('P0', 0)}  "
         f"P1={severity_counts.get('P1', 0)}  "
         f"P2={severity_counts.get('P2', 0)}  "
@@ -159,15 +218,10 @@ def _append_night_run_log(
 def main() -> int:
     args = _parse_args()
 
-    if args.scope == "schema_coverage":
-        raise NotImplementedError(
-            "schema_coverage scope is Phase B work — not yet implemented. "
-            "Run with --scope sensibility for Phase A."
-        )
     if args.scope == "full":
         raise NotImplementedError(
             "full scope is Phase E work — requires Hermes orchestration. "
-            "Run with --scope sensibility for Phase A."
+            "Run with --scope sensibility or --scope schema_coverage."
         )
 
     tables = [t.strip() for t in args.tables.split(",") if t.strip()] if args.tables else []
@@ -180,18 +234,17 @@ def main() -> int:
     )
 
     try:
-        total = _run_sensibility(tables, args.dry_run)
+        if args.scope == "sensibility":
+            total = _run_sensibility(tables, args.dry_run)
+        else:
+            total = _run_schema_coverage(args.dry_run)
 
-        # Build severity counts for the log line from re-running is expensive;
-        # use a lightweight re-run via counter on the already-printed total.
-        # We can't re-access all_findings here without refactoring; use a
-        # separate log call that omits per-severity breakdown (full detail is
-        # already printed to stdout above).
         _append_night_run_log(
             total=total,
-            severity_counts=Counter(),  # per-sev detail in stdout
+            severity_counts=Counter(),  # per-sev detail already printed to stdout
             dry_run=args.dry_run,
             tables=tables,
+            scope=args.scope,
         )
     except Exception as exc:
         log.error("validator_cli_error", error=str(exc), exc_info=True)

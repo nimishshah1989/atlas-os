@@ -37,8 +37,8 @@ def classify_rs_state(df: pd.DataFrame, thresholds: Mapping[str, Decimal]) -> pd
     Threshold keys: ``rs_quintile_top`` (default 0.80),
     ``rs_quintile_bottom`` (default 0.20).
     """
-    top = thresholds["rs_quintile_top"]
-    bot = thresholds["rs_quintile_bottom"]
+    top = float(thresholds["rs_quintile_top"])
+    bot = float(thresholds["rs_quintile_bottom"])
 
     out = df.copy()
     p1w = out["rs_pctile_1w"]
@@ -83,8 +83,8 @@ def classify_momentum_state(df: pd.DataFrame, thresholds: Mapping[str, Decimal])
     Threshold keys: ``momentum_flat_band_pct`` (default 0.02),
     ``momentum_ema_convergence_pct`` (default 0.01).
     """
-    flat_band = thresholds["momentum_flat_band_pct"]
-    converge = thresholds["momentum_ema_convergence_pct"]
+    flat_band = float(thresholds["momentum_flat_band_pct"])
+    converge = float(thresholds["momentum_ema_convergence_pct"])
 
     out = df.copy()
     r10 = out["ema_10_ratio"]
@@ -122,11 +122,11 @@ def classify_risk_state(df: pd.DataFrame, thresholds: Mapping[str, Decimal]) -> 
 
     Required columns: ``extension_pct``, ``vol_ratio_63``.
     """
-    ext_low_max = thresholds["risk_extension_low_max_pct"]
-    ext_high_min = thresholds["risk_extension_high_min_pct"]
-    vol_low_max = thresholds["risk_vol_ratio_low_max"]
-    vol_norm_max = thresholds["risk_vol_ratio_normal_max"]
-    vol_high_min = thresholds["risk_vol_ratio_high_min"]
+    ext_low_max = float(thresholds["risk_extension_low_max_pct"])
+    ext_high_min = float(thresholds["risk_extension_high_min_pct"])
+    vol_low_max = float(thresholds["risk_vol_ratio_low_max"])
+    vol_norm_max = float(thresholds["risk_vol_ratio_normal_max"])
+    vol_high_min = float(thresholds["risk_vol_ratio_high_min"])
 
     out = df.copy()
     ext = out["extension_pct"] * 100  # methodology states thresholds in %
@@ -167,10 +167,10 @@ def classify_volume_state(df: pd.DataFrame, thresholds: Mapping[str, Decimal]) -
 
     Required columns: ``volume_expansion``, ``effort_ratio_63``.
     """
-    acc_exp = thresholds["volume_accumulation_expansion_min"]
-    acc_eff = thresholds["volume_accumulation_effort_min"]
-    dist_eff = thresholds["volume_distribution_effort_max"]
-    heavy_eff = thresholds["volume_heavy_distribution_effort_max"]
+    acc_exp = float(thresholds["volume_accumulation_expansion_min"])
+    acc_eff = float(thresholds["volume_accumulation_effort_min"])
+    dist_eff = float(thresholds["volume_distribution_effort_max"])
+    heavy_eff = float(thresholds["volume_heavy_distribution_effort_max"])
 
     out = df.copy()
     exp = out["volume_expansion"]
