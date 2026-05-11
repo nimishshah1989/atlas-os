@@ -61,6 +61,7 @@ METRICS_COLUMNS: tuple[str, ...] = (
     "participation_50",
     "participation_rs",
     "leadership_concentration",
+    "rs_velocity",  # SP02: 4-week rate-of-change of bottomup_rs_3m_nifty500
     "compute_run_id",
 )
 """Mirrors ``docs/02_DATABASE_SCHEMA.md`` §3.4 — order matters for psycopg2
@@ -758,6 +759,84 @@ def compute_sector_states(
 # --------------------------------------------------------------------------- #
 
 
+def compute_rs_velocity(
+    df_metrics: pd.DataFrame,
+    window_days: int = 28,
+) -> pd.DataFrame:
+    """Compute ``rs_velocity``: 4-week rate-of-change of ``bottomup_rs_3m_nifty500``.
+
+    Formula::
+
+        rs_velocity = (RS_today - RS_N_days_ago) / |RS_N_days_ago|
+
+    where ``N = window_days`` (default 28 calendar days, tunable via
+    ``atlas_thresholds`` key ``rs_velocity_window_days``).
+
+    Division guard: if ``RS_N_days_ago == 0``, ``rs_velocity`` is NaN
+    (not ``inf``).
+
+    Args:
+        df_metrics: long-form DataFrame with columns ``sector_name``,
+            ``date``, ``bottomup_rs_3m_nifty500``. May contain other
+            columns — they are preserved unchanged.
+        window_days: look-back window in calendar days. Caller passes
+            ``int(thresholds.get("rs_velocity_window_days", 28))``.
+
+    Returns:
+        The same DataFrame with a new ``rs_velocity`` column added (float,
+        NaN for dates with insufficient lookback).
+    """
+    if df_metrics.empty:
+        return df_metrics.assign(rs_velocity=pd.NA)
+
+    # Work on a copy keyed by sector + date so we don't disturb the caller's frame.
+    work = df_metrics[["sector_name", "date", "bottomup_rs_3m_nifty500"]].copy()
+    work["date"] = pd.to_datetime(work["date"])
+    work = work.sort_values(["sector_name", "date"]).reset_index(drop=True)
+
+    # For each (sector, date) find the most-recent row whose date is at most
+    # ``window_days`` calendar days earlier. We use merge_asof per sector
+    # so that one sector's lagged RS cannot leak into another.
+    prior_frames: list[pd.DataFrame] = []
+    for _, grp in work.groupby("sector_name", sort=False):
+        grp_sorted = grp.sort_values("date").reset_index(drop=True)
+
+        # Build a lagged frame whose ``date`` is shifted forward by
+        # ``window_days`` — merge_asof BACKWARD on this gives the most
+        # recent row whose original date is at most window_days before.
+        lagged = grp_sorted[["date", "bottomup_rs_3m_nifty500"]].copy()
+        lagged = lagged.rename(columns={"bottomup_rs_3m_nifty500": "rs_prior"})
+        lagged["date"] = lagged["date"] + pd.Timedelta(days=window_days)
+        lagged = lagged.sort_values("date").reset_index(drop=True)
+
+        merged = pd.merge_asof(
+            grp_sorted,
+            lagged,
+            on="date",
+            direction="backward",
+            tolerance=pd.Timedelta(days=5),  # ±5d slack for trading-day gaps
+        )
+        prior_frames.append(merged[["sector_name", "date", "bottomup_rs_3m_nifty500", "rs_prior"]])
+
+    prior_df = pd.concat(prior_frames, ignore_index=True)
+
+    # Rate-of-change with zero-guard. Replace 0 in the denominator with NA so
+    # that division produces NaN rather than ``inf``.
+    rs_base = prior_df["rs_prior"].replace(0, pd.NA)
+    prior_df["rs_velocity"] = (
+        prior_df["bottomup_rs_3m_nifty500"] - prior_df["rs_prior"]
+    ) / rs_base.abs()
+
+    # Join velocity back onto the original frame.
+    velocity_col = prior_df[["sector_name", "date", "rs_velocity"]]
+    out = df_metrics.copy()
+    # Align dtypes for the merge key so caller frames using ``date`` as Python
+    # ``date`` objects still join correctly.
+    out["date"] = pd.to_datetime(out["date"])
+    out = out.merge(velocity_col, on=["sector_name", "date"], how="left")
+    return out
+
+
 def assemble_sector_metrics(
     df_bottomup: pd.DataFrame,
     df_topdown: pd.DataFrame,
@@ -865,6 +944,12 @@ def _run_pipeline(
     topdown = compute_top_down_sector_metrics(index_metrics, sector_master)
 
     metrics = assemble_sector_metrics(bottomup, topdown, breadth)
+
+    # SP02: compute rs_velocity after assembly (needs full sector × date frame).
+    # ``load_thresholds`` returns ``dict[str, Decimal]`` → coerce to int.
+    velocity_window = int(thresholds.get("rs_velocity_window_days", Decimal("28")))
+    metrics = compute_rs_velocity(metrics, window_days=velocity_window)
+
     states = compute_sector_states(metrics, thresholds)
 
     if write_start is not None:
@@ -923,6 +1008,7 @@ __all__ = [
     "assemble_sector_metrics",
     "backfill_sector_metrics",
     "compute_bottom_up_sector_metrics",
+    "compute_rs_velocity",
     "compute_sector_breadth",
     "compute_sector_states",
     "compute_top_down_sector_metrics",
