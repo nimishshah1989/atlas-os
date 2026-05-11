@@ -195,36 +195,28 @@ export function RRGChart({
 
       const color = MOM_COLOR[sectorCurrent.bottomup_momentum_state ?? ''] ?? FALLBACK_COLOR
 
-      // Build points: trail history + today's bubble position
-      const allPoints = last5.map(r => ({ px: xScale(r.x), py: yScale(r.y) }))
-      if (sectorCurrent?.x != null && sectorCurrent?.y != null) {
-        allPoints.push({ px: xScale(sectorCurrent.x), py: yScale(sectorCurrent.y) })
+      // Build points: oldest trail → current bubble (bubble is always last)
+      const trailPts = last5.map(r => ({ px: xScale(r.x), py: yScale(r.y) }))
+      const bubblePt = { px: xScale(sectorCurrent.x), py: yScale(sectorCurrent.y) }
+      const allPts   = [...trailPts, bubblePt]
+
+      // Walk BACKWARDS from the bubble to find the contiguous connected segment.
+      // Any point further than MAX_TRAIL_JUMP from its successor breaks the chain.
+      // This ensures we only draw the trail that leads continuously to the current bubble —
+      // orphaned clusters of old trail dots never appear even when RS jumps sharply.
+      let connStart = allPts.length - 1 // worst case: bubble only, no trail
+      for (let i = allPts.length - 2; i >= 0; i--) {
+        const a = allPts[i], b = allPts[i + 1]
+        const dist = Math.sqrt((b.px - a.px) ** 2 + (b.py - a.py) ** 2)
+        if (dist > MAX_TRAIL_JUMP) break
+        connStart = i
       }
 
-      // Split into continuous segments — break wherever two consecutive points
-      // are further apart than MAX_TRAIL_JUMP (avoids long "teleport" lines)
-      const segments: Array<Array<{ px: number; py: number }>> = []
-      let current: Array<{ px: number; py: number }> = []
-      for (let i = 0; i < allPoints.length; i++) {
-        if (i === 0) { current.push(allPoints[i]); continue }
-        const prev = allPoints[i - 1]
-        const pt   = allPoints[i]
-        const dx = pt.px - prev.px
-        const dy = pt.py - prev.py
-        const dist = Math.sqrt(dx * dx + dy * dy)
-        if (dist > MAX_TRAIL_JUMP) {
-          if (current.length >= 2) segments.push(current)
-          current = [pt]
-        } else {
-          current.push(pt)
-        }
-      }
-      if (current.length >= 2) segments.push(current)
+      const connectedPts = allPts.slice(connStart)
 
-      // Draw each continuous segment
-      for (const seg of segments) {
+      if (connectedPts.length >= 2) {
         trailGroup.append('path')
-          .datum(seg)
+          .datum(connectedPts)
           .attr('d', lineGen)
           .attr('fill', 'none')
           .attr('stroke', color)
@@ -233,14 +225,14 @@ export function RRGChart({
           .attr('pointer-events', 'none')
       }
 
-      // Draw trail dots with ramping opacity
-      last5.forEach((row, i) => {
+      // Only draw trail dots that are within the connected segment (exclude the bubble itself)
+      last5.slice(connStart).forEach((row, localIdx) => {
         trailGroup.append('circle')
           .attr('cx', xScale(row.x))
           .attr('cy', yScale(row.y))
           .attr('r', 3.5)
           .attr('fill', color)
-          .attr('opacity', TRAIL_OPACITIES[i] ?? 1.0)
+          .attr('opacity', TRAIL_OPACITIES[connStart + localIdx] ?? 1.0)
           .attr('pointer-events', 'none')
       })
     }
