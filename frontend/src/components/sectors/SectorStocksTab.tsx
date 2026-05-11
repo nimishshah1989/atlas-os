@@ -1,4 +1,5 @@
 // frontend/src/components/sectors/SectorStocksTab.tsx
+// allow-large: this file is the main stocks tab — RSDistribution, ReturnConcentration, and the overextension callout must all live here to share the `stocks` array without prop drilling through parent shells
 'use client'
 import { useState, useMemo } from 'react'
 import { Info, AlertTriangle } from 'lucide-react'
@@ -54,6 +55,67 @@ function RSDistributionBar({ stocks }: { stocks: { rs_state: string | null }[] }
           </span>
         ))}
       </div>
+    </div>
+  )
+}
+
+function ReturnConcentrationBar({ stocks, range }: { stocks: StockRow[]; range?: TimeRange }) {
+  const field = range === '1M' ? 'ret_1m' : range === '6M' ? 'ret_6m' : 'ret_3m'
+  const label = range === '1M' ? '1M' : range === '6M' ? '6M' : '3M'
+
+  const valid = useMemo(
+    () =>
+      stocks
+        .filter(s => s[field] != null && !isNaN(parseFloat(s[field] as string)))
+        .map(s => ({ ...s, ret: parseFloat(s[field] as string) }))
+        .sort((a, b) => b.ret - a.ret),
+    [stocks, field],
+  )
+
+  if (valid.length < 4) return null
+
+  const top5  = valid.slice(0, 5)
+  const bot3  = valid.slice(-3).reverse()
+  const maxAbs = Math.max(...valid.map(s => Math.abs(s.ret)))
+
+  const Bar = ({ s, pos }: { s: typeof valid[0]; pos: boolean }) => (
+    <div className="flex items-center gap-2">
+      <div className="w-20 text-right font-sans text-[10px] text-ink-secondary truncate" title={s.company_name}>{s.symbol}</div>
+      <div className="flex-1 bg-paper-rule/30 rounded-sm h-1.5 overflow-hidden">
+        <div
+          className={`h-full rounded-sm ${pos ? 'bg-signal-pos/60' : 'bg-signal-neg/60'}`}
+          style={{ width: `${Math.abs(s.ret) / maxAbs * 100}%` }}
+        />
+      </div>
+      <div className={`w-11 text-right font-sans text-[10px] font-medium tabular-nums ${s.ret >= 0 ? 'text-signal-pos' : 'text-signal-neg'}`}>
+        {s.ret >= 0 ? '+' : ''}{(s.ret * 100).toFixed(1)}%
+      </div>
+      {!s.in_nifty_500 && (
+        <span className="font-sans text-[8px] text-ink-tertiary bg-paper-rule/40 px-1 rounded leading-4">off-idx</span>
+      )}
+    </div>
+  )
+
+  const offIdxCount = top5.filter(s => !s.in_nifty_500).length
+
+  return (
+    <div className="space-y-2.5">
+      <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider">Return Drivers — {label}</div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+        <div className="space-y-1.5">
+          <div className="font-sans text-[10px] text-signal-pos/80 font-medium">Top Contributors</div>
+          {top5.map(s => <Bar key={s.symbol} s={s} pos />)}
+        </div>
+        <div className="space-y-1.5">
+          <div className="font-sans text-[10px] text-signal-neg/80 font-medium">Bottom Contributors</div>
+          {bot3.map(s => <Bar key={s.symbol} s={s} pos={s.ret >= 0} />)}
+        </div>
+      </div>
+      {offIdxCount >= 2 && (
+        <div className="font-sans text-[10px] text-ink-tertiary leading-relaxed">
+          <span className="text-ink-secondary font-medium">{offIdxCount} of the top 5</span> are off-index (not in Nifty 500). This explains a higher bottom-up average vs the top-down index return — the index only captures index constituents, market-cap weighted.
+        </div>
+      )}
     </div>
   )
 }
@@ -159,6 +221,9 @@ export function SectorStocksTab({
           </div>
         </div>
       )}
+
+      {/* Return concentration — who's driving this sector's returns */}
+      <ReturnConcentrationBar stocks={stocks} range={range} />
 
       {/* Bubble chart */}
       <div>
