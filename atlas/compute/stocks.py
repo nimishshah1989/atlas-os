@@ -338,7 +338,7 @@ def _compute_stock_metrics(
             on=["benchmark_code", "date"],
             how="left",
         )
-        df["drawdown_ratio_252"] = df["max_drawdown_252"] / df["max_drawdown_252_bench"]
+        df["drawdown_ratio_252"] = -df["max_drawdown_252"]
     else:
         df["drawdown_ratio_252"] = pd.NA
 

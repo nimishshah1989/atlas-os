@@ -216,13 +216,10 @@ def compute_fund_nav_raw_metrics(
     # Realised vol: 63-day annualised
     merged["realized_vol_63"] = merged["daily_ret"].rolling(63, min_periods=42).std() * np.sqrt(252)
 
-    # Drawdown ratio vs benchmark
-    bench_daily = fund_bench["close"].pct_change()
+    # Max drawdown magnitude over rolling 252-day window (stored as negative fraction)
+    # e.g. -0.063 = fund drew down 6.3% peak-to-trough within the window
     fund_dd_252 = _rolling_max_drawdown(merged["daily_ret"])
-    bench_dd_252 = _rolling_max_drawdown(bench_daily.reindex(merged.index))
-    merged["fund_dd_252"] = fund_dd_252
-    merged["bench_dd_252"] = bench_dd_252.values
-    merged["drawdown_ratio_252"] = merged["fund_dd_252"] / merged["bench_dd_252"].replace(0, np.nan)
+    merged["drawdown_ratio_252"] = -fund_dd_252
 
     # Inf guard before write
     for col in merged.select_dtypes(include=[float]).columns:

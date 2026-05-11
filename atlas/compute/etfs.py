@@ -265,10 +265,9 @@ def _compute_etf_metrics(
         df = df.drop(columns=["ema_10_stock", "ema_20_stock"])
 
     df = add_vol_ratio(df)
-    if "max_drawdown_252_bench" in df.columns:
-        df["drawdown_ratio_252"] = df["max_drawdown_252"] / df["max_drawdown_252_bench"]
-    else:
-        df["drawdown_ratio_252"] = pd.NA
+    df["drawdown_ratio_252"] = (
+        -df["max_drawdown_252"] if "max_drawdown_252" in df.columns else pd.NA
+    )
 
     # ETF percentile ranking — uses RS vs own benchmark, ranked across ETFs
     for w in ("1w", "1m", "3m"):
