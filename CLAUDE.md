@@ -21,6 +21,33 @@ This file orients agents working on this project. Global engineering rules live 
 - ADRs: see `.ruflo/adr/` (managed by `ruflo-adr` plugin).
 - Active milestone status: see `tasks.jsonl` if present, or run `npx ruflo hive-mind status`.
 
+## Phase 2 — REQUIRED READING before any new milestone
+
+Two canonical reference documents in `docs/phase2/`. Read BOTH before starting
+work on any Phase 2 sub-project, the Data Validator Agent, or any new Atlas
+intelligence layer.
+
+1. **`docs/phase2/00-master-plan.html`** — The 9-sub-project Phase 2 plan
+   (Signal Validation Lab, Materialized Views, OpenBB BYO Copilot, Signal
+   Intelligence, Daily Brief, Continuous Simulation, Hermes Agent Runtime,
+   Intraday Live State, UI-TARS scraping). Locked ordering: Option B parallel
+   sprint week 1 (SP01 + SP02 + SP03). Validation target for SP01: full
+   `decision_state` composite.
+
+2. **`docs/phase2/01-data-validator-agent.html`** — The Hermes-orchestrated
+   data integrity agent that validates every frontend data point against
+   its backend source. Six classes of issue: gaps, inconsistencies, calc
+   errors, accuracy errors, insensible values, incomplete data. Runs nightly
+   + pre-milestone + on-demand. **Pre-flight gate before any sub-project
+   kickoff** (per master plan §7.1).
+
+These docs are the canonical reference. Every agent session that touches
+`atlas/intelligence/`, `atlas/agents/`, or any new Phase 2 surface MUST
+read them first. To view in browser: `open docs/phase2/00-master-plan.html`.
+
+Baseline at Phase 2 start: commit `1e97c72`, tag
+`health-audit-baseline-2026-05`. All P0/P1 health-audit findings resolved.
+
 ## What goes in this file (vs the global one)
 
 - Project-only conventions (e.g. "we use Polars not pandas in this codebase")
