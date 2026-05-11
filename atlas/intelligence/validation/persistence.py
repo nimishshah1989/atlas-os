@@ -42,7 +42,10 @@ _UPSERT_SQL = """
 
 
 def _nan_to_none(x: float | None) -> float | None:
-    """Convert NaN (Python float, numpy NaN) or None to None for safe DB storage."""
+    """Convert NaN (Python float, numpy NaN) or None to None; coerce numpy
+    scalar types to Python float so psycopg2 doesn't try to interpret
+    `np.float64(...)` as SQL identifier syntax.
+    """
     if x is None:
         return None
     try:
@@ -50,7 +53,7 @@ def _nan_to_none(x: float | None) -> float | None:
             return None
     except TypeError:
         return None
-    return x
+    return float(x)
 
 
 def persist_ic_result(
