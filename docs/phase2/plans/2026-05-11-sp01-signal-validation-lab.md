@@ -8,7 +8,7 @@
 
 **Architecture:** Three-layer pipeline. (1) **Factor loader** joins existing state tables (`atlas_stock_states_daily`, `atlas_sector_states_daily`, `atlas_market_regime_daily`) per (instrument_id, date) and encodes categorical states to a numeric composite quality score. (2) **IC engine** computes alphalens-style IC, t-statistics, quantile spreads, decay curves, and turnover on rolling windows. (3) **Persistence + reporting** writes results to `atlas_signal_ic` table and emits a markdown tearsheet under `output/validation/`.
 
-**Tech Stack:** Python 3.12, alphalens-reloaded (cloudQuant fork; the original Quantopian package is abandoned on Py 3.11+), statsmodels (for t-stats), pandas, SQLAlchemy 2.0 (existing). New migration 032. New module `atlas/intelligence/validation/`. New CLI `scripts/run_signal_validation.py`.
+**Tech Stack:** Python 3.12, alphalens-reloaded (cloudQuant fork; the original Quantopian package is abandoned on Py 3.11+), statsmodels (for t-stats), pandas, SQLAlchemy 2.0 (existing). New migration 033. New module `atlas/intelligence/validation/`. New CLI `scripts/run_signal_validation.py`.
 
 **Decision-state composite encoding (v1):** Each categorical state maps to a [0,1] quality score; dimensions weighted; sentinels (`INSUFFICIENT_HISTORY`, `ILLIQUID`, `DISLOCATION_SUSPENDED`) drop the row. SP04 (Signal Intelligence layer) replaces these hand-set weights with IC-derived weights from this very table. The v1 weights below are a measurable starting point, not a permanent choice:
 
@@ -42,7 +42,7 @@ atlas/intelligence/validation/ic_engine.py              # alphalens wrapper + ro
 atlas/intelligence/validation/persistence.py            # writes to atlas_signal_ic
 atlas/intelligence/validation/report.py                 # markdown tearsheet generator
 scripts/run_signal_validation.py                        # CLI orchestrator
-migrations/versions/032_create_signal_ic_table.py
+migrations/versions/033_create_signal_ic_table.py
 tests/intelligence/__init__.py
 tests/intelligence/validation/__init__.py
 tests/intelligence/validation/test_encoding.py
@@ -134,11 +134,11 @@ git commit -m "feat(sp01): add intelligence extras (alphalens-reloaded, statsmod
 ## Task 1: Migration 032 — `atlas_signal_ic` table
 
 **Files:**
-- Create: `migrations/versions/032_create_signal_ic_table.py`
+- Create: `migrations/versions/033_create_signal_ic_table.py`
 
 - [ ] **Step 1: Write the migration**
 
-Create `migrations/versions/032_create_signal_ic_table.py`:
+Create `migrations/versions/033_create_signal_ic_table.py`:
 
 ```python
 """SP01: create atlas_signal_ic for storing rolling IC measurements.
@@ -155,8 +155,8 @@ Create Date: 2026-05-11
 from alembic import op
 import sqlalchemy as sa
 
-revision = "032"
-down_revision = "031"
+revision = "033"
+down_revision = "032"
 branch_labels = None
 depends_on = None
 
@@ -229,8 +229,8 @@ Expected: 13 columns listed in the order defined above.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add migrations/versions/032_create_signal_ic_table.py
-git commit -m "feat(sp01): migration 032 — atlas_signal_ic table"
+git add migrations/versions/033_create_signal_ic_table.py
+git commit -m "feat(sp01): migration 033 — atlas_signal_ic table"
 ```
 
 ---
