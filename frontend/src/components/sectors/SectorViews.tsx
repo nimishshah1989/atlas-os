@@ -12,6 +12,7 @@ import type {
   BreadthWaterfallRow,
   DaysInStateRow,
 } from '@/lib/queries/sectors'
+import type { SectorRotationRow } from '@/lib/queries/rotation'
 import { EXCLUDED_SECTORS } from '@/lib/sectors-filter'
 import { SectorBubbleChart, type XView } from './SectorBubbleChart'
 import { SectorDecisionTable } from './SectorDecisionTable'
@@ -53,6 +54,14 @@ type Props = {
   daysInState: DaysInStateRow[]
   playbook: PlaybookEntry[]
   range: string
+  /**
+   * Sector rotation snapshot from mv_sector_rotation_state (SP02).
+   * Carries rrg_quadrant / rs_velocity / rs_pctile_cross_sector per sector.
+   * Optional and currently unused by sub-components — wired so downstream
+   * components (RRG bubbles, decision table) can read quadrant labels
+   * without a second round-trip.
+   */
+  rotation?: SectorRotationRow[]
 }
 
 function SectionDivider({ title, subtitle }: { title: string; subtitle?: string }) {
@@ -192,7 +201,12 @@ export function SectorViews({
   daysInState,
   playbook,
   range,
+  // SP02: rotation lookup carried through for future RRG quadrant overlays
+  // and decision-table badges. Sub-components don't read it yet — wiring
+  // the data path now means no extra round-trip when consumers land.
+  rotation: _rotation,
 }: Props) {
+
   const router = useRouter()
   const [showAll, setShowAll] = useState(false)
   const [bubbleXView, setBubbleXView] = useState<'rs-3m' | 'ret-1m' | 'ret-3m' | 'ret-6m'>('rs-3m')

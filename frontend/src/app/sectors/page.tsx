@@ -12,6 +12,7 @@ import {
   type PlaybookEntry,
 } from '@/lib/queries/sectors'
 import { getCurrentRegime } from '@/lib/queries/regime'
+import { getSectorRotationState, type SectorRotationRow } from '@/lib/queries/rotation'
 import { rangeToDays, type TimeRange } from '@/lib/time-range'
 import { getSectorDecision } from '@/lib/sectors-decision'
 import { filterSectors } from '@/lib/sectors-filter'
@@ -33,15 +34,22 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
   const regime = await getCurrentRegime().catch(() => null)
   const regimeState = regime?.regime_state ?? 'Unknown'
 
-  // 6 parallel queries — non-critical queries degrade to empty arrays
-  const [allRaw, stateHistory, rrgHistory, breadthData, daysInState, playbook] = await Promise.all([
+  // 7 parallel queries — non-critical queries degrade to empty arrays.
+  // rotation pulls from mv_sector_rotation_state (refreshed nightly by pg_cron)
+  // and enriches sectors with rrg_quadrant / rs_velocity / rs_pctile_cross_sector.
+  const [allRaw, stateHistory, rrgHistory, breadthData, daysInState, playbook, rotation] = await Promise.all([
     getSectorsWithMomentum(),
     getSectorStateHistory(days).catch(() => [] as Awaited<ReturnType<typeof getSectorStateHistory>>),
     getRRGHistory(30).catch(() => [] as Awaited<ReturnType<typeof getRRGHistory>>),
     getBreadthWaterfallData(null, 1095).catch(() => [] as Awaited<ReturnType<typeof getBreadthWaterfallData>>),
     getDaysInStateForAllSectors().catch(() => [] as Awaited<ReturnType<typeof getDaysInStateForAllSectors>>),
     getSectorPlaybook(regimeState).catch(() => [] as PlaybookEntry[]),
+    getSectorRotationState().catch(() => [] as SectorRotationRow[]),
   ])
+
+  // Build a name → rotation lookup so downstream components can read
+  // rrg_quadrant / rs_velocity off the snapshot without re-querying.
+  const rotationByName = new Map(rotation.map(r => [r.sector_name, r]))
 
   if (allRaw.length === 0) {
     return (
@@ -127,6 +135,7 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
           daysInState={daysInState}
           playbook={playbook}
           range={historyRange}
+          rotation={rotation}
         />
       </Suspense>
     </div>
