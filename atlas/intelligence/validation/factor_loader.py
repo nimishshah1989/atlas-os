@@ -35,7 +35,7 @@ log = structlog.get_logger()
 _LOAD_SQL = """
     SELECT
         s.date,
-        s.instrument_id,
+        s.instrument_id::text AS instrument_id,
         s.rs_state,
         s.momentum_state,
         s.risk_state,

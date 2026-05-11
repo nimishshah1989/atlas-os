@@ -129,7 +129,11 @@ def main(argv: list[str] | None = None) -> int:
     # window anyway). Add a safety buffer for non-trading days + max forward
     # period needed for lookahead.
     max_period = max(periods)
-    buffer_calendar_days = int((window_days + max_period) * 1.6) + 30
+    # Need: window_days (for the window itself, slid back by max_period for
+    # lookahead room) + max_period extra trading days at the end (for the
+    # forward-return lookahead the window dates actually use). Approximate
+    # trading→calendar conversion at 1.6x with a generous floor.
+    buffer_calendar_days = int((window_days + 2 * max_period) * 1.6) + 30
     load_start = max(start_date, end_date - timedelta(days=buffer_calendar_days))
     log.info(
         "load_range_trimmed",
@@ -163,9 +167,17 @@ def main(argv: list[str] | None = None) -> int:
         log.error("no_dates_in_factor")
         return 3
 
-    # Determine the window slice: last window_days dates available in factor
+    # Determine the window slice: the latest window_days dates that still have
+    # enough lookahead room for max(periods) forward returns. If we end the
+    # window at the data-end date, the last max_period rows have NaN forward
+    # returns and IC collapses to n_obs=0.
+    if len(all_dates) <= max_period:
+        log.error("insufficient_dates_for_lookahead", n_dates=len(all_dates), max_period=max_period)
+        return 3
+
+    usable_dates: pd.DatetimeIndex = all_dates[:-max_period]  # type: ignore[assignment]
     window_dates: pd.DatetimeIndex = (
-        all_dates[-window_days:] if len(all_dates) >= window_days else all_dates
+        usable_dates[-window_days:] if len(usable_dates) >= window_days else usable_dates
     )
     window_factor = factor.loc[window_dates]
 
