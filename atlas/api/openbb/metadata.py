@@ -66,3 +66,19 @@ _AGENT_METADATA: dict = {
 def get_agents_metadata() -> dict:
     """Return the Atlas agent definition for OpenBB Workspace registration."""
     return _AGENT_METADATA
+
+
+@router.get(
+    "/v1/widgets.json",
+    tags=["openbb"],
+    summary="OpenBB widgets manifest (empty — Atlas exposes none in v1)",
+)
+def get_widgets_manifest() -> dict:
+    """Return an empty widgets manifest.
+
+    OpenBB Workspace probes this endpoint during the connect-backend flow
+    regardless of the "Validate widgets" toggle. Returning {} satisfies the
+    probe; v2 may expose Atlas data widgets here. No auth required — this
+    is the same surface area as a public health probe.
+    """
+    return {}

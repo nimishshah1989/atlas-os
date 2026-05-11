@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from atlas.api.auth import JWTAuthMiddleware
@@ -12,6 +13,16 @@ from atlas.api.portfolios import rule_based_router
 from atlas.api.strategies import router as strategies_router
 
 app = FastAPI(title="Atlas API", version="0.1.0")
+
+# CORS for OpenBB Workspace + browser-based clients. Must be added BEFORE
+# JWTAuthMiddleware so OPTIONS preflight passes without auth.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://pro.openbb.co", "https://app.openbb.co", "https://openbb.co"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
 
 app.add_middleware(JWTAuthMiddleware)
 
