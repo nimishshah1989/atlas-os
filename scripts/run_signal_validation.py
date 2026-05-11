@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import structlog
@@ -121,16 +121,34 @@ def main(argv: list[str] | None = None) -> int:
 
     engine = get_engine()
 
+    # Trim the load range to the minimum needed for the LATEST rolling window.
+    # The user-supplied --start/--end is a search range; the actual IC is
+    # computed on the last `window_days` dates within that range. Loading the
+    # full multi-year range hits Supabase pooler statement_timeout on heavy
+    # joined queries (and is wasteful — we discard everything before the
+    # window anyway). Add a safety buffer for non-trading days + max forward
+    # period needed for lookahead.
+    max_period = max(periods)
+    buffer_calendar_days = int((window_days + max_period) * 1.6) + 30
+    load_start = max(start_date, end_date - timedelta(days=buffer_calendar_days))
+    log.info(
+        "load_range_trimmed",
+        original_start=str(start_date),
+        load_start=str(load_start),
+        end=str(end_date),
+        buffer_calendar_days=buffer_calendar_days,
+    )
+
     # Step 1: Load factor
-    factor = load_decision_state_factor(engine, start_date=start_date, end_date=end_date)
+    factor = load_decision_state_factor(engine, start_date=load_start, end_date=end_date)
     if factor.empty:
-        log.error("no_factor_data", start=args.start, end=args.end)
+        log.error("no_factor_data", start=str(load_start), end=args.end)
         return 3
 
     # Step 2: Load price matrix and compute forward returns
-    prices = load_price_matrix(engine, start_date=start_date, end_date=end_date)
+    prices = load_price_matrix(engine, start_date=load_start, end_date=end_date)
     if prices.empty:
-        log.error("no_price_data", start=args.start, end=args.end)
+        log.error("no_price_data", start=str(load_start), end=args.end)
         return 3
 
     forward_returns = compute_forward_returns(prices, periods=periods)
