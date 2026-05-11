@@ -75,6 +75,39 @@ function MaTile({
   )
 }
 
+function StatTile({
+  label,
+  count,
+  total,
+  color,
+  subtitle,
+}: {
+  label: string
+  count: number
+  total: number
+  color: string
+  subtitle?: string
+}) {
+  const pct = total > 0 ? count / total : 0
+  return (
+    <div className="flex flex-col gap-1.5 px-4 py-2.5 border border-paper-rule rounded-sm min-w-[160px] bg-paper">
+      <div className="font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary">
+        {label}
+      </div>
+      <div className="flex items-baseline gap-1.5">
+        <span className="font-mono text-lg font-semibold text-ink-primary tabular-nums">{count}</span>
+        <span className="font-sans text-xs text-ink-tertiary">/ {total} stocks</span>
+      </div>
+      <div className="w-full h-1 bg-paper-rule rounded-full overflow-hidden">
+        <div className="h-full rounded-full" style={{ width: `${Math.round(pct * 100)}%`, background: color }} />
+      </div>
+      <div className="font-mono text-[10px] tabular-nums" style={{ color }}>
+        {Math.round(pct * 100)}%{subtitle ? <span className="text-ink-tertiary font-sans ml-1">{subtitle}</span> : null}
+      </div>
+    </div>
+  )
+}
+
 // Full RS + Momentum composition stacked bars with % labels
 function CompositionBars({ label, arr }: { label: string; arr: StockRowWithSector[] }) {
   const n = arr.length
@@ -162,6 +195,11 @@ export function StockBreadthPanel({
   const above50d  = stocks.filter(s => getBool(s, 'above_50d_ma')).length
   const above200d = stocks.filter(s => getBool(s, 'above_200d_ma')).length
 
+  const leaderStrong   = stocks.filter(s => s.rs_state === 'Leader' || s.rs_state === 'Strong').length
+  const accelImproving = stocks.filter(s => s.momentum_state === 'Accelerating' || s.momentum_state === 'Improving').length
+  const aboveRs50      = stocks.filter(s => s.rs_pctile_3m != null && parseFloat(s.rs_pctile_3m) >= 0.5).length
+  const investable     = stocks.filter(s => s.is_investable === true).length
+
   const n50  = stocks.filter(s => s.in_nifty_50)
   const n100 = stocks.filter(s => s.in_nifty_100)
   const n500 = stocks.filter(s => s.in_nifty_500)
@@ -188,6 +226,11 @@ export function StockBreadthPanel({
           <MaTile label="Above 30-Week MA"  count={above30w}  total={total} filterKey="above_30w_ma"  active={activeMaFilter === 'above_30w_ma'}  onClick={onMaFilter} />
           <MaTile label="Above 50-Day EMA"  count={above50d}  total={total} filterKey="above_50d_ma"  active={activeMaFilter === 'above_50d_ma'}  onClick={onMaFilter} />
           <MaTile label="Above 200-Day EMA" count={above200d} total={total} filterKey="above_200d_ma" active={activeMaFilter === 'above_200d_ma'} onClick={onMaFilter} />
+          <div className="w-px self-stretch bg-paper-rule/60 hidden sm:block" />
+          <StatTile label="Leader / Strong"   count={leaderStrong}   total={total} color={breadthColor(leaderStrong / total)}   subtitle="RS quality" />
+          <StatTile label="Accel / Improving" count={accelImproving} total={total} color={breadthColor(accelImproving / total)} subtitle="Momentum" />
+          <StatTile label="RS Pctile ≥ 50"   count={aboveRs50}      total={total} color={breadthColor(aboveRs50 / total)}      subtitle="outperforming" />
+          <StatTile label="Investable"        count={investable}     total={total} color={investable > 0 ? '#1D9E75' : '#94a3b8'} />
         </div>
       </div>
 
