@@ -7,10 +7,29 @@ Handler callables have signature::
 
     async def handle_*(engine: Engine, query_text: str) -> AsyncGenerator[dict, None]
 
-Concrete handler modules (regime/leaders/rotation/breakouts) are imported and
-the dispatch table is built in Task 6. This package marker is intentionally
-minimal so ``handlers/router.py`` (the intent classifier — pure function, no
-DB) can be unit-tested without dragging the SQLAlchemy-touching handlers in.
+``classify_intent()`` lives in ``handlers/router.py`` — a pure function with no
+DB imports — so it can be unit-tested without touching SQLAlchemy.
 """
 
 from __future__ import annotations
+
+from collections.abc import AsyncGenerator, Callable
+
+from sqlalchemy.engine import Engine
+
+from atlas.api.openbb.handlers.breakouts import handle_breakouts
+from atlas.api.openbb.handlers.leaders import handle_leaders
+from atlas.api.openbb.handlers.regime import handle_regime
+from atlas.api.openbb.handlers.rotation import handle_rotation
+
+# Dispatch table: intent key → handler callable.
+# ``query.py`` imports this dict and calls
+# ``HANDLER_DISPATCH[intent](engine, query_text)``.
+HANDLER_DISPATCH: dict[str, Callable[[Engine, str], AsyncGenerator[dict, None]]] = {
+    "regime": handle_regime,
+    "leaders": handle_leaders,
+    "rotation": handle_rotation,
+    "breakouts": handle_breakouts,
+}
+
+__all__ = ["HANDLER_DISPATCH"]
