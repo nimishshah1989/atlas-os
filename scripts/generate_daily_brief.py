@@ -18,7 +18,7 @@ Exit codes:
     0 - success
     2 - invalid arguments
     3 - context is empty (no MV data); brief refused
-    4 - ANTHROPIC_API_KEY missing (only when not --dry-run-stub)
+    4 - GROQ_API_KEY missing (only when not --dry-run-stub)
 """
 
 from __future__ import annotations
@@ -73,7 +73,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help=(
             "Build context and print it; skip the Claude call entirely. "
-            "Used by CI when ANTHROPIC_API_KEY is not available."
+            "Used by CI when GROQ_API_KEY is not available."
         ),
     )
     return p.parse_args(argv)
@@ -120,9 +120,9 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(ctx.to_dict(), indent=2))
         return 0
 
-    if not os.environ.get("ANTHROPIC_API_KEY"):
+    if not os.environ.get("GROQ_API_KEY"):
         print(
-            "ANTHROPIC_API_KEY is not set. Export it or re-run with "
+            "GROQ_API_KEY is not set. Export it or re-run with "
             "--dry-run-stub to test the context build only.",
             file=sys.stderr,
         )
