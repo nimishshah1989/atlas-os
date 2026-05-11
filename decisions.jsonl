@@ -14687,3 +14687,21 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{
+  "ts": "2026-05-11T23:26:33Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/038_create_atlas_agent_invocations.py",
+  "lines_changed": 57,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-11T23:26:48Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/agents/tools/__init__.py",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
