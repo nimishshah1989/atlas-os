@@ -46,6 +46,9 @@ dependencies = [
 
     # Auth — Supabase JWT verification (HS256)
     "pyjwt>=2.8",
+
+    # SP05 — Claude Sonnet 4.6 daily brief generation
+    "anthropic>=0.40",
 ]
 
 [project.optional-dependencies]
