@@ -144,7 +144,8 @@ def finish_run(
                 SET ended_at = :ended_at,
                     status = :status,
                     rows_written = :rows_written,
-                    error_message = :error_message
+                    error_message = :error_message,
+                    updated_at = :ended_at
                 WHERE run_id = :run_id
             """),
             {
