@@ -21,7 +21,6 @@ import { CHART_COLORS } from '@/lib/chart-colors'
 // allow-large: single cohesive component — axes, quadrants, tooltip, legend, filter chips all belong together (mirrors StockBubbleChart pattern)
 
 const RET_CAP = 1.5   // 150% — exclude extreme return outliers
-const VOL_CAP = 120   // 120% annualized vol
 
 const PERIOD_RET_KEY: Record<Period, keyof FundRow> = {
   '1M': 'ret_1m',
@@ -52,13 +51,14 @@ const LEGEND = [
 ]
 
 type BubblePoint = {
-  x: number               // vol %
-  y: number               // ret %
-  z: number               // bubble size
+  x: number               // RS percentile (0–100)
+  y: number               // period return %
+  z: number               // bubble size (vol)
   mstarId: string
   schemeName: string
   amc: string
   color: string
+  vol: number | null
   rsPctile: number | null
   recommendation: string | null
 }
@@ -93,12 +93,14 @@ function CustomTooltip({
             {d.y >= 0 ? '+' : ''}{d.y.toFixed(1)}%
           </span>
         </div>
-        <div className="text-ink-secondary">Vol (63D): {d.x.toFixed(0)}%</div>
         <div className="text-ink-secondary">
-          RS Pctile: {d.rsPctile != null ? `${(d.rsPctile * 100).toFixed(0)}th` : '—'}
+          RS Pctile: {d.rsPctile != null ? `${d.rsPctile.toFixed(0)}th` : '—'}
+        </div>
+        <div className="text-ink-secondary">
+          Vol (63D): {d.vol != null ? `${d.vol.toFixed(0)}%` : '—'}
         </div>
         <div className="text-ink-secondary">Recommendation: {d.recommendation ?? '—'}</div>
-        <div className="text-ink-tertiary text-[9px] mt-1">Larger bubble = higher RS pctile</div>
+        <div className="text-ink-tertiary text-[9px] mt-1">Larger bubble = higher volatility</div>
       </div>
     </div>
   )
@@ -171,26 +173,25 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange, o
     const pctileKey = PERIOD_PCTILE_KEY[period]
     return filteredFunds.flatMap(f => {
       const retRaw = f[retKey] != null ? parseFloat(f[retKey] as string) : null
-      const volRaw = f.realized_vol_63 != null ? parseFloat(f.realized_vol_63) * 100 : null
-
-      if (retRaw == null || volRaw == null) return []
-      if (Math.abs(retRaw) > RET_CAP || volRaw > VOL_CAP) return []
-
       const rsPctileRaw = f[pctileKey] != null ? parseFloat(f[pctileKey] as string) : null
-      // Bubble size = RS pctile (0–1). Clamp to [6, 600] so low-RS funds remain visible.
-      const z = rsPctileRaw != null
-        ? Math.max(6, Math.min(600, rsPctileRaw * 600))
-        : 20
+
+      if (retRaw == null || rsPctileRaw == null) return []
+      if (Math.abs(retRaw) > RET_CAP) return []
+
+      const volRaw = f.realized_vol_63 != null ? parseFloat(f.realized_vol_63) * 100 : null
+      // Bubble size = volatility. Clamp so all bubbles are visible.
+      const z = volRaw != null ? Math.max(10, Math.min(500, volRaw * 8)) : 30
 
       return [{
-        x: volRaw,
-        y: retRaw * 100,
+        x: rsPctileRaw * 100,   // RS percentile 0–100
+        y: retRaw * 100,         // return %
         z,
         mstarId: f.mstar_id,
         schemeName: f.scheme_name,
         amc: f.amc,
         color: recColor(f.recommendation),
-        rsPctile: rsPctileRaw,
+        vol: volRaw,
+        rsPctile: rsPctileRaw * 100,
         recommendation: f.recommendation,
       }]
     })
@@ -206,14 +207,6 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange, o
       Math.max(-75, Math.floor((lo - pad) / 10) * 10),
       Math.min(150, Math.ceil((hi + pad) / 10) * 10),
     ]
-  }, [data])
-
-  // Dynamic X midpoint — median vol rounded to nearest 5
-  const volMedian = useMemo(() => {
-    if (data.length === 0) return 35
-    const xs = [...data.map(d => d.x)].sort((a, b) => a - b)
-    const raw = xs[Math.floor(xs.length / 2)]
-    return Math.round(raw / 5) * 5
   }, [data])
 
   const handleClick = useCallback((point: { payload?: BubblePoint }) => {
@@ -286,7 +279,7 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange, o
       {/* Description */}
       <div className="px-5 py-2 border-b border-paper-rule/40 bg-paper-rule/5">
         <p className="font-sans text-[11px] text-ink-secondary leading-relaxed">
-          X = annualized vol · Y = {period} return · Bubble size = {period} RS pctile · Color = recommendation.
+          X = {period} RS percentile vs universe · Y = {period} return · Bubble size = volatility · Color = recommendation.
           Click bubble for deep-dive.
         </p>
       </div>
@@ -300,7 +293,7 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange, o
           </div>
         ))}
         <div className="ml-auto font-sans text-[10px] text-ink-tertiary">
-          {data.length} funds
+          Bubble size = volatility · {data.length} funds
         </div>
       </div>
 
@@ -309,36 +302,36 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange, o
         <ResponsiveContainer width="100%" height="100%">
           <ScatterChart margin={{ top: 10, right: 24, bottom: 42, left: 36 }}>
 
-            {/* Quadrant tints */}
+            {/* Quadrant tints — split at RS pctile 50 and return 0 */}
             <ReferenceArea
-              x1={0} x2={volMedian} y1={0} y2={yMax}
+              x1={50} x2={100} y1={0} y2={yMax}
               fill="#22c55e" fillOpacity={0.04}
-              label={quadLabel('tl', 'Quality Uptrend', 'low vol · positive return', '#22c55e')}
+              label={quadLabel('tr', 'Leaders', 'high RS · positive return', '#22c55e')}
             />
             <ReferenceArea
-              x1={volMedian} x2={VOL_CAP} y1={0} y2={yMax}
-              fill="#f59e0b" fillOpacity={0.04}
-              label={quadLabel('tr', 'High Beta', 'high vol · positive return', '#f59e0b')}
-            />
-            <ReferenceArea
-              x1={0} x2={volMedian} y1={yMin} y2={0}
+              x1={0} x2={50} y1={0} y2={yMax}
               fill="#94a3b8" fillOpacity={0.04}
-              label={quadLabel('bl', 'Quiet Drift', 'low vol · negative return', '#94a3b8')}
+              label={quadLabel('tl', 'Recovering', 'low RS · positive return', '#94a3b8')}
             />
             <ReferenceArea
-              x1={volMedian} x2={VOL_CAP} y1={yMin} y2={0}
+              x1={50} x2={100} y1={yMin} y2={0}
+              fill="#f59e0b" fillOpacity={0.04}
+              label={quadLabel('br', 'Fading', 'high RS · negative return', '#f59e0b')}
+            />
+            <ReferenceArea
+              x1={0} x2={50} y1={yMin} y2={0}
               fill="#ef4444" fillOpacity={0.05}
-              label={quadLabel('br', 'Danger Zone', 'high vol · negative return', '#ef4444')}
+              label={quadLabel('bl', 'Laggards', 'low RS · negative return', '#ef4444')}
             />
 
             <XAxis
               type="number"
               dataKey="x"
-              domain={[0, VOL_CAP]}
-              tickFormatter={v => `${(v as number).toFixed(0)}%`}
-              label={{ value: 'Annualized Volatility % (63-day) →', position: 'insideBottom', offset: -28, fontSize: 10, fill: '#94a3b8' }}
+              domain={[0, 100]}
+              tickFormatter={v => `${(v as number).toFixed(0)}th`}
+              label={{ value: `${period} RS Percentile vs Universe →`, position: 'insideBottom', offset: -28, fontSize: 10, fill: '#94a3b8' }}
               tick={{ fontSize: 10, fill: '#94a3b8' }}
-              tickCount={7}
+              ticks={[0, 25, 50, 75, 100]}
             />
             <YAxis
               type="number"
@@ -349,7 +342,7 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange, o
               tick={{ fontSize: 10, fill: '#94a3b8' }}
               tickCount={6}
             />
-            <ZAxis type="number" dataKey="z" range={[4, 800]} />
+            <ZAxis type="number" dataKey="z" range={[4, 600]} />
             <Tooltip content={<CustomTooltip />} cursor={false} />
 
             {/* Axis dividers */}
@@ -358,9 +351,9 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange, o
               stroke="#cbd5e1" strokeDasharray="4 3" strokeWidth={1}
             />
             <ReferenceLine
-              x={volMedian}
+              x={50}
               stroke="#cbd5e1" strokeDasharray="4 3" strokeWidth={1}
-              label={{ value: `${volMedian}% vol`, position: 'insideTopRight', fontSize: 9, fill: '#94a3b8', dy: -4 }}
+              label={{ value: '50th pctile', position: 'insideTopRight', fontSize: 9, fill: '#94a3b8', dy: -4 }}
             />
 
             <Scatter data={data} onClick={handleClick} cursor="pointer">
