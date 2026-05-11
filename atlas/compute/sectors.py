@@ -953,8 +953,9 @@ def _run_pipeline(
     states = compute_sector_states(metrics, thresholds)
 
     if write_start is not None:
-        metrics = metrics.loc[metrics["date"] >= write_start].copy()
-        states = states.loc[states["date"] >= write_start].copy()
+        _ws = pd.Timestamp(write_start)
+        metrics = metrics.loc[metrics["date"] >= _ws].copy()
+        states = states.loc[states["date"] >= _ws].copy()
 
     metric_rows = _write_metrics(engine, metrics, run_id)
     state_rows = _write_states(engine, states, run_id)

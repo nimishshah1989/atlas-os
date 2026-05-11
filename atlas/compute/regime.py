@@ -493,7 +493,7 @@ def apply_dislocation_override(
 
     out = df_classified.sort_values("date").reset_index(drop=True).copy()
 
-    multiplier = (df_thresholds or {}).get("dislocation_vol_multiplier", 4.0)
+    multiplier = float((df_thresholds or {}).get("dislocation_vol_multiplier", 4.0))
 
     # Trigger uses Nifty500-derived 5d vol vs 252d median per methodology
     # §11.5. NULL guard: if either input is NaN, treat trigger as False.
