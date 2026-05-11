@@ -26,9 +26,9 @@ export function FundLens2({
 
   const segments = hasDisclosure
     ? [
-        { pct: parseFloat(lens!.aligned_aum_pct!), color: 'green' as const },
-        { pct: parseFloat(lens!.neutral_aum_pct ?? '0'), color: 'neutral' as const },
-        { pct: parseFloat(lens!.avoid_aum_pct ?? '0'), color: 'red' as const },
+        { pct: Number(lens?.aligned_aum_pct ?? '0'), color: 'green' as const },
+        { pct: Number(lens?.neutral_aum_pct ?? '0'), color: 'neutral' as const },
+        { pct: Number(lens?.avoid_aum_pct ?? '0'), color: 'red' as const },
       ]
     : []
 

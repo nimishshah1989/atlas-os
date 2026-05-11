@@ -89,7 +89,6 @@ exclude = [
 select = ["E", "F", "I", "N", "W", "UP", "B", "RUF", "S"]
 ignore = [
     "S101",   # assert allowed in tests + DoD checks
-    "S608",   # SQL formatted strings — bound parameters used at write time
     "S110",   # try-except-pass used for defensive connection cleanup
     "RUF001", # mathematical unicode (σ) in string literals is intentional
     "RUF002", # mathematical unicode (×, −, σ, –) in docstrings is intentional

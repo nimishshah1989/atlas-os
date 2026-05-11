@@ -18,8 +18,9 @@ from __future__ import annotations
 
 import time
 import uuid
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import date, timedelta
+from decimal import Decimal
 
 import pandas as pd
 import structlog
@@ -205,7 +206,7 @@ def _load_event_dates(engine: Engine) -> set:
         if bool(flags["has_event"]):
             cols.append("COALESCE(is_major_event_day, FALSE)")
         df = pd.read_sql(
-            f"SELECT date FROM public.de_trading_calendar WHERE {' OR '.join(cols)}",
+            f"SELECT date FROM public.de_trading_calendar WHERE {' OR '.join(cols)}",  # noqa: S608 -- cols are SQL fragments from schema introspection, not user input
             conn,
         )
     return set(pd.to_datetime(df["date"]).dt.date)
@@ -291,7 +292,7 @@ def _compute_stock_metrics(
     universe: pd.DataFrame,
     benchmark_cache: pd.DataFrame,
     event_dates: set,
-    thresholds: dict[str, float],
+    thresholds: Mapping[str, Decimal],
 ) -> pd.DataFrame:
     """Run the full primitives → percentiles → states pipeline on ``ohlcv``.
 
@@ -338,7 +339,11 @@ def _compute_stock_metrics(
             on=["benchmark_code", "date"],
             how="left",
         )
-        df["drawdown_ratio_252"] = -df["max_drawdown_252"]
+        # ratio = stock drawdown / benchmark drawdown per methodology §7.4
+        # guard against zero benchmark drawdown (early history / holiday runs)
+        df["drawdown_ratio_252"] = df["max_drawdown_252"] / df["max_drawdown_252_bench"].replace(
+            0, pd.NA
+        )
     else:
         df["drawdown_ratio_252"] = pd.NA
 

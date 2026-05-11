@@ -6,6 +6,7 @@ driver, ``pool_pre_ping`` for transient-failure resilience, modest pool size.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from functools import lru_cache
 
 import structlog
@@ -66,7 +67,7 @@ def sanity_check() -> dict[str, str]:
     return result
 
 
-def load_thresholds(engine: Engine | None = None) -> dict[str, float]:
+def load_thresholds(engine: Engine | None = None) -> dict[str, Decimal]:
     """Read all active thresholds from ``atlas.atlas_thresholds`` once per run.
 
     Per architecture 5.6: every classifier function takes thresholds as a
@@ -81,7 +82,7 @@ def load_thresholds(engine: Engine | None = None) -> dict[str, float]:
                 "FROM atlas.atlas_thresholds WHERE is_active = TRUE"
             )
         ).all()
-    return {key: float(value) for key, value in rows}
+    return {key: Decimal(str(value)) for key, value in rows}
 
 
 if __name__ == "__main__":

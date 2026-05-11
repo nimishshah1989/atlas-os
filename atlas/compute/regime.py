@@ -17,12 +17,18 @@ vol of NIFTY 500 exceeds ``dislocation_vol_multiplier`` × its trailing
 Implementation pattern mirrors :mod:`atlas.compute.sectors`: pure functions
 for each transform, an orchestrator that loads, computes, and writes.
 """
+# allow-large: monolithic regime pipeline — loaders, breadth aggregation,
+# dislocation override, state classification, and DB writers are a tightly
+# coupled single-pass computation. Splitting would break the single-read
+# guarantee needed on EC2 where two reads could see different pipeline states.
 
 from __future__ import annotations
 
 import time
 import uuid
+from collections.abc import Mapping
 from datetime import date, timedelta
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
@@ -357,7 +363,7 @@ def compute_regime_inputs(
 
 def classify_regime_state(
     df_inputs: pd.DataFrame,
-    df_thresholds: dict[str, float],
+    df_thresholds: Mapping[str, Decimal],
 ) -> pd.DataFrame:
     """Apply methodology §11.4 — Risk-On / Constructive / Cautious / Risk-Off.
 
@@ -387,14 +393,16 @@ def classify_regime_state(
 
     out = df_inputs.copy()
 
-    # All thresholds stored as percent → fraction.
-    risk_on_min = df_thresholds["regime_risk_on_breadth_min_pct"] / 100.0
-    constr_min = df_thresholds["regime_constructive_breadth_min_pct"] / 100.0
-    risk_off_max = df_thresholds["regime_risk_off_breadth_max_pct"] / 100.0
-    risk_on_vix = df_thresholds["regime_risk_on_vix_max"]
-    constr_vix = df_thresholds["regime_constructive_vix_max"]
-    cautious_vix = df_thresholds["regime_cautious_vix_max"]
-    near_200_band = df_thresholds["regime_near_200ema_band_pct"] / 100.0
+    # All thresholds stored as percent → fraction. Convert to float for pandas
+    # Series comparison (Decimal / float raises TypeError; Decimal / int is fine
+    # but pandas needs float scalars for clean dtype handling).
+    risk_on_min = float(df_thresholds["regime_risk_on_breadth_min_pct"]) / 100.0
+    constr_min = float(df_thresholds["regime_constructive_breadth_min_pct"]) / 100.0
+    risk_off_max = float(df_thresholds["regime_risk_off_breadth_max_pct"]) / 100.0
+    risk_on_vix = float(df_thresholds["regime_risk_on_vix_max"])
+    constr_vix = float(df_thresholds["regime_constructive_vix_max"])
+    cautious_vix = float(df_thresholds["regime_cautious_vix_max"])
+    near_200_band = float(df_thresholds["regime_near_200ema_band_pct"]) / 100.0
 
     above_200 = out["nifty500_above_ema_200"].fillna(False).astype(bool)
     pct_50 = out["pct_above_ema_50"].astype("float64")
@@ -409,12 +417,21 @@ def classify_regime_state(
     breadth_drop = out["pct_above_ema_50"].diff(periods=21)
     breadth_deteriorating = (breadth_drop < -0.05).fillna(False)
 
-    is_risk_on = above_200 & (pct_50 > risk_on_min) & (vix < risk_on_vix)
+    # When VIX is NaN (data gap / holiday), treat it as non-contributory to any
+    # condition: don't let it block Risk-On and don't use it to trigger Risk-Off.
+    # Breadth + price trend drive the regime on VIX-gap dates.
+    vix_valid = vix.notna()
+    is_risk_on = above_200 & (pct_50 > risk_on_min) & (~vix_valid | (vix < risk_on_vix))
     is_constructive = (
-        above_200 & (pct_50 >= constr_min) & (pct_50 <= risk_on_min) & (vix < constr_vix)
+        above_200
+        & (pct_50 >= constr_min)
+        & (pct_50 <= risk_on_min)
+        & (~vix_valid | (vix < constr_vix))
     )
-    is_risk_off = (~above_200) & (pct_50 < risk_off_max) & (vix > cautious_vix)
-    is_cautious = near_200 | breadth_deteriorating | ((vix >= constr_vix) & (vix <= cautious_vix))
+    is_risk_off = (~above_200) & (pct_50 < risk_off_max) & vix_valid & (vix > cautious_vix)
+    is_cautious = (
+        near_200 | breadth_deteriorating | (vix_valid & (vix >= constr_vix) & (vix <= cautious_vix))
+    )
 
     # Order of priority: Risk-Off (most-restrictive) → Risk-On → Constructive
     # → Cautious → default Cautious. We deliberately let Risk-Off win ties
@@ -427,10 +444,9 @@ def classify_regime_state(
     )
     out["deployment_multiplier"] = out["regime_state"].map(DEPLOYMENT_MULTIPLIERS).astype("float64")
 
-    # Where every classification input is NaN (insufficient history at the
-    # start of the series), null out the state — we shouldn't write
-    # placeholder regime values during warm-up.
-    no_inputs = pct_50.isna() & vix.isna() & close.isna()
+    # Where price + breadth inputs are both absent (early-history warm-up), null
+    # out the state. VIX gap alone is handled above via vix_valid guards.
+    no_inputs = pct_50.isna() & close.isna()
     out.loc[no_inputs, "regime_state"] = None
     out.loc[no_inputs, "deployment_multiplier"] = np.nan
 
@@ -444,7 +460,7 @@ def classify_regime_state(
 
 def apply_dislocation_override(
     df_classified: pd.DataFrame,
-    df_thresholds: dict[str, float] | None = None,
+    df_thresholds: Mapping[str, Decimal] | None = None,
     *,
     persist_days: int = 5,
 ) -> pd.DataFrame:

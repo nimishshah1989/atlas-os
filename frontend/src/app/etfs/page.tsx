@@ -73,7 +73,7 @@ export default async function ETFsPage() {
           <ETFIntelligencePanel
             etfs={etfs}
             regimeState={regime?.regime_state ?? 'Unknown'}
-            deploymentMultiplier={parseFloat(regime?.deployment_multiplier ?? '0')}
+            deploymentMultiplier={Number(regime?.deployment_multiplier ?? '0')}
           />
         </div>
       </div>

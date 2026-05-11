@@ -14,8 +14,9 @@ from __future__ import annotations
 
 import time
 import uuid
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import date, timedelta
+from decimal import Decimal
 
 import pandas as pd
 import structlog
@@ -226,7 +227,7 @@ def _compute_etf_metrics(
     universe_with_benchmark: pd.DataFrame,
     benchmark_cache: pd.DataFrame,
     event_dates: set,
-    thresholds: dict[str, float],
+    thresholds: Mapping[str, Decimal],
 ) -> pd.DataFrame:
     """Pure-function ETF compute — primitives → states."""
     df = ohlcv.merge(

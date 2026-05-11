@@ -127,7 +127,7 @@ def bulk_upsert(
     pk_csv = ", ".join(pk_columns)
 
     sql = (
-        f"INSERT INTO {table} ({col_csv}) VALUES %s "
+        f"INSERT INTO {table} ({col_csv}) VALUES %s "  # noqa: S608 -- table/columns are internal constants, never user input
         f"ON CONFLICT ({pk_csv}) DO UPDATE SET {update_csv}"
     )
 

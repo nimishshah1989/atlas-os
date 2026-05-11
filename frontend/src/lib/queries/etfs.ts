@@ -80,7 +80,9 @@ export type ETFStateHistoryRow = {
 export async function getAllETFs(): Promise<ETFRow[]> {
   return sql<ETFRow[]>`
     WITH latest AS (
-      SELECT MAX(date) AS d FROM atlas.atlas_etf_metrics_daily
+      SELECT ticker, MAX(date) AS d
+      FROM atlas.atlas_etf_metrics_daily
+      GROUP BY ticker
     )
     SELECT
       u.ticker,
@@ -129,7 +131,7 @@ export async function getAllETFs(): Promise<ETFRow[]> {
       d.exit_momentum_collapse,
       d.exit_stop_loss
     FROM atlas.atlas_universe_etfs u
-    JOIN latest l ON TRUE
+    LEFT JOIN latest l ON l.ticker = u.ticker
     LEFT JOIN atlas.atlas_etf_metrics_daily m
       ON m.ticker = u.ticker AND m.date = l.d
     LEFT JOIN atlas.atlas_etf_states_daily s
@@ -148,6 +150,7 @@ export async function getETFByTicker(ticker: string): Promise<ETFRow | null> {
   const rows = await sql<ETFRow[]>`
     WITH latest AS (
       SELECT MAX(date) AS d FROM atlas.atlas_etf_metrics_daily
+      WHERE ticker = ${ticker}
     )
     SELECT
       u.ticker,
@@ -276,7 +279,9 @@ export type ETFHoldingRow = {
 export async function getLinkedETFsForSector(sectorName: string): Promise<ETFRow[]> {
   return sql<ETFRow[]>`
     WITH latest AS (
-      SELECT MAX(date) AS d FROM atlas.atlas_etf_metrics_daily
+      SELECT ticker, MAX(date) AS d
+      FROM atlas.atlas_etf_metrics_daily
+      GROUP BY ticker
     )
     SELECT
       u.ticker,
@@ -325,7 +330,7 @@ export async function getLinkedETFsForSector(sectorName: string): Promise<ETFRow
       d.exit_momentum_collapse,
       d.exit_stop_loss
     FROM atlas.atlas_universe_etfs u
-    JOIN latest l ON TRUE
+    LEFT JOIN latest l ON l.ticker = u.ticker
     LEFT JOIN atlas.atlas_etf_metrics_daily m
       ON m.ticker = u.ticker AND m.date = l.d
     LEFT JOIN atlas.atlas_etf_states_daily s

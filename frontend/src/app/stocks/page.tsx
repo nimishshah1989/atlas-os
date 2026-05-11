@@ -48,7 +48,7 @@ export default async function StocksPage() {
         <StocksClientShell
           stocks={stocks}
           regimeState={regime?.regime_state ?? 'Unknown'}
-          deploymentMultiplier={parseFloat(regime?.deployment_multiplier ?? '0')}
+          deploymentMultiplier={Number(regime?.deployment_multiplier ?? '0')}
         />
       </div>
     </div>

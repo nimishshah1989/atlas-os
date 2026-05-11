@@ -79,7 +79,7 @@ def _load_one_benchmark_prices(
         raise ValueError(f"Unknown benchmark source_table: {source_table}")
 
     sql = (
-        f"SELECT date, close FROM public.{source_table} "
+        f"SELECT date, close FROM public.{source_table} "  # noqa: S608 -- source_table validated against keymap whitelist above
         f"WHERE {keymap[source_table]} = %(code)s "
         f"AND date BETWEEN %(start)s AND %(end)s "
         f"ORDER BY date"
@@ -231,5 +231,6 @@ def add_vol_ratio(
 ) -> pd.DataFrame:
     """``vol_ratio_63 = stock_vol_63 / benchmark_vol_63`` per methodology §7.3."""
     out = df.copy()
-    out[out_col] = out[stock_vol_col] / out[bench_vol_col]
+    # guard: zero benchmark vol (holiday runs / early history) → NA, not inf
+    out[out_col] = out[stock_vol_col] / out[bench_vol_col].replace(0, pd.NA)
     return out

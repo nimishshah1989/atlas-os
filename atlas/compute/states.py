@@ -13,6 +13,9 @@ applied last via :func:`apply_suspension_overrides`.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from decimal import Decimal
+
 import numpy as np
 import pandas as pd
 
@@ -21,7 +24,7 @@ import pandas as pd
 # --------------------------------------------------------------------------- #
 
 
-def classify_rs_state(df: pd.DataFrame, thresholds: dict[str, float]) -> pd.DataFrame:
+def classify_rs_state(df: pd.DataFrame, thresholds: Mapping[str, Decimal]) -> pd.DataFrame:
     """Apply the 7-state RS classification.
 
     Required columns:
@@ -71,7 +74,7 @@ def classify_rs_state(df: pd.DataFrame, thresholds: dict[str, float]) -> pd.Data
 # --------------------------------------------------------------------------- #
 
 
-def classify_momentum_state(df: pd.DataFrame, thresholds: dict[str, float]) -> pd.DataFrame:
+def classify_momentum_state(df: pd.DataFrame, thresholds: Mapping[str, Decimal]) -> pd.DataFrame:
     """Apply the 5-state momentum classification.
 
     Required columns: ``ema_10_ratio``, ``ema_20_ratio``, ``ema_10_at_20d_high``,
@@ -109,7 +112,7 @@ def classify_momentum_state(df: pd.DataFrame, thresholds: dict[str, float]) -> p
 # --------------------------------------------------------------------------- #
 
 
-def classify_risk_state(df: pd.DataFrame, thresholds: dict[str, float]) -> pd.DataFrame:
+def classify_risk_state(df: pd.DataFrame, thresholds: Mapping[str, Decimal]) -> pd.DataFrame:
     """Apply the 5-state risk classification.
 
     "Below Trend" is terminal: when ``extension_pct < 0`` (price below the
@@ -159,7 +162,7 @@ def apply_below_trend_conjunction(df: pd.DataFrame) -> pd.DataFrame:
 # --------------------------------------------------------------------------- #
 
 
-def classify_volume_state(df: pd.DataFrame, thresholds: dict[str, float]) -> pd.DataFrame:
+def classify_volume_state(df: pd.DataFrame, thresholds: Mapping[str, Decimal]) -> pd.DataFrame:
     """Apply the 5-state volume classification.
 
     Required columns: ``volume_expansion``, ``effort_ratio_63``.

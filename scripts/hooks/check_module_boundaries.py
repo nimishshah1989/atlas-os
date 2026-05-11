@@ -63,6 +63,11 @@ ALLOWED_EDGES: set[tuple[str, str]] = {
     # timeout on run-log inserts). Pre-existing edge; documented here so
     # staged edits to runs.py don't trip the boundary check.
     ("atlas.health", "atlas.compute"),
+    # validation → compute: tier2_metrics.py and tier3_states.py call
+    # open_compute_session to read from atlas tables for hand-validation
+    # spot-checks. Pre-existing edge (present before 2026-05 health audit).
+    # Long-term fix: extract session factory into atlas.db shared kernel.
+    ("atlas.validation", "atlas.compute"),
 }
 
 

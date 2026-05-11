@@ -51,13 +51,13 @@ def snapshot(engine: Engine, *, today: date | None = None) -> list[TableFreshnes
 
     with open_compute_session(engine) as conn:
         for table, date_col in TRACKED_TABLES:
-            cnt_sql = f"SELECT count(*) AS c FROM {table}"
+            cnt_sql = f"SELECT count(*) AS c FROM {table}"  # noqa: S608 -- table from TRACKED_TABLES constant
             cnt = int(pd.read_sql(cnt_sql, conn).iloc[0]["c"])
 
             latest: date | None = None
             lag: int | None = None
             if date_col is not None and cnt > 0:
-                row = pd.read_sql(f"SELECT MAX({date_col}) AS d FROM {table}", conn).iloc[0]
+                row = pd.read_sql(f"SELECT MAX({date_col}) AS d FROM {table}", conn).iloc[0]  # noqa: S608 -- table/col from TRACKED_TABLES constant
                 d = row["d"]
                 if d is not None:
                     latest_date = pd.to_datetime(d).date()

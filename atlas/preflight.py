@@ -43,6 +43,9 @@ Usage::
     # Save report to custom path:
     python -m atlas.preflight --output output/my_check.md
 """
+# allow-large: monolithic pre-flight script — all 50+ checks share helpers,
+# report builder, and the CLI entrypoint. Splitting would scatter related
+# checks across files with no benefit; each check is < 20 lines.
 
 from __future__ import annotations
 
@@ -439,7 +442,7 @@ def _check_stock_ohlcv_depth(engine: Engine, report: Report) -> None:
               WHERE o.instrument_id = i.id
           ) > '{HISTORICAL_START}'
           AND (i.listing_date IS NULL OR i.listing_date < '{HISTORICAL_START}')
-        """,
+        """,  # noqa: S608 -- HISTORICAL_START is a module-level date constant, not user input
     )
     report.add(
         CheckResult(
@@ -511,7 +514,7 @@ def _check_index_coverage(engine: Engine, report: Report) -> None:
     params: dict[str, Any] = {f"code_{i}": code for i, code in enumerate(CURATED_INDEX_CODES)}
     found_count = _scalar(
         engine,
-        f"SELECT COUNT(*) FROM public.de_index_master WHERE index_code IN ({placeholders})",
+        f"SELECT COUNT(*) FROM public.de_index_master WHERE index_code IN ({placeholders})",  # noqa: S608 -- placeholders are %(code_N)s bound params, not literals
         **params,
     )
     report.add(
@@ -774,7 +777,7 @@ def _check_sector_mapping(engine: Engine, report: Report) -> None:
     params: dict[str, Any] = {f"sec_{i}": f"%{s}%" for i, s in enumerate(required_sectors)}
     mapped = _scalar(
         engine,
-        f"SELECT COUNT(*) FROM public.de_sector_mapping "
+        f"SELECT COUNT(*) FROM public.de_sector_mapping "  # noqa: S608 -- placeholders are %(sec_N)s bound params, not literals
         f"WHERE primary_nse_index IS NOT NULL AND ({placeholders})",
         **params,
     )

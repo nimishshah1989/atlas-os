@@ -19,7 +19,9 @@ These are documented precision artifacts, not computation bugs.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import date
+from decimal import Decimal
 from typing import Any
 
 import pandas as pd
@@ -38,7 +40,7 @@ log = structlog.get_logger()
 # --------------------------------------------------------------------------- #
 
 
-def hand_classify_rs(row: dict[str, Any], thresholds: dict[str, float]) -> str:
+def hand_classify_rs(row: dict[str, Any], thresholds: Mapping[str, Decimal]) -> str:
     """Translate methodology §7.1 verbatim. No np.select, plain Python ifs."""
     top = thresholds["rs_quintile_top"]
     bot = thresholds["rs_quintile_bottom"]
@@ -71,7 +73,7 @@ def hand_classify_rs(row: dict[str, Any], thresholds: dict[str, float]) -> str:
     return "Average"
 
 
-def hand_classify_momentum(row: dict[str, Any], thresholds: dict[str, float]) -> str:
+def hand_classify_momentum(row: dict[str, Any], thresholds: Mapping[str, Decimal]) -> str:
     flat = thresholds["momentum_flat_band_pct"]
     converge = thresholds["momentum_ema_convergence_pct"]
     r10 = row["ema_10_ratio"]
@@ -98,7 +100,7 @@ def hand_classify_momentum(row: dict[str, Any], thresholds: dict[str, float]) ->
     return "Flat"
 
 
-def hand_classify_risk(row: dict[str, Any], thresholds: dict[str, float]) -> str:
+def hand_classify_risk(row: dict[str, Any], thresholds: Mapping[str, Decimal]) -> str:
     ext_low_max = thresholds["risk_extension_low_max_pct"]
     ext_high_min = thresholds["risk_extension_high_min_pct"]
     vol_low_max = thresholds["risk_vol_ratio_low_max"]
@@ -121,7 +123,7 @@ def hand_classify_risk(row: dict[str, Any], thresholds: dict[str, float]) -> str
     return "Normal"
 
 
-def hand_classify_volume(row: dict[str, Any], thresholds: dict[str, float]) -> str:
+def hand_classify_volume(row: dict[str, Any], thresholds: Mapping[str, Decimal]) -> str:
     acc_exp = thresholds["volume_accumulation_expansion_min"]
     acc_eff = thresholds["volume_accumulation_effort_min"]
     dist_eff = thresholds["volume_distribution_effort_max"]

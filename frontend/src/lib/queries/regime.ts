@@ -63,7 +63,19 @@ export type RegimeHistoryRow = {
 
 export async function getCurrentRegime(): Promise<MarketRegimeRow | null> {
   const rows = await sql<MarketRegimeRow[]>`
-    SELECT *
+    SELECT
+      date,
+      nifty500_close, nifty500_ema_50, nifty500_ema_200,
+      nifty500_above_ema_50, nifty500_above_ema_200,
+      nifty500_ema_50_slope, nifty500_ema_200_slope,
+      pct_above_ema_20, pct_above_ema_50, pct_above_ema_200,
+      advances_count, declines_count, unchanged_count,
+      ad_ratio, ad_line, ad_line_slope_21,
+      mcclellan_oscillator, mcclellan_summation,
+      new_52w_highs, new_52w_lows, net_new_highs, new_high_low_ratio,
+      pct_in_strong_states, pct_weinstein_pass,
+      india_vix, realized_vol_5d_nifty500, vol_252_median_nifty500,
+      regime_state, deployment_multiplier, dislocation_active, dislocation_started
     FROM atlas.atlas_market_regime_daily
     ORDER BY date DESC
     LIMIT 1

@@ -23,6 +23,9 @@ Usage::
     # Custom output path
     python -m atlas.validation.m1_data_quality --output output/dq.md
 """
+# allow-large: comprehensive audit script — 12 data quality sections, shared
+# helpers, report writer, and CLI entrypoint form one indivisible validation
+# run. Splitting would require passing a shared report object across files.
 
 from __future__ import annotations
 

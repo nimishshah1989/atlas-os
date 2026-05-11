@@ -176,7 +176,7 @@ def _read_metric(
     """Read a single metric value from ``atlas_stock_metrics_daily``."""
     with open_compute_session(engine) as conn:
         result = pd.read_sql(
-            f"SELECT {column} FROM atlas.atlas_stock_metrics_daily "
+            f"SELECT {column} FROM atlas.atlas_stock_metrics_daily "  # noqa: S608 -- column is validated against METRIC_COLUMNS before call
             f"WHERE instrument_id = %(id)s AND date = %(date)s",
             conn,
             params={"id": instrument_id, "date": target_date},

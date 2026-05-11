@@ -27,7 +27,9 @@ from __future__ import annotations
 
 import time
 import uuid
+from collections.abc import Mapping
 from datetime import date, timedelta
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
@@ -481,11 +483,13 @@ def compute_sector_breadth(
         .rename("participation_50")
     )
 
-    # ---- participation_rs (rs_1m_tier > 0) ---------------------------------
-    # rs_1m_tier is a DIFFERENCE (stock_ret - benchmark_ret), not a ratio,
-    # so the "positive RS" cut is at 0 not 1.0.
-    rs_work = work.dropna(subset=["rs_1m_tier"])
-    is_pos_rs = (rs_work["rs_1m_tier"] > 0).astype(int)
+    # ---- participation_rs — methodology §10.4 ----------------------------------
+    # Count of stocks with rs_state ∈ {Leader, Strong, Emerging} per methodology.
+    # Previous implementation used rs_1m_tier > 0 as a proxy; using the actual
+    # state column avoids Weinstein-gate discrepancies at the quintile boundary.
+    _positive_rs_states = {"Leader", "Strong", "Emerging"}
+    rs_work = work.dropna(subset=["rs_state"])
+    is_pos_rs = rs_work["rs_state"].isin(_positive_rs_states).astype(int)
     p_rs = (
         is_pos_rs.groupby([rs_work["sector_name"], rs_work["date"]], observed=True)
         .mean()
@@ -630,7 +634,7 @@ def _classify_bottomup_rs_state(
 
 def compute_sector_states(
     df_metrics: pd.DataFrame,
-    df_thresholds: dict[str, float],
+    df_thresholds: Mapping[str, Decimal],
 ) -> pd.DataFrame:
     """Per-sector four-state classification (methodology §10.5).
 
@@ -657,9 +661,10 @@ def compute_sector_states(
     out = df_metrics.copy()
 
     # Threshold keys are percent values per docs/04 — convert to fraction.
-    overweight_min = df_thresholds["sector_overweight_participation_min_pct"] / 100.0
-    underweight_max = df_thresholds["sector_underweight_participation_max_pct"] / 100.0
-    avoid_max = df_thresholds["sector_avoid_participation_max_pct"] / 100.0
+    # Cast to float: Decimal / float raises TypeError; pandas comparisons need float scalars.
+    overweight_min = float(df_thresholds["sector_overweight_participation_min_pct"]) / 100.0
+    underweight_max = float(df_thresholds["sector_underweight_participation_max_pct"]) / 100.0
+    avoid_max = float(df_thresholds["sector_avoid_participation_max_pct"]) / 100.0
 
     # ---- Bottom-up RS state ------------------------------------------------
     out["bottomup_rs_state"] = _classify_bottomup_rs_state(out)
@@ -692,9 +697,12 @@ def compute_sector_states(
     is_underweight = (rs_state == "Avoid_RS") | (p_rs < underweight_max)
     is_overweight = (rs_state == "Overweight_RS") & (mom == "Improving") & (p_rs >= overweight_min)
 
+    # Avoid takes priority; Underweight before Overweight so a sector that
+    # meets both conditions (threshold edge-case) defaults to the more
+    # conservative classification.
     out["bottomup_state"] = np.select(
-        [is_avoid, is_overweight, is_underweight],
-        ["Avoid", "Overweight", "Underweight"],
+        [is_avoid, is_underweight, is_overweight],
+        ["Avoid", "Underweight", "Overweight"],
         default="Neutral",
     )
 

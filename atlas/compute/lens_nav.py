@@ -193,6 +193,17 @@ def compute_fund_nav_raw_metrics(
     fund_nav = fund_nav.sort_values("date").set_index("date")
     fund_bench = fund_bench.sort_values("date").set_index("date")
 
+    # Detect NAV gaps before forward-filling; methodology §3.3 forbids silent skips.
+    nav_gaps = fund_nav["close"].isna().sum()
+    if nav_gaps > 0:
+        log.warning(
+            "nav_gaps_detected_filling_forward",
+            mstar_id=mstar_id,
+            gap_count=int(nav_gaps),
+            date_range=f"{fund_nav.index.min()} – {fund_nav.index.max()}",
+        )
+        fund_nav["close"] = fund_nav["close"].ffill()
+
     # Returns: fund NAV series
     for name, periods in FUND_WINDOWS.items():
         fund_nav[f"ret_{name}"] = fund_nav["close"].pct_change(periods=periods)
@@ -205,10 +216,12 @@ def compute_fund_nav_raw_metrics(
         fund_bench[f"bench_ret_{name}"] = fund_bench["close"].pct_change(periods=periods)
 
     # Price-relative RS: (1+fund)/(1+bench) - 1 per methodology §4
+    # NaN returns after forward-fill can only come from benchmark gaps; use 0
+    # so the fund's RS isn't lost because of a benchmark data hole.
     merged = fund_nav.join(fund_bench[[f"bench_ret_{n}" for n in FUND_WINDOWS]], how="left")
     for name in ("1m", "3m", "6m"):
         f_ret = merged[f"ret_{name}"].fillna(0)
-        b_ret = merged[f"bench_ret_{name}"].fillna(0)
+        b_ret = merged[f"bench_ret_{name}"].fillna(0)  # benchmark gap → treat as 0
         denom = 1 + b_ret
         denom = denom.where(denom != 0, np.nan)
         merged[f"rs_{name}_category"] = (1 + f_ret) / denom - 1
