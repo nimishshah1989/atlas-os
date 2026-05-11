@@ -58,6 +58,11 @@ class Config:
     SUPABASE_JWT_SECRET: str = os.environ.get("SUPABASE_JWT_SECRET", "")
     AUTH_DISABLED: bool = os.environ.get("ATLAS_AUTH_DISABLED", "false").lower() == "true"
 
+    # SP03: OpenBB BYO Copilot API key. Set in .env on EC2.
+    # NOT a Supabase JWT — OpenBB Workspace sends its own bearer for /v1/* routes.
+    # Empty string disables auth (local dev only). Never empty in production.
+    OPENBB_BACKEND_API_KEY: str = os.environ.get("OPENBB_BACKEND_API_KEY", "")
+
     @classmethod
     def assert_db_url(cls) -> str:
         """Fail loudly if ``ATLAS_DB_URL`` is missing.
