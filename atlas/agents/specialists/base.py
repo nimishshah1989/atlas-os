@@ -114,13 +114,40 @@ def _run_loop(
 
     for _i in range(MAX_ITERS):
         iterations += 1
-        response = client.chat.completions.create(
-            model=_MODEL,
-            max_tokens=_MAX_TOKENS,
-            messages=messages,
-            tools=groq_tools,
-            tool_choice="auto",
-        )
+        # Llama 3.3 70B on Groq occasionally emits XML-style function calls
+        # (e.g. `<function=name {args}>`) instead of the OpenAI tool_calls JSON.
+        # When Groq's validator rejects the malformed call with HTTP 400
+        # `tool_use_failed`, fall back to a tool-less completion so the
+        # agent can still emit a degraded narrative answer rather than crash.
+        try:
+            response = client.chat.completions.create(
+                model=_MODEL,
+                max_tokens=_MAX_TOKENS,
+                messages=messages,
+                tools=groq_tools,
+                tool_choice="auto",
+            )
+        except Exception as exc:
+            msg_str = str(exc)
+            if "tool_use_failed" in msg_str or "Failed to call a function" in msg_str:
+                log.warning("agent_tool_use_failed_fallback", err=msg_str[:200])
+                response = client.chat.completions.create(
+                    model=_MODEL,
+                    max_tokens=_MAX_TOKENS,
+                    messages=[
+                        *messages,
+                        {
+                            "role": "system",
+                            "content": (
+                                "Continue without calling any more tools. "
+                                "Synthesize an answer from data already available. "
+                                "End with a 'Data as of YYYY-MM-DD' line."
+                            ),
+                        },
+                    ],
+                )
+            else:
+                raise
         choice = response.choices[0]
         usage = getattr(response, "usage", None)
         if usage is not None:
