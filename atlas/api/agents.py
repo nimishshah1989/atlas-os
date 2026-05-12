@@ -30,6 +30,7 @@ from atlas.agents.specialists import (
     list_specialists,
 )
 from atlas.agents.specialists.base import AgentResult
+from atlas.api.admin.proposals import _require_admin
 from atlas.db import get_engine
 
 log = structlog.get_logger()
@@ -74,7 +75,11 @@ class ListResponse(BaseModel):
 
 
 @router.get("", summary="List available specialist agents")
-def list_agents() -> ListResponse:
+def list_agents(request: Request) -> ListResponse:
+    # Same dual-auth path the admin routes use — accepts either a
+    # JWT role=admin (main app) or ATLAS_INTERNAL_SECRET bearer
+    # (internal_recompute mount).
+    _require_admin(request)
     return ListResponse(specialists=list_specialists())
 
 
@@ -84,7 +89,9 @@ def invoke_agent(
     request: Request,
     engine: Engine = Depends(get_engine),  # noqa: B008 — FastAPI dependency idiom
 ) -> InvokeResponse:
-    user_id = getattr(getattr(request.state, "user", None), "user_id", None)
+    # Auth gate first so anonymous callers can't burn Groq tokens.
+    reviewer = _require_admin(request)
+    user_id = getattr(getattr(request.state, "user", None), "user_id", None) or reviewer
     log.info(
         "agents_invoke_request",
         agent=body.agent,
