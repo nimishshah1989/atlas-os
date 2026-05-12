@@ -19,12 +19,17 @@ export function matchesFundSearch(
 }
 
 // Cap weeks_in_current_state at "52+" when > 260 (data artifact: nightly job anomaly producing ~963 weeks)
+// Shows days for <2w, weeks for 2w–12w, months for >12w.
 export function formatWeeksInState(weeks: string | null): string {
   if (!weeks) return '—'
   const n = parseInt(weeks, 10)
   if (isNaN(n)) return '—'
-  if (n > 260) return '52+'
-  return `${n}w`
+  if (n > 260) return '52w+'
+  const days = n * 7
+  if (days < 14) return `${days}d`
+  if (n <= 12) return `${n}w`
+  const months = Math.round(n / 4.33)
+  return `${months}mo`
 }
 
 // ── Composition state chip ─────────────────────────────────────────────────

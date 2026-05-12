@@ -12,6 +12,7 @@ import { FundMetricTiles } from '@/components/funds/FundMetricTiles'
 import { FundBubbleChart } from '@/components/funds/FundBubbleChart'
 import { FundIntelligencePanel } from '@/components/funds/FundIntelligencePanel'
 import { FundScreener } from '@/components/funds/FundScreener'
+import { FundGlossaryButton } from '@/components/funds/FundGlossary'
 
 // Placeholder imports — these components are created in Tasks 3.3-3.6
 // They will be replaced by real imports once those tasks complete
@@ -157,13 +158,16 @@ export function FundPageClient({
             </button>
           ))}
         </div>
-        <input
-          type="search"
-          placeholder="Search funds..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="ml-auto px-3 py-1 rounded-sm border border-paper-rule bg-paper font-sans text-xs text-ink-primary placeholder:text-ink-tertiary focus:outline-none focus:border-teal"
-        />
+        <div className="ml-auto flex items-center gap-2">
+          <FundGlossaryButton />
+          <input
+            type="search"
+            placeholder="Search funds..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="px-3 py-1 rounded-sm border border-paper-rule bg-paper font-sans text-xs text-ink-primary placeholder:text-ink-tertiary focus:outline-none focus:border-teal"
+          />
+        </div>
       </div>
 
       {/* Band 4: Fund Screener */}

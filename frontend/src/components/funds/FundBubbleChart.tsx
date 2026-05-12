@@ -179,8 +179,8 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange, o
       if (Math.abs(retRaw) > RET_CAP) return []
 
       const volRaw = f.realized_vol_63 != null ? parseFloat(f.realized_vol_63) * 100 : null
-      // Bubble size = volatility. Clamp so all bubbles are visible.
-      const z = volRaw != null ? Math.max(10, Math.min(500, volRaw * 8)) : 30
+      // Bubble size = volatility. Tight clamp — 500+ funds on one chart needs small bubbles.
+      const z = volRaw != null ? Math.max(5, Math.min(80, volRaw * 3)) : 12
 
       return [{
         x: rsPctileRaw * 100,   // RS percentile 0–100
@@ -342,7 +342,7 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange, o
               tick={{ fontSize: 10, fill: '#94a3b8' }}
               tickCount={6}
             />
-            <ZAxis type="number" dataKey="z" range={[4, 600]} />
+            <ZAxis type="number" dataKey="z" range={[4, 80]} />
             <Tooltip content={<CustomTooltip />} cursor={false} />
 
             {/* Axis dividers */}
@@ -361,9 +361,9 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange, o
                 <Cell
                   key={`cell-${i}`}
                   fill={entry.color}
-                  fillOpacity={0.70}
+                  fillOpacity={entry.recommendation === 'Recommended' ? 0.85 : 0.55}
                   stroke={entry.color}
-                  strokeOpacity={0.85}
+                  strokeOpacity={0.80}
                   strokeWidth={0.5}
                 />
               ))}

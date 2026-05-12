@@ -5,6 +5,7 @@ import {
   RecommendationChip, formatWeeksInState,
 } from '@/lib/fund-formatters'
 import type { FundMasterRow } from '@/lib/queries/funds'
+import { FundStateJourneyCompact } from '@/components/funds/FundStateJourneyCompact'
 
 function formatDate(d: Date | string | null): string {
   if (!d) return '—'
@@ -100,6 +101,14 @@ export function FundDeepDiveHeader({ master }: { master: FundMasterRow }) {
             Metrics as of {formatDate(master.data_as_of)}
           </span>
         )}
+      </div>
+
+      {/* 180-day state journey strip — NAV / Composition / Holdings */}
+      <div className="mt-3 pt-3 border-t border-paper-rule/60">
+        <div className="font-sans text-[9px] text-ink-tertiary uppercase tracking-wider mb-1.5">
+          State History · last 180 days
+        </div>
+        <FundStateJourneyCompact mstarId={master.mstar_id} days={180} />
       </div>
 
       {/* Trigger indicators — only shown when at least one is active */}

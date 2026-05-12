@@ -13,13 +13,13 @@ gap, inconsistency, calc error, etc.) ship in later phases.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Any
 
 import structlog
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from atlas.agents.validator.models import Finding
 from atlas.agents.validator.sensibility_rules import RuleViolation, check_value
 
 log = structlog.get_logger()
@@ -58,24 +58,7 @@ _P0_RULES: frozenset[str] = frozenset(
 )
 
 
-# ---------------------------------------------------------------------------
-# Finding dataclass
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class Finding:
-    """One detected data-integrity issue."""
-
-    finding_class: str  # always "insensible_value" in Phase A
-    severity: str  # "P0" | "P1" | "P2" | "P3"
-    surface: str  # "table.column"
-    identifier: str  # PK-based string, e.g. "instrument_id=RELIANCE,date=2026-05-11"
-    expected_value: str  # constraint rule description
-    actual_value: str  # stringified offending value
-    evidence: dict[str, Any] = field(default_factory=dict)
-    remediation: str = ""
-
+# Finding dataclass lives in atlas.agents.validator.models and is re-exported above.
 
 # ---------------------------------------------------------------------------
 # Internal helpers

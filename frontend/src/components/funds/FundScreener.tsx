@@ -39,7 +39,7 @@ const ALL_COLS: ColumnDef[] = [
   { key: 'gates',           label: 'Gates',           defaultVisible: true },
   { key: 'comp_bar',        label: 'Comp Bar',        defaultVisible: true },
   { key: 'holdings_bar',    label: 'Holdings Bar',    defaultVisible: true },
-  { key: 'weeks_in_state',  label: 'Weeks',           defaultVisible: true },
+  { key: 'weeks_in_state',  label: 'In State',         defaultVisible: true },
   { key: 'drawdown',        label: '1Y Ret',          defaultVisible: true },
   { key: 'max_drawdown',    label: 'Max DD (1Y)',      defaultVisible: false },
 ]
@@ -188,7 +188,7 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
               {visibleCols.has('gates')          && <PlainTh label="Gates" />}
               {visibleCols.has('comp_bar')       && <PlainTh label="Comp Bar" />}
               {visibleCols.has('holdings_bar')   && <PlainTh label="Holdings Bar" />}
-              {visibleCols.has('weeks_in_state') && <Th label="Weeks"          k="weeks_in_state" align="right" />}
+              {visibleCols.has('weeks_in_state') && <Th label="In State" k="weeks_in_state" align="right" title="How long this fund has been in its current NAV state (d=days, w=weeks, mo=months)" />}
               {visibleCols.has('drawdown')       && <Th label="1Y Ret"         k="drawdown"       align="right" />}
               {visibleCols.has('max_drawdown')   && <Th label="Max DD (1Y)"    k="max_drawdown"   align="right" title="Maximum drawdown over 252 trading days (1 year)" />}
             </tr>
