@@ -145,8 +145,11 @@ def measure_ic_for_signal(
 
     Returns ``None`` if there's insufficient data to compute IC reliably
     (n_observations < MIN_OBSERVATIONS). The CLI / persistence layer
-    treats ``None`` as a skip.
+    treats ``None`` as a skip. Raises ``ValueError`` if ``signal_name``
+    is not in the SIGNAL_COLUMNS whitelist (fast fail on caller bugs).
     """
+    if signal_name not in SIGNAL_COLUMNS:
+        raise ValueError(f"signal_name {signal_name!r} not in SIGNAL_COLUMNS whitelist")
     # Lookback window for prices needs forward_horizon extra days to compute
     # the last forward return; we pull start = lookback + forward.
     lookback_start = as_of - timedelta(days=lookback_days + forward_horizon + 7)
