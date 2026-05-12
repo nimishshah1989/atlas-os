@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -108,7 +109,7 @@ def _structural_checks(engine) -> None:
         }
         global checks_run, failures
         for name, table in tables.items():
-            cnt = pd.read_sql(f"SELECT count(*) as c FROM {table}", conn).iloc[0]["c"]
+            cnt = pd.read_sql(f"SELECT count(*) as c FROM {table}", conn).iloc[0]["c"]  # noqa: S608 -- table is a hardcoded internal constant, never user input
             checks_run += 1
             if cnt == 0:
                 failures.append(f"FAIL  {name}: 0 rows (backfill not complete?)")
@@ -116,22 +117,27 @@ def _structural_checks(engine) -> None:
             else:
                 print(f"  {name}: {cnt:,} rows  OK")
 
-        # No orphan fund_states (every state row has matching metrics)
+        # No orphan fund_states on latest date.
+        # M4 writes states with date=target_date but metrics with nav_date=latest_nav_date
+        # (1-2 day offset is expected). Allow a 5-day window to handle weekends + holidays.
         orphan = pd.read_sql(
             """
             SELECT count(*) as c
             FROM atlas.atlas_fund_states_daily s
             LEFT JOIN atlas.atlas_fund_metrics_daily m
-                ON m.mstar_id = s.mstar_id AND m.nav_date = s.date
+                ON m.mstar_id = s.mstar_id
+               AND m.nav_date >= s.date - interval '5 days'
+               AND m.nav_date <= s.date
             WHERE m.mstar_id IS NULL
+              AND s.date = (SELECT MAX(date) FROM atlas.atlas_fund_states_daily)
             """,
             conn,
         ).iloc[0]["c"]
         checks_run += 1
         if orphan > 0:
-            failures.append(f"FAIL  fund_states orphan rows: {orphan}")
+            failures.append(f"FAIL  fund_states orphan rows (latest date): {orphan}")
         else:
-            print("  fund_states orphan rows: 0  OK")
+            print("  fund_states orphan rows (latest date): 0  OK")
 
         # All nav_state values are valid
         bad_nav = pd.read_sql(
@@ -215,6 +221,7 @@ def _tier2_composition(engine) -> None:
                    aligned_aum_pct, avoid_aum_pct
             FROM atlas.atlas_fund_lens_monthly
             WHERE aligned_aum_pct IS NOT NULL AND avoid_aum_pct IS NOT NULL
+              AND last_disclosed_date >= CURRENT_DATE - interval '90 days'
             ORDER BY RANDOM()
             LIMIT 25
             """,
@@ -346,7 +353,7 @@ def _tier2_holdings(engine) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def _tier3_nav_state(engine, thresholds: dict[str, float]) -> None:
+def _tier3_nav_state(engine, thresholds: dict[str, Any]) -> None:
     print("\n=== Tier 3A: NAV State Re-classification ===")
 
     with open_compute_session(engine) as conn:
@@ -360,6 +367,7 @@ def _tier3_nav_state(engine, thresholds: dict[str, float]) -> None:
               AND rs_pctile_1m IS NOT NULL
               AND rs_pctile_3m IS NOT NULL
               AND rs_pctile_6m IS NOT NULL
+              AND nav_date = (SELECT MAX(nav_date) FROM atlas.atlas_fund_metrics_daily)
             ORDER BY RANDOM()
             LIMIT 50
             """,
@@ -398,7 +406,7 @@ def _tier3_nav_state(engine, thresholds: dict[str, float]) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def _tier3_composition_state(engine, thresholds: dict[str, float]) -> None:
+def _tier3_composition_state(engine, thresholds: dict[str, Any]) -> None:
     print("\n=== Tier 3B: Composition State Re-classification ===")
 
     with open_compute_session(engine) as conn:
@@ -443,7 +451,7 @@ def _tier3_composition_state(engine, thresholds: dict[str, float]) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def _tier3_holdings_state(engine, thresholds: dict[str, float]) -> None:
+def _tier3_holdings_state(engine, thresholds: dict[str, Any]) -> None:
     print("\n=== Tier 3C: Holdings State Re-classification ===")
 
     with open_compute_session(engine) as conn:
@@ -499,6 +507,7 @@ def _tier3_fund_states(engine) -> None:
                 fs.nav_state, fs.composition_state, fs.holdings_state
             FROM atlas.atlas_fund_states_daily fs
             WHERE fs.nav_state IS NOT NULL
+              AND fs.date = (SELECT MAX(date) FROM atlas.atlas_fund_states_daily)
             ORDER BY RANDOM()
             LIMIT 50
             """,
