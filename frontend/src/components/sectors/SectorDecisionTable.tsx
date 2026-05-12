@@ -1,9 +1,11 @@
+// allow-large: single table component — sector state, playbook, CTS pivot balance, drill-down rows; splitting would scatter cohesive column-render logic across multiple files
 'use client'
 import { useState, useRef, useEffect } from 'react'
 import { ChevronUp, ChevronDown, AlertTriangle, Info } from 'lucide-react'
 import type { SectorDecision } from '@/lib/sectors-decision'
 import { getTopPicksAction } from '@/app/sectors/actions'
 import type { TopPickRow } from '@/lib/queries/sector-deep-dive'
+import type { SectorPivotRow } from '@/lib/queries/sectors'
 import { buildSectorCommentary } from '@/lib/commentary/sectors'
 
 type Row = {
@@ -307,11 +309,13 @@ export function SectorDecisionTable({
   onSelect,
   leadingRRGCount,
   leadersBySector,
+  ctsPivot,
 }: {
   data: Row[]
   onSelect: (name: string) => void
   leadingRRGCount: number
   leadersBySector?: Record<string, { leader_count: number; top_symbols: string[] }>
+  ctsPivot?: Record<string, SectorPivotRow>
 }) {
   const [sortKey, setSortKey] = useState<SortKey>('decision')
   const [asc, setAsc] = useState(true)
@@ -435,6 +439,14 @@ export function SectorDecisionTable({
                 <ColTip text="Count of RS Leader / Strong stocks in this sector today, and the top 3 by 3M RS percentile." />
               </span>
             </th>
+            {ctsPivot && Object.keys(ctsPivot).length > 0 && (
+              <th className="px-3 py-2 text-left font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary whitespace-nowrap">
+                <span className="flex items-center gap-0.5">
+                  PPC/NPC
+                  <ColTip text="Pivot balance: (PPC count − NPC count) ÷ tradeable stocks today. Positive = more bullish pivotal candles than bearish. Shows intra-sector timing pressure." />
+                </span>
+              </th>
+            )}
             <th className="px-3 py-2 text-center font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary"
                 title="Top-down / bottom-up divergence flag">
               &#9888;
@@ -568,6 +580,33 @@ export function SectorDecisionTable({
                   )
                 })()}
               </td>
+              {ctsPivot && Object.keys(ctsPivot).length > 0 && (() => {
+                const pivot = ctsPivot[row.sector_name]
+                if (!pivot) {
+                  return <td className="px-3 py-2.5 text-right font-mono text-xs text-ink-tertiary">—</td>
+                }
+                const balance = pivot.pivot_balance != null ? parseFloat(pivot.pivot_balance) : 0
+                const isPos = balance > 0
+                const barColor = balance > 0.2 ? '#2F6B43' : balance < -0.2 ? '#B0492C' : '#B8860B'
+                return (
+                  <td className="px-3 py-2.5">
+                    <div className="flex flex-col items-end gap-1 min-w-[56px]">
+                      <div className="w-14 h-1.5 bg-paper-rule rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{ width: `${Math.min(Math.abs(balance) * 100, 100)}%`, background: barColor }}
+                        />
+                      </div>
+                      <span className={`font-mono text-xs tabular-nums ${isPos ? 'text-signal-pos' : 'text-signal-neg'}`}>
+                        {isPos ? '+' : ''}{(balance * 100).toFixed(0)}%
+                      </span>
+                      <span className="text-ink-tertiary text-[10px]">
+                        {pivot.ppc_count}↑ {pivot.npc_count}↓
+                      </span>
+                    </div>
+                  </td>
+                )
+              })()}
               <td className="px-3 py-2.5 text-center">
                 {row.divergence_flag && (
                   <span title="Top-down and bottom-up signals diverge">

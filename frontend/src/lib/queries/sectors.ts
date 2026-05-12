@@ -169,6 +169,24 @@ export async function getSectorMetricHistory(
   `
 }
 
+export type SectorPivotRow = {
+  sector: string
+  ppc_count: number
+  npc_count: number
+  total_tradeable: number
+  pivot_balance: string | null
+}
+
+export async function getSectorCTSPivot(): Promise<SectorPivotRow[]> {
+  return sql<SectorPivotRow[]>`
+    SELECT sector, ppc_count, npc_count, total_tradeable,
+           pivot_balance::text AS pivot_balance
+    FROM atlas.atlas_cts_sector_pivot_daily
+    WHERE date = (SELECT MAX(date) FROM atlas.atlas_cts_sector_pivot_daily)
+    ORDER BY pivot_balance DESC NULLS LAST
+  `
+}
+
 export type RRGHistoryRow = {
   sector_name: string
   date: Date

@@ -9,6 +9,7 @@ import {
   interpretEMARatio,
   interpret3MReturn,
 } from '@/lib/stock-formatters'
+import { CTSDeepDiveCard } from './CTSDeepDiveCard'
 
 function Commentary({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -74,6 +75,20 @@ export function StockOverviewTab({
           {interpretMomentumState(stock.momentum_state)}
         </Commentary>
       </div>
+
+      {/* CTS Timing Setup */}
+      <CTSDeepDiveCard
+        symbol={stock.symbol}
+        stage={stock.stage as 1 | 2 | 3 | 4 | null}
+        signal={
+          stock.is_ppc ? 'PPC'
+          : stock.is_npc ? 'NPC'
+          : stock.is_contraction ? 'Contraction'
+          : null
+        }
+        signalDate={stock.signal_date ?? null}
+        triggerLevel={stock.trigger_level != null ? parseFloat(stock.trigger_level) : null}
+      />
 
       {/* Charts + commentary — 2 column layout */}
       <div>

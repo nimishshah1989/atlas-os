@@ -56,6 +56,8 @@ type Props = {
   range: string
   /** Per-sector RS leader counts + top symbols. Optional — degrades gracefully. */
   leadersBySector?: Record<string, { leader_count: number; top_symbols: string[] }>
+  /** CTS pivot balance per sector (SP09). Optional — column hidden when absent. */
+  ctsPivot?: Record<string, import('@/lib/queries/sectors').SectorPivotRow>
   /**
    * Sector rotation snapshot from mv_sector_rotation_state (SP02).
    * Carries rrg_quadrant / rs_velocity / rs_pctile_cross_sector per sector.
@@ -204,6 +206,7 @@ export function SectorViews({
   playbook,
   range,
   leadersBySector,
+  ctsPivot,
   // SP02: rotation lookup carried through for future RRG quadrant overlays
   // and decision-table badges. Sub-components don't read it yet — wiring
   // the data path now means no extra round-trip when consumers land.
@@ -388,7 +391,7 @@ export function SectorViews({
           title="Sector Decision Table"
           subtitle="Click any row for the full sector deep dive"
         />
-        <SectorDecisionTable data={visibleWithDays} onSelect={onSelect} leadingRRGCount={leadingRRGCount} leadersBySector={leadersBySector} />
+        <SectorDecisionTable data={visibleWithDays} onSelect={onSelect} leadingRRGCount={leadingRRGCount} leadersBySector={leadersBySector} ctsPivot={ctsPivot} />
       </div>
 
       {/* ── Section 4: Breadth + State History ── */}

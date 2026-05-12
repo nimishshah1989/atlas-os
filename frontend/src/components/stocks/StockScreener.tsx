@@ -10,6 +10,7 @@ import {
   RSStateChip, MomentumChip, RiskChip, VolumeChip,
 } from '@/lib/stock-formatters'
 import { SectorBadge } from './SectorBadge'
+import { StageBadge, SignalBadge } from './CTSSignalBadge'
 import { ColumnToggle, useColumnVisibility, type ColumnDef } from '@/components/ui/ColumnToggle'
 import { StateJourneyCompact } from '@/components/ui/StateJourneyCompact'
 import { ConvictionCell } from './ConvictionCell'
@@ -107,6 +108,8 @@ function buildStockSignal(row: StockRowWithSector): { compact: string; tooltip: 
 const OPTIONAL_COLS: ColumnDef[] = [
   { key: 'conviction',      label: 'Conviction',  defaultVisible: true },
   { key: 'quality',         label: 'Grade',       defaultVisible: true },
+  { key: 'cts_stage',       label: 'Stage',       defaultVisible: false },
+  { key: 'cts_signal',      label: 'CTS Signal',  defaultVisible: false },
   { key: 'signal',          label: 'Signal',      defaultVisible: false },
   { key: 'ret_1d',          label: '1D',          defaultVisible: false },
   { key: 'ret_1w',          label: '1W',          defaultVisible: true },
@@ -488,6 +491,12 @@ export function StockScreener({
                   ].join('\n')}
                 />
               )}
+              {visibleCols.has('cts_stage') && (
+                <PlainTh label="Stage" tooltip="Weinstein Stage (1-4) from 150-day MA slope. S2 = price above rising 150d MA — primary uptrend." />
+              )}
+              {visibleCols.has('cts_signal') && (
+                <PlainTh label="CTS Signal" tooltip="Latest CTS timing signal: PPC (Positive Pivotal Candle), NPC (Negative Pivotal Candle), or Contraction near highs." />
+              )}
               {visibleCols.has('signal') && <PlainTh label="Signal" />}
               {visibleCols.has('ret_1d') && <PlainTh label="1D" align="right" />}
               {visibleCols.has('ret_1w') && <PlainTh label="1W" align="right" />}
@@ -602,6 +611,25 @@ export function StockScreener({
                             >
                               {g.grade}
                             </span>
+                          </td>
+                        )
+                      })()}
+                      {visibleCols.has('cts_stage') && (
+                        <td className="px-3 py-2.5">
+                          <StageBadge stage={optNum(row, 'stage') as 1 | 2 | 3 | 4 | null} />
+                        </td>
+                      )}
+                      {visibleCols.has('cts_signal') && (() => {
+                        const sig = optBool(row, 'is_ppc') ? 'PPC'
+                          : optBool(row, 'is_npc') ? 'NPC'
+                          : optBool(row, 'is_contraction') ? 'Contraction'
+                          : null
+                        return (
+                          <td className="px-3 py-2.5">
+                            <SignalBadge
+                              signal={sig as 'PPC' | 'NPC' | 'Contraction' | null}
+                              date={optStr(row, 'signal_date') ?? undefined}
+                            />
                           </td>
                         )
                       })()}
