@@ -7,6 +7,7 @@ import type { StockRowWithSector } from '@/lib/queries/stocks'
 
 type Period = '1M' | '3M' | '6M' | '1Y'
 type DisplayFilter = 'n100' | 'n500' | 'all'
+type CapFilter = 'all' | 'large' | 'mid' | 'small'
 
 const PERIOD_RET_KEY: Record<Period, keyof StockRowWithSector> = {
   '1M': 'ret_1m',
@@ -73,12 +74,24 @@ export function StockBubbleChart({ stocks }: { stocks: StockRowWithSector[] }) {
 
   const [period, setPeriod] = useState<Period>('3M')
   const [displayFilter, setDisplayFilter] = useState<DisplayFilter>('n500')
+  const [capFilter, setCapFilter] = useState<CapFilter>('all')
+  const [sectorFilter, setSectorFilter] = useState<string>('all')
+
+  const sectors = useMemo(() => {
+    const unique = Array.from(new Set(stocks.map(s => s.sector).filter((s): s is string => !!s))).sort()
+    return unique
+  }, [stocks])
 
   const filteredStocks = useMemo(() => {
-    if (displayFilter === 'n100') return stocks.filter(s => s.in_nifty_100)
-    if (displayFilter === 'n500') return stocks.filter(s => s.in_nifty_500)
-    return stocks
-  }, [stocks, displayFilter])
+    let s = stocks
+    if (displayFilter === 'n100') s = s.filter(x => x.in_nifty_100)
+    else if (displayFilter === 'n500') s = s.filter(x => x.in_nifty_500)
+    if (capFilter === 'large') s = s.filter(x => x.in_nifty_100)
+    else if (capFilter === 'mid') s = s.filter(x => x.in_nifty_500 && !x.in_nifty_100)
+    else if (capFilter === 'small') s = s.filter(x => !x.in_nifty_500)
+    if (sectorFilter !== 'all') s = s.filter(x => x.sector === sectorFilter)
+    return s
+  }, [stocks, displayFilter, capFilter, sectorFilter])
 
   const countsByFilter = useMemo(() => ({
     n100: stocks.filter(s => s.in_nifty_100).length,
@@ -336,7 +349,7 @@ export function StockBubbleChart({ stocks }: { stocks: StockRowWithSector[] }) {
           ))}
         </div>
         <div className="flex gap-1 ml-auto items-center">
-          <span className="font-sans text-[10px] text-ink-tertiary mr-1">Show:</span>
+          <span className="font-sans text-[10px] text-ink-tertiary mr-1">Index:</span>
           {DISPLAY_FILTERS.map(f => (
             <button key={f.key} type="button" onClick={() => setDisplayFilter(f.key)}
               className={`px-2 py-0.5 rounded-sm font-sans text-[11px] font-medium transition-colors ${
@@ -347,6 +360,36 @@ export function StockBubbleChart({ stocks }: { stocks: StockRowWithSector[] }) {
               {f.label} ({countsByFilter[f.key]})
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Second filter row: cap + sector */}
+      <div className="px-5 py-2 border-b border-paper-rule flex flex-wrap items-center gap-4">
+        <div className="flex gap-1 items-center">
+          <span className="font-sans text-[10px] text-ink-tertiary mr-1">Cap:</span>
+          {(['all', 'large', 'mid', 'small'] as CapFilter[]).map(c => (
+            <button key={c} type="button" onClick={() => setCapFilter(c)}
+              className={`px-2 py-0.5 rounded-sm font-sans text-[11px] font-medium capitalize transition-colors ${
+                capFilter === c
+                  ? 'bg-teal text-paper'
+                  : 'bg-paper-rule/20 text-ink-secondary hover:bg-paper-rule/40'
+              }`}>
+              {c === 'all' ? 'All' : c === 'large' ? 'Large (N100)' : c === 'mid' ? 'Mid (N500–N100)' : 'Small (ex-N500)'}
+            </button>
+          ))}
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="font-sans text-[10px] text-ink-tertiary">Sector:</span>
+          <select
+            value={sectorFilter}
+            onChange={e => setSectorFilter(e.target.value)}
+            className="font-sans text-[11px] text-ink-secondary bg-paper border border-paper-rule rounded-sm px-2 py-0.5 focus:outline-none focus:border-teal"
+          >
+            <option value="all">All Sectors</option>
+            {sectors.map(s => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
         </div>
       </div>
 
