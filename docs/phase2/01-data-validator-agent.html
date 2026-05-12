@@ -644,8 +644,12 @@ python -m atlas.agents.validator --quick --fail-on=P0,P1
 <section id="implementation">
 <h2>10. Implementation plan</h2>
 
+<div class="callout">
+  <strong>Status as of 2026-05-12:</strong> Phases <strong>A and B shipped</strong> (on-demand CLI only; nightly schedule wiring in <code>scripts/run_atlas_intelligence_nightly.sh</code>, awaiting cron install). Phases C-F (Route Crawler, Calc Verifier, Orchestrator, admin UI, hardening) <strong>not started</strong>. Hermes-orchestration pivoted to direct CLI invocation in line with the SP07 pivot — re-engagement when local-Llama DPDP path is needed.
+</div>
+
 <div class="phase-block">
-  <div class="phase-title">Phase A — Foundation</div>
+  <div class="phase-title">Phase A — Foundation <span class="pill" style="margin-left: 8px;">✓ Shipped</span></div>
   <p><strong>Deliverable:</strong> Hermes installed; read-only SQL tool registered; simple Sensibility Validator subagent running against existing tables.</p>
   <ul>
     <li>Add <code>hermes-agent</code> to <code>pyproject.toml</code> dependencies</li>
@@ -659,7 +663,7 @@ python -m atlas.agents.validator --quick --fail-on=P0,P1
 </div>
 
 <div class="phase-block">
-  <div class="phase-title">Phase B — Coverage and lineage scaffolding</div>
+  <div class="phase-title">Phase B — Coverage and lineage scaffolding <span class="pill" style="margin-left: 8px;">✓ Shipped</span></div>
   <p><strong>Deliverable:</strong> Schema Validator subagent operational; expected-coverage YAML in place; lineage tag scaffold in 4 highest-value frontend components.</p>
   <ul>
     <li>Implement <code>tools/coverage_query.py</code></li>
@@ -671,7 +675,7 @@ python -m atlas.agents.validator --quick --fail-on=P0,P1
 </div>
 
 <div class="phase-block">
-  <div class="phase-title">Phase C — Route Crawler + frontend/backend diff</div>
+  <div class="phase-title">Phase C — Route Crawler + frontend/backend diff <span class="pill pill-warn" style="margin-left: 8px;">⏸ Not started</span></div>
   <p><strong>Deliverable:</strong> Route Crawler subagent + Cross-page Consistency subagent operational; diffs surfacing on 4 tagged pages.</p>
   <ul>
     <li>Add Playwright to dev dependencies</li>
