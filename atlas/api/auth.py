@@ -6,7 +6,8 @@ request.state.user with user_id and role on every authenticated request.
 Set ATLAS_AUTH_DISABLED=true in .env to bypass verification for local dev.
 Never set AUTH_DISABLED in production.
 
-Exempt paths (no token required): /health, /docs, /openapi.json, /redoc
+Exempt paths (no token required): /health, /docs, /openapi.json, /redoc,
+/api/kite/*, /api/v1/intraday/*
 """
 
 from __future__ import annotations
@@ -28,8 +29,6 @@ _EXEMPT_PREFIXES = (
     "/docs",
     "/openapi.json",
     "/redoc",
-    "/v1",
-    "/agents.json",
     "/api/kite/login",  # SP08: KiteConnect OAuth — no user JWT at this point
     "/api/kite/callback",  # SP08: Zerodha redirect — called without our JWT
     "/api/v1/intraday",  # SP08: intraday data — auth handled by Next.js proxy layer
@@ -37,7 +36,7 @@ _EXEMPT_PREFIXES = (
 
 
 class _User:
-    __slots__ = ("user_id", "role")
+    __slots__ = ("role", "user_id")
 
     def __init__(self, user_id: str, role: str) -> None:
         self.user_id = user_id
