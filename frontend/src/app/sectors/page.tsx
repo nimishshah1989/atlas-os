@@ -13,6 +13,7 @@ import {
 } from '@/lib/queries/sectors'
 import { getCurrentRegime } from '@/lib/queries/regime'
 import { getSectorRotationState, type SectorRotationRow } from '@/lib/queries/rotation'
+import { getLeadersBySector } from '@/lib/queries/leaders'
 import { rangeToDays, type TimeRange } from '@/lib/time-range'
 import { getSectorDecision } from '@/lib/sectors-decision'
 import { filterSectors } from '@/lib/sectors-filter'
@@ -37,7 +38,7 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
   // 7 parallel queries — non-critical queries degrade to empty arrays.
   // rotation pulls from mv_sector_rotation_state (refreshed nightly by pg_cron)
   // and enriches sectors with rrg_quadrant / rs_velocity / rs_pctile_cross_sector.
-  const [allRaw, stateHistory, rrgHistory, breadthData, daysInState, playbook, rotation] = await Promise.all([
+  const [allRaw, stateHistory, rrgHistory, breadthData, daysInState, playbook, rotation, leadersBySectorArr] = await Promise.all([
     getSectorsWithMomentum(),
     getSectorStateHistory(days).catch(() => [] as Awaited<ReturnType<typeof getSectorStateHistory>>),
     getRRGHistory(30).catch(() => [] as Awaited<ReturnType<typeof getRRGHistory>>),
@@ -45,7 +46,10 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
     getDaysInStateForAllSectors().catch(() => [] as Awaited<ReturnType<typeof getDaysInStateForAllSectors>>),
     getSectorPlaybook(regimeState).catch(() => [] as PlaybookEntry[]),
     getSectorRotationState().catch(() => [] as SectorRotationRow[]),
+    getLeadersBySector().catch(() => []),
   ])
+
+  const leadersBySector = Object.fromEntries(leadersBySectorArr.map(r => [r.sector, r]))
 
   // Build a name → rotation lookup so downstream components can read
   // rrg_quadrant / rs_velocity off the snapshot without re-querying.
@@ -136,6 +140,7 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
           playbook={playbook}
           range={historyRange}
           rotation={rotation}
+          leadersBySector={leadersBySector}
         />
       </Suspense>
     </div>

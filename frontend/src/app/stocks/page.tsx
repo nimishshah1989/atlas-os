@@ -5,7 +5,6 @@ import { getCurrentRegime } from '@/lib/queries/regime'
 import { getConvictionMap } from '@/lib/queries/conviction'
 import { getRSLeaders, getBreakoutCandidates, getDeteriorationWatch } from '@/lib/queries/leaders'
 import { StocksClientShell } from '@/components/stocks/StocksClientShell'
-import { RSLeadersPanel } from '@/components/stocks/RSLeadersPanel'
 
 export default async function StocksPage() {
   const [stocks, regime, convictionMap, leaders, breakouts, deterioration] = await Promise.all([
@@ -51,14 +50,12 @@ export default async function StocksPage() {
         </span>
       </div>
 
-      <div className="px-6 py-6 space-y-6">
+      <div className="px-6 py-6">
         <StocksClientShell
           stocks={stocks}
           regimeState={regime?.regime_state ?? 'Unknown'}
           deploymentMultiplier={Number(regime?.deployment_multiplier ?? '0')}
           convictionMap={convictionMap}
-        />
-        <RSLeadersPanel
           leaders={leaders}
           breakouts={breakouts}
           deterioration={deterioration}

@@ -306,10 +306,12 @@ export function SectorDecisionTable({
   data,
   onSelect,
   leadingRRGCount,
+  leadersBySector,
 }: {
   data: Row[]
   onSelect: (name: string) => void
   leadingRRGCount: number
+  leadersBySector?: Record<string, { leader_count: number; top_symbols: string[] }>
 }) {
   const [sortKey, setSortKey] = useState<SortKey>('decision')
   const [asc, setAsc] = useState(true)
@@ -427,6 +429,12 @@ export function SectorDecisionTable({
             </th>
             <Th label="TD RS" k="topdown_rs_3m_nifty500"
               tip="Top-down RS: (NSE sector index 3M return) − (Nifty500 3M return). +5% = sector index beat Nifty500 by 5pp. Computed from the NSE benchmark index (e.g. Nifty Bank for Banking), NOT from constituents. ✓ = top-down and bottom-up RS agree in direction → high conviction. ≠ = they diverge → index is being distorted by 1–2 large-cap names, bottom-up aggregate is the better read." />
+            <th className="px-3 py-2 text-left font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary whitespace-nowrap">
+              <span className="flex items-center gap-0.5">
+                Leaders
+                <ColTip text="Count of RS Leader / Strong stocks in this sector today, and the top 3 by 3M RS percentile." />
+              </span>
+            </th>
             <th className="px-3 py-2 text-center font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary"
                 title="Top-down / bottom-up divergence flag">
               &#9888;
@@ -537,6 +545,28 @@ export function SectorDecisionTable({
               </td>
               <td className="px-3 py-2.5">
                 <TopDownCell tdRs={row.topdown_rs_3m_nifty500} buRs={row.bottomup_rs_3m_nifty500} />
+              </td>
+              <td className="px-3 py-2.5">
+                {(() => {
+                  const stat = leadersBySector?.[row.sector_name]
+                  if (!stat || stat.leader_count === 0) {
+                    return <span className="font-mono text-xs text-ink-tertiary">—</span>
+                  }
+                  return (
+                    <div>
+                      <span className="font-mono text-xs font-semibold text-signal-pos">{stat.leader_count}</span>
+                      {stat.top_symbols.length > 0 && (
+                        <div className="flex flex-wrap gap-0.5 mt-0.5">
+                          {stat.top_symbols.map(s => (
+                            <span key={s} className="font-mono text-[9px] text-ink-tertiary bg-paper-rule/40 px-1 py-0.5 rounded-[2px]">
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
               </td>
               <td className="px-3 py-2.5 text-center">
                 {row.divergence_flag && (

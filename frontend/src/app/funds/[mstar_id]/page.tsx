@@ -10,6 +10,8 @@ import {
   getFundNavHistory,
   getFundLensHistory,
 } from '@/lib/queries/funds'
+import { getFundLeaderHoldings } from '@/lib/queries/leaders'
+import { LeaderHoldingsPanel } from '@/components/ui/LeaderHoldingsPanel'
 import { buildSingleFundCommentary } from '@/lib/commentary/funds'
 import { CommentaryBlock } from '@/components/ui/CommentaryBlock'
 import { FundDeepDiveHeader } from '@/components/funds/FundDeepDiveHeader'
@@ -29,15 +31,16 @@ export default async function FundDeepDivePage({
 }) {
   const { mstar_id } = await params
 
-  const [master, metricHistory, lens, decisionHistory, holdings, navHistory, lensHistory] =
+  const [master, metricHistory, lens, decisionHistory, holdings, navHistory, lensHistory, leaderHoldings] =
     await Promise.all([
       getFundMaster(mstar_id),
       getFundMetricHistory(mstar_id, 180),
       getFundLens(mstar_id),
       getFundDecisionHistory(mstar_id),
       getFundHoldings(mstar_id, 20),
-      getFundNavHistory(mstar_id, 1825),   // up to 5Y of NAV price
-      getFundLensHistory(mstar_id),         // all disclosure periods
+      getFundNavHistory(mstar_id, 1825),
+      getFundLensHistory(mstar_id),
+      getFundLeaderHoldings(mstar_id).catch(() => []),
     ])
 
   if (!master) notFound()
@@ -96,6 +99,11 @@ export default async function FundDeepDivePage({
             <FundHoldingsTab holdings={holdings} />
           </div>
         </div>
+      </div>
+
+      {/* RS Leader & Strong holdings */}
+      <div className="px-6 py-6 border-b border-paper-rule">
+        <LeaderHoldingsPanel holdings={leaderHoldings} />
       </div>
 
       <div className="px-6 py-6">
