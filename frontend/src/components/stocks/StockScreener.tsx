@@ -108,6 +108,7 @@ function buildStockSignal(row: StockRowWithSector): { compact: string; tooltip: 
 const OPTIONAL_COLS: ColumnDef[] = [
   { key: 'conviction',      label: 'Conviction',  defaultVisible: true },
   { key: 'quality',         label: 'Grade',       defaultVisible: true },
+  { key: 'cts_timing',      label: 'CTS Timing',  defaultVisible: true },
   { key: 'cts_stage',       label: 'Stage',       defaultVisible: false },
   { key: 'cts_signal',      label: 'CTS Signal',  defaultVisible: false },
   { key: 'signal',          label: 'Signal',      defaultVisible: false },
@@ -491,6 +492,18 @@ export function StockScreener({
                   ].join('\n')}
                 />
               )}
+              {visibleCols.has('cts_timing') && (
+                <PlainTh
+                  label="CTS Timing"
+                  tooltip={[
+                    'CTS Timing Engine: Weinstein Stage + Pocket Pivot signal + conviction score.',
+                    '',
+                    'Score 0–100: stage (0–30) + signal strength (0–30) + RS percentile (0–20) + sector bonus (+10) + regime bonus (+10).',
+                    '',
+                    '⚡ ACTION READY: Stage 2 + PPC + RS ≥ 60th + score ≥ 55. All four gates pass — highest-confidence long setup.',
+                  ].join('\n')}
+                />
+              )}
               {visibleCols.has('cts_stage') && (
                 <PlainTh label="Stage" tooltip="Weinstein Stage (1-4) from 150-day MA slope. S2 = price above rising 150d MA — primary uptrend." />
               )}
@@ -611,6 +624,57 @@ export function StockScreener({
                             >
                               {g.grade}
                             </span>
+                          </td>
+                        )
+                      })()}
+                      {visibleCols.has('cts_timing') && (() => {
+                        const score = optNum(row, 'cts_conviction_score')
+                        const actionReady = optBool(row, 'cts_action_confidence')
+                        const isPpc = optBool(row, 'is_ppc')
+                        const isNpc = optBool(row, 'is_npc')
+                        const stg = optNum(row, 'stage')
+                        const scoreInt = score != null ? Math.round(score) : null
+                        const barWidth = scoreInt != null ? Math.max(scoreInt, 4) : 0
+                        const barColor = actionReady
+                          ? 'bg-teal'
+                          : scoreInt != null && scoreInt >= 55
+                          ? 'bg-amber-500'
+                          : 'bg-paper-rule'
+                        return (
+                          <td className="px-3 py-2.5 min-w-[130px]">
+                            {scoreInt == null ? (
+                              <span className="font-mono text-xs text-ink-tertiary">—</span>
+                            ) : (
+                              <div className="flex flex-col gap-0.5">
+                                <div className="flex items-center gap-1.5">
+                                  <div className="relative flex-1 h-1.5 bg-paper-rule rounded-full overflow-hidden">
+                                    <div
+                                      className={`h-full ${barColor} rounded-full transition-all`}
+                                      style={{ width: `${barWidth}%` }}
+                                    />
+                                  </div>
+                                  <span className="font-mono text-xs font-semibold text-ink-primary tabular-nums w-7 text-right">
+                                    {scoreInt}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  {stg != null && (
+                                    <span className="font-mono text-[10px] text-ink-tertiary">S{stg}</span>
+                                  )}
+                                  {isPpc && (
+                                    <span className="font-mono text-[10px] font-semibold text-signal-pos">PPC</span>
+                                  )}
+                                  {isNpc && (
+                                    <span className="font-mono text-[10px] font-semibold text-signal-neg">NPC</span>
+                                  )}
+                                  {actionReady && (
+                                    <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-teal/10 text-teal border border-teal/30 font-sans text-[9px] font-bold uppercase tracking-wide">
+                                      ⚡ Action
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </td>
                         )
                       })()}
