@@ -1,5 +1,5 @@
 'use client'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { IndicatorChart } from '@/components/regime/IndicatorChart'
 import type { MetricHistoryRow, StateHistoryRow, StockRowWithSector } from '@/lib/queries/stocks'
 import {
@@ -158,6 +158,24 @@ function SignalsSection({ stock }: { stock: StockRowWithSector }) {
   )
 }
 
+const CHART_RANGES = [
+  { label: '3M', days: 90 },
+  { label: '6M', days: 180 },
+  { label: '1Y', days: 365 },
+] as const
+
+type ChartDays = 90 | 180 | 365
+
+function sliceByDays<T extends { date: Date | string }>(arr: T[], days: ChartDays): T[] {
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - days)
+  const cutoffStr = cutoff.toISOString().slice(0, 10)
+  return arr.filter(r => {
+    const d = r.date instanceof Date ? r.date.toISOString().slice(0, 10) : String(r.date).slice(0, 10)
+    return d >= cutoffStr
+  })
+}
+
 export function StockDeepDiveBody({
   stock,
   metricHistory,
@@ -167,37 +185,41 @@ export function StockDeepDiveBody({
   metricHistory: MetricHistoryRow[]
   stateHistory: StateHistoryRow[]
 }) {
-  const latest = metricHistory[metricHistory.length - 1]
+  const [chartDays, setChartDays] = useState<ChartDays>(180)
 
-  const rsPctileData = metricHistory.map(r => ({
+  const filteredMetric = sliceByDays(metricHistory, chartDays)
+  const filteredState  = sliceByDays(stateHistory, chartDays)
+  const latest = filteredMetric[filteredMetric.length - 1]
+
+  const rsPctileData = filteredMetric.map(r => ({
     date: dateStr(r.date),
     value: r.rs_pctile_3m != null ? parseFloat(r.rs_pctile_3m) : null,
   }))
-  const ret3mData = metricHistory.map(r => ({
+  const ret3mData = filteredMetric.map(r => ({
     date: dateStr(r.date),
     value: r.ret_3m != null ? parseFloat(r.ret_3m) : null,
   }))
-  const emaData = metricHistory.map(r => ({
+  const emaData = filteredMetric.map(r => ({
     date: dateStr(r.date),
     value: r.ema_10_ratio != null ? parseFloat(r.ema_10_ratio) : null,
   }))
-  const ema20Data = metricHistory.map(r => ({
+  const ema20Data = filteredMetric.map(r => ({
     date: dateStr(r.date),
     value: r.ema_20_ratio != null ? parseFloat(r.ema_20_ratio) - 1 : null,
   }))
-  const drawdownData = metricHistory.map(r => ({
+  const drawdownData = filteredMetric.map(r => ({
     date: dateStr(r.date),
     value: r.drawdown_ratio_252 != null ? parseFloat(r.drawdown_ratio_252) : null,
   }))
-  const extensionData = metricHistory.map(r => ({
+  const extensionData = filteredMetric.map(r => ({
     date: dateStr(r.date),
     value: r.extension_pct != null ? parseFloat(r.extension_pct) : null,
   }))
-  const volumeData = metricHistory.map(r => ({
+  const volumeData = filteredMetric.map(r => ({
     date: dateStr(r.date),
     value: r.avg_volume_20 != null ? parseFloat(r.avg_volume_20) / 1_000_000 : null,
   }))
-  const volRatioData = metricHistory.map(r => ({
+  const volRatioData = filteredMetric.map(r => ({
     date: dateStr(r.date),
     value: r.vol_ratio_63 != null ? parseFloat(r.vol_ratio_63) : null,
   }))
@@ -208,12 +230,30 @@ export function StockDeepDiveBody({
 
   return (
     <div className="px-6 py-6 space-y-8">
+      {/* Range picker */}
+      <div className="flex items-center gap-1 justify-end">
+        {CHART_RANGES.map(r => (
+          <button
+            key={r.days}
+            type="button"
+            onClick={() => setChartDays(r.days)}
+            className={`px-3 py-1.5 font-sans text-xs rounded-sm border transition-colors ${
+              chartDays === r.days
+                ? 'border-teal bg-teal/10 text-teal font-semibold'
+                : 'border-paper-rule text-ink-tertiary hover:text-ink-secondary hover:border-paper-rule/80'
+            }`}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
+
       {/* State journey compact strip */}
       <div className="border border-paper-rule rounded-sm bg-paper px-4 py-3">
         <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-2">
-          State Journey — 6M
+          State Journey — {CHART_RANGES.find(r => r.days === chartDays)?.label}
         </div>
-        <StateJourneyCompact symbol={stock.symbol} days={180} />
+        <StateJourneyCompact symbol={stock.symbol} days={chartDays} />
       </div>
 
       {/* Entry / Exit Signals */}
@@ -261,18 +301,18 @@ export function StockDeepDiveBody({
 
       {/* State history heatmap */}
       <div>
-        <SectionLabel>State History — Daily Heatmap (6M)</SectionLabel>
+        <SectionLabel>State History — Daily Heatmap ({CHART_RANGES.find(r => r.days === chartDays)?.label})</SectionLabel>
         <div className="mt-3">
-          <StateHeatmap history={stateHistory} />
+          <StateHeatmap history={filteredState} />
         </div>
       </div>
 
       {/* Metric charts */}
-      {metricHistory.length === 0 ? (
+      {filteredMetric.length === 0 ? (
         <p className="font-sans text-xs text-ink-tertiary">No metric history available.</p>
       ) : (
         <div className="space-y-5">
-          <SectionLabel>Metric History — 6M</SectionLabel>
+          <SectionLabel>Metric History — {CHART_RANGES.find(r => r.days === chartDays)?.label}</SectionLabel>
 
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 items-start">
             <IndicatorChart

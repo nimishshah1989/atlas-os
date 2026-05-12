@@ -20,8 +20,8 @@ export default async function StockPage({
   if (!stock) notFound()
 
   const [metricHistory, stateHistory, conviction, breakdown, hitRate] = await Promise.all([
-    getStockMetricHistory(stock.instrument_id, 180),
-    getStockStateHistory(stock.instrument_id, 180),
+    getStockMetricHistory(stock.instrument_id, 365),
+    getStockStateHistory(stock.instrument_id, 365),
     getStockConviction(stock.instrument_id),
     getConvictionBreakdown(stock.instrument_id),
     getHitRateForStock(stock.instrument_id, 20),
