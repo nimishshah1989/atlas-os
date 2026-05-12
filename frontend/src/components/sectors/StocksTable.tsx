@@ -230,7 +230,11 @@ export function StocksTable({
               <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(row[rsColumnKey])}`}>
                 {pct(row[rsColumnKey])}
               </td>
-              <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums text-ink-secondary">
+              <td
+                className="px-3 py-2.5 text-right font-mono text-xs tabular-nums text-ink-secondary"
+                data-validator-id={`stock.rs_pctile_3m:${row.instrument_id}`}
+                data-validator-raw={row.rs_pctile_3m ?? '—'}
+              >
                 {row.rs_pctile_3m != null ? (parseFloat(row.rs_pctile_3m) * 100).toFixed(0) : '—'}
               </td>
               <td className="px-3 py-2.5 text-right">

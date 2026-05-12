@@ -13,7 +13,7 @@
 set -u
 cd /home/ubuntu/atlas-os
 source .venv/bin/activate
-export $(grep -E "^(GROQ_API_KEY|ATLAS_DB_URL|SMTP_USER|SMTP_PASS|NOTIFY_EMAIL)" .env | xargs)
+export $(grep -E "^(GROQ_API_KEY|ATLAS_DB_URL|SMTP_USER|SMTP_PASS|NOTIFY_EMAIL|ATLAS_BASE_URL|ATLAS_PASSWORD)" .env | xargs)
 
 LOG_FILE="/home/ubuntu/logs/atlas-intelligence.log"
 FAILED_STEPS=()
@@ -69,6 +69,13 @@ with e.begin() as c:
         print(f'refreshed {mv}')
 print(f'refreshed {len(MVS)} materialized views')
 "
+
+# Phase C: frontend accuracy crawler — runs LAST, after MVs are refreshed,
+# so the SQL source-of-truth reflects today's compute output before we diff.
+# Requires ATLAS_BASE_URL + ATLAS_PASSWORD in .env. Needs playwright installed:
+#   pip install -e .[crawler] && playwright install chromium --with-deps
+run_step "validator_frontend"  python scripts/crawl_frontend.py
+run_step "notify_validator"    python scripts/notify_validator.py
 
 if [ ${#FAILED_STEPS[@]} -eq 0 ]; then
   log "DONE atlas_intelligence_nightly — all steps OK"

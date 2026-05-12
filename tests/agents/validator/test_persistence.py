@@ -10,8 +10,8 @@ import uuid
 
 import pytest
 
+from atlas.agents.validator.models import Finding
 from atlas.agents.validator.persistence import finish_run, start_run, upsert_finding
-from atlas.agents.validator.sensibility_scanner import Finding
 from atlas.db import get_engine
 
 

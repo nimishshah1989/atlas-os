@@ -86,7 +86,11 @@ export function TopConvictionSection({ byTier }: Props) {
                       <span className="font-sans text-[10px] text-ink-tertiary truncate flex-1 mx-2">
                         {r.sector ?? '—'}
                       </span>
-                      <span className="font-mono text-xs text-ink-primary tabular-nums">
+                      <span
+                        className="font-mono text-xs text-ink-primary tabular-nums"
+                        data-validator-id={`stock.conviction_score:${r.instrument_id}`}
+                        data-validator-raw={r.conviction_score != null ? String(r.conviction_score) : '—'}
+                      >
                         {score}
                       </span>
                     </li>

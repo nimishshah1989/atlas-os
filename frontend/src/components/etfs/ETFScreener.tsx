@@ -382,7 +382,11 @@ export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
                       <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(row.ret_3m)}`}>
                         {pct(row.ret_3m)}
                       </td>
-                      <td className="px-3 py-2.5 text-right">
+                      <td
+                        className="px-3 py-2.5 text-right"
+                        data-validator-id={`etf.rs_pctile_3m:${row.ticker}`}
+                        data-validator-raw={row.rs_pctile_3m ?? '—'}
+                      >
                         <RSPctileBar value={row.rs_pctile_3m} />
                       </td>
                       <td className="px-3 py-2.5 text-right">

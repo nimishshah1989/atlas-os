@@ -1,0 +1,97 @@
+# Per-field tolerance bands for frontend vs backend diff.
+#
+# Severity rules (diff.py):
+#   P0: |delta_pct| > 10 * tolerance  (screenshot captured)
+#   P1: |delta_pct| > tolerance        (screenshot captured)
+#   P2: |delta_pct| > 0.5 * tolerance  (no screenshot)
+#   P3: |delta_pct| <= 0.5 * tolerance (not persisted)
+#
+# tolerance is expressed as a fraction of expected value (e.g. 0.01 = 1%)
+# Use absolute tolerance (abs_tolerance) for values near zero where pct is unstable.
+#
+# Keys match the entity_type.field portion of data-validator-id attributes.
+# Format: {entity_type}.{field}:{pk}  →  entity_type.field is the lookup key here.
+
+# --- Stock conviction ---
+stock.conviction_score:
+  tolerance: 0.02       # 2% relative — small deviations from rounding acceptable
+
+stock.backing_ic:
+  tolerance: 0.05       # 5% — IC is a rolling average, minor staleness ok
+
+# --- Stock metrics (rs pctile shown as %) ---
+stock.rs_pctile_3m:
+  tolerance: 0.03       # 3% — percentile rank, shown as integer, rounding ok
+
+stock.rs_pctile_1m:
+  tolerance: 0.03
+
+stock.rs_velocity:
+  tolerance: 0.05       # velocity can drift slightly between mv refresh + page load
+
+# --- Stock states (categorical) ---
+stock.momentum_state:
+  tolerance: 0.0        # exact string match required
+  categorical: true
+
+stock.rs_state:
+  tolerance: 0.0
+  categorical: true
+
+# --- Returns ---
+stock.ret_1w:
+  tolerance: 0.01       # 1% relative
+
+stock.ret_1m:
+  tolerance: 0.01
+
+stock.ret_3m:
+  tolerance: 0.02
+
+stock.ret_6m:
+  tolerance: 0.02
+
+# --- Sector fields ---
+sector.sector_state:
+  tolerance: 0.0
+  categorical: true
+
+sector.rs_velocity:
+  tolerance: 0.05
+
+sector.participation_rs:
+  tolerance: 0.03
+
+sector.rs_pctile_cross_sector:
+  tolerance: 0.03
+
+# --- ETF metrics ---
+etf.rs_pctile_3m:
+  tolerance: 0.03
+
+etf.effort_ratio_63:
+  tolerance: 0.05
+
+etf.above_30w_ma:
+  tolerance: 0.0
+  categorical: true     # boolean rendered as Yes/No
+
+# --- Fund metrics ---
+fund.rs_pctile_3m:
+  tolerance: 0.03
+
+fund.category_state:
+  tolerance: 0.0
+  categorical: true
+
+# --- Market regime ---
+regime.regime_state:
+  tolerance: 0.0
+  categorical: true
+
+regime.breadth_score:
+  tolerance: 0.02
+
+# Default fallback (used when no key matches)
+_default:
+  tolerance: 0.02

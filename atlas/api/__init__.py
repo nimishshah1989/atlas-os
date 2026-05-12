@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from atlas.api.admin.proposals import router as admin_proposals_router
+from atlas.api.admin.validator import router as admin_validator_router
 from atlas.api.agents import router as agents_router
 from atlas.api.auth import JWTAuthMiddleware
 from atlas.api.intraday import router as intraday_router
@@ -33,6 +34,7 @@ app.include_router(rule_based_router)
 app.include_router(strategies_router)
 app.include_router(agents_router)  # SP07: specialist agents — /api/agents/invoke
 app.include_router(admin_proposals_router)  # SP04 Stage 4a — admin proposals
+app.include_router(admin_validator_router)  # Phase C — validator runs + findings
 app.include_router(kite_auth_router)  # SP08: KiteConnect OAuth — /api/kite/*
 app.include_router(intraday_router)  # SP08: intraday data — /api/v1/intraday/*
 

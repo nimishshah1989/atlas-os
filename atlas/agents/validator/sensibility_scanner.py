@@ -158,8 +158,7 @@ def scan_table(
     """
     if table not in TABLE_WHITELIST:
         raise ValueError(
-            f"Table '{table}' is not in TABLE_WHITELIST. "
-            f"Allowed tables: {sorted(TABLE_WHITELIST)}"
+            f"Table '{table}' is not in TABLE_WHITELIST. Allowed tables: {sorted(TABLE_WHITELIST)}"
         )
 
     sql, params = _build_query(table, schema, sample_size)

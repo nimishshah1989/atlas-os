@@ -83,6 +83,11 @@ optimizer = [
     "optuna[postgres]>=3.0",
 ]
 
+crawler = [
+    # Phase C route crawler — install on EC2 before running crawl_frontend.py
+    "playwright>=1.40",
+]
+
 ui = [
     "streamlit>=1.32",
     "plotly>=5.18",

@@ -490,7 +490,12 @@ export function SectorDecisionTable({
               <td className="px-3 py-2.5">
                 <span className="flex items-center gap-1.5">
                   <span className={`inline-block w-1.5 h-1.5 rounded-full ${STATE_DOT[row.sector_state] ?? 'bg-ink-tertiary'}`} />
-                  <span className="font-sans text-xs text-ink-secondary">{row.sector_state}</span>
+                  <span
+                    className="font-sans text-xs text-ink-secondary"
+                    data-validator-id={`sector.sector_state:${row.sector_name}`}
+                  >
+                    {row.sector_state}
+                  </span>
                 </span>
               </td>
               <td className={`px-3 py-2.5 font-mono text-xs tabular-nums ${pctColor(row.bottomup_ret_1w)}`}>
