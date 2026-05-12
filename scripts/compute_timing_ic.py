@@ -1,6 +1,12 @@
-"""Compute Spearman IC between ppc_strength / npc_strength / atr_slope and forward returns.
+"""Compute Spearman IC between CTS signals and forward returns.
 
-Usage: python scripts/compute_timing_ic.py [--date YYYY-MM-DD] [--persist]
+v2 improvements:
+- Primary horizon: 5d (PPC is a short-term signal; 20d dilutes with macro noise)
+- Window: 365 days (~252 trading days) — statistically meaningful vs prior n=39
+- Segments: full universe AND Stage 2-only to measure quality-filter lift
+- Adds cts_conviction_score IC vs fwd_ret_5d
+
+Usage: python -m scripts.compute_timing_ic [--date YYYY-MM-DD] [--persist]
 """
 
 from __future__ import annotations
@@ -17,14 +23,18 @@ from atlas.intelligence.validation.ic_engine import compute_ic_over_window
 
 log = structlog.get_logger()
 
+# (signal_col, fwd_col, stage_filter: int|None)  — None = all stages
 SIGNAL_CONFIGS = [
-    ("ppc_strength", "fwd_ret_20d"),
-    ("npc_strength", "fwd_ret_20d"),
-    ("atr_slope", "fwd_ret_20d"),
-    ("ppc_strength", "fwd_ret_10d"),
+    ("ppc_strength", "fwd_ret_5d", None),  # primary: all PPC
+    ("ppc_strength", "fwd_ret_5d", 2),  # Stage 2 PPC only — quality lift
+    ("ppc_strength", "fwd_ret_10d", None),
+    ("npc_strength", "fwd_ret_5d", None),
+    ("cts_conviction_score", "fwd_ret_5d", None),  # conviction vs short return
+    ("cts_conviction_score", "fwd_ret_5d", 2),  # Stage 2 conviction
+    ("atr_slope", "fwd_ret_5d", None),
 ]
-LOOKBACK_DAYS = 90
-MIN_OBS = 20
+LOOKBACK_DAYS = 365  # ~252 trading days
+MIN_OBS = 30
 
 
 def run(as_of_date: date, *, persist: bool) -> None:
@@ -33,11 +43,12 @@ def run(as_of_date: date, *, persist: bool) -> None:
     with open_compute_session(engine) as conn:
         df = pd.read_sql(
             """
-            SELECT date, instrument_id, ppc_strength, npc_strength, atr_slope,
+            SELECT date, instrument_id, stage,
+                   ppc_strength, npc_strength, atr_slope, cts_conviction_score,
                    fwd_ret_5d, fwd_ret_10d, fwd_ret_20d
             FROM atlas.atlas_cts_signals_daily
             WHERE date BETWEEN %(start)s AND %(end)s
-              AND fwd_ret_20d IS NOT NULL
+              AND fwd_ret_5d IS NOT NULL
             """,
             conn,
             params={
@@ -53,40 +64,54 @@ def run(as_of_date: date, *, persist: bool) -> None:
     df["date"] = pd.to_datetime(df["date"])
 
     results = []
-    for signal_col, fwd_col in SIGNAL_CONFIGS:
+    for signal_col, fwd_col, stage_filter in SIGNAL_CONFIGS:
+        if signal_col not in df.columns or fwd_col not in df.columns:
+            continue
         horizon = int(fwd_col.split("_")[-1].replace("d", ""))
-        sub = df[["date", "instrument_id", signal_col, fwd_col]].dropna()
+        sub = df[["date", "instrument_id", "stage", signal_col, fwd_col]].dropna(
+            subset=[signal_col, fwd_col]
+        )
+        if stage_filter is not None:
+            sub = sub[sub["stage"] == stage_filter]
         if len(sub) < MIN_OBS:
+            log.info("timing_ic_skip", signal=signal_col, stage=stage_filter, n=len(sub))
             continue
 
         returns_wide = sub.pivot(index="date", columns="instrument_id", values=fwd_col)
-        # ic_engine expects factor column named 'factor'
-        factor_df = sub[["date", "instrument_id", signal_col]].copy()  # type: ignore[index]  # pandas stubs widen df[list]
-        factor_df = factor_df.rename(columns={signal_col: "factor"})  # type: ignore[union-attr]
-        factor = factor_df.set_index(["date", "instrument_id"])
+        factor_df = (
+            sub[["date", "instrument_id", signal_col]]
+            .rename(columns={signal_col: "factor"})
+            .set_index(["date", "instrument_id"])
+        )
+
         try:
-            ic_result = compute_ic_over_window(factor, returns_wide)
+            ic_result = compute_ic_over_window(factor_df, returns_wide)
         except Exception as e:
-            log.warning("timing_ic_failed", signal=signal_col, error=str(e))
+            log.warning("timing_ic_failed", signal=signal_col, stage=stage_filter, error=str(e))
             continue
+
+        stage_label = f"stage{stage_filter}" if stage_filter is not None else "all"
+        signal_label = f"{signal_col}_{stage_label}"
+
+        log.info(
+            "timing_ic_computed",
+            signal=signal_label,
+            horizon=horizon,
+            ic=round(ic_result.mean_ic, 4),
+            t_stat=round(ic_result.ic_t_stat, 2),
+            n=ic_result.n_observations,
+        )
 
         results.append(
             {
                 "as_of_date": as_of_date,
-                "signal_name": signal_col,
+                "signal_name": signal_label,
                 "lookback_window": LOOKBACK_DAYS,
                 "forward_horizon": horizon,
                 "n_observations": ic_result.n_observations,
                 "ic": ic_result.mean_ic,
                 "t_stat": ic_result.ic_t_stat,
             }
-        )
-        log.info(
-            "timing_ic_computed",
-            signal=signal_col,
-            horizon=horizon,
-            ic=round(ic_result.mean_ic, 4),
-            n=ic_result.n_observations,
         )
 
     if results and persist:
