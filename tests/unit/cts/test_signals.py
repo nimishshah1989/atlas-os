@@ -44,10 +44,11 @@ def _build_universe(n: int = 40, *, inject_ppc: bool = False) -> pd.DataFrame:
         )
     if inject_ppc:
         last = rows[-1]
-        last["high"] = last["close"] + 8.0
-        last["low"] = last["close"] - 4.0
-        last["close"] = last["close"] + 6.5
+        c = last["close"]
+        last["close"] = c + 6.5
         last["open"] = last["close"] - 2.0  # green candle
+        last["high"] = last["close"] + 1.0  # close_pct = 4/(1+4) = 0.80 ≥ 0.60 threshold
+        last["low"] = last["close"] - 4.0
         last["volume"] = 600_000.0
     return pd.DataFrame(rows)
 
@@ -77,17 +78,17 @@ def test_ppc_strength_in_unit_range() -> None:
     df = _build_universe(inject_ppc=True)
     out = detect_signals(df, thresholds=THRESHOLDS)
     ppc_rows = out[out["is_ppc"] == True]  # noqa: E712
-    if not ppc_rows.empty:
-        assert (ppc_rows["ppc_strength"].dropna() >= 0).all()
-        assert (ppc_rows["ppc_strength"].dropna() <= 1).all()
+    assert not ppc_rows.empty, "expected PPC to fire on injected candle"
+    assert (ppc_rows["ppc_strength"].dropna() >= 0).all()
+    assert (ppc_rows["ppc_strength"].dropna() <= 1).all()
 
 
 def test_npc_not_fired_on_green_candle() -> None:
     df = _build_universe(inject_ppc=True)
     out = detect_signals(df, thresholds=THRESHOLDS)
     last = out.iloc[-1]
-    if last["is_ppc"]:
-        assert not last["is_npc"]
+    assert last["is_ppc"], "expected PPC to fire on injected candle"
+    assert not last["is_npc"]
 
 
 def test_contraction_fires_on_tightening_setup() -> None:

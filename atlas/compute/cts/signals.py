@@ -38,6 +38,8 @@ def detect_signals(
     corresponding signal is False.
     """
     weights = ppc_weights or _DEFAULT_PPC_WEIGHTS
+    if abs(sum(weights.values()) - 1.0) > 1e-9:
+        raise ValueError(f"ppc_weights must sum to 1.0, got {sum(weights.values()):.6f}")
 
     out = add_trp(df, group_col=group_col)
     out = add_volume_ratio(out, group_col=group_col)
@@ -135,8 +137,9 @@ def _add_contraction(
         g = g.sort_values("date").copy()
 
         # Condition 1: volatility compressing
-        # fillna(0) → unknown ATR slope treated as "not declining" only when truly NaN
-        # (pre-ATR history). When history is sufficient, real slope is used.
+        # fillna(0): NaN atr_slope (pre-history) becomes 0, so 0 < 0 = False → cond_atr not met.
+        # In practice the con_high_bars window is the binding constraint,
+        # so contraction cannot fire before ATR history is established anyway.
         cond_atr = g["atr_slope"].fillna(0) < 0
 
         bar_range = g["high"] - g["low"]
@@ -166,7 +169,7 @@ def _add_contraction(
 
     result = (
         out.groupby("instrument_id", group_keys=False, observed=True)
-        .apply(_contraction_for_group, include_groups=False)
+        .apply(_contraction_for_group)
         .reset_index(drop=True)
     )
     return result

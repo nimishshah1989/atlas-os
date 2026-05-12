@@ -18,7 +18,7 @@ def add_trp(
     trp_ratio = trp / avg_trp (NaN when avg_trp is 0 or not yet available).
     """
     out = df.copy().sort_values([group_col, "date"])
-    out["trp"] = (out["high"] - out["low"]) / out["close"] * 100
+    out["trp"] = (out["high"] - out["low"]) / out["close"].replace(0, pd.NA) * 100
 
     out["avg_trp"] = out.groupby(group_col, observed=True)["trp"].transform(
         lambda s: s.rolling(avg_window, min_periods=avg_window).mean()
@@ -73,8 +73,8 @@ def add_atr14(
 ) -> pd.DataFrame:
     """Append atr_14 via pandas-ta Wilder smoothing, and atr_slope.
 
-    atr_slope = linear-regression slope of ATR over last 5 bars (normalised
-    by current ATR). Negative slope = volatility compressing (Contraction cue).
+    atr_slope = raw linear-regression slope of ATR over last 5 bars (absolute
+    price units per bar, not normalised). Negative slope = volatility compressing (Contraction cue).
     """
     out = df.copy().sort_values([group_col, "date"])
     col = f"atr_{length}"
