@@ -310,38 +310,39 @@ class IntradayIngester:
         log.warning("ticker_reconnecting", attempts=attempts_count)
         if self._kite is None:
             return
-        try:
-            tokens = list(self._token_map.keys())
-            quotes: dict = self._kite.quote(tokens)
-            for token_str, quote_data in quotes.items():
-                token = int(token_str)
-                ohlc = quote_data.get("ohlc", {})
-                last_price = quote_data.get("last_price")
-                if not last_price:
-                    continue
-                close = Decimal(str(last_price))
-                open_val = Decimal(str(ohlc.get("open", last_price)))
-                high_val = Decimal(str(ohlc.get("high", last_price)))
-                low_val = Decimal(str(ohlc.get("low", last_price)))
-                volume = int(quote_data.get("volume", 0))
+        with self._bar_lock:
+            try:
+                tokens = list(self._token_map.keys())
+                quotes: dict = self._kite.quote(tokens)
+                for token_str, quote_data in quotes.items():
+                    token = int(token_str)
+                    ohlc = quote_data.get("ohlc", {})
+                    last_price = quote_data.get("last_price")
+                    if not last_price:
+                        continue
+                    close = Decimal(str(last_price))
+                    open_val = Decimal(str(ohlc.get("open", last_price)))
+                    high_val = Decimal(str(ohlc.get("high", last_price)))
+                    low_val = Decimal(str(ohlc.get("low", last_price)))
+                    volume = int(quote_data.get("volume", 0))
 
-                if token not in self._current_bar:
-                    self._current_bar[token] = {
-                        "open": open_val,
-                        "high": high_val,
-                        "low": low_val,
-                        "close": close,
-                        "volume": volume,
-                        "tick_count": 1,
-                    }
-                else:
-                    bar = self._current_bar[token]
-                    bar["close"] = close
-                    bar["high"] = max(bar["high"], high_val)
-                    bar["low"] = min(bar["low"], low_val)
-            log.info("reconnect_backfill_complete", token_count=len(quotes))
-        except Exception as exc:
-            log.warning("reconnect_backfill_failed", error=str(exc))
+                    if token not in self._current_bar:
+                        self._current_bar[token] = {
+                            "open": open_val,
+                            "high": high_val,
+                            "low": low_val,
+                            "close": close,
+                            "volume": volume,
+                            "tick_count": 1,
+                        }
+                    else:
+                        bar = self._current_bar[token]
+                        bar["close"] = close
+                        bar["high"] = max(bar["high"], high_val)
+                        bar["low"] = min(bar["low"], low_val)
+                log.info("reconnect_backfill_complete", token_count=len(quotes))
+            except Exception as exc:
+                log.warning("reconnect_backfill_failed", error=str(exc))
 
     def _on_close(self, _ws: Any, code: Any, reason: Any) -> None:
         log.warning("ticker_closed", code=code, reason=reason)
