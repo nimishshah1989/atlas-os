@@ -95,7 +95,7 @@ class TestPersist:
                 text(
                     "SELECT conviction_score, weight_set_version "
                     "FROM atlas.atlas_stock_conviction_daily "
-                    "WHERE instrument_id = :iid::uuid AND date = :d"
+                    "WHERE instrument_id = CAST(:iid AS uuid) AND date = :d"
                 ),
                 {"iid": iid, "d": _SENTINEL_DATE},
             ).fetchone()
