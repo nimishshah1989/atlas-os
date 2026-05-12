@@ -10,6 +10,7 @@ from atlas.agents.tools.atlas_queries import (
     _to_jsonable,
     query_current_regime,
     query_sector_rotation_quadrants,
+    query_top_conviction,
     query_top_rs_stocks,
 )
 
@@ -119,3 +120,53 @@ def test_top_rs_stocks_clamps_n_to_at_least_1() -> None:
     conn = engine.connect.return_value.__enter__.return_value
     args, _ = conn.execute.call_args
     assert args[1]["lim"] == 1
+
+
+def test_top_conviction_clamps_n() -> None:
+    engine = _mock_engine_for_rows([])
+    query_top_conviction(engine, n=999)
+    conn = engine.connect.return_value.__enter__.return_value
+    args, _ = conn.execute.call_args
+    assert args[1]["lim"] == 50
+
+
+def test_top_conviction_filters_passed_through() -> None:
+    engine = _mock_engine_for_rows([])
+    query_top_conviction(engine, n=5, tier="tier_1_megacap", confidence_label="industry_grade")
+    conn = engine.connect.return_value.__enter__.return_value
+    args, _ = conn.execute.call_args
+    bound = args[1]
+    assert bound["lim"] == 5
+    assert bound["tier"] == "tier_1_megacap"
+    assert bound["cl"] == "industry_grade"
+
+
+def test_top_conviction_unknown_tier_dropped() -> None:
+    """Whitelist-validated: bogus tier value is silently ignored."""
+    engine = _mock_engine_for_rows([])
+    query_top_conviction(engine, n=5, tier="not_a_real_tier")
+    conn = engine.connect.return_value.__enter__.return_value
+    args, _ = conn.execute.call_args
+    assert "tier" not in args[1]
+
+
+def test_top_conviction_serializes_decimal() -> None:
+    """Decimal conviction_score should serialize to string via _to_jsonable."""
+    engine = _mock_engine_for_rows(
+        [
+            {
+                "instrument_id": "abc",
+                "symbol": "TCS",
+                "sector": "IT",
+                "tier": "tier_1_megacap",
+                "conviction_score": Decimal("87.3"),
+                "confidence_label": "industry_grade",
+                "backing_ic": Decimal("0.051100"),
+                "weight_set_version": "tier_1_megacap@2026-05-12T00:00:00",
+            }
+        ]
+    )
+    result = query_top_conviction(engine, n=10)
+    assert result[0]["symbol"] == "TCS"
+    assert result[0]["conviction_score"] == "87.3"
+    assert result[0]["confidence_label"] == "industry_grade"

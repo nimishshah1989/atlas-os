@@ -35,6 +35,7 @@ from atlas.agents.tools.atlas_queries import (
     query_recent_findings,
     query_regime_history,
     query_sector_rotation_quadrants,
+    query_top_conviction,
     query_top_rs_stocks,
 )
 
@@ -168,6 +169,44 @@ _PARAMETER_SCHEMAS: dict[str, dict[str, Any]] = {
         "additionalProperties": False,
     },
     "get_latest_brief": _NO_ARGS,
+    "get_top_conviction": {
+        "type": "object",
+        "properties": {
+            "n": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 50,
+                "default": 10,
+                "description": "Number of stocks to return.",
+            },
+            "tier": {
+                "type": "string",
+                "enum": [
+                    "tier_1_megacap",
+                    "tier_2_largecap",
+                    "tier_3_uppermid",
+                    "tier_4_lowermid",
+                    "tier_5_smallcap",
+                ],
+                "description": (
+                    "Optional liquidity tier. tier_1_megacap = top 50 by ADV; "
+                    "tier_3_uppermid = ranks 151-300 (industry-grade). "
+                    "Omit to scan all tiers."
+                ),
+            },
+            "confidence_label": {
+                "type": "string",
+                "enum": ["industry_grade", "baseline"],
+                "description": (
+                    "Filter to 'industry_grade' for tiers where the composite "
+                    "has measured holdout IC >= 0.05 (T1 mega-cap and T3 upper "
+                    "mid-cap as of Stage 2). 'baseline' surfaces directionally "
+                    "positive but weaker tiers."
+                ),
+            },
+        },
+        "additionalProperties": False,
+    },
 }
 
 
@@ -221,6 +260,16 @@ _DESCRIPTIONS: dict[str, str] = {
         "Return the most recent persisted Atlas daily brief (narrative + key "
         "themes + regime summary) from atlas_daily_briefs."
     ),
+    "get_top_conviction": (
+        "Return the top N stocks by conviction_score from the production "
+        "conviction composite (atlas_stock_conviction_daily). Prefer this "
+        "over get_top_rs_stocks when the user asks for 'best', 'highest "
+        "conviction', or 'top picks' — the composite is an IC-weighted "
+        "blend of momentum, trend, drawdown, and volatility signals "
+        "measured on out-of-sample 2023-2025 data. Use "
+        "confidence_label='industry_grade' to restrict to T1 and T3 "
+        "(measured IC >= 0.05)."
+    ),
 }
 
 
@@ -238,6 +287,7 @@ _FUNCTIONS: dict[str, Callable[..., Any]] = {
     "get_finding_summary": query_finding_summary,
     "get_distribution_stats": query_distribution_stats,
     "get_latest_brief": query_latest_brief,
+    "get_top_conviction": query_top_conviction,
 }
 
 # Tuple of the 10 v1 tool names — tests pin against this.
