@@ -65,6 +65,39 @@ def add_volume_ratio(
     return out
 
 
+def add_pocket_pivot_volume(
+    df: pd.DataFrame,
+    *,
+    group_col: str = "instrument_id",
+    window: int = 10,
+) -> pd.DataFrame:
+    """Append pp_vol_threshold and is_pp_volume (Morales pocket pivot volume).
+
+    Down day = close strictly below prior close (close < close.shift(1)).
+    pp_vol_threshold = rolling max of down-day volume over prior `window` bars
+    (shift(1) ensures current bar's volume is excluded from its own lookback).
+    is_pp_volume = True when volume > pp_vol_threshold AND threshold is not NaN.
+    """
+    out = df.copy().sort_values([group_col, "date"])
+    threshold_series = pd.Series(index=out.index, dtype=float, name="pp_vol_threshold")
+
+    for _, grp in out.groupby(group_col, observed=True):
+        grp_sorted = grp.sort_values("date")
+        is_down = grp_sorted["close"] < grp_sorted["close"].shift(1)
+        down_vol = grp_sorted["volume"].where(is_down, other=np.nan)
+        # shift(1): look at prior bars only; min_periods=1 so we get a threshold as soon
+        # as the first down day appears in the window
+        pp_thresh = down_vol.shift(1).rolling(window, min_periods=1).max()
+        threshold_series.loc[grp_sorted.index] = pp_thresh.values
+
+    out["pp_vol_threshold"] = threshold_series
+    # Only fire when threshold is non-NaN (at least 1 down day in prior window)
+    out["is_pp_volume"] = out["pp_vol_threshold"].notna() & (
+        out["volume"] > out["pp_vol_threshold"]
+    )
+    return out
+
+
 def add_atr14(
     df: pd.DataFrame,
     *,
