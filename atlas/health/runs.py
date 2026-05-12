@@ -21,6 +21,7 @@ import os
 import platform
 import socket
 import subprocess
+import time as _time
 import traceback
 import uuid
 from datetime import UTC, datetime
@@ -166,26 +167,39 @@ def finish_run(
 
 
 def safe_record(script_name: str, **kwargs: Any) -> uuid.UUID | None:
-    """Best-effort record_run that never raises.
-
-    Use in scripts where a DB connection issue must NOT block the pipeline
-    itself from running. Returns None if recording fails.
-    """
-    try:
-        return record_run(script_name, **kwargs)
-    except Exception as exc:
-        log.warning("record_run_failed", script=script_name, error=str(exc))
-        return None
+    """Record a pipeline run with one retry. Logs at ERROR on both failures."""
+    for attempt in range(2):
+        try:
+            return record_run(script_name, **kwargs)
+        except Exception as exc:
+            log.error(
+                "record_run_failed",
+                script=script_name,
+                attempt=attempt + 1,
+                error=str(exc),
+            )
+            if attempt == 0:
+                _time.sleep(2)
+    return None
 
 
 def safe_finish(run_id: uuid.UUID | None, **kwargs: Any) -> None:
-    """Best-effort finish_run that never raises."""
+    """Finish a pipeline run with one retry. Logs at ERROR on both failures."""
     if run_id is None:
         return
-    try:
-        finish_run(run_id, **kwargs)
-    except Exception as exc:
-        log.warning("finish_run_failed", run_id=str(run_id), error=str(exc))
+    for attempt in range(2):
+        try:
+            finish_run(run_id, **kwargs)
+            return
+        except Exception as exc:
+            log.error(
+                "finish_run_failed",
+                run_id=str(run_id),
+                attempt=attempt + 1,
+                error=str(exc),
+            )
+            if attempt == 0:
+                _time.sleep(2)
 
 
 __all__ = ["record_run", "finish_run", "safe_record", "safe_finish"]

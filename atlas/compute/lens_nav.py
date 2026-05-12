@@ -152,20 +152,15 @@ def load_benchmark_prices(
 
 
 def _rolling_max_drawdown(returns: pd.Series, window: int = 252) -> pd.Series:
-    """252-day rolling max drawdown magnitude (positive value).
+    """Maximum drawdown over rolling window. Returns negative values (e.g. -0.15 = 15% drawdown).
 
-    Uses compounded-return equity curve within each window so short periods
-    don't inflate the result via simple-sum arithmetic.
+    Fully vectorized via pandas rolling — no Python loop. Compounded equity
+    curve ensures short-period arithmetic doesn't inflate results.
     """
-    result = pd.Series(np.nan, index=returns.index, dtype=float)
-    arr = returns.fillna(0).values
-    for i in range(window - 1, len(arr)):
-        win = arr[i - window + 1 : i + 1]
-        cum = np.cumprod(1 + win)
-        running_max = np.maximum.accumulate(cum)
-        dd = (cum - running_max) / running_max
-        result.iloc[i] = float(abs(dd.min()))
-    return result
+    cum = (1 + returns.fillna(0)).cumprod()
+    rolling_peak = cum.rolling(window, min_periods=1).max()
+    drawdown = cum / rolling_peak - 1
+    return drawdown.rolling(window, min_periods=1).min()
 
 
 def compute_fund_nav_raw_metrics(
@@ -216,23 +211,25 @@ def compute_fund_nav_raw_metrics(
         fund_bench[f"bench_ret_{name}"] = fund_bench["close"].pct_change(periods=periods)
 
     # Price-relative RS: (1+fund)/(1+bench) - 1 per methodology §4
-    # NaN returns after forward-fill can only come from benchmark gaps; use 0
-    # so the fund's RS isn't lost because of a benchmark data hole.
+    # Keep NaN — data gaps must not become 0 (zero return silently distorts RS).
     merged = fund_nav.join(fund_bench[[f"bench_ret_{n}" for n in FUND_WINDOWS]], how="left")
     for name in ("1m", "3m", "6m"):
-        f_ret = merged[f"ret_{name}"].fillna(0)
-        b_ret = merged[f"bench_ret_{name}"].fillna(0)  # benchmark gap → treat as 0
+        f_ret = merged[f"ret_{name}"]  # keep NaN — gaps must not become 0
+        b_ret = merged[f"bench_ret_{name}"]  # keep NaN — gaps must not become 0
         denom = 1 + b_ret
-        denom = denom.where(denom != 0, np.nan)
+        denom = denom.where(denom.notna() & (denom != 0), np.nan)
         merged[f"rs_{name}_category"] = (1 + f_ret) / denom - 1
+        na_count = int(merged[f"rs_{name}_category"].isna().sum())
+        if na_count:
+            log.debug("fund_rs_null_rows", window=name, null_rows=na_count)
 
     # Realised vol: 63-day annualised
     merged["realized_vol_63"] = merged["daily_ret"].rolling(63, min_periods=42).std() * np.sqrt(252)
 
-    # Max drawdown magnitude over rolling 252-day window (stored as negative fraction)
-    # e.g. -0.063 = fund drew down 6.3% peak-to-trough within the window
-    fund_dd_252 = _rolling_max_drawdown(merged["daily_ret"])
-    merged["drawdown_ratio_252"] = -fund_dd_252
+    # Max drawdown over rolling 252-day window (stored as negative fraction)
+    # e.g. -0.063 = fund drew down 6.3% peak-to-trough within the window.
+    # _rolling_max_drawdown returns negative values directly (min of drawdown series).
+    merged["drawdown_ratio_252"] = _rolling_max_drawdown(merged["daily_ret"])
 
     # Inf guard before write
     for col in merged.select_dtypes(include=[float]).columns:
@@ -389,6 +386,7 @@ def run_lens1(
 
     all_metrics: list[pd.DataFrame] = []
     errors: list[dict[str, Any]] = []
+    total_funds = len(fund_universe)
 
     for _, fund in fund_universe.iterrows():
         try:
@@ -400,6 +398,16 @@ def run_lens1(
         except Exception as exc:
             errors.append({"mstar_id": fund["mstar_id"], "error": str(exc)})
             log.error("lens1_fund_error", mstar_id=fund["mstar_id"], error=str(exc))
+
+    error_rate = len(errors) / max(total_funds, 1)
+    if error_rate > 0.10:
+        raise RuntimeError(
+            f"Fund lens failed for {len(errors)}/{total_funds} funds "
+            f"({error_rate:.0%}). Aborting to prevent partial write. "
+            f"First error: {errors[0]['error'] if errors else 'none'}"
+        )
+    if errors:
+        log.warning("lens1_partial_errors", error_count=len(errors), total=total_funds)
 
     if not all_metrics:
         log.warning("lens1_no_metrics_computed")

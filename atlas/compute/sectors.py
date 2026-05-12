@@ -710,14 +710,18 @@ def compute_sector_states(
     # ---- Top-down state classification ------------------------------------
     # Use top-down ret_3m / RS-vs-Nifty500 as a simple proxy. Top-down state
     # is informational; final sector_state is bottomup-driven per methodology
-    # priority. Top-down "Overweight" if rs_3m_nifty500 > 1.0, "Avoid" if
-    # < 0.95, else Neutral / Underweight by ret_3m sign.
+    # priority. RS is price-relative delta form: (1+index_ret)/(1+bench_ret) - 1,
+    # centered around 0. >0.05 = meaningful outperformance, <-0.05 = meaningful
+    # underperformance. Using ratio-form thresholds (1.05/0.95) was wrong — those
+    # values can never be reached in delta form.
     td_rs = out["topdown_rs_3m_nifty500"]
     td_ret = out["topdown_ret_3m"]
+    # RS is price-relative delta form: (1+index_ret)/(1+bench_ret) - 1,
+    # centered around 0. >0.05 = meaningful outperformance, <-0.05 = meaningful underperformance.
     out["topdown_state"] = np.select(
         [
-            td_rs > 1.05,
-            td_rs < 0.95,
+            td_rs > 0.05,
+            td_rs < -0.05,
             (td_ret < 0),
         ],
         ["Overweight", "Avoid", "Underweight"],
