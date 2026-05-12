@@ -303,6 +303,11 @@ export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
                       </td>
                       <td className="px-3 py-2.5">
                         <ThemeBadge theme={row.theme} />
+                        {row.linked_sector && (
+                          <div className="font-sans text-[10px] text-ink-tertiary mt-0.5 whitespace-nowrap">
+                            {row.linked_sector}
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-2.5">
                         <GateBadge row={row} />
