@@ -80,7 +80,13 @@ def add_atr14(
     col = f"atr_{length}"
 
     def _atr(g: pd.DataFrame) -> pd.Series:
-        return ta.atr(g["high"], g["low"], g["close"], length=length)
+        result = ta.atr(  # type: ignore[attr-defined]
+            g["high"].squeeze(),  # type: ignore[arg-type]
+            g["low"].squeeze(),  # type: ignore[arg-type]
+            g["close"].squeeze(),  # type: ignore[arg-type]
+            length=length,
+        )
+        return pd.Series(result, index=g.index)  # type: ignore[return-value]
 
     out[col] = (
         out.groupby(group_col, group_keys=False, observed=True)
@@ -95,7 +101,7 @@ def add_atr14(
             x = np.arange(len(arr), dtype=float)
             return float(np.polyfit(x, arr, 1)[0])
 
-        return s.rolling(window, min_periods=window).apply(_slope, raw=True)
+        return s.rolling(window, min_periods=window).apply(_slope, raw=True)  # type: ignore[return-value]
 
     out["atr_slope"] = out.groupby(group_col, observed=True)[col].transform(_lr_slope)
     return out
