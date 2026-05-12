@@ -44,6 +44,7 @@ run_step "compute_cts_signals"         python scripts/compute_cts_signals.py --p
 run_step "update_cts_fwd_returns"      python scripts/update_cts_fwd_returns.py --persist
 run_step "compute_timing_ic"           python scripts/compute_timing_ic.py --persist
 run_step "compute_cts_hit_rates_sp09"  python scripts/compute_cts_hit_rates.py --persist
+run_step "generate_cts_param_candidates" python scripts/generate_cts_param_candidates.py --persist
 # Drift check runs dry by default. Flip to --apply once ≥60 days of live_perf
 # data exists for at least one active weight set.
 run_step "check_weight_drift"         python scripts/check_weight_drift.py
