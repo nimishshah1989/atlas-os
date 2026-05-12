@@ -47,6 +47,7 @@ def upgrade() -> None:
             fwd_ret_10d     NUMERIC(8, 6),
             fwd_ret_20d     NUMERIC(8, 6),
             created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
             CONSTRAINT atlas_cts_signals_daily_uq UNIQUE (date, instrument_id)
         )
     """)
@@ -65,6 +66,7 @@ def upgrade() -> None:
             total_tradeable INT NOT NULL DEFAULT 0,
             pivot_balance   NUMERIC(6, 4),
             created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
             CONSTRAINT atlas_cts_sector_pivot_uq UNIQUE (date, sector)
         )
     """)
@@ -80,6 +82,7 @@ def upgrade() -> None:
             ic                NUMERIC(8, 6),
             t_stat            NUMERIC(8, 4),
             created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
             CONSTRAINT atlas_cts_timing_ic_uq UNIQUE (as_of_date, signal_name, lookback_window, forward_horizon)
         )
     """)
@@ -98,6 +101,7 @@ def upgrade() -> None:
             base_rate         NUMERIC(6, 4),
             lift_ratio        NUMERIC(6, 4),
             created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
             CONSTRAINT atlas_cts_hit_rates_uq UNIQUE (as_of_date, signal_type, stage_filter, forward_horizon, return_threshold)
         )
     """)
@@ -115,7 +119,8 @@ def upgrade() -> None:
             rationale           TEXT NOT NULL,
             status              VARCHAR(20) NOT NULL DEFAULT 'pending',
             applied_at          TIMESTAMPTZ,
-            created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+            created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
         )
     """)
 
