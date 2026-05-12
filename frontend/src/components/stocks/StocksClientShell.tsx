@@ -6,6 +6,7 @@ import { StockBreadthPanel } from './StockBreadthPanel'
 import { StockBubbleChart } from './StockBubbleChart'
 import { StockIntelligencePanel } from './StockIntelligencePanel'
 import { StockScreener } from './StockScreener'
+import { IntradayRSLeaders } from './IntradayRSLeaders'
 
 type MaFilter = 'above_30w_ma' | 'above_50d_ma' | 'above_200d_ma' | null
 
@@ -24,6 +25,7 @@ export function StocksClientShell({
 
   return (
     <div className="flex flex-col gap-6">
+      <IntradayRSLeaders />
       <StockBreadthPanel
         stocks={stocks}
         activeMaFilter={maFilter}

@@ -47,6 +47,12 @@ dependencies = [
     # Auth — Supabase JWT verification (HS256)
     "pyjwt>=2.8",
 
+    # SP08 — KiteConnect WebSocket intraday feed
+    "kiteconnect>=5.0",
+
+    # SP08 — Telegram daily OAuth reminder
+    "python-telegram-bot>=20.0",
+
 ]
 
 [project.optional-dependencies]

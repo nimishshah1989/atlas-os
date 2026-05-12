@@ -36,6 +36,10 @@ log = structlog.get_logger()
 _MODEL = "llama-3.3-70b-versatile"
 _MAX_TOKENS = 700
 MAX_ITERS = 4
+# Groq's Llama 3.3 70B emits XML-style tool calls ~30-50% of the time,
+# causing HTTP 400 tool_use_failed. Retrying the same payload usually
+# succeeds because the failure is non-deterministic generation noise.
+_TOOL_CALL_RETRIES = 2
 
 
 class SEBIComplianceError(RuntimeError):
@@ -115,48 +119,59 @@ def _run_loop(
     for _i in range(MAX_ITERS):
         iterations += 1
         # Llama 3.3 70B on Groq occasionally emits XML-style function calls
-        # (e.g. `<function=name {args}>`) instead of the OpenAI tool_calls JSON.
-        # When Groq's validator rejects the malformed call with HTTP 400
-        # `tool_use_failed`, fall back to a tool-less completion so the
-        # agent can still emit a degraded narrative answer rather than crash.
-        try:
-            response = client.chat.completions.create(
-                model=_MODEL,
-                max_tokens=_MAX_TOKENS,
-                messages=messages,
-                tools=groq_tools,
-                tool_choice="auto",
-            )
-        except Exception as exc:
-            msg_str = str(exc)
-            if "tool_use_failed" in msg_str or "Failed to call a function" in msg_str:
-                log.warning("agent_tool_use_failed_fallback", err=msg_str[:200])
-                # SEBI-critical: forbid the model from inventing data on fallback.
-                # Without this guard Llama 3.3 70B will cite training-era tickers
-                # and percentiles as if they were live — compliance failure.
+        # instead of the OpenAI tool_calls JSON, causing HTTP 400 tool_use_failed.
+        # The failure is non-deterministic; retry before falling to SEBI fallback.
+        response = None
+        last_tool_exc: Exception | None = None
+        for _attempt in range(_TOOL_CALL_RETRIES + 1):
+            try:
                 response = client.chat.completions.create(
                     model=_MODEL,
                     max_tokens=_MAX_TOKENS,
-                    messages=[
-                        *messages,
-                        {
-                            "role": "system",
-                            "content": (
-                                "Continue without calling tools. Tools failed; "
-                                "you have NO live data beyond what's already in "
-                                "this conversation. DO NOT invent stock tickers, "
-                                "sector members, prices, or percentile numbers. "
-                                "If you don't have verified data from prior tool "
-                                "results to answer the question, say exactly: "
-                                "'I couldn't reach the live data layer for this "
-                                "query. Please retry in a moment.' End with "
-                                "'Data unavailable.' on its own line."
-                            ),
-                        },
-                    ],
+                    messages=messages,
+                    tools=groq_tools,
+                    tool_choice="auto",
                 )
-            else:
-                raise
+                last_tool_exc = None
+                break
+            except Exception as exc:
+                msg_str = str(exc)
+                if "tool_use_failed" in msg_str or "Failed to call a function" in msg_str:
+                    last_tool_exc = exc
+                    log.warning(
+                        "agent_tool_use_failed_retry",
+                        attempt=_attempt + 1,
+                        max_attempts=_TOOL_CALL_RETRIES + 1,
+                        err=msg_str[:200],
+                    )
+                else:
+                    raise
+
+        if last_tool_exc is not None:
+            # All retries exhausted. SEBI-critical: forbid inventing data.
+            log.warning("agent_tool_use_failed_fallback", err=str(last_tool_exc)[:200])
+            response = client.chat.completions.create(
+                model=_MODEL,
+                max_tokens=_MAX_TOKENS,
+                messages=[
+                    *messages,
+                    {
+                        "role": "system",
+                        "content": (
+                            "Continue without calling tools. Tools failed; "
+                            "you have NO live data beyond what's already in "
+                            "this conversation. DO NOT invent stock tickers, "
+                            "sector members, prices, or percentile numbers. "
+                            "If you don't have verified data from prior tool "
+                            "results to answer the question, say exactly: "
+                            "'I couldn't reach the live data layer for this "
+                            "query. Please retry in a moment.' End with "
+                            "'Data unavailable.' on its own line."
+                        ),
+                    },
+                ],
+            )
+        assert response is not None
         choice = response.choices[0]
         usage = getattr(response, "usage", None)
         if usage is not None:

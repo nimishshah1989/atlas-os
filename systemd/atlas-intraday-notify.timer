@@ -1,0 +1,15 @@
+[Unit]
+Description=Atlas SP08 Kite Auth Reminder Timer (08:55 IST daily)
+
+[Timer]
+# 08:55 IST = 03:25 UTC.
+# IMPORTANT: verify EC2 timezone with `timedatectl` before deploying.
+#   If EC2 is IST (Asia/Kolkata): change to "Mon-Fri 08:55:00" and remove "UTC".
+#   If EC2 is UTC (default for most AWS regions): keep as-is.
+OnCalendar=Mon-Fri 03:25:00 UTC
+
+# Do NOT fire catch-up jobs if the system was offline at trigger time.
+Persistent=false
+
+[Install]
+WantedBy=timers.target

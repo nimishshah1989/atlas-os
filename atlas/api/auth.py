@@ -23,7 +23,16 @@ from atlas.config import Config
 
 log = structlog.get_logger()
 
-_EXEMPT_PREFIXES = ("/health", "/docs", "/openapi.json", "/redoc", "/v1", "/agents.json")
+_EXEMPT_PREFIXES = (
+    "/health",
+    "/docs",
+    "/openapi.json",
+    "/redoc",
+    "/v1",
+    "/agents.json",
+    "/api/kite/login",  # SP08: KiteConnect OAuth — no user JWT at this point
+    "/api/kite/callback",  # SP08: Zerodha redirect — called without our JWT
+)
 
 
 class _User:

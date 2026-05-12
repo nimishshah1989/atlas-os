@@ -9,6 +9,8 @@ from fastapi.responses import JSONResponse
 from atlas.api.admin.proposals import router as admin_proposals_router
 from atlas.api.agents import router as agents_router
 from atlas.api.auth import JWTAuthMiddleware
+from atlas.api.intraday import router as intraday_router
+from atlas.api.kite_auth import router as kite_auth_router
 from atlas.api.openbb.router import openbb_router
 from atlas.api.portfolios import router as portfolios_router
 from atlas.api.portfolios import rule_based_router
@@ -34,6 +36,8 @@ app.include_router(strategies_router)
 app.include_router(openbb_router)  # SP03: OpenBB BYO Copilot — /v1/agents.json, /v1/query
 app.include_router(agents_router)  # SP07: specialist agents — /api/agents/invoke
 app.include_router(admin_proposals_router)  # SP04 Stage 4a — admin proposals
+app.include_router(kite_auth_router)  # SP08: KiteConnect OAuth — /api/kite/*
+app.include_router(intraday_router)  # SP08: intraday data — /api/v1/intraday/*
 
 
 @app.get("/health", include_in_schema=False)

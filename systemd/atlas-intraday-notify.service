@@ -1,0 +1,24 @@
+[Unit]
+Description=Atlas SP08 Kite Daily Auth Reminder (Telegram)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# oneshot: run-to-completion, then unit transitions to "inactive".
+# This is correct for a notification script invoked by a timer.
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/atlas-os
+
+# Load all credentials from .env (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, DATABASE_URL)
+EnvironmentFile=/home/ubuntu/atlas-os/.env
+
+# Send Telegram reminder
+ExecStart=/home/ubuntu/atlas-os/.venv/bin/python /home/ubuntu/atlas-os/scripts/kite_daily_notify.py
+
+# Log to systemd journal
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

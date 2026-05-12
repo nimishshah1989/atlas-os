@@ -1,0 +1,33 @@
+[Unit]
+Description=Atlas SP08 KiteConnect Intraday Ingester
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/atlas-os
+
+# Load all credentials from .env (KITE_API_KEY, DATABASE_URL, etc.)
+EnvironmentFile=/home/ubuntu/atlas-os/.env
+
+# Trading calendar guard: exits 1 on holidays/weekends → systemd won't
+# start the main service. Exits 0 on trading days → main service starts.
+ExecStartPre=/home/ubuntu/atlas-os/.venv/bin/python /home/ubuntu/atlas-os/scripts/trading_calendar.py
+
+# Main ingester process
+ExecStart=/home/ubuntu/atlas-os/.venv/bin/python /home/ubuntu/atlas-os/scripts/run_intraday.py
+
+# Restart on failure (e.g. network drop, KiteTicker disconnect)
+Restart=on-failure
+RestartSec=30
+
+# Log to systemd journal
+StandardOutput=journal
+StandardError=journal
+
+# Give the ingester 30 seconds to shut down cleanly on SIGTERM
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

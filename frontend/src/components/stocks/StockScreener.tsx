@@ -55,6 +55,37 @@ function buildStockGrade(row: StockRowWithSector): { grade: string; color: strin
   return { grade: 'C', color: '#ef4444', score }
 }
 
+function buildGradeTooltip(row: StockRowWithSector): string {
+  const rsScore: Record<string, number>   = { Leader: 3, Strong: 2, Consolidating: 1, Emerging: 1, Average: 0, Weak: -1, Laggard: -2 }
+  const momScore: Record<string, number>  = { Accelerating: 2, Improving: 1, Flat: 0, Deteriorating: -1, Collapsing: -2 }
+  const riskScore: Record<string, number> = { Low: 1, Normal: 0, Elevated: -1, High: -2, 'Below Trend': -1 }
+  const volScore: Record<string, number>  = { Accumulation: 2, 'Steady-Buying': 1, Neutral: 0, Distribution: -1, 'Heavy Distribution': -2 }
+  const rs    = rsScore[row.rs_state ?? ''] ?? 0
+  const mom   = momScore[row.momentum_state ?? ''] ?? 0
+  const risk  = riskScore[row.risk_state ?? ''] ?? 0
+  const vol   = volScore[row.volume_state ?? ''] ?? 0
+  const stage = row.above_30w_ma === true ? 1 : 0
+  const p = row.rs_pctile_3m != null ? parseFloat(row.rs_pctile_3m) : null
+  const pctile = p != null ? (p >= 0.75 ? 1 : p < 0.25 ? -1 : 0) : 0
+  const total  = rs + mom + risk + vol + stage + pctile
+  const grade  = total >= 5 ? 'A' : total >= 1 ? 'B' : 'C'
+  const s = (n: number) => n > 0 ? `+${n}` : `${n}`
+  const pLabel = p != null ? `${Math.round(p * 100)}th%` : 'n/a'
+  return [
+    `Grade ${grade}  (composite score ${s(total)})`,
+    `  RS State (${row.rs_state ?? '—'}):  ${s(rs)}`,
+    `  Momentum (${row.momentum_state ?? '—'}):  ${s(mom)}`,
+    `  Risk (${row.risk_state ?? '—'}):  ${s(risk)}`,
+    `  Volume (${row.volume_state ?? '—'}):  ${s(vol)}`,
+    `  Stage 2 (${row.above_30w_ma === true ? 'above 30W MA' : 'below 30W MA'}):  ${s(stage)}`,
+    `  RS Percentile (${pLabel}):  ${s(pctile)}`,
+    '',
+    'A ≥5 = strong alignment across signals',
+    'B 1–4 = mixed — some positive, some not',
+    'C ≤0 = predominantly negative signals',
+  ].join('\n')
+}
+
 // Deterministic signal string explaining the stock's classification.
 function buildStockSignal(row: StockRowWithSector): { compact: string; tooltip: string } {
   const parts: string[] = []
@@ -345,12 +376,17 @@ export function StockScreener({
   }
 
   // Plain (non-sortable) header for optional columns and Gates column.
-  function PlainTh({ label, align = 'left' }: { label: string; align?: 'left' | 'right' }) {
+  function PlainTh({ label, align = 'left', tooltip }: { label: string; align?: 'left' | 'right'; tooltip?: string }) {
     return (
       <th
         className={`px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap text-${align} text-ink-tertiary`}
       >
-        {label}
+        <span className="inline-flex items-center gap-1">
+          {label}
+          {tooltip && (
+            <span className="cursor-help opacity-50 hover:opacity-100 text-[9px]" title={tooltip}>ⓘ</span>
+          )}
+        </span>
       </th>
     )
   }
@@ -424,8 +460,34 @@ export function StockScreener({
               <Th label="Mom" k="momentum_state" />
               <Th label="Risk" k="risk_state" />
               <Th label="Vol" k="volume_state" />
-              {visibleCols.has('conviction') && <PlainTh label="Conviction" />}
-              {visibleCols.has('quality') && <PlainTh label="Grade" />}
+              {visibleCols.has('conviction') && (
+                <PlainTh
+                  label="Conviction"
+                  tooltip={[
+                    'Score 0–100: how this stock ranks vs its liquidity tier peers on 11 technical signals (momentum, trend, volume, risk).',
+                    '',
+                    'Percentile ranks are within-tier — a 70 for a Mega-cap beat 70% of the top 50 NSE stocks by liquidity. Tiers are not comparable to each other.',
+                    '',
+                    '★ Industry-Grade (IC ≥ 0.05): composite was directionally predictive in 2023–25 backtest. Currently validated for T1 (Mega-cap, rank 1–50) and T3 (Upper Mid, rank 151–300). High scores here carry weight.',
+                    '',
+                    'Baseline (IC < 0.05): same composite formula, but didn\'t clear the validation bar. Useful for relative comparison within the peer group — don\'t anchor on it as a strong directional signal.',
+                  ].join('\n')}
+                />
+              )}
+              {visibleCols.has('quality') && (
+                <PlainTh
+                  label="Grade"
+                  tooltip={[
+                    'Composite quality letter from 6 signals: RS state, Momentum, Risk, Volume, Stage 2 (above rising 30W MA), and RS Percentile.',
+                    '',
+                    'A (score ≥5): strong positive alignment across signals',
+                    'B (score 1–4): mixed — some signals positive, others not',
+                    'C (score ≤0): predominantly negative signals',
+                    '',
+                    'Hover any grade cell to see the per-signal score breakdown.',
+                  ].join('\n')}
+                />
+              )}
               {visibleCols.has('signal') && <PlainTh label="Signal" />}
               {visibleCols.has('ret_1d') && <PlainTh label="1D" align="right" />}
               {visibleCols.has('ret_1w') && <PlainTh label="1W" align="right" />}
@@ -533,7 +595,7 @@ export function StockScreener({
                       {visibleCols.has('quality') && (() => {
                         const g = buildStockGrade(row)
                         return (
-                          <td className="px-3 py-2.5" title={`Grade ${g.grade} (score ${g.score})`}>
+                          <td className="px-3 py-2.5" title={buildGradeTooltip(row)}>
                             <span
                               className="inline-flex items-center justify-center w-5 h-5 rounded font-mono text-[11px] font-bold text-white"
                               style={{ background: g.color }}

@@ -1,0 +1,16 @@
+[Unit]
+Description=Atlas SP08 Intraday Ingester Daily Timer
+
+[Timer]
+# 09:10 IST = 03:40 UTC.
+# IMPORTANT: verify EC2 timezone with `timedatectl` before deploying.
+#   If EC2 is IST (Asia/Kolkata): change to "Mon-Fri 09:10:00" and remove "UTC".
+#   If EC2 is UTC (default for most AWS regions): keep as-is.
+OnCalendar=Mon-Fri 03:40:00 UTC
+
+# Do NOT fire catch-up jobs if the system was offline at trigger time.
+# (We don't want a stale market-hours job firing at 11:00 IST after a reboot.)
+Persistent=false
+
+[Install]
+WantedBy=timers.target
