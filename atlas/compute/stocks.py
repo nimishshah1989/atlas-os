@@ -35,6 +35,7 @@ from atlas.compute.benchmarks import (
     add_vol_ratio,
     materialize_benchmark_cache,
     merge_tier_benchmark,
+    persist_benchmark_cache,
 )
 from atlas.compute.gates import (
     add_history_gate,
@@ -459,6 +460,7 @@ def run_stock_backfill(
     log.info("thresholds_loaded", count=len(thresholds))
 
     benchmark_cache = materialize_benchmark_cache(eng, start=start, end=end)
+    persist_benchmark_cache(eng, benchmark_cache)
     event_dates = _load_event_dates(eng)
 
     ohlcv = _load_ohlcv(
@@ -526,6 +528,7 @@ def run_stock_daily(
     universe = _load_universe(eng)
     thresholds = load_thresholds(eng)
     benchmark_cache = materialize_benchmark_cache(eng, start=start, end=target_date)
+    persist_benchmark_cache(eng, benchmark_cache)
     event_dates = _load_event_dates(eng)
     ohlcv = _load_ohlcv(
         eng,

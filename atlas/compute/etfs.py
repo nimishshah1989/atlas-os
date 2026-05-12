@@ -27,6 +27,7 @@ from atlas.compute.benchmarks import (
     add_relative_strength,
     add_vol_ratio,
     materialize_benchmark_cache,
+    persist_benchmark_cache,
 )
 from atlas.compute.gates import (
     add_history_gate,
@@ -362,6 +363,7 @@ def run_etf_backfill(
     universe = _resolve_benchmark_code(universe, sector_map)
     thresholds = load_thresholds(eng)
     benchmark_cache = materialize_benchmark_cache(eng, start=start, end=end)
+    persist_benchmark_cache(eng, benchmark_cache)
 
     # v0: trading-calendar event-day flags aren't yet exposed by JIP.
     # See ``atlas.compute.stocks._load_event_dates`` for the same fallback.

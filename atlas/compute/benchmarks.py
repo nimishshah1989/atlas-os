@@ -15,7 +15,7 @@ import pandas as pd
 import structlog
 from sqlalchemy.engine import Engine
 
-from atlas.compute._session import open_compute_session
+from atlas.compute._session import bulk_upsert, df_to_pg_rows, open_compute_session
 from atlas.compute.primitives import (
     WINDOWS,
     add_emas,
@@ -168,6 +168,44 @@ def materialize_benchmark_cache(
         benchmarks=cache["benchmark_code"].nunique(),
     )
     return cache
+
+
+_BENCHMARK_CACHE_COLUMNS = (
+    "benchmark_code",
+    "date",
+    "close",
+    "ret_1d",
+    "ret_1w",
+    "ret_1m",
+    "ret_3m",
+    "ret_6m",
+    "ret_12m",
+    "ret_12m_1m",
+    "ema_10",
+    "ema_20",
+    "realized_vol_63",
+)
+
+
+def persist_benchmark_cache(engine: Engine, cache: pd.DataFrame) -> int:
+    """Write the in-memory benchmark cache to ``atlas_benchmark_returns_cache``.
+
+    Called once per M2 pipeline run after ``materialize_benchmark_cache``.
+    Renames ema_10_benchmark/ema_20_benchmark to the DB column names.
+    """
+    df = cache.rename(columns={"ema_10_benchmark": "ema_10", "ema_20_benchmark": "ema_20"})
+    df = df.reindex(columns=list(_BENCHMARK_CACHE_COLUMNS)).dropna(subset=["ret_1d"])
+    if df.empty:
+        return 0
+    n = bulk_upsert(
+        engine,
+        table="atlas.atlas_benchmark_returns_cache",
+        columns=list(_BENCHMARK_CACHE_COLUMNS),
+        rows=df_to_pg_rows(df),
+        pk_columns=["benchmark_code", "date"],
+    )
+    log.info("benchmark_cache_persisted", rows=n)
+    return n
 
 
 def merge_tier_benchmark(
