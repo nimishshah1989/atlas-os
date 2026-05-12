@@ -39,10 +39,10 @@ def detect_signals(
     """
     weights = ppc_weights or _DEFAULT_PPC_WEIGHTS
 
-    out = add_trp(df)
-    out = add_volume_ratio(out)
-    out = add_atr14(out)
-    out = classify_stage(out, thresholds=thresholds)
+    out = add_trp(df, group_col=group_col)
+    out = add_volume_ratio(out, group_col=group_col)
+    out = add_atr14(out, group_col=group_col)
+    out = classify_stage(out, thresholds=thresholds, group_col=group_col)
 
     # Threshold extraction — float() at boundary; arithmetic uses float, not Decimal
     ppc_range = float(thresholds["cts_ppc_range_multiplier"])
@@ -164,7 +164,7 @@ def _add_contraction(
 
     result = (
         out.groupby("instrument_id", group_keys=False, observed=True)
-        .apply(_contraction_for_group, include_groups=True)
+        .apply(_contraction_for_group, include_groups=False)
         .reset_index(drop=True)
     )
     return result

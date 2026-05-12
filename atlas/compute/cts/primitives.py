@@ -86,9 +86,9 @@ def add_atr14(
     atr_series = pd.Series(index=out.index, dtype=float, name=col)
     for _, grp in out.groupby(group_col, observed=True):
         vals = ta.atr(  # type: ignore[attr-defined]
-            grp["high"],
-            grp["low"],
-            grp["close"],
+            grp["high"].squeeze(),  # type: ignore[arg-type]
+            grp["low"].squeeze(),  # type: ignore[arg-type]
+            grp["close"].squeeze(),  # type: ignore[arg-type]
             length=length,
         )
         # ta.atr returns None when the group has fewer bars than `length`
