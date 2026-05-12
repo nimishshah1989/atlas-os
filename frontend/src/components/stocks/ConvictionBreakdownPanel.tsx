@@ -10,6 +10,7 @@ type Props = {
     backing_ic: string | null
   } | null
   breakdown: Record<string, ConvictionBreakdown> | null
+  hitRateSlot?: React.ReactNode
 }
 
 const SIGNAL_LABELS: Record<string, string> = {
@@ -34,7 +35,7 @@ const TIER_DISPLAY: Record<string, string> = {
   tier_5_smallcap: 'Tier 5 (small-cap)',
 }
 
-export function ConvictionBreakdownPanel({ conviction, breakdown }: Props) {
+export function ConvictionBreakdownPanel({ conviction, breakdown, hitRateSlot }: Props) {
   if (!conviction || !breakdown) {
     return (
       <section className="border-t border-paper-rule pt-6 mt-6">
@@ -100,6 +101,8 @@ export function ConvictionBreakdownPanel({ conviction, breakdown }: Props) {
           )}
         </div>
       </div>
+
+      {hitRateSlot}
 
       <div className="space-y-1.5">
         {entries.map(([signal, info]) => {

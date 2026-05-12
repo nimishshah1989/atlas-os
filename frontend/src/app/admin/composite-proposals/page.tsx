@@ -2,8 +2,10 @@
 export const dynamic = 'force-dynamic'
 
 import { getPendingProposals } from '@/lib/queries/proposals'
+import { getRecentReverts } from '@/lib/queries/weight_performance'
 import { ProposalDiffTable } from '@/components/admin/ProposalDiffTable'
 import { ProposalActionBar } from '@/components/admin/ProposalActionBar'
+import { RevertBanner } from '@/components/admin/RevertBanner'
 
 const TIER_LABELS: Record<string, string> = {
   tier_1_megacap: 'Tier 1 (mega-cap)',
@@ -26,7 +28,10 @@ function fmtDate(d: Date | string): string {
 }
 
 export default async function CompositeProposalsPage() {
-  const proposals = await getPendingProposals()
+  const [proposals, reverts] = await Promise.all([
+    getPendingProposals(),
+    getRecentReverts(),
+  ])
 
   return (
     <main className="min-h-screen bg-paper px-8 py-6 max-w-7xl mx-auto">
@@ -47,6 +52,8 @@ export default async function CompositeProposalsPage() {
           {proposals.length} pending proposal{proposals.length === 1 ? '' : 's'}
         </p>
       </header>
+
+      <RevertBanner reverts={reverts} />
 
       {proposals.length === 0 ? (
         <div className="border border-paper-rule rounded-sm bg-white p-6">

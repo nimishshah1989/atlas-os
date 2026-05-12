@@ -85,6 +85,35 @@ def get_agents_metadata(request: Request) -> dict:
 
 
 @router.get(
+    "/v1/copilots.json",
+    tags=["openbb"],
+    summary="OpenBB BYO Copilot discovery endpoint",
+)
+def get_copilots_manifest(request: Request) -> dict:
+    """Return the Atlas copilot definition in the format OpenBB Workspace probes.
+
+    OpenBB calls this endpoint (without auth) to discover available copilots.
+    Uses the older copilots.json contract: hasStreaming + copilotQuery keys.
+    No auth required — discovery surface, same as widgets.json.
+    """
+    base = _public_base_url(request)
+    return {
+        "atlas": {
+            "name": "Atlas Intelligence",
+            "description": (
+                "Indian equity research engine with relative strength ranking, "
+                "momentum classification, market regime detection, and sector "
+                "rotation signals. Data covers Nifty 500 universe."
+            ),
+            "hasStreaming": True,
+            "endpoints": {
+                "copilotQuery": f"{base}/v1/query",
+            },
+        }
+    }
+
+
+@router.get(
     "/v1/widgets.json",
     tags=["openbb"],
     summary="OpenBB widgets manifest (empty — Atlas exposes none in v1)",

@@ -30,16 +30,19 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from atlas.api.admin.proposals import router as admin_proposals_router
+from atlas.api.admin.weight_performance import router as admin_perf_router
 from atlas.db import get_engine
 
 log = structlog.get_logger()
 
 app = FastAPI(title="Atlas Internal API", version="0.2.0")
 
-# SP04 Stage 4a — admin proposal endpoints. The router gates itself on
-# the ATLAS_INTERNAL_SECRET bearer token (same secret the recompute
-# endpoints below use), so we don't need a separate middleware here.
+# SP04 Stage 4a — admin proposal endpoints. SP04 Stage 4c — weight
+# performance + revert log. Both routers gate themselves via the
+# _require_admin dependency (JWT role=admin OR ATLAS_INTERNAL_SECRET
+# bearer), so no extra middleware is needed.
 app.include_router(admin_proposals_router)
+app.include_router(admin_perf_router)
 
 # Resolved once at import time — atlas/api/internal_recompute.py → atlas-os/
 ATLAS_ROOT = Path(__file__).resolve().parent.parent.parent
