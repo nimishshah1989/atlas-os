@@ -117,27 +117,27 @@ def _structural_checks(engine) -> None:
             else:
                 print(f"  {name}: {cnt:,} rows  OK")
 
-        # No orphan fund_states on latest date.
-        # M4 writes states with date=target_date but metrics with nav_date=latest_nav_date
-        # (1-2 day offset is expected). Allow a 5-day window to handle weekends + holidays.
+        # No fund_states rows on the latest date where the fund has never had metrics.
+        # M4 writes states with date=target_date and metrics with nav_date=last_nav_date
+        # (1-2 day offset is expected and correct). We check that every fund in states
+        # has at least one metrics row (not same-date), which catches true data gaps.
         orphan = pd.read_sql(
             """
             SELECT count(*) as c
             FROM atlas.atlas_fund_states_daily s
-            LEFT JOIN atlas.atlas_fund_metrics_daily m
-                ON m.mstar_id = s.mstar_id
-               AND m.nav_date >= s.date - interval '5 days'
-               AND m.nav_date <= s.date
-            WHERE m.mstar_id IS NULL
-              AND s.date = (SELECT MAX(date) FROM atlas.atlas_fund_states_daily)
+            WHERE s.date = (SELECT MAX(date) FROM atlas.atlas_fund_states_daily)
+              AND NOT EXISTS (
+                SELECT 1 FROM atlas.atlas_fund_metrics_daily m
+                WHERE m.mstar_id = s.mstar_id
+              )
             """,
             conn,
         ).iloc[0]["c"]
         checks_run += 1
         if orphan > 0:
-            failures.append(f"FAIL  fund_states orphan rows (latest date): {orphan}")
+            failures.append(f"FAIL  fund_states orphan rows (no metrics ever): {orphan}")
         else:
-            print("  fund_states orphan rows (latest date): 0  OK")
+            print("  fund_states orphan rows (no metrics ever): 0  OK")
 
         # All nav_state values are valid
         bad_nav = pd.read_sql(

@@ -63,6 +63,7 @@ THEME_BENCHMARK = {
     "Thematic": "NIFTY500",
     "International": "MSCIWORLD",
     "Gold": "GOLD",
+    "Silver": "NIFTY500",  # No dedicated silver benchmark; NIFTY500 used as baseline
 }
 """Methodology §8.1 theme → default benchmark mapping. Sectoral is filled in
 per-ETF using ``atlas_universe_etfs.linked_sector``."""
