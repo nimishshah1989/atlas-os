@@ -167,9 +167,12 @@ def _add_contraction(
         g["trigger_level"] = np.where(g["is_contraction"], g["high"], np.nan)
         return g
 
-    result = (
-        out.groupby("instrument_id", group_keys=False, observed=True)
-        .apply(_contraction_for_group)
-        .reset_index(drop=True)
+    # pandas 3.0 removed include_groups=True. The groupby column is excluded
+    # from g inside the apply function. Restore it from out's index after apply.
+    result = out.groupby("instrument_id", group_keys=False, observed=True).apply(
+        _contraction_for_group
     )
+    if "instrument_id" not in result.columns:
+        result["instrument_id"] = out.loc[result.index, "instrument_id"].values
+    result = result.reset_index(drop=True)
     return result
