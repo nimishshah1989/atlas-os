@@ -1,8 +1,10 @@
 // src/app/layout.tsx
 import type { Metadata } from 'next'
 import { Source_Serif_4, Inter, JetBrains_Mono } from 'next/font/google'
+import { Suspense } from 'react'
 import './globals.css'
 import { TopNav } from '@/components/nav/TopNav'
+import { HealthDot } from '@/components/nav/HealthDot'
 
 const sourceSerif4 = Source_Serif_4({
   subsets: ['latin'],
@@ -37,7 +39,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${sourceSerif4.variable} ${inter.variable} ${jetbrainsMono.variable}`}
     >
       <body className="bg-paper min-h-screen">
-        <TopNav />
+        <TopNav healthDot={
+          <Suspense fallback={<span className="inline-block w-2 h-2 rounded-full bg-paper-rule" />}>
+            <HealthDot />
+          </Suspense>
+        } />
         <main className="pt-20">{children}</main>
       </body>
     </html>

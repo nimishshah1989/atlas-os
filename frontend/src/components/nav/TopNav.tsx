@@ -1,9 +1,8 @@
 'use client'
 import Link from 'next/link'
-import { Suspense, useState } from 'react'
+import { useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { Menu, X } from 'lucide-react'
-import { HealthDot } from './HealthDot'
 
 type SubLink = { href: string; label: string }
 type Group   = { key: string; label: string; links: SubLink[] }
@@ -65,7 +64,7 @@ function activeGroup(pathname: string): Group {
   return GROUPS[0] // research is default
 }
 
-export function TopNav() {
+export function TopNav({ healthDot }: { healthDot?: React.ReactNode }) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
   const active = activeGroup(pathname)
@@ -98,9 +97,7 @@ export function TopNav() {
         </div>
 
         <div className="ml-auto flex items-center gap-3">
-          <Suspense fallback={<span className="inline-block w-2 h-2 rounded-full bg-paper-rule" />}>
-            <HealthDot />
-          </Suspense>
+          {healthDot}
           {/* Mobile hamburger */}
           <button
             className="md:hidden p-1 text-ink-secondary hover:text-ink-primary"
