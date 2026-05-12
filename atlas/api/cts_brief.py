@@ -7,11 +7,18 @@ return predictions, no explicit buy/sell instructions.
 
 from __future__ import annotations
 
+import asyncio
+
 import structlog
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
 
+from atlas.agents.specialists.base import (
+    SEBIComplianceError,
+    _scan_banned_words,
+    call_groq,
+)
 from atlas.compute._session import open_compute_session
 from atlas.db import get_engine
 
@@ -50,19 +57,17 @@ Sector PPC/NPC balance: {pivot_balance}
 class CTSBriefResponse(BaseModel):
     symbol: str
     brief: str
-    context: dict
+    stage: int | None
+    signal: str | None
 
 
-@router.post("/{symbol}/cts_brief", response_model=CTSBriefResponse)
-async def get_cts_brief(symbol: str) -> CTSBriefResponse:
+def _fetch_row(symbol: str) -> dict:
     engine = get_engine()
-
     with open_compute_session(engine) as conn:
         row = conn.execute(
             text("""
                 SELECT
                     u.symbol,
-                    c.conviction_score,
                     c.tier,
                     m.rs_pctile_3m,
                     sec.sector_state,
@@ -104,11 +109,15 @@ async def get_cts_brief(symbol: str) -> CTSBriefResponse:
             """),
             {"sym": symbol},
         ).fetchone()
+    return dict(row._mapping) if row else {}
 
-    if not row:
+
+@router.post("/{symbol}/cts_brief", response_model=CTSBriefResponse)
+async def get_cts_brief(symbol: str) -> CTSBriefResponse:
+    ctx = await asyncio.to_thread(_fetch_row, symbol)
+
+    if not ctx:
         raise HTTPException(status_code=404, detail=f"Symbol {symbol} not found")
-
-    ctx = dict(row._mapping)
 
     slope_dir = "rising" if (ctx.get("sma_150_slope") or 0) > 0 else "flat/declining"
     last_ppc = "None in recent window"
@@ -137,12 +146,31 @@ async def get_cts_brief(symbol: str) -> CTSBriefResponse:
         pivot_balance=pivot_str,
     )
 
+    brief_text = "Brief unavailable — please try again."
     try:
-        from atlas.agents.specialists.base import call_groq
-
-        brief_text = await call_groq(system=SEBI_GUARD, user=prompt)
+        raw = await call_groq(system=SEBI_GUARD, user=prompt)
+        banned = _scan_banned_words(raw)
+        if banned:
+            log.warning("cts_brief_sebi_violation", symbol=symbol, banned=banned)
+            raise SEBIComplianceError(f"banned words: {banned}")
+        brief_text = raw
+    except SEBIComplianceError:
+        brief_text = "Brief unavailable — signal state is described in the panel above."
     except Exception as e:
         log.error("cts_brief_llm_failed", symbol=symbol, error=str(e))
-        brief_text = "Brief unavailable — please try again."
 
-    return CTSBriefResponse(symbol=symbol.upper(), brief=brief_text, context=ctx)
+    signal: str | None = None
+    if ctx.get("is_ppc"):
+        signal = "PPC"
+    elif ctx.get("is_npc"):
+        signal = "NPC"
+    elif ctx.get("is_contraction"):
+        signal = "Contraction"
+
+    stage_val = ctx.get("stage")
+    return CTSBriefResponse(
+        symbol=symbol.upper(),
+        brief=brief_text,
+        stage=int(stage_val) if stage_val is not None else None,
+        signal=signal,
+    )

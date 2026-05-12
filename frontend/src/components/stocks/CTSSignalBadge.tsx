@@ -9,6 +9,7 @@ const STAGE_STYLES: Record<number, string> = {
   3: 'bg-signal-warn/10 text-signal-warn border border-signal-warn/30',
   4: 'bg-signal-neg/10 text-signal-neg border border-signal-neg/30',
 }
+const STAGE_STYLE_FALLBACK = 'bg-paper-rule/20 text-ink-secondary border border-paper-rule'
 
 const STAGE_TOOLTIPS: Record<number, string> = {
   1: 'Stage 1 — Base-building: below declining 150-day MA. Range-bound, no directional bias.',
@@ -22,12 +23,13 @@ export function StageBadge({ stage }: { stage: Stage }) {
     <span className="text-ink-tertiary text-xs" aria-label="No stage data">—</span>
   )
   const label = `S${stage}`
+  const tooltip = STAGE_TOOLTIPS[stage] ?? `Stage ${stage}`
   return (
     <span
       data-testid="stage-badge"
-      title={STAGE_TOOLTIPS[stage]}
-      aria-label={STAGE_TOOLTIPS[stage]}
-      className={`inline-flex items-center px-1.5 py-0.5 rounded-[2px] text-xs font-mono font-medium ${STAGE_STYLES[stage]}`}
+      title={tooltip}
+      aria-label={tooltip}
+      className={`inline-flex items-center px-1.5 py-0.5 rounded-[2px] text-xs font-mono font-medium ${STAGE_STYLES[stage] ?? STAGE_STYLE_FALLBACK}`}
     >
       {label}
     </span>
