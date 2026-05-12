@@ -159,12 +159,13 @@ function SignalsSection({ stock }: { stock: StockRowWithSector }) {
 }
 
 const CHART_RANGES = [
+  { label: '1M', days: 30 },
   { label: '3M', days: 90 },
   { label: '6M', days: 180 },
   { label: '1Y', days: 365 },
 ] as const
 
-type ChartDays = 90 | 180 | 365
+type ChartDays = 30 | 90 | 180 | 365
 
 function sliceByDays<T extends { date: Date | string }>(arr: T[], days: ChartDays): T[] {
   const cutoff = new Date()

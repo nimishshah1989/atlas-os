@@ -40,6 +40,9 @@ class DailyMarketContext:
     rotating_out: list[str]
     new_breakouts: list[dict[str, Any]]
     new_deteriorations: list[dict[str, Any]]
+    # SP04 Stage 3+: top conviction names per industry-grade tier. Empty
+    # list if mv_top_conviction_daily has no rows for as_of.
+    top_conviction: list[dict[str, Any]] = field(default_factory=list)
     raw_regime_row: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -168,6 +171,31 @@ def build_daily_context(engine: Engine, as_of: date) -> DailyMarketContext:
             .fetchall()
         )
 
+        # 6. Top conviction names — SP04 Stage 3 overlay. Restrict to
+        # industry-grade tiers (T1 mega-cap + T3 upper mid) so the brief
+        # never quotes a low-confidence pick as if it were high-grade.
+        try:
+            conviction_rows = (
+                conn.execute(
+                    text(
+                        "SELECT u.symbol, u.sector, c.tier, "
+                        "ROUND((c.conviction_score * 100)::numeric, 1) AS conviction "
+                        "FROM atlas.mv_top_conviction_daily c "
+                        "LEFT JOIN atlas.atlas_universe_stocks u "
+                        "       ON u.instrument_id = c.instrument_id "
+                        "WHERE c.confidence_label = 'industry_grade' "
+                        "ORDER BY c.conviction_score DESC "
+                        "LIMIT 5"
+                    )
+                )
+                .mappings()
+                .fetchall()
+            )
+        except Exception as exc:
+            # mv_top_conviction_daily may be empty on a fresh DB.
+            log.warning("conviction_mv_unavailable", err=str(exc)[:120])
+            conviction_rows = []
+
     if regime_row is None:
         # Graceful degradation: no MV data. Return a stub context that the
         # generator will refuse to send to Claude.
@@ -203,6 +231,7 @@ def build_daily_context(engine: Engine, as_of: date) -> DailyMarketContext:
 
     new_breakouts = [dict(r) for r in breakout_rows]
     new_deteriorations = [dict(r) for r in deterioration_rows]
+    top_conviction = [dict(r) for r in conviction_rows]
 
     log.info(
         "daily_context_built",
@@ -211,6 +240,7 @@ def build_daily_context(engine: Engine, as_of: date) -> DailyMarketContext:
         regime_delta=regime_delta,
         n_breakouts=len(new_breakouts),
         n_deteriorations=len(new_deteriorations),
+        n_top_conviction=len(top_conviction),
     )
 
     return DailyMarketContext(
@@ -222,6 +252,7 @@ def build_daily_context(engine: Engine, as_of: date) -> DailyMarketContext:
         top_sectors=top_sectors,
         rotating_out=rotating_out,
         new_breakouts=new_breakouts,
+        top_conviction=top_conviction,
         new_deteriorations=new_deteriorations,
         raw_regime_row=dict(regime_row),
     )

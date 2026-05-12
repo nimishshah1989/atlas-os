@@ -105,8 +105,24 @@ def _render_user_message(ctx: DailyMarketContext) -> str:
         lines.append("Deteriorations: none today.")
 
     lines.append("")
+    if ctx.top_conviction:
+        lines.append(
+            "Top conviction names (industry-grade tiers only — "
+            "IC-weighted composite, holdout 2023-2025):"
+        )
+        for c in ctx.top_conviction:
+            lines.append(
+                f"  - {c.get('symbol')} ({c.get('sector')}) "
+                f"in {c.get('tier')}; Conviction {c.get('conviction')}"
+            )
+    else:
+        lines.append("Top conviction: not yet computed.")
+
+    lines.append("")
     lines.append(
         "Produce the brief in 200-280 words following the system prompt rules. "
+        "When citing conviction names, refer to them as 'rank highly' or "
+        "'register industry-grade conviction', never as buys or recommendations. "
         "Call emit_brief with the structured fields."
     )
     return "\n".join(lines)
