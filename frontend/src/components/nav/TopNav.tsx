@@ -4,15 +4,17 @@ import { Suspense } from 'react'
 import { HealthDot } from './HealthDot'
 
 const NAV_LINKS = [
-  { href: '/',               label: 'Regime' },
-  { href: '/sectors',        label: 'Sectors' },
-  { href: '/stocks',         label: 'Stocks' },
-  { href: '/etfs',           label: 'ETFs' },
-  { href: '/funds',          label: 'Funds' },
-  { href: '/strategies',     label: 'Strategies' },
-  { href: '/portfolios',     label: 'Portfolios' },
-  { href: '/health',         label: 'Health' },
-  { href: '/admin/policies', label: 'Policies' },
+  { href: '/',                   label: 'Regime' },
+  { href: '/sectors',            label: 'Sectors' },
+  { href: '/stocks',             label: 'Stocks' },
+  { href: '/etfs',               label: 'ETFs' },
+  { href: '/funds',              label: 'Funds' },
+  { href: '/strategies',         label: 'Strategies' },
+  { href: '/portfolios',         label: 'Portfolios' },
+  { href: '/intelligence',       label: 'Intelligence' },
+  { href: '/methodology',        label: 'Methodology' },
+  { href: '/health',             label: 'Health' },
+  { href: '/admin/policies',     label: 'Policies' },
 ]
 
 export function TopNav() {
