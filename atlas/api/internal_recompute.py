@@ -29,11 +29,17 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from atlas.api.admin.proposals import router as admin_proposals_router
 from atlas.db import get_engine
 
 log = structlog.get_logger()
 
 app = FastAPI(title="Atlas Internal API", version="0.2.0")
+
+# SP04 Stage 4a — admin proposal endpoints. The router gates itself on
+# the ATLAS_INTERNAL_SECRET bearer token (same secret the recompute
+# endpoints below use), so we don't need a separate middleware here.
+app.include_router(admin_proposals_router)
 
 # Resolved once at import time — atlas/api/internal_recompute.py → atlas-os/
 ATLAS_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -127,21 +133,19 @@ def trigger_recompute(
     placeholders = ", ".join(f":m{i}" for i in range(len(milestones_to_check)))
     params: dict[str, Any] = {f"m{i}": v for i, v in enumerate(milestones_to_check)}
 
+    # placeholders is built from a closed-set milestone whitelist (see
+    # _ALLOWED_MILESTONES above), so the f-string is injection-safe.
+    sql_text = f"""
+        SELECT run_id
+        FROM atlas.atlas_pipeline_runs
+        WHERE milestone IN ({placeholders})
+          AND status = 'running'
+          AND started_at > NOW() - INTERVAL '6 hours'
+        ORDER BY started_at DESC
+        LIMIT 1
+    """  # noqa: S608
     with _db(engine) as conn:
-        row = conn.execute(
-            text(
-                f"""
-                SELECT run_id
-                FROM atlas.atlas_pipeline_runs
-                WHERE milestone IN ({placeholders})
-                  AND status = 'running'
-                  AND started_at > NOW() - INTERVAL '6 hours'
-                ORDER BY started_at DESC
-                LIMIT 1
-                """
-            ),
-            params,
-        ).fetchone()
+        row = conn.execute(text(sql_text), params).fetchone()
 
     if row is not None:
         existing_run_id = str(row[0])

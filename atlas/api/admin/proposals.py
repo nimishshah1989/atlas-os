@@ -12,6 +12,7 @@ in dev). The role is set by the Supabase JWT and surfaced via
 
 from __future__ import annotations
 
+import os
 from datetime import date as date_cls
 from datetime import datetime
 from typing import Any
@@ -34,13 +35,33 @@ router = APIRouter(prefix="/api/admin/proposals", tags=["admin"])
 
 
 def _require_admin(request: Request) -> str:
-    """Pull the admin user_id off request.state. 403 if not admin."""
+    """Authorize via either of two paths and return a reviewer label.
+
+    1. JWT middleware path (main app): request.state.user with role
+       ``admin`` or ``service_role``. Returns the JWT user_id.
+    2. Internal-secret path (internal_recompute app): Authorization
+       header equals ``Bearer <ATLAS_INTERNAL_SECRET>``. Returns a
+       fixed ``internal-proxy`` reviewer label so audit-trail rows
+       still identify the reviewer source.
+
+    Raises 401 if neither path matches.
+    """
+    # Path 1: JWT-authenticated user with admin role.
     user = getattr(request.state, "user", None)
+    if user is not None and getattr(user, "role", "") in ("admin", "service_role"):
+        return getattr(user, "user_id", "unknown")
+
+    # Path 2: Internal-secret Bearer header.
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        secret = os.environ.get("ATLAS_INTERNAL_SECRET", "")
+        if secret and token == secret:
+            return "internal-proxy"
+
     if user is None:
         raise HTTPException(status_code=401, detail="auth required")
-    if getattr(user, "role", "") not in ("admin", "service_role"):
-        raise HTTPException(status_code=403, detail="admin role required")
-    return getattr(user, "user_id", "unknown")
+    raise HTTPException(status_code=403, detail="admin role required")
 
 
 class ApproveBody(BaseModel):

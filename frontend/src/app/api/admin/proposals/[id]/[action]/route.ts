@@ -28,9 +28,13 @@ export async function POST(
   }
 
   const body = await req.text()
+  const internalSecret = process.env.ATLAS_INTERNAL_SECRET ?? ''
   const upstream = await fetch(`${apiBase}/api/admin/proposals/${id}/${action}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(internalSecret ? { Authorization: `Bearer ${internalSecret}` } : {}),
+    },
     body,
   })
   const text = await upstream.text()
