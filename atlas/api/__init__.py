@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from atlas.api.admin.proposals import router as admin_proposals_router
 from atlas.api.agents import router as agents_router
 from atlas.api.auth import JWTAuthMiddleware
 from atlas.api.openbb.router import openbb_router
@@ -32,6 +33,7 @@ app.include_router(rule_based_router)
 app.include_router(strategies_router)
 app.include_router(openbb_router)  # SP03: OpenBB BYO Copilot — /v1/agents.json, /v1/query
 app.include_router(agents_router)  # SP07: specialist agents — /api/agents/invoke
+app.include_router(admin_proposals_router)  # SP04 Stage 4a — admin proposals
 
 
 @app.get("/health", include_in_schema=False)

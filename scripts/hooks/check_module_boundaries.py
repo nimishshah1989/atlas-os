@@ -79,6 +79,11 @@ ALLOWED_EDGES: set[tuple[str, str]] = {
     # public __init__.py of atlas.agents.specialists (the package's
     # public surface) — same pattern as api → simulation above.
     ("atlas.api", "atlas.agents"),
+    # SP04 Stage 4a: api → intelligence. POST /api/admin/proposals/{id}/*
+    # is a thin HTTP wrapper over atlas.intelligence.conviction.optimization
+    # persistence (apply/reject/snooze). Business logic stays in
+    # intelligence; api owns request/response shape + admin role gate.
+    ("atlas.api", "atlas.intelligence"),
 }
 
 
