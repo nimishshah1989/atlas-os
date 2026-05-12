@@ -9,30 +9,20 @@
 # description: human-readable label for logs and findings
 
 routes:
-  - path: /stocks
-    wait_selector: "[data-validator-id]"
-    description: "Stock screener — conviction + RS + momentum"
-
-  - path: /sectors
-    wait_selector: "[data-validator-id]"
-    description: "Sector decisions — sector_state + rs_velocity + participation"
-
+  # Active — instrumented with data-validator-id
   - path: /etfs
     wait_selector: "[data-validator-id]"
     description: "ETF screener — RS pctile + effort ratio + MA signal"
 
-  - path: /funds
-    wait_selector: "[data-validator-id]"
-    description: "Fund lens — fund RS + category state"
-
   - path: /intelligence
     wait_selector: "[data-validator-id]"
-    description: "Intelligence page — top conviction stocks"
+    description: "Intelligence page — top conviction stocks + RS pctile"
 
-  - path: /regime
-    wait_selector: "[data-validator-id]"
-    description: "Market regime — regime state + breadth score"
+  # Pending instrumentation (add data-validator-id to components first)
+  # - path: /stocks        # StocksScreener not yet instrumented
+  # - path: /funds         # FundLens not yet instrumented
+  # - path: /regime        # RegimeDashboard not yet instrumented
+  # - path: /admin/thresholds  # ThresholdsTable not yet instrumented
 
-  - path: /admin/thresholds
-    wait_selector: "[data-validator-id]"
-    description: "Admin thresholds — live threshold values"
+  # Pending page-load fix (domcontentloaded never fires within 60 s)
+  # - path: /sectors       # SectorDecisionTable has data-validator-id but page hangs

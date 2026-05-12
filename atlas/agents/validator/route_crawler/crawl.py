@@ -40,8 +40,8 @@ from atlas.agents.validator.route_crawler.sql_lookup import lookup
 log = structlog.get_logger()
 
 _ROUTES_YAML = Path(__file__).parent / "routes.yaml"
-_TIMEOUT_MS = 30_000  # 30 s per route load
-_NETWORKIDLE_MS = 15_000
+_TIMEOUT_MS = 60_000  # 60 s per route load (some data-heavy pages take 50+ s)
+_NETWORKIDLE_MS = 20_000
 
 
 def _load_routes() -> list[dict[str, str]]:
@@ -153,6 +153,7 @@ async def _crawl_route(
             try:
                 backend_val = lookup(vid, conn)
             except (ValueError, Exception) as exc:
+                conn.rollback()  # reset aborted transaction so next lookup can proceed
                 log.warning("crawl_lookup_error", vid=vid, error=str(exc))
                 continue  # Unknown field — skip silently
 

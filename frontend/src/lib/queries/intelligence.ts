@@ -37,6 +37,7 @@ export type BreakoutRow = {
 }
 
 export type RSLeaderSnapshotRow = {
+  instrument_id: string
   symbol: string
   sector: string | null
   rs_state: string | null
@@ -107,6 +108,7 @@ export async function getIntelligenceDashboard(): Promise<IntelligenceDashboardD
       `,
       sql<RSLeaderSnapshotRow[]>`
         SELECT
+          instrument_id::text AS instrument_id,
           symbol,
           sector,
           rs_state,

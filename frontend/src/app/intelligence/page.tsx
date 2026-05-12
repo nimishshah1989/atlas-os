@@ -153,7 +153,7 @@ function RSLeadersList({ leaders }: { leaders: RSLeaderSnapshotRow[] }) {
           </span>
           <span
             className="font-mono text-[11px] text-ink-secondary shrink-0"
-            data-validator-id={`stock.rs_pctile_3m:${r.symbol}`}
+            data-validator-id={`stock.rs_pctile_3m:${r.instrument_id}`}
             data-validator-raw={r.rs_pctile_3m ?? '—'}
           >
             {r.rs_pctile_3m ? `${(parseFloat(r.rs_pctile_3m) * 100).toFixed(0)}%ile` : '—'}
