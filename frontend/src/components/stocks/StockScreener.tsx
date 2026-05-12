@@ -578,12 +578,14 @@ export function StockScreener({
                       <td
                         className="px-3 py-2.5"
                         data-validator-id={`stock.rs_state:${row.instrument_id}`}
+                        data-validator-raw={row.rs_state ?? ''}
                       >
                         <RSStateChip value={row.rs_state} />
                       </td>
                       <td
                         className="px-3 py-2.5"
                         data-validator-id={`stock.momentum_state:${row.instrument_id}`}
+                        data-validator-raw={row.momentum_state ?? ''}
                       >
                         <MomentumChip value={row.momentum_state} />
                       </td>

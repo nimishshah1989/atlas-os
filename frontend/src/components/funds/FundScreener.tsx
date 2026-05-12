@@ -248,6 +248,7 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
                       <td
                         className="px-3 py-2.5"
                         data-validator-id={`fund.nav_state:${f.mstar_id}`}
+                        data-validator-raw={f.nav_state ?? ''}
                       >
                         <NavStateChip value={f.nav_state} />
                       </td>
@@ -256,6 +257,7 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
                       <td
                         className="px-3 py-2.5"
                         data-validator-id={`fund.composition_state:${f.mstar_id}`}
+                        data-validator-raw={f.composition_state ?? ''}
                       >
                         <CompositionStateChip value={f.composition_state} />
                       </td>

@@ -149,15 +149,33 @@ def _etf_scalar(column: str) -> QueryFn:
     return _fn
 
 
-def _fund_scalar(column: str) -> QueryFn:
-    """Fetch one column from atlas_fund_lens_daily. PK is mstar_id."""
+def _fund_metrics_scalar(column: str) -> QueryFn:
+    """Fetch one column from atlas_fund_metrics_daily. PK is mstar_id."""
 
     def _fn(conn: Connection, pk: str) -> Decimal | str | None:
         parts = [p.strip() for p in pk.split(",", 1)]
         mstar_id = _esc(parts[0])
         date_clause = f"AND date = '{_esc(parts[1])}'" if len(parts) > 1 else ""
         sql = text(
-            f"SELECT {column} FROM atlas.atlas_fund_lens_daily "
+            f"SELECT {column} FROM atlas.atlas_fund_metrics_daily "
+            f"WHERE mstar_id = '{mstar_id}' {date_clause} "
+            f"ORDER BY date DESC LIMIT 1"
+        )
+        row = conn.execute(sql).fetchone()
+        return _scalar_result(row[0] if row else None)
+
+    return _fn
+
+
+def _fund_states_scalar(column: str) -> QueryFn:
+    """Fetch one column from atlas_fund_states_daily. PK is mstar_id."""
+
+    def _fn(conn: Connection, pk: str) -> Decimal | str | None:
+        parts = [p.strip() for p in pk.split(",", 1)]
+        mstar_id = _esc(parts[0])
+        date_clause = f"AND date = '{_esc(parts[1])}'" if len(parts) > 1 else ""
+        sql = text(
+            f"SELECT {column} FROM atlas.atlas_fund_states_daily "
             f"WHERE mstar_id = '{mstar_id}' {date_clause} "
             f"ORDER BY date DESC LIMIT 1"
         )
@@ -237,11 +255,12 @@ LOOKUPS: dict[str, QueryFn] = {
     "etf.effort_ratio_63": _etf_scalar("effort_ratio_63"),
     "etf.above_30w_ma": _etf_scalar("above_30w_ma"),
     "etf.rs_state": _etf_scalar("rs_state"),
-    # Fund metrics
-    "fund.rs_pctile_3m": _fund_scalar("rs_pctile_3m"),
-    "fund.category_state": _fund_scalar("category_state"),
-    "fund.nav_state": _fund_scalar("nav_state"),
-    "fund.composition_state": _fund_scalar("composition_state"),
+    # Fund metrics (atlas_fund_metrics_daily)
+    "fund.rs_pctile_3m": _fund_metrics_scalar("rs_pctile_3m"),
+    "fund.nav_state": _fund_metrics_scalar("nav_state"),
+    "fund.category_state": _fund_metrics_scalar("category_state"),
+    # Fund states (atlas_fund_states_daily)
+    "fund.composition_state": _fund_states_scalar("composition_state"),
     # Market regime
     "regime.regime_state": _regime_scalar("regime_state"),
     "regime.breadth_score": _regime_scalar("breadth_score"),
