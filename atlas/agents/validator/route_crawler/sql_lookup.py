@@ -30,7 +30,7 @@ from sqlalchemy.engine import Connection
 # PK sanitiser — allow only alphanumeric, underscore, dash, dot, comma, space
 # ---------------------------------------------------------------------------
 
-_SAFE_PK_RE = re.compile(r"^[\w\s.,\-]+$")
+_SAFE_PK_RE = re.compile(r"^[\w\s.,\-&]+$")
 
 
 def _esc(pk_value: str) -> str:
@@ -38,7 +38,7 @@ def _esc(pk_value: str) -> str:
     if not _SAFE_PK_RE.match(pk_value):
         raise ValueError(
             f"Unsafe pk_value in data-validator-id: {pk_value!r}. "
-            "Only alphanumeric, underscore, dash, dot, comma, and space allowed."
+            "Only alphanumeric, underscore, dash, dot, comma, ampersand, and space allowed."
         )
     return pk_value
 
@@ -96,7 +96,7 @@ def _conviction_scalar(column: str) -> QueryFn:
 
 
 def _sector_scalar(column: str) -> QueryFn:
-    """Fetch one column from atlas_sector_metrics_daily."""
+    """Fetch one column from atlas_sector_metrics_daily (PK: sector_name)."""
 
     def _fn(conn: Connection, pk: str) -> Decimal | str | None:
         parts = [p.strip() for p in pk.split(",", 1)]
@@ -104,7 +104,25 @@ def _sector_scalar(column: str) -> QueryFn:
         date_clause = f"AND date = '{_esc(parts[1])}'" if len(parts) > 1 else ""
         sql = text(
             f"SELECT {column} FROM atlas.atlas_sector_metrics_daily "
-            f"WHERE sector = '{sector}' {date_clause} "
+            f"WHERE sector_name = '{sector}' {date_clause} "
+            f"ORDER BY date DESC LIMIT 1"
+        )
+        row = conn.execute(sql).fetchone()
+        return _scalar_result(row[0] if row else None)
+
+    return _fn
+
+
+def _sector_state_scalar(column: str) -> QueryFn:
+    """Fetch one column from atlas_sector_states_daily (PK: sector_name)."""
+
+    def _fn(conn: Connection, pk: str) -> Decimal | str | None:
+        parts = [p.strip() for p in pk.split(",", 1)]
+        sector = _esc(parts[0])
+        date_clause = f"AND date = '{_esc(parts[1])}'" if len(parts) > 1 else ""
+        sql = text(
+            f"SELECT {column} FROM atlas.atlas_sector_states_daily "
+            f"WHERE sector_name = '{sector}' {date_clause} "
             f"ORDER BY date DESC LIMIT 1"
         )
         row = conn.execute(sql).fetchone()
@@ -208,10 +226,11 @@ LOOKUPS: dict[str, QueryFn] = {
     # Stock states
     "stock.momentum_state": _stock_state_scalar("momentum_state"),
     "stock.rs_state": _stock_state_scalar("rs_state"),
-    # Sector metrics
-    "sector.sector_state": _sector_scalar("sector_state"),
+    # Sector state (atlas_sector_states_daily — separate table)
+    "sector.sector_state": _sector_state_scalar("sector_state"),
+    # Sector metrics (atlas_sector_metrics_daily)
     "sector.rs_velocity": _sector_scalar("rs_velocity"),
-    "sector.participation_rs": _sector_scalar("participation_rs_pct"),
+    "sector.participation_rs": _sector_scalar("participation_rs"),
     "sector.rs_pctile_cross_sector": _sector_scalar("rs_pctile_cross_sector"),
     # ETF metrics
     "etf.rs_pctile_3m": _etf_scalar("rs_pctile_3m"),
