@@ -174,8 +174,8 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange, o
       if (Math.abs(retRaw) > RET_CAP) return []
 
       const volRaw = f.realized_vol_63 != null ? parseFloat(f.realized_vol_63) * 100 : null
-      // Bubble size = volatility. Tight clamp — 500+ funds on one chart needs small bubbles.
-      const z = volRaw != null ? Math.max(5, Math.min(80, volRaw * 3)) : 12
+      // z = raw vol % (12–49 range). ZAxis range maps this to visual size without clamping.
+      const z = volRaw ?? 10
 
       // Strip " NAV" suffix to match rsStateColor keys (Leader NAV → Leader)
       const navStateKey = f.nav_state ? f.nav_state.replace(/ NAV$/, '') : null
@@ -340,7 +340,7 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange, o
               tick={{ fontSize: 10, fill: '#94a3b8' }}
               tickCount={6}
             />
-            <ZAxis type="number" dataKey="z" range={[4, 80]} />
+            <ZAxis type="number" dataKey="z" range={[15, 500]} />
             <Tooltip content={<CustomTooltip />} cursor={false} />
 
             {/* Axis dividers */}

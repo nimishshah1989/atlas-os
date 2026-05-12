@@ -55,6 +55,7 @@ export function FundPageClient({
 }: Props) {
   const [activeFilter, setActiveFilter] = useState<FilterChip>('all')
   const [search, setSearch] = useState('')
+  const [hideDirectPlans, setHideDirectPlans] = useState(true)
   const router = useRouter()
 
   function handlePeriodChange(newPeriod: Period) {
@@ -67,6 +68,10 @@ export function FundPageClient({
 
   const filteredFunds = useMemo(() => {
     let result = funds
+    // Hide direct plans by default (plan_type column is broken in DB; filter by name pattern)
+    if (hideDirectPlans) {
+      result = result.filter(f => !f.scheme_name.includes(' Dir '))
+    }
     if (activeFilter !== 'all') {
       result = result.filter(f => {
         if (activeFilter === 'recommended') return f.recommendation === 'Recommended'
@@ -81,7 +86,7 @@ export function FundPageClient({
       result = result.filter(f => matchesFundSearch(f, search))
     }
     return result
-  }, [funds, activeFilter, search])
+  }, [funds, activeFilter, search, hideDirectPlans])
 
   return (
     <div className="flex flex-col">
@@ -160,6 +165,18 @@ export function FundPageClient({
         </div>
         <div className="ml-auto flex items-center gap-2">
           <FundGlossaryButton />
+          <button
+            type="button"
+            onClick={() => setHideDirectPlans(h => !h)}
+            title="Direct plans (Dir Gr) have the same underlying fund but lower expense ratios. Regular plans are standard for advisory clients."
+            className={`px-2.5 py-1 rounded-sm font-sans text-xs font-medium transition-colors border ${
+              hideDirectPlans
+                ? 'border-paper-rule bg-paper-rule/20 text-ink-tertiary'
+                : 'border-teal text-teal bg-teal/5'
+            }`}
+          >
+            {hideDirectPlans ? 'Regular only' : 'Showing All Plans'}
+          </button>
           <input
             type="search"
             placeholder="Search funds..."

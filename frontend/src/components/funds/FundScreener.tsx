@@ -42,6 +42,7 @@ const ALL_COLS: ColumnDef[] = [
   { key: 'weeks_in_state',  label: 'In State',         defaultVisible: true },
   { key: 'drawdown',        label: '1Y Ret',          defaultVisible: true },
   { key: 'max_drawdown',    label: 'Max DD (1Y)',      defaultVisible: false },
+  { key: 'aum',             label: 'AUM (Cr)',         defaultVisible: false },
 ]
 
 const COL_STORAGE_KEY = 'atlas-column-prefs-funds'
@@ -54,7 +55,7 @@ type SortCol =
   | 'scheme_name' | 'amc' | 'category'
   | 'nav_state' | 'composition' | 'holdings' | 'recommendation'
   | 'ret' | 'rs_pctile' | 'rs_category'
-  | 'vol' | 'weeks_in_state' | 'drawdown' | 'max_drawdown'
+  | 'vol' | 'weeks_in_state' | 'drawdown' | 'max_drawdown' | 'aum'
 
 // 4 coloured dots: Perf · Sectors · Stocks · Market
 function GateDots({ f }: { f: FundRow }) {
@@ -92,6 +93,7 @@ function getSortValue(col: SortCol, f: FundRow, period: Period): number | string
     case 'weeks_in_state': return buildSortKey('weeks_in_state', { weeks_in_state: f.weeks_in_current_state })
     case 'drawdown':       return buildSortKey('drawdown',       { drawdown: f.ret_12m })
     case 'max_drawdown':   return buildSortKey('drawdown',       { drawdown: f.drawdown_ratio_252 })
+    case 'aum':            return buildSortKey('ret',            { ret: f.aum_cr })
   }
 }
 
@@ -113,6 +115,11 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
 
   const sorted = useMemo(() => {
     return [...funds].sort((a, b) => {
+      // No-state funds always sink to bottom regardless of sort column
+      const aNoData = a.nav_state == null ? 1 : 0
+      const bNoData = b.nav_state == null ? 1 : 0
+      if (aNoData !== bNoData) return aNoData - bNoData
+
       const av = getSortValue(sortCol, a, period)
       const bv = getSortValue(sortCol, b, period)
       let cmp = 0
@@ -162,7 +169,12 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
       {/* Header: count + column toggle */}
       <div className="flex items-center gap-2">
         <span className="font-sans text-xs text-ink-tertiary whitespace-nowrap">
-          Showing {sorted.length} of {funds.length} funds
+          {sorted.filter(f => f.nav_state != null).length} funds with data
+          {sorted.filter(f => f.nav_state == null).length > 0 && (
+            <span className="text-ink-tertiary/50 ml-1">
+              · {sorted.filter(f => f.nav_state == null).length} pending (new launches, bottom)
+            </span>
+          )}
         </span>
         <div className="ml-auto">
           <ColumnToggle columns={ALL_COLS} visible={visibleCols} onChange={setVisibleCols} />
@@ -191,6 +203,7 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
               {visibleCols.has('weeks_in_state') && <Th label="In State" k="weeks_in_state" align="right" title="How long this fund has been in its current NAV state (d=days, w=weeks, mo=months)" />}
               {visibleCols.has('drawdown')       && <Th label="1Y Ret"         k="drawdown"       align="right" />}
               {visibleCols.has('max_drawdown')   && <Th label="Max DD (1Y)"    k="max_drawdown"   align="right" title="Maximum drawdown over 252 trading days (1 year)" />}
+              {visibleCols.has('aum')            && <Th label="AUM (Cr)"       k="aum"            align="right" title="Monthly average AUM in ₹ crore (AMFI data)" />}
             </tr>
           </thead>
           <tbody>
@@ -289,6 +302,13 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
                     {visibleCols.has('max_drawdown') && (
                       <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${f.drawdown_ratio_252 != null ? 'text-signal-neg' : 'text-ink-tertiary'}`}>
                         {f.drawdown_ratio_252 != null ? pct(f.drawdown_ratio_252) : '—'}
+                      </td>
+                    )}
+                    {visibleCols.has('aum') && (
+                      <td className="px-3 py-2.5 text-right font-mono text-xs text-ink-secondary tabular-nums">
+                        {f.aum_cr != null
+                          ? `₹${Number(f.aum_cr).toLocaleString('en-IN', { maximumFractionDigits: 0 })}Cr`
+                          : '—'}
                       </td>
                     )}
                   </tr>

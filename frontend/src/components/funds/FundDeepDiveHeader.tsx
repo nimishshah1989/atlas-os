@@ -65,6 +65,11 @@ export function FundDeepDiveHeader({ master }: { master: FundMasterRow }) {
                 · Since {formatDate(master.inception_date)}
               </span>
             )}
+            {master.aum_cr && (
+              <span className="ml-2 font-semibold text-ink-secondary">
+                · ₹{Number(master.aum_cr).toLocaleString('en-IN', { maximumFractionDigits: 0 })} Cr AUM
+              </span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">

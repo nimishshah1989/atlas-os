@@ -37,6 +37,9 @@ export type FundRow = {
   entry_trigger: boolean | null
   exit_trigger: boolean | null
   reduce_trigger: boolean | null
+  // AUM
+  aum_cr: string | null
+  aum_as_of: string | null
   // Lens (LEFT JOIN — all nullable)
   aligned_aum_pct: string | null
   avoid_aum_pct: string | null
@@ -55,6 +58,8 @@ export type FundMasterRow = {
   broad_category: string
   inception_date: Date | null
   data_as_of: string | null
+  aum_cr: string | null
+  aum_as_of: string | null
   nav_state: string | null
   nav_state_as_of: Date | null
   composition_state: string | null
@@ -130,6 +135,7 @@ export async function getAllFunds(): Promise<FundRow[]> {
     SELECT
       uf.mstar_id, uf.scheme_name, uf.amc, uf.category_name, uf.broad_category,
       (SELECT metrics_date FROM latest)::text AS data_as_of,
+      uf.aum_cr::text AS aum_cr, uf.aum_as_of::text AS aum_as_of,
       fm.ret_1m::text AS ret_1m, fm.ret_3m::text AS ret_3m,
       fm.ret_6m::text AS ret_6m, fm.ret_12m::text AS ret_12m,
       fm.rs_1m_category::text AS rs_1m_category,
@@ -173,6 +179,7 @@ export async function getFundMaster(mstar_id: string): Promise<FundMasterRow | n
       uf.mstar_id, uf.scheme_name, uf.amc, uf.category_name, uf.broad_category,
       uf.inception_date,
       (SELECT MAX(nav_date)::text FROM atlas.atlas_fund_metrics_daily WHERE mstar_id = ${mstar_id}) AS data_as_of,
+      uf.aum_cr::text AS aum_cr, uf.aum_as_of::text AS aum_as_of,
       fs.nav_state, fs.nav_state_as_of,
       fs.composition_state, fs.composition_as_of,
       fs.holdings_state, fs.holdings_as_of,
