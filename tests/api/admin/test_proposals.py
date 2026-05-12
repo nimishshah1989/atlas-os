@@ -1,24 +1,33 @@
-"""Tests for the admin proposals route. Uses FastAPI TestClient."""
+"""Tests for the admin proposals route. Uses FastAPI TestClient.
+
+Sets ``ATLAS_AUTH_DISABLED=true`` at module import time so the JWT middleware
+falls back to the dev admin user (the env var is consumed when ``atlas.config``
+is first imported).
+"""
 
 from __future__ import annotations
 
 import os
+
+os.environ.setdefault("ATLAS_AUTH_DISABLED", "true")
+
 from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
+from atlas.api import app
+from atlas.config import Config
 from atlas.db import get_engine
 from atlas.intelligence.conviction.optimization.persistence import insert_proposal
 
 
 @pytest.fixture(scope="module")
 def client() -> TestClient:
-    # Auth-disable for tests so the middleware sets a dev admin user.
-    os.environ["ATLAS_AUTH_DISABLED"] = "true"
-    from atlas.api import app
-
+    # Belt-and-suspenders: flip the bool on the loaded Config singleton
+    # so middleware sees AUTH_DISABLED even when env-var was read earlier.
+    Config.AUTH_DISABLED = True
     return TestClient(app)
 
 
