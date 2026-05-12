@@ -38,7 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <body className="bg-paper min-h-screen">
         <TopNav />
-        <main className="pt-14">{children}</main>
+        <main className="pt-20">{children}</main>
       </body>
     </html>
   )
