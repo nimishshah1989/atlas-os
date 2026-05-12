@@ -76,10 +76,12 @@ function stateKey(row: FundDecisionRow): string {
 
 function collapsePeriods(decisions: FundDecisionRow[]): Period[] {
   if (decisions.length === 0) return []
+  // Sort ascending so period.from = oldest date, period.to = newest date
+  const asc = [...decisions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
   const periods: Period[] = []
-  let current: Period = { from: decisions[0], to: decisions[0], count: 1 }
-  for (let i = 1; i < decisions.length; i++) {
-    const row = decisions[i]
+  let current: Period = { from: asc[0], to: asc[0], count: 1 }
+  for (let i = 1; i < asc.length; i++) {
+    const row = asc[i]
     if (stateKey(row) === stateKey(current.from) && !hasTrigger(row) && !hasTrigger(current.from)) {
       current.to = row
       current.count++
@@ -89,7 +91,7 @@ function collapsePeriods(decisions: FundDecisionRow[]): Period[] {
     }
   }
   periods.push(current)
-  return periods
+  return periods.reverse()  // most recent period first
 }
 
 export function FundDecisionHistory({ decisions }: { decisions: FundDecisionRow[] }) {

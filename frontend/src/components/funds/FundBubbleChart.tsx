@@ -16,7 +16,7 @@ import {
 import type { FundRow } from '@/lib/queries/funds'
 import type { Period } from '@/lib/url-params'
 import type { FilterChip } from '@/components/funds/FundPageClient'
-import { CHART_COLORS } from '@/lib/chart-colors'
+import { CHART_COLORS, rsStateColor } from '@/lib/chart-colors'
 
 // allow-large: single cohesive component — axes, quadrants, tooltip, legend, filter chips all belong together (mirrors StockBubbleChart pattern)
 
@@ -44,10 +44,13 @@ const BUBBLE_FILTERS: { key: FilterChip; label: string }[] = [
 ]
 
 const LEGEND = [
-  { color: CHART_COLORS.rsLeader,    label: 'Recommended' },
-  { color: '#B8860B',                label: 'Hold' },
-  { color: CHART_COLORS.rsWeak,      label: 'Reduce / Exit' },
-  { color: CHART_COLORS.inkTertiary, label: 'No Rating' },
+  { color: CHART_COLORS.rsLeader,        label: 'Leader NAV' },
+  { color: CHART_COLORS.rsStrong,        label: 'Strong NAV' },
+  { color: CHART_COLORS.rsEmerging,      label: 'Emerging NAV' },
+  { color: CHART_COLORS.rsConsolidating, label: 'Consolidating NAV' },
+  { color: CHART_COLORS.rsAverage,       label: 'Average NAV' },
+  { color: CHART_COLORS.rsWeak,          label: 'Weak / Laggard NAV' },
+  { color: CHART_COLORS.inkTertiary,     label: 'No State' },
 ]
 
 type BubblePoint = {
@@ -61,16 +64,7 @@ type BubblePoint = {
   vol: number | null
   rsPctile: number | null
   recommendation: string | null
-}
-
-function recColor(recommendation: string | null): string {
-  switch (recommendation) {
-    case 'Recommended': return CHART_COLORS.rsLeader
-    case 'Hold':        return '#B8860B'
-    case 'Reduce':      return CHART_COLORS.rsWeak
-    case 'Exit':        return CHART_COLORS.rsWeak
-    default:            return CHART_COLORS.inkTertiary
-  }
+  navState: string | null
 }
 
 function CustomTooltip({
@@ -99,6 +93,7 @@ function CustomTooltip({
         <div className="text-ink-secondary">
           Vol (63D): {d.vol != null ? `${d.vol.toFixed(0)}%` : '—'}
         </div>
+        <div className="text-ink-secondary">NAV State: {d.navState ?? '—'}</div>
         <div className="text-ink-secondary">Recommendation: {d.recommendation ?? '—'}</div>
         <div className="text-ink-tertiary text-[9px] mt-1">Larger bubble = higher volatility</div>
       </div>
@@ -182,6 +177,8 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange, o
       // Bubble size = volatility. Tight clamp — 500+ funds on one chart needs small bubbles.
       const z = volRaw != null ? Math.max(5, Math.min(80, volRaw * 3)) : 12
 
+      // Strip " NAV" suffix to match rsStateColor keys (Leader NAV → Leader)
+      const navStateKey = f.nav_state ? f.nav_state.replace(/ NAV$/, '') : null
       return [{
         x: rsPctileRaw * 100,   // RS percentile 0–100
         y: retRaw * 100,         // return %
@@ -189,10 +186,11 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange, o
         mstarId: f.mstar_id,
         schemeName: f.scheme_name,
         amc: f.amc,
-        color: recColor(f.recommendation),
+        color: rsStateColor(navStateKey),
         vol: volRaw,
         rsPctile: rsPctileRaw * 100,
         recommendation: f.recommendation,
+        navState: f.nav_state,
       }]
     })
   }, [filteredFunds, period])
