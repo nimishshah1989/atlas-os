@@ -31,7 +31,7 @@ from sqlalchemy import create_engine, text  # noqa: E402
 log = structlog.get_logger()
 
 MFAPI_BASE = "https://api.mfapi.in/mf"
-REQUEST_DELAY = 0.4  # seconds between API calls — be polite to mfapi.in
+REQUEST_DELAY = 2.0  # seconds between API calls — conservative to avoid rate-limiting
 REQUEST_TIMEOUT = 20  # seconds per request
 
 # Fetch funds whose latest NAV is before this date and who have 252+ days history
@@ -129,25 +129,19 @@ def insert_nav_rows(supa_engine, rows: list[dict], dry_run: bool) -> int:
         log.info("dry_run_would_insert", count=len(rows))
         return 0
 
-    inserted = 0
     chunk_size = 500
     with supa_engine.begin() as conn:
         for i in range(0, len(rows), chunk_size):
             chunk = rows[i : i + chunk_size]
             conn.execute(
-                text("""
-                    INSERT INTO public.de_mf_nav_daily (nav_date, mstar_id, nav, data_status)
-                    SELECT
-                        (r->>'nav_date')::date,
-                        r->>'mstar_id',
-                        (r->>'nav')::numeric,
-                        'amfi_backfill'
-                    FROM json_array_elements(:rows::json) r
-                    ON CONFLICT (nav_date, mstar_id) DO NOTHING
-                """),
-                {"rows": __import__("json").dumps(chunk)},
+                text(
+                    "INSERT INTO public.de_mf_nav_daily "
+                    "(nav_date, mstar_id, nav, data_status) "
+                    "VALUES (:nav_date, :mstar_id, :nav, 'raw') "
+                    "ON CONFLICT (nav_date, mstar_id) DO NOTHING"
+                ),
+                chunk,
             )
-            inserted += len(chunk)
 
     return len(rows)
 
