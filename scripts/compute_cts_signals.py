@@ -134,13 +134,13 @@ def _upsert_signals(engine, df: pd.DataFrame) -> None:
         "atr_14",
         "atr_slope",
     ]
-    rows = df_to_pg_rows(df[cols])
+    rows = df_to_pg_rows(df[cols])  # type: ignore[arg-type]  # pandas stubs: df[list] -> DataFrame|Series|Unknown, runtime always DataFrame
     bulk_upsert(engine, "atlas.atlas_cts_signals_daily", cols, rows, ["date", "instrument_id"])
 
 
 def _upsert_pivot(engine, df: pd.DataFrame) -> None:
     cols = ["date", "sector", "ppc_count", "npc_count", "total_tradeable", "pivot_balance"]
-    rows = df_to_pg_rows(df[cols])
+    rows = df_to_pg_rows(df[cols])  # type: ignore[arg-type]  # pandas stubs: df[list] -> DataFrame|Series|Unknown, runtime always DataFrame
     bulk_upsert(engine, "atlas.atlas_cts_sector_pivot_daily", cols, rows, ["date", "sector"])
 
 
