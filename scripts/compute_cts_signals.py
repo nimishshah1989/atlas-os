@@ -54,16 +54,16 @@ def _load_ohlcv(engine, instrument_ids: list[str], end: date) -> pd.DataFrame:
 
 
 def _load_rs_pctile(engine, as_of_date: date) -> pd.DataFrame:
-    """Load cross-sector RS percentile from the latest sector rotation MV."""
+    """Load cross-sector RS percentile for the given date."""
     with open_compute_session(engine) as conn:
         return pd.read_sql(
             """
-            SELECT i.id AS instrument_id,
-                   COALESCE(m.rs_pctile_3m_nifty500, 0.0)::float AS rs_pctile_cross_sector
-            FROM atlas.atlas_instruments i
+            SELECT u.instrument_id,
+                   COALESCE(m.rs_pctile_3m, 0.0)::float AS rs_pctile_cross_sector
+            FROM atlas.atlas_universe_stocks u
             LEFT JOIN atlas.atlas_stock_metrics_daily m
-                ON m.instrument_id = i.id AND m.date = %(d)s
-            WHERE i.is_active
+                ON m.instrument_id = u.instrument_id AND m.date = %(d)s
+            WHERE u.effective_to IS NULL
             """,
             conn,
             params={"d": as_of_date},
