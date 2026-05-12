@@ -79,20 +79,23 @@ def add_atr14(
     out = df.copy().sort_values([group_col, "date"])
     col = f"atr_{length}"
 
-    def _atr(g: pd.DataFrame) -> pd.Series:
-        result = ta.atr(  # type: ignore[attr-defined]
-            g["high"].squeeze(),  # type: ignore[arg-type]
-            g["low"].squeeze(),  # type: ignore[arg-type]
-            g["close"].squeeze(),  # type: ignore[arg-type]
+    # Per-group loop avoids groupby.apply shape ambiguity: when the applied
+    # function returns a same-length Series, pandas may treat the result as a
+    # "reduce" (1 row per group, N columns) rather than a "transform" (N rows).
+    # A manual loop with index-loc assignment is unambiguous and correct.
+    atr_series = pd.Series(index=out.index, dtype=float, name=col)
+    for _, grp in out.groupby(group_col, observed=True):
+        vals = ta.atr(  # type: ignore[attr-defined]
+            grp["high"],
+            grp["low"],
+            grp["close"],
             length=length,
         )
-        return pd.Series(result, index=g.index)  # type: ignore[return-value]
-
-    out[col] = (
-        out.groupby(group_col, group_keys=False, observed=True)
-        .apply(_atr)
-        .reset_index(level=0, drop=True)
-    )
+        # ta.atr returns None when the group has fewer bars than `length`
+        if vals is not None:
+            atr_series.loc[grp.index] = vals.values  # type: ignore[index]
+        # else: leave as NaN (default); downstream consumers guard on NaN
+    out[col] = atr_series
 
     def _lr_slope(s: pd.Series, window: int = 5) -> pd.Series:
         def _slope(arr: np.ndarray) -> float:
