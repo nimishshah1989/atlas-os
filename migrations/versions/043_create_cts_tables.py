@@ -29,7 +29,7 @@ def upgrade() -> None:
             stage           SMALLINT,
             is_stage1b      BOOLEAN,
             sma_150         NUMERIC(12, 4),
-            sma_150_slope   NUMERIC(8, 6),
+            sma_150_slope   NUMERIC(16, 4),
             trp             NUMERIC(6, 4),
             avg_trp         NUMERIC(6, 4),
             trp_ratio       NUMERIC(6, 4),
