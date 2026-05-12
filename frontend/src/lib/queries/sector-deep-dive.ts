@@ -29,6 +29,7 @@ export type StockRow = {
   position_size_pct: string | null
   ema_10_at_20d_high: boolean | null
   weinstein_gate_pass: boolean | null
+  realized_vol_63: string | null
 }
 
 export async function getStocksInSector(sectorName: string): Promise<StockRow[]> {
@@ -46,6 +47,7 @@ export async function getStocksInSector(sectorName: string): Promise<StockRow[]>
       m.ret_1m::text          AS ret_1m,
       m.ret_3m::text          AS ret_3m,
       m.ret_6m::text          AS ret_6m,
+      m.realized_vol_63::text AS realized_vol_63,
       m.rs_3m_tier::text      AS rs_3m_nifty500,
       m.rs_pctile_3m::text    AS rs_pctile_3m,
       m.rs_3m_tier_gold::text AS rs_3m_tier_gold,

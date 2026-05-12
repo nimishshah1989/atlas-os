@@ -96,6 +96,7 @@ METRICS_COLUMNS: tuple[str, ...] = (
     "realized_vol_63",
     "drawdown_ratio_252",
     "volume_expansion",
+    "avg_volume_20",
     "effort_ratio_63",
     "above_30w_ma",
     "weinstein_gate_pass",
@@ -172,7 +173,7 @@ def _resolve_benchmark_code(
     fall back to ``NIFTY500`` so the ETF still gets a usable benchmark for RS.
     """
     out = universe.copy()
-    out["benchmark_code"] = out["theme"].map(THEME_BENCHMARK)
+    out["benchmark_code"] = out["theme"].map(THEME_BENCHMARK)  # type: ignore[arg-type]
     sectoral = out["theme"] == "Sectoral"
     if sector_to_benchmark:
         out.loc[sectoral, "benchmark_code"] = out.loc[sectoral, "linked_sector"].map(
@@ -216,7 +217,7 @@ def _merge_benchmark(
     rename["realized_vol_63"] = "realized_vol_63_benchmark"
     rename["max_drawdown_252"] = "max_drawdown_252_bench"
     rename.update({f"ema_{n}_benchmark": f"ema_{n}_benchmark" for n in (10, 20, 50, 200)})
-    bench = bench.rename(columns=rename)
+    bench = bench.rename(columns=rename)  # type: ignore[call-overload]
 
     return etfs.merge(bench, on=["benchmark_code", "date"], how="left")
 

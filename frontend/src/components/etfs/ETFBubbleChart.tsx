@@ -1,8 +1,23 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import * as d3 from 'd3'
-import { CHART_COLORS, rsStateColor } from '@/lib/chart-colors'
+import { rsStateColor } from '@/lib/chart-colors'
 import type { ETFRow } from '@/lib/queries/etfs'
+
+function volumeToRadius(vol: number | null): number {
+  if (!vol || vol <= 0) return 5
+  const log = Math.log10(Math.max(1000, vol))
+  // ETF volumes are typically 1K–5M units/day. log10(1K)=3, log10(5M)=6.7.
+  // Map to radius 6–42 px.
+  return Math.min(42, 6 + (log - 3) * 10)
+}
+
+function fmtVol(v: number | null): string {
+  if (!v) return '—'
+  if (v >= 10_000_000) return (v / 10_000_000).toFixed(1) + ' Cr'
+  if (v >= 100_000)    return (v / 100_000).toFixed(1) + ' L'
+  return v.toLocaleString('en-IN', { maximumFractionDigits: 0 })
+}
 
 type Theme = 'all' | 'Broad' | 'Sectoral'
 
@@ -48,9 +63,9 @@ export function ETFBubbleChart({
     const points = filtered
       .map(e => ({
         ...e,
-        x: e.vol_63       != null ? parseFloat(e.vol_63) * 100       : NaN,
-        y: e.ret_3m       != null ? parseFloat(e.ret_3m) * 100        : NaN,
-        r: e.rs_pctile_3m != null ? parseFloat(e.rs_pctile_3m) * 280 + 12 : 12,
+        x: e.vol_63 != null ? parseFloat(e.vol_63) * 100 : NaN,
+        y: e.ret_3m != null ? parseFloat(e.ret_3m) * 100 : NaN,
+        avgVol: e.avg_volume_20 != null ? parseFloat(e.avg_volume_20) : null,
       }))
       .filter(p => !isNaN(p.x) && !isNaN(p.y))
 
@@ -158,7 +173,7 @@ export function ETFBubbleChart({
 
     node.append('circle')
       .attr('cx', p => xScale(p.x)).attr('cy', p => yScale(p.y))
-      .attr('r', p => Math.sqrt(p.r) * 3.5)
+      .attr('r', p => volumeToRadius(p.avgVol))
       .attr('fill', p => rsStateColor(p.rs_state)).attr('fill-opacity', 0.18)
       .attr('stroke', p => rsStateColor(p.rs_state)).attr('stroke-width', 1.5)
 
@@ -182,7 +197,7 @@ export function ETFBubbleChart({
             <div style="border-top:1px solid #f1f5f9;padding-top:5px;display:grid;gap:3px">
               <div style="color:#64748b">3M Return: <span style="font-weight:600;color:${p.y >= 0 ? '#2F6B43' : '#B0492C'}">${ret3m}</span></div>
               <div style="color:#64748b">Volatility 63D: <span style="color:#1e293b">${p.x.toFixed(1)}%</span></div>
-              <div style="color:#64748b">RS Pctile: <span style="color:#1e293b">${p.rs_pctile_3m != null ? (parseFloat(p.rs_pctile_3m) * 100).toFixed(0) + 'th' : '—'}</span></div>
+              <div style="color:#64748b">Avg Vol 20D: <span style="color:#1e293b">${fmtVol(p.avgVol)}</span></div>
               <div style="color:#64748b">RS State: <span style="color:#1e293b">${p.rs_state ?? '—'}</span></div>
               <div style="color:#64748b">Momentum: <span style="color:#1e293b">${p.momentum_state ?? '—'}</span></div>
               <div style="color:#64748b;font-size:10px">${p.theme}</div>
@@ -234,7 +249,7 @@ export function ETFBubbleChart({
           </div>
         ))}
         <div className="ml-auto font-sans text-[10px] text-ink-tertiary">
-          Bubble size = RS pctile · {filtered.length} ETFs
+          Bubble size = avg volume 20D · {filtered.length} ETFs
         </div>
       </div>
     </div>

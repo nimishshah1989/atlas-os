@@ -24,6 +24,7 @@ export type ETFRow = {
   vol_63: string | null
   drawdown: string | null
   volume_expansion: string | null
+  avg_volume_20: string | null
   effort_ratio_63: string | null
   above_30w_ma: boolean | null
   ema_10_at_20d_high: boolean | null
@@ -106,6 +107,7 @@ export async function getAllETFs(): Promise<ETFRow[]> {
       m.realized_vol_63::text       AS vol_63,
       m.drawdown_ratio_252::text    AS drawdown,
       m.volume_expansion::text      AS volume_expansion,
+      m.avg_volume_20::text         AS avg_volume_20,
       m.effort_ratio_63::text       AS effort_ratio_63,
       m.above_30w_ma,
       m.ema_10_at_20d_high,
@@ -174,6 +176,7 @@ export async function getETFByTicker(ticker: string): Promise<ETFRow | null> {
       m.realized_vol_63::text       AS vol_63,
       m.drawdown_ratio_252::text    AS drawdown,
       m.volume_expansion::text      AS volume_expansion,
+      m.avg_volume_20::text         AS avg_volume_20,
       m.effort_ratio_63::text       AS effort_ratio_63,
       m.above_30w_ma,
       m.ema_10_at_20d_high,
@@ -305,6 +308,7 @@ export async function getLinkedETFsForSector(sectorName: string): Promise<ETFRow
       m.realized_vol_63::text       AS vol_63,
       m.drawdown_ratio_252::text    AS drawdown,
       m.volume_expansion::text      AS volume_expansion,
+      m.avg_volume_20::text         AS avg_volume_20,
       m.effort_ratio_63::text       AS effort_ratio_63,
       m.above_30w_ma,
       m.ema_10_at_20d_high,

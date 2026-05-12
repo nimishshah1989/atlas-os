@@ -1,23 +1,17 @@
-// frontend/src/components/sectors/StockBubbleChart.tsx
+// allow-large: single cohesive D3 component
 'use client'
 import { useEffect, useRef } from 'react'
 import * as d3 from 'd3'
 import type { StockRow } from '@/lib/queries/sector-deep-dive'
 
-function colorFor(row: StockRow): string {
-  const rs  = row.rs_state ?? ''
-  const mom = row.momentum_state ?? ''
-  if (rs === 'Leader') {
-    if (mom === 'Accelerating' || mom === 'Improving') return '#22c55e'
-    if (mom === 'Deteriorating' || mom === 'Collapsing') return '#f59e0b'
-    return '#16a34a'
-  }
-  if (rs === 'Strong')        return '#22c55e'
-  if (rs === 'Emerging')      return '#0d9488'
-  if (rs === 'Consolidating') return '#1D9E75'
-  if (rs === 'Weak')          return '#f59e0b'
-  if (rs === 'Laggard')       return '#ef4444'
-  return '#94a3b8' // Average, ILLIQUID, INSUFFICIENT_HISTORY
+function colorFor(rs_state: string | null): string {
+  if (rs_state === 'Leader')        return '#2F6B43'
+  if (rs_state === 'Strong')        return '#1D9E75'
+  if (rs_state === 'Emerging')      return '#25394A'
+  if (rs_state === 'Consolidating') return '#B8860B'
+  if (rs_state === 'Weak')          return '#B0492C'
+  if (rs_state === 'Laggard')       return '#B0492C'
+  return '#8C8278'
 }
 
 export function StockBubbleChart({
@@ -50,16 +44,17 @@ export function StockBubbleChart({
       .append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`)
 
-    const points = stocks
+    // X = realized_vol_63 (%), Y = ret_3m (%)
+    const validPoints = stocks
       .map(s => ({
         ...s,
-        x: s.ret_3m        != null ? parseFloat(s.ret_3m)        : NaN,
-        y: s.rs_pctile_3m  != null ? parseFloat(s.rs_pctile_3m)  : NaN,
-        r: s.position_size_pct != null ? parseFloat(s.position_size_pct) : 0.005,
+        x: s.realized_vol_63 != null ? parseFloat(s.realized_vol_63) * 100 : NaN,
+        y: s.ret_3m           != null ? parseFloat(s.ret_3m)          * 100 : NaN,
+        r: parseFloat(s.position_size_pct ?? '0.005'),
       }))
       .filter(p => !isNaN(p.x) && !isNaN(p.y))
 
-    if (points.length === 0) {
+    if (validPoints.length === 0) {
       svg.append('text')
         .attr('x', W / 2).attr('y', H / 2)
         .attr('text-anchor', 'middle')
@@ -70,50 +65,82 @@ export function StockBubbleChart({
       return
     }
 
-    const xExt = d3.extent(points, p => p.x) as [number, number]
-    const xPad = (xExt[1] - xExt[0]) * 0.12 || 0.05
-    const xDomLo = xExt[0] - xPad
-    const xDomHi = xExt[1] + xPad
+    const xExt = d3.extent(validPoints, p => p.x) as [number, number]
+    const xPad = (xExt[1] - xExt[0]) * 0.12 || 1
     const xScale = d3.scaleLinear()
-      .domain([xDomLo, xDomHi])
+      .domain([Math.max(0, xExt[0] - xPad), xExt[1] + xPad])
       .range([0, W])
 
+    const yExt = d3.extent(validPoints, p => p.y) as [number, number]
+    const yPad = (yExt[1] - yExt[0]) * 0.12 || 2
     const yScale = d3.scaleLinear()
-      .domain([0, 1])
+      .domain([yExt[0] - yPad, yExt[1] + yPad])
       .range([H, 0])
 
     const rScale = d3.scaleSqrt()
-      .domain([0, d3.max(points, p => p.r) ?? 0.05])
-      .range([4, 22])
+      .domain([0, d3.max(validPoints, p => p.r) ?? 0.05])
+      .range([4, 24])
 
-    const midX = xScale(0)
-    const midY = yScale(0.5)
+    // Crosshair: X = median volatility, Y = 0% return
+    const medianVol = d3.median(validPoints, p => p.x) ?? 0
+    const midX = xScale(medianVol)
+    const midY = yScale(0)
 
-    // Quadrant tints
-    // X = 3M return (right = positive return), Y = RS percentile (up = top-ranked)
+    // Quadrant tints: top-left=QUALITY UPTREND, top-right=HIGH BETA,
+    //                 bottom-left=QUIET DRIFT, bottom-right=DANGER ZONE
     const quads = [
-      { x: midX, y: 0,    w: W - midX, h: midY,     label: 'LEADERS',    color: '#22c55e' },
-      { x: 0,    y: 0,    w: midX,     h: midY,     label: 'RESILIENT',  color: '#1D9E75' },
-      { x: midX, y: midY, w: W - midX, h: H - midY, label: 'RISING',     color: '#f59e0b' },
-      { x: 0,    y: midY, w: midX,     h: H - midY, label: 'LAGGARDS',   color: '#ef4444' },
+      {
+        x: 0,    y: 0,    w: midX,     h: midY,
+        label: 'QUALITY UPTREND', sub: 'low risk · positive return',
+        bg: '#e2f0e8', textColor: '#2F6B43',
+      },
+      {
+        x: midX, y: 0,    w: W - midX, h: midY,
+        label: 'HIGH BETA', sub: 'high risk · positive return',
+        bg: '#f5f0e8', textColor: '#B8860B',
+      },
+      {
+        x: 0,    y: midY, w: midX,     h: H - midY,
+        label: 'QUIET DRIFT', sub: 'low risk · negative return',
+        bg: '#e8f0f5', textColor: '#25394A',
+      },
+      {
+        x: midX, y: midY, w: W - midX, h: H - midY,
+        label: 'DANGER ZONE', sub: 'high risk · negative return',
+        bg: '#f5e8e8', textColor: '#B0492C',
+      },
     ]
+
     quads.forEach(q => {
       svg.append('rect')
         .attr('x', q.x).attr('y', q.y)
         .attr('width', q.w).attr('height', q.h)
-        .attr('fill', q.color).attr('opacity', 0.04)
+        .attr('fill', q.bg).attr('opacity', 0.35)
+
+      // Main label (top of quadrant if positive-return half, bottom if negative)
+      const isTop = q.y === 0
       svg.append('text')
         .attr('x', q.x + q.w / 2)
-        .attr('y', q.y + (q.y === 0 ? 14 : q.h - 6))
+        .attr('y', isTop ? q.y + 14 : q.y + q.h - 14)
         .attr('text-anchor', 'middle')
         .attr('font-family', 'var(--font-sans)')
         .attr('font-size', 8).attr('font-weight', 700)
         .attr('letter-spacing', 1.5)
-        .attr('fill', q.color).attr('opacity', 0.5)
+        .attr('fill', q.textColor).attr('opacity', 0.65)
         .text(q.label)
+
+      // Sub-label
+      svg.append('text')
+        .attr('x', q.x + q.w / 2)
+        .attr('y', isTop ? q.y + 24 : q.y + q.h - 4)
+        .attr('text-anchor', 'middle')
+        .attr('font-family', 'var(--font-sans)')
+        .attr('font-size', 7)
+        .attr('fill', q.textColor).attr('opacity', 0.40)
+        .text(q.sub)
     })
 
-    // Mid lines
+    // Crosshair lines
     svg.append('line')
       .attr('x1', midX).attr('x2', midX)
       .attr('y1', 0).attr('y2', H)
@@ -128,16 +155,27 @@ export function StockBubbleChart({
     // X axis
     svg.append('g')
       .attr('transform', `translate(0,${H})`)
-      .call(d3.axisBottom(xScale).tickFormat(v => `${(+v * 100).toFixed(0)}%`).ticks(7).tickSize(0))
+      .call(
+        d3.axisBottom(xScale)
+          .tickFormat(v => `${(+v).toFixed(0)}%`)
+          .ticks(7)
+          .tickSize(0)
+      )
       .call(ax => {
         ax.select('.domain').remove()
         ax.selectAll('.tick text')
           .attr('font-family', 'var(--font-sans)').attr('font-size', 9)
           .attr('fill', '#94a3b8').attr('dy', 12)
       })
-    // Y axis
+
+    // Y axis — +/- sign format
     svg.append('g')
-      .call(d3.axisLeft(yScale).tickFormat(v => `${(+v * 100).toFixed(0)}%`).ticks(5).tickSize(0))
+      .call(
+        d3.axisLeft(yScale)
+          .tickFormat(v => `${+v >= 0 ? '+' : ''}${(+v).toFixed(0)}%`)
+          .ticks(5)
+          .tickSize(0)
+      )
       .call(ax => {
         ax.select('.domain').remove()
         ax.selectAll('.tick text')
@@ -145,17 +183,18 @@ export function StockBubbleChart({
           .attr('fill', '#94a3b8').attr('dx', -6)
       })
 
+    // Axis labels
     svg.append('text')
       .attr('x', W / 2).attr('y', H + 50).attr('text-anchor', 'middle')
       .attr('font-family', 'var(--font-sans)').attr('font-size', 10).attr('fill', '#64748b')
-      .text('3-Month Absolute Return →')
+      .text('Volatility 63D (%) →')
     svg.append('text')
       .attr('transform', 'rotate(-90)')
       .attr('x', -H / 2).attr('y', -42).attr('text-anchor', 'middle')
       .attr('font-family', 'var(--font-sans)').attr('font-size', 10).attr('fill', '#64748b')
-      .text('↑ RS Percentile vs Peers')
+      .text('↑ 3M Return (%)')
 
-    // Tooltip in body for portal-like behavior
+    // Tooltip
     const tip = d3.select(document.body)
       .append('div')
       .style('position', 'fixed').style('pointer-events', 'none')
@@ -166,15 +205,15 @@ export function StockBubbleChart({
       .style('z-index', '9999').style('box-shadow', '0 2px 8px rgba(0,0,0,0.08)')
       .style('min-width', '160px')
 
-    const node = svg.selectAll<SVGGElement, typeof points[0]>('.stock-node')
-      .data(points).enter().append('g')
+    const node = svg.selectAll<SVGGElement, typeof validPoints[0]>('.stock-node')
+      .data(validPoints).enter().append('g')
       .attr('class', 'stock-node').style('cursor', 'pointer')
 
     node.append('circle')
       .attr('cx', p => xScale(p.x)).attr('cy', p => yScale(p.y))
       .attr('r', p => rScale(p.r))
-      .attr('fill', p => colorFor(p)).attr('fill-opacity', 0.18)
-      .attr('stroke', p => colorFor(p)).attr('stroke-width', 1.5)
+      .attr('fill', p => colorFor(p.rs_state)).attr('fill-opacity', 0.18)
+      .attr('stroke', p => colorFor(p.rs_state)).attr('stroke-width', 1.5)
 
     node.append('text')
       .attr('x', p => xScale(p.x))
@@ -182,27 +221,31 @@ export function StockBubbleChart({
       .attr('text-anchor', 'middle')
       .attr('font-family', 'var(--font-sans)')
       .attr('font-size', 7).attr('font-weight', 600)
-      .attr('fill', p => colorFor(p))
+      .attr('fill', p => colorFor(p.rs_state))
       .attr('pointer-events', 'none')
       .text(p => p.symbol.length > 8 ? p.symbol.slice(0, 8) : p.symbol)
 
     node
       .on('mouseenter', function (event, p) {
         d3.select(this).select('circle').attr('fill-opacity', 0.32).attr('stroke-width', 2.5)
+        const retColor = p.y >= 0 ? '#2F6B43' : '#B0492C'
+        const retSign  = p.y >= 0 ? '+' : ''
         tip.style('opacity', '1')
           .style('left', `${(event.clientX as number) + 14}px`)
           .style('top',  `${(event.clientY as number) - 30}px`)
           .html(`
-            <div style="font-weight:700;margin-bottom:4px">${p.symbol}</div>
-            <div style="color:#64748b;font-size:10px;margin-bottom:4px">${p.company_name}</div>
-            <div style="color:#64748b">3M Return: <span style="color:${p.x >= 0 ? '#22c55e' : '#ef4444'}">${p.x >= 0 ? '+' : ''}${(p.x * 100).toFixed(1)}%</span></div>
-            <div style="color:#64748b">RS pctile: <span style="color:#1e293b">${(p.y * 100).toFixed(0)}th</span></div>
+            <div style="font-weight:700;margin-bottom:2px">${p.symbol}</div>
+            <div style="color:#64748b;font-size:10px;margin-bottom:6px">${p.company_name}</div>
+            <div style="color:#64748b">3M Return: <span style="color:${retColor}">${retSign}${p.y.toFixed(1)}%</span></div>
+            <div style="color:#64748b">Volatility 63D: <span style="color:#1e293b">${p.x.toFixed(1)}%</span></div>
             <div style="color:#64748b">Position: <span style="color:#1e293b">${(p.r * 100).toFixed(2)}%</span></div>
             <div style="margin-top:4px;color:#64748b">${p.rs_state ?? '—'} · ${p.momentum_state ?? '—'}</div>
           `)
       })
       .on('mousemove', function (event) {
-        tip.style('left', `${(event.clientX as number) + 14}px`).style('top', `${(event.clientY as number) - 30}px`)
+        tip
+          .style('left', `${(event.clientX as number) + 14}px`)
+          .style('top',  `${(event.clientY as number) - 30}px`)
       })
       .on('mouseleave', function () {
         d3.select(this).select('circle').attr('fill-opacity', 0.18).attr('stroke-width', 1.5)
@@ -219,28 +262,23 @@ export function StockBubbleChart({
   return (
     <div ref={wrapRef} className="relative">
       <svg ref={svgRef} className="w-full" />
-      <div className="flex items-center gap-4 mt-2 font-sans text-[11px] text-ink-tertiary flex-wrap">
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#22c55e' }} />
-          Leader / Strong
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#1D9E75' }} />
-          Emerging / Consolidating
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#f59e0b' }} />
-          Weak
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#ef4444' }} />
-          Laggard
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#94a3b8' }} />
-          Average
-        </span>
-        <span className="ml-auto text-ink-tertiary/70">X = 3M return · Y = RS percentile · Size = position size</span>
+      <div className="flex flex-wrap items-center gap-3 mt-2 pt-2 border-t border-paper-rule/40">
+        {([
+          ['Leader',         '#2F6B43'],
+          ['Strong',         '#1D9E75'],
+          ['Emerging',       '#25394A'],
+          ['Consolidating',  '#B8860B'],
+          ['Average',        '#8C8278'],
+          ['Weak / Laggard', '#B0492C'],
+        ] as [string, string][]).map(([label, color]) => (
+          <div key={label} className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: color }} />
+            <span className="font-sans text-[10px] text-ink-tertiary">{label}</span>
+          </div>
+        ))}
+        <div className="ml-auto font-sans text-[10px] text-ink-tertiary">
+          Bubble size = position weight
+        </div>
       </div>
     </div>
   )

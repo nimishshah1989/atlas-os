@@ -1,20 +1,9 @@
 'use client'
-import { useState, useMemo, useCallback } from 'react'
+// allow-large: single cohesive D3 component — axes, quadrants, tooltip, legend, filter chips all belong together
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import {
-  ScatterChart,
-  Scatter,
-  XAxis,
-  YAxis,
-  ZAxis,
-  Tooltip,
-  ReferenceLine,
-  ReferenceArea,
-  ResponsiveContainer,
-  Cell,
-} from 'recharts'
+import * as d3 from 'd3'
 import type { StockRowWithSector } from '@/lib/queries/stocks'
-import { bubbleColor } from '@/lib/chart-colors'
 
 type Period = '1M' | '3M' | '6M' | '1Y'
 type DisplayFilter = 'n100' | 'n500' | 'all'
@@ -26,92 +15,62 @@ const PERIOD_RET_KEY: Record<Period, keyof StockRowWithSector> = {
   '1Y': 'ret_12m',
 }
 
+const PERIOD_LABEL: Record<Period, string> = {
+  '1M': '1M', '3M': '3M', '6M': '6M', '1Y': '1Y',
+}
+
 const DISPLAY_FILTERS: { key: DisplayFilter; label: string }[] = [
   { key: 'n100', label: 'N100' },
   { key: 'n500', label: 'N500' },
   { key: 'all',  label: 'All' },
 ]
 
+const LEGEND = [
+  { color: '#2F6B43', label: 'Leader' },
+  { color: '#1D9E75', label: 'Strong' },
+  { color: '#25394A', label: 'Emerging' },
+  { color: '#B8860B', label: 'Consolidating' },
+  { color: '#8C8278', label: 'Average' },
+  { color: '#B0492C', label: 'Weak / Laggard' },
+]
+
 // Max return (absolute) to include — outliers beyond this distort the Y-axis
-const RET_CAP = 1.5    // 150%
+const RET_CAP = 1.5   // 150%
 // Max annualized vol to include
-const VOL_CAP = 120    // 120%
+const VOL_CAP = 120   // 120%
 
-
-type BubblePoint = {
-  x: number   // annualized vol %
-  y: number   // return %
-  z: number   // normalized log volume
-  symbol: string
-  company: string
-  sector: string
-  color: string
-  rs_state: string | null
-  mom_state: string | null
+function volumeToRadius(vol: number | null): number {
+  if (!vol || vol <= 0) return 5
+  const log = Math.log10(Math.max(1000, vol))
+  // ETF avg volumes for Indian stocks are typically 50K–50M shares.
+  // log10(50K)=4.7, log10(50M)=7.7. Map linearly to radius 6–42 px.
+  return Math.min(42, 6 + (log - 3) * 6)
 }
 
-function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: BubblePoint }> }) {
-  if (!active || !payload?.length) return null
-  const d = payload[0].payload
-  return (
-    <div className="bg-paper border border-paper-rule rounded-sm shadow-md px-3 py-2 font-sans text-xs max-w-[220px]">
-      <div className="font-semibold text-ink-primary">{d.symbol}</div>
-      <div className="text-ink-tertiary text-[10px] mb-1 truncate">{d.company}</div>
-      <div className="text-ink-secondary mb-1.5">{d.sector}</div>
-      <div className="space-y-0.5 border-t border-paper-rule/40 pt-1.5">
-        <div className="text-ink-secondary">
-          Return: <span className={d.y >= 0 ? 'text-signal-pos font-medium' : 'text-signal-neg font-medium'}>
-            {d.y >= 0 ? '+' : ''}{d.y.toFixed(1)}%
-          </span>
-        </div>
-        <div className="text-ink-secondary">Volatility (63D): {d.x.toFixed(0)}%</div>
-        <div className="text-ink-tertiary text-[10px] mt-1">{d.rs_state ?? '—'} · {d.mom_state ?? '—'}</div>
-      </div>
-    </div>
-  )
+function navStateColor(rs_state: string | null, _mom_state: string | null): string {
+  if (rs_state === 'Leader')        return '#2F6B43'
+  if (rs_state === 'Strong')        return '#1D9E75'
+  if (rs_state === 'Emerging')      return '#25394A'
+  if (rs_state === 'Consolidating') return '#B8860B'
+  if (rs_state === 'Weak')          return '#B0492C'
+  if (rs_state === 'Laggard')       return '#B0492C'
+  return '#8C8278'
 }
 
-// Custom SVG label for each ReferenceArea quadrant
-// viewBox gives pixel bounds of the area inside the chart
-type QuadrantPos = 'tl' | 'tr' | 'bl' | 'br'
-function quadLabel(pos: QuadrantPos, text: string, sub: string, color: string) {
-  return function QuadLabel({ viewBox }: { viewBox?: { x: number; y: number; width: number; height: number } }) {
-    if (!viewBox) return null
-    const { x, y, width, height } = viewBox
-    const isRight = pos === 'tr' || pos === 'br'
-    const isBottom = pos === 'bl' || pos === 'br'
-    const tx = isRight ? x + width - 10 : x + 10
-    const ty1 = isBottom ? y + height - 18 : y + 14
-    const ty2 = isBottom ? y + height - 6  : y + 24
-    const anchor = isRight ? 'end' : 'start'
-    return (
-      <g>
-        <text
-          x={tx} y={ty1}
-          fill={color} fillOpacity={0.55}
-          fontSize={9} fontWeight={700}
-          fontFamily="var(--font-sans)"
-          textAnchor={anchor}
-          letterSpacing={1.2}
-        >
-          {text.toUpperCase()}
-        </text>
-        <text
-          x={tx} y={ty2}
-          fill={color} fillOpacity={0.35}
-          fontSize={8}
-          fontFamily="var(--font-sans)"
-          textAnchor={anchor}
-        >
-          {sub}
-        </text>
-      </g>
-    )
-  }
+function formatVolume(vol: number | null): string {
+  if (vol == null || vol <= 0) return '—'
+  if (vol >= 10_000_000) return `${(vol / 10_000_000).toFixed(1)} Cr`
+  return `${(vol / 100_000).toFixed(1)} L`
 }
 
 export function StockBubbleChart({ stocks }: { stocks: StockRowWithSector[] }) {
-  const router = useRouter()
+  const router     = useRouter()
+  const routerRef  = useRef(router)
+  routerRef.current = router
+
+  const svgRef  = useRef<SVGSVGElement>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+
   const [period, setPeriod] = useState<Period>('3M')
   const [displayFilter, setDisplayFilter] = useState<DisplayFilter>('n500')
 
@@ -121,74 +80,243 @@ export function StockBubbleChart({ stocks }: { stocks: StockRowWithSector[] }) {
     return stocks
   }, [stocks, displayFilter])
 
-  // Compute log-volume range for normalization (per displayed cohort)
-  const { logVolMin, logVolMax } = useMemo(() => {
-    const logs = filteredStocks
-      .map(s => s.avg_volume_20 != null ? Math.log10(parseFloat(s.avg_volume_20) + 1) : null)
-      .filter((v): v is number => v != null && isFinite(v))
-    if (logs.length < 2) return { logVolMin: 4, logVolMax: 8 }
-    return { logVolMin: Math.min(...logs), logVolMax: Math.max(...logs) }
-  }, [filteredStocks])
-
-  const data = useMemo<BubblePoint[]>(() => {
-    const retKey = PERIOD_RET_KEY[period]
-    return filteredStocks.flatMap(s => {
-      const retRaw = s[retKey] != null ? parseFloat(s[retKey] as string) : null
-      const volRaw = s.realized_vol_63 != null ? parseFloat(s.realized_vol_63) * 100 : null
-
-      if (retRaw == null || volRaw == null) return []
-      if (Math.abs(retRaw) > RET_CAP || volRaw > VOL_CAP) return []
-
-      const logVol = s.avg_volume_20 != null ? Math.log10(parseFloat(s.avg_volume_20) + 1) : null
-      const range = logVolMax - logVolMin || 1
-      const z = logVol != null
-        ? 18 + Math.round(((logVol - logVolMin) / range) * 242)
-        : 35
-
-      return [{
-        x: volRaw,
-        y: retRaw * 100,
-        z,
-        symbol: s.symbol,
-        company: s.company_name,
-        sector: s.sector,
-        color: bubbleColor(s.rs_state, s.momentum_state),
-        rs_state: s.rs_state,
-        mom_state: s.momentum_state,
-      }]
-    })
-  }, [filteredStocks, period, logVolMin, logVolMax])
-
-  // Dynamic Y domain — pad 15% beyond actual range, capped
-  const [yMin, yMax] = useMemo(() => {
-    if (data.length === 0) return [-50, 80]
-    const ys = data.map(d => d.y)
-    const lo = Math.min(...ys), hi = Math.max(...ys)
-    const pad = Math.max((hi - lo) * 0.12, 8)
-    return [
-      Math.max(-75, Math.floor((lo - pad) / 10) * 10),
-      Math.min(150, Math.ceil((hi + pad) / 10) * 10),
-    ]
-  }, [data])
-
-  // Dynamic X midpoint — median volatility of plotted stocks, rounded to nearest 5
-  const volMedian = useMemo(() => {
-    if (data.length === 0) return 35
-    const xs = [...data.map(d => d.x)].sort((a, b) => a - b)
-    const raw = xs[Math.floor(xs.length / 2)]
-    return Math.round(raw / 5) * 5
-  }, [data])
-
-  const handleClick = useCallback((point: { payload?: BubblePoint }) => {
-    if (point?.payload?.symbol)
-      router.push(`/stocks/${encodeURIComponent(point.payload.symbol)}`)
-  }, [router])
-
   const countsByFilter = useMemo(() => ({
     n100: stocks.filter(s => s.in_nifty_100).length,
     n500: stocks.filter(s => s.in_nifty_500).length,
     all:  stocks.length,
   }), [stocks])
+
+  const visibleCount = useMemo(() => {
+    const retKey = PERIOD_RET_KEY[period]
+    return filteredStocks.filter(s => s[retKey] != null && s.realized_vol_63 != null).length
+  }, [filteredStocks, period])
+
+  useEffect(() => {
+    const container = wrapRef.current
+    const svgEl     = svgRef.current
+    if (!container || !svgEl) return
+
+    const retKey = PERIOD_RET_KEY[period]
+
+    const points = filteredStocks.flatMap(s => {
+      const retRaw = s[retKey] != null ? parseFloat(s[retKey] as string) : null
+      const volRaw = s.realized_vol_63 != null ? parseFloat(s.realized_vol_63) * 100 : null
+      if (retRaw == null || volRaw == null) return []
+      if (Math.abs(retRaw) > RET_CAP || volRaw > VOL_CAP) return []
+      const avgVol = s.avg_volume_20 != null ? parseFloat(s.avg_volume_20) : null
+      return [{
+        symbol:    s.symbol,
+        company:   s.company_name,
+        sector:    s.sector,
+        x:         volRaw,
+        y:         retRaw * 100,
+        r:         volumeToRadius(avgVol),
+        avgVol,
+        color:     navStateColor(s.rs_state, s.momentum_state),
+        rs_state:  s.rs_state,
+        mom_state: s.momentum_state,
+      }]
+    })
+
+    const margin = { top: 40, right: 48, bottom: 64, left: 64 }
+    const totalW = container.clientWidth
+    const totalH = 500
+    const W = totalW - margin.left - margin.right
+    const H = totalH - margin.top  - margin.bottom
+
+    d3.select(svgEl).selectAll('*').remove()
+    d3.select(svgEl).attr('width', totalW).attr('height', totalH)
+
+    if (points.length === 0) {
+      d3.select(svgEl).append('text')
+        .attr('x', totalW / 2).attr('y', totalH / 2)
+        .attr('text-anchor', 'middle')
+        .attr('font-family', 'var(--font-sans)').attr('font-size', 12).attr('fill', '#94a3b8')
+        .text('No stocks with data for this filter.')
+      return
+    }
+
+    const svg = d3.select(svgEl).append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`)
+
+    // Axes
+    const xExt = d3.extent(points, p => p.x) as [number, number]
+    const xPad = Math.max((xExt[1] - xExt[0]) * 0.10, 2)
+    const xScale = d3.scaleLinear()
+      .domain([Math.max(0, xExt[0] - xPad), Math.min(VOL_CAP, xExt[1] + xPad)])
+      .range([0, W])
+
+    const yExt = d3.extent(points, p => p.y) as [number, number]
+    const yPad = Math.max((yExt[1] - yExt[0]) * 0.12, 8)
+    const yScale = d3.scaleLinear()
+      .domain([
+        Math.max(-75, Math.floor((yExt[0] - yPad) / 10) * 10),
+        Math.min(150, Math.ceil( (yExt[1] + yPad) / 10) * 10),
+      ])
+      .range([H, 0])
+
+    // Crosshair: X at median vol, Y at 0% return
+    const xMed = d3.median(points, p => p.x) ?? 0
+    const xMid = xScale(xMed)
+    const yMid = yScale(0)
+
+    // Quadrant tints
+    const quads = [
+      { x: 0,    y: 0,    w: xMid,      h: yMid,     label: 'QUALITY UPTREND', sub: 'low risk · positive return',  bg: '#e2f0e8', text: '#2F6B43' },
+      { x: xMid, y: 0,    w: W - xMid,  h: yMid,     label: 'HIGH BETA',       sub: 'high risk · positive return', bg: '#f5f0e8', text: '#B8860B' },
+      { x: 0,    y: yMid, w: xMid,      h: H - yMid, label: 'QUIET DRIFT',     sub: 'low risk · negative return',  bg: '#e8f0f5', text: '#25394A' },
+      { x: xMid, y: yMid, w: W - xMid,  h: H - yMid, label: 'DANGER ZONE',    sub: 'high risk · negative return', bg: '#f5e8e8', text: '#B0492C' },
+    ]
+    quads.forEach(q => {
+      svg.append('rect')
+        .attr('x', q.x).attr('y', q.y)
+        .attr('width', q.w).attr('height', q.h)
+        .attr('fill', q.bg).attr('opacity', 0.45)
+      svg.append('text')
+        .attr('x', q.x + q.w / 2)
+        .attr('y', q.y + (q.y === 0 ? 14 : q.h - 14))
+        .attr('text-anchor', 'middle')
+        .attr('font-family', 'var(--font-sans)').attr('font-size', 8).attr('font-weight', 700)
+        .attr('letter-spacing', 1.5).attr('fill', q.text).attr('opacity', 0.65)
+        .text(q.label)
+      svg.append('text')
+        .attr('x', q.x + q.w / 2)
+        .attr('y', q.y + (q.y === 0 ? 26 : q.h - 4))
+        .attr('text-anchor', 'middle')
+        .attr('font-family', 'var(--font-sans)').attr('font-size', 7)
+        .attr('fill', q.text).attr('opacity', 0.40)
+        .text(q.sub)
+    })
+
+    // Crosshair lines
+    svg.append('line')
+      .attr('x1', xMid).attr('x2', xMid).attr('y1', 0).attr('y2', H)
+      .attr('stroke', '#94a3b8').attr('stroke-width', 1).attr('stroke-dasharray', '4 3')
+    svg.append('line')
+      .attr('x1', 0).attr('x2', W).attr('y1', yMid).attr('y2', yMid)
+      .attr('stroke', '#94a3b8').attr('stroke-width', 1).attr('stroke-dasharray', '4 3')
+
+    // 0% label on Y axis
+    svg.append('text')
+      .attr('x', W + 4).attr('y', yMid + 3)
+      .attr('font-family', 'var(--font-sans)').attr('font-size', 8).attr('fill', '#94a3b8')
+      .text('0%')
+
+    // Median vol label on X crosshair
+    svg.append('text')
+      .attr('x', xMid + 3).attr('y', 10)
+      .attr('font-family', 'var(--font-sans)').attr('font-size', 8).attr('fill', '#94a3b8')
+      .text(`${xMed.toFixed(0)}% vol`)
+
+    // Bottom X axis
+    svg.append('g')
+      .attr('transform', `translate(0,${H})`)
+      .call(d3.axisBottom(xScale).tickFormat(v => `${(+v).toFixed(0)}%`).ticks(6).tickSize(0))
+      .call(ax => {
+        ax.select('.domain').remove()
+        ax.selectAll('.tick text')
+          .attr('font-family', 'var(--font-sans)').attr('font-size', 9)
+          .attr('fill', '#94a3b8').attr('dy', 12)
+      })
+
+    // Left Y axis
+    svg.append('g')
+      .call(d3.axisLeft(yScale)
+        .tickFormat(v => `${(+v) >= 0 ? '+' : ''}${(+v).toFixed(0)}%`)
+        .ticks(6).tickSize(0))
+      .call(ax => {
+        ax.select('.domain').remove()
+        ax.selectAll('.tick text')
+          .attr('font-family', 'var(--font-sans)').attr('font-size', 9)
+          .attr('fill', '#94a3b8').attr('dx', -6)
+      })
+
+    svg.append('text')
+      .attr('x', W / 2).attr('y', H + 50)
+      .attr('text-anchor', 'middle')
+      .attr('font-family', 'var(--font-sans)').attr('font-size', 10).attr('fill', '#64748b')
+      .text('Volatility 63D (%) →')
+
+    svg.append('text')
+      .attr('transform', 'rotate(-90)')
+      .attr('x', -H / 2).attr('y', -50)
+      .attr('text-anchor', 'middle')
+      .attr('font-family', 'var(--font-sans)').attr('font-size', 10).attr('fill', '#64748b')
+      .text(`↑ ${PERIOD_LABEL[period]} Return (%)`)
+
+    // Tooltip (fixed position so it escapes overflow:hidden parents)
+    const tip = d3.select(document.body).append('div')
+      .style('position', 'fixed').style('pointer-events', 'none')
+      .style('opacity', '0').style('background', '#fff')
+      .style('border', '1px solid #e2e8f0').style('border-radius', '2px')
+      .style('padding', '8px 10px').style('font-family', 'var(--font-sans)')
+      .style('font-size', '11px').style('color', '#1e293b')
+      .style('z-index', '9999').style('box-shadow', '0 2px 8px rgba(0,0,0,0.08)')
+      .style('min-width', '210px').style('max-width', '280px')
+
+    // Render largest bubbles first (behind smaller ones)
+    const sorted = [...points].sort((a, b) => b.r - a.r)
+
+    const node = svg.selectAll<SVGGElement, typeof sorted[0]>('.stock-node')
+      .data(sorted).enter().append('g')
+      .attr('class', 'stock-node').style('cursor', 'pointer')
+
+    node.append('circle')
+      .attr('cx', p => xScale(p.x)).attr('cy', p => yScale(p.y))
+      .attr('r',  p => p.r)
+      .attr('fill',         p => p.color)
+      .attr('fill-opacity', 0.70)
+      .attr('stroke',       p => p.color)
+      .attr('stroke-width', 0.5)
+      .attr('stroke-opacity', 0.85)
+
+    // Label large bubbles only (r >= 16px), truncated to 6 chars
+    node.filter(p => p.r >= 16)
+      .append('text')
+      .attr('x', p => xScale(p.x)).attr('y', p => yScale(p.y) + 3)
+      .attr('text-anchor', 'middle')
+      .attr('font-family', 'var(--font-sans)').attr('font-size', 7).attr('font-weight', 600)
+      .attr('fill', p => p.color).attr('pointer-events', 'none')
+      .text(p => p.symbol.length > 6 ? p.symbol.slice(0, 6) : p.symbol)
+
+    node
+      .on('mouseenter', function (event, p) {
+        d3.select(this).select('circle').attr('fill-opacity', 0.90).attr('stroke-width', 2)
+        tip.style('opacity', '1')
+          .style('left', `${(event.clientX as number) + 14}px`)
+          .style('top',  `${(event.clientY as number) - 30}px`)
+          .html(`
+            <div style="font-weight:700;margin-bottom:2px;font-size:12px;line-height:1.3">${p.symbol}</div>
+            <div style="color:#64748b;font-size:10px;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px">${p.company}</div>
+            <div style="border-top:1px solid #f1f5f9;padding-top:5px;display:grid;gap:3px">
+              <div style="color:#64748b">${PERIOD_LABEL[period]} Return:
+                <span style="font-weight:600;color:${p.y >= 0 ? '#2F6B43' : '#B0492C'}">
+                  ${p.y >= 0 ? '+' : ''}${p.y.toFixed(1)}%
+                </span>
+              </div>
+              <div style="color:#64748b">Volatility 63D: <span style="color:#1e293b">${p.x.toFixed(1)}%</span></div>
+              <div style="color:#64748b">Avg Volume 20D: <span style="color:#1e293b">${formatVolume(p.avgVol)}</span></div>
+              <div style="color:#64748b">RS State: <span style="color:#1e293b">${p.rs_state ?? '—'}</span></div>
+              <div style="color:#64748b">Momentum State: <span style="color:#1e293b">${p.mom_state ?? '—'}</span></div>
+              <div style="color:#64748b">Sector: <span style="color:#1e293b">${p.sector}</span></div>
+            </div>
+          `)
+      })
+      .on('mousemove', function (event) {
+        tip.style('left', `${(event.clientX as number) + 14}px`)
+           .style('top',  `${(event.clientY as number) - 30}px`)
+      })
+      .on('mouseleave', function () {
+        d3.select(this).select('circle').attr('fill-opacity', 0.70).attr('stroke-width', 0.5)
+        tip.style('opacity', '0')
+      })
+      .on('click', (_, p) => {
+        tip.style('opacity', '0')
+        routerRef.current.push(`/stocks/${encodeURIComponent(p.symbol)}`)
+      })
+
+    return () => { tip.remove() }
+  }, [filteredStocks, period])
 
   return (
     <div className="border border-paper-rule rounded-sm bg-paper">
@@ -225,105 +353,26 @@ export function StockBubbleChart({ stocks }: { stocks: StockRowWithSector[] }) {
       {/* Description */}
       <div className="px-5 py-2 border-b border-paper-rule/40 bg-paper-rule/5">
         <p className="font-sans text-[11px] text-ink-secondary leading-relaxed">
-          <span className="font-semibold">Risk vs Return:</span>{' '}
-          X = annualized 63-day volatility · Y = {period} return · Bubble size = 20-day avg volume (larger = more liquid).
-          Ideal stocks sit top-left. Quadrant split at median vol ({volMedian}%). Click any bubble to open deep-dive.
+          X = volatility 63D · Y = {period} return · Bubble = avg volume 20D · Color = RS state · Click for deep-dive
         </p>
       </div>
 
       {/* Legend */}
       <div className="px-5 pt-2 pb-1 flex flex-wrap items-center gap-3 border-b border-paper-rule/40">
-        {[
-          { color: '#2F6B43', label: 'Leader' },
-          { color: '#1D9E75', label: 'Strong' },
-          { color: '#25394A', label: 'Emerging' },
-          { color: '#B8860B', label: 'Consolidating' },
-          { color: '#8C8278', label: 'Average' },
-          { color: '#B0492C', label: 'Weak / Laggard' },
-        ].map(l => (
+        {LEGEND.map(l => (
           <div key={l.label} className="flex items-center gap-1.5">
             <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: l.color }} />
             <span className="font-sans text-[10px] text-ink-tertiary">{l.label}</span>
           </div>
         ))}
         <div className="ml-auto font-sans text-[10px] text-ink-tertiary">
-          {data.length} stocks · size = avg volume
+          Bubble size = avg volume 20D · {visibleCount} stocks
         </div>
       </div>
 
-      {/* Chart */}
-      <div className="px-2 py-4" style={{ height: 480 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <ScatterChart margin={{ top: 10, right: 24, bottom: 42, left: 36 }}>
-
-            {/* Quadrant background tints */}
-            <ReferenceArea
-              x1={0} x2={volMedian} y1={0} y2={yMax}
-              fill="#22c55e" fillOpacity={0.04}
-              label={quadLabel('tl', 'Quality Uptrend', 'low vol · positive return', '#22c55e')}
-            />
-            <ReferenceArea
-              x1={volMedian} x2={VOL_CAP} y1={0} y2={yMax}
-              fill="#f59e0b" fillOpacity={0.04}
-              label={quadLabel('tr', 'High Beta', 'high vol · positive return', '#f59e0b')}
-            />
-            <ReferenceArea
-              x1={0} x2={volMedian} y1={yMin} y2={0}
-              fill="#94a3b8" fillOpacity={0.04}
-              label={quadLabel('bl', 'Quiet Drift', 'low vol · negative return', '#94a3b8')}
-            />
-            <ReferenceArea
-              x1={volMedian} x2={VOL_CAP} y1={yMin} y2={0}
-              fill="#ef4444" fillOpacity={0.05}
-              label={quadLabel('br', 'Danger Zone', 'high vol · negative return', '#ef4444')}
-            />
-
-            <XAxis
-              type="number"
-              dataKey="x"
-              domain={[0, VOL_CAP]}
-              tickFormatter={v => `${v.toFixed(0)}%`}
-              label={{ value: 'Annualized Volatility % (63-day) →', position: 'insideBottom', offset: -28, fontSize: 10, fill: '#94a3b8' }}
-              tick={{ fontSize: 10, fill: '#94a3b8' }}
-              tickCount={7}
-            />
-            <YAxis
-              type="number"
-              dataKey="y"
-              domain={[yMin, yMax]}
-              tickFormatter={v => `${v >= 0 ? '+' : ''}${v.toFixed(0)}%`}
-              label={{ value: `↑ ${period} Return`, angle: -90, position: 'insideLeft', offset: 14, fontSize: 10, fill: '#94a3b8' }}
-              tick={{ fontSize: 10, fill: '#94a3b8' }}
-              tickCount={6}
-            />
-            <ZAxis type="number" dataKey="z" range={[12, 320]} />
-            <Tooltip content={<CustomTooltip />} cursor={false} />
-
-            {/* Axis dividers */}
-            <ReferenceLine
-              y={0}
-              stroke="#cbd5e1" strokeDasharray="4 3" strokeWidth={1}
-            />
-            <ReferenceLine
-              x={volMedian}
-              stroke="#cbd5e1" strokeDasharray="4 3" strokeWidth={1}
-              label={{ value: `${volMedian}% vol`, position: 'insideTopRight', fontSize: 9, fill: '#94a3b8', dy: -4 }}
-            />
-
-            <Scatter data={data} onClick={handleClick} cursor="pointer">
-              {data.map((entry, i) => (
-                <Cell
-                  key={`cell-${i}`}
-                  fill={entry.color}
-                  fillOpacity={0.70}
-                  stroke={entry.color}
-                  strokeOpacity={0.85}
-                  strokeWidth={0.5}
-                />
-              ))}
-            </Scatter>
-          </ScatterChart>
-        </ResponsiveContainer>
+      {/* Chart canvas */}
+      <div ref={wrapRef} className="px-2 py-4">
+        <svg ref={svgRef} className="w-full" />
       </div>
     </div>
   )
