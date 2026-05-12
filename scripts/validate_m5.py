@@ -239,6 +239,7 @@ def _tier2_stock_gates(engine) -> None:
                 ON ss.sector_name = s.sector AND ss.date = d.date
             LEFT JOIN atlas.atlas_market_regime_daily mr ON mr.date = d.date
             WHERE s.rs_state NOT IN ('INSUFFICIENT_HISTORY','ILLIQUID','DISLOCATION_SUSPENDED')
+              AND d.date = (SELECT MAX(date) FROM atlas.atlas_stock_decisions_daily)
             ORDER BY RANDOM()
             LIMIT 50
             """,
@@ -306,6 +307,7 @@ def _tier2_stock_exits(engine) -> None:
             LEFT JOIN atlas.atlas_sector_states_daily ss
                 ON ss.sector_name = s.sector AND ss.date = d.date
             LEFT JOIN atlas.atlas_market_regime_daily mr ON mr.date = d.date
+            WHERE d.date = (SELECT MAX(date) FROM atlas.atlas_stock_decisions_daily)
             ORDER BY RANDOM()
             LIMIT 30
             """,
@@ -378,6 +380,7 @@ def _tier2_etf_gates(engine) -> None:
                 ON ss.sector_name = u.linked_sector AND ss.date = d.date
             LEFT JOIN atlas.atlas_market_regime_daily mr ON mr.date = d.date
             WHERE s.rs_state NOT IN ('INSUFFICIENT_HISTORY','ILLIQUID','DISLOCATION_SUSPENDED')
+              AND d.date = (SELECT MAX(date) FROM atlas.atlas_etf_decisions_daily)
             ORDER BY RANDOM()
             LIMIT 50
             """,
@@ -432,6 +435,7 @@ def _tier2_fund_recommendation(engine) -> None:
             LEFT JOIN atlas.atlas_market_regime_daily mr ON mr.date = d.date
             WHERE fs.nav_state IS NOT NULL
               AND fs.nav_state != 'DISLOCATION_SUSPENDED'
+              AND d.date = (SELECT MAX(date) FROM atlas.atlas_fund_decisions_daily)
             ORDER BY RANDOM()
             LIMIT 50
             """,
