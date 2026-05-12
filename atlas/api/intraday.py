@@ -20,6 +20,7 @@ import structlog
 from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 
 from atlas.db import get_engine
 
@@ -144,8 +145,22 @@ def get_rs_leaders(
         sql_str = _RS_LEADERS_BASE_SQL + _RS_LEADERS_ORDER_LIMIT
         params = {"n": n}
 
-    with engine.connect() as conn:
-        rows = conn.execute(text(sql_str), params).fetchall()
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(text(sql_str), params).fetchall()
+    except OperationalError as exc:
+        if "has not been populated" in str(exc):
+            log.warning("mv_rs_intraday_not_populated")
+            response.headers["Cache-Control"] = "public, max-age=30"
+            return IntradayLeadersResponse(
+                data=[],
+                meta={
+                    "note": "Intraday MV not yet populated — first bar after market open",
+                    "fetched_at": datetime.now(UTC).isoformat(),
+                    "source": "mv_rs_intraday",
+                },
+            )
+        raise
 
     row_count = len(rows)
     log.debug("rs_leaders_fetched", row_count=row_count, n=n, sector=sector)
