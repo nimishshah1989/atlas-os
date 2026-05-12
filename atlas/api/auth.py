@@ -32,6 +32,7 @@ _EXEMPT_PREFIXES = (
     "/agents.json",
     "/api/kite/login",  # SP08: KiteConnect OAuth — no user JWT at this point
     "/api/kite/callback",  # SP08: Zerodha redirect — called without our JWT
+    "/api/v1/intraday",  # SP08: intraday data — auth handled by Next.js proxy layer
 )
 
 
