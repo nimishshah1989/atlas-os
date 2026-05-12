@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 from datetime import date, timedelta
 
+import numpy as np
 import pandas as pd
 import structlog
 from sqlalchemy import text
@@ -95,6 +96,77 @@ def _load_universe(engine) -> pd.DataFrame:
         )
 
 
+def _load_regime(engine, start: date, end: date) -> pd.DataFrame:
+    """Load market regime state per date for conviction boost calculation."""
+    with open_compute_session(engine) as conn:
+        return pd.read_sql(
+            """
+            SELECT date, regime_state
+            FROM atlas.atlas_market_regime_daily
+            WHERE date BETWEEN %(start)s AND %(end)s
+            ORDER BY date
+            """,
+            conn,
+            params={"start": start, "end": end},
+        )
+
+
+def _boost_conviction(
+    signals: pd.DataFrame,
+    sector_pivot: pd.DataFrame,
+    regime_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Add sector (+10) and regime (+10) bonus to cts_conviction_score (vectorized).
+
+    Sector bonus: pivot_balance > 0.10 for the stock's (date, sector) → +10 pts
+    Regime bonus: regime_state == 'Risk-On' on that date → +10 pts
+    Also recomputes cts_action_confidence with the full 100-pt scale (threshold 55).
+
+    All operations are vectorized — no iterrows.
+    """
+    df = signals.copy()
+
+    # --- Sector bonus (vectorized via merge) ---
+    if (
+        not sector_pivot.empty
+        and "pivot_balance" in sector_pivot.columns
+        and "sector" in df.columns
+    ):
+        pivot_lookup = sector_pivot[["date", "sector", "pivot_balance"]].copy()
+        pivot_lookup["date"] = pd.to_datetime(pivot_lookup["date"]).dt.date
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+        df = df.merge(pivot_lookup, on=["date", "sector"], how="left", suffixes=("", "_pivot"))
+        sector_bonus = np.where(df["pivot_balance"].fillna(0.0) > 0.10, 10.0, 0.0)
+        df.drop(columns=["pivot_balance"], inplace=True, errors="ignore")
+    else:
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+        sector_bonus = np.zeros(len(df))
+
+    # --- Regime bonus (vectorized via merge) ---
+    if not regime_df.empty and "regime_state" in regime_df.columns:
+        regime_lookup = regime_df[["date", "regime_state"]].copy()
+        regime_lookup["date"] = pd.to_datetime(regime_lookup["date"]).dt.date
+        df = df.merge(regime_lookup, on="date", how="left")
+        regime_bonus = np.where(df["regime_state"].fillna("") == "Risk-On", 10.0, 0.0)
+        df.drop(columns=["regime_state"], inplace=True, errors="ignore")
+    else:
+        regime_bonus = np.zeros(len(df))
+
+    df["cts_conviction_score"] = (
+        df["cts_conviction_score"].fillna(0.0) + sector_bonus + regime_bonus
+    ).clip(0, 100)
+
+    rs_col = "rs_pctile_cross_sector"
+    rs_series = df[rs_col].fillna(0.0) if rs_col in df.columns else pd.Series(0.0, index=df.index)
+    df["cts_action_confidence"] = (
+        (df["stage"] == 2)
+        & df["is_ppc"].fillna(False)
+        & (rs_series >= 0.60)
+        & (df["cts_conviction_score"] >= 55)
+    )
+    return df
+
+
 def run_bulk(total_days: int = 504, *, dry_run: bool = False) -> None:
     engine = get_engine()
     thresholds = load_thresholds(engine)
@@ -164,11 +236,22 @@ def run_bulk(total_days: int = 504, *, dry_run: bool = False) -> None:
         log.info("dry_run_complete_no_writes")
         return
 
+    log.info("computing_sector_pivots")
+    pivot = compute_sector_pivot(today_signals)
+
+    log.info("boosting_conviction_scores")
+    regime_df = _load_regime(engine, min(target_dates), max(target_dates))
+    log.info("regime_loaded", rows=len(regime_df))
+    today_signals = _boost_conviction(today_signals, pivot, regime_df)
+    log.info(
+        "conviction_boosted",
+        action_confidence_count=int(today_signals["cts_action_confidence"].sum()),
+        mean_conviction=round(float(today_signals["cts_conviction_score"].mean()), 2),
+    )
+
     log.info("upserting_signals", rows=len(today_signals))
     _upsert_signals(engine, today_signals)
 
-    log.info("computing_sector_pivots")
-    pivot = compute_sector_pivot(today_signals)
     _upsert_pivot(engine, pivot)
 
     log.info("cts_bulk_backfill_complete", signal_rows=len(today_signals), pivot_rows=len(pivot))
@@ -195,14 +278,32 @@ def _upsert_signals(engine, df: pd.DataFrame) -> None:
         "trigger_level",
         "atr_14",
         "atr_slope",
+        "cts_conviction_score",
+        "cts_action_confidence",
     ]
     rows = df_to_pg_rows(df[cols])  # type: ignore[arg-type]
     bulk_upsert(engine, "atlas.atlas_cts_signals_daily", cols, rows, ["date", "instrument_id"])
 
 
 def _upsert_pivot(engine, df: pd.DataFrame) -> None:
-    cols = ["date", "sector", "ppc_count", "npc_count", "total_tradeable", "pivot_balance"]
-    rows = df_to_pg_rows(df[cols])  # type: ignore[arg-type]
+    cols = [
+        "date",
+        "sector",
+        "ppc_count",
+        "npc_count",
+        "total_tradeable",
+        "pivot_balance",
+        "stage2_count",
+        "stage2_pct",
+        "avg_ppc_conviction",
+        "action_alert_count",
+    ]
+    # Fill any missing columns gracefully (for partial pivot output)
+    pivot_df = df.copy()
+    for c in cols:
+        if c not in pivot_df.columns:
+            pivot_df[c] = None
+    rows = df_to_pg_rows(pivot_df[cols])  # type: ignore[arg-type]
     bulk_upsert(engine, "atlas.atlas_cts_sector_pivot_daily", cols, rows, ["date", "sector"])
 
 
