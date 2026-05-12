@@ -121,7 +121,12 @@ def detect_signals(
         & (close_pct <= npc_close)
         & out["is_pp_volume"].fillna(False)
         & (out["close"] < out["open"])
-        & (pd.to_numeric(out["stage"], errors="coerce").fillna(0).astype(int) >= npc_stage_max)
+        & (
+            pd.Series(pd.to_numeric(out["stage"], errors="coerce"), index=out.index)
+            .fillna(0)
+            .astype(int)
+            >= npc_stage_max
+        )
         & (rs_series <= npc_rs_max)
     ).fillna(False)
 
