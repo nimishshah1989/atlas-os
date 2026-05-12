@@ -150,15 +150,15 @@ def _etf_scalar(column: str) -> QueryFn:
 
 
 def _fund_scalar(column: str) -> QueryFn:
-    """Fetch one column from atlas_fund_lens_daily."""
+    """Fetch one column from atlas_fund_lens_daily. PK is mstar_id."""
 
     def _fn(conn: Connection, pk: str) -> Decimal | str | None:
         parts = [p.strip() for p in pk.split(",", 1)]
-        instrument_id = _esc(parts[0])
+        mstar_id = _esc(parts[0])
         date_clause = f"AND date = '{_esc(parts[1])}'" if len(parts) > 1 else ""
         sql = text(
             f"SELECT {column} FROM atlas.atlas_fund_lens_daily "
-            f"WHERE instrument_id = '{instrument_id}' {date_clause} "
+            f"WHERE mstar_id = '{mstar_id}' {date_clause} "
             f"ORDER BY date DESC LIMIT 1"
         )
         row = conn.execute(sql).fetchone()
@@ -240,9 +240,16 @@ LOOKUPS: dict[str, QueryFn] = {
     # Fund metrics
     "fund.rs_pctile_3m": _fund_scalar("rs_pctile_3m"),
     "fund.category_state": _fund_scalar("category_state"),
+    "fund.nav_state": _fund_scalar("nav_state"),
+    "fund.composition_state": _fund_scalar("composition_state"),
     # Market regime
     "regime.regime_state": _regime_scalar("regime_state"),
     "regime.breadth_score": _regime_scalar("breadth_score"),
+    "regime.deployment_multiplier": _regime_scalar("deployment_multiplier"),
+    "regime.india_vix": _regime_scalar("india_vix"),
+    "regime.pct_above_ema_50": _regime_scalar("pct_above_ema_50"),
+    "regime.ad_ratio": _regime_scalar("ad_ratio"),
+    "regime.mcclellan_oscillator": _regime_scalar("mcclellan_oscillator"),
 }
 
 

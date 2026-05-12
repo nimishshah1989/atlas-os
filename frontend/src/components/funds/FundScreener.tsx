@@ -245,10 +245,20 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
                       <td className="px-3 py-2.5 font-sans text-xs text-ink-secondary whitespace-nowrap">{f.category_name}</td>
                     )}
                     {visibleCols.has('nav_state') && (
-                      <td className="px-3 py-2.5"><NavStateChip value={f.nav_state} /></td>
+                      <td
+                        className="px-3 py-2.5"
+                        data-validator-id={`fund.nav_state:${f.mstar_id}`}
+                      >
+                        <NavStateChip value={f.nav_state} />
+                      </td>
                     )}
                     {visibleCols.has('composition') && (
-                      <td className="px-3 py-2.5"><CompositionStateChip value={f.composition_state} /></td>
+                      <td
+                        className="px-3 py-2.5"
+                        data-validator-id={`fund.composition_state:${f.mstar_id}`}
+                      >
+                        <CompositionStateChip value={f.composition_state} />
+                      </td>
                     )}
                     {visibleCols.has('holdings') && (
                       <td className="px-3 py-2.5"><HoldingsStateChip value={f.holdings_state} /></td>
@@ -262,7 +272,13 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
                       </td>
                     )}
                     {visibleCols.has('rs_pctile') && (
-                      <td className="px-3 py-2.5 text-right"><RSPctileBar value={f[pctileKey] as string | null} /></td>
+                      <td
+                        className="px-3 py-2.5 text-right"
+                        data-validator-id={`fund.rs_pctile_3m:${f.mstar_id}`}
+                        data-validator-raw={f.rs_pctile_3m ?? ''}
+                      >
+                        <RSPctileBar value={f[pctileKey] as string | null} />
+                      </td>
                     )}
                     {visibleCols.has('rs_category') && (
                       <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(f[rsCatKey] as string | null)}`}>

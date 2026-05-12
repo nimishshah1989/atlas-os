@@ -575,10 +575,16 @@ export function StockScreener({
                       <td className="px-3 py-2.5">
                         <GateDots row={row} />
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td
+                        className="px-3 py-2.5"
+                        data-validator-id={`stock.rs_state:${row.instrument_id}`}
+                      >
                         <RSStateChip value={row.rs_state} />
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td
+                        className="px-3 py-2.5"
+                        data-validator-id={`stock.momentum_state:${row.instrument_id}`}
+                      >
                         <MomentumChip value={row.momentum_state} />
                       </td>
                       <td className="px-3 py-2.5">
@@ -625,10 +631,18 @@ export function StockScreener({
                           {pct(ret1w)}
                         </td>
                       )}
-                      <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(row.ret_1m)}`}>
+                      <td
+                        className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(row.ret_1m)}`}
+                        data-validator-id={`stock.ret_1m:${row.instrument_id}`}
+                        data-validator-raw={row.ret_1m ?? ''}
+                      >
                         {pct(row.ret_1m)}
                       </td>
-                      <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(row.ret_3m)}`}>
+                      <td
+                        className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(row.ret_3m)}`}
+                        data-validator-id={`stock.ret_3m:${row.instrument_id}`}
+                        data-validator-raw={row.ret_3m ?? ''}
+                      >
                         {pct(row.ret_3m)}
                       </td>
                       {visibleCols.has('ret_6m') && (
@@ -711,7 +725,11 @@ export function StockScreener({
                           {pct(alpha6m)}
                         </td>
                       )}
-                      <td className="px-3 py-2.5 text-right">
+                      <td
+                        className="px-3 py-2.5 text-right"
+                        data-validator-id={`stock.rs_pctile_3m:${row.instrument_id}`}
+                        data-validator-raw={row.rs_pctile_3m ?? ''}
+                      >
                         <RSPctileBar value={row.rs_pctile_3m} />
                       </td>
                     </tr>

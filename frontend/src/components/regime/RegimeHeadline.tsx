@@ -137,7 +137,10 @@ export function RegimeHeadline({ regime }: Props) {
             state={regime.regime_state}
             className={`w-8 h-8 flex-shrink-0 ${accentClass}`}
           />
-          <h1 className={`font-serif text-5xl font-semibold leading-none tracking-tight ${accentClass}`}>
+          <h1
+            className={`font-serif text-5xl font-semibold leading-none tracking-tight ${accentClass}`}
+            data-validator-id={`regime.regime_state:${regime.date instanceof Date ? regime.date.toISOString().split('T')[0] : String(regime.date)}`}
+          >
             {regime.regime_state}
           </h1>
           {regime.dislocation_active && (
@@ -190,14 +193,20 @@ export function RegimeHeadline({ regime }: Props) {
         </div>
         <div className="flex items-center gap-5 font-mono text-xs tabular-nums text-ink-tertiary">
           {vix && (
-            <span>
+            <span
+              data-validator-id={`regime.india_vix:${regime.date instanceof Date ? regime.date.toISOString().split('T')[0] : String(regime.date)}`}
+              data-validator-raw={regime.india_vix ?? ''}
+            >
               VIX{' '}
               <span className={`font-medium ${parseFloat(vix) > 25 ? 'text-signal-neg' : parseFloat(vix) > 18 ? 'text-signal-warn' : 'text-ink-primary'}`}>
                 {vix}
               </span>
             </span>
           )}
-          <span>
+          <span
+            data-validator-id={`regime.deployment_multiplier:${regime.date instanceof Date ? regime.date.toISOString().split('T')[0] : String(regime.date)}`}
+            data-validator-raw={regime.deployment_multiplier}
+          >
             Deploy{' '}
             <span className="font-medium text-ink-primary">{deployPct}%</span>
           </span>

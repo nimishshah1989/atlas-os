@@ -84,6 +84,14 @@ fund.category_state:
   tolerance: 0.0
   categorical: true
 
+fund.nav_state:
+  tolerance: 0.0
+  categorical: true
+
+fund.composition_state:
+  tolerance: 0.0
+  categorical: true
+
 # --- Market regime ---
 regime.regime_state:
   tolerance: 0.0
@@ -91,6 +99,21 @@ regime.regime_state:
 
 regime.breadth_score:
   tolerance: 0.02
+
+regime.deployment_multiplier:
+  tolerance: 0.01       # exact by design; 1% guard for rounding
+
+regime.india_vix:
+  tolerance: 0.01       # VIX shown to 1 decimal; 1% tolerance
+
+regime.pct_above_ema_50:
+  tolerance: 0.02       # breadth pct, minor rounding ok
+
+regime.ad_ratio:
+  tolerance: 0.02
+
+regime.mcclellan_oscillator:
+  tolerance: 0.02       # oscillator is an integer display; 2% of value
 
 # Default fallback (used when no key matches)
 _default:
