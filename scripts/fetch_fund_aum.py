@@ -1,11 +1,11 @@
 """
 Fetch monthly AUM for all funds in atlas_universe_funds from AMFI India.
 
-AMFI publishes scheme-wise monthly average AUM as a downloadable text file.
+AMFI publishes scheme-wise monthly average AUM via a Strapi-backed JSON API.
 We match via de_mf_master.amfi_code → atlas_universe_funds.mstar_id.
 
 Usage:
-    python scripts/fetch_fund_aum.py          # fetch latest published month
+    python scripts/fetch_fund_aum.py          # fetch latest published period
     python scripts/fetch_fund_aum.py --dry-run # print matches without writing
 """
 
@@ -23,61 +23,109 @@ from sqlalchemy import create_engine, text
 
 log = structlog.get_logger()
 
-AMFI_AUM_URL = (
-    "https://www.amfiindia.com/modules/InavPerfReport" "?nav=SchemeWiseMonthlyAUM&rtntype=D"
-)
-AMFI_AUM_FALLBACK_URL = "https://www.amfiindia.com/research-information/aum-data"
+AMFI_BASE = "https://www.amfiindia.com/api/average-aum-schemewise"
 
-# AMFI publishes a semicolon-delimited text file for scheme-wise AUM.
-# Format varies by year; we try multiple layouts.
-AMFI_TEXT_URL = "https://portal.amfiindia.com/DownloadData_Po.aspx?mf=0&dtype=3&OldNewFlag=O"
+MONTH_END = {
+    "January": 1,
+    "February": 2,
+    "March": 3,
+    "April": 4,
+    "May": 5,
+    "June": 6,
+    "July": 7,
+    "August": 8,
+    "September": 9,
+    "October": 10,
+    "November": 11,
+    "December": 12,
+}
+
+_HEADERS = {
+    "Accept": "application/json",
+    "User-Agent": "Mozilla/5.0 (compatible; atlas-os/1.0)",
+    "Referer": "https://www.amfiindia.com/aum-data/average-aum",
+}
+
+
+def _get(url: str, params: dict | None = None) -> dict:
+    resp = requests.get(url, params=params, headers=_HEADERS, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _latest_fy_period() -> tuple[int, int, str]:
+    """Return (fy_id, period_id, period_label) for the most recently published period."""
+    fy_data = _get(AMFI_BASE, params={"strType": "Categorywise"})
+    # data is a list of {"id": N, "financial_year": "April YYYY - March YYYY"}
+    years = fy_data.get("data", [])
+    if not years:
+        raise ValueError("No financial years returned from AMFI API")
+    latest_fy = years[0]  # most recent FY is first
+    fy_id = latest_fy["id"]
+    log.info("amfi_fy_selected", fy_id=fy_id, fy=latest_fy.get("financial_year"))
+
+    period_data = _get(AMFI_BASE, params={"strType": "Categorywise", "fyId": fy_id})
+    periods = period_data.get("data", {}).get("periods", [])
+    if not periods:
+        raise ValueError(f"No periods returned for fyId={fy_id}")
+    latest_period = periods[0]  # most recent period is first
+    period_id = latest_period["id"]
+    period_label = latest_period["period"]
+    log.info("amfi_period_selected", period_id=period_id, period=period_label)
+    return fy_id, period_id, period_label
+
+
+def _period_end_date(period_label: str) -> str:
+    """Convert 'January - March 2026' → '2026-03-31'."""
+    # Period label format: "<Month> - <Month> <Year>"
+    m = re.match(r"(\w+)\s*-\s*(\w+)\s+(\d{4})", period_label.strip())
+    if not m:
+        raise ValueError(f"Cannot parse period label: {period_label!r}")
+    end_month_name, year = m.group(2), int(m.group(3))
+    month_num = MONTH_END.get(end_month_name)
+    if not month_num:
+        raise ValueError(f"Unknown month: {end_month_name!r}")
+    period_end = (pd.Timestamp(year=year, month=month_num, day=1) + pd.offsets.MonthEnd(0)).date()
+    return str(period_end)
 
 
 def fetch_amfi_aum_df() -> pd.DataFrame:
     """Download AMFI scheme-wise AUM data and return a DataFrame with
     columns: amfi_code (str), aum_cr (Decimal), period_end (date str YYYY-MM-DD).
     """
-    log.info("fetching_amfi_aum", url=AMFI_TEXT_URL)
-    resp = requests.get(AMFI_TEXT_URL, timeout=30)
-    resp.raise_for_status()
-    raw = resp.text
+    fy_id, period_id, period_label = _latest_fy_period()
+    period_end = _period_end_date(period_label)
 
-    # Parse the semicolon-delimited AMFI format
+    log.info("fetching_amfi_aum_data", fy_id=fy_id, period_id=period_id, period_end=period_end)
+    payload = _get(
+        AMFI_BASE,
+        params={"strType": "Categorywise", "fyId": fy_id, "periodId": period_id, "MF_ID": 0},
+    )
+
+    # Nested structure: data[] → schemes[] → AMFI_Code + AverageAumForTheMonth
     rows = []
-    period_end = None
-    for line in raw.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        # Header line contains the period date, e.g. "Month Ended:March 2025"
-        if line.startswith("Month Ended"):
-            m = re.search(r"(\w+ \d{4})", line)
-            if m:
-                period_end = pd.to_datetime(m.group(1), format="%B %Y")
-                period_end = period_end + pd.offsets.MonthEnd(0)
-                period_end = period_end.date()
-            continue
-        parts = line.split(";")
-        if len(parts) < 4:
-            continue
-        # Typical columns: Scheme Code ; Scheme Name ; ... ; AUM (Cr)
-        code_str = parts[0].strip()
-        if not code_str.isdigit():
-            continue
-        # Last numeric field is AUM in crore
-        aum_str = parts[-1].strip().replace(",", "")
-        try:
-            aum_val = Decimal(aum_str)
-        except Exception:
-            log.debug("aum_parse_skip", code=code_str, raw=aum_str)
-            continue
-        rows.append({"amfi_code": code_str, "aum_cr": aum_val})
+    for fund_house in payload.get("data", []):
+        for scheme in fund_house.get("schemes", []):
+            amfi_code = scheme.get("AMFI_Code")
+            if amfi_code is None:
+                continue
+            aum_obj = scheme.get("AverageAumForTheMonth", {})
+            # Use ex-domestic-FoF AUM (industry standard for scheme-level AUM)
+            aum_raw = aum_obj.get("ExcludingFundOfFundsDomesticButIncludingFundOfFundsOverseas", 0)
+            if not aum_raw:
+                continue
+            try:
+                aum_val = Decimal(str(aum_raw))
+            except Exception:
+                log.debug("aum_parse_skip", amfi_code=amfi_code, raw=aum_raw)
+                continue
+            rows.append({"amfi_code": str(amfi_code), "aum_cr": aum_val})
 
     if not rows:
-        raise ValueError("AMFI AUM parse produced 0 rows — check format")
+        raise ValueError("AMFI AUM parse produced 0 rows — check API response structure")
 
     df = pd.DataFrame(rows)
-    df["period_end"] = str(period_end) if period_end else None
+    df["period_end"] = period_end
     log.info("amfi_aum_parsed", rows=len(df), period_end=period_end)
     return df
 
@@ -89,7 +137,6 @@ def run(dry_run: bool = False) -> None:
 
     engine = create_engine(db_url, future=True)
 
-    # Load the amfi_code → mstar_id mapping from de_mf_master
     with engine.connect() as conn:
         mapping = pd.read_sql(
             text(
@@ -118,7 +165,6 @@ def run(dry_run: bool = False) -> None:
         log.error("no_matches_aborting")
         sys.exit(1)
 
-    # Upsert aum_cr + aum_as_of into atlas_universe_funds
     updated = 0
     with engine.begin() as conn:
         for _, row in merged.iterrows():
