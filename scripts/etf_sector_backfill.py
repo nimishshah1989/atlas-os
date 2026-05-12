@@ -842,6 +842,11 @@ def main() -> None:
         default=8,
         help="Parallel download threads (default: 8)",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Skip gap check and run backfill for all tickers in the given date range",
+    )
     args = parser.parse_args()
 
     start = date.fromisoformat(args.start)
@@ -878,14 +883,17 @@ def main() -> None:
     else:
         log.warning("could_not_fetch_recent_bhav")
 
-    # Phase 3: Gap check
-    log.info("phase3_gap_check")
-    needs_backfill = get_tickers_needing_backfill(engine, tickers)
-    if not needs_backfill:
-        log.info("all_tickers_sufficient", tickers=tickers)
-        return
-
-    log.info("tickers_needing_backfill", count=len(needs_backfill), tickers=needs_backfill)
+    # Phase 3: Gap check (skip when --force, e.g. for nightly incremental runs)
+    if args.force:
+        needs_backfill = tickers
+        log.info("phase3_skipped_force", tickers=needs_backfill)
+    else:
+        log.info("phase3_gap_check")
+        needs_backfill = get_tickers_needing_backfill(engine, tickers)
+        if not needs_backfill:
+            log.info("all_tickers_sufficient", tickers=tickers)
+            return
+        log.info("tickers_needing_backfill", count=len(needs_backfill), tickers=needs_backfill)
 
     # Phase 4: Download and insert (reuse the Phase 2 session — one cookie fetch)
     log.info("phase4_backfill", start=start.isoformat(), end=end.isoformat())
