@@ -20,8 +20,9 @@ the state tuple.
 
 from __future__ import annotations
 
+import bisect
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 import pandas as pd
@@ -113,7 +114,10 @@ def assemble_fund_states(
         mstar_ids = chunk["mstar_id"].tolist()
         cat_map = dict(zip(chunk["mstar_id"], chunk["category_name"], strict=False))
 
-        # Load Lens 1 nav metrics for this fund chunk
+        # Load Lens 1 nav metrics with a 10-day lookback so funds whose
+        # latest NAV trails by a day or two (T-1 settlement, bank holiday)
+        # are still included rather than silently dropped.
+        nav_lookback_start = start_date - timedelta(days=10)
         with open_compute_session(engine) as conn:
             nav_metrics = pd.read_sql(
                 """
@@ -123,7 +127,7 @@ def assemble_fund_states(
                   AND nav_date BETWEEN %(start)s AND %(end)s
                 """,
                 conn,
-                params={"ids": mstar_ids, "start": start_date, "end": end_date},
+                params={"ids": mstar_ids, "start": nav_lookback_start, "end": end_date},
             )
 
         # Load Lens 2+3 monthly states for this fund chunk
@@ -141,19 +145,37 @@ def assemble_fund_states(
                 params={"ids": mstar_ids, "end": end_date},
             )
 
-        # Build state for each (fund, date) in the chunk
+        # Build state for each (fund, date) in the chunk.
+        # nav_state: use most recent row on or before the trading date (within
+        # max_nav_staleness_days) so funds whose NAV trails by T-1/T-2 due
+        # to settlement lag or bank holidays are not silently dropped.
+        max_nav_staleness_days = 10
+
         for mstar_id in mstar_ids:
             fund_nav = nav_metrics[nav_metrics["mstar_id"] == mstar_id].copy()
             fund_monthly = monthly_states[monthly_states["mstar_id"] == mstar_id].copy()
 
-            nav_lookup = dict(zip(fund_nav["date"], fund_nav["nav_state"], strict=False))
+            fund_nav_sorted = fund_nav.sort_values("date").reset_index(drop=True)
+            nav_dates_list: list[date] = fund_nav_sorted["date"].tolist()
 
             monthly_sorted = fund_monthly.sort_values("as_of_date")
 
             rows = []
             for d in trading_dates:
-                nav_s = nav_lookup.get(d)
-                # Skip rows with no nav_state — table column is NOT NULL.
+                # Binary-search for the latest nav row on or before d.
+                # bisect_right returns insertion point after any equal elements,
+                # so -1 gives the last row whose date <= d.
+                idx = bisect.bisect_right(nav_dates_list, d) - 1  # type: ignore[attr-defined]
+                if idx < 0:
+                    continue
+                latest_nav_row = fund_nav_sorted.iloc[idx]
+                days_stale = (d - latest_nav_row["date"]).days
+                if days_stale > max_nav_staleness_days:
+                    continue
+                nav_s = latest_nav_row["nav_state"]
+                nav_as_of = latest_nav_row["date"]
+
+                # table column is NOT NULL — skip if classifier produced None
                 if nav_s is None:
                     continue
 
@@ -166,7 +188,6 @@ def assemble_fund_states(
                     comp_as_of = latest["as_of_date"]
                     hold_as_of = latest["as_of_date"]
                 else:
-                    # Pre-disclosure dates — schema requires non-null sentinel.
                     comp_s = "NO_DISCLOSURE"
                     hold_s = "NO_DISCLOSURE"
                     comp_as_of = None
@@ -178,7 +199,7 @@ def assemble_fund_states(
                         "date": d,
                         "category_name": cat_map[mstar_id],
                         "nav_state": nav_s,
-                        "nav_state_as_of": d,
+                        "nav_state_as_of": nav_as_of,
                         "composition_state": comp_s,
                         "composition_as_of": comp_as_of,
                         "holdings_state": hold_s,

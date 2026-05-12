@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 class ChatMessage(BaseModel):
     """One message in the conversation history."""
 
-    role: Literal["user", "assistant", "system"]
+    role: str  # OpenBB sends "human"/"ai"/"tool"; accept any string
     content: str
 
 
@@ -38,14 +38,14 @@ class QueryRequest(BaseModel):
     """
 
     messages: list[ChatMessage] = Field(..., min_length=1)
-    widgets: list[Any] | None = None
-    context: dict[str, Any] | None = None
+    widgets: dict[str, Any] | list[Any] | None = None  # object in OpenBB v4
+    context: dict[str, Any] | list[Any] | None = None
 
     @property
     def last_user_message(self) -> str:
         """Extract the content of the last user-role message."""
         for msg in reversed(self.messages):
-            if msg.role == "user":
+            if msg.role in ("human", "user"):
                 return msg.content
         return ""
 
