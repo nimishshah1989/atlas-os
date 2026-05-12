@@ -54,7 +54,7 @@ def _load_prices(engine, ids: list[str], min_date: date, max_date: date) -> pd.D
             """
             SELECT instrument_id::text AS instrument_id, date, close
             FROM public.de_equity_ohlcv
-            WHERE instrument_id = ANY(%(ids)s)
+            WHERE instrument_id = ANY(%(ids)s::uuid[])
               AND date BETWEEN %(start)s AND %(end)s + INTERVAL '45 days'
             ORDER BY instrument_id, date
             """,
