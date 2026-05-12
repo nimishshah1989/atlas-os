@@ -39,6 +39,11 @@ run_step "recompute_signal_ic"        python scripts/recompute_signal_ic.py --pe
 run_step "generate_weight_candidates" python scripts/generate_weight_candidates.py --persist
 run_step "track_live_ic"              python scripts/track_live_ic.py --persist
 run_step "compute_hit_rates"          python scripts/compute_hit_rates.py --persist
+# SP09 CTS Timing Engine
+run_step "compute_cts_signals"         python scripts/compute_cts_signals.py --persist
+run_step "update_cts_fwd_returns"      python scripts/update_cts_fwd_returns.py --persist
+run_step "compute_timing_ic"           python scripts/compute_timing_ic.py --persist
+run_step "compute_cts_hit_rates_sp09"  python scripts/compute_cts_hit_rates.py --persist
 # Drift check runs dry by default. Flip to --apply once ≥60 days of live_perf
 # data exists for at least one active weight set.
 run_step "check_weight_drift"         python scripts/check_weight_drift.py
