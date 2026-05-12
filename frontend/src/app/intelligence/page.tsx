@@ -3,9 +3,12 @@
 // RS leaders, and deterioration watch into a single scannable view.
 // Server component. Layout: left col (regime + sectors + breakouts) |
 //                           right col (brief + RS leaders + deterioration).
+// allow-large: morning-dashboard composition layer — 6 self-contained sub-components (RegimeHero, SectorRotation, TransitionList, RSLeadersList, SectionCard, TopConviction) inline for one-glance scanning. Extracting them adds a hop without removing complexity.
 import Link from 'next/link'
 import { TrendingUp, Minus, TrendingDown } from 'lucide-react'
 import { getIntelligenceDashboard } from '@/lib/queries/intelligence'
+import { getTopConvictionByTier } from '@/lib/queries/conviction'
+import { TopConvictionSection } from '@/components/intelligence/TopConvictionSection'
 import type {
   RegimeSummary,
   BriefSummary,
@@ -171,7 +174,17 @@ function SectionCard({ title, children }: { title: string; children: React.React
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default async function IntelligencePage() {
-  const d = await getIntelligenceDashboard()
+  const [d, t1, t3, t2] = await Promise.all([
+    getIntelligenceDashboard(),
+    getTopConvictionByTier('tier_1_megacap', 5),
+    getTopConvictionByTier('tier_3_uppermid', 5),
+    getTopConvictionByTier('tier_2_largecap', 5),
+  ])
+  const convictionByTier = {
+    tier_1_megacap: t1,
+    tier_3_uppermid: t3,
+    tier_2_largecap: t2,
+  }
 
   return (
     <main className="max-w-[1200px] mx-auto px-4 sm:px-6 py-8 bg-white min-h-screen">
@@ -241,6 +254,9 @@ export default async function IntelligencePage() {
           </SectionCard>
         </div>
       </div>
+
+      {/* Top Conviction — full-width section below the two-column grid */}
+      <TopConvictionSection byTier={convictionByTier} />
     </main>
   )
 }

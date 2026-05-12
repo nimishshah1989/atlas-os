@@ -4,6 +4,7 @@ import { Fragment, useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import type { StockRowWithSector } from '@/lib/queries/stocks'
+import type { ConvictionMapRow } from '@/lib/queries/conviction'
 import {
   pct, pctColor, RSPctileBar,
   RSStateChip, MomentumChip, RiskChip, VolumeChip,
@@ -11,6 +12,7 @@ import {
 import { SectorBadge } from './SectorBadge'
 import { ColumnToggle, useColumnVisibility, type ColumnDef } from '@/components/ui/ColumnToggle'
 import { StateJourneyCompact } from '@/components/ui/StateJourneyCompact'
+import { ConvictionCell } from './ConvictionCell'
 
 const RS_ORDER = ['Leader', 'Strong', 'Consolidating', 'Emerging', 'Average', 'Weak', 'Laggard']
 const MOM_ORDER = ['Accelerating', 'Improving', 'Flat', 'Deteriorating', 'Collapsing']
@@ -72,6 +74,7 @@ function buildStockSignal(row: StockRowWithSector): { compact: string; tooltip: 
 
 // Optional columns. 1W, 6M, 12M visible by default.
 const OPTIONAL_COLS: ColumnDef[] = [
+  { key: 'conviction',      label: 'Conviction',  defaultVisible: true },
   { key: 'quality',         label: 'Grade',       defaultVisible: true },
   { key: 'signal',          label: 'Signal',      defaultVisible: false },
   { key: 'ret_1d',          label: '1D',          defaultVisible: false },
@@ -179,9 +182,11 @@ function GateDots({ row }: { row: StockRowWithSector }) {
 export function StockScreener({
   stocks,
   maFilter,
+  convictionMap,
 }: {
   stocks: StockRowWithSector[]
   maFilter?: 'above_30w_ma' | 'above_50d_ma' | 'above_200d_ma' | null
+  convictionMap?: Record<string, ConvictionMapRow>
 }) {
   const [sortKey, setSortKey] = useState<SortKey>('cap_rank')
   const [asc, setAsc] = useState(true)
@@ -419,6 +424,7 @@ export function StockScreener({
               <Th label="Mom" k="momentum_state" />
               <Th label="Risk" k="risk_state" />
               <Th label="Vol" k="volume_state" />
+              {visibleCols.has('conviction') && <PlainTh label="Conviction" />}
               {visibleCols.has('quality') && <PlainTh label="Grade" />}
               {visibleCols.has('signal') && <PlainTh label="Signal" />}
               {visibleCols.has('ret_1d') && <PlainTh label="1D" align="right" />}
@@ -519,6 +525,11 @@ export function StockScreener({
                       <td className="px-3 py-2.5">
                         <VolumeChip value={row.volume_state} />
                       </td>
+                      {visibleCols.has('conviction') && (
+                        <td className="px-3 py-2.5">
+                          <ConvictionCell row={convictionMap?.[row.instrument_id]} />
+                        </td>
+                      )}
                       {visibleCols.has('quality') && (() => {
                         const g = buildStockGrade(row)
                         return (

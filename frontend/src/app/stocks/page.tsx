@@ -2,12 +2,14 @@ export const dynamic = 'force-dynamic'
 
 import { getAllStocks } from '@/lib/queries/stocks'
 import { getCurrentRegime } from '@/lib/queries/regime'
+import { getConvictionMap } from '@/lib/queries/conviction'
 import { StocksClientShell } from '@/components/stocks/StocksClientShell'
 
 export default async function StocksPage() {
-  const [stocks, regime] = await Promise.all([
+  const [stocks, regime, convictionMap] = await Promise.all([
     getAllStocks(),
     getCurrentRegime(),
+    getConvictionMap(),
   ])
 
   if (stocks.length === 0) {
@@ -49,6 +51,7 @@ export default async function StocksPage() {
           stocks={stocks}
           regimeState={regime?.regime_state ?? 'Unknown'}
           deploymentMultiplier={Number(regime?.deployment_multiplier ?? '0')}
+          convictionMap={convictionMap}
         />
       </div>
     </div>
