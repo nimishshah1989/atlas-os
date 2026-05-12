@@ -53,6 +53,7 @@ def detect_signals(
     npc_vol = float(thresholds["cts_npc_volume_multiplier"])
     con_bars = int(thresholds["cts_contraction_bars"])
     con_res = float(thresholds["cts_contraction_resistance_pct"])
+    con_high_bars = int(thresholds["cts_contraction_highest_high_bars"])
 
     # --- Candle geometry (vectorised) ---
     candle_range = (out["high"] - out["low"]).replace(0, pd.NA)
@@ -105,7 +106,7 @@ def detect_signals(
     out["npc_strength"] = raw_npc_strength.where(out["is_npc"], other=pd.NA)
 
     # --- Contraction detection (per-group rolling) ---
-    out = _add_contraction(out, con_bars=con_bars, con_res=con_res)
+    out = _add_contraction(out, con_bars=con_bars, con_res=con_res, con_high_bars=con_high_bars)
     return out
 
 
@@ -114,6 +115,7 @@ def _add_contraction(
     *,
     con_bars: int,
     con_res: float,
+    con_high_bars: int,
 ) -> pd.DataFrame:
     """Append is_contraction, is_trigger_bar, trigger_level.
 
@@ -122,7 +124,7 @@ def _add_contraction(
        — fillna(0) means unknown ATR direction doesn't block the signal on short
        histories; on adequate history the real slope is decisive.
     2. >= 60% of bar-to-bar range transitions are narrowing over con_bars window
-    3. close within con_res% of 50-bar highest high
+    3. close within con_res% of con_high_bars highest high
 
     is_trigger_bar mirrors is_contraction (trigger = first contraction bar).
     trigger_level = bar high on trigger bar, NaN otherwise.
@@ -149,10 +151,10 @@ def _add_contraction(
         narrowing = bar_range.rolling(con_bars, min_periods=con_bars).apply(
             _narrowing_count, raw=True
         )
-        cond_narrow = narrowing >= con_bars * 0.6
+        cond_narrow = narrowing >= (con_bars - 1) * 0.6
 
-        # Condition 3: price proximity to 50-bar highest high (resistance coiling)
-        highest_high = g["high"].rolling(50, min_periods=50).max()
+        # Condition 3: price proximity to highest high (resistance coiling)
+        highest_high = g["high"].rolling(con_high_bars, min_periods=con_high_bars).max()
         dist_pct = (highest_high - g["close"]) / highest_high.replace(0, pd.NA) * 100
         cond_prox = dist_pct <= con_res
 

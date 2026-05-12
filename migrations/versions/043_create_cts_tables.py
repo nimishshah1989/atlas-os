@@ -143,7 +143,9 @@ def upgrade() -> None:
             ('cts_contraction_bars',           5,    'cts', 'Contraction narrowing lookback bars',       3,    20,    5,    'migration_043', true),
             ('cts_contraction_resistance_pct', 3.0,  'cts', 'Contraction: max % from highest high',     1.0,  10.0,  3.0,  'migration_043', true),
             ('cts_stage2_sma_period',          150,  'cts', 'Weinstein SMA period (trading days)',       100,  250,   150,  'migration_043', true),
-            ('cts_stage2_slope_min_days',      20,   'cts', 'SMA slope lookback days',                  10,   60,    20,   'migration_043', true)
+            ('cts_stage2_slope_min_days',      20,   'cts', 'SMA slope lookback days',                  10,   60,    20,   'migration_043', true),
+            ('cts_stage1b_proximity_pct',      0.03, 'cts', 'Stage 1B: max % below SMA_150 to qualify', 0.01, 0.10,  0.03, 'migration_043', true),
+            ('cts_contraction_highest_high_bars', 50, 'cts', 'Contraction: lookback bars for highest high resistance', 20, 100, 50, 'migration_043', true)
         ON CONFLICT (threshold_key) DO NOTHING
     """)
 

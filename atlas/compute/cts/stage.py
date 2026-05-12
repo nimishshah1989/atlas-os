@@ -22,7 +22,7 @@ def classify_stage(
       3 = price > SMA_150 AND close momentum <= 0                    (topping)
       1 = price <= SMA_150 AND SMA slope (rounded 2dp) >= 0          (basing)
       4 = price <= SMA_150 AND SMA slope (rounded 2dp) < 0           (declining)
-      1B = stage 1 AND price within <=3% below SMA_150
+      1B = stage 1 AND price within <=cts_stage1b_proximity_pct below SMA_150
 
     Stage 2/3 use close momentum rather than SMA slope so that topping
     (Stage 3) is detectable before the 150-bar SMA itself turns negative.
@@ -62,9 +62,10 @@ def classify_stage(
         dtype=object,
     )
 
-    # Stage 1B: price within <=3% below SMA (coiling before breakout)
+    # Stage 1B: price within threshold% below SMA (coiling before breakout)
+    stage1b_prox = float(thresholds["cts_stage1b_proximity_pct"])
     prox = (out[sma_col] - out["close"]) / out[sma_col]
-    out["is_stage1b"] = (out["stage"] == 1) & (prox <= float(Decimal("0.03")))
+    out["is_stage1b"] = (out["stage"] == 1) & (prox <= stage1b_prox)
 
     out.rename(columns={sma_col: "sma_150", slope_col: "sma_150_slope"}, inplace=True)
     return out

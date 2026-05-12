@@ -34,6 +34,7 @@ def _downtrend_df(n: int = 200) -> pd.DataFrame:
 THRESHOLDS = {
     "cts_stage2_sma_period": Decimal("150"),
     "cts_stage2_slope_min_days": Decimal("20"),
+    "cts_stage1b_proximity_pct": Decimal("0.03"),
 }
 
 

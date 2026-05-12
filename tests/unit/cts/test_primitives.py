@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from atlas.compute.cts.primitives import add_sma_slope, add_trp, add_volume_ratio
+from atlas.compute.cts.primitives import add_atr14, add_sma_slope, add_trp, add_volume_ratio
 
 
 def _make_ohlcv(n: int = 30) -> pd.DataFrame:
@@ -69,3 +69,25 @@ def test_add_volume_ratio_equals_vol_over_20bar_mean():
     expected_avg_vol = df["volume"].rolling(20).mean()
     expected_ratio = df["volume"] / expected_avg_vol
     pd.testing.assert_series_equal(out["vol_ratio"], expected_ratio, check_names=False, rtol=1e-6)
+
+
+def test_atr14_is_nonnegative() -> None:
+    """ATR is always non-negative; atr_slope is computed on sufficient history."""
+    rng = np.random.default_rng(99)
+    n = 50
+    close = 100 + np.cumsum(rng.normal(0, 1, n))
+    high = close + rng.uniform(0.5, 2.0, n)
+    low = close - rng.uniform(0.5, 2.0, n)
+    df = pd.DataFrame(
+        {
+            "instrument_id": ["X"] * n,
+            "date": pd.date_range("2024-01-01", periods=n),
+            "high": high,
+            "low": low,
+            "close": close,
+        }
+    )
+    out = add_atr14(df)
+    atr_vals = out["atr_14"].dropna()
+    assert len(atr_vals) > 0
+    assert (atr_vals >= 0).all()

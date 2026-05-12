@@ -19,6 +19,8 @@ THRESHOLDS = {
     "cts_contraction_resistance_pct": Decimal("3.0"),
     "cts_stage2_sma_period": Decimal("150"),
     "cts_stage2_slope_min_days": Decimal("20"),
+    "cts_stage1b_proximity_pct": Decimal("0.03"),
+    "cts_contraction_highest_high_bars": Decimal("50"),
 }
 
 
