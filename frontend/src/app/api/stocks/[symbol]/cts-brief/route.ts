@@ -7,7 +7,8 @@ export async function POST(
   { params }: { params: Promise<{ symbol: string }> },
 ) {
   const { symbol } = await params
-  const apiBase = process.env.ATLAS_INTERNAL_API_BASE_URL
+  // CTS brief is on the main API (port 8020), not internal_recompute (port 8002)
+  const apiBase = process.env.ATLAS_MAIN_API_BASE_URL ?? process.env.ATLAS_INTERNAL_API_BASE_URL
   if (!apiBase) {
     return NextResponse.json(
       { error: 'ATLAS_INTERNAL_API_BASE_URL not configured' },
