@@ -133,8 +133,8 @@ def _boost_conviction(
         and "sector" in df.columns
     ):
         pivot_lookup = sector_pivot[["date", "sector", "pivot_balance"]].copy()
-        pivot_lookup["date"] = pd.to_datetime(pivot_lookup["date"]).dt.date
-        df["date"] = pd.to_datetime(df["date"]).dt.date
+        pivot_lookup["date"] = pd.to_datetime(pivot_lookup["date"]).dt.date  # type: ignore[union-attr]
+        df["date"] = pd.to_datetime(df["date"]).dt.date  # type: ignore[union-attr]
         df = df.merge(pivot_lookup, on=["date", "sector"], how="left", suffixes=("", "_pivot"))
         sector_bonus = np.where(df["pivot_balance"].fillna(0.0) > 0.10, 10.0, 0.0)
         df.drop(columns=["pivot_balance"], inplace=True, errors="ignore")
@@ -145,7 +145,7 @@ def _boost_conviction(
     # --- Regime bonus (vectorized via merge) ---
     if not regime_df.empty and "regime_state" in regime_df.columns:
         regime_lookup = regime_df[["date", "regime_state"]].copy()
-        regime_lookup["date"] = pd.to_datetime(regime_lookup["date"]).dt.date
+        regime_lookup["date"] = pd.to_datetime(regime_lookup["date"]).dt.date  # type: ignore[union-attr]
         df = df.merge(regime_lookup, on="date", how="left")
         regime_bonus = np.where(df["regime_state"].fillna("") == "Risk-On", 10.0, 0.0)
         df.drop(columns=["regime_state"], inplace=True, errors="ignore")
