@@ -7,19 +7,18 @@ startup on holidays; this script adds a belt-and-suspenders check in Python
 to handle manual runs outside systemd.
 
 Required env vars (read from .env):
-  DATABASE_URL       — Postgres DSN
+  ATLAS_DB_URL       — Postgres DSN
   KITE_API_KEY       — KiteConnect API key
   KITE_API_SECRET    — KiteConnect API secret
   KITE_TOKEN_ENCRYPTION_KEY — pgp_sym_encrypt key for token storage
 
 Exits:
   0 — not a trading day, or clean shutdown via SIGTERM/SIGINT
-  1 — missing DATABASE_URL or fatal startup error
+  1 — missing ATLAS_DB_URL or fatal startup error
 """
 
 from __future__ import annotations
 
-import os
 import signal
 import sys
 import time
@@ -54,11 +53,14 @@ def main() -> None:
         sys.exit(0)
 
     # ------------------------------------------------------------------
-    # 2. Require DATABASE_URL
+    # 2. Require ATLAS_DB_URL (via Config — fails loudly if missing)
     # ------------------------------------------------------------------
-    database_url = os.environ.get("DATABASE_URL")
-    if not database_url:
-        log.error("intraday_startup_failed", reason="DATABASE_URL environment variable not set")
+    from atlas.config import Config
+
+    try:
+        database_url = Config.assert_db_url()
+    except RuntimeError as exc:
+        log.error("intraday_startup_failed", reason=str(exc))
         sys.exit(1)
 
     # ------------------------------------------------------------------
@@ -83,7 +85,7 @@ def main() -> None:
     # ------------------------------------------------------------------
     # 5. Start the ingester
     # ------------------------------------------------------------------
-    log.info("intraday_starting", database_url_prefix=database_url[:30])
+    log.info("intraday_starting")
     ingester.start()
     log.info("intraday_running")
 

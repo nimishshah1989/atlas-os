@@ -127,7 +127,7 @@ function TransitionList({ rows, emptyMsg }: { rows: BreakoutRow[]; emptyMsg: str
     <div className="space-y-1.5">
       {rows.map((r) => (
         <div key={r.symbol} className="flex items-baseline justify-between gap-4">
-          <span className="font-mono text-xs font-semibold text-ink-primary">{r.symbol}</span>
+          <Link href={`/stocks/${encodeURIComponent(r.symbol)}`} className="font-mono text-xs font-semibold text-ink-primary hover:text-teal transition-colors">{r.symbol}</Link>
           <span className="font-sans text-[11px] text-ink-tertiary truncate">{r.sector ?? '—'}</span>
           <span className="font-sans text-[11px] text-ink-secondary shrink-0">
             {r.prior_rs_state ?? '—'} → {r.new_rs_state ?? '—'}
@@ -146,7 +146,7 @@ function RSLeadersList({ leaders }: { leaders: RSLeaderSnapshotRow[] }) {
     <div className="space-y-1.5">
       {leaders.map((r) => (
         <div key={r.symbol} className="flex items-baseline justify-between gap-3">
-          <span className="font-mono text-xs font-semibold text-ink-primary">{r.symbol}</span>
+          <Link href={`/stocks/${encodeURIComponent(r.symbol)}`} className="font-mono text-xs font-semibold text-ink-primary hover:text-teal transition-colors">{r.symbol}</Link>
           <span className="font-sans text-[11px] text-ink-tertiary truncate flex-1 min-w-0">{r.sector ?? '—'}</span>
           <span className={`font-sans text-[10px] font-semibold shrink-0 ${r.rs_state === 'Leader' ? 'text-signal-pos' : 'text-teal'}`}>
             {r.rs_state}

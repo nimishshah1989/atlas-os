@@ -200,7 +200,7 @@ class TestHappyPath:
         assert "meta" in body
         data = body["data"]
         assert data["milestone"] == "m3"
-        assert data["status"] == "running"
+        assert data["status"] == "queued"
         # spec: data.compute_run_id per M13_THRESHOLDS_ADMIN.md §response-envelope
         assert "compute_run_id" in data
         # compute_run_id must be a valid UUID.

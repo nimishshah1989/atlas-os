@@ -95,7 +95,6 @@ def invoke_agent(
     log.info(
         "agents_invoke_request",
         agent=body.agent,
-        question_preview=body.question[:80],
         user_id=user_id,
     )
 

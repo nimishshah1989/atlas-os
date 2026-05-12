@@ -145,7 +145,7 @@ def trigger_recompute(
         SELECT run_id
         FROM atlas.atlas_pipeline_runs
         WHERE milestone IN ({placeholders})
-          AND status = 'running'
+          AND status IN ('queued', 'running')
           AND started_at > NOW() - INTERVAL '6 hours'
         ORDER BY started_at DESC
         LIMIT 1
@@ -175,12 +175,30 @@ def trigger_recompute(
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     log_path = LOG_DIR / f"recompute-{milestone}-{run_id}.log"
 
-    # 4. Build subprocess command.
+    # 4. Insert a queued row BEFORE spawning so the concurrency guard above
+    #    catches a second concurrent request that races past the SELECT above.
+    #    The subprocess's safe_record() call will UPDATE this row to 'running'.
+    now_utc = datetime.now(UTC)
+    now_iso = now_utc.isoformat()
+    with engine.begin() as conn:
+        conn.execute(
+            text("""
+                INSERT INTO atlas.atlas_pipeline_runs
+                    (run_id, script_name, milestone, started_at, status)
+                VALUES (:rid, :script, :ms, :started, 'queued')
+            """),
+            {
+                "rid": str(run_id),
+                "script": f"{milestone}_daily.py",
+                "ms": milestone.upper(),
+                "started": now_utc,
+            },
+        )
+
+    # 5. Build subprocess command.
     cmd = [sys.executable, f"scripts/{milestone}_daily.py"]
 
     child_env = {**os.environ, "ATLAS_PIPELINE_RUN_ID": str(run_id)}
-
-    now_iso = datetime.now(UTC).isoformat()
 
     log.info(
         "recompute_spawning",
@@ -190,7 +208,7 @@ def trigger_recompute(
         source_ip=source_ip,
     )
 
-    # 5. Spawn.
+    # 6. Spawn.
     # The `with` block closes the parent's file handle once Popen returns.
     # The subprocess has already inherited the fd via dup2; the kernel's
     # per-fd reference count keeps the underlying file alive as long as the
@@ -213,6 +231,13 @@ def trigger_recompute(
             source_ip=source_ip,
             error=str(exc),
         )
+        # Roll back the queued row so the concurrency guard doesn't block
+        # a subsequent retry after the spawn failure is resolved.
+        with engine.begin() as conn:
+            conn.execute(
+                text("DELETE FROM atlas.atlas_pipeline_runs WHERE run_id = :rid"),
+                {"rid": str(run_id)},
+            )
         raise HTTPException(
             status_code=500,
             detail={
@@ -222,13 +247,13 @@ def trigger_recompute(
             },
         ) from exc
 
-    # 6. Return 202 immediately.
+    # 7. Return 202 immediately.
     # spec: data.compute_run_id per M13_THRESHOLDS_ADMIN.md §response-envelope
     return {
         "data": {
             "compute_run_id": str(run_id),
             "milestone": milestone,
-            "status": "running",
+            "status": "queued",
             "log_file": str(log_path),
         },
         "meta": {

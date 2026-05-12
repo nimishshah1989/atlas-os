@@ -31,7 +31,7 @@ async def send_message(text: str) -> None:
 
         bot = Bot(token=token)
         await bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML")
-        log.debug("telegram_message_sent", chat_id=chat_id)
+        log.debug("telegram_message_sent")
     except Exception as exc:
         log.warning("telegram_send_failed", error=str(exc))
 

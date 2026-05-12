@@ -132,7 +132,7 @@ def get_valid_access_token(*, conn_str: str) -> str:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT pgp_sym_decrypt(access_token_enc::bytea, %s)
+                SELECT pgp_sym_decrypt(access_token_enc, %s)
                 FROM atlas.atlas_kite_session
                 WHERE session_type = 'active'
                   AND expires_at > NOW()

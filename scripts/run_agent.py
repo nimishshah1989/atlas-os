@@ -188,7 +188,6 @@ def main(argv: list[str] | None = None) -> int:
     log.info(
         "run_agent_cli_start",
         agent=args.agent,
-        question_preview=args.question[:80],
         persist=args.persist,
     )
 
@@ -212,7 +211,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.agent == "auto":
         # Echo the routing decision for transparency.
         also_classified = classify_specialist(args.question)
-        log.info("routed_to", question_preview=args.question[:80], agent=also_classified)
+        log.info("routed_to", agent=also_classified)
 
     if args.json:
         print(_format_json(agent_name, result))

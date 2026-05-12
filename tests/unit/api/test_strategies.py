@@ -221,7 +221,7 @@ class TestReRunBacktest202:
         assert "data" in body
         assert "compute_run_id" in body["data"]
         assert body["data"]["strategy_id"] == sid
-        assert body["data"]["status"] == "running"
+        assert body["data"]["status"] == "queued"
         # meta envelope present
         assert "meta" in body
         assert body["meta"]["source"] == "atlas-api"

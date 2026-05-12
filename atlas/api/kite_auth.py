@@ -16,6 +16,7 @@ import structlog
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import RedirectResponse
 
+from atlas.config import Config
 from atlas.intraday.auth import exchange_request_token, store_access_token
 from atlas.intraday.notify import send_message_sync
 
@@ -90,17 +91,18 @@ def kite_callback(
     Raises:
         HTTPException(500): If token exchange or storage fails.
     """
-    conn_str = os.environ.get("DATABASE_URL", "")
-    if not conn_str:
+    try:
+        conn_str = Config.assert_db_url()
+    except RuntimeError as exc:
         log.error("kite_callback_missing_database_url")
         raise HTTPException(
             status_code=500,
             detail={
                 "error_code": "server_misconfigured",
-                "message": "DATABASE_URL not set.",
+                "message": "ATLAS_DB_URL not set.",
                 "context": {},
             },
-        )
+        ) from exc
 
     try:
         session_data = exchange_request_token(request_token)

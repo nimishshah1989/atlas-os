@@ -1,1 +1,1 @@
-{"feature":"sprint-3-sectors-upgrade","approved_at":"2026-05-10T00:00:00Z","approver":"superpowers:executing-plans","plan":"docs/superpowers/plans/2026-05-10-sprint-3-sectors-upgrade.md"}
+{"feature":"validator-phase-c-admin-page","approved_at":"2026-05-12T00:00:00Z","approver":"plan-eng-review","plan":"~/.gstack/projects/atlas-os/ceo-plans/2026-05-12-validator-phase-c-route-crawler.md","description":"Admin page for Phase C validator: run history + findings table with P0/P1/P2 severity filtering. Follows weight-performance page visual pattern exactly."}

@@ -7,9 +7,9 @@ write_trades, etc.) are called by runner.py.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 from uuid import UUID
 
 import pandas as pd
@@ -47,6 +47,27 @@ class Trade:
     notional_value: float
 
 
+class _PaperTraderConfig(Protocol):
+    """Structural type for configs accepted by apply_strategy_filter / compute_trades.
+
+    Both BacktestConfig (defined here) and StrategyConfig (from loader.py)
+    satisfy this Protocol structurally — no import coupling needed.
+    """
+
+    state_filter: list[str]
+    regime_stance: str
+    max_positions: int
+
+
+@dataclass
+class BacktestConfig:
+    """Minimal config for paper_trader pure functions in backtest contexts."""
+
+    regime_stance: str = "pause_risk_off"
+    max_positions: int = 20
+    state_filter: list[str] = field(default_factory=lambda: ["leader"])
+
+
 class MissingAtlasDecisionsError(RuntimeError):
     pass
 
@@ -74,7 +95,7 @@ _EXIT_COLUMNS = [
 
 def apply_strategy_filter(
     decisions: pd.DataFrame,
-    config: object,
+    config: _PaperTraderConfig,
     threshold_overrides: dict[str, float],
 ) -> tuple[set[str], set[str]]:
     """Pure function: decisions DataFrame + config -> (entry_set, exit_set).
@@ -87,7 +108,7 @@ def apply_strategy_filter(
     exit_set: set[str] = set()
 
     allowed_states: set[str] | None = set()
-    for sf in getattr(config, "state_filter", ["leader"]):
+    for sf in config.state_filter:
         mapped = _STATE_FILTER_MAP.get(sf.lower())
         if mapped is None:
             allowed_states = None  # investable = any state
@@ -128,7 +149,7 @@ def compute_trades(
     entries: set[str],
     exits: set[str],
     regime: str,
-    config: object,
+    config: _PaperTraderConfig,
 ) -> list[Trade]:
     """Pure function: holdings + signals + regime -> trade list.
 
@@ -139,8 +160,8 @@ def compute_trades(
     """
     trades: list[Trade] = []
     is_risk_off = regime == "Risk-Off"
-    regime_stance = getattr(config, "regime_stance", "pause_risk_off")
-    max_positions = getattr(config, "max_positions", 20)
+    regime_stance = config.regime_stance
+    max_positions = config.max_positions
 
     # 1. Exit trades
     for inst_id in exits:

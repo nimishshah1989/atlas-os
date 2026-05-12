@@ -15,7 +15,6 @@ export type RSLeaderRow = {
   tier: string | null
   rs_pctile_3m: string | null    // NUMERIC — cross-stock percentile 0–1
   rs_pctile_1m: string | null    // NUMERIC
-  rs_3m_nifty500: string | null  // NUMERIC — raw RS vs Nifty500 over 3 months
   ret_6m: string | null          // NUMERIC — 6-month total return
   rs_state: string | null        // 'Leader' | 'Strong'
   momentum_state: string | null
@@ -47,7 +46,6 @@ export async function getRSLeaders(
         tier,
         rs_pctile_3m::text   AS rs_pctile_3m,
         rs_pctile_1m::text   AS rs_pctile_1m,
-        rs_3m_nifty500::text AS rs_3m_nifty500,
         ret_6m::text         AS ret_6m,
         rs_state,
         momentum_state,
@@ -68,7 +66,6 @@ export async function getRSLeaders(
       tier,
       rs_pctile_3m::text   AS rs_pctile_3m,
       rs_pctile_1m::text   AS rs_pctile_1m,
-      rs_3m_nifty500::text AS rs_3m_nifty500,
       ret_6m::text         AS ret_6m,
       rs_state,
       momentum_state,
@@ -91,7 +88,6 @@ export type BreakoutCandidateRow = {
   momentum_state: string | null
   state_since_date: Date | null
   rs_pctile_3m: string | null
-  rs_3m_nifty500: string | null
 }
 
 export type DeteriorationWatchRow = BreakoutCandidateRow
@@ -112,8 +108,7 @@ export async function getBreakoutCandidates(): Promise<BreakoutCandidateRow[]> {
       prior_rs_state,
       momentum_state,
       state_since_date,
-      rs_pctile_3m::text   AS rs_pctile_3m,
-      rs_3m_nifty500::text AS rs_3m_nifty500
+      rs_pctile_3m::text   AS rs_pctile_3m
     FROM atlas.mv_breakout_candidates
     ORDER BY rs_pctile_3m DESC NULLS LAST
   `
@@ -136,8 +131,7 @@ export async function getDeteriorationWatch(): Promise<DeteriorationWatchRow[]> 
       prior_rs_state,
       momentum_state,
       state_since_date,
-      rs_pctile_3m::text   AS rs_pctile_3m,
-      rs_3m_nifty500::text AS rs_3m_nifty500
+      rs_pctile_3m::text   AS rs_pctile_3m
     FROM atlas.mv_deterioration_watch
     ORDER BY rs_pctile_3m DESC NULLS LAST
   `

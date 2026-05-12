@@ -61,7 +61,7 @@ class IntradayIngester:
 
     Usage::
 
-        ingester = IntradayIngester(conn_str=os.environ["DATABASE_URL"])
+        ingester = IntradayIngester(conn_str=Config.assert_db_url())
         ingester.start()
         # ... runs until Ctrl-C or ingester.stop() ...
         ingester.stop()

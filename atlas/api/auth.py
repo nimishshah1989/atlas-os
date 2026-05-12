@@ -7,10 +7,15 @@ Set ATLAS_AUTH_DISABLED=true in .env to bypass verification for local dev.
 Never set AUTH_DISABLED in production.
 
 Exempt paths (no token required): /health, /docs, /openapi.json, /redoc,
-/api/kite/*, /api/v1/intraday/*
+/api/kite/login, /api/kite/callback
+
+Service-token paths (ATLAS_INTERNAL_SECRET bearer required):
+/api/v1/intraday/* — called only by the Next.js proxy, never by browser clients
 """
 
 from __future__ import annotations
+
+import secrets
 
 import jwt
 import structlog
@@ -31,8 +36,9 @@ _EXEMPT_PREFIXES = (
     "/redoc",
     "/api/kite/login",  # SP08: KiteConnect OAuth — no user JWT at this point
     "/api/kite/callback",  # SP08: Zerodha redirect — called without our JWT
-    "/api/v1/intraday",  # SP08: intraday data — auth handled by Next.js proxy layer
 )
+
+_SERVICE_TOKEN_PREFIXES = ("/api/v1/intraday",)
 
 
 class _User:
@@ -43,6 +49,30 @@ class _User:
         self.role = role
 
 
+async def _check_service_token(request: Request, call_next) -> Response:  # type: ignore[misc]
+    """Validate ATLAS_INTERNAL_SECRET for service-to-service routes."""
+    expected = Config.ATLAS_INTERNAL_SECRET
+    if not expected:
+        log.error("atlas_internal_secret_not_configured")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error_code": "server_misconfigured",
+                "message": "ATLAS_INTERNAL_SECRET is not set on the server.",
+                "context": {},
+            },
+        )
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return _unauthorized("missing_token", "Service token required")
+    token = auth_header[7:]
+    if not secrets.compare_digest(token.encode(), expected.encode()):
+        log.warning("service_token_invalid", path=request.url.path)
+        return _unauthorized("invalid_service_token", "Invalid service token")
+    request.state.user = _User(user_id="service:intraday", role="service")
+    return await call_next(request)
+
+
 class JWTAuthMiddleware(BaseHTTPMiddleware):
     def __init__(self, app: ASGIApp) -> None:
         super().__init__(app)
@@ -51,6 +81,9 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         if any(path.startswith(p) for p in _EXEMPT_PREFIXES):
             return await call_next(request)
+
+        if any(path.startswith(p) for p in _SERVICE_TOKEN_PREFIXES):
+            return await _check_service_token(request, call_next)
 
         if Config.AUTH_DISABLED:
             request.state.user = _User(user_id="dev-user", role="admin")
@@ -73,8 +106,13 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
             return _unauthorized("missing_token", "Authorization: Bearer <token> required")
 
         token = auth_header[7:]
+        decode_kwargs: dict = {"algorithms": ["HS256"]}
+        if Config.SUPABASE_JWT_AUDIENCE:
+            decode_kwargs["audience"] = Config.SUPABASE_JWT_AUDIENCE
+        if Config.SUPABASE_JWT_ISSUER:
+            decode_kwargs["issuer"] = Config.SUPABASE_JWT_ISSUER
         try:
-            payload: dict = jwt.decode(token, secret, algorithms=["HS256"])  # type: ignore[assignment]
+            payload: dict = jwt.decode(token, secret, **decode_kwargs)  # type: ignore[assignment]
         except jwt.ExpiredSignatureError:
             return _unauthorized("token_expired", "Token has expired")
         except jwt.InvalidTokenError as exc:

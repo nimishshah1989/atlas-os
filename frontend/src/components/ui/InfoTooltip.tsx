@@ -14,9 +14,9 @@ export function InfoTooltip({ content, className = '' }: Props) {
         <Tooltip.Trigger asChild>
           <button
             aria-label="info"
-            className={`inline-flex items-center text-ink-tertiary hover:text-ink-secondary transition-colors ml-0.5 ${className}`}
+            className={`inline-flex items-center justify-center w-4 h-4 rounded-full border border-ink-tertiary/70 text-ink-secondary hover:border-ink-secondary hover:text-ink-primary transition-colors ml-1 shrink-0 ${className}`}
           >
-            <Info size={12} strokeWidth={1.5} />
+            <Info size={10} strokeWidth={2} />
           </button>
         </Tooltip.Trigger>
         <Tooltip.Portal>

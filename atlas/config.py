@@ -56,7 +56,13 @@ class Config:
     # Auth — Supabase JWT secret for Bearer token verification.
     # Set ATLAS_AUTH_DISABLED=true in local .env to bypass JWT checks during dev.
     SUPABASE_JWT_SECRET: str = os.environ.get("SUPABASE_JWT_SECRET", "")
+    SUPABASE_JWT_AUDIENCE: str = os.environ.get("SUPABASE_JWT_AUDIENCE", "")
+    SUPABASE_JWT_ISSUER: str = os.environ.get("SUPABASE_JWT_ISSUER", "")
     AUTH_DISABLED: bool = os.environ.get("ATLAS_AUTH_DISABLED", "false").lower() == "true"
+
+    # Internal service-to-service token — used by the Next.js proxy for
+    # /api/v1/intraday/* routes. Never expose to browser clients.
+    ATLAS_INTERNAL_SECRET: str = os.environ.get("ATLAS_INTERNAL_SECRET", "")
 
     @classmethod
     def assert_db_url(cls) -> str:
