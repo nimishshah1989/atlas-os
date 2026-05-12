@@ -820,12 +820,14 @@ def compute_rs_velocity(
 
     prior_df = pd.concat(prior_frames, ignore_index=True)
 
-    # Rate-of-change with zero-guard. Replace 0 in the denominator with NA so
-    # that division produces NaN rather than ``inf``.
-    rs_base = prior_df["rs_prior"].replace(0, pd.NA)
-    prior_df["rs_velocity"] = (
-        prior_df["bottomup_rs_3m_nifty500"] - prior_df["rs_prior"]
-    ) / rs_base.abs()
+    # Rate-of-change with near-zero guard. Replace any denominator with absolute
+    # value < 0.001 with NA so tiny RS bases (common in early/volatile history)
+    # don't produce 10000+ velocities that overflow NUMERIC(10,6).
+    # Clip result to ±10 (±1000% ROC) for the same reason.
+    rs_base = prior_df["rs_prior"].abs()
+    rs_base = rs_base.where(rs_base >= 0.001, other=pd.NA)
+    raw_velocity = (prior_df["bottomup_rs_3m_nifty500"] - prior_df["rs_prior"]) / rs_base
+    prior_df["rs_velocity"] = raw_velocity.clip(-10, 10)
 
     # Join velocity back onto the original frame. Drop any pre-existing
     # rs_velocity column first (assemble_sector_metrics seeds it as NaN via
