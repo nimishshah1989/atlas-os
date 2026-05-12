@@ -827,9 +827,11 @@ def compute_rs_velocity(
         prior_df["bottomup_rs_3m_nifty500"] - prior_df["rs_prior"]
     ) / rs_base.abs()
 
-    # Join velocity back onto the original frame.
+    # Join velocity back onto the original frame. Drop any pre-existing
+    # rs_velocity column first (assemble_sector_metrics seeds it as NaN via
+    # reindex) so pandas merge doesn't produce rs_velocity_x / rs_velocity_y.
     velocity_col = prior_df[["sector_name", "date", "rs_velocity"]]
-    out = df_metrics.copy()
+    out = df_metrics.drop(columns=["rs_velocity"], errors="ignore").copy()
     # Align dtypes for the merge key so caller frames using ``date`` as Python
     # ``date`` objects still join correctly.
     out["date"] = pd.to_datetime(out["date"])
