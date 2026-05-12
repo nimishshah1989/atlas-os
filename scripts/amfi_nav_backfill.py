@@ -17,7 +17,7 @@ from __future__ import annotations
 import argparse
 import sys
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -34,8 +34,9 @@ MFAPI_BASE = "https://api.mfapi.in/mf"
 REQUEST_DELAY = 2.0  # seconds between API calls — conservative to avoid rate-limiting
 REQUEST_TIMEOUT = 20  # seconds per request
 
-# Fetch funds whose latest NAV is before this date and who have 252+ days history
-STALE_CUTOFF = "2026-05-01"
+# Default staleness window: flag funds whose latest NAV is >N days old.
+# Overridable via --stale-days at runtime.
+DEFAULT_STALE_DAYS = 5
 MIN_HISTORY_DAYS = 252
 
 
@@ -50,7 +51,9 @@ def load_env(env_path: Path) -> dict[str, str]:
     return env
 
 
-def get_stuck_funds(supa_engine, single_fund: str | None) -> list[tuple[str, date]]:
+def get_stuck_funds(
+    supa_engine, single_fund: str | None, stale_cutoff: date
+) -> list[tuple[str, date]]:
     """Return (mstar_id, latest_nav_date) for each fund needing backfill."""
     if single_fund:
         with supa_engine.connect() as conn:
@@ -76,13 +79,12 @@ def get_stuck_funds(supa_engine, single_fund: str | None) -> list[tuple[str, dat
                   ON f.mstar_id = n.mstar_id
                   AND f.effective_to IS NULL
                   AND f.plan_type = 'Regular'
-                WHERE n.nav_date <= '2026-05-11'
                 GROUP BY n.mstar_id
                 HAVING COUNT(*) >= :min_days
                   AND MAX(n.nav_date) < :cutoff
                 ORDER BY n.mstar_id
             """),
-            {"min_days": MIN_HISTORY_DAYS, "cutoff": STALE_CUTOFF},
+            {"min_days": MIN_HISTORY_DAYS, "cutoff": str(stale_cutoff)},
         ).fetchall()
     return [(r[0], r[1]) for r in rows]
 
@@ -182,15 +184,26 @@ def process_fund(
 def main() -> int:
     parser = argparse.ArgumentParser(description="Backfill AMFI NAVs for stuck funds")
     parser.add_argument("--write", action="store_true", help="Actually insert (default: dry-run)")
-    parser.add_argument("--from-date", default="2026-04-01", help="Fetch NAV from this date")
+    parser.add_argument(
+        "--from-date", default=None, help="Fetch NAV from this date (default: stale-days ago)"
+    )
+    parser.add_argument(
+        "--stale-days",
+        type=int,
+        default=DEFAULT_STALE_DAYS,
+        help="Flag funds whose latest NAV is older than this many days (default: 5)",
+    )
     parser.add_argument("--fund", help="Process single mstar_id only")
     parser.add_argument("--env", default="/home/ubuntu/atlas-compute/.env")
     args = parser.parse_args()
 
     dry_run = not args.write
-    from_date = datetime.strptime(args.from_date, "%Y-%m-%d").date()
+    stale_cutoff = date.today() - timedelta(days=args.stale_days)
+    from_date = (
+        datetime.strptime(args.from_date, "%Y-%m-%d").date() if args.from_date else stale_cutoff
+    )
 
-    print(f"AMFI NAV Backfill — dry_run={dry_run}, from={from_date}")
+    print(f"AMFI NAV Backfill — dry_run={dry_run}, from={from_date}, stale_cutoff={stale_cutoff}")
 
     env = load_env(Path(args.env))
     supa = create_engine(env["ATLAS_DB_URL"], pool_pre_ping=True, pool_size=2)
@@ -202,7 +215,7 @@ def main() -> int:
         jip_url, pool_pre_ping=True, pool_size=2, connect_args={"connect_timeout": 15}
     )
 
-    stuck = get_stuck_funds(supa, args.fund)
+    stuck = get_stuck_funds(supa, args.fund, stale_cutoff)
     print(f"Stuck funds to process: {len(stuck)}")
 
     mstar_ids = [mid for mid, _ in stuck]
