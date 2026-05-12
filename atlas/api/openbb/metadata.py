@@ -58,8 +58,8 @@ def _agent_payload(base_url: str) -> dict:
             },
             "features": {
                 "streaming": True,
-                "widgets": False,
-                "citations": False,
+                "widget-dashboard-select": False,
+                "widget-dashboard-search": False,
             },
             "sample_queries": [
                 "What is the current market regime?",
@@ -71,6 +71,15 @@ def _agent_payload(base_url: str) -> dict:
             ],
         }
     }
+
+
+@router.get(
+    "/agents.json",
+    tags=["openbb"],
+    summary="OpenBB agent discovery (root path, no auth — what OpenBB actually probes)",
+)
+def get_agents_root(request: Request) -> dict:
+    return _agent_payload(_public_base_url(request))
 
 
 @router.get(
