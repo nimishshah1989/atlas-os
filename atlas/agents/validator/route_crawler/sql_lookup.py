@@ -150,16 +150,16 @@ def _etf_scalar(column: str) -> QueryFn:
 
 
 def _fund_metrics_scalar(column: str) -> QueryFn:
-    """Fetch one column from atlas_fund_metrics_daily. PK is mstar_id."""
+    """Fetch one column from atlas_fund_metrics_daily. PK is mstar_id. Date col is nav_date."""
 
     def _fn(conn: Connection, pk: str) -> Decimal | str | None:
         parts = [p.strip() for p in pk.split(",", 1)]
         mstar_id = _esc(parts[0])
-        date_clause = f"AND date = '{_esc(parts[1])}'" if len(parts) > 1 else ""
+        date_clause = f"AND nav_date = '{_esc(parts[1])}'" if len(parts) > 1 else ""
         sql = text(
             f"SELECT {column} FROM atlas.atlas_fund_metrics_daily "
             f"WHERE mstar_id = '{mstar_id}' {date_clause} "
-            f"ORDER BY date DESC LIMIT 1"
+            f"ORDER BY nav_date DESC LIMIT 1"
         )
         row = conn.execute(sql).fetchone()
         return _scalar_result(row[0] if row else None)
@@ -255,11 +255,10 @@ LOOKUPS: dict[str, QueryFn] = {
     "etf.effort_ratio_63": _etf_scalar("effort_ratio_63"),
     "etf.above_30w_ma": _etf_scalar("above_30w_ma"),
     "etf.rs_state": _etf_scalar("rs_state"),
-    # Fund metrics (atlas_fund_metrics_daily)
+    # Fund metrics (atlas_fund_metrics_daily — date col is nav_date)
     "fund.rs_pctile_3m": _fund_metrics_scalar("rs_pctile_3m"),
-    "fund.nav_state": _fund_metrics_scalar("nav_state"),
-    "fund.category_state": _fund_metrics_scalar("category_state"),
-    # Fund states (atlas_fund_states_daily)
+    # Fund states (atlas_fund_states_daily — date col is date)
+    "fund.nav_state": _fund_states_scalar("nav_state"),
     "fund.composition_state": _fund_states_scalar("composition_state"),
     # Market regime
     "regime.regime_state": _regime_scalar("regime_state"),

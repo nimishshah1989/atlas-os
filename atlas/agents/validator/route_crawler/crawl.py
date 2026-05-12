@@ -40,7 +40,7 @@ from atlas.agents.validator.route_crawler.sql_lookup import lookup
 log = structlog.get_logger()
 
 _ROUTES_YAML = Path(__file__).parent / "routes.yaml"
-_TIMEOUT_MS = 60_000  # 60 s per route load (some data-heavy pages take 50+ s)
+_TIMEOUT_MS = 120_000  # 120 s per route load — /sectors is data-heavy and needs >60 s
 _NETWORKIDLE_MS = 20_000
 
 
