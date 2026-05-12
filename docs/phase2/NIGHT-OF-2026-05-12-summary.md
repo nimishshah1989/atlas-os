@@ -10,20 +10,31 @@
 ## TL;DR — what's live as you read this
 
 1. **Daily Atlas Brief is live in production** at `https://atlas.jslwealth.in/intelligence/daily-brief`
-   - First real brief generated and persisted: Risk-On regime, 1.00x deployment, 28-Mar-2026 commentary
+   - First real brief generated and persisted: Risk-On regime, 1.00x deployment, India VIX 16.84
    - Author: Llama 3.3 70B Versatile via Groq (free tier; no Anthropic billing line)
    - SEBI-safe prose (zero buy/sell/invest/recommend verbs)
    - 1348 input / 328 output tokens per brief, ~5 sec generation
-2. **OpenBB BYO Copilot is registered** in your OpenBB Workspace as "atlas" backend
+2. **`/intelligence` morning dashboard live** at `https://atlas.jslwealth.in/intelligence`
+   - Regime banner + brief snippet + sector rotation quadrants + breakouts + RS leaders
+   - Two-column desktop, stacked mobile, Atlas brand tokens
+3. **OpenBB BYO Copilot is registered** in your OpenBB Workspace as "atlas" backend
    - Public via cloudflared tunnel: `https://first-soldiers-pontiac-civilian.trycloudflare.com/v1`
    - Switch the chat dropdown from "OpenBB Copilot" to "Atlas Intelligence" to use it
    - Tunnel is ephemeral; needs proper nginx + DNS for permanent setup
-3. **5 materialized views refreshing nightly on EC2** via pg_cron (20:00 IST)
+4. **4 Specialist Agents live on EC2** via Groq Llama 3.3 70B (SP07 Hermes runtime — pivoted)
+   - `regime_watcher` — verified live: "Current regime Cautious, deployment 0.40, transitioned from Risk-On"
+   - `sector_rotation` — verified live: "Defence ranks highly, Energy/Capital Goods/Healthcare in leading quadrant"
+   - `stock_screener` — partial (hits Groq Llama XML-function-call bug ~30-50% of queries; SEBI guard prevents hallucination)
+   - `drift_detector` — verified live: "1752 findings, 0 P0..."
+   - REST: `POST /api/agents/invoke` (JWT-gated); CLI: `python scripts/run_agent.py`
+5. **5 materialized views refreshing nightly on EC2** via pg_cron (20:00 IST)
    - mv_rs_leaders_daily, mv_sector_rotation_state, mv_current_market_regime, mv_breakout_candidates, mv_deterioration_watch
-4. **Signal Validation Lab measured the v1 composite**
+6. **Signal Validation Lab measured the v1 composite**
    - Result: IC = 0.009 on 21-day forward returns (FAIL gate — needed > 0.05)
    - This is informative, not failure. Drives SP04 redesign.
-5. **Data Integrity Validator Phase A** runs on demand on EC2 (0 baseline findings)
+7. **Data Integrity Validator Phase A + B** run on demand on EC2
+   - Phase A (sensibility): 0 baseline findings, 22K rows scanned
+   - Phase B (schema/coverage): 1752 findings — P0=0, P1=4 (holiday-counted-as-business-day false positives), P3=1748 (historical 2016-2018 small universe — expected)
 
 ---
 
