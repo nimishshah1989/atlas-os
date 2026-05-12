@@ -39,9 +39,17 @@ jobs:
             cd /home/ubuntu/atlas-frontend
 
             echo "--- writing env ---"
-            printf '%s\n%s\n' \
+            # SP04 Stage 4a/4c: ATLAS_INTERNAL_SECRET is required by the
+            # /api/admin/proposals/* and /api/admin/weight-performance Next.js
+            # proxy routes so the approve/reject/snooze buttons can reach the
+            # FastAPI on the compute EC2. Add the secret in GitHub repo
+            # Settings → Secrets and variables → Actions. Same value as
+            # /etc/systemd/system/atlas-internal-recompute.service.d/secret.conf
+            # on the compute host.
+            printf '%s\n%s\n%s\n' \
               'ATLAS_DB_URL=${{ secrets.ATLAS_DB_URL }}' \
               'ATLAS_INTERNAL_API_BASE_URL=${{ secrets.ATLAS_INTERNAL_API_BASE_URL }}' \
+              'ATLAS_INTERNAL_SECRET=${{ secrets.ATLAS_INTERNAL_SECRET }}' \
               > .env.local
 
             echo "--- installing deps ---"
