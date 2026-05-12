@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import date, timedelta
+from typing import cast
 
 import pandas as pd
 import structlog
@@ -68,20 +69,27 @@ def run(as_of_date: date, *, persist: bool) -> None:
         if signal_col not in df.columns or fwd_col not in df.columns:
             continue
         horizon = int(fwd_col.split("_")[-1].replace("d", ""))
-        sub = df[["date", "instrument_id", "stage", signal_col, fwd_col]].dropna(
-            subset=[signal_col, fwd_col]
+        sub = cast(
+            pd.DataFrame,
+            df[["date", "instrument_id", "stage", signal_col, fwd_col]].dropna(),  # type: ignore[call-overload]
         )
+        # Re-apply per-column NaN filter after cast (dropna() without subset drops all-NaN rows)
+        sub = sub[sub[signal_col].notna() & sub[fwd_col].notna()]
         if stage_filter is not None:
-            sub = sub[sub["stage"] == stage_filter]
+            sub = cast(pd.DataFrame, sub[sub["stage"] == stage_filter])
         if len(sub) < MIN_OBS:
             log.info("timing_ic_skip", signal=signal_col, stage=stage_filter, n=len(sub))
             continue
 
-        returns_wide = sub.pivot(index="date", columns="instrument_id", values=fwd_col)
-        factor_df = (
+        returns_wide = cast(
+            pd.DataFrame, sub.pivot(index="date", columns="instrument_id", values=fwd_col)
+        )
+        factor_df = cast(
+            pd.DataFrame,
             sub[["date", "instrument_id", signal_col]]
-            .rename(columns={signal_col: "factor"})
-            .set_index(["date", "instrument_id"])
+            .copy()
+            .rename(columns={signal_col: "factor"})  # type: ignore[call-overload]
+            .set_index(["date", "instrument_id"]),
         )
 
         try:
