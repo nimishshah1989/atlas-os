@@ -24,5 +24,6 @@ routes:
   # - path: /regime        # RegimeDashboard not yet instrumented
   # - path: /admin/thresholds  # ThresholdsTable not yet instrumented
 
-  # Pending page-load fix (domcontentloaded never fires within 60 s)
-  # - path: /sectors       # SectorDecisionTable has data-validator-id but page hangs
+  - path: /sectors
+    wait_selector: "[data-validator-id]"
+    description: "Sector decisions — sector_state + participation + stocks RS"

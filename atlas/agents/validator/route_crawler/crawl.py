@@ -209,7 +209,8 @@ async def _run_crawl_async(
     all_findings: list[Finding] = []
 
     async with async_playwright() as pw:
-        browser = await pw.chromium.launch(headless=True)
+        # --disable-http2: nginx H2 causes ERR_HTTP2_PROTOCOL_ERROR in headless Chrome
+        browser = await pw.chromium.launch(headless=True, args=["--disable-http2"])
         context = await browser.new_context()
         await _setup_auth(context, base_url, password)
 
