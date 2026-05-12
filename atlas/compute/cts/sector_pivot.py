@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import cast
+
 import pandas as pd
 
 
@@ -54,7 +56,8 @@ def compute_sector_pivot(signals_df: pd.DataFrame) -> pd.DataFrame:
 
     # avg_ppc_conviction: mean of cts_conviction_score for PPC stocks only
     if has_conviction:
-        ppc_only = tradeable[tradeable["is_ppc"].fillna(False)]
+        ppc_mask: pd.Series = tradeable["is_ppc"].fillna(False).astype(bool)  # type: ignore[assignment]
+        ppc_only: pd.DataFrame = cast(pd.DataFrame, tradeable[ppc_mask])
         if not ppc_only.empty:
             avg_conv = (
                 ppc_only.groupby(["date", "sector"])["cts_conviction_score"]
