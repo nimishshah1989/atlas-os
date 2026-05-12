@@ -385,3 +385,23 @@ def _make_groq_client() -> Any:
     if not api_key:
         raise RuntimeError("GROQ_API_KEY is not set. Get one at console.groq.com.")
     return OpenAI(base_url="https://api.groq.com/openai/v1", api_key=api_key)
+
+
+async def call_groq(*, system: str, user: str) -> str:
+    """Thin async wrapper for simple system+user Groq calls (no tool loop)."""
+    import asyncio
+
+    client = _make_groq_client()
+
+    def _sync() -> str:
+        resp = client.chat.completions.create(
+            model=_MODEL,
+            max_tokens=_MAX_TOKENS,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        )
+        return (resp.choices[0].message.content or "").strip()
+
+    return await asyncio.to_thread(_sync)

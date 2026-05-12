@@ -43,6 +43,13 @@ export type StockRowWithSector = StockRow & {
   exit_momentum_collapse: boolean | null
   exit_volume_distrib: boolean | null
   exit_stop_loss: boolean | null
+  stage: number | null
+  is_ppc: boolean | null
+  is_npc: boolean | null
+  is_contraction: boolean | null
+  trigger_level: string | null
+  ppc_strength: string | null
+  signal_date: string | null
 }
 
 export type FullStockRow = StockRowWithSector
@@ -162,7 +169,14 @@ export async function getAllStocks(): Promise<StockRowWithSector[]> {
         WHEN m.ret_6m IS NOT NULL AND b.n500_now IS NOT NULL AND b.n500_6m IS NOT NULL AND b.n500_6m > 0
         THEN (m.ret_6m - (b.n500_now - b.n500_6m) / b.n500_6m)::text
         ELSE NULL
-      END AS alpha_6m
+      END AS alpha_6m,
+      cts.stage,
+      cts.is_ppc,
+      cts.is_npc,
+      cts.is_contraction,
+      cts.trigger_level::text  AS trigger_level,
+      cts.ppc_strength::text   AS ppc_strength,
+      cts.date::text           AS signal_date
     FROM atlas.atlas_universe_stocks u
     JOIN latest l ON TRUE
     CROSS JOIN benchmark b
@@ -172,6 +186,9 @@ export async function getAllStocks(): Promise<StockRowWithSector[]> {
       ON s.instrument_id = u.instrument_id AND s.date = l.d
     LEFT JOIN atlas.atlas_stock_decisions_daily d
       ON d.instrument_id = u.instrument_id AND d.date = l.d
+    LEFT JOIN atlas.atlas_cts_signals_daily cts
+      ON cts.instrument_id = u.instrument_id
+      AND cts.date = (SELECT MAX(date) FROM atlas.atlas_cts_signals_daily)
     WHERE u.effective_to IS NULL
     ORDER BY
       d.is_investable DESC NULLS LAST,
@@ -356,7 +373,14 @@ export async function getStockBySymbol(symbol: string): Promise<StockRowWithSect
         WHEN m.ret_6m IS NOT NULL AND b.n500_now IS NOT NULL AND b.n500_6m IS NOT NULL AND b.n500_6m > 0
         THEN (m.ret_6m - (b.n500_now - b.n500_6m) / b.n500_6m)::text
         ELSE NULL
-      END AS alpha_6m
+      END AS alpha_6m,
+      cts.stage,
+      cts.is_ppc,
+      cts.is_npc,
+      cts.is_contraction,
+      cts.trigger_level::text  AS trigger_level,
+      cts.ppc_strength::text   AS ppc_strength,
+      cts.date::text           AS signal_date
     FROM atlas.atlas_universe_stocks u
     JOIN latest l ON TRUE
     CROSS JOIN benchmark b
@@ -366,6 +390,9 @@ export async function getStockBySymbol(symbol: string): Promise<StockRowWithSect
       ON s.instrument_id = u.instrument_id AND s.date = l.d
     LEFT JOIN atlas.atlas_stock_decisions_daily d
       ON d.instrument_id = u.instrument_id AND d.date = l.d
+    LEFT JOIN atlas.atlas_cts_signals_daily cts
+      ON cts.instrument_id = u.instrument_id
+      AND cts.date = (SELECT MAX(date) FROM atlas.atlas_cts_signals_daily)
     WHERE u.symbol = ${symbol}
       AND u.effective_to IS NULL
     LIMIT 1

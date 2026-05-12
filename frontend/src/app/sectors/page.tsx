@@ -9,6 +9,7 @@ import {
   getBreadthWaterfallData,
   getDaysInStateForAllSectors,
   getSectorPlaybook,
+  getSectorCTSPivot,
   type PlaybookEntry,
 } from '@/lib/queries/sectors'
 import { getCurrentRegime } from '@/lib/queries/regime'
@@ -38,7 +39,7 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
   // 7 parallel queries — non-critical queries degrade to empty arrays.
   // rotation pulls from mv_sector_rotation_state (refreshed nightly by pg_cron)
   // and enriches sectors with rrg_quadrant / rs_velocity / rs_pctile_cross_sector.
-  const [allRaw, stateHistory, rrgHistory, breadthData, daysInState, playbook, rotation, leadersBySectorArr] = await Promise.all([
+  const [allRaw, stateHistory, rrgHistory, breadthData, daysInState, playbook, rotation, leadersBySectorArr, ctsPivotArr] = await Promise.all([
     getSectorsWithMomentum(),
     getSectorStateHistory(days).catch(() => [] as Awaited<ReturnType<typeof getSectorStateHistory>>),
     getRRGHistory(30).catch(() => [] as Awaited<ReturnType<typeof getRRGHistory>>),
@@ -47,9 +48,11 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
     getSectorPlaybook(regimeState).catch(() => [] as PlaybookEntry[]),
     getSectorRotationState().catch(() => [] as SectorRotationRow[]),
     getLeadersBySector().catch(() => []),
+    getSectorCTSPivot().catch(() => []),
   ])
 
   const leadersBySector = Object.fromEntries(leadersBySectorArr.map(r => [r.sector, r]))
+  const ctsPivot = Object.fromEntries(ctsPivotArr.map(r => [r.sector, r]))
 
   // Build a name → rotation lookup so downstream components can read
   // rrg_quadrant / rs_velocity off the snapshot without re-querying.
@@ -141,6 +144,7 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
           range={historyRange}
           rotation={rotation}
           leadersBySector={leadersBySector}
+          ctsPivot={ctsPivot}
         />
       </Suspense>
     </div>
