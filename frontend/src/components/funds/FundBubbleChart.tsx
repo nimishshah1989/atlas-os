@@ -56,11 +56,12 @@ const LEGEND = [
 type BubblePoint = {
   x: number               // RS percentile (0–100)
   y: number               // period return %
-  z: number               // bubble size (vol)
+  z: number               // bubble size (log AUM)
   mstarId: string
   schemeName: string
   amc: string
   color: string
+  aum: number | null      // raw AUM in crore
   vol: number | null
   rsPctile: number | null
   recommendation: string | null
@@ -91,11 +92,14 @@ function CustomTooltip({
           RS Pctile: {d.rsPctile != null ? `${d.rsPctile.toFixed(0)}th` : '—'}
         </div>
         <div className="text-ink-secondary">
+          AUM: {d.aum != null ? `₹${d.aum.toLocaleString('en-IN', { maximumFractionDigits: 0 })} Cr` : '—'}
+        </div>
+        <div className="text-ink-secondary">
           Vol (63D): {d.vol != null ? `${d.vol.toFixed(0)}%` : '—'}
         </div>
         <div className="text-ink-secondary">NAV State: {d.navState ?? '—'}</div>
         <div className="text-ink-secondary">Recommendation: {d.recommendation ?? '—'}</div>
-        <div className="text-ink-tertiary text-[9px] mt-1">Larger bubble = higher volatility</div>
+        <div className="text-ink-tertiary text-[9px] mt-1">Larger bubble = higher AUM</div>
       </div>
     </div>
   )
@@ -174,8 +178,9 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange, o
       if (Math.abs(retRaw) > RET_CAP) return []
 
       const volRaw = f.realized_vol_63 != null ? parseFloat(f.realized_vol_63) * 100 : null
-      // z = raw vol % (12–49 range). ZAxis range maps this to visual size without clamping.
-      const z = volRaw ?? 10
+      const aumRaw = f.aum_cr != null ? parseFloat(f.aum_cr) : null
+      // log scale keeps small funds visible alongside large ones (1 Cr → ~0, 8.8L Cr → ~5.95)
+      const z = aumRaw != null && aumRaw > 0 ? Math.log10(aumRaw) : 0.5
 
       // Strip " NAV" suffix to match rsStateColor keys (Leader NAV → Leader)
       const navStateKey = f.nav_state ? f.nav_state.replace(/ NAV$/, '') : null
@@ -187,6 +192,7 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange, o
         schemeName: f.scheme_name,
         amc: f.amc,
         color: rsStateColor(navStateKey),
+        aum: aumRaw,
         vol: volRaw,
         rsPctile: rsPctileRaw * 100,
         recommendation: f.recommendation,
@@ -277,7 +283,7 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange, o
       {/* Description */}
       <div className="px-5 py-2 border-b border-paper-rule/40 bg-paper-rule/5">
         <p className="font-sans text-[11px] text-ink-secondary leading-relaxed">
-          X = {period} RS percentile vs universe · Y = {period} return · Bubble size = volatility · Color = recommendation.
+          X = {period} RS percentile vs universe · Y = {period} return · Bubble size = AUM · Color = NAV state.
           Click bubble for deep-dive.
         </p>
       </div>
@@ -291,7 +297,7 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange, o
           </div>
         ))}
         <div className="ml-auto font-sans text-[10px] text-ink-tertiary">
-          Bubble size = volatility · {data.length} funds
+          Bubble size = AUM (log scale) · {data.length} funds
         </div>
       </div>
 
