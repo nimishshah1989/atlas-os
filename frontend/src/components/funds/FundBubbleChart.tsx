@@ -1,26 +1,15 @@
 'use client'
-import { useMemo, useCallback } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import {
-  ScatterChart,
-  Scatter,
-  XAxis,
-  YAxis,
-  ZAxis,
-  Tooltip,
-  ReferenceLine,
-  ReferenceArea,
-  ResponsiveContainer,
-  Cell,
-} from 'recharts'
+import * as d3 from 'd3'
 import type { FundRow } from '@/lib/queries/funds'
 import type { Period } from '@/lib/url-params'
 import type { FilterChip } from '@/components/funds/FundPageClient'
-import { CHART_COLORS, rsStateColor } from '@/lib/chart-colors'
+import { rsStateColor } from '@/lib/chart-colors'
 
-// allow-large: single cohesive component — axes, quadrants, tooltip, legend, filter chips all belong together (mirrors StockBubbleChart pattern)
+// allow-large: single cohesive D3 component — axes, quadrants, tooltip, legend, filter chips all belong together
 
-const RET_CAP = 1.5   // 150% — exclude extreme return outliers
+const RET_CAP = 1.5   // 150% — exclude extreme outliers
 
 const PERIOD_RET_KEY: Record<Period, keyof FundRow> = {
   '1M': 'ret_1m',
@@ -29,11 +18,8 @@ const PERIOD_RET_KEY: Record<Period, keyof FundRow> = {
   '1Y': 'ret_12m',
 }
 
-const PERIOD_PCTILE_KEY: Record<Period, keyof FundRow> = {
-  '1M': 'rs_pctile_1m',
-  '3M': 'rs_pctile_3m',
-  '6M': 'rs_pctile_6m',
-  '1Y': 'rs_pctile_6m', // 6M is best available proxy for 1Y
+const PERIOD_LABEL: Record<Period, string> = {
+  '1M': '1M', '3M': '3M', '6M': '6M', '1Y': '1Y',
 }
 
 const BUBBLE_FILTERS: { key: FilterChip; label: string }[] = [
@@ -44,107 +30,21 @@ const BUBBLE_FILTERS: { key: FilterChip; label: string }[] = [
 ]
 
 const LEGEND = [
-  { color: CHART_COLORS.rsLeader,        label: 'Leader NAV' },
-  { color: CHART_COLORS.rsStrong,        label: 'Strong NAV' },
-  { color: CHART_COLORS.rsEmerging,      label: 'Emerging NAV' },
-  { color: CHART_COLORS.rsConsolidating, label: 'Consolidating NAV' },
-  { color: CHART_COLORS.rsAverage,       label: 'Average NAV' },
-  { color: CHART_COLORS.rsWeak,          label: 'Weak / Laggard NAV' },
-  { color: CHART_COLORS.inkTertiary,     label: 'No State' },
+  { color: '#2F6B43', label: 'Leader NAV' },
+  { color: '#1D9E75', label: 'Strong NAV' },
+  { color: '#25394A', label: 'Emerging NAV' },
+  { color: '#B8860B', label: 'Consolidating NAV' },
+  { color: '#8C8278', label: 'Average NAV' },
+  { color: '#B0492C', label: 'Weak / Laggard NAV' },
 ]
 
-type BubblePoint = {
-  x: number               // RS percentile (0–100)
-  y: number               // period return %
-  z: number               // bubble size (log AUM)
-  mstarId: string
-  schemeName: string
-  amc: string
-  color: string
-  aum: number | null      // raw AUM in crore
-  vol: number | null
-  rsPctile: number | null
-  recommendation: string | null
-  navState: string | null
-}
-
-function CustomTooltip({
-  active,
-  payload,
-}: {
-  active?: boolean
-  payload?: Array<{ payload: BubblePoint }>
-}) {
-  if (!active || !payload?.length) return null
-  const d = payload[0].payload
-  return (
-    <div className="bg-paper border border-paper-rule rounded-sm shadow-md px-3 py-2 font-sans text-xs max-w-[240px]">
-      <div className="font-semibold text-ink-primary truncate">{d.schemeName}</div>
-      <div className="text-ink-tertiary text-[10px] mb-1 truncate">{d.amc}</div>
-      <div className="space-y-0.5 border-t border-paper-rule/40 pt-1.5">
-        <div>
-          Return:{' '}
-          <span className={d.y >= 0 ? 'text-signal-pos font-medium' : 'text-signal-neg font-medium'}>
-            {d.y >= 0 ? '+' : ''}{d.y.toFixed(1)}%
-          </span>
-        </div>
-        <div className="text-ink-secondary">
-          RS Pctile: {d.rsPctile != null ? `${d.rsPctile.toFixed(0)}th` : '—'}
-        </div>
-        <div className="text-ink-secondary">
-          AUM: {d.aum != null ? `₹${d.aum.toLocaleString('en-IN', { maximumFractionDigits: 0 })} Cr` : '—'}
-        </div>
-        <div className="text-ink-secondary">
-          Vol (63D): {d.vol != null ? `${d.vol.toFixed(0)}%` : '—'}
-        </div>
-        <div className="text-ink-secondary">NAV State: {d.navState ?? '—'}</div>
-        <div className="text-ink-secondary">Recommendation: {d.recommendation ?? '—'}</div>
-        <div className="text-ink-tertiary text-[9px] mt-1">Larger bubble = higher AUM</div>
-      </div>
-    </div>
-  )
-}
-
-type QuadrantPos = 'tl' | 'tr' | 'bl' | 'br'
-
-function quadLabel(pos: QuadrantPos, text: string, sub: string, color: string) {
-  return function QuadLabel({
-    viewBox,
-  }: {
-    viewBox?: { x: number; y: number; width: number; height: number }
-  }) {
-    if (!viewBox) return null
-    const { x, y, width, height } = viewBox
-    const isRight = pos === 'tr' || pos === 'br'
-    const isBottom = pos === 'bl' || pos === 'br'
-    const tx = isRight ? x + width - 10 : x + 10
-    const ty1 = isBottom ? y + height - 18 : y + 14
-    const ty2 = isBottom ? y + height - 6 : y + 24
-    const anchor = isRight ? 'end' : 'start'
-    return (
-      <g>
-        <text
-          x={tx} y={ty1}
-          fill={color} fillOpacity={0.55}
-          fontSize={9} fontWeight={700}
-          fontFamily="var(--font-sans)"
-          textAnchor={anchor}
-          letterSpacing={1.2}
-        >
-          {text.toUpperCase()}
-        </text>
-        <text
-          x={tx} y={ty2}
-          fill={color} fillOpacity={0.35}
-          fontSize={8}
-          fontFamily="var(--font-sans)"
-          textAnchor={anchor}
-        >
-          {sub}
-        </text>
-      </g>
-    )
-  }
+// Log-linear radius: every 10× AUM increase = constant radius step.
+// Gives clear visual differentiation across the 100 Cr → 1 lakh Cr range.
+function aumToRadius(aum: number | null): number {
+  if (!aum || aum <= 0) return 5
+  const log = Math.log10(Math.max(10, aum))
+  // log10 of 10 Cr = 1, of ~10M Cr = 7. Map linearly to radius 6–46 px.
+  return Math.min(46, 6 + (log - 1) * 6.67)
 }
 
 type Props = {
@@ -156,9 +56,13 @@ type Props = {
 }
 
 export function FundBubbleChart({ funds, period, activeFilter, onFilterChange, onPeriodChange }: Props) {
-  const router = useRouter()
+  const router     = useRouter()
+  const routerRef  = useRef(router)
+  routerRef.current = router
 
-  // Apply bubble-level filter (subset of FundPageClient's full filter logic)
+  const svgRef  = useRef<SVGSVGElement>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+
   const filteredFunds = useMemo(() => {
     if (activeFilter === 'all')         return funds
     if (activeFilter === 'recommended') return funds.filter(f => f.recommendation === 'Recommended')
@@ -167,113 +71,271 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange, o
     return funds
   }, [funds, activeFilter])
 
-  const data = useMemo<BubblePoint[]>(() => {
+  const visibleCount = useMemo(() => {
     const retKey = PERIOD_RET_KEY[period]
-    const pctileKey = PERIOD_PCTILE_KEY[period]
-    return filteredFunds.flatMap(f => {
-      const retRaw = f[retKey] != null ? parseFloat(f[retKey] as string) : null
-      const rsPctileRaw = f[pctileKey] != null ? parseFloat(f[pctileKey] as string) : null
-
-      if (retRaw == null || rsPctileRaw == null) return []
-      if (Math.abs(retRaw) > RET_CAP) return []
-
-      const volRaw = f.realized_vol_63 != null ? parseFloat(f.realized_vol_63) * 100 : null
-      const aumRaw = f.aum_cr != null ? parseFloat(f.aum_cr) : null
-      // log scale keeps small funds visible alongside large ones (1 Cr → ~0, 8.8L Cr → ~5.95)
-      const z = aumRaw != null && aumRaw > 0 ? Math.log10(aumRaw) : 0.5
-
-      // Strip " NAV" suffix to match rsStateColor keys (Leader NAV → Leader)
-      const navStateKey = f.nav_state ? f.nav_state.replace(/ NAV$/, '') : null
-      return [{
-        x: rsPctileRaw * 100,   // RS percentile 0–100
-        y: retRaw * 100,         // return %
-        z,
-        mstarId: f.mstar_id,
-        schemeName: f.scheme_name,
-        amc: f.amc,
-        color: rsStateColor(navStateKey),
-        aum: aumRaw,
-        vol: volRaw,
-        rsPctile: rsPctileRaw * 100,
-        recommendation: f.recommendation,
-        navState: f.nav_state,
-      }]
-    })
+    return filteredFunds.filter(f => f[retKey] != null && f.realized_vol_63 != null).length
   }, [filteredFunds, period])
 
-  // Dynamic Y domain — pad 15%, clamp to [-75, 150]
-  const [yMin, yMax] = useMemo(() => {
-    if (data.length === 0) return [-50, 80]
-    const ys = data.map(d => d.y)
-    const lo = Math.min(...ys), hi = Math.max(...ys)
-    const pad = Math.max((hi - lo) * 0.15, 8)
-    return [
-      Math.max(-75, Math.floor((lo - pad) / 10) * 10),
-      Math.min(150, Math.ceil((hi + pad) / 10) * 10),
+  useEffect(() => {
+    const container = wrapRef.current
+    const svgEl     = svgRef.current
+    if (!container || !svgEl) return
+
+    const retKey = PERIOD_RET_KEY[period]
+
+    const points = filteredFunds.flatMap(f => {
+      const retRaw = f[retKey] != null ? parseFloat(f[retKey] as string) : null
+      const volRaw = f.realized_vol_63 != null ? parseFloat(f.realized_vol_63) : null
+      if (retRaw == null || volRaw == null) return []
+      if (Math.abs(retRaw) > RET_CAP) return []
+      const aumRaw      = f.aum_cr != null ? parseFloat(f.aum_cr) : null
+      const navStateKey = f.nav_state ? f.nav_state.replace(/ NAV$/, '') : null
+      return [{
+        mstarId:        f.mstar_id,
+        schemeName:     f.scheme_name,
+        amc:            f.amc,
+        x:              volRaw * 100,
+        y:              retRaw * 100,
+        r:              aumToRadius(aumRaw),
+        aum:            aumRaw,
+        color:          rsStateColor(navStateKey),
+        recommendation: f.recommendation,
+        navState:       f.nav_state,
+      }]
+    })
+
+    const margin = { top: 40, right: 48, bottom: 64, left: 64 }
+    const totalW = container.clientWidth
+    const totalH = 500
+    const W = totalW - margin.left - margin.right
+    const H = totalH - margin.top  - margin.bottom
+
+    d3.select(svgEl).selectAll('*').remove()
+    d3.select(svgEl).attr('width', totalW).attr('height', totalH)
+
+    if (points.length === 0) {
+      d3.select(svgEl).append('text')
+        .attr('x', totalW / 2).attr('y', totalH / 2)
+        .attr('text-anchor', 'middle')
+        .attr('font-family', 'var(--font-sans)').attr('font-size', 12).attr('fill', '#94a3b8')
+        .text('No funds with data for this filter.')
+      return
+    }
+
+    const svg = d3.select(svgEl).append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`)
+
+    // Axes
+    const xExt = d3.extent(points, p => p.x) as [number, number]
+    const xPad = Math.max((xExt[1] - xExt[0]) * 0.10, 1)
+    const xScale = d3.scaleLinear()
+      .domain([Math.max(0, xExt[0] - xPad), xExt[1] + xPad])
+      .range([0, W])
+
+    const yExt = d3.extent(points, p => p.y) as [number, number]
+    const yPad = Math.max((yExt[1] - yExt[0]) * 0.12, 5)
+    const yScale = d3.scaleLinear()
+      .domain([
+        Math.max(-80, Math.floor((yExt[0] - yPad) / 5) * 5),
+        Math.min(150, Math.ceil( (yExt[1] + yPad) / 5) * 5),
+      ])
+      .range([H, 0])
+
+    // Crosshair: X at median vol, Y at 0% return
+    const xMed = d3.median(points, p => p.x) ?? 0
+    const xMid = xScale(xMed)
+    const yMid = yScale(0)
+
+    // Quadrant tints (same palette as Sector + ETF charts)
+    const quads = [
+      { x: 0,    y: 0,    w: xMid,      h: yMid,     label: 'QUALITY UPTREND', sub: 'low risk · positive return',  bg: '#e2f0e8', text: '#2F6B43' },
+      { x: xMid, y: 0,    w: W - xMid,  h: yMid,     label: 'HIGH BETA',       sub: 'high risk · positive return', bg: '#f5f0e8', text: '#B8860B' },
+      { x: 0,    y: yMid, w: xMid,      h: H - yMid, label: 'QUIET DRIFT',     sub: 'low risk · negative return',  bg: '#e8f0f5', text: '#25394A' },
+      { x: xMid, y: yMid, w: W - xMid,  h: H - yMid, label: 'DANGER ZONE',    sub: 'high risk · negative return', bg: '#f5e8e8', text: '#B0492C' },
     ]
-  }, [data])
+    quads.forEach(q => {
+      svg.append('rect')
+        .attr('x', q.x).attr('y', q.y)
+        .attr('width', q.w).attr('height', q.h)
+        .attr('fill', q.bg).attr('opacity', 0.45)
+      svg.append('text')
+        .attr('x', q.x + q.w / 2)
+        .attr('y', q.y + (q.y === 0 ? 14 : q.h - 14))
+        .attr('text-anchor', 'middle')
+        .attr('font-family', 'var(--font-sans)').attr('font-size', 8).attr('font-weight', 700)
+        .attr('letter-spacing', 1.5).attr('fill', q.text).attr('opacity', 0.65)
+        .text(q.label)
+      svg.append('text')
+        .attr('x', q.x + q.w / 2)
+        .attr('y', q.y + (q.y === 0 ? 26 : q.h - 4))
+        .attr('text-anchor', 'middle')
+        .attr('font-family', 'var(--font-sans)').attr('font-size', 7)
+        .attr('fill', q.text).attr('opacity', 0.40)
+        .text(q.sub)
+    })
 
-  const handleClick = useCallback((point: { payload?: BubblePoint }) => {
-    if (point?.payload?.mstarId)
-      router.push(`/funds/${point.payload.mstarId}`)
-  }, [router])
+    // Crosshair lines
+    svg.append('line')
+      .attr('x1', xMid).attr('x2', xMid).attr('y1', 0).attr('y2', H)
+      .attr('stroke', '#94a3b8').attr('stroke-width', 1).attr('stroke-dasharray', '4 3')
+    svg.append('line')
+      .attr('x1', 0).attr('x2', W).attr('y1', yMid).attr('y2', yMid)
+      .attr('stroke', '#94a3b8').attr('stroke-width', 1).attr('stroke-dasharray', '4 3')
 
-  if (data.length === 0) {
-    return (
-      <div className="border border-paper-rule rounded-sm bg-paper">
-        {/* Header */}
-        <div className="px-5 py-3 border-b border-paper-rule flex flex-wrap items-center gap-4">
-          <span className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider">
-            Fund Map
-          </span>
-          <div className="flex gap-1">
-            {BUBBLE_FILTERS.map(f => (
-              <button key={f.key} type="button" onClick={() => onFilterChange(f.key)}
-                className={`px-2 py-0.5 rounded-sm font-sans text-[11px] font-medium transition-colors ${
-                  activeFilter === f.key
-                    ? 'bg-ink-secondary text-paper'
-                    : 'bg-paper-rule/20 text-ink-secondary hover:bg-paper-rule/40'
-                }`}>
-                {f.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="flex items-center justify-center" style={{ height: 480 }}>
-          <p className="font-sans text-sm text-ink-tertiary">No funds to display for this filter.</p>
-        </div>
-      </div>
-    )
-  }
+    // 0% label on Y axis
+    svg.append('text')
+      .attr('x', W + 4).attr('y', yMid + 3)
+      .attr('font-family', 'var(--font-sans)').attr('font-size', 8).attr('fill', '#94a3b8')
+      .text('0%')
+
+    // Bottom X axis
+    svg.append('g')
+      .attr('transform', `translate(0,${H})`)
+      .call(d3.axisBottom(xScale).tickFormat(v => `${(+v).toFixed(0)}%`).ticks(6).tickSize(0))
+      .call(ax => {
+        ax.select('.domain').remove()
+        ax.selectAll('.tick text')
+          .attr('font-family', 'var(--font-sans)').attr('font-size', 9)
+          .attr('fill', '#94a3b8').attr('dy', 12)
+      })
+
+    // Left Y axis
+    svg.append('g')
+      .call(d3.axisLeft(yScale)
+        .tickFormat(v => `${(+v) >= 0 ? '+' : ''}${(+v).toFixed(0)}%`)
+        .ticks(6).tickSize(0))
+      .call(ax => {
+        ax.select('.domain').remove()
+        ax.selectAll('.tick text')
+          .attr('font-family', 'var(--font-sans)').attr('font-size', 9)
+          .attr('fill', '#94a3b8').attr('dx', -6)
+      })
+
+    svg.append('text')
+      .attr('x', W / 2).attr('y', H + 50)
+      .attr('text-anchor', 'middle')
+      .attr('font-family', 'var(--font-sans)').attr('font-size', 10).attr('fill', '#64748b')
+      .text('Volatility 63D (%) →')
+
+    svg.append('text')
+      .attr('transform', 'rotate(-90)')
+      .attr('x', -H / 2).attr('y', -50)
+      .attr('text-anchor', 'middle')
+      .attr('font-family', 'var(--font-sans)').attr('font-size', 10).attr('fill', '#64748b')
+      .text(`↑ ${PERIOD_LABEL[period]} Return (%)`)
+
+    // Tooltip (fixed position so it escapes overflow:hidden parents)
+    const tip = d3.select(document.body).append('div')
+      .style('position', 'fixed').style('pointer-events', 'none')
+      .style('opacity', '0').style('background', '#fff')
+      .style('border', '1px solid #e2e8f0').style('border-radius', '2px')
+      .style('padding', '8px 10px').style('font-family', 'var(--font-sans)')
+      .style('font-size', '11px').style('color', '#1e293b')
+      .style('z-index', '9999').style('box-shadow', '0 2px 8px rgba(0,0,0,0.08)')
+      .style('min-width', '210px').style('max-width', '280px')
+
+    // Render largest bubbles first (behind smaller ones)
+    const sorted = [...points].sort((a, b) => b.r - a.r)
+
+    const node = svg.selectAll<SVGGElement, typeof sorted[0]>('.fund-node')
+      .data(sorted).enter().append('g')
+      .attr('class', 'fund-node').style('cursor', 'pointer')
+
+    node.append('circle')
+      .attr('cx', p => xScale(p.x)).attr('cy', p => yScale(p.y))
+      .attr('r',  p => p.r)
+      .attr('fill',         p => p.color)
+      .attr('fill-opacity', p => p.recommendation === 'Recommended' ? 0.22 : 0.14)
+      .attr('stroke',       p => p.color)
+      .attr('stroke-width', 1.5)
+
+    // Label large bubbles only (AUM large enough to read)
+    node.filter(p => p.r >= 20)
+      .append('text')
+      .attr('x', p => xScale(p.x)).attr('y', p => yScale(p.y) + 3)
+      .attr('text-anchor', 'middle')
+      .attr('font-family', 'var(--font-sans)').attr('font-size', 7).attr('font-weight', 600)
+      .attr('fill', p => p.color).attr('pointer-events', 'none')
+      .text(p => {
+        const short = p.schemeName
+          .replace(/\b(Direct|Regular|Growth|IDCW|Plan|Fund)\b.*/i, '')
+          .trim()
+        return short.length > 15 ? short.slice(0, 15) + '…' : short
+      })
+
+    node
+      .on('mouseenter', function (event, p) {
+        d3.select(this).select('circle').attr('fill-opacity', 0.35).attr('stroke-width', 2.5)
+        tip.style('opacity', '1')
+          .style('left', `${(event.clientX as number) + 14}px`)
+          .style('top',  `${(event.clientY as number) - 30}px`)
+          .html(`
+            <div style="font-weight:700;margin-bottom:3px;font-size:12px;line-height:1.3">${p.schemeName}</div>
+            <div style="color:#64748b;font-size:10px;margin-bottom:6px">${p.amc}</div>
+            <div style="border-top:1px solid #f1f5f9;padding-top:5px;display:grid;gap:3px">
+              <div style="color:#64748b">${PERIOD_LABEL[period]} Return:
+                <span style="font-weight:600;color:${p.y >= 0 ? '#2F6B43' : '#B0492C'}">
+                  ${p.y >= 0 ? '+' : ''}${p.y.toFixed(1)}%
+                </span>
+              </div>
+              <div style="color:#64748b">Volatility 63D: <span style="color:#1e293b">${p.x.toFixed(1)}%</span></div>
+              <div style="color:#64748b">AUM:
+                <span style="color:#1e293b">
+                  ${p.aum != null ? '₹' + p.aum.toLocaleString('en-IN', { maximumFractionDigits: 0 }) + ' Cr' : '—'}
+                </span>
+              </div>
+              <div style="color:#64748b">NAV State: <span style="color:#1e293b">${p.navState ?? '—'}</span></div>
+              <div style="color:#64748b">Recommendation: <span style="color:#1e293b">${p.recommendation ?? '—'}</span></div>
+            </div>
+          `)
+      })
+      .on('mousemove', function (event) {
+        tip.style('left', `${(event.clientX as number) + 14}px`)
+           .style('top',  `${(event.clientY as number) - 30}px`)
+      })
+      .on('mouseleave', function (_, p) {
+        d3.select(this).select('circle')
+          .attr('fill-opacity', p.recommendation === 'Recommended' ? 0.22 : 0.14)
+          .attr('stroke-width', 1.5)
+        tip.style('opacity', '0')
+      })
+      .on('click', (_, p) => {
+        tip.style('opacity', '0')
+        routerRef.current.push(`/funds/${p.mstarId}`)
+      })
+
+    return () => { tip.remove() }
+  }, [filteredFunds, period])
 
   return (
     <div className="border border-paper-rule rounded-sm bg-paper">
-      {/* Header: title + period selector + filter chips */}
+      {/* Header */}
       <div className="px-5 py-3 border-b border-paper-rule flex flex-wrap items-center gap-4">
         <span className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider">
           Fund Map
         </span>
-        {/* Period selector — controls Y-axis return + bubble size (RS pctile) */}
         <div className="flex items-center gap-0.5 border border-paper-rule rounded-sm overflow-hidden">
           {(['1M', '3M', '6M', '1Y'] as Period[]).map(p => (
-            <button key={p} type="button" onClick={() => onPeriodChange(p)}
+            <button
+              key={p} type="button" onClick={() => onPeriodChange(p)}
               className={`px-2.5 py-0.5 font-sans text-[11px] font-medium transition-colors ${
-                period === p
-                  ? 'bg-teal text-white'
-                  : 'text-ink-secondary hover:bg-paper-rule/30'
-              }`}>
+                period === p ? 'bg-teal text-white' : 'text-ink-secondary hover:bg-paper-rule/30'
+              }`}
+            >
               {p}
             </button>
           ))}
         </div>
         <div className="flex gap-1">
           {BUBBLE_FILTERS.map(f => (
-            <button key={f.key} type="button" onClick={() => onFilterChange(f.key)}
+            <button
+              key={f.key} type="button" onClick={() => onFilterChange(f.key)}
               className={`px-2 py-0.5 rounded-sm font-sans text-[11px] font-medium transition-colors ${
                 activeFilter === f.key
                   ? 'bg-ink-secondary text-paper'
                   : 'bg-paper-rule/20 text-ink-secondary hover:bg-paper-rule/40'
-              }`}>
+              }`}
+            >
               {f.label}
             </button>
           ))}
@@ -283,8 +345,7 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange, o
       {/* Description */}
       <div className="px-5 py-2 border-b border-paper-rule/40 bg-paper-rule/5">
         <p className="font-sans text-[11px] text-ink-secondary leading-relaxed">
-          X = {period} RS percentile vs universe · Y = {period} return · Bubble size = AUM · Color = NAV state.
-          Click bubble for deep-dive.
+          X = volatility 63D · Y = {period} return · Bubble = AUM · Color = NAV state · Click for deep-dive
         </p>
       </div>
 
@@ -297,83 +358,13 @@ export function FundBubbleChart({ funds, period, activeFilter, onFilterChange, o
           </div>
         ))}
         <div className="ml-auto font-sans text-[10px] text-ink-tertiary">
-          Bubble size = AUM (log scale) · {data.length} funds
+          Bubble size = AUM · {visibleCount} funds
         </div>
       </div>
 
-      {/* Chart */}
-      <div className="px-2 py-4" style={{ height: 480 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <ScatterChart margin={{ top: 10, right: 24, bottom: 42, left: 36 }}>
-
-            {/* Quadrant tints — split at RS pctile 50 and return 0 */}
-            <ReferenceArea
-              x1={50} x2={100} y1={0} y2={yMax}
-              fill="#22c55e" fillOpacity={0.04}
-              label={quadLabel('tr', 'Leaders', 'high RS · positive return', '#22c55e')}
-            />
-            <ReferenceArea
-              x1={0} x2={50} y1={0} y2={yMax}
-              fill="#94a3b8" fillOpacity={0.04}
-              label={quadLabel('tl', 'Recovering', 'low RS · positive return', '#94a3b8')}
-            />
-            <ReferenceArea
-              x1={50} x2={100} y1={yMin} y2={0}
-              fill="#f59e0b" fillOpacity={0.04}
-              label={quadLabel('br', 'Fading', 'high RS · negative return', '#f59e0b')}
-            />
-            <ReferenceArea
-              x1={0} x2={50} y1={yMin} y2={0}
-              fill="#ef4444" fillOpacity={0.05}
-              label={quadLabel('bl', 'Laggards', 'low RS · negative return', '#ef4444')}
-            />
-
-            <XAxis
-              type="number"
-              dataKey="x"
-              domain={[0, 100]}
-              tickFormatter={v => `${(v as number).toFixed(0)}th`}
-              label={{ value: `${period} RS Percentile vs Universe →`, position: 'insideBottom', offset: -28, fontSize: 10, fill: '#94a3b8' }}
-              tick={{ fontSize: 10, fill: '#94a3b8' }}
-              ticks={[0, 25, 50, 75, 100]}
-            />
-            <YAxis
-              type="number"
-              dataKey="y"
-              domain={[yMin, yMax]}
-              tickFormatter={v => `${(v as number) >= 0 ? '+' : ''}${(v as number).toFixed(0)}%`}
-              label={{ value: `↑ ${period} Return`, angle: -90, position: 'insideLeft', offset: 14, fontSize: 10, fill: '#94a3b8' }}
-              tick={{ fontSize: 10, fill: '#94a3b8' }}
-              tickCount={6}
-            />
-            <ZAxis type="number" dataKey="z" range={[15, 500]} />
-            <Tooltip content={<CustomTooltip />} cursor={false} />
-
-            {/* Axis dividers */}
-            <ReferenceLine
-              y={0}
-              stroke="#cbd5e1" strokeDasharray="4 3" strokeWidth={1}
-            />
-            <ReferenceLine
-              x={50}
-              stroke="#cbd5e1" strokeDasharray="4 3" strokeWidth={1}
-              label={{ value: '50th pctile', position: 'insideTopRight', fontSize: 9, fill: '#94a3b8', dy: -4 }}
-            />
-
-            <Scatter data={data} onClick={handleClick} cursor="pointer">
-              {data.map((entry, i) => (
-                <Cell
-                  key={`cell-${i}`}
-                  fill={entry.color}
-                  fillOpacity={entry.recommendation === 'Recommended' ? 0.85 : 0.55}
-                  stroke={entry.color}
-                  strokeOpacity={0.80}
-                  strokeWidth={0.5}
-                />
-              ))}
-            </Scatter>
-          </ScatterChart>
-        </ResponsiveContainer>
+      {/* Chart canvas */}
+      <div ref={wrapRef} className="px-2 py-4">
+        <svg ref={svgRef} className="w-full" />
       </div>
     </div>
   )

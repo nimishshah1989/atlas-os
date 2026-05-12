@@ -32,7 +32,7 @@ export function ETFBubbleChart({
     const svgEl = svgRef.current
     if (!container || !svgEl || filtered.length === 0) return
 
-    const margin = { top: 30, right: 30, bottom: 64, left: 56 }
+    const margin = { top: 40, right: 48, bottom: 64, left: 56 }
     const totalW = container.clientWidth
     const totalH = 460
     const W = totalW - margin.left - margin.right
@@ -71,15 +71,15 @@ export function ETFBubbleChart({
     const yPad = (yExt[1] - yExt[0]) * 0.12 || 2
     const yScale = d3.scaleLinear().domain([yExt[0] - yPad, yExt[1] + yPad]).range([H, 0])
 
-    const midX = xScale((xExt[0] + xExt[1]) / 2)
+    const midX = xScale(d3.median(points, p => p.x) ?? (xExt[0] + xExt[1]) / 2)
     const midY = yScale(0)
 
     // Quadrant backgrounds — neutral tones, distinct from RS-state bubble colors
     const quads = [
-      { x: 0,    y: 0,    w: midX,      h: midY,     label: 'QUALITY UPTREND', bg: '#e2f0e8', text: '#2F6B43' },
-      { x: midX, y: 0,    w: W - midX,  h: midY,     label: 'HIGH BETA',       bg: '#f5f0e8', text: '#B8860B' },
-      { x: 0,    y: midY, w: midX,      h: H - midY, label: 'QUIET DRIFT',     bg: '#e8f0f5', text: '#25394A' },
-      { x: midX, y: midY, w: W - midX,  h: H - midY, label: 'DANGER ZONE',    bg: '#f5e8e8', text: '#B0492C' },
+      { x: 0,    y: 0,    w: midX,      h: midY,     label: 'QUALITY UPTREND', sub: 'low risk · positive return',  bg: '#e2f0e8', text: '#2F6B43' },
+      { x: midX, y: 0,    w: W - midX,  h: midY,     label: 'HIGH BETA',       sub: 'high risk · positive return', bg: '#f5f0e8', text: '#B8860B' },
+      { x: 0,    y: midY, w: midX,      h: H - midY, label: 'QUIET DRIFT',     sub: 'low risk · negative return',  bg: '#e8f0f5', text: '#25394A' },
+      { x: midX, y: midY, w: W - midX,  h: H - midY, label: 'DANGER ZONE',    sub: 'high risk · negative return', bg: '#f5e8e8', text: '#B0492C' },
     ]
     quads.forEach(q => {
       svg.append('rect')
@@ -88,18 +88,31 @@ export function ETFBubbleChart({
         .attr('fill', q.bg).attr('opacity', 0.45)
       svg.append('text')
         .attr('x', q.x + q.w / 2)
-        .attr('y', q.y + (q.y === 0 ? 14 : q.h - 6))
+        .attr('y', q.y + (q.y === 0 ? 14 : q.h - 14))
         .attr('text-anchor', 'middle')
         .attr('font-family', 'var(--font-sans)')
         .attr('font-size', 8).attr('font-weight', 700).attr('letter-spacing', 1.5)
-        .attr('fill', q.text).attr('opacity', 0.55)
+        .attr('fill', q.text).attr('opacity', 0.65)
         .text(q.label)
+      svg.append('text')
+        .attr('x', q.x + q.w / 2)
+        .attr('y', q.y + (q.y === 0 ? 26 : q.h - 4))
+        .attr('text-anchor', 'middle')
+        .attr('font-family', 'var(--font-sans)').attr('font-size', 7)
+        .attr('fill', q.text).attr('opacity', 0.40)
+        .text(q.sub)
     })
 
     svg.append('line').attr('x1', midX).attr('x2', midX).attr('y1', 0).attr('y2', H)
-      .attr('stroke', '#94a3b8').attr('stroke-width', 1).attr('stroke-dasharray', '3 3')
+      .attr('stroke', '#94a3b8').attr('stroke-width', 1).attr('stroke-dasharray', '4 3')
     svg.append('line').attr('x1', 0).attr('x2', W).attr('y1', midY).attr('y2', midY)
-      .attr('stroke', '#94a3b8').attr('stroke-width', 1).attr('stroke-dasharray', '3 3')
+      .attr('stroke', '#94a3b8').attr('stroke-width', 1).attr('stroke-dasharray', '4 3')
+
+    // 0% label on Y axis
+    svg.append('text')
+      .attr('x', W + 4).attr('y', midY + 3)
+      .attr('font-family', 'var(--font-sans)').attr('font-size', 8).attr('fill', '#94a3b8')
+      .text('0%')
 
     // Axes
     svg.append('g')
@@ -111,7 +124,7 @@ export function ETFBubbleChart({
           .attr('fill', '#94a3b8').attr('dy', 12)
       })
     svg.append('g')
-      .call(d3.axisLeft(yScale).tickFormat(v => `${(+v).toFixed(0)}%`).ticks(5).tickSize(0))
+      .call(d3.axisLeft(yScale).tickFormat(v => `${(+v) >= 0 ? '+' : ''}${(+v).toFixed(0)}%`).ticks(5).tickSize(0))
       .call(ax => {
         ax.select('.domain').remove()
         ax.selectAll('.tick text').attr('font-family', 'var(--font-sans)').attr('font-size', 9)
@@ -164,13 +177,16 @@ export function ETFBubbleChart({
           .style('left', `${(event.clientX as number) + 14}px`)
           .style('top', `${(event.clientY as number) - 30}px`)
           .html(`
-            <div style="font-weight:700;margin-bottom:4px">${p.ticker}</div>
-            <div style="color:#64748b;font-size:10px;margin-bottom:4px">${p.etf_name ?? ''}</div>
-            <div style="color:#64748b">3M Return: <span style="color:${p.y >= 0 ? '#22c55e' : '#ef4444'}">${ret3m}</span></div>
-            <div style="color:#64748b">Volatility: <span style="color:#1e293b">${p.x.toFixed(1)}%</span></div>
-            <div style="color:#64748b">RS Pctile: <span style="color:#1e293b">${p.rs_pctile_3m != null ? (parseFloat(p.rs_pctile_3m) * 100).toFixed(0) + 'th' : '—'}</span></div>
-            <div style="margin-top:4px;color:#64748b">${p.rs_state ?? '—'} · ${p.momentum_state ?? '—'}</div>
-            <div style="color:#64748b;font-size:10px">${p.theme}</div>
+            <div style="font-weight:700;margin-bottom:3px;font-size:12px;line-height:1.3">${p.ticker}</div>
+            <div style="color:#64748b;font-size:10px;margin-bottom:6px">${p.etf_name ?? ''}</div>
+            <div style="border-top:1px solid #f1f5f9;padding-top:5px;display:grid;gap:3px">
+              <div style="color:#64748b">3M Return: <span style="font-weight:600;color:${p.y >= 0 ? '#2F6B43' : '#B0492C'}">${ret3m}</span></div>
+              <div style="color:#64748b">Volatility 63D: <span style="color:#1e293b">${p.x.toFixed(1)}%</span></div>
+              <div style="color:#64748b">RS Pctile: <span style="color:#1e293b">${p.rs_pctile_3m != null ? (parseFloat(p.rs_pctile_3m) * 100).toFixed(0) + 'th' : '—'}</span></div>
+              <div style="color:#64748b">RS State: <span style="color:#1e293b">${p.rs_state ?? '—'}</span></div>
+              <div style="color:#64748b">Momentum: <span style="color:#1e293b">${p.momentum_state ?? '—'}</span></div>
+              <div style="color:#64748b;font-size:10px">${p.theme}</div>
+            </div>
           `)
       })
       .on('mousemove', function (event) {
@@ -209,14 +225,16 @@ export function ETFBubbleChart({
       </div>
       <div ref={wrapRef} className="relative">
         <svg ref={svgRef} className="w-full" />
-        <div className="flex items-center gap-5 mt-2 font-sans text-[11px] text-ink-tertiary flex-wrap">
-          {(['Leader', 'Strong', 'Average', 'Weak', 'Laggard'] as const).map(s => (
-            <span key={s} className="flex items-center gap-1.5">
-              <span className="inline-block w-2 h-2 rounded-full" style={{ background: rsStateColor(s) }} />
-              {s}
-            </span>
-          ))}
-          <span className="ml-auto">X = volatility · Y = 3M return · Size = RS percentile</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-3 mt-2 pt-2 border-t border-paper-rule/40">
+        {(['Leader', 'Strong', 'Average', 'Weak', 'Laggard'] as const).map(s => (
+          <div key={s} className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: rsStateColor(s) }} />
+            <span className="font-sans text-[10px] text-ink-tertiary">{s}</span>
+          </div>
+        ))}
+        <div className="ml-auto font-sans text-[10px] text-ink-tertiary">
+          Bubble size = RS pctile · {filtered.length} ETFs
         </div>
       </div>
     </div>

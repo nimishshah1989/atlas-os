@@ -27,19 +27,19 @@ const X_CONFIG: Record<XView, { field: keyof SectorPoint; label: string; tooltip
 }
 
 const STATE_COLOR: Record<string, string> = {
-  Overweight:  '#22c55e',
-  Neutral:     '#f59e0b',
-  Underweight: '#ef4444',
-  Avoid:       '#ef4444',
+  Overweight:  '#2F6B43',
+  Neutral:     '#B8860B',
+  Underweight: '#B0492C',
+  Avoid:       '#7B3426',
 }
 
 const DECISION_COLOR: Record<string, string> = {
-  'ENTER':     '#22c55e',
-  'HOLD':      '#14b8a6',
-  'ROTATE IN': '#f59e0b',
-  'WATCH':     '#94a3b8',
-  'PASS':      '#94a3b8',
-  'EXIT':      '#ef4444',
+  'ENTER':     '#2F6B43',
+  'HOLD':      '#1D9E75',
+  'ROTATE IN': '#B8860B',
+  'WATCH':     '#8C8278',
+  'PASS':      '#8C8278',
+  'EXIT':      '#B0492C',
 }
 
 export function SectorBubbleChart({
@@ -106,10 +106,10 @@ export function SectorBubbleChart({
     // Quadrant backgrounds use neutral slate tones — deliberately separate from bubble state colors
     // so that sector state (bubble fill) doesn't visually fight with quadrant position.
     const quads = [
-      { x: midX, y: 0,    w: W - midX,  h: midY,     label: 'LEADERS',    bg: '#e2f0e8', text: '#2F6B43' },
-      { x: 0,    y: 0,    w: midX,      h: midY,     label: 'RECOVERING', bg: '#e8f0f5', text: '#25394A' },
-      { x: midX, y: midY, w: W - midX,  h: H - midY, label: 'NARROWING',  bg: '#f5f0e8', text: '#B8860B' },
-      { x: 0,    y: midY, w: midX,      h: H - midY, label: 'LAGGARDS',   bg: '#f5e8e8', text: '#B0492C' },
+      { x: midX, y: 0,    w: W - midX,  h: midY,     label: 'LEADERS',    sub: 'high RS · high breadth',  bg: '#e2f0e8', text: '#2F6B43' },
+      { x: 0,    y: 0,    w: midX,      h: midY,     label: 'RECOVERING', sub: 'low RS · high breadth',   bg: '#e8f0f5', text: '#25394A' },
+      { x: midX, y: midY, w: W - midX,  h: H - midY, label: 'NARROWING',  sub: 'high RS · low breadth',   bg: '#f5f0e8', text: '#B8860B' },
+      { x: 0,    y: midY, w: midX,      h: H - midY, label: 'LAGGARDS',   sub: 'low RS · low breadth',    bg: '#f5e8e8', text: '#B0492C' },
     ]
 
     quads.forEach(q => {
@@ -120,13 +120,20 @@ export function SectorBubbleChart({
 
       svg.append('text')
         .attr('x', q.x + q.w / 2)
-        .attr('y', q.y + (q.y === 0 ? 14 : q.h - 6))
+        .attr('y', q.y + (q.y === 0 ? 14 : q.h - 14))
         .attr('text-anchor', 'middle')
         .attr('font-family', 'var(--font-sans)')
         .attr('font-size', 8).attr('font-weight', 700)
         .attr('letter-spacing', 1.5)
-        .attr('fill', q.text).attr('opacity', 0.55)
+        .attr('fill', q.text).attr('opacity', 0.65)
         .text(q.label)
+      svg.append('text')
+        .attr('x', q.x + q.w / 2)
+        .attr('y', q.y + (q.y === 0 ? 26 : q.h - 4))
+        .attr('text-anchor', 'middle')
+        .attr('font-family', 'var(--font-sans)').attr('font-size', 7)
+        .attr('fill', q.text).attr('opacity', 0.40)
+        .text(q.sub)
     })
 
     svg.append('line')
@@ -277,14 +284,16 @@ export function SectorBubbleChart({
   return (
     <div ref={wrapRef} className="relative">
       <svg ref={svgRef} className="w-full" />
-      <div className="flex items-center gap-5 mt-2">
-        {([['Overweight', '#22c55e'], ['Neutral', '#f59e0b'], ['Underweight', '#ef4444'], ['Avoid', '#ef4444']] as [string, string][]).map(([label, color]) => (
-          <span key={label} className="flex items-center gap-1.5 font-sans text-xs text-ink-secondary">
-            <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: color, opacity: 0.7 }} />
-            {label}
-          </span>
+      <div className="flex flex-wrap items-center gap-3 mt-2 pt-2 border-t border-paper-rule/40">
+        {([['Overweight', '#2F6B43'], ['Neutral', '#B8860B'], ['Underweight', '#B0492C'], ['Avoid', '#7B3426']] as [string, string][]).map(([label, color]) => (
+          <div key={label} className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: color }} />
+            <span className="font-sans text-[10px] text-ink-tertiary">{label}</span>
+          </div>
         ))}
-        <span className="font-sans text-xs text-ink-tertiary ml-2">Bubble size = number of stocks in sector</span>
+        <div className="ml-auto font-sans text-[10px] text-ink-tertiary">
+          Bubble size = stocks in sector
+        </div>
       </div>
     </div>
   )
