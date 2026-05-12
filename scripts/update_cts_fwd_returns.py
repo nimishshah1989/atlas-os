@@ -83,7 +83,7 @@ def run(*, persist: bool) -> None:
             conn,
             if_exists="replace",
             index=False,
-            dtype={
+            dtype={  # type: ignore[arg-type]  # pandas stubs don't accept SQLAlchemy types; runtime OK
                 "instrument_id": sa.UUID(),
                 "date": sa.Date(),
                 "fwd_ret_5d": sa.Numeric(),

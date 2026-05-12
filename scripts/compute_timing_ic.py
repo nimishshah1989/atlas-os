@@ -6,7 +6,7 @@ Usage: python scripts/compute_timing_ic.py [--date YYYY-MM-DD] [--persist]
 from __future__ import annotations
 
 import argparse
-from datetime import date
+from datetime import date, timedelta
 
 import pandas as pd
 import structlog
@@ -41,7 +41,7 @@ def run(as_of_date: date, *, persist: bool) -> None:
             """,
             conn,
             params={
-                "start": as_of_date - pd.Timedelta(days=LOOKBACK_DAYS),
+                "start": as_of_date - timedelta(days=LOOKBACK_DAYS),
                 "end": as_of_date,
             },
         )
@@ -61,11 +61,9 @@ def run(as_of_date: date, *, persist: bool) -> None:
 
         returns_wide = sub.pivot(index="date", columns="instrument_id", values=fwd_col)
         # ic_engine expects factor column named 'factor'
-        factor = (
-            sub[["date", "instrument_id", signal_col]]
-            .rename(columns={signal_col: "factor"})
-            .set_index(["date", "instrument_id"])
-        )
+        factor_df = sub[["date", "instrument_id", signal_col]].copy()  # type: ignore[index]  # pandas stubs widen df[list]
+        factor_df = factor_df.rename(columns={signal_col: "factor"})  # type: ignore[union-attr]
+        factor = factor_df.set_index(["date", "instrument_id"])
         try:
             ic_result = compute_ic_over_window(factor, returns_wide)
         except Exception as e:

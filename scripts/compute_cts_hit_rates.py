@@ -6,7 +6,7 @@ Usage: python scripts/compute_cts_hit_rates.py [--date YYYY-MM-DD] [--persist]
 from __future__ import annotations
 
 import argparse
-from datetime import date
+from datetime import date, timedelta
 
 import pandas as pd
 import structlog
@@ -42,7 +42,7 @@ def run(as_of_date: date, *, persist: bool) -> None:
             """,
             conn,
             params={
-                "start": as_of_date - pd.Timedelta(days=LOOKBACK_DAYS),
+                "start": as_of_date - timedelta(days=LOOKBACK_DAYS),
                 "end": as_of_date,
             },
         )

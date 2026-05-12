@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -49,7 +49,7 @@ def generate_proposals(
             """,
             conn,
             params={
-                "start": as_of_date - pd.Timedelta(days=90),
+                "start": as_of_date - timedelta(days=90),
                 "end": as_of_date,
             },
         )

@@ -28,7 +28,7 @@ def compute_hit_rate(
     if stage_filter is not None:
         valid = valid[valid["stage"] == stage_filter]
 
-    if valid.empty:
+    if valid.empty:  # type: ignore[union-attr]  # pandas stubs widen df[mask] to include ndarray
         return {
             "hit_count": 0,
             "total_signals": 0,
