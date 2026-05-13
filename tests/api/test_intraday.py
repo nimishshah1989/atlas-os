@@ -30,7 +30,6 @@ _SERVICE_HEADERS = {"Authorization": "Bearer test-service-secret"}
 @pytest.fixture(scope="module")
 def client() -> TestClient:
     Config.AUTH_DISABLED = True
-    Config.ATLAS_INTERNAL_SECRET = "test-service-secret"  # noqa: S105
     return TestClient(app, headers=_SERVICE_HEADERS)
 
 
