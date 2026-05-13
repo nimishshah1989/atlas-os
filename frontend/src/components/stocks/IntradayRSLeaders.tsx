@@ -18,6 +18,7 @@ interface IntradayLeader {
   ema_50: number | null
   rs_vs_nifty: number | null
   rs_pctile_intraday: number | null
+  return_since_open: number | null
   bar_time: string
 }
 
@@ -27,6 +28,7 @@ interface IntradayLeadersMeta {
   fetched_at?: string
   source?: string
   row_count?: number
+  nifty_return_since_open?: number | null
 }
 
 interface IntradayLeadersData {
@@ -67,13 +69,28 @@ function formatClose(value: number): string {
   })
 }
 
-function formatRsVsNifty(value: number | null): { text: string; cls: string } {
-  if (value === null) return { text: '—', cls: 'text-ink-tertiary' }
+function formatRsVsNifty(
+  value: number | null,
+  niftyReturn: number | null,
+  stockReturn: number | null,
+): { text: string; cls: string } {
+  if (value === null) {
+    return { text: '—', cls: 'text-ink-tertiary' }
+  }
   // rs_vs_nifty = stock_return_since_open / nifty_return_since_open (a ratio, not a fraction)
   const ratio = Number(value)
   const sign = ratio >= 0 ? '+' : ''
   const text = `${sign}${ratio.toFixed(2)}x`
-  const cls = ratio >= 1 ? 'text-signal-pos' : 'text-signal-neg'
+  // Green = stock outperforms Nifty today on a return basis, not ratio >= 1.
+  // ratio >= 1 is wrong when Nifty is negative: stock −0.5% vs Nifty −2% → ratio 0.25 (red)
+  // but the stock clearly outperforms. Use nifty_return_since_open from meta when available.
+  let cls = 'text-ink-tertiary'
+  if (stockReturn !== null && niftyReturn !== null) {
+    cls = Number(stockReturn) > Number(niftyReturn) ? 'text-signal-pos' : 'text-signal-neg'
+  } else {
+    // Fallback when nifty return is unavailable: ratio > 1 (imperfect but acceptable)
+    cls = ratio > 1 ? 'text-signal-pos' : 'text-signal-neg'
+  }
   return { text, cls }
 }
 
@@ -279,7 +296,11 @@ export function IntradayRSLeaders() {
               </thead>
               <tbody>
                 {result.data.map((row, i) => {
-                  const rsNifty = formatRsVsNifty(row.rs_vs_nifty)
+                  const rsNifty = formatRsVsNifty(
+                    row.rs_vs_nifty,
+                    result.meta.nifty_return_since_open ?? null,
+                    row.return_since_open,
+                  )
                   // rs_pctile_intraday is a 0-1 fraction — RSPctileBar expects a
                   // 0-1 string (same shape as daily rs_pctile_3m)
                   const pctileStr =

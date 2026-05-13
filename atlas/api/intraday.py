@@ -1,6 +1,10 @@
 """Intraday data endpoints: RS leaders + ingester status.
+# allow-large: 6 tightly-coupled endpoints (rs-leaders, status, nifty, sector-movers,
+# prices, indices) share one router, one engine, and one OperationalError guard pattern.
+# Splitting would duplicate the guard and engine import across multiple files with no
+# cohesion gain — the single-responsibility boundary is the intraday domain, not the file.
 
-SP08: Live intraday market state surface.
+SP08/SP10: Live intraday market state surface.
 
 Endpoints:
     GET /api/v1/intraday/rs-leaders   — top N stocks by intraday RS percentile
@@ -8,6 +12,7 @@ Endpoints:
     GET /api/v1/intraday/nifty          — latest Nifty 50 intraday bar
     GET /api/v1/intraday/sector-movers  — sector return-since-open ranked
     GET /api/v1/intraday/prices         — {instrument_id: close} dict for all tracked stocks
+    GET /api/v1/intraday/indices        — latest bar for all tracked NSE indices
 
 All routes carry the ``/v1`` prefix and are therefore exempt from
 JWTAuthMiddleware (atlas.api.auth._EXEMPT_PREFIXES includes "/v1").
@@ -49,6 +54,7 @@ class IntradayLeader(BaseModel):
     ema_50: Decimal | None
     rs_vs_nifty: Decimal | None
     rs_pctile_intraday: Decimal | None
+    return_since_open: Decimal | None
     bar_time: datetime
 
 
@@ -93,6 +99,22 @@ class IntradayPricesResponse(BaseModel):
     meta: dict[str, Any]
 
 
+class IndexBar(BaseModel):
+    symbol: str
+    bar_time: datetime
+    open: Decimal
+    high: Decimal
+    low: Decimal
+    close: Decimal
+    return_since_open: Decimal | None
+    pct_change_since_open: float | None  # return_since_open * 100 for display
+
+
+class IndicesResponse(BaseModel):
+    data: list[IndexBar]
+    meta: dict[str, Any]
+
+
 # ---------------------------------------------------------------------------
 # SQL fragments
 # ---------------------------------------------------------------------------
@@ -108,6 +130,7 @@ SELECT
     ema_50,
     rs_vs_nifty,
     rs_pctile_intraday,
+    return_since_open,
     bar_time
 FROM atlas.mv_rs_intraday
 WHERE rs_vs_nifty IS NOT NULL
@@ -153,6 +176,25 @@ ORDER BY avg_return DESC NULLS LAST
 _PRICES_SQL = """
 SELECT instrument_id::text, close, MAX(bar_time) OVER () AS data_as_of
 FROM atlas.mv_rs_intraday
+"""
+
+_NIFTY_RETURN_FOR_RS_SQL = """
+SELECT return_since_open
+FROM atlas.atlas_nifty_intraday
+WHERE symbol = 'NIFTY 50'
+ORDER BY bar_time DESC
+LIMIT 1
+"""
+
+_INDICES_SQL = """
+SELECT symbol, bar_time, open, high, low, close, return_since_open
+FROM atlas.atlas_nifty_intraday
+WHERE (symbol, bar_time) IN (
+    SELECT symbol, MAX(bar_time)
+    FROM atlas.atlas_nifty_intraday
+    GROUP BY symbol
+)
+ORDER BY symbol
 """
 
 
@@ -206,6 +248,7 @@ def get_rs_leaders(
     try:
         with engine.connect() as conn:
             rows = conn.execute(text(sql_str), params).fetchall()
+            nifty_row = conn.execute(text(_NIFTY_RETURN_FOR_RS_SQL)).fetchone()
     except OperationalError as exc:
         if "has not been populated" in str(exc):
             log.warning("mv_rs_intraday_not_populated")
@@ -220,6 +263,10 @@ def get_rs_leaders(
             )
         raise
 
+    nifty_return_since_open: Decimal | None = (
+        Decimal(str(nifty_row[0])) if nifty_row and nifty_row[0] is not None else None
+    )
+
     row_count = len(rows)
     log.debug("rs_leaders_fetched", row_count=row_count, n=n, sector=sector)
 
@@ -228,6 +275,7 @@ def get_rs_leaders(
             "note": "Market closed or no intraday data yet",
             "fetched_at": datetime.now(UTC).isoformat(),
             "source": "mv_rs_intraday",
+            "nifty_return_since_open": None,
         }
         response.headers["Cache-Control"] = "public, max-age=30"
         return IntradayLeadersResponse(data=[], meta=meta)
@@ -245,7 +293,8 @@ def get_rs_leaders(
                 ema_50=Decimal(str(row[6])) if row[6] is not None else None,
                 rs_vs_nifty=Decimal(str(row[7])) if row[7] is not None else None,
                 rs_pctile_intraday=Decimal(str(row[8])) if row[8] is not None else None,
-                bar_time=row[9],
+                return_since_open=Decimal(str(row[9])) if row[9] is not None else None,
+                bar_time=row[10],
             )
         )
 
@@ -256,6 +305,7 @@ def get_rs_leaders(
         "fetched_at": datetime.now(UTC).isoformat(),
         "source": "mv_rs_intraday",
         "row_count": row_count,
+        "nifty_return_since_open": nifty_return_since_open,
     }
 
     response.headers["Cache-Control"] = "public, max-age=30"
@@ -545,5 +595,88 @@ def get_intraday_prices(response: Response) -> IntradayPricesResponse:
             "fetched_at": datetime.now(UTC).isoformat(),
             "source": "mv_rs_intraday",
             "instrument_count": len(prices),
+        },
+    )
+
+
+@router.get(
+    "/indices",
+    response_model=IndicesResponse,
+    summary="Latest bar for all tracked NSE indices",
+)
+def get_indices(response: Response) -> IndicesResponse:
+    """Return the most recent bar for each tracked NSE index.
+
+    Queries ``atlas.atlas_nifty_intraday`` for the latest (symbol, bar_time) row
+    per symbol. Returns all five tracked indices: NIFTY 50, NIFTY BANK,
+    NIFTY MID100, NIFTY SMLCAP, NIFTY IT.
+
+    Returns an empty list with an explanatory note when the table has no rows
+    (pre-first bar or migration 059 not yet applied).
+
+    Args:
+        response: FastAPI Response — used to set Cache-Control header.
+
+    Returns:
+        IndicesResponse with one IndexBar per symbol (or empty list) + meta.
+    """
+    engine = get_engine()
+
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(text(_INDICES_SQL)).fetchall()
+    except OperationalError as exc:
+        if "has not been populated" in str(exc):
+            log.warning("atlas_nifty_intraday_not_populated")
+            response.headers["Cache-Control"] = "public, max-age=30"
+            return IndicesResponse(
+                data=[],
+                meta={
+                    "note": "atlas_nifty_intraday not yet populated — first bar after market open",
+                    "fetched_at": datetime.now(UTC).isoformat(),
+                    "source": "atlas_nifty_intraday",
+                },
+            )
+        raise
+
+    response.headers["Cache-Control"] = "public, max-age=30"
+
+    if not rows:
+        log.debug("indices_empty")
+        return IndicesResponse(
+            data=[],
+            meta={
+                "note": "No index intraday data yet — table empty or pre-market",
+                "fetched_at": datetime.now(UTC).isoformat(),
+                "source": "atlas_nifty_intraday",
+            },
+        )
+
+    bars: list[IndexBar] = []
+    for row in rows:
+        ret = Decimal(str(row[6])) if row[6] is not None else None
+        bars.append(
+            IndexBar(
+                symbol=str(row[0]),
+                bar_time=row[1],
+                open=Decimal(str(row[2])),
+                high=Decimal(str(row[3])),
+                low=Decimal(str(row[4])),
+                close=Decimal(str(row[5])),
+                return_since_open=ret,
+                pct_change_since_open=float(ret * 100) if ret is not None else None,
+            )
+        )
+
+    data_as_of_str = bars[0].bar_time.isoformat() if bars else None
+    log.debug("indices_fetched", symbol_count=len(bars))
+
+    return IndicesResponse(
+        data=bars,
+        meta={
+            "data_as_of": data_as_of_str,
+            "fetched_at": datetime.now(UTC).isoformat(),
+            "source": "atlas_nifty_intraday",
+            "symbol_count": len(bars),
         },
     )

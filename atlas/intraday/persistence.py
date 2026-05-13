@@ -35,7 +35,7 @@ class BarRecord:
 
 @dataclass
 class NiftyBarRecord:
-    """One 15-minute OHLCV bar for the Nifty50 index."""
+    """One 15-minute OHLCV bar for an NSE index (Nifty 50 or other tracked index)."""
 
     bar_time: datetime
     open: Decimal
@@ -43,6 +43,7 @@ class NiftyBarRecord:
     low: Decimal
     close: Decimal
     return_since_open: Decimal | None = None
+    symbol: str = "NIFTY 50"
 
 
 def _strip_dialect(conn_str: str) -> str:
@@ -133,9 +134,10 @@ def upsert_bars(bars: list[BarRecord], *, conn_str: str) -> int:
 
 
 def upsert_nifty_bar(bar: NiftyBarRecord, *, conn_str: str) -> None:
-    """Upsert a single Nifty50 bar into atlas_nifty_intraday.
+    """Upsert a single NSE index bar into atlas_nifty_intraday.
 
-    On conflict on bar_time (PRIMARY KEY), updates all mutable columns.
+    On conflict on (symbol, bar_time) (PRIMARY KEY), updates all mutable columns.
+    symbol is part of the PK so it is NOT included in DO UPDATE SET.
 
     Args:
         bar: NiftyBarRecord instance to upsert.
@@ -143,9 +145,9 @@ def upsert_nifty_bar(bar: NiftyBarRecord, *, conn_str: str) -> None:
     """
     upsert_sql = """
         INSERT INTO atlas.atlas_nifty_intraday
-            (bar_time, open, high, low, close, return_since_open, updated_at)
-        VALUES (%s, %s, %s, %s, %s, %s, NOW())
-        ON CONFLICT (bar_time) DO UPDATE SET
+            (symbol, bar_time, open, high, low, close, return_since_open, updated_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+        ON CONFLICT (symbol, bar_time) DO UPDATE SET
             open               = EXCLUDED.open,
             high               = EXCLUDED.high,
             low                = EXCLUDED.low,
@@ -162,6 +164,7 @@ def upsert_nifty_bar(bar: NiftyBarRecord, *, conn_str: str) -> None:
                 cur.execute(
                     upsert_sql,
                     (
+                        bar.symbol,
                         bar.bar_time,
                         bar.open,
                         bar.high,
@@ -173,4 +176,4 @@ def upsert_nifty_bar(bar: NiftyBarRecord, *, conn_str: str) -> None:
     finally:
         conn.close()
 
-    log.debug("nifty_bar_upserted", bar_time=bar.bar_time.isoformat())
+    log.debug("nifty_bar_upserted", symbol=bar.symbol, bar_time=bar.bar_time.isoformat())

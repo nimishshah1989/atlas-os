@@ -30,6 +30,7 @@ import structlog
 from atlas.intraday.ema_engine import EMAState, bootstrap_ema_state, update_ema
 from atlas.intraday.persistence import BarRecord, NiftyBarRecord, upsert_bars, upsert_nifty_bar
 from atlas.intraday.rs_engine import (
+    INDEX_TOKENS,
     NIFTY50_TOKEN,
     compute_return_since_open,
     compute_rs,
@@ -240,13 +241,22 @@ class IntradayIngester:
                 token_map[int(token)] = symbol_to_id[sym]
                 matched += 1
 
-        # Always include Nifty50 benchmark token
+        # Always include Nifty50 benchmark token (sentinel value used by RS computation)
         token_map[NIFTY50_TOKEN] = "NIFTY50_INDEX"
+
+        # Add all other tracked index tokens with a distinct prefix so the
+        # stock-bar loop skips them (the loop checks for valid UUIDs and the
+        # "NIFTY50_INDEX" sentinel, but not arbitrary non-UUID strings).
+        for token, sym in INDEX_TOKENS.items():
+            if token == NIFTY50_TOKEN:
+                continue  # already added as "NIFTY50_INDEX"
+            token_map[token] = f"__INDEX__{sym}"
 
         log.info(
             "token_map_built",
             total_instruments=len(instruments),
             matched=matched,
+            index_tokens=len(INDEX_TOKENS),
         )
         return token_map
 
@@ -409,11 +419,14 @@ class IntradayIngester:
                     self._open_prices["NIFTY50_INDEX"] = nifty_open
                 nifty_return = compute_return_since_open(nifty_bar["close"], nifty_open)
 
-        # Build BarRecord list for all tracked stocks (exclude Nifty sentinel)
+        # Build BarRecord list for all tracked stocks (exclude all index sentinels)
         bar_records: list[BarRecord] = []
         for token, bar_data in self._current_bar.items():
             inst_id_str = self._token_map.get(token)
-            if inst_id_str is None or inst_id_str == "NIFTY50_INDEX":
+            if inst_id_str is None:
+                continue
+            # Skip Nifty50 sentinel and all other index tokens (prefixed with __INDEX__)
+            if inst_id_str == "NIFTY50_INDEX" or inst_id_str.startswith("__INDEX__"):
                 continue
 
             try:
@@ -477,6 +490,7 @@ class IntradayIngester:
                             low=Decimal(str(nifty_bar_data.get("low", nifty_bar_data["close"]))),
                             close=Decimal(str(nifty_bar_data["close"])),
                             return_since_open=nifty_return,
+                            symbol="NIFTY 50",
                         ),
                         conn_str=self._conn_str,
                     )
@@ -485,6 +499,41 @@ class IntradayIngester:
                     log.warning(
                         "nifty_bar_upsert_failed", bar_time=bar_time.isoformat(), error=str(exc)
                     )
+
+        # Persist all other tracked index bars — non-fatal per index if it fails
+        for idx_token, idx_sym in INDEX_TOKENS.items():
+            if idx_token == NIFTY50_TOKEN:
+                continue  # already handled above
+            if idx_token not in self._current_bar:
+                continue
+            idx_bar_data = self._current_bar[idx_token]
+            sentinel_key = f"__INDEX__{idx_sym}"
+            idx_open = self._open_prices.get(sentinel_key)
+            if idx_open is None:
+                idx_open = idx_bar_data["open"]
+                self._open_prices[sentinel_key] = idx_open
+            idx_return = compute_return_since_open(idx_bar_data["close"], idx_open)
+            try:
+                upsert_nifty_bar(
+                    NiftyBarRecord(
+                        bar_time=bar_time,
+                        open=idx_open,
+                        high=Decimal(str(idx_bar_data.get("high", idx_bar_data["close"]))),
+                        low=Decimal(str(idx_bar_data.get("low", idx_bar_data["close"]))),
+                        close=Decimal(str(idx_bar_data["close"])),
+                        return_since_open=idx_return,
+                        symbol=idx_sym,
+                    ),
+                    conn_str=self._conn_str,
+                )
+                log.debug("index_bar_persisted", symbol=idx_sym, bar_time=bar_time.isoformat())
+            except Exception as exc:
+                log.warning(
+                    "index_bar_upsert_failed",
+                    symbol=idx_sym,
+                    bar_time=bar_time.isoformat(),
+                    error=str(exc),
+                )
 
         log.info(
             "bar_close_processed",

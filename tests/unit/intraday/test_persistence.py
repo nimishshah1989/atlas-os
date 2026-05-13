@@ -207,3 +207,38 @@ class TestNiftyBarRecord:
             close=Decimal("24530.00"),
         )
         assert bar.bar_time.tzinfo is not None
+
+    def test_nifty_bar_record_symbol_defaults_to_nifty50(self) -> None:
+        """symbol defaults to 'NIFTY 50' — existing callers need no change."""
+        bar = NiftyBarRecord(
+            bar_time=datetime(2026, 5, 12, 9, 30, tzinfo=_IST),
+            open=Decimal("24500.00"),
+            high=Decimal("24550.00"),
+            low=Decimal("24480.00"),
+            close=Decimal("24530.00"),
+        )
+        assert bar.symbol == "NIFTY 50"
+
+    def test_nifty_bar_record_symbol_can_be_set_to_other_index(self) -> None:
+        """symbol can be set to any tracked index (e.g. NIFTY BANK)."""
+        bar = NiftyBarRecord(
+            bar_time=datetime(2026, 5, 12, 9, 30, tzinfo=_IST),
+            open=Decimal("52000.00"),
+            high=Decimal("52100.00"),
+            low=Decimal("51900.00"),
+            close=Decimal("52050.00"),
+            symbol="NIFTY BANK",
+        )
+        assert bar.symbol == "NIFTY BANK"
+
+    def test_nifty_bar_record_symbol_is_str(self) -> None:
+        """symbol field is always a str."""
+        bar = NiftyBarRecord(
+            bar_time=datetime(2026, 5, 12, 9, 30, tzinfo=_IST),
+            open=Decimal("24500.00"),
+            high=Decimal("24550.00"),
+            low=Decimal("24480.00"),
+            close=Decimal("24530.00"),
+            symbol="NIFTY MID100",
+        )
+        assert isinstance(bar.symbol, str)

@@ -7,6 +7,16 @@ from decimal import Decimal
 # NSE:NIFTY 50 KiteConnect instrument token
 NIFTY50_TOKEN: int = 256265
 
+# Kite instrument token → display symbol for all tracked NSE indices.
+# Values must exactly match the `symbol` column in atlas_nifty_intraday.
+INDEX_TOKENS: dict[int, str] = {
+    256265: "NIFTY 50",
+    260105: "NIFTY BANK",
+    288009: "NIFTY MID100",
+    289281: "NIFTY SMLCAP",
+    259849: "NIFTY IT",
+}
+
 
 def compute_rs(
     stock_return: Decimal | None,
