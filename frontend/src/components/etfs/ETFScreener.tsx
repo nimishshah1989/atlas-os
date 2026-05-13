@@ -26,19 +26,26 @@ type SortKey =
   | 'ret_1m' | 'ret_3m' | 'ret_12m' | 'position_size_pct'
   | 'rs_state' | 'momentum_state' | 'risk_state'
 
-type FilterChip = 'all' | 'broad' | 'sectoral' | 'investable'
+type FilterChip = 'all' | 'broad' | 'sectoral' | 'thematic' | 'gold' | 'silver' | 'international' | 'investable'
 
 const CHIPS: { key: FilterChip; label: string }[] = [
-  { key: 'all',        label: 'All' },
-  { key: 'broad',      label: 'Broad' },
-  { key: 'sectoral',   label: 'Sectoral' },
-  { key: 'investable', label: 'Investable' },
+  { key: 'all',           label: 'All' },
+  { key: 'broad',         label: 'Broad' },
+  { key: 'sectoral',      label: 'Sectoral' },
+  { key: 'thematic',      label: 'Thematic' },
+  { key: 'gold',          label: 'Gold' },
+  { key: 'silver',        label: 'Silver' },
+  { key: 'international', label: 'International' },
+  { key: 'investable',    label: 'Investable' },
 ]
 
 const THEME_STYLE: Record<string, string> = {
-  Broad:     'bg-teal/10 text-teal',
-  Sectoral:  'bg-signal-pos/10 text-signal-pos',
-  Thematic:  'bg-signal-warn/10 text-signal-warn',
+  Broad:         'bg-teal/10 text-teal',
+  Sectoral:      'bg-signal-pos/10 text-signal-pos',
+  Thematic:      'bg-signal-warn/10 text-signal-warn',
+  Gold:          'bg-yellow-400/10 text-yellow-600',
+  Silver:        'bg-slate-400/10 text-slate-500',
+  International: 'bg-purple-400/10 text-purple-600',
 }
 
 // Optional columns — all default to hidden.
@@ -142,8 +149,12 @@ export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
   const filtered = useMemo(() => {
     let result = etfs
 
-    if (chip === 'broad')         result = result.filter(e => e.theme === 'Broad')
-    else if (chip === 'sectoral') result = result.filter(e => e.theme === 'Sectoral')
+    if (chip === 'broad')           result = result.filter(e => e.theme === 'Broad')
+    else if (chip === 'sectoral')   result = result.filter(e => e.theme === 'Sectoral')
+    else if (chip === 'thematic')   result = result.filter(e => e.theme === 'Thematic')
+    else if (chip === 'gold')       result = result.filter(e => e.theme === 'Gold')
+    else if (chip === 'silver')     result = result.filter(e => e.theme === 'Silver')
+    else if (chip === 'international') result = result.filter(e => e.theme === 'International')
     else if (chip === 'investable') result = result.filter(e => e.is_investable)
 
     if (search.trim()) {

@@ -141,7 +141,6 @@ export async function getAllETFs(): Promise<ETFRow[]> {
     LEFT JOIN atlas.atlas_etf_decisions_daily d
       ON d.ticker = u.ticker AND d.date = l.d
     WHERE u.effective_to IS NULL
-      AND u.theme IN ('Broad', 'Sectoral')
     ORDER BY
       d.is_investable DESC NULLS LAST,
       m.rs_pctile_3m DESC NULLS LAST
