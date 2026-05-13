@@ -17,7 +17,9 @@ const GROUPS: Group[] = [
       { href: '/stocks',  label: 'Stocks' },
       { href: '/etfs',    label: 'ETFs' },
       { href: '/funds',   label: 'Funds' },
-      { href: '/global',  label: 'Global Pulse' },
+      { href: '/global',     label: 'Global Pulse' },
+      { href: '/us/stocks',  label: 'US Stocks' },
+      { href: '/us/etfs',    label: 'US ETFs' },
     ],
   },
   {

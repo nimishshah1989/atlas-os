@@ -21554,3 +21554,300 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{
+  "ts": "2026-05-13T11:59:03Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/us-stocks.ts",
+  "lines_changed": 149,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T11:59:21Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/us-etfs.ts",
+  "lines_changed": 109,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T11:59:22Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-13-tv-signal-report-integration.md",
+  "lines_changed": 15,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T11:59:37Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-13-tv-signal-report-integration.md",
+  "lines_changed": 44,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T11:59:43Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-13-tv-signal-report-integration.md",
+  "lines_changed": 16,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T11:59:51Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-13-tv-signal-report-integration.md",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:00:01Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-13-tv-signal-report-integration.md",
+  "lines_changed": 9,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:00:10Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/us/USSectorBreadthBar.tsx",
+  "lines_changed": 102,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:00:13Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-13-tv-signal-report-integration.md",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:00:29Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/us/USSectorHeatmap.tsx",
+  "lines_changed": 97,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:00:37Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-13-tv-signal-report-integration.md",
+  "lines_changed": 68,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:00:51Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-13-tv-signal-report-integration.md",
+  "lines_changed": 15,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:01:07Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-13-tv-signal-report-integration.md",
+  "lines_changed": 22,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:01:12Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-13-tv-signal-report-integration.md",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:01:25Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-13-tv-signal-report-integration.md",
+  "lines_changed": 19,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:01:39Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-13-tv-signal-report-integration.md",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:01:50Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-13-tv-signal-report-integration.md",
+  "lines_changed": 19,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:02:00Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-13-tv-signal-report-integration.md",
+  "lines_changed": 14,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:02:17Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-13-tv-signal-report-integration.md",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:02:31Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-13-tv-signal-report-integration.md",
+  "lines_changed": 21,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:02:37Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-13-tv-signal-report-integration.md",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:02:47Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-13-tv-signal-report-integration.md",
+  "lines_changed": 24,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:02:48Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/us/USStockScreener.tsx",
+  "lines_changed": 302,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:02:53Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-13-tv-signal-report-integration.md",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:03:00Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-13-tv-signal-report-integration.md",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:03:09Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-13-tv-signal-report-integration.md",
+  "lines_changed": 19,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:03:39Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/us/USETFScreener.tsx",
+  "lines_changed": 293,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:03:56Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-13-tv-signal-report-integration.md",
+  "lines_changed": 15,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:04:06Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-13-tv-signal-report-integration.md",
+  "lines_changed": 29,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:04:23Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-13-tv-signal-report-integration.md",
+  "lines_changed": 20,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:04:38Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/us/stocks/page.tsx",
+  "lines_changed": 72,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:04:51Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/us/etfs/page.tsx",
+  "lines_changed": 71,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T12:04:59Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/nav/TopNav.tsx",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
