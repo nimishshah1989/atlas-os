@@ -9,6 +9,7 @@ import { StockIntelligencePanel } from './StockIntelligencePanel'
 import { StockScreener } from './StockScreener'
 import { IntradayRSLeaders } from './IntradayRSLeaders'
 import { RSLeadersPanel } from './RSLeadersPanel'
+import { CTSGradeSummaryCards } from './CTSGradeSummaryCards'
 import { CTSIndexTimingPanel } from './CTSIndexTimingPanel'
 import { CTSSectorPanel } from './CTSSectorPanel'
 
@@ -80,6 +81,7 @@ export function StocksClientShell({
             regimeState={regimeState}
             deploymentMultiplier={deploymentMultiplier}
           />
+          <CTSGradeSummaryCards />
           <CTSIndexTimingPanel />
           <CTSSectorPanel />
           <StockScreener
