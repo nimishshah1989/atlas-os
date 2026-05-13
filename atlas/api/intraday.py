@@ -5,8 +5,11 @@ SP08: Live intraday market state surface.
 Endpoints:
     GET /api/v1/intraday/rs-leaders   — top N stocks by intraday RS percentile
     GET /api/v1/intraday/status       — KiteConnect session + last bar health
+    GET /api/v1/intraday/nifty          — latest Nifty 50 intraday bar
+    GET /api/v1/intraday/sector-movers  — sector return-since-open ranked
+    GET /api/v1/intraday/prices         — {instrument_id: close} dict for all tracked stocks
 
-Both routes carry the ``/v1`` prefix and are therefore exempt from
+All routes carry the ``/v1`` prefix and are therefore exempt from
 JWTAuthMiddleware (atlas.api.auth._EXEMPT_PREFIXES includes "/v1").
 """
 
@@ -139,7 +142,8 @@ _SECTOR_MOVERS_SQL = """
 SELECT
     sector,
     AVG(return_since_open) AS avg_return,
-    COUNT(*) AS stock_count
+    COUNT(*) AS stock_count,
+    MAX(bar_time) AS data_as_of
 FROM atlas.mv_rs_intraday
 WHERE return_since_open IS NOT NULL
 GROUP BY sector
@@ -147,7 +151,7 @@ ORDER BY avg_return DESC NULLS LAST
 """
 
 _PRICES_SQL = """
-SELECT instrument_id::text, close
+SELECT instrument_id::text, close, MAX(bar_time) OVER () AS data_as_of
 FROM atlas.mv_rs_intraday
 """
 
@@ -340,8 +344,22 @@ def get_nifty_bar(response: Response) -> NiftyResponse:
     """
     engine = get_engine()
 
-    with engine.connect() as conn:
-        row = conn.execute(text(_NIFTY_LATEST_SQL)).fetchone()
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(text(_NIFTY_LATEST_SQL)).fetchone()
+    except OperationalError as exc:
+        if "has not been populated" in str(exc):
+            log.warning("atlas_nifty_intraday_not_populated")
+            response.headers["Cache-Control"] = "public, max-age=30"
+            return NiftyResponse(
+                data=None,
+                meta={
+                    "note": "atlas_nifty_intraday not yet populated — first bar after market open",
+                    "fetched_at": datetime.now(UTC).isoformat(),
+                    "source": "atlas_nifty_intraday",
+                },
+            )
+        raise
 
     response.headers["Cache-Control"] = "public, max-age=30"
 
@@ -406,8 +424,22 @@ def get_sector_movers(response: Response) -> SectorMoversResponse:
     """
     engine = get_engine()
 
-    with engine.connect() as conn:
-        rows = conn.execute(text(_SECTOR_MOVERS_SQL)).fetchall()
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(text(_SECTOR_MOVERS_SQL)).fetchall()
+    except OperationalError as exc:
+        if "has not been populated" in str(exc):
+            log.warning("mv_rs_intraday_not_populated")
+            response.headers["Cache-Control"] = "public, max-age=30"
+            return SectorMoversResponse(
+                data=[],
+                meta={
+                    "note": "Intraday MV not yet populated — first bar after market open",
+                    "fetched_at": datetime.now(UTC).isoformat(),
+                    "source": "mv_rs_intraday",
+                },
+            )
+        raise
 
     response.headers["Cache-Control"] = "public, max-age=30"
 
@@ -431,11 +463,15 @@ def get_sector_movers(response: Response) -> SectorMoversResponse:
         for row in rows
     ]
 
+    data_as_of_raw = rows[0][3] if rows else None
+    data_as_of_str = data_as_of_raw.isoformat() if data_as_of_raw is not None else None
+
     log.debug("sector_movers_fetched", sector_count=len(movers))
 
     return SectorMoversResponse(
         data=movers,
         meta={
+            "data_as_of": data_as_of_str,
             "fetched_at": datetime.now(UTC).isoformat(),
             "source": "mv_rs_intraday",
             "sector_count": len(movers),
@@ -465,8 +501,22 @@ def get_intraday_prices(response: Response) -> IntradayPricesResponse:
     """
     engine = get_engine()
 
-    with engine.connect() as conn:
-        rows = conn.execute(text(_PRICES_SQL)).fetchall()
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(text(_PRICES_SQL)).fetchall()
+    except OperationalError as exc:
+        if "has not been populated" in str(exc):
+            log.warning("mv_rs_intraday_not_populated")
+            response.headers["Cache-Control"] = "public, max-age=30"
+            return IntradayPricesResponse(
+                data={},
+                meta={
+                    "note": "Intraday MV not yet populated — first bar after market open",
+                    "fetched_at": datetime.now(UTC).isoformat(),
+                    "source": "mv_rs_intraday",
+                },
+            )
+        raise
 
     response.headers["Cache-Control"] = "public, max-age=30"
 
@@ -481,6 +531,9 @@ def get_intraday_prices(response: Response) -> IntradayPricesResponse:
             },
         )
 
+    data_as_of_raw = rows[0][2] if rows else None
+    data_as_of_str = data_as_of_raw.isoformat() if data_as_of_raw is not None else None
+
     prices: dict[str, Decimal] = {str(row[0]): Decimal(str(row[1])) for row in rows}
 
     log.debug("intraday_prices_fetched", instrument_count=len(prices))
@@ -488,6 +541,7 @@ def get_intraday_prices(response: Response) -> IntradayPricesResponse:
     return IntradayPricesResponse(
         data=prices,
         meta={
+            "data_as_of": data_as_of_str,
             "fetched_at": datetime.now(UTC).isoformat(),
             "source": "mv_rs_intraday",
             "instrument_count": len(prices),
