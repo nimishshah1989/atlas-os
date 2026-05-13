@@ -1,5 +1,6 @@
 'use client'
-import { Fragment, useState, useMemo, useEffect } from 'react'
+// allow-large: single table component with conditional column rendering; all logic is cohesive
+import { Fragment, useState, useMemo, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import type { StockRowWithSector } from '@/lib/queries/stocks'
@@ -18,7 +19,7 @@ import {
   OPTIONAL_COLS, COL_STORAGE_KEY, ALWAYS_VISIBLE_COL_COUNT,
   stateRank, capRank, optBool, optStr, optNum,
   buildStockGrade, buildGradeTooltip,
-  GateDots, GATE_LEGEND, COL_TOOLTIPS,
+  GateDots, GATE_LEGEND, COL_TOOLTIPS, isMarketOpen,
   type SortKey, type FilterChip,
 } from './screener-utils'
 import { ScreenerFilterPanel } from './ScreenerFilterPanel'
@@ -43,6 +44,24 @@ export function StockScreener({
   const [visibleCols, setVisibleCols] = useColumnVisibility(COL_STORAGE_KEY, OPTIONAL_COLS)
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 50
+
+  const [livePrices, setLivePrices] = useState<Record<string, string>>({})
+  const livePriceIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    if (!visibleCols.has('live_price') || !isMarketOpen()) return
+    const fetchPrices = async () => {
+      try {
+        const res = await fetch('/api/intraday?endpoint=prices')
+        if (!res.ok) return
+        const json = await res.json() as { data: Record<string, string> }
+        setLivePrices(json.data ?? {})
+      } catch { /* non-critical — shows '—' on error */ }
+    }
+    void fetchPrices()
+    livePriceIntervalRef.current = setInterval(() => void fetchPrices(), 30_000)
+    return () => { if (livePriceIntervalRef.current) { clearInterval(livePriceIntervalRef.current); livePriceIntervalRef.current = null } }
+  }, [visibleCols])
 
   // Sorted, deduped sector list for the dropdown.
   const sectorOptions = useMemo(() => {
@@ -206,6 +225,12 @@ export function StockScreener({
     )
   }
 
+  function formatLivePrice(instrumentId: string): string {
+    const raw = livePrices[instrumentId]
+    if (!raw) return '—'
+    return '₹' + Number(raw).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <ScreenerFilterPanel
@@ -285,6 +310,7 @@ export function StockScreener({
               {visibleCols.has('days_in_state') && <PlainTh label="Days" align="right" />}
               {visibleCols.has('alpha_3m') && <PlainTh label="α 3M" align="right" />}
               {visibleCols.has('alpha_6m') && <PlainTh label="α 6M" align="right" />}
+              {visibleCols.has('live_price') && <PlainTh label="Live ₹" align="right" tooltip="Current intraday close price — refreshes every 30 s during market hours (09:15–15:35 IST)" />}
               <Th label="RS Pctile" k="rs_pctile_3m" align="right" />
             </tr>
           </thead>
@@ -520,6 +546,11 @@ export function StockScreener({
                       {visibleCols.has('alpha_6m') && (
                         <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(alpha6m)}`}>
                           {pct(alpha6m)}
+                        </td>
+                      )}
+                      {visibleCols.has('live_price') && (
+                        <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums text-ink-primary">
+                          {formatLivePrice(row.instrument_id)}
                         </td>
                       )}
                       <td

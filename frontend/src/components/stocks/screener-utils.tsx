@@ -50,6 +50,7 @@ export const OPTIONAL_COLS: ColumnDef[] = [
   { key: 'days_in_state',  label: 'Days',        defaultVisible: false },
   { key: 'alpha_3m',       label: 'α 3M',        defaultVisible: false },
   { key: 'alpha_6m',       label: 'α 6M',        defaultVisible: false },
+  { key: 'live_price',     label: 'Live ₹',      defaultVisible: false },
 ]
 
 export const COL_STORAGE_KEY = 'atlas-stock-screener-cols'
@@ -68,6 +69,21 @@ export const GATE_LEGEND = [
   { key: 'G', field: 'sector_gate',         label: 'Sector',    desc: 'Sector is not in avoid list (sector momentum is healthy)' },
   { key: 'M', field: 'market_gate',         label: 'Market',    desc: 'Market regime is Risk-On or Cautious (not Risk-Off)' },
 ]
+
+// Returns true if the current wall-clock time is within NSE market hours (09:15–15:35 IST, Mon–Fri).
+export function isMarketOpen(): boolean {
+  const now = new Date()
+  const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes()
+  const istMinutes = utcMinutes + 330
+  const dayOfWeek = new Date(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate() + Math.floor(istMinutes / 1440),
+  ).getDay()
+  if (dayOfWeek === 0 || dayOfWeek === 6) return false
+  const istDayMinutes = istMinutes % 1440
+  return istDayMinutes >= 555 && istDayMinutes <= 935
+}
 
 export function stateRank(order: string[], val: string | null): number {
   if (!val) return order.length
