@@ -29,9 +29,11 @@ from atlas.compute.benchmarks import (
 )
 from atlas.compute.gates import (
     add_history_gate,
+    add_stage1_base,
     add_weinstein_gate,
 )
 from atlas.compute.primitives import (
+    add_atr,
     add_emas,
     add_extension_pct,
     add_max_drawdown,
@@ -298,14 +300,15 @@ def _classify_states(df: pd.DataFrame, thresholds: Mapping[str, Decimal]) -> pd.
     vol_floor = float(thresholds.get("liquidity_gate_min_avg_vol", Decimal("500000")))
     out["liquidity_gate_pass"] = out["avg_volume_20"].fillna(0) >= vol_floor
 
-    out["stage1_base_qualifies"] = False
-
     # VT pctile as primary RS universe ranking (mirrors NIFTY 500 pctile in India)
     out["rs_pctile_1w"] = out.get("rs_pctile_1w_vt", pd.NA)
     out["rs_pctile_1m"] = out.get("rs_pctile_1m_vt", pd.NA)
     out["rs_pctile_3m"] = out.get("rs_pctile_3m_vt", pd.NA)
     out = classify_rs_state(out, thresholds)
     out = out.drop(columns=["rs_pctile_1w", "rs_pctile_1m", "rs_pctile_3m"], errors="ignore")
+
+    # stage1_base reads historical rs_state — must run after classify_rs_state
+    out = add_stage1_base(out, group_col="ticker", state_col="rs_state")
 
     out = classify_momentum_state(out, thresholds)
     out = classify_risk_state(out, thresholds)
@@ -459,10 +462,7 @@ def run_us_stocks_backfill(
     # drawdown_ratio_252 — negate max_drawdown (which is stored as negative)
     df["max_drawdown_252"] = -df["max_drawdown_252"] if "max_drawdown_252" in df.columns else pd.NA
 
-    # ret_12m_1m: not computed by add_returns default WINDOWS — leave as NA
-    df["ret_12m_1m"] = pd.NA
-    # atr_21: not yet implemented — leave as NA
-    df["atr_21"] = pd.NA
+    df = add_atr(df, group_col="ticker", length=21)
 
     # --- RS vs 4 benchmarks ---
     df = _compute_rs(
