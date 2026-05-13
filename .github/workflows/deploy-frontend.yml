@@ -53,23 +53,16 @@ jobs:
               > .env.local
 
             echo "--- installing deps ---"
-            npm ci --prefer-offline
+            npm ci
 
-            echo "--- stopping PM2 ---"
-            pm2 stop atlas-frontend || true
-
-            echo "--- freeing port 3001 ---"
-            lsof -ti:3001 | xargs -r kill -9 2>/dev/null || true
-            sleep 1
-
-            echo "--- building ---"
+            echo "--- building (PM2 keeps serving old version during build) ---"
             rm -rf .next
             npm run build
 
-            echo "--- starting PM2 ---"
-            pm2 start atlas-frontend
+            echo "--- restarting service (only reached if build succeeded) ---"
+            sudo systemctl restart atlas-frontend
 
             echo "--- verifying ---"
-            sleep 3
-            pm2 status
+            sleep 5
+            systemctl is-active atlas-frontend
             curl -sf http://localhost:3001/ > /dev/null && echo "✓ site is up" || (echo "✗ site not responding" && exit 1)
