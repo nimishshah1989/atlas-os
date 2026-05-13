@@ -59,6 +59,37 @@ class IntradayStatusResponse(BaseModel):
     meta: dict[str, Any]
 
 
+class NiftyBar(BaseModel):
+    bar_time: datetime
+    open: Decimal
+    high: Decimal
+    low: Decimal
+    close: Decimal
+    return_since_open: Decimal | None
+    pct_change_since_open: Decimal | None
+
+
+class NiftyResponse(BaseModel):
+    data: NiftyBar | None
+    meta: dict[str, Any]
+
+
+class SectorMover(BaseModel):
+    sector: str
+    avg_return_since_open: Decimal
+    stock_count: int
+
+
+class SectorMoversResponse(BaseModel):
+    data: list[SectorMover]
+    meta: dict[str, Any]
+
+
+class IntradayPricesResponse(BaseModel):
+    data: dict[str, Decimal]
+    meta: dict[str, Any]
+
+
 # ---------------------------------------------------------------------------
 # SQL fragments
 # ---------------------------------------------------------------------------
@@ -95,6 +126,29 @@ _LAST_BAR_SQL = """
 SELECT MAX(bar_time), COUNT(*)
 FROM atlas.atlas_stock_metrics_intraday
 WHERE bar_time > NOW() - INTERVAL '1 hour'
+"""
+
+_NIFTY_LATEST_SQL = """
+SELECT bar_time, open, high, low, close, return_since_open
+FROM atlas.atlas_nifty_intraday
+ORDER BY bar_time DESC
+LIMIT 1
+"""
+
+_SECTOR_MOVERS_SQL = """
+SELECT
+    sector,
+    AVG(return_since_open) AS avg_return,
+    COUNT(*) AS stock_count
+FROM atlas.mv_rs_intraday
+WHERE return_since_open IS NOT NULL
+GROUP BY sector
+ORDER BY avg_return DESC NULLS LAST
+"""
+
+_PRICES_SQL = """
+SELECT instrument_id::text, close
+FROM atlas.mv_rs_intraday
 """
 
 
@@ -262,5 +316,180 @@ def get_intraday_status() -> IntradayStatusResponse:
         meta={
             "fetched_at": fetched_at,
             "source": "atlas_kite_session",
+        },
+    )
+
+
+@router.get(
+    "/nifty",
+    response_model=NiftyResponse,
+    summary="Latest Nifty 50 intraday bar",
+)
+def get_nifty_bar(response: Response) -> NiftyResponse:
+    """Return the most recent Nifty 50 intraday bar from atlas_nifty_intraday.
+
+    Returns the last-known bar whether market is open or closed. Returns
+    ``data: null`` with an explanatory note when the table is empty (pre-first
+    bar or table not yet populated by migration 058).
+
+    Args:
+        response: FastAPI Response — used to set Cache-Control header.
+
+    Returns:
+        NiftyResponse with the latest bar or null + meta envelope.
+    """
+    engine = get_engine()
+
+    with engine.connect() as conn:
+        row = conn.execute(text(_NIFTY_LATEST_SQL)).fetchone()
+
+    response.headers["Cache-Control"] = "public, max-age=30"
+
+    if row is None:
+        log.debug("nifty_bar_empty")
+        return NiftyResponse(
+            data=None,
+            meta={
+                "note": "No Nifty intraday data yet — table empty or pre-market",
+                "fetched_at": datetime.now(UTC).isoformat(),
+                "source": "atlas_nifty_intraday",
+            },
+        )
+
+    bar_time: datetime = row[0]
+    open_price = Decimal(str(row[1]))
+    close_price = Decimal(str(row[4]))
+    return_since_open = Decimal(str(row[5])) if row[5] is not None else None
+
+    # pct_change_since_open = return_since_open * 100 for display convenience
+    pct_change = (return_since_open * Decimal("100")) if return_since_open is not None else None
+
+    log.debug("nifty_bar_fetched", bar_time=bar_time.isoformat())
+
+    return NiftyResponse(
+        data=NiftyBar(
+            bar_time=bar_time,
+            open=open_price,
+            high=Decimal(str(row[2])),
+            low=Decimal(str(row[3])),
+            close=close_price,
+            return_since_open=return_since_open,
+            pct_change_since_open=pct_change,
+        ),
+        meta={
+            "data_as_of": bar_time.isoformat(),
+            "fetched_at": datetime.now(UTC).isoformat(),
+            "source": "atlas_nifty_intraday",
+        },
+    )
+
+
+@router.get(
+    "/sector-movers",
+    response_model=SectorMoversResponse,
+    summary="Sector return-since-open sorted best to worst",
+)
+def get_sector_movers(response: Response) -> SectorMoversResponse:
+    """Return all sectors ranked by average return-since-open.
+
+    Queries ``mv_rs_intraday`` — the same view used by rs-leaders — grouping
+    by sector and averaging return_since_open across all stocks in the sector.
+
+    Returns an empty list with a note when the view is empty (market closed
+    or no data yet).
+
+    Args:
+        response: FastAPI Response — used to set Cache-Control header.
+
+    Returns:
+        SectorMoversResponse with sector list sorted best → worst + meta.
+    """
+    engine = get_engine()
+
+    with engine.connect() as conn:
+        rows = conn.execute(text(_SECTOR_MOVERS_SQL)).fetchall()
+
+    response.headers["Cache-Control"] = "public, max-age=30"
+
+    if not rows:
+        log.debug("sector_movers_empty")
+        return SectorMoversResponse(
+            data=[],
+            meta={
+                "note": "No intraday data — market closed or MV not yet populated",
+                "fetched_at": datetime.now(UTC).isoformat(),
+                "source": "mv_rs_intraday",
+            },
+        )
+
+    movers: list[SectorMover] = [
+        SectorMover(
+            sector=str(row[0]),
+            avg_return_since_open=Decimal(str(row[1])),
+            stock_count=int(row[2]),
+        )
+        for row in rows
+    ]
+
+    log.debug("sector_movers_fetched", sector_count=len(movers))
+
+    return SectorMoversResponse(
+        data=movers,
+        meta={
+            "fetched_at": datetime.now(UTC).isoformat(),
+            "source": "mv_rs_intraday",
+            "sector_count": len(movers),
+        },
+    )
+
+
+@router.get(
+    "/prices",
+    response_model=IntradayPricesResponse,
+    summary="Latest close price for all tracked instruments",
+)
+def get_intraday_prices(response: Response) -> IntradayPricesResponse:
+    """Return a dict of instrument_id → latest close price.
+
+    Queries ``mv_rs_intraday`` for all instruments. Returns an empty dict
+    when the view is empty (market closed or no data yet).
+
+    Intended for the StockScreener live-price column: the frontend fetches
+    this once on load and every 30 s, then cross-joins locally by instrument_id.
+
+    Args:
+        response: FastAPI Response — used to set Cache-Control header.
+
+    Returns:
+        IntradayPricesResponse with {instrument_id: close} dict + meta.
+    """
+    engine = get_engine()
+
+    with engine.connect() as conn:
+        rows = conn.execute(text(_PRICES_SQL)).fetchall()
+
+    response.headers["Cache-Control"] = "public, max-age=30"
+
+    if not rows:
+        log.debug("intraday_prices_empty")
+        return IntradayPricesResponse(
+            data={},
+            meta={
+                "note": "No intraday data — market closed or MV not yet populated",
+                "fetched_at": datetime.now(UTC).isoformat(),
+                "source": "mv_rs_intraday",
+            },
+        )
+
+    prices: dict[str, Decimal] = {str(row[0]): Decimal(str(row[1])) for row in rows}
+
+    log.debug("intraday_prices_fetched", instrument_count=len(prices))
+
+    return IntradayPricesResponse(
+        data=prices,
+        meta={
+            "fetched_at": datetime.now(UTC).isoformat(),
+            "source": "mv_rs_intraday",
+            "instrument_count": len(prices),
         },
     )
