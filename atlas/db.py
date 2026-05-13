@@ -67,19 +67,32 @@ def sanity_check() -> dict[str, str]:
     return result
 
 
-def load_thresholds(engine: Engine | None = None) -> dict[str, Decimal]:
-    """Read all active thresholds from ``atlas.atlas_thresholds`` once per run.
+_VALID_SCHEMAS = frozenset({"atlas", "us_atlas", "global_atlas"})
+
+
+def load_thresholds(
+    schema: str = "atlas",
+    engine: Engine | None = None,
+) -> dict[str, Decimal]:
+    """Read all active thresholds from ``{schema}.atlas_thresholds`` once per run.
 
     Per architecture 5.6: every classifier function takes thresholds as a
     parameter rather than looking them up independently. This is the single
     place those values enter the compute pipeline.
+
+    Args:
+        schema: Postgres schema to read from. Validated against the known
+                universe schema set — never interpolates user input.
+        engine: Optional engine override; defaults to the process-wide engine.
     """
+    if schema not in _VALID_SCHEMAS:
+        raise ValueError(f"load_thresholds: schema must be one of {_VALID_SCHEMAS}, got {schema!r}")
     eng = engine or get_engine()
     with eng.connect() as conn:
         rows = conn.execute(
             text(
-                "SELECT threshold_key, threshold_value "
-                "FROM atlas.atlas_thresholds WHERE is_active = TRUE"
+                f"SELECT threshold_key, threshold_value "  # noqa: S608 -- schema validated against _VALID_SCHEMAS whitelist above
+                f"FROM {schema}.atlas_thresholds WHERE is_active = TRUE"
             )
         ).all()
     return {key: Decimal(str(value)) for key, value in rows}

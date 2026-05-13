@@ -124,14 +124,16 @@ STATES_COLUMNS: tuple[str, ...] = (
 )
 
 
-def _load_universe(engine: Engine) -> pd.DataFrame:
+_VALID_SCHEMAS = frozenset({"atlas", "us_atlas", "global_atlas"})
+
+
+def _load_universe(engine: Engine, schema: str = "atlas") -> pd.DataFrame:
+    if schema not in _VALID_SCHEMAS:
+        raise ValueError(f"_load_universe: schema must be one of {_VALID_SCHEMAS}, got {schema!r}")
     with open_compute_session(engine) as conn:
         return pd.read_sql(
-            """
-            SELECT ticker, theme, linked_sector
-            FROM atlas.atlas_universe_etfs
-            WHERE effective_to IS NULL
-            """,
+            f"SELECT ticker, theme, linked_sector "  # noqa: S608 -- schema validated against _VALID_SCHEMAS whitelist above
+            f"FROM {schema}.atlas_universe_etfs WHERE effective_to IS NULL",
             conn,
         )
 
@@ -312,20 +314,28 @@ def _compute_etf_metrics(
     return df
 
 
-def _write_metrics(engine: Engine, df: pd.DataFrame, run_id: uuid.UUID) -> int:
+def _write_metrics(
+    engine: Engine, df: pd.DataFrame, run_id: uuid.UUID, schema: str = "atlas"
+) -> int:
+    if schema not in _VALID_SCHEMAS:
+        raise ValueError(f"_write_metrics: schema must be one of {_VALID_SCHEMAS}, got {schema!r}")
     df = df.copy()
     df["compute_run_id"] = str(run_id)
     payload = df.reindex(columns=list(METRICS_COLUMNS))
     return bulk_upsert(
         engine,
-        table="atlas.atlas_etf_metrics_daily",
+        table=f"{schema}.atlas_etf_metrics_daily",
         columns=list(METRICS_COLUMNS),
         rows=df_to_pg_rows(payload),
         pk_columns=["ticker", "date"],
     )
 
 
-def _write_states(engine: Engine, df: pd.DataFrame, run_id: uuid.UUID) -> int:
+def _write_states(
+    engine: Engine, df: pd.DataFrame, run_id: uuid.UUID, schema: str = "atlas"
+) -> int:
+    if schema not in _VALID_SCHEMAS:
+        raise ValueError(f"_write_states: schema must be one of {_VALID_SCHEMAS}, got {schema!r}")
     df = df.copy()
     df["compute_run_id"] = str(run_id)
     payload = df.reindex(columns=list(STATES_COLUMNS))
@@ -340,7 +350,7 @@ def _write_states(engine: Engine, df: pd.DataFrame, run_id: uuid.UUID) -> int:
     payload = payload.dropna(subset=required)
     return bulk_upsert(
         engine,
-        table="atlas.atlas_etf_states_daily",
+        table=f"{schema}.atlas_etf_states_daily",
         columns=list(STATES_COLUMNS),
         rows=df_to_pg_rows(payload),
         pk_columns=["ticker", "date"],
@@ -352,19 +362,24 @@ def run_etf_backfill(
     start: date | None = None,
     end: date | None = None,
     engine: Engine | None = None,
+    schema: str = "atlas",
 ) -> dict[str, object]:
+    if schema not in _VALID_SCHEMAS:
+        raise ValueError(
+            f"run_etf_backfill: schema must be one of {_VALID_SCHEMAS}, got {schema!r}"
+        )
     eng = engine or get_engine()
     run_id = uuid.uuid4()
     started = time.time()
     start = start or pd.to_datetime(Config.HISTORICAL_START_DATE).date()
     end = end or date.today()
 
-    universe = _load_universe(eng)
+    universe = _load_universe(eng, schema=schema)
     sector_map = _load_sector_benchmark_map(eng)
     universe = _resolve_benchmark_code(universe, sector_map)
-    thresholds = load_thresholds(eng)
-    benchmark_cache = materialize_benchmark_cache(eng, start=start, end=end)
-    persist_benchmark_cache(eng, benchmark_cache)
+    thresholds = load_thresholds(schema=schema, engine=eng)
+    benchmark_cache = materialize_benchmark_cache(eng, start=start, end=end, schema=schema)
+    persist_benchmark_cache(eng, benchmark_cache, schema=schema)
 
     # v0: trading-calendar event-day flags aren't yet exposed by JIP.
     # See ``atlas.compute.stocks._load_event_dates`` for the same fallback.
@@ -386,8 +401,8 @@ def run_etf_backfill(
         thresholds=thresholds,
     )
 
-    metric_rows = _write_metrics(eng, metrics, run_id)
-    state_rows = _write_states(eng, metrics, run_id)
+    metric_rows = _write_metrics(eng, metrics, run_id, schema=schema)
+    state_rows = _write_states(eng, metrics, run_id, schema=schema)
 
     log.info(
         "etf_backfill_complete",
@@ -395,6 +410,7 @@ def run_etf_backfill(
         metric_rows=metric_rows,
         state_rows=state_rows,
         duration_sec=round(time.time() - started, 1),
+        schema=schema,
     )
     return {
         "run_id": str(run_id),
@@ -409,11 +425,13 @@ def run_etf_daily(
     *,
     lookback_days: int = 400,
     engine: Engine | None = None,
+    schema: str = "atlas",
 ) -> dict[str, object]:
     return run_etf_backfill(
         start=target_date - timedelta(days=lookback_days),
         end=target_date,
         engine=engine,
+        schema=schema,
     )
 
 

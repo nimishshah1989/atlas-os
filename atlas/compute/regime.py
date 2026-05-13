@@ -536,11 +536,17 @@ def apply_dislocation_override(
 # --------------------------------------------------------------------------- #
 
 
+_VALID_SCHEMAS = frozenset({"atlas", "us_atlas", "global_atlas"})
+
+
 def _write_metrics(
     engine: Engine,
     df: pd.DataFrame,
     run_id: uuid.UUID,
+    schema: str = "atlas",
 ) -> int:
+    if schema not in _VALID_SCHEMAS:
+        raise ValueError(f"_write_metrics: schema must be one of {_VALID_SCHEMAS}, got {schema!r}")
     if df.empty:
         return 0
     df = df.copy()
@@ -566,7 +572,7 @@ def _write_metrics(
     payload = df.reindex(columns=list(METRICS_COLUMNS))
     return bulk_upsert(
         engine,
-        table="atlas.atlas_market_regime_daily",
+        table=f"{schema}.atlas_market_regime_daily",
         columns=list(METRICS_COLUMNS),
         rows=df_to_pg_rows(payload),
         pk_columns=["date"],
@@ -584,6 +590,7 @@ def _run_pipeline(
     start: date,
     end: date,
     write_start: date | None = None,
+    schema: str = "atlas",
 ) -> dict[str, object]:
     """Shared orchestration for backfill + daily."""
     run_id = uuid.uuid4()
@@ -594,9 +601,10 @@ def _run_pipeline(
         run_id=str(run_id),
         start=str(start),
         end=str(end),
+        schema=schema,
     )
 
-    thresholds = load_thresholds(engine)
+    thresholds = load_thresholds(schema=schema, engine=engine)
     inputs = compute_regime_inputs(engine, start_date=start, end_date=end)
     classified = classify_regime_state(inputs, thresholds)
     final = apply_dislocation_override(classified, thresholds)
@@ -604,7 +612,7 @@ def _run_pipeline(
     if write_start is not None:
         final = final.loc[final["date"] >= write_start].copy()
 
-    rows = _write_metrics(engine, final, run_id)
+    rows = _write_metrics(engine, final, run_id, schema=schema)
     duration = round(time.time() - started, 1)
     log.info(
         "regime_pipeline_complete",
@@ -623,21 +631,24 @@ def backfill_regime(
     engine: Engine | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
+    schema: str = "atlas",
 ) -> int:
     """Full historical backfill (default: HISTORICAL_START_DATE → today)."""
     eng = engine or get_engine()
     start = start_date or pd.to_datetime(Config.HISTORICAL_START_DATE).date()
     end = end_date or date.today()
-    result = _run_pipeline(eng, start=start, end=end, write_start=start)
+    result = _run_pipeline(eng, start=start, end=end, write_start=start, schema=schema)
     return int(str(result["rows_written"]))
 
 
-def run_daily_regime(engine: Engine | None = None) -> int:
+def run_daily_regime(engine: Engine | None = None, schema: str = "atlas") -> int:
     """Incremental run for the most recent ~10 calendar days."""
     eng = engine or get_engine()
     today = date.today()
     window_start = today - timedelta(days=10)
-    result = _run_pipeline(eng, start=window_start, end=today, write_start=window_start)
+    result = _run_pipeline(
+        eng, start=window_start, end=today, write_start=window_start, schema=schema
+    )
     return int(str(result["rows_written"]))
 
 

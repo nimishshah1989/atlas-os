@@ -134,15 +134,17 @@ STATES_COLUMNS: tuple[str, ...] = (
 )
 
 
-def _load_universe(engine: Engine) -> pd.DataFrame:
+_VALID_SCHEMAS = frozenset({"atlas", "us_atlas", "global_atlas"})
+
+
+def _load_universe(engine: Engine, schema: str = "atlas") -> pd.DataFrame:
     """Active stock universe with tier and sector denormalised."""
+    if schema not in _VALID_SCHEMAS:
+        raise ValueError(f"_load_universe: schema must be one of {_VALID_SCHEMAS}, got {schema!r}")
     with open_compute_session(engine) as conn:
         return pd.read_sql(
-            """
-            SELECT instrument_id, symbol, tier, sector, listing_date
-            FROM atlas.atlas_universe_stocks
-            WHERE effective_to IS NULL
-            """,
+            f"SELECT instrument_id, symbol, tier, sector, listing_date "  # noqa: S608 -- schema validated against _VALID_SCHEMAS whitelist above
+            f"FROM {schema}.atlas_universe_stocks WHERE effective_to IS NULL",
             conn,
         )
 
@@ -250,8 +252,9 @@ def _log_run(
     started_at: float,
     finished_at: float | None = None,
     error: str | None = None,
+    schema: str = "atlas",
 ) -> None:
-    """Append a row to ``atlas_run_log``. Best-effort — failures here log only."""
+    """Append a row to ``{schema}.atlas_run_log``. Best-effort — failures here log only."""
     finished = finished_at if finished_at is not None else time.time()
     duration_sec = int(finished - started_at)
     # atlas_run_log schema uses per-stage timing columns; M2 stock runs map to stage3.
@@ -265,20 +268,18 @@ def _log_run(
         "rows_written_total": rows_written,
         "failure_message": error,
     }
+    if schema not in _VALID_SCHEMAS:
+        raise ValueError(f"_log_run: schema must be one of {_VALID_SCHEMAS}, got {schema!r}")
     try:
         with open_compute_session(engine) as conn:
             conn.execute(
                 text(
-                    """
-                    INSERT INTO atlas.atlas_run_log
-                        (compute_run_id, business_date, started_at, completed_at,
-                         status, stage3_stock_etf_sec, rows_written_total,
-                         failure_message)
-                    VALUES
-                        (:compute_run_id, :business_date, :started_at, :completed_at,
-                         :status, :stage3_stock_etf_sec, :rows_written_total,
-                         :failure_message)
-                    """
+                    f"INSERT INTO {schema}.atlas_run_log "  # noqa: S608 -- schema validated against _VALID_SCHEMAS whitelist above
+                    f"    (compute_run_id, business_date, started_at, completed_at,"
+                    f"     status, stage3_stock_etf_sec, rows_written_total, failure_message)"
+                    f" VALUES"
+                    f"    (:compute_run_id, :business_date, :started_at, :completed_at,"
+                    f"     :status, :stage3_stock_etf_sec, :rows_written_total, :failure_message)"
                 ),
                 payload,
             )
@@ -389,26 +390,34 @@ def _coerce_volume_bigints(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _write_metrics(engine: Engine, df: pd.DataFrame, run_id: uuid.UUID) -> int:
-    """Bulk-upsert into ``atlas_stock_metrics_daily``."""
+def _write_metrics(
+    engine: Engine, df: pd.DataFrame, run_id: uuid.UUID, schema: str = "atlas"
+) -> int:
+    """Bulk-upsert into ``{schema}.atlas_stock_metrics_daily``."""
+    if schema not in _VALID_SCHEMAS:
+        raise ValueError(f"_write_metrics: schema must be one of {_VALID_SCHEMAS}, got {schema!r}")
     df = _coerce_volume_bigints(df)
     df["compute_run_id"] = str(run_id)
     payload = df.reindex(columns=list(METRICS_COLUMNS))
     return bulk_upsert(
         engine,
-        table="atlas.atlas_stock_metrics_daily",
+        table=f"{schema}.atlas_stock_metrics_daily",
         columns=list(METRICS_COLUMNS),
         rows=df_to_pg_rows(payload),
         pk_columns=["instrument_id", "date"],
     )
 
 
-def _write_states(engine: Engine, df: pd.DataFrame, run_id: uuid.UUID) -> int:
-    """Bulk-upsert into ``atlas_stock_states_daily``.
+def _write_states(
+    engine: Engine, df: pd.DataFrame, run_id: uuid.UUID, schema: str = "atlas"
+) -> int:
+    """Bulk-upsert into ``{schema}.atlas_stock_states_daily``.
 
     States are NOT NULL in schema 005 — drop rows where critical state cols
     couldn't be classified (e.g., insufficient history at start of series).
     """
+    if schema not in _VALID_SCHEMAS:
+        raise ValueError(f"_write_states: schema must be one of {_VALID_SCHEMAS}, got {schema!r}")
     df = df.copy()
     df["compute_run_id"] = str(run_id)
     payload = df.reindex(columns=list(STATES_COLUMNS))
@@ -425,7 +434,7 @@ def _write_states(engine: Engine, df: pd.DataFrame, run_id: uuid.UUID) -> int:
     payload = payload.dropna(subset=required)
     return bulk_upsert(
         engine,
-        table="atlas.atlas_stock_states_daily",
+        table=f"{schema}.atlas_stock_states_daily",
         columns=list(STATES_COLUMNS),
         rows=df_to_pg_rows(payload),
         pk_columns=["instrument_id", "date"],
@@ -437,6 +446,7 @@ def run_stock_backfill(
     start: date | None = None,
     end: date | None = None,
     engine: Engine | None = None,
+    schema: str = "atlas",
 ) -> dict[str, object]:
     """Full historical backfill — methodology window 2016-04-07 → today.
 
@@ -451,16 +461,18 @@ def run_stock_backfill(
     start = start or pd.to_datetime(Config.HISTORICAL_START_DATE).date()
     end = end or date.today()
 
-    log.info("stock_backfill_start", run_id=str(run_id), start=str(start), end=str(end))
+    log.info(
+        "stock_backfill_start", run_id=str(run_id), start=str(start), end=str(end), schema=schema
+    )
 
-    universe = _load_universe(eng)
+    universe = _load_universe(eng, schema=schema)
     log.info("universe_loaded", count=len(universe))
 
-    thresholds = load_thresholds(eng)
+    thresholds = load_thresholds(schema=schema, engine=eng)
     log.info("thresholds_loaded", count=len(thresholds))
 
-    benchmark_cache = materialize_benchmark_cache(eng, start=start, end=end)
-    persist_benchmark_cache(eng, benchmark_cache)
+    benchmark_cache = materialize_benchmark_cache(eng, start=start, end=end, schema=schema)
+    persist_benchmark_cache(eng, benchmark_cache, schema=schema)
     event_dates = _load_event_dates(eng)
 
     ohlcv = _load_ohlcv(
@@ -480,8 +492,8 @@ def run_stock_backfill(
     )
     log.info("compute_complete", rows=len(metrics))
 
-    metric_rows = _write_metrics(eng, metrics, run_id)
-    state_rows = _write_states(eng, metrics, run_id)
+    metric_rows = _write_metrics(eng, metrics, run_id, schema=schema)
+    state_rows = _write_states(eng, metrics, run_id, schema=schema)
 
     finished = time.time()
     _log_run(
@@ -492,6 +504,7 @@ def run_stock_backfill(
         rows_written=metric_rows + state_rows,
         started_at=started,
         finished_at=finished,
+        schema=schema,
     )
     return {
         "run_id": str(run_id),
@@ -506,6 +519,7 @@ def run_stock_daily(
     *,
     lookback_days: int = 400,
     engine: Engine | None = None,
+    schema: str = "atlas",
 ) -> dict[str, object]:
     """Single-day incremental compute.
 
@@ -523,12 +537,13 @@ def run_stock_daily(
         run_id=str(run_id),
         target=str(target_date),
         lookback_start=str(start),
+        schema=schema,
     )
 
-    universe = _load_universe(eng)
-    thresholds = load_thresholds(eng)
-    benchmark_cache = materialize_benchmark_cache(eng, start=start, end=target_date)
-    persist_benchmark_cache(eng, benchmark_cache)
+    universe = _load_universe(eng, schema=schema)
+    thresholds = load_thresholds(schema=schema, engine=eng)
+    benchmark_cache = materialize_benchmark_cache(eng, start=start, end=target_date, schema=schema)
+    persist_benchmark_cache(eng, benchmark_cache, schema=schema)
     event_dates = _load_event_dates(eng)
     ohlcv = _load_ohlcv(
         eng,
@@ -545,8 +560,8 @@ def run_stock_daily(
     )
     target_rows = metrics.loc[metrics["date"] == target_date]
 
-    metric_rows = _write_metrics(eng, target_rows, run_id)
-    state_rows = _write_states(eng, target_rows, run_id)
+    metric_rows = _write_metrics(eng, target_rows, run_id, schema=schema)
+    state_rows = _write_states(eng, target_rows, run_id, schema=schema)
 
     finished = time.time()
     _log_run(
@@ -557,6 +572,7 @@ def run_stock_daily(
         rows_written=metric_rows + state_rows,
         started_at=started,
         finished_at=finished,
+        schema=schema,
     )
     return {
         "run_id": str(run_id),

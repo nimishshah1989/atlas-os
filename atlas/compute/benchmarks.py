@@ -44,17 +44,28 @@ Code matches ``atlas_benchmark_master.benchmark_code = 'GOLD'`` whose
 underlying source is ``de_etf_ohlcv:GOLDBEES``."""
 
 
-def load_benchmark_master(engine: Engine) -> pd.DataFrame:
+_VALID_SCHEMAS = frozenset({"atlas", "us_atlas", "global_atlas"})
+
+
+def load_benchmark_master(engine: Engine, schema: str = "atlas") -> pd.DataFrame:
     """Read active benchmarks (code + source_table + source_identifier)."""
+    if schema not in _VALID_SCHEMAS:
+        raise ValueError(
+            f"load_benchmark_master: schema must be one of {_VALID_SCHEMAS}, got {schema!r}"
+        )
     with open_compute_session(engine) as conn:
         return pd.read_sql(
-            """
-            SELECT benchmark_code, benchmark_type, source_table, source_identifier
-            FROM atlas.atlas_benchmark_master
-            WHERE is_active = TRUE
-            """,
+            f"SELECT benchmark_code, benchmark_type, source_table, source_identifier "  # noqa: S608 -- schema validated against _VALID_SCHEMAS whitelist above
+            f"FROM {schema}.atlas_benchmark_master WHERE is_active = TRUE",
             conn,
         )
+
+
+_INDIA_SOURCE_TABLES: Mapping[str, str] = {
+    "de_index_prices": "index_code",
+    "de_etf_ohlcv": "ticker",
+    "de_global_prices": "ticker",
+}
 
 
 def _load_one_benchmark_prices(
@@ -64,26 +75,44 @@ def _load_one_benchmark_prices(
     source_identifier: str,
     start: date,
     end: date,
+    schema: str = "atlas",
 ) -> pd.DataFrame:
     """Load price series for one benchmark from its source table.
 
-    Maps the three flavours of source table (``de_index_prices``,
-    ``de_etf_ohlcv``, ``de_global_prices``) to a uniform ``(date, close)`` frame.
-    """
-    keymap = {
-        "de_index_prices": "index_code",
-        "de_etf_ohlcv": "ticker",
-        "de_global_prices": "ticker",
-    }
-    if source_table not in keymap:
-        raise ValueError(f"Unknown benchmark source_table: {source_table}")
+    India path: source_table is one of de_index_prices / de_etf_ohlcv /
+    de_global_prices — loaded from the ``public`` schema with the matching
+    key column.
 
-    sql = (
-        f"SELECT date, close FROM public.{source_table} "  # noqa: S608 -- source_table validated against keymap whitelist above
-        f"WHERE {keymap[source_table]} = %(code)s "
-        f"AND date BETWEEN %(start)s AND %(end)s "
-        f"ORDER BY date"
-    )
+    US/Global path: source_table is ``stock_ohlcv`` — loaded from
+    ``{schema}.stock_ohlcv`` using ``ticker`` as the key column.
+    """
+    # Strip optional schema prefix ("global_atlas.stock_ohlcv" → "stock_ohlcv")
+    # so seed data and runtime dispatch stay decoupled.
+    table_name = source_table.rsplit(".", 1)[-1]
+
+    if table_name in _INDIA_SOURCE_TABLES:
+        key_col = _INDIA_SOURCE_TABLES[table_name]
+        sql = (
+            f"SELECT date, close FROM public.{table_name} "  # noqa: S608 -- table_name validated against _INDIA_SOURCE_TABLES whitelist above
+            f"WHERE {key_col} = %(code)s "
+            f"AND date BETWEEN %(start)s AND %(end)s "
+            f"ORDER BY date"
+        )
+    elif table_name == "stock_ohlcv":
+        if schema not in _VALID_SCHEMAS:
+            raise ValueError(
+                "_load_one_benchmark_prices: schema must be one of "
+                f"{_VALID_SCHEMAS}, got {schema!r}"
+            )
+        sql = (
+            f"SELECT date, close FROM {schema}.stock_ohlcv "  # noqa: S608 -- schema validated against _VALID_SCHEMAS whitelist; table_name is literal 'stock_ohlcv'
+            f"WHERE ticker = %(code)s "
+            f"AND date BETWEEN %(start)s AND %(end)s "
+            f"ORDER BY date"
+        )
+    else:
+        raise ValueError(f"Unknown benchmark source_table: {source_table!r}")
+
     with open_compute_session(engine) as conn:
         return pd.read_sql(
             sql,
@@ -97,6 +126,7 @@ def materialize_benchmark_cache(
     *,
     start: date,
     end: date,
+    schema: str = "atlas",
 ) -> pd.DataFrame:
     """Build the per-run benchmark cache.
 
@@ -111,26 +141,27 @@ def materialize_benchmark_cache(
     long-format because pandas merges on ``(date, benchmark_code)`` are clean;
     we pivot wide only when absolutely needed (e.g., RS-vs-multiple-benchmarks).
     """
-    master = load_benchmark_master(engine)
-    log.info("benchmark_master_loaded", count=len(master))
+    master = load_benchmark_master(engine, schema=schema)
+    log.info("benchmark_master_loaded", count=len(master), schema=schema)
 
     pieces: list[pd.DataFrame] = []
-    for row in master.itertuples(index=False):
+    for _, row in master.iterrows():
         prices = _load_one_benchmark_prices(
             engine,
-            source_table=row.source_table,
-            source_identifier=row.source_identifier,
+            source_table=str(row["source_table"]),
+            source_identifier=str(row["source_identifier"]),
             start=start,
             end=end,
+            schema=schema,
         )
         if prices.empty:
             log.warning(
                 "benchmark_prices_empty",
-                benchmark_code=row.benchmark_code,
-                source=row.source_identifier,
+                benchmark_code=row["benchmark_code"],
+                source=row["source_identifier"],
             )
             continue
-        prices["benchmark_code"] = row.benchmark_code
+        prices["benchmark_code"] = row["benchmark_code"]
         pieces.append(prices)
 
     cache = pd.concat(pieces, ignore_index=True)
@@ -187,24 +218,28 @@ _BENCHMARK_CACHE_COLUMNS = (
 )
 
 
-def persist_benchmark_cache(engine: Engine, cache: pd.DataFrame) -> int:
-    """Write the in-memory benchmark cache to ``atlas_benchmark_returns_cache``.
+def persist_benchmark_cache(engine: Engine, cache: pd.DataFrame, schema: str = "atlas") -> int:
+    """Write the in-memory benchmark cache to ``{schema}.atlas_benchmark_returns_cache``.
 
-    Called once per M2 pipeline run after ``materialize_benchmark_cache``.
+    Called once per pipeline run after ``materialize_benchmark_cache``.
     Renames ema_10_benchmark/ema_20_benchmark to the DB column names.
     """
+    if schema not in _VALID_SCHEMAS:
+        raise ValueError(
+            f"persist_benchmark_cache: schema must be one of {_VALID_SCHEMAS}, got {schema!r}"
+        )
     df = cache.rename(columns={"ema_10_benchmark": "ema_10", "ema_20_benchmark": "ema_20"})
     df = df.reindex(columns=list(_BENCHMARK_CACHE_COLUMNS)).dropna(subset=["ret_1d"])
     if df.empty:
         return 0
     n = bulk_upsert(
         engine,
-        table="atlas.atlas_benchmark_returns_cache",
+        table=f"{schema}.atlas_benchmark_returns_cache",
         columns=list(_BENCHMARK_CACHE_COLUMNS),
         rows=df_to_pg_rows(df),
         pk_columns=["benchmark_code", "date"],
     )
-    log.info("benchmark_cache_persisted", rows=n)
+    log.info("benchmark_cache_persisted", rows=n, schema=schema)
     return n
 
 
