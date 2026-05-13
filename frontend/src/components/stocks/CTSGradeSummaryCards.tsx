@@ -68,11 +68,47 @@ const GRADE_CONFIG = [
   },
 ]
 
+const GLOSSARY = [
+  {
+    term: 'PPC · Pocket Pivot Candle',
+    def:  'An up-day where volume exceeds the highest down-day volume across the prior 10 trading sessions. Signals institutional accumulation entering a position. Source: Morales & Kacher methodology.',
+  },
+  {
+    term: 'NPC · Negative Pivot Candle',
+    def:  'The bearish mirror of PPC. A down-day where volume exceeds the highest up-day volume in the prior 10 sessions. Signals institutional distribution — large players exiting.',
+  },
+  {
+    term: 'Contraction',
+    def:  'A day with narrowing price range (shrinking ATR slope), close within ~3% of the session high, on below-average volume. Indicates a quiet pause in an uptrend — tight base coiling before the next move. Often precedes a PPC.',
+  },
+  {
+    term: 'Stage 1 · Basing',
+    def:  'Stock moving sideways beneath a flat or declining 30-week MA. Accumulation may be happening but no confirmed uptrend. Wait for Stage 2 before buying.',
+  },
+  {
+    term: 'Stage 2 · Advancing',
+    def:  'Stock trading above a rising 30-week MA — the primary buy zone per Weinstein stage analysis. This is the only stage where new positions are initiated. PPC in Stage 2 = highest-conviction entry.',
+  },
+  {
+    term: 'Stage 3 · Topping',
+    def:  'MA flattening or turning down. Institutional distribution begins. Stocks here are at risk; existing positions should be tightened or exited. An NPC in Stage 3 escalates to −A.',
+  },
+  {
+    term: 'Stage 4 · Declining',
+    def:  'Stock below a declining 30-week MA. Avoid entirely. If held, this is an immediate exit signal (−A). No buying in Stage 4 regardless of short-term bounces.',
+  },
+  {
+    term: 'Timing Grade +A / +B / — / −B / −A',
+    def:  '+ = buy timing  ·  − = sell timing  ·  A = act now (trigger confirmed)  ·  B = watch (setup forming but no trigger yet)\n+A: Stage 2 + confirmed Pocket Pivot — highest conviction buy\n+B: Stage 2, no PPC yet — right stage, wait for volume trigger\n —: Stage 1 or Contraction — neutral, no action\n−B: Stage 3 topping — begin reducing / tighten stops\n−A: Stage 4 decline or Stage 3 + Negative Pivot — exit now',
+  },
+]
+
 export function CTSGradeSummaryCards() {
   const [data, setData]         = useState<IndexTimingRow[] | null>(null)
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState<string | null>(null)
   const [selected, setSelected] = useState('All Tradeable')
+  const [showDefs, setShowDefs] = useState(false)
 
   useEffect(() => {
     fetch('/api/cts/index-timing')
@@ -210,6 +246,39 @@ export function CTSGradeSummaryCards() {
                   {row.total} stocks in {selected}
                 </span>
               </div>
+            </div>
+            {/* Glossary toggle */}
+            <div className="border-t border-paper-rule/60 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowDefs(d => !d)}
+                className="flex items-center gap-1.5 font-sans text-[10px] text-ink-tertiary hover:text-ink-secondary transition-colors"
+              >
+                <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full border border-ink-tertiary/40 text-[8px] font-bold">ⓘ</span>
+                {showDefs ? 'Hide signal definitions' : 'How are these signals calculated?'}
+              </button>
+
+              {showDefs && (
+                <div className="mt-3 grid grid-cols-1 gap-3">
+                  {GLOSSARY.map(item => (
+                    <div key={item.term} className="flex gap-3">
+                      <div className="shrink-0 w-[180px]">
+                        <span className="font-mono text-[10px] font-semibold text-ink-secondary">{item.term}</span>
+                      </div>
+                      <div className="flex-1">
+                        {item.def.split('\n').map((line, i) => (
+                          <p key={i} className={`font-sans text-[10px] text-ink-tertiary leading-relaxed ${i > 0 ? 'mt-0.5' : ''}`}>
+                            {line}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  <p className="font-sans text-[9px] text-ink-tertiary/60 pt-1 border-t border-paper-rule/40">
+                    Stage analysis: Mark Weinstein (1988). Pocket Pivot: Gil Morales &amp; Chris Kacher. Volume thresholds computed daily against trailing 10-session window.
+                  </p>
+                </div>
+              )}
             </div>
           </>
         )}

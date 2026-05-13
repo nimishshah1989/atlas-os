@@ -509,10 +509,32 @@ export function StockScreener({
                 />
               )}
               {visibleCols.has('cts_stage') && (
-                <PlainTh label="Stage" tooltip="Weinstein Stage (1-4) from 150-day MA slope. S2 = price above rising 150d MA — primary uptrend." />
+                <PlainTh label="Stage" tooltip={[
+                  'Weinstein Stage (1–4) derived from the slope of the 150-day moving average.',
+                  '',
+                  'Stage 1 · Basing     — sideways below flat/declining MA. No position.',
+                  'Stage 2 · Advancing  — above a rising MA. Primary buy zone. PPC here = +A.',
+                  'Stage 3 · Topping    — MA flattening. Distribution begins. Reduce exposure.',
+                  'Stage 4 · Declining  — below declining MA. Exit. No buying at any price.',
+                  '',
+                  'Source: Mark Weinstein, "Stan Weinstein\'s Secrets For Profiting in Bull and Bear Markets" (1988).',
+                ].join('\n')} />
               )}
               {visibleCols.has('cts_signal') && (
-                <PlainTh label="CTS Signal" tooltip="Latest CTS timing signal: PPC (Positive Pivotal Candle), NPC (Negative Pivotal Candle), or Contraction near highs." />
+                <PlainTh label="CTS Signal" tooltip={[
+                  'Latest volume signal for this stock today.',
+                  '',
+                  'PPC · Pocket Pivot Candle — up-day where volume exceeds the highest down-day volume',
+                  '  in the prior 10 sessions. Signals institutional accumulation. Best when in Stage 2.',
+                  '',
+                  'NPC · Negative Pivot Candle — down-day where volume exceeds the highest up-day volume',
+                  '  in the prior 10 sessions. Signals institutional distribution (selling pressure).',
+                  '',
+                  'Contraction — narrow range day, close near high, below-average volume.',
+                  '  A quiet pause; often precedes a new PPC. Bullish if in Stage 2.',
+                  '',
+                  'Source: Morales & Kacher, "Trade Like an O\'Neil Disciple" (2010).',
+                ].join('\n')} />
               )}
               {visibleCols.has('signal') && (
                 <PlainTh

@@ -125,13 +125,59 @@ export function CTSSectorPanel() {
                 <thead>
                   <tr className="border-b border-paper-rule bg-paper">
                     <th className="px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary text-left">Sector</th>
-                    <th className="px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary text-left" title="+A/+B = buy timing  —  −B/−A = sell timing">Timing</th>
-                    <th className="px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary text-right">PPC</th>
-                    <th className="px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary text-right">NPC</th>
-                    <th className="px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary text-left">Balance</th>
-                    <th className="px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary text-right">S2 %</th>
-                    <th className="px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary text-left whitespace-nowrap">Avg Conv</th>
-                    <th className="px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary text-right whitespace-nowrap">Actions</th>
+                    <th className="px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary text-left cursor-help" title={[
+                      'Directional timing grade derived from sector PPC/NPC balance and action-alert count.',
+                      '',
+                      '+A  Buy · Act Now — balance ≥ +10% with at least one action-ready PPC stock',
+                      '+B  Buy · Watch   — positive balance (more PPCs than NPCs)',
+                      ' —  Neutral        — balance within ±3%',
+                      '−B  Sell · Watch  — negative balance (more NPCs than PPCs)',
+                      '−A  Sell · Act Now — balance ≤ −15% with NPC-dominant pattern',
+                    ].join('\n')}>Timing</th>
+                    <th className="px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary text-right cursor-help" title={[
+                      'PPC · Pocket Pivot Candle count today.',
+                      '',
+                      'A PPC is an up-day where volume exceeds the highest down-day volume',
+                      'across the prior 10 trading sessions — a footprint of institutional',
+                      'accumulation entering a position.',
+                      '',
+                      'Source: Morales & Kacher methodology.',
+                    ].join('\n')}>PPC</th>
+                    <th className="px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary text-right cursor-help" title={[
+                      'NPC · Negative Pivot Candle count today.',
+                      '',
+                      'A NPC is a down-day where volume exceeds the highest up-day volume',
+                      'across the prior 10 trading sessions — the bearish mirror of PPC.',
+                      'Signals institutional distribution (large players exiting).',
+                    ].join('\n')}>NPC</th>
+                    <th className="px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary text-left cursor-help" title={[
+                      'Pivot Balance = (PPC count − NPC count) / total tradeable stocks in sector.',
+                      '',
+                      'Positive → more buying signals than selling signals.',
+                      'Negative → more selling signals than buying signals.',
+                      'Bar length shows magnitude; color shows direction (teal = positive, red = negative).',
+                    ].join('\n')}>Balance</th>
+                    <th className="px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary text-right cursor-help" title={[
+                      'Stage 2 % — percentage of tradeable stocks in this sector currently in Weinstein Stage 2.',
+                      '',
+                      'Stage 2 = price trading above a rising 30-week MA (the primary uptrend / buy zone).',
+                      'Higher % = more stocks in the sector are in confirmed uptrends.',
+                    ].join('\n')}>S2 %</th>
+                    <th className="px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary text-left whitespace-nowrap cursor-help" title={[
+                      'Average Conviction Score across Stage 2 stocks in this sector.',
+                      '',
+                      'Conviction is a 0–100 percentile rank within the stock\'s size tier (Mega/Large/Mid/Small),',
+                      'derived from 11 technical signals: momentum, trend strength, volume character, and risk.',
+                      '',
+                      '≥55 = top tier (bar turns teal)  ·  40–55 = mid tier (amber)  ·  <40 = weak (grey)',
+                    ].join('\n')}>Avg Conv</th>
+                    <th className="px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary text-right whitespace-nowrap cursor-help" title={[
+                      'Action-ready stocks — Stage 2 stocks with a confirmed Pocket Pivot today.',
+                      '',
+                      'These stocks have both the right trend context (Stage 2) AND a volume trigger (PPC).',
+                      'This is the highest-conviction entry signal: trend + timing aligned simultaneously.',
+                      'Drives the sector\'s +A grade when combined with positive balance.',
+                    ].join('\n')}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>

@@ -112,8 +112,19 @@ export function CTSIndexTimingPanel() {
           <span className="font-sans text-xs font-semibold text-ink-primary uppercase tracking-wide">
             Market Timing
           </span>
-          <span className="font-sans text-[10px] text-ink-tertiary">
-            Index-level buy/sell grade aggregated from stock CTS signals
+          <span className="font-sans text-[10px] text-ink-tertiary" title={[
+            'Grade aggregated from individual stock CTS signals across the index constituents.',
+            '',
+            'Each stock is graded: +A (Stage 2 + Pocket Pivot), +B (Stage 2), — (neutral),',
+            '−B (Stage 3 topping), or −A (Stage 4 / Stage 3 + Negative Pivot).',
+            '',
+            'Index grade = net directional score across all constituents:',
+            '  +A if (buy% − sell%) ≥ 25% and at least one +A stock',
+            '  +B if net ≥ 10%  ·  −B if net ≤ −10%  ·  −A if net ≤ −25% and −A stocks present',
+            '',
+            'Weinstein stage analysis + Morales/Kacher Pocket Pivot methodology.',
+          ].join('\n')}>
+            Index-level buy/sell grade · Weinstein stage + Pocket Pivot signals
           </span>
           {loading && <span className="font-sans text-[10px] text-ink-tertiary">Loading…</span>}
         </div>
