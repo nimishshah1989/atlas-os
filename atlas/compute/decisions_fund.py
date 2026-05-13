@@ -287,7 +287,8 @@ def compute_weeks_in_state(
             )
 
     def _streak(grp: pd.DataFrame) -> pd.Series:
-        mid = grp["mstar_id"].iloc[0]
+        # grp.name is the mstar_id value when groupby key is a single column
+        mid = str(grp.name)
         prev_rec, prev_count = prior.get(mid, (None, 0))
         counts = []
         for rec in grp["recommendation"]:
