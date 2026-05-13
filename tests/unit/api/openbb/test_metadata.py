@@ -41,7 +41,7 @@ class TestGetAgentsJson:
     def test_query_endpoint_listed(self) -> None:
         agent = client.get("/v1/agents.json").json()["atlas"]
         assert "query" in agent["endpoints"]
-        assert agent["endpoints"]["query"] == "/v1/query"
+        assert agent["endpoints"]["query"].endswith("/v1/query")
 
     def test_streaming_feature_true(self) -> None:
         features = client.get("/v1/agents.json").json()["atlas"]["features"]

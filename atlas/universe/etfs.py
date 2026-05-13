@@ -249,6 +249,7 @@ _AUTO_DETECT_QUERY = """
 """
 
 _BROAD_KEYWORDS = (
+    "NIFTYBEES",
     "NIFTY 50",
     "NIFTY50",
     "NIFTY 100",
@@ -268,24 +269,23 @@ _BROAD_KEYWORDS = (
     "TOTAL MKT",
 )
 
-# Substring → atlas_sector_master.sector_name.
-# Sector names verified against JIP de_instrument.sector.
+# Substring → sector label.
 # Order matters: longer/more specific tokens must appear before shorter ones.
 _SECTORAL_KEYWORDS: tuple[tuple[str, str], ...] = (
-    ("PSU BANK", "Banking"),
-    ("PRIVATE BANK", "Banking"),
-    ("PVT BANK", "Banking"),
+    ("PSU BANK", "PSU Bank"),
+    ("PRIVATE BANK", "Private Bank"),
+    ("PVT BANK", "Private Bank"),
     ("FINANCIAL SERVICES", "Financial Services"),
     ("FIN SERVICES", "Financial Services"),
     ("FIN SVCS", "Financial Services"),
-    ("BANK", "Banking"),
+    ("BANK", "Bank"),
     ("HEALTHCARE", "Healthcare"),
     ("PHARMA", "Pharma"),
     ("FMCG", "FMCG"),
     ("OIL & GAS", "Oil & Gas"),
     ("OIL AND GAS", "Oil & Gas"),
     ("OIL GAS", "Oil & Gas"),
-    ("AUTO", "Automobile"),
+    ("AUTO", "Auto"),
     ("METAL", "Metal"),
     ("ENERGY", "Energy"),
     ("REALTY", "Realty"),

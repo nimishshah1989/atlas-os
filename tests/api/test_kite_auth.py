@@ -69,11 +69,10 @@ class TestKiteLogin:
 
 class TestKiteCallback:
     def test_kite_callback_missing_database_url_returns_500(self, client: TestClient) -> None:
-        """500 when DATABASE_URL is not configured."""
-        env_patch = {"KITE_API_KEY": "k", "KITE_API_SECRET": "s"}
-        with patch.dict(os.environ, env_patch, clear=False):
-            os.environ.pop("DATABASE_URL", None)
-            response = client.get("/api/kite/callback?request_token=tok123")
+        """500 when ATLAS_DB_URL is not configured."""
+        with patch.dict(os.environ, {"KITE_API_KEY": "k", "KITE_API_SECRET": "s"}, clear=False):
+            with patch.object(Config, "DB_URL", ""):
+                response = client.get("/api/kite/callback?request_token=tok123")
         assert response.status_code == 500
         body = response.json()
         assert body["detail"]["error_code"] == "server_misconfigured"
@@ -102,16 +101,16 @@ class TestKiteCallback:
             {
                 "KITE_API_KEY": "k",
                 "KITE_API_SECRET": "s",
-                "DATABASE_URL": "postgresql://localhost/atlas",
                 "KITE_TOKEN_ENCRYPTION_KEY": "secret_enc_key",
             },
         ):
-            with patch(
-                "atlas.api.kite_auth.exchange_request_token", return_value=fake_session
-            ) as mock_exchange:
-                with patch("atlas.api.kite_auth.store_access_token") as mock_store:
-                    with patch("atlas.api.kite_auth.send_message_sync") as mock_notify:
-                        response = client.get("/api/kite/callback?request_token=validtoken123")
+            with patch.object(Config, "DB_URL", "postgresql://localhost/atlas"):
+                with patch(
+                    "atlas.api.kite_auth.exchange_request_token", return_value=fake_session
+                ) as mock_exchange:
+                    with patch("atlas.api.kite_auth.store_access_token") as mock_store:
+                        with patch("atlas.api.kite_auth.send_message_sync") as mock_notify:
+                            response = client.get("/api/kite/callback?request_token=validtoken123")
 
         assert response.status_code == 302
         assert response.headers["location"] == "/admin"

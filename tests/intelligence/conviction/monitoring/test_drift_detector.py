@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -15,6 +16,8 @@ from atlas.intelligence.conviction.monitoring.drift_detector import (
     detect_drift,
 )
 
+_needs_db = pytest.mark.skipif(not os.getenv("ATLAS_DB_URL"), reason="needs ATLAS_DB_URL")
+
 
 def test_constants_are_sane() -> None:
     assert DEFAULT_RATIO_THRESHOLD == Decimal("0.5")
@@ -22,6 +25,7 @@ def test_constants_are_sane() -> None:
 
 
 @pytest.mark.integration
+@_needs_db
 def test_no_findings_when_no_perf_history() -> None:
     """With <60 days of live-perf data on EC2, detector returns []."""
     eng = get_engine()
@@ -32,6 +36,7 @@ def test_no_findings_when_no_perf_history() -> None:
 
 
 @pytest.mark.integration
+@_needs_db
 def test_detector_with_synthetic_in_revert_territory() -> None:
     """Insert 60 days of bad perf for tier_5_smallcap, detect."""
     eng = get_engine()
@@ -87,6 +92,7 @@ def test_detector_with_synthetic_in_revert_territory() -> None:
 
 
 @pytest.mark.integration
+@_needs_db
 def test_detector_skips_when_one_day_above_threshold() -> None:
     """If 59 days are below but 1 day is above, no finding."""
     eng = get_engine()

@@ -286,11 +286,11 @@ def compute_weeks_in_state(
                 int(rec["weeks_in_current_state"]),
             )
 
-    def _streak(grp: pd.DataFrame) -> pd.Series:
-        # grp.name is the mstar_id value when groupby key is a single column
-        mid = str(grp.name)
-        prev_rec, prev_count = prior.get(mid, (None, 0))
-        counts = []
+    streak_parts: list[pd.Series] = []
+    for mid, grp in df.groupby("mstar_id", sort=False):
+        mid_str = str(mid)
+        prev_rec, prev_count = prior.get(mid_str, (None, 0))
+        counts: list[int] = []
         for rec in grp["recommendation"]:
             if rec == prev_rec:
                 prev_count += 1
@@ -298,9 +298,8 @@ def compute_weeks_in_state(
                 prev_count = 1
             counts.append(prev_count)
             prev_rec = rec
-        return pd.Series(counts, index=grp.index)
-
-    df["weeks_in_current_state"] = df.groupby("mstar_id", group_keys=False).apply(_streak)
+        streak_parts.append(pd.Series(counts, index=grp.index))
+    df["weeks_in_current_state"] = pd.concat(streak_parts) if streak_parts else pd.Series(dtype=int)
     return df
 
 

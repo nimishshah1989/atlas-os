@@ -34,7 +34,7 @@ import sqlalchemy as sa
 
 _MIGRATION_MODULE = "migrations.versions.024_create_decision_policy"
 _SKIP_INTEGRATION = pytest.mark.skipif(
-    os.environ.get("ATLAS_DB_URL") is None,
+    not os.environ.get("ATLAS_INTEGRATION_TESTS"),
     reason="needs ATLAS_DB_URL — integration tests run on EC2 only",
 )
 
@@ -346,7 +346,7 @@ class TestPolicyTriggerIntegration:
             conn.execute(
                 sa.text("""
                     UPDATE atlas.atlas_decision_policy
-                    SET policy_value = :val::jsonb,
+                    SET policy_value = CAST(:val AS jsonb),
                         last_modified_by = 'test_user'
                     WHERE policy_key = :key
                 """),

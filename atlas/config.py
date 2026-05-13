@@ -64,6 +64,9 @@ class Config:
     # /api/v1/intraday/* routes. Never expose to browser clients.
     ATLAS_INTERNAL_SECRET: str = os.environ.get("ATLAS_INTERNAL_SECRET", "")
 
+    # OpenBB BYO Copilot — SP03. Empty = dev mode (auth bypassed).
+    OPENBB_BACKEND_API_KEY: str = os.environ.get("OPENBB_BACKEND_API_KEY", "")
+
     # TradingView integration — SP10 TV Signal + Report
     TV_WEBHOOK_SECRET: str = os.environ.get("TV_WEBHOOK_SECRET", "")
     TV_SESSION_ID: str = os.environ.get("TV_SESSION_ID", "")

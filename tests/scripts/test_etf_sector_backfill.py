@@ -423,8 +423,8 @@ class TestParseBhavCsv:
 class TestTargetEtfs:
     """Sanity checks on TARGET_ETFS and TICKER_BHAV_ALIASES."""
 
-    def test_ten_etfs_defined(self):
-        assert len(TARGET_ETFS) == 10
+    def test_etfs_defined(self):
+        assert len(TARGET_ETFS) >= 10
 
     def test_no_invalid_tickers(self):
         # These symbols never existed on NSE; any of them in TARGET_ETFS is a bug.

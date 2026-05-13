@@ -29,6 +29,7 @@ _SAMPLE_BAR_TIME = datetime(2026, 5, 12, 9, 30, 0, tzinfo=UTC)
 @pytest.fixture(scope="module")
 def client() -> TestClient:
     Config.AUTH_DISABLED = True
+    Config.ATLAS_INTERNAL_SECRET = "test-service-secret"  # noqa: S105
     return TestClient(app, headers=_SERVICE_HEADERS)
 
 

@@ -32,7 +32,7 @@ import sqlalchemy as sa
 
 _MIGRATION_MODULE = "migrations.versions.025_strategy_configs_audit"
 _SKIP_INTEGRATION = pytest.mark.skipif(
-    os.environ.get("ATLAS_DB_URL") is None,
+    not os.environ.get("ATLAS_INTEGRATION_TESTS"),
     reason="needs ATLAS_DB_URL — integration tests run on EC2 only",
 )
 

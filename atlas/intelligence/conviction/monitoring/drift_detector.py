@@ -64,6 +64,7 @@ _RESTORE_TARGET_SQL = text("""
     WHERE tier = :tier
       AND regime = :regime
       AND effective_to IS NOT NULL
+    GROUP BY tier
 """)
 
 

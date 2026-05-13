@@ -352,7 +352,6 @@ TICKER_BHAV_ALIASES: dict[str, list[str]] = {
     "ITBEES": ["NETFIT"],  # Nippon India ETF Nifty IT, renamed ~Jun 2022
     "MID150BEES": ["NETFMID150"],  # Nippon India ETF Nifty Midcap 150, renamed ~Jun 2022
     "PHARMABEES": ["NETFPHARMA"],  # renamed ~Jun 2022
-    "BANKBEES": ["NETFBANKBEES"],  # older BHAV symbol if applicable
     "HEALTHIETF": ["NETFHLT"],  # older BHAV symbol if applicable
     "AUTOBEES": ["NETFAUTO"],  # older BHAV symbol if applicable
     "METALIETF": ["NETFMETAL"],  # older BHAV symbol if applicable
