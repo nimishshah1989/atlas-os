@@ -6,7 +6,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-import pandas_ta as ta  # noqa: F401
+import pandas_ta as ta  # type: ignore[import-untyped]  # noqa: F401 — registers df.ta accessor
 import structlog
 from scipy.signal import find_peaks
 
@@ -42,7 +42,12 @@ def _fetch_ohlcv(ticker: str, lookback_days: int, conn: Any) -> pd.DataFrame:
     ).fetchall()
     if not rows:
         raise ValueError(f"No OHLCV data for {ticker}")
-    df = pd.DataFrame(rows, columns=["date", "open", "high", "low", "close", "volume"])
+    df = pd.DataFrame(
+        [
+            dict(zip(["date", "open", "high", "low", "close", "volume"], r, strict=False))
+            for r in rows
+        ]
+    )
     return df.sort_values("date").reset_index(drop=True)
 
 
@@ -119,8 +124,9 @@ def compute_technical_snapshot(ticker: str, conn: Any) -> TechnicalSnapshot:
         ema200=float(last[ema200_col] or last["close"]),
     )
 
-    highs_idx, _ = find_peaks(df["close"].values, distance=10, prominence=0.02)
-    lows_idx, _ = find_peaks(-df["close"].values, distance=10, prominence=0.02)
+    close_arr = df["close"].to_numpy(dtype=float)
+    highs_idx, _ = find_peaks(close_arr, distance=10, prominence=0.02)
+    lows_idx, _ = find_peaks(-close_arr, distance=10, prominence=0.02)
 
     hh = len(highs_idx) >= 2 and df["close"].iloc[highs_idx[-1]] > df["close"].iloc[highs_idx[-2]]
     hl = len(lows_idx) >= 2 and df["close"].iloc[lows_idx[-1]] > df["close"].iloc[lows_idx[-2]]
