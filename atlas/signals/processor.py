@@ -17,7 +17,7 @@ _DUAL_CONFIRM_CTS_BUY_STATES = frozenset({"BUY Stage 1", "BUY Stage 2", "BUY Sta
 
 
 def _determine_confirmation_level(
-    tier: int,
+    tier: int,  # pyright: ignore[reportUnusedParameter] — reserved for per-tier thresholds
     conviction_score: Decimal | None,
     cts_state: str | None,
     rs_percentile: Decimal | None,
