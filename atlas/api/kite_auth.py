@@ -128,4 +128,4 @@ def kite_callback(
             },
         ) from exc
 
-    return RedirectResponse(url="/admin", status_code=302)
+    return RedirectResponse(url="/stocks", status_code=302)
