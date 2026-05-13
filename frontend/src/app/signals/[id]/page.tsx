@@ -11,8 +11,9 @@ async function fetchReport(id: string) {
   return res.json();
 }
 
-export default async function SignalReportPage({ params }: { params: { id: string } }) {
-  const report = await fetchReport(params.id);
+export default async function SignalReportPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const report = await fetchReport(id);
   if (!report) notFound();
   return (
     <div className="px-4 py-8">
