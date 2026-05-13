@@ -304,11 +304,17 @@ def _classify_states(df: pd.DataFrame, thresholds: Mapping[str, Decimal]) -> pd.
     out["rs_pctile_1w"] = out.get("rs_pctile_1w_vt", pd.NA)
     out["rs_pctile_1m"] = out.get("rs_pctile_1m_vt", pd.NA)
     out["rs_pctile_3m"] = out.get("rs_pctile_3m_vt", pd.NA)
-    out = classify_rs_state(out, thresholds)
-    out = out.drop(columns=["rs_pctile_1w", "rs_pctile_1m", "rs_pctile_3m"], errors="ignore")
 
-    # stage1_base reads historical rs_state — must run after classify_rs_state
+    # Two-pass RS classification: classify_rs_state needs stage1_base_qualifies,
+    # but add_stage1_base needs rs_state. Resolve by seeding False, classifying
+    # once to populate rs_state for all rows, then recomputing stage1_base and
+    # reclassifying so Emerging can fire.
+    out["stage1_base_qualifies"] = False
+    out = classify_rs_state(out, thresholds)  # pass 1 — Emerging never fires
     out = add_stage1_base(out, group_col="ticker", state_col="rs_state")
+    out = classify_rs_state(out, thresholds)  # pass 2 — Emerging fires for qualifying stocks
+
+    out = out.drop(columns=["rs_pctile_1w", "rs_pctile_1m", "rs_pctile_3m"], errors="ignore")
 
     out = classify_momentum_state(out, thresholds)
     out = classify_risk_state(out, thresholds)
