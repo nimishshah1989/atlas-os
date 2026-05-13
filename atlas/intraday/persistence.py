@@ -30,6 +30,19 @@ class BarRecord:
     ema_50: Decimal | None
     rs_vs_nifty: Decimal | None
     gap_filled: bool = False
+    return_since_open: Decimal | None = None
+
+
+@dataclass
+class NiftyBarRecord:
+    """One 15-minute OHLCV bar for the Nifty50 index."""
+
+    bar_time: datetime
+    open: Decimal
+    high: Decimal
+    low: Decimal
+    close: Decimal
+    return_since_open: Decimal | None = None
 
 
 def _strip_dialect(conn_str: str) -> str:
@@ -70,6 +83,7 @@ def upsert_bars(bars: list[BarRecord], *, conn_str: str) -> int:
             bar.ema_50,
             bar.rs_vs_nifty,
             bar.gap_filled,
+            bar.return_since_open,
         )
         for bar in bars
     ]
@@ -77,24 +91,25 @@ def upsert_bars(bars: list[BarRecord], *, conn_str: str) -> int:
     upsert_sql = """
         INSERT INTO atlas.atlas_stock_metrics_intraday
             (instrument_id, bar_time, open, high, low, close, volume,
-             tick_count, ema_20, ema_50, rs_vs_nifty, gap_filled, updated_at)
+             tick_count, ema_20, ema_50, rs_vs_nifty, gap_filled, return_since_open, updated_at)
         VALUES %s
         ON CONFLICT (instrument_id, bar_time) DO UPDATE SET
-            open        = EXCLUDED.open,
-            high        = EXCLUDED.high,
-            low         = EXCLUDED.low,
-            close       = EXCLUDED.close,
-            volume      = EXCLUDED.volume,
-            tick_count  = EXCLUDED.tick_count,
-            ema_20      = EXCLUDED.ema_20,
-            ema_50      = EXCLUDED.ema_50,
-            rs_vs_nifty = EXCLUDED.rs_vs_nifty,
-            gap_filled  = EXCLUDED.gap_filled,
-            updated_at  = NOW()
+            open             = EXCLUDED.open,
+            high             = EXCLUDED.high,
+            low              = EXCLUDED.low,
+            close            = EXCLUDED.close,
+            volume           = EXCLUDED.volume,
+            tick_count       = EXCLUDED.tick_count,
+            ema_20           = EXCLUDED.ema_20,
+            ema_50           = EXCLUDED.ema_50,
+            rs_vs_nifty      = EXCLUDED.rs_vs_nifty,
+            gap_filled       = EXCLUDED.gap_filled,
+            return_since_open = EXCLUDED.return_since_open,
+            updated_at       = NOW()
     """
 
     # Template with explicit NOW() for the updated_at extra column
-    template = "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())"
+    template = "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())"
 
     dsn = _strip_dialect(conn_str)
     conn = psycopg2.connect(dsn)  # type: ignore[attr-defined]
@@ -115,3 +130,47 @@ def upsert_bars(bars: list[BarRecord], *, conn_str: str) -> int:
     bar_time_sample = bars[0].bar_time.isoformat() if bars else "n/a"
     log.debug("bars_upserted", bars_upserted=n, bar_time=bar_time_sample)
     return n
+
+
+def upsert_nifty_bar(bar: NiftyBarRecord, *, conn_str: str) -> None:
+    """Upsert a single Nifty50 bar into atlas_nifty_intraday.
+
+    On conflict on bar_time (PRIMARY KEY), updates all mutable columns.
+
+    Args:
+        bar: NiftyBarRecord instance to upsert.
+        conn_str: DSN for the atlas database.
+    """
+    upsert_sql = """
+        INSERT INTO atlas.atlas_nifty_intraday
+            (bar_time, open, high, low, close, return_since_open, updated_at)
+        VALUES (%s, %s, %s, %s, %s, %s, NOW())
+        ON CONFLICT (bar_time) DO UPDATE SET
+            open               = EXCLUDED.open,
+            high               = EXCLUDED.high,
+            low                = EXCLUDED.low,
+            close              = EXCLUDED.close,
+            return_since_open  = EXCLUDED.return_since_open,
+            updated_at         = NOW()
+    """
+
+    dsn = _strip_dialect(conn_str)
+    conn = psycopg2.connect(dsn)  # type: ignore[attr-defined]
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    upsert_sql,
+                    (
+                        bar.bar_time,
+                        bar.open,
+                        bar.high,
+                        bar.low,
+                        bar.close,
+                        bar.return_since_open,
+                    ),
+                )
+    finally:
+        conn.close()
+
+    log.debug("nifty_bar_upserted", bar_time=bar.bar_time.isoformat())
