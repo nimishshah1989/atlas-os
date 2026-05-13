@@ -32,6 +32,8 @@ from sqlalchemy.engine import Engine
 from atlas.api.admin.proposals import router as admin_proposals_router
 from atlas.api.admin.weight_performance import router as admin_perf_router
 from atlas.api.agents import router as agents_router
+from atlas.api.intraday import router as intraday_router
+from atlas.api.kite_auth import router as kite_auth_router
 from atlas.db import get_engine
 
 log = structlog.get_logger()
@@ -46,6 +48,9 @@ app = FastAPI(title="Atlas Internal API", version="0.2.0")
 app.include_router(admin_proposals_router)
 app.include_router(admin_perf_router)
 app.include_router(agents_router)
+# SP08: KiteConnect OAuth + intraday data — public routes, no Bearer required.
+app.include_router(kite_auth_router)
+app.include_router(intraday_router)
 
 # Resolved once at import time — atlas/api/internal_recompute.py → atlas-os/
 ATLAS_ROOT = Path(__file__).resolve().parent.parent.parent
