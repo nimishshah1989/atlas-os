@@ -64,6 +64,20 @@ class Config:
     # /api/v1/intraday/* routes. Never expose to browser clients.
     ATLAS_INTERNAL_SECRET: str = os.environ.get("ATLAS_INTERNAL_SECRET", "")
 
+    # TradingView integration — SP10 TV Signal + Report
+    TV_WEBHOOK_SECRET: str = os.environ.get("TV_WEBHOOK_SECRET", "")
+    TV_SESSION_ID: str = os.environ.get("TV_SESSION_ID", "")
+    TV_SESSION_SIGN: str = os.environ.get("TV_SESSION_SIGN", "")
+    TV_LAYOUT_ID_VS_NIFTY: str = os.environ.get("TV_LAYOUT_ID_VS_NIFTY", "")
+    TV_LAYOUT_ID_VS_SECTOR: str = os.environ.get("TV_LAYOUT_ID_VS_SECTOR", "")
+    TV_ACCOUNT_EMAIL: str = os.environ.get("TV_ACCOUNT_EMAIL", "")
+    SIGNAL_SCREENSHOT_DIR: str = os.environ.get(
+        "SIGNAL_SCREENSHOT_DIR", "/data/signals/screenshots"
+    )
+    SIGNAL_REPORT_BASE_URL: str = os.environ.get(
+        "SIGNAL_REPORT_BASE_URL", "https://atlas.jslwealth.in/signals"
+    )
+
     @classmethod
     def assert_db_url(cls) -> str:
         """Fail loudly if ``ATLAS_DB_URL`` is missing.

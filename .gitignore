@@ -20,6 +20,9 @@ venv/
 
 # Outputs (regenerated each run)
 output/
+coverage.json
+.coverage
+htmlcov/
 
 # Tool-internal state (not project code)
 .claude/
