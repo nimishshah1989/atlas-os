@@ -1,6 +1,7 @@
 // allow-large: sector table requires full column set — 14 columns, sortable, with derived state + decision logic
 'use client'
 import { useState } from 'react'
+import Link from 'next/link'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import type { USSectorRow } from '@/lib/queries/us-sectors'
 
@@ -234,9 +235,14 @@ export function USSectorTable({ sectors }: Props) {
                 key={r.gics_sector}
                 className="border-b border-paper-rule/40 hover:bg-paper-rule/10 transition-colors"
               >
-                {/* Sector name */}
-                <td className="py-2.5 px-2 font-sans text-xs text-ink-primary whitespace-nowrap">
-                  {r.gics_sector}
+                {/* Sector name — links to stocks tab pre-filtered by sector */}
+                <td className="py-2.5 px-2 font-sans text-xs whitespace-nowrap">
+                  <Link
+                    href={`/us?tab=Stocks&sector=${encodeURIComponent(r.gics_sector)}`}
+                    className="text-ink-primary hover:text-teal hover:underline transition-colors"
+                  >
+                    {r.gics_sector}
+                  </Link>
                 </td>
 
                 {/* State badge */}

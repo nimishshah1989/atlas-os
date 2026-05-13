@@ -3,6 +3,7 @@ import sql from '@/lib/db'
 
 export type USETFRow = {
   ticker: string
+  etf_name: string | null
   etf_category: string | null
   linked_sector: string | null
   is_benchmark: boolean
@@ -95,6 +96,7 @@ export async function getUSETFs(): Promise<USETFRow[]> {
     )
     SELECT
       u.ticker,
+      i.name                            AS etf_name,
       u.etf_category,
       u.linked_sector,
       u.is_benchmark,
@@ -167,6 +169,7 @@ export async function getUSETFs(): Promise<USETFRow[]> {
       s.liquidity_gate_pass,
       s.weinstein_gate_pass
     FROM us_atlas.atlas_universe_etfs u
+    LEFT JOIN us_atlas.instruments i ON i.ticker = u.ticker
     LEFT JOIN latest l ON l.ticker = u.ticker
     LEFT JOIN us_atlas.atlas_etf_metrics_daily m
       ON m.ticker = u.ticker AND m.date = l.d

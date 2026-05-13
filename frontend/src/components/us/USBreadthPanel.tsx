@@ -1,4 +1,5 @@
 'use client'
+import Link from 'next/link'
 import type { USStockRow } from '@/lib/queries/us-stocks'
 
 type Props = {
@@ -11,11 +12,12 @@ type TileProps = {
   pct?: number
   valueColor?: string
   pctColor?: string
+  href?: string
 }
 
-function StatTile({ label, value, pct, valueColor = 'text-ink-primary', pctColor }: TileProps) {
-  return (
-    <div className="rounded border border-paper-rule px-4 py-3 min-w-[140px] flex flex-col gap-0.5">
+function StatTile({ label, value, pct, valueColor = 'text-ink-primary', pctColor, href }: TileProps) {
+  const inner = (
+    <>
       <span className="font-sans text-[11px] text-ink-tertiary uppercase tracking-wide leading-none">
         {label}
       </span>
@@ -29,6 +31,21 @@ function StatTile({ label, value, pct, valueColor = 'text-ink-primary', pctColor
           </span>
         )}
       </div>
+    </>
+  )
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className="rounded border border-paper-rule px-4 py-3 min-w-[140px] flex flex-col gap-0.5 hover:border-teal/60 hover:bg-teal/5 transition-colors cursor-pointer"
+      >
+        {inner}
+      </Link>
+    )
+  }
+  return (
+    <div className="rounded border border-paper-rule px-4 py-3 min-w-[140px] flex flex-col gap-0.5">
+      {inner}
     </div>
   )
 }
@@ -51,6 +68,7 @@ export function USBreadthPanel({ stocks }: Props) {
       <StatTile
         label="Live Stocks"
         value={totalLive}
+        href="/us?tab=Stocks&filter=investable"
       />
       <StatTile
         label="Above 30W MA"
@@ -58,6 +76,7 @@ export function USBreadthPanel({ stocks }: Props) {
         pct={pct(above30W)}
         valueColor="text-blue-700"
         pctColor="text-blue-500"
+        href="/us?tab=Stocks&filter=above_30w"
       />
       <StatTile
         label="Leader / Strong"
@@ -65,6 +84,7 @@ export function USBreadthPanel({ stocks }: Props) {
         pct={pct(leaderStrong)}
         valueColor="text-teal"
         pctColor="text-teal"
+        href="/us?tab=Stocks&filter=leader_strong"
       />
       <StatTile
         label="Accel / Improving"
@@ -72,6 +92,7 @@ export function USBreadthPanel({ stocks }: Props) {
         pct={pct(accel)}
         valueColor="text-signal-pos"
         pctColor="text-signal-pos"
+        href="/us?tab=Stocks&filter=accel_improving"
       />
       <StatTile
         label="Weinstein Gate"

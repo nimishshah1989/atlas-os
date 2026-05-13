@@ -1,6 +1,7 @@
 // allow-large: stock screener requires full column set and toggle logic
 'use client'
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { ChevronUp, ChevronDown, SlidersHorizontal, X } from 'lucide-react'
 import type { USStockRow } from '@/lib/queries/us-stocks'
 
@@ -172,8 +173,15 @@ const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
   { key: 'accel_improving', label: 'Accel/Improving' },
 ]
 export function USStockScreener({ stocks }: { stocks: USStockRow[] }) {
-  const [quickFilter, setQuickFilter]     = useState<QuickFilter>('all')
-  const [sector, setSector]               = useState('All')
+  const searchParams  = useSearchParams()
+  const urlSector     = searchParams.get('sector')
+  const urlFilter     = searchParams.get('filter') as QuickFilter | null
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>(
+    urlFilter && ['all','sp500','leader_strong','above_30w','investable','accel_improving'].includes(urlFilter)
+      ? urlFilter
+      : 'all'
+  )
+  const [sector, setSector] = useState(urlSector ?? 'All')
   const [search, setSearch]               = useState('')
   const [sortCol, setSortCol]             = useState<SortCol>('rs_pctile_3m_vt')
   const [sortDir, setSortDir]             = useState<'asc' | 'desc'>('desc')
@@ -205,7 +213,9 @@ export function USStockScreener({ stocks }: { stocks: USStockRow[] }) {
     let rows = stocks
     if (search.trim()) {
       const q = search.trim().toUpperCase()
-      rows = rows.filter(r => r.ticker.includes(q))
+      rows = rows.filter(r =>
+        r.ticker.includes(q) || (r.company_name?.toUpperCase().includes(q) ?? false)
+      )
     }
     if (sector !== 'All') rows = rows.filter(r => r.gics_sector === sector)
     if (quickFilter === 'sp500')           rows = rows.filter(r => r.in_sp500)
@@ -412,7 +422,11 @@ export function USStockScreener({ stocks }: { stocks: USStockRow[] }) {
                           <span className="font-sans text-[9px] bg-ink-tertiary/10 text-ink-tertiary px-1 rounded">S&amp;P</span>
                         )}
                       </div>
-                      {row.tier && <span className="font-sans text-[9px] text-ink-tertiary">{row.tier}</span>}
+                      {row.company_name && (
+                        <span className="font-sans text-[9px] text-ink-tertiary truncate max-w-[120px]" title={row.company_name}>
+                          {row.company_name}
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-3 py-2.5 max-w-[110px]">

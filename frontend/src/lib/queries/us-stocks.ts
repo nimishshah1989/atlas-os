@@ -3,6 +3,7 @@ import sql from '@/lib/db'
 
 export type USStockRow = {
   ticker: string
+  company_name: string | null
   gics_sector: string | null
   tier: string | null
   in_sp500: boolean
@@ -102,6 +103,7 @@ export async function getUSStocks(): Promise<USStockRow[]> {
     )
     SELECT
       u.ticker,
+      i.name                            AS company_name,
       u.gics_sector,
       u.tier,
       u.in_sp500,
@@ -175,6 +177,7 @@ export async function getUSStocks(): Promise<USStockRow[]> {
       s.liquidity_gate_pass,
       s.weinstein_gate_pass
     FROM us_atlas.atlas_universe_stocks u
+    LEFT JOIN us_atlas.instruments i ON i.ticker = u.ticker
     LEFT JOIN latest l ON l.ticker = u.ticker
     LEFT JOIN us_atlas.atlas_stock_metrics_daily m
       ON m.ticker = u.ticker AND m.date = l.d

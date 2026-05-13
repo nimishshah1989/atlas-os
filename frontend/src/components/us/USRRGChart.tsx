@@ -3,10 +3,11 @@ import { useEffect, useRef } from 'react'
 import * as d3 from 'd3'
 import type { USSectorRow, USSectorRRGPoint } from '@/lib/queries/us-sectors'
 
+// rs_pctile values are stored 0-1 (rank/count). 0.65 = 65th percentile.
 function deriveSectorState(avgRsPctile: number): 'Overweight' | 'Neutral' | 'Underweight' | 'Avoid' {
-  if (avgRsPctile >= 60) return 'Overweight'
-  if (avgRsPctile >= 42) return 'Neutral'
-  if (avgRsPctile >= 28) return 'Underweight'
+  if (avgRsPctile >= 0.60) return 'Overweight'
+  if (avgRsPctile >= 0.42) return 'Neutral'
+  if (avgRsPctile >= 0.28) return 'Underweight'
   return 'Avoid'
 }
 
