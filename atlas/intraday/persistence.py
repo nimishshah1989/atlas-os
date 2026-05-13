@@ -58,7 +58,7 @@ def upsert_bars(bars: list[BarRecord], *, conn_str: str) -> int:
 
     rows = [
         (
-            bar.instrument_id,
+            str(bar.instrument_id),
             bar.bar_time,
             bar.open,
             bar.high,

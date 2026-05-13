@@ -127,14 +127,13 @@ export async function getAllFunds(): Promise<FundRow[]> {
   return sql<FundRow[]>`
     WITH latest AS (
       SELECT
-        (SELECT MAX(nav_date) FROM atlas.atlas_fund_metrics_daily)   AS metrics_date,
         (SELECT MAX(date)     FROM atlas.atlas_fund_states_daily)    AS states_date,
         (SELECT MAX(date)     FROM atlas.atlas_fund_decisions_daily) AS decisions_date,
         (SELECT MAX(as_of_date) FROM atlas.atlas_fund_lens_monthly)  AS lens_date
     )
     SELECT
       uf.mstar_id, uf.scheme_name, uf.amc, uf.category_name, uf.broad_category,
-      (SELECT metrics_date FROM latest)::text AS data_as_of,
+      fm.nav_date::text AS data_as_of,
       uf.aum_cr::text AS aum_cr, uf.aum_as_of::text AS aum_as_of,
       fm.ret_1m::text AS ret_1m, fm.ret_3m::text AS ret_3m,
       fm.ret_6m::text AS ret_6m, fm.ret_12m::text AS ret_12m,
@@ -160,8 +159,11 @@ export async function getAllFunds(): Promise<FundRow[]> {
       GREATEST(0, 100 - COALESCE(fl.strong_aum_pct * 100, 0) - COALESCE(fl.weak_aum_pct * 100, 0))::text AS unknown_aum_pct,
       fl.as_of_date AS lens_as_of_date
     FROM atlas.atlas_universe_funds uf
-    LEFT JOIN atlas.atlas_fund_metrics_daily fm
-      ON fm.mstar_id = uf.mstar_id AND fm.nav_date = (SELECT metrics_date FROM latest)
+    LEFT JOIN LATERAL (
+      SELECT * FROM atlas.atlas_fund_metrics_daily
+      WHERE mstar_id = uf.mstar_id
+      ORDER BY nav_date DESC LIMIT 1
+    ) fm ON TRUE
     LEFT JOIN atlas.atlas_fund_states_daily fs
       ON fs.mstar_id = uf.mstar_id AND fs.date = (SELECT states_date FROM latest)
     LEFT JOIN atlas.atlas_fund_decisions_daily fd

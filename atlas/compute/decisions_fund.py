@@ -252,26 +252,51 @@ def compute_recommendation_transitions(
 
 def compute_weeks_in_state(
     df: pd.DataFrame,
+    engine: Engine | None = None,
 ) -> pd.DataFrame:
-    """Count consecutive days (not weeks) in current recommendation state.
+    """Count consecutive trading days in current recommendation state.
 
-    For v0, approximated via consecutive-day count within the batch.
-    Exact week-count requires full history; the UI divides by 5 to get
-    approximate weeks.
+    For single-day batches (normal nightly run), carries forward the previous
+    day's streak from the DB rather than resetting to 1 every night.
+    For multi-day backfills, counts the streak within the batch then adds
+    any prior streak for the earliest date in the batch.
     """
     df = df.sort_values(["mstar_id", "date"])
+    min_date = df["date"].min()
+
+    # Load prior streak baseline: latest committed row before min_date
+    prior: dict[str, tuple[str, int]] = {}  # mstar_id → (prev_rec, prev_streak)
+    if engine is not None:
+        with open_compute_session(engine) as conn:
+            prior_df = pd.read_sql(
+                """
+                SELECT DISTINCT ON (mstar_id)
+                    mstar_id, recommendation, weeks_in_current_state
+                FROM atlas.atlas_fund_decisions_daily
+                WHERE date < %(min_date)s
+                  AND weeks_in_current_state IS NOT NULL
+                ORDER BY mstar_id, date DESC
+                """,
+                conn,
+                params={"min_date": min_date},
+            )
+        for rec in prior_df.to_dict("records"):
+            prior[str(rec["mstar_id"])] = (
+                str(rec["recommendation"]),
+                int(rec["weeks_in_current_state"]),
+            )
 
     def _streak(grp: pd.DataFrame) -> pd.Series:
+        mid = grp["mstar_id"].iloc[0]
+        prev_rec, prev_count = prior.get(mid, (None, 0))
         counts = []
-        streak = 0
-        prev = None
         for rec in grp["recommendation"]:
-            if rec == prev:
-                streak += 1
+            if rec == prev_rec:
+                prev_count += 1
             else:
-                streak = 1
-            counts.append(streak)
-            prev = rec
+                prev_count = 1
+            counts.append(prev_count)
+            prev_rec = rec
         return pd.Series(counts, index=grp.index)
 
     df["weeks_in_current_state"] = df.groupby("mstar_id", group_keys=False).apply(_streak)
@@ -306,7 +331,7 @@ def run_fund_decisions(
     df = compute_fund_recommendations(df, engine=engine)
     df = compute_fund_exit_triggers(df)
     df = compute_recommendation_transitions(df, engine, start_date, end_date)
-    df = compute_weeks_in_state(df)
+    df = compute_weeks_in_state(df, engine=engine)
     df["compute_run_id"] = str(run_id)
 
     write_cols = [c for c in DECISIONS_COLUMNS if c in df.columns]
