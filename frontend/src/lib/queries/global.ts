@@ -1,45 +1,14 @@
 import 'server-only'
 import sql from '@/lib/db'
 
-export type CountryRow = {
-  ticker: string
-  country: string
-  region: string
-  is_developed_market: boolean
-  // Core returns
-  ret_1w: string | null
-  ret_1m: string | null
-  ret_3m: string | null
-  ret_12m: string | null
-  // EMA trend
-  above_30w_ma: boolean | null
-  ema_10_ratio: string | null
-  // RS quintiles — 4 benchmarks × 3 key timeframes
-  q_1m_acwi: number | null
-  q_3m_acwi: number | null
-  q_12m_acwi: number | null
-  q_1m_vt: number | null
-  q_3m_vt: number | null
-  q_12m_vt: number | null
-  q_1m_eem: number | null
-  q_3m_eem: number | null
-  q_12m_eem: number | null
-  q_1m_gold: number | null
-  q_3m_gold: number | null
-  q_12m_gold: number | null
-  // Consensus (0-20 cells)
-  rs_consensus_bullish: number | null
-  rs_consensus_bearish: number | null
-  // Sort key: VT 3m RS percentile (continuous, for ranking within Q)
-  pctile_3m_vt: string | null
-  data_as_of: string | null
-}
 
 export type GlobalRegimeRow = {
   date: string
   benchmark_close: string | null
   benchmark_ema_50: string | null
   benchmark_ema_200: string | null
+  benchmark_ema_50_slope: string | null
+  benchmark_ema_200_slope: string | null
   benchmark_above_ema_50: boolean | null
   benchmark_above_ema_200: boolean | null
   realized_vol_5d: string | null
@@ -57,6 +26,8 @@ export async function getGlobalRegime(): Promise<GlobalRegimeRow | null> {
       benchmark_close::text,
       benchmark_ema_50::text,
       benchmark_ema_200::text,
+      benchmark_ema_50_slope::text,
+      benchmark_ema_200_slope::text,
       benchmark_above_ema_50,
       benchmark_above_ema_200,
       realized_vol_5d::text,
@@ -108,6 +79,8 @@ export async function getCountryRankings(): Promise<CountryRow[]> {
       m.ret_12m::text,
       m.above_30w_ma,
       m.ema_10_ratio::text,
+      m.realized_vol_63::text,
+      s.rs_state,
       r.q_1m_acwi,
       r.q_3m_acwi,
       r.q_12m_acwi,
@@ -128,30 +101,81 @@ export async function getCountryRankings(): Promise<CountryRow[]> {
     LEFT JOIN rs_pivot r ON r.ticker = u.ticker
     LEFT JOIN global_atlas.atlas_etf_metrics_daily m
       ON m.ticker = u.ticker AND m.date = (SELECT d FROM latest_date)
+    LEFT JOIN global_atlas.atlas_etf_states_daily s
+      ON s.ticker = u.ticker AND s.date = (SELECT d FROM latest_date)
     WHERE u.is_active = TRUE
     ORDER BY r.pctile_3m_vt DESC NULLS LAST
   `
 }
 
-export type RegimeHistoryRow = {
+export type GlobalRegimeHistoryRow = {
   date: string
   regime_state: string | null
-  pct_countries_above_200dma: string | null
+  benchmark_close: string | null
+  benchmark_ema_50_slope: string | null
+  benchmark_ema_200_slope: string | null
+  benchmark_above_ema_50: boolean | null
   benchmark_above_ema_200: boolean | null
+  pct_countries_above_50dma: string | null
+  pct_countries_above_200dma: string | null
+  realized_vol_5d: string | null
 }
 
-export async function getGlobalRegimeHistory(days = 252): Promise<RegimeHistoryRow[]> {
+export async function getGlobalRegimeHistory(days = 252): Promise<GlobalRegimeHistoryRow[]> {
   if (!Number.isInteger(days) || days < 1 || days > 3650) {
     throw new Error(`days must be between 1 and 3650, got: ${days}`)
   }
-  return sql<RegimeHistoryRow[]>`
+  return sql<GlobalRegimeHistoryRow[]>`
     SELECT
       date::text,
       regime_state,
+      benchmark_close::text,
+      benchmark_ema_50_slope::text,
+      benchmark_ema_200_slope::text,
+      benchmark_above_ema_50,
+      benchmark_above_ema_200,
+      pct_countries_above_50dma::text,
       pct_countries_above_200dma::text,
-      benchmark_above_ema_200
+      realized_vol_5d::text
     FROM global_atlas.atlas_market_regime_daily
     WHERE date >= CURRENT_DATE - (${days} || ' days')::interval
     ORDER BY date ASC
   `
+}
+
+export type CountryRow = {
+  ticker: string
+  country: string
+  region: string
+  is_developed_market: boolean
+  // Core returns
+  ret_1w: string | null
+  ret_1m: string | null
+  ret_3m: string | null
+  ret_12m: string | null
+  // EMA trend + volatility
+  above_30w_ma: boolean | null
+  ema_10_ratio: string | null
+  realized_vol_63: string | null
+  // RS state (derived from quintile)
+  rs_state: string | null
+  // RS quintiles — 4 benchmarks × 3 key timeframes
+  q_1m_acwi: number | null
+  q_3m_acwi: number | null
+  q_12m_acwi: number | null
+  q_1m_vt: number | null
+  q_3m_vt: number | null
+  q_12m_vt: number | null
+  q_1m_eem: number | null
+  q_3m_eem: number | null
+  q_12m_eem: number | null
+  q_1m_gold: number | null
+  q_3m_gold: number | null
+  q_12m_gold: number | null
+  // Consensus (0-20 cells)
+  rs_consensus_bullish: number | null
+  rs_consensus_bearish: number | null
+  // Sort key: VT 3m RS percentile (continuous, for ranking within Q)
+  pctile_3m_vt: string | null
+  data_as_of: string | null
 }

@@ -8,8 +8,10 @@ import type { USETFRow } from '@/lib/queries/us-etfs'
 import type { ETFRow } from '@/lib/queries/etfs'
 import { USBreadthPanel } from '@/components/us/USBreadthPanel'
 import { USSectorTable } from '@/components/us/USSectorTable'
+import { USSectorHeatmap } from '@/components/us/USSectorHeatmap'
 import { USStockScreener } from '@/components/us/USStockScreener'
 import { USETFScreener } from '@/components/us/USETFScreener'
+import { ETFMetricTiles } from '@/components/etfs/ETFMetricTiles'
 
 // D3 charts loaded client-side only (no SSR)
 const USSectorBubbleChart = dynamic(
@@ -57,9 +59,10 @@ const ETFBubbleChart = dynamic(
   },
 )
 
-// Adapt USETFRow → the subset of ETFRow fields used by ETFBubbleChart
-function adaptUSETFForBubble(row: USETFRow): ETFRow {
+// Adapt USETFRow → ETFRow shape for reuse of India ETFBubbleChart + ETFMetricTiles
+function adaptUSETF(row: USETFRow): ETFRow {
   const isSector = row.etf_category?.toLowerCase().includes('sector') ?? false
+  const isInvestable = (row.history_gate_pass ?? false) && (row.liquidity_gate_pass ?? false)
   return {
     ticker:              row.ticker,
     etf_name:            row.etf_name ?? row.ticker,
@@ -93,7 +96,7 @@ function adaptUSETFForBubble(row: USETFRow): ETFRow {
     weinstein_gate_pass: row.weinstein_gate_pass,
     history_gate_pass:   row.history_gate_pass,
     liquidity_gate_pass: row.liquidity_gate_pass,
-    is_investable:       null,
+    is_investable:       isInvestable,
     strength_gate:       null,
     direction_gate:      null,
     risk_gate:           null,
@@ -120,35 +123,6 @@ type Props = {
   etfs: USETFRow[]
 }
 
-function StockQuickStats({ stocks }: { stocks: USStockRow[] }) {
-  const live        = stocks.filter(s => s.history_gate_pass && s.liquidity_gate_pass)
-  const leaderStrong = live.filter(s => s.rs_state === 'Leader' || s.rs_state === 'Strong')
-  const above30w    = live.filter(s => s.above_30w_ma === true)
-  const accel       = live.filter(s => s.momentum_state === 'Accelerating' || s.momentum_state === 'Improving')
-
-  return (
-    <div className="px-6 py-3 border-b border-paper-rule flex flex-wrap gap-4 font-sans text-xs text-ink-secondary">
-      <span>Total: <strong className="text-ink-primary">{stocks.length}</strong></span>
-      <span>Live: <strong className="text-ink-primary">{live.length}</strong></span>
-      <span>Leader/Strong: <strong className="text-teal">{leaderStrong.length}</strong></span>
-      <span>Above 30W: <strong className="text-ink-primary">{above30w.length}</strong></span>
-      <span>Accel/Improving: <strong className="text-signal-pos">{accel.length}</strong></span>
-    </div>
-  )
-}
-
-function ETFQuickStats({ etfs }: { etfs: USETFRow[] }) {
-  const leaderStrong  = etfs.filter(e => e.rs_state === 'Leader' || e.rs_state === 'Strong')
-  const sectorETFs    = etfs.filter(e => e.etf_category?.toLowerCase().includes('sector'))
-
-  return (
-    <div className="px-6 py-3 border-b border-paper-rule flex flex-wrap gap-4 font-sans text-xs text-ink-secondary">
-      <span>Total ETFs: <strong className="text-ink-primary">{etfs.length}</strong></span>
-      <span>Sector ETFs: <strong className="text-ink-primary">{sectorETFs.length}</strong></span>
-      <span>Leader/Strong: <strong className="text-teal">{leaderStrong.length}</strong></span>
-    </div>
-  )
-}
 
 export function USPulseShell({ sectors, rrgHistory, stocks, etfs }: Props) {
   const router       = useRouter()
@@ -184,7 +158,7 @@ export function USPulseShell({ sectors, rrgHistory, stocks, etfs }: Props) {
         ))}
       </div>
 
-      {/* Sectors tab */}
+      {/* Sectors tab — mirrors India /sectors: breadth → bubble → RRG → heatmap → table */}
       {activeTab === 'Sectors' && (
         <div>
           <USBreadthPanel stocks={stocks} />
@@ -194,17 +168,19 @@ export function USPulseShell({ sectors, rrgHistory, stocks, etfs }: Props) {
           <div className="px-6 py-6 border-b border-paper-rule">
             <USRRGChart sectors={sectors} rrgHistory={rrgHistory} />
           </div>
+          <div className="px-6 py-6 border-b border-paper-rule">
+            <USSectorHeatmap etfs={etfs} />
+          </div>
           <div className="px-6 py-6">
             <USSectorTable sectors={sectors} />
           </div>
         </div>
       )}
 
-      {/* Stocks tab */}
+      {/* Stocks tab — mirrors India /stocks: breadth → bubble → screener */}
       {activeTab === 'Stocks' && (
         <div>
-          <StockQuickStats stocks={stocks} />
-          {/* Bubble chart first — matches India /stocks format */}
+          <USBreadthPanel stocks={stocks} />
           <div className="px-6 pt-4">
             <div className="border border-paper-rule rounded-sm p-4">
               <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-1">
@@ -222,11 +198,12 @@ export function USPulseShell({ sectors, rrgHistory, stocks, etfs }: Props) {
         </div>
       )}
 
-      {/* ETFs tab */}
+      {/* ETFs tab — mirrors India /etfs: metric tiles → bubble → screener */}
       {activeTab === 'ETFs' && (
         <div>
-          <ETFQuickStats etfs={etfs} />
-          {/* Bubble chart — reuses India ETFBubbleChart with adapted data */}
+          <div className="px-6 pt-4">
+            <ETFMetricTiles etfs={etfs.map(adaptUSETF)} />
+          </div>
           <div className="px-6 pt-4">
             <div className="border border-paper-rule rounded-sm p-4">
               <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-1">
@@ -235,7 +212,7 @@ export function USPulseShell({ sectors, rrgHistory, stocks, etfs }: Props) {
               <p className="font-sans text-[11px] text-ink-tertiary mb-3">
                 X = annualised volatility, Y = 3-month return. Color = RS state. Bubble size = avg volume 20D.
               </p>
-              <ETFBubbleChart etfs={etfs.map(adaptUSETFForBubble)} />
+              <ETFBubbleChart etfs={etfs.map(adaptUSETF)} />
             </div>
           </div>
           <div className="px-6 py-4">
