@@ -468,13 +468,13 @@ export function StockScreener({
                 <PlainTh
                   label="Conviction"
                   tooltip={[
-                    'Score 0–100: how this stock ranks vs its liquidity tier peers on 11 technical signals (momentum, trend, volume, risk).',
+                    'Score 0–100: where this stock ranks among peers in the same size tier (Mega, Large, Mid, Small).',
                     '',
-                    'Percentile ranks are within-tier — a 70 for a Mega-cap beat 70% of the top 50 NSE stocks by liquidity. Tiers are not comparable to each other.',
+                    '50 = median for its tier. 70+ = top 30% of peers. 30 or below = bottom 30%.',
                     '',
-                    '★ Industry-Grade (IC ≥ 0.05): composite was directionally predictive in 2023–25 backtest. Currently validated for T1 (Mega-cap, rank 1–50) and T3 (Upper Mid, rank 151–300). High scores here carry weight.',
+                    'Based on 11 technical signals: momentum, trend, volume, and risk. Higher = better overall technical picture relative to size-similar stocks.',
                     '',
-                    'Baseline (IC < 0.05): same composite formula, but didn\'t clear the validation bar. Useful for relative comparison within the peer group — don\'t anchor on it as a strong directional signal.',
+                    'Percentile is within-tier only — do not compare Mega-cap scores to Small-cap scores directly.',
                   ].join('\n')}
                 />
               )}
@@ -510,7 +510,18 @@ export function StockScreener({
               {visibleCols.has('cts_signal') && (
                 <PlainTh label="CTS Signal" tooltip="Latest CTS timing signal: PPC (Positive Pivotal Candle), NPC (Negative Pivotal Candle), or Contraction near highs." />
               )}
-              {visibleCols.has('signal') && <PlainTh label="Signal" />}
+              {visibleCols.has('signal') && (
+                <PlainTh
+                  label="Signal"
+                  tooltip={[
+                    'Four dimensions read top to bottom:',
+                    '  RS — relative strength percentile vs all stocks (75%+ = top quartile)',
+                    '  Stage — Stage 2 means price is above a rising 30-week MA (primary uptrend)',
+                    '  Mom — momentum direction: Accelerating/Improving/Flat/Deteriorating/Collapsing',
+                    '  Vol — volume character: Accumulation (buying pressure) or Distribution (selling)',
+                  ].join('\n')}
+                />
+              )}
               {visibleCols.has('ret_1d') && <PlainTh label="1D" align="right" />}
               {visibleCols.has('ret_1w') && <PlainTh label="1W" align="right" />}
               <Th label="1M" k="ret_1m" align="right" />
@@ -698,12 +709,52 @@ export function StockScreener({
                         )
                       })()}
                       {visibleCols.has('signal') && (() => {
-                        const sig = buildStockSignal(row)
+                        const p = row.rs_pctile_3m != null ? Math.round(parseFloat(row.rs_pctile_3m) * 100) : null
+                        const pColor = p != null ? (p >= 75 ? 'text-signal-pos' : p < 25 ? 'text-signal-neg' : 'text-ink-secondary') : 'text-ink-tertiary'
+                        const isS2 = row.above_30w_ma === true
+                        const mom = row.momentum_state
+                        const vol = row.volume_state
+                        const risk = row.risk_state
+                        const momCls: Record<string, string> = { Accelerating: 'text-signal-pos', Improving: 'text-signal-pos', Flat: 'text-ink-secondary', Deteriorating: 'text-signal-neg', Collapsing: 'text-signal-neg' }
+                        const volCls: Record<string, string> = { Accumulation: 'text-signal-pos', 'Steady-Buying': 'text-signal-pos', Neutral: 'text-ink-tertiary', Distribution: 'text-signal-neg', 'Heavy Distribution': 'text-signal-neg' }
+                        const momFull: Record<string, string> = { Accelerating: 'Accelerating', Improving: 'Improving', Flat: 'Flat', Deteriorating: 'Deteriorating', Collapsing: 'Collapsing' }
+                        const volFull: Record<string, string> = { Accumulation: 'Accumulation', 'Steady-Buying': 'Steady Buying', Neutral: 'Neutral', Distribution: 'Distribution', 'Heavy Distribution': 'Heavy Dist.' }
                         return (
-                          <td className="px-3 py-2.5 max-w-[200px]" title={sig.tooltip}>
-                            <span className="font-sans text-[10px] text-ink-secondary truncate block">
-                              {sig.compact || '—'}
-                            </span>
+                          <td className="px-3 py-2.5 min-w-[140px]">
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-sans text-[9px] text-ink-tertiary w-8 shrink-0">RS</span>
+                                {p != null
+                                  ? <span className={`font-mono text-[10px] font-semibold ${pColor}`}>{p}th%</span>
+                                  : <span className="font-mono text-[10px] text-ink-tertiary">—</span>}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-sans text-[9px] text-ink-tertiary w-8 shrink-0">Stage</span>
+                                <span className={`font-mono text-[10px] font-medium px-1 rounded ${isS2 ? 'bg-teal/10 text-teal' : 'text-ink-tertiary'}`}>
+                                  {isS2 ? 'Stage 2' : 'Below MA'}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-sans text-[9px] text-ink-tertiary w-8 shrink-0">Mom</span>
+                                {mom
+                                  ? <span className={`font-mono text-[10px] font-medium ${momCls[mom] ?? 'text-ink-secondary'}`}>{momFull[mom] ?? mom}</span>
+                                  : <span className="font-mono text-[10px] text-ink-tertiary">—</span>}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-sans text-[9px] text-ink-tertiary w-8 shrink-0">Vol</span>
+                                {vol
+                                  ? <span className={`font-mono text-[10px] font-medium ${volCls[vol] ?? 'text-ink-secondary'}`}>{volFull[vol] ?? vol}</span>
+                                  : <span className="font-mono text-[10px] text-ink-tertiary">—</span>}
+                              </div>
+                              {(risk === 'High' || risk === 'Elevated') && (
+                                <div className="flex items-center gap-2">
+                                  <span className="font-sans text-[9px] text-ink-tertiary w-8 shrink-0">Risk</span>
+                                  <span className={`font-mono text-[10px] font-bold ${risk === 'High' ? 'text-signal-neg' : 'text-amber-500'}`}>
+                                    {risk === 'High' ? '⚠ High' : 'Elevated'}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                           </td>
                         )
                       })()}
