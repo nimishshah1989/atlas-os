@@ -1,4 +1,3 @@
-// allow-large: Sprint 2 screener — sector filter, col toggle, gate dots, expandable rows
 'use client'
 import { Fragment, useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
@@ -11,208 +10,20 @@ import {
 } from '@/lib/stock-formatters'
 import { SectorBadge } from './SectorBadge'
 import { StageBadge, SignalBadge } from './CTSSignalBadge'
-import { ColumnToggle, useColumnVisibility, type ColumnDef } from '@/components/ui/ColumnToggle'
+import { useColumnVisibility } from '@/components/ui/ColumnToggle'
 import { StateJourneyCompact } from '@/components/ui/StateJourneyCompact'
 import { ConvictionCell } from './ConvictionCell'
-
-const RS_ORDER = ['Leader', 'Strong', 'Consolidating', 'Emerging', 'Average', 'Weak', 'Laggard']
-const MOM_ORDER = ['Accelerating', 'Improving', 'Flat', 'Deteriorating', 'Collapsing']
-const RISK_ORDER = ['Low', 'Normal', 'Elevated', 'High', 'Below Trend']
-const VOL_ORDER = ['Accumulation', 'Steady-Buying', 'Neutral', 'Distribution', 'Heavy Distribution']
-
-type SortKey =
-  | 'symbol' | 'sector' | 'rs_pctile_3m' | 'cap_rank'
-  | 'ret_1m' | 'ret_3m' | 'ret_6m'
-  | 'rs_state' | 'momentum_state' | 'risk_state' | 'volume_state'
-
-type FilterChip = 'all' | 'n50' | 'n100' | 'n500' | 'investable' | 'leader' | 'accel'
-
-const CHIPS: { key: FilterChip; label: string }[] = [
-  { key: 'all',        label: 'All' },
-  { key: 'n50',        label: 'Nifty 50' },
-  { key: 'n100',       label: 'Nifty 100' },
-  { key: 'n500',       label: 'Nifty 500' },
-  { key: 'investable', label: 'Investable' },
-  { key: 'leader',     label: 'Leader/Strong' },
-  { key: 'accel',      label: 'Accelerating' },
-]
-
-// Composite quality grade derived from RS state, momentum, risk, volume, stage, and RS pctile.
-function buildStockGrade(row: StockRowWithSector): { grade: string; color: string; score: number } {
-  let score = 0
-  const rsScore: Record<string, number>   = { Leader: 3, Strong: 2, Consolidating: 1, Emerging: 1, Average: 0, Weak: -1, Laggard: -2 }
-  const momScore: Record<string, number>  = { Accelerating: 2, Improving: 1, Flat: 0, Deteriorating: -1, Collapsing: -2 }
-  const riskScore: Record<string, number> = { Low: 1, Normal: 0, Elevated: -1, High: -2, 'Below Trend': -1 }
-  const volScore: Record<string, number>  = { Accumulation: 2, 'Steady-Buying': 1, Neutral: 0, Distribution: -1, 'Heavy Distribution': -2 }
-  score += rsScore[row.rs_state ?? ''] ?? 0
-  score += momScore[row.momentum_state ?? ''] ?? 0
-  score += riskScore[row.risk_state ?? ''] ?? 0
-  score += volScore[row.volume_state ?? ''] ?? 0
-  if (row.above_30w_ma === true) score += 1
-  const p = row.rs_pctile_3m != null ? parseFloat(row.rs_pctile_3m) : null
-  if (p != null) { if (p >= 0.75) score += 1; else if (p < 0.25) score -= 1 }
-  if (score >= 5) return { grade: 'A', color: '#2F6B43', score }
-  if (score >= 1) return { grade: 'B', color: '#d97706', score }
-  return { grade: 'C', color: '#ef4444', score }
-}
-
-function buildGradeTooltip(row: StockRowWithSector): string {
-  const rsScore: Record<string, number>   = { Leader: 3, Strong: 2, Consolidating: 1, Emerging: 1, Average: 0, Weak: -1, Laggard: -2 }
-  const momScore: Record<string, number>  = { Accelerating: 2, Improving: 1, Flat: 0, Deteriorating: -1, Collapsing: -2 }
-  const riskScore: Record<string, number> = { Low: 1, Normal: 0, Elevated: -1, High: -2, 'Below Trend': -1 }
-  const volScore: Record<string, number>  = { Accumulation: 2, 'Steady-Buying': 1, Neutral: 0, Distribution: -1, 'Heavy Distribution': -2 }
-  const rs    = rsScore[row.rs_state ?? ''] ?? 0
-  const mom   = momScore[row.momentum_state ?? ''] ?? 0
-  const risk  = riskScore[row.risk_state ?? ''] ?? 0
-  const vol   = volScore[row.volume_state ?? ''] ?? 0
-  const stage = row.above_30w_ma === true ? 1 : 0
-  const p = row.rs_pctile_3m != null ? parseFloat(row.rs_pctile_3m) : null
-  const pctile = p != null ? (p >= 0.75 ? 1 : p < 0.25 ? -1 : 0) : 0
-  const total  = rs + mom + risk + vol + stage + pctile
-  const grade  = total >= 5 ? 'A' : total >= 1 ? 'B' : 'C'
-  const s = (n: number) => n > 0 ? `+${n}` : `${n}`
-  const pLabel = p != null ? `${Math.round(p * 100)}th%` : 'n/a'
-  return [
-    `Grade ${grade}  (composite score ${s(total)})`,
-    `  RS State (${row.rs_state ?? '—'}):  ${s(rs)}`,
-    `  Momentum (${row.momentum_state ?? '—'}):  ${s(mom)}`,
-    `  Risk (${row.risk_state ?? '—'}):  ${s(risk)}`,
-    `  Volume (${row.volume_state ?? '—'}):  ${s(vol)}`,
-    `  Stage 2 (${row.above_30w_ma === true ? 'above 30W MA' : 'below 30W MA'}):  ${s(stage)}`,
-    `  RS Percentile (${pLabel}):  ${s(pctile)}`,
-    '',
-    'A ≥5 = strong alignment across signals',
-    'B 1–4 = mixed — some positive, some not',
-    'C ≤0 = predominantly negative signals',
-  ].join('\n')
-}
-
-// Deterministic signal string explaining the stock's classification.
-function buildStockSignal(row: StockRowWithSector): { compact: string; tooltip: string } {
-  const parts: string[] = []
-  const tip: string[] = []
-  const p = row.rs_pctile_3m != null ? Math.round(parseFloat(row.rs_pctile_3m) * 100) : null
-  if (p != null) { parts.push(`${p}th%`); tip.push(`RS Pctile (3M): ${p}th percentile`) }
-  if (row.above_30w_ma === true)       { parts.push('Stage2');  tip.push('Stage 2: Above rising 30W MA ✓') }
-  else if (row.above_30w_ma === false) { parts.push('BelowMA'); tip.push('Stage 2: Below 30W MA ✗') }
-  const momShort: Record<string, string> = { Accelerating: 'Accel', Improving: 'Improv', Flat: 'Flat', Deteriorating: 'Detr', Collapsing: 'Coll' }
-  if (row.momentum_state) { parts.push(momShort[row.momentum_state] ?? row.momentum_state); tip.push(`Momentum: ${row.momentum_state}`) }
-  const volShort: Record<string, string> = { Accumulation: 'Accum', 'Steady-Buying': 'Steady', Distribution: 'Distr', 'Heavy Distribution': 'H.Distr' }
-  if (row.volume_state && row.volume_state !== 'Neutral') { parts.push(volShort[row.volume_state] ?? row.volume_state); tip.push(`Volume: ${row.volume_state}`) }
-  if (row.risk_state === 'High')     { parts.push('⚠Risk');  tip.push('Risk: HIGH — risk_gate fails → position_size = 0%') }
-  else if (row.risk_state === 'Elevated') { parts.push('Elev'); tip.push('Risk: Elevated — proceed with caution') }
-  return { compact: parts.join(' · '), tooltip: tip.join('\n') }
-}
-
-// Optional columns. 1W, 6M, 12M visible by default.
-const OPTIONAL_COLS: ColumnDef[] = [
-  { key: 'conviction',      label: 'Conviction',  defaultVisible: true },
-  { key: 'quality',         label: 'Grade',       defaultVisible: true },
-  { key: 'cts_timing',      label: 'CTS Timing',  defaultVisible: true },
-  { key: 'cts_stage',       label: 'Stage',       defaultVisible: false },
-  { key: 'cts_signal',      label: 'CTS Signal',  defaultVisible: false },
-  { key: 'signal',          label: 'Signal',      defaultVisible: false },
-  { key: 'ret_1d',          label: '1D',          defaultVisible: false },
-  { key: 'ret_1w',          label: '1W',          defaultVisible: true },
-  { key: 'ret_6m',          label: '6M',          defaultVisible: true },
-  { key: 'ret_12m',         label: '12M',         defaultVisible: true },
-  { key: 'rs_pctile_1w',   label: 'RS 1W',       defaultVisible: false },
-  { key: 'rs_pctile_1m',   label: 'RS 1M',       defaultVisible: false },
-  { key: 'extension_pct',  label: 'Ext %',       defaultVisible: false },
-  { key: 'ema_20_ratio',   label: 'EMA20 %',    defaultVisible: false },
-  { key: 'vol_63',         label: 'Vol (63D)',   defaultVisible: false },
-  { key: 'vol_ratio_63',   label: 'Vol Ratio',   defaultVisible: false },
-  { key: 'max_drawdown_252', label: 'Max DD',    defaultVisible: false },
-  { key: 'drawdown',       label: 'Drawdown',    defaultVisible: false },
-  { key: 'effort_ratio_63', label: 'Effort',     defaultVisible: false },
-  { key: 'volume_expansion', label: 'Vol Exp',   defaultVisible: false },
-  { key: 'ma_30w_slope_4w', label: '30W Slope',  defaultVisible: false },
-  { key: 'days_in_state',  label: 'Days',        defaultVisible: false },
-  { key: 'alpha_3m',       label: 'α 3M',        defaultVisible: false },
-  { key: 'alpha_6m',       label: 'α 6M',        defaultVisible: false },
-]
-
-const COL_STORAGE_KEY = 'atlas-stock-screener-cols'
-
-// Always-visible columns: Symbol, Cap, Sector, Gates, RS State, Mom, Risk, Vol, 1M, 3M, RS Pctile = 11
-const ALWAYS_VISIBLE_COL_COUNT = 11
-
-function stateRank(order: string[], val: string | null): number {
-  if (!val) return order.length
-  const i = order.indexOf(val)
-  return i === -1 ? order.length : i
-}
-
-function capRank(s: StockRowWithSector): number {
-  if (s.in_nifty_50) return 1
-  if (s.in_nifty_100) return 2
-  if (s.in_nifty_500) return 3
-  return 4
-}
-
-// Safely read an optional field that may not exist on the row type.
-function optField(row: StockRowWithSector, key: string): unknown {
-  return (row as unknown as Record<string, unknown>)[key]
-}
-
-function optStr(row: StockRowWithSector, key: string): string | null {
-  const v = optField(row, key)
-  if (v == null) return null
-  return typeof v === 'string' ? v : String(v)
-}
-
-function optBool(row: StockRowWithSector, key: string): boolean | null {
-  const v = optField(row, key)
-  if (v === true || v === false) return v
-  return null
-}
-
-function optNum(row: StockRowWithSector, key: string): number | null {
-  const v = optField(row, key)
-  if (v == null) return null
-  if (typeof v === 'number') return v
-  if (typeof v === 'string') {
-    const n = parseFloat(v)
-    return Number.isFinite(n) ? n : null
-  }
-  return null
-}
-
-const GATE_LEGEND = [
-  { key: 'H', field: 'history_gate_pass',   label: 'History',   desc: 'Stock has ≥6M of price history in our universe' },
-  { key: 'L', field: 'liquidity_gate_pass', label: 'Liquidity', desc: 'Avg daily value traded meets minimum threshold' },
-  { key: 'W', field: 'weinstein_gate_pass', label: 'Weinstein', desc: 'Price is in Weinstein Stage 2 (above rising 30W MA)' },
-  { key: 'S', field: 'strength_gate',       label: 'Strength',  desc: 'RS State is Leader, Strong, or Emerging' },
-  { key: 'D', field: 'direction_gate',      label: 'Direction', desc: 'Momentum is Accelerating or Improving' },
-  { key: 'R', field: 'risk_gate',           label: 'Risk',      desc: 'Risk state is Low or Normal (not Elevated/High/Below Trend)' },
-  { key: 'V', field: 'volume_gate',         label: 'Volume',    desc: 'Volume state is Accumulation or Steady-Buying' },
-  { key: 'G', field: 'sector_gate',         label: 'Sector',    desc: 'Sector is not in avoid list (sector momentum is healthy)' },
-  { key: 'M', field: 'market_gate',         label: 'Market',    desc: 'Market regime is Risk-On or Cautious (not Risk-Off)' },
-]
-
-function GateDot({ value }: { value: boolean | null }) {
-  const color = value === true
-    ? 'bg-teal'
-    : value === false ? 'bg-signal-neg' : 'bg-paper-rule'
-  return <span className={`w-1.5 h-1.5 rounded-full ${color} shrink-0`} />
-}
-
-function GateDots({ row }: { row: StockRowWithSector }) {
-  const vals = GATE_LEGEND.map(g => optBool(row, g.field))
-  const passCount = vals.filter(v => v === true).length
-  const tooltipText = GATE_LEGEND.map((g, i) =>
-    `${g.key}=${g.label}: ${vals[i] === true ? '✓' : vals[i] === false ? '✗' : '?'} — ${g.desc}`
-  ).join('\n')
-  return (
-    <span
-      className="inline-flex items-center gap-0.5"
-      title={tooltipText}
-    >
-      {vals.map((v, i) => <GateDot key={i} value={v} />)}
-      <span className="ml-1 font-mono text-[10px] text-ink-tertiary tabular-nums">{passCount}/9</span>
-    </span>
-  )
-}
+import {
+  RS_ORDER, MOM_ORDER, RISK_ORDER, VOL_ORDER,
+  OPTIONAL_COLS, COL_STORAGE_KEY, ALWAYS_VISIBLE_COL_COUNT,
+  stateRank, capRank, optBool, optStr, optNum,
+  buildStockGrade, buildGradeTooltip,
+  GateDots, GATE_LEGEND, COL_TOOLTIPS,
+  type SortKey, type FilterChip,
+} from './screener-utils'
+import { ScreenerFilterPanel } from './ScreenerFilterPanel'
+import { CTSTimingCell } from './CTSTimingCell'
+import { SignalCell } from './SignalCell'
 
 export function StockScreener({
   stocks,
@@ -397,49 +208,21 @@ export function StockScreener({
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Controls */}
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          type="search"
-          placeholder="Search symbol or company..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="px-3 py-1.5 border border-paper-rule rounded-sm font-sans text-sm text-ink-primary bg-paper placeholder:text-ink-tertiary focus:outline-none focus:ring-1 focus:ring-teal/50 w-56"
-        />
-        <select
-          value={sectorFilter}
-          onChange={e => setSectorFilter(e.target.value)}
-          aria-label="Filter by sector"
-          className="px-2 py-1.5 border border-paper-rule rounded-sm font-sans text-sm text-ink-primary bg-paper focus:outline-none focus:ring-1 focus:ring-teal/50"
-        >
-          {sectorOptions.map(s => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-        <div className="flex flex-wrap gap-1.5">
-          {CHIPS.map(c => (
-            <button
-              key={c.key}
-              type="button"
-              aria-pressed={chip === c.key}
-              onClick={() => setChip(c.key)}
-              className={`px-2.5 py-1 min-h-[44px] rounded-sm font-sans text-xs font-medium transition-colors ${
-                chip === c.key
-                  ? 'bg-teal text-paper'
-                  : 'bg-paper-rule/20 text-ink-secondary hover:bg-paper-rule/40'
-              }`}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <span className="font-sans text-xs text-ink-tertiary whitespace-nowrap">
-            {pagedRows.length} of {filtered.length} shown ({stocks.length} total)
-          </span>
-          <ColumnToggle columns={OPTIONAL_COLS} visible={visibleCols} onChange={setVisibleCols} />
-        </div>
-      </div>
+      <ScreenerFilterPanel
+        search={search}
+        sectorFilter={sectorFilter}
+        chip={chip}
+        sectorOptions={sectorOptions}
+        pagedRows={pagedRows}
+        filtered={filtered}
+        stocks={stocks}
+        visibleCols={visibleCols}
+        onSearch={setSearch}
+        onSectorFilter={setSectorFilter}
+        onChip={setChip}
+        onVisibleColsChange={setVisibleCols}
+        onClearFilters={clearFilters}
+      />
 
       {/* Table */}
       <div className="overflow-x-auto border border-paper-rule rounded-sm">
@@ -465,88 +248,22 @@ export function StockScreener({
               <Th label="Risk" k="risk_state" />
               <Th label="Vol" k="volume_state" />
               {visibleCols.has('conviction') && (
-                <PlainTh
-                  label="Conviction"
-                  tooltip={[
-                    'Score 0–100: where this stock ranks among peers in the same size tier (Mega, Large, Mid, Small).',
-                    '',
-                    '50 = median for its tier. 70+ = top 30% of peers. 30 or below = bottom 30%.',
-                    '',
-                    'Based on 11 technical signals: momentum, trend, volume, and risk. Higher = better overall technical picture relative to size-similar stocks.',
-                    '',
-                    'Percentile is within-tier only — do not compare Mega-cap scores to Small-cap scores directly.',
-                  ].join('\n')}
-                />
+                <PlainTh label="Conviction" tooltip={COL_TOOLTIPS.conviction} />
               )}
               {visibleCols.has('quality') && (
-                <PlainTh
-                  label="Grade"
-                  tooltip={[
-                    'Composite quality letter from 6 signals: RS state, Momentum, Risk, Volume, Stage 2 (above rising 30W MA), and RS Percentile.',
-                    '',
-                    'A (score ≥5): strong positive alignment across signals',
-                    'B (score 1–4): mixed — some signals positive, others not',
-                    'C (score ≤0): predominantly negative signals',
-                    '',
-                    'Hover any grade cell to see the per-signal score breakdown.',
-                  ].join('\n')}
-                />
+                <PlainTh label="Grade" tooltip={COL_TOOLTIPS.quality} />
               )}
               {visibleCols.has('cts_timing') && (
-                <PlainTh
-                  label="Timing"
-                  tooltip={[
-                    'Directional timing grade — buy or sell urgency based on Weinstein stage + CTS signal.',
-                    '',
-                    '+A  Act now — buy trigger: Stage 2 + Pocket Pivot + RS ≥ 60th + conviction ≥ 55',
-                    '+B  Watch — buy setup forming: Stage 2, no trigger yet, conviction ≥ 40',
-                    ' —  Neutral — Stage 1 basing (wait)',
-                    '−B  Watch — sell setup: Stage 3 topping / distribution starting',
-                    '−A  Act now — sell trigger: Stage 4 decline, or Stage 3 + Negative Pivot active',
-                    '',
-                    'Applies equally to all stocks — if you hold a −A stock, that\'s your exit signal.',
-                  ].join('\n')}
-                />
+                <PlainTh label="Timing" tooltip={COL_TOOLTIPS.cts_timing} />
               )}
               {visibleCols.has('cts_stage') && (
-                <PlainTh label="Stage" tooltip={[
-                  'Weinstein Stage (1–4) derived from the slope of the 150-day moving average.',
-                  '',
-                  'Stage 1 · Basing     — sideways below flat/declining MA. No position.',
-                  'Stage 2 · Advancing  — above a rising MA. Primary buy zone. PPC here = +A.',
-                  'Stage 3 · Topping    — MA flattening. Distribution begins. Reduce exposure.',
-                  'Stage 4 · Declining  — below declining MA. Exit. No buying at any price.',
-                  '',
-                  'Source: Mark Weinstein, "Stan Weinstein\'s Secrets For Profiting in Bull and Bear Markets" (1988).',
-                ].join('\n')} />
+                <PlainTh label="Stage" tooltip={COL_TOOLTIPS.cts_stage} />
               )}
               {visibleCols.has('cts_signal') && (
-                <PlainTh label="CTS Signal" tooltip={[
-                  'Latest volume signal for this stock today.',
-                  '',
-                  'PPC · Pocket Pivot Candle — up-day where volume exceeds the highest down-day volume',
-                  '  in the prior 10 sessions. Signals institutional accumulation. Best when in Stage 2.',
-                  '',
-                  'NPC · Negative Pivot Candle — down-day where volume exceeds the highest up-day volume',
-                  '  in the prior 10 sessions. Signals institutional distribution (selling pressure).',
-                  '',
-                  'Contraction — narrow range day, close near high, below-average volume.',
-                  '  A quiet pause; often precedes a new PPC. Bullish if in Stage 2.',
-                  '',
-                  'Source: Morales & Kacher, "Trade Like an O\'Neil Disciple" (2010).',
-                ].join('\n')} />
+                <PlainTh label="CTS Signal" tooltip={COL_TOOLTIPS.cts_signal} />
               )}
               {visibleCols.has('signal') && (
-                <PlainTh
-                  label="Signal"
-                  tooltip={[
-                    'Four dimensions read top to bottom:',
-                    '  RS — relative strength percentile vs all stocks (75%+ = top quartile)',
-                    '  Stage — Stage 2 means price is above a rising 30-week MA (primary uptrend)',
-                    '  Mom — momentum direction: Accelerating/Improving/Flat/Deteriorating/Collapsing',
-                    '  Vol — volume character: Accumulation (buying pressure) or Distribution (selling)',
-                  ].join('\n')}
-                />
+                <PlainTh label="Signal" tooltip={COL_TOOLTIPS.signal} />
               )}
               {visibleCols.has('ret_1d') && <PlainTh label="1D" align="right" />}
               {visibleCols.has('ret_1w') && <PlainTh label="1W" align="right" />}
@@ -672,69 +389,11 @@ export function StockScreener({
                           </td>
                         )
                       })()}
-                      {visibleCols.has('cts_timing') && (() => {
-                        const score = optNum(row, 'cts_conviction_score')
-                        const actionReady = optBool(row, 'cts_action_confidence')
-                        const isPpc = optBool(row, 'is_ppc')
-                        const isNpc = optBool(row, 'is_npc')
-                        const stg = optNum(row, 'stage')
-                        const scoreInt = score != null ? Math.round(score) : null
-
-                        // Derive bi-directional timing grade
-                        type CTSGrade = '+A' | '+B' | '—' | '−B' | '−A'
-                        let grade: CTSGrade = '—'
-                        if (stg != null) {
-                          if (stg === 4) grade = '−A'
-                          else if (stg === 3 && isNpc) grade = '−A'
-                          else if (stg === 3) grade = '−B'
-                          else if (stg === 2 && actionReady) grade = '+A'
-                          else if (stg === 2 && scoreInt != null && scoreInt >= 40) grade = '+B'
-                          else if (stg === 2) grade = '+B' // Stage 2 always at minimum a watch
-                          // Stage 1 stays '—'
-                        }
-
-                        const GRADE_STYLES: Record<CTSGrade, { badge: string; label: string; sub: string }> = {
-                          '+A': { badge: 'bg-teal text-white',                           label: '+A', sub: 'Buy · Act now' },
-                          '+B': { badge: 'bg-teal/10 text-teal border border-teal/40',  label: '+B', sub: 'Buy · Watch' },
-                          '—':  { badge: 'bg-paper-rule/30 text-ink-tertiary',           label: '—',  sub: 'Neutral' },
-                          '−B': { badge: 'bg-amber-500/10 text-amber-500 border border-amber-500/40', label: '−B', sub: 'Sell · Watch' },
-                          '−A': { badge: 'bg-signal-neg text-white',                    label: '−A', sub: 'Sell · Act now' },
-                        }
-                        const gs = GRADE_STYLES[grade]
-
-                        return (
-                          <td className="px-3 py-2.5">
-                            {stg == null ? (
-                              <span className="font-mono text-xs text-ink-tertiary">—</span>
-                            ) : (
-                              <div className="flex flex-col gap-0.5">
-                                <div className="flex items-center gap-1.5">
-                                  <span className={`inline-flex items-center justify-center w-8 h-6 rounded font-mono text-xs font-bold ${gs.badge}`}>
-                                    {gs.label}
-                                  </span>
-                                  <span className="font-sans text-[10px] text-ink-tertiary whitespace-nowrap">{gs.sub}</span>
-                                </div>
-                                {scoreInt != null && (
-                                  <div className="flex items-center gap-1.5 pl-0.5">
-                                    <div className="relative w-14 h-1 bg-paper-rule rounded-full overflow-hidden">
-                                      <div
-                                        className={`h-full rounded-full ${grade === '+A' || grade === '+B' ? 'bg-teal/50' : grade === '−A' || grade === '−B' ? 'bg-signal-neg/50' : 'bg-paper-rule'}`}
-                                        style={{ width: `${Math.max(scoreInt, 4)}%` }}
-                                      />
-                                    </div>
-                                    <span className="font-mono text-[10px] text-ink-tertiary tabular-nums">{scoreInt}</span>
-                                    {(isPpc || isNpc) && (
-                                      <span className={`font-mono text-[10px] font-semibold ${isPpc ? 'text-signal-pos' : 'text-signal-neg'}`}>
-                                        {isPpc ? 'PPC' : 'NPC'}
-                                      </span>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </td>
-                        )
-                      })()}
+                      {visibleCols.has('cts_timing') && (
+                        <td className="px-3 py-2.5">
+                          <CTSTimingCell row={row} />
+                        </td>
+                      )}
                       {visibleCols.has('cts_stage') && (
                         <td className="px-3 py-2.5">
                           <StageBadge stage={optNum(row, 'stage') as 1 | 2 | 3 | 4 | null} />
@@ -754,56 +413,11 @@ export function StockScreener({
                           </td>
                         )
                       })()}
-                      {visibleCols.has('signal') && (() => {
-                        const p = row.rs_pctile_3m != null ? Math.round(parseFloat(row.rs_pctile_3m) * 100) : null
-                        const pColor = p != null ? (p >= 75 ? 'text-signal-pos' : p < 25 ? 'text-signal-neg' : 'text-ink-secondary') : 'text-ink-tertiary'
-                        const isS2 = row.above_30w_ma === true
-                        const mom = row.momentum_state
-                        const vol = row.volume_state
-                        const risk = row.risk_state
-                        const momCls: Record<string, string> = { Accelerating: 'text-signal-pos', Improving: 'text-signal-pos', Flat: 'text-ink-secondary', Deteriorating: 'text-signal-neg', Collapsing: 'text-signal-neg' }
-                        const volCls: Record<string, string> = { Accumulation: 'text-signal-pos', 'Steady-Buying': 'text-signal-pos', Neutral: 'text-ink-tertiary', Distribution: 'text-signal-neg', 'Heavy Distribution': 'text-signal-neg' }
-                        const momFull: Record<string, string> = { Accelerating: 'Accelerating', Improving: 'Improving', Flat: 'Flat', Deteriorating: 'Deteriorating', Collapsing: 'Collapsing' }
-                        const volFull: Record<string, string> = { Accumulation: 'Accumulation', 'Steady-Buying': 'Steady Buying', Neutral: 'Neutral', Distribution: 'Distribution', 'Heavy Distribution': 'Heavy Dist.' }
-                        return (
-                          <td className="px-3 py-2.5 min-w-[140px]">
-                            <div className="flex flex-col gap-1">
-                              <div className="flex items-center gap-2">
-                                <span className="font-sans text-[9px] text-ink-tertiary w-8 shrink-0">RS</span>
-                                {p != null
-                                  ? <span className={`font-mono text-[10px] font-semibold ${pColor}`}>{p}th%</span>
-                                  : <span className="font-mono text-[10px] text-ink-tertiary">—</span>}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-sans text-[9px] text-ink-tertiary w-8 shrink-0">Stage</span>
-                                <span className={`font-mono text-[10px] font-medium px-1 rounded ${isS2 ? 'bg-teal/10 text-teal' : 'text-ink-tertiary'}`}>
-                                  {isS2 ? 'Stage 2' : 'Below MA'}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-sans text-[9px] text-ink-tertiary w-8 shrink-0">Mom</span>
-                                {mom
-                                  ? <span className={`font-mono text-[10px] font-medium ${momCls[mom] ?? 'text-ink-secondary'}`}>{momFull[mom] ?? mom}</span>
-                                  : <span className="font-mono text-[10px] text-ink-tertiary">—</span>}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-sans text-[9px] text-ink-tertiary w-8 shrink-0">Vol</span>
-                                {vol
-                                  ? <span className={`font-mono text-[10px] font-medium ${volCls[vol] ?? 'text-ink-secondary'}`}>{volFull[vol] ?? vol}</span>
-                                  : <span className="font-mono text-[10px] text-ink-tertiary">—</span>}
-                              </div>
-                              {(risk === 'High' || risk === 'Elevated') && (
-                                <div className="flex items-center gap-2">
-                                  <span className="font-sans text-[9px] text-ink-tertiary w-8 shrink-0">Risk</span>
-                                  <span className={`font-mono text-[10px] font-bold ${risk === 'High' ? 'text-signal-neg' : 'text-amber-500'}`}>
-                                    {risk === 'High' ? '⚠ High' : 'Elevated'}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                        )
-                      })()}
+                      {visibleCols.has('signal') && (
+                        <td className="px-3 py-2.5 min-w-[140px]">
+                          <SignalCell row={row} />
+                        </td>
+                      )}
                       {visibleCols.has('ret_1d') && (
                         <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(ret1d)}`}>
                           {pct(ret1d)}
