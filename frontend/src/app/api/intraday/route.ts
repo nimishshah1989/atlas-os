@@ -1,9 +1,9 @@
-// SP08 — Next.js → FastAPI proxy for intraday endpoints.
+// SP08/SP10 — Next.js → FastAPI proxy for intraday endpoints.
 import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
-const ALLOWED = new Set(['rs-leaders', 'status'])
+const ALLOWED = new Set(['rs-leaders', 'status', 'nifty', 'sector-movers', 'prices'])
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const apiBase = process.env.ATLAS_INTERNAL_API_BASE_URL
