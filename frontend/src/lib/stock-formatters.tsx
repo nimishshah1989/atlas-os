@@ -115,8 +115,15 @@ function StateTag({
   style: string
   raw: string | null
 }) {
-  if (!raw || raw.startsWith('INSUFFICIENT') || raw.startsWith('DISLOCATION') || raw.startsWith('ILLIQUID')) {
-    return <span className="font-mono text-[10px] text-ink-tertiary">—</span>
+  if (!raw) return <span className="font-mono text-[10px] text-ink-tertiary">—</span>
+  if (raw.startsWith('ILLIQUID')) {
+    return <span className="inline-flex items-center px-1 py-0.5 rounded-[2px] font-sans text-[9px] font-semibold bg-ink-tertiary/10 text-ink-tertiary" title="Low trading volume — not tradeable">Illiq</span>
+  }
+  if (raw.startsWith('INSUFFICIENT')) {
+    return <span className="inline-flex items-center px-1 py-0.5 rounded-[2px] font-sans text-[9px] font-semibold bg-ink-tertiary/10 text-ink-tertiary" title="Insufficient price history">Insuf</span>
+  }
+  if (raw.startsWith('DISLOCATION')) {
+    return <span className="inline-flex items-center px-1 py-0.5 rounded-[2px] font-sans text-[9px] font-semibold bg-signal-warn/10 text-signal-warn" title="Market dislocation — suspended">Disl</span>
   }
   return (
     <span
