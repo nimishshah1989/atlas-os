@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { SignalCard } from "@/components/signals/SignalCard";
 
 interface SignalReport {
