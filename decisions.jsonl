@@ -19844,3 +19844,624 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{
+  "ts": "2026-05-13T06:41:03Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/compute/global_pipeline.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:41:11Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/compute/global_pipeline.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:41:23Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/compute/global_pipeline.py",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:41:40Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/global_daily.py",
+  "lines_changed": 74,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:41:53Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/us_daily.py",
+  "lines_changed": 74,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:44:34Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/055_create_us_atlas_schema.py",
+  "lines_changed": 550,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:45:43Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/056_create_global_atlas_schema.py",
+  "lines_changed": 374,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:48:14Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/stooq_backfill_global.py",
+  "lines_changed": 62,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:48:32Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/us_etf_backfill.py",
+  "lines_changed": 97,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:49:07Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/057_seed_us_atlas_etf_universe.py",
+  "lines_changed": 84,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:49:57Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/055_create_us_atlas_schema.py",
+  "lines_changed": 33,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:50:11Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/055_create_us_atlas_schema.py",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:51:13Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/global.ts",
+  "lines_changed": 157,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:52:03Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/global/CountryRankingsTable.tsx",
+  "lines_changed": 133,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:52:24Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/global/page.tsx",
+  "lines_changed": 100,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:52:39Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/nav/TopNav.tsx",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:52:52Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/global/page.tsx",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:55:35Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/global_backfill.py",
+  "lines_changed": 10,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:55:42Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/compute/global_pipeline.py",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:56:29Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/compute/global_pipeline.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:56:38Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/compute/benchmarks.py",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:56:45Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/compute/benchmarks.py",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:56:54Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/compute/global_pipeline.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:00:57Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/compute/global_pipeline.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:14:59Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/058_sp10_intraday_live_panels.py",
+  "lines_changed": 225,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:17:01Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/058_sp10_intraday_live_panels.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:18:29Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/intraday/persistence.py",
+  "lines_changed": 29,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:18:33Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/intraday/persistence.py",
+  "lines_changed": 18,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:18:38Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/intraday/persistence.py",
+  "lines_changed": 22,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:18:45Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/intraday/persistence.py",
+  "lines_changed": 48,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:21:20Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/intraday/ingester.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:21:24Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/intraday/ingester.py",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:21:33Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/intraday/ingester.py",
+  "lines_changed": 30,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:22:58Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/intraday/ingester.py",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:27:05Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/api/intraday.py",
+  "lines_changed": 34,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:27:11Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/api/intraday.py",
+  "lines_changed": 28,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:27:34Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/api/intraday.py",
+  "lines_changed": 187,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:31:35Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/api/intraday.py",
+  "lines_changed": 14,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:31:41Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/api/intraday.py",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:31:46Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/api/intraday.py",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:31:53Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/api/intraday.py",
+  "lines_changed": 22,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:32:03Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/api/intraday.py",
+  "lines_changed": 55,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:32:14Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/api/intraday.py",
+  "lines_changed": 48,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:33:48Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/api/intraday/route.ts",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:39:03Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/stocks/screener-utils.tsx",
+  "lines_changed": 202,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:39:16Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/stocks/ScreenerFilterPanel.tsx",
+  "lines_changed": 70,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:39:33Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/stocks/CTSTimingCell.tsx",
+  "lines_changed": 65,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:39:50Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/stocks/SignalCell.tsx",
+  "lines_changed": 52,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:41:56Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 640,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:42:39Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/stocks/screener-utils.tsx",
+  "lines_changed": 65,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:42:47Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:43:13Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/stocks/StockScreener.tsx",
+  "lines_changed": 18,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:46:41Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/chunks/chunk-sp10-t7-approach.md",
+  "lines_changed": 49,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:46:46Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/chunks/chunk-sp10-task8-approach.md",
+  "lines_changed": 50,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:47:05Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/regime/IntradayNiftyStrip.tsx",
+  "lines_changed": 185,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:47:10Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/page.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:47:13Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/sectors/IntradaySectorMovers.tsx",
+  "lines_changed": 219,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:47:16Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/page.tsx",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:47:18Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/sectors/page.tsx",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:47:24Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/sectors/page.tsx",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:47:42Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/sectors/IntradaySectorMovers.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:47:46Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/sectors/IntradaySectorMovers.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:47:50Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/regime/IntradayNiftyStrip.tsx",
+  "lines_changed": 145,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:47:50Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/sectors/IntradaySectorMovers.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:48:00Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/sectors/IntradaySectorMovers.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:48:06Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/sectors/IntradaySectorMovers.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:48:32Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/.forge/knowledge/raw/atlas-os/chunk-sp10-t7-learnings.md",
+  "lines_changed": 25,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:48:34Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/sectors/IntradaySectorMovers.tsx",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T07:51:18Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/.gstack/projects/atlas-os/designs/global-pulse-20260513/finalized.html",
+  "lines_changed": 1275,
+  "session_id": "unknown",
+  "schema_version": 1
+}

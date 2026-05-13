@@ -21,6 +21,7 @@ import { filterSectors } from '@/lib/sectors-filter'
 import { TimeRangeToggle } from '@/components/ui/TimeRangeToggle'
 import { SectorViews } from '@/components/sectors/SectorViews'
 import { SectorRiskWatch } from '@/components/sectors/SectorRiskWatch'
+import { IntradaySectorMovers } from '@/components/sectors/IntradaySectorMovers'
 
 type SearchParams = Promise<{ range?: string; tab?: string }>
 
@@ -125,6 +126,11 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
       </div>
 
       <SectorRiskWatch sectors={actionableWithDecision} />
+
+      {/* SP10: Intraday sector movers */}
+      <div className="px-6 py-3 border-b border-paper-rule">
+        <IntradaySectorMovers />
+      </div>
 
       <Suspense fallback={
         <div className="px-6 py-8 animate-pulse space-y-3">

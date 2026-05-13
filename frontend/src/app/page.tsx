@@ -2,6 +2,7 @@
 import { Suspense } from 'react'
 import { getCurrentRegime, getRegimeHistory } from '@/lib/queries/regime'
 import { RegimeHeadline } from '@/components/regime/RegimeHeadline'
+import { IntradayNiftyStrip } from '@/components/regime/IntradayNiftyStrip'
 import { RegimeOverlayChart } from '@/components/regime/RegimeOverlayChart'
 import { TrendSection } from '@/components/regime/TrendSection'
 import { BreadthSection } from '@/components/regime/BreadthSection'
@@ -36,6 +37,11 @@ export default async function RegimePage({ searchParams }: { searchParams: Searc
     <div className="max-w-[1400px] mx-auto">
       {/* Compact regime headline — unchanged */}
       <RegimeHeadline regime={current} />
+
+      {/* SP10: Intraday Nifty strip */}
+      <div className="px-6 py-3 border-b border-paper-rule">
+        <IntradayNiftyStrip />
+      </div>
 
       {/* Nifty 500 with regime background shading + master time range toggle */}
       <div className="px-6 py-5 border-b border-paper-rule">
