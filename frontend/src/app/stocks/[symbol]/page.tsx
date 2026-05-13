@@ -9,6 +9,7 @@ import { StockSnapshotTiles } from '@/components/stocks/StockSnapshotTiles'
 import { StockDeepDiveBody } from '@/components/stocks/StockDeepDiveBody'
 import { ConvictionBreakdownPanel } from '@/components/stocks/ConvictionBreakdownPanel'
 import { HitRateRow } from '@/components/stocks/HitRateRow'
+import { IntradayStockBadge } from '@/components/stocks/IntradayStockBadge'
 
 export default async function StockPage({
   params,
@@ -30,6 +31,9 @@ export default async function StockPage({
   return (
     <div className="max-w-[1200px] mx-auto">
       <StockDeepDiveHeader stock={stock} />
+      <div className="px-6 py-2 border-b border-paper-rule">
+        <IntradayStockBadge instrumentId={stock.instrument_id} />
+      </div>
       <StockSnapshotTiles stock={stock} />
       <StockDeepDiveBody
         stock={stock}
