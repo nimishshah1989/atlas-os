@@ -22760,3 +22760,21 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{
+  "ts": "2026-05-13T13:54:07Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/signals/SignalCard.tsx",
+  "lines_changed": 75,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T13:54:22Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/signals/page.tsx",
+  "lines_changed": 63,
+  "session_id": "unknown",
+  "schema_version": 1
+}
