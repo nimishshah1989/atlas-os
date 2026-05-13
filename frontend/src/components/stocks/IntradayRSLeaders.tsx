@@ -69,10 +69,11 @@ function formatClose(value: number): string {
 
 function formatRsVsNifty(value: number | null): { text: string; cls: string } {
   if (value === null) return { text: '—', cls: 'text-ink-tertiary' }
-  const pct = Number(value) * 100
-  const sign = pct >= 0 ? '+' : ''
-  const text = `${sign}${pct.toFixed(1)}%`
-  const cls = pct >= 0 ? 'text-signal-pos' : 'text-signal-neg'
+  // rs_vs_nifty = stock_return_since_open / nifty_return_since_open (a ratio, not a fraction)
+  const ratio = Number(value)
+  const sign = ratio >= 0 ? '+' : ''
+  const text = `${sign}${ratio.toFixed(2)}x`
+  const cls = ratio >= 1 ? 'text-signal-pos' : 'text-signal-neg'
   return { text, cls }
 }
 
