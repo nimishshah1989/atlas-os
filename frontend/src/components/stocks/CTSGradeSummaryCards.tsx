@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { Info } from 'lucide-react'
 
 type IndexTimingRow = {
   index_name: string
@@ -254,7 +255,7 @@ export function CTSGradeSummaryCards() {
                 onClick={() => setShowDefs(d => !d)}
                 className="flex items-center gap-1.5 font-sans text-[10px] text-ink-tertiary hover:text-ink-secondary transition-colors"
               >
-                <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full border border-ink-tertiary/40 text-[8px] font-bold">ⓘ</span>
+                <Info size={12} strokeWidth={1.5} />
                 {showDefs ? 'Hide signal definitions' : 'How are these signals calculated?'}
               </button>
 
