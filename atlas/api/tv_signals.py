@@ -53,7 +53,6 @@ async def process_signal(payload: TVSignalPayload) -> None:
 async def receive_tv_signal(
     payload: TVSignalPayload,
     background_tasks: BackgroundTasks,
-    request: Request,
 ) -> dict[str, str]:
     """Receive a TradingView alert webhook.
 
