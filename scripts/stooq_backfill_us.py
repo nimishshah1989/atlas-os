@@ -94,9 +94,25 @@ ALL_ETFS = (
 )
 
 
-def get_sp500_tickers() -> list[str]:
-    """Fetch current S&P 500 constituents from Wikipedia."""
-    log.info("fetching_sp500_constituents")
+def get_sp500_tickers(engine=None) -> list[str]:
+    """Fetch S&P 500 constituents — DB universe first, Wikipedia fallback."""
+    if engine is not None:
+        try:
+            with engine.connect() as conn:
+                rows = conn.execute(
+                    text(
+                        "SELECT ticker FROM us_atlas.atlas_universe_stocks "
+                        "WHERE in_sp500 = TRUE AND is_active = TRUE ORDER BY ticker"
+                    )
+                ).fetchall()
+            if rows:
+                tickers = [r[0] for r in rows]
+                log.info("sp500_tickers_from_db", count=len(tickers))
+                return tickers
+        except Exception as e:
+            log.warning("sp500_db_fetch_failed", error=str(e), action="falling_back_to_wikipedia")
+
+    log.info("fetching_sp500_constituents_from_wikipedia")
     try:
         tables = pd.read_html(
             "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
@@ -210,7 +226,7 @@ def main() -> None:
     # ------------------------------------------------------------------
     stock_df = pd.DataFrame()
     if not args.etfs_only:
-        sp500_tickers = get_sp500_tickers()
+        sp500_tickers = get_sp500_tickers(engine)
         log.info("loading_sp500_stocks", count=len(sp500_tickers))
         stock_df = load_stooq_zip(us_zip, us_file_map, sp500_tickers, start_date=args.start_date)
         validate_ohlcv(stock_df, label="sp500_stocks")
