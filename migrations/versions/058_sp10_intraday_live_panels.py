@@ -28,18 +28,6 @@ down_revision = "057"
 branch_labels = None
 depends_on = None
 
-# ------------------------------------------------------------------ #
-# pg_cron job definitions                                             #
-# ------------------------------------------------------------------ #
-# Retention cleanup: 11:15 UTC = 16:45 IST (well after market close)
-_SCHEDULE_NIFTY_RETENTION = "15 11 * * 1-5"
-
-_NIFTY_RETENTION_CMD = (
-    "DELETE FROM atlas.atlas_nifty_intraday "
-    "WHERE bar_time < NOW() - INTERVAL '7 days'"
-)
-
-
 def upgrade() -> None:
     # ------------------------------------------------------------------ #
     # 1. atlas_nifty_intraday table                                       #
