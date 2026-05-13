@@ -13,10 +13,10 @@ type LensBarProps = {
 }
 
 const COLOR_CLASS: Record<Segment['color'], string> = {
-  green:   'bg-signal-pos/25',
-  red:     'bg-signal-neg/20',
-  neutral: 'bg-ink-tertiary/15',
-  unknown: 'bg-ink-tertiary/10',
+  green:   'bg-signal-pos/75',
+  red:     'bg-signal-neg/70',
+  neutral: 'bg-ink-tertiary/35',
+  unknown: 'bg-ink-tertiary/15',
 }
 
 export function LensBar({ segments, label, asOfDate, nullish }: LensBarProps) {
