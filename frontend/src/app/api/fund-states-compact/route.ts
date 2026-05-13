@@ -23,12 +23,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'days must be 1–720' }, { status: 400 })
   }
 
-  const rows = await sql<FundStateRow[]>`
-    SELECT date, nav_state, composition_state, holdings_state
-    FROM atlas.atlas_fund_states_daily
-    WHERE mstar_id = ${mstarId}
-      AND date >= CURRENT_DATE - INTERVAL '1 day' * ${days}
-    ORDER BY date ASC
-  `
-  return NextResponse.json({ rows })
+  try {
+    const rows = await sql<FundStateRow[]>`
+      SELECT date, nav_state, composition_state, holdings_state
+      FROM atlas.atlas_fund_states_daily
+      WHERE mstar_id = ${mstarId}
+        AND date >= CURRENT_DATE - INTERVAL '1 day' * ${days}
+      ORDER BY date ASC
+    `
+    return NextResponse.json({ rows })
+  } catch (err) {
+    console.error('fund-states-compact error:', err)
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
 }
