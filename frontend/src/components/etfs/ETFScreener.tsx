@@ -129,11 +129,17 @@ function GateBadge({ row }: { row: ETFRow }) {
   )
 }
 
+function isIlliquidEtf(etf: ETFRow): boolean {
+  const s = etf.rs_state
+  return !s || s.startsWith('ILLIQUID') || s.startsWith('INSUFFICIENT')
+}
+
 export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
   const [sortKey, setSortKey] = useState<SortKey>('rs_pctile_3m')
   const [asc, setAsc] = useState(false)
   const [chip, setChip] = useState<FilterChip>('all')
   const [search, setSearch] = useState('')
+  const [showIlliquid, setShowIlliquid] = useState(false)
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null)
   const [visibleCols, setVisibleCols] = useColumnVisibility(COL_STORAGE_KEY, OPTIONAL_COLS)
 
@@ -146,8 +152,12 @@ export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
     setExpandedTicker(prev => prev === ticker ? null : ticker)
   }
 
+  const illiquidCount = useMemo(() => etfs.filter(isIlliquidEtf).length, [etfs])
+
   const filtered = useMemo(() => {
     let result = etfs
+
+    if (!showIlliquid) result = result.filter(e => !isIlliquidEtf(e))
 
     if (chip === 'broad')           result = result.filter(e => e.theme === 'Broad')
     else if (chip === 'sectoral')   result = result.filter(e => e.theme === 'Sectoral')
@@ -181,7 +191,7 @@ export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
       }
       return asc ? cmp : -cmp
     })
-  }, [etfs, chip, search, sortKey, asc])
+  }, [etfs, chip, search, sortKey, asc, showIlliquid])
 
   // Total visible columns = always-visible + optional currently selected.
   const optionalVisibleCount = OPTIONAL_COLS.filter(c => visibleCols.has(c.key)).length
@@ -248,6 +258,18 @@ export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
           ))}
         </div>
         <div className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowIlliquid(v => !v)}
+            title="Illiquid ETFs have low trading volumes and cannot be traded. Hide them for a cleaner view."
+            className={`px-2.5 py-1 rounded-sm font-sans text-xs font-medium transition-colors border ${
+              showIlliquid
+                ? 'border-teal text-teal bg-teal/5'
+                : 'border-paper-rule bg-paper-rule/20 text-ink-tertiary'
+            }`}
+          >
+            {showIlliquid ? `Hiding ${illiquidCount} illiquid` : `+${illiquidCount} illiquid`}
+          </button>
           <span className="font-sans text-xs text-ink-tertiary whitespace-nowrap">
             Showing {filtered.length} of {etfs.length} ETFs
           </span>

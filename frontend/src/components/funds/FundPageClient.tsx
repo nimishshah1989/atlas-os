@@ -56,6 +56,7 @@ export function FundPageClient({
   const [activeFilter, setActiveFilter] = useState<FilterChip>('all')
   const [search, setSearch] = useState('')
   const [hideDirectPlans, setHideDirectPlans] = useState(true)
+  const [showNewLaunches, setShowNewLaunches] = useState(false)
   const router = useRouter()
 
   function handlePeriodChange(newPeriod: Period) {
@@ -72,6 +73,10 @@ export function FundPageClient({
     if (hideDirectPlans) {
       result = result.filter(f => !f.scheme_name.includes(' Dir '))
     }
+    // Hide new launches (< 1 year history, no state computed) by default
+    if (!showNewLaunches) {
+      result = result.filter(f => f.nav_state !== null)
+    }
     if (activeFilter !== 'all') {
       result = result.filter(f => {
         if (activeFilter === 'recommended') return f.recommendation === 'Recommended'
@@ -86,7 +91,7 @@ export function FundPageClient({
       result = result.filter(f => matchesFundSearch(f, search))
     }
     return result
-  }, [funds, activeFilter, search, hideDirectPlans])
+  }, [funds, activeFilter, search, hideDirectPlans, showNewLaunches])
 
   return (
     <div className="flex flex-col">
@@ -106,7 +111,7 @@ export function FundPageClient({
       {/* Band 2: Bubble chart */}
       <div className="px-6 py-4 border-b border-paper-rule">
         <FundBubbleChart
-          funds={funds}
+          funds={filteredFunds}
           period={period}
           activeFilter={activeFilter}
           onFilterChange={handleFilterChange}
@@ -165,6 +170,18 @@ export function FundPageClient({
         </div>
         <div className="ml-auto flex items-center gap-2">
           <FundGlossaryButton />
+          <button
+            type="button"
+            onClick={() => setShowNewLaunches(v => !v)}
+            title="New launches have less than 1 year of NAV history — no meaningful state or signal can be computed for them."
+            className={`px-2.5 py-1 rounded-sm font-sans text-xs font-medium transition-colors border ${
+              showNewLaunches
+                ? 'border-teal text-teal bg-teal/5'
+                : 'border-paper-rule bg-paper-rule/20 text-ink-tertiary'
+            }`}
+          >
+            {showNewLaunches ? 'Hiding new launches' : '+New launches'}
+          </button>
           <button
             type="button"
             onClick={() => setHideDirectPlans(h => !h)}
