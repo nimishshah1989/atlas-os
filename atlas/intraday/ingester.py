@@ -276,7 +276,7 @@ class IntradayIngester:
             raise ValueError("KITE_API_KEY environment variable not set")
 
         access_token = get_valid_access_token(conn_str=self._conn_str)
-        self._ticker = KiteTicker(api_key, access_token, threaded=True)
+        self._ticker = KiteTicker(api_key, access_token)
 
         self._ticker.on_ticks = self._on_ticks
         self._ticker.on_connect = self._on_connect
@@ -285,9 +285,8 @@ class IntradayIngester:
         self._ticker.on_error = self._on_error
 
         subscribe_tokens = list(self._token_map.keys())
-        self._ticker.connect()
-        # subscribe after connect event fires via on_connect
         self._pending_tokens = subscribe_tokens
+        self._ticker.connect(threaded=True)  # kiteconnect v5: threaded arg moved to connect()
 
     # ------------------------------------------------------------------ #
     # Ticker callbacks                                                     #

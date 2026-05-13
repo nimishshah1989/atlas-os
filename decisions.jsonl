@@ -19385,3 +19385,120 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{
+  "ts": "2026-05-13T06:04:45Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/stooq_backfill_us.py",
+  "lines_changed": 260,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:04:50Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/stooq_backfill_us.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:04:57Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/stooq_backfill_us.py",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:00:02Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/050_create_us_atlas_schema.py",
+  "lines_changed": 551,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:00:11Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/050_create_us_atlas_schema.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:01:35Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/051_create_global_atlas_schema.py",
+  "lines_changed": 374,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:02:36Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/stooq_ingest.py",
+  "lines_changed": 266,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:02:46Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/stooq_ingest.py",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:02:57Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/stooq_ingest.py",
+  "lines_changed": 21,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:03:14Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/stooq_ingest.py",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:03:33Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/stooq_ingest.py",
+  "lines_changed": 45,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:03:55Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/intraday/ingester.py",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-13T06:05:02Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/stooq_backfill_us.py",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
