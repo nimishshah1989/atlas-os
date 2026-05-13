@@ -8,16 +8,16 @@ cron.job table because the job name 'atlas_mv_conviction' already exists.
 This migration re-schedules safely by unscheduling first (ignoring 'not found'
 errors), then scheduling with the correct UTC time (14:30 UTC = 20:00 IST).
 
-Revision ID: 047
-Revises: 046
+Revision ID: 054
+Revises: 053
 Create Date: 2026-05-12
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "047"
-down_revision = "046"
+revision = "054"
+down_revision = "053"
 branch_labels = None
 depends_on = None
 

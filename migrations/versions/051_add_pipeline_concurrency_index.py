@@ -8,16 +8,16 @@ The index covers only rows where status IN ('queued', 'running'), so completed
 runs (success, failed) are excluded and allow re-running the same milestone
 on any future day.
 
-Revision ID: 044
-Revises: 043
+Revision ID: 051
+Revises: 050
 Create Date: 2026-05-12
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "044"
-down_revision = "043"
+revision = "051"
+down_revision = "050"
 branch_labels = None
 depends_on = None
 

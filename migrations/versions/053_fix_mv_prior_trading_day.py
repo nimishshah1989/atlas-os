@@ -10,16 +10,16 @@ Fix: replace `d - 1` with a proper prior-trading-day lookup that finds the
 maximum date in atlas_stock_states_daily that is strictly less than the latest
 date. This is correct over weekends, holidays, and any other market closure.
 
-Revision ID: 046
-Revises: 045
+Revision ID: 053
+Revises: 052
 Create Date: 2026-05-12
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "046"
-down_revision = "045"
+revision = "053"
+down_revision = "052"
 branch_labels = None
 depends_on = None
 

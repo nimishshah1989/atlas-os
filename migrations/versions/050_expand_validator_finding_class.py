@@ -7,16 +7,16 @@ Phase C Route Crawler produces two new finding classes:
 The migration is idempotent: it drops the old constraint if present and
 recreates it with the expanded allowlist. Safe to re-run.
 
-Revision ID: 043
-Revises: 042
+Revision ID: 050
+Revises: 049
 Create Date: 2026-05-12
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "043"
-down_revision = "042"
+revision = "050"
+down_revision = "049"
 branch_labels = None
 depends_on = None
 

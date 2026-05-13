@@ -9,16 +9,16 @@ The USING clause converts existing stored values: the hex-escaped text
 representation that Postgres stores when you write bytea into a text column
 is the same bytes, so the cast round-trips cleanly.
 
-Revision ID: 045
-Revises: 044
+Revision ID: 052
+Revises: 051
 Create Date: 2026-05-12
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "045"
-down_revision = "044"
+revision = "052"
+down_revision = "051"
 branch_labels = None
 depends_on = None
 
