@@ -9,6 +9,8 @@ import { StockIntelligencePanel } from './StockIntelligencePanel'
 import { StockScreener } from './StockScreener'
 import { IntradayRSLeaders } from './IntradayRSLeaders'
 import { RSLeadersPanel } from './RSLeadersPanel'
+import { CTSIndexTimingPanel } from './CTSIndexTimingPanel'
+import { CTSSectorPanel } from './CTSSectorPanel'
 
 type MaFilter = 'above_30w_ma' | 'above_50d_ma' | 'above_200d_ma' | null
 type ActiveView = 'overview' | 'leaders'
@@ -78,6 +80,8 @@ export function StocksClientShell({
             regimeState={regimeState}
             deploymentMultiplier={deploymentMultiplier}
           />
+          <CTSIndexTimingPanel />
+          <CTSSectorPanel />
           <StockScreener
             stocks={stocks}
             maFilter={maFilter}

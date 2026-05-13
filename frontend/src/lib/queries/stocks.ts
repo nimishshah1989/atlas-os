@@ -50,6 +50,8 @@ export type StockRowWithSector = StockRow & {
   trigger_level: string | null
   ppc_strength: string | null
   signal_date: string | null
+  cts_conviction_score: string | null
+  cts_action_confidence: boolean | null
 }
 
 export type FullStockRow = StockRowWithSector
@@ -174,9 +176,11 @@ export async function getAllStocks(): Promise<StockRowWithSector[]> {
       cts.is_ppc,
       cts.is_npc,
       cts.is_contraction,
-      cts.trigger_level::text  AS trigger_level,
-      cts.ppc_strength::text   AS ppc_strength,
-      cts.date::text           AS signal_date
+      cts.trigger_level::text          AS trigger_level,
+      cts.ppc_strength::text           AS ppc_strength,
+      cts.date::text                   AS signal_date,
+      cts.cts_conviction_score::text   AS cts_conviction_score,
+      cts.cts_action_confidence        AS cts_action_confidence
     FROM atlas.atlas_universe_stocks u
     JOIN latest l ON TRUE
     CROSS JOIN benchmark b
@@ -378,9 +382,11 @@ export async function getStockBySymbol(symbol: string): Promise<StockRowWithSect
       cts.is_ppc,
       cts.is_npc,
       cts.is_contraction,
-      cts.trigger_level::text  AS trigger_level,
-      cts.ppc_strength::text   AS ppc_strength,
-      cts.date::text           AS signal_date
+      cts.trigger_level::text          AS trigger_level,
+      cts.ppc_strength::text           AS ppc_strength,
+      cts.date::text                   AS signal_date,
+      cts.cts_conviction_score::text   AS cts_conviction_score,
+      cts.cts_action_confidence        AS cts_action_confidence
     FROM atlas.atlas_universe_stocks u
     JOIN latest l ON TRUE
     CROSS JOIN benchmark b

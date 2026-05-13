@@ -11,6 +11,7 @@ from atlas.api.admin.validator import router as admin_validator_router
 from atlas.api.agents import router as agents_router
 from atlas.api.auth import JWTAuthMiddleware
 from atlas.api.cts_brief import router as cts_brief_router
+from atlas.api.cts_sectors import router as cts_sectors_router
 from atlas.api.intraday import router as intraday_router
 from atlas.api.kite_auth import router as kite_auth_router
 from atlas.api.portfolios import router as portfolios_router
@@ -41,6 +42,7 @@ app.include_router(intraday_router)  # SP08: intraday data — /api/v1/intraday/
 app.include_router(
     cts_brief_router
 )  # SP09: CTS on-demand brief — /api/v1/stocks/{symbol}/cts_brief
+app.include_router(cts_sectors_router)  # SP09 Phase 2: sector CTS snapshot — /api/v1/cts/sectors
 
 
 @app.get("/health", include_in_schema=False)
