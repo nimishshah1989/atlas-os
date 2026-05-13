@@ -14,7 +14,7 @@ interface SignalReport {
 
 async function fetchSignals(): Promise<{ reports: SignalReport[]; total: number }> {
   const res = await fetch(
-    `${process.env.ATLAS_INTERNAL_API_URL}/api/v1/tv/signals?limit=50`,
+    `${process.env.ATLAS_INTERNAL_API_BASE_URL}/api/v1/tv/signals?limit=50`,
     { next: { revalidate: 30 } }
   );
   if (!res.ok) return { reports: [], total: 0 };

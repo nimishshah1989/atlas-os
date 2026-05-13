@@ -3,7 +3,7 @@ import { SignalReport } from "@/components/signals/SignalReport";
 
 async function fetchReport(id: string) {
   const res = await fetch(
-    `${process.env.ATLAS_INTERNAL_API_URL}/api/v1/tv/signals/${id}`,
+    `${process.env.ATLAS_INTERNAL_API_BASE_URL}/api/v1/tv/signals/${id}`,
     { next: { revalidate: 60 } }
   );
   if (res.status === 404) return null;

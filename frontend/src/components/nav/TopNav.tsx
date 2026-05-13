@@ -17,9 +17,8 @@ const GROUPS: Group[] = [
       { href: '/stocks',  label: 'Stocks' },
       { href: '/etfs',    label: 'ETFs' },
       { href: '/funds',   label: 'Funds' },
-      { href: '/global',     label: 'Global Pulse' },
-      { href: '/us/stocks',  label: 'US Stocks' },
-      { href: '/us/etfs',    label: 'US ETFs' },
+      { href: '/global',  label: 'Global Pulse' },
+      { href: '/us',      label: 'US Pulse' },
     ],
   },
   {
@@ -64,6 +63,7 @@ function activeGroup(pathname: string): Group {
   if (pathname.startsWith('/intelligence')) return GROUPS[2]
   if (pathname.startsWith('/strategies') || pathname.startsWith('/portfolios')) return GROUPS[1]
   if (pathname.startsWith('/methodology') || pathname.startsWith('/health'))    return GROUPS[3]
+  if (pathname.startsWith('/us')) return GROUPS[0]
   return GROUPS[0] // research is default
 }
 
