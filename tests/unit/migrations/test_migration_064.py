@@ -31,12 +31,6 @@ _SKIP_INTEGRATION = pytest.mark.skipif(
     reason="needs ATLAS_DB_URL — integration tests run on EC2 only",
 )
 
-_EXPECTED_TABLES = (
-    "tv_alert_registry",
-    "tv_signal_reports",
-    "atlas_signal_alerts",
-)
-
 
 def _load_migration():  # type: ignore[return]
     """Import the migration module fresh (handles repeated imports gracefully)."""
