@@ -7,6 +7,9 @@ Architecture:
   boundary, drains the queue, aggregates OHLCV, computes EMA + RS, upserts.
 - EMA state and open prices are held in instance dicts; no external state store.
 """
+# allow-large: single IntradayIngester class; all methods are tightly coupled
+# around one WebSocket lifecycle (connect → tick → aggregate → persist). Splitting
+# would require passing mutable shared state across module boundaries.
 
 from __future__ import annotations
 
@@ -25,7 +28,7 @@ import psycopg2
 import structlog
 
 from atlas.intraday.ema_engine import EMAState, bootstrap_ema_state, update_ema
-from atlas.intraday.persistence import BarRecord, upsert_bars
+from atlas.intraday.persistence import BarRecord, NiftyBarRecord, upsert_bars, upsert_nifty_bar
 from atlas.intraday.rs_engine import (
     NIFTY50_TOKEN,
     compute_return_since_open,
@@ -450,6 +453,7 @@ class IntradayIngester:
                     ema_20=new_ema.ema_20,
                     ema_50=new_ema.ema_50,
                     rs_vs_nifty=rs,
+                    return_since_open=stock_return,
                     gap_filled=False,
                 )
             )
@@ -458,6 +462,29 @@ class IntradayIngester:
         n_upserted = 0
         if bar_records:
             n_upserted = upsert_bars(bar_records, conn_str=self._conn_str)
+
+        # Persist Nifty50 bar — non-fatal if it fails
+        if nifty_token in self._current_bar and nifty_return is not None:
+            nifty_bar_data = self._current_bar[nifty_token]
+            nifty_open = self._open_prices.get("NIFTY50_INDEX")
+            if nifty_open is not None:
+                try:
+                    upsert_nifty_bar(
+                        NiftyBarRecord(
+                            bar_time=bar_time,
+                            open=nifty_open,
+                            high=Decimal(str(nifty_bar_data.get("high", nifty_bar_data["close"]))),
+                            low=Decimal(str(nifty_bar_data.get("low", nifty_bar_data["close"]))),
+                            close=Decimal(str(nifty_bar_data["close"])),
+                            return_since_open=nifty_return,
+                        ),
+                        conn_str=self._conn_str,
+                    )
+                    log.debug("nifty_bar_persisted", bar_time=bar_time.isoformat())
+                except Exception as exc:
+                    log.warning(
+                        "nifty_bar_upsert_failed", bar_time=bar_time.isoformat(), error=str(exc)
+                    )
 
         log.info(
             "bar_close_processed",
