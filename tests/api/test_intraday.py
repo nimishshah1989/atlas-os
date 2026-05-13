@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import os
 
+# Set both auth flags before any atlas import so Config reads them at module load.
 os.environ.setdefault("ATLAS_AUTH_DISABLED", "true")
+os.environ.setdefault("ATLAS_INTERNAL_SECRET", "test-service-secret")
 
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
@@ -22,11 +24,14 @@ from fastapi.testclient import TestClient
 from atlas.api import app
 from atlas.config import Config
 
+_SERVICE_HEADERS = {"Authorization": "Bearer test-service-secret"}
+
 
 @pytest.fixture(scope="module")
 def client() -> TestClient:
     Config.AUTH_DISABLED = True
-    return TestClient(app)
+    Config.ATLAS_INTERNAL_SECRET = "test-service-secret"  # noqa: S105
+    return TestClient(app, headers=_SERVICE_HEADERS)
 
 
 # ---------------------------------------------------------------------------
@@ -362,3 +367,247 @@ class TestIntradayStatus:
             response = client.get("/api/v1/intraday/status")
 
         assert response.json()["data"]["instruments_in_last_bar"] == 742
+
+
+# ---------------------------------------------------------------------------
+# Helpers: fetchone mock + new sample data
+# ---------------------------------------------------------------------------
+
+from decimal import Decimal  # noqa: E402 — appended section; Decimal not imported above
+
+
+def _mock_engine_fetchone(row) -> MagicMock:
+    """Return a mock engine whose connect().execute().fetchone() returns row."""
+    mock_conn = MagicMock()
+    mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+    mock_conn.__exit__ = MagicMock(return_value=False)
+    mock_result = MagicMock()
+    mock_result.fetchone.return_value = row
+    mock_conn.execute.return_value = mock_result
+    mock_engine = MagicMock()
+    mock_engine.connect.return_value = mock_conn
+    return mock_engine
+
+
+_SAMPLE_NIFTY_ROW = (
+    _SAMPLE_BAR_TIME,  # bar_time
+    Decimal("24500.00"),  # open
+    Decimal("24550.00"),  # high
+    Decimal("24480.00"),  # low
+    Decimal("24530.00"),  # close
+    Decimal("0.001224"),  # return_since_open
+)
+
+_SAMPLE_SECTOR_ROW = ("TECHNOLOGY", Decimal("0.008542"), 12, _SAMPLE_BAR_TIME)
+
+_SAMPLE_PRICE_ROWS = [
+    ("uuid-rel-001", Decimal("2850.50"), _SAMPLE_BAR_TIME),
+    ("uuid-tcs-002", Decimal("3540.00"), _SAMPLE_BAR_TIME),
+]
+
+
+# ---------------------------------------------------------------------------
+# /api/v1/intraday/nifty
+# ---------------------------------------------------------------------------
+
+
+class TestNiftyEndpoint:
+    def test_nifty_returns_200_with_data(self, client: TestClient) -> None:
+        """200 with properly shaped data when table has a row."""
+        mock_engine = _mock_engine_fetchone(_SAMPLE_NIFTY_ROW)
+        with patch("atlas.api.intraday.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/intraday/nifty")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["data"] is not None
+        assert "meta" in body
+
+    def test_nifty_response_shape_has_required_fields(self, client: TestClient) -> None:
+        """data contains all seven required fields."""
+        mock_engine = _mock_engine_fetchone(_SAMPLE_NIFTY_ROW)
+        with patch("atlas.api.intraday.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/intraday/nifty")
+        data = response.json()["data"]
+        for field in (
+            "bar_time",
+            "open",
+            "high",
+            "low",
+            "close",
+            "return_since_open",
+            "pct_change_since_open",
+        ):
+            assert field in data, f"Missing field: {field}"
+
+    def test_nifty_pct_change_is_return_times_100(self, client: TestClient) -> None:
+        """pct_change_since_open = return_since_open * 100."""
+        mock_engine = _mock_engine_fetchone(_SAMPLE_NIFTY_ROW)
+        with patch("atlas.api.intraday.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/intraday/nifty")
+        data = response.json()["data"]
+        ret = float(data["return_since_open"])
+        pct = float(data["pct_change_since_open"])
+        assert abs(pct - ret * 100) < 0.0001
+
+    def test_nifty_empty_table_returns_null_data_with_note(self, client: TestClient) -> None:
+        """Empty table returns data=null, not an error."""
+        mock_engine = _mock_engine_fetchone(None)
+        with patch("atlas.api.intraday.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/intraday/nifty")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["data"] is None
+        assert "note" in body["meta"]
+
+    def test_nifty_cache_control_set(self, client: TestClient) -> None:
+        """Cache-Control: public, max-age=30 is present."""
+        mock_engine = _mock_engine_fetchone(_SAMPLE_NIFTY_ROW)
+        with patch("atlas.api.intraday.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/intraday/nifty")
+        assert "max-age=30" in response.headers.get("cache-control", "")
+
+    def test_nifty_cache_control_on_empty_table(self, client: TestClient) -> None:
+        """Cache-Control is set even when table is empty."""
+        mock_engine = _mock_engine_fetchone(None)
+        with patch("atlas.api.intraday.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/intraday/nifty")
+        assert "max-age=30" in response.headers.get("cache-control", "")
+
+    def test_nifty_meta_data_as_of_present_when_data_available(self, client: TestClient) -> None:
+        """meta.data_as_of is the bar_time ISO string when data is present."""
+        mock_engine = _mock_engine_fetchone(_SAMPLE_NIFTY_ROW)
+        with patch("atlas.api.intraday.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/intraday/nifty")
+        meta = response.json()["meta"]
+        assert "data_as_of" in meta
+        assert "2026-05-12" in meta["data_as_of"]
+
+    def test_nifty_return_since_open_null_handled(self, client: TestClient) -> None:
+        """return_since_open=NULL in DB comes back as null JSON (no crash)."""
+        row_with_null_return = (
+            _SAMPLE_BAR_TIME,
+            Decimal("24500.00"),
+            Decimal("24550.00"),
+            Decimal("24480.00"),
+            Decimal("24530.00"),
+            None,  # return_since_open is NULL
+        )
+        mock_engine = _mock_engine_fetchone(row_with_null_return)
+        with patch("atlas.api.intraday.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/intraday/nifty")
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["return_since_open"] is None
+        assert data["pct_change_since_open"] is None
+
+
+# ---------------------------------------------------------------------------
+# /api/v1/intraday/sector-movers
+# ---------------------------------------------------------------------------
+
+
+class TestSectorMovers:
+    def test_sector_movers_returns_200_with_data(self, client: TestClient) -> None:
+        """200 with list of sector movers."""
+        mock_engine = _mock_engine_with_rows([_SAMPLE_SECTOR_ROW])
+        with patch("atlas.api.intraday.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/intraday/sector-movers")
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["data"]) == 1
+
+    def test_sector_movers_response_shape(self, client: TestClient) -> None:
+        """Each item has sector, avg_return_since_open, stock_count."""
+        mock_engine = _mock_engine_with_rows([_SAMPLE_SECTOR_ROW])
+        with patch("atlas.api.intraday.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/intraday/sector-movers")
+        item = response.json()["data"][0]
+        for field in ("sector", "avg_return_since_open", "stock_count"):
+            assert field in item, f"Missing field: {field}"
+
+    def test_sector_movers_empty_mv_returns_empty_list(self, client: TestClient) -> None:
+        """Empty MV returns empty list with note."""
+        mock_engine = _mock_engine_with_rows([])
+        with patch("atlas.api.intraday.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/intraday/sector-movers")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["data"] == []
+        assert "note" in body["meta"]
+
+    def test_sector_movers_cache_control_set(self, client: TestClient) -> None:
+        """Cache-Control: public, max-age=30 is present."""
+        mock_engine = _mock_engine_with_rows([_SAMPLE_SECTOR_ROW])
+        with patch("atlas.api.intraday.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/intraday/sector-movers")
+        assert "max-age=30" in response.headers.get("cache-control", "")
+
+    def test_sector_movers_meta_has_data_as_of(self, client: TestClient) -> None:
+        """meta.data_as_of is present when data rows exist."""
+        mock_engine = _mock_engine_with_rows([_SAMPLE_SECTOR_ROW])
+        with patch("atlas.api.intraday.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/intraday/sector-movers")
+        meta = response.json()["meta"]
+        assert "data_as_of" in meta
+
+    def test_sector_movers_multiple_sectors_returned(self, client: TestClient) -> None:
+        """Multiple sector rows all appear in response."""
+        rows = [
+            ("TECHNOLOGY", Decimal("0.008542"), 12, _SAMPLE_BAR_TIME),
+            ("FINANCIALS", Decimal("0.003210"), 18, _SAMPLE_BAR_TIME),
+            ("ENERGY", Decimal("-0.002100"), 8, _SAMPLE_BAR_TIME),
+        ]
+        mock_engine = _mock_engine_with_rows(rows)
+        with patch("atlas.api.intraday.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/intraday/sector-movers")
+        assert len(response.json()["data"]) == 3
+
+
+# ---------------------------------------------------------------------------
+# /api/v1/intraday/prices
+# ---------------------------------------------------------------------------
+
+
+class TestIntradayPrices:
+    def test_prices_returns_200_with_data(self, client: TestClient) -> None:
+        """200 with instrument_id->price dict."""
+        mock_engine = _mock_engine_with_rows(_SAMPLE_PRICE_ROWS)
+        with patch("atlas.api.intraday.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/intraday/prices")
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert "uuid-rel-001" in data
+        assert "uuid-tcs-002" in data
+
+    def test_prices_empty_mv_returns_empty_dict(self, client: TestClient) -> None:
+        """Empty MV returns empty dict with note."""
+        mock_engine = _mock_engine_with_rows([])
+        with patch("atlas.api.intraday.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/intraday/prices")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["data"] == {}
+        assert "note" in body["meta"]
+
+    def test_prices_cache_control_set(self, client: TestClient) -> None:
+        """Cache-Control: public, max-age=30 is present."""
+        mock_engine = _mock_engine_with_rows(_SAMPLE_PRICE_ROWS)
+        with patch("atlas.api.intraday.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/intraday/prices")
+        assert "max-age=30" in response.headers.get("cache-control", "")
+
+    def test_prices_meta_has_instrument_count(self, client: TestClient) -> None:
+        """meta.instrument_count reflects the number of rows."""
+        mock_engine = _mock_engine_with_rows(_SAMPLE_PRICE_ROWS)
+        with patch("atlas.api.intraday.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/intraday/prices")
+        meta = response.json()["meta"]
+        assert meta["instrument_count"] == len(_SAMPLE_PRICE_ROWS)
+
+    def test_prices_meta_has_data_as_of(self, client: TestClient) -> None:
+        """meta.data_as_of is present when rows exist."""
+        mock_engine = _mock_engine_with_rows(_SAMPLE_PRICE_ROWS)
+        with patch("atlas.api.intraday.get_engine", return_value=mock_engine):
+            response = client.get("/api/v1/intraday/prices")
+        meta = response.json()["meta"]
+        assert "data_as_of" in meta
