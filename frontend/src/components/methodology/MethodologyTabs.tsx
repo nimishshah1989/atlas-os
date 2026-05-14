@@ -268,13 +268,16 @@ function TabSectors() {
       </Callout>
 
       <SectionHead id="sector-states">Sector States — actionability overlay</SectionHead>
-      <P>On top of the RRG, Atlas also classifies each sector into an <strong>Overweight / Neutral / Underweight / Avoid</strong> state. This uses three inputs: sector-level RS state (derived from its constituent stocks), momentum state, and participation_rs (% of stocks in the sector with positive RS).</P>
-      <div className="space-y-2 mb-4">
+      <P>On top of the RRG, Atlas also classifies each sector into an <strong>Overweight / Neutral / Underweight / Avoid</strong> state. This uses three inputs: sector-level RS state (derived from its constituent stocks), momentum direction, and RS breadth ranking.</P>
+      <Callout color="warn">
+        <strong>These states are relative, not absolute.</strong> A sector can be Overweight even in a broad market downturn — it simply means it is leading <em>relative to other sectors</em> in RS strength and breadth. The classification distributes across sectors at all times so you always know which sectors are the best and worst options available right now.
+      </Callout>
+      <div className="space-y-2 mb-4 mt-3">
         {[
-          { s: 'Overweight',  c: '#e8f4ec', tc: '#2F6B43', d: 'Sector RS is Overweight_RS AND momentum is Improving AND >50% of stocks have positive RS. Tilt towards this sector.' },
-          { s: 'Neutral',     c: '#f5f5f5', tc: '#5a5a5a', d: 'Middle-ground readings. Maintain current allocation; no strong directional signal.' },
-          { s: 'Underweight', c: '#fdf0ee', tc: '#B0492C', d: 'Below-average RS and/or deteriorating momentum. Reduce allocation vs benchmark.' },
-          { s: 'Avoid',       c: '#fce8e4', tc: '#8B2E1A', d: 'RS in the bottom quartile AND breadth below threshold. Minimum allocation only.' },
+          { s: 'Overweight',  c: '#e8f4ec', tc: '#2F6B43', d: 'Sector is in the top RS quintile cross-sectorally AND momentum is Improving AND RS breadth rank is in the top half of all sectors. Tilt towards this sector relative to benchmark.' },
+          { s: 'Neutral',     c: '#f5f5f5', tc: '#5a5a5a', d: 'Middle-ground readings. RS is average, breadth is mid-range. Maintain current allocation; no strong directional signal.' },
+          { s: 'Underweight', c: '#fdf0ee', tc: '#B0492C', d: 'RS is weak cross-sectorally OR RS breadth rank is in the bottom 30% of sectors. Reduce allocation vs benchmark.' },
+          { s: 'Avoid',       c: '#fce8e4', tc: '#8B2E1A', d: 'RS in the bottom quintile AND RS breadth rank in the bottom 25% of sectors. Minimum allocation only. This does not mean the sector is down in absolute terms — it is the weakest relative to the other sectors available.' },
         ].map(s => (
           <div key={s.s} className="flex gap-3 items-start text-xs p-2 rounded-sm border border-paper-rule">
             <span className="inline-flex items-center px-2 py-0.5 rounded-sm font-sans text-[10px] font-bold shrink-0" style={{ background: s.c, color: s.tc }}>{s.s}</span>
@@ -289,8 +292,8 @@ function TabSectors() {
       <ul className="space-y-1.5 mb-4 ml-2 font-sans text-xs text-ink-secondary">
         <li><strong>RS Level</strong> — bottom-up median 3M RS of all stocks in the sector vs Nifty 500</li>
         <li><strong>RS Velocity</strong> — 4-week change in RS Level. Positive = sector gaining ground. Negative = losing.</li>
-        <li><strong>Participation %</strong> — % of stocks in the sector with positive relative strength. Above 50% = broad strength. Below 30% = narrow, fragile leadership.</li>
-        <li><strong>Sector State</strong> — Overweight / Neutral / Underweight / Avoid (see above)</li>
+        <li><strong>Participation %</strong> — % of stocks in the sector with positive relative strength. Used as a <em>relative rank</em> across sectors (not an absolute threshold), so a sector with 20% participation can still be Overweight if it is the highest-participation sector available.</li>
+        <li><strong>Sector State</strong> — Overweight / Neutral / Underweight / Avoid (see above). Always relative — there will always be Overweight sectors even in a falling market.</li>
         <li><strong>RRG Quadrant</strong> — Leading / Improving / Weakening / Lagging</li>
       </ul>
     </div>

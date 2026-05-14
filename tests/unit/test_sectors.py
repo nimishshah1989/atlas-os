@@ -10,6 +10,8 @@ functions that drive Phase B output:
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -46,9 +48,9 @@ SECTOR_MASTER = pd.DataFrame(
 )
 
 THRESHOLDS = {
-    "sector_overweight_participation_min_pct": 50.0,
-    "sector_underweight_participation_max_pct": 30.0,
-    "sector_avoid_participation_max_pct": 25.0,
+    "sector_overweight_participation_min_pct": Decimal("50"),
+    "sector_underweight_participation_max_pct": Decimal("30"),
+    "sector_avoid_participation_max_pct": Decimal("25"),
 }
 
 
@@ -220,7 +222,7 @@ def test_bottom_up_rs_vs_nifty500_division() -> None:
 @pytest.mark.unit
 def test_bottom_up_empty_input_returns_empty() -> None:
     empty = pd.DataFrame(
-        columns=[
+        columns=[  # type: ignore[arg-type]
             "instrument_id",
             "date",
             "sector_name",
@@ -479,6 +481,125 @@ def test_sector_states_states_columns_match_schema() -> None:
         assert col in out.columns, f"missing schema column: {col}"
 
 
+@pytest.mark.unit
+def test_sector_states_relative_participation_distributes_in_bear_market() -> None:
+    """Bear-market scenario: all sectors have absolute participation_rs < 0.30.
+
+    With absolute thresholds (pre-fix), every sector lands Underweight because
+    ``participation_rs < underweight_max (0.30)`` is True for all — even relative
+    sector leaders. After the fix (cross-sector percentile rank), top-ranked
+    sectors still reach Overweight/Neutral.
+    """
+    d = pd.Timestamp("2024-01-15").date()
+    df = pd.DataFrame(
+        [
+            {  # best — highest participation_rs, top RS
+                "sector_name": "Bank",
+                "date": d,
+                "bottomup_ret_1m": 0.02,
+                "bottomup_ret_3m": 0.06,
+                "bottomup_ret_6m": 0.10,
+                "bottomup_rs_3m_nifty500": 1.30,
+                "bottomup_ema_10_ratio": 1.05,
+                "bottomup_ema_20_ratio": 1.02,
+                "topdown_index_code": "NIFTY BANK",
+                "topdown_ret_1m": 0.02,
+                "topdown_ret_3m": 0.05,
+                "topdown_rs_3m_nifty500": 1.20,
+                "constituent_count": 30,
+                "participation_50": 0.35,
+                "participation_rs": 0.25,  # < 0.30 absolute threshold
+                "leadership_concentration": 0.4,
+            },
+            {
+                "sector_name": "Energy",
+                "date": d,
+                "bottomup_ret_1m": 0.01,
+                "bottomup_ret_3m": 0.04,
+                "bottomup_ret_6m": 0.08,
+                "bottomup_rs_3m_nifty500": 1.20,
+                "bottomup_ema_10_ratio": 1.03,
+                "bottomup_ema_20_ratio": 1.01,
+                "topdown_index_code": "NIFTY ENERGY",
+                "topdown_ret_1m": 0.01,
+                "topdown_ret_3m": 0.04,
+                "topdown_rs_3m_nifty500": 1.10,
+                "constituent_count": 20,
+                "participation_50": 0.30,
+                "participation_rs": 0.20,  # < 0.30 absolute threshold
+                "leadership_concentration": 0.4,
+            },
+            {
+                "sector_name": "Power",
+                "date": d,
+                "bottomup_ret_1m": 0.00,
+                "bottomup_ret_3m": 0.01,
+                "bottomup_ret_6m": 0.02,
+                "bottomup_rs_3m_nifty500": 1.00,
+                "bottomup_ema_10_ratio": 1.01,
+                "bottomup_ema_20_ratio": 1.00,
+                "topdown_index_code": "NIFTY POWER",
+                "topdown_ret_1m": 0.00,
+                "topdown_ret_3m": 0.01,
+                "topdown_rs_3m_nifty500": 1.00,
+                "constituent_count": 15,
+                "participation_50": 0.25,
+                "participation_rs": 0.15,  # < 0.30 absolute threshold
+                "leadership_concentration": 0.4,
+            },
+            {
+                "sector_name": "Pharma",
+                "date": d,
+                "bottomup_ret_1m": -0.01,
+                "bottomup_ret_3m": -0.02,
+                "bottomup_ret_6m": -0.04,
+                "bottomup_rs_3m_nifty500": 0.85,
+                "bottomup_ema_10_ratio": 0.98,
+                "bottomup_ema_20_ratio": 0.99,
+                "topdown_index_code": "NIFTY PHARMA",
+                "topdown_ret_1m": -0.01,
+                "topdown_ret_3m": -0.02,
+                "topdown_rs_3m_nifty500": 0.90,
+                "constituent_count": 25,
+                "participation_50": 0.20,
+                "participation_rs": 0.10,  # < 0.30 absolute threshold
+                "leadership_concentration": 0.4,
+            },
+            {  # weakest — bottom quintile RS, lowest breadth
+                "sector_name": "Tech",
+                "date": d,
+                "bottomup_ret_1m": -0.05,
+                "bottomup_ret_3m": -0.10,
+                "bottomup_ret_6m": -0.15,
+                "bottomup_rs_3m_nifty500": 0.60,
+                "bottomup_ema_10_ratio": 0.95,
+                "bottomup_ema_20_ratio": 0.97,
+                "topdown_index_code": "NIFTY IT",
+                "topdown_ret_1m": -0.04,
+                "topdown_ret_3m": -0.09,
+                "topdown_rs_3m_nifty500": 0.65,
+                "constituent_count": 20,
+                "participation_50": 0.15,
+                "participation_rs": 0.05,  # < 0.30 absolute threshold
+                "leadership_concentration": 0.5,
+            },
+        ]
+    )
+
+    out = compute_sector_states(df, THRESHOLDS)
+    states = dict(zip(out["sector_name"], out["sector_state"], strict=False))
+
+    # Relative leader must escape Underweight even when absolute breadth is low
+    assert states["Bank"] in ("Overweight", "Neutral"), (
+        f"Bank (relative breadth leader) got '{states['Bank']}'. "
+        f"All-Underweight = absolute participation bug. States: {states}"
+    )
+    non_negative = {s: v for s, v in states.items() if v not in ("Underweight", "Avoid")}
+    assert (
+        len(non_negative) >= 2
+    ), f"Expected >=2 sectors Overweight/Neutral in bear market, got: {states}"
+
+
 # --------------------------------------------------------------------------- #
 # assemble                                                                    #
 # --------------------------------------------------------------------------- #
@@ -491,7 +612,7 @@ def test_assemble_sector_metrics_columns_match_schema() -> None:
     breadth = compute_sector_breadth(df, SECTOR_MASTER)
     # Empty top-down for this test
     td = pd.DataFrame(
-        columns=[
+        columns=[  # type: ignore[arg-type]
             "sector_name",
             "date",
             "topdown_index_code",

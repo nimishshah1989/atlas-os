@@ -128,7 +128,7 @@ export function SectorDrawerSnapshot({ snapshot }: { snapshot: SectorWithDecisio
     <div className="space-y-4 pb-4 border-b border-paper-rule">
       {/* Top row: state + decision + count */}
       <div className="flex items-stretch gap-2">
-        <div className="flex-1 px-3 py-2.5 border border-paper-rule rounded-sm bg-paper" title="Overweight = above-benchmark allocation justified. Neutral = market-weight. Underweight = reduce. Avoid = no new positions.">
+        <div className="flex-1 px-3 py-2.5 border border-paper-rule rounded-sm bg-paper" title="Relative classification vs other sectors — not an absolute market signal. Overweight = top RS quintile + improving momentum + top-half breadth rank. Neutral = mid-range. Underweight = bottom-30% RS breadth or weak RS. Avoid = bottom quintile RS + bottom-25% breadth rank. There will always be Overweight sectors even in a declining market.">
           <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider mb-1">State</div>
           <div className={`font-sans text-base font-semibold ${stateColor}`}>{snapshot.sector_state}</div>
         </div>
