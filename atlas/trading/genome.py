@@ -37,7 +37,8 @@ LAYER1_SEARCH_SPACE: dict[str, tuple] = {
     "state_velocity_lookback_days": ("int", 5, 20),
     "synergy_weight": ("float", 0.0, 0.3),
     "penalty_weight": ("float", 0.0, 0.3),
-    # Conviction formula weights — these become genome variables (not hardcoded)
+    # Conviction formula weights — unnormalized importance weights
+    # decision.py uses relative scale, not sum=1
     "conviction_rs_weight": ("float", 0.40, 0.80),
     "conviction_mom_weight": ("float", 0.10, 0.40),
     "conviction_state_weight": ("float", 0.05, 0.25),
@@ -47,6 +48,8 @@ LAYER1_SEARCH_SPACE: dict[str, tuple] = {
     "genome_max_heat_pct": ("float", 0.12, 0.30),
 }
 
+# Regime-level search space. Consumed by DEAP evolver (Task 10) for mutation bounds.
+# Not directly used by Optuna trial factory — each regime generates its own playbook.
 REGIME_SEARCH_SPACE: dict[str, tuple] = {
     "min_conviction_to_enter": ("float", 0.35, 0.80),
     "base_position_pct": ("float", 2.0, 6.0),
@@ -167,6 +170,11 @@ def _random_weights() -> dict[str, float]:
 def _random_playbook(
     has_profit_target: bool, has_time_stop: bool, has_trailing: bool
 ) -> RegimePlaybook:
+    # Cascade drawdown thresholds to enforce halt < tighten < liquidate
+    dd_halt = random.uniform(8.0, 15.0)
+    dd_tighten = random.uniform(max(14.0, dd_halt + 0.5), 22.0)
+    dd_liquidate = random.uniform(max(19.0, dd_tighten + 0.5), 30.0)
+
     return RegimePlaybook(
         min_conviction_to_enter=random.uniform(0.35, 0.80),
         base_position_pct=random.uniform(2.0, 6.0),
@@ -177,9 +185,9 @@ def _random_playbook(
         trailing_stop_from_peak_pct=(random.uniform(5.0, 20.0) if has_trailing else None),
         min_hold_days=random.randint(3, 15),
         max_sector_concentration_pct=random.randint(15, 35),
-        dd_halt_entry_pct=random.uniform(8.0, 15.0),
-        dd_tighten_exit_pct=random.uniform(14.0, 22.0),
-        dd_liquidate_pct=random.uniform(19.0, 30.0),
+        dd_halt_entry_pct=dd_halt,
+        dd_tighten_exit_pct=dd_tighten,
+        dd_liquidate_pct=dd_liquidate,
     )
 
 
@@ -190,20 +198,30 @@ class GenomeFactory:
         strong = random.randint(45, min(65, leader - 1))
         average = random.randint(25, min(45, strong - 1))
         weak = random.randint(10, min(25, average - 1))
+
+        # Cascade breadth thresholds: risk_on > constructive > cautious
+        risk_on_breadth = random.randint(50, 70)
+        constructive_breadth = random.randint(35, min(55, risk_on_breadth - 1))
+        cautious_breadth = random.randint(20, min(40, constructive_breadth - 1))
+
+        # Cascade vol ratios: elevated < high
+        vol_elevated = random.uniform(1.2, 1.8)
+        vol_high = random.uniform(max(1.5, vol_elevated + 0.05), 2.5)
+
         layer1 = Layer1Perception(
             rs_leader_cutoff_pct=leader,
             rs_strong_cutoff_pct=strong,
             rs_average_cutoff_pct=average,
             rs_weak_cutoff_pct=weak,
             rs_timeframe_weights=_random_weights(),
-            regime_risk_on_breadth_pct=random.randint(50, 70),
-            regime_constructive_breadth_pct=random.randint(35, 55),
-            regime_cautious_breadth_pct=random.randint(20, 40),
+            regime_risk_on_breadth_pct=risk_on_breadth,
+            regime_constructive_breadth_pct=constructive_breadth,
+            regime_cautious_breadth_pct=cautious_breadth,
             regime_risk_on_vix_ceiling=random.uniform(14.0, 22.0),
             momentum_accel_ema_ratio=random.uniform(1.010, 1.040),
             momentum_decel_ema_ratio=random.uniform(0.975, 0.995),
-            vol_elevated_ratio=random.uniform(1.2, 1.8),
-            vol_high_ratio=random.uniform(1.5, 2.5),
+            vol_elevated_ratio=vol_elevated,
+            vol_high_ratio=vol_high,
             state_velocity_lookback_days=random.randint(5, 20),
             synergy_weight=random.uniform(0.0, 0.3),
             penalty_weight=random.uniform(0.0, 0.3),
@@ -239,24 +257,35 @@ class GenomeFactory:
         total = w1 + w2 + w3
         weights = {"1w": w1 / total, "1m": w2 / total, "3m": w3 / total}
 
+        # Cascade breadth thresholds: risk_on > constructive > cautious
+        risk_on_breadth = trial.suggest_int("regime_risk_on_breadth_pct", 50, 70)
+        constructive_breadth = trial.suggest_int(
+            "regime_constructive_breadth_pct", 35, min(55, risk_on_breadth - 1)
+        )
+        cautious_breadth = trial.suggest_int(
+            "regime_cautious_breadth_pct", 20, min(40, constructive_breadth - 1)
+        )
+
+        # Cascade vol ratios: elevated < high
+        vol_elevated = trial.suggest_float("vol_elevated_ratio", 1.2, 1.8)
+        vol_high = trial.suggest_float("vol_high_ratio", max(1.5, vol_elevated + 0.05), 2.5)
+
         layer1 = Layer1Perception(
             rs_leader_cutoff_pct=leader,
             rs_strong_cutoff_pct=strong,
             rs_average_cutoff_pct=average,
             rs_weak_cutoff_pct=weak,
             rs_timeframe_weights=weights,
-            regime_risk_on_breadth_pct=trial.suggest_int("regime_risk_on_breadth_pct", 50, 70),
-            regime_constructive_breadth_pct=trial.suggest_int(
-                "regime_constructive_breadth_pct", 35, 55
-            ),
-            regime_cautious_breadth_pct=trial.suggest_int("regime_cautious_breadth_pct", 20, 40),
+            regime_risk_on_breadth_pct=risk_on_breadth,
+            regime_constructive_breadth_pct=constructive_breadth,
+            regime_cautious_breadth_pct=cautious_breadth,
             regime_risk_on_vix_ceiling=trial.suggest_float(
                 "regime_risk_on_vix_ceiling", 14.0, 22.0
             ),
             momentum_accel_ema_ratio=trial.suggest_float("momentum_accel_ema_ratio", 1.010, 1.040),
             momentum_decel_ema_ratio=trial.suggest_float("momentum_decel_ema_ratio", 0.975, 0.995),
-            vol_elevated_ratio=trial.suggest_float("vol_elevated_ratio", 1.2, 1.8),
-            vol_high_ratio=trial.suggest_float("vol_high_ratio", 1.5, 2.5),
+            vol_elevated_ratio=vol_elevated,
+            vol_high_ratio=vol_high,
             state_velocity_lookback_days=trial.suggest_int("state_velocity_lookback_days", 5, 20),
             synergy_weight=trial.suggest_float("synergy_weight", 0.0, 0.3),
             penalty_weight=trial.suggest_float("penalty_weight", 0.0, 0.3),
@@ -273,11 +302,22 @@ class GenomeFactory:
         def _trial_playbook(
             prefix: str, has_profit: bool, has_time: bool, has_trail: bool
         ) -> RegimePlaybook:
+            # Cascade drawdown thresholds to enforce halt < tighten < liquidate
+            dd_halt = trial.suggest_float(f"{prefix}_dd_halt_pct", 8.0, 15.0)
+            dd_tighten = trial.suggest_float(
+                f"{prefix}_dd_tighten_pct", max(14.0, dd_halt + 0.5), 22.0
+            )
+            dd_liquidate = trial.suggest_float(
+                f"{prefix}_dd_liquidate_pct", max(19.0, dd_tighten + 0.5), 30.0
+            )
+
             return RegimePlaybook(
                 min_conviction_to_enter=trial.suggest_float(f"{prefix}_min_conviction", 0.35, 0.80),
                 base_position_pct=trial.suggest_float(f"{prefix}_base_position_pct", 2.0, 6.0),
                 exit_rs_drop_tiers=trial.suggest_int(f"{prefix}_exit_rs_drop_tiers", 1, 3),
-                exit_momentum_collapse=True,
+                exit_momentum_collapse=trial.suggest_categorical(
+                    f"{prefix}_exit_momentum_collapse", [True, False]
+                ),
                 profit_target_pct=(
                     trial.suggest_float(f"{prefix}_profit_target_pct", 10.0, 30.0)
                     if has_profit
@@ -293,9 +333,9 @@ class GenomeFactory:
                 ),
                 min_hold_days=trial.suggest_int(f"{prefix}_min_hold_days", 3, 15),
                 max_sector_concentration_pct=trial.suggest_int(f"{prefix}_max_sector_pct", 15, 35),
-                dd_halt_entry_pct=trial.suggest_float(f"{prefix}_dd_halt_pct", 8.0, 15.0),
-                dd_tighten_exit_pct=trial.suggest_float(f"{prefix}_dd_tighten_pct", 14.0, 22.0),
-                dd_liquidate_pct=trial.suggest_float(f"{prefix}_dd_liquidate_pct", 19.0, 30.0),
+                dd_halt_entry_pct=dd_halt,
+                dd_tighten_exit_pct=dd_tighten,
+                dd_liquidate_pct=dd_liquidate,
             )
 
         return Genome(
