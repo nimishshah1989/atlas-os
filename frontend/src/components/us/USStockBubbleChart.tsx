@@ -18,10 +18,22 @@ const PERIOD_KEY: Record<Period, keyof USStockRow> = {
   '1Y': 'ret_12m',
 }
 
-const FILTERS: { key: 'sp500' | 'all'; label: string }[] = [
-  { key: 'sp500', label: 'S&P 500' },
-  { key: 'all',   label: 'All' },
-]
+type RSFilter = 'all' | 'strong+' | 'leaders'
+type Setup    = 'any' | '30w'    | 'stage1'
+
+const SECTOR_ABBR: Record<string, string> = {
+  'Communication Services': 'Comms',
+  'Consumer Discretionary': 'Disc.',
+  'Consumer Staples':       'Staples',
+  'Energy':                 'Energy',
+  'Financials':             'Fin.',
+  'Health Care':            'Health',
+  'Industrials':            'Ind.',
+  'Information Technology': 'Tech',
+  'Materials':              'Materials',
+  'Real Estate':            'RE',
+  'Utilities':              'Util.',
+}
 
 const LEGEND = [
   { color: '#2F6B43', label: 'Leader' },
@@ -38,11 +50,25 @@ const RET_CAP = 1.5
 export function USStockBubbleChart({ stocks }: { stocks: USStockRow[] }) {
   const svgRef  = useRef<SVGSVGElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
-  const [period, setPeriod]   = useState<Period>('3M')
-  const [filter, setFilter]   = useState<'sp500' | 'all'>('sp500')
+  const [period, setPeriod]     = useState<Period>('3M')
+  const [sector, setSector]     = useState<string>('all')
+  const [rsFilter, setRsFilter] = useState<RSFilter>('all')
+  const [setup, setSetup]       = useState<Setup>('any')
 
   const live = stocks.filter(s => s.history_gate_pass && s.liquidity_gate_pass)
-  const displayed = filter === 'sp500' ? live.filter(s => s.in_sp500) : live
+
+  const sectors = Array.from(
+    new Set(live.map(s => s.gics_sector).filter(Boolean) as string[])
+  ).sort()
+
+  const displayed = live.filter(s => {
+    if (sector !== 'all' && s.gics_sector !== sector) return false
+    if (rsFilter === 'strong+' && s.rs_state !== 'Leader' && s.rs_state !== 'Strong') return false
+    if (rsFilter === 'leaders' && s.rs_state !== 'Leader') return false
+    if (setup === '30w'    && !s.above_30w_ma) return false
+    if (setup === 'stage1' && !s.stage1_base_qualifies) return false
+    return true
+  })
 
   useEffect(() => {
     const container = wrapRef.current
@@ -212,24 +238,8 @@ export function USStockBubbleChart({ stocks }: { stocks: USStockRow[] }) {
 
   return (
     <div>
-      {/* Controls */}
-      <div className="flex items-center gap-4 mb-4 flex-wrap">
-        <div className="flex items-center gap-0.5 bg-paper-rule/20 rounded-sm p-0.5">
-          {FILTERS.map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setFilter(key)}
-              className={
-                'px-3 py-0.5 font-sans text-[10px] rounded-[2px] transition-colors ' +
-                (filter === key
-                  ? 'bg-paper text-ink-primary font-medium shadow-sm'
-                  : 'text-ink-tertiary hover:text-ink-secondary')
-              }
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+      {/* Row 1: period toggle + count */}
+      <div className="flex items-center gap-3 mb-2">
         <div className="flex items-center gap-0.5 bg-paper-rule/20 rounded-sm p-0.5">
           {(['1M', '3M', '6M', '1Y'] as Period[]).map(p => (
             <button
@@ -249,6 +259,73 @@ export function USStockBubbleChart({ stocks }: { stocks: USStockRow[] }) {
         <span className="ml-auto font-sans text-[10px] text-ink-tertiary">
           {displayed.length} stocks · bubble size = avg vol 20D
         </span>
+      </div>
+
+      {/* Row 2: sector pills · RS quality · setup */}
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <div className="flex items-center gap-0.5 bg-paper-rule/20 rounded-sm p-0.5 flex-wrap">
+          <button
+            onClick={() => setSector('all')}
+            className={
+              'px-2.5 py-0.5 font-sans text-[10px] rounded-[2px] transition-colors ' +
+              (sector === 'all'
+                ? 'bg-paper text-ink-primary font-medium shadow-sm'
+                : 'text-ink-tertiary hover:text-ink-secondary')
+            }
+          >
+            All
+          </button>
+          {sectors.map(s => (
+            <button
+              key={s}
+              onClick={() => setSector(sector === s ? 'all' : s)}
+              className={
+                'px-2.5 py-0.5 font-sans text-[10px] rounded-[2px] transition-colors ' +
+                (sector === s
+                  ? 'bg-paper text-ink-primary font-medium shadow-sm'
+                  : 'text-ink-tertiary hover:text-ink-secondary')
+              }
+            >
+              {SECTOR_ABBR[s] ?? s}
+            </button>
+          ))}
+        </div>
+
+        <div className="w-px h-4 bg-paper-rule/40 shrink-0" />
+
+        <div className="flex items-center gap-0.5 bg-paper-rule/20 rounded-sm p-0.5 shrink-0">
+          {([['all', 'All RS'], ['strong+', 'Strong+'], ['leaders', 'Leaders']] as [RSFilter, string][]).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setRsFilter(key)}
+              className={
+                'px-2.5 py-0.5 font-sans text-[10px] rounded-[2px] transition-colors ' +
+                (rsFilter === key
+                  ? 'bg-paper text-ink-primary font-medium shadow-sm'
+                  : 'text-ink-tertiary hover:text-ink-secondary')
+              }
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-0.5 bg-paper-rule/20 rounded-sm p-0.5 shrink-0">
+          {([['any', 'Any Setup'], ['30w', '>30W MA'], ['stage1', 'Stage 1']] as [Setup, string][]).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setSetup(key)}
+              className={
+                'px-2.5 py-0.5 font-sans text-[10px] rounded-[2px] transition-colors ' +
+                (setup === key
+                  ? 'bg-paper text-ink-primary font-medium shadow-sm'
+                  : 'text-ink-tertiary hover:text-ink-secondary')
+              }
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div ref={wrapRef} className="relative">
