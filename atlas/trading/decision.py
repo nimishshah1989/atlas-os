@@ -48,6 +48,8 @@ def compute_conviction(
     """Compute conviction score 0–1 for a single stock on a single day.
 
     Uses genome-controlled layer1 weights for all signal components.
+    Weights are on an unnormalized relative scale; clip(0, 1) is the intended
+    normalization boundary.
     """
     rs_norm = rs_pctile_norm
     mom_norm = _MOM_NORM[momentum_state]

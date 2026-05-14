@@ -1,10 +1,16 @@
 import numpy as np
 
-from atlas.trading.decision import apply_entry_rules, apply_exit_rules, compute_conviction
+from atlas.trading.decision import (
+    apply_entry_rules,
+    apply_exit_rules,
+    compute_conviction,
+    compute_position_size,
+)
 from atlas.trading.genome import GenomeFactory
 from atlas.trading.perception import (
     MOM_ACCELERATING,
     MOM_NEUTRAL,
+    REGIME_RISK_OFF,
     REGIME_RISK_ON,
     RS_AVERAGE,
     RS_LEADER,
@@ -18,6 +24,10 @@ def _genome():
     g = GenomeFactory.random()
     g.layer1.synergy_weight = 0.2
     g.layer1.penalty_weight = 0.1
+    g.layer1.conviction_rs_weight = 0.60
+    g.layer1.conviction_mom_weight = 0.20
+    g.layer1.conviction_state_weight = 0.15
+    g.layer1.conviction_velocity_weight = 0.05
     g.risk_on.min_conviction_to_enter = 0.55
     g.risk_on.exit_rs_drop_tiers = 2
     g.risk_on.min_hold_days = 5  # pin so holding_days=10 always satisfies the constraint
@@ -97,3 +107,53 @@ def test_exit_on_rs_drop():
         exit_rs_drop_tiers=g.risk_on.exit_rs_drop_tiers,
     )
     assert mask2[0]
+
+
+def test_entry_blocked_when_regime_risk_off():
+    """All entries must be blocked when regime is REGIME_RISK_OFF, regardless of conviction."""
+    g = _genome()
+    conviction = np.array([0.9, 0.8, 0.7])
+    mask = apply_entry_rules(conviction, regime=REGIME_RISK_OFF, portfolio_heat=0.0, genome=g)
+    assert not mask.any()
+
+
+def test_entry_blocked_when_drawdown_exceeds_halt():
+    """All entries must be blocked when portfolio drawdown >= dd_halt_entry_pct."""
+    g = _genome()
+    # dd_halt_entry_pct is in percent (e.g. 15.0 means 15%) — drawdown arg is fraction
+    halt_pct = g.risk_on.dd_halt_entry_pct  # e.g. 15.0
+    drawdown_fraction = halt_pct / 100.0  # 0.15
+    conviction = np.array([0.9, 0.8])
+    mask = apply_entry_rules(
+        conviction,
+        regime=REGIME_RISK_ON,
+        portfolio_heat=0.0,
+        genome=g,
+        portfolio_drawdown=drawdown_fraction,
+    )
+    assert not mask.any()
+
+
+def test_position_size_scales_with_conviction():
+    """Position size at entry threshold equals base_position_pct/100; high conviction is capped."""
+    g = _genome()
+    # Pin base_position_pct to 2.0 so base=0.02 is well below max_pos=0.05 (scale=1 won't clip)
+    g.risk_on.base_position_pct = 2.0
+    playbook = g.risk_on
+    max_pos = 0.05
+
+    # At exactly min_conviction_to_enter: excess=0, scale=1.0, size = base_position_pct/100
+    size_at_min = compute_position_size(
+        conviction=playbook.min_conviction_to_enter,
+        playbook=playbook,
+        max_position_pct=max_pos,
+    )
+    assert size_at_min == playbook.base_position_pct / 100.0
+
+    # Very high conviction: should be capped at max_position_pct
+    size_at_max = compute_position_size(
+        conviction=1.0,
+        playbook=playbook,
+        max_position_pct=max_pos,
+    )
+    assert size_at_max <= max_pos
