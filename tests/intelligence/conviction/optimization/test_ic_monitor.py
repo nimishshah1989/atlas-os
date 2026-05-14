@@ -22,10 +22,14 @@ def test_constants_are_sane() -> None:
 
 
 def test_invalid_signal_raises_helpful_error() -> None:
-    """signal_name not in SIGNAL_COLUMNS whitelist must raise ValueError."""
-    from atlas.db import get_engine
+    """signal_name not in SIGNAL_COLUMNS whitelist must raise ValueError.
 
-    eng = get_engine()
+    The ValueError is raised before any DB access, so a MagicMock engine
+    is sufficient — no ATLAS_DB_URL required.
+    """
+    from unittest.mock import MagicMock
+
+    eng = MagicMock()
     with pytest.raises(ValueError, match="SIGNAL_COLUMNS"):
         measure_ic_for_signal(
             eng,
