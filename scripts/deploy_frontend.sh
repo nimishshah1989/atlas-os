@@ -16,7 +16,7 @@ echo "[deploy] installing dependencies..."
 ssh "$REMOTE" "cd $FRONTEND_DIR && npm ci --prefer-offline"
 
 echo "[deploy] building..."
-ssh "$REMOTE" "cd $FRONTEND_DIR && npm run build"
+ssh "$REMOTE" "cd $FRONTEND_DIR && NODE_OPTIONS='--max-old-space-size=3072' npm run build"
 
 echo "[deploy] restarting pm2..."
 ssh "$REMOTE" "pm2 restart atlas-frontend 2>/dev/null || pm2 start 'npx next start -p $PORT' --name atlas-frontend --cwd $FRONTEND_DIR && pm2 save"
