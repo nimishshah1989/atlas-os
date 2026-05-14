@@ -423,6 +423,7 @@ export async function getFundDecisionScoreHistory(
   limit = 12,
 ): Promise<FundDecisionScoreRow[]> {
   if (!Number.isInteger(limit) || limit < 1 || limit > 24) {
+    // 24 = 2 years of monthly decision snapshots
     throw new Error(`limit must be between 1 and 24, got: ${limit}`)
   }
   return sql<FundDecisionScoreRow[]>`
@@ -448,12 +449,15 @@ export async function getFundDecisionDetail(
   period_date: string,
   action?: string,
 ): Promise<FundHoldingsChangeRow[]> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(period_date)) {
+    throw new Error(`period_date must be YYYY-MM-DD, got: ${period_date}`)
+  }
   if (action && !['entry', 'exit', 'increase', 'decrease'].includes(action)) {
     throw new Error(`Invalid action filter: ${action}`)
   }
   return sql<FundHoldingsChangeRow[]>`
     SELECT
-      COALESCE(symbol, instrument_id) AS symbol,
+      symbol,
       action,
       weight_before::text AS weight_before,
       weight_after::text AS weight_after,
@@ -470,5 +474,6 @@ export async function getFundDecisionDetail(
       AND to_date = ${period_date}::date
       ${action ? sql`AND action = ${action}` : sql``}
     ORDER BY ABS(weight_delta::numeric) DESC
+    LIMIT 200
   `
 }
