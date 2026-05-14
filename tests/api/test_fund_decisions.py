@@ -77,6 +77,9 @@ def test_decision_history_returns_200(mock_session, mock_engine, client):
     assert "meta" in body
     assert len(body["data"]) == 1
     assert body["meta"]["mstar_id"] == "F0GBR04S23"
+    assert "fetched_at" in body["meta"]
+    assert "source" in body["meta"]
+    assert body["meta"]["source"] == "atlas_fund_decision_scores"
 
 
 @patch("atlas.api.fund_decisions.get_engine")
@@ -114,6 +117,9 @@ def test_decision_detail_returns_200_empty(mock_session, mock_engine, client):
     body = response.json()
     assert body["data"] == []
     assert body["meta"]["count"] == 0
+    assert "fetched_at" in body["meta"]
+    assert "source" in body["meta"]
+    assert body["meta"]["source"] == "atlas_fund_holdings_changes"
 
 
 @patch("atlas.api.fund_decisions.get_engine")

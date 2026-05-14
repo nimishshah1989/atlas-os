@@ -6,7 +6,7 @@ GET /api/v1/funds/{mstar_id}/decisions/{period_date}
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 
 import structlog
 from fastapi import APIRouter, HTTPException, Query
@@ -87,7 +87,12 @@ def get_decision_history(
     data = [DecisionScoreRow(**dict(r._mapping)) for r in rows]
     return DecisionHistoryResponse(
         data=data,
-        meta={"mstar_id": mstar_id, "count": len(data)},
+        meta={
+            "mstar_id": mstar_id,
+            "count": len(data),
+            "fetched_at": datetime.now(UTC).isoformat(),
+            "source": "atlas_fund_decision_scores",
+        },
     )
 
 
@@ -128,5 +133,11 @@ def get_decision_detail(
     data = [HoldingsChangeRow(**dict(r._mapping)) for r in rows]
     return DecisionDetailResponse(
         data=data,
-        meta={"mstar_id": mstar_id, "period_date": str(period_date), "count": len(data)},
+        meta={
+            "mstar_id": mstar_id,
+            "period_date": str(period_date),
+            "count": len(data),
+            "fetched_at": datetime.now(UTC).isoformat(),
+            "source": "atlas_fund_holdings_changes",
+        },
     )
