@@ -38,6 +38,17 @@ _EXEMPT_PREFIXES = (
     "/api/kite/callback",  # SP08: Zerodha redirect — called without our JWT
 )
 
+# Exact-path exemptions — use when startswith would over-match siblings.
+# /api/v1/tv/signal is exempt (TV webhooks can't send Bearer tokens; validated by body secret).
+# /api/v1/tv/generate-report is exempt (validated by X-Internal-Secret header).
+# /api/v1/tv/signals and /api/v1/tv/signals/{id} remain under JWT auth.
+_EXEMPT_EXACT: frozenset[str] = frozenset(
+    {
+        "/api/v1/tv/signal",
+        "/api/v1/tv/generate-report",
+    }
+)
+
 _SERVICE_TOKEN_PREFIXES = ("/api/v1/intraday",)
 
 
@@ -79,7 +90,7 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next) -> Response:  # type: ignore[override]
         path = request.url.path
-        if any(path.startswith(p) for p in _EXEMPT_PREFIXES):
+        if path in _EXEMPT_EXACT or any(path.startswith(p) for p in _EXEMPT_PREFIXES):
             return await call_next(request)
 
         if any(path.startswith(p) for p in _SERVICE_TOKEN_PREFIXES):

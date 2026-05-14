@@ -690,13 +690,23 @@ def compute_sector_states(
     # Underweight: bottomup RS is Avoid_RS (Weak-equivalent) OR participation < underweight_max
     # Overweight: Overweight_RS AND momentum 'Improving' AND participation_rs >= overweight_min
     # Neutral: default
+    #
+    # participation_rs uses CROSS-SECTOR PERCENTILE RANK (grouped by date), not
+    # absolute value. Absolute breadth collapses in bear markets — every sector
+    # ends up Underweight even as relative leaders still lead. Percentile rank
+    # preserves the distribution: thresholds (50/30/25) become percentile cutoffs,
+    # so the top half always remains eligible for Overweight regardless of market
+    # conditions. (Decision: 2026-05-14, replacing absolute threshold that caused
+    # all funds to show Misaligned/Reduce since Jan 2026.)
     rs_state = out["bottomup_rs_state"]
     mom = out["bottomup_momentum_state"]
-    p_rs = out["participation_rs"]
+    p_rs_rank = out.groupby("date")["participation_rs"].rank(pct=True)
 
-    is_avoid = (rs_state == "Avoid_RS") & (p_rs < avoid_max)
-    is_underweight = (rs_state == "Avoid_RS") | (p_rs < underweight_max)
-    is_overweight = (rs_state == "Overweight_RS") & (mom == "Improving") & (p_rs >= overweight_min)
+    is_avoid = (rs_state == "Avoid_RS") & (p_rs_rank < avoid_max)
+    is_underweight = (rs_state == "Avoid_RS") | (p_rs_rank < underweight_max)
+    is_overweight = (
+        (rs_state == "Overweight_RS") & (mom == "Improving") & (p_rs_rank >= overweight_min)
+    )
 
     # Avoid takes priority; Underweight before Overweight so a sector that
     # meets both conditions (threshold edge-case) defaults to the more

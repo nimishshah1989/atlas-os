@@ -9,6 +9,7 @@ import { GlobalBreadthSection } from '@/components/global/GlobalBreadthSection'
 import { GlobalMomentumSection } from '@/components/global/GlobalMomentumSection'
 import { GlobalParticipationSection } from '@/components/global/GlobalParticipationSection'
 import { CountryRankingsTable } from '@/components/global/CountryRankingsTable'
+import { GlobalCountryScreener } from '@/components/global/GlobalCountryScreener'
 
 const GlobalRegimeOverlayChart = dynamic(
   () => import('@/components/global/GlobalRegimeOverlayChart').then(m => m.GlobalRegimeOverlayChart),
@@ -34,8 +35,8 @@ const GlobalCountryBubbleChart = dynamic(
   },
 )
 
-type Tab = 'Regime' | 'Countries'
-const TABS: Tab[] = ['Regime', 'Countries']
+type Tab = 'Regime' | 'Countries' | 'Screener'
+const TABS: Tab[] = ['Regime', 'Countries', 'Screener']
 
 type Props = {
   regime: GlobalRegimeRow | null
@@ -154,6 +155,21 @@ export function GlobalPulseShell({ regime, history, countries }: Props) {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Screener tab — sortable/filterable country table */}
+      {activeTab === 'Screener' && (
+        <div className="px-6 py-4">
+          {countries.length > 0 ? (
+            <GlobalCountryScreener countries={countries} />
+          ) : (
+            <div className="py-16 text-center">
+              <p className="font-sans text-sm text-ink-secondary">
+                No country data. Run the Global Atlas pipeline first.
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>

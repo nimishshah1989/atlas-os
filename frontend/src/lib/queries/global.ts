@@ -81,6 +81,8 @@ export async function getCountryRankings(): Promise<CountryRow[]> {
       m.ema_10_ratio::text,
       m.realized_vol_63::text,
       s.rs_state,
+      s.momentum_state,
+      s.risk_state,
       r.q_1m_acwi,
       r.q_3m_acwi,
       r.q_12m_acwi,
@@ -157,8 +159,10 @@ export type CountryRow = {
   above_30w_ma: boolean | null
   ema_10_ratio: string | null
   realized_vol_63: string | null
-  // RS state (derived from quintile)
+  // State classification
   rs_state: string | null
+  momentum_state: string | null
+  risk_state: string | null
   // RS quintiles — 4 benchmarks × 3 key timeframes
   q_1m_acwi: number | null
   q_3m_acwi: number | null
