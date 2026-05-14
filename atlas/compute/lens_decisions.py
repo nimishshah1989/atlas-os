@@ -12,6 +12,7 @@ Entry point: ``run_lens_decisions(engine, thresholds, target_funds)``
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import date
 from typing import Any
 
@@ -291,7 +292,7 @@ def compute_decision_score(
     mstar_id: str,
     to_date: date,
     _from_date: date | None,
-    thresholds: dict[str, Any],
+    thresholds: Mapping[str, Any],
 ) -> dict[str, Any]:
     """Aggregate diff results into one decision score row.
 
@@ -305,8 +306,8 @@ def compute_decision_score(
     Returns:
         Dict matching atlas_fund_decision_scores column set.
     """
-    sharp_threshold = float(thresholds.get("decision_score_sharp_threshold", 65))
-    poor_threshold = float(thresholds.get("decision_score_poor_threshold", 40))
+    sharp_threshold = float(thresholds["decision_score_sharp_threshold"])
+    poor_threshold = float(thresholds["decision_score_poor_threshold"])
 
     if diff_df.empty:
         actions = pd.Series(dtype=str)
@@ -368,7 +369,7 @@ def compute_decision_score(
 
 def run_lens_decisions(
     engine: Engine | None = None,
-    thresholds: dict[str, Any] | None = None,
+    thresholds: Mapping[str, Any] | None = None,
     target_funds: list[str] | None = None,
 ) -> dict[str, Any]:
     """Compute holdings diffs and decision scores for all (or target) funds.
@@ -391,7 +392,16 @@ def run_lens_decisions(
     engine = engine or get_engine()
     thresholds = thresholds or load_thresholds("atlas", engine)
 
-    min_weight_delta = float(thresholds.get("holdings_weight_change_min_pct", 0.25))
+    _required = {
+        "holdings_weight_change_min_pct",
+        "decision_score_sharp_threshold",
+        "decision_score_poor_threshold",
+    }
+    _missing = _required - thresholds.keys()
+    if _missing:
+        raise KeyError(f"Missing required thresholds: {_missing}")
+
+    min_weight_delta = float(thresholds["holdings_weight_change_min_pct"])
 
     # Load all distinct funds from holdings table
     with open_compute_session(engine) as conn:
@@ -508,7 +518,7 @@ def run_lens_decisions(
                 decision_state=score_row.get("decision_state"),
             )
 
-        except Exception as exc:
+        except (ValueError, KeyError, TypeError) as exc:
             errors.append({"mstar_id": mstar_id, "error": str(exc)})
             log.error("lens_decisions_fund_error", mstar_id=mstar_id, error=str(exc))
 
