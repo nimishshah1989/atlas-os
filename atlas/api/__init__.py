@@ -12,6 +12,7 @@ from atlas.api.agents import router as agents_router
 from atlas.api.auth import JWTAuthMiddleware
 from atlas.api.cts_brief import router as cts_brief_router
 from atlas.api.cts_sectors import router as cts_sectors_router
+from atlas.api.fund_decisions import router as fund_decisions_router
 from atlas.api.intraday import router as intraday_router
 from atlas.api.kite_auth import router as kite_auth_router
 from atlas.api.openbb.router import openbb_router
@@ -46,6 +47,7 @@ app.include_router(
 )  # SP09: CTS on-demand brief — /api/v1/stocks/{symbol}/cts_brief
 app.include_router(cts_sectors_router)  # SP09 Phase 2: sector CTS snapshot — /api/v1/cts/sectors
 app.include_router(tv_signals_router)  # SP10: TV webhook receiver + signal report feed
+app.include_router(fund_decisions_router)  # MF holdings decision history
 app.include_router(openbb_router)  # SP03: OpenBB BYO Copilot — /v1/agents.json + /v1/query
 
 
