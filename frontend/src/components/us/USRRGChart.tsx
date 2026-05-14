@@ -153,8 +153,8 @@ export function USRRGChart({
     const allYVals = plots.flatMap(p => [p.y, ...p.trail.map(t => t.y)])
     const xExt = (d3.extent(allXVals) as [number, number])
     const yExt = (d3.extent(allYVals) as [number, number])
-    const xPad = Math.max((xExt[1] - xExt[0]) * 0.15, 5)
-    const yPad = Math.max((yExt[1] - yExt[0]) * 0.15, 1)
+    const xPad = Math.max((xExt[1] - xExt[0]) * 0.15, 0.05)
+    const yPad = Math.max((yExt[1] - yExt[0]) * 0.15, 0.02)
 
     const xScale = d3.scaleLinear()
       .domain([xExt[0] - xPad, xExt[1] + xPad])

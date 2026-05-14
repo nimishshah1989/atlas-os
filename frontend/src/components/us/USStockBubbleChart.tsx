@@ -178,7 +178,7 @@ export function USStockBubbleChart({ stocks }: { stocks: USStockRow[] }) {
       .attr('text-anchor', 'middle')
       .attr('font-family', 'var(--font-sans)').attr('font-size', 6).attr('font-weight', 600)
       .attr('fill', p => rsStateColor(p.rs_state)).attr('pointer-events', 'none')
-      .text(p => p.ticker)
+      .text(p => p.name !== p.ticker ? p.name.split(' ')[0] : p.ticker)
 
     node
       .on('mouseenter', function (event, p) {

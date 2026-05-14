@@ -1,27 +1,28 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import * as d3 from 'd3'
+import { rsStateColor, CHART_COLORS } from '@/lib/chart-colors'
 import type { CountryRow } from '@/lib/queries/global'
 
-const STATE_FILL: Record<string, string> = {
-  Overweight:  '#1D9E75',
-  Neutral:     '#F59E0B',
-  Underweight: '#FB923C',
-  Avoid:       '#EF4444',
-}
-
-function rsStateFromQuintile(q3mVt: number | null): string {
-  if (q3mVt == null) return 'Neutral'
-  if (q3mVt <= 1) return 'Overweight'
-  if (q3mVt <= 2) return 'Neutral'
-  if (q3mVt <= 3) return 'Underweight'
-  return 'Avoid'
+// Fallback color when rs_state is null — derive from VT quintile
+function colorFromQuintile(q: number | null): string {
+  if (q == null) return CHART_COLORS.inkTertiary
+  if (q <= 1) return CHART_COLORS.rsStrong
+  if (q <= 2) return CHART_COLORS.rsEmerging
+  if (q <= 3) return CHART_COLORS.rsAverage
+  return CHART_COLORS.rsWeak
 }
 
 function bubbleFill(row: CountryRow): string {
-  const state = row.rs_state ?? rsStateFromQuintile(row.q_3m_vt)
-  return STATE_FILL[state] ?? '#94a3b8'
+  return row.rs_state ? rsStateColor(row.rs_state) : colorFromQuintile(row.q_3m_vt)
 }
+
+const LEGEND_ITEMS = [
+  { label: 'Leader/Strong', color: CHART_COLORS.rsStrong },
+  { label: 'Emerging',      color: CHART_COLORS.rsEmerging },
+  { label: 'Average',       color: CHART_COLORS.rsAverage },
+  { label: 'Weak/Laggard',  color: CHART_COLORS.rsWeak },
+]
 
 type Filter = 'all' | 'dm' | 'em'
 
@@ -151,7 +152,7 @@ export function GlobalCountryBubbleChart({ countries }: { countries: CountryRow[
       .on('mouseover', (event, p) => {
         const ret3m = p.ret_3m != null ? (parseFloat(p.ret_3m) * 100).toFixed(1) : '—'
         const vol   = p.realized_vol_63 != null ? (parseFloat(p.realized_vol_63) * 100).toFixed(1) : '—'
-        const state = p.rs_state ?? rsStateFromQuintile(p.q_3m_vt)
+        const state = p.rs_state ?? `Q${p.q_3m_vt ?? '?'}`
         tooltip
           .style('display', 'block')
           .html(`<strong>${p.country}</strong> (${p.ticker})<br/>3M: ${ret3m}% | Vol: ${vol}% | ${state}<br/>RS Bull Score: ${p.rs_consensus_bullish ?? '—'}/20`)
@@ -201,10 +202,10 @@ export function GlobalCountryBubbleChart({ countries }: { countries: CountryRow[
 
       {/* Legend */}
       <div className="flex items-center gap-3 mb-2">
-        {Object.entries(STATE_FILL).map(([state, color]) => (
-          <div key={state} className="flex items-center gap-1">
+        {LEGEND_ITEMS.map(({ label, color }) => (
+          <div key={label} className="flex items-center gap-1">
             <div className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
-            <span className="font-sans text-[10px] text-ink-secondary">{state}</span>
+            <span className="font-sans text-[10px] text-ink-secondary">{label}</span>
           </div>
         ))}
       </div>
