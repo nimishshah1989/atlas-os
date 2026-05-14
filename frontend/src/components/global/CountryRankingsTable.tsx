@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { rsStateColor } from '@/lib/chart-colors'
+import { MomentumChip } from '@/lib/stock-formatters'
 import type { CountryRow } from '@/lib/queries/global'
 
 const QUINTILE_COLORS: Record<number, string> = {
@@ -88,7 +89,6 @@ export function CountryRankingsTable({ countries }: { countries: CountryRow[] })
 
   return (
     <div>
-      {/* Toggle */}
       <div className="flex items-center gap-2 mb-3">
         <span className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider">View:</span>
         {(['quintile', 'returns'] as ViewMode[]).map(v => (
@@ -118,7 +118,7 @@ export function CountryRankingsTable({ countries }: { countries: CountryRow[] })
             <tr className="border-b border-paper-rule">
               <th className="px-3 py-2 font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider w-44">Country</th>
               <th className="px-2 py-2 font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider">Seg</th>
-              <th className="px-2 py-2 font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider">State</th>
+              <th className="px-2 py-2 font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider">RS / Mom</th>
               <th className="px-2 py-2 font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider text-right">3M Ret</th>
               <th className="px-2 py-2 font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider text-right">1Y Ret</th>
               <th className="px-2 py-2 font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider text-center">30W</th>
@@ -129,7 +129,7 @@ export function CountryRankingsTable({ countries }: { countries: CountryRow[] })
               ))}
               <th className="px-2 py-2 font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider text-center border-l border-paper-rule">Score</th>
             </tr>
-            <tr className="border-b border-paper-rule bg-paper-bg/50">
+            <tr className="border-b border-paper-rule bg-paper/50">
               <th colSpan={6} />
               {BENCHMARKS.flatMap((_, bi) =>
                 TIMEFRAMES.map((tf, ti) => (
@@ -149,7 +149,7 @@ export function CountryRankingsTable({ countries }: { countries: CountryRow[] })
               const rows = countries.filter(c => c.region === region)
               if (rows.length === 0) return []
               return [
-                <tr key={`hdr-${region}`} className="bg-paper-bg/70">
+                <tr key={`hdr-${region}`} className="bg-paper/70">
                   <td colSpan={19} className="px-3 py-1 font-sans text-[9px] font-semibold text-ink-tertiary uppercase tracking-wider">
                     {region}
                   </td>
@@ -157,7 +157,7 @@ export function CountryRankingsTable({ countries }: { countries: CountryRow[] })
                 ...rows.map(c => (
                   <tr
                     key={c.ticker}
-                    className="border-b border-paper-rule/50 hover:bg-paper-bg/40 transition-colors cursor-pointer"
+                    className="border-b border-paper-rule/50 hover:bg-paper/40 transition-colors cursor-pointer"
                     onClick={() => router.push(`/global/country/${encodeURIComponent(c.ticker)}`)}
                   >
                     <td className="px-3 py-1.5">
@@ -170,7 +170,10 @@ export function CountryRankingsTable({ countries }: { countries: CountryRow[] })
                       </span>
                     </td>
                     <td className="px-2 py-1.5">
-                      <StateChip state={c.rs_state} />
+                      <div className="flex flex-col gap-0.5">
+                        <StateChip state={c.rs_state} />
+                        <MomentumChip value={c.momentum_state} />
+                      </div>
                     </td>
                     <td className="px-2 py-1.5 text-right font-mono text-[11px]"><Pct v={c.ret_3m} /></td>
                     <td className="px-2 py-1.5 text-right font-mono text-[11px]"><Pct v={c.ret_12m} /></td>
@@ -181,19 +184,15 @@ export function CountryRankingsTable({ countries }: { countries: CountryRow[] })
                         <span className={`w-2 h-2 rounded-full inline-block ${c.above_30w_ma ? 'bg-signal-pos' : 'bg-signal-neg'}`} />
                       )}
                     </td>
-                    {/* ACWI */}
                     {view === 'quintile' ? <QCell q={c.q_1m_acwi} /> : <RetCell v={c.ret_1m} />}
                     {view === 'quintile' ? <QCell q={c.q_3m_acwi} /> : <RetCell v={c.ret_3m} />}
                     {view === 'quintile' ? <QCell q={c.q_12m_acwi} /> : <RetCell v={c.ret_12m} />}
-                    {/* VT */}
                     {view === 'quintile' ? <QCell q={c.q_1m_vt} /> : <RetCell v={c.ret_1m} />}
                     {view === 'quintile' ? <QCell q={c.q_3m_vt} /> : <RetCell v={c.ret_3m} />}
                     {view === 'quintile' ? <QCell q={c.q_12m_vt} /> : <RetCell v={c.ret_12m} />}
-                    {/* EEM */}
                     {view === 'quintile' ? <QCell q={c.q_1m_eem} /> : <RetCell v={c.ret_1m} />}
                     {view === 'quintile' ? <QCell q={c.q_3m_eem} /> : <RetCell v={c.ret_3m} />}
                     {view === 'quintile' ? <QCell q={c.q_12m_eem} /> : <RetCell v={c.ret_12m} />}
-                    {/* Gold */}
                     {view === 'quintile' ? <QCell q={c.q_1m_gold} /> : <RetCell v={c.ret_1m} />}
                     {view === 'quintile' ? <QCell q={c.q_3m_gold} /> : <RetCell v={c.ret_3m} />}
                     {view === 'quintile' ? <QCell q={c.q_12m_gold} /> : <RetCell v={c.ret_12m} />}
