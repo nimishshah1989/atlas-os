@@ -29,7 +29,7 @@ def test_load_thresholds_rejects_engine_as_first_arg():
     """Passing an Engine as schema raises ValueError — documents the broken callers."""
     engine = _make_mock_engine()
     with pytest.raises(ValueError, match="schema must be one of"):
-        load_thresholds(engine)  # type: ignore[arg-type]
+        load_thresholds(engine)  # type: ignore
 
 
 def test_load_thresholds_accepts_schema_plus_engine():
