@@ -24,7 +24,11 @@ from atlas.trading.config import PortfolioConfig
 
 
 def _synthetic_df(n_stocks=5, n_days=120) -> pd.DataFrame:
-    """Build minimal metrics DataFrame matching atlas_stock_metrics_daily schema."""
+    """Build minimal metrics DataFrame matching atlas_stock_metrics_daily schema.
+
+    Note: breadth + VIX come from atlas_market_regime_daily — use _regime_df() separately.
+    Only rs_pctile_1w/1m/3m exist (no 6m/12m). EMA column is ema_20_ratio.
+    """
     dates = [date(2023, 1, 1) + timedelta(days=i) for i in range(n_days)]
     records = []
     rng = np.random.default_rng(42)
@@ -38,27 +42,34 @@ def _synthetic_df(n_stocks=5, n_days=120) -> pd.DataFrame:
                 "rs_pctile_1w": rng.uniform(0, 100),
                 "rs_pctile_1m": rng.uniform(0, 100),
                 "rs_pctile_3m": rng.uniform(0, 100),
-                "rs_pctile_6m": rng.uniform(0, 100),
-                "rs_pctile_12m": rng.uniform(0, 100),
-                "breadth_pct_above_50d": rng.uniform(30, 80),
-                "vix": rng.uniform(12, 25),
                 "vol_ratio_63": rng.uniform(0.8, 2.2),
-                "ema_ratio_21_63": rng.uniform(0.97, 1.04),
+                "ema_20_ratio": rng.uniform(0.97, 1.04),
             })
     return pd.DataFrame(records)
+
+
+def _regime_df(n_days=120) -> pd.DataFrame:
+    """Build minimal regime DataFrame matching atlas_market_regime_daily schema."""
+    dates = [date(2023, 1, 1) + timedelta(days=i) for i in range(n_days)]
+    rng = np.random.default_rng(99)
+    return pd.DataFrame([
+        {"date": d, "pct_above_ema_50": rng.uniform(30, 80), "india_vix": rng.uniform(12, 25)}
+        for d in dates
+    ])
 
 
 def test_simulate_genome_returns_sim_result():
     genome = GenomeFactory.random()
     config = PortfolioConfig()
     df = _synthetic_df()
+    rdf = _regime_df()
 
     start = date(2023, 1, 1)
     split = date(2023, 3, 1)
     end = date(2023, 4, 30)
     windows = [(start, split, split, end)]
 
-    result = simulate_genome(genome, df, config, windows)
+    result = simulate_genome(genome, df, rdf, config, windows)
 
     assert isinstance(result, SimResult)
     assert isinstance(result.sortino_oos, float)
@@ -77,11 +88,12 @@ def test_simulate_genome_risk_off_full_liquidbees():
 
     config = PortfolioConfig()
     df = _synthetic_df()
+    rdf = _regime_df()
 
     start = date(2023, 1, 1)
     split = date(2023, 3, 1)
     end = date(2023, 4, 30)
-    result = simulate_genome(genome, df, config, [(start, split, split, end)])
+    result = simulate_genome(genome, df, rdf, config, [(start, split, split, end)])
 
     assert result.total_trades == 0
 ```
@@ -145,47 +157,43 @@ class SimResult:
 def simulate_genome(
     genome: Genome,
     metrics_df: pd.DataFrame,
+    regime_df: pd.DataFrame,
     config: PortfolioConfig,
     walk_forward_windows: list[tuple[date, date, date, date]],
 ) -> SimResult:
     """Run genome across walk-forward windows.
 
+    metrics_df: from atlas_stock_metrics_daily (instrument_id, date, close,
+                rs_pctile_1w/1m/3m, ema_20_ratio, vol_ratio_63)
+    regime_df:  from atlas_market_regime_daily (date, pct_above_ema_50, india_vix)
     walk_forward_windows: list of (train_start, train_end, test_start, test_end)
 
     Returns SimResult with metrics averaged across all OOS windows.
     Each metric is after-tax, after-cost.
     """
-    # Pivot metrics into 2D arrays: (n_stocks, n_days)
+    # Pivot metrics into 2D arrays: (n_stocks, n_days) using vectorized pivot
     df = metrics_df.sort_values(["date", "instrument_id"])
     dates = sorted(df["date"].unique())
     instruments = sorted(df["instrument_id"].unique())
-    n_stocks = len(instruments)
-    n_days = len(dates)
-
-    date_idx = {d: i for i, d in enumerate(dates)}
-    inst_idx = {iid: i for i, iid in enumerate(instruments)}
 
     def _pivot(col: str) -> np.ndarray:
-        arr = np.full((n_stocks, n_days), np.nan, dtype=np.float32)
-        for row in df.itertuples(index=False):
-            s = inst_idx.get(row.instrument_id)
-            d = date_idx.get(row.date)
-            if s is not None and d is not None:
-                arr[s, d] = getattr(row, col)
-        return arr
+        pivoted = df.pivot(index="instrument_id", columns="date", values=col)
+        return pivoted.reindex(index=instruments, columns=dates).values.astype(np.float32)
 
     close = _pivot("close")
+    # Only 3 timeframes exist in atlas_stock_metrics_daily (no 6m/12m)
     rs_arrays = {
         "1w": _pivot("rs_pctile_1w"),
         "1m": _pivot("rs_pctile_1m"),
         "3m": _pivot("rs_pctile_3m"),
-        "6m": _pivot("rs_pctile_6m"),
-        "12m": _pivot("rs_pctile_12m"),
     }
-    breadth = df.groupby("date")["breadth_pct_above_50d"].first().reindex(dates).values.astype(np.float32)
-    vix_arr = df.groupby("date")["vix"].first().reindex(dates).values.astype(np.float32)
     vol_ratio = _pivot("vol_ratio_63")
-    ema_ratio = _pivot("ema_ratio_21_63")
+    ema_ratio = _pivot("ema_20_ratio")   # atlas_stock_metrics_daily column name
+
+    # Regime data comes from atlas_market_regime_daily (separate table)
+    rdf = regime_df.set_index("date").reindex(dates)
+    breadth = rdf["pct_above_ema_50"].values.astype(np.float32)
+    vix_arr = rdf["india_vix"].values.astype(np.float32)
 
     # Layer 1 states (applied once for all windows)
     blended_rs = compute_blended_rs_pctile(rs_arrays, genome.layer1.rs_timeframe_weights)
@@ -213,6 +221,7 @@ def simulate_genome(
 
     oos_sortinos: list[float] = []
     oos_calmars: list[float] = []
+    oos_max_drawdowns: list[float] = []
     insample_sortinos: list[float] = []
     all_trades = 0
 
@@ -230,6 +239,7 @@ def simulate_genome(
         if oos_result is not None:
             oos_sortinos.append(oos_result["sortino"])
             oos_calmars.append(oos_result["calmar"])
+            oos_max_drawdowns.append(oos_result["max_drawdown"])
             all_trades += oos_result["trades"]
         if is_result is not None:
             insample_sortinos.append(is_result["sortino"])
@@ -237,12 +247,13 @@ def simulate_genome(
     sortino_oos = float(np.mean(oos_sortinos)) if oos_sortinos else 0.0
     calmar_oos = float(np.mean(oos_calmars)) if oos_calmars else 0.0
     sortino_is = float(np.mean(insample_sortinos)) if insample_sortinos else 0.0
+    max_drawdown = float(np.max(oos_max_drawdowns)) if oos_max_drawdowns else 0.0
 
     return SimResult(
         sortino_oos=sortino_oos,
         calmar_oos=calmar_oos,
         sortino_insample=sortino_is,
-        max_drawdown=0.0,   # populated by tournament.py on promoted genomes
+        max_drawdown=max_drawdown,
         total_trades=all_trades,
         turnover_pct=0.0,
     )
@@ -250,7 +261,7 @@ def simulate_genome(
 
 def _run_window(
     genome: Genome,
-    config: PortfolioConfig,
+    config: PortfolioConfig,    # needed for heat cap + fees
     dates: list[date],
     close: np.ndarray,
     conv_matrix: np.ndarray,
@@ -258,7 +269,7 @@ def _run_window(
     regime_state: np.ndarray,
     window_start: date,
     window_end: date,
-    instruments: list[int],
+    instruments: list,
 ) -> dict | None:
     """Run portfolio simulation for a single date window."""
     d_start = next((i for i, d in enumerate(dates) if d >= window_start), None)
@@ -307,6 +318,7 @@ def _run_window(
             regime=regime,
             portfolio_heat=portfolio_heat,
             genome=genome,
+            max_portfolio_heat_pct=float(config.max_portfolio_heat_pct),
         )
         entries[d, :] = entry_mask & ~exit_mask
         position_days[entry_mask] += 1
@@ -334,14 +346,11 @@ def _run_window(
             group_by=True,
             cash_sharing=True,
         )
-        sortino = pf.sortino_ratio() or 0.0
-        if hasattr(sortino, '__float__'):
-            sortino = float(sortino)
-        calmar = pf.calmar_ratio() or 0.0
-        if hasattr(calmar, '__float__'):
-            calmar = float(calmar)
+        sortino = float(pf.sortino_ratio() or 0.0)
+        calmar = float(pf.calmar_ratio() or 0.0)
+        max_dd = float(pf.max_drawdown() or 0.0)
         trades = int(pf.trades.count() or 0)
-        return {"sortino": sortino, "calmar": calmar, "trades": trades}
+        return {"sortino": sortino, "calmar": calmar, "max_drawdown": max_dd, "trades": trades}
     except Exception as e:
         log.warning("simulation_window_error", error=str(e))
         return None
@@ -514,12 +523,15 @@ git commit -m "feat(trading): Optuna study wrapper with TPE sampler + parameter 
 
 **Files:**
 - Create: `atlas/trading/evolver.py`
+- Create: `tests/trading/test_evolver.py`
 
 - [ ] **Step 1: Write failing test**
 
-In `tests/trading/test_optimizer.py` append:
+Create `tests/trading/test_evolver.py`:
 ```python
+import pytest
 from atlas.trading.evolver import Evolver
+from atlas.trading.genome import GenomeFactory
 
 
 def test_crossover_offspring_in_range():
@@ -536,10 +548,7 @@ def test_mutate_changes_params():
     evolver = Evolver()
     genome = GenomeFactory.random()
     mutated = evolver.mutate(genome, sigma=0.15)
-    # At least one param should differ
-    original_vals = (genome.layer1.rs_leader_cutoff_pct, genome.risk_on.base_position_pct)
-    mutated_vals = (mutated.layer1.rs_leader_cutoff_pct, mutated.risk_on.base_position_pct)
-    # Can't guarantee a specific param changed, but the genome should still be valid
+    # Mutated genome must still be within search-space bounds
     assert 60 <= mutated.layer1.rs_leader_cutoff_pct <= 80
 
 
@@ -553,7 +562,7 @@ def test_select_survivors_keeps_pareto_front():
 - [ ] **Step 2: Confirm fail**
 
 ```bash
-pytest tests/trading/test_optimizer.py::test_crossover_offspring_in_range -v
+pytest tests/trading/test_evolver.py -v
 ```
 
 Expected: `ModuleNotFoundError: No module named 'atlas.trading.evolver'`
@@ -726,15 +735,15 @@ class Evolver:
 - [ ] **Step 4: Run tests**
 
 ```bash
-pytest tests/trading/test_optimizer.py -v
+pytest tests/trading/test_evolver.py -v
 ```
 
-Expected: `5 passed`
+Expected: `3 passed`
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atlas/trading/evolver.py
+git add atlas/trading/evolver.py tests/trading/test_evolver.py
 git commit -m "feat(trading): DEAP-inspired genome crossover + mutation + survivor selection"
 ```
 
@@ -1000,7 +1009,7 @@ git commit -m "feat(trading): 3-round tournament evaluation + leaderboard writes
 
 - [ ] **Step 1: Write failing test**
 
-Add to `tests/trading/test_optimizer.py`:
+Create `tests/trading/test_insight.py`:
 ```python
 from unittest.mock import patch, MagicMock
 from atlas.trading.insight import generate_insights
@@ -1032,7 +1041,7 @@ def test_generate_insights_returns_bullets():
 - [ ] **Step 2: Confirm fail**
 
 ```bash
-pytest tests/trading/test_optimizer.py::test_generate_insights_returns_bullets -v
+pytest tests/trading/test_insight.py -v
 ```
 
 Expected: `ModuleNotFoundError: No module named 'atlas.trading.insight'`
@@ -1116,7 +1125,7 @@ def generate_insights(
 - [ ] **Step 4: Run tests**
 
 ```bash
-pytest tests/trading/test_optimizer.py::test_generate_insights_returns_bullets -v
+pytest tests/trading/test_insight.py -v
 ```
 
 Expected: `1 passed`
@@ -1124,7 +1133,7 @@ Expected: `1 passed`
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atlas/trading/insight.py
+git add atlas/trading/insight.py tests/trading/test_insight.py
 git commit -m "feat(trading): Groq insight feed for nightly optimization narration"
 ```
 
@@ -1144,7 +1153,7 @@ git commit -m "feat(trading): Groq insight feed for nightly optimization narrati
 Run as: python -m atlas.trading.incubator
 
 Sequence (spec §5.2):
-  1. Load metrics from atlas_stock_metrics_daily
+  1. Load metrics from atlas_stock_metrics_daily + regime from atlas_market_regime_daily
   2. For each Optuna trial: simulate genome → return (sortino, calmar)
   3. DEAP breeding: crossover top performers, kill bottom 20%
   4. Tournament: evaluate top candidates, promote to leaderboard
@@ -1153,8 +1162,10 @@ Sequence (spec §5.2):
 """
 from __future__ import annotations
 
+import json
 import os
 from datetime import date, datetime, timedelta, timezone
+from typing import Any
 
 import pandas as pd
 import structlog
@@ -1184,6 +1195,7 @@ _WALK_FORWARD_TEST_DAYS = 90
 
 
 def _load_metrics_df(conn, start_date: date, end_date: date) -> pd.DataFrame:
+    """Load stock metrics. Only 3 RS timeframes exist (no 6m/12m)."""
     log.info("loading_metrics", start=start_date, end=end_date)
     result = conn.execute(
         text(
@@ -1191,9 +1203,7 @@ def _load_metrics_df(conn, start_date: date, end_date: date) -> pd.DataFrame:
             SELECT
                 m.instrument_id, m.date, m.close,
                 m.rs_pctile_1w, m.rs_pctile_1m, m.rs_pctile_3m,
-                m.rs_pctile_6m, m.rs_pctile_12m,
-                m.breadth_pct_above_50d, m.vix, m.vol_ratio_63,
-                m.ema_ratio_21_63
+                m.vol_ratio_63, m.ema_20_ratio
             FROM atlas_stock_metrics_daily m
             WHERE m.date BETWEEN :start AND :end
             ORDER BY m.date, m.instrument_id
@@ -1203,6 +1213,24 @@ def _load_metrics_df(conn, start_date: date, end_date: date) -> pd.DataFrame:
     )
     df = pd.DataFrame(result.mappings().all())
     log.info("metrics_loaded", rows=len(df))
+    return df
+
+
+def _load_regime_df(conn, start_date: date, end_date: date) -> pd.DataFrame:
+    """Load market regime data from atlas_market_regime_daily."""
+    result = conn.execute(
+        text(
+            """
+            SELECT date, pct_above_ema_50, india_vix
+            FROM atlas_market_regime_daily
+            WHERE date BETWEEN :start AND :end
+            ORDER BY date
+            """
+        ),
+        {"start": start_date, "end": end_date},
+    )
+    df = pd.DataFrame(result.mappings().all())
+    log.info("regime_loaded", rows=len(df))
     return df
 
 
@@ -1229,6 +1257,7 @@ def run_nightly(conn, config: PortfolioConfig | None = None) -> None:
     today = date.today()
     data_start = today - timedelta(days=365 * 12)  # 12 years of history
     metrics_df = _load_metrics_df(conn, data_start, today)
+    regime_df = _load_regime_df(conn, data_start, today)
 
     if metrics_df.empty:
         log.error("no_metrics_data")
@@ -1242,10 +1271,10 @@ def run_nightly(conn, config: PortfolioConfig | None = None) -> None:
     db_url = os.environ.get("ATLAS_DB_URL", "")
     study = OptunaStudy.production(db_url) if db_url else OptunaStudy("atlas_strategy_lab_v1")
 
-    genome_scores: list[tuple, float, float] = []
+    genome_scores: list[tuple[Any, float, float]] = []
 
     def objective(genome):
-        result = simulate_genome(genome, metrics_df, config, walk_forward_windows)
+        result = simulate_genome(genome, metrics_df, regime_df, config, walk_forward_windows)
         genome_scores.append((genome, result.sortino_oos, result.calmar_oos))
         return result.sortino_oos
 
@@ -1271,7 +1300,7 @@ def run_nightly(conn, config: PortfolioConfig | None = None) -> None:
     for rank, (genome, sortino, calmar) in enumerate(genome_scores[:10], start=1):
         def sim_fn(g, start, end):
             w = [(start, end - timedelta(days=_WALK_FORWARD_TEST_DAYS // 2), end - timedelta(days=_WALK_FORWARD_TEST_DAYS // 2) + timedelta(days=1), end)]
-            r = simulate_genome(g, metrics_df, config, w)
+            r = simulate_genome(g, metrics_df, regime_df, config, w)
             return r
 
         result = evaluator.evaluate(genome, sim_fn, recent_start=recent_start, recent_end=recent_end)
@@ -1293,9 +1322,9 @@ def run_nightly(conn, config: PortfolioConfig | None = None) -> None:
                 """
             ),
             {
-                "bullets": __import__("json").dumps(bullets),
-                "importance": __import__("json").dumps({k: float(v) for k, v in importance.items()}),
-                "deltas": __import__("json").dumps(top_deltas),
+                "bullets": json.dumps(bullets),
+                "importance": json.dumps({k: float(v) for k, v in importance.items()}),
+                "deltas": json.dumps(top_deltas),
             },
         )
 
@@ -1418,11 +1447,11 @@ async def get_genome(genome_id: str, session: AsyncSession = Depends(get_session
 async def get_positions(genome_id: str, session: AsyncSession = Depends(get_session)):
     rows = (await session.execute(
         text("""
-            SELECT p.date, i.ticker, i.company_name, p.position_type,
+            SELECT p.date, u.ticker, u.company_name, p.position_type,
                    p.entry_date, p.entry_price, p.shares, p.current_value,
                    p.unrealized_pnl, p.holding_days, p.tax_status, p.entry_signals
             FROM atlas_strategy_positions_daily p
-            JOIN atlas_instruments i ON i.id = p.instrument_id
+            JOIN atlas.atlas_universe_stocks u ON u.id = p.instrument_id
             WHERE p.genome_id = :gid AND p.date = (SELECT MAX(date) FROM atlas_strategy_positions_daily WHERE genome_id = :gid)
             ORDER BY p.current_value DESC
         """),

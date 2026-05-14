@@ -101,7 +101,7 @@ export function SignalReport({ report: r }: SignalReportProps) {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
           <div>
             <div className="text-gray-500 text-xs mb-0.5">Conviction</div>
-            <div className="font-medium">{r.conviction_score != null ? `${fmt(r.conviction_score)}/10` : "—"}</div>
+            <div className="font-medium">{r.conviction_score != null ? `${(Number(r.conviction_score) * 10).toFixed(1)}/10` : "—"}</div>
           </div>
           <div>
             <div className="text-gray-500 text-xs mb-0.5">CTS State</div>
@@ -110,7 +110,9 @@ export function SignalReport({ report: r }: SignalReportProps) {
           <div>
             <div className="text-gray-500 text-xs mb-0.5">RS Rank</div>
             <div className="font-medium">
-              {r.rs_rank != null ? `#${r.rs_rank} / ${r.rs_rank_total ?? "?"} (${fmt(r.rs_percentile)}th pct)` : "—"}
+              {r.rs_percentile != null
+                ? `${(Number(r.rs_percentile) * 100).toFixed(0)}th pct${r.rs_rank != null ? ` · #${r.rs_rank}` : ""}`
+                : "—"}
             </div>
           </div>
           <div>

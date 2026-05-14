@@ -49,7 +49,7 @@ _EXEMPT_EXACT: frozenset[str] = frozenset(
     }
 )
 
-_SERVICE_TOKEN_PREFIXES = ("/api/v1/intraday",)
+_SERVICE_TOKEN_PREFIXES = ("/api/v1/intraday", "/api/v1/tv/signals")
 
 
 class _User:

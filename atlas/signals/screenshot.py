@@ -26,7 +26,9 @@ except ImportError:
 
 _TV_CHART_BASE = "https://www.tradingview.com/chart"
 _TV_COOKIE_DOMAIN = ".tradingview.com"
-_NETWORK_IDLE_WAIT_MS = 3_000  # extra ms after networkidle for chart render
+# TV charts use persistent WebSocket — networkidle never fires.
+# Use domcontentloaded + fixed wait for chart canvas to render.
+_CHART_RENDER_WAIT_MS = 8_000
 
 
 def _build_chart_url(
@@ -91,8 +93,8 @@ async def _screenshot_one(url: str, path: str) -> bool:
                 ]
             )
             page = await context.new_page()
-            await page.goto(url, wait_until="networkidle")
-            await page.wait_for_timeout(_NETWORK_IDLE_WAIT_MS)
+            await page.goto(url, wait_until="domcontentloaded", timeout=20_000)
+            await page.wait_for_timeout(_CHART_RENDER_WAIT_MS)
             await page.screenshot(path=path)
             await browser.close()
         log.info("screenshot_saved", path=path, url=url)

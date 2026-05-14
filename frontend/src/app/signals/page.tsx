@@ -15,9 +15,13 @@ interface SignalReport {
 }
 
 async function fetchSignals(): Promise<{ reports: SignalReport[]; total: number }> {
+  const base = process.env.ATLAS_TV_API_BASE_URL ?? process.env.ATLAS_INTERNAL_API_BASE_URL;
   const res = await fetch(
-    `${process.env.ATLAS_INTERNAL_API_BASE_URL}/api/v1/tv/signals?limit=50`,
-    { next: { revalidate: 30 } }
+    `${base}/api/v1/tv/signals?limit=50`,
+    {
+      headers: { Authorization: `Bearer ${process.env.ATLAS_INTERNAL_SECRET ?? ""}` },
+      next: { revalidate: 30 },
+    }
   );
   if (!res.ok) return { reports: [], total: 0 };
   return res.json();

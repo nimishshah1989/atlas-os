@@ -115,8 +115,8 @@ export async function getGenomePositions(genomeId: string): Promise<GenomePositi
   return sql<GenomePositionRow[]>`
     SELECT
       p.date,
-      i.ticker,
-      i.company_name,
+      u.ticker,
+      u.company_name,
       p.position_type,
       p.entry_date,
       p.entry_price::text,
@@ -127,7 +127,7 @@ export async function getGenomePositions(genomeId: string): Promise<GenomePositi
       p.tax_status,
       p.entry_signals
     FROM atlas_strategy_positions_daily p
-    JOIN atlas_instruments i ON i.id = p.instrument_id
+    JOIN atlas.atlas_universe_stocks u ON u.id = p.instrument_id
     WHERE p.genome_id = ${genomeId}
       AND p.date = (SELECT MAX(date) FROM atlas_strategy_positions_daily WHERE genome_id = ${genomeId})
     ORDER BY p.current_value DESC
@@ -157,7 +157,16 @@ export const dynamic = 'force-dynamic'
 import { getLeaderboard, getLatestInsights, getGenePoolHealth } from '@/lib/queries/strategy_lab'
 import { MorningBrief } from '@/components/trading/MorningBrief'
 
-export default async function StrategyLabPage() {
+type SearchParams = { configurator?: string }
+
+export default async function StrategyLabPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>
+}) {
+  const params = await searchParams
+  const showConfigurator = params.configurator === '1'
+
   const [leaderboard, insights, health] = await Promise.all([
     getLeaderboard(),
     getLatestInsights(),
@@ -170,6 +179,7 @@ export default async function StrategyLabPage() {
         leaderboard={leaderboard}
         insights={insights}
         health={health}
+        showConfigurator={showConfigurator}
       />
     </main>
   )
@@ -184,11 +194,13 @@ export default async function StrategyLabPage() {
 
 import Link from 'next/link'
 import type { LeaderboardRow, InsightRow, GenePoolHealth } from '@/lib/queries/strategy_lab'
+import { StrategyConfigurator } from './StrategyConfigurator'
 
 type Props = {
   leaderboard: LeaderboardRow[]
   insights: InsightRow | null
   health: GenePoolHealth
+  showConfigurator?: boolean
 }
 
 function fmt(v: string | null, decimals = 2): string {
@@ -207,12 +219,15 @@ function SignBadge({ value }: { value: string | null }) {
   )
 }
 
-export function MorningBrief({ leaderboard, insights, health }: Props) {
+export function MorningBrief({ leaderboard, insights, health, showConfigurator }: Props) {
   const top = leaderboard[0]
   const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 
   return (
     <div className="space-y-6">
+      {showConfigurator && (
+        <StrategyConfigurator onClose={() => {}} />
+      )}
       {/* Header */}
       <header>
         <p className="font-sans text-xs text-ink-tertiary uppercase tracking-wide">Strategy Lab</p>
@@ -349,6 +364,7 @@ git commit -m "feat(trading-ui): Morning Brief — Layer 1 landing page"
 - Create: `frontend/src/components/trading/StrategyLeaderboard.tsx`
 - Create: `frontend/src/components/trading/GenomeRadarChart.tsx`
 - Create: `frontend/src/components/trading/WalkForwardChart.tsx`
+- Create: `frontend/src/components/trading/EquityCurveChart.tsx`
 
 - [ ] **Step 1: Create [id] page shell**
 
@@ -356,7 +372,7 @@ git commit -m "feat(trading-ui): Morning Brief — Layer 1 landing page"
 ```tsx
 export const dynamic = 'force-dynamic'
 
-import { getLeaderboard, getGenomePositions } from '@/lib/queries/strategy_lab'
+import { getLeaderboard, getGenomePositions, getActivePortfolioConfig } from '@/lib/queries/strategy_lab'
 import { StrategyLeaderboard } from '@/components/trading/StrategyLeaderboard'
 import { ReplicationGuide } from '@/components/trading/ReplicationGuide'
 import { notFound } from 'next/navigation'
@@ -365,9 +381,10 @@ type Props = { params: Promise<{ id: string }> }
 
 export default async function StrategyExplorerPage({ params }: Props) {
   const { id } = await params
-  const [leaderboard, positions] = await Promise.all([
+  const [leaderboard, positions, config] = await Promise.all([
     getLeaderboard(),
     getGenomePositions(id),
+    getActivePortfolioConfig(),
   ])
 
   const selected = leaderboard.find((r) => r.genome_id === id)
@@ -380,7 +397,7 @@ export default async function StrategyExplorerPage({ params }: Props) {
           <StrategyLeaderboard leaderboard={leaderboard} selectedId={id} />
         </aside>
         <section className="col-span-2 space-y-6">
-          <ReplicationGuide strategy={selected} positions={positions} />
+          <ReplicationGuide strategy={selected} positions={positions} config={config} />
         </section>
       </div>
     </main>
@@ -548,7 +565,49 @@ export function WalkForwardChart({ data }: Props) {
 }
 ```
 
-- [ ] **Step 5: Type-check**
+- [ ] **Step 5: Create EquityCurveChart**
+
+`frontend/src/components/trading/EquityCurveChart.tsx`:
+```tsx
+'use client'
+
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from 'recharts'
+
+type DataPoint = { date: string; value: number }
+type Props = { data: DataPoint[]; label?: string }
+
+export function EquityCurveChart({ data, label = 'Portfolio Value' }: Props) {
+  return (
+    <div>
+      <p className="font-sans text-xs text-ink-tertiary uppercase tracking-wide mb-2">{label}</p>
+      <div className="h-48">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data}>
+            <defs>
+              <linearGradient id="equityGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#1D9E75" stopOpacity={0.15} />
+                <stop offset="95%" stopColor="#1D9E75" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+            <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#9ca3af' }} />
+            <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} />
+            <Tooltip formatter={(v: number) => [`₹${v.toLocaleString('en-IN')}`, label]} />
+            <Area
+              type="monotone" dataKey="value" stroke="#1D9E75" strokeWidth={2}
+              fill="url(#equityGrad)" dot={false}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  )
+}
+```
+
+- [ ] **Step 6: Type-check**
 
 ```bash
 cd frontend && npx tsc --noEmit 2>&1 | grep "trading\|strategy_lab" | head -20
@@ -556,11 +615,11 @@ cd frontend && npx tsc --noEmit 2>&1 | grep "trading\|strategy_lab" | head -20
 
 Expected: no errors on new files
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add frontend/src/app/strategies/lab/[id]/page.tsx frontend/src/components/trading/StrategyLeaderboard.tsx frontend/src/components/trading/GenomeRadarChart.tsx frontend/src/components/trading/WalkForwardChart.tsx
-git commit -m "feat(trading-ui): Strategy Explorer — leaderboard + genome radar + walk-forward chart"
+git add frontend/src/app/strategies/lab/[id]/page.tsx frontend/src/components/trading/StrategyLeaderboard.tsx frontend/src/components/trading/GenomeRadarChart.tsx frontend/src/components/trading/WalkForwardChart.tsx frontend/src/components/trading/EquityCurveChart.tsx
+git commit -m "feat(trading-ui): Strategy Explorer — leaderboard + genome radar + walk-forward + equity curve charts"
 ```
 
 ---
@@ -634,12 +693,13 @@ export function TaxHarvestingAlert({ ticker, grossPnl, holdingDays, stcgRate, lt
 ```tsx
 'use client'
 
-import type { LeaderboardRow, GenomePositionRow } from '@/lib/queries/strategy_lab'
+import type { LeaderboardRow, GenomePositionRow, PortfolioConfigRow } from '@/lib/queries/strategy_lab'
 import { TaxHarvestingAlert } from './TaxHarvestingAlert'
 
 type Props = {
   strategy: LeaderboardRow
   positions: GenomePositionRow[]
+  config: PortfolioConfigRow | null   // active PortfolioConfig — drives tax rates
 }
 
 type Section = 'hold' | 'watch' | 'buy' | 'sell' | 'liquidbees'
@@ -663,7 +723,11 @@ const SECTION_LABELS: Record<Section, { label: string; color: string }> = {
   liquidbees:  { label: 'LiquidBees',     color: 'text-gray-700 bg-gray-50 border-gray-200' },
 }
 
-function PositionRow({ pos }: { pos: GenomePositionRow }) {
+function PositionRow({ pos, stcgRate, ltcgRate }: {
+  pos: GenomePositionRow
+  stcgRate: number
+  ltcgRate: number
+}) {
   const pnl = Number(pos.unrealized_pnl)
   const pnlColor = pnl >= 0 ? 'text-teal-600' : 'text-red-600'
   const ltcgEligible = pos.tax_status === 'ltcg_eligible'
@@ -703,16 +767,20 @@ function PositionRow({ pos }: { pos: GenomePositionRow }) {
           ticker={pos.ticker}
           grossPnl={pnl}
           holdingDays={pos.holding_days}
-          stcgRate={0.20}
-          ltcgRate={0.125}
-          signalStrength={0.4}   // TODO: wire from entry_signals when available
+          stcgRate={stcgRate}
+          ltcgRate={ltcgRate}
+          signalStrength={0.4}
         />
       )}
     </div>
   )
 }
 
-export function ReplicationGuide({ strategy, positions }: Props) {
+export function ReplicationGuide({ strategy, positions, config }: Props) {
+  // Read tax rates from active PortfolioConfig; fall back to post-Budget 2024 defaults
+  const stcgRate = Number((config?.config_json as Record<string, string>)?.stcg_rate ?? '0.20')
+  const ltcgRate = Number((config?.config_json as Record<string, string>)?.ltcg_rate ?? '0.125')
+
   const grouped = positions.reduce<Record<Section, GenomePositionRow[]>>(
     (acc, pos) => {
       const section = classifyPosition(pos)
@@ -769,7 +837,7 @@ export function ReplicationGuide({ strategy, positions }: Props) {
             </div>
             <div className="px-4">
               {items.map((pos) => (
-                <PositionRow key={`${pos.ticker}-${pos.date}`} pos={pos} />
+                <PositionRow key={`${pos.ticker}-${pos.date}`} pos={pos} stcgRate={stcgRate} ltcgRate={ltcgRate} />
               ))}
             </div>
           </div>
@@ -1386,13 +1454,13 @@ Expected: 0 errors
 - [ ] **Final commit summary**
 
 By this point you should have commits covering:
-- 065 migration (7 tables)
+- 067 migration (8 tables)
 - atlas/trading/ bounded context (13 modules)
 - atlas/api/trading.py (6 endpoints)
 - frontend/src/app/strategies/lab/ (3 pages)
 - frontend/src/lib/queries/strategy_lab.ts
-- frontend/src/components/trading/ (9 components)
-- tests/trading/ (8 test files)
+- frontend/src/components/trading/ (10 components including EquityCurveChart)
+- tests/trading/ (8 test files: test_config, test_genome, test_perception, test_tax_engine, test_decision, test_simulator, test_optimizer, test_evolver, test_insight, test_tournament)
 
 ---
 
@@ -1409,7 +1477,7 @@ By this point you should have commits covering:
 - §6.3 Portfolio drawdown adaptation → RegimePlaybook dd_halt/tighten/liquidate fields + apply_entry_rules
 - §6.4 Tax harvesting → TaxHarvestingAlert.tsx
 - §6.5 Insight feed → insight.py + EngineRoom
-- §7 Data model → migration 065 (all 8 tables)
+- §7 Data model → migration 067 (all 8 tables)
 - §8.1–8.4 Frontend layers 1–3 → Tasks 15–18
 - §8.5 Tax harvesting alert → Task 17
 - §8.7 Configurator → Task 19

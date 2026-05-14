@@ -24281,3 +24281,1461 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{
+  "ts": "2026-05-14T08:06:04Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/tests/unit/compute/test_lens_decisions.py",
+  "lines_changed": 348,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:08:52Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/compute/lens_decisions.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:08:53Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/066_tv_signal_reports_widen_varchars.py",
+  "lines_changed": 29,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:09:18Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/.claude/projects/-Users-nimishshah-Documents-GitHub-atlas-os/memory/project_health_audit_2026_05.md",
+  "lines_changed": 9,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:09:30Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/compute/lens_decisions.py",
+  "lines_changed": 19,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:10:36Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/compute/lens_decisions.py",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:10:57Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/compute/lens_decisions.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:11:23Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/compute/lens_decisions.py",
+  "lines_changed": 27,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:12:21Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/compute/lens_decisions.py",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:12:35Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/compute/lens_decisions.py",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:12:38Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/api/auth.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:12:45Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/signals/page.tsx",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:12:47Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/compute/lens_decisions.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:12:52Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/signals/[id]/page.tsx",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:12:55Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/compute/lens_decisions.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:13:09Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/compute/lens_decisions.py",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:13:19Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/nav/TopNav.tsx",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:16:37Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/compute/lens_decisions.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:16:51Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/compute/lens_decisions.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:21:10Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/compute/lens_decisions.py",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:21:20Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/compute/lens_decisions.py",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:21:29Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/compute/lens_decisions.py",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:21:37Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/compute/lens_decisions.py",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:21:53Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/compute/lens_decisions.py",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:22:00Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/compute/lens_decisions.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:25:52Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/scripts/run_fund_decisions.py",
+  "lines_changed": 62,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:33:48Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/scripts/enrich_fund_decision_outcomes.py",
+  "lines_changed": 171,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:33:59Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/tests/unit/compute/test_enrich_fund_decisions.py",
+  "lines_changed": 55,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:37:58Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/scripts/enrich_fund_decision_outcomes.py",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:40:26Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/scripts/enrich_fund_decision_outcomes.py",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:40:39Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/scripts/enrich_fund_decision_outcomes.py",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:53:28Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/scripts/enrich_fund_decision_outcomes.py",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:53:34Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/scripts/enrich_fund_decision_outcomes.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:53:42Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/scripts/enrich_fund_decision_outcomes.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:53:49Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/scripts/enrich_fund_decision_outcomes.py",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:53:56Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/scripts/enrich_fund_decision_outcomes.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:54:09Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/scripts/enrich_fund_decision_outcomes.py",
+  "lines_changed": 34,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:54:18Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/tests/unit/compute/test_enrich_fund_decisions.py",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:59:47Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/signals/screenshot.py",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T08:59:54Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/signals/screenshot.py",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:02:54Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/api/fund_decisions.py",
+  "lines_changed": 133,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:03:04Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/api/__init__.py",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:03:10Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/api/__init__.py",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:03:35Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/tests/api/test_fund_decisions.py",
+  "lines_changed": 107,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:04:11Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/tests/api/test_fund_decisions.py",
+  "lines_changed": 121,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:04:37Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/tests/api/test_fund_decisions.py",
+  "lines_changed": 32,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:12:25Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/tests/api/test_fund_decisions.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:18:58Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/api/fund_decisions.py",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:23:47Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/api/fund_decisions.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:23:54Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/api/fund_decisions.py",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:23:59Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/api/fund_decisions.py",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:24:06Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/tests/api/test_fund_decisions.py",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:24:11Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/tests/api/test_fund_decisions.py",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:30:24Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/lib/queries/funds.ts",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:30:37Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/lib/queries/funds.ts",
+  "lines_changed": 39,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:30:46Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/lib/queries/funds.ts",
+  "lines_changed": 14,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:30:58Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/lib/queries/funds.ts",
+  "lines_changed": 60,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:31:05Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/lib/queries/funds.ts",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:31:12Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/lib/queries/funds.ts",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:31:19Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/lib/queries/funds.ts",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:31:46Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/signals/page.tsx",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:31:54Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/signals/[id]/page.tsx",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:32:42Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/lib/queries/funds.ts",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:32:48Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/lib/queries/funds.ts",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:42:16Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/lib/queries/funds.ts",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T09:42:27Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/lib/queries/funds.ts",
+  "lines_changed": 33,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:08:58Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/components/funds/FundManagerDecisionSummary.tsx",
+  "lines_changed": 115,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:09:29Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/components/funds/FundManagerDecisionSummary.tsx",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:13:17Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/signals/narrative.py",
+  "lines_changed": 204,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:13:38Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/signals/processor.py",
+  "lines_changed": 20,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:13:52Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/signals/processor.py",
+  "lines_changed": 10,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:14:00Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/signals/processor.py",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:14:15Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/signals/processor.py",
+  "lines_changed": 29,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:14:23Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/signals/processor.py",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:14:46Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/api/tv_signals.py",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:14:52Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/api/tv_signals.py",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:15:03Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/api/tv_signals.py",
+  "lines_changed": 27,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:15:13Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/api/tv_signals.py",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:15:22Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/api/tv_signals.py",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:15:35Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/api/tv_signals.py",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:15:56Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/api/tv_signals.py",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:16:13Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/api/signals/screenshot/route.ts",
+  "lines_changed": 35,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:20:31Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/components/funds/FundManagerDecisionsDetail.tsx",
+  "lines_changed": 219,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:26:07Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/app/funds/[mstar_id]/decisions/page.tsx",
+  "lines_changed": 53,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:27:53Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/signals/processor.py",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:28:05Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/signals/narrative.py",
+  "lines_changed": 16,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:28:25Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/signals/narrative.py",
+  "lines_changed": 26,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:28:36Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/signals/SignalReport.tsx",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:28:41Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/signals/SignalReport.tsx",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:28:53Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/signals/SignalCard.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:31:15Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/app/funds/[mstar_id]/page.tsx",
+  "lines_changed": 10,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:31:21Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/app/funds/[mstar_id]/page.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:31:30Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/app/funds/[mstar_id]/page.tsx",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:31:39Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/app/funds/[mstar_id]/page.tsx",
+  "lines_changed": 16,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:35:12Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/components/funds/FundScreener.tsx",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:35:18Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/components/funds/FundScreener.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:35:27Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/components/funds/FundScreener.tsx",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:35:37Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/components/funds/FundScreener.tsx",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:35:45Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/signals/processor.py",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:35:51Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/components/funds/FundScreener.tsx",
+  "lines_changed": 53,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:35:54Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/signals/processor.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:36:13Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/signals/processor.py",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:36:28Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/signals/processor.py",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:36:43Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/signals/narrative.py",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:40:39Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab.md",
+  "lines_changed": 1603,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:44:42Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part2.md",
+  "lines_changed": 1514,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:48:17Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part3.md",
+  "lines_changed": 1423,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:54:14Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/components/funds/FundManagerDecisionsDetail.tsx",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:54:27Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/components/funds/FundManagerDecisionsDetail.tsx",
+  "lines_changed": 9,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:57:05Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/components/funds/FundManagerDecisionsDetail.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:57:12Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/components/funds/FundManagerDecisionsDetail.tsx",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:57:18Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/components/funds/FundManagerDecisionsDetail.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:57:26Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/components/funds/FundManagerDecisionsDetail.tsx",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:57:38Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/app/funds/[mstar_id]/decisions/page.tsx",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T10:57:49Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/frontend/src/components/funds/FundScreener.tsx",
+  "lines_changed": 38,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:06:24Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab.md",
+  "lines_changed": 17,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:06:33Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab.md",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:06:48Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab.md",
+  "lines_changed": 21,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:06:57Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab.md",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:07:11Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab.md",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:07:30Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab.md",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:07:48Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab.md",
+  "lines_changed": 10,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:07:55Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab.md",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:08:01Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab.md",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:11:06Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab.md",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:11:15Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab.md",
+  "lines_changed": 22,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:11:29Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab.md",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:13:27Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part2.md",
+  "lines_changed": 33,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:13:37Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part2.md",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:13:44Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part2.md",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:14:04Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part2.md",
+  "lines_changed": 40,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:14:23Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part2.md",
+  "lines_changed": 38,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:14:33Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part2.md",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:14:39Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part2.md",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:14:46Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part2.md",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:15:04Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part2.md",
+  "lines_changed": 47,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:15:11Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part2.md",
+  "lines_changed": 14,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:15:18Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part2.md",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:15:24Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part2.md",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:15:30Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part2.md",
+  "lines_changed": 14,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:15:43Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part2.md",
+  "lines_changed": 22,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:15:56Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part2.md",
+  "lines_changed": 38,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:16:07Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part2.md",
+  "lines_changed": 21,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:16:14Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part2.md",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:16:23Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part2.md",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:16:31Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part2.md",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:17:17Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/tmp/validate_ohlcv_daily.py",
+  "lines_changed": 24,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:17:33Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part3.md",
+  "lines_changed": 22,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:17:41Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part3.md",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:17:47Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part3.md",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:17:55Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part3.md",
+  "lines_changed": 10,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:18:06Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part3.md",
+  "lines_changed": 18,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:18:25Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part3.md",
+  "lines_changed": 31,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:18:38Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part3.md",
+  "lines_changed": 35,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:18:45Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part3.md",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:18:51Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part3.md",
+  "lines_changed": 9,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:18:58Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part3.md",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:19:13Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part3.md",
+  "lines_changed": 56,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:19:22Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-atlas-strategy-lab-part3.md",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:19:45Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/migrations/versions/065_mf_holdings_history.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:21:35Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/migrations/versions/065_mf_holdings_history.py",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T11:23:31Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-mf-holdings/atlas/compute/lens_decisions.py",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}

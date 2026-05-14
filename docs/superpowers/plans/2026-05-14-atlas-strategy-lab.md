@@ -29,7 +29,7 @@ atlas/trading/tournament.py      # 3-round promotion + leaderboard writes
 atlas/trading/insight.py         # Groq narration
 atlas/trading/incubator.py       # Nightly orchestrator
 
-migrations/versions/065_atlas_strategy_lab.py
+migrations/versions/067_atlas_strategy_lab.py
 
 atlas/api/trading.py             # Read-only FastAPI endpoints
 
@@ -64,7 +64,7 @@ tests/trading/test_tournament.py
 
 **Files:**
 - Modify: `pyproject.toml`
-- Create: `migrations/versions/065_atlas_strategy_lab.py`
+- Create: `migrations/versions/067_atlas_strategy_lab.py`
 
 - [ ] **Step 1: Add `deap` to pyproject.toml**
 
@@ -75,13 +75,13 @@ In `pyproject.toml`, find the `dependencies` array and add after the `optuna` li
 
 - [ ] **Step 2: Write migration**
 
-Create `migrations/versions/065_atlas_strategy_lab.py`:
+Create `migrations/versions/067_atlas_strategy_lab.py`:
 
 ```python
-"""Atlas Strategy Lab — 7 new tables for genome-based portfolio simulation.
+"""Atlas Strategy Lab — 8 new tables for genome-based portfolio simulation.
 
-Revision ID: 065
-Revises: 064
+Revision ID: 067
+Revises: 066
 Create Date: 2026-05-14
 """
 from __future__ import annotations
@@ -90,8 +90,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 
-revision = "065"
-down_revision = "064"
+revision = "067"
+down_revision = "066"
 branch_labels = None
 depends_on = None
 
@@ -108,6 +108,8 @@ def upgrade() -> None:
         sa.Column("status", sa.Text, nullable=False, server_default="active"),
         sa.Column("kill_reason", sa.Text, nullable=True),
         sa.Column("generation", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
         sa.CheckConstraint("status IN ('active','promoted','killed','archived')", name="ck_genomes_status"),
     )
 
@@ -131,7 +133,8 @@ def upgrade() -> None:
         "atlas_strategy_positions_daily",
         sa.Column("genome_id", UUID(as_uuid=True), sa.ForeignKey("atlas_strategy_genomes.id"), nullable=False),
         sa.Column("date", sa.Date, nullable=False),
-        sa.Column("instrument_id", sa.Integer, sa.ForeignKey("atlas_instruments.id"), nullable=False),
+        # instrument_id is UUID — matches atlas_universe_stocks.id (not INT)
+        sa.Column("instrument_id", UUID(as_uuid=True), sa.ForeignKey("atlas.atlas_universe_stocks.id"), nullable=False),
         sa.Column("position_type", sa.Text, nullable=False),
         sa.Column("entry_date", sa.Date, nullable=False),
         sa.Column("entry_price", sa.Numeric(20, 4), nullable=False),
@@ -141,6 +144,8 @@ def upgrade() -> None:
         sa.Column("holding_days", sa.Integer, nullable=False),
         sa.Column("tax_status", sa.Text, nullable=False),
         sa.Column("entry_signals", JSONB, nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
         sa.PrimaryKeyConstraint("genome_id", "date", "instrument_id"),
         sa.CheckConstraint("position_type IN ('equity','liquidbees')", name="ck_positions_type"),
         sa.CheckConstraint("tax_status IN ('stcg','ltcg_eligible','liquidbees')", name="ck_positions_tax"),
@@ -156,6 +161,8 @@ def upgrade() -> None:
         sa.Column("calmar_oos", sa.Numeric(10, 4), nullable=True),
         sa.Column("alpha_30d", sa.Numeric(10, 4), nullable=True),
         sa.Column("regime_breakdown", JSONB, nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
     )
 
     op.create_table(
@@ -169,7 +176,7 @@ def upgrade() -> None:
 
     op.create_table(
         "atlas_universe_membership_daily",
-        sa.Column("instrument_id", sa.Integer, sa.ForeignKey("atlas_instruments.id"), nullable=False),
+        sa.Column("instrument_id", UUID(as_uuid=True), sa.ForeignKey("atlas.atlas_universe_stocks.id"), nullable=False),
         sa.Column("date", sa.Date, nullable=False),
         sa.Column("universe", sa.Text, nullable=False),
         sa.Column("was_member", sa.Boolean, nullable=False, server_default="true"),
@@ -189,6 +196,8 @@ def upgrade() -> None:
         sa.Column("kill_reason", sa.Text, nullable=True),
         sa.Column("generation", sa.Integer, nullable=True),
         sa.Column("parameter_delta", JSONB, nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
         sa.CheckConstraint(
             "event_type IN ('born','killed','promoted','demoted','mutated','crossover')",
             name="ck_evolution_event_type",
@@ -202,6 +211,7 @@ def upgrade() -> None:
         sa.Column("config_json", JSONB, nullable=False),
         sa.Column("is_active", sa.Boolean, nullable=False, server_default="false"),
         sa.Column("label", sa.Text, nullable=True),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
     )
 
 
@@ -222,16 +232,16 @@ def downgrade() -> None:
 - [ ] **Step 3: Run migration locally**
 
 ```bash
-alembic upgrade 065
+alembic upgrade 067
 ```
 
-Expected: `Running upgrade 064 -> 065, Atlas Strategy Lab — 7 new tables`
+Expected: `Running upgrade 066 -> 067, Atlas Strategy Lab — 8 new tables`
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add pyproject.toml migrations/versions/065_atlas_strategy_lab.py
-git commit -m "feat(trading): add deap dep + migration 065 for Strategy Lab tables"
+git add pyproject.toml migrations/versions/067_atlas_strategy_lab.py
+git commit -m "feat(trading): add deap dep + migration 067 for Strategy Lab tables"
 ```
 
 ---
@@ -468,16 +478,16 @@ from typing import Any
 # Search space definitions (Optuna ranges)
 # ---------------------------------------------------------------------------
 
+# NOTE: atlas_stock_metrics_daily only has rs_pctile_1w, rs_pctile_1m, rs_pctile_3m.
+# 6M and 12M timeframes are NOT in the DB. Genome uses 3-timeframe blend only.
 LAYER1_SEARCH_SPACE: dict[str, tuple] = {
     "rs_leader_cutoff_pct":           ("int",   60,  80),
     "rs_strong_cutoff_pct":           ("int",   45,  65),
     "rs_average_cutoff_pct":          ("int",   25,  45),
     "rs_weak_cutoff_pct":             ("int",   10,  25),
-    "rs_w1w":                         ("float", 0.10, 0.60),
-    "rs_w1m":                         ("float", 0.10, 0.50),
-    "rs_w3m":                         ("float", 0.05, 0.40),
-    "rs_w6m":                         ("float", 0.02, 0.25),
-    "rs_w12m":                        ("float", 0.01, 0.20),
+    "rs_w1w":                         ("float", 0.10, 0.70),
+    "rs_w1m":                         ("float", 0.10, 0.60),
+    "rs_w3m":                         ("float", 0.05, 0.50),
     "regime_risk_on_breadth_pct":     ("int",   50,  70),
     "regime_constructive_breadth_pct":("int",   35,  55),
     "regime_cautious_breadth_pct":    ("int",   20,  40),
@@ -516,7 +526,7 @@ class Layer1Perception:
     rs_strong_cutoff_pct: int
     rs_average_cutoff_pct: int
     rs_weak_cutoff_pct: int
-    rs_timeframe_weights: dict[str, float]   # keys: 1w, 1m, 3m, 6m, 12m; sum=1.0
+    rs_timeframe_weights: dict[str, float]   # keys: 1w, 1m, 3m; sum=1.0 (DB has only these 3)
     regime_risk_on_breadth_pct: int
     regime_constructive_breadth_pct: int
     regime_cautious_breadth_pct: int
@@ -598,10 +608,11 @@ class Genome:
 # ---------------------------------------------------------------------------
 
 def _random_weights() -> dict[str, float]:
-    raw = [random.random() for _ in range(5)]
+    # 3 timeframes only — atlas_stock_metrics_daily has rs_pctile_1w/1m/3m
+    raw = [random.random() for _ in range(3)]
     total = sum(raw)
     vals = [v / total for v in raw]
-    return {"1w": vals[0], "1m": vals[1], "3m": vals[2], "6m": vals[3], "12m": vals[4]}
+    return {"1w": vals[0], "1m": vals[1], "3m": vals[2]}
 
 
 def _random_playbook(has_profit_target: bool, has_time_stop: bool, has_trailing: bool) -> RegimePlaybook:
@@ -665,13 +676,12 @@ class GenomeFactory:
         average = trial.suggest_int("rs_average_cutoff_pct", 25, min(45, strong - 1))
         weak = trial.suggest_int("rs_weak_cutoff_pct", 10, min(25, average - 1))
 
-        w1 = trial.suggest_float("rs_w1w", 0.10, 0.60)
-        w2 = trial.suggest_float("rs_w1m", 0.10, 0.50)
-        w3 = trial.suggest_float("rs_w3m", 0.05, 0.40)
-        w4 = trial.suggest_float("rs_w6m", 0.02, 0.25)
-        w5 = trial.suggest_float("rs_w12m", 0.01, 0.20)
-        total = w1 + w2 + w3 + w4 + w5
-        weights = {"1w": w1/total, "1m": w2/total, "3m": w3/total, "6m": w4/total, "12m": w5/total}
+        # 3 timeframes only — atlas_stock_metrics_daily has rs_pctile_1w/1m/3m
+        w1 = trial.suggest_float("rs_w1w", 0.10, 0.70)
+        w2 = trial.suggest_float("rs_w1m", 0.10, 0.60)
+        w3 = trial.suggest_float("rs_w3m", 0.05, 0.50)
+        total = w1 + w2 + w3
+        weights = {"1w": w1/total, "1m": w2/total, "3m": w3/total}
 
         layer1 = Layer1Perception(
             rs_leader_cutoff_pct=leader,
@@ -846,8 +856,8 @@ def bootstrap_nifty500_membership(conn: Connection) -> int:
             INSERT INTO atlas_universe_membership_daily (instrument_id, date, universe, was_member)
             SELECT DISTINCT m.instrument_id, m.date, 'nifty500', TRUE
             FROM atlas_stock_metrics_daily m
-            JOIN atlas_instruments i ON i.id = m.instrument_id
-            WHERE i.index_member = 'nifty500'
+            JOIN atlas.atlas_universe_stocks i ON i.id = m.instrument_id
+            WHERE i.in_nifty_500 = TRUE
             ON CONFLICT (instrument_id, date, universe) DO NOTHING
             """
         )
@@ -1055,8 +1065,8 @@ def compute_blended_rs_pctile(
     """Weighted blend of multi-timeframe RS percentile arrays.
 
     Args:
-        rs_arrays: {'1w': ndarray, '1m': ndarray, '3m': ndarray, '6m': ndarray, '12m': ndarray}
-                   each shape (n_stocks, n_days)
+        rs_arrays: {'1w': ndarray, '1m': ndarray, '3m': ndarray}
+                   each shape (n_stocks, n_days) — only 3 TFs in atlas_stock_metrics_daily
         weights: genome rs_timeframe_weights, must sum to 1.0
 
     Returns:
@@ -1526,6 +1536,7 @@ def apply_entry_rules(
     portfolio_heat: float,
     genome: Genome,
     portfolio_drawdown: float = 0.0,
+    max_portfolio_heat_pct: float = 0.20,   # pass from active PortfolioConfig
 ) -> np.ndarray:
     """Return boolean mask of stocks eligible for entry today.
 
@@ -1537,10 +1548,9 @@ def apply_entry_rules(
     if regime == REGIME_RISK_OFF:
         return np.zeros(len(conviction), dtype=bool)
 
-    from atlas.trading.config import PortfolioConfig  # avoid circular at import time
     playbook = _get_playbook(genome, regime)
 
-    if portfolio_heat >= float(PortfolioConfig().max_portfolio_heat_pct):
+    if portfolio_heat >= max_portfolio_heat_pct:
         return np.zeros(len(conviction), dtype=bool)
 
     if portfolio_drawdown >= playbook.dd_halt_entry_pct / 100.0:
