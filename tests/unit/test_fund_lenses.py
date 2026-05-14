@@ -22,8 +22,8 @@ from atlas.compute.lens_nav import classify_nav_state, compute_within_category_p
 # ---------------------------------------------------------------------------
 
 DEFAULT_THRESHOLDS = {
-    "rs_quintile_top": 80,  # top quintile threshold (percentage, divide by 100)
-    "rs_quintile_bottom": 20,  # bottom quintile threshold
+    "rs_quintile_top": 0.80,  # fraction form matching atlas_thresholds DB values
+    "rs_quintile_bottom": 0.20,
     "fund_aligned_aum_min_pct": 70,
     "fund_avoid_aum_max_pct": 10,
     "fund_strong_holdings_min_pct": 60,

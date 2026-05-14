@@ -317,8 +317,9 @@ def classify_nav_state(
     strength (Laggard checked first, then Weak, then Leader/Strong/Emerging,
     otherwise Average).
     """
-    top = float(thresholds.get("rs_quintile_top", 80)) / 100
-    bot = float(thresholds.get("rs_quintile_bottom", 20)) / 100
+    # Thresholds stored as fractions (0.80 = 80th pctile) — do NOT divide by 100.
+    top = float(thresholds.get("rs_quintile_top", 0.80))
+    bot = float(thresholds.get("rs_quintile_bottom", 0.20))
 
     df = metrics_df.copy()
     p1 = df["rs_pctile_1m"]
