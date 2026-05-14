@@ -24,7 +24,7 @@ export default async function CountryDetailPage({
   const { ticker: rawTicker } = await params
   const { range = '6M', tab = 'overview' } = await searchParams
 
-  const ticker = decodeURIComponent(rawTicker).toUpperCase()
+  const ticker = decodeURIComponent(rawTicker).toLowerCase()
   const VALID_RANGES: TimeRange[] = ['1M', '3M', '6M', '1Y']
   const historyRange: TimeRange = VALID_RANGES.includes(range as TimeRange)
     ? (range as TimeRange)
