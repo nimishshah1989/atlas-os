@@ -23,7 +23,7 @@ def upgrade() -> None:
         sa.Column("from_date", sa.Date, nullable=True, comment="NULL for first-ever portfolio observation (no prior snapshot to diff from)"),
         sa.Column("to_date", sa.Date, nullable=False),
         sa.Column("instrument_id", sa.Text, nullable=False, index=True),
-        sa.Column("symbol", sa.String(20), nullable=False),
+        sa.Column("symbol", sa.Text, nullable=False),
         sa.Column("action", sa.String(10), nullable=False),
         sa.Column("weight_before", sa.Numeric(10, 4), nullable=False),
         sa.Column("weight_after", sa.Numeric(10, 4), nullable=False),
@@ -55,6 +55,7 @@ def upgrade() -> None:
             "outcome_quality_3m IN ('good','bad','neutral') OR outcome_quality_3m IS NULL",
             name="chk_afhc_outcome_quality_3m",
         ),
+        sa.UniqueConstraint("mstar_id", "to_date", "instrument_id", name="uq_afhc_mstar_date_instrument"),
         schema="atlas",
     )
     op.create_index(
