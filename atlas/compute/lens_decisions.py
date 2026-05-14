@@ -47,6 +47,18 @@ _CHANGES_COLUMNS: tuple[str, ...] = (
     "signal_quality",
 )
 
+_DIFF_RESULT_COLUMNS: tuple[str, ...] = (
+    "instrument_id",
+    "symbol",
+    "action",
+    "weight_before",
+    "weight_after",
+    "weight_delta",
+    "rs_state_at_action",
+    "momentum_state_at_action",
+    "signal_quality",
+)
+
 _SCORES_COLUMNS: tuple[str, ...] = (
     "mstar_id",
     "period_date",
@@ -137,9 +149,13 @@ def _load_stock_states(
             conn,
             params={"ids": instrument_ids, "date": as_of_date},
         )
-    return {
-        row["instrument_id"]: (row["rs_state"], row["momentum_state"]) for _, row in df.iterrows()
-    }
+    return dict(
+        zip(
+            df["instrument_id"],
+            zip(df["rs_state"], df["momentum_state"], strict=False),
+            strict=False,
+        )
+    )
 
 
 def _load_computed_set(engine: Engine) -> set[tuple[str, Any]]:
@@ -182,25 +198,13 @@ def compute_holdings_diff(
         weight_delta, rs_state_at_action, momentum_state_at_action, signal_quality.
         Returns empty DataFrame with those columns if no rows pass the filter.
     """
-    _empty_result = pd.DataFrame(
-        columns=[
-            "instrument_id",
-            "symbol",
-            "action",
-            "weight_before",
-            "weight_after",
-            "weight_delta",
-            "rs_state_at_action",
-            "momentum_state_at_action",
-            "signal_quality",
-        ]
-    )
+    _empty_result = pd.DataFrame(columns=list(_DIFF_RESULT_COLUMNS))  # type: ignore[call-overload]
 
     # Normalise empty frames so the outer merge always has the right columns
     if to_df.empty:
-        to_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])
+        to_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])  # type: ignore[call-overload]
     if from_df.empty:
-        from_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])
+        from_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])  # type: ignore[call-overload]
 
     # If both snapshots are empty there is nothing to diff
     if to_df.empty and from_df.empty:
@@ -235,32 +239,36 @@ def compute_holdings_diff(
     merged["action"] = np.select(
         [is_entry, is_exit, is_increase, is_decrease],
         ["entry", "exit", "increase", "decrease"],
-        default=None,
+        default=None,  # type: ignore[arg-type]  # None rows filtered by .notna() below
     )
     merged = merged[merged["action"].notna()].copy()
 
     if merged.empty:
         return _empty_result
 
-    # Vectorized state mapping
+    # Vectorized state mapping — explicit Series cast avoids Pyright ndarray inference
     rs_map = {k: v[0] for k, v in state_map.items()}
     mom_map = {k: v[1] for k, v in state_map.items()}
-    merged["rs_state"] = merged["instrument_id"].map(rs_map)
-    merged["mom_state"] = merged["instrument_id"].map(mom_map)
+    _ids = pd.Series(merged["instrument_id"])
+    merged["rs_state"] = _ids.map(rs_map)  # type: ignore[arg-type]
+    merged["mom_state"] = _ids.map(mom_map)  # type: ignore[arg-type]
+    _rs = pd.Series(merged["rs_state"])
 
     # Vectorized signal quality — entry into strong state is high; exit from weak state is high
+    _high = list(_HIGH_QUALITY_STATES)
+    _low = list(_LOW_QUALITY_STATES)
     sq_conds = [
-        (merged["action"] == "entry") & merged["rs_state"].isin(_HIGH_QUALITY_STATES),
-        (merged["action"] == "entry") & merged["rs_state"].isin(_LOW_QUALITY_STATES),
-        (merged["action"] == "exit") & merged["rs_state"].isin(_LOW_QUALITY_STATES),
-        (merged["action"] == "exit") & merged["rs_state"].isin(_HIGH_QUALITY_STATES),
+        (merged["action"] == "entry") & _rs.isin(_high),
+        (merged["action"] == "entry") & _rs.isin(_low),
+        (merged["action"] == "exit") & _rs.isin(_low),
+        (merged["action"] == "exit") & _rs.isin(_high),
     ]
     merged["signal_quality"] = np.select(
         sq_conds, ["high", "low", "high", "low"], default="neutral"
     )
 
     # Rename columns to final schema names
-    result = merged.rename(
+    merged = merged.rename(  # type: ignore[call-overload]
         columns={
             "weight_pct_before": "weight_before",
             "weight_pct_after": "weight_after",
@@ -268,20 +276,8 @@ def compute_holdings_diff(
             "rs_state": "rs_state_at_action",
             "mom_state": "momentum_state_at_action",
         }
-    )[
-        [
-            "instrument_id",
-            "symbol",
-            "action",
-            "weight_before",
-            "weight_after",
-            "weight_delta",
-            "rs_state_at_action",
-            "momentum_state_at_action",
-            "signal_quality",
-        ]
-    ].reset_index(drop=True)
-
+    )
+    result: pd.DataFrame = merged[list(_DIFF_RESULT_COLUMNS)].reset_index(drop=True)  # type: ignore[assignment]
     return result
 
 
@@ -294,7 +290,7 @@ def compute_decision_score(
     diff_df: pd.DataFrame,
     mstar_id: str,
     to_date: date,
-    from_date: date | None,
+    _from_date: date | None,
     thresholds: dict[str, Any],
 ) -> dict[str, Any]:
     """Aggregate diff results into one decision score row.
@@ -444,7 +440,7 @@ def run_lens_decisions(
             from_df = (
                 _load_snapshot(engine, mstar_id, from_date)
                 if from_date is not None
-                else pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])
+                else pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])  # type: ignore[call-overload]
             )
 
             # Load stock states as of to_date for all instruments in newer snapshot
@@ -476,7 +472,7 @@ def run_lens_decisions(
 
                 # Select columns in the exact order expected by bulk_upsert
                 change_cols = list(_CHANGES_COLUMNS)
-                change_rows = df_to_pg_rows(change_rows_df[change_cols])
+                change_rows = df_to_pg_rows(change_rows_df[change_cols])  # type: ignore[arg-type]
 
                 rows_written += bulk_upsert(
                     engine,
@@ -489,7 +485,7 @@ def run_lens_decisions(
             # Upsert decision score
             score_df = pd.DataFrame([score_row])
             score_cols = list(_SCORES_COLUMNS)
-            score_rows = df_to_pg_rows(score_df[score_cols])
+            score_rows = df_to_pg_rows(score_df[score_cols])  # type: ignore[arg-type]
             rows_written += bulk_upsert(
                 engine,
                 "atlas.atlas_fund_decision_scores",
