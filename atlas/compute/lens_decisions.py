@@ -117,6 +117,7 @@ def _load_snapshot(
                AND u.effective_to IS NULL
             WHERE h.mstar_id = %(mstar_id)s
               AND h.as_of_date = %(as_of_date)s
+              AND h.instrument_id IS NOT NULL
             """,
             conn,
             params={"mstar_id": mstar_id, "as_of_date": as_of_date},
