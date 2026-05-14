@@ -16,7 +16,6 @@ dependencies = [
     "empyrical-reloaded>=0.5.10",
     "scipy>=1.11",
     "numpy>=1.26",
-    "deap>=1.4",
 
     # Database (per architecture 2.4)
     "sqlalchemy>=2.0,<3.0",
@@ -82,6 +81,7 @@ intelligence = [
 
 optimizer = [
     "optuna[postgres]>=3.0",
+    "deap>=1.4",
 ]
 
 crawler = [

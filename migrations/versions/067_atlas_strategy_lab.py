@@ -68,6 +68,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("genome_id", "date"),
     )
     op.create_index("ix_perf_daily_date", "atlas_strategy_performance_daily", ["date"])
+    op.create_index("ix_perf_genome_id", "atlas_strategy_performance_daily", ["genome_id"])
 
     op.create_table(
         "atlas_strategy_positions_daily",
@@ -102,6 +103,8 @@ def upgrade() -> None:
         sa.CheckConstraint("tax_status IN ('stcg','ltcg_eligible','liquidbees')", name="ck_positions_tax"),
     )
     op.create_index("ix_positions_daily_date", "atlas_strategy_positions_daily", ["date"])
+    op.create_index("ix_positions_genome_id", "atlas_strategy_positions_daily", ["genome_id"])
+    op.create_index("ix_positions_instrument_id", "atlas_strategy_positions_daily", ["instrument_id"])
 
     op.create_table(
         "atlas_strategy_leaderboard",
@@ -122,6 +125,7 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
     )
+    op.create_index("ix_leaderboard_genome_id", "atlas_strategy_leaderboard", ["genome_id"])
 
     op.create_table(
         "atlas_strategy_insights",
@@ -149,6 +153,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("instrument_id", "date", "universe"),
     )
     op.create_index("ix_universe_membership_date_universe", "atlas_universe_membership_daily", ["date", "universe"])
+    op.create_index("ix_membership_instrument_id", "atlas_universe_membership_daily", ["instrument_id"])
 
     op.create_table(
         "atlas_strategy_evolution_log",
@@ -177,6 +182,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_evolution_log_event_at", "atlas_strategy_evolution_log", ["event_at"])
     op.create_index("ix_evolution_log_event_type", "atlas_strategy_evolution_log", ["event_type"])
+    op.create_index("ix_evolution_genome_id", "atlas_strategy_evolution_log", ["genome_id"])
 
     op.create_table(
         "atlas_portfolio_config",
@@ -191,6 +197,13 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_index("ix_evolution_genome_id", table_name="atlas_strategy_evolution_log")
+    op.drop_index("ix_membership_instrument_id", table_name="atlas_universe_membership_daily")
+    op.drop_index("ix_leaderboard_genome_id", table_name="atlas_strategy_leaderboard")
+    op.drop_index("ix_positions_instrument_id", table_name="atlas_strategy_positions_daily")
+    op.drop_index("ix_positions_genome_id", table_name="atlas_strategy_positions_daily")
+    op.drop_index("ix_perf_genome_id", table_name="atlas_strategy_performance_daily")
+
     for table in [
         "atlas_portfolio_config",
         "atlas_strategy_evolution_log",
