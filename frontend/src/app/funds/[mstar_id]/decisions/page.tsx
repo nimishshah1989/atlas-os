@@ -45,7 +45,6 @@ export default async function FundDecisionsPage({ params, searchParams }: Props)
           scores={scores}
           initialChanges={initialChanges}
           initialPeriod={selectedPeriod}
-          mstar_id={mstar_id}
         />
       ) : null}
     </div>

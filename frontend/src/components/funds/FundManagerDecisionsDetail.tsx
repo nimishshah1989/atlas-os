@@ -72,15 +72,9 @@ type Props = {
   scores: FundDecisionScoreRow[]
   initialChanges: FundHoldingsChangeRow[]
   initialPeriod: string
-  mstar_id: string
 }
 
-export function FundManagerDecisionsDetail({
-  scores,
-  initialChanges,
-  initialPeriod,
-  mstar_id: _mstar_id,
-}: Props) {
+export function FundManagerDecisionsDetail({ scores, initialChanges, initialPeriod }: Props) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<(typeof ACTION_TABS)[number]>('All')
 
@@ -96,8 +90,11 @@ export function FundManagerDecisionsDetail({
     <div className="space-y-4">
       {/* Period selector */}
       <div className="flex items-center gap-3">
-        <span className="font-sans text-[11px] text-ink-tertiary">Period</span>
+        <label htmlFor="period-select" className="font-sans text-[11px] text-ink-tertiary">
+          Period
+        </label>
         <select
+          id="period-select"
           value={initialPeriod}
           onChange={(e) => handlePeriodChange(e.target.value)}
           className="font-mono text-sm border border-paper-rule rounded px-2 py-1 bg-paper text-ink-primary"
@@ -132,10 +129,11 @@ export function FundManagerDecisionsDetail({
         {ACTION_TABS.map((tab) => (
           <button
             key={tab}
+            type="button"
             onClick={() => setActiveTab(tab)}
             className={`px-3 py-1.5 font-sans text-xs capitalize border-b-2 transition-colors ${
               activeTab === tab
-                ? 'border-teal-600 text-teal-600 font-medium'
+                ? 'border-teal text-teal font-medium'
                 : 'border-transparent text-ink-tertiary hover:text-ink-secondary'
             }`}
           >
@@ -172,8 +170,8 @@ export function FundManagerDecisionsDetail({
             </tr>
           </thead>
           <tbody>
-            {filtered.map((row, i) => (
-              <tr key={i} className="border-b border-paper-rule/50 hover:bg-paper-rule/5">
+            {filtered.map((row) => (
+              <tr key={row.symbol} className="border-b border-paper-rule/50 hover:bg-paper-rule/5">
                 <td className="py-1.5 px-2 font-mono text-xs font-medium">{row.symbol}</td>
                 <td className="py-1.5 px-2">
                   <ActionBadge action={row.action} />
@@ -185,7 +183,7 @@ export function FundManagerDecisionsDetail({
                   {(Number(row.weight_after) * 100).toFixed(2)}%
                 </td>
                 <td
-                  className={`py-1.5 px-2 font-mono text-xs text-right ${Number(row.weight_delta) > 0 ? 'text-signal-pos' : 'text-signal-neg'}`}
+                  className={`py-1.5 px-2 font-mono text-xs text-right ${Number(row.weight_delta) > 0 ? 'text-signal-pos' : Number(row.weight_delta) < 0 ? 'text-signal-neg' : 'text-ink-tertiary'}`}
                 >
                   {Number(row.weight_delta) > 0 ? '+' : ''}
                   {(Number(row.weight_delta) * 100).toFixed(2)}%

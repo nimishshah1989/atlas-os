@@ -343,14 +343,13 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
                       <td className="py-1.5 px-2 font-mono text-xs text-right tabular-nums">
                         {f.decision_score !== null ? (
                           <span
-                            style={{
-                              color:
-                                Number(f.decision_score) >= 65
-                                  ? '#1D9E75'
-                                  : Number(f.decision_score) >= 40
-                                    ? '#f59e0b'
-                                    : '#ef4444',
-                            }}
+                            className={
+                              Number(f.decision_score) >= 65
+                                ? 'text-signal-pos'
+                                : Number(f.decision_score) >= 40
+                                  ? 'text-signal-warn'
+                                  : 'text-signal-neg'
+                            }
                           >
                             {Number(f.decision_score).toFixed(1)}
                           </span>
@@ -363,14 +362,13 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
                       <td className="py-1.5 px-2 font-mono text-xs text-right tabular-nums">
                         {f.decision_score_1m !== null ? (
                           <span
-                            style={{
-                              color:
-                                Number(f.decision_score_1m) >= 65
-                                  ? '#1D9E75'
-                                  : Number(f.decision_score_1m) >= 40
-                                    ? '#f59e0b'
-                                    : '#ef4444',
-                            }}
+                            className={
+                              Number(f.decision_score_1m) >= 65
+                                ? 'text-signal-pos'
+                                : Number(f.decision_score_1m) >= 40
+                                  ? 'text-signal-warn'
+                                  : 'text-signal-neg'
+                            }
                           >
                             {Number(f.decision_score_1m).toFixed(1)}
                           </span>
