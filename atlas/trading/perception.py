@@ -35,6 +35,9 @@ def derive_rs_state(rs_pctile: np.ndarray, layer1: Layer1Perception) -> np.ndarr
 
     Returns:
         int8 array of same shape with RS state values 0–4
+
+    NaN values in rs_pctile evaluate False in all comparisons and remain RS_LAGGARD
+    (conservative default for missing data).
     """
     out = np.full(rs_pctile.shape, RS_LAGGARD, dtype=np.int8)
     out = np.where(rs_pctile >= layer1.rs_weak_cutoff_pct, RS_WEAK, out)
@@ -86,6 +89,9 @@ def derive_vol_state(vol_ratio: np.ndarray, layer1: Layer1Perception) -> np.ndar
 
     Returns:
         int8 array of same shape with vol state 0–2
+
+    NaN values in vol_ratio evaluate False in all comparisons and remain VOL_NORMAL
+    (conservative default for missing data).
     """
     out = np.full(vol_ratio.shape, VOL_NORMAL, dtype=np.int8)
     out = np.where(vol_ratio >= layer1.vol_elevated_ratio, VOL_ELEVATED, out)
@@ -101,6 +107,9 @@ def derive_momentum_state(ema_ratio: np.ndarray, layer1: Layer1Perception) -> np
 
     Returns:
         int8 array of same shape with momentum state 0–2
+
+    NaN values in ema_ratio evaluate False in all comparisons and remain MOM_NEUTRAL
+    (conservative default for missing data).
     """
     out = np.full(ema_ratio.shape, MOM_NEUTRAL, dtype=np.int8)
     out = np.where(ema_ratio >= layer1.momentum_accel_ema_ratio, MOM_ACCELERATING, out)

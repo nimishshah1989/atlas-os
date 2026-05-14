@@ -110,6 +110,11 @@ class Layer1Perception:
         assert (
             self.momentum_accel_ema_ratio > self.momentum_decel_ema_ratio
         ), "momentum_accel_ema_ratio must exceed momentum_decel_ema_ratio"
+        assert (
+            self.regime_risk_on_breadth_pct
+            > self.regime_constructive_breadth_pct
+            > self.regime_cautious_breadth_pct
+        ), "Breadth thresholds must be strictly decreasing: risk_on > constructive > cautious"
 
 
 @dataclass
