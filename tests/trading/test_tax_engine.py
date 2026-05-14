@@ -80,12 +80,21 @@ def test_ltcg_loss_no_tax(cfg, ledger):
         config=cfg,
         ledger=ledger,
     )
-    assert net < Decimal("0")  # net loss after costs
+    gross_pnl = (Decimal("150") - Decimal("200")) * Decimal("100")
+    entry_val = Decimal("200") * Decimal("100")
+    exit_val = Decimal("150") * Decimal("100")
+    brokerage = (entry_val + exit_val) * cfg.brokerage_rate
+    stt = exit_val * cfg.stt_rate_sell
+    exchange = (entry_val + exit_val) * (cfg.exchange_charge_rate + cfg.sebi_charge_rate)
+    total_costs = brokerage + stt + exchange
+    # No tax on losses — net must equal gross_pnl minus costs only
+    assert net == gross_pnl - total_costs
 
 
 def test_liquidbees_accrual(cfg):
     idle = Decimal("1000000")  # ₹10L
     daily_net = accrue_liquidbees(idle, 1, cfg)
-    # daily gross = 1,000,000 * 0.067 / 365 ≈ 183.56
-    # daily net after 30% tax ≈ 183.56 * 0.70 ≈ 128.49
-    assert Decimal("120") < daily_net < Decimal("140")
+    # Exact Decimal computation matching the implementation
+    expected_gross = idle * cfg.liquidbees_annual_yield / Decimal("365") * Decimal("1")
+    expected_net = expected_gross * (Decimal("1") - cfg.income_tax_slab_rate)
+    assert daily_net == expected_net
