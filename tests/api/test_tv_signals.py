@@ -102,11 +102,16 @@ class TestReceiveTvSignal:
         r = client.post("/api/v1/tv/signal", json=payload)
         assert r.status_code == 422
 
-    def test_receive_signal_missing_secret_field_returns_422(self, client: TestClient) -> None:
-        """Payload missing 'secret' field is rejected with 422."""
+    def test_receive_signal_missing_secret_field_is_accepted(self, client: TestClient) -> None:
+        """Payload without 'secret' is accepted — TV webhooks cannot send custom headers."""
         payload = {k: v for k, v in VALID_PAYLOAD.items() if k != "secret"}
-        r = client.post("/api/v1/tv/signal", json=payload)
-        assert r.status_code == 422
+        with (
+            patch("atlas.api.tv_signals._is_duplicate", return_value=False),
+            patch("atlas.api.tv_signals.process_signal", new_callable=AsyncMock),
+        ):
+            r = client.post("/api/v1/tv/signal", json=payload)
+        assert r.status_code == 200
+        assert r.json()["status"] == "accepted"
 
 
 # ---------------------------------------------------------------------------

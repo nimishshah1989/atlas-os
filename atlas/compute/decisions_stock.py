@@ -412,7 +412,7 @@ def run_stock_decisions(
     run_id = run_id or uuid.uuid4()
 
     if thresholds is None:
-        thresholds = load_thresholds(engine)
+        thresholds = load_thresholds("atlas", engine)
 
     log.info("stock_decisions_start", start=str(start_date), end=str(end_date))
 

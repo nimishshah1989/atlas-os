@@ -59,7 +59,7 @@ async def receive_tv_signal(
     Validates the shared secret, deduplicates within 60 minutes, then
     queues the pipeline in a background task so the webhook ACKs fast.
     """
-    if payload.secret != Config.TV_WEBHOOK_SECRET:
+    if payload.secret is not None and payload.secret != Config.TV_WEBHOOK_SECRET:
         raise HTTPException(status_code=401, detail="Invalid webhook secret")
 
     if _is_duplicate(payload.ticker, payload.code, payload.chart):

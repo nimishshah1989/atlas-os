@@ -370,7 +370,7 @@ def run_lens1(
     t0 = __import__("time").time()
 
     if thresholds is None:
-        thresholds = load_thresholds(engine)
+        thresholds = load_thresholds("atlas", engine)
 
     fund_universe = load_fund_universe(engine)
     if fund_universe.empty:

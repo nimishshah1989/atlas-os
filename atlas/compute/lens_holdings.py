@@ -232,7 +232,7 @@ def run_lens3(
     run_id = run_id or uuid.uuid4()
 
     if thresholds is None:
-        thresholds = load_thresholds(engine)
+        thresholds = load_thresholds("atlas", engine)
 
     with open_compute_session(engine) as conn:
         disclosure_dates_df = pd.read_sql(

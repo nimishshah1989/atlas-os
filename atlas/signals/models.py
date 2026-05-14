@@ -15,7 +15,7 @@ class TVSignalPayload(BaseModel):
     close: Decimal  # TV sends as string — Pydantic coerces
     volume: int
     time: str  # ISO string from TV {{timenow}}
-    secret: str
+    secret: str | None = None
 
     @field_validator("close", mode="before")
     @classmethod
