@@ -40,6 +40,31 @@ export type USSectorRRGPoint = {
   rs_momentum: string | null
 }
 
+export type USSectorStockRow = {
+  ticker: string
+  company_name: string | null
+  rs_state: string | null
+  momentum_state: string | null
+  above_30w_ma: boolean | null
+  rs_pctile_3m_vt: string | null
+  rs_pctile_1m_vt: string | null
+  ret_1m: string | null
+  ret_3m: string | null
+  ret_6m: string | null
+  extension_pct: string | null
+  max_drawdown_252: string | null
+  realized_vol_63: string | null
+}
+
+export type USSectorMetricHistoryRow = {
+  date: string
+  avg_rs_pctile_3m_vt: string | null
+  avg_rs_pctile_1m_vt: string | null
+  avg_ret_1m: string | null
+  avg_ret_3m: string | null
+  participation_rs: string | null
+}
+
 export async function getUSSectorSummary(): Promise<USSectorRow[]> {
   return sql<USSectorRow[]>`
     WITH latest_date AS (
@@ -97,6 +122,70 @@ export async function getUSSectorSummary(): Promise<USSectorRow[]> {
     FROM live_stocks
     GROUP BY gics_sector
     ORDER BY AVG(rs_pctile_3m_vt) DESC NULLS LAST
+  `
+}
+
+export async function getUSSectorByName(sectorName: string): Promise<USSectorRow | null> {
+  const rows = await getUSSectorSummary()
+  return rows.find(r => r.gics_sector === sectorName) ?? null
+}
+
+export async function getUSStocksInSector(sectorName: string): Promise<USSectorStockRow[]> {
+  return sql<USSectorStockRow[]>`
+    WITH latest_date AS (
+      SELECT MAX(date) AS d FROM us_atlas.atlas_stock_states_daily
+    )
+    SELECT
+      u.ticker,
+      i.name                    AS company_name,
+      s.rs_state,
+      s.momentum_state,
+      s.above_30w_ma,
+      m.rs_pctile_3m_vt::text,
+      m.rs_pctile_1m_vt::text,
+      m.ret_1m::text,
+      m.ret_3m::text,
+      m.ret_6m::text,
+      m.extension_pct::text,
+      m.max_drawdown_252::text,
+      m.realized_vol_63::text
+    FROM us_atlas.atlas_universe_stocks u
+    LEFT JOIN us_atlas.instruments i ON i.ticker = u.ticker
+    JOIN us_atlas.atlas_stock_states_daily s ON s.ticker = u.ticker
+    JOIN us_atlas.atlas_stock_metrics_daily m ON m.ticker = u.ticker AND m.date = s.date
+    CROSS JOIN latest_date ld
+    WHERE s.date = ld.d
+      AND u.is_active = true
+      AND s.gics_sector = ${sectorName}
+      AND s.history_gate_pass = true
+      AND s.liquidity_gate_pass = true
+    ORDER BY m.rs_pctile_3m_vt DESC NULLS LAST
+  `
+}
+
+export async function getUSSectorMetricHistory(sectorName: string, days = 126): Promise<USSectorMetricHistoryRow[]> {
+  if (!Number.isInteger(days) || days < 1 || days > 3650) {
+    throw new Error(`days must be between 1 and 3650, got: ${days}`)
+  }
+  return sql<USSectorMetricHistoryRow[]>`
+    SELECT
+      m.date::text,
+      AVG(m.rs_pctile_3m_vt)::text   AS avg_rs_pctile_3m_vt,
+      AVG(m.rs_pctile_1m_vt)::text   AS avg_rs_pctile_1m_vt,
+      AVG(m.ret_1m)::text            AS avg_ret_1m,
+      AVG(m.ret_3m)::text            AS avg_ret_3m,
+      (100.0 * COUNT(CASE WHEN s.rs_state IN ('Leader','Strong') THEN 1 END)
+               / NULLIF(COUNT(*), 0))::text AS participation_rs
+    FROM us_atlas.atlas_stock_metrics_daily m
+    JOIN us_atlas.atlas_stock_states_daily s ON s.ticker = m.ticker AND s.date = m.date
+    JOIN us_atlas.atlas_universe_stocks u ON u.ticker = m.ticker
+    WHERE s.gics_sector = ${sectorName}
+      AND u.is_active = true
+      AND s.history_gate_pass = true
+      AND s.liquidity_gate_pass = true
+      AND m.date >= CURRENT_DATE - (${days} || ' days')::interval
+    GROUP BY m.date
+    ORDER BY m.date ASC
   `
 }
 

@@ -238,7 +238,7 @@ export function USSectorTable({ sectors }: Props) {
                 {/* Sector name — links to stocks tab pre-filtered by sector */}
                 <td className="py-2.5 px-2 font-sans text-xs whitespace-nowrap">
                   <Link
-                    href={`/us?tab=Stocks&sector=${encodeURIComponent(r.gics_sector)}`}
+                    href={`/us/sectors/${encodeURIComponent(r.gics_sector)}`}
                     className="text-ink-primary hover:text-teal hover:underline transition-colors"
                   >
                     {r.gics_sector}

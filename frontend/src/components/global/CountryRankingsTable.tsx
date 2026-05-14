@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { rsStateColor } from '@/lib/chart-colors'
 import type { CountryRow } from '@/lib/queries/global'
 
@@ -83,6 +84,7 @@ const TIMEFRAMES  = ['1M', '3M', '12M']
 
 export function CountryRankingsTable({ countries }: { countries: CountryRow[] }) {
   const [view, setView] = useState<ViewMode>('quintile')
+  const router = useRouter()
 
   return (
     <div>
@@ -153,9 +155,13 @@ export function CountryRankingsTable({ countries }: { countries: CountryRow[] })
                   </td>
                 </tr>,
                 ...rows.map(c => (
-                  <tr key={c.ticker} className="border-b border-paper-rule/50 hover:bg-paper-bg/40 transition-colors">
+                  <tr
+                    key={c.ticker}
+                    className="border-b border-paper-rule/50 hover:bg-paper-bg/40 transition-colors cursor-pointer"
+                    onClick={() => router.push(`/global/country/${encodeURIComponent(c.ticker)}`)}
+                  >
                     <td className="px-3 py-1.5">
-                      <div className="font-sans text-[12px] text-ink-primary">{c.country}</div>
+                      <div className="font-sans text-[12px] text-ink-primary hover:text-teal transition-colors">{c.country}</div>
                       <div className="font-mono text-[10px] text-ink-tertiary uppercase">{c.ticker}</div>
                     </td>
                     <td className="px-2 py-1.5">

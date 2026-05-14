@@ -23624,3 +23624,372 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{
+  "ts": "2026-05-14T06:20:00Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/specs/2026-05-14-mf-holdings-history-design.md",
+  "lines_changed": 291,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:20:35Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/specs/2026-05-14-mf-holdings-history-design.md",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:31:54Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-mf-holdings-history.md",
+  "lines_changed": 2151,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:32:25Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-mf-holdings-history.md",
+  "lines_changed": 19,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:32:36Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-mf-holdings-history.md",
+  "lines_changed": 10,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:32:42Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-mf-holdings-history.md",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:37:19Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/064_tv_signal_reports.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:39:08Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/us-sectors.ts",
+  "lines_changed": 95,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:39:33Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/global.ts",
+  "lines_changed": 155,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:39:49Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/us/sectors/[name]/page.tsx",
+  "lines_changed": 57,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:40:15Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/us/USSectorDeepDiveHeader.tsx",
+  "lines_changed": 105,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:41:09Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/us/USSectorDetailTabs.tsx",
+  "lines_changed": 272,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:41:16Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/us/USSectorTable.tsx",
+  "lines_changed": 9,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:41:27Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/global/country/[ticker]/page.tsx",
+  "lines_changed": 58,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:41:51Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/global/CountryDeepDiveHeader.tsx",
+  "lines_changed": 77,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:42:12Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/global/CountrySnapshotTiles.tsx",
+  "lines_changed": 107,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:43:02Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/global/CountryDeepDiveTabs.tsx",
+  "lines_changed": 271,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:43:09Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/global/CountryRankingsTable.tsx",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:43:14Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/global/CountryRankingsTable.tsx",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:43:22Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/global/CountryRankingsTable.tsx",
+  "lines_changed": 10,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:44:55Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/us-sectors.ts",
+  "lines_changed": 221,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:51:47Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-mf-holdings-history.md",
+  "lines_changed": 18,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:52:08Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-mf-holdings-history.md",
+  "lines_changed": 72,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:52:57Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-mf-holdings-history.md",
+  "lines_changed": 51,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:53:12Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-mf-holdings-history.md",
+  "lines_changed": 81,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:53:24Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-mf-holdings-history.md",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:53:36Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-mf-holdings-history.md",
+  "lines_changed": 30,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:47:52Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/specs/2026-05-14-atlas-strategy-lab-design.md",
+  "lines_changed": 667,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:48:39Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/specs/2026-05-14-atlas-strategy-lab-design.md",
+  "lines_changed": 10,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:48:44Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/us-sectors.ts",
+  "lines_changed": 216,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:48:49Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/specs/2026-05-14-atlas-strategy-lab-design.md",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:48:57Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/specs/2026-05-14-atlas-strategy-lab-design.md",
+  "lines_changed": 15,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:49:59Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/global.ts",
+  "lines_changed": 158,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:50:41Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/us/USSectorTable.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:50:54Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/global/CountryRankingsTable.tsx",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:50:59Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/global/CountryRankingsTable.tsx",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:51:05Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/global/CountryRankingsTable.tsx",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:51:24Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-mf-holdings-history.md",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:54:15Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-mf-holdings-history.md",
+  "lines_changed": 39,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:54:42Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-mf-holdings-history.md",
+  "lines_changed": 23,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-14T06:54:50Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-14-mf-holdings-history.md",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}

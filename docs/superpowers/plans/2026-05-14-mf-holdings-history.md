@@ -349,16 +349,17 @@ def _load_stock_states(
     }
 
 
-def _already_computed(engine: Engine, mstar_id: str, to_date: date) -> bool:
+def _load_computed_set(engine: Engine) -> set[tuple[str, Any]]:
+    """Return set of (mstar_id, period_date) already in atlas_fund_decision_scores.
+
+    Called once before the fund loop — avoids ~500 per-fund queries (D4 fix).
+    """
     with open_compute_session(engine) as conn:
-        result = conn.execute(
-            text(
-                "SELECT 1 FROM atlas.atlas_fund_decision_scores "
-                "WHERE mstar_id = :mid AND period_date = :d LIMIT 1"
-            ),
-            {"mid": mstar_id, "d": to_date},
-        ).fetchone()
-    return result is not None
+        df = pd.read_sql(
+            "SELECT mstar_id, period_date FROM atlas.atlas_fund_decision_scores",
+            conn,
+        )
+    return set(zip(df["mstar_id"], df["period_date"]))
 
 
 # --------------------------------------------------------------------------- #
@@ -374,8 +375,12 @@ def compute_holdings_diff(
     state_map: dict[str, tuple[str | None, str | None]],
     min_weight_delta: float,
 ) -> list[dict[str, Any]]:
-    """Diff two holdings snapshots; return list of change row dicts."""
-    # Merge on instrument_id
+    """Diff two holdings snapshots; return list of change row dicts.
+
+    Fully vectorized — no iterrows (D2 fix). Uses np.select for action
+    classification and state lookup via .map(), same pattern as
+    classify_holdings_state() in lens_holdings.py.
+    """
     merged = pd.merge(
         to_snap.rename(columns={"weight": "w_after", "symbol": "symbol_after"}),
         from_snap[["instrument_id", "weight"]].rename(columns={"weight": "w_before"}),
@@ -384,41 +389,55 @@ def compute_holdings_diff(
     ).fillna({"w_after": 0.0, "w_before": 0.0, "symbol_after": ""})
 
     merged["delta"] = merged["w_after"] - merged["w_before"]
+    threshold = min_weight_delta / 100.0
 
-    rows = []
-    for _, r in merged.iterrows():
-        w_before = float(r["w_before"])
-        w_after = float(r["w_after"])
-        delta = float(r["delta"])
-        iid = r["instrument_id"]
+    # Vectorized action classification using np.select (no iterrows)
+    is_entry    = (merged["w_before"] == 0) & (merged["w_after"] > 0)
+    is_exit     = (merged["w_before"] > 0)  & (merged["w_after"] == 0)
+    is_increase = ~is_entry & ~is_exit & (merged["delta"] >=  threshold)
+    is_decrease = ~is_entry & ~is_exit & (merged["delta"] <= -threshold)
 
-        if w_before == 0 and w_after > 0:
-            action = "entry"
-        elif w_before > 0 and w_after == 0:
-            action = "exit"
-        elif abs(delta) >= (min_weight_delta / 100.0):
-            action = "increase" if delta > 0 else "decrease"
-        else:
-            continue  # noise
+    merged["action"] = np.select(
+        [is_entry, is_exit, is_increase, is_decrease],
+        ["entry", "exit", "increase", "decrease"],
+        default=None,
+    )
+    merged = merged[merged["action"].notna()].copy()
 
-        rs_state, momentum_state = state_map.get(iid, (None, None))
-        signal_quality = derive_signal_quality(action, rs_state)
+    if merged.empty:
+        return []
 
-        rows.append({
-            "mstar_id": mstar_id,
-            "from_date": from_date,
-            "to_date": to_date,
-            "instrument_id": iid,
-            "symbol": r.get("symbol_after") or "",
-            "action": action,
-            "weight_before": round(w_before, 4),
-            "weight_after": round(w_after, 4),
-            "weight_delta": round(delta, 4),
-            "rs_state_at_action": rs_state,
-            "momentum_state_at_action": momentum_state,
-            "signal_quality": signal_quality,
-        })
-    return rows
+    # Vectorized state lookup via dict.map
+    rs_map  = {k: v[0] for k, v in state_map.items()}
+    mom_map = {k: v[1] for k, v in state_map.items()}
+    merged["rs_state"]  = merged["instrument_id"].map(rs_map)
+    merged["mom_state"] = merged["instrument_id"].map(mom_map)
+
+    # Vectorized signal_quality derivation (np.select, conservative-first)
+    sq_conds = [
+        (merged["action"] == "entry") & merged["rs_state"].isin(_HIGH_QUALITY_STATES),
+        (merged["action"] == "entry") & merged["rs_state"].isin(_LOW_QUALITY_STATES),
+        (merged["action"] == "exit")  & merged["rs_state"].isin(_LOW_QUALITY_STATES),
+        (merged["action"] == "exit")  & merged["rs_state"].isin(_HIGH_QUALITY_STATES),
+    ]
+    merged["signal_quality"] = np.select(sq_conds, ["high", "low", "high", "low"], default="neutral")
+
+    merged["mstar_id"]    = mstar_id
+    merged["from_date"]   = from_date
+    merged["to_date"]     = to_date
+    merged["symbol"]      = merged["symbol_after"].fillna("")
+    merged["weight_before"] = merged["w_before"].round(4)
+    merged["weight_after"]  = merged["w_after"].round(4)
+    merged["weight_delta"]  = merged["delta"].round(4)
+
+    return merged.rename(columns={
+        "rs_state":  "rs_state_at_action",
+        "mom_state": "momentum_state_at_action",
+    })[[
+        "mstar_id", "from_date", "to_date", "instrument_id", "symbol",
+        "action", "weight_before", "weight_after", "weight_delta",
+        "rs_state_at_action", "momentum_state_at_action", "signal_quality",
+    ]].to_dict("records")
 
 
 # --------------------------------------------------------------------------- #
@@ -519,6 +538,9 @@ def run_lens_decisions(
 
     log.info("lens_decisions_start", total_funds=len(fund_dates))
 
+    # D4: batch-load all already-computed pairs upfront (one query vs ~500)
+    computed_set = _load_computed_set(engine)
+
     total_changes = 0
     total_scores = 0
     skipped = 0
@@ -529,7 +551,7 @@ def run_lens_decisions(
             to_date = dates[0]
             from_date = dates[1] if len(dates) >= 2 else None
 
-            if _already_computed(engine, mstar_id, to_date):
+            if (mstar_id, to_date) in computed_set:
                 skipped += 1
                 continue
 
@@ -1071,86 +1093,53 @@ def _derive_outcome_quality(action: str, rs_state: str | None) -> str:
 
 
 def _enrich_window(engine, days: int, rs_col: str, ret_col: str, quality_col: str) -> int:
-    """Fill outcome columns for one time window. Returns rows updated."""
+    """Fill outcome columns for one time window via single SQL UPDATE...FROM (D3 fix).
+
+    Uses a CTE with DISTINCT ON to find the closest available stock state within
+    ±7 days of the outcome target date. No Python loop, no N+1 queries.
+    The CASE expression in the UPDATE handles outcome_quality derivation in SQL.
+    Returns rows updated.
+    """
     cutoff = date.today() - timedelta(days=days)
+    interval = timedelta(days=days)
+    ret_field = "ret_1m" if days == 30 else "ret_3m"
 
     with open_compute_session(engine) as conn:
-        pending = pd.read_sql(
-            f"""
-            SELECT id::text AS id, instrument_id, action, to_date
-            FROM atlas.atlas_fund_holdings_changes
-            WHERE {quality_col} IS NULL
-              AND to_date <= %(cutoff)s
-            """,  # noqa: S608 -- no user input; column name is a constant
-            conn,
-            params={"cutoff": cutoff},
-        )
-
-    if pending.empty:
-        log.info("enrich_window_nothing_pending", window_days=days)
-        return 0
-
-    # Load stock states at outcome date for all affected instruments
-    all_ids = pending["instrument_id"].unique().tolist()
-    outcome_dates = (pending["to_date"] + pd.Timedelta(days=days)).dt.date.unique().tolist()
-
-    with open_compute_session(engine) as conn:
-        states_df = pd.read_sql(
-            """
-            SELECT DISTINCT ON (instrument_id, target_date)
-                instrument_id::text AS instrument_id,
-                date AS state_date,
-                rs_state,
-                ret_1m,
-                ret_3m
-            FROM atlas.atlas_stock_states_daily
-            JOIN atlas.atlas_stock_metrics_daily USING (instrument_id, date)
-            WHERE instrument_id::text = ANY(%(ids)s)
-              AND date BETWEEN %(min_date)s AND %(max_date)s
-            ORDER BY instrument_id, date DESC
-            """,
-            conn,
-            params={
-                "ids": all_ids,
-                "min_date": min(outcome_dates) - timedelta(days=7),
-                "max_date": max(outcome_dates) + timedelta(days=7),
-            },
-        )
-
-    # Build lookup: (instrument_id, approx_outcome_date) → (rs_state, ret)
-    states_df["state_date"] = pd.to_datetime(states_df["state_date"]).dt.date
-    state_lookup = {
-        (row["instrument_id"], row["state_date"]): (row["rs_state"], row["ret_1m"] if days == 30 else row["ret_3m"])
-        for _, row in states_df.iterrows()
-    }
-
-    updated = 0
-    for _, row in pending.iterrows():
-        target_date = row["to_date"] + timedelta(days=days)
-        # Find closest available state (within ±7 days)
-        rs_state = ret_val = None
-        for offset in range(0, 8):
-            for delta in [0, -offset, +offset]:
-                check_date = target_date + timedelta(days=delta)
-                if (row["instrument_id"], check_date) in state_lookup:
-                    rs_state, ret_val = state_lookup[(row["instrument_id"], check_date)]
-                    break
-            if rs_state is not None:
-                break
-
-        outcome_quality = _derive_outcome_quality(row["action"], rs_state)
-
-        with open_compute_session(engine) as conn:
-            conn.execute(
-                text(f"""
-                    UPDATE atlas.atlas_fund_holdings_changes
-                    SET {rs_col} = :rs, {ret_col} = :ret, {quality_col} = :quality,
-                        updated_at = NOW()
-                    WHERE id = :id
-                """),  # noqa: S608 -- column names are constants, not user input
-                {"rs": rs_state, "ret": ret_val, "quality": outcome_quality, "id": row["id"]},
+        result = conn.execute(text(f"""
+            WITH outcome_states AS (
+                SELECT DISTINCT ON (c.id)
+                    c.id,
+                    s.rs_state,
+                    sm.{ret_field} AS ret_val
+                FROM atlas.atlas_fund_holdings_changes c
+                JOIN atlas.atlas_stock_states_daily s
+                    ON s.instrument_id::text = c.instrument_id::text
+                   AND s.date BETWEEN c.to_date + :interval - INTERVAL '7 days'
+                                  AND c.to_date + :interval + INTERVAL '7 days'
+                JOIN atlas.atlas_stock_metrics_daily sm
+                    ON sm.instrument_id = s.instrument_id AND sm.date = s.date
+                WHERE c.{quality_col} IS NULL
+                  AND c.to_date <= :cutoff
+                ORDER BY c.id, ABS(s.date - (c.to_date + :interval))
             )
-        updated += 1
+            UPDATE atlas.atlas_fund_holdings_changes c
+            SET
+                {rs_col}      = o.rs_state,
+                {ret_col}     = o.ret_val,
+                {quality_col} = CASE
+                    WHEN c.action IN ('increase','decrease') THEN 'neutral'
+                    WHEN c.action = 'entry' AND o.rs_state IN ('Leader','Strong','Emerging') THEN 'good'
+                    WHEN c.action = 'entry' AND o.rs_state IN ('Weak','Laggard') THEN 'bad'
+                    WHEN c.action = 'exit'  AND o.rs_state IN ('Weak','Laggard') THEN 'good'
+                    WHEN c.action = 'exit'  AND o.rs_state IN ('Leader','Strong','Emerging') THEN 'bad'
+                    ELSE 'neutral'
+                END,
+                updated_at = NOW()
+            FROM outcome_states o
+            WHERE c.id = o.id
+        """),  # noqa: S608 -- column/field names are string constants, not user input
+        {"cutoff": cutoff, "interval": interval})
+        updated = result.rowcount
 
     log.info("enrich_window_done", window_days=days, rows_updated=updated)
     return updated
@@ -1233,11 +1222,82 @@ python scripts/enrich_fund_decision_outcomes.py --window both
 
 Expected: Some rows updated if any `to_date` is ≥ 30 days ago. No errors.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: Write unit tests for outcome enrichment logic (D5)**
+
+Create `tests/unit/compute/test_enrich_fund_decisions.py`:
+
+```python
+"""Unit tests for enrich_fund_decision_outcomes outcome quality derivation.
+
+Tests the _derive_outcome_quality pure function — all cases from the spec
+outcome quality definition (§Compute.Enrichment). No DB required.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from scripts.enrich_fund_decision_outcomes import _derive_outcome_quality
+
+
+class TestDeriveOutcomeQuality:
+    def test_entry_into_leader_is_good(self):
+        assert _derive_outcome_quality("entry", "Leader") == "good"
+
+    def test_entry_into_strong_is_good(self):
+        assert _derive_outcome_quality("entry", "Strong") == "good"
+
+    def test_entry_into_emerging_is_good(self):
+        assert _derive_outcome_quality("entry", "Emerging") == "good"
+
+    def test_entry_into_weak_is_bad(self):
+        assert _derive_outcome_quality("entry", "Weak") == "bad"
+
+    def test_entry_into_laggard_is_bad(self):
+        assert _derive_outcome_quality("entry", "Laggard") == "bad"
+
+    def test_exit_from_weak_is_good(self):
+        assert _derive_outcome_quality("exit", "Weak") == "good"
+
+    def test_exit_from_laggard_is_good(self):
+        assert _derive_outcome_quality("exit", "Laggard") == "good"
+
+    def test_exit_from_leader_is_bad(self):
+        assert _derive_outcome_quality("exit", "Leader") == "bad"
+
+    def test_exit_from_strong_is_bad(self):
+        assert _derive_outcome_quality("exit", "Strong") == "bad"
+
+    def test_increase_is_always_neutral(self):
+        assert _derive_outcome_quality("increase", "Leader") == "neutral"
+
+    def test_decrease_is_always_neutral(self):
+        assert _derive_outcome_quality("decrease", "Laggard") == "neutral"
+
+    def test_none_rs_state_is_neutral(self):
+        assert _derive_outcome_quality("entry", None) == "neutral"
+
+    def test_unknown_rs_state_is_neutral(self):
+        assert _derive_outcome_quality("entry", "Unknown") == "neutral"
+
+    def test_entry_neutral_rs_is_neutral(self):
+        # Stocks that are in universe but in 'Neutral' state → neutral outcome
+        assert _derive_outcome_quality("entry", "Neutral") == "neutral"
+```
+
+- [ ] **Step 4: Run the outcome tests**
 
 ```bash
-git add scripts/enrich_fund_decision_outcomes.py
-git commit -m "feat(scripts): add enrich_fund_decision_outcomes for 1m/3m outcome backfill"
+pytest tests/unit/compute/test_enrich_fund_decisions.py -v
+```
+
+Expected: All 14 tests PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add scripts/enrich_fund_decision_outcomes.py tests/unit/compute/test_enrich_fund_decisions.py
+git commit -m "feat(scripts): add enrich_fund_decision_outcomes + outcome quality unit tests"
 ```
 
 ---
@@ -1798,6 +1858,7 @@ git commit -m "feat(frontend): add FundManagerDecisionSummary chart component"
 ```tsx
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import type { FundDecisionScoreRow, FundHoldingsChangeRow } from '@/lib/queries/funds'
 
@@ -1854,25 +1915,18 @@ type Props = {
 }
 
 export function FundManagerDecisionsDetail({ scores, initialChanges, initialPeriod, mstar_id }: Props) {
-  const [selectedPeriod, setSelectedPeriod] = useState(initialPeriod)
+  const router = useRouter()
+  // activeTab is local UI state; period comes from URL via server re-fetch (D1 fix)
   const [activeTab, setActiveTab] = useState<typeof ACTION_TABS[number]>('All')
-  const [changes, setChanges] = useState<FundHoldingsChangeRow[]>(initialChanges)
-  const [loading, setLoading] = useState(false)
 
-  const currentScore = scores.find(s => s.period_date === selectedPeriod)
-
+  const changes = initialChanges
+  const currentScore = scores.find(s => s.period_date === initialPeriod)
   const filtered = activeTab === 'All' ? changes : changes.filter(c => c.action === activeTab)
 
-  async function handlePeriodChange(period: string) {
-    setSelectedPeriod(period)
-    setLoading(true)
-    try {
-      const res = await fetch(`/api/v1/funds/${mstar_id}/decisions/${period}`)
-      const json = await res.json()
-      setChanges(json.data ?? [])
-    } finally {
-      setLoading(false)
-    }
+  function handlePeriodChange(period: string) {
+    // D1 fix: URL-based navigation — server component re-fetches for new period.
+    // Never calls Atlas FastAPI from the client; uses Supabase sql<> via page.tsx.
+    router.push(`?period=${period}`)
   }
 
   return (
@@ -1881,7 +1935,7 @@ export function FundManagerDecisionsDetail({ scores, initialChanges, initialPeri
       <div className="flex items-center gap-3">
         <span className="font-sans text-[11px] text-ink-tertiary">Period</span>
         <select
-          value={selectedPeriod}
+          value={initialPeriod}
           onChange={e => handlePeriodChange(e.target.value)}
           className="font-mono text-sm border border-paper-rule rounded px-2 py-1 bg-paper text-ink-primary"
         >
@@ -1917,48 +1971,42 @@ export function FundManagerDecisionsDetail({ scores, initialChanges, initialPeri
         ))}
       </div>
 
-      {/* Changes table */}
-      {loading ? (
-        <div className="h-32 flex items-center justify-center">
-          <span className="font-sans text-sm text-ink-tertiary animate-pulse">Loading…</span>
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-paper-rule">
-                {['Symbol', 'Action', 'Before', 'After', 'Δ Weight', 'RS State', 'Signal', '1m Outcome', '3m Outcome'].map(h => (
-                  <th key={h} className="py-2 px-2 font-sans text-[10px] text-ink-tertiary uppercase tracking-wide whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((row, i) => (
-                <tr key={i} className="border-b border-paper-rule/50 hover:bg-paper-rule/5">
-                  <td className="py-1.5 px-2 font-mono text-xs font-medium">{row.symbol}</td>
-                  <td className="py-1.5 px-2"><ActionBadge action={row.action} /></td>
-                  <td className="py-1.5 px-2 font-mono text-xs text-right">{(Number(row.weight_before) * 100).toFixed(2)}%</td>
-                  <td className="py-1.5 px-2 font-mono text-xs text-right">{(Number(row.weight_after) * 100).toFixed(2)}%</td>
-                  <td className={`py-1.5 px-2 font-mono text-xs text-right ${Number(row.weight_delta) > 0 ? 'text-signal-pos' : 'text-signal-neg'}`}>
-                    {Number(row.weight_delta) > 0 ? '+' : ''}{(Number(row.weight_delta) * 100).toFixed(2)}%
-                  </td>
-                  <td className="py-1.5 px-2 font-sans text-[11px]">{row.rs_state_at_action ?? '—'}</td>
-                  <td className="py-1.5 px-2"><QualityBadge quality={row.signal_quality} /></td>
-                  <td className="py-1.5 px-2"><QualityBadge quality={row.outcome_quality_1m} /></td>
-                  <td className="py-1.5 px-2"><QualityBadge quality={row.outcome_quality_3m} /></td>
-                </tr>
+      {/* Changes table — data arrives via server re-fetch on period URL change (D1 fix) */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="border-b border-paper-rule">
+              {['Symbol', 'Action', 'Before', 'After', 'Δ Weight', 'RS State', 'Signal', '1m Outcome', '3m Outcome'].map(h => (
+                <th key={h} className="py-2 px-2 font-sans text-[10px] text-ink-tertiary uppercase tracking-wide whitespace-nowrap">{h}</th>
               ))}
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={9} className="py-6 text-center font-sans text-sm text-ink-tertiary">
-                    No {activeTab === 'All' ? '' : activeTab} changes this period.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((row, i) => (
+              <tr key={i} className="border-b border-paper-rule/50 hover:bg-paper-rule/5">
+                <td className="py-1.5 px-2 font-mono text-xs font-medium">{row.symbol}</td>
+                <td className="py-1.5 px-2"><ActionBadge action={row.action} /></td>
+                <td className="py-1.5 px-2 font-mono text-xs text-right">{(Number(row.weight_before) * 100).toFixed(2)}%</td>
+                <td className="py-1.5 px-2 font-mono text-xs text-right">{(Number(row.weight_after) * 100).toFixed(2)}%</td>
+                <td className={`py-1.5 px-2 font-mono text-xs text-right ${Number(row.weight_delta) > 0 ? 'text-signal-pos' : 'text-signal-neg'}`}>
+                  {Number(row.weight_delta) > 0 ? '+' : ''}{(Number(row.weight_delta) * 100).toFixed(2)}%
+                </td>
+                <td className="py-1.5 px-2 font-sans text-[11px]">{row.rs_state_at_action ?? '—'}</td>
+                <td className="py-1.5 px-2"><QualityBadge quality={row.signal_quality} /></td>
+                <td className="py-1.5 px-2"><QualityBadge quality={row.outcome_quality_1m} /></td>
+                <td className="py-1.5 px-2"><QualityBadge quality={row.outcome_quality_3m} /></td>
+              </tr>
+            ))}
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={9} className="py-6 text-center font-sans text-sm text-ink-tertiary">
+                  No {activeTab === 'All' ? '' : activeTab} changes this period.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
@@ -1987,10 +2035,16 @@ import { FundManagerDecisionsDetail } from '@/components/funds/FundManagerDecisi
 
 export const dynamic = 'force-dynamic'
 
-type Props = { params: Promise<{ mstar_id: string }> }
+// D1 fix: period comes from URL searchParams so the server re-fetches for any period.
+// Client component only calls router.push(?period=X) — never fetch() to Atlas FastAPI.
+type Props = {
+  params: Promise<{ mstar_id: string }>
+  searchParams: Promise<{ period?: string }>
+}
 
-export default async function FundDecisionsPage({ params }: Props) {
+export default async function FundDecisionsPage({ params, searchParams }: Props) {
   const { mstar_id } = await params
+  const { period } = await searchParams
 
   const [master, scores] = await Promise.all([
     getFundMaster(mstar_id),
@@ -1999,9 +2053,10 @@ export default async function FundDecisionsPage({ params }: Props) {
 
   if (!master) notFound()
 
-  const latestPeriod = scores[0]?.period_date ?? null
-  const initialChanges = latestPeriod
-    ? await getFundDecisionDetail(mstar_id, latestPeriod)
+  // URL period takes precedence; fall back to latest
+  const selectedPeriod = period ?? scores[0]?.period_date ?? null
+  const initialChanges = selectedPeriod
+    ? await getFundDecisionDetail(mstar_id, selectedPeriod)
     : []
 
   return (
@@ -2021,7 +2076,7 @@ export default async function FundDecisionsPage({ params }: Props) {
         <FundManagerDecisionsDetail
           scores={scores}
           initialChanges={initialChanges}
-          initialPeriod={latestPeriod!}
+          initialPeriod={selectedPeriod!}
           mstar_id={mstar_id}
         />
       )}
@@ -2148,8 +2203,38 @@ git commit -m "feat(frontend): add Decision Score + 1m Outcome + Decision State 
 
 Run after all tasks complete:
 
-- [ ] `pytest tests/unit/compute/test_lens_decisions.py tests/api/test_fund_decisions.py -v` — all pass
+- [ ] `pytest tests/unit/compute/test_lens_decisions.py tests/unit/compute/test_enrich_fund_decisions.py tests/api/test_fund_decisions.py -v` — all pass
 - [ ] `cd frontend && npx tsc --noEmit` — zero type errors
 - [ ] Spot-check one fund end-to-end: `scripts/run_fund_decisions.py --mstar-id <ID>` → API response → `/funds/<ID>/decisions` page loads
 - [ ] Verify enrichment job fills 1m outcomes for any `to_date` ≥ 30 days ago: `python scripts/enrich_fund_decision_outcomes.py --window 1m`
 - [ ] Check `atlas_fund_decision_scores` has `decision_state` populated (not all NULL) after running
+- [ ] Verify period switching on `/funds/<ID>/decisions?period=YYYY-MM-DD` renders correct period data without client-side fetch
+
+---
+
+## GSTACK REVIEW REPORT — 2026-05-14
+
+**Reviewer:** plan-eng-review
+**Plan:** MF Holdings History & Fund Manager Decision Tracking
+**Outcome:** APPROVED — 5 issues found, all resolved
+
+### Issues Resolved
+
+| ID | Category | Issue | Decision | Status |
+|---|---|---|---|---|
+| D1 | Architecture | `FundManagerDecisionsDetail` called `fetch()` to Atlas FastAPI for period switching — frontend must never call FastAPI directly | URL-based navigation via `router.push(?period=X)`; page reads `searchParams.period` and server-fetches via `sql<>` to Supabase | Applied |
+| D2 | Code Quality | `compute_holdings_diff` used `iterrows()` — banned by commit hook | Vectorized with `np.select` + dict `.map()` for state lookup; same pattern as `classify_holdings_state` in `lens_holdings.py` | Applied |
+| D3 | Code Quality | `_enrich_window` used N+1 per-row UPDATEs inside a Python loop — banned pattern | Single SQL `UPDATE...FROM` with CTE using `DISTINCT ON` to find closest state within ±7 days | Applied |
+| D4 | Performance | `_already_computed()` called per fund = ~500 DB queries before the main loop | `_load_computed_set()` batch-loads all computed pairs into a Python set; loop checks set in O(1) | Applied |
+| D5 | Test Coverage | No test for `_derive_outcome_quality` or enrichment SQL logic | Added `tests/unit/compute/test_enrich_fund_decisions.py` — 14 cases covering all outcome quality combinations | Applied |
+
+### Review Readiness Dashboard
+
+| Category | Status | Notes |
+|---|---|---|
+| Architecture | Ready | D1 applied — no client-side FastAPI calls; URL-based navigation |
+| Code Quality | Ready | D2 + D3 applied — no iterrows, no N+1 updates |
+| Performance | Ready | D4 applied — batch computed-set load before fund loop |
+| Test Coverage | Ready | D5 applied — outcome quality unit tests added |
+
+**Ready for subagent-driven implementation.**
