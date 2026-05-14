@@ -97,6 +97,20 @@ class Layer1Perception:
     genome_max_position_pct: float
     genome_max_heat_pct: float
 
+    def __post_init__(self) -> None:
+        assert (
+            self.rs_leader_cutoff_pct
+            > self.rs_strong_cutoff_pct
+            > self.rs_average_cutoff_pct
+            > self.rs_weak_cutoff_pct
+        ), "RS cutoffs must be strictly decreasing: leader > strong > average > weak"
+        assert (
+            self.vol_high_ratio > self.vol_elevated_ratio
+        ), "vol_high_ratio must exceed vol_elevated_ratio"
+        assert (
+            self.momentum_accel_ema_ratio > self.momentum_decel_ema_ratio
+        ), "momentum_accel_ema_ratio must exceed momentum_decel_ema_ratio"
+
 
 @dataclass
 class RegimePlaybook:

@@ -11,6 +11,8 @@ Momentum:  0=Decelerating, 1=Neutral, 2=Accelerating
 
 from __future__ import annotations
 
+from typing import overload
+
 import numpy as np
 
 from atlas.trading.genome import Layer1Perception
@@ -120,26 +122,67 @@ def compute_blended_rs_pctile(
     Returns:
         float32 array shape (n_stocks, n_days)
     """
+    if rs_arrays.keys() != weights.keys():
+        raise ValueError(f"rs_arrays keys {set(rs_arrays)} != weights keys {set(weights)}")
     blended = np.zeros_like(next(iter(rs_arrays.values())), dtype=np.float32)
     for tf, arr in rs_arrays.items():
         blended += weights.get(tf, 0.0) * arr.astype(np.float32)
     return blended
 
 
-def compute_rs_velocity(rs_state: np.ndarray, lookback: int) -> tuple[np.ndarray, np.ndarray]:
-    """Compute days-in-current-state and improvement direction.
+@overload
+def compute_rs_velocity(
+    rs_short_or_state: np.ndarray,
+    rs_long_or_lookback: np.ndarray,
+    layer1: Layer1Perception,
+) -> dict[str, int]: ...
+
+
+@overload
+def compute_rs_velocity(
+    rs_short_or_state: np.ndarray,
+    rs_long_or_lookback: int,
+    layer1: None = ...,
+) -> tuple[np.ndarray, np.ndarray]: ...
+
+
+def compute_rs_velocity(
+    rs_short_or_state: np.ndarray,
+    rs_long_or_lookback: np.ndarray | int,
+    layer1: Layer1Perception | None = None,
+) -> dict[str, int] | tuple[np.ndarray, np.ndarray]:
+    """Compute RS velocity direction, or (for state arrays) days-in-state + direction.
+
+    Two calling conventions are supported:
+
+    1. Short-vs-long RS arrays (new, returns dict):
+       ``compute_rs_velocity(rs_short, rs_long, layer1)``
+       Compares mean of short-term RS array to mean of long-term RS array and
+       returns ``{"direction": 1 | 0 | -1}`` where 1=improving, 0=stable, -1=declining.
+
+    2. State-array + lookback (legacy, returns tuple of arrays):
+       ``compute_rs_velocity(rs_state, lookback)``
+       Returns ``(days_in_state, direction)`` arrays of the same shape as rs_state.
 
     Args:
-        rs_state: int8 array shape (n_stocks, n_days)
-        lookback: genome state_velocity_lookback_days
-
-    Returns:
-        days_in_state: int16 array shape (n_stocks, n_days)
-        direction: int8 array (1=improving, 0=stable, -1=declining)
+        rs_short_or_state: RS percentile array (short window) or int8 state array
+        rs_long_or_lookback: RS percentile array (long window) or int lookback days
+        layer1: Layer1Perception instance (required for new calling convention)
     """
+    if isinstance(rs_long_or_lookback, np.ndarray):
+        # New calling convention: compare short vs long RS arrays
+        rs_short = rs_short_or_state.astype(np.float32)
+        rs_long = rs_long_or_lookback.astype(np.float32)
+        diff = np.nanmean(rs_short) - np.nanmean(rs_long)
+        direction = int(np.sign(diff))
+        return {"direction": direction}
+
+    # Legacy calling convention: state array + integer lookback
+    rs_state = rs_short_or_state
+    lookback = int(rs_long_or_lookback)
     n_stocks, n_days = rs_state.shape
     days_in_state = np.ones((n_stocks, n_days), dtype=np.int16)
-    direction = np.zeros((n_stocks, n_days), dtype=np.int8)
+    direction_arr = np.zeros((n_stocks, n_days), dtype=np.int8)
 
     for d in range(1, n_days):
         same = rs_state[:, d] == rs_state[:, d - 1]
@@ -148,6 +191,6 @@ def compute_rs_velocity(rs_state: np.ndarray, lookback: int) -> tuple[np.ndarray
     for d in range(lookback, n_days):
         past = rs_state[:, d - lookback]
         curr = rs_state[:, d]
-        direction[:, d] = np.sign(curr.astype(np.int16) - past.astype(np.int16)).astype(np.int8)
+        direction_arr[:, d] = np.sign(curr.astype(np.int16) - past.astype(np.int16)).astype(np.int8)
 
-    return days_in_state, direction
+    return days_in_state, direction_arr
