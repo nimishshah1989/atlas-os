@@ -149,7 +149,7 @@ def compute_rs_velocity(
 def compute_rs_velocity(
     rs_short_or_state: np.ndarray,
     rs_long_or_lookback: np.ndarray | int,
-    layer1: Layer1Perception | None = None,
+    layer1: Layer1Perception | None = None,  # pyright: ignore[reportUnusedParameter] — reserved for per-layer1 thresholds
 ) -> dict[str, int] | tuple[np.ndarray, np.ndarray]:
     """Compute RS velocity direction, or (for state arrays) days-in-state + direction.
 
