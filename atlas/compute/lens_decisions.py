@@ -438,86 +438,93 @@ def run_lens_decisions(
                 log.debug("lens_decisions_skip_no_dates", mstar_id=mstar_id)
                 continue
 
-            to_date: date = dates[0]
-            from_date: date | None = dates[1] if len(dates) >= 2 else None
+            # Iterate ALL consecutive disclosure pairs (newest → oldest) for full backfill.
+            # For daily compute, only the newest pair is uncomputed; all older pairs are skipped.
+            for j in range(len(dates)):
+                to_date: date = dates[j]
+                from_date: date | None = dates[j + 1] if j + 1 < len(dates) else None
 
-            # Idempotent skip — already computed for this fund/period
-            if (mstar_id, to_date) in computed_set:
-                log.debug("lens_decisions_skip_computed", mstar_id=mstar_id, to_date=str(to_date))
-                continue
+                # Idempotent skip — already computed for this fund/period
+                if (mstar_id, to_date) in computed_set:
+                    log.debug(
+                        "lens_decisions_skip_computed", mstar_id=mstar_id, to_date=str(to_date)
+                    )
+                    continue
 
-            # Load snapshots
-            to_df = _load_snapshot(engine, mstar_id, to_date)
-            from_df = (
-                _load_snapshot(engine, mstar_id, from_date)
-                if from_date is not None
-                else pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])  # type: ignore[call-overload]
-            )
-
-            # Load stock states as of to_date for all instruments in newer snapshot
-            instrument_ids: list[str] = to_df["instrument_id"].dropna().tolist()
-            state_map = _load_stock_states(engine, instrument_ids, to_date)
-
-            before_count = len(to_df)
-            # Diff
-            diff_df = compute_holdings_diff(to_df, from_df, state_map, min_weight_delta)
-            after_count = len(diff_df)
-            log.debug(
-                "lens_decisions_diff",
-                mstar_id=mstar_id,
-                to_date=str(to_date),
-                holdings_before=before_count,
-                changes_after=after_count,
-            )
-
-            # Compute decision score
-            score_row = compute_decision_score(diff_df, mstar_id, to_date, from_date, thresholds)
-
-            # Prepare change rows
-            rows_written = 0
-            if not diff_df.empty:
-                change_rows_df = diff_df.copy()
-                change_rows_df["mstar_id"] = mstar_id
-                change_rows_df["from_date"] = from_date
-                change_rows_df["to_date"] = to_date
-
-                # Select columns in the exact order expected by bulk_upsert
-                change_cols = list(_CHANGES_COLUMNS)
-                change_rows = df_to_pg_rows(change_rows_df[change_cols])  # type: ignore[arg-type]
-
-                rows_written += bulk_upsert(
-                    engine,
-                    "atlas.atlas_fund_holdings_changes",
-                    change_cols,
-                    change_rows,
-                    pk_columns=["mstar_id", "to_date", "instrument_id"],
+                # Load snapshots
+                to_df = _load_snapshot(engine, mstar_id, to_date)
+                from_df = (
+                    _load_snapshot(engine, mstar_id, from_date)
+                    if from_date is not None
+                    else pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])  # type: ignore[call-overload]
                 )
 
-            # Upsert decision score
-            score_df = pd.DataFrame([score_row])
-            score_cols = list(_SCORES_COLUMNS)
-            score_rows = df_to_pg_rows(score_df[score_cols])  # type: ignore[arg-type]
-            rows_written += bulk_upsert(
-                engine,
-                "atlas.atlas_fund_decision_scores",
-                score_cols,
-                score_rows,
-                pk_columns=["mstar_id", "period_date"],
-            )
+                # Load stock states as of to_date for all instruments in newer snapshot
+                instrument_ids: list[str] = to_df["instrument_id"].dropna().tolist()
+                state_map = _load_stock_states(engine, instrument_ids, to_date)
 
-            # Mark as computed within this run to prevent reprocessing
-            computed_set.add((mstar_id, to_date))
-            funds_processed += 1
-            total_rows_written += rows_written
+                before_count = len(to_df)
+                # Diff
+                diff_df = compute_holdings_diff(to_df, from_df, state_map, min_weight_delta)
+                after_count = len(diff_df)
+                log.debug(
+                    "lens_decisions_diff",
+                    mstar_id=mstar_id,
+                    to_date=str(to_date),
+                    holdings_before=before_count,
+                    changes_after=after_count,
+                )
 
-            log.info(
-                "lens_decisions_fund_done",
-                mstar_id=mstar_id,
-                to_date=str(to_date),
-                from_date=str(from_date),
-                rows_written=rows_written,
-                decision_state=score_row.get("decision_state"),
-            )
+                # Compute decision score
+                score_row = compute_decision_score(
+                    diff_df, mstar_id, to_date, from_date, thresholds
+                )
+
+                # Prepare change rows
+                rows_written = 0
+                if not diff_df.empty:
+                    change_rows_df = diff_df.copy()
+                    change_rows_df["mstar_id"] = mstar_id
+                    change_rows_df["from_date"] = from_date
+                    change_rows_df["to_date"] = to_date
+
+                    # Select columns in the exact order expected by bulk_upsert
+                    change_cols = list(_CHANGES_COLUMNS)
+                    change_rows = df_to_pg_rows(change_rows_df[change_cols])  # type: ignore[arg-type]
+
+                    rows_written += bulk_upsert(
+                        engine,
+                        "atlas.atlas_fund_holdings_changes",
+                        change_cols,
+                        change_rows,
+                        pk_columns=["mstar_id", "to_date", "instrument_id"],
+                    )
+
+                # Upsert decision score
+                score_df = pd.DataFrame([score_row])
+                score_cols = list(_SCORES_COLUMNS)
+                score_rows = df_to_pg_rows(score_df[score_cols])  # type: ignore[arg-type]
+                rows_written += bulk_upsert(
+                    engine,
+                    "atlas.atlas_fund_decision_scores",
+                    score_cols,
+                    score_rows,
+                    pk_columns=["mstar_id", "period_date"],
+                )
+
+                # Mark as computed within this run to prevent reprocessing
+                computed_set.add((mstar_id, to_date))
+                funds_processed += 1
+                total_rows_written += rows_written
+
+                log.info(
+                    "lens_decisions_fund_done",
+                    mstar_id=mstar_id,
+                    to_date=str(to_date),
+                    from_date=str(from_date),
+                    rows_written=rows_written,
+                    decision_state=score_row.get("decision_state"),
+                )
 
         except (ValueError, KeyError, TypeError) as exc:
             errors.append({"mstar_id": mstar_id, "error": str(exc)})
