@@ -33,7 +33,7 @@ def _snapshot(*rows: tuple[str, str, float]) -> pd.DataFrame:
 
     Each row is (instrument_id, symbol, weight_pct).
     """
-    return pd.DataFrame(rows, columns=["instrument_id", "symbol", "weight_pct"])
+    return pd.DataFrame(rows, columns=["instrument_id", "symbol", "weight_pct"])  # type: ignore[call-overload]
 
 
 _DEFAULT_THRESHOLDS: dict = {
@@ -93,14 +93,14 @@ class TestComputeHoldingsDiff:
     def test_first_disclosure_all_entries(self) -> None:
         """When from_df is empty, every holding should be an entry."""
         to_df = _snapshot(("IID001", "A", 3.0), ("IID002", "B", 2.0))
-        from_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])
+        from_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])  # type: ignore[call-overload]
         result = compute_holdings_diff(to_df, from_df, {}, min_weight_delta_pct=0.25)
         assert len(result) == 2
         assert set(result["action"]) == {"entry"}
 
     def test_empty_to_df_with_nonempty_from_df_produces_exits(self) -> None:
         """Empty current snapshot means all prior holdings were exited."""
-        to_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])
+        to_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])  # type: ignore[call-overload]
         from_df = _snapshot(("IID001", "A", 3.0))
         result = compute_holdings_diff(to_df, from_df, {}, min_weight_delta_pct=0.25)
         assert len(result) == 1
@@ -108,8 +108,8 @@ class TestComputeHoldingsDiff:
 
     def test_both_empty_returns_empty_result(self) -> None:
         """Both snapshots empty — nothing to diff."""
-        to_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])
-        from_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])
+        to_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])  # type: ignore[call-overload]
+        from_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])  # type: ignore[call-overload]
         result = compute_holdings_diff(to_df, from_df, {}, min_weight_delta_pct=0.25)
         assert result.empty
 
@@ -125,7 +125,7 @@ class TestComputeHoldingsDiff:
     def test_entry_into_high_quality_state_gets_high_signal(self) -> None:
         for state in _HIGH_QUALITY_STATES:
             to_df = _snapshot(("IID001", "X", 5.0))
-            from_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])
+            from_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])  # type: ignore[call-overload]
             state_map = {"IID001": (state, "Accelerating")}
             result = compute_holdings_diff(to_df, from_df, state_map, min_weight_delta_pct=0.25)
             assert (
@@ -135,14 +135,14 @@ class TestComputeHoldingsDiff:
     def test_entry_into_low_quality_state_gets_low_signal(self) -> None:
         for state in _LOW_QUALITY_STATES:
             to_df = _snapshot(("IID001", "X", 5.0))
-            from_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])
+            from_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])  # type: ignore[call-overload]
             state_map = {"IID001": (state, "Declining")}
             result = compute_holdings_diff(to_df, from_df, state_map, min_weight_delta_pct=0.25)
             assert result.iloc[0]["signal_quality"] == "low", f"Expected low for entry into {state}"
 
     def test_exit_from_low_quality_state_gets_high_signal(self) -> None:
         for state in _LOW_QUALITY_STATES:
-            to_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])
+            to_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])  # type: ignore[call-overload]
             from_df = _snapshot(("IID001", "X", 5.0))
             state_map = {"IID001": (state, "Declining")}
             result = compute_holdings_diff(to_df, from_df, state_map, min_weight_delta_pct=0.25)
@@ -152,7 +152,7 @@ class TestComputeHoldingsDiff:
 
     def test_exit_from_high_quality_state_gets_low_signal(self) -> None:
         for state in _HIGH_QUALITY_STATES:
-            to_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])
+            to_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])  # type: ignore[call-overload]
             from_df = _snapshot(("IID001", "X", 5.0))
             state_map = {"IID001": (state, "Accelerating")}
             result = compute_holdings_diff(to_df, from_df, state_map, min_weight_delta_pct=0.25)
@@ -160,14 +160,14 @@ class TestComputeHoldingsDiff:
 
     def test_unknown_rs_state_gets_neutral_signal(self) -> None:
         to_df = _snapshot(("IID001", "X", 5.0))
-        from_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])
+        from_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])  # type: ignore[call-overload]
         # No state_map entry => rs_state is NaN => neutral
         result = compute_holdings_diff(to_df, from_df, {}, min_weight_delta_pct=0.25)
         assert result.iloc[0]["signal_quality"] == "neutral"
 
     def test_result_has_all_expected_columns(self) -> None:
         to_df = _snapshot(("IID001", "A", 5.0))
-        from_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])
+        from_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])  # type: ignore[call-overload]
         result = compute_holdings_diff(to_df, from_df, {}, min_weight_delta_pct=0.25)
         expected_cols = {
             "instrument_id",
@@ -290,7 +290,7 @@ class TestComputeDecisionScore:
         assert score["decision_state"] is None
 
     def test_empty_diff_all_counts_zero(self) -> None:
-        diff = pd.DataFrame(columns=["action", "signal_quality"])
+        diff = pd.DataFrame(columns=["action", "signal_quality"])  # type: ignore[call-overload]
         score = compute_decision_score(diff, _MSTAR_ID, _TO_DATE, _FROM_DATE, _DEFAULT_THRESHOLDS)
         assert score["entries_count"] == 0
         assert score["exits_count"] == 0
@@ -317,14 +317,14 @@ class TestComputeDecisionScore:
         assert score["decreases_count"] == 2
 
     def test_period_date_and_mstar_id_in_result(self) -> None:
-        diff = pd.DataFrame(columns=["action", "signal_quality"])
+        diff = pd.DataFrame(columns=["action", "signal_quality"])  # type: ignore[call-overload]
         score = compute_decision_score(diff, _MSTAR_ID, _TO_DATE, _FROM_DATE, _DEFAULT_THRESHOLDS)
         assert score["mstar_id"] == _MSTAR_ID
         assert score["period_date"] == _TO_DATE
 
     def test_no_from_date_accepted(self) -> None:
         """First-ever disclosure has no from_date — should not raise."""
-        diff = pd.DataFrame(columns=["action", "signal_quality"])
+        diff = pd.DataFrame(columns=["action", "signal_quality"])  # type: ignore[call-overload]
         score = compute_decision_score(diff, _MSTAR_ID, _TO_DATE, None, _DEFAULT_THRESHOLDS)
         assert score["mstar_id"] == _MSTAR_ID
         assert score["signal_score"] is None
