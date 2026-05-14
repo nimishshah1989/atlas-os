@@ -49,13 +49,6 @@ def _make_score_row(data: dict):
     return mock_row
 
 
-def _make_change_row(data: dict):
-    """Create a mock SQLAlchemy Row with _mapping attribute."""
-    mock_row = MagicMock()
-    mock_row._mapping = data
-    return mock_row
-
-
 @patch("atlas.api.fund_decisions.get_engine")
 @patch("atlas.api.fund_decisions.open_compute_session")
 def test_decision_history_returns_200(mock_session, mock_engine, client):
