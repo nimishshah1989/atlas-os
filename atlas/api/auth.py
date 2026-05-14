@@ -40,11 +40,13 @@ _EXEMPT_PREFIXES = (
 
 # Exact-path exemptions — use when startswith would over-match siblings.
 # /api/v1/tv/signal is exempt (TV webhooks can't send Bearer tokens; validated by body secret).
-# /api/v1/tv/generate-report is exempt (validated by X-Internal-Secret header).
-# /api/v1/tv/signals and /api/v1/tv/signals/{id} remain under JWT auth.
+# /api/v1/tv/screenshot is exempt (validates X-Internal-Secret internally).
+# /api/v1/tv/generate-report is exempt (validates X-Internal-Secret internally).
+# /api/v1/tv/signals and /api/v1/tv/signals/{id} remain under service-token auth.
 _EXEMPT_EXACT: frozenset[str] = frozenset(
     {
         "/api/v1/tv/signal",
+        "/api/v1/tv/screenshot",
         "/api/v1/tv/generate-report",
     }
 )

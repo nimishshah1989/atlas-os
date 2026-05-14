@@ -1,4 +1,3 @@
-# pragma: finance-critical
 """TradingView webhook receiver and signal report feed.
 
 Endpoints:
