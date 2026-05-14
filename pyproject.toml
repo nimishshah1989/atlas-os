@@ -127,6 +127,7 @@ ignore = [
 "scripts/**" = ["S101", "E501"]
 "atlas/validation/m1_data_quality.py" = ["E501"]
 "atlas/preflight.py" = ["E501"]
+"atlas/trading/genome.py" = ["S311"]  # non-crypto RNG OK for genome seeding
 
 [tool.pyright]
 pythonVersion = "3.12"
