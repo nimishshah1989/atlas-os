@@ -319,7 +319,7 @@ def run_fund_decisions(
     engine = engine or get_engine()
     run_id = run_id or uuid.uuid4()
     if thresholds is None:
-        thresholds = load_thresholds(engine)
+        thresholds = load_thresholds("atlas", engine)
 
     log.info("fund_decisions_start", start=str(start_date), end=str(end_date))
 

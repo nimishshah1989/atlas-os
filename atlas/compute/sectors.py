@@ -940,7 +940,7 @@ def _run_pipeline(
     )
 
     sector_master = load_sector_master(engine)
-    thresholds = load_thresholds(engine)
+    thresholds = load_thresholds("atlas", engine)
     stock_data = load_sector_stock_data(engine, start_date=start, end_date=end)
     index_metrics = load_index_metrics(engine, start_date=start, end_date=end)
     nifty500_returns = load_nifty500_returns(engine, start_date=start, end_date=end)

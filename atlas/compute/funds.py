@@ -297,7 +297,7 @@ def run_m4_daily(
     engine = engine or get_engine()
     run_id = uuid.uuid4()
     target_date = target_date or date.today()
-    thresholds = load_thresholds(engine)
+    thresholds = load_thresholds("atlas", engine)
 
     log.info("m4_daily_start", date=str(target_date), run_id=str(run_id))
 
@@ -380,7 +380,7 @@ def run_m4_backfill(
     run_id = uuid.uuid4()
     start = start_date or pd.to_datetime(Config.HISTORICAL_START_DATE).date()
     end = end_date or date.today()
-    thresholds = load_thresholds(engine)
+    thresholds = load_thresholds("atlas", engine)
 
     log.info("m4_backfill_start", start=str(start), end=str(end), run_id=str(run_id))
 
