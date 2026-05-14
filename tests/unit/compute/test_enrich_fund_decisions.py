@@ -37,6 +37,9 @@ class TestDeriveOutcomeQuality:
     def test_exit_from_strong_is_bad(self):
         assert _derive_outcome_quality("exit", "Strong") == "bad"
 
+    def test_exit_from_emerging_is_bad(self):
+        assert _derive_outcome_quality("exit", "Emerging") == "bad"
+
     def test_increase_is_always_neutral(self):
         assert _derive_outcome_quality("increase", "Leader") == "neutral"
 

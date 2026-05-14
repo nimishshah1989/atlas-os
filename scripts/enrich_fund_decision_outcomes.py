@@ -25,6 +25,7 @@ from datetime import date, timedelta
 
 import structlog
 from sqlalchemy import text
+from sqlalchemy.engine import Engine
 
 from atlas.compute._session import open_compute_session
 from atlas.db import get_engine
@@ -49,7 +50,7 @@ def _derive_outcome_quality(action: str, rs_state: str | None) -> str:
     return "neutral"
 
 
-def _enrich_window(engine, days: int, rs_col: str, ret_col: str, quality_col: str) -> int:
+def _enrich_window(engine: Engine, days: int, rs_col: str, ret_col: str, quality_col: str) -> int:
     """Fill outcome columns for one time window via single SQL UPDATE...FROM.
 
     Uses a CTE with DISTINCT ON to find the closest available stock state within
@@ -78,7 +79,7 @@ def _enrich_window(engine, days: int, rs_col: str, ret_col: str, quality_col: st
                     ON sm.instrument_id = s.instrument_id AND sm.date = s.date
                 WHERE c.{quality_col} IS NULL
                   AND c.to_date <= :cutoff
-                ORDER BY c.id, ABS(s.date - (c.to_date + :interval))
+                ORDER BY c.id, ABS(EXTRACT(EPOCH FROM (s.date::timestamp - (c.to_date + :interval))))
             )
             UPDATE atlas.atlas_fund_holdings_changes c
             SET
@@ -99,12 +100,13 @@ def _enrich_window(engine, days: int, rs_col: str, ret_col: str, quality_col: st
             {"cutoff": cutoff, "interval": interval},
         )
         updated = result.rowcount
+        conn.commit()
 
     log.info("enrich_window_done", window_days=days, rows_updated=updated)
     return updated
 
 
-def _recompute_outcome_scores(engine, window: str) -> int:
+def _recompute_outcome_scores(engine: Engine, window: str) -> int:
     """Recompute outcome_*_pct and outcome_score_* in atlas_fund_decision_scores."""
     if window == "1m":
         quality_col = "outcome_quality_1m"
@@ -118,7 +120,7 @@ def _recompute_outcome_scores(engine, window: str) -> int:
         score_col = "outcome_score_3m"
 
     with open_compute_session(engine) as conn:
-        conn.execute(
+        result = conn.execute(
             text(f"""
             UPDATE atlas.atlas_fund_decision_scores ds
             SET
@@ -148,8 +150,9 @@ def _recompute_outcome_scores(engine, window: str) -> int:
             WHERE ds.mstar_id = sub.mstar_id AND ds.period_date = sub.period_date
         """)  # noqa: S608 -- column names are string constants, not user input
         )
+        conn.commit()
     log.info("recomputed_outcome_scores", window=window)
-    return 0
+    return result.rowcount
 
 
 def main(argv: list[str] | None = None) -> int:
