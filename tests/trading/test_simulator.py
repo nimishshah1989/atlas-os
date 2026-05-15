@@ -62,6 +62,10 @@ def test_simulate_genome_returns_sim_result():
     assert isinstance(result.total_trades, int)
     assert result.total_trades >= 0
     assert not np.isnan(result.sortino_oos) or result.sortino_oos == 0.0
+    assert isinstance(result.sortino_insample, float)
+    assert isinstance(result.max_drawdown, float)
+    assert isinstance(result.turnover_pct, float)
+    assert result.equity_curve_oos is None or isinstance(result.equity_curve_oos, pd.Series)
 
 
 def test_simulate_genome_risk_off_full_liquidbees():

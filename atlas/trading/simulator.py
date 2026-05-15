@@ -15,7 +15,6 @@ from datetime import date
 import numpy as np
 import pandas as pd
 import structlog
-import vectorbt as vbt
 
 from atlas.trading.config import PortfolioConfig
 from atlas.trading.decision import apply_entry_rules, apply_exit_rules, compute_conviction
@@ -153,6 +152,7 @@ def simulate_genome(
         max_drawdown=float(np.max(oos_max_drawdowns)) if oos_max_drawdowns else 0.0,
         total_trades=all_trades,
         turnover_pct=0.0,
+        equity_curve_oos=None,  # populated by incubator when equity curve storage is needed
     )
 
 
@@ -169,6 +169,8 @@ def _run_window(
     instruments: list,
 ) -> dict | None:
     """Simulate one walk-forward window. Returns None if window < 20 days."""
+    import vectorbt as vbt
+
     d_start = next((i for i, d in enumerate(dates) if d >= window_start), None)
     d_end = next((i for i, d in enumerate(dates) if d > window_end), len(dates))
     if d_start is None or d_end - d_start < 20:
@@ -215,7 +217,7 @@ def _run_window(
         position_days[exit_mask] = 0
 
         n_held = int((position_days > 0).sum())
-        portfolio_heat = n_held * eff_pos
+        portfolio_heat = n_held * eff_pos  # upper-bound approx — assumes full fills at eff_pos
 
         entry_mask = apply_entry_rules(
             conviction=w_conv[:, d],
