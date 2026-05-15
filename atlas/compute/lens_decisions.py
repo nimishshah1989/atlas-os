@@ -185,6 +185,7 @@ def compute_holdings_diff(
     from_df: pd.DataFrame,
     state_map: dict[str, tuple[str, str]],
     min_weight_delta_pct: float,
+    exit_state_map: dict[str, tuple[str, str]] | None = None,
 ) -> pd.DataFrame:
     """Diff two holdings snapshots and classify each change.
 
@@ -192,7 +193,12 @@ def compute_holdings_diff(
         to_df: Newer snapshot. Columns: instrument_id, symbol, weight_pct.
         from_df: Older snapshot (empty DataFrame for first-ever disclosure).
         state_map: {instrument_id: (rs_state, momentum_state)} as of to_df date.
+            Used for entries, increases, and decreases.
         min_weight_delta_pct: Minimum absolute weight delta to count as increase/decrease.
+        exit_state_map: States as of from_df date, used for exits.
+            Exit quality is evaluated at the prior snapshot date so we capture the
+            state the fund was holding — stocks dropped from the universe have no
+            state at to_date but still had one at from_date.
 
     Returns:
         DataFrame with one row per material change. Columns:
@@ -248,12 +254,19 @@ def compute_holdings_diff(
     if merged.empty:
         return _empty_result
 
-    # Vectorized state mapping — explicit Series cast avoids Pyright ndarray inference
+    # Vectorized state mapping — entries/increases/decreases use to_date states;
+    # exits use from_date states (exit_state_map) so we capture the RS state the
+    # fund was actually holding before the stock left the universe.
     rs_map = {k: v[0] for k, v in state_map.items()}
     mom_map = {k: v[1] for k, v in state_map.items()}
+    exit_rs_map = {k: v[0] for k, v in exit_state_map.items()} if exit_state_map else rs_map
+    exit_mom_map = {k: v[1] for k, v in exit_state_map.items()} if exit_state_map else mom_map
+
     _ids = pd.Series(merged["instrument_id"])
-    merged["rs_state"] = _ids.map(rs_map)  # type: ignore[arg-type]
-    merged["mom_state"] = _ids.map(mom_map)  # type: ignore[arg-type]
+    is_exit_mask = merged["action"] == "exit"
+
+    merged["rs_state"] = _ids.map(rs_map).where(~is_exit_mask, _ids.map(exit_rs_map))  # type: ignore[arg-type]
+    merged["mom_state"] = _ids.map(mom_map).where(~is_exit_mask, _ids.map(exit_mom_map))  # type: ignore[arg-type]
     _rs = pd.Series(merged["rs_state"])
 
     # Vectorized signal quality — entry into strong state is high; exit from weak state is high
@@ -309,6 +322,7 @@ def compute_decision_score(
     """
     sharp_threshold = float(thresholds["decision_score_sharp_threshold"])
     poor_threshold = float(thresholds["decision_score_poor_threshold"])
+    min_decisions = int(thresholds.get("decision_score_min_decisions", 3))  # type: ignore[call-overload]
 
     if diff_df.empty:
         actions = pd.Series(dtype=str)
@@ -320,42 +334,56 @@ def compute_decision_score(
     increases_count = int((actions == "increase").sum())
     decreases_count = int((actions == "decrease").sum())
 
-    quality_entries_pct: float | None = None
-    quality_exits_pct: float | None = None
-
-    if entries_count > 0 and not diff_df.empty:
-        entry_rows = diff_df[diff_df["action"] == "entry"]
-        quality_entries_pct = 100.0 * (entry_rows["signal_quality"] == "high").sum() / entries_count
-
-    if exits_count > 0 and not diff_df.empty:
-        exit_rows = diff_df[diff_df["action"] == "exit"]
-        quality_exits_pct = 100.0 * (exit_rows["signal_quality"] == "high").sum() / exits_count
-
-    if quality_entries_pct is not None and quality_exits_pct is not None:
-        signal_score: float | None = (quality_entries_pct + quality_exits_pct) / 2.0
-    elif quality_entries_pct is not None:
-        signal_score = quality_entries_pct
-    elif quality_exits_pct is not None:
-        signal_score = quality_exits_pct
-    else:
-        signal_score = None
-
-    decision_state: str | None = None
-    if signal_score is not None:
-        if signal_score >= sharp_threshold:
-            decision_state = "Sharp"
-        elif signal_score < poor_threshold:
-            decision_state = "Poor"
-        else:
-            decision_state = "Average"
-
-    return {
+    _base: dict[str, Any] = {
         "mstar_id": mstar_id,
         "period_date": to_date,
         "entries_count": entries_count,
         "exits_count": exits_count,
         "increases_count": increases_count,
         "decreases_count": decreases_count,
+        "quality_entries_pct": None,
+        "quality_exits_pct": None,
+        "signal_score": None,
+        "decision_state": None,
+    }
+
+    # First-ever observation (from_date=None): all holdings are entries by definition,
+    # not active buy decisions.  Store counts for display but skip quality scoring.
+    if _from_date is None:
+        return _base
+
+    total_decisions = entries_count + exits_count
+    if total_decisions < min_decisions:
+        return _base
+
+    entry_rows = diff_df[diff_df["action"] == "entry"] if entries_count > 0 else pd.DataFrame()
+    exit_rows = diff_df[diff_df["action"] == "exit"] if exits_count > 0 else pd.DataFrame()
+
+    high_entries = (
+        int((entry_rows["signal_quality"] == "high").sum()) if not entry_rows.empty else 0
+    )
+    low_entries = int((entry_rows["signal_quality"] == "low").sum()) if not entry_rows.empty else 0
+    high_exits = int((exit_rows["signal_quality"] == "high").sum()) if not exit_rows.empty else 0
+    low_exits = int((exit_rows["signal_quality"] == "low").sum()) if not exit_rows.empty else 0
+
+    # Diagnostic percentages (stored for visibility in admin/frontend)
+    quality_entries_pct = 100.0 * high_entries / entries_count if entries_count > 0 else None
+    quality_exits_pct = 100.0 * high_exits / exits_count if exits_count > 0 else None
+
+    # Net-quality score: centred at 50.  +50 = all decisions are good, -50 = all bad, 0 = neutral.
+    # Formula: (high - low) / total_decisions * 50 + 50  →  range [0, 100]
+    net_quality = high_entries + high_exits - low_entries - low_exits
+    signal_score: float = (net_quality / total_decisions) * 50.0 + 50.0
+
+    if signal_score >= sharp_threshold:
+        decision_state: str | None = "Sharp"
+    elif signal_score < poor_threshold:
+        decision_state = "Poor"
+    else:
+        decision_state = "Average"
+
+    return {
+        **_base,
         "quality_entries_pct": quality_entries_pct,
         "quality_exits_pct": quality_exits_pct,
         "signal_score": signal_score,
@@ -459,13 +487,29 @@ def run_lens_decisions(
                     else pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])  # type: ignore[call-overload]
                 )
 
-                # Load stock states as of to_date for all instruments in newer snapshot
+                # Load stock states as of to_date (entries/increases/decreases)
                 instrument_ids: list[str] = to_df["instrument_id"].dropna().tolist()
                 state_map = _load_stock_states(engine, instrument_ids, to_date)
 
+                # Load stock states as of from_date for exit quality evaluation.
+                # Stocks that exit the portfolio often leave the investable universe
+                # by to_date, so their state must be read from the prior snapshot date.
+                from_instrument_ids: list[str] = (
+                    from_df["instrument_id"].dropna().tolist()
+                    if not from_df.empty and from_date is not None
+                    else []
+                )
+                exit_state_map: dict[str, tuple[str, str]] = (
+                    _load_stock_states(engine, from_instrument_ids, from_date)  # type: ignore[arg-type]
+                    if from_instrument_ids and from_date is not None
+                    else {}
+                )
+
                 before_count = len(to_df)
                 # Diff
-                diff_df = compute_holdings_diff(to_df, from_df, state_map, min_weight_delta)
+                diff_df = compute_holdings_diff(
+                    to_df, from_df, state_map, min_weight_delta, exit_state_map=exit_state_map
+                )
                 after_count = len(diff_df)
                 log.debug(
                     "lens_decisions_diff",

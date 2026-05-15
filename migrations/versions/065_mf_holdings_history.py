@@ -115,9 +115,10 @@ def upgrade() -> None:
             last_modified_by, is_active
         )
         VALUES
-            ('holdings_weight_change_min_pct', 0.25, 'mf_holdings', 'Min absolute weight delta to classify as increase/decrease', 0.01, 5.0, 0.25, 'migration_065', true),
+            ('holdings_weight_change_min_pct',  0.25, 'mf_holdings', 'Min absolute weight delta to classify as increase/decrease', 0.01, 5.0, 0.25, 'migration_065', true),
             ('decision_score_sharp_threshold', 65.0, 'mf_holdings', 'Signal score >= this => Sharp decision state', 50.0, 95.0, 65.0, 'migration_065', true),
-            ('decision_score_poor_threshold',  40.0, 'mf_holdings', 'Signal score < this => Poor decision state',  5.0,  50.0, 40.0, 'migration_065', true)
+            ('decision_score_poor_threshold',  40.0, 'mf_holdings', 'Signal score < this => Poor decision state',  5.0,  50.0, 40.0, 'migration_065', true),
+            ('decision_score_min_decisions',    3.0, 'mf_holdings', 'Min entry+exit count to compute signal_score for a period', 1.0, 20.0, 3.0, 'migration_065', true)
         ON CONFLICT (threshold_key) DO NOTHING
     """))
 
@@ -136,7 +137,8 @@ def downgrade() -> None:
         WHERE threshold_key IN (
             'holdings_weight_change_min_pct',
             'decision_score_sharp_threshold',
-            'decision_score_poor_threshold'
+            'decision_score_poor_threshold',
+            'decision_score_min_decisions'
         )
     """))
     op.drop_table("atlas_fund_decision_scores", schema="atlas")

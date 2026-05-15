@@ -40,7 +40,11 @@ _DEFAULT_THRESHOLDS: dict = {
     "decision_score_sharp_threshold": 65.0,
     "decision_score_poor_threshold": 40.0,
     "holdings_weight_change_min_pct": 0.25,
+    "decision_score_min_decisions": 3,
 }
+
+# Thresholds without the min-decisions floor, for tests that use small diff sets.
+_THRESHOLDS_NO_MIN: dict = {**_DEFAULT_THRESHOLDS, "decision_score_min_decisions": 1}
 
 _MSTAR_ID = "F00000WXYZ"
 _TO_DATE = date(2024, 4, 30)
@@ -216,24 +220,26 @@ class TestComputeDecisionScore:
         return pd.DataFrame(rows)
 
     def test_sharp_state_when_score_above_threshold(self) -> None:
+        # net_quality=2, total=2 → (2/2)*50+50=100.  Use no-min variant (2 < default floor of 3).
         diff = self._make_diff(
             [
                 {"action": "entry", "signal_quality": "high"},
                 {"action": "exit", "signal_quality": "high"},
             ]
         )
-        score = compute_decision_score(diff, _MSTAR_ID, _TO_DATE, _FROM_DATE, _DEFAULT_THRESHOLDS)
+        score = compute_decision_score(diff, _MSTAR_ID, _TO_DATE, _FROM_DATE, _THRESHOLDS_NO_MIN)
         assert score["decision_state"] == "Sharp"
         assert score["signal_score"] == 100.0
 
     def test_poor_state_when_score_below_threshold(self) -> None:
+        # net_quality=-2, total=2 → (-2/2)*50+50=0.  Use no-min variant.
         diff = self._make_diff(
             [
                 {"action": "entry", "signal_quality": "low"},
                 {"action": "exit", "signal_quality": "low"},
             ]
         )
-        score = compute_decision_score(diff, _MSTAR_ID, _TO_DATE, _FROM_DATE, _DEFAULT_THRESHOLDS)
+        score = compute_decision_score(diff, _MSTAR_ID, _TO_DATE, _FROM_DATE, _THRESHOLDS_NO_MIN)
         assert score["decision_state"] == "Poor"
         assert score["signal_score"] == 0.0
 
@@ -252,25 +258,26 @@ class TestComputeDecisionScore:
         assert score["signal_score"] == 50.0
 
     def test_only_entries_no_exits(self) -> None:
-        """When only entries exist, signal_score comes from entries only."""
+        """When only entries exist signal_score comes from entries only.  Use no-min variant."""
         diff = self._make_diff(
             [
                 {"action": "entry", "signal_quality": "high"},
                 {"action": "entry", "signal_quality": "high"},
             ]
         )
-        score = compute_decision_score(diff, _MSTAR_ID, _TO_DATE, _FROM_DATE, _DEFAULT_THRESHOLDS)
+        score = compute_decision_score(diff, _MSTAR_ID, _TO_DATE, _FROM_DATE, _THRESHOLDS_NO_MIN)
         assert score["quality_entries_pct"] == 100.0
         assert score["quality_exits_pct"] is None
         assert score["signal_score"] == 100.0
 
     def test_only_exits_no_entries(self) -> None:
+        # 1 low exit: net_quality=-1, total=1 → (-1/1)*50+50=0.  Use no-min variant.
         diff = self._make_diff(
             [
                 {"action": "exit", "signal_quality": "low"},
             ]
         )
-        score = compute_decision_score(diff, _MSTAR_ID, _TO_DATE, _FROM_DATE, _DEFAULT_THRESHOLDS)
+        score = compute_decision_score(diff, _MSTAR_ID, _TO_DATE, _FROM_DATE, _THRESHOLDS_NO_MIN)
         assert score["quality_entries_pct"] is None
         assert score["quality_exits_pct"] == 0.0
         assert score["signal_score"] == 0.0
@@ -330,19 +337,65 @@ class TestComputeDecisionScore:
         assert score["signal_score"] is None
 
     def test_custom_thresholds_respected(self) -> None:
-        """Sharp threshold at 80 — score of 75 should be Average."""
+        """Sharp threshold at 80 — net-quality score of 75 should be Average.
+
+        4 entries: 3 high, 1 low → net_quality = 3-1 = 2
+        signal_score = (2/4)*50 + 50 = 75.0  → Average with sharp@80
+        """
         custom = {
             "decision_score_sharp_threshold": 80.0,
             "decision_score_poor_threshold": 30.0,
+            "decision_score_min_decisions": 1,
         }
         diff = self._make_diff(
             [
                 {"action": "entry", "signal_quality": "high"},
                 {"action": "entry", "signal_quality": "low"},
                 {"action": "entry", "signal_quality": "high"},
-                {"action": "entry", "signal_quality": "high"},  # 75% high entries
+                {"action": "entry", "signal_quality": "high"},
             ]
         )
         score = compute_decision_score(diff, _MSTAR_ID, _TO_DATE, _FROM_DATE, custom)
         assert score["signal_score"] == 75.0
         assert score["decision_state"] == "Average"
+
+    def test_min_decisions_floor_returns_none(self) -> None:
+        """Periods with fewer than min_decisions entry+exit rows get signal_score=None."""
+        diff = self._make_diff(
+            [
+                {"action": "entry", "signal_quality": "high"},
+                {"action": "entry", "signal_quality": "high"},
+                # only 2 decisions, default min is 3
+            ]
+        )
+        score = compute_decision_score(diff, _MSTAR_ID, _TO_DATE, _FROM_DATE, _DEFAULT_THRESHOLDS)
+        assert score["signal_score"] is None
+        assert score["decision_state"] is None
+
+    def test_first_observation_skips_scoring(self) -> None:
+        """from_date=None (first-ever snapshot): counts stored, signal_score must be None."""
+        diff = self._make_diff(
+            [
+                {"action": "entry", "signal_quality": "high"},
+                {"action": "entry", "signal_quality": "high"},
+                {"action": "entry", "signal_quality": "high"},
+            ]
+        )
+        score = compute_decision_score(diff, _MSTAR_ID, _TO_DATE, None, _DEFAULT_THRESHOLDS)
+        assert score["entries_count"] == 3
+        assert score["signal_score"] is None
+        assert score["decision_state"] is None
+
+    def test_exit_uses_from_state_map(self) -> None:
+        """Exit quality should use exit_state_map (from_date states), not to_date states."""
+        to_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])  # type: ignore[call-overload]
+        from_df = _snapshot(("IID001", "X", 5.0))
+        # to_date state_map has no entry for IID001 (stock left universe)
+        state_map: dict = {}
+        # exit_state_map records Weak at from_date
+        exit_state_map = {"IID001": ("Weak", "Declining")}
+        result = compute_holdings_diff(
+            to_df, from_df, state_map, 0.25, exit_state_map=exit_state_map
+        )
+        assert result.iloc[0]["rs_state_at_action"] == "Weak"
+        assert result.iloc[0]["signal_quality"] == "high"  # exit from Weak = high quality
