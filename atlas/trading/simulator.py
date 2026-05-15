@@ -234,7 +234,7 @@ def _run_window(
     price_df = pd.DataFrame(
         w_close.T,
         index=pd.DatetimeIndex([pd.Timestamp(d) for d in w_dates]),
-        columns=[str(iid) for iid in instruments],
+        columns=pd.Index([str(iid) for iid in instruments]),
     )
     entries_df = pd.DataFrame(entries, index=price_df.index, columns=price_df.columns)
     exits_df = pd.DataFrame(exits, index=price_df.index, columns=price_df.columns)
