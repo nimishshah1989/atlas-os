@@ -207,8 +207,22 @@ export function SignalReport({ report: r }: SignalReportProps) {
       {/* Narrative */}
       {r.narrative && (
         <div className="bg-white border border-gray-200 rounded-lg p-5">
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Narrative</h2>
-          <p className="text-sm text-gray-700 leading-relaxed">{r.narrative}</p>
+          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Analyst Note</h2>
+          <div className="space-y-3">
+            {r.narrative
+              .split(/\n\n+/)
+              .map((para) => para.trim())
+              .filter(Boolean)
+              .map((para, i) => (
+                <p
+                  key={i}
+                  className="text-sm text-gray-700 leading-relaxed"
+                  dangerouslySetInnerHTML={{
+                    __html: para.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>"),
+                  }}
+                />
+              ))}
+          </div>
         </div>
       )}
 
