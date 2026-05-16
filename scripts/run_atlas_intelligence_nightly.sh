@@ -13,7 +13,12 @@
 set -u
 cd /home/ubuntu/atlas-os
 source .venv/bin/activate
-export $(grep -E "^(GROQ_API_KEY|ATLAS_DB_URL|SMTP_USER|SMTP_PASS|NOTIFY_EMAIL|ATLAS_BASE_URL|ATLAS_PASSWORD)" .env | xargs)
+export $(grep -E "^(TZ|GROQ_API_KEY|ATLAS_DB_URL|SMTP_USER|SMTP_PASS|NOTIFY_EMAIL|ATLAS_BASE_URL|ATLAS_PASSWORD)" .env | xargs)
+
+# Required env guards — fail fast if .env is missing critical keys (otherwise
+# notify_failure.py silently no-ops and downstream steps fail without alerts).
+: "${ATLAS_DB_URL:?ATLAS_DB_URL missing from .env}"
+: "${GROQ_API_KEY:?GROQ_API_KEY missing from .env}"
 
 LOG_FILE="/home/ubuntu/logs/atlas-intelligence.log"
 FAILED_STEPS=()

@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 import structlog
 from sqlalchemy import text
@@ -40,15 +40,36 @@ log = structlog.get_logger()
 
 
 def _resolve_default_as_of(engine) -> date | None:
-    """Pick the most recent date present in BOTH metrics and validated OHLCV."""
+    """Pick the most recent date present in BOTH metrics and ingested OHLCV.
+
+    Accepts ``data_status IN ('raw','validated')`` because JIP's validation step
+    sometimes lags or is missing; consistent with the relaxed filter in
+    ``atlas.intelligence.conviction.tier_assignment`` and
+    ``atlas.intelligence.validation.forward_returns``.
+    """
     sql = text("""
         SELECT LEAST(
           (SELECT MAX(date) FROM atlas.atlas_stock_metrics_daily),
-          (SELECT MAX(date) FROM public.de_equity_ohlcv WHERE data_status = 'validated')
+          (SELECT MAX(date) FROM public.de_equity_ohlcv WHERE data_status IN ('raw', 'validated'))
         )
     """)
     with engine.connect() as c:
-        return c.execute(sql).scalar()
+        anchor = c.execute(sql).scalar()
+    # P1-4 guard: warn if the anchor has rolled backward more than 2 days from
+    # today UTC — that's the canary for "M3 silently failed and we're now
+    # recomputing yesterday's data forever".
+    if anchor is not None:
+        from datetime import datetime
+
+        lag = (datetime.now(UTC).date() - anchor).days
+        if lag >= 2:
+            log.warning(
+                "conviction_anchor_lag",
+                anchor=str(anchor),
+                lag_days=lag,
+                hint="atlas_stock_metrics_daily or de_equity_ohlcv is stale upstream",
+            )
+    return anchor
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:

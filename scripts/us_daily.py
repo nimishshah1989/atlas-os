@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -22,7 +22,6 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import structlog  # noqa: E402
-from sqlalchemy import create_engine  # noqa: E402
 
 from atlas.compute.global_pipeline import run_us_etf_daily  # noqa: E402
 
@@ -63,8 +62,10 @@ def main() -> None:
         log.error("ATLAS_DB_URL_not_set")
         sys.exit(1)
 
-    engine = create_engine(db_url, pool_pre_ping=True)
-    target = date.fromisoformat(args.date) if args.date else date.today()
+    from atlas.db import get_engine
+
+    engine = get_engine()
+    target = date.fromisoformat(args.date) if args.date else datetime.now(UTC).date()
 
     result = run_us_etf_daily(target, lookback_days=args.lookback, engine=engine)
     log.info("us_etf_daily_done", target=str(target), **result)

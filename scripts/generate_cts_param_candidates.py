@@ -19,7 +19,7 @@ log = structlog.get_logger()
 
 def run(as_of_date: date, *, persist: bool) -> None:
     engine = get_engine()
-    thresholds = load_thresholds(engine)
+    thresholds = load_thresholds(engine=engine)
     proposals = generate_proposals(engine, as_of_date, thresholds)
     log.info("cts_proposals_generated", count=len(proposals))
     if proposals and persist:
