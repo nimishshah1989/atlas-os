@@ -290,3 +290,59 @@ def test_conviction_capped_at_1():
         1.0, RS_LEADER, MOM_ACCELERATING, VOL_NORMAL, 1, 1, g.layer1, ppc=1, contraction=1
     )
     assert result <= 1.0
+
+
+def test_compute_conviction_matrix_matches_scalar():
+    """Vectorized matrix conviction must produce identical results to per-cell scalar."""
+    import numpy as np
+
+    from atlas.trading.decision import compute_conviction, compute_conviction_matrix
+    from atlas.trading.genome import GenomeFactory
+
+    rng = np.random.default_rng(7)
+    n_stocks, n_days = 8, 50
+    blended_rs = rng.uniform(0, 100, size=(n_stocks, n_days)).astype(np.float32)
+    blended_rs[0, 5] = np.nan  # NaN cell — scalar version skips (conv=0); matrix should match
+    rs_state = rng.integers(0, 5, size=(n_stocks, n_days)).astype(np.int8)
+    mom_state = rng.integers(0, 3, size=(n_stocks, n_days)).astype(np.int8)
+    vol_state = rng.integers(0, 3, size=(n_stocks, n_days)).astype(np.int8)
+    days_in_state = rng.integers(0, 60, size=(n_stocks, n_days)).astype(np.int32)
+    direction = rng.choice([-1, 0, 1], size=(n_stocks, n_days)).astype(np.int8)
+    ppc = rng.integers(0, 2, size=(n_stocks, n_days)).astype(np.int8)
+    contraction = rng.integers(0, 2, size=(n_stocks, n_days)).astype(np.int8)
+
+    genome = GenomeFactory.random()
+
+    # Scalar reference
+    expected = np.zeros((n_stocks, n_days), dtype=np.float32)
+    for s in range(n_stocks):
+        for d in range(n_days):
+            if np.isnan(blended_rs[s, d]):
+                continue
+            expected[s, d] = compute_conviction(
+                rs_pctile_norm=float(blended_rs[s, d]) / 100.0,
+                rs_state=int(rs_state[s, d]),
+                momentum_state=int(mom_state[s, d]),
+                vol_state=int(vol_state[s, d]),
+                days_in_state=int(days_in_state[s, d]),
+                direction=int(direction[s, d]),
+                layer1=genome.layer1,
+                ppc=int(ppc[s, d]),
+                contraction=int(contraction[s, d]),
+            )
+
+    actual = compute_conviction_matrix(
+        blended_rs=blended_rs,
+        rs_state=rs_state,
+        mom_state=mom_state,
+        vol_state=vol_state,
+        days_in_state=days_in_state,
+        direction=direction,
+        ppc=ppc,
+        contraction=contraction,
+        layer1=genome.layer1,
+    )
+
+    assert np.allclose(
+        expected, actual, atol=1e-5
+    ), f"vectorized conviction diverges from scalar; max diff = {np.abs(expected - actual).max()}"

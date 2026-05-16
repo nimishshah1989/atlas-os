@@ -35,6 +35,65 @@ _RS_NORM = {RS_LAGGARD: 0.0, RS_WEAK: 0.2, RS_AVERAGE: 0.4, RS_STRONG: 0.7, RS_L
 _MOM_NORM = {MOM_DECELERATING: 0.0, MOM_NEUTRAL: 0.5, MOM_ACCELERATING: 1.0}
 _VOL_NORM = {VOL_NORMAL: 0.0, VOL_ELEVATED: 0.5, VOL_HIGH: 1.0}
 
+# LUT arrays for vectorized matrix conviction (indexable by state integers).
+# Index = state integer; perception.py defines:
+#   RS:  LAGGARD=0, WEAK=1, AVERAGE=2, STRONG=3, LEADER=4
+#   MOM: DECELERATING=0, NEUTRAL=1, ACCELERATING=2
+#   VOL: NORMAL=0, ELEVATED=1, HIGH=2
+_RS_NORM_LUT = np.array([0.0, 0.2, 0.4, 0.7, 1.0], dtype=np.float32)
+_MOM_NORM_LUT = np.array([0.0, 0.5, 1.0], dtype=np.float32)
+_VOL_NORM_LUT = np.array([0.0, 0.5, 1.0], dtype=np.float32)
+
+
+def compute_conviction_matrix(
+    blended_rs: np.ndarray,
+    rs_state: np.ndarray,
+    mom_state: np.ndarray,
+    vol_state: np.ndarray,
+    days_in_state: np.ndarray,
+    direction: np.ndarray,
+    ppc: np.ndarray,
+    contraction: np.ndarray,
+    layer1: Layer1Perception,
+) -> np.ndarray:
+    """Vectorized conviction over (n_stocks, n_days). Equivalent to looping
+    compute_conviction per cell, but ~1000× faster (numpy ops vs Python dict
+    lookups inside a 1.9M-iter loop).
+
+    NaN cells in blended_rs produce conviction=0 (matching the original
+    loop's `continue` behavior which left conv_matrix at 0).
+    """
+    rs_norm = blended_rs / 100.0
+    mom_norm = _MOM_NORM_LUT[mom_state]
+    vol_norm = _VOL_NORM_LUT[vol_state]
+    rs_state_norm = _RS_NORM_LUT[rs_state]
+
+    # Velocity bonus — direction * max(0, 1 - days_in_state/30)
+    velocity_bonus = direction.astype(np.float32) * np.maximum(
+        0.0, 1.0 - days_in_state.astype(np.float32) / 30.0
+    )
+
+    base = (
+        layer1.conviction_rs_weight * rs_norm
+        + layer1.conviction_mom_weight * mom_norm
+        + layer1.conviction_state_weight * rs_state_norm
+        + layer1.conviction_velocity_weight * np.maximum(0.0, velocity_bonus)
+    )
+
+    synergy = rs_norm * mom_norm
+    penalty = vol_norm * rs_norm
+
+    conviction = (
+        base * (1.0 + layer1.synergy_weight * synergy) * (1.0 - layer1.penalty_weight * penalty)
+    )
+    conviction = conviction + layer1.ppc_conviction_boost * ppc.astype(np.float32)
+    conviction = conviction + layer1.contraction_entry_bonus * contraction.astype(np.float32)
+
+    conviction = np.clip(conviction, 0.0, 1.0)
+    # NaN in blended_rs → 0 (matches the scalar loop's `continue` skip)
+    conviction = np.where(np.isnan(blended_rs), 0.0, conviction)
+    return conviction.astype(np.float32)
+
 
 def compute_conviction(
     rs_pctile_norm: float,  # 0–1 (raw percentile / 100)

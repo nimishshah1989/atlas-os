@@ -17,7 +17,11 @@ import pandas as pd
 import structlog
 
 from atlas.trading.config import PortfolioConfig
-from atlas.trading.decision import apply_entry_rules, apply_exit_rules, compute_conviction
+from atlas.trading.decision import (
+    apply_entry_rules,
+    apply_exit_rules,
+    compute_conviction_matrix,
+)
 from atlas.trading.genome import Genome
 from atlas.trading.perception import (
     REGIME_RISK_OFF,
@@ -218,23 +222,19 @@ def simulate_genome(
         rs_state, genome.layer1.state_velocity_lookback_days
     )
 
-    # Layer 2: conviction matrix
-    conv_matrix = np.zeros((n_stocks, n_days), dtype=np.float32)
-    for s in range(n_stocks):
-        for d in range(n_days):
-            if np.isnan(blended_rs[s, d]):
-                continue
-            conv_matrix[s, d] = compute_conviction(
-                rs_pctile_norm=float(blended_rs[s, d]) / 100.0,
-                rs_state=int(rs_state[s, d]),
-                momentum_state=int(mom_state[s, d]),
-                vol_state=int(vol_state[s, d]),
-                days_in_state=int(days_in_state[s, d]),
-                direction=int(direction[s, d]),
-                layer1=genome.layer1,
-                ppc=int(ppc[s, d]),
-                contraction=int(contraction[s, d]),
-            )
+    # Layer 2: conviction matrix — vectorized (was a 1.93M-iter Python loop;
+    # now ~10ms numpy). Same math as the per-cell compute_conviction.
+    conv_matrix = compute_conviction_matrix(
+        blended_rs=blended_rs,
+        rs_state=rs_state,
+        mom_state=mom_state,
+        vol_state=vol_state,
+        days_in_state=days_in_state,
+        direction=direction,
+        ppc=ppc,
+        contraction=contraction,
+        layer1=genome.layer1,
+    )
 
     oos_sortinos: list[float] = []
     oos_calmars: list[float] = []
