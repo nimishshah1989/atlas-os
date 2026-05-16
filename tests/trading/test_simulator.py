@@ -111,44 +111,39 @@ def test_simulate_genome_missing_cts_columns_uses_safe_defaults():
     assert result.total_trades >= 0
 
 
-def test_sanitize_masks_non_corp_action_jumps():
-    """Bhavcopy artifact (no corp action on file) gets masked by forward-fill."""
+def test_sanitize_drops_stock_with_uncovered_jump():
+    """Stock with a >100% jump that isn't in de_corporate_actions is dropped."""
     from atlas.trading.simulator import _sanitize_close_adj
 
     instruments = ["stock-A"]
     dates_arr = [date(2017, 1, 1) + timedelta(days=i) for i in range(10)]
-    # Day 5 has a 24x jump with NO corp action — should be masked
+    # Day 5 has a 24x jump with NO corp action — entire stock should drop
     close = np.array(
-        [[7.5, 7.8, 8.0, 8.1, 8.25, 198.85, 195.0, 196.5, 200.0, 199.0]], dtype=np.float32
+        [[7.5, 7.8, 8.0, 8.1, 8.25, 198.85, 195.0, 196.5, 200.0, 199.0]],
+        dtype=np.float32,
     )
     sanitized = _sanitize_close_adj(close, instruments, dates_arr, corp_actions=set())
 
-    # Day 5 should have been masked (forward-filled to day 4's value of 8.25)
-    assert sanitized[0, 5] == pytest.approx(
-        8.25
-    ), f"masked day should forward-fill, got {sanitized[0, 5]}"
-    # No remaining ratios > 2.0 (sanity)
-    ratios = sanitized[0, 1:] / sanitized[0, :-1]
-    assert ratios.max() < 2.0, f"discontinuity remains, max ratio = {ratios.max():.2f}"
+    # Whole row should be NaN (vectorbt treats NaN as untradeable)
+    assert np.all(np.isnan(sanitized[0])), f"bad stock should be entirely NaN, got {sanitized[0]}"
 
 
 def test_sanitize_keeps_corp_action_jumps():
-    """A jump on a recorded corp-action date is exempted (NOT masked)."""
+    """A jump on a recorded corp-action date is exempted (stock not dropped)."""
     from atlas.trading.simulator import _sanitize_close_adj
 
     instruments = ["stock-B"]
     dates_arr = [date(2017, 1, 1) + timedelta(days=i) for i in range(10)]
-    # Day 5 has a 24x jump AND is a corp action — should be kept
     close = np.array(
-        [[7.5, 7.8, 8.0, 8.1, 8.25, 198.85, 195.0, 196.5, 200.0, 199.0]], dtype=np.float32
+        [[7.5, 7.8, 8.0, 8.1, 8.25, 198.85, 195.0, 196.5, 200.0, 199.0]],
+        dtype=np.float32,
     )
     ca = {("stock-B", dates_arr[5])}  # bonus/split recorded on day 5
     sanitized = _sanitize_close_adj(close, instruments, dates_arr, corp_actions=ca)
 
-    # Day 5 is preserved (legitimate corp action)
-    assert sanitized[0, 5] == pytest.approx(
-        198.85
-    ), f"corp action day should be preserved, got {sanitized[0, 5]}"
+    # Stock preserved with all original values
+    assert not np.any(np.isnan(sanitized[0])), "corp action stock should not be dropped"
+    assert sanitized[0, 5] == pytest.approx(198.85)
 
 
 def test_max_drawdown_stored_as_positive_magnitude():

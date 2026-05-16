@@ -73,66 +73,62 @@ def _sanitize_close_adj(
     instruments: list,
     dates: list,
     corp_actions: set[tuple[str, date]] | None = None,
-    jump_threshold: float = 0.5,
+    jump_threshold: float = 1.0,
 ) -> np.ndarray:
-    """Mask bhavcopy / close_adj artifacts while preserving legitimate corp actions.
+    """Drop stocks with close_adj corruption; preserve corp-action moves.
 
-    Three principles (from data engineering recipe):
-      1. Source price is COALESCE(close_adj, close) — caller's responsibility
-      2. Exempt corp actions — real splits keep their drops (de_corporate_actions
-         is authoritative for "did a split/bonus happen this date?")
-      3. Mask the rest — any other >50% one-day jump is a bhavcopy error or
-         backfill artifact; forward-fill so downstream doesn't see fake returns
+    Stocks with close_adj backfill bugs show scale-change discontinuities
+    (one big jump UP that persists at the new scale). Forward-filling
+    masked days creates a NEW discontinuity, so masking single days
+    doesn't work. The clean approach: if a stock has ANY >100% one-day
+    jump that isn't a recorded corp action, drop the whole stock from
+    the universe (set its close row to NaN; vectorbt won't trade NaN).
 
-    Expected mask rate ~0.12% of universe stock-days (1,131 / 937K). The
-    bhavcopy errors usually don't corrupt volume, so volume is untouched.
+    Tradeoff: loses ~14% of universe (~107 of 750 stocks). Remaining
+    643 stocks have clean continuous price series. Better than feeding
+    fake mega-returns to the optimizer.
 
-    Falsey-corp_actions = no exemption (mask every >50% jump). Tests pass
-    no corp actions; production passes the loaded set from de_corporate_actions.
+    Fully vectorized: runs in ~50ms on 750x2600. Safe to call per-trial.
+    Threshold 1.0 = 100% one-day move. 50% catches too many legitimate
+    small-cap moves; 100% is rare without corp action.
     """
     sanitized = close.copy().astype(np.float64)
     n_stocks, n_days = sanitized.shape
     corp_actions = corp_actions or set()
-    masked = 0
 
-    for s in range(n_stocks):
-        iid_str = str(instruments[s])
-        last_valid = sanitized[s, 0] if np.isfinite(sanitized[s, 0]) else np.nan
-        for d in range(1, n_days):
-            curr = sanitized[s, d]
-            if not np.isfinite(curr) or curr <= 0:
-                # Already NaN or zero — forward-fill from last valid
-                sanitized[s, d] = last_valid
-                continue
-            if not np.isfinite(last_valid) or last_valid <= 0:
-                last_valid = curr
-                continue
-            ratio = curr / last_valid
-            day_return = ratio - 1.0
-            if abs(day_return) > jump_threshold:
-                # Suspect jump. Exempt if a real corp action happened today
-                # or yesterday (price drop can appear on either day depending
-                # on data timing).
-                d_today = dates[d]
-                d_prev = dates[d - 1]
-                has_ca = (iid_str, d_today) in corp_actions or (
-                    iid_str,
-                    d_prev,
-                ) in corp_actions
-                if has_ca:
-                    last_valid = curr  # legitimate, accept and continue
-                else:
-                    sanitized[s, d] = last_valid  # forward-fill, mask the day
-                    masked += 1
-            else:
-                last_valid = curr
+    # One-day return ratios
+    prev = np.empty_like(sanitized)
+    prev[:, 0] = sanitized[:, 0]
+    prev[:, 1:] = sanitized[:, :-1]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratios = sanitized / prev
+    big_jumps = np.isfinite(ratios) & (prev > 0) & (np.abs(ratios - 1.0) > jump_threshold)
 
-    if masked > 0:
+    # Build corp action mask via direct (iid, date) -> grid index lookups.
+    has_ca = np.zeros_like(big_jumps, dtype=bool)
+    iid_to_idx = {str(instruments[s]): s for s in range(n_stocks)}
+    date_to_idx = {dates[d]: d for d in range(n_days)}
+    for iid, dt in corp_actions:
+        s = iid_to_idx.get(iid)
+        d = date_to_idx.get(dt)
+        if s is not None and d is not None:
+            has_ca[s, d] = True
+            if d + 1 < n_days:
+                has_ca[s, d + 1] = True  # price drop may appear day-after
+
+    suspect = big_jumps & ~has_ca
+    # If a stock has ANY suspect day, drop it from the universe.
+    bad_stock_mask = suspect.any(axis=1)
+    bad_count = int(bad_stock_mask.sum())
+    sanitized[bad_stock_mask, :] = np.nan
+
+    if bad_count > 0:
         log.info(
-            "close_adj_masked",
-            masked_days=masked,
-            stocks=n_stocks,
-            mask_pct=round(100.0 * masked / (n_stocks * n_days), 4),
+            "close_adj_dropped_stocks",
+            dropped=bad_count,
+            of_total=n_stocks,
+            drop_pct=round(100.0 * bad_count / max(1, n_stocks), 2),
+            threshold=jump_threshold,
         )
     return sanitized.astype(np.float32)
 
