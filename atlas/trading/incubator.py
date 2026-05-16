@@ -342,24 +342,41 @@ def run_nightly(conn, config: PortfolioConfig | None = None) -> dict[str, Any]:
 
     today = date.today()
     data_start = today - timedelta(days=365 * 12)
-    metrics_df = _load_metrics_df(conn, data_start, today)
-    regime_df = _load_regime_df(conn, data_start, today)
-    corp_actions = _load_corp_actions(conn, data_start, today)
+    worker_mode = os.environ.get("ATLAS_INCUBATOR_WORKER_MODE") == "1"
 
-    if metrics_df.empty:
-        log.error("no_metrics_data_abort")
-        return {"status": "aborted", "reason": "no_metrics_data"}
+    if worker_mode:
+        # Worker mode: load data from coordinator's parquet cache. No DB.
+        log.info("worker_loading_cached_data")
+        metrics_df, regime_df, corp_actions, config_from_cache, walk_forward_windows = (
+            _load_data_in_worker()
+        )
+        config = config_from_cache
+    else:
+        metrics_df = _load_metrics_df(conn, data_start, today)
+        regime_df = _load_regime_df(conn, data_start, today)
+        corp_actions = _load_corp_actions(conn, data_start, today)
+        if metrics_df.empty:
+            log.error("no_metrics_data_abort")
+            return {"status": "aborted", "reason": "no_metrics_data"}
+        walk_forward_windows = _build_walk_forward_windows(
+            start_date=today - timedelta(days=365 * 10),
+            end_date=today,
+        )
+        if not walk_forward_windows:
+            log.error("no_walk_forward_windows")
+            return {"status": "aborted", "reason": "no_walk_forward_windows"}
 
-    walk_forward_windows = _build_walk_forward_windows(
-        start_date=today - timedelta(days=365 * 10),
-        end_date=today,
-    )
-    if not walk_forward_windows:
-        log.error("no_walk_forward_windows")
-        return {"status": "aborted", "reason": "no_walk_forward_windows"}
-
-    db_url = os.environ.get("ATLAS_DB_URL", "")
-    study = OptunaStudy.production(db_url) if db_url else OptunaStudy("atlas_strategy_lab_v1")
+    # Study: file-based JournalStorage when n_jobs > 1 (multi-process) so
+    # workers don't need DB connections. Single-process path uses Postgres RDB.
+    n_jobs = _n_jobs()
+    if worker_mode or n_jobs > 1:
+        journal_path = f"{_DATA_CACHE_DIR}/study.log"
+        study = OptunaStudy.journal(journal_path)
+    else:
+        db_url = os.environ.get("ATLAS_DB_URL", "")
+        study = (
+            OptunaStudy.production(db_url) if db_url else OptunaStudy("atlas_strategy_lab_v1")
+        )
 
     # Tuple shape: (genome, alpha_oos, information_ratio, sortino_oos)
     # Alpha is the primary score (Optuna objective). IR + Sortino are kept for
@@ -403,12 +420,17 @@ def run_nightly(conn, config: PortfolioConfig | None = None) -> dict[str, Any]:
         return {"status": "worker_done", "trials_run": n_trials}
 
     if n_jobs > 1:
-        # Coordinator mode: spawn N worker subprocesses (true process-level
-        # parallelism, no GIL contention). Each worker runs n_trials/n_jobs
-        # trials and writes to the shared study. After workers exit, we
-        # reload completed trials from the study and reconstruct genome_scores.
+        # Coordinator mode: dump data to /tmp parquet so workers don't need DB,
+        # then spawn N subprocess workers. Workers share a file-locked
+        # JournalStorage Optuna study (zero DB connections during trials).
+        log.info("coordinator_dumping_data_for_workers")
+        _dump_data_for_workers(
+            metrics_df, regime_df, corp_actions, config, walk_forward_windows
+        )
         log.info("coordinator_spawning_workers", n_workers=n_jobs, total_trials=n_trials)
         _run_distributed_trials(n_trials, n_jobs)
+        # Reload study from journal (workers' results live there)
+        study = OptunaStudy.journal(f"{_DATA_CACHE_DIR}/study.log")
         genome_scores = _reconstruct_genome_scores_from_study(study)
         log.info("coordinator_reconstructed_scores", n=len(genome_scores))
     else:
