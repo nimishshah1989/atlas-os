@@ -204,8 +204,11 @@ def _dump_data_for_workers(
     import pickle
 
     os.makedirs(_DATA_CACHE_DIR, exist_ok=True)
-    metrics_df.to_parquet(f"{_DATA_CACHE_DIR}/metrics.parquet", compression="snappy")
-    regime_df.to_parquet(f"{_DATA_CACHE_DIR}/regime.parquet", compression="snappy")
+    # Pickle instead of parquet: pyarrow is an optional dep we don't want to
+    # require for the burn-in. DataFrames pickle fine; ~150MB on disk for the
+    # 1.4M-row metrics_df, mmap-readable from each worker.
+    metrics_df.to_pickle(f"{_DATA_CACHE_DIR}/metrics.pkl")
+    regime_df.to_pickle(f"{_DATA_CACHE_DIR}/regime.pkl")
     with open(f"{_DATA_CACHE_DIR}/corp_actions.pkl", "wb") as f:
         pickle.dump(corp_actions, f)
     with open(f"{_DATA_CACHE_DIR}/config.pkl", "wb") as f:
@@ -230,8 +233,8 @@ def _load_data_in_worker() -> tuple:
     """Worker reads data from /tmp/ cache (no DB connections)."""
     import pickle
 
-    metrics_df = pd.read_parquet(f"{_DATA_CACHE_DIR}/metrics.parquet")
-    regime_df = pd.read_parquet(f"{_DATA_CACHE_DIR}/regime.parquet")
+    metrics_df = pd.read_pickle(f"{_DATA_CACHE_DIR}/metrics.pkl")
+    regime_df = pd.read_pickle(f"{_DATA_CACHE_DIR}/regime.pkl")
     with open(f"{_DATA_CACHE_DIR}/corp_actions.pkl", "rb") as f:
         corp_actions = pickle.load(f)
     with open(f"{_DATA_CACHE_DIR}/config.pkl", "rb") as f:
