@@ -154,6 +154,33 @@ def get_recommendations_today(engine: Engine = Depends(get_engine)) -> dict:  # 
     return _envelope([dict(r) for r in rows], data_as_of=latest_date)
 
 
+@router.get("/proof/{genome_id}")
+def get_proof(genome_id: str, engine: Engine = Depends(get_engine)) -> dict:  # type: ignore[type-arg, misc]  # noqa: B008
+    """Year-by-year backtest validation for a genome — the goal-post proof.
+
+    Returns the data behind the Proof tab on /strategies/lab. Includes
+    strategy_return + benchmark_return per year so the frontend can render
+    'beat the benchmark with lower drawdown'.
+    """
+    with engine.connect() as conn:
+        rows = (
+            conn.execute(
+                text("""
+                SELECT year, strategy_return, benchmark_return, alpha,
+                       max_drawdown, benchmark_max_drawdown, sortino,
+                       n_trades, avg_positions_held, run_at::text
+                FROM atlas.atlas_strategy_validation
+                WHERE genome_id = CAST(:gid AS uuid)
+                ORDER BY year
+            """),
+                {"gid": genome_id},
+            )
+            .mappings()
+            .all()
+        )
+    return _envelope([dict(r) for r in rows])
+
+
 @router.get("/insights/latest")
 def get_latest_insights(engine: Engine = Depends(get_engine)) -> dict:  # type: ignore[type-arg, misc]  # noqa: B008
     with engine.connect() as conn:
