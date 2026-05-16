@@ -127,8 +127,11 @@ def upgrade() -> None:
         sa.Column("regime_breakdown", JSONB, nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        # tournament.promote_to_leaderboard upserts via ON CONFLICT (genome_id);
+        # the UNIQUE constraint is what makes that idempotent. Without it the
+        # second promotion of a genome would crash the nightly chain.
+        sa.UniqueConstraint("genome_id", name="uq_leaderboard_genome_id"),
     )
-    op.create_index("ix_leaderboard_genome_id", "atlas_strategy_leaderboard", ["genome_id"])
     op.create_index("ix_leaderboard_rank", "atlas_strategy_leaderboard", ["rank"])
 
     op.create_table(
@@ -208,7 +211,6 @@ def downgrade() -> None:
     op.drop_index("ix_universe_membership_date_universe", table_name="atlas_universe_membership_daily")
     op.drop_index("ix_membership_instrument_id", table_name="atlas_universe_membership_daily")
     op.drop_index("ix_leaderboard_rank", table_name="atlas_strategy_leaderboard")
-    op.drop_index("ix_leaderboard_genome_id", table_name="atlas_strategy_leaderboard")
     op.drop_index("ix_positions_daily_date", table_name="atlas_strategy_positions_daily")
     op.drop_index("ix_positions_instrument_id", table_name="atlas_strategy_positions_daily")
     op.drop_index("ix_positions_genome_id", table_name="atlas_strategy_positions_daily")

@@ -163,6 +163,13 @@ def run_nightly(conn, config: PortfolioConfig | None = None) -> dict[str, Any]:
     log.info("running_optuna_trials", n=n_trials)
     study.run_trials(n_trials=n_trials, objective_fn=objective)
 
+    if not genome_scores:
+        # Every trial raised inside simulate_genome — surface this distinctly
+        # from "trials ran but nothing was good enough to promote" so an
+        # operator can tell whether the engine is broken vs the genes are bad.
+        log.error("all_trials_failed_no_scores", n_trials=n_trials)
+        return {"status": "aborted", "reason": "all_trials_failed", "trials_run": n_trials}
+
     # DEAP breeding
     evolver = Evolver()
     survivors = evolver.select_survivors(genome_scores, target_pool=_TARGET_POOL_SIZE)
@@ -215,7 +222,9 @@ def run_nightly(conn, config: PortfolioConfig | None = None) -> dict[str, Any]:
                     (id, generated_at, insight_bullets, parameter_importance, top_genome_deltas)
                 VALUES
                     (gen_random_uuid(), NOW(),
-                     :bullets::jsonb, :importance::jsonb, :deltas::jsonb)
+                     CAST(:bullets AS jsonb),
+                     CAST(:importance AS jsonb),
+                     CAST(:deltas AS jsonb))
                 """
             ),
             {

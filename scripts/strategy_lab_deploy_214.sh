@@ -37,7 +37,7 @@ echo "==> [3/4] Apply migration 067 (atlas_strategy_lab tables)"
 # Alembic is idempotent: if 067 already applied, this is a no-op.
 alembic upgrade head
 
-echo "==> [4/4] Smoke-test trading module imports + DB tables"
+echo "==> [4/5] Smoke-test trading module imports + DB tables"
 python - <<'PY'
 from atlas.trading.config import PortfolioConfig
 from atlas.trading.genome import Genome, GenomeFactory
@@ -74,6 +74,12 @@ if missing:
     raise SystemExit(f"  MISSING tables: {missing}")
 print(f"  All 8 strategy lab tables present: {sorted(rows)}")
 PY
+
+echo "==> [5/5] Integration test — verify leaderboard upsert path"
+# Runs the integration tests added in review-fix B1. The
+# uq_leaderboard_genome_id check fails fast if migration 067 was applied
+# from an older revision (without the unique constraint).
+python -m pytest tests/integration/trading/ -v --tb=short
 
 cat <<'EOF'
 

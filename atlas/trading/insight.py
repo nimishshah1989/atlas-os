@@ -50,6 +50,12 @@ def generate_insights(
 
     Returns 3-5 insight strings. Falls back to [] if Groq is unavailable.
     """
+    if not os.environ.get("GROQ_API_KEY"):
+        # No key configured (CI, local dev, EC2 without secrets) — skip the
+        # round-trip rather than make a guaranteed-401 network call.
+        log.info("insight_generation_skipped_no_groq_key")
+        return []
+
     prompt = _PROMPT_TEMPLATE.format(
         importance_json=json.dumps(parameter_importance, indent=2),
         delta_json=json.dumps(top_genome_deltas[:5], indent=2),

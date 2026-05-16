@@ -3,7 +3,8 @@ from unittest.mock import MagicMock, patch
 from atlas.trading.insight import generate_insights
 
 
-def test_generate_insights_returns_bullets():
+def test_generate_insights_returns_bullets(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
     mock_response = MagicMock()
     mock_response.choices = [MagicMock()]
     mock_response.choices[0].message.content = (
@@ -27,7 +28,8 @@ def test_generate_insights_returns_bullets():
     assert all(isinstance(b, str) for b in bullets)
 
 
-def test_generate_insights_groq_unavailable_returns_empty():
+def test_generate_insights_groq_unavailable_returns_empty(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
     with patch("atlas.trading.insight._get_groq_client") as mock_client_fn:
         mock_client_fn.side_effect = RuntimeError("Groq unavailable")
 
@@ -39,7 +41,8 @@ def test_generate_insights_groq_unavailable_returns_empty():
     assert bullets == []
 
 
-def test_generate_insights_malformed_response_returns_empty():
+def test_generate_insights_malformed_response_returns_empty(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
     mock_response = MagicMock()
     mock_response.choices = [MagicMock()]
     mock_response.choices[0].message.content = "No numbered bullets here, just prose."
@@ -56,3 +59,16 @@ def test_generate_insights_malformed_response_returns_empty():
 
     # No numbered bullets found → empty list (graceful degradation)
     assert isinstance(bullets, list)
+
+
+def test_generate_insights_skipped_when_no_groq_key(monkeypatch):
+    """Without a key we never touch the network — fast path returns []."""
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    with patch("atlas.trading.insight._get_groq_client") as mock_client_fn:
+        bullets = generate_insights(
+            parameter_importance={"rs_leader_cutoff_pct": 0.5},
+            top_genome_deltas=[],
+        )
+
+    assert bullets == []
+    mock_client_fn.assert_not_called()
