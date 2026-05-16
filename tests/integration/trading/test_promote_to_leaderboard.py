@@ -36,10 +36,10 @@ def _seed_genome_row(conn, genome_id: str) -> None:
         text(
             """
             INSERT INTO atlas.atlas_strategy_genomes
-                (id, generation, status, params_json, created_at)
+                (id, generation, status, genome_json, born_at, created_at)
             VALUES
-                (CAST(:id AS uuid), 0, 'tournament_passed',
-                 CAST('{}' AS jsonb), :now)
+                (CAST(:id AS uuid), 0, 'promoted',
+                 CAST('{}' AS jsonb), :now, :now)
             ON CONFLICT (id) DO NOTHING
             """
         ),

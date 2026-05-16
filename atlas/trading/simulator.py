@@ -106,17 +106,22 @@ def simulate_genome(
     close = _pivot("close")
     n_stocks, n_days = close.shape
 
+    # CRITICAL: rs_pctile_1w/1m/3m are stored 0-1 in atlas_stock_metrics_daily
+    # but genome thresholds (rs_leader_cutoff_pct=60-80, etc.) and the
+    # /100 normalization inside compute_conviction both assume 0-100 scale.
+    # Scale here so the rest of the pipeline is consistent.
     rs_arrays = {
-        "1w": _pivot("rs_pctile_1w"),
-        "1m": _pivot("rs_pctile_1m"),
-        "3m": _pivot("rs_pctile_3m"),
+        "1w": _pivot("rs_pctile_1w") * 100.0,
+        "1m": _pivot("rs_pctile_1m") * 100.0,
+        "3m": _pivot("rs_pctile_3m") * 100.0,
     }
     vol_ratio = _pivot("vol_ratio_63")
     ema_ratio = _pivot("ema_20_ratio")
 
     rdf = regime_df.set_index("date").reindex(dates)
-    breadth = rdf["pct_above_ema_50"].values.astype(np.float32)
-    vix_arr = rdf["india_vix"].values.astype(np.float32)
+    # Same scale fix for breadth: stored 0-1 but compared against 0-100 thresholds.
+    breadth = rdf["pct_above_ema_50"].values.astype(np.float32) * 100.0
+    vix_arr = rdf["india_vix"].values.astype(np.float32)  # absolute scale, no fix needed
     # Benchmark price series for alpha computation. ffill is intentional —
     # on a non-trading day Nifty 500 doesn't move, so carrying forward the
     # last close is correct (vs leaving NaN and breaking the alpha calc).

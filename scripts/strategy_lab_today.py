@@ -174,16 +174,19 @@ def _compute_today_actions(
         return pivoted.reindex(index=instruments, columns=dates).values.astype(np.float32)
 
     close = _pivot("close")
+    # Scale RS percentiles + breadth from DB's 0-1 representation to the 0-100
+    # scale that genome thresholds and conviction normalization both assume.
+    # Same fix as atlas/trading/simulator.py:_run_window.
     rs_arrays = {
-        "1w": _pivot("rs_pctile_1w"),
-        "1m": _pivot("rs_pctile_1m"),
-        "3m": _pivot("rs_pctile_3m"),
+        "1w": _pivot("rs_pctile_1w") * 100.0,
+        "1m": _pivot("rs_pctile_1m") * 100.0,
+        "3m": _pivot("rs_pctile_3m") * 100.0,
     }
     vol_ratio = _pivot("vol_ratio_63")
     ema_ratio = _pivot("ema_20_ratio")
 
     rdf = regime_df.set_index("date").reindex(dates)
-    breadth = rdf["pct_above_ema_50"].values.astype(np.float32)
+    breadth = rdf["pct_above_ema_50"].values.astype(np.float32) * 100.0
     vix_arr = rdf["india_vix"].values.astype(np.float32)
 
     # CTS stage defaults (Stage 2 neutral) — keeps the entry rules functional

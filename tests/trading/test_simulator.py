@@ -21,9 +21,9 @@ def _synthetic_df(n_stocks=5, n_days=120) -> pd.DataFrame:
                     "instrument_id": s + 1,
                     "date": d,
                     "close": prices[d_idx],
-                    "rs_pctile_1w": rng.uniform(0, 100),
-                    "rs_pctile_1m": rng.uniform(0, 100),
-                    "rs_pctile_3m": rng.uniform(0, 100),
+                    "rs_pctile_1w": rng.uniform(0, 1),
+                    "rs_pctile_1m": rng.uniform(0, 1),
+                    "rs_pctile_3m": rng.uniform(0, 1),
                     "vol_ratio_63": rng.uniform(0.8, 2.2),
                     "ema_20_ratio": rng.uniform(0.97, 1.04),
                 }
@@ -37,7 +37,11 @@ def _regime_df(n_days=120) -> pd.DataFrame:
     rng = np.random.default_rng(99)
     return pd.DataFrame(
         [
-            {"date": d, "pct_above_ema_50": rng.uniform(30, 80), "india_vix": rng.uniform(12, 25)}
+            {
+                "date": d,
+                "pct_above_ema_50": rng.uniform(0.30, 0.80),
+                "india_vix": rng.uniform(12, 25),
+            }
             for d in dates
         ]
     )

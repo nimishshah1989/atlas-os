@@ -232,9 +232,24 @@ def run_nightly(conn, config: PortfolioConfig | None = None) -> dict[str, Any]:
             promoted_count += 1
 
     # Insight generation — surface the goal-post metrics to the LLM narrator.
+    # Sortino can be ±Infinity when std-of-returns is 0 (degenerate genome with
+    # all-equal returns or no trades). JSON can't serialize Infinity into JSONB.
+    # NaN can also leak through. Replace both with None before passing to LLM/DB.
+    def _finite(v: float) -> float | None:
+        if v != v:  # NaN
+            return None
+        if v == float("inf") or v == float("-inf"):
+            return None
+        return float(v)
+
     importance = study.get_parameter_importance()
     top_deltas = [
-        {"genome_id": g.genome_id, "alpha": alpha, "ir": ir, "sortino": sortino}
+        {
+            "genome_id": g.genome_id,
+            "alpha": _finite(alpha),
+            "ir": _finite(ir),
+            "sortino": _finite(sortino),
+        }
         for g, alpha, ir, sortino in genome_scores[:5]
     ]
     bullets = generate_insights(importance, top_deltas)
