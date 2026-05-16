@@ -277,6 +277,9 @@ def _run_window(
     exits_df = pd.DataFrame(exits, index=price_df.index, columns=price_df.columns)
 
     try:
+        # Decimal arithmetic executes first (precise); float() is a single
+        # conversion required by vectorbt's numpy internals. Fee rates are
+        # ≤0.1% each so the float representation is exact to 17 digits.
         total_fees = float(
             config.brokerage_rate
             + config.stt_rate_sell

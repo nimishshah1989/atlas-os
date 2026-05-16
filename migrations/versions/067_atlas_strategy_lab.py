@@ -83,7 +83,8 @@ def upgrade() -> None:
         sa.Column(
             "instrument_id",
             UUID(as_uuid=True),
-            sa.ForeignKey("atlas.atlas_universe_stocks.id"),
+            # No FK: trading bounded context must not reference atlas.compute tables.
+            # instrument_id values are validated at write time by the simulation layer.
             nullable=False,
             index=True,
         ),
@@ -108,7 +109,8 @@ def upgrade() -> None:
 
     op.create_table(
         "atlas_strategy_leaderboard",
-        sa.Column("rank", sa.Integer, primary_key=True),
+        sa.Column("id", UUID(as_uuid=True), primary_key=True, server_default=sa.text("uuid_generate_v4()")),
+        sa.Column("rank", sa.Integer, nullable=False),
         sa.Column(
             "genome_id",
             UUID(as_uuid=True),
@@ -118,14 +120,16 @@ def upgrade() -> None:
         ),
         sa.Column("strategy_name", sa.Text, nullable=False),
         sa.Column("promoted_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("sortino_oos", sa.Numeric(10, 4), nullable=True),
-        sa.Column("calmar_oos", sa.Numeric(10, 4), nullable=True),
+        # NOT NULL: a genome that makes the leaderboard must have been evaluated.
+        sa.Column("sortino_oos", sa.Numeric(10, 4), nullable=False),
+        sa.Column("calmar_oos", sa.Numeric(10, 4), nullable=False),
         sa.Column("alpha_30d", sa.Numeric(10, 4), nullable=True),
         sa.Column("regime_breakdown", JSONB, nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
     )
     op.create_index("ix_leaderboard_genome_id", "atlas_strategy_leaderboard", ["genome_id"])
+    op.create_index("ix_leaderboard_rank", "atlas_strategy_leaderboard", ["rank"])
 
     op.create_table(
         "atlas_strategy_insights",
@@ -143,7 +147,7 @@ def upgrade() -> None:
         sa.Column(
             "instrument_id",
             UUID(as_uuid=True),
-            sa.ForeignKey("atlas.atlas_universe_stocks.id"),
+            # No FK: same bounded-context rule as positions_daily.
             nullable=False,
             index=True,
         ),
@@ -197,12 +201,21 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_index("ix_portfolio_config_is_active", table_name="atlas_portfolio_config")
+    op.drop_index("ix_evolution_log_event_type", table_name="atlas_strategy_evolution_log")
+    op.drop_index("ix_evolution_log_event_at", table_name="atlas_strategy_evolution_log")
     op.drop_index("ix_evolution_genome_id", table_name="atlas_strategy_evolution_log")
+    op.drop_index("ix_universe_membership_date_universe", table_name="atlas_universe_membership_daily")
     op.drop_index("ix_membership_instrument_id", table_name="atlas_universe_membership_daily")
+    op.drop_index("ix_leaderboard_rank", table_name="atlas_strategy_leaderboard")
     op.drop_index("ix_leaderboard_genome_id", table_name="atlas_strategy_leaderboard")
+    op.drop_index("ix_positions_daily_date", table_name="atlas_strategy_positions_daily")
     op.drop_index("ix_positions_instrument_id", table_name="atlas_strategy_positions_daily")
     op.drop_index("ix_positions_genome_id", table_name="atlas_strategy_positions_daily")
+    op.drop_index("ix_perf_daily_date", table_name="atlas_strategy_performance_daily")
     op.drop_index("ix_perf_genome_id", table_name="atlas_strategy_performance_daily")
+    op.drop_index("ix_genomes_generation", table_name="atlas_strategy_genomes")
+    op.drop_index("ix_genomes_status", table_name="atlas_strategy_genomes")
 
     for table in [
         "atlas_portfolio_config",
