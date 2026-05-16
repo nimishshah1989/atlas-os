@@ -126,12 +126,14 @@ class OptunaStudy:
         Used for distributed burn-ins to avoid Supabase pooler connection
         limits. Workers and coordinator share a journal file with file-lock
         coordination; no DB connections needed for trial state.
-
-        Trial history persists to disk; survives process restarts. After
-        burn-in, the coordinator reads completed trials from the journal
-        (no DB calls) for reconstruction of genome_scores.
         """
-        storage = optuna.storages.JournalStorage(
-            optuna.storages.JournalFileStorage(journal_path)
-        )
+        import os
+
+        os.makedirs(os.path.dirname(journal_path), exist_ok=True)
+        # JournalFileStorage was deprecated in Optuna 4.0 in favor of
+        # JournalFileBackend (new module location). Use the new class to
+        # avoid DeprecationWarning and prepare for removal in v6.0.
+        from optuna.storages.journal import JournalFileBackend
+
+        storage = optuna.storages.JournalStorage(JournalFileBackend(journal_path))
         return cls(study_name=study_name, storage=storage)
