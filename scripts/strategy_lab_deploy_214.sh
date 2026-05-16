@@ -29,9 +29,12 @@ git fetch origin
 git checkout "$TARGET_BRANCH"
 git pull --ff-only origin "$TARGET_BRANCH"
 
-echo "==> [2/4] Install optimizer dependencies (optuna + deap)"
+echo "==> [2/4] Install optimizer + simulation dependencies"
+# optimizer brings optuna + deap; simulation brings vectorbt + PyPortfolioOpt.
+# Strategy Lab uses both: optuna/deap drive the search, vectorbt runs the
+# walk-forward portfolio simulation inside each trial.
 source .venv/bin/activate
-pip install -e ".[optimizer]" --quiet
+pip install -e ".[optimizer,simulation]" --quiet
 
 echo "==> [3/4] Apply migration 067 (atlas_strategy_lab tables)"
 # Alembic is idempotent: if 067 already applied, this is a no-op.
