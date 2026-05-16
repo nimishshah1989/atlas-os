@@ -145,7 +145,7 @@ def promote_to_leaderboard(
     conn.execute(
         text(
             """
-            INSERT INTO atlas_strategy_leaderboard
+            INSERT INTO atlas.atlas_strategy_leaderboard
                 (id, rank, genome_id, strategy_name, promoted_at, sortino_oos, calmar_oos)
             VALUES
                 (gen_random_uuid(), :rank, :genome_id::uuid, :name, :promoted_at, :sortino, :calmar)

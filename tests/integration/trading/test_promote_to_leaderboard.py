@@ -35,7 +35,7 @@ def _seed_genome_row(conn, genome_id: str) -> None:
     conn.execute(
         text(
             """
-            INSERT INTO atlas_strategy_genomes
+            INSERT INTO atlas.atlas_strategy_genomes
                 (id, generation, status, params_json, created_at)
             VALUES
                 (CAST(:id AS uuid), 0, 'tournament_passed',
@@ -73,7 +73,7 @@ def test_promote_to_leaderboard_upsert_is_idempotent(engine):
             promote_to_leaderboard(conn, genome, _make_result(0.85, 1.10), rank=3)
             count_after_first = conn.execute(
                 text(
-                    "SELECT COUNT(*) FROM atlas_strategy_leaderboard "
+                    "SELECT COUNT(*) FROM atlas.atlas_strategy_leaderboard "
                     "WHERE genome_id = CAST(:id AS uuid)"
                 ),
                 {"id": genome.genome_id},
@@ -86,7 +86,7 @@ def test_promote_to_leaderboard_upsert_is_idempotent(engine):
                 conn.execute(
                     text(
                         "SELECT rank, sortino_oos, calmar_oos "
-                        "FROM atlas_strategy_leaderboard "
+                        "FROM atlas.atlas_strategy_leaderboard "
                         "WHERE genome_id = CAST(:id AS uuid)"
                     ),
                     {"id": genome.genome_id},
@@ -96,7 +96,7 @@ def test_promote_to_leaderboard_upsert_is_idempotent(engine):
             )
             count_after_second = conn.execute(
                 text(
-                    "SELECT COUNT(*) FROM atlas_strategy_leaderboard "
+                    "SELECT COUNT(*) FROM atlas.atlas_strategy_leaderboard "
                     "WHERE genome_id = CAST(:id AS uuid)"
                 ),
                 {"id": genome.genome_id},

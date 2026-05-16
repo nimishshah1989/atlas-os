@@ -1,6 +1,6 @@
 """Atlas Strategy Lab — 8 new tables for genome-based portfolio simulation.
 
-Tables:
+Tables (all in ``atlas`` schema, matching the convention from migration 004):
 1. atlas_strategy_genomes — evolution population (active, promoted, killed, archived)
 2. atlas_strategy_performance_daily — daily metrics (Sortino, Calmar, alpha, drawdown, heat)
 3. atlas_strategy_positions_daily — daily holdings per genome (entry_date, tax_status)
@@ -26,6 +26,10 @@ down_revision = "066"
 branch_labels = None
 depends_on = None
 
+# Single source of truth for the schema name in this migration. Atlas's data
+# tables live in the ``atlas`` schema per migration 004 / atlas.config.SCHEMA_NAME.
+_SCHEMA = "atlas"
+
 
 def upgrade() -> None:
     op.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
@@ -42,16 +46,17 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
         sa.CheckConstraint("status IN ('active','promoted','killed','archived')", name="ck_genomes_status"),
+        schema=_SCHEMA,
     )
-    op.create_index("ix_genomes_status", "atlas_strategy_genomes", ["status"])
-    op.create_index("ix_genomes_generation", "atlas_strategy_genomes", ["generation"])
+    op.create_index("ix_genomes_status", "atlas_strategy_genomes", ["status"], schema=_SCHEMA)
+    op.create_index("ix_genomes_generation", "atlas_strategy_genomes", ["generation"], schema=_SCHEMA)
 
     op.create_table(
         "atlas_strategy_performance_daily",
         sa.Column(
             "genome_id",
             UUID(as_uuid=True),
-            sa.ForeignKey("atlas_strategy_genomes.id", ondelete="CASCADE"),
+            sa.ForeignKey("atlas.atlas_strategy_genomes.id", ondelete="CASCADE"),
             nullable=False,
             index=True,
         ),
@@ -66,16 +71,17 @@ def upgrade() -> None:
         sa.Column("total_trades", sa.Integer, nullable=True),
         sa.Column("turnover_pct", sa.Numeric(10, 4), nullable=True),
         sa.PrimaryKeyConstraint("genome_id", "date"),
+        schema=_SCHEMA,
     )
-    op.create_index("ix_perf_daily_date", "atlas_strategy_performance_daily", ["date"])
-    op.create_index("ix_perf_genome_id", "atlas_strategy_performance_daily", ["genome_id"])
+    op.create_index("ix_perf_daily_date", "atlas_strategy_performance_daily", ["date"], schema=_SCHEMA)
+    op.create_index("ix_perf_genome_id", "atlas_strategy_performance_daily", ["genome_id"], schema=_SCHEMA)
 
     op.create_table(
         "atlas_strategy_positions_daily",
         sa.Column(
             "genome_id",
             UUID(as_uuid=True),
-            sa.ForeignKey("atlas_strategy_genomes.id", ondelete="CASCADE"),
+            sa.ForeignKey("atlas.atlas_strategy_genomes.id", ondelete="CASCADE"),
             nullable=False,
             index=True,
         ),
@@ -102,10 +108,11 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("genome_id", "date", "instrument_id"),
         sa.CheckConstraint("position_type IN ('equity','liquidbees')", name="ck_positions_type"),
         sa.CheckConstraint("tax_status IN ('stcg','ltcg_eligible','liquidbees')", name="ck_positions_tax"),
+        schema=_SCHEMA,
     )
-    op.create_index("ix_positions_daily_date", "atlas_strategy_positions_daily", ["date"])
-    op.create_index("ix_positions_genome_id", "atlas_strategy_positions_daily", ["genome_id"])
-    op.create_index("ix_positions_instrument_id", "atlas_strategy_positions_daily", ["instrument_id"])
+    op.create_index("ix_positions_daily_date", "atlas_strategy_positions_daily", ["date"], schema=_SCHEMA)
+    op.create_index("ix_positions_genome_id", "atlas_strategy_positions_daily", ["genome_id"], schema=_SCHEMA)
+    op.create_index("ix_positions_instrument_id", "atlas_strategy_positions_daily", ["instrument_id"], schema=_SCHEMA)
 
     op.create_table(
         "atlas_strategy_leaderboard",
@@ -114,7 +121,7 @@ def upgrade() -> None:
         sa.Column(
             "genome_id",
             UUID(as_uuid=True),
-            sa.ForeignKey("atlas_strategy_genomes.id", ondelete="CASCADE"),
+            sa.ForeignKey("atlas.atlas_strategy_genomes.id", ondelete="CASCADE"),
             nullable=False,
             index=True,
         ),
@@ -131,8 +138,9 @@ def upgrade() -> None:
         # the UNIQUE constraint is what makes that idempotent. Without it the
         # second promotion of a genome would crash the nightly chain.
         sa.UniqueConstraint("genome_id", name="uq_leaderboard_genome_id"),
+        schema=_SCHEMA,
     )
-    op.create_index("ix_leaderboard_rank", "atlas_strategy_leaderboard", ["rank"])
+    op.create_index("ix_leaderboard_rank", "atlas_strategy_leaderboard", ["rank"], schema=_SCHEMA)
 
     op.create_table(
         "atlas_strategy_insights",
@@ -143,6 +151,7 @@ def upgrade() -> None:
         sa.Column("top_genome_deltas", JSONB, nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        schema=_SCHEMA,
     )
 
     op.create_table(
@@ -158,9 +167,10 @@ def upgrade() -> None:
         sa.Column("universe", sa.Text, nullable=False),
         sa.Column("was_member", sa.Boolean, nullable=False, server_default="true"),
         sa.PrimaryKeyConstraint("instrument_id", "date", "universe"),
+        schema=_SCHEMA,
     )
-    op.create_index("ix_universe_membership_date_universe", "atlas_universe_membership_daily", ["date", "universe"])
-    op.create_index("ix_membership_instrument_id", "atlas_universe_membership_daily", ["instrument_id"])
+    op.create_index("ix_universe_membership_date_universe", "atlas_universe_membership_daily", ["date", "universe"], schema=_SCHEMA)
+    op.create_index("ix_membership_instrument_id", "atlas_universe_membership_daily", ["instrument_id"], schema=_SCHEMA)
 
     op.create_table(
         "atlas_strategy_evolution_log",
@@ -168,7 +178,7 @@ def upgrade() -> None:
         sa.Column(
             "genome_id",
             UUID(as_uuid=True),
-            sa.ForeignKey("atlas_strategy_genomes.id", ondelete="CASCADE"),
+            sa.ForeignKey("atlas.atlas_strategy_genomes.id", ondelete="CASCADE"),
             nullable=False,
             index=True,
         ),
@@ -186,10 +196,11 @@ def upgrade() -> None:
             "event_type IN ('born','killed','promoted','demoted','mutated','crossover')",
             name="ck_evolution_event_type",
         ),
+        schema=_SCHEMA,
     )
-    op.create_index("ix_evolution_log_event_at", "atlas_strategy_evolution_log", ["event_at"])
-    op.create_index("ix_evolution_log_event_type", "atlas_strategy_evolution_log", ["event_type"])
-    op.create_index("ix_evolution_genome_id", "atlas_strategy_evolution_log", ["genome_id"])
+    op.create_index("ix_evolution_log_event_at", "atlas_strategy_evolution_log", ["event_at"], schema=_SCHEMA)
+    op.create_index("ix_evolution_log_event_type", "atlas_strategy_evolution_log", ["event_type"], schema=_SCHEMA)
+    op.create_index("ix_evolution_genome_id", "atlas_strategy_evolution_log", ["genome_id"], schema=_SCHEMA)
 
     op.create_table(
         "atlas_portfolio_config",
@@ -199,25 +210,26 @@ def upgrade() -> None:
         sa.Column("is_active", sa.Boolean, nullable=False, server_default="false"),
         sa.Column("label", sa.Text, nullable=True),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        schema=_SCHEMA,
     )
-    op.create_index("ix_portfolio_config_is_active", "atlas_portfolio_config", ["is_active"])
+    op.create_index("ix_portfolio_config_is_active", "atlas_portfolio_config", ["is_active"], schema=_SCHEMA)
 
 
 def downgrade() -> None:
-    op.drop_index("ix_portfolio_config_is_active", table_name="atlas_portfolio_config")
-    op.drop_index("ix_evolution_log_event_type", table_name="atlas_strategy_evolution_log")
-    op.drop_index("ix_evolution_log_event_at", table_name="atlas_strategy_evolution_log")
-    op.drop_index("ix_evolution_genome_id", table_name="atlas_strategy_evolution_log")
-    op.drop_index("ix_universe_membership_date_universe", table_name="atlas_universe_membership_daily")
-    op.drop_index("ix_membership_instrument_id", table_name="atlas_universe_membership_daily")
-    op.drop_index("ix_leaderboard_rank", table_name="atlas_strategy_leaderboard")
-    op.drop_index("ix_positions_daily_date", table_name="atlas_strategy_positions_daily")
-    op.drop_index("ix_positions_instrument_id", table_name="atlas_strategy_positions_daily")
-    op.drop_index("ix_positions_genome_id", table_name="atlas_strategy_positions_daily")
-    op.drop_index("ix_perf_daily_date", table_name="atlas_strategy_performance_daily")
-    op.drop_index("ix_perf_genome_id", table_name="atlas_strategy_performance_daily")
-    op.drop_index("ix_genomes_generation", table_name="atlas_strategy_genomes")
-    op.drop_index("ix_genomes_status", table_name="atlas_strategy_genomes")
+    op.drop_index("ix_portfolio_config_is_active", table_name="atlas_portfolio_config", schema=_SCHEMA)
+    op.drop_index("ix_evolution_log_event_type", table_name="atlas_strategy_evolution_log", schema=_SCHEMA)
+    op.drop_index("ix_evolution_log_event_at", table_name="atlas_strategy_evolution_log", schema=_SCHEMA)
+    op.drop_index("ix_evolution_genome_id", table_name="atlas_strategy_evolution_log", schema=_SCHEMA)
+    op.drop_index("ix_universe_membership_date_universe", table_name="atlas_universe_membership_daily", schema=_SCHEMA)
+    op.drop_index("ix_membership_instrument_id", table_name="atlas_universe_membership_daily", schema=_SCHEMA)
+    op.drop_index("ix_leaderboard_rank", table_name="atlas_strategy_leaderboard", schema=_SCHEMA)
+    op.drop_index("ix_positions_daily_date", table_name="atlas_strategy_positions_daily", schema=_SCHEMA)
+    op.drop_index("ix_positions_instrument_id", table_name="atlas_strategy_positions_daily", schema=_SCHEMA)
+    op.drop_index("ix_positions_genome_id", table_name="atlas_strategy_positions_daily", schema=_SCHEMA)
+    op.drop_index("ix_perf_daily_date", table_name="atlas_strategy_performance_daily", schema=_SCHEMA)
+    op.drop_index("ix_perf_genome_id", table_name="atlas_strategy_performance_daily", schema=_SCHEMA)
+    op.drop_index("ix_genomes_generation", table_name="atlas_strategy_genomes", schema=_SCHEMA)
+    op.drop_index("ix_genomes_status", table_name="atlas_strategy_genomes", schema=_SCHEMA)
 
     for table in [
         "atlas_portfolio_config",
@@ -229,4 +241,4 @@ def downgrade() -> None:
         "atlas_strategy_performance_daily",
         "atlas_strategy_genomes",
     ]:
-        op.drop_table(table)
+        op.drop_table(table, schema=_SCHEMA)

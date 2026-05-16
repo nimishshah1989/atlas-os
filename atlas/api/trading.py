@@ -40,8 +40,8 @@ def get_leaderboard(engine: Engine = Depends(get_engine)) -> dict:  # type: igno
                        l.promoted_at::text, l.sortino_oos, l.calmar_oos,
                        l.alpha_30d, l.regime_breakdown,
                        g.genome_json, g.generation
-                FROM atlas_strategy_leaderboard l
-                JOIN atlas_strategy_genomes g ON g.id = l.genome_id
+                FROM atlas.atlas_strategy_leaderboard l
+                JOIN atlas.atlas_strategy_genomes g ON g.id = l.genome_id
                 ORDER BY l.rank
             """)
             )
@@ -59,7 +59,7 @@ def get_genome(genome_id: str, engine: Engine = Depends(get_engine)) -> dict:  #
                 text("""
                 SELECT id::text, genome_json, born_at::text, generation,
                        status, parent_ids::text[]
-                FROM atlas_strategy_genomes
+                FROM atlas.atlas_strategy_genomes
                 WHERE id = :gid
             """),
                 {"gid": genome_id},
@@ -75,7 +75,7 @@ def get_genome(genome_id: str, engine: Engine = Depends(get_engine)) -> dict:  #
                 text("""
                 SELECT date::text, sortino_oos, calmar_oos, alpha_vs_nifty500,
                        max_drawdown, total_trades
-                FROM atlas_strategy_performance_daily
+                FROM atlas.atlas_strategy_performance_daily
                 WHERE genome_id = :gid
                 ORDER BY date DESC LIMIT 90
             """),
@@ -98,10 +98,10 @@ def get_positions(genome_id: str, engine: Engine = Depends(get_engine)) -> dict:
                        p.entry_date::text, p.entry_price, p.shares,
                        p.current_value, p.unrealized_pnl,
                        p.holding_days, p.tax_status, p.entry_signals
-                FROM atlas_strategy_positions_daily p
+                FROM atlas.atlas_strategy_positions_daily p
                 WHERE p.genome_id = :gid
                   AND p.date = (
-                      SELECT MAX(date) FROM atlas_strategy_positions_daily
+                      SELECT MAX(date) FROM atlas.atlas_strategy_positions_daily
                       WHERE genome_id = :gid
                   )
                 ORDER BY p.current_value DESC
@@ -122,7 +122,7 @@ def get_latest_insights(engine: Engine = Depends(get_engine)) -> dict:  # type: 
                 text("""
                 SELECT generated_at::text, insight_bullets,
                        parameter_importance, top_genome_deltas
-                FROM atlas_strategy_insights
+                FROM atlas.atlas_strategy_insights
                 ORDER BY generated_at DESC LIMIT 1
             """)
             )
@@ -145,7 +145,7 @@ def get_gene_pool_health(engine: Engine = Depends(get_engine)) -> dict:  # type:
                     COUNT(*) FILTER (WHERE status = 'killed')   AS killed_count,
                     COUNT(*) FILTER (WHERE status = 'promoted') AS promoted_count,
                     MAX(born_at)::text                          AS last_born_at
-                FROM atlas_strategy_genomes
+                FROM atlas.atlas_strategy_genomes
             """)
             )
             .mappings()
@@ -160,7 +160,7 @@ def get_config(engine: Engine = Depends(get_engine)) -> dict:  # type: ignore[ty
         row = (
             conn.execute(
                 text("""
-                SELECT config_json FROM atlas_portfolio_config
+                SELECT config_json FROM atlas.atlas_portfolio_config
                 WHERE is_active = TRUE
                 ORDER BY created_at DESC LIMIT 1
             """)
@@ -185,10 +185,10 @@ def save_config(body: dict, engine: Engine = Depends(get_engine)) -> dict:  # ty
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     with engine.connect() as conn:
-        conn.execute(text("UPDATE atlas_portfolio_config SET is_active = FALSE"))
+        conn.execute(text("UPDATE atlas.atlas_portfolio_config SET is_active = FALSE"))
         conn.execute(
             text("""
-                INSERT INTO atlas_portfolio_config (config_json, is_active, label)
+                INSERT INTO atlas.atlas_portfolio_config (config_json, is_active, label)
                 VALUES (CAST(:cfg AS jsonb), TRUE, :label)
             """),
             {"cfg": json.dumps(cfg.to_json()), "label": body.get("label", "")},

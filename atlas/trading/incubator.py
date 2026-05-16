@@ -3,7 +3,7 @@
 Run as: python -m atlas.trading.incubator
 
 Sequence:
-  1. Load metrics from atlas_stock_metrics_daily + regime from atlas_market_regime_daily
+  1. Load metrics from atlas.atlas_stock_metrics_daily + regime from atlas.atlas_market_regime_daily
   2. Run Optuna trials: simulate_genome → score
   3. DEAP breeding: crossover top performers, mutate top 5
   4. Tournament: evaluate top 10 candidates, promote survivors to leaderboard
@@ -65,7 +65,7 @@ def _load_metrics_df(conn, start_date: date, end_date: date) -> pd.DataFrame:
                 m.instrument_id, m.date, m.close,
                 m.rs_pctile_1w, m.rs_pctile_1m, m.rs_pctile_3m,
                 m.vol_ratio_63, m.ema_20_ratio
-            FROM atlas_stock_metrics_daily m
+            FROM atlas.atlas_stock_metrics_daily m
             WHERE m.date BETWEEN :start AND :end
             ORDER BY m.date, m.instrument_id
             """
@@ -82,7 +82,7 @@ def _load_regime_df(conn, start_date: date, end_date: date) -> pd.DataFrame:
         text(
             """
             SELECT date, pct_above_ema_50, india_vix
-            FROM atlas_market_regime_daily
+            FROM atlas.atlas_market_regime_daily
             WHERE date BETWEEN :start AND :end
             ORDER BY date
             """
@@ -115,7 +115,7 @@ def _load_active_config(conn) -> PortfolioConfig:
     row = (
         conn.execute(
             text(
-                "SELECT config_json FROM atlas_portfolio_config "
+                "SELECT config_json FROM atlas.atlas_portfolio_config "
                 "WHERE is_active = TRUE ORDER BY created_at DESC LIMIT 1"
             )
         )
@@ -218,7 +218,7 @@ def run_nightly(conn, config: PortfolioConfig | None = None) -> dict[str, Any]:
         conn.execute(
             text(
                 """
-                INSERT INTO atlas_strategy_insights
+                INSERT INTO atlas.atlas_strategy_insights
                     (id, generated_at, insight_bullets, parameter_importance, top_genome_deltas)
                 VALUES
                     (gen_random_uuid(), NOW(),

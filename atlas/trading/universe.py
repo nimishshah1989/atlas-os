@@ -1,7 +1,7 @@
 """Point-in-time universe membership loader and filter.
 
 Handles Nifty 500 membership state at any historical date for backtesting
-and portfolio simulation. Reads from atlas_universe_membership_daily.
+and portfolio simulation. Reads from atlas.atlas_universe_membership_daily.
 """
 
 from __future__ import annotations
@@ -67,7 +67,7 @@ def load_universe_membership(
     start_date: date,
     end_date: date,
 ) -> dict:
-    """Load point-in-time membership from atlas_universe_membership_daily.
+    """Load point-in-time membership from atlas.atlas_universe_membership_daily.
 
     Args:
         conn: SQLAlchemy connection.
@@ -85,7 +85,7 @@ def load_universe_membership(
     rows = (
         conn.execute(
             text(
-                "SELECT instrument_id, date FROM atlas_universe_membership_daily "
+                "SELECT instrument_id, date FROM atlas.atlas_universe_membership_daily "
                 "WHERE universe = :universe AND was_member = TRUE "
                 "AND date BETWEEN :start AND :end"
             ),
@@ -108,7 +108,7 @@ def load_universe_membership(
 
 
 def bootstrap_nifty500_membership(conn: Connection) -> int:
-    """Seed atlas_universe_membership_daily from atlas_universe_stocks for all dates.
+    """Seed atlas.atlas_universe_membership_daily from atlas_universe_stocks for all dates.
 
     Initial approximation — assumes each instrument was a member for all dates
     it has price data. Replace with NSE historical composition files for
@@ -126,9 +126,10 @@ def bootstrap_nifty500_membership(conn: Connection) -> int:
     result = conn.execute(
         text(
             """
-            INSERT INTO atlas_universe_membership_daily (instrument_id, date, universe, was_member)
+            INSERT INTO atlas.atlas_universe_membership_daily
+                (instrument_id, date, universe, was_member)
             SELECT DISTINCT m.instrument_id, m.date, 'nifty500', TRUE
-            FROM atlas_stock_metrics_daily m
+            FROM atlas.atlas_stock_metrics_daily m
             JOIN atlas.atlas_universe_stocks i ON i.instrument_id = m.instrument_id
             WHERE i.in_nifty_500 = TRUE
             ON CONFLICT (instrument_id, date, universe) DO NOTHING
