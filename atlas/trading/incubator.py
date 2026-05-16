@@ -88,7 +88,8 @@ def _load_metrics_df(conn, start_date: date, end_date: date) -> pd.DataFrame:
         text(
             """
             SELECT
-                m.instrument_id, m.date, p.close_adj AS close,
+                m.instrument_id, m.date,
+                COALESCE(p.close_adj, p.close) AS close,
                 m.rs_pctile_1w, m.rs_pctile_1m, m.rs_pctile_3m,
                 m.vol_ratio_63, m.ema_20_ratio
             FROM atlas.atlas_stock_metrics_daily m
@@ -96,7 +97,7 @@ def _load_metrics_df(conn, start_date: date, end_date: date) -> pd.DataFrame:
               ON p.instrument_id = m.instrument_id
              AND p.date = m.date
             WHERE m.date BETWEEN :start AND :end
-              AND p.close_adj IS NOT NULL
+              AND COALESCE(p.close_adj, p.close) IS NOT NULL
             ORDER BY m.date, m.instrument_id
             """
         ),
@@ -105,6 +106,29 @@ def _load_metrics_df(conn, start_date: date, end_date: date) -> pd.DataFrame:
     df = pd.DataFrame(result.mappings().all())
     log.info("metrics_loaded", rows=len(df))
     return df
+
+
+def _load_corp_actions(conn, start_date: date, end_date: date) -> set[tuple[str, date]]:
+    """Load split/bonus ex-dates so the simulator exempts them from masking.
+
+    Returns a set of (instrument_id_str, ex_date) pairs. The sanitizer treats
+    >50% one-day jumps as artifacts UNLESS the day is in this set.
+    """
+    result = conn.execute(
+        text(
+            """
+            SELECT instrument_id::text AS iid, ex_date
+            FROM public.de_corporate_actions
+            WHERE action_type IN ('split', 'bonus')
+              AND ratio_from IS NOT NULL
+              AND ex_date BETWEEN :start AND :end
+            """
+        ),
+        {"start": start_date, "end": end_date},
+    )
+    pairs = {(row["iid"], row["ex_date"]) for row in result.mappings()}
+    log.info("corp_actions_loaded", rows=len(pairs))
+    return pairs
 
 
 def _load_regime_df(conn, start_date: date, end_date: date) -> pd.DataFrame:
@@ -172,6 +196,7 @@ def run_nightly(conn, config: PortfolioConfig | None = None) -> dict[str, Any]:
     data_start = today - timedelta(days=365 * 12)
     metrics_df = _load_metrics_df(conn, data_start, today)
     regime_df = _load_regime_df(conn, data_start, today)
+    corp_actions = _load_corp_actions(conn, data_start, today)
 
     if metrics_df.empty:
         log.error("no_metrics_data_abort")
@@ -195,7 +220,14 @@ def run_nightly(conn, config: PortfolioConfig | None = None) -> dict[str, Any]:
 
     def objective(genome: Genome) -> float:
         """Optimize alpha vs Nifty 500. Goal post: maximize alpha with confidence."""
-        result = simulate_genome(genome, metrics_df, regime_df, config, walk_forward_windows)
+        result = simulate_genome(
+            genome,
+            metrics_df,
+            regime_df,
+            config,
+            walk_forward_windows,
+            corp_actions=corp_actions,
+        )
         genome_scores.append(
             (genome, result.alpha_oos, result.information_ratio, result.sortino_oos)
         )
@@ -237,7 +269,7 @@ def run_nightly(conn, config: PortfolioConfig | None = None) -> dict[str, Any]:
 
         def sim_fn(g: Genome, start: date, end: date) -> SimResult:
             w = [(start, end - timedelta(days=half), end - timedelta(days=half - 1), end)]
-            return simulate_genome(g, metrics_df, regime_df, config, w)
+            return simulate_genome(g, metrics_df, regime_df, config, w, corp_actions=corp_actions)
 
         return sim_fn
 

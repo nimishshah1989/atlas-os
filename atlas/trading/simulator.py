@@ -68,43 +68,73 @@ class SimResult:
     equity_curve_oos: pd.Series | None = None
 
 
-def _sanitize_close_adj(close: np.ndarray, jump_threshold: float = 2.0) -> np.ndarray:
-    """Repair close_adj discontinuities caused by upstream backfill bugs.
+def _sanitize_close_adj(
+    close: np.ndarray,
+    instruments: list,
+    dates: list,
+    corp_actions: set[tuple[str, date]] | None = None,
+    jump_threshold: float = 0.5,
+) -> np.ndarray:
+    """Mask bhavcopy / close_adj artifacts while preserving legitimate corp actions.
 
-    Atlas's price-adjustment pipeline has known issues where close_adj has
-    artificial >100% one-day jumps on corporate-action dates (~107 symbols,
-    ~4139 days affected as of 2026-05-16). The simulator would otherwise
-    interpret these as fake mega-returns and the optimizer would find
-    genomes that "exploit" the bad data.
+    Three principles (from data engineering recipe):
+      1. Source price is COALESCE(close_adj, close) — caller's responsibility
+      2. Exempt corp actions — real splits keep their drops (de_corporate_actions
+         is authoritative for "did a split/bonus happen this date?")
+      3. Mask the rest — any other >50% one-day jump is a bhavcopy error or
+         backfill artifact; forward-fill so downstream doesn't see fake returns
 
-    Algorithm: walk forward per stock. If close[d] / close[d-1] > 2.0 or
-    < 0.5, rescale ALL prior values by the inverse ratio so the series
-    becomes continuous from d onwards. This reconstructs a coherent
-    backward-adjusted series in memory; the DB is untouched.
+    Expected mask rate ~0.12% of universe stock-days (1,131 / 937K). The
+    bhavcopy errors usually don't corrupt volume, so volume is untouched.
 
-    2.0 threshold (100% one-day) is conservative. Real stocks essentially
-    never move that much without a corp action. False positives possible
-    on IPO-listing days or extreme small-cap moves; acceptable tradeoff
-    vs the 53,000% data artifacts we're filtering out.
+    Falsey-corp_actions = no exemption (mask every >50% jump). Tests pass
+    no corp actions; production passes the loaded set from de_corporate_actions.
     """
-    sanitized = close.copy()
+    sanitized = close.copy().astype(np.float64)
     n_stocks, n_days = sanitized.shape
-    repairs = 0
+    corp_actions = corp_actions or set()
+    masked = 0
+
     for s in range(n_stocks):
+        iid_str = str(instruments[s])
+        last_valid = sanitized[s, 0] if np.isfinite(sanitized[s, 0]) else np.nan
         for d in range(1, n_days):
-            prev = sanitized[s, d - 1]
             curr = sanitized[s, d]
-            if not np.isfinite(prev) or not np.isfinite(curr) or prev <= 0:
+            if not np.isfinite(curr) or curr <= 0:
+                # Already NaN or zero — forward-fill from last valid
+                sanitized[s, d] = last_valid
                 continue
-            ratio = curr / prev
-            if ratio > jump_threshold or ratio < (1.0 / jump_threshold):
-                # Rescale all prior values to match this day's scale.
-                # Forward-walking backward adjustment.
-                sanitized[s, :d] = sanitized[s, :d] * ratio
-                repairs += 1
-    if repairs > 0:
-        log.info("close_adj_sanitized", repairs=repairs, stocks=n_stocks)
-    return sanitized
+            if not np.isfinite(last_valid) or last_valid <= 0:
+                last_valid = curr
+                continue
+            ratio = curr / last_valid
+            day_return = ratio - 1.0
+            if abs(day_return) > jump_threshold:
+                # Suspect jump. Exempt if a real corp action happened today
+                # or yesterday (price drop can appear on either day depending
+                # on data timing).
+                d_today = dates[d]
+                d_prev = dates[d - 1]
+                has_ca = (iid_str, d_today) in corp_actions or (
+                    iid_str,
+                    d_prev,
+                ) in corp_actions
+                if has_ca:
+                    last_valid = curr  # legitimate, accept and continue
+                else:
+                    sanitized[s, d] = last_valid  # forward-fill, mask the day
+                    masked += 1
+            else:
+                last_valid = curr
+
+    if masked > 0:
+        log.info(
+            "close_adj_masked",
+            masked_days=masked,
+            stocks=n_stocks,
+            mask_pct=round(100.0 * masked / (n_stocks * n_days), 4),
+        )
+    return sanitized.astype(np.float32)
 
 
 def simulate_genome(
@@ -113,6 +143,7 @@ def simulate_genome(
     regime_df: pd.DataFrame,
     config: PortfolioConfig,
     walk_forward_windows: list[tuple[date, date, date, date]],
+    corp_actions: set[tuple[str, date]] | None = None,
 ) -> SimResult:
     """Run genome across walk-forward windows, return averaged OOS metrics.
 
@@ -120,6 +151,9 @@ def simulate_genome(
                 rs_pctile_3m, vol_ratio_63, ema_20_ratio
     regime_df:  date, pct_above_ema_50, india_vix
     walk_forward_windows: list of (train_start, train_end, test_start, test_end)
+    corp_actions: optional set of (instrument_id_str, ex_date) pairs from
+                  de_corporate_actions. Exempts legitimate split/bonus drops
+                  from the close_adj sanitizer. None = mask everything > 50%.
     """
     df = metrics_df.sort_values(["date", "instrument_id"])
     dates = sorted(df["date"].unique())
@@ -143,7 +177,7 @@ def simulate_genome(
         )
 
     close = _pivot("close")
-    close = _sanitize_close_adj(close)
+    close = _sanitize_close_adj(close, instruments, dates, corp_actions)
     n_stocks, n_days = close.shape
 
     # CRITICAL: rs_pctile_1w/1m/3m are stored 0-1 in atlas_stock_metrics_daily
