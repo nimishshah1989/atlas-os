@@ -200,8 +200,8 @@ def _crossover_l1(a: Layer1Perception, b: Layer1Perception) -> Layer1Perception:
     d: dict[str, Any] = {}
     for key, (lo, hi) in _L1_FLOAT_BOUNDS.items():
         d[key] = _clamp(_blend(getattr(a, key), getattr(b, key)), lo, hi)
-    for key, _lo, _hi in _L1_INT_RANGES:
-        d[key] = int(round(_blend(float(getattr(a, key)), float(getattr(b, key)))))
+    for key, lo, hi in _L1_INT_RANGES:
+        d[key] = int(round(_clamp(_blend(float(getattr(a, key)), float(getattr(b, key))), lo, hi)))
     d["rs_timeframe_weights"] = _normalize_weights(
         {
             k: (a.rs_timeframe_weights.get(k, 0.0) + b.rs_timeframe_weights.get(k, 0.0)) / 2.0
@@ -317,6 +317,6 @@ class Evolver:
         if not genomes_with_scores:
             return []
         ranked = sorted(genomes_with_scores, key=lambda t: t[1] + t[2], reverse=True)
-        survivors = [g for g, _s, _c in ranked[:target_pool]]
+        survivors = [g for g, *_ in ranked[:target_pool]]
         log.debug("select_survivors", kept=len(survivors), from_pool=len(genomes_with_scores))
         return survivors
