@@ -110,6 +110,33 @@ def test_simulate_genome_missing_cts_columns_uses_safe_defaults():
     assert result.total_trades >= 0
 
 
+def test_max_drawdown_stored_as_positive_magnitude():
+    """Regression — vectorbt returns DD as negative fraction, simulator must abs() it.
+
+    Without the abs() at extraction time, np.max in the aggregator picks the
+    LEAST negative DD across walk-forward windows (often 0 from zero-trade
+    windows), and tournament gate STRESS_COVID_MAX_DRAWDOWN > 0.25 never
+    triggers. Smoke #3 surfaced this bug: leaderboard genome had max_dd=0.0
+    despite 2319 trades over 12 years.
+    """
+    genome = GenomeFactory.random()
+    config = PortfolioConfig()
+    df = _synthetic_df()
+    rdf = _regime_df()
+    result = simulate_genome(
+        genome,
+        df,
+        rdf,
+        config,
+        [(date(2023, 1, 1), date(2023, 3, 1), date(2023, 3, 2), date(2023, 4, 30))],
+    )
+    # Must always be >= 0 (we store absolute magnitude). Could be 0 if no
+    # trades happened; never negative.
+    assert (
+        result.max_drawdown >= 0.0
+    ), f"max_drawdown must be non-negative magnitude, got {result.max_drawdown}"
+
+
 def test_simulate_genome_stage3_produces_no_entries():
     """All Stage 3 stocks produce zero entries when require_stage2_for_entry=True."""
     genome = GenomeFactory.random()

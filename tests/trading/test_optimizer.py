@@ -32,3 +32,27 @@ def test_parameter_importance_keys():
 def test_best_genome_empty_study_returns_none():
     study = OptunaStudy(study_name="test_atlas_empty", storage=None)
     assert study.best_genome() is None
+
+
+def test_run_trials_n_jobs_parallel_completes_all():
+    """n_jobs=4 should still execute exactly n_trials of the objective.
+
+    Regression for the parallelization patch that runs Optuna trials in a
+    thread pool. The objective callback must be called once per trial even
+    under concurrent execution; list.append is atomic in CPython so the
+    counter is safe without an explicit lock.
+    """
+    import threading
+
+    study = OptunaStudy(study_name="test_atlas_parallel", storage=None)
+    call_count = {"n": 0}
+    counter_lock = threading.Lock()
+
+    def mock_objective(genome):
+        with counter_lock:
+            call_count["n"] += 1
+        return float(genome.layer1.rs_leader_cutoff_pct) / 100.0
+
+    study.run_trials(n_trials=8, objective_fn=mock_objective, n_jobs=4)
+    assert call_count["n"] == 8
+    assert study.best_genome() is not None

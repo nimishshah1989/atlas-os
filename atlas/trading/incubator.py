@@ -56,6 +56,25 @@ def _n_trials_per_night() -> int:
         return _N_TRIALS_PER_NIGHT_DEFAULT
 
 
+def _n_jobs() -> int:
+    """Optuna n_jobs — thread pool size for parallel trial evaluation.
+
+    Default 1 (sequential). Override via ATLAS_INCUBATOR_N_JOBS for burn-in
+    runs on bigger instances. Suggested values:
+      t3.2xlarge (8 vCPU):   n_jobs=4-6   (current)
+      c6i.8xlarge (32 vCPU): n_jobs=16-24
+      c6i.16xlarge (64 vCPU): n_jobs=32-48
+    """
+    raw = os.environ.get("ATLAS_INCUBATOR_N_JOBS")
+    if raw is None:
+        return 1
+    try:
+        n = int(raw)
+        return max(1, n)
+    except ValueError:
+        return 1
+
+
 def _load_metrics_df(conn, start_date: date, end_date: date) -> pd.DataFrame:
     """Load derived metrics joined with raw close prices for vectorbt simulation.
 
@@ -69,7 +88,7 @@ def _load_metrics_df(conn, start_date: date, end_date: date) -> pd.DataFrame:
         text(
             """
             SELECT
-                m.instrument_id, m.date, p.close,
+                m.instrument_id, m.date, p.close_adj AS close,
                 m.rs_pctile_1w, m.rs_pctile_1m, m.rs_pctile_3m,
                 m.vol_ratio_63, m.ema_20_ratio
             FROM atlas.atlas_stock_metrics_daily m
@@ -77,6 +96,7 @@ def _load_metrics_df(conn, start_date: date, end_date: date) -> pd.DataFrame:
               ON p.instrument_id = m.instrument_id
              AND p.date = m.date
             WHERE m.date BETWEEN :start AND :end
+              AND p.close_adj IS NOT NULL
             ORDER BY m.date, m.instrument_id
             """
         ),
@@ -182,8 +202,9 @@ def run_nightly(conn, config: PortfolioConfig | None = None) -> dict[str, Any]:
         return result.alpha_oos
 
     n_trials = _n_trials_per_night()
-    log.info("running_optuna_trials", n=n_trials)
-    study.run_trials(n_trials=n_trials, objective_fn=objective)
+    n_jobs = _n_jobs()
+    log.info("running_optuna_trials", n=n_trials, n_jobs=n_jobs)
+    study.run_trials(n_trials=n_trials, objective_fn=objective, n_jobs=n_jobs)
 
     if not genome_scores:
         # Every trial raised inside simulate_genome — surface this distinctly

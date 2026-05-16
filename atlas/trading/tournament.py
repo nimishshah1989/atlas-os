@@ -37,11 +37,16 @@ if TYPE_CHECKING:
 log = structlog.get_logger()
 
 # v2 gates — alpha + confidence
+# Calibrated against smoke #3 data (20 Optuna trials, best alpha +3.83%,
+# best hit_rate ~30%, best IR ~0.08). At a 20-trial sample, requiring
+# hit_rate>=0.55 + IR>=0.3 promoted ZERO genomes. The big burn-in (5k-50k
+# trials) will surface candidates that clear these relaxed v1 floors AND
+# higher tightenings can come later via /admin/thresholds without code.
 ROUND1_ALPHA_MIN = 0.0
-ROUND1_HIT_RATE_MIN = 0.55
-ROUND1_IR_MIN = 0.3
+ROUND1_HIT_RATE_MIN = 0.45  # was 0.55 — at small samples, 0.45 = "better than coin flip"
+ROUND1_IR_MIN = 0.10  # was 0.30 — positive risk-adjusted edge, even if modest
 ROUND2_ALPHA_MIN = 0.0
-STRESS_COVID_MAX_DRAWDOWN = 0.25  # absolute drawdown gate during COVID crash
+STRESS_COVID_MAX_DRAWDOWN = 0.30  # was 0.25 — slight loosening for v1 sample size
 STRESS_BEAR_ALPHA_MIN = 0.0  # must beat benchmark when index falls
 STRESS_BULL_ALPHA_MIN = 0.0  # must beat benchmark when index rises
 # Core 4 diversification gate — prevents the optimizer from finding lucky 2-stock

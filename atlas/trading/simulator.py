@@ -416,7 +416,13 @@ def _run_window(
 
         sortino = _scalar(pf.sortino_ratio())
         calmar = _scalar(pf.calmar_ratio())
-        max_dd = _scalar(pf.max_drawdown())
+        # vectorbt returns max_drawdown as a negative fraction (e.g. -0.22 for
+        # 22% drawdown). Tournament gates compare against positive thresholds
+        # (STRESS_COVID_MAX_DRAWDOWN = 0.25). Convert to absolute magnitude so
+        # the aggregator's np.max correctly picks the WORST window — without
+        # the abs, np.max selects the LEAST negative (closest to zero, often
+        # a zero-trade window) and the COVID gate would never trigger.
+        max_dd = abs(_scalar(pf.max_drawdown()))
         trades = int(pf.trades.count() or 0)
         portfolio_return = _scalar(pf.total_return())
 

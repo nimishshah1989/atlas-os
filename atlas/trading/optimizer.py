@@ -32,15 +32,40 @@ class OptunaStudy:
         )
         self._name = study_name
 
-    def run_trials(self, n_trials: int, objective_fn: Callable[[Genome], float]) -> None:
-        """Run n_trials Optuna trials. objective_fn receives a Genome, returns float."""
+    def run_trials(
+        self,
+        n_trials: int,
+        objective_fn: Callable[[Genome], float],
+        n_jobs: int = 1,
+    ) -> None:
+        """Run n_trials Optuna trials. objective_fn receives a Genome, returns float.
+
+        n_jobs controls thread-level parallelism. n_jobs=1 is sequential (the
+        default and what the nightly cron uses). n_jobs>1 spawns Optuna's thread
+        pool; each thread calls _wrapped → objective_fn → simulate_genome.
+
+        Thread-safety notes for n_jobs>1:
+          - list.append in the closure is atomic in CPython (no lock needed)
+          - pandas pivot creates a new DataFrame per call (no shared mutation)
+          - vectorbt's numba JIT cache is process-global; first thread compiles,
+            others reuse. No per-thread warmup required.
+          - Optuna's TPE sampler is thread-safe with the RDB storage backend.
+
+        For c6i.8xlarge (32 vCPU) / c6i.16xlarge (64 vCPU) burn-in runs, set
+        n_jobs to ~half the vCPU count to leave headroom for the OS + DB.
+        """
 
         def _wrapped(trial: optuna.Trial) -> float:
             genome = GenomeFactory.from_optuna_trial(trial)
             return objective_fn(genome)
 
         try:
-            self._study.optimize(_wrapped, n_trials=n_trials, show_progress_bar=False)
+            self._study.optimize(
+                _wrapped,
+                n_trials=n_trials,
+                n_jobs=n_jobs,
+                show_progress_bar=False,
+            )
         except Exception:
             log.exception("optuna_optimize_failed", study=self._name)
             raise
@@ -49,6 +74,7 @@ class OptunaStudy:
             study=self._name,
             n_trials=len(self._study.trials),
             best_value=self._study.best_value,
+            n_jobs=n_jobs,
         )
 
     def best_genome(self) -> Genome | None:

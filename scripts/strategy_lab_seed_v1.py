@@ -117,13 +117,14 @@ def main() -> dict:
             conn.execute(
                 text(
                     """
-                    SELECT m.instrument_id, m.date, p.close,
+                    SELECT m.instrument_id, m.date, p.close_adj AS close,
                            m.rs_pctile_1w, m.rs_pctile_1m, m.rs_pctile_3m,
                            m.vol_ratio_63, m.ema_20_ratio
                     FROM atlas.atlas_stock_metrics_daily m
                     JOIN public.de_equity_ohlcv p
                       ON p.instrument_id = m.instrument_id AND p.date = m.date
                     WHERE m.date BETWEEN :s AND :e
+                      AND p.close_adj IS NOT NULL
                     ORDER BY m.date, m.instrument_id
                     """
                 ),

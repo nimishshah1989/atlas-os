@@ -62,12 +62,12 @@ def test_genome_failing_round1_alpha_zero_not_promoted() -> None:
 
 
 def test_genome_failing_round1_low_hit_rate_not_promoted() -> None:
-    """Positive alpha but hit_rate < 0.55 fails Round 1."""
+    """Positive alpha but hit_rate < 0.45 fails Round 1 (v1 calibrated floor)."""
     evaluator = _evaluator()
     genome = GenomeFactory.random()
 
     def sim_fn(*_):  # type: ignore[no-untyped-def]
-        return _sim_result(alpha=0.05, hit_rate=0.50)  # below 0.55 floor
+        return _sim_result(alpha=0.05, hit_rate=0.40)  # below 0.45 floor
 
     result = evaluator.evaluate(
         genome, sim_fn, recent_start=date(2024, 9, 1), recent_end=date(2024, 12, 31)
@@ -78,12 +78,12 @@ def test_genome_failing_round1_low_hit_rate_not_promoted() -> None:
 
 
 def test_genome_failing_round1_low_ir_not_promoted() -> None:
-    """Positive alpha + decent hit rate but IR < 0.3 fails Round 1."""
+    """Positive alpha + decent hit rate but IR < 0.10 fails Round 1 (v1 floor)."""
     evaluator = _evaluator()
     genome = GenomeFactory.random()
 
     def sim_fn(*_):  # type: ignore[no-untyped-def]
-        return _sim_result(alpha=0.05, hit_rate=0.65, ir=0.2)  # IR too low
+        return _sim_result(alpha=0.05, hit_rate=0.65, ir=0.05)  # IR below 0.10 floor
 
     result = evaluator.evaluate(
         genome, sim_fn, recent_start=date(2024, 9, 1), recent_end=date(2024, 12, 31)
@@ -112,7 +112,7 @@ def test_genome_failing_round2_alpha_not_promoted() -> None:
 
 
 def test_genome_covid_drawdown_fail() -> None:
-    """Rounds 1-2 pass but COVID drawdown exceeds 25% — Round 3 fails."""
+    """Rounds 1-2 pass but COVID drawdown exceeds 30% — Round 3 fails (v1 floor)."""
     evaluator = _evaluator()
     genome = GenomeFactory.random()
     call_count = {"n": 0}
@@ -121,8 +121,8 @@ def test_genome_covid_drawdown_fail() -> None:
         call_count["n"] += 1
         if call_count["n"] <= 2:
             return _sim_result(alpha=0.05)  # Rounds 1+2 pass
-        # COVID window: drawdown > 25% → fail
-        return _sim_result(alpha=0.02, max_dd=0.30)
+        # COVID window: drawdown > 30% → fail (v1 floor relaxed from 25% to 30%)
+        return _sim_result(alpha=0.02, max_dd=0.35)
 
     result = evaluator.evaluate(
         genome, sim_fn, recent_start=date(2024, 9, 1), recent_end=date(2024, 12, 31)
