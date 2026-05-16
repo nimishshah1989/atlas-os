@@ -57,15 +57,25 @@ def _n_trials_per_night() -> int:
 
 
 def _load_metrics_df(conn, start_date: date, end_date: date) -> pd.DataFrame:
+    """Load derived metrics joined with raw close prices for vectorbt simulation.
+
+    atlas.atlas_stock_metrics_daily holds only derived signals (RS, vol, EMA);
+    raw close prices come from public.de_equity_ohlcv — the JIP data lake.
+    Reading the lake directly is permitted (it's the shared data substrate,
+    not another bounded context's internals).
+    """
     log.info("loading_metrics", start=str(start_date), end=str(end_date))
     result = conn.execute(
         text(
             """
             SELECT
-                m.instrument_id, m.date, m.close,
+                m.instrument_id, m.date, p.close,
                 m.rs_pctile_1w, m.rs_pctile_1m, m.rs_pctile_3m,
                 m.vol_ratio_63, m.ema_20_ratio
             FROM atlas.atlas_stock_metrics_daily m
+            JOIN public.de_equity_ohlcv p
+              ON p.instrument_id = m.instrument_id
+             AND p.date = m.date
             WHERE m.date BETWEEN :start AND :end
             ORDER BY m.date, m.instrument_id
             """
