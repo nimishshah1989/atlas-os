@@ -110,6 +110,31 @@ def test_simulate_genome_missing_cts_columns_uses_safe_defaults():
     assert result.total_trades >= 0
 
 
+def test_sanitize_close_adj_repairs_discontinuity():
+    """Sanitizer rescales prior history when a >100% one-day jump is detected.
+
+    Models the real JSWSTEEL 2017 bug: close_adj jumped from 8.25 to 198.85
+    on the corp-action date. After sanitization, the series should be
+    continuous (no >100% jumps remain).
+    """
+    from atlas.trading.simulator import _sanitize_close_adj
+
+    # Synthetic: 1 stock, 10 days, discontinuity on day 5 (8.25 -> 198.85)
+    close = np.array(
+        [[7.5, 7.8, 8.0, 8.1, 8.25, 198.85, 195.0, 196.5, 200.0, 199.0]], dtype=np.float32
+    )
+    sanitized = _sanitize_close_adj(close)
+
+    # All one-day ratios must be <2.0x after sanitization
+    ratios = sanitized[0, 1:] / sanitized[0, :-1]
+    assert ratios.max() < 2.0, f"discontinuity remains, max ratio = {ratios.max():.2f}"
+    assert ratios.min() > 0.5, f"downward discontinuity remains, min ratio = {ratios.min():.2f}"
+    # Sanity: post-jump prices unchanged
+    assert sanitized[0, 5] == 198.85
+    # Sanity: pre-jump prices scaled up (multiplied by ~24x)
+    assert sanitized[0, 4] > 100.0, f"pre-jump should be scaled up, got {sanitized[0, 4]}"
+
+
 def test_max_drawdown_stored_as_positive_magnitude():
     """Regression — vectorbt returns DD as negative fraction, simulator must abs() it.
 

@@ -68,6 +68,45 @@ class SimResult:
     equity_curve_oos: pd.Series | None = None
 
 
+def _sanitize_close_adj(close: np.ndarray, jump_threshold: float = 2.0) -> np.ndarray:
+    """Repair close_adj discontinuities caused by upstream backfill bugs.
+
+    Atlas's price-adjustment pipeline has known issues where close_adj has
+    artificial >100% one-day jumps on corporate-action dates (~107 symbols,
+    ~4139 days affected as of 2026-05-16). The simulator would otherwise
+    interpret these as fake mega-returns and the optimizer would find
+    genomes that "exploit" the bad data.
+
+    Algorithm: walk forward per stock. If close[d] / close[d-1] > 2.0 or
+    < 0.5, rescale ALL prior values by the inverse ratio so the series
+    becomes continuous from d onwards. This reconstructs a coherent
+    backward-adjusted series in memory; the DB is untouched.
+
+    2.0 threshold (100% one-day) is conservative. Real stocks essentially
+    never move that much without a corp action. False positives possible
+    on IPO-listing days or extreme small-cap moves; acceptable tradeoff
+    vs the 53,000% data artifacts we're filtering out.
+    """
+    sanitized = close.copy()
+    n_stocks, n_days = sanitized.shape
+    repairs = 0
+    for s in range(n_stocks):
+        for d in range(1, n_days):
+            prev = sanitized[s, d - 1]
+            curr = sanitized[s, d]
+            if not np.isfinite(prev) or not np.isfinite(curr) or prev <= 0:
+                continue
+            ratio = curr / prev
+            if ratio > jump_threshold or ratio < (1.0 / jump_threshold):
+                # Rescale all prior values to match this day's scale.
+                # Forward-walking backward adjustment.
+                sanitized[s, :d] = sanitized[s, :d] * ratio
+                repairs += 1
+    if repairs > 0:
+        log.info("close_adj_sanitized", repairs=repairs, stocks=n_stocks)
+    return sanitized
+
+
 def simulate_genome(
     genome: Genome,
     metrics_df: pd.DataFrame,
@@ -104,6 +143,7 @@ def simulate_genome(
         )
 
     close = _pivot("close")
+    close = _sanitize_close_adj(close)
     n_stocks, n_days = close.shape
 
     # CRITICAL: rs_pctile_1w/1m/3m are stored 0-1 in atlas_stock_metrics_daily
