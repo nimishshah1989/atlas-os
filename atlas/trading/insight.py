@@ -62,7 +62,8 @@ def generate_insights(
             max_tokens=_MAX_TOKENS,
             temperature=0.3,
         )
-        raw = response.choices[0].message.content.strip()
+        content = response.choices[0].message.content
+        raw = content.strip() if content is not None else ""
         bullets = [
             line.strip() for line in raw.split("\n") if line.strip() and line.strip()[0].isdigit()
         ]

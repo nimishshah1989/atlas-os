@@ -37,7 +37,7 @@ def test_genome_failing_round1_not_promoted() -> None:
     evaluator = _evaluator()
     genome = GenomeFactory.random()
 
-    def sim_fn(g, start, end):  # type: ignore[no-untyped-def]
+    def sim_fn(*_):  # type: ignore[no-untyped-def]
         return _sim_result(sortino=0.3)  # < 0.7 threshold → fail Round 1
 
     result = evaluator.evaluate(
@@ -53,7 +53,7 @@ def test_genome_failing_round2_not_promoted() -> None:
     genome = GenomeFactory.random()
     call_count = {"n": 0}
 
-    def sim_fn(g, start, end):  # type: ignore[no-untyped-def]
+    def sim_fn(*_):  # type: ignore[no-untyped-def]
         call_count["n"] += 1
         return _sim_result(sortino=0.9 if call_count["n"] == 1 else 0.3)
 
@@ -69,7 +69,7 @@ def test_genome_covid_stress_fail() -> None:
     genome = GenomeFactory.random()
     call_count = {"n": 0}
 
-    def sim_fn(g, start, end):  # type: ignore[no-untyped-def]
+    def sim_fn(*_):  # type: ignore[no-untyped-def]
         call_count["n"] += 1
         if call_count["n"] <= 2:
             return _sim_result(sortino=0.9)  # Rounds 1 + 2 pass
@@ -87,7 +87,7 @@ def test_genome_passing_all_rounds_promoted() -> None:
     evaluator = _evaluator()
     genome = GenomeFactory.random()
 
-    def sim_fn(g, start, end):  # type: ignore[no-untyped-def]
+    def sim_fn(*_):  # type: ignore[no-untyped-def]
         return _sim_result(sortino=0.9, calmar=1.2, max_dd=0.08)
 
     result = evaluator.evaluate(
