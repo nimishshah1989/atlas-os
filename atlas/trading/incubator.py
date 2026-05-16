@@ -181,7 +181,7 @@ def run_nightly(conn, config: PortfolioConfig | None = None) -> dict[str, Any]:
     _sim_fn = _make_sim_fn(_half_test)
 
     promoted_count = 0
-    for _rank_idx, (genome, _sortino, _calmar) in enumerate(genome_scores[:10]):
+    for genome, *_ in genome_scores[:10]:
         result = evaluator.evaluate(
             genome, _sim_fn, recent_start=recent_start, recent_end=recent_end
         )
