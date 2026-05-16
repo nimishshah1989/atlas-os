@@ -38,10 +38,22 @@ _STRESS_PERIODS = {
     "bull_2023": (date(2023, 1, 1), date(2023, 12, 31)),
 }
 
-_N_TRIALS_PER_NIGHT = 200
+_N_TRIALS_PER_NIGHT_DEFAULT = 200
 _TARGET_POOL_SIZE = 120
 _WALK_FORWARD_TRAIN_DAYS = 252
 _WALK_FORWARD_TEST_DAYS = 90
+
+
+def _n_trials_per_night() -> int:
+    """Trial count for this run — env-override for Phase 0 burn-in (one-shot 2k–5k)."""
+    raw = os.environ.get("ATLAS_INCUBATOR_TRIALS")
+    if raw is None:
+        return _N_TRIALS_PER_NIGHT_DEFAULT
+    try:
+        n = int(raw)
+        return n if n > 0 else _N_TRIALS_PER_NIGHT_DEFAULT
+    except ValueError:
+        return _N_TRIALS_PER_NIGHT_DEFAULT
 
 
 def _load_metrics_df(conn, start_date: date, end_date: date) -> pd.DataFrame:
@@ -147,8 +159,9 @@ def run_nightly(conn, config: PortfolioConfig | None = None) -> dict[str, Any]:
         genome_scores.append((genome, result.sortino_oos, result.calmar_oos))
         return result.sortino_oos
 
-    log.info("running_optuna_trials", n=_N_TRIALS_PER_NIGHT)
-    study.run_trials(n_trials=_N_TRIALS_PER_NIGHT, objective_fn=objective)
+    n_trials = _n_trials_per_night()
+    log.info("running_optuna_trials", n=n_trials)
+    study.run_trials(n_trials=n_trials, objective_fn=objective)
 
     # DEAP breeding
     evolver = Evolver()
@@ -214,7 +227,7 @@ def run_nightly(conn, config: PortfolioConfig | None = None) -> dict[str, Any]:
 
     summary = {
         "status": "ok",
-        "trials_run": _N_TRIALS_PER_NIGHT,
+        "trials_run": n_trials,
         "genomes_evaluated": len(genome_scores),
         "promoted": promoted_count,
         "offspring": len(offspring),

@@ -49,7 +49,7 @@ run_step "generate_cts_param_candidates" python scripts/generate_cts_param_candi
 # data exists for at least one active weight set.
 run_step "check_weight_drift"         python scripts/check_weight_drift.py
 run_step "validator_sensibility"      python scripts/run_validator.py --scope sensibility
-run_step "validator_schema"           python scripts/run_validator.py --scope schema
+run_step "validator_schema"           python scripts/run_validator.py --scope schema_coverage
 
 # Refresh all materialized views after the full pipeline completes.
 # SP02 MVs (rs_leaders, breakout_candidates, deterioration_watch,
@@ -75,6 +75,15 @@ with e.begin() as c:
         print(f'refreshed {mv}')
 print(f'refreshed {len(MVS)} materialized views')
 "
+
+# Strategy Lab — nightly evolutionary genome optimization (Atlas Strategy Lab).
+# Runs 200 Optuna trials, breeds top performers, evaluates tournament,
+# promotes survivors to leaderboard, generates Groq insight bullets.
+# Requires migration 067 + Phase 0 burn-in to have seeded the Optuna study.
+# Heavy step (10–30 min on .214); run after MV refresh so any future query
+# paths into MVs see today's compute output. Optuna persists to Postgres so
+# trial state survives chain failures.
+run_step "strategy_lab_incubator"  python -m atlas.trading.incubator
 
 # Phase C: frontend accuracy crawler — runs LAST, after MVs are refreshed,
 # so the SQL source-of-truth reflects today's compute output before we diff.
