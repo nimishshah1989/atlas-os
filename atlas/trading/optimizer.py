@@ -105,9 +105,33 @@ class OptunaStudy:
 
     @classmethod
     def production(cls, db_url: str) -> OptunaStudy:
-        """Create study backed by production Postgres DB."""
+        """Create study backed by production Postgres DB.
+
+        Pool sized for multi-process distributed burn-ins: pool_size=1,
+        max_overflow=0 so each worker holds only 1 DB connection for the
+        Optuna study. Combined with the worker's _engine (also pool=1),
+        each worker uses ≤2 connections — keeps us under the Supabase
+        pooler limit of 15 concurrent clients.
+        """
         storage = optuna.storages.RDBStorage(
             url=db_url,
-            engine_kwargs={"pool_size": 5, "max_overflow": 10},
+            engine_kwargs={"pool_size": 1, "max_overflow": 0, "pool_pre_ping": True},
         )
         return cls(study_name="atlas_strategy_lab_v1", storage=storage)
+
+    @classmethod
+    def journal(cls, journal_path: str, study_name: str = "atlas_strategy_lab_v1") -> OptunaStudy:
+        """Create study backed by file-based JournalStorage.
+
+        Used for distributed burn-ins to avoid Supabase pooler connection
+        limits. Workers and coordinator share a journal file with file-lock
+        coordination; no DB connections needed for trial state.
+
+        Trial history persists to disk; survives process restarts. After
+        burn-in, the coordinator reads completed trials from the journal
+        (no DB calls) for reconstruction of genome_scores.
+        """
+        storage = optuna.storages.JournalStorage(
+            optuna.storages.JournalFileStorage(journal_path)
+        )
+        return cls(study_name=study_name, storage=storage)

@@ -187,6 +187,60 @@ def _load_active_config(conn) -> PortfolioConfig:
     return PortfolioConfig()
 
 
+_DATA_CACHE_DIR = "/tmp/atlas_strategy_lab"
+
+
+def _dump_data_for_workers(
+    metrics_df: pd.DataFrame,
+    regime_df: pd.DataFrame,
+    corp_actions: set,
+    config: PortfolioConfig,
+    walk_forward_windows: list,
+) -> str:
+    """Coordinator dumps data to /tmp/ files so workers can mmap-read without DB.
+
+    Returns path to the journal file workers should use as Optuna storage.
+    """
+    import pickle
+
+    os.makedirs(_DATA_CACHE_DIR, exist_ok=True)
+    metrics_df.to_parquet(f"{_DATA_CACHE_DIR}/metrics.parquet", compression="snappy")
+    regime_df.to_parquet(f"{_DATA_CACHE_DIR}/regime.parquet", compression="snappy")
+    with open(f"{_DATA_CACHE_DIR}/corp_actions.pkl", "wb") as f:
+        pickle.dump(corp_actions, f)
+    with open(f"{_DATA_CACHE_DIR}/config.pkl", "wb") as f:
+        pickle.dump(config, f)
+    with open(f"{_DATA_CACHE_DIR}/windows.pkl", "wb") as f:
+        pickle.dump(walk_forward_windows, f)
+    journal_path = f"{_DATA_CACHE_DIR}/study.log"
+    # Fresh journal per burn-in — old trials shouldn't influence new study state.
+    if os.path.exists(journal_path):
+        os.remove(journal_path)
+    log.info(
+        "data_cached_for_workers",
+        metrics_rows=len(metrics_df),
+        regime_rows=len(regime_df),
+        corp_actions=len(corp_actions),
+        journal=journal_path,
+    )
+    return journal_path
+
+
+def _load_data_in_worker() -> tuple:
+    """Worker reads data from /tmp/ cache (no DB connections)."""
+    import pickle
+
+    metrics_df = pd.read_parquet(f"{_DATA_CACHE_DIR}/metrics.parquet")
+    regime_df = pd.read_parquet(f"{_DATA_CACHE_DIR}/regime.parquet")
+    with open(f"{_DATA_CACHE_DIR}/corp_actions.pkl", "rb") as f:
+        corp_actions = pickle.load(f)
+    with open(f"{_DATA_CACHE_DIR}/config.pkl", "rb") as f:
+        config = pickle.load(f)
+    with open(f"{_DATA_CACHE_DIR}/windows.pkl", "rb") as f:
+        walk_forward_windows = pickle.load(f)
+    return metrics_df, regime_df, corp_actions, config, walk_forward_windows
+
+
 def _run_distributed_trials(n_trials: int, n_workers: int) -> None:
     """Spawn N worker subprocesses; each runs n_trials/N trials of its own.
 
@@ -469,7 +523,11 @@ if __name__ == "__main__":
 
     sl.configure()
     _db_url = os.environ["ATLAS_DB_URL"]
-    _engine = create_engine(_db_url)
+    # Worker-mode and coordinator both run from this entrypoint. Sized at
+    # pool_size=1, max_overflow=0 so each worker holds at most 1 DB
+    # connection in addition to Optuna's own (also 1). That keeps total
+    # under Supabase pooler's 15-connection limit even with 6+ workers.
+    _engine = create_engine(_db_url, pool_size=1, max_overflow=0, pool_pre_ping=True)
     with _engine.connect() as _conn:
         run_nightly(_conn)
         _conn.commit()
