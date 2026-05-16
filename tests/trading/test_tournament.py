@@ -16,6 +16,7 @@ def _sim_result(
     trades: int = 10,
     max_dd: float = 0.10,
     t_stat: float = 2.5,
+    avg_positions: float = 15.0,  # Core 4: clear the diversification floor by default
 ) -> SimResult:
     return SimResult(
         sortino_oos=sortino,
@@ -30,6 +31,7 @@ def _sim_result(
         information_ratio=ir,
         hit_rate=hit_rate,
         alpha_t_stat=t_stat,
+        avg_positions_held=avg_positions,
     )
 
 
@@ -168,6 +170,23 @@ def test_genome_passing_all_rounds_promoted() -> None:
     assert result.final_alpha > 0
     assert result.final_information_ratio >= 0.3
     assert result.final_hit_rate >= 0.55
+
+
+def test_genome_failing_diversification_floor_not_promoted() -> None:
+    """Core 4: lucky-2-stock genome with great alpha but avg_held < 5 fails Round 1."""
+    evaluator = _evaluator()
+    genome = GenomeFactory.random()
+
+    def sim_fn(*_):  # type: ignore[no-untyped-def]
+        # All other gates pass cleanly; only diversification is broken (3 positions avg).
+        return _sim_result(alpha=0.10, ir=1.0, hit_rate=0.80, avg_positions=3.0)
+
+    result = evaluator.evaluate(
+        genome, sim_fn, recent_start=date(2024, 9, 1), recent_end=date(2024, 12, 31)
+    )
+    assert not result.promoted
+    assert result.failed_round == 1
+    assert "diversification" in (result.fail_reason or "").lower()
 
 
 def test_auto_name_reflects_genome() -> None:

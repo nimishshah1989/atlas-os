@@ -44,6 +44,10 @@ ROUND2_ALPHA_MIN = 0.0
 STRESS_COVID_MAX_DRAWDOWN = 0.25  # absolute drawdown gate during COVID crash
 STRESS_BEAR_ALPHA_MIN = 0.0  # must beat benchmark when index falls
 STRESS_BULL_ALPHA_MIN = 0.0  # must beat benchmark when index rises
+# Core 4 diversification gate — prevents the optimizer from finding lucky 2-stock
+# genomes that game alpha + IR + hit-rate stats with insane concentration risk.
+DIVERSIFICATION_ABSOLUTE_FLOOR = 5.0  # never promote if avg holdings < 5
+DIVERSIFICATION_GENE_REALIZATION = 0.8  # avg_held must reach 80% of gene's min target
 
 
 @dataclass
@@ -83,6 +87,22 @@ class TournamentEvaluator:
             return _fail(base, 1, f"Round 1 hit_rate {r1.hit_rate:.2f} < {ROUND1_HIT_RATE_MIN}")
         if r1.information_ratio < ROUND1_IR_MIN:
             return _fail(base, 1, f"Round 1 IR {r1.information_ratio:.2f} < {ROUND1_IR_MIN}")
+
+        # Core 4 diversification gate. Two-part: absolute floor (no lucky 2-stocks)
+        # AND realization of the genome's own min_concurrent_positions target.
+        # If a genome claims min=10 but only ran 4 positions on average, it's not
+        # actually diversifying — reject it even if alpha + IR look great.
+        diversification_floor = max(
+            DIVERSIFICATION_ABSOLUTE_FLOOR,
+            float(genome.layer1.min_concurrent_positions) * DIVERSIFICATION_GENE_REALIZATION,
+        )
+        if r1.avg_positions_held < diversification_floor:
+            return _fail(
+                base,
+                1,
+                f"Round 1 diversification: avg_held {r1.avg_positions_held:.1f} < "
+                f"{diversification_floor:.1f} (floor=max(5.0, min_gene*0.8))",
+            )
 
         # Round 2: prior window — alpha must be positive twice in a row
         prior_end = recent_start - timedelta(days=1)

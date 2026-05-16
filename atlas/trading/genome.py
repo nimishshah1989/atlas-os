@@ -46,6 +46,12 @@ LAYER1_SEARCH_SPACE: dict[str, tuple] = {
     # Genome-controlled allocation limits (enforced as min(genome, config_ceiling))
     "genome_max_position_pct": ("float", 0.03, 0.08),
     "genome_max_heat_pct": ("float", 0.12, 0.30),
+    # Core 4 risk management (active risk per trade, not just statistical confidence).
+    # Goal-post alignment: maximize alpha WHILE doing active risk management.
+    "stop_loss_pct": ("float", 0.05, 0.20),  # 5-20% drop from entry triggers exit
+    "risk_per_trade_pct": ("float", 0.005, 0.020),  # 0.5-2% of capital risked per trade
+    "min_concurrent_positions": ("int", 5, 15),  # diversification floor (target)
+    "max_concurrent_positions": ("int", 15, 30),  # hard cap, must > min (cascade)
 }
 
 # Regime-level search space. Consumed by DEAP evolver (Task 10) for mutation bounds.
@@ -97,6 +103,14 @@ class Layer1Perception:
     genome_max_position_pct: float
     genome_max_heat_pct: float
 
+    # Core 4 active risk management — stop-loss, risk-parity sizing, diversification.
+    # Defaults preserve backward compat for existing test fixtures; new genomes
+    # always sample these via Optuna or random factory.
+    stop_loss_pct: float = 0.10
+    risk_per_trade_pct: float = 0.010
+    min_concurrent_positions: int = 8
+    max_concurrent_positions: int = 20
+
     # Weinstein/CTS stage gates
     require_stage2_for_entry: bool = True
     stage3_blocks_entry: bool = True
@@ -133,6 +147,13 @@ class Layer1Perception:
             self.rs_strong_exit_pct < self.rs_strong_cutoff_pct
         ), "Strong exit threshold must be below strong entry cutoff (hysteresis dead-band)"
         assert 0.0 <= self.ppc_conviction_boost <= 0.5, "ppc_conviction_boost must be in [0, 0.5]"
+        # Core 4 invariants — keep stops sane and diversification ordering correct.
+        assert 0.03 <= self.stop_loss_pct <= 0.30, "stop_loss_pct must be in [3%, 30%]"
+        assert 0.001 <= self.risk_per_trade_pct <= 0.05, "risk_per_trade_pct must be in [0.1%, 5%]"
+        assert (
+            self.max_concurrent_positions > self.min_concurrent_positions
+        ), "max_concurrent_positions must exceed min_concurrent_positions (cascade)"
+        assert self.min_concurrent_positions >= 2, "min_concurrent_positions must be >= 2"
 
 
 @dataclass
@@ -272,6 +293,11 @@ class GenomeFactory:
             conviction_velocity_weight=random.uniform(0.01, 0.15),
             genome_max_position_pct=random.uniform(0.03, 0.08),
             genome_max_heat_pct=random.uniform(0.12, 0.30),
+            # Core 4 — cascade min < max via direct sample then bound
+            stop_loss_pct=random.uniform(0.05, 0.20),
+            risk_per_trade_pct=random.uniform(0.005, 0.020),
+            min_concurrent_positions=random.randint(5, 15),
+            max_concurrent_positions=random.randint(16, 30),
             require_stage2_for_entry=random.choice([True, False]),
             stage3_blocks_entry=True,  # always True — never enter declining stocks
             ppc_conviction_boost=random.uniform(0.05, 0.30),
@@ -354,6 +380,18 @@ class GenomeFactory:
             ),
             genome_max_position_pct=trial.suggest_float("genome_max_position_pct", 0.03, 0.08),
             genome_max_heat_pct=trial.suggest_float("genome_max_heat_pct", 0.12, 0.30),
+            # Core 4 risk genes — Optuna explores the active-risk-mgmt search space.
+            # max > min cascade enforced by sampling min first, then max above it.
+            stop_loss_pct=trial.suggest_float("stop_loss_pct", 0.05, 0.20),
+            risk_per_trade_pct=trial.suggest_float("risk_per_trade_pct", 0.005, 0.020),
+            min_concurrent_positions=trial.suggest_int("min_concurrent_positions", 5, 15),
+            max_concurrent_positions=trial.suggest_int(
+                "max_concurrent_positions",
+                # Ensure cascade: max strictly > min. Read the min already sampled this trial.
+                # Optuna re-uses the same trial state for both suggests, so this works.
+                min(16, trial.params["min_concurrent_positions"] + 1),
+                30,
+            ),
             require_stage2_for_entry=require_stage2_for_entry,
             stage3_blocks_entry=True,  # always True — never enter declining stocks
             ppc_conviction_boost=ppc_conviction_boost,

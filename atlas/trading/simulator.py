@@ -62,6 +62,9 @@ class SimResult:
     information_ratio: float = 0.0  # alpha_oos / tracking_error
     hit_rate: float = 0.0  # % of windows where portfolio beat benchmark
     alpha_t_stat: float = 0.0  # sqrt(n_windows) * information_ratio
+    # Core 4 — diversification realization. Tournament gates on this so optimizer
+    # can't cheat by finding a "lucky 2-stock" genome that looks good statistically.
+    avg_positions_held: float = 0.0
     equity_curve_oos: pd.Series | None = None
 
 
@@ -164,6 +167,7 @@ def simulate_genome(
     oos_alphas: list[float] = []
     oos_portfolio_returns: list[float] = []
     oos_benchmark_returns: list[float] = []
+    oos_avg_positions: list[float] = []
     insample_sortinos: list[float] = []
     all_trades = 0
 
@@ -205,6 +209,7 @@ def simulate_genome(
             oos_alphas.append(oos["alpha"])
             oos_portfolio_returns.append(oos["portfolio_return"])
             oos_benchmark_returns.append(oos["benchmark_return"])
+            oos_avg_positions.append(oos["avg_positions_held"])
             all_trades += oos["trades"]
         if isn is not None:
             insample_sortinos.append(isn["sortino"])
@@ -231,6 +236,7 @@ def simulate_genome(
         information_ratio=information_ratio,
         hit_rate=hit_rate,
         alpha_t_stat=alpha_t_stat,
+        avg_positions_held=float(np.mean(oos_avg_positions)) if oos_avg_positions else 0.0,
         equity_curve_oos=None,  # populated by incubator when equity curve storage is needed
     )
 
@@ -280,7 +286,23 @@ def _run_window(
     position_days = np.zeros(n_stocks, dtype=int)
 
     eff_heat = min(float(genome.layer1.genome_max_heat_pct), float(config.max_portfolio_heat_pct))
-    eff_pos = min(float(genome.layer1.genome_max_position_pct), float(config.max_position_pct))
+    # Core 4 risk-parity sizing: position size scales with stop distance.
+    # If 1% risk + 10% stop, position = 10% of portfolio. Capped at hard limits.
+    # When stop is tight, position grows; when stop is wide, position shrinks.
+    risk_parity_size = float(genome.layer1.risk_per_trade_pct) / max(
+        float(genome.layer1.stop_loss_pct), 0.001
+    )
+    eff_pos = min(
+        risk_parity_size,
+        float(genome.layer1.genome_max_position_pct),
+        float(config.max_position_pct),
+    )
+    max_concurrent = int(genome.layer1.max_concurrent_positions)
+    stop_loss_frac = float(genome.layer1.stop_loss_pct)
+
+    # Track positions held per day so the aggregator can compute avg_positions_held —
+    # tournament gate enforces diversification floor via this stat.
+    daily_held_counts: list[int] = []
 
     for d in range(1, n_days):
         regime = int(w_regime[d])
@@ -320,10 +342,25 @@ def _run_window(
             stage=w_stage[:, d],
         )
         new_entries = entry_mask & ~exit_mask
+
+        # Core 4 max-position gate: cap new entries so total holdings <= max_concurrent.
+        # When more candidates than capacity, keep top-K by conviction (the model's own
+        # ranking). When capacity <= 0, no new entries today regardless of signals.
+        capacity = max_concurrent - n_held
+        if capacity < int(new_entries.sum()):
+            if capacity <= 0:
+                new_entries = np.zeros_like(new_entries)
+            else:
+                candidate_idx = np.where(new_entries)[0]
+                top_k = candidate_idx[np.argsort(-w_conv[candidate_idx, d])[:capacity]]
+                new_entries = np.zeros_like(new_entries)
+                new_entries[top_k] = True
+
         entries[d, :] = new_entries
         # Increment holding days for all currently-held positions (including new entries today)
         held_before = position_days > 0
         position_days[held_before | new_entries] += 1
+        daily_held_counts.append(int((position_days > 0).sum()))
         prev_rs = w_rs_exit[:, d].copy()  # track exit state for next day's comparison
 
     price_df = pd.DataFrame(
@@ -352,6 +389,7 @@ def _run_window(
             fees=total_fees,
             size=eff_pos,
             size_type="Percent",
+            sl_stop=stop_loss_frac,  # Core 4 stop-loss exit (vectorbt-native)
             group_by=True,
             cash_sharing=True,
         )
@@ -386,6 +424,7 @@ def _run_window(
             benchmark_return = 0.0
         alpha = portfolio_return - benchmark_return
 
+        avg_positions_held = float(np.mean(daily_held_counts)) if daily_held_counts else 0.0
         return {
             "sortino": sortino,
             "calmar": calmar,
@@ -394,6 +433,7 @@ def _run_window(
             "portfolio_return": portfolio_return,
             "benchmark_return": benchmark_return,
             "alpha": alpha,
+            "avg_positions_held": avg_positions_held,
         }
     except Exception as e:
         log.warning("simulation_window_error", error=str(e))
