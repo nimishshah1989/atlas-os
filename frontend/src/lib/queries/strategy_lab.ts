@@ -117,6 +117,87 @@ export async function getGenomePositions(genomeId: string): Promise<GenomePositi
   `
 }
 
+export type RecommendationRow = {
+  date: Date
+  genome_id: string
+  rank: number
+  instrument_id: string
+  ticker: string | null
+  company_name: string | null
+  action: 'BUY' | 'HOLD' | 'SELL' | 'EXIT_SIGNAL' | 'STOP_HIT'
+  conviction: string
+  position_size_pct: string
+  stop_price: string | null
+  genome_alpha_oos: string
+  genome_information_ratio: string
+  genome_hit_rate: string
+  genome_t_stat: string
+  confidence_band: 'HIGH' | 'MEDIUM' | 'LOW'
+  strategy_name: string
+}
+
+export type ValidationRow = {
+  year: number
+  strategy_return: string
+  benchmark_return: string
+  alpha: string
+  max_drawdown: string
+  benchmark_max_drawdown: string
+  sortino: string
+  n_trades: number
+  avg_positions_held: string
+}
+
+/** Today's BUY recommendations across the top-N genomes, joined with ticker info. */
+export async function getRecommendationsToday(): Promise<RecommendationRow[]> {
+  return sql<RecommendationRow[]>`
+    WITH latest AS (
+      SELECT MAX(date) AS d FROM atlas_strategy_recommendations_daily
+    )
+    SELECT
+      r.date,
+      r.genome_id::text,
+      r.rank,
+      r.instrument_id::text,
+      u.ticker,
+      u.company_name,
+      r.action,
+      r.conviction::text,
+      r.position_size_pct::text,
+      r.stop_price::text,
+      r.genome_alpha_oos::text,
+      r.genome_information_ratio::text,
+      r.genome_hit_rate::text,
+      r.genome_t_stat::text,
+      r.confidence_band,
+      l.strategy_name
+    FROM atlas_strategy_recommendations_daily r
+    JOIN atlas_strategy_leaderboard l ON l.genome_id = r.genome_id
+    LEFT JOIN atlas.atlas_universe_stocks u ON u.id = r.instrument_id
+    WHERE r.date = (SELECT d FROM latest)
+    ORDER BY r.rank, r.conviction DESC
+  `
+}
+
+/** Year-by-year backtest validation for a specific genome — feeds the Proof tab. */
+export async function getValidation(genomeId: string): Promise<ValidationRow[]> {
+  return sql<ValidationRow[]>`
+    SELECT
+      year,
+      strategy_return::text,
+      benchmark_return::text,
+      alpha::text,
+      max_drawdown::text,
+      benchmark_max_drawdown::text,
+      sortino::text,
+      n_trades,
+      avg_positions_held::text
+    FROM atlas_strategy_validation
+    WHERE genome_id = ${genomeId}
+    ORDER BY year
+  `
+}
+
 export async function getActivePortfolioConfig(): Promise<PortfolioConfigRow | null> {
   const rows = await sql<PortfolioConfigRow[]>`
     SELECT id::text, created_at, config_json, is_active, label
