@@ -197,33 +197,58 @@ def _run_distributed_trials(n_trials: int, n_workers: int) -> None:
     import subprocess
     import sys
 
+    import time
+
     trials_per_worker = max(1, n_trials // n_workers)
-    extra = n_trials - (trials_per_worker * n_workers)  # distribute remainder
+    extra = n_trials - (trials_per_worker * n_workers)
+    log_dir = os.path.expanduser("~/logs/strategy_lab_workers")
+    os.makedirs(log_dir, exist_ok=True)
     procs = []
     for i in range(n_workers):
         env = os.environ.copy()
         env["ATLAS_INCUBATOR_WORKER_MODE"] = "1"
         env["ATLAS_INCUBATOR_TRIALS"] = str(trials_per_worker + (1 if i < extra else 0))
-        env["ATLAS_INCUBATOR_N_JOBS"] = "1"  # workers themselves single-threaded
+        env["ATLAS_INCUBATOR_N_JOBS"] = "1"
         env["ATLAS_INCUBATOR_WORKER_ID"] = str(i)
+        # Capture per-worker stderr so failures surface for diagnosis.
+        log_path = os.path.join(log_dir, f"worker_{i:02d}.log")
+        log_file = open(log_path, "w")  # noqa: SIM115 — kept open for subprocess
         proc = subprocess.Popen(
             [sys.executable, "-m", "atlas.trading.incubator"],
             env=env,
-            stdout=subprocess.DEVNULL,  # workers' structlog also writes to stderr → DB
+            stdout=log_file,
             stderr=subprocess.STDOUT,
         )
-        procs.append(proc)
-        log.info("worker_spawned", worker=i, trials=env["ATLAS_INCUBATOR_TRIALS"], pid=proc.pid)
+        procs.append((proc, log_file, log_path))
+        log.info(
+            "worker_spawned",
+            worker=i,
+            trials=env["ATLAS_INCUBATOR_TRIALS"],
+            pid=proc.pid,
+            log=log_path,
+        )
+        # Stagger startups to avoid 24 simultaneous DB connection storms
+        # (Optuna study creation + metrics_df load). Empirically, 0.3s spacing
+        # is enough for Supabase to absorb the wave.
+        time.sleep(0.3)
 
     failed = 0
-    for i, proc in enumerate(procs):
+    failed_logs: list[str] = []
+    for i, (proc, log_file, log_path) in enumerate(procs):
         rc = proc.wait()
+        log_file.close()
         if rc != 0:
             failed += 1
-            log.warning("worker_nonzero_exit", worker=i, rc=rc)
+            failed_logs.append(log_path)
+            log.warning("worker_nonzero_exit", worker=i, rc=rc, log=log_path)
         else:
             log.info("worker_done", worker=i)
-    log.info("all_workers_done", n_workers=n_workers, failed=failed)
+    log.info(
+        "all_workers_done",
+        n_workers=n_workers,
+        failed=failed,
+        failed_logs=failed_logs[:3],
+    )
 
 
 def _reconstruct_genome_scores_from_study(
