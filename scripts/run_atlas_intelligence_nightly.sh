@@ -89,6 +89,10 @@ print(f'refreshed {len(MVS)} materialized views')
 # paths into MVs see today's compute output. Optuna persists to Postgres so
 # trial state survives chain failures.
 run_step "strategy_lab_incubator"  python -m atlas.trading.incubator
+# Strategy Lab recommendations — translate top-N leaderboard genomes into today's
+# stock picks with confidence bands. Persistent state for /strategies/lab/today.
+# Depends on incubator having populated the leaderboard with at least one genome.
+run_step "strategy_lab_today"      python scripts/strategy_lab_today.py
 
 # Phase C: frontend accuracy crawler — runs LAST, after MVs are refreshed,
 # so the SQL source-of-truth reflects today's compute output before we diff.

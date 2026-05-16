@@ -114,6 +114,46 @@ def get_positions(genome_id: str, engine: Engine = Depends(get_engine)) -> dict:
     return _envelope([dict(r) for r in rows])
 
 
+@router.get("/recommendations/today")
+def get_recommendations_today(engine: Engine = Depends(get_engine)) -> dict:  # type: ignore[type-arg, misc]  # noqa: B008
+    """Today's recommendations across top-N genomes — persistent state for the lab.
+
+    Returns the latest date's recommendations grouped by genome. If today's
+    nightly hasn't run yet, the most recent date in the table is returned with
+    its actual data_as_of timestamp so the UI can warn the user.
+    """
+    with engine.connect() as conn:
+        latest_date_row = (
+            conn.execute(
+                text("SELECT MAX(date)::text AS d FROM atlas.atlas_strategy_recommendations_daily")
+            )
+            .mappings()
+            .first()
+        )
+        if not latest_date_row or not latest_date_row["d"]:
+            return _envelope([])
+        latest_date = latest_date_row["d"]
+        rows = (
+            conn.execute(
+                text("""
+                SELECT r.date::text, r.genome_id::text, r.rank, r.instrument_id::text,
+                       r.action, r.conviction, r.position_size_pct, r.stop_price,
+                       r.genome_alpha_oos, r.genome_information_ratio,
+                       r.genome_hit_rate, r.genome_t_stat, r.confidence_band,
+                       l.strategy_name
+                FROM atlas.atlas_strategy_recommendations_daily r
+                JOIN atlas.atlas_strategy_leaderboard l ON l.genome_id = r.genome_id
+                WHERE r.date = CAST(:d AS date)
+                ORDER BY r.rank, r.conviction DESC
+            """),
+                {"d": latest_date},
+            )
+            .mappings()
+            .all()
+        )
+    return _envelope([dict(r) for r in rows], data_as_of=latest_date)
+
+
 @router.get("/insights/latest")
 def get_latest_insights(engine: Engine = Depends(get_engine)) -> dict:  # type: ignore[type-arg, misc]  # noqa: B008
     with engine.connect() as conn:
