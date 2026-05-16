@@ -88,10 +88,16 @@ def _load_metrics_df(conn, start_date: date, end_date: date) -> pd.DataFrame:
 
 
 def _load_regime_df(conn, start_date: date, end_date: date) -> pd.DataFrame:
+    """Load regime state + Nifty 500 close for alpha-vs-benchmark computation.
+
+    nifty500_close is the benchmark price series used by the simulator to
+    compute per-window alpha (portfolio return minus Nifty 500 return).
+    Per the goal post: optimize alpha, not absolute Sortino.
+    """
     result = conn.execute(
         text(
             """
-            SELECT date, pct_above_ema_50, india_vix
+            SELECT date, pct_above_ema_50, india_vix, nifty500_close
             FROM atlas.atlas_market_regime_daily
             WHERE date BETWEEN :start AND :end
             ORDER BY date
@@ -162,12 +168,18 @@ def run_nightly(conn, config: PortfolioConfig | None = None) -> dict[str, Any]:
     db_url = os.environ.get("ATLAS_DB_URL", "")
     study = OptunaStudy.production(db_url) if db_url else OptunaStudy("atlas_strategy_lab_v1")
 
-    genome_scores: list[tuple[Genome, float, float]] = []
+    # Tuple shape: (genome, alpha_oos, information_ratio, sortino_oos)
+    # Alpha is the primary score (Optuna objective). IR + Sortino are kept for
+    # downstream ranking + diagnostics. Order matters: index 1 is the score.
+    genome_scores: list[tuple[Genome, float, float, float]] = []
 
     def objective(genome: Genome) -> float:
+        """Optimize alpha vs Nifty 500. Goal post: maximize alpha with confidence."""
         result = simulate_genome(genome, metrics_df, regime_df, config, walk_forward_windows)
-        genome_scores.append((genome, result.sortino_oos, result.calmar_oos))
-        return result.sortino_oos
+        genome_scores.append(
+            (genome, result.alpha_oos, result.information_ratio, result.sortino_oos)
+        )
+        return result.alpha_oos
 
     n_trials = _n_trials_per_night()
     log.info("running_optuna_trials", n=n_trials)
@@ -219,9 +231,12 @@ def run_nightly(conn, config: PortfolioConfig | None = None) -> dict[str, Any]:
             promote_to_leaderboard(conn, genome, result, rank=promoted_count + 1)
             promoted_count += 1
 
-    # Insight generation
+    # Insight generation — surface the goal-post metrics to the LLM narrator.
     importance = study.get_parameter_importance()
-    top_deltas = [{"genome_id": g.genome_id, "sortino": s} for g, s, _ in genome_scores[:5]]
+    top_deltas = [
+        {"genome_id": g.genome_id, "alpha": alpha, "ir": ir, "sortino": sortino}
+        for g, alpha, ir, sortino in genome_scores[:5]
+    ]
     bullets = generate_insights(importance, top_deltas)
 
     if bullets:

@@ -311,9 +311,17 @@ class Evolver:
 
     def select_survivors(
         self,
-        genomes_with_scores: list[tuple[Genome, float, float]],
+        genomes_with_scores: list[tuple[Genome, float, float, float]],
         target_pool: int,
     ) -> list[Genome]:
+        """Rank by alpha + IR (the v2 goal-post metrics, not Sortino+Calmar).
+
+        Tuple shape: (genome, alpha_oos, information_ratio, sortino_oos).
+        Survivors are the top-N by (alpha + IR) — alpha is the maximization
+        target, IR penalizes alpha that came from a few lucky windows. Genome
+        with high alpha AND high IR has consistent excess return, which is
+        what we want to breed forward.
+        """
         if not genomes_with_scores:
             return []
         ranked = sorted(genomes_with_scores, key=lambda t: t[1] + t[2], reverse=True)

@@ -35,12 +35,33 @@ log = structlog.get_logger()
 
 @dataclass
 class SimResult:
+    """Per-genome simulation outcome aggregated across walk-forward windows.
+
+    v2 (alpha + confidence) — aligned with the goal post: maximize alpha,
+    minimize drawdown, minimize risk, with quantified confidence.
+
+    Confidence semantics:
+      - hit_rate: fraction of OOS windows where portfolio beat the benchmark
+        (0.0–1.0). Higher = more regime-robust.
+      - information_ratio: mean(alpha) / std(alpha). The standard quant-finance
+        measure of risk-adjusted excess return. IR > 0.5 decent, > 1.0 good.
+      - alpha_t_stat: sqrt(n_windows) * IR. T-statistic on the alpha series;
+        used as a significance gate (> 2 ~= 95% confidence alpha is non-zero).
+    """
+
     sortino_oos: float
     calmar_oos: float
     sortino_insample: float
     max_drawdown: float
     total_trades: int
     turnover_pct: float
+    # v2 — alpha + confidence (goal-post-aligned metrics)
+    alpha_oos: float = 0.0  # mean per-window alpha (portfolio return − benchmark return)
+    benchmark_return_oos: float = 0.0  # mean per-window Nifty 500 return
+    tracking_error: float = 0.0  # std-dev of per-window alpha
+    information_ratio: float = 0.0  # alpha_oos / tracking_error
+    hit_rate: float = 0.0  # % of windows where portfolio beat benchmark
+    alpha_t_stat: float = 0.0  # sqrt(n_windows) * information_ratio
     equity_curve_oos: pd.Series | None = None
 
 
@@ -93,6 +114,14 @@ def simulate_genome(
     rdf = regime_df.set_index("date").reindex(dates)
     breadth = rdf["pct_above_ema_50"].values.astype(np.float32)
     vix_arr = rdf["india_vix"].values.astype(np.float32)
+    # Benchmark price series for alpha computation. ffill is intentional —
+    # on a non-trading day Nifty 500 doesn't move, so carrying forward the
+    # last close is correct (vs leaving NaN and breaking the alpha calc).
+    nifty500_close_arr = (
+        np.asarray(rdf["nifty500_close"].astype(np.float64).ffill().values, dtype=np.float64)
+        if "nifty500_close" in rdf.columns
+        else np.full(len(dates), np.nan, dtype=np.float64)
+    )
 
     # CTS stage signals (default: Stage 2 = neutral, no PPC/NPC/contraction)
     cts_stage = _safe_pivot("cts_stage", default=2.0).astype(np.int8)
@@ -132,6 +161,9 @@ def simulate_genome(
     oos_sortinos: list[float] = []
     oos_calmars: list[float] = []
     oos_max_drawdowns: list[float] = []
+    oos_alphas: list[float] = []
+    oos_portfolio_returns: list[float] = []
+    oos_benchmark_returns: list[float] = []
     insample_sortinos: list[float] = []
     all_trades = 0
 
@@ -146,6 +178,7 @@ def simulate_genome(
             regime_state,
             cts_stage,
             npc_arr,
+            nifty500_close_arr,
             test_start,
             test_end,
             instruments,
@@ -160,6 +193,7 @@ def simulate_genome(
             regime_state,
             cts_stage,
             npc_arr,
+            nifty500_close_arr,
             train_start,
             train_end,
             instruments,
@@ -168,9 +202,21 @@ def simulate_genome(
             oos_sortinos.append(oos["sortino"])
             oos_calmars.append(oos["calmar"])
             oos_max_drawdowns.append(oos["max_drawdown"])
+            oos_alphas.append(oos["alpha"])
+            oos_portfolio_returns.append(oos["portfolio_return"])
+            oos_benchmark_returns.append(oos["benchmark_return"])
             all_trades += oos["trades"]
         if isn is not None:
             insample_sortinos.append(isn["sortino"])
+
+    # v2 confidence aggregation. Hit rate + IR + t-stat are the standard
+    # quant-finance triple for "how confident are we this alpha is real?"
+    alpha_mean = float(np.mean(oos_alphas)) if oos_alphas else 0.0
+    alpha_std = float(np.std(oos_alphas, ddof=1)) if len(oos_alphas) > 1 else 0.0
+    hit_rate = float(sum(1 for a in oos_alphas if a > 0)) / len(oos_alphas) if oos_alphas else 0.0
+    information_ratio = alpha_mean / alpha_std if alpha_std > 1e-9 else 0.0
+    alpha_t_stat = float(np.sqrt(len(oos_alphas))) * information_ratio if oos_alphas else 0.0
+    benchmark_mean = float(np.mean(oos_benchmark_returns)) if oos_benchmark_returns else 0.0
 
     return SimResult(
         sortino_oos=float(np.mean(oos_sortinos)) if oos_sortinos else 0.0,
@@ -179,6 +225,12 @@ def simulate_genome(
         max_drawdown=float(np.max(oos_max_drawdowns)) if oos_max_drawdowns else 0.0,
         total_trades=all_trades,
         turnover_pct=0.0,
+        alpha_oos=alpha_mean,
+        benchmark_return_oos=benchmark_mean,
+        tracking_error=alpha_std,
+        information_ratio=information_ratio,
+        hit_rate=hit_rate,
+        alpha_t_stat=alpha_t_stat,
         equity_curve_oos=None,  # populated by incubator when equity curve storage is needed
     )
 
@@ -193,11 +245,16 @@ def _run_window(
     regime_state: np.ndarray,
     cts_stage: np.ndarray,
     npc: np.ndarray,
+    nifty500_close_arr: np.ndarray,
     window_start: date,
     window_end: date,
     instruments: list,
 ) -> dict | None:
-    """Simulate one walk-forward window. Returns None if window < 20 days."""
+    """Simulate one walk-forward window. Returns None if window < 20 days.
+
+    Computes per-window alpha = portfolio_return − Nifty 500 return so the
+    incubator can aggregate hit rate + IR + t-stat across windows.
+    """
     import vectorbt as vbt
 
     d_start = next((i for i, d in enumerate(dates) if d >= window_start), None)
@@ -212,6 +269,7 @@ def _run_window(
     w_regime = regime_state[d_start:d_end]
     w_stage = cts_stage[:, d_start:d_end]
     w_npc = npc[:, d_start:d_end]
+    w_n500 = nifty500_close_arr[d_start:d_end]
 
     n_stocks, n_days = w_close.shape
     entries = np.zeros((n_days, n_stocks), dtype=bool)
@@ -312,7 +370,31 @@ def _run_window(
         calmar = _scalar(pf.calmar_ratio())
         max_dd = _scalar(pf.max_drawdown())
         trades = int(pf.trades.count() or 0)
-        return {"sortino": sortino, "calmar": calmar, "max_drawdown": max_dd, "trades": trades}
+        portfolio_return = _scalar(pf.total_return())
+
+        # Benchmark return: simple start-to-end, NaN-safe. ffill in
+        # simulate_genome guarantees no NaN inside the window, but we still
+        # defend against an all-NaN window (e.g. early-history regime gaps).
+        if (
+            len(w_n500) >= 2
+            and not np.isnan(w_n500[0])
+            and not np.isnan(w_n500[-1])
+            and w_n500[0] > 0
+        ):
+            benchmark_return = float(w_n500[-1] / w_n500[0] - 1.0)
+        else:
+            benchmark_return = 0.0
+        alpha = portfolio_return - benchmark_return
+
+        return {
+            "sortino": sortino,
+            "calmar": calmar,
+            "max_drawdown": max_dd,
+            "trades": trades,
+            "portfolio_return": portfolio_return,
+            "benchmark_return": benchmark_return,
+            "alpha": alpha,
+        }
     except Exception as e:
         log.warning("simulation_window_error", error=str(e))
         return None
