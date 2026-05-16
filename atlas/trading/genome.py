@@ -97,6 +97,17 @@ class Layer1Perception:
     genome_max_position_pct: float
     genome_max_heat_pct: float
 
+    # Weinstein/CTS stage gates
+    require_stage2_for_entry: bool = True
+    stage3_blocks_entry: bool = True
+    ppc_conviction_boost: float = 0.15
+    npc_overrides_min_hold: bool = True
+    contraction_entry_bonus: float = 0.10
+
+    # RS hysteresis: exit thresholds (lower than entry cutoffs — dead-band prevents oscillation)
+    rs_leader_exit_pct: float = 62.0
+    rs_strong_exit_pct: float = 40.0
+
     def __post_init__(self) -> None:
         assert (
             self.rs_leader_cutoff_pct
@@ -115,6 +126,13 @@ class Layer1Perception:
             > self.regime_constructive_breadth_pct
             > self.regime_cautious_breadth_pct
         ), "Breadth thresholds must be strictly decreasing: risk_on > constructive > cautious"
+        assert (
+            self.rs_leader_exit_pct < self.rs_leader_cutoff_pct
+        ), "Leader exit threshold must be below leader entry cutoff (hysteresis dead-band)"
+        assert (
+            self.rs_strong_exit_pct < self.rs_strong_cutoff_pct
+        ), "Strong exit threshold must be below strong entry cutoff (hysteresis dead-band)"
+        assert 0.0 <= self.ppc_conviction_boost <= 0.5, "ppc_conviction_boost must be in [0, 0.5]"
 
 
 @dataclass
@@ -227,6 +245,10 @@ class GenomeFactory:
         vol_elevated = random.uniform(1.2, 1.8)
         vol_high = random.uniform(max(1.5, vol_elevated + 0.05), 2.5)
 
+        # RS exit thresholds must be strictly below entry cutoffs (hysteresis)
+        leader_exit = random.randint(50, min(68, leader - 2))
+        strong_exit = random.randint(32, min(48, strong - 2))
+
         layer1 = Layer1Perception(
             rs_leader_cutoff_pct=leader,
             rs_strong_cutoff_pct=strong,
@@ -250,6 +272,13 @@ class GenomeFactory:
             conviction_velocity_weight=random.uniform(0.01, 0.15),
             genome_max_position_pct=random.uniform(0.03, 0.08),
             genome_max_heat_pct=random.uniform(0.12, 0.30),
+            require_stage2_for_entry=random.choice([True, False]),
+            stage3_blocks_entry=True,  # always True — never enter declining stocks
+            ppc_conviction_boost=random.uniform(0.05, 0.30),
+            npc_overrides_min_hold=random.choice([True, False]),
+            contraction_entry_bonus=random.uniform(0.0, 0.20),
+            rs_leader_exit_pct=float(leader_exit),
+            rs_strong_exit_pct=float(strong_exit),
         )
         return Genome(
             genome_id=str(uuid.uuid4()),
@@ -289,6 +318,15 @@ class GenomeFactory:
         vol_elevated = trial.suggest_float("vol_elevated_ratio", 1.2, 1.8)
         vol_high = trial.suggest_float("vol_high_ratio", max(1.5, vol_elevated + 0.05), 2.5)
 
+        require_stage2_for_entry = trial.suggest_categorical(
+            "require_stage2_for_entry", [True, False]
+        )
+        ppc_conviction_boost = trial.suggest_float("ppc_conviction_boost", 0.05, 0.30)
+        npc_overrides_min_hold = trial.suggest_categorical("npc_overrides_min_hold", [True, False])
+        contraction_entry_bonus = trial.suggest_float("contraction_entry_bonus", 0.0, 0.20)
+        rs_leader_exit_pct = trial.suggest_int("rs_leader_exit_pct", 50, min(68, leader - 2))
+        rs_strong_exit_pct = trial.suggest_int("rs_strong_exit_pct", 32, min(48, strong - 2))
+
         layer1 = Layer1Perception(
             rs_leader_cutoff_pct=leader,
             rs_strong_cutoff_pct=strong,
@@ -316,6 +354,13 @@ class GenomeFactory:
             ),
             genome_max_position_pct=trial.suggest_float("genome_max_position_pct", 0.03, 0.08),
             genome_max_heat_pct=trial.suggest_float("genome_max_heat_pct", 0.12, 0.30),
+            require_stage2_for_entry=require_stage2_for_entry,
+            stage3_blocks_entry=True,  # always True — never enter declining stocks
+            ppc_conviction_boost=ppc_conviction_boost,
+            npc_overrides_min_hold=npc_overrides_min_hold,
+            contraction_entry_bonus=contraction_entry_bonus,
+            rs_leader_exit_pct=float(rs_leader_exit_pct),
+            rs_strong_exit_pct=float(rs_strong_exit_pct),
         )
 
         def _trial_playbook(

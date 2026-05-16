@@ -22,6 +22,7 @@ from atlas.trading.perception import (
     compute_rs_velocity,
     derive_momentum_state,
     derive_regime_state,
+    derive_rs_exit_state,
     derive_rs_state,
     derive_vol_state,
 )
@@ -225,3 +226,81 @@ def test_regime_vix_nan_cautious_breadth(layer1: Layer1Perception) -> None:
     vix = np.array([float("nan")])
     result = derive_regime_state(breadth, vix, layer1)
     assert result[0] == REGIME_CAUTIOUS
+
+
+# ---------------------------------------------------------------------------
+# derive_rs_exit_state tests (RS hysteresis)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def layer1_with_exit_thresholds() -> Layer1Perception:
+    """Layer1 with known entry and exit cutoffs for predictable hysteresis tests."""
+    g = GenomeFactory.random()
+    # Pin all cutoffs to known values
+    g.layer1.rs_leader_cutoff_pct = 70
+    g.layer1.rs_strong_cutoff_pct = 55
+    g.layer1.rs_average_cutoff_pct = 35
+    g.layer1.rs_weak_cutoff_pct = 20
+    # Exit thresholds strictly below entry cutoffs
+    g.layer1.rs_leader_exit_pct = 62.0
+    g.layer1.rs_strong_exit_pct = 40.0
+    return g.layer1
+
+
+def test_rs_exit_state_uses_lower_thresholds(
+    layer1_with_exit_thresholds: Layer1Perception,
+) -> None:
+    """Exit state uses rs_leader_exit_pct (62), not rs_leader_cutoff_pct (70).
+
+    A stock at rs=65: entry state → RS_STRONG (65 < 70), exit state → RS_LEADER (65 >= 62).
+    This shows hysteresis: stock entered at Strong level stays LEADER in exit state.
+    """
+    layer1 = layer1_with_exit_thresholds
+    rs = np.array([[65.0]])
+    entry_state = derive_rs_state(rs, layer1)
+    exit_state = derive_rs_exit_state(rs, layer1)
+    # Entry: 65 < 70 (leader cutoff) → RS_STRONG
+    assert entry_state[0, 0] == RS_STRONG
+    # Exit: 65 >= 62 (leader exit threshold) → RS_LEADER
+    assert exit_state[0, 0] == RS_LEADER
+
+
+def test_hysteresis_prevents_immediate_exit(
+    layer1_with_exit_thresholds: Layer1Perception,
+) -> None:
+    """A stock that barely enters Strong doesn't immediately drop on exit state.
+
+    Entry cutoff for Strong = 55. A stock at rs=56 enters as Strong.
+    Exit threshold for Strong = 40. At rs=56, exit state is still Strong (56 >= 40).
+    No immediate exit triggered — hysteresis dead-band is active.
+    """
+    layer1 = layer1_with_exit_thresholds
+    rs = np.array([[56.0]])
+    entry_state = derive_rs_state(rs, layer1)
+    exit_state = derive_rs_exit_state(rs, layer1)
+    # Entry: 56 >= 55 (strong cutoff) → RS_STRONG
+    assert entry_state[0, 0] == RS_STRONG
+    # Exit: 56 >= 40 (strong exit) → still RS_STRONG (not lower)
+    assert exit_state[0, 0] == RS_STRONG
+
+
+def test_rs_exit_state_laggard_below_weak_cutoff(
+    layer1_with_exit_thresholds: Layer1Perception,
+) -> None:
+    """Stock below rs_weak_cutoff must be RS_LAGGARD in exit state."""
+    layer1 = layer1_with_exit_thresholds
+    rs = np.array([[5.0]])  # below weak cutoff of 20
+    result = derive_rs_exit_state(rs, layer1)
+    assert result[0, 0] == RS_LAGGARD
+
+
+def test_rs_exit_state_shape_matches_input(
+    layer1_with_exit_thresholds: Layer1Perception,
+) -> None:
+    """derive_rs_exit_state returns array of same shape as input."""
+    layer1 = layer1_with_exit_thresholds
+    rs = np.random.default_rng(0).uniform(0, 100, size=(10, 30)).astype(np.float32)
+    result = derive_rs_exit_state(rs, layer1)
+    assert result.shape == rs.shape
+    assert result.dtype == np.int8

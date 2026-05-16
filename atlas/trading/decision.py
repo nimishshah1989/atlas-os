@@ -44,12 +44,17 @@ def compute_conviction(
     days_in_state: int,
     direction: int,  # -1, 0, 1
     layer1: Layer1Perception,
+    ppc: int = 0,  # Pocket Pivot Count signal (0 or 1)
+    contraction: int = 0,  # Contraction pattern signal (0 or 1)
 ) -> float:
     """Compute conviction score 0–1 for a single stock on a single day.
 
     Uses genome-controlled layer1 weights for all signal components.
     Weights are on an unnormalized relative scale; clip(0, 1) is the intended
     normalization boundary.
+
+    CTS signal boosts (ppc, contraction) are additive after the base formula
+    and applied before the final clip to 1.0.
     """
     rs_norm = rs_pctile_norm
     mom_norm = _MOM_NORM[momentum_state]
@@ -74,6 +79,10 @@ def compute_conviction(
     conviction = (
         base * (1.0 + layer1.synergy_weight * synergy) * (1.0 - layer1.penalty_weight * penalty)
     )
+
+    # CTS signal boosts (additive, applied before final clip)
+    conviction += layer1.ppc_conviction_boost * ppc
+    conviction += layer1.contraction_entry_bonus * contraction
     return float(np.clip(conviction, 0.0, 1.0))
 
 
@@ -92,10 +101,12 @@ def apply_entry_rules(
     genome: Genome,
     portfolio_drawdown: float = 0.0,
     max_portfolio_heat_pct: float = 0.20,
+    stage: np.ndarray | None = None,
 ) -> np.ndarray:
     """Return boolean mask of stocks eligible for entry today.
 
     Blocks all entries if regime is Risk-Off, heat cap exceeded, or drawdown >= halt threshold.
+    Applies Weinstein stage gates when stage array is provided.
     """
     if regime == REGIME_RISK_OFF:
         return np.zeros(len(conviction), dtype=bool)
@@ -108,7 +119,16 @@ def apply_entry_rules(
     if portfolio_drawdown >= playbook.dd_halt_entry_pct / 100.0:
         return np.zeros(len(conviction), dtype=bool)
 
-    return conviction >= playbook.min_conviction_to_enter
+    mask = conviction >= playbook.min_conviction_to_enter
+
+    # Weinstein stage gates
+    if stage is not None:
+        if genome.layer1.require_stage2_for_entry:
+            mask &= stage == 2
+        elif genome.layer1.stage3_blocks_entry:
+            mask &= stage < 3
+
+    return mask
 
 
 def apply_exit_rules(
@@ -117,14 +137,22 @@ def apply_exit_rules(
     holding_days: np.ndarray,
     min_hold_days: int,
     exit_rs_drop_tiers: int,
+    npc: np.ndarray | None = None,
+    npc_overrides_min_hold: bool = False,
 ) -> np.ndarray:
     """Return boolean mask of positions that should be exited today.
 
     Exits when RS state drops by >= exit_rs_drop_tiers tiers, after min_hold_days constraint.
+    NPC signal triggers immediate exit regardless of min_hold_days when npc_overrides_min_hold.
     """
     rs_drop = prev_rs_state.astype(np.int8) - curr_rs_state.astype(np.int8)
     held_long_enough = holding_days >= min_hold_days
-    return (rs_drop >= exit_rs_drop_tiers) & held_long_enough
+    exit_mask = (rs_drop >= exit_rs_drop_tiers) & held_long_enough
+
+    # NPC override: immediate exit regardless of min_hold_days
+    if npc is not None and npc_overrides_min_hold:
+        exit_mask = exit_mask | npc.astype(bool)
+    return exit_mask
 
 
 def compute_position_size(

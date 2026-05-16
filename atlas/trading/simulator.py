@@ -25,6 +25,7 @@ from atlas.trading.perception import (
     compute_rs_velocity,
     derive_momentum_state,
     derive_regime_state,
+    derive_rs_exit_state,
     derive_rs_state,
     derive_vol_state,
 )
@@ -65,6 +66,19 @@ def simulate_genome(
         pivoted = df.pivot(index="instrument_id", columns="date", values=col)
         return pivoted.reindex(index=instruments, columns=dates).values.astype(np.float32)
 
+    def _safe_pivot(col: str, default: float) -> np.ndarray:
+        """Pivot an optional column; fills with default when column is absent."""
+        n_stocks_local = len(instruments)
+        n_days_local = len(dates)
+        if col not in df.columns:
+            return np.full((n_stocks_local, n_days_local), default, dtype=np.float32)
+        pivoted = df.pivot(index="instrument_id", columns="date", values=col)
+        return (
+            pivoted.reindex(index=instruments, columns=dates)
+            .fillna(default)
+            .values.astype(np.float32)
+        )
+
     close = _pivot("close")
     n_stocks, n_days = close.shape
 
@@ -80,9 +94,16 @@ def simulate_genome(
     breadth = rdf["pct_above_ema_50"].values.astype(np.float32)
     vix_arr = rdf["india_vix"].values.astype(np.float32)
 
+    # CTS stage signals (default: Stage 2 = neutral, no PPC/NPC/contraction)
+    cts_stage = _safe_pivot("cts_stage", default=2.0).astype(np.int8)
+    ppc = _safe_pivot("ppc", default=0.0).astype(np.int8)
+    npc_arr = _safe_pivot("npc", default=0.0).astype(np.int8)
+    contraction = _safe_pivot("contraction", default=0.0).astype(np.int8)
+
     # Layer 1: state matrices computed once for all windows
     blended_rs = compute_blended_rs_pctile(rs_arrays, genome.layer1.rs_timeframe_weights)
     rs_state = derive_rs_state(blended_rs, genome.layer1)
+    rs_exit_state = derive_rs_exit_state(blended_rs, genome.layer1)
     regime_state = derive_regime_state(breadth, vix_arr, genome.layer1)
     vol_state = derive_vol_state(vol_ratio, genome.layer1)
     mom_state = derive_momentum_state(ema_ratio, genome.layer1)
@@ -104,6 +125,8 @@ def simulate_genome(
                 days_in_state=int(days_in_state[s, d]),
                 direction=int(direction[s, d]),
                 layer1=genome.layer1,
+                ppc=int(ppc[s, d]),
+                contraction=int(contraction[s, d]),
             )
 
     oos_sortinos: list[float] = []
@@ -120,7 +143,11 @@ def simulate_genome(
             close,
             conv_matrix,
             rs_state,
+            rs_exit_state,
             regime_state,
+            cts_stage,
+            ppc,
+            npc_arr,
             test_start,
             test_end,
             instruments,
@@ -132,7 +159,11 @@ def simulate_genome(
             close,
             conv_matrix,
             rs_state,
+            rs_exit_state,
             regime_state,
+            cts_stage,
+            ppc,
+            npc_arr,
             train_start,
             train_end,
             instruments,
@@ -163,7 +194,11 @@ def _run_window(
     close: np.ndarray,
     conv_matrix: np.ndarray,
     rs_state: np.ndarray,
+    rs_exit_state: np.ndarray,
     regime_state: np.ndarray,
+    cts_stage: np.ndarray,
+    ppc: np.ndarray,
+    npc: np.ndarray,
     window_start: date,
     window_end: date,
     instruments: list,
@@ -179,14 +214,17 @@ def _run_window(
     w_dates = dates[d_start:d_end]
     w_close = close[:, d_start:d_end]
     w_conv = conv_matrix[:, d_start:d_end]
-    w_rs = rs_state[:, d_start:d_end]
+    w_rs_exit = rs_exit_state[:, d_start:d_end]
     w_regime = regime_state[d_start:d_end]
+    w_stage = cts_stage[:, d_start:d_end]
+    w_npc = npc[:, d_start:d_end]
 
     n_stocks, n_days = w_close.shape
     entries = np.zeros((n_days, n_stocks), dtype=bool)
     exits = np.zeros((n_days, n_stocks), dtype=bool)
 
-    prev_rs = w_rs[:, 0].copy()
+    # Track exit state for continuity (hysteresis)
+    prev_rs = w_rs_exit[:, 0].copy()
     position_days = np.zeros(n_stocks, dtype=int)
 
     eff_heat = min(float(genome.layer1.genome_max_heat_pct), float(config.max_portfolio_heat_pct))
@@ -197,7 +235,7 @@ def _run_window(
         if regime == REGIME_RISK_OFF:
             exits[d, :] = True
             position_days[:] = 0
-            prev_rs = w_rs[:, d].copy()
+            prev_rs = w_rs_exit[:, d].copy()
             continue
 
         playbook = (
@@ -208,10 +246,12 @@ def _run_window(
 
         exit_mask = apply_exit_rules(
             prev_rs_state=prev_rs,
-            curr_rs_state=w_rs[:, d],
+            curr_rs_state=w_rs_exit[:, d],  # exit state uses hysteresis thresholds
             holding_days=position_days,
             min_hold_days=playbook.min_hold_days,
             exit_rs_drop_tiers=playbook.exit_rs_drop_tiers,
+            npc=w_npc[:, d],
+            npc_overrides_min_hold=genome.layer1.npc_overrides_min_hold,
         )
         exits[d, :] = exit_mask
         position_days[exit_mask] = 0
@@ -225,13 +265,14 @@ def _run_window(
             portfolio_heat=portfolio_heat,
             genome=genome,
             max_portfolio_heat_pct=eff_heat,
+            stage=w_stage[:, d],
         )
         new_entries = entry_mask & ~exit_mask
         entries[d, :] = new_entries
         # Increment holding days for all currently-held positions (including new entries today)
         held_before = position_days > 0
         position_days[held_before | new_entries] += 1
-        prev_rs = w_rs[:, d].copy()
+        prev_rs = w_rs_exit[:, d].copy()  # track exit state for next day's comparison
 
     price_df = pd.DataFrame(
         w_close.T,

@@ -87,3 +87,42 @@ def test_simulate_genome_risk_off_full_liquidbees():
     result = simulate_genome(genome, df, rdf, config, [(start, split, split, end)])
 
     assert result.total_trades == 0
+
+
+def test_simulate_genome_missing_cts_columns_uses_safe_defaults():
+    """metrics_df without cts_stage/ppc/npc/contraction columns doesn't crash."""
+    genome = GenomeFactory.random()
+    config = PortfolioConfig()
+    # Standard metrics_df WITHOUT any CTS columns (backward compat)
+    df = _synthetic_df()
+    rdf = _regime_df()
+
+    start = date(2023, 1, 1)
+    split = date(2023, 3, 1)
+    end = date(2023, 4, 30)
+    result = simulate_genome(genome, df, rdf, config, [(start, split, split, end)])
+
+    assert isinstance(result, SimResult)
+    assert result.total_trades >= 0
+
+
+def test_simulate_genome_stage3_produces_no_entries():
+    """All Stage 3 stocks produce zero entries when require_stage2_for_entry=True."""
+    genome = GenomeFactory.random()
+    # Force require_stage2_for_entry to True so only Stage 2 can enter
+    object.__setattr__(genome.layer1, "require_stage2_for_entry", True)
+
+    config = PortfolioConfig()
+    n_stocks, n_days = 5, 120
+    df = _synthetic_df(n_stocks=n_stocks, n_days=n_days)
+    rdf = _regime_df(n_days=n_days)
+
+    # Set all cts_stage to 3 — no stock should qualify for entry
+    df["cts_stage"] = 3
+
+    start = date(2023, 1, 1)
+    split = date(2023, 3, 1)
+    end = date(2023, 4, 30)
+    result = simulate_genome(genome, df, rdf, config, [(start, split, split, end)])
+
+    assert result.total_trades == 0

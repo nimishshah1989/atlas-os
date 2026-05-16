@@ -47,6 +47,28 @@ def derive_rs_state(rs_pctile: np.ndarray, layer1: Layer1Perception) -> np.ndarr
     return out.astype(np.int8)
 
 
+def derive_rs_exit_state(rs_pctile: np.ndarray, layer1: Layer1Perception) -> np.ndarray:
+    """RS state for EXIT decisions using hysteresis (lower) thresholds.
+
+    Once a position is entered at rs_leader_cutoff_pct, it only drops from Leader
+    when rs_pctile falls below rs_leader_exit_pct (< cutoff). This dead-band
+    prevents oscillation from noise near the entry boundary.
+
+    Args:
+        rs_pctile: shape (n_stocks, n_days) — blended RS percentile rank 0–100
+        layer1: genome Layer1Perception with cutoff and exit thresholds
+
+    Returns:
+        int8 array of same shape with RS state values 0–4
+    """
+    out = np.full(rs_pctile.shape, RS_LAGGARD, dtype=np.int8)
+    out = np.where(rs_pctile >= layer1.rs_weak_cutoff_pct, RS_WEAK, out)
+    out = np.where(rs_pctile >= layer1.rs_average_cutoff_pct, RS_AVERAGE, out)
+    out = np.where(rs_pctile >= layer1.rs_strong_exit_pct, RS_STRONG, out)
+    out = np.where(rs_pctile >= layer1.rs_leader_exit_pct, RS_LEADER, out)
+    return out.astype(np.int8)
+
+
 def derive_regime_state(
     breadth_pct: np.ndarray, vix: np.ndarray, layer1: Layer1Perception
 ) -> np.ndarray:

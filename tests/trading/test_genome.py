@@ -1,4 +1,19 @@
-from atlas.trading.genome import Genome, GenomeFactory
+import pytest
+
+from atlas.trading.genome import Genome, GenomeFactory, Layer1Perception
+
+
+def _build_layer1(**overrides) -> Layer1Perception:
+    """Build Layer1Perception from a random genome base, then apply overrides and reconstruct.
+
+    This triggers __post_init__ with the overridden values so invariant tests work correctly.
+    """
+    import dataclasses
+
+    g = GenomeFactory.random()
+    base = dataclasses.asdict(g.layer1)
+    base.update(overrides)
+    return Layer1Perception(**base)
 
 
 def test_random_genome_is_valid():
@@ -43,6 +58,44 @@ def test_genome_json_roundtrip():
     assert g2.constructive.profit_target_pct is None  # constructive has no profit target
     assert g2.cautious.profit_target_pct is not None  # cautious has profit target
     assert g2.born_at.tzinfo is not None  # Ensure tz-aware
+
+
+def test_random_genome_has_cts_fields():
+    """Random genome must have CTS fields with hysteresis invariants satisfied."""
+    g = GenomeFactory.random()
+    assert g.layer1.rs_leader_exit_pct < g.layer1.rs_leader_cutoff_pct
+    assert g.layer1.rs_strong_exit_pct < g.layer1.rs_strong_cutoff_pct
+    assert 0.05 <= g.layer1.ppc_conviction_boost <= 0.30
+    assert 0.0 <= g.layer1.contraction_entry_bonus <= 0.20
+    assert g.layer1.stage3_blocks_entry is True  # always fixed True
+
+
+def test_layer1_exit_pct_below_entry_cutoff_raises():
+    """rs_leader_exit_pct >= rs_leader_cutoff_pct must raise AssertionError.
+
+    We pin the leader_cutoff to a known value (70) and set exit_pct to the same
+    value (70.0) so the hysteresis invariant fires regardless of random seed.
+    """
+    with pytest.raises(AssertionError, match="Leader exit threshold"):
+        # leader_cutoff=70, exit_pct=70 → exit not < cutoff → AssertionError
+        _build_layer1(rs_leader_cutoff_pct=70, rs_leader_exit_pct=70.0)
+
+
+def test_layer1_strong_exit_pct_below_entry_cutoff_raises():
+    """rs_strong_exit_pct >= rs_strong_cutoff_pct must raise AssertionError.
+
+    We pin strong_cutoff to 55 and set exit_pct to 55 so the assertion always fires.
+    Leader cutoff must remain above 55, so we pin it to 70 as well.
+    """
+    with pytest.raises(AssertionError, match="Strong exit threshold"):
+        # strong_cutoff=55, exit_pct=55 → exit not < cutoff → AssertionError
+        _build_layer1(rs_leader_cutoff_pct=70, rs_strong_cutoff_pct=55, rs_strong_exit_pct=55.0)
+
+
+def test_layer1_ppc_boost_out_of_range_raises():
+    """ppc_conviction_boost > 0.5 must raise AssertionError."""
+    with pytest.raises(AssertionError, match="ppc_conviction_boost"):
+        _build_layer1(ppc_conviction_boost=0.6)
 
 
 def test_optuna_trial_produces_valid_genome():
