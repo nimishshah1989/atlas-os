@@ -470,7 +470,7 @@ export async function getFundLatestHoldingsChanges(
       c.to_date::text AS period_date
     FROM atlas.atlas_fund_holdings_changes c
     LEFT JOIN atlas.atlas_universe_stocks u
-      ON u.instrument_id = c.instrument_id::uuid
+      ON u.instrument_id::text = c.instrument_id
       AND u.effective_to IS NULL
     WHERE c.mstar_id = ${mstar_id}
       AND c.to_date = (
