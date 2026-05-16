@@ -35,7 +35,7 @@ class OptunaStudy:
     def run_trials(
         self,
         n_trials: int,
-        objective_fn: Callable[[Genome], float],
+        objective_fn: Callable[..., float],
         n_jobs: int = 1,
     ) -> None:
         """Run n_trials Optuna trials. objective_fn receives a Genome, returns float.
@@ -57,7 +57,12 @@ class OptunaStudy:
 
         def _wrapped(trial: optuna.Trial) -> float:
             genome = GenomeFactory.from_optuna_trial(trial)
-            return objective_fn(genome)
+            # Pass trial to objective_fn if it accepts a second positional arg
+            # (so callers can set_user_attr for cross-process metric capture).
+            try:
+                return objective_fn(genome, trial)
+            except TypeError:
+                return objective_fn(genome)
 
         try:
             self._study.optimize(

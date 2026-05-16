@@ -187,6 +187,75 @@ def _load_active_config(conn) -> PortfolioConfig:
     return PortfolioConfig()
 
 
+def _run_distributed_trials(n_trials: int, n_workers: int) -> None:
+    """Spawn N worker subprocesses; each runs n_trials/N trials of its own.
+
+    Workers share an Optuna RDB study (Postgres) so they pull and push trials
+    to a single coordinated optimization. Each worker is a separate Python
+    interpreter → no GIL contention; uses 1 core fully.
+    """
+    import subprocess
+    import sys
+
+    trials_per_worker = max(1, n_trials // n_workers)
+    extra = n_trials - (trials_per_worker * n_workers)  # distribute remainder
+    procs = []
+    for i in range(n_workers):
+        env = os.environ.copy()
+        env["ATLAS_INCUBATOR_WORKER_MODE"] = "1"
+        env["ATLAS_INCUBATOR_TRIALS"] = str(trials_per_worker + (1 if i < extra else 0))
+        env["ATLAS_INCUBATOR_N_JOBS"] = "1"  # workers themselves single-threaded
+        env["ATLAS_INCUBATOR_WORKER_ID"] = str(i)
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "atlas.trading.incubator"],
+            env=env,
+            stdout=subprocess.DEVNULL,  # workers' structlog also writes to stderr → DB
+            stderr=subprocess.STDOUT,
+        )
+        procs.append(proc)
+        log.info("worker_spawned", worker=i, trials=env["ATLAS_INCUBATOR_TRIALS"], pid=proc.pid)
+
+    failed = 0
+    for i, proc in enumerate(procs):
+        rc = proc.wait()
+        if rc != 0:
+            failed += 1
+            log.warning("worker_nonzero_exit", worker=i, rc=rc)
+        else:
+            log.info("worker_done", worker=i)
+    log.info("all_workers_done", n_workers=n_workers, failed=failed)
+
+
+def _reconstruct_genome_scores_from_study(
+    study: OptunaStudy,
+) -> list[tuple[Genome, float, float, float]]:
+    """Read completed trials from the shared study, rebuild (genome, alpha, IR, sortino).
+
+    Workers set user_attrs["ir"] and user_attrs["sortino"] on each trial; this
+    reader pulls them back so the coordinator can rank survivors without
+    re-running the simulations.
+    """
+    import optuna
+
+    from atlas.trading.genome import GenomeFactory
+
+    scores: list[tuple[Genome, float, float, float]] = []
+    for trial in study._study.trials:
+        if trial.state != optuna.trial.TrialState.COMPLETE or trial.value is None:
+            continue
+        try:
+            genome = GenomeFactory.from_optuna_trial(optuna.trial.FixedTrial(trial.params))
+        except Exception:
+            continue  # malformed/old trial — skip
+        alpha = float(trial.value)
+        ir = float(trial.user_attrs.get("ir", 0.0))
+        sortino = float(trial.user_attrs.get("sortino", 0.0))
+        scores.append((genome, alpha, ir, sortino))
+    # Best alpha first
+    scores.sort(key=lambda t: t[1], reverse=True)
+    return scores
+
+
 def run_nightly(conn, config: PortfolioConfig | None = None) -> dict[str, Any]:
     """Run the full nightly incubator cycle. Returns a summary dict."""
     if config is None:
@@ -218,8 +287,13 @@ def run_nightly(conn, config: PortfolioConfig | None = None) -> dict[str, Any]:
     # downstream ranking + diagnostics. Order matters: index 1 is the score.
     genome_scores: list[tuple[Genome, float, float, float]] = []
 
-    def objective(genome: Genome) -> float:
-        """Optimize alpha vs Nifty 500. Goal post: maximize alpha with confidence."""
+    def objective(genome: Genome, trial=None) -> float:
+        """Optimize alpha vs Nifty 500. Goal post: maximize alpha with confidence.
+
+        Sets trial.user_attrs so multi-process workers can persist IR + Sortino
+        to the shared Optuna RDB study; coordinator reconstructs genome_scores
+        from those attrs after workers finish.
+        """
         result = simulate_genome(
             genome,
             metrics_df,
@@ -228,6 +302,9 @@ def run_nightly(conn, config: PortfolioConfig | None = None) -> dict[str, Any]:
             walk_forward_windows,
             corp_actions=corp_actions,
         )
+        if trial is not None:
+            trial.set_user_attr("ir", float(result.information_ratio))
+            trial.set_user_attr("sortino", float(result.sortino_oos))
         genome_scores.append(
             (genome, result.alpha_oos, result.information_ratio, result.sortino_oos)
         )
@@ -235,8 +312,30 @@ def run_nightly(conn, config: PortfolioConfig | None = None) -> dict[str, Any]:
 
     n_trials = _n_trials_per_night()
     n_jobs = _n_jobs()
-    log.info("running_optuna_trials", n=n_trials, n_jobs=n_jobs)
-    study.run_trials(n_trials=n_trials, objective_fn=objective, n_jobs=n_jobs)
+    worker_mode = os.environ.get("ATLAS_INCUBATOR_WORKER_MODE") == "1"
+
+    if worker_mode:
+        # Worker mode: just run our share of trials, exit. Coordinator will
+        # spawn N of these in parallel and reconstruct results from the
+        # shared Optuna RDB study after all workers complete.
+        log.info("worker_mode_running_trials", n_trials=n_trials)
+        study.run_trials(n_trials=n_trials, objective_fn=objective, n_jobs=1)
+        log.info("worker_mode_done", trials=n_trials)
+        return {"status": "worker_done", "trials_run": n_trials}
+
+    if n_jobs > 1:
+        # Coordinator mode: spawn N worker subprocesses (true process-level
+        # parallelism, no GIL contention). Each worker runs n_trials/n_jobs
+        # trials and writes to the shared study. After workers exit, we
+        # reload completed trials from the study and reconstruct genome_scores.
+        log.info("coordinator_spawning_workers", n_workers=n_jobs, total_trials=n_trials)
+        _run_distributed_trials(n_trials, n_jobs)
+        genome_scores = _reconstruct_genome_scores_from_study(study)
+        log.info("coordinator_reconstructed_scores", n=len(genome_scores))
+    else:
+        # Single-process legacy path
+        log.info("running_optuna_trials", n=n_trials, n_jobs=n_jobs)
+        study.run_trials(n_trials=n_trials, objective_fn=objective, n_jobs=n_jobs)
 
     if not genome_scores:
         # Every trial raised inside simulate_genome — surface this distinctly
