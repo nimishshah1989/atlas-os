@@ -390,6 +390,11 @@ def _run_window(
             size=eff_pos,
             size_type="Percent",
             sl_stop=stop_loss_frac,  # Core 4 stop-loss exit (vectorbt-native)
+            # vectorbt 1.0 requires explicit freq on the index when it isn't set;
+            # walk-forward windows are trading days with weekend gaps, so we
+            # declare daily frequency. Without this, Portfolio.from_signals
+            # raises "Index frequency is None" on every window.
+            freq="D",
             group_by=True,
             cash_sharing=True,
         )
