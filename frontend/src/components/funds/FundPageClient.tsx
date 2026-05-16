@@ -24,6 +24,7 @@ export type TileCounts = {
   n_strong_hold: number
   n_suspended: number
   n_weak_hold: number
+  n_sharp_decisions: number
 }
 
 export type FilterChip =
@@ -33,6 +34,7 @@ export type FilterChip =
   | 'leader_nav'
   | 'aligned'
   | 'strong_hold'
+  | 'sharp_decisions'
 
 type Props = {
   funds: FundRow[]
@@ -79,11 +81,12 @@ export function FundPageClient({
     }
     if (activeFilter !== 'all') {
       result = result.filter(f => {
-        if (activeFilter === 'recommended') return f.recommendation === 'Recommended'
-        if (activeFilter === 'hold')        return f.recommendation === 'Hold'
-        if (activeFilter === 'leader_nav')  return f.nav_state === 'Leader NAV'
-        if (activeFilter === 'aligned')     return f.composition_state === 'Aligned'
-        if (activeFilter === 'strong_hold') return f.recommendation === 'Hold' && f.holdings_state === 'Strong-Holdings'
+        if (activeFilter === 'recommended')     return f.recommendation === 'Recommended'
+        if (activeFilter === 'hold')            return f.recommendation === 'Hold'
+        if (activeFilter === 'leader_nav')      return f.nav_state === 'Leader NAV'
+        if (activeFilter === 'aligned')         return f.composition_state === 'Aligned'
+        if (activeFilter === 'strong_hold')     return f.recommendation === 'Hold' && f.holdings_state === 'Strong-Holdings'
+        if (activeFilter === 'sharp_decisions') return f.decision_state_label === 'Sharp'
         return true
       })
     }
@@ -149,19 +152,25 @@ export function FundPageClient({
         </div>
         <div className="flex items-center gap-1">
           {([
-            { key: 'all' as FilterChip,         label: 'All' },
-            { key: 'recommended' as FilterChip, label: 'Recommended' },
-            { key: 'hold' as FilterChip,        label: 'Hold' },
-            { key: 'leader_nav' as FilterChip,  label: 'Leader/Strong NAV' },
-            { key: 'aligned' as FilterChip,     label: 'Aligned' },
-          ]).map(({ key, label }) => (
+            { key: 'all' as FilterChip,              label: 'All',               title: undefined },
+            { key: 'recommended' as FilterChip,      label: 'Recommended',       title: 'Funds with all 4 gates passing — eligible for entry' },
+            { key: 'hold' as FilterChip,             label: 'Hold',              title: 'Funds to hold but not add to — some gates failing' },
+            { key: 'leader_nav' as FilterChip,       label: 'Leader/Strong NAV', title: 'Funds in Leader NAV or Strong NAV state — outperforming peers' },
+            { key: 'aligned' as FilterChip,          label: 'Aligned',           title: 'Funds whose portfolio composition is predominantly in Aligned sectors' },
+            { key: 'sharp_decisions' as FilterChip,  label: 'Sharp Decisions',   title: 'Funds whose manager consistently buys strong stocks and sells weak stocks (decision score ≥65)' },
+          ]).map(({ key, label, title }) => (
             <button
               key={key}
               onClick={() => handleFilterChange(key)}
+              title={title}
               className={`px-3 py-1 rounded-sm font-sans text-xs font-medium transition-colors ${
                 activeFilter === key
-                  ? 'bg-ink-primary text-paper'
-                  : 'text-ink-secondary hover:text-ink-primary'
+                  ? key === 'sharp_decisions'
+                    ? 'bg-signal-pos text-white'
+                    : 'bg-ink-primary text-paper'
+                  : key === 'sharp_decisions'
+                    ? 'text-signal-pos border border-signal-pos/30 hover:border-signal-pos/60'
+                    : 'text-ink-secondary hover:text-ink-primary'
               }`}
             >
               {label}

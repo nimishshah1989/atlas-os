@@ -4,6 +4,12 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import type { FundDecisionScoreRow, FundHoldingsChangeRow } from '@/lib/queries/funds'
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+function safeSymbol(s: string | null | undefined): string {
+  if (!s || UUID_RE.test(s)) return '—'
+  return s
+}
+
 function ActionBadge({ action }: { action: string }) {
   const colors: Record<string, string> = {
     entry: 'bg-signal-pos/15 text-signal-pos font-semibold',
@@ -172,7 +178,7 @@ export function FundManagerDecisionsDetail({ scores, initialChanges, initialPeri
           <tbody>
             {filtered.map((row) => (
               <tr key={row.symbol} className="border-b border-paper-rule/50 hover:bg-paper-rule/5">
-                <td className="py-1.5 px-2 font-mono text-xs font-medium">{row.symbol}</td>
+                <td className="py-1.5 px-2 font-mono text-xs font-medium">{safeSymbol(row.symbol)}</td>
                 <td className="py-1.5 px-2">
                   <ActionBadge action={row.action} />
                 </td>

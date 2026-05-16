@@ -27,13 +27,14 @@ export default async function FundsPage({
   }
 
   // Tile counts (server-side computation)
-  const n_recommended = funds.filter(f => f.recommendation === 'Recommended').length
-  const n_hold        = funds.filter(f => f.recommendation === 'Hold').length
-  const n_leader_nav  = funds.filter(f => f.nav_state === 'Leader NAV').length
-  const n_aligned     = funds.filter(f => f.composition_state === 'Aligned').length
-  const n_strong_hold = funds.filter(f => f.recommendation === 'Hold' && f.holdings_state === 'Strong-Holdings').length
-  const n_suspended   = funds.filter(f => f.nav_state === 'DISLOCATION_SUSPENDED').length
-  const n_weak_hold   = funds.filter(f => f.recommendation === 'Hold' && f.holdings_state === 'Weak-Holdings').length
+  const n_recommended     = funds.filter(f => f.recommendation === 'Recommended').length
+  const n_hold            = funds.filter(f => f.recommendation === 'Hold').length
+  const n_leader_nav      = funds.filter(f => f.nav_state === 'Leader NAV').length
+  const n_aligned         = funds.filter(f => f.composition_state === 'Aligned').length
+  const n_strong_hold     = funds.filter(f => f.recommendation === 'Hold' && f.holdings_state === 'Strong-Holdings').length
+  const n_suspended       = funds.filter(f => f.nav_state === 'DISLOCATION_SUSPENDED').length
+  const n_weak_hold       = funds.filter(f => f.recommendation === 'Hold' && f.holdings_state === 'Weak-Holdings').length
+  const n_sharp_decisions = funds.filter(f => f.decision_state_label === 'Sharp').length
 
   // Median RS pctile — always use rs_pctile_3m (90-day equivalent)
   const pctiles = funds
@@ -105,6 +106,7 @@ export default async function FundsPage({
     n_strong_hold,
     n_suspended,
     n_weak_hold,
+    n_sharp_decisions,
   }
 
   return (

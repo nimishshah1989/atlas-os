@@ -13,9 +13,10 @@ type TileProps = {
   filter?: FilterChip
   activeFilter?: FilterChip
   onTileClick?: (f: FilterChip) => void
+  title?: string
 }
 
-function Tile({ label, value, sub, tone = 'neutral', filter, activeFilter, onTileClick }: TileProps) {
+function Tile({ label, value, sub, tone = 'neutral', filter, activeFilter, onTileClick, title }: TileProps) {
   const clickable = filter !== undefined && onTileClick !== undefined
   const isActive = clickable && activeFilter === filter
   const valueColor =
@@ -26,9 +27,10 @@ function Tile({ label, value, sub, tone = 'neutral', filter, activeFilter, onTil
 
   return (
     <div
+      title={title}
       className={`flex flex-col gap-1 px-4 py-3 border-r border-paper-rule last:border-0 ${
         isActive ? 'bg-paper-rule/10' : ''
-      } ${clickable ? 'cursor-pointer hover:bg-paper-rule/5' : ''}`}
+      } ${clickable ? 'cursor-pointer hover:bg-paper-rule/5' : ''}${title ? ' cursor-help' : ''}`}
       onClick={clickable ? () => onTileClick(filter) : undefined}
       role={clickable ? 'button' : undefined}
       aria-pressed={clickable ? isActive : undefined}
@@ -161,6 +163,16 @@ export function FundMetricTiles({
           filter="strong_hold"
           activeFilter={activeFilter}
           onTileClick={onTileClick}
+        />
+        <Tile
+          label="SHARP DECISIONS"
+          value={`${tileCounts.n_sharp_decisions}`}
+          sub="decision score ≥65"
+          tone={tileCounts.n_sharp_decisions > 0 ? 'pos' : 'neutral'}
+          filter="sharp_decisions"
+          activeFilter={activeFilter}
+          onTileClick={onTileClick}
+          title="Funds whose manager consistently buys high RS-state stocks and sells weak ones (score ≥65 out of 100)"
         />
         <Tile
           label="MEDIAN RS"

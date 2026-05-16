@@ -444,6 +444,47 @@ export async function getFundDecisionScoreHistory(
   `
 }
 
+export type LatestHoldingsChangeRow = FundHoldingsChangeRow & {
+  company_name: string | null
+  period_date: string
+}
+
+export async function getFundLatestHoldingsChanges(
+  mstar_id: string,
+): Promise<LatestHoldingsChangeRow[]> {
+  return sql<LatestHoldingsChangeRow[]>`
+    SELECT
+      c.symbol,
+      u.company_name,
+      c.action,
+      c.weight_before::text AS weight_before,
+      c.weight_after::text AS weight_after,
+      c.weight_delta::text AS weight_delta,
+      c.rs_state_at_action,
+      c.momentum_state_at_action,
+      c.signal_quality,
+      c.outcome_ret_1m::text AS outcome_ret_1m,
+      c.outcome_quality_1m,
+      c.outcome_ret_3m::text AS outcome_ret_3m,
+      c.outcome_quality_3m,
+      c.to_date::text AS period_date
+    FROM atlas.atlas_fund_holdings_changes c
+    LEFT JOIN atlas.atlas_universe_stocks u
+      ON u.instrument_id = c.instrument_id
+      AND u.effective_to IS NULL
+    WHERE c.mstar_id = ${mstar_id}
+      AND c.to_date = (
+        SELECT MAX(to_date)
+        FROM atlas.atlas_fund_holdings_changes
+        WHERE mstar_id = ${mstar_id}
+      )
+    ORDER BY
+      CASE c.action WHEN 'entry' THEN 0 WHEN 'exit' THEN 1 WHEN 'increase' THEN 2 ELSE 3 END,
+      ABS(c.weight_delta::numeric) DESC
+    LIMIT 50
+  `
+}
+
 export async function getFundDecisionDetail(
   mstar_id: string,
   period_date: string,

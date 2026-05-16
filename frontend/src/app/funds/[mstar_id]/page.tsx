@@ -10,6 +10,7 @@ import {
   getFundNavHistory,
   getFundLensHistory,
   getFundDecisionScoreHistory,
+  getFundLatestHoldingsChanges,
 } from '@/lib/queries/funds'
 import { getFundLeaderHoldings } from '@/lib/queries/leaders'
 import { LeaderHoldingsPanel } from '@/components/ui/LeaderHoldingsPanel'
@@ -21,6 +22,7 @@ import { FundLens2 } from '@/components/funds/FundLens2'
 import { FundLens3 } from '@/components/funds/FundLens3'
 import { FundDecisionHistory } from '@/components/funds/FundDecisionHistory'
 import { FundManagerDecisionSummary } from '@/components/funds/FundManagerDecisionSummary'
+import { FundHoldingsChanges } from '@/components/funds/FundHoldingsChanges'
 import { FundHoldingsTab } from '@/components/funds/FundHoldingsTab'
 import { FundNavChart } from '@/components/funds/FundNavChart'
 import { FundRiskPanel } from '@/components/funds/FundRiskPanel'
@@ -33,7 +35,7 @@ export default async function FundDeepDivePage({
 }) {
   const { mstar_id } = await params
 
-  const [master, metricHistory, lens, decisionHistory, holdings, navHistory, lensHistory, leaderHoldings, decisionScores] =
+  const [master, metricHistory, lens, decisionHistory, holdings, navHistory, lensHistory, leaderHoldings, decisionScores, latestChanges] =
     await Promise.all([
       getFundMaster(mstar_id),
       getFundMetricHistory(mstar_id, 180),
@@ -44,6 +46,7 @@ export default async function FundDeepDivePage({
       getFundLensHistory(mstar_id),
       getFundLeaderHoldings(mstar_id).catch(() => []),
       getFundDecisionScoreHistory(mstar_id, 12),
+      getFundLatestHoldingsChanges(mstar_id),
     ])
 
   if (!master) notFound()
@@ -109,19 +112,44 @@ export default async function FundDeepDivePage({
         <LeaderHoldingsPanel holdings={leaderHoldings} />
       </div>
 
+      {/* Portfolio Manager Decisions — score + scored periods */}
       <div className="px-6 py-6 border-b border-paper-rule">
-        <h2 className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-4">
-          Decision History
-        </h2>
-        <FundDecisionHistory decisions={decisionHistory} />
-      </div>
-
-      {/* Manager Decisions — holdings change quality */}
-      <div className="px-6 py-6 border-t border-paper-rule">
         <h2 className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-4">
           Portfolio Manager Decisions
         </h2>
         <FundManagerDecisionSummary scores={decisionScores} mstar_id={mstar_id} />
+      </div>
+
+      {/* Holdings Changes — what was actually bought/sold/added/trimmed */}
+      <div className="px-6 py-6 border-b border-paper-rule">
+        <div className="flex items-center gap-2 mb-4">
+          <h2 className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider">
+            Holdings Changes — Latest Disclosure
+          </h2>
+          <span
+            className="font-sans text-[9px] text-ink-tertiary/60 border border-paper-rule rounded px-1.5 py-0.5"
+            title="Changes are computed by diffing consecutive monthly portfolio disclosures. Only changes above the minimum weight threshold are shown."
+          >
+            What did the manager buy/sell?
+          </span>
+        </div>
+        <FundHoldingsChanges changes={latestChanges} />
+      </div>
+
+      {/* Recommendation & gate history timeline */}
+      <div className="px-6 py-6 border-b border-paper-rule">
+        <div className="flex items-center gap-2 mb-4">
+          <h2 className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider">
+            Recommendation History
+          </h2>
+          <span
+            className="font-sans text-[9px] text-ink-tertiary/60 border border-paper-rule rounded px-1.5 py-0.5"
+            title="Daily Recommended / Hold / Reduce / Exit recommendation computed from 4 gates. Identical consecutive days are collapsed into one row."
+          >
+            Hold / Recommend / Exit timeline
+          </span>
+        </div>
+        <FundDecisionHistory decisions={decisionHistory} />
       </div>
     </div>
   )
