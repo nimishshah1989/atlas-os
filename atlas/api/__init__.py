@@ -18,6 +18,7 @@ from atlas.api.openbb.router import openbb_router
 from atlas.api.portfolios import router as portfolios_router
 from atlas.api.portfolios import rule_based_router
 from atlas.api.strategies import router as strategies_router
+from atlas.api.trading import router as trading_router
 from atlas.api.tv_signals import router as tv_signals_router
 
 app = FastAPI(title="Atlas API", version="0.1.0")
@@ -46,6 +47,7 @@ app.include_router(
 )  # SP09: CTS on-demand brief — /api/v1/stocks/{symbol}/cts_brief
 app.include_router(cts_sectors_router)  # SP09 Phase 2: sector CTS snapshot — /api/v1/cts/sectors
 app.include_router(tv_signals_router)  # SP10: TV webhook receiver + signal report feed
+app.include_router(trading_router)  # Strategy Lab — /api/trading/*
 app.include_router(openbb_router)  # SP03: OpenBB BYO Copilot — /v1/agents.json + /v1/query
 
 
