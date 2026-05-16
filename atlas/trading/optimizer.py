@@ -25,7 +25,9 @@ class OptunaStudy:
             storage=storage,
             direction="maximize",
             load_if_exists=True,
-            sampler=optuna.samplers.TPESampler(seed=42),
+            sampler=optuna.samplers.TPESampler(
+                seed=42
+            ),  # seed: deterministic for CI reproducibility
             pruner=optuna.pruners.MedianPruner(n_startup_trials=10, n_warmup_steps=0),
         )
         self._name = study_name
@@ -37,7 +39,11 @@ class OptunaStudy:
             genome = GenomeFactory.from_optuna_trial(trial)
             return objective_fn(genome)
 
-        self._study.optimize(_wrapped, n_trials=n_trials, show_progress_bar=False)
+        try:
+            self._study.optimize(_wrapped, n_trials=n_trials, show_progress_bar=False)
+        except Exception:
+            log.exception("optuna_optimize_failed", study=self._name)
+            raise
         log.info(
             "optuna_trials_complete",
             study=self._name,
@@ -50,14 +56,20 @@ class OptunaStudy:
         try:
             best_trial = self._study.best_trial
             return GenomeFactory.from_optuna_trial(optuna.trial.FixedTrial(best_trial.params))
+        except RuntimeError:
+            return None
         except Exception:
+            log.warning("best_genome_unexpected_error", study=self._name)
             return None
 
     def get_parameter_importance(self) -> dict[str, float]:
         """Return parameter importance scores. Returns empty dict if insufficient trials."""
         try:
             return optuna.importance.get_param_importances(self._study)
+        except ValueError:
+            return {}
         except Exception:
+            log.warning("param_importance_unexpected_error", study=self._name)
             return {}
 
     @classmethod

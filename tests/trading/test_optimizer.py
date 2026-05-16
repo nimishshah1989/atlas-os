@@ -12,8 +12,8 @@ def test_study_create_and_optimize():
 
     study.run_trials(n_trials=5, objective_fn=mock_objective)
     assert call_count["n"] == 5
-    assert study.best_genome() is not None
     best = study.best_genome()
+    assert best is not None
     assert 60 <= best.layer1.rs_leader_cutoff_pct <= 80
 
 
@@ -27,3 +27,8 @@ def test_parameter_importance_keys():
     importance = study.get_parameter_importance()
     assert isinstance(importance, dict)
     assert len(importance) > 0
+
+
+def test_best_genome_empty_study_returns_none():
+    study = OptunaStudy(study_name="test_atlas_empty", storage=None)
+    assert study.best_genome() is None
