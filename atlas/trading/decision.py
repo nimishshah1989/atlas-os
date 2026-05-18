@@ -58,15 +58,9 @@ def _xs_rank(arr: np.ndarray) -> np.ndarray:
 
 
 def compute_conviction_matrix(
-    ma_30w_slope_4w: np.ndarray,
-    ret_12m_1m: np.ndarray,
-    ret_12m: np.ndarray,
-    extension_pct: np.ndarray,
-    ret_6m: np.ndarray,
-    above_30w_ma: np.ndarray,
-    weinstein_gate_pass: np.ndarray,
-    rs_pctile_3m: np.ndarray,
-    ret_3m: np.ndarray,
+    natr_14: np.ndarray,
+    beta_alpha_63d: np.ndarray,
+    mom_low_vol: np.ndarray,
     layer1: Layer1Perception,
 ) -> np.ndarray:
     """v4 conviction — 9 signals with per-date IR_of_IC > 0.40.
@@ -85,15 +79,9 @@ def compute_conviction_matrix(
     NaN cells produce 0 conviction (won't be entered that day).
     """
     conviction = (
-        layer1.ma_30w_slope_weight * _xs_rank(ma_30w_slope_4w)
-        + layer1.ret_12m_1m_weight * _xs_rank(ret_12m_1m)
-        + layer1.ret_12m_weight * _xs_rank(ret_12m)
-        + layer1.extension_weight * _xs_rank(extension_pct)
-        + layer1.ret_6m_weight * _xs_rank(ret_6m)
-        + layer1.above_30w_weight * above_30w_ma.astype(np.float32)
-        + layer1.weinstein_weight * weinstein_gate_pass.astype(np.float32)
-        + layer1.rs_3m_weight * _xs_rank(rs_pctile_3m)
-        + layer1.ret_3m_weight * _xs_rank(ret_3m)
+        layer1.natr_14_weight * _xs_rank(natr_14)
+        + layer1.beta_alpha_weight * _xs_rank(beta_alpha_63d)
+        + layer1.mom_low_vol_weight * _xs_rank(mom_low_vol)
     )
     return np.clip(conviction, 0.0, 1.0).astype(np.float32)
 

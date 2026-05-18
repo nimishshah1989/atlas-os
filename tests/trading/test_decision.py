@@ -292,55 +292,27 @@ def test_conviction_capped_at_1():
     assert result <= 1.0
 
 
-def test_compute_conviction_matrix_v4_signal_weights():
-    """v4 conviction matrix: stocks with higher signal values get higher conviction.
-
-    Sanity check that the cross-sectional rank blend actually orders stocks
-    by signal magnitude. Construct synthetic data where stock 0 has the
-    highest ret_12m on every day; verify it consistently scores top conviction.
-    """
+def test_compute_conviction_matrix_v5_signal_weights():
+    """v5 conviction: 3 alphalens-validated monotonic signals."""
     import numpy as np
-
     from atlas.trading.decision import compute_conviction_matrix
     from atlas.trading.genome import GenomeFactory
 
     n_stocks, n_days = 5, 20
-    # Stock 0 is best on every signal; stock 4 is worst.
     base = np.linspace(1.0, 0.0, n_stocks).reshape(-1, 1)
-    ret_12m = base * np.ones((n_stocks, n_days)).astype(np.float32)
-    ret_6m = ret_12m.copy()
-    ret_3m = ret_12m.copy()
-    ret_12m_1m = ret_12m.copy()
-    extension = ret_12m.copy()
-    ma_30w_slope = ret_12m.copy()
-    rs_3m = (base * 100.0 * np.ones((n_stocks, n_days))).astype(np.float32)
-    above_30w = (base > 0.5).astype(np.float32) * np.ones((n_stocks, n_days)).astype(np.float32)
-    weinstein = above_30w.copy()
+    ones = np.ones((n_stocks, n_days), dtype=np.float32)
+    natr = (base * ones).astype(np.float32)
+    beta_alpha = natr.copy()
+    mom_lv = natr.copy()
 
     genome = GenomeFactory.random()
-    # Force non-zero weights so the test exercises the formula.
-    object.__setattr__(genome.layer1, "ret_12m_weight", 0.3)
-    object.__setattr__(genome.layer1, "ret_6m_weight", 0.2)
-    object.__setattr__(genome.layer1, "extension_weight", 0.2)
-    object.__setattr__(genome.layer1, "ma_30w_slope_weight", 0.2)
-    object.__setattr__(genome.layer1, "rs_3m_weight", 0.1)
+    object.__setattr__(genome.layer1, "natr_14_weight", 0.4)
+    object.__setattr__(genome.layer1, "beta_alpha_weight", 0.4)
+    object.__setattr__(genome.layer1, "mom_low_vol_weight", 0.2)
 
     conv = compute_conviction_matrix(
-        ma_30w_slope_4w=ma_30w_slope,
-        ret_12m_1m=ret_12m_1m,
-        ret_12m=ret_12m,
-        extension_pct=extension,
-        ret_6m=ret_6m,
-        above_30w_ma=above_30w,
-        weinstein_gate_pass=weinstein,
-        rs_pctile_3m=rs_3m,
-        ret_3m=ret_3m,
-        layer1=genome.layer1,
+        natr_14=natr, beta_alpha_63d=beta_alpha, mom_low_vol=mom_lv, layer1=genome.layer1,
     )
-
-    # Stock 0 (highest signals every day) must have the top conviction every day.
     for d in range(n_days):
-        col = conv[:, d]
-        assert col.argmax() == 0, f"day {d}: best stock should be 0, got {col.argmax()}"
-    # Conviction in [0, 1]
+        assert conv[:, d].argmax() == 0
     assert conv.min() >= 0.0 and conv.max() <= 1.0

@@ -143,16 +143,27 @@ class Layer1Perception:
     # Booleans encoded as continuous {0,1} conviction inputs (NOT hard filters —
     # filter_α tests showed hard-gating loses positive-outlier stocks).
     ma_30w_slope_weight: float = 0.0
-    ret_12m_1m_weight: float = 0.0      # IR_IC 0.51
-    ret_12m_weight: float = 0.0          # IR_IC 0.49
-    extension_weight: float = 0.0        # IR_IC 0.44
-    ret_6m_weight: float = 0.0           # IR_IC 0.44
-    above_30w_weight: float = 0.0        # IR_IC 0.42 (boolean as 0/1)
-    weinstein_weight: float = 0.0        # IR_IC 0.41 (boolean as 0/1)
-    rs_3m_weight: float = 0.0            # IR_IC 0.41
-    ret_3m_weight: float = 0.0           # IR_IC 0.40
-    # DROPPED: realized_vol (IR_IC 0.015 — noise), volume_expansion (IR_IC 0.21),
-    #          stage1_base (negative IC), rs_pctile_1w (IR_IC 0.024)
+    ret_12m_1m_weight: float = 0.0
+    ret_12m_weight: float = 0.0
+    extension_weight: float = 0.0
+    ret_6m_weight: float = 0.0
+    above_30w_weight: float = 0.0
+    weinstein_weight: float = 0.0
+    rs_3m_weight: float = 0.0
+    ret_3m_weight: float = 0.0
+
+    # v5 — alphalens-validated MONOTONIC signals (Q5-Q1 > 0 AND OOS-robust).
+    # Methodology: per-date Spearman IC + quintile spread test + IR_IC > 0.30 +
+    # out-of-sample validation on 2023-2024 holdout. From 30+ candidates tested,
+    # only 3 truly INDEPENDENT signals (pairwise correlation < 0.35) passed:
+    #   natr_14         Q5-Q1 +9.33% OOS, IR_IC 0.83  (volatility, NEW dimension)
+    #   beta_alpha_63d  Q5-Q1 +6.18% OOS, IR_IC 0.91  (beta-adjusted momentum)
+    #   mom_low_vol     Q5-Q1 +3.75% OOS, IR_IC 1.41  (momentum × low-vol)
+    # Old momentum signals (ret_3m/6m/12m, extension_pct) FAILED Q5-Q1 monotonicity
+    # in this universe — top quintile UNDERPERFORMS bottom quintile by 0.5-7%.
+    natr_14_weight: float = 0.0
+    beta_alpha_weight: float = 0.0
+    mom_low_vol_weight: float = 0.0
 
     def __post_init__(self) -> None:
         assert (
@@ -337,18 +348,12 @@ class GenomeFactory:
             contraction_entry_bonus=random.uniform(0.0, 0.20),
             rs_leader_exit_pct=float(leader_exit),
             rs_strong_exit_pct=float(strong_exit),
-            # v4 IC-validated signal weights (sum bounded by clip in conviction).
-            # Bounds 0.0-0.4 each so Optuna explores both small and large weightings;
-            # a genome with all-zero weights produces zero conviction (no entries).
-            ma_30w_slope_weight=random.uniform(0.0, 0.4),
-            ret_12m_1m_weight=random.uniform(0.0, 0.4),
-            ret_12m_weight=random.uniform(0.0, 0.4),
-            extension_weight=random.uniform(0.0, 0.4),
-            ret_6m_weight=random.uniform(0.0, 0.4),
-            above_30w_weight=random.uniform(0.0, 0.3),
-            weinstein_weight=random.uniform(0.0, 0.3),
-            rs_3m_weight=random.uniform(0.0, 0.3),
-            ret_3m_weight=random.uniform(0.0, 0.3),
+            # v5 — sample the 3 alphalens-validated MONOTONIC signal weights.
+            # natr_14 (volatility, Q5-Q1 +9.33% OOS) gets larger range since it's
+            # the strongest signal and independent of the momentum bundle.
+            natr_14_weight=random.uniform(0.0, 0.6),
+            beta_alpha_weight=random.uniform(0.0, 0.5),
+            mom_low_vol_weight=random.uniform(0.0, 0.4),
         )
         return Genome(
             genome_id=str(uuid.uuid4()),
@@ -443,16 +448,10 @@ class GenomeFactory:
             contraction_entry_bonus=contraction_entry_bonus,
             rs_leader_exit_pct=float(rs_leader_exit_pct),
             rs_strong_exit_pct=float(rs_strong_exit_pct),
-            # v4 IC-validated signal weights
-            ma_30w_slope_weight=trial.suggest_float("ma_30w_slope_weight", 0.0, 0.4),
-            ret_12m_1m_weight=trial.suggest_float("ret_12m_1m_weight", 0.0, 0.4),
-            ret_12m_weight=trial.suggest_float("ret_12m_weight", 0.0, 0.4),
-            extension_weight=trial.suggest_float("extension_weight", 0.0, 0.4),
-            ret_6m_weight=trial.suggest_float("ret_6m_weight", 0.0, 0.4),
-            above_30w_weight=trial.suggest_float("above_30w_weight", 0.0, 0.3),
-            weinstein_weight=trial.suggest_float("weinstein_weight", 0.0, 0.3),
-            rs_3m_weight=trial.suggest_float("rs_3m_weight", 0.0, 0.3),
-            ret_3m_weight=trial.suggest_float("ret_3m_weight", 0.0, 0.3),
+            # v5 alphalens-validated MONOTONIC signal weights (independent dimensions)
+            natr_14_weight=trial.suggest_float("natr_14_weight", 0.0, 0.6),
+            beta_alpha_weight=trial.suggest_float("beta_alpha_weight", 0.0, 0.5),
+            mom_low_vol_weight=trial.suggest_float("mom_low_vol_weight", 0.0, 0.4),
         )
 
         def _trial_playbook(

@@ -211,17 +211,59 @@ def simulate_genome(
     npc_arr = _safe_pivot("npc", default=0.0).astype(np.int8)
     contraction = _safe_pivot("contraction", default=0.0).astype(np.int8)
 
-    # v4 — IC-validated signals (IR_IC > 0.40 per-date stability).
-    # _safe_pivot returns zeros for missing columns so tests with synthetic
-    # dataframes still work (and zero rank contributes zero conviction).
-    ma_30w_slope_arr = _safe_pivot("ma_30w_slope_4w", default=0.0).astype(np.float32)
-    ret_12m_1m_arr = _safe_pivot("ret_12m_1m", default=0.0).astype(np.float32)
+    # v5 — alphalens-validated MONOTONIC signals (Q5-Q1 > 0 OOS-robust).
+    # Computed on-the-fly from base OHLCV + benchmark price + realized_vol.
+    high_arr = _safe_pivot("high", default=0.0).astype(np.float32)
+    low_arr = _safe_pivot("low", default=0.0).astype(np.float32)
     ret_12m_arr = _safe_pivot("ret_12m", default=0.0).astype(np.float32)
-    ret_6m_arr = _safe_pivot("ret_6m", default=0.0).astype(np.float32)
-    ret_3m_arr = _safe_pivot("ret_3m", default=0.0).astype(np.float32)
-    extension_pct_arr = _safe_pivot("extension_pct", default=0.0).astype(np.float32)
-    weinstein_arr = _safe_pivot("weinstein_gate_pass", default=0.0).astype(np.float32)
-    above_30w_arr = _safe_pivot("above_30w_ma", default=0.0).astype(np.float32)
+    realized_vol_arr = _safe_pivot("realized_vol_63", default=0.0).astype(np.float32)
+
+    # Signal 1: natr_14 = ATR(14) / close × 100 (vectorized)
+    # ATR = SMA(14) of TR; TR = max(H-L, |H-prev_close|, |L-prev_close|)
+    prev_close = np.empty_like(close)
+    prev_close[:, 0] = close[:, 0]
+    prev_close[:, 1:] = close[:, :-1]
+    tr = np.maximum.reduce([
+        high_arr - low_arr,
+        np.abs(high_arr - prev_close),
+        np.abs(low_arr - prev_close),
+    ])
+    # Rolling SMA over axis=1 (days); use pandas for speed
+    atr = pd.DataFrame(tr).rolling(14, axis=1, min_periods=14).mean().to_numpy().astype(np.float32)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        natr_14_arr = np.where(close > 0, atr / close * 100, 0.0).astype(np.float32)
+
+    # Signal 2: beta_alpha_63d = stock 63d return − beta × benchmark 63d return.
+    # Beta = cov(stock_ret_1d, benchmark_ret_1d) / var(benchmark_ret_1d) over 63d window.
+    stock_ret_1d = np.zeros_like(close)
+    stock_ret_1d[:, 1:] = close[:, 1:] / np.where(close[:, :-1] > 0, close[:, :-1], 1) - 1
+    n500_ret_1d = np.zeros_like(nifty500_close_arr)
+    n500_ret_1d[1:] = nifty500_close_arr[1:] / np.where(
+        nifty500_close_arr[:-1] > 0, nifty500_close_arr[:-1], 1
+    ) - 1
+    # Broadcast benchmark return to all stocks (same for each stock on date d)
+    bench_broadcast = np.broadcast_to(n500_ret_1d, stock_ret_1d.shape)
+    # Rolling 63d cov/var per stock
+    sret_df = pd.DataFrame(stock_ret_1d)
+    bret_df = pd.DataFrame(bench_broadcast)
+    cov_63 = sret_df.rolling(63, axis=1, min_periods=63).cov(bret_df).to_numpy()
+    var_63 = bret_df.rolling(63, axis=1, min_periods=63).var().to_numpy()
+    with np.errstate(divide="ignore", invalid="ignore"):
+        beta_63 = np.where(np.abs(var_63) > 1e-12, cov_63 / var_63, 0.0)
+    # 63d stock return + benchmark return
+    stock_63_ret = np.zeros_like(close)
+    stock_63_ret[:, 63:] = close[:, 63:] / np.where(close[:, :-63] > 0, close[:, :-63], 1) - 1
+    bench_63 = nifty500_close_arr[63:] / np.where(
+        nifty500_close_arr[:-63] > 0, nifty500_close_arr[:-63], 1
+    ) - 1
+    bench_63_full = np.zeros_like(nifty500_close_arr)
+    bench_63_full[63:] = bench_63
+    bench_63_bcast = np.broadcast_to(bench_63_full, close.shape)
+    beta_alpha_63d_arr = (stock_63_ret - beta_63 * bench_63_bcast).astype(np.float32)
+
+    # Signal 3: mom_low_vol = ret_12m × (1 − vol_rank). Cross-sectional vol rank per day.
+    vol_rank = pd.DataFrame(realized_vol_arr).rank(axis=0, pct=True).fillna(0.5).to_numpy()
+    mom_low_vol_arr = (ret_12m_arr * (1.0 - vol_rank)).astype(np.float32)
 
     # Layer 1: state matrices computed once for all windows
     blended_rs = compute_blended_rs_pctile(rs_arrays, genome.layer1.rs_timeframe_weights)
@@ -234,17 +276,11 @@ def simulate_genome(
         rs_state, genome.layer1.state_velocity_lookback_days
     )
 
-    # Layer 2: v4 conviction matrix — 9 signals with per-date IR_IC > 0.40.
+    # Layer 2: v5 conviction — 3 alphalens-monotonic OOS-robust signals.
     conv_matrix = compute_conviction_matrix(
-        ma_30w_slope_4w=ma_30w_slope_arr,
-        ret_12m_1m=ret_12m_1m_arr,
-        ret_12m=ret_12m_arr,
-        extension_pct=extension_pct_arr,
-        ret_6m=ret_6m_arr,
-        above_30w_ma=above_30w_arr,
-        weinstein_gate_pass=weinstein_arr,
-        rs_pctile_3m=rs_arrays["3m"],
-        ret_3m=ret_3m_arr,
+        natr_14=natr_14_arr,
+        beta_alpha_63d=beta_alpha_63d_arr,
+        mom_low_vol=mom_low_vol_arr,
         layer1=genome.layer1,
     )
 
