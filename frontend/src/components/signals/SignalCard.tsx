@@ -59,7 +59,7 @@ export function SignalCard({
             <span className={`text-xs font-semibold uppercase ${verdictColor}`}>{verdict}</span>
             {convictionScore != null && (
               <span className="text-xs text-gray-500">
-                Conviction {Number(convictionScore).toFixed(1)}/10
+                Conviction {(Number(convictionScore) * 10).toFixed(1)}/10
               </span>
             )}
           </div>

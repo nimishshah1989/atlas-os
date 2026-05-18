@@ -1,4 +1,3 @@
-# pragma: finance-critical
 """TradingView webhook receiver and signal report feed.
 
 Endpoints:
@@ -10,11 +9,14 @@ Endpoints:
 
 from __future__ import annotations
 
+import os
+import pathlib
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import structlog
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
+from fastapi.responses import FileResponse
 from sqlalchemy import text
 
 from atlas.config import Config
@@ -129,6 +131,36 @@ async def get_signal_report(report_id: str) -> dict:
     if row is None:
         raise HTTPException(status_code=404, detail="Report not found")
     return dict(row._mapping)
+
+
+@router.get("/screenshot")
+async def serve_screenshot(
+    request: Request,
+    path: str = Query(..., description="Absolute path to PNG file on this server"),
+) -> FileResponse:
+    """Serve a signal screenshot PNG from the local filesystem.
+
+    Protected by the internal secret header — only the frontend proxy calls this.
+    The ``path`` parameter must fall within SIGNAL_SCREENSHOT_DIR.
+    """
+    secret = request.headers.get("X-Internal-Secret", "")
+    if secret != Config.ATLAS_INTERNAL_SECRET:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    allowed_base = pathlib.Path(
+        os.environ.get("SIGNAL_SCREENSHOT_DIR", "/data/signals/screenshots")
+    ).resolve()
+    resolved = pathlib.Path(path).resolve()
+
+    if not str(resolved).startswith(str(allowed_base)):
+        raise HTTPException(status_code=403, detail="Forbidden path")
+
+    if not resolved.is_file():
+        raise HTTPException(status_code=404, detail="Screenshot not found")
+
+    return FileResponse(
+        str(resolved), media_type="image/png", headers={"Cache-Control": "public, max-age=86400"}
+    )
 
 
 @router.post("/generate-report")

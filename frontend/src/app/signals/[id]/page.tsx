@@ -4,9 +4,13 @@ import { notFound } from "next/navigation";
 import { SignalReport } from "@/components/signals/SignalReport";
 
 async function fetchReport(id: string) {
+  const base = process.env.ATLAS_TV_API_BASE_URL ?? process.env.ATLAS_INTERNAL_API_BASE_URL;
   const res = await fetch(
-    `${process.env.ATLAS_INTERNAL_API_BASE_URL}/api/v1/tv/signals/${id}`,
-    { next: { revalidate: 60 } }
+    `${base}/api/v1/tv/signals/${id}`,
+    {
+      headers: { Authorization: `Bearer ${process.env.ATLAS_INTERNAL_SECRET ?? ""}` },
+      next: { revalidate: 60 },
+    }
   );
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Report fetch failed: ${res.status}`);

@@ -75,21 +75,31 @@ export type TableFreshness = {
   lag_days: number | null
 }
 
-const TRACKED_TABLES: { name: string; date_col: string | null }[] = [
-  { name: 'atlas_index_metrics_daily',   date_col: 'date' },
-  { name: 'atlas_sector_metrics_daily',  date_col: 'date' },
-  { name: 'atlas_sector_states_daily',   date_col: 'date' },
-  { name: 'atlas_market_regime_daily',   date_col: 'date' },
-  { name: 'atlas_stock_metrics_daily',   date_col: 'date' },
-  { name: 'atlas_stock_states_daily',    date_col: 'date' },
-  { name: 'atlas_etf_metrics_daily',     date_col: 'date' },
-  { name: 'atlas_etf_states_daily',      date_col: 'date' },
-  { name: 'atlas_fund_metrics_daily',    date_col: 'nav_date' },
-  { name: 'atlas_fund_lens_monthly',     date_col: 'as_of_date' },
-  { name: 'atlas_fund_states_daily',     date_col: 'date' },
-  { name: 'atlas_stock_decisions_daily', date_col: 'date' },
-  { name: 'atlas_etf_decisions_daily',   date_col: 'date' },
-  { name: 'atlas_fund_decisions_daily',  date_col: 'date' },
+const TRACKED_TABLES: { schema: string; name: string; date_col: string | null }[] = [
+  { schema: 'atlas',        name: 'atlas_index_metrics_daily',   date_col: 'date' },
+  { schema: 'atlas',        name: 'atlas_sector_metrics_daily',  date_col: 'date' },
+  { schema: 'atlas',        name: 'atlas_sector_states_daily',   date_col: 'date' },
+  { schema: 'atlas',        name: 'atlas_market_regime_daily',   date_col: 'date' },
+  { schema: 'atlas',        name: 'atlas_stock_metrics_daily',   date_col: 'date' },
+  { schema: 'atlas',        name: 'atlas_stock_states_daily',    date_col: 'date' },
+  { schema: 'atlas',        name: 'atlas_etf_metrics_daily',     date_col: 'date' },
+  { schema: 'atlas',        name: 'atlas_etf_states_daily',      date_col: 'date' },
+  { schema: 'atlas',        name: 'atlas_fund_metrics_daily',    date_col: 'nav_date' },
+  { schema: 'atlas',        name: 'atlas_fund_lens_monthly',     date_col: 'as_of_date' },
+  { schema: 'atlas',        name: 'atlas_fund_states_daily',     date_col: 'date' },
+  { schema: 'atlas',        name: 'atlas_stock_decisions_daily', date_col: 'date' },
+  { schema: 'atlas',        name: 'atlas_etf_decisions_daily',   date_col: 'date' },
+  { schema: 'atlas',        name: 'atlas_fund_decisions_daily',  date_col: 'date' },
+  { schema: 'us_atlas',     name: 'stock_ohlcv',                 date_col: 'date' },
+  { schema: 'us_atlas',     name: 'atlas_etf_metrics_daily',     date_col: 'date' },
+  { schema: 'us_atlas',     name: 'atlas_etf_states_daily',      date_col: 'date' },
+  { schema: 'us_atlas',     name: 'atlas_stock_metrics_daily',   date_col: 'date' },
+  { schema: 'us_atlas',     name: 'atlas_stock_states_daily',    date_col: 'date' },
+  { schema: 'us_atlas',     name: 'atlas_market_regime_daily',   date_col: 'date' },
+  { schema: 'global_atlas', name: 'stock_ohlcv',                 date_col: 'date' },
+  { schema: 'global_atlas', name: 'atlas_etf_metrics_daily',     date_col: 'date' },
+  { schema: 'global_atlas', name: 'atlas_etf_states_daily',      date_col: 'date' },
+  { schema: 'global_atlas', name: 'atlas_market_regime_daily',   date_col: 'date' },
 ]
 
 export async function getFreshness(): Promise<TableFreshness[]> {
@@ -97,16 +107,16 @@ export async function getFreshness(): Promise<TableFreshness[]> {
   today.setHours(0, 0, 0, 0)
 
   return Promise.all(
-    TRACKED_TABLES.map(async ({ name, date_col }) => {
+    TRACKED_TABLES.map(async ({ schema, name, date_col }) => {
+      const display = schema === 'atlas' ? name : `${schema}.${name}`
       if (date_col) {
-        // Use pg_stat_user_tables for fast row-count estimate; MAX() is index-backed.
         const rows = await sql<{ row_count: string; latest_date: Date | null }[]>`
           SELECT
             (SELECT reltuples::bigint FROM pg_class
               JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace
-              WHERE nspname = 'atlas' AND relname = ${name})::text AS row_count,
+              WHERE nspname = ${schema} AND relname = ${name})::text AS row_count,
             MAX(${sql(date_col)}) AS latest_date
-          FROM atlas.${sql(name)}
+          FROM ${sql(schema)}.${sql(name)}
         `
         const r = rows[0]
         const latest = r?.latest_date ? new Date(r.latest_date) : null
@@ -114,7 +124,7 @@ export async function getFreshness(): Promise<TableFreshness[]> {
           ? Math.floor((today.getTime() - latest.getTime()) / (1000 * 60 * 60 * 24))
           : null
         return {
-          table_name: name,
+          table_name: display,
           row_count: Number(r?.row_count ?? 0),
           latest_date: latest,
           lag_days: lag,
@@ -124,10 +134,10 @@ export async function getFreshness(): Promise<TableFreshness[]> {
           SELECT reltuples::bigint::text AS row_count
           FROM pg_class
           JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace
-          WHERE nspname = 'atlas' AND relname = ${name}
+          WHERE nspname = ${schema} AND relname = ${name}
         `
         return {
-          table_name: name,
+          table_name: display,
           row_count: Number(rows[0]?.row_count ?? 0),
           latest_date: null,
           lag_days: null,
@@ -146,12 +156,14 @@ export function lagThresholdDays(table: string): number {
 // ---------------------------------------------------------------------------
 
 const JIP_TABLES: { name: string; date_col: string }[] = [
-  { name: 'de_source_files', date_col: 'created_at' },
-  { name: 'de_equity_ohlcv', date_col: 'date' },
-  { name: 'de_index_prices', date_col: 'date' },
-  { name: 'de_mf_nav_daily', date_col: 'nav_date' },
-  { name: 'de_etf_ohlcv',    date_col: 'date' },
-  { name: 'de_cron_run',     date_col: 'started_at' },
+  { name: 'de_source_files',  date_col: 'created_at' },
+  { name: 'de_equity_ohlcv',  date_col: 'date' },
+  { name: 'de_index_prices',  date_col: 'date' },
+  { name: 'de_mf_nav_daily',  date_col: 'nav_date' },
+  { name: 'de_etf_ohlcv',     date_col: 'date' },
+  { name: 'de_global_prices', date_col: 'date' },
+  { name: 'de_etf_holdings',  date_col: 'as_of_date' },
+  { name: 'de_cron_run',      date_col: 'started_at' },
 ]
 
 export async function getJipFreshness(): Promise<TableFreshness[]> {

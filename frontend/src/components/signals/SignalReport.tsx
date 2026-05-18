@@ -101,7 +101,7 @@ export function SignalReport({ report: r }: SignalReportProps) {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
           <div>
             <div className="text-gray-500 text-xs mb-0.5">Conviction</div>
-            <div className="font-medium">{r.conviction_score != null ? `${fmt(r.conviction_score)}/10` : "—"}</div>
+            <div className="font-medium">{r.conviction_score != null ? `${(Number(r.conviction_score) * 10).toFixed(1)}/10` : "—"}</div>
           </div>
           <div>
             <div className="text-gray-500 text-xs mb-0.5">CTS State</div>
@@ -110,7 +110,9 @@ export function SignalReport({ report: r }: SignalReportProps) {
           <div>
             <div className="text-gray-500 text-xs mb-0.5">RS Rank</div>
             <div className="font-medium">
-              {r.rs_rank != null ? `#${r.rs_rank} / ${r.rs_rank_total ?? "?"} (${fmt(r.rs_percentile)}th pct)` : "—"}
+              {r.rs_percentile != null
+                ? `${(Number(r.rs_percentile) * 100).toFixed(0)}th pct${r.rs_rank != null ? ` · #${r.rs_rank}` : ""}`
+                : "—"}
             </div>
           </div>
           <div>
@@ -205,8 +207,22 @@ export function SignalReport({ report: r }: SignalReportProps) {
       {/* Narrative */}
       {r.narrative && (
         <div className="bg-white border border-gray-200 rounded-lg p-5">
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Narrative</h2>
-          <p className="text-sm text-gray-700 leading-relaxed">{r.narrative}</p>
+          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Analyst Note</h2>
+          <div className="space-y-3">
+            {r.narrative
+              .split(/\n\n+/)
+              .map((para) => para.trim())
+              .filter(Boolean)
+              .map((para, i) => (
+                <p
+                  key={i}
+                  className="text-sm text-gray-700 leading-relaxed"
+                  dangerouslySetInnerHTML={{
+                    __html: para.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>"),
+                  }}
+                />
+              ))}
+          </div>
         </div>
       )}
 

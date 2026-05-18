@@ -36,6 +36,7 @@ const GROUPS: Group[] = [
       { href: '/intelligence',               label: 'Dashboard' },
       { href: '/intelligence/daily-brief',   label: 'Daily Brief' },
       { href: '/intelligence/agents',        label: 'Ask Atlas' },
+      { href: '/signals',                    label: 'Signals' },
     ],
   },
   {
