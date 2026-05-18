@@ -453,3 +453,92 @@ export async function getStockStateHistory(
     ORDER BY date ASC
   `
 }
+
+export interface OBVPoint {
+  date: string
+  close: number
+  volume: number
+  obv: number
+}
+
+/**
+ * 50-day OBV series. Computed in SQL:
+ *   obv = cumulative sum of (volume × sign(daily_return))
+ * Returns the trailing N days for sparkline display.
+ */
+export async function getStockOBVSeries(
+  instrumentId: string, days = 50,
+): Promise<OBVPoint[]> {
+  return sql<OBVPoint[]>`
+    WITH base AS (
+      SELECT date::text, COALESCE(close_adj, close)::float8 AS close,
+             volume::float8 AS volume,
+             LAG(COALESCE(close_adj, close)) OVER (ORDER BY date) AS prev_close
+      FROM public.de_equity_ohlcv
+      WHERE instrument_id = ${instrumentId}::uuid
+      ORDER BY date DESC
+      LIMIT ${days + 1}
+    ),
+    signed_vol AS (
+      SELECT date, close, volume,
+             CASE
+               WHEN prev_close IS NULL THEN 0
+               WHEN close > prev_close THEN volume
+               WHEN close < prev_close THEN -volume
+               ELSE 0
+             END AS signed_volume
+      FROM base
+    )
+    SELECT date, close, volume,
+           SUM(signed_volume) OVER (ORDER BY date)::float8 AS obv
+    FROM signed_vol
+    ORDER BY date ASC
+  `
+}
+
+export interface ATRContraction {
+  atr_14_current: number
+  atr_14_252d_avg: number
+  ratio: number
+}
+
+/**
+ * Current ATR contraction ratio = atr_14 / atr_14_252d_avg.
+ * Returns null if insufficient history.
+ */
+export async function getStockATRContraction(
+  instrumentId: string,
+): Promise<ATRContraction | null> {
+  const rows = await sql<ATRContraction[]>`
+    WITH ohlcv AS (
+      SELECT date, COALESCE(close_adj, close)::float8 AS close,
+             high::float8 AS high, low::float8 AS low,
+             LAG(COALESCE(close_adj, close)) OVER (ORDER BY date) AS prev_close
+      FROM public.de_equity_ohlcv
+      WHERE instrument_id = ${instrumentId}::uuid
+      ORDER BY date DESC
+      LIMIT 280
+    ),
+    tr AS (
+      SELECT date,
+             GREATEST(high - low, ABS(high - prev_close), ABS(low - prev_close)) AS true_range
+      FROM ohlcv
+      WHERE prev_close IS NOT NULL
+    ),
+    atr14 AS (
+      SELECT date,
+             AVG(true_range) OVER (
+               ORDER BY date
+               ROWS BETWEEN 13 PRECEDING AND CURRENT ROW
+             ) AS atr_14
+      FROM tr
+    )
+    SELECT
+      (SELECT atr_14 FROM atr14 ORDER BY date DESC LIMIT 1)::float8 AS atr_14_current,
+      (SELECT AVG(atr_14) FROM atr14)::float8 AS atr_14_252d_avg,
+      ((SELECT atr_14 FROM atr14 ORDER BY date DESC LIMIT 1)::float8
+       / NULLIF((SELECT AVG(atr_14) FROM atr14)::float8, 0))::float8 AS ratio
+    WHERE EXISTS (SELECT 1 FROM atr14)
+  `
+  return rows[0] ?? null
+}
