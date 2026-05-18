@@ -38,8 +38,9 @@ dependencies = [
     "sse-starlette>=2.0",
 
     # External data sources used during M0 gap-fill / M1 reference checks
-    "yfinance>=0.2",
+    "yfinance>=0.2.40",
     "requests>=2.31",
+    "beautifulsoup4>=4.12",
 
     # Notification (per architecture 7.4)
     "httpx>=0.26",
