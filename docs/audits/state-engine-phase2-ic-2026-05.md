@@ -99,3 +99,60 @@ Migration 078 deactivates `theta_low_vol` and `theta_vol_mult`; inserts `theta_c
 ## Next operational step
 
 Re-classify 2023-2024 with `v2.0-validated` (running 2026-05-18 ~15:50 IST). Compare state distribution against `v1.0-tune-base`. Expected: more Stage 2A entries (volume requirement gone), fewer false Stage 1 (NATR-decorative metric replaced), Stage 3 transitions earlier (OBV trigger active).
+
+## Phase 2.5 — Per-tier component validation (2026-05-18 16:20 IST)
+
+Run via `atlas-lab states validate-components --start 2023-01-01 --end 2024-12-31`. 13 (component, badge) rows persisted to `atlas_component_validation`.
+
+### Findings
+
+**Component: rs_rank_12m**
+
+| Tier | IR | Q5-Q1 | Status |
+|---|---|---|---|
+| Leader (≥0.90) | +0.62 | +5.5% | validated ✓ |
+| Strong (0.70-0.90) | +0.54 | +2.8% | validated ✓ |
+| Average (0.30-0.70) | +0.02 | -0.3% | decorative |
+| Weak (0.10-0.30) | -0.72 | -4.7% | validated ✓ |
+| Laggard (<0.10) | -0.58 | -1.6% | validated ✓ |
+
+→ Extreme tiers earn their badges; middle tier doesn't. Drop "Average" implied-action from UI.
+
+**Component: obv_slope_50d**
+
+| Tier | IR | Status |
+|---|---|---|
+| Accumulation (slope > 0) | +0.00 | decorative |
+| Distribution (slope < 0) | -0.00 | decorative |
+
+→ Binary tier collapses the signal. Continuous OBV slope IS predictive (-0.43 found in alternative investigation), but the *labeled badge* isn't. Frontend should show continuous OBV value, not a "Accumulation/Distribution" badge.
+
+**Component: realized_vol_63**
+
+| Tier | IR | Q5-Q1 | Status |
+|---|---|---|---|
+| Low (p<0.25) | -0.70 | -6.5% | validated ✓ |
+| Normal (0.25-0.50) | -0.25 | -2.9% | weak |
+| Elevated (0.50-0.75) | +0.91 | +1.4% | validated ✓ |
+| High (p≥0.75) | +0.37 | +8.6% | weak |
+
+→ Strong inversion of "low-vol anomaly": bottom-vol stocks underperform by 6.5% over 63d. Top-vol Q5-Q1 is the largest at +8.6%. Use Elevated/High tiers as conviction-positive; flag Low tier as "warns long."
+
+**Component: atr_contraction_ratio**
+
+| Tier | IR | Status |
+|---|---|---|
+| Contracting (ratio < 1.0) | +0.01 | decorative |
+| Expanding (ratio ≥ 1.0) | -0.01 | decorative |
+
+→ Same as OBV: binary tier collapses signal. Continuous ratio IS predictive (-0.48 found earlier). Frontend needs continuous value display, not contracting/expanding badge.
+
+### Frontend rendering implications (Phase 5)
+
+The per-badge IC validation gives the engine empirical justification for HOW each badge renders. Three render treatments:
+
+- **validated** (8 of 13 tiers): full color badge + implied-action verb in tooltip + IC number
+- **weak** (2 of 13 tiers): grey badge with asterisk, no implied action
+- **decorative** (3 of 13 tiers): plain label OR replaced with continuous numeric display
+
+The continuous-vs-tier finding (OBV + ATR contraction) is a design lesson: where the tier-level IC collapses, render the raw continuous metric instead of a categorical badge. Phase 5 should track which display kind each component uses.
