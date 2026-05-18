@@ -63,6 +63,7 @@ dev = [
     "ruff>=0.4",
     "pyright>=1.1",
     "ipython>=8.0",
+    "responses>=0.25",
 ]
 
 simulation = [
