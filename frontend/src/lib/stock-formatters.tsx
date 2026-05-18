@@ -159,28 +159,6 @@ export function VolumeChip({ value }: { value: string | null }) {
   return <StateTag raw={value} label={label} style={style} />
 }
 
-// 4-chip horizontal strip for stocks
-export function StateTuple4({
-  rs,
-  mom,
-  risk,
-  vol,
-}: {
-  rs: string | null
-  mom: string | null
-  risk: string | null
-  vol: string | null
-}) {
-  return (
-    <span className="inline-flex items-center gap-1">
-      <RSStateChip value={rs} />
-      <MomentumChip value={mom} />
-      <RiskChip value={risk} />
-      <VolumeChip value={vol} />
-    </span>
-  )
-}
-
 // 3-chip horizontal strip for ETFs (no volume gate)
 export function StateTuple3({
   rs,
