@@ -24,6 +24,10 @@ import pandas as pd
 import structlog
 from sqlalchemy import create_engine, text
 
+from atlas.trading.cli_states import (
+    _apply_dwell_and_urgency,
+    _states_baselines_refresh_cmd,
+)
 from atlas.trading.lab import run_baseline_v5
 
 log = structlog.get_logger()
@@ -407,10 +411,7 @@ def _states_classify_cmd(args: argparse.Namespace) -> int:
     log.info("states_classify_classifying", rows=len(features))
     panel = classify_state_panel(features, thresholds, args.classifier_version)
 
-    # Phase 1 placeholders — Task 1.10 wires real dwell_percentile + urgency.
-    panel["dwell_percentile"] = None
-    panel["urgency_score"] = "n/a"
-    panel["within_state_rank"] = None
+    panel = _apply_dwell_and_urgency(panel, eng)
 
     n = persist_state_panel(eng, panel)
     log.info("states_classify_persisted", n_rows=n)
@@ -467,6 +468,11 @@ def main(argv: list[str] | None = None) -> int:
     states_classify.add_argument("--universe", default="stocks_nifty500")
     states_classify.add_argument("--classifier-version", default="v1.0")
     states_classify.set_defaults(func=_states_classify_cmd)
+
+    states_baselines = states_sub.add_parser(
+        "baselines-refresh", help="Recompute cohort dwell baselines"
+    )
+    states_baselines.set_defaults(func=_states_baselines_refresh_cmd)
 
     args = parser.parse_args(argv)
     return args.func(args)

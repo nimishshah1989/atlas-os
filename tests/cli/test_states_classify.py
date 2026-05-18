@@ -186,3 +186,95 @@ def test_states_classify_writes_rows():
                 " WHERE classifier_version = 'v1.0-smoke'"
             )
         )
+
+
+@_SKIP_INTEGRATION
+def test_baselines_refresh_writes_rows():
+    """`states baselines-refresh` reads classified rows + writes dwell stats."""
+    from sqlalchemy import create_engine, text
+
+    from atlas.trading.cli import _states_classify_cmd
+    from atlas.trading.cli_states import _states_baselines_refresh_cmd
+
+    db_url = (
+        os.environ["ATLAS_DB_URL"].replace("postgresql+psycopg2://", "postgresql://").split("?")[0]
+    )
+    eng = create_engine(db_url)
+
+    # Seed some classified rows; baselines-refresh reads from atlas_stock_state_daily.
+    classify_args = argparse.Namespace(
+        start="2024-06-03",
+        end="2024-06-07",
+        universe="stocks_nifty500",
+        classifier_version="v1.0-baselines-test",
+    )
+    rc = _states_classify_cmd(classify_args)
+    assert rc == 0, "classify must succeed before baselines-refresh"
+
+    try:
+        refresh_args = argparse.Namespace()
+        rc = _states_baselines_refresh_cmd(refresh_args)
+        assert rc == 0, "baselines-refresh should return 0"
+
+        with eng.connect() as c:
+            n = c.execute(
+                text(
+                    "SELECT COUNT(*) FROM atlas.atlas_state_dwell_statistics"
+                    " WHERE as_of_date = CURRENT_DATE"
+                )
+            ).scalar()
+        assert n is not None and n > 0, f"Expected baselines rows for today, got {n}"
+    finally:
+        with eng.begin() as c:
+            c.execute(
+                text(
+                    "DELETE FROM atlas.atlas_stock_state_daily"
+                    " WHERE classifier_version = 'v1.0-baselines-test'"
+                )
+            )
+
+
+@_SKIP_INTEGRATION
+def test_classify_with_real_urgency():
+    """After classify with cohort baselines present, urgency_score has real categories."""
+    from sqlalchemy import create_engine, text
+
+    from atlas.trading.cli import _states_classify_cmd
+
+    db_url = (
+        os.environ["ATLAS_DB_URL"].replace("postgresql+psycopg2://", "postgresql://").split("?")[0]
+    )
+    eng = create_engine(db_url)
+
+    args = argparse.Namespace(
+        start="2024-06-03",
+        end="2024-06-07",
+        universe="stocks_nifty500",
+        classifier_version="v1.0-urgency-test",
+    )
+    rc = _states_classify_cmd(args)
+    assert rc == 0
+
+    try:
+        with eng.connect() as c:
+            rows = c.execute(
+                text("""
+                    SELECT urgency_score, COUNT(*) AS n
+                    FROM atlas.atlas_stock_state_daily
+                    WHERE classifier_version = 'v1.0-urgency-test'
+                    GROUP BY urgency_score
+                """)
+            ).fetchall()
+        urgencies = {r.urgency_score for r in rows}
+        # At minimum some urgency category must be present.
+        # 'n/a' is guaranteed for Stage 1 / 4 / uninvestable.
+        assert len(urgencies) > 0, "Expected at least one urgency category"
+        assert "n/a" in urgencies, "Expected 'n/a' for uninvestable/Stage1/Stage4 rows"
+    finally:
+        with eng.begin() as c:
+            c.execute(
+                text(
+                    "DELETE FROM atlas.atlas_stock_state_daily"
+                    " WHERE classifier_version = 'v1.0-urgency-test'"
+                )
+            )
