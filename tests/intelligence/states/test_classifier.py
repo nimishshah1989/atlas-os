@@ -420,3 +420,256 @@ def test_stage_3_negated_when_prior_is_not_stage_2x():
         )
         is False
     )
+
+
+# ---------------------------------------------------------------------------
+# classify_state_panel orchestrator (Task 1.6)
+# ---------------------------------------------------------------------------
+
+import pandas as pd  # noqa: E402
+
+from atlas.intelligence.states.classifier import classify_state_panel  # noqa: E402
+from atlas.intelligence.states.thresholds import ThresholdValue  # noqa: E402
+
+
+def _full_thresholds():
+    """Return a thresholds dict with the 18 active thresholds from migration 076."""
+    tv = lambda v: ThresholdValue(float(v), None, None)  # noqa: E731
+    return {
+        # Uninvestable
+        ("theta_liq", "uninvestable"): tv(100_000),
+        ("theta_gap", "uninvestable"): tv(20),
+        ("theta_min_price", "uninvestable"): tv(10.0),
+        # Stage 1
+        ("theta_base_tightness", "stage_1"): tv(0.10),
+        ("theta_low_vol", "stage_1"): tv(0.035),
+        ("theta_min_recovery_days", "stage_1"): tv(30),
+        # Stage 2A
+        ("theta_slope_days", "stage_2a"): tv(30),
+        ("theta_base_breakout", "stage_2a"): tv(1.02),
+        ("theta_vol_mult", "stage_2a"): tv(1.5),
+        ("theta_rs", "stage_2a"): tv(70.0),
+        ("theta_fresh_days", "stage_2a"): tv(21),
+        # Stage 2B
+        ("theta_confirmed_days", "stage_2b"): tv(126),
+        # Stage 2C
+        ("theta_extension", "stage_2c"): tv(1.10),
+        ("theta_atr_expansion", "stage_2c"): tv(1.40),
+        # Stage 3
+        ("theta_distribution", "stage_3"): tv(5),
+        # Stage 4
+        ("theta_decline_floor", "stage_4"): tv(0.90),
+        # Risk gates (unused by classifier itself)
+        ("theta_dd_halt", "risk_gate"): tv(15.0),
+        ("theta_sector_cap", "risk_gate"): tv(5),
+    }
+
+
+def _synthetic_features_panel(n_days: int = 30) -> pd.DataFrame:
+    """3-stock synthetic panel: one healthy uptrend (s1), one in decline (s2),
+    one penny stock (s3)."""
+    rows = []
+    base_date = pd.Timestamp("2026-01-01")
+    for d in range(n_days):
+        dt = (base_date + pd.Timedelta(days=d)).date()
+        # s1: healthy uptrend — close above MAs, slope positive
+        rows.append(
+            {
+                "instrument_id": "s1",
+                "date": dt,
+                "close": 200.0 + d,
+                "sma_50": 195.0,
+                "sma_150": 190.0,
+                "sma_200": 185.0,
+                "sma_50_slope": 0.001,
+                "sma_150_slope": 0.001,
+                "sma_200_slope": 0.001,
+                "atr_14": 3.0,
+                "atr_14_50d_avg": 3.0,
+                "volume": 200_000,
+                "volume_50d_avg": 100_000,
+                "max_close_60d": 195.0,
+                "rs_rank_12m": 0.85,
+                "distribution_days_25d": 0,
+                "distribution_days_5d": 0,
+                "low_252_age_days": 100,
+                "liquidity_score": 5_000_000,
+                "data_gap_count": 0,
+            }
+        )
+        # s2: decline — close < SMA stack, slopes negative
+        rows.append(
+            {
+                "instrument_id": "s2",
+                "date": dt,
+                "close": 70.0,
+                "sma_50": 90.0,
+                "sma_150": 100.0,
+                "sma_200": 110.0,
+                "sma_50_slope": -0.001,
+                "sma_150_slope": -0.001,
+                "sma_200_slope": -0.001,
+                "atr_14": 4.0,
+                "atr_14_50d_avg": 4.0,
+                "volume": 200_000,
+                "volume_50d_avg": 100_000,
+                "max_close_60d": 100.0,
+                "rs_rank_12m": 0.10,
+                "distribution_days_25d": 10,
+                "distribution_days_5d": 2,
+                "low_252_age_days": 5,
+                "liquidity_score": 500_000,
+                "data_gap_count": 2,
+            }
+        )
+        # s3: penny stock — uninvestable
+        rows.append(
+            {
+                "instrument_id": "s3",
+                "date": dt,
+                "close": 5.0,
+                "sma_50": 5.0,
+                "sma_150": 5.0,
+                "sma_200": 5.0,
+                "sma_50_slope": 0.0,
+                "sma_150_slope": 0.0,
+                "sma_200_slope": 0.0,
+                "atr_14": 0.2,
+                "atr_14_50d_avg": 0.2,
+                "volume": 200_000,
+                "volume_50d_avg": 100_000,
+                "max_close_60d": 5.0,
+                "rs_rank_12m": 0.5,
+                "distribution_days_25d": 0,
+                "distribution_days_5d": 0,
+                "low_252_age_days": 100,
+                "liquidity_score": 500_000,
+                "data_gap_count": 0,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def test_classify_state_panel_returns_dataframe_with_required_columns():
+    panel = classify_state_panel(_synthetic_features_panel(5), _full_thresholds(), "v1.0-test")
+    required = {
+        "instrument_id",
+        "date",
+        "state",
+        "prior_state",
+        "state_since_date",
+        "dwell_days",
+        "classifier_version",
+        "rs_rank_12m",
+        "close_vs_sma_50",
+        "close_vs_sma_150",
+        "close_vs_sma_200",
+        "sma_200_slope",
+        "volume_ratio_50d",
+        "distribution_days",
+    }
+    assert required <= set(panel.columns)
+
+
+def test_classify_state_panel_state_values_valid():
+    panel = classify_state_panel(_synthetic_features_panel(5), _full_thresholds(), "v1.0-test")
+    valid_states = {
+        "uninvestable",
+        "stage_1",
+        "stage_2a",
+        "stage_2b",
+        "stage_2c",
+        "stage_3",
+        "stage_4",
+    }
+    assert panel["state"].isin(valid_states).all()
+
+
+def test_classify_state_panel_uninvestable_for_penny_stock():
+    """Stock 3 (penny stock) → all days uninvestable."""
+    panel = classify_state_panel(_synthetic_features_panel(10), _full_thresholds(), "v1.0-test")
+    s3 = panel[panel["instrument_id"] == "s3"]
+    assert (s3["state"] == "uninvestable").all()
+
+
+def test_classify_state_panel_dwell_increments_within_same_state():
+    """When a stock stays in the same state across days, dwell_days increases."""
+    panel = classify_state_panel(_synthetic_features_panel(10), _full_thresholds(), "v1.0-test")
+    s1 = panel[panel["instrument_id"] == "s1"].sort_values("date").reset_index(drop=True)
+    # First row has dwell_days = 0 (state just started)
+    assert s1.iloc[0]["dwell_days"] == 0
+    # Later rows have dwell_days > 0 IF state didn't change
+    later_dwell = s1.iloc[-1]["dwell_days"]
+    # Either dwell_days grew, or the state changed (in which case dwell reset)
+    if s1.iloc[0]["state"] == s1.iloc[-1]["state"]:
+        assert later_dwell > 0
+
+
+def test_classify_state_panel_classifier_version_propagated():
+    panel = classify_state_panel(_synthetic_features_panel(3), _full_thresholds(), "v9.9.9-custom")
+    assert (panel["classifier_version"] == "v9.9.9-custom").all()
+
+
+def test_classify_state_panel_state_since_date_resets_on_transition():
+    """When state changes, state_since_date updates to the transition date."""
+    # Construct a panel where stock transitions Stage 1 → Stage 2A on day 5
+    rows = []
+    base = pd.Timestamp("2026-01-01")
+    for d in range(10):
+        dt = (base + pd.Timedelta(days=d)).date()
+        if d < 5:
+            # Stage 1 conditions
+            row = {
+                "instrument_id": "x",
+                "date": dt,
+                "close": 100.0,
+                "sma_50": 99.0,
+                "sma_150": 100.0,
+                "sma_200": 99.0,
+                "sma_50_slope": 0.0,
+                "sma_150_slope": 0.0,
+                "sma_200_slope": 0.0,
+                "atr_14": 1.0,
+                "atr_14_50d_avg": 1.0,
+                "volume": 100_000,
+                "volume_50d_avg": 100_000,
+                "max_close_60d": 100.0,
+                "rs_rank_12m": 0.5,
+                "distribution_days_25d": 0,
+                "distribution_days_5d": 0,
+                "low_252_age_days": 100,
+                "liquidity_score": 500_000,
+                "data_gap_count": 0,
+            }
+        else:
+            # Stage 2A breakout conditions
+            row = {
+                "instrument_id": "x",
+                "date": dt,
+                "close": 130.0,
+                "sma_50": 110.0,
+                "sma_150": 105.0,
+                "sma_200": 100.0,
+                "sma_50_slope": 0.001,
+                "sma_150_slope": 0.001,
+                "sma_200_slope": 0.001,
+                "atr_14": 2.0,
+                "atr_14_50d_avg": 2.0,
+                "volume": 300_000,
+                "volume_50d_avg": 100_000,
+                "max_close_60d": 115.0,
+                "rs_rank_12m": 0.90,
+                "distribution_days_25d": 0,
+                "distribution_days_5d": 0,
+                "low_252_age_days": 100,
+                "liquidity_score": 5_000_000,
+                "data_gap_count": 0,
+            }
+        rows.append(row)
+    panel = classify_state_panel(pd.DataFrame(rows), _full_thresholds(), "v1.0-test")
+    # On day 5 the state should change. Verify state_since_date updates.
+    by_day = panel.sort_values("date").reset_index(drop=True)
+    # State on day 5 should differ from day 4
+    assert by_day.iloc[5]["state"] != by_day.iloc[4]["state"]
+    # state_since_date on day 5 should equal day-5 date (just transitioned)
+    assert by_day.iloc[5]["state_since_date"] == by_day.iloc[5]["date"]

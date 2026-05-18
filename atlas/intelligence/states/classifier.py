@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import math
 
+import pandas as pd
+
 from atlas.intelligence.states.thresholds import ThresholdValue
 from atlas.intelligence.states.thresholds import get as get_threshold
 
@@ -208,3 +210,164 @@ def classify_stage_3(
         thresholds, "theta_distribution", "stage_3"
     )
     return topping_price and enough_distribution
+
+
+# ---------------------------------------------------------------------------
+# Panel orchestrator (Task 1.6)
+# ---------------------------------------------------------------------------
+
+
+def _value_or_nan(v: object) -> float:
+    """Return float(v) or NaN if v is None, NaN, or unconvertible."""
+    if v is None:
+        return float("nan")
+    try:
+        f = float(v)  # type: ignore[arg-type]
+        return f
+    except (TypeError, ValueError):
+        return float("nan")
+
+
+def classify_state_panel(
+    features: pd.DataFrame,
+    thresholds: dict[tuple[str, str], ThresholdValue],
+    classifier_version: str,
+) -> pd.DataFrame:
+    """Apply state classifier to a (instrument_id × date) feature panel.
+
+    Required feature columns:
+      instrument_id, date, close, sma_50, sma_150, sma_200, sma_50_slope,
+      sma_150_slope, sma_200_slope, atr_14, atr_14_50d_avg, volume,
+      volume_50d_avg, max_close_60d, rs_rank_12m, distribution_days_25d,
+      distribution_days_5d, low_252_age_days, liquidity_score, data_gap_count.
+
+    Returns DataFrame with columns:
+      instrument_id, date, state, prior_state, state_since_date, dwell_days,
+      classifier_version, rs_rank_12m, close_vs_sma_50, close_vs_sma_150,
+      close_vs_sma_200, sma_200_slope, volume_ratio_50d, distribution_days.
+
+    Priority order (first match wins):
+      Uninvestable → Stage 4 → Stage 3 → Stage 2A → Stage 2C → Stage 2B → Stage 1
+    """
+    # Process rows per-instrument in chronological order.
+    features = features.sort_values(["instrument_id", "date"]).reset_index(drop=True)
+
+    prior_state_per_instr: dict[str, str] = {}
+    state_since_per_instr: dict[str, object] = {}
+    days_in_stage_2_per_instr: dict[str, int] = {}
+
+    rows = []
+    for _, r in features.iterrows():
+        iid = r["instrument_id"]
+        prior = prior_state_per_instr.get(iid, "stage_1")
+
+        # Carry forward the in-stage-2 day counter.
+        prev_days_in_stage_2 = days_in_stage_2_per_instr.get(iid, 0)
+        is_currently_in_2 = prior in ("stage_2a", "stage_2b", "stage_2c")
+        days_in_stage_2 = prev_days_in_stage_2 + 1 if is_currently_in_2 else 0
+
+        close = _value_or_nan(r["close"])
+        sma_50 = _value_or_nan(r["sma_50"])
+        sma_150 = _value_or_nan(r["sma_150"])
+        sma_200 = _value_or_nan(r["sma_200"])
+        sma_50_slope = _value_or_nan(r["sma_50_slope"])
+        sma_150_slope = _value_or_nan(r["sma_150_slope"])
+        sma_200_slope = _value_or_nan(r["sma_200_slope"])
+        atr_14 = _value_or_nan(r["atr_14"])
+        atr_14_50d_avg = _value_or_nan(r["atr_14_50d_avg"])
+        rs_rank_12m_val = _value_or_nan(r["rs_rank_12m"])
+        max_close_60d = _value_or_nan(r["max_close_60d"])
+        volume = _value_or_nan(r["volume"])
+        volume_50d_avg = _value_or_nan(r["volume_50d_avg"])
+        liquidity = _value_or_nan(r["liquidity_score"])
+        dist_25 = 0 if pd.isna(r["distribution_days_25d"]) else int(r["distribution_days_25d"])
+        dist_5 = 0 if pd.isna(r["distribution_days_5d"]) else int(r["distribution_days_5d"])
+        low_age = 0 if pd.isna(r["low_252_age_days"]) else int(r["low_252_age_days"])
+        data_gap = 0 if pd.isna(r["data_gap_count"]) else int(r["data_gap_count"])
+
+        # Priority-ordered classification.
+        if classify_uninvestable(liquidity, data_gap, close, thresholds):
+            state = "uninvestable"
+        elif classify_stage_4(close, sma_150, sma_200, sma_150_slope, thresholds):
+            state = "stage_4"
+        elif classify_stage_3(prior, close, sma_50, sma_50_slope, dist_25, thresholds):
+            state = "stage_3"
+        elif classify_stage_2a(
+            prior,
+            close,
+            sma_50,
+            sma_150,
+            sma_200,
+            sma_200_slope,
+            max_close_60d,
+            volume,
+            volume_50d_avg,
+            rs_rank_12m_val,
+            days_in_stage_2,
+            thresholds,
+        ):
+            state = "stage_2a"
+        else:
+            trend_ok = (
+                not any(_is_nan(v) for v in (close, sma_50, sma_150, sma_200))
+                and close > sma_50 > sma_150 > sma_200
+            )
+            in_stage_2 = is_currently_in_2 and trend_ok
+            if classify_stage_2c(
+                in_stage_2, days_in_stage_2, close, sma_50, atr_14, atr_14_50d_avg, thresholds
+            ):
+                state = "stage_2c"
+            elif classify_stage_2b(in_stage_2, days_in_stage_2, dist_5, close, sma_50, thresholds):
+                state = "stage_2b"
+            elif classify_stage_1(close, sma_150, atr_14, low_age, thresholds):
+                state = "stage_1"
+            else:
+                state = "stage_1"
+
+        # State-transition bookkeeping.
+        current_date = r["date"]
+        if state != prior:
+            state_since: object = current_date
+            days_in_stage_2 = 1 if state in ("stage_2a", "stage_2b", "stage_2c") else 0
+        else:
+            state_since = state_since_per_instr.get(iid, current_date)
+
+        try:
+            dwell = (pd.to_datetime(current_date) - pd.to_datetime(state_since)).days
+        except Exception:
+            dwell = 0
+
+        # Explanation columns.
+        cvs50 = (close / sma_50 - 1) if (not _is_nan(sma_50) and sma_50 > 0) else None
+        cvs150 = (close / sma_150 - 1) if (not _is_nan(sma_150) and sma_150 > 0) else None
+        cvs200 = (close / sma_200 - 1) if (not _is_nan(sma_200) and sma_200 > 0) else None
+        vol_ratio = (
+            (volume / volume_50d_avg)
+            if (not _is_nan(volume_50d_avg) and volume_50d_avg > 0)
+            else None
+        )
+
+        rows.append(
+            {
+                "instrument_id": iid,
+                "date": current_date,
+                "state": state,
+                "prior_state": prior,
+                "state_since_date": state_since,
+                "dwell_days": int(dwell),
+                "classifier_version": classifier_version,
+                "rs_rank_12m": None if _is_nan(rs_rank_12m_val) else rs_rank_12m_val,
+                "close_vs_sma_50": cvs50,
+                "close_vs_sma_150": cvs150,
+                "close_vs_sma_200": cvs200,
+                "sma_200_slope": None if _is_nan(sma_200_slope) else sma_200_slope,
+                "volume_ratio_50d": vol_ratio,
+                "distribution_days": dist_25,
+            }
+        )
+
+        prior_state_per_instr[iid] = state
+        state_since_per_instr[iid] = state_since
+        days_in_stage_2_per_instr[iid] = days_in_stage_2
+
+    return pd.DataFrame(rows)
