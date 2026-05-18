@@ -10,6 +10,7 @@ export type StockRowWithSector = StockRow & {
   vol_63: string | null
   drawdown: string | null
   days_in_state: number | null
+  // Phase 7: gate columns will be removed in Phase 8 (page-level cleanup).
   history_gate_pass: boolean | null
   liquidity_gate_pass: boolean | null
   strength_gate: boolean | null
@@ -33,10 +34,12 @@ export type StockRowWithSector = StockRow & {
   ema_20_ratio: string | null
   ma_30w_slope_4w: string | null
   atr_21: string | null
+  // Phase 7: gate columns will be removed in Phase 8 (page-level cleanup).
   sector_gate: boolean | null
   market_gate: boolean | null
   transition_trigger: boolean | null
   breakout_trigger: boolean | null
+  // Exit signals: NULL pending CTS replacement in Phase 8.
   exit_market_riskoff: boolean | null
   exit_sector_avoid: boolean | null
   exit_rs_deteriorate: boolean | null
@@ -115,7 +118,7 @@ export async function getAllStocks(): Promise<StockRowWithSector[]> {
       m.rs_pctile_3m::text            AS rs_pctile_3m,
       m.above_30w_ma,
       m.ema_10_at_20d_high,
-      m.weinstein_gate_pass,
+      su.weinstein_gate_pass,
       m.ret_1w::text                       AS ret_1w,
       m.extension_pct::text                AS extension_pct,
       m.realized_vol_63::text              AS vol_63,
@@ -140,28 +143,29 @@ export async function getAllStocks(): Promise<StockRowWithSector[]> {
         AND m.ema_200_stock * (1 + m.extension_pct) > m.ema_50_stock
       )                                    AS above_50d_ma,
       m.drawdown_ratio_252::text           AS drawdown,
-      (CURRENT_DATE - s.state_since_date)::int AS days_in_state,
-      s.history_gate_pass,
-      s.liquidity_gate_pass,
-      d.strength_gate,
-      d.direction_gate,
-      d.risk_gate,
-      d.volume_gate,
-      d.sector_gate,
-      d.market_gate,
-      d.transition_trigger,
-      d.breakout_trigger,
-      d.exit_market_riskoff,
-      d.exit_sector_avoid,
-      d.exit_rs_deteriorate,
-      d.exit_momentum_collapse,
-      d.exit_volume_distrib,
-      d.exit_stop_loss,
-      s.rs_state,
-      s.momentum_state,
-      s.risk_state,
-      s.volume_state,
-      d.is_investable,
+      su.dwell_days                        AS days_in_state,
+      -- Phase 7: gate columns will be removed in Phase 8 (page-level cleanup).
+      TRUE                                 AS history_gate_pass,
+      TRUE                                 AS liquidity_gate_pass,
+      TRUE                                 AS strength_gate,
+      TRUE                                 AS direction_gate,
+      TRUE                                 AS risk_gate,
+      TRUE                                 AS volume_gate,
+      TRUE                                 AS sector_gate,
+      TRUE                                 AS market_gate,
+      TRUE                                 AS transition_trigger,
+      TRUE                                 AS breakout_trigger,
+      NULL::boolean                        AS exit_market_riskoff,
+      NULL::boolean                        AS exit_sector_avoid,
+      NULL::boolean                        AS exit_rs_deteriorate,
+      NULL::boolean                        AS exit_momentum_collapse,
+      NULL::boolean                        AS exit_volume_distrib,
+      NULL::boolean                        AS exit_stop_loss,
+      su.rs_state,
+      su.momentum_state,
+      NULL::text                           AS risk_state,
+      NULL::text                           AS volume_state,
+      su.is_investable,
       CASE
         WHEN m.ret_3m IS NOT NULL AND b.n500_now IS NOT NULL AND b.n500_3m IS NOT NULL AND b.n500_3m > 0
         THEN (m.ret_3m - (b.n500_now - b.n500_3m) / b.n500_3m)::text
@@ -172,30 +176,26 @@ export async function getAllStocks(): Promise<StockRowWithSector[]> {
         THEN (m.ret_6m - (b.n500_now - b.n500_6m) / b.n500_6m)::text
         ELSE NULL
       END AS alpha_6m,
-      cts.stage,
-      cts.is_ppc,
-      cts.is_npc,
-      cts.is_contraction,
-      cts.trigger_level::text          AS trigger_level,
-      cts.ppc_strength::text           AS ppc_strength,
-      cts.date::text                   AS signal_date,
-      cts.cts_conviction_score::text   AS cts_conviction_score,
-      cts.cts_action_confidence        AS cts_action_confidence
+      -- CTS columns: NULL pending Phase 8 removal.
+      NULL::int                            AS stage,
+      NULL::boolean                        AS is_ppc,
+      NULL::boolean                        AS is_npc,
+      NULL::boolean                        AS is_contraction,
+      NULL::text                           AS trigger_level,
+      NULL::text                           AS ppc_strength,
+      NULL::text                           AS signal_date,
+      NULL::text                           AS cts_conviction_score,
+      NULL::boolean                        AS cts_action_confidence
     FROM atlas.atlas_universe_stocks u
     JOIN latest l ON TRUE
     CROSS JOIN benchmark b
     LEFT JOIN atlas.atlas_stock_metrics_daily m
       ON m.instrument_id = u.instrument_id AND m.date = l.d
-    LEFT JOIN atlas.atlas_stock_states_daily s
-      ON s.instrument_id = u.instrument_id AND s.date = l.d
-    LEFT JOIN atlas.atlas_stock_decisions_daily d
-      ON d.instrument_id = u.instrument_id AND d.date = l.d
-    LEFT JOIN atlas.atlas_cts_signals_daily cts
-      ON cts.instrument_id = u.instrument_id
-      AND cts.date = (SELECT MAX(date) FROM atlas.atlas_cts_signals_daily)
+    LEFT JOIN atlas.atlas_stock_signal_unified su
+      ON su.instrument_id = u.instrument_id AND su.date = l.d
     WHERE u.effective_to IS NULL
     ORDER BY
-      d.is_investable DESC NULLS LAST,
+      su.is_investable DESC NULLS LAST,
       m.rs_pctile_3m DESC NULLS LAST
   `
 }
@@ -219,7 +219,7 @@ export async function getTopPicksAcrossSectors(): Promise<StockRowWithSector[]> 
       m.rs_pctile_3m::text            AS rs_pctile_3m,
       m.above_30w_ma,
       m.ema_10_at_20d_high,
-      m.weinstein_gate_pass,
+      su.weinstein_gate_pass,
       m.ret_1w::text                       AS ret_1w,
       m.extension_pct::text                AS extension_pct,
       m.realized_vol_63::text              AS vol_63,
@@ -244,41 +244,49 @@ export async function getTopPicksAcrossSectors(): Promise<StockRowWithSector[]> 
         AND m.ema_200_stock * (1 + m.extension_pct) > m.ema_50_stock
       )                                    AS above_50d_ma,
       m.drawdown_ratio_252::text           AS drawdown,
-      (CURRENT_DATE - s.state_since_date)::int AS days_in_state,
-      s.history_gate_pass,
-      s.liquidity_gate_pass,
-      d.strength_gate,
-      d.direction_gate,
-      d.risk_gate,
-      d.volume_gate,
-      d.sector_gate,
-      d.market_gate,
-      d.transition_trigger,
-      d.breakout_trigger,
-      d.exit_market_riskoff,
-      d.exit_sector_avoid,
-      d.exit_rs_deteriorate,
-      d.exit_momentum_collapse,
-      d.exit_volume_distrib,
-      d.exit_stop_loss,
-      s.rs_state,
-      s.momentum_state,
-      s.risk_state,
-      s.volume_state,
-      d.is_investable,
+      su.dwell_days                        AS days_in_state,
+      -- Phase 7: gate columns will be removed in Phase 8 (page-level cleanup).
+      TRUE                                 AS history_gate_pass,
+      TRUE                                 AS liquidity_gate_pass,
+      TRUE                                 AS strength_gate,
+      TRUE                                 AS direction_gate,
+      TRUE                                 AS risk_gate,
+      TRUE                                 AS volume_gate,
+      TRUE                                 AS sector_gate,
+      TRUE                                 AS market_gate,
+      TRUE                                 AS transition_trigger,
+      TRUE                                 AS breakout_trigger,
+      NULL::boolean                        AS exit_market_riskoff,
+      NULL::boolean                        AS exit_sector_avoid,
+      NULL::boolean                        AS exit_rs_deteriorate,
+      NULL::boolean                        AS exit_momentum_collapse,
+      NULL::boolean                        AS exit_volume_distrib,
+      NULL::boolean                        AS exit_stop_loss,
+      su.rs_state,
+      su.momentum_state,
+      NULL::text                           AS risk_state,
+      NULL::text                           AS volume_state,
+      su.is_investable,
       NULL::text AS alpha_3m,
-      NULL::text AS alpha_6m
+      NULL::text AS alpha_6m,
+      NULL::int                            AS stage,
+      NULL::boolean                        AS is_ppc,
+      NULL::boolean                        AS is_npc,
+      NULL::boolean                        AS is_contraction,
+      NULL::text                           AS trigger_level,
+      NULL::text                           AS ppc_strength,
+      NULL::text                           AS signal_date,
+      NULL::text                           AS cts_conviction_score,
+      NULL::boolean                        AS cts_action_confidence
     FROM atlas.atlas_universe_stocks u
     JOIN latest l ON TRUE
     JOIN atlas.atlas_stock_metrics_daily m
       ON m.instrument_id = u.instrument_id AND m.date = l.d
-    JOIN atlas.atlas_stock_states_daily s
-      ON s.instrument_id = u.instrument_id AND s.date = l.d
-    JOIN atlas.atlas_stock_decisions_daily d
-      ON d.instrument_id = u.instrument_id AND d.date = l.d
+    JOIN atlas.atlas_stock_signal_unified su
+      ON su.instrument_id = u.instrument_id AND su.date = l.d
     WHERE u.effective_to IS NULL
-      AND d.is_investable = true
-      AND s.rs_state IN ('Leader', 'Strong')
+      AND su.is_investable = true
+      AND su.rs_state IN ('Leader', 'Strong')
     ORDER BY m.rs_pctile_3m DESC NULLS LAST
     LIMIT 20
   `
@@ -321,7 +329,7 @@ export async function getStockBySymbol(symbol: string): Promise<StockRowWithSect
       m.rs_pctile_3m::text            AS rs_pctile_3m,
       m.above_30w_ma,
       m.ema_10_at_20d_high,
-      m.weinstein_gate_pass,
+      su.weinstein_gate_pass,
       m.ret_1w::text                       AS ret_1w,
       m.extension_pct::text                AS extension_pct,
       m.realized_vol_63::text              AS vol_63,
@@ -346,28 +354,29 @@ export async function getStockBySymbol(symbol: string): Promise<StockRowWithSect
         AND m.ema_200_stock * (1 + m.extension_pct) > m.ema_50_stock
       )                                    AS above_50d_ma,
       m.drawdown_ratio_252::text           AS drawdown,
-      (CURRENT_DATE - s.state_since_date)::int AS days_in_state,
-      s.history_gate_pass,
-      s.liquidity_gate_pass,
-      d.strength_gate,
-      d.direction_gate,
-      d.risk_gate,
-      d.volume_gate,
-      d.sector_gate,
-      d.market_gate,
-      d.transition_trigger,
-      d.breakout_trigger,
-      d.exit_market_riskoff,
-      d.exit_sector_avoid,
-      d.exit_rs_deteriorate,
-      d.exit_momentum_collapse,
-      d.exit_volume_distrib,
-      d.exit_stop_loss,
-      s.rs_state,
-      s.momentum_state,
-      s.risk_state,
-      s.volume_state,
-      d.is_investable,
+      su.dwell_days                        AS days_in_state,
+      -- Phase 7: gate columns will be removed in Phase 8 (page-level cleanup).
+      TRUE                                 AS history_gate_pass,
+      TRUE                                 AS liquidity_gate_pass,
+      TRUE                                 AS strength_gate,
+      TRUE                                 AS direction_gate,
+      TRUE                                 AS risk_gate,
+      TRUE                                 AS volume_gate,
+      TRUE                                 AS sector_gate,
+      TRUE                                 AS market_gate,
+      TRUE                                 AS transition_trigger,
+      TRUE                                 AS breakout_trigger,
+      NULL::boolean                        AS exit_market_riskoff,
+      NULL::boolean                        AS exit_sector_avoid,
+      NULL::boolean                        AS exit_rs_deteriorate,
+      NULL::boolean                        AS exit_momentum_collapse,
+      NULL::boolean                        AS exit_volume_distrib,
+      NULL::boolean                        AS exit_stop_loss,
+      su.rs_state,
+      su.momentum_state,
+      NULL::text                           AS risk_state,
+      NULL::text                           AS volume_state,
+      su.is_investable,
       CASE
         WHEN m.ret_3m IS NOT NULL AND b.n500_now IS NOT NULL AND b.n500_3m IS NOT NULL AND b.n500_3m > 0
         THEN (m.ret_3m - (b.n500_now - b.n500_3m) / b.n500_3m)::text
@@ -378,27 +387,22 @@ export async function getStockBySymbol(symbol: string): Promise<StockRowWithSect
         THEN (m.ret_6m - (b.n500_now - b.n500_6m) / b.n500_6m)::text
         ELSE NULL
       END AS alpha_6m,
-      cts.stage,
-      cts.is_ppc,
-      cts.is_npc,
-      cts.is_contraction,
-      cts.trigger_level::text          AS trigger_level,
-      cts.ppc_strength::text           AS ppc_strength,
-      cts.date::text                   AS signal_date,
-      cts.cts_conviction_score::text   AS cts_conviction_score,
-      cts.cts_action_confidence        AS cts_action_confidence
+      NULL::int                            AS stage,
+      NULL::boolean                        AS is_ppc,
+      NULL::boolean                        AS is_npc,
+      NULL::boolean                        AS is_contraction,
+      NULL::text                           AS trigger_level,
+      NULL::text                           AS ppc_strength,
+      NULL::text                           AS signal_date,
+      NULL::text                           AS cts_conviction_score,
+      NULL::boolean                        AS cts_action_confidence
     FROM atlas.atlas_universe_stocks u
     JOIN latest l ON TRUE
     CROSS JOIN benchmark b
     LEFT JOIN atlas.atlas_stock_metrics_daily m
       ON m.instrument_id = u.instrument_id AND m.date = l.d
-    LEFT JOIN atlas.atlas_stock_states_daily s
-      ON s.instrument_id = u.instrument_id AND s.date = l.d
-    LEFT JOIN atlas.atlas_stock_decisions_daily d
-      ON d.instrument_id = u.instrument_id AND d.date = l.d
-    LEFT JOIN atlas.atlas_cts_signals_daily cts
-      ON cts.instrument_id = u.instrument_id
-      AND cts.date = (SELECT MAX(date) FROM atlas.atlas_cts_signals_daily)
+    LEFT JOIN atlas.atlas_stock_signal_unified su
+      ON su.instrument_id = u.instrument_id AND su.date = l.d
     WHERE u.symbol = ${symbol}
       AND u.effective_to IS NULL
     LIMIT 1
@@ -440,14 +444,16 @@ export async function getStockStateHistory(
   if (!Number.isInteger(days) || days < 1 || days > 3650) {
     throw new Error(`days must be an integer between 1 and 3650, got: ${days}`)
   }
+  // Phase 7: rewired to atlas_stock_signal_unified.
+  // risk_state and volume_state are deprecated gate columns; returned as NULL.
   return sql<StateHistoryRow[]>`
     SELECT
       date,
       rs_state,
       momentum_state,
-      risk_state,
-      volume_state
-    FROM atlas.atlas_stock_states_daily
+      NULL::text AS risk_state,
+      NULL::text AS volume_state
+    FROM atlas.atlas_stock_signal_unified
     WHERE instrument_id = ${instrumentId}
       AND date >= CURRENT_DATE - INTERVAL '1 day' * ${days}
     ORDER BY date ASC

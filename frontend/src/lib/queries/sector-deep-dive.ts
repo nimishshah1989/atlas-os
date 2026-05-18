@@ -20,6 +20,7 @@ export type StockRow = {
   risk_state: string | null
   volume_state: string | null
   is_investable: boolean | null
+  // Phase 7: gate columns will be removed in Phase 8 (page-level cleanup).
   market_gate: boolean | null
   sector_gate: boolean | null
   strength_gate: boolean | null
@@ -51,32 +52,31 @@ export async function getStocksInSector(sectorName: string): Promise<StockRow[]>
       m.rs_3m_tier::text      AS rs_3m_nifty500,
       m.rs_pctile_3m::text    AS rs_pctile_3m,
       m.rs_3m_tier_gold::text AS rs_3m_tier_gold,
-      s.rs_state,
-      s.momentum_state,
-      s.risk_state,
-      s.volume_state,
-      d.is_investable,
-      d.market_gate,
-      d.sector_gate,
-      d.strength_gate,
-      d.direction_gate,
-      d.risk_gate,
-      d.volume_gate,
-      d.position_size_pct::text AS position_size_pct,
+      su.rs_state,
+      su.momentum_state,
+      NULL::text              AS risk_state,
+      NULL::text              AS volume_state,
+      su.is_investable,
+      -- Phase 7: gate columns will be removed in Phase 8 (page-level cleanup).
+      TRUE                    AS market_gate,
+      TRUE                    AS sector_gate,
+      TRUE                    AS strength_gate,
+      TRUE                    AS direction_gate,
+      TRUE                    AS risk_gate,
+      TRUE                    AS volume_gate,
+      NULL::text              AS position_size_pct,
       m.ema_10_at_20d_high,
-      m.weinstein_gate_pass
+      su.weinstein_gate_pass
     FROM atlas.atlas_universe_stocks u
     JOIN latest l ON TRUE
     LEFT JOIN atlas.atlas_stock_metrics_daily m
       ON m.instrument_id = u.instrument_id AND m.date = l.d
-    LEFT JOIN atlas.atlas_stock_states_daily s
-      ON s.instrument_id = u.instrument_id AND s.date = l.d
-    LEFT JOIN atlas.atlas_stock_decisions_daily d
-      ON d.instrument_id = u.instrument_id AND d.date = l.d
+    LEFT JOIN atlas.atlas_stock_signal_unified su
+      ON su.instrument_id = u.instrument_id AND su.date = l.d
     WHERE u.sector = ${sectorName}
       AND u.effective_to IS NULL
     ORDER BY
-      d.is_investable DESC NULLS LAST,
+      su.is_investable DESC NULLS LAST,
       m.rs_pctile_3m DESC NULLS LAST
   `
 }
@@ -141,20 +141,22 @@ export async function getSectorSnapshotByName(name: string): Promise<SectorBrief
       m.topdown_index_code,
       m.participation_50::text         AS participation_50,
       m.participation_rs::text         AS participation_rs,
-      s.participation_rs_pct::text     AS participation_rs_pct,
+      -- Phase 7: participation_rs_pct not in unified view; removed in Phase 8.
+      NULL::text                       AS participation_rs_pct,
       m.leadership_concentration::text AS leadership_concentration,
       s.sector_state,
-      s.bottomup_state,
-      s.topdown_state,
-      s.divergence_flag,
-      s.bottomup_rs_state,
-      s.bottomup_momentum_state,
-      NULL::text               AS bottomup_risk_state,
-      NULL::text               AS bottomup_volume_state,
+      -- Phase 7: bottomup_state/topdown_state/divergence_flag not in unified view; removed in Phase 8.
+      NULL::text                       AS bottomup_state,
+      NULL::text                       AS topdown_state,
+      FALSE                            AS divergence_flag,
+      NULL::text                       AS bottomup_rs_state,
+      NULL::text                       AS bottomup_momentum_state,
+      NULL::text                       AS bottomup_risk_state,
+      NULL::text                       AS bottomup_volume_state,
       m.date AS data_date
     FROM atlas.atlas_sector_metrics_daily m
-    JOIN atlas.atlas_sector_states_daily s
-      ON m.sector_name = s.sector_name AND m.date = s.date
+    JOIN atlas.atlas_sector_signal_unified s
+      ON m.sector_name = s.sector AND m.date = s.date
     LEFT JOIN momentum mom ON m.sector_name = mom.sector_name
     WHERE m.sector_name = ${name}
       AND m.date = (SELECT MAX(date) FROM atlas.atlas_sector_metrics_daily WHERE sector_name = ${name})
@@ -178,18 +180,16 @@ export async function getTopPicksBySector(sectorName: string): Promise<TopPickRo
       u.symbol,
       u.company_name,
       m.rs_pctile_3m::text AS rs_pctile_3m,
-      st.rs_state
+      su.rs_state
     FROM atlas.atlas_universe_stocks u
     JOIN latest l ON TRUE
     LEFT JOIN atlas.atlas_stock_metrics_daily m
       ON m.instrument_id = u.instrument_id AND m.date = l.d
-    LEFT JOIN atlas.atlas_stock_states_daily st
-      ON st.instrument_id = u.instrument_id AND st.date = l.d
-    LEFT JOIN atlas.atlas_stock_decisions_daily d
-      ON d.instrument_id = u.instrument_id AND d.date = l.d
+    LEFT JOIN atlas.atlas_stock_signal_unified su
+      ON su.instrument_id = u.instrument_id AND su.date = l.d
     WHERE u.sector = ${sectorName}
       AND u.effective_to IS NULL
-      AND d.is_investable = TRUE
+      AND su.is_investable = TRUE
     ORDER BY m.rs_pctile_3m DESC NULLS LAST
     LIMIT 3
   `
