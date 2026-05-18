@@ -37,6 +37,9 @@ function makeSnapshot(over: Partial<SectorSnapshot>): SectorSnapshot {
     bottomup_risk_state: null,
     bottomup_volume_state: null,
     data_date: new Date('2026-05-09'),
+    pct_stage_2: null,
+    pct_stage_3: null,
+    pct_stage_4: null,
   }
 }
 

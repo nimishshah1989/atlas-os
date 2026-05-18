@@ -110,6 +110,9 @@ function adaptUSETF(row: USETFRow): ETFRow {
     exit_rs_deteriorate: null,
     exit_momentum_collapse: null,
     exit_stop_loss:      null,
+    // Phase 8: bubble chart axes — not available for US ETFs
+    mean_rs_rank_12m:      null,
+    mean_within_state_rank: null,
   }
 }
 
