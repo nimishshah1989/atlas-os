@@ -70,6 +70,7 @@ def classify_stage_1(
     close: float,
     sma_150: float,
     atr_14: float,
+    atr_14_252d_avg: float,
     low_252_age_days: int,
     thresholds: dict[tuple[str, str], ThresholdValue],
 ) -> bool:
@@ -80,18 +81,25 @@ def classify_stage_1(
 
     All three must hold:
       - |close - sma_150| / sma_150 < theta_base_tightness  (price hugs the long MA)
-      - atr_14 / close < theta_low_vol                       (vol is contracted)
+      - atr_14 / atr_14_252d_avg < theta_contraction         (IC-validated: vol contracted vs year)
       - low_252_age_days >= theta_min_recovery_days          (past the bottom)
+
+    IC note: atr_14/atr_14_252d_avg has IR -0.48 at 63d — contraction predicts high forward
+    returns. Replaces old atr_14/close (IR -0.18, decorative).
+    atr_14_252d_avg NaN-guarded: if unavailable (< 266 days of history), Stage 1 returns False.
     """
     if any(_is_nan(v) for v in (close, sma_150, atr_14)):
         return False
     if sma_150 <= 0 or close <= 0:
         return False
+    # NaN or zero denominator guard: without a valid 252d avg, we cannot confirm contraction.
+    if _is_nan(atr_14_252d_avg) or atr_14_252d_avg <= 0:
+        return False
     tightness = abs(close - sma_150) / sma_150
-    low_vol = atr_14 / close
+    contraction_ratio = atr_14 / atr_14_252d_avg
     return (
         tightness < get_threshold(thresholds, "theta_base_tightness", "stage_1")
-        and low_vol < get_threshold(thresholds, "theta_low_vol", "stage_1")
+        and contraction_ratio < get_threshold(thresholds, "theta_contraction", "stage_1")
         and low_252_age_days >= get_threshold(thresholds, "theta_min_recovery_days", "stage_1")
     )
 
@@ -104,36 +112,26 @@ def classify_stage_2a(
     sma_200: float,
     sma_200_slope: float,
     max_close_60d: float,
-    volume_today: float,
-    volume_50d_avg: float,
     rs_rank_12m: float,
     days_in_stage_2: int,
     thresholds: dict[tuple[str, str], ThresholdValue],
 ) -> bool:
-    """Stage 2A (Fresh Breakout). Only fires on transition from Stage 1 or 4."""
+    """Stage 2A (Fresh Breakout). Only fires on transition from Stage 1 or 4.
+
+    IC note: volume_today/volume_50d_avg had IR 0.15 at 21d — decorative.
+    Volume requirement removed in migration 078; volume columns remain in the
+    feature DF for other uses (OBV, liquidity_score) but are not checked here.
+    """
     if prior_state not in ("stage_1", "stage_4"):
         return False
-    if any(
-        _is_nan(v)
-        for v in (
-            close,
-            sma_50,
-            sma_150,
-            sma_200,
-            sma_200_slope,
-            volume_today,
-            volume_50d_avg,
-            rs_rank_12m,
-        )
-    ):
+    if any(_is_nan(v) for v in (close, sma_50, sma_150, sma_200, sma_200_slope, rs_rank_12m)):
         return False
-    if volume_50d_avg <= 0 or max_close_60d <= 0:
+    if max_close_60d <= 0:
         return False
     return (
         close > sma_50 > sma_150 > sma_200
         and sma_200_slope > 0
         and close >= get_threshold(thresholds, "theta_base_breakout", "stage_2a") * max_close_60d
-        and volume_today > get_threshold(thresholds, "theta_vol_mult", "stage_2a") * volume_50d_avg
         and rs_rank_12m * 100 >= get_threshold(thresholds, "theta_rs", "stage_2a")
         and days_in_stage_2 <= get_threshold(thresholds, "theta_fresh_days", "stage_2a")
     )
@@ -193,19 +191,29 @@ def classify_stage_3(
     sma_50: float,
     sma_50_slope: float,
     distribution_days_25d: int,
+    obv_slope_50d: float,
     thresholds: dict[tuple[str, str], ThresholdValue],
 ) -> bool:
     """Stage 3 (Top): was in stage 2, now showing topping signs.
 
     Both must hold:
-      - topping signal: close < sma_50 OR sma_50_slope < 0
+      - topping signal: close < sma_50 OR sma_50_slope < 0 OR obv_slope_50d < theta_obv_slope_neg
       - distribution_days_25d >= theta_distribution
+
+    IC note: obv_slope_50d has IR -0.43 at 63d (validated_inverse). Falling OBV is
+    an alternative topping trigger — a held Stage 2 stock with deteriorating OBV is
+    starting to top. Added as an OR to the existing price-condition conjuncts.
+    obv_slope_50d NaN-guarded: NaN means the 50-bar warm-up hasn't completed; the OBV
+    branch is simply skipped (conservative — requires price signal to trigger Stage 3).
     """
     if prior_state not in ("stage_2a", "stage_2b", "stage_2c"):
         return False
     if any(_is_nan(v) for v in (close, sma_50, sma_50_slope)):
         return False
-    topping_price = close < sma_50 or sma_50_slope < 0
+    obv_neg_threshold = get_threshold(thresholds, "theta_obv_slope_neg", "stage_3")
+    # OBV topping: only applies when obv_slope_50d is a valid number.
+    obv_topping = (not _is_nan(obv_slope_50d)) and (obv_slope_50d < obv_neg_threshold)
+    topping_price = close < sma_50 or sma_50_slope < 0 or obv_topping
     enough_distribution = distribution_days_25d >= get_threshold(
         thresholds, "theta_distribution", "stage_3"
     )
@@ -237,9 +245,14 @@ def classify_state_panel(
 
     Required feature columns:
       instrument_id, date, close, sma_50, sma_150, sma_200, sma_50_slope,
-      sma_150_slope, sma_200_slope, atr_14, atr_14_50d_avg, volume,
-      volume_50d_avg, max_close_60d, rs_rank_12m, distribution_days_25d,
-      distribution_days_5d, low_252_age_days, liquidity_score, data_gap_count.
+      sma_150_slope, sma_200_slope, atr_14, atr_14_50d_avg, atr_14_252d_avg,
+      obv_slope_50d, volume, volume_50d_avg, max_close_60d, rs_rank_12m,
+      distribution_days_25d, distribution_days_5d, low_252_age_days,
+      liquidity_score, data_gap_count.
+
+    New in migration 078:
+      atr_14_252d_avg — denominator for Stage 1 contraction check
+      obv_slope_50d   — OBV slope for Stage 3 topping signal
 
     Returns DataFrame with columns:
       instrument_id, date, state, prior_state, state_since_date, dwell_days,
@@ -275,6 +288,8 @@ def classify_state_panel(
         sma_200_slope = _value_or_nan(r["sma_200_slope"])
         atr_14 = _value_or_nan(r["atr_14"])
         atr_14_50d_avg = _value_or_nan(r["atr_14_50d_avg"])
+        atr_14_252d_avg = _value_or_nan(r["atr_14_252d_avg"])
+        obv_slope_50d = _value_or_nan(r["obv_slope_50d"])
         rs_rank_12m_val = _value_or_nan(r["rs_rank_12m"])
         max_close_60d = _value_or_nan(r["max_close_60d"])
         volume = _value_or_nan(r["volume"])
@@ -290,7 +305,9 @@ def classify_state_panel(
             state = "uninvestable"
         elif classify_stage_4(close, sma_150, sma_200, sma_150_slope, thresholds):
             state = "stage_4"
-        elif classify_stage_3(prior, close, sma_50, sma_50_slope, dist_25, thresholds):
+        elif classify_stage_3(
+            prior, close, sma_50, sma_50_slope, dist_25, obv_slope_50d, thresholds
+        ):
             state = "stage_3"
         elif classify_stage_2a(
             prior,
@@ -300,8 +317,6 @@ def classify_state_panel(
             sma_200,
             sma_200_slope,
             max_close_60d,
-            volume,
-            volume_50d_avg,
             rs_rank_12m_val,
             days_in_stage_2,
             thresholds,
@@ -319,7 +334,7 @@ def classify_state_panel(
                 state = "stage_2c"
             elif classify_stage_2b(in_stage_2, days_in_stage_2, dist_5, close, sma_50, thresholds):
                 state = "stage_2b"
-            elif classify_stage_1(close, sma_150, atr_14, low_age, thresholds):
+            elif classify_stage_1(close, sma_150, atr_14, atr_14_252d_avg, low_age, thresholds):
                 state = "stage_1"
             else:
                 state = "stage_1"

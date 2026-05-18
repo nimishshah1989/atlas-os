@@ -329,12 +329,25 @@ def _compute_features_for_stock(g: pd.DataFrame) -> pd.DataFrame:
     out["sma_200_slope"] = slope(g["close"], 30)  # theta_slope_days=30
     out["atr_14"] = calc_atr_14(g["high"], g["low"], g["close"])
     out["atr_14_50d_avg"] = out["atr_14"].rolling(50, min_periods=50).mean()
+    # IC-validated (migration 078): contraction ratio denominator.
+    # NaN for first 252+14=266 rows per stock; NaN guard in classify_stage_1.
+    out["atr_14_252d_avg"] = out["atr_14"].rolling(252, min_periods=252).mean()
 
     vol_col = (
         g["volume"] if "volume" in g.columns else pd.Series([float("nan")] * len(g), index=g.index)
     )
     out["volume"] = vol_col
     out["volume_50d_avg"] = vol_col.rolling(50, min_periods=50).mean()
+
+    # IC-validated (migration 078): On-Balance Volume slope over 50 days.
+    # OBV = cumsum(volume * sign(daily_ret)). Slope computed by features.slope().
+    # NaN for first 50 rows; NaN guard in classify_stage_3 skips OBV conjunct.
+    # np.sign is vectorized: no apply/iterrows.
+    daily_ret = g["close"].pct_change()
+    obv_direction = vol_col * pd.Series(np.sign(daily_ret.fillna(0).values), index=vol_col.index)
+    obv = obv_direction.cumsum()
+    out["obv_slope_50d"] = slope(obv, 50)
+
     # Exclude today from the 60d max so the breakout rule
     # "close >= theta_base_breakout * max_close_60d" can fire when today
     # makes a new high. Including today made the rule trivially false for

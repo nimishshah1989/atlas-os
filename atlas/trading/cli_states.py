@@ -135,11 +135,19 @@ def _apply_dwell_and_urgency(
 
     dwell_percentile: linear position within (p25, p95) range, clamped [0, 1].
     urgency_score: derive_urgency(state, dwell_days, cohort_baseline_dict).
-    within_state_rank: simple mean of (freshness, rs_rank_12m) where
-      freshness = 1 - dwell_percentile.  IC-validated weighting deferred to Phase 2.
+    within_state_rank (IC-validated formula, migration 078):
+      0.4 * freshness + 0.3 * rs_rank_12m + 0.3 * realized_vol_rank
+      where:
+        freshness        = 1 - dwell_percentile (0.5 if unavailable)
+        rs_rank_12m      = cross-sectional percentile of 12m return
+        realized_vol_rank = cross-sectional percentile of realized_vol_63 per-day
+                           (high vol → high rank → favored; IR +0.55 at 63d validated)
     """
     from atlas.intelligence.states.cohorts import cohort_for_stock
     from atlas.intelligence.states.dwell import derive_urgency
+
+    # Determine date range covered by the panel for the realized_vol_63 join.
+    panel_dates = panel["date"].unique().tolist()
 
     # Load latest cohort baselines.
     with eng.connect() as c:
@@ -163,6 +171,33 @@ def _apply_dwell_and_urgency(
             """),
             c,
         )
+        # Load realized_vol_63 for the panel's date range.
+        # Used to compute cross-sectional percentile rank per date.
+        if panel_dates:
+            min_date = min(panel_dates)
+            max_date = max(panel_dates)
+            vol_df = pd.read_sql(
+                text("""
+                    SELECT instrument_id::text AS instrument_id, date, realized_vol_63
+                    FROM atlas.atlas_stock_metrics_daily
+                    WHERE date BETWEEN :min_d AND :max_d
+                      AND realized_vol_63 IS NOT NULL
+                """),
+                c,
+                params={"min_d": min_date, "max_d": max_date},
+            )
+        else:
+            vol_df = pd.DataFrame(columns=["instrument_id", "date", "realized_vol_63"])
+
+    # Build cross-sectional percentile rank of realized_vol_63 per date.
+    # (instrument_id, date) -> realized_vol_rank in [0, 1]
+    realized_vol_rank_map: dict[tuple[str, object], float] = {}
+    if not vol_df.empty:
+        vol_df["realized_vol_rank"] = vol_df.groupby("date")["realized_vol_63"].rank(pct=True)
+        for _, row in vol_df.iterrows():
+            realized_vol_rank_map[(str(row["instrument_id"]), row["date"])] = float(
+                row["realized_vol_rank"]
+            )
 
     # Build meta lookup: instrument_id -> row dict.
     meta_map: dict[str, dict] = {}
@@ -212,15 +247,19 @@ def _apply_dwell_and_urgency(
         else:
             dwell_pct.append(None)
 
-        # within_state_rank: mean of freshness + rs_rank_12m.
-        # freshness = 1 - dwell_percentile (0.5 if unavailable).
+        # within_state_rank: IC-validated formula (migration 078).
+        # 0.4 * freshness + 0.3 * rs_rank_12m + 0.3 * realized_vol_rank
         fresh = 1.0 - (dwell_pct[-1] if dwell_pct[-1] is not None else 0.5)
+
         rs_raw = r.get("rs_rank_12m")
         if rs_raw is None or (isinstance(rs_raw, float) and pd.isna(rs_raw)):
             rs = 0.5
         else:
             rs = float(rs_raw)
-        within_rank.append(round((fresh + rs) / 2.0, 4))
+
+        vol_rank = realized_vol_rank_map.get((iid, r["date"]), 0.5)
+
+        within_rank.append(round(0.4 * fresh + 0.3 * rs + 0.3 * vol_rank, 4))
 
     panel = panel.copy()
     panel["dwell_percentile"] = dwell_pct

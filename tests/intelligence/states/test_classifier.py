@@ -162,23 +162,27 @@ def test_stage_4_nan_inputs_return_false():
 # ---------------------------------------------------------------------------
 
 
-def _stage_1_th(tightness=0.10, low_vol=0.035, min_recovery=30):
+def _stage_1_th(tightness=0.10, contraction=0.95, min_recovery=30):
     from atlas.intelligence.states.thresholds import ThresholdValue
 
     return {
         ("theta_base_tightness", "stage_1"): ThresholdValue(float(tightness), None, None),
-        ("theta_low_vol", "stage_1"): ThresholdValue(float(low_vol), None, None),
+        ("theta_contraction", "stage_1"): ThresholdValue(float(contraction), None, None),
         ("theta_min_recovery_days", "stage_1"): ThresholdValue(float(min_recovery), None, None),
     }
 
 
 def test_stage_1_consolidation():
-    """close near SMA_150, low ATR, recovered from 252d low → Stage 1."""
+    """close near SMA_150, ATR contraction, recovered from 252d low → Stage 1.
+
+    atr_14=2.0, atr_14_252d_avg=3.0 → ratio=0.667 < 0.95 (contraction fires).
+    """
     assert (
         classify_stage_1(
             close=100.0,
             sma_150=99.0,
             atr_14=2.0,
+            atr_14_252d_avg=3.0,
             low_252_age_days=60,
             thresholds=_stage_1_th(),
         )
@@ -186,13 +190,30 @@ def test_stage_1_consolidation():
     )
 
 
-def test_stage_1_negated_by_high_vol():
-    """ATR/close above θ_low_vol → not stage 1."""
+def test_stage_1_negated_by_vol_expansion():
+    """ATR above atr_252d_avg × theta_contraction → not stage 1 (vol expanded)."""
+    # atr_14=3.5, atr_14_252d_avg=3.0 → ratio=1.167 >= 0.95 → fails contraction
     assert (
         classify_stage_1(
             close=100.0,
             sma_150=99.0,
-            atr_14=10.0,
+            atr_14=3.5,
+            atr_14_252d_avg=3.0,
+            low_252_age_days=60,
+            thresholds=_stage_1_th(),
+        )
+        is False
+    )
+
+
+def test_stage_1_nan_atr_252d_avg_returns_false():
+    """NaN atr_14_252d_avg → Stage 1 returns False (NaN guard)."""
+    assert (
+        classify_stage_1(
+            close=100.0,
+            sma_150=99.0,
+            atr_14=2.0,
+            atr_14_252d_avg=float("nan"),
             low_252_age_days=60,
             thresholds=_stage_1_th(),
         )
@@ -205,20 +226,19 @@ def test_stage_1_negated_by_high_vol():
 # ---------------------------------------------------------------------------
 
 
-def _stage_2a_th(slope_days=30, breakout=1.02, vol_mult=1.5, rs=70, fresh_days=21):
+def _stage_2a_th(slope_days=30, breakout=1.00, rs=70, fresh_days=21):
     from atlas.intelligence.states.thresholds import ThresholdValue
 
     return {
         ("theta_slope_days", "stage_2a"): ThresholdValue(float(slope_days), None, None),
         ("theta_base_breakout", "stage_2a"): ThresholdValue(float(breakout), None, None),
-        ("theta_vol_mult", "stage_2a"): ThresholdValue(float(vol_mult), None, None),
         ("theta_rs", "stage_2a"): ThresholdValue(float(rs), None, None),
         ("theta_fresh_days", "stage_2a"): ThresholdValue(float(fresh_days), None, None),
     }
 
 
 def test_stage_2a_fresh_breakout():
-    """All conditions for a fresh Stage 2A breakout."""
+    """All conditions for a fresh Stage 2A breakout (no volume requirement)."""
     assert (
         classify_stage_2a(
             prior_state="stage_1",
@@ -228,8 +248,6 @@ def test_stage_2a_fresh_breakout():
             sma_200=95.0,
             sma_200_slope=0.001,
             max_close_60d=107.0,
-            volume_today=200_000,
-            volume_50d_avg=100_000,
             rs_rank_12m=0.80,
             days_in_stage_2=5,
             thresholds=_stage_2a_th(),
@@ -249,8 +267,6 @@ def test_stage_2a_negated_when_prior_is_stage_2x():
             sma_200=95.0,
             sma_200_slope=0.001,
             max_close_60d=107.0,
-            volume_today=200_000,
-            volume_50d_avg=100_000,
             rs_rank_12m=0.80,
             days_in_stage_2=5,
             thresholds=_stage_2a_th(),
@@ -371,10 +387,13 @@ def test_stage_2c_negated_when_not_in_stage_2():
 # ---------------------------------------------------------------------------
 
 
-def _stage_3_th(distribution=5):
+def _stage_3_th(distribution=5, obv_slope_neg=0.0):
     from atlas.intelligence.states.thresholds import ThresholdValue
 
-    return {("theta_distribution", "stage_3"): ThresholdValue(float(distribution), None, None)}
+    return {
+        ("theta_distribution", "stage_3"): ThresholdValue(float(distribution), None, None),
+        ("theta_obv_slope_neg", "stage_3"): ThresholdValue(float(obv_slope_neg), None, None),
+    }
 
 
 def test_stage_3_topping():
@@ -386,6 +405,7 @@ def test_stage_3_topping():
             sma_50=100.0,
             sma_50_slope=-0.001,
             distribution_days_25d=6,
+            obv_slope_50d=0.5,
             thresholds=_stage_3_th(),
         )
         is True
@@ -401,6 +421,7 @@ def test_stage_3_negated_by_low_distribution():
             sma_50=100.0,
             sma_50_slope=-0.001,
             distribution_days_25d=2,
+            obv_slope_50d=0.5,
             thresholds=_stage_3_th(),
         )
         is False
@@ -416,7 +437,44 @@ def test_stage_3_negated_when_prior_is_not_stage_2x():
             sma_50=100.0,
             sma_50_slope=-0.001,
             distribution_days_25d=6,
+            obv_slope_50d=0.5,
             thresholds=_stage_3_th(),
+        )
+        is False
+    )
+
+
+def test_stage_3_fires_via_obv_slope_alone():
+    """OBV slope < theta_obv_slope_neg fires Stage 3 even when price condition is false.
+
+    Price condition (close > sma_50 AND sma_50_slope >= 0) is NOT met for the
+    traditional trigger, but negative OBV slope provides the topping signal.
+    """
+    assert (
+        classify_stage_3(
+            prior_state="stage_2b",
+            close=105.0,  # close > sma_50 → price condition false
+            sma_50=100.0,
+            sma_50_slope=0.001,  # slope positive → price condition false
+            distribution_days_25d=6,  # enough distribution
+            obv_slope_50d=-0.001,  # negative OBV slope → fires the OBV topping signal
+            thresholds=_stage_3_th(obv_slope_neg=0.0),
+        )
+        is True
+    )
+
+
+def test_stage_3_not_fired_when_obv_slope_positive_and_price_ok():
+    """Positive OBV slope AND price above SMA50 AND positive SMA50 slope → not Stage 3."""
+    assert (
+        classify_stage_3(
+            prior_state="stage_2b",
+            close=105.0,
+            sma_50=100.0,
+            sma_50_slope=0.001,
+            distribution_days_25d=6,
+            obv_slope_50d=0.5,  # positive OBV → no topping signal
+            thresholds=_stage_3_th(obv_slope_neg=0.0),
         )
         is False
     )
@@ -433,21 +491,26 @@ from atlas.intelligence.states.thresholds import ThresholdValue  # noqa: E402
 
 
 def _full_thresholds():
-    """Return a thresholds dict with the 18 active thresholds from migration 076."""
+    """Return a thresholds dict with the active thresholds after migration 078.
+
+    Changes from migration 076/077:
+    - theta_low_vol (stage_1) removed; replaced by theta_contraction (stage_1)
+    - theta_vol_mult (stage_2a) removed (volume requirement dropped)
+    - theta_obv_slope_neg (stage_3) added
+    """
     tv = lambda v: ThresholdValue(float(v), None, None)  # noqa: E731
     return {
         # Uninvestable
         ("theta_liq", "uninvestable"): tv(100_000),
         ("theta_gap", "uninvestable"): tv(20),
         ("theta_min_price", "uninvestable"): tv(10.0),
-        # Stage 1
+        # Stage 1 — theta_low_vol replaced by theta_contraction (migration 078)
         ("theta_base_tightness", "stage_1"): tv(0.10),
-        ("theta_low_vol", "stage_1"): tv(0.035),
+        ("theta_contraction", "stage_1"): tv(0.95),
         ("theta_min_recovery_days", "stage_1"): tv(30),
-        # Stage 2A
+        # Stage 2A — theta_vol_mult removed (migration 078)
         ("theta_slope_days", "stage_2a"): tv(30),
-        ("theta_base_breakout", "stage_2a"): tv(1.02),
-        ("theta_vol_mult", "stage_2a"): tv(1.5),
+        ("theta_base_breakout", "stage_2a"): tv(1.00),
         ("theta_rs", "stage_2a"): tv(70.0),
         ("theta_fresh_days", "stage_2a"): tv(21),
         # Stage 2B
@@ -455,8 +518,9 @@ def _full_thresholds():
         # Stage 2C
         ("theta_extension", "stage_2c"): tv(1.10),
         ("theta_atr_expansion", "stage_2c"): tv(1.40),
-        # Stage 3
+        # Stage 3 — theta_obv_slope_neg added (migration 078)
         ("theta_distribution", "stage_3"): tv(5),
+        ("theta_obv_slope_neg", "stage_3"): tv(0.0),
         # Stage 4
         ("theta_decline_floor", "stage_4"): tv(0.90),
         # Risk gates (unused by classifier itself)
@@ -467,7 +531,12 @@ def _full_thresholds():
 
 def _synthetic_features_panel(n_days: int = 30) -> pd.DataFrame:
     """3-stock synthetic panel: one healthy uptrend (s1), one in decline (s2),
-    one penny stock (s3)."""
+    one penny stock (s3).
+
+    Includes the new feature columns added in migration 078:
+      - atr_14_252d_avg: ATR contraction denominator
+      - obv_slope_50d: OBV slope over 50 days
+    """
     rows = []
     base_date = pd.Timestamp("2026-01-01")
     for d in range(n_days):
@@ -486,6 +555,8 @@ def _synthetic_features_panel(n_days: int = 30) -> pd.DataFrame:
                 "sma_200_slope": 0.001,
                 "atr_14": 3.0,
                 "atr_14_50d_avg": 3.0,
+                "atr_14_252d_avg": 4.0,  # atr_14/atr_14_252d_avg = 0.75 < 0.95 (contraction)
+                "obv_slope_50d": 0.001,  # positive OBV slope (healthy)
                 "volume": 200_000,
                 "volume_50d_avg": 100_000,
                 "max_close_60d": 195.0,
@@ -511,6 +582,8 @@ def _synthetic_features_panel(n_days: int = 30) -> pd.DataFrame:
                 "sma_200_slope": -0.001,
                 "atr_14": 4.0,
                 "atr_14_50d_avg": 4.0,
+                "atr_14_252d_avg": 3.5,  # atr_14/atr_14_252d_avg = 1.14 >= 0.95 (expanded)
+                "obv_slope_50d": -0.001,  # negative OBV slope (declining)
                 "volume": 200_000,
                 "volume_50d_avg": 100_000,
                 "max_close_60d": 100.0,
@@ -536,6 +609,8 @@ def _synthetic_features_panel(n_days: int = 30) -> pd.DataFrame:
                 "sma_200_slope": 0.0,
                 "atr_14": 0.2,
                 "atr_14_50d_avg": 0.2,
+                "atr_14_252d_avg": 0.3,  # contraction ratio = 0.67 < 0.95
+                "obv_slope_50d": 0.0,  # neutral OBV slope
                 "volume": 200_000,
                 "volume_50d_avg": 100_000,
                 "max_close_60d": 5.0,
@@ -631,6 +706,8 @@ def test_classify_state_panel_state_since_date_resets_on_transition():
                 "sma_200_slope": 0.0,
                 "atr_14": 1.0,
                 "atr_14_50d_avg": 1.0,
+                "atr_14_252d_avg": 2.0,  # contraction ratio = 0.5 < 0.95
+                "obv_slope_50d": 0.0,
                 "volume": 100_000,
                 "volume_50d_avg": 100_000,
                 "max_close_60d": 100.0,
@@ -655,6 +732,8 @@ def test_classify_state_panel_state_since_date_resets_on_transition():
                 "sma_200_slope": 0.001,
                 "atr_14": 2.0,
                 "atr_14_50d_avg": 2.0,
+                "atr_14_252d_avg": 3.0,  # contraction ratio = 0.67 < 0.95
+                "obv_slope_50d": 0.001,
                 "volume": 300_000,
                 "volume_50d_avg": 100_000,
                 "max_close_60d": 115.0,
