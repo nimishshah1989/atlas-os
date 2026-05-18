@@ -334,7 +334,11 @@ def _compute_features_for_stock(g: pd.DataFrame) -> pd.DataFrame:
     )
     out["volume"] = vol_col
     out["volume_50d_avg"] = vol_col.rolling(50, min_periods=50).mean()
-    out["max_close_60d"] = g["close"].rolling(60, min_periods=60).max()
+    # Exclude today from the 60d max so the breakout rule
+    # "close >= theta_base_breakout * max_close_60d" can fire when today
+    # makes a new high. Including today made the rule trivially false for
+    # quiet-grinder uptrends (today == max → close >= 1.02×close is impossible).
+    out["max_close_60d"] = g["close"].shift(1).rolling(60, min_periods=60).max()
     out["distribution_days_25d"] = distribution_days_25d(g["close"], vol_col).fillna(0)
     out["distribution_days_5d"] = (
         ((g["close"].pct_change() <= -0.002) & (vol_col > vol_col.shift(1)))
