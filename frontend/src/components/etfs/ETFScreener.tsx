@@ -4,10 +4,12 @@ import { Fragment, useState, useMemo } from 'react'
 import Link from 'next/link'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import type { ETFRow } from '@/lib/queries/etfs'
+import type { ComponentValidation } from '@/lib/queries/component_validation'
 import {
   pct, pctColor, PosSizeBar, RSPctileBar,
-  RSStateChip, MomentumChip, RiskChip,
+  MomentumChip,
 } from '@/lib/stock-formatters'
+import { ValidatedBadge } from '@/components/ui/ValidatedBadge'
 import { ColumnToggle, useColumnVisibility, type ColumnDef } from '@/components/ui/ColumnToggle'
 
 const RS_ORDER = ['Leader', 'Strong', 'Consolidating', 'Emerging', 'Average', 'Weak', 'Laggard']
@@ -133,7 +135,7 @@ function isIlliquidEtf(etf: ETFRow): boolean {
   return !s || s.startsWith('ILLIQUID') || s.startsWith('INSUFFICIENT')
 }
 
-export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
+export function ETFScreener({ etfs, validations = [] }: { etfs: ETFRow[]; validations?: ComponentValidation[] }) {
   const [sortKey, setSortKey] = useState<SortKey>('rs_pctile_3m')
   const [asc, setAsc] = useState(false)
   const [chip, setChip] = useState<FilterChip>('all')
@@ -345,13 +347,19 @@ export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
                         <GateBadge row={row} />
                       </td>
                       <td className="px-3 py-2.5">
-                        <RSStateChip value={row.rs_state} />
+                        <ValidatedBadge
+                          label={row.rs_state ?? '—'}
+                          validation={validations.find(v => v.component_name === 'rs' && v.badge === row.rs_state) ?? undefined}
+                        />
                       </td>
                       <td className="px-3 py-2.5">
                         <MomentumChip value={row.momentum_state} />
                       </td>
                       <td className="px-3 py-2.5">
-                        <RiskChip value={row.risk_state} />
+                        <ValidatedBadge
+                          label={row.risk_state ?? '—'}
+                          validation={validations.find(v => v.component_name === 'risk' && v.badge === row.risk_state) ?? undefined}
+                        />
                       </td>
                       {visibleCols.has('ret_1w') && (
                         <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(row.ret_1w)}`}>
