@@ -1,0 +1,9 @@
+{
+  "indexName": "NIFTY 500",
+  "effectiveDate": "2024-09-30",
+  "constituents": [
+    {"symbol": "RELIANCE", "isin": "INE002A01018"},
+    {"symbol": "TCS",      "isin": "INE467B01029"},
+    {"symbol": "INFY",     "isin": "INE009A01021"}
+  ]
+}
