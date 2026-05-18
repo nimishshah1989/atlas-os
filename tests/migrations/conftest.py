@@ -1,8 +1,8 @@
 """Conftest for tests/migrations/.
 
 Provides a `db_engine` fixture backed by ATLAS_DB_URL.
-All tests in this directory are skipped when ATLAS_INTEGRATION_TESTS is unset
-so that CI on Mac (where psycopg2 may lack SSL) does not fail.
+Individual test modules declare their own ``_SKIP_INTEGRATION`` marker to gate
+live-DB tests; set ``ATLAS_INTEGRATION_TESTS=1`` to enable them (EC2 only).
 """
 
 from __future__ import annotations
@@ -20,11 +20,6 @@ if _ENV_FILE.exists():
     from dotenv import load_dotenv
 
     load_dotenv(_ENV_FILE, override=False)
-
-_SKIP = pytest.mark.skipif(
-    not os.environ.get("ATLAS_INTEGRATION_TESTS"),
-    reason="live-DB tests — set ATLAS_INTEGRATION_TESTS=1 to run (EC2 only)",
-)
 
 
 @pytest.fixture(scope="session")

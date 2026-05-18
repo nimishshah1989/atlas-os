@@ -21,6 +21,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import sqlalchemy as sa
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 _MODULE = "migrations.versions.072_atlas_stock_state_daily"
 _SKIP_INTEGRATION = pytest.mark.skipif(
@@ -191,8 +192,8 @@ def test_atlas_stock_state_daily_columns_present(db_engine: sa.Engine) -> None:
 @_SKIP_INTEGRATION
 def test_atlas_stock_state_daily_check_constraints(db_engine: sa.Engine) -> None:
     """ck_state_value rejects bogus state values."""
-    with db_engine.connect() as c:
-        with pytest.raises(Exception, match="ck_state_value"):
+    with pytest.raises(IntegrityError, match="ck_state_value"):
+        with db_engine.begin() as c:
             c.execute(
                 text(
                     "INSERT INTO atlas.atlas_stock_state_daily "
@@ -202,4 +203,3 @@ def test_atlas_stock_state_daily_check_constraints(db_engine: sa.Engine) -> None
                     " 'bogus_state', '2026-01-01', 0, 'normal', 'v1')"
                 )
             )
-            c.commit()
