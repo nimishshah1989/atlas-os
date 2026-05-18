@@ -2,15 +2,15 @@ export const dynamic = 'force-dynamic'
 
 import { getAllStocks } from '@/lib/queries/stocks'
 import { getCurrentRegime } from '@/lib/queries/regime'
-import { getConvictionMap } from '@/lib/queries/conviction'
+import { getComponentValidations } from '@/lib/queries/component_validation'
 import { getRSLeaders, getBreakoutCandidates, getDeteriorationWatch } from '@/lib/queries/leaders'
 import { StocksClientShell } from '@/components/stocks/StocksClientShell'
 
 export default async function StocksPage() {
-  const [stocks, regime, convictionMap, leaders, breakouts, deterioration] = await Promise.all([
+  const [stocks, regime, validations, leaders, breakouts, deterioration] = await Promise.all([
     getAllStocks(),
     getCurrentRegime(),
-    getConvictionMap(),
+    getComponentValidations(),
     getRSLeaders(null, 50),
     getBreakoutCandidates(),
     getDeteriorationWatch(),
@@ -55,7 +55,7 @@ export default async function StocksPage() {
           stocks={stocks}
           regimeState={regime?.regime_state ?? 'Unknown'}
           deploymentMultiplier={Number(regime?.deployment_multiplier ?? '0')}
-          convictionMap={convictionMap}
+          validations={validations}
           leaders={leaders}
           breakouts={breakouts}
           deterioration={deterioration}

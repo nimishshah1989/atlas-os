@@ -4,14 +4,15 @@ import { Fragment, useState, useMemo, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import type { StockRowWithSector } from '@/lib/queries/stocks'
-import type { ConvictionMapRow } from '@/lib/queries/conviction'
+import type { ComponentValidation } from '@/lib/queries/component_validation'
 import {
   pct, pctColor, RSPctileBar,
-  RSStateChip, MomentumChip, RiskChip, VolumeChip,
+  MomentumChip, VolumeChip,
 } from '@/lib/stock-formatters'
 import { SectorBadge } from './SectorBadge'
 import { useColumnVisibility } from '@/components/ui/ColumnToggle'
-import { ConvictionCell } from './ConvictionCell'
+import { WithinStateRankCell } from './WithinStateRankCell'
+import { ValidatedBadge } from '@/components/ui/ValidatedBadge'
 import {
   RS_ORDER, MOM_ORDER, RISK_ORDER, VOL_ORDER,
   OPTIONAL_COLS, COL_STORAGE_KEY, ALWAYS_VISIBLE_COL_COUNT,
@@ -25,11 +26,11 @@ import { ScreenerFilterPanel } from './ScreenerFilterPanel'
 export function StockScreener({
   stocks,
   maFilter,
-  convictionMap,
+  validations = [],
 }: {
   stocks: StockRowWithSector[]
   maFilter?: 'above_30w_ma' | 'above_50d_ma' | 'above_200d_ma' | null
-  convictionMap?: Record<string, ConvictionMapRow>
+  validations?: ComponentValidation[]
 }) {
   const [sortKey, setSortKey] = useState<SortKey>('cap_rank')
   const [asc, setAsc] = useState(true)
@@ -366,7 +367,10 @@ export function StockScreener({
                         data-validator-id={`stock.rs_state:${row.instrument_id}`}
                         data-validator-raw={row.rs_state ?? ''}
                       >
-                        <RSStateChip value={row.rs_state} />
+                        <ValidatedBadge
+                          label={row.rs_state ?? '—'}
+                          validation={validations.find(v => v.component_name === 'rs' && v.badge === row.rs_state) ?? undefined}
+                        />
                       </td>
                       <td
                         className="px-3 py-2.5"
@@ -376,14 +380,17 @@ export function StockScreener({
                         <MomentumChip value={row.momentum_state} />
                       </td>
                       <td className="px-3 py-2.5">
-                        <RiskChip value={row.risk_state} />
+                        <ValidatedBadge
+                          label={row.risk_state ?? '—'}
+                          validation={validations.find(v => v.component_name === 'risk' && v.badge === row.risk_state) ?? undefined}
+                        />
                       </td>
                       <td className="px-3 py-2.5">
                         <VolumeChip value={row.volume_state} />
                       </td>
                       {visibleCols.has('conviction') && (
                         <td className="px-3 py-2.5">
-                          <ConvictionCell row={convictionMap?.[row.instrument_id]} />
+                          <WithinStateRankCell value={typeof (row as Record<string, unknown>).within_state_rank === 'number' ? (row as Record<string, unknown>).within_state_rank as number : null} />
                         </td>
                       )}
                       {visibleCols.has('quality') && (() => {

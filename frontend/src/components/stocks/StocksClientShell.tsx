@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import type { StockRowWithSector } from '@/lib/queries/stocks'
-import type { ConvictionMapRow } from '@/lib/queries/conviction'
+import type { ComponentValidation } from '@/lib/queries/component_validation'
 import type { RSLeaderRow, BreakoutCandidateRow } from '@/lib/queries/leaders'
 import { StockBreadthPanel } from './StockBreadthPanel'
 import { StockBubbleChart } from './StockBubbleChart'
@@ -17,7 +17,7 @@ export function StocksClientShell({
   stocks,
   regimeState,
   deploymentMultiplier,
-  convictionMap,
+  validations = [],
   leaders,
   breakouts,
   deterioration,
@@ -25,7 +25,7 @@ export function StocksClientShell({
   stocks: StockRowWithSector[]
   regimeState: string
   deploymentMultiplier: number
-  convictionMap?: Record<string, ConvictionMapRow>
+  validations?: ComponentValidation[]
   leaders: RSLeaderRow[]
   breakouts: BreakoutCandidateRow[]
   deterioration: BreakoutCandidateRow[]
@@ -81,7 +81,7 @@ export function StocksClientShell({
           <StockScreener
             stocks={stocks}
             maFilter={maFilter}
-            convictionMap={convictionMap}
+            validations={validations}
           />
         </>
       ) : (
