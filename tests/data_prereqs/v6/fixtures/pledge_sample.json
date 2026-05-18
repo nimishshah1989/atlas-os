@@ -1,0 +1,7 @@
+{
+  "asOfDate": "2024-09-30",
+  "filings": [
+    {"symbol": "DHFL", "promoter_total_shares": 1000000, "promoter_pledged_shares": 600000},
+    {"symbol": "TCS",  "promoter_total_shares": 5000000, "promoter_pledged_shares": 0}
+  ]
+}
