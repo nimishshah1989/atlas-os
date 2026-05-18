@@ -10,9 +10,7 @@ import {
   RSStateChip, MomentumChip, RiskChip, VolumeChip,
 } from '@/lib/stock-formatters'
 import { SectorBadge } from './SectorBadge'
-import { StageBadge, SignalBadge } from './CTSSignalBadge'
 import { useColumnVisibility } from '@/components/ui/ColumnToggle'
-import { StateJourneyCompact } from '@/components/ui/StateJourneyCompact'
 import { ConvictionCell } from './ConvictionCell'
 import {
   RS_ORDER, MOM_ORDER, RISK_ORDER, VOL_ORDER,
@@ -23,8 +21,6 @@ import {
   type SortKey, type FilterChip,
 } from './screener-utils'
 import { ScreenerFilterPanel } from './ScreenerFilterPanel'
-import { CTSTimingCell } from './CTSTimingCell'
-import { SignalCell } from './SignalCell'
 
 export function StockScreener({
   stocks,
@@ -278,18 +274,6 @@ export function StockScreener({
               {visibleCols.has('quality') && (
                 <PlainTh label="Grade" tooltip={COL_TOOLTIPS.quality} />
               )}
-              {visibleCols.has('cts_timing') && (
-                <PlainTh label="Timing" tooltip={COL_TOOLTIPS.cts_timing} />
-              )}
-              {visibleCols.has('cts_stage') && (
-                <PlainTh label="Stage" tooltip={COL_TOOLTIPS.cts_stage} />
-              )}
-              {visibleCols.has('cts_signal') && (
-                <PlainTh label="CTS Signal" tooltip={COL_TOOLTIPS.cts_signal} />
-              )}
-              {visibleCols.has('signal') && (
-                <PlainTh label="Signal" tooltip={COL_TOOLTIPS.signal} />
-              )}
               {visibleCols.has('ret_1d') && <PlainTh label="1D" align="right" />}
               {visibleCols.has('ret_1w') && <PlainTh label="1W" align="right" />}
               <Th label="1M" k="ret_1m" align="right" />
@@ -415,35 +399,6 @@ export function StockScreener({
                           </td>
                         )
                       })()}
-                      {visibleCols.has('cts_timing') && (
-                        <td className="px-3 py-2.5">
-                          <CTSTimingCell row={row} />
-                        </td>
-                      )}
-                      {visibleCols.has('cts_stage') && (
-                        <td className="px-3 py-2.5">
-                          <StageBadge stage={optNum(row, 'stage') as 1 | 2 | 3 | 4 | null} />
-                        </td>
-                      )}
-                      {visibleCols.has('cts_signal') && (() => {
-                        const sig = optBool(row, 'is_ppc') ? 'PPC'
-                          : optBool(row, 'is_npc') ? 'NPC'
-                          : optBool(row, 'is_contraction') ? 'Contraction'
-                          : null
-                        return (
-                          <td className="px-3 py-2.5">
-                            <SignalBadge
-                              signal={sig as 'PPC' | 'NPC' | 'Contraction' | null}
-                              date={optStr(row, 'signal_date') ?? undefined}
-                            />
-                          </td>
-                        )
-                      })()}
-                      {visibleCols.has('signal') && (
-                        <td className="px-3 py-2.5 min-w-[140px]">
-                          <SignalCell row={row} />
-                        </td>
-                      )}
                       {visibleCols.has('ret_1d') && (
                         <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(ret1d)}`}>
                           {pct(ret1d)}
@@ -564,10 +519,7 @@ export function StockScreener({
                     {isExpanded && (
                       <tr className="border-b border-paper-rule bg-paper-rule/10">
                         <td colSpan={totalCols} className="px-4 py-3">
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex-1 min-w-0">
-                              <StateJourneyCompact symbol={row.symbol} />
-                            </div>
+                          <div className="flex items-start justify-end gap-4">
                             <Link
                               href={`/stocks/${encodeURIComponent(row.symbol)}`}
                               onClick={e => e.stopPropagation()}

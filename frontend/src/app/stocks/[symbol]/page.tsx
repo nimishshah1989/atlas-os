@@ -4,7 +4,6 @@ import { notFound } from 'next/navigation'
 import {
   getStockBySymbol,
   getStockMetricHistory,
-  getStockStateHistory,
   getStockOBVSeries,
   getStockATRContraction,
 } from '@/lib/queries/stocks'
@@ -39,7 +38,6 @@ export default async function StockPage({
 
   const [
     metricHistory,
-    stateHistoryLegacy,
     stockState,
     cohortKey,
     stateHistory,
@@ -49,7 +47,6 @@ export default async function StockPage({
     hitRate,
   ] = await Promise.all([
     getStockMetricHistory(stock.instrument_id, 365),
-    getStockStateHistory(stock.instrument_id, 365),
     getStockState(stock.instrument_id),
     getStockCohortKey(stock.instrument_id),
     getStateHistory(stock.instrument_id, 252),
@@ -129,7 +126,6 @@ export default async function StockPage({
       <StockDeepDiveBody
         stock={stock}
         metricHistory={metricHistory}
-        stateHistory={stateHistoryLegacy}
       />
 
       <div className="px-6 pb-10">

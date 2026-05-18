@@ -9,7 +9,6 @@ import {
   RSStateChip, MomentumChip, RiskChip,
 } from '@/lib/stock-formatters'
 import { ColumnToggle, useColumnVisibility, type ColumnDef } from '@/components/ui/ColumnToggle'
-import { StateJourneyCompact } from '@/components/ui/StateJourneyCompact'
 
 const RS_ORDER = ['Leader', 'Strong', 'Consolidating', 'Emerging', 'Average', 'Weak', 'Laggard']
 const MOM_ORDER = ['Accelerating', 'Improving', 'Flat', 'Deteriorating', 'Collapsing']
@@ -433,13 +432,6 @@ export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
                         </div>
                       </td>
                     </tr>
-                    {isExpanded && (
-                      <tr className="border-b border-paper-rule bg-paper-rule/10">
-                        <td colSpan={totalCols} className="px-4 py-3">
-                          <StateJourneyCompact ticker={row.ticker} />
-                        </td>
-                      </tr>
-                    )}
                   </Fragment>
                 )
               })

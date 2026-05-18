@@ -1,7 +1,7 @@
 'use client'
 import { useState, type ReactNode } from 'react'
 import { IndicatorChart } from '@/components/regime/IndicatorChart'
-import type { MetricHistoryRow, StateHistoryRow, StockRowWithSector } from '@/lib/queries/stocks'
+import type { MetricHistoryRow, StockRowWithSector } from '@/lib/queries/stocks'
 import {
   interpretRSPctile,
   interpretMomentumState,
@@ -14,8 +14,6 @@ import {
   pct,
   pctColor,
 } from '@/lib/stock-formatters'
-import { StateHeatmap } from './StockHistoryTab'
-import { StateJourneyCompact } from '@/components/ui/StateJourneyCompact'
 
 function Commentary({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -180,16 +178,13 @@ function sliceByDays<T extends { date: Date | string }>(arr: T[], days: ChartDay
 export function StockDeepDiveBody({
   stock,
   metricHistory,
-  stateHistory,
 }: {
   stock: StockRowWithSector
   metricHistory: MetricHistoryRow[]
-  stateHistory: StateHistoryRow[]
 }) {
   const [chartDays, setChartDays] = useState<ChartDays>(180)
 
   const filteredMetric = sliceByDays(metricHistory, chartDays)
-  const filteredState  = sliceByDays(stateHistory, chartDays)
   const latest = filteredMetric[filteredMetric.length - 1]
 
   const rsPctileData = filteredMetric.map(r => ({
@@ -249,14 +244,6 @@ export function StockDeepDiveBody({
         ))}
       </div>
 
-      {/* State journey compact strip */}
-      <div className="border border-paper-rule rounded-sm bg-paper px-4 py-3">
-        <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-2">
-          State Journey — {CHART_RANGES.find(r => r.days === chartDays)?.label}
-        </div>
-        <StateJourneyCompact symbol={stock.symbol} days={chartDays} />
-      </div>
-
       {/* Entry / Exit Signals */}
       <div>
         <SectionLabel>Signals</SectionLabel>
@@ -298,14 +285,6 @@ export function StockDeepDiveBody({
         <Commentary title="Momentum">
           {interpretMomentumState(stock.momentum_state)}
         </Commentary>
-      </div>
-
-      {/* State history heatmap */}
-      <div>
-        <SectionLabel>State History — Daily Heatmap ({CHART_RANGES.find(r => r.days === chartDays)?.label})</SectionLabel>
-        <div className="mt-3">
-          <StateHeatmap history={filteredState} />
-        </div>
       </div>
 
       {/* Metric charts */}
