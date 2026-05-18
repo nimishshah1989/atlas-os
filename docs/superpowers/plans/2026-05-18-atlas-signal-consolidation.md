@@ -112,6 +112,167 @@
 2. **`atlas/trading/lab.py` is read-only for this plan.** The strategy runner is untouched.
 3. **No drop migrations run until Phase 9** (after 2-week burn-in verification).
 4. **Bridge views are non-destructive.** Phase 1 deploys them; legacy tables still write nightly. The cutover to "state-engine-only nightly write" happens in Phase 8.
+5. **Parallel-deploy isolation.** All work happens on `feat/atlas-consolidation` (worktree at `../atlas-os-consolidation`). EC2 deploys go to `/home/ubuntu/atlas-frontend-v2/` and PM2 process `atlas-frontend-v2` on port `3002`. The existing `atlas-frontend` (3001) on `atlas.jslwealth.in` is untouched until the fund-manager demo approves the v2.
+
+---
+
+## Phase 0 — Parallel deploy infrastructure (0.5 day CC)
+
+Goal: stand up a second deploy target on EC2 (`/home/ubuntu/atlas-frontend-v2/`, PM2 process `atlas-frontend-v2` on port 3002, security-group rule allowing inbound :3002). All subsequent phase deploys go to this target; production atlas-frontend on :3001 is unaffected.
+
+### Task 0.1: Open EC2 security group port 3002
+
+- [ ] **Step 1: Find the security group attached to the EC2 instance**
+
+```bash
+ssh atlas "curl -s http://169.254.169.254/latest/meta-data/security-groups"
+```
+Expected: a security group name (e.g., `atlas-prod-sg`).
+
+- [ ] **Step 2: Add inbound rule via AWS CLI**
+
+```bash
+aws ec2 authorize-security-group-ingress \
+  --group-id sg-XXXXXXXX \
+  --protocol tcp --port 3002 --cidr 0.0.0.0/0 \
+  --region ap-south-1
+```
+(Replace `sg-XXXXXXXX` with the actual security group ID. If `aws` CLI is not configured locally, do this in the AWS console.)
+
+- [ ] **Step 3: Verify port reachable**
+
+```bash
+nc -vz 13.206.34.214 3002
+```
+Expected: at this stage, "Connection refused" — the port is open but nothing is listening yet. Good.
+
+### Task 0.2: Set up `/home/ubuntu/atlas-frontend-v2/` deploy directory
+
+- [ ] **Step 1: Clone the structure from existing atlas-frontend**
+
+```bash
+ssh atlas "
+  mkdir -p /home/ubuntu/atlas-frontend-v2
+  cp -R /home/ubuntu/atlas-frontend/package.json \
+        /home/ubuntu/atlas-frontend/package-lock.json \
+        /home/ubuntu/atlas-frontend/next.config.js \
+        /home/ubuntu/atlas-frontend/tsconfig.json \
+        /home/ubuntu/atlas-frontend/postcss.config.mjs \
+        /home/ubuntu/atlas-frontend/eslint.config.mjs \
+        /home/ubuntu/atlas-frontend/playwright.config.ts \
+        /home/ubuntu/atlas-frontend/middleware.ts \
+        /home/ubuntu/atlas-frontend/next-env.d.ts \
+        /home/ubuntu/atlas-frontend-v2/
+  ln -s /home/ubuntu/atlas-frontend-v2/frontend/src /home/ubuntu/atlas-frontend-v2/src 2>/dev/null || true
+"
+```
+
+- [ ] **Step 2: Install dependencies**
+
+```bash
+ssh atlas "cd /home/ubuntu/atlas-frontend-v2 && npm install 2>&1 | tail -5"
+```
+Expected: "added N packages" and no errors.
+
+- [ ] **Step 3: Copy current frontend source to bootstrap the build**
+
+```bash
+ssh atlas "
+  mkdir -p /home/ubuntu/atlas-frontend-v2/frontend
+  cp -R /home/ubuntu/atlas-frontend/frontend/src /home/ubuntu/atlas-frontend-v2/frontend/
+  cp -R /home/ubuntu/atlas-frontend/frontend/public /home/ubuntu/atlas-frontend-v2/frontend/ 2>/dev/null || true
+"
+```
+
+- [ ] **Step 4: Copy .env**
+
+```bash
+ssh atlas "cp /home/ubuntu/atlas-frontend/.env /home/ubuntu/atlas-frontend-v2/.env"
+```
+
+### Task 0.3: PM2 ecosystem entry on port 3002
+
+- [ ] **Step 1: Write the ecosystem file**
+
+```bash
+ssh atlas "cat > /home/ubuntu/atlas-frontend-v2/ecosystem.config.js <<'EOF'
+module.exports = {
+  apps: [{
+    name: 'atlas-frontend-v2',
+    cwd:  '/home/ubuntu/atlas-frontend-v2',
+    script: 'node_modules/.bin/next',
+    args: 'start -p 3002',
+    env: {
+      NODE_ENV: 'production',
+      PORT: '3002',
+    },
+    instances: 1,
+    autorestart: true,
+    max_memory_restart: '512M',
+  }],
+};
+EOF
+"
+```
+
+- [ ] **Step 2: Initial build (sanity check with current frontend code)**
+
+```bash
+ssh atlas "cd /home/ubuntu/atlas-frontend-v2 && npm run build 2>&1 | tail -10"
+```
+Expected: build succeeds.
+
+- [ ] **Step 3: Start the PM2 process**
+
+```bash
+ssh atlas "cd /home/ubuntu/atlas-frontend-v2 && pm2 start ecosystem.config.js && pm2 save"
+```
+
+- [ ] **Step 4: Smoke test from local machine**
+
+```bash
+curl -s -o /dev/null -w 'HTTP %{http_code}\n' "http://13.206.34.214:3002/"
+```
+Expected: `HTTP 200` or `HTTP 307` (redirect to /login).
+
+- [ ] **Step 5: Commit the deploy script on the consolidation branch**
+
+Create `scripts/deploy_v2.sh`:
+
+```bash
+#!/usr/bin/env bash
+# Deploys the current branch's frontend to /home/ubuntu/atlas-frontend-v2 on EC2.
+# Used during signal-consolidation v2 demo build-out.
+set -euo pipefail
+
+BRANCH=$(git branch --show-current)
+[ "$BRANCH" = "feat/atlas-consolidation" ] || {
+  echo "Refusing to deploy from branch '$BRANCH' (expected feat/atlas-consolidation)"
+  exit 1
+}
+
+echo "[deploy-v2] bundling frontend changes..."
+tar -czf /tmp/atlas-frontend-v2.tgz frontend/src/
+
+echo "[deploy-v2] shipping to EC2..."
+scp /tmp/atlas-frontend-v2.tgz atlas:/tmp/
+
+echo "[deploy-v2] extracting + building on EC2..."
+ssh atlas '
+  cd /home/ubuntu/atlas-frontend-v2 \
+    && tar -xzf /tmp/atlas-frontend-v2.tgz \
+    && npm run build 2>&1 | tail -5 \
+    && pm2 restart atlas-frontend-v2
+'
+
+echo "[deploy-v2] done. Demo URL: http://13.206.34.214:3002/"
+```
+
+```bash
+chmod +x scripts/deploy_v2.sh
+git add scripts/deploy_v2.sh
+git commit -m "feat(deploy): scripts/deploy_v2.sh — parallel frontend deploy to port 3002"
+```
 
 ---
 
@@ -2761,6 +2922,90 @@ Expected: state engine writes, three aggregator tables populated.
 ssh atlas "cd /home/ubuntu/atlas-os-sl && /home/ubuntu/.venv/bin/python -m atlas.trading.cli goal-post --rank 1"
 ```
 Expected: `met:true`.
+
+---
+
+## Phase 8.10 — Demo handoff to fund manager (0.5 day CC)
+
+Goal: every page on `http://13.206.34.214:3002/` reads exclusively from the new state engine and bridge views. Existing production at `https://atlas.jslwealth.in/` is untouched. Fund manager evaluates side-by-side.
+
+### Task 8.10.1: Final v2 deploy + visual walkthrough
+
+- [ ] **Step 1: Deploy current branch to v2**
+
+```bash
+./scripts/deploy_v2.sh
+```
+Expected: `HTTP 200` from the demo URL.
+
+- [ ] **Step 2: Smoke test the key pages with curl**
+
+```bash
+for path in /stocks /stocks/NESTLEIND /stocks/ANANTRAJ /sectors /sectors/Banking /funds /etfs; do
+  printf "%-40s " "$path"
+  curl -s -o /dev/null -w 'HTTP %{http_code} | %{size_download}b\n' "http://13.206.34.214:3002$path"
+done
+```
+Expected: all HTTP 200, response sizes comparable to production atlas.jslwealth.in.
+
+- [ ] **Step 3: Side-by-side spot check on NESTLEIND**
+
+```bash
+curl -s "http://13.206.34.214:3002/stocks/NESTLEIND" > /tmp/v2-nestle.html
+curl -s "https://atlas.jslwealth.in/stocks/NESTLEIND"  > /tmp/v1-nestle.html
+# Confirm v2 lacks the legacy gate row + has only one state label.
+grep -c "history_gate_pass\|weinstein_gate_pass\|liquidity_gate_pass" /tmp/v2-nestle.html
+# Expected: 0 (gates gone)
+grep -c "STAGE 4 DECLINE\|Stage 4 Decline" /tmp/v2-nestle.html
+# Expected: ≥ 1 (master state present)
+```
+
+- [ ] **Step 4: Write demo notes**
+
+Create `docs/audits/v2-demo-handoff-2026-05.md`:
+
+```markdown
+# Atlas v2 — fund-manager demo
+
+**URL:** http://13.206.34.214:3002/
+**Production:** https://atlas.jslwealth.in/
+
+## What changed
+- Single state per instrument across every page (no contradictions)
+- Gate rows removed from stock + fund screeners
+- ConvictionCell replaced with within-state-rank
+- Sector / fund / ETF aggregations are bottom-up from stock states
+- nav_state retained for funds (genuinely fund-internal)
+
+## Side-by-side
+| Page | v1 (atlas.jslwealth.in) | v2 (13.206.34.214:3002) |
+|---|---|---|
+| /stocks/NESTLEIND | "Investable" + "Stage 4 Decline" (contradicts) | "Stage 4 Decline" only |
+| /stocks (list) | 7-gate dot row + Mom + Vol chips | gates gone; rs_state via ValidatedBadge |
+| /funds | 4-gate dot row | gates gone; recommendation derived |
+| /sectors | top-down sector_state | bottom-up from stock states |
+
+## Evaluation prompts for the fund manager
+1. Is the v2 page faster to interpret?
+2. Are there any signals you miss from v1 that v2 cuts?
+3. Does the "Recommended / Hold / Avoid" derived from new aggregators match your intuition vs the v1 version?
+4. Does within_state_rank replace SP04 conviction acceptably?
+```
+
+- [ ] **Step 5: Commit the demo notes**
+
+```bash
+git add docs/audits/v2-demo-handoff-2026-05.md
+git commit -m "docs(demo): v2 handoff notes for fund-manager evaluation"
+```
+
+### Task 8.10.2: Decision gate
+
+After the fund manager evaluates:
+
+- **If approved** → merge `feat/atlas-consolidation` → `main`, retire production atlas-frontend on 3001, point `atlas.jslwealth.in` at port 3002 (or rebuild 3001 from main), then run Phase 9 (drop legacy tables) after 2-week burn-in.
+- **If iteration needed** → fund-manager feedback lands as new tasks on `feat/atlas-consolidation`. Re-deploy via `./scripts/deploy_v2.sh`. No production impact.
+- **If rejected** → preserve `feat/atlas-consolidation` as a research branch; the bridge views + new aggregator tables stay (non-destructive) and become available for any future cleanup attempt.
 
 ---
 
