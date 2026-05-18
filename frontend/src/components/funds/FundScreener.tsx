@@ -36,7 +36,7 @@ const ALL_COLS: ColumnDef[] = [
   { key: 'rs_pctile',       label: 'RS Pctile',       defaultVisible: true },
   { key: 'rs_category',     label: 'RS Category',     defaultVisible: true },
   { key: 'vol',             label: 'Vol (63D)',        defaultVisible: false },
-  { key: 'gates',           label: 'Gates',           defaultVisible: true },
+  // Phase 8: 'gates' column removed — 4-gate dot row (P/S/H/M) dropped
   { key: 'comp_bar',        label: 'Comp Bar',        defaultVisible: true },
   { key: 'holdings_bar',    label: 'Holdings Bar',    defaultVisible: true },
   { key: 'weeks_in_state',  label: 'In State',         defaultVisible: true },
@@ -56,25 +56,6 @@ type SortCol =
   | 'nav_state' | 'composition' | 'holdings' | 'recommendation'
   | 'ret' | 'rs_pctile' | 'rs_category'
   | 'vol' | 'weeks_in_state' | 'drawdown' | 'max_drawdown' | 'aum'
-
-// 4 coloured dots: Perf · Sectors · Stocks · Market
-function GateDots({ f }: { f: FundRow }) {
-  const gates = [f.performance_gate, f.sectors_gate, f.stocks_gate, f.market_gate]
-  const labels = ['Perf', 'Sectors', 'Stocks', 'Market']
-  return (
-    <span className="flex gap-0.5">
-      {gates.map((g, i) => (
-        <span
-          key={labels[i]}
-          title={`${labels[i]}: ${g === true ? 'Pass' : g === false ? 'Fail' : 'N/A'}`}
-          className={`text-[10px] ${g === true ? 'text-signal-pos' : g === false ? 'text-signal-neg' : 'text-ink-tertiary/40'}`}
-        >
-          ●
-        </span>
-      ))}
-    </span>
-  )
-}
 
 function getSortValue(col: SortCol, f: FundRow, period: Period): number | string {
   // Re-shape the row so buildSortKey() can read the canonical column key it expects.
@@ -197,7 +178,6 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
               {visibleCols.has('rs_pctile')      && <Th label="RS Pctile"      k="rs_pctile"   align="right" />}
               {visibleCols.has('rs_category')    && <Th label="RS Cat"         k="rs_category" align="right" />}
               {visibleCols.has('vol')            && <Th label="Vol 63D"        k="vol"          align="right" />}
-              {visibleCols.has('gates')          && <PlainTh label="Gates" />}
               {visibleCols.has('comp_bar')       && <PlainTh label="Comp Bar" />}
               {visibleCols.has('holdings_bar')   && <PlainTh label="Holdings Bar" />}
               {visibleCols.has('weeks_in_state') && <Th label="In State" k="weeks_in_state" align="right" title="How long this fund has been in its current NAV state (d=days, w=weeks, mo=months)" />}
@@ -292,11 +272,6 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
                         {f.realized_vol_63 != null
                           ? `${(parseFloat(f.realized_vol_63) * 100).toFixed(0)}%`
                           : '—'}
-                      </td>
-                    )}
-                    {visibleCols.has('gates') && (
-                      <td className="px-3 py-2.5">
-                        <GateDots f={f} />
                       </td>
                     )}
                     {visibleCols.has('comp_bar') && (
