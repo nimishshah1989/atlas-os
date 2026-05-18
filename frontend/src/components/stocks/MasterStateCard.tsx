@@ -151,7 +151,7 @@ export function MasterStateCard({
 
   return (
     <div
-      className="sticky top-0 z-30 bg-paper border-b border-paper-rule py-4 px-6"
+      className="sticky top-14 z-30 bg-paper border-b border-paper-rule py-4 px-6"
       data-testid="master-state-card"
     >
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">

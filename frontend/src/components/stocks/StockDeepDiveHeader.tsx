@@ -14,7 +14,7 @@ function IndexBadge({ label }: { label: string }) {
 
 export function StockDeepDiveHeader({ stock }: { stock: StockRowWithSector }) {
   return (
-    <div className="sticky top-14 bg-paper border-b border-paper-rule z-30">
+    <div className="bg-paper border-b border-paper-rule">
       <div className="px-6 py-4">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1 font-sans text-xs text-ink-tertiary mb-3" aria-label="Breadcrumb">
