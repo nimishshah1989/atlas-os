@@ -53,6 +53,9 @@ export type ETFRow = {
   exit_rs_deteriorate: boolean | null
   exit_momentum_collapse: boolean | null
   exit_stop_loss: boolean | null
+  // Phase 8: bubble chart axes — from atlas_etf_signal_unified
+  mean_rs_rank_12m: number | null
+  mean_within_state_rank: number | null
 }
 
 export type ETFMetricHistoryRow = {
@@ -160,7 +163,10 @@ export async function getAllETFs(): Promise<ETFRow[]> {
       NULL::boolean                 AS exit_sector_avoid,
       NULL::boolean                 AS exit_rs_deteriorate,
       NULL::boolean                 AS exit_momentum_collapse,
-      NULL::boolean                 AS exit_stop_loss
+      NULL::boolean                 AS exit_stop_loss,
+      -- Phase 8: bubble chart axes
+      eu.mean_rs_rank_12m::float8   AS mean_rs_rank_12m,
+      eu.mean_within_state_rank::float8 AS mean_within_state_rank
     FROM atlas.atlas_universe_etfs u
     LEFT JOIN latest l ON l.ticker = u.ticker
     LEFT JOIN atlas.atlas_etf_metrics_daily m
@@ -240,7 +246,10 @@ export async function getETFByTicker(ticker: string): Promise<ETFRow | null> {
       NULL::boolean                 AS exit_sector_avoid,
       NULL::boolean                 AS exit_rs_deteriorate,
       NULL::boolean                 AS exit_momentum_collapse,
-      NULL::boolean                 AS exit_stop_loss
+      NULL::boolean                 AS exit_stop_loss,
+      -- Phase 8: bubble chart axes
+      eu.mean_rs_rank_12m::float8   AS mean_rs_rank_12m,
+      eu.mean_within_state_rank::float8 AS mean_within_state_rank
     FROM atlas.atlas_universe_etfs u
     JOIN latest l ON TRUE
     LEFT JOIN atlas.atlas_etf_metrics_daily m
@@ -399,7 +408,10 @@ export async function getLinkedETFsForSector(sectorName: string): Promise<ETFRow
       NULL::boolean                 AS exit_sector_avoid,
       NULL::boolean                 AS exit_rs_deteriorate,
       NULL::boolean                 AS exit_momentum_collapse,
-      NULL::boolean                 AS exit_stop_loss
+      NULL::boolean                 AS exit_stop_loss,
+      -- Phase 8: bubble chart axes
+      eu.mean_rs_rank_12m::float8   AS mean_rs_rank_12m,
+      eu.mean_within_state_rank::float8 AS mean_within_state_rank
     FROM atlas.atlas_universe_etfs u
     LEFT JOIN latest l ON l.ticker = u.ticker
     LEFT JOIN atlas.atlas_etf_metrics_daily m

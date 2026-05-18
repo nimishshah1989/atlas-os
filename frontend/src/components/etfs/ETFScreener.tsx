@@ -7,7 +7,6 @@ import type { ETFRow } from '@/lib/queries/etfs'
 import type { ComponentValidation } from '@/lib/queries/component_validation'
 import {
   pct, pctColor, PosSizeBar, RSPctileBar,
-  MomentumChip,
 } from '@/lib/stock-formatters'
 import { ValidatedBadge } from '@/components/ui/ValidatedBadge'
 import { ColumnToggle, useColumnVisibility, type ColumnDef } from '@/components/ui/ColumnToggle'
@@ -66,8 +65,9 @@ const OPTIONAL_COLS: ColumnDef[] = [
 const COL_STORAGE_KEY = 'atlas-etf-screener-cols'
 
 // Always-visible columns:
-//   Ticker, Theme, Gates, RS State, Mom, Risk, 1M, 3M, RS Pctile, Deploy %  = 10
-const ALWAYS_VISIBLE_COL_COUNT = 10
+//   Ticker, Theme, RS State, Risk, 1M, 3M, RS Pctile, Deploy %  = 8
+// (Gates and Mom columns removed in Phase 8)
+const ALWAYS_VISIBLE_COL_COUNT = 8
 
 function TriggerBadges({ row }: { row: ETFRow }) {
   if (!row.breakout_trigger && !row.transition_trigger) return null
@@ -89,44 +89,6 @@ function ThemeBadge({ theme }: { theme: string }) {
     <span className={`inline-flex items-center px-1.5 py-0.5 rounded-[2px] font-sans text-[10px] font-semibold whitespace-nowrap ${style}`}>
       {theme}
     </span>
-  )
-}
-
-const GATE_DEFS: { label: string; title: string; key: keyof ETFRow }[] = [
-  { label: 'H',  title: 'History gate — ETF has ≥52 weeks of price history',                  key: 'history_gate_pass' },
-  { label: 'L',  title: 'Liquidity gate — average daily volume above minimum threshold',       key: 'liquidity_gate_pass' },
-  { label: 'W',  title: 'Weinstein gate — price above 30-week (150-day) moving average',       key: 'weinstein_gate_pass' },
-  { label: 'S',  title: 'Strength gate — RS state is Leader or Strong (top 30th percentile)', key: 'strength_gate' },
-  { label: 'D',  title: 'Direction gate — momentum is Accelerating or Improving',              key: 'direction_gate' },
-  { label: 'Ri', title: 'Risk gate — extension <40% above 200-day MA and volatility normal',  key: 'risk_gate' },
-]
-
-function GateBadge({ row }: { row: ETFRow }) {
-  const passing = GATE_DEFS.filter(g => row[g.key] === true).length
-  return (
-    <div className="flex items-center gap-0.5">
-      <span className={`font-mono text-[9px] mr-0.5 ${passing >= 5 ? 'text-signal-pos' : passing >= 4 ? 'text-signal-warn' : 'text-ink-tertiary'}`}>
-        {passing}/6
-      </span>
-      {GATE_DEFS.map(g => {
-        const pass = row[g.key]
-        return (
-          <span
-            key={g.label}
-            title={g.title}
-            className={`inline-flex items-center justify-center px-0.5 py-0.5 rounded-[2px] font-mono text-[8px] font-bold cursor-help ${
-              pass === true
-                ? 'bg-teal/15 text-teal'
-                : pass === false
-                ? 'bg-signal-neg/10 text-signal-neg'
-                : 'bg-paper-rule/20 text-ink-tertiary'
-            }`}
-          >
-            {g.label}
-          </span>
-        )
-      })}
-    </div>
   )
 }
 
@@ -285,9 +247,7 @@ export function ETFScreener({ etfs, validations = [] }: { etfs: ETFRow[]; valida
             <tr className="border-b border-paper-rule bg-paper">
               <Th label="Ticker" k="ticker" />
               <Th label="Theme" k="theme" />
-              <PlainTh label="Gates" />
               <Th label="RS State" k="rs_state" />
-              <Th label="Mom" k="momentum_state" />
               <Th label="Risk" k="risk_state" />
               {visibleCols.has('ret_1w') && <PlainTh label="1W" align="right" />}
               {visibleCols.has('ret_12m') && <Th label="12M" k="ret_12m" align="right" />}
@@ -344,16 +304,10 @@ export function ETFScreener({ etfs, validations = [] }: { etfs: ETFRow[]; valida
                         )}
                       </td>
                       <td className="px-3 py-2.5">
-                        <GateBadge row={row} />
-                      </td>
-                      <td className="px-3 py-2.5">
                         <ValidatedBadge
                           label={row.rs_state ?? '—'}
                           validation={validations.find(v => v.component_name === 'rs' && v.badge === row.rs_state) ?? undefined}
                         />
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <MomentumChip value={row.momentum_state} />
                       </td>
                       <td className="px-3 py-2.5">
                         <ValidatedBadge
