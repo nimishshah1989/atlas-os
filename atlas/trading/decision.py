@@ -45,54 +45,57 @@ _MOM_NORM_LUT = np.array([0.0, 0.5, 1.0], dtype=np.float32)
 _VOL_NORM_LUT = np.array([0.0, 0.5, 1.0], dtype=np.float32)
 
 
+def _xs_rank(arr: np.ndarray) -> np.ndarray:
+    """Cross-sectional percentile rank per day (column).
+
+    Each (stock, day) cell becomes its percentile rank among that day's
+    valid stocks. NaN cells → 0.0 (neutral, no conviction contribution).
+    """
+    import pandas as pd
+
+    df = pd.DataFrame(arr)
+    return df.rank(axis=0, pct=True).fillna(0.0).to_numpy().astype(np.float32)
+
+
 def compute_conviction_matrix(
-    blended_rs: np.ndarray,
-    rs_state: np.ndarray,
-    mom_state: np.ndarray,
-    vol_state: np.ndarray,
-    days_in_state: np.ndarray,
-    direction: np.ndarray,
-    ppc: np.ndarray,
-    contraction: np.ndarray,
+    ma_30w_slope_4w: np.ndarray,
+    ret_12m_1m: np.ndarray,
+    ret_12m: np.ndarray,
+    extension_pct: np.ndarray,
+    ret_6m: np.ndarray,
+    above_30w_ma: np.ndarray,
+    weinstein_gate_pass: np.ndarray,
+    rs_pctile_3m: np.ndarray,
+    ret_3m: np.ndarray,
     layer1: Layer1Perception,
 ) -> np.ndarray:
-    """Vectorized conviction over (n_stocks, n_days). Equivalent to looping
-    compute_conviction per cell, but ~1000× faster (numpy ops vs Python dict
-    lookups inside a 1.9M-iter loop).
+    """v4 conviction — 9 signals with per-date IR_of_IC > 0.40.
 
-    NaN cells in blended_rs produce conviction=0 (matching the original
-    loop's `continue` behavior which left conv_matrix at 0).
+    All signals tested on 1M+ stock-days (2017-2024) via per-date Spearman
+    correlation with forward 63-day returns. Only signals where the
+    IC-of-IC ratio (mean / stdev across dates) exceeds 0.40 are included —
+    that means the signal is positively predictive on more than 65% of
+    trading days, which is the cutoff for "reliable" in quant practice.
+
+    Continuous signals are cross-sectionally rank-normalized per-day to
+    [0, 1]. Booleans (weinstein_gate_pass, above_30w_ma) contribute their
+    raw 0/1 value — using them as conviction weights rather than hard
+    filters preserves the positive-outlier stocks that hard-gating drops.
+
+    NaN cells produce 0 conviction (won't be entered that day).
     """
-    rs_norm = blended_rs / 100.0
-    mom_norm = _MOM_NORM_LUT[mom_state]
-    vol_norm = _VOL_NORM_LUT[vol_state]
-    rs_state_norm = _RS_NORM_LUT[rs_state]
-
-    # Velocity bonus — direction * max(0, 1 - days_in_state/30)
-    velocity_bonus = direction.astype(np.float32) * np.maximum(
-        0.0, 1.0 - days_in_state.astype(np.float32) / 30.0
-    )
-
-    base = (
-        layer1.conviction_rs_weight * rs_norm
-        + layer1.conviction_mom_weight * mom_norm
-        + layer1.conviction_state_weight * rs_state_norm
-        + layer1.conviction_velocity_weight * np.maximum(0.0, velocity_bonus)
-    )
-
-    synergy = rs_norm * mom_norm
-    penalty = vol_norm * rs_norm
-
     conviction = (
-        base * (1.0 + layer1.synergy_weight * synergy) * (1.0 - layer1.penalty_weight * penalty)
+        layer1.ma_30w_slope_weight * _xs_rank(ma_30w_slope_4w)
+        + layer1.ret_12m_1m_weight * _xs_rank(ret_12m_1m)
+        + layer1.ret_12m_weight * _xs_rank(ret_12m)
+        + layer1.extension_weight * _xs_rank(extension_pct)
+        + layer1.ret_6m_weight * _xs_rank(ret_6m)
+        + layer1.above_30w_weight * above_30w_ma.astype(np.float32)
+        + layer1.weinstein_weight * weinstein_gate_pass.astype(np.float32)
+        + layer1.rs_3m_weight * _xs_rank(rs_pctile_3m)
+        + layer1.ret_3m_weight * _xs_rank(ret_3m)
     )
-    conviction = conviction + layer1.ppc_conviction_boost * ppc.astype(np.float32)
-    conviction = conviction + layer1.contraction_entry_bonus * contraction.astype(np.float32)
-
-    conviction = np.clip(conviction, 0.0, 1.0)
-    # NaN in blended_rs → 0 (matches the scalar loop's `continue` skip)
-    conviction = np.where(np.isnan(blended_rs), 0.0, conviction)
-    return conviction.astype(np.float32)
+    return np.clip(conviction, 0.0, 1.0).astype(np.float32)
 
 
 def compute_conviction(

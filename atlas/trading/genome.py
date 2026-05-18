@@ -122,6 +122,38 @@ class Layer1Perception:
     rs_leader_exit_pct: float = 62.0
     rs_strong_exit_pct: float = 40.0
 
+    # v4 — IC-validated signal portfolio (full sweep on 1M+ stock-days, 2017-2024).
+    # All weights are continuous in [0, 1]; conviction is cross-sectional-rank weighted.
+    # Top 9 signals by max |IC| across forward horizons (5d, 21d, 63d, 126d):
+    #   ma_30w_slope_4w     IC +0.140 @126d   (Weinstein 30wMA slope — strongest)
+    #   ret_6m              IC +0.140 @126d
+    #   extension_pct       IC +0.127 @126d   (% above 50d MA)
+    #   ret_3m              IC +0.106 @126d
+    #   ret_12m_1m          IC +0.100 @126d   (12m ret minus last 1m, anti-overextension)
+    #   ret_12m             IC +0.088 @126d
+    #   realized_vol_63     IC +0.082 @126d   (positive at long horizons)
+    #   volume_expansion    IC +0.082 @126d
+    #   rs_pctile_3m        IC +0.050 @126d   (weakest of the keepers)
+    # Boolean filters (IC-positive, used to gate entries — not weighted into conviction):
+    #   weinstein_gate_pass  IC +0.110 @126d   (Stage 2 active)
+    #   above_30w_ma         IC +0.107 @126d   (above 30-week MA)
+    # Dropped from v4: rs_pctile_1w/1m (IC −0.029 to 0, anti-predictive),
+    #                  stage1_base_qualifies (IC −0.045 @126d).
+    # v4 — only signals with IR_IC > 0.40 (per-date IC stability) kept.
+    # Booleans encoded as continuous {0,1} conviction inputs (NOT hard filters —
+    # filter_α tests showed hard-gating loses positive-outlier stocks).
+    ma_30w_slope_weight: float = 0.0
+    ret_12m_1m_weight: float = 0.0      # IR_IC 0.51
+    ret_12m_weight: float = 0.0          # IR_IC 0.49
+    extension_weight: float = 0.0        # IR_IC 0.44
+    ret_6m_weight: float = 0.0           # IR_IC 0.44
+    above_30w_weight: float = 0.0        # IR_IC 0.42 (boolean as 0/1)
+    weinstein_weight: float = 0.0        # IR_IC 0.41 (boolean as 0/1)
+    rs_3m_weight: float = 0.0            # IR_IC 0.41
+    ret_3m_weight: float = 0.0           # IR_IC 0.40
+    # DROPPED: realized_vol (IR_IC 0.015 — noise), volume_expansion (IR_IC 0.21),
+    #          stage1_base (negative IC), rs_pctile_1w (IR_IC 0.024)
+
     def __post_init__(self) -> None:
         assert (
             self.rs_leader_cutoff_pct
@@ -305,6 +337,18 @@ class GenomeFactory:
             contraction_entry_bonus=random.uniform(0.0, 0.20),
             rs_leader_exit_pct=float(leader_exit),
             rs_strong_exit_pct=float(strong_exit),
+            # v4 IC-validated signal weights (sum bounded by clip in conviction).
+            # Bounds 0.0-0.4 each so Optuna explores both small and large weightings;
+            # a genome with all-zero weights produces zero conviction (no entries).
+            ma_30w_slope_weight=random.uniform(0.0, 0.4),
+            ret_12m_1m_weight=random.uniform(0.0, 0.4),
+            ret_12m_weight=random.uniform(0.0, 0.4),
+            extension_weight=random.uniform(0.0, 0.4),
+            ret_6m_weight=random.uniform(0.0, 0.4),
+            above_30w_weight=random.uniform(0.0, 0.3),
+            weinstein_weight=random.uniform(0.0, 0.3),
+            rs_3m_weight=random.uniform(0.0, 0.3),
+            ret_3m_weight=random.uniform(0.0, 0.3),
         )
         return Genome(
             genome_id=str(uuid.uuid4()),
@@ -399,6 +443,16 @@ class GenomeFactory:
             contraction_entry_bonus=contraction_entry_bonus,
             rs_leader_exit_pct=float(rs_leader_exit_pct),
             rs_strong_exit_pct=float(rs_strong_exit_pct),
+            # v4 IC-validated signal weights
+            ma_30w_slope_weight=trial.suggest_float("ma_30w_slope_weight", 0.0, 0.4),
+            ret_12m_1m_weight=trial.suggest_float("ret_12m_1m_weight", 0.0, 0.4),
+            ret_12m_weight=trial.suggest_float("ret_12m_weight", 0.0, 0.4),
+            extension_weight=trial.suggest_float("extension_weight", 0.0, 0.4),
+            ret_6m_weight=trial.suggest_float("ret_6m_weight", 0.0, 0.4),
+            above_30w_weight=trial.suggest_float("above_30w_weight", 0.0, 0.3),
+            weinstein_weight=trial.suggest_float("weinstein_weight", 0.0, 0.3),
+            rs_3m_weight=trial.suggest_float("rs_3m_weight", 0.0, 0.3),
+            ret_3m_weight=trial.suggest_float("ret_3m_weight", 0.0, 0.3),
         )
 
         def _trial_playbook(

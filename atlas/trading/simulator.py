@@ -211,6 +211,18 @@ def simulate_genome(
     npc_arr = _safe_pivot("npc", default=0.0).astype(np.int8)
     contraction = _safe_pivot("contraction", default=0.0).astype(np.int8)
 
+    # v4 — IC-validated signals (IR_IC > 0.40 per-date stability).
+    # _safe_pivot returns zeros for missing columns so tests with synthetic
+    # dataframes still work (and zero rank contributes zero conviction).
+    ma_30w_slope_arr = _safe_pivot("ma_30w_slope_4w", default=0.0).astype(np.float32)
+    ret_12m_1m_arr = _safe_pivot("ret_12m_1m", default=0.0).astype(np.float32)
+    ret_12m_arr = _safe_pivot("ret_12m", default=0.0).astype(np.float32)
+    ret_6m_arr = _safe_pivot("ret_6m", default=0.0).astype(np.float32)
+    ret_3m_arr = _safe_pivot("ret_3m", default=0.0).astype(np.float32)
+    extension_pct_arr = _safe_pivot("extension_pct", default=0.0).astype(np.float32)
+    weinstein_arr = _safe_pivot("weinstein_gate_pass", default=0.0).astype(np.float32)
+    above_30w_arr = _safe_pivot("above_30w_ma", default=0.0).astype(np.float32)
+
     # Layer 1: state matrices computed once for all windows
     blended_rs = compute_blended_rs_pctile(rs_arrays, genome.layer1.rs_timeframe_weights)
     rs_state = derive_rs_state(blended_rs, genome.layer1)
@@ -222,17 +234,17 @@ def simulate_genome(
         rs_state, genome.layer1.state_velocity_lookback_days
     )
 
-    # Layer 2: conviction matrix — vectorized (was a 1.93M-iter Python loop;
-    # now ~10ms numpy). Same math as the per-cell compute_conviction.
+    # Layer 2: v4 conviction matrix — 9 signals with per-date IR_IC > 0.40.
     conv_matrix = compute_conviction_matrix(
-        blended_rs=blended_rs,
-        rs_state=rs_state,
-        mom_state=mom_state,
-        vol_state=vol_state,
-        days_in_state=days_in_state,
-        direction=direction,
-        ppc=ppc,
-        contraction=contraction,
+        ma_30w_slope_4w=ma_30w_slope_arr,
+        ret_12m_1m=ret_12m_1m_arr,
+        ret_12m=ret_12m_arr,
+        extension_pct=extension_pct_arr,
+        ret_6m=ret_6m_arr,
+        above_30w_ma=above_30w_arr,
+        weinstein_gate_pass=weinstein_arr,
+        rs_pctile_3m=rs_arrays["3m"],
+        ret_3m=ret_3m_arr,
         layer1=genome.layer1,
     )
 

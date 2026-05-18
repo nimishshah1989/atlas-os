@@ -91,7 +91,11 @@ def _load_metrics_df(conn, start_date: date, end_date: date) -> pd.DataFrame:
                 m.instrument_id, m.date,
                 COALESCE(p.close_adj, p.close) AS close,
                 m.rs_pctile_1w, m.rs_pctile_1m, m.rs_pctile_3m,
-                m.vol_ratio_63, m.ema_20_ratio
+                m.vol_ratio_63, m.ema_20_ratio,
+                -- v4 IC-validated signals (IR_IC > 0.40):
+                m.ma_30w_slope_4w, m.ret_3m, m.ret_6m, m.ret_12m,
+                m.ret_12m_1m, m.extension_pct,
+                m.weinstein_gate_pass, m.above_30w_ma
             FROM atlas.atlas_stock_metrics_daily m
             JOIN public.de_equity_ohlcv p
               ON p.instrument_id = m.instrument_id
