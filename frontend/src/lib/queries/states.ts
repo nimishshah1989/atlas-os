@@ -62,9 +62,9 @@ export async function getStockState(instrumentId: string): Promise<StockState | 
       prior_state,
       state_since_date::text,
       dwell_days,
-      dwell_percentile,
+      dwell_percentile::float8     AS dwell_percentile,
       urgency_score,
-      within_state_rank,
+      within_state_rank::float8    AS within_state_rank,
       rs_rank_12m::float8          AS rs_rank_12m,
       close_vs_sma_50::float8      AS close_vs_sma_50,
       close_vs_sma_150::float8     AS close_vs_sma_150,
@@ -139,8 +139,8 @@ export async function getWithinStatePeers(
     SELECT
       s.instrument_id::text,
       u.symbol,
-      s.within_state_rank,
-      s.rs_rank_12m::float8 AS rs_rank_12m,
+      s.within_state_rank::float8 AS within_state_rank,
+      s.rs_rank_12m::float8       AS rs_rank_12m,
       s.dwell_days
     FROM atlas.atlas_stock_state_daily s
     JOIN atlas.atlas_universe_stocks u USING (instrument_id)
