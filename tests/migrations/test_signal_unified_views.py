@@ -127,3 +127,186 @@ def test_stock_signal_unified_continuous_columns_present(db_engine: sa.Engine) -
     assert row is not None, "view must return at least one row for continuous column check"
     # classifier_version must always be v2.0-validated (view WHERE clause)
     assert row.classifier_version == "v2.0-validated"
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 — v2 aggregate tables
+# ---------------------------------------------------------------------------
+
+
+@_SKIP_INTEGRATION
+def test_atlas_sector_state_v2_table_exists(db_engine: sa.Engine) -> None:
+    """atlas_sector_state_v2 exists with all required columns."""
+    with db_engine.connect() as c:
+        rows = c.execute(
+            text("""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_schema = 'atlas'
+              AND table_name   = 'atlas_sector_state_v2'
+        """)
+        ).fetchall()
+    cols = {r.column_name for r in rows}
+    expected = {
+        "sector",
+        "date",
+        "dominant_state",
+        "dominant_share",
+        "n_constituents",
+        "mean_within_state_rank",
+        "pct_stage_2",
+        "pct_stage_3",
+        "pct_stage_4",
+        "pct_stage_1",
+        "pct_uninvestable",
+        "computed_at",
+    }
+    assert expected.issubset(cols), f"missing columns: {expected - cols}"
+
+
+@_SKIP_INTEGRATION
+def test_atlas_fund_state_v2_table_exists(db_engine: sa.Engine) -> None:
+    """atlas_fund_state_v2 exists with all required columns."""
+    with db_engine.connect() as c:
+        rows = c.execute(
+            text("""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_schema = 'atlas'
+              AND table_name   = 'atlas_fund_state_v2'
+        """)
+        ).fetchall()
+    cols = {r.column_name for r in rows}
+    expected = {
+        "mstar_id",
+        "date",
+        "composition_state",
+        "holdings_state",
+        "pct_holdings_stage_2",
+        "pct_holdings_stage_3",
+        "pct_holdings_stage_4",
+        "mean_within_state_rank",
+        "n_holdings",
+        "computed_at",
+    }
+    assert expected.issubset(cols), f"missing columns: {expected - cols}"
+
+
+@_SKIP_INTEGRATION
+def test_atlas_etf_state_v2_table_exists(db_engine: sa.Engine) -> None:
+    """atlas_etf_state_v2 exists with all required columns."""
+    with db_engine.connect() as c:
+        rows = c.execute(
+            text("""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_schema = 'atlas'
+              AND table_name   = 'atlas_etf_state_v2'
+        """)
+        ).fetchall()
+    cols = {r.column_name for r in rows}
+    expected = {
+        "etf_ticker",
+        "date",
+        "dominant_state",
+        "dominant_share",
+        "n_holdings",
+        "mean_rs_rank_12m",
+        "pct_stage_2",
+        "pct_stage_3",
+        "pct_stage_4",
+        "computed_at",
+    }
+    assert expected.issubset(cols), f"missing columns: {expected - cols}"
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 — unified view smoke tests (SELECT 1 row, verify column presence)
+# ---------------------------------------------------------------------------
+
+
+@_SKIP_INTEGRATION
+def test_atlas_sector_signal_unified_view_columns(db_engine: sa.Engine) -> None:
+    """atlas_sector_signal_unified exposes required columns (0 rows OK — table may be empty)."""
+    with db_engine.connect() as c:
+        # SELECT with LIMIT 0 still validates column names
+        result = c.execute(
+            text("""
+            SELECT sector, date, engine_state, dominant_share, n_constituents,
+                   mean_within_state_rank, pct_stage_2, pct_stage_3, pct_stage_4,
+                   sector_state
+            FROM atlas.atlas_sector_signal_unified
+            LIMIT 0
+        """)
+        )
+        col_names = set(result.keys())
+    expected = {
+        "sector",
+        "date",
+        "engine_state",
+        "dominant_share",
+        "n_constituents",
+        "mean_within_state_rank",
+        "pct_stage_2",
+        "pct_stage_3",
+        "pct_stage_4",
+        "sector_state",
+    }
+    assert expected.issubset(col_names), f"missing view columns: {expected - col_names}"
+
+
+@_SKIP_INTEGRATION
+def test_atlas_fund_signal_unified_view_columns(db_engine: sa.Engine) -> None:
+    """atlas_fund_signal_unified exposes required columns (0 rows OK — table may be empty)."""
+    with db_engine.connect() as c:
+        result = c.execute(
+            text("""
+            SELECT mstar_id, date, composition_state, holdings_state,
+                   pct_holdings_stage_2, pct_holdings_stage_3, pct_holdings_stage_4,
+                   mean_within_state_rank, n_holdings,
+                   nav_state, nav_state_as_of, recommendation
+            FROM atlas.atlas_fund_signal_unified
+            LIMIT 0
+        """)
+        )
+        col_names = set(result.keys())
+    expected = {
+        "mstar_id",
+        "date",
+        "composition_state",
+        "holdings_state",
+        "pct_holdings_stage_2",
+        "pct_holdings_stage_3",
+        "pct_holdings_stage_4",
+        "mean_within_state_rank",
+        "n_holdings",
+        "nav_state",
+        "nav_state_as_of",
+        "recommendation",
+    }
+    assert expected.issubset(col_names), f"missing view columns: {expected - col_names}"
+
+
+@_SKIP_INTEGRATION
+def test_atlas_etf_signal_unified_view_columns(db_engine: sa.Engine) -> None:
+    """atlas_etf_signal_unified exposes required columns (0 rows OK — table may be empty)."""
+    with db_engine.connect() as c:
+        result = c.execute(
+            text("""
+            SELECT etf_ticker, date, engine_state, dominant_share,
+                   n_holdings, mean_rs_rank_12m,
+                   pct_stage_2, pct_stage_3, pct_stage_4
+            FROM atlas.atlas_etf_signal_unified
+            LIMIT 0
+        """)
+        )
+        col_names = set(result.keys())
+    expected = {
+        "etf_ticker",
+        "date",
+        "engine_state",
+        "dominant_share",
+        "n_holdings",
+        "mean_rs_rank_12m",
+        "pct_stage_2",
+        "pct_stage_3",
+        "pct_stage_4",
+    }
+    assert expected.issubset(col_names), f"missing view columns: {expected - col_names}"
