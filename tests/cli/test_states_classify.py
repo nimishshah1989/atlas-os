@@ -125,6 +125,41 @@ def test_states_classify_cmd_missing_db_url(monkeypatch):
         _states_classify_cmd(args)
 
 
+def test_states_tune_cmd_missing_db_url(monkeypatch):
+    """_states_tune_cmd raises SystemExit when ATLAS_DB_URL is not set."""
+    from atlas.trading.cli_states import _states_tune_cmd
+
+    monkeypatch.delenv("ATLAS_DB_URL", raising=False)
+    args = argparse.Namespace(
+        start="2024-09-01",
+        end="2024-10-31",
+        as_of=None,
+        dry_run=True,
+        format="text",
+    )
+    with pytest.raises(SystemExit):
+        _states_tune_cmd(args)
+
+
+def test_states_tune_help():
+    """CLI help text for 'states tune' includes expected arguments."""
+    import subprocess
+    import sys
+
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, "-m", "atlas.trading.cli", "states", "tune", "--help"],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "ATLAS_DB_URL": "postgresql://placeholder"},
+    )
+    assert result.returncode == 0
+    assert "--start" in result.stdout
+    assert "--end" in result.stdout
+    assert "--dry-run" in result.stdout
+    assert "--as-of" in result.stdout
+    assert "--format" in result.stdout
+
+
 def test_states_classify_help():
     """CLI help text includes 'states' and 'classify' subcommands."""
     import subprocess
@@ -276,5 +311,57 @@ def test_classify_with_real_urgency():
                 text(
                     "DELETE FROM atlas.atlas_stock_state_daily"
                     " WHERE classifier_version = 'v1.0-urgency-test'"
+                )
+            )
+
+
+@_SKIP_INTEGRATION
+def test_states_tune_dry_run():
+    """`states tune --dry-run` computes IC across catalog without persisting thresholds."""
+    from sqlalchemy import create_engine, text
+
+    from atlas.trading.cli import _states_classify_cmd
+    from atlas.trading.cli_states import _states_tune_cmd
+
+    # Seed classified rows so the factor panels have data to pull.
+    classify_args = argparse.Namespace(
+        start="2024-09-01",
+        end="2024-10-31",
+        universe="stocks_nifty500",
+        classifier_version="v1.0-tune-test",
+    )
+    rc = _states_classify_cmd(classify_args)
+    assert rc == 0, "classify must succeed before tune"
+
+    db_url = (
+        os.environ["ATLAS_DB_URL"].replace("postgresql+psycopg2://", "postgresql://").split("?")[0]
+    )
+    try:
+        tune_args = argparse.Namespace(
+            start="2024-09-01",
+            end="2024-10-31",
+            as_of="2024-10-31",
+            dry_run=True,
+            format="text",
+        )
+        rc = _states_tune_cmd(tune_args)
+        assert rc == 0, "states tune --dry-run should return 0"
+
+        # Dry-run must NOT have written any threshold rows for this as_of date.
+        eng = create_engine(db_url)
+        with eng.connect() as c:
+            n = c.execute(
+                text(
+                    "SELECT COUNT(*) FROM atlas.atlas_state_thresholds"
+                    " WHERE as_of_date = '2024-10-31'"
+                )
+            ).scalar()
+        assert n == 0, f"dry-run should not persist threshold rows; got {n}"
+    finally:
+        with create_engine(db_url).begin() as c:
+            c.execute(
+                text(
+                    "DELETE FROM atlas.atlas_stock_state_daily"
+                    " WHERE classifier_version = 'v1.0-tune-test'"
                 )
             )

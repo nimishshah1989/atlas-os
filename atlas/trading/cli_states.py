@@ -1,4 +1,4 @@
-"""State Engine CLI helpers — dwell/urgency wiring + baselines-refresh.
+"""State Engine CLI helpers — dwell/urgency wiring, baselines-refresh, tune.
 
 Split from cli.py to keep that file under the 600-LOC hook limit.
 These functions are imported directly into cli.py.
@@ -6,10 +6,12 @@ These functions are imported directly into cli.py.
 Public API:
   _apply_dwell_and_urgency(panel, eng) -> pd.DataFrame
   _states_baselines_refresh_cmd(args) -> int
+  _states_tune_cmd(args) -> int
 """
 
 from __future__ import annotations
 
+import argparse
 import os
 from datetime import date
 
@@ -17,7 +19,109 @@ import pandas as pd
 import structlog
 from sqlalchemy import create_engine, text
 
+from atlas.intelligence.states.threshold_optimizer import (
+    apply_tuned_threshold,
+    tune_single_threshold,
+)
+from atlas.intelligence.states.tune_catalog import TUNE_CATALOG, build_factor_panel
+
 log = structlog.get_logger()
+
+
+def _states_tune_cmd(args: argparse.Namespace) -> int:
+    """Run IC-validation tuning across the catalog, persist optimal θ per threshold."""
+    from atlas.intelligence.validation.forward_returns import (
+        compute_forward_returns,
+        load_price_matrix,
+    )
+
+    start = date.fromisoformat(args.start)
+    end = date.fromisoformat(args.end)
+    as_of = date.fromisoformat(args.as_of) if args.as_of else end
+
+    db_url = os.environ.get("ATLAS_DB_URL")
+    if not db_url:
+        raise SystemExit("ATLAS_DB_URL is not set. Source .env first.")
+    db_url = db_url.replace("postgresql+psycopg2://", "postgresql://").split("?")[0]
+    eng = create_engine(db_url, pool_size=2, max_overflow=0)
+
+    log.info("states_tune_start", start=str(start), end=str(end), as_of=str(as_of))
+
+    # Load price matrix once; reused across all horizons.
+    prices = load_price_matrix(eng, start_date=start, end_date=end)
+    if prices.empty:
+        log.error("states_tune_no_price_data", start=str(start), end=str(end))
+        return 1
+
+    # Pre-compute all forward-return horizons in a single pass.
+    horizons = sorted({entry["horizon_days"] for entry in TUNE_CATALOG})
+    fwd = compute_forward_returns(prices, periods=horizons)
+    log.info("states_tune_loaded_data", n_horizons=len(horizons), n_instruments=prices.shape[1])
+
+    summaries: list[dict] = []
+    for entry in TUNE_CATALOG:
+        tname = entry["threshold_name"]
+        try:
+            factor = build_factor_panel(eng, entry["factor_builder"], start, end)
+        except NotImplementedError as exc:
+            log.warning("states_tune_skip_builder", threshold=tname, reason=str(exc))
+            summaries.append({"threshold_name": tname, "status": "skipped"})
+            continue
+
+        if factor.empty:
+            log.warning("states_tune_empty_factor", threshold=tname)
+            summaries.append({"threshold_name": tname, "status": "no_data"})
+            continue
+
+        returns_wide = fwd[f"return_{entry['horizon_days']}d"]
+        result = tune_single_threshold(
+            threshold_name=tname,
+            state=entry["state"],
+            factor=factor,
+            returns_wide=returns_wide,
+            candidates=entry["candidates"],
+            as_of=as_of,
+        )
+        log.info(
+            "states_tune_result",
+            threshold=tname,
+            optimal=result.optimal_value,
+            passed_gates=result.passed_gates,
+        )
+        if not args.dry_run:
+            apply_tuned_threshold(eng, result)
+
+        summaries.append(
+            {
+                "threshold_name": tname,
+                "state": entry["state"],
+                "optimal_value": result.optimal_value,
+                "passed_gates": result.passed_gates,
+                "per_candidate_ic": {
+                    str(k): {kk: vv for kk, vv in v.items() if kk in ("ic_ir", "q5_q1_spread")}
+                    for k, v in result.per_candidate_ic.items()
+                },
+            }
+        )
+
+    if args.format == "json":
+        import json
+
+        print(
+            json.dumps(
+                {"as_of": str(as_of), "dry_run": args.dry_run, "tuned": summaries},
+                indent=2,
+                default=str,
+            )
+        )
+    else:
+        print(f"=== Tuning summary as_of={as_of} (dry_run={args.dry_run}) ===")
+        for s in summaries:
+            print(
+                f"  {s['threshold_name']:<26} → {s.get('optimal_value')} "
+                f"(passed_gates={s.get('passed_gates', 'n/a')})"
+            )
+    return 0
 
 
 def _apply_dwell_and_urgency(

@@ -27,6 +27,7 @@ from sqlalchemy import create_engine, text
 from atlas.trading.cli_states import (
     _apply_dwell_and_urgency,
     _states_baselines_refresh_cmd,
+    _states_tune_cmd,
 )
 from atlas.trading.lab import run_baseline_v5
 
@@ -477,6 +478,24 @@ def main(argv: list[str] | None = None) -> int:
         "baselines-refresh", help="Recompute cohort dwell baselines"
     )
     states_baselines.set_defaults(func=_states_baselines_refresh_cmd)
+
+    states_tune = states_sub.add_parser(
+        "tune", help="IC-tune state-engine thresholds against forward returns"
+    )
+    states_tune.add_argument("--start", required=True, help="ISO date YYYY-MM-DD")
+    states_tune.add_argument("--end", required=True, help="ISO date YYYY-MM-DD")
+    states_tune.add_argument(
+        "--as-of",
+        default=None,
+        help="As-of date for persisted threshold row; defaults to --end",
+    )
+    states_tune.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Compute IC and report optimal values without persisting to DB",
+    )
+    states_tune.add_argument("--format", choices=("text", "json"), default="text")
+    states_tune.set_defaults(func=_states_tune_cmd)
 
     args = parser.parse_args(argv)
     return args.func(args)
