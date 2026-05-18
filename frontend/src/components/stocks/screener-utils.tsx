@@ -51,8 +51,9 @@ export const OPTIONAL_COLS: ColumnDef[] = [
 
 export const COL_STORAGE_KEY = 'atlas-stock-screener-cols'
 
-// Always-visible columns: Symbol, Cap, Sector, Gates, RS State, Mom, Risk, Vol, 1M, 3M, RS Pctile = 11
-export const ALWAYS_VISIBLE_COL_COUNT = 11
+// Always-visible columns: Symbol, Cap, Sector, RS State, Risk, 1M, 3M, RS Pctile = 8
+// (Gates, Mom, Vol columns removed in Phase 8)
+export const ALWAYS_VISIBLE_COL_COUNT = 8
 
 export const GATE_LEGEND = [
   { key: 'H', field: 'history_gate_pass',   label: 'History',   desc: 'Stock has ≥6M of price history in our universe' },

@@ -7,7 +7,6 @@ import type { StockRowWithSector } from '@/lib/queries/stocks'
 import type { ComponentValidation } from '@/lib/queries/component_validation'
 import {
   pct, pctColor, RSPctileBar,
-  MomentumChip, VolumeChip,
 } from '@/lib/stock-formatters'
 import { SectorBadge } from './SectorBadge'
 import { useColumnVisibility } from '@/components/ui/ColumnToggle'
@@ -18,7 +17,7 @@ import {
   OPTIONAL_COLS, COL_STORAGE_KEY, ALWAYS_VISIBLE_COL_COUNT,
   stateRank, capRank, optBool, optStr, optNum,
   buildStockGrade, buildGradeTooltip,
-  GateDots, GATE_LEGEND, COL_TOOLTIPS, isMarketOpen,
+  COL_TOOLTIPS, isMarketOpen,
   type SortKey, type FilterChip,
 } from './screener-utils'
 import { ScreenerFilterPanel } from './ScreenerFilterPanel'
@@ -254,21 +253,8 @@ export function StockScreener({
               <Th label="Symbol" k="symbol" />
               <Th label="Cap" k="cap_rank" />
               <Th label="Sector" k="sector" />
-              <th className="px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap text-ink-tertiary">
-                <span className="inline-flex items-center gap-1">
-                  Gates
-                  <span
-                    className="cursor-help opacity-50 hover:opacity-100 text-[9px]"
-                    title={GATE_LEGEND.map(g => `${g.key}=${g.label}: ${g.desc}`).join('\n')}
-                  >
-                    ⓘ
-                  </span>
-                </span>
-              </th>
               <Th label="RS State" k="rs_state" />
-              <Th label="Mom" k="momentum_state" />
               <Th label="Risk" k="risk_state" />
-              <Th label="Vol" k="volume_state" />
               {visibleCols.has('conviction') && (
                 <PlainTh label="Conviction" tooltip={COL_TOOLTIPS.conviction} />
               )}
@@ -359,9 +345,6 @@ export function StockScreener({
                       <td className="px-3 py-2.5">
                         <SectorBadge sector={row.sector} />
                       </td>
-                      <td className="px-3 py-2.5">
-                        <GateDots row={row} />
-                      </td>
                       <td
                         className="px-3 py-2.5"
                         data-validator-id={`stock.rs_state:${row.instrument_id}`}
@@ -372,21 +355,11 @@ export function StockScreener({
                           validation={validations.find(v => v.component_name === 'rs' && v.badge === row.rs_state) ?? undefined}
                         />
                       </td>
-                      <td
-                        className="px-3 py-2.5"
-                        data-validator-id={`stock.momentum_state:${row.instrument_id}`}
-                        data-validator-raw={row.momentum_state ?? ''}
-                      >
-                        <MomentumChip value={row.momentum_state} />
-                      </td>
                       <td className="px-3 py-2.5">
                         <ValidatedBadge
                           label={row.risk_state ?? '—'}
                           validation={validations.find(v => v.component_name === 'risk' && v.badge === row.risk_state) ?? undefined}
                         />
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <VolumeChip value={row.volume_state} />
                       </td>
                       {visibleCols.has('conviction') && (
                         <td className="px-3 py-2.5">
