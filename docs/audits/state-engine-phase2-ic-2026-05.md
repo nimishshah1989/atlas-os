@@ -156,3 +156,52 @@ The per-badge IC validation gives the engine empirical justification for HOW eac
 - **decorative** (3 of 13 tiers): plain label OR replaced with continuous numeric display
 
 The continuous-vs-tier finding (OBV + ATR contraction) is a design lesson: where the tier-level IC collapses, render the raw continuous metric instead of a categorical badge. Phase 5 should track which display kind each component uses.
+
+---
+
+## Audit note — migration 080 bridge view (2026-05-19)
+
+**Phase 1 of signal consolidation plan deployed.**
+
+Migration 080 created `atlas.atlas_stock_signal_unified` VIEW deriving legacy
+column names from `atlas_stock_state_daily WHERE classifier_version='v2.0-validated'`.
+Applied to Supabase DB (shared between local dev and EC2 atlas-os-sl).
+
+### Smoke query results (latest date in view)
+
+| Metric | Value |
+|---|---|
+| `engine_rows` (atlas_stock_state_daily v2.0-validated) | 273,231 |
+| `view_rows` (atlas_stock_signal_unified) | 273,231 |
+| Row count parity | PASS |
+
+**is_investable distribution (latest date — 378 stocks):**
+
+| is_investable | count |
+|---|---|
+| False | 48 |
+| True | 330 |
+
+Both buckets non-zero. 87.3% of universe investable per state engine.
+
+**rs_state distribution (latest date — 378 stocks):**
+
+| rs_state | count |
+|---|---|
+| Average | 163 |
+| Laggard | 35 |
+| Leader | 36 |
+| Strong | 72 |
+| Weak | 72 |
+
+All 5 buckets present. Distribution follows expected RS rank bell-curve with
+slight rightward skew (Leader+Strong = 108, Laggard+Weak = 107).
+
+**Goal-post check:** `atlas-lab goal-post --rank 1` → `met: true`
+V5-RP-TREND alpha_oos=0.2018, hit_rate=0.631, n_recs=20, n_high_confidence=20.
+`atlas/trading/lab.py` untouched throughout.
+
+**Unexpected finding:** Migration 071 (`strategy_leaderboard_profile`) was
+present in `main` but not yet merged into `feat/atlas-consolidation` worktree.
+Copied to worktree to resolve the alembic revision chain. No functional impact —
+the DB had already applied it.
