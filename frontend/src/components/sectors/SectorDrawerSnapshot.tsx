@@ -130,7 +130,19 @@ export function SectorDrawerSnapshot({ snapshot }: { snapshot: SectorWithDecisio
       <div className="flex items-stretch gap-2">
         <div className="flex-1 px-3 py-2.5 border border-paper-rule rounded-sm bg-paper" title="Relative classification vs other sectors — not an absolute market signal. Overweight = top RS quintile + improving momentum + top-half breadth rank. Neutral = mid-range. Underweight = bottom-30% RS breadth or weak RS. Avoid = bottom quintile RS + bottom-25% breadth rank. There will always be Overweight sectors even in a declining market.">
           <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider mb-1">State</div>
-          <div className={`font-sans text-base font-semibold ${stateColor}`}>{snapshot.sector_state}</div>
+          <div className="flex items-center gap-2">
+            <div className={`font-sans text-base font-semibold ${stateColor}`}>{snapshot.sector_state}</div>
+            {(snapshot.pct_stage_2 != null || snapshot.pct_stage_3 != null || snapshot.pct_stage_4 != null) && (
+              <div
+                className="flex h-1.5 w-32 overflow-hidden rounded-sm shrink-0"
+                title={`Stage 2: ${((snapshot.pct_stage_2 ?? 0) * 100).toFixed(0)}% · Stage 3: ${((snapshot.pct_stage_3 ?? 0) * 100).toFixed(0)}% · Stage 4: ${((snapshot.pct_stage_4 ?? 0) * 100).toFixed(0)}%`}
+              >
+                <div className="bg-signal-pos" style={{ width: `${(snapshot.pct_stage_2 ?? 0) * 100}%` }} />
+                <div className="bg-signal-warn" style={{ width: `${(snapshot.pct_stage_3 ?? 0) * 100}%` }} />
+                <div className="bg-signal-neg" style={{ width: `${(snapshot.pct_stage_4 ?? 0) * 100}%` }} />
+              </div>
+            )}
+          </div>
         </div>
         <div className={`flex-1 px-3 py-2.5 border rounded-sm ${DECISION_STYLE[snapshot.decision]}`} title="ENTER = open position. HOLD = maintain. ROTATE IN = shift from weaker sectors. WATCH = improving but not confirmed. PASS = no signal. EXIT = close positions.">
           <div className="font-sans text-[10px] uppercase tracking-wider mb-1 opacity-70">Decision</div>

@@ -273,6 +273,9 @@ export function SectorOverviewTab({
         topdown_index_code: snapshot.topdown_index_code,
         participation_rs_pct: snapshot.participation_rs_pct,
         decision: snapshot.decision,
+        pct_stage_2: snapshot.pct_stage_2,
+        pct_stage_3: snapshot.pct_stage_3,
+        pct_stage_4: snapshot.pct_stage_4,
       }} />
 
       {/* State stats */}

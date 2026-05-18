@@ -33,6 +33,10 @@ export type SectorSnapshot = {
   bottomup_risk_state: string | null
   bottomup_volume_state: string | null
   data_date: Date
+  // Phase 8: stage breadth from atlas_sector_signal_unified
+  pct_stage_2: number | null
+  pct_stage_3: number | null
+  pct_stage_4: number | null
 }
 
 export type SectorStateRow = {
@@ -108,7 +112,10 @@ export async function getSectorsWithMomentum(): Promise<SectorSnapshot[]> {
       NULL::text                       AS bottomup_momentum_state,
       NULL::text                       AS bottomup_risk_state,
       NULL::text                       AS bottomup_volume_state,
-      m.date                           AS data_date
+      m.date                           AS data_date,
+      s.pct_stage_2,
+      s.pct_stage_3,
+      s.pct_stage_4
     FROM atlas.atlas_sector_metrics_daily m
     JOIN atlas.atlas_sector_signal_unified s
       ON m.sector_name = s.sector
