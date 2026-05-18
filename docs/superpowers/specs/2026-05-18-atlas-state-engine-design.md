@@ -337,6 +337,73 @@ CREATE TABLE atlas.atlas_state_action_log (
 - Persist to `atlas_state_thresholds`; re-backfill `atlas_stock_state_daily`
 - IC report per state with mean_ic, Q5-Q1, IR_of_IC
 
+### Phase 2.5 — Component IC validation (1 week)
+
+The composite state (Stage 2A et al.) is a conjunction of component checks. A
+composite that passes IC validation does NOT prove each component earns its
+place — a strong conjunct can mask a useless one.
+
+For fund managers to trust a recommendation page that says
+"BUY because: RS Leader + Volume Accumulation + Stage 2A," every claim on that
+page must be independently statistically valid. This phase IC-validates each
+component indicator at its own action horizon, independently of how the
+composite state uses it.
+
+Components + their horizons:
+
+| Component | Metric | Tier-defining threshold | Implied horizon |
+|---|---|---|---|
+| Relative strength | rs_rank_12m | Leader ≥0.90 / Strong 0.70-0.90 / Average 0.30-0.70 / Weak 0.10-0.30 / Laggard <0.10 | 63d |
+| Momentum | normalized slope(close, 21) | Accelerating / Stable / Decelerating | 21d |
+| Volatility | atr_14 / close (NATR) | Low / Normal / Elevated / High | 63d (warns, sign-inverted IC) |
+| Volume | up_down_volume_ratio_50d | Accumulation / Neutral / Distribution | 21d |
+
+For each (component, tier) pair, the validator computes IC of "in this tier"
+vs forward returns at the implied horizon. Classification per tier:
+
+- `validated` IR > 0.4 AND sign matches implied direction
+- `validated_inverse` IR > 0.4 AND sign opposite to implied direction
+- `weak` IR in (0.2, 0.4)
+- `decorative` IR ≤ 0.2
+
+New table:
+
+```sql
+CREATE TABLE atlas.atlas_component_validation (
+    component_name VARCHAR(48) NOT NULL,
+    badge          VARCHAR(32) NOT NULL,
+    threshold_range VARCHAR(64) NOT NULL,
+    implied_action VARCHAR(48) NOT NULL,
+    horizon_days   INTEGER NOT NULL,
+    as_of_date     DATE NOT NULL,
+    mean_ic        NUMERIC(10,6),
+    ic_std         NUMERIC(10,6),
+    ic_t_stat      NUMERIC(10,4),
+    ic_ir          NUMERIC(10,4),
+    q5_q1_spread   NUMERIC(10,6),
+    n_observations INTEGER,
+    status         VARCHAR(24) NOT NULL,
+    validated_at   TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (component_name, badge, horizon_days, as_of_date),
+    CHECK (status IN ('validated', 'validated_inverse', 'weak', 'decorative'))
+);
+```
+
+Module: `atlas/intelligence/states/component_validator.py` (~250 LOC). Reuses
+the same `atlas/intelligence/validation/ic_engine.py` and
+`forward_returns.py` as the state validator.
+
+CLI: `atlas-lab states validate-components --start YYYY-MM-DD --end YYYY-MM-DD`.
+
+Frontend impact: every component sub-badge on the recommendation page reads
+its rendering treatment from `atlas_component_validation.status` for that
+specific tier. Tiers with status='decorative' render as plain text without the
+implied action. Tiers with status='validated_inverse' render with a clear
+"counter-intuitive" indicator (e.g., the badge says "Accumulation" but the
+hover shows "historically anti-predictive: stocks in this tier have
+underperformed at 21d horizon"). This is the only way to avoid the
+`history_gate_pass`-class trap surfaced 2026-05-18 morning.
+
 ### Phase 3 — Aggregation (1 week)
 - Sector + country breadth computed from constituent states
 - ETF + MF direct classification via wrapper OHLCV/NAV

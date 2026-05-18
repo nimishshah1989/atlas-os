@@ -1590,6 +1590,115 @@ The harness reuses `atlas/intelligence/validation/ic_engine.compute_ic_over_wind
 
 ---
 
+# PHASE 2.5 — Component IC Validation (1 week)
+
+Independently IC-validate each component indicator (RS / momentum / volatility / volume)
+at the tier level. Each badge shown to a fund manager must be a true signal at the
+horizon its implied action assumes — not just a conjunct of a working composite.
+
+### Task 2.5.1: Migration 077 — atlas_component_validation
+
+Standard alembic migration following the 072–076 pattern.
+- Columns: component_name, badge, threshold_range, implied_action, horizon_days,
+  as_of_date, mean_ic, ic_std, ic_t_stat, ic_ir, q5_q1_spread, n_observations, status.
+- PK (component_name, badge, horizon_days, as_of_date).
+- CHECK on status IN (validated, validated_inverse, weak, decorative).
+- Test: existence + status CHECK rejection. Same pattern as test_072–076.
+
+### Task 2.5.2: component_validator.py
+
+**Files:**
+- Create: `atlas/intelligence/states/component_validator.py` (~250 LOC)
+- Create: `tests/intelligence/states/test_component_validator.py`
+
+Public API:
+```python
+def validate_all_components(
+    engine: Engine, start: date, end: date
+) -> list[ComponentValidationResult]:
+    """For each (component, tier) pair, compute IC + classify + persist."""
+```
+
+Components catalog (matches the 4 indicators displayed in the UI):
+```python
+COMPONENTS = [
+    {
+        "name": "rs_rank_12m",
+        "horizon_days": 63,
+        "implied_action": "favours_long",
+        "tiers": [
+            ("Leader", "rs_rank_12m >= 0.90"),
+            ("Strong", "rs_rank_12m >= 0.70 AND rs_rank_12m < 0.90"),
+            ("Average", "rs_rank_12m >= 0.30 AND rs_rank_12m < 0.70"),
+            ("Weak", "rs_rank_12m >= 0.10 AND rs_rank_12m < 0.30"),
+            ("Laggard", "rs_rank_12m < 0.10"),
+        ],
+    },
+    {
+        "name": "momentum_slope_21d",
+        "horizon_days": 21,
+        "implied_action": "favours_long",
+        "tiers": [
+            ("Accelerating", "slope_21d >= θ_mom_hi"),
+            ("Stable", "between"),
+            ("Decelerating", "slope_21d <= θ_mom_lo"),
+        ],
+    },
+    {
+        "name": "natr_14",
+        "horizon_days": 63,
+        "implied_action": "warns_long",  # high NATR → expected to underperform on a risk-adjusted basis
+        "tiers": [...quartiles...],
+    },
+    {
+        "name": "up_down_volume_ratio_50d",
+        "horizon_days": 21,
+        "implied_action": "favours_long",
+        "tiers": [("Accumulation", ">θ_hi"), ("Neutral", "between"), ("Distribution", "<θ_lo")],
+    },
+]
+```
+
+For each (component, tier):
+1. Build factor series — boolean 1/0 of "stock is in this tier on this date."
+2. Load forward returns at horizon_days via `compute_forward_returns`.
+3. Compute IC via `compute_ic_over_window`.
+4. Classify per status rule:
+   - `validated` if IR > 0.4 AND sign matches implied_action
+   - `validated_inverse` if IR > 0.4 AND sign opposite
+   - `weak` if 0.2 < IR ≤ 0.4
+   - `decorative` otherwise.
+5. Persist row to `atlas_component_validation`.
+
+Tests (5+ per component, 20+ total):
+- Synthetic data where one tier clearly has positive IC; validator detects it.
+- Synthetic data where one tier has IC ~ 0; classified decorative.
+- Sign-inverse detection: synthetic data where high tier → negative returns.
+- Empty/insufficient data handling.
+
+### Task 2.5.3: CLI `atlas-lab states validate-components`
+
+Add to `atlas/trading/cli_states.py` (state-related CLI ops). Takes `--start` / `--end`,
+loops the component catalog, persists results.
+
+### Task 2.5.4: Frontend rendering rule (Phase 5 follow-on)
+
+Tracked separately; not in this phase's code. Phase 5 frontend reads
+`atlas_component_validation.status` for each badge and applies treatment:
+- `validated` — green badge with implied action.
+- `validated_inverse` — orange badge with "historically anti-predictive" hover.
+- `weak` — grey badge with asterisk.
+- `decorative` — plain label, no implied action.
+
+### Task 2.5.5: Audit existing components against initial run
+
+Operational, not coding. After running `atlas-lab states validate-components`, write
+`docs/audits/component-validation-2026-05.md` summarizing which tiers are validated /
+weak / decorative / validated_inverse, with the implication on which badges to revise
+or drop in the UI.
+
+---
+
 # PHASE 3 — Aggregation (1 week)
 
 ### Task 3.1: aggregation.py — sector breadth
