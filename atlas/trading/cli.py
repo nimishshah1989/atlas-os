@@ -28,6 +28,7 @@ from atlas.trading.cli_states import (
     _apply_dwell_and_urgency,
     _states_baselines_refresh_cmd,
     _states_tune_cmd,
+    _states_validate_components_cmd,
 )
 from atlas.trading.lab import run_baseline_v5
 
@@ -509,6 +510,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     states_tune.add_argument("--format", choices=("text", "json"), default="text")
     states_tune.set_defaults(func=_states_tune_cmd)
+
+    states_validate = states_sub.add_parser(
+        "validate-components",
+        help="IC-validate each component tier against forward returns",
+    )
+    states_validate.add_argument("--start", required=True, help="ISO date YYYY-MM-DD")
+    states_validate.add_argument("--end", required=True, help="ISO date YYYY-MM-DD")
+    states_validate.set_defaults(func=_states_validate_components_cmd)
 
     args = parser.parse_args(argv)
     return args.func(args)

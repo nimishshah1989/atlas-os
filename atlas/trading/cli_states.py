@@ -268,6 +268,30 @@ def _apply_dwell_and_urgency(
     return panel
 
 
+def _states_validate_components_cmd(args: argparse.Namespace) -> int:
+    """IC-validate each component tier against forward returns; print summary."""
+    from atlas.intelligence.states.component_validator import validate_all_components
+
+    start = date.fromisoformat(args.start)
+    end = date.fromisoformat(args.end)
+
+    db_url = os.environ.get("ATLAS_DB_URL")
+    if not db_url:
+        raise SystemExit("ATLAS_DB_URL is not set. Source .env first.")
+    db_url = db_url.replace("postgresql+psycopg2://", "postgresql://").split("?")[0]
+    eng = create_engine(db_url, pool_size=2, max_overflow=0)
+
+    results = validate_all_components(eng, start, end)
+    print(f"=== Component validation as_of={end} ({len(results)} rows) ===")
+    print(f"{'component':<26} {'badge':<14} {'status':<22} {'ic_ir':>8} {'q5_q1':>8}")
+    for r in results:
+        print(
+            f"  {r.component_name:<24} {r.badge:<14} {r.status:<22} "
+            f"{r.ic_ir:>+8.4f} {r.q5_q1_spread:>+8.4f}"
+        )
+    return 0
+
+
 def _states_baselines_refresh_cmd(args) -> int:
     """Recompute per-cohort dwell baselines from atlas_stock_state_daily.
 
