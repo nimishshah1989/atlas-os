@@ -113,7 +113,7 @@ def test_simulate_genome_missing_cts_columns_uses_safe_defaults():
 
 def test_sanitize_drops_stock_with_uncovered_jump():
     """Stock with a >100% jump that isn't in de_corporate_actions is dropped."""
-    from atlas.trading.simulator import _sanitize_close_adj
+    from atlas.trading.data_loader import sanitize_close_adj as _sanitize_close_adj
 
     instruments = ["stock-A"]
     dates_arr = [date(2017, 1, 1) + timedelta(days=i) for i in range(10)]
@@ -130,7 +130,7 @@ def test_sanitize_drops_stock_with_uncovered_jump():
 
 def test_sanitize_keeps_corp_action_jumps():
     """A jump on a recorded corp-action date is exempted (stock not dropped)."""
-    from atlas.trading.simulator import _sanitize_close_adj
+    from atlas.trading.data_loader import sanitize_close_adj as _sanitize_close_adj
 
     instruments = ["stock-B"]
     dates_arr = [date(2017, 1, 1) + timedelta(days=i) for i in range(10)]
