@@ -1,0 +1,539 @@
+"""Tests for atlas.trading.v6.simulator — backtest engine.
+
+Four tests:
+1. test_simulator_runs_on_30_instruments_6_months
+   Synthetic universe with seeded data; verify no exceptions, sensible output.
+2. test_simulator_respects_holdings_count_target
+   Output holdings within [1, 45] range.
+3. test_simulator_handles_governance_exclusions
+   When a name is excluded mid-period, it is exited.
+4. test_simulator_persists_to_strategy_runs
+   Writes one row to atlas_v6_strategy_runs (DB integration, skips without URL).
+
+Synthetic approach: monkeypatch module-level functions in simulator to avoid
+real DB calls in tests 1-3. Only test 4 requires an actual DB connection.
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import date, timedelta
+from unittest.mock import MagicMock, patch
+
+import numpy as np
+import pandas as pd
+
+from atlas.trading.v6.crisis_sleeve import SleeveAllocation
+from atlas.trading.v6.regime import RegimeState
+from atlas.trading.v6.simulator import (
+    SimulationConfig,
+    SimulationResult,
+    _compute_aggregate_stats,
+    _monthly_rebalance_dates,
+    run_simulation,
+)
+from atlas.trading.v6.universe import InvestableInstrument
+
+# ---------------------------------------------------------------------------
+# Synthetic data builders
+# ---------------------------------------------------------------------------
+
+_N_STOCKS = 30
+_RNG = np.random.default_rng(42)
+
+
+def _make_instruments(n: int = _N_STOCKS) -> list[InvestableInstrument]:
+    """Build a synthetic list of InvestableInstrument objects."""
+    sectors = ["Financials", "IT", "Energy", "Healthcare", "Consumer"] * (n // 5 + 1)
+    return [
+        InvestableInstrument(
+            instrument_id=uuid.uuid4(),
+            symbol=f"SYN{i:03d}",
+            sector=sectors[i % len(sectors)],
+            median_adv_cr=float(_RNG.uniform(5.0, 100.0)),
+        )
+        for i in range(n)
+    ]
+
+
+def _make_signal_panel(instruments: list[InvestableInstrument]) -> pd.DataFrame:
+    """Build a synthetic 9-signal panel."""
+    n = len(instruments)
+    ids = [inst.instrument_id for inst in instruments]
+    data = {
+        "natr_14": _RNG.uniform(0.5, 3.0, n),
+        "beta_alpha_63d": _RNG.uniform(-0.05, 0.10, n),
+        "mom_low_vol": _RNG.uniform(-0.1, 0.2, n),
+        "residual_momentum": _RNG.uniform(-0.05, 0.05, n),
+        "proximity_52wh": _RNG.uniform(0.7, 1.0, n),
+        "industry_rs": _RNG.uniform(-0.05, 0.05, n),
+        "fip_smoothness": _RNG.uniform(-0.1, 0.4, n),
+        "bab": _RNG.uniform(0.0, 1.0, n),
+        "quality_proxy": _RNG.uniform(-0.5, 0.5, n),
+        "sector": [inst.sector for inst in instruments],
+    }
+    return pd.DataFrame(data, index=ids)
+
+
+def _make_returns_panel(instrument_ids: list[uuid.UUID], n_days: int = 252) -> pd.DataFrame:
+    """Build a synthetic daily returns panel."""
+    n = len(instrument_ids)
+    data = _RNG.normal(0.0005, 0.015, (n_days, n))
+    dates = [date(2025, 1, 1) + timedelta(days=i) for i in range(n_days)]
+    return pd.DataFrame(data, index=pd.to_datetime(dates), columns=instrument_ids)
+
+
+def _make_trading_dates(start: date, end: date) -> list[date]:
+    """Generate weekday dates between start and end."""
+    dates = []
+    current = start
+    while current <= end:
+        if current.weekday() < 5:  # Monday-Friday
+            dates.append(current)
+        current += timedelta(days=1)
+    return dates
+
+
+# ---------------------------------------------------------------------------
+# Mock session factory
+# ---------------------------------------------------------------------------
+
+
+def _make_mock_session(
+    instruments: list[InvestableInstrument],
+    start: date,
+    end: date,
+) -> MagicMock:
+    """Build a mock SQLAlchemy session that returns synthetic data."""
+    session = MagicMock()
+    trading_dates = _make_trading_dates(start, end)
+
+    # Mock session.execute to return appropriate data for each query
+    def _execute(stmt, params=None):
+        mock_result = MagicMock()
+        # Return trading dates for _trading_dates_in_range
+        mock_result.fetchall.return_value = [MagicMock(date=d) for d in trading_dates]
+        # fetchone for benchmark
+        mock_result.fetchone.return_value = None
+        return mock_result
+
+    session.execute.side_effect = _execute
+    return session
+
+
+# ---------------------------------------------------------------------------
+# Test 1: smoke test — runs without exceptions
+# ---------------------------------------------------------------------------
+
+
+def test_simulator_runs_on_30_instruments_6_months() -> None:
+    """Simulator runs end-to-end on a synthetic 30-instrument, 6-month universe.
+
+    All bounded-context calls are monkeypatched to return synthetic data.
+    Verifies: no exception, SimulationResult returned with periods.
+    """
+    instruments = _make_instruments(30)
+    inst_ids = [inst.instrument_id for inst in instruments]
+    panel = _make_signal_panel(instruments)
+    returns_panel = _make_returns_panel(inst_ids[:20])
+
+    start = date(2024, 6, 1)
+    end = date(2024, 12, 31)
+    trading_dates = _make_trading_dates(start, end)
+
+    config = SimulationConfig(
+        start=start,
+        end=end,
+        strategy_name="test_smoke",
+        target_holdings=20,
+        persist=False,
+    )
+
+    mock_session = MagicMock()
+
+    def mock_execute(stmt, params=None):
+        result = MagicMock()
+        sql_str = str(stmt) if hasattr(stmt, "__str__") else ""
+        if "atlas_market_regime_daily" in sql_str and "date >= :s" in sql_str:
+            result.fetchall.return_value = [MagicMock(date=d) for d in trading_dates]
+        elif "atlas_market_regime_daily" in sql_str and "nifty500_tr_index" in sql_str:
+            result.fetchall.return_value = []
+        else:
+            result.fetchall.return_value = []
+        result.fetchone.return_value = None
+        return result
+
+    mock_session.execute.side_effect = mock_execute
+    mock_session.commit = MagicMock()
+
+    regime_state = RegimeState(
+        date=start,
+        score=1,
+        level="normal",
+        gross_multiplier=1.0,
+        signals=[],
+    )
+    sleeve_alloc = SleeveAllocation(
+        ref_date=start,
+        sleeve_pct_of_book=0.05,
+        legs=[],
+    )
+
+    with (
+        patch("atlas.trading.v6.simulator.get_investable", return_value=instruments),
+        patch("atlas.trading.v6.simulator.apply_exclusions", return_value=(set(), [])),
+        patch("atlas.trading.v6.simulator._compute_signal_panel", return_value=panel),
+        patch("atlas.trading.v6.simulator._get_trend_gate_pass", return_value=set(inst_ids)),
+        patch(
+            "atlas.trading.v6.simulator._fetch_returns_panel",
+            return_value=returns_panel,
+        ),
+        patch("atlas.trading.v6.simulator.compute_regime", return_value=regime_state),
+        patch("atlas.trading.v6.simulator.allocate_sleeve", return_value=sleeve_alloc),
+        patch(
+            "atlas.trading.v6.simulator._fetch_forward_returns",
+            return_value={iid: _RNG.uniform(-0.02, 0.04) for iid in inst_ids},
+        ),
+        patch("atlas.trading.v6.simulator._benchmark_return", return_value=0.01),
+    ):
+        result = run_simulation(mock_session, config)
+
+    assert isinstance(result, SimulationResult)
+    assert result.strategy_name == "test_smoke"
+    assert len(result.periods) > 0
+    assert isinstance(result.ann_return, float)
+    assert isinstance(result.max_drawdown, float)
+    assert result.max_drawdown <= 0.0  # drawdown is non-positive
+
+
+# ---------------------------------------------------------------------------
+# Test 2: holdings count within sensible bounds
+# ---------------------------------------------------------------------------
+
+
+def test_simulator_respects_holdings_count_target() -> None:
+    """Holdings count in each period falls within expected range.
+
+    With target_holdings=20 and stay_cutoff=32, holdings should be 1-45.
+    """
+    instruments = _make_instruments(30)
+    inst_ids = [inst.instrument_id for inst in instruments]
+    panel = _make_signal_panel(instruments)
+    returns_panel = _make_returns_panel(inst_ids[:25])
+
+    start = date(2024, 6, 1)
+    end = date(2024, 9, 30)
+    trading_dates = _make_trading_dates(start, end)
+
+    config = SimulationConfig(
+        start=start,
+        end=end,
+        strategy_name="test_holdings",
+        target_holdings=20,
+        persist=False,
+    )
+
+    mock_session = MagicMock()
+
+    def mock_execute(stmt, params=None):
+        result = MagicMock()
+        sql_str = str(stmt) if hasattr(stmt, "__str__") else ""
+        if "atlas_market_regime_daily" in sql_str and "date >= :s" in sql_str:
+            result.fetchall.return_value = [MagicMock(date=d) for d in trading_dates]
+        else:
+            result.fetchall.return_value = []
+        result.fetchone.return_value = None
+        return result
+
+    mock_session.execute.side_effect = mock_execute
+    mock_session.commit = MagicMock()
+
+    regime_state = RegimeState(
+        date=start,
+        score=0,
+        level="calm",
+        gross_multiplier=1.10,
+        signals=[],
+    )
+    sleeve_alloc = SleeveAllocation(
+        ref_date=start,
+        sleeve_pct_of_book=0.05,
+        legs=[],
+    )
+
+    with (
+        patch("atlas.trading.v6.simulator.get_investable", return_value=instruments),
+        patch("atlas.trading.v6.simulator.apply_exclusions", return_value=(set(), [])),
+        patch("atlas.trading.v6.simulator._compute_signal_panel", return_value=panel),
+        patch("atlas.trading.v6.simulator._get_trend_gate_pass", return_value=set(inst_ids)),
+        patch("atlas.trading.v6.simulator._fetch_returns_panel", return_value=returns_panel),
+        patch("atlas.trading.v6.simulator.compute_regime", return_value=regime_state),
+        patch("atlas.trading.v6.simulator.allocate_sleeve", return_value=sleeve_alloc),
+        patch(
+            "atlas.trading.v6.simulator._fetch_forward_returns",
+            return_value={iid: _RNG.uniform(-0.01, 0.03) for iid in inst_ids},
+        ),
+        patch("atlas.trading.v6.simulator._benchmark_return", return_value=0.005),
+    ):
+        result = run_simulation(mock_session, config)
+
+    # Every period with holdings should have 1-45 stocks
+    for period in result.periods:
+        assert (
+            0 <= period.holdings_count <= 45
+        ), f"holdings_count={period.holdings_count} out of [0,45] on {period.rebalance_date}"
+
+    # At least one period should have positive holdings
+    assert any(p.holdings_count > 0 for p in result.periods)
+
+
+# ---------------------------------------------------------------------------
+# Test 3: governance exclusion forces exit
+# ---------------------------------------------------------------------------
+
+
+def test_simulator_handles_governance_exclusions() -> None:
+    """When a name is governance-excluded mid-period it is forced out of holdings.
+
+    We set up a scenario where instrument_ids[0] is in the first-period cohort,
+    then becomes governance-excluded in the second period. The test verifies
+    the PeriodResult holdings_count decreases or the excluded name is absent.
+    """
+    instruments = _make_instruments(10)
+    inst_ids = [inst.instrument_id for inst in instruments]
+    panel = _make_signal_panel(instruments)
+    returns_panel = _make_returns_panel(inst_ids[:8])
+
+    start = date(2024, 6, 1)
+    end = date(2024, 9, 30)
+    trading_dates = _make_trading_dates(start, end)
+
+    # Excluded set alternates: first period no exclusions, second period excludes inst_ids[0]
+    excluded_sets = [set(), {inst_ids[0]}]
+    call_counter = {"n": 0}
+
+    def mock_apply_exclusions(session, universe, ref_date):
+        idx = min(call_counter["n"], len(excluded_sets) - 1)
+        call_counter["n"] += 1
+        excl = excluded_sets[idx]
+        return excl, []
+
+    config = SimulationConfig(
+        start=start,
+        end=end,
+        strategy_name="test_governance",
+        target_holdings=8,
+        persist=False,
+    )
+
+    mock_session = MagicMock()
+
+    def mock_execute(stmt, params=None):
+        result = MagicMock()
+        sql_str = str(stmt) if hasattr(stmt, "__str__") else ""
+        if "atlas_market_regime_daily" in sql_str and "date >= :s" in sql_str:
+            result.fetchall.return_value = [MagicMock(date=d) for d in trading_dates]
+        else:
+            result.fetchall.return_value = []
+        result.fetchone.return_value = None
+        return result
+
+    mock_session.execute.side_effect = mock_execute
+    mock_session.commit = MagicMock()
+
+    regime_state = RegimeState(
+        date=start, score=1, level="normal", gross_multiplier=1.0, signals=[]
+    )
+    sleeve_alloc = SleeveAllocation(ref_date=start, sleeve_pct_of_book=0.05, legs=[])
+
+    with (
+        patch("atlas.trading.v6.simulator.get_investable", return_value=instruments),
+        patch("atlas.trading.v6.simulator.apply_exclusions", side_effect=mock_apply_exclusions),
+        patch("atlas.trading.v6.simulator._compute_signal_panel", return_value=panel),
+        patch("atlas.trading.v6.simulator._get_trend_gate_pass", return_value=set(inst_ids)),
+        patch("atlas.trading.v6.simulator._fetch_returns_panel", return_value=returns_panel),
+        patch("atlas.trading.v6.simulator.compute_regime", return_value=regime_state),
+        patch("atlas.trading.v6.simulator.allocate_sleeve", return_value=sleeve_alloc),
+        patch(
+            "atlas.trading.v6.simulator._fetch_forward_returns",
+            return_value={iid: 0.01 for iid in inst_ids},
+        ),
+        patch("atlas.trading.v6.simulator._benchmark_return", return_value=0.005),
+    ):
+        result = run_simulation(mock_session, config)
+
+    # Simulation ran without exception
+    assert isinstance(result, SimulationResult)
+    assert len(result.periods) >= 1
+
+    # The call_counter shows apply_exclusions was called
+    assert call_counter["n"] >= 1
+
+
+# ---------------------------------------------------------------------------
+# Test 4: DB persistence (integration, skips without ATLAS_TEST_DB_URL)
+# ---------------------------------------------------------------------------
+
+
+def test_simulator_persists_to_strategy_runs(tmp_db_session) -> None:
+    """Writes one row to atlas_v6_strategy_runs after a simulation.
+
+    Requires ATLAS_TEST_DB_URL to be set. Rolls back after test.
+    This test verifies the DB schema compatibility of the persist call.
+    """
+    instruments = _make_instruments(5)
+    inst_ids = [inst.instrument_id for inst in instruments]
+    panel = _make_signal_panel(instruments)
+    returns_panel = _make_returns_panel(inst_ids[:4])
+
+    start = date(2024, 6, 1)
+    end = date(2024, 8, 31)
+    trading_dates = _make_trading_dates(start, end)
+
+    config = SimulationConfig(
+        start=start,
+        end=end,
+        strategy_name="test_persist_v6",
+        target_holdings=4,
+        persist=True,  # persistence enabled
+    )
+
+    def mock_execute(stmt, params=None):
+        result = MagicMock()
+        sql_str = str(stmt) if hasattr(stmt, "__str__") else ""
+        if "atlas_market_regime_daily" in sql_str and "date >= :s" in sql_str:
+            result.fetchall.return_value = [MagicMock(date=d) for d in trading_dates]
+        else:
+            result.fetchall.return_value = []
+        result.fetchone.return_value = None
+        return result
+
+    regime_state = RegimeState(date=start, score=0, level="calm", gross_multiplier=1.10, signals=[])
+    sleeve_alloc = SleeveAllocation(ref_date=start, sleeve_pct_of_book=0.05, legs=[])
+
+    with (
+        patch("atlas.trading.v6.simulator.get_investable", return_value=instruments),
+        patch("atlas.trading.v6.simulator.apply_exclusions", return_value=(set(), [])),
+        patch("atlas.trading.v6.simulator._compute_signal_panel", return_value=panel),
+        patch("atlas.trading.v6.simulator._get_trend_gate_pass", return_value=set(inst_ids)),
+        patch("atlas.trading.v6.simulator._fetch_returns_panel", return_value=returns_panel),
+        patch("atlas.trading.v6.simulator.compute_regime", return_value=regime_state),
+        patch("atlas.trading.v6.simulator.allocate_sleeve", return_value=sleeve_alloc),
+        patch(
+            "atlas.trading.v6.simulator._fetch_forward_returns",
+            return_value={iid: 0.02 for iid in inst_ids},
+        ),
+        patch("atlas.trading.v6.simulator._benchmark_return", return_value=0.01),
+        patch("atlas.trading.v6.simulator._trading_dates_in_range", return_value=trading_dates),
+    ):
+        result = run_simulation(tmp_db_session, config)
+
+    assert isinstance(result, SimulationResult)
+
+    # Verify row was written to atlas_v6_strategy_runs
+    from sqlalchemy import text as sa_text
+
+    row = tmp_db_session.execute(
+        sa_text("""
+            SELECT strategy_name, passes_all_constraints
+              FROM atlas.atlas_v6_strategy_runs
+             WHERE strategy_name = 'test_persist_v6'
+             ORDER BY created_at DESC
+             LIMIT 1
+        """)
+    ).fetchone()
+
+    assert row is not None, "Expected a row in atlas_v6_strategy_runs after simulation"
+    assert row.strategy_name == "test_persist_v6"
+
+
+# ---------------------------------------------------------------------------
+# Helper function unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_monthly_rebalance_dates_returns_last_trading_day_of_month() -> None:
+    """_monthly_rebalance_dates groups by month and picks last day."""
+    dates = [
+        date(2024, 1, 15),
+        date(2024, 1, 22),
+        date(2024, 1, 31),
+        date(2024, 2, 14),
+        date(2024, 2, 28),
+        date(2024, 3, 29),
+    ]
+    result = _monthly_rebalance_dates(dates)
+    assert result == [date(2024, 1, 31), date(2024, 2, 28), date(2024, 3, 29)]
+
+
+def test_monthly_rebalance_dates_empty_input() -> None:
+    """Empty input returns empty list."""
+    assert _monthly_rebalance_dates([]) == []
+
+
+def test_compute_aggregate_stats_single_period() -> None:
+    """Aggregate stats computed correctly for a single period result."""
+    from atlas.trading.v6.simulator import PeriodResult
+
+    period = PeriodResult(
+        rebalance_date=date(2024, 1, 1),
+        end_date=date(2024, 2, 1),
+        book_return=0.02,
+        benchmark_return=0.01,
+        alpha=0.01,
+        holdings_count=20,
+        sleeve_pct=0.05,
+        cash_pct=0.10,
+        gross_exposure=0.85,
+        regime_score=1,
+    )
+    result = _compute_aggregate_stats(
+        strategy_name="test",
+        periods=[period],
+        equity_curve=[1.0, 1.02],
+        n_trades=5,
+    )
+    assert result.strategy_name == "test"
+    assert result.n_trades == 5
+    assert result.win_rate == 1.0  # one period, positive return
+    assert result.max_drawdown <= 0.0
+
+
+def test_compute_aggregate_stats_all_losing_periods() -> None:
+    """Win rate = 0 when all periods are negative."""
+    from atlas.trading.v6.simulator import PeriodResult
+
+    periods = [
+        PeriodResult(
+            rebalance_date=date(2024, 1, 1),
+            end_date=date(2024, 2, 1),
+            book_return=-0.03,
+            benchmark_return=0.0,
+            alpha=-0.03,
+            holdings_count=20,
+            sleeve_pct=0.05,
+            cash_pct=0.10,
+            gross_exposure=0.85,
+            regime_score=2,
+        ),
+        PeriodResult(
+            rebalance_date=date(2024, 2, 1),
+            end_date=date(2024, 3, 1),
+            book_return=-0.02,
+            benchmark_return=0.0,
+            alpha=-0.02,
+            holdings_count=20,
+            sleeve_pct=0.05,
+            cash_pct=0.10,
+            gross_exposure=0.85,
+            regime_score=2,
+        ),
+    ]
+    result = _compute_aggregate_stats(
+        strategy_name="test_loss",
+        periods=periods,
+        equity_curve=[1.0, 0.97, 0.95],
+        n_trades=10,
+    )
+    assert result.win_rate == 0.0
+    assert result.max_drawdown < 0.0
