@@ -509,7 +509,7 @@ def _compute_signal_panel(
                 m.max_drawdown_252,
                 m.effort_ratio_63
               FROM atlas.atlas_stock_metrics_daily m
-             WHERE m.instrument_id = ANY(:iids)
+             WHERE m.instrument_id = ANY(CAST(:iids AS uuid[]))
                AND m.date <= :ref
                AND m.date >= :lb
              ORDER BY m.instrument_id, m.date DESC
@@ -534,7 +534,7 @@ def _compute_signal_panel(
                     m.max_drawdown_252,
                     m.effort_ratio_63
                   FROM atlas.atlas_stock_metrics_daily m
-                 WHERE m.instrument_id = ANY(:iids)
+                 WHERE m.instrument_id = ANY(CAST(:iids AS uuid[]))
                    AND m.date <= :ref
                  ORDER BY m.instrument_id, m.date DESC
                  LIMIT :n
@@ -676,7 +676,7 @@ def _get_trend_gate_pass(
                 ema_10_stock,
                 ema_200_stock
               FROM atlas.atlas_stock_metrics_daily
-             WHERE instrument_id = ANY(:iids)
+             WHERE instrument_id = ANY(CAST(:iids AS uuid[]))
                AND date <= :ref
                AND date >= :lb
              ORDER BY instrument_id, date DESC
@@ -805,7 +805,7 @@ def _fetch_returns_panel(
         text("""
             SELECT instrument_id, date, ret_1d
               FROM atlas.atlas_stock_metrics_daily
-             WHERE instrument_id = ANY(:iids)
+             WHERE instrument_id = ANY(CAST(:iids AS uuid[]))
                AND date BETWEEN :s AND :e
                AND ret_1d IS NOT NULL
              ORDER BY date
@@ -818,9 +818,12 @@ def _fetch_returns_panel(
 
     df = pd.DataFrame(rows, columns=["instrument_id", "date", "ret_1d"])
     df["instrument_id"] = df["instrument_id"].apply(lambda x: uuid.UUID(str(x)))
+    # Cast NUMERIC ret_1d from psycopg2 (Decimal) to float64 — otherwise
+    # downstream pandas arithmetic with float Series raises TypeError.
+    df["ret_1d"] = df["ret_1d"].astype(float)
 
     pivot = df.pivot(index="date", columns="instrument_id", values="ret_1d")
-    pivot = pivot.fillna(0.0)
+    pivot = pivot.fillna(0.0).astype(float)
 
     # Keep only instruments with enough history
     min_rows = 20
@@ -848,7 +851,7 @@ def _fetch_forward_returns(
         text("""
             SELECT instrument_id, date, ret_1d
               FROM atlas.atlas_stock_metrics_daily
-             WHERE instrument_id = ANY(:iids)
+             WHERE instrument_id = ANY(CAST(:iids AS uuid[]))
                AND date > :s AND date <= :e
                AND ret_1d IS NOT NULL
              ORDER BY instrument_id, date
