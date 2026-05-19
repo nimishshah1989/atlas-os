@@ -11,10 +11,15 @@ function rsRankToRadius(rank: number | null): number {
   return Math.min(30, 5 + rank * 25)
 }
 
-// ATR contraction ratio (atr_14_252d_ratio) is not yet in ETFRow — per Phase 8 spec,
-// x-axis defaults to 1.0 (no contraction) until a per-ETF weighted-average ATR aggregation
-// is added to the nightly ETF aggregator and atlas_etf_signal_unified view.
-const ATR_RATIO_PLACEHOLDER = 1.0
+// Trend strength proxy: pct_stage_2 - pct_stage_4 (range -1 to +1).
+// Positive = stage 2 breadth dominant (uptrend momentum).
+// Negative = stage 4 dominant (downtrend / distribution phase).
+// Populated from atlas_etf_state_v2 via atlas_etf_signal_unified (migration 089).
+// Falls back to 0 (neutral) when pct_stage columns are NULL (pre-migration 089 state).
+function computeTrendStrength(pct_stage_2: number | null, pct_stage_4: number | null): number {
+  if (pct_stage_2 == null && pct_stage_4 == null) return 0
+  return (pct_stage_2 ?? 0) - (pct_stage_4 ?? 0)
+}
 
 type Theme = 'all' | 'Broad' | 'Sectoral'
 
@@ -60,8 +65,10 @@ export function ETFBubbleChart({
     const points = filtered
       .map(e => ({
         ...e,
-        // X: ATR contraction ratio — defaults to 1.0 until per-ETF aggregation is available
-        x: ATR_RATIO_PLACEHOLDER,
+        // X: trend strength = pct_stage_2 - pct_stage_4 (range -1 to +1).
+        // Source: atlas_etf_state_v2 via atlas_etf_signal_unified (migration 089).
+        // 0 = neutral / no data yet (pre-migration fallback).
+        x: computeTrendStrength(e.pct_stage_2, e.pct_stage_4),
         // Y: mean within-state rank (0–1) across holdings
         y: e.mean_within_state_rank != null ? e.mean_within_state_rank : NaN,
         rsRank: e.mean_rs_rank_12m,
@@ -77,24 +84,24 @@ export function ETFBubbleChart({
       return
     }
 
-    // X axis: ATR contraction ratio — all points at 1.0 until per-ETF aggregation ships.
-    // Spread points slightly along x using jitter so they're not all stacked.
-    const xExt: [number, number] = [0.5, 1.5]
+    // X axis: trend strength (pct_stage_2 - pct_stage_4), range -1 to +1.
+    // Fixed domain: -1 = fully stage-4 dominant, +1 = fully stage-2 dominant, 0 = neutral.
+    const xExt: [number, number] = [-1, 1]
     const xScale = d3.scaleLinear().domain(xExt).range([0, W])
 
     const yExt = d3.extent(points, p => p.y) as [number, number]
     const yPad = (yExt[1] - yExt[0]) * 0.12 || 0.05
     const yScale = d3.scaleLinear().domain([Math.max(0, yExt[0] - yPad), Math.min(1, yExt[1] + yPad)]).range([H, 0])
 
-    const midX = xScale(1.0)
+    const midX = xScale(0)
     const midY = yScale(0.5)
 
     // Quadrant backgrounds — neutral tones, distinct from RS-state bubble colors
     const quads = [
-      { x: 0,    y: 0,    w: midX,      h: midY,     label: 'LOW CONTRACTION',  sub: 'steady vol · high rank',   bg: '#e2f0e8', text: '#2F6B43' },
-      { x: midX, y: 0,    w: W - midX,  h: midY,     label: 'EXPANDING VOL',    sub: 'vol rising · high rank',   bg: '#f5f0e8', text: '#B8860B' },
-      { x: 0,    y: midY, w: midX,      h: H - midY, label: 'LOW CONTRACTION',  sub: 'steady vol · low rank',    bg: '#e8f0f5', text: '#25394A' },
-      { x: midX, y: midY, w: W - midX,  h: H - midY, label: 'EXPANDING VOL',   sub: 'vol rising · low rank',    bg: '#f5e8e8', text: '#B0492C' },
+      { x: 0,    y: 0,    w: midX,      h: midY,     label: 'STAGE 4 DOMINANT', sub: 'distribution · high rank',  bg: '#f5e8e8', text: '#B0492C' },
+      { x: midX, y: 0,    w: W - midX,  h: midY,     label: 'STAGE 2 DOMINANT', sub: 'uptrend · high rank',       bg: '#e2f0e8', text: '#2F6B43' },
+      { x: 0,    y: midY, w: midX,      h: H - midY, label: 'STAGE 4 DOMINANT', sub: 'distribution · low rank',   bg: '#f5e8e8', text: '#B0492C' },
+      { x: midX, y: midY, w: W - midX,  h: H - midY, label: 'STAGE 2 DOMINANT', sub: 'uptrend · low rank',        bg: '#e8f0f5', text: '#25394A' },
     ]
     quads.forEach(q => {
       svg.append('rect')
@@ -132,7 +139,7 @@ export function ETFBubbleChart({
     // Axes
     svg.append('g')
       .attr('transform', `translate(0,${H})`)
-      .call(d3.axisBottom(xScale).tickFormat(v => `${(+v).toFixed(2)}x`).ticks(4).tickSize(0))
+      .call(d3.axisBottom(xScale).tickFormat(v => `${+v >= 0 ? '+' : ''}${(+v).toFixed(1)}`).ticks(5).tickSize(0))
       .call(ax => {
         ax.select('.domain').remove()
         ax.selectAll('.tick text').attr('font-family', 'var(--font-sans)').attr('font-size', 9)
@@ -149,12 +156,12 @@ export function ETFBubbleChart({
     svg.append('text')
       .attr('x', W / 2).attr('y', H + 50).attr('text-anchor', 'middle')
       .attr('font-family', 'var(--font-sans)').attr('font-size', 10).attr('fill', '#64748b')
-      .text('Volatility contraction (ATR ratio) →')
+      .text('← Stage 4 dominant · Stage 2 dominant →')
     svg.append('text')
       .attr('transform', 'rotate(-90)')
       .attr('x', -H / 2).attr('y', -42).attr('text-anchor', 'middle')
       .attr('font-family', 'var(--font-sans)').attr('font-size', 10).attr('fill', '#64748b')
-      .text('↑ Within-state rank (cohort)')
+      .text('Within-state rank →')
 
     // Tooltip
     const tip = d3.select(document.body)
@@ -189,6 +196,7 @@ export function ETFBubbleChart({
         d3.select(this).select('circle').attr('fill-opacity', 0.32).attr('stroke-width', 2.5)
         const rankPct = p.y != null ? `${(p.y * 100).toFixed(0)}%` : '—'
         const rsRankPct = p.rsRank != null ? `${(p.rsRank * 100).toFixed(0)}%` : '—'
+        const trendStr = p.x != null ? (p.x >= 0 ? `+${p.x.toFixed(2)}` : p.x.toFixed(2)) : '—'
         tip.style('opacity', '1')
           .style('left', `${(event.clientX as number) + 14}px`)
           .style('top', `${(event.clientY as number) - 30}px`)
@@ -197,6 +205,7 @@ export function ETFBubbleChart({
             <div style="color:#64748b;font-size:10px;margin-bottom:6px">${p.etf_name ?? ''}</div>
             <div style="border-top:1px solid #f1f5f9;padding-top:5px;display:grid;gap:3px">
               <div style="color:#64748b">Within-state rank: <span style="font-weight:600;color:#2F6B43">${rankPct}</span></div>
+              <div style="color:#64748b">Trend strength: <span style="color:#1e293b">${trendStr}</span></div>
               <div style="color:#64748b">RS Rank 12M: <span style="color:#1e293b">${rsRankPct}</span></div>
               <div style="color:#64748b">RS State: <span style="color:#1e293b">${p.rs_state ?? '—'}</span></div>
               <div style="color:#64748b">Momentum: <span style="color:#1e293b">${p.momentum_state ?? '—'}</span></div>
@@ -249,7 +258,7 @@ export function ETFBubbleChart({
           </div>
         ))}
         <div className="ml-auto font-sans text-[10px] text-ink-tertiary">
-          Bubble size = RS rank 12M · {filtered.length} ETFs · ATR ratio axis pending aggregation
+          Bubble size = RS rank 12M · {filtered.length} ETFs · X = trend strength (stage 2 − stage 4 breadth)
         </div>
       </div>
     </div>

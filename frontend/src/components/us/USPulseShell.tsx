@@ -113,6 +113,8 @@ function adaptUSETF(row: USETFRow): ETFRow {
     // Phase 8: bubble chart axes — not available for US ETFs
     mean_rs_rank_12m:      null,
     mean_within_state_rank: null,
+    pct_stage_2:           null,
+    pct_stage_4:           null,
   }
 }
 

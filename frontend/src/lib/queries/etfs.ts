@@ -56,6 +56,12 @@ export type ETFRow = {
   // Phase 8: bubble chart axes — from atlas_etf_signal_unified
   mean_rs_rank_12m: number | null
   mean_within_state_rank: number | null
+  // Trend strength inputs: pct_stage_2 - pct_stage_4 = trend_strength (range -1 to +1).
+  // Positive = stage 2 breadth dominant (uptrend), negative = stage 4 dominant (downtrend).
+  // X axis on ETFBubbleChart. Populated by atlas_etf_state_v2 via atlas_etf_signal_unified
+  // after migration 089 is applied.
+  pct_stage_2: number | null
+  pct_stage_4: number | null
 }
 
 export type ETFMetricHistoryRow = {
@@ -166,7 +172,9 @@ export async function getAllETFs(): Promise<ETFRow[]> {
       NULL::boolean                 AS exit_stop_loss,
       -- Phase 8: bubble chart axes
       eu.mean_rs_rank_12m::float8   AS mean_rs_rank_12m,
-      eu.mean_within_state_rank::float8 AS mean_within_state_rank
+      eu.mean_within_state_rank::float8 AS mean_within_state_rank,
+      eu.pct_stage_2::float8        AS pct_stage_2,
+      eu.pct_stage_4::float8        AS pct_stage_4
     FROM atlas.atlas_universe_etfs u
     LEFT JOIN latest l ON l.ticker = u.ticker
     LEFT JOIN atlas.atlas_etf_metrics_daily m
@@ -249,7 +257,9 @@ export async function getETFByTicker(ticker: string): Promise<ETFRow | null> {
       NULL::boolean                 AS exit_stop_loss,
       -- Phase 8: bubble chart axes
       eu.mean_rs_rank_12m::float8   AS mean_rs_rank_12m,
-      eu.mean_within_state_rank::float8 AS mean_within_state_rank
+      eu.mean_within_state_rank::float8 AS mean_within_state_rank,
+      eu.pct_stage_2::float8        AS pct_stage_2,
+      eu.pct_stage_4::float8        AS pct_stage_4
     FROM atlas.atlas_universe_etfs u
     JOIN latest l ON TRUE
     LEFT JOIN atlas.atlas_etf_metrics_daily m
@@ -411,7 +421,9 @@ export async function getLinkedETFsForSector(sectorName: string): Promise<ETFRow
       NULL::boolean                 AS exit_stop_loss,
       -- Phase 8: bubble chart axes
       eu.mean_rs_rank_12m::float8   AS mean_rs_rank_12m,
-      eu.mean_within_state_rank::float8 AS mean_within_state_rank
+      eu.mean_within_state_rank::float8 AS mean_within_state_rank,
+      eu.pct_stage_2::float8        AS pct_stage_2,
+      eu.pct_stage_4::float8        AS pct_stage_4
     FROM atlas.atlas_universe_etfs u
     LEFT JOIN latest l ON l.ticker = u.ticker
     LEFT JOIN atlas.atlas_etf_metrics_daily m
