@@ -85,7 +85,7 @@ def test_compute_features_for_stock_sma200_nan_before_warmup():
         }
     )
     out = _compute_features_for_stock(g)
-    assert out["sma_200"].iloc[:199].isna().all(), "SMA-200 should be NaN before row 200"
+    assert bool(out["sma_200"].iloc[:199].isna().all()), "SMA-200 should be NaN before row 200"
     assert not pd.isna(out["sma_200"].iloc[199]), "SMA-200 should be valid at row 200"
 
 
@@ -107,7 +107,7 @@ def test_compute_features_for_stock_no_volume_column():
     )
     out = _compute_features_for_stock(g)
     assert "volume" in out.columns
-    assert out["volume"].isna().all(), "volume should be all-NaN when absent from input"
+    assert bool(out["volume"].isna().all()), "volume should be all-NaN when absent from input"
 
 
 def test_states_classify_cmd_missing_db_url(monkeypatch):
@@ -179,6 +179,184 @@ def test_states_classify_help():
 
 
 # ---------------------------------------------------------------------------
+# Unit tests for _apply_dwell_and_urgency vectorized path (no DB required)
+# ---------------------------------------------------------------------------
+
+
+def _build_synthetic_panel():  # type: ignore[return]
+    """Minimal DataFrames matching the DB schema for dwell/urgency tests."""
+    from datetime import date
+
+    d0 = date(2026, 1, 5)
+    meta = pd.DataFrame(
+        {
+            "instrument_id": ["A", "B", "C"],
+            "in_nifty_100": [True, False, False],
+            "in_nifty_500": [True, True, False],
+            "sector": ["financials", "it", "energy"],
+        }
+    )
+    baselines = pd.DataFrame(
+        {
+            "cohort_key": ["large_cap", "mid_cap", "small_cap"],
+            "state": ["Stage2", "Stage2", "Stage2"],
+            "median_dwell_days": [30, 25, 20],
+            "p25_dwell_days": [10, 8, 6],
+            "p75_dwell_days": [50, 40, 35],
+            "p95_dwell_days": [80, 70, 60],
+        }
+    )
+    vol_df = pd.DataFrame(
+        {
+            "instrument_id": ["A", "B", "C"],
+            "date": [d0, d0, d0],
+            "realized_vol_63": [0.20, 0.25, 0.30],
+        }
+    )
+    panel = pd.DataFrame(
+        {
+            "instrument_id": ["A", "B", "C"],
+            "date": [d0, d0, d0],
+            "state": ["Stage2", "Stage2", "Stage2"],
+            "dwell_days": [45, 20, 10],
+            "rs_rank_12m": [0.8, 0.6, None],
+            "dwell_percentile": [None, None, None],
+            "urgency_score": ["n/a", "n/a", "n/a"],
+            "within_state_rank": [None, None, None],
+        }
+    )
+    return panel, baselines, meta, vol_df
+
+
+def _make_mock_eng(baselines, meta, vol_df):  # type: ignore[return]
+    """MagicMock engine whose pd.read_sql returns supplied frames in order."""
+    from unittest.mock import MagicMock
+
+    call_idx: dict[str, int] = {"n": 0}
+    returns = [baselines, meta, vol_df]
+
+    def _fake_sql(_q, _c, **_kw):  # type: ignore[return]
+        r = returns[call_idx["n"]]
+        call_idx["n"] += 1
+        return r
+
+    conn = MagicMock()
+    conn.__enter__ = lambda s: conn
+    conn.__exit__ = MagicMock(return_value=False)
+    eng = MagicMock()
+    eng.connect.return_value = conn
+    return eng, _fake_sql
+
+
+def test_apply_dwell_vectorized_dwell_percentile():
+    """dwell_percentile is computed correctly by the vectorized path."""
+    from unittest.mock import patch
+
+    panel, baselines, meta, vol_df = _build_synthetic_panel()
+    eng, fake_sql = _make_mock_eng(baselines, meta, vol_df)
+    # A: large_cap Stage2, p25=10, p95=80, dwell=45 -> (45-10)/70 = 0.5
+    expected_a = round(35 / 70, 4)
+
+    with patch("pandas.read_sql", side_effect=fake_sql):
+        from atlas.trading.cli_states import _apply_dwell_and_urgency
+
+        out = _apply_dwell_and_urgency(panel, eng)
+
+    row_a = out.loc[out["instrument_id"] == "A"].iloc[0]
+    assert abs(float(row_a["dwell_percentile"]) - expected_a) < 1e-4
+
+
+def test_apply_dwell_vectorized_within_rank():
+    """within_state_rank = 0.4*fresh + 0.3*rs + 0.3*vol_rank holds numerically."""
+    from unittest.mock import patch
+
+    panel, baselines, meta, vol_df = _build_synthetic_panel()
+    eng, fake_sql = _make_mock_eng(baselines, meta, vol_df)
+
+    with patch("pandas.read_sql", side_effect=fake_sql):
+        from atlas.trading.cli_states import _apply_dwell_and_urgency
+
+        out = _apply_dwell_and_urgency(panel, eng)
+
+    # A: dp=0.5, fresh=0.5, rs=0.8, vol_rank=1/3 (lowest vol -> rank pct 1/3)
+    row_a = out.loc[out["instrument_id"] == "A"].iloc[0]
+    dp_a = float(row_a["dwell_percentile"])
+    expected = round(0.4 * (1.0 - dp_a) + 0.3 * 0.8 + 0.3 * (1 / 3), 4)
+    assert abs(float(row_a["within_state_rank"]) - expected) < 1e-3
+
+
+def test_apply_dwell_vectorized_no_meta():
+    """Instrument absent from meta -> urgency='n/a', numeric cols None/NaN."""
+    from datetime import date
+    from unittest.mock import patch
+
+    d0 = date(2026, 1, 5)
+    panel = pd.DataFrame(
+        {
+            "instrument_id": ["UNKNOWN"],
+            "date": [d0],
+            "state": ["Stage2"],
+            "dwell_days": [20],
+            "rs_rank_12m": [0.5],
+            "dwell_percentile": [None],
+            "urgency_score": ["n/a"],
+            "within_state_rank": [None],
+        }
+    )
+    _meta_cols: list[str] = ["instrument_id", "in_nifty_100", "in_nifty_500", "sector"]
+    empty_meta = pd.DataFrame({"_": pd.Series([], dtype=str)}).drop(columns=["_"])
+    empty_meta = empty_meta.reindex(columns=_meta_cols)
+    _bl_cols: list[str] = [
+        "cohort_key",
+        "state",
+        "median_dwell_days",
+        "p25_dwell_days",
+        "p75_dwell_days",
+        "p95_dwell_days",
+    ]
+    empty_bl = pd.DataFrame({"_": pd.Series([], dtype=str)}).drop(columns=["_"])
+    empty_bl = empty_bl.reindex(columns=_bl_cols)
+    _vol_cols: list[str] = ["instrument_id", "date", "realized_vol_63"]
+    empty_vol = pd.DataFrame({"_": pd.Series([], dtype=str)}).drop(columns=["_"])
+    empty_vol = empty_vol.reindex(columns=_vol_cols)
+    eng, fake_sql = _make_mock_eng(empty_bl, empty_meta, empty_vol)
+
+    with patch("pandas.read_sql", side_effect=fake_sql):
+        from atlas.trading.cli_states import _apply_dwell_and_urgency
+
+        out = _apply_dwell_and_urgency(panel, eng)
+
+    row = out.iloc[0]
+    assert row["urgency_score"] == "n/a"
+    assert row["dwell_percentile"] is None or bool(pd.isna(row["dwell_percentile"]))
+    assert row["within_state_rank"] is None or bool(pd.isna(row["within_state_rank"]))
+
+
+def test_apply_dwell_vectorized_return_shape():
+    """Output has three patched columns; no helper columns leak into the result."""
+    from unittest.mock import patch
+
+    panel, baselines, meta, vol_df = _build_synthetic_panel()
+    eng, fake_sql = _make_mock_eng(baselines, meta, vol_df)
+
+    with patch("pandas.read_sql", side_effect=fake_sql):
+        from atlas.trading.cli_states import _apply_dwell_and_urgency
+
+        out = _apply_dwell_and_urgency(panel, eng)
+
+    for col in ("dwell_percentile", "urgency_score", "within_state_rank"):
+        assert col in out.columns, f"Missing patched column: {col}"
+
+    leaked = [
+        c
+        for c in out.columns
+        if c.startswith("_") or c in ("in_nifty_100", "in_nifty_500", "sector", "cohort_key")
+    ]
+    assert not leaked, f"Helper columns leaked into output: {leaked}"
+    assert len(out) == len(panel)
+
+
+# ---------------------------------------------------------------------------
 # Integration test (live DB required)
 # ---------------------------------------------------------------------------
 
@@ -217,8 +395,7 @@ def test_states_classify_writes_rows():
     with eng.begin() as c:
         c.execute(
             text(
-                "DELETE FROM atlas.atlas_stock_state_daily"
-                " WHERE classifier_version = 'v1.0-smoke'"
+                "DELETE FROM atlas.atlas_stock_state_daily WHERE classifier_version = 'v1.0-smoke'"
             )
         )
 
