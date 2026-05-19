@@ -31,6 +31,12 @@ export type StockRow = {
   ema_10_at_20d_high: boolean | null
   weinstein_gate_pass: boolean | null
   realized_vol_63: string | null
+  // IC-validated state engine surface (from atlas_stock_signal_unified):
+  engine_state: string | null
+  within_state_rank: number | null
+  rs_rank_12m: number | null
+  dwell_days: number | null
+  urgency_score: string | null
 }
 
 export async function getStocksInSector(sectorName: string): Promise<StockRow[]> {
@@ -54,9 +60,19 @@ export async function getStocksInSector(sectorName: string): Promise<StockRow[]>
       m.rs_3m_tier_gold::text AS rs_3m_tier_gold,
       su.rs_state,
       su.momentum_state,
-      NULL::text              AS risk_state,
+      CASE NTILE(4) OVER (ORDER BY m.realized_vol_63 NULLS LAST)
+        WHEN 1 THEN 'Low'
+        WHEN 2 THEN 'Normal'
+        WHEN 3 THEN 'Elevated'
+        WHEN 4 THEN 'High'
+      END                     AS risk_state,
       NULL::text              AS volume_state,
       su.is_investable,
+      su.engine_state,
+      su.within_state_rank::float8 AS within_state_rank,
+      su.rs_rank_12m::float8       AS rs_rank_12m,
+      su.dwell_days,
+      su.urgency_score,
       -- Phase 7: gate columns will be removed in Phase 8 (page-level cleanup).
       TRUE                    AS market_gate,
       TRUE                    AS sector_gate,

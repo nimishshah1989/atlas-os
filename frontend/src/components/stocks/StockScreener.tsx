@@ -12,6 +12,41 @@ import { SectorBadge } from './SectorBadge'
 import { useColumnVisibility } from '@/components/ui/ColumnToggle'
 import { WithinStateRankCell } from './WithinStateRankCell'
 import { ValidatedBadge } from '@/components/ui/ValidatedBadge'
+
+const STAGE_LABEL: Record<string, string> = {
+  stage_1: '1 BASE',
+  stage_2a: '2A BREAK',
+  stage_2b: '2B CONF',
+  stage_2c: '2C MATURE',
+  stage_3: '3 TOP',
+  stage_4: '4 DECLINE',
+  uninvestable: 'UNINV',
+}
+const STAGE_COLOR: Record<string, string> = {
+  stage_1: 'text-ink-secondary bg-paper-rule/30',
+  stage_2a: 'text-signal-pos bg-signal-pos/10',
+  stage_2b: 'text-signal-pos bg-signal-pos/10',
+  stage_2c: 'text-signal-warn bg-signal-warn/10',
+  stage_3: 'text-signal-warn bg-signal-warn/10',
+  stage_4: 'text-signal-neg bg-signal-neg/10',
+  uninvestable: 'text-ink-tertiary bg-paper-rule/20',
+}
+
+function StageBadge({ state, dwellDays }: { state: string | null; dwellDays: number | null }) {
+  if (!state) return <span className="font-mono text-xs text-ink-tertiary">—</span>
+  const label = STAGE_LABEL[state] ?? state.toUpperCase()
+  const color = STAGE_COLOR[state] ?? 'text-ink-secondary bg-paper-rule/20'
+  return (
+    <span className="inline-flex flex-col gap-0.5" title={`${state} · day ${dwellDays ?? '?'}`}>
+      <span className={`px-1.5 py-0.5 rounded-sm font-sans text-[10px] font-semibold tracking-[0.04em] ${color}`}>
+        {label}
+      </span>
+      {dwellDays != null && (
+        <span className="font-mono text-[9px] text-ink-tertiary leading-none">d{dwellDays}</span>
+      )}
+    </span>
+  )
+}
 import {
   RS_ORDER, MOM_ORDER, RISK_ORDER, VOL_ORDER,
   OPTIONAL_COLS, COL_STORAGE_KEY, ALWAYS_VISIBLE_COL_COUNT,
@@ -253,6 +288,7 @@ export function StockScreener({
               <Th label="Symbol" k="symbol" />
               <Th label="Cap" k="cap_rank" />
               <Th label="Sector" k="sector" />
+              <PlainTh label="Stage" tooltip="Master Weinstein state (IC-validated): stage_1 base · stage_2a fresh breakout · stage_2b confirmed · stage_2c mature · stage_3 top · stage_4 decline · uninvestable" />
               <Th label="RS State" k="rs_state" />
               <Th label="Risk" k="risk_state" />
               {visibleCols.has('conviction') && (
@@ -344,6 +380,9 @@ export function StockScreener({
                       </td>
                       <td className="px-3 py-2.5">
                         <SectorBadge sector={row.sector} />
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <StageBadge state={row.engine_state} dwellDays={row.dwell_days} />
                       </td>
                       <td
                         className="px-3 py-2.5"

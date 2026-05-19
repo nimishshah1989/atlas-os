@@ -75,11 +75,18 @@ def _load_cts_continuous(
     Returns empty DataFrame if the column or table doesn't exist / has no data.
     Factor is indexed by (date, instrument_id).
     """
+    # Cast boolean columns to 1.0/0.0; pass numeric columns through.
+    # Postgres rejects direct `bool::float8` so use CASE.
+    factor_expr = (
+        f"CASE WHEN {col} THEN 1.0 ELSE 0.0 END"
+        if col in {"is_ppc", "is_npc", "is_contraction"}
+        else f"{col}::float8"
+    )
     sql = text(
         f"""
         SELECT instrument_id::text AS instrument_id,
                date                AS date,
-               {col}::float8       AS factor
+               {factor_expr}       AS factor
         FROM atlas.atlas_cts_signals_daily
         WHERE date BETWEEN :s AND :e
           AND {col} IS NOT NULL

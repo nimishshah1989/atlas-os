@@ -1,3 +1,4 @@
+// allow-large: stocks query module — multiple cohesive queries (getAllStocks, getTopPicks, RSLeaders, stock detail, history) share the same SELECT shape and benefit from co-location for grep + refactor
 import 'server-only'
 import sql from '@/lib/db'
 import type { StockRow } from './sector-deep-dive'
@@ -55,6 +56,12 @@ export type StockRowWithSector = StockRow & {
   signal_date: string | null
   cts_conviction_score: string | null
   cts_action_confidence: boolean | null
+  // IC-validated state engine surface (from atlas_stock_signal_unified):
+  engine_state: string | null
+  within_state_rank: number | null
+  rs_rank_12m: number | null
+  dwell_days: number | null
+  urgency_score: string | null
 }
 
 export type FullStockRow = StockRowWithSector
@@ -163,9 +170,19 @@ export async function getAllStocks(): Promise<StockRowWithSector[]> {
       NULL::boolean                        AS exit_stop_loss,
       su.rs_state,
       su.momentum_state,
-      NULL::text                           AS risk_state,
+      CASE NTILE(4) OVER (ORDER BY m.realized_vol_63 NULLS LAST)
+        WHEN 1 THEN 'Low'
+        WHEN 2 THEN 'Normal'
+        WHEN 3 THEN 'Elevated'
+        WHEN 4 THEN 'High'
+      END                                  AS risk_state,
       NULL::text                           AS volume_state,
       su.is_investable,
+      su.engine_state,
+      su.within_state_rank::float8         AS within_state_rank,
+      su.rs_rank_12m::float8               AS rs_rank_12m,
+      su.dwell_days,
+      su.urgency_score,
       CASE
         WHEN m.ret_3m IS NOT NULL AND b.n500_now IS NOT NULL AND b.n500_3m IS NOT NULL AND b.n500_3m > 0
         THEN (m.ret_3m - (b.n500_now - b.n500_3m) / b.n500_3m)::text
@@ -264,9 +281,19 @@ export async function getTopPicksAcrossSectors(): Promise<StockRowWithSector[]> 
       NULL::boolean                        AS exit_stop_loss,
       su.rs_state,
       su.momentum_state,
-      NULL::text                           AS risk_state,
+      CASE NTILE(4) OVER (ORDER BY m.realized_vol_63 NULLS LAST)
+        WHEN 1 THEN 'Low'
+        WHEN 2 THEN 'Normal'
+        WHEN 3 THEN 'Elevated'
+        WHEN 4 THEN 'High'
+      END                                  AS risk_state,
       NULL::text                           AS volume_state,
       su.is_investable,
+      su.engine_state,
+      su.within_state_rank::float8         AS within_state_rank,
+      su.rs_rank_12m::float8               AS rs_rank_12m,
+      su.dwell_days,
+      su.urgency_score,
       NULL::text AS alpha_3m,
       NULL::text AS alpha_6m,
       NULL::int                            AS stage,
@@ -374,9 +401,19 @@ export async function getStockBySymbol(symbol: string): Promise<StockRowWithSect
       NULL::boolean                        AS exit_stop_loss,
       su.rs_state,
       su.momentum_state,
-      NULL::text                           AS risk_state,
+      CASE NTILE(4) OVER (ORDER BY m.realized_vol_63 NULLS LAST)
+        WHEN 1 THEN 'Low'
+        WHEN 2 THEN 'Normal'
+        WHEN 3 THEN 'Elevated'
+        WHEN 4 THEN 'High'
+      END                                  AS risk_state,
       NULL::text                           AS volume_state,
       su.is_investable,
+      su.engine_state,
+      su.within_state_rank::float8         AS within_state_rank,
+      su.rs_rank_12m::float8               AS rs_rank_12m,
+      su.dwell_days,
+      su.urgency_score,
       CASE
         WHEN m.ret_3m IS NOT NULL AND b.n500_now IS NOT NULL AND b.n500_3m IS NOT NULL AND b.n500_3m > 0
         THEN (m.ret_3m - (b.n500_now - b.n500_3m) / b.n500_3m)::text
