@@ -729,7 +729,7 @@ def _fetch_daily_portfolio_returns(
         text("""
             SELECT instrument_id, date, ret_1d
               FROM atlas.atlas_stock_metrics_daily
-             WHERE instrument_id = ANY(:iids)
+             WHERE instrument_id = ANY(CAST(:iids AS uuid[]))
                AND date > :s AND date <= :e
                AND ret_1d IS NOT NULL
              ORDER BY date, instrument_id
