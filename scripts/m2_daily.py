@@ -116,11 +116,12 @@ def run_state_engine_daily(as_of_date: date) -> None:
     )
     print(f"[state-engine sectors] panel={len(stock_panel)} upserted={sector_rows}")
 
+    # Per-asset-class error tracking: a failure in one step does not block others,
+    # but the script exits non-zero so ops monitoring catches partial failures.
+    _step_errors: list[str] = []
+
     # Step 3: fund aggregation (monthly cadence; use most recent disclosure on-or-before date).
     # Pass None to load all disclosed months — the persist call is idempotent.
-    # NOTE: atlas_fund_lens_monthly may contain holdings_state values (e.g. 'Decent') that
-    # do not satisfy the atlas_fund_state_v2 CHECK constraint. If this happens, we log and
-    # continue — fund state quality is tracked separately and should not block sector/ETF steps.
     try:
         fund_panel = load_fund_holdings_panel(engine, as_of_date=None)
         log.info("state_engine_fund_panel_loaded", rows=len(fund_panel))
@@ -129,22 +130,40 @@ def run_state_engine_daily(as_of_date: date) -> None:
         log.info("state_engine_fund_persisted", rows_upserted=fund_rows, input_rows=len(fund_panel))
         print(f"[state-engine funds] panel={len(fund_panel)} upserted={fund_rows}")
     except Exception as exc:
-        log.warning(
-            "state_engine_fund_skipped",
-            reason=str(exc)[:200],
-            note="fund holdings_state values may violate atlas_fund_state_v2 CHECK constraint",
+        log.error(
+            "state_engine_fund_failed",
+            error=str(exc)[:400],
+            exc_type=type(exc).__name__,
         )
-        print(f"[state-engine funds] SKIPPED — {type(exc).__name__}: {str(exc)[:120]}")
+        _step_errors.append(f"fund: {type(exc).__name__}: {str(exc)[:200]}")
+        print(f"[state-engine funds] FAILED — {type(exc).__name__}: {str(exc)[:120]}")
 
     # Step 4: ETF aggregation.
-    etf_panel = load_etf_holdings_panel(engine, as_of_date=date_str)
-    log.info("state_engine_etf_panel_loaded", rows=len(etf_panel))
-    etf_agg = aggregate_etf_states(etf_panel)
-    etf_rows = persist_etf_state_v2(engine, etf_agg)
-    log.info("state_engine_etf_persisted", rows_upserted=etf_rows, input_rows=len(etf_panel))
-    print(f"[state-engine etfs] panel={len(etf_panel)} upserted={etf_rows}")
+    try:
+        etf_panel = load_etf_holdings_panel(engine, as_of_date=date_str)
+        log.info("state_engine_etf_panel_loaded", rows=len(etf_panel))
+        etf_agg = aggregate_etf_states(etf_panel)
+        etf_rows = persist_etf_state_v2(engine, etf_agg)
+        log.info("state_engine_etf_persisted", rows_upserted=etf_rows, input_rows=len(etf_panel))
+        print(f"[state-engine etfs] panel={len(etf_panel)} upserted={etf_rows}")
+    except Exception as exc:
+        log.error(
+            "state_engine_etf_failed",
+            error=str(exc)[:400],
+            exc_type=type(exc).__name__,
+        )
+        _step_errors.append(f"etf: {type(exc).__name__}: {str(exc)[:200]}")
+        print(f"[state-engine etfs] FAILED — {type(exc).__name__}: {str(exc)[:120]}")
 
     engine.dispose()
+
+    if _step_errors:
+        log.error("state_engine_partial_failure", errors=_step_errors)
+        raise RuntimeError(
+            f"state_engine_daily partial failure ({len(_step_errors)} step(s) failed): "
+            + "; ".join(_step_errors)
+        )
+
     log.info("state_engine_daily_done", as_of_date=date_str)
 
 
@@ -170,7 +189,14 @@ def main() -> int:
 
     # New state engine + aggregators — writes to atlas_stock_state_daily (v2),
     # atlas_sector_state_v2, atlas_fund_state_v2, atlas_etf_state_v2.
-    run_state_engine_daily(args.date)
+    try:
+        run_state_engine_daily(args.date)
+    except RuntimeError as exc:
+        # Partial failure: logged inside run_state_engine_daily.
+        # Exit code 2 = partial success; allows ops alerts to distinguish from
+        # exit code 1 (hard failure in run_stock_daily / run_etf_daily).
+        log.error("m2_daily_partial_failure", error=str(exc)[:400])
+        return 2
 
     return 0
 
