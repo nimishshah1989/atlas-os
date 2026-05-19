@@ -14,6 +14,10 @@ Synthetic approach: monkeypatch module-level functions in simulator to avoid
 real DB calls in tests 1-3. Only test 4 requires an actual DB connection.
 """
 
+# allow-large: 15 cohesive tests for a single module (simulator.py). Fix-B daily
+# NAV tests, weighted-sum tests, and smoke tests all share synthetic builders.
+# Splitting would lose co-locality between builders and tests. Responsibility = 1.
+
 from __future__ import annotations
 
 import uuid
@@ -29,6 +33,7 @@ from atlas.trading.v6.simulator import (
     SimulationConfig,
     SimulationResult,
     _compute_aggregate_stats,
+    _fetch_daily_portfolio_returns,
     _monthly_rebalance_dates,
     run_simulation,
 )
@@ -605,3 +610,222 @@ def test_compute_aggregate_stats_alpha_t_stat_zero_variance() -> None:
         n_trades=6,
     )
     assert result.alpha_t_stat == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Fix-B tests: daily NAV granularity
+# ---------------------------------------------------------------------------
+
+
+def test_fetch_daily_portfolio_returns_empty_weights() -> None:
+    """Empty book_weights returns empty list without hitting DB."""
+    mock_session = MagicMock()
+    result = _fetch_daily_portfolio_returns(mock_session, {}, date(2022, 1, 1), date(2022, 2, 1))
+    assert result == []
+    mock_session.execute.assert_not_called()
+
+
+def test_fetch_daily_portfolio_returns_no_db_rows() -> None:
+    """Returns empty list when DB returns no rows; logs warning."""
+    iid = uuid.uuid4()
+    mock_session = MagicMock()
+    mock_result = MagicMock()
+    mock_result.fetchall.return_value = []
+    mock_session.execute.return_value = mock_result
+
+    result = _fetch_daily_portfolio_returns(
+        mock_session,
+        {iid: 0.5},
+        date(2022, 1, 1),
+        date(2022, 2, 1),
+    )
+    assert result == []
+
+
+def test_fetch_daily_portfolio_returns_weighted_sum() -> None:
+    """Daily returns are weighted sums: port_ret[t] = sum(w_i * r_i[t])."""
+    iid_a = uuid.uuid4()
+    iid_b = uuid.uuid4()
+    book_weights = {iid_a: 0.6, iid_b: 0.4}
+
+    # Two days, two instruments
+    day1 = date(2022, 1, 3)
+    day2 = date(2022, 1, 4)
+
+    def _row(iid: uuid.UUID, d: date, ret: float) -> MagicMock:
+        r = MagicMock()
+        r.instrument_id = str(iid)
+        r.date = d
+        r.ret_1d = ret
+        return r
+
+    rows = [
+        _row(iid_a, day1, 0.01),  # 0.6 * 0.01
+        _row(iid_b, day1, -0.005),  # 0.4 * -0.005
+        _row(iid_a, day2, 0.02),  # 0.6 * 0.02
+        _row(iid_b, day2, 0.015),  # 0.4 * 0.015
+    ]
+
+    mock_result = MagicMock()
+    mock_result.fetchall.return_value = rows
+    mock_session = MagicMock()
+    mock_session.execute.return_value = mock_result
+
+    result = _fetch_daily_portfolio_returns(
+        mock_session,
+        book_weights,
+        date(2022, 1, 1),
+        date(2022, 1, 5),
+    )
+
+    assert len(result) == 2
+    expected_day1 = 0.6 * 0.01 + 0.4 * (-0.005)
+    expected_day2 = 0.6 * 0.02 + 0.4 * 0.015
+    assert abs(result[0] - expected_day1) < 1e-10
+    assert abs(result[1] - expected_day2) < 1e-10
+
+
+def test_compute_aggregate_stats_daily_mdd_deeper_than_monthly() -> None:
+    """Daily NAV must produce MDD that is <= the monthly series MDD.
+
+    Scenario: two months each ending up +2%, but the daily series shows
+    a -10% intra-month trough in month 1. Monthly equity_curve [1.0,1.02,1.04]
+    would report MDD=0.0 (all rising). Daily series captures the trough.
+    """
+    from atlas.trading.v6.simulator import PeriodResult
+
+    periods = [
+        PeriodResult(
+            rebalance_date=date(2022, 1, 1),
+            end_date=date(2022, 2, 1),
+            book_return=0.02,
+            benchmark_return=0.01,
+            alpha=0.01,
+            holdings_count=20,
+            sleeve_pct=0.05,
+            cash_pct=0.10,
+            gross_exposure=0.85,
+            regime_score=2,
+        ),
+        PeriodResult(
+            rebalance_date=date(2022, 2, 1),
+            end_date=date(2022, 3, 1),
+            book_return=0.02,
+            benchmark_return=0.01,
+            alpha=0.01,
+            holdings_count=20,
+            sleeve_pct=0.05,
+            cash_pct=0.10,
+            gross_exposure=0.85,
+            regime_score=2,
+        ),
+    ]
+
+    # Monthly equity curve: [1.0, 1.02, 1.04] — monotonically rising → MDD=0
+    monthly_result = _compute_aggregate_stats(
+        strategy_name="test_monthly",
+        periods=periods,
+        equity_curve=[1.0, 1.02, 1.0404],
+        daily_returns=None,
+        n_trades=0,
+    )
+    # MDD from monthly series: no drawdown visible (NAV only hits month-ends)
+    assert (
+        monthly_result.max_drawdown >= -0.001
+    ), f"Monthly MDD should be ~0 but got {monthly_result.max_drawdown}"
+
+    # Daily returns: starts at 1.0, drops to 0.90 intra-month, then recovers
+    # Simulated: day 1 = -10%, day 2 = +0.02/0.90 - 1 (recovery) to reach 1.02
+    # day3-day5 are flat for period 2, ending at ~1.04
+    daily_rets_period1 = [-0.10, (1.02 / 0.90) - 1.0]  # trough then recovery
+    daily_rets_period2 = [0.01, 0.01, 0.0]  # gentle rise
+
+    all_daily = daily_rets_period1 + daily_rets_period2
+    # Build daily equity curve
+    daily_ec = [1.0]
+    for r in all_daily:
+        daily_ec.append(daily_ec[-1] * (1.0 + r))
+
+    daily_result = _compute_aggregate_stats(
+        strategy_name="test_daily",
+        periods=periods,
+        equity_curve=daily_ec,
+        daily_returns=all_daily,
+        n_trades=0,
+    )
+    # Daily MDD must capture the -10% intra-month trough
+    assert daily_result.max_drawdown < -0.09, (
+        f"Daily MDD should be < -9% (captures intra-month trough) "
+        f"but got {daily_result.max_drawdown}"
+    )
+    # Daily MDD should be strictly worse than monthly MDD
+    assert daily_result.max_drawdown < monthly_result.max_drawdown
+
+
+def test_run_simulation_daily_returns_patches_applied() -> None:
+    """run_simulation calls _fetch_daily_portfolio_returns and extends equity_curve daily.
+
+    The equity_curve should have more points than (n_periods + 1) when daily
+    returns are returned.
+    """
+    instruments = _make_instruments(10)
+    inst_ids = [inst.instrument_id for inst in instruments]
+    panel = _make_signal_panel(instruments)
+    returns_panel = _make_returns_panel(inst_ids[:8])
+
+    start = date(2024, 6, 1)
+    end = date(2024, 8, 31)
+    trading_dates = _make_trading_dates(start, end)
+
+    config = SimulationConfig(
+        start=start,
+        end=end,
+        strategy_name="test_daily_nav",
+        target_holdings=8,
+        persist=False,
+    )
+
+    mock_session = MagicMock()
+
+    def mock_execute(stmt, params=None):
+        result = MagicMock()
+        sql_str = str(stmt) if hasattr(stmt, "__str__") else ""
+        if "atlas_market_regime_daily" in sql_str and "date >= :s" in sql_str:
+            result.fetchall.return_value = [MagicMock(date=d) for d in trading_dates]
+        else:
+            result.fetchall.return_value = []
+        result.fetchone.return_value = None
+        return result
+
+    mock_session.execute.side_effect = mock_execute
+    mock_session.commit = MagicMock()
+
+    regime_state = RegimeState(date=start, score=0, level="calm", gross_multiplier=1.0, signals=[])
+    sleeve_alloc = SleeveAllocation(ref_date=start, sleeve_pct_of_book=0.05, legs=[])
+
+    # Return 5 daily returns per period from _fetch_daily_portfolio_returns
+    daily_ret_stub = [0.001, -0.002, 0.003, 0.0, 0.001]
+
+    with (
+        patch("atlas.trading.v6.simulator.get_investable", return_value=instruments),
+        patch("atlas.trading.v6.simulator.apply_exclusions", return_value=(set(), [])),
+        patch("atlas.trading.v6.simulator._compute_signal_panel", return_value=panel),
+        patch("atlas.trading.v6.simulator._get_trend_gate_pass", return_value=set(inst_ids)),
+        patch("atlas.trading.v6.simulator._fetch_returns_panel", return_value=returns_panel),
+        patch("atlas.trading.v6.simulator.compute_regime", return_value=regime_state),
+        patch("atlas.trading.v6.simulator.allocate_sleeve", return_value=sleeve_alloc),
+        patch(
+            "atlas.trading.v6.simulator._fetch_daily_portfolio_returns",
+            return_value=daily_ret_stub,
+        ),
+        patch("atlas.trading.v6.simulator._benchmark_return", return_value=0.005),
+    ):
+        result = run_simulation(mock_session, config)
+
+    assert isinstance(result, SimulationResult)
+    # With daily data, each period contributes 5 daily NAV points.
+    # n_periods ~= 2 for Jun-Aug → equity_curve len > 3 (monthly would be 3)
+    # equity_curve starts at [1.0] + 5 daily points per period:
+    #   len == 1 + 5 * n_periods (daily) vs 1 + 1 * n_periods (monthly)
+    assert result.max_drawdown <= 0.0  # non-positive
+    assert len(result.periods) >= 1

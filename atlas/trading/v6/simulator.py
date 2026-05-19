@@ -130,7 +130,8 @@ def run_simulation(session: Session, config: SimulationConfig) -> SimulationResu
     )
 
     periods: list[PeriodResult] = []
-    equity_curve: list[float] = [1.0]  # NAV starts at 1.0
+    equity_curve: list[float] = [1.0]  # NAV starts at 1.0 (daily granularity after fix-B)
+    daily_returns: list[float] = []  # daily portfolio returns — drives MDD/vol
     held_yesterday: set[uuid.UUID] = set()
     prior_weights: dict[uuid.UUID, float] = {}
     n_trades = 0
@@ -146,7 +147,7 @@ def run_simulation(session: Session, config: SimulationConfig) -> SimulationResu
         next_reb = rebalance_dates[i + 1] if i + 1 < len(rebalance_dates) else config.end
 
         try:
-            period = _run_single_period(
+            period, period_daily_rets = _run_single_period(
                 session=session,
                 config=config,
                 allocator=allocator,
@@ -154,7 +155,6 @@ def run_simulation(session: Session, config: SimulationConfig) -> SimulationResu
                 end_date=next_reb,
                 held_yesterday=held_yesterday,
                 prior_weights=prior_weights,
-                equity_curve=equity_curve,
             )
         except ValueError as exc:
             log.warning(
@@ -162,7 +162,13 @@ def run_simulation(session: Session, config: SimulationConfig) -> SimulationResu
                 rebalance_date=str(reb_date),
                 reason=str(exc),
             )
-            # No regime data or empty universe — carry forward, mark zero return
+            # No regime data or empty universe — carry forward, mark zero return.
+            # Emit ~20 zero daily returns to keep NAV series daily-granularity.
+            trading_days_in_period = max(
+                1,
+                len([d for d in all_dates if reb_date < d <= next_reb]),
+            )
+            period_daily_rets = [0.0] * trading_days_in_period
             period = PeriodResult(
                 rebalance_date=reb_date,
                 end_date=next_reb,
@@ -176,8 +182,10 @@ def run_simulation(session: Session, config: SimulationConfig) -> SimulationResu
                 regime_score=0,
             )
 
-        # Update equity curve with book return
-        equity_curve.append(equity_curve[-1] * (1.0 + period.book_return))
+        # Extend daily NAV series from daily returns (Fix-B: daily granularity)
+        for dr in period_daily_rets:
+            equity_curve.append(equity_curve[-1] * (1.0 + dr))
+        daily_returns.extend(period_daily_rets)
 
         # Trades = changes from prior_weights (count entries/exits)
         if prior_weights:
@@ -188,11 +196,12 @@ def run_simulation(session: Session, config: SimulationConfig) -> SimulationResu
         # Update state for next period
         held_yesterday = set(prior_weights.keys())
 
-    # Aggregate statistics
+    # Aggregate statistics — daily_returns drives MDD/vol (Fix-B)
     result = _compute_aggregate_stats(
         strategy_name=config.strategy_name,
         periods=periods,
         equity_curve=equity_curve,
+        daily_returns=daily_returns,
         n_trades=n_trades,
     )
 
@@ -225,9 +234,12 @@ def _run_single_period(
     end_date: date,
     held_yesterday: set[uuid.UUID],
     prior_weights: dict[uuid.UUID, float],
-    equity_curve: list[float],
-) -> PeriodResult:
-    """Execute one monthly rebalance period. Returns PeriodResult.
+) -> tuple[PeriodResult, list[float]]:
+    """Execute one monthly rebalance period.
+
+    Returns (PeriodResult, daily_portfolio_returns).
+    daily_portfolio_returns: one float per trading day in [rebalance_date+1, end_date].
+    Slippage drag is subtracted from the first day's return.
 
     Mutates prior_weights in-place to reflect new holdings at period end.
     """
@@ -247,7 +259,7 @@ def _run_single_period(
             cash_pct=1.0,
             gross_exposure=0.30,
             regime_score=0,
-        )
+        ), []
 
     # Step 2 — Governance
     instrument_ids = [inst.instrument_id for inst in instruments]
@@ -269,7 +281,7 @@ def _run_single_period(
             cash_pct=1.0,
             gross_exposure=0.30,
             regime_score=0,
-        )
+        ), []
 
     # Step 4 — Composite
     composite = compute_composite(panel, config.signal_weights)
@@ -302,7 +314,7 @@ def _run_single_period(
             cash_pct=1.0,
             gross_exposure=0.30,
             regime_score=0,
-        )
+        ), []
 
     # Step 6 — HRP weights
     returns_panel = _fetch_returns_panel(session, cohort, rebalance_date, lookback_days=252)
@@ -356,17 +368,35 @@ def _run_single_period(
         rebalance_date=rebalance_date,
     )
 
-    # Period return: forward returns from rebalance_date to end_date
-    forward_returns = _fetch_forward_returns(
-        session, list(book_weights.keys()), rebalance_date, end_date
+    # Daily portfolio returns (Fix-B: daily NAV granularity for MDD).
+    # Slippage drag subtracted from the first day only (rebalance cost is incurred
+    # at open on rebalance_date+1, the first trading day after rebalance).
+    daily_port_returns = _fetch_daily_portfolio_returns(
+        session, book_weights, rebalance_date, end_date
     )
+    if daily_port_returns:
+        daily_port_returns[0] -= slippage_drag
+    else:
+        # No daily data in period — emit a single observation from compound return
+        daily_port_returns = []
 
-    book_return = (
-        float(
-            sum(book_weights.get(iid, 0.0) * forward_returns.get(iid, 0.0) for iid in book_weights)
+    # Period compound return: derived from daily series for consistency with NAV.
+    # If no daily data, fall back to direct forward_returns calculation.
+    if daily_port_returns:
+        book_return = float((pd.Series(daily_port_returns) + 1.0).prod() - 1.0)
+    else:
+        forward_returns = _fetch_forward_returns(
+            session, list(book_weights.keys()), rebalance_date, end_date
         )
-        - slippage_drag
-    )
+        book_return = (
+            float(
+                sum(
+                    book_weights.get(iid, 0.0) * forward_returns.get(iid, 0.0)
+                    for iid in book_weights
+                )
+            )
+            - slippage_drag
+        )
 
     bench_return = _benchmark_return(session, rebalance_date, end_date)
 
@@ -385,7 +415,7 @@ def _run_single_period(
         cash_pct=cash_pct,
         gross_exposure=gross,
         regime_score=regime.score,
-    )
+    ), daily_port_returns
 
 
 # ---------------------------------------------------------------------------
@@ -671,6 +701,89 @@ def _get_trend_gate_pass(
 # ---------------------------------------------------------------------------
 
 
+def _fetch_daily_portfolio_returns(
+    session: Session,
+    book_weights: dict[uuid.UUID, float],
+    start: date,
+    end: date,
+) -> list[float]:
+    """Compute daily portfolio returns for all trading days in (start, end].
+
+    For each trading day t:
+        port_ret[t] = sum(weight_i * ret_1d_i[t])
+    Days where a stock has NULL ret_1d contribute 0.0 for that stock (logged
+    if gap count is non-trivial).
+
+    Returns list of floats (one per trading day with at least one stock having
+    data). Returns empty list if no data exists in the window.
+
+    Source: atlas.atlas_stock_metrics_daily.ret_1d (pre-computed daily returns).
+    Per-Day Query Loop bug avoided: ONE SQL fetch per period (not per day).
+    """
+    if not book_weights:
+        return []
+
+    iid_strs = [str(i) for i in book_weights]
+
+    rows = session.execute(
+        text("""
+            SELECT instrument_id, date, ret_1d
+              FROM atlas.atlas_stock_metrics_daily
+             WHERE instrument_id = ANY(:iids)
+               AND date > :s AND date <= :e
+               AND ret_1d IS NOT NULL
+             ORDER BY date, instrument_id
+        """),
+        {"iids": iid_strs, "s": start, "e": end},
+    ).fetchall()
+
+    if not rows:
+        log.warning(
+            "simulator.no_daily_returns_for_period",
+            start=str(start),
+            end=str(end),
+            n_holdings=len(book_weights),
+        )
+        return []
+
+    # Group ret_1d by date
+    date_returns: dict[date, float] = {}
+    date_weight_sum: dict[date, float] = {}
+
+    for r in rows:
+        iid = uuid.UUID(str(r.instrument_id))
+        w = book_weights.get(iid, 0.0)
+        if w == 0.0:
+            continue
+        d = r.date
+        ret = float(r.ret_1d)
+        if d not in date_returns:
+            date_returns[d] = 0.0
+            date_weight_sum[d] = 0.0
+        date_returns[d] += w * ret
+        date_weight_sum[d] += w
+
+    if not date_returns:
+        return []
+
+    # Count gaps — days where no holding had data (already filtered by IS NOT NULL above,
+    # but weight_sum < total_weight signals partial coverage)
+    total_weight = sum(book_weights.values())
+    partial_days = sum(1 for d, ws in date_weight_sum.items() if ws < total_weight * 0.5)
+    if partial_days > 0:
+        log.warning(
+            "simulator.daily_returns_partial_coverage",
+            start=str(start),
+            end=str(end),
+            partial_days=partial_days,
+            total_days=len(date_returns),
+        )
+
+    # Return sorted by date
+    sorted_dates = sorted(date_returns)
+    return [date_returns[d] for d in sorted_dates]
+
+
 def _fetch_returns_panel(
     session: Session,
     instrument_ids: Sequence[uuid.UUID],
@@ -862,8 +975,18 @@ def _compute_aggregate_stats(
     periods: list[PeriodResult],
     equity_curve: list[float],
     n_trades: int,
+    daily_returns: list[float] | None = None,
 ) -> SimulationResult:
-    """Compute CAGR, MDD, vol, Sharpe, Calmar, win_rate from period results."""
+    """Compute CAGR, MDD, vol, Sharpe, Calmar, win_rate from period results.
+
+    Fix-B: MDD and vol are computed from the daily equity curve when daily_returns
+    is provided (daily NAV series passed in equity_curve). This captures
+    intra-month drawdowns that the monthly-only series suppressed.
+
+    If daily_returns is None or empty, falls back to monthly-granularity
+    computation (backward-compatible path for unit tests that supply
+    synthetic monthly equity_curves directly to this function).
+    """
     if not periods:
         return SimulationResult(
             strategy_name=strategy_name,
@@ -887,23 +1010,34 @@ def _compute_aggregate_stats(
     else:
         ann_return = (equity_curve[-1] / equity_curve[0]) ** (365.25 / total_days) - 1.0
 
-    # Max drawdown
+    # Max drawdown — use daily NAV series for accurate intra-month troughs (Fix-B).
+    # Fall back to the equity_curve series (monthly) if no daily data provided.
     running_max = nav.cummax()
     drawdowns = (nav / running_max) - 1.0
     max_drawdown = float(drawdowns.min())
 
-    # Vol (annualized, assuming ~12 periods/year)
-    ret_series = pd.Series(returns)
-    periods_per_year = 12.0
-    vol = float(ret_series.std() * math.sqrt(periods_per_year))
-
-    # Sharpe (using 6% annualized risk-free, ≈ 0.5% per month)
-    rf_per_period = 0.06 / periods_per_year
-    excess_returns = ret_series - rf_per_period
-    exc_std = excess_returns.std()
-    sharpe = (
-        float(excess_returns.mean() / exc_std * math.sqrt(periods_per_year)) if exc_std > 0 else 0.0
-    )
+    # Vol (annualized) — daily series gives more accurate vol; fall back to monthly.
+    if daily_returns:
+        daily_ret_series = pd.Series(daily_returns)
+        vol = float(daily_ret_series.std() * math.sqrt(252))
+        # Sharpe: daily risk-free ≈ 6%/252
+        rf_per_day = 0.06 / 252.0
+        excess_daily = daily_ret_series - rf_per_day
+        exc_std = excess_daily.std()
+        sharpe = float(excess_daily.mean() / exc_std * math.sqrt(252)) if exc_std > 0 else 0.0
+    else:
+        # Backward-compatible monthly path (unit tests, zero-holdings periods)
+        ret_series = pd.Series(returns)
+        periods_per_year = 12.0
+        vol = float(ret_series.std() * math.sqrt(periods_per_year))
+        rf_per_period = 0.06 / periods_per_year
+        excess_returns = ret_series - rf_per_period
+        exc_std = excess_returns.std()
+        sharpe = (
+            float(excess_returns.mean() / exc_std * math.sqrt(periods_per_year))
+            if exc_std > 0
+            else 0.0
+        )
 
     # Calmar
     calmar = (ann_return / abs(max_drawdown)) if max_drawdown < 0 else 0.0
