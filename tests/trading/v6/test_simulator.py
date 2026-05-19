@@ -537,3 +537,71 @@ def test_compute_aggregate_stats_all_losing_periods() -> None:
     )
     assert result.win_rate == 0.0
     assert result.max_drawdown < 0.0
+
+
+def test_compute_aggregate_stats_alpha_t_stat_nonzero() -> None:
+    """alpha_t_stat is computed from per-period alpha series (§8.4 formula)."""
+    import math
+
+    from atlas.trading.v6.simulator import PeriodResult
+
+    # Three periods with consistent positive alpha → t-stat > 0
+    alphas = [0.02, 0.03, 0.015]
+    periods = [
+        PeriodResult(
+            rebalance_date=date(2024, 1, 1) + timedelta(days=30 * i),
+            end_date=date(2024, 1, 1) + timedelta(days=30 * (i + 1)),
+            book_return=alpha + 0.01,
+            benchmark_return=0.01,
+            alpha=alpha,
+            holdings_count=20,
+            sleeve_pct=0.05,
+            cash_pct=0.10,
+            gross_exposure=0.85,
+            regime_score=1,
+        )
+        for i, alpha in enumerate(alphas)
+    ]
+    equity_curve = [1.0, 1.03, 1.06, 1.075]
+    result = _compute_aggregate_stats(
+        strategy_name="test_alpha",
+        periods=periods,
+        equity_curve=equity_curve,
+        n_trades=6,
+    )
+    # Manual check: alpha_mean / alpha_std * sqrt(3)
+    import statistics
+
+    mean_a = sum(alphas) / len(alphas)
+    std_a = statistics.stdev(alphas)
+    expected_t = mean_a / std_a * math.sqrt(3)
+    assert abs(result.alpha_t_stat - expected_t) < 1e-9
+    assert result.alpha_t_stat > 0.0
+
+
+def test_compute_aggregate_stats_alpha_t_stat_zero_variance() -> None:
+    """alpha_t_stat is 0.0 when all alphas are identical (zero variance)."""
+    from atlas.trading.v6.simulator import PeriodResult
+
+    periods = [
+        PeriodResult(
+            rebalance_date=date(2024, 1, 1) + timedelta(days=30 * i),
+            end_date=date(2024, 1, 1) + timedelta(days=30 * (i + 1)),
+            book_return=0.02,
+            benchmark_return=0.01,
+            alpha=0.01,  # identical every period → std=0
+            holdings_count=20,
+            sleeve_pct=0.05,
+            cash_pct=0.10,
+            gross_exposure=0.85,
+            regime_score=1,
+        )
+        for i in range(3)
+    ]
+    result = _compute_aggregate_stats(
+        strategy_name="test_flat_alpha",
+        periods=periods,
+        equity_curve=[1.0, 1.02, 1.04, 1.06],
+        n_trades=6,
+    )
+    assert result.alpha_t_stat == 0.0

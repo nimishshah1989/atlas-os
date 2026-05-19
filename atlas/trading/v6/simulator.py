@@ -78,6 +78,7 @@ class SimulationResult:
     calmar: float
     win_rate: float
     n_trades: int
+    alpha_t_stat: float = 0.0
 
 
 @dataclass
@@ -436,16 +437,26 @@ def _compute_signal_panel(
     SQL-first approach: pulls pre-computed metrics from atlas_stock_metrics_daily
     to avoid loading raw OHLCV for all 500 stocks per date.
 
-    Columns mapped:
-      natr_14             → natr_14 (or realized_vol_63 proxy)
-      beta_alpha_63d      → alpha_63d (pre-computed in atlas_stock_metrics_daily)
-      mom_low_vol         → ret_12m * (1 - vol_rank) proxy via ret_12m / realized_vol_63
-      proximity_52wh      → computed from high_252d / close_63d proxy
-      fip_smoothness      → computed from positive_days_252d / 252
-      bab                 → 1 - beta rank (cross-sectional inverse rank of beta_63d)
-      industry_rs         → ret_3m - sector median ret_3m
-      residual_momentum   → alpha_63d as residual proxy (full OLS deferred)
+    Columns mapped (using actual atlas_stock_metrics_daily schema):
+      natr_14             → atr_21 / ema_10_stock (NATR proxy: ATR normalized by price)
+      beta_alpha_63d      → rs_3m_nifty500 (stock 3m return vs Nifty 500 = alpha proxy)
+      mom_low_vol         → ret_12m / realized_vol_63 (Sharpe-like return/vol ratio)
+      proximity_52wh      → ema_10_stock / ema_200_stock (proximity to long-term trend)
+      fip_smoothness      → effort_ratio_63 (trend-strength proxy; >1 = bullish effort)
+      bab                 → vol_ratio_63 (stock/bench vol ratio; inverted for low-vol rank)
+      industry_rs         → ret_3m - sector median ret_3m (computed cross-sectionally)
+      residual_momentum   → rs_3m_nifty500 proxy (full OLS vs factor returns deferred; TODO)
       quality_proxy       → -0.5×rank(vol) - 0.3×rank(mdd) + 0.2×rank(consistency)
+
+    Missing from live schema (handled):
+      natr_14 → atr_21 available; NATR computed as atr_21/ema_10_stock
+      alpha_63d → rs_3m_nifty500 used as excess-return proxy
+      beta_63d → vol_ratio_63 used as systematic-risk proxy
+      ma_200d → ema_200_stock (EMA-200 vs SMA-200: near-identical for trend gate)
+      close → ema_10_stock (recent price proxy)
+      max_drawdown_252d → max_drawdown_252 (schema name difference only)
+      positive_days_252d → effort_ratio_63 used as directional-consistency proxy
+      worst_quarter_ret → max_drawdown_252 negated as worst-period proxy
     """
     if not instruments:
         return pd.DataFrame()
@@ -457,17 +468,16 @@ def _compute_signal_panel(
         text("""
             SELECT DISTINCT ON (m.instrument_id)
                 m.instrument_id,
-                m.natr_14,
-                m.alpha_63d,
+                m.atr_21,
+                m.rs_3m_nifty500,
                 m.ret_12m,
                 m.ret_3m,
                 m.realized_vol_63,
-                m.beta_63d,
-                m.ma_200d,
-                m.close,
-                m.max_drawdown_252d,
-                m.positive_days_252d,
-                m.worst_quarter_ret
+                m.vol_ratio_63,
+                m.ema_200_stock,
+                m.ema_10_stock,
+                m.max_drawdown_252,
+                m.effort_ratio_63
               FROM atlas.atlas_stock_metrics_daily m
              WHERE m.instrument_id = ANY(:iids)
                AND m.date <= :ref
@@ -483,17 +493,16 @@ def _compute_signal_panel(
             text("""
                 SELECT DISTINCT ON (m.instrument_id)
                     m.instrument_id,
-                    m.natr_14,
-                    m.alpha_63d,
+                    m.atr_21,
+                    m.rs_3m_nifty500,
                     m.ret_12m,
                     m.ret_3m,
                     m.realized_vol_63,
-                    m.beta_63d,
-                    m.ma_200d,
-                    m.close,
-                    m.max_drawdown_252d,
-                    m.positive_days_252d,
-                    m.worst_quarter_ret
+                    m.vol_ratio_63,
+                    m.ema_200_stock,
+                    m.ema_10_stock,
+                    m.max_drawdown_252,
+                    m.effort_ratio_63
                   FROM atlas.atlas_stock_metrics_daily m
                  WHERE m.instrument_id = ANY(:iids)
                    AND m.date <= :ref
@@ -514,42 +523,52 @@ def _compute_signal_panel(
     records = []
     for r in rows:
         iid = uuid.UUID(str(r.instrument_id))
-        natr = float(r.natr_14 or 0.0)
-        alpha = float(r.alpha_63d or 0.0)
+        # Use actual schema columns with safe fallbacks
+        atr_21 = float(r.atr_21 or 0.0)
+        rs_3m_vs_bench = float(r.rs_3m_nifty500 or 0.0)  # alpha proxy
         ret_12m = float(r.ret_12m or 0.0)
         ret_3m = float(r.ret_3m or 0.0)
         vol = float(r.realized_vol_63 or 1e-6)  # guard zero
-        beta = float(r.beta_63d or 1.0)
-        close = float(r.close or 1.0)
-        ma_200 = float(r.ma_200d or close)
-        mdd = float(r.max_drawdown_252d or 0.0)
-        pos_days = float(r.positive_days_252d or 126.0)
-        worst_q = float(r.worst_quarter_ret or -0.01)
+        vol_ratio = float(r.vol_ratio_63 or 1.0)  # stock vol / bench vol ≈ beta
+        ema_200 = float(r.ema_200_stock or 1.0)
+        ema_10 = float(r.ema_10_stock or ema_200)  # close proxy
+        mdd = float(r.max_drawdown_252 or 0.0)
+        effort = float(r.effort_ratio_63 or 1.0)  # directional-consistency proxy
 
-        # mom_low_vol = ret_12m / vol as a proxy (directionally correct)
+        # NATR proxy: ATR normalized by recent price
+        natr = atr_21 / ema_10 if ema_10 > 0 else 0.0
+
+        # mom_low_vol = ret_12m / vol (Sharpe-like: high return, low vol)
         mom_low_vol = ret_12m / vol if vol > 0 else 0.0
 
-        # FIP smoothness = (n_up - n_down) / 252 ≈ (2*pos - 252) / 252
-        fip_smoothness = (2.0 * pos_days - 252.0) / 252.0
+        # FIP smoothness: use effort_ratio_63 centered at 1.0
+        # effort_ratio > 1 = price moving more than expected (bullish)
+        fip_smoothness = (effort - 1.0) / max(effort, 1e-8)
+
+        # Worst-period proxy: negate MDD (MDD is stored as positive fraction)
+        worst_q_proxy = -abs(mdd)
+
+        # Proximity to long-term trend (EMA10 / EMA200)
+        proximity_52wh = ema_10 / ema_200 if ema_200 > 0 else 1.0
 
         # industry_rs will be filled after sector median computation
         records.append(
             {
                 "instrument_id": iid,
                 "natr_14": natr,
-                "beta_alpha_63d": alpha,
+                "beta_alpha_63d": rs_3m_vs_bench,  # excess return vs bench = alpha proxy
                 "mom_low_vol": mom_low_vol,
-                "residual_momentum": alpha,  # proxy: same as alpha_63d
-                "proximity_52wh": min(1.0, close / (ma_200 * 1.1 + 1e-8)),  # proxy
+                "residual_momentum": rs_3m_vs_bench,  # TODO: replace with OLS residual
+                "proximity_52wh": proximity_52wh,
                 "fip_smoothness": fip_smoothness,
-                "bab": beta,  # raw beta — inverted to rank downstream
+                "bab": vol_ratio,  # raw vol_ratio — inverted downstream (low vol → high BAB)
                 "quality_raw_vol": vol,
                 "quality_raw_mdd": mdd,
-                "quality_raw_worst_q": worst_q,
+                "quality_raw_worst_q": worst_q_proxy,
                 "ret_12m": ret_12m,
                 "ret_3m": ret_3m,
-                "close": close,
-                "ma_200d": ma_200,
+                "ema_10": ema_10,
+                "ema_200": ema_200,
                 "sector": sector_lookup.get(iid, "Unknown"),
             }
         )
@@ -593,8 +612,8 @@ def _compute_signal_panel(
             "quality_raw_worst_q",
             "ret_12m",
             "ret_3m",
-            "close",
-            "ma_200d",
+            "ema_10",
+            "ema_200",
         ],
         errors="ignore",
     )
@@ -624,8 +643,8 @@ def _get_trend_gate_pass(
         text("""
             SELECT DISTINCT ON (instrument_id)
                 instrument_id,
-                close,
-                ma_200d
+                ema_10_stock,
+                ema_200_stock
               FROM atlas.atlas_stock_metrics_daily
              WHERE instrument_id = ANY(:iids)
                AND date <= :ref
@@ -637,11 +656,11 @@ def _get_trend_gate_pass(
 
     passing: set[uuid.UUID] = set()
     for r in rows:
-        if r.close is not None and r.ma_200d is not None:
-            if float(r.close) >= float(r.ma_200d):
+        if r.ema_10_stock is not None and r.ema_200_stock is not None:
+            if float(r.ema_10_stock) >= float(r.ema_200_stock):
                 passing.add(uuid.UUID(str(r.instrument_id)))
         else:
-            # Missing ma_200d → fail-open: treat as passing
+            # Missing ema_200_stock → fail-open: treat as passing
             passing.add(uuid.UUID(str(r.instrument_id)))
 
     return passing
@@ -744,34 +763,48 @@ def _fetch_forward_returns(
 
 
 def _benchmark_return(session: Session, start: date, end: date) -> float:
-    """Nifty 500 total return between start and end dates.
+    """Nifty 500 price return between start and end dates.
 
-    Uses atlas_market_regime_daily nifty500_tr_index column if available,
-    falls back to 0.0 with a warning if missing.
+    Uses atlas_market_regime_daily.nifty500_close (price return proxy;
+    nifty500_tr_index column does not exist in schema as of Phase 9 run).
+    For each date boundary, find the nearest available trading day.
     """
-    rows = session.execute(
+    # Find the nearest close to start (on or after)
+    start_row = session.execute(
         text("""
-            SELECT date, nifty500_tr_index
+            SELECT date, nifty500_close
               FROM atlas.atlas_market_regime_daily
-             WHERE date IN (:s, :e)
-               AND nifty500_tr_index IS NOT NULL
+             WHERE date >= :s AND nifty500_close IS NOT NULL
              ORDER BY date
+             LIMIT 1
         """),
-        {"s": start, "e": end},
-    ).fetchall()
+        {"s": start},
+    ).fetchone()
 
-    if len(rows) >= 2:
-        start_val = float(rows[0].nifty500_tr_index)
-        end_val = float(rows[-1].nifty500_tr_index)
-        if start_val > 0:
+    # Find the nearest close to end (on or before)
+    end_row = session.execute(
+        text("""
+            SELECT date, nifty500_close
+              FROM atlas.atlas_market_regime_daily
+             WHERE date <= :e AND nifty500_close IS NOT NULL
+             ORDER BY date DESC
+             LIMIT 1
+        """),
+        {"e": end},
+    ).fetchone()
+
+    if start_row is not None and end_row is not None:
+        start_val = float(start_row.nifty500_close)
+        end_val = float(end_row.nifty500_close)
+        if start_val > 0 and start_row.date < end_row.date:
             return (end_val / start_val) - 1.0
 
-    # Fallback: no benchmark data — return 0 with warning
+    # Fallback: no benchmark data — return 0.0 with warning
     log.debug(
         "simulator.benchmark_missing",
         start=str(start),
         end=str(end),
-        note="nifty500_tr_index not available; benchmark_return=0.0",
+        note="nifty500_close not available for period; benchmark_return=0.0",
     )
     return 0.0
 
@@ -878,6 +911,16 @@ def _compute_aggregate_stats(
     # Win rate
     win_rate = float(sum(1 for r in returns if r > 0) / len(returns))
 
+    # Alpha t-stat (§8.4): per-period alpha series → mean/std × sqrt(n)
+    alpha_series = pd.Series([p.alpha for p in periods])
+    alpha_mean = float(alpha_series.mean())
+    alpha_std = float(alpha_series.std(ddof=1))
+    n_periods = len(periods)
+    if alpha_std > 0 and n_periods > 1:
+        alpha_t_stat = alpha_mean / alpha_std * math.sqrt(n_periods)
+    else:
+        alpha_t_stat = 0.0
+
     return SimulationResult(
         strategy_name=strategy_name,
         periods=periods,
@@ -888,6 +931,7 @@ def _compute_aggregate_stats(
         calmar=calmar,
         win_rate=win_rate,
         n_trades=n_trades,
+        alpha_t_stat=alpha_t_stat,
     )
 
 
@@ -916,7 +960,12 @@ def _persist_strategy_run(
     # OOS period defaults to same as IS for a simple backtest (no walk-forward split here)
     oos_period = is_period
 
-    passes = result.calmar >= 0.5 and result.max_drawdown >= -0.20 and result.sharpe >= 0.5
+    passes = (
+        result.calmar >= 0.5
+        and result.max_drawdown >= -0.20
+        and result.sharpe >= 0.5
+        and result.alpha_t_stat >= 1.5
+    )
     failures = []
     if result.calmar < 0.5:
         failures.append("calmar<0.5")
@@ -924,24 +973,28 @@ def _persist_strategy_run(
         failures.append("mdd>20%")
     if result.sharpe < 0.5:
         failures.append("sharpe<0.5")
+    if result.alpha_t_stat < 1.5:
+        failures.append("alpha_t_stat<1.5")
 
     session.execute(
         text("""
             INSERT INTO atlas.atlas_v6_strategy_runs (
                 run_id, strategy_name, signal_weights,
                 is_period, oos_period,
-                calmar, vol_ratio, mdd_ratio, win_rate,
+                calmar, vol_ratio, mdd_ratio, win_rate, alpha_t_stat,
                 passes_all_constraints, constraint_failures
             ) VALUES (
                 :run_id, :name, :weights::jsonb,
                 :is_period::tsrange, :oos_period::tsrange,
-                :calmar, :vol, :mdd, :win_rate,
+                :calmar, :vol, :mdd, :win_rate, :alpha_t_stat,
                 :passes, :failures
             )
             ON CONFLICT (run_id) DO UPDATE SET
                 calmar = EXCLUDED.calmar,
                 win_rate = EXCLUDED.win_rate,
-                passes_all_constraints = EXCLUDED.passes_all_constraints
+                alpha_t_stat = EXCLUDED.alpha_t_stat,
+                passes_all_constraints = EXCLUDED.passes_all_constraints,
+                constraint_failures = EXCLUDED.constraint_failures
         """),
         {
             "run_id": str(run_id),
@@ -953,6 +1006,7 @@ def _persist_strategy_run(
             "vol": Decimal(str(round(result.vol, 4))),
             "mdd": Decimal(str(round(result.max_drawdown, 4))),
             "win_rate": Decimal(str(round(result.win_rate, 4))),
+            "alpha_t_stat": Decimal(str(round(result.alpha_t_stat, 4))),
             "passes": passes,
             "failures": failures,
         },
