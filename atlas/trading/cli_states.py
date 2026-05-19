@@ -267,6 +267,14 @@ def _apply_dwell_and_urgency(
     # Instruments absent from meta: sentinel -> urgency='n/a', numeric cols=None.
     p.loc[_no_meta, "_cohort_key"] = None
 
+    # Deduplicate baselines before merging — atlas_state_dwell_statistics may have
+    # duplicate (as_of_date, cohort_key, state) rows if the refresh ran more than
+    # once for the same date. A cartesian explosion from the merge would double
+    # panel rows and corrupt dwell_percentile / urgency_score.
+    baselines = baselines.drop_duplicates(["cohort_key", "state"], keep="last").reset_index(
+        drop=True
+    )
+
     # Prepare baselines lookup DataFrame with normalised column names.
     _bl_rename: dict[str, str] = {
         "cohort_key": "_cohort_key",

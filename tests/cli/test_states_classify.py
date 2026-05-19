@@ -542,3 +542,70 @@ def test_states_tune_dry_run():
                     " WHERE classifier_version = 'v1.0-tune-test'"
                 )
             )
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for drop_duplicates defence in _apply_dwell_and_urgency (Fix 5)
+# ---------------------------------------------------------------------------
+
+
+def test_apply_dwell_duplicate_baselines_no_row_explosion():
+    """Duplicate (cohort_key, state) rows in baselines must not double panel rows.
+
+    Before Fix 5, the merge on (cohort_key, state) produced a Cartesian join for
+    each duplicate baseline row, inflating the output from N rows to 2N or more.
+    After the drop_duplicates call, output length must equal input length.
+    """
+    from datetime import date
+    from unittest.mock import patch
+
+    d0 = date(2026, 1, 5)
+    panel = pd.DataFrame(
+        {
+            "instrument_id": ["A", "B"],
+            "date": [d0, d0],
+            "state": ["Stage2", "Stage2"],
+            "dwell_days": [30, 20],
+            "rs_rank_12m": [0.7, 0.5],
+            "dwell_percentile": [None, None],
+            "urgency_score": ["n/a", "n/a"],
+            "within_state_rank": [None, None],
+        }
+    )
+    # Duplicate rows for ("large_cap", "Stage2") — simulates double-refresh
+    baselines_with_dupe = pd.DataFrame(
+        {
+            "cohort_key": ["large_cap", "large_cap", "mid_cap"],
+            "state": ["Stage2", "Stage2", "Stage2"],
+            "median_dwell_days": [30, 31, 25],
+            "p25_dwell_days": [10, 10, 8],
+            "p75_dwell_days": [50, 50, 40],
+            "p95_dwell_days": [80, 80, 70],
+        }
+    )
+    meta = pd.DataFrame(
+        {
+            "instrument_id": ["A", "B"],
+            "in_nifty_100": [True, False],
+            "in_nifty_500": [True, True],
+            "sector": ["financials", "it"],
+        }
+    )
+    vol_df = pd.DataFrame(
+        {
+            "instrument_id": ["A", "B"],
+            "date": [d0, d0],
+            "realized_vol_63": [0.20, 0.25],
+        }
+    )
+    eng, fake_sql = _make_mock_eng(baselines_with_dupe, meta, vol_df)
+
+    with patch("pandas.read_sql", side_effect=fake_sql):
+        from atlas.trading.cli_states import _apply_dwell_and_urgency
+
+        out = _apply_dwell_and_urgency(panel, eng)
+
+    assert len(out) == len(panel), (
+        f"Row explosion detected: input={len(panel)}, output={len(out)}. "
+        "drop_duplicates on baselines is required before the merge."
+    )
