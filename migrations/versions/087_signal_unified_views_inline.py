@@ -112,7 +112,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise NotImplementedError(
-        "Hotfix migration is one-way; reverting would re-break the demo. "
-        "Replace this migration in the proper Phase 8.2 aggregator-backfill work."
-    )
+    # Drop the inline hotfix views; running alembic upgrade 086 will recreate
+    # the original versions from that migration.
+    op.execute("DROP VIEW IF EXISTS atlas.atlas_etf_signal_unified")
+    op.execute("DROP VIEW IF EXISTS atlas.atlas_fund_signal_unified")
+    op.execute("DROP VIEW IF EXISTS atlas.atlas_sector_signal_unified")
