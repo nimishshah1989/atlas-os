@@ -172,7 +172,7 @@ def apply_exclusions(
         text("""
             SELECT instrument_id
               FROM atlas.atlas_governance_daily
-             WHERE instrument_id = ANY(:iids)
+             WHERE instrument_id = ANY(CAST(:iids AS uuid[]))
                AND date = :d
                AND pledge_ratio_pct > :threshold
         """),
@@ -188,7 +188,7 @@ def apply_exclusions(
         text("""
             SELECT instrument_id
               FROM atlas.atlas_governance_daily
-             WHERE instrument_id = ANY(:iids)
+             WHERE instrument_id = ANY(CAST(:iids AS uuid[]))
                AND date = :d
                AND in_fno_ban_list = true
         """),
@@ -205,7 +205,7 @@ def apply_exclusions(
         text("""
             SELECT instrument_id
               FROM atlas.atlas_universe_stocks
-             WHERE instrument_id = ANY(:iids)
+             WHERE instrument_id = ANY(CAST(:iids AS uuid[]))
                AND UPPER(tier) = 'SME'
         """),
         {"iids": iid_strs},
@@ -222,7 +222,7 @@ def apply_exclusions(
         text("""
             SELECT instrument_id
               FROM atlas.atlas_governance_master
-             WHERE instrument_id = ANY(:iids)
+             WHERE instrument_id = ANY(CAST(:iids AS uuid[]))
                AND last_qualified_audit_date IS NOT NULL
                AND last_qualified_audit_date < :cutoff
         """),
