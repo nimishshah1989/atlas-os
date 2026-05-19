@@ -12,6 +12,8 @@ import pandas as pd
 import pytest
 
 from atlas.intelligence.aggregations.fund import (
+    _normalize_composition_state,
+    _normalize_holdings_state,
     aggregate_fund_composition,
     derive_fund_recommendation,
 )
@@ -176,3 +178,68 @@ def test_derive_fund_recommendation_mixed_composition_hold() -> None:
         holdings_state="Mixed-Holdings",
     )
     assert rec == "Hold"
+
+
+# ---------------------------------------------------------------------------
+# Normalization helper tests (Fix 3)
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_holdings_state_known_values() -> None:
+    """All valid CHECK-constraint values pass through unchanged."""
+    for v in ("Strong-Holdings", "Weak-Holdings", "Mixed-Holdings", "Unknown"):
+        assert _normalize_holdings_state(v) == v
+
+
+def test_normalize_holdings_state_legacy_decent_maps_to_mixed() -> None:
+    assert _normalize_holdings_state("Decent") == "Mixed-Holdings"
+
+
+def test_normalize_holdings_state_legacy_aligned_maps_to_strong() -> None:
+    assert _normalize_holdings_state("Aligned") == "Strong-Holdings"
+
+
+def test_normalize_holdings_state_unknown_maps_to_unknown() -> None:
+    assert _normalize_holdings_state("SomethingNew") == "Unknown"
+
+
+def test_normalize_holdings_state_none_maps_to_unknown() -> None:
+    assert _normalize_holdings_state(None) == "Unknown"
+
+
+def test_normalize_composition_state_known_values() -> None:
+    for v in ("Aligned", "Deteriorating", "Mixed"):
+        assert _normalize_composition_state(v) == v
+
+
+def test_normalize_composition_state_misaligned_maps_to_mixed() -> None:
+    assert _normalize_composition_state("Misaligned") == "Mixed"
+
+
+def test_normalize_composition_state_conflicted_maps_to_mixed() -> None:
+    assert _normalize_composition_state("Conflicted") == "Mixed"
+
+
+def test_normalize_composition_state_unknown_maps_to_mixed() -> None:
+    assert _normalize_composition_state("GarbageValue") == "Mixed"
+
+
+def test_aggregate_fund_composition_legacy_holdings_state_normalised() -> None:
+    """'Decent' holdings_state from legacy lens is normalised to Mixed-Holdings."""
+    panel = pd.DataFrame(
+        [
+            {
+                "mstar_id": "LEGACY1",
+                "date": date(2024, 12, 31),
+                "aligned_aum_pct": 0.50,
+                "avoid_aum_pct": 0.10,
+                "strong_aum_pct": 0.20,
+                "weak_aum_pct": 0.15,
+                "composition_state": "Aligned",
+                "holdings_state": "Decent",  # legacy value
+            }
+        ]
+    )
+    out = aggregate_fund_composition(panel)
+    assert len(out) == 1
+    assert out.iloc[0]["holdings_state"] == "Mixed-Holdings"

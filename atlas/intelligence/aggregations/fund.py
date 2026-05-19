@@ -33,12 +33,56 @@ from sqlalchemy.engine import Engine
 
 # Thresholds for composition_state classification (pass-through from lens,
 # but also used as fallback if lens composition_state is NULL).
+# TODO(P1): migrate these four constants to atlas.atlas_thresholds via migration 091.
 ALIGNED_THRESHOLD = 0.60  # >= 60% of AUM in stage 2 -> Aligned
 DETERIORATING_THRESHOLD = 0.40  # >= 40% in stage 3/4 -> Deteriorating
 
 # Thresholds for holdings_state classification.
 STRONG_HOLDINGS_THRESHOLD = 0.60  # strong_aum_pct >= 0.60
 WEAK_HOLDINGS_THRESHOLD = 0.30  # weak_aum_pct > 0.30
+
+# ---------------------------------------------------------------------------
+# Legacy state value normalisation
+# atlas_fund_lens_monthly may contain holdings_state / composition_state values
+# that predate the CHECK constraint on atlas_fund_state_v2.
+# Unmapped values fall back to "Unknown" / "Mixed" respectively.
+# ---------------------------------------------------------------------------
+_HOLDINGS_STATE_MAP: dict[str, str] = {
+    "Strong-Holdings": "Strong-Holdings",
+    "Weak-Holdings": "Weak-Holdings",
+    "Mixed-Holdings": "Mixed-Holdings",
+    "Unknown": "Unknown",
+    # Legacy variants
+    "Decent": "Mixed-Holdings",
+    "Aligned": "Strong-Holdings",
+}
+
+_COMPOSITION_STATE_MAP: dict[str, str] = {
+    "Aligned": "Aligned",
+    "Deteriorating": "Deteriorating",
+    "Mixed": "Mixed",
+    # Legacy variants
+    "Misaligned": "Mixed",
+    "Conflicted": "Mixed",
+}
+
+
+def _normalize_holdings_state(s: str | None) -> str:
+    """Map a raw holdings_state value to a CHECK-constraint-safe value.
+
+    Unknown values (including None/empty) fall back to 'Unknown'.
+    """
+    return _HOLDINGS_STATE_MAP.get((s or "").strip(), "Unknown")
+
+
+def _normalize_composition_state(s: str | None) -> str:
+    """Map a raw composition_state value to a CHECK-constraint-safe value.
+
+    Unknown values (including None/empty) fall back to 'Mixed'.
+    Callers that compute composition_state from thresholds bypass this — it is
+    only applied to values read directly from atlas_fund_lens_monthly.
+    """
+    return _COMPOSITION_STATE_MAP.get((s or "").strip(), "Mixed")
 
 
 _HOLDINGS_SQL = text("""
@@ -125,14 +169,14 @@ def aggregate_fund_composition(panel: pd.DataFrame) -> pd.DataFrame:
         # Remainder that is not stage-2, stage-4, or unknown goes to stage-3.
         pct_stage_3 = max(0.0, 1.0 - pct_stage_2 - pct_stage_4)
 
-        # Use lens-computed states directly; derive only if NULL.
-        # Normalise: atlas_fund_lens_monthly uses "Misaligned" but
-        # atlas_fund_state_v2 CHECK constraint only allows Aligned/Mixed/Deteriorating.
-        # Misaligned (avg aligned_aum_pct ~35%) maps to Mixed semantically.
-        comp = row.get("composition_state")
-        if comp == "Misaligned":
-            comp = "Mixed"
-        if not comp:
+        # Use lens-computed states directly; derive only if NULL/empty.
+        # Normalise via the allowlist maps — atlas_fund_lens_monthly may contain
+        # legacy values ("Misaligned", "Decent", etc.) that violate the
+        # atlas_fund_state_v2 CHECK constraint.
+        raw_comp = row.get("composition_state")
+        if raw_comp:
+            comp = _normalize_composition_state(raw_comp)
+        else:
             if pct_stage_2 >= ALIGNED_THRESHOLD:
                 comp = "Aligned"
             elif pct_stage_3 + pct_stage_4 >= DETERIORATING_THRESHOLD:
@@ -140,8 +184,10 @@ def aggregate_fund_composition(panel: pd.DataFrame) -> pd.DataFrame:
             else:
                 comp = "Mixed"
 
-        holdings = row.get("holdings_state")
-        if not holdings:
+        raw_holdings = row.get("holdings_state")
+        if raw_holdings:
+            holdings = _normalize_holdings_state(raw_holdings)
+        else:
             strong = float(row.get("strong_aum_pct") or 0.0)
             weak = float(row.get("weak_aum_pct") or 0.0)
             if strong >= STRONG_HOLDINGS_THRESHOLD:
