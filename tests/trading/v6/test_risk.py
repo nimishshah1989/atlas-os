@@ -106,9 +106,9 @@ def test_vol_targeted_gross_result_always_in_bounds():
     ]
     for vol, regime_mult in test_cases:
         result = vol_targeted_gross(vol, regime_mult)
-        assert 0.30 <= result <= 1.10, (
-            f"Out of bounds for vol={vol}, regime={regime_mult}: {result}"
-        )
+        assert (
+            0.30 <= result <= 1.10
+        ), f"Out of bounds for vol={vol}, regime={regime_mult}: {result}"
 
 
 # ---------------------------------------------------------------------------

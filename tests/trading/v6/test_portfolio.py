@@ -50,9 +50,9 @@ def test_weights_sum_to_one_five_names() -> None:
         sector_map={i: f"S{k % 3}" for k, i in enumerate(ids)},
         issuer_group_map={i: f"G{k}" for k, i in enumerate(ids)},
     )
-    assert abs(result.weights.sum() - 1.0) < 1e-6, (
-        f"Weights sum to {result.weights.sum():.8f}, expected 1.0"
-    )
+    assert (
+        abs(result.weights.sum() - 1.0) < 1e-6
+    ), f"Weights sum to {result.weights.sum():.8f}, expected 1.0"
 
 
 def test_weights_sum_to_one_thirty_names() -> None:
@@ -127,14 +127,14 @@ def test_single_name_cap_binds_and_redistributes() -> None:
     )
 
     # All present weights must respect cap
-    assert result.weights.max() <= 0.15 + 1e-9, (
-        f"Max weight {result.weights.max():.4f} exceeds single-name cap"
-    )
+    assert (
+        result.weights.max() <= 0.15 + 1e-9
+    ), f"Max weight {result.weights.max():.4f} exceeds single-name cap"
     assert abs(result.weights.sum() - 1.0) < 1e-6
     # Cap must have bound (name cap was triggered)
-    assert "name" in result.caps_binding, (
-        f"Expected 'name' in caps_binding, got {result.caps_binding}"
-    )
+    assert (
+        "name" in result.caps_binding
+    ), f"Expected 'name' in caps_binding, got {result.caps_binding}"
 
 
 def test_single_name_cap_no_binding_when_all_equal() -> None:
@@ -200,13 +200,13 @@ def test_sector_cap_binds_at_25pct() -> None:
 
     present_ids = set(result.weights.index)
     banking_weight = sum(result.weights[i] for i in banking_ids if i in present_ids)
-    assert banking_weight <= 0.25 + 1e-6, (
-        f"Banking sector weight {banking_weight:.6f} exceeds 25% cap"
-    )
+    assert (
+        banking_weight <= 0.25 + 1e-6
+    ), f"Banking sector weight {banking_weight:.6f} exceeds 25% cap"
     assert abs(result.weights.sum() - 1.0) < 1e-6
-    assert "sector" in result.caps_binding, (
-        f"Expected 'sector' in caps_binding, got {result.caps_binding}"
-    )
+    assert (
+        "sector" in result.caps_binding
+    ), f"Expected 'sector' in caps_binding, got {result.caps_binding}"
 
 
 def test_sector_cap_does_not_bind_when_diversified() -> None:
@@ -291,13 +291,13 @@ def test_issuer_group_cap_binds_adani_scenario() -> None:
 
     present_ids = set(result.weights.index)
     adani_weight = sum(result.weights[i] for i in adani_ids if i in present_ids)
-    assert adani_weight <= 0.20 + 1e-6, (
-        f"Adani group weight {adani_weight:.6f} exceeds 20% issuer-group cap"
-    )
+    assert (
+        adani_weight <= 0.20 + 1e-6
+    ), f"Adani group weight {adani_weight:.6f} exceeds 20% issuer-group cap"
     assert abs(result.weights.sum() - 1.0) < 1e-6
-    assert "group" in result.caps_binding, (
-        f"Expected 'group' in caps_binding, got {result.caps_binding}"
-    )
+    assert (
+        "group" in result.caps_binding
+    ), f"Expected 'group' in caps_binding, got {result.caps_binding}"
 
 
 # ---------------------------------------------------------------------------
@@ -334,9 +334,9 @@ def test_below_floor_dropped_and_renormalized() -> None:
     )
 
     # All surviving weights must be at or above floor
-    assert (result.weights >= 0.005 - 1e-9).all(), (
-        f"Weight below floor: {result.weights[result.weights < 0.005]}"
-    )
+    assert (
+        result.weights >= 0.005 - 1e-9
+    ).all(), f"Weight below floor: {result.weights[result.weights < 0.005]}"
     # Weights still sum to 1.0
     assert abs(result.weights.sum() - 1.0) < 1e-6
     # dropped_below_floor is a list of UUIDs (may be empty if none dropped)
@@ -369,9 +369,9 @@ def test_below_floor_dropped_ids_are_in_result() -> None:
     )
 
     for dropped_id in result.dropped_below_floor:
-        assert dropped_id not in result.weights.index, (
-            f"Dropped instrument {dropped_id} still appears in weights"
-        )
+        assert (
+            dropped_id not in result.weights.index
+        ), f"Dropped instrument {dropped_id} still appears in weights"
 
 
 # ---------------------------------------------------------------------------

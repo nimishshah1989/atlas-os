@@ -118,9 +118,9 @@ def test_composite_winsorizes_extremes() -> None:
     norm_natr = w.natr_14 / sum(w.as_dict().values())
     expected_outlier = norm_natr * 3.0  # ≈ 0.4545
 
-    assert abs(result[ids[-1]] - expected_outlier) < 1e-6, (
-        f"Expected {expected_outlier:.6f}, got {result[ids[-1]]:.6f}"
-    )
+    assert (
+        abs(result[ids[-1]] - expected_outlier) < 1e-6
+    ), f"Expected {expected_outlier:.6f}, got {result[ids[-1]]:.6f}"
     # All 19 zero-value instruments must have negative composite (they are below sector mean)
     for iid in ids[:-1]:
         assert result[iid] < 0.0, "Below-mean instrument should have negative composite"
@@ -168,19 +168,19 @@ def test_composite_weighted_sum_correct() -> None:
     expected_low = -expected_high
 
     # ids[0] and ids[2] are the "high" instruments (value=10)
-    assert abs(result[ids[0]] - expected_high) < 1e-6, (
-        f"ids[0] expected {expected_high:.6f}, got {result[ids[0]]:.6f}"
-    )
-    assert abs(result[ids[2]] - expected_high) < 1e-6, (
-        f"ids[2] expected {expected_high:.6f}, got {result[ids[2]]:.6f}"
-    )
+    assert (
+        abs(result[ids[0]] - expected_high) < 1e-6
+    ), f"ids[0] expected {expected_high:.6f}, got {result[ids[0]]:.6f}"
+    assert (
+        abs(result[ids[2]] - expected_high) < 1e-6
+    ), f"ids[2] expected {expected_high:.6f}, got {result[ids[2]]:.6f}"
     # ids[1] and ids[3] are the "low" instruments (value=0)
-    assert abs(result[ids[1]] - expected_low) < 1e-6, (
-        f"ids[1] expected {expected_low:.6f}, got {result[ids[1]]:.6f}"
-    )
-    assert abs(result[ids[3]] - expected_low) < 1e-6, (
-        f"ids[3] expected {expected_low:.6f}, got {result[ids[3]]:.6f}"
-    )
+    assert (
+        abs(result[ids[1]] - expected_low) < 1e-6
+    ), f"ids[1] expected {expected_low:.6f}, got {result[ids[1]]:.6f}"
+    assert (
+        abs(result[ids[3]] - expected_low) < 1e-6
+    ), f"ids[3] expected {expected_low:.6f}, got {result[ids[3]]:.6f}"
 
 
 # ---------------------------------------------------------------------------
@@ -208,9 +208,9 @@ def test_select_entries_respect_enter_cutoff() -> None:
     assert isinstance(result, SelectionResult)
     # Exactly top 30 should enter
     expected_entered = set(ids[:30])
-    assert set(result.entered) == expected_entered, (
-        f"Expected entered={expected_entered}, got {set(result.entered)}"
-    )
+    assert (
+        set(result.entered) == expected_entered
+    ), f"Expected entered={expected_entered}, got {set(result.entered)}"
     assert len(result.held) == 0
     assert len(result.exited) == 0
 
@@ -282,9 +282,9 @@ def test_select_exits_rank_above_50() -> None:
         stay_rank_cutoff=50,
     )
 
-    assert rank_55_id in result.exited, (
-        f"rank-55 held yesterday must exit; got exited={result.exited}"
-    )
+    assert (
+        rank_55_id in result.exited
+    ), f"rank-55 held yesterday must exit; got exited={result.exited}"
     assert rank_55_id not in result.held
     assert rank_55_id not in result.entered
 
@@ -316,9 +316,9 @@ def test_select_governance_exclusions_force_exit() -> None:
         stay_rank_cutoff=50,
     )
 
-    assert top_id in result.exited, (
-        f"Governance-excluded held name must exit; got exited={result.exited}"
-    )
+    assert (
+        top_id in result.exited
+    ), f"Governance-excluded held name must exit; got exited={result.exited}"
     assert top_id not in result.entered
     assert top_id not in result.held
     # top_id should not appear in rank 1 since composite → -inf
@@ -352,12 +352,12 @@ def test_select_trend_gate_blocks_new_entries() -> None:
         stay_rank_cutoff=50,
     )
 
-    assert rank_5_id not in result.entered, (
-        f"rank-5 blocked by trend gate must not enter; entered={result.entered}"
-    )
-    assert rank_5_id in result.bench_hold, (
-        f"rank-5 blocked by trend gate should be bench_hold; bench_hold={result.bench_hold}"
-    )
+    assert (
+        rank_5_id not in result.entered
+    ), f"rank-5 blocked by trend gate must not enter; entered={result.entered}"
+    assert (
+        rank_5_id in result.bench_hold
+    ), f"rank-5 blocked by trend gate should be bench_hold; bench_hold={result.bench_hold}"
     # All other top-30 names (that pass trend gate) should enter
     top_30_passing = [iid for iid in ids[:30] if iid != rank_5_id]
     for iid in top_30_passing:
