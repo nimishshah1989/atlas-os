@@ -70,7 +70,7 @@ def _load_cts_continuous(
     end: dt.date,
     col: str,
 ) -> pd.DataFrame:
-    """Load a CTS continuous score from atlas_cts_stock_signals.
+    """Load a CTS continuous score from atlas_cts_signals_daily.
 
     Returns empty DataFrame if the column or table doesn't exist / has no data.
     Factor is indexed by (date, instrument_id).
@@ -78,10 +78,10 @@ def _load_cts_continuous(
     sql = text(
         f"""
         SELECT instrument_id::text AS instrument_id,
-               signal_date         AS date,
+               date                AS date,
                {col}::float8       AS factor
-        FROM atlas.atlas_cts_stock_signals
-        WHERE signal_date BETWEEN :s AND :e
+        FROM atlas.atlas_cts_signals_daily
+        WHERE date BETWEEN :s AND :e
           AND {col} IS NOT NULL
         """
     )
@@ -104,8 +104,10 @@ def _load_legacy_state_bool(
     end: dt.date,
     col: str,
 ) -> pd.DataFrame:
-    """Load a legacy boolean state column from atlas_stock_states_daily as 0/1.
+    """Load a legacy boolean state column from atlas_stock_decisions_daily as 0/1.
 
+    transition_trigger and breakout_trigger live in atlas_stock_decisions_daily,
+    not atlas_stock_states_daily — the states table only holds regime/state columns.
     Returns empty DataFrame if the column doesn't exist or has no data.
     Factor is indexed by (date, instrument_id).
     """
@@ -114,7 +116,7 @@ def _load_legacy_state_bool(
         SELECT instrument_id::text AS instrument_id,
                date                AS date,
                CASE WHEN {col} THEN 1.0 ELSE 0.0 END AS factor
-        FROM atlas.atlas_stock_states_daily
+        FROM atlas.atlas_stock_decisions_daily
         WHERE date BETWEEN :s AND :e
           AND {col} IS NOT NULL
         """
@@ -151,20 +153,20 @@ LEGACY_SIGNAL_CATALOG: list[LegacySignal] = [
     LegacySignal(
         name="cts_ppc_continuous",
         horizon_days=21,
-        loader=lambda e, s, end: _load_cts_continuous(e, s, end, "ppc_score"),
-        description="CTS PPC continuous score — phase1 pocket pivot. Tier collapse if decorative.",
+        loader=lambda e, s, end: _load_cts_continuous(e, s, end, "ppc_strength"),
+        description="CTS PPC strength (ppc_strength col). Tier collapse if decorative.",
     ),
     LegacySignal(
         name="cts_npc_continuous",
         horizon_days=21,
-        loader=lambda e, s, end: _load_cts_continuous(e, s, end, "npc_score"),
-        description="CTS NPC continuous score — non-pocket-pivot. Tier collapse if decorative.",
+        loader=lambda e, s, end: _load_cts_continuous(e, s, end, "npc_strength"),
+        description="CTS NPC strength (npc_strength col). Tier collapse if decorative.",
     ),
     LegacySignal(
         name="cts_contraction_continuous",
         horizon_days=21,
-        loader=lambda e, s, end: _load_cts_continuous(e, s, end, "contraction_score"),
-        description="CTS contraction continuous score. Tier collapse if decorative.",
+        loader=lambda e, s, end: _load_cts_continuous(e, s, end, "is_contraction"),
+        description="CTS contraction bool (atlas_cts_signals_daily.is_contraction) as 0/1.",
     ),
     LegacySignal(
         name="transition_trigger",
