@@ -49,6 +49,9 @@ export type FundRow = {
   weak_aum_pct: string | null
   unknown_aum_pct: string | null   // computed in SQL
   lens_as_of_date: Date | null
+  // Phase 8: bubble chart axis
+  // TODO: fu.mean_within_state_rank not yet confirmed in view; returns NULL until Agent A rewrite
+  mean_within_state_rank: number | null
 }
 
 export type FundMasterRow = {
@@ -168,7 +171,10 @@ export async function getAllFunds(): Promise<FundRow[]> {
       (fl.strong_aum_pct * 100)::text AS strong_aum_pct,
       (fl.weak_aum_pct   * 100)::text AS weak_aum_pct,
       GREATEST(0, 100 - COALESCE(fl.strong_aum_pct * 100, 0) - COALESCE(fl.weak_aum_pct * 100, 0))::text AS unknown_aum_pct,
-      fl.as_of_date AS lens_as_of_date
+      fl.as_of_date AS lens_as_of_date,
+      -- Phase 8: TODO: fu.mean_within_state_rank not yet in atlas_fund_signal_unified;
+      -- returns NULL until Agent A rewrites the view to expose this column.
+      NULL::float8 AS mean_within_state_rank
     FROM atlas.atlas_universe_funds uf
     LEFT JOIN LATERAL (
       SELECT * FROM atlas.atlas_fund_metrics_daily

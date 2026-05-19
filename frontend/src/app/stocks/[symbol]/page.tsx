@@ -6,6 +6,7 @@ import {
   getStockMetricHistory,
   getStockOBVSeries,
   getStockATRContraction,
+  getStockFooterMetrics,
 } from '@/lib/queries/stocks'
 import {
   getStockState,
@@ -45,6 +46,7 @@ export default async function StockPage({
     atrContraction,
     validations,
     hitRate,
+    footerMetrics,
   ] = await Promise.all([
     getStockMetricHistory(stock.instrument_id, 365),
     getStockState(stock.instrument_id),
@@ -54,6 +56,7 @@ export default async function StockPage({
     getStockATRContraction(stock.instrument_id),
     getComponentValidations(),
     getHitRateForStock(stock.instrument_id, 20),
+    getStockFooterMetrics(stock.instrument_id),
   ])
 
   const [cohortBaseline, peers] = stockState
@@ -120,7 +123,13 @@ export default async function StockPage({
       )}
 
       {stockState && (
-        <ComponentScorecard state={stockState} validations={validations} />
+        <ComponentScorecard
+          state={stockState}
+          validations={validations}
+          obvSlope={footerMetrics.obv_slope}
+          atrRatio={footerMetrics.atr_ratio}
+          realizedVolTier={footerMetrics.realized_vol_tier}
+        />
       )}
 
       <StockDeepDiveBody

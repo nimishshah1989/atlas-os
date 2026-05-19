@@ -17,6 +17,7 @@ import {
 import { LensBar } from '@/components/ui/LensBar'
 import { ColumnToggle, useColumnVisibility, type ColumnDef } from '@/components/ui/ColumnToggle'
 import { buildSortKey } from '@/lib/screener-utils'
+import { WithinStateRankCell } from '@/components/stocks/WithinStateRankCell'
 
 type Props = {
   funds: FundRow[]
@@ -43,6 +44,7 @@ const ALL_COLS: ColumnDef[] = [
   { key: 'drawdown',        label: '1Y Ret',          defaultVisible: true },
   { key: 'max_drawdown',    label: 'Max DD (1Y)',      defaultVisible: false },
   { key: 'aum',             label: 'AUM (Cr)',         defaultVisible: false },
+  { key: 'within_state_rank', label: 'Within Rank',   defaultVisible: false },
 ]
 
 const COL_STORAGE_KEY = 'atlas-column-prefs-funds'
@@ -184,6 +186,7 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
               {visibleCols.has('drawdown')       && <Th label="1Y Ret"         k="drawdown"       align="right" />}
               {visibleCols.has('max_drawdown')   && <Th label="Max DD (1Y)"    k="max_drawdown"   align="right" title="Maximum drawdown over 252 trading days (1 year)" />}
               {visibleCols.has('aum')            && <Th label="AUM (Cr)"       k="aum"            align="right" title="Monthly average AUM in ₹ crore (AMFI data)" />}
+              {visibleCols.has('within_state_rank') && <PlainTh label="Within Rank" align="right" />}
             </tr>
           </thead>
           <tbody>
@@ -302,6 +305,11 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
                         {f.aum_cr != null
                           ? `₹${Number(f.aum_cr).toLocaleString('en-IN', { maximumFractionDigits: 0 })}Cr`
                           : '—'}
+                      </td>
+                    )}
+                    {visibleCols.has('within_state_rank') && (
+                      <td className="px-3 py-2.5 text-right" data-testid={`fund-wsr-${f.mstar_id}`}>
+                        <WithinStateRankCell value={f.mean_within_state_rank ?? null} />
                       </td>
                     )}
                   </tr>

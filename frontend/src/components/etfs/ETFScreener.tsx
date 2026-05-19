@@ -10,6 +10,7 @@ import {
 } from '@/lib/stock-formatters'
 import { ValidatedBadge } from '@/components/ui/ValidatedBadge'
 import { ColumnToggle, useColumnVisibility, type ColumnDef } from '@/components/ui/ColumnToggle'
+import { WithinStateRankCell } from '@/components/stocks/WithinStateRankCell'
 
 const RS_ORDER = ['Leader', 'Strong', 'Consolidating', 'Emerging', 'Average', 'Weak', 'Laggard']
 const MOM_ORDER = ['Accelerating', 'Improving', 'Flat', 'Deteriorating', 'Collapsing']
@@ -60,6 +61,7 @@ const OPTIONAL_COLS: ColumnDef[] = [
   { key: 'above_30w_ma',     label: '30W MA',       defaultVisible: false },
   { key: 'effort_ratio',     label: 'Effort Ratio', defaultVisible: false },
   { key: 'days_in_state',    label: 'Days (RS)',    defaultVisible: false },
+  { key: 'within_state_rank', label: 'Within Rank', defaultVisible: false },
 ]
 
 const COL_STORAGE_KEY = 'atlas-etf-screener-cols'
@@ -259,6 +261,9 @@ export function ETFScreener({ etfs, validations = [] }: { etfs: ETFRow[]; valida
               {visibleCols.has('above_30w_ma') && <PlainTh label="30W MA" align="right" title="Price above 30-week (150-day) moving average — Weinstein Stage 2 indicator" />}
               {visibleCols.has('effort_ratio') && <PlainTh label="Effort" align="right" title="Effort ratio: price range vs volume ratio vs 63-day average. >1.2 = price moving efficiently on volume" />}
               {visibleCols.has('days_in_state') && <PlainTh label="Days (RS)" align="right" />}
+              {visibleCols.has('within_state_rank') && (
+                <PlainTh label="Within Rank" align="right" title="within-state rank: position within same-state peers (0=bottom, 1=top)" />
+              )}
               <Th label="1M" k="ret_1m" align="right" />
               <Th label="3M" k="ret_3m" align="right" />
               <Th label="RS Pctile" k="rs_pctile_3m" align="right" />
@@ -373,6 +378,11 @@ export function ETFScreener({ etfs, validations = [] }: { etfs: ETFRow[]; valida
                       {visibleCols.has('days_in_state') && (
                         <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums text-ink-secondary">
                           {row.days_in_state != null ? row.days_in_state : '—'}
+                        </td>
+                      )}
+                      {visibleCols.has('within_state_rank') && (
+                        <td className="px-3 py-2.5 text-right" data-testid={`etf-wsr-${row.ticker}`}>
+                          <WithinStateRankCell value={row.mean_within_state_rank ?? null} />
                         </td>
                       )}
                       <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(row.ret_1m)}`}>

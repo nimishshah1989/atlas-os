@@ -548,3 +548,51 @@ export async function getStockATRContraction(
   `
   return rows[0] ?? null
 }
+
+export interface StockFooterMetrics {
+  obv_slope: number | null
+  atr_ratio: number | null
+  realized_vol_tier: string | null
+}
+
+/**
+ * Footer metrics for ComponentScorecard.
+ * - obv_slope: TODO: column needs migration; not yet stored in atlas_stock_metrics_daily
+ * - atr_ratio: derived from getStockATRContraction()
+ * - realized_vol_tier: NTILE(4) over realized_vol_63 for the day cohort -> Low/Normal/Elevated/High
+ */
+export async function getStockFooterMetrics(
+  instrumentId: string,
+): Promise<StockFooterMetrics> {
+  // TODO: column needs migration; currently not stored in atlas_stock_metrics_daily
+  const obv_slope: number | null = null
+
+  // ATR ratio: derive from existing function
+  const atrData = await getStockATRContraction(instrumentId)
+  const atr_ratio = atrData?.ratio ?? null
+
+  // Realized vol tier: NTILE(4) within today's cohort
+  const rows = await sql<{ tier: number | null }[]>`
+    WITH latest AS (
+      SELECT MAX(date) AS d FROM atlas.atlas_stock_metrics_daily
+    ),
+    ranked AS (
+      SELECT
+        instrument_id,
+        NTILE(4) OVER (ORDER BY realized_vol_63 ASC NULLS LAST) AS tier
+      FROM atlas.atlas_stock_metrics_daily
+      WHERE date = (SELECT d FROM latest)
+        AND realized_vol_63 IS NOT NULL
+    )
+    SELECT tier
+    FROM ranked
+    WHERE instrument_id = ${instrumentId}::uuid
+    LIMIT 1
+  `
+
+  const tierMap: Record<number, string> = { 1: 'Low', 2: 'Normal', 3: 'Elevated', 4: 'High' }
+  const tierNum = rows[0]?.tier ?? null
+  const realized_vol_tier = tierNum != null ? (tierMap[tierNum] ?? null) : null
+
+  return { obv_slope, atr_ratio, realized_vol_tier }
+}
