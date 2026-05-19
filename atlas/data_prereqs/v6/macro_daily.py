@@ -98,17 +98,19 @@ class BreadthComputer:
     session: Session
 
     def compute(self, ref_date: date) -> float:
+        # above_30w_ma is the pre-computed 200 DMA boolean in atlas_stock_metrics_daily.
+        # Columns 'close' and 'ma_200' do not exist in the table; above_30w_ma does.
         row = self.session.execute(
             text("""
             SELECT
-                COUNT(*) FILTER (WHERE close > ma_200) AS above,
+                COUNT(*) FILTER (WHERE above_30w_ma = TRUE) AS above,
                 COUNT(*) AS total
               FROM atlas.atlas_stock_metrics_daily
-             WHERE date = :d AND ma_200 IS NOT NULL
+             WHERE date = :d AND above_30w_ma IS NOT NULL
         """),
             {"d": ref_date},
         ).first()
-        if not row.total:
+        if not row or not row.total:
             return 0.0
         return round(100.0 * row.above / row.total, 2)
 
