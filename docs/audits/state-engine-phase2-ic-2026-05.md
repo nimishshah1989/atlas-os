@@ -205,3 +205,46 @@ V5-RP-TREND alpha_oos=0.2018, hit_rate=0.631, n_recs=20, n_high_confidence=20.
 present in `main` but not yet merged into `feat/atlas-consolidation` worktree.
 Copied to worktree to resolve the alembic revision chain. No functional impact —
 the DB had already applied it.
+
+---
+
+## Phase 4 — Legacy candidate IC harness (2026-05-19)
+
+### What shipped
+
+Migration `090_legacy_validation_kind` adds `component_kind VARCHAR(32) NOT NULL DEFAULT 'state_engine_tier'`
+with `CHECK (component_kind IN ('state_engine_tier','legacy_candidate'))` to
+`atlas_component_validation`. This allows the harness to store legacy signal rows
+alongside state-engine tier rows without mixing concern.
+
+`atlas/intelligence/states/ic_harness.py` implements:
+- `classify_ic_status(ic_ir, q5_q1_spread)` — 4-class classifier (validated / validated_inverse / weak / decorative)
+- `LEGACY_SIGNAL_CATALOG` — 6 signals: cts_ppc_continuous, cts_npc_continuous, cts_contraction_continuous, transition_trigger, breakout_trigger, nav_state
+- `run_legacy_ic_harness(engine, start, end)` — runs IC engine against each signal, returns summary DataFrame
+- `persist_legacy_ic_results(engine, df, as_of_date)` — UPSERTs into `atlas_component_validation` with `component_kind='legacy_candidate'`, sentinel `badge='Continuous'`, `threshold_range='continuous'`, `implied_action='investigate'`
+
+CLI: `atlas-lab states validate-legacy --start 2023-01-01 --end 2024-12-31`
+
+### Expected verdicts (pending EC2 run)
+
+| Signal | Hypothesis | Expected status |
+|---|---|---|
+| cts_ppc_continuous | PPC score predicts 21d returns | weak or validated |
+| cts_npc_continuous | NPC score predicts 21d returns | weak or decorative |
+| cts_contraction_continuous | Contraction score predicts 21d returns | weak or decorative |
+| transition_trigger | Redundant with classifier output, circular logic | decorative |
+| breakout_trigger | New engine encodes as stage='stage_2a', redundant | decorative |
+| nav_state | Fund-level; deferred to fund harness | skipped (empty loader) |
+
+### Verdicts to action
+
+- **validated (IR > 0.4)**: promote to Tier-3 transition trigger in state engine
+- **weak (0.2 <= IR < 0.4)**: render as continuous display only (Tier-4)
+- **decorative (IR < 0.2 or spread < 0.5%)**: delete from frontend entirely
+- **validated_inverse**: investigate sign-flip before use; may be contrarian signal
+
+### Architecture note
+
+`threshold_range='continuous'` and `implied_action='investigate'` are sentinels
+chosen because those columns are NOT NULL on `atlas_component_validation`. They
+signal to the frontend that these rows are informational, not action-generating.

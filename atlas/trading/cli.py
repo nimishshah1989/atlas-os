@@ -29,6 +29,7 @@ from atlas.trading.cli_states import (
     _states_baselines_refresh_cmd,
     _states_tune_cmd,
     _states_validate_components_cmd,
+    _states_validate_legacy_cmd,
 )
 from atlas.trading.lab import run_baseline_v5
 
@@ -435,8 +436,7 @@ def _states_classify_cmd(args: argparse.Namespace) -> int:
     n = persist_state_panel(eng, panel)
     log.info("states_classify_persisted", n_rows=n)
     print(
-        f"States classified: {n} rows persisted with"
-        f" classifier_version={args.classifier_version}"
+        f"States classified: {n} rows persisted with classifier_version={args.classifier_version}"
     )
     return 0
 
@@ -518,6 +518,21 @@ def main(argv: list[str] | None = None) -> int:
     states_validate.add_argument("--start", required=True, help="ISO date YYYY-MM-DD")
     states_validate.add_argument("--end", required=True, help="ISO date YYYY-MM-DD")
     states_validate.set_defaults(func=_states_validate_components_cmd)
+
+    states_vl = states_sub.add_parser(
+        "validate-legacy",
+        help="IC-validate legacy candidate signals (CTS continuous, triggers)",
+    )
+    states_vl.add_argument(
+        "--start", default="2023-01-01", help="ISO start date (default: 2023-01-01)"
+    )
+    states_vl.add_argument("--end", default="2024-12-31", help="ISO end date (default: 2024-12-31)")
+    states_vl.add_argument(
+        "--no-persist",
+        action="store_true",
+        help="Print without persisting to atlas_component_validation",
+    )
+    states_vl.set_defaults(func=_states_validate_legacy_cmd)
 
     args = parser.parse_args(argv)
     return args.func(args)
