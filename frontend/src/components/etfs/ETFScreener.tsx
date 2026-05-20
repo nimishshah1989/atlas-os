@@ -16,6 +16,37 @@ const RS_ORDER = ['Leader', 'Strong', 'Consolidating', 'Emerging', 'Average', 'W
 const MOM_ORDER = ['Accelerating', 'Improving', 'Flat', 'Deteriorating', 'Collapsing']
 const RISK_ORDER = ['Low', 'Normal', 'Elevated', 'High', 'Below Trend']
 
+// Stage badge — mirrors StockScreener.tsx StageBadge (no dwell for ETFs).
+const STAGE_LABEL: Record<string, string> = {
+  stage_1: '1 BASE',
+  stage_2a: '2A BREAK',
+  stage_2b: '2B CONF',
+  stage_2c: '2C MATURE',
+  stage_3: '3 TOP',
+  stage_4: '4 DECLINE',
+  uninvestable: 'UNINV',
+}
+const STAGE_COLOR: Record<string, string> = {
+  stage_1: 'text-ink-secondary bg-paper-rule/30',
+  stage_2a: 'text-signal-pos bg-signal-pos/10',
+  stage_2b: 'text-signal-pos bg-signal-pos/10',
+  stage_2c: 'text-signal-warn bg-signal-warn/10',
+  stage_3: 'text-signal-warn bg-signal-warn/10',
+  stage_4: 'text-signal-neg bg-signal-neg/10',
+  uninvestable: 'text-ink-tertiary bg-paper-rule/20',
+}
+
+function StageBadge({ state }: { state: string | null }) {
+  if (!state) return <span className="font-mono text-xs text-ink-tertiary">—</span>
+  const label = STAGE_LABEL[state] ?? state.toUpperCase()
+  const color = STAGE_COLOR[state] ?? 'text-ink-secondary bg-paper-rule/20'
+  return (
+    <span className={`px-1.5 py-0.5 rounded-sm font-sans text-[10px] font-semibold tracking-[0.04em] ${color}`}>
+      {label}
+    </span>
+  )
+}
+
 function stateRank(order: string[], val: string | null): number {
   if (!val) return order.length
   const i = order.indexOf(val)
@@ -67,9 +98,9 @@ const OPTIONAL_COLS: ColumnDef[] = [
 const COL_STORAGE_KEY = 'atlas-etf-screener-cols'
 
 // Always-visible columns:
-//   Ticker, Theme, RS State, Risk, 1M, 3M, RS Pctile, Deploy %  = 8
+//   Ticker, Theme, Stage, RS State, Risk, 1M, 3M, RS Pctile, Deploy %  = 9
 // (Gates and Mom columns removed in Phase 8)
-const ALWAYS_VISIBLE_COL_COUNT = 8
+const ALWAYS_VISIBLE_COL_COUNT = 9
 
 function TriggerBadges({ row }: { row: ETFRow }) {
   if (!row.breakout_trigger && !row.transition_trigger) return null
@@ -249,6 +280,7 @@ export function ETFScreener({ etfs, validations = [] }: { etfs: ETFRow[]; valida
             <tr className="border-b border-paper-rule bg-paper">
               <Th label="Ticker" k="ticker" />
               <Th label="Theme" k="theme" />
+              <PlainTh label="Stage" title="Weinstein stage from constituent holdings (equity ETFs) or ticker-level RS/momentum (others)" />
               <Th label="RS State" k="rs_state" />
               <Th label="Risk" k="risk_state" />
               {visibleCols.has('ret_1w') && <PlainTh label="1W" align="right" />}
@@ -307,6 +339,9 @@ export function ETFScreener({ etfs, validations = [] }: { etfs: ETFRow[]; valida
                             {row.linked_sector}
                           </div>
                         )}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <StageBadge state={row.engine_state} />
                       </td>
                       <td className="px-3 py-2.5">
                         <ValidatedBadge

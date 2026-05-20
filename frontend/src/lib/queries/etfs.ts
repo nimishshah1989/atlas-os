@@ -53,6 +53,8 @@ export type ETFRow = {
   exit_rs_deteriorate: boolean | null
   exit_momentum_collapse: boolean | null
   exit_stop_loss: boolean | null
+  // Stage: dominant_state from atlas_etf_signal_unified (engine_state column)
+  engine_state: string | null
   // Phase 8: bubble chart axes — from atlas_etf_signal_unified
   mean_rs_rank_12m: number | null
   mean_within_state_rank: number | null
@@ -149,7 +151,9 @@ export async function getAllETFs(): Promise<ETFRow[]> {
         WHEN eu.pct_stage_2 IS NOT NULL THEN 'Flat'
         ELSE NULL
       END                           AS momentum_state,
-      NULL::text                    AS risk_state,
+      CASE NTILE(4) OVER (ORDER BY m.realized_vol_63 NULLS LAST)
+        WHEN 1 THEN 'Low' WHEN 2 THEN 'Normal' WHEN 3 THEN 'Elevated' WHEN 4 THEN 'High'
+      END                           AS risk_state,
       -- weinstein_gate_pass: pct_stage_2 dominant
       (eu.pct_stage_2 IS NOT NULL AND eu.pct_stage_2 >= 0.50) AS weinstein_gate_pass,
       -- Phase 7: gate columns will be removed in Phase 8 (page-level cleanup).
@@ -170,6 +174,8 @@ export async function getAllETFs(): Promise<ETFRow[]> {
       NULL::boolean                 AS exit_rs_deteriorate,
       NULL::boolean                 AS exit_momentum_collapse,
       NULL::boolean                 AS exit_stop_loss,
+      -- Stage badge: engine_state from atlas_etf_signal_unified
+      eu.engine_state,
       -- Phase 8: bubble chart axes
       eu.mean_rs_rank_12m::float8   AS mean_rs_rank_12m,
       eu.mean_within_state_rank::float8 AS mean_within_state_rank,
@@ -236,7 +242,9 @@ export async function getETFByTicker(ticker: string): Promise<ETFRow | null> {
         WHEN eu.pct_stage_2 IS NOT NULL THEN 'Flat'
         ELSE NULL
       END                           AS momentum_state,
-      NULL::text                    AS risk_state,
+      CASE NTILE(4) OVER (ORDER BY m.realized_vol_63 NULLS LAST)
+        WHEN 1 THEN 'Low' WHEN 2 THEN 'Normal' WHEN 3 THEN 'Elevated' WHEN 4 THEN 'High'
+      END                           AS risk_state,
       (eu.pct_stage_2 IS NOT NULL AND eu.pct_stage_2 >= 0.50) AS weinstein_gate_pass,
       -- Phase 7: gate columns will be removed in Phase 8 (page-level cleanup).
       TRUE                          AS history_gate_pass,
@@ -255,6 +263,8 @@ export async function getETFByTicker(ticker: string): Promise<ETFRow | null> {
       NULL::boolean                 AS exit_rs_deteriorate,
       NULL::boolean                 AS exit_momentum_collapse,
       NULL::boolean                 AS exit_stop_loss,
+      -- Stage badge: engine_state from atlas_etf_signal_unified
+      eu.engine_state,
       -- Phase 8: bubble chart axes
       eu.mean_rs_rank_12m::float8   AS mean_rs_rank_12m,
       eu.mean_within_state_rank::float8 AS mean_within_state_rank,
@@ -304,7 +314,7 @@ export async function getETFMetricHistory(
 }
 
 // Phase 7: getETFStateHistory rewired to atlas_etf_signal_unified.
-// risk_state not in view — returns NULL.
+// risk_state derived from atlas_etf_metrics_daily.realized_vol_63 via NTILE quartile.
 export async function getETFStateHistory(
   ticker: string,
   days = 180,
@@ -313,28 +323,37 @@ export async function getETFStateHistory(
     throw new Error(`days must be an integer between 1 and 3650, got: ${days}`)
   }
   return sql<ETFStateHistoryRow[]>`
+    WITH vol_window AS (
+      SELECT date, realized_vol_63
+      FROM atlas.atlas_etf_metrics_daily
+      WHERE ticker = ${ticker}
+        AND date >= CURRENT_DATE - (${days} || ' days')::interval
+    )
     SELECT
-      date,
+      eu.date,
       CASE
-        WHEN mean_rs_rank_12m >= 0.90 THEN 'Leader'
-        WHEN mean_rs_rank_12m >= 0.70 THEN 'Strong'
-        WHEN mean_rs_rank_12m >= 0.30 THEN 'Average'
-        WHEN mean_rs_rank_12m >= 0.10 THEN 'Weak'
-        WHEN mean_rs_rank_12m IS NOT NULL THEN 'Laggard'
+        WHEN eu.mean_rs_rank_12m >= 0.90 THEN 'Leader'
+        WHEN eu.mean_rs_rank_12m >= 0.70 THEN 'Strong'
+        WHEN eu.mean_rs_rank_12m >= 0.30 THEN 'Average'
+        WHEN eu.mean_rs_rank_12m >= 0.10 THEN 'Weak'
+        WHEN eu.mean_rs_rank_12m IS NOT NULL THEN 'Laggard'
         ELSE NULL
       END                       AS rs_state,
       CASE
-        WHEN pct_stage_2 >= 0.50  THEN 'Accelerating'
-        WHEN pct_stage_4 >= 0.50  THEN 'Collapsing'
-        WHEN pct_stage_3 >= 0.30  THEN 'Deteriorating'
-        WHEN pct_stage_2 IS NOT NULL THEN 'Flat'
+        WHEN eu.pct_stage_2 >= 0.50  THEN 'Accelerating'
+        WHEN eu.pct_stage_4 >= 0.50  THEN 'Collapsing'
+        WHEN eu.pct_stage_3 >= 0.30  THEN 'Deteriorating'
+        WHEN eu.pct_stage_2 IS NOT NULL THEN 'Flat'
         ELSE NULL
       END                       AS momentum_state,
-      NULL::text                AS risk_state
-    FROM atlas.atlas_etf_signal_unified
-    WHERE etf_ticker = ${ticker}
-      AND date >= CURRENT_DATE - (${days} || ' days')::interval
-    ORDER BY date ASC
+      CASE NTILE(4) OVER (ORDER BY vw.realized_vol_63 NULLS LAST)
+        WHEN 1 THEN 'Low' WHEN 2 THEN 'Normal' WHEN 3 THEN 'Elevated' WHEN 4 THEN 'High'
+      END                       AS risk_state
+    FROM atlas.atlas_etf_signal_unified eu
+    LEFT JOIN vol_window vw ON vw.date = eu.date
+    WHERE eu.etf_ticker = ${ticker}
+      AND eu.date >= CURRENT_DATE - (${days} || ' days')::interval
+    ORDER BY eu.date ASC
   `
 }
 
@@ -400,7 +419,9 @@ export async function getLinkedETFsForSector(sectorName: string): Promise<ETFRow
         WHEN eu.pct_stage_2 IS NOT NULL THEN 'Flat'
         ELSE NULL
       END                           AS momentum_state,
-      NULL::text                    AS risk_state,
+      CASE NTILE(4) OVER (ORDER BY m.realized_vol_63 NULLS LAST)
+        WHEN 1 THEN 'Low' WHEN 2 THEN 'Normal' WHEN 3 THEN 'Elevated' WHEN 4 THEN 'High'
+      END                           AS risk_state,
       (eu.pct_stage_2 IS NOT NULL AND eu.pct_stage_2 >= 0.50) AS weinstein_gate_pass,
       -- Phase 7: gate columns will be removed in Phase 8 (page-level cleanup).
       TRUE                          AS history_gate_pass,
@@ -419,6 +440,8 @@ export async function getLinkedETFsForSector(sectorName: string): Promise<ETFRow
       NULL::boolean                 AS exit_rs_deteriorate,
       NULL::boolean                 AS exit_momentum_collapse,
       NULL::boolean                 AS exit_stop_loss,
+      -- Stage badge: engine_state from atlas_etf_signal_unified
+      eu.engine_state,
       -- Phase 8: bubble chart axes
       eu.mean_rs_rank_12m::float8   AS mean_rs_rank_12m,
       eu.mean_within_state_rank::float8 AS mean_within_state_rank,
