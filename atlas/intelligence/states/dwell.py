@@ -19,7 +19,7 @@ Urgency polarity:
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, cast
 
 import pandas as pd
 
@@ -71,7 +71,7 @@ def compute_cohort_dwell_baselines(historical_panel: pd.DataFrame) -> pd.DataFra
     separate episodes even within the same (cohort_key, state).
     """
     if historical_panel.empty:
-        return pd.DataFrame(columns=_BASELINE_COLUMNS)
+        return pd.DataFrame(columns=pd.Index(_BASELINE_COLUMNS))
 
     panel = historical_panel.copy()
 
@@ -118,7 +118,7 @@ def compute_cohort_dwell_baselines(historical_panel: pd.DataFrame) -> pd.DataFra
     for col in ("median_dwell_days", "p25_dwell_days", "p75_dwell_days", "p95_dwell_days"):
         agg[col] = agg[col].round().astype("Int64")
 
-    return agg[_BASELINE_COLUMNS]
+    return cast("pd.DataFrame", agg[_BASELINE_COLUMNS])
 
 
 def derive_urgency(
