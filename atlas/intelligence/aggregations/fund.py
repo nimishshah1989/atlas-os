@@ -9,10 +9,12 @@ No raw per-instrument holdings table (instrument_id + weight_pct) exists
 in the atlas schema as of 2026-05-19. The lens pipeline produces the
 aggregated form; this module lifts it into atlas_fund_state_v2.
 
-Public API is unchanged -- callers use:
+Public API:
   load_fund_holdings_panel(engine, as_of_date) -> pd.DataFrame
   aggregate_fund_composition(panel) -> pd.DataFrame
+  derive_fund_recommendations_cross_sectional(panel, thresholds) -> dict[str, str]
   derive_fund_recommendation(nav_state, composition_state, holdings_state) -> str
+    (compatibility shim — superseded by the cross-sectional function)
 
 Column mapping from atlas_fund_lens_monthly:
   aligned_aum_pct  -> pct_holdings_stage_2  (% of AUM in stage-2 state)
@@ -27,9 +29,14 @@ nav_state remains a fund-internal NAV-vs-category computation produced by
 
 from __future__ import annotations
 
+import math
+from decimal import Decimal
+
 import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
+
+from atlas.intelligence.ranking import RankConfig, hybrid_rank_labels
 
 # Thresholds for composition_state classification (pass-through from lens,
 # but also used as fallback if lens composition_state is NULL).
@@ -40,6 +47,16 @@ DETERIORATING_THRESHOLD = 0.40  # >= 40% in stage 3/4 -> Deteriorating
 # Thresholds for holdings_state classification.
 STRONG_HOLDINGS_THRESHOLD = 0.60  # strong_aum_pct >= 0.60
 WEAK_HOLDINGS_THRESHOLD = 0.30  # weak_aum_pct > 0.30
+
+# ---------------------------------------------------------------------------
+# Inline defaults for fund band thresholds (cross-sectional hybrid rank).
+# TODO Wave 4A Task 5: seed fund_band_p20/p50/p80/fund_recommended_floor into
+# atlas_thresholds table so they are runtime-tunable.
+# ---------------------------------------------------------------------------
+_DEFAULT_FUND_BAND_P20 = Decimal("0.20")
+_DEFAULT_FUND_BAND_P50 = Decimal("0.50")
+_DEFAULT_FUND_BAND_P80 = Decimal("0.80")
+_DEFAULT_FUND_RECOMMENDED_FLOOR = Decimal("0.20")  # strong_aum_pct >= 20% for 'Recommended'
 
 # ---------------------------------------------------------------------------
 # Legacy state value normalisation
@@ -143,20 +160,20 @@ def aggregate_fund_composition(panel: pd.DataFrame) -> pd.DataFrame:
     Returns:
         DataFrame with columns matching atlas_fund_state_v2 schema.
     """
+    _empty_cols = [
+        "mstar_id",
+        "date",
+        "composition_state",
+        "holdings_state",
+        "pct_holdings_stage_2",
+        "pct_holdings_stage_3",
+        "pct_holdings_stage_4",
+        "mean_within_state_rank",
+        "n_holdings",
+        "recommendation",
+    ]
     if panel.empty:
-        return pd.DataFrame(
-            columns=[
-                "mstar_id",
-                "date",
-                "composition_state",
-                "holdings_state",
-                "pct_holdings_stage_2",
-                "pct_holdings_stage_3",
-                "pct_holdings_stage_4",
-                "mean_within_state_rank",
-                "n_holdings",
-            ]
-        )
+        return pd.DataFrame({c: pd.Series([], dtype=object) for c in _empty_cols})
 
     rows: list[dict[str, object]] = []
     # Monthly cadence -- few hundred rows at most; iterrows is acceptable here.
@@ -213,23 +230,137 @@ def aggregate_fund_composition(panel: pd.DataFrame) -> pd.DataFrame:
                 "n_holdings": 0,
             }
         )
-    return pd.DataFrame(rows)
+    agg_df = pd.DataFrame(rows)
+
+    # Attach cross-sectional recommendation labels.
+    # Row count before/after must be equal (1-to-1 ranker).
+    rows_before = len(agg_df)
+    label_map = derive_fund_recommendations_cross_sectional(panel)
+    mstar_ids: list[object] = agg_df["mstar_id"].tolist()
+    agg_df["recommendation"] = [label_map.get(str(m), "Hold") for m in mstar_ids]
+    rows_after = len(agg_df)
+    assert (
+        rows_before == rows_after
+    ), f"recommendation join changed row count: {rows_before} → {rows_after}"
+
+    return agg_df
 
 
-# Recommendation lookup table -- (nav, composition, holdings) -> recommendation.
-# Vocabulary: Recommended / Hold / Reduce / Exit  (matches atlas_fund_signal_unified view
-# and all frontend consumers: FundIntelligencePanel, RecommendationChip, FundDecisionHistory,
-# FundGlossary, buildSingleFundCommentary).
-# Conservative-first: worst condition wins.
+def _to_decimal(value: object) -> Decimal:
+    """Convert scalar to Decimal, returning Decimal("0") for None/NaN.
+
+    Null component → 0 is intentional: missing data penalises rank rather
+    than fabricating strength.
+    """
+    if value is None:
+        return Decimal("0")
+    if isinstance(value, float) and math.isnan(value):
+        return Decimal("0")
+    return Decimal(str(value))
+
+
+def _fund_rank_config(thresholds: dict[str, Decimal] | None = None) -> RankConfig:
+    """Build a RankConfig for fund cross-sectional labelling.
+
+    Reads band thresholds from the supplied thresholds dict (as returned by
+    load_thresholds()). Falls back to inline defaults when the key is absent
+    or the dict is None — keeps unit tests DB-free.
+
+    Args:
+        thresholds: Optional mapping of threshold_key -> Decimal value.
+                    Keys used: fund_band_p20, fund_band_p50, fund_band_p80,
+                    fund_recommended_floor.
+
+    Returns:
+        RankConfig with Exit/Reduce/Hold/Recommended labels.
+    """
+    t = thresholds or {}
+    p20 = t.get("fund_band_p20", _DEFAULT_FUND_BAND_P20)
+    p50 = t.get("fund_band_p50", _DEFAULT_FUND_BAND_P50)
+    p80 = t.get("fund_band_p80", _DEFAULT_FUND_BAND_P80)
+    floor = t.get("fund_recommended_floor", _DEFAULT_FUND_RECOMMENDED_FLOOR)
+    return RankConfig(
+        labels=["Exit", "Reduce", "Hold", "Recommended"],
+        band_pcts=[p20, p50, p80],
+        floor_label="Recommended",
+        floor_min=floor,
+    )
+
+
+def derive_fund_recommendations_cross_sectional(
+    panel: pd.DataFrame,
+    thresholds: dict[str, Decimal] | None = None,
+) -> dict[str, str]:
+    """Rank all funds cross-sectionally for a single date slice.
+
+    Assigns Exit/Reduce/Hold/Recommended using hybrid_rank_labels.
+    Guarantees a label spread — never collapses to one constant label.
+
+    Score = aligned_aum_pct * strong_aum_pct (Decimal; null component → 0).
+    Floor = strong_aum_pct. A fund ranked 'Recommended' that fails
+    fund_recommended_floor (default 20%) is capped to 'Hold'.
+
+    No nav_state or fund RS is available in the lens panel; composition quality
+    (aligned_aum_pct) and holdings quality (strong_aum_pct) are the real columns.
+
+    Args:
+        panel: DataFrame with at least mstar_id, aligned_aum_pct, strong_aum_pct.
+               Rows must cover a single date (caller's responsibility).
+        thresholds: Optional threshold overrides loaded from atlas_thresholds via
+                    load_thresholds(). Keys: fund_band_p20/p50/p80,
+                    fund_recommended_floor. Defaults applied when absent.
+
+    Returns:
+        {mstar_id: label} for every row in the panel.
+    """
+    if panel.empty:
+        return {}
+
+    cfg = _fund_rank_config(thresholds)
+    scores: dict[str, Decimal] = {}
+    floor_values: dict[str, Decimal] = {}
+
+    for rec in panel.to_dict("records"):
+        mstar_id = str(rec["mstar_id"])
+        aligned = _to_decimal(rec.get("aligned_aum_pct"))
+        strong = _to_decimal(rec.get("strong_aum_pct"))
+        scores[mstar_id] = aligned * strong
+        floor_values[mstar_id] = strong
+
+    return hybrid_rank_labels(scores, floor_values, cfg)
+
+
+# ---------------------------------------------------------------------------
+# Compatibility shim (superseded by derive_fund_recommendations_cross_sectional)
+#
+# derive_fund_recommendation remains public so that callers that have not yet
+# migrated to the cross-sectional API (and existing tests) continue to compile.
+# New callers should use derive_fund_recommendations_cross_sectional.
+#
+# The shim no longer contains the short-circuit
+#   "holdings_state == 'Weak-Holdings' → Reduce"
+# which caused 100% of real funds to return "Reduce" in thin markets.
+# ---------------------------------------------------------------------------
 def derive_fund_recommendation(
     nav_state: str | None,
     composition_state: str,
     holdings_state: str,
 ) -> str:
-    """Map the 3-tuple to Recommended / Hold / Reduce / Exit."""
+    """Map the 3-tuple to Recommended / Hold / Reduce / Exit.
+
+    Compatibility shim. Superseded by derive_fund_recommendations_cross_sectional
+    which ranks funds cross-sectionally and guarantees a label spread.
+
+    This shim no longer short-circuits on Weak-Holdings alone. The short-circuit
+    (holdings_state == "Weak-Holdings" → "Reduce") was removed because it caused
+    100% of funds to return "Reduce" when the strong_aum_pct < 0.40 bar is
+    unreachable in a thin market (Wave 4A Task 4).
+    """
     if nav_state == "DISLOCATION_SUSPENDED":
         return "Exit"
-    if composition_state == "Deteriorating" or holdings_state == "Weak-Holdings":
+    if composition_state == "Deteriorating" and holdings_state == "Weak-Holdings":
+        return "Exit"
+    if composition_state == "Deteriorating":
         return "Reduce"
     if (
         composition_state == "Aligned"
