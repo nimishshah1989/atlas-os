@@ -46,6 +46,16 @@ function narrativePreview(text: string): string {
   return sentences.slice(0, 3).join(' ').trim() || text.slice(0, 300)
 }
 
+// Returns true if the brief's as_of_date lags the regime date by more than 2 days.
+// A stale brief contradicts the live regime and must not be shown.
+function isBriefStale(brief: { as_of_date: Date }, regimeDate: Date | null): boolean {
+  if (!regimeDate) return false
+  const briefMs  = new Date(brief.as_of_date).getTime()
+  const regimeMs = new Date(regimeDate).getTime()
+  const lagDays  = (regimeMs - briefMs) / (1000 * 60 * 60 * 24)
+  return lagDays > 2
+}
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 const REGIME_CFG: Record<string, { bg: string; border: string; text: string; Icon: typeof TrendingUp }> = {
@@ -221,7 +231,7 @@ export default async function IntelligencePage() {
         <div className="space-y-5">
           {/* 2. Today's Brief card */}
           <SectionCard title="Today's Brief">
-            {d.brief ? (
+            {d.brief && !isBriefStale(d.brief, d.regime?.date ?? null) ? (
               <div>
                 <div className="font-sans text-[10px] text-ink-tertiary mb-2">{fmtDate(d.brief.as_of_date)}</div>
                 <p className="font-serif text-sm leading-relaxed text-ink-primary line-clamp-4">
@@ -242,6 +252,10 @@ export default async function IntelligencePage() {
                   </Link>
                 </div>
               </div>
+            ) : d.brief ? (
+              <p className="font-sans text-xs text-ink-tertiary">
+                Brief from {fmtDate(d.brief.as_of_date)} is stale — will regenerate tonight.
+              </p>
             ) : (
               <p className="font-sans text-xs text-ink-tertiary">No brief generated yet.</p>
             )}
