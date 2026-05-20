@@ -80,7 +80,7 @@ def format_preflight(result: PreflightResult) -> str:
     adj_pct = (result.adj_with / result.adj_total * 100) if result.adj_total else 0.0
     hist_pct = (result.delisted_with_history / result.delisted * 100) if result.delisted else 0.0
     check1 = "PASS" if adj_pct >= 80 else "WARN"
-    check2 = "PASS" if hist_pct >= 80 else "WARN"
+    check2 = "PASS" if (result.delisted == 0 or hist_pct >= 80) else "WARN"
     return "\n".join(
         [
             "SDE pre-flight checks",
@@ -97,8 +97,8 @@ def format_preflight(result: PreflightResult) -> str:
 
 def main() -> None:
     report = format_preflight(run_preflight(get_engine()))
-    log.info("sde_preflight_done")
     print(report)
+    log.info("sde_preflight_done")
 
 
 if __name__ == "__main__":

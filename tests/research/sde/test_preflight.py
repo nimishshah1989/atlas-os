@@ -17,3 +17,10 @@ def test_format_preflight_warn_on_low_coverage() -> None:
     text = format_preflight(result)
     assert "Check 1 WARN" in text
     assert "Check 2 WARN" in text
+
+
+def test_format_preflight_check2_passes_when_no_delisted() -> None:
+    # Zero delisted instruments is a fine state, not a WARN.
+    result = PreflightResult(adj_total=1000, adj_with=950, delisted=0, delisted_with_history=0)
+    text = format_preflight(result)
+    assert "Check 2 PASS" in text
