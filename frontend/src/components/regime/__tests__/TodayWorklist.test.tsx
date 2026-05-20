@@ -60,6 +60,19 @@ describe('TodayWorklist', () => {
     expect(relianceLink).toHaveAttribute('href', '/stocks/RELIANCE')
   })
 
+  it('renders a LinkedTicker chip when there is exactly one breakout symbol', () => {
+    const singleBreakoutData: WorklistData = {
+      sectorsEnteredFavour: 1,
+      freshBreakouts: 1,
+      breakoutSymbols: ['RELIANCE'],
+      deterioratingCount: 0,
+      deterioratingSymbols: [],
+    }
+    render(<TodayWorklist data={singleBreakoutData} />)
+    const relianceLink = screen.getByRole('link', { name: /RELIANCE/ })
+    expect(relianceLink).toHaveAttribute('href', '/stocks/RELIANCE')
+  })
+
   it('renders zero counts gracefully', () => {
     const emptyData: WorklistData = {
       sectorsEnteredFavour: 0,

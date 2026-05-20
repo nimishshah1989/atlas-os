@@ -80,7 +80,7 @@ export function TodayWorklist({ data }: Props) {
         </div>
       </div>
 
-      {data.breakoutSymbols.length > 1 && (
+      {data.breakoutSymbols.length > 0 && (
         <div className="border border-signal-pos/20 rounded-sm bg-signal-pos/5 px-4 py-3 mb-2">
           <div className="font-sans text-[10px] text-signal-pos uppercase tracking-wider mb-2">
             Fresh Breakouts
