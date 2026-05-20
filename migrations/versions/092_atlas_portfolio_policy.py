@@ -26,7 +26,6 @@ depends_on = None
 _SCHEMA = "atlas"
 _TABLE = "atlas_portfolio_policy"
 _IDX = "uix_portfolio_policy_house_default"
-_IDX_PORTFOLIO = "ix_atlas_portfolio_policy_portfolio_id"
 
 
 def upgrade() -> None:
