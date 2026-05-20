@@ -65,6 +65,27 @@ else
     echo "[step 1] OK" | tee -a "$LOG"
 fi
 
+# Step 1b: continuous dwell_days recompute — fixes monthly-chunk degeneracy.
+# Runs only when Step 1 (classify) succeeded so dwell reflects today's states.
+echo "" | tee -a "$LOG"
+echo "[step 1b] dwell_days continuous recompute..." | tee -a "$LOG"
+if [[ ${M2_EXIT:-0} -eq 0 ]]; then
+    PYTHONPATH="$REPO" python3 -c "
+from atlas.db import get_engine
+from atlas.intelligence.states.dwell_recompute import recompute_and_persist
+n = recompute_and_persist(get_engine())
+print(f'dwell recompute updated {n} rows')
+" 2>&1 | tee -a "$LOG"
+    DWELL_EXIT=${PIPESTATUS[0]}
+    if [[ $DWELL_EXIT -ne 0 ]]; then
+        echo "[step 1b] FAILED (exit $DWELL_EXIT) — dwell stats will be stale" | tee -a "$LOG"
+    else
+        echo "[step 1b] OK" | tee -a "$LOG"
+    fi
+else
+    echo "[step 1b] SKIPPED — step 1 failed; dwell recompute requires fresh classify output" | tee -a "$LOG"
+fi
+
 # Step 2: daily intelligence brief (requires GROQ_API_KEY)
 echo "" | tee -a "$LOG"
 echo "[step 2] generate_daily_brief.py --persist..." | tee -a "$LOG"
