@@ -21,6 +21,8 @@ export function StocksClientShell({
   leaders,
   breakouts,
   deterioration,
+  initialSectorFilter,
+  initialIndexFilter,
 }: {
   stocks: StockRowWithSector[]
   regimeState: string
@@ -29,6 +31,8 @@ export function StocksClientShell({
   leaders: RSLeaderRow[]
   breakouts: BreakoutCandidateRow[]
   deterioration: BreakoutCandidateRow[]
+  initialSectorFilter?: string
+  initialIndexFilter?: string
 }) {
   const [maFilter, setMaFilter] = useState<MaFilter>(null)
   const [activeView, setActiveView] = useState<ActiveView>('overview')
@@ -82,6 +86,8 @@ export function StocksClientShell({
             stocks={stocks}
             maFilter={maFilter}
             validations={validations}
+            initialSectorFilter={initialSectorFilter}
+            initialIndexFilter={initialIndexFilter}
           />
         </>
       ) : (

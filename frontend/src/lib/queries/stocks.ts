@@ -88,7 +88,14 @@ export type StateHistoryRow = {
   volume_state: string | null
 }
 
-export async function getAllStocks(): Promise<StockRowWithSector[]> {
+export interface GetAllStocksParams {
+  sectorFilter?: string
+  indexFilter?: string
+}
+
+export async function getAllStocks(params?: GetAllStocksParams): Promise<StockRowWithSector[]> {
+  const sector = params?.sectorFilter ?? null
+  const indexName = params?.indexFilter ?? null
   return sql<StockRowWithSector[]>`
     WITH latest AS (
       SELECT MAX(date) AS d FROM atlas.atlas_stock_metrics_daily
@@ -211,6 +218,13 @@ export async function getAllStocks(): Promise<StockRowWithSector[]> {
     LEFT JOIN atlas.atlas_stock_signal_unified su
       ON su.instrument_id = u.instrument_id AND su.date = l.d
     WHERE u.effective_to IS NULL
+      AND (${sector}::text IS NULL OR u.sector = ${sector}::text)
+      AND (
+        ${indexName}::text IS NULL
+        OR (${indexName} = 'Nifty 50'  AND u.in_nifty_50  = TRUE)
+        OR (${indexName} = 'Nifty 100' AND u.in_nifty_100 = TRUE)
+        OR (${indexName} = 'Nifty 500' AND u.in_nifty_500 = TRUE)
+      )
     ORDER BY
       su.is_investable DESC NULLS LAST,
       m.rs_pctile_3m DESC NULLS LAST

@@ -11,6 +11,7 @@ export type SortKey =
   | 'symbol' | 'sector' | 'rs_pctile_3m' | 'cap_rank'
   | 'ret_1m' | 'ret_3m' | 'ret_6m'
   | 'rs_state' | 'momentum_state' | 'risk_state' | 'volume_state'
+  | 'within_state_rank'
 
 export type FilterChip = 'all' | 'n50' | 'n100' | 'n500' | 'investable' | 'leader' | 'accel'
 

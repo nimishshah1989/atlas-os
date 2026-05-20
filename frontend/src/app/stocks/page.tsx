@@ -6,9 +6,17 @@ import { getComponentValidations } from '@/lib/queries/component_validation'
 import { getRSLeaders, getBreakoutCandidates, getDeteriorationWatch } from '@/lib/queries/leaders'
 import { StocksClientShell } from '@/components/stocks/StocksClientShell'
 
-export default async function StocksPage() {
+export default async function StocksPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ sector?: string; index?: string }>
+}) {
+  const params = await searchParams
+  const sectorFilter = params.sector?.trim() || undefined
+  const indexFilter = params.index?.trim() || undefined
+
   const [stocks, regime, validations, leaders, breakouts, deterioration] = await Promise.all([
-    getAllStocks(),
+    getAllStocks({ sectorFilter, indexFilter }),
     getCurrentRegime(),
     getComponentValidations(),
     getRSLeaders(null, 50),
@@ -59,6 +67,8 @@ export default async function StocksPage() {
           leaders={leaders}
           breakouts={breakouts}
           deterioration={deterioration}
+          initialSectorFilter={sectorFilter}
+          initialIndexFilter={indexFilter}
         />
       </div>
     </div>

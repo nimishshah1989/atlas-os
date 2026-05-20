@@ -4,10 +4,14 @@ import type { StockRowWithSector } from '@/lib/queries/stocks'
 import { SectorBadge } from './SectorBadge'
 
 function IndexBadge({ label }: { label: string }) {
+  const encoded = encodeURIComponent(label)
   return (
-    <span className="inline-flex items-center px-1.5 py-0.5 rounded-[2px] font-sans text-[10px] font-semibold bg-paper-rule/30 text-ink-secondary">
+    <Link
+      href={`/stocks?index=${encoded}`}
+      className="inline-flex items-center px-1.5 py-0.5 rounded-[2px] font-sans text-[10px] font-semibold bg-paper-rule/30 text-ink-secondary hover:bg-teal/10 hover:text-teal transition-colors"
+    >
       {label}
-    </span>
+    </Link>
   )
 }
 

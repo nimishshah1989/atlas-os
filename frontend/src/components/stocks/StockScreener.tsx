@@ -2,7 +2,7 @@
 // allow-large: single table component with conditional column rendering; all logic is cohesive
 import { Fragment, useState, useMemo, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { ChevronUp, ChevronDown } from 'lucide-react'
+import { ChevronUp, ChevronDown, X } from 'lucide-react'
 import type { StockRowWithSector } from '@/lib/queries/stocks'
 import type { ComponentValidation } from '@/lib/queries/component_validation'
 import {
@@ -61,16 +61,27 @@ export function StockScreener({
   stocks,
   maFilter,
   validations = [],
+  initialSectorFilter,
+  initialIndexFilter,
 }: {
   stocks: StockRowWithSector[]
   maFilter?: 'above_30w_ma' | 'above_50d_ma' | 'above_200d_ma' | null
   validations?: ComponentValidation[]
+  initialSectorFilter?: string
+  initialIndexFilter?: string
 }) {
-  const [sortKey, setSortKey] = useState<SortKey>('cap_rank')
-  const [asc, setAsc] = useState(true)
+  // When a URL-seeded sector filter is active, default sort to within_state_rank desc.
+  const defaultSortKey: SortKey = initialSectorFilter ? 'within_state_rank' : 'cap_rank'
+  const defaultAsc = initialSectorFilter ? false : true
+  const [sortKey, setSortKey] = useState<SortKey>(defaultSortKey)
+  const [asc, setAsc] = useState(defaultAsc)
   const [chip, setChip] = useState<FilterChip>('all')
   const [search, setSearch] = useState('')
-  const [sectorFilter, setSectorFilter] = useState<string>('All Sectors')
+  const [sectorFilter, setSectorFilter] = useState<string>(
+    initialSectorFilter ?? 'All Sectors'
+  )
+  // Track active index filter (from URL seed); purely display — SQL already filtered server-side.
+  const [activeIndexFilter] = useState<string | undefined>(initialIndexFilter)
   const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null)
   const [visibleCols, setVisibleCols] = useColumnVisibility(COL_STORAGE_KEY, OPTIONAL_COLS)
   const [page, setPage] = useState(1)
@@ -264,6 +275,44 @@ export function StockScreener({
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Sector pre-filter banner — shown when page was opened with ?sector= param */}
+      {initialSectorFilter && (
+        <div
+          data-testid="sector-filter-banner"
+          className="flex items-center gap-2 px-3 py-2 bg-teal/10 border border-teal/30 rounded-sm"
+        >
+          <span className="font-sans text-xs text-teal font-medium">
+            Filtering: {initialSectorFilter}
+          </span>
+          <Link
+            href="/stocks"
+            data-testid="sector-filter-clear"
+            className="ml-1 inline-flex items-center text-teal/70 hover:text-teal"
+            aria-label="Clear sector filter"
+          >
+            <X className="w-3 h-3" />
+          </Link>
+        </div>
+      )}
+      {/* Index pre-filter banner — shown when page was opened with ?index= param */}
+      {activeIndexFilter && (
+        <div
+          data-testid="index-filter-banner"
+          className="flex items-center gap-2 px-3 py-2 bg-teal/10 border border-teal/30 rounded-sm"
+        >
+          <span className="font-sans text-xs text-teal font-medium">
+            Filtering: {activeIndexFilter}
+          </span>
+          <Link
+            href="/stocks"
+            data-testid="index-filter-clear"
+            className="ml-1 inline-flex items-center text-teal/70 hover:text-teal"
+            aria-label="Clear index filter"
+          >
+            <X className="w-3 h-3" />
+          </Link>
+        </div>
+      )}
       <ScreenerFilterPanel
         search={search}
         sectorFilter={sectorFilter}
