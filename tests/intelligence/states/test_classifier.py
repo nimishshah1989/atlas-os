@@ -807,3 +807,200 @@ def test_classify_state_panel_state_since_date_resets_on_transition():
     assert by_day.iloc[5]["state"] != by_day.iloc[4]["state"]
     # state_since_date on day 5 should equal day-5 date (just transitioned)
     assert by_day.iloc[5]["state_since_date"] == by_day.iloc[5]["date"]
+
+
+# ---------------------------------------------------------------------------
+# Task 4: Stage 2B/2C reachability — mid-trend admission (Wave 4C)
+# ---------------------------------------------------------------------------
+# A stock observed for the first time (or returning after a data gap) when its
+# structural indicators already show a confirmed uptrend must be admitted directly
+# to Stage 2B or 2C without being forced through a 21-day Stage-2A holding period.
+#
+# The gap: in_stage_2 = is_currently_in_2 and trend_ok. When prior = "stage_1"
+# (default cold-start), is_currently_in_2 = False, so in_stage_2 = False, which
+# blocks 2B/2C regardless of structural conditions. The stock lands in 2A (days=0)
+# and must wait 21 days before advancing — misclassifying a stock already deep
+# in a confirmed uptrend.
+
+
+def _mid_trend_2b_row(instrument_id: str = "mid_trend") -> dict:
+    """A single-row feature dict for a stock clearly in a 2B confirmed uptrend.
+
+    Structural conditions satisfied:
+      - Full uptrend MA stack: close > sma_50 > sma_150 > sma_200
+      - sma_200_slope > 0 (rising long-term trend)
+      - rs_rank_12m * 100 = 80 >= theta_rs=70
+      - distribution_days_5d = 0 (no distribution)
+      - close > sma_50 (price above short MA)
+      - NOT price-extended (close/sma_50 = 105/100 = 1.05, well below theta_extension=1.10)
+      - NOT ATR-expanded (atr_14/atr_14_50d_avg = 1.0, below theta_atr_expansion=1.40)
+
+    This stock has been in an uptrend for 100+ days but the classifier has no
+    prior stage-2 history — prior_state defaults to "stage_1".
+    """
+    return {
+        "instrument_id": instrument_id,
+        "date": pd.Timestamp("2026-03-01").date(),
+        "close": 105.0,
+        "sma_50": 100.0,
+        "sma_150": 95.0,
+        "sma_200": 90.0,
+        "sma_50_slope": 0.002,
+        "sma_150_slope": 0.001,
+        "sma_200_slope": 0.001,
+        "atr_14": 2.0,
+        "atr_14_50d_avg": 2.0,  # ratio = 1.0 < 1.40 (not expanded → not 2C via ATR)
+        "atr_14_252d_avg": 3.0,  # atr/252d = 0.67 < 0.95 (contraction satisfied)
+        "obv_slope_50d": 0.001,
+        "volume": 500_000,
+        "volume_50d_avg": 200_000,
+        "max_close_60d": 106.0,
+        "rs_rank_12m": 0.80,  # 80 >= theta_rs=70
+        "distribution_days_25d": 0,
+        "distribution_days_5d": 0,  # no distribution → 2B condition met
+        "low_252_age_days": 120,
+        "liquidity_score": 5_000_000,
+        "data_gap_count": 0,
+    }
+
+
+def _mid_trend_2c_row(instrument_id: str = "mid_trend_2c") -> dict:
+    """A single-row feature dict for a stock clearly in a 2C mature uptrend.
+
+    Structural 2C trigger: close / sma_50 = 120/100 = 1.20 > theta_extension=1.10
+    (price-extended — would be 2C regardless of days counter).
+    MA stack and RS conditions still met.
+    """
+    return {
+        "instrument_id": instrument_id,
+        "date": pd.Timestamp("2026-03-01").date(),
+        "close": 120.0,
+        "sma_50": 100.0,
+        "sma_150": 95.0,
+        "sma_200": 90.0,
+        "sma_50_slope": 0.003,
+        "sma_150_slope": 0.002,
+        "sma_200_slope": 0.001,
+        "atr_14": 2.0,
+        "atr_14_50d_avg": 2.0,
+        "atr_14_252d_avg": 3.0,
+        "obv_slope_50d": 0.001,
+        "volume": 500_000,
+        "volume_50d_avg": 200_000,
+        "max_close_60d": 118.0,
+        "rs_rank_12m": 0.80,
+        "distribution_days_25d": 0,
+        "distribution_days_5d": 0,
+        "low_252_age_days": 120,
+        "liquidity_score": 5_000_000,
+        "data_gap_count": 0,
+    }
+
+
+def test_stage_2b_direct_admission_from_cold_start():
+    """Task 4 fix: a stock with a confirmed uptrend MA structure first observed
+    without prior stage-2 history (cold start / prior_state effectively stage_1)
+    must be admitted to Stage 2B directly, without spending 21 days in Stage 2A.
+
+    Structural conditions (all met by fixture):
+      - close > sma_50 > sma_150 > sma_200 (full uptrend MA stack)
+      - distribution_days_5d == 0 (no recent selling pressure)
+      - close > sma_50 (price above short MA)
+      - NOT price-extended (close/sma_50 = 1.05 < theta_extension=1.10)
+      - NOT ATR-expanded (ratio = 1.0 < theta_atr_expansion=1.40)
+
+    Expected state: stage_2b (not stage_2a, not stage_1).
+    """
+    panel = classify_state_panel(
+        pd.DataFrame([_mid_trend_2b_row()]), _full_thresholds(), "v1.0-test"
+    )
+    assert (
+        panel.iloc[0]["state"] == "stage_2b"
+    ), f"Expected stage_2b for cold-start mid-trend stock, got {panel.iloc[0]['state']}"
+
+
+def test_stage_2c_direct_admission_from_cold_start():
+    """Task 4 fix: a price-extended stock (close/sma_50 > theta_extension) first
+    observed without prior stage-2 history must be admitted to Stage 2C directly.
+
+    Structural 2C trigger used: extension (close/sma_50 = 1.20 > theta_extension=1.10).
+    Expected state: stage_2c (not stage_2a, not stage_2b, not stage_1).
+    """
+    panel = classify_state_panel(
+        pd.DataFrame([_mid_trend_2c_row()]), _full_thresholds(), "v1.0-test"
+    )
+    assert (
+        panel.iloc[0]["state"] == "stage_2c"
+    ), f"Expected stage_2c for cold-start price-extended stock, got {panel.iloc[0]['state']}"
+
+
+def test_stage_2b_normal_progression_from_stage_1_still_goes_through_2a():
+    """Regression: a stock transitioning from a genuine Stage-1 base (not a
+    confirmed uptrend) still enters Stage 2A first, not 2B directly.
+
+    Stage 1 structural conditions met on day 1 (tightness, contraction, recovery).
+    On day 2, uptrend conditions suddenly met — but days_in_stage_2 = 0 and this
+    is a fresh breakout → must be classified stage_2a, NOT stage_2b.
+
+    This test ensures the mid-trend admission path does NOT admit a genuinely fresh
+    breakout directly to 2B, bypassing the 2A freshness window.
+    """
+    base = pd.Timestamp("2026-01-01")
+    rows = [
+        # Day 1: genuine Stage 1 base (close near sma_150, vol contracted)
+        {
+            "instrument_id": "fresh_break",
+            "date": base.date(),
+            "close": 100.5,  # tightness = 0.005 < 0.10
+            "sma_50": 100.0,
+            "sma_150": 100.0,
+            "sma_200": 99.0,
+            "sma_50_slope": 0.0,
+            "sma_150_slope": 0.0,
+            "sma_200_slope": 0.001,
+            "atr_14": 1.5,
+            "atr_14_50d_avg": 1.5,
+            "atr_14_252d_avg": 2.5,  # ratio = 0.6 < 0.95 → contraction
+            "obv_slope_50d": 0.0,
+            "volume": 100_000,
+            "volume_50d_avg": 100_000,
+            "max_close_60d": 101.0,
+            "rs_rank_12m": 0.75,
+            "distribution_days_25d": 0,
+            "distribution_days_5d": 0,
+            "low_252_age_days": 60,
+            "liquidity_score": 2_000_000,
+            "data_gap_count": 0,
+        },
+        # Day 2: fresh breakout — uptrend MA stack, but only 1 day into stage 2
+        {
+            "instrument_id": "fresh_break",
+            "date": (base + pd.Timedelta(days=1)).date(),
+            "close": 115.0,
+            "sma_50": 108.0,
+            "sma_150": 104.0,
+            "sma_200": 100.0,
+            "sma_50_slope": 0.002,
+            "sma_150_slope": 0.001,
+            "sma_200_slope": 0.001,
+            "atr_14": 2.0,
+            "atr_14_50d_avg": 2.0,
+            "atr_14_252d_avg": 3.0,
+            "obv_slope_50d": 0.001,
+            "volume": 500_000,
+            "volume_50d_avg": 100_000,
+            "max_close_60d": 112.0,
+            "rs_rank_12m": 0.80,
+            "distribution_days_25d": 0,
+            "distribution_days_5d": 0,
+            "low_252_age_days": 61,
+            "liquidity_score": 5_000_000,
+            "data_gap_count": 0,
+        },
+    ]
+    panel = classify_state_panel(pd.DataFrame(rows), _full_thresholds(), "v1.0-test")
+    by_day = panel.sort_values("date").reset_index(drop=True)
+    # Day 2 (index 1): must be stage_2a, NOT stage_2b — this is a fresh breakout
+    assert (
+        by_day.iloc[1]["state"] == "stage_2a"
+    ), f"Fresh breakout must enter 2A first, got {by_day.iloc[1]['state']}"
