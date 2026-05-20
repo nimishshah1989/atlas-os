@@ -2,6 +2,7 @@
 // Mini-table of top-30 peer stocks in the same Weinstein state.
 // Current stock row is highlighted. Pure server component.
 import type { WithinStatePeer } from '@/lib/queries/states'
+import { LinkedTicker } from '@/components/ui/LinkedToken'
 
 interface WithinStatePeersProps {
   peers: WithinStatePeer[]
@@ -88,7 +89,7 @@ export function WithinStatePeers({
                   data-testid={isCurrent ? 'current-peer-row' : undefined}
                 >
                   <td className="py-2 text-ink-tertiary font-mono">{idx + 1}</td>
-                  <td className="py-2">{p.symbol}</td>
+                  <td className="py-2"><LinkedTicker symbol={p.symbol} /></td>
                   <td className="py-2 text-right font-mono">
                     {(p.rs_rank_12m * 100).toFixed(0)}
                   </td>
