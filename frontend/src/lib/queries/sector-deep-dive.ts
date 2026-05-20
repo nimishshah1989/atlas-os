@@ -162,16 +162,20 @@ export async function getSectorSnapshotByName(name: string): Promise<SectorBrief
       m.topdown_index_code,
       m.participation_50::text         AS participation_50,
       m.participation_rs::text         AS participation_rs,
-      -- Phase 7: participation_rs_pct not in unified view; removed in Phase 8.
-      NULL::text                       AS participation_rs_pct,
+      -- participation_rs_pct comes from atlas_sector_states_daily (as a 0–100 pct); normalise to 0–1 fraction.
+      CASE WHEN sd.participation_rs_pct IS NOT NULL
+           THEN (sd.participation_rs_pct / 100.0)::text
+           ELSE NULL
+      END                              AS participation_rs_pct,
       m.leadership_concentration::text AS leadership_concentration,
       s.sector_state,
-      -- Phase 7: bottomup_state/topdown_state/divergence_flag not in unified view; removed in Phase 8.
-      NULL::text                       AS bottomup_state,
-      NULL::text                       AS topdown_state,
-      FALSE                            AS divergence_flag,
-      NULL::text                       AS bottomup_rs_state,
-      NULL::text                       AS bottomup_momentum_state,
+      -- Signal-component states from atlas_sector_states_daily (re-wired from Phase 7 NULL stubs).
+      sd.bottomup_state,
+      sd.topdown_state,
+      COALESCE(sd.divergence_flag, FALSE) AS divergence_flag,
+      sd.bottomup_rs_state,
+      sd.bottomup_momentum_state,
+      -- bottomup_risk_state and bottomup_volume_state not yet computed at sector level.
       NULL::text                       AS bottomup_risk_state,
       NULL::text                       AS bottomup_volume_state,
       m.date AS data_date,
@@ -182,6 +186,8 @@ export async function getSectorSnapshotByName(name: string): Promise<SectorBrief
     FROM atlas.atlas_sector_metrics_daily m
     JOIN atlas.atlas_sector_signal_unified s
       ON m.sector_name = s.sector AND m.date = s.date
+    LEFT JOIN atlas.atlas_sector_states_daily sd
+      ON sd.sector_name = m.sector_name AND sd.date = m.date
     LEFT JOIN momentum mom ON m.sector_name = mom.sector_name
     WHERE m.sector_name = ${name}
       AND m.date = (SELECT MAX(date) FROM atlas.atlas_sector_metrics_daily WHERE sector_name = ${name})

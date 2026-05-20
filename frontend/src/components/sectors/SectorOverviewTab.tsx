@@ -328,22 +328,17 @@ export function SectorOverviewTab({
               </Commentary>
             </div>
 
-            {/* RS Participation */}
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 items-start">
-              <IndicatorChart
-                title="RS Participation — % Stocks with Positive RS"
-                description="Fraction of the sector's stocks outperforming Nifty 500. High = leadership is broad, not concentrated in 1-2 names."
-                currentValue={rawPct(latest?.participation_rs)}
-                isBullish={latest?.participation_rs != null ? parseFloat(latest.participation_rs) > 0.5 : null}
-                data={rsParticData}
-                refLine={0.5}
-                refLabel="50%"
-                variant="area"
-                yFormat="pct"
-              />
-              <Commentary title={`RS Participation Today · ${rawPct(latest?.participation_rs)}`}>
-                {interpretRSPartic(latest?.participation_rs)}
-              </Commentary>
+            {/* RS Participation — suppressed: participation_rs in atlas_sector_metrics_daily writes
+                near-zero values (e.g. 0.02–0.06) rather than true "% of stocks" fractions.
+                TODO(backend): fix the sector-metrics pipeline to compute participation_rs correctly
+                as count(stocks_with_positive_rs) / constituent_count before re-enabling this chart. */}
+            <div className="border border-paper-rule/40 rounded-sm px-5 py-4 bg-paper-rule/5">
+              <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-2">
+                RS Participation — % Stocks with Positive RS
+              </div>
+              <p className="font-sans text-xs text-ink-tertiary italic">
+                RS participation metric under data-quality review — temporarily unavailable.
+              </p>
             </div>
 
             {/* 3M Return */}
