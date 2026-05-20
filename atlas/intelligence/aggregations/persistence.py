@@ -21,11 +21,11 @@ _SECTOR_UPSERT_SQL = text("""
     INSERT INTO atlas.atlas_sector_state_v2 (
         sector, date, dominant_state, dominant_share, n_constituents,
         mean_within_state_rank, pct_stage_2, pct_stage_3, pct_stage_4,
-        pct_stage_1, pct_uninvestable
+        pct_stage_1, pct_uninvestable, sector_state
     ) VALUES (
         :sector, :date, :dominant_state, :dominant_share, :n_constituents,
         :mean_within_state_rank, :pct_stage_2, :pct_stage_3, :pct_stage_4,
-        :pct_stage_1, :pct_uninvestable
+        :pct_stage_1, :pct_uninvestable, :sector_state
     )
     ON CONFLICT (sector, date) DO UPDATE SET
         dominant_state         = EXCLUDED.dominant_state,
@@ -37,6 +37,7 @@ _SECTOR_UPSERT_SQL = text("""
         pct_stage_4            = EXCLUDED.pct_stage_4,
         pct_stage_1            = EXCLUDED.pct_stage_1,
         pct_uninvestable       = EXCLUDED.pct_uninvestable,
+        sector_state           = EXCLUDED.sector_state,
         computed_at            = CURRENT_TIMESTAMP
 """)
 
@@ -48,7 +49,9 @@ def persist_sector_state_v2(engine: Engine, df: pd.DataFrame) -> int:
         engine: SQLAlchemy engine connected to the atlas DB.
         df: DataFrame with columns matching atlas_sector_state_v2 (sector, date,
             dominant_state, dominant_share, n_constituents, mean_within_state_rank,
-            pct_stage_2, pct_stage_3, pct_stage_4, pct_stage_1, pct_uninvestable).
+            pct_stage_2, pct_stage_3, pct_stage_4, pct_stage_1, pct_uninvestable,
+            sector_state). sector_state is produced by aggregate_sector_states()
+            via hybrid_rank_labels (Wave 4A Task 3, migration 094).
 
     Returns:
         Number of rows upserted.
