@@ -515,3 +515,129 @@ class TestMissingCurrentWeight:
         # target should be min(40, 15) = 15.00 (single sector gets full regime_cap, capped)
         assert results[0].target == Decimal("15.00")
         assert results[0].gap == Decimal("15.00")
+
+
+# ---------------------------------------------------------------------------
+# Regression: None sector-signal fields coerced to zero (empty-sector safety)
+#
+# The real sector aggregator (aggregate_sector_states) emits None for
+# mean_within_state_rank and pct_stage_2 when a sector has no classified
+# stocks.  Constructing a SectorSignal with None must NOT raise TypeError,
+# and the resulting target must be Decimal("0") with zero raw contribution.
+# ---------------------------------------------------------------------------
+
+
+class TestNoneSectorSignalCoercion:
+    """SectorSignal(None fields) does not crash; empty sector gets target=0 (C5/T2.4)."""
+
+    def test_mean_within_state_rank_none_does_not_raise(self) -> None:
+        """Constructing SectorSignal with mean_within_state_rank=None must not raise."""
+        sig = SectorSignal(
+            sector="Empty",
+            pct_stage_2=Decimal("0.5"),
+            mean_within_state_rank=None,  # type: ignore[arg-type]
+        )
+        # After __post_init__, field must be coerced to Decimal("0")
+        assert sig.mean_within_state_rank == Decimal("0")
+
+    def test_pct_stage_2_none_does_not_raise(self) -> None:
+        """Constructing SectorSignal with pct_stage_2=None must not raise."""
+        sig = SectorSignal(
+            sector="Empty",
+            pct_stage_2=None,  # type: ignore[arg-type]
+            mean_within_state_rank=Decimal("0.7"),
+        )
+        # After __post_init__, field must be coerced to Decimal("0")
+        assert sig.pct_stage_2 == Decimal("0")
+
+    def test_none_mean_within_state_rank_produces_zero_target(self) -> None:
+        """A sector with mean_within_state_rank=None yields target=0."""
+        signals = [
+            SectorSignal(
+                sector="EmptyA",
+                pct_stage_2=Decimal("0.5"),
+                mean_within_state_rank=None,  # type: ignore[arg-type]
+            ),
+            SectorSignal(
+                sector="Healthy",
+                pct_stage_2=Decimal("0.8"),
+                mean_within_state_rank=Decimal("0.9"),
+            ),
+        ]
+        policy = _make_policy(max_per_sector_pct=Decimal("15"))
+        results = derive_sector_targets(
+            sector_signals=signals,
+            policy=policy,
+            current_weights={"EmptyA": Decimal("5"), "Healthy": Decimal("10")},
+            regime_cap=Decimal("40"),
+        )
+        by_sector = {r.sector: r for r in results}
+        # EmptyA: raw = 0.5 * 0 = 0 → target must be 0
+        got = by_sector["EmptyA"].target
+        assert got == Decimal(
+            "0"
+        ), f"Expected target=0 for None-mean_within_state_rank sector, got {got}"
+        # Healthy: has valid signals, target must be > 0
+        assert by_sector["Healthy"].target > Decimal("0")
+
+    def test_none_pct_stage_2_produces_zero_target(self) -> None:
+        """A sector with pct_stage_2=None yields target=0."""
+        signals = [
+            SectorSignal(
+                sector="EmptyB",
+                pct_stage_2=None,  # type: ignore[arg-type]
+                mean_within_state_rank=Decimal("0.8"),
+            ),
+            SectorSignal(
+                sector="Healthy",
+                pct_stage_2=Decimal("0.7"),
+                mean_within_state_rank=Decimal("0.8"),
+            ),
+        ]
+        policy = _make_policy(max_per_sector_pct=Decimal("15"))
+        results = derive_sector_targets(
+            sector_signals=signals,
+            policy=policy,
+            current_weights={"EmptyB": Decimal("8"), "Healthy": Decimal("6")},
+            regime_cap=Decimal("40"),
+        )
+        by_sector = {r.sector: r for r in results}
+        # EmptyB: raw = 0 * 0.8 = 0 → target must be 0
+        assert by_sector["EmptyB"].target == Decimal(
+            "0"
+        ), f"Expected target=0 for None-pct_stage_2 sector, got {by_sector['EmptyB'].target}"
+
+    def test_all_none_sectors_degenerate_path(self) -> None:
+        """All sectors have None fields → degenerate path, all targets=0, no exception."""
+        signals = [
+            SectorSignal(
+                sector="S1",
+                pct_stage_2=None,  # type: ignore[arg-type]
+                mean_within_state_rank=None,  # type: ignore[arg-type]
+            ),
+            SectorSignal(
+                sector="S2",
+                pct_stage_2=None,  # type: ignore[arg-type]
+                mean_within_state_rank=None,  # type: ignore[arg-type]
+            ),
+            SectorSignal(
+                sector="S3",
+                pct_stage_2=None,  # type: ignore[arg-type]
+                mean_within_state_rank=None,  # type: ignore[arg-type]
+            ),
+        ]
+        policy = _make_policy(max_per_sector_pct=Decimal("15"))
+        results = derive_sector_targets(
+            sector_signals=signals,
+            policy=policy,
+            current_weights={"S1": Decimal("10"), "S2": Decimal("5"), "S3": Decimal("3")},
+            regime_cap=Decimal("40"),
+        )
+        for r in results:
+            assert r.target == Decimal(
+                "0"
+            ), f"{r.sector}.target should be 0 in all-None degenerate case, got {r.target}"
+        # Verify gaps are honest (negative, since current > 0)
+        assert results[0].gap == Decimal("-10")
+        assert results[1].gap == Decimal("-5")
+        assert results[2].gap == Decimal("-3")

@@ -33,6 +33,8 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from atlas.intelligence.policy.policy import Policy
 
+_ZERO = Decimal("0")
+
 # Rounding precision for final target weights (whole-number %, 2 dp).
 _TWO_DP = Decimal("0.01")
 
@@ -49,14 +51,31 @@ class SectorSignal:
     Fields mirror ``aggregate_sector_states`` output columns:
         - pct_stage_2: fraction [0, 1] of the sector's stocks classified in any
           Stage-2 sub-state (stage_2a + stage_2b + stage_2c).
+          None → 0; an empty sector contributes no engine signal.
         - mean_within_state_rank: mean within_state_rank for the sector,
-          fraction [0, 1]. A missing/NaN sector (no constituents) should be
-          passed as Decimal("0") so it receives zero allocation.
+          fraction [0, 1].
+          None → 0; an empty sector contributes no engine signal.
+
+    Both fields accept ``None`` as input (the real sector aggregator emits
+    ``None`` for sectors that have no classified constituents).  A ``__post_init__``
+    coerces ``None`` → ``Decimal("0")`` so all downstream arithmetic is safe.
+    An empty sector therefore receives raw weight 0 and target 0, which is
+    the correct, honest behaviour (C5: no fabricated signal).
     """
 
     sector: str
-    pct_stage_2: Decimal
-    mean_within_state_rank: Decimal
+    pct_stage_2: Decimal | None
+    mean_within_state_rank: Decimal | None
+
+    def __post_init__(self) -> None:
+        """Coerce None fields to Decimal("0") for empty-sector safety.
+
+        Uses ``object.__setattr__`` because the dataclass is frozen.
+        """
+        if self.pct_stage_2 is None:
+            object.__setattr__(self, "pct_stage_2", _ZERO)
+        if self.mean_within_state_rank is None:
+            object.__setattr__(self, "mean_within_state_rank", _ZERO)
 
 
 @dataclass(frozen=True)
@@ -118,8 +137,12 @@ def derive_sector_targets(
     """
     max_per_sector = policy.max_per_sector_pct
 
-    # Step 1: raw scores
-    raws: list[Decimal] = [sig.pct_stage_2 * sig.mean_within_state_rank for sig in sector_signals]
+    # Step 1: raw scores.
+    # __post_init__ guarantees both fields are Decimal (None → 0) after construction,
+    # but pyright reads the annotation (Decimal | None), so we coerce here too.
+    raws: list[Decimal] = [
+        (sig.pct_stage_2 or _ZERO) * (sig.mean_within_state_rank or _ZERO) for sig in sector_signals
+    ]
 
     total_raw = sum(raws, Decimal("0"))
 
