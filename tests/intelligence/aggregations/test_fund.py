@@ -144,31 +144,34 @@ def test_derive_fund_recommendation_aligned_strong_holdings_recommends() -> None
     assert rec == "Recommended"
 
 
-def test_derive_fund_recommendation_deteriorating_recommends_avoid() -> None:
+def test_derive_fund_recommendation_deteriorating_recommends_reduce() -> None:
+    # Deteriorating composition -> Reduce (taxonomy fix: was "Avoid", now "Reduce")
     rec = derive_fund_recommendation(
         nav_state="Weak NAV",
         composition_state="Deteriorating",
         holdings_state="Weak-Holdings",
     )
-    assert rec == "Avoid"
+    assert rec == "Reduce"
 
 
-def test_derive_fund_recommendation_weak_holdings_avoid() -> None:
+def test_derive_fund_recommendation_weak_holdings_reduce() -> None:
+    # Weak holdings with otherwise-aligned composition -> Reduce
     rec = derive_fund_recommendation(
         nav_state="Strong NAV",
         composition_state="Aligned",
         holdings_state="Weak-Holdings",
     )
-    assert rec == "Avoid"
+    assert rec == "Reduce"
 
 
-def test_derive_fund_recommendation_dislocation_suspended_avoid() -> None:
+def test_derive_fund_recommendation_dislocation_suspended_exit() -> None:
+    # DISLOCATION_SUSPENDED is the worst state -> Exit (was "Avoid")
     rec = derive_fund_recommendation(
         nav_state="DISLOCATION_SUSPENDED",
         composition_state="Aligned",
         holdings_state="Strong-Holdings",
     )
-    assert rec == "Avoid"
+    assert rec == "Exit"
 
 
 def test_derive_fund_recommendation_mixed_composition_hold() -> None:

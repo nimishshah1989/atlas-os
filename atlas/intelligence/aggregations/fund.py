@@ -217,17 +217,20 @@ def aggregate_fund_composition(panel: pd.DataFrame) -> pd.DataFrame:
 
 
 # Recommendation lookup table -- (nav, composition, holdings) -> recommendation.
-# Conservative-first: any "Avoid" condition dominates.
+# Vocabulary: Recommended / Hold / Reduce / Exit  (matches atlas_fund_signal_unified view
+# and all frontend consumers: FundIntelligencePanel, RecommendationChip, FundDecisionHistory,
+# FundGlossary, buildSingleFundCommentary).
+# Conservative-first: worst condition wins.
 def derive_fund_recommendation(
     nav_state: str | None,
     composition_state: str,
     holdings_state: str,
 ) -> str:
-    """Map the 3-tuple to Recommended / Hold / Avoid."""
+    """Map the 3-tuple to Recommended / Hold / Reduce / Exit."""
     if nav_state == "DISLOCATION_SUSPENDED":
-        return "Avoid"
+        return "Exit"
     if composition_state == "Deteriorating" or holdings_state == "Weak-Holdings":
-        return "Avoid"
+        return "Reduce"
     if (
         composition_state == "Aligned"
         and holdings_state == "Strong-Holdings"

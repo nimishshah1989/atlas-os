@@ -105,7 +105,7 @@ export function buildSingleFundCommentary(
   let narrative: string
   if (master.nav_state === 'DISLOCATION_SUSPENDED') {
     narrative = `${master.scheme_name} is in DISLOCATION_SUSPENDED state — recommendations are paused during market dislocation. No entry or exit action until the state clears.`
-  } else if (master.recommendation === 'Recommended' && gateCount === 4) {
+  } else if (master.recommendation === 'Recommended') {
     narrative = [
       `${master.scheme_name} is Recommended with all 4 gates passing.`,
       weeksStr ? `In current state for ${weeksStr}.` : null,
