@@ -26,6 +26,30 @@ def test_factor_frame_has_multiindex_and_factor_column(
     assert len(frame) > 0
 
 
+def test_generate_factors_skips_short_history_instruments(
+    ohlcv_panel: pd.DataFrame,
+) -> None:
+    """Instruments with <260 rows must be silently skipped, not raise TypeError."""
+    # Keep aaa/bbb at full 400-row history; truncate ccc to 120 rows.
+    full = ohlcv_panel[ohlcv_panel["instrument_id"].isin(["aaa", "bbb"])]
+    short = ohlcv_panel[ohlcv_panel["instrument_id"] == "ccc"].head(120)
+    panel = pd.concat([full, short], ignore_index=True)
+
+    # Must not raise (previously raised TypeError inside factor lambdas when
+    # pandas-ta returned None for series shorter than the lookback length).
+    factors = generate_factors(panel)
+
+    # ccc must be absent from every factor frame it would have poisoned.
+    assert "ccc" not in factors["roc_252"].index.get_level_values("instrument_id")
+    assert "ccc" not in factors["dist_sma_200"].index.get_level_values("instrument_id")
+    assert "ccc" not in factors["roc_63"].index.get_level_values("instrument_id")
+
+    # aaa and bbb must still be present.
+    ids = set(factors["roc_63"].index.get_level_values("instrument_id"))
+    assert "aaa" in ids
+    assert "bbb" in ids
+
+
 def test_liquidity_mask_flags_low_traded_value(ohlcv_panel: pd.DataFrame) -> None:
     # Force instrument "ccc" to near-zero volume -> illiquid.
     panel = ohlcv_panel.copy()

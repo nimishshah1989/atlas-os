@@ -68,16 +68,22 @@ FACTOR_CATALOG: dict[str, Callable[[pd.DataFrame], pd.Series]] = {  # type: igno
 }
 
 
-def generate_factors(panel: pd.DataFrame) -> dict[str, pd.DataFrame]:
+def generate_factors(panel: pd.DataFrame, *, min_history: int = 260) -> dict[str, pd.DataFrame]:
     """Run the factor catalog across an OHLCV panel.
 
     panel: long DataFrame with date, instrument_id, open/high/low/close/volume.
     Returns dict[factor_name -> DataFrame], each indexed by a
     (date, instrument_id) MultiIndex with a single 'factor' column.
+
+    Instruments with fewer than `min_history` rows are skipped entirely — they
+    cannot support the catalog's longest-lookback factors (roc_252,
+    prox_52w_high/low at 252 days). Default is 260 (a small buffer past 252).
     """
     collected: dict[str, list[pd.DataFrame]] = {name: [] for name in FACTOR_CATALOG}
     for iid, group in panel.groupby("instrument_id", sort=False):
         idf = group.sort_values("date").set_index("date")
+        if len(idf) < min_history:
+            continue
         for name, fn in FACTOR_CATALOG.items():
             series = fn(idf)
             if series is None:
