@@ -48,38 +48,47 @@ def upgrade() -> None:
 
     # 2. Recreate the unified view so sector_state is read from the column.
     #    COALESCE to 'Neutral' for rows that pre-date the hybrid compute run.
-    #    All other columns copied verbatim from migration 084's definition.
+    #
+    #    IMPORTANT: The live view (as of migration 087's hotfix) has numeric(6,4)
+    #    columns for dominant_share, mean_within_state_rank, pct_stage_2/3/4.
+    #    The original 084 body cast those to ::float8, but Postgres rejected that
+    #    replacement on EC2 because CREATE OR REPLACE VIEW cannot change existing
+    #    column types.  We reproduce the LIVE column types exactly — no ::float8
+    #    casts — so CREATE OR REPLACE succeeds.  The only change versus the live
+    #    view is the sector_state expression: CASE replaced by COALESCE(column).
     op.execute("""
         CREATE OR REPLACE VIEW atlas.atlas_sector_signal_unified AS
         SELECT
             s.sector,
             s.date,
             s.dominant_state                                              AS engine_state,
-            s.dominant_share::float8                                      AS dominant_share,
+            s.dominant_share,
             s.n_constituents,
-            s.mean_within_state_rank::float8                              AS mean_within_state_rank,
-            s.pct_stage_2::float8                                         AS pct_stage_2,
-            s.pct_stage_3::float8                                         AS pct_stage_3,
-            s.pct_stage_4::float8                                         AS pct_stage_4,
+            s.mean_within_state_rank,
+            s.pct_stage_2,
+            s.pct_stage_3,
+            s.pct_stage_4,
             COALESCE(s.sector_state, 'Neutral')                           AS sector_state
         FROM atlas.atlas_sector_state_v2 s
     """)
 
 
 def downgrade() -> None:
-    # Restore migration 084's view (absolute CASE on pct_stage_2).
+    # Restore the live view's original sector_state expression (the CASE on
+    # pct_stage_2/3/4).  Column types are kept identical to the live view —
+    # no ::float8 casts — so CREATE OR REPLACE succeeds on downgrade too.
     op.execute("""
         CREATE OR REPLACE VIEW atlas.atlas_sector_signal_unified AS
         SELECT
             s.sector,
             s.date,
             s.dominant_state                                              AS engine_state,
-            s.dominant_share::float8                                      AS dominant_share,
+            s.dominant_share,
             s.n_constituents,
-            s.mean_within_state_rank::float8                              AS mean_within_state_rank,
-            s.pct_stage_2::float8                                         AS pct_stage_2,
-            s.pct_stage_3::float8                                         AS pct_stage_3,
-            s.pct_stage_4::float8                                         AS pct_stage_4,
+            s.mean_within_state_rank,
+            s.pct_stage_2,
+            s.pct_stage_3,
+            s.pct_stage_4,
             CASE
                 WHEN s.pct_stage_2 >= 0.50 THEN 'Overweight'
                 WHEN s.pct_stage_4 >= 0.50 THEN 'Avoid'
