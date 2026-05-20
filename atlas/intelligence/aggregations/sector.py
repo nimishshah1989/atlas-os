@@ -36,10 +36,6 @@ from atlas.intelligence.aggregations.base import (
 )
 from atlas.intelligence.ranking import RankConfig, hybrid_rank_labels
 
-# Equal-weight sentinel: every stock gets weight 1.0 until a market-cap
-# source is available in the atlas schema.
-_EQUAL_WEIGHT = 1.0
-
 # ---------------------------------------------------------------------------
 # Inline defaults for sector band thresholds.
 # Seeded into atlas.atlas_thresholds by migration 095_seed_hybrid_classifier_thresholds.
