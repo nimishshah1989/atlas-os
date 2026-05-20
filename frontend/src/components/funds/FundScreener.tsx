@@ -1,7 +1,6 @@
 // allow-large: FundScreener — 16 column data table with sort, col-toggle, lens bars, vol, and gates
 'use client'
 import { useState, useMemo } from 'react'
-import Link from 'next/link'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import type { FundRow } from '@/lib/queries/funds'
 import type { Period } from '@/lib/url-params'
@@ -19,6 +18,7 @@ import { ColumnToggle, useColumnVisibility, type ColumnDef } from '@/components/
 import { buildSortKey } from '@/lib/screener-utils'
 import { WithinStateRankCell } from '@/components/stocks/WithinStateRankCell'
 import { ProvenanceMarker } from '@/components/ui/ProvenanceMarker'
+import { LinkedFund } from '@/components/ui/LinkedToken'
 
 type Props = {
   funds: FundRow[]
@@ -218,12 +218,10 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
                     className={`border-b border-paper-rule hover:bg-paper-rule/20 transition-colors ${i % 2 === 0 ? '' : 'bg-paper-rule/5'}`}
                   >
                     <td className="px-3 py-2.5 whitespace-nowrap">
-                      <Link href={`/funds/${f.mstar_id}`} className="hover:opacity-80">
-                        <div className="font-sans text-xs font-semibold text-ink-primary truncate max-w-[220px] inline-flex items-center gap-0.5">
-                          {f.scheme_name}
-                          <ProvenanceMarker dataSource={f.data_source} id={f.mstar_id} />
-                        </div>
-                      </Link>
+                      <div className="font-sans text-xs font-semibold truncate max-w-[220px] inline-flex items-center gap-0.5">
+                        <LinkedFund mstarId={f.mstar_id} name={f.scheme_name} />
+                        <ProvenanceMarker dataSource={f.data_source} id={f.mstar_id} />
+                      </div>
                     </td>
                     {visibleCols.has('amc') && (
                       <td className="px-3 py-2.5 font-sans text-xs text-ink-secondary whitespace-nowrap">{f.amc}</td>

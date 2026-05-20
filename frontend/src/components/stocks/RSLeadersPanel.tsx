@@ -1,8 +1,8 @@
-import Link from 'next/link'
 import { TrendingUp, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import type { RSLeaderRow, BreakoutCandidateRow } from '@/lib/queries/leaders'
 import { pct, pctColor, RSPctileBar, RSStateChip, MomentumChip } from '@/lib/stock-formatters'
 import { SectorBadge } from './SectorBadge'
+import { LinkedTicker } from '@/components/ui/LinkedToken'
 
 function StateChangeArrow({ newState }: { newState: string | null }) {
   const positive = newState === 'Leader' || newState === 'Strong'
@@ -40,10 +40,8 @@ function LeadersTable({ leaders }: { leaders: RSLeaderRow[] }) {
             <tr key={r.instrument_id} className="border-b border-paper-rule last:border-0 hover:bg-paper-rule/10">
               <td className="py-1.5 font-mono text-xs text-ink-tertiary tabular-nums">{i + 1}</td>
               <td className="py-1.5 pr-3">
-                <Link href={`/stocks/${encodeURIComponent(r.symbol)}`} className="hover:opacity-80">
-                  <div className="font-sans text-xs font-semibold text-ink-primary">{r.symbol}</div>
-                  <div className="font-sans text-[10px] text-ink-tertiary truncate max-w-[140px]">{r.company_name}</div>
-                </Link>
+                <LinkedTicker symbol={r.symbol} className="font-semibold" />
+                <div className="font-sans text-[10px] text-ink-tertiary truncate max-w-[140px]">{r.company_name}</div>
               </td>
               <td className="py-1.5 pr-3 hidden sm:table-cell">
                 <SectorBadge sector={r.sector ?? ''} />
@@ -93,10 +91,8 @@ function BreakoutsTable({ candidates, label, positive }: { candidates: BreakoutC
             {candidates.map((r) => (
               <tr key={r.instrument_id} className="border-b border-paper-rule last:border-0 hover:bg-paper-rule/10">
                 <td className="py-1.5 pr-3">
-                  <Link href={`/stocks/${encodeURIComponent(r.symbol)}`} className="hover:opacity-80">
-                    <div className="font-sans text-xs font-semibold text-ink-primary">{r.symbol}</div>
-                    <div className="font-sans text-[10px] text-ink-tertiary truncate max-w-[140px]">{r.company_name}</div>
-                  </Link>
+                  <LinkedTicker symbol={r.symbol} className="font-semibold" />
+                  <div className="font-sans text-[10px] text-ink-tertiary truncate max-w-[140px]">{r.company_name}</div>
                 </td>
                 <td className="py-1.5 pr-3 hidden sm:table-cell">
                   <SectorBadge sector={r.sector ?? ''} />

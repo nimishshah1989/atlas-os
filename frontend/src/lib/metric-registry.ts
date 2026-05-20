@@ -1,4 +1,10 @@
 // frontend/src/lib/metric-registry.ts
+//
+// Surface boundary: drives the regime SignalScorecard tiles and stock-detail
+// engine metrics via metric(). Each entry has a label, definition, and formula.
+// Legacy regime/sector ⓘ tooltips (regime overview, sector deep-dive, fund pages)
+// use the TOOLTIPS map in tooltips.ts instead.
+//
 export interface MetricDef { label: string; definition: string; formula: string }
 
 export const METRIC_REGISTRY: Record<string, MetricDef> = {

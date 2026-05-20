@@ -2,6 +2,7 @@
 // allow-large: this file is the main stocks tab — RSDistribution, ReturnConcentration, and the overextension callout must all live here to share the `stocks` array without prop drilling through parent shells
 'use client'
 import { useState, useMemo } from 'react'
+import Link from 'next/link'
 import { Info, AlertTriangle } from 'lucide-react'
 import { RSStateChip } from '@/lib/stock-formatters'
 import type { StockRow } from '@/lib/queries/sector-deep-dive'
@@ -195,6 +196,19 @@ export function SectorStocksTab({
     <div>
       {regime && <MarketRegimeBanner regime={regime} />}
       <div className="px-6 py-6 space-y-5">
+      {/* Screener handoff — step 2→3 of the decision flow */}
+      <div className="flex items-center justify-between">
+        <span className="font-sans text-xs text-ink-tertiary">
+          {stocks.length} stocks in {sectorName}
+        </span>
+        <Link
+          href={`/stocks?sector=${encodeURIComponent(sectorName)}`}
+          className="inline-flex items-center gap-1 font-sans text-xs font-medium text-teal hover:underline"
+        >
+          View all {sectorName} stocks in screener →
+        </Link>
+      </div>
+
       {/* Top Picks callout */}
       <TopPicksCallout stocks={stocks} />
 

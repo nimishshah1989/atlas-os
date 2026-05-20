@@ -1,5 +1,10 @@
 // frontend/src/lib/tooltips.ts
-
+//
+// Surface boundary: drives legacy regime and sector ⓘ tooltips via the TOOLTIPS map.
+// Used by InfoTooltip components on the regime overview, sector deep-dive, and fund pages.
+// Does NOT drive the SignalScorecard tiles or stock-detail engine metrics —
+// those are registered in metric-registry.ts via metric().
+//
 // Every ⓘ tooltip in the app. Add sections as pages are built.
 // Format: one-sentence what-it-is, then how-it-works.
 

@@ -3,6 +3,7 @@
 import { Fragment, useState, useMemo, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { ChevronUp, ChevronDown, X } from 'lucide-react'
+import { LinkedTicker } from '@/components/ui/LinkedToken'
 import type { StockRowWithSector } from '@/lib/queries/stocks'
 import type { ComponentValidation } from '@/lib/queries/component_validation'
 import {
@@ -410,17 +411,11 @@ export function StockScreener({
                       onClick={() => toggleExpanded(row.symbol)}
                       className={`border-b border-paper-rule hover:bg-paper-rule/20 transition-colors cursor-pointer ${i % 2 === 0 ? '' : 'bg-paper-rule/5'} ${isExpanded ? 'bg-paper-rule/30' : ''}`}
                     >
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        <Link
-                          href={`/stocks/${encodeURIComponent(row.symbol)}`}
-                          onClick={e => e.stopPropagation()}
-                          className="hover:opacity-80"
-                        >
-                          <div className="font-sans text-xs font-semibold text-ink-primary">{row.symbol}</div>
-                          <div className="font-sans text-[10px] text-ink-tertiary truncate max-w-[160px]" title={row.company_name}>
-                            {row.company_name}
-                          </div>
-                        </Link>
+                      <td className="px-3 py-2.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                        <LinkedTicker symbol={row.symbol} className="font-semibold" />
+                        <div className="font-sans text-[10px] text-ink-tertiary truncate max-w-[160px]" title={row.company_name}>
+                          {row.company_name}
+                        </div>
                       </td>
                       <td className="px-3 py-2.5 whitespace-nowrap">
                         <span className="font-mono text-[10px] text-ink-tertiary">

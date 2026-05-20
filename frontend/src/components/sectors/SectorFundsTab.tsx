@@ -1,6 +1,6 @@
-import Link from 'next/link'
 import type { SectorFundRow } from '@/lib/queries/sector-funds'
 import { NavStateChip, RecommendationChip } from '@/lib/fund-formatters'
+import { LinkedFund } from '@/components/ui/LinkedToken'
 
 function pct(v: string | null, digits = 1): string {
   if (v == null) return '—'
@@ -79,12 +79,11 @@ export function SectorFundsTab({
               >
                 <td className="px-3 py-2.5 font-mono text-ink-tertiary">{i + 1}</td>
                 <td className="px-3 py-2.5">
-                  <Link
-                    href={`/funds/${f.mstar_id}`}
-                    className="font-semibold text-ink-primary hover:text-teal transition-colors block"
-                  >
-                    {f.scheme_name}
-                  </Link>
+                  <LinkedFund
+                    mstarId={f.mstar_id}
+                    name={f.scheme_name}
+                    className="font-semibold block"
+                  />
                   <div className="text-[10px] text-ink-tertiary">{f.amc} · {f.category_name}</div>
                 </td>
                 <td className="px-3 py-2.5 text-right font-mono font-semibold text-teal">

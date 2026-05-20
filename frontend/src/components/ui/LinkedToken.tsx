@@ -25,21 +25,21 @@ export function LinkedSector({ sector, className = '' }: { sector: string | null
   )
 }
 
-export function LinkedFund({ mstarId, name }: { mstarId: string | null; name: string | null }) {
+export function LinkedFund({ mstarId, name, className = '' }: { mstarId: string | null; name: string | null; className?: string }) {
   if (!mstarId || !name) return dash()
   return (
     <Link href={`/funds/${encodeURIComponent(mstarId)}`}
-      className="text-ink-primary hover:text-teal hover:underline transition-colors">
+      className={`text-ink-primary hover:text-teal hover:underline transition-colors ${className}`}>
       {name}
     </Link>
   )
 }
 
-export function LinkedETF({ ticker }: { ticker: string | null }) {
+export function LinkedETF({ ticker, className = '' }: { ticker: string | null; className?: string }) {
   if (!ticker) return dash()
   return (
     <Link href={`/etfs/${encodeURIComponent(ticker)}`}
-      className="text-ink-primary hover:text-teal hover:underline transition-colors">
+      className={`text-ink-primary hover:text-teal hover:underline transition-colors ${className}`}>
       {ticker}
     </Link>
   )

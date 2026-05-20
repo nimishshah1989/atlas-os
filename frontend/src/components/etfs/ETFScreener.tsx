@@ -1,7 +1,6 @@
 // allow-large: Sprint 2 ETF screener — col toggle, gate badge, expandable rows
 'use client'
 import { Fragment, useState, useMemo } from 'react'
-import Link from 'next/link'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import type { ETFRow } from '@/lib/queries/etfs'
 import type { ComponentValidation } from '@/lib/queries/component_validation'
@@ -11,7 +10,7 @@ import {
 import { ValidatedBadge } from '@/components/ui/ValidatedBadge'
 import { ColumnToggle, useColumnVisibility, type ColumnDef } from '@/components/ui/ColumnToggle'
 import { WithinStateRankCell } from '@/components/stocks/WithinStateRankCell'
-import { LinkedSector } from '@/components/ui/LinkedToken'
+import { LinkedSector, LinkedETF } from '@/components/ui/LinkedToken'
 import { ProvenanceMarker } from '@/components/ui/ProvenanceMarker'
 
 const RS_ORDER = ['Leader', 'Strong', 'Consolidating', 'Emerging', 'Average', 'Weak', 'Laggard']
@@ -342,21 +341,15 @@ export function ETFScreener({ etfs, validations = [] }: { etfs: ETFRow[]; valida
                       onClick={() => toggleExpanded(row.ticker)}
                       className={`border-b border-paper-rule hover:bg-paper-rule/20 transition-colors cursor-pointer ${i % 2 === 0 ? '' : 'bg-paper-rule/5'} ${isExpanded ? 'bg-paper-rule/30' : ''}`}
                     >
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        <Link
-                          href={`/etfs/${encodeURIComponent(row.ticker)}`}
-                          onClick={e => e.stopPropagation()}
-                          className="hover:opacity-80"
-                        >
-                          <div className="font-sans text-xs font-semibold text-ink-primary inline-flex items-center gap-0.5">
-                            {row.ticker}
-                            <ProvenanceMarker dataSource={row.data_source} id={row.ticker} />
-                          </div>
-                          <div className="font-sans text-[10px] text-ink-tertiary truncate max-w-[200px]" title={row.etf_name ?? ''}>
-                            {row.etf_name ?? '—'}
-                          </div>
-                          <TriggerBadges row={row} />
-                        </Link>
+                      <td className="px-3 py-2.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                        <div className="font-sans text-xs font-semibold inline-flex items-center gap-0.5">
+                          <LinkedETF ticker={row.ticker} />
+                          <ProvenanceMarker dataSource={row.data_source} id={row.ticker} />
+                        </div>
+                        <div className="font-sans text-[10px] text-ink-tertiary truncate max-w-[200px]" title={row.etf_name ?? ''}>
+                          {row.etf_name ?? '—'}
+                        </div>
+                        <TriggerBadges row={row} />
                       </td>
                       <td className="px-3 py-2.5">
                         <ThemeBadge theme={row.theme} />

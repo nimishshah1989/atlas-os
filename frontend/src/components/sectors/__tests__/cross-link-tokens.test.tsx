@@ -2,12 +2,14 @@
  * Task 1.6 — Sector cross-link tests
  * Verifies that stock symbols in sector tables use <LinkedTicker> (real hrefs),
  * sector chips use <LinkedSector>, and SectorDecisionTable leader symbols are linked.
+ * Wave-1 B1 — SectorStocksTab renders a link to the pre-filtered screener.
  */
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { StocksTable } from '../StocksTable'
 import { TopPicksCallout } from '../TopPicksCallout'
 import { SectorDecisionTable } from '../SectorDecisionTable'
+import { SectorStocksTab } from '../SectorStocksTab'
 import type { StockRow } from '@/lib/queries/sector-deep-dive'
 
 // SectorDecisionTable imports a 'use server' action — mock to avoid module resolution error in jsdom
@@ -44,6 +46,34 @@ function makeStockRow(overrides: Partial<StockRow> = {}): StockRow {
     ...overrides,
   }
 }
+
+describe('SectorStocksTab — sector→screener handoff link (B1)', () => {
+  it('renders a link with href /stocks?sector=<encoded name>', () => {
+    render(
+      <SectorStocksTab
+        sectorName="Financial Services"
+        stocks={[makeStockRow()]}
+        range="3M"
+        regime={null}
+      />,
+    )
+    const link = screen.getByRole('link', { name: /Financial Services.*screener|screener.*Financial Services|View all.*Financial Services|Financial Services.*stocks/i })
+    expect(link).toHaveAttribute('href', '/stocks?sector=Financial%20Services')
+  })
+
+  it('encodes special characters in sector name', () => {
+    render(
+      <SectorStocksTab
+        sectorName="Oil & Gas"
+        stocks={[makeStockRow()]}
+        range="3M"
+        regime={null}
+      />,
+    )
+    const link = screen.getByRole('link', { name: /Oil.*Gas.*screener|screener.*Oil.*Gas|View all.*Oil|Oil.*Gas.*stocks/i })
+    expect(link).toHaveAttribute('href', '/stocks?sector=Oil%20%26%20Gas')
+  })
+})
 
 describe('StocksTable — LinkedTicker for stock symbols', () => {
   it('renders stock symbol as a link to /stocks/[symbol]', () => {
