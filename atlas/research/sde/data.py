@@ -66,15 +66,17 @@ def adjust_ohlc(long_df: pd.DataFrame) -> pd.DataFrame:
     and close falls back to the raw close.
     """
     df = long_df.copy()
-    close_raw = pd.to_numeric(df["close"], errors="coerce")
-    close_adj = pd.to_numeric(df["close_adj"], errors="coerce")
-    ratio = (close_adj / close_raw).where(close_adj.notna() & (close_raw > 0), 1.0)
+    df["close"] = pd.to_numeric(df["close"], errors="coerce")
+    df["close_adj"] = pd.to_numeric(df["close_adj"], errors="coerce")
+    ratio = (df["close_adj"] / df["close"]).where(df["close_adj"].notna() & (df["close"] > 0), 1.0)
     for col in ("open", "high", "low"):
-        df[col] = pd.to_numeric(df[col], errors="coerce") * ratio
-    df["close"] = close_adj.where(close_adj.notna(), close_raw)
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+        df[col] = df[col] * ratio
+    df["close"] = df["close_adj"].where(df["close_adj"].notna(), df["close"])
     df["volume"] = pd.to_numeric(df["volume"], errors="coerce")
     df["date"] = pd.to_datetime(df["date"])
-    return df[["date", "instrument_id", "open", "high", "low", "close", "volume"]]
+    out: pd.DataFrame = df[["date", "instrument_id", "open", "high", "low", "close", "volume"]]  # type: ignore[assignment]
+    return out
 
 
 def mask_extreme_moves(panel: pd.DataFrame, *, max_daily_move: float = 0.40) -> pd.DataFrame:
