@@ -1,6 +1,7 @@
 // frontend/src/components/regime/RegimeVerdict.tsx
 // One-line verdict sentence derived from regime state + deployment % + leading sectors.
 // Pure presentational: no DB, no async. Called from page.tsx (server component).
+import { LinkedSector } from '@/components/ui/LinkedToken'
 
 type Props = {
   regimeState: string
@@ -8,28 +9,24 @@ type Props = {
   leadingSectors: string[]
 }
 
-function buildVerdict(regimeState: string, deploymentPct: number, leadingSectors: string[]): string {
-  const sectorPart =
-    leadingSectors.length > 0
-      ? ` Focus on leading sectors: ${leadingSectors.slice(0, 3).join(', ')}.`
-      : ''
-
+function buildVerdictPrefix(regimeState: string, deploymentPct: number): string {
   switch (regimeState) {
     case 'Risk-On':
-      return `Risk-On — deploy ${deploymentPct}%. Add Leader/Strong names broadly across the market.${sectorPart}`
+      return `Risk-On — deploy ${deploymentPct}%. Add Leader/Strong names broadly across the market.`
     case 'Constructive':
-      return `Constructive — deploy ${deploymentPct}%. Add Stage 2a/2b breakouts; prefer leading sectors.${sectorPart}`
+      return `Constructive — deploy ${deploymentPct}%. Add Stage 2a/2b breakouts; prefer leading sectors.`
     case 'Cautious':
-      return `Cautious — deploy ${deploymentPct}%. Add Leader/Strong names in leading sectors only. Trim Stage 3→4 holdings.${sectorPart}`
+      return `Cautious — deploy ${deploymentPct}%. Add Leader/Strong names in leading sectors only. Trim Stage 3→4 holdings.`
     case 'Risk-Off':
-      return `Risk-Off — deploy ${deploymentPct}%. Preserve capital. Hold only highest-conviction Stage 2 positions.${sectorPart}`
+      return `Risk-Off — deploy ${deploymentPct}%. Preserve capital. Hold only highest-conviction Stage 2 positions.`
     default:
-      return `${regimeState} — deploy ${deploymentPct}%.${sectorPart}`
+      return `${regimeState} — deploy ${deploymentPct}%.`
   }
 }
 
 export function RegimeVerdict({ regimeState, deploymentPct, leadingSectors }: Props) {
-  const verdict = buildVerdict(regimeState, deploymentPct, leadingSectors)
+  const prefix = buildVerdictPrefix(regimeState, deploymentPct)
+  const topSectors = leadingSectors.slice(0, 3)
 
   const accentColor =
     regimeState === 'Risk-On'      ? 'text-signal-pos' :
@@ -47,7 +44,18 @@ export function RegimeVerdict({ regimeState, deploymentPct, leadingSectors }: Pr
         className={`font-serif text-base leading-snug ${accentColor}`}
         data-testid="regime-verdict"
       >
-        {verdict}
+        {prefix}
+        {topSectors.length > 0 && (
+          <span>
+            {' '}Focus on leading sectors:{' '}
+            {topSectors.map((sector, i) => (
+              <span key={sector}>
+                <LinkedSector sector={sector} className="font-serif" />
+                {i < topSectors.length - 1 ? ', ' : '.'}
+              </span>
+            ))}
+          </span>
+        )}
       </p>
     </div>
   )

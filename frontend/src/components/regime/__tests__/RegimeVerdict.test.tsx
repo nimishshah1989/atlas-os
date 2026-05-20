@@ -35,6 +35,14 @@ describe('RegimeVerdict', () => {
     expect(el.textContent).toMatch(/Banking/)
   })
 
+  it('leading sectors are rendered as LinkedSector anchors pointing to /sectors/[name]', () => {
+    render(<RegimeVerdict {...BASE_PROPS} />)
+    const bankingLink = screen.getByRole('link', { name: /Banking/ })
+    expect(bankingLink).toHaveAttribute('href', '/sectors/Banking')
+    const techLink = screen.getByRole('link', { name: /Technology/ })
+    expect(techLink).toHaveAttribute('href', '/sectors/Technology')
+  })
+
   it('renders Risk-On verdict with 100% deployment', () => {
     render(<RegimeVerdict regimeState="Risk-On" deploymentPct={100} leadingSectors={['IT', 'Pharma']} />)
     const el = screen.getByTestId('regime-verdict')

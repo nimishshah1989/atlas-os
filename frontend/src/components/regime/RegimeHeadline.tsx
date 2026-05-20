@@ -1,5 +1,7 @@
 import { TrendingUp, TrendingDown, AlertTriangle, Activity, ChevronRight, Flame, Info } from 'lucide-react'
 import { SignalGauge } from './SignalGauge'
+import { InfoTooltip } from '@/components/ui/InfoTooltip'
+import { TOOLTIPS } from '@/lib/tooltips'
 import {
   getRegimeTintClass,
   getRegimeAccentClass,
@@ -194,6 +196,7 @@ export function RegimeHeadline({ regime }: Props) {
         <div className="flex items-center gap-5 font-mono text-xs tabular-nums text-ink-tertiary">
           {vix && (
             <span
+              className="inline-flex items-center gap-1"
               data-validator-id={`regime.india_vix:${regime.date instanceof Date ? regime.date.toISOString().split('T')[0] : String(regime.date)}`}
               data-validator-raw={regime.india_vix ?? ''}
             >
@@ -201,6 +204,7 @@ export function RegimeHeadline({ regime }: Props) {
               <span className={`font-medium ${parseFloat(vix) > 25 ? 'text-signal-neg' : parseFloat(vix) > 18 ? 'text-signal-warn' : 'text-ink-primary'}`}>
                 {vix}
               </span>
+              <InfoTooltip content={TOOLTIPS.india_vix} />
             </span>
           )}
           <span

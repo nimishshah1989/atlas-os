@@ -51,6 +51,15 @@ describe('TodayWorklist', () => {
     expect(screen.getByRole('link', { name: /HINDUNILVR/ })).toHaveAttribute('href', '/stocks/HINDUNILVR')
   })
 
+  it('breakout symbols are rendered as LinkedTicker anchors pointing to /stocks/[symbol]', () => {
+    render(<TodayWorklist data={WORKLIST_DATA} />)
+    // Each breakout symbol should be a link to its detail page
+    const anantrajLink = screen.getByRole('link', { name: /ANANTRAJ/ })
+    expect(anantrajLink).toHaveAttribute('href', '/stocks/ANANTRAJ')
+    const relianceLink = screen.getByRole('link', { name: /RELIANCE/ })
+    expect(relianceLink).toHaveAttribute('href', '/stocks/RELIANCE')
+  })
+
   it('renders zero counts gracefully', () => {
     const emptyData: WorklistData = {
       sectorsEnteredFavour: 0,

@@ -80,6 +80,23 @@ export function TodayWorklist({ data }: Props) {
         </div>
       </div>
 
+      {data.breakoutSymbols.length > 1 && (
+        <div className="border border-signal-pos/20 rounded-sm bg-signal-pos/5 px-4 py-3 mb-2">
+          <div className="font-sans text-[10px] text-signal-pos uppercase tracking-wider mb-2">
+            Fresh Breakouts
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+            {data.breakoutSymbols.map((sym) => (
+              <LinkedTicker
+                key={sym}
+                symbol={sym}
+                className="font-mono text-xs font-semibold"
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {data.deterioratingSymbols.length > 0 && (
         <div className="border border-signal-neg/20 rounded-sm bg-signal-neg/5 px-4 py-3">
           <div className="font-sans text-[10px] text-signal-neg uppercase tracking-wider mb-2">

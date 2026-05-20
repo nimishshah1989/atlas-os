@@ -42,6 +42,41 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
     definition: 'Volatility tier from 63-day realized volatility, quartiled across the day cohort.',
     formula: 'NTILE(4) OVER (ORDER BY realized_vol_63): Low / Normal / Elevated / High.',
   },
+  india_vix: {
+    label: 'India VIX',
+    definition: 'India VIX is the NSE\'s implied volatility index derived from Nifty 50 options. Values above 20 indicate elevated fear in the options market. Used as a regime corroborator — high VIX suppresses deployment even when breadth is otherwise constructive.',
+    formula: 'NSE-published daily fixing. Stored in atlas_market_regime_daily.india_vix. Thresholds: <18 = calm, 18–25 = elevated, >25 = stressed.',
+  },
+  ad_ratio: {
+    label: 'Advance/Decline Ratio',
+    definition: 'Ratio of stocks advancing to stocks declining across the 750-stock Nifty 500 universe on a given day. Values above 1 mean more stocks are rising than falling — a basic breadth health check.',
+    formula: 'advances_count / declines_count · source: atlas_market_regime_daily. Computed from NSE daily price changes.',
+  },
+  ad_line_slope_21: {
+    label: 'A/D Line Slope (21D)',
+    definition: '21-day slope of the cumulative Advance/Decline line, expressed in standard-deviation units of daily A/D net changes over the same window. Positive = A/D line is rising (healthy internals). Divergence between this and the index is an early warning.',
+    formula: 'OLS slope of ad_line over last 21 trading days, divided by stddev(daily_net_advances, 21D) · source: atlas_market_regime_daily.',
+  },
+  mcclellan_oscillator: {
+    label: 'McClellan Oscillator',
+    definition: 'Short-term breadth momentum oscillator. The difference between the 19-day EMA and 39-day EMA of daily net advances (advances minus declines). Positive = breadth is accelerating upward; negative = decelerating. Zero-line crossovers are transition signals.',
+    formula: 'EMA(19, net_advances) − EMA(39, net_advances) · source: atlas_market_regime_daily.mcclellan_oscillator.',
+  },
+  mcclellan_summation: {
+    label: 'McClellan Summation Index',
+    definition: 'Cumulative running sum of the McClellan Oscillator. An intermediate-term breadth trend indicator. Structurally bullish above zero; deep negative readings require sustained improvement to reverse. Slower and more reliable than the oscillator for regime change.',
+    formula: 'CUMSUM(mcclellan_oscillator) reset at market structure change · source: atlas_market_regime_daily.mcclellan_summation.',
+  },
+  net_new_highs: {
+    label: 'Net New Highs (52W)',
+    definition: 'New 52-week highs minus new 52-week lows. Positive = more stocks at annual highs than lows (healthy internal expansion). Sustained negative readings — persistent for 30+ days — have historically defined bear markets.',
+    formula: 'new_52w_highs − new_52w_lows · source: atlas_market_regime_daily. Rolling 252-trading-day lookback for high/low classification.',
+  },
+  new_high_low_ratio: {
+    label: 'New High/Low Ratio',
+    definition: 'Normalizes new 52-week highs vs new lows. Values above 1 are bullish (more highs than lows). Smooths the absolute count to adjust for universe size and avoids zero-denominator on days with no new lows.',
+    formula: 'new_52w_highs / MAX(new_52w_lows, 1) · source: atlas_market_regime_daily.',
+  },
 }
 
 export function metric(key: string): MetricDef | null {
