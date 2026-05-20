@@ -189,11 +189,27 @@ def test_respect_regime_cap_is_true() -> None:
 
 
 def test_insert_sql_has_on_conflict_do_nothing() -> None:
-    """Idempotency guard: INSERT must use ON CONFLICT DO NOTHING."""
+    """Idempotency guard: INSERT must target the partial unique index explicitly.
+
+    Bare `ON CONFLICT DO NOTHING` (no inference clause) does NOT match partial
+    indexes in Postgres, so the conflict target must include both the column
+    AND the index predicate: ON CONFLICT (is_house_default) WHERE is_house_default
+    """
     from scripts.seed_house_policy import INSERT_SQL
 
-    assert "ON CONFLICT" in INSERT_SQL.upper()
-    assert "DO NOTHING" in INSERT_SQL.upper()
+    sql_upper = INSERT_SQL.upper()
+    assert "ON CONFLICT" in sql_upper
+    assert "DO NOTHING" in sql_upper
+    # Conflict target must name the column so Postgres can infer the partial index
+    assert (
+        "(IS_HOUSE_DEFAULT)" in sql_upper
+    ), "ON CONFLICT clause must include explicit conflict target (is_house_default)"
+    # The WHERE predicate is REQUIRED to match the partial unique index
+    # uix_portfolio_policy_house_default (defined with postgresql_where="is_house_default")
+    assert "WHERE IS_HOUSE_DEFAULT" in sql_upper, (
+        "ON CONFLICT clause must include WHERE is_house_default predicate "
+        "to match the partial unique index — bare ON CONFLICT DO NOTHING is insufficient"
+    )
 
 
 def test_main_function_is_callable() -> None:

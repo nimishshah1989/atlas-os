@@ -121,7 +121,7 @@ INSERT_SQL = """
         :benchmark,
         :rebalance_cadence
     )
-    ON CONFLICT DO NOTHING
+    ON CONFLICT (is_house_default) WHERE is_house_default DO NOTHING
 """
 
 # ---------------------------------------------------------------------------
