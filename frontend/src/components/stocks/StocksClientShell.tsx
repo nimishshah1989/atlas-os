@@ -3,6 +3,7 @@ import { useState } from 'react'
 import type { StockRowWithSector } from '@/lib/queries/stocks'
 import type { ComponentValidation } from '@/lib/queries/component_validation'
 import type { RSLeaderRow, BreakoutCandidateRow } from '@/lib/queries/leaders'
+import type { PolicyEntryParams } from '@/lib/policy-entry-filter'
 import { StockBreadthPanel } from './StockBreadthPanel'
 import { StockBubbleChart } from './StockBubbleChart'
 import { StockIntelligencePanel } from './StockIntelligencePanel'
@@ -23,6 +24,7 @@ export function StocksClientShell({
   deterioration,
   initialSectorFilter,
   initialIndexFilter,
+  policyEntryParams,
 }: {
   stocks: StockRowWithSector[]
   regimeState: string
@@ -33,6 +35,8 @@ export function StocksClientShell({
   deterioration: BreakoutCandidateRow[]
   initialSectorFilter?: string
   initialIndexFilter?: string
+  /** Policy entry-rule params for flow mode (active portfolio + sector filter). */
+  policyEntryParams?: PolicyEntryParams
 }) {
   const [maFilter, setMaFilter] = useState<MaFilter>(null)
   const [activeView, setActiveView] = useState<ActiveView>('overview')
@@ -88,6 +92,7 @@ export function StocksClientShell({
             validations={validations}
             initialSectorFilter={initialSectorFilter}
             initialIndexFilter={initialIndexFilter}
+            policyEntryParams={policyEntryParams}
           />
         </>
       ) : (

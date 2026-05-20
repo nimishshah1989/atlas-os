@@ -276,6 +276,7 @@ export function SectorOverviewTab({
         pct_stage_2: snapshot.pct_stage_2,
         pct_stage_3: snapshot.pct_stage_3,
         pct_stage_4: snapshot.pct_stage_4,
+        mean_within_state_rank: snapshot.mean_within_state_rank,
       }} />
 
       {/* State stats */}

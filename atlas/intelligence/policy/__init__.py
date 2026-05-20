@@ -1,4 +1,4 @@
-"""Policy module — effective-policy resolution, validation, and sector targets.
+"""Policy module — effective-policy resolution, validation, sector targets, and entry filter.
 
 Public surface:
 - ``Policy`` — frozen dataclass representing the merged effective policy
@@ -8,8 +8,14 @@ Public surface:
 - ``SectorSignal`` — per-sector bottom-up signal (pct_stage_2, mean_within_state_rank)
 - ``SectorTarget`` — per-sector derived target (sector, current, target, gap)
 - ``derive_sector_targets`` — pure formula: engine signal ∩ policy cap ∩ regime cap
+- ``CandidateInstrument`` — instrument with state/rank fields for entry filtering
+- ``apply_entry_filter`` — pure filter: buy_states ∩ rank thresholds
 """
 
+from atlas.intelligence.policy.entry_filter import (
+    CandidateInstrument,
+    apply_entry_filter,
+)
 from atlas.intelligence.policy.policy import (
     Policy,
     _merge,
@@ -30,4 +36,6 @@ __all__ = [
     "SectorSignal",
     "SectorTarget",
     "derive_sector_targets",
+    "CandidateInstrument",
+    "apply_entry_filter",
 ]

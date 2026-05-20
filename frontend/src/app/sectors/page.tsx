@@ -15,18 +15,20 @@ import {
 import { getCurrentRegime } from '@/lib/queries/regime'
 import { getSectorRotationState, type SectorRotationRow } from '@/lib/queries/rotation'
 import { getLeadersBySector } from '@/lib/queries/leaders'
+import { getEffectivePolicy } from '@/lib/queries/policy'
 import { rangeToDays, type TimeRange } from '@/lib/time-range'
 import { getSectorDecision } from '@/lib/sectors-decision'
 import { filterSectors } from '@/lib/sectors-filter'
+import { deriveSectorTargets, type SectorTargetOutput } from '@/lib/sector-targets'
 import { TimeRangeToggle } from '@/components/ui/TimeRangeToggle'
 import { SectorViews } from '@/components/sectors/SectorViews'
 import { SectorRiskWatch } from '@/components/sectors/SectorRiskWatch'
 import { IntradaySectorMovers } from '@/components/sectors/IntradaySectorMovers'
 
-type SearchParams = Promise<{ range?: string; tab?: string }>
+type SearchParams = Promise<{ range?: string; tab?: string; portfolio?: string }>
 
 export default async function SectorsPage({ searchParams }: { searchParams: SearchParams }) {
-  const { range = '6M' } = await searchParams
+  const { range = '6M', portfolio: portfolioId } = await searchParams
   const VALID_RANGES: TimeRange[] = ['1W', '1M', '3M', '6M', '1Y']
   const historyRange: TimeRange = VALID_RANGES.includes(range as TimeRange)
     ? (range as TimeRange)
@@ -58,6 +60,8 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
   // Build a name → rotation lookup so downstream components can read
   // rrg_quadrant / rs_velocity off the snapshot without re-querying.
   const rotationByName = new Map(rotation.map(r => [r.sector_name, r]))
+  // rotationByName is currently unused by sub-components; carried for future wiring.
+  void rotationByName
 
   if (allRaw.length === 0) {
     return (
@@ -84,6 +88,37 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
   const avoidCount       = actionableWithDecision.filter(s => s.sector_state === 'Avoid').length
   const dataDate = allRaw[0]?.data_date
 
+  // Policy-capped sector targets — only computed when ?portfolio= is present.
+  // If no active portfolio: sectorTargets=undefined → SectorViews shows engine view only.
+  // The deployment_multiplier is the regime cap fraction [0,1]; multiply by 100 for whole-%.
+  let sectorTargets: SectorTargetOutput[] | undefined
+
+  if (portfolioId) {
+    try {
+      const policy = await getEffectivePolicy(portfolioId)
+      if (policy !== null) {
+        const maxPerSectorPct = parseFloat(
+          (policy.max_per_sector_pct.value as string | null) ?? '15'
+        )
+        // regime deployment_multiplier is a fraction [0,1]; convert to whole-number pct
+        const regimeCap = Number(regime?.deployment_multiplier ?? '1') * 100
+
+        sectorTargets = deriveSectorTargets(
+          allRaw.map(s => ({
+            sector: s.sector_name,
+            pct_stage_2: s.pct_stage_2,
+            mean_within_state_rank: s.mean_within_state_rank,
+          })),
+          {}, // current weights: no per-portfolio holdings wired yet — defaults to 0 for all sectors
+          regimeCap,
+          maxPerSectorPct,
+        )
+      }
+    } catch {
+      // Non-fatal: targets load failure degrades to engine view only.
+    }
+  }
+
   return (
     <div className="max-w-[1400px] mx-auto">
       {/* Header band */}
@@ -109,6 +144,12 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
               <span className="flex items-center gap-1.5 font-sans text-xs text-ink-secondary">
                 <span className="inline-block w-2 h-2 rounded-full bg-signal-neg" />
                 {avoidCount} Avoid
+              </span>
+            )}
+            {sectorTargets && (
+              <span className="flex items-center gap-1.5 font-sans text-xs text-teal">
+                <span className="inline-block w-2 h-2 rounded-full bg-teal" />
+                Policy targets active
               </span>
             )}
           </div>
@@ -151,6 +192,7 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
           rotation={rotation}
           leadersBySector={leadersBySector}
           ctsPivot={ctsPivot}
+          sectorTargets={sectorTargets}
         />
       </Suspense>
     </div>

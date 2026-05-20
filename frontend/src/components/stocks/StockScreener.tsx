@@ -13,6 +13,7 @@ import { SectorBadge } from './SectorBadge'
 import { useColumnVisibility } from '@/components/ui/ColumnToggle'
 import { WithinStateRankCell } from './WithinStateRankCell'
 import { ValidatedBadge } from '@/components/ui/ValidatedBadge'
+import { applyEntryFilter, type PolicyEntryParams } from '@/lib/policy-entry-filter'
 
 const STAGE_LABEL: Record<string, string> = {
   stage_1: '1 BASE',
@@ -64,12 +65,15 @@ export function StockScreener({
   validations = [],
   initialSectorFilter,
   initialIndexFilter,
+  policyEntryParams,
 }: {
   stocks: StockRowWithSector[]
   maFilter?: 'above_30w_ma' | 'above_50d_ma' | 'above_200d_ma' | null
   validations?: ComponentValidation[]
   initialSectorFilter?: string
   initialIndexFilter?: string
+  /** When set (flow mode with active portfolio + sector filter), applies policy entry rules. */
+  policyEntryParams?: PolicyEntryParams
 }) {
   // When a URL-seeded sector filter is active, default sort to within_state_rank desc.
   const defaultSortKey: SortKey = initialSectorFilter ? 'within_state_rank' : 'cap_rank'
@@ -129,6 +133,26 @@ export function StockScreener({
   function toggleExpanded(symbol: string) {
     setExpandedSymbol(prev => prev === symbol ? null : symbol)
   }
+
+  // Policy entry filter: computed before UI filters so the "N of M" count reflects
+  // the full sector-filtered set, not just the current page/chip.
+  // Only active when both policyEntryParams and a sectorFilter are set (flow mode).
+  // The count is real — derived from the same stocks array as the screener.
+  const policyPassCount = useMemo(() => {
+    if (!policyEntryParams || !initialSectorFilter) return null
+    const sectorStocks = stocks.filter(s => s.sector === initialSectorFilter)
+    const passed = applyEntryFilter(
+      sectorStocks.map(s => ({
+        instrument_id: s.instrument_id,
+        symbol: s.symbol,
+        engine_state: s.engine_state,
+        within_state_rank: s.within_state_rank,
+        rs_rank_12m: s.rs_rank_12m,
+      })),
+      policyEntryParams,
+    )
+    return { pass: passed.length, total: sectorStocks.length }
+  }, [stocks, policyEntryParams, initialSectorFilter])
 
   const filtered = useMemo(() => {
     let result = stocks
@@ -312,6 +336,18 @@ export function StockScreener({
           >
             <X className="w-3 h-3" />
           </Link>
+        </div>
+      )}
+      {/* Policy entry-rule banner — shown in flow mode (active portfolio + sector filter) */}
+      {policyPassCount !== null && (
+        <div
+          data-testid="policy-entry-filter-banner"
+          className="flex items-center gap-2 px-3 py-2 bg-paper-rule/20 border border-paper-rule rounded-sm"
+        >
+          <span className="font-sans text-xs text-ink-secondary">
+            <span className="font-semibold text-ink-primary">{policyPassCount.pass} of {policyPassCount.total}</span>
+            {' '}stocks in this sector pass your portfolio&apos;s entry rules
+          </span>
         </div>
       )}
       <ScreenerFilterPanel
