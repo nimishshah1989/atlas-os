@@ -118,6 +118,21 @@ def classify_stage_2a(
 ) -> bool:
     """Stage 2A (Fresh Breakout). Only fires on transition from Stage 1 or 4.
 
+    Active gates (IC-validated):
+      - prior_state in ("stage_1", "stage_4") — transition gate
+      - close > sma_50 > sma_150 > sma_200 — MA stack (uptrend aligned)
+      - sma_200_slope > 0 — rising long-term trend
+      - rs_rank_12m * 100 >= theta_rs — relative strength filter
+      - days_in_stage_2 <= theta_fresh_days — freshness window
+
+    REMOVED gate (Wave 4C Task 3):
+      close >= theta_base_breakout * max_close_60d (breakout ratio)
+      Reason: IC validation showed IR 0.107/0.145 — below the 0.2 weak floor.
+      Top-breakout-ratio quintile underperforms the bottom (mildly anti-predictive).
+      theta_base_breakout row kept dormant in atlas_thresholds (no migration needed).
+      The breakout_ratio factor in tune_catalog.py is retained as a catalogued factor.
+      NOTE: Stage-2A IC re-validation is required (Task 5) before this ships.
+
     IC note: volume_today/volume_50d_avg had IR 0.15 at 21d — decorative.
     Volume requirement removed in migration 078; volume columns remain in the
     feature DF for other uses (OBV, liquidity_score) but are not checked here.
@@ -126,12 +141,12 @@ def classify_stage_2a(
         return False
     if any(_is_nan(v) for v in (close, sma_50, sma_150, sma_200, sma_200_slope, rs_rank_12m)):
         return False
-    if max_close_60d <= 0:
-        return False
+    # max_close_60d is still accepted as a parameter (used by callers / feature panel)
+    # but is no longer used as a gate here — the breakout_ratio gate was removed.
+    _ = max_close_60d
     return (
         close > sma_50 > sma_150 > sma_200
         and sma_200_slope > 0
-        and close >= get_threshold(thresholds, "theta_base_breakout", "stage_2a") * max_close_60d
         and rs_rank_12m * 100 >= get_threshold(thresholds, "theta_rs", "stage_2a")
         and days_in_stage_2 <= get_threshold(thresholds, "theta_fresh_days", "stage_2a")
     )

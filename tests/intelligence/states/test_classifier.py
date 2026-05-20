@@ -1,3 +1,5 @@
+# allow-large: single cohesive test module for the state classifier; covers all 7
+# state predicates + the panel orchestrator in one file for discoverability.
 from atlas.intelligence.states.classifier import (
     classify_stage_1,
     classify_stage_2a,
@@ -226,12 +228,13 @@ def test_stage_1_nan_atr_252d_avg_returns_false():
 # ---------------------------------------------------------------------------
 
 
-def _stage_2a_th(slope_days=30, breakout=1.00, rs=70, fresh_days=21):
+def _stage_2a_th(slope_days=30, rs=70, fresh_days=21):
+    # theta_base_breakout removed: IC-validated INVALID (IR 0.107/0.145, below 0.2 weak
+    # floor; top-breakout-quintile underperforms bottom). Gate removed in Wave 4C Task 3.
     from atlas.intelligence.states.thresholds import ThresholdValue
 
     return {
         ("theta_slope_days", "stage_2a"): ThresholdValue(float(slope_days), None, None),
-        ("theta_base_breakout", "stage_2a"): ThresholdValue(float(breakout), None, None),
         ("theta_rs", "stage_2a"): ThresholdValue(float(rs), None, None),
         ("theta_fresh_days", "stage_2a"): ThresholdValue(float(fresh_days), None, None),
     }
@@ -253,6 +256,57 @@ def test_stage_2a_fresh_breakout():
             thresholds=_stage_2a_th(),
         )
         is True
+    )
+
+
+def test_stage_2a_admits_below_60d_high_after_breakout_gate_removed():
+    """Stock below the 60-day high is still admitted to Stage 2A.
+
+    Wave 4C Task 3: the breakout gate (close >= theta_base_breakout * max_close_60d)
+    was removed after IC validation showed IR 0.107/0.145 (below the 0.2 weak floor)
+    and that the top-breakout-ratio quintile *underperforms* the bottom.
+
+    Fixture: close=100.0, max_close_60d=108.0 — clearly below the 60-day high.
+    All other validated gates pass (prior_state, MA stack, rising SMA-200, RS, fresh).
+    Expected: stage_2a fires (True).
+    """
+    assert (
+        classify_stage_2a(
+            prior_state="stage_1",
+            close=100.0,  # below 60-day high of 108 → old gate: 100 < 1.00*108 → FAIL
+            sma_50=98.0,  # MA stack: close > sma_50 > sma_150 > sma_200
+            sma_150=95.0,
+            sma_200=90.0,
+            sma_200_slope=0.002,  # rising SMA-200
+            max_close_60d=108.0,  # 60-day high above close
+            rs_rank_12m=0.75,  # rs_rank_12m * 100 = 75 >= theta_rs=70
+            days_in_stage_2=3,  # within fresh window
+            thresholds=_stage_2a_th(),
+        )
+        is True
+    )
+
+
+def test_stage_2a_still_rejected_when_rs_too_low():
+    """Removing the breakout gate must not weaken the RS gate.
+
+    A stock that satisfies every gate including being below the 60-day high, but
+    has rs_rank_12m * 100 = 40 < theta_rs=70, must NOT be classified stage_2a.
+    """
+    assert (
+        classify_stage_2a(
+            prior_state="stage_1",
+            close=100.0,
+            sma_50=98.0,
+            sma_150=95.0,
+            sma_200=90.0,
+            sma_200_slope=0.002,
+            max_close_60d=108.0,
+            rs_rank_12m=0.40,  # rs_rank_12m * 100 = 40 < theta_rs=70 → FAIL
+            days_in_stage_2=3,
+            thresholds=_stage_2a_th(),
+        )
+        is False
     )
 
 
@@ -508,9 +562,10 @@ def _full_thresholds():
         ("theta_base_tightness", "stage_1"): tv(0.10),
         ("theta_contraction", "stage_1"): tv(0.95),
         ("theta_min_recovery_days", "stage_1"): tv(30),
-        # Stage 2A — theta_vol_mult removed (migration 078)
+        # Stage 2A — theta_vol_mult removed (migration 078);
+        # theta_base_breakout removed (Wave 4C Task 3: IC-invalid, IR 0.107/0.145).
+        # The row remains dormant in atlas_thresholds DB (no migration to delete it).
         ("theta_slope_days", "stage_2a"): tv(30),
-        ("theta_base_breakout", "stage_2a"): tv(1.00),
         ("theta_rs", "stage_2a"): tv(70.0),
         ("theta_fresh_days", "stage_2a"): tv(21),
         # Stage 2B
