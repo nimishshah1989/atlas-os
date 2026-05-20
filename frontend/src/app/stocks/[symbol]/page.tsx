@@ -17,6 +17,7 @@ import {
 } from '@/lib/queries/states'
 import { getComponentValidations } from '@/lib/queries/component_validation'
 import { getHitRateForStock } from '@/lib/queries/weight_performance'
+import { getStaticPortfolioById } from '@/lib/queries/portfolios'
 import { getEffectivePolicy } from '@/lib/queries/policy'
 import { getCurrentRegime } from '@/lib/queries/regime'
 import { StockDeepDiveHeader } from '@/components/stocks/StockDeepDiveHeader'
@@ -30,44 +31,7 @@ import { WithinStatePeers } from '@/components/stocks/WithinStatePeers'
 import { DwellTimeline } from '@/components/stocks/DwellTimeline'
 import { HitRateRow } from '@/components/stocks/HitRateRow'
 import { ActButton } from '@/components/portfolio/ActButton'
-
-// ---------------------------------------------------------------------------
-// Position-sizing helper (TS port of atlas/intelligence/policy/sizing.py)
-// All values in whole-number percent as strings for safe Decimal arithmetic.
-// ---------------------------------------------------------------------------
-
-type SizingResult = { suggestedPct: string; bindingConstraint: string }
-
-function computeSizing(
-  maxPerStockPct: string,
-  deploymentMultiplier: string,
-): SizingResult {
-  // max_per_stock and regime_cap are real values.
-  // target_gap: not yet wired → treat as max_per_stock (gap cap does not bind tighter).
-  // current_invested: not yet wired → treat as 0 (upper bound, conservative).
-  const maxPs = parseFloat(maxPerStockPct)
-  // deployment_multiplier is a fraction 0.0–1.0 → convert to whole-number percent
-  const regimeCap = parseFloat(deploymentMultiplier) * 100
-  const regimeRoom = regimeCap - 0 // current_invested assumed 0
-  const targetGap = maxPs // not wired: defaults to maxPs so it doesn't bind
-
-  const raw = Math.min(targetGap, maxPs, regimeRoom)
-  const suggested = Math.max(raw, 0)
-
-  let binding: string
-  if (suggested <= 0) {
-    if (targetGap <= 0) binding = 'target_gap'
-    else binding = 'regime_cap'
-  } else if (raw === targetGap && raw === maxPs) {
-    binding = 'max_per_stock' // tie: max_per_stock wins (targetGap == maxPs by design)
-  } else if (raw === maxPs) {
-    binding = 'max_per_stock'
-  } else {
-    binding = 'regime_cap'
-  }
-
-  return { suggestedPct: suggested.toFixed(1), bindingConstraint: binding }
-}
+import { computeSizing } from '@/lib/position-sizing'
 
 export default async function StockPage({
   params,
@@ -123,22 +87,32 @@ export default async function StockPage({
   let actSuggestedPct: string | null = null
   let actBindingConstraint: string | null = null
   let actPortfolioName: string | undefined
+  let actSectorGapApplied = false
 
   if (portfolioId) {
     try {
-      const [policy, regime] = await Promise.all([
+      const [policy, regime, portfolioDetail] = await Promise.all([
         getEffectivePolicy(portfolioId),
         getCurrentRegime(),
+        getStaticPortfolioById(portfolioId),
       ])
-      // Portfolio display name: not available without an extra query.
-      // Use the portfolioId as a fallback label for now (Task 3.5 will surface names).
-      actPortfolioName = `Portfolio ${portfolioId.slice(0, 8)}`
+      // Real portfolio name from DB; fall back to ID prefix only if detail is null.
+      actPortfolioName = portfolioDetail?.name ?? `Portfolio ${portfolioId.slice(0, 8)}`
+      // current_invested = sum of existing holding weights (whole-number percent).
+      // weight_pct in the JSONB is stored as a numeric value; coerce with Number()
+      // to handle any cases where the postgres.js driver returns it as a string.
+      const currentInvested =
+        portfolioDetail?.instruments.reduce(
+          (acc, i) => acc + Number(i.weight_pct),
+          0,
+        ) ?? 0
       if (policy !== null && regime !== null) {
         const maxPerStock = (policy.max_per_stock_pct.value as string | null) ?? '5'
         const deployMult = regime.deployment_multiplier ?? '1'
-        const sizing = computeSizing(maxPerStock, deployMult)
+        const sizing = computeSizing(maxPerStock, deployMult, currentInvested)
         actSuggestedPct = sizing.suggestedPct
         actBindingConstraint = sizing.bindingConstraint
+        actSectorGapApplied = sizing.sectorGapApplied
       }
     } catch {
       // Non-fatal: ActButton will render disabled if sizing not available.
@@ -227,6 +201,7 @@ export default async function StockPage({
             instrumentId={stock.instrument_id}
             suggestedPct={actSuggestedPct}
             bindingConstraint={actBindingConstraint}
+            sectorGapApplied={actSectorGapApplied}
           />
         </div>
       </div>

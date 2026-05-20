@@ -44,6 +44,12 @@ export type ActButtonProps = {
    * 'regime_cap' | 'none'. Null when suggestion unavailable.
    */
   bindingConstraint: string | null
+  /**
+   * Whether the sector-gap term was applied in the sizing formula.
+   * False means target_gap defaulted to max_per_stock (Task 2.6 not yet wired).
+   * When false, the button displays an honest caveat.
+   */
+  sectorGapApplied: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -66,6 +72,7 @@ export function ActButton({
   instrumentId,
   suggestedPct,
   bindingConstraint,
+  sectorGapApplied,
 }: ActButtonProps) {
   const [submitState, setSubmitState] = useState<SubmitState>({ kind: 'idle' })
 
@@ -89,7 +96,8 @@ export function ActButton({
   const isSuggestable = !isNaN(weightValue) && weightValue > 0
 
   const label = constraintLabel(bindingConstraint)
-  const rationale = isSuggestable ? `${label} ${suggestedPct}%` : label
+  const caveat = !sectorGapApplied ? ' (sector-gap not yet applied)' : ''
+  const rationale = isSuggestable ? `${label} ${suggestedPct}%${caveat}` : label
 
   // ---- Handlers ----
   async function handlePropose() {
@@ -150,7 +158,7 @@ export function ActButton({
         `}
         aria-label={
           isSuggestable
-            ? `Add to ${portfolioName} — suggest ${suggestedPct}% (${label})`
+            ? `Add to ${portfolioName} — suggest ${suggestedPct}% — bounded by policy + regime cap${caveat}`
             : 'Position sizing unavailable'
         }
       >
@@ -164,6 +172,11 @@ export function ActButton({
             <span className="font-mono text-[10px] px-1.5 py-0.5 rounded-[2px] border border-teal/20 text-teal/80 bg-teal/5">
               {label}
             </span>
+            {!sectorGapApplied && (
+              <span className="font-sans text-[10px] text-ink-tertiary">
+                sector-gap not yet applied
+              </span>
+            )}
           </>
         ) : (
           <span>Sizing unavailable ({label})</span>

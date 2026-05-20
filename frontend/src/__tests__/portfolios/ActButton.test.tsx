@@ -18,6 +18,7 @@ function renderNoPortfolio() {
       instrumentId="uuid-instrument-abc"
       suggestedPct={null}
       bindingConstraint={null}
+      sectorGapApplied={false}
     />,
   )
 }
@@ -26,11 +27,13 @@ function renderWithPortfolio(overrides: {
   suggestedPct?: string | null
   bindingConstraint?: string | null
   portfolioName?: string
+  sectorGapApplied?: boolean
 } = {}) {
   const {
     suggestedPct = '5.0',
     bindingConstraint = 'max_per_stock',
     portfolioName = 'My Portfolio',
+    sectorGapApplied = false,
   } = overrides
   return render(
     <ActButton
@@ -39,6 +42,7 @@ function renderWithPortfolio(overrides: {
       instrumentId="uuid-instrument-abc"
       suggestedPct={suggestedPct}
       bindingConstraint={bindingConstraint}
+      sectorGapApplied={sectorGapApplied}
     />,
   )
 }
@@ -194,5 +198,47 @@ describe('ActButton — submit flow', () => {
       ok: true,
       json: async () => ({ data: { id: 'id', status: 'pending' } }),
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Tests: sectorGapApplied caveat
+// ---------------------------------------------------------------------------
+
+describe('ActButton — sector-gap caveat', () => {
+  it('shows sector-gap caveat when sectorGapApplied is false', () => {
+    renderWithPortfolio({ sectorGapApplied: false, suggestedPct: '4.0' })
+    expect(screen.getByText(/sector-gap not yet applied/i)).toBeInTheDocument()
+  })
+
+  it('does not show sector-gap caveat when sectorGapApplied is true', () => {
+    renderWithPortfolio({ sectorGapApplied: true, suggestedPct: '4.0' })
+    expect(screen.queryByText(/sector-gap not yet applied/i)).not.toBeInTheDocument()
+  })
+
+  it('aria-label includes sector-gap caveat when sectorGapApplied is false', () => {
+    renderWithPortfolio({
+      sectorGapApplied: false,
+      suggestedPct: '4.0',
+      portfolioName: 'Banking Leaders',
+    })
+    const btn = screen.getByRole('button')
+    expect(btn).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('sector-gap not yet applied'),
+    )
+  })
+
+  it('aria-label does not mention sector-gap when sectorGapApplied is true', () => {
+    renderWithPortfolio({
+      sectorGapApplied: true,
+      suggestedPct: '4.0',
+      portfolioName: 'Banking Leaders',
+    })
+    const btn = screen.getByRole('button')
+    expect(btn).not.toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('sector-gap not yet applied'),
+    )
   })
 })
