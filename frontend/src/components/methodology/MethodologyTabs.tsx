@@ -91,7 +91,7 @@ function TabOverview() {
       <P>The typical morning flow, roughly ten minutes:</P>
       <ol className="space-y-2.5 ml-2 mb-4 list-decimal list-outside pl-4">
         {[
-          ['Intelligence → Dashboard', '/intelligence', 'Regime state first. If Risk-Off, deployment multiplier is 0× — the system is in capital-preservation mode. Check the daily brief for qualitative context.'],
+          ['Admin → Morning Dashboard', '/intelligence', 'Regime state first. If Risk-Off, deployment multiplier is 0× — the system is in capital-preservation mode. Check the daily brief for qualitative context.'],
           ['Sectors page', '/sectors', 'Glance at the RRG scatter. Which quadrants hold your existing positions? Leading = healthy. Weakening = watch. Lagging = review. Improving = potential rotational entry.'],
           ['Stocks page', '/stocks', 'Filter to your index tier (N100 for mega/large-cap). Sort by Conviction descending. Stocks in Leader RS + Accelerating/Improving momentum + high conviction are worth the deep-dive.'],
           ['Stock deep-dive', '/stocks/[symbol]', 'Four-state badge row at the top. Conviction score with tier badge. CTS timing signal if active. Hit-rate tells you how often this name has delivered when it looked good.'],

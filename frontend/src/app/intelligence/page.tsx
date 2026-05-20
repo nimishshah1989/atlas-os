@@ -203,7 +203,7 @@ export default async function IntelligencePage() {
   return (
     <main className="max-w-[1200px] mx-auto px-4 sm:px-6 py-8 bg-white min-h-screen">
       <header className="mb-6">
-        <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider">Atlas · Intelligence</div>
+        <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider">Atlas · Admin</div>
         <h1 className="font-serif text-2xl text-ink-primary mt-1">Morning Dashboard</h1>
       </header>
 
