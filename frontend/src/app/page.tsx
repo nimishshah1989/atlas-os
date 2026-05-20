@@ -1,6 +1,10 @@
 // frontend/src/app/page.tsx
 import { Suspense } from 'react'
 import { getCurrentRegime, getRegimeHistory } from '@/lib/queries/regime'
+import { getRegimeScorecard } from '@/lib/queries/regime-scorecard'
+import { RegimeVerdict } from '@/components/regime/RegimeVerdict'
+import { SignalScorecard } from '@/components/regime/SignalScorecard'
+import { TodayWorklist } from '@/components/regime/TodayWorklist'
 import { RegimeHeadline } from '@/components/regime/RegimeHeadline'
 import { IntradayNiftyStrip } from '@/components/regime/IntradayNiftyStrip'
 import { RegimeOverlayChart } from '@/components/regime/RegimeOverlayChart'
@@ -33,8 +37,30 @@ export default async function RegimePage({ searchParams }: { searchParams: Searc
     )
   }
 
+  // Fetch scorecard signals. Breadth is passed in from the regime row to avoid
+  // a duplicate DB round-trip (pct_above_ema_50 already fetched above).
+  const { scorecard, worklist } = await getRegimeScorecard(current.pct_above_ema_50)
+
+  const deploymentPct = Math.round(parseFloat(current.deployment_multiplier) * 100)
+
+  // Derive leading sectors from the worklist for the verdict sentence.
+  // "Leading sectors" here means sectors that recently entered Overweight
+  // (worklist.sectorsEnteredFavour > 0 indicates transitions happened today,
+  //  but we don't yet have the sector names from this query path — render
+  //  without sector names when none entered today).
+  const leadingSectors: string[] = []
+
   return (
     <div className="max-w-[1400px] mx-auto">
+      {/* ── NEW: Verdict + scorecard + worklist (above existing content) ── */}
+      <RegimeVerdict
+        regimeState={current.regime_state}
+        deploymentPct={deploymentPct}
+        leadingSectors={leadingSectors}
+      />
+      <SignalScorecard data={scorecard} />
+      <TodayWorklist data={worklist} />
+
       {/* Compact regime headline — unchanged */}
       <RegimeHeadline regime={current} />
 
@@ -56,7 +82,7 @@ export default async function RegimePage({ searchParams }: { searchParams: Searc
         <RegimeOverlayChart history={history} />
       </div>
 
-      {/* Four category sections */}
+      {/* Four category sections — unchanged */}
       <TrendSection current={current} history={history} />
       <BreadthSection current={current} history={history} />
       <MomentumSection current={current} history={history} />
