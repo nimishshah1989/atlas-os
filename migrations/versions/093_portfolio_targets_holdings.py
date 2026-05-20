@@ -33,10 +33,6 @@ depends_on = None
 _SCHEMA = "atlas"
 _TABLE = "atlas_portfolio_proposed_change"
 
-# Indexes created explicitly so downgrade can drop them by name before table drop.
-_IDX_PORTFOLIO_ID = "ix_proposed_change_portfolio_id"
-_IDX_INSTRUMENT_ID = "ix_proposed_change_instrument_id"
-
 
 def upgrade() -> None:
     # ------------------------------------------------------------------
