@@ -101,15 +101,18 @@ async function loadPortfolioOverride(portfolioId: string): Promise<PolicyDbRow |
 
 type ScalarFieldValue = string | string[] | boolean | null
 
-function resolveField(
+// resolveField mirrors the backend atlas/intelligence/policy/policy.py _merge rule:
+//   - SQL NULL (JS null/undefined) → inherited from house default
+//   - ANY non-null value, including an empty array [], → overridden
+//
+// The sql driver returns SQL NULL as JS null and an empty Postgres array as
+// a JS empty array []. We must NOT treat [] as inherited — an empty buy_states
+// is a valid explicit override meaning "buy nothing".
+export function resolveField(
   houseVal: ScalarFieldValue,
   overrideVal: ScalarFieldValue,
 ): PolicyFieldValue {
   if (overrideVal !== null && overrideVal !== undefined) {
-    // Array check: non-empty array counts as an override
-    if (Array.isArray(overrideVal) && overrideVal.length === 0) {
-      return { value: houseVal, source: 'inherited' }
-    }
     return { value: overrideVal, source: 'overridden' }
   }
   return { value: houseVal, source: 'inherited' }
