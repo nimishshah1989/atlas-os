@@ -37898,3 +37898,183 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{
+  "ts": "2026-05-20T05:31:14Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-consolidation/frontend/src/components/regime/__tests__/TodayWorklist.test.tsx",
+  "lines_changed": 75,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-20T05:31:28Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-consolidation/frontend/src/components/regime/__tests__/RegimeVerdict.test.tsx",
+  "lines_changed": 59,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-20T05:25:59Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-consolidation/frontend/src/lib/queries/regime-scorecard.ts",
+  "lines_changed": 25,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-20T05:26:07Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-consolidation/frontend/src/lib/queries/regime-scorecard.ts",
+  "lines_changed": 10,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-20T05:26:18Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-consolidation/frontend/src/lib/queries/regime-scorecard.ts",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-20T05:26:29Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-consolidation/frontend/src/lib/queries/regime-scorecard.ts",
+  "lines_changed": 19,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-20T05:26:37Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-consolidation/frontend/src/lib/queries/regime-scorecard.ts",
+  "lines_changed": 18,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-20T05:26:47Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/research/__init__.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-20T05:26:48Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/research/sde/__init__.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-20T05:26:50Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-consolidation/frontend/src/app/page.tsx",
+  "lines_changed": 9,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-20T05:29:57Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/research/sde/test_data.py",
+  "lines_changed": 72,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-20T05:30:40Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/research/sde/data.py",
+  "lines_changed": 126,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-20T05:31:57Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-consolidation/frontend/src/components/regime/__tests__/RegimeHeadline.test.tsx",
+  "lines_changed": 64,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-20T05:32:32Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-consolidation/frontend/src/components/regime/__tests__/RegimeHeadline.test.tsx",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-20T05:33:35Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-consolidation/frontend/src/lib/metric-registry.ts",
+  "lines_changed": 41,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-20T05:32:49Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-consolidation/frontend/src/components/regime/__tests__/RegimeHeadline.test.tsx",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-20T05:33:56Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-consolidation/frontend/src/components/regime/TodayWorklist.tsx",
+  "lines_changed": 33,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-20T05:34:14Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-consolidation/frontend/src/components/regime/RegimeVerdict.tsx",
+  "lines_changed": 62,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-20T05:34:25Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-consolidation/frontend/src/components/regime/RegimeHeadline.tsx",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-20T05:34:37Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-consolidation/frontend/src/components/regime/RegimeHeadline.tsx",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
