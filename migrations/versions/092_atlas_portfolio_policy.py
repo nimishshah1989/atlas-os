@@ -106,6 +106,10 @@ def upgrade() -> None:
             "rebalance_cadence IN ('daily','weekly','monthly')",
             name="ck_portfolio_policy_rebalance_cadence",
         ),
+        sa.CheckConstraint(
+            "NOT is_house_default OR portfolio_id IS NULL",
+            name="ck_portfolio_policy_house_default_no_portfolio",
+        ),
         schema=_SCHEMA,
     )
 

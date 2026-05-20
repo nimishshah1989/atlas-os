@@ -53,6 +53,19 @@ def test_downgrade_takes_no_positional_args() -> None:
     assert len(params) == 0
 
 
+def test_house_default_coherence_check_defined() -> None:
+    """upgrade() source contains the house-default coherence CHECK constraint."""
+    source = inspect.getsource(_MOD.upgrade)
+    assert "ck_portfolio_policy_house_default_no_portfolio" in source, (
+        "CHECK constraint ck_portfolio_policy_house_default_no_portfolio "
+        "must be defined inside upgrade()"
+    )
+    assert "NOT is_house_default OR portfolio_id IS NULL" in source, (
+        "CHECK expression 'NOT is_house_default OR portfolio_id IS NULL' "
+        "must be present in upgrade()"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Integration tests — skipped unless ATLAS_INTEGRATION_TESTS=1
 # ---------------------------------------------------------------------------
