@@ -30,7 +30,7 @@ def test_liquidity_mask_flags_low_traded_value(ohlcv_panel: pd.DataFrame) -> Non
     # Force instrument "ccc" to near-zero volume -> illiquid.
     panel = ohlcv_panel.copy()
     panel.loc[panel["instrument_id"] == "ccc", "volume"] = 1.0
-    mask = liquidity_mask(panel, floor_inr=5e7, window=60)
+    mask = liquidity_mask(panel, floor_inr=1e7, window=60)
     ccc = mask.xs("ccc", level="instrument_id")
     aaa = mask.xs("aaa", level="instrument_id")
     assert not ccc.any()  # ccc never clears the floor

@@ -106,20 +106,19 @@ def generate_factors(panel: pd.DataFrame) -> dict[str, pd.DataFrame]:
 
 
 def liquidity_mask(panel: pd.DataFrame, *, floor_inr: float = 5e7, window: int = 60) -> pd.Series:  # type: ignore[type-arg]
-    """Per-(date, instrument) boolean: any day in the trailing `window`-day
-    window saw traded value (close * volume) at or above the floor.
+    """Per-(date, instrument) boolean: trailing `window`-day median traded
+    value (close * volume) is at or above the floor.
 
-    Uses rolling max so that an instrument is considered liquid on a given
-    date if it traded at sufficient volume at least once in the recent window.
+    Uses rolling median as the robust liquidity measure — one high-volume day
+    should not qualify an otherwise illiquid instrument.
     Returned as a boolean Series on a (date, instrument_id) MultiIndex.
     This is the point-in-time liquidity gate — it drops days where a kept
     instrument was temporarily illiquid (e.g. early in its listed history).
     """
     df = panel.sort_values(["instrument_id", "date"]).copy()
     df["traded_value"] = df["close"] * df["volume"]
-    df["max_tv"] = df.groupby("instrument_id")["traded_value"].transform(
-        lambda s: s.rolling(window, min_periods=window // 2).max()
+    df["median_tv"] = df.groupby("instrument_id")["traded_value"].transform(
+        lambda s: s.rolling(window, min_periods=window // 2).median()
     )
     indexed = df.set_index(["date", "instrument_id"])
-    max_tv: pd.Series = indexed["max_tv"]  # type: ignore[assignment]
-    return (max_tv >= floor_inr).fillna(False)
+    return (indexed["median_tv"] >= floor_inr).fillna(False)
