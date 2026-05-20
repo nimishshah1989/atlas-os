@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import date
+from decimal import Decimal
 
 import pandas as pd
 import structlog
@@ -43,7 +44,7 @@ _OHLCV_SQL = """
 
 
 def load_liquid_universe(
-    engine: Engine, *, start: date, end: date, floor_inr: float = 5e7
+    engine: Engine, *, start: date, end: date, floor_inr: Decimal = Decimal("5e7")
 ) -> list[str]:
     """Return instrument_id strings whose median traded value clears the floor.
 
@@ -89,6 +90,10 @@ def mask_extreme_moves(panel: pd.DataFrame, *, max_daily_move: float = 0.40) -> 
     (~443 rows / 0.009% over a 2-year window). Nulling the price columns on
     those rows means every downstream factor and forward return skips them,
     so factor IC is not polluted by price artifacts.
+
+    Note: pct_change is computed before masking, so the recovery row
+    immediately following an extreme move is also nulled — intentional, as
+    that row's return is itself an artifact of the corrupt prior price.
     """
     df = panel.sort_values(["instrument_id", "date"]).copy()
     daily_ret = df.groupby("instrument_id")["close"].pct_change()
@@ -114,7 +119,10 @@ def load_ohlcv_panel(
             params={"start": start, "end": end, "ids": list(instrument_ids)},
         )
     if long_df.empty:
-        return long_df
+        empty: pd.DataFrame = long_df[
+            ["date", "instrument_id", "open", "high", "low", "close", "volume"]
+        ]  # type: ignore[assignment]
+        return empty
     panel = mask_extreme_moves(adjust_ohlc(long_df))
     log.info(
         "sde_ohlcv_panel",

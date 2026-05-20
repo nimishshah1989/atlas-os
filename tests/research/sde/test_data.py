@@ -46,6 +46,8 @@ def test_adjust_ohlc_falls_back_when_close_adj_null() -> None:
     # close_adj null -> ratio 1.0, OHLC unchanged, close = raw close
     assert out.loc[0, "open"] == 100.0
     assert out.loc[0, "close"] == 100.0
+    assert out.loc[0, "high"] == 110.0
+    assert out.loc[0, "low"] == 90.0
 
 
 def test_mask_extreme_moves_nulls_split_like_rows() -> None:
