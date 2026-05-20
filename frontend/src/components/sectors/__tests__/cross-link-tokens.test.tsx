@@ -3,11 +3,17 @@
  * Verifies that stock symbols in sector tables use <LinkedTicker> (real hrefs),
  * sector chips use <LinkedSector>, and SectorDecisionTable leader symbols are linked.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { StocksTable } from '../StocksTable'
 import { TopPicksCallout } from '../TopPicksCallout'
+import { SectorDecisionTable } from '../SectorDecisionTable'
 import type { StockRow } from '@/lib/queries/sector-deep-dive'
+
+// SectorDecisionTable imports a 'use server' action — mock to avoid module resolution error in jsdom
+vi.mock('@/app/sectors/actions', () => ({
+  getTopPicksAction: vi.fn().mockResolvedValue([]),
+}))
 
 function makeStockRow(overrides: Partial<StockRow> = {}): StockRow {
   return {
@@ -70,5 +76,44 @@ describe('TopPicksCallout — LinkedTicker for top-pick symbols', () => {
     // A non-investable stock should NOT produce a link in TopPicksCallout picks section
     render(<TopPicksCallout stocks={[makeStockRow({ is_investable: false })]} />)
     expect(screen.queryByRole('link', { name: 'RELIANCE' })).not.toBeInTheDocument()
+  })
+})
+
+describe('SectorDecisionTable — LinkedTicker for leader chips', () => {
+  const minimalRow = {
+    sector_name: 'Technology',
+    constituent_count: 20,
+    bottomup_ret_1w: null,
+    bottomup_ret_1m: null,
+    bottomup_ret_3m: null,
+    bottomup_ret_6m: null,
+    bottomup_rs_3m_nifty500: null,
+    rs_momentum: null,
+    participation_50: null,
+    leadership_concentration: null,
+    sector_state: 'Overweight',
+    bottomup_momentum_state: null,
+    bottomup_rs_state: null,
+    bottomup_ema_10_ratio: null,
+    bottomup_ema_20_ratio: null,
+    topdown_rs_3m_nifty500: null,
+    divergence_flag: false,
+    decision: 'HOLD' as const,
+    days_in_state: 5,
+  }
+
+  it('renders top_symbols chip as an anchor with /stocks/[symbol] href', () => {
+    render(
+      <SectorDecisionTable
+        data={[minimalRow]}
+        onSelect={() => undefined}
+        leadingRRGCount={0}
+        leadersBySector={{
+          Technology: { leader_count: 2, top_symbols: ['INFY', 'TCS'] },
+        }}
+      />
+    )
+    const infyLink = screen.getByRole('link', { name: 'INFY' })
+    expect(infyLink).toHaveAttribute('href', '/stocks/INFY')
   })
 })

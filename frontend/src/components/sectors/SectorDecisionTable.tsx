@@ -7,6 +7,7 @@ import { getTopPicksAction } from '@/app/sectors/actions'
 import type { TopPickRow } from '@/lib/queries/sector-deep-dive'
 import type { SectorPivotRow } from '@/lib/queries/sectors'
 import { buildSectorCommentary } from '@/lib/commentary/sectors'
+import { LinkedTicker } from '@/components/ui/LinkedToken'
 
 type Row = {
   sector_name: string
@@ -576,7 +577,7 @@ export function SectorDecisionTable({
                         <div className="flex flex-wrap gap-0.5 mt-0.5">
                           {stat.top_symbols.map(s => (
                             <span key={s} className="font-mono text-[9px] text-ink-tertiary bg-paper-rule/40 px-1 py-0.5 rounded-[2px]">
-                              {s}
+                              <LinkedTicker symbol={s} />
                             </span>
                           ))}
                         </div>
