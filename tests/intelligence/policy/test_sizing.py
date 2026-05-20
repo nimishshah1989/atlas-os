@@ -400,6 +400,68 @@ class TestBindingConstraintValues:
 
 
 # ---------------------------------------------------------------------------
+# Tie-break ordering: first-match-wins (target_gap → max_per_stock → regime_cap)
+#
+# These cases verify the documented priority when two or more caps produce the
+# same minimum value.  Expected values are hand-computed against the formula;
+# they do NOT reference implementation output.
+# ---------------------------------------------------------------------------
+
+
+class TestTieBreak:
+    """Pin the first-match-wins tie-break order across all tie combinations."""
+
+    def test_target_gap_and_max_per_stock_tie(self) -> None:
+        """target_gap == max_per_stock < regime_room → binding = 'target_gap' (first match).
+
+        Hand-computation:
+            regime_room = 40 - 10 = 30
+            raw = min(5, 5, 30) = 5
+            raw == target_gap (5 == 5) → first match → binding = 'target_gap'
+        """
+        result = suggest_position_size(
+            target_gap=Decimal("5"),
+            max_per_stock=Decimal("5"),
+            regime_cap=Decimal("40"),
+            current_invested=Decimal("10"),
+        )
+        _assert_result(result, Decimal("5"), "target_gap")
+
+    def test_max_per_stock_and_regime_room_tie(self) -> None:
+        """max_per_stock == regime_room < target_gap → binding = 'max_per_stock' (first match).
+
+        Hand-computation:
+            regime_room = 40 - 35 = 5
+            raw = min(8, 5, 5) = 5
+            raw == target_gap? 5 == 8 → NO
+            raw == max_per_stock? 5 == 5 → YES → binding = 'max_per_stock'
+        """
+        result = suggest_position_size(
+            target_gap=Decimal("8"),
+            max_per_stock=Decimal("5"),
+            regime_cap=Decimal("40"),
+            current_invested=Decimal("35"),
+        )
+        _assert_result(result, Decimal("5"), "max_per_stock")
+
+    def test_all_three_tie(self) -> None:
+        """target_gap == max_per_stock == regime_room → binding = 'target_gap' (first match).
+
+        Hand-computation:
+            regime_room = 40 - 35 = 5
+            raw = min(5, 5, 5) = 5
+            raw == target_gap? 5 == 5 → YES → binding = 'target_gap'
+        """
+        result = suggest_position_size(
+            target_gap=Decimal("5"),
+            max_per_stock=Decimal("5"),
+            regime_cap=Decimal("40"),
+            current_invested=Decimal("35"),
+        )
+        _assert_result(result, Decimal("5"), "target_gap")
+
+
+# ---------------------------------------------------------------------------
 # Frozen dataclass: immutability
 # ---------------------------------------------------------------------------
 
