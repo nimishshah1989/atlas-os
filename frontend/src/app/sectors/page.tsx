@@ -97,7 +97,7 @@ export default async function SectorsPage({ searchParams }: { searchParams: Sear
     try {
       const policy = await getEffectivePolicy(portfolioId)
       if (policy !== null) {
-        const maxPerSectorPct = parseFloat(
+        const maxPerSectorPct = Number(
           (policy.max_per_sector_pct.value as string | null) ?? '15'
         )
         // regime deployment_multiplier is a fraction [0,1]; convert to whole-number pct
