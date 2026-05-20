@@ -50,8 +50,9 @@ WEAK_HOLDINGS_THRESHOLD = 0.30  # weak_aum_pct > 0.30
 
 # ---------------------------------------------------------------------------
 # Inline defaults for fund band thresholds (cross-sectional hybrid rank).
-# TODO Wave 4A Task 5: seed fund_band_p20/p50/p80/fund_recommended_floor into
-# atlas_thresholds table so they are runtime-tunable.
+# Seeded into atlas.atlas_thresholds by migration 095_seed_hybrid_classifier_thresholds.
+# These inline defaults keep unit tests DB-free; live runs load from DB via load_thresholds().
+# Keys: fund_band_p20, fund_band_p50, fund_band_p80, fund_recommended_floor.
 # ---------------------------------------------------------------------------
 _DEFAULT_FUND_BAND_P20 = Decimal("0.20")
 _DEFAULT_FUND_BAND_P50 = Decimal("0.50")

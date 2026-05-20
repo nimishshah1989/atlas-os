@@ -16,8 +16,8 @@ sector_state derivation (Wave 4A Task 3):
     Guarantees a label spread — never collapses to all-Neutral even in
     thin-breadth markets. Thresholds loaded from atlas_thresholds via
     load_thresholds(); inline defaults used when DB not available.
-    TODO Wave 4A Task 5: seed sector_band_p20/p50/p80/overweight_floor
-    into atlas_thresholds table so they are runtime-tunable.
+    Wave 4A Task 5: sector_band_p20/p50/p80/sector_overweight_floor are
+    seeded into atlas_thresholds by migration 095_seed_hybrid_classifier_thresholds.
 """
 
 from __future__ import annotations
@@ -42,9 +42,10 @@ _EQUAL_WEIGHT = 1.0
 
 # ---------------------------------------------------------------------------
 # Inline defaults for sector band thresholds.
-# TODO Wave 4A Task 5: move to atlas_thresholds (seed migration 095).
+# Seeded into atlas.atlas_thresholds by migration 095_seed_hybrid_classifier_thresholds.
+# These inline defaults keep unit tests DB-free; live runs load from DB via load_thresholds().
 # Keys: sector_band_p20, sector_band_p50, sector_band_p80,
-#       sector_overweight_floor (as a proportion 0–1, not whole-number pct)
+#       sector_overweight_floor (proportion 0–1; 0.10 means "pct_stage_2 >= 10%")
 # ---------------------------------------------------------------------------
 _DEFAULT_BAND_P20 = Decimal("0.20")
 _DEFAULT_BAND_P50 = Decimal("0.50")
