@@ -1,4 +1,5 @@
-"""Tests for migration 093 — portfolio target_weight + atlas_portfolio_proposed_change.
+"""Tests for migration 093 — per-instrument target_weight_pct in instruments JSONB
++ atlas_portfolio_proposed_change table.
 
 Lightweight (import-level) tests run everywhere without a DB.
 Integration tests (requires ATLAS_INTEGRATION_TESTS=1) verify the live DB.
@@ -72,26 +73,88 @@ def test_status_check_constraint_defined() -> None:
     ), "CHECK expression must reference 'pending', 'applied', 'rejected'"
 
 
-def test_target_weight_column_defined() -> None:
-    """upgrade() source adds target_weight column to strategy_fm_custom_portfolios."""
+def test_no_scalar_target_weight_column_added() -> None:
+    """upgrade() must NOT add a portfolio-level scalar target_weight column.
+
+    A single scalar cannot express per-instrument targets (Task 3.5). The
+    per-instrument home is target_weight_pct inside the instruments JSONB array.
+    """
     source = inspect.getsource(_MOD.upgrade)
+    assert "add_column" not in source, (
+        "upgrade() must not use op.add_column — the ambiguous scalar "
+        "target_weight column was removed in favour of per-instrument JSONB"
+    )
+
+
+def test_jsonb_backfill_target_weight_pct_in_upgrade() -> None:
+    """upgrade() source contains the JSONB backfill for target_weight_pct."""
+    source = inspect.getsource(_MOD.upgrade)
+    assert "target_weight_pct" in source, (
+        "upgrade() must reference target_weight_pct " "(backfilled into instruments JSONB elements)"
+    )
+
+
+def test_backfill_sql_module_level() -> None:
+    """Module defines the _BACKFILL_TARGET_WEIGHT_PCT SQL constant."""
+    assert hasattr(
+        _MOD, "_BACKFILL_TARGET_WEIGHT_PCT"
+    ), "_BACKFILL_TARGET_WEIGHT_PCT SQL constant must be present in the module"
+    sql = _MOD._BACKFILL_TARGET_WEIGHT_PCT
+    assert "target_weight_pct" in sql
+    assert "jsonb_agg" in sql
+    assert "jsonb_array_elements" in sql
+
+
+def test_strip_sql_module_level() -> None:
+    """Module defines the _STRIP_TARGET_WEIGHT_PCT SQL constant for downgrade."""
+    assert hasattr(
+        _MOD, "_STRIP_TARGET_WEIGHT_PCT"
+    ), "_STRIP_TARGET_WEIGHT_PCT SQL constant must be present in the module"
+    sql = _MOD._STRIP_TARGET_WEIGHT_PCT
+    assert "target_weight_pct" in sql
+    assert "jsonb_agg" in sql
+
+
+def test_downgrade_strips_target_weight_pct() -> None:
+    """downgrade() source strips target_weight_pct from instruments JSONB."""
+    source = inspect.getsource(_MOD.downgrade)
     assert (
-        "target_weight" in source
-    ), "upgrade() must add target_weight column to strategy_fm_custom_portfolios"
+        "target_weight_pct" in source
+    ), "downgrade() must strip target_weight_pct from instruments JSONB elements"
 
 
-def test_target_weight_is_numeric_not_float() -> None:
-    """target_weight must use sa.Numeric, never sa.Float."""
-    source = inspect.getsource(_MOD.upgrade)
-    # Numeric must appear; Float must not be used for target_weight
-    assert "Numeric" in source, "target_weight must be sa.Numeric type"
+def test_downgrade_drops_proposed_change_table() -> None:
+    """downgrade() drops the atlas_portfolio_proposed_change table.
+
+    downgrade() references the module-level _TABLE constant which holds the
+    table name, so we verify via the constant rather than the literal string.
+    """
+    assert (
+        _MOD._TABLE == "atlas_portfolio_proposed_change"
+    ), "_TABLE module constant must equal 'atlas_portfolio_proposed_change'"
+    source = inspect.getsource(_MOD.downgrade)
+    assert "drop_table" in source, "downgrade() must call op.drop_table"
+    assert (
+        "_TABLE" in source
+    ), "downgrade() must reference _TABLE (the atlas_portfolio_proposed_change table name)"
+
+
+def test_downgrade_does_not_drop_target_weight_column() -> None:
+    """downgrade() must NOT call drop_column for the now-removed scalar target_weight.
+
+    The column no longer exists; dropping it in downgrade() would error on a live DB.
+    """
+    source = inspect.getsource(_MOD.downgrade)
+    assert "drop_column" not in source, (
+        "downgrade() must not reference drop_column — the scalar target_weight "
+        "column was removed from the migration"
+    )
 
 
 def test_instrument_id_indexed_no_fk() -> None:
     """instrument_id is a plain indexed UUID (no FK — universe tables have composite PKs)."""
     source = inspect.getsource(_MOD.upgrade)
     assert "instrument_id" in source, "instrument_id column must be present"
-    # The migration source should NOT contain a ForeignKey referencing a universe table
     assert "atlas_universe_stocks" not in source, (
         "instrument_id must NOT have a FK to atlas_universe_stocks "
         "(composite PK — not a valid FK target)"
@@ -107,22 +170,6 @@ def test_portfolio_id_fk_defined() -> None:
     assert "CASCADE" in source, "FK must have ondelete CASCADE"
 
 
-def test_downgrade_drops_proposed_change_table() -> None:
-    """downgrade() source drops atlas_portfolio_proposed_change."""
-    source = inspect.getsource(_MOD.downgrade)
-    assert (
-        "atlas_portfolio_proposed_change" in source
-    ), "downgrade() must drop atlas_portfolio_proposed_change"
-
-
-def test_downgrade_drops_target_weight_column() -> None:
-    """downgrade() source drops target_weight from strategy_fm_custom_portfolios."""
-    source = inspect.getsource(_MOD.downgrade)
-    assert (
-        "target_weight" in source
-    ), "downgrade() must drop target_weight column from strategy_fm_custom_portfolios"
-
-
 def test_timestamps_tz_aware() -> None:
     """created_at and updated_at columns use timezone=True."""
     source = inspect.getsource(_MOD.upgrade)
@@ -135,6 +182,12 @@ def test_rationale_column_defined() -> None:
     assert (
         "rationale" in source
     ), "upgrade() must include a rationale column for Wave 3 Act affordance"
+
+
+def test_numeric_type_used_for_proposed_weight() -> None:
+    """proposed_weight must use sa.Numeric, never sa.Float."""
+    source = inspect.getsource(_MOD.upgrade)
+    assert "Numeric" in source, "proposed_weight must be sa.Numeric type"
 
 
 # ---------------------------------------------------------------------------
@@ -178,52 +231,105 @@ def test_proposed_change_table_exists(db_engine) -> None:  # type: ignore[no-unt
 
 
 @_SKIP_INTEGRATION
-def test_target_weight_column_exists_on_portfolios(db_engine) -> None:  # type: ignore[no-untyped-def]
-    """Migration 093 adds target_weight to strategy_fm_custom_portfolios."""
+def test_instruments_jsonb_has_target_weight_pct(db_engine) -> None:  # type: ignore[no-untyped-def]
+    """After migration 093, all non-empty instruments JSONB arrays contain target_weight_pct."""
+    from sqlalchemy import text
+
+    with db_engine.connect() as c:
+        # Count rows where at least one element is missing the key.
+        row = c.execute(
+            text("""
+                SELECT COUNT(*) AS bad_count
+                FROM atlas.strategy_fm_custom_portfolios
+                WHERE instruments IS NOT NULL
+                  AND jsonb_typeof(instruments) = 'array'
+                  AND jsonb_array_length(instruments) > 0
+                  AND EXISTS (
+                      SELECT 1
+                      FROM jsonb_array_elements(instruments) AS elem
+                      WHERE NOT (elem ? 'target_weight_pct')
+                  )
+            """)
+        ).fetchone()
+    assert row is not None
+    assert row[0] == 0, (
+        f"{row[0]} portfolio row(s) still have instruments elements "
+        "missing target_weight_pct after migration 093"
+    )
+
+
+@_SKIP_INTEGRATION
+def test_no_scalar_target_weight_on_portfolios_table(db_engine) -> None:  # type: ignore[no-untyped-def]
+    """Migration 093 must NOT have added a scalar target_weight column.
+
+    Per-instrument targets live in the instruments JSONB array, not in a
+    portfolio-level scalar on strategy_fm_custom_portfolios.
+    """
     from sqlalchemy import text
 
     with db_engine.connect() as c:
         rows = c.execute(
             text("""
-                SELECT column_name, data_type
+                SELECT column_name
                 FROM information_schema.columns
                 WHERE table_schema = 'atlas'
                   AND table_name   = 'strategy_fm_custom_portfolios'
                   AND column_name  = 'target_weight'
             """)
         ).fetchall()
-    assert len(rows) == 1, "target_weight column not found on strategy_fm_custom_portfolios"
-    data_type = rows[0][1]
-    assert data_type == "numeric", f"target_weight must be numeric type, got {data_type}"
+    assert len(rows) == 0, (
+        "scalar target_weight column must NOT exist on strategy_fm_custom_portfolios; "
+        "per-instrument targets live in the instruments JSONB array"
+    )
 
 
 @_SKIP_INTEGRATION
 def test_proposed_change_status_check_rejects_invalid(db_engine) -> None:  # type: ignore[no-untyped-def]
-    """status CHECK constraint rejects values outside ('pending','applied','rejected')."""
+    """status CHECK constraint rejects values outside ('pending','applied','rejected').
+
+    A real portfolio row is inserted first so the FK is satisfied — this isolates
+    the CHECK constraint as the sole cause of the IntegrityError.
+    """
     import uuid
 
     from sqlalchemy import text
     from sqlalchemy.exc import IntegrityError
 
-    # We need a real portfolio_id to satisfy the FK; use a fresh UUID that may not exist.
-    # If FK enforcement fires first, that's fine — we're testing the CHECK fires on valid FK.
-    # Insert with NULL portfolio_id (FK allows NULL? — it does not; portfolio_id is NOT NULL).
-    # The easiest approach: insert a row with an invalid status and expect IntegrityError
-    # from EITHER the FK violation or the CHECK constraint.
-    with pytest.raises(IntegrityError):
+    portfolio_id = str(uuid.uuid4())
+
+    # Create a real portfolio so the FK cannot fire — only the CHECK can reject.
+    with db_engine.begin() as c:
+        c.execute(
+            text("""
+                INSERT INTO atlas.strategy_fm_custom_portfolios
+                    (id, name, instruments)
+                VALUES
+                    (:id, 'test-093-check', '[]'::jsonb)
+            """),
+            {"id": portfolio_id},
+        )
+
+    try:
+        with pytest.raises(IntegrityError, match="ck_proposed_change_status"):
+            with db_engine.begin() as c:
+                c.execute(
+                    text("""
+                        INSERT INTO atlas.atlas_portfolio_proposed_change
+                            (id, portfolio_id, instrument_id, proposed_weight, status)
+                        VALUES
+                            (:id, :pid, :iid, 5.0000, 'invalid_status')
+                    """),
+                    {
+                        "id": str(uuid.uuid4()),
+                        "pid": portfolio_id,
+                        "iid": str(uuid.uuid4()),
+                    },
+                )
+    finally:
         with db_engine.begin() as c:
             c.execute(
-                text("""
-                    INSERT INTO atlas.atlas_portfolio_proposed_change
-                        (id, portfolio_id, instrument_id, proposed_weight, status)
-                    VALUES
-                        (:id, :pid, :iid, 5.0000, 'invalid_status')
-                """),
-                {
-                    "id": str(uuid.uuid4()),
-                    "pid": str(uuid.uuid4()),  # non-existent FK → IntegrityError
-                    "iid": str(uuid.uuid4()),
-                },
+                text("DELETE FROM atlas.strategy_fm_custom_portfolios WHERE id = :id"),
+                {"id": portfolio_id},
             )
 
 
@@ -234,7 +340,6 @@ def test_proposed_change_status_check_accepts_valid_pending(db_engine) -> None: 
 
     from sqlalchemy import text
 
-    # First insert a portfolio row so the FK is satisfied.
     portfolio_id = str(uuid.uuid4())
     proposed_id = str(uuid.uuid4())
     instrument_id = str(uuid.uuid4())

@@ -1,12 +1,20 @@
-"""Add target_weight to custom portfolios + create atlas_portfolio_proposed_change.
+"""Add per-instrument target_weight_pct to instruments JSONB
++ create atlas_portfolio_proposed_change.
 
-Wave 3 "Act loop" data model:
-1. target_weight (Numeric, nullable) added to atlas.strategy_fm_custom_portfolios —
-   represents the fund manager's intended total allocation target for a portfolio.
-   NULL = no target set yet.
+Wave 3 "Act loop" data model — corrected after code review:
+
+1. Per-instrument target_weight_pct backfilled into the instruments JSONB array on
+   atlas.strategy_fm_custom_portfolios.  Each element gains a "target_weight_pct" key
+   (null = no target set yet — honest default; Task 3.5 renders current vs target per
+   holding).  The instruments column was created in migration 020 as JSONB NOT NULL and
+   holds an array of objects of the form {instrument_id, instrument_type, weight_pct}.
+   A portfolio-level scalar target_weight column was considered and rejected: a single
+   scalar cannot express per-instrument targets as required by Task 3.5.
 
 2. atlas_portfolio_proposed_change — one row per proposed (not-yet-executed) trade,
    sized by policy, before compliance sign-off.  Statuses: pending → applied | rejected.
+   This table is unchanged from the original design — per-instrument proposed changes are
+   naturally row-per-instrument.
 
 Notes on instrument_id:
   atlas_universe_stocks has a composite PK (instrument_id, effective_from) so it cannot
@@ -33,22 +41,52 @@ depends_on = None
 _SCHEMA = "atlas"
 _TABLE = "atlas_portfolio_proposed_change"
 
+# ---------------------------------------------------------------------------
+# JSONB backfill SQL
+# ---------------------------------------------------------------------------
+# Adds "target_weight_pct": null to every element of the instruments JSONB
+# array that does not already carry that key.  Guards:
+#   • WHERE instruments IS NOT NULL         — skip explicit NULLs
+#   • AND jsonb_typeof(instruments) = 'array' — skip non-array JSONB
+#   • AND jsonb_array_length(instruments) > 0 — skip empty arrays (no-op but
+#                                               avoids scanning them)
+# The CASE preserves elements that already have the key (idempotent if run
+# twice).
+_BACKFILL_TARGET_WEIGHT_PCT = """
+UPDATE atlas.strategy_fm_custom_portfolios
+SET instruments = (
+    SELECT jsonb_agg(
+        CASE WHEN elem ? 'target_weight_pct' THEN elem
+             ELSE elem || '{"target_weight_pct": null}'::jsonb END
+    )
+    FROM jsonb_array_elements(instruments) AS elem
+)
+WHERE instruments IS NOT NULL
+  AND jsonb_typeof(instruments) = 'array'
+  AND jsonb_array_length(instruments) > 0
+"""
+
+# Strips the "target_weight_pct" key from every element (downgrade path).
+_STRIP_TARGET_WEIGHT_PCT = """
+UPDATE atlas.strategy_fm_custom_portfolios
+SET instruments = (
+    SELECT jsonb_agg(elem - 'target_weight_pct')
+    FROM jsonb_array_elements(instruments) AS elem
+)
+WHERE instruments IS NOT NULL
+  AND jsonb_typeof(instruments) = 'array'
+  AND jsonb_array_length(instruments) > 0
+"""
+
 
 def upgrade() -> None:
     # ------------------------------------------------------------------
-    # 1. Add target_weight to atlas.strategy_fm_custom_portfolios
+    # 1. Backfill target_weight_pct into every instruments JSONB element
     # ------------------------------------------------------------------
-    # Numeric(7,4): supports 0.0000–999.9999 — covers any percentage target.
-    # Nullable: NULL means "no target set yet" — valid state for new portfolios.
-    op.add_column(
-        "strategy_fm_custom_portfolios",
-        sa.Column(
-            "target_weight",
-            sa.Numeric(7, 4),
-            nullable=True,
-        ),
-        schema=_SCHEMA,
-    )
+    # instruments is a JSONB NOT NULL column (migration 020) that stores an
+    # array of per-holding objects.  We add "target_weight_pct": null to
+    # each element that doesn't already carry the key.
+    op.execute(sa.text(_BACKFILL_TARGET_WEIGHT_PCT))
 
     # ------------------------------------------------------------------
     # 2. Create atlas_portfolio_proposed_change
@@ -85,7 +123,7 @@ def upgrade() -> None:
             index=True,
         ),
         # --- Proposed allocation ---
-        # Numeric(7,4): matches target_weight precision; covers 0.0000–99.9999 % per instrument.
+        # Numeric(7,4): supports 0.0000–99.9999 % per instrument.
         sa.Column(
             "proposed_weight",
             sa.Numeric(7, 4),
@@ -129,5 +167,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_table("atlas_portfolio_proposed_change", schema=_SCHEMA)
-    op.drop_column("strategy_fm_custom_portfolios", "target_weight", schema=_SCHEMA)
+    op.drop_table(_TABLE, schema=_SCHEMA)
+    # Strip target_weight_pct key from all instruments JSONB elements.
+    op.execute(sa.text(_STRIP_TARGET_WEIGHT_PCT))
