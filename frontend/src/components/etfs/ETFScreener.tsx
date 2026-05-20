@@ -12,6 +12,7 @@ import { ValidatedBadge } from '@/components/ui/ValidatedBadge'
 import { ColumnToggle, useColumnVisibility, type ColumnDef } from '@/components/ui/ColumnToggle'
 import { WithinStateRankCell } from '@/components/stocks/WithinStateRankCell'
 import { LinkedSector } from '@/components/ui/LinkedToken'
+import { ProvenanceMarker } from '@/components/ui/ProvenanceMarker'
 
 const RS_ORDER = ['Leader', 'Strong', 'Consolidating', 'Emerging', 'Average', 'Weak', 'Laggard']
 const MOM_ORDER = ['Accelerating', 'Improving', 'Flat', 'Deteriorating', 'Collapsing']
@@ -46,6 +47,27 @@ function StageBadge({ state }: { state: string | null }) {
       {label}
     </span>
   )
+}
+
+/** True for commodity ETFs (Gold/Silver theme) — no equity constituents, no engine_state. */
+function isCommodityETF(theme: string): boolean {
+  return theme === 'Gold' || theme === 'Silver'
+}
+
+/** C5: render engine_state cell honestly — n/a for commodity ETFs, StageBadge otherwise. */
+function EngineStateCell({ row }: { row: ETFRow }) {
+  if (isCommodityETF(row.theme)) {
+    return (
+      <span
+        data-testid={`commodity-etf-na-${row.ticker}`}
+        className="font-sans text-[10px] text-ink-tertiary"
+        title="Commodity ETF — no equity constituents, bottom-up engine_state not applicable"
+      >
+        n/a — commodity ETF
+      </span>
+    )
+  }
+  return <StageBadge state={row.engine_state} />
 }
 
 function stateRank(order: string[], val: string | null): number {
@@ -326,7 +348,10 @@ export function ETFScreener({ etfs, validations = [] }: { etfs: ETFRow[]; valida
                           onClick={e => e.stopPropagation()}
                           className="hover:opacity-80"
                         >
-                          <div className="font-sans text-xs font-semibold text-ink-primary">{row.ticker}</div>
+                          <div className="font-sans text-xs font-semibold text-ink-primary inline-flex items-center gap-0.5">
+                            {row.ticker}
+                            <ProvenanceMarker dataSource={row.data_source} id={row.ticker} />
+                          </div>
                           <div className="font-sans text-[10px] text-ink-tertiary truncate max-w-[200px]" title={row.etf_name ?? ''}>
                             {row.etf_name ?? '—'}
                           </div>
@@ -342,7 +367,7 @@ export function ETFScreener({ etfs, validations = [] }: { etfs: ETFRow[]; valida
                         )}
                       </td>
                       <td className="px-3 py-2.5">
-                        <StageBadge state={row.engine_state} />
+                        <EngineStateCell row={row} />
                       </td>
                       <td className="px-3 py-2.5">
                         <ValidatedBadge

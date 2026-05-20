@@ -38,6 +38,9 @@ export type FundRow = {
   entry_trigger: boolean | null
   exit_trigger: boolean | null
   reduce_trigger: boolean | null
+  // C5: data provenance — 'bottom_up' = from holdings-based v2 aggregator;
+  // 'legacy' = from atlas_fund_states_daily via migration-087 hotfix view.
+  data_source: 'bottom_up' | 'legacy'
   // AUM
   aum_cr: string | null
   aum_as_of: string | null
@@ -62,6 +65,8 @@ export type FundMasterRow = {
   broad_category: string
   inception_date: Date | null
   data_as_of: string | null
+  // C5: data provenance — matches FundRow.data_source.
+  data_source: 'bottom_up' | 'legacy'
   aum_cr: string | null
   aum_as_of: string | null
   nav_state: string | null
@@ -174,7 +179,12 @@ export async function getAllFunds(): Promise<FundRow[]> {
       fl.as_of_date AS lens_as_of_date,
       -- Phase 8: TODO: fu.mean_within_state_rank not yet in atlas_fund_signal_unified;
       -- returns NULL until Agent A rewrites the view to expose this column.
-      NULL::float8 AS mean_within_state_rank
+      NULL::float8 AS mean_within_state_rank,
+      -- C5: provenance. The current atlas_fund_signal_unified view (migration 087)
+      -- is a pure pass-through from atlas_fund_states_daily (legacy nightly writer).
+      -- No bottom-up aggregator path exists yet. Every row is 'legacy' until a
+      -- future migration adds the v2 holdings engine path and updates this value.
+      'legacy'::text AS data_source
     FROM atlas.atlas_universe_funds uf
     LEFT JOIN LATERAL (
       SELECT * FROM atlas.atlas_fund_metrics_daily
@@ -216,7 +226,9 @@ export async function getFundMaster(mstar_id: string): Promise<FundMasterRow | n
       NULL::boolean AS entry_trigger,
       NULL::boolean AS exit_trigger,
       NULL::boolean AS reduce_trigger,
-      NULL::boolean AS add_trigger
+      NULL::boolean AS add_trigger,
+      -- C5: provenance. Migration-087 view is a legacy passthrough only.
+      'legacy'::text AS data_source
     FROM atlas.atlas_universe_funds uf
     LEFT JOIN atlas.atlas_fund_signal_unified fu
       ON fu.mstar_id = uf.mstar_id

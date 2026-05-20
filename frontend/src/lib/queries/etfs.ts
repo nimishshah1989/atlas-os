@@ -11,6 +11,9 @@ export type ETFRow = {
   asset_class: string | null
   fund_house: string | null
   data_as_of: string | null
+  // C5: data provenance — 'bottom_up' = from the holdings-based v2 aggregator;
+  // 'legacy' = from atlas_etf_states_daily via the migration-087 hotfix view.
+  data_source: 'bottom_up' | 'legacy'
   // Metrics
   ret_1w: string | null
   ret_1m: string | null
@@ -180,7 +183,12 @@ export async function getAllETFs(): Promise<ETFRow[]> {
       eu.mean_rs_rank_12m::float8   AS mean_rs_rank_12m,
       eu.mean_within_state_rank::float8 AS mean_within_state_rank,
       eu.pct_stage_2::float8        AS pct_stage_2,
-      eu.pct_stage_4::float8        AS pct_stage_4
+      eu.pct_stage_4::float8        AS pct_stage_4,
+      -- C5: provenance. Migration-087 atlas_etf_signal_unified is a pure pass-through
+      -- from atlas_etf_states_daily (legacy ticker-level RS/momentum writer).
+      -- n_holdings IS NULL in this view (no bottom-up holdings aggregator path yet).
+      -- All rows are 'legacy' until a future migration populates atlas_etf_state_v2.
+      'legacy'::text                AS data_source
     FROM atlas.atlas_universe_etfs u
     LEFT JOIN latest l ON l.ticker = u.ticker
     LEFT JOIN atlas.atlas_etf_metrics_daily m
@@ -269,7 +277,9 @@ export async function getETFByTicker(ticker: string): Promise<ETFRow | null> {
       eu.mean_rs_rank_12m::float8   AS mean_rs_rank_12m,
       eu.mean_within_state_rank::float8 AS mean_within_state_rank,
       eu.pct_stage_2::float8        AS pct_stage_2,
-      eu.pct_stage_4::float8        AS pct_stage_4
+      eu.pct_stage_4::float8        AS pct_stage_4,
+      -- C5: provenance. Migration-087 atlas_etf_signal_unified is legacy passthrough.
+      'legacy'::text                AS data_source
     FROM atlas.atlas_universe_etfs u
     JOIN latest l ON TRUE
     LEFT JOIN atlas.atlas_etf_metrics_daily m
@@ -446,7 +456,9 @@ export async function getLinkedETFsForSector(sectorName: string): Promise<ETFRow
       eu.mean_rs_rank_12m::float8   AS mean_rs_rank_12m,
       eu.mean_within_state_rank::float8 AS mean_within_state_rank,
       eu.pct_stage_2::float8        AS pct_stage_2,
-      eu.pct_stage_4::float8        AS pct_stage_4
+      eu.pct_stage_4::float8        AS pct_stage_4,
+      -- C5: provenance. Migration-087 atlas_etf_signal_unified is legacy passthrough.
+      'legacy'::text                AS data_source
     FROM atlas.atlas_universe_etfs u
     LEFT JOIN latest l ON l.ticker = u.ticker
     LEFT JOIN atlas.atlas_etf_metrics_daily m

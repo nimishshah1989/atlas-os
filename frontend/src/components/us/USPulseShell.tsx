@@ -117,6 +117,8 @@ function adaptUSETF(row: USETFRow): ETFRow {
     mean_within_state_rank: null,
     pct_stage_2:           null,
     pct_stage_4:           null,
+    // C5: US ETFs use the ticker-level RS/momentum path (not holdings aggregator).
+    data_source:           'legacy' as const,
   }
 }
 
