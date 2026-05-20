@@ -161,6 +161,7 @@ export async function getStaticPortfolioById(
           SELECT engine_state
           FROM atlas.atlas_stock_signal_unified
           WHERE instrument_id = (elem->>'instrument_id')::uuid
+          ORDER BY date DESC
           LIMIT 1
         ) ss ON TRUE
       )                               AS instruments,
