@@ -1,4 +1,5 @@
 import type { ETFRow } from '@/lib/queries/etfs'
+import { ordinal } from '@/lib/ordinal'
 
 type Props = {
   etfs: ETFRow[]
@@ -47,7 +48,7 @@ export function ETFMetricTiles({ etfs }: Props) {
       <Tile label="Investable" value={`${investable}`} sub={`${(investable / n * 100).toFixed(0)}% of universe`} tone={investable > 0 ? 'pos' : 'neutral'} />
       <Tile label="Broad Inv" value={`${broadInv}`} sub="broad market" />
       <Tile label="Sectoral Inv" value={`${sectoralInv}`} sub="sectoral" />
-      <Tile label="Median RS" value={medianPctile != null ? `${(medianPctile * 100).toFixed(0)}th` : '—'} />
+      <Tile label="Median RS" value={medianPctile != null ? ordinal(Math.round(medianPctile * 100)) : '—'} />
       <Tile label="Accel/Impr" value={`${accelImpr}`} sub={`${(accelImpr / n * 100).toFixed(0)}% gaining`} tone={accelImpr / n >= 0.25 ? 'pos' : 'neutral'} />
       <Tile
         label="Avg 3M Ret"

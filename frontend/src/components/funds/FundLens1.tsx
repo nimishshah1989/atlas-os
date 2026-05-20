@@ -5,6 +5,7 @@ import {
   ReferenceLine, ResponsiveContainer,
 } from 'recharts'
 import type { FundMetricHistoryRow } from '@/lib/queries/funds'
+import { ordinal } from '@/lib/ordinal'
 
 type PeriodKey = '1M' | '3M' | '6M'
 type ViewMode = 'rs' | 'returns'
@@ -110,7 +111,7 @@ export function FundLens1({
                 contentStyle={{ fontSize: 11, fontFamily: 'var(--font-sans)' }}
                 formatter={(v) => {
                   const n = typeof v === 'number' ? v : Number(v)
-                  return [`${Number.isFinite(n) ? n.toFixed(0) : '—'}th`, 'RS Pctile']
+                  return [Number.isFinite(n) ? ordinal(Math.round(n)) : '—', 'RS Pctile']
                 }}
               />
               <Line type="monotone" dataKey="pctile" stroke="#1D9E75" strokeWidth={1.5} dot={false} />

@@ -5,7 +5,7 @@ import { ChevronUp, ChevronDown } from 'lucide-react'
 import type { ETFRow } from '@/lib/queries/etfs'
 import type { ComponentValidation } from '@/lib/queries/component_validation'
 import {
-  pct, pctColor, PosSizeBar, RSPctileBar,
+  pct, pctColor, RSPctileBar,
 } from '@/lib/stock-formatters'
 import { ValidatedBadge } from '@/components/ui/ValidatedBadge'
 import { ColumnToggle, useColumnVisibility, type ColumnDef } from '@/components/ui/ColumnToggle'
@@ -77,7 +77,7 @@ function stateRank(order: string[], val: string | null): number {
 
 type SortKey =
   | 'ticker' | 'theme' | 'rs_pctile_3m'
-  | 'ret_1m' | 'ret_3m' | 'ret_12m' | 'position_size_pct'
+  | 'ret_1m' | 'ret_3m' | 'ret_12m'
   | 'rs_state' | 'momentum_state' | 'risk_state'
 
 type FilterChip = 'all' | 'broad' | 'sectoral' | 'thematic' | 'gold' | 'silver' | 'international' | 'investable'
@@ -120,9 +120,9 @@ const OPTIONAL_COLS: ColumnDef[] = [
 const COL_STORAGE_KEY = 'atlas-etf-screener-cols'
 
 // Always-visible columns:
-//   Ticker, Theme, Stage, RS State, Risk, 1M, 3M, RS Pctile, Deploy %  = 9
-// (Gates and Mom columns removed in Phase 8)
-const ALWAYS_VISIBLE_COL_COUNT = 9
+//   Ticker, Theme, Stage, RS State, Risk, 1M, 3M, RS Pctile  = 8
+// (Gates, Mom, and Deploy % columns removed in Phase 8)
+const ALWAYS_VISIBLE_COL_COUNT = 8
 
 function TriggerBadges({ row }: { row: ETFRow }) {
   if (!row.breakout_trigger && !row.transition_trigger) return null
@@ -321,7 +321,6 @@ export function ETFScreener({ etfs, validations = [] }: { etfs: ETFRow[]; valida
               <Th label="1M" k="ret_1m" align="right" />
               <Th label="3M" k="ret_3m" align="right" />
               <Th label="RS Pctile" k="rs_pctile_3m" align="right" />
-              <Th label="Deploy %" k="position_size_pct" align="right" />
             </tr>
           </thead>
           <tbody>
@@ -451,11 +450,6 @@ export function ETFScreener({ etfs, validations = [] }: { etfs: ETFRow[]; valida
                         data-validator-raw={row.rs_pctile_3m ?? '—'}
                       >
                         <RSPctileBar value={row.rs_pctile_3m} />
-                      </td>
-                      <td className="px-3 py-2.5 text-right">
-                        <div className="flex justify-end">
-                          <PosSizeBar value={row.position_size_pct} />
-                        </div>
                       </td>
                     </tr>
                   </Fragment>

@@ -11,7 +11,6 @@ import {
   CompositionStateChip,
   HoldingsStateChip,
   RecommendationChip,
-  formatWeeksInState,
 } from '@/lib/fund-formatters'
 import { LensBar } from '@/components/ui/LensBar'
 import { ColumnToggle, useColumnVisibility, type ColumnDef } from '@/components/ui/ColumnToggle'
@@ -41,7 +40,6 @@ const ALL_COLS: ColumnDef[] = [
   // Phase 8: 'gates' column removed — 4-gate dot row (P/S/H/M) dropped
   { key: 'comp_bar',        label: 'Comp Bar',        defaultVisible: true },
   { key: 'holdings_bar',    label: 'Holdings Bar',    defaultVisible: true },
-  { key: 'weeks_in_state',  label: 'In State',         defaultVisible: true },
   { key: 'drawdown',        label: '1Y Ret',          defaultVisible: true },
   { key: 'max_drawdown',    label: 'Max DD (1Y)',      defaultVisible: false },
   { key: 'aum',             label: 'AUM (Cr)',         defaultVisible: false },
@@ -58,7 +56,7 @@ type SortCol =
   | 'scheme_name' | 'amc' | 'category'
   | 'nav_state' | 'composition' | 'holdings' | 'recommendation'
   | 'ret' | 'rs_pctile' | 'rs_category'
-  | 'vol' | 'weeks_in_state' | 'drawdown' | 'max_drawdown' | 'aum'
+  | 'vol' | 'drawdown' | 'max_drawdown' | 'aum'
 
 function getSortValue(col: SortCol, f: FundRow, period: Period): number | string {
   // Re-shape the row so buildSortKey() can read the canonical column key it expects.
@@ -74,7 +72,6 @@ function getSortValue(col: SortCol, f: FundRow, period: Period): number | string
     case 'rs_pctile':      return buildSortKey('rs_pctile',      { rs_pctile: f[PCTILE_KEY[period]] as string | null })
     case 'rs_category':    return buildSortKey('rs_category',    { rs_category: (f[RSCAT_KEY[period]] as string | null) ?? '' })
     case 'vol':            return buildSortKey('ret',            { ret: f.realized_vol_63 })
-    case 'weeks_in_state': return buildSortKey('weeks_in_state', { weeks_in_state: f.weeks_in_current_state })
     case 'drawdown':       return buildSortKey('drawdown',       { drawdown: f.ret_12m })
     case 'max_drawdown':   return buildSortKey('drawdown',       { drawdown: f.drawdown_ratio_252 })
     case 'aum':            return buildSortKey('ret',            { ret: f.aum_cr })
@@ -183,7 +180,6 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
               {visibleCols.has('vol')            && <Th label="Vol 63D"        k="vol"          align="right" />}
               {visibleCols.has('comp_bar')       && <PlainTh label="Comp Bar" />}
               {visibleCols.has('holdings_bar')   && <PlainTh label="Holdings Bar" />}
-              {visibleCols.has('weeks_in_state') && <Th label="In State" k="weeks_in_state" align="right" title="How long this fund has been in its current NAV state (d=days, w=weeks, mo=months)" />}
               {visibleCols.has('drawdown')       && <Th label="1Y Ret"         k="drawdown"       align="right" />}
               {visibleCols.has('max_drawdown')   && <Th label="Max DD (1Y)"    k="max_drawdown"   align="right" title="Maximum drawdown over 252 trading days (1 year)" />}
               {visibleCols.has('aum')            && <Th label="AUM (Cr)"       k="aum"            align="right" title="Monthly average AUM in ₹ crore (AMFI data)" />}
@@ -288,9 +284,6 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
                       <td className="px-3 py-2.5 w-24">
                         <LensBar segments={holdSegments} label="Holdings" nullish={holdNullish} />
                       </td>
-                    )}
-                    {visibleCols.has('weeks_in_state') && (
-                      <td className="px-3 py-2.5 text-right font-mono text-xs text-ink-secondary">{formatWeeksInState(f.weeks_in_current_state)}</td>
                     )}
                     {visibleCols.has('drawdown') && (
                       <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(f.ret_12m)}`}>
