@@ -160,3 +160,14 @@ export async function getEffectivePolicy(portfolioId: string): Promise<Effective
   if (house === null) return null
   return mergeRows(house, override)
 }
+
+/**
+ * Returns the house-default policy with all fields marked as 'inherited'.
+ * Used for the /setup/policy page when no portfolio is selected.
+ * Returns null if no house-default row has been seeded yet.
+ */
+export async function getHouseDefaultPolicy(): Promise<EffectivePolicy | null> {
+  const house = await loadHouseDefault()
+  if (house === null) return null
+  return mergeRows(house, null)
+}
