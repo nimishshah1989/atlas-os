@@ -1,4 +1,4 @@
-"""Policy module — effective-policy resolution, validation, sector targets, and entry filter.
+"""Policy module — effective-policy resolution, validation, targets, filter, and compliance.
 
 Public surface:
 - ``Policy`` — frozen dataclass representing the merged effective policy
@@ -12,8 +12,16 @@ Public surface:
 - ``apply_entry_filter`` — pure filter: buy_states ∩ rank thresholds
 - ``PositionSizeResult`` — result of the position-sizing formula (suggested_pct, binding_constraint)
 - ``suggest_position_size`` — pure formula: target_gap ∩ max_per_stock ∩ regime_room
+- ``Holding`` — portfolio holding with fields required for compliance checking
+- ``ComplianceBreach`` — a single policy constraint breach (rule, message, actual, limit)
+- ``check_compliance`` — pure function: holdings + policy → list of breaches
 """
 
+from atlas.intelligence.policy.compliance import (
+    ComplianceBreach,
+    Holding,
+    check_compliance,
+)
 from atlas.intelligence.policy.entry_filter import (
     CandidateInstrument,
     apply_entry_filter,
@@ -46,4 +54,7 @@ __all__ = [
     "apply_entry_filter",
     "PositionSizeResult",
     "suggest_position_size",
+    "Holding",
+    "ComplianceBreach",
+    "check_compliance",
 ]
