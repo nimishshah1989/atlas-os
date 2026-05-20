@@ -11,7 +11,11 @@ from datetime import date
 
 import pandas as pd
 
-from atlas.intelligence.states.dwell_recompute import recompute_dwell_days
+from atlas.intelligence.states.dwell_recompute import (
+    _UPDATE_CHUNK_SIZE,
+    _chunked,
+    recompute_dwell_days,
+)
 
 
 def test_dwell_accumulates_across_a_continuous_run() -> None:
@@ -91,3 +95,53 @@ def test_dwell_computed_per_instrument_independently() -> None:
         1,
         2,
     ], f"instrument b dwell wrong: {b_rows['dwell_days'].tolist()}"
+
+
+# ---------------------------------------------------------------------------
+# _chunked helper tests
+# ---------------------------------------------------------------------------
+
+
+def test_chunked_splits_evenly() -> None:
+    # 10 items, chunk size 5 -> [[0..4], [5..9]]
+    result = _chunked(list(range(10)), 5)
+    assert result == [list(range(0, 5)), list(range(5, 10))]
+
+
+def test_chunked_last_chunk_shorter() -> None:
+    # 12 items, chunk size 5 -> three chunks: 5, 5, 2
+    result = _chunked(list(range(12)), 5)
+    assert [len(c) for c in result] == [5, 5, 2]
+    assert result[2] == [10, 11]
+
+
+def test_chunked_single_chunk_when_seq_smaller_than_size() -> None:
+    result = _chunked([1, 2, 3], 100)
+    assert result == [[1, 2, 3]]
+
+
+def test_chunked_empty_seq_returns_empty_list() -> None:
+    assert _chunked([], 5) == []
+
+
+def test_chunked_size_one_produces_singleton_chunks() -> None:
+    result = _chunked([10, 20, 30], 1)
+    assert result == [[10], [20], [30]]
+
+
+def test_chunked_raises_on_zero_size() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="size must be > 0"):
+        _chunked([1, 2], 0)
+
+
+# ---------------------------------------------------------------------------
+# Module-level constant guard
+# ---------------------------------------------------------------------------
+
+
+def test_update_chunk_size_is_5000() -> None:
+    assert _UPDATE_CHUNK_SIZE == 5000
+    assert isinstance(_UPDATE_CHUNK_SIZE, int)
+    assert _UPDATE_CHUNK_SIZE > 0

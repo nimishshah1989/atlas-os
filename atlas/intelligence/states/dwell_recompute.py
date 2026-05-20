@@ -24,11 +24,35 @@ Algorithm (vectorized — no iterrows, no apply on large data):
 
 from __future__ import annotations
 
-from typing import cast
+from typing import Any, cast
 
 import pandas as pd
+import structlog
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
+
+log = structlog.get_logger(__name__)
+
+_UPDATE_CHUNK_SIZE = 5000
+
+
+def _chunked(seq: list[Any], size: int) -> list[list[Any]]:
+    """Split *seq* into consecutive sublists each of length at most *size*.
+
+    Args:
+        seq:  Input sequence.
+        size: Maximum length of each chunk (must be > 0).
+
+    Returns:
+        List of sublists; the last sublist may be shorter than *size*.
+        Returns an empty list when *seq* is empty.
+
+    Example:
+        _chunked(list(range(12)), 5)  ->  [[0..4], [5..9], [10,11]]
+    """
+    if size <= 0:
+        raise ValueError(f"size must be > 0, got {size}")
+    return [seq[i : i + size] for i in range(0, len(seq), size)]
 
 
 def recompute_dwell_days(panel: pd.DataFrame) -> pd.DataFrame:
@@ -122,19 +146,36 @@ def recompute_and_persist(
 
     subset = cast(pd.DataFrame, out[["instrument_id", "date", "dwell_days"]])
     records = subset.to_dict(orient="records")
+    tagged = [{**r, "cv": classifier_version} for r in records]
 
-    # Batch UPDATE. Using CAST() not ::uuid syntax to avoid SQLAlchemy
-    # param-cast collision (wiki bug-pattern: SQLAlchemy Param-Cast Collision).
-    with engine.begin() as conn:
-        conn.execute(
-            text("""
-                UPDATE atlas.atlas_stock_state_daily
-                SET dwell_days = :dwell_days
-                WHERE instrument_id = CAST(:instrument_id AS uuid)
-                  AND date = :date
-                  AND classifier_version = :cv
-            """),
-            [{**r, "cv": classifier_version} for r in records],
-        )
+    # Chunked UPDATE: each 5 000-row slice runs in its own transaction so no
+    # single statement exceeds Postgres statement_timeout.  Progress is durable —
+    # a later chunk failing does not roll back committed earlier chunks.
+    # Using CAST() not ::uuid syntax to avoid SQLAlchemy param-cast collision
+    # (wiki bug-pattern: SQLAlchemy Param-Cast Collision).
+    update_sql = text("""
+        UPDATE atlas.atlas_stock_state_daily
+        SET dwell_days = :dwell_days
+        WHERE instrument_id = CAST(:instrument_id AS uuid)
+          AND date = :date
+          AND classifier_version = :cv
+    """)
 
-    return len(records)
+    chunks = _chunked(tagged, _UPDATE_CHUNK_SIZE)
+    total_chunks = len(chunks)
+    rows_updated = 0
+
+    for idx, chunk in enumerate(chunks, start=1):
+        with engine.begin() as conn:
+            conn.execute(update_sql, chunk)
+        rows_updated += len(chunk)
+        if idx % 10 == 0 or idx == total_chunks:
+            log.info(
+                "dwell_recompute.chunk_progress",
+                chunk=idx,
+                total_chunks=total_chunks,
+                rows_committed=rows_updated,
+                total_rows=len(tagged),
+            )
+
+    return rows_updated
