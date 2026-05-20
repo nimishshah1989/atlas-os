@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Atlas Strategy Marketplace — v1 Design Spec</title>
+<style>
+  :root{
+    --paper:#ffffff; --bg:#f5f4f1; --ink:#1c1b19; --ink2:#56524b; --ink3:#8b867d;
+    --rule:#e6e3dd; --rule2:#d8d4cc; --teal:#1D9E75; --teal-d:#16785a; --teal-bg:#eaf6f1;
+    --pos:#1D9E75; --neg:#c0392b; --amber:#b8860b; --amber-bg:#fbf3df;
+    --serif:"Iowan Old Style",Georgia,"Times New Roman",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);
+       font-size:15px;line-height:1.62;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:980px;margin:0 auto;padding:0 28px 100px;}
+
+  /* masthead */
+  .masthead{padding:54px 0 30px;border-bottom:3px solid var(--ink);margin-bottom:38px;}
+  .eyebrow{font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+           color:var(--teal-d);font-weight:700;margin-bottom:14px;}
+  h1{font-family:var(--serif);font-size:42px;line-height:1.12;margin:0 0 14px;font-weight:600;}
+  .sub{font-size:17px;color:var(--ink2);font-family:var(--serif);font-style:italic;margin-bottom:20px;}
+  .meta{display:flex;flex-wrap:wrap;gap:6px 26px;font-size:12.5px;color:var(--ink3);}
+  .meta b{color:var(--ink2);font-weight:600;}
+
+  h2{font-family:var(--serif);font-size:25px;font-weight:600;margin:46px 0 6px;
+     padding-top:14px;}
+  h2 .num{color:var(--teal);font-size:18px;margin-right:10px;font-family:var(--mono);}
+  h3{font-size:14px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink2);
+     margin:26px 0 8px;font-weight:700;}
+  p{margin:10px 0;}
+  a{color:var(--teal-d);}
+  strong{font-weight:650;}
+  code{font-family:var(--mono);font-size:12.5px;background:#efeee9;
+       padding:1px 5px;border-radius:3px;color:var(--ink);}
+
+  /* callouts */
+  .callout{background:var(--paper);border:1px solid var(--rule);border-left:4px solid var(--teal);
+           border-radius:3px;padding:16px 20px;margin:18px 0;}
+  .callout.amber{border-left-color:var(--amber);}
+  .callout .ct{font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+               font-weight:700;color:var(--teal-d);margin-bottom:6px;}
+  .callout.amber .ct{color:var(--amber);}
+
+  /* two-column */
+  .cols{display:flex;gap:18px;margin:18px 0;flex-wrap:wrap;}
+  .col{flex:1;min-width:260px;background:var(--paper);border:1px solid var(--rule);
+       border-radius:3px;padding:16px 20px;}
+  .col h4{margin:0 0 8px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;}
+  .col.in h4{color:var(--teal-d);}
+  .col.out h4{color:var(--neg);}
+  ul{margin:8px 0;padding-left:20px;}
+  li{margin:5px 0;}
+
+  /* architecture flow */
+  .flow{background:var(--paper);border:1px solid var(--rule);border-radius:3px;
+        padding:24px 20px;margin:20px 0;}
+  .flow-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;}
+  .node{border:1.5px solid var(--rule2);background:#fbfaf8;border-radius:4px;
+        padding:10px 14px;font-size:12.5px;text-align:center;min-width:120px;}
+  .node .nt{font-weight:700;display:block;}
+  .node .nd{color:var(--ink3);font-size:11px;}
+  .node.eng{border-color:var(--teal);background:var(--teal-bg);}
+  .node.out{border-color:var(--ink);}
+  .arrow{color:var(--teal);font-size:20px;font-weight:700;}
+  .flow-note{text-align:center;font-size:11.5px;color:var(--ink3);margin-top:14px;
+             font-style:italic;}
+
+  /* data tables */
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13px;}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--rule);}
+  th{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3);
+     font-weight:700;border-bottom:1.5px solid var(--rule2);}
+  td.num,th.num{text-align:right;font-family:var(--mono);}
+  .pos{color:var(--pos);font-weight:600;}
+  .neg{color:var(--neg);font-weight:600;}
+
+  /* MOCKUP frame */
+  .mock{margin:22px 0 8px;border:1px solid var(--rule2);border-radius:6px;overflow:hidden;
+        box-shadow:0 12px 34px -16px rgba(0,0,0,.32);}
+  .mock-bar{background:#ecebe6;border-bottom:1px solid var(--rule2);padding:8px 14px;
+            display:flex;align-items:center;gap:7px;}
+  .dot{width:10px;height:10px;border-radius:50%;background:#cfccc4;}
+  .mock-url{flex:1;text-align:center;font-family:var(--mono);font-size:11px;color:var(--ink3);}
+  .mock-tag{font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;
+            color:var(--teal-d);background:var(--teal-bg);border:1px solid #c6e6da;
+            border-radius:3px;padding:2px 7px;}
+  .screen{background:var(--paper);padding:20px 22px;}
+  .mock-cap{font-size:12px;color:var(--ink3);font-style:italic;margin:6px 2px 26px;}
+
+  /* product chrome inside mockups */
+  .pnav{display:flex;gap:18px;font-size:12px;color:var(--ink3);
+        border-bottom:1px solid var(--rule);padding-bottom:9px;margin-bottom:14px;}
+  .pnav b{color:var(--ink);font-weight:600;border-bottom:2px solid var(--teal);padding-bottom:9px;}
+  .ptitle{font-family:var(--serif);font-size:21px;font-weight:600;margin:2px 0;}
+  .psub{font-size:12px;color:var(--ink3);margin-bottom:14px;}
+  .chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px;}
+  .chip{font-size:11px;border:1px solid var(--rule2);border-radius:14px;padding:3px 11px;
+        color:var(--ink2);background:#fbfaf8;}
+  .chip.on{background:var(--ink);color:#fff;border-color:var(--ink);}
+  .strip{display:flex;gap:24px;background:#fbfaf8;border:1px solid var(--rule);
+         border-radius:3px;padding:10px 16px;margin-bottom:14px;font-size:12px;}
+  .strip b{font-family:var(--mono);font-size:15px;display:block;color:var(--ink);}
+  .strip span{color:var(--ink3);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;}
+
+  .badge{font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;
+         padding:2px 6px;border-radius:3px;}
+  .b-sys{background:#eef0f6;color:#3d4a82;}
+  .b-man{background:var(--teal-bg);color:var(--teal-d);}
+  .b-surf{background:var(--teal-bg);color:var(--teal-d);}
+  .b-cand{background:var(--amber-bg);color:var(--amber);}
+  .b-bt{background:#efeee9;color:var(--ink3);}
+
+  /* regime fit mini-bars */
+  .rfit{display:inline-flex;gap:2px;}
+  .rfit i{width:9px;height:14px;border-radius:1px;display:inline-block;background:#e2e0d9;}
+  .rfit i.f{background:var(--teal);}
+  .rfit i.p{background:#a9d8c6;}
+
+  .panel{border:1px solid var(--rule);border-radius:3px;padding:14px 16px;margin:12px 0;
+         background:#fbfaf8;}
+  .panel h5{margin:0 0 8px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+            color:var(--ink2);font-weight:700;}
+  .rule-line{font-family:var(--mono);font-size:11.5px;line-height:1.7;color:var(--ink2);}
+
+  .foot{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);
+        font-size:12px;color:var(--ink3);}
+  .tag-row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 2px;}
+  .oq{counter-reset:oq;}
+  .oq .q{background:var(--paper);border:1px solid var(--rule);border-radius:3px;
+         padding:12px 16px 12px 44px;margin:9px 0;position:relative;}
+  .oq .q:before{counter-increment:oq;content:counter(oq);position:absolute;left:14px;top:12px;
+                font-family:var(--mono);font-weight:700;color:var(--teal);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="masthead">
+    <div class="eyebrow">Atlas v2 · Design Specification</div>
+    <h1>Strategy Marketplace</h1>
+    <div class="sub">A self-running marketplace of trading strategies — generated broadly, surfaced honestly.</div>
+    <div class="meta">
+      <span><b>Date</b> 20 May 2026</span>
+      <span><b>Worktree</b> atlas-os-consolidation</span>
+      <span><b>Branch</b> feat/atlas-consolidation</span>
+      <span><b>Status</b> Design — pending review</span>
+      <span><b>Builds on</b> Decision Engine (Waves 1-3), State Engine</span>
+    </div>
+  </div>
+
+  <h2><span class="num">01</span>What this is</h2>
+  <p>A self-running marketplace of trading strategies. A <strong>generator</strong> produces
+  a large population of strategies — hundreds to thousands. Every strategy runs on a
+  <strong>paper book</strong> from Day Zero. The marketplace surfaces to the fund manager the
+  few that have <em>earned trust</em>: consistent live performance across regimes, plus a
+  clean, inspectable, decision-by-decision audit trail. Strategies that decay are retired;
+  the generator replenishes. No real-money execution in v1 — paper only.</p>
+
+  <h2><span class="num">02</span>Why</h2>
+  <p>The fund manager is starting to trust Atlas. He will deploy a strategy only after he
+  can interrogate its <strong>consistency across regimes, its logic, and the audit trail
+  behind every decision</strong> — not because a leaderboard ranks it #1. The marketplace
+  runs many strategies cheaply and honestly, and surfaces the ones an experienced manager
+  can build conviction in.</p>
+
+  <h2><span class="num">03</span>The core distinction</h2>
+  <p>The discipline that keeps this honest. These two layers are not in tension — they are
+  the backend and the frontend of one system.</p>
+  <div class="cols">
+    <div class="col in">
+      <h4>Generation is broad</h4>
+      <p>Thousands of strategies generated and running on paper. Cheap — the compute is
+      not the constraint. Vectorized over the existing data.</p>
+    </div>
+    <div class="col out" style="border-left:4px solid var(--teal);">
+      <h4 style="color:var(--teal-d);">Surfacing is disciplined</h4>
+      <p>What reaches the fund manager is ranked by <strong>live forward performance</strong>
+      and <strong>consistency across regimes</strong> — never by backtest rank. A backtest is
+      a starting credential, not a selector.</p>
+    </div>
+  </div>
+  <div class="callout amber">
+    <div class="ct">The rule</div>
+    A backtest selects nothing. Thousands run; the few that surface as <em>trusted</em> earned
+    it on live, forward, out-of-sample paper results. "Best of thousands" over a short window
+    is luck — so the surfacing filter is breadth-aware: it scales the required live track
+    record to the size of the population and demands consistency across more than one regime.
+  </div>
+
+  <h2><span class="num">04</span>Architecture</h2>
+  <div class="flow">
+    <div class="flow-row">
+      <div class="node"><span class="nt">Generator</span><span class="nd">samples Policy-space</span></div>
+      <span class="arrow">&rarr;</span>
+      <div class="node"><span class="nt">Population</span><span class="nd">100s–1000s of Policies</span></div>
+      <span class="arrow">&rarr;</span>
+      <div class="node eng"><span class="nt">Vectorized Engine</span><span class="nd">runs every Policy</span></div>
+      <span class="arrow">&rarr;</span>
+      <div class="node"><span class="nt">Paper books</span><span class="nd">one per strategy</span></div>
+    </div>
+    <div class="flow-row" style="margin-top:14px;">
+      <div class="node"><span class="nt">Audit trail</span><span class="nd">every decision logged</span></div>
+      <span class="arrow">&rarr;</span>
+      <div class="node"><span class="nt">Surfacing filter</span><span class="nd">live perf · regime consistency</span></div>
+      <span class="arrow">&rarr;</span>
+      <div class="node out"><span class="nt">Marketplace page</span><span class="nd">the trusted few</span></div>
+      <span class="arrow">&rarr;</span>
+      <div class="node"><span class="nt">Retirement</span><span class="nd">decay &rarr; replenish</span></div>
+    </div>
+    <div class="flow-note">The State Engine supplies the signal. The Decision Engine's 6-step
+    flow is what each strategy runs. The marketplace is Decision Engine "Wave 4".</div>
+  </div>
+
+  <h2><span class="num">05</span>Scope — v1</h2>
+  <div class="cols">
+    <div class="col in">
+      <h4>In</h4>
+      <ul>
+        <li><strong>Generator</strong> — samples the Policy-field space (entry states,
+        RS/rank thresholds, sizing caps, exits, universe, cadence). Each strategy is a
+        Policy row. Origin <code>system</code> or <code>manual</code>.</li>
+        <li><strong>Generic vectorized strategy engine</strong> — runs any Policy through
+        the 6-step flow, batched across the whole population.</li>
+        <li><strong>Paper-trading from Day Zero</strong> — every strategy holds a paper book.</li>
+        <li><strong>Day-Zero credential</strong> — a regime-segmented backtest, labelled
+        "not yet live-proven".</li>
+        <li><strong>Live surfacing</strong> — marketplace page ranked by live performance
+        + regime consistency.</li>
+        <li><strong>Retirement</strong> — decaying strategies retire; generator replenishes.</li>
+        <li><strong>Audit trail</strong> — decision-by-decision log. Core scope.</li>
+      </ul>
+    </div>
+    <div class="col out">
+      <h4>Out of v1</h4>
+      <ul>
+        <li><strong>Real-money / broker execution.</strong> Atlas proposes; v1 stays paper.</li>
+        <li><strong>Fund-manager-authored strategies via a UI builder.</strong> v1
+        <code>manual</code> strategies are authored as config/seed; a UI builder is a
+        later phase.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2><span class="num">06</span>The engine — the core build</h2>
+  <p><code>atlas/trading/lab.py</code> today runs only <code>V5-RP-TREND</code> with four flag
+  modes; it does not consume a parameterized strategy. v1's central engineering is a
+  <strong>generic strategy engine</strong> that takes any Policy, runs the 6-step decision
+  flow under it, is <strong>vectorized</strong> (evaluates the whole population over the
+  OHLCV/state panel in batch), and emits — per strategy, per cadence — the trades and the
+  audit-trail rows. Everything else (generator, surfacing page, retirement) is lighter and
+  sits around this engine.</p>
+
+  <!-- ============ MOCKUP 1 ============ -->
+  <h2><span class="num">07</span>How it looks — the Marketplace page</h2>
+  <div class="mock">
+    <div class="mock-bar">
+      <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      <span class="mock-url">atlas.jslwealth.in / strategies</span>
+      <span class="mock-tag">Mockup</span>
+    </div>
+    <div class="screen">
+      <div class="pnav"><span>Regime</span><span>Sectors</span><span>Stocks</span>
+        <b>Strategies</b><span>Portfolios</span></div>
+      <div class="ptitle">Strategy Marketplace</div>
+      <div class="psub">Strategies ranked by live paper performance. Backtest figures shown
+        for reference only — they select nothing.</div>
+
+      <div class="strip">
+        <div><b>1,240</b><span>running on paper</span></div>
+        <div><b>18</b><span>surfaced as trusted</span></div>
+        <div><b>47</b><span>retired this quarter</span></div>
+        <div><b>Volatile</b><span>current regime</span></div>
+      </div>
+
+      <div class="chips">
+        <span class="chip on">Regime: Volatile</span>
+        <span class="chip">Horizon: all</span>
+        <span class="chip">Universe: all</span>
+        <span class="chip">Origin: all</span>
+        <span class="chip on">Consistency &ge; 6mo</span>
+        <span class="chip">Status: surfaced</span>
+      </div>
+
+      <table>
+        <thead><tr>
+          <th>Strategy</th><th>Origin</th><th>Regime fit</th>
+          <th class="num">Live &alpha;</th><th class="num">Backtest &alpha;</th>
+          <th>Consistency</th><th class="num">Sharpe</th><th>Status</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>V5-RP-TREND</strong></td>
+            <td><span class="badge b-man">Manual</span></td>
+            <td><span class="rfit"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></span></td>
+            <td class="num pos">+18.2%</td><td class="num" style="color:#8b867d;">+20.2%</td>
+            <td>4/4 regimes · 14mo</td><td class="num">1.31</td>
+            <td><span class="badge b-surf">Surfaced</span></td>
+          </tr>
+          <tr>
+            <td><strong>RS-Leader Momentum</strong></td>
+            <td><span class="badge b-sys">System</span></td>
+            <td><span class="rfit"><i class="f"></i><i class="f"></i><i class="f"></i><i class="p"></i></span></td>
+            <td class="num pos">+11.4%</td><td class="num" style="color:#8b867d;">+16.8%</td>
+            <td>3/4 regimes · 9mo</td><td class="num">1.05</td>
+            <td><span class="badge b-surf">Surfaced</span></td>
+          </tr>
+          <tr>
+            <td><strong>Low-Vol Quality Compounders</strong></td>
+            <td><span class="badge b-sys">System</span></td>
+            <td><span class="rfit"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></span></td>
+            <td class="num pos">+7.9%</td><td class="num" style="color:#8b867d;">+9.1%</td>
+            <td>4/4 regimes · 11mo</td><td class="num">0.94</td>
+            <td><span class="badge b-surf">Surfaced</span></td>
+          </tr>
+          <tr>
+            <td><strong>52-Week-High Proximity Trend</strong></td>
+            <td><span class="badge b-man">Manual</span></td>
+            <td><span class="rfit"><i class="f"></i><i class="f"></i><i class="f"></i><i class="p"></i></span></td>
+            <td class="num pos">+9.3%</td><td class="num" style="color:#8b867d;">+10.0%</td>
+            <td>3/4 regimes · 8mo</td><td class="num">0.88</td>
+            <td><span class="badge b-surf">Surfaced</span></td>
+          </tr>
+          <tr>
+            <td><strong>Sector-Rotation Breadth</strong></td>
+            <td><span class="badge b-sys">System</span></td>
+            <td><span class="rfit"><i class="f"></i><i class="f"></i><i class="p"></i><i></i></span></td>
+            <td class="num pos">+6.1%</td><td class="num" style="color:#8b867d;">+12.3%</td>
+            <td>2/4 regimes · 6mo</td><td class="num">0.71</td>
+            <td><span class="badge b-cand">Candidate</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="font-size:11.5px;color:#8b867d;font-style:italic;">
+        + 1,235 strategies running on paper, not yet surfaced — below the consistency bar.
+      </div>
+    </div>
+  </div>
+  <div class="mock-cap">The marketplace page. Thousands run behind; the table shows only
+    what has cleared the live-performance + regime-consistency bar. Backtest &alpha; is greyed —
+    visible, but it ranks nothing.</div>
+
+  <!-- ============ MOCKUP 2 ============ -->
+  <h2><span class="num">08</span>How it looks — the Strategy Detail page</h2>
+  <div class="mock">
+    <div class="mock-bar">
+      <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      <span class="mock-url">atlas.jslwealth.in / strategies / rs-leader-momentum</span>
+      <span class="mock-tag">Mockup</span>
+    </div>
+    <div class="screen">
+      <div class="pnav"><span>Regime</span><span>Sectors</span><span>Stocks</span>
+        <b>Strategies</b><span>Portfolios</span></div>
+      <div style="display:flex;align-items:baseline;gap:10px;">
+        <div class="ptitle">RS-Leader Momentum</div>
+        <span class="badge b-sys">System</span>
+        <span class="badge b-surf">Surfaced</span>
+      </div>
+      <div class="psub">Generated 11-Aug-2025 · paper-trading 9 months · surfaced 04-Feb-2026</div>
+
+      <div class="panel">
+        <h5>The rules — what this strategy does</h5>
+        <div class="rule-line">
+          BUY&nbsp; stocks entering Stage 2A / 2B&nbsp; · &nbsp;RS rank &ge; 80&nbsp; · &nbsp;within-state rank &ge; 0.60<br>
+          SIZE max 5.0% / stock&nbsp; · &nbsp;max 15% / sector&nbsp; · &nbsp;max 25 holdings&nbsp; · &nbsp;regime cap respected<br>
+          EXIT trim 50% on Stage 3&nbsp; · &nbsp;full exit on Stage 4&nbsp; · &nbsp;hard stop &minus;15%<br>
+          UNIVERSE direct equity&nbsp; · &nbsp;BENCHMARK Nifty 500&nbsp; · &nbsp;REBALANCE weekly
+        </div>
+      </div>
+
+      <h5 style="margin:18px 0 4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#56524b;">
+        Track record by regime</h5>
+      <table>
+        <thead><tr><th>Regime</th>
+          <th class="num">Backtest &alpha; <span class="badge b-bt">ref only</span></th>
+          <th class="num">Live paper &alpha;</th><th class="num">Live months</th>
+          <th class="num">Hit rate</th></tr></thead>
+        <tbody>
+          <tr><td>Calm</td><td class="num" style="color:#8b867d;">+14.1%</td>
+            <td class="num pos">+12.8%</td><td class="num">3</td><td class="num">64%</td></tr>
+          <tr><td>Normal</td><td class="num" style="color:#8b867d;">+17.0%</td>
+            <td class="num pos">+11.9%</td><td class="num">4</td><td class="num">61%</td></tr>
+          <tr><td>Volatile</td><td class="num" style="color:#8b867d;">+19.2%</td>
+            <td class="num pos">+8.4%</td><td class="num">2</td><td class="num">57%</td></tr>
+          <tr><td>Crash</td><td class="num" style="color:#8b867d;">&minus;6.0%</td>
+            <td class="num" style="color:#8b867d;">— no live data —</td>
+            <td class="num">0</td><td class="num">—</td></tr>
+        </tbody>
+      </table>
+      <div style="font-size:11px;color:#8b867d;font-style:italic;margin-bottom:6px;">
+        Surfaced on 3/4 regimes. Not yet live-tested in a Crash regime — flagged, not hidden.</div>
+
+      <div class="panel">
+        <h5>Audit trail — every decision, and the signal behind it</h5>
+        <table style="margin:2px 0;">
+          <thead><tr><th>Date</th><th>Action</th><th>Instrument</th>
+            <th>Trigger</th><th class="num">Size</th><th>Bound by</th></tr></thead>
+          <tbody>
+            <tr><td>12-May-2026</td><td><span class="pos">BUY</span></td><td>TATAMOTORS</td>
+              <td>Stage 1 &rarr; 2A breakout · RS 0.91</td><td class="num">4.8%</td><td>max_per_stock</td></tr>
+            <tr><td>12-May-2026</td><td><span class="pos">BUY</span></td><td>DIXON</td>
+              <td>Stage 1 &rarr; 2A breakout · RS 0.88</td><td class="num">4.1%</td><td>within-state rank</td></tr>
+            <tr><td>06-May-2026</td><td><span class="neg">TRIM</span></td><td>BHARTIARTL</td>
+              <td>Stage 2C &rarr; 3 · distribution days 6</td><td class="num">&minus;50%</td><td>state_exit_trim</td></tr>
+            <tr><td>29-Apr-2026</td><td><span class="neg">EXIT</span></td><td>ADANIGREEN</td>
+              <td>hard stop &minus;15% hit</td><td class="num">&minus;100%</td><td>hard_stop_pct</td></tr>
+            <tr><td>22-Apr-2026</td><td><span class="neg">EXIT</span></td><td>IRCTC</td>
+              <td>Stage 3 &rarr; 4 decline</td><td class="num">&minus;100%</td><td>state_exit_full</td></tr>
+          </tbody>
+        </table>
+        <div style="font-size:11px;color:#8b867d;font-style:italic;">Full log filterable by
+          action, instrument, date, trigger.</div>
+      </div>
+
+      <div class="panel">
+        <h5>Current paper book — 21 holdings · 92% deployed</h5>
+        <table style="margin:2px 0;">
+          <thead><tr><th>Instrument</th><th>Sector</th><th class="num">Weight</th>
+            <th class="num">P&amp;L since entry</th><th>State</th></tr></thead>
+          <tbody>
+            <tr><td>TATAMOTORS</td><td>Auto</td><td class="num">4.8%</td>
+              <td class="num pos">+2.1%</td><td>Stage 2A</td></tr>
+            <tr><td>PERSISTENT</td><td>IT</td><td class="num">4.6%</td>
+              <td class="num pos">+9.4%</td><td>Stage 2B</td></tr>
+            <tr><td>DIXON</td><td>Cons. Durables</td><td class="num">4.1%</td>
+              <td class="num neg">&minus;1.3%</td><td>Stage 2A</td></tr>
+            <tr><td colspan="5" style="color:#8b867d;font-style:italic;">+ 18 more holdings</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="mock-cap">The Strategy Detail page — the inspectable surface. Rules in plain
+    language, a regime-segmented record (backtest greyed, live in colour), the full audit
+    trail with the signal behind every decision, and the current paper book. This page is
+    the adoption gate: it is how the fund manager builds conviction.</div>
+
+  <h2><span class="num">09</span>Data model</h2>
+  <ul>
+    <li>A strategy <strong>is a Policy</strong> — <code>atlas_portfolio_policy</code>
+      (migration 092) plus new columns: <code>name</code>, <code>origin</code>
+      (<code>system</code>/<code>manual</code>), <code>lifecycle_status</code>
+      (<code>candidate</code> / <code>surfaced</code> / <code>retired</code>),
+      <code>generated_at</code>.</li>
+    <li>Each strategy owns a <strong>paper portfolio</strong> — built on the Decision Engine
+      Wave 3 portfolio model + the Wave 4 paper book.</li>
+    <li><strong>Decision audit log</strong> — every BUY/TRIM/EXIT per strategy with the
+      triggering signal. Reuse where possible: <code>atlas_strategy_recommendations_daily</code>
+      and <code>atlas_state_action_log</code> already carry per-decision rows. A dedicated
+      <code>atlas_strategy_decision_log</code> is the likely home (resolved in the plan).</li>
+    <li><strong>Performance + ranking</strong> — reuse <code>atlas_strategy_leaderboard</code>
+      (incl. <code>regime_breakdown</code> JSONB) and <code>atlas_strategy_validation</code>
+      (per-year backtest).</li>
+  </ul>
+
+  <h2><span class="num">10</span>Day Zero vs ongoing</h2>
+  <div class="cols">
+    <div class="col">
+      <h4 style="color:var(--ink2);">Day Zero</h4>
+      <p>The generator seeds the population; each strategy is backtested over ~10y of
+      history, regime-segmented. The page ranks by this backtest credential — explicitly
+      labelled "backtested, not yet live-proven". <code>V5-RP-TREND</code>, already proven,
+      seeds as a <code>manual</code> strategy.</p>
+    </div>
+    <div class="col">
+      <h4 style="color:var(--teal-d);">Ongoing</h4>
+      <p>Every strategy paper-trades forward. Live performance accumulates and the ranking
+      <strong>shifts from backtest credential to live track record</strong>. Both are always
+      shown; live is flagged as the one that counts. Retirement and replenishment run on the
+      live record.</p>
+    </div>
+  </div>
+
+  <h2><span class="num">11</span>Success criteria</h2>
+  <ol>
+    <li>The generator seeds and maintains a population of hundreds+ strategies, all paper-trading.</li>
+    <li>The marketplace page surfaces strategies ranked by live performance, filtered by
+      regime consistency; the fund manager sees the trusted few.</li>
+    <li>Any strategy can be opened and every paper decision traced to its signal.</li>
+    <li>Backtest vs live-paper is unambiguous everywhere.</li>
+    <li>Decaying strategies retire automatically; the generator replenishes.</li>
+  </ol>
+
+  <h2><span class="num">12</span>Open questions</h2>
+  <div class="oq">
+    <div class="q"><strong>Generator sampling.</strong> Pure random over Policy-space, grid,
+      or mutate live-winners (genetic). v1 can start with random + grid; mutation later.</div>
+    <div class="q"><strong>Vectorized engine boundaries.</strong> How much of the 6-step flow
+      vectorizes cleanly vs needs a per-strategy loop. An implementation-plan decision.</div>
+    <div class="q"><strong>Audit-log storage.</strong> Dedicated
+      <code>atlas_strategy_decision_log</code> vs extending
+      <code>atlas_strategy_recommendations_daily</code>. An implementation-plan decision.</div>
+  </div>
+
+  <div class="foot">
+    <div class="tag-row">
+      <span class="chip">Atlas v2</span><span class="chip">Decision Engine Wave 4</span>
+      <span class="chip">paper-only</span><span class="chip">pending review</span>
+    </div>
+    Canonical spec: <code>docs/superpowers/specs/2026-05-20-atlas-strategy-marketplace-design.md</code>.
+    This HTML is the rich presentation view of that spec — the mockups are illustrative, not
+    final UI. Generated 20 May 2026.
+  </div>
+
+</div>
+</body>
+</html>
