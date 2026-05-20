@@ -29,6 +29,9 @@ export type StaticInstrument = {
   sector: string
   // True if not in Nifty 100 and not in Nifty 500 (small-cap definition matching compliance.py).
   is_small_cap: boolean
+  // Task 3.6: current Weinstein engine state from atlas_stock_signal_unified.
+  // null for ETFs/funds/unclassified stocks. Used for deterioration surfacing.
+  engine_state: string | null
 }
 
 export type StaticPortfolioDetail = {
@@ -125,6 +128,10 @@ export async function getAllPortfolios(): Promise<PortfolioListRow[]> {
  * by joining each JSONB element against atlas_universe_stocks (most-recent snapshot per
  * instrument_id). Non-universe instruments (ETFs, funds, missing IDs) fall back to
  * sector='Unknown' and is_small_cap=false — safe for compliance checks.
+ *
+ * Task 3.6: instruments array further enriched with engine_state from
+ * atlas_stock_signal_unified (latest row per instrument_id). Null for ETFs/funds
+ * not in the signal table. Used for deterioration surfacing.
  */
 export async function getStaticPortfolioById(
   id: string,
@@ -138,7 +145,8 @@ export async function getStaticPortfolioById(
           elem || jsonb_build_object(
             'symbol',       u.symbol,
             'sector',       COALESCE(u.sector, 'Unknown'),
-            'is_small_cap', (u.in_nifty_100 IS NOT TRUE AND u.in_nifty_500 IS NOT TRUE)
+            'is_small_cap', (u.in_nifty_100 IS NOT TRUE AND u.in_nifty_500 IS NOT TRUE),
+            'engine_state', ss.engine_state
           )
         )
         FROM jsonb_array_elements(p.instruments) AS elem
@@ -149,6 +157,12 @@ export async function getStaticPortfolioById(
           ORDER BY effective_from DESC
           LIMIT 1
         ) u ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT engine_state
+          FROM atlas.atlas_stock_signal_unified
+          WHERE instrument_id = (elem->>'instrument_id')::uuid
+          LIMIT 1
+        ) ss ON TRUE
       )                               AS instruments,
       p.backtest_id,
       p.paper_trading_active,

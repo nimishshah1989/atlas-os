@@ -11,6 +11,8 @@ import {
 import { getEffectivePolicy } from '@/lib/queries/policy'
 import { getPendingProposedChanges } from '@/lib/queries/proposed-changes'
 import { CurrentVsTarget } from '@/components/portfolio/CurrentVsTarget'
+import { DeteriorationPanel } from '@/components/portfolio/DeteriorationPanel'
+import { findDeterioration } from '@/lib/policy-deterioration'
 import type { CompliancePolicy } from '@/lib/policy-compliance'
 import { KPICard } from '@/components/strategy/KPICard'
 import { ReRunBacktestButton } from '@/components/strategy/ReRunBacktestButton'
@@ -65,7 +67,7 @@ export default async function PortfolioDetailPage({ params }: Props) {
   return (
     <main className="min-h-screen bg-paper px-8 py-6 max-w-5xl mx-auto">
       <nav className="flex gap-4 text-xs font-sans text-ink-tertiary mb-6 border-b border-paper-rule pb-3">
-        {['kpis', 'composition', 'equity', 'drawdown', 'backtests', 'policy'].map((anchor) => (
+        {['kpis', 'composition', 'equity', 'drawdown', 'backtests', 'policy', 'deterioration'].map((anchor) => (
           <a key={anchor} href={`#${anchor}`} className="hover:text-ink-primary transition-colors capitalize">
             {anchor === 'kpis' ? 'KPIs' : anchor.charAt(0).toUpperCase() + anchor.slice(1)}
           </a>
@@ -172,6 +174,29 @@ export default async function PortfolioDetailPage({ params }: Props) {
         <h2 className="font-sans text-xs font-semibold uppercase tracking-wide text-ink-secondary mb-3">Trade Policy</h2>
         <PolicyPanel policy={effectivePolicy} />
       </section>
+
+      {/* Step 6: deterioration — surfaces holdings hitting a Policy exit rule */}
+      {isStatic && staticPortfolio!.instruments.length > 0 && effectivePolicy != null && (() => {
+        const deteriItems = findDeterioration(
+          staticPortfolio!.instruments.map((i) => ({
+            instrument_id: i.instrument_id, symbol: i.symbol,
+            engine_state: i.engine_state ?? null, weight_pct: i.weight_pct,
+          })),
+          {
+            state_exit_trim: typeof effectivePolicy.state_exit_trim.value === 'string' ? effectivePolicy.state_exit_trim.value : null,
+            state_exit_full: typeof effectivePolicy.state_exit_full.value === 'string' ? effectivePolicy.state_exit_full.value : null,
+            buy_states: Array.isArray(effectivePolicy.buy_states.value) ? (effectivePolicy.buy_states.value as string[]) : [],
+          },
+        )
+        return (
+          <section id="deterioration" className="mb-8">
+            <h2 className="font-sans text-xs font-semibold uppercase tracking-wide text-ink-secondary mb-3">
+              Exit Signals{deteriItems.length > 0 && <span className="ml-2 font-mono text-signal-neg">{deteriItems.length} holding{deteriItems.length === 1 ? '' : 's'}</span>}
+            </h2>
+            <DeteriorationPanel items={deteriItems} hardStopTracked={false} />
+          </section>
+        )
+      })()}
 
       {/* Current-vs-target: only for static portfolios that have instruments */}
       {isStatic && staticPortfolio!.instruments.length > 0 && (() => {
