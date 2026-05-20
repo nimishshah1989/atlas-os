@@ -255,66 +255,6 @@ def classify_stage_3(
 
 
 # ---------------------------------------------------------------------------
-# Cold-start structural 2B/2C helper (Task 4 — Wave 4C reachability fix)
-# ---------------------------------------------------------------------------
-
-
-def _cold_start_2bc_state(
-    close: float,
-    sma_50: float,
-    atr_14: float,
-    atr_14_50d_avg: float,
-    distribution_days_5d: int,
-    thresholds: dict[tuple[str, str], ThresholdValue],
-) -> str:
-    """Return "stage_2c", "stage_2b", or "" for a cold-start structural admission.
-
-    Called only when:
-      - is_cold_start is True (first observation of this instrument in the panel)
-      - trend_ok is True (close > sma_50 > sma_150 > sma_200, all non-NaN)
-
-    Returns a non-empty string (truthy) when the stock should bypass the normal
-    Stage-2A freshness window and be admitted directly to 2B or 2C. Returns ""
-    (falsy) when no structural signal fires, allowing the caller to fall through
-    to the normal Stage-2A / Stage-1 path.
-
-    2C admission (structural):
-      - close / sma_50 > theta_extension  (price-extended)
-      - OR atr_14 / atr_14_50d_avg > theta_atr_expansion  (volatility-expanded)
-      Either signal alone is sufficient; both indicate a mature, extended uptrend
-      that cannot be a fresh breakout.
-
-    2B admission (structural):
-      - distribution_days_5d == 0  (no recent selling pressure)
-      - close > sma_50  (already guaranteed by trend_ok in the caller, checked
-        here for correctness as a self-contained predicate)
-      The MA stack (trend_ok) already confirms the uptrend is established.
-
-    Design note: the freshness window (theta_fresh_days) is NOT checked here.
-    Cold-start admission is structural, not temporal — we do not have a reliable
-    day-count for a stock first seen mid-trend. The caller sets days_in_stage_2
-    to theta_fresh_days + 1 so that subsequent panel rows continue in the normal
-    2B → 2C progression.
-    """
-    if _is_nan(close) or _is_nan(sma_50) or sma_50 <= 0:
-        return ""
-    extension = get_threshold(thresholds, "theta_extension", "stage_2c")
-    atr_expansion = get_threshold(thresholds, "theta_atr_expansion", "stage_2c")
-    overextended = close / sma_50 > extension
-    vol_expanded = (
-        not _is_nan(atr_14)
-        and not _is_nan(atr_14_50d_avg)
-        and atr_14_50d_avg > 0
-        and atr_14 / atr_14_50d_avg > atr_expansion
-    )
-    if overextended or vol_expanded:
-        return "stage_2c"
-    if distribution_days_5d == 0 and close > sma_50:
-        return "stage_2b"
-    return ""
-
-
-# ---------------------------------------------------------------------------
 # Panel orchestrator (Task 1.6)
 # ---------------------------------------------------------------------------
 
@@ -354,9 +294,7 @@ def classify_state_panel(
       close_vs_sma_200, sma_200_slope, volume_ratio_50d, distribution_days.
 
     Priority order (first match wins):
-      Uninvestable → Stage 4 → Stage 3
-      → Cold-start 2B/2C (Task 4: structural mid-trend admission on first observation)
-      → Stage 2A → Stage 2C → Stage 2B → Stage 1
+      Uninvestable → Stage 4 → Stage 3 → Stage 2A → Stage 2C → Stage 2B → Stage 1
     """
     # Process rows per-instrument in chronological order.
     features = features.sort_values(["instrument_id", "date"]).reset_index(drop=True)
@@ -368,11 +306,6 @@ def classify_state_panel(
     rows = []
     for _, r in features.iterrows():
         iid = r["instrument_id"]
-        # Track whether this is the first time we observe this instrument.
-        # Cold starts (no prior history) allow structural 2B/2C admission without
-        # requiring a prior Stage-2A pass — the stock may have been mid-trend before
-        # entering the panel. (Task 4 — Wave 4C reachability fix.)
-        is_cold_start = iid not in prior_state_per_instr
         prior = prior_state_per_instr.get(iid, "stage_1")
 
         # Carry forward the in-stage-2 day counter.
@@ -401,17 +334,7 @@ def classify_state_panel(
         low_age = 0 if pd.isna(r["low_252_age_days"]) else int(r["low_252_age_days"])
         data_gap = 0 if pd.isna(r["data_gap_count"]) else int(r["data_gap_count"])
 
-        # Full uptrend MA stack — used by multiple branches below.
-        trend_ok = (
-            not any(_is_nan(v) for v in (close, sma_50, sma_150, sma_200))
-            and close > sma_50 > sma_150 > sma_200
-        )
-
         # Priority-ordered classification.
-        # _cold_start_synthetic_days: set in the cold-start branch only; used by
-        # the bookkeeping section below to preserve the synthetic days counter.
-        _cold_start_synthetic_days: int | None = None
-
         if classify_uninvestable(liquidity, data_gap, close, thresholds):
             state = "uninvestable"
         elif classify_stage_4(close, sma_150, sma_200, sma_150_slope, thresholds):
@@ -420,25 +343,6 @@ def classify_state_panel(
             prior, close, sma_50, sma_50_slope, dist_25, obv_slope_50d, thresholds
         ):
             state = "stage_3"
-        elif (
-            is_cold_start
-            and trend_ok
-            and _cold_start_2bc_state(close, sma_50, atr_14, atr_14_50d_avg, dist_5, thresholds)
-        ):
-            # Task 4 (Wave 4C): structural mid-trend admission.
-            # On first observation the prior defaults to "stage_1", which would
-            # force the stock through a 21-day Stage-2A holding period even when
-            # structural indicators already show a confirmed or mature uptrend.
-            # Admit directly to 2B or 2C based on structural signals only.
-            state = _cold_start_2bc_state(close, sma_50, atr_14, atr_14_50d_avg, dist_5, thresholds)
-            # Initialise the days_in_stage_2 counter at the freshness boundary so
-            # that subsequent days continue smoothly into the normal 2B/2C range.
-            # NOTE: the state-transition block below resets this to 1 on a state
-            # change (prior="stage_1" → state="stage_2b/2c"). We use a sentinel
-            # flag so the bookkeeping section can preserve the synthetic counter.
-            _cold_start_synthetic_days = (
-                int(get_threshold(thresholds, "theta_fresh_days", "stage_2a")) + 1
-            )
         elif classify_stage_2a(
             prior,
             close,
@@ -453,6 +357,10 @@ def classify_state_panel(
         ):
             state = "stage_2a"
         else:
+            trend_ok = (
+                not any(_is_nan(v) for v in (close, sma_50, sma_150, sma_200))
+                and close > sma_50 > sma_150 > sma_200
+            )
             in_stage_2 = is_currently_in_2 and trend_ok
             if classify_stage_2c(
                 in_stage_2, days_in_stage_2, close, sma_50, atr_14, atr_14_50d_avg, thresholds
@@ -469,12 +377,7 @@ def classify_state_panel(
         current_date = r["date"]
         if state != prior:
             state_since: object = current_date
-            if _cold_start_synthetic_days is not None:
-                # Cold-start 2B/2C: preserve the synthetic days counter so the
-                # next row does not fall back into the Stage-2A freshness window.
-                days_in_stage_2 = _cold_start_synthetic_days
-            else:
-                days_in_stage_2 = 1 if state in ("stage_2a", "stage_2b", "stage_2c") else 0
+            days_in_stage_2 = 1 if state in ("stage_2a", "stage_2b", "stage_2c") else 0
         else:
             state_since = state_since_per_instr.get(iid, current_date)
 
