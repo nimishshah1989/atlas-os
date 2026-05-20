@@ -39,16 +39,13 @@ export default async function RegimePage({ searchParams }: { searchParams: Searc
 
   // Fetch scorecard signals. Breadth is passed in from the regime row to avoid
   // a duplicate DB round-trip (pct_above_ema_50 already fetched above).
-  const { scorecard, worklist } = await getRegimeScorecard(current.pct_above_ema_50)
+  const { scorecard, worklist, leadingSectorNames } = await getRegimeScorecard(current.pct_above_ema_50)
 
   const deploymentPct = Math.round(parseFloat(current.deployment_multiplier) * 100)
 
-  // Derive leading sectors from the worklist for the verdict sentence.
-  // "Leading sectors" here means sectors that recently entered Overweight
-  // (worklist.sectorsEnteredFavour > 0 indicates transitions happened today,
-  //  but we don't yet have the sector names from this query path — render
-  //  without sector names when none entered today).
-  const leadingSectors: string[] = []
+  // leadingSectorNames = sectors that entered Overweight today (were not Overweight yesterday).
+  // Empty list on days with no new entries — verdict renders without the sector clause.
+  const leadingSectors: string[] = leadingSectorNames
 
   return (
     <div className="max-w-[1400px] mx-auto">

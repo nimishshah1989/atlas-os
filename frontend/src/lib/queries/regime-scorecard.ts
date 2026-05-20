@@ -22,6 +22,7 @@ import type { WorklistData } from '@/components/regime/TodayWorklist'
 export type RegimeScorecardResult = {
   scorecard: ScorecardData
   worklist: WorklistData
+  leadingSectorNames: string[]
 }
 
 // ── Individual query helpers ──────────────────────────────────────────────────
@@ -96,8 +97,8 @@ async function getParticipationBreadth(): Promise<number | null> {
   return raw != null ? parseFloat(raw) : null
 }
 
-async function getSectorsEnteredFavour(): Promise<number> {
-  const rows = await sql<{ cnt: number }[]>`
+async function getSectorsEnteredFavour(): Promise<string[]> {
+  const rows = await sql<{ sector: string }[]>`
     WITH latest_two AS (
       SELECT DISTINCT date
       FROM atlas.atlas_sector_signal_unified
@@ -114,23 +115,23 @@ async function getSectorsEnteredFavour(): Promise<number> {
       SELECT sector FROM atlas.atlas_sector_signal_unified
       WHERE date = (SELECT date FROM yest_date) AND sector_state = 'Overweight'
     )
-    SELECT COUNT(*)::int AS cnt
+    SELECT t.sector
     FROM today_rows t
     WHERE t.sector NOT IN (SELECT sector FROM yest_rows)
+    ORDER BY t.sector
   `
-  return rows[0]?.cnt ?? 0
+  return rows.map((r) => r.sector)
 }
 
-type BreakoutRow = { symbol: string; cnt: number }
+type BreakoutRow = { symbol: string }
 
 async function getBreakoutCandidates(limit = 10): Promise<BreakoutRow[]> {
-  const rows = await sql<{ symbol: string }[]>`
+  return sql<BreakoutRow[]>`
     SELECT symbol
     FROM atlas.mv_breakout_candidates
     ORDER BY rs_pctile_3m DESC NULLS LAST
     LIMIT ${limit}
   `
-  return rows.map((r, i) => ({ symbol: r.symbol, cnt: i }))
 }
 
 async function getBreakoutCount(): Promise<number> {
@@ -173,7 +174,7 @@ export async function getRegimeScorecard(
     trendPct,
     momentumNet,
     participationBreadth,
-    sectorsEntered,
+    sectorsEnteredNames,
     breakoutCount,
     breakoutRows,
     deteriorationCount,
@@ -220,7 +221,7 @@ export async function getRegimeScorecard(
   }
 
   const worklist: WorklistData = {
-    sectorsEnteredFavour: sectorsEntered,
+    sectorsEnteredFavour: sectorsEnteredNames.length,
     freshBreakouts:       breakoutCount,
     breakoutSymbols:      breakoutRows.map((r) => r.symbol),
     deterioratingCount:   deteriorationCount,
@@ -235,5 +236,6 @@ export async function getRegimeScorecard(
       participation: participationTile,
     },
     worklist,
+    leadingSectorNames: sectorsEnteredNames,
   }
 }
