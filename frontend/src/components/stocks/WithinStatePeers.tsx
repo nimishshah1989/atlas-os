@@ -45,7 +45,7 @@ export function WithinStatePeers({
 
   if (peers.length === 0) {
     return (
-      <section data-testid="within-state-peers">
+      <section id="within-state-peers" data-testid="within-state-peers" className="scroll-mt-24">
         <h3 className="font-sans text-xs font-medium text-ink-tertiary uppercase tracking-wider">
           Peers in {label}
         </h3>
@@ -55,7 +55,7 @@ export function WithinStatePeers({
   }
 
   return (
-    <section data-testid="within-state-peers">
+    <section id="within-state-peers" data-testid="within-state-peers" className="scroll-mt-24">
       <h3 className="font-sans text-xs font-medium text-ink-tertiary uppercase tracking-wider">
         Peers in {label}
       </h3>
