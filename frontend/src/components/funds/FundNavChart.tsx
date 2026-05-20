@@ -133,7 +133,7 @@ export function FundNavChart({ navHistory }: { navHistory: FundNavHistoryRow[] }
           <p className="font-sans text-xs text-ink-tertiary">Insufficient data for selected period</p>
         </div>
       ) : (
-        <div style={{ height: 200 }}>
+        <div style={{ height: 200, minHeight: 200 }}>
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={chartData} margin={{ top: 4, right: 8, bottom: 4, left: 32 }}>
               <XAxis

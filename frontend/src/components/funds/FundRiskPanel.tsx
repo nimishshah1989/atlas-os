@@ -45,7 +45,7 @@ function MiniChart({
     )
   }
   return (
-    <div style={{ height: 80 }}>
+    <div style={{ height: 80, minHeight: 80 }}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 2, right: 4, bottom: 2, left: 28 }}>
           <XAxis dataKey="date" tick={false} axisLine={false} tickLine={false} />

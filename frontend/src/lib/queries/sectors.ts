@@ -189,19 +189,6 @@ export async function getSectorMetricHistory(
   `
 }
 
-export type SectorPivotRow = {
-  sector: string
-  ppc_count: number
-  npc_count: number
-  total_tradeable: number
-  pivot_balance: string | null
-}
-
-// Phase 7: CTS sector pivot table (atlas_cts_sector_pivot_daily) is being cut.
-// Returns empty array; Phase 8 removes the UI panel that consumed this.
-export async function getSectorCTSPivot(): Promise<SectorPivotRow[]> {
-  return []
-}
 
 export type RRGHistoryRow = {
   sector_name: string

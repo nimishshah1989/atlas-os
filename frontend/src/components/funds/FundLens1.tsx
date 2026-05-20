@@ -101,7 +101,7 @@ export function FundLens1({
           <p className="font-sans text-xs text-ink-tertiary">Insufficient history</p>
         </div>
       ) : view === 'rs' ? (
-        <div style={{ height: 160 }}>
+        <div style={{ height: 160, minHeight: 160 }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={rsChartData} margin={{ top: 4, right: 8, bottom: 16, left: 24 }}>
               <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#94a3b8' }} interval="preserveStartEnd" />
@@ -119,7 +119,7 @@ export function FundLens1({
           </ResponsiveContainer>
         </div>
       ) : (
-        <div style={{ height: 160 }}>
+        <div style={{ height: 160, minHeight: 160 }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={retChartData} margin={{ top: 4, right: 8, bottom: 16, left: 32 }}>
               <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#94a3b8' }} interval="preserveStartEnd" />

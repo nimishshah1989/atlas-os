@@ -11,13 +11,15 @@ export type StockRowWithSector = StockRow & {
   vol_63: string | null
   drawdown: string | null
   days_in_state: number | null
-  // Phase 7: gate columns will be removed in Phase 8 (page-level cleanup).
+  // Gate columns — used by screener legend, sector quality panel, stocks table.
   history_gate_pass: boolean | null
   liquidity_gate_pass: boolean | null
   strength_gate: boolean | null
   direction_gate: boolean | null
   risk_gate: boolean | null
   volume_gate: boolean | null
+  sector_gate: boolean | null
+  market_gate: boolean | null
   above_50d_ma: boolean | null
   above_200d_ma: boolean | null
   ret_12m: string | null
@@ -35,27 +37,6 @@ export type StockRowWithSector = StockRow & {
   ema_20_ratio: string | null
   ma_30w_slope_4w: string | null
   atr_21: string | null
-  // Phase 7: gate columns will be removed in Phase 8 (page-level cleanup).
-  sector_gate: boolean | null
-  market_gate: boolean | null
-  transition_trigger: boolean | null
-  breakout_trigger: boolean | null
-  // Exit signals: NULL pending CTS replacement in Phase 8.
-  exit_market_riskoff: boolean | null
-  exit_sector_avoid: boolean | null
-  exit_rs_deteriorate: boolean | null
-  exit_momentum_collapse: boolean | null
-  exit_volume_distrib: boolean | null
-  exit_stop_loss: boolean | null
-  stage: number | null
-  is_ppc: boolean | null
-  is_npc: boolean | null
-  is_contraction: boolean | null
-  trigger_level: string | null
-  ppc_strength: string | null
-  signal_date: string | null
-  cts_conviction_score: string | null
-  cts_action_confidence: boolean | null
   // IC-validated state engine surface (from atlas_stock_signal_unified):
   engine_state: string | null
   within_state_rank: number | null
@@ -158,7 +139,7 @@ export async function getAllStocks(params?: GetAllStocksParams): Promise<StockRo
       )                                    AS above_50d_ma,
       m.drawdown_ratio_252::text           AS drawdown,
       su.dwell_days                        AS days_in_state,
-      -- Phase 7: gate columns will be removed in Phase 8 (page-level cleanup).
+      -- Gate columns: hardcoded TRUE (real gate logic moved to atlas_stock_signal_unified).
       TRUE                                 AS history_gate_pass,
       TRUE                                 AS liquidity_gate_pass,
       TRUE                                 AS strength_gate,
@@ -167,14 +148,6 @@ export async function getAllStocks(params?: GetAllStocksParams): Promise<StockRo
       TRUE                                 AS volume_gate,
       TRUE                                 AS sector_gate,
       TRUE                                 AS market_gate,
-      TRUE                                 AS transition_trigger,
-      TRUE                                 AS breakout_trigger,
-      NULL::boolean                        AS exit_market_riskoff,
-      NULL::boolean                        AS exit_sector_avoid,
-      NULL::boolean                        AS exit_rs_deteriorate,
-      NULL::boolean                        AS exit_momentum_collapse,
-      NULL::boolean                        AS exit_volume_distrib,
-      NULL::boolean                        AS exit_stop_loss,
       su.rs_state,
       su.momentum_state,
       CASE NTILE(4) OVER (ORDER BY m.realized_vol_63 NULLS LAST)
@@ -199,17 +172,7 @@ export async function getAllStocks(params?: GetAllStocksParams): Promise<StockRo
         WHEN m.ret_6m IS NOT NULL AND b.n500_now IS NOT NULL AND b.n500_6m IS NOT NULL AND b.n500_6m > 0
         THEN (m.ret_6m - (b.n500_now - b.n500_6m) / b.n500_6m)::text
         ELSE NULL
-      END AS alpha_6m,
-      -- CTS columns: NULL pending Phase 8 removal.
-      NULL::int                            AS stage,
-      NULL::boolean                        AS is_ppc,
-      NULL::boolean                        AS is_npc,
-      NULL::boolean                        AS is_contraction,
-      NULL::text                           AS trigger_level,
-      NULL::text                           AS ppc_strength,
-      NULL::text                           AS signal_date,
-      NULL::text                           AS cts_conviction_score,
-      NULL::boolean                        AS cts_action_confidence
+      END AS alpha_6m
     FROM atlas.atlas_universe_stocks u
     JOIN latest l ON TRUE
     CROSS JOIN benchmark b
@@ -276,7 +239,7 @@ export async function getTopPicksAcrossSectors(): Promise<StockRowWithSector[]> 
       )                                    AS above_50d_ma,
       m.drawdown_ratio_252::text           AS drawdown,
       su.dwell_days                        AS days_in_state,
-      -- Phase 7: gate columns will be removed in Phase 8 (page-level cleanup).
+      -- Gate columns: hardcoded TRUE (real gate logic moved to atlas_stock_signal_unified).
       TRUE                                 AS history_gate_pass,
       TRUE                                 AS liquidity_gate_pass,
       TRUE                                 AS strength_gate,
@@ -285,14 +248,6 @@ export async function getTopPicksAcrossSectors(): Promise<StockRowWithSector[]> 
       TRUE                                 AS volume_gate,
       TRUE                                 AS sector_gate,
       TRUE                                 AS market_gate,
-      TRUE                                 AS transition_trigger,
-      TRUE                                 AS breakout_trigger,
-      NULL::boolean                        AS exit_market_riskoff,
-      NULL::boolean                        AS exit_sector_avoid,
-      NULL::boolean                        AS exit_rs_deteriorate,
-      NULL::boolean                        AS exit_momentum_collapse,
-      NULL::boolean                        AS exit_volume_distrib,
-      NULL::boolean                        AS exit_stop_loss,
       su.rs_state,
       su.momentum_state,
       CASE NTILE(4) OVER (ORDER BY m.realized_vol_63 NULLS LAST)
@@ -309,16 +264,7 @@ export async function getTopPicksAcrossSectors(): Promise<StockRowWithSector[]> 
       su.dwell_days,
       su.urgency_score,
       NULL::text AS alpha_3m,
-      NULL::text AS alpha_6m,
-      NULL::int                            AS stage,
-      NULL::boolean                        AS is_ppc,
-      NULL::boolean                        AS is_npc,
-      NULL::boolean                        AS is_contraction,
-      NULL::text                           AS trigger_level,
-      NULL::text                           AS ppc_strength,
-      NULL::text                           AS signal_date,
-      NULL::text                           AS cts_conviction_score,
-      NULL::boolean                        AS cts_action_confidence
+      NULL::text AS alpha_6m
     FROM atlas.atlas_universe_stocks u
     JOIN latest l ON TRUE
     JOIN atlas.atlas_stock_metrics_daily m
@@ -396,7 +342,7 @@ export async function getStockBySymbol(symbol: string): Promise<StockRowWithSect
       )                                    AS above_50d_ma,
       m.drawdown_ratio_252::text           AS drawdown,
       su.dwell_days                        AS days_in_state,
-      -- Phase 7: gate columns will be removed in Phase 8 (page-level cleanup).
+      -- Gate columns: hardcoded TRUE (real gate logic moved to atlas_stock_signal_unified).
       TRUE                                 AS history_gate_pass,
       TRUE                                 AS liquidity_gate_pass,
       TRUE                                 AS strength_gate,
@@ -405,14 +351,6 @@ export async function getStockBySymbol(symbol: string): Promise<StockRowWithSect
       TRUE                                 AS volume_gate,
       TRUE                                 AS sector_gate,
       TRUE                                 AS market_gate,
-      TRUE                                 AS transition_trigger,
-      TRUE                                 AS breakout_trigger,
-      NULL::boolean                        AS exit_market_riskoff,
-      NULL::boolean                        AS exit_sector_avoid,
-      NULL::boolean                        AS exit_rs_deteriorate,
-      NULL::boolean                        AS exit_momentum_collapse,
-      NULL::boolean                        AS exit_volume_distrib,
-      NULL::boolean                        AS exit_stop_loss,
       su.rs_state,
       su.momentum_state,
       CASE NTILE(4) OVER (ORDER BY m.realized_vol_63 NULLS LAST)
@@ -437,16 +375,7 @@ export async function getStockBySymbol(symbol: string): Promise<StockRowWithSect
         WHEN m.ret_6m IS NOT NULL AND b.n500_now IS NOT NULL AND b.n500_6m IS NOT NULL AND b.n500_6m > 0
         THEN (m.ret_6m - (b.n500_now - b.n500_6m) / b.n500_6m)::text
         ELSE NULL
-      END AS alpha_6m,
-      NULL::int                            AS stage,
-      NULL::boolean                        AS is_ppc,
-      NULL::boolean                        AS is_npc,
-      NULL::boolean                        AS is_contraction,
-      NULL::text                           AS trigger_level,
-      NULL::text                           AS ppc_strength,
-      NULL::text                           AS signal_date,
-      NULL::text                           AS cts_conviction_score,
-      NULL::boolean                        AS cts_action_confidence
+      END AS alpha_6m
     FROM atlas.atlas_universe_stocks u
     JOIN latest l ON TRUE
     CROSS JOIN benchmark b

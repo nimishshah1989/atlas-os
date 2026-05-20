@@ -88,7 +88,7 @@ export function OBVContinuousChart({ series }: OBVContinuousChartProps) {
         <span className="text-xs text-ink-tertiary">{slopeLabel}</span>
       </div>
 
-      <div style={{ height: 80 }} className="mt-2">
+      <div style={{ height: 80, minHeight: 80 }} className="mt-2">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={series} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
             <XAxis
