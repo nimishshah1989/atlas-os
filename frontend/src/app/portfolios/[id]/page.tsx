@@ -8,12 +8,14 @@ import {
   getRuleBasedPortfolioById,
   getBacktestsForPortfolio,
 } from '@/lib/queries/portfolios'
+import { getEffectivePolicy } from '@/lib/queries/policy'
 import { KPICard } from '@/components/strategy/KPICard'
 import { ReRunBacktestButton } from '@/components/strategy/ReRunBacktestButton'
 import { EquityCurveChart } from '@/components/charts/EquityCurveChart'
 import { DrawdownChart } from '@/components/charts/DrawdownChart'
 import { PaperTradingToggle } from './PaperTradingToggle'
 import { StaticComposition, RuleBasedComposition } from './CompositionView'
+import { PolicyPanel } from '@/components/portfolio/PolicyPanel'
 
 function fmtPct(raw: string | null): string {
   if (raw == null) return '—'
@@ -37,9 +39,10 @@ type Props = { params: Promise<{ id: string }> }
 export default async function PortfolioDetailPage({ params }: Props) {
   const { id } = await params
 
-  const [staticPortfolio, ruleBasedPortfolio] = await Promise.all([
+  const [staticPortfolio, ruleBasedPortfolio, effectivePolicy] = await Promise.all([
     getStaticPortfolioById(id),
     getRuleBasedPortfolioById(id),
+    getEffectivePolicy(id),
   ])
 
   const isStatic = staticPortfolio != null
@@ -58,7 +61,7 @@ export default async function PortfolioDetailPage({ params }: Props) {
   return (
     <main className="min-h-screen bg-paper px-8 py-6 max-w-5xl mx-auto">
       <nav className="flex gap-4 text-xs font-sans text-ink-tertiary mb-6 border-b border-paper-rule pb-3">
-        {['kpis', 'composition', 'equity', 'drawdown', 'backtests'].map((anchor) => (
+        {['kpis', 'composition', 'equity', 'drawdown', 'backtests', 'policy'].map((anchor) => (
           <a key={anchor} href={`#${anchor}`} className="hover:text-ink-primary transition-colors capitalize">
             {anchor === 'kpis' ? 'KPIs' : anchor.charAt(0).toUpperCase() + anchor.slice(1)}
           </a>
@@ -159,6 +162,11 @@ export default async function PortfolioDetailPage({ params }: Props) {
         {isStatic
           ? <PaperTradingToggle portfolioId={id} currentActive={paperActive} />
           : <p className="font-sans text-sm text-ink-tertiary">Paper trading for Rule-Based portfolios connects in M16.</p>}
+      </section>
+
+      <section id="policy" className="mb-8">
+        <h2 className="font-sans text-xs font-semibold uppercase tracking-wide text-ink-secondary mb-3">Trade Policy</h2>
+        <PolicyPanel policy={effectivePolicy} />
       </section>
     </main>
   )
