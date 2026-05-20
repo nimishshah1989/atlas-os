@@ -10,6 +10,8 @@ Public surface:
 - ``derive_sector_targets`` — pure formula: engine signal ∩ policy cap ∩ regime cap
 - ``CandidateInstrument`` — instrument with state/rank fields for entry filtering
 - ``apply_entry_filter`` — pure filter: buy_states ∩ rank thresholds
+- ``PositionSizeResult`` — result of the position-sizing formula (suggested_pct, binding_constraint)
+- ``suggest_position_size`` — pure formula: target_gap ∩ max_per_stock ∩ regime_room
 """
 
 from atlas.intelligence.policy.entry_filter import (
@@ -21,6 +23,10 @@ from atlas.intelligence.policy.policy import (
     _merge,
     effective_policy,
     validate_policy,
+)
+from atlas.intelligence.policy.sizing import (
+    PositionSizeResult,
+    suggest_position_size,
 )
 from atlas.intelligence.policy.targets import (
     SectorSignal,
@@ -38,4 +44,6 @@ __all__ = [
     "derive_sector_targets",
     "CandidateInstrument",
     "apply_entry_filter",
+    "PositionSizeResult",
+    "suggest_position_size",
 ]
