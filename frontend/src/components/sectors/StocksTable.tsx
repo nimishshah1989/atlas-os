@@ -4,6 +4,7 @@ import { useState, useMemo, useRef } from 'react'
 import { ChevronUp, ChevronDown, CheckCircle2, Info } from 'lucide-react'
 import type { StockRow } from '@/lib/queries/sector-deep-dive'
 import type { TimeRange } from '@/lib/time-range'
+import { LinkedTicker } from '@/components/ui/LinkedToken'
 
 type SortKey =
   | 'symbol' | 'rs_3m_nifty500' | 'rs_pctile_3m' | 'ret_1m' | 'ret_3m' | 'ret_6m'
@@ -216,7 +217,9 @@ export function StocksTable({
               className={`border-b border-paper-rule last:border-0 hover:bg-paper-rule/20 transition-colors ${i % 2 === 0 ? '' : 'bg-paper-rule/5'}`}
             >
               <td className="px-3 py-2.5 whitespace-nowrap">
-                <div className="font-sans text-xs font-semibold text-ink-primary">{row.symbol}</div>
+                <div className="font-sans text-xs font-semibold">
+                  <LinkedTicker symbol={row.symbol} />
+                </div>
                 <div className="font-sans text-[10px] text-ink-tertiary truncate max-w-[200px]" title={row.company_name}>
                   {row.company_name}
                 </div>

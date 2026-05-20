@@ -2,6 +2,7 @@
 'use client'
 import { Sparkles } from 'lucide-react'
 import type { StockRow } from '@/lib/queries/sector-deep-dive'
+import { LinkedTicker } from '@/components/ui/LinkedToken'
 
 function pct(v: string | null, digits = 1): string {
   if (v == null) return '—'
@@ -62,8 +63,8 @@ export function TopPicksCallout({ stocks }: { stocks: StockRow[] }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
         {picks.map(p => (
           <div key={p.instrument_id} className="px-3 py-2 bg-paper border border-paper-rule rounded-sm">
-            <div className="font-sans text-sm font-semibold text-ink-primary truncate" title={p.company_name}>
-              {p.symbol}
+            <div className="font-sans text-sm font-semibold truncate" title={p.company_name}>
+              <LinkedTicker symbol={p.symbol} />
             </div>
             <div className="font-sans text-[10px] text-ink-tertiary truncate mb-2" title={p.company_name}>
               {p.company_name}

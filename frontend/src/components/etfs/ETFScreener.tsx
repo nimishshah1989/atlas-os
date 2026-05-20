@@ -11,6 +11,7 @@ import {
 import { ValidatedBadge } from '@/components/ui/ValidatedBadge'
 import { ColumnToggle, useColumnVisibility, type ColumnDef } from '@/components/ui/ColumnToggle'
 import { WithinStateRankCell } from '@/components/stocks/WithinStateRankCell'
+import { LinkedSector } from '@/components/ui/LinkedToken'
 
 const RS_ORDER = ['Leader', 'Strong', 'Consolidating', 'Emerging', 'Average', 'Weak', 'Laggard']
 const MOM_ORDER = ['Accelerating', 'Improving', 'Flat', 'Deteriorating', 'Collapsing']
@@ -335,8 +336,8 @@ export function ETFScreener({ etfs, validations = [] }: { etfs: ETFRow[]; valida
                       <td className="px-3 py-2.5">
                         <ThemeBadge theme={row.theme} />
                         {row.linked_sector && (
-                          <div className="font-sans text-[10px] text-ink-tertiary mt-0.5 whitespace-nowrap">
-                            {row.linked_sector}
+                          <div className="font-sans text-[10px] mt-0.5 whitespace-nowrap">
+                            <LinkedSector sector={row.linked_sector} />
                           </div>
                         )}
                       </td>

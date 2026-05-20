@@ -57,12 +57,12 @@ export function SectorFundsTab({
               >
                 {sectorName} Wt
               </th>
-              <th className="px-3 py-2 text-left font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]">Rating</th>
-              <th className="px-3 py-2 text-left font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]">NAV State</th>
-              <th className="px-3 py-2 text-right font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]">RS Pctile</th>
-              <th className="px-3 py-2 text-right font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]">1M</th>
-              <th className="px-3 py-2 text-right font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]">3M</th>
-              <th className="px-3 py-2 text-right font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]">12M</th>
+              <th className="px-3 py-2 text-left font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]" title="Atlas composite rating: Recommended = all gates pass; Hold = partial; Avoid = majority of gates failing">Rating</th>
+              <th className="px-3 py-2 text-left font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]" title="NAV trend state: Leader NAV = sustained uptrend; Uptrend = rising; Downtrend = falling; Laggard NAV = sustained decline">NAV State</th>
+              <th className="px-3 py-2 text-right font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]" title="3-month RS percentile within the fund's peer category. 90 = top 10% vs category peers. Higher is better.">RS Pctile</th>
+              <th className="px-3 py-2 text-right font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]" title="Rolling 1-month NAV return">1M</th>
+              <th className="px-3 py-2 text-right font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]" title="Rolling 3-month NAV return">3M</th>
+              <th className="px-3 py-2 text-right font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]" title="Rolling 12-month NAV return">12M</th>
               <th
                 className="px-3 py-2 text-center font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]"
                 title="Quality gates: Performance / Sectors / Holdings / Market"

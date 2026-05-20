@@ -1,4 +1,5 @@
 import type { FundHoldingRow } from '@/lib/queries/funds'
+import { LinkedTicker, LinkedSector } from '@/components/ui/LinkedToken'
 
 const RS_STYLE: Record<string, string> = {
   Leader:               'bg-signal-pos/20 text-signal-pos',
@@ -81,24 +82,28 @@ export function FundHoldingsTab({ holdings }: { holdings: FundHoldingRow[] }) {
             <tr className="border-b border-paper-rule bg-paper">
               <th className="px-3 py-2 text-left font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]">Stock</th>
               <th className="px-3 py-2 text-left font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]">Sector</th>
-              <th className="px-3 py-2 text-right font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]">Weight</th>
-              <th className="px-3 py-2 text-left font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]">RS State</th>
-              <th className="px-3 py-2 text-left font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]">Momentum</th>
-              <th className="px-3 py-2 text-left font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]">Risk</th>
-              <th className="px-3 py-2 text-right font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]">1M</th>
-              <th className="px-3 py-2 text-right font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]">3M</th>
+              <th className="px-3 py-2 text-right font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]" title="Portfolio weight of this holding as a % of fund AUM at the last disclosure date">Weight</th>
+              <th className="px-3 py-2 text-left font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]" title="Relative strength state vs Nifty 500 peers: Leader/Strong = outperforming; Weak/Laggard = underperforming">RS State</th>
+              <th className="px-3 py-2 text-left font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]" title="Direction of price momentum: Accelerating/Improving = rising; Flat = no change; Deteriorating/Collapsing = falling">Momentum</th>
+              <th className="px-3 py-2 text-left font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]" title="Overextension risk: Low = close to moving averages; Elevated = extended above MAs; High or Below Trend = gate-failing">Risk</th>
+              <th className="px-3 py-2 text-right font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]" title="Rolling 1-month price return">1M</th>
+              <th className="px-3 py-2 text-right font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]" title="Rolling 3-month price return">3M</th>
             </tr>
           </thead>
           <tbody>
             {holdings.map((h, i) => (
               <tr key={h.symbol ?? i} className="border-b border-paper-rule/50 hover:bg-paper-rule/10 transition-colors">
                 <td className="px-3 py-2.5">
-                  <div className="font-semibold text-ink-primary">{h.symbol ?? '—'}</div>
+                  <div className="font-semibold">
+                    <LinkedTicker symbol={h.symbol} />
+                  </div>
                   {h.company_name && (
                     <div className="text-[10px] text-ink-tertiary truncate max-w-[140px]">{h.company_name}</div>
                   )}
                 </td>
-                <td className="px-3 py-2.5 text-ink-secondary">{h.sector ?? '—'}</td>
+                <td className="px-3 py-2.5">
+                  <LinkedSector sector={h.sector} />
+                </td>
                 <td className="px-3 py-2.5 text-right font-mono font-semibold text-ink-primary">{weightStr(h.weight)}</td>
                 <td className="px-3 py-2.5">
                   {h.rs_state ? (
