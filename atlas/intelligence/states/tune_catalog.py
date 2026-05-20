@@ -15,7 +15,7 @@ catalog and delegates all factor construction here.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 import pandas as pd
 import structlog
@@ -23,12 +23,13 @@ from sqlalchemy import text
 
 log = structlog.get_logger()
 
+# 90 calendar days ≈ 65 trading days — enough to warm up the 60-day rolling window
+# plus a small buffer for weekends and holidays.
+_BREAKOUT_LOOKBACK: timedelta = timedelta(days=90)
+
 # ---------------------------------------------------------------------------
 # Catalog
 # ---------------------------------------------------------------------------
-# breakout_ratio is intentionally NotImplementedError for this task — it
-# requires a raw OHLCV pull (close / max_close_60d_excl_today).  Skipping
-# it is correct per the Phase 2 MVP scope.
 
 TUNE_CATALOG: list[dict] = [
     {
@@ -83,8 +84,7 @@ def build_factor_panel(
         are found (caller logs and skips).
 
     Raises:
-        NotImplementedError: for builder_id='breakout_ratio' (Phase 2 deferred).
-        ValueError:          for unrecognised builder_id values.
+        ValueError: for unrecognised builder_id values.
     """
     if builder_id == "rs_rank_12m":
         with eng.connect() as c:
@@ -118,9 +118,51 @@ def build_factor_panel(
         df["factor"] = df["factor"].astype(float)
 
     elif builder_id == "breakout_ratio":
-        raise NotImplementedError(
-            "breakout_ratio requires raw OHLCV (close / max_close_60d_excl_today); "
-            "implement in a later Phase 2 iteration"
+        # Fetch raw OHLCV with a 90-calendar-day pre-window for the 60-day
+        # rolling warm-up.  COALESCE(close_adj, close) mirrors the pattern in
+        # atlas.intelligence.validation.forward_returns.
+        pre_start = start - _BREAKOUT_LOOKBACK
+        with eng.connect() as c:
+            raw = pd.read_sql(
+                text("""
+                    SELECT date,
+                           instrument_id::text AS instrument_id,
+                           COALESCE(close_adj, close) AS close
+                    FROM public.de_equity_ohlcv
+                    WHERE date >= :pre_start
+                      AND date <= :e
+                      AND data_status IN ('raw', 'validated')
+                      AND COALESCE(close_adj, close) > 0
+                    ORDER BY instrument_id, date
+                """),
+                c,
+                params={"pre_start": pre_start, "e": end},
+            )
+        raw_before = len(raw)
+        raw["date"] = pd.to_datetime(raw["date"])
+        if raw_before > 0:
+            raw["close"] = pd.to_numeric(raw["close"], errors="coerce")
+
+            # Per-instrument vectorised rolling max — shift(1) excludes today so
+            # a new all-time-high today can satisfy close >= theta * max_close_60d.
+            raw["max_close_60d"] = raw.groupby("instrument_id")["close"].transform(
+                lambda s: s.shift(1).rolling(60, min_periods=60).max()
+            )
+            raw["factor"] = raw["close"] / raw["max_close_60d"]
+
+            # Trim to the requested window; drop warm-up rows (NaN factor).
+            start_ts = pd.Timestamp(start)
+            end_ts = pd.Timestamp(end)
+            valid_mask = (raw["date"] >= start_ts) & (raw["date"] <= end_ts) & raw["factor"].notna()
+            df = raw.loc[valid_mask, ["date", "instrument_id", "factor"]].copy()
+            df["factor"] = df["factor"].astype(float)
+        else:
+            df = raw.copy()
+
+        log.info(
+            "breakout_ratio_raw_rows",
+            raw_rows=raw_before,
+            trimmed_rows=len(df),
         )
 
     elif builder_id == "distribution_days_25d":
