@@ -74,6 +74,7 @@ export default async function StocksPage({
         <span className="flex items-center gap-1.5 font-sans text-xs text-ink-secondary">
           <span className="inline-block w-2 h-2 rounded-full bg-teal" />
           {investableCount} Investable
+          <span className="text-ink-tertiary">(of {stocks.length} total)</span>
         </span>
         <span className="flex items-center gap-1.5 font-sans text-xs text-ink-secondary">
           <span className="inline-block w-2 h-2 rounded-full bg-signal-pos" />

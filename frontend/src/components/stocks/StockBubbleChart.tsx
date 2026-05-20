@@ -409,7 +409,7 @@ export function StockBubbleChart({ stocks }: { stocks: StockRowWithSector[] }) {
           </div>
         ))}
         <div className="ml-auto font-sans text-[10px] text-ink-tertiary">
-          Bubble size = avg volume 20D · {visibleCount} stocks
+          Bubble size = avg volume 20D · {visibleCount} charted (filtered)
         </div>
       </div>
 

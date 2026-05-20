@@ -173,7 +173,11 @@ export function RegimeHeadline({ regime }: Props) {
       </div>
 
       {/* Row 4 — four signal gauges (one per category) */}
-      <div className="ml-11 flex items-center gap-8 mb-5 flex-wrap">
+      <div className="ml-11 mb-5">
+        <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider mb-2">
+          4-State Classifier — Signal Inputs
+        </div>
+      <div className="flex items-center gap-8 flex-wrap">
         {CATEGORY_LABELS.map(({ key, label }) => (
           <div key={key} className="flex items-center gap-2.5">
             <span className="font-sans text-[11px] text-ink-tertiary uppercase tracking-wider w-[88px]">
@@ -185,6 +189,7 @@ export function RegimeHeadline({ regime }: Props) {
             />
           </div>
         ))}
+      </div>
       </div>
 
       {/* Row 5 — action + key stats */}

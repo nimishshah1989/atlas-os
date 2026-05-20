@@ -75,6 +75,11 @@ function ScorecardTileCard({ tileKey, tile }: TileProps) {
       <div className={`font-mono text-2xl font-semibold tabular-nums leading-none ${colorClass}`}>
         {tile.value ?? 'n/a'}
       </div>
+      {tileKey === 'momentum' && (
+        <div className="font-sans text-[9px] text-ink-tertiary/70 leading-none">
+          net stage-2 flow · 5d
+        </div>
+      )}
     </div>
   )
 }
@@ -93,8 +98,13 @@ export function SignalScorecard({ data }: Props) {
 
   return (
     <div className="px-6 py-4 border-b border-paper-rule">
-      <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider mb-3">
-        Bottom-Up Signals
+      <div className="mb-3">
+        <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider">
+          Bottom-Up Signal Scorecard
+        </div>
+        <div className="font-sans text-[10px] text-ink-tertiary/60 mt-0.5">
+          Built from individual stock states — the engine&apos;s own breadth read
+        </div>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {tiles.map(([key, tile]) => (

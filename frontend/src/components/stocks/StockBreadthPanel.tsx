@@ -211,6 +211,7 @@ export function StockBreadthPanel({
         <div className="flex items-center gap-3 mb-3">
           <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider">
             Market Breadth — Moving Average Participation
+            <span className="ml-1.5 font-normal normal-case tracking-normal text-ink-tertiary/60">({total} in universe)</span>
           </div>
           {activeMaFilter && (
             <button
