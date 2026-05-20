@@ -22,7 +22,7 @@ def ohlcv_panel() -> pd.DataFrame:
         high = close * (1 + rng.uniform(0, 0.02, len(dates)))
         low = close * (1 - rng.uniform(0, 0.02, len(dates)))
         open_ = close * (1 + rng.normal(0, 0.005, len(dates)))
-        volume = rng.integers(50_000, 500_000, len(dates)).astype(float)
+        volume = rng.integers(500_000, 5_000_000, len(dates)).astype(float)
         frames.append(
             pd.DataFrame(
                 {

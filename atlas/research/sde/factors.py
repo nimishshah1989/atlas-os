@@ -24,8 +24,7 @@ log = structlog.get_logger()
 
 
 def _ret(df: pd.DataFrame) -> pd.Series:  # type: ignore[type-arg]
-    s: pd.Series = df["close"]  # type: ignore[assignment]
-    return s.pct_change()
+    return _s(df, "close").pct_change()
 
 
 def _s(df: pd.DataFrame, col: str) -> pd.Series:  # type: ignore[type-arg]
@@ -49,7 +48,6 @@ FACTOR_CATALOG: dict[str, Callable[[pd.DataFrame], pd.Series]] = {  # type: igno
     # volatility
     "atr_pct_14": lambda df: ta.atr(_s(df, "high"), _s(df, "low"), _s(df, "close"), length=14)  # type: ignore[attr-defined]
     / _s(df, "close"),
-    "natr_14": lambda df: ta.natr(_s(df, "high"), _s(df, "low"), _s(df, "close"), length=14),  # type: ignore[attr-defined]
     "vol_21": lambda df: _ret(df).rolling(21).std(),
     "vol_63": lambda df: _ret(df).rolling(63).std(),
     # volume
@@ -101,13 +99,16 @@ def generate_factors(panel: pd.DataFrame) -> dict[str, pd.DataFrame]:
         df.index = df.index.set_names(["date", "instrument_id"])
         result[name] = df[["factor"]].dropna()  # type: ignore[assignment]
 
-    log.info("sde_factors_generated", n_factors=len(result))
+    log.info(
+        "sde_factors_generated", n_factors=len(result), n_rows=sum(len(f) for f in result.values())
+    )
     return result
 
 
 def liquidity_mask(panel: pd.DataFrame, *, floor_inr: float = 5e7, window: int = 60) -> pd.Series:  # type: ignore[type-arg]
-    """Per-(date, instrument) boolean: trailing `window`-day median traded
-    value (close * volume) is at or above the floor.
+    """Per-(date, instrument) boolean: trailing rolling median of traded value
+    (window `window` days, minimum `window // 2` observations) (close * volume)
+    is at or above the floor.
 
     Uses rolling median as the robust liquidity measure — one high-volume day
     should not qualify an otherwise illiquid instrument.
