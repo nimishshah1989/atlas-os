@@ -576,8 +576,8 @@ function TabAdmin() {
         ))}
       </div>
 
-      <SectionHead id="policies">Policies — <Link href="/admin/policies" className="text-teal hover:underline">policies</Link></SectionHead>
-      <P>Decision policies govern how conviction scores translate into portfolio actions. Policies are rules like "if conviction drops below X for a position we hold, flag for review" or "maximum 15% sector concentration." The Policies page lets you view and adjust these rules.</P>
+      <SectionHead id="policies">Policy — <Link href="/setup/policy" className="text-teal hover:underline">policy editor</Link></SectionHead>
+      <P>The Policy is the fund manager's trade mandate expressed as configuration — per-portfolio, inheriting a house default. It governs how engine signals translate into portfolio actions: deployment and concentration caps, entry rules (which states qualify, minimum conviction), exit rules (hard stop, state-exit), instrument universe, and benchmark. Edit it in Setup → Policy editor.</P>
       <P>Policies are applied in the simulation engine and in the portfolio page's decision overlay. Changing a policy takes effect on the next nightly compute — it does not retroactively change historical portfolio snapshots.</P>
 
       <SectionHead id="thresholds">Thresholds — tunable at runtime</SectionHead>
