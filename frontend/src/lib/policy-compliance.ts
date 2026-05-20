@@ -186,7 +186,7 @@ function checkCashFloor(
   if (cash < limit) {
     return {
       rule: 'cash_floor',
-      message: `Residual cash ${cash.toFixed(4)}% is below cash floor ${limit}% (invested ${invested.toFixed(4)}% of 100%)`,
+      message: `Residual cash ${cash.toFixed(1).replace(/\.0$/, '')}% is below cash floor ${limit}% (invested ${invested.toFixed(1).replace(/\.0$/, '')}% of 100%)`,
       actual: cash,
       limit,
     }

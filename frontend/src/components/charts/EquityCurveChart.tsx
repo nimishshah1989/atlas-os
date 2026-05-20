@@ -1,7 +1,7 @@
 'use client'
 // src/components/charts/EquityCurveChart.tsx
 // Equity curve chart — paper performance vs Nifty500 benchmark.
-// Falls back to placeholder if no paper data is available (pre-M16).
+// Falls back to a placeholder when no paper trading data is available.
 // Moved from strategies/[id]/ to be shared with portfolios/[id]/.
 
 import {
@@ -77,10 +77,10 @@ export function EquityCurveChart({ data }: Props) {
     return (
       <div className="border border-paper-rule rounded-[2px] p-6 text-center">
         <p className="font-sans text-sm text-ink-tertiary">
-          Backtest equity series unavailable in v0 — coming with M16 paper-trader hookup.
+          Equity curve will appear once paper trading is active for this portfolio.
         </p>
         <p className="font-sans text-xs text-ink-tertiary mt-1">
-          Paper trading has not started for this strategy yet.
+          Paper trading has not started for this portfolio yet.
         </p>
       </div>
     )

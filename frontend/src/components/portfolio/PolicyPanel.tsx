@@ -10,6 +10,8 @@
 // Extending metric-registry with policy fields would muddy its purpose.
 
 import { InfoTooltip } from '@/components/ui/InfoTooltip'
+import { formatPct, formatRank } from '@/lib/format-number'
+import { stageLabel, instrumentUniverseLabel } from '@/lib/stage-labels'
 
 // ---------------------------------------------------------------------------
 // Types — exported so policy.ts can import them
@@ -107,7 +109,7 @@ function formatValue(key: keyof EffectivePolicy, raw: PolicyFieldValue['value'])
             key={s}
             className="font-mono text-xs px-1.5 py-0.5 rounded-[2px] border border-paper-rule bg-paper text-ink-secondary"
           >
-            {s}
+            {stageLabel(s)}
           </span>
         ))}
       </span>
@@ -120,20 +122,27 @@ function formatValue(key: keyof EffectivePolicy, raw: PolicyFieldValue['value'])
 
   if (kind === 'trailing') {
     if (raw === null || raw === undefined || raw === '') return <span className="text-ink-tertiary">Off</span>
-    return <span>{raw}%</span>
+    return <span>{formatPct(typeof raw === 'string' ? raw : null)}</span>
   }
 
   if (kind === 'pct') {
     if (raw === null || raw === undefined) return <span className="text-ink-tertiary">—</span>
-    return <span>{raw}%</span>
+    return <span>{formatPct(typeof raw === 'string' || typeof raw === 'number' ? raw : null)}</span>
   }
 
   if (kind === 'rank') {
     if (raw === null || raw === undefined) return <span className="text-ink-tertiary">—</span>
-    return <span>{raw}</span>
+    return <span>{formatRank(typeof raw === 'string' || typeof raw === 'number' ? raw : null)}</span>
   }
 
+  // 'text' kind — translate known enum values
   if (raw === null || raw === undefined) return <span className="text-ink-tertiary">—</span>
+  if (key === 'state_exit_trim' || key === 'state_exit_full') {
+    return <span>{stageLabel(typeof raw === 'string' ? raw : null)}</span>
+  }
+  if (key === 'instrument_universe') {
+    return <span>{instrumentUniverseLabel(typeof raw === 'string' ? raw : null)}</span>
+  }
   return <span>{String(raw)}</span>
 }
 

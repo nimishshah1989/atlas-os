@@ -85,10 +85,12 @@ describe('PolicyPanel — field value formatting', () => {
     expect(screen.getByText('Yes')).toBeInTheDocument()   // respect_regime_cap=true
   })
 
-  it('renders buy_states as individual badges', () => {
+  it('renders buy_states as human-readable labels, not raw enum strings', () => {
     render(<PolicyPanel policy={INHERITED_POLICY} />)
-    expect(screen.getByText('stage_2a')).toBeInTheDocument()
-    expect(screen.getByText('stage_2b')).toBeInTheDocument()
+    expect(screen.getByText('Stage 2A')).toBeInTheDocument()
+    expect(screen.getByText('Stage 2B')).toBeInTheDocument()
+    expect(screen.queryByText('stage_2a')).not.toBeInTheDocument()
+    expect(screen.queryByText('stage_2b')).not.toBeInTheDocument()
   })
 
   it('renders null trailing_stop_pct as Off', () => {
@@ -182,9 +184,10 @@ describe('PolicyPanel — overridden values display correctly', () => {
     expect(screen.getByText('10%')).toBeInTheDocument()
   })
 
-  it('shows overridden buy_states includes stage_2c', () => {
+  it('shows overridden buy_states includes Stage 2C (human label)', () => {
     render(<PolicyPanel policy={MIXED_POLICY} />)
-    expect(screen.getByText('stage_2c')).toBeInTheDocument()
+    expect(screen.getByText('Stage 2C')).toBeInTheDocument()
+    expect(screen.queryByText('stage_2c')).not.toBeInTheDocument()
   })
 
   it('shows overridden trailing_stop as 12%', () => {

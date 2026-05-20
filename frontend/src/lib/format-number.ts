@@ -18,3 +18,34 @@ export function formatThreshold(raw: string | null | undefined): string {
   if (decimals >= 2) return trimmed
   return trimmed + '0'.repeat(2 - decimals)
 }
+
+/**
+ * Format a policy percentage field for display.
+ * Trims trailing zeros and shows at most 1 decimal place.
+ *   "5.0000" -> "5%"
+ *   "15.0000" -> "15%"
+ *   "8.5000" -> "8.5%"
+ *   null -> "—"
+ */
+export function formatPct(raw: string | number | null | undefined): string {
+  if (raw == null) return '—'
+  const n = typeof raw === 'number' ? raw : Number(raw)
+  if (!Number.isFinite(n)) return String(raw)
+  // At most 1 decimal place, trim trailing zero.
+  const s = n.toFixed(1).replace(/\.0$/, '')
+  return `${s}%`
+}
+
+/**
+ * Format a rank field (0–1 quantile) for display.
+ * Always shows exactly 2 decimal places.
+ *   "0.600000" -> "0.60"
+ *   "0.700000" -> "0.70"
+ *   null -> "—"
+ */
+export function formatRank(raw: string | number | null | undefined): string {
+  if (raw == null) return '—'
+  const n = typeof raw === 'number' ? raw : Number(raw)
+  if (!Number.isFinite(n)) return String(raw)
+  return n.toFixed(2)
+}

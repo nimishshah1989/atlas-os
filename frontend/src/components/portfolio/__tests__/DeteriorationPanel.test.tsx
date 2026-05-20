@@ -101,6 +101,24 @@ describe('DeteriorationPanel — with deteriorating items', () => {
 })
 
 // ---------------------------------------------------------------------------
+// A3: engine_state column shows human-readable labels not raw enum strings
+// ---------------------------------------------------------------------------
+
+describe('DeteriorationPanel — state label translation (A3)', () => {
+  it('renders "Stage 4 Decline" for stage_4 state, not raw "stage_4"', () => {
+    render(<DeteriorationPanel items={[FULL_EXIT_ITEM]} />)
+    expect(screen.getByText('Stage 4 Decline')).toBeInTheDocument()
+    expect(screen.queryByText('stage_4')).not.toBeInTheDocument()
+  })
+
+  it('renders "Stage 3 Top" for stage_3 state, not raw "stage_3"', () => {
+    render(<DeteriorationPanel items={[TRIM_ITEM]} />)
+    expect(screen.getByText('Stage 3 Top')).toBeInTheDocument()
+    expect(screen.queryByText('stage_3')).not.toBeInTheDocument()
+  })
+})
+
+// ---------------------------------------------------------------------------
 // hard_stop_pct honest labelling
 // ---------------------------------------------------------------------------
 

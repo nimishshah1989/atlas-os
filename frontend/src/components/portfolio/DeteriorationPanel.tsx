@@ -16,6 +16,7 @@
 import { LinkedTicker } from '@/components/ui/LinkedToken'
 import { InfoTooltip } from '@/components/ui/InfoTooltip'
 import type { DeteriItem } from '@/lib/policy-deterioration'
+import { stageLabel } from '@/lib/stage-labels'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -140,7 +141,7 @@ export function DeteriorationPanel({ items, hardStopTracked = false }: Props) {
                     <RuleBadge rule={item.rule} itemId={item.instrument_id} />
                   </td>
                   <td className="py-2 pr-4 font-mono text-xs text-ink-secondary">
-                    {item.engine_state}
+                    {stageLabel(item.engine_state)}
                   </td>
                   <td
                     data-testid={`weight-${item.instrument_id}`}

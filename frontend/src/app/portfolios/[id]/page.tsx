@@ -27,18 +27,19 @@ function fmtPct(raw: string | null): string {
   const n = parseFloat(raw)
   return isNaN(n) ? '—' : `${n >= 0 ? '+' : ''}${(n * 100).toFixed(2)}%`
 }
-
+function fmtDrawdown(raw: string | null): string {
+  const n = raw != null ? parseFloat(raw) : NaN
+  return isNaN(n) || n === 0 ? '—' : `${n >= 0 ? '+' : ''}${(n * 100).toFixed(2)}%`
+}
 function fmtSharpe(raw: string | null): string {
   if (raw == null) return '—'
   const n = parseFloat(raw)
   return isNaN(n) ? '—' : n.toFixed(2)
 }
-
 function fmtDate(d: Date): string {
   const date = d instanceof Date ? d : new Date(String(d))
   return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 }
-
 type Props = { params: Promise<{ id: string }> }
 
 export default async function PortfolioDetailPage({ params }: Props) {
@@ -104,7 +105,7 @@ export default async function PortfolioDetailPage({ params }: Props) {
         <h2 className="font-sans text-xs font-semibold uppercase tracking-wide text-ink-secondary mb-3">Performance Metrics</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <KPICard label="Sharpe Ratio" value={fmtSharpe(portfolio.latest_sharpe)} />
-          <KPICard label="Max Drawdown" value={fmtPct(portfolio.latest_max_drawdown)} />
+          <KPICard label="Max Drawdown" value={fmtDrawdown(portfolio.latest_max_drawdown)} />
           <KPICard
             label="Alpha vs Nifty500"
             value={fmtPct(portfolio.latest_alpha_vs_nifty500)}
@@ -167,7 +168,7 @@ export default async function PortfolioDetailPage({ params }: Props) {
         <h2 className="font-sans text-xs font-semibold uppercase tracking-wide text-ink-secondary mb-3">Paper Trading</h2>
         {isStatic
           ? <PaperTradingToggle portfolioId={id} currentActive={paperActive} />
-          : <p className="font-sans text-sm text-ink-tertiary">Paper trading for Rule-Based portfolios connects in M16.</p>}
+          : <p className="font-sans text-sm text-ink-tertiary">Paper trading is not yet available for Rule-Based portfolios.</p>}
       </section>
 
       <section id="policy" className="mb-8">
