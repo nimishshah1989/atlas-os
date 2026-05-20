@@ -16,14 +16,25 @@ export type PortfolioListRow = {
   created_at: Date
 }
 
+export type StaticInstrument = {
+  instrument_id: string
+  instrument_type: 'stock' | 'etf' | 'fund'
+  weight_pct: number
+  // Task 3.5: target weight per holding. null = no target set (render "—", never fake 0).
+  target_weight_pct: number | null
+  // Task 3.5: enriched from atlas_universe_stocks for display + compliance checks.
+  // null when the instrument_id is not found in the universe (ETF/fund without a universe row).
+  symbol: string | null
+  // 'Unknown' when the instrument_id is not found in the universe (e.g. ETF/fund).
+  sector: string
+  // True if not in Nifty 100 and not in Nifty 500 (small-cap definition matching compliance.py).
+  is_small_cap: boolean
+}
+
 export type StaticPortfolioDetail = {
   id: string
   name: string
-  instruments: Array<{
-    instrument_id: string
-    instrument_type: 'stock' | 'etf' | 'fund'
-    weight_pct: number
-  }>
+  instruments: Array<StaticInstrument>
   backtest_id: string | null
   paper_trading_active: boolean
   created_at: Date
@@ -108,7 +119,13 @@ export async function getAllPortfolios(): Promise<PortfolioListRow[]> {
   `
 }
 
-/** Single static portfolio detail + latest backtest KPIs. Returns null if not found. */
+/** Single static portfolio detail + latest backtest KPIs. Returns null if not found.
+ *
+ * Task 3.5: instruments array is enriched with target_weight_pct, sector, is_small_cap
+ * by joining each JSONB element against atlas_universe_stocks (most-recent snapshot per
+ * instrument_id). Non-universe instruments (ETFs, funds, missing IDs) fall back to
+ * sector='Unknown' and is_small_cap=false — safe for compliance checks.
+ */
 export async function getStaticPortfolioById(
   id: string,
 ): Promise<StaticPortfolioDetail | null> {
@@ -116,7 +133,23 @@ export async function getStaticPortfolioById(
     SELECT
       p.id,
       p.name,
-      p.instruments,
+      (
+        SELECT jsonb_agg(
+          elem || jsonb_build_object(
+            'symbol',       u.symbol,
+            'sector',       COALESCE(u.sector, 'Unknown'),
+            'is_small_cap', (u.in_nifty_100 IS NOT TRUE AND u.in_nifty_500 IS NOT TRUE)
+          )
+        )
+        FROM jsonb_array_elements(p.instruments) AS elem
+        LEFT JOIN LATERAL (
+          SELECT symbol, sector, in_nifty_100, in_nifty_500
+          FROM atlas.atlas_universe_stocks
+          WHERE instrument_id = (elem->>'instrument_id')::uuid
+          ORDER BY effective_from DESC
+          LIMIT 1
+        ) u ON TRUE
+      )                               AS instruments,
       p.backtest_id,
       p.paper_trading_active,
       p.created_at,

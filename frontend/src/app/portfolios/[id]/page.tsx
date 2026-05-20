@@ -9,6 +9,9 @@ import {
   getBacktestsForPortfolio,
 } from '@/lib/queries/portfolios'
 import { getEffectivePolicy } from '@/lib/queries/policy'
+import { getPendingProposedChanges } from '@/lib/queries/proposed-changes'
+import { CurrentVsTarget } from '@/components/portfolio/CurrentVsTarget'
+import type { CompliancePolicy } from '@/lib/policy-compliance'
 import { KPICard } from '@/components/strategy/KPICard'
 import { ReRunBacktestButton } from '@/components/strategy/ReRunBacktestButton'
 import { EquityCurveChart } from '@/components/charts/EquityCurveChart'
@@ -39,10 +42,11 @@ type Props = { params: Promise<{ id: string }> }
 export default async function PortfolioDetailPage({ params }: Props) {
   const { id } = await params
 
-  const [staticPortfolio, ruleBasedPortfolio, effectivePolicy] = await Promise.all([
+  const [staticPortfolio, ruleBasedPortfolio, effectivePolicy, pendingChanges] = await Promise.all([
     getStaticPortfolioById(id),
     getRuleBasedPortfolioById(id),
     getEffectivePolicy(id),
+    getPendingProposedChanges(id),
   ])
 
   const isStatic = staticPortfolio != null
@@ -168,6 +172,52 @@ export default async function PortfolioDetailPage({ params }: Props) {
         <h2 className="font-sans text-xs font-semibold uppercase tracking-wide text-ink-secondary mb-3">Trade Policy</h2>
         <PolicyPanel policy={effectivePolicy} />
       </section>
+
+      {/* Current-vs-target: only for static portfolios that have instruments */}
+      {isStatic && staticPortfolio!.instruments.length > 0 && (() => {
+        const cvtPolicy: CompliancePolicy = {
+          max_per_stock_pct:  effectivePolicy?.max_per_stock_pct.value != null
+            ? Number(effectivePolicy.max_per_stock_pct.value) : null,
+          max_per_sector_pct: effectivePolicy?.max_per_sector_pct.value != null
+            ? Number(effectivePolicy.max_per_sector_pct.value) : null,
+          max_small_cap_pct:  effectivePolicy?.max_small_cap_pct.value != null
+            ? Number(effectivePolicy.max_small_cap_pct.value) : null,
+          min_holdings:       effectivePolicy?.min_holdings.value != null
+            ? Number(effectivePolicy.min_holdings.value) : null,
+          max_positions:      effectivePolicy?.max_positions.value != null
+            ? Number(effectivePolicy.max_positions.value) : null,
+          cash_floor_pct:     effectivePolicy?.cash_floor_pct.value != null
+            ? Number(effectivePolicy.cash_floor_pct.value) : null,
+        }
+        const cvtHoldings = staticPortfolio!.instruments.map((inst) => ({
+          instrument_id: inst.instrument_id,
+          instrument_type: inst.instrument_type,
+          symbol: inst.symbol,
+          weight_pct: inst.weight_pct,
+          target_weight_pct: inst.target_weight_pct,
+          sector: inst.sector,
+          is_small_cap: inst.is_small_cap,
+        }))
+        const cvtPending = pendingChanges.map((pc) => ({
+          id: pc.id,
+          instrument_id: pc.instrument_id,
+          symbol: pc.symbol,
+          proposed_weight: Number(pc.proposed_weight),
+          rationale: pc.rationale,
+        }))
+        return (
+          <section id="current-vs-target" className="mb-8">
+            <h2 className="font-sans text-xs font-semibold uppercase tracking-wide text-ink-secondary mb-3">
+              Current vs Target
+            </h2>
+            <CurrentVsTarget
+              holdings={cvtHoldings}
+              pendingChanges={cvtPending}
+              policy={cvtPolicy}
+            />
+          </section>
+        )
+      })()}
     </main>
   )
 }
