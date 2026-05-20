@@ -55,7 +55,12 @@ def compute_cohort_dwell_baselines(historical_panel: pd.DataFrame) -> pd.DataFra
     """Aggregate state-episode dwell durations into per-(cohort, state) statistics.
 
     Input columns required:
-      instrument_id, state, dwell_days, cohort_key
+      instrument_id, date, state, dwell_days, cohort_key
+
+    The `date` column must be present so rows are sorted chronologically
+    within each instrument. Sorting by dwell_days instead of date scrambles
+    multi-state instruments: all stage_1 rows get grouped together, breaking
+    the cumsum-based episode-id logic and collapsing run-lengths to 1.
 
     Returns DataFrame with columns:
       cohort_key, state, mean_dwell_days, median_dwell_days,
@@ -70,8 +75,10 @@ def compute_cohort_dwell_baselines(historical_panel: pd.DataFrame) -> pd.DataFra
 
     panel = historical_panel.copy()
 
-    # Sort so that within each (instrument, state) the rows are in dwell order.
-    panel = panel.sort_values(["instrument_id", "state", "dwell_days"]).reset_index(drop=True)
+    # Sort chronologically so that state transitions are in temporal order.
+    # Sorting by dwell_days would group all same-state rows together across
+    # different time periods, breaking the cumsum episode-id logic.
+    panel = panel.sort_values(["instrument_id", "date"]).reset_index(drop=True)
 
     # Assign a unique episode_id per contiguous run.
     # A new episode starts whenever dwell_days resets to 0.

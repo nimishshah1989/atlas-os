@@ -61,7 +61,7 @@ function findValidation(
 export function ComponentScorecard({ state, validations, obvSlope, atrRatio, realizedVolTier }: ComponentScorecardProps) {
   const rsTier      = deriveRsTier(state.rs_rank_12m)
   const rsRankStr   = state.rs_rank_12m != null
-    ? `rs_rank_12m ${state.rs_rank_12m.toFixed(2)}`
+    ? `12-month RS rank: ${state.rs_rank_12m.toFixed(2)}`
     : undefined
   const rsValidation = findValidation(validations, 'rs', rsTier)
 
@@ -112,7 +112,7 @@ export function ComponentScorecard({ state, validations, obvSlope, atrRatio, rea
           componentLabel="OBV slope"
           badge="Continuous"
           validation={findValidation(validations, 'obv_slope_50d', 'Continuous')}
-          contextLine={obvSlope == null ? 'not yet stored' : `slope ${obvSlope.toFixed(4)}/day`}
+          contextLine={obvSlope == null ? 'computed continuously' : `slope ${obvSlope >= 0 ? '+' : ''}${Math.round(obvSlope).toLocaleString('en-IN')}/day`}
         />
 
         {/* ATR contraction row */}
@@ -120,7 +120,7 @@ export function ComponentScorecard({ state, validations, obvSlope, atrRatio, rea
           componentLabel="ATR contraction"
           badge="Continuous"
           validation={findValidation(validations, 'atr_contraction_ratio', 'Continuous')}
-          contextLine={atrRatio == null ? 'not yet stored' : `ratio ${atrRatio.toFixed(2)}`}
+          contextLine={atrRatio == null ? 'computed continuously' : `ratio ${atrRatio.toFixed(2)}`}
         />
 
         {/* Realized vol tier row */}

@@ -460,7 +460,7 @@ def _states_baselines_refresh_cmd(args: Any) -> int:
             pd.DataFrame,
             pd.read_sql(
                 text("""
-                    SELECT s.instrument_id::text AS instrument_id, s.state, s.dwell_days,
+                    SELECT s.instrument_id::text AS instrument_id, s.date, s.state, s.dwell_days,
                            u.in_nifty_100, u.in_nifty_500, u.sector
                     FROM atlas.atlas_stock_state_daily s
                     JOIN atlas.atlas_universe_stocks u USING (instrument_id)

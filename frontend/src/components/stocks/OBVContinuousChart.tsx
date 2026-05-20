@@ -58,9 +58,11 @@ export function OBVContinuousChart({ series }: OBVContinuousChartProps) {
   }
 
   const slope = computeSlope(series)
-  const slopeSign = slope >= 0 ? '+' : ''
+  const slopeSign = slope >= 0 ? '+' : '-'
   const slopeClass = slope >= 0 ? 'text-signal-pos' : 'text-signal-neg'
   const slopeLabel = slope > 0 ? 'accumulating' : slope < 0 ? 'distributing' : 'flat'
+  // Format slope as a whole number with thousands separators, e.g. "+1,234/day"
+  const slopeFormatted = Math.round(Math.abs(slope)).toLocaleString('en-IN')
 
   // Find zero-crossings: consecutive points where OBV sign flips
   const zeroCrossings = series
@@ -81,7 +83,7 @@ export function OBVContinuousChart({ series }: OBVContinuousChartProps) {
           className={`font-mono text-lg font-medium ${slopeClass}`}
           data-testid="obv-slope"
         >
-          {slopeSign}{slope.toFixed(4)}/day
+          {slopeSign}{slopeFormatted}/day
         </span>
         <span className="text-xs text-ink-tertiary">{slopeLabel}</span>
       </div>
@@ -98,10 +100,17 @@ export function OBVContinuousChart({ series }: OBVContinuousChartProps) {
               interval="preserveStartEnd"
             />
             <YAxis
-              width={32}
+              width={44}
               tick={{ fontSize: 9, fontFamily: 'var(--font-mono)', fill: 'var(--color-ink-tertiary)' }}
               tickLine={false}
               axisLine={false}
+              tickFormatter={(v: number) => {
+                const abs = Math.abs(v)
+                const sign = v < 0 ? '-' : ''
+                if (abs >= 1_00_000) return `${sign}${(abs / 1_00_000).toFixed(1)}L`
+                if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(0)}k`
+                return `${sign}${abs}`
+              }}
             />
             <Tooltip
               contentStyle={{

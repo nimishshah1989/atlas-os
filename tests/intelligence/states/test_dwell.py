@@ -8,28 +8,126 @@ from atlas.intelligence.states.dwell import (
 
 def test_cohort_dwell_baselines_aggregates_per_state():
     """Given historical state episodes, produce per-(cohort, state) statistics."""
+    # All rows are for a single instrument/state, so date just needs to be
+    # monotonically increasing to keep the sort correct.
     panel = pd.DataFrame(
         [
             # 3 historical stage_2a episodes for large_cap
-            {"instrument_id": "a", "state": "stage_2a", "dwell_days": 0, "cohort_key": "large_cap"},
-            {"instrument_id": "a", "state": "stage_2a", "dwell_days": 1, "cohort_key": "large_cap"},
-            {"instrument_id": "a", "state": "stage_2a", "dwell_days": 2, "cohort_key": "large_cap"},
-            {"instrument_id": "a", "state": "stage_2a", "dwell_days": 3, "cohort_key": "large_cap"},
+            {
+                "instrument_id": "a",
+                "date": "2026-01-01",
+                "state": "stage_2a",
+                "dwell_days": 0,
+                "cohort_key": "large_cap",
+            },
+            {
+                "instrument_id": "a",
+                "date": "2026-01-02",
+                "state": "stage_2a",
+                "dwell_days": 1,
+                "cohort_key": "large_cap",
+            },
+            {
+                "instrument_id": "a",
+                "date": "2026-01-03",
+                "state": "stage_2a",
+                "dwell_days": 2,
+                "cohort_key": "large_cap",
+            },
+            {
+                "instrument_id": "a",
+                "date": "2026-01-04",
+                "state": "stage_2a",
+                "dwell_days": 3,
+                "cohort_key": "large_cap",
+            },
             # episode 1: 5 days (dwell 0..4)
-            {"instrument_id": "a", "state": "stage_2a", "dwell_days": 4, "cohort_key": "large_cap"},
-            {"instrument_id": "b", "state": "stage_2a", "dwell_days": 0, "cohort_key": "large_cap"},
-            {"instrument_id": "b", "state": "stage_2a", "dwell_days": 1, "cohort_key": "large_cap"},
+            {
+                "instrument_id": "a",
+                "date": "2026-01-05",
+                "state": "stage_2a",
+                "dwell_days": 4,
+                "cohort_key": "large_cap",
+            },
+            {
+                "instrument_id": "b",
+                "date": "2026-01-01",
+                "state": "stage_2a",
+                "dwell_days": 0,
+                "cohort_key": "large_cap",
+            },
+            {
+                "instrument_id": "b",
+                "date": "2026-01-02",
+                "state": "stage_2a",
+                "dwell_days": 1,
+                "cohort_key": "large_cap",
+            },
             # episode 2: 3 days (dwell 0..2)
-            {"instrument_id": "b", "state": "stage_2a", "dwell_days": 2, "cohort_key": "large_cap"},
-            {"instrument_id": "c", "state": "stage_2a", "dwell_days": 0, "cohort_key": "large_cap"},
-            {"instrument_id": "c", "state": "stage_2a", "dwell_days": 1, "cohort_key": "large_cap"},
-            {"instrument_id": "c", "state": "stage_2a", "dwell_days": 2, "cohort_key": "large_cap"},
-            {"instrument_id": "c", "state": "stage_2a", "dwell_days": 3, "cohort_key": "large_cap"},
-            {"instrument_id": "c", "state": "stage_2a", "dwell_days": 4, "cohort_key": "large_cap"},
-            {"instrument_id": "c", "state": "stage_2a", "dwell_days": 5, "cohort_key": "large_cap"},
-            {"instrument_id": "c", "state": "stage_2a", "dwell_days": 6, "cohort_key": "large_cap"},
+            {
+                "instrument_id": "b",
+                "date": "2026-01-03",
+                "state": "stage_2a",
+                "dwell_days": 2,
+                "cohort_key": "large_cap",
+            },
+            {
+                "instrument_id": "c",
+                "date": "2026-01-01",
+                "state": "stage_2a",
+                "dwell_days": 0,
+                "cohort_key": "large_cap",
+            },
+            {
+                "instrument_id": "c",
+                "date": "2026-01-02",
+                "state": "stage_2a",
+                "dwell_days": 1,
+                "cohort_key": "large_cap",
+            },
+            {
+                "instrument_id": "c",
+                "date": "2026-01-03",
+                "state": "stage_2a",
+                "dwell_days": 2,
+                "cohort_key": "large_cap",
+            },
+            {
+                "instrument_id": "c",
+                "date": "2026-01-04",
+                "state": "stage_2a",
+                "dwell_days": 3,
+                "cohort_key": "large_cap",
+            },
+            {
+                "instrument_id": "c",
+                "date": "2026-01-05",
+                "state": "stage_2a",
+                "dwell_days": 4,
+                "cohort_key": "large_cap",
+            },
+            {
+                "instrument_id": "c",
+                "date": "2026-01-06",
+                "state": "stage_2a",
+                "dwell_days": 5,
+                "cohort_key": "large_cap",
+            },
+            {
+                "instrument_id": "c",
+                "date": "2026-01-07",
+                "state": "stage_2a",
+                "dwell_days": 6,
+                "cohort_key": "large_cap",
+            },
             # episode 3: 8 days (dwell 0..7)
-            {"instrument_id": "c", "state": "stage_2a", "dwell_days": 7, "cohort_key": "large_cap"},
+            {
+                "instrument_id": "c",
+                "date": "2026-01-08",
+                "state": "stage_2a",
+                "dwell_days": 7,
+                "cohort_key": "large_cap",
+            },
         ]
     )
     stats = compute_cohort_dwell_baselines(panel)
@@ -44,7 +142,7 @@ def test_cohort_dwell_baselines_aggregates_per_state():
 
 def test_cohort_dwell_baselines_empty():
     """Empty panel returns empty DataFrame with correct shape."""
-    empty = pd.DataFrame(columns=["instrument_id", "state", "dwell_days", "cohort_key"])
+    empty = pd.DataFrame(columns=["instrument_id", "date", "state", "dwell_days", "cohort_key"])
     stats = compute_cohort_dwell_baselines(empty)
     expected = {
         "cohort_key",
@@ -143,3 +241,57 @@ def test_derive_urgency_missing_baseline_keys_defaults_to_normal_or_na():
         cohort_baseline={},
     )
     assert urgency in ("urgent", "normal", "late", "n/a")
+
+
+def test_cohort_dwell_baselines_multi_state_instrument():
+    """Run-lengths must be computed from chronological order.
+
+    An instrument that transitions stage_1 → stage_2a has interleaved
+    states. Sorting by dwell_days (old bug) grouped all stage_1 rows
+    together, breaking cumsum episode-id and collapsing all stats to 1.
+    Sorting by date (fix) preserves temporal order.
+
+    Panel layout (one instrument, two states):
+      Dates 2026-01-01..05: stage_1, dwell 0..4  → episode length = 5
+      Dates 2026-01-06..10: stage_2a, dwell 0..4 → episode length = 5
+
+    Expected baselines (each cohort/state has exactly 1 episode of 5 days):
+      stage_1:  median=5, p25=5, p75=5, n=1
+      stage_2a: median=5, p25=5, p75=5, n=1
+    """
+    rows = []
+    for day in range(5):
+        rows.append(
+            {
+                "instrument_id": "A",
+                "date": f"2026-01-{day + 1:02d}",
+                "state": "stage_1",
+                "dwell_days": day,
+                "cohort_key": "large_cap",
+            }
+        )
+    for day in range(5):
+        rows.append(
+            {
+                "instrument_id": "A",
+                "date": f"2026-01-{day + 6:02d}",
+                "state": "stage_2a",
+                "dwell_days": day,
+                "cohort_key": "large_cap",
+            }
+        )
+
+    panel = pd.DataFrame(rows)
+    stats = compute_cohort_dwell_baselines(panel)
+
+    # stage_1: one episode of 5 days (dwell 0..4 → length = max(4)+1 = 5)
+    s1 = stats[(stats["cohort_key"] == "large_cap") & (stats["state"] == "stage_1")]
+    assert len(s1) == 1, "Expected exactly one (cohort, state) row for stage_1"
+    assert s1.iloc[0]["n_observations"] == 1
+    assert int(s1.iloc[0]["median_dwell_days"]) == 5  # single episode length
+
+    # stage_2a: one episode of 5 days
+    s2 = stats[(stats["cohort_key"] == "large_cap") & (stats["state"] == "stage_2a")]
+    assert len(s2) == 1, "Expected exactly one (cohort, state) row for stage_2a"
+    assert s2.iloc[0]["n_observations"] == 1
+    assert int(s2.iloc[0]["median_dwell_days"]) == 5
