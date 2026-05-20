@@ -122,16 +122,29 @@ def classify_stage_2a(
       - prior_state in ("stage_1", "stage_4") — transition gate
       - close > sma_50 > sma_150 > sma_200 — MA stack (uptrend aligned)
       - sma_200_slope > 0 — rising long-term trend
+      - close >= theta_base_breakout * max_close_60d — breakout quality filter
       - rs_rank_12m * 100 >= theta_rs — relative strength filter
       - days_in_stage_2 <= theta_fresh_days — freshness window
 
-    REMOVED gate (Wave 4C Task 3):
-      close >= theta_base_breakout * max_close_60d (breakout ratio)
-      Reason: IC validation showed IR 0.107/0.145 — below the 0.2 weak floor.
-      Top-breakout-ratio quintile underperforms the bottom (mildly anti-predictive).
-      theta_base_breakout row kept dormant in atlas_thresholds (no migration needed).
-      The breakout_ratio factor in tune_catalog.py is retained as a catalogued factor.
-      NOTE: Stage-2A IC re-validation is required (Task 5) before this ships.
+    Breakout gate — Wave 4C history (the load-bearing decision record):
+      Task 2 showed the `breakout_ratio` *factor* is decorative cross-sectionally
+      (IR 0.11/0.14). Task 3 therefore REMOVED the gate. Task 5 then proved removal
+      DEGRADED the aggregate Stage-2 state's 63d IR from +0.243 (with the gate) to
+      +0.179 (without) — out of the weak band into decorative. The gate is a useful
+      BINARY QUALITY FILTER even though its factor does not rank.
+      Wave 4C soft-band rework: theta_base_breakout was grid-tuned over
+      {0.90, 0.92, 0.94, 0.96, 0.98} (524,887-row 2023-2026 panel, OLD-topology
+      apples-to-apples). 63d IR is monotone in theta — 0.90→0.202, 0.96→0.224,
+      0.98→0.225, 1.00→0.243. NO soft-band value clears the 0.243 bar. The gate
+      works *because* it is a literal 60-day-high filter; any loosening admits a
+      lower-quality cohort that dilutes the IR. theta_base_breakout is therefore
+      kept at 1.000 (the IC-proven value). See
+      docs/audits/2026-05-stage2-softband-revalidation.md.
+
+    max_close_60d is the prior-60-day high (today excluded — the CLI feature panel
+    shifts the rolling max by one bar), so `close >= 1.000 * max_close_60d` means
+    "close at or above the prior 60-day high" — a genuine new-high breakout, not a
+    trivially-unsatisfiable today-vs-today comparison.
 
     IC note: volume_today/volume_50d_avg had IR 0.15 at 21d — decorative.
     Volume requirement removed in migration 078; volume columns remain in the
@@ -141,12 +154,18 @@ def classify_stage_2a(
         return False
     if any(_is_nan(v) for v in (close, sma_50, sma_150, sma_200, sma_200_slope, rs_rank_12m)):
         return False
-    # max_close_60d is still accepted as a parameter (used by callers / feature panel)
-    # but is no longer used as a gate here — the breakout_ratio gate was removed.
-    _ = max_close_60d
+    # Breakout quality gate. theta_base_breakout defaults to 1.000 (IC-proven —
+    # see docstring) when the threshold row is absent, keeping unit tests DB-free.
+    # max_close_60d NaN or <= 0 means < 60 bars of history — the gate is skipped
+    # (cannot evaluate a 60-day high), consistent with the production feature panel.
+    theta_breakout = get_threshold(thresholds, "theta_base_breakout", "stage_2a", default=1.000)
+    breakout_ok = (
+        _is_nan(max_close_60d) or max_close_60d <= 0 or (close >= theta_breakout * max_close_60d)
+    )
     return (
         close > sma_50 > sma_150 > sma_200
         and sma_200_slope > 0
+        and breakout_ok
         and rs_rank_12m * 100 >= get_threshold(thresholds, "theta_rs", "stage_2a")
         and days_in_stage_2 <= get_threshold(thresholds, "theta_fresh_days", "stage_2a")
     )
