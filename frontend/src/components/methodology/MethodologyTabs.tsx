@@ -1,6 +1,7 @@
-// allow-large: comprehensive methodology guide — 6 tab sections covering states, regime,
-// sectors, conviction/IC, CTS timing, and admin. Single cohesive document; splitting
-// by tab would spread one conceptual unit across 6 files with no reuse benefit.
+// allow-large: comprehensive methodology guide — 6 tab sections covering the v2 decision
+// engine (layered targets, policy rails, 6-step flow), states, regime, sectors (hybrid
+// classifier), conviction/IC, and admin. Single cohesive document; splitting by tab would
+// spread one conceptual unit across 6 files with no reuse benefit.
 'use client'
 import { useState } from 'react'
 import Link from 'next/link'
@@ -83,34 +84,78 @@ function StateTable({ children }: { children: React.ReactNode }) {
 function TabOverview() {
   return (
     <div>
-      <SectionHead id="what">What is Atlas?</SectionHead>
-      <P>Atlas is a systematic research platform for Indian equity markets. It measures every listed stock across four independent axes every night, aggregates those readings into sector and market-level views, and surfaces the results as a structured dashboard for fund managers and analysts at Javeri Securities.</P>
-      <P>Atlas does not give buy or sell recommendations. It gives you ranked, quantified, reproducible measurements — so your conviction is informed by data, not memory. Think of it as a second opinion that never gets tired.</P>
+      <SectionHead id="decision-engine">The v2 decision engine</SectionHead>
+      <P>Atlas v2 is a systematic decision engine for Indian equity portfolios. Every night it classifies the full ~1,000-stock universe, aggregates stock states into sector and market views, and — critically — intersects those views with a fund manager&apos;s per-portfolio mandate (the Policy) to produce recommendations that are specific to how a given desk runs money.</P>
+      <P>The engine does not fire generic signals. It produces a layered answer to three questions: <em>what is the market environment?</em> (regime) → <em>which sectors should I hold and how much?</em> (rotation targets) → <em>which instruments fill those targets?</em> (bottom-up picks filtered by Policy).</P>
 
-      <SectionHead id="flow">Morning workflow — how to use the portal</SectionHead>
-      <P>The typical morning flow, roughly ten minutes:</P>
-      <ol className="space-y-2.5 ml-2 mb-4 list-decimal list-outside pl-4">
+      <SectionHead id="layered-targets">Layered targets — the unit of action</SectionHead>
+      <P>Every recommendation has two layers:</P>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
         {[
-          ['Intelligence → Dashboard', '/intelligence', 'Regime state first. If Risk-Off, deployment multiplier is 0× — the system is in capital-preservation mode. Check the daily brief for qualitative context.'],
-          ['Sectors page', '/sectors', 'Glance at the RRG scatter. Which quadrants hold your existing positions? Leading = healthy. Weakening = watch. Lagging = review. Improving = potential rotational entry.'],
-          ['Stocks page', '/stocks', 'Filter to your index tier (N100 for mega/large-cap). Sort by Conviction descending. Stocks in Leader RS + Accelerating/Improving momentum + high conviction are worth the deep-dive.'],
-          ['Stock deep-dive', '/stocks/[symbol]', 'Four-state badge row at the top. Conviction score with tier badge. CTS timing signal if active. Hit-rate tells you how often this name has delivered when it looked good.'],
-          ['Admin (weekly)', '/admin/composite-proposals', 'Any pending signal-weight proposals? Approve if IC data supports it. Check Weight Performance for realized vs predicted IC drift.'],
-        ].map(([step, href, desc]) => (
-          <li key={step as string} className="font-sans text-sm text-ink-secondary leading-relaxed">
-            <Link href={href as string} className="font-semibold text-teal hover:underline">{step as string}</Link>
-            {' — '}{desc as string}
+          { title: 'Sector targets — the WHAT', desc: 'Set at the regime + rotation layer. Example: "be 12% Banking." Sized by engine signal strength and capped by the Policy\'s max-per-sector rule. The rotation engine ranks sectors cross-sectionally; the Policy caps the ceiling.' },
+          { title: 'Instrument picks — the WHICH', desc: 'The stocks, ETFs, or funds that fill a sector target. Ranked by within-state conviction and filtered to the Policy\'s entry rules. An ETF book sees sector ETFs; a direct-equity book sees stocks.' },
+        ].map(p => (
+          <div key={p.title} className="border border-paper-rule rounded-sm p-4">
+            <div className="font-sans text-[11px] font-semibold text-ink-primary mb-1">{p.title}</div>
+            <div className="font-sans text-xs text-ink-secondary leading-relaxed">{p.desc}</div>
+          </div>
+        ))}
+      </div>
+
+      <SectionHead id="policy-rails">Policy rails — the spine of every recommendation</SectionHead>
+      <P>Every recommendation is the intersection of two things:</P>
+      <div className="border border-paper-rule rounded-sm p-4 mb-4 bg-paper-rule/10">
+        <div className="font-mono text-sm text-ink-primary text-center">
+          recommendation = engine_signal ∩ policy_constraint
+        </div>
+      </div>
+      <P>The <strong>engine signal</strong> is the IC-validated Weinstein state output — the same data for every portfolio. The <strong>Policy</strong> is the fund manager&apos;s mandate, configured per-portfolio. Same engine, different Policy → different recommendations. A retiree book tightens stops and lowers the small-cap ceiling vs the house default. A focused book caps total names at 20.</P>
+      <P>Policy fields govern: deployment (cash floor, regime-cap respect), concentration (per-stock / per-sector / small-cap ceilings, min/max holdings count), entry rules (which Weinstein states qualify to buy, minimum conviction and RS rank), exit rules (hard stop %, state-triggered exit, trailing stop), instrument universe (direct equity / ETF / fund / mixed), benchmark, and rebalance cadence.</P>
+      <Callout color="teal">
+        <strong>Every flow step reads the Policy.</strong> Step 2 reads sector caps. Step 3 reads entry rules and instrument universe. Step 5 reads sizing caps. Step 6 reads exit rules. The Policy is the thread that makes the engine actionable for a specific book.
+      </Callout>
+
+      <SectionHead id="six-step-flow">The 6-step decision flow</SectionHead>
+      <P>A continuous decision loop. Each step passes context to the next — the active portfolio, its Policy, the regime deployment cap, and the sector target gap.</P>
+      <ol className="space-y-3 ml-2 mb-4 list-decimal list-outside pl-4">
+        {([
+          ['Step 1 — Regime', '/', 'The market environment verdict. One sentence: e.g. "Cautious — deploy 40%. Add only Leader/Strong names in leading sectors. Trim Stage 3→4 holdings." Backed by the 4-signal scorecard (Trend / Breadth / Momentum / Participation) and the full breadth panel (VIX, A/D, McClellan, Net NH-NL). The deployment cap carries forward.'],
+          ['Step 2 — Sector rotation', '/sectors', 'Sectors ranked by bottom-up stage breadth. For the active portfolio, each sector row shows current exposure vs policy-capped target: "Banking: now 8% · engine strong · policy cap 15% → target 12% · fill +4%." This is where sector targets are set. The chosen sector + target gap carry forward.'],
+          ['Step 3 — Fill the target', '/sectors/[name]', 'The sector\'s instruments ranked by within-state conviction, filtered to the Policy\'s entry rules. Instrument type shown = the Policy\'s instrument universe. Suggested weights respect the max-per-stock cap. Candidate instruments carry forward.'],
+          ['Step 4 — Conviction check', '/stocks/[symbol]', 'The IC-validated evidence page. Every token is a link — sector chip → sector page, "N peers in this state" → peer list. Ends with the Act affordance. Act or pass carries forward.'],
+          ['Step 5 — Act', '/portfolios/[id]', '"Add to book" produces a proposed portfolio change (not a raw trade ticket). Position size is pre-filled from target gap ∩ max-per-stock ∩ regime deployment cap. A policy-compliance check runs before the change is accepted.'],
+          ['Step 6 — Deterioration loop', '/portfolios/[id]', 'Holdings that hit a Policy exit rule (hard stop, state exit) auto-surface on the portfolio page. Each → click → stock detail → confirm trim. The portfolio page is both the destination of steps 1–5 and the origin of the trim flow.'],
+        ] as [string, string, string][]).map(([step, href, desc]) => (
+          <li key={step} className="font-sans text-sm text-ink-secondary leading-relaxed">
+            <Link href={href} className="font-semibold text-teal hover:underline">{step}</Link>
+            {' — '}{desc}
           </li>
         ))}
       </ol>
 
-      <SectionHead id="pillars">The four measurement pillars</SectionHead>
+      <SectionHead id="scorecard">The 4-signal bottom-up scorecard</SectionHead>
+      <P>The regime page leads with a scorecard built bottom-up from individual stock Weinstein states. It answers: <em>how healthy is the breadth of the market right now?</em></P>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
         {[
-          { title: 'Stock States', desc: 'Four per-stock axes: RS (relative strength), Momentum, Risk, and Volume. Nightly. Tell you WHERE a stock is in its cycle.', tab: 'states' },
-          { title: 'Market Regime', desc: 'One number per day: Risk-On / Constructive / Cautious / Risk-Off. Drives the deployment multiplier — how much capital the portfolio should have working.', tab: 'regime' },
-          { title: 'Sector Rotation (RRG)', desc: 'Sector-level RS and RS-velocity plot into a 2×2 quadrant: Leading → Weakening → Lagging → Improving → Leading. Shows where institutional money is rotating.', tab: 'sectors' },
-          { title: 'Conviction Score', desc: '0–100 composite of 11 signals, weighted by predictive IC per liquidity tier. Tells you HOW ALIGNED a stock\'s signals are — not just where it is.', tab: 'conviction' },
+          { signal: 'Trend', desc: '% of the classified universe in Stage 2 (mark-up). The primary measure of structural health. Thin Stage-2 breadth = even a Risk-On regime is narrow-led.' },
+          { signal: 'Breadth', desc: 'Moving-average participation — % of universe above their 50-day EMA. Feeds the regime classifier directly. Below 40% = broad deterioration.' },
+          { signal: 'Momentum', desc: 'Stage-2 inflow rate — how many stocks entered Stage 2 in the past week vs exited. Positive = broadening; negative = narrowing.' },
+          { signal: 'Participation', desc: 'Leadership concentration — how many stocks account for 80% of positive RS. A market where 10 stocks do all the work is structurally fragile even if the index is up.' },
+        ].map(p => (
+          <div key={p.signal} className="border border-paper-rule rounded-sm p-4">
+            <div className="font-sans text-[11px] font-semibold text-ink-primary mb-1">{p.signal}</div>
+            <div className="font-sans text-xs text-ink-secondary leading-relaxed">{p.desc}</div>
+          </div>
+        ))}
+      </div>
+
+      <SectionHead id="pillars">The measurement layers — where to go next</SectionHead>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+        {[
+          { title: 'Weinstein State Engine', desc: 'Every stock is classified daily into Stage 1 (base) / 2A–2C (mark-up) / 3 (top) / 4 (decline) or Uninvestable. Sector and fund views aggregate bottom-up from these stock states.', tab: 'states' },
+          { title: 'Market Regime', desc: 'One number per day: Risk-On / Constructive / Cautious / Risk-Off. Drives the deployment multiplier. Backed by the 4-signal scorecard plus the full breadth panel.', tab: 'regime' },
+          { title: 'Sector Rotation + Hybrid Classifier', desc: 'Sectors ranked cross-sectionally daily. An absolute floor keeps the top label honest in a thin market. RRG quadrant shows rotation momentum.', tab: 'sectors' },
+          { title: 'Conviction Score + IC Optimization', desc: '0–100 composite of 11 signals, weighted by rolling IC per liquidity tier. Nightly proposal loop + FM approval + auto-revert guard.', tab: 'conviction' },
         ].map(p => (
           <div key={p.title} className="border border-paper-rule rounded-sm p-4">
             <div className="font-sans text-[11px] font-semibold text-ink-primary mb-1">{p.title}</div>
@@ -120,7 +165,7 @@ function TabOverview() {
       </div>
 
       <Callout color="teal">
-        <strong>Important framing:</strong> Atlas uses words like "Leader" and "Laggard" to describe relative-strength rank, not quality of business. A "Laggard" can be a world-class company temporarily out of favour. A "Leader" can be in a speculative blow-off. The states describe price behaviour, not business fundamentals.
+        <strong>Important framing:</strong> Atlas uses words like "Leader," "Stage 2," and "Overweight" to describe price behaviour and relative rank — not business quality. A Stage-4 stock can be a world-class company in a temporary downtrend. An Overweight sector is the least-bad in the current field, not necessarily strong in absolute terms. The engine describes where the market is; the Policy defines what you do about it.
       </Callout>
     </div>
   )
@@ -242,7 +287,7 @@ function TabRegime() {
 function TabSectors() {
   return (
     <div>
-      <P>The Sectors page gives you a top-down view of capital rotation across 11 NIFTY sectors. Two independent frameworks run in parallel: the <strong>RRG Quadrant</strong> (rotation position) and the <strong>Sector State</strong> (actionability). Use them together.</P>
+      <P>The Sectors page gives you a top-down view of capital rotation across 11 NIFTY sectors. Three frameworks run together: the <strong>RRG Quadrant</strong> (rotation position), the <strong>Hybrid Sector Classifier</strong> (actionability label), and the <strong>Weinstein stage breadth</strong> (bottom-up stock states). Use all three together.</P>
 
       <SectionHead id="rrg">RRG — Relative Rotation Graph</SectionHead>
       <P>The RRG places each sector on a 2×2 grid based on two axes: <strong>RS Level</strong> (is the sector stronger or weaker than median?) and <strong>RS Velocity</strong> (is that relative strength improving or declining?). The typical rotation path is clockwise: Leading → Weakening → Lagging → Improving → Leading.</P>
@@ -262,38 +307,59 @@ function TabSectors() {
           </div>
         ))}
       </div>
-      <P><strong>How the quadrant is assigned:</strong> RS Level uses cross-sectional PERCENT_RANK of the sector's bottom-up 3M RS score across all 11 sectors. RS Velocity is the 4-week rate-of-change of that RS score. Median RS = 50th percentile. Velocity ≥ 0 = improving.</P>
+      <P><strong>How the quadrant is assigned:</strong> RS Level uses cross-sectional PERCENT_RANK of the sector&apos;s bottom-up 3M RS score across all 11 sectors. RS Velocity is the 4-week rate-of-change of that RS score. Median RS = 50th percentile. Velocity ≥ 0 = improving.</P>
       <Callout color="teal">
-        <strong>Reading rotation:</strong> Watch for sectors crossing quadrant boundaries, not just their current position. A sector that was Lagging last month and is now Improving is more interesting than one that has been Leading for 6 months. The Atlas Sector page shows the current date's snapshot; for history, look at the trend in the RS level and velocity columns.
+        <strong>Reading rotation:</strong> Watch for sectors crossing quadrant boundaries, not just their current position. A sector that was Lagging last month and is now Improving is more interesting than one that has been Leading for 6 months. The Atlas Sector page shows the current date&apos;s snapshot; for history, look at the trend in the RS level and velocity columns.
       </Callout>
 
-      <SectionHead id="sector-states">Sector States — actionability overlay</SectionHead>
-      <P>On top of the RRG, Atlas also classifies each sector into an <strong>Overweight / Neutral / Underweight / Avoid</strong> state. This uses three inputs: sector-level RS state (derived from its constituent stocks), momentum direction, and RS breadth ranking.</P>
-      <Callout color="warn">
-        <strong>These states are relative, not absolute.</strong> A sector can be Overweight even in a broad market downturn — it simply means it is leading <em>relative to other sectors</em> in RS strength and breadth. The classification distributes across sectors at all times so you always know which sectors are the best and worst options available right now.
-      </Callout>
+      <SectionHead id="hybrid-classifier">Hybrid rank + absolute floor — the sector classifier</SectionHead>
+      <P>The sector label (Overweight / Neutral / Underweight / Avoid) is assigned by a <strong>hybrid rank + absolute floor</strong> model. It has two parts that work together:</P>
+      <SubHead>Part 1 — Daily cross-sectional rank</SubHead>
+      <P>Every day, all sectors are scored on a composite built from bottom-up signals: <code className="font-mono text-[10px] bg-paper-rule/30 px-1">pct_stage_2</code> (share of constituents in mark-up), <code className="font-mono text-[10px] bg-paper-rule/30 px-1">mean_within_state_rank</code> (conviction of those constituents), and sector RS. Sectors are then ranked against each other and assigned a label by percentile band:</P>
       <div className="space-y-2 mb-4 mt-3">
         {[
-          { s: 'Overweight',  c: '#e8f4ec', tc: '#2F6B43', d: 'Sector is in the top RS quintile cross-sectorally AND momentum is Improving AND RS breadth rank is in the top half of all sectors. Tilt towards this sector relative to benchmark.' },
-          { s: 'Neutral',     c: '#f5f5f5', tc: '#5a5a5a', d: 'Middle-ground readings. RS is average, breadth is mid-range. Maintain current allocation; no strong directional signal.' },
-          { s: 'Underweight', c: '#fdf0ee', tc: '#B0492C', d: 'RS is weak cross-sectorally OR RS breadth rank is in the bottom 30% of sectors. Reduce allocation vs benchmark.' },
-          { s: 'Avoid',       c: '#fce8e4', tc: '#8B2E1A', d: 'RS in the bottom quintile AND RS breadth rank in the bottom 25% of sectors. Minimum allocation only. This does not mean the sector is down in absolute terms — it is the weakest relative to the other sectors available.' },
+          { s: 'Overweight',  band: 'Top quintile (≥ 80th pct)', c: '#e8f4ec', tc: '#2F6B43', d: 'The relatively strongest sectors. Tilt towards these vs benchmark — subject to the absolute floor (see below).' },
+          { s: 'Neutral',     band: '50th–80th pct',             c: '#f5f5f5', tc: '#5a5a5a', d: 'Middle-ground. Maintain current allocation; no strong directional signal.' },
+          { s: 'Underweight', band: '20th–50th pct',             c: '#fdf0ee', tc: '#B0492C', d: 'Below-median strength. Reduce allocation vs benchmark.' },
+          { s: 'Avoid',       band: 'Bottom quintile (< 20th)',  c: '#fce8e4', tc: '#8B2E1A', d: 'The relatively weakest sectors. Minimum allocation. Not necessarily down in absolute terms — it is the weakest of the available options today.' },
         ].map(s => (
           <div key={s.s} className="flex gap-3 items-start text-xs p-2 rounded-sm border border-paper-rule">
-            <span className="inline-flex items-center px-2 py-0.5 rounded-sm font-sans text-[10px] font-bold shrink-0" style={{ background: s.c, color: s.tc }}>{s.s}</span>
+            <div className="shrink-0 w-28">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-sm font-sans text-[10px] font-bold" style={{ background: s.c, color: s.tc }}>{s.s}</span>
+              <div className="font-mono text-[9px] text-ink-tertiary mt-0.5">{s.band}</div>
+            </div>
             <span className="font-sans text-[11px] text-ink-secondary leading-relaxed">{s.d}</span>
           </div>
         ))}
       </div>
+      <P>Because the assignment is relative, the classifier always produces a spread — it can never collapse to one constant label regardless of market conditions.</P>
+      <SubHead>Part 2 — Absolute floor (keeps the top label honest)</SubHead>
+      <P>A sector may <em>hold</em> the Overweight label only if its absolute breadth clears a minimum bar — a floor on <code className="font-mono text-[10px] bg-paper-rule/30 px-1">pct_stage_2</code> calibrated from historical distribution. If the relative-best sector fails the floor, its label caps at Neutral. The ranking is still visible, but the label stays honest.</P>
+      <Callout color="warn">
+        <strong>In a genuine thin-breadth market</strong>, you may see no Overweight sectors — only Neutral at best. That is the floor doing its job: it prevents a falsely reassuring label when even the &ldquo;best&rdquo; sector has very thin Stage-2 breadth. The regime&apos;s deployment multiplier governs overall capital deployment; the sector labels govern where within that capital to tilt.
+      </Callout>
+
+      <SectionHead id="weinstein-aggregation">Weinstein stage breadth — the bottom-up truth</SectionHead>
+      <P>Every sector metric is derived bottom-up from the individual stock Weinstein states (see the <strong>Stock States</strong> tab). The key aggregated metrics per sector:</P>
+      <ul className="space-y-1.5 mb-4 ml-2 font-sans text-xs text-ink-secondary">
+        <li><strong>pct_stage_2</strong> — share of sector constituents classified Stage 2A / 2B / 2C (the mark-up / uptrend zone). The primary health signal for a sector.</li>
+        <li><strong>pct_stage_3 / pct_stage_4</strong> — share in distribution / decline. Rising pct_stage_4 is the first warning of a sector breaking down.</li>
+        <li><strong>mean_within_state_rank</strong> — average conviction score of Stage-2 stocks in the sector. A sector can have high pct_stage_2 with low conviction (breadth without quality) or the reverse.</li>
+        <li><strong>Participation %</strong> — share of stocks with positive RS, ranked cross-sectorally (not an absolute threshold). A sector with 20% participation can still be the highest-participation sector available.</li>
+      </ul>
+
+      <SectionHead id="fund-classifier">Fund classifier — the same hybrid model</SectionHead>
+      <P>The fund recommendation label (Recommended / Hold / Reduce / Exit) uses the same hybrid rank + absolute floor approach applied to mutual funds and ETFs. Each fund is scored on: NAV state (the fund&apos;s own price trend), holdings quality (share of AUM in strong-state stocks), and fund RS vs benchmark. Funds are ranked cross-sectionally and assigned labels by percentile band, with an absolute floor that prevents Recommended unless the fund clears a minimum holdings-quality bar.</P>
+      <P>Inside the decision flow, funds/ETFs compete on the same bottom-up Weinstein states as their underlying stocks. The verdict label is shown alongside the rank, but the <em>ranking</em> within a sector target is bottom-up — it reflects holdings quality, not the fund manager&apos;s marketing.</P>
 
       <SectionHead id="sector-reading">How to read the Sectors page</SectionHead>
-      <P>The Sectors page has two views: an <strong>RRG scatter plot</strong> (position in the rotation cycle) and a <strong>sector table</strong> (all metrics at a glance). Click any sector row to enter the Sector Deep Dive, which shows the individual stocks within that sector ranked by RS and conviction.</P>
+      <P>The Sectors page has two views: an <strong>RRG scatter plot</strong> (position in the rotation cycle) and a <strong>sector table</strong> (all metrics at a glance). Click any sector row to enter the Sector Deep Dive, which shows the individual stocks within that sector ranked by conviction.</P>
       <P>Key columns in the sector table:</P>
       <ul className="space-y-1.5 mb-4 ml-2 font-sans text-xs text-ink-secondary">
         <li><strong>RS Level</strong> — bottom-up median 3M RS of all stocks in the sector vs Nifty 500</li>
         <li><strong>RS Velocity</strong> — 4-week change in RS Level. Positive = sector gaining ground. Negative = losing.</li>
-        <li><strong>Participation %</strong> — % of stocks in the sector with positive relative strength. Used as a <em>relative rank</em> across sectors (not an absolute threshold), so a sector with 20% participation can still be Overweight if it is the highest-participation sector available.</li>
-        <li><strong>Sector State</strong> — Overweight / Neutral / Underweight / Avoid (see above). Always relative — there will always be Overweight sectors even in a falling market.</li>
+        <li><strong>pct Stage 2</strong> — share of sector stocks in the mark-up zone. The primary health signal; feeds the hybrid classifier.</li>
+        <li><strong>Sector State</strong> — Overweight / Neutral / Underweight / Avoid. Always relative; always a spread. The absolute floor prevents the top label when breadth is genuinely poor.</li>
         <li><strong>RRG Quadrant</strong> — Leading / Improving / Weakening / Lagging</li>
       </ul>
     </div>
@@ -510,8 +576,8 @@ function TabAdmin() {
         ))}
       </div>
 
-      <SectionHead id="policies">Policies — <Link href="/admin/policies" className="text-teal hover:underline">policies</Link></SectionHead>
-      <P>Decision policies govern how conviction scores translate into portfolio actions. Policies are rules like "if conviction drops below X for a position we hold, flag for review" or "maximum 15% sector concentration." The Policies page lets you view and adjust these rules.</P>
+      <SectionHead id="policies">Policy — <Link href="/setup/policy" className="text-teal hover:underline">policy editor</Link></SectionHead>
+      <P>The Policy is the fund manager's trade mandate expressed as configuration — per-portfolio, inheriting a house default. It governs how engine signals translate into portfolio actions: deployment and concentration caps, entry rules (which states qualify, minimum conviction), exit rules (hard stop, state-exit), instrument universe, and benchmark. Edit it in Setup → Policy editor.</P>
       <P>Policies are applied in the simulation engine and in the portfolio page's decision overlay. Changing a policy takes effect on the next nightly compute — it does not retroactively change historical portfolio snapshots.</P>
 
       <SectionHead id="thresholds">Thresholds — tunable at runtime</SectionHead>

@@ -4,10 +4,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import * as d3 from 'd3'
 import type { StockRowWithSector } from '@/lib/queries/stocks'
-import { rsStateColor } from '@/lib/chart-colors'
 
 type Period = '1M' | '3M' | '6M' | '1Y'
-type CapFilter = 'all' | 'n50' | 'n100' | 'mid' | 'small'
+type DisplayFilter = 'n100' | 'n500' | 'all'
+type CapFilter = 'all' | 'large' | 'mid' | 'small'
 
 const PERIOD_RET_KEY: Record<Period, keyof StockRowWithSector> = {
   '1M': 'ret_1m',
@@ -20,15 +20,10 @@ const PERIOD_LABEL: Record<Period, string> = {
   '1M': '1M', '3M': '3M', '6M': '6M', '1Y': '1Y',
 }
 
-// Universe segmentation. True market-cap "Top 100/200/300" requires a
-// market_cap column the universe table does not yet have — these buckets use
-// the Nifty index-membership flags, the only segmentation currently available.
-const CAP_FILTERS: { key: CapFilter; label: string }[] = [
-  { key: 'all',   label: 'All' },
-  { key: 'n50',   label: 'Nifty 50' },
-  { key: 'n100',  label: 'Nifty 100' },
-  { key: 'mid',   label: 'Mid (N500 ex-N100)' },
-  { key: 'small', label: 'Small (ex-N500)' },
+const DISPLAY_FILTERS: { key: DisplayFilter; label: string }[] = [
+  { key: 'n100', label: 'N100' },
+  { key: 'n500', label: 'N500' },
+  { key: 'all',  label: 'All' },
 ]
 
 const LEGEND = [
@@ -53,6 +48,16 @@ function volumeToRadius(vol: number | null): number {
   return Math.min(42, 6 + (log - 3) * 6)
 }
 
+function navStateColor(rs_state: string | null, _mom_state: string | null): string {
+  if (rs_state === 'Leader')        return '#2F6B43'
+  if (rs_state === 'Strong')        return '#1D9E75'
+  if (rs_state === 'Emerging')      return '#25394A'
+  if (rs_state === 'Consolidating') return '#B8860B'
+  if (rs_state === 'Weak')          return '#B0492C'
+  if (rs_state === 'Laggard')       return '#B0492C'
+  return '#8C8278'
+}
+
 function formatVolume(vol: number | null): string {
   if (vol == null || vol <= 0) return '—'
   if (vol >= 10_000_000) return `${(vol / 10_000_000).toFixed(1)} Cr`
@@ -68,6 +73,7 @@ export function StockBubbleChart({ stocks }: { stocks: StockRowWithSector[] }) {
   const wrapRef = useRef<HTMLDivElement>(null)
 
   const [period, setPeriod] = useState<Period>('3M')
+  const [displayFilter, setDisplayFilter] = useState<DisplayFilter>('n500')
   const [capFilter, setCapFilter] = useState<CapFilter>('all')
   const [sectorFilter, setSectorFilter] = useState<string>('all')
 
@@ -78,20 +84,19 @@ export function StockBubbleChart({ stocks }: { stocks: StockRowWithSector[] }) {
 
   const filteredStocks = useMemo(() => {
     let s = stocks
-    if (capFilter === 'n50') s = s.filter(x => x.in_nifty_50)
-    else if (capFilter === 'n100') s = s.filter(x => x.in_nifty_100)
+    if (displayFilter === 'n100') s = s.filter(x => x.in_nifty_100)
+    else if (displayFilter === 'n500') s = s.filter(x => x.in_nifty_500)
+    if (capFilter === 'large') s = s.filter(x => x.in_nifty_100)
     else if (capFilter === 'mid') s = s.filter(x => x.in_nifty_500 && !x.in_nifty_100)
     else if (capFilter === 'small') s = s.filter(x => !x.in_nifty_500)
     if (sectorFilter !== 'all') s = s.filter(x => x.sector === sectorFilter)
     return s
-  }, [stocks, capFilter, sectorFilter])
+  }, [stocks, displayFilter, capFilter, sectorFilter])
 
-  const capCounts = useMemo(() => ({
-    all:   stocks.length,
-    n50:   stocks.filter(s => s.in_nifty_50).length,
-    n100:  stocks.filter(s => s.in_nifty_100).length,
-    mid:   stocks.filter(s => s.in_nifty_500 && !s.in_nifty_100).length,
-    small: stocks.filter(s => !s.in_nifty_500).length,
+  const countsByFilter = useMemo(() => ({
+    n100: stocks.filter(s => s.in_nifty_100).length,
+    n500: stocks.filter(s => s.in_nifty_500).length,
+    all:  stocks.length,
   }), [stocks])
 
   const visibleCount = useMemo(() => {
@@ -120,7 +125,7 @@ export function StockBubbleChart({ stocks }: { stocks: StockRowWithSector[] }) {
         y:         retRaw * 100,
         r:         volumeToRadius(avgVol),
         avgVol,
-        color:     rsStateColor(s.rs_state),
+        color:     navStateColor(s.rs_state, s.momentum_state),
         rs_state:  s.rs_state,
         mom_state: s.momentum_state,
       }]
@@ -343,20 +348,33 @@ export function StockBubbleChart({ stocks }: { stocks: StockRowWithSector[] }) {
             </button>
           ))}
         </div>
+        <div className="flex gap-1 ml-auto items-center">
+          <span className="font-sans text-[10px] text-ink-tertiary mr-1">Index:</span>
+          {DISPLAY_FILTERS.map(f => (
+            <button key={f.key} type="button" onClick={() => setDisplayFilter(f.key)}
+              className={`px-2 py-0.5 rounded-sm font-sans text-[11px] font-medium transition-colors ${
+                displayFilter === f.key
+                  ? 'bg-ink-secondary text-paper'
+                  : 'bg-paper-rule/20 text-ink-secondary hover:bg-paper-rule/40'
+              }`}>
+              {f.label} ({countsByFilter[f.key]})
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Second filter row: universe + sector */}
+      {/* Second filter row: cap + sector */}
       <div className="px-5 py-2 border-b border-paper-rule flex flex-wrap items-center gap-4">
         <div className="flex gap-1 items-center">
-          <span className="font-sans text-[10px] text-ink-tertiary mr-1">Universe:</span>
-          {CAP_FILTERS.map(c => (
-            <button key={c.key} type="button" onClick={() => setCapFilter(c.key)}
-              className={`px-2 py-0.5 rounded-sm font-sans text-[11px] font-medium transition-colors ${
-                capFilter === c.key
+          <span className="font-sans text-[10px] text-ink-tertiary mr-1">Cap:</span>
+          {(['all', 'large', 'mid', 'small'] as CapFilter[]).map(c => (
+            <button key={c} type="button" onClick={() => setCapFilter(c)}
+              className={`px-2 py-0.5 rounded-sm font-sans text-[11px] font-medium capitalize transition-colors ${
+                capFilter === c
                   ? 'bg-teal text-paper'
                   : 'bg-paper-rule/20 text-ink-secondary hover:bg-paper-rule/40'
               }`}>
-              {c.label} ({capCounts[c.key]})
+              {c === 'all' ? 'All' : c === 'large' ? 'Large (N100)' : c === 'mid' ? 'Mid (N500–N100)' : 'Small (ex-N500)'}
             </button>
           ))}
         </div>
@@ -391,7 +409,7 @@ export function StockBubbleChart({ stocks }: { stocks: StockRowWithSector[] }) {
           </div>
         ))}
         <div className="ml-auto font-sans text-[10px] text-ink-tertiary">
-          Bubble size = avg volume 20D · {visibleCount} stocks
+          Bubble size = avg volume 20D · {visibleCount} charted (filtered)
         </div>
       </div>
 

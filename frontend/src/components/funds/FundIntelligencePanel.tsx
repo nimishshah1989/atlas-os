@@ -2,6 +2,7 @@ import type { FundRow } from '@/lib/queries/funds'
 import type { CommentaryResult } from '@/lib/commentary/stocks'
 import { CommentaryBlock } from '@/components/ui/CommentaryBlock'
 import { CHART_COLORS } from '@/lib/chart-colors'
+import { ordinal } from '@/lib/ordinal'
 
 const NAV_STATES = [
   'Leader NAV',
@@ -135,7 +136,7 @@ export function FundIntelligencePanel({
                   {topCategory.name}
                 </div>
                 <div className="font-mono text-[10px] text-ink-tertiary">
-                  {(topCategory.mean * 100).toFixed(0)}th pctile avg
+                  {ordinal(Math.round(topCategory.mean * 100))} pctile avg
                 </div>
               </div>
             )}
@@ -147,7 +148,7 @@ export function FundIntelligencePanel({
       <div className="flex gap-4 text-[10px] font-mono text-ink-tertiary">
         <span>
           Median RS:{' '}
-          <span className="text-ink-primary">{(medianRsPctile * 100).toFixed(0)}th</span>
+          <span className="text-ink-primary">{ordinal(Math.round(medianRsPctile * 100))}</span>
         </span>
         {medianReturn != null && (
           <span>

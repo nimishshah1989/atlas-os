@@ -69,53 +69,46 @@ function formatClose(value: number): string {
   })
 }
 
-// Intraday outperformance vs Nifty, in percentage points (stock return since
-// open minus Nifty return since open). This replaces the old `rs_vs_nifty`
-// ratio, which exploded toward huge "x" multiples whenever Nifty's intraday
-// return was near zero and was not interpretable.
-function formatVsNifty(
+function formatRsVsNifty(
+  value: number | null,
   niftyReturn: number | null,
   stockReturn: number | null,
 ): { text: string; cls: string } {
-  if (stockReturn === null || niftyReturn === null) {
+  if (value === null) {
     return { text: '—', cls: 'text-ink-tertiary' }
   }
-  const diffPct = (Number(stockReturn) - Number(niftyReturn)) * 100
-  const sign = diffPct >= 0 ? '+' : ''
-  return {
-    text: `${sign}${diffPct.toFixed(2)}%`,
-    cls: diffPct >= 0 ? 'text-signal-pos' : 'text-signal-neg',
+  // rs_vs_nifty = stock_return_since_open / nifty_return_since_open (a ratio, not a fraction)
+  const ratio = Number(value)
+  const sign = ratio >= 0 ? '+' : ''
+  const text = `${sign}${ratio.toFixed(2)}x`
+  // Green = stock outperforms Nifty today on a return basis, not ratio >= 1.
+  // ratio >= 1 is wrong when Nifty is negative: stock −0.5% vs Nifty −2% → ratio 0.25 (red)
+  // but the stock clearly outperforms. Use nifty_return_since_open from meta when available.
+  let cls = 'text-ink-tertiary'
+  if (stockReturn !== null && niftyReturn !== null) {
+    cls = Number(stockReturn) > Number(niftyReturn) ? 'text-signal-pos' : 'text-signal-neg'
+  } else {
+    // Fallback when nifty return is unavailable: ratio > 1 (imperfect but acceptable)
+    cls = ratio > 1 ? 'text-signal-pos' : 'text-signal-neg'
   }
+  return { text, cls }
 }
 
-// Price distance from the 20-period EMA, as a signed %. A raw EMA rupee value
-// is not actionable; "% above/below EMA-20" is.
-function formatVsEma(close: number, ema: number | null): { text: string; cls: string } {
-  if (ema === null || ema <= 0) return { text: '—', cls: 'text-ink-tertiary' }
-  const diffPct = (close / ema - 1) * 100
-  const sign = diffPct >= 0 ? '+' : ''
-  return {
-    text: `${sign}${diffPct.toFixed(2)}%`,
-    cls: diffPct >= 0 ? 'text-signal-pos' : 'text-signal-neg',
-  }
+function formatEma(value: number | null): string {
+  if (value === null) return '—'
+  return '₹' + Number(value).toFixed(2)
 }
 
 function formatBarTime(isoString: string): string {
-  // bar_time is stored UTC; render in IST. Include the date when the bar is
-  // not from today (IST) so stale intraday data is visually obvious.
+  // Convert UTC datetime to IST (UTC+5:30) and return "HH:MM IST"
   const d = new Date(isoString)
-  const ist = new Date(d.getTime() + 330 * 60_000)
-  const now = new Date()
-  const nowIst = new Date(now.getTime() + 330 * 60_000)
-  const hh = String(ist.getUTCHours()).padStart(2, '0')
-  const mm = String(ist.getUTCMinutes()).padStart(2, '0')
-  const sameDay =
-    ist.getUTCFullYear() === nowIst.getUTCFullYear() &&
-    ist.getUTCMonth() === nowIst.getUTCMonth() &&
-    ist.getUTCDate() === nowIst.getUTCDate()
-  if (sameDay) return `${hh}:${mm} IST`
-  const mon = ist.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })
-  return `${String(ist.getUTCDate()).padStart(2, '0')}-${mon} ${hh}:${mm} IST`
+  const totalUtcMinutes = d.getUTCHours() * 60 + d.getUTCMinutes()
+  const istTotalMinutes = totalUtcMinutes + 330 // UTC+5:30
+  const istH = Math.floor(istTotalMinutes / 60) % 24
+  const istM = istTotalMinutes % 60
+  const hh = String(istH).padStart(2, '0')
+  const mm = String(istM).padStart(2, '0')
+  return `${hh}:${mm} IST`
 }
 
 // ---------------------------------------------------------------------------
@@ -287,23 +280,14 @@ export function IntradayRSLeaders() {
                   <th className="pb-1.5 text-right font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary">
                     Close
                   </th>
-                  <th
-                    className="pb-1.5 text-right font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary"
-                    title="Intraday outperformance vs Nifty — stock return since open minus Nifty return since open, in percentage points."
-                  >
-                    vs Nifty <span className="opacity-50">ⓘ</span>
+                  <th className="pb-1.5 text-right font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary">
+                    RS vs Nifty
                   </th>
-                  <th
-                    className="pb-1.5 text-right font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary"
-                    title="Intraday relative-strength percentile — rank of this stock's intraday return vs the universe (0–100)."
-                  >
-                    RS Pctile <span className="opacity-50">ⓘ</span>
+                  <th className="pb-1.5 text-right font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary">
+                    RS Pctile
                   </th>
-                  <th
-                    className="pb-1.5 text-right font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary hidden lg:table-cell"
-                    title="Price distance from the 20-period EMA, as a signed %. Positive = trading above its short-term trend."
-                  >
-                    vs EMA-20 <span className="opacity-50">ⓘ</span>
+                  <th className="pb-1.5 text-right font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary hidden lg:table-cell">
+                    EMA-20
                   </th>
                   <th className="pb-1.5 text-right font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary hidden md:table-cell">
                     Bar Time
@@ -312,11 +296,11 @@ export function IntradayRSLeaders() {
               </thead>
               <tbody>
                 {result.data.map((row, i) => {
-                  const vsNifty = formatVsNifty(
+                  const rsNifty = formatRsVsNifty(
+                    row.rs_vs_nifty,
                     result.meta.nifty_return_since_open ?? null,
                     row.return_since_open,
                   )
-                  const vsEma = formatVsEma(row.close, row.ema_20)
                   // rs_pctile_intraday is a 0-1 fraction — RSPctileBar expects a
                   // 0-1 string (same shape as daily rs_pctile_3m)
                   const pctileStr =
@@ -345,14 +329,14 @@ export function IntradayRSLeaders() {
                       <td className="py-1.5 pr-3 text-right font-mono text-xs tabular-nums text-ink-primary">
                         {formatClose(row.close)}
                       </td>
-                      <td className={`py-1.5 pr-3 text-right font-mono text-xs tabular-nums ${vsNifty.cls}`}>
-                        {vsNifty.text}
+                      <td className={`py-1.5 pr-3 text-right font-mono text-xs tabular-nums ${rsNifty.cls}`}>
+                        {rsNifty.text}
                       </td>
                       <td className="py-1.5 pr-3 text-right">
                         <RSPctileBar value={pctileStr} />
                       </td>
-                      <td className={`py-1.5 pr-3 text-right font-mono text-xs tabular-nums hidden lg:table-cell ${vsEma.cls}`}>
-                        {vsEma.text}
+                      <td className="py-1.5 pr-3 text-right font-mono text-xs tabular-nums text-ink-secondary hidden lg:table-cell">
+                        {formatEma(row.ema_20)}
                       </td>
                       <td className="py-1.5 text-right font-mono text-xs tabular-nums text-ink-tertiary hidden md:table-cell">
                         {formatBarTime(row.bar_time)}

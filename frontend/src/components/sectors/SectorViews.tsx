@@ -14,6 +14,7 @@ import type {
 } from '@/lib/queries/sectors'
 import type { SectorRotationRow } from '@/lib/queries/rotation'
 import { EXCLUDED_SECTORS } from '@/lib/sectors-filter'
+import type { SectorTargetOutput } from '@/lib/sector-targets'
 import { SectorBubbleChart, type XView } from './SectorBubbleChart'
 import { SectorDecisionTable } from './SectorDecisionTable'
 import { SectorHeatmap } from './SectorHeatmap'
@@ -56,8 +57,6 @@ type Props = {
   range: string
   /** Per-sector RS leader counts + top symbols. Optional — degrades gracefully. */
   leadersBySector?: Record<string, { leader_count: number; top_symbols: string[] }>
-  /** CTS pivot balance per sector (SP09). Optional — column hidden when absent. */
-  ctsPivot?: Record<string, import('@/lib/queries/sectors').SectorPivotRow>
   /**
    * Sector rotation snapshot from mv_sector_rotation_state (SP02).
    * Carries rrg_quadrant / rs_velocity / rs_pctile_cross_sector per sector.
@@ -66,6 +65,12 @@ type Props = {
    * without a second round-trip.
    */
   rotation?: SectorRotationRow[]
+  /**
+   * Policy-capped sector targets (T2.6).
+   * Only present when a ?portfolio= param is active.
+   * When absent, the decision table shows the engine view with no target column.
+   */
+  sectorTargets?: SectorTargetOutput[]
 }
 
 function SectionDivider({ title, subtitle }: { title: string; subtitle?: string }) {
@@ -206,11 +211,11 @@ export function SectorViews({
   playbook,
   range,
   leadersBySector,
-  ctsPivot,
   // SP02: rotation lookup carried through for future RRG quadrant overlays
   // and decision-table badges. Sub-components don't read it yet — wiring
   // the data path now means no extra round-trip when consumers land.
   rotation: _rotation,
+  sectorTargets,
 }: Props) {
 
   const router = useRouter()
@@ -234,6 +239,15 @@ export function SectorViews({
     ...s,
     days_in_state: daysMap.get(s.sector_name),
   }))
+
+  // Policy target lookup: sector_name → { target, gap }
+  // Only present when ?portfolio= is active.
+  const targetsMap = useMemo(
+    () => sectorTargets
+      ? new Map(sectorTargets.map(t => [t.sector, t]))
+      : null,
+    [sectorTargets],
+  )
 
   const overweightSectors = visible
     .filter(s => s.sector_state === 'Overweight')
@@ -391,7 +405,7 @@ export function SectorViews({
           title="Sector Decision Table"
           subtitle="Click any row for the full sector deep dive"
         />
-        <SectorDecisionTable data={visibleWithDays} onSelect={onSelect} leadingRRGCount={leadingRRGCount} leadersBySector={leadersBySector} ctsPivot={ctsPivot} />
+        <SectorDecisionTable data={visibleWithDays} onSelect={onSelect} leadingRRGCount={leadingRRGCount} leadersBySector={leadersBySector} policyTargets={targetsMap ?? undefined} />
       </div>
 
       {/* ── Section 4: Breadth + State History ── */}

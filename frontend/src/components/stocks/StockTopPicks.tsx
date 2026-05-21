@@ -1,8 +1,8 @@
-import Link from 'next/link'
 import { Sparkles } from 'lucide-react'
 import type { StockRowWithSector } from '@/lib/queries/stocks'
 import { pct, pctColor, PosSizeBar, RSPctileBar } from '@/lib/stock-formatters'
 import { SectorBadge } from './SectorBadge'
+import { LinkedTicker } from '@/components/ui/LinkedToken'
 
 export function StockTopPicks({ picks }: { picks: StockRowWithSector[] }) {
   if (picks.length === 0) {
@@ -54,10 +54,8 @@ export function StockTopPicks({ picks }: { picks: StockRowWithSector[] }) {
               >
                 <td className="py-2 font-mono text-xs text-ink-tertiary tabular-nums">{i + 1}</td>
                 <td className="py-2 pr-3">
-                  <Link href={`/stocks/${encodeURIComponent(p.symbol)}`} className="hover:opacity-80">
-                    <div className="font-sans text-xs font-semibold text-ink-primary">{p.symbol}</div>
-                    <div className="font-sans text-[10px] text-ink-tertiary truncate max-w-[160px]">{p.company_name}</div>
-                  </Link>
+                  <LinkedTicker symbol={p.symbol} className="font-semibold" />
+                  <div className="font-sans text-[10px] text-ink-tertiary truncate max-w-[160px]">{p.company_name}</div>
                 </td>
                 <td className="py-2 pr-3">
                   <SectorBadge sector={p.sector} />

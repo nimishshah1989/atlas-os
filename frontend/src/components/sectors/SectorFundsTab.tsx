@@ -1,6 +1,6 @@
-import Link from 'next/link'
 import type { SectorFundRow } from '@/lib/queries/sector-funds'
 import { NavStateChip, RecommendationChip } from '@/lib/fund-formatters'
+import { LinkedFund } from '@/components/ui/LinkedToken'
 
 function pct(v: string | null, digits = 1): string {
   if (v == null) return '—'
@@ -57,12 +57,12 @@ export function SectorFundsTab({
               >
                 {sectorName} Wt
               </th>
-              <th className="px-3 py-2 text-left font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]">Rating</th>
-              <th className="px-3 py-2 text-left font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]">NAV State</th>
-              <th className="px-3 py-2 text-right font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]">RS Pctile</th>
-              <th className="px-3 py-2 text-right font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]">1M</th>
-              <th className="px-3 py-2 text-right font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]">3M</th>
-              <th className="px-3 py-2 text-right font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]">12M</th>
+              <th className="px-3 py-2 text-left font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]" title="Atlas composite rating: Recommended = all gates pass; Hold = partial; Avoid = majority of gates failing">Rating</th>
+              <th className="px-3 py-2 text-left font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]" title="NAV trend state: Leader NAV = sustained uptrend; Uptrend = rising; Downtrend = falling; Laggard NAV = sustained decline">NAV State</th>
+              <th className="px-3 py-2 text-right font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]" title="3-month RS percentile within the fund's peer category. 90 = top 10% vs category peers. Higher is better.">RS Pctile</th>
+              <th className="px-3 py-2 text-right font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]" title="Rolling 1-month NAV return">1M</th>
+              <th className="px-3 py-2 text-right font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]" title="Rolling 3-month NAV return">3M</th>
+              <th className="px-3 py-2 text-right font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]" title="Rolling 12-month NAV return">12M</th>
               <th
                 className="px-3 py-2 text-center font-semibold text-ink-tertiary uppercase tracking-wider text-[10px]"
                 title="Quality gates: Performance / Sectors / Holdings / Market"
@@ -79,12 +79,11 @@ export function SectorFundsTab({
               >
                 <td className="px-3 py-2.5 font-mono text-ink-tertiary">{i + 1}</td>
                 <td className="px-3 py-2.5">
-                  <Link
-                    href={`/funds/${f.mstar_id}`}
-                    className="font-semibold text-ink-primary hover:text-teal transition-colors block"
-                  >
-                    {f.scheme_name}
-                  </Link>
+                  <LinkedFund
+                    mstarId={f.mstar_id}
+                    name={f.scheme_name}
+                    className="font-semibold block"
+                  />
                   <div className="text-[10px] text-ink-tertiary">{f.amc} · {f.category_name}</div>
                 </td>
                 <td className="px-3 py-2.5 text-right font-mono font-semibold text-teal">

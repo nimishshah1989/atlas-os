@@ -36,7 +36,7 @@ export default function AgentsChatPage() {
     <main className="max-w-3xl mx-auto px-6 sm:px-10 py-8 bg-white min-h-screen">
       <header className="mb-6">
         <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider">
-          Atlas · Intelligence · Agents
+          Atlas · Admin · Agents
         </div>
         <h1 className="font-serif text-2xl text-ink-primary mt-1">Ask Atlas</h1>
         <p className="font-sans text-sm text-ink-secondary mt-1 max-w-2xl">

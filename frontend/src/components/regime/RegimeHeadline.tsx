@@ -1,5 +1,7 @@
 import { TrendingUp, TrendingDown, AlertTriangle, Activity, ChevronRight, Flame, Info } from 'lucide-react'
 import { SignalGauge } from './SignalGauge'
+import { InfoTooltip } from '@/components/ui/InfoTooltip'
+import { TOOLTIPS } from '@/lib/tooltips'
 import {
   getRegimeTintClass,
   getRegimeAccentClass,
@@ -171,7 +173,11 @@ export function RegimeHeadline({ regime }: Props) {
       </div>
 
       {/* Row 4 — four signal gauges (one per category) */}
-      <div className="ml-11 flex items-center gap-8 mb-5 flex-wrap">
+      <div className="ml-11 mb-5">
+        <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider mb-2">
+          4-State Classifier — Signal Inputs
+        </div>
+      <div className="flex items-center gap-8 flex-wrap">
         {CATEGORY_LABELS.map(({ key, label }) => (
           <div key={key} className="flex items-center gap-2.5">
             <span className="font-sans text-[11px] text-ink-tertiary uppercase tracking-wider w-[88px]">
@@ -184,6 +190,7 @@ export function RegimeHeadline({ regime }: Props) {
           </div>
         ))}
       </div>
+      </div>
 
       {/* Row 5 — action + key stats */}
       <div className="ml-11 flex items-center justify-between">
@@ -194,6 +201,7 @@ export function RegimeHeadline({ regime }: Props) {
         <div className="flex items-center gap-5 font-mono text-xs tabular-nums text-ink-tertiary">
           {vix && (
             <span
+              className="inline-flex items-center gap-1"
               data-validator-id={`regime.india_vix:${regime.date instanceof Date ? regime.date.toISOString().split('T')[0] : String(regime.date)}`}
               data-validator-raw={regime.india_vix ?? ''}
             >
@@ -201,6 +209,7 @@ export function RegimeHeadline({ regime }: Props) {
               <span className={`font-medium ${parseFloat(vix) > 25 ? 'text-signal-neg' : parseFloat(vix) > 18 ? 'text-signal-warn' : 'text-ink-primary'}`}>
                 {vix}
               </span>
+              <InfoTooltip content={TOOLTIPS.india_vix} />
             </span>
           )}
           <span

@@ -44,13 +44,9 @@ export interface StateHistoryEntry {
 export interface WithinStatePeer {
   instrument_id: string
   symbol: string
-  sector: string | null
-  industry: string | null
   within_state_rank: number
   rs_rank_12m: number
   dwell_days: number
-  close_vs_sma_50: number | null
-  sma_200_slope: number | null
 }
 
 /**
@@ -131,35 +127,27 @@ export async function getStockCohortKey(instrumentId: string): Promise<string> {
 }
 
 /**
- * Sector peers in the same Weinstein state on the same date, ranked by
- * within_state_rank. Filtering to the current stock's sector makes the list
- * genuine peers (comparable companies at the same stage) rather than an
- * arbitrary cross-sector mix. Default N=30.
+ * Top N stocks in the same state on the same date, ranked by within_state_rank.
+ * For the WithinStatePeers component. Default N=30.
  */
 export async function getWithinStatePeers(
   state: string,
   asOfDate: string,
-  sector: string | null,
   limit = 30,
 ): Promise<WithinStatePeer[]> {
   return sql<WithinStatePeer[]>`
     SELECT
       s.instrument_id::text,
       u.symbol,
-      u.sector,
-      u.industry,
       s.within_state_rank::float8 AS within_state_rank,
       s.rs_rank_12m::float8       AS rs_rank_12m,
-      s.dwell_days,
-      s.close_vs_sma_50::float8   AS close_vs_sma_50,
-      s.sma_200_slope::float8     AS sma_200_slope
+      s.dwell_days
     FROM atlas.atlas_stock_state_daily s
     JOIN atlas.atlas_universe_stocks u USING (instrument_id)
     WHERE s.classifier_version = 'v2.0-validated'
       AND s.state = ${state}
       AND s.date = ${asOfDate}::date
       AND s.within_state_rank IS NOT NULL
-      AND (${sector}::text IS NULL OR u.sector = ${sector})
     ORDER BY s.within_state_rank DESC NULLS LAST
     LIMIT ${limit}
   `

@@ -1,19 +1,73 @@
 // allow-large: Sprint 2 ETF screener — col toggle, gate badge, expandable rows
 'use client'
 import { Fragment, useState, useMemo } from 'react'
-import Link from 'next/link'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import type { ETFRow } from '@/lib/queries/etfs'
+import type { ComponentValidation } from '@/lib/queries/component_validation'
 import {
-  pct, pctColor, PosSizeBar, RSPctileBar,
-  RSStateChip, MomentumChip, RiskChip,
+  pct, pctColor, RSPctileBar,
 } from '@/lib/stock-formatters'
+import { ValidatedBadge } from '@/components/ui/ValidatedBadge'
 import { ColumnToggle, useColumnVisibility, type ColumnDef } from '@/components/ui/ColumnToggle'
-import { StateJourneyCompact } from '@/components/ui/StateJourneyCompact'
+import { WithinStateRankCell } from '@/components/stocks/WithinStateRankCell'
+import { LinkedSector, LinkedETF } from '@/components/ui/LinkedToken'
+import { ProvenanceMarker } from '@/components/ui/ProvenanceMarker'
 
 const RS_ORDER = ['Leader', 'Strong', 'Consolidating', 'Emerging', 'Average', 'Weak', 'Laggard']
 const MOM_ORDER = ['Accelerating', 'Improving', 'Flat', 'Deteriorating', 'Collapsing']
 const RISK_ORDER = ['Low', 'Normal', 'Elevated', 'High', 'Below Trend']
+
+// Stage badge — mirrors StockScreener.tsx StageBadge (no dwell for ETFs).
+const STAGE_LABEL: Record<string, string> = {
+  stage_1: '1 BASE',
+  stage_2a: '2A BREAK',
+  stage_2b: '2B CONF',
+  stage_2c: '2C MATURE',
+  stage_3: '3 TOP',
+  stage_4: '4 DECLINE',
+  uninvestable: 'UNINV',
+}
+const STAGE_COLOR: Record<string, string> = {
+  stage_1: 'text-ink-secondary bg-paper-rule/30',
+  stage_2a: 'text-signal-pos bg-signal-pos/10',
+  stage_2b: 'text-signal-pos bg-signal-pos/10',
+  stage_2c: 'text-signal-warn bg-signal-warn/10',
+  stage_3: 'text-signal-warn bg-signal-warn/10',
+  stage_4: 'text-signal-neg bg-signal-neg/10',
+  uninvestable: 'text-ink-tertiary bg-paper-rule/20',
+}
+
+function StageBadge({ state }: { state: string | null }) {
+  if (!state) return <span className="font-mono text-xs text-ink-tertiary">—</span>
+  const label = STAGE_LABEL[state] ?? state.toUpperCase()
+  const color = STAGE_COLOR[state] ?? 'text-ink-secondary bg-paper-rule/20'
+  return (
+    <span className={`px-1.5 py-0.5 rounded-sm font-sans text-[10px] font-semibold tracking-[0.04em] ${color}`}>
+      {label}
+    </span>
+  )
+}
+
+/** True for commodity ETFs (Gold/Silver theme) — no equity constituents, no engine_state. */
+function isCommodityETF(theme: string): boolean {
+  return theme === 'Gold' || theme === 'Silver'
+}
+
+/** C5: render engine_state cell honestly — n/a for commodity ETFs, StageBadge otherwise. */
+function EngineStateCell({ row }: { row: ETFRow }) {
+  if (isCommodityETF(row.theme)) {
+    return (
+      <span
+        data-testid={`commodity-etf-na-${row.ticker}`}
+        className="font-sans text-[10px] text-ink-tertiary"
+        title="Commodity ETF — no equity constituents, bottom-up engine_state not applicable"
+      >
+        n/a — commodity ETF
+      </span>
+    )
+  }
+  return <StageBadge state={row.engine_state} />
+}
 
 function stateRank(order: string[], val: string | null): number {
   if (!val) return order.length
@@ -23,7 +77,7 @@ function stateRank(order: string[], val: string | null): number {
 
 type SortKey =
   | 'ticker' | 'theme' | 'rs_pctile_3m'
-  | 'ret_1m' | 'ret_3m' | 'ret_12m' | 'position_size_pct'
+  | 'ret_1m' | 'ret_3m' | 'ret_12m'
   | 'rs_state' | 'momentum_state' | 'risk_state'
 
 type FilterChip = 'all' | 'broad' | 'sectoral' | 'thematic' | 'gold' | 'silver' | 'international' | 'investable'
@@ -60,13 +114,15 @@ const OPTIONAL_COLS: ColumnDef[] = [
   { key: 'above_30w_ma',     label: '30W MA',       defaultVisible: false },
   { key: 'effort_ratio',     label: 'Effort Ratio', defaultVisible: false },
   { key: 'days_in_state',    label: 'Days (RS)',    defaultVisible: false },
+  { key: 'within_state_rank', label: 'Within Rank', defaultVisible: false },
 ]
 
 const COL_STORAGE_KEY = 'atlas-etf-screener-cols'
 
 // Always-visible columns:
-//   Ticker, Theme, Gates, RS State, Mom, Risk, 1M, 3M, RS Pctile, Deploy %  = 10
-const ALWAYS_VISIBLE_COL_COUNT = 10
+//   Ticker, Theme, Stage, RS State, Risk, 1M, 3M, RS Pctile  = 8
+// (Gates, Mom, and Deploy % columns removed in Phase 8)
+const ALWAYS_VISIBLE_COL_COUNT = 8
 
 function TriggerBadges({ row }: { row: ETFRow }) {
   if (!row.breakout_trigger && !row.transition_trigger) return null
@@ -91,50 +147,12 @@ function ThemeBadge({ theme }: { theme: string }) {
   )
 }
 
-const GATE_DEFS: { label: string; title: string; key: keyof ETFRow }[] = [
-  { label: 'H',  title: 'History gate — ETF has ≥52 weeks of price history',                  key: 'history_gate_pass' },
-  { label: 'L',  title: 'Liquidity gate — average daily volume above minimum threshold',       key: 'liquidity_gate_pass' },
-  { label: 'W',  title: 'Weinstein gate — price above 30-week (150-day) moving average',       key: 'weinstein_gate_pass' },
-  { label: 'S',  title: 'Strength gate — RS state is Leader or Strong (top 30th percentile)', key: 'strength_gate' },
-  { label: 'D',  title: 'Direction gate — momentum is Accelerating or Improving',              key: 'direction_gate' },
-  { label: 'Ri', title: 'Risk gate — extension <40% above 200-day MA and volatility normal',  key: 'risk_gate' },
-]
-
-function GateBadge({ row }: { row: ETFRow }) {
-  const passing = GATE_DEFS.filter(g => row[g.key] === true).length
-  return (
-    <div className="flex items-center gap-0.5">
-      <span className={`font-mono text-[9px] mr-0.5 ${passing >= 5 ? 'text-signal-pos' : passing >= 4 ? 'text-signal-warn' : 'text-ink-tertiary'}`}>
-        {passing}/6
-      </span>
-      {GATE_DEFS.map(g => {
-        const pass = row[g.key]
-        return (
-          <span
-            key={g.label}
-            title={g.title}
-            className={`inline-flex items-center justify-center px-0.5 py-0.5 rounded-[2px] font-mono text-[8px] font-bold cursor-help ${
-              pass === true
-                ? 'bg-teal/15 text-teal'
-                : pass === false
-                ? 'bg-signal-neg/10 text-signal-neg'
-                : 'bg-paper-rule/20 text-ink-tertiary'
-            }`}
-          >
-            {g.label}
-          </span>
-        )
-      })}
-    </div>
-  )
-}
-
 function isIlliquidEtf(etf: ETFRow): boolean {
   const s = etf.rs_state
   return !s || s.startsWith('ILLIQUID') || s.startsWith('INSUFFICIENT')
 }
 
-export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
+export function ETFScreener({ etfs, validations = [] }: { etfs: ETFRow[]; validations?: ComponentValidation[] }) {
   const [sortKey, setSortKey] = useState<SortKey>('rs_pctile_3m')
   const [asc, setAsc] = useState(false)
   const [chip, setChip] = useState<FilterChip>('all')
@@ -284,9 +302,8 @@ export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
             <tr className="border-b border-paper-rule bg-paper">
               <Th label="Ticker" k="ticker" />
               <Th label="Theme" k="theme" />
-              <PlainTh label="Gates" />
+              <PlainTh label="Stage" title="Weinstein stage from constituent holdings (equity ETFs) or ticker-level RS/momentum (others)" />
               <Th label="RS State" k="rs_state" />
-              <Th label="Mom" k="momentum_state" />
               <Th label="Risk" k="risk_state" />
               {visibleCols.has('ret_1w') && <PlainTh label="1W" align="right" />}
               {visibleCols.has('ret_12m') && <Th label="12M" k="ret_12m" align="right" />}
@@ -298,10 +315,12 @@ export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
               {visibleCols.has('above_30w_ma') && <PlainTh label="30W MA" align="right" title="Price above 30-week (150-day) moving average — Weinstein Stage 2 indicator" />}
               {visibleCols.has('effort_ratio') && <PlainTh label="Effort" align="right" title="Effort ratio: price range vs volume ratio vs 63-day average. >1.2 = price moving efficiently on volume" />}
               {visibleCols.has('days_in_state') && <PlainTh label="Days (RS)" align="right" />}
+              {visibleCols.has('within_state_rank') && (
+                <PlainTh label="Within Rank" align="right" title="within-state rank: position within same-state peers (0=bottom, 1=top)" />
+              )}
               <Th label="1M" k="ret_1m" align="right" />
               <Th label="3M" k="ret_3m" align="right" />
               <Th label="RS Pctile" k="rs_pctile_3m" align="right" />
-              <Th label="Deploy %" k="position_size_pct" align="right" />
             </tr>
           </thead>
           <tbody>
@@ -321,38 +340,38 @@ export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
                       onClick={() => toggleExpanded(row.ticker)}
                       className={`border-b border-paper-rule hover:bg-paper-rule/20 transition-colors cursor-pointer ${i % 2 === 0 ? '' : 'bg-paper-rule/5'} ${isExpanded ? 'bg-paper-rule/30' : ''}`}
                     >
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        <Link
-                          href={`/etfs/${encodeURIComponent(row.ticker)}`}
-                          onClick={e => e.stopPropagation()}
-                          className="hover:opacity-80"
-                        >
-                          <div className="font-sans text-xs font-semibold text-ink-primary">{row.ticker}</div>
-                          <div className="font-sans text-[10px] text-ink-tertiary truncate max-w-[200px]" title={row.etf_name ?? ''}>
-                            {row.etf_name ?? '—'}
-                          </div>
-                          <TriggerBadges row={row} />
-                        </Link>
+                      <td className="px-3 py-2.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                        <div className="font-sans text-xs font-semibold inline-flex items-center gap-0.5">
+                          <LinkedETF ticker={row.ticker} />
+                          <ProvenanceMarker dataSource={row.data_source} id={row.ticker} />
+                        </div>
+                        <div className="font-sans text-[10px] text-ink-tertiary truncate max-w-[200px]" title={row.etf_name ?? ''}>
+                          {row.etf_name ?? '—'}
+                        </div>
+                        <TriggerBadges row={row} />
                       </td>
                       <td className="px-3 py-2.5">
                         <ThemeBadge theme={row.theme} />
                         {row.linked_sector && (
-                          <div className="font-sans text-[10px] text-ink-tertiary mt-0.5 whitespace-nowrap">
-                            {row.linked_sector}
+                          <div className="font-sans text-[10px] mt-0.5 whitespace-nowrap">
+                            <LinkedSector sector={row.linked_sector} />
                           </div>
                         )}
                       </td>
                       <td className="px-3 py-2.5">
-                        <GateBadge row={row} />
+                        <EngineStateCell row={row} />
                       </td>
                       <td className="px-3 py-2.5">
-                        <RSStateChip value={row.rs_state} />
+                        <ValidatedBadge
+                          label={row.rs_state ?? '—'}
+                          validation={validations.find(v => v.component_name === 'rs' && v.badge === row.rs_state) ?? undefined}
+                        />
                       </td>
                       <td className="px-3 py-2.5">
-                        <MomentumChip value={row.momentum_state} />
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <RiskChip value={row.risk_state} />
+                        <ValidatedBadge
+                          label={row.risk_state ?? '—'}
+                          validation={validations.find(v => v.component_name === 'risk' && v.badge === row.risk_state) ?? undefined}
+                        />
                       </td>
                       {visibleCols.has('ret_1w') && (
                         <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(row.ret_1w)}`}>
@@ -414,6 +433,11 @@ export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
                           {row.days_in_state != null ? row.days_in_state : '—'}
                         </td>
                       )}
+                      {visibleCols.has('within_state_rank') && (
+                        <td className="px-3 py-2.5 text-right" data-testid={`etf-wsr-${row.ticker}`}>
+                          <WithinStateRankCell value={row.mean_within_state_rank ?? null} />
+                        </td>
+                      )}
                       <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(row.ret_1m)}`}>
                         {pct(row.ret_1m)}
                       </td>
@@ -427,19 +451,7 @@ export function ETFScreener({ etfs }: { etfs: ETFRow[] }) {
                       >
                         <RSPctileBar value={row.rs_pctile_3m} />
                       </td>
-                      <td className="px-3 py-2.5 text-right">
-                        <div className="flex justify-end">
-                          <PosSizeBar value={row.position_size_pct} />
-                        </div>
-                      </td>
                     </tr>
-                    {isExpanded && (
-                      <tr className="border-b border-paper-rule bg-paper-rule/10">
-                        <td colSpan={totalCols} className="px-4 py-3">
-                          <StateJourneyCompact ticker={row.ticker} />
-                        </td>
-                      </tr>
-                    )}
                   </Fragment>
                 )
               })

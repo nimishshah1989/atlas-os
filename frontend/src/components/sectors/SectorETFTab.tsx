@@ -2,6 +2,7 @@ import Link from 'next/link'
 import type { ETFRow } from '@/lib/queries/etfs'
 import { RSStateChip, MomentumChip, RiskChip, pct, pctColor } from '@/lib/stock-formatters'
 import { ETFGatesPanel } from '@/components/etfs/ETFGatesPanel'
+import { LinkedETF } from '@/components/ui/LinkedToken'
 
 function MetricTile({ label, value, color, subtitle }: { label: string; value: string; color?: string; subtitle?: string }) {
   return (
@@ -35,12 +36,10 @@ function ETFCard({ etf }: { etf: ETFRow }) {
       <div className="px-5 py-4 border-b border-paper-rule flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <Link
-              href={`/etfs/${encodeURIComponent(etf.ticker)}`}
-              className="font-serif text-2xl font-semibold text-ink-primary hover:text-teal transition-colors"
-            >
-              {etf.ticker}
-            </Link>
+            <LinkedETF
+              ticker={etf.ticker}
+              className="font-serif text-2xl font-semibold"
+            />
             <span className={`font-sans text-[10px] font-semibold px-1.5 py-0.5 rounded ${
               etf.theme === 'Broad' ? 'bg-teal/10 text-teal'
               : etf.theme === 'Sectoral' ? 'bg-signal-pos/10 text-signal-pos'

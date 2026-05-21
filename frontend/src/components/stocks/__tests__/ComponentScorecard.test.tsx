@@ -85,14 +85,14 @@ describe('ComponentScorecard — RS Leader stock', () => {
     expect(screen.getByText(/Leader/)).toBeInTheDocument()
   })
 
-  it('renders rs_rank_12m context line', () => {
+  it('renders 12-month RS rank context line', () => {
     render(
       <ComponentScorecard
         state={makeState({ rs_rank_12m: 0.87 })}
         validations={validations}
       />,
     )
-    expect(screen.getByText(/rs_rank_12m 0\.87/)).toBeInTheDocument()
+    expect(screen.getByText(/12-month RS rank: 0\.87/)).toBeInTheDocument()
   })
 
   it('renders Dwell timing row with day count', () => {
@@ -116,6 +116,20 @@ describe('ComponentScorecard — RS Leader stock', () => {
     expect(screen.getByText('OBV slope')).toBeInTheDocument()
     expect(screen.getByText('ATR contraction')).toBeInTheDocument()
     expect(screen.getByText('Realized vol tier')).toBeInTheDocument()
+  })
+
+  it('renders "computed continuously" when obvSlope is null (no raw field name or dev jargon)', () => {
+    render(
+      <ComponentScorecard
+        state={makeState()}
+        validations={validations}
+        obvSlope={null}
+      />,
+    )
+    // Both OBV slope and ATR contraction show this placeholder when values are null
+    const placeholders = screen.getAllByText('computed continuously')
+    expect(placeholders.length).toBeGreaterThanOrEqual(1)
+    expect(screen.queryByText(/not yet stored/)).not.toBeInTheDocument()
   })
 })
 

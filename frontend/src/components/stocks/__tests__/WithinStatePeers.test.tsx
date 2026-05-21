@@ -122,3 +122,35 @@ describe('WithinStatePeers — state label mapping', () => {
     expect(screen.getByText(/No peers found/i)).toBeInTheDocument()
   })
 })
+
+// ---------------------------------------------------------------------------
+// Test 3: id anchor target exists (regression guard for #within-state-peers link)
+// ---------------------------------------------------------------------------
+
+describe('WithinStatePeers — id anchor target', () => {
+  it('renders section with id="within-state-peers" when populated', () => {
+    const { container } = render(
+      <WithinStatePeers
+        peers={makePeers(3)}
+        currentInstrumentId="aaa-111"
+        state="stage_2c"
+      />,
+    )
+    const section = container.querySelector('#within-state-peers')
+    expect(section).toBeInTheDocument()
+    expect(section?.tagName.toLowerCase()).toBe('section')
+  })
+
+  it('renders section with id="within-state-peers" in empty-state branch', () => {
+    const { container } = render(
+      <WithinStatePeers
+        peers={[]}
+        currentInstrumentId="aaa-111"
+        state="stage_2c"
+      />,
+    )
+    const section = container.querySelector('#within-state-peers')
+    expect(section).toBeInTheDocument()
+    expect(section?.tagName.toLowerCase()).toBe('section')
+  })
+})

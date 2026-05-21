@@ -9,7 +9,6 @@ import {
   getFundHoldings,
   getFundNavHistory,
   getFundLensHistory,
-  getFundDecisionScoreHistory,
 } from '@/lib/queries/funds'
 import { getFundLeaderHoldings } from '@/lib/queries/leaders'
 import { LeaderHoldingsPanel } from '@/components/ui/LeaderHoldingsPanel'
@@ -20,7 +19,6 @@ import { FundLens1 } from '@/components/funds/FundLens1'
 import { FundLens2 } from '@/components/funds/FundLens2'
 import { FundLens3 } from '@/components/funds/FundLens3'
 import { FundDecisionHistory } from '@/components/funds/FundDecisionHistory'
-import { FundManagerDecisionSummary } from '@/components/funds/FundManagerDecisionSummary'
 import { FundHoldingsTab } from '@/components/funds/FundHoldingsTab'
 import { FundNavChart } from '@/components/funds/FundNavChart'
 import { FundRiskPanel } from '@/components/funds/FundRiskPanel'
@@ -33,7 +31,7 @@ export default async function FundDeepDivePage({
 }) {
   const { mstar_id } = await params
 
-  const [master, metricHistory, lens, decisionHistory, holdings, navHistory, lensHistory, leaderHoldings, decisionScores] =
+  const [master, metricHistory, lens, decisionHistory, holdings, navHistory, lensHistory, leaderHoldings] =
     await Promise.all([
       getFundMaster(mstar_id),
       getFundMetricHistory(mstar_id, 180),
@@ -43,7 +41,6 @@ export default async function FundDeepDivePage({
       getFundNavHistory(mstar_id, 1825),
       getFundLensHistory(mstar_id),
       getFundLeaderHoldings(mstar_id).catch(() => []),
-      getFundDecisionScoreHistory(mstar_id, 12),
     ])
 
   if (!master) notFound()
@@ -109,19 +106,11 @@ export default async function FundDeepDivePage({
         <LeaderHoldingsPanel holdings={leaderHoldings} />
       </div>
 
-      <div className="px-6 py-6 border-b border-paper-rule">
+      <div className="px-6 py-6">
         <h2 className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-4">
           Decision History
         </h2>
         <FundDecisionHistory decisions={decisionHistory} />
-      </div>
-
-      {/* Manager Decisions — holdings change quality */}
-      <div className="px-6 py-6 border-t border-paper-rule">
-        <h2 className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-4">
-          Portfolio Manager Decisions
-        </h2>
-        <FundManagerDecisionSummary scores={decisionScores} mstar_id={mstar_id} />
       </div>
     </div>
   )

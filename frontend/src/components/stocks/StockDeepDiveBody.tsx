@@ -1,11 +1,9 @@
 'use client'
 import { useState, type ReactNode } from 'react'
 import { IndicatorChart } from '@/components/regime/IndicatorChart'
-import type { MetricHistoryRow, StateHistoryRow, StockRowWithSector } from '@/lib/queries/stocks'
+import type { MetricHistoryRow, StockRowWithSector } from '@/lib/queries/stocks'
 import {
   interpretRSPctile,
-  interpretMomentumState,
-  interpretWeinsteinGate,
   interpretEMARatio,
   interpret3MReturn,
   interpretDrawdown,
@@ -14,8 +12,6 @@ import {
   pct,
   pctColor,
 } from '@/lib/stock-formatters'
-import { StateHeatmap } from './StockHistoryTab'
-import { StateJourneyCompact } from '@/components/ui/StateJourneyCompact'
 
 function Commentary({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -53,110 +49,6 @@ function SectionLabel({ children }: { children: ReactNode }) {
   )
 }
 
-function EntryBadge({ label, active }: { label: string; active: boolean | null }) {
-  if (active) {
-    return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm bg-teal/15 border border-teal/30 font-sans text-xs font-semibold text-teal">
-        <span className="w-1.5 h-1.5 rounded-full bg-teal shrink-0" />
-        {label}
-      </span>
-    )
-  }
-  return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm bg-paper-rule/10 border border-paper-rule/30 font-sans text-xs text-ink-tertiary">
-      <span className="w-1.5 h-1.5 rounded-full bg-paper-rule shrink-0" />
-      {label}
-    </span>
-  )
-}
-
-function ExitBadge({ label, active }: { label: string; active: boolean | null }) {
-  if (active) {
-    return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm bg-signal-neg/15 border border-signal-neg/30 font-sans text-xs font-semibold text-signal-neg">
-        <span className="w-1.5 h-1.5 rounded-full bg-signal-neg shrink-0" />
-        {label}
-      </span>
-    )
-  }
-  return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm bg-paper-rule/10 border border-paper-rule/30 font-sans text-xs text-ink-tertiary">
-      <span className="w-1.5 h-1.5 rounded-full bg-paper-rule shrink-0" />
-      {label}
-    </span>
-  )
-}
-
-function SignalsSection({ stock }: { stock: StockRowWithSector }) {
-  const entrySignals = [
-    { label: 'Transition (Stage 1→2)', active: stock.transition_trigger },
-    { label: 'Breakout to New High', active: stock.breakout_trigger },
-  ]
-  const exitSignals = [
-    { label: 'Market Risk-Off', active: stock.exit_market_riskoff },
-    { label: 'Sector Avoid', active: stock.exit_sector_avoid },
-    { label: 'RS Deteriorating', active: stock.exit_rs_deteriorate },
-    { label: 'Momentum Collapse', active: stock.exit_momentum_collapse },
-    { label: 'Volume Distribution', active: stock.exit_volume_distrib },
-    { label: 'Stop Loss Hit', active: stock.exit_stop_loss },
-  ]
-
-  const anyEntry = entrySignals.some(s => s.active === true)
-  const anyExit = exitSignals.some(s => s.active === true)
-  const atrVal = stock.atr_21 != null ? parseFloat(stock.atr_21) : null
-
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      {/* Entry signals */}
-      <div className="border border-paper-rule rounded-sm px-4 py-3">
-        <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-2 flex items-center gap-2">
-          Entry Signals
-          {anyEntry && (
-            <span className="text-teal text-[9px] font-semibold uppercase tracking-wide">Active</span>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {entrySignals.map(s => (
-            <EntryBadge key={s.label} label={s.label} active={s.active} />
-          ))}
-        </div>
-        {!anyEntry && (
-          <p className="font-sans text-[10px] text-ink-tertiary mt-2">
-            No entry triggers currently firing. Both require investable-grade quality.
-          </p>
-        )}
-      </div>
-
-      {/* Exit risk flags */}
-      <div className="border border-paper-rule rounded-sm px-4 py-3">
-        <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-2 flex items-center gap-2">
-          Exit Risk Flags
-          {anyExit && (
-            <span className="text-signal-neg text-[9px] font-semibold uppercase tracking-wide">Warning</span>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {exitSignals.map(s => (
-            <ExitBadge key={s.label} label={s.label} active={s.active} />
-          ))}
-        </div>
-        {!anyExit && (
-          <p className="font-sans text-[10px] text-ink-tertiary mt-2">No exit flags active.</p>
-        )}
-        {atrVal != null && (
-          <div className="mt-2 pt-2 border-t border-paper-rule/30">
-            <span className="font-sans text-[10px] text-ink-tertiary">
-              ATR-21: <span className="font-mono font-semibold text-ink-secondary">
-                ₹{atrVal.toFixed(1)}
-              </span>
-              <span className="ml-1 text-ink-tertiary">avg daily range</span>
-            </span>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
 
 const CHART_RANGES = [
   { label: '1M', days: 30 },
@@ -180,16 +72,13 @@ function sliceByDays<T extends { date: Date | string }>(arr: T[], days: ChartDay
 export function StockDeepDiveBody({
   stock,
   metricHistory,
-  stateHistory,
 }: {
   stock: StockRowWithSector
   metricHistory: MetricHistoryRow[]
-  stateHistory: StateHistoryRow[]
 }) {
   const [chartDays, setChartDays] = useState<ChartDays>(180)
 
   const filteredMetric = sliceByDays(metricHistory, chartDays)
-  const filteredState  = sliceByDays(stateHistory, chartDays)
   const latest = filteredMetric[filteredMetric.length - 1]
 
   const rsPctileData = filteredMetric.map(r => ({
@@ -249,22 +138,6 @@ export function StockDeepDiveBody({
         ))}
       </div>
 
-      {/* State journey compact strip */}
-      <div className="border border-paper-rule rounded-sm bg-paper px-4 py-3">
-        <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-2">
-          State Journey — {CHART_RANGES.find(r => r.days === chartDays)?.label}
-        </div>
-        <StateJourneyCompact symbol={stock.symbol} days={chartDays} />
-      </div>
-
-      {/* Entry / Exit Signals */}
-      <div>
-        <SectionLabel>Signals</SectionLabel>
-        <div className="mt-3">
-          <SignalsSection stock={stock} />
-        </div>
-      </div>
-
       {/* Returns */}
       <div>
         <SectionLabel>Returns</SectionLabel>
@@ -287,24 +160,6 @@ export function StockDeepDiveBody({
               </div>
             )
           })}
-        </div>
-      </div>
-
-      {/* Weinstein + Momentum summary cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Commentary title="Weinstein Stage">
-          {interpretWeinsteinGate(stock.weinstein_gate_pass, stock.ema_10_at_20d_high)}
-        </Commentary>
-        <Commentary title="Momentum">
-          {interpretMomentumState(stock.momentum_state)}
-        </Commentary>
-      </div>
-
-      {/* State history heatmap */}
-      <div>
-        <SectionLabel>State History — Daily Heatmap ({CHART_RANGES.find(r => r.days === chartDays)?.label})</SectionLabel>
-        <div className="mt-3">
-          <StateHeatmap history={filteredState} />
         </div>
       </div>
 

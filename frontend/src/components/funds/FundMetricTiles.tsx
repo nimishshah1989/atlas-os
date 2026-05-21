@@ -2,6 +2,7 @@ import React from 'react'
 import type { FundRow } from '@/lib/queries/funds'
 import type { Period } from '@/lib/url-params'
 import type { TileCounts, FilterChip } from '@/components/funds/FundPageClient'
+import { ordinal } from '@/lib/ordinal'
 
 type Tone = 'pos' | 'neg' | 'warn' | 'neutral'
 
@@ -164,7 +165,7 @@ export function FundMetricTiles({
         />
         <Tile
           label="MEDIAN RS"
-          value={`${(medianRsPctile * 100).toFixed(0)}th`}
+          value={ordinal(Math.round(medianRsPctile * 100))}
           tone={medianRsTone}
         />
         <Tile

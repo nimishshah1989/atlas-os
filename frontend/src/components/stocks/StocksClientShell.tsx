@@ -1,17 +1,15 @@
 'use client'
 import { useState } from 'react'
 import type { StockRowWithSector } from '@/lib/queries/stocks'
-import type { ConvictionMapRow } from '@/lib/queries/conviction'
+import type { ComponentValidation } from '@/lib/queries/component_validation'
 import type { RSLeaderRow, BreakoutCandidateRow } from '@/lib/queries/leaders'
+import type { PolicyEntryParams } from '@/lib/policy-entry-filter'
 import { StockBreadthPanel } from './StockBreadthPanel'
 import { StockBubbleChart } from './StockBubbleChart'
 import { StockIntelligencePanel } from './StockIntelligencePanel'
 import { StockScreener } from './StockScreener'
 import { IntradayRSLeaders } from './IntradayRSLeaders'
 import { RSLeadersPanel } from './RSLeadersPanel'
-import { CTSGradeSummaryCards } from './CTSGradeSummaryCards'
-import { CTSIndexTimingPanel } from './CTSIndexTimingPanel'
-import { CTSSectorPanel } from './CTSSectorPanel'
 
 type MaFilter = 'above_30w_ma' | 'above_50d_ma' | 'above_200d_ma' | null
 type ActiveView = 'overview' | 'leaders'
@@ -20,22 +18,28 @@ export function StocksClientShell({
   stocks,
   regimeState,
   deploymentMultiplier,
-  convictionMap,
+  validations = [],
   leaders,
   breakouts,
   deterioration,
+  initialSectorFilter,
+  initialIndexFilter,
+  policyEntryParams,
 }: {
   stocks: StockRowWithSector[]
   regimeState: string
   deploymentMultiplier: number
-  convictionMap?: Record<string, ConvictionMapRow>
+  validations?: ComponentValidation[]
   leaders: RSLeaderRow[]
   breakouts: BreakoutCandidateRow[]
   deterioration: BreakoutCandidateRow[]
+  initialSectorFilter?: string
+  initialIndexFilter?: string
+  /** Policy entry-rule params for flow mode (active portfolio + sector filter). */
+  policyEntryParams?: PolicyEntryParams
 }) {
   const [maFilter, setMaFilter] = useState<MaFilter>(null)
   const [activeView, setActiveView] = useState<ActiveView>('overview')
-  const [showIntraday, setShowIntraday] = useState(false)
 
   return (
     <div className="flex flex-col gap-6">
@@ -70,24 +74,7 @@ export function StocksClientShell({
 
       {activeView === 'overview' ? (
         <>
-          <div className="border border-paper-rule rounded-sm bg-paper">
-            <button
-              type="button"
-              onClick={() => setShowIntraday(v => !v)}
-              className="w-full flex items-center justify-between px-5 py-2.5 font-sans text-xs font-medium text-ink-secondary hover:bg-paper-rule/10 transition-colors"
-            >
-              <span className="flex items-center gap-1.5">
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-signal-pos" />
-                Live RS Leaders (intraday)
-              </span>
-              <span className="text-ink-tertiary">{showIntraday ? '▲ Hide' : '▼ Show'}</span>
-            </button>
-            {showIntraday && (
-              <div className="border-t border-paper-rule p-4">
-                <IntradayRSLeaders />
-              </div>
-            )}
-          </div>
+          <IntradayRSLeaders />
           <StockBreadthPanel
             stocks={stocks}
             activeMaFilter={maFilter}
@@ -99,13 +86,13 @@ export function StocksClientShell({
             regimeState={regimeState}
             deploymentMultiplier={deploymentMultiplier}
           />
-          <CTSGradeSummaryCards />
-          <CTSIndexTimingPanel />
-          <CTSSectorPanel />
           <StockScreener
             stocks={stocks}
             maFilter={maFilter}
-            convictionMap={convictionMap}
+            validations={validations}
+            initialSectorFilter={initialSectorFilter}
+            initialIndexFilter={initialIndexFilter}
+            policyEntryParams={policyEntryParams}
           />
         </>
       ) : (

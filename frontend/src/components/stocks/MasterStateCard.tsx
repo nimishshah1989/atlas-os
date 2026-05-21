@@ -4,6 +4,8 @@
 // Pure server component — no interactivity needed. Sticky via CSS only.
 import { AlertTriangle, Clock } from 'lucide-react'
 import type { StockState, CohortBaseline } from '@/lib/queries/states'
+import { InfoTooltip } from '@/components/ui/InfoTooltip'
+import { metric } from '@/lib/metric-registry'
 
 interface MasterStateCardProps {
   symbol: string
@@ -166,10 +168,11 @@ export function MasterStateCard({
         <div className="flex flex-col gap-1.5 sm:items-end">
           {/* Master state label */}
           <div
-            className={`font-sans text-sm font-semibold tracking-[0.22em] ${color}`}
+            className={`font-sans text-sm font-semibold tracking-[0.22em] ${color} flex items-center`}
             data-testid="state-label"
           >
             {label}
+            <InfoTooltip content={metric('engine_state')?.definition ?? 'IC-validated Weinstein stage classification.'} />
           </div>
 
           {/* Dwell line */}
@@ -196,9 +199,14 @@ export function MasterStateCard({
             </div>
           )}
 
-          {/* Peer rank */}
+          {/* Peer rank — linked to on-page peers table */}
           <div className="font-sans text-xs text-ink-tertiary">
-            {peerLine}
+            <a
+              href="#within-state-peers"
+              className="hover:text-ink-secondary hover:underline transition-colors"
+            >
+              {peerLine}
+            </a>
             {wsr != null && (
               <span className="ml-1">
                 · within-state rank <span className="font-mono">{wsrDisplay}</span>
