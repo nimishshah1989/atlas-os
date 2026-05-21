@@ -43,6 +43,9 @@ const ALL_COLS: ColumnDef[] = [
   { key: 'drawdown',        label: '1Y Ret',          defaultVisible: true },
   { key: 'max_drawdown',    label: 'Max DD (1Y)',      defaultVisible: false },
   { key: 'aum',             label: 'AUM (Cr)',         defaultVisible: false },
+  { key: 'decision_score',   label: 'Decision Score',  defaultVisible: false },
+  { key: 'decision_score_1m',label: '1m Outcome',      defaultVisible: false },
+  { key: 'decision_state',   label: 'Decision State',  defaultVisible: false },
 ]
 
 const COL_STORAGE_KEY = 'atlas-column-prefs-funds'
@@ -56,6 +59,7 @@ type SortCol =
   | 'nav_state' | 'composition' | 'holdings' | 'recommendation'
   | 'ret' | 'rs_pctile' | 'rs_category'
   | 'vol' | 'weeks_in_state' | 'drawdown' | 'max_drawdown' | 'aum'
+  | 'decision_score' | 'decision_score_1m' | 'decision_state'
 
 // 4 coloured dots: Perf · Sectors · Stocks · Market
 function GateDots({ f }: { f: FundRow }) {
@@ -94,6 +98,9 @@ function getSortValue(col: SortCol, f: FundRow, period: Period): number | string
     case 'drawdown':       return buildSortKey('drawdown',       { drawdown: f.ret_12m })
     case 'max_drawdown':   return buildSortKey('drawdown',       { drawdown: f.drawdown_ratio_252 })
     case 'aum':            return buildSortKey('ret',            { ret: f.aum_cr })
+    case 'decision_score':    return buildSortKey('ret', { ret: f.decision_score })
+    case 'decision_score_1m': return buildSortKey('ret', { ret: f.decision_score_1m })
+    case 'decision_state':    return buildSortKey('scheme_name', { scheme_name: f.decision_state_label ?? '' })
   }
 }
 
@@ -204,6 +211,9 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
               {visibleCols.has('drawdown')       && <Th label="1Y Ret"         k="drawdown"       align="right" />}
               {visibleCols.has('max_drawdown')   && <Th label="Max DD (1Y)"    k="max_drawdown"   align="right" title="Maximum drawdown over 252 trading days (1 year)" />}
               {visibleCols.has('aum')            && <Th label="AUM (Cr)"       k="aum"            align="right" title="Monthly average AUM in ₹ crore (AMFI data)" />}
+              {visibleCols.has('decision_score')    && <Th label="Decision Score" k="decision_score"    align="right" />}
+              {visibleCols.has('decision_score_1m') && <Th label="1m Outcome"     k="decision_score_1m" align="right" />}
+              {visibleCols.has('decision_state')    && <Th label="Decision State" k="decision_state" />}
             </tr>
           </thead>
           <tbody>
@@ -327,6 +337,49 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
                         {f.aum_cr != null
                           ? `₹${Number(f.aum_cr).toLocaleString('en-IN', { maximumFractionDigits: 0 })}Cr`
                           : '—'}
+                      </td>
+                    )}
+                    {visibleCols.has('decision_score') && (
+                      <td className="py-1.5 px-2 font-mono text-xs text-right tabular-nums">
+                        {f.decision_score !== null ? (
+                          <span
+                            className={
+                              Number(f.decision_score) >= 65
+                                ? 'text-signal-pos'
+                                : Number(f.decision_score) >= 40
+                                  ? 'text-signal-warn'
+                                  : 'text-signal-neg'
+                            }
+                          >
+                            {Number(f.decision_score).toFixed(1)}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                    )}
+                    {visibleCols.has('decision_score_1m') && (
+                      <td className="py-1.5 px-2 font-mono text-xs text-right tabular-nums">
+                        {f.decision_score_1m !== null ? (
+                          <span
+                            className={
+                              Number(f.decision_score_1m) >= 65
+                                ? 'text-signal-pos'
+                                : Number(f.decision_score_1m) >= 40
+                                  ? 'text-signal-warn'
+                                  : 'text-signal-neg'
+                            }
+                          >
+                            {Number(f.decision_score_1m).toFixed(1)}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                    )}
+                    {visibleCols.has('decision_state') && (
+                      <td className="py-1.5 px-2 font-sans text-[11px]">
+                        {f.decision_state_label ?? '—'}
                       </td>
                     )}
                   </tr>

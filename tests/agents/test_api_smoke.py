@@ -20,12 +20,17 @@ def _set_auth_disabled() -> None:
 
 
 def _fresh_app() -> TestClient:
-    """Build a fresh FastAPI app post-env-flag; uses TestClient."""
-    # The auth middleware reads ATLAS_AUTH_DISABLED at request time via
-    # Config, so simply set the env var before creating the client.
+    """Build a fresh FastAPI app post-env-flag; uses TestClient.
+
+    Overrides the ``get_engine`` FastAPI dependency with a MagicMock so
+    tests don't require ATLAS_DB_URL to be set in the environment.
+    """
     _set_auth_disabled()
     from atlas.api import app
+    from atlas.db import get_engine
 
+    mock_engine = MagicMock()
+    app.dependency_overrides[get_engine] = lambda: mock_engine
     return TestClient(app)
 
 

@@ -95,6 +95,9 @@ ui = [
     "altair>=5.2",
 ]
 
+[project.scripts]
+atlas-lab = "atlas.trading.cli:main"
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"

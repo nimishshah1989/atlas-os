@@ -16,14 +16,27 @@ from __future__ import annotations
 
 import json
 import os
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
 
 from atlas.api import app
+from atlas.config import Config
+from atlas.db import get_engine
 
 os.environ.setdefault("OPENBB_BACKEND_API_KEY", "")
 os.environ.setdefault("ATLAS_AUTH_DISABLED", "true")
+
+# Override get_engine so tests don't require ATLAS_DB_URL.
+# Unknown-intent paths short-circuit before touching the DB, but FastAPI still
+# resolves the dependency at request time.
+_mock_engine = MagicMock()
+app.dependency_overrides[get_engine] = lambda: _mock_engine
+
+# Config.AUTH_DISABLED is evaluated at class-definition time; force it True so
+# the JWT middleware skips token validation in test runs.
+Config.AUTH_DISABLED = True
 
 client = TestClient(app)
 

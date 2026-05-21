@@ -48,6 +48,10 @@ export type FundRow = {
   weak_aum_pct: string | null
   unknown_aum_pct: string | null   // computed in SQL
   lens_as_of_date: Date | null
+  // Manager decision scores (LEFT JOIN — all nullable)
+  decision_score: string | null
+  decision_score_1m: string | null
+  decision_state_label: string | null
 }
 
 export type FundMasterRow = {
@@ -129,7 +133,8 @@ export async function getAllFunds(): Promise<FundRow[]> {
       SELECT
         (SELECT MAX(date)     FROM atlas.atlas_fund_states_daily)    AS states_date,
         (SELECT MAX(date)     FROM atlas.atlas_fund_decisions_daily) AS decisions_date,
-        (SELECT MAX(as_of_date) FROM atlas.atlas_fund_lens_monthly)  AS lens_date
+        (SELECT MAX(as_of_date) FROM atlas.atlas_fund_lens_monthly)  AS lens_date,
+        (SELECT MAX(period_date) FROM atlas.atlas_fund_decision_scores) AS decision_date
     )
     SELECT
       uf.mstar_id, uf.scheme_name, uf.amc, uf.category_name, uf.broad_category,
@@ -157,7 +162,10 @@ export async function getAllFunds(): Promise<FundRow[]> {
       (fl.strong_aum_pct * 100)::text AS strong_aum_pct,
       (fl.weak_aum_pct   * 100)::text AS weak_aum_pct,
       GREATEST(0, 100 - COALESCE(fl.strong_aum_pct * 100, 0) - COALESCE(fl.weak_aum_pct * 100, 0))::text AS unknown_aum_pct,
-      fl.as_of_date AS lens_as_of_date
+      fl.as_of_date AS lens_as_of_date,
+      ds.signal_score::text AS decision_score,
+      ds.outcome_score_1m::text AS decision_score_1m,
+      ds.decision_state AS decision_state_label
     FROM atlas.atlas_universe_funds uf
     LEFT JOIN LATERAL (
       SELECT * FROM atlas.atlas_fund_metrics_daily
@@ -170,6 +178,8 @@ export async function getAllFunds(): Promise<FundRow[]> {
       ON fd.mstar_id = uf.mstar_id AND fd.date = (SELECT decisions_date FROM latest)
     LEFT JOIN atlas.atlas_fund_lens_monthly fl
       ON fl.mstar_id = uf.mstar_id AND fl.as_of_date = (SELECT lens_date FROM latest)
+    LEFT JOIN atlas.atlas_fund_decision_scores ds
+      ON ds.mstar_id = uf.mstar_id AND ds.period_date = (SELECT decision_date FROM latest)
     WHERE uf.plan_type = 'Regular'
     ORDER BY fm.rs_pctile_3m DESC NULLS LAST
   `
@@ -298,6 +308,33 @@ export type FundHoldingRow = {
   holdings_date: string | null
 }
 
+export type FundDecisionScoreRow = {
+  period_date: string
+  entries_count: number
+  exits_count: number
+  increases_count: number
+  decreases_count: number
+  signal_score: string | null
+  outcome_score_1m: string | null
+  outcome_score_3m: string | null
+  decision_state: string | null
+}
+
+export type FundHoldingsChangeRow = {
+  symbol: string
+  action: string
+  weight_before: string
+  weight_after: string
+  weight_delta: string
+  rs_state_at_action: string | null
+  momentum_state_at_action: string | null
+  signal_quality: string | null
+  outcome_ret_1m: string | null
+  outcome_quality_1m: string | null
+  outcome_ret_3m: string | null
+  outcome_quality_3m: string | null
+}
+
 export async function getFundNavHistory(
   mstar_id: string,
   days = 365,
@@ -378,5 +415,65 @@ export async function getFundHoldings(mstar_id: string, limit = 20): Promise<Fun
     WHERE h.mstar_id = ${mstar_id}
     ORDER BY h.weight_pct DESC
     LIMIT ${limit}
+  `
+}
+
+export async function getFundDecisionScoreHistory(
+  mstar_id: string,
+  limit = 12,
+): Promise<FundDecisionScoreRow[]> {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 24) {
+    // 24 = 2 years of monthly decision snapshots
+    throw new Error(`limit must be between 1 and 24, got: ${limit}`)
+  }
+  return sql<FundDecisionScoreRow[]>`
+    SELECT
+      period_date::text AS period_date,
+      entries_count,
+      exits_count,
+      increases_count,
+      decreases_count,
+      signal_score::text AS signal_score,
+      outcome_score_1m::text AS outcome_score_1m,
+      outcome_score_3m::text AS outcome_score_3m,
+      decision_state
+    FROM atlas.atlas_fund_decision_scores
+    WHERE mstar_id = ${mstar_id}
+    ORDER BY period_date DESC
+    LIMIT ${limit}
+  `
+}
+
+export async function getFundDecisionDetail(
+  mstar_id: string,
+  period_date: string,
+  action?: string,
+): Promise<FundHoldingsChangeRow[]> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(period_date)) {
+    throw new Error(`period_date must be YYYY-MM-DD, got: ${period_date}`)
+  }
+  if (action && !['entry', 'exit', 'increase', 'decrease'].includes(action)) {
+    throw new Error(`Invalid action filter: ${action}`)
+  }
+  return sql<FundHoldingsChangeRow[]>`
+    SELECT
+      symbol,
+      action,
+      weight_before::text AS weight_before,
+      weight_after::text AS weight_after,
+      weight_delta::text AS weight_delta,
+      rs_state_at_action,
+      momentum_state_at_action,
+      signal_quality,
+      outcome_ret_1m::text AS outcome_ret_1m,
+      outcome_quality_1m,
+      outcome_ret_3m::text AS outcome_ret_3m,
+      outcome_quality_3m
+    FROM atlas.atlas_fund_holdings_changes
+    WHERE mstar_id = ${mstar_id}
+      AND to_date = ${period_date}::date
+      ${action ? sql`AND action = ${action}` : sql``}
+    ORDER BY ABS(weight_delta::numeric) DESC
+    LIMIT 200
   `
 }
