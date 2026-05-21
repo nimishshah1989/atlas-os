@@ -35,6 +35,7 @@ export function StocksClientShell({
 }) {
   const [maFilter, setMaFilter] = useState<MaFilter>(null)
   const [activeView, setActiveView] = useState<ActiveView>('overview')
+  const [showIntraday, setShowIntraday] = useState(false)
 
   return (
     <div className="flex flex-col gap-6">
@@ -69,7 +70,24 @@ export function StocksClientShell({
 
       {activeView === 'overview' ? (
         <>
-          <IntradayRSLeaders />
+          <div className="border border-paper-rule rounded-sm bg-paper">
+            <button
+              type="button"
+              onClick={() => setShowIntraday(v => !v)}
+              className="w-full flex items-center justify-between px-5 py-2.5 font-sans text-xs font-medium text-ink-secondary hover:bg-paper-rule/10 transition-colors"
+            >
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-signal-pos" />
+                Live RS Leaders (intraday)
+              </span>
+              <span className="text-ink-tertiary">{showIntraday ? '▲ Hide' : '▼ Show'}</span>
+            </button>
+            {showIntraday && (
+              <div className="border-t border-paper-rule p-4">
+                <IntradayRSLeaders />
+              </div>
+            )}
+          </div>
           <StockBreadthPanel
             stocks={stocks}
             activeMaFilter={maFilter}

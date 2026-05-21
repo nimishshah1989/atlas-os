@@ -43,6 +43,16 @@ function formatDate(dateStr: string): string {
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
 }
 
+// Volume figures run into crores of shares — raw numbers are unreadable on an
+// axis. Render in lakh (L) / crore (Cr).
+function formatVol(v: number): string {
+  const abs = Math.abs(v)
+  if (abs >= 1e7) return `${(v / 1e7).toFixed(1)}Cr`
+  if (abs >= 1e5) return `${(v / 1e5).toFixed(1)}L`
+  if (abs >= 1e3) return `${(v / 1e3).toFixed(0)}k`
+  return v.toFixed(0)
+}
+
 export function OBVContinuousChart({ series }: OBVContinuousChartProps) {
   if (series.length < MIN_POINTS) {
     return (
@@ -81,12 +91,12 @@ export function OBVContinuousChart({ series }: OBVContinuousChartProps) {
           className={`font-mono text-lg font-medium ${slopeClass}`}
           data-testid="obv-slope"
         >
-          {slopeSign}{slope.toFixed(4)}/day
+          {slopeSign}{formatVol(slope)}/day
         </span>
         <span className="text-xs text-ink-tertiary">{slopeLabel}</span>
       </div>
 
-      <div style={{ height: 80 }} className="mt-2">
+      <div style={{ height: 170 }} className="mt-2">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={series} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
             <XAxis
@@ -98,7 +108,9 @@ export function OBVContinuousChart({ series }: OBVContinuousChartProps) {
               interval="preserveStartEnd"
             />
             <YAxis
-              width={32}
+              width={48}
+              domain={['dataMin', 'dataMax']}
+              tickFormatter={formatVol}
               tick={{ fontSize: 9, fontFamily: 'var(--font-mono)', fill: 'var(--color-ink-tertiary)' }}
               tickLine={false}
               axisLine={false}
@@ -140,9 +152,10 @@ export function OBVContinuousChart({ series }: OBVContinuousChartProps) {
       </div>
 
       <p className="text-xs text-ink-tertiary mt-2 max-w-prose">
-        Validated_inverse at 63d horizon (IR -0.43). Cross-sectionally, falling-OBV
-        stocks outperformed; for a held Stage 2 position, falling OBV is a topping
-        warning. Zero-cross highlighted.
+        On-Balance Volume — a running total that adds the day&apos;s volume on up-days
+        and subtracts it on down-days. Rising OBV = accumulation; falling OBV =
+        distribution. For a held Stage-2 position, an OBV downturn is an early
+        topping warning. Dashed lines mark zero-crossings.
       </p>
     </section>
   )

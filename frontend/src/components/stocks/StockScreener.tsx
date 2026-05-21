@@ -193,16 +193,18 @@ export function StockScreener({
   }
 
   function Th({
-    label, k, align = 'left',
-  }: { label: string; k: SortKey; align?: 'left' | 'right' }) {
+    label, k, align = 'left', tooltip,
+  }: { label: string; k: SortKey; align?: 'left' | 'right'; tooltip?: string }) {
     const active = sortKey === k
     return (
       <th
         onClick={() => handleSort(k)}
+        title={tooltip}
         className={`px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider cursor-pointer hover:text-ink-secondary select-none whitespace-nowrap text-${align} ${active ? 'text-teal' : 'text-ink-tertiary'}`}
       >
         <span className={`inline-flex items-center gap-1 ${align === 'right' ? 'flex-row-reverse' : ''}`}>
           {label}
+          {tooltip && <span className="cursor-help opacity-50 text-[9px]">ⓘ</span>}
           <SortIcon k={k} />
         </span>
       </th>
@@ -255,7 +257,7 @@ export function StockScreener({
           <thead>
             <tr className="border-b border-paper-rule bg-paper">
               <Th label="Symbol" k="symbol" />
-              <Th label="Cap" k="cap_rank" />
+              <Th label="Cap" k="cap_rank" tooltip={COL_TOOLTIPS.cap} />
               <Th label="Sector" k="sector" />
               <th className="px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap text-ink-tertiary">
                 <span className="inline-flex items-center gap-1">
@@ -268,10 +270,10 @@ export function StockScreener({
                   </span>
                 </span>
               </th>
-              <Th label="RS State" k="rs_state" />
-              <Th label="Mom" k="momentum_state" />
-              <Th label="Risk" k="risk_state" />
-              <Th label="Vol" k="volume_state" />
+              <Th label="RS State" k="rs_state" tooltip={COL_TOOLTIPS.rs_state} />
+              <Th label="Mom" k="momentum_state" tooltip={COL_TOOLTIPS.momentum_state} />
+              <Th label="Risk" k="risk_state" tooltip={COL_TOOLTIPS.risk_state} />
+              <Th label="Vol" k="volume_state" tooltip={COL_TOOLTIPS.volume_state} />
               {visibleCols.has('conviction') && (
                 <PlainTh label="Conviction" tooltip={COL_TOOLTIPS.conviction} />
               )}
@@ -290,28 +292,28 @@ export function StockScreener({
               {visibleCols.has('signal') && (
                 <PlainTh label="Signal" tooltip={COL_TOOLTIPS.signal} />
               )}
-              {visibleCols.has('ret_1d') && <PlainTh label="1D" align="right" />}
-              {visibleCols.has('ret_1w') && <PlainTh label="1W" align="right" />}
-              <Th label="1M" k="ret_1m" align="right" />
-              <Th label="3M" k="ret_3m" align="right" />
-              {visibleCols.has('ret_6m') && <Th label="6M" k="ret_6m" align="right" />}
-              {visibleCols.has('ret_12m') && <PlainTh label="12M" align="right" />}
-              {visibleCols.has('rs_pctile_1w') && <PlainTh label="RS 1W" align="right" />}
-              {visibleCols.has('rs_pctile_1m') && <PlainTh label="RS 1M" align="right" />}
-              {visibleCols.has('extension_pct') && <PlainTh label="Ext %" align="right" />}
-              {visibleCols.has('ema_20_ratio') && <PlainTh label="EMA20 %" align="right" />}
-              {visibleCols.has('vol_63') && <PlainTh label="Vol 63D" align="right" />}
-              {visibleCols.has('vol_ratio_63') && <PlainTh label="Vol Ratio" align="right" />}
-              {visibleCols.has('max_drawdown_252') && <PlainTh label="Max DD" align="right" />}
-              {visibleCols.has('drawdown') && <PlainTh label="Drawdown" align="right" />}
-              {visibleCols.has('effort_ratio_63') && <PlainTh label="Effort" align="right" />}
-              {visibleCols.has('volume_expansion') && <PlainTh label="Vol Exp" align="right" />}
-              {visibleCols.has('ma_30w_slope_4w') && <PlainTh label="30W Slope" align="right" />}
-              {visibleCols.has('days_in_state') && <PlainTh label="Days" align="right" />}
-              {visibleCols.has('alpha_3m') && <PlainTh label="α 3M" align="right" />}
-              {visibleCols.has('alpha_6m') && <PlainTh label="α 6M" align="right" />}
-              {visibleCols.has('live_price') && <PlainTh label="Live ₹" align="right" tooltip="Current intraday close price — refreshes every 30 s during market hours (09:15–15:35 IST)" />}
-              <Th label="RS Pctile" k="rs_pctile_3m" align="right" />
+              {visibleCols.has('ret_1d') && <PlainTh label="1D" align="right" tooltip={COL_TOOLTIPS.ret} />}
+              {visibleCols.has('ret_1w') && <PlainTh label="1W" align="right" tooltip={COL_TOOLTIPS.ret} />}
+              <Th label="1M" k="ret_1m" align="right" tooltip={COL_TOOLTIPS.ret} />
+              <Th label="3M" k="ret_3m" align="right" tooltip={COL_TOOLTIPS.ret} />
+              {visibleCols.has('ret_6m') && <Th label="6M" k="ret_6m" align="right" tooltip={COL_TOOLTIPS.ret} />}
+              {visibleCols.has('ret_12m') && <PlainTh label="12M" align="right" tooltip={COL_TOOLTIPS.ret} />}
+              {visibleCols.has('rs_pctile_1w') && <PlainTh label="RS 1W" align="right" tooltip={COL_TOOLTIPS.rs_pctile_short} />}
+              {visibleCols.has('rs_pctile_1m') && <PlainTh label="RS 1M" align="right" tooltip={COL_TOOLTIPS.rs_pctile_short} />}
+              {visibleCols.has('extension_pct') && <PlainTh label="Ext %" align="right" tooltip={COL_TOOLTIPS.extension_pct} />}
+              {visibleCols.has('ema_20_ratio') && <PlainTh label="vs EMA-20" align="right" tooltip={COL_TOOLTIPS.ema_20_ratio} />}
+              {visibleCols.has('vol_63') && <PlainTh label="Vol 63D" align="right" tooltip={COL_TOOLTIPS.vol_63} />}
+              {visibleCols.has('vol_ratio_63') && <PlainTh label="Vol Ratio" align="right" tooltip={COL_TOOLTIPS.vol_ratio_63} />}
+              {visibleCols.has('max_drawdown_252') && <PlainTh label="Max DD" align="right" tooltip={COL_TOOLTIPS.max_drawdown_252} />}
+              {visibleCols.has('drawdown') && <PlainTh label="Drawdown" align="right" tooltip={COL_TOOLTIPS.drawdown} />}
+              {visibleCols.has('effort_ratio_63') && <PlainTh label="Effort" align="right" tooltip={COL_TOOLTIPS.effort_ratio_63} />}
+              {visibleCols.has('volume_expansion') && <PlainTh label="Vol Exp" align="right" tooltip={COL_TOOLTIPS.volume_expansion} />}
+              {visibleCols.has('ma_30w_slope_4w') && <PlainTh label="30W Slope" align="right" tooltip={COL_TOOLTIPS.ma_30w_slope_4w} />}
+              {visibleCols.has('days_in_state') && <PlainTh label="Days" align="right" tooltip={COL_TOOLTIPS.days_in_state} />}
+              {visibleCols.has('alpha_3m') && <PlainTh label="α 3M" align="right" tooltip={COL_TOOLTIPS.alpha} />}
+              {visibleCols.has('alpha_6m') && <PlainTh label="α 6M" align="right" tooltip={COL_TOOLTIPS.alpha} />}
+              {visibleCols.has('live_price') && <PlainTh label="Live ₹" align="right" tooltip={COL_TOOLTIPS.live_price} />}
+              <Th label="RS Pctile" k="rs_pctile_3m" align="right" tooltip={COL_TOOLTIPS.rs_pctile_3m} />
             </tr>
           </thead>
           <tbody>

@@ -130,7 +130,8 @@ def _load_stock_data_for_regime(
                 m.rs_1m_tier,
                 s.rs_state,
                 s.momentum_state,
-                s.weinstein_gate_pass
+                s.weinstein_gate_pass,
+                COALESCE(o.close_adj, o.close) AS close_real
             FROM atlas.atlas_stock_metrics_daily m
             JOIN atlas.atlas_universe_stocks u
                 ON u.instrument_id = m.instrument_id
@@ -138,6 +139,9 @@ def _load_stock_data_for_regime(
             LEFT JOIN atlas.atlas_stock_states_daily s
                 ON s.instrument_id = m.instrument_id
                 AND s.date = m.date
+            LEFT JOIN public.de_equity_ohlcv o
+                ON o.instrument_id = m.instrument_id
+                AND o.date = m.date
             WHERE m.date BETWEEN %(start)s AND %(end)s
               AND u.in_nifty_500 = TRUE
             ORDER BY m.instrument_id, m.date
@@ -151,9 +155,16 @@ def _load_stock_data_for_regime(
         return df
 
     df["date"] = pd.to_datetime(df["date"]).dt.date
+    # Breadth (new highs/lows, MA breadth) computes off close_approx. Use the
+    # real adjusted close from de_equity_ohlcv — it is complete and reliable.
+    # Fall back to the ema_200×(1+extension_pct) reconstruction only where the
+    # OHLCV row is missing, so a sparse ema_200 column can never silently
+    # collapse breadth to zero again (see 2026-05 breadth regression).
+    close_real = df["close_real"].astype("float64")
     ema200 = df["ema_200_stock"].astype("float64")
     ext = df["extension_pct"].astype("float64")
-    df["close_approx"] = ema200 * (1.0 + ext)
+    reconstructed = ema200 * (1.0 + ext)
+    df["close_approx"] = close_real.where(close_real.notna(), reconstructed)
     return df
 
 

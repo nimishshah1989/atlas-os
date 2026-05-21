@@ -62,7 +62,7 @@ export default async function StockPage({
   const [cohortBaseline, peers] = stockState
     ? await Promise.all([
         getCohortBaseline(cohortKey, stockState.state),
-        getWithinStatePeers(stockState.state, stockState.date, 30),
+        getWithinStatePeers(stockState.state, stockState.date, stock.sector ?? null, 30),
       ])
     : [null, []]
 
@@ -106,16 +106,6 @@ export default async function StockPage({
         </section>
       )}
 
-      {stockState && peers.length > 0 && (
-        <section className="px-6 py-6 border-b border-paper-rule">
-          <WithinStatePeers
-            peers={peers}
-            currentInstrumentId={stock.instrument_id}
-            state={stockState.state}
-          />
-        </section>
-      )}
-
       {stockState && stateHistory.length > 0 && (
         <section className="px-6 py-6 border-b border-paper-rule">
           <DwellTimeline history={stateHistory} />
@@ -131,6 +121,17 @@ export default async function StockPage({
         metricHistory={metricHistory}
         stateHistory={stateHistoryLegacy}
       />
+
+      {stockState && peers.length > 0 && (
+        <section className="px-6 py-6 border-b border-paper-rule">
+          <WithinStatePeers
+            peers={peers}
+            currentInstrumentId={stock.instrument_id}
+            state={stockState.state}
+            sector={stock.sector ?? null}
+          />
+        </section>
+      )}
 
       <div className="px-6 pb-10">
         <HitRateRow hitRate={hitRate} />
