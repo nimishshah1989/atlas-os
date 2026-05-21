@@ -169,7 +169,9 @@ def _load_ohlcv(
     with open_compute_session(engine) as conn:
         df = pd.read_sql(
             """
-            SELECT instrument_id, date, open, high, low, close, volume
+            SELECT instrument_id, date, open, high, low,
+                   COALESCE(close_adj, close) AS close,
+                   volume
             FROM public.de_equity_ohlcv
             WHERE instrument_id = ANY(%(ids)s)
               AND date BETWEEN %(start)s AND %(end)s

@@ -10,7 +10,7 @@ from decimal import Decimal
 from functools import lru_cache
 
 import structlog
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Engine
 
 from atlas.config import Config
@@ -24,6 +24,10 @@ def get_engine() -> Engine:
 
     Cached so repeated callers share one pool. ``pool_pre_ping`` recovers from
     Supabase transient drops without surfacing them to callers.
+
+    Every new connection is set to Asia/Kolkata timezone — so TIMESTAMPTZ
+    columns display in IST when SELECTed. Internal storage stays UTC; this only
+    affects the wire-format the client sees.
     """
     db_url = Config.assert_db_url()
     engine = create_engine(
@@ -31,12 +35,18 @@ def get_engine() -> Engine:
         pool_size=Config.POOL_SIZE,
         max_overflow=Config.MAX_OVERFLOW,
         pool_pre_ping=True,
-        # echo=False  — never log raw SQL in production; structlog handles audit
     )
+
+    @event.listens_for(engine, "connect")
+    def _set_session_timezone(dbapi_connection, _connection_record):
+        with dbapi_connection.cursor() as cur:
+            cur.execute("SET TIME ZONE 'Asia/Kolkata'")
+
     log.info(
         "engine_created",
         pool_size=Config.POOL_SIZE,
         max_overflow=Config.MAX_OVERFLOW,
+        session_timezone="Asia/Kolkata",
     )
     return engine
 

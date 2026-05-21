@@ -8,7 +8,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pandas as pd
 import structlog
@@ -72,7 +72,7 @@ def _load_rs_pctile(engine, as_of_date: date) -> pd.DataFrame:
 
 def run(as_of_date: date, *, persist: bool) -> None:
     engine = get_engine()
-    thresholds = load_thresholds(engine)
+    thresholds = load_thresholds(engine=engine)
 
     log.info("cts_compute_start", date=str(as_of_date))
     universe = _load_universe(engine)
@@ -82,6 +82,15 @@ def run(as_of_date: date, *, persist: bool) -> None:
     log.info("ohlcv_loaded", rows=len(ohlcv), instruments=ohlcv["instrument_id"].nunique())
 
     rs_pctile = _load_rs_pctile(engine, as_of_date)
+    # P1-3 guard: if rs_pctile is entirely NaN, M3 stocks pipeline failed upstream.
+    # Don't pollute CTS history with garbage (every stock would look like a low-RS underperformer).
+    if rs_pctile["rs_pctile_cross_sector"].dropna().empty:
+        log.error(
+            "rs_pctile_unavailable",
+            as_of_date=str(as_of_date),
+            hint="atlas_stock_metrics_daily has no rs_pctile_3m for this date — upstream M3 failed",
+        )
+        return
     ohlcv = ohlcv.merge(rs_pctile, on="instrument_id", how="left")
     ohlcv["rs_pctile_cross_sector"] = ohlcv["rs_pctile_cross_sector"].fillna(0.0)
 
@@ -146,7 +155,7 @@ def _upsert_pivot(engine, df: pd.DataFrame) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--date", default=str(date.today()))
+    parser.add_argument("--date", default=str(datetime.now(timezone.utc).date()))
     parser.add_argument("--persist", action="store_true")
     args = parser.parse_args()
     run(date.fromisoformat(args.date), persist=args.persist)

@@ -1,6 +1,7 @@
 # pragma: finance-critical
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -11,22 +12,41 @@ from atlas.signals.models import TVSignalPayload
 
 log = structlog.get_logger()
 
+# Thresholds in display scale: conviction 0–10, rs_percentile 0–100.
+# DB stores both as 0–1 fractions; callers must scale before passing here.
 _DUAL_CONFIRM_CONVICTION_MIN = Decimal("6.0")
 _DUAL_CONFIRM_RS_PERCENTILE_MIN = Decimal("60.0")
-_DUAL_CONFIRM_CTS_BUY_STATES = frozenset({"BUY Stage 1", "BUY Stage 2", "BUY Stage 3"})
+# CTS stage is 1–4; stages 1–3 = accumulation/momentum (buy); 4 = distribution.
+# Accepts integers OR label strings like "BUY Stage 2" / "CTS Stage 2 — mid-cycle".
+_DUAL_CONFIRM_CTS_BUY_STAGES = frozenset({1, 2, 3})
+_CTS_STAGE_LABELS = {
+    1: "CTS Stage 1 — early accumulation",
+    2: "CTS Stage 2 — mid-cycle",
+    3: "CTS Stage 3 — momentum phase",
+    4: "CTS Stage 4 — distribution / avoid",
+}
+
+
+def _parse_cts_stage(cts_state: str | int | None) -> int | None:
+    if cts_state is None:
+        return None
+    if isinstance(cts_state, int):
+        return cts_state
+    m = re.search(r"\b([1-4])\b", str(cts_state))
+    return int(m.group(1)) if m else None
 
 
 def _determine_confirmation_level(
     tier: int,  # pyright: ignore[reportUnusedParameter] — reserved for per-tier thresholds
     conviction_score: Decimal | None,
-    cts_state: str | None,
+    cts_state: str | int | None,
     rs_percentile: Decimal | None,
 ) -> str:
     if conviction_score is None or rs_percentile is None:
         return "tv_only"
     conviction_ok = conviction_score >= _DUAL_CONFIRM_CONVICTION_MIN
     rs_ok = rs_percentile >= _DUAL_CONFIRM_RS_PERCENTILE_MIN
-    cts_ok = cts_state in _DUAL_CONFIRM_CTS_BUY_STATES if cts_state else False
+    cts_ok = _parse_cts_stage(cts_state) in _DUAL_CONFIRM_CTS_BUY_STAGES
     if conviction_ok and rs_ok and cts_ok:
         return "dual"
     return "tv_only"
@@ -55,8 +75,8 @@ def _fetch_atlas_intelligence(instrument_id: str, conn: Any) -> dict:
             "SELECT c.conviction_score, c.confidence_label AS conviction_trend, "
             "cts.stage AS cts_state, "
             "s.rs_state, "
-            "mr.regime_label AS market_regime, "
-            "ss.rs_state AS sector_regime "
+            "mr.regime_state AS market_regime, "
+            "ss.sector_state AS sector_regime "
             "FROM atlas.atlas_stock_conviction_daily c "
             "LEFT JOIN atlas.atlas_cts_signals_daily cts "
             "  ON cts.instrument_id = c.instrument_id AND cts.date = c.date "
@@ -64,7 +84,7 @@ def _fetch_atlas_intelligence(instrument_id: str, conn: Any) -> dict:
             "  ON s.instrument_id = c.instrument_id AND s.date = c.date "
             "LEFT JOIN atlas.atlas_market_regime_daily mr ON mr.date = c.date "
             "LEFT JOIN atlas.atlas_sector_states_daily ss "
-            "  ON ss.sector = ("
+            "  ON ss.sector_name = ("
             "    SELECT sector FROM atlas.atlas_universe_stocks "
             "    WHERE instrument_id = c.instrument_id AND effective_to IS NULL LIMIT 1"
             "  ) AND ss.date = c.date "
@@ -85,8 +105,10 @@ def _fetch_performance(instrument_id: str, conn: Any) -> dict:
     row = conn.execute(
         text(
             "SELECT ret_1m AS perf_1m, ret_3m AS perf_3m, ret_6m AS perf_6m, "
-            "ret_ytd AS perf_ytd, ret_vs_benchmark_1m AS perf_vs_nifty_1m, "
-            "ret_vs_benchmark_ytd AS perf_vs_nifty_ytd "
+            "ret_12m AS perf_ytd, "
+            "rs_1m_nifty500 AS perf_vs_nifty_1m, "
+            "rs_3m_nifty500 AS perf_vs_nifty_ytd, "
+            "rs_pctile_1m AS rs_percentile "
             "FROM atlas.atlas_stock_metrics_daily "
             "WHERE instrument_id = :iid "
             "ORDER BY date DESC LIMIT 1"
@@ -160,16 +182,28 @@ async def run_signal_pipeline(payload: TVSignalPayload) -> None:
         meta = _fetch_company_meta(payload.ticker, conn)
 
         conviction_score = intel.get("conviction_score")
-        cts_state = intel.get("cts_state")
-        rs_percentile = intel.get("rs_percentile")
+        # cts.stage may be int 1–4 or a label string like "BUY Stage 2"
+        cts_stage_raw = intel.get("cts_state")
+        stage_int = _parse_cts_stage(cts_stage_raw)
+        cts_state = _CTS_STAGE_LABELS.get(stage_int) if stage_int is not None else None
+        rs_percentile = perf.get("rs_percentile")
 
+        # DB stores conviction 0–1 and rs_percentile 0–1; thresholds use display scale.
+        conviction_disp = (
+            Decimal(str(round(float(conviction_score) * 10, 4)))
+            if conviction_score is not None
+            else None
+        )
+        rs_pctile_disp = (
+            Decimal(str(round(float(rs_percentile) * 100, 4)))
+            if rs_percentile is not None
+            else None
+        )
         confirmation = _determine_confirmation_level(
             tier=payload.tier,
-            conviction_score=Decimal(str(conviction_score))
-            if conviction_score is not None
-            else None,
-            cts_state=cts_state,
-            rs_percentile=Decimal(str(rs_percentile)) if rs_percentile is not None else None,
+            conviction_score=conviction_disp,
+            cts_state=cts_stage_raw,
+            rs_percentile=rs_pctile_disp,
         )
 
         snap = compute_technical_snapshot(payload.ticker, conn)
@@ -181,10 +215,14 @@ async def run_signal_pipeline(payload: TVSignalPayload) -> None:
         layout_id_sector=Config.TV_LAYOUT_ID_VS_SECTOR,
     )
 
+    verdict = _verdict_from_tier(payload.tier)
     context = {
         "ticker": payload.ticker,
+        "exchange": payload.exchange,
         "company_name": meta.get("company_name", payload.ticker),
         "condition_label": _build_condition_label(payload.code),
+        "confirmation_level": confirmation,
+        "verdict": verdict,
         "conviction_score": conviction_score,
         "conviction_trend": intel.get("conviction_trend"),
         "cts_state": cts_state,
@@ -199,6 +237,11 @@ async def run_signal_pipeline(payload: TVSignalPayload) -> None:
         "ema_alignment": snap.ema_alignment,
         "hh_hl_state": snap.hh_hl_state,
         "volume_vs_avg": float(snap.volume_vs_avg),
+        "perf_1m": float(perf.get("perf_1m") or 0),
+        "perf_3m": float(perf.get("perf_3m") or 0),
+        "perf_6m": float(perf.get("perf_6m") or 0),
+        "perf_ytd": float(perf.get("perf_ytd") or 0),
+        "perf_vs_nifty_1m": float(perf.get("perf_vs_nifty_1m") or 0),
         "perf_vs_nifty_ytd": float(perf.get("perf_vs_nifty_ytd") or 0),
     }
 
@@ -275,7 +318,7 @@ async def run_signal_pipeline(payload: TVSignalPayload) -> None:
                 "screenshot_weekly": screenshots.get("weekly_path"),
                 "screenshot_sector": screenshots.get("sector_path"),
                 "narrative": narrative,
-                "verdict": _verdict_from_tier(payload.tier),
+                "verdict": verdict,
             },
         )
         report_row = result.fetchone()

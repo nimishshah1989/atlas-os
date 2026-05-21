@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import structlog
@@ -37,8 +37,8 @@ def main() -> int:
     parser.add_argument(
         "--date",
         type=_parse_date,
-        default=date.today() - timedelta(days=1),
-        help="Target date (YYYY-MM-DD). Defaults to yesterday.",
+        default=datetime.now(timezone.utc).date(),
+        help="Target date (YYYY-MM-DD). Defaults to today UTC (pinned to UTC regardless of TZ env).",
     )
     args = parser.parse_args()
 

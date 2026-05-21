@@ -38,7 +38,7 @@ def _resolve_default_as_of(engine):
     sql = text("""
         SELECT LEAST(
           (SELECT MAX(date) FROM atlas.atlas_stock_metrics_daily),
-          (SELECT MAX(date) FROM public.de_equity_ohlcv WHERE data_status = 'validated')
+          (SELECT MAX(date) FROM public.de_equity_ohlcv WHERE data_status IN ('raw', 'validated'))
         )
     """)
     with engine.connect() as c:
