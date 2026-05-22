@@ -1,4 +1,6 @@
-export const RS_ORDER    = ['Leader', 'Strong', 'Consolidating', 'Emerging', 'Average', 'Weak', 'Laggard'] as const
+// rs_state taxonomy: atlas_stock_signal_unified emits exactly these 5 (CASE on rs_rank_12m).
+// "Consolidating"/"Emerging" were retired — do not re-add without a matching view change.
+export const RS_ORDER    = ['Leader', 'Strong', 'Average', 'Weak', 'Laggard'] as const
 export const MOM_ORDER   = ['Accelerating', 'Improving', 'Flat', 'Deteriorating', 'Collapsing'] as const
 export const RISK_ORDER  = ['Low', 'Normal', 'Elevated', 'High', 'Below Trend'] as const
 export const VOL_ORDER   = ['Accumulation', 'Steady-Buying', 'Neutral', 'Distribution', 'Heavy Distribution'] as const

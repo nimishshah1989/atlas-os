@@ -151,16 +151,19 @@ export async function getStaticPortfolioById(
         )
         FROM jsonb_array_elements(p.instruments) AS elem
         LEFT JOIN LATERAL (
+          -- Portfolio holdings mix stock instruments (uuid ids) and fund
+          -- instruments (string ids like "F00001G6N8"). Compare as text so a
+          -- fund id never gets cast to ::uuid (which would raise a SQL error).
           SELECT symbol, sector, in_nifty_100, in_nifty_500
           FROM atlas.atlas_universe_stocks
-          WHERE instrument_id = (elem->>'instrument_id')::uuid
+          WHERE instrument_id::text = elem->>'instrument_id'
           ORDER BY effective_from DESC
           LIMIT 1
         ) u ON TRUE
         LEFT JOIN LATERAL (
           SELECT engine_state
           FROM atlas.atlas_stock_signal_unified
-          WHERE instrument_id = (elem->>'instrument_id')::uuid
+          WHERE instrument_id::text = elem->>'instrument_id'
           ORDER BY date DESC
           LIMIT 1
         ) ss ON TRUE

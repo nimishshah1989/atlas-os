@@ -26,11 +26,11 @@ const DISPLAY_FILTERS: { key: DisplayFilter; label: string }[] = [
   { key: 'all',  label: 'All' },
 ]
 
+// rs_state taxonomy = the 5 values atlas_stock_signal_unified emits.
+// "Emerging"/"Consolidating" were retired.
 const LEGEND = [
   { color: '#2F6B43', label: 'Leader' },
   { color: '#1D9E75', label: 'Strong' },
-  { color: '#25394A', label: 'Emerging' },
-  { color: '#B8860B', label: 'Consolidating' },
   { color: '#8C8278', label: 'Average' },
   { color: '#B0492C', label: 'Weak / Laggard' },
 ]

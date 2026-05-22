@@ -2,7 +2,9 @@ import type { StockRowWithSector } from '@/lib/queries/stocks'
 
 type MaFilter = 'above_30w_ma' | 'above_50d_ma' | 'above_200d_ma' | null
 
-const RS_STATES = ['Leader', 'Strong', 'Consolidating', 'Emerging', 'Average', 'Weak', 'Laggard'] as const
+// rs_state taxonomy = the 5 values atlas_stock_signal_unified emits.
+// "Consolidating"/"Emerging" were retired — they would render as permanently-zero buckets.
+const RS_STATES = ['Leader', 'Strong', 'Average', 'Weak', 'Laggard'] as const
 const MOM_STATES = ['Accelerating', 'Improving', 'Flat', 'Deteriorating', 'Collapsing'] as const
 
 const RS_COLORS: Record<string, string> = {

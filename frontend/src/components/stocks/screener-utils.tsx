@@ -2,7 +2,8 @@
 import type { StockRowWithSector } from '@/lib/queries/stocks'
 import type { ColumnDef } from '@/components/ui/ColumnToggle'
 
-export const RS_ORDER = ['Leader', 'Strong', 'Consolidating', 'Emerging', 'Average', 'Weak', 'Laggard']
+// rs_state taxonomy = the 5 values atlas_stock_signal_unified emits ("Consolidating"/"Emerging" retired).
+export const RS_ORDER = ['Leader', 'Strong', 'Average', 'Weak', 'Laggard']
 export const MOM_ORDER = ['Accelerating', 'Improving', 'Flat', 'Deteriorating', 'Collapsing']
 export const RISK_ORDER = ['Low', 'Normal', 'Elevated', 'High', 'Below Trend']
 export const VOL_ORDER = ['Accumulation', 'Steady-Buying', 'Neutral', 'Distribution', 'Heavy Distribution']
@@ -60,7 +61,7 @@ export const GATE_LEGEND = [
   { key: 'H', field: 'history_gate_pass',   label: 'History',   desc: 'Stock has ≥6M of price history in our universe' },
   { key: 'L', field: 'liquidity_gate_pass', label: 'Liquidity', desc: 'Avg daily value traded meets minimum threshold' },
   { key: 'W', field: 'weinstein_gate_pass', label: 'Weinstein', desc: 'Price is in Weinstein Stage 2 (above rising 30W MA)' },
-  { key: 'S', field: 'strength_gate',       label: 'Strength',  desc: 'RS State is Leader, Strong, or Emerging' },
+  { key: 'S', field: 'strength_gate',       label: 'Strength',  desc: 'RS State is Leader or Strong' },
   { key: 'D', field: 'direction_gate',      label: 'Direction', desc: 'Momentum is Accelerating or Improving' },
   { key: 'R', field: 'risk_gate',           label: 'Risk',      desc: 'Risk state is Low or Normal (not Elevated/High/Below Trend)' },
   { key: 'V', field: 'volume_gate',         label: 'Volume',    desc: 'Volume state is Accumulation or Steady-Buying' },

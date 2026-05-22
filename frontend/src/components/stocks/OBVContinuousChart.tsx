@@ -73,6 +73,15 @@ export function OBVContinuousChart({ series }: OBVContinuousChartProps) {
     })
     .map((pt) => pt.date)
 
+  // The series is a windowed cumulative OBV that may sit far from zero
+  // (e.g. always large-positive). Auto-scale the Y-axis to the data's own
+  // range so the slope is readable; only anchor a zero line if the series
+  // actually straddles zero.
+  const obvValues = series.map((pt) => pt.obv)
+  const obvMin = Math.min(...obvValues)
+  const obvMax = Math.max(...obvValues)
+  const seriesCrossesZero = obvMin < 0 && obvMax > 0
+
   return (
     <section data-testid="obv-chart">
       <h3 className="font-sans text-xs font-medium text-ink-tertiary uppercase tracking-wider">
@@ -101,6 +110,7 @@ export function OBVContinuousChart({ series }: OBVContinuousChartProps) {
             />
             <YAxis
               width={44}
+              domain={['dataMin', 'dataMax']}
               tick={{ fontSize: 9, fontFamily: 'var(--font-mono)', fill: 'var(--color-ink-tertiary)' }}
               tickLine={false}
               axisLine={false}
@@ -133,8 +143,10 @@ export function OBVContinuousChart({ series }: OBVContinuousChartProps) {
                 strokeWidth={1}
               />
             ))}
-            {/* Zero-axis line */}
-            <ReferenceLine y={0} stroke="var(--color-paper-rule)" strokeDasharray="3 3" />
+            {/* Zero-axis line — only when the series actually straddles zero */}
+            {seriesCrossesZero && (
+              <ReferenceLine y={0} stroke="var(--color-paper-rule)" strokeDasharray="3 3" />
+            )}
             <Line
               type="monotone"
               dataKey="obv"
