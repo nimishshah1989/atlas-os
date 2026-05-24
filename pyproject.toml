@@ -97,6 +97,7 @@ ui = [
 
 [project.scripts]
 atlas-lab = "atlas.trading.cli:main"
+atlas-inference = "atlas.inference.cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]
