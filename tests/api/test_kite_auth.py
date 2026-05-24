@@ -79,15 +79,13 @@ class TestKiteCallback:
 
     def test_kite_callback_exchange_failure_returns_500(self, client: TestClient) -> None:
         """500 when exchange_request_token raises RuntimeError."""
-        with patch.dict(
-            os.environ,
-            {"KITE_API_KEY": "k", "KITE_API_SECRET": "s", "DATABASE_URL": "postgresql://x"},
-        ):
-            with patch(
-                "atlas.api.kite_auth.exchange_request_token",
-                side_effect=RuntimeError("KiteConnect error"),
-            ):
-                response = client.get("/api/kite/callback?request_token=badtoken")
+        with patch.dict(os.environ, {"KITE_API_KEY": "k", "KITE_API_SECRET": "s"}):
+            with patch.object(Config, "DB_URL", "postgresql://x"):
+                with patch(
+                    "atlas.api.kite_auth.exchange_request_token",
+                    side_effect=RuntimeError("KiteConnect error"),
+                ):
+                    response = client.get("/api/kite/callback?request_token=badtoken")
         assert response.status_code == 500
         body = response.json()
         assert body["detail"]["error_code"] == "token_exchange_failed"
@@ -136,16 +134,14 @@ class TestKiteCallback:
         """500 when store_access_token raises (e.g. DB down)."""
         fake_session = {"access_token": "tok", "login_time": "", "user_id": "u1"}
 
-        with patch.dict(
-            os.environ,
-            {"KITE_API_KEY": "k", "DATABASE_URL": "postgresql://x"},
-        ):
-            with patch("atlas.api.kite_auth.exchange_request_token", return_value=fake_session):
-                with patch(
-                    "atlas.api.kite_auth.store_access_token",
-                    side_effect=OSError("DB connection refused"),
-                ):
-                    response = client.get("/api/kite/callback?request_token=tok123")
+        with patch.dict(os.environ, {"KITE_API_KEY": "k"}):
+            with patch.object(Config, "DB_URL", "postgresql://x"):
+                with patch("atlas.api.kite_auth.exchange_request_token", return_value=fake_session):
+                    with patch(
+                        "atlas.api.kite_auth.store_access_token",
+                        side_effect=OSError("DB connection refused"),
+                    ):
+                        response = client.get("/api/kite/callback?request_token=tok123")
 
         assert response.status_code == 500
         body = response.json()

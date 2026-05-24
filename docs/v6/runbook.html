@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atlas v6 — Build Runbook</title>
+<style>
+  :root {
+    --teal: #1D9E75; --teal-light: #E6F4EE; --teal-dark: #15745A;
+    --ink: #1A1A1A; --ink-light: #5A5A5A; --ink-mid: #3A3A3A;
+    --border: #E5E7EB; --border-dark: #C9CDD3;
+    --bg: #FFFFFF; --bg-soft: #F9FAFB; --bg-card: #FCFCFD;
+    --green: #16A34A; --green-soft: #E8F5EC;
+    --red: #DC2626; --red-soft: #FCE8E8;
+    --amber: #D97706; --amber-soft: #FEF3E3;
+    --blue: #2563EB; --blue-soft: #EBF2FE;
+    --purple: #7C3AED; --purple-soft: #F1ECFE;
+    --shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06);
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.65; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 60px 40px 120px; }
+  .cover { background: linear-gradient(135deg, #FAFAFA 0%, #F3F8F6 100%); border-bottom: 4px solid var(--teal); padding: 80px 40px 60px; }
+  .cover .inner { max-width: 1100px; margin: 0 auto; }
+  .cover-tag { display: inline-block; background: var(--teal); color: white; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; padding: 5px 12px; border-radius: 3px; margin-bottom: 24px; }
+  h1 { font-size: 42px; margin: 0 0 8px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; }
+  .subtitle { font-size: 19px; color: var(--ink-light); font-weight: 400; margin: 0 0 36px; line-height: 1.4; }
+  .meta { display: flex; gap: 32px; font-size: 13px; color: var(--ink-light); margin-top: 20px; flex-wrap: wrap; }
+  .meta strong { color: var(--ink); font-weight: 600; }
+  .meta div { display: flex; flex-direction: column; gap: 2px; }
+  .meta-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--ink-light); }
+  h2 { font-size: 28px; margin: 56px 0 8px; font-weight: 700; letter-spacing: -0.015em; border-top: 1px solid var(--border); padding-top: 44px; }
+  h2:first-of-type { border-top: none; padding-top: 0; margin-top: 40px; }
+  h2 .num { color: var(--teal); font-weight: 800; margin-right: 14px; font-size: 24px; }
+  h3 { font-size: 19px; margin: 32px 0 12px; font-weight: 700; }
+  h4 { font-size: 14px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--teal); margin: 24px 0 8px; font-weight: 700; }
+  p { margin: 0 0 14px; font-size: 15px; }
+  ul, ol { padding-left: 22px; margin: 0 0 14px; }
+  li { margin-bottom: 6px; font-size: 15px; }
+  code { background: var(--bg-soft); border: 1px solid var(--border); padding: 1.5px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; font-size: 13px; color: var(--teal-dark); }
+  pre { background: #0F172A; color: #E2E8F0; padding: 16px 20px; border-radius: 8px; overflow-x: auto; font-family: 'SF Mono', Monaco, monospace; font-size: 12.5px; line-height: 1.55; margin: 14px 0 20px; }
+  pre code { background: transparent; border: none; color: inherit; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 22px; font-size: 13.5px; background: white; box-shadow: var(--shadow); }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-soft); font-weight: 700; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ink-light); border-bottom: 2px solid var(--border-dark); }
+  tr:last-child td { border-bottom: none; }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; }
+  .pill.green { background: var(--green-soft); color: var(--green); }
+  .pill.amber { background: var(--amber-soft); color: var(--amber); }
+  .pill.blue { background: var(--blue-soft); color: var(--blue); }
+  .pill.teal { background: var(--teal-light); color: var(--teal-dark); }
+  .pill.red { background: var(--red-soft); color: var(--red); }
+  .pill.purple { background: var(--purple-soft); color: var(--purple); }
+  .callout { background: var(--teal-light); border-left: 4px solid var(--teal); padding: 16px 20px; margin: 22px 0; border-radius: 0 6px 6px 0; }
+  .callout-warn { background: var(--amber-soft); border-left: 4px solid var(--amber); padding: 16px 20px; margin: 22px 0; border-radius: 0 6px 6px 0; }
+  .callout-head { font-weight: 700; margin-bottom: 6px; font-size: 14px; }
+  .toc { background: var(--bg-soft); border: 1px solid var(--border); padding: 18px 22px; border-radius: 8px; margin: 30px 0 0; }
+  .toc h3 { margin-top: 0; }
+  .toc ol { columns: 2; column-gap: 36px; margin: 0; }
+  .toc a { color: var(--ink); text-decoration: none; }
+  .toc a:hover { color: var(--teal-dark); text-decoration: underline; }
+  .ascii { background: var(--bg-soft); border: 1px solid var(--border); padding: 16px 20px; border-radius: 6px; font-family: 'SF Mono', Monaco, monospace; font-size: 12px; line-height: 1.5; overflow-x: auto; white-space: pre; margin: 14px 0 22px; color: var(--ink); }
+  .step { background: var(--bg-card); border: 1px solid var(--border); border-left: 4px solid var(--teal); padding: 16px 20px; margin: 14px 0; border-radius: 0 6px 6px 0; box-shadow: var(--shadow); }
+  .step-num { display: inline-block; background: var(--teal); color: white; font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 3px; margin-right: 10px; letter-spacing: 0.4px; }
+  .step-title { font-weight: 700; font-size: 16px; margin-bottom: 6px; display: flex; align-items: center; }
+  .layer { background: white; border: 2px solid var(--border-dark); padding: 14px 18px; margin: 10px 0; border-radius: 6px; }
+  .layer-head { font-weight: 800; font-size: 14px; color: var(--ink); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .layer.foundation { border-color: var(--teal); background: var(--teal-light); }
+  .layer.reference { border-color: var(--blue); background: var(--blue-soft); }
+  .layer.workplan { border-color: var(--purple); background: var(--purple-soft); }
+  .layer.session { border-color: var(--amber); background: var(--amber-soft); }
+  .layer.audit { border-color: var(--red); background: var(--red-soft); }
+  .verdict { background: var(--ink); color: white; padding: 22px 28px; border-radius: 10px; margin: 36px 0 0; font-size: 15px; line-height: 1.5; }
+  .verdict-head { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--teal); font-weight: 700; margin-bottom: 8px; }
+  .small { font-size: 12.5px; color: var(--ink-light); }
+  @media (max-width: 760px) { .toc ol { columns: 1; } .wrap { padding: 40px 20px 80px; } .cover { padding: 60px 20px 40px; } h1 { font-size: 32px; } }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="inner">
+    <div class="cover-tag">Build Runbook · v6.0 · 2026-05-24</div>
+    <h1>Atlas v6 — Build Runbook</h1>
+    <div class="subtitle">How the multi-month, 10-phase build stays coherent across sessions, worktrees, and context resets. Read this every time you boot a v6 session.</div>
+    <div class="meta">
+      <div><span class="meta-label">Owner</span><strong>Nimish (single-maintainer)</strong></div>
+      <div><span class="meta-label">Phase status</span><strong>Pre-Phase-0 — gates pending</strong></div>
+      <div><span class="meta-label">Active worktrees</span><strong>None yet</strong></div>
+      <div><span class="meta-label">Last update</span><strong>2026-05-24 post-grill</strong></div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+<div class="toc">
+  <h3>Contents</h3>
+  <ol>
+    <li><a href="#layers">1. The five context layers</a></li>
+    <li><a href="#gates">2. The four pre-build gates (do these in order)</a></li>
+    <li><a href="#bootstrap">3. Session bootstrap — every time you start work</a></li>
+    <li><a href="#chunk-loop">4. The per-chunk execution loop</a></li>
+    <li><a href="#worktrees">5. Worktree discipline</a></li>
+    <li><a href="#memory">6. Memory hygiene — what gets written where</a></li>
+    <li><a href="#failure">7. Failure recovery patterns</a></li>
+    <li><a href="#cadence">8. Cross-cutting rituals</a></li>
+    <li><a href="#status">9. Current status &amp; next action</a></li>
+  </ol>
+</div>
+
+<div class="callout">
+  <div class="callout-head">Why this document exists</div>
+  <p>v6 is a 10-phase build with 8 bounded contexts, 5+ parallel lanes, and an open-ended calendar. Sessions will be days or weeks apart. Without a deliberate context-and-memory regime, the system loses coherence — decisions drift, terminology re-litigates, the same bug gets diagnosed twice. This runbook is the discipline that prevents that.</p>
+</div>
+
+<h2 id="layers"><span class="num">01</span>The five context layers</h2>
+
+<p>Atlas v6's context lives in five layers, each loaded at a different cadence. Knowing what lives where tells you where to add new information and where to look for it.</p>
+
+<div class="layer foundation">
+  <div class="layer-head">Layer 1 — Foundational (loaded every session, never optional)</div>
+  <ul>
+    <li><code>~/.claude/CLAUDE.md</code> — global engineering standards (fintech rules, hook-enforced)</li>
+    <li><code>CLAUDE.md</code> — project-specific rules (modulith, file-size limits, threshold discipline)</li>
+    <li><code>CONTEXT.md</code> — the domain glossary (created 2026-05-24 by /grill-with-docs)</li>
+    <li><code>~/.claude/projects/-Users-nimishshah-Documents-GitHub-atlas-os/memory/MEMORY.md</code> — auto-memory index</li>
+  </ul>
+  <p class="small">Total budget: ~3-5KB read per session. Always loaded; never skipped.</p>
+</div>
+
+<div class="layer reference">
+  <div class="layer-head">Layer 2 — Reference docs (loaded on demand, relevant to active phase)</div>
+  <ul>
+    <li><code>~/.gstack/projects/atlas-os/ceo-plans/2026-05-24-atlas-v6-product-spec.md</code> — CEO plan</li>
+    <li><code>~/.gstack/projects/atlas-os/eng-plans/2026-05-24-atlas-v6-eng-review.html</code> — eng review</li>
+    <li><code>&lt;consolidation&gt;/docs/atlas-signal-discovery/methodology-lock-2026-05-23.md</code> — methodology lock</li>
+    <li><code>&lt;consolidation&gt;/docs/atlas-signal-discovery/ATLAS_PRODUCT_SPEC_2026-05-24.html</code> — product spec</li>
+    <li><code>docs/v6/runbook.html</code> — THIS document</li>
+  </ul>
+  <p class="small">Total budget: ~30-50KB per phase. Read the ones relevant to what you're doing.</p>
+</div>
+
+<div class="layer workplan">
+  <div class="layer-head">Layer 3 — Workplan / chunk specs (forge-style)</div>
+  <ul>
+    <li><code>docs/v6/phases/{phase}/</code> — one folder per phase</li>
+    <li><code>docs/v6/phases/{phase}/{chunk}.md</code> — per-chunk specs (acceptance criteria, tests, files-touched)</li>
+    <li><code>docs/v6/TODOS.md</code> — deferred items (T1-T9 from eng review)</li>
+    <li>(optional) <code>orchestrator/plan.yaml</code> + <code>orchestrator/state.db</code> if using <code>/chunkmaster</code> + forge runtime</li>
+  </ul>
+  <p class="small">Created by <code>/to-issues</code> + <code>/chunkmaster</code>. Each chunk should fit one session.</p>
+</div>
+
+<div class="layer session">
+  <div class="layer-head">Layer 4 — Per-session checkpoints (continuity primitive)</div>
+  <ul>
+    <li><code>~/.gstack/projects/atlas-os/checkpoints/{date}-{branch}.md</code> — written by <code>/context-save</code> at session end</li>
+    <li><code>~/.gstack/projects/atlas-os/timeline.jsonl</code> — append-only session timeline (skill, branch, outcome)</li>
+    <li>Restored by <code>/context-restore</code> at session start</li>
+  </ul>
+  <p class="small">Each session ends with <code>/context-save</code>; each session starts with <code>/context-restore</code> if the gap is &gt;1 day.</p>
+</div>
+
+<div class="layer audit">
+  <div class="layer-head">Layer 5 — Audit trail (immutable, append-only)</div>
+  <ul>
+    <li><code>decisions.jsonl</code> — hash-chained log of every substantive edit (Ruflo-managed; hook-enforced)</li>
+    <li><code>.ruflo/adr/</code> — Architectural Decision Records for hard-to-reverse calls (rare; only when criteria met)</li>
+    <li><code>~/.gstack/projects/atlas-os/{branch}-reviews.jsonl</code> — every /review, /codex, /plan-eng-review entry</li>
+    <li><code>~/.gstack/analytics/</code> — skill usage + telemetry (local)</li>
+  </ul>
+  <p class="small">Never modify after the fact. SEBI RA registration may require these for inspection.</p>
+</div>
+
+<h2 id="gates"><span class="num">02</span>The four pre-build gates (do these in order)</h2>
+
+<p>Before fresh main is cut and Phase 0 begins, four planning gates must close. Each gate produces a load-bearing artifact that downstream phases consume.</p>
+
+<div class="step">
+  <div class="step-title"><span class="step-num">Gate 1</span>/plan-design-review on the eng review HTML</div>
+  <p>Owns UX-readiness for Phase 6. Resolves multi-tenure headline UX, regime-gating chip, SP10 panel visual fit with new scorecard, accessibility, mobile-first vs desktop-first defaults.</p>
+  <p><strong>Output:</strong> design plan at <code>~/.gstack/projects/atlas-os/design-plans/2026-05-XX-atlas-v6-design-plan.html</code>.</p>
+  <p><strong>Status:</strong> <span class="pill amber">NEXT</span></p>
+</div>
+
+<div class="step">
+  <div class="step-title"><span class="step-num">Gate 2</span>/to-issues Pass 1 — Phase 0.5 research lanes</div>
+  <p>Decomposes Lane A1 (0.5a large-cap fix), A2 (0.5b survivorship), A3 (0.5c walk-forward), A4 (0.5d friction + 0.5e Large-cap BUY), A5 (0.5f, 0.5g, 0.5h-prime, 0.5h), B (Phase 1 inventory), C (0.5i SEBI RA), D (Phase 6 wireframes), E (migrations 080-081) into independent tracer-bullet issues.</p>
+  <p><strong>Output:</strong> ~15-20 GitHub issues with triage labels + acceptance criteria.</p>
+  <p><strong>Status:</strong> <span class="pill gray">pending Gate 1</span></p>
+</div>
+
+<div class="step">
+  <div class="step-title"><span class="step-num">Gate 3</span>/codex:adversarial-review on the consolidated plan</div>
+  <p>Outside-voice challenge against the CEO plan + eng review + design plan + grill resolutions. Catches what both prior reviews missed.</p>
+  <p><strong>Status:</strong> Codex quota was walled in the CEO review session. <span class="pill amber">RUN WHEN QUOTA RESETS</span>. Fallback: dispatch Claude subagent with fresh context.</p>
+</div>
+
+<div class="step">
+  <div class="step-title"><span class="step-num">Gate 4</span>/to-issues Pass 2 — Phase 1-9 decomposition</div>
+  <p>Once design plan is locked, decompose Phase 1 (inventory) through Phase 9 (macro overlay) into ~30-50 chunks. Each chunk maps to one issue + one PR + one /ship cycle.</p>
+  <p><strong>Output:</strong> Full issue board; orchestrator/plan.yaml if running forge-runner.</p>
+</div>
+
+<p><strong>Only after all four gates close does Phase 0 (fork preservation + fresh main) begin.</strong> Skipping a gate to "save time" is the failure mode this discipline exists to prevent.</p>
+
+<h2 id="bootstrap"><span class="num">03</span>Session bootstrap — every time you start work</h2>
+
+<p>The first 3 minutes of every v6 session look exactly the same. Memorize this sequence.</p>
+
+<div class="ascii">┌─────────────────────────────────────────────────────────────────┐
+│                                                                  │
+│  1.  cd ~/Documents/GitHub/atlas-os (or active worktree)         │
+│                                                                  │
+│  2.  Open this runbook in browser:                               │
+│      open docs/v6/runbook.html                                   │
+│                                                                  │
+│  3.  In Claude Code, the SessionStart hook auto-loads:           │
+│      - ~/.claude/CLAUDE.md (global)                              │
+│      - CLAUDE.md (project)                                       │
+│      - CONTEXT.md (glossary)                                     │
+│      - memory/MEMORY.md (auto-memory index)                      │
+│                                                                  │
+│  4.  If >1 day since last session:                               │
+│         /context-restore                                         │
+│      → Loads last checkpoint, recent skill runs, active chunk.   │
+│                                                                  │
+│  5.  Confirm the active phase + active chunk from:               │
+│      - docs/v6/phases/{phase}/STATUS.md                          │
+│      - gh issue list --label "v6,active"                         │
+│                                                                  │
+│  6.  Read the chunk spec:                                        │
+│      - docs/v6/phases/{phase}/{chunk}.md                         │
+│                                                                  │
+│  7.  Begin the per-chunk loop (§04).                             │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘</div>
+
+<p>Total bootstrap budget: ~3 minutes. If it takes longer, the previous session's <code>/context-save</code> was sloppy — fix that first.</p>
+
+<h2 id="chunk-loop"><span class="num">04</span>The per-chunk execution loop</h2>
+
+<p>Every implementation chunk follows the same loop. This is the v6 build's heartbeat.</p>
+
+<div class="step">
+  <div class="step-title"><span class="step-num">Step 1</span>Mini eng review on the chunk spec</div>
+  <p>Don't run full <code>/plan-eng-review</code> on every chunk — it's overkill. Instead: read the chunk spec, identify the 3-5 files that'll be touched, identify regression risks, identify which test fixtures matter. ~5 minutes.</p>
+  <p><strong>Skill:</strong> <code>/plan-eng-review</code> only if the chunk is &gt;1 day of work or crosses bounded-context boundaries. Otherwise just think.</p>
+</div>
+
+<div class="step">
+  <div class="step-title"><span class="step-num">Step 2</span>TDD — write tests first against frozen snapshots</div>
+  <p>Per memory <code>feedback_lift_aggressively_lean_fast.md</code> + global testing rules: tests assert behavior. For v6, every feature math / cell rule / portfolio FSM test uses the small (100-instrument) frozen snapshot. The full snapshot is for nightly only.</p>
+  <p><strong>Skill:</strong> <code>/tdd</code> for new modules; for lifts, write regression tests against v5 behavior first.</p>
+</div>
+
+<div class="step">
+  <div class="step-title"><span class="step-num">Step 3</span>Implement vectorized + Pydantic-typed</div>
+  <p>Per Principle 2 (eng review §2.2): numpy/pandas vectorized; SQL set ops where data lives in Postgres; Decimal for money; no <code>dict[str, Any]</code> at module boundaries. Branch ≤ 5 per function.</p>
+</div>
+
+<div class="step">
+  <div class="step-title"><span class="step-num">Step 4</span>Run tests + verify regression gates</div>
+  <p>Locally: pytest on the affected module. CI: look-ahead audit, IC regression, friction golden, LLM eval (if agents/ touched), SEBI guard (if agents/ touched). Per /grill-with-docs Q11 D6 these are non-negotiable CI gates.</p>
+</div>
+
+<div class="step">
+  <div class="step-title"><span class="step-num">Step 5</span>Pre-landing review</div>
+  <p><code>/review</code> on the diff (architectural + tests + perf). Then <code>/codex review</code> for independent challenge. Both required for non-trivial PRs.</p>
+</div>
+
+<div class="step">
+  <div class="step-title"><span class="step-num">Step 6</span>Ship</div>
+  <p><code>/ship</code> bundles: tests pass, VERSION bump, CHANGELOG entry, commit, push, PR. Then <code>/land-and-deploy</code> for merge + canary verification.</p>
+</div>
+
+<div class="step">
+  <div class="step-title"><span class="step-num">Step 7</span>Update CONTEXT.md if any term semantics changed</div>
+  <p>If the chunk resolved a previously-ambiguous term or introduced a new one, append to <code>CONTEXT.md</code> in the same commit. Glossary drift is the #1 way multi-session builds lose coherence.</p>
+</div>
+
+<div class="step">
+  <div class="step-title"><span class="step-num">Step 8</span>/context-save at session end</div>
+  <p>Captures: branch, active chunk, what was done, what's next, decisions made this session, anything uncertain. Read by <code>/context-restore</code> next session.</p>
+</div>
+
+<h2 id="worktrees"><span class="num">05</span>Worktree discipline</h2>
+
+<p>Eng review §08 + grill mid-Q6 dictate 8 lanes (A1, A2, A3, A4, A5, B, C, D, E) of which 5-6 can run in parallel post-Phase-0. Parallel lanes mean parallel git worktrees.</p>
+
+<h4>Naming convention</h4>
+<pre><code># Created by /gstack worktree or `git worktree add`
+worktree-v6-{lane}-{phase}/
+  Examples:
+  worktree-v6-A1-largecap-fix/      # 0.5a recovery work
+  worktree-v6-A2-survivorship/      # 0.5b
+  worktree-v6-E-migrations/         # 080-081 schema
+  worktree-v6-D-frontend-wires/     # Phase 6 wireframes</code></pre>
+
+<h4>Merge ordering</h4>
+<ol>
+  <li><strong>E (schema) merges first.</strong> Migrations 080-081 must land before F (compute backend) can begin.</li>
+  <li><strong>A1 (large-cap fix) merges before A4</strong> per grill mid-Q6.</li>
+  <li><strong>A2 (survivorship) merges before A3</strong>.</li>
+  <li><strong>A4 + A5 merge before F</strong>.</li>
+  <li><strong>F merges before G + H</strong>.</li>
+  <li><strong>G + H merge before Phase 6 (frontend rebuild)</strong>.</li>
+</ol>
+
+<h4>Conflict avoidance</h4>
+<p>The known conflict: F + G both touch <code>atlas.primitives.returns</code>. Centralize that module FIRST (Finding 2.C from eng review), in its own micro-chunk before either lane needs it.</p>
+
+<h2 id="memory"><span class="num">06</span>Memory hygiene — what gets written where</h2>
+
+<table>
+<thead><tr><th>Information type</th><th>Goes where</th><th>Cadence</th></tr></thead>
+<tbody>
+<tr><td>Domain term resolved or added</td><td><code>CONTEXT.md</code></td><td>Inline when resolved (don't batch)</td></tr>
+<tr><td>Hard-to-reverse architectural decision</td><td><code>.ruflo/adr/</code> as new ADR</td><td>Rare; only when criteria met</td></tr>
+<tr><td>Substantive code edit</td><td><code>decisions.jsonl</code> (hook-enforced)</td><td>Auto on every Write/Edit</td></tr>
+<tr><td>Per-session state at session end</td><td><code>~/.gstack/projects/atlas-os/checkpoints/{date}-{branch}.md</code></td><td><code>/context-save</code> at end of every session</td></tr>
+<tr><td>Cross-session pattern Claude should remember</td><td><code>~/.claude/projects/.../memory/{type}_{name}.md</code> + MEMORY.md index</td><td>When user feedback validates / corrects a pattern</td></tr>
+<tr><td>Per-chunk progress / acceptance status</td><td><code>docs/v6/phases/{phase}/STATUS.md</code></td><td>After every /ship</td></tr>
+<tr><td>Methodology lock changes</td><td><code>&lt;consolidation&gt;/docs/atlas-signal-discovery/methodology-lock-2026-05-23.md</code> as changelog entry</td><td>Only by maintainer; single sign-off (N1=B)</td></tr>
+<tr><td>v7 deferred items</td><td><code>docs/v6/TODOS.md</code></td><td>When eng review or chunk surfaces a defer</td></tr>
+<tr><td>Review entries (/review, /codex, /plan-eng-review)</td><td><code>~/.gstack/projects/atlas-os/{branch}-reviews.jsonl</code> (auto via gstack-review-log)</td><td>Auto at end of each review</td></tr>
+</tbody>
+</table>
+
+<div class="callout-warn">
+  <div class="callout-head">⚠ The two write traps</div>
+  <p><strong>Trap 1:</strong> writing domain terms to <code>decisions.jsonl</code> instead of <code>CONTEXT.md</code>. <code>decisions.jsonl</code> is a chronological edit log; nobody reads it backward to find terminology. Terms go in <code>CONTEXT.md</code>.</p>
+  <p><strong>Trap 2:</strong> writing chunk progress to <code>CONTEXT.md</code>. <code>CONTEXT.md</code> is a glossary, NOT a status board. Status goes in <code>docs/v6/phases/{phase}/STATUS.md</code>.</p>
+</div>
+
+<h2 id="failure"><span class="num">07</span>Failure recovery patterns</h2>
+
+<table>
+<thead><tr><th>Failure</th><th>Recovery</th></tr></thead>
+<tbody>
+<tr><td>Context compaction mid-session, lost what I was doing</td><td>The system auto-compacts; ride it out. If still lost, <code>/context-restore</code> reads last checkpoint.</td></tr>
+<tr><td>New session, gap &gt;1 day, no idea where I left off</td><td><code>/context-restore</code> + read <code>docs/v6/phases/{phase}/STATUS.md</code></td></tr>
+<tr><td>Phase 0.5 gate fails (e.g., 0.5c TN below 65%)</td><td>Apply the locked gate-failure rule (CEO plan §"Phase 0.5 gate-failure decision rules"); document in methodology lock; do NOT discretionary-override.</td></tr>
+<tr><td>Walk-forward IC regresses post-Phase-4</td><td><code>/investigate</code> → <code>/diagnose</code>. Frozen snapshot makes this reproducible offline.</td></tr>
+<tr><td>Drift monitor flags a cell post-Phase-5</td><td>Per grill Q2 + Q3: auto-deprecation kicks in after Z &gt; 2.5 × 10 days × warmup met. Maintainer reviews via audit log; can clear <code>deprecated_at</code> if false-positive.</td></tr>
+<tr><td>Stuck on a chunk for &gt;3 attempts</td><td><code>/codex:rescue</code> for a second opinion. If still stuck after rescue, fork the chunk into discovery + implementation issues.</td></tr>
+<tr><td>SEBI RA registration delayed (Phase 0.5i blocker)</td><td>Internal alpha proceeds; public flip is blocked. Frontend builds against <code>v6.atlas.jslwealth.in</code> non-public subdomain in the meantime.</td></tr>
+<tr><td>Methodology drift caught in CI gate (IC ± 0.005)</td><td>Hard-fail the PR. Diagnose with frozen snapshot. Do NOT bump the threshold without an explicit methodology-lock changelog entry.</td></tr>
+</tbody>
+</table>
+
+<h2 id="cadence"><span class="num">08</span>Cross-cutting rituals</h2>
+
+<table>
+<thead><tr><th>Cadence</th><th>Ritual</th><th>Skill</th></tr></thead>
+<tbody>
+<tr><td>End of every session</td><td>Save checkpoint</td><td><code>/context-save</code></td></tr>
+<tr><td>Start of every session (gap &gt;1 day)</td><td>Restore checkpoint</td><td><code>/context-restore</code></td></tr>
+<tr><td>After each chunk ships</td><td>Update phase STATUS.md + decisions.jsonl auto-appends</td><td>inline edit</td></tr>
+<tr><td>Weekly</td><td>Retrospective on what shipped + decisions made + trends</td><td><code>/retro</code></td></tr>
+<tr><td>Per phase boundary</td><td>Check all gates green + verify methodology-lock not silently drifted</td><td><code>/landing-report</code> + manual diff of methodology lock</td></tr>
+<tr><td>Post-/ship of any significant chunk</td><td>Update README / CHANGELOG / docs to match what shipped</td><td><code>/document-release</code></td></tr>
+<tr><td>Monthly</td><td>Cathedral test — are we still building what CEO plan describes?</td><td><code>/zoom-out</code> (Pocock skill)</td></tr>
+<tr><td>Quarterly or on major refactor</td><td>Code-base architecture review</td><td><code>/improve-codebase-architecture</code></td></tr>
+<tr><td>Pre-merge of every PR</td><td>Pre-landing review + outside voice</td><td><code>/review</code> + <code>/codex review</code></td></tr>
+</tbody>
+</table>
+
+<h2 id="status"><span class="num">09</span>Current status &amp; next action</h2>
+
+<table>
+<thead><tr><th>Item</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>CEO plan</td><td><span class="pill green">CLEAR</span> 41 decisions, 0 unresolved</td></tr>
+<tr><td>Eng review</td><td><span class="pill green">CLEAR</span> 12 findings + 11 grill questions resolved</td></tr>
+<tr><td>CONTEXT.md</td><td><span class="pill green">LIVE</span> created 2026-05-24; 409 lines; 11 glossary entries</td></tr>
+<tr><td>Gate 1 — Design review</td><td><span class="pill amber">NEXT — run now</span></td></tr>
+<tr><td>Gate 2 — /to-issues Pass 1</td><td><span class="pill gray">Pending Gate 1</span></td></tr>
+<tr><td>Gate 3 — Codex adversarial</td><td><span class="pill amber">Quota walled — re-run when reset</span></td></tr>
+<tr><td>Gate 4 — /to-issues Pass 2</td><td><span class="pill gray">Pending Gate 1 + 3</span></td></tr>
+<tr><td>Phase 0 — Fork preservation</td><td><span class="pill gray">After all gates</span></td></tr>
+<tr><td>Phase 0.5a — Large-cap fix</td><td><span class="pill gray">First Lane A1 issue after Gate 2</span></td></tr>
+</tbody>
+</table>
+
+<div class="verdict">
+  <div class="verdict-head">Next action</div>
+  <strong>Run <code>/plan-design-review</code> on the eng review HTML.</strong> Resolves the design-owned items (multi-tenure headline UX, regime-gating chip, SP10 visual fit, accessibility, mobile-first defaults). Output → design plan HTML in <code>~/.gstack/projects/atlas-os/design-plans/</code>. Estimated session length: 20-30 min of interactive Q&amp;A.
+</div>
+
+</div>
+</body>
+</html>

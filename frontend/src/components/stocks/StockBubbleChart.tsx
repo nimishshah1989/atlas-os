@@ -26,11 +26,11 @@ const DISPLAY_FILTERS: { key: DisplayFilter; label: string }[] = [
   { key: 'all',  label: 'All' },
 ]
 
+// rs_state taxonomy = the 5 values atlas_stock_signal_unified emits.
+// "Emerging"/"Consolidating" were retired.
 const LEGEND = [
   { color: '#2F6B43', label: 'Leader' },
   { color: '#1D9E75', label: 'Strong' },
-  { color: '#25394A', label: 'Emerging' },
-  { color: '#B8860B', label: 'Consolidating' },
   { color: '#8C8278', label: 'Average' },
   { color: '#B0492C', label: 'Weak / Laggard' },
 ]
@@ -409,7 +409,7 @@ export function StockBubbleChart({ stocks }: { stocks: StockRowWithSector[] }) {
           </div>
         ))}
         <div className="ml-auto font-sans text-[10px] text-ink-tertiary">
-          Bubble size = avg volume 20D · {visibleCount} stocks
+          Bubble size = avg volume 20D · {visibleCount} charted (filtered)
         </div>
       </div>
 

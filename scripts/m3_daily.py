@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import structlog
@@ -42,7 +42,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    overall_start = datetime.now()
+    overall_start = datetime.now(UTC)
     run_id = safe_record("m3_daily", milestone="M3", phase=args.phase)
     total_rows = 0
 
@@ -69,7 +69,7 @@ def main() -> int:
         raise
 
     safe_finish(run_id, status="success", rows_written=total_rows)
-    elapsed = (datetime.now() - overall_start).total_seconds() / 60
+    elapsed = (datetime.now(UTC) - overall_start).total_seconds() / 60
     print(f"[m3_daily] complete in {elapsed:.1f} minutes")
     return 0
 

@@ -1,17 +1,15 @@
 'use client'
 import { useState } from 'react'
 import type { StockRowWithSector } from '@/lib/queries/stocks'
-import type { ConvictionMapRow } from '@/lib/queries/conviction'
+import type { ComponentValidation } from '@/lib/queries/component_validation'
 import type { RSLeaderRow, BreakoutCandidateRow } from '@/lib/queries/leaders'
+import type { PolicyEntryParams } from '@/lib/policy-entry-filter'
 import { StockBreadthPanel } from './StockBreadthPanel'
 import { StockBubbleChart } from './StockBubbleChart'
 import { StockIntelligencePanel } from './StockIntelligencePanel'
 import { StockScreener } from './StockScreener'
 import { IntradayRSLeaders } from './IntradayRSLeaders'
 import { RSLeadersPanel } from './RSLeadersPanel'
-import { CTSGradeSummaryCards } from './CTSGradeSummaryCards'
-import { CTSIndexTimingPanel } from './CTSIndexTimingPanel'
-import { CTSSectorPanel } from './CTSSectorPanel'
 
 type MaFilter = 'above_30w_ma' | 'above_50d_ma' | 'above_200d_ma' | null
 type ActiveView = 'overview' | 'leaders'
@@ -20,18 +18,25 @@ export function StocksClientShell({
   stocks,
   regimeState,
   deploymentMultiplier,
-  convictionMap,
+  validations = [],
   leaders,
   breakouts,
   deterioration,
+  initialSectorFilter,
+  initialIndexFilter,
+  policyEntryParams,
 }: {
   stocks: StockRowWithSector[]
   regimeState: string
   deploymentMultiplier: number
-  convictionMap?: Record<string, ConvictionMapRow>
+  validations?: ComponentValidation[]
   leaders: RSLeaderRow[]
   breakouts: BreakoutCandidateRow[]
   deterioration: BreakoutCandidateRow[]
+  initialSectorFilter?: string
+  initialIndexFilter?: string
+  /** Policy entry-rule params for flow mode (active portfolio + sector filter). */
+  policyEntryParams?: PolicyEntryParams
 }) {
   const [maFilter, setMaFilter] = useState<MaFilter>(null)
   const [activeView, setActiveView] = useState<ActiveView>('overview')
@@ -81,13 +86,13 @@ export function StocksClientShell({
             regimeState={regimeState}
             deploymentMultiplier={deploymentMultiplier}
           />
-          <CTSGradeSummaryCards />
-          <CTSIndexTimingPanel />
-          <CTSSectorPanel />
           <StockScreener
             stocks={stocks}
             maFilter={maFilter}
-            convictionMap={convictionMap}
+            validations={validations}
+            initialSectorFilter={initialSectorFilter}
+            initialIndexFilter={initialIndexFilter}
+            policyEntryParams={policyEntryParams}
           />
         </>
       ) : (

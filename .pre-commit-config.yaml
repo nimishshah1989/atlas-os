@@ -36,6 +36,10 @@ repos:
   # Requires the global gates installed at ~/.claude/gates/.
   # entry uses bash -c so $HOME expands at run time (pre-commit does not
   # do shell expansion of ~ or $VAR in entry strings).
+  #
+  # files: \.py$  — this gate runs the Python test suite; a frontend-only
+  # (TypeScript) commit must NOT trigger it. Without this filter every
+  # commit, including pure-frontend ones, ran pytest and blocked on it.
   - repo: local
     hooks:
       - id: pragma-coverage
@@ -43,9 +47,11 @@ repos:
         entry: bash -c "exec $HOME/.claude/gates/gate-pragma-coverage.sh"
         language: system
         pass_filenames: false
+        files: \.py$
         stages: [pre-commit]
 
   # Local hook: decisions.jsonl chain integrity (FIX #5).
+  # Only relevant when decisions.jsonl itself is part of the commit.
   - repo: local
     hooks:
       - id: verify-decisions-chain
@@ -53,23 +59,28 @@ repos:
         entry: bash -c "exec $HOME/.claude/hooks/lib/verify-chain.sh"
         language: system
         pass_filenames: false
+        files: ^decisions\.jsonl$
         stages: [pre-commit]
 
   # Modulith discipline: enforce architectural rules.
   - repo: local
     hooks:
       - id: file-size-limit
-        name: file size limit (no file > 400 LOC)
+        name: file size limit (tiered LOC limits)
         entry: python3 scripts/hooks/check_file_size.py
         language: system
         pass_filenames: false
+        files: \.(py|tsx?|jsx?)$
         stages: [pre-commit]
 
+      # module-boundaries + no-magic-thresholds inspect Python imports /
+      # Python source — scope to .py so frontend commits skip them.
       - id: module-boundaries
         name: bounded-context import boundaries
         entry: python3 scripts/hooks/check_module_boundaries.py
         language: system
         pass_filenames: false
+        files: \.py$
         stages: [pre-commit]
 
       - id: no-magic-thresholds
@@ -77,4 +88,5 @@ repos:
         entry: python3 scripts/hooks/check_no_magic_thresholds.py
         language: system
         pass_filenames: false
+        files: \.py$
         stages: [pre-commit]

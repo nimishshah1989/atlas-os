@@ -8,7 +8,9 @@ query-param filtering, and missing-field rejection.
 
 from __future__ import annotations
 
+import asyncio
 import os
+from decimal import Decimal
 
 # Set auth flags before any atlas import so Config reads them at module load.
 os.environ.setdefault("ATLAS_AUTH_DISABLED", "true")
@@ -103,7 +105,7 @@ class TestReceiveTvSignal:
         assert r.status_code == 422
 
     def test_receive_signal_missing_secret_field_is_accepted(self, client: TestClient) -> None:
-        """Payload without 'secret' is accepted — TV webhooks cannot send custom headers."""
+        """Payload without 'secret' is accepted - TV webhooks cannot send custom headers."""
         payload = {k: v for k, v in VALID_PAYLOAD.items() if k != "secret"}
         with (
             patch("atlas.api.tv_signals._is_duplicate", return_value=False),
@@ -126,7 +128,6 @@ def _make_mock_engine_for_signals(rows: list, total: int) -> MagicMock:
     mock_conn.__exit__ = MagicMock(return_value=False)
 
     fetch_result = MagicMock()
-    # Build mock rows with ._mapping attribute
     mock_rows = []
     for row_dict in rows:
         mock_row = MagicMock()
@@ -221,7 +222,7 @@ class TestListSignalReports:
 # ---------------------------------------------------------------------------
 
 
-def _make_mock_engine_fetchone(row) -> MagicMock:
+def _make_mock_engine_fetchone(row: dict | None) -> MagicMock:
     """Mock engine returning row from fetchone()."""
     mock_conn = MagicMock()
     mock_conn.__enter__ = MagicMock(return_value=mock_conn)
@@ -317,3 +318,138 @@ class TestGenerateReportAdhoc:
                 headers={"X-Internal-Secret": "test-service-secret"},
             )
         assert r.json()["ticker"] == "INFY"
+
+
+# ---------------------------------------------------------------------------
+# _is_duplicate - tests the DB query helper directly
+# ---------------------------------------------------------------------------
+
+
+def test_is_duplicate_returns_true_when_row_found() -> None:
+    from atlas.api.tv_signals import _is_duplicate
+
+    mock_conn = MagicMock()
+    mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+    mock_conn.__exit__ = MagicMock(return_value=False)
+    mock_conn.execute.return_value.fetchone.return_value = MagicMock()
+
+    mock_engine = MagicMock()
+    mock_engine.connect.return_value = mock_conn
+
+    with patch("atlas.api.tv_signals.get_engine", return_value=mock_engine):
+        result = _is_duplicate("HDFCBANK", "breakout_52w_volume", "vs_nifty")
+
+    assert result is True
+
+
+def test_is_duplicate_returns_false_when_no_row() -> None:
+    from atlas.api.tv_signals import _is_duplicate
+
+    mock_conn = MagicMock()
+    mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+    mock_conn.__exit__ = MagicMock(return_value=False)
+    mock_conn.execute.return_value.fetchone.return_value = None
+
+    mock_engine = MagicMock()
+    mock_engine.connect.return_value = mock_conn
+
+    with patch("atlas.api.tv_signals.get_engine", return_value=mock_engine):
+        result = _is_duplicate("HDFCBANK", "breakout_52w_volume", "vs_nifty")
+
+    assert result is False
+
+
+# ---------------------------------------------------------------------------
+# process_signal - thin async wrapper
+# ---------------------------------------------------------------------------
+
+
+def test_process_signal_calls_pipeline() -> None:
+    from atlas.api.tv_signals import process_signal
+    from atlas.signals.models import TVSignalPayload
+
+    payload = TVSignalPayload(
+        tier=1,
+        code="breakout_52w_volume",
+        chart="vs_nifty",
+        ticker="HDFCBANK",
+        exchange="NSE",
+        close=Decimal("1820.50"),
+        volume=4500000,
+        time="2026-05-13T09:20:00Z",
+    )
+    mock_pipeline = AsyncMock()
+    with patch("atlas.signals.processor.run_signal_pipeline", mock_pipeline):
+        asyncio.run(process_signal(payload))
+
+    mock_pipeline.assert_awaited_once_with(payload)
+
+
+# ---------------------------------------------------------------------------
+# Screenshot endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestServeScreenshot:
+    def test_screenshot_wrong_secret_returns_401(self, client: TestClient) -> None:
+        """Wrong X-Internal-Secret returns 401."""
+        with patch("atlas.api.tv_signals.Config") as mock_cfg:
+            mock_cfg.ATLAS_INTERNAL_SECRET = "correct-secret"  # noqa: S105
+            r = client.get(
+                "/api/v1/tv/screenshot",
+                params={"path": "/data/signals/screenshots/test.png"},
+                headers={"X-Internal-Secret": "wrong-secret"},
+            )
+        assert r.status_code == 401
+
+    def test_screenshot_path_traversal_returns_403(self, client: TestClient) -> None:
+        """Path outside allowed base dir returns 403."""
+        with (
+            patch("atlas.api.tv_signals.Config") as mock_cfg,
+            patch.dict("os.environ", {"SIGNAL_SCREENSHOT_DIR": "/data/signals/screenshots"}),
+        ):
+            mock_cfg.ATLAS_INTERNAL_SECRET = "test-service-secret"  # noqa: S105
+            r = client.get(
+                "/api/v1/tv/screenshot",
+                params={"path": "/etc/passwd"},
+                headers={"X-Internal-Secret": "test-service-secret"},
+            )
+        assert r.status_code == 403
+
+    def test_screenshot_file_not_found_returns_404(
+        self, client: TestClient, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        """Valid path inside allowed dir but file missing returns 404."""
+        allowed = tmp_path / "screenshots"  # type: ignore[operator]
+        allowed.mkdir()
+        with (
+            patch("atlas.api.tv_signals.Config") as mock_cfg,
+            patch.dict("os.environ", {"SIGNAL_SCREENSHOT_DIR": str(allowed)}),
+        ):
+            mock_cfg.ATLAS_INTERNAL_SECRET = "test-service-secret"  # noqa: S105
+            r = client.get(
+                "/api/v1/tv/screenshot",
+                params={"path": str(allowed / "missing.png")},
+                headers={"X-Internal-Secret": "test-service-secret"},
+            )
+        assert r.status_code == 404
+
+    def test_screenshot_valid_file_returns_200(
+        self, client: TestClient, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        """Existing file inside allowed dir returns 200 with PNG content-type."""
+        allowed = tmp_path / "screenshots"  # type: ignore[operator]
+        allowed.mkdir()
+        png_file = allowed / "chart.png"
+        png_file.write_bytes(b"fakepng")
+        with (
+            patch("atlas.api.tv_signals.Config") as mock_cfg,
+            patch.dict("os.environ", {"SIGNAL_SCREENSHOT_DIR": str(allowed)}),
+        ):
+            mock_cfg.ATLAS_INTERNAL_SECRET = "test-service-secret"  # noqa: S105
+            r = client.get(
+                "/api/v1/tv/screenshot",
+                params={"path": str(png_file)},
+                headers={"X-Internal-Secret": "test-service-secret"},
+            )
+        assert r.status_code == 200

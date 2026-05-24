@@ -2,13 +2,14 @@ export const dynamic = 'force-dynamic'
 
 import { getAllETFs } from '@/lib/queries/etfs'
 import { getCurrentRegime } from '@/lib/queries/regime'
+import { getComponentValidations } from '@/lib/queries/component_validation'
 import { ETFScreener } from '@/components/etfs/ETFScreener'
 import { ETFMetricTiles } from '@/components/etfs/ETFMetricTiles'
 import { ETFIntelligencePanel } from '@/components/etfs/ETFIntelligencePanel'
 import { ETFBubbleChart } from '@/components/etfs/ETFBubbleChart'
 
 export default async function ETFsPage() {
-  const [etfs, regime] = await Promise.all([getAllETFs(), getCurrentRegime()])
+  const [etfs, regime, validations] = await Promise.all([getAllETFs(), getCurrentRegime(), getComponentValidations()])
 
   if (etfs.length === 0) {
     return (
@@ -49,14 +50,14 @@ export default async function ETFsPage() {
         <ETFMetricTiles etfs={etfs} />
       </div>
 
-      {/* Bubble chart: Volatility vs 3M Return */}
+      {/* Bubble chart: trend strength vs within-state rank */}
       <div className="px-6 pt-4">
         <div className="border border-paper-rule rounded-sm p-4">
           <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-1">
-            ETF Risk/Return Map — Volatility vs 3M Return
+            ETF Trend Map — Holding Trend Strength vs Within-State Rank
           </div>
           <p className="font-sans text-[11px] text-ink-tertiary mb-3">
-            X = annualised volatility, Y = 3-month return. Color = RS state. Bubble size = RS percentile. Low-vol + high-return (top-left) is the ideal quality zone.
+            X = holdings trend strength (stage&nbsp;2 − stage&nbsp;4 breadth). Y = mean within-state rank of holdings. Color = RS state. Bubble size = RS rank 12M. Strong-trend + high-rank (top-right) is the leadership zone.
           </p>
           <ETFBubbleChart etfs={etfs} />
         </div>
@@ -64,7 +65,7 @@ export default async function ETFsPage() {
 
       {/* Main content: screener + intelligence panel */}
       <div className="px-6 py-4 grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6 items-start">
-        <ETFScreener etfs={etfs} />
+        <ETFScreener etfs={etfs} validations={validations} />
 
         <div className="border border-paper-rule rounded-sm p-4 bg-paper sticky top-4">
           <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-3">

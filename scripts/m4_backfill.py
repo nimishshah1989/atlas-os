@@ -53,7 +53,7 @@ def main() -> None:
     args = p.parse_args()
 
     engine = get_engine()
-    thresholds = load_thresholds(engine)
+    thresholds = load_thresholds(engine=engine)
 
     print(
         f"M4 backfill starting | phase={args.phase} | "

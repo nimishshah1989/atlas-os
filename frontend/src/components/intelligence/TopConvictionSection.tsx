@@ -1,8 +1,8 @@
 // SP04 Stage 3 — "Top Conviction Today" section on the /intelligence
 // morning dashboard. Shows top picks across the two industry-grade tiers
 // (T1 mega-cap + T3 upper mid-cap) plus T2 large-cap as baseline reference.
-import Link from 'next/link'
 import type { ConvictionRow } from '@/lib/queries/conviction'
+import { LinkedTicker } from '@/components/ui/LinkedToken'
 
 type Props = {
   byTier: Record<string, ConvictionRow[]>
@@ -77,12 +77,7 @@ export function TopConvictionSection({ byTier }: Props) {
                       key={r.instrument_id}
                       className="flex items-baseline justify-between text-xs py-1 border-b border-paper-rule/40"
                     >
-                      <Link
-                        href={`/stocks/${encodeURIComponent(symbol)}`}
-                        className="font-mono text-xs font-semibold text-ink-primary hover:text-teal"
-                      >
-                        {symbol}
-                      </Link>
+                      <LinkedTicker symbol={symbol} className="font-semibold" />
                       <span className="font-sans text-[10px] text-ink-tertiary truncate flex-1 mx-2">
                         {r.sector ?? '—'}
                       </span>

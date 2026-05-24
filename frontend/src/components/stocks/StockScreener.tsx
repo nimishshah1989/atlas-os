@@ -2,44 +2,91 @@
 // allow-large: single table component with conditional column rendering; all logic is cohesive
 import { Fragment, useState, useMemo, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { ChevronUp, ChevronDown } from 'lucide-react'
+import { ChevronUp, ChevronDown, X } from 'lucide-react'
+import { LinkedTicker } from '@/components/ui/LinkedToken'
 import type { StockRowWithSector } from '@/lib/queries/stocks'
-import type { ConvictionMapRow } from '@/lib/queries/conviction'
+import type { ComponentValidation } from '@/lib/queries/component_validation'
 import {
   pct, pctColor, RSPctileBar,
-  RSStateChip, MomentumChip, RiskChip, VolumeChip,
 } from '@/lib/stock-formatters'
 import { SectorBadge } from './SectorBadge'
-import { StageBadge, SignalBadge } from './CTSSignalBadge'
 import { useColumnVisibility } from '@/components/ui/ColumnToggle'
-import { StateJourneyCompact } from '@/components/ui/StateJourneyCompact'
-import { ConvictionCell } from './ConvictionCell'
+import { WithinStateRankCell } from './WithinStateRankCell'
+import { ValidatedBadge } from '@/components/ui/ValidatedBadge'
+import { applyEntryFilter, type PolicyEntryParams } from '@/lib/policy-entry-filter'
+
+const STAGE_LABEL: Record<string, string> = {
+  stage_1: '1 BASE',
+  stage_2a: '2A BREAK',
+  stage_2b: '2B CONF',
+  stage_2c: '2C MATURE',
+  stage_3: '3 TOP',
+  stage_4: '4 DECLINE',
+  uninvestable: 'UNINV',
+}
+const STAGE_COLOR: Record<string, string> = {
+  stage_1: 'text-ink-secondary bg-paper-rule/30',
+  stage_2a: 'text-signal-pos bg-signal-pos/10',
+  stage_2b: 'text-signal-pos bg-signal-pos/10',
+  stage_2c: 'text-signal-warn bg-signal-warn/10',
+  stage_3: 'text-signal-warn bg-signal-warn/10',
+  stage_4: 'text-signal-neg bg-signal-neg/10',
+  uninvestable: 'text-ink-tertiary bg-paper-rule/20',
+}
+
+function StageBadge({ state, dwellDays }: { state: string | null; dwellDays: number | null }) {
+  if (!state) return <span className="font-mono text-xs text-ink-tertiary">—</span>
+  const label = STAGE_LABEL[state] ?? state.toUpperCase()
+  const color = STAGE_COLOR[state] ?? 'text-ink-secondary bg-paper-rule/20'
+  return (
+    <span className="inline-flex flex-col gap-0.5" title={`${state} · day ${dwellDays ?? '?'}`}>
+      <span className={`px-1.5 py-0.5 rounded-sm font-sans text-[10px] font-semibold tracking-[0.04em] ${color}`}>
+        {label}
+      </span>
+      {dwellDays != null && (
+        <span className="font-mono text-[9px] text-ink-tertiary leading-none">d{dwellDays}</span>
+      )}
+    </span>
+  )
+}
 import {
   RS_ORDER, MOM_ORDER, RISK_ORDER, VOL_ORDER,
   OPTIONAL_COLS, COL_STORAGE_KEY, ALWAYS_VISIBLE_COL_COUNT,
   stateRank, capRank, optBool, optStr, optNum,
   buildStockGrade, buildGradeTooltip,
-  GateDots, GATE_LEGEND, COL_TOOLTIPS, isMarketOpen,
+  COL_TOOLTIPS, isMarketOpen,
   type SortKey, type FilterChip,
 } from './screener-utils'
 import { ScreenerFilterPanel } from './ScreenerFilterPanel'
-import { CTSTimingCell } from './CTSTimingCell'
-import { SignalCell } from './SignalCell'
 
 export function StockScreener({
   stocks,
   maFilter,
-  convictionMap,
+  validations = [],
+  initialSectorFilter,
+  initialIndexFilter,
+  policyEntryParams,
 }: {
   stocks: StockRowWithSector[]
   maFilter?: 'above_30w_ma' | 'above_50d_ma' | 'above_200d_ma' | null
-  convictionMap?: Record<string, ConvictionMapRow>
+  validations?: ComponentValidation[]
+  initialSectorFilter?: string
+  initialIndexFilter?: string
+  /** When set (flow mode with active portfolio + sector filter), applies policy entry rules. */
+  policyEntryParams?: PolicyEntryParams
 }) {
-  const [sortKey, setSortKey] = useState<SortKey>('cap_rank')
-  const [asc, setAsc] = useState(true)
+  // When a URL-seeded sector filter is active, default sort to within_state_rank desc.
+  const defaultSortKey: SortKey = initialSectorFilter ? 'within_state_rank' : 'cap_rank'
+  const defaultAsc = initialSectorFilter ? false : true
+  const [sortKey, setSortKey] = useState<SortKey>(defaultSortKey)
+  const [asc, setAsc] = useState(defaultAsc)
   const [chip, setChip] = useState<FilterChip>('all')
   const [search, setSearch] = useState('')
-  const [sectorFilter, setSectorFilter] = useState<string>('All Sectors')
+  const [sectorFilter, setSectorFilter] = useState<string>(
+    initialSectorFilter ?? 'All Sectors'
+  )
+  // Track active index filter (from URL seed); purely display — SQL already filtered server-side.
+  const [activeIndexFilter] = useState<string | undefined>(initialIndexFilter)
   const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null)
   const [visibleCols, setVisibleCols] = useColumnVisibility(COL_STORAGE_KEY, OPTIONAL_COLS)
   const [page, setPage] = useState(1)
@@ -86,6 +133,26 @@ export function StockScreener({
   function toggleExpanded(symbol: string) {
     setExpandedSymbol(prev => prev === symbol ? null : symbol)
   }
+
+  // Policy entry filter: computed before UI filters so the "N of M" count reflects
+  // the full sector-filtered set, not just the current page/chip.
+  // Only active when both policyEntryParams and a sectorFilter are set (flow mode).
+  // The count is real — derived from the same stocks array as the screener.
+  const policyPassCount = useMemo(() => {
+    if (!policyEntryParams || !initialSectorFilter) return null
+    const sectorStocks = stocks.filter(s => s.sector === initialSectorFilter)
+    const passed = applyEntryFilter(
+      sectorStocks.map(s => ({
+        instrument_id: s.instrument_id,
+        symbol: s.symbol,
+        engine_state: s.engine_state,
+        within_state_rank: s.within_state_rank,
+        rs_rank_12m: s.rs_rank_12m,
+      })),
+      policyEntryParams,
+    )
+    return { pass: passed.length, total: sectorStocks.length }
+  }, [stocks, policyEntryParams, initialSectorFilter])
 
   const filtered = useMemo(() => {
     let result = stocks
@@ -233,6 +300,56 @@ export function StockScreener({
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Sector pre-filter banner — shown when page was opened with ?sector= param */}
+      {initialSectorFilter && (
+        <div
+          data-testid="sector-filter-banner"
+          className="flex items-center gap-2 px-3 py-2 bg-teal/10 border border-teal/30 rounded-sm"
+        >
+          <span className="font-sans text-xs text-teal font-medium">
+            Filtering: {initialSectorFilter}
+          </span>
+          <Link
+            href="/stocks"
+            data-testid="sector-filter-clear"
+            className="ml-1 inline-flex items-center text-teal/70 hover:text-teal"
+            aria-label="Clear sector filter"
+          >
+            <X className="w-3 h-3" />
+          </Link>
+        </div>
+      )}
+      {/* Index pre-filter banner — shown when page was opened with ?index= param */}
+      {activeIndexFilter && (
+        <div
+          data-testid="index-filter-banner"
+          className="flex items-center gap-2 px-3 py-2 bg-teal/10 border border-teal/30 rounded-sm"
+        >
+          <span className="font-sans text-xs text-teal font-medium">
+            Filtering: {activeIndexFilter}
+          </span>
+          <Link
+            href="/stocks"
+            data-testid="index-filter-clear"
+            className="ml-1 inline-flex items-center text-teal/70 hover:text-teal"
+            aria-label="Clear index filter"
+          >
+            <X className="w-3 h-3" />
+          </Link>
+        </div>
+      )}
+      {/* Policy entry-rule banner — shown in flow mode (active portfolio + sector filter) */}
+      {policyPassCount !== null && (
+        <div
+          data-testid="policy-entry-filter-banner"
+          className="flex items-center gap-2 px-3 py-2 bg-paper-rule/20 border border-paper-rule rounded-sm"
+        >
+          <span className="font-sans text-xs text-ink-secondary">
+            <span className="font-semibold text-ink-primary">{policyPassCount.pass} of {policyPassCount.total}</span>
+            {' '}stocks in this sector pass your portfolio&apos;s entry rules
+          </span>
+        </div>
+      )}
       <ScreenerFilterPanel
         search={search}
         sectorFilter={sectorFilter}
@@ -257,38 +374,14 @@ export function StockScreener({
               <Th label="Symbol" k="symbol" />
               <Th label="Cap" k="cap_rank" />
               <Th label="Sector" k="sector" />
-              <th className="px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap text-ink-tertiary">
-                <span className="inline-flex items-center gap-1">
-                  Gates
-                  <span
-                    className="cursor-help opacity-50 hover:opacity-100 text-[9px]"
-                    title={GATE_LEGEND.map(g => `${g.key}=${g.label}: ${g.desc}`).join('\n')}
-                  >
-                    ⓘ
-                  </span>
-                </span>
-              </th>
+              <PlainTh label="Stage" tooltip="Master Weinstein state (IC-validated): stage_1 base · stage_2a fresh breakout · stage_2b confirmed · stage_2c mature · stage_3 top · stage_4 decline · uninvestable" />
               <Th label="RS State" k="rs_state" />
-              <Th label="Mom" k="momentum_state" />
               <Th label="Risk" k="risk_state" />
-              <Th label="Vol" k="volume_state" />
               {visibleCols.has('conviction') && (
                 <PlainTh label="Conviction" tooltip={COL_TOOLTIPS.conviction} />
               )}
               {visibleCols.has('quality') && (
                 <PlainTh label="Grade" tooltip={COL_TOOLTIPS.quality} />
-              )}
-              {visibleCols.has('cts_timing') && (
-                <PlainTh label="Timing" tooltip={COL_TOOLTIPS.cts_timing} />
-              )}
-              {visibleCols.has('cts_stage') && (
-                <PlainTh label="Stage" tooltip={COL_TOOLTIPS.cts_stage} />
-              )}
-              {visibleCols.has('cts_signal') && (
-                <PlainTh label="CTS Signal" tooltip={COL_TOOLTIPS.cts_signal} />
-              )}
-              {visibleCols.has('signal') && (
-                <PlainTh label="Signal" tooltip={COL_TOOLTIPS.signal} />
               )}
               {visibleCols.has('ret_1d') && <PlainTh label="1D" align="right" />}
               {visibleCols.has('ret_1w') && <PlainTh label="1W" align="right" />}
@@ -354,17 +447,11 @@ export function StockScreener({
                       onClick={() => toggleExpanded(row.symbol)}
                       className={`border-b border-paper-rule hover:bg-paper-rule/20 transition-colors cursor-pointer ${i % 2 === 0 ? '' : 'bg-paper-rule/5'} ${isExpanded ? 'bg-paper-rule/30' : ''}`}
                     >
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        <Link
-                          href={`/stocks/${encodeURIComponent(row.symbol)}`}
-                          onClick={e => e.stopPropagation()}
-                          className="hover:opacity-80"
-                        >
-                          <div className="font-sans text-xs font-semibold text-ink-primary">{row.symbol}</div>
-                          <div className="font-sans text-[10px] text-ink-tertiary truncate max-w-[160px]" title={row.company_name}>
-                            {row.company_name}
-                          </div>
-                        </Link>
+                      <td className="px-3 py-2.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                        <LinkedTicker symbol={row.symbol} className="font-semibold" />
+                        <div className="font-sans text-[10px] text-ink-tertiary truncate max-w-[160px]" title={row.company_name}>
+                          {row.company_name}
+                        </div>
                       </td>
                       <td className="px-3 py-2.5 whitespace-nowrap">
                         <span className="font-mono text-[10px] text-ink-tertiary">
@@ -374,32 +461,28 @@ export function StockScreener({
                       <td className="px-3 py-2.5">
                         <SectorBadge sector={row.sector} />
                       </td>
-                      <td className="px-3 py-2.5">
-                        <GateDots row={row} />
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <StageBadge state={row.engine_state} dwellDays={row.dwell_days} />
                       </td>
                       <td
                         className="px-3 py-2.5"
                         data-validator-id={`stock.rs_state:${row.instrument_id}`}
                         data-validator-raw={row.rs_state ?? ''}
                       >
-                        <RSStateChip value={row.rs_state} />
-                      </td>
-                      <td
-                        className="px-3 py-2.5"
-                        data-validator-id={`stock.momentum_state:${row.instrument_id}`}
-                        data-validator-raw={row.momentum_state ?? ''}
-                      >
-                        <MomentumChip value={row.momentum_state} />
+                        <ValidatedBadge
+                          label={row.rs_state ?? '—'}
+                          validation={validations.find(v => v.component_name === 'rs' && v.badge === row.rs_state) ?? undefined}
+                        />
                       </td>
                       <td className="px-3 py-2.5">
-                        <RiskChip value={row.risk_state} />
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <VolumeChip value={row.volume_state} />
+                        <ValidatedBadge
+                          label={row.risk_state ?? '—'}
+                          validation={validations.find(v => v.component_name === 'risk' && v.badge === row.risk_state) ?? undefined}
+                        />
                       </td>
                       {visibleCols.has('conviction') && (
                         <td className="px-3 py-2.5">
-                          <ConvictionCell row={convictionMap?.[row.instrument_id]} />
+                          <WithinStateRankCell value={typeof (row as Record<string, unknown>).within_state_rank === 'number' ? (row as Record<string, unknown>).within_state_rank as number : null} />
                         </td>
                       )}
                       {visibleCols.has('quality') && (() => {
@@ -415,35 +498,6 @@ export function StockScreener({
                           </td>
                         )
                       })()}
-                      {visibleCols.has('cts_timing') && (
-                        <td className="px-3 py-2.5">
-                          <CTSTimingCell row={row} />
-                        </td>
-                      )}
-                      {visibleCols.has('cts_stage') && (
-                        <td className="px-3 py-2.5">
-                          <StageBadge stage={optNum(row, 'stage') as 1 | 2 | 3 | 4 | null} />
-                        </td>
-                      )}
-                      {visibleCols.has('cts_signal') && (() => {
-                        const sig = optBool(row, 'is_ppc') ? 'PPC'
-                          : optBool(row, 'is_npc') ? 'NPC'
-                          : optBool(row, 'is_contraction') ? 'Contraction'
-                          : null
-                        return (
-                          <td className="px-3 py-2.5">
-                            <SignalBadge
-                              signal={sig as 'PPC' | 'NPC' | 'Contraction' | null}
-                              date={optStr(row, 'signal_date') ?? undefined}
-                            />
-                          </td>
-                        )
-                      })()}
-                      {visibleCols.has('signal') && (
-                        <td className="px-3 py-2.5 min-w-[140px]">
-                          <SignalCell row={row} />
-                        </td>
-                      )}
                       {visibleCols.has('ret_1d') && (
                         <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(ret1d)}`}>
                           {pct(ret1d)}
@@ -564,10 +618,7 @@ export function StockScreener({
                     {isExpanded && (
                       <tr className="border-b border-paper-rule bg-paper-rule/10">
                         <td colSpan={totalCols} className="px-4 py-3">
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex-1 min-w-0">
-                              <StateJourneyCompact symbol={row.symbol} />
-                            </div>
+                          <div className="flex items-start justify-end gap-4">
                             <Link
                               href={`/stocks/${encodeURIComponent(row.symbol)}`}
                               onClick={e => e.stopPropagation()}

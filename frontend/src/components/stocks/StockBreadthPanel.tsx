@@ -2,7 +2,9 @@ import type { StockRowWithSector } from '@/lib/queries/stocks'
 
 type MaFilter = 'above_30w_ma' | 'above_50d_ma' | 'above_200d_ma' | null
 
-const RS_STATES = ['Leader', 'Strong', 'Consolidating', 'Emerging', 'Average', 'Weak', 'Laggard'] as const
+// rs_state taxonomy = the 5 values atlas_stock_signal_unified emits.
+// "Consolidating"/"Emerging" were retired — they would render as permanently-zero buckets.
+const RS_STATES = ['Leader', 'Strong', 'Average', 'Weak', 'Laggard'] as const
 const MOM_STATES = ['Accelerating', 'Improving', 'Flat', 'Deteriorating', 'Collapsing'] as const
 
 const RS_COLORS: Record<string, string> = {
@@ -211,6 +213,7 @@ export function StockBreadthPanel({
         <div className="flex items-center gap-3 mb-3">
           <div className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider">
             Market Breadth — Moving Average Participation
+            <span className="ml-1.5 font-normal normal-case tracking-normal text-ink-tertiary/60">({total} in universe)</span>
           </div>
           {activeMaFilter && (
             <button

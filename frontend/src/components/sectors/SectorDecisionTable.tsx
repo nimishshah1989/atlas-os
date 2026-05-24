@@ -1,12 +1,14 @@
-// allow-large: single table component — sector state, playbook, CTS pivot balance, drill-down rows; splitting would scatter cohesive column-render logic across multiple files
+// allow-large: single table component — sector state, playbook, CTS pivot balance, policy targets, drill-down rows; splitting would scatter cohesive column-render logic across multiple files
 'use client'
 import { useState, useRef, useEffect } from 'react'
 import { ChevronUp, ChevronDown, AlertTriangle, Info } from 'lucide-react'
 import type { SectorDecision } from '@/lib/sectors-decision'
 import { getTopPicksAction } from '@/app/sectors/actions'
 import type { TopPickRow } from '@/lib/queries/sector-deep-dive'
-import type { SectorPivotRow } from '@/lib/queries/sectors'
+
+import type { SectorTargetOutput } from '@/lib/sector-targets'
 import { buildSectorCommentary } from '@/lib/commentary/sectors'
+import { LinkedTicker } from '@/components/ui/LinkedToken'
 
 type Row = {
   sector_name: string
@@ -309,13 +311,17 @@ export function SectorDecisionTable({
   onSelect,
   leadingRRGCount,
   leadersBySector,
-  ctsPivot,
+  policyTargets,
 }: {
   data: Row[]
   onSelect: (name: string) => void
   leadingRRGCount: number
   leadersBySector?: Record<string, { leader_count: number; top_symbols: string[] }>
-  ctsPivot?: Record<string, SectorPivotRow>
+  /**
+   * Policy-capped targets per sector. Only present when ?portfolio= is active.
+   * When absent, the Target column is hidden (engine view — no portfolio context).
+   */
+  policyTargets?: Map<string, SectorTargetOutput>
 }) {
   const [sortKey, setSortKey] = useState<SortKey>('decision')
   const [asc, setAsc] = useState(true)
@@ -439,11 +445,12 @@ export function SectorDecisionTable({
                 <ColTip text="Count of RS Leader / Strong stocks in this sector today, and the top 3 by 3M RS percentile." />
               </span>
             </th>
-            {ctsPivot && Object.keys(ctsPivot).length > 0 && (
-              <th className="px-3 py-2 text-left font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary whitespace-nowrap">
-                <span className="flex items-center gap-0.5">
-                  PPC/NPC
-                  <ColTip text="Pivot balance: (PPC count − NPC count) ÷ tradeable stocks today. Positive = more bullish pivotal candles than bearish. Shows intra-sector timing pressure." />
+            {policyTargets && (
+              <th className="px-3 py-2 text-right font-sans text-[10px] font-semibold uppercase tracking-wider text-teal whitespace-nowrap">
+                <span className="flex items-center gap-0.5 justify-end">
+                  Target
+                  <ColTip text="Policy-capped target allocation for this sector (whole-number %). Derived from Stage-2 breadth × mean rank, normalized, regime-capped, then clipped at your portfolio's max_per_sector_pct. No portfolio selected = this column is hidden." />
+                  {' / Gap'}
                 </span>
               </th>
             )}
@@ -576,7 +583,7 @@ export function SectorDecisionTable({
                         <div className="flex flex-wrap gap-0.5 mt-0.5">
                           {stat.top_symbols.map(s => (
                             <span key={s} className="font-mono text-[9px] text-ink-tertiary bg-paper-rule/40 px-1 py-0.5 rounded-[2px]">
-                              {s}
+                              <LinkedTicker symbol={s} />
                             </span>
                           ))}
                         </div>
@@ -585,28 +592,19 @@ export function SectorDecisionTable({
                   )
                 })()}
               </td>
-              {ctsPivot && Object.keys(ctsPivot).length > 0 && (() => {
-                const pivot = ctsPivot[row.sector_name]
-                if (!pivot) {
+              {policyTargets && (() => {
+                const t = policyTargets.get(row.sector_name)
+                if (!t) {
                   return <td className="px-3 py-2.5 text-right font-mono text-xs text-ink-tertiary">—</td>
                 }
-                const balance = pivot.pivot_balance != null ? parseFloat(pivot.pivot_balance) : 0
-                const isPos = balance > 0
-                const barColor = balance > 0.2 ? '#2F6B43' : balance < -0.2 ? '#B0492C' : '#B8860B'
+                const gapColor = t.gap > 0 ? 'text-signal-pos' : t.gap < 0 ? 'text-signal-neg' : 'text-ink-tertiary'
+                const gapPrefix = t.gap > 0 ? '+' : ''
                 return (
-                  <td className="px-3 py-2.5">
-                    <div className="flex flex-col items-end gap-1 min-w-[56px]">
-                      <div className="w-14 h-1.5 bg-paper-rule rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all"
-                          style={{ width: `${Math.min(Math.abs(balance) * 100, 100)}%`, background: barColor }}
-                        />
-                      </div>
-                      <span className={`font-mono text-xs tabular-nums ${isPos ? 'text-signal-pos' : 'text-signal-neg'}`}>
-                        {isPos ? '+' : ''}{(balance * 100).toFixed(0)}%
-                      </span>
-                      <span className="text-ink-tertiary text-[10px]">
-                        {pivot.ppc_count}↑ {pivot.npc_count}↓
+                  <td className="px-3 py-2.5 text-right">
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span className="font-mono text-xs font-semibold text-teal">{t.target.toFixed(1)}%</span>
+                      <span className={`font-mono text-[10px] ${gapColor}`}>
+                        {gapPrefix}{t.gap.toFixed(1)}%
                       </span>
                     </div>
                   </td>

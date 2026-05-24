@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
 
-const ALLOWED_BASE = process.env.SIGNAL_SCREENSHOT_DIR ?? "/data/signals/screenshots";
+const TV_API_BASE =
+  process.env.ATLAS_TV_API_BASE_URL ?? process.env.ATLAS_INTERNAL_API_BASE_URL ?? "";
+const SECRET = process.env.ATLAS_INTERNAL_SECRET ?? "";
 
 export async function GET(req: NextRequest) {
   const filePath = req.nextUrl.searchParams.get("path");
@@ -10,18 +10,26 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "path required" }, { status: 400 });
   }
 
-  // Security: ensure the path is within the allowed base directory
-  const resolved = path.resolve(filePath);
-  if (!resolved.startsWith(path.resolve(ALLOWED_BASE))) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  const upstream = `${TV_API_BASE}/api/v1/tv/screenshot?path=${encodeURIComponent(filePath)}`;
 
-  if (!fs.existsSync(resolved)) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
-  }
+  try {
+    const res = await fetch(upstream, {
+      headers: { "X-Internal-Secret": SECRET },
+      next: { revalidate: 86400 },
+    });
 
-  const buffer = fs.readFileSync(resolved);
-  return new NextResponse(buffer, {
-    headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=86400" },
-  });
+    if (!res.ok) {
+      return NextResponse.json({ error: "screenshot unavailable" }, { status: res.status });
+    }
+
+    const buffer = await res.arrayBuffer();
+    return new NextResponse(buffer, {
+      headers: {
+        "Content-Type": "image/png",
+        "Cache-Control": "public, max-age=86400",
+      },
+    });
+  } catch {
+    return NextResponse.json({ error: "upstream unreachable" }, { status: 502 });
+  }
 }

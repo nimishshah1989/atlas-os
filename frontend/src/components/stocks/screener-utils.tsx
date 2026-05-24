@@ -2,7 +2,8 @@
 import type { StockRowWithSector } from '@/lib/queries/stocks'
 import type { ColumnDef } from '@/components/ui/ColumnToggle'
 
-export const RS_ORDER = ['Leader', 'Strong', 'Consolidating', 'Emerging', 'Average', 'Weak', 'Laggard']
+// rs_state taxonomy = the 5 values atlas_stock_signal_unified emits ("Consolidating"/"Emerging" retired).
+export const RS_ORDER = ['Leader', 'Strong', 'Average', 'Weak', 'Laggard']
 export const MOM_ORDER = ['Accelerating', 'Improving', 'Flat', 'Deteriorating', 'Collapsing']
 export const RISK_ORDER = ['Low', 'Normal', 'Elevated', 'High', 'Below Trend']
 export const VOL_ORDER = ['Accumulation', 'Steady-Buying', 'Neutral', 'Distribution', 'Heavy Distribution']
@@ -11,6 +12,7 @@ export type SortKey =
   | 'symbol' | 'sector' | 'rs_pctile_3m' | 'cap_rank'
   | 'ret_1m' | 'ret_3m' | 'ret_6m'
   | 'rs_state' | 'momentum_state' | 'risk_state' | 'volume_state'
+  | 'within_state_rank'
 
 export type FilterChip = 'all' | 'n50' | 'n100' | 'n500' | 'investable' | 'leader' | 'accel'
 
@@ -28,10 +30,6 @@ export const CHIPS: { key: FilterChip; label: string }[] = [
 export const OPTIONAL_COLS: ColumnDef[] = [
   { key: 'conviction',      label: 'Conviction',  defaultVisible: true },
   { key: 'quality',         label: 'Grade',       defaultVisible: true },
-  { key: 'cts_timing',      label: 'CTS Timing',  defaultVisible: true },
-  { key: 'cts_stage',       label: 'Stage',       defaultVisible: false },
-  { key: 'cts_signal',      label: 'CTS Signal',  defaultVisible: false },
-  { key: 'signal',          label: 'Signal',      defaultVisible: false },
   { key: 'ret_1d',          label: '1D',          defaultVisible: false },
   { key: 'ret_1w',          label: '1W',          defaultVisible: true },
   { key: 'ret_6m',          label: '6M',          defaultVisible: true },
@@ -55,14 +53,15 @@ export const OPTIONAL_COLS: ColumnDef[] = [
 
 export const COL_STORAGE_KEY = 'atlas-stock-screener-cols'
 
-// Always-visible columns: Symbol, Cap, Sector, Gates, RS State, Mom, Risk, Vol, 1M, 3M, RS Pctile = 11
-export const ALWAYS_VISIBLE_COL_COUNT = 11
+// Always-visible columns: Symbol, Cap, Sector, Stage, RS State, Risk, 1M, 3M, RS Pctile = 9
+// Stage column was added after initial count; bumped here to fix colSpan off-by-one.
+export const ALWAYS_VISIBLE_COL_COUNT = 9
 
 export const GATE_LEGEND = [
   { key: 'H', field: 'history_gate_pass',   label: 'History',   desc: 'Stock has ≥6M of price history in our universe' },
   { key: 'L', field: 'liquidity_gate_pass', label: 'Liquidity', desc: 'Avg daily value traded meets minimum threshold' },
   { key: 'W', field: 'weinstein_gate_pass', label: 'Weinstein', desc: 'Price is in Weinstein Stage 2 (above rising 30W MA)' },
-  { key: 'S', field: 'strength_gate',       label: 'Strength',  desc: 'RS State is Leader, Strong, or Emerging' },
+  { key: 'S', field: 'strength_gate',       label: 'Strength',  desc: 'RS State is Leader or Strong' },
   { key: 'D', field: 'direction_gate',      label: 'Direction', desc: 'Momentum is Accelerating or Improving' },
   { key: 'R', field: 'risk_gate',           label: 'Risk',      desc: 'Risk state is Low or Normal (not Elevated/High/Below Trend)' },
   { key: 'V', field: 'volume_gate',         label: 'Volume',    desc: 'Volume state is Accumulation or Steady-Buying' },
@@ -212,48 +211,6 @@ export const COL_TOOLTIPS = {
     'C (score ≤0): predominantly negative signals',
     '',
     'Hover any grade cell to see the per-signal score breakdown.',
-  ].join('\n'),
-  cts_timing: [
-    'Directional timing grade — buy or sell urgency based on Weinstein stage + CTS signal.',
-    '',
-    '+A  Act now — buy trigger: Stage 2 + Pocket Pivot + RS ≥ 60th + conviction ≥ 55',
-    '+B  Watch — buy setup forming: Stage 2, no trigger yet, conviction ≥ 40',
-    ' —  Neutral — Stage 1 basing (wait)',
-    '−B  Watch — sell setup: Stage 3 topping / distribution starting',
-    '−A  Act now — sell trigger: Stage 4 decline, or Stage 3 + Negative Pivot active',
-    '',
-    "Applies equally to all stocks — if you hold a −A stock, that's your exit signal.",
-  ].join('\n'),
-  cts_stage: [
-    'Weinstein Stage (1–4) derived from the slope of the 150-day moving average.',
-    '',
-    'Stage 1 · Basing     — sideways below flat/declining MA. No position.',
-    'Stage 2 · Advancing  — above a rising MA. Primary buy zone. PPC here = +A.',
-    'Stage 3 · Topping    — MA flattening. Distribution begins. Reduce exposure.',
-    'Stage 4 · Declining  — below declining MA. Exit. No buying at any price.',
-    '',
-    "Source: Mark Weinstein, \"Stan Weinstein's Secrets For Profiting in Bull and Bear Markets\" (1988).",
-  ].join('\n'),
-  cts_signal: [
-    'Latest volume signal for this stock today.',
-    '',
-    'PPC · Pocket Pivot Candle — up-day where volume exceeds the highest down-day volume',
-    '  in the prior 10 sessions. Signals institutional accumulation. Best when in Stage 2.',
-    '',
-    'NPC · Negative Pivot Candle — down-day where volume exceeds the highest up-day volume',
-    '  in the prior 10 sessions. Signals institutional distribution (selling pressure).',
-    '',
-    'Contraction — narrow range day, close near high, below-average volume.',
-    '  A quiet pause; often precedes a new PPC. Bullish if in Stage 2.',
-    '',
-    "Source: Morales & Kacher, \"Trade Like an O'Neil Disciple\" (2010).",
-  ].join('\n'),
-  signal: [
-    'Four dimensions read top to bottom:',
-    '  RS — relative strength percentile vs all stocks (75%+ = top quartile)',
-    '  Stage — Stage 2 means price is above a rising 30-week MA (primary uptrend)',
-    '  Mom — momentum direction: Accelerating/Improving/Flat/Deteriorating/Collapsing',
-    '  Vol — volume character: Accumulation (buying pressure) or Distribution (selling)',
   ].join('\n'),
 }
 

@@ -18,14 +18,14 @@ export default async function MethodologyPage() {
           How Atlas Thinks
         </h1>
         <p className="font-sans text-sm text-ink-secondary leading-relaxed mt-2 max-w-xl">
-          A complete guide to every state, metric, and admin tool in the portal — written for daily use, not one-time reading.
+          The v2 decision engine: layered targets, Policy rails, the 6-step flow, Weinstein stage classification, and the hybrid sector + fund classifiers — written for daily use.
         </p>
       </header>
 
       <MethodologyTabs activeSets={sets} />
 
       <footer className="mt-14 pt-6 border-t border-paper-rule font-sans text-[10px] text-ink-tertiary">
-        Last methodology revision: 2026-05-13 · Atlas-OS v2 (Phase 2)
+        Last methodology revision: 2026-05-20 · Atlas-OS v2 (Wave 4B) — v2 decision engine
       </footer>
     </main>
   )

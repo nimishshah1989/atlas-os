@@ -7,12 +7,19 @@ import { Menu, X } from 'lucide-react'
 type SubLink = { href: string; label: string }
 type Group   = { key: string; label: string; links: SubLink[] }
 
-const GROUPS: Group[] = [
+export const GROUPS: Group[] = [
+  {
+    key: 'today',
+    label: 'TODAY',
+    links: [
+      { href: '/',                            label: 'Regime' },
+      { href: '/intelligence/daily-brief',    label: 'Daily Brief' },
+    ],
+  },
   {
     key: 'research',
-    label: 'Research',
+    label: 'RESEARCH',
     links: [
-      { href: '/',        label: 'Regime' },
       { href: '/sectors', label: 'Sectors' },
       { href: '/stocks',  label: 'Stocks' },
       { href: '/etfs',    label: 'ETFs' },
@@ -22,25 +29,25 @@ const GROUPS: Group[] = [
     ],
   },
   {
-    key: 'portfolio',
-    label: 'Portfolio',
+    key: 'portfolios',
+    label: 'PORTFOLIOS',
     links: [
-      { href: '/strategies', label: 'Strategies' },
-      { href: '/portfolios', label: 'Portfolios' },
+      { href: '/portfolios',  label: 'Portfolios' },
+      { href: '/strategies',  label: 'Strategies' },
     ],
   },
   {
-    key: 'intelligence',
-    label: 'Intelligence',
+    key: 'setup',
+    label: 'SETUP',
     links: [
-      { href: '/intelligence',               label: 'Dashboard' },
-      { href: '/intelligence/daily-brief',   label: 'Daily Brief' },
-      { href: '/intelligence/agents',        label: 'Ask Atlas' },
+      { href: '/setup',                label: 'Overview' },
+      { href: '/setup/policy',         label: 'Policy' },
+      { href: '/setup/new-portfolio',  label: 'New Portfolio' },
     ],
   },
   {
     key: 'reference',
-    label: 'Reference',
+    label: 'REFERENCE',
     links: [
       { href: '/methodology', label: 'Methodology' },
       { href: '/health',      label: 'Health' },
@@ -48,23 +55,29 @@ const GROUPS: Group[] = [
   },
   {
     key: 'admin',
-    label: 'Admin',
+    label: 'ADMIN',
     links: [
-      { href: '/admin/policies',              label: 'Policies' },
+      { href: '/admin/thresholds',            label: 'Thresholds' },
       { href: '/admin/composite-proposals',   label: 'Signal Proposals' },
       { href: '/admin/validator',             label: 'Data Validator' },
       { href: '/admin/weight-performance',    label: 'Weight Monitoring' },
+      { href: '/intelligence',                label: 'Intelligence' },
+      { href: '/intelligence/agents',         label: 'Ask Atlas' },
+      { href: '/signals',                     label: 'Signals' },
     ],
   },
 ]
 
 function activeGroup(pathname: string): Group {
-  if (pathname.startsWith('/admin'))        return GROUPS[4]
-  if (pathname.startsWith('/intelligence')) return GROUPS[2]
-  if (pathname.startsWith('/strategies') || pathname.startsWith('/portfolios')) return GROUPS[1]
-  if (pathname.startsWith('/methodology') || pathname.startsWith('/health'))    return GROUPS[3]
-  if (pathname.startsWith('/us')) return GROUPS[0]
-  return GROUPS[0] // research is default
+  if (pathname.startsWith('/admin'))                        return GROUPS[5]
+  if (pathname.startsWith('/intelligence') || pathname.startsWith('/signals')) return GROUPS[5]
+  if (pathname.startsWith('/setup'))                        return GROUPS[3]
+  if (pathname.startsWith('/strategies') || pathname.startsWith('/portfolios')) return GROUPS[2]
+  if (pathname.startsWith('/methodology') || pathname.startsWith('/health'))    return GROUPS[4]
+  if (pathname.startsWith('/sectors') || pathname.startsWith('/stocks') ||
+      pathname.startsWith('/etfs') || pathname.startsWith('/funds') ||
+      pathname.startsWith('/global') || pathname.startsWith('/us'))             return GROUPS[1]
+  return GROUPS[0] // today is default
 }
 
 export function TopNav({ healthDot }: { healthDot?: React.ReactNode }) {

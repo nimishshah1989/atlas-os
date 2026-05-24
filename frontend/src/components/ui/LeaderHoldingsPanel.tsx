@@ -1,7 +1,7 @@
-import Link from 'next/link'
 import { TrendingUp } from 'lucide-react'
 import type { LeaderHoldingRow } from '@/lib/queries/leaders'
 import { RSStateChip, RSPctileBar, MomentumChip } from '@/lib/stock-formatters'
+import { LinkedTicker } from '@/components/ui/LinkedToken'
 
 function pct(v: string | null): string {
   if (v == null) return '—'
@@ -64,10 +64,8 @@ export function LeaderHoldingsPanel({ holdings, asOfDate }: Props) {
             {holdings.map(h => (
               <tr key={h.instrument_id} className="border-b border-paper-rule last:border-0 hover:bg-paper-rule/10">
                 <td className="py-1.5 pr-3">
-                  <Link href={`/stocks/${encodeURIComponent(h.symbol)}`} className="hover:opacity-80">
-                    <div className="font-sans text-xs font-semibold text-ink-primary">{h.symbol}</div>
-                    <div className="font-sans text-[10px] text-ink-tertiary truncate max-w-[140px]">{h.company_name}</div>
-                  </Link>
+                  <LinkedTicker symbol={h.symbol} className="font-semibold" />
+                  <div className="font-sans text-[10px] text-ink-tertiary truncate max-w-[140px]">{h.company_name}</div>
                 </td>
                 <td className="py-1.5 pr-3 hidden sm:table-cell">
                   <span className="font-sans text-[10px] text-ink-secondary">{h.sector ?? '—'}</span>

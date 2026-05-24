@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { IndicatorChart } from '@/components/regime/IndicatorChart'
-import type { MetricHistoryRow, StateHistoryRow } from '@/lib/queries/stocks'
+import type { MetricHistoryRow } from '@/lib/queries/stocks'
 import type { StockRowWithSector } from '@/lib/queries/stocks'
 import {
   interpretRSPctile,
@@ -9,7 +9,6 @@ import {
   interpretEMARatio,
   interpret3MReturn,
 } from '@/lib/stock-formatters'
-import { CTSDeepDiveCard } from './CTSDeepDiveCard'
 
 function Commentary({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -45,7 +44,6 @@ export function StockOverviewTab({
 }: {
   stock: StockRowWithSector
   metricHistory: MetricHistoryRow[]
-  stateHistory?: StateHistoryRow[]
 }) {
   const rsPctileData = metricHistory.map(r => ({
     date: dateStr(r.date),
@@ -75,20 +73,6 @@ export function StockOverviewTab({
           {interpretMomentumState(stock.momentum_state)}
         </Commentary>
       </div>
-
-      {/* CTS Timing Setup */}
-      <CTSDeepDiveCard
-        symbol={stock.symbol}
-        stage={stock.stage as 1 | 2 | 3 | 4 | null}
-        signal={
-          stock.is_ppc ? 'PPC'
-          : stock.is_npc ? 'NPC'
-          : stock.is_contraction ? 'Contraction'
-          : null
-        }
-        signalDate={stock.signal_date ?? null}
-        triggerLevel={stock.trigger_level != null ? parseFloat(stock.trigger_level) : null}
-      />
 
       {/* Charts + commentary — 2 column layout */}
       <div>

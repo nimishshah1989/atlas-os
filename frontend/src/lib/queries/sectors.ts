@@ -33,6 +33,11 @@ export type SectorSnapshot = {
   bottomup_risk_state: string | null
   bottomup_volume_state: string | null
   data_date: Date
+  // Phase 8: stage breadth + mean rank from atlas_sector_signal_unified
+  pct_stage_2: number | null
+  pct_stage_3: number | null
+  pct_stage_4: number | null
+  mean_within_state_rank: number | null
 }
 
 export type SectorStateRow = {
@@ -96,21 +101,34 @@ export async function getSectorsWithMomentum(): Promise<SectorSnapshot[]> {
       m.topdown_index_code,
       m.participation_50::text         AS participation_50,
       m.participation_rs::text         AS participation_rs,
-      s.participation_rs_pct::text     AS participation_rs_pct,
+      -- participation_rs_pct comes from atlas_sector_states_daily (as a 0–100 pct); normalise to 0–1 fraction.
+      CASE WHEN sd.participation_rs_pct IS NOT NULL
+           THEN (sd.participation_rs_pct / 100.0)::text
+           ELSE NULL
+      END                              AS participation_rs_pct,
       m.leadership_concentration::text AS leadership_concentration,
       s.sector_state,
-      s.bottomup_state,
-      s.topdown_state,
-      s.divergence_flag,
-      s.bottomup_rs_state,
-      s.bottomup_momentum_state,
-      NULL::text               AS bottomup_risk_state,
-      NULL::text               AS bottomup_volume_state,
-      m.date                           AS data_date
+      -- Signal-component states from atlas_sector_states_daily (re-wired from Phase 7 NULL stubs).
+      sd.bottomup_state,
+      sd.topdown_state,
+      COALESCE(sd.divergence_flag, FALSE) AS divergence_flag,
+      sd.bottomup_rs_state,
+      sd.bottomup_momentum_state,
+      -- bottomup_risk_state and bottomup_volume_state not yet computed at sector level.
+      NULL::text                       AS bottomup_risk_state,
+      NULL::text                       AS bottomup_volume_state,
+      m.date                           AS data_date,
+      s.pct_stage_2,
+      s.pct_stage_3,
+      s.pct_stage_4,
+      s.mean_within_state_rank::float8 AS mean_within_state_rank
     FROM atlas.atlas_sector_metrics_daily m
-    JOIN atlas.atlas_sector_states_daily s
-      ON m.sector_name = s.sector_name
+    JOIN atlas.atlas_sector_signal_unified s
+      ON m.sector_name = s.sector
      AND m.date        = s.date
+    LEFT JOIN atlas.atlas_sector_states_daily sd
+      ON sd.sector_name = m.sector_name
+     AND sd.date        = m.date
     LEFT JOIN momentum mom ON m.sector_name = mom.sector_name
     WHERE m.date = (SELECT MAX(date) FROM atlas.atlas_sector_metrics_daily)
     ORDER BY
@@ -129,11 +147,12 @@ export async function getSectorStateHistory(days: number): Promise<SectorStateRo
   if (!Number.isInteger(days) || days < 1 || days > 3650) {
     throw new Error(`days must be an integer between 1 and 3650, got: ${days}`)
   }
+  // Phase 7: rewired to atlas_sector_signal_unified.
   return sql<SectorStateRow[]>`
-    SELECT date, sector_name, sector_state
-    FROM atlas.atlas_sector_states_daily
+    SELECT date, sector AS sector_name, sector_state
+    FROM atlas.atlas_sector_signal_unified
     WHERE date >= CURRENT_DATE - (${days} || ' days')::interval
-    ORDER BY date ASC, sector_name ASC
+    ORDER BY date ASC, sector ASC
   `
 }
 
@@ -153,15 +172,16 @@ export async function getSectorMetricHistory(
       m.topdown_ret_3m::text           AS topdown_ret_3m,
       m.participation_50::text         AS participation_50,
       m.participation_rs::text         AS participation_rs,
-      s.participation_rs_pct::text     AS participation_rs_pct,
+      -- Phase 7: participation_rs_pct not in unified view; removed in Phase 8.
+      NULL::text                       AS participation_rs_pct,
       m.leadership_concentration::text AS leadership_concentration,
       m.bottomup_ret_3m::text          AS bottomup_ret_3m,
       m.bottomup_ema_10_ratio::text    AS bottomup_ema_10_ratio,
       m.bottomup_ema_20_ratio::text    AS bottomup_ema_20_ratio,
       s.sector_state
     FROM atlas.atlas_sector_metrics_daily m
-    JOIN atlas.atlas_sector_states_daily s
-      ON m.sector_name = s.sector_name
+    JOIN atlas.atlas_sector_signal_unified s
+      ON m.sector_name = s.sector
      AND m.date        = s.date
     WHERE m.sector_name = ${sectorName}
       AND m.date >= CURRENT_DATE - (${days} || ' days')::interval
@@ -169,23 +189,6 @@ export async function getSectorMetricHistory(
   `
 }
 
-export type SectorPivotRow = {
-  sector: string
-  ppc_count: number
-  npc_count: number
-  total_tradeable: number
-  pivot_balance: string | null
-}
-
-export async function getSectorCTSPivot(): Promise<SectorPivotRow[]> {
-  return sql<SectorPivotRow[]>`
-    SELECT sector, ppc_count, npc_count, total_tradeable,
-           pivot_balance::text AS pivot_balance
-    FROM atlas.atlas_cts_sector_pivot_daily
-    WHERE date = (SELECT MAX(date) FROM atlas.atlas_cts_sector_pivot_daily)
-    ORDER BY pivot_balance DESC NULLS LAST
-  `
-}
 
 export type RRGHistoryRow = {
   sector_name: string
@@ -244,7 +247,8 @@ export async function getBreadthWaterfallData(
     throw new Error(`days must be an integer between 1 and 3650, got: ${days}`)
   }
   if (sectorName === null) {
-    // Market-wide: one row per date aggregating ALL stocks across all sectors
+    // Market-wide: one row per date aggregating ALL stocks across all sectors.
+    // Phase 7: rewired to atlas_stock_signal_unified.
     return sql<BreadthWaterfallRow[]>`
       SELECT
         date::text                                                                          AS date,
@@ -256,35 +260,39 @@ export async function getBreadthWaterfallData(
         COUNT(*) FILTER (WHERE rs_state = 'Weak')::float / NULLIF(COUNT(*), 0)             AS weak_pct,
         COUNT(*) FILTER (WHERE rs_state = 'Laggard')::float / NULLIF(COUNT(*), 0)          AS laggard_pct,
         ''::text                                                                            AS sector_state
-      FROM atlas.atlas_stock_states_daily
+      FROM atlas.atlas_stock_signal_unified
       WHERE date >= CURRENT_DATE - (${days} || ' days')::interval
       GROUP BY date
       ORDER BY date ASC
     `
   }
-  // Per-sector: join to sector states table to include sector_state coloring
+  // Per-sector: join to sector signal unified to include sector_state coloring.
+  // Phase 7: rewired to atlas_stock_signal_unified + atlas_sector_signal_unified.
   return sql<BreadthWaterfallRow[]>`
     SELECT
-      sst.date::text AS date,
-      sst.sector,
-      COUNT(*) FILTER (WHERE sst.rs_state = 'Leader')::float
+      ssu.date::text AS date,
+      u.sector,
+      COUNT(*) FILTER (WHERE ssu.rs_state = 'Leader')::float
         / NULLIF(COUNT(*), 0)                                                               AS leader_pct,
-      COUNT(*) FILTER (WHERE sst.rs_state = 'Strong')::float
+      COUNT(*) FILTER (WHERE ssu.rs_state = 'Strong')::float
         / NULLIF(COUNT(*), 0)                                                               AS strong_pct,
-      COUNT(*) FILTER (WHERE sst.rs_state IN ('Emerging', 'Consolidating', 'Average', 'ILLIQUID', 'INSUFFICIENT_HISTORY'))::float
+      COUNT(*) FILTER (WHERE ssu.rs_state IN ('Emerging', 'Consolidating', 'Average', 'ILLIQUID', 'INSUFFICIENT_HISTORY'))::float
         / NULLIF(COUNT(*), 0)                                                               AS neutral_pct,
-      COUNT(*) FILTER (WHERE sst.rs_state = 'Weak')::float
+      COUNT(*) FILTER (WHERE ssu.rs_state = 'Weak')::float
         / NULLIF(COUNT(*), 0)                                                               AS weak_pct,
-      COUNT(*) FILTER (WHERE sst.rs_state = 'Laggard')::float
+      COUNT(*) FILTER (WHERE ssu.rs_state = 'Laggard')::float
         / NULLIF(COUNT(*), 0)                                                               AS laggard_pct,
-      sec.sector_state
-    FROM atlas.atlas_stock_states_daily sst
-    JOIN atlas.atlas_sector_states_daily sec
-      ON sst.sector = sec.sector_name AND sst.date = sec.date
-    WHERE sst.date >= CURRENT_DATE - (${days} || ' days')::interval
-      AND sst.sector = ${sectorName}
-    GROUP BY sst.date, sst.sector, sec.sector_state
-    ORDER BY sst.date ASC
+      COALESCE(sec.sector_state, '')::text AS sector_state
+    FROM atlas.atlas_stock_signal_unified ssu
+    JOIN atlas.atlas_universe_stocks u
+      ON u.instrument_id = ssu.instrument_id
+      AND u.effective_to IS NULL
+    LEFT JOIN atlas.atlas_sector_signal_unified sec
+      ON u.sector = sec.sector AND ssu.date = sec.date
+    WHERE ssu.date >= CURRENT_DATE - (${days} || ' days')::interval
+      AND u.sector = ${sectorName}
+    GROUP BY ssu.date, u.sector, sec.sector_state
+    ORDER BY ssu.date ASC
   `
 }
 
@@ -294,30 +302,31 @@ export type DaysInStateRow = {
 }
 
 export async function getDaysInStateForAllSectors(): Promise<DaysInStateRow[]> {
+  // Phase 7: rewired to atlas_sector_signal_unified.
   return sql<DaysInStateRow[]>`
     WITH latest_states AS (
-      SELECT sector_name, sector_state
-      FROM atlas.atlas_sector_states_daily
-      WHERE date = (SELECT MAX(date) FROM atlas.atlas_sector_states_daily)
+      SELECT sector, sector_state
+      FROM atlas.atlas_sector_signal_unified
+      WHERE date = (SELECT MAX(date) FROM atlas.atlas_sector_signal_unified)
     ),
     streak_starts AS (
       SELECT
-        ls.sector_name,
+        ls.sector,
         COALESCE(MAX(h.date), '2000-01-01'::date) AS change_date
       FROM latest_states ls
-      LEFT JOIN atlas.atlas_sector_states_daily h
-        ON h.sector_name = ls.sector_name
+      LEFT JOIN atlas.atlas_sector_signal_unified h
+        ON h.sector = ls.sector
        AND h.sector_state != ls.sector_state
-      GROUP BY ls.sector_name
+      GROUP BY ls.sector
     )
     SELECT
-      ss.sector_name,
+      ss.sector AS sector_name,
       COUNT(*)::int AS days_in_state
     FROM streak_starts ss
-    JOIN atlas.atlas_sector_states_daily d
-      ON d.sector_name = ss.sector_name
+    JOIN atlas.atlas_sector_signal_unified d
+      ON d.sector = ss.sector
      AND d.date > ss.change_date
-    GROUP BY ss.sector_name
+    GROUP BY ss.sector
   `
 }
 

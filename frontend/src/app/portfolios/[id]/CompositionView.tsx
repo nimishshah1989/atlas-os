@@ -3,10 +3,14 @@
 // Composition view for portfolio detail — Static (instrument table)
 // or Rule-Based (human-readable narrative from config JSONB).
 
+import { LinkedTicker } from '@/components/ui/LinkedToken'
+
 type StaticInstrument = {
   instrument_id: string
   instrument_type: 'stock' | 'etf' | 'fund'
   weight_pct: number
+  // symbol resolved via LATERAL join against atlas_universe_stocks. Null for non-universe instruments.
+  symbol: string | null
 }
 
 export function StaticComposition({ instruments }: { instruments: StaticInstrument[] }) {
@@ -18,7 +22,7 @@ export function StaticComposition({ instruments }: { instruments: StaticInstrume
       <table className="w-full text-left border-collapse">
         <thead>
           <tr className="border-b border-paper-rule">
-            {['ID / Ticker', 'Type', 'Weight %'].map((col) => (
+            {['Ticker', 'Type', 'Weight %'].map((col) => (
               <th key={col} className="font-sans text-xs text-ink-tertiary uppercase tracking-wide pb-2 pr-4 font-medium">
                 {col}
               </th>
@@ -28,7 +32,11 @@ export function StaticComposition({ instruments }: { instruments: StaticInstrume
         <tbody>
           {instruments.map((inst) => (
             <tr key={inst.instrument_id} className="border-b border-paper-rule/50">
-              <td className="py-2 pr-4 font-mono text-xs text-ink-primary">{inst.instrument_id}</td>
+              <td className="py-2 pr-4 font-mono text-xs text-ink-primary">
+                {inst.instrument_type === 'stock'
+                  ? <LinkedTicker symbol={inst.symbol} />
+                  : <span>{inst.symbol ?? inst.instrument_id}</span>}
+              </td>
               <td className="py-2 pr-4 font-sans text-xs text-ink-secondary capitalize">
                 {inst.instrument_type}
               </td>

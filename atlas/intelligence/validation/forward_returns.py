@@ -23,16 +23,21 @@ from sqlalchemy.engine import Engine
 
 log = structlog.get_logger()
 
-# Fetch adjusted close from the OHLCV view. Only validated rows to avoid
-# bad data from restatements or pipeline failures.
+# Fetch adjusted close from the OHLCV view.
+# Accepts ``data_status IN ('raw','validated')`` because JIP's validation step
+# sometimes lags or fails — without this, 100% of rows are excluded.
+# Falls back to ``close`` when ``close_adj`` is NULL (JIP adjustment-factors
+# pipeline is currently not populating close_adj). Identical pattern to
+# ``atlas.intelligence.conviction.tier_assignment``.
 _PRICE_SQL = """
-    SELECT date, instrument_id::text, close_adj
+    SELECT date,
+           instrument_id::text,
+           COALESCE(close_adj, close) AS close_adj
     FROM public.de_equity_ohlcv
     WHERE date >= :start_date
       AND date <= :end_date
-      AND data_status = 'validated'
-      AND close_adj IS NOT NULL
-      AND close_adj > 0
+      AND data_status IN ('raw', 'validated')
+      AND COALESCE(close_adj, close) > 0
     ORDER BY date
 """
 

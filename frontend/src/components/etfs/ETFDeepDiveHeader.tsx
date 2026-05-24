@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import type { ETFRow } from '@/lib/queries/etfs'
 import { StateTuple3 } from '@/lib/stock-formatters'
+import { LinkedSector } from '@/components/ui/LinkedToken'
 
 const THEME_STYLE: Record<string, string> = {
   Broad:     'bg-teal/10 text-teal',
@@ -47,7 +48,7 @@ export function ETFDeepDiveHeader({ etf }: { etf: ETFRow }) {
             {etf.linked_sector && (
               <span className="font-sans text-xs text-ink-tertiary">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary/70 mr-0.5">Sector:</span>
-                {etf.linked_sector}
+                <LinkedSector sector={etf.linked_sector} />
               </span>
             )}
             {etf.linked_index && (

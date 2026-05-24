@@ -42,12 +42,12 @@ def assign_tier_from_rank(rank: int) -> str:
 
 _ADV_SQL = text("""
     SELECT instrument_id::text AS instrument_id,
-           AVG(volume * close_adj) AS adv_20d
+           AVG(volume * COALESCE(close_adj, close)) AS adv_20d
     FROM public.de_equity_ohlcv
     WHERE date BETWEEN :window_start AND :window_end
-      AND data_status = 'validated'
+      AND data_status IN ('raw','validated')
       AND volume > 0
-      AND close_adj > 0
+      AND COALESCE(close_adj, close) > 0
     GROUP BY instrument_id
     HAVING COUNT(*) >= 15
 """)

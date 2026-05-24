@@ -1,7 +1,6 @@
 // allow-large: FundScreener — 16 column data table with sort, col-toggle, lens bars, vol, and gates
 'use client'
 import { useState, useMemo } from 'react'
-import Link from 'next/link'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import type { FundRow } from '@/lib/queries/funds'
 import type { Period } from '@/lib/url-params'
@@ -12,11 +11,13 @@ import {
   CompositionStateChip,
   HoldingsStateChip,
   RecommendationChip,
-  formatWeeksInState,
 } from '@/lib/fund-formatters'
 import { LensBar } from '@/components/ui/LensBar'
 import { ColumnToggle, useColumnVisibility, type ColumnDef } from '@/components/ui/ColumnToggle'
 import { buildSortKey } from '@/lib/screener-utils'
+import { WithinStateRankCell } from '@/components/stocks/WithinStateRankCell'
+import { ProvenanceMarker } from '@/components/ui/ProvenanceMarker'
+import { LinkedFund } from '@/components/ui/LinkedToken'
 
 type Props = {
   funds: FundRow[]
@@ -36,13 +37,13 @@ const ALL_COLS: ColumnDef[] = [
   { key: 'rs_pctile',       label: 'RS Pctile',       defaultVisible: true },
   { key: 'rs_category',     label: 'RS Category',     defaultVisible: true },
   { key: 'vol',             label: 'Vol (63D)',        defaultVisible: false },
-  { key: 'gates',           label: 'Gates',           defaultVisible: true },
+  // Phase 8: 'gates' column removed — 4-gate dot row (P/S/H/M) dropped
   { key: 'comp_bar',        label: 'Comp Bar',        defaultVisible: true },
   { key: 'holdings_bar',    label: 'Holdings Bar',    defaultVisible: true },
-  { key: 'weeks_in_state',  label: 'In State',         defaultVisible: true },
   { key: 'drawdown',        label: '1Y Ret',          defaultVisible: true },
   { key: 'max_drawdown',    label: 'Max DD (1Y)',      defaultVisible: false },
   { key: 'aum',             label: 'AUM (Cr)',         defaultVisible: false },
+  { key: 'within_state_rank', label: 'Within Rank',   defaultVisible: false },
 ]
 
 const COL_STORAGE_KEY = 'atlas-column-prefs-funds'
@@ -55,26 +56,7 @@ type SortCol =
   | 'scheme_name' | 'amc' | 'category'
   | 'nav_state' | 'composition' | 'holdings' | 'recommendation'
   | 'ret' | 'rs_pctile' | 'rs_category'
-  | 'vol' | 'weeks_in_state' | 'drawdown' | 'max_drawdown' | 'aum'
-
-// 4 coloured dots: Perf · Sectors · Stocks · Market
-function GateDots({ f }: { f: FundRow }) {
-  const gates = [f.performance_gate, f.sectors_gate, f.stocks_gate, f.market_gate]
-  const labels = ['Perf', 'Sectors', 'Stocks', 'Market']
-  return (
-    <span className="flex gap-0.5">
-      {gates.map((g, i) => (
-        <span
-          key={labels[i]}
-          title={`${labels[i]}: ${g === true ? 'Pass' : g === false ? 'Fail' : 'N/A'}`}
-          className={`text-[10px] ${g === true ? 'text-signal-pos' : g === false ? 'text-signal-neg' : 'text-ink-tertiary/40'}`}
-        >
-          ●
-        </span>
-      ))}
-    </span>
-  )
-}
+  | 'vol' | 'drawdown' | 'max_drawdown' | 'aum'
 
 function getSortValue(col: SortCol, f: FundRow, period: Period): number | string {
   // Re-shape the row so buildSortKey() can read the canonical column key it expects.
@@ -90,7 +72,6 @@ function getSortValue(col: SortCol, f: FundRow, period: Period): number | string
     case 'rs_pctile':      return buildSortKey('rs_pctile',      { rs_pctile: f[PCTILE_KEY[period]] as string | null })
     case 'rs_category':    return buildSortKey('rs_category',    { rs_category: (f[RSCAT_KEY[period]] as string | null) ?? '' })
     case 'vol':            return buildSortKey('ret',            { ret: f.realized_vol_63 })
-    case 'weeks_in_state': return buildSortKey('weeks_in_state', { weeks_in_state: f.weeks_in_current_state })
     case 'drawdown':       return buildSortKey('drawdown',       { drawdown: f.ret_12m })
     case 'max_drawdown':   return buildSortKey('drawdown',       { drawdown: f.drawdown_ratio_252 })
     case 'aum':            return buildSortKey('ret',            { ret: f.aum_cr })
@@ -197,13 +178,12 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
               {visibleCols.has('rs_pctile')      && <Th label="RS Pctile"      k="rs_pctile"   align="right" />}
               {visibleCols.has('rs_category')    && <Th label="RS Cat"         k="rs_category" align="right" />}
               {visibleCols.has('vol')            && <Th label="Vol 63D"        k="vol"          align="right" />}
-              {visibleCols.has('gates')          && <PlainTh label="Gates" />}
               {visibleCols.has('comp_bar')       && <PlainTh label="Comp Bar" />}
               {visibleCols.has('holdings_bar')   && <PlainTh label="Holdings Bar" />}
-              {visibleCols.has('weeks_in_state') && <Th label="In State" k="weeks_in_state" align="right" title="How long this fund has been in its current NAV state (d=days, w=weeks, mo=months)" />}
               {visibleCols.has('drawdown')       && <Th label="1Y Ret"         k="drawdown"       align="right" />}
               {visibleCols.has('max_drawdown')   && <Th label="Max DD (1Y)"    k="max_drawdown"   align="right" title="Maximum drawdown over 252 trading days (1 year)" />}
               {visibleCols.has('aum')            && <Th label="AUM (Cr)"       k="aum"            align="right" title="Monthly average AUM in ₹ crore (AMFI data)" />}
+              {visibleCols.has('within_state_rank') && <PlainTh label="Within Rank" align="right" />}
             </tr>
           </thead>
           <tbody>
@@ -234,9 +214,10 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
                     className={`border-b border-paper-rule hover:bg-paper-rule/20 transition-colors ${i % 2 === 0 ? '' : 'bg-paper-rule/5'}`}
                   >
                     <td className="px-3 py-2.5 whitespace-nowrap">
-                      <Link href={`/funds/${f.mstar_id}`} className="hover:opacity-80">
-                        <div className="font-sans text-xs font-semibold text-ink-primary truncate max-w-[220px]">{f.scheme_name}</div>
-                      </Link>
+                      <div className="font-sans text-xs font-semibold truncate max-w-[220px] inline-flex items-center gap-0.5">
+                        <LinkedFund mstarId={f.mstar_id} name={f.scheme_name} />
+                        <ProvenanceMarker dataSource={f.data_source} id={f.mstar_id} />
+                      </div>
                     </td>
                     {visibleCols.has('amc') && (
                       <td className="px-3 py-2.5 font-sans text-xs text-ink-secondary whitespace-nowrap">{f.amc}</td>
@@ -294,11 +275,6 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
                           : '—'}
                       </td>
                     )}
-                    {visibleCols.has('gates') && (
-                      <td className="px-3 py-2.5">
-                        <GateDots f={f} />
-                      </td>
-                    )}
                     {visibleCols.has('comp_bar') && (
                       <td className="px-3 py-2.5 w-24">
                         <LensBar segments={compSegments} label="Composition" nullish={compNullish} />
@@ -308,9 +284,6 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
                       <td className="px-3 py-2.5 w-24">
                         <LensBar segments={holdSegments} label="Holdings" nullish={holdNullish} />
                       </td>
-                    )}
-                    {visibleCols.has('weeks_in_state') && (
-                      <td className="px-3 py-2.5 text-right font-mono text-xs text-ink-secondary">{formatWeeksInState(f.weeks_in_current_state)}</td>
                     )}
                     {visibleCols.has('drawdown') && (
                       <td className={`px-3 py-2.5 text-right font-mono text-xs tabular-nums ${pctColor(f.ret_12m)}`}>
@@ -327,6 +300,11 @@ export function FundScreener({ funds, period, activeFilter, onFilterChange: _onF
                         {f.aum_cr != null
                           ? `₹${Number(f.aum_cr).toLocaleString('en-IN', { maximumFractionDigits: 0 })}Cr`
                           : '—'}
+                      </td>
+                    )}
+                    {visibleCols.has('within_state_rank') && (
+                      <td className="px-3 py-2.5 text-right" data-testid={`fund-wsr-${f.mstar_id}`}>
+                        <WithinStateRankCell value={f.mean_within_state_rank ?? null} />
                       </td>
                     )}
                   </tr>

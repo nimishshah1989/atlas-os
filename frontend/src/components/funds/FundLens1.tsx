@@ -5,6 +5,7 @@ import {
   ReferenceLine, ResponsiveContainer,
 } from 'recharts'
 import type { FundMetricHistoryRow } from '@/lib/queries/funds'
+import { ordinal } from '@/lib/ordinal'
 
 type PeriodKey = '1M' | '3M' | '6M'
 type ViewMode = 'rs' | 'returns'
@@ -100,7 +101,7 @@ export function FundLens1({
           <p className="font-sans text-xs text-ink-tertiary">Insufficient history</p>
         </div>
       ) : view === 'rs' ? (
-        <div style={{ height: 160 }}>
+        <div style={{ height: 160, minHeight: 160 }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={rsChartData} margin={{ top: 4, right: 8, bottom: 16, left: 24 }}>
               <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#94a3b8' }} interval="preserveStartEnd" />
@@ -110,7 +111,7 @@ export function FundLens1({
                 contentStyle={{ fontSize: 11, fontFamily: 'var(--font-sans)' }}
                 formatter={(v) => {
                   const n = typeof v === 'number' ? v : Number(v)
-                  return [`${Number.isFinite(n) ? n.toFixed(0) : '—'}th`, 'RS Pctile']
+                  return [Number.isFinite(n) ? ordinal(Math.round(n)) : '—', 'RS Pctile']
                 }}
               />
               <Line type="monotone" dataKey="pctile" stroke="#1D9E75" strokeWidth={1.5} dot={false} />
@@ -118,7 +119,7 @@ export function FundLens1({
           </ResponsiveContainer>
         </div>
       ) : (
-        <div style={{ height: 160 }}>
+        <div style={{ height: 160, minHeight: 160 }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={retChartData} margin={{ top: 4, right: 8, bottom: 16, left: 32 }}>
               <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#94a3b8' }} interval="preserveStartEnd" />

@@ -1,7 +1,9 @@
 // frontend/src/lib/queries/conviction.ts
-// SP04 Stage 3 — read-only queries against the conviction tables.
-// NUMERIC columns are returned as strings to preserve Decimal precision
-// across the JS boundary; format at display time only.
+// Phase 7: atlas_stock_conviction_daily is deprecated.
+// conviction_score → within_state_rank from atlas_stock_signal_unified.
+// tier → derived from rs_rank_12m using the same CASE expression as the view.
+// confidence_label → hardcoded to 'descriptive_only' (no IC table equivalent).
+// ConvictionBreakdown (contributing_signals JSON) has no equivalent in the view; stub returns null.
 import 'server-only'
 import sql from '@/lib/db'
 
@@ -34,74 +36,103 @@ export type ConvictionMapRow = {
   backing_ic: string | null
 }
 
+// Phase 7: rewired from atlas_stock_conviction_daily → atlas_stock_signal_unified.
+// conviction_score returns within_state_rank (float8, 0-1 range).
+// tier derived from rs_rank_12m thresholds (Leader/Strong/Average/Weak/Laggard).
 export async function getStockConviction(
   instrumentId: string,
 ): Promise<ConvictionRow | null> {
   const rows = await sql<ConvictionRow[]>`
     SELECT
-      c.instrument_id::text  AS instrument_id,
+      su.instrument_id::text  AS instrument_id,
       u.symbol,
       u.sector,
-      c.tier,
-      c.conviction_score::text  AS conviction_score,
-      c.confidence_label,
-      c.backing_ic::text        AS backing_ic,
-      c.computed_at
-    FROM atlas.atlas_stock_conviction_daily c
+      CASE
+        WHEN su.rs_rank_12m >= 0.90 THEN 'Leader'
+        WHEN su.rs_rank_12m >= 0.70 THEN 'Strong'
+        WHEN su.rs_rank_12m >= 0.30 THEN 'Average'
+        WHEN su.rs_rank_12m >= 0.10 THEN 'Weak'
+        ELSE 'Laggard'
+      END                           AS tier,
+      su.within_state_rank::text    AS conviction_score,
+      'descriptive_only'::text      AS confidence_label,
+      NULL::text                    AS backing_ic,
+      su.date::timestamp            AS computed_at
+    FROM atlas.atlas_stock_signal_unified su
     LEFT JOIN atlas.atlas_universe_stocks u
-           ON u.instrument_id = c.instrument_id
-    WHERE c.instrument_id = ${instrumentId}::uuid
-      AND c.date = (SELECT MAX(date) FROM atlas.atlas_stock_conviction_daily)
+           ON u.instrument_id = su.instrument_id
+    WHERE su.instrument_id = ${instrumentId}::uuid
+      AND su.date = (SELECT MAX(date) FROM atlas.atlas_stock_signal_unified)
   `
   return rows[0] ?? null
 }
 
+// Phase 7: ConvictionBreakdown has no equivalent in atlas_stock_signal_unified.
+// Returns null — callers already guard against null (Phase 6 cleanup).
 export async function getConvictionBreakdown(
-  instrumentId: string,
+  _instrumentId: string,
 ): Promise<Record<string, ConvictionBreakdown> | null> {
-  const rows = await sql<{ contributing_signals: Record<string, ConvictionBreakdown> }[]>`
-    SELECT contributing_signals
-    FROM atlas.atlas_stock_conviction_daily
-    WHERE instrument_id = ${instrumentId}::uuid
-      AND date = (SELECT MAX(date) FROM atlas.atlas_stock_conviction_daily)
-  `
-  return rows[0]?.contributing_signals ?? null
+  return null
 }
 
+// Phase 7: getConvictionMap rewired from mv_top_conviction_daily → atlas_stock_signal_unified.
+// Returns the current snapshot keyed by instrument_id.
 export async function getConvictionMap(): Promise<Record<string, ConvictionMapRow>> {
   const rows = await sql<ConvictionMapRow[]>`
     SELECT
       instrument_id::text       AS instrument_id,
-      conviction_score::text    AS conviction_score,
-      confidence_label,
-      tier,
-      backing_ic::text          AS backing_ic
-    FROM atlas.mv_top_conviction_daily
+      within_state_rank::text   AS conviction_score,
+      'descriptive_only'::text  AS confidence_label,
+      CASE
+        WHEN rs_rank_12m >= 0.90 THEN 'Leader'
+        WHEN rs_rank_12m >= 0.70 THEN 'Strong'
+        WHEN rs_rank_12m >= 0.30 THEN 'Average'
+        WHEN rs_rank_12m >= 0.10 THEN 'Weak'
+        ELSE 'Laggard'
+      END                       AS tier,
+      NULL::text                AS backing_ic
+    FROM atlas.atlas_stock_signal_unified
+    WHERE date = (SELECT MAX(date) FROM atlas.atlas_stock_signal_unified)
   `
   const map: Record<string, ConvictionMapRow> = {}
   for (const r of rows) map[r.instrument_id] = r
   return map
 }
 
+// Phase 7: getTopConvictionByTier rewired from mv_top_conviction_daily → atlas_stock_signal_unified.
+// tier maps to the rs_rank_12m CASE expression.
 export async function getTopConvictionByTier(
   tier: string,
   n: number = 10,
 ): Promise<ConvictionRow[]> {
   return await sql<ConvictionRow[]>`
     SELECT
-      c.instrument_id::text  AS instrument_id,
+      su.instrument_id::text  AS instrument_id,
       u.symbol,
       u.sector,
-      c.tier,
-      c.conviction_score::text AS conviction_score,
-      c.confidence_label,
-      c.backing_ic::text     AS backing_ic,
-      NOW() AS computed_at
-    FROM atlas.mv_top_conviction_daily c
+      CASE
+        WHEN su.rs_rank_12m >= 0.90 THEN 'Leader'
+        WHEN su.rs_rank_12m >= 0.70 THEN 'Strong'
+        WHEN su.rs_rank_12m >= 0.30 THEN 'Average'
+        WHEN su.rs_rank_12m >= 0.10 THEN 'Weak'
+        ELSE 'Laggard'
+      END                           AS tier,
+      su.within_state_rank::text    AS conviction_score,
+      'descriptive_only'::text      AS confidence_label,
+      NULL::text                    AS backing_ic,
+      su.date::timestamp            AS computed_at
+    FROM atlas.atlas_stock_signal_unified su
     LEFT JOIN atlas.atlas_universe_stocks u
-           ON u.instrument_id = c.instrument_id
-    WHERE c.tier = ${tier}
-    ORDER BY c.conviction_score DESC
+           ON u.instrument_id = su.instrument_id
+    WHERE su.date = (SELECT MAX(date) FROM atlas.atlas_stock_signal_unified)
+      AND CASE
+            WHEN su.rs_rank_12m >= 0.90 THEN 'Leader'
+            WHEN su.rs_rank_12m >= 0.70 THEN 'Strong'
+            WHEN su.rs_rank_12m >= 0.30 THEN 'Average'
+            WHEN su.rs_rank_12m >= 0.10 THEN 'Weak'
+            ELSE 'Laggard'
+          END = ${tier}
+    ORDER BY su.within_state_rank DESC NULLS LAST
     LIMIT ${n}
   `
 }

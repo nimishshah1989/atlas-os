@@ -69,6 +69,7 @@ export async function getStocksForPicker(
   const search = filters.search ? `%${filters.search}%` : null
 
   return sql<StockPickerRow[]>`
+    -- Phase 7: rs_state from atlas_stock_signal_unified instead of atlas_stock_states_daily.
     SELECT
       s.instrument_id,
       s.symbol,
@@ -80,7 +81,7 @@ export async function getStocksForPicker(
     FROM atlas.atlas_universe_stocks s
     LEFT JOIN LATERAL (
       SELECT rs_state
-      FROM atlas.atlas_stock_states_daily
+      FROM atlas.atlas_stock_signal_unified
       WHERE instrument_id = s.instrument_id
       ORDER BY date DESC
       LIMIT 1

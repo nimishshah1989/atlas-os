@@ -8,38 +8,48 @@ import {
   getRuleBasedPortfolioById,
   getBacktestsForPortfolio,
 } from '@/lib/queries/portfolios'
+import { getEffectivePolicy } from '@/lib/queries/policy'
+import { getPendingProposedChanges } from '@/lib/queries/proposed-changes'
+import { CurrentVsTarget } from '@/components/portfolio/CurrentVsTarget'
+import { DeteriorationPanel } from '@/components/portfolio/DeteriorationPanel'
+import { findDeterioration } from '@/lib/policy-deterioration'
+import type { CompliancePolicy } from '@/lib/policy-compliance'
 import { KPICard } from '@/components/strategy/KPICard'
 import { ReRunBacktestButton } from '@/components/strategy/ReRunBacktestButton'
 import { EquityCurveChart } from '@/components/charts/EquityCurveChart'
 import { DrawdownChart } from '@/components/charts/DrawdownChart'
 import { PaperTradingToggle } from './PaperTradingToggle'
 import { StaticComposition, RuleBasedComposition } from './CompositionView'
+import { PolicyPanel } from '@/components/portfolio/PolicyPanel'
 
 function fmtPct(raw: string | null): string {
   if (raw == null) return '—'
   const n = parseFloat(raw)
   return isNaN(n) ? '—' : `${n >= 0 ? '+' : ''}${(n * 100).toFixed(2)}%`
 }
-
+function fmtDrawdown(raw: string | null): string {
+  const n = raw != null ? parseFloat(raw) : NaN
+  return isNaN(n) || n === 0 ? '—' : `${n >= 0 ? '+' : ''}${(n * 100).toFixed(2)}%`
+}
 function fmtSharpe(raw: string | null): string {
   if (raw == null) return '—'
   const n = parseFloat(raw)
   return isNaN(n) ? '—' : n.toFixed(2)
 }
-
 function fmtDate(d: Date): string {
   const date = d instanceof Date ? d : new Date(String(d))
   return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 }
-
 type Props = { params: Promise<{ id: string }> }
 
 export default async function PortfolioDetailPage({ params }: Props) {
   const { id } = await params
 
-  const [staticPortfolio, ruleBasedPortfolio] = await Promise.all([
+  const [staticPortfolio, ruleBasedPortfolio, effectivePolicy, pendingChanges] = await Promise.all([
     getStaticPortfolioById(id),
     getRuleBasedPortfolioById(id),
+    getEffectivePolicy(id),
+    getPendingProposedChanges(id),
   ])
 
   const isStatic = staticPortfolio != null
@@ -58,7 +68,7 @@ export default async function PortfolioDetailPage({ params }: Props) {
   return (
     <main className="min-h-screen bg-paper px-8 py-6 max-w-5xl mx-auto">
       <nav className="flex gap-4 text-xs font-sans text-ink-tertiary mb-6 border-b border-paper-rule pb-3">
-        {['kpis', 'composition', 'equity', 'drawdown', 'backtests'].map((anchor) => (
+        {['kpis', 'composition', 'equity', 'drawdown', 'backtests', 'policy', 'deterioration'].map((anchor) => (
           <a key={anchor} href={`#${anchor}`} className="hover:text-ink-primary transition-colors capitalize">
             {anchor === 'kpis' ? 'KPIs' : anchor.charAt(0).toUpperCase() + anchor.slice(1)}
           </a>
@@ -95,7 +105,7 @@ export default async function PortfolioDetailPage({ params }: Props) {
         <h2 className="font-sans text-xs font-semibold uppercase tracking-wide text-ink-secondary mb-3">Performance Metrics</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <KPICard label="Sharpe Ratio" value={fmtSharpe(portfolio.latest_sharpe)} />
-          <KPICard label="Max Drawdown" value={fmtPct(portfolio.latest_max_drawdown)} />
+          <KPICard label="Max Drawdown" value={fmtDrawdown(portfolio.latest_max_drawdown)} />
           <KPICard
             label="Alpha vs Nifty500"
             value={fmtPct(portfolio.latest_alpha_vs_nifty500)}
@@ -158,8 +168,82 @@ export default async function PortfolioDetailPage({ params }: Props) {
         <h2 className="font-sans text-xs font-semibold uppercase tracking-wide text-ink-secondary mb-3">Paper Trading</h2>
         {isStatic
           ? <PaperTradingToggle portfolioId={id} currentActive={paperActive} />
-          : <p className="font-sans text-sm text-ink-tertiary">Paper trading for Rule-Based portfolios connects in M16.</p>}
+          : <p className="font-sans text-sm text-ink-tertiary">Paper trading is not yet available for Rule-Based portfolios.</p>}
       </section>
+
+      <section id="policy" className="mb-8">
+        <h2 className="font-sans text-xs font-semibold uppercase tracking-wide text-ink-secondary mb-3">Trade Policy</h2>
+        <PolicyPanel policy={effectivePolicy} />
+      </section>
+
+      {/* Step 6: deterioration — surfaces holdings hitting a Policy exit rule */}
+      {isStatic && staticPortfolio!.instruments.length > 0 && effectivePolicy != null && (() => {
+        const deteriItems = findDeterioration(
+          staticPortfolio!.instruments.map((i) => ({
+            instrument_id: i.instrument_id, symbol: i.symbol,
+            engine_state: i.engine_state ?? null, weight_pct: i.weight_pct,
+          })),
+          {
+            state_exit_trim: typeof effectivePolicy.state_exit_trim.value === 'string' ? effectivePolicy.state_exit_trim.value : null,
+            state_exit_full: typeof effectivePolicy.state_exit_full.value === 'string' ? effectivePolicy.state_exit_full.value : null,
+            buy_states: Array.isArray(effectivePolicy.buy_states.value) ? (effectivePolicy.buy_states.value as string[]) : [],
+          },
+        )
+        return (
+          <section id="deterioration" className="mb-8">
+            <h2 className="font-sans text-xs font-semibold uppercase tracking-wide text-ink-secondary mb-3">
+              Exit Signals{deteriItems.length > 0 && <span className="ml-2 font-mono text-signal-neg">{deteriItems.length} holding{deteriItems.length === 1 ? '' : 's'}</span>}
+            </h2>
+            <DeteriorationPanel items={deteriItems} hardStopTracked={false} />
+          </section>
+        )
+      })()}
+
+      {/* Current-vs-target: only for static portfolios that have instruments */}
+      {isStatic && staticPortfolio!.instruments.length > 0 && (() => {
+        const cvtPolicy: CompliancePolicy = {
+          max_per_stock_pct:  effectivePolicy?.max_per_stock_pct.value != null
+            ? Number(effectivePolicy.max_per_stock_pct.value) : null,
+          max_per_sector_pct: effectivePolicy?.max_per_sector_pct.value != null
+            ? Number(effectivePolicy.max_per_sector_pct.value) : null,
+          max_small_cap_pct:  effectivePolicy?.max_small_cap_pct.value != null
+            ? Number(effectivePolicy.max_small_cap_pct.value) : null,
+          min_holdings:       effectivePolicy?.min_holdings.value != null
+            ? Number(effectivePolicy.min_holdings.value) : null,
+          max_positions:      effectivePolicy?.max_positions.value != null
+            ? Number(effectivePolicy.max_positions.value) : null,
+          cash_floor_pct:     effectivePolicy?.cash_floor_pct.value != null
+            ? Number(effectivePolicy.cash_floor_pct.value) : null,
+        }
+        const cvtHoldings = staticPortfolio!.instruments.map((inst) => ({
+          instrument_id: inst.instrument_id,
+          instrument_type: inst.instrument_type,
+          symbol: inst.symbol,
+          weight_pct: inst.weight_pct,
+          target_weight_pct: inst.target_weight_pct,
+          sector: inst.sector,
+          is_small_cap: inst.is_small_cap,
+        }))
+        const cvtPending = pendingChanges.map((pc) => ({
+          id: pc.id,
+          instrument_id: pc.instrument_id,
+          symbol: pc.symbol,
+          proposed_weight: Number(pc.proposed_weight),
+          rationale: pc.rationale,
+        }))
+        return (
+          <section id="current-vs-target" className="mb-8">
+            <h2 className="font-sans text-xs font-semibold uppercase tracking-wide text-ink-secondary mb-3">
+              Current vs Target
+            </h2>
+            <CurrentVsTarget
+              holdings={cvtHoldings}
+              pendingChanges={cvtPending}
+              policy={cvtPolicy}
+            />
+          </section>
+        )
+      })()}
     </main>
   )
 }
