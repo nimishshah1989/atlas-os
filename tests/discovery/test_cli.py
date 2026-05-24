@@ -125,14 +125,26 @@ def test_run_sweep_cli_creates_parent_dirs(tmp_path: Path) -> None:
     assert out.exists()
 
 
-def test_run_sweep_cli_cache_mode_returns_2(capsys: pytest.CaptureFixture[str]) -> None:
-    """Stubbed modes raise NotImplementedError -> CLI returns exit code 2."""
+def test_run_sweep_cli_cache_mode_returns_2_when_files_missing(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Cache mode without cache pickles → FileNotFoundError → CLI exit 2."""
+    # Point the cache loader at an empty tmp_path so FileNotFoundError fires
+    # regardless of whether /tmp has real cache pickles on this developer
+    # laptop.
+    import atlas.discovery.engine as engine_mod
+
+    monkeypatch.setattr(engine_mod, "DEFAULT_CACHE_DIR", tmp_path)
     rc = run_sweep_cli(["--mode", "cache", "--dry-run"])
     assert rc == 2
     captured = capsys.readouterr()
-    # Error-mode CLI prints a single-line JSON via json.dumps() (no indent).
     payload = json.loads([ln for ln in captured.out.splitlines() if ln.startswith("{")][-1])
-    assert "not implemented" in payload["error"].lower()
+    assert (
+        "missing cache files" in payload["error"].lower()
+        or "scp from ec2" in payload["error"].lower()
+    )
 
 
 def test_run_sweep_cli_supabase_mode_returns_2(capsys: pytest.CaptureFixture[str]) -> None:

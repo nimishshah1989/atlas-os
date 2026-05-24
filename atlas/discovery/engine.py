@@ -43,10 +43,12 @@ Vectorised — no Python loops over instruments.
 
 from __future__ import annotations
 
+import json
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import Any, Literal, cast
 
 import numpy as np
@@ -434,6 +436,176 @@ def _generate_synthetic_universe(
 
 
 # ---------------------------------------------------------------------------
+# Cache-mode loader (real OHLCV from EC2-scp'd pickles in /tmp)
+# ---------------------------------------------------------------------------
+
+# Default cache file locations. Overridable via WalkForwardSweep(cache_dir=...).
+# /tmp is the agreed-upon scp target for EC2-pulled OHLCV pickles; not used
+# at runtime in production (production reads from Supabase).
+DEFAULT_CACHE_DIR = Path("/tmp")  # noqa: S108
+OHLCV_CACHE_FILENAME = "sde_ohlcv_cache.pkl"
+NIFTY500_CACHE_FILENAME = "nifty500_cache.pkl"
+BLACKLIST_FILENAME = "iid_blacklist.json"
+
+# Trailing window for cap_tier derivation (per CONTEXT.md
+# "cap_tier (point-in-time semantics)").
+CAP_TIER_LOOKBACK_DAYS = 60
+
+
+def _load_cache_files(
+    cache_dir: Path = DEFAULT_CACHE_DIR,
+) -> tuple[pd.DataFrame, pd.Series, list[str]]:
+    """Load OHLCV + nifty500 + blacklist from the on-disk cache.
+
+    Returns:
+        ohlcv: DataFrame with columns (date, iid, close, volume).
+            ``date`` is naive datetime; ``iid`` is the v6 instrument UUID.
+        nifty500: Series indexed by date with the benchmark close.
+        blacklist: list of iid strings to exclude from the universe.
+
+    Raises:
+        FileNotFoundError: if any cache file is missing, with an actionable
+            "scp from ec2 first" message.
+    """
+    ohlcv_path = cache_dir / OHLCV_CACHE_FILENAME
+    nifty500_path = cache_dir / NIFTY500_CACHE_FILENAME
+    blacklist_path = cache_dir / BLACKLIST_FILENAME
+
+    missing = [p for p in (ohlcv_path, nifty500_path, blacklist_path) if not p.exists()]
+    if missing:
+        raise FileNotFoundError(
+            f"missing cache files: {[str(p) for p in missing]}. "
+            f"scp from ec2 first: "
+            f"`scp jsl-wealth-server:/tmp/{OHLCV_CACHE_FILENAME} "
+            f"{cache_dir}/` (and the nifty500/blacklist siblings). "
+            "For pipeline validation use mode='synthetic'."
+        )
+
+    # pickles are dev-only cache artifacts scp'd from our own EC2 host;
+    # never user input. CI never loads them (cache files absent there).
+    ohlcv = cast(pd.DataFrame, pd.read_pickle(ohlcv_path))  # noqa: S301
+    nifty500 = cast(pd.Series, pd.read_pickle(nifty500_path))  # noqa: S301
+    with blacklist_path.open() as fh:
+        blacklist_raw = json.load(fh)
+    # Blacklist is a list of {"iid": "...", "symbol": "..."} dicts.
+    blacklist = [str(row["iid"]) for row in blacklist_raw]
+    return ohlcv, nifty500, blacklist
+
+
+def _compute_cap_tier_panel(
+    ohlcv: pd.DataFrame,
+    *,
+    lookback_days: int = CAP_TIER_LOOKBACK_DAYS,
+) -> pd.DataFrame:
+    """Compute point-in-time cap_tier per (date, iid) from trailing-60d traded value.
+
+    Per CONTEXT.md "cap_tier (point-in-time semantics)": at each date,
+    rank iids by trailing-60d median (close × volume), then qcut into 3
+    terciles (Small bottom, Mid middle, Large top).
+
+    Vectorised — no Python loops over instruments. Uses pandas groupby +
+    rolling per-instrument; ranks cross-sectionally per date.
+
+    Args:
+        ohlcv: long-form DataFrame with (date, iid, close, volume).
+        lookback_days: trailing window for median traded value.
+
+    Returns:
+        DataFrame with columns (date, iid, cap_tier). cap_tier is NaN for
+        dates where insufficient history exists (< lookback_days) — caller
+        should drop or treat as "unclassified".
+    """
+    df = cast(pd.DataFrame, ohlcv[["date", "iid", "close", "volume"]].copy())
+    df = cast(pd.DataFrame, df.sort_values(["iid", "date"]).reset_index(drop=True))
+    df["tv"] = df["close"].astype(float) * df["volume"].astype(float)
+    # Per-iid rolling median traded value over 60 sessions.
+    df["med_tv_60d"] = df.groupby("iid", group_keys=False)["tv"].transform(
+        lambda s: s.rolling(window=lookback_days, min_periods=lookback_days).median()
+    )
+
+    # Cross-sectional tercile per date. qcut with duplicates='drop' for
+    # the edge case where many ties exist; fall back to rank-based bucket.
+    def _bucket(s: pd.Series) -> pd.Series:
+        valid = s.dropna()
+        if len(valid) < 3:
+            return pd.Series(np.nan, index=s.index, dtype=object)
+        ranks = valid.rank(pct=True)
+        # bottom third Small, middle Mid, top third Large.
+        out = pd.Series(np.nan, index=s.index, dtype=object)
+        out.loc[ranks.index] = np.where(
+            ranks <= (1.0 / 3),
+            "Small",
+            np.where(ranks <= (2.0 / 3), "Mid", "Large"),
+        )
+        return out
+
+    df["cap_tier"] = df.groupby("date", group_keys=False)["med_tv_60d"].transform(_bucket)
+    return cast(pd.DataFrame, df[["date", "iid", "cap_tier"]])
+
+
+def _build_cache_universe(
+    ohlcv: pd.DataFrame,
+    blacklist: list[str],
+    *,
+    lookback_days: int = CAP_TIER_LOOKBACK_DAYS,
+) -> pd.DataFrame:
+    """Build the engine-shaped universe DataFrame from cache OHLCV.
+
+    Pipeline:
+      1. Drop blacklisted iids.
+      2. Compute cap_tier panel (point-in-time, trailing-60d traded value).
+      3. Merge cap_tier back; drop rows where cap_tier is NaN (early history).
+      4. Synthesize open/high/low = close (engine never reads them; we only
+         use close for log-returns + drawdown).
+      5. Rename ``iid`` → ``instrument_id`` to match the engine's schema.
+      6. Add a placeholder ``sector`` column (engine archetypes don't use
+         sector — Pullback + Severely Broken work on RS + drawdown only).
+
+    Returns:
+        DataFrame with columns (instrument_id, date, open, high, low, close,
+        volume, sector, cap_tier) — the same shape the synthetic generator
+        produces, so the rest of the engine flows through unchanged.
+    """
+    if blacklist:
+        ohlcv = cast(pd.DataFrame, ohlcv[~ohlcv["iid"].isin(list(blacklist))].copy())
+
+    cap_panel = _compute_cap_tier_panel(ohlcv, lookback_days=lookback_days)
+    df = ohlcv.merge(cap_panel, on=["date", "iid"], how="left")
+    df = cast(pd.DataFrame, df.dropna(subset=["cap_tier"]).reset_index(drop=True))
+
+    # Normalize date column to python date for downstream comparisons
+    # against WalkForwardWindow's date fields.
+    if pd.api.types.is_datetime64_any_dtype(df["date"]):
+        df["date"] = df["date"].dt.date
+
+    close = df["close"].astype(float)
+    df["open"] = close
+    df["high"] = close
+    df["low"] = close
+    df["close"] = close
+    df["volume"] = df["volume"].astype(float)
+    df["sector"] = "unknown"  # cache lacks sector; archetypes here don't need it
+    df = df.rename(columns={"iid": "instrument_id"})
+
+    return cast(
+        pd.DataFrame,
+        df[
+            [
+                "instrument_id",
+                "date",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+                "sector",
+                "cap_tier",
+            ]
+        ].reset_index(drop=True),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Walk-forward computation helpers
 # ---------------------------------------------------------------------------
 
@@ -698,6 +870,7 @@ class WalkForwardSweep:
         db_engine: Engine | None = None,
         windows: tuple[WalkForwardWindow, ...] = DEFAULT_WINDOWS,
         synthetic_seed: int = _SYNTHETIC_SEED,
+        cache_dir: Path | None = None,
     ) -> None:
         if mode not in {"synthetic", "cache", "supabase", "ec2"}:
             raise ValueError(f"unknown mode={mode!r} (allowed: synthetic, cache, supabase, ec2)")
@@ -705,9 +878,43 @@ class WalkForwardSweep:
         self.db_engine = db_engine
         self.windows = windows
         self.synthetic_seed = synthetic_seed
+        # Resolve cache_dir at construction so monkeypatching
+        # DEFAULT_CACHE_DIR at test time works for the default path.
+        self.cache_dir = cache_dir if cache_dir is not None else DEFAULT_CACHE_DIR
         self._universe: pd.DataFrame | None = None
+        self._nifty500: pd.Series | None = None
 
     # ---- data loading --------------------------------------------------
+
+    def _load_cache(self) -> pd.DataFrame:
+        """Load + shape cache OHLCV into engine-compatible universe.
+
+        Stashes the benchmark series in ``self._nifty500`` as a side effect
+        for future use; the engine currently uses cross-sectional means
+        instead of nifty500 directly.
+
+        Raises FileNotFoundError if cache pickles are missing.
+        """
+        ohlcv, nifty500, blacklist = _load_cache_files(self.cache_dir)
+        self._nifty500 = nifty500
+        log.info(
+            "cache_loaded",
+            ohlcv_rows=len(ohlcv),
+            iids=int(ohlcv["iid"].nunique()),
+            date_min=str(ohlcv["date"].min()),
+            date_max=str(ohlcv["date"].max()),
+            blacklist_count=len(blacklist),
+        )
+        universe = _build_cache_universe(ohlcv, blacklist)
+        log.info(
+            "cache_universe_built",
+            rows=len(universe),
+            instruments=int(universe["instrument_id"].nunique()),
+            cap_tier_counts={
+                k: int(v) for k, v in universe["cap_tier"].value_counts().to_dict().items()
+            },
+        )
+        return universe
 
     def _load_universe(self) -> pd.DataFrame:
         if self._universe is not None:
@@ -716,11 +923,8 @@ class WalkForwardSweep:
             self._universe = _generate_synthetic_universe(seed=self.synthetic_seed)
             return self._universe
         if self.mode == "cache":
-            raise NotImplementedError(
-                "mode='cache' requires /tmp/sde_ohlcv_cache.pkl — "
-                "wire pickle.load + cap_tier annotation before running. "
-                "For pipeline validation use mode='synthetic'."
-            )
+            self._universe = self._load_cache()
+            return self._universe
         if self.mode == "supabase":
             raise NotImplementedError(
                 "mode='supabase' requires de_equity_ohlcv read via the Supabase "

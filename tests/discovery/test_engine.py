@@ -38,7 +38,9 @@ from atlas.discovery.engine import (
     SweepResult,
     WalkForwardSweep,
     WalkForwardWindow,
+    _build_cache_universe,
     _build_rule_dsl,
+    _compute_cap_tier_panel,
     _compute_ic,
     _generate_synthetic_universe,
 )
@@ -287,9 +289,12 @@ def test_walkforward_sweep_rejects_unknown_mode() -> None:
         WalkForwardSweep(mode="bogus")
 
 
-def test_walkforward_sweep_cache_mode_not_implemented() -> None:
-    sweep = WalkForwardSweep(mode="cache")
-    with pytest.raises(NotImplementedError, match=r"sde_ohlcv_cache\.pkl"):
+def test_walkforward_sweep_cache_mode_raises_filenotfound_when_missing(
+    tmp_path: Any,
+) -> None:
+    """cache mode without /tmp pickles → clear FileNotFoundError with next-step hint."""
+    sweep = WalkForwardSweep(mode="cache", cache_dir=tmp_path)
+    with pytest.raises(FileNotFoundError, match=r"scp from ec2 first"):
         sweep._load_universe()
 
 
@@ -557,3 +562,108 @@ def test_full_synthetic_run_is_deterministic_same_seed() -> None:
         br = b_by_key[key]
         assert ar.validated == br.validated
         assert ar.ic == br.ic
+
+
+# ---------------------------------------------------------------------------
+# Cache-mode tests (cap_tier derivation + universe shaping)
+# ---------------------------------------------------------------------------
+
+
+def _make_synthetic_cache_ohlcv(n_iids: int = 12, n_days: int = 120) -> pd.DataFrame:
+    """Build a small synthetic cache-shaped (date, iid, close, volume) df.
+
+    iids 0..3 → low traded value (Small), 4..7 → mid, 8..11 → high (Large).
+    """
+    rng = np.random.default_rng(0)
+    iids = [f"iid_{i:02d}" for i in range(n_iids)]
+    dates = pd.date_range("2024-01-01", periods=n_days, freq="B")
+    rows = []
+    for i, iid in enumerate(iids):
+        close = 100.0 + np.cumsum(rng.normal(0, 1, size=n_days))
+        # Vol multiplier scales with i so trailing-60d traded value clusters
+        # into terciles cleanly.
+        volume = np.full(n_days, 1_000 * (i + 1) ** 2, dtype=np.int64)
+        for d, c, v in zip(dates, close, volume, strict=True):
+            rows.append({"date": d, "iid": iid, "close": float(c), "volume": int(v)})
+    return pd.DataFrame(rows)
+
+
+def test_compute_cap_tier_panel_produces_three_terciles() -> None:
+    """cap_tier panel: per-date qcut into Small/Mid/Large terciles."""
+    ohlcv = _make_synthetic_cache_ohlcv(n_iids=12, n_days=120)
+    panel = _compute_cap_tier_panel(ohlcv, lookback_days=60)
+    # After lookback warm-up there should be classified rows.
+    classified = panel.dropna(subset=["cap_tier"])
+    assert len(classified) > 0
+    # Per-date tier distribution must cover all three tiers when n_iids=12.
+    one_day = classified[classified["date"] == classified["date"].max()]
+    tiers = set(one_day["cap_tier"].unique())
+    assert tiers == {"Small", "Mid", "Large"}
+    # 12 iids → roughly 4 per tier.
+    counts = one_day["cap_tier"].value_counts().to_dict()
+    for tier in ("Small", "Mid", "Large"):
+        assert 3 <= counts[tier] <= 5
+
+
+def test_compute_cap_tier_panel_warmup_is_nan() -> None:
+    """Before lookback_days of history exist, cap_tier is NaN."""
+    ohlcv = _make_synthetic_cache_ohlcv(n_iids=6, n_days=120)
+    panel = _compute_cap_tier_panel(ohlcv, lookback_days=60)
+    # First 59 days per iid must have NaN cap_tier (need 60 sessions of TV).
+    first_date = panel["date"].min()
+    early = panel[panel["date"] == first_date]
+    assert early["cap_tier"].isna().all()
+
+
+def test_build_cache_universe_excludes_blacklist() -> None:
+    ohlcv = _make_synthetic_cache_ohlcv(n_iids=8, n_days=120)
+    blacklist = ["iid_00", "iid_01"]
+    universe = _build_cache_universe(ohlcv, blacklist)
+    remaining = set(universe["instrument_id"].unique())
+    assert "iid_00" not in remaining
+    assert "iid_01" not in remaining
+    assert "iid_02" in remaining
+
+
+def test_build_cache_universe_emits_engine_schema() -> None:
+    """The universe returned matches the synthetic generator's column set."""
+    ohlcv = _make_synthetic_cache_ohlcv(n_iids=6, n_days=120)
+    universe = _build_cache_universe(ohlcv, [])
+    expected = {
+        "instrument_id",
+        "date",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "sector",
+        "cap_tier",
+    }
+    assert expected.issubset(set(universe.columns))
+    # date must be python date for WalkForwardWindow comparisons.
+    sample_date = universe["date"].iloc[0]
+    assert isinstance(sample_date, date)
+
+
+def test_walkforward_sweep_cache_dir_propagates(tmp_path: Any) -> None:
+    """The cache_dir kwarg flows through to the cache loader."""
+    sweep = WalkForwardSweep(mode="cache", cache_dir=tmp_path)
+    assert sweep.cache_dir == tmp_path
+
+
+def test_cache_mode_loads_real_universe_smoke() -> None:
+    """Smoke test: cache mode loads real /tmp pickles → non-empty universe.
+
+    Only runs when the cache pickle is present locally (developer-laptop
+    path; never in CI).
+    """
+    from pathlib import Path as _Path
+
+    cache_pkl = _Path("/tmp/sde_ohlcv_cache.pkl")  # noqa: S108 — dev cache path
+    if not cache_pkl.exists():
+        pytest.skip("real cache pickle missing — skipped in CI")
+    sweep = WalkForwardSweep(mode="cache")
+    universe = sweep._load_universe()
+    assert len(universe) > 0
+    assert set(universe["cap_tier"].unique()) >= {"Small", "Mid", "Large"}
