@@ -102,29 +102,89 @@ FEATURES: Final[tuple[str, ...]] = (
     "rs_alignment_count",
     "rs_acceleration_63d",
     "trend_slope_60d",
+    # --- deep-search v2 extension features (Phase 0.5g — all 24 cells) ---
+    # Added 2026-05-24 to support exhaustive 24-cell exploration. All
+    # vectorisable from close+volume; ATR is a daily-range proxy when
+    # high/low are not in the cache.
+    "rs_residual_1m",
+    "realized_vol_20d",
+    "vol_regime_60_252",
+    "downside_vol_60d",
+    "volume_zscore_252d",
+    "tv_momentum_21_63",
+    "roc_21d",
+    "roc_63d",
+    "roc_126d",
+    "max_consec_pos_months_12m",
+    "pos_weeks_12m",
+    "dd_recovery_pct",
+    "dist_from_52w_low",
+    "close_at_52w_high",
+    "consecutive_above_sma50",
+    "consecutive_above_sma200",
+    "rsi_14",
+    "bb_pct_20d",
+    "atr_pct_14",
+    "corr_to_nifty_60d",
+    "beta_60d",
+    "excess_vol_60d",
+    "rs_rank_6m_3m_diff",
+    "rs_rank_12m_6m_diff",
+    "range_compression_60_252",
+    "ulcer_index_60d",
+    "momentum_quality_6m",
+    "trend_strength_60d",
+    "new_high_streak_60d",
+    "close_over_252d_high",
+    # --- red-team quick-win features (Phase 0.5g — gap closures) ---
+    # Added 2026-05-24 to address red-team coverage gaps from
+    # /tmp/deep_search_v2/factor_coverage_critique.md. amihud captures
+    # illiquidity; OBV/MFI capture money-flow direction missed by raw
+    # volume z-scores; bb_squeeze flags compression-then-thrust setups;
+    # within-tier ranks fix the cross-tier RS bias (a tiny-cap top-decile
+    # is not the same as a large-cap top-decile).
+    "amihud_illiq_21d",
+    "obv_slope_60d",
+    "mfi_14",
+    "bb_squeeze_20d",
+    "rs_rank_within_tier_3m",
+    "rs_rank_within_tier_6m",
+    "rs_rank_within_tier_12m",
+    # --- sector RS features (Phase 0.5g — sector family) ---
+    # Added 2026-05-24 from /tmp/deep_search_v2/sector_rs_features.py
+    # with the leave-one-out (LOO) fix applied to cohort means
+    # (`(sum - self) / (count - 1)`) per integration plan §5 risk register.
+    # Sector mapping pulled from /tmp/deep_search_v2/sector_mapping.csv.
+    "sector_rs_6m",
+    "sector_rs_12m",
+    "sector_rs_rank_6m",
+    "sector_breadth_pos",
+    "sector_strength_rank",
+    "sector_vol_regime",
+    "cross_sector_breadth",
 )
 
 __all__ = [
     # Allowlist
     "FEATURES",
-    # Trend family
-    "add_emas",
-    "add_rs_momentum",
-    # Volatility family
-    "add_atr",
-    "add_realized_vol",
-    # Volume family
-    "add_volume_primitives",
-    "compute_advances_declines",
-    # Path family
-    "add_max_drawdown",
-    "add_returns",
-    # Sector family
-    "compute_rs_velocity",
     # Daily writer
     "ScorecardRow",
     "ScorecardWriteResult",
+    # Volatility family
+    "add_atr",
+    # Trend family
+    "add_emas",
+    # Path family
+    "add_max_drawdown",
+    "add_realized_vol",
+    "add_returns",
+    "add_rs_momentum",
+    # Volume family
+    "add_volume_primitives",
+    "compute_advances_declines",
     "compute_cap_tiers",
     "compute_daily_scorecard",
+    # Sector family
+    "compute_rs_velocity",
     "derive_family_states",
 ]

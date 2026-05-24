@@ -229,7 +229,7 @@ def _render_matrix_grid(result: SweepResult) -> str:
                 f"<div class='col-header'>{tenure_label}<br/>"
                 f"<span class='action-{action_class}'>{action_label}</span></div>"
             )
-    header_row = f"<div class='matrix-row matrix-header'>" f"{''.join(header_cells)}</div>"
+    header_row = f"<div class='matrix-row matrix-header'>{''.join(header_cells)}</div>"
 
     return f"""
     <section class="matrix">
