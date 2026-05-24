@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atlas v6 — Skill Cadence &amp; Autonomous Build Process</title>
+<style>
+  :root { --teal: #1D9E75; --teal-light: #E6F4EE; --teal-dark: #15745A; --ink: #1A1A1A; --ink-light: #5A5A5A; --ink-mid: #3A3A3A; --border: #E5E7EB; --border-dark: #C9CDD3; --bg: #FFFFFF; --bg-soft: #F9FAFB; --bg-card: #FCFCFD; --green: #16A34A; --green-soft: #E8F5EC; --red: #DC2626; --red-soft: #FCE8E8; --amber: #D97706; --amber-soft: #FEF3E3; --blue: #2563EB; --blue-soft: #EBF2FE; --purple: #7C3AED; --purple-soft: #F1ECFE; --shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06); }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.65; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 60px 40px 120px; }
+  .cover { background: linear-gradient(135deg, #FAFAFA 0%, #F3F8F6 100%); border-bottom: 4px solid var(--teal); padding: 80px 40px 60px; }
+  .cover .inner { max-width: 1100px; margin: 0 auto; }
+  .cover-tag { display: inline-block; background: var(--teal); color: white; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; padding: 5px 12px; border-radius: 3px; margin-bottom: 24px; }
+  h1 { font-size: 42px; margin: 0 0 8px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; }
+  .subtitle { font-size: 19px; color: var(--ink-light); font-weight: 400; margin: 0 0 36px; line-height: 1.4; }
+  .meta { display: flex; gap: 32px; font-size: 13px; color: var(--ink-light); margin-top: 20px; flex-wrap: wrap; }
+  .meta strong { color: var(--ink); font-weight: 600; }
+  .meta div { display: flex; flex-direction: column; gap: 2px; }
+  .meta-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--ink-light); }
+  h2 { font-size: 28px; margin: 56px 0 8px; font-weight: 700; letter-spacing: -0.015em; border-top: 1px solid var(--border); padding-top: 44px; }
+  h2:first-of-type { border-top: none; padding-top: 0; margin-top: 40px; }
+  h2 .num { color: var(--teal); font-weight: 800; margin-right: 14px; font-size: 24px; }
+  h3 { font-size: 19px; margin: 30px 0 12px; font-weight: 700; }
+  h4 { font-size: 14px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--teal); margin: 22px 0 8px; font-weight: 700; }
+  p { margin: 0 0 14px; font-size: 15px; }
+  ul, ol { padding-left: 22px; margin: 0 0 14px; }
+  li { margin-bottom: 6px; font-size: 15px; }
+  code { background: var(--bg-soft); border: 1px solid var(--border); padding: 1.5px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; font-size: 13px; color: var(--teal-dark); }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 22px; font-size: 13.5px; background: white; box-shadow: var(--shadow); }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-soft); font-weight: 700; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ink-light); border-bottom: 2px solid var(--border-dark); }
+  tr:last-child td { border-bottom: none; }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; }
+  .pill.green { background: var(--green-soft); color: var(--green); }
+  .pill.amber { background: var(--amber-soft); color: var(--amber); }
+  .pill.blue { background: var(--blue-soft); color: var(--blue); }
+  .pill.teal { background: var(--teal-light); color: var(--teal-dark); }
+  .pill.red { background: var(--red-soft); color: var(--red); }
+  .pill.purple { background: var(--purple-soft); color: var(--purple); }
+  .pill.gray { background: var(--bg-soft); color: var(--ink-light); }
+  .callout { background: var(--teal-light); border-left: 4px solid var(--teal); padding: 16px 20px; margin: 22px 0; border-radius: 0 6px 6px 0; }
+  .callout-head { font-weight: 700; margin-bottom: 6px; font-size: 14px; }
+  .ascii { background: var(--bg-soft); border: 1px solid var(--border); padding: 16px 20px; border-radius: 6px; font-family: 'SF Mono', Monaco, monospace; font-size: 12px; line-height: 1.55; overflow-x: auto; white-space: pre; margin: 14px 0 22px; color: var(--ink); }
+  .checkpoint { background: linear-gradient(135deg, var(--amber-soft) 0%, #FFF 100%); border: 2px solid var(--amber); padding: 14px 18px; margin: 14px 0; border-radius: 8px; }
+  .checkpoint-head { font-weight: 800; font-size: 14px; color: var(--amber); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+  .skill-card { background: var(--bg-card); border: 1px solid var(--border); padding: 12px 16px; margin: 8px 0; border-radius: 6px; box-shadow: var(--shadow); }
+  .skill-name { font-weight: 800; font-size: 14px; color: var(--ink); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .skill-source { font-size: 10px; padding: 2px 7px; border-radius: 999px; letter-spacing: 0.4px; text-transform: uppercase; font-weight: 700; }
+  .skill-source.gstack { background: var(--teal-light); color: var(--teal-dark); }
+  .skill-source.pocock { background: var(--purple-soft); color: var(--purple); }
+  .skill-source.super { background: var(--blue-soft); color: var(--blue); }
+  .skill-source.codex { background: var(--amber-soft); color: var(--amber); }
+  .skill-when { font-size: 13px; color: var(--ink-mid); margin-top: 4px; }
+  .lane { background: white; border-left: 4px solid var(--blue); padding: 12px 16px; margin: 10px 0; border-radius: 0 6px 6px 0; box-shadow: var(--shadow); }
+  .lane-head { font-weight: 700; font-size: 14px; color: var(--blue); margin-bottom: 4px; }
+  .verdict { background: var(--ink); color: white; padding: 22px 28px; border-radius: 10px; margin: 36px 0 0; font-size: 15px; line-height: 1.55; }
+  .verdict-head { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--teal); font-weight: 700; margin-bottom: 8px; }
+  .toc { background: var(--bg-soft); border: 1px solid var(--border); padding: 18px 22px; border-radius: 8px; margin: 30px 0 0; }
+  .toc h3 { margin-top: 0; }
+  .toc ol { columns: 2; column-gap: 36px; margin: 0; }
+  .toc a { color: var(--ink); text-decoration: none; }
+  .toc a:hover { color: var(--teal-dark); text-decoration: underline; }
+  @media (max-width: 760px) { .toc ol { columns: 1; } .wrap { padding: 40px 20px 80px; } .cover { padding: 60px 20px 40px; } h1 { font-size: 30px; } }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="inner">
+    <div class="cover-tag">Skill Cadence &amp; Autonomy Plan · v6.0 · 2026-05-24</div>
+    <h1>How Atlas v6 actually gets built</h1>
+    <div class="subtitle">Every skill, every checkpoint, every hook. The full plan for autonomous execution with milestone check-ins, hardened against terminology drift, scope creep, and context loss.</div>
+    <div class="meta">
+      <div><span class="meta-label">Total skills wired</span><strong>22 distinct</strong></div>
+      <div><span class="meta-label">Critical check-ins</span><strong>~20 events</strong></div>
+      <div><span class="meta-label">Hooks enforcing</span><strong>14 (8 global + 6 v6-specific)</strong></div>
+      <div><span class="meta-label">Autonomous loop</span><strong>per-chunk × ~50 chunks</strong></div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+<div class="toc">
+  <h3>Contents</h3>
+  <ol>
+    <li><a href="#layers">1. Three layers of skill use</a></li>
+    <li><a href="#planning">2. Planning skills (one-shot, before build)</a></li>
+    <li><a href="#chunk">3. Per-chunk loop (the heartbeat)</a></li>
+    <li><a href="#periodic">4. Periodic rituals (autonomous, on schedule)</a></li>
+    <li><a href="#failure">5. Failure-recovery skills</a></li>
+    <li><a href="#checkpoints">6. Critical milestone check-ins (where I pause for you)</a></li>
+    <li><a href="#hooks">7. The 14 hooks enforcing this</a></li>
+    <li><a href="#calibration">8. Calibration loops — staying on goal</a></li>
+    <li><a href="#summary">9. End-to-end flow diagram</a></li>
+  </ol>
+</div>
+
+<div class="callout">
+  <div class="callout-head">The principle</div>
+  <p>You said: "highest accuracy and constantly calibrating to our goal post and not moving here and there". That requires THREE things working together: <strong>skills that compose into a loop</strong>, <strong>hooks that block deviation</strong>, and <strong>periodic calibration rituals that re-anchor to the goal</strong>. This document is the spec for all three.</p>
+</div>
+
+<h2 id="layers"><span class="num">01</span>Three layers of skill use</h2>
+
+<table>
+<thead><tr><th>Layer</th><th>Frequency</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><strong>Planning</strong></td><td>One-shot (4 events)</td><td>Lock scope, architecture, terminology, issues — done BEFORE Phase 0 starts</td></tr>
+<tr><td><strong>Per-chunk loop</strong></td><td>~50 cycles</td><td>The build heartbeat. Same 7-step sequence for every chunk.</td></tr>
+<tr><td><strong>Periodic rituals</strong></td><td>Weekly / monthly / quarterly</td><td>Recalibrate against the cathedral test; retro on what shipped; surface architecture-deepening opportunities</td></tr>
+</tbody>
+</table>
+
+<h2 id="planning"><span class="num">02</span>Planning skills (one-shot, before build)</h2>
+
+<p>Six skills closed the planning loop. Four are done; three remain.</p>
+
+<div class="skill-card">
+  <div class="skill-name">/plan-ceo-review <span class="skill-source gstack">gstack</span> <span class="pill green">DONE</span></div>
+  <div class="skill-when">Scope, expansion-vs-reduction, business priorities. Output: CEO plan with 41 decisions.</div>
+</div>
+
+<div class="skill-card">
+  <div class="skill-name">/plan-eng-review <span class="skill-source gstack">gstack</span> <span class="pill green">DONE</span></div>
+  <div class="skill-when">Architecture, modules, migrations, test pyramid, perf. Output: eng review HTML with 12 findings.</div>
+</div>
+
+<div class="skill-card">
+  <div class="skill-name">/grill-with-docs <span class="skill-source pocock">Pocock</span> <span class="pill green">DONE</span></div>
+  <div class="skill-when">Stress-test plan terminology against CONTEXT.md + methodology lock. Caught 11 ambiguities + the Phase 0.5a→0.5e dependency. Output: CONTEXT.md (409 lines).</div>
+</div>
+
+<div class="skill-card">
+  <div class="skill-name">/plan-design-review <span class="skill-source gstack">gstack</span> <span class="pill amber">NEXT</span></div>
+  <div class="skill-when">UX, accessibility, multi-tenure headline, regime-gating chip, SP10 visual fit. Output: design plan HTML.</div>
+</div>
+
+<div class="skill-card">
+  <div class="skill-name">/to-issues <span class="skill-source pocock">Pocock</span> <span class="pill amber">PASS 1 PENDING</span></div>
+  <div class="skill-when">Decompose Phase 0.5 lanes into ~15-20 tracer-bullet issues. Pass 2 after design review for Phase 1-9 (~30-50 issues).</div>
+</div>
+
+<div class="skill-card">
+  <div class="skill-name">/codex:adversarial-review <span class="skill-source codex">codex</span> <span class="pill amber">QUOTA WALLED</span></div>
+  <div class="skill-when">Outside-voice challenge across CEO + eng + design + grill. Fallback: Claude subagent. Output: review log entry.</div>
+</div>
+
+<h2 id="chunk"><span class="num">03</span>Per-chunk loop — the heartbeat</h2>
+
+<p>This sequence repeats for every chunk (~50 chunks total). Hooks enforce it. You should NOT see deviation unless you explicitly direct it.</p>
+
+<div class="ascii">┌──────────────────────────────────────────────────────────────────────────┐
+│ Per-chunk loop (every chunk follows this exactly)                         │
+└──────────────────────────────────────────────────────────────────────────┘
+
+   ┌─────────────────┐
+   │ Session start   │ → SessionStart hook auto-fires:
+   │ (any session)   │   • session-start-skill-loader (global)
+   └────────┬────────┘   • session-start-repo-map (global)
+            │            • session-start-v6-orienter (NEW)
+            ▼
+   ┌─────────────────┐
+   │ /context-restore│ ← only if gap > 1 day
+   │   (gstack)      │
+   └────────┬────────┘
+            │
+            ▼
+   ┌─────────────────┐
+   │/grill-with-docs │ ← lock terminology vs CONTEXT.md before any code
+   │   (Pocock)      │   ENFORCED: pre-edit-v6-module-gate.sh blocks Edit
+   └────────┬────────┘   without one of: grill-with-docs / tdd / plan-eng-review
+            │
+            ▼
+   ┌─────────────────┐
+   │     /tdd        │ ← write tests first against frozen-snapshot fixtures
+   │   (Pocock)      │   (small 100-iid snapshot for PR CI; full 727+ nightly)
+   └────────┬────────┘
+            │
+            ▼
+   ┌─────────────────┐
+   │  Implementation │ ← vectorized, Pydantic-typed, Decimal-for-money
+   │ (Edit / Write)  │   Global hooks block: float, bare except, hardcoded
+   │                 │   creds, PII logging, frontend without .design-approved
+   └────────┬────────┘
+            │ (post-edit hooks fire automatically:
+            │  decision-log, pyright, eslint, pragma-test-required)
+            ▼
+   ┌─────────────────┐
+   │    /review      │ ← pre-merge structural review on the diff
+   │   (gstack)      │
+   └────────┬────────┘
+            │
+            ▼
+   ┌─────────────────┐
+   │  /codex review  │ ← independent outside-voice on the diff
+   │   (codex)       │   Fallback: Claude subagent if quota walled
+   └────────┬────────┘
+            │
+            ▼
+   ┌─────────────────┐
+   │     /ship       │ ← VERSION bump, CHANGELOG, commit, push, PR
+   │   (gstack)      │
+   └────────┬────────┘
+            │
+            ▼
+   ┌─────────────────┐
+   │/land-and-deploy │ ← merge + canary check on staging
+   │   (gstack)      │
+   └────────┬────────┘
+            │
+            ▼
+   ┌─────────────────┐
+   │/document-release│ ← optional; only if chunk closed a meaningful slice
+   │   (gstack)      │   Updates README + CHANGELOG voice
+   └────────┬────────┘
+            │
+            ▼
+   ┌─────────────────┐
+   │  Session end    │ → Stop hook auto-fires:
+   │                 │   • session-harvest (global)
+   │                 │   • on-stop-wiki-capture (global)
+   │                 │   • on-stop-v6-checkpoint (NEW)
+   │                 │ Writes ~/.gstack/projects/atlas-os/checkpoints/...md
+   └─────────────────┘</div>
+
+<p>Skills are picked by purpose. Most chunks use: <code>/grill-with-docs</code> → <code>/tdd</code> → implement → <code>/review</code> → <code>/codex review</code> → <code>/ship</code> → <code>/land-and-deploy</code>. That's <strong>7 skill invocations per chunk × ~50 chunks = ~350 skill executions</strong> across the v6 build.</p>
+
+<h2 id="periodic"><span class="num">04</span>Periodic rituals (autonomous, on schedule)</h2>
+
+<div class="skill-card">
+  <div class="skill-name">/retro <span class="skill-source gstack">gstack</span></div>
+  <div class="skill-when"><strong>Weekly.</strong> Analyzes commit history, ship cadence, decisions made. Detects velocity drops, decision pile-up.</div>
+</div>
+
+<div class="skill-card">
+  <div class="skill-name">/zoom-out <span class="skill-source pocock">Pocock</span></div>
+  <div class="skill-when"><strong>Monthly (or every 4th session — SessionStart hook reminds).</strong> The cathedral test: "Are we still building the v6 the CEO plan describes?" Catches scope drift.</div>
+</div>
+
+<div class="skill-card">
+  <div class="skill-name">/landing-report <span class="skill-source gstack">gstack</span></div>
+  <div class="skill-when"><strong>Per phase boundary.</strong> Reads gate tracker; shows what's done vs what's blocking the next phase.</div>
+</div>
+
+<div class="skill-card">
+  <div class="skill-name">/improve-codebase-architecture <span class="skill-source pocock">Pocock</span></div>
+  <div class="skill-when"><strong>Quarterly or post-Phase 5.</strong> Finds deepening opportunities informed by CONTEXT.md + ADRs. Hardens the modulith.</div>
+</div>
+
+<div class="skill-card">
+  <div class="skill-name">/document-release <span class="skill-source gstack">gstack</span></div>
+  <div class="skill-when"><strong>Per meaningful slice (post-/ship).</strong> Syncs README + ARCHITECTURE + CHANGELOG + CLAUDE.md to match what shipped.</div>
+</div>
+
+<h2 id="failure"><span class="num">05</span>Failure-recovery skills</h2>
+
+<table>
+<thead><tr><th>Failure signal</th><th>Skill</th><th>Source</th></tr></thead>
+<tbody>
+<tr><td>Bug / unexpected behavior / test failure</td><td><code>/investigate</code></td><td><span class="skill-source gstack">gstack</span></td></tr>
+<tr><td>Hard bug needing root-cause discipline</td><td><code>/diagnose</code></td><td><span class="skill-source pocock">Pocock</span></td></tr>
+<tr><td>Stuck &gt; 3 attempts on the same chunk</td><td><code>/codex:rescue</code></td><td><span class="skill-source codex">codex</span></td></tr>
+<tr><td>Drift detector trips (post-Phase-5)</td><td><code>/investigate</code> → <code>/diagnose</code></td><td>—</td></tr>
+<tr><td>Phase 0.5 gate fails</td><td>Apply CEO plan gate-failure rule (mechanical, no skill)</td><td>—</td></tr>
+<tr><td>CI gate fails (look-ahead, IC regression, friction golden)</td><td><code>/investigate</code> → fix → re-run tests</td><td>—</td></tr>
+<tr><td>SEBI guard adversarial test fails</td><td><code>/investigate</code> on the LLM eval probe</td><td>—</td></tr>
+<tr><td>Production deploy regresses</td><td><code>/canary</code> alert → revert via feature flag → <code>/investigate</code></td><td><span class="skill-source gstack">gstack</span></td></tr>
+</tbody>
+</table>
+
+<h2 id="checkpoints"><span class="num">06</span>Critical milestone check-ins — where I pause for you</h2>
+
+<p>Twenty events where the system pauses, produces an artifact for you, and waits for your "go" before resuming the autonomous loop. Each generates an HTML report.</p>
+
+<div class="checkpoint">
+  <div class="checkpoint-head">Pre-build phase — 4 check-ins</div>
+  <ol>
+    <li><strong>Design plan ready</strong> — output of <code>/plan-design-review</code></li>
+    <li><strong>Issues Pass 1 ready</strong> — ~15-20 Phase 0.5 issues drafted</li>
+    <li><strong>Codex adversarial review complete</strong> — outside-voice findings + reconciliation</li>
+    <li><strong>Issues Pass 2 ready</strong> — ~30-50 Phase 1-9 chunks drafted, all four gates closed</li>
+  </ol>
+  <p style="margin-top:8px;"><strong>You decide:</strong> approve and unblock Phase 0, or redirect any specific issue/gate.</p>
+</div>
+
+<div class="checkpoint">
+  <div class="checkpoint-head">Phase 0.5 — 10 check-ins</div>
+  <ol start="5">
+    <li><strong>0.5a Large-cap fix complete</strong> — 10-12 names recovered; universe → ~738</li>
+    <li><strong>0.5b Survivorship rebuild</strong> — delisted names reconstructed</li>
+    <li><strong>0.5c 2015-2020 walk-forward</strong> — regime-stress-test results</li>
+    <li><strong>0.5d Friction model</strong> — per-tier coefficients locked</li>
+    <li><strong>0.5e Large-cap BUY signal</strong> — cell validation against recovered universe</li>
+    <li><strong>0.5f Distribution disclosure</strong> — percentile bands per cell</li>
+    <li><strong>0.5g Multi-tenure sweep</strong> — 4-tenure cell matrix populated</li>
+    <li><strong>0.5h-prime Regime threshold sweep</strong> — locks regime classifier</li>
+    <li><strong>0.5h Regime-conditional confidence</strong> — per-regime per-cell confidence</li>
+    <li><strong>0.5i SEBI RA registration</strong> — legal certificate received (parallel workstream)</li>
+  </ol>
+  <p style="margin-top:8px;"><strong>You decide:</strong> apply locked gate-failure rules where applicable; approve cell matrix for Phase 4 consumption.</p>
+</div>
+
+<div class="checkpoint">
+  <div class="checkpoint-head">Phases 1-9 — 9 check-ins</div>
+  <ol start="15">
+    <li><strong>Phase 1 inventory ready</strong> — keep/port/retire mapping signed off</li>
+    <li><strong>Phase 2 schema migrated</strong> — migrations 080-088 on staging</li>
+    <li><strong>Phase 3 features + scorecard live</strong> — daily writes to <code>atlas_scorecard_daily</code></li>
+    <li><strong>Phase 4 decision engine live</strong> — daily cell firings; <code>atlas_signal_calls</code> accumulating</li>
+    <li><strong>Phase 5 ledger + drift + paper portfolio live</strong> — first realized excess recorded</li>
+    <li><strong>Phase 6 internal alpha</strong> — v6.atlas.jslwealth.in live for internal team</li>
+    <li><strong>Phase 6 public launch</strong> — post-SEBI cert + design review pass + 2-week alpha</li>
+    <li><strong>Phase 7 simulation framework</strong> — re-validator + walk-forward CLI</li>
+    <li><strong>Phase 8 ETF + MF</strong> — extends matrix; quartile MF rec live</li>
+    <li><strong>Phase 9 macro overlay</strong> — asset-allocation bands live</li>
+  </ol>
+  <p style="margin-top:8px;"><strong>You decide:</strong> approve each phase boundary; flip feature flags for progressive rollout; sign off methodology lock changes.</p>
+</div>
+
+<p>Outside these 20 events, the loop runs autonomously. <strong>You do not need to be in the chain on every chunk.</strong> The hooks block bad paths; the periodic rituals catch drift; the milestone reports surface the genuine decisions.</p>
+
+<h2 id="hooks"><span class="num">07</span>The 14 hooks enforcing this</h2>
+
+<h3>Already in place (8 global, in <code>~/.claude/settings.json</code>)</h3>
+
+<table>
+<thead><tr><th>Event</th><th>Hook</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td>PreToolUse Edit/Write</td><td>pre-edit-no-hardcoded-creds</td><td>Blocks if .env-style secrets in code</td></tr>
+<tr><td>PreToolUse Edit/Write</td><td>pre-edit-no-bare-except</td><td>Blocks bare <code>except:</code></td></tr>
+<tr><td>PreToolUse Edit/Write</td><td>pre-edit-no-float-money</td><td>Blocks float on money fields</td></tr>
+<tr><td>PreToolUse Edit/Write</td><td>pre-edit-no-pii-logging</td><td>Blocks PII in log strings</td></tr>
+<tr><td>PreToolUse Edit/Write</td><td>pre-edit-decimal-encoder-fastapi</td><td>Enforces Decimal encoder presence</td></tr>
+<tr><td>PreToolUse Edit/Write</td><td>pre-edit-design-gate</td><td>Blocks frontend edits without .design-approved.json</td></tr>
+<tr><td>PreToolUse Edit/Write</td><td>pre-edit-require-thinking</td><td>Requires thinking marker on non-trivial edits</td></tr>
+<tr><td>PostToolUse Edit/Write</td><td>post-edit-decision-log + pyright + eslint + pragma-test-required</td><td>Auto-appends decisions.jsonl, type-checks, lints, enforces pragma:finance-critical test req</td></tr>
+</tbody>
+</table>
+
+<h3>New v6-specific (6, in <code>.claude/settings.json</code>)</h3>
+
+<table>
+<thead><tr><th>Event</th><th>Hook</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td>SessionStart</td><td>session-start-v6-orienter.sh</td><td>Banners required reading; shows gate status; reminds of cathedral test every 4th session</td></tr>
+<tr><td>UserPromptSubmit</td><td>userprompt-v6-glossary-enforce.sh</td><td>Detects v6 terms in prompt; nudges CONTEXT.md consultation</td></tr>
+<tr><td>PreToolUse Edit/Write</td><td>pre-edit-v6-module-gate.sh</td><td><strong>BLOCKS</strong> edits to atlas/{features,decisions,regime,portfolio,ledger,macro,agents,discovery}/ unless a planning skill was invoked this session</td></tr>
+<tr><td>PreToolUse Bash</td><td>pre-bash-phase0-gate-check.sh</td><td><strong>BLOCKS</strong> Phase 0 fresh-main ops or migration 080+ unless all 4 pre-build gates closed</td></tr>
+<tr><td>Stop</td><td>on-stop-v6-checkpoint.sh</td><td>Auto-writes session checkpoint; appends to phase STATUS.md</td></tr>
+<tr><td>PostToolUse Skill</td><td>post-skill-v6-next-step.sh</td><td>After each v6 planning skill, suggests the next one in the cadence chain</td></tr>
+</tbody>
+</table>
+
+<h2 id="calibration"><span class="num">08</span>Calibration loops — staying on goal</h2>
+
+<p>You said "constantly calibrating to our goal post". Four explicit loops do this:</p>
+
+<div class="lane">
+  <div class="lane-head">Loop 1 — Per-edit calibration (sub-second)</div>
+  <p>Every edit goes through 8 PreToolUse hooks + 4 PostToolUse hooks. Float for money, bare except, hardcoded creds, etc. = instant block. <strong>The system literally cannot drift on engineering rules.</strong></p>
+</div>
+
+<div class="lane">
+  <div class="lane-head">Loop 2 — Per-chunk calibration (every ~hour)</div>
+  <p>Every chunk loop runs <code>/grill-with-docs</code> against CONTEXT.md before code edit, and <code>/review</code> + <code>/codex review</code> before merge. <strong>Terminology + architecture cannot drift across chunks</strong> because the grill catches it and outside-voice catches missed grills.</p>
+</div>
+
+<div class="lane">
+  <div class="lane-head">Loop 3 — Periodic calibration (monthly)</div>
+  <p><code>/zoom-out</code> cathedral test asks: "Is what we're building still the v6 the CEO plan describes?" If yes, continue. If no, surface the deviation as a planning question. <strong>Strategy cannot silently drift past a month.</strong></p>
+</div>
+
+<div class="lane">
+  <div class="lane-head">Loop 4 — Continuous calibration (live, post-Phase-5)</div>
+  <p>The drift detector compares realized vs predicted excess per cell. Cells that fail the |Z|&gt;2.5 over 10 days threshold auto-deprecate (locked in CONTEXT.md). <strong>Methodology cannot silently drift in production</strong> — the system retires its own broken cells.</p>
+</div>
+
+<h2 id="summary"><span class="num">09</span>End-to-end flow — one page</h2>
+
+<div class="ascii">PLANNING (one-shot, 4 gates, 4 check-ins) ✅ 3 of 6 done
+  /plan-ceo-review ✅ → /plan-eng-review ✅ → /grill-with-docs ✅
+  → /plan-design-review ⏳ → /to-issues Pass 1 ⏳
+  → /codex:adversarial-review ⏳ → /to-issues Pass 2 ⏳
+                                  │
+                                  ▼  (all 4 gates closed)
+PHASE 0 unblocks ─ git fork + fresh main + tag pre-v6-2026-05
+                                  │
+                                  ▼
+PHASE 0.5 (5 parallel lanes, 10 check-ins, autonomous chunks)
+  Lane A1: 0.5a Large-cap fix ─────────────────→ check-in
+  Lane A2: 0.5b Survivorship ───────────────────→ check-in
+  Lane A3: 0.5c 2015-2020 walk-forward ─────────→ check-in
+  Lane A4: 0.5d Friction + 0.5e Large-cap BUY ──→ check-in × 2
+  Lane A5: 0.5f,g,h-prime,h sweep ──────────────→ check-in × 4
+  Lane C:  0.5i SEBI RA (parallel, legal) ──────→ check-in
+                                  │
+                                  ▼  (matrix populated, methodology locked)
+PHASE 1-9 (9 phases, 9 check-ins, sequential with parallel sub-lanes)
+  Phase 1 inventory → 2 schema → 3 features → 4 decisions
+   → 5 ledger+drift+portfolio → 6 frontend → public launch
+   → 7 simulation → 8 ETF+MF → 9 macro overlay
+                                  │
+   Each phase: /context-restore → /grill-with-docs → /tdd → impl
+              → /review → /codex → /ship → /land-and-deploy
+              → /document-release → /context-save (auto via Stop hook)
+                                  │
+   Periodic in parallel:
+              Weekly /retro · Monthly /zoom-out · Quarterly /improve-codebase-architecture
+                                  │
+                                  ▼
+v6 SHIPPED — public on atlas.jslwealth.in
+              Drift monitor continuously calibrating live</div>
+
+<div class="verdict">
+  <div class="verdict-head">What this gives you</div>
+  <strong>Autonomous execution with milestone check-ins.</strong> You get ~20 decision points across the build; everything else runs in the hook-gated loop without needing your attention. Quality maintained by: 14 hooks (8 global, 6 v6), per-chunk grill + review + codex challenge, monthly cathedral test, continuous drift detection post-Phase-5. Context not lost because: SessionStart orients, CONTEXT.md auto-loads, Stop hook auto-checkpoints, /context-restore picks up where you left off. Goal post not drifting because: /grill-with-docs catches term drift, /zoom-out catches scope drift, drift detector catches methodology drift in production.<br><br>
+  <span class="pill green" style="background:rgba(22,163,74,0.25); color:#86EFAC;">Process locked</span>
+  <span class="pill teal" style="background:rgba(255,255,255,0.15); color:white; margin-left:6px;">Hooks wired</span>
+  <span class="pill amber" style="background:rgba(217,119,6,0.25); color:#FFC76A; margin-left:6px;">Next: /plan-design-review on your "go"</span>
+</div>
+
+</div>
+</body>
+</html>

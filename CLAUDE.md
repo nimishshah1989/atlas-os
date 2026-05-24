@@ -1,204 +1,88 @@
 ---
 nimish-os: 1.0
 project: atlas-os
-domain: fintech              # fintech | restaurant | content | health | other
-regime: [SEBI, DPDP]              # YAML list, e.g. [SEBI, DPDP] — drives skill auto-load
-stack: [python, fastapi, postgres]                 # YAML list, e.g. [python, fastapi, postgres, react]
-has_frontend: true   # true | false
-scale: large                 # small | medium | large
+domain: fintech
+regime: [SEBI, DPDP]
+stack: [python, fastapi, postgres]
+has_frontend: true
+scale: large
 ---
 
 # atlas-os
 
-This file orients agents working on this project. Global engineering rules live at `~/.claude/CLAUDE.md`. Hooks fire on every edit regardless of mode (planned milestone, ad-hoc chat, exploration). The frontmatter above drives:
-- regime-specific skill auto-load (Indian regulatory matrix from `~/forge-skills/<regime>/`)
-- fintech context detection for hooks (no float on money, no PII in logs, FastAPI Decimal encoder)
-- Design Protocol activation if `has_frontend: true`
+Global engineering rules live at `~/.claude/CLAUDE.md`. This file is a thin
+pointer; substance lives in the docs below.
 
-## Project-specific notes
+## Active track
 
-- Stack-specific decisions: see `decisions.jsonl` (append-only, hash-chained).
-- ADRs: see `.ruflo/adr/` (managed by `ruflo-adr` plugin).
-- Active milestone status: see `tasks.jsonl` if present, or run `npx ruflo hive-mind status`.
+**v6** — discovery-first equity intelligence platform rebuild (post-2026-05-24).
+Read `docs/v6/runbook.html` FIRST every v6 session. Phase 2 (SP01-SP10) still
+exists as a parallel surface; read `docs/phase2/00-master-plan.html` if you
+touch it.
 
-## Phase 2 — REQUIRED READING before any new milestone
+## Required reading (every session)
 
-Two canonical reference documents in `docs/phase2/`. Read BOTH before starting
-work on any Phase 2 sub-project, the Data Validator Agent, or any new Atlas
-intelligence layer.
+1. `docs/v6/runbook.html` — build runbook (bootstrap, per-chunk loop, gates)
+2. `CONTEXT.md` — domain glossary (auto-loaded with this file)
+3. `~/.gstack/projects/atlas-os/ceo-plans/2026-05-24-atlas-v6-product-spec.md` — CEO plan
+4. `~/.gstack/projects/atlas-os/eng-plans/2026-05-24-atlas-v6-eng-review.html` — eng review
 
-1. **`docs/phase2/00-master-plan.html`** — The 9-sub-project Phase 2 plan
-   (Signal Validation Lab, Materialized Views, OpenBB BYO Copilot, Signal
-   Intelligence, Daily Brief, Continuous Simulation, Hermes Agent Runtime,
-   Intraday Live State, UI-TARS scraping). Locked ordering: Option B parallel
-   sprint week 1 (SP01 + SP02 + SP03). Validation target for SP01: full
-   `decision_state` composite.
+## Pointers (read on demand)
 
-2. **`docs/phase2/01-data-validator-agent.html`** — The Hermes-orchestrated
-   data integrity agent that validates every frontend data point against
-   its backend source. Six classes of issue: gaps, inconsistencies, calc
-   errors, accuracy errors, insensible values, incomplete data. Runs nightly
-   + pre-milestone + on-demand. **Pre-flight gate before any sub-project
-   kickoff** (per master plan §7.1).
+- `docs/health-audit-rules.md` — 2026-05 audit guardrails (compute / frontend / arch)
+- `docs/agents/supabase-mcp.md` — Supabase MCP tiers + marker protocol
+- `docs/agents/issue-tracker.md` — GitHub issues via `gh` CLI
+- `docs/agents/triage-labels.md` — five canonical triage roles
+- `docs/agents/domain.md` — CONTEXT.md + ADR conventions
+- `decisions.jsonl` — append-only hash-chained audit log (Ruflo-managed)
+- `.ruflo/adr/` — ADRs for hard-to-reverse decisions
+- `<consolidation>/docs/atlas-signal-discovery/methodology-lock-2026-05-23.md` — methodology lock
 
-These docs are the canonical reference. Every agent session that touches
-`atlas/intelligence/`, `atlas/agents/`, or any new Phase 2 surface MUST
-read them first. To view in browser: `open docs/phase2/00-master-plan.html`.
+## Architectural rules (HOOK-ENFORCED — don't fight)
 
-Baseline at Phase 2 start: commit `1e97c72`, tag
-`health-audit-baseline-2026-05`. All P0/P1 health-audit findings resolved.
+1. **Modulith**. Each top-level `atlas/` package is a bounded context. No cross-context imports except via `atlas.primitives`, `atlas.db`, `atlas.config` or a context's public `__init__.py`.
+2. **Tiered file-size limits**: 600 LOC source / 800 LOC tests / 250 LOC page shells. Escape valve: `# allow-large: <reason>` (Python) or `// allow-large: <reason>` (TS).
+3. **Methodology thresholds** live in `atlas.atlas_thresholds`, loaded via `atlas.db.load_thresholds()`. No hardcoded constants in code.
+4. **Decimal for money. Tz-aware datetimes.** Float for money is rejected by global hooks.
+5. **v6 module edits gated** — `atlas/{features,decisions,regime,portfolio,ledger,macro,agents}/` Edits require a chunk-level planning skill (`/grill-with-docs`, `/tdd`, or `/plan-eng-review`) invoked first in the session.
+6. **Phase 0 gated** — `git checkout -b feat/v6-phase-0-*` or migration 080 require all 4 pre-build gates closed in `~/.gstack/projects/atlas-os/v6-gates.json`.
 
-## What goes in this file (vs the global one)
-
-- Project-only conventions (e.g. "we use Polars not pandas in this codebase")
-- Project-only paths or entry points
-- Project-only deferred work / known limitations
-
-Do NOT duplicate global rules from `~/.claude/CLAUDE.md` here — they're already loaded.
-
----
-
-## Engineering discipline (NON-NEGOTIABLE)
-
-atlas-os is a **modular monolith** ("modulith"). Each top-level package under
-`atlas/` is a bounded context. The boundaries are enforced by hooks; treat
-them as load-bearing.
-
-### Skill cadence — invoke BEFORE coding
-
-For ANY new file or non-trivial edit in `atlas/`, `frontend/src/`, or
-`migrations/versions/`, you MUST first invoke at least one of these skills:
+## Skill cadence — invoke BEFORE coding
 
 | Situation | Skill |
 |---|---|
-| Any meaningful edit | `andrej-karpathy-skills:karpathy-guidelines` |
-| New feature / new module | `plan-eng-review` |
-| Refactor or simplify existing | `simplify` |
+| Start of v6 chunk | `/grill-with-docs` (lock terms vs CONTEXT.md) |
+| Bugfix or new feature | `/tdd` |
+| New feature / module | `/plan-eng-review` (full review) or just grill-with-docs (mini) |
+| Refactor existing | `simplify` |
 | UI components | `frontend-design:frontend-design` |
-| New bounded context | `ruflo-ddd:ddd-context` |
-| New aggregate root | `ruflo-ddd:ddd-aggregate` |
-| Unclear scope / new product idea | `superpowers:brainstorming` or `office-hours` |
+| Unclear scope | `superpowers:brainstorming` or `office-hours` |
 | Multi-step plan | `superpowers:writing-plans` |
-| Bugfix or feature with TDD | `superpowers:test-driven-development` |
 | Before claiming done | `superpowers:verification-before-completion` |
-| Pre-merge | `review` + `codex` |
+| Pre-merge | `/review` + `/codex review` |
+| Ship | `/ship` then `/land-and-deploy` |
+| Session end | `/context-save` (or wait for Stop hook to auto-write) |
+| Session start (gap > 1 day) | `/context-restore` |
+| Weekly | `/retro` |
+| Monthly (cathedral test) | `/zoom-out` |
+| Quarterly | `/improve-codebase-architecture` |
+| Stuck > 3 attempts | `/codex:rescue` or `/diagnose` |
 
-A PreToolUse hook enforces this gate: Write/Edit on `atlas/**`, `frontend/src/**`,
-or `migrations/versions/**` is blocked unless one of the planning skills was
-invoked earlier in the session. Don't fight the hook — invoke a planning skill
-or argue the rule out in a plan first.
+PreToolUse hook blocks Edit/Write on `atlas/**`, `frontend/src/**`,
+`migrations/versions/**` unless one of the planning skills was invoked
+earlier in the session.
 
-### Architectural rules (hook-enforced)
+## API design (v6 endpoints)
 
-1. **Tiered file-size limits.** Different file kinds have different reasonable
-   lengths; one-size-fits-all is the wrong call:
-
-   | File kind | LOC limit |
-   |---|---|
-   | Source files (`atlas/`, `frontend/src/components|lib|hooks/`) | **600** |
-   | Test files (`tests/`, `*test_*.py`, `*.test.ts`, `*.spec.ts`) | **800** |
-   | Page shells (`frontend/src/app/**/page.tsx`, `layout.tsx`) | **250** (thin shells; logic goes in lib/components) |
-   | Migrations / lockfiles / generated | no limit (whitelisted) |
-
-   **Escape valve:** if a file is *genuinely* cohesive at its current size,
-   add `# allow-large: <reason>` (Python) or `// allow-large: <reason>`
-   (TS/JS) anywhere in the file. The reason becomes the load-bearing
-   artifact reviewers can challenge — line count alone is never the smell,
-   *responsibility count* is. The marker forces the author to write the
-   justification down where every reviewer sees it.
-
-2. **No cross-context imports.** `atlas.compute.*` cannot import `atlas.api.*`,
-   etc. Exchange happens via the shared kernel (`atlas.primitives`, `atlas.db`,
-   `atlas.config`) or a context's public `__init__.py`.
-3. **Methodology thresholds live in `atlas.atlas_thresholds`,** loaded via
-   `atlas.db.load_thresholds()`. No hardcoded thresholds in code (use
-   `# noqa: threshold` only for genuine non-thresholds).
-4. **Decimal for money. Tz-aware datetimes.** Float for money is rejected by
-   global hooks.
-
-### API design (when M6+ ships)
-
-- Bloomberg-style: terse, function-style URLs (`/api/v1/screen.stocks`),
-  versioned, immutable contract.
-- Pydantic v2 for every request/response. Schema = contract. OpenAPI auto-generated.
+- Bloomberg-style terse URLs (`/v1/screen.stocks`), versioned, immutable.
+- Pydantic v2 every request/response. Schema = contract. OpenAPI auto-gen.
 - Response envelope: `{"data": ..., "meta": {"data_as_of", "fetched_at", "source"}}`.
 - Error envelope: `{"error_code", "field", "message", "context"}`.
-- Cursor pagination. Never offset.
-- `X-RateLimit-*` headers always.
-- `Idempotency-Key` header on writes.
-- Auth = Supabase JWT verified in middleware; `request.state.user` carries `user_id`, `role`.
+- Cursor pagination. Never offset. `X-RateLimit-*` headers. `Idempotency-Key` on writes.
+- Auth = Supabase JWT in middleware; `request.state.user` carries `user_id`, `role`.
 
-### Threshold tuning
+## What goes in this file
 
-Threshold values in `atlas.atlas_thresholds` are tunable at runtime. To change a
-value:
-1. UPDATE the row (will trigger `atlas_threshold_history` audit log).
-2. Next compute run picks up the new value via `load_thresholds()`.
-3. No redeploy needed.
-
-When `/admin/thresholds` UI ships, it'll surface diff preview + audit trail
-before save.
-
----
-
-## Standing guardrails from 2026-05 health audit
-
-Learnings from the first full codebase health pass. Each rule maps to a bug
-category found in the audit — treat them as patterns to watch for.
-
-### Compute pipeline rules
-
-- **`load_thresholds()` returns `dict[str, Decimal]`.** All compute functions
-  that accept thresholds must type-hint them as `Mapping[str, Decimal]` not
-  `dict[str, float]`. When using threshold values in arithmetic with floats
-  (e.g. `/100.0`), cast first: `float(thresholds["key"]) / 100.0`.
-
-- **Division guards on all ratio columns.** Any `x / y` where `y` comes from
-  benchmark or external data must use `.replace(0, pd.NA)` to guard zero
-  denominators. Holiday runs and early history produce zero vols → `inf` risk
-  states. Pattern: `stock_col / bench_col.replace(0, pd.NA)`.
-
-- **`np.select` ordering is conservative-first.** When conditions overlap at
-  threshold edges, the more-restrictive/negative state must appear first.
-  "Avoid before Underweight before Overweight", "Below Trend before High before
-  Elevated". First-match-wins — wrong order silently overrides the right state.
-
-- **NAV gaps must be logged before filling.** Never call `ffill()` or
-  `fillna()` on NAV/price series without first counting and logging gap rows.
-  Pattern: `if na_count := df["close"].isna().sum(): log.warning("nav_gaps", count=int(na_count)); df["close"] = df["close"].ffill()`.
-
-- **VIX NaN requires per-condition guards.** Missing VIX must not silently
-  force the regime to a non-Risk-On state. Use `vix_valid = vix.notna()` and
-  gate conditions: `is_risk_on = ... & (~vix_valid | (vix < threshold))`.
-
-- **No SQL f-strings without `# noqa: S608` with justification.** Global S608
-  suppression was removed. Every SQL f-string must have a per-line noqa with a
-  reason explaining why the identifier is safe (constant, whitelist-validated,
-  schema-introspected — never user input).
-
-### Frontend rules
-
-- **No `SELECT *` on time-series tables.** Enumerate exact columns matching
-  the TypeScript type. `SELECT *` on a 30-column regime table breaks silently
-  if columns are added/removed.
-
-- **No `parseFloat()` on financial Decimal fields.** Use `Number()` for
-  display-only coefficients (deployment multiplier). For anything stored as
-  money, keep as string and format at display time.
-
-- **No non-null assertions (`!`) on nullable DB fields.** Use optional
-  chaining (`?.`) with `?? '0'` fallback. The assertion produces `NaN%` in
-  the UI when the field is NULL — which is valid DB state for new funds.
-
-### Architectural red flags
-
-- **`atlas.api.*` must not import from `atlas.simulation.*` internals.** Use
-  the simulation context's public `__init__.py` exports only.
-
-- **Fake 202 responses must not persist `status='running'`.** Either spawn
-  the subprocess or return `status='queued'` with no DB row. A running row
-  that never completes permanently blocks the 30-min concurrency guard.
-
-- **Auth middleware must exist before shipping M6.** Current `atlas/api/__init__.py`
-  has no Supabase JWT middleware. All M6 API routes must be behind
-  `get_current_user` dependency before going to production.
+Project-only conventions, paths, and pointers. NOT a place to duplicate
+global rules from `~/.claude/CLAUDE.md`. Keep this file under 120 lines —
+long CLAUDE.md files dilute their own enforcement.
