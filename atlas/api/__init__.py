@@ -10,14 +10,18 @@ from atlas.api.admin.proposals import router as admin_proposals_router
 from atlas.api.admin.validator import router as admin_validator_router
 from atlas.api.agents import router as agents_router
 from atlas.api.auth import JWTAuthMiddleware
+from atlas.api.cell_defs import router as cell_defs_router
 from atlas.api.cts_brief import router as cts_brief_router
 from atlas.api.cts_sectors import router as cts_sectors_router
 from atlas.api.fund_decisions import router as fund_decisions_router
+from atlas.api.instrument import router as instrument_router
 from atlas.api.intraday import router as intraday_router
 from atlas.api.kite_auth import router as kite_auth_router
+from atlas.api.market import router as market_router
 from atlas.api.openbb.router import openbb_router
 from atlas.api.portfolios import router as portfolios_router
 from atlas.api.portfolios import rule_based_router
+from atlas.api.screen import router as screen_router
 from atlas.api.strategies import router as strategies_router
 from atlas.api.trading import router as trading_router
 from atlas.api.tv_signals import router as tv_signals_router
@@ -51,6 +55,11 @@ app.include_router(tv_signals_router)  # SP10: TV webhook receiver + signal repo
 app.include_router(trading_router)  # Strategy Lab — /api/trading/*
 app.include_router(fund_decisions_router)  # MF holdings decision history
 app.include_router(openbb_router)  # SP03: OpenBB BYO Copilot — /v1/agents.json + /v1/query
+# v6 /v1 endpoints — screen.*, market.regime, cell.definitions, instrument/{iid}
+app.include_router(screen_router)
+app.include_router(market_router)
+app.include_router(cell_defs_router)
+app.include_router(instrument_router)
 
 
 @app.get("/health", include_in_schema=False)
