@@ -82,6 +82,26 @@ FEATURES: Final[tuple[str, ...]] = (
     "rs_momentum",
     "rs_velocity",
     "volume_zscore",
+    # --- deep-search extension features (Phase 0.5e — Large @ 12m POSITIVE) ---
+    # Added 2026-05-24 to support exhaustive single-cell exploration per
+    # methodology lock principle 7 ("pick features by what separates TP
+    # from FP, not from theory"). All vectorisable from close+volume.
+    "rs_residual_3m",
+    "rs_residual_12m",
+    "dd_from_52w_high",
+    "dd_from_3y_high",
+    "dd_from_5y_high",
+    "dist_above_sma50",
+    "dist_above_sma200",
+    "sma50_gt_sma200",
+    "realized_vol_252d",
+    "close_over_60d_high",
+    "close_over_30d_high",
+    "volume_zscore_60d",
+    "pos_months_12m",
+    "rs_alignment_count",
+    "rs_acceleration_63d",
+    "trend_slope_60d",
 )
 
 __all__ = [
