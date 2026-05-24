@@ -44,6 +44,13 @@ from __future__ import annotations
 from typing import Final
 
 from atlas.features.path import add_max_drawdown, add_returns
+from atlas.features.scorecard_writer import (
+    ScorecardRow,
+    ScorecardWriteResult,
+    compute_cap_tiers,
+    compute_daily_scorecard,
+    derive_family_states,
+)
 from atlas.features.sector import compute_rs_velocity
 from atlas.features.trend import add_emas, add_rs_momentum
 from atlas.features.volatility import add_atr, add_realized_vol
@@ -94,4 +101,10 @@ __all__ = [
     "add_returns",
     # Sector family
     "compute_rs_velocity",
+    # Daily writer
+    "ScorecardRow",
+    "ScorecardWriteResult",
+    "compute_cap_tiers",
+    "compute_daily_scorecard",
+    "derive_family_states",
 ]
