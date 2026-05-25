@@ -116,6 +116,8 @@ def _to_decimal(value: object) -> Decimal | None:
     if value is None:
         return None
     if isinstance(value, Decimal):
+        if value.is_nan() or value.is_infinite():
+            return None
         return value
     if isinstance(value, float):
         if np.isnan(value) or np.isinf(value):
@@ -125,7 +127,10 @@ def _to_decimal(value: object) -> Decimal | None:
         return Decimal(value)
     # Anything else (str from JSONB, numpy scalar, etc.) — best effort.
     try:
-        return Decimal(str(value))
+        d = Decimal(str(value))
+        if d.is_nan() or d.is_infinite():
+            return None
+        return d
     except (TypeError, ValueError, ArithmeticError):
         return None
 
