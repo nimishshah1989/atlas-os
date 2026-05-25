@@ -56,14 +56,14 @@ describe('GradeChip — variant renders', () => {
     expect(chip.className).toContain('text-paper')
   })
 
-  it('renders failed-gate with paper-deep inline style and ink-tertiary text', () => {
+  it('renders failed-gate with bg-paper-deep class and ink-tertiary text', () => {
     const { container } = render(<GradeChip grade="failed-gate" />)
     const chip = container.querySelector('span')!
     // Display text is NO SIGNAL for failed-gate
     expect(chip.textContent).toBe('NO SIGNAL')
     expect(chip.className).toContain('text-ink-tertiary')
-    // paper-deep (#F1ECDF) is applied via inline style (not in globals.css yet)
-    expect(chip.style.backgroundColor).toBe('rgb(241, 236, 223)')
+    // paper-deep token is now in globals.css; applied via Tailwind class
+    expect(chip.className).toContain('bg-paper-deep')
   })
 })
 

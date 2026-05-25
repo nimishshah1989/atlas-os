@@ -4,7 +4,7 @@
 // Trigger: Settings gear icon. Modal: grouped checkboxes in 5 categories.
 // Closes on: outside-click, Esc key.
 // No Radix Dialog available — uses createPortal + manual focus trap.
-// Tokens: DESIGN.md paper/ink only.
+// Tokens: all colors use globals.css @theme tokens (no inline hex values).
 
 'use client'
 
@@ -34,7 +34,8 @@ export type ColumnDef<T extends string = string> = {
 type Props<T extends string = string> = {
   columns: ColumnDef<T>[]
   visible: T[]
-  defaults: T[]
+  // NOTE: `defaults` prop removed — reset is wired via onReset callback which
+  // calls the hook's own reset(). Accepting defaults here was dead code (never read).
   onVisibleChange: (cols: T[]) => void
   onReset: () => void
   open: boolean
@@ -82,14 +83,23 @@ function GearIcon() {
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
 
+type ModalProps<T extends string> = {
+  columns: ColumnDef<T>[]
+  visible: T[]
+  onVisibleChange: (cols: T[]) => void
+  onReset: () => void
+  onClose: () => void
+  triggerRef: React.RefObject<HTMLButtonElement | null>
+}
+
 function Modal<T extends string>({
   columns,
   visible,
-  defaults,
   onVisibleChange,
   onReset,
   onClose,
-}: Omit<Props<T>, 'open' | 'onOpenChange'> & { onClose: () => void }) {
+  triggerRef,
+}: ModalProps<T>) {
   const modalRef = useRef<HTMLDivElement>(null)
   const firstFocusableRef = useRef<HTMLButtonElement>(null)
 
@@ -111,15 +121,23 @@ function Modal<T extends string>({
 
   // Outside-click closes the modal (mousedown not click, to avoid event
   // propagation quirks when clicking portal content).
+  // Excludes the trigger button ref so clicking the trigger while the modal is
+  // open does NOT cause a flicker (close fires + toggle-open fires = stays open
+  // but flickers). With the exclusion, only the trigger's onClick toggles state.
   useEffect(() => {
     function handleMouseDown(e: MouseEvent) {
-      if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
+      if (
+        modalRef.current &&
+        !modalRef.current.contains(e.target as Node) &&
+        triggerRef.current &&
+        !triggerRef.current.contains(e.target as Node)
+      ) {
         onClose()
       }
     }
     document.addEventListener('mousedown', handleMouseDown)
     return () => document.removeEventListener('mousedown', handleMouseDown)
-  }, [onClose])
+  }, [onClose, triggerRef])
 
   const visibleSet = new Set(visible)
 
@@ -152,26 +170,26 @@ function Modal<T extends string>({
 
       <div
         ref={modalRef}
-        className="relative z-10 w-72 rounded border border-[#C2B8A8] bg-[#F8F4EC] shadow-lg"
+        className="relative z-10 w-72 rounded border border-paper-rule bg-paper shadow-lg"
         style={{ maxHeight: 'calc(100vh - 5rem)', overflowY: 'auto' }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#C2B8A8] px-4 py-3">
-          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[#1A1714]">
+        <div className="flex items-center justify-between border-b border-paper-rule px-4 py-3">
+          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-primary">
             Columns
           </span>
           <div className="flex items-center gap-2">
             <button
               ref={firstFocusableRef}
               onClick={onReset}
-              className="text-xs text-[#6B6157] underline underline-offset-2 hover:text-[#1A1714] transition-colors"
+              className="text-xs text-ink-secondary underline underline-offset-2 hover:text-ink-primary transition-colors"
             >
               Reset to default
             </button>
             <button
               onClick={onClose}
               aria-label="Close column chooser"
-              className="ml-1 rounded p-0.5 text-[#9A8F82] hover:text-[#1A1714] transition-colors"
+              className="ml-1 rounded p-0.5 text-ink-tertiary hover:text-ink-primary transition-colors"
             >
               <svg
                 aria-hidden="true"
@@ -198,7 +216,7 @@ function Modal<T extends string>({
               <section key={group} aria-labelledby={`colgroup-${group}`}>
                 <p
                   id={`colgroup-${group}`}
-                  className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#9A8F82]"
+                  className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-tertiary"
                 >
                   {GROUP_LABELS[group]}
                 </p>
@@ -207,12 +225,12 @@ function Modal<T extends string>({
                     const checked = visibleSet.has(col.key)
                     return (
                       <li key={col.key}>
-                        <label className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-xs text-[#3D362E] hover:bg-[#F1ECDF] transition-colors">
+                        <label className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-xs text-ink-primary hover:bg-paper-deep transition-colors">
                           <input
                             type="checkbox"
                             checked={checked}
                             onChange={() => toggleColumn(col.key)}
-                            className="h-3 w-3 accent-[#2F6B43] rounded-sm"
+                            className="h-3 w-3 accent-signal-pos rounded-sm"
                             aria-label={`Toggle ${col.label}`}
                           />
                           {col.label}
@@ -236,7 +254,6 @@ function Modal<T extends string>({
 export function ColumnChooser<T extends string = string>({
   columns,
   visible,
-  defaults,
   onVisibleChange,
   onReset,
   open,
@@ -258,7 +275,7 @@ export function ColumnChooser<T extends string = string>({
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-label="Open column chooser"
-        className="flex items-center gap-1 rounded border border-[#C2B8A8] px-2 py-1 text-xs text-[#6B6157] transition-colors hover:bg-[#F1ECDF] hover:text-[#1A1714]"
+        className="flex items-center gap-1 rounded border border-paper-rule px-2 py-1 text-xs text-ink-secondary transition-colors hover:bg-paper-deep hover:text-ink-primary"
       >
         <GearIcon />
         Columns
@@ -268,10 +285,10 @@ export function ColumnChooser<T extends string = string>({
         <Modal
           columns={columns}
           visible={visible}
-          defaults={defaults}
           onVisibleChange={onVisibleChange}
           onReset={onReset}
           onClose={handleClose}
+          triggerRef={triggerRef}
         />
       )}
     </>

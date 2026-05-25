@@ -4,6 +4,7 @@
 @theme {
   /* ── Atlas DS color palette ── */
   --color-paper:         #F8F4EC;
+  --color-paper-deep:    #F1ECDF;   /* hover/selected paper — deeper warm tint */
   --color-ink-primary:   #1A1714;
   --color-ink-secondary: #5A5248;
   --color-ink-tertiary:  #8C8278;

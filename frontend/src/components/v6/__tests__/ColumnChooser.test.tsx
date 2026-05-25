@@ -67,7 +67,6 @@ function renderChooser(
     <ColumnChooser
       columns={COLUMNS}
       visible={visible}
-      defaults={DEFAULTS}
       onVisibleChange={onVisibleChange}
       onReset={onReset}
       open={open}
