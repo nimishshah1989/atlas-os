@@ -1,0 +1,21 @@
+{
+  "sector_relative_leadership": ["sector", "RS"],
+  "quality_momentum": ["volatility", "cohort"],
+  "bab_low_beta": ["beta", "momentum"],
+  "mean_reversion": ["52w", "pullback"],
+  "liquidity_expansion": ["turnover", "volume"],
+  "inflection": ["SMA200", "RS"],
+  "consolidation_breakout": ["volatility", "breakout"],
+  "structural": ["trend", "RS"],
+  "deep_value": ["drawdown", "recovery"],
+  "low_vol_carry": ["volatility", "carry"],
+  "breakout_with_pullback": ["52w", "pullback"],
+  "idio_high_RS": ["RS", "idiosyncratic"],
+  "obv_thrust": ["OBV", "volume"],
+  "mean_reversion_overbought": ["200D SMA", "RSI"],
+  "distribution": ["volume", "RS"],
+  "volatility_spike": ["vol", "RS"],
+  "breakdown": ["52w-low", "negative 12m RS"],
+  "sector_drag": ["sector", "breadth"],
+  "sector_breakdown": ["sector", "RS"]
+}
