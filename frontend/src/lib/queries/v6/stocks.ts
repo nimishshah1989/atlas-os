@@ -6,10 +6,10 @@
 // Joins:
 //   atlas_universe_stocks     ← symbol / company_name / sector / tier
 //   atlas_conviction_daily    ← per-tenure verdict + IC + cell id (4 rows / iid)
-//   atlas_stock_metrics_daily ← ret_1m / 3m / 6m / 12m + rs_pctile_3m
+//   atlas_stock_metrics_daily ← ret_1d / 1w / 1m / 3m / 6m / 12m + rs_pctile_3m
 //   atlas_stock_signal_unified ← rs_state / engine_state (Stage) / is_investable
 //
-// Returns ScreenStock[] (same shape the page consumes from api/v1).
+// Returns StockV6Row[] — extends ScreenStock with short-horizon returns (1d/1w).
 
 import 'server-only'
 import sql from '@/lib/db'
@@ -31,11 +31,38 @@ type StockRow = {
   rs_state: string | null
   engine_state: string | null
   is_investable: boolean | null
+  ret_1d: string | null
+  ret_1w: string | null
   ret_1m: string | null
   ret_3m: string | null
   ret_6m: string | null
   ret_12m: string | null
   rs_pctile_3m: string | null
+}
+
+/**
+ * ScreenStock extended with short-horizon returns required by design-lock §3.4.
+ * The base ScreenStock type lacks ret_1d and ret_1w; this additive extension
+ * keeps the type stable for other consumers while C.15 adds the missing columns.
+ */
+export type StockV6Row = {
+  iid: string
+  symbol: string
+  company_name: string | null
+  sector: string | null
+  tier: Tier
+  mcap_inr: number | null
+  rs_state: string | null
+  stage: string | null
+  conviction_tape: ConvictionTape
+  ret_1d: number | null
+  ret_1w: number | null
+  ret_1m: number | null
+  ret_3m: number | null
+  ret_6m: number | null
+  ret_12m: number | null
+  rs_pctile_3m: number | null
+  is_investable: boolean
 }
 
 type ConvictionRow = {
@@ -70,16 +97,19 @@ export type GetStocksForDateParams = {
 }
 
 /**
- * Return one ScreenStock row per stock in the universe for a snapshot_date.
+ * Return one StockV6Row per stock in the universe for a snapshot_date.
  *
  * The conviction_tape is built by zipping the 4-tenure rows from
  * atlas_conviction_daily into a single per-iid object. Stocks with no
  * conviction rows get the all-NEUTRAL tape.
+ *
+ * Includes ret_1d + ret_1w (design-lock §3.4 "always visible" short-horizon
+ * return columns) in addition to the base ScreenStock fields.
  */
 export async function getStocksForDate(
   snapshotDate: string,
   params: GetStocksForDateParams = {},
-): Promise<ScreenStock[]> {
+): Promise<StockV6Row[]> {
   const sector = params.sector ?? null
   const tier = params.tier ?? null
   // 10000 is effectively "no limit" for the v6 universe (~750 stocks).
@@ -98,6 +128,8 @@ export async function getStocksForDate(
       ls.rs_state,
       ls.engine_state,
       ls.is_investable,
+      m.ret_1d::text                 AS ret_1d,
+      m.ret_1w::text                 AS ret_1w,
       m.ret_1m::text                 AS ret_1m,
       m.ret_3m::text                 AS ret_3m,
       m.ret_6m::text                 AS ret_6m,
@@ -154,7 +186,7 @@ export async function getStocksForDate(
     }
   }
 
-  return stockRows.map((r): ScreenStock => ({
+  return stockRows.map((r): StockV6Row => ({
     iid: r.iid,
     symbol: r.symbol,
     company_name: r.company_name,
@@ -164,6 +196,8 @@ export async function getStocksForDate(
     rs_state: r.rs_state,
     stage: r.engine_state,
     conviction_tape: byIid.get(r.iid) ?? EMPTY_TAPE,
+    ret_1d: r.ret_1d != null ? Number(r.ret_1d) : null,
+    ret_1w: r.ret_1w != null ? Number(r.ret_1w) : null,
     ret_1m: r.ret_1m != null ? Number(r.ret_1m) : null,
     ret_3m: r.ret_3m != null ? Number(r.ret_3m) : null,
     ret_6m: r.ret_6m != null ? Number(r.ret_6m) : null,
