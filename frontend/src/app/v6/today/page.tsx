@@ -2,12 +2,11 @@
 // v6 Today — RegimeIndicator + Top Conviction stacks + Cells Lit Today + Sector Ladder top-5.
 
 import Link from 'next/link'
-import {
-  getMarketRegime,
-  getScreenStocks,
-  getScreenSectors,
-  getCellDefinitions,
-} from '@/lib/api/v1'
+import { getCellDefinitions } from '@/lib/api/v1'
+import { getCurrentRegime } from '@/lib/queries/v6/regime'
+import { getStocksForDate } from '@/lib/queries/v6/stocks'
+import { getSectorsForDate } from '@/lib/queries/v6/sectors'
+import { getLatestSnapshotDate } from '@/lib/queries/v6/snapshot'
 import { RegimeIndicator } from '@/components/v6/RegimeIndicator'
 import { ConvictionTape } from '@/components/v6/ConvictionTape'
 import { CellMatrix } from '@/components/v6/CellMatrix'
@@ -35,16 +34,14 @@ function topConvictionByTier(stocks: ScreenStock[], tier: Tier, n: number): Scre
 }
 
 export default async function V6TodayPage() {
-  const [regimeRes, stocksRes, sectorsRes, cellsRes] = await Promise.all([
-    getMarketRegime(),
-    getScreenStocks({ limit: 200 }),
-    getScreenSectors(),
+  const snapshotDate = await getLatestSnapshotDate()
+  const [regime, stocks, sectors, cellsRes] = await Promise.all([
+    getCurrentRegime(),
+    getStocksForDate(snapshotDate, { limit: 200 }),
+    getSectorsForDate(snapshotDate),
     getCellDefinitions(),
   ])
 
-  const regime = regimeRes.data
-  const stocks = stocksRes.data
-  const sectors = sectorsRes.data
   const cells = cellsRes.data
 
   const top = {
@@ -75,7 +72,7 @@ export default async function V6TodayPage() {
         </p>
       </div>
 
-      <DataSourceBanner source={regimeRes.source_kind} asOf={regimeRes.meta.data_as_of} />
+      <DataSourceBanner source="live" asOf={snapshotDate} />
 
       <div className="px-6 py-5 border-b border-paper-rule">
         <RegimeIndicator regime={regime} />

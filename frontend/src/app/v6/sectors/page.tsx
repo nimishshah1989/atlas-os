@@ -1,14 +1,16 @@
 // frontend/src/app/v6/sectors/page.tsx
 // v6 sectors — SectorLadder hero.
 
-import { getScreenSectors } from '@/lib/api/v1'
+import { getSectorsForDate } from '@/lib/queries/v6/sectors'
+import { getLatestSnapshotDate } from '@/lib/queries/v6/snapshot'
 import { SectorLadder } from '@/components/v6/SectorLadder'
 import { DataSourceBanner } from '@/components/v6/DataSourceBanner'
 
 export const dynamic = 'force-dynamic'
 
 export default async function V6SectorsPage() {
-  const { data: sectors, meta, source_kind } = await getScreenSectors()
+  const snapshotDate = await getLatestSnapshotDate()
+  const sectors = await getSectorsForDate(snapshotDate)
 
   const overweight = sectors.filter(s => s.sector_state === 'Overweight').length
   const neutral = sectors.filter(s => s.sector_state === 'Neutral').length
@@ -30,7 +32,7 @@ export default async function V6SectorsPage() {
         </p>
       </div>
 
-      <DataSourceBanner source={source_kind} asOf={meta.data_as_of} />
+      <DataSourceBanner source="live" asOf={snapshotDate} />
 
       <div className="px-6 py-3 border-b border-paper-rule flex items-center gap-6 flex-wrap">
         <span className="flex items-center gap-1.5 font-sans text-xs text-ink-secondary">

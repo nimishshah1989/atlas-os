@@ -1,7 +1,8 @@
 // frontend/src/app/v6/etfs/page.tsx
 // v6 ETFs — POSITIVE/NEUTRAL only.
 
-import { getScreenEtfs } from '@/lib/api/v1'
+import { getEtfsForDate } from '@/lib/queries/v6/etfs'
+import { getLatestSnapshotDate } from '@/lib/queries/v6/snapshot'
 import { ConvictionTape } from '@/components/v6/ConvictionTape'
 import { DataSourceBanner } from '@/components/v6/DataSourceBanner'
 import { LinkedETF } from '@/components/ui/LinkedToken'
@@ -18,7 +19,8 @@ function pctSigned(v: number | null) {
 }
 
 export default async function V6EtfsPage() {
-  const { data: etfs, meta, source_kind } = await getScreenEtfs()
+  const snapshotDate = await getLatestSnapshotDate()
+  const etfs = await getEtfsForDate(snapshotDate)
 
   return (
     <div className="max-w-[1400px] mx-auto">
@@ -35,7 +37,7 @@ export default async function V6EtfsPage() {
         </p>
       </div>
 
-      <DataSourceBanner source={source_kind} asOf={meta.data_as_of} />
+      <DataSourceBanner source="live" asOf={snapshotDate} />
 
       <div className="overflow-x-auto border border-paper-rule rounded-[2px] mx-6 my-4">
         <table className="w-full border-collapse">

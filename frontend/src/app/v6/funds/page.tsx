@@ -1,7 +1,8 @@
 // frontend/src/app/v6/funds/page.tsx
 // v6 funds — ConvictionTape + StyleBox.
 
-import { getScreenFunds } from '@/lib/api/v1'
+import { getFundsForDate } from '@/lib/queries/v6/funds'
+import { getLatestSnapshotDate } from '@/lib/queries/v6/snapshot'
 import { ConvictionTape } from '@/components/v6/ConvictionTape'
 import { DataSourceBanner } from '@/components/v6/DataSourceBanner'
 import { StyleBox } from '@/components/v6/StyleBox'
@@ -38,7 +39,8 @@ function styleBoxFromFunds(funds: ScreenFund[]) {
 }
 
 export default async function V6FundsPage() {
-  const { data: funds, meta, source_kind } = await getScreenFunds()
+  const snapshotDate = await getLatestSnapshotDate()
+  const funds = await getFundsForDate(snapshotDate)
   const styleCells = styleBoxFromFunds(funds)
 
   return (
@@ -56,7 +58,7 @@ export default async function V6FundsPage() {
         </p>
       </div>
 
-      <DataSourceBanner source={source_kind} asOf={meta.data_as_of} />
+      <DataSourceBanner source="live" asOf={snapshotDate} />
 
       <div className="px-6 py-5 border-b border-paper-rule flex gap-8 flex-wrap">
         <StyleBox cells={styleCells} />

@@ -2,7 +2,9 @@
 // Full regime story v6 — RegimeIndicator hero + cells favored under regime.
 
 import Link from 'next/link'
-import { getMarketRegime, getCellDefinitions } from '@/lib/api/v1'
+import { getCellDefinitions } from '@/lib/api/v1'
+import { getCurrentRegime } from '@/lib/queries/v6/regime'
+import { getLatestSnapshotDate } from '@/lib/queries/v6/snapshot'
 import { RegimeIndicator } from '@/components/v6/RegimeIndicator'
 import { DataSourceBanner } from '@/components/v6/DataSourceBanner'
 import { LinkedCellById } from '@/components/v6/LinkedCell'
@@ -12,11 +14,11 @@ import { formatIC } from '@/lib/format-cell'
 export const dynamic = 'force-dynamic'
 
 export default async function RegimePage() {
-  const [regimeRes, cellsRes] = await Promise.all([
-    getMarketRegime(),
+  const snapshotDate = await getLatestSnapshotDate()
+  const [regime, cellsRes] = await Promise.all([
+    getCurrentRegime(),
     getCellDefinitions(),
   ])
-  const regime = regimeRes.data
   const cells = cellsRes.data
   const cellsById = new Map(cells.map(c => [c.cell_id, c]))
 
@@ -36,7 +38,7 @@ export default async function RegimePage() {
         </p>
       </div>
 
-      <DataSourceBanner source={regimeRes.source_kind} asOf={regimeRes.meta.data_as_of} />
+      <DataSourceBanner source="live" asOf={snapshotDate} />
 
       <div className="px-6 py-5 border-b border-paper-rule">
         <RegimeIndicator regime={regime} />

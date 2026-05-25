@@ -1,7 +1,9 @@
 // frontend/src/app/v6/stocks/page.tsx
 // v6 stocks page — 4-tenure ConvictionTape per row + chip filters + drill-down.
 
-import { getScreenStocks, getCellDefinitions } from '@/lib/api/v1'
+import { getCellDefinitions } from '@/lib/api/v1'
+import { getStocksForDate } from '@/lib/queries/v6/stocks'
+import { getLatestSnapshotDate } from '@/lib/queries/v6/snapshot'
 import { StocksTableV6 } from '@/components/v6/StocksTableV6'
 import { DataSourceBanner } from '@/components/v6/DataSourceBanner'
 import type { CellRule } from '@/lib/api/v1'
@@ -9,11 +11,11 @@ import type { CellRule } from '@/lib/api/v1'
 export const dynamic = 'force-dynamic'
 
 export default async function V6StocksPage() {
-  const [stocksRes, cellsRes] = await Promise.all([
-    getScreenStocks(),
+  const snapshotDate = await getLatestSnapshotDate()
+  const [stocks, cellsRes] = await Promise.all([
+    getStocksForDate(snapshotDate),
     getCellDefinitions(),
   ])
-  const stocks = stocksRes.data
   const cellRules = new Map<string, CellRule[]>(
     cellsRes.data.map(c => [c.cell_id, c.rules])
   )
@@ -36,7 +38,7 @@ export default async function V6StocksPage() {
         </p>
       </div>
 
-      <DataSourceBanner source={stocksRes.source_kind} asOf={stocksRes.meta.data_as_of} />
+      <DataSourceBanner source="live" asOf={snapshotDate} />
 
       <div className="px-6 py-3 border-b border-paper-rule flex items-center gap-6 flex-wrap">
         <span className="flex items-center gap-1.5 font-sans text-xs text-ink-secondary">

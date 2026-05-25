@@ -3,7 +3,10 @@
 
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { getScreenSectors, getScreenStocks, getCellDefinitions } from '@/lib/api/v1'
+import { getCellDefinitions } from '@/lib/api/v1'
+import { getSectorsForDate } from '@/lib/queries/v6/sectors'
+import { getStocksForDate } from '@/lib/queries/v6/stocks'
+import { getLatestSnapshotDate } from '@/lib/queries/v6/snapshot'
 import { StocksTableV6 } from '@/components/v6/StocksTableV6'
 import { DataSourceBanner } from '@/components/v6/DataSourceBanner'
 import { StateBadge } from '@/components/ui/StateBadge'
@@ -15,12 +18,13 @@ export const dynamic = 'force-dynamic'
 export default async function V6SectorDetailPage({ params }: { params: Promise<{ name: string }> }) {
   const { name } = await params
   const decoded = decodeURIComponent(name)
-  const [sectorsRes, stocksRes, cellsRes] = await Promise.all([
-    getScreenSectors(),
-    getScreenStocks({ sector: decoded }),
+  const snapshotDate = await getLatestSnapshotDate()
+  const [sectors, sectorStocks, cellsRes] = await Promise.all([
+    getSectorsForDate(snapshotDate),
+    getStocksForDate(snapshotDate, { sector: decoded }),
     getCellDefinitions(),
   ])
-  const sector = sectorsRes.data.find(s => s.sector_name === decoded)
+  const sector = sectors.find(s => s.sector_name === decoded)
   if (!sector) notFound()
 
   const cellRules = new Map<string, CellRule[]>(
@@ -49,7 +53,7 @@ export default async function V6SectorDetailPage({ params }: { params: Promise<{
         </div>
       </div>
 
-      <DataSourceBanner source={sectorsRes.source_kind} asOf={sectorsRes.meta.data_as_of} />
+      <DataSourceBanner source="live" asOf={snapshotDate} />
 
       <div className="px-6 py-4 border-b border-paper-rule flex items-center gap-6 flex-wrap">
         <Metric label="Breadth (Stage 2)" value={sector.breadth_pct_stage_2 != null ? `${Math.round(sector.breadth_pct_stage_2 * 100)}%` : '—'} />
@@ -76,13 +80,13 @@ export default async function V6SectorDetailPage({ params }: { params: Promise<{
         <h2 className="font-sans text-xs font-medium text-ink-tertiary uppercase tracking-wider mb-3">
           Constituents
         </h2>
-        {stocksRes.data.length === 0 ? (
+        {sectorStocks.length === 0 ? (
           <p className="font-sans text-sm text-ink-secondary">
             No constituent stocks in the current universe. The demo dataset is curated
             to top-tier names — the live endpoint surfaces all stocks in the sector.
           </p>
         ) : (
-          <StocksTableV6 stocks={stocksRes.data} cellRules={cellRules} />
+          <StocksTableV6 stocks={sectorStocks} cellRules={cellRules} />
         )}
       </div>
     </div>
