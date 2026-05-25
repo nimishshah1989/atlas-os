@@ -147,13 +147,13 @@ describe('CellDetailClient', () => {
   })
 
   it('drift_warn chip is visible only when drift_status = drift_warn', () => {
-    // healthy: no drift chip
+    // healthy: no drift chip (role="status" should not be present)
     const { rerender } = render(<CellDetailClient {...BASE_PROPS} cell={BASE_CELL} />)
-    expect(screen.queryByText('Drift Warning')).not.toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
 
-    // drift_warn: chip appears
+    // drift_warn: chip appears with canonical DriftWarnChip copy
     rerender(<CellDetailClient {...BASE_PROPS} cell={CELL_DRIFT_WARN} cellLabel="Mid 12m POSITIVE" />)
-    expect(screen.getByText('Drift Warning')).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: /Drift warning/i })).toBeInTheDocument()
   })
 
 })

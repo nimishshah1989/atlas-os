@@ -14,11 +14,13 @@ import { GradeChip } from './GradeChip'
 import { ConvictionTape } from './ConvictionTape'
 import { PortfolioBadge } from './PortfolioBadge'
 import { PositionSizingWidget } from './PositionSizingWidget'
+import { DriftWarnChip } from './DriftWarnChip'
 import { toNumber } from '@/lib/v6/decimal'
 import type { ScreenStock } from '@/lib/api/v1'
 import type { HoldingState } from '@/lib/queries/v6/portfolio_holdings'
 import type { StockTechnicals } from '@/lib/queries/v6/stock_technicals'
 import type { Grade } from './GradeChip'
+import type { DriftStatus } from '@/lib/queries/v6/cells'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -42,6 +44,8 @@ export interface StockHeroProps {
   actionVerb: string
   /** 3-5 thesis bullets. */
   bullets: string[]
+  /** Drift status from the cell backing this stock's signal. null = unknown / not applicable. */
+  driftStatus?: DriftStatus | null
   className?: string
 }
 
@@ -155,6 +159,7 @@ export function StockHero({
   crossRuleDepth,
   actionVerb,
   bullets,
+  driftStatus = null,
   className = '',
 }: StockHeroProps) {
   const grade = deriveGrade(stock)
@@ -182,6 +187,7 @@ export function StockHero({
       <div className="flex items-start justify-between flex-wrap gap-4 mb-5">
         <div className="flex items-center gap-3 flex-wrap">
           <GradeChip grade={grade} size="md" />
+          <DriftWarnChip driftStatus={driftStatus} />
           <h1 className="font-serif text-2xl lg:text-3xl font-semibold text-ink-primary leading-none">
             {stock.symbol}
           </h1>

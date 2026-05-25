@@ -12,9 +12,10 @@
 
 import React from 'react'
 import { GradeChip } from '@/components/v6/GradeChip'
+import { DriftWarnChip } from '@/components/v6/DriftWarnChip'
 import type { Grade } from '@/components/v6/GradeChip'
 import { formatPct } from '@/lib/v6/decimal'
-import type { Cell, DriftStatus } from '@/lib/queries/v6/cells'
+import type { Cell } from '@/lib/queries/v6/cells'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -32,32 +33,6 @@ function icToGrade(ic: string | null | undefined): Grade {
   if (n >= 0.02) return 'BB'
   if (n >= 0.01) return 'B'
   return 'failed-gate'
-}
-
-function DriftChip({ status }: { status: DriftStatus }): React.ReactElement | null {
-  if (status === 'healthy') return null
-
-  const config = {
-    drift_warn: { label: 'Drift Warning', classes: 'bg-signal-warn/20 text-signal-warn' },
-    deprecated: { label: 'Deprecated', classes: 'bg-paper-deep text-ink-tertiary' },
-  } as const
-
-  const c = config[status as 'drift_warn' | 'deprecated']
-  if (!c) return null
-
-  return (
-    <span
-      role="status"
-      aria-label={`Cell drift status: ${c.label}`}
-      className={[
-        'inline-flex items-center px-2 py-0.5 rounded-[2px] text-[11px] font-sans font-semibold uppercase',
-        'tracking-[0.08em]',
-        c.classes,
-      ].join(' ')}
-    >
-      {c.label}
-    </span>
-  )
 }
 
 // ---------------------------------------------------------------------------
@@ -130,7 +105,7 @@ export function CellHero({ cell, cellLabel }: CellHeroProps): React.ReactElement
           {cellLabel}
         </h1>
         <GradeChip grade={grade} size="md" />
-        <DriftChip status={cell.drift_status} />
+        <DriftWarnChip driftStatus={cell.drift_status} />
       </div>
 
       {/* Tier / tenure / action tags */}
