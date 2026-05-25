@@ -21,6 +21,7 @@ from atlas.api.market import router as market_router
 from atlas.api.openbb.router import openbb_router
 from atlas.api.portfolios import router as portfolios_router
 from atlas.api.portfolios import rule_based_router
+from atlas.api.rank import router as rank_router
 from atlas.api.screen import router as screen_router
 from atlas.api.strategies import router as strategies_router
 from atlas.api.trading import router as trading_router
@@ -55,11 +56,12 @@ app.include_router(tv_signals_router)  # SP10: TV webhook receiver + signal repo
 app.include_router(trading_router)  # Strategy Lab — /api/trading/*
 app.include_router(fund_decisions_router)  # MF holdings decision history
 app.include_router(openbb_router)  # SP03: OpenBB BYO Copilot — /v1/agents.json + /v1/query
-# v6 /v1 endpoints — screen.*, market.regime, cell.definitions, instrument/{iid}
+# v6 /v1 endpoints — screen.*, market.regime, cell.definitions, instrument/{iid}, rank.*
 app.include_router(screen_router)
 app.include_router(market_router)
 app.include_router(cell_defs_router)
 app.include_router(instrument_router)
+app.include_router(rank_router)  # v6 Fund + ETF scorecard ranking (migration 093)
 
 
 @app.get("/health", include_in_schema=False)
