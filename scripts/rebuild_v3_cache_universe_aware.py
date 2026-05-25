@@ -129,13 +129,24 @@ def _fetch_ohlcv_universe_aware(engine: Engine, since: date) -> pd.DataFrame:
 
     JOIN semantics:
       INNER JOIN atlas.atlas_universe_stocks u ON u.instrument_id = o.instrument_id
-      WHERE o.date >= u.effective_from
-        AND (u.effective_to IS NULL OR o.date <= u.effective_to)
+      WHERE (u.effective_to IS NULL OR o.date <= u.effective_to)
+
+    The ``effective_from`` lower-bound is intentionally NOT applied as a
+    date filter. Today the universe table is a present-day snapshot
+    (every row has ``effective_from = UNIVERSE_LOCK_DATE``), so an
+    ``o.date >= u.effective_from`` filter would clip the cache to ~17
+    days of data — useless for 1m/3m/6m/12m walk-forwards.
+
+    The right intent of effective_from is "first date this row's
+    metadata was authoritative", not "first date this instrument was
+    universe-eligible". We treat universe membership as INNER JOIN by
+    iid, with future effective_to support if/when the universe gets a
+    real historical track (the Yes Bank / DHFL / Vodafone-Idea
+    survivorship-correction pattern).
 
     A given instrument may appear multiple times in the universe table
-    if it was added / removed / re-added — the JOIN handles this by
-    matching each OHLCV row to whichever universe-membership window
-    covers its date.
+    if it was added / removed / re-added — the JOIN + downstream dedup
+    handle this correctly when that data lands.
 
     Returns:
         Long DataFrame (date, iid, close, volume) — matches the contract
@@ -150,7 +161,7 @@ def _fetch_ohlcv_universe_aware(engine: Engine, since: date) -> pd.DataFrame:
         FROM public.de_equity_ohlcv o
         INNER JOIN atlas.atlas_universe_stocks u
           ON u.instrument_id = o.instrument_id
-        WHERE o.date >= GREATEST(u.effective_from, CAST(:since AS DATE))
+        WHERE o.date >= CAST(:since AS DATE)
           AND (u.effective_to IS NULL OR o.date <= u.effective_to)
           AND o.close_adj IS NOT NULL
           AND o.volume    IS NOT NULL
@@ -202,12 +213,17 @@ def _fetch_ohlcv_universe_aware(engine: Engine, since: date) -> pd.DataFrame:
 
 
 def _fetch_nifty500(engine: Engine, since: date) -> pd.Series:
-    """Fetch Nifty 500 benchmark closes — identical to plain v3."""
+    """Fetch Nifty 500 benchmark closes.
+
+    Note: ``public.de_index_prices`` uses ``index_code`` (not ``symbol``)
+    as the index identifier column. Lookup is case-sensitive against the
+    canonical ``NIFTY 500`` value (no UPPER() wrap needed).
+    """
     sql = text(
         """
         SELECT date, close
         FROM public.de_index_prices
-        WHERE UPPER(symbol) = :sym
+        WHERE index_code = :sym
           AND date >= :since
         ORDER BY date
         """

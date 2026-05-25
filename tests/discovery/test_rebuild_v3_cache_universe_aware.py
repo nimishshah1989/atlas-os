@@ -138,13 +138,11 @@ def _load_module():
 
 
 @pytest.fixture
-def synthetic_uniaware_rows() -> (
-    tuple[
-        list[tuple[Any, ...]],
-        list[tuple[Any, ...]],
-        list[tuple[Any, ...]],
-    ]
-):
+def synthetic_uniaware_rows() -> tuple[
+    list[tuple[Any, ...]],
+    list[tuple[Any, ...]],
+    list[tuple[Any, ...]],
+]:
     """Build a universe-aware OHLCV result + universe + nifty rows.
 
     Universe composition:
@@ -241,10 +239,13 @@ def test_uniaware_join_sql_respects_effective_window(
         list[tuple[Any, ...]],
     ],
 ) -> None:
-    """The OHLCV SQL must reference both universe table AND effective_from / effective_to.
+    """The OHLCV SQL must INNER JOIN the universe table AND respect effective_to.
 
-    Without this, the cache is just a JOIN by iid — losing the
-    survivorship-correction semantics that justify this rebuild.
+    INNER JOIN gates the cache to curated universe iids only.
+    effective_to filtering supports survivorship-correction for any
+    rows that later get an upper-bound date (Yes Bank / DHFL / V-I
+    pattern). effective_from is intentionally NOT applied as a date
+    floor — see the function's docstring.
     """
     mod = _load_module()
     ohlcv_rows, nifty_rows, universe_rows = synthetic_uniaware_rows
@@ -259,10 +260,9 @@ def test_uniaware_join_sql_respects_effective_window(
     )
     sql = engine.last_ohlcv_sql
     assert sql is not None, "OHLCV SQL was not executed against the stub engine"
-    assert (
-        "atlas_universe_stocks" in sql
-    ), "universe-aware OHLCV SQL must JOIN against atlas.atlas_universe_stocks"
-    assert "effective_from" in sql, "universe-aware OHLCV SQL must filter by effective_from"
+    assert "atlas_universe_stocks" in sql, (
+        "universe-aware OHLCV SQL must JOIN against atlas.atlas_universe_stocks"
+    )
     assert "effective_to" in sql, "universe-aware OHLCV SQL must filter by effective_to (or NULL)"
     assert "INNER JOIN" in sql.upper(), "must use INNER JOIN to enforce universe membership"
 
@@ -296,9 +296,9 @@ def test_uniaware_cache_includes_historical_universe_members(
     df = pd.read_pickle(output)  # noqa: S301
     last_by_iid = df.groupby("iid")["date"].max()
     historical = last_by_iid[last_by_iid < pd.Timestamp("2021-01-01")]
-    assert (
-        len(historical) >= 1
-    ), "universe-aware cache must include historically-delisted iids; got none"
+    assert len(historical) >= 1, (
+        "universe-aware cache must include historically-delisted iids; got none"
+    )
 
 
 def test_uniaware_cache_raises_on_empty_join(tmp_path: Path) -> None:
