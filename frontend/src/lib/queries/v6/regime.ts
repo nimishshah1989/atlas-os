@@ -95,3 +95,132 @@ export async function getCurrentRegime(): Promise<MarketRegime> {
     cells_favored: [],
   }
 }
+
+// ---------------------------------------------------------------------------
+// RegimeDetail — enriched type for the /regime hero (D.9)
+// ---------------------------------------------------------------------------
+
+export type RegimeJourneyPoint = {
+  date: string
+  regime_state: string
+}
+
+export type RegimeInputRow = {
+  date: string
+  smallcap_rs_z: number | null
+  breadth_pct_above_200dma: number | null
+  vix_percentile: number | null
+  cross_sectional_dispersion: number | null
+}
+
+export type RegimeDetail = {
+  /** Regime label — may be 'Cautious', 'Risk-On', etc. Pass through as-is. */
+  regime_state: string
+  /** Raw Decimal string e.g. "0.7000" — may be null if row absent. */
+  deployment_multiplier: string | null
+  /** Number of consecutive trading days in the current regime. */
+  days_in_regime: number
+  /**
+   * 5-day flip probability — column absent on atlas_market_regime_daily.
+   * Always null in v6.0; UI renders "—".
+   */
+  flip_probability_5d: string | null
+  /** Last 12 weeks (84d) of regime history, oldest → newest. */
+  journey: RegimeJourneyPoint[]
+  /** Last 12 weeks (84d) of driver input sparkline data, oldest → newest. */
+  inputs: RegimeInputRow[]
+  /** ISO date string of the most-recent row. */
+  as_of: string | null
+}
+
+type DetailRow = {
+  date: string
+  regime_state: string
+  deployment_multiplier: string | null
+  smallcap_rs_z: string | null
+  breadth_pct_above_200dma: string | null
+  vix_percentile: string | null
+  cross_sectional_dispersion: string | null
+}
+
+/**
+ * Return enriched regime detail for the /regime hero.
+ *
+ * days_in_regime is derived in-process from the ordered history rows —
+ * count consecutive rows (newest → oldest) that share the current regime_state.
+ *
+ * flip_probability_5d is always null (column not present on table in v6.0).
+ */
+export async function getRegimeDetail(): Promise<RegimeDetail> {
+  // Fetch 84 days (12 weeks) to cover journey strip + input sparklines.
+  // A second fetch of the latest row isn't needed — first row of the 84d
+  // window (DESC order) is the latest.
+  const rows = await sql<DetailRow[]>`
+    SELECT
+      date::text                              AS date,
+      regime_state,
+      deployment_multiplier::text             AS deployment_multiplier,
+      smallcap_rs_z::text                     AS smallcap_rs_z,
+      breadth_pct_above_200dma::text          AS breadth_pct_above_200dma,
+      vix_percentile::text                    AS vix_percentile,
+      cross_sectional_dispersion::text        AS cross_sectional_dispersion
+    FROM atlas.atlas_market_regime_daily
+    ORDER BY date DESC
+    LIMIT 84
+  `
+
+  if (rows.length === 0) {
+    return {
+      regime_state: 'Neutral',
+      deployment_multiplier: null,
+      days_in_regime: 0,
+      flip_probability_5d: null,
+      journey: [],
+      inputs: [],
+      as_of: null,
+    }
+  }
+
+  const latest = rows[0]
+  const currentState = latest.regime_state
+
+  // Compute contiguous streak: rows are DESC; count while regime_state matches.
+  let streak = 0
+  for (const row of rows) {
+    if (row.regime_state === currentState) {
+      streak++
+    } else {
+      break
+    }
+  }
+
+  // Reverse to oldest → newest for journey strip + sparklines.
+  const ascending = rows.slice().reverse()
+
+  const journey: RegimeJourneyPoint[] = ascending.map(r => ({
+    date: r.date,
+    regime_state: r.regime_state,
+  }))
+
+  const inputs: RegimeInputRow[] = ascending.map(r => ({
+    date: r.date,
+    smallcap_rs_z: r.smallcap_rs_z != null ? Number(r.smallcap_rs_z) : null,
+    breadth_pct_above_200dma: r.breadth_pct_above_200dma != null
+      ? Number(r.breadth_pct_above_200dma)
+      : null,
+    vix_percentile: r.vix_percentile != null ? Number(r.vix_percentile) : null,
+    cross_sectional_dispersion: r.cross_sectional_dispersion != null
+      ? Number(r.cross_sectional_dispersion)
+      : null,
+  }))
+
+  return {
+    regime_state: currentState,
+    deployment_multiplier: latest.deployment_multiplier,
+    days_in_regime: streak,
+    flip_probability_5d: null,
+    journey,
+    inputs,
+    as_of: latest.date,
+  }
+}

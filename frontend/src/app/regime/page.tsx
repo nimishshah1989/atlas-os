@@ -1,13 +1,13 @@
 // frontend/src/app/regime/page.tsx
-// Full regime story v6 — RegimeIndicator hero + cells favored under regime.
+// Regime page v6 — RegimeHero (deployment_multiplier hero) + input panels + cells.
 
 import Link from 'next/link'
 import { getCellDefinitions } from '@/lib/api/v1'
-import { getCurrentRegime } from '@/lib/queries/v6/regime'
+import { getRegimeDetail } from '@/lib/queries/v6/regime'
 import { getLatestSnapshotDate } from '@/lib/queries/v6/snapshot'
-import { RegimeIndicator } from '@/components/v6/RegimeIndicator'
+import { RegimeHero } from '@/components/v6/RegimeHero'
+import { RegimeInputPanel } from '@/components/v6/RegimeInputPanel'
 import { DataSourceBanner } from '@/components/v6/DataSourceBanner'
-import { LinkedCellById } from '@/components/v6/LinkedCell'
 import { ELI5Tooltip } from '@/components/v6/ELI5Tooltip'
 import { formatIC } from '@/lib/format-cell'
 
@@ -15,8 +15,8 @@ export const dynamic = 'force-dynamic'
 
 export default async function RegimePage() {
   const snapshotDate = await getLatestSnapshotDate()
-  const [regime, cellsRes] = await Promise.all([
-    getCurrentRegime(),
+  const [detail, cellsRes] = await Promise.all([
+    getRegimeDetail(),
     getCellDefinitions(),
   ])
   const cells = cellsRes.data
@@ -24,48 +24,60 @@ export default async function RegimePage() {
 
   return (
     <div className="max-w-[1400px] mx-auto">
+      {/* Page header */}
       <div className="px-6 py-4 border-b border-paper-rule">
         <div className="font-sans text-[10px] uppercase tracking-wider text-ink-tertiary mb-1">
           Market Regime
         </div>
-        <h1 className="font-serif text-3xl font-semibold text-ink-primary leading-none">
-          {regime.regime_state}
+        <h1 className="font-serif text-3xl font-semibold text-ink-primary leading-none sr-only">
+          Regime: {detail.regime_state}
         </h1>
-        <p className="font-sans text-sm text-ink-secondary leading-relaxed mt-2 max-w-[760px]">
-          Deploy {regime.deployment_pct}%. Constructive regime — add fresh Stage 2a/2b breakouts;
-          prefer leading sectors. {regime.cells_favored.length} cells are favoured
-          under this regime.
-        </p>
       </div>
 
       <DataSourceBanner source="live" asOf={snapshotDate} />
 
+      {/* Hero — deployment_multiplier front-and-center */}
       <div className="px-6 py-5 border-b border-paper-rule">
-        <RegimeIndicator regime={regime} />
+        <RegimeHero detail={detail} />
       </div>
 
+      {/* Input sparklines */}
       <div className="px-6 py-5 border-b border-paper-rule">
         <h2 className="font-sans text-xs font-medium text-ink-tertiary uppercase tracking-wider mb-3">
-          Cells favoured under {regime.regime_state}
+          Regime classifier inputs
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {regime.cells_favored.map(cf => {
-            const cell = cellsById.get(cf.cell_id)
-            return (
+        <RegimeInputPanel inputs={detail.inputs} />
+      </div>
+
+      {/* Cells favored — empty state handled gracefully */}
+      <div className="px-6 py-5 border-b border-paper-rule">
+        <h2 className="font-sans text-xs font-medium text-ink-tertiary uppercase tracking-wider mb-3">
+          Cells favoured under {detail.regime_state}
+        </h2>
+        {cells.length === 0 ? (
+          <p className="font-sans text-sm text-ink-tertiary">
+            Cell-to-regime mapping pending backfill. Check back after nightly run.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {cells.slice(0, 12).map(cell => (
               <Link
-                key={cf.cell_id}
-                href={`/matrix/${encodeURIComponent(cf.cell_id)}`}
+                key={cell.cell_id}
+                href={`/v6/cells/${encodeURIComponent(cell.cell_id)}`}
                 className="block border border-paper-rule rounded-[2px] bg-paper p-3 hover:bg-paper-rule/10 transition-colors"
+                aria-label={`Cell: ${cell.cell_id}`}
               >
                 <div className="flex items-baseline justify-between mb-1">
                   <span className="font-sans text-sm font-semibold text-ink-primary">
-                    {cf.cell_id}
+                    {cell.cell_id}
                   </span>
-                  <span className="font-mono text-xs tabular-nums text-signal-pos">
-                    IC {formatIC(cf.ic_in_regime)}
-                  </span>
+                  {cell.best_archetype && (
+                    <span className="font-mono text-xs tabular-nums text-ink-tertiary">
+                      {cell.grade ?? '—'}
+                    </span>
+                  )}
                 </div>
-                {cell?.best_archetype && (
+                {cell.best_archetype && (
                   <ELI5Tooltip term={cell.best_archetype}>
                     <span className="font-sans text-[10px] uppercase tracking-wider text-ink-tertiary">
                       {cell.best_archetype}
@@ -73,27 +85,25 @@ export default async function RegimePage() {
                   </ELI5Tooltip>
                 )}
                 <p className="font-sans text-xs text-ink-secondary leading-relaxed mt-1">
-                  {cell?.reason ?? 'Cell summary loading…'}
+                  {cell.reason ?? '—'}
                 </p>
               </Link>
-            )
-          })}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
+      {/* Regime → Matrix → Stocks nav */}
       <div className="px-6 py-5">
         <h2 className="font-sans text-xs font-medium text-ink-tertiary uppercase tracking-wider mb-3">
           Regime → Matrix → Stocks
         </h2>
         <p className="font-sans text-sm text-ink-secondary leading-relaxed max-w-[760px] mb-3">
-          The regime sets the deployment multiplier and the universe of cells worth firing.
-          Each cell holds a small set of validated rules. The stocks firing those rules today
-          are the universe of opportunities.
+          The regime sets the deployment multiplier and the universe of cells worth
+          firing. Each cell holds validated rules. Stocks firing those rules today
+          are the live opportunity set.
         </p>
         <div className="flex gap-3">
-          <LinkedCellById cellId="Large-3m-POSITIVE" className="font-sans text-sm">
-            <span className="text-teal hover:underline">Large 3m POSITIVE →</span>
-          </LinkedCellById>
           <Link href="/matrix" className="font-sans text-sm text-teal hover:underline">
             Full matrix →
           </Link>
