@@ -7,9 +7,12 @@
 //   atlas_universe_funds      ← scheme_name / amc / category enrichment + aum_cr
 //   atlas_fund_metrics_daily  ← ret_1m / 3m / 6m / 12m + rs_pctile_3m (latest NAV)
 //
-// Returns ScreenFund shape consumed by /v6/funds page. Style box and
-// conviction tape are placeholders pending v6.1 work — the fund scorecard
-// doesn't yet expose tape rows for funds (only stocks).
+// Exports:
+//   getFundsForDate()    → ScreenFund[] (legacy shape — style box page + v1 API)
+//   getFundRowsForDate() → FundListRow[] (extended shape for D.5 FundsList)
+//
+// Style box and conviction tape are placeholders pending v6.1 work — the fund
+// scorecard doesn't yet expose tape rows for funds (only stocks).
 
 import 'server-only'
 import sql from '@/lib/db'
@@ -142,4 +145,107 @@ function rsStateFromPctile(p: string | null): string | null {
   if (v >= 0.30) return 'Average'
   if (v >= 0.10) return 'Weak'
   return 'Laggard'
+}
+
+// ---------------------------------------------------------------------------
+// FundListRow — extended shape for D.5 FundsList component
+// ---------------------------------------------------------------------------
+
+/**
+ * Extended fund row with all fields needed by FundsList ranked table.
+ * expense_ratio comes from sub_metrics JSONB (populated at scorecard write time).
+ * sector_tilt is top-sector from eli5 text (parsed best-effort).
+ */
+export type FundListRow = {
+  iid: string
+  code: string
+  name: string | null
+  category: string | null
+  aum_cr: string | null          // Stringified Decimal — ₹ crore
+  expense_ratio: string | null   // Stringified Decimal — percentage
+  composite_score: string | null // Stringified Decimal — 0..100
+  rank_in_category: number | null
+  category_size: number | null
+  is_atlas_leader: boolean | null
+  is_avoid: boolean | null
+  ret_1m: number | null          // Fraction (0.05 = 5%)
+  ret_3m: number | null
+  ret_6m: number | null
+  ret_12m: number | null
+  rs_pctile_3m: string | null    // Stringified Decimal — 0..1 percentile
+  sector_tilt: string | null     // Top-sector tilt (from eli5 or null)
+}
+
+/**
+ * Return all fund rows with extended fields for the FundsList ranked table.
+ * Reuses the same SQL as getFundsForDate but maps to FundListRow shape.
+ * expense_ratio is extracted from sub_metrics JSONB.
+ * Returns [] when no rows exist (table empty or no matching snapshot_date).
+ */
+export async function getFundRowsForDate(snapshotDate: string): Promise<FundListRow[]> {
+  type ExtRow = Row & { sub_metrics_expense: string | null }
+  const rows = await sql<ExtRow[]>`
+    SELECT
+      s.scheme_code                                   AS iid,
+      s.scheme_code                                   AS code,
+      COALESCE(s.fund_name, u.scheme_name)            AS name,
+      s.fund_category                                 AS category,
+      u.aum_cr::text                                  AS aum_cr,
+      (s.sub_metrics->>'expense_ratio')::text         AS sub_metrics_expense,
+      s.composite_score::text                         AS composite_score,
+      s.risk_adjusted_return_score::text              AS risk_adjusted_return_score,
+      s.holdings_conviction_score::text               AS holdings_conviction_score,
+      s.style_sector_score::text                      AS style_sector_score,
+      s.cost_manager_score::text                      AS cost_manager_score,
+      s.rank_in_category,
+      s.category_size,
+      s.is_atlas_leader,
+      s.is_avoid,
+      s.confidence_low,
+      s.eli5,
+      lm.ret_1m::text                                 AS ret_1m,
+      lm.ret_3m::text                                 AS ret_3m,
+      lm.ret_6m::text                                 AS ret_6m,
+      lm.ret_12m::text                                AS ret_12m,
+      lm.rs_pctile_3m::text                           AS rs_pctile_3m,
+      s.amc                                           AS amc,
+      s.fund_style                                    AS fund_style
+    FROM atlas.atlas_fund_scorecard s
+    LEFT JOIN atlas.atlas_universe_funds u
+      ON u.mstar_id = s.scheme_code
+     AND u.effective_to IS NULL
+    LEFT JOIN atlas.atlas_fund_metrics_daily lm
+      ON lm.mstar_id = s.scheme_code
+     AND lm.nav_date = (
+       SELECT MAX(nav_date)
+       FROM atlas.atlas_fund_metrics_daily
+       WHERE nav_date <= ${snapshotDate}
+     )
+    WHERE s.snapshot_date = ${snapshotDate}
+    ORDER BY s.composite_score DESC NULLS LAST
+  `
+
+  return rows.map((r): FundListRow => ({
+    iid: r.iid,
+    code: r.code,
+    name: r.name ?? null,
+    category: r.category ?? null,
+    aum_cr: r.aum_cr ?? null,
+    // expense_ratio from sub_metrics JSONB (may be null when data feed lags)
+    expense_ratio: r.sub_metrics_expense ?? null,
+    composite_score: r.composite_score ?? null,
+    rank_in_category: r.rank_in_category ?? null,
+    category_size: r.category_size ?? null,
+    is_atlas_leader: r.is_atlas_leader ?? null,
+    is_avoid: r.is_avoid ?? null,
+    // Return fractions (keep as number for display helpers)
+    ret_1m: r.ret_1m != null ? Number(r.ret_1m) : null,
+    ret_3m: r.ret_3m != null ? Number(r.ret_3m) : null,
+    ret_6m: r.ret_6m != null ? Number(r.ret_6m) : null,
+    ret_12m: r.ret_12m != null ? Number(r.ret_12m) : null,
+    rs_pctile_3m: r.rs_pctile_3m ?? null,
+    // sector_tilt: v6.0 placeholder — would require top_holdings JSONB parse
+    // TODO(v6.1): derive from top_holdings JSONB aggregated by sector
+    sector_tilt: null,
+  }))
 }
