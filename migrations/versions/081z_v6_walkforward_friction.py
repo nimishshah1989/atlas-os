@@ -70,7 +70,14 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "081_z"
-down_revision = "089"
+# Linearized 2026-05-26: original chain pointed to "089" but 092/093 also
+# branched from 089, creating two parallel heads on the Alembic graph. The
+# atlas_cell_walkforward_runs + atlas_friction_params tables never landed
+# on Supabase atlas-os (082-089 also never landed there — the 094 replay
+# fills those in). Re-pointing down_revision to "094" so 081_z's tables
+# land AFTER 094 completes the 082-088 catch-up. Linear chain: 080 -> 082
+# -> ... -> 089 -> 092 -> 093 -> 094 -> 081_z.
+down_revision = "094"
 branch_labels = None
 depends_on = None
 

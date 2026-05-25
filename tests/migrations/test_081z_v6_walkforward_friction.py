@@ -100,9 +100,14 @@ class TestMigrationMetadata:
     def test_revision(self) -> None:
         assert _load().revision == "081_z"
 
-    def test_down_revision_089(self) -> None:
-        """081_z lands AFTER 089 in the chain (082-089 already shipped)."""
-        assert _load().down_revision == "089"
+    def test_down_revision_094(self) -> None:
+        """081_z lands AFTER 094 (the 082-088 replay) in the linearized chain.
+
+        Originally pointed to 089, but 092 also branched from 089, creating
+        two parallel heads. Linearized 2026-05-26 to point at 094 so the
+        chain reads: ... -> 089 -> 092 -> 093 -> 094 -> 081_z.
+        """
+        assert _load().down_revision == "094"
 
     def test_branch_labels_none(self) -> None:
         assert _load().branch_labels is None

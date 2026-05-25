@@ -88,7 +88,7 @@ def _create_enum_if_not_exists(name: str, *values: str) -> None:
                 JOIN pg_namespace n ON n.oid = t.typnamespace
                 WHERE t.typname = '{name}' AND n.nspname = '{_SCHEMA}'
             ) THEN
-                EXECUTE 'CREATE TYPE {_SCHEMA}.{name} AS ENUM ({values_sql})';
+                EXECUTE $enum$CREATE TYPE {_SCHEMA}.{name} AS ENUM ({values_sql})$enum$;
             END IF;
         END
         $$;
