@@ -154,8 +154,8 @@ describe('getMatrixCells', () => {
 
   it('returns MatrixCells with n_firing_today populated (>= 0)', async () => {
     const matrixRows = [
-      { ...BASE_CELL_ROW, n_firing_today: '12' },
-      { ...NEUTRAL_ROW, n_firing_today: '0' },
+      { ...BASE_CELL_ROW, n_firing_today: '12', n_candidates: '5', n_gate_pass: '3', n_held_firing: '0' },
+      { ...NEUTRAL_ROW, n_firing_today: '0', n_candidates: '0', n_gate_pass: '0', n_held_firing: '0' },
     ]
     sqlMock.mockResolvedValueOnce(matrixRows)
 
@@ -166,6 +166,10 @@ describe('getMatrixCells', () => {
     expect(cells[0].n_firing_today).toBeGreaterThanOrEqual(0)
     expect(cells[1].n_firing_today).toBe(0)
     expect(cells[1].n_firing_today).toBeGreaterThanOrEqual(0)
+    // C.14 extended fields
+    expect(cells[0].n_candidates).toBe(5)
+    expect(cells[0].n_gate_pass).toBe(3)
+    expect(cells[0].n_held_firing).toBe(0)
     // Cell fields still present on MatrixCell
     expect(cells[0].cell_id).toBe('11111111-1111-1111-1111-111111111111')
     expect(cells[1].action).toBe('NEUTRAL')
@@ -173,10 +177,12 @@ describe('getMatrixCells', () => {
 
   it('returns n_firing_today=0 when signal_calls LATERAL returns 0', async () => {
     sqlMock.mockResolvedValueOnce([
-      { ...DEPRECATED_ROW, n_firing_today: '0' },
+      { ...DEPRECATED_ROW, n_firing_today: '0', n_candidates: '2', n_gate_pass: '0', n_held_firing: '0' },
     ])
     const cells = await getMatrixCells()
     expect(cells[0].n_firing_today).toBe(0)
+    expect(cells[0].n_candidates).toBe(2)
+    expect(cells[0].n_gate_pass).toBe(0)
   })
 })
 
