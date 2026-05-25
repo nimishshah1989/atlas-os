@@ -249,3 +249,204 @@ export async function getFundRowsForDate(snapshotDate: string): Promise<FundList
     sector_tilt: null,
   }))
 }
+
+// ---------------------------------------------------------------------------
+// FundDetail — single-fund detail query for D.6 fund detail page
+// ---------------------------------------------------------------------------
+
+/**
+ * Shape of a single holding entry from the top_holdings JSONB array.
+ * {instrument_id, symbol, weight_pct, verdict}
+ */
+export type FundHoldingEntry = {
+  instrument_id: string | null
+  symbol: string | null
+  weight_pct: number
+  verdict: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE' | null
+}
+
+export type FundDetail = {
+  // Identity
+  iid: string        // scheme_code doubles as iid for funds
+  code: string
+  name: string | null
+  category: string | null
+  amc: string | null
+  fund_style: string | null
+  // Scores (stringified Decimals)
+  composite_score: string | null
+  risk_adjusted_return_score: string | null
+  holdings_conviction_score: string | null
+  style_sector_score: string | null
+  cost_manager_score: string | null
+  rank_in_category: number | null
+  category_size: number | null
+  is_atlas_leader: boolean | null
+  is_avoid: boolean | null
+  confidence_low: boolean | null
+  // ELI5 narrative
+  eli5: string | null
+  // Sub-metrics (from JSONB) — all strings for Decimal safety
+  ter_pct: string | null          // TER as percentage e.g. "1.25"
+  aum_cr: string | null           // AUM in ₹ crore
+  manager_tenure_years: string | null
+  fund_age_years: string | null
+  sharpe: string | null
+  max_dd: string | null
+  // Returns (fractions)
+  ret_1m: number | null
+  ret_3m: number | null
+  ret_6m: number | null
+  ret_12m: number | null
+  rs_pctile_3m: string | null
+  // Holdings
+  top_holdings: FundHoldingEntry[] | null
+  // Dates
+  snapshot_date: string | null
+  nav_as_of: string | null
+  holdings_as_of: string | null
+}
+
+type FundDetailRow = {
+  iid: string
+  code: string
+  name: string | null
+  category: string | null
+  amc: string | null
+  fund_style: string | null
+  composite_score: string | null
+  risk_adjusted_return_score: string | null
+  holdings_conviction_score: string | null
+  style_sector_score: string | null
+  cost_manager_score: string | null
+  rank_in_category: number | null
+  category_size: number | null
+  is_atlas_leader: boolean | null
+  is_avoid: boolean | null
+  confidence_low: boolean | null
+  eli5: string | null
+  sub_metrics: Record<string, unknown> | null
+  top_holdings: unknown | null
+  ret_1m: string | null
+  ret_3m: string | null
+  ret_6m: string | null
+  ret_12m: string | null
+  rs_pctile_3m: string | null
+  snapshot_date: string | null
+  nav_as_of: string | null
+  holdings_as_of: string | null
+}
+
+/**
+ * Fetch full detail for a single fund by scheme_code (= iid for funds).
+ * Returns null when no scorecard row exists for this fund.
+ */
+export async function getFundDetail(code: string): Promise<FundDetail | null> {
+  const rows = await sql<FundDetailRow[]>`
+    SELECT
+      s.scheme_code                                   AS iid,
+      s.scheme_code                                   AS code,
+      COALESCE(s.fund_name, u.scheme_name)            AS name,
+      s.fund_category                                 AS category,
+      s.amc,
+      s.fund_style,
+      s.composite_score::text                         AS composite_score,
+      s.risk_adjusted_return_score::text              AS risk_adjusted_return_score,
+      s.holdings_conviction_score::text               AS holdings_conviction_score,
+      s.style_sector_score::text                      AS style_sector_score,
+      s.cost_manager_score::text                      AS cost_manager_score,
+      s.rank_in_category,
+      s.category_size,
+      s.is_atlas_leader,
+      s.is_avoid,
+      s.confidence_low,
+      s.eli5,
+      s.sub_metrics,
+      s.top_holdings,
+      lm.ret_1m::text                                 AS ret_1m,
+      lm.ret_3m::text                                 AS ret_3m,
+      lm.ret_6m::text                                 AS ret_6m,
+      lm.ret_12m::text                                AS ret_12m,
+      lm.rs_pctile_3m::text                           AS rs_pctile_3m,
+      s.snapshot_date::text                           AS snapshot_date,
+      s.nav_as_of::text                               AS nav_as_of,
+      s.holdings_as_of::text                          AS holdings_as_of
+    FROM atlas.atlas_fund_scorecard s
+    LEFT JOIN atlas.atlas_universe_funds u
+      ON u.mstar_id = s.scheme_code
+     AND u.effective_to IS NULL
+    LEFT JOIN atlas.atlas_fund_metrics_daily lm
+      ON lm.mstar_id = s.scheme_code
+     AND lm.nav_date = (
+       SELECT MAX(nav_date)
+       FROM atlas.atlas_fund_metrics_daily
+       WHERE mstar_id = s.scheme_code
+     )
+    WHERE s.scheme_code = ${code}
+      AND s.snapshot_date = (
+        SELECT MAX(snapshot_date)
+        FROM atlas.atlas_fund_scorecard
+        WHERE scheme_code = ${code}
+      )
+    LIMIT 1
+  `
+
+  if (rows.length === 0) return null
+  const r = rows[0]
+
+  // Parse sub_metrics JSONB safely
+  const sm = (r.sub_metrics ?? {}) as Record<string, unknown>
+  function smStr(k: string): string | null {
+    const v = sm[k]
+    if (v == null) return null
+    return String(v)
+  }
+
+  // Parse top_holdings JSONB safely
+  let topHoldings: FundHoldingEntry[] | null = null
+  if (Array.isArray(r.top_holdings) && r.top_holdings.length > 0) {
+    topHoldings = (r.top_holdings as Array<Record<string, unknown>>).map((h) => ({
+      instrument_id: h.instrument_id != null ? String(h.instrument_id) : null,
+      symbol: h.symbol != null ? String(h.symbol) : null,
+      weight_pct: h.weight_pct != null ? Number(h.weight_pct) : 0,
+      verdict: (['POSITIVE', 'NEUTRAL', 'NEGATIVE'].includes(String(h.verdict ?? ''))
+        ? String(h.verdict) as FundHoldingEntry['verdict']
+        : null),
+    }))
+  }
+
+  return {
+    iid: r.iid,
+    code: r.code,
+    name: r.name ?? null,
+    category: r.category ?? null,
+    amc: r.amc ?? null,
+    fund_style: r.fund_style ?? null,
+    composite_score: r.composite_score ?? null,
+    risk_adjusted_return_score: r.risk_adjusted_return_score ?? null,
+    holdings_conviction_score: r.holdings_conviction_score ?? null,
+    style_sector_score: r.style_sector_score ?? null,
+    cost_manager_score: r.cost_manager_score ?? null,
+    rank_in_category: r.rank_in_category ?? null,
+    category_size: r.category_size ?? null,
+    is_atlas_leader: r.is_atlas_leader ?? null,
+    is_avoid: r.is_avoid ?? null,
+    confidence_low: r.confidence_low ?? null,
+    eli5: r.eli5 ?? null,
+    ter_pct: smStr('ter_pct'),
+    aum_cr: smStr('aum_cr'),
+    manager_tenure_years: smStr('manager_tenure_years'),
+    fund_age_years: smStr('fund_age_years'),
+    sharpe: smStr('sharpe'),
+    max_dd: smStr('max_dd'),
+    ret_1m: r.ret_1m != null ? Number(r.ret_1m) : null,
+    ret_3m: r.ret_3m != null ? Number(r.ret_3m) : null,
+    ret_6m: r.ret_6m != null ? Number(r.ret_6m) : null,
+    ret_12m: r.ret_12m != null ? Number(r.ret_12m) : null,
+    rs_pctile_3m: r.rs_pctile_3m ?? null,
+    top_holdings: topHoldings,
+    snapshot_date: r.snapshot_date ?? null,
+    nav_as_of: r.nav_as_of ?? null,
+    holdings_as_of: r.holdings_as_of ?? null,
+  }
+}
