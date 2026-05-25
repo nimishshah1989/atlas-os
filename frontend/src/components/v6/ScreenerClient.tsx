@@ -17,7 +17,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 
 import { ScreenerFilterBuilder } from '@/components/v6/ScreenerFilterBuilder'
 import { StocksListV6 } from '@/components/v6/StocksListV6'
-import { filterToParams, paramsToFilter, type ScreenFilter } from '@/lib/queries/v6/screen'
+import { filterToParams, paramsToFilter, type ScreenFilter } from '@/lib/queries/v6/screen-filter'
 import type { StockV6Row } from '@/lib/queries/v6/stocks'
 
 // ── Props ─────────────────────────────────────────────────────────────────────

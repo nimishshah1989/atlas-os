@@ -5,7 +5,7 @@
 
 'use client'
 
-import type { ScreenFilter } from '@/lib/queries/v6/screen'
+import type { ScreenFilter } from '@/lib/queries/v6/screen-filter'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
