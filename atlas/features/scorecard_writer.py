@@ -59,7 +59,105 @@ from sqlalchemy.engine import Engine
 from atlas.compute._session import bulk_upsert, open_compute_session
 from atlas.db import get_engine, load_thresholds
 
+# atlas.discovery.* is imported lazily inside the bridge function to
+# avoid a circular import (atlas.discovery → atlas.decisions →
+# atlas.features). The bridge needs the deep-search panel computer but
+# it must not be hoisted to module scope.
+
 log = structlog.get_logger()
+
+
+# Features that ship as first-class columns on atlas_scorecard_daily
+# (migration 080) — these MUST NOT be duplicated inside the features
+# JSONB. The bridge writes every OTHER feature in the deep-search
+# library to JSONB so cell-rule predicates can evaluate against them.
+_FIRST_CLASS_FEATURE_NAMES: frozenset[str] = frozenset(
+    {
+        "rs_residual_6m",
+        "log_med_tv_60d",
+        "realized_vol_60d",
+        "formation_max_dd",
+        "listing_age_days",
+        "log_price",
+    }
+)
+
+# Names wired in panel_for_feature (deep_search_features.py). These are
+# the features the cell rules reference at evaluation time. Anything in
+# this list MINUS the first-class set is what we write to features JSONB.
+# Kept as a module constant so changes here track the discovery library.
+_DEEP_SEARCH_PANEL_FEATURES: tuple[str, ...] = (
+    # v1
+    "log_med_tv_60d",
+    "realized_vol_60d",
+    "realized_vol_252d",
+    "rs_residual_3m",
+    "rs_residual_6m",
+    "rs_residual_12m",
+    "rs_alignment_count",
+    "rs_acceleration_63d",
+    "formation_max_dd",
+    "dd_from_52w_high",
+    "dd_from_3y_high",
+    "dd_from_5y_high",
+    "dist_above_sma50",
+    "dist_above_sma200",
+    "sma50_gt_sma200",
+    "listing_age_days",
+    "close_over_60d_high",
+    "close_over_30d_high",
+    "volume_zscore_60d",
+    "pos_months_12m",
+    "log_price",
+    "trend_slope_60d",
+    # v2
+    "rs_residual_1m",
+    "realized_vol_20d",
+    "vol_regime_60_252",
+    "downside_vol_60d",
+    "volume_zscore_252d",
+    "tv_momentum_21_63",
+    "roc_21d",
+    "roc_63d",
+    "roc_126d",
+    "max_consec_pos_months_12m",
+    "pos_weeks_12m",
+    "dd_recovery_pct",
+    "dist_from_52w_low",
+    "close_at_52w_high",
+    "consecutive_above_sma50",
+    "consecutive_above_sma200",
+    "rsi_14",
+    "bb_pct_20d",
+    "atr_pct_14",
+    "corr_to_nifty_60d",
+    "beta_60d",
+    "excess_vol_60d",
+    "rs_rank_6m_3m_diff",
+    "rs_rank_12m_6m_diff",
+    "range_compression_60_252",
+    "ulcer_index_60d",
+    "momentum_quality_6m",
+    "trend_strength_60d",
+    "new_high_streak_60d",
+    "close_over_252d_high",
+    # red-team quick wins
+    "amihud_illiq_21d",
+    "obv_slope_60d",
+    "mfi_14",
+    "bb_squeeze_20d",
+    "rs_rank_within_tier_3m",
+    "rs_rank_within_tier_6m",
+    "rs_rank_within_tier_12m",
+    # sector family
+    "sector_rs_6m",
+    "sector_rs_12m",
+    "sector_rs_rank_6m",
+    "sector_breadth_pos",
+    "sector_strength_rank",
+    "sector_vol_regime",
+    "cross_sector_breadth",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -733,14 +831,208 @@ def _row_dicts(snap: pd.DataFrame, target_date: date) -> list[dict]:
             .map(_to_int_or_none)
         )
 
-    # features JSONB — empty dict by default
-    out["features"] = [{} for _ in range(len(out))]
+    # features JSONB — use the precomputed deep-search bridge dict when
+    # the caller populated the ``features_jsonb`` column; otherwise empty.
+    if "features_jsonb" in out.columns:
+        out["features"] = out["features_jsonb"].apply(lambda v: v if isinstance(v, dict) else {})
+    else:
+        out["features"] = [{} for _ in range(len(out))]
     # Make sure date is a python date object
     out["date"] = pd.to_datetime(out["date"]).dt.date
     # date is always target_date for this snap, but enforce it:
     out["date"] = target_date
 
     return out.reindex(columns=list(SCORECARD_COLUMNS)).to_dict(orient="records")
+
+
+# ---------------------------------------------------------------------------
+# Deep-search feature bridge
+# ---------------------------------------------------------------------------
+
+
+def _to_jsonb_safe(value: object) -> float | int | bool | None:
+    """Coerce a single panel value to a JSON-safe scalar.
+
+    Returns:
+        * ``None`` when the value is NaN, ±inf, or otherwise unrepresentable.
+        * ``int`` when the value is a whole number (preserves listing-age /
+          streak semantics in the JSONB).
+        * ``float`` for ordinary numeric values.
+
+    The predicate evaluator treats absent keys as NULL, so omitting NaN
+    instead of writing `null` saves bytes without changing semantics.
+    """
+    if value is None:
+        return None
+    # bool is a subclass of int — keep it explicit.
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int | np.integer):
+        return int(value)
+    if isinstance(value, float | np.floating):
+        f = float(value)
+        if np.isnan(f) or np.isinf(f):
+            return None
+        return f
+    # Fallback — coerce via float.
+    try:
+        f = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    if np.isnan(f) or np.isinf(f):
+        return None
+    return f
+
+
+def _compute_deep_search_features_jsonb(
+    ohlcv: pd.DataFrame,
+    bench: pd.DataFrame,
+    cap_tiers: pd.Series,
+    target_date: date,
+) -> dict[str, dict[str, float | int | bool | None]]:
+    """Compute deep-search feature panels and extract per-iid values.
+
+    Bridges :func:`compute_daily_scorecard` to the deep-search feature
+    library that the cell-rule predicates evaluate against. The 6 locked
+    methodology features stay as first-class columns and are NOT written
+    to the JSONB; everything else in :data:`_DEEP_SEARCH_PANEL_FEATURES`
+    that produces a non-NaN value at ``target_date`` lands in the dict.
+
+    Args:
+        ohlcv: long-form OHLCV loaded by :func:`_load_ohlcv` — columns
+            ``instrument_id, date, open, high, low, close, volume``. The
+            ``instrument_id`` column is renamed to ``iid`` inline for the
+            deep-search API.
+        bench: NIFTY 500 benchmark frame (``date, bench_close``). Empty
+            frame is acceptable; sector + RS panels will produce NaN.
+        cap_tiers: per-iid Series produced by :func:`compute_cap_tiers`.
+            Broadcast to a full date-indexed panel so the deep-search
+            sector + within-tier panels resolve.
+        target_date: the snapshot date — the function returns one dict
+            per instrument with values at this date.
+
+    Returns:
+        ``{instrument_id: {feature: value, ...}}``. Empty dict when the
+        OHLCV slice is empty or no panels produce values.
+
+    Performance: panels are vectorised; on a 365 × 750 panel this runs
+    in well under the 5-minute backfill budget. Sector mapping is loaded
+    once from the staged CSV (``/tmp/deep_search_v2/sector_mapping.csv``)
+    and reused; absence is tolerated (sector panels fall back to NaN).
+    """
+    if ohlcv.empty:
+        return {}
+
+    # Lazy imports — atlas.discovery transitively depends on atlas.features
+    # (for the FEATURES allowlist), so module-level imports would create a
+    # cycle. The bridge is the only call site so deferring is cheap.
+    from atlas.discovery._sector_panels import load_sector_mapping
+    from atlas.discovery.deep_search_features import (
+        compute_feature_panels,
+        panel_for_feature,
+    )
+
+    # Deep-search API expects (date, iid, close, volume). Rename and
+    # narrow. Build the frame directly to dodge pandas rename's
+    # overload-resolution ambiguity (pyright cannot pick the right
+    # overload from a single-arg call).
+    ds_ohlcv = pd.DataFrame(
+        {
+            "iid": ohlcv["instrument_id"].astype(str).to_numpy(),
+            "date": ohlcv["date"].to_numpy(),
+            "close": ohlcv["close"].to_numpy(),
+            "volume": ohlcv["volume"].to_numpy(),
+        }
+    )
+
+    # compute_feature_panels uses .pivot, which is happy with python date
+    # and the str-coerced iid built above.
+
+    # Build a nifty Series indexed by date. compute_rs_residual reindexes
+    # this to the close panel index and forward-fills, so a sparse bench
+    # frame is acceptable.
+    if not bench.empty:
+        nifty_series = pd.Series(
+            bench["bench_close"].astype("float64").to_numpy(),
+            index=pd.Index(bench["date"], name="date"),
+            name="nifty500",
+        )
+    else:
+        # All-NaN series of the right length → RS panels produce NaN,
+        # caller handles gracefully.
+        nifty_series = pd.Series(
+            [np.nan] * len(ds_ohlcv["date"].unique()),
+            index=pd.Index(sorted(ds_ohlcv["date"].unique()), name="date"),
+            name="nifty500",
+        )
+
+    # cap_tier panel — deep-search expects long-form (date, iid, cap_tier)
+    # covering the full panel. Broadcast the per-iid target-date tier
+    # across every date in ds_ohlcv (the within-tier rank panels read the
+    # tier at each date; using today's tier is an acceptable approximation
+    # at v6 launch — point-in-time cap_tier landing is queued for the
+    # phase 0.5g refresh, and is orthogonal to closing the scorecard
+    # JSONB gap).
+    cap_long_rows: list[dict[str, object]] = []
+    tier_lookup = cap_tiers.fillna("Mid").astype(str).to_dict()
+    unique_dates = sorted(ds_ohlcv["date"].unique())
+    for d in unique_dates:
+        for iid, tier in tier_lookup.items():
+            cap_long_rows.append({"date": d, "iid": str(iid), "cap_tier": tier})
+    cap_long = pd.DataFrame(cap_long_rows)
+
+    sector_of = load_sector_mapping()
+
+    panels = compute_feature_panels(ds_ohlcv, nifty_series, cap_long, sector_of=sector_of)
+
+    # Extract per-instrument values at target_date. The panels are wide
+    # frames indexed by date with iid columns. compute_feature_panels
+    # forces every iid in the OHLCV to appear as a column.
+    if target_date not in panels.close.index:
+        # Fall back to the most recent available date <= target_date —
+        # the panels reindex on close.index which is the OHLCV dates.
+        # Defensive guard: if the target_date never appears in OHLCV
+        # (holiday on the exchange), the scorecard writer's caller has
+        # already logged a warning; emit no JSONB here.
+        log.warning(
+            "scorecard_deep_search_target_date_missing",
+            target_date=str(target_date),
+        )
+        return {}
+
+    out: dict[str, dict[str, float | int | bool | None]] = {}
+    iid_columns = list(panels.close.columns)
+
+    # Pre-collect each panel's row at target_date.
+    target_rows: dict[str, pd.Series] = {}
+    for feature in _DEEP_SEARCH_PANEL_FEATURES:
+        if feature in _FIRST_CLASS_FEATURE_NAMES:
+            continue
+        try:
+            panel = panel_for_feature(panels, feature)
+        except KeyError:
+            # New feature added to the cell vocabulary without a panel —
+            # log once and skip; conviction tape will fall back to NULL
+            # for predicates referencing it (existing behaviour).
+            log.warning("scorecard_deep_search_panel_missing", feature=feature)
+            continue
+        if target_date not in panel.index:
+            continue
+        target_rows[feature] = panel.loc[target_date]
+
+    for iid in iid_columns:
+        iid_str = str(iid)
+        feature_dict: dict[str, float | int | bool | None] = {}
+        for feature, row_series in target_rows.items():
+            raw = row_series.get(iid)
+            safe = _to_jsonb_safe(raw)
+            if safe is None:
+                continue
+            feature_dict[feature] = safe
+        if feature_dict:
+            out[iid_str] = feature_dict
+
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -856,6 +1148,29 @@ def compute_daily_scorecard(
 
     # Derive family R/A/G
     feature_snap = derive_family_states(feature_snap, thresholds)
+
+    # Bridge: compute the deep-search feature library and attach a
+    # ``features_jsonb`` column. Predicate evaluator merges this dict
+    # into the scorecard row via dict.update(), so each non-NaN key
+    # becomes addressable from cell-rule predicates. The 6 locked
+    # methodology features remain first-class columns and are excluded
+    # from the JSONB to avoid duplication.
+    deep_search_jsonb = _compute_deep_search_features_jsonb(ohlcv, bench, cap_tiers, target_date)
+    feature_snap["features_jsonb"] = (
+        feature_snap["instrument_id"].astype(str).map(lambda iid: deep_search_jsonb.get(iid, {}))
+    )
+    # Defensive: ensure every cell is a dict before serialization. The
+    # map above already returns {} for unknown iids, but a stray NaN
+    # from a downstream merge would silently corrupt JSONB writes.
+    feature_snap["features_jsonb"] = feature_snap["features_jsonb"].apply(
+        lambda v: v if isinstance(v, dict) else {}
+    )
+    populated = int((feature_snap["features_jsonb"].apply(len) > 0).sum())
+    log.info(
+        "scorecard_deep_search_jsonb_attached",
+        populated=populated,
+        total=len(feature_snap),
+    )
 
     # Missing instruments — universe IDs absent from the OHLCV snap
     snap_ids = set(feature_snap["instrument_id"].astype(str).tolist())
