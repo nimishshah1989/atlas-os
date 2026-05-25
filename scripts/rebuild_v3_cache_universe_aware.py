@@ -152,7 +152,10 @@ def _fetch_ohlcv_universe_aware(engine: Engine, since: date) -> pd.DataFrame:
         Long DataFrame (date, iid, close, volume) — matches the contract
         :func:`atlas.discovery.engine._load_cache_files` consumes.
     """
-    sql = text(
+    # Paginate by year. A single full-history scan is killed by the
+    # Supabase pooler's statement_timeout (~5 min); per-year slices each
+    # finish well under the cap.
+    sql_year = text(
         """
         SELECT o.date,
                o.instrument_id::text AS iid,
@@ -161,25 +164,44 @@ def _fetch_ohlcv_universe_aware(engine: Engine, since: date) -> pd.DataFrame:
         FROM public.de_equity_ohlcv o
         INNER JOIN atlas.atlas_universe_stocks u
           ON u.instrument_id = o.instrument_id
-        WHERE o.date >= CAST(:since AS DATE)
+        WHERE o.date >= CAST(:y_start AS DATE)
+          AND o.date <  CAST(:y_end   AS DATE)
           AND (u.effective_to IS NULL OR o.date <= u.effective_to)
           AND o.close_adj IS NOT NULL
           AND o.volume    IS NOT NULL
-        ORDER BY o.instrument_id, o.date
         """
     )
 
     chunks: list[pd.DataFrame] = []
     rows_so_far = 0
     t0 = time.monotonic()
-    conn = engine.connect().execution_options(stream_results=True, max_row_buffer=CHUNK_SIZE)
+    start_year = since.year
+    end_year = date.today().year + 1
+    year_slices = [
+        (date(y, 1, 1) if y > start_year else since, date(y + 1, 1, 1))
+        for y in range(start_year, end_year)
+    ]
     try:
-        result = conn.execute(sql, {"since": since})
-        cols: list[Any] = list(result.keys())
-        while True:
-            batch = result.fetchmany(CHUNK_SIZE)
+        for y_start, y_end in year_slices:
+            # Fresh connection per slice keeps the pooler happy.
+            with engine.connect() as conn:
+                try:
+                    conn.execute(text("SET statement_timeout = 0"))
+                    conn.commit()
+                except Exception:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+                year_result = conn.execute(sql_year, {"y_start": y_start, "y_end": y_end})
+                cols: list[Any] = list(year_result.keys())
+                batch = year_result.fetchall()
             if not batch:
-                break
+                logger.info(
+                    "v3_uniaware_year_empty",
+                    extra={"y_start": str(y_start), "y_end": str(y_end)},
+                )
+                continue
             df = pd.DataFrame(batch, columns=cast(Any, cols))
             chunks.append(df)
             rows_so_far += len(df)
@@ -191,8 +213,8 @@ def _fetch_ohlcv_universe_aware(engine: Engine, since: date) -> pd.DataFrame:
                     "chunks": len(chunks),
                 },
             )
-    finally:
-        conn.close()
+    except Exception:
+        raise
 
     if not chunks:
         raise RuntimeError(

@@ -833,7 +833,9 @@ def _try_load_fund_inputs_from_engine(
                         text(
                             """
                             SELECT instrument_id::text AS instrument_id,
-                                   weight_pct, symbol, as_of_date
+                                   weight_pct,
+                                   holding_name AS symbol,
+                                   as_of_date
                             FROM public.de_mf_holdings
                             WHERE mstar_id = :m
                               AND as_of_date <= :d

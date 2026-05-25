@@ -144,11 +144,34 @@ _LOAD_ETFS_SQL = text(
 )
 
 
+def _synth_etf_instrument_id(ticker: str | None, isin: str | None) -> str | None:
+    """Synthesize a deterministic UUID5 for an ETF.
+
+    ``atlas_universe_etfs`` does not carry a UUID — ETFs are keyed by
+    ticker (and ISIN). The scorecard table requires a UUID
+    ``instrument_id`` (NOT NULL) so we derive one from ISIN preferred,
+    ticker fallback. Deterministic so reruns hit the ON CONFLICT path.
+    """
+    import uuid as _uuid
+
+    seed = (isin or ticker or "").strip()
+    if not seed:
+        return None
+    return str(_uuid.uuid5(_uuid.NAMESPACE_OID, f"atlas-etf::{seed}"))
+
+
 def _load_etf_universe(engine: Engine) -> list[Mapping[str, Any]]:
     """Pull active ETF universe rows."""
     with engine.connect() as conn:
         rows = conn.execute(_LOAD_ETFS_SQL).mappings().all()
-    return [dict(r) for r in rows]
+    out: list[Mapping[str, Any]] = []
+    for r in rows:
+        d = dict(r)
+        # Inject a deterministic instrument_id derived from ISIN/ticker so
+        # the scorecard table's NOT NULL UUID constraint is satisfied.
+        d["instrument_id"] = _synth_etf_instrument_id(d.get("ticker"), d.get("isin"))
+        out.append(d)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -445,9 +468,13 @@ def _load_conviction_for_date(
 
 
 def _load_sector_strength_map(engine: Engine, snapshot_date: date) -> dict[str, int]:
-    """Lookup sector_strength_rank from sector_states or market_regime tables.
+    """Build a sector_strength_rank map from atlas_sector_states_daily.
 
-    Falls back gracefully if neither table exists.
+    The live table exposes ``sector_name`` and ``participation_rs_pct``
+    (higher = stronger). We rank by ``participation_rs_pct DESC`` to
+    produce 1 = strongest. Falls back to an ordinal derived from
+    ``sector_state`` ordering when participation is NULL across the row
+    set.
     """
     out: dict[str, int] = {}
     try:
@@ -455,7 +482,9 @@ def _load_sector_strength_map(engine: Engine, snapshot_date: date) -> dict[str, 
             rows = conn.execute(
                 text(
                     """
-                    SELECT sector, sector_strength_rank
+                    SELECT sector_name,
+                           participation_rs_pct,
+                           sector_state
                     FROM atlas.atlas_sector_states_daily
                     WHERE date = (
                         SELECT MAX(date) FROM atlas.atlas_sector_states_daily
@@ -465,9 +494,25 @@ def _load_sector_strength_map(engine: Engine, snapshot_date: date) -> dict[str, 
                 ),
                 {"d": snapshot_date},
             ).all()
-        for sector, rank in rows:
-            if rank is not None:
-                out[str(sector)] = int(rank)
+        # Prefer participation_rs_pct when available; fall back to a
+        # qualitative state ordering. Either way the output is a dense
+        # rank in [1, N] where 1 = strongest.
+        scored: list[tuple[str, float]] = []
+        state_score = {
+            "Leading": 100.0,
+            "Improving": 75.0,
+            "Neutral": 50.0,
+            "Weakening": 25.0,
+            "Lagging": 0.0,
+        }
+        for sector_name, pct, state in rows:
+            if pct is not None:
+                scored.append((str(sector_name), float(pct)))
+            elif state is not None and str(state) in state_score:
+                scored.append((str(sector_name), state_score[str(state)]))
+        scored.sort(key=lambda x: x[1], reverse=True)
+        for rank, (sector_name, _v) in enumerate(scored, start=1):
+            out[sector_name] = rank
     except Exception as exc:
         log.info("etf_sector_strength_load_failed", error=str(exc))
     return out
@@ -538,7 +583,10 @@ def compute_etf_scorecard(
         extras = c["extras"]
         category = c["category"]
         ticker = u.get("ticker")
-        instrument_id = extras.get("instrument_id")
+        # instrument_id can come from the universe loader (production —
+        # derived UUID5 from ISIN/ticker) or via the test-only extras
+        # injection. Prefer the universe value when present.
+        instrument_id = u.get("instrument_id") or extras.get("instrument_id")
         underlying_sector = u.get("linked_sector")
 
         m_score, m_reason = score_matrix_conviction(instrument_id, conviction_rows)
