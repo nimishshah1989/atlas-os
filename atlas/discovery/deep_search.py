@@ -133,6 +133,7 @@ def _panels_cache_path(cache_dir: Path) -> Path:
 def load_panels(
     cache_dir: Path | None = None,
     use_cache: bool = True,
+    cache_path: Path | None = None,
 ) -> FeaturePanels:
     """Load OHLCV cache + sector mapping; compute or restore feature panels.
 
@@ -141,19 +142,62 @@ def load_panels(
 
     Args:
         cache_dir: cache root. Defaults to the engine's DEFAULT_CACHE_DIR.
+            Used for the sibling files (nifty500_cache.pkl,
+            iid_blacklist.json) and as the panel-cache directory.
         use_cache: whether to read/write the panels pickle. Disable in tests
             to force recompute.
+        cache_path: optional explicit path to a v3-shape OHLCV cache pickle
+            (overrides ``<cache_dir>/sde_ohlcv_cache.pkl``). When set, the
+            sibling nifty500 + blacklist files are still read from
+            ``cache_dir``. The panel-cache pickle is derived from
+            ``cache_path``'s stem so v2 and v3 panel caches don't collide.
     """
-    from atlas.discovery.engine import DEFAULT_CACHE_DIR
+    from atlas.discovery.engine import (
+        BLACKLIST_FILENAME,
+        DEFAULT_CACHE_DIR,
+        NIFTY500_CACHE_FILENAME,
+    )
 
     cache_dir = cache_dir if cache_dir is not None else DEFAULT_CACHE_DIR
-    panels_pickle = _panels_cache_path(cache_dir)
+    # When the caller supplies an explicit OHLCV pickle, derive the panel-cache
+    # filename from its stem so v2/v3 caches live side-by-side (e.g. for the
+    # comparison flow). Otherwise fall back to the default panel-cache name.
+    if cache_path is not None:
+        panels_pickle = cache_dir / f"{cache_path.stem}_panels.pkl"
+    else:
+        panels_pickle = _panels_cache_path(cache_dir)
     if use_cache and panels_pickle.exists():
         log.info("deep_search_v2_panels_cache_hit", path=str(panels_pickle))
         with panels_pickle.open("rb") as fh:
             return cast(FeaturePanels, pickle.load(fh))  # noqa: S301
 
-    ohlcv, nifty500, blacklist = _load_cache_files(cache_dir)
+    if cache_path is not None:
+        # Explicit OHLCV path: read it directly; sibling nifty500 + blacklist
+        # still come from cache_dir.
+        if not cache_path.exists():
+            raise FileNotFoundError(
+                f"--cache-path file not found: {cache_path}. "
+                "Run scripts/rebuild_v3_cache.py to produce it."
+            )
+        ohlcv = cast(pd.DataFrame, pd.read_pickle(cache_path))  # noqa: S301
+        nifty500_path = cache_dir / NIFTY500_CACHE_FILENAME
+        blacklist_path = cache_dir / BLACKLIST_FILENAME
+        if not nifty500_path.exists() or not blacklist_path.exists():
+            raise FileNotFoundError(
+                f"sibling cache files missing alongside --cache-path: "
+                f"{nifty500_path}, {blacklist_path}"
+            )
+        # pickles are dev-only cache artifacts; never user input.
+        nifty500 = cast(pd.Series, pd.read_pickle(nifty500_path))  # noqa: S301
+        import json as _json
+
+        with blacklist_path.open() as fh:
+            blacklist_raw = _json.load(fh)
+        blacklist = [
+            str(row["iid"]) if isinstance(row, dict) else str(row) for row in blacklist_raw
+        ]
+    else:
+        ohlcv, nifty500, blacklist = _load_cache_files(cache_dir)
     if blacklist:
         ohlcv = cast(pd.DataFrame, ohlcv[~ohlcv["iid"].isin(list(blacklist))].copy())
     cap_panel = _compute_cap_tier_panel(ohlcv)
@@ -473,6 +517,7 @@ def run_single_cell(
     output_dir: str | Path = "/tmp/deep_search_v2",  # noqa: S108
     panels: FeaturePanels | None = None,
     use_panel_cache: bool = True,
+    cache_path: str | Path | None = None,
 ) -> CellSummary:
     """Generate, evaluate, BH-correct, persist one cell's deep-search.
 
@@ -485,14 +530,22 @@ def run_single_cell(
         panels: optionally inject panels (test seam). If None, load via
             :func:`load_panels`.
         use_panel_cache: pass-through to :func:`load_panels`.
+        cache_path: optional explicit OHLCV pickle path (v3 cache support).
+            Passes through to :func:`load_panels`; sibling nifty500 +
+            blacklist files are still read from ``cache_dir``.
     """
     started = datetime.now(UTC)
     cache_dir_p = Path(cache_dir)
     output_dir_p = Path(output_dir)
     output_dir_p.mkdir(parents=True, exist_ok=True)
 
+    cache_path_p = Path(cache_path) if cache_path is not None else None
     if panels is None:
-        panels = load_panels(cache_dir_p, use_cache=use_panel_cache)
+        panels = load_panels(
+            cache_dir_p,
+            use_cache=use_panel_cache,
+            cache_path=cache_path_p,
+        )
 
     candidates = generate_candidates(tier, tenure, direction)
     log.info(
@@ -607,6 +660,16 @@ def _build_cli_parser() -> Any:
         action="store_true",
         help="Force recompute of the feature panels pickle.",
     )
+    parser.add_argument(
+        "--cache-path",
+        default=None,
+        help=(
+            "Optional explicit OHLCV pickle path (v3 cache support). When "
+            "set, overrides <cache-dir>/sde_ohlcv_cache.pkl. The sibling "
+            "nifty500_cache.pkl + iid_blacklist.json are still read from "
+            "--cache-dir."
+        ),
+    )
     return parser
 
 
@@ -632,6 +695,7 @@ def main(argv: list[str] | None = None) -> int:
             cache_dir=args.cache_dir,
             output_dir=args.output_dir,
             use_panel_cache=not args.no_panel_cache,
+            cache_path=args.cache_path,
         )
     except FileNotFoundError as exc:
         print(json.dumps({"error": f"cache missing: {exc}"}))
