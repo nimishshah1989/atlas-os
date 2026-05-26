@@ -42,21 +42,21 @@ function buildWaterfallData(s: NonNullable<Awaited<ReturnType<typeof getInstrume
   return { stock_return: p(s.ret_6m), cohort_return: p(s.rs_pctile_3m != null ? s.rs_pctile_3m * 0.5 : null), nifty50_return: '0', nifty500_return: '0', gold_return: null, tenure: '6m' }
 }
 
-// RankDecomposition: derive from conviction tape IC values across both
-// directions. Composite = average signed IC across non-NEUTRAL tenures × 100.
-// For RELIANCE with only 1m=-4.1 active, composite reflects the negative
-// conviction; previously it returned 0 because only POSITIVE was counted.
+// RankDecomposition: derive from conviction tape IC values. IC is already
+// signed by direction in atlas_conviction_daily (POSITIVE → ic > 0,
+// NEGATIVE → ic < 0), so we sum the raw values directly. Composite =
+// average IC across non-NEUTRAL tenures × 100.
 function buildRankData(s: NonNullable<Awaited<ReturnType<typeof getInstrumentDetail>>>): StockDetailClientProps['rankData'] {
   const tapes = ['1m', '3m', '6m', '12m'] as const
   let active = 0
-  let signedSum = 0
+  let icSum = 0
   const components = tapes.map((t) => {
     const seg = s.conviction_tape[t]
     const ic = seg.ic
     const dir = seg.direction
     if (ic != null && dir !== 'NEUTRAL') {
       active++
-      signedSum += dir === 'POSITIVE' ? ic : -ic
+      icSum += ic // already signed in source data
     }
     return {
       name: t,
@@ -66,7 +66,7 @@ function buildRankData(s: NonNullable<Awaited<ReturnType<typeof getInstrumentDet
       delta_vs_cohort: ic != null && dir !== 'NEUTRAL' ? (ic * 100).toFixed(2) : '0',
     }
   })
-  const composite = active > 0 ? ((signedSum / active) * 100).toFixed(2) : '—'
+  const composite = active > 0 ? ((icSum / active) * 100).toFixed(2) : '—'
   return { composite_score: composite, components, rank_in_category: 1, category_size: 100 }
 }
 
