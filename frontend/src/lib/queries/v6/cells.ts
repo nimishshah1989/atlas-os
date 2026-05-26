@@ -129,7 +129,7 @@ export const getAllCells: () => Promise<Cell[]> = cache(async () => {
        FROM atlas.atlas_signal_calls sc
        WHERE sc.cell_id = cd.cell_id
          AND sc.exit_date IS NULL
-       ORDER BY sc.entry_date DESC
+       ORDER BY sc.date DESC
        LIMIT 1) AS predicted_excess,
       cd.drift_status::text,
       NULL::text AS bh_fdr_q,
@@ -158,7 +158,7 @@ export async function getCellById(cell_id: string): Promise<Cell | null> {
        FROM atlas.atlas_signal_calls sc
        WHERE sc.cell_id = cd.cell_id
          AND sc.exit_date IS NULL
-       ORDER BY sc.entry_date DESC
+       ORDER BY sc.date DESC
        LIMIT 1) AS predicted_excess,
       cd.drift_status::text,
       NULL::text AS bh_fdr_q,
@@ -187,7 +187,7 @@ export const getMatrixCells: () => Promise<MatrixCell[]> = cache(async () => {
        FROM atlas.atlas_signal_calls sc
        WHERE sc.cell_id = cd.cell_id
          AND sc.exit_date IS NULL
-       ORDER BY sc.entry_date DESC
+       ORDER BY sc.date DESC
        LIMIT 1) AS predicted_excess,
       cd.drift_status::text,
       NULL::text AS bh_fdr_q,

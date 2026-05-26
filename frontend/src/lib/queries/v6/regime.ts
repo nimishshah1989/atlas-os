@@ -155,15 +155,20 @@ export async function getRegimeDetail(): Promise<RegimeDetail> {
   // Fetch 84 days (12 weeks) to cover journey strip + input sparklines.
   // A second fetch of the latest row isn't needed — first row of the 84d
   // window (DESC order) is the latest.
+  // Real columns on atlas_market_regime_daily (verified 2026-05-26):
+  // - pct_above_ema_200       — breadth proxy
+  // - india_vix               — VIX absolute (percentile computed in TS layer)
+  // - realized_vol_5d_nifty500 — vol proxy for dispersion
+  // No native smallcap_rs_z column — returns null; UI renders "—" gracefully.
   const rows = await sql<DetailRow[]>`
     SELECT
       date::text                              AS date,
       regime_state,
       deployment_multiplier::text             AS deployment_multiplier,
-      smallcap_rs_z::text                     AS smallcap_rs_z,
-      breadth_pct_above_200dma::text          AS breadth_pct_above_200dma,
-      vix_percentile::text                    AS vix_percentile,
-      cross_sectional_dispersion::text        AS cross_sectional_dispersion
+      NULL::text                              AS smallcap_rs_z,
+      pct_above_ema_200::text                 AS breadth_pct_above_200dma,
+      india_vix::text                         AS vix_percentile,
+      realized_vol_5d_nifty500::text          AS cross_sectional_dispersion
     FROM atlas.atlas_market_regime_daily
     ORDER BY date DESC
     LIMIT 84

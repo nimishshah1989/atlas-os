@@ -107,12 +107,14 @@ async function getEtfSnapshot(): Promise<IndustrySnapshot> {
     SELECT
       COUNT(*)::text                                   AS n_total,
       SUM(CASE WHEN is_atlas_leader THEN 1 ELSE 0 END)::text AS n_atlas_leaders,
-      SUM(CASE WHEN is_avoid THEN 1 ELSE 0 END)::text  AS n_avoid,
+      -- atlas_etf_scorecard has no is_avoid column (verified 2026-05-26);
+      -- derive as composite_score < 40 threshold (matches fund logic intent).
+      SUM(CASE WHEN composite_score < 40 THEN 1 ELSE 0 END)::text AS n_avoid,
       AVG(
-        NULLIF((sub_metrics->>'expense_ratio')::numeric, 0)
+        NULLIF((raw_metrics->>'expense_ratio')::numeric, 0)
       )::text                                           AS median_expense,
       AVG(
-        NULLIF((sub_metrics->>'aum_cr')::numeric, 0)
+        NULLIF((raw_metrics->>'aum_cr')::numeric, 0)
       )::text                                           AS median_aum_cr
     FROM atlas.atlas_etf_scorecard
     WHERE snapshot_date = (
