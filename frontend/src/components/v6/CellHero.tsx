@@ -73,8 +73,10 @@ export interface CellHeroProps {
 export function CellHero({ cell, cellLabel }: CellHeroProps): React.ReactElement {
   const grade = icToGrade(cell.confidence_unconditional)
 
+  // StatPill renders the label separately; don't suffix " IC" here or it shows
+  // "IC 68.99 IC".
   const icDisplay = cell.confidence_unconditional
-    ? (parseFloat(cell.confidence_unconditional) * 100).toFixed(2) + ' IC'
+    ? (parseFloat(cell.confidence_unconditional) * 100).toFixed(2)
     : '—'
 
   const fricDisplay = cell.friction_adjusted_excess

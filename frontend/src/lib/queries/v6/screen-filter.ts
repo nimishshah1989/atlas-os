@@ -102,3 +102,19 @@ export function paramsToFilter(
 
   return f
 }
+
+/**
+ * Decode Next.js page searchParams (Record<string, string | string[] | undefined>)
+ * into a ScreenFilter. Server-safe — has no client-only hooks. Use this from
+ * the `/v6/screening/page.tsx` server component.
+ */
+export function decodeScreenerParams(
+  searchParams: Record<string, string | string[] | undefined>,
+): ScreenFilter {
+  const flat: Record<string, string> = {}
+  for (const [k, v] of Object.entries(searchParams)) {
+    if (typeof v === 'string') flat[k] = v
+    else if (Array.isArray(v) && v.length > 0) flat[k] = v[v.length - 1]
+  }
+  return paramsToFilter(flat)
+}

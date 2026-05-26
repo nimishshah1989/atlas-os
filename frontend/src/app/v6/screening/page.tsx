@@ -16,7 +16,8 @@ import { screenStocks } from '@/lib/queries/v6/screen'
 import { getHeldIidSet } from '@/lib/queries/v6/portfolio_holdings'
 import { getLatestSnapshotDate } from '@/lib/queries/v6/snapshot'
 import { DataSourceBanner } from '@/components/v6/DataSourceBanner'
-import { ScreenerClient, decodeScreenerParams } from '@/components/v6/ScreenerClient'
+import { ScreenerClient } from '@/components/v6/ScreenerClient'
+import { decodeScreenerParams } from '@/lib/queries/v6/screen-filter'
 
 export const dynamic = 'force-dynamic'
 

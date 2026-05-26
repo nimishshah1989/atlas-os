@@ -17,7 +17,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 
 import { ScreenerFilterBuilder } from '@/components/v6/ScreenerFilterBuilder'
 import { StocksListV6 } from '@/components/v6/StocksListV6'
-import { filterToParams, paramsToFilter, type ScreenFilter } from '@/lib/queries/v6/screen-filter'
+import { filterToParams, type ScreenFilter } from '@/lib/queries/v6/screen-filter'
 import type { StockV6Row } from '@/lib/queries/v6/stocks'
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -167,19 +167,7 @@ export function ScreenerClient({
   )
 }
 
-// ── URL helper (used by the page shell to decode incoming params) ─────────────
-
-/**
- * Decode search params from a Next.js page searchParams prop into a ScreenFilter.
- * Safe to call on server side (no `useSearchParams` hook).
- */
-export function decodeScreenerParams(
-  searchParams: Record<string, string | string[] | undefined>,
-): ScreenFilter {
-  const flat: Record<string, string> = {}
-  for (const [k, v] of Object.entries(searchParams)) {
-    if (typeof v === 'string') flat[k] = v
-    else if (Array.isArray(v) && v.length > 0) flat[k] = v[v.length - 1]
-  }
-  return paramsToFilter(flat)
-}
+// decodeScreenerParams moved to lib/queries/v6/screen-filter.ts (server-safe).
+// Client components in Next.js App Router cannot export non-component
+// functions that the server tries to import — that triggers the
+// "Attempted to call X() from the server but X is on the client" error.

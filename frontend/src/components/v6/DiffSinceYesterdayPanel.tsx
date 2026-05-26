@@ -57,17 +57,17 @@ function ActionBadge({ action }: { action: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE' |
 // ---------------------------------------------------------------------------
 
 function CellRow({ cell }: { cell: CellSummary }) {
+  // Compose human-readable name: "Large 6m POSITIVE" instead of raw UUID.
+  // The /v6/cells/[cell_id] route accepts both formats.
+  const composedName = `${cell.cap_tier} ${cell.tenure} ${cell.action}`
   return (
     <li className="flex items-center gap-2 py-1">
       <Link
-        href={`/v6/cells/${encodeURIComponent(cell.cell_id)}`}
-        className="font-mono text-xs font-medium text-ink-primary hover:text-teal hover:underline flex-1 min-w-0 truncate"
+        href={`/v6/cells/${encodeURIComponent(composedName.replace(/ /g, '-'))}`}
+        className="font-sans text-xs font-medium text-ink-primary hover:text-teal hover:underline flex-1 min-w-0 truncate"
       >
-        {cell.cell_id}
+        {composedName}
       </Link>
-      <span className="font-sans text-[10px] text-ink-tertiary whitespace-nowrap">
-        {cell.cap_tier} · {cell.tenure}
-      </span>
       <ActionBadge action={cell.action} />
       <span className="font-sans text-[10px] text-ink-tertiary whitespace-nowrap">
         {cell.date_changed}

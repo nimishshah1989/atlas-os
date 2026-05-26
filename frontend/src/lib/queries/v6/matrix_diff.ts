@@ -141,19 +141,23 @@ async function _queryNewFiring(
   prevDate: string | null,
 ): Promise<RawCellRow[]> {
   if (prevDate === null) {
-    // First snapshot — all of today's cells are "new".
+    // First snapshot — all of today's cells are "new". DISTINCT ON (cell_id)
+    // so we get ONE row per distinct cell, not one per signal_call (which
+    // would give 363 dupes when there are only 18 distinct cells firing).
     return sql<RawCellRow[]>`
-      SELECT sc.cell_id::text, cd.cap_tier::text, sc.tenure::text, sc.action::text,
+      SELECT DISTINCT ON (sc.cell_id)
+             sc.cell_id::text, cd.cap_tier::text, sc.tenure::text, sc.action::text,
              sc.confidence_unconditional::text, sc.date::text AS date_changed
       FROM atlas.atlas_signal_calls sc
       JOIN atlas.atlas_cell_definitions cd ON cd.cell_id = sc.cell_id
       WHERE sc.date = ${todayDate}::date AND sc.exit_date IS NULL
-      ORDER BY cd.cap_tier, sc.tenure, sc.action
+      ORDER BY sc.cell_id, cd.cap_tier, sc.tenure, sc.action
     `
   }
 
   return sql<RawCellRow[]>`
-    SELECT sc.cell_id::text, cd.cap_tier::text, sc.tenure::text, sc.action::text,
+    SELECT DISTINCT ON (sc.cell_id)
+           sc.cell_id::text, cd.cap_tier::text, sc.tenure::text, sc.action::text,
            sc.confidence_unconditional::text, sc.date::text AS date_changed
     FROM atlas.atlas_signal_calls sc
     JOIN atlas.atlas_cell_definitions cd ON cd.cell_id = sc.cell_id
@@ -163,7 +167,7 @@ async function _queryNewFiring(
         SELECT DISTINCT cell_id FROM atlas.atlas_signal_calls
         WHERE date = ${prevDate}::date AND exit_date IS NULL
       )
-    ORDER BY cd.cap_tier, sc.tenure, sc.action
+    ORDER BY sc.cell_id, cd.cap_tier, sc.tenure, sc.action
   `
 }
 

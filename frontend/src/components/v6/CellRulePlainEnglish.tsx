@@ -19,10 +19,18 @@ import React from 'react'
 // Types
 // ---------------------------------------------------------------------------
 
+// rule_dsl JSONB shape (per atlas/discovery output, verified live 2026-05-26):
+//   { "cmp": ">=", "value": "16.5", "feature": "log_med_tv_60d" }
+//   { "cmp": "in_top_quantile", "value": "1", "feature": "rs_residual_12m",
+//     "value_quantile_n": 10 }
+// Note: field names are `cmp` and `value`, NOT `op` and `threshold`.
 export interface RulePredicate {
   feature: string
-  op: string          // ">=", "<=", ">", "<", "==", "in_top_decile", etc.
-  threshold?: number | string
+  cmp: string                            // canonical name in DB
+  op?: string                            // accept legacy alias
+  value?: number | string
+  threshold?: number | string             // legacy alias
+  value_quantile_n?: number               // for in_top_quantile / in_bottom_quantile
   weight?: number
 }
 
@@ -60,9 +68,17 @@ const FEATURE_LABELS: Record<string, string> = {
   momentum_6m: '6-month momentum',
   momentum_12m: '12-month momentum',
   vol_60d: '60-day realized volatility',
+  realized_vol_60d: '60-day realized volatility',
+  realized_vol_252d: '252-day realized volatility',
   beta: 'market beta',
   mcap_rank: 'market cap rank within universe',
   sector_rank: 'sector RS rank',
+  rs_residual_12m: '12-month RS residual (beta-adjusted)',
+  rs_residual_6m: '6-month RS residual (beta-adjusted)',
+  rs_residual_3m: '3-month RS residual (beta-adjusted)',
+  pct_from_52w_high: '% from 52-week high',
+  pct_from_52w_low: '% from 52-week low',
+  drawdown_from_peak: 'drawdown from peak',
 }
 
 const OP_WORDS: Record<string, string> = {
@@ -74,6 +90,8 @@ const OP_WORDS: Record<string, string> = {
   'in_top_decile': 'in top decile',
   'in_bottom_decile': 'in bottom decile',
   'in_top_quartile': 'in top quartile',
+  'in_top_quantile': 'in top quantile',
+  'in_bottom_quantile': 'in bottom quantile',
 }
 
 function translateFeature(feature: string): string {
@@ -86,22 +104,39 @@ function translateOp(op: string): string {
 
 function formatThreshold(threshold: number | string | undefined): string {
   if (threshold == null) return ''
-  if (typeof threshold === 'number') {
-    return Math.abs(threshold) < 1 ? threshold.toFixed(3) : threshold.toFixed(2)
+  // JSONB serialises numerics as strings (e.g. "0.018", "16.5"). Coerce to
+  // number for the magnitude-based precision rule, but fall back to the raw
+  // string when it isn't parseable.
+  const n = typeof threshold === 'number' ? threshold : Number(threshold)
+  if (Number.isFinite(n)) {
+    return Math.abs(n) < 1 ? n.toFixed(3) : n.toFixed(2)
   }
   return String(threshold)
 }
 
 function predicateToEnglish(pred: RulePredicate): string {
+  // Accept both canonical (cmp/value) and legacy alias (op/threshold) shapes.
+  const op = pred.cmp ?? pred.op ?? ''
   const featureLabel = translateFeature(pred.feature)
-  const opWord = translateOp(pred.op)
+  const opWord = translateOp(op)
+  const rawValue = pred.value ?? pred.threshold
 
-  // Handle in_top_decile / in_bottom_decile / in_top_quartile (no threshold)
-  if (pred.op === 'in_top_decile' || pred.op === 'in_bottom_decile' || pred.op === 'in_top_quartile') {
+  // Handle quantile / decile / quartile ops — append "of N" when value_quantile_n
+  // is set (e.g. "in top quantile of 10" for top decile, "of 4" for top quartile).
+  if (
+    op === 'in_top_decile' ||
+    op === 'in_bottom_decile' ||
+    op === 'in_top_quartile' ||
+    op === 'in_top_quantile' ||
+    op === 'in_bottom_quantile'
+  ) {
+    if (pred.value_quantile_n) {
+      return `${featureLabel} is ${opWord} of ${pred.value_quantile_n}`
+    }
     return `${featureLabel} is ${opWord}`
   }
 
-  const threshStr = formatThreshold(pred.threshold)
+  const threshStr = formatThreshold(rawValue)
   return `${featureLabel} ${opWord} ${threshStr}`.trim()
 }
 
