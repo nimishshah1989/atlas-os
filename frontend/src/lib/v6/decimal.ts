@@ -22,10 +22,15 @@
  * - valid numeric string → number
  * - invalid / non-numeric string → throws TypeError (not silent NaN)
  */
+// Sentinel strings that the UI uses for "no data". Treat as null instead of
+// throwing — chart consumers downstream gracefully skip nulls.
+const NULL_SENTINELS = new Set(['—', '-', 'N/A', 'n/a', 'NaN', 'nan', 'null', 'undefined'])
+
 export function toNumber(s: string | null | undefined): number | null {
   if (s == null) return null
   const trimmed = typeof s === 'string' ? s.trim() : s
-  if (trimmed === '') throw new TypeError(`toNumber: cannot convert empty string to number`)
+  if (trimmed === '') return null
+  if (typeof trimmed === 'string' && NULL_SENTINELS.has(trimmed)) return null
   const n = Number(trimmed)
   if (!Number.isFinite(n)) {
     throw new TypeError(`toNumber: "${s}" is not a valid number`)
