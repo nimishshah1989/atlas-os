@@ -60,7 +60,7 @@ async function getFundSnapshot(): Promise<IndustrySnapshot> {
       SUM(CASE WHEN is_atlas_leader THEN 1 ELSE 0 END)::text AS n_atlas_leaders,
       SUM(CASE WHEN is_avoid THEN 1 ELSE 0 END)::text  AS n_avoid,
       AVG(
-        NULLIF((sub_metrics->>'expense_ratio')::numeric, 0)
+        NULLIF((sub_metrics->>'ter_pct')::numeric, 0)
       )::text                                           AS median_expense,
       AVG(
         NULLIF((sub_metrics->>'aum_cr')::numeric, 0)
@@ -111,7 +111,7 @@ async function getEtfSnapshot(): Promise<IndustrySnapshot> {
       -- derive as composite_score < 40 threshold (matches fund logic intent).
       SUM(CASE WHEN composite_score < 40 THEN 1 ELSE 0 END)::text AS n_avoid,
       AVG(
-        NULLIF((raw_metrics->>'expense_ratio')::numeric, 0)
+        NULLIF((raw_metrics->>'ter_pct')::numeric, 0)
       )::text                                           AS median_expense,
       AVG(
         NULLIF((raw_metrics->>'aum_cr')::numeric, 0)

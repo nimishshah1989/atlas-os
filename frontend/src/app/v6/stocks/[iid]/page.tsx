@@ -42,16 +42,32 @@ function buildWaterfallData(s: NonNullable<Awaited<ReturnType<typeof getInstrume
   return { stock_return: p(s.ret_6m), cohort_return: p(s.rs_pctile_3m != null ? s.rs_pctile_3m * 0.5 : null), nifty50_return: '0', nifty500_return: '0', gold_return: null, tenure: '6m' }
 }
 
-// RankDecomposition: derive from conviction tape IC values.
+// RankDecomposition: derive from conviction tape IC values across both
+// directions. Composite = average signed IC across non-NEUTRAL tenures × 100.
+// For RELIANCE with only 1m=-4.1 active, composite reflects the negative
+// conviction; previously it returned 0 because only POSITIVE was counted.
 function buildRankData(s: NonNullable<Awaited<ReturnType<typeof getInstrumentDetail>>>): StockDetailClientProps['rankData'] {
   const tapes = ['1m', '3m', '6m', '12m'] as const
-  let posCount = 0; let totalIc = 0
+  let active = 0
+  let signedSum = 0
   const components = tapes.map((t) => {
-    const seg = s.conviction_tape[t]; const ic = seg.ic ?? 0; const isPos = seg.direction === 'POSITIVE'
-    if (isPos) { posCount++; totalIc += ic }
-    return { name: `${t}`, raw_score: (ic * 100).toFixed(2), percentile_in_category: isPos ? '75' : seg.direction === 'NEGATIVE' ? '25' : '50', weight_pct: '25', delta_vs_cohort: isPos ? (ic * 100).toFixed(2) : '0' }
+    const seg = s.conviction_tape[t]
+    const ic = seg.ic
+    const dir = seg.direction
+    if (ic != null && dir !== 'NEUTRAL') {
+      active++
+      signedSum += dir === 'POSITIVE' ? ic : -ic
+    }
+    return {
+      name: t,
+      raw_score: ic != null ? (ic * 100).toFixed(2) : '—',
+      percentile_in_category: dir === 'POSITIVE' ? '75' : dir === 'NEGATIVE' ? '25' : '50',
+      weight_pct: '25',
+      delta_vs_cohort: ic != null && dir !== 'NEUTRAL' ? (ic * 100).toFixed(2) : '0',
+    }
   })
-  return { composite_score: posCount > 0 ? ((totalIc / posCount) * 100).toFixed(2) : '0', components, rank_in_category: 1, category_size: 100 }
+  const composite = active > 0 ? ((signedSum / active) * 100).toFixed(2) : '—'
+  return { composite_score: composite, components, rank_in_category: 1, category_size: 100 }
 }
 
 // Thesis: derive action verb + bullets from stock signals.

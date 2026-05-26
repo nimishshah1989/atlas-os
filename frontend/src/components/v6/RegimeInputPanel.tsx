@@ -120,13 +120,13 @@ export function RegimeInputPanel({ inputs }: Props) {
       />
 
       <InputTile
-        label="VIX Percentile"
-        description="India VIX ranked within 252-day rolling window. High = elevated fear."
+        label="India VIX"
+        description="India VIX absolute level. >20 = elevated fear; <12 = complacency."
         data={vixData}
         latestValue={latest.vix_percentile}
-        formatValue={v => `${(v * 100).toFixed(0)}p`}
+        formatValue={v => v.toFixed(2)}
         color={CHART_COLORS.cautious}
-        refLine={0.7}
+        refLine={20}
       />
 
       <InputTile
