@@ -68,6 +68,11 @@ export async function getFundsHoldingStock(iid: string): Promise<FundHolding[]> 
     WHERE fs.snapshot_date = (
             SELECT MAX(snapshot_date) FROM atlas.atlas_fund_scorecard
           )
+      -- Live data has ~36 rows with instrument_id='None' (Python None bleeding
+      -- through the writer); filter as text BEFORE the uuid cast so we don't
+      -- crash on every stock detail page.
+      AND (h->>'instrument_id') IS NOT NULL
+      AND (h->>'instrument_id') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       AND (h->>'instrument_id')::uuid = ${iid}::uuid
       AND (h->>'weight_pct')::numeric >= 0.5
     ORDER BY (fs.sub_metrics->>'aum_cr')::numeric DESC NULLS LAST

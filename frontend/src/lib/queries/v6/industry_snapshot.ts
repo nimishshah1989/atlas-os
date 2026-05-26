@@ -122,19 +122,21 @@ async function getEtfSnapshot(): Promise<IndustrySnapshot> {
     )
   `
 
-  // ETF scorecard uses `amc` column from atlas_universe_etfs join or directly.
-  // We derive AMC from the scorecard amc column (populated at write time).
+  // atlas_etf_scorecard has NO `amc` column (verified live 2026-05-26 — only
+  // atlas_fund_scorecard.amc exists). Derive AMC from etf_name prefix as a
+  // best-effort grouping until a proper amc column is added (v6.1 backlog).
+  // Example: "Nippon India ETF Nifty Healthcare" → "Nippon India".
   const amcRows = await sql<AmcRow[]>`
     SELECT
-      amc,
-      AVG(composite_score)::text  AS avg_composite,
-      COUNT(*)::text              AS n_funds
+      SPLIT_PART(etf_name, ' ETF', 1) AS amc,
+      AVG(composite_score)::text       AS avg_composite,
+      COUNT(*)::text                   AS n_funds
     FROM atlas.atlas_etf_scorecard
     WHERE snapshot_date = (
       SELECT MAX(snapshot_date) FROM atlas.atlas_etf_scorecard
     )
-      AND amc IS NOT NULL
-    GROUP BY amc
+      AND etf_name IS NOT NULL
+    GROUP BY SPLIT_PART(etf_name, ' ETF', 1)
     ORDER BY AVG(composite_score) DESC NULLS LAST
     LIMIT 5
   `
