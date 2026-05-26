@@ -145,28 +145,72 @@ export const getAllCells: () => Promise<Cell[]> = cache(async () => {
 // Get one cell by id (NOT memoized — per-call different input)
 // ---------------------------------------------------------------------------
 
-export async function getCellById(cell_id: string): Promise<Cell | null> {
-  const rows = await sql<CellRow[]>`
-    SELECT
-      cd.cell_id::text,
-      cd.cap_tier::text,
-      cd.tenure::text,
-      cd.action::text,
-      cd.confidence_unconditional::text,
-      cd.friction_adjusted_excess::text,
-      (SELECT sc.predicted_excess::text
-       FROM atlas.atlas_signal_calls sc
-       WHERE sc.cell_id = cd.cell_id
-         AND sc.exit_date IS NULL
-       ORDER BY sc.date DESC
-       LIMIT 1) AS predicted_excess,
-      cd.drift_status::text,
-      NULL::text AS bh_fdr_q,
-      cd.methodology_lock_ref,
-      cd.rule_dsl
-    FROM atlas.atlas_cell_definitions cd
-    WHERE cd.cell_id = ${cell_id}::uuid
-  `
+// Matches UUID v4 format (e.g. ecbbd7c9-3a7a-4c56-bba6-bed03e8efc1c)
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// Matches composed cell-name format: <CapTier>-<tenure>-<ACTION>
+// e.g. "Large-6m-POSITIVE", "Mid-12m-NEGATIVE", "Small-3m-POSITIVE"
+const COMPOSED_RE =
+  /^(Small|Mid|Large)-(1m|3m|6m|12m)-(POSITIVE|NEUTRAL|NEGATIVE)$/
+
+export async function getCellById(idOrName: string): Promise<Cell | null> {
+  // Accept either a UUID or a composed name like "Large-6m-POSITIVE".
+  // Composed names come from the CellMatrix tile clicks and external links
+  // that don't have the UUID handy.
+  let rows: CellRow[]
+  if (UUID_RE.test(idOrName)) {
+    rows = await sql<CellRow[]>`
+      SELECT
+        cd.cell_id::text,
+        cd.cap_tier::text,
+        cd.tenure::text,
+        cd.action::text,
+        cd.confidence_unconditional::text,
+        cd.friction_adjusted_excess::text,
+        (SELECT sc.predicted_excess::text
+         FROM atlas.atlas_signal_calls sc
+         WHERE sc.cell_id = cd.cell_id
+           AND sc.exit_date IS NULL
+         ORDER BY sc.date DESC
+         LIMIT 1) AS predicted_excess,
+        cd.drift_status::text,
+        NULL::text AS bh_fdr_q,
+        cd.methodology_lock_ref,
+        cd.rule_dsl
+      FROM atlas.atlas_cell_definitions cd
+      WHERE cd.cell_id = ${idOrName}::uuid
+      LIMIT 1
+    `
+  } else {
+    const match = COMPOSED_RE.exec(idOrName)
+    if (!match) return null
+    const [, capTier, tenure, action] = match
+    rows = await sql<CellRow[]>`
+      SELECT
+        cd.cell_id::text,
+        cd.cap_tier::text,
+        cd.tenure::text,
+        cd.action::text,
+        cd.confidence_unconditional::text,
+        cd.friction_adjusted_excess::text,
+        (SELECT sc.predicted_excess::text
+         FROM atlas.atlas_signal_calls sc
+         WHERE sc.cell_id = cd.cell_id
+           AND sc.exit_date IS NULL
+         ORDER BY sc.date DESC
+         LIMIT 1) AS predicted_excess,
+        cd.drift_status::text,
+        NULL::text AS bh_fdr_q,
+        cd.methodology_lock_ref,
+        cd.rule_dsl
+      FROM atlas.atlas_cell_definitions cd
+      WHERE cd.cap_tier::text = ${capTier}
+        AND cd.tenure::text = ${tenure}
+        AND cd.action::text = ${action}
+      LIMIT 1
+    `
+  }
   return rows.length > 0 ? mapCell(rows[0]) : null
 }
 

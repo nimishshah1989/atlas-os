@@ -132,21 +132,24 @@ export default async function CellDetailPage({
 }: {
   params: Promise<{ cell_id: string }>
 }) {
-  const { cell_id } = await params
+  const { cell_id: paramIdOrName } = await params
 
-  // Parallel data fetch
-  const [cell, signalHistory, heldIidSet, walkForwardWindows, ledgerOutcomes] =
-    await Promise.all([
-      getCellById(cell_id),
-      getSignalCallsByCell(cell_id, 50),
-      getHeldIidSet(),
-      getWalkForwardWindows(cell_id),
-      getLedgerOutcomes(cell_id),
-    ])
-
+  // Resolve to the actual UUID first — paramIdOrName may be either a UUID
+  // or a composed name like "Large-6m-POSITIVE" (from CellMatrix tile clicks
+  // before C.14's UUID-routing fix propagated).
+  const cell = await getCellById(paramIdOrName)
   if (!cell) {
     notFound()
   }
+  const cellUuid = cell.cell_id
+
+  const [signalHistory, heldIidSet, walkForwardWindows, ledgerOutcomes] =
+    await Promise.all([
+      getSignalCallsByCell(cellUuid, 50),
+      getHeldIidSet(),
+      getWalkForwardWindows(cellUuid),
+      getLedgerOutcomes(cellUuid),
+    ])
 
   // Stocks firing today = active signal calls (exit_date is null)
   const firingToday = signalHistory.filter((sc) => sc.is_active)
