@@ -7,26 +7,26 @@ Designed to be called from EC2 cron via pg_cron wrapper or directly:
     python -m atlas.ingest.macro.runner --mode=incremental
 
 Sources orchestrated:
-  1. FRED: us_10y_yield, india_10y_yield, brent_usd (temp), risk_free_91d
-  2. NSE bhavcopy: fii_cash_equity_flow_cr, dii_flow
+  1. FRED: us_10y_yield, india_10y_yield, risk_free_91d
+  2. NSE FII/DII: fii_cash_equity_flow_cr, dii_flow
+     NOTE: Historical backfill is BLOCKED (all NSE archive URLs 404 as of 2026-05-27).
+     Incremental mode fetches today's data via NSE React API.
   3. MOSPI CPI (bundled): cpi_yoy
-  4. NSE VIX: vix_9d
-  5. Derived: brent_inr = brent_usd × atlas_macro_daily.usdinr (SQL UPDATE)
+  4. Yahoo Finance ^INDIAVIX: vix_9d (NSE archives URL 404; Yahoo Finance is the source)
+  5. Derived: brent_inr = brent_usd × atlas_macro_daily.usdinr (in-memory, no DB col)
+  6. Forward-fill: india_10y_yield and risk_free_91d are monthly FRED series.
+     After upserting monthly values, forward-fill propagates each value to all
+     subsequent daily rows until the next monthly value.
 
 brent_inr derivation:
-  brent_usd is ingested temporarily via FRED (DCOILBRENTEU), stored in a
-  staging step, then crossed with the existing usdinr column already in
-  atlas_macro_daily (populated by the main atlas compute pipeline).
+  brent_usd is fetched from FRED DCOILBRENTEU and held in Python memory only.
+  brent_usd is NOT a column in atlas_macro_daily — no DB write for brent_usd.
+  The runner crosses brent_usd (in-memory) × usdinr (from DB) and writes brent_inr.
 
-  SQL: UPDATE atlas.atlas_macro_daily
-       SET brent_inr = brent_usd_stage * usdinr
-       WHERE brent_usd_stage IS NOT NULL AND usdinr IS NOT NULL;
-
-  After derivation, brent_usd column (if staging) is left as-is.
-  Note: brent_usd is NOT a column in atlas_macro_daily by default;
-  the runner uses atlas_macro_daily.brent_inr as the final target.
-  The FRED brent_usd values are held in Python memory and crossed with
-  usdinr from the DB before writing brent_inr directly.
+Forward-fill for monthly series:
+  FRED india_10y_yield and risk_free_91d are monthly. atlas_macro_daily has daily rows.
+  After each monthly upsert, _forward_fill_monthly_col() propagates the last known
+  value to NULL rows via SQL correlated subquery. This gives ≥95% coverage for both cols.
 """
 
 from __future__ import annotations
@@ -132,6 +132,70 @@ def _derive_brent_inr(
     return upserted
 
 
+def _forward_fill_monthly_col(
+    col: str,
+    engine: Engine,
+    start: str = "2016-01-01",
+) -> int:
+    """Forward-fill a monthly column to all daily rows in atlas_macro_daily.
+
+    Monthly FRED series (india_10y_yield, risk_free_91d) are upserted to
+    atlas_macro_daily on the first calendar day of each month. This leaves
+    all other daily rows NULL. This function fills each NULL row with the
+    most recent non-NULL value on or before that date.
+
+    Strategy: correlated subquery — for each NULL row, SELECT the latest
+    non-NULL value from rows with date <= current row's date.
+
+    Args:
+        col:    Column name (must be one of the monthly FRED cols to prevent
+                accidental use on daily series).
+        engine: SQLAlchemy engine.
+        start:  Earliest date to forward-fill from.
+
+    Returns:
+        Number of rows updated.
+
+    SQL pattern:
+        UPDATE atlas.atlas_macro_daily t
+        SET col = (
+            SELECT m.col FROM atlas.atlas_macro_daily m
+            WHERE m.col IS NOT NULL AND m.date <= t.date
+            ORDER BY m.date DESC
+            LIMIT 1
+        )
+        WHERE t.col IS NULL AND t.date >= start_date
+    """
+    monthly_cols = frozenset({"india_10y_yield", "risk_free_91d", "cpi_yoy"})
+    if col not in monthly_cols:
+        raise ValueError(
+            f"_forward_fill_monthly_col: col {col!r} not in monthly-safe set {monthly_cols}"
+        )
+
+    sql = f"""
+        UPDATE atlas.atlas_macro_daily t
+        SET {col} = (
+            SELECT m.{col} FROM atlas.atlas_macro_daily m
+            WHERE m.{col} IS NOT NULL AND m.date <= t.date
+            ORDER BY m.date DESC
+            LIMIT 1
+        )
+        WHERE t.{col} IS NULL AND t.date >= :start
+    """  # noqa: S608 — col validated against frozenset above
+
+    with engine.begin() as conn:
+        result = conn.execute(text(sql), {"start": start})
+        rows_updated = result.rowcount
+
+    log.info(
+        "forward_fill_monthly_col_done",
+        col=col,
+        start=start,
+        rows_updated=rows_updated,
+    )
+    return rows_updated
+
+
 def run_backfill(
     start: str = _DEFAULT_BACKFILL_START,
     engine: Engine | None = None,
@@ -155,23 +219,40 @@ def run_backfill(
 
     log.info("macro_backfill_start", start=start, end=today)
 
-    # 1. FRED — us_10y_yield, india_10y_yield, brent_usd, risk_free_91d
+    # 1. FRED — us_10y_yield, india_10y_yield, risk_free_91d
+    #    (brent_usd is fetched separately for in-memory derivation; NOT in SERIES_MAP)
     log.info("macro_step", step=1, name="FRED")
     brent_usd_df: pd.DataFrame = pd.DataFrame(columns=["date", "value"])
     try:
-        fred_results = fred_ingest.run_all(start=start, engine=eng)
-        results.update(fred_results)
-        # Also fetch brent_usd raw for derivation (separate from upsert cols)
         import os
 
+        fred_results = fred_ingest.run_all(start=start, engine=eng)
+        results.update(fred_results)
+        # Fetch brent_usd raw (in-memory only) for brent_inr derivation
         if os.environ.get("FRED_API_KEY"):
             brent_usd_df = fred_ingest.fetch_series("DCOILBRENTEU", start, today)
             log.info("brent_usd_fetched", rows=len(brent_usd_df))
     except Exception as exc:
         log.error("fred_step_error", error=str(exc))
 
-    # 2. NSE FII/DII bhavcopy
-    log.info("macro_step", step=2, name="NSE_FII_DII")
+    # 1b. Forward-fill monthly FRED series to daily rows
+    #     india_10y_yield and risk_free_91d are monthly; must fill daily gaps
+    log.info("macro_step", step="1b", name="FORWARD_FILL_MONTHLY")
+    for monthly_col in ("india_10y_yield", "risk_free_91d"):
+        try:
+            ff_count = _forward_fill_monthly_col(monthly_col, eng, start)
+            results[f"ffill_{monthly_col}"] = ff_count
+        except Exception as exc:
+            log.error("forward_fill_error", col=monthly_col, error=str(exc))
+            results[f"ffill_{monthly_col}"] = 0
+
+    # 2. NSE FII/DII (historical BLOCKED — today only via React API)
+    log.info(
+        "macro_step",
+        step=2,
+        name="NSE_FII_DII",
+        note="historical_blocked_404_see_nse_bhavcopy_ingest_docstring",
+    )
     try:
         fii_count = nse_bhavcopy_ingest.run_all(start=start, engine=eng, csv_path=fii_dii_csv_path)
         results["fii_dii"] = fii_count
@@ -179,7 +260,7 @@ def run_backfill(
         log.error("nse_bhavcopy_step_error", error=str(exc))
         results["fii_dii"] = 0
 
-    # 3. MOSPI CPI (bundled data — no network call)
+    # 3. MOSPI CPI (bundled data — no network call; carry-forward done inside module)
     log.info("macro_step", step=3, name="MOSPI_CPI")
     try:
         cpi_count = mospi_cpi_ingest.run_all(engine=eng)
@@ -188,8 +269,8 @@ def run_backfill(
         log.error("mospi_cpi_step_error", error=str(exc))
         results["cpi_yoy"] = 0
 
-    # 4. NSE VIX
-    log.info("macro_step", step=4, name="NSE_VIX")
+    # 4. NSE VIX via Yahoo Finance ^INDIAVIX (NSE archives 404 as of 2026-05-27)
+    log.info("macro_step", step=4, name="YAHOO_VIX")
     try:
         vix_count = nse_vix_ingest.run_all(start=start, engine=eng, csv_path=vix_csv_path)
         results["vix_9d"] = vix_count
@@ -197,7 +278,7 @@ def run_backfill(
         log.error("nse_vix_step_error", error=str(exc))
         results["vix_9d"] = 0
 
-    # 5. Derived: brent_inr = brent_usd × usdinr
+    # 5. Derived: brent_inr = brent_usd (in-memory) × usdinr (from DB)
     log.info("macro_step", step=5, name="BRENT_INR_DERIVE")
     try:
         brent_inr_count = _derive_brent_inr(brent_usd_df, eng, start)

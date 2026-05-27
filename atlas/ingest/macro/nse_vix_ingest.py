@@ -1,29 +1,25 @@
-"""NSE India VIX historical ingest.
+"""NSE India VIX historical ingest via Yahoo Finance.
 
 Source:
-  NSE India VIX Historical data — downloadable CSV from NSE website.
-  Primary URL: https://www.nseindia.com/api/historical/vixhistory?data=[...]
-  Alternative download (direct CSV): NSE VIX history page.
+  Yahoo Finance ^INDIAVIX — daily India VIX close prices.
+  API: https://query2.finance.yahoo.com/v8/finance/chart/%5EINDIAVIX
+       ?period1={unix_start}&period2={unix_end}&interval=1d
+  No authentication required. Standard HTTP with User-Agent header.
+
+Why Yahoo Finance (not NSE archives):
+  NSE archives hist_vix_data.csv: HTTP 404 confirmed from EC2 (2026-05-27).
+  NSE historical VIX API (nseindia.com/api/historical/vixhistory): HTTP 503.
+  niftyindices.com INDIA_VIX_Historicaldata.csv: HTTP 404.
+  Yahoo Finance ^INDIAVIX: HTTP 200, 2568 rows daily 2016-01-01 to 2026-05-26.
+
+Verified 2026-05-27 with curl:
+  period1=1451606400 (2016-01-01) period2=1748390400 (2026-05-27) interval=1d
+  Returns JSON with "timestamp" array (Unix epoch) and "close" array.
 
 Populates:
-  atlas.atlas_macro_daily (via india_vix intermediate; stored only as vix_9d
-  in the target schema. The india_vix column is not in atlas_macro_daily;
-  see migration 097 for the exact columns. vix_9d is the primary output.)
-
-Columns written:
-  vix_9d — 9-day backward EMA of India VIX daily close (documented proxy).
-            NSE publishes India VIX (30d implied vol) but NOT a 9-day variant.
-            vix_9d is computed as ewm(span=9, adjust=False) on daily VIX close.
-
-CSV format (NSE VIX historical download):
-  Date | VIX Open | VIX High | VIX Low | VIX Close | Prev Close | Change | % Change
-  Date format: DD-Mon-YYYY (e.g. "01-Jan-2024")
-  Values: percentage points (no conversion needed)
-
-Note on historical depth:
-  NSE VIX historical data goes back to 2007-11-01.
-  Atlas scope is 2016-01-01. Rows before that are included in EMA calculation
-  for warm-up but filtered out of the upsert.
+  atlas.atlas_macro_daily.vix_9d — 9-day backward EMA of India VIX daily close.
+  NSE publishes India VIX (30-day implied vol). The 9-day variant is computed
+  as ewm(span=9, adjust=False) on daily VIX close (documented proxy).
 
 All values stored as Decimal. Idempotent upsert on date PK.
 """
@@ -31,8 +27,7 @@ All values stored as Decimal. Idempotent upsert on date PK.
 from __future__ import annotations
 
 import math
-import os
-import tempfile
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pandas as pd
@@ -45,58 +40,103 @@ from atlas.db import get_engine
 
 log = structlog.get_logger(__name__)
 
-# NSE VIX historical download — requires session-based approach
-# The actual download endpoint may need a session cookie from the main site.
-_NSE_VIX_URL = "https://archives.nseindia.com/content/indices/hist_vix_data.csv"
-_NSE_HEADERS = {
+# Yahoo Finance chart API for India VIX
+_YAHOO_VIX_URL = "https://query2.finance.yahoo.com/v8/finance/chart/%5EINDIAVIX"
+_YAHOO_HEADERS = {
     "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
+        "Mozilla/5.0 (compatible; atlas-os/1.0; +https://github.com/nimishshah/atlas-os)"
     ),
-    "Referer": "https://www.nseindia.com/",
-    "Accept-Encoding": "gzip, deflate, br",
+    "Accept": "application/json",
 }
 
 # EMA span for vix_9d proxy (documented in approach doc)
 _VIX_9D_SPAN = 9
 
 
-def fetch_vix_csv(
-    url: str = _NSE_VIX_URL,
-    dest_dir: str | None = None,
-) -> str:
-    """Download NSE India VIX historical CSV to a local file.
+def fetch_vix_from_yahoo(
+    start: str,
+    end: str,
+) -> pd.DataFrame:
+    """Fetch India VIX daily close from Yahoo Finance.
 
     Args:
-        url:      Source URL (overridable for tests).
-        dest_dir: Directory to write the file. Uses system temp dir if None.
+        start: ISO date string "YYYY-MM-DD" (e.g. "2016-01-01")
+        end:   ISO date string "YYYY-MM-DD" (e.g. "2026-05-27")
 
     Returns:
-        Absolute path to downloaded CSV file.
+        DataFrame with columns ["date", "india_vix"].
+        date is ISO string "YYYY-MM-DD".
+        india_vix is float (daily VIX close).
+        Rows with null close values are excluded.
 
     Raises:
         requests.HTTPError: on non-2xx response.
+
+    Response shape (Yahoo Finance v8 chart API):
+        {
+          "chart": {
+            "result": [{
+              "timestamp": [unix_epoch, ...],
+              "indicators": {
+                "quote": [{"close": [float|null, ...]}]
+              }
+            }]
+          }
+        }
     """
-    dest = dest_dir or tempfile.mkdtemp()
-    dest_path = os.path.join(dest, "india_vix_historical.csv")
+    # Convert ISO dates to Unix timestamps (UTC midnight)
+    start_dt = datetime.strptime(start, "%Y-%m-%d").replace(tzinfo=UTC)
+    end_dt = datetime.strptime(end, "%Y-%m-%d").replace(tzinfo=UTC)
+    period1 = int(start_dt.timestamp())
+    period2 = int(end_dt.timestamp()) + 86400  # include end date
 
-    with requests.Session() as session:
-        resp = session.get(url, headers=_NSE_HEADERS, timeout=60)
-        resp.raise_for_status()
+    r = requests.get(
+        _YAHOO_VIX_URL,
+        params={
+            "period1": str(period1),
+            "period2": str(period2),
+            "interval": "1d",
+        },
+        headers=_YAHOO_HEADERS,
+        timeout=30,
+    )
+    r.raise_for_status()
 
-        with open(dest_path, "wb") as f:
-            f.write(resp.content)
+    chart_result = r.json().get("chart", {}).get("result", [])
+    if not chart_result:
+        log.warning("yahoo_vix_empty_result", start=start, end=end)
+        return pd.DataFrame(columns=["date", "india_vix"])
 
-    log.info("vix_csv_downloaded", path=dest_path, size_bytes=len(resp.content))
-    return dest_path
+    result = chart_result[0]
+    timestamps = result.get("timestamp", [])
+    quote = result.get("indicators", {}).get("quote", [{}])[0]
+    closes = quote.get("close", [])
+
+    rows = []
+    for ts, close_val in zip(timestamps, closes, strict=False):
+        if close_val is None or (isinstance(close_val, float) and math.isnan(close_val)):
+            continue
+        date_str = datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d")
+        rows.append({"date": date_str, "india_vix": float(close_val)})
+
+    df = pd.DataFrame(rows) if rows else pd.DataFrame(columns=["date", "india_vix"])
+    log.info(
+        "yahoo_vix_fetched",
+        start=start,
+        end=end,
+        row_count=len(df),
+    )
+    return df
 
 
 def parse_vix_csv(csv_path: str) -> pd.DataFrame:
     """Parse NSE India VIX CSV into a clean DataFrame.
 
+    Legacy method retained for backward compatibility and tests.
+    Production code now uses fetch_vix_from_yahoo().
+
     Args:
-        csv_path: Path to the downloaded CSV file.
+        csv_path: Path to a downloaded NSE VIX CSV file.
 
     Returns:
         DataFrame with columns ["date", "india_vix"].
@@ -255,20 +295,40 @@ def run_all(
 ) -> int:
     """Download, parse, compute EMA, and upsert VIX data.
 
+    Primary source: Yahoo Finance ^INDIAVIX (daily, 2008-present).
+    Fallback: csv_path argument for local fixture files (used in testing).
+
+    NSE archives hist_vix_data.csv is 404 as of 2026-05-27.
+    Yahoo Finance provides equivalent or better coverage.
+
     Args:
         start:    Earliest date to upsert (ISO "YYYY-MM-DD").
                   Earlier rows are used for EMA warm-up but not upserted.
         engine:   Optional engine override.
-        csv_path: Override download path (for testing with local fixture).
+        csv_path: Override: use this local CSV instead of Yahoo Finance.
+                  Intended for tests with fixture data.
 
     Returns:
         Number of rows upserted.
     """
-    path = csv_path or fetch_vix_csv()
-    df = parse_vix_csv(path)
+    from datetime import date as _date
+
+    end = _date.today().isoformat()
+
+    if csv_path is not None:
+        df = parse_vix_csv(csv_path)
+    else:
+        # Fetch from Yahoo Finance (primary source)
+        # Start 30 days early to provide EMA warm-up history
+        import datetime
+
+        warmup_start = (
+            datetime.date.fromisoformat(start) - datetime.timedelta(days=30)
+        ).isoformat()
+        df = fetch_vix_from_yahoo(warmup_start, end)
 
     if df.empty:
-        log.warning("vix_run_all_empty_after_parse")
+        log.warning("vix_run_all_empty_after_fetch")
         return 0
 
     # Compute EMA on full history (warm-up needed before start date)

@@ -1,13 +1,28 @@
-"""FRED API ingest for macro columns: US 10Y, India 10Y, Brent USD, risk-free 91d.
+"""FRED API ingest for macro columns: US 10Y, India 10Y, risk-free 91d.
 
 Sources:
-  - DGS10         → us_10y_yield   (US 10Y Treasury Constant Maturity Rate, daily)
-  - INDIRLTLT01STM → india_10y_yield (India 10Y Government Bond Yield, monthly)
-  - DCOILBRENTEU  → brent_usd (temp) (Brent crude spot, daily USD/barrel)
-  - INTGSB91D156N → risk_free_91d   (India 91-day T-bill rate, weekly proxy)
+  - DGS10            → us_10y_yield   (US 10Y Treasury Constant Maturity Rate, daily)
+  - INDIRLTLT01STM   → india_10y_yield (India 10Y Government Bond Yield, monthly)
+  - IRSTCI01INM156N  → risk_free_91d   (India call money/interbank rate, monthly proxy)
+
+NOTE: brent_inr is computed in runner.py by fetching DCOILBRENTEU separately and
+crossing with usdinr from atlas_macro_daily. brent_usd is NOT a DB column and
+NOT in SERIES_MAP — it is held in Python memory only.
+
+NOTE on risk_free_91d series:
+  FRED does not carry India 91-day T-bill (INTGSB91D156N returns 400 - series does
+  not exist). The closest available series is IRSTCI01INM156N (RBI overnight call
+  money / interbank rate, monthly). Call money tracks RBI policy rate closely and
+  is a standard proxy for India's risk-free short-term rate in macro models.
+  Values are monthly; runner.py applies forward-fill to propagate to daily rows.
 
 FRED series are free (key at https://fred.stlouisfed.org/docs/api/api_key.html).
 Set FRED_API_KEY in .env before running.
+
+Verified 2026-05-27:
+  DGS10:           HTTP 200, daily, 2016-2026, ~2600 rows
+  INDIRLTLT01STM:  HTTP 200, monthly, 2016-2026, ~123 rows
+  IRSTCI01INM156N: HTTP 200, monthly, 2016-2026-03, 123 rows
 
 All monetary/yield values stored as Decimal (never float) per fintech standards.
 Tz-aware datetimes used for all timestamps.
@@ -31,22 +46,25 @@ log = structlog.get_logger(__name__)
 FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
 
 # Columns we are allowed to write to (SQL injection guard — validated before interpolation)
+# brent_usd intentionally excluded — it is NOT a column in atlas_macro_daily.
+# brent_inr is computed in runner.py from in-memory brent_usd × usdinr.
 _SAFE_COLS: frozenset[str] = frozenset(
     {
         "us_10y_yield",
         "india_10y_yield",
-        "brent_usd",
         "risk_free_91d",
-        "brent_inr",
     }
 )
 
-# Canonical FRED series IDs for each target column
+# Canonical FRED series IDs for each target column.
+# brent_usd (DCOILBRENTEU) is intentionally NOT here — runner.py fetches it
+# separately and holds in memory for brent_inr derivation without a DB write.
 SERIES_MAP: dict[str, str] = {
     "us_10y_yield": "DGS10",
     "india_10y_yield": "INDIRLTLT01STM",
-    "brent_usd": "DCOILBRENTEU",
-    "risk_free_91d": "INTGSB91D156N",
+    # INTGSB91D156N returns 400 (series does not exist).
+    # IRSTCI01INM156N is RBI call money/interbank (monthly). Close proxy.
+    "risk_free_91d": "IRSTCI01INM156N",
 }
 
 # Default historical start date aligned with atlas_macro_daily scope

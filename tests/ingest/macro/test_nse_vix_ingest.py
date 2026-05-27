@@ -1,7 +1,7 @@
 """Tests for atlas.ingest.macro.nse_vix_ingest.
 
 TDD: tests written before implementation.
-Source: NSE India VIX historical CSV (close prices).
+Primary source: Yahoo Finance ^INDIAVIX (NSE archives 404 as of 2026-05-27).
 vix_9d is a documented proxy: 9-day backward EMA of India VIX daily close.
 NSE does not publish a 9-day VIX directly.
 """
@@ -16,6 +16,108 @@ import pandas as pd
 import pytest
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+
+# ---------------------------------------------------------------------------
+# fetch_vix_from_yahoo
+# ---------------------------------------------------------------------------
+
+
+def test_fetch_vix_from_yahoo_returns_expected_columns():
+    """Yahoo Finance fetch returns DataFrame with date and india_vix."""
+    from atlas.ingest.macro.nse_vix_ingest import fetch_vix_from_yahoo
+
+    mock_response = {
+        "chart": {
+            "result": [
+                {
+                    "timestamp": [1704067200, 1704153600],  # 2024-01-01, 2024-01-02
+                    "indicators": {"quote": [{"close": [14.5, 15.2]}]},
+                }
+            ]
+        }
+    }
+
+    with patch("atlas.ingest.macro.nse_vix_ingest.requests.get") as mock_get:
+        mock_get.return_value.json.return_value = mock_response
+        mock_get.return_value.raise_for_status = MagicMock()
+
+        df = fetch_vix_from_yahoo("2024-01-01", "2024-01-02")
+
+    assert "date" in df.columns
+    assert "india_vix" in df.columns
+    assert len(df) == 2
+    assert list(df["india_vix"].values) == pytest.approx([14.5, 15.2], abs=0.01)
+
+
+def test_fetch_vix_from_yahoo_filters_null_closes():
+    """Null close values must be excluded from the result."""
+    from atlas.ingest.macro.nse_vix_ingest import fetch_vix_from_yahoo
+
+    mock_response = {
+        "chart": {
+            "result": [
+                {
+                    "timestamp": [1704067200, 1704153600, 1704240000],
+                    "indicators": {"quote": [{"close": [14.5, None, 15.2]}]},
+                }
+            ]
+        }
+    }
+
+    with patch("atlas.ingest.macro.nse_vix_ingest.requests.get") as mock_get:
+        mock_get.return_value.json.return_value = mock_response
+        mock_get.return_value.raise_for_status = MagicMock()
+
+        df = fetch_vix_from_yahoo("2024-01-01", "2024-01-03")
+
+    assert len(df) == 2  # null row excluded
+
+
+def test_fetch_vix_from_yahoo_empty_result_returns_empty_df():
+    """Empty chart result returns empty DataFrame."""
+    from atlas.ingest.macro.nse_vix_ingest import fetch_vix_from_yahoo
+
+    mock_response = {"chart": {"result": []}}
+
+    with patch("atlas.ingest.macro.nse_vix_ingest.requests.get") as mock_get:
+        mock_get.return_value.json.return_value = mock_response
+        mock_get.return_value.raise_for_status = MagicMock()
+
+        df = fetch_vix_from_yahoo("2024-01-01", "2024-01-02")
+
+    assert isinstance(df, pd.DataFrame)
+    assert len(df) == 0
+    assert "date" in df.columns
+    assert "india_vix" in df.columns
+
+
+def test_fetch_vix_from_yahoo_dates_are_iso_format():
+    """Output dates must be ISO YYYY-MM-DD strings derived from Unix timestamps."""
+    from atlas.ingest.macro.nse_vix_ingest import fetch_vix_from_yahoo
+
+    # 2024-01-15 00:00:00 UTC = 1705276800
+    mock_response = {
+        "chart": {
+            "result": [
+                {
+                    "timestamp": [1705276800],
+                    "indicators": {"quote": [{"close": [14.0]}]},
+                }
+            ]
+        }
+    }
+
+    with patch("atlas.ingest.macro.nse_vix_ingest.requests.get") as mock_get:
+        mock_get.return_value.json.return_value = mock_response
+        mock_get.return_value.raise_for_status = MagicMock()
+
+        df = fetch_vix_from_yahoo("2024-01-15", "2024-01-15")
+
+    date_str = df.iloc[0]["date"]
+    assert len(date_str) == 10
+    assert date_str[4] == "-"
+    assert date_str[7] == "-"
 
 
 # ---------------------------------------------------------------------------

@@ -183,3 +183,72 @@ def test_fetch_fii_dii_csv_downloads_and_returns_path():
             path = fetch_fii_dii_csv(dest_dir=tmpdir)
             assert path is not None
             assert os.path.exists(path)
+
+
+# ---------------------------------------------------------------------------
+# fetch_fii_dii_today (NSE React API — current day only)
+# ---------------------------------------------------------------------------
+
+
+def test_fetch_fii_dii_today_returns_single_row_dataframe():
+    """fetch_fii_dii_today returns one-row DataFrame for today's FII/DII."""
+    from atlas.ingest.macro.nse_bhavcopy_ingest import fetch_fii_dii_today
+
+    mock_json = [
+        {
+            "buyValue": "15536.74",
+            "category": "DII",
+            "date": "26-May-2026",
+            "netValue": "1361.43",
+            "sellValue": "14175.31",
+        },
+        {
+            "buyValue": "13127.02",
+            "category": "FII/FPI",
+            "date": "26-May-2026",
+            "netValue": "-2407.87",
+            "sellValue": "15534.89",
+        },
+    ]
+
+    with patch("atlas.ingest.macro.nse_bhavcopy_ingest.requests.get") as mock_get:
+        mock_get.return_value.json.return_value = mock_json
+        mock_get.return_value.raise_for_status = MagicMock()
+
+        df = fetch_fii_dii_today()
+
+    assert len(df) == 1
+    assert "date" in df.columns
+    assert "fii_net_cr" in df.columns
+    assert "dii_net_cr" in df.columns
+    assert df.iloc[0]["date"] == "2026-05-26"
+    assert float(df.iloc[0]["fii_net_cr"]) == pytest.approx(-2407.87, abs=0.01)
+    assert float(df.iloc[0]["dii_net_cr"]) == pytest.approx(1361.43, abs=0.01)
+
+
+def test_fetch_fii_dii_today_handles_api_error():
+    """fetch_fii_dii_today returns empty DataFrame on API failure."""
+    from atlas.ingest.macro.nse_bhavcopy_ingest import fetch_fii_dii_today
+
+    with patch("atlas.ingest.macro.nse_bhavcopy_ingest.requests.get") as mock_get:
+        mock_get.side_effect = Exception("Connection timeout")
+
+        df = fetch_fii_dii_today()
+
+    assert isinstance(df, pd.DataFrame)
+    assert len(df) == 0
+    assert "date" in df.columns
+
+
+def test_fetch_fii_dii_today_empty_response_returns_empty_df():
+    """fetch_fii_dii_today handles empty API response gracefully."""
+    from atlas.ingest.macro.nse_bhavcopy_ingest import fetch_fii_dii_today
+
+    with patch("atlas.ingest.macro.nse_bhavcopy_ingest.requests.get") as mock_get:
+        mock_get.return_value.json.return_value = []
+        mock_get.return_value.raise_for_status = MagicMock()
+
+        df = fetch_fii_dii_today()
+
+    assert isinstance(df, pd.DataFrame)
+    assert len(df) == 0

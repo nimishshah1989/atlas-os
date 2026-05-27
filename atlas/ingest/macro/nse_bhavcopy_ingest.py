@@ -1,24 +1,27 @@
-"""NSE FII/DII Historical Activity ingest.
+"""NSE FII/DII Daily Activity ingest.
 
-Source:
-  NSE archives FII/DII CSV — Historical Activity summary.
-  URL: https://archives.nseindia.com/content/fo/all_foii_dii.csv
-  (Single file with full history from ~2007; no auth required but NSE
-   requires a User-Agent and Referer header to avoid bot-blocks.)
+**Historical backfill status: BLOCKED**
 
-Populates:
+Source investigation (2026-05-27):
+  - archives.nseindia.com/content/fo/all_foii_dii.csv: HTTP 404 (EC2 confirmed)
+  - nseindia.com/api/historicalOR/foCash/historicalcontract: HTTP 404
+  - nseindia.com/api/fiidiiTradeReact: HTTP 200 but returns today's 2 rows only;
+    date params are ignored; NSE home page returns 403 (bot-block)
+  - Moneycontrol pricefeed/fii_dii: empty response
+  - BSE API: connection timeout
+  - NSDL: connection error
+
+All attempted historical data sources are unreachable from automated scripts.
+NSE's anti-bot measures block server-side session establishment.
+
+**Current behavior:**
+  - Incremental mode (nightly): fetches today's FII/DII from fiidiiTradeReact API
+  - Backfill mode: returns 0 (no historical source available)
+  - fii_cash_equity_flow_cr and dii_flow will remain NULL for historical rows
+
+Populates (incremental only):
   atlas.atlas_macro_daily.fii_cash_equity_flow_cr  — FII net (Buy - Sell), ₹ Crore
   atlas.atlas_macro_daily.dii_flow                 — DII net (Buy - Sell), ₹ Crore
-
-CSV format (NSE archive):
-  Columns: Date, Buy Value (FII), Sell Value (FII), Net Value (FII),
-           Buy Value (DII), Sell Value (DII), Net Value (DII)
-  Date format: DD-Mon-YYYY (e.g. "01-Jan-2024")
-  Values: ₹ Crore (no further conversion needed)
-
-Note on historical depth:
-  NSE all_foii_dii.csv typically starts from 2007. However the atlas scope is
-  2016-01-01. Rows before that date are silently ignored during backfill.
 
 All values stored as Decimal. Idempotent upsert on date PK.
 """
@@ -39,23 +42,102 @@ from atlas.db import get_engine
 
 log = structlog.get_logger(__name__)
 
-_NSE_FII_DII_URL = "https://archives.nseindia.com/content/fo/all_foii_dii.csv"
+# NSE FII/DII current-day API (returns today's 2 rows: FII and DII)
+# No historical params honored. Used for incremental/nightly updates only.
+_NSE_FII_DII_REACT_URL = "https://www.nseindia.com/api/fiidiiTradeReact"
 _NSE_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/120.0.0.0 Safari/537.36"
     ),
-    "Referer": "https://www.nseindia.com/",
-    "Accept-Encoding": "gzip, deflate, br",
+    "Accept": "application/json",
+    "Referer": "https://www.nseindia.com/market-data/fii-dii-activity",
 }
+
+# Legacy URL — 404 as of 2026-05-27. Retained for reference only.
+_NSE_FII_DII_LEGACY_URL = "https://archives.nseindia.com/content/fo/all_foii_dii.csv"
+
+
+def fetch_fii_dii_today() -> pd.DataFrame:
+    """Fetch today's FII and DII net flows from NSE React API.
+
+    Returns current day's FII and DII data only. Historical data is not
+    available via this endpoint.
+
+    Returns:
+        DataFrame with columns ["date", "fii_net_cr", "dii_net_cr"].
+        Returns empty DataFrame if API fails or returns unexpected format.
+
+    Response shape:
+        [
+          {"buyValue": "15536.74", "category": "DII", "date": "26-May-2026",
+           "netValue": "1361.43", "sellValue": "14175.31"},
+          {"buyValue": "13127.02", "category": "FII/FPI", "date": "26-May-2026",
+           "netValue": "-2407.87", "sellValue": "15534.89"}
+        ]
+    """
+    try:
+        r = requests.get(_NSE_FII_DII_REACT_URL, headers=_NSE_HEADERS, timeout=30)
+        r.raise_for_status()
+        records = r.json()
+    except Exception as exc:
+        log.error("nse_fii_dii_fetch_error", error=str(exc))
+        return pd.DataFrame(columns=["date", "fii_net_cr", "dii_net_cr"])
+
+    if not isinstance(records, list) or len(records) == 0:
+        log.warning("nse_fii_dii_unexpected_response", records=records)
+        return pd.DataFrame(columns=["date", "fii_net_cr", "dii_net_cr"])
+
+    fii_net: float | None = None
+    dii_net: float | None = None
+    date_str: str | None = None
+
+    for rec in records:
+        category = str(rec.get("category", "")).upper()
+        raw_date = str(rec.get("date", "")).strip()
+        net_val_str = str(rec.get("netValue", "")).replace(",", "")
+
+        # Parse date (format: "26-May-2026")
+        if date_str is None and raw_date:
+            try:
+                date_str = pd.to_datetime(raw_date, format="%d-%b-%Y").strftime("%Y-%m-%d")
+            except Exception:
+                pass
+
+        try:
+            net_val = float(net_val_str)
+        except (ValueError, TypeError):
+            continue
+
+        if "FII" in category or "FPI" in category:
+            fii_net = net_val
+        elif "DII" in category:
+            dii_net = net_val
+
+    if date_str is None or fii_net is None or dii_net is None:
+        log.warning(
+            "nse_fii_dii_incomplete",
+            date=date_str,
+            fii_net=fii_net,
+            dii_net=dii_net,
+        )
+        return pd.DataFrame(columns=["date", "fii_net_cr", "dii_net_cr"])
+
+    df = pd.DataFrame([{"date": date_str, "fii_net_cr": fii_net, "dii_net_cr": dii_net}])
+    log.info("nse_fii_dii_fetched", date=date_str, fii_net_cr=fii_net, dii_net_cr=dii_net)
+    return df
 
 
 def fetch_fii_dii_csv(
-    url: str = _NSE_FII_DII_URL,
+    url: str = _NSE_FII_DII_LEGACY_URL,
     dest_dir: str | None = None,
 ) -> str:
     """Download NSE FII/DII historical CSV to a local file.
+
+    DEPRECATED: The legacy URL (all_foii_dii.csv) returns 404 as of 2026-05-27.
+    This method is retained for backward compatibility with tests that use
+    fixture CSV files by passing a local file URL.
 
     Args:
         url:      Source URL (overridable for tests).
@@ -217,21 +299,39 @@ def run_all(
     engine: Engine | None = None,
     csv_path: str | None = None,
 ) -> int:
-    """Download and upsert FII/DII history from NSE.
+    """Upsert FII/DII flows into atlas_macro_daily.
+
+    Historical backfill: NOT AVAILABLE (all NSE archive URLs are 404).
+    Incremental mode: fetches today's FII/DII from NSE React API.
+
+    If csv_path is provided (test fixture): parses and upserts that CSV.
+    Otherwise: fetches today's data only via fetch_fii_dii_today().
 
     Args:
         start:    Earliest date to keep (ISO "YYYY-MM-DD"). Earlier rows dropped.
+                  Only relevant when using csv_path.
         engine:   Optional engine override.
-        csv_path: Override download path (for testing with local fixture).
+        csv_path: Override: use local fixture CSV instead of NSE API.
+                  Intended for tests only.
 
     Returns:
-        Number of rows upserted.
+        Number of rows upserted (0 for backfill without csv_path).
     """
-    path = csv_path or fetch_fii_dii_csv()
-    df = parse_fii_dii_csv(path)
+    if csv_path is not None:
+        # Test / manual path: parse provided CSV
+        df = parse_fii_dii_csv(csv_path)
+        if not df.empty:
+            df = df[df["date"] >= start]
+            log.info("fii_dii_filtered", start=start, rows_after_filter=len(df))
+        return upsert_fii_dii(df, engine=engine)
 
-    if not df.empty:
-        df = df[df["date"] >= start]
-        log.info("fii_dii_filtered", start=start, rows_after_filter=len(df))
-
-    return upsert_fii_dii(df, engine=engine)
+    # Production path: fetch today's data only
+    log.info(
+        "fii_dii_historical_unavailable",
+        message=(
+            "NSE archives all_foii_dii.csv is 404. Historical FII/DII backfill "
+            "is BLOCKED. Fetching today's data only via NSE React API."
+        ),
+    )
+    df_today = fetch_fii_dii_today()
+    return upsert_fii_dii(df_today, engine=engine)

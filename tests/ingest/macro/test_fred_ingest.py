@@ -179,3 +179,33 @@ def test_upsert_macro_col_empty_dataframe_returns_zero():
 
     assert count == 0
     mock_engine.begin.assert_not_called()
+
+
+def test_upsert_macro_col_rejects_brent_usd():
+    """brent_usd is NOT a valid column for upsert (no such column in atlas_macro_daily)."""
+    from atlas.ingest.macro.fred_ingest import upsert_macro_col
+
+    df = pd.DataFrame([{"date": "2024-01-01", "value": 80.0}])
+
+    mock_engine = MagicMock()
+
+    with pytest.raises(ValueError, match="brent_usd"):
+        upsert_macro_col("brent_usd", df, engine=mock_engine)
+
+
+def test_series_map_does_not_contain_brent_usd():
+    """SERIES_MAP must not include brent_usd (not a DB column)."""
+    from atlas.ingest.macro.fred_ingest import SERIES_MAP
+
+    assert "brent_usd" not in SERIES_MAP
+
+
+def test_series_map_uses_correct_risk_free_91d_series():
+    """SERIES_MAP must use IRSTCI01INM156N for risk_free_91d (not INTGSB91D156N which is 400)."""
+    from atlas.ingest.macro.fred_ingest import SERIES_MAP
+
+    assert "risk_free_91d" in SERIES_MAP
+    assert SERIES_MAP["risk_free_91d"] == "IRSTCI01INM156N", (
+        f"Expected IRSTCI01INM156N (call money proxy), got {SERIES_MAP['risk_free_91d']!r}. "
+        "INTGSB91D156N returns HTTP 400 (series does not exist in FRED)."
+    )
