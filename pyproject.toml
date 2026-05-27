@@ -133,6 +133,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S106"]
 "scripts/**" = ["S101", "E501"]
+"migrations/**" = ["E501"]  # SQL string literals in migrations have long lines by nature
 "atlas/validation/m1_data_quality.py" = ["E501"]
 "atlas/preflight.py" = ["E501"]
 "atlas/trading/genome.py" = ["S311"]  # non-crypto RNG OK for genome seeding
