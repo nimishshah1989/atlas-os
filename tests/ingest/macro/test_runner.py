@@ -76,8 +76,9 @@ def test_forward_fill_any_col_rejects_unsafe_col():
 
     mock_engine = MagicMock()
 
+    # "price" is not a macro column and must be rejected
     with pytest.raises(ValueError, match="safe macro set"):
-        _forward_fill_any_col("fii_cash_equity_flow_cr", mock_engine)
+        _forward_fill_any_col("price", mock_engine)
 
 
 def test_forward_fill_any_col_accepts_vix_and_us10y():
@@ -201,6 +202,7 @@ def test_run_backfill_returns_dict_with_expected_keys():
         patch("atlas.ingest.macro.runner._forward_fill_monthly_col") as mock_ffill,
         patch("atlas.ingest.macro.runner._forward_fill_any_col") as mock_ffill_any,
         patch("atlas.ingest.macro.runner.nse_bhavcopy_ingest.run_all") as mock_fii,
+        patch("atlas.ingest.macro.runner.fii_dii_monthly_ingest.run_all") as mock_fii_monthly,
         patch("atlas.ingest.macro.runner.mospi_cpi_ingest.run_all") as mock_cpi,
         patch("atlas.ingest.macro.runner.nse_vix_ingest.run_all") as mock_vix,
         patch("atlas.ingest.macro.runner._derive_brent_inr") as mock_brent,
@@ -214,7 +216,8 @@ def test_run_backfill_returns_dict_with_expected_keys():
         mock_fetch.return_value = pd.DataFrame([{"date": "2024-01-01", "value": 80.0}])
         mock_ffill.return_value = 50
         mock_ffill_any.return_value = 10
-        mock_fii.return_value = 1  # today only
+        mock_fii.return_value = 1  # today only via NSE React API
+        mock_fii_monthly.return_value = 124  # 124 months from bundled data
         mock_cpi.return_value = 150
         mock_vix.return_value = 2500
         mock_brent.return_value = 2000
@@ -229,3 +232,4 @@ def test_run_backfill_returns_dict_with_expected_keys():
     assert "cpi_yoy" in results
     assert "brent_inr" in results
     assert "fii_dii" in results
+    assert "fii_dii_monthly" in results

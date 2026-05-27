@@ -8,9 +8,9 @@ Designed to be called from EC2 cron via pg_cron wrapper or directly:
 
 Sources orchestrated:
   1. FRED: us_10y_yield, india_10y_yield, risk_free_91d
-  2. NSE FII/DII: fii_cash_equity_flow_cr, dii_flow
-     NOTE: Historical backfill is BLOCKED (all NSE archive URLs 404 as of 2026-05-27).
-     Incremental mode fetches today's data via NSE React API.
+  2. NSE FII/DII: fii_cash_equity_flow_cr, dii_flow (today only — NSE archives 404)
+  2b. Monthly FII/DII bundled: fii_cash_equity_flow_cr + dii_flow via SEBI/NSE monthly
+      net-flow data (2016-01 onward). Carry-forward to all daily rows in each month.
   3. MOSPI CPI (bundled): cpi_yoy
   4. Yahoo Finance ^INDIAVIX: vix_9d (NSE archives URL 404; Yahoo Finance is the source)
   5. Derived: brent_inr = brent_usd × atlas_macro_daily.usdinr (in-memory, no DB col)
@@ -43,6 +43,7 @@ from sqlalchemy.engine import Engine
 
 from atlas.db import get_engine
 from atlas.ingest.macro import (
+    fii_dii_monthly_ingest,
     fred_ingest,
     mospi_cpi_ingest,
     nse_bhavcopy_ingest,
@@ -228,6 +229,8 @@ def _forward_fill_any_col(
             "cpi_yoy",
             "vix_9d",
             "brent_inr",
+            "fii_cash_equity_flow_cr",
+            "dii_flow",
         }
     )
     if col not in safe_cols:
@@ -273,6 +276,7 @@ def run_backfill(
 
     Returns:
         Dict mapping source/column name → rows upserted.
+        Includes "fii_dii_monthly" key for bundled monthly FII/DII rows processed.
     """
     eng = engine or get_engine()
     today = date.today().isoformat()
@@ -321,6 +325,17 @@ def run_backfill(
         log.error("nse_bhavcopy_step_error", error=str(exc))
         results["fii_dii"] = 0
 
+    # 2b. Monthly FII/DII bundled data (SEBI/NSE public reports, carry-forward to daily)
+    #     Fills fii_cash_equity_flow_cr + dii_flow from 2016-01 via monthly net flows.
+    #     Forward-fill in step 6 propagates to any remaining NULL rows within each month.
+    log.info("macro_step", step="2b", name="FII_DII_MONTHLY_BUNDLED")
+    try:
+        fii_monthly_count = fii_dii_monthly_ingest.run_all(engine=eng)
+        results["fii_dii_monthly"] = fii_monthly_count
+    except Exception as exc:
+        log.error("fii_dii_monthly_step_error", error=str(exc))
+        results["fii_dii_monthly"] = 0
+
     # 3. MOSPI CPI (bundled data — no network call; carry-forward done inside module)
     log.info("macro_step", step=3, name="MOSPI_CPI")
     try:
@@ -353,7 +368,14 @@ def run_backfill(
     #    has calendar-daily rows. Forward-fill propagates last known value.
     #    Also covers CPI gaps (months with no new release).
     log.info("macro_step", step=6, name="FORWARD_FILL_TRADING_DAY_GAPS")
-    for daily_col in ("us_10y_yield", "cpi_yoy", "vix_9d", "brent_inr"):
+    for daily_col in (
+        "us_10y_yield",
+        "cpi_yoy",
+        "vix_9d",
+        "brent_inr",
+        "fii_cash_equity_flow_cr",
+        "dii_flow",
+    ):
         try:
             ff_count = _forward_fill_any_col(daily_col, eng, start)
             results[f"ffill_{daily_col}"] = ff_count
