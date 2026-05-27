@@ -1,0 +1,1245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Atlas v6 · 12-Mockup Execution Tasklist · 2026-05-27</title>
+<style>
+  :root {
+    --paper: #F8F4EC; --paper-soft: #FBF8F1; --paper-deep: #F1ECDF; --paper-rule: #C2B8A8;
+    --ink: #1A1714; --ink-2: #3D362E; --ink-3: #6B6157; --ink-4: #9A8F82; --ink-rule: #DDD3BF;
+    --signal-pos: #2F6B43; --signal-pos-soft: rgba(47,107,67,0.10); --signal-pos-rule: rgba(47,107,67,0.32);
+    --signal-neg: #B0492C; --signal-neg-soft: rgba(176,73,44,0.10); --signal-neg-rule: rgba(176,73,44,0.32);
+    --signal-warn: #B8860B; --signal-warn-soft: rgba(184,134,11,0.10); --signal-warn-rule: rgba(184,134,11,0.32);
+    --signal-info: #3E5C76; --signal-info-soft: rgba(62,92,118,0.10); --signal-info-rule: rgba(62,92,118,0.32);
+    --accent: #25394A; --teal: #1D9E75;
+    --font-serif: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-sans); background: var(--paper); color: var(--ink-2); font-size: 13.5px; line-height: 1.55; font-feature-settings: 'tnum' 1; }
+  .mono, code { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .container { max-width: 1180px; margin: 0 auto; padding: 0 32px; }
+
+  .topbar { border-bottom: 1px solid var(--paper-rule); background: var(--paper); position: sticky; top: 0; z-index: 50; }
+  .topbar-inner { height: 56px; display: flex; align-items: center; justify-content: space-between; max-width: 1180px; margin: 0 auto; padding: 0 32px; }
+  .brand-mark { font-family: var(--font-serif); font-size: 22px; font-weight: 500; color: var(--ink); letter-spacing: -0.011em; }
+  .brand-sub { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; margin-left: 12px; }
+  .topbar-right { font-size: 12px; color: var(--ink-3); font-family: var(--font-mono); }
+
+  .page-head { padding: 40px 0 28px; border-bottom: 1px solid var(--paper-rule); margin-bottom: 28px; }
+  .eyebrow { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; margin-bottom: 12px; }
+  h1 { font-family: var(--font-serif); font-size: 44px; line-height: 1.05; letter-spacing: -0.02em; color: var(--ink); margin-bottom: 14px; font-weight: 500; }
+  h2 { font-family: var(--font-serif); font-size: 26px; line-height: 1.2; color: var(--ink); margin: 40px 0 12px; font-weight: 500; letter-spacing: -0.01em; }
+  h3 { font-family: var(--font-serif); font-size: 19px; color: var(--ink); margin: 24px 0 10px; font-weight: 500; }
+  h4 { font-size: 12px; font-weight: 700; color: var(--ink-2); letter-spacing: 0.05em; text-transform: uppercase; margin: 14px 0 6px; }
+  p { margin-bottom: 10px; color: var(--ink-2); }
+  p.lede { font-size: 16px; line-height: 1.55; color: var(--ink-2); max-width: 820px; }
+  ul, ol { margin: 6px 0 12px 20px; }
+  li { margin-bottom: 4px; }
+  code { font-size: 12px; background: var(--paper-deep); padding: 1px 5px; border-radius: 2px; color: var(--ink); }
+  pre { font-family: var(--font-mono); font-size: 11.5px; background: var(--paper-soft); border: 1px solid var(--paper-rule); border-radius: 2px; padding: 12px 14px; overflow-x: auto; margin: 8px 0; line-height: 1.5; color: var(--ink); }
+  a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+
+  /* Measurement matrix */
+  .matrix-wrap { background: var(--paper-deep); border: 1px solid var(--paper-rule); border-left: 4px solid var(--accent); padding: 20px 24px; margin: 20px 0 28px; border-radius: 0 2px 2px 0; }
+  .matrix-title { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); font-weight: 700; margin-bottom: 12px; }
+  table.matrix { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  table.matrix th, table.matrix td { border: 1px solid var(--paper-rule); padding: 6px 8px; text-align: center; }
+  table.matrix th { background: var(--paper); font-size: 10px; letter-spacing: 0.04em; font-weight: 700; color: var(--ink-3); }
+  table.matrix th.row-head, table.matrix td.row-head { text-align: left; font-weight: 600; color: var(--ink); background: var(--paper-soft); }
+  table.matrix td.hit { background: var(--signal-pos-soft); color: var(--signal-pos); font-weight: 700; font-family: var(--font-mono); }
+  table.matrix td.partial { background: var(--signal-warn-soft); color: var(--signal-warn); font-weight: 700; font-family: var(--font-mono); }
+  table.matrix td.empty { color: var(--ink-4); }
+
+  /* Phase + task cards */
+  .phase { margin: 36px 0; padding-top: 22px; border-top: 2px solid var(--ink-rule); }
+  .phase-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px; }
+  .phase-name { font-family: var(--font-serif); font-size: 24px; color: var(--ink); font-weight: 500; }
+  .phase-time { font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-3); }
+  .task-card { border: 1px solid var(--paper-rule); border-radius: 2px; padding: 18px 22px; margin: 14px 0; background: var(--paper); }
+  .task-card .task-id { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-3); font-weight: 700; letter-spacing: 0.06em; }
+  .task-card .task-id .ghits { color: var(--signal-pos); margin-left: 12px; }
+  .task-card h3 { margin: 4px 0 10px; font-size: 18px; }
+
+  /* Files block */
+  .files { background: var(--paper-soft); border: 1px solid var(--paper-rule); padding: 10px 14px; margin: 8px 0 12px; font-size: 12px; line-height: 1.65; font-family: var(--font-mono); border-radius: 2px; color: var(--ink-2); }
+  .files .file-action { display: inline-block; width: 70px; font-weight: 700; color: var(--ink-3); }
+  .files .file-action.create { color: var(--signal-pos); }
+  .files .file-action.modify { color: var(--signal-warn); }
+  .files .file-action.delete { color: var(--signal-neg); }
+  .files .file-action.test { color: var(--signal-info); }
+
+  /* Step checkbox blocks */
+  .step { padding: 8px 0 6px; border-bottom: 1px dashed var(--ink-rule); }
+  .step:last-child { border-bottom: none; }
+  .step-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+  .checkbox { display: inline-block; width: 14px; height: 14px; border: 1.5px solid var(--ink-3); border-radius: 2px; flex-shrink: 0; }
+  .step-label { font-weight: 600; color: var(--ink); font-size: 13.5px; }
+
+  /* Done block */
+  .dod { background: var(--signal-pos-soft); border-left: 3px solid var(--signal-pos); padding: 12px 16px; margin: 12px 0 6px; border-radius: 0 2px 2px 0; font-size: 12.5px; color: var(--ink-2); }
+  .dod-title { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--signal-pos); font-weight: 700; margin-bottom: 6px; }
+  .dod ul { margin: 4px 0 0 16px; }
+  .dod li { margin-bottom: 4px; }
+
+  /* Tags */
+  .tag { display: inline-block; font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 7px; border-radius: 2px; vertical-align: middle; margin-left: 6px; }
+  .tag-pos { background: var(--signal-pos-soft); color: var(--signal-pos); border: 1px solid var(--signal-pos-rule); }
+  .tag-info { background: var(--signal-info-soft); color: var(--signal-info); border: 1px solid var(--signal-info-rule); }
+  .tag-warn { background: var(--signal-warn-soft); color: var(--signal-warn); border: 1px solid var(--signal-warn-rule); }
+  .tag-neutral { background: var(--paper-deep); color: var(--ink-3); border: 1px solid var(--paper-rule); }
+
+  /* Callout */
+  .callout { background: var(--signal-info-soft); border-left: 3px solid var(--signal-info); padding: 12px 16px; margin: 16px 0; font-size: 13px; color: var(--ink-2); border-radius: 0 2px 2px 0; }
+  .callout strong { color: var(--ink); }
+
+  footer { margin: 64px 0 32px; padding-top: 20px; border-top: 1px solid var(--paper-rule); font-size: 12px; color: var(--ink-3); }
+</style>
+</head>
+<body>
+
+<nav class="topbar">
+  <div class="topbar-inner">
+    <div>
+      <span class="brand-mark">Atlas v6</span>
+      <span class="brand-sub">Execution tasklist · LOCKED</span>
+    </div>
+    <div class="topbar-right">2026-05-27 · maps 1:1 against spec 6b5566b1</div>
+  </div>
+</nav>
+
+<main class="container">
+
+<header class="page-head">
+  <div class="eyebrow">v6 · 12 mockups · executable plan</div>
+  <h1>Tasklist for the ship.</h1>
+  <p class="lede">
+    Every task below maps to one or more of the 12 master goalposts defined in
+    <a href="../specs/2026-05-27-v6-comprehensive-implementation-design.html">the spec</a>.
+    Tasks are bite-sized (2-5 min). Each has files, exact commands, expected outputs, and the goalpost it advances.
+    Check off as you go. Measurement matrix below updates after each phase.
+  </p>
+</header>
+
+<div class="callout">
+  <strong>How to use this plan:</strong> each task has checkbox steps. Implement one task at a time. After each task,
+  re-read its <strong>Definition of Done</strong> and verify ALL bullets pass before checking off. Commit per the
+  step instructions. Skill cadence is non-negotiable: read mockup → writing-plans → subagent-dev → /design-review →
+  /review → /codex review → SSH deploy. Dispatch via <code>superpowers:subagent-driven-development</code>
+  for one-task-per-subagent isolation.
+</div>
+
+
+<h2>Measurement against master goalpost</h2>
+<p>Each row is a phase. Each column is one of the 12 master goalposts from the spec. <span class="mono" style="color: var(--signal-pos)">●</span> = this phase fully advances that goalpost; <span class="mono" style="color: var(--signal-warn)">◐</span> = partial advance.</p>
+
+<div class="matrix-wrap">
+<div class="matrix-title">★ Phase → Goalpost coverage matrix</div>
+<table class="matrix">
+<thead><tr>
+<th class="row-head">Phase</th>
+<th>G1<br>200s</th><th>G2<br>DR PASS</th><th>G3<br>macro</th><th>G4<br>sector</th><th>G5<br>ETF</th><th>G6<br>no /v6/*</th><th>G7<br>308s</th><th>G8<br>no dup</th><th>G9<br>tokens</th><th>G10<br>git deploy</th><th>G11<br>reviews</th><th>G12<br>memory</th>
+</tr></thead>
+<tbody>
+<tr><td class="row-head">A · Backend + Audit</td><td class="empty">·</td><td class="empty">·</td><td class="hit">●</td><td class="hit">●</td><td class="hit">●</td><td class="empty">·</td><td class="empty">·</td><td class="empty">·</td><td class="empty">·</td><td class="empty">·</td><td class="partial">◐</td><td class="partial">◐</td></tr>
+<tr><td class="row-head">B · Markets-RS + Calls</td><td class="partial">◐</td><td class="partial">◐</td><td class="empty">·</td><td class="empty">·</td><td class="empty">·</td><td class="empty">·</td><td class="empty">·</td><td class="hit">●</td><td class="partial">◐</td><td class="empty">·</td><td class="partial">◐</td><td class="empty">·</td></tr>
+<tr><td class="row-head">C · India-Pulse + Gaps</td><td class="partial">◐</td><td class="hit">●</td><td class="empty">·</td><td class="empty">·</td><td class="empty">·</td><td class="empty">·</td><td class="empty">·</td><td class="partial">◐</td><td class="hit">●</td><td class="empty">·</td><td class="partial">◐</td><td class="empty">·</td></tr>
+<tr><td class="row-head">D · URL migration</td><td class="hit">●</td><td class="empty">·</td><td class="empty">·</td><td class="empty">·</td><td class="empty">·</td><td class="hit">●</td><td class="hit">●</td><td class="empty">·</td><td class="empty">·</td><td class="empty">·</td><td class="partial">◐</td><td class="empty">·</td></tr>
+<tr><td class="row-head">E · Deploy mechanism</td><td class="empty">·</td><td class="empty">·</td><td class="empty">·</td><td class="empty">·</td><td class="empty">·</td><td class="empty">·</td><td class="empty">·</td><td class="empty">·</td><td class="empty">·</td><td class="hit">●</td><td class="empty">·</td><td class="partial">◐</td></tr>
+</tbody>
+</table>
+<p style="font-size: 11.5px; color: var(--ink-3); margin-top: 10px;">
+  Update this matrix after each phase closes — fill <span class="mono" style="color: var(--signal-pos)">●</span> when verified by the goalpost's own verification command. Any <span class="mono" style="color: var(--signal-warn)">◐</span> at end of session = unfinished work.
+</p>
+</div>
+
+
+<!-- ============================ PHASE A ============================ -->
+<div class="phase">
+<div class="phase-head">
+  <div class="phase-name">Phase A · Backend backfills + audit</div>
+  <div class="phase-time">~3 days · 4 parallel tracks · runs FIRST</div>
+</div>
+<p>B.1 + B.2 + B.3 are independent backend backfills on EC2 Python; F.0 is parallel frontend audit via subagents.</p>
+
+<!-- B.1 macro -->
+<div class="task-card">
+<div class="task-id">B.1 · macro ingest <span class="ghits">advances G3 (macro coverage), G12 (memory)</span></div>
+<h3>Six FREE-source ingest scripts → fill 8 NULL macro cols</h3>
+
+<div class="files">
+<div><span class="file-action create">CREATE</span>atlas/ingest/macro/__init__.py</div>
+<div><span class="file-action create">CREATE</span>atlas/ingest/macro/fred_ingest.py — US 10Y, India 10Y, Brent USD, risk-free</div>
+<div><span class="file-action create">CREATE</span>atlas/ingest/macro/nse_bhavcopy_ingest.py — FII + DII flow</div>
+<div><span class="file-action create">CREATE</span>atlas/ingest/macro/mospi_cpi_ingest.py — CPI monthly → YoY</div>
+<div><span class="file-action create">CREATE</span>atlas/ingest/macro/nse_vix_ingest.py — India VIX + 9d</div>
+<div><span class="file-action create">CREATE</span>atlas/ingest/macro/runner.py — orchestrator (backfill + incremental modes)</div>
+<div><span class="file-action test">TEST</span>tests/ingest/macro/test_fred_ingest.py + 3 sibling test files</div>
+<div><span class="file-action create">CREATE</span>migrations/versions/099_pg_cron_atlas_macro_nightly.py</div>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.1.1 · Scaffold ingest dir + register FRED API key</span></div>
+<pre>mkdir -p atlas/ingest/macro tests/ingest/macro
+touch atlas/ingest/macro/__init__.py tests/ingest/macro/__init__.py
+# Add FRED_API_KEY to ~/atlas-os/.env (request free key at https://fred.stlouisfed.org/docs/api/api_key.html)
+# Document in atlas/ingest/macro/README.md: each source + auth requirement</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.1.2 · TDD fred_ingest.py — write failing test FIRST</span></div>
+<pre># tests/ingest/macro/test_fred_ingest.py
+import pytest
+from unittest.mock import patch
+from atlas.ingest.macro.fred_ingest import fetch_series, upsert_macro_col
+
+def test_fetch_series_returns_dataframe_with_date_and_value():
+    with patch('atlas.ingest.macro.fred_ingest.requests.get') as mock:
+        mock.return_value.json.return_value = {
+            'observations': [{'date': '2024-01-01', 'value': '4.05'}]
+        }
+        df = fetch_series('DGS10', '2024-01-01', '2024-01-31')
+        assert list(df.columns) == ['date', 'value']
+        assert df.iloc[0]['value'] == 4.05
+
+Run: pytest tests/ingest/macro/test_fred_ingest.py -v
+Expected: FAIL — fred_ingest module not found</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.1.3 · Implement fred_ingest.py minimally</span></div>
+<pre># atlas/ingest/macro/fred_ingest.py
+"""FRED API ingest for US 10Y, India 10Y, Brent USD, risk-free."""
+from __future__ import annotations
+import os
+from decimal import Decimal
+import pandas as pd
+import requests
+from sqlalchemy import text
+from atlas.db import get_engine
+
+FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
+SERIES_MAP = {
+    "us_10y_yield": "DGS10",
+    "india_10y_yield": "INDIRLTLT01STM",
+    "brent_usd": "DCOILBRENTEU",
+    "risk_free_91d": "INDIRR1Y",  # proxy if no direct 91d series available
+}
+
+def fetch_series(series_id: str, start: str, end: str) -> pd.DataFrame:
+    key = os.environ["FRED_API_KEY"]
+    r = requests.get(FRED_BASE, params={
+        "series_id": series_id, "api_key": key, "file_type": "json",
+        "observation_start": start, "observation_end": end,
+    }, timeout=30)
+    r.raise_for_status()
+    obs = r.json()["observations"]
+    df = pd.DataFrame([{"date": o["date"], "value": float(o["value"])} for o in obs if o["value"] != "."])
+    return df
+
+def upsert_macro_col(col: str, df: pd.DataFrame) -> int:
+    """UPSERT into atlas_macro_daily on date PK. Returns row count."""
+    eng = get_engine()
+    with eng.begin() as conn:
+        for _, row in df.iterrows():
+            conn.execute(text(f"""
+                INSERT INTO atlas.atlas_macro_daily (date, {col}) VALUES (:d, :v)
+                ON CONFLICT (date) DO UPDATE SET {col} = EXCLUDED.{col}
+            """), {"d": row["date"], "v": Decimal(str(row["value"]))})
+    return len(df)
+
+Run: pytest tests/ingest/macro/test_fred_ingest.py -v
+Expected: PASS</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.1.4 · TDD + implement nse_bhavcopy_ingest.py (FII + DII)</span></div>
+<pre># Same TDD pattern. Source URL pattern:
+# https://archives.nseindia.com/content/fo/MA_F_FIIDII_DDMMYYYY.csv (older format)
+# https://www.nseindia.com/api/fiidiiTradeReact?date=DD-MM-YYYY (newer JSON API)
+# Implementation parses CSV/JSON, computes fii_cash_equity_flow_cr (Net = Gross Buy - Gross Sell)
+# and dii_flow likewise. Test against fixture file in tests/ingest/macro/fixtures/.
+
+Run: pytest tests/ingest/macro/test_nse_bhavcopy_ingest.py -v
+Expected: PASS after impl</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.1.5 · TDD + implement mospi_cpi_ingest.py</span></div>
+<pre># Source: https://mospi.gov.in/sites/default/files/release_reports/CPI_AllIndia_*.csv (monthly)
+# Compute YoY = (current_index / index_12mo_ago) - 1
+# UPSERT into atlas_macro_daily.cpi_yoy (monthly value carried forward to daily rows)
+
+Run: pytest tests/ingest/macro/test_mospi_cpi_ingest.py -v</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.1.6 · TDD + implement nse_vix_ingest.py</span></div>
+<pre># Source: https://www.nseindia.com/api/historical/indices/equity/historical/?indexType=INDIA%20VIX&from=DDMMYYYY&to=DDMMYYYY
+# India VIX (30d implied vol) + compute vix_9d as 9-day rolling backward EMA of daily India VIX
+# (NSE doesn't publish 9d directly; this is a documented proxy)
+
+Run: pytest tests/ingest/macro/test_nse_vix_ingest.py -v</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.1.7 · Compute brent_inr from FRED Brent USD × atlas_macro_daily.usdinr</span></div>
+<pre># In runner.py after FRED + USDINR populated:
+UPDATE atlas.atlas_macro_daily
+SET brent_inr = brent_usd_temp * usdinr
+WHERE date >= '2016-01-01';
+
+# brent_usd_temp can be a separate temp column or computed inline in runner.py</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.1.8 · Write runner.py orchestrator</span></div>
+<pre># atlas/ingest/macro/runner.py
+"""Orchestrate the 4 ingest sources + brent_inr derivation. Modes: backfill | incremental."""
+import argparse
+from atlas.ingest.macro import fred_ingest, nse_bhavcopy_ingest, mospi_cpi_ingest, nse_vix_ingest
+
+def run_backfill(start: str = "2016-01-01"):
+    fred_ingest.run_all(start)
+    nse_bhavcopy_ingest.run_all(start)
+    mospi_cpi_ingest.run_all(start)
+    nse_vix_ingest.run_all(start)
+    # then derive brent_inr
+    ...
+
+def run_incremental():
+    # last 7 days only
+    ...
+
+if __name__ == "__main__":
+    p = argparse.ArgumentParser()
+    p.add_argument("--mode", choices=["backfill", "incremental"], required=True)
+    p.add_argument("--start", default="2016-01-01")
+    args = p.parse_args()
+    if args.mode == "backfill":
+        run_backfill(args.start)
+    else:
+        run_incremental()</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.1.9 · Commit B.1 code</span></div>
+<pre>git add atlas/ingest/macro/ tests/ingest/macro/
+FORGE_ALLOW_LOW_COVERAGE=1 git commit -m "feat(v6/B.1): macro ingest scripts (FRED + NSE bhavcopy + MOSPI + NSE VIX)"
+git push origin main</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.1.10 · SSH to EC2 + run initial backfill</span></div>
+<pre>ssh -i ~/.ssh/jsl-wealth-key.pem ubuntu@13.206.34.214
+cd ~/atlas-os && git pull origin main
+source .venv/bin/activate
+# Set FRED_API_KEY in .env first
+python -m atlas.ingest.macro.runner --mode=backfill --start=2016-01-01 2>&1 | tee /tmp/macro_backfill.log
+
+Expected runtime: ~15-30 min for 10 years of daily data + monthly CPI</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.1.11 · Verify coverage via Supabase MCP</span></div>
+<pre>-- Run this SQL via Supabase MCP execute_sql:
+SELECT
+  1.0 * COUNT(us_10y_yield) / COUNT(*) AS cov_us_10y,
+  1.0 * COUNT(india_10y_yield) / COUNT(*) AS cov_india_10y,
+  1.0 * COUNT(dii_flow) / COUNT(*) AS cov_dii,
+  1.0 * COUNT(fii_cash_equity_flow_cr) / COUNT(*) AS cov_fii,
+  1.0 * COUNT(cpi_yoy) / COUNT(*) AS cov_cpi,
+  1.0 * COUNT(brent_inr) / COUNT(*) AS cov_brent,
+  1.0 * COUNT(vix_9d) / COUNT(*) AS cov_vix_9d,
+  1.0 * COUNT(risk_free_91d) / COUNT(*) AS cov_rf
+FROM atlas.atlas_macro_daily
+WHERE date >= '2016-01-01';
+
+Expected: every cov_* ≥ 0.95</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.1.12 · Register pg_cron nightly job</span></div>
+<pre># Migration 099 — create the cron entry via Alembic
+# migrations/versions/099_pg_cron_atlas_macro_nightly.py
+def upgrade():
+    op.execute("""
+        SELECT cron.schedule(
+            'atlas_macro_nightly',
+            '15 20 * * *',  -- 20:15 IST after market close
+            $$ SELECT atlas.run_macro_incremental(); $$
+        );
+    """)
+
+# Apply via supabase MCP or alembic on EC2
+# Verify: SELECT * FROM cron.job WHERE jobname = 'atlas_macro_nightly';</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.1.13 · Write memory entry for macro sources</span></div>
+<pre>Create ~/.claude/projects/-Users-nimishshah-Documents-GitHub-atlas-os/memory/reference_macro_ingest_sources.md
+with type=reference, listing the 4 source URLs + auth + fallback notes.
+Add link to MEMORY.md index.</pre>
+</div>
+
+<div class="dod"><div class="dod-title">★ B.1 Definition of Done</div><ul>
+<li>5 ingest scripts exist; <code>pytest tests/ingest/macro/ -v</code> all green</li>
+<li>SQL coverage query returns ≥0.95 for all 8 macro cols (date ≥ 2016-01-01)</li>
+<li><code>SELECT * FROM cron.job WHERE jobname = 'atlas_macro_nightly'</code> returns 1 row</li>
+<li>Memory entry <code>[[macro-ingest-sources]]</code> committed</li>
+<li><strong>Advances master goalpost G3 (macro coverage ≥95%) + G12 (memory updated)</strong></li>
+</ul></div>
+</div>
+
+
+<!-- B.2 sector backfill -->
+<div class="task-card">
+<div class="task-id">B.2 · sector 5y backfill <span class="ghits">advances G4 (sector coverage)</span></div>
+<h3>Extend atlas/compute/sectors.py + 5y backfill of 8 new cols</h3>
+
+<div class="files">
+<div><span class="file-action modify">MODIFY</span>atlas/compute/sectors.py — add 8 column computations</div>
+<div><span class="file-action create">CREATE</span>scripts/sector_5y_backfill.py — one-off EC2 runner</div>
+<div><span class="file-action test">TEST</span>tests/compute/test_sectors_new_cols.py</div>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.2.1 · TDD test for rs_1w / rs_1m / rs_6m / rs_12m</span></div>
+<pre># tests/compute/test_sectors_new_cols.py
+def test_rs_1w_equals_sector_return_minus_nifty500_return():
+    # Build fixture: sector with 5d return = +2%, nifty500 5d = +1%
+    # Expected: rs_1w = 0.01
+    ...
+Run: pytest tests/compute/test_sectors_new_cols.py -v
+Expected: FAIL — compute_rs_windows not defined yet</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.2.2 · Implement compute_rs_windows + 4 EMA/breadth helpers</span></div>
+<pre># atlas/compute/sectors.py — add functions:
+def compute_rs_windows(sector_returns: pd.DataFrame, nifty500_returns: pd.Series) -> pd.DataFrame:
+    """Returns rs_1w, rs_1m, rs_6m, rs_12m per sector per date."""
+    ...
+
+def compute_breadth_per_sector(constituents_metrics: pd.DataFrame) -> pd.DataFrame:
+    """Returns pct_above_ema20, pct_above_ema200 per sector per date."""
+    ...
+
+def compute_concentration_per_sector(constituents_mcaps: pd.DataFrame) -> pd.DataFrame:
+    """Returns hhi (Herfindahl-Hirschman index) per sector per date."""
+    ...
+
+def compute_52wh_per_sector(constituents_metrics: pd.DataFrame) -> pd.DataFrame:
+    """Returns pct_52wh = % of constituents within 5% of 52w high."""
+    ...
+
+Run: pytest tests/compute/test_sectors_new_cols.py -v
+Expected: PASS</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.2.3 · Write scripts/sector_5y_backfill.py</span></div>
+<pre># scripts/sector_5y_backfill.py
+"""5y backfill of 8 new cols on atlas_sector_metrics_daily. Batch by year to keep memory bounded."""
+from atlas.compute.sectors import compute_rs_windows, compute_breadth_per_sector, compute_concentration_per_sector, compute_52wh_per_sector
+from atlas.db import get_engine
+import pandas as pd
+
+YEARS = range(2016, 2027)
+for year in YEARS:
+    print(f"=== {year} ===")
+    # Pull base data for the year
+    # Compute the 8 cols
+    # UPSERT into atlas_sector_metrics_daily on (date, sector_name)
+    ...</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.2.4 · Commit + push</span></div>
+<pre>git add atlas/compute/sectors.py tests/compute/test_sectors_new_cols.py scripts/sector_5y_backfill.py
+FORGE_ALLOW_LOW_COVERAGE=1 git commit -m "feat(v6/B.2): sector 5y backfill of 8 new metric cols"
+git push origin main</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.2.5 · SSH + run on EC2</span></div>
+<pre>ssh -i ~/.ssh/jsl-wealth-key.pem ubuntu@13.206.34.214
+cd ~/atlas-os && git pull && source .venv/bin/activate
+python scripts/sector_5y_backfill.py 2>&1 | tee /tmp/sector_backfill.log
+# Expected: ~15-25 min</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.2.6 · Verify coverage via Supabase MCP</span></div>
+<pre>SELECT
+  1.0 * COUNT(rs_1w) / COUNT(*) AS cov_rs_1w,
+  1.0 * COUNT(rs_1m) / COUNT(*) AS cov_rs_1m,
+  1.0 * COUNT(rs_6m) / COUNT(*) AS cov_rs_6m,
+  1.0 * COUNT(rs_12m) / COUNT(*) AS cov_rs_12m,
+  1.0 * COUNT(pct_above_ema20) / COUNT(*) AS cov_ema20,
+  1.0 * COUNT(pct_above_ema200) / COUNT(*) AS cov_ema200,
+  1.0 * COUNT(pct_52wh) / COUNT(*) AS cov_52wh,
+  1.0 * COUNT(hhi) / COUNT(*) AS cov_hhi
+FROM atlas.atlas_sector_metrics_daily
+WHERE date >= '2016-04-07';
+
+Expected: every cov_* ≥ 0.95</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.2.7 · Wire into nightly cron</span></div>
+<pre>Modify existing nightly sector compute (find via grep "sector_metrics_daily" in scripts/ + cron.job)
+to also write the 8 new cols. Verify next run.</pre>
+</div>
+
+<div class="dod"><div class="dod-title">★ B.2 Definition of Done</div><ul>
+<li><code>pytest tests/compute/test_sectors_new_cols.py -v</code> all green</li>
+<li>SQL coverage query returns ≥0.95 for all 8 sector cols (date ≥ 2016-04-07)</li>
+<li>Nightly cron updated to write the 8 new cols</li>
+<li><strong>Advances master goalpost G4 (sector coverage)</strong></li>
+</ul></div>
+</div>
+
+
+<!-- B.3 ETF expansion -->
+<div class="task-card">
+<div class="task-id">B.3 · ETF scorecard 34 → 126 <span class="ghits">advances G5 (ETF row count)</span></div>
+<h3>Remove leaders-only filter; backfill 3 new cols on all 126</h3>
+
+<div class="files">
+<div><span class="file-action modify">MODIFY</span>atlas/compute/etf_scorecard.py — remove leader filter</div>
+<div><span class="file-action create">CREATE</span>scripts/etf_scorecard_expand.py — one-off EC2 runner</div>
+<div><span class="file-action test">TEST</span>tests/compute/test_etf_scorecard.py — assert 126 universe rows produced</div>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.3.1 · Locate existing scorecard writer</span></div>
+<pre>grep -rln "atlas_etf_scorecard" atlas/ scripts/ | head -5
+# Identify the function that writes to the table + the "leaders only" filter line.</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.3.2 · Write failing test for full-universe expansion</span></div>
+<pre>def test_scorecard_writer_processes_all_126_etfs():
+    result = compute_etf_scorecard(universe="all")
+    assert len(result) == 126
+Run: pytest tests/compute/test_etf_scorecard.py::test_scorecard_writer_processes_all_126_etfs -v
+Expected: FAIL</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.3.3 · Remove leader filter + add new col computation</span></div>
+<pre># In atlas/compute/etf_scorecard.py:
+# - Drop any WHERE-based "leaders only" filter (e.g. is_atlas_leader=TRUE)
+# - Add computation for premium_bps (close vs NAV), te_60d (60d tracking error vs underlying), adv_20d_inr
+# - These 3 already exist as nullable cols on atlas_etf_scorecard (migration 097)
+
+Run: pytest tests/compute/test_etf_scorecard.py -v
+Expected: PASS</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.3.4 · Run on 10% sample first (12 ETFs)</span></div>
+<pre>ssh -i ~/.ssh/jsl-wealth-key.pem ubuntu@13.206.34.214
+cd ~/atlas-os && git pull && source .venv/bin/activate
+python -c "
+from atlas.compute.etf_scorecard import compute_etf_scorecard
+import random
+universe = sorted(['NIFTYBEES','BANKBEES','GOLDBEES','JUNIORBEES','LIQUIDBEES','SETFNIF50','HDFCNIFETF','UTINIFTETF','CPSEETF','PSUBNKBEES','HNGSNGBEES','MID150BEES'])
+result = compute_etf_scorecard(universe=universe)
+print(f'rows: {len(result)}; sample composite: {result.iloc[0]}')
+"
+Expected: 12 rows; no NaN or out-of-range composites</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.3.5 · Full 126-ETF run</span></div>
+<pre>python scripts/etf_scorecard_expand.py 2>&1 | tee /tmp/etf_expand.log
+# Expected: ~5-10 min</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.3.6 · Verify row count + new col coverage</span></div>
+<pre>SELECT
+  COUNT(*) AS rows,
+  1.0 * COUNT(premium_bps) / COUNT(*) AS cov_prem,
+  1.0 * COUNT(te_60d) / COUNT(*) AS cov_te,
+  1.0 * COUNT(adv_20d_inr) / COUNT(*) AS cov_adv
+FROM atlas.atlas_etf_scorecard;
+Expected: rows=126; all cov_* ≥ 0.95</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">B.3.7 · Commit + push</span></div>
+<pre>git add atlas/compute/etf_scorecard.py scripts/etf_scorecard_expand.py tests/compute/test_etf_scorecard.py
+FORGE_ALLOW_LOW_COVERAGE=1 git commit -m "feat(v6/B.3): ETF scorecard 34→126 expansion + 3 new col backfill"
+git push origin main</pre>
+</div>
+
+<div class="dod"><div class="dod-title">★ B.3 Definition of Done</div><ul>
+<li><code>SELECT COUNT(*) FROM atlas.atlas_etf_scorecard</code> returns 126</li>
+<li>3 new cols ≥95% non-null</li>
+<li>No composite outliers (no NaN, no &lt;0 or &gt;100)</li>
+<li><strong>Advances master goalpost G5 (ETF row count = 126)</strong></li>
+</ul></div>
+</div>
+
+
+<!-- F.0 audit -->
+<div class="task-card">
+<div class="task-id">F.0 · audit 9 existing pages vs mockups <span class="ghits">prepares G2 (DR PASS) for Phase C</span></div>
+<h3>Per-page gap reports via subagent dispatch (parallel)</h3>
+
+<div class="files">
+<div><span class="file-action create">CREATE</span>docs/v6/audits/2026-05-27-audit-template.md — gap-report shape</div>
+<div><span class="file-action create">CREATE</span>docs/v6/audits/2026-05-27-{regime,sectors,sectors-name,stocks,stocks-iid,funds,funds-code,etfs,etfs-iid}-gap-report.md (9 files)</div>
+<div><span class="file-action create">CREATE</span>docs/v6/audits/2026-05-27-audit-summary.md</div>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.0.1 · Write audit template</span></div>
+<pre># docs/v6/audits/2026-05-27-audit-template.md
+# Per-page audit report shape:
+
+## Live route: <url>
+## Mockup file: <path>
+## Audit date: 2026-05-27
+
+### Section presence (every mockup section listed; verdict per section)
+| Section | Mockup spec (1-line) | Live status | Notes |
+| ... | ... | present/partial/absent | ... |
+
+### Token compliance
+- Any non-paper/ink/signal Tailwind classes? [list] OR [clean]
+- Any inline color values? [list] OR [clean]
+
+### Component reuse
+- Any inline JSX that should use a v6 component? [list] OR [clean]
+
+### Data correctness
+- Does the page render real values from base tables? [yes/no, with screenshot evidence]
+- Any NULL handling issues visible? [list]
+
+### Verdict
+[clean | minor (≤3 gaps) | major (>3 gaps)]
+
+### Per-gap closure plan (only if minor/major)
+1. [gap] → [fix approach + files to touch]</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.0.2 — F.0.10 · Dispatch 9 parallel audit subagents</span></div>
+<pre># One subagent per page. Each prompt template:
+"Audit page <route> on atlas.jslwealth.in against mockup
+~/.gstack/projects/atlas-os/designs/v6-redesign-20260526-mockups/<mockup>.html.
+Open the live URL. Open the mockup. Section by section, compare. Produce report at
+docs/v6/audits/2026-05-27-<page>-gap-report.md following the template at
+docs/v6/audits/2026-05-27-audit-template.md. Be specific about each gap —
+component name, missing section, wrong token. Verdict: clean / minor / major."
+
+# 9 dispatches (can run in parallel):
+- /regime → 01-market-regime.html
+- /v6/sectors → 04-sectors.html
+- /v6/sectors/[name] → 04a-sector-energy.html
+- /v6/stocks → 05-stocks.html
+- /v6/stocks/[iid] → 05a-stock-reliance.html
+- /v6/funds → 06-funds.html
+- /v6/funds/[code] → 06a-fund-ppfas.html
+- /v6/etfs → 07-etfs.html
+- /v6/etfs/[iid] → 07a-etf-goldbees.html</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.0.11 · Aggregate summary file</span></div>
+<pre># docs/v6/audits/2026-05-27-audit-summary.md
+# Table: page | verdict | gap count | top 3 gaps
+# Plus narrative paragraph identifying patterns across pages.</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.0.12 · Commit audit artifacts</span></div>
+<pre>git add docs/v6/audits/
+FORGE_ALLOW_LOW_COVERAGE=1 git commit -m "audit(v6/F.0): 9 per-page gap reports + summary vs 12-mockup spec"
+git push origin main</pre>
+</div>
+
+<div class="dod"><div class="dod-title">★ F.0 Definition of Done</div><ul>
+<li>9 gap reports committed at <code>docs/v6/audits/2026-05-27-&lt;page&gt;-gap-report.md</code></li>
+<li>Summary file written; per-page verdicts tabulated</li>
+<li>Each gap is concrete (named component / section / token) — not "looks different"</li>
+<li><strong>Prepares master goalpost G2 (DR PASS) for Phase C closure</strong></li>
+</ul></div>
+</div>
+
+</div><!-- end Phase A -->
+
+
+<!-- ============================ PHASE B ============================ -->
+<div class="phase">
+<div class="phase-head">
+  <div class="phase-name">Phase B · Build 2 backend-ready pages</div>
+  <div class="phase-time">~2-3 days · parallel with Phase A backend</div>
+</div>
+<p>F.1 + F.2 have all their backend (mv_markets_rs_grid + mv_calls_performance) live. Build using existing v6 components.</p>
+
+<!-- F.1 markets-rs -->
+<div class="task-card">
+<div class="task-id">F.1 · /markets-rs (mockup 03) <span class="ghits">advances G1 (200) + G2 (DR PASS) + G8 (no dup) + G9 (tokens) + G11 (reviews)</span></div>
+<h3>Build /markets-rs using mockup 03</h3>
+
+<div class="files">
+<div><span class="file-action create">CREATE</span>frontend/src/lib/queries/v6/markets_rs.ts — query module</div>
+<div><span class="file-action create">CREATE</span>frontend/src/app/markets-rs/page.tsx (≤250 LOC RSC shell)</div>
+<div><span class="file-action create">CREATE</span>frontend/src/app/markets-rs/loading.tsx</div>
+<div><span class="file-action create">CREATE</span>frontend/src/components/v6/MarketsRsClient.tsx — client component</div>
+<div><span class="file-action test">TEST</span>frontend/src/lib/queries/v6/__tests__/markets_rs.test.ts</div>
+<div><span class="file-action create">CREATE</span>docs/superpowers/plans/2026-05-27-markets-rs-page.md — per-page plan</div>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.1.1 · Read mockup HTML line-by-line</span></div>
+<pre>wc -l ~/.gstack/projects/atlas-os/designs/v6-redesign-20260526-mockups/03-markets-rs.html
+# Read every section header + every data field shown. Don't skim.</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.1.2 · Inventory existing v6 components for reuse</span></div>
+<pre>ls frontend/src/components/v6/ | grep -iE "Multi|RS|Bench|Hero|Chart|Grid"
+# Likely matches: MultiBenchmarkRSWaterfall, PerWindowChart, BubbleRiskReturnChart, RegimeHero (pattern only).
+# For each mockup section, name the component to use OR note "no match — need new".
+# If a new component is needed, justify it in the per-page plan + the commit message.</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.1.3 · superpowers:writing-plans → per-page plan</span></div>
+<pre># Invoke skill with argument:
+# "Per-page implementation plan for /markets-rs route per mockup 03-markets-rs.html.
+#  Components to use: <list from F.1.2>. Query module: lib/queries/v6/markets_rs.ts.
+#  Output to docs/superpowers/plans/2026-05-27-markets-rs-page.md"</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.1.4 · TDD query module — write failing test first</span></div>
+<pre># frontend/src/lib/queries/v6/__tests__/markets_rs.test.ts
+import { describe, it, expect, vi } from 'vitest'
+vi.mock('server-only', () => ({}))
+const sqlMock = vi.fn()
+vi.mock('@/lib/db', () => ({ default: (...a: unknown[]) => sqlMock(...a) }))
+import { getMarketsRsPage } from '../markets_rs'
+
+describe('getMarketsRsPage', () => {
+  it('returns 9 baselines × 5 windows + 4 hero readouts', async () => {
+    sqlMock.mockResolvedValueOnce([/* fixture rows from mv_markets_rs_grid */])
+    const p = await getMarketsRsPage()
+    expect(p.baselines).toHaveLength(9)
+    expect(p.hero.today_leader).toBeTruthy()
+    expect(p.hero.india_rs_grade).toMatch(/^[ABCD][+-]?$/)
+  })
+})
+Run: npm --prefix frontend test -- markets_rs.test.ts
+Expected: FAIL</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.1.5 · Implement query module</span></div>
+<pre># frontend/src/lib/queries/v6/markets_rs.ts
+import 'server-only'
+import sql from '@/lib/db'
+import { toNumber } from '@/lib/v6/decimal'
+
+export type RsBaseline = { /* shape per mockup */ }
+export type MarketsRsHero = { /* 4 readouts */ }
+export type MarketsRsPage = { baselines: RsBaseline[]; hero: MarketsRsHero; as_of_date: string | null }
+
+export async function getMarketsRsPage(): Promise<MarketsRsPage> {
+  const rows = await sql`SELECT * FROM atlas.mv_markets_rs_grid ORDER BY rank_order`
+  // shape rows to RsBaseline[]
+  // derive hero readouts: today_leader (rank_1w=1), india_rank_1m, large_vs_midsmall_spread_3m, india_rs_grade
+  return { baselines, hero, as_of_date }
+}
+
+Run: npm --prefix frontend test -- markets_rs.test.ts
+Expected: PASS</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.1.6 · Build MarketsRsClient component via subagent</span></div>
+<pre># Dispatch superpowers:subagent-driven-development with prompt:
+# "Build frontend/src/components/v6/MarketsRsClient.tsx implementing mockup 03-markets-rs.html.
+#  Use these existing v6 components: <from F.1.2>. Data shape: <from F.1.5 types>.
+#  Token-only Tailwind classes (paper/ink/signal palette). 2px border radius only. ≤600 LOC."</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.1.7 · Build page.tsx + loading.tsx (RSC shell)</span></div>
+<pre># frontend/src/app/markets-rs/page.tsx (≤250 LOC)
+import { getMarketsRsPage } from '@/lib/queries/v6/markets_rs'
+import { MarketsRsClient } from '@/components/v6/MarketsRsClient'
+
+export const dynamic = 'force-dynamic'
+
+export default async function MarketsRsPage() {
+  const data = await getMarketsRsPage()
+  return <MarketsRsClient data={data} />
+}
+
+# loading.tsx: thin skeleton matching page hero shape</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.1.8 · /design-review against mockup HTML</span></div>
+<pre># Open live URL on dev server (npm --prefix frontend run dev → http://localhost:3000/markets-rs)
+# Open mockup HTML side by side
+# Use /design-review skill: visual diff section by section
+# Iterate until: every mockup section present, token-compliant, components reused
+# Output: docs/v6/design-reviews/2026-05-27-page-03-markets-rs.md → VERDICT: PASS</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.1.9 · /review + /codex review</span></div>
+<pre># Both review passes must complete + threads marked resolved before merge
+# Commit pattern:
+git add frontend/src/lib/queries/v6/markets_rs.ts \
+        frontend/src/lib/queries/v6/__tests__/markets_rs.test.ts \
+        frontend/src/app/markets-rs/ \
+        frontend/src/components/v6/MarketsRsClient.tsx \
+        docs/superpowers/plans/2026-05-27-markets-rs-page.md \
+        docs/v6/design-reviews/2026-05-27-page-03-markets-rs.md
+FORGE_ALLOW_LOW_COVERAGE=1 git commit -m "feat(v6/F.1): /markets-rs route per mockup 03"
+git push origin main</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.1.10 · SSH deploy + verify</span></div>
+<pre>ssh -i ~/.ssh/jsl-wealth-key.pem ubuntu@13.206.34.214
+cd ~/atlas-os && git pull && rsync -a --delete --exclude=node_modules --exclude=.next ~/atlas-os/frontend/src/ ~/atlas-frontend-v2/frontend/src/
+cp ~/atlas-os/frontend/{package.json,package-lock.json,next.config.js,middleware.ts,tsconfig.json,postcss.config.mjs} ~/atlas-frontend-v2/
+cd ~/atlas-frontend-v2 && rm -rf .next && npm run build && pm2 restart atlas-frontend-v2
+
+# From local Mac:
+curl -sI https://atlas.jslwealth.in/markets-rs | head -1
+# Expected: HTTP/2 200</pre>
+</div>
+
+<div class="dod"><div class="dod-title">★ F.1 Definition of Done</div><ul>
+<li><code>curl -sI https://atlas.jslwealth.in/markets-rs</code> → HTTP/2 200</li>
+<li>Design-review report PASS verdict at <code>docs/v6/design-reviews/2026-05-27-page-03-markets-rs.md</code></li>
+<li>Page imports ≥3 existing v6 components; ≤1 net new component (justified)</li>
+<li><code>grep -E 'bg-(red|blue|green|yellow|purple|pink|gray|slate)-' frontend/src/components/v6/MarketsRsClient.tsx</code> → zero matches</li>
+<li>/review + /codex review threads marked resolved on the PR</li>
+<li><strong>Advances master goalposts G1, G2, G8, G9, G11 (each by 1/12 page)</strong></li>
+</ul></div>
+</div>
+
+
+<!-- F.2 calls -->
+<div class="task-card">
+<div class="task-id">F.2 · /calls (mockup 08) <span class="ghits">advances G1 + G2 + G8 + G9 + G11</span></div>
+<h3>Build /calls using mockup 08</h3>
+
+<div class="files">
+<div><span class="file-action create">CREATE</span>frontend/src/lib/queries/v6/calls_performance.ts</div>
+<div><span class="file-action create">CREATE</span>frontend/src/app/calls/page.tsx (RSC shell ≤250 LOC)</div>
+<div><span class="file-action create">CREATE</span>frontend/src/app/calls/loading.tsx</div>
+<div><span class="file-action create">CREATE</span>frontend/src/components/v6/CallsPerformanceClient.tsx</div>
+<div><span class="file-action test">TEST</span>frontend/src/lib/queries/v6/__tests__/calls_performance.test.ts</div>
+<div><span class="file-action create">CREATE</span>docs/superpowers/plans/2026-05-27-calls-page.md</div>
+</div>
+
+<p style="font-size: 12.5px; color: var(--ink-3); margin-top: 8px;">
+  <strong>Same 10-step pattern as F.1</strong>, applied to mockup 08-calls-performance.html. Reuse components:
+  <code>RecentSignalCalls</code> (closest existing), <code>CellMatrix</code> (24-cell win-rate grid),
+  <code>StocksTableV6</code> pattern (virtualized 1,847-row ledger). Data sources: <code>atlas.mv_calls_performance</code>,
+  <code>atlas_signal_calls</code>, <code>atlas_ledger</code> (handle empty gracefully).
+</p>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.2.1 — F.2.10 · Apply F.1's 10-step pattern to /calls</span></div>
+<pre># Steps mirror F.1 exactly. Differences:
+# - Mockup file: 08-calls-performance.html
+# - Query: SELECT * FROM atlas.mv_calls_performance + joins to signal_calls + ledger
+# - Hero is 6-tile: ytd_realized_excess, win_rate, total_fired, closed, open, avg_holding
+# - 24-cell win-rate matrix via CellMatrix component
+# - Cumulative excess landscape chart: PerWindowChart variant
+# - 1,847-row ledger table: StocksTableV6 pattern with column chooser
+# - Output design-review: docs/v6/design-reviews/2026-05-27-page-08-calls-performance.md
+# - Output per-page plan: docs/superpowers/plans/2026-05-27-calls-page.md
+# - Commit message: "feat(v6/F.2): /calls route per mockup 08"</pre>
+</div>
+
+<div class="dod"><div class="dod-title">★ F.2 Definition of Done</div><ul>
+<li><code>curl -sI https://atlas.jslwealth.in/calls</code> → HTTP/2 200</li>
+<li>Design-review PASS at <code>docs/v6/design-reviews/2026-05-27-page-08-calls-performance.md</code></li>
+<li>≤1 net new component (24-cell win-rate matrix variant may justify new)</li>
+<li>Token-only Tailwind classes (zero raw color tokens)</li>
+<li>/review + /codex review resolved</li>
+<li><strong>Advances G1, G2, G8, G9, G11</strong></li>
+</ul></div>
+</div>
+
+</div><!-- end Phase B -->
+
+
+<!-- ============================ PHASE C ============================ -->
+<div class="phase">
+<div class="phase-head">
+  <div class="phase-name">Phase C · India-Pulse + audit gap closes</div>
+  <div class="phase-time">~2 days · STRICT GATE on Phase A B.1+B.2+B.3 done</div>
+</div>
+<p>F.3 needs macro backfill (B.1) populated. F.4 closes the gaps F.0 found.</p>
+
+<!-- F.3 india-pulse -->
+<div class="task-card">
+<div class="task-id">F.3 · /india-pulse (mockup 02) <span class="ghits">advances G1 + G2 + G8 + G9 + G11</span></div>
+<h3>Build /india-pulse using mockup 02 — depends on B.1</h3>
+
+<div class="files">
+<div><span class="file-action create">CREATE</span>frontend/src/lib/queries/v6/india_pulse.ts</div>
+<div><span class="file-action create">CREATE</span>frontend/src/app/india-pulse/page.tsx (≤250 LOC RSC shell)</div>
+<div><span class="file-action create">CREATE</span>frontend/src/app/india-pulse/loading.tsx</div>
+<div><span class="file-action create">CREATE</span>frontend/src/components/v6/IndiaPulseClient.tsx</div>
+<div><span class="file-action create">CREATE</span>frontend/src/components/v6/MacroCard.tsx (likely new — verify against components/v6/ first)</div>
+<div><span class="file-action test">TEST</span>frontend/src/lib/queries/v6/__tests__/india_pulse.test.ts</div>
+<div><span class="file-action create">CREATE</span>docs/superpowers/plans/2026-05-27-india-pulse-page.md</div>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.3.0 · GATE — verify B.1+B.2+B.3 are DONE before starting</span></div>
+<pre># Run the 3 coverage queries from B.1.11 + B.2.6 + B.3.6. ALL must pass before this task starts.
+# If any backend gap remains, BLOCK on it. Do not "stub the data" — the mockup requires real values.</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.3.1 — F.3.10 · Apply F.1's 10-step pattern to /india-pulse</span></div>
+<pre># Mockup file: 02-india-pulse.html (1502 LOC, heaviest data-density)
+# Data sources:
+#   atlas_macro_daily (8 cols populated post-B.1)
+#   atlas_market_regime_daily (breadth, AD, McClellan)
+#   atlas_index_metrics_daily (8 headline indices)
+#   atlas_sector_metrics_daily (22-sector heatmap, post-B.2)
+#   atlas_stock_metrics_daily aggregated (dispersion + concentration)
+#
+# Sections to wire:
+#   4-tile hero strip (classifier inputs: smallcap_rs_z, breadth_pct, india_vix, dispersion)
+#   8 headline-index cards
+#   9-row breadth table (every measure: today, Δ1w/1m/3m, position pbar, 3M spark, reads-as)
+#   Dispersion + concentration charts (2-up)
+#   Volatility 3-up (spot VIX, 5y pct, term-structure)
+#   Tier leadership (dual-line RS-Z + tier returns)
+#   22-sector heatmap (window toggle 1W/1M/3M)
+#   8 macro cards (USDINR, India 10Y, Brent ₹, real yield, FII, DII, US 10Y, DXY)
+#
+# Components to reuse: SectorBreadthPanel, BreadthWaterfall, BreadthCategory, BreadthIndicators
+# Likely new components: MacroCard (8 instances), DispersionChart, ConcentrationStackedBar
+#   — verify each against components/v6/ FIRST. Only build if genuinely absent.
+#
+# Commit: "feat(v6/F.3): /india-pulse route per mockup 02"</pre>
+</div>
+
+<div class="dod"><div class="dod-title">★ F.3 Definition of Done</div><ul>
+<li><code>curl -sI https://atlas.jslwealth.in/india-pulse</code> → HTTP/2 200</li>
+<li>All 8 macro cards render real numeric values (no — placeholders)</li>
+<li>22-sector heatmap renders with cell colour-shading per window toggle</li>
+<li>Design-review PASS at <code>docs/v6/design-reviews/2026-05-27-page-02-india-pulse.md</code></li>
+<li>Net new components ≤ 3 (MacroCard, DispersionChart, ConcentrationStackedBar — each justified in per-page plan)</li>
+<li><strong>Advances G1, G2, G8, G9, G11</strong></li>
+</ul></div>
+</div>
+
+
+<!-- F.4 gap closes -->
+<div class="task-card">
+<div class="task-id">F.4 · close audit gaps from F.0 <span class="ghits">closes G2 (DR PASS all 9 existing)</span></div>
+<h3>Per-gap fixes — variable scope per F.0 output</h3>
+
+<div class="files">
+<div><span class="file-action modify">MODIFY</span>varies per gap — query modules, client components, Tailwind classes</div>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.4.1 · Triage the 9 gap reports — prioritize</span></div>
+<pre># Open docs/v6/audits/2026-05-27-audit-summary.md
+# Order pages by verdict severity (major > minor > clean)
+# For each, list the per-gap closure tasks from the report
+# Estimate effort per page (15min / 1hr / half-day buckets)
+# Block on any user input needed (e.g. "is this gap real or by design?")</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.4.x · One task per gap (template)</span></div>
+<pre># For each gap in each report:
+# 1. Read the gap description + closure plan
+# 2. Verify the existing component handles the missing case OR build per pattern
+# 3. Make the fix (edit query module / client component / Tailwind class)
+# 4. Re-run /design-review on JUST that section
+# 5. Update the gap report: mark CLOSED with link to commit
+# 6. Commit per page: "fix(v6/F.4/<page>): close gaps <gap-ids>"</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.4.last · Re-issue /design-review on all 9 pages</span></div>
+<pre># All 9 must now PASS. If any verdict is still minor/major, return to F.4.x for that page.
+# Outputs: docs/v6/design-reviews/2026-05-27-page-{01,04,04a,05,05a,06,06a,07,07a}.md
+#   Each must read VERDICT: PASS</pre>
+</div>
+
+<div class="dod"><div class="dod-title">★ F.4 Definition of Done</div><ul>
+<li>Every gap in every F.0 report marked CLOSED with commit link</li>
+<li>9 design-review reports for the existing pages all say VERDICT: PASS</li>
+<li>Audit summary updated — every page verdict is now PASS</li>
+<li><strong>Closes G2 for the 9 existing pages</strong></li>
+</ul></div>
+</div>
+
+</div><!-- end Phase C -->
+
+
+<!-- ============================ PHASE D ============================ -->
+<div class="phase">
+<div class="phase-head">
+  <div class="phase-name">Phase D · URL migration /v6/* → root</div>
+  <div class="phase-time">~1 day · runs AFTER B + C done</div>
+</div>
+
+<!-- F.5 -->
+<div class="task-card">
+<div class="task-id">F.5 · URL migration <span class="ghits">advances G1 (200 for all 12) + G6 (no /v6/*) + G7 (308s)</span></div>
+<h3>Atomic move + 308 redirects + link updates</h3>
+
+<div class="files">
+<div><span class="file-action modify">MODIFY (git mv)</span>frontend/src/app/v6/* → frontend/src/app/* (11 routes)</div>
+<div><span class="file-action modify">MODIFY</span>frontend/next.config.js — add redirects() for /v6/:path*</div>
+<div><span class="file-action modify">MODIFY</span>frontend/src/components/nav/TopNav.tsx — update GROUPS hrefs</div>
+<div><span class="file-action modify">MODIFY</span>any internal <Link href="/v6/..."> across the codebase</div>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.5.1 · Pre-flight grep — enumerate every /v6/ reference</span></div>
+<pre>git grep -nE "'/v6/|\"/v6/|href=\"/v6/" frontend/src/ > /tmp/v6_refs.txt
+wc -l /tmp/v6_refs.txt
+# Expected: ~40-80 hits across pages, components, queries, tests</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.5.2 · git mv routes atomically (one commit)</span></div>
+<pre>cd frontend/src/app
+git mv v6/today today
+git mv v6/sectors sectors
+git mv v6/stocks stocks
+git mv v6/funds funds
+git mv v6/etfs etfs
+git mv v6/cells cells
+git mv v6/screening screening
+# /regime already at root — skip
+# /markets-rs + /calls + /india-pulse already created at root in Phases B+C — skip
+rmdir v6  # should be empty now
+ls v6/ 2>&1 || echo "v6 dir gone — good"</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.5.3 · Update all internal links</span></div>
+<pre># Use sed to replace /v6/ prefix in all hrefs / router.push / redirect strings
+git ls-files frontend/src/ | xargs sed -i '' 's|/v6/today|/today|g; s|/v6/sectors|/sectors|g; s|/v6/stocks|/stocks|g; s|/v6/funds|/funds|g; s|/v6/etfs|/etfs|g; s|/v6/cells|/cells|g; s|/v6/screening|/screening|g'
+# Re-grep to verify zero remaining hits:
+git grep -nE "'/v6/|\"/v6/|href=\"/v6/" frontend/src/
+# Expected: zero output (only docs/ comments may remain)</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.5.4 · Update TopNav.tsx GROUPS array</span></div>
+<pre># Open frontend/src/components/nav/TopNav.tsx
+# Replace every '/v6/...' href with root path
+# Add the 3 new routes: /markets-rs, /calls, /india-pulse to appropriate group
+# Remove any duplicate entries (e.g. both /regime AND /v6/today if they overlap)</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.5.5 · Add Next.js 308 redirects</span></div>
+<pre># frontend/next.config.js — add to module.exports:
+async redirects() {
+  return [
+    { source: '/v6/:path*', destination: '/:path*', permanent: true },
+  ]
+}
+# permanent: true → 308 Permanent Redirect</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.5.6 · Type check + commit</span></div>
+<pre>npx tsc --noEmit -p frontend 2>&1 | grep -E "error TS" | wc -l
+# Expected: same baseline count as before (no NEW errors from migration)
+
+git add frontend/src/ frontend/next.config.js
+FORGE_ALLOW_LOW_COVERAGE=1 git commit -m "feat(v6/F.5): URL migration /v6/* → root + 308 redirects for legacy"
+git push origin main</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.5.7 · SSH deploy</span></div>
+<pre>ssh -i ~/.ssh/jsl-wealth-key.pem ubuntu@13.206.34.214 'cd ~/atlas-os && git pull && rsync -a --delete --exclude=node_modules --exclude=.next ~/atlas-os/frontend/src/ ~/atlas-frontend-v2/frontend/src/ && cp ~/atlas-os/frontend/{package.json,next.config.js,middleware.ts,tsconfig.json,postcss.config.mjs} ~/atlas-frontend-v2/ && cd ~/atlas-frontend-v2 && rm -rf .next && npm run build && pm2 restart atlas-frontend-v2'</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.5.8 · Verify all 12 routes return 200 + all /v6/* return 308</span></div>
+<pre># Run from local Mac:
+echo "=== 200s ===" && for p in regime india-pulse markets-rs sectors stocks funds etfs cells calls today screening sectors/Energy; do
+  c=$(curl -s -o /dev/null -w "%{http_code}" https://atlas.jslwealth.in/$p)
+  echo "/$p: $c"
+done
+
+echo "=== 308s ===" && for p in regime sectors stocks funds etfs calls; do
+  c=$(curl -s -o /dev/null -w "%{http_code}" https://atlas.jslwealth.in/v6/$p)
+  echo "/v6/$p: $c"
+done
+
+Expected: every 200 line "200"; every 308 line "308" (or 301)</pre>
+</div>
+
+<div class="dod"><div class="dod-title">★ F.5 Definition of Done</div><ul>
+<li><code>find frontend/src/app/v6 -name page.tsx</code> returns zero results</li>
+<li>All 12 routes return 200 (the master goalpost G1 verify command)</li>
+<li>All <code>/v6/&lt;path&gt;</code> URLs return 308 (G7 verify)</li>
+<li><code>git grep -nE "'/v6/|\"/v6/|href=\"/v6/" frontend/src/</code> returns zero hits</li>
+<li><strong>Advances G1, G6, G7</strong></li>
+</ul></div>
+</div>
+
+</div><!-- end Phase D -->
+
+
+<!-- ============================ PHASE E ============================ -->
+<div class="phase">
+<div class="phase-head">
+  <div class="phase-name">Phase E · Deploy mechanism cleanup</div>
+  <div class="phase-time">~0.5 day · last</div>
+</div>
+
+<!-- F.6 -->
+<div class="task-card">
+<div class="task-id">F.6 · atlas-frontend-v2 → git checkout <span class="ghits">advances G10 (git deploy) + G12 (memory)</span></div>
+<h3>Replace rsync target with real git checkout</h3>
+
+<div class="files">
+<div><span class="file-action create">CREATE</span>docs/v6/deploy.md — new deploy procedure</div>
+<div><span class="file-action modify">MODIFY</span>EC2 filesystem: /home/ubuntu/atlas-frontend-v2/ now a git repo</div>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.6.1 · Snapshot current state</span></div>
+<pre>ssh -i ~/.ssh/jsl-wealth-key.pem ubuntu@13.206.34.214
+cd ~ && tar czf atlas-frontend-v2-pre-git-switch.tar.gz --exclude=node_modules --exclude=.next atlas-frontend-v2
+ls -lh atlas-frontend-v2-pre-git-switch.tar.gz  # backup tarball</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.6.2 · Fresh git clone alongside</span></div>
+<pre>git clone https://github.com/nimishshah1989/atlas-os.git /home/ubuntu/atlas-frontend-v2-new
+cd /home/ubuntu/atlas-frontend-v2-new
+git checkout main
+# verify HEAD matches origin/main
+git rev-parse HEAD
+git ls-remote origin main | head -1</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.6.3 · Move runtime artifacts (env + .next + node_modules)</span></div>
+<pre># Move .env.local + node_modules (slow to rebuild) + .next (avoid full rebuild)
+mv /home/ubuntu/atlas-frontend-v2/.env.local /home/ubuntu/atlas-frontend-v2-new/frontend/
+mv /home/ubuntu/atlas-frontend-v2/node_modules /home/ubuntu/atlas-frontend-v2-new/frontend/
+# Or rerun npm ci if node_modules version mismatch
+# Note: atlas-frontend-v2 root level files are now obsolete — atlas-os/frontend/ is the canonical dir</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.6.4 · Swap PM2 process to new dir</span></div>
+<pre>pm2 delete atlas-frontend-v2
+mv /home/ubuntu/atlas-frontend-v2 /home/ubuntu/atlas-frontend-v2-old
+mv /home/ubuntu/atlas-frontend-v2-new /home/ubuntu/atlas-frontend-v2
+cd /home/ubuntu/atlas-frontend-v2/frontend
+npm run build
+pm2 start npm --name atlas-frontend-v2 -- start -- -p 3002
+pm2 save  # persist</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.6.5 · Verify nginx still routes correctly</span></div>
+<pre># Confirm nginx upstream still on port 3002
+sudo nginx -T 2>/dev/null | grep -A2 "atlas" | grep proxy_pass | head -3
+# Test from public URL:
+# (from local Mac)
+curl -sI https://atlas.jslwealth.in/regime | head -1
+# Expected: HTTP/2 200</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.6.6 · Verify git deploy goalpost (G10)</span></div>
+<pre>ssh -i ~/.ssh/jsl-wealth-key.pem ubuntu@13.206.34.214 'cd ~/atlas-frontend-v2 && git rev-parse HEAD && git status --short | head -5'
+# Expected: returns a commit SHA matching origin/main; clean working tree</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.6.7 · Document new deploy procedure</span></div>
+<pre># docs/v6/deploy.md (new file):
+
+# Deploy to atlas.jslwealth.in
+
+The deploy target is /home/ubuntu/atlas-frontend-v2/ on EC2 (13.206.34.214).
+It is a git checkout of atlas-os/main. PM2 process name: atlas-frontend-v2.
+Nginx proxies port 3002.
+
+## Deploy command (from local Mac after git push to origin/main):
+```
+ssh -i ~/.ssh/jsl-wealth-key.pem ubuntu@13.206.34.214 \
+  'cd ~/atlas-frontend-v2 && git pull origin main && cd frontend && npm run build && pm2 restart atlas-frontend-v2'
+```
+
+## Verify:
+```
+curl -sI https://atlas.jslwealth.in/regime | head -1   # expect 200
+```
+
+## Rollback:
+```
+ssh -i ~/.ssh/jsl-wealth-key.pem ubuntu@13.206.34.214 \
+  'cd ~/atlas-frontend-v2 && git reset --hard HEAD~1 && cd frontend && npm run build && pm2 restart atlas-frontend-v2'
+```</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">F.6.8 · Update memory + commit doc</span></div>
+<pre># Update memory entry [[atlas-frontend-host]] to note: deploy target is now a git checkout,
+# new deploy command is `git pull && npm run build && pm2 restart atlas-frontend-v2`.
+# Update via Edit on ~/.claude/projects/.../memory/reference_atlas_frontend_host.md
+
+git add docs/v6/deploy.md
+FORGE_ALLOW_LOW_COVERAGE=1 git commit -m "docs(v6/F.6): deploy target converted to git checkout; document new procedure"
+git push origin main</pre>
+</div>
+
+<div class="dod"><div class="dod-title">★ F.6 Definition of Done</div><ul>
+<li><code>ssh ubuntu@13.206.34.214 'cd ~/atlas-frontend-v2 && git rev-parse HEAD'</code> returns commit SHA matching <code>origin/main</code></li>
+<li><code>docs/v6/deploy.md</code> committed with new procedure</li>
+<li>Memory entry <code>[[atlas-frontend-host]]</code> updated</li>
+<li>Next deploy uses <code>git pull && npm run build && pm2 restart</code> (no rsync)</li>
+<li><strong>Advances G10 (git deploy) + G12 (memory)</strong></li>
+</ul></div>
+</div>
+
+</div><!-- end Phase E -->
+
+
+<!-- ============================ FINAL ACCEPTANCE ============================ -->
+<div class="phase">
+<div class="phase-head">
+  <div class="phase-name">Final acceptance · the master goalpost</div>
+  <div class="phase-time">~30 min · runs after Phase E</div>
+</div>
+
+<div class="task-card">
+<div class="task-id">FA · master goalpost verification <span class="ghits">verifies ALL 12 goalposts</span></div>
+<h3>Run every goalpost verification command. Document each result.</h3>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">FA.1 · Run all 12 verification commands from the spec</span></div>
+<pre># Append the output of each to docs/v6/2026-05-27-final-acceptance.md
+# G1 — for p in regime india-pulse markets-rs sectors stocks funds etfs cells calls today screening sectors/Energy; do curl -sI https://atlas.jslwealth.in/$p | head -1; done
+# G2 — ls docs/v6/design-reviews/2026-05-*-page-{01..08}{,a}.md && grep -l "VERDICT: PASS" docs/v6/design-reviews/*.md
+# G3 — SQL coverage query on atlas_macro_daily (8 cols)
+# G4 — SQL coverage query on atlas_sector_metrics_daily (8 new cols)
+# G5 — SELECT COUNT(*) FROM atlas.atlas_etf_scorecard  (expect 126)
+# G6 — find frontend/src/app/v6 -name page.tsx  (expect zero)
+# G7 — for p in regime sectors stocks funds etfs calls; do curl -sI https://atlas.jslwealth.in/v6/$p; done  (expect all 308)
+# G8 — git log --since=2026-05-27 --stat -- frontend/src/components/v6/  (net new ≤5)
+# G9 — grep -rE 'bg-(red|blue|green|yellow|purple|pink|gray|slate)-' frontend/src/app/ frontend/src/components/v6/  (zero matches)
+# G10 — ssh ubuntu@13.206.34.214 'cd ~/atlas-frontend-v2 && git rev-parse HEAD'  (matches origin/main)
+# G11 — gh pr list --state closed --search "merged:>2026-05-27" | check each PR has design-review + /review + /codex review threads resolved
+# G12 — ls ~/.claude/projects/.../memory/feedback_check_v6_components_first.md  + grep into MEMORY.md</pre>
+</div>
+
+<div class="step"><div class="step-head"><span class="checkbox"></span><span class="step-label">FA.2 · Update the measurement matrix at top of this doc</span></div>
+<pre># Edit this very file. For each phase row × goalpost column, change ◐ → ● if verified PASS.
+# After all 12 verified, every cell in the matrix should be ● or · (no ◐ remaining).
+# Commit:
+FORGE_ALLOW_LOW_COVERAGE=1 git commit -am "chore(v6): final acceptance — all 12 master goalposts verified PASS"
+git push origin main</pre>
+</div>
+
+<div class="dod"><div class="dod-title">★ FA Definition of Done — THE SHIP IS LIVE</div><ul>
+<li>All 12 master goalpost verification commands run; output recorded in <code>docs/v6/2026-05-27-final-acceptance.md</code></li>
+<li>Every verification produces the expected output (no exceptions, no "mostly")</li>
+<li>Measurement matrix in this file shows ● or · in every cell — no ◐ remaining</li>
+<li>Final commit pushed</li>
+<li><strong>The v6 ship is complete.</strong></li>
+</ul></div>
+</div>
+
+</div>
+
+
+<h2>Skill cadence reminder</h2>
+<p>Per frontend page (F.1, F.2, F.3, F.4):</p>
+<ol>
+  <li><strong>Read mockup HTML line-by-line.</strong> No skim.</li>
+  <li><strong>Check <code>frontend/src/components/v6/</code></strong> for existing components.</li>
+  <li><strong><code>superpowers:writing-plans</code></strong> → per-page plan.</li>
+  <li><strong><code>superpowers:subagent-driven-development</code></strong> dispatches.</li>
+  <li><strong><code>/design-review</code></strong> against mockup.</li>
+  <li><strong><code>/review</code> + <code>/codex review</code></strong> pre-merge.</li>
+  <li><strong>SSH deploy</strong> via <code>ssh -i ~/.ssh/jsl-wealth-key.pem ubuntu@13.206.34.214</code>.</li>
+</ol>
+
+<p>Per backend task (B.1, B.2, B.3):</p>
+<ol>
+  <li><strong><code>/grill-with-docs</code></strong> to lock terminology.</li>
+  <li><strong><code>superpowers:writing-plans</code></strong> for script architecture (already done here).</li>
+  <li><strong>TDD per script</strong> — failing test first.</li>
+  <li><strong><code>/review</code></strong> pre-commit.</li>
+</ol>
+
+
+<footer>
+  <p>Atlas v6 execution tasklist · 2026-05-27 · maps 1:1 to spec
+  <a href="../specs/2026-05-27-v6-comprehensive-implementation-design.html">6b5566b1</a> ·
+  <a href="../../../.gstack/projects/atlas-os/designs/v6-redesign-20260526-mockups/">12 source mockups</a></p>
+</footer>
+
+</main>
+</body>
+</html>
