@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Atlas v6 · 12-Mockup Implementation Spec · 2026-05-27</title>
+<style>
+  :root {
+    --paper: #F8F4EC; --paper-soft: #FBF8F1; --paper-deep: #F1ECDF; --paper-rule: #C2B8A8;
+    --ink: #1A1714; --ink-2: #3D362E; --ink-3: #6B6157; --ink-4: #9A8F82; --ink-rule: #DDD3BF;
+    --signal-pos: #2F6B43; --signal-pos-soft: rgba(47,107,67,0.10); --signal-pos-rule: rgba(47,107,67,0.32);
+    --signal-neg: #B0492C; --signal-neg-soft: rgba(176,73,44,0.10); --signal-neg-rule: rgba(176,73,44,0.32);
+    --signal-warn: #B8860B; --signal-warn-soft: rgba(184,134,11,0.10); --signal-warn-rule: rgba(184,134,11,0.32);
+    --signal-info: #3E5C76; --signal-info-soft: rgba(62,92,118,0.10); --signal-info-rule: rgba(62,92,118,0.32);
+    --accent: #25394A; --teal: #1D9E75;
+    --font-serif: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-sans); background: var(--paper); color: var(--ink-2); font-size: 14px; line-height: 1.55; font-feature-settings: 'tnum' 1; }
+  .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .serif { font-family: var(--font-serif); font-weight: 400; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 32px; }
+
+  .topbar { border-bottom: 1px solid var(--paper-rule); background: var(--paper); position: sticky; top: 0; z-index: 50; }
+  .topbar-inner { height: 56px; display: flex; align-items: center; justify-content: space-between; max-width: 1100px; margin: 0 auto; padding: 0 32px; }
+  .brand-mark { font-family: var(--font-serif); font-size: 22px; font-weight: 500; color: var(--ink); letter-spacing: -0.011em; }
+  .brand-sub { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; margin-left: 12px; }
+  .topbar-right { font-size: 12px; color: var(--ink-3); font-family: var(--font-mono); }
+
+  .page-head { padding: 48px 0 32px; border-bottom: 1px solid var(--paper-rule); margin-bottom: 32px; }
+  .eyebrow { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; margin-bottom: 14px; }
+  h1 { font-family: var(--font-serif); font-size: 48px; line-height: 1.05; letter-spacing: -0.02em; color: var(--ink); margin-bottom: 16px; font-weight: 500; }
+  h2 { font-family: var(--font-serif); font-size: 28px; line-height: 1.2; color: var(--ink); margin: 48px 0 16px; font-weight: 500; letter-spacing: -0.01em; }
+  h3 { font-family: var(--font-serif); font-size: 20px; color: var(--ink); margin: 28px 0 12px; font-weight: 500; }
+  h4 { font-size: 13px; font-weight: 600; color: var(--ink); margin: 16px 0 8px; }
+  p { margin-bottom: 12px; color: var(--ink-2); }
+  p.lede { font-size: 17px; line-height: 1.55; color: var(--ink-2); max-width: 780px; }
+  ul, ol { margin: 8px 0 16px 20px; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--font-mono); font-size: 12.5px; background: var(--paper-deep); padding: 1px 5px; border-radius: 2px; color: var(--ink); }
+  pre { font-family: var(--font-mono); font-size: 12px; background: var(--paper-soft); border: 1px solid var(--paper-rule); border-radius: 2px; padding: 14px 16px; overflow-x: auto; margin: 12px 0; line-height: 1.45; }
+  a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+
+  /* THE GOALPOST — a sharp, visually-distinct definition-of-done block */
+  .goalpost { background: var(--signal-pos-soft); border-left: 3px solid var(--signal-pos); padding: 16px 20px; margin: 16px 0 20px; border-radius: 0 2px 2px 0; }
+  .goalpost-master { background: var(--paper-deep); border: 1px solid var(--paper-rule); border-left: 4px solid var(--accent); padding: 24px 28px; margin: 24px 0 32px; border-radius: 0 2px 2px 0; }
+  .goalpost-title { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--signal-pos); font-weight: 700; margin-bottom: 8px; }
+  .goalpost-master .goalpost-title { color: var(--accent); }
+  .goalpost-list { margin: 8px 0 0 20px; }
+  .goalpost-list li { margin-bottom: 8px; font-size: 13.5px; color: var(--ink-2); }
+  .goalpost-list li::marker { color: var(--signal-pos); font-weight: 700; }
+  .goalpost-master .goalpost-list li::marker { color: var(--accent); }
+  .verify { display: block; font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-3); background: var(--paper); border: 1px dashed var(--paper-rule); padding: 6px 10px; margin-top: 6px; border-radius: 2px; }
+
+  /* Decision cards */
+  .decisions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+  .decision-card { border: 1px solid var(--paper-rule); padding: 16px 18px; border-radius: 2px; background: var(--paper-soft); }
+  .decision-card .num { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); font-weight: 600; margin-bottom: 4px; }
+  .decision-card .what { font-weight: 600; color: var(--ink); margin-bottom: 6px; font-size: 14px; }
+  .decision-card .why { font-size: 12.5px; color: var(--ink-3); line-height: 1.5; }
+
+  /* Phase + task cards */
+  .phase { margin: 32px 0; padding-top: 24px; border-top: 2px solid var(--ink-rule); }
+  .phase-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+  .phase-name { font-family: var(--font-serif); font-size: 26px; color: var(--ink); font-weight: 500; }
+  .phase-time { font-family: var(--font-mono); font-size: 12px; color: var(--ink-3); }
+  .task-card { border: 1px solid var(--paper-rule); border-radius: 2px; padding: 18px 22px; margin: 16px 0; background: var(--paper); }
+  .task-card .task-id { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); font-weight: 600; letter-spacing: 0.06em; }
+  .task-card h3 { margin: 4px 0 12px; font-size: 19px; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 12.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--ink-rule); }
+  th { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; background: var(--paper-soft); }
+  td.mono { font-family: var(--font-mono); font-size: 12px; }
+  td.pos { color: var(--signal-pos); font-weight: 500; }
+  td.neg { color: var(--signal-neg); font-weight: 500; }
+  td.warn { color: var(--signal-warn); font-weight: 500; }
+
+  /* Status tag */
+  .tag { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 8px; border-radius: 2px; vertical-align: middle; }
+  .tag-pos { background: var(--signal-pos-soft); color: var(--signal-pos); border: 1px solid var(--signal-pos-rule); }
+  .tag-neg { background: var(--signal-neg-soft); color: var(--signal-neg); border: 1px solid var(--signal-neg-rule); }
+  .tag-warn { background: var(--signal-warn-soft); color: var(--signal-warn); border: 1px solid var(--signal-warn-rule); }
+  .tag-info { background: var(--signal-info-soft); color: var(--signal-info); border: 1px solid var(--signal-info-rule); }
+  .tag-neutral { background: var(--paper-deep); color: var(--ink-3); border: 1px solid var(--paper-rule); }
+
+  /* Sequencing flow */
+  .flow { background: var(--paper-soft); border: 1px solid var(--paper-rule); padding: 18px 22px; border-radius: 2px; margin: 16px 0 24px; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.7; color: var(--ink-2); white-space: pre; overflow-x: auto; }
+
+  /* Footnote */
+  footer { margin: 64px 0 32px; padding-top: 24px; border-top: 1px solid var(--paper-rule); font-size: 12px; color: var(--ink-3); }
+</style>
+</head>
+<body>
+
+<nav class="topbar">
+  <div class="topbar-inner">
+    <div>
+      <span class="brand-mark">Atlas v6</span>
+      <span class="brand-sub">Implementation spec · LOCKED</span>
+    </div>
+    <div class="topbar-right">2026-05-27 · supersedes 95431fa4 + ae6170bf + 8c6d99e8</div>
+  </div>
+</nav>
+
+<main class="container">
+
+<header class="page-head">
+  <div class="eyebrow">v6 ship · 12 mockups · zero scope creep</div>
+  <h1>Ship all 12 mockups, end-to-end, no fuckups.</h1>
+  <p class="lede">
+    This is the single source of truth for shipping the v6 product. Every prior planning artifact
+    (the rebuild plan at 95431fa4, the locked plan at ae6170bf, and the markdown spec at 8c6d99e8)
+    is superseded. The 12 mockups in
+    <code>~/.gstack/projects/atlas-os/designs/v6-redesign-20260526-mockups/</code> are the design spec.
+    All 12 will be live at <code>atlas.jslwealth.in</code> at root URLs with backend completeness and
+    locked design fidelity. Goalposts are sharp, binary, and verifiable at every level.
+  </p>
+</header>
+
+<section class="goalpost-master">
+  <div class="goalpost-title">★ MASTER GOALPOST · the only thing that counts as "done"</div>
+  <p style="font-size: 14.5px; color: var(--ink); margin: 8px 0 12px;">
+    The v6 ship is complete when <strong>all twelve</strong> of these are simultaneously true. Not eleven.
+    Not "mostly." All twelve, verifiable by the listed command.
+  </p>
+  <ol class="goalpost-list">
+    <li>
+      <strong>All 12 routes return HTTP 200 from the public URL.</strong>
+      <span class="verify">for p in regime india-pulse markets-rs sectors stocks funds etfs cells calls today screening sectors/Energy; do curl -sI https://atlas.jslwealth.in/$p | head -1; done — every line must read "HTTP/2 200"</span>
+    </li>
+    <li>
+      <strong>Each route's visual passes <code>/design-review</code> against its mockup HTML.</strong> 12 design-review reports
+      committed under <code>docs/v6/design-reviews/</code>, each verdict "PASS" against the corresponding mockup file.
+      <span class="verify">ls docs/v6/design-reviews/2026-05-*-page-{01..08}{,a}.md → 12 files, each with "VERDICT: PASS" in body</span>
+    </li>
+    <li>
+      <strong>Backend macro data is complete.</strong> 8 columns on <code>atlas_macro_daily</code> at ≥95% non-null from 2016-01-01.
+      <span class="verify">SQL: SELECT 1.0 * COUNT(col) / COUNT(*) AS coverage FROM atlas.atlas_macro_daily WHERE date >= '2016-01-01' — for each of: us_10y_yield, india_10y_yield, dii_flow, fii_cash_equity_flow_cr, cpi_yoy, brent_inr, vix_9d, risk_free_91d</span>
+    </li>
+    <li>
+      <strong>Backend sector data is complete.</strong> 8 new columns on <code>atlas_sector_metrics_daily</code> at ≥95% non-null from 2016-04-07.
+      <span class="verify">SQL: same coverage query for rs_1w, rs_1m, rs_6m, rs_12m, pct_above_ema20, pct_above_ema200, pct_52wh, hhi</span>
+    </li>
+    <li>
+      <strong>Backend ETF data is complete.</strong> <code>atlas_etf_scorecard</code> at exactly 126 rows (matches <code>atlas_universe_etfs</code>).
+      <span class="verify">SQL: SELECT COUNT(*) FROM atlas.atlas_etf_scorecard — must return 126</span>
+    </li>
+    <li>
+      <strong>All routes live at root URLs.</strong> No mockup-bound page exists under <code>/v6/*</code>.
+      <span class="verify">find frontend/src/app/v6 -name page.tsx — must return zero files</span>
+    </li>
+    <li>
+      <strong>Old <code>/v6/*</code> URLs 308-redirect to root.</strong>
+      <span class="verify">for p in regime sectors stocks funds etfs calls; do curl -sI https://atlas.jslwealth.in/v6/$p | head -1; done — every line "HTTP/2 308"</span>
+    </li>
+    <li>
+      <strong>Existing 114 components reused; no parallel duplicates.</strong>
+      <span class="verify">git log --since=2026-05-27 --stat -- frontend/src/components/v6/ — net new components ≤ 5 (the genuinely-new ones identified per page during planning)</span>
+    </li>
+    <li>
+      <strong>Locked design tokens used.</strong> Page Tailwind classes only reference the paper/ink/signal palette + 2px radius from <code>tailwind.config.ts</code>.
+      <span class="verify">grep -rE 'bg-(red|blue|green|yellow|purple|pink|gray|slate)-' frontend/src/app/ frontend/src/components/v6/ — zero matches (only paper/ink/signal tokens permitted)</span>
+    </li>
+    <li>
+      <strong>Deploy mechanism is a git checkout.</strong> <code>/home/ubuntu/atlas-frontend-v2/</code> is a real git repo of <code>atlas-os</code>; future deploys are <code>git pull && npm run build && pm2 restart</code>.
+      <span class="verify">ssh ubuntu@13.206.34.214 'cd ~/atlas-frontend-v2 && git rev-parse HEAD' — returns a commit SHA matching origin/main</span>
+    </li>
+    <li>
+      <strong>Per-page design-review pass + /review pass + /codex review pass before any merge to main.</strong> No commits to main bypass review.
+      <span class="verify">For each F.* task commit, the PR has design-review + /review + /codex review threads marked resolved</span>
+    </li>
+    <li>
+      <strong>Memory entries updated.</strong> <code>[[check-v6-components-first]]</code>, <code>[[v6-build-plan-source-of-truth]]</code>, <code>[[v6-mv-count-breakdown]]</code> exist and the index links them.
+      <span class="verify">ls ~/.claude/projects/-Users-nimishshah-Documents-GitHub-atlas-os/memory/feedback_check_v6_components_first.md → exists; grep into MEMORY.md for the link</span>
+    </li>
+  </ol>
+</section>
+
+<h2>5 locked decisions</h2>
+<p>From the brainstorming session signed off 2026-05-27. Any change to these requires editing this spec first.</p>
+
+<div class="decisions">
+  <div class="decision-card">
+    <div class="num">D1 · Scope</div>
+    <div class="what">All 12 mockups</div>
+    <div class="why">9 already built + 3 to build (markets-rs, calls, india-pulse). India-pulse is in scope because we will build the macro ingest jobs.</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D2 · Backend</div>
+    <div class="what">3 backfills (macro + sector + ETF)</div>
+    <div class="why">Macro ingest jobs from FRED + NSE + MOSPI; sector 5-yr backfill of 8 new cols; ETF scorecard 34→126 expansion. All on EC2 Python compute.</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D3 · Architecture</div>
+    <div class="what">Base-table reads, no new MVs</div>
+    <div class="why">3 new pages query <code>atlas_*</code> tables directly via query modules — matches the pattern of the 9 existing pages. The 7 MVs from the canonical doc are deferred as performance optimisation.</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D4 · URLs</div>
+    <div class="what">Root only</div>
+    <div class="why"><code>/regime</code>, <code>/sectors</code>, <code>/markets-rs</code>, <code>/calls</code>, <code>/india-pulse</code> etc. <code>/v6/*</code> prefix retired with 308 redirects.</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D5 · Fidelity</div>
+    <div class="what">Spirit + every section + locked tokens + existing 114 components</div>
+    <div class="why">Pixel-exact not required. Every major mockup section present. Color palette + typography from locked tokens. Components from <code>frontend/src/components/v6/</code> reused — no parallel implementations.</div>
+  </div>
+</div>
+
+<h2>Architecture (locked per 2026-05-26 60-task plan)</h2>
+<p>Tech stack: Next.js 15.3.9 App Router · React 19 · postgres-js 3.4.5 (session-mode Supabase pooler) · Tailwind v4 <code>@theme</code> tokens · Recharts 3.8 · D3 v7 · Radix Tooltip · <code>@tanstack/react-virtual</code> · Vitest + Testing Library · Playwright + axe-core.</p>
+
+<h3>Page pattern (canonical, used by all 12 pages)</h3>
+<pre>frontend/src/app/&lt;route&gt;/page.tsx          (RSC shell ≤250 LOC, hook-enforced)
+  → imports query modules from lib/queries/v6/
+  → fetches data in parallel via Promise.all()
+  → renders &lt;SomethingClient&gt; from components/v6/
+
+frontend/src/components/v6/&lt;Something&gt;Client.tsx   (client component, all rendering)
+  → composes existing v6 primitives + layout components
+  → URL persistence via lib/v6/persistence.ts hooks (STATE.md contract)</pre>
+
+
+<!-- ============================ PHASE A ============================ -->
+<div class="phase">
+  <div class="phase-head">
+    <div class="phase-name">Phase A · Backend backfills + audit</div>
+    <div class="phase-time">~3 days · parallel tracks · runs FIRST</div>
+  </div>
+
+  <div class="goalpost">
+    <div class="goalpost-title">Definition of Done — Phase A</div>
+    <ol class="goalpost-list">
+      <li>All 8 macro cols on <code>atlas_macro_daily</code> at ≥95% non-null from 2016-01-01.</li>
+      <li>All 8 new sector cols on <code>atlas_sector_metrics_daily</code> at ≥95% non-null from 2016-04-07.</li>
+      <li><code>atlas_etf_scorecard</code> at 126 rows; new cols <code>premium_bps</code>, <code>te_60d</code>, <code>adv_20d_inr</code> populated.</li>
+      <li>9 per-page gap reports committed in <code>docs/v6/audits/2026-05-27-&lt;page&gt;-gap-report.md</code>.</li>
+      <li>Audit summary file <code>docs/v6/audits/2026-05-27-audit-summary.md</code> identifies per-page status (clean / minor / major).</li>
+    </ol>
+  </div>
+
+  <div class="task-card">
+    <div class="task-id">B.1 · backend</div>
+    <h3>Macro ingest jobs (new code)</h3>
+    <p>Six NULL columns on <code>atlas_macro_daily</code> need writers. Free public sources; ingest scripts under <code>atlas/ingest/macro/</code>; orchestrated by a runner; scheduled via <code>pg_cron</code>.</p>
+
+    <table>
+      <thead><tr><th>Column</th><th>Source</th><th>Depth</th><th>Tag</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">us_10y_yield</td><td>FRED series <code>DGS10</code></td><td>1962+</td><td><span class="tag tag-pos">free API</span></td></tr>
+        <tr><td class="mono">india_10y_yield</td><td>FRED <code>INDIRLTLT01STM</code></td><td>2003+</td><td><span class="tag tag-pos">free API</span></td></tr>
+        <tr><td class="mono">dii_flow</td><td>NSE bhavcopy MA_F_FIIDII_*.csv</td><td>2007+</td><td><span class="tag tag-info">archive ZIP</span></td></tr>
+        <tr><td class="mono">fii_cash_equity_flow_cr</td><td>Same NSE bhavcopy</td><td>2007+</td><td><span class="tag tag-info">archive ZIP</span></td></tr>
+        <tr><td class="mono">cpi_yoy</td><td>MOSPI monthly index → YoY</td><td>2011+</td><td><span class="tag tag-info">CSV download</span></td></tr>
+        <tr><td class="mono">brent_inr</td><td>FRED <code>DCOILBRENTEU</code> × <code>usdinr</code></td><td>1987+</td><td><span class="tag tag-pos">free API</span></td></tr>
+        <tr><td class="mono">vix_9d</td><td>NSE India VIX historical archive</td><td>2014+</td><td><span class="tag tag-info">CSV download</span></td></tr>
+        <tr><td class="mono">risk_free_91d</td><td>RBI 91-day T-bill</td><td>2000+</td><td><span class="tag tag-warn">scrape</span></td></tr>
+      </tbody>
+    </table>
+
+    <h4>Deliverables</h4>
+    <ul>
+      <li><code>atlas/ingest/macro/fred_ingest.py</code> — US 10Y, India 10Y, Brent USD, risk-free</li>
+      <li><code>atlas/ingest/macro/nse_bhavcopy_ingest.py</code> — FII + DII daily flow</li>
+      <li><code>atlas/ingest/macro/mospi_cpi_ingest.py</code> — CPI monthly → YoY transform</li>
+      <li><code>atlas/ingest/macro/nse_vix_ingest.py</code> — India VIX + 9d</li>
+      <li><code>atlas/ingest/macro/runner.py</code> — orchestrator (backfill + incremental modes)</li>
+      <li>UPSERT writes to <code>atlas_macro_daily</code> on <code>date</code> PK</li>
+      <li><code>pg_cron</code> nightly 20:15 IST after market data</li>
+    </ul>
+
+    <div class="goalpost">
+      <div class="goalpost-title">Definition of Done — B.1</div>
+      <ol class="goalpost-list">
+        <li>5 ingest scripts exist under <code>atlas/ingest/macro/</code>; each has unit tests with fixture data.<span class="verify">ls atlas/ingest/macro/ && pytest tests/ingest/macro/ -v</span></li>
+        <li>One-shot backfill on EC2 populates all 8 cols ≥95% from 2016-01-01.<span class="verify">SQL coverage query per column</span></li>
+        <li><code>pg_cron</code> job <code>atlas_macro_nightly</code> registered + runs successfully once.<span class="verify">SELECT * FROM cron.job WHERE jobname = 'atlas_macro_nightly'</span></li>
+        <li>Memory entry <code>[[macro-ingest-sources]]</code> added to memory index.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="task-card">
+    <div class="task-id">B.2 · backend</div>
+    <h3>Sector 5-year backfill</h3>
+    <p>8 columns on <code>atlas_sector_metrics_daily</code> are NULL across 74,752 rows. Extend the existing sector compute, then run a 5-year backfill on EC2.</p>
+
+    <h4>Columns to backfill</h4>
+    <p><code>rs_1w · rs_1m · rs_6m · rs_12m · pct_above_ema20 · pct_above_ema200 · pct_52wh · hhi</code></p>
+
+    <h4>Deliverables</h4>
+    <ul>
+      <li>Extension to <code>atlas/compute/sectors.py</code> computing the 8 new cols</li>
+      <li><code>scripts/sector_5y_backfill.py</code> — one-off backfill runner on EC2</li>
+      <li>Added to nightly cron going forward</li>
+    </ul>
+
+    <div class="goalpost">
+      <div class="goalpost-title">Definition of Done — B.2</div>
+      <ol class="goalpost-list">
+        <li>All 8 cols ≥95% non-null for dates ≥ 2016-04-07.<span class="verify">SQL per-col coverage; expect ~640k filled cells</span></li>
+        <li>Per-(sector, window) value matches a hand-verified spot check from <code>atlas_stock_metrics_daily</code>.<span class="verify">pytest tests/compute/sectors/test_rs_columns.py</span></li>
+        <li>Nightly cron updated to include the new cols (no separate cron entry).</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="task-card">
+    <div class="task-id">B.3 · backend</div>
+    <h3>ETF scorecard 34 → 126 expansion</h3>
+    <p><code>atlas_etf_scorecard</code> has 34 leader rows. Universe has 126 ETFs. Expand to full universe + populate new cols.</p>
+
+    <h4>Deliverables</h4>
+    <ul>
+      <li>Remove "leaders only" filter in the scorecard writer</li>
+      <li>Backfill new cols from migration 097: <code>premium_bps</code>, <code>te_60d</code>, <code>adv_20d_inr</code></li>
+      <li>One-shot expansion run on EC2 → writes 92 new rows + populates new cols on all 126</li>
+    </ul>
+
+    <div class="goalpost">
+      <div class="goalpost-title">Definition of Done — B.3</div>
+      <ol class="goalpost-list">
+        <li><code>atlas_etf_scorecard</code> at exactly 126 rows.<span class="verify">SELECT COUNT(*) FROM atlas.atlas_etf_scorecard</span></li>
+        <li>3 new cols populated ≥95% on all rows.</li>
+        <li>Composite scores for new 92 ETFs are coherent (no NaN, no &lt;0 or &gt;100 outliers).</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="task-card">
+    <div class="task-id">F.0 · frontend</div>
+    <h3>Audit 9 existing pages vs mockups</h3>
+    <p>No code changes — just careful visual + structural comparison. Each audit dispatched to a subagent in parallel.</p>
+
+    <h4>Pages to audit</h4>
+    <p><code>/regime</code> · <code>/v6/sectors</code> · <code>/v6/sectors/[name]</code> · <code>/v6/stocks</code> · <code>/v6/stocks/[iid]</code> · <code>/v6/funds</code> · <code>/v6/funds/[code]</code> · <code>/v6/etfs</code> · <code>/v6/etfs/[iid]</code></p>
+
+    <h4>Per-page report contract</h4>
+    <ul>
+      <li>Section-by-section diff vs mockup HTML (every section in mockup checked: present / partial / absent on live)</li>
+      <li>Token compliance check (any non-paper/ink/signal Tailwind classes flagged)</li>
+      <li>Component reuse check (any inline-styled JSX that should be using a v6 component)</li>
+      <li>Verdict: clean / minor (≤3 gaps) / major (&gt;3 gaps)</li>
+    </ul>
+
+    <div class="goalpost">
+      <div class="goalpost-title">Definition of Done — F.0</div>
+      <ol class="goalpost-list">
+        <li>9 reports committed at <code>docs/v6/audits/2026-05-27-&lt;page&gt;-gap-report.md</code>.</li>
+        <li>Summary file <code>docs/v6/audits/2026-05-27-audit-summary.md</code> tabulates verdicts.</li>
+        <li>Each report names specific gaps (component names, missing sections, wrong tokens). No vague "looks different".</li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+
+<!-- ============================ PHASE B ============================ -->
+<div class="phase">
+  <div class="phase-head">
+    <div class="phase-name">Phase B · Build 2 backend-ready pages</div>
+    <div class="phase-time">~2-3 days · parallel with Phase A backend tracks</div>
+  </div>
+
+  <div class="goalpost">
+    <div class="goalpost-title">Definition of Done — Phase B</div>
+    <ol class="goalpost-list">
+      <li><code>/markets-rs</code> returns 200; <code>/design-review</code> verdict PASS against <code>03-markets-rs.html</code>.</li>
+      <li><code>/calls</code> returns 200; <code>/design-review</code> verdict PASS against <code>08-calls-performance.html</code>.</li>
+      <li>Both pages use only components from <code>frontend/src/components/v6/</code>. Any net-new component is documented and justified.</li>
+    </ol>
+  </div>
+
+  <div class="task-card">
+    <div class="task-id">F.1 · frontend</div>
+    <h3>Build /markets-rs (mockup 03)</h3>
+    <p>9 baselines × 5 windows RS grid, 4-card hero, narrative, multi-dim chart grid.</p>
+
+    <h4>Data sources</h4>
+    <ul>
+      <li><code>atlas.mv_markets_rs_grid</code> (already live, 9 baselines × 5 windows)</li>
+      <li><code>de_index_prices</code> + <code>de_global_prices</code> for detail-chart series</li>
+      <li><code>atlas_macro_daily.usdinr</code> for FX-adjusting foreign baselines</li>
+    </ul>
+
+    <h4>Components to reuse</h4>
+    <ul>
+      <li><code>MultiBenchmarkRSWaterfall</code> for the 9×5 RS grid</li>
+      <li><code>PerWindowChart</code> for the multidim detail charts</li>
+      <li><code>ChipControl</code> for layer toggles</li>
+      <li><code>BubbleRiskReturnChart</code> if needed for cross-baseline visualisation</li>
+    </ul>
+
+    <h4>Route</h4>
+    <p><code>/markets-rs</code> · page.tsx ≤250 LOC · client component <code>frontend/src/components/v6/MarketsRsClient.tsx</code></p>
+
+    <div class="goalpost">
+      <div class="goalpost-title">Definition of Done — F.1</div>
+      <ol class="goalpost-list">
+        <li>Route returns 200 on staging + production.</li>
+        <li>9×5 RS grid renders with real values; sort + colour-shading matches mockup.</li>
+        <li>4-card hero shows: today's leader, India vs world rank, large-vs-midsmall spread 3M, India RS grade letter.</li>
+        <li>Detail-chart grid renders ≤8 multidim charts with layer toggles.</li>
+        <li>Visual diff against <code>03-markets-rs.html</code> → PASS via <code>/design-review</code>.</li>
+        <li>Per-page plan committed at <code>docs/superpowers/plans/2026-05-27-markets-rs-page.md</code>.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="task-card">
+    <div class="task-id">F.2 · frontend</div>
+    <h3>Build /calls (mockup 08)</h3>
+    <p>Hero 6-tile + 4-up story + cumulative excess landscape chart + 24-cell win-rate matrix + cell-IC trajectories + 1,847-row ledger.</p>
+
+    <h4>Data sources</h4>
+    <ul>
+      <li><code>atlas.mv_calls_performance</code> (363 rows live)</li>
+      <li><code>atlas_signal_calls</code> for richer detail</li>
+      <li><code>atlas_ledger</code> (currently empty; fills as tenures expire — handle gracefully)</li>
+    </ul>
+
+    <h4>Components to reuse</h4>
+    <ul>
+      <li><code>RecentSignalCalls</code> (closest existing)</li>
+      <li><code>CellMatrix</code> for the 24-cell win-rate grid</li>
+      <li><code>StocksTableV6</code> pattern (already virtualized) for the 1,847-row ledger</li>
+    </ul>
+
+    <h4>Route</h4>
+    <p><code>/calls</code> · client component <code>frontend/src/components/v6/CallsPerformanceClient.tsx</code></p>
+
+    <div class="goalpost">
+      <div class="goalpost-title">Definition of Done — F.2</div>
+      <ol class="goalpost-list">
+        <li>Route returns 200 on staging + production.</li>
+        <li>6 hero tiles: YTD realized excess, win rate, total fired, closed, open, avg holding.</li>
+        <li>Cumulative excess landscape chart renders with ±1σ ribbon + regime-flip markers.</li>
+        <li>24-cell win-rate matrix colour-codes by win%.</li>
+        <li>Ledger table virtualizes; column chooser works.</li>
+        <li>Visual diff against <code>08-calls-performance.html</code> → PASS via <code>/design-review</code>.</li>
+        <li>Per-page plan committed at <code>docs/superpowers/plans/2026-05-27-calls-page.md</code>.</li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+
+<!-- ============================ PHASE C ============================ -->
+<div class="phase">
+  <div class="phase-head">
+    <div class="phase-name">Phase C · India-pulse + gap closes</div>
+    <div class="phase-time">~2 days · depends on Phase A B.1/B.2/B.3 done</div>
+  </div>
+
+  <div class="goalpost">
+    <div class="goalpost-title">Definition of Done — Phase C</div>
+    <ol class="goalpost-list">
+      <li><code>/india-pulse</code> returns 200; <code>/design-review</code> verdict PASS against <code>02-india-pulse.html</code>.</li>
+      <li>All 9 audited pages now PASS <code>/design-review</code> (gaps from F.0 closed).</li>
+    </ol>
+  </div>
+
+  <div class="task-card">
+    <div class="task-id">F.3 · frontend</div>
+    <h3>Build /india-pulse (mockup 02) · depends on B.1</h3>
+    <p>4 classifier-input tiles + 8 headline indices + 9-row breadth table + dispersion/concentration + volatility + tier leadership + 22-sector heatmap + 8 macro cards.</p>
+
+    <h4>Data sources (all base tables, post-B.1)</h4>
+    <ul>
+      <li><code>atlas_macro_daily</code> (all 8 cols populated by B.1)</li>
+      <li><code>atlas_market_regime_daily</code> for breadth/AD/McClellan</li>
+      <li><code>atlas_index_metrics_daily</code> for headline indices</li>
+      <li><code>atlas_sector_metrics_daily</code> for 22-sector heatmap (post-B.2)</li>
+      <li><code>atlas_stock_metrics_daily</code> aggregated for dispersion + concentration</li>
+    </ul>
+
+    <h4>Components to reuse + (likely) extend</h4>
+    <ul>
+      <li><code>SectorBreadthPanel</code> · <code>BreadthWaterfall</code> · <code>BreadthCategory</code> · <code>BreadthIndicators</code></li>
+      <li>Likely new: <code>MacroCard</code> (8 cards), <code>DispersionChart</code>, <code>ConcentrationStackedBar</code></li>
+    </ul>
+
+    <h4>Route</h4>
+    <p><code>/india-pulse</code> · client component <code>frontend/src/components/v6/IndiaPulseClient.tsx</code></p>
+
+    <div class="goalpost">
+      <div class="goalpost-title">Definition of Done — F.3</div>
+      <ol class="goalpost-list">
+        <li>Route returns 200 on staging + production.</li>
+        <li>4 classifier-input hero tiles show real values from <code>atlas_market_regime_daily</code> + <code>atlas_macro_daily</code>.</li>
+        <li>9-row breadth table renders all 9 measures with Δ1w/Δ1m/Δ3m + position pbar + spark + reads-as commentary.</li>
+        <li>8 macro cards render real values (USD/INR, India 10Y, Brent ₹, real yield, FII flow, DII flow, US 10Y, DXY).</li>
+        <li>22-sector heatmap renders with cell colour-shading.</li>
+        <li>Visual diff against <code>02-india-pulse.html</code> → PASS via <code>/design-review</code>.</li>
+        <li>Per-page plan committed at <code>docs/superpowers/plans/2026-05-27-india-pulse-page.md</code>.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="task-card">
+    <div class="task-id">F.4 · frontend</div>
+    <h3>Close gaps from F.0 audit</h3>
+    <p>For each per-page gap report from F.0, address each named gap in priority order.</p>
+
+    <h4>Workflow per gap</h4>
+    <ul>
+      <li>If gap = missing section → add it, reusing existing components.</li>
+      <li>If gap = wrong data → fix the query module.</li>
+      <li>If gap = visual / token mismatch → fix Tailwind classes against locked tokens.</li>
+      <li>If gap = missing component → check <code>components/v6/</code> first; only build if genuinely absent.</li>
+      <li><code>/design-review</code> after each fix.</li>
+    </ul>
+
+    <div class="goalpost">
+      <div class="goalpost-title">Definition of Done — F.4</div>
+      <ol class="goalpost-list">
+        <li>Each per-page gap report has every gap marked CLOSED with link to commit + verification.</li>
+        <li>Audit summary updated — every page is verdict PASS.</li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+
+<!-- ============================ PHASE D ============================ -->
+<div class="phase">
+  <div class="phase-head">
+    <div class="phase-name">Phase D · URL migration</div>
+    <div class="phase-time">~1 day · runs after Phases B + C done</div>
+  </div>
+
+  <div class="goalpost">
+    <div class="goalpost-title">Definition of Done — Phase D</div>
+    <ol class="goalpost-list">
+      <li>All 12 routes live at root URLs. <code>find frontend/src/app/v6 -name page.tsx</code> returns zero results.</li>
+      <li>Every <code>/v6/&lt;path&gt;</code> URL 308-redirects to <code>/&lt;path&gt;</code>.</li>
+      <li><code>git grep -l '/v6/'</code> in <code>frontend/src/</code> returns only docs/comments, not active imports/links.</li>
+      <li><code>TopNav.tsx</code> GROUPS array references root URLs only.</li>
+    </ol>
+  </div>
+
+  <div class="task-card">
+    <div class="task-id">F.5 · frontend</div>
+    <h3>URL migration /v6/* → root</h3>
+
+    <table>
+      <thead><tr><th>From</th><th>To</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">/v6/today</td><td class="mono">/today (or fold into /regime — decide during execution)</td></tr>
+        <tr><td class="mono">/v6/sectors</td><td class="mono">/sectors</td></tr>
+        <tr><td class="mono">/v6/sectors/[name]</td><td class="mono">/sectors/[name]</td></tr>
+        <tr><td class="mono">/v6/stocks</td><td class="mono">/stocks</td></tr>
+        <tr><td class="mono">/v6/stocks/[iid]</td><td class="mono">/stocks/[iid]</td></tr>
+        <tr><td class="mono">/v6/funds</td><td class="mono">/funds</td></tr>
+        <tr><td class="mono">/v6/funds/[code]</td><td class="mono">/funds/[code]</td></tr>
+        <tr><td class="mono">/v6/etfs</td><td class="mono">/etfs</td></tr>
+        <tr><td class="mono">/v6/etfs/[iid]</td><td class="mono">/etfs/[iid]</td></tr>
+        <tr><td class="mono">/v6/cells/[cell_id]</td><td class="mono">/cells/[cell_id]</td></tr>
+        <tr><td class="mono">/v6/screening</td><td class="mono">/screening</td></tr>
+        <tr><td class="mono">— (new)</td><td class="mono">/markets-rs</td></tr>
+        <tr><td class="mono">— (new)</td><td class="mono">/calls</td></tr>
+        <tr><td class="mono">— (new)</td><td class="mono">/india-pulse</td></tr>
+      </tbody>
+    </table>
+
+    <h4>Execution</h4>
+    <ul>
+      <li><code>git mv</code> each route directory atomically</li>
+      <li><code>git grep -l '/v6/'</code> to find every internal link; update via <code>sed</code></li>
+      <li>Update <code>TopNav.tsx</code> GROUPS array</li>
+      <li>Add Next.js <code>redirects()</code>: <code>/v6/:path*</code> → <code>/:path*</code> (308 permanent)</li>
+      <li>Retire legacy <code>/sectors</code>, <code>/stocks</code>, <code>/etfs</code>, <code>/funds</code> v5-era pages (already deleted; verify)</li>
+      <li><code>tsc --noEmit</code> + manual smoke before commit</li>
+    </ul>
+  </div>
+</div>
+
+
+<!-- ============================ PHASE E ============================ -->
+<div class="phase">
+  <div class="phase-head">
+    <div class="phase-name">Phase E · Deploy mechanism cleanup</div>
+    <div class="phase-time">~0.5 day · last</div>
+  </div>
+
+  <div class="goalpost">
+    <div class="goalpost-title">Definition of Done — Phase E</div>
+    <ol class="goalpost-list">
+      <li><code>/home/ubuntu/atlas-frontend-v2/</code> is a git checkout of <code>atlas-os</code> (not an rsync target).</li>
+      <li><code>git rev-parse HEAD</code> in that dir returns a commit SHA matching <code>origin/main</code>.</li>
+      <li>Deploy command is exactly <code>git pull && npm run build && pm2 restart atlas-frontend-v2</code>. Documented in <code>docs/v6/deploy.md</code>.</li>
+    </ol>
+  </div>
+
+  <div class="task-card">
+    <div class="task-id">F.6 · ops</div>
+    <h3>Convert atlas-frontend-v2 to git checkout</h3>
+    <ul>
+      <li><code>cd ~ && git clone https://github.com/nimishshah1989/atlas-os.git atlas-frontend-v2-new</code></li>
+      <li>Move <code>.env.local</code>, <code>.next/</code>, <code>node_modules/</code> from old dir to new</li>
+      <li><code>pm2 delete atlas-frontend-v2 && pm2 start ecosystem.config.js</code></li>
+      <li>Verify nginx upstream still points to port 3002</li>
+      <li>Document new deploy procedure in <code>docs/v6/deploy.md</code></li>
+    </ul>
+  </div>
+</div>
+
+
+<h2>Execution sequencing</h2>
+<div class="flow">Phase A (~3 days, parallel):
+├─ EC2 backend: B.1 macro + B.2 sector + B.3 ETF (3 parallel SSH sessions)
+└─ Local: F.0 audit 9 pages (subagent-dispatched)
+
+Phase B (~2-3 days, parallel with A):
+├─ F.1 build /markets-rs (no backend dep)
+└─ F.2 build /calls (no backend dep)
+
+Phase C (~2 days, depends on A's B.1+B.2+B.3 done):
+├─ F.3 build /india-pulse (needs macro)
+└─ F.4 close audit gaps (uses sector + ETF data)
+
+Phase D (~1 day, depends on B + C):
+└─ F.5 URL migration + 308 redirects
+
+Phase E (~0.5 day):
+└─ F.6 deploy mechanism cleanup
+
+Total wall-clock: ~8-10 focused days.
+Parallelism saves ~3-4 days vs strict serial.</div>
+
+
+<h2>Skill cadence (non-negotiable)</h2>
+<p>Per frontend page (F.1, F.2, F.3, F.4):</p>
+<ol>
+  <li><strong>Read mockup HTML line by line.</strong> No skim. No "I have the gist."</li>
+  <li><strong>Check <code>frontend/src/components/v6/</code></strong> for existing components (memory <code>[[check-v6-components-first]]</code>).</li>
+  <li><strong><code>superpowers:writing-plans</code></strong> → per-page plan in <code>docs/superpowers/plans/2026-05-27-&lt;page&gt;-page.md</code>.</li>
+  <li><strong><code>superpowers:subagent-driven-development</code></strong> dispatches per component / section.</li>
+  <li><strong><code>/design-review</code></strong> against mockup HTML — visual diff, not "does it compile."</li>
+  <li><strong><code>/review</code> + <code>/codex review</code></strong> pre-merge.</li>
+  <li><strong>SSH deploy</strong> (<code>ssh -i ~/.ssh/jsl-wealth-key.pem ubuntu@13.206.34.214</code>) — no paste-back loops.</li>
+</ol>
+
+<p>Per backend task (B.1, B.2, B.3):</p>
+<ol>
+  <li><strong><code>/grill-with-docs</code></strong> to lock terminology against CONTEXT.md.</li>
+  <li><strong><code>superpowers:writing-plans</code></strong> for the ingest script architecture.</li>
+  <li><strong>TDD per script</strong> — write tests against fixture data first.</li>
+  <li><strong><code>/review</code></strong> pre-commit.</li>
+</ol>
+
+
+<h2>Risks + mitigations</h2>
+<table>
+  <thead><tr><th>Risk</th><th>Mitigation</th></tr></thead>
+  <tbody>
+    <tr><td>FRED API quota or downtime during backfill</td><td>Cache responses, backfill in batches, retry with exponential backoff</td></tr>
+    <tr><td>NSE bhavcopy format changes (historically has)</td><td>Parse defensively, alert on schema diff, manual recovery if needed</td></tr>
+    <tr><td>Existing pages diverge from mockups by &gt; minor gaps</td><td>F.0 audit identifies early; F.4 budget grows; flag to user immediately</td></tr>
+    <tr><td>ETF scorecard writer bug surfaces only at full-universe scale</td><td>Run on 10% sample first; verify before full 126</td></tr>
+    <tr><td>URL migration breaks links in DB content / SP07 specialists</td><td>Pre-flight grep; staged migration; 308 redirects catch outbound links</td></tr>
+    <tr><td>Sector backfill compute exceeds EC2 memory (640k row writes)</td><td>Batch by year; <code>to_sql(method='multi', chunksize=5000)</code></td></tr>
+    <tr><td>Auto-mode classifier blocks SSH</td><td>User pre-confirmed; specific allow rules already in settings.json</td></tr>
+  </tbody>
+</table>
+
+
+<h2>What's explicitly NOT in this round</h2>
+<ul>
+  <li>5 sector MVs (<code>mv_sector_cards/breadth/rrg/deepdive/rotation</code>) — pages query base tables; MVs are performance opt for later</li>
+  <li>2 ETF MVs (<code>mv_etf_list_v6</code>, <code>mv_etf_deepdive</code>) — same reasoning</li>
+  <li><code>mv_stock_landscape</code>, <code>mv_markets_rs_detail_charts</code>, <code>mv_india_pulse</code> — page queries hit base tables directly</li>
+  <li>TopNav redesign — keep existing component; only hrefs change in Phase D</li>
+  <li>Storybook / component demo route — not needed; v6 components exist and are exercised by their pages</li>
+</ul>
+
+
+<h2>Sign-off</h2>
+<p>This HTML spec is the single source of truth. The MASTER GOALPOST at the top + per-phase + per-task goalposts together define "done". Any deviation requires editing this file FIRST.</p>
+
+<p>Next step after sign-off: <code>superpowers:writing-plans</code> produces the executable tasklist mapped 1:1 against the goalposts above.</p>
+
+
+<footer>
+  <p>Atlas v6 implementation spec · 2026-05-27 · supersedes 95431fa4 + ae6170bf + 8c6d99e8 ·
+  <a href="../../../v6/2026-05-27-LOCKED-12-mockup-implementation-plan.md">earlier MD plan</a> ·
+  <a href="../../../../.gstack/projects/atlas-os/designs/v6-redesign-20260526-mockups/">12 source mockups</a></p>
+</footer>
+
+</main>
+</body>
+</html>
