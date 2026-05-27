@@ -88,6 +88,8 @@ describe('getCallsPerformancePage', () => {
     expect(p.calls[0].realized_excess_pct).toBeNull()
     expect(p.calls[0].predicted_excess).toBeNull()
     expect(p.summary.avg_realized_excess_pct).toBeNull()
-    expect(p.summary.hit_rate).toBe(0)
+    // hit_rate is null (not 0) when zero calls have realized data —
+    // counting brand-new in-flight calls as misses would be misleading.
+    expect(p.summary.hit_rate).toBeNull()
   })
 })

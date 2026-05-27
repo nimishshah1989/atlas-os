@@ -108,12 +108,15 @@ export async function getCallsPerformancePage(): Promise<CallsPerformancePage> {
   }))
 
   const total = calls.length
-  const hits = calls.reduce((acc, c) => acc + (c.is_hit ? 1 : 0), 0)
-  const hit_rate = total > 0 ? hits / total : null
-
   const realizedValues = calls
     .map(c => c.realized_excess_pct)
     .filter((v): v is number => v != null)
+  // hit_rate is only meaningful once realized excess exists for at least
+  // one call. Brand-new in-flight calls have realized_excess_pct = null,
+  // and is_hit is initialized to false on entry — counting those as
+  // "misses" would report a false 0% on a fresh day.
+  const hits = calls.reduce((acc, c) => acc + (c.is_hit ? 1 : 0), 0)
+  const hit_rate = realizedValues.length > 0 ? hits / total : null
   const avg_realized_excess_pct = realizedValues.length > 0
     ? realizedValues.reduce((a, b) => a + b, 0) / realizedValues.length
     : null

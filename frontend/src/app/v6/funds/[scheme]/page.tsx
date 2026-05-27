@@ -31,7 +31,7 @@ function recoTint(reco: string | null): string {
 
 export default async function FundDeepdivePage({ params }: { params: Promise<{ scheme: string }> }) {
   const { scheme } = await params
-  const d = await getFundDeepdive(scheme)
+  const d = await getFundDeepdive(decodeURIComponent(scheme))
   if (!d) notFound()
 
   return (

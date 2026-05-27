@@ -7,6 +7,12 @@
 //   2. NULL JSONB → [] or {} fallback
 //   3. typed-shape tagging via TS interfaces
 //
+// Contract for JSONB scales (locked with the MV definition):
+//   - next_state_probs        — integer percent (e.g. 56 = 56%)
+//   - deployment_defaults     — fraction        (e.g. 0.6  = 60%)
+//   - deployment_multiplier   — fraction        (column on the table)
+//   - twelve_week_journey[].breadth_pct — fraction
+//
 // MV refreshed nightly via pg_cron (Phase D).
 
 import 'server-only'

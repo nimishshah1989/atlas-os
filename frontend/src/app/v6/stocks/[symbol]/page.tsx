@@ -39,7 +39,8 @@ function tapeTint(state: string | null): string {
 
 export default async function StockDeepdivePage({ params }: { params: Promise<{ symbol: string }> }) {
   const { symbol } = await params
-  const d = await getStockDeepdive(symbol.toUpperCase())
+  // Indian symbols like M&M, J&KBANK come URL-encoded in the path segment.
+  const d = await getStockDeepdive(decodeURIComponent(symbol).toUpperCase())
   if (!d) notFound()
 
   const tape = d.conviction_tape as { '1m'?: string | null; '3m'?: string | null; '6m'?: string | null; '12m'?: string | null }
