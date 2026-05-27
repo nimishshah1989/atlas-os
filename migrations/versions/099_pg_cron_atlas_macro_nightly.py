@@ -32,7 +32,6 @@ Create Date: 2026-05-27
 
 from __future__ import annotations
 
-import sqlalchemy as sa
 from alembic import op
 
 revision = "099"
@@ -40,34 +39,20 @@ down_revision = "098"
 branch_labels = None
 depends_on = None
 
-_SCHEMA = "atlas"
-
 
 def upgrade() -> None:
-    # =================================================================
-    # 1. atlas_macro_daily — 3 missing columns from B.1 macro ingest
-    # =================================================================
-    op.add_column(
-        "atlas_macro_daily",
-        sa.Column("india_10y_yield", sa.Numeric(6, 4), nullable=True),
-        schema=_SCHEMA,
-    )
-    op.add_column(
-        "atlas_macro_daily",
-        sa.Column("fii_cash_equity_flow_cr", sa.Numeric(14, 4), nullable=True),
-        schema=_SCHEMA,
-    )
-    op.add_column(
-        "atlas_macro_daily",
-        sa.Column("risk_free_91d", sa.Numeric(6, 4), nullable=True),
-        schema=_SCHEMA,
-    )
+    # The 8 macro columns (india_10y_yield, fii_cash_equity_flow_cr, risk_free_91d,
+    # dii_flow, us_10y_yield, brent_inr, cpi_yoy, vix_9d) already exist on
+    # atlas_macro_daily — verified via Supabase MCP on 2026-05-27. Migration 097
+    # added 5 of them; the other 3 predate. This migration is pg_cron-only.
 
-    # =================================================================
-    # 2. pg_cron — register atlas_macro_nightly job
-    # Runs at 20:15 IST = 14:45 UTC (after NSE market close + bhavcopy publish)
-    # The cron job calls the ingest runner via a stored procedure wrapper.
-    # =================================================================
+    # pg_cron — register atlas_macro_nightly job
+    # Runs 20:15 IST = 14:45 UTC, Mon-Fri (after NSE market close + bhavcopy publish).
+    # NOTIFY channel is consumed by an EC2 systemd listener that runs the Python
+    # runner. If the listener is not deployed, a plain EC2 crontab fallback works:
+    #   45 20 * * 1-5 cd ~/atlas-os && source .venv/bin/activate &&
+    #     python -m atlas.ingest.macro.runner --mode=incremental \
+    #     >> /var/log/atlas/macro_nightly.log 2>&1
     op.execute(
         """
         SELECT cron.schedule(
@@ -77,21 +62,7 @@ def upgrade() -> None:
         );
         """
     )
-    # Note: The actual runner (atlas.ingest.macro.runner --mode=incremental) is
-    # invoked by a systemd service listening on the NOTIFY channel, or alternatively
-    # via a shell cron on EC2 that wraps the Python module.
-    # If pg_cron is not available, create an EC2 crontab entry instead:
-    #   45 20 * * 1-5 cd ~/atlas-os && source .venv/bin/activate &&
-    #     python -m atlas.ingest.macro.runner --mode=incremental >> /var/log/atlas/macro_nightly.log 2>&1
 
 
 def downgrade() -> None:
-    # Remove the cron job
-    op.execute(
-        "SELECT cron.unschedule('atlas_macro_nightly');"
-    )
-
-    # Drop added columns
-    op.drop_column("atlas_macro_daily", "risk_free_91d", schema=_SCHEMA)
-    op.drop_column("atlas_macro_daily", "fii_cash_equity_flow_cr", schema=_SCHEMA)
-    op.drop_column("atlas_macro_daily", "india_10y_yield", schema=_SCHEMA)
+    op.execute("SELECT cron.unschedule('atlas_macro_nightly');")
