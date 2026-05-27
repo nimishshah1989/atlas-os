@@ -42607,3 +42607,498 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{
+  "ts": "2026-05-27T15:51:26Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/atlas_health_check.py",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T15:51:34Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/atlas_health_check.py",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T15:51:41Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/atlas_health_check.py",
+  "lines_changed": 10,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-27T13:53:59Z","kind":"supabase_sql_executed","sql_preview":"CREATE MATERIALIZED VIEW IF NOT EXISTS atlas.mv_sector_breadth AS\nWITH\nspine AS (SELECT DISTINCT date AS as_of_date, sector_name FROM atlas.atlas_sector_metrics_daily WHERE date >= '2020-01-01'),\nsector_scalars AS (SELECT date AS as_of_date, sector_name, pct_above_ema20, participation_50 AS pct_above_ema50, pct_above_ema200, pct_52wh AS pct_at_52wh FROM atlas.atlas_sector_metrics_daily WHERE date >= '2020-01-01'),\nconstituent_counts AS (SELECT sector AS sector_name, COUNT(DISTINCT instrument_id)"}
+{"ts":"2026-05-27T13:56:27Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  (SELECT relispopulated FROM pg_class WHERE relname='mv_sector_breadth' AND relnamespace=(SELECT oid FROM pg_namespace WHERE nspname='atlas')) AS populated,\n  EXISTS(SELECT 1 FROM pg_indexes WHERE schemaname='atlas' AND indexname='uix_mv_sector_breadth_date_sector') AS idx_exists,\n  (SELECT COUNT(*) FROM pg_stat_activity WHERE query LIKE '%mv_sector_breadth%' AND state='active') AS active_queries;"}
+{"ts":"2026-05-27T13:56:47Z","kind":"supabase_sql_executed","sql_preview":"SELECT pid, NOW() - query_start AS duration, state, LEFT(query, 80) AS sample\nFROM pg_stat_activity WHERE query LIKE '%mv_sector_breadth%' AND pid != pg_backend_pid()\nORDER BY query_start ASC LIMIT 5;"}
+{"ts":"2026-05-27T13:57:39Z","kind":"supabase_sql_executed","sql_preview":"DROP MATERIALIZED VIEW IF EXISTS atlas.mv_sector_breadth CASCADE;\nCREATE MATERIALIZED VIEW atlas.mv_sector_breadth AS\nWITH\nspine AS (SELECT DISTINCT date AS as_of_date, sector_name FROM atlas.atlas_sector_metrics_daily WHERE date >= '2020-01-01'),\nsector_scalars AS (SELECT date AS as_of_date, sector_name, pct_above_ema20, participation_50 AS pct_above_ema50, pct_above_ema200, pct_52wh AS pct_at_52wh FROM atlas.atlas_sector_metrics_daily WHERE date >= '2020-01-01'),\nconstituent_counts AS (SELECT "}
+{"ts":"2026-05-27T13:58:30Z","kind":"supabase_sql_executed","sql_preview":"CREATE UNIQUE INDEX uix_mv_sector_breadth_date_sector ON atlas.mv_sector_breadth (as_of_date, sector_name);\nREFRESH MATERIALIZED VIEW atlas.mv_sector_breadth;"}
+{"ts":"2026-05-27T13:58:45Z","kind":"supabase_sql_executed","sql_preview":"SELECT cron.schedule('mv_sector_breadth_nightly', '45 14 * * *', $$ REFRESH MATERIALIZED VIEW CONCURRENTLY atlas.mv_sector_breadth; $$);\nUPDATE atlas.atlas_alembic_version SET version_num = '103';\nSELECT COUNT(*) AS total_rows, COUNT(DISTINCT sector_name) AS sectors, MIN(as_of_date)::text AS min_d, MAX(as_of_date)::text AS max_d FROM atlas.mv_sector_breadth;"}
+{
+  "ts": "2026-05-27T14:01:52Z",
+  "prev": "aa4cb4e350a0dd68",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/chunks/chunk-mv-sector-rrg-approach.md",
+  "lines_changed": 103,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T14:02:52Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/104_mv_sector_rrg.py",
+  "lines_changed": 300,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T14:04:35Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/migrations/test_104_mv_sector_rrg.py",
+  "lines_changed": 693,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T14:04:55Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/migrations/test_104_mv_sector_rrg.py",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T14:05:03Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/migrations/test_104_mv_sector_rrg.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T14:06:03Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/v6/mvs/2026-05-27-mv-sector-rrg-design.md",
+  "lines_changed": 152,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T14:06:31Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/v6/audits/2026-05-27-mv-sector-rrg-final.md",
+  "lines_changed": 90,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T14:06:50Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/.claude/projects/-Users-nimishshah-Documents-GitHub-atlas-os/memory/project_mv_sector_rrg_state.md",
+  "lines_changed": 51,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-27T14:11:35Z","kind":"supabase_sql_executed","sql_preview":"CREATE MATERIALIZED VIEW IF NOT EXISTS atlas.mv_sector_rrg AS\nWITH\nspine AS (SELECT DISTINCT date AS as_of_date, sector_name FROM atlas.atlas_sector_metrics_daily WHERE date >= '2020-01-01'),\nraw_rs AS (SELECT date, sector_name, bottomup_rs_3m_nifty500,\n  CASE WHEN bottomup_rs_3m_nifty500 IS NOT NULL THEN ROUND((100 + bottomup_rs_3m_nifty500 * 100)::numeric, 4) ELSE NULL END AS rs_ratio\n  FROM atlas.atlas_sector_metrics_daily WHERE date >= '2020-01-01'),\nwith_momentum AS (SELECT date, sector_nam"}
+{"ts":"2026-05-27T14:12:57Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  (SELECT relispopulated FROM pg_class WHERE relname='mv_sector_rrg' AND relnamespace=(SELECT oid FROM pg_namespace WHERE nspname='atlas')) AS populated,\n  EXISTS(SELECT 1 FROM pg_indexes WHERE schemaname='atlas' AND indexname='uix_mv_sector_rrg_date_sector') AS idx,\n  EXISTS(SELECT 1 FROM cron.job WHERE jobname='mv_sector_rrg_nightly') AS cron_set,\n  (SELECT version_num FROM atlas.atlas_alembic_version) AS alembic_head,\n  (SELECT COUNT(*) FROM pg_stat_activity WHERE query LIKE '%mv_secto"}
+{"ts":"2026-05-27T14:13:06Z","kind":"supabase_sql_executed","sql_preview":"SELECT pid, NOW() - query_start AS duration, LEFT(query, 60) AS sample\nFROM pg_stat_activity WHERE query LIKE '%mv_sector_rrg%' AND pid != pg_backend_pid()\nORDER BY query_start ASC LIMIT 3;"}
+{"ts":"2026-05-27T14:13:43Z","kind":"supabase_sql_executed","sql_preview":"SELECT pg_cancel_backend(1066111) AS cancelled;\nDROP MATERIALIZED VIEW IF EXISTS atlas.mv_sector_rrg CASCADE;\nCREATE MATERIALIZED VIEW atlas.mv_sector_rrg AS\nWITH\nraw_rs AS (SELECT date, sector_name,\n  CASE WHEN bottomup_rs_3m_nifty500 IS NOT NULL THEN ROUND((100 + bottomup_rs_3m_nifty500 * 100)::numeric, 4) ELSE NULL END AS rs_ratio\n  FROM atlas.atlas_sector_metrics_daily WHERE date >= '2020-01-01'),\nwith_momentum AS (SELECT date, sector_name, rs_ratio,\n  CASE WHEN rs_ratio IS NOT NULL AND LAG("}
+{"ts":"2026-05-27T14:14:02Z","kind":"supabase_sql_executed","sql_preview":"CREATE UNIQUE INDEX uix_mv_sector_rrg_sector ON atlas.mv_sector_rrg (sector_name);\nREFRESH MATERIALIZED VIEW atlas.mv_sector_rrg;\nSELECT cron.schedule('mv_sector_rrg_nightly', '20 15 * * *', $$ REFRESH MATERIALIZED VIEW CONCURRENTLY atlas.mv_sector_rrg; $$);\nUPDATE atlas.atlas_alembic_version SET version_num = '104';\nSELECT COUNT(*) AS rows, MIN(as_of_date)::text AS min_d, MAX(as_of_date)::text AS max_d,\n  COUNT(*) FILTER (WHERE quadrant_current = 'Leading') AS leading,\n  COUNT(*) FILTER (WHERE "}
+{
+  "ts": "2026-05-27T14:20:09Z",
+  "prev": "f09b8293d9c1dbd2",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/chunks/chunk-mv6-sector-deepdive-approach.md",
+  "lines_changed": 131,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T14:21:47Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/105_mv_sector_deepdive.py",
+  "lines_changed": 545,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T14:23:10Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/migrations/test_105_mv_sector_deepdive.py",
+  "lines_changed": 601,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T14:23:33Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/migrations/test_105_mv_sector_deepdive.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T14:24:36Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/v6/mvs/2026-05-27-mv-sector-deepdive-design.md",
+  "lines_changed": 244,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T14:25:07Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/v6/audits/2026-05-27-mv-sector-deepdive-final.md",
+  "lines_changed": 78,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T14:25:20Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/.claude/projects/-Users-nimishshah-Documents-GitHub-atlas-os/memory/project_mv_sector_deepdive_state.md",
+  "lines_changed": 39,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T14:28:06Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/v6/audits/2026-05-27-mv-sector-deepdive-final.md",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T14:32:37Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/.forge/knowledge/raw/atlas-os/chunk-mv6-sector-deepdive-learnings.md",
+  "lines_changed": 37,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-27T14:34:19Z","kind":"supabase_sql_executed","sql_preview":"CREATE MATERIALIZED VIEW IF NOT EXISTS atlas.mv_sector_deepdive AS WITH latest_sector_date AS (SELECT MAX(date) AS d FROM atlas.atlas_sector_metrics_daily),latest_stock_date AS (SELECT MAX(date) AS d FROM atlas.atlas_stock_metrics_daily),latest_conviction_date AS (SELECT MAX(date) AS d FROM atlas.atlas_stock_conviction_daily),latest_stock_state_date AS (SELECT MAX(date) AS d FROM atlas.atlas_stock_states_daily),latest_sector_state_date AS (SELECT MAX(date) AS d FROM atlas.atlas_sector_states_dai"}
+{"ts":"2026-05-27T14:36:24Z","kind":"supabase_sql_executed","sql_preview":"CREATE UNIQUE INDEX IF NOT EXISTS uix_mv_sector_deepdive_sector ON atlas.mv_sector_deepdive (sector_name);"}
+{"ts":"2026-05-27T14:36:31Z","kind":"supabase_sql_executed","sql_preview":"REFRESH MATERIALIZED VIEW atlas.mv_sector_deepdive;"}
+{"ts":"2026-05-27T14:36:35Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  COUNT(*) AS row_count,\n  COUNT(constituents_top30) AS has_constituents,\n  COUNT(top_picks_top10) AS has_top_picks,\n  COUNT(returns) AS has_returns,\n  COUNT(strength_dist) AS has_strength_dist\nFROM atlas.mv_sector_deepdive;"}
+{"ts":"2026-05-27T14:36:46Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  sector_name,\n  jsonb_typeof(constituents_top30) AS constituents_type,\n  jsonb_typeof(top_picks_top10) AS top_picks_type,\n  jsonb_typeof(strength_dist) AS strength_type,\n  jsonb_typeof(returns) AS returns_type\nFROM atlas.mv_sector_deepdive\nWHERE sector_name = 'Energy';"}
+{"ts":"2026-05-27T14:36:50Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  sector_name,\n  jsonb_array_length(constituents_top30) AS constituents_n,\n  jsonb_array_length(top_picks_top10) AS top_picks_n,\n  returns,\n  strength_dist\nFROM atlas.mv_sector_deepdive\nWHERE sector_name = 'Energy';"}
+{"ts":"2026-05-27T14:37:00Z","kind":"supabase_sql_executed","sql_preview":"SELECT cron.schedule(\n  'mv_sector_deepdive_nightly',\n  '25 15 * * *',\n  $$REFRESH MATERIALIZED VIEW CONCURRENTLY atlas.mv_sector_deepdive;$$\n);"}
+{"ts":"2026-05-27T14:37:08Z","kind":"supabase_sql_executed","sql_preview":"UPDATE alembic_version SET version_num = '105';\nSELECT version_num FROM alembic_version;"}
+{"ts":"2026-05-27T14:37:29Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  c.relname AS table_name,\n  pg_size_pretty(pg_total_relation_size(c.oid)) AS size,\n  (SELECT n_live_tup FROM pg_stat_user_tables WHERE relname = c.relname AND schemaname = 'atlas') AS row_count\nFROM pg_class c\nJOIN pg_namespace n ON n.oid = c.relnamespace\nWHERE n.nspname = 'atlas'\n  AND c.relkind = 'r'\n  AND c.relname IN (\n    'atlas_stock_metrics_daily',\n    'atlas_stock_conviction_daily',\n    'atlas_scorecard_daily',\n    'atlas_signal_calls',\n    'atlas_universe_stocks',\n    'atlas_cts"}
+{"ts":"2026-05-27T14:37:33Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name, data_type\nFROM information_schema.columns\nWHERE table_schema = 'atlas' AND table_name = 'atlas_scorecard_daily'\nORDER BY ordinal_position;"}
+{"ts":"2026-05-27T14:37:38Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name, data_type\nFROM information_schema.columns\nWHERE table_schema = 'atlas' AND table_name = 'atlas_stock_conviction_daily'\nORDER BY ordinal_position;"}
+{"ts":"2026-05-27T14:37:42Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name, data_type\nFROM information_schema.columns\nWHERE table_schema = 'atlas' AND table_name = 'atlas_cts_states_daily'\nORDER BY ordinal_position;"}
+{"ts":"2026-05-27T14:37:46Z","kind":"supabase_sql_executed","sql_preview":"SELECT table_name\nFROM information_schema.tables\nWHERE table_schema = 'atlas' AND table_name LIKE '%cts%' OR table_name LIKE '%tape%'\nORDER BY table_name;"}
+{"ts":"2026-05-27T14:37:50Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name, data_type\nFROM information_schema.columns\nWHERE table_schema = 'atlas' AND table_name = 'atlas_cts_signals_daily'\nORDER BY ordinal_position;"}
+{"ts":"2026-05-27T14:38:46Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name, data_type\nFROM information_schema.columns\nWHERE table_schema = 'atlas' AND table_name = 'atlas_signal_calls'\nORDER BY ordinal_position;"}
+{"ts":"2026-05-27T14:38:53Z","kind":"supabase_sql_executed","sql_preview":"SELECT table_name FROM information_schema.tables WHERE table_schema = 'atlas' AND table_name LIKE '%cell%' ORDER BY table_name;"}
+{"ts":"2026-05-27T14:38:57Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name, data_type\nFROM information_schema.columns\nWHERE table_schema = 'atlas' AND table_name = 'atlas_cell_definitions'\nORDER BY ordinal_position;"}
+{"ts":"2026-05-27T14:39:05Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  (SELECT COUNT(*) FROM atlas.atlas_cell_definitions) AS cells_n,\n  (SELECT COUNT(*) FROM atlas.atlas_cell_definitions WHERE deprecated_at IS NULL) AS cells_active,\n  (SELECT COUNT(*) FROM atlas.atlas_signal_calls WHERE exit_date IS NULL) AS open_signals,\n  (SELECT MAX(date) FROM atlas.atlas_signal_calls) AS last_signal,\n  (SELECT MAX(date) FROM atlas.atlas_stock_metrics_daily) AS last_metric,\n  (SELECT MAX(date) FROM atlas.atlas_stock_conviction_daily) AS last_conv;"}
+{"ts":"2026-05-27T14:39:24Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name, data_type\nFROM information_schema.columns\nWHERE table_schema = 'atlas' AND table_name = 'atlas_stock_metrics_daily'\n  AND column_name IN ('rs_1m','rs_3m','rs_6m','rs_12m','rs_3m_nifty500','market_cap_cr','close','adj_close','sma_150_slope','ret_1m','ret_3m','ret_6m','ret_12m')\nORDER BY column_name;"}
+{"ts":"2026-05-27T14:39:28Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name\nFROM information_schema.columns\nWHERE table_schema = 'atlas' AND table_name = 'atlas_stock_metrics_daily'\nORDER BY ordinal_position;"}
+{"ts":"2026-05-27T14:39:40Z","kind":"supabase_sql_executed","sql_preview":"SELECT table_name FROM information_schema.tables WHERE table_schema = 'atlas' AND (table_name LIKE '%market_cap%' OR table_name LIKE '%mcap%' OR table_name LIKE '%instrument%') ORDER BY table_name;"}
+{"ts":"2026-05-27T14:39:45Z","kind":"supabase_sql_executed","sql_preview":"SELECT table_schema, table_name\nFROM information_schema.tables\nWHERE (table_name LIKE '%market_cap%' OR table_name LIKE '%mcap%' OR table_name LIKE '%instrument%' OR table_name LIKE '%universe%' OR table_name LIKE '%symbol%')\n  AND table_schema IN ('atlas','public','de')\nORDER BY table_schema, table_name;"}
+{"ts":"2026-05-27T14:39:50Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  (SELECT COUNT(*) FROM public.de_market_cap_history) AS mcap_rows,\n  (SELECT COUNT(*) FROM public.de_instrument) AS instrument_rows,\n  (SELECT COUNT(DISTINCT instrument_id) FROM atlas.atlas_stock_metrics_daily WHERE date = (SELECT MAX(date) FROM atlas.atlas_stock_metrics_daily)) AS stocks_latest;"}
+{"ts":"2026-05-27T14:39:54Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'de_instrument' ORDER BY ordinal_position;"}
+{"ts":"2026-05-27T14:40:00Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name FROM information_schema.columns WHERE table_schema = 'atlas' AND table_name = 'atlas_universe_stocks' ORDER BY ordinal_position;"}
+{"ts":"2026-05-27T14:40:11Z","kind":"supabase_sql_executed","sql_preview":"SELECT table_schema, table_name FROM information_schema.tables WHERE (table_name LIKE '%price%' OR table_name LIKE '%ohlc%' OR table_name LIKE '%nav%') AND table_schema IN ('atlas','public','de') ORDER BY table_schema, table_name;"}
+{"ts":"2026-05-27T14:40:20Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = 'atlas' AND table_name = 'atlas_v6_clean_ohlcv' ORDER BY ordinal_position;"}
+{
+  "ts": "2026-05-27T14:41:52Z",
+  "prev": "d297cd107cfd6d0a",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/106_mv_stock_landscape.py",
+  "lines_changed": 376,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-27T14:42:28Z","kind":"supabase_sql_executed","sql_preview":"CREATE MATERIALIZED VIEW IF NOT EXISTS atlas.mv_stock_landscape AS\nWITH\nlatest_metric_date AS (\n  SELECT MAX(date) AS d FROM atlas.atlas_stock_metrics_daily\n),\nlatest_conviction_date AS (\n  SELECT MAX(date) AS d FROM atlas.atlas_stock_conviction_daily\n),\nlatest_ohlcv_date AS (\n  SELECT MAX(date) AS d FROM atlas.atlas_v6_clean_ohlcv\n),\nuniverse AS (\n  SELECT u.instrument_id, u.symbol, u.company_name, u.tier AS cap_tier, u.sector, u.industry\n  FROM atlas.atlas_universe_stocks u\n  WHERE u.effective"}
+{"ts":"2026-05-27T14:43:50Z","kind":"supabase_sql_executed","sql_preview":"SELECT EXISTS (\n  SELECT 1 FROM pg_matviews WHERE schemaname='atlas' AND matviewname='mv_stock_landscape'\n) AS mv_exists,\n(SELECT COUNT(*) FROM atlas.mv_stock_landscape) AS row_count;"}
+{"ts":"2026-05-27T14:43:56Z","kind":"supabase_sql_executed","sql_preview":"SELECT indexname FROM pg_indexes WHERE schemaname='atlas' AND tablename='mv_stock_landscape';"}
+{"ts":"2026-05-27T14:44:12Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  COUNT(*) AS total_rows,\n  COUNT(cap_tier) AS has_cap_tier,\n  COUNT(composite_score) AS has_composite,\n  COUNT(rs_3m_nifty500) AS has_rs3m,\n  COUNT(bubble_quadrant) AS has_quadrant,\n  COUNT(liquidity_proxy_cr) AS has_liquidity,\n  COUNT(cell_id) AS firing_open_cells,\n  COUNT(cell_ic) AS firing_with_ic,\n  COUNT(composite_trajectory_30d) AS has_trajectory\nFROM atlas.mv_stock_landscape;"}
+{"ts":"2026-05-27T14:44:21Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  date,\n  COUNT(*) AS rows_today,\n  COUNT(rs_3m_nifty500) AS has_rs3m,\n  COUNT(rs_1m_nifty500) AS has_rs1m,\n  COUNT(ret_3m) AS has_ret3m\nFROM atlas.atlas_stock_metrics_daily\nWHERE date >= (SELECT MAX(date) - INTERVAL '15 days' FROM atlas.atlas_stock_metrics_daily)\nGROUP BY date\nORDER BY date DESC\nLIMIT 10;"}
+{"ts":"2026-05-27T14:44:39Z","kind":"supabase_sql_executed","sql_preview":"DROP MATERIALIZED VIEW IF EXISTS atlas.mv_stock_landscape;"}
+{
+  "ts": "2026-05-27T14:44:46Z",
+  "prev": "8a789ceddf03c08b",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/106_mv_stock_landscape.py",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-27T14:45:20Z","kind":"supabase_sql_executed","sql_preview":"CREATE MATERIALIZED VIEW IF NOT EXISTS atlas.mv_stock_landscape AS\nWITH\nlatest_metric_date AS (\n  SELECT MAX(date) AS d FROM atlas.atlas_stock_metrics_daily WHERE rs_3m_nifty500 IS NOT NULL\n),\nlatest_conviction_date AS (\n  SELECT MAX(date) AS d FROM atlas.atlas_stock_conviction_daily\n),\nlatest_ohlcv_date AS (\n  SELECT MAX(date) AS d FROM atlas.atlas_v6_clean_ohlcv\n),\nuniverse AS (\n  SELECT u.instrument_id, u.symbol, u.company_name, u.tier AS cap_tier, u.sector, u.industry\n  FROM atlas.atlas_univ"}
+{"ts":"2026-05-27T14:45:28Z","kind":"supabase_sql_executed","sql_preview":"CREATE UNIQUE INDEX IF NOT EXISTS uix_mv_stock_landscape_instrument ON atlas.mv_stock_landscape (instrument_id);"}
+{"ts":"2026-05-27T14:46:39Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  COUNT(*) AS total_rows,\n  MIN(as_of_date) AS as_of_date,\n  COUNT(rs_3m_nifty500) AS has_rs3m,\n  COUNT(bubble_quadrant) AS has_quadrant,\n  COUNT(liquidity_proxy_cr) AS has_liquidity,\n  COUNT(cell_id) AS firing_open_cells,\n  COUNT(cell_ic) AS firing_with_ic\nFROM atlas.mv_stock_landscape;"}
+{"ts":"2026-05-27T14:46:46Z","kind":"supabase_sql_executed","sql_preview":"SELECT bubble_quadrant, action, COUNT(*) AS n,\n  ROUND(AVG(rs_3m_nifty500)::numeric, 3) AS avg_rs3m,\n  ROUND(AVG(composite_score)::numeric, 2) AS avg_comp\nFROM atlas.mv_stock_landscape\nWHERE bubble_quadrant IS NOT NULL\nGROUP BY 1, 2 ORDER BY 1, 2;"}
+{"ts":"2026-05-27T14:46:55Z","kind":"supabase_sql_executed","sql_preview":"SELECT cap_tier, matrix_tenure_dominant, matrix_action_sign, COUNT(*) AS n\nFROM atlas.mv_stock_landscape\nWHERE cap_tier IS NOT NULL AND matrix_action_sign IS NOT NULL\nGROUP BY 1, 2, 3\nORDER BY cap_tier, matrix_tenure_dominant, matrix_action_sign;"}
+{"ts":"2026-05-27T14:47:07Z","kind":"supabase_sql_executed","sql_preview":"SELECT cron.schedule(\n  'mv_stock_landscape_nightly',\n  '30 15 * * *',\n  $$REFRESH MATERIALIZED VIEW CONCURRENTLY atlas.mv_stock_landscape;$$\n);\nUPDATE alembic_version SET version_num = '106';\nSELECT version_num FROM alembic_version;"}
+{"ts":"2026-05-27T14:47:19Z","kind":"supabase_sql_executed","sql_preview":"SELECT table_name FROM information_schema.tables WHERE table_schema='atlas' AND table_name LIKE '%etf%' ORDER BY table_name;"}
+{"ts":"2026-05-27T14:47:30Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name, data_type FROM information_schema.columns\nWHERE table_schema='atlas' AND table_name IN ('atlas_etf_scorecard','atlas_universe_etfs','atlas_etf_metrics_daily','atlas_etf_states_daily','atlas_etf_signal_calls','atlas_etf_decisions_daily')\nORDER BY table_name, ordinal_position;"}
+{"ts":"2026-05-27T14:47:38Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  (SELECT COUNT(*) FROM atlas.atlas_universe_etfs WHERE effective_to IS NULL) AS active_etfs,\n  (SELECT COUNT(*) FROM atlas.atlas_etf_scorecard) AS scorecard_rows,\n  (SELECT COUNT(DISTINCT ticker) FROM atlas.atlas_etf_scorecard) AS scorecard_unique_tickers,\n  (SELECT MAX(snapshot_date) FROM atlas.atlas_etf_scorecard) AS scorecard_last,\n  (SELECT MAX(date) FROM atlas.atlas_etf_metrics_daily) AS metrics_last,\n  (SELECT MAX(date) FROM atlas.atlas_etf_states_daily) AS states_last,\n  (SELECT C"}
+{
+  "ts": "2026-05-27T14:48:50Z",
+  "prev": "1865c59cfe328af6",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/107_mv_etf_list_v6.py",
+  "lines_changed": 311,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T14:49:09Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/107_mv_etf_list_v6.py",
+  "lines_changed": 19,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-27T14:50:10Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name FROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_etf_scorecard' ORDER BY ordinal_position;"}
+{"ts":"2026-05-27T14:50:15Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name FROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_etf_signal_calls' ORDER BY ordinal_position;"}
+{
+  "ts": "2026-05-27T14:50:24Z",
+  "prev": "0d8b97da23639f2f",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/107_mv_etf_list_v6.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T14:50:29Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/107_mv_etf_list_v6.py",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-27T14:51:09Z","kind":"supabase_sql_executed","sql_preview":"CREATE MATERIALIZED VIEW IF NOT EXISTS atlas.mv_etf_list_v6 AS\nWITH\nlatest_scorecard AS (SELECT MAX(snapshot_date) AS d FROM atlas.atlas_etf_scorecard),\nlatest_metrics AS (SELECT MAX(date) AS d FROM atlas.atlas_etf_metrics_daily),\nlatest_states AS (SELECT MAX(date) AS d FROM atlas.atlas_etf_states_daily),\nlatest_decisions AS (SELECT MAX(date) AS d FROM atlas.atlas_etf_decisions_daily),\nactive_etfs AS (\n  SELECT u.ticker, u.isin, u.fund_house, u.etf_name,\n    u.theme, u.linked_sector, u.linked_in"}
+{"ts":"2026-05-27T14:51:20Z","kind":"supabase_sql_executed","sql_preview":"CREATE UNIQUE INDEX IF NOT EXISTS uix_mv_etf_list_v6_ticker ON atlas.mv_etf_list_v6 (ticker);\nREFRESH MATERIALIZED VIEW atlas.mv_etf_list_v6;"}
+{"ts":"2026-05-27T14:51:26Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  COUNT(*) AS total,\n  COUNT(action) AS has_action,\n  COUNT(composite_score) AS has_composite,\n  COUNT(rs_3m) AS has_rs3m,\n  COUNT(premium_bps) AS has_premium,\n  COUNT(adv_20d_inr) AS has_adv,\n  COUNT(cell_id) AS firing_open_cells,\n  COUNT(scatter_zone) AS has_zone\nFROM atlas.mv_etf_list_v6;\nSELECT action, scatter_zone, COUNT(*) AS n\nFROM atlas.mv_etf_list_v6 GROUP BY 1, 2 ORDER BY 1, 2;"}
+{"ts":"2026-05-27T14:51:37Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  COUNT(*) AS total,\n  COUNT(action) AS has_action,\n  COUNT(composite_score) AS has_composite,\n  COUNT(rs_3m) AS has_rs3m,\n  COUNT(premium_bps) AS has_premium,\n  COUNT(adv_20d_inr) AS has_adv,\n  COUNT(cell_id) AS firing_open_cells,\n  COUNT(scatter_zone) AS has_zone,\n  COUNT(matrix_conviction_score) AS has_mcs,\n  COUNT(rs_state) AS has_rsstate\nFROM atlas.mv_etf_list_v6;"}
+{
+  "ts": "2026-05-27T14:51:55Z",
+  "prev": "14bc14ef2f698d03",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/107_mv_etf_list_v6.py",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-27T14:52:05Z","kind":"supabase_sql_executed","sql_preview":"DROP MATERIALIZED VIEW IF EXISTS atlas.mv_etf_list_v6;"}
+{"ts":"2026-05-27T14:52:43Z","kind":"supabase_sql_executed","sql_preview":"CREATE MATERIALIZED VIEW IF NOT EXISTS atlas.mv_etf_list_v6 AS\nWITH\nlatest_scorecard AS (SELECT MAX(snapshot_date) AS d FROM atlas.atlas_etf_scorecard),\nlatest_metrics AS (SELECT MAX(date) AS d FROM atlas.atlas_etf_metrics_daily),\nlatest_states AS (SELECT MAX(date) AS d FROM atlas.atlas_etf_states_daily),\nlatest_decisions AS (SELECT MAX(date) AS d FROM atlas.atlas_etf_decisions_daily),\nactive_etfs AS (\n  SELECT u.ticker, u.isin, u.fund_house, u.etf_name,\n    u.theme, u.linked_sector, u.linked_in"}
+{"ts":"2026-05-27T14:52:54Z","kind":"supabase_sql_executed","sql_preview":"CREATE UNIQUE INDEX IF NOT EXISTS uix_mv_etf_list_v6_ticker ON atlas.mv_etf_list_v6 (ticker);\nREFRESH MATERIALIZED VIEW atlas.mv_etf_list_v6;\nSELECT cron.schedule('mv_etf_list_v6_nightly', '35 15 * * *',\n  $$REFRESH MATERIALIZED VIEW CONCURRENTLY atlas.mv_etf_list_v6;$$);\nUPDATE alembic_version SET version_num = '107';\nSELECT scatter_zone, COUNT(*) FROM atlas.mv_etf_list_v6 GROUP BY 1 ORDER BY 1;"}
+{"ts":"2026-05-27T14:53:23Z","kind":"supabase_sql_executed","sql_preview":"SELECT table_name FROM information_schema.tables\nWHERE table_schema='atlas' AND (table_name LIKE '%holding%' OR table_name LIKE '%composition%' OR table_name LIKE '%constituent%')\nORDER BY table_name;"}
+{"ts":"2026-05-27T14:53:29Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name FROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_fund_holdings_changes' ORDER BY ordinal_position;\nSELECT COUNT(*) AS rows FROM atlas.atlas_fund_holdings_changes;"}
+{"ts":"2026-05-27T14:53:43Z","kind":"supabase_sql_executed","sql_preview":"SELECT table_name FROM information_schema.tables WHERE table_schema='atlas' AND (table_name LIKE '%te_%' OR table_name LIKE '%tracking%' OR table_name LIKE '%nav%') ORDER BY table_name;"}
+{"ts":"2026-05-27T14:53:49Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name FROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_etf_te_bands' ORDER BY ordinal_position;\nSELECT COUNT(*) AS rows FROM atlas.atlas_etf_te_bands;"}
+{
+  "ts": "2026-05-27T14:54:44Z",
+  "prev": "c57c60126d7ca1c0",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/108_mv_etf_deepdive.py",
+  "lines_changed": 253,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-27T14:55:23Z","kind":"supabase_sql_executed","sql_preview":"CREATE MATERIALIZED VIEW IF NOT EXISTS atlas.mv_etf_deepdive AS\nWITH\nlatest_scorecard AS (SELECT MAX(snapshot_date) AS d FROM atlas.atlas_etf_scorecard),\nlatest_metrics  AS (SELECT MAX(date) AS d FROM atlas.atlas_etf_metrics_daily),\nlatest_states   AS (SELECT MAX(date) AS d FROM atlas.atlas_etf_states_daily),\nlatest_decisions AS (SELECT MAX(date) AS d FROM atlas.atlas_etf_decisions_daily),\nlatest_ohlcv    AS (SELECT MAX(date) AS d FROM atlas.atlas_v6_clean_ohlcv),\nactive_etfs AS (\n  SELECT u.tic"}
+{"ts":"2026-05-27T14:56:47Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  EXISTS (SELECT 1 FROM pg_matviews WHERE schemaname='atlas' AND matviewname='mv_etf_deepdive') AS mv_exists,\n  (SELECT COUNT(*) FROM atlas.mv_etf_deepdive) AS row_count,\n  (SELECT COUNT(price_180d) FROM atlas.mv_etf_deepdive) AS has_price180d,\n  (SELECT COUNT(peer_set) FROM atlas.mv_etf_deepdive) AS has_peer_set;"}
+{"ts":"2026-05-27T14:57:59Z","kind":"supabase_sql_executed","sql_preview":"SELECT ticker FROM atlas.atlas_universe_etfs WHERE effective_to IS NULL ORDER BY ticker LIMIT 8;"}
+{"ts":"2026-05-27T14:58:11Z","kind":"supabase_sql_executed","sql_preview":"SELECT COUNT(*) AS rows_etf, MAX(date) AS last_date\nFROM atlas.atlas_v6_clean_ohlcv WHERE symbol IN ('GOLDBEES','BANKBEES','NIFTYBEES','CPSEETF');"}
+{"ts":"2026-05-27T14:58:16Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name, data_type FROM information_schema.columns\nWHERE table_schema='public' AND table_name='de_etf_ohlcv' ORDER BY ordinal_position;"}
+{"ts":"2026-05-27T14:58:21Z","kind":"supabase_sql_executed","sql_preview":"SELECT MAX(date) AS last_date, COUNT(DISTINCT ticker) AS unique_tickers\nFROM public.de_etf_ohlcv;"}
+{"ts":"2026-05-27T14:58:30Z","kind":"supabase_sql_executed","sql_preview":"DROP MATERIALIZED VIEW IF EXISTS atlas.mv_etf_deepdive;"}
+{
+  "ts": "2026-05-27T14:58:36Z",
+  "prev": "c42bd367fb22b44b",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/108_mv_etf_deepdive.py",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T14:58:42Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/108_mv_etf_deepdive.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T14:58:50Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/108_mv_etf_deepdive.py",
+  "lines_changed": 10,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-27T14:59:29Z","kind":"supabase_sql_executed","sql_preview":"CREATE MATERIALIZED VIEW IF NOT EXISTS atlas.mv_etf_deepdive AS\nWITH\nlatest_scorecard AS (SELECT MAX(snapshot_date) AS d FROM atlas.atlas_etf_scorecard),\nlatest_metrics  AS (SELECT MAX(date) AS d FROM atlas.atlas_etf_metrics_daily),\nlatest_states   AS (SELECT MAX(date) AS d FROM atlas.atlas_etf_states_daily),\nlatest_decisions AS (SELECT MAX(date) AS d FROM atlas.atlas_etf_decisions_daily),\nlatest_ohlcv    AS (SELECT MAX(date) AS d FROM public.de_etf_ohlcv),\nactive_etfs AS (\n  SELECT u.ticker, u."}
+{"ts":"2026-05-27T14:59:38Z","kind":"supabase_sql_executed","sql_preview":"CREATE UNIQUE INDEX IF NOT EXISTS uix_mv_etf_deepdive_ticker ON atlas.mv_etf_deepdive (ticker);\nREFRESH MATERIALIZED VIEW atlas.mv_etf_deepdive;"}
+{"ts":"2026-05-27T14:59:44Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  COUNT(*) AS total,\n  COUNT(price_180d) AS has_price180d,\n  COUNT(peer_set) AS has_peer_set,\n  COUNT(composite_score) AS has_composite,\n  COUNT(action) AS has_action,\n  jsonb_array_length((SELECT price_180d FROM atlas.mv_etf_deepdive WHERE ticker = 'GOLDBEES' LIMIT 1)) AS goldbees_price_days\nFROM atlas.mv_etf_deepdive;"}
+{"ts":"2026-05-27T14:59:54Z","kind":"supabase_sql_executed","sql_preview":"SELECT cron.schedule('mv_etf_deepdive_nightly', '40 15 * * *',\n  $$REFRESH MATERIALIZED VIEW CONCURRENTLY atlas.mv_etf_deepdive;$$);\nUPDATE alembic_version SET version_num = '108';\nSELECT version_num FROM alembic_version;"}
+{
+  "ts": "2026-05-27T15:01:27Z",
+  "prev": "c9fe6366907783f5",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/amfi_etf_inav_ingest.py",
+  "lines_changed": 233,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-27T15:02:04Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  COUNT(*) AS total,\n  COUNT(isin) AS with_isin,\n  COUNT(DISTINCT isin) AS unique_isins\nFROM atlas.atlas_universe_etfs WHERE effective_to IS NULL;\nSELECT ticker, isin FROM atlas.atlas_universe_etfs WHERE effective_to IS NULL LIMIT 8;"}
+{"ts":"2026-05-27T15:02:11Z","kind":"supabase_sql_executed","sql_preview":"SELECT COUNT(ticker) AS total, COUNT(isin) AS has_isin\nFROM atlas.atlas_etf_scorecard WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM atlas.atlas_etf_scorecard);\nSELECT ticker, isin FROM atlas.atlas_etf_scorecard WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM atlas.atlas_etf_scorecard) LIMIT 5;"}
+{"ts":"2026-05-27T15:02:26Z","kind":"supabase_sql_executed","sql_preview":"SELECT u.ticker, di.isin, di.exchange, di.series\nFROM atlas.atlas_universe_etfs u\nLEFT JOIN public.de_instrument di ON di.symbol = u.ticker\nWHERE u.effective_to IS NULL\nORDER BY u.ticker LIMIT 10;\nSELECT COUNT(*) AS matched, COUNT(di.isin) AS has_isin\nFROM atlas.atlas_universe_etfs u\nLEFT JOIN public.de_instrument di ON di.symbol = u.ticker\nWHERE u.effective_to IS NULL;"}
+{"ts":"2026-05-27T15:02:37Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='de_global_instrument_master' ORDER BY ordinal_position;"}
+{
+  "ts": "2026-05-27T15:03:27Z",
+  "prev": "7147d18e335e3eae",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/backfill_etf_isin_from_nse.py",
+  "lines_changed": 136,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T15:04:28Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/amfi_etf_inav_ingest.py",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T15:04:49Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/amfi_etf_inav_ingest.py",
+  "lines_changed": 47,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T15:05:00Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/amfi_etf_inav_ingest.py",
+  "lines_changed": 18,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T15:05:09Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/amfi_etf_inav_ingest.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T15:05:37Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/amfi_etf_inav_ingest.py",
+  "lines_changed": 36,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-27T15:05:58Z","kind":"supabase_sql_executed","sql_preview":"REFRESH MATERIALIZED VIEW atlas.mv_etf_list_v6;\nREFRESH MATERIALIZED VIEW atlas.mv_etf_deepdive;\nSELECT\n  scatter_zone,\n  COUNT(*) AS n,\n  ROUND(AVG(premium_bps)::numeric, 2) AS avg_premium_bps,\n  MIN(premium_bps) AS min_p,\n  MAX(premium_bps) AS max_p\nFROM atlas.mv_etf_list_v6 GROUP BY 1 ORDER BY 1;"}
+{"ts":"2026-05-27T15:06:07Z","kind":"supabase_sql_executed","sql_preview":"SELECT ticker, premium_bps, adv_20d_inr FROM atlas.mv_etf_list_v6\nWHERE scatter_zone = 'premium_outlier' OR ABS(premium_bps) > 100 ORDER BY ABS(premium_bps) DESC;"}
+{"ts":"2026-05-27T15:06:32Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  schemaname || '.' || matviewname AS mv,\n  pg_size_pretty(pg_total_relation_size(format('%I.%I', schemaname, matviewname)::regclass)) AS size,\n  ispopulated\nFROM pg_matviews\nWHERE schemaname = 'atlas'\nORDER BY matviewname;"}
+{"ts":"2026-05-27T15:06:54Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name FROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_macro_daily' ORDER BY ordinal_position;"}
+{"ts":"2026-05-27T15:07:03Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  MAX(date) AS macro_last,\n  COUNT(*) FILTER (WHERE date >= '2026-05-01') AS rows_may,\n  COUNT(usdinr) FILTER (WHERE date >= '2026-05-01') AS has_usdinr,\n  COUNT(dxy) FILTER (WHERE date >= '2026-05-01') AS has_dxy,\n  COUNT(us_10y_yield) FILTER (WHERE date >= '2026-05-01') AS has_us10y,\n  COUNT(brent_inr) FILTER (WHERE date >= '2026-05-01') AS has_brent,\n  COUNT(india_10y_yield) FILTER (WHERE date >= '2026-05-01') AS has_india10y,\n  COUNT(cpi_yoy) FILTER (WHERE date >= '2026-05-01') AS has"}
+{
+  "ts": "2026-05-27T15:21:52Z",
+  "prev": "121072ef29d60e83",
+  "tool": "Write",
+  "file": "/Users/nimishshah/.claude/projects/-Users-nimishshah-Documents-GitHub-atlas-os/memory/feedback_data_source_policy.md",
+  "lines_changed": 31,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T15:31:09Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/infra/crons/atlas_v6_nightly_schedule.md",
+  "lines_changed": 143,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T15:34:30Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/109_atlas_data_health.py",
+  "lines_changed": 81,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-27T15:34:45Z","kind":"supabase_sql_executed","sql_preview":"CREATE TABLE IF NOT EXISTS atlas.atlas_data_health (\n  check_date            date          NOT NULL,\n  schema_name           text          NOT NULL,\n  table_name            text          NOT NULL,\n  category              text          NOT NULL,\n  source                text,\n  last_data_date        date,\n  expected_data_date    date,\n  freshness_days_lag    integer,\n  row_count             bigint,\n  null_rate_critical    numeric(6, 4),\n  size_bytes            bigint,\n  status                text "}
+{
+  "ts": "2026-05-27T15:36:04Z",
+  "prev": "ace4ccefa24a0b4b",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/atlas_health_check.py",
+  "lines_changed": 664,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T15:36:12Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/atlas_health_check.py",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T15:37:00Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/atlas_health_check.py",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-27T15:37:53Z","kind":"supabase_sql_executed","sql_preview":"SELECT status, COUNT(*) AS n FROM atlas.atlas_data_health\nWHERE check_date = CURRENT_DATE GROUP BY status ORDER BY status;\nSELECT table_name, status, freshness_days_lag, last_data_date, notes\nFROM atlas.atlas_data_health WHERE check_date = CURRENT_DATE AND status = 'RED'\nORDER BY freshness_days_lag DESC NULLS LAST, table_name;"}
+{"ts":"2026-05-27T15:41:09Z","kind":"supabase_sql_executed","sql_preview":"SELECT indexname, indexdef\nFROM pg_indexes\nWHERE schemaname='public' AND tablename LIKE 'de_equity_ohlcv%'\n  AND (indexdef LIKE '%instrument_id%' AND indexdef LIKE '%date%')\nORDER BY tablename, indexname\nLIMIT 10;\nSELECT current_setting('statement_timeout');"}
+{"ts":"2026-05-27T15:41:16Z","kind":"supabase_sql_executed","sql_preview":"SELECT tablename, indexname, indexdef\nFROM pg_indexes\nWHERE schemaname='public' AND tablename = 'de_equity_ohlcv_y2024'\nORDER BY indexname;"}
+{
+  "ts": "2026-05-27T15:45:54Z",
+  "prev": "61235686744c2a9a",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/atlas_health_check.py",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
