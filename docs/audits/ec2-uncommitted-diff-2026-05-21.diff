@@ -1,0 +1,975 @@
+diff --git a/atlas/__init__.py b/atlas/__init__.py
+index f8c3946..e5c2a99 100644
+--- a/atlas/__init__.py
++++ b/atlas/__init__.py
+@@ -12,4 +12,32 @@ The package is laid out per architecture Section 11:
+ - ``atlas.api``       — Thin FastAPI serving layer (post-M5)
+ """
+ 
++from __future__ import annotations
++
++from datetime import datetime
++from zoneinfo import ZoneInfo
++
++import structlog
++
+ __version__ = "0.1.0"
++
++_IST = ZoneInfo("Asia/Kolkata")
++
++
++def _ist_timestamper(_logger, _name, event_dict):
++    """structlog processor: emit timestamps in Asia/Kolkata regardless of system TZ.
++
++    Internal logic (date.today(), cron scheduling, DB UTC storage) is untouched;
++    only the user-visible log line is rendered in IST.
++    """
++    event_dict["timestamp"] = datetime.now(_IST).strftime("%Y-%m-%d %H:%M:%S IST")
++    return event_dict
++
++
++structlog.configure(
++    processors=[
++        structlog.processors.add_log_level,
++        _ist_timestamper,
++        structlog.dev.ConsoleRenderer(),
++    ],
++)
+diff --git a/atlas/api/auth.py b/atlas/api/auth.py
+index fa0f4a5..4b97840 100644
+--- a/atlas/api/auth.py
++++ b/atlas/api/auth.py
+@@ -40,16 +40,18 @@ _EXEMPT_PREFIXES = (
+ 
+ # Exact-path exemptions — use when startswith would over-match siblings.
+ # /api/v1/tv/signal is exempt (TV webhooks can't send Bearer tokens; validated by body secret).
+-# /api/v1/tv/generate-report is exempt (validated by X-Internal-Secret header).
+-# /api/v1/tv/signals and /api/v1/tv/signals/{id} remain under JWT auth.
++# /api/v1/tv/screenshot is exempt (validates X-Internal-Secret internally).
++# /api/v1/tv/generate-report is exempt (validates X-Internal-Secret internally).
++# /api/v1/tv/signals and /api/v1/tv/signals/{id} remain under service-token auth.
+ _EXEMPT_EXACT: frozenset[str] = frozenset(
+     {
+         "/api/v1/tv/signal",
++        "/api/v1/tv/screenshot",
+         "/api/v1/tv/generate-report",
+     }
+ )
+ 
+-_SERVICE_TOKEN_PREFIXES = ("/api/v1/intraday",)
++_SERVICE_TOKEN_PREFIXES = ("/api/v1/intraday", "/api/v1/tv/signals")
+ 
+ 
+ class _User:
+diff --git a/atlas/api/tv_signals.py b/atlas/api/tv_signals.py
+index 5e2a6d0..dcd4341 100644
+--- a/atlas/api/tv_signals.py
++++ b/atlas/api/tv_signals.py
+@@ -1,4 +1,3 @@
+-# pragma: finance-critical
+ """TradingView webhook receiver and signal report feed.
+ 
+ Endpoints:
+@@ -10,11 +9,14 @@ Endpoints:
+ 
+ from __future__ import annotations
+ 
++import os
++import pathlib
+ from datetime import UTC, datetime, timedelta
+ from decimal import Decimal
+ 
+ import structlog
+ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
++from fastapi.responses import FileResponse
+ from sqlalchemy import text
+ 
+ from atlas.config import Config
+@@ -131,6 +133,36 @@ async def get_signal_report(report_id: str) -> dict:
+     return dict(row._mapping)
+ 
+ 
++@router.get("/screenshot")
++async def serve_screenshot(
++    request: Request,
++    path: str = Query(..., description="Absolute path to PNG file on this server"),
++) -> FileResponse:
++    """Serve a signal screenshot PNG from the local filesystem.
++
++    Protected by the internal secret header — only the frontend proxy calls this.
++    The ``path`` parameter must fall within SIGNAL_SCREENSHOT_DIR.
++    """
++    secret = request.headers.get("X-Internal-Secret", "")
++    if secret != Config.ATLAS_INTERNAL_SECRET:
++        raise HTTPException(status_code=401, detail="Unauthorized")
++
++    allowed_base = pathlib.Path(
++        os.environ.get("SIGNAL_SCREENSHOT_DIR", "/data/signals/screenshots")
++    ).resolve()
++    resolved = pathlib.Path(path).resolve()
++
++    if not str(resolved).startswith(str(allowed_base)):
++        raise HTTPException(status_code=403, detail="Forbidden path")
++
++    if not resolved.is_file():
++        raise HTTPException(status_code=404, detail="Screenshot not found")
++
++    return FileResponse(
++        str(resolved), media_type="image/png", headers={"Cache-Control": "public, max-age=86400"}
++    )
++
++
+ @router.post("/generate-report")
+ async def generate_report_adhoc(
+     body: dict,
+diff --git a/atlas/compute/stocks.py b/atlas/compute/stocks.py
+index 25e7baf..f885e95 100644
+--- a/atlas/compute/stocks.py
++++ b/atlas/compute/stocks.py
+@@ -169,7 +169,9 @@ def _load_ohlcv(
+     with open_compute_session(engine) as conn:
+         df = pd.read_sql(
+             """
+-            SELECT instrument_id, date, open, high, low, close, volume
++            SELECT instrument_id, date, open, high, low,
++                   COALESCE(close_adj, close) AS close,
++                   volume
+             FROM public.de_equity_ohlcv
+             WHERE instrument_id = ANY(%(ids)s)
+               AND date BETWEEN %(start)s AND %(end)s
+diff --git a/atlas/db.py b/atlas/db.py
+index 3c07d65..5ce28ac 100644
+--- a/atlas/db.py
++++ b/atlas/db.py
+@@ -10,7 +10,7 @@ from decimal import Decimal
+ from functools import lru_cache
+ 
+ import structlog
+-from sqlalchemy import create_engine, text
++from sqlalchemy import create_engine, event, text
+ from sqlalchemy.engine import Engine
+ 
+ from atlas.config import Config
+@@ -24,6 +24,10 @@ def get_engine() -> Engine:
+ 
+     Cached so repeated callers share one pool. ``pool_pre_ping`` recovers from
+     Supabase transient drops without surfacing them to callers.
++
++    Every new connection is set to Asia/Kolkata timezone — so TIMESTAMPTZ
++    columns display in IST when SELECTed. Internal storage stays UTC; this only
++    affects the wire-format the client sees.
+     """
+     db_url = Config.assert_db_url()
+     engine = create_engine(
+@@ -31,12 +35,18 @@ def get_engine() -> Engine:
+         pool_size=Config.POOL_SIZE,
+         max_overflow=Config.MAX_OVERFLOW,
+         pool_pre_ping=True,
+-        # echo=False  — never log raw SQL in production; structlog handles audit
+     )
++
++    @event.listens_for(engine, "connect")
++    def _set_session_timezone(dbapi_connection, _connection_record):
++        with dbapi_connection.cursor() as cur:
++            cur.execute("SET TIME ZONE 'Asia/Kolkata'")
++
+     log.info(
+         "engine_created",
+         pool_size=Config.POOL_SIZE,
+         max_overflow=Config.MAX_OVERFLOW,
++        session_timezone="Asia/Kolkata",
+     )
+     return engine
+ 
+diff --git a/atlas/intelligence/conviction/tier_assignment.py b/atlas/intelligence/conviction/tier_assignment.py
+index 9b673ef..e79b3ef 100644
+--- a/atlas/intelligence/conviction/tier_assignment.py
++++ b/atlas/intelligence/conviction/tier_assignment.py
+@@ -42,12 +42,12 @@ def assign_tier_from_rank(rank: int) -> str:
+ 
+ _ADV_SQL = text("""
+     SELECT instrument_id::text AS instrument_id,
+-           AVG(volume * close_adj) AS adv_20d
++           AVG(volume * COALESCE(close_adj, close)) AS adv_20d
+     FROM public.de_equity_ohlcv
+     WHERE date BETWEEN :window_start AND :window_end
+-      AND data_status = 'validated'
++      AND data_status IN ('raw','validated')
+       AND volume > 0
+-      AND close_adj > 0
++      AND COALESCE(close_adj, close) > 0
+     GROUP BY instrument_id
+     HAVING COUNT(*) >= 15
+ """)
+diff --git a/atlas/intelligence/validation/forward_returns.py b/atlas/intelligence/validation/forward_returns.py
+index 3c2e6ac..9fce1f4 100644
+--- a/atlas/intelligence/validation/forward_returns.py
++++ b/atlas/intelligence/validation/forward_returns.py
+@@ -23,16 +23,21 @@ from sqlalchemy.engine import Engine
+ 
+ log = structlog.get_logger()
+ 
+-# Fetch adjusted close from the OHLCV view. Only validated rows to avoid
+-# bad data from restatements or pipeline failures.
++# Fetch adjusted close from the OHLCV view.
++# Accepts ``data_status IN ('raw','validated')`` because JIP's validation step
++# sometimes lags or fails — without this, 100% of rows are excluded.
++# Falls back to ``close`` when ``close_adj`` is NULL (JIP adjustment-factors
++# pipeline is currently not populating close_adj). Identical pattern to
++# ``atlas.intelligence.conviction.tier_assignment``.
+ _PRICE_SQL = """
+-    SELECT date, instrument_id::text, close_adj
++    SELECT date,
++           instrument_id::text,
++           COALESCE(close_adj, close) AS close_adj
+     FROM public.de_equity_ohlcv
+     WHERE date >= :start_date
+       AND date <= :end_date
+-      AND data_status = 'validated'
+-      AND close_adj IS NOT NULL
+-      AND close_adj > 0
++      AND data_status IN ('raw', 'validated')
++      AND COALESCE(close_adj, close) > 0
+     ORDER BY date
+ """
+ 
+diff --git a/atlas/signals/narrative.py b/atlas/signals/narrative.py
+index e28dc39..419c76f 100644
+--- a/atlas/signals/narrative.py
++++ b/atlas/signals/narrative.py
+@@ -9,90 +9,210 @@ import structlog
+ log = structlog.get_logger()
+ 
+ _MODEL = "llama-3.3-70b-versatile"
+-_MAX_TOKENS = 300
+-
+-_PROMPT_TEMPLATE = (
+-    "You are an experienced equity analyst writing a one-paragraph investment brief.\n"
+-    'Be direct and opinionated. Lead with a clear verdict ("The setup appears bullish"'
+-    ' or "This chart is flashing a warning").\n'
+-    "Explain what the technical trigger means in the context of the stock's"
+-    " quantitative profile.\n"
+-    "Do not hedge excessively. Reference specific numbers. 3-4 sentences maximum.\n"
+-    "\n"
+-    "Stock: {ticker} ({company_name})\n"
+-    "Trigger: {condition_label}\n"
+-    "{conviction_line}\n"
+-    "{cts_line}\n"
+-    "{rs_line}\n"
+-    "Sector: {sector} — {sector_regime}\n"
+-    "Market: {market_regime}\n"
+-    "RSI(14): {rsi_14:.1f}\n"
+-    "MACD: {macd_signal}\n"
+-    "EMA Alignment: {ema_alignment}\n"
+-    "HH/HL State: {hh_hl_state}\n"
+-    "Volume vs 20-day avg: {volume_vs_avg:.1f}x\n"
+-    "Performance vs Nifty (YTD): {perf_vs_nifty_ytd:+.1f}%"
+-)
++_MAX_TOKENS = 900
++
++_SYSTEM = """\
++You are a senior equity analyst at a top-tier institutional research firm. You write signal notes
++that portfolio managers read in 90 seconds and immediately understand the full setup.
++
++STYLE (non-negotiable):
++• Open with a bold, specific verdict using **markdown bold**: "**The setup in TICKER is
++unambiguously bullish.**" or "**This is a textbook stage-2 breakout with Atlas confirmation.**"
++• Name the chart pattern explicitly using institutional vocabulary: inverse head & shoulders,
++cup-and-handle, false breakdown / shake-out, higher-high/higher-low uptrend confirmation,
++stage-2 breakout, stage-3 topping, ascending triangle, bull flag, saucer base, three-weeks-tight.
++• Cite specific numbers assertively. Not "strong RS" → "RS at the 94th percentile of the Nifty 500."
++• Cross-reference the TV trigger with Atlas intelligence in every note.
++If dual-confirmed: say both layers agree and why.
++If TV-only: name the gap (e.g., "conviction below the 6/10 threshold") and what closes it.
++• Integrate ALL available metrics: RSI, MACD, EMA stack, HH/HL structure, volume ratio,
++perf vs Nifty, CTS stage, conviction score, market regime, sector regime. Do not skip metrics.
++• State a forward expectation with a specific price structure or condition:
++"A weekly close above the prior swing high would confirm the larger base breakout."
++"Watch for a volume expansion on the next up-bar to validate the move."
++• Never hedge without resolving: "may" and "could" only if immediately followed by the
++specific condition that resolves the uncertainty.
++
++FORMAT: Three substantive paragraphs separated by blank lines, ~250 words total.
++Use **markdown bold** for key numbers and verdicts. No bullet points.
++  Para 1: Pattern diagnosis + TV trigger + technical snapshot (RSI, MACD, EMA, volume).
++  Para 2: Atlas intelligence cross-reference (conviction, CTS stage, RS rank, regime context,
++           sector regime, performance vs Nifty). Leave nothing out.
++  Para 3: Forward expectation — what happens next, specific price conditions that confirm,
++           and what invalidates the thesis.
++
++FIELD INTERPRETATIONS (use these translations in your prose):
++ema_alignment:
++  all_bullish → "price above the 20/50/200-day EMA stack — textbook stage-2 alignment"
++  bullish → "price above the 50 and 200-day EMAs, intermediate trend intact"
++  mixed → "EMAs not yet aligned — pending confirmation"
++  bearish / all_bearish → "price below the EMA stack — distribution phase"
++
++hh_hl_state:
++  confirmed_uptrend / HH+HL → "confirmed higher-high/higher-low uptrend structure on daily bars"
++  neutral / mixed → "swing structure not yet resolved — watch for the next HH"
++  confirmed_downtrend / LL+LH → "lower-low/lower-high downtrend structure — distribution"
++
++macd_signal:
++  bullish_cross_above_zero → "MACD bullish crossover above zero — momentum firmly net positive"
++  bullish_cross → "MACD bullish crossover — momentum inflecting upward"
++  bearish_cross → "MACD bearish crossover — momentum rolling over"
++  bullish / positive → "MACD positive — underlying bid present"
++  neutral → "MACD near zero — momentum ambiguous"
++
++cts_state (pre-translated to label before being passed to you):
++  "CTS Stage 1 — early accumulation" → high risk/reward entry zone, patient accumulation area
++  "CTS Stage 2 — mid-cycle" → institutional accumulation well underway, price action confirming
++  "CTS Stage 3 — momentum phase" → late-cycle momentum, tight stops warranted
++  "CTS Stage 4 — distribution / avoid" → distribution underway — bearish divergence from
++    TV buy trigger; flag this conflict explicitly
++  not available → CTS data unavailable, do not fabricate CTS context
++
++confirmation_level:
++  dual → "Atlas dual-confirmed: the quantitative layer agrees with the TV trigger"
++  tv_only → "TV trigger only — not yet Atlas-dual-confirmed; conviction or RS needs to strengthen"
++
++RS percentile:
++  ≥90 → "top-decile RS — the stock is leading the market"
++  ≥75 → "top-quartile RS — clear market leadership"
++  ≥60 → "above-median RS — modest relative strength"
++  <60 → "below-median RS — relative underperformer"
++
++conviction_score (displayed 0–10, stored as 0–1 fraction × 10):
++  ≥8 → "high-conviction (industry-grade)"
++  ≥6 → "moderate-conviction"
++  ≥4 → "low-conviction"
++  <4 → "sub-threshold conviction — do not overweight the signal"
++
++RS percentile (displayed 0–100):
++  ≥90 → "top-decile RS — the stock is leading the market"
++  ≥75 → "top-quartile RS — clear market leadership"
++  ≥60 → "above-median RS — modest relative strength"
++  <60 → "below-median RS — relative underperformer"
++
++conviction_quality field:
++  "industry_grade" → add "(industry-grade)" to conviction description
++  "baseline" → baseline conviction model
++"""
++
++_USER_TEMPLATE = """\
++Generate a signal note for the following setup:
++
++INSTRUMENT: {ticker} ({company_name}) — {exchange}
++TRIGGER: {condition_label}
++CONFIRMATION: {confirmation_level}
++VERDICT: {verdict}
++
++--- ATLAS INTELLIGENCE ---
++Conviction: {conviction_score_str}
++CTS State: {cts_state_str}
++RS Rank: {rs_rank_str}
++Market Regime: {market_regime}
++Sector ({sector}): {sector_regime}
++
++--- TECHNICAL SNAPSHOT ---
++RSI(14): {rsi_14:.1f}
++MACD: {macd_signal}
++EMA Alignment: {ema_alignment}
++Structure: {hh_hl_state}
++Volume vs 20d avg: {volume_vs_avg:.1f}×
++
++--- PERFORMANCE ---
++1M: {perf_1m}  |  3M: {perf_3m}  |  6M: {perf_6m}  |  YTD: {perf_ytd}
++vs Nifty 1M: {perf_vs_nifty_1m}  |  vs Nifty YTD: {perf_vs_nifty_ytd}
++"""
++
++
++def _fmt_pct(v: Any, decimals: int = 1) -> str:
++    if v is None:
++        return "n/a"
++    try:
++        n = float(v)
++        return f"{n:+.{decimals}f}%"
++    except (TypeError, ValueError):
++        return "n/a"
+ 
+ 
+ def _build_prompt(ctx: dict) -> str:
+-    conviction_line = (
+-        f"Conviction: {ctx['conviction_score']}/10" f" ({ctx.get('conviction_trend', 'stable')})"
+-        if ctx.get("conviction_score") is not None
+-        else "Conviction: not available"
+-    )
+-    cts_line = (
+-        f"CTS State: {ctx['cts_state']}" if ctx.get("cts_state") else "CTS State: not available"
+-    )
+-    rs_line = (
+-        f"RS Rank: #{ctx['rs_rank']} of {ctx['rs_rank_total']}"
+-        f" ({ctx['rs_percentile']:.1f}th percentile)"
+-        if ctx.get("rs_rank") is not None
+-        else "RS Rank: not available"
+-    )
+-    return _PROMPT_TEMPLATE.format(
++    # conviction_score is stored 0–1; display as 0–10
++    conviction_score = ctx.get("conviction_score")
++    conviction_quality = ctx.get(
++        "conviction_trend", ""
++    )  # field is confidence_label: "industry_grade"/"baseline"
++    if conviction_score is not None:
++        score_10 = float(conviction_score) * 10
++        quality_str = f" ({conviction_quality})" if conviction_quality else ""
++        conviction_score_str = f"{score_10:.1f}/10{quality_str}"
++    else:
++        conviction_score_str = "not available"
++
++    cts_state = ctx.get("cts_state")
++    cts_state_str = cts_state if cts_state else "not available"
++
++    # rs_percentile is stored 0–1; display as 0–100
++    rs_rank = ctx.get("rs_rank")
++    rs_rank_total = ctx.get("rs_rank_total")
++    rs_percentile = ctx.get("rs_percentile")
++    if rs_rank is not None and rs_percentile is not None:
++        pct_100 = float(rs_percentile) * 100
++        total_str = f" of {rs_rank_total}" if rs_rank_total else ""
++        rs_rank_str = f"#{rs_rank}{total_str} ({pct_100:.0f}th percentile)"
++    elif rs_percentile is not None:
++        pct_100 = float(rs_percentile) * 100
++        rs_rank_str = f"{pct_100:.0f}th percentile"
++    else:
++        rs_rank_str = "not available"
++
++    return _USER_TEMPLATE.format(
+         ticker=ctx.get("ticker", ""),
+         company_name=ctx.get("company_name", ""),
++        exchange=ctx.get("exchange", "NSE"),
+         condition_label=ctx.get("condition_label", ""),
+-        conviction_line=conviction_line,
+-        cts_line=cts_line,
+-        rs_line=rs_line,
+-        sector=ctx.get("sector", "Unknown"),
+-        sector_regime=ctx.get("sector_regime", "Unknown"),
+-        market_regime=ctx.get("market_regime", "Unknown"),
+-        rsi_14=ctx.get("rsi_14", 50.0),
+-        macd_signal=ctx.get("macd_signal", "neutral"),
+-        ema_alignment=ctx.get("ema_alignment", "mixed"),
+-        hh_hl_state=ctx.get("hh_hl_state", "neutral"),
+-        volume_vs_avg=ctx.get("volume_vs_avg", 1.0),
+-        perf_vs_nifty_ytd=ctx.get("perf_vs_nifty_ytd", 0.0),
++        confirmation_level=ctx.get("confirmation_level", "tv_only"),
++        verdict=ctx.get("verdict", "watch"),
++        conviction_score_str=conviction_score_str,
++        cts_state_str=cts_state_str,
++        rs_rank_str=rs_rank_str,
++        market_regime=ctx.get("market_regime") or "unknown",
++        sector=ctx.get("sector") or "Unknown",
++        sector_regime=ctx.get("sector_regime") or "unknown",
++        rsi_14=float(ctx.get("rsi_14") or 50.0),
++        macd_signal=ctx.get("macd_signal") or "neutral",
++        ema_alignment=ctx.get("ema_alignment") or "mixed",
++        hh_hl_state=ctx.get("hh_hl_state") or "neutral",
++        volume_vs_avg=float(ctx.get("volume_vs_avg") or 1.0),
++        perf_1m=_fmt_pct(ctx.get("perf_1m")),
++        perf_3m=_fmt_pct(ctx.get("perf_3m")),
++        perf_6m=_fmt_pct(ctx.get("perf_6m")),
++        perf_ytd=_fmt_pct(ctx.get("perf_ytd")),
++        perf_vs_nifty_1m=_fmt_pct(ctx.get("perf_vs_nifty_1m")),
++        perf_vs_nifty_ytd=_fmt_pct(ctx.get("perf_vs_nifty_ytd")),
+     )
+ 
+ 
+ def _get_client() -> Any:
+-    """Return an OpenAI-compatible client pointed at Groq's API.
+-
+-    Uses the same pattern as atlas.agents.specialists.base._make_groq_client —
+-    openai SDK with Groq base URL. The groq SDK is not installed; openai is.
+-    """
+     try:
+         from openai import OpenAI
+     except ImportError as e:
+         raise RuntimeError("openai SDK not installed. Run: pip install 'openai>=1.50'") from e
+     api_key = os.environ.get("GROQ_API_KEY", "")
+     if not api_key:
+-        raise RuntimeError("GROQ_API_KEY is not set. Get one at console.groq.com.")
++        raise RuntimeError("GROQ_API_KEY is not set.")
+     return OpenAI(base_url="https://api.groq.com/openai/v1", api_key=api_key)
+ 
+ 
+ async def generate_narrative(ctx: dict) -> str:
+-    prompt = _build_prompt(ctx)
++    user_msg = _build_prompt(ctx)
+     try:
+         client = _get_client()
+         response = client.chat.completions.create(
+             model=_MODEL,
+             max_tokens=_MAX_TOKENS,
+-            messages=[{"role": "user", "content": prompt}],
++            temperature=0.3,
++            messages=[
++                {"role": "system", "content": _SYSTEM},
++                {"role": "user", "content": user_msg},
++            ],
+         )
+         return response.choices[0].message.content.strip()
+     except Exception:
+diff --git a/atlas/signals/processor.py b/atlas/signals/processor.py
+index af6e954..b9aca27 100644
+--- a/atlas/signals/processor.py
++++ b/atlas/signals/processor.py
+@@ -1,6 +1,7 @@
+ # pragma: finance-critical
+ from __future__ import annotations
+ 
++import re
+ from datetime import UTC, datetime
+ from decimal import Decimal
+ from typing import Any
+@@ -11,22 +12,41 @@ from atlas.signals.models import TVSignalPayload
+ 
+ log = structlog.get_logger()
+ 
++# Thresholds in display scale: conviction 0–10, rs_percentile 0–100.
++# DB stores both as 0–1 fractions; callers must scale before passing here.
+ _DUAL_CONFIRM_CONVICTION_MIN = Decimal("6.0")
+ _DUAL_CONFIRM_RS_PERCENTILE_MIN = Decimal("60.0")
+-_DUAL_CONFIRM_CTS_BUY_STATES = frozenset({"BUY Stage 1", "BUY Stage 2", "BUY Stage 3"})
++# CTS stage is 1–4; stages 1–3 = accumulation/momentum (buy); 4 = distribution.
++# Accepts integers OR label strings like "BUY Stage 2" / "CTS Stage 2 — mid-cycle".
++_DUAL_CONFIRM_CTS_BUY_STAGES = frozenset({1, 2, 3})
++_CTS_STAGE_LABELS = {
++    1: "CTS Stage 1 — early accumulation",
++    2: "CTS Stage 2 — mid-cycle",
++    3: "CTS Stage 3 — momentum phase",
++    4: "CTS Stage 4 — distribution / avoid",
++}
++
++
++def _parse_cts_stage(cts_state: str | int | None) -> int | None:
++    if cts_state is None:
++        return None
++    if isinstance(cts_state, int):
++        return cts_state
++    m = re.search(r"\b([1-4])\b", str(cts_state))
++    return int(m.group(1)) if m else None
+ 
+ 
+ def _determine_confirmation_level(
+     tier: int,  # pyright: ignore[reportUnusedParameter] — reserved for per-tier thresholds
+     conviction_score: Decimal | None,
+-    cts_state: str | None,
++    cts_state: str | int | None,
+     rs_percentile: Decimal | None,
+ ) -> str:
+     if conviction_score is None or rs_percentile is None:
+         return "tv_only"
+     conviction_ok = conviction_score >= _DUAL_CONFIRM_CONVICTION_MIN
+     rs_ok = rs_percentile >= _DUAL_CONFIRM_RS_PERCENTILE_MIN
+-    cts_ok = cts_state in _DUAL_CONFIRM_CTS_BUY_STATES if cts_state else False
++    cts_ok = _parse_cts_stage(cts_state) in _DUAL_CONFIRM_CTS_BUY_STAGES
+     if conviction_ok and rs_ok and cts_ok:
+         return "dual"
+     return "tv_only"
+@@ -55,8 +75,8 @@ def _fetch_atlas_intelligence(instrument_id: str, conn: Any) -> dict:
+             "SELECT c.conviction_score, c.confidence_label AS conviction_trend, "
+             "cts.stage AS cts_state, "
+             "s.rs_state, "
+-            "mr.regime_label AS market_regime, "
+-            "ss.rs_state AS sector_regime "
++            "mr.regime_state AS market_regime, "
++            "ss.sector_state AS sector_regime "
+             "FROM atlas.atlas_stock_conviction_daily c "
+             "LEFT JOIN atlas.atlas_cts_signals_daily cts "
+             "  ON cts.instrument_id = c.instrument_id AND cts.date = c.date "
+@@ -64,7 +84,7 @@ def _fetch_atlas_intelligence(instrument_id: str, conn: Any) -> dict:
+             "  ON s.instrument_id = c.instrument_id AND s.date = c.date "
+             "LEFT JOIN atlas.atlas_market_regime_daily mr ON mr.date = c.date "
+             "LEFT JOIN atlas.atlas_sector_states_daily ss "
+-            "  ON ss.sector = ("
++            "  ON ss.sector_name = ("
+             "    SELECT sector FROM atlas.atlas_universe_stocks "
+             "    WHERE instrument_id = c.instrument_id AND effective_to IS NULL LIMIT 1"
+             "  ) AND ss.date = c.date "
+@@ -85,8 +105,10 @@ def _fetch_performance(instrument_id: str, conn: Any) -> dict:
+     row = conn.execute(
+         text(
+             "SELECT ret_1m AS perf_1m, ret_3m AS perf_3m, ret_6m AS perf_6m, "
+-            "ret_ytd AS perf_ytd, ret_vs_benchmark_1m AS perf_vs_nifty_1m, "
+-            "ret_vs_benchmark_ytd AS perf_vs_nifty_ytd "
++            "ret_12m AS perf_ytd, "
++            "rs_1m_nifty500 AS perf_vs_nifty_1m, "
++            "rs_3m_nifty500 AS perf_vs_nifty_ytd, "
++            "rs_pctile_1m AS rs_percentile "
+             "FROM atlas.atlas_stock_metrics_daily "
+             "WHERE instrument_id = :iid "
+             "ORDER BY date DESC LIMIT 1"
+@@ -160,16 +182,28 @@ async def run_signal_pipeline(payload: TVSignalPayload) -> None:
+         meta = _fetch_company_meta(payload.ticker, conn)
+ 
+         conviction_score = intel.get("conviction_score")
+-        cts_state = intel.get("cts_state")
+-        rs_percentile = intel.get("rs_percentile")
+-
++        # cts.stage may be int 1–4 or a label string like "BUY Stage 2"
++        cts_stage_raw = intel.get("cts_state")
++        stage_int = _parse_cts_stage(cts_stage_raw)
++        cts_state = _CTS_STAGE_LABELS.get(stage_int) if stage_int is not None else None
++        rs_percentile = perf.get("rs_percentile")
++
++        # DB stores conviction 0–1 and rs_percentile 0–1; thresholds use display scale.
++        conviction_disp = (
++            Decimal(str(round(float(conviction_score) * 10, 4)))
++            if conviction_score is not None
++            else None
++        )
++        rs_pctile_disp = (
++            Decimal(str(round(float(rs_percentile) * 100, 4)))
++            if rs_percentile is not None
++            else None
++        )
+         confirmation = _determine_confirmation_level(
+             tier=payload.tier,
+-            conviction_score=Decimal(str(conviction_score))
+-            if conviction_score is not None
+-            else None,
+-            cts_state=cts_state,
+-            rs_percentile=Decimal(str(rs_percentile)) if rs_percentile is not None else None,
++            conviction_score=conviction_disp,
++            cts_state=cts_stage_raw,
++            rs_percentile=rs_pctile_disp,
+         )
+ 
+         snap = compute_technical_snapshot(payload.ticker, conn)
+@@ -181,10 +215,14 @@ async def run_signal_pipeline(payload: TVSignalPayload) -> None:
+         layout_id_sector=Config.TV_LAYOUT_ID_VS_SECTOR,
+     )
+ 
++    verdict = _verdict_from_tier(payload.tier)
+     context = {
+         "ticker": payload.ticker,
++        "exchange": payload.exchange,
+         "company_name": meta.get("company_name", payload.ticker),
+         "condition_label": _build_condition_label(payload.code),
++        "confirmation_level": confirmation,
++        "verdict": verdict,
+         "conviction_score": conviction_score,
+         "conviction_trend": intel.get("conviction_trend"),
+         "cts_state": cts_state,
+@@ -199,6 +237,11 @@ async def run_signal_pipeline(payload: TVSignalPayload) -> None:
+         "ema_alignment": snap.ema_alignment,
+         "hh_hl_state": snap.hh_hl_state,
+         "volume_vs_avg": float(snap.volume_vs_avg),
++        "perf_1m": float(perf.get("perf_1m") or 0),
++        "perf_3m": float(perf.get("perf_3m") or 0),
++        "perf_6m": float(perf.get("perf_6m") or 0),
++        "perf_ytd": float(perf.get("perf_ytd") or 0),
++        "perf_vs_nifty_1m": float(perf.get("perf_vs_nifty_1m") or 0),
+         "perf_vs_nifty_ytd": float(perf.get("perf_vs_nifty_ytd") or 0),
+     }
+ 
+@@ -275,7 +318,7 @@ async def run_signal_pipeline(payload: TVSignalPayload) -> None:
+                 "screenshot_weekly": screenshots.get("weekly_path"),
+                 "screenshot_sector": screenshots.get("sector_path"),
+                 "narrative": narrative,
+-                "verdict": _verdict_from_tier(payload.tier),
++                "verdict": verdict,
+             },
+         )
+         report_row = result.fetchone()
+diff --git a/pyproject.toml b/pyproject.toml
+index 1a78a8a..12d4835 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -81,6 +81,7 @@ intelligence = [
+ 
+ optimizer = [
+     "optuna[postgres]>=3.0",
++    "deap>=1.4",
+ ]
+ 
+ crawler = [
+@@ -94,6 +95,9 @@ ui = [
+     "altair>=5.2",
+ ]
+ 
++[project.scripts]
++atlas-lab = "atlas.trading.cli:main"
++
+ [build-system]
+ requires = ["setuptools>=68"]
+ build-backend = "setuptools.build_meta"
+@@ -126,6 +130,7 @@ ignore = [
+ "scripts/**" = ["S101", "E501"]
+ "atlas/validation/m1_data_quality.py" = ["E501"]
+ "atlas/preflight.py" = ["E501"]
++"atlas/trading/genome.py" = ["S311"]  # non-crypto RNG OK for genome seeding
+ 
+ [tool.pyright]
+ pythonVersion = "3.12"
+diff --git a/scripts/compute_conviction.py b/scripts/compute_conviction.py
+index 6907f98..9f65908 100644
+--- a/scripts/compute_conviction.py
++++ b/scripts/compute_conviction.py
+@@ -40,15 +40,35 @@ log = structlog.get_logger()
+ 
+ 
+ def _resolve_default_as_of(engine) -> date | None:
+-    """Pick the most recent date present in BOTH metrics and validated OHLCV."""
++    """Pick the most recent date present in BOTH metrics and ingested OHLCV.
++
++    Accepts ``data_status IN ('raw','validated')`` because JIP's validation step
++    sometimes lags or is missing; consistent with the relaxed filter in
++    ``atlas.intelligence.conviction.tier_assignment`` and
++    ``atlas.intelligence.validation.forward_returns``.
++    """
+     sql = text("""
+         SELECT LEAST(
+           (SELECT MAX(date) FROM atlas.atlas_stock_metrics_daily),
+-          (SELECT MAX(date) FROM public.de_equity_ohlcv WHERE data_status = 'validated')
++          (SELECT MAX(date) FROM public.de_equity_ohlcv WHERE data_status IN ('raw', 'validated'))
+         )
+     """)
+     with engine.connect() as c:
+-        return c.execute(sql).scalar()
++        anchor = c.execute(sql).scalar()
++    # P1-4 guard: warn if the anchor has rolled backward more than 2 days from
++    # today UTC — that's the canary for "M3 silently failed and we're now
++    # recomputing yesterday's data forever".
++    if anchor is not None:
++        from datetime import datetime, timezone
++        lag = (datetime.now(timezone.utc).date() - anchor).days
++        if lag >= 2:
++            log.warning(
++                "conviction_anchor_lag",
++                anchor=str(anchor),
++                lag_days=lag,
++                hint="atlas_stock_metrics_daily or de_equity_ohlcv is stale upstream",
++            )
++    return anchor
+ 
+ 
+ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+diff --git a/scripts/compute_cts_signals.py b/scripts/compute_cts_signals.py
+index 7f1be05..72d9c27 100644
+--- a/scripts/compute_cts_signals.py
++++ b/scripts/compute_cts_signals.py
+@@ -8,7 +8,7 @@ Usage:
+ from __future__ import annotations
+ 
+ import argparse
+-from datetime import date, timedelta
++from datetime import date, datetime, timedelta, timezone
+ 
+ import pandas as pd
+ import structlog
+@@ -72,7 +72,7 @@ def _load_rs_pctile(engine, as_of_date: date) -> pd.DataFrame:
+ 
+ def run(as_of_date: date, *, persist: bool) -> None:
+     engine = get_engine()
+-    thresholds = load_thresholds(engine)
++    thresholds = load_thresholds(engine=engine)
+ 
+     log.info("cts_compute_start", date=str(as_of_date))
+     universe = _load_universe(engine)
+@@ -82,6 +82,15 @@ def run(as_of_date: date, *, persist: bool) -> None:
+     log.info("ohlcv_loaded", rows=len(ohlcv), instruments=ohlcv["instrument_id"].nunique())
+ 
+     rs_pctile = _load_rs_pctile(engine, as_of_date)
++    # P1-3 guard: if rs_pctile is entirely NaN, M3 stocks pipeline failed upstream.
++    # Don't pollute CTS history with garbage (every stock would look like a low-RS underperformer).
++    if rs_pctile["rs_pctile_cross_sector"].dropna().empty:
++        log.error(
++            "rs_pctile_unavailable",
++            as_of_date=str(as_of_date),
++            hint="atlas_stock_metrics_daily has no rs_pctile_3m for this date — upstream M3 failed",
++        )
++        return
+     ohlcv = ohlcv.merge(rs_pctile, on="instrument_id", how="left")
+     ohlcv["rs_pctile_cross_sector"] = ohlcv["rs_pctile_cross_sector"].fillna(0.0)
+ 
+@@ -146,7 +155,7 @@ def _upsert_pivot(engine, df: pd.DataFrame) -> None:
+ 
+ if __name__ == "__main__":
+     parser = argparse.ArgumentParser()
+-    parser.add_argument("--date", default=str(date.today()))
++    parser.add_argument("--date", default=str(datetime.now(timezone.utc).date()))
+     parser.add_argument("--persist", action="store_true")
+     args = parser.parse_args()
+     run(date.fromisoformat(args.date), persist=args.persist)
+diff --git a/scripts/compute_hit_rates.py b/scripts/compute_hit_rates.py
+index fcf3339..a251c66 100644
+--- a/scripts/compute_hit_rates.py
++++ b/scripts/compute_hit_rates.py
+@@ -24,7 +24,7 @@ def _resolve_default_as_of(engine) -> date | None:
+     sql = text("""
+         SELECT LEAST(
+           (SELECT MAX(date) FROM atlas.atlas_stock_metrics_daily),
+-          (SELECT MAX(date) FROM public.de_equity_ohlcv WHERE data_status = 'validated')
++          (SELECT MAX(date) FROM public.de_equity_ohlcv WHERE data_status IN ('raw', 'validated'))
+         )
+     """)
+     with engine.connect() as c:
+diff --git a/scripts/generate_cts_param_candidates.py b/scripts/generate_cts_param_candidates.py
+index 86fdb1e..f110265 100644
+--- a/scripts/generate_cts_param_candidates.py
++++ b/scripts/generate_cts_param_candidates.py
+@@ -19,7 +19,7 @@ log = structlog.get_logger()
+ 
+ def run(as_of_date: date, *, persist: bool) -> None:
+     engine = get_engine()
+-    thresholds = load_thresholds(engine)
++    thresholds = load_thresholds(engine=engine)
+     proposals = generate_proposals(engine, as_of_date, thresholds)
+     log.info("cts_proposals_generated", count=len(proposals))
+     if proposals and persist:
+diff --git a/scripts/m2_daily.py b/scripts/m2_daily.py
+index da60412..271c191 100644
+--- a/scripts/m2_daily.py
++++ b/scripts/m2_daily.py
+@@ -13,7 +13,7 @@ from __future__ import annotations
+ 
+ import argparse
+ import sys
+-from datetime import date, datetime, timedelta
++from datetime import date, datetime, timezone
+ from pathlib import Path
+ 
+ import structlog
+@@ -37,8 +37,8 @@ def main() -> int:
+     parser.add_argument(
+         "--date",
+         type=_parse_date,
+-        default=date.today() - timedelta(days=1),
+-        help="Target date (YYYY-MM-DD). Defaults to yesterday.",
++        default=datetime.now(timezone.utc).date(),
++        help="Target date (YYYY-MM-DD). Defaults to today UTC (pinned to UTC regardless of TZ env).",
+     )
+     args = parser.parse_args()
+ 
+diff --git a/scripts/m3_daily.py b/scripts/m3_daily.py
+index c5f5bac..f283456 100644
+--- a/scripts/m3_daily.py
++++ b/scripts/m3_daily.py
+@@ -15,7 +15,7 @@ from __future__ import annotations
+ 
+ import argparse
+ import sys
+-from datetime import datetime
++from datetime import datetime, timezone
+ from pathlib import Path
+ 
+ import structlog
+@@ -42,7 +42,7 @@ def main() -> int:
+     )
+     args = parser.parse_args()
+ 
+-    overall_start = datetime.now()
++    overall_start = datetime.now(timezone.utc)
+     run_id = safe_record("m3_daily", milestone="M3", phase=args.phase)
+     total_rows = 0
+ 
+@@ -69,7 +69,7 @@ def main() -> int:
+         raise
+ 
+     safe_finish(run_id, status="success", rows_written=total_rows)
+-    elapsed = (datetime.now() - overall_start).total_seconds() / 60
++    elapsed = (datetime.now(timezone.utc) - overall_start).total_seconds() / 60
+     print(f"[m3_daily] complete in {elapsed:.1f} minutes")
+     return 0
+ 
+diff --git a/scripts/recompute_signal_ic.py b/scripts/recompute_signal_ic.py
+index 645228c..52c6648 100644
+--- a/scripts/recompute_signal_ic.py
++++ b/scripts/recompute_signal_ic.py
+@@ -38,7 +38,7 @@ def _resolve_default_as_of(engine):
+     sql = text("""
+         SELECT LEAST(
+           (SELECT MAX(date) FROM atlas.atlas_stock_metrics_daily),
+-          (SELECT MAX(date) FROM public.de_equity_ohlcv WHERE data_status = 'validated')
++          (SELECT MAX(date) FROM public.de_equity_ohlcv WHERE data_status IN ('raw', 'validated'))
+         )
+     """)
+     with engine.connect() as c:
+diff --git a/scripts/run_atlas_intelligence_nightly.sh b/scripts/run_atlas_intelligence_nightly.sh
+index dfd6699..e7c7ddc 100755
+--- a/scripts/run_atlas_intelligence_nightly.sh
++++ b/scripts/run_atlas_intelligence_nightly.sh
+@@ -13,7 +13,12 @@
+ set -u
+ cd /home/ubuntu/atlas-os
+ source .venv/bin/activate
+-export $(grep -E "^(GROQ_API_KEY|ATLAS_DB_URL|SMTP_USER|SMTP_PASS|NOTIFY_EMAIL|ATLAS_BASE_URL|ATLAS_PASSWORD)" .env | xargs)
++export $(grep -E "^(TZ|GROQ_API_KEY|ATLAS_DB_URL|SMTP_USER|SMTP_PASS|NOTIFY_EMAIL|ATLAS_BASE_URL|ATLAS_PASSWORD)" .env | xargs)
++
++# Required env guards — fail fast if .env is missing critical keys (otherwise
++# notify_failure.py silently no-ops and downstream steps fail without alerts).
++: "${ATLAS_DB_URL:?ATLAS_DB_URL missing from .env}"
++: "${GROQ_API_KEY:?GROQ_API_KEY missing from .env}"
+ 
+ LOG_FILE="/home/ubuntu/logs/atlas-intelligence.log"
+ FAILED_STEPS=()
+@@ -49,7 +54,7 @@ run_step "generate_cts_param_candidates" python scripts/generate_cts_param_candi
+ # data exists for at least one active weight set.
+ run_step "check_weight_drift"         python scripts/check_weight_drift.py
+ run_step "validator_sensibility"      python scripts/run_validator.py --scope sensibility
+-run_step "validator_schema"           python scripts/run_validator.py --scope schema
++run_step "validator_schema"           python scripts/run_validator.py --scope schema_coverage
+ 
+ # Refresh all materialized views after the full pipeline completes.
+ # SP02 MVs (rs_leaders, breakout_candidates, deterioration_watch,
+@@ -76,6 +81,15 @@ with e.begin() as c:
+ print(f'refreshed {len(MVS)} materialized views')
+ "
+ 
++# Strategy Lab — nightly evolutionary genome optimization (Atlas Strategy Lab).
++# Runs 200 Optuna trials, breeds top performers, evaluates tournament,
++# promotes survivors to leaderboard, generates Groq insight bullets.
++# Requires migration 067 + Phase 0 burn-in to have seeded the Optuna study.
++# Heavy step (10–30 min on .214); run after MV refresh so any future query
++# paths into MVs see today's compute output. Optuna persists to Postgres so
++# trial state survives chain failures.
++run_step "strategy_lab_incubator"  python -m atlas.trading.incubator
++
+ # Phase C: frontend accuracy crawler — runs LAST, after MVs are refreshed,
+ # so the SQL source-of-truth reflects today's compute output before we diff.
+ # Requires ATLAS_BASE_URL + ATLAS_PASSWORD in .env. Needs playwright installed:
+diff --git a/scripts/track_live_ic.py b/scripts/track_live_ic.py
+index 44d84dd..ca0f636 100644
+--- a/scripts/track_live_ic.py
++++ b/scripts/track_live_ic.py
+@@ -24,7 +24,7 @@ def _resolve_default_as_of(engine) -> date | None:
+     sql = text("""
+         SELECT LEAST(
+           (SELECT MAX(date) FROM atlas.atlas_stock_metrics_daily),
+-          (SELECT MAX(date) FROM public.de_equity_ohlcv WHERE data_status = 'validated')
++          (SELECT MAX(date) FROM public.de_equity_ohlcv WHERE data_status IN ('raw', 'validated'))
+         )
+     """)
+     with engine.connect() as c:
+diff --git a/scripts/us_daily.py b/scripts/us_daily.py
+index 64aaec8..a8888ee 100644
+--- a/scripts/us_daily.py
++++ b/scripts/us_daily.py
+@@ -14,7 +14,7 @@ from __future__ import annotations
+ 
+ import argparse
+ import sys
+-from datetime import date
++from datetime import date, datetime, timezone
+ from pathlib import Path
+ 
+ ROOT = Path(__file__).resolve().parent.parent
+@@ -22,7 +22,6 @@ if str(ROOT) not in sys.path:
+     sys.path.insert(0, str(ROOT))
+ 
+ import structlog  # noqa: E402
+-from sqlalchemy import create_engine  # noqa: E402
+ 
+ from atlas.compute.global_pipeline import run_us_etf_daily  # noqa: E402
+ 
+@@ -63,8 +62,9 @@ def main() -> None:
+         log.error("ATLAS_DB_URL_not_set")
+         sys.exit(1)
+ 
+-    engine = create_engine(db_url, pool_pre_ping=True)
+-    target = date.fromisoformat(args.date) if args.date else date.today()
++    from atlas.db import get_engine
++    engine = get_engine()
++    target = date.fromisoformat(args.date) if args.date else datetime.now(timezone.utc).date()
+ 
+     result = run_us_etf_daily(target, lookback_days=args.lookback, engine=engine)
+     log.info("us_etf_daily_done", target=str(target), **result)
