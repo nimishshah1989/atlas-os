@@ -38,10 +38,11 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import statistics
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -82,6 +83,10 @@ class ETFScoreRow:
     is_atlas_leader: bool
     eli5: str | None
     raw_metrics: dict[str, Any] = field(default_factory=dict)
+    # Migration 097: three new columns (all nullable)
+    premium_bps: float | None = None
+    te_60d: float | None = None
+    adv_20d_inr: float | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -357,6 +362,63 @@ def score_expense_ratio(
 
 
 # ---------------------------------------------------------------------------
+# Migration 097: three new column computations
+# ---------------------------------------------------------------------------
+
+
+def compute_premium_bps(market_close: float | None, nav: float | None) -> float | None:
+    """Compute ETF premium/discount in basis points.
+
+    premium_bps = (market_close - nav) / nav * 10_000
+
+    Clamped to [-500, +500] bps as a sanity guard against stale/bad data.
+    Returns None when either input is None or nav is zero.
+    """
+    if market_close is None or nav is None:
+        return None
+    if nav == 0.0:
+        return None
+    raw = (market_close - nav) / nav * 10_000.0
+    return max(-500.0, min(500.0, raw))
+
+
+def compute_te_60d(
+    etf_returns_60d: Sequence[float],
+    underlying_returns_60d: Sequence[float],
+) -> float | None:
+    """Compute 60-day annualized tracking error.
+
+    TE = std(etf_ret - underlying_ret) * sqrt(252) over the paired daily returns.
+
+    Uses sample standard deviation (ddof=1). Returns None when fewer than 2
+    paired observations are available (std is undefined with 0 or 1 obs).
+    """
+    pairs = [(e, u) for e, u in zip(etf_returns_60d, underlying_returns_60d, strict=False)]
+    if len(pairs) < 2:
+        return None
+    diffs = [e - u for e, u in pairs]
+    return statistics.stdev(diffs) * math.sqrt(252)
+
+
+def compute_adv_20d_inr(
+    volume_20d: Sequence[float],
+    close_20d: Sequence[float],
+) -> float:
+    """Compute average daily traded value (INR) over last 20 trading days.
+
+    ADV = sum(volume_i * close_i for all paired days) / n_days
+
+    Zero-volume days are included in the average (not skipped).
+    Returns 0.0 when inputs are empty.
+    """
+    pairs = list(zip(volume_20d, close_20d, strict=False))
+    if not pairs:
+        return 0.0
+    total = sum(v * c for v, c in pairs)
+    return total / len(pairs)
+
+
+# ---------------------------------------------------------------------------
 # Composite + ELI5
 # ---------------------------------------------------------------------------
 
@@ -518,6 +580,169 @@ def _load_sector_strength_map(engine: Engine, snapshot_date: date) -> dict[str, 
     return out
 
 
+# Theme → benchmark_code mapping (mirrors atlas/compute/etfs.py THEME_BENCHMARK)
+_THEME_TO_BENCHMARK: dict[str, str] = {
+    "Broad": "NIFTY500",
+    "Thematic": "NIFTY500",
+    "Silver": "NIFTY500",
+    "Gold": "GOLD",
+    "International": "MSCIWORLD",
+    "Sectoral": "NIFTY500",  # fallback; sector-specific indices not in benchmark_returns_cache
+}
+
+
+def _load_new_col_metrics_from_db(
+    engine: Engine,
+    snapshot_date: date,
+    tickers: Sequence[str],
+) -> dict[str, dict[str, Any]]:
+    """Load adv_20d_inr and te_60d for the 3 new scorecard columns.
+
+    premium_bps: ETF NAV is not available in any DB table (no ISIN on active
+    ETF rows, no de_mf_nav match). Returns None for all tickers — flagged in
+    raw_metrics as 'premium_bps_no_nav_available'.
+
+    te_60d: std(etf_ret_1d - bench_ret_1d) * sqrt(252) over last 60 trading
+    days. Benchmark is resolved via THEME → benchmark_code mapping.
+
+    adv_20d_inr: AVG(close * volume) over last 20 trading days from de_etf_ohlcv.
+
+    Returns dict keyed by ticker with keys:
+        adv_20d_inr: float | None
+        te_60d: float | None
+        premium_bps: None  (always None — no NAV source)
+    """
+    if not tickers:
+        return {}
+
+    empty: dict[str, Any] = {"adv_20d_inr": None, "te_60d": None, "premium_bps": None}
+    out: dict[str, dict[str, Any]] = {t: dict(empty) for t in tickers}
+
+    # --- adv_20d_inr ---
+    # Use last 20 trading days from de_etf_ohlcv. The anchor is the most recent
+    # date in de_etf_ohlcv (or snapshot_date, whichever is earlier) minus 28
+    # calendar days (generous window to guarantee ≥ 20 trading days).
+    cutoff_adv = snapshot_date - timedelta(days=28)
+    try:
+        with engine.connect() as conn:
+            adv_rows = conn.execute(
+                text(
+                    """
+                    SELECT ticker,
+                           SUM(close * volume) / NULLIF(COUNT(*), 0) AS adv_inr
+                    FROM public.de_etf_ohlcv
+                    WHERE ticker = ANY(:tickers)
+                      AND date > :cutoff
+                      AND date <= :snap
+                    GROUP BY ticker
+                    """
+                ),
+                {"tickers": list(tickers), "cutoff": cutoff_adv, "snap": snapshot_date},
+            ).all()
+        rows_before = len(adv_rows)
+        for ticker, adv in adv_rows:
+            if ticker in out and adv is not None:
+                out[ticker]["adv_20d_inr"] = float(adv)
+        n_with_adv = sum(1 for v in out.values() if v["adv_20d_inr"] is not None)
+        log.info("etf_adv_loaded", rows=rows_before, tickers_with_data=n_with_adv)
+    except Exception as exc:
+        log.warning("etf_adv_load_failed", error=str(exc))
+
+    # --- te_60d ---
+    # Pull ETF returns from atlas_etf_metrics_daily (last 65 calendar days → ~60 trading days)
+    # and benchmark returns from atlas_benchmark_returns_cache.
+    # Need the theme for each ticker to pick the right benchmark.
+    cutoff_te = snapshot_date - timedelta(days=91)  # 91 days ≈ 65 trading days
+    try:
+        with engine.connect() as conn:
+            # Load universe with theme for benchmark mapping
+            universe_rows = conn.execute(
+                text(
+                    """
+                    SELECT ticker, theme
+                    FROM atlas.atlas_universe_etfs
+                    WHERE ticker = ANY(:tickers) AND effective_to IS NULL
+                    """
+                ),
+                {"tickers": list(tickers)},
+            ).all()
+            ticker_theme = {r[0]: r[1] for r in universe_rows}
+
+            # Load ETF daily returns
+            etf_ret_rows = conn.execute(
+                text(
+                    """
+                    SELECT ticker, date, ret_1d
+                    FROM atlas.atlas_etf_metrics_daily
+                    WHERE ticker = ANY(:tickers)
+                      AND date > :cutoff
+                      AND date <= :snap
+                      AND ret_1d IS NOT NULL
+                    ORDER BY ticker, date
+                    """
+                ),
+                {"tickers": list(tickers), "cutoff": cutoff_te, "snap": snapshot_date},
+            ).all()
+
+            # Load all needed benchmark daily returns
+            bench_codes = list(
+                {_THEME_TO_BENCHMARK.get(t, "NIFTY500") for t in ticker_theme.values()}
+            )
+            bench_ret_rows = conn.execute(
+                text(
+                    """
+                    SELECT benchmark_code, date, ret_1d
+                    FROM atlas.atlas_benchmark_returns_cache
+                    WHERE benchmark_code = ANY(:codes)
+                      AND date > :cutoff
+                      AND date <= :snap
+                      AND ret_1d IS NOT NULL
+                    ORDER BY benchmark_code, date
+                    """
+                ),
+                {"codes": bench_codes, "cutoff": cutoff_te, "snap": snapshot_date},
+            ).all()
+
+        # Build lookup: benchmark_code → {date → ret_1d}
+        bench_by_code: dict[str, dict[date, float]] = {}
+        for code, dt, ret in bench_ret_rows:
+            bench_by_code.setdefault(code, {})[dt] = float(ret)
+
+        # Build lookup: ticker → {date → ret_1d}
+        etf_by_ticker: dict[str, dict[date, float]] = {}
+        for ticker, dt, ret in etf_ret_rows:
+            etf_by_ticker.setdefault(ticker, {})[dt] = float(ret)
+
+        # Compute TE per ticker
+        te_computed = 0
+        for ticker in tickers:
+            theme = ticker_theme.get(ticker, "Broad")
+            bench_code = _THEME_TO_BENCHMARK.get(theme, "NIFTY500")
+            etf_dates = etf_by_ticker.get(ticker, {})
+            bench_dates = bench_by_code.get(bench_code, {})
+
+            # Intersect dates — take the 60 most recent common trading days
+            all_common = set(etf_dates.keys()) & set(bench_dates.keys())
+            common_dates = sorted(all_common, reverse=True)[:60]
+            if len(common_dates) < 2:
+                out[ticker]["te_60d"] = None
+                continue
+
+            etf_rets = [etf_dates[d] for d in common_dates]
+            bench_rets = [bench_dates[d] for d in common_dates]
+            te = compute_te_60d(etf_rets, bench_rets)
+            out[ticker]["te_60d"] = te
+            if te is not None:
+                te_computed += 1
+
+        log.info("etf_te_computed", tickers_with_te=te_computed, total=len(tickers))
+
+    except Exception as exc:
+        log.warning("etf_te_load_failed", error=str(exc))
+
+    return out
+
+
 def compute_etf_scorecard(
     snapshot_date: date,
     *,
@@ -536,11 +761,14 @@ def compute_etf_scorecard(
               log_med_tv_60d, is_passive, instrument_id}} that lets the
     test path inject all the auxiliary numbers without hitting a live DB.
     """
+    new_col_metrics: dict[str, dict[str, Any]] = {}
     if engine is not None:
         etf_universe = _load_etf_universe(engine)
         conviction_rows = _load_conviction_for_date(engine, snapshot_date)
         sector_strength_map = _load_sector_strength_map(engine, snapshot_date)
         thresholds = _load_etf_thresholds(engine)
+        all_tickers: list[str] = [str(u.get("ticker")) for u in etf_universe if u.get("ticker")]
+        new_col_metrics = _load_new_col_metrics_from_db(engine, snapshot_date, all_tickers)
     if thresholds is None:
         thresholds = dict(_DEFAULT_WEIGHTS)
     if etf_universe is None:
@@ -630,6 +858,13 @@ def compute_etf_scorecard(
             },
         }
 
+        # Pull new col values: from DB loader (production) or extras injection (test)
+        ticker_key = str(ticker) if ticker else ""
+        ncm = new_col_metrics.get(ticker_key, extras)
+        adv_val: float | None = ncm.get("adv_20d_inr") if ncm else extras.get("adv_20d_inr")
+        te_val: float | None = ncm.get("te_60d") if ncm else extras.get("te_60d")
+        premium_val: float | None = ncm.get("premium_bps") if ncm else extras.get("premium_bps")
+
         rows.append(
             ETFScoreRow(
                 snapshot_date=snapshot_date,
@@ -651,6 +886,9 @@ def compute_etf_scorecard(
                 is_atlas_leader=False,
                 eli5=None,
                 raw_metrics=raw_metrics,
+                premium_bps=premium_val,
+                te_60d=te_val,
+                adv_20d_inr=adv_val,
             )
         )
 
@@ -697,6 +935,13 @@ def _sql_decimal(d: Decimal | None) -> str:
     return f"{float(d):.4f}"
 
 
+def _sql_float_or_null(v: float | None) -> str:
+    """Format a float for SQL, or NULL."""
+    if v is None:
+        return "NULL"
+    return f"{v:.4f}"
+
+
 def emit_upsert_sql(rows: list[ETFScoreRow]) -> str:
     """Build a multi-row INSERT...ON CONFLICT statement."""
     if not rows:
@@ -727,7 +972,10 @@ def emit_upsert_sql(rows: list[ETFScoreRow]) -> str:
             f"{r.category_size if r.category_size is not None else 'NULL'}, "
             f"{'TRUE' if r.is_atlas_leader else 'FALSE'}, "
             f"{_sql_quote(r.eli5)}, "
-            f"{raw_json}"
+            f"{raw_json}, "
+            f"{_sql_float_or_null(r.premium_bps)}, "
+            f"{_sql_float_or_null(r.te_60d)}, "
+            f"{_sql_float_or_null(r.adv_20d_inr)}"
             ")"
         )
     if not values_lines:
@@ -738,7 +986,7 @@ def emit_upsert_sql(rows: list[ETFScoreRow]) -> str:
         "underlying_sector, matrix_conviction_score, sector_strength_score, "
         "tracking_quality_score, aum_bracket_score, liquidity_score, "
         "expense_ratio_score, composite_score, rank_in_category, category_size, "
-        "is_atlas_leader, eli5, raw_metrics) VALUES\n"
+        "is_atlas_leader, eli5, raw_metrics, premium_bps, te_60d, adv_20d_inr) VALUES\n"
         + ",\n".join(values_lines)
         + "\nON CONFLICT (snapshot_date, instrument_id) DO UPDATE SET\n"
         "  etf_category = EXCLUDED.etf_category,\n"
@@ -754,7 +1002,10 @@ def emit_upsert_sql(rows: list[ETFScoreRow]) -> str:
         "  category_size = EXCLUDED.category_size,\n"
         "  is_atlas_leader = EXCLUDED.is_atlas_leader,\n"
         "  eli5 = EXCLUDED.eli5,\n"
-        "  raw_metrics = EXCLUDED.raw_metrics;\n"
+        "  raw_metrics = EXCLUDED.raw_metrics,\n"
+        "  premium_bps = EXCLUDED.premium_bps,\n"
+        "  te_60d = EXCLUDED.te_60d,\n"
+        "  adv_20d_inr = EXCLUDED.adv_20d_inr;\n"
     )
 
 
