@@ -33,8 +33,9 @@ from datetime import date, timedelta
 import numpy as np
 import pandas as pd
 import structlog
+from psycopg2.extras import execute_values
 
-from atlas.compute._session import bulk_upsert, df_to_pg_rows, open_compute_session
+from atlas.compute._session import open_compute_session
 from atlas.compute.sectors import (
     compute_52wh_per_sector,
     compute_breadth_per_sector,
@@ -304,6 +305,71 @@ def compute_sector_new_cols_for_year(
     return result[UPDATE_COLS]
 
 
+def _update_new_cols(engine, df: pd.DataFrame) -> int:
+    """UPDATE the 8 new columns on existing atlas_sector_metrics_daily rows.
+
+    Uses a temporary table + UPDATE ... FROM so we only touch existing rows
+    and don't violate NOT NULL on compute_run_id (which is not in UPDATE_COLS).
+
+    Returns number of rows updated.
+    """
+    if df.empty:
+        return 0
+
+    # Build the SET clause dynamically from UPDATE_COLS minus the PK.
+    data_cols = [c for c in UPDATE_COLS if c not in ("sector_name", "date")]
+    set_clause = ", ".join(f"{c} = tmp.{c}" for c in data_cols)
+
+    raw = engine.raw_connection()
+    try:
+        cur = raw.cursor()
+        cur.execute("SET statement_timeout = 0")
+
+        # Create temp table matching the update shape
+        col_defs = ", ".join(
+            f"{c} DOUBLE PRECISION" if c not in ("sector_name",) else f"{c} TEXT"
+            for c in UPDATE_COLS
+            if c != "date"
+        )
+        cur.execute(
+            f"CREATE TEMP TABLE _sector_new_cols ("
+            f"sector_name TEXT, date DATE, {col_defs.replace('sector_name TEXT, ', '')})"
+        )
+
+        # Bulk-copy the result DataFrame into the temp table
+        col_csv = ", ".join(UPDATE_COLS)
+        rows = []
+        for row in (
+            df.astype(object).where(df.notna(), other=None).itertuples(index=False, name=None)
+        ):
+            rows.append(row)
+        execute_values(
+            cur,
+            f"INSERT INTO _sector_new_cols ({col_csv}) VALUES %s",  # noqa: S608
+            rows,
+            page_size=3000,
+        )
+
+        # UPDATE target from temp table
+        cur.execute(
+            f"UPDATE atlas.atlas_sector_metrics_daily t "  # noqa: S608
+            f"SET {set_clause} "
+            f"FROM _sector_new_cols tmp "
+            f"WHERE t.sector_name = tmp.sector_name AND t.date = tmp.date"
+        )
+        n_updated = cur.rowcount
+        cur.execute("DROP TABLE IF EXISTS _sector_new_cols")
+        raw.commit()
+
+        log.info("partial_update_complete", rows_updated=n_updated)
+        return n_updated
+    except Exception:
+        raw.rollback()
+        raise
+    finally:
+        raw.close()
+
+
 def run_year_batch(
     engine,
     year: int,
@@ -369,15 +435,10 @@ def run_year_batch(
             log.warning("year_batch_no_results", year=year)
             return 0, True
 
-        # UPSERT into atlas_sector_metrics_daily
-        rows = df_to_pg_rows(result_df)
-        n_written = bulk_upsert(
-            engine,
-            table="atlas.atlas_sector_metrics_daily",
-            columns=UPDATE_COLS,
-            rows=rows,
-            pk_columns=["sector_name", "date"],
-        )
+        # UPDATE existing rows (not upsert — new rows are owned by the main pipeline).
+        # We use a temporary table + UPDATE ... FROM pattern so partial column
+        # updates don't violate the NOT NULL constraint on compute_run_id.
+        n_written = _update_new_cols(engine, result_df)
 
         elapsed = round(time.time() - t0, 1)
         log.info(
