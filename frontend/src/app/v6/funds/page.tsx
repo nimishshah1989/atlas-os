@@ -1,116 +1,84 @@
 // frontend/src/app/v6/funds/page.tsx
+// D.5 — /v6/funds list: SwitchProposalsBanner + IndustrySnapshot (funds variant
+//         with AMC leaderboard) + BubbleRiskReturnChart + SignatureMatrix +
+//         ranked table with PortfolioBadge column (default visible).
 //
-// Page 06 Fund List — ~587 mutual fund schemes from atlas.mv_fund_list_v6,
-// ordered by atlas-leader flag then composite. Renders a compact table with
-// composite + 4 sub-pillars + quartile + recommendation. AMC stats panel
-// deferred; the per-fund deep dive carries the holding-level detail.
-//
-// Refresh: nightly pg_cron at 20:05 IST.
+// Thin RSC shell (≤250 LOC). All list logic lives in FundsList.tsx.
+// v6.0 note: atlas_paper_portfolio is empty → SwitchProposalsBanner renders
+// nothing, PortfolioBadge silent. Both degrade gracefully without errors.
 
-import Link from 'next/link'
-import { getFundListPage } from '@/lib/queries/v6/fund-list'
+import { getFundRowsForDate } from '@/lib/queries/v6/funds'
+import { getLatestSnapshotDate } from '@/lib/queries/v6/snapshot'
+import { getIndustrySnapshot } from '@/lib/queries/v6/industry_snapshot'
+import { getHeldIidSet } from '@/lib/queries/v6/portfolio_holdings'
+import { getSwitchProposals } from '@/lib/queries/v6/switch_proposals'
+import { DataSourceBanner } from '@/components/v6/DataSourceBanner'
+import { SwitchProposalsBanner } from '@/components/v6/SwitchProposalsBanner'
+import { FundsList } from '@/components/v6/FundsList'
+import type { HoldingState } from '@/lib/queries/v6/portfolio_holdings'
 
 export const dynamic = 'force-dynamic'
-export const revalidate = 0
 
-function fmtScore(v: number | null): string {
-  if (v == null) return '—'
-  return v.toFixed(1)
-}
+export default async function V6FundsPage() {
+  const snapshotDate = await getLatestSnapshotDate()
 
-function fmtPctRaw(v: number | null, digits = 2): string {
-  if (v == null) return '—'
-  return `${v.toFixed(digits)}%`
-}
+  // Parallel fetch: fund rows, industry snapshot, held iid set, switch proposals.
+  // All error-safe: empty tables return graceful defaults.
+  const [funds, snapshot, heldIidSet, switchProposals] = await Promise.all([
+    getFundRowsForDate(snapshotDate),
+    getIndustrySnapshot('funds'),
+    getHeldIidSet(),
+    getSwitchProposals(),
+  ])
 
-function recoTint(reco: string | null): string {
-  if (reco === 'BUY') return 'text-signal-pos'
-  if (reco === 'AVOID' || reco === 'SELL') return 'text-signal-neg'
-  return 'text-ink-secondary'
-}
+  // Build holdingMap for PortfolioBadge column.
+  // v6.0: atlas_paper_portfolio is empty at launch — map will be empty.
+  const BADGE_STATE: HoldingState = {
+    portfolio_count: 1,
+    weight_range: ['0.00', '0.00'],
+    aggregate_weight: '0.00',
+    last_add_date: null,
+  }
+  const holdingMap: Record<string, HoldingState> = {}
+  for (const iid of heldIidSet) {
+    holdingMap[iid] = BADGE_STATE
+  }
 
-export default async function FundListPage() {
-  const { rows, as_of_date } = await getFundListPage()
+  const leaderCount = funds.filter(f => f.is_atlas_leader).length
+  const avoidCount = funds.filter(f => f.is_avoid).length
 
   return (
-    <main className="container mx-auto px-8 py-12 max-w-[1400px]">
-      <header className="mb-10 pb-8 border-b border-paper-rule">
-        <div className="text-[11px] uppercase tracking-widest text-ink-tertiary font-semibold mb-3">
-          Mutual funds · {rows.length.toLocaleString()} schemes
+    <div className="max-w-[1400px] mx-auto">
+      {/* ── Page header ─────────────────────────────────────────────────── */}
+      <div className="px-6 py-4 border-b border-paper-rule">
+        <div className="font-sans text-[10px] uppercase tracking-wider text-ink-tertiary mb-1">
+          Funds · v6
         </div>
-        <h1 className="font-serif text-5xl leading-tight text-ink mb-3">
-          Which funds are doing real work?
+        <h1 className="font-serif text-2xl lg:text-3xl font-semibold text-ink-primary">
+          Funds Discovery
         </h1>
-        <p className="text-base text-ink-secondary max-w-3xl">
-          Composite combines risk-adjusted return, holdings conviction, style/sector fit, and
-          cost/manager efficiency. Atlas leaders are top-quartile on all four pillars.
+        <p className="font-sans text-sm text-ink-secondary leading-relaxed mt-2 max-w-[760px]">
+          {funds.length} funds · {leaderCount} Atlas Leaders · {avoidCount} Avoid ·
+          ranked by composite score · as of {snapshotDate}.
         </p>
-        {as_of_date && (
-          <div className="text-xs font-mono text-ink-tertiary mt-3">
-            As of {as_of_date} · refreshed nightly 20:05 IST
-          </div>
-        )}
-      </header>
+      </div>
 
-      <section className="border border-paper-rule rounded-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-paper-deep border-b border-paper-rule">
-              <tr className="text-[10px] uppercase tracking-wider text-ink-tertiary font-semibold">
-                <th className="px-3 py-3 text-left">Fund</th>
-                <th className="px-3 py-3 text-left">AMC</th>
-                <th className="px-3 py-3 text-left">Category</th>
-                <th className="px-3 py-3 text-right">AUM ₹Cr</th>
-                <th className="px-3 py-3 text-right">Composite</th>
-                <th className="px-3 py-3 text-right">RAR</th>
-                <th className="px-3 py-3 text-right">Conv</th>
-                <th className="px-3 py-3 text-right">Style</th>
-                <th className="px-3 py-3 text-right">Cost</th>
-                <th className="px-3 py-3 text-center">Quartile</th>
-                <th className="px-3 py-3 text-center">Reco</th>
-                <th className="px-3 py-3 text-right">Expense</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(r => (
-                <tr key={r.scheme_code} className="border-t border-paper-rule hover:bg-paper-soft transition-colors">
-                  <td className="px-3 py-2">
-                    <Link href={`/v6/funds/${r.scheme_code}`} className="text-ink hover:underline">
-                      {r.fund_name}
-                    </Link>
-                    {r.is_atlas_leader && (
-                      <span className="ml-2 text-[9px] uppercase tracking-wider text-signal-pos font-semibold">★ leader</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-ink-secondary">{r.amc}</td>
-                  <td className="px-3 py-2 text-xs text-ink-tertiary">{r.fund_category ?? '—'}</td>
-                  <td className="px-3 py-2 text-right font-mono text-xs text-ink-secondary">
-                    {r.aum_cr != null ? r.aum_cr.toFixed(0) : '—'}
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono text-ink">{fmtScore(r.composite_score)}</td>
-                  <td className="px-3 py-2 text-right font-mono text-xs text-ink-secondary">{fmtScore(r.risk_adjusted_return_score)}</td>
-                  <td className="px-3 py-2 text-right font-mono text-xs text-ink-secondary">{fmtScore(r.holdings_conviction_score)}</td>
-                  <td className="px-3 py-2 text-right font-mono text-xs text-ink-secondary">{fmtScore(r.style_sector_score)}</td>
-                  <td className="px-3 py-2 text-right font-mono text-xs text-ink-secondary">{fmtScore(r.cost_manager_score)}</td>
-                  <td className="px-3 py-2 text-center font-mono text-xs text-ink">{r.peer_quartile ?? '—'}</td>
-                  <td className={`px-3 py-2 text-center text-[10px] uppercase tracking-wider font-semibold ${recoTint(r.recommendation)}`}>
-                    {r.recommendation ?? '—'}
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono text-xs text-ink-tertiary">
-                    {r.expense_ratio != null ? fmtPctRaw(r.expense_ratio * 100, 2) : '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <DataSourceBanner source="live" asOf={snapshotDate} />
+
+      {/* ── SWITCH proposals banner (silent when no proposals) ────────── */}
+      {switchProposals.length > 0 && (
+        <div className="px-6 pt-4">
+          <SwitchProposalsBanner proposals={switchProposals} />
         </div>
-      </section>
+      )}
 
-      <footer className="text-xs text-ink-tertiary leading-relaxed border-t border-paper-rule pt-6 mt-6">
-        Pillars are 0–100 scaled. RAR = risk-adjusted return; Conv = holdings conviction;
-        Style = style/sector fit; Cost = cost/manager efficiency. Q1 is top quartile within
-        the same category. Click a fund to see top-10 holdings and sub-metrics.
-      </footer>
-    </main>
+      {/* ── FundsList client component ────────────────────────────────── */}
+      <FundsList
+        funds={funds}
+        snapshot={snapshot}
+        holdingMap={holdingMap}
+        snapshotDate={snapshotDate}
+      />
+    </div>
   )
 }

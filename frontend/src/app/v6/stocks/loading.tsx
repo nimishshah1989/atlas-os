@@ -1,10 +1,5 @@
+import { SkeletonStocks } from "@/components/v6/skeletons/SkeletonStocks";
+
 export default function Loading() {
-  return (
-    <div className="container mx-auto px-8 py-16">
-      <div className="animate-pulse">
-        <div className="h-12 w-3/4 bg-paper-deep rounded mb-8" />
-        <div className="h-[600px] bg-paper-deep rounded" />
-      </div>
-    </div>
-  )
+  return <SkeletonStocks />;
 }
