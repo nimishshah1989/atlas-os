@@ -13,6 +13,7 @@ export const GROUPS: Group[] = [
     label: 'TODAY',
     links: [
       { href: '/',                            label: 'Regime' },
+      { href: '/v6/today',                    label: 'Today (v6)' },
       { href: '/intelligence/daily-brief',    label: 'Daily Brief' },
     ],
   },
@@ -20,12 +21,18 @@ export const GROUPS: Group[] = [
     key: 'research',
     label: 'RESEARCH',
     links: [
-      { href: '/sectors', label: 'Sectors' },
-      { href: '/stocks',  label: 'Stocks' },
-      { href: '/etfs',    label: 'ETFs' },
-      { href: '/funds',   label: 'Funds' },
-      { href: '/global',  label: 'Global Pulse' },
-      { href: '/us',      label: 'US Pulse' },
+      { href: '/sectors',     label: 'Sectors' },
+      { href: '/stocks',      label: 'Stocks' },
+      { href: '/etfs',        label: 'ETFs' },
+      { href: '/funds',       label: 'Funds' },
+      { href: '/matrix',      label: 'Matrix' },
+      { href: '/regime',      label: 'Regime (v6)' },
+      { href: '/v6/stocks',   label: 'Stocks (v6)' },
+      { href: '/v6/sectors',  label: 'Sectors (v6)' },
+      { href: '/v6/etfs',     label: 'ETFs (v6)' },
+      { href: '/v6/funds',    label: 'Funds (v6)' },
+      { href: '/global',      label: 'Global Pulse' },
+      { href: '/us',          label: 'US Pulse' },
     ],
   },
   {
@@ -74,9 +81,12 @@ function activeGroup(pathname: string): Group {
   if (pathname.startsWith('/setup'))                        return GROUPS[3]
   if (pathname.startsWith('/strategies') || pathname.startsWith('/portfolios')) return GROUPS[2]
   if (pathname.startsWith('/methodology') || pathname.startsWith('/health'))    return GROUPS[4]
+  if (pathname.startsWith('/v6/today'))                                         return GROUPS[0]
   if (pathname.startsWith('/sectors') || pathname.startsWith('/stocks') ||
       pathname.startsWith('/etfs') || pathname.startsWith('/funds') ||
-      pathname.startsWith('/global') || pathname.startsWith('/us'))             return GROUPS[1]
+      pathname.startsWith('/global') || pathname.startsWith('/us') ||
+      pathname.startsWith('/matrix') || pathname.startsWith('/regime') ||
+      pathname.startsWith('/v6'))                                               return GROUPS[1]
   return GROUPS[0] // today is default
 }
 

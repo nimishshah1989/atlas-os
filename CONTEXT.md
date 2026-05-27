@@ -864,3 +864,333 @@ investing the 24-framework discovery effort.
 
 Locked 2026-05-24 post scoped re-review (finding 9).
 
+---
+
+# v6 frontend redesign locks (2026-05-26)
+
+The sections below lock vocabulary for the 8-page IA + standardization
+refactor (post-design-review). They supersede any earlier looser usage
+in CEO/design plans.
+
+## Actionable sectors (22, not 30)
+
+Atlas displays **22 actionable sectors**. The full universe has 30+ raw
+NSE/BSE classifications, but 8 thin-tail buckets (single-stock or
+<3-stock universes) are **rolled up backend-side** into their nearest
+parent before reaching the frontend.
+
+**Rollups (locked):**
+
+| Thin-tail bucket | Rolled into |
+|---|---|
+| Diamond, Jewellery & Precious Metals | Consumer Discretionary |
+| Hospitality | Consumer Discretionary |
+| Media & Entertainment | Communication Services |
+| Printing & Publishing | Communication Services |
+| Aquaculture | Consumer Staples |
+| Tea & Coffee | Consumer Staples |
+| Fertilisers & Agrochemicals | Materials |
+| Paper Products | Materials |
+
+**Why rollup, not "Other":** an "Other" bucket is information-hostile —
+the user sees a sector and cannot act on it. Backend rollup keeps every
+visible sector clickable + a peer set ≥ 3 instruments deep.
+
+**Display rule:** the 22 sector list is canonical. No page may render
+the raw 30+ list. Rollup mapping lives in `atlas_sector_rollup`
+config table.
+
+Locked 2026-05-26 post design-review pivot.
+
+## Calls performance window
+
+The **Calls Performance** page (new in 2026-05-26 IA) tracks the
+realized excess of every fired signal call from **T+1 onward**, where
+T = the date `signal_call_id` was minted.
+
+**Display panes:**
+
+- **Daily realized excess** — running cumulative excess return vs the
+  position's anchor benchmark (see Baselines below), starting T+1
+- **Win rate vs benchmark** — % of closed calls with realized excess > 0,
+  bucketed by tier × tenure
+- **Best / worst calls** — top 10 and bottom 10 closed calls in trailing
+  90-day window
+
+**Anchor benchmark by tier:** Large → Nifty 100, Mid → Nifty Midcap 150,
+Small → Nifty Smallcap 250. Documented on every Calls Performance row.
+
+**Source:** `atlas_ledger.realized_excess` (already in v6 schema). The
+page is read-only over the ledger — no new compute path.
+
+**T+1 rationale:** T (call date) realized excess is mechanically 0 (signal
+fires post-close); T+1 is the first day a holder could be exposed to the
+trade. Removes the false "day 1 +X%" artifact that plagues retail
+backtests.
+
+Locked 2026-05-26 in /plan-design-review (Atlas v6 redesign).
+
+## Cash treatment (Liquid BeES, not idle)
+
+When Atlas recommends a sub-100% deployment (e.g. "deploy 40% capital"),
+the **remaining 60% is NOT idle cash**. It is parked in **Liquid BeES**
+(or equivalent overnight liquid ETF) earning ~6.5% nominal.
+
+**Why this matters for the user:** the headline "deploy 40%" must be
+read as "40% in cells; 60% earning Liquid BeES yield." The conservative-
+regime hero must surface the BeES yield alongside the deployment %, or
+users misread "low deployment" as "money sitting still."
+
+**Display rule:** any page rendering deployment % must adjacently render
+the Liquid BeES yield (currently ~6.5%, fetched from the BeES NAV
+series). Methodology footnote links to a one-paragraph explainer.
+
+**Simulation rule:** all backtest + projected-return calculations treat
+the non-deployed allocation as earning Liquid BeES yield day-over-day,
+not 0%. Total portfolio return = (deployment × cell-realized return) +
+((1 − deployment) × BeES yield).
+
+Locked 2026-05-26 post user direction.
+
+## "Signal fired" (plain-English definition)
+
+A **signal fires** when a stock crosses from INACTIVE to ACTIVE on a
+validated cell — meaning the cell's entry predicates all evaluate TRUE
+at end-of-day T on that stock.
+
+**Plain-English rendering on user-facing pages:** "Signal fired on
+[symbol]" — never "INACTIVE→ACTIVE transition on (iid, cell, tenure)."
+The technical phrase is reserved for the engineering audit log.
+
+**Display contract:** every fired signal carries (1) cell composed name
+in sentence case ("Mid 6m POSITIVE"), (2) the action verb (BUY / HOLD /
+AVOID — see DESIGN.md), (3) the conviction tape segment showing the
+firing tenure, (4) the cross-rule depth (how many other cells the stock
+fired on today, 0-5 scale).
+
+Locked 2026-05-26 in /plan-design-review.
+
+## Baselines (9 canonical, not arbitrary)
+
+Atlas uses **9 fixed baselines** for relative-strength comparison.
+No page may invent its own baseline.
+
+**Locked baselines:**
+
+| Baseline | Use |
+|---|---|
+| **Nifty 50** | Anchor benchmark for Large-tier |
+| **Nifty 500** | Broad-market benchmark |
+| **Nifty Smallcap 250** | Anchor benchmark for Small-tier |
+| **Nifty Midcap 150** | Anchor benchmark for Mid-tier |
+| **Nifty 100** (large) | Alternate Large anchor (Calls Performance only) |
+| **Gold (₹/g, Mumbai)** | Gold relative-strength comparator |
+| **MSCI World (USD-INR adjusted)** | Developed-market context |
+| **MSCI Emerging Markets** | Peer-market context |
+| **S&P 500 (USD-INR adjusted)** | US-market context |
+
+**Time windows for RS only:** 1w / 1m / 3m / 6m / 12m. Other windows
+(YTD, 5y, etc.) are NOT in scope for v6 user-facing pages. They may
+appear on the Methodology appendix.
+
+**COSPI removed:** the BSE Composite Stock Price Index is not in the v6
+baseline set. (Prior CEO plan listed it; user direction 2026-05-26
+removes it as redundant + low-relevance for the retail/family-office
+user.)
+
+Locked 2026-05-26 in /plan-design-review.
+
+## Language translation rule (no raw stats on user-facing pages)
+
+User-facing pages may **never** render raw statistical terms:
+
+- ❌ "IC 0.0531"
+- ❌ "BH-FDR adjusted p = 0.043"
+- ❌ "Z-score 2.7"
+- ❌ "T-statistic 3.4"
+- ❌ "Hit rate 67.4% (n=89)"
+
+Translate to plain English on every user-facing surface:
+
+- ✅ "Predicted excess +5.3% over next 6 months"
+- ✅ "High statistical confidence"
+- ✅ "Cell has fired 89 times historically"
+- ✅ "Stock matches all 4 entry conditions" (instead of "predicate eval = TRUE")
+
+**Where raw stats ARE allowed:** the Methodology appendix (`/methodology`
++ per-cell deep-dive at `/v6/cells/[id]`'s "Methodology" tab) and the
+admin/maintainer surfaces (`/admin/*`). Never on /v6/today, /matrix,
+/regime, /v6/stocks list, /v6/sectors, /v6/funds, /v6/etfs, or the
+Calls Performance page.
+
+**Implementation:** the `<Tooltip variant="methodology">` primitive
+(see DESIGN.md standardization spec) is the only authorized escape
+hatch — it lets a curious user click through to the raw number with
+methodology context attached.
+
+Locked 2026-05-26 in /plan-design-review.
+
+## Cell display name (user-facing, NOT the cell_id)
+
+The CEO-plan + methodology cell state vocabulary (POSITIVE / NEUTRAL /
+NEGATIVE) is the **internal** state machine. It is used for cell_id,
+URLs, database columns, the methodology appendix, and engineering logs.
+
+It is **NOT** used in user-facing display names on the 8 main pages.
+Showing both "BUY" (chip) and "POSITIVE" (name) is vocabulary-mixing —
+the user reads two synonyms and assumes they mean different things.
+
+**Display name rule (locked):**
+
+| Cell internal id (URLs, DB) | Cell display name (UI) |
+|---|---|
+| `Mid-6m-POSITIVE` | **Mid 6m BUY signal** |
+| `Mid-6m-NEGATIVE` | **Mid 6m AVOID signal** |
+| `Mid-6m-NEUTRAL` | **Mid 6m WATCH signal** |
+| `Large-12m-POSITIVE` | **Large 12m BUY signal** |
+| ... | ... |
+
+**Why "BUY/AVOID/WATCH" and not the ownership-aware verb
+(ACCUMULATE/SELL/HOLD):** the cell name is intrinsic to the cell, not to
+the user. A cell is universally a BUY cell or an AVOID cell. Whether the
+user reads it as ACCUMULATE or BUY depends on their holdings — that's an
+action chip rendered alongside the name, not part of the name itself.
+
+**Where the methodology vocabulary still appears:**
+- `cell_id` (e.g. `Mid-6m-POSITIVE`) — URLs, DB, code
+- `/methodology` appendix — the curious reader sees the full vocabulary
+- `<InfoTooltip variant="methodology">` — when expanded, shows
+  "BUY signal · internal id Mid-6m-POSITIVE · view methodology"
+
+**Implementation contract:** `cell.display_name` is a NEW field on
+`atlas_cell_definitions`, computed deterministically from cell_id +
+direction. Migration adds the column; backfill populates it from the
+existing 18-20 cells. Frontend always reads `display_name` for UI; it
+NEVER constructs the name from `cell_id` parts.
+
+Locked 2026-05-26 in /plan-design-review redline cycle.
+
+## 8-page IA + Methodology appendix
+
+The v6 user-facing surface collapses to **8 pages + 1 appendix**:
+
+1. **Market Regime** (landing) — current regime + 12-week journey + India pulse
+2. **India Pulse** — breadth / dispersion / sectoral indices / regime inputs
+3. **Markets RS** — 9 baselines × 5 time windows RS grid (cross-market context)
+4. **Sectors** — 22 actionable sectors with RRG + heatmap + sector cards
+5. **Stocks** — instrument list with conviction tape + per-stock deep dive
+6. **Funds** — 587 funds with AMC leaderboard + per-fund deep dive
+7. **ETFs** — 34 ETFs with AMC grouping + per-ETF deep dive
+8. **Calls Performance** — realized excess + win rate of fired signals from T+1
+
+**Appendix:** `/methodology` (the 24-cell matrix, IC tables, walk-forward
+plots, drift event log) — for the curious + the auditor. NOT linked
+from the primary nav; reachable via every methodology tooltip.
+
+**Existing pages that get retired** in this IA:
+- `/v6/today` — folded into Market Regime hero
+- `/v6/cells/[id]` — folded into Methodology appendix (the per-cell
+  detail page becomes a /methodology/cells/[id] page)
+- `/v6/screening` — folded into the Stocks page filter builder
+- `/matrix` — folded into the Methodology appendix
+
+Locked 2026-05-26 in /plan-design-review (Atlas v6 redesign).
+
+---
+
+# v6 backend MV locks (2026-05-26)
+
+The sections below resolve grill-with-docs Q12-Q14 in service of three
+materialized views: `mv_market_regime_landing`, `mv_india_pulse`,
+`mv_markets_rs_grid`. They take precedence over the looser glossary
+additions in `docs/v6/glossary-additions-2026-05-26.md`.
+
+## Regime data source-of-truth (v5 + v6 hybrid)
+
+`atlas_regime_daily` (v6, migration 080) carries the regime **state**
+machine — `regime_state` enum + the 4 driver attribution columns from
+the classifier (`smallcap_rs_z`, `breadth_pct_above_200dma`,
+`vix_percentile`, `cross_sectional_dispersion`). It is the v6 contract.
+
+`atlas_market_regime_daily` (v5, migration 004) carries the **rich
+inputs** — full MA breadth (pct_above_ema_20/50/200), AD breadth,
+McClellan, new highs/lows, India VIX, realized vol. It is populated
+nightly on EC2 and remains read-only until v5 retirement (per Migration
+chain lock).
+
+**MV contract:** all three v6 MVs read regime state from v6
+`atlas_regime_daily` and JOIN v5 `atlas_market_regime_daily` on
+`date` for the rich numeric inputs. No new ingest required. No new
+`atlas_regime_inputs_daily` table is built; the glossary additions
+sketch (which proposed it) is superseded.
+
+**Why hybrid not all-v6:** building a new
+`atlas_regime_inputs_daily` would duplicate v5 columns and require
+~504-day backfill before the MV could ship. Lifting v5 follows the
+codified "lift aggressively from v1-v5" rule.
+
+**Why hybrid not all-v5:** v6 must own the regime-state enum
+transition log; otherwise v6 classifier work in `atlas/regime/`
+becomes orphaned. State + inputs separation is the load-bearing
+distinction.
+
+Locked 2026-05-26 in /grill-with-docs (mv build session).
+
+## Baseline source registry (Markets RS)
+
+The 9 canonical baselines (§Baselines above) read from these tables:
+
+| Baseline | Source table | Code |
+|---|---|---|
+| Nifty 50 | `public.de_index_prices` | `NIFTY 50` |
+| Nifty 100 | `public.de_index_prices` | `NIFTY 100` |
+| Nifty Midcap 150 | `public.de_index_prices` | `NIFTY MIDCAP 150` |
+| Nifty Smallcap 250 | `public.de_index_prices` | `NIFTY SMLCAP 250` |
+| Nifty 500 | `public.de_index_prices` | `NIFTY 500` |
+| Gold (₹/g, Mumbai) | `public.de_etf_ohlcv` | `GOLDBEES` |
+| S&P 500 | `public.de_global_prices` | `SP500` |
+| MSCI World | `public.de_global_prices` | `MSCIWORLD` |
+| MSCI EM | `us_atlas.stock_ohlcv` | `EEM` (proxy) |
+
+**EEM as MSCI EM proxy:** the canonical MSCI EM index is not in our
+data warehouse. The iShares MSCI EM ETF (EEM) is the working proxy —
+tracks the index with TE ≤ 35 bps (§Tracking-error band). USD-denominated;
+USD/INR adjustment applied via `atlas_macro_features_daily.inr_usd_trend`
+joined on date. Documented as proxy in MV column comment.
+
+**USD-INR adjustment** for SP500 / MSCIWORLD / EEM: `close_inr = close_usd
+× usd_inr_T / usd_inr_T0`, where `T0` is the window-start date for the
+RS calculation. Stored as a CTE in each MV; not materialized separately.
+
+Locked 2026-05-26 in /grill-with-docs (mv build session).
+
+## MV scope contract — "full mockup parity"
+
+User direction 2026-05-26: every visible field in the mockups must be
+backed by real data. This commits to a 2-phase build:
+
+**Phase A — pre-MV ingest** (separate PRs, must land before MV PRs):
+- Migration: add `fii_inr_cr`, `dii_inr_cr`, `us_10y_yield`,
+  `dxy_level`, `avg_pairwise_corr`, `concentration_top5`,
+  `concentration_top10`, `concentration_top25` columns to
+  `atlas_macro_features_daily` (or split into a new
+  `atlas_market_context_daily` table if column count crosses 15)
+- New compute job: `atlas/macro/pairwise_correlation.py` (nightly,
+  trailing-60d Nifty 500 constituent correlation matrix)
+- New compute job: `atlas/macro/concentration.py` (top-N point
+  contributions to Nifty 50/100/500 each EOD)
+- New ingest: NSDL FII/DII provisional flows (HTML scrape, T+1)
+- New ingest: FRED US 10Y (DGS10) + DXY (DTWEXBGS) daily
+
+**Phase B — MV ship** (the 3 named PRs):
+- `mv_market_regime_landing` (~80 LOC SQL)
+- `mv_india_pulse` (~120 LOC SQL)
+- `mv_markets_rs_grid` (~150 LOC SQL)
+
+**Data availability fallback:** if Phase A ingest hits a hard blocker
+(NSDL HTML structure change, FRED rate limit), the MV SQL still ships
+with the columns SELECT-ed; rows simply return NULL until ingest lands.
+MVs never block on ingest.
+
+Locked 2026-05-26 in /grill-with-docs (mv build session).
+

@@ -53,6 +53,10 @@ dependencies = [
     # SP08 — Telegram daily OAuth reminder
     "python-telegram-bot>=20.0",
 
+    # E2 brief generator (#47) — application-layer SQL parse for the
+    # atlas_agent_readonly defense-in-depth allowlist check.
+    "sqlparse>=0.4",
+
 ]
 
 [project.optional-dependencies]
@@ -97,6 +101,7 @@ ui = [
 
 [project.scripts]
 atlas-lab = "atlas.trading.cli:main"
+atlas-inference = "atlas.inference.cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]
