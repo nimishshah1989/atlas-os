@@ -98,6 +98,38 @@ def load_nifty500_extended(
     return df
 
 
+def load_stock_ret12m(
+    engine,
+    start_date: date,
+    end_date: date,
+) -> pd.DataFrame:
+    """Load ret_12m from atlas_stock_metrics_daily for instruments in universe.
+
+    load_sector_stock_data doesn't include ret_12m. This function loads
+    just (instrument_id, date, ret_12m) to merge into the stock data frame.
+    """
+    # Include lookback buffer matching load_sector_stock_data's 900-day default
+    load_start = start_date - timedelta(days=900)
+    with open_compute_session(engine) as conn:
+        df = pd.read_sql(
+            """
+            SELECT m.instrument_id, m.date, m.ret_12m
+            FROM atlas.atlas_stock_metrics_daily m
+            JOIN atlas.atlas_universe_stocks u
+                ON u.instrument_id = m.instrument_id
+                AND u.effective_to IS NULL
+            WHERE m.date BETWEEN %(start)s AND %(end)s
+            ORDER BY m.instrument_id, m.date
+            """,
+            conn,
+            params={"start": load_start, "end": end_date},
+        )
+    if not df.empty:
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+    log.info("stock_ret12m_loaded", rows=len(df))
+    return df
+
+
 def load_sector_master(engine) -> pd.DataFrame:
     """Load active sector master."""
     with open_compute_session(engine) as conn:
@@ -301,6 +333,17 @@ def run_year_batch(
         if stock_data.empty:
             log.warning("year_batch_no_stock_data", year=year)
             return 0, True
+
+        # Merge ret_12m (not included in load_sector_stock_data)
+        ret12m_df = load_stock_ret12m(engine, year_start, year_end)
+        if not ret12m_df.empty:
+            stock_data = stock_data.merge(
+                ret12m_df,
+                on=["instrument_id", "date"],
+                how="left",
+            )
+        else:
+            stock_data["ret_12m"] = float("nan")
 
         # Get unique instrument IDs for OHLCV rolling max
         instrument_ids = stock_data["instrument_id"].unique().tolist()
