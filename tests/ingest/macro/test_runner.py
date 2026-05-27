@@ -70,6 +70,34 @@ def test_forward_fill_monthly_col_accepts_valid_cols():
         assert count == 10, f"Expected 10 for col {col!r}"
 
 
+def test_forward_fill_any_col_rejects_unsafe_col():
+    """_forward_fill_any_col must raise ValueError for non-macro columns."""
+    from atlas.ingest.macro.runner import _forward_fill_any_col
+
+    mock_engine = MagicMock()
+
+    with pytest.raises(ValueError, match="safe macro set"):
+        _forward_fill_any_col("fii_cash_equity_flow_cr", mock_engine)
+
+
+def test_forward_fill_any_col_accepts_vix_and_us10y():
+    """_forward_fill_any_col must accept daily series like vix_9d and us_10y_yield."""
+    from atlas.ingest.macro.runner import _forward_fill_any_col
+
+    for col in ("vix_9d", "us_10y_yield", "brent_inr", "cpi_yoy"):
+        mock_conn = MagicMock()
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+        mock_result = MagicMock()
+        mock_result.rowcount = 5
+        mock_conn.execute.return_value = mock_result
+        mock_engine = MagicMock()
+        mock_engine.begin.return_value = mock_conn
+
+        count = _forward_fill_any_col(col, mock_engine)
+        assert count == 5, f"Expected 5 for col {col!r}"
+
+
 def test_forward_fill_monthly_col_passes_start_param():
     """_forward_fill_monthly_col must pass start date as SQL parameter."""
     from atlas.ingest.macro.runner import _forward_fill_monthly_col
@@ -171,6 +199,7 @@ def test_run_backfill_returns_dict_with_expected_keys():
         patch("atlas.ingest.macro.runner.fred_ingest.run_all") as mock_fred,
         patch("atlas.ingest.macro.runner.fred_ingest.fetch_series") as mock_fetch,
         patch("atlas.ingest.macro.runner._forward_fill_monthly_col") as mock_ffill,
+        patch("atlas.ingest.macro.runner._forward_fill_any_col") as mock_ffill_any,
         patch("atlas.ingest.macro.runner.nse_bhavcopy_ingest.run_all") as mock_fii,
         patch("atlas.ingest.macro.runner.mospi_cpi_ingest.run_all") as mock_cpi,
         patch("atlas.ingest.macro.runner.nse_vix_ingest.run_all") as mock_vix,
@@ -184,6 +213,7 @@ def test_run_backfill_returns_dict_with_expected_keys():
         }
         mock_fetch.return_value = pd.DataFrame([{"date": "2024-01-01", "value": 80.0}])
         mock_ffill.return_value = 50
+        mock_ffill_any.return_value = 10
         mock_fii.return_value = 1  # today only
         mock_cpi.return_value = 150
         mock_vix.return_value = 2500

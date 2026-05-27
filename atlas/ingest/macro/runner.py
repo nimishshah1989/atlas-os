@@ -196,6 +196,67 @@ def _forward_fill_monthly_col(
     return rows_updated
 
 
+def _forward_fill_any_col(
+    col: str,
+    engine: Engine,
+    start: str = "2016-01-01",
+) -> int:
+    """Forward-fill any macro column to cover weekends/holidays and data gaps.
+
+    Identical SQL pattern to _forward_fill_monthly_col but without col
+    restriction — accepts all macro columns. Used for:
+      - vix_9d: Yahoo Finance only has trading days; fill weekends
+      - us_10y_yield: FRED only has trading days; fill weekends
+      - brent_inr: FRED Brent is 5-day; fill weekends
+      - cpi_yoy: fill months with no new CPI release yet
+
+    Col is validated against an explicit safe-set to prevent SQL injection.
+
+    Args:
+        col:    Column name (must be in the safe-set of macro columns).
+        engine: SQLAlchemy engine.
+        start:  Earliest date to forward-fill from.
+
+    Returns:
+        Number of rows updated.
+    """
+    safe_cols = frozenset(
+        {
+            "us_10y_yield",
+            "india_10y_yield",
+            "risk_free_91d",
+            "cpi_yoy",
+            "vix_9d",
+            "brent_inr",
+        }
+    )
+    if col not in safe_cols:
+        raise ValueError(f"_forward_fill_any_col: col {col!r} not in safe macro set {safe_cols}")
+
+    sql = f"""
+        UPDATE atlas.atlas_macro_daily t
+        SET {col} = (
+            SELECT m.{col} FROM atlas.atlas_macro_daily m
+            WHERE m.{col} IS NOT NULL AND m.date <= t.date
+            ORDER BY m.date DESC
+            LIMIT 1
+        )
+        WHERE t.{col} IS NULL AND t.date >= :start
+    """  # noqa: S608 — col validated against frozenset above
+
+    with engine.begin() as conn:
+        result = conn.execute(text(sql), {"start": start})
+        rows_updated = result.rowcount
+
+    log.info(
+        "forward_fill_any_col_done",
+        col=col,
+        start=start,
+        rows_updated=rows_updated,
+    )
+    return rows_updated
+
+
 def run_backfill(
     start: str = _DEFAULT_BACKFILL_START,
     engine: Engine | None = None,
@@ -286,6 +347,19 @@ def run_backfill(
     except Exception as exc:
         log.error("brent_inr_step_error", error=str(exc))
         results["brent_inr"] = 0
+
+    # 6. Forward-fill trading-day columns to cover weekends/holidays.
+    #    FRED and Yahoo Finance only publish on trading days; atlas_macro_daily
+    #    has calendar-daily rows. Forward-fill propagates last known value.
+    #    Also covers CPI gaps (months with no new release).
+    log.info("macro_step", step=6, name="FORWARD_FILL_TRADING_DAY_GAPS")
+    for daily_col in ("us_10y_yield", "cpi_yoy", "vix_9d", "brent_inr"):
+        try:
+            ff_count = _forward_fill_any_col(daily_col, eng, start)
+            results[f"ffill_{daily_col}"] = ff_count
+        except Exception as exc:
+            log.error("forward_fill_daily_error", col=daily_col, error=str(exc))
+            results[f"ffill_{daily_col}"] = 0
 
     log.info("macro_backfill_complete", results=results)
     return results
