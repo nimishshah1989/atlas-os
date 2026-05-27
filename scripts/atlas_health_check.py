@@ -264,11 +264,12 @@ TABLE_SPECS: tuple[TableSpec, ...] = (
         schema="atlas",
         table="atlas_etf_signal_calls",
         category="calculated",
-        source="compute (Atlas intelligence)",
-        date_column="date",
+        source="manual backfill (no nightly writer)",
+        date_column=None,  # design-as-config: rows persist until exit; no daily cadence
         critical_columns=("action",),
-        expected_lag_days=1,
+        expected_lag_days=0,
         min_rows=1,
+        notes_hint="Open ETF signals — no nightly writer; rows persist until exit",
     ),
     TableSpec(
         schema="atlas",
@@ -314,7 +315,7 @@ TABLE_SPECS: tuple[TableSpec, ...] = (
         category="mv",
         source="mv",
         date_column=None,
-        min_rows=10,
+        min_rows=5,  # 9 benchmark rows by design — threshold below that
     ),
     TableSpec(
         schema="atlas",
@@ -659,7 +660,47 @@ def main() -> int:
     n_green = sum(1 for r in rows if r["status"] == "GREEN")
     n_yellow = sum(1 for r in rows if r["status"] == "YELLOW")
     n_red = sum(1 for r in rows if r["status"] == "RED")
-    print(f"\nSummary  GREEN={n_green}  YELLOW={n_yellow}  RED={n_red}  (check_date={check_date})")
+    summary_line = (
+        f"Summary  GREEN={n_green}  YELLOW={n_yellow}  RED={n_red}  (check_date={check_date})"
+    )
+    print(f"\n{summary_line}")
+
+    # Human-readable status file — primary morning-check surface. No Slack/email
+    # per user direction. `cat ~/atlas_status.txt` over ssh = full picture.
+    try:
+        with open("/home/ubuntu/atlas_status.txt", "w") as f:
+            f.write(f"Atlas backend status — {check_date}\n")
+            f.write(f"{summary_line}\n\n")
+            if n_red:
+                f.write("REDS (action required):\n")
+                for r in rows:
+                    if r["status"] == "RED":
+                        f.write(
+                            f"  {r['schema_name']}.{r['table_name']:<40s} "
+                            f"last={r['last_data_date'] or '—'} "
+                            f"notes: {r['notes'] or ''}\n"
+                        )
+                f.write("\n")
+            if n_yellow:
+                f.write("YELLOWS (acceptable but watch):\n")
+                for r in rows:
+                    if r["status"] == "YELLOW":
+                        f.write(
+                            f"  {r['schema_name']}.{r['table_name']:<40s} "
+                            f"last={r['last_data_date'] or '—'} "
+                            f"notes: {r['notes'] or ''}\n"
+                        )
+                f.write("\n")
+            f.write("All tracked tables:\n")
+            for r in sorted(rows, key=lambda x: (x["category"], x["table_name"])):
+                f.write(
+                    f"  [{r['status']:<6s}] {r['schema_name']}.{r['table_name']:<40s} "
+                    f"last={r['last_data_date'] or '—':<10s} "
+                    f"rows={r['row_count']:>12,}  ({r['category']})\n"
+                )
+    except Exception as exc:
+        log.warning("status_file_write_failed", error=str(exc))
+
     return 0 if n_red == 0 else 2
 
 
