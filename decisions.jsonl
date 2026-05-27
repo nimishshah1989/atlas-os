@@ -42513,3 +42513,97 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{
+  "ts": "2026-05-27T12:45:28Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/097_v6_mv_stock_list.py",
+  "lines_changed": 222,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-27T12:53:37Z","kind":"supabase_sql_executed","sql_preview":"CREATE MATERIALIZED VIEW atlas.mv_india_pulse AS\nWITH\ndates AS (SELECT date AS as_of_date FROM atlas.atlas_market_regime_daily),\nregime_v5 AS (SELECT date, pct_above_ema_200, pct_above_ema_50, india_vix, ad_ratio, mcclellan_oscillator, new_52w_highs, new_52w_lows, ad_line, advances_count, declines_count FROM atlas.atlas_market_regime_daily),\nregime_v6 AS (SELECT date, smallcap_rs_z, cross_sectional_dispersion, vix_percentile, breadth_pct_above_200dma FROM atlas.atlas_regime_daily),\nmacro_vix9d A"}
+{"ts":"2026-05-27T12:53:56Z","kind":"supabase_sql_executed","sql_preview":"CREATE UNIQUE INDEX uix_mv_india_pulse_as_of_date ON atlas.mv_india_pulse (as_of_date);\nREFRESH MATERIALIZED VIEW atlas.mv_india_pulse;\nSELECT cron.schedule('mv_india_pulse_nightly', '30 14 * * *', $$ REFRESH MATERIALIZED VIEW CONCURRENTLY atlas.mv_india_pulse; $$);\nUPDATE atlas.atlas_alembic_version SET version_num = '100';"}
+{"ts":"2026-05-27T12:54:07Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  COUNT(*) AS total_rows,\n  MIN(as_of_date)::text AS min_date,\n  MAX(as_of_date)::text AS max_date,\n  (SELECT version_num FROM atlas.atlas_alembic_version) AS alembic_head,\n  (SELECT jobname FROM cron.job WHERE jobname = 'mv_india_pulse_nightly') AS cron_job,\n  COUNT(*) FILTER (WHERE headline_indices IS NOT NULL) AS rows_w_headline,\n  COUNT(*) FILTER (WHERE breadth_table IS NOT NULL) AS rows_w_breadth,\n  COUNT(*) FILTER (WHERE sector_heatmap IS NOT NULL) AS rows_w_sectors,\n  COUNT(*) FILT"}
+{"ts":"2026-05-27T12:54:22Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  as_of_date,\n  vix_spot,\n  ROUND(vix_5y_pct::numeric, 3) AS vix_5y_pct,\n  (headline_indices -> 0 ->> 'label')   AS first_idx,\n  (headline_indices -> 0 ->> 'close')    AS first_idx_close,\n  (macro_cards -> 0 ->> 'label')         AS first_macro,\n  (macro_cards -> 0 ->> 'value')         AS first_macro_value,\n  jsonb_array_length(headline_indices)   AS num_indices,\n  jsonb_array_length(breadth_table)      AS num_breadth_rows,\n  jsonb_array_length(sector_heatmap)     AS num_sectors,\n  jsonb_a"}
+{
+  "ts": "2026-05-27T12:58:24Z",
+  "prev": "871ab9453e69d5d8",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/v6/mvs/2026-05-27-mv-markets-rs-detail-charts-design.md",
+  "lines_changed": 200,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T12:59:55Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/101_mv_markets_rs_detail_charts.py",
+  "lines_changed": 613,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T13:04:21Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/101_mv_markets_rs_detail_charts.py",
+  "lines_changed": 529,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T13:06:13Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/migrations/test_101_mv_markets_rs_detail_charts.py",
+  "lines_changed": 484,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T13:06:29Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/migrations/test_101_mv_markets_rs_detail_charts.py",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T13:06:34Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/migrations/test_101_mv_markets_rs_detail_charts.py",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T13:07:36Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/v6/audits/2026-05-27-mv-markets-rs-detail-charts-final.md",
+  "lines_changed": 112,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T13:08:11Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/.forge/knowledge/raw/atlas-os/chunk-mv2-markets-rs-detail-charts-learnings.md",
+  "lines_changed": 66,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-27T13:08:38Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/.claude/projects/-Users-nimishshah-Documents-GitHub-atlas-os/memory/project_mv_markets_rs_detail_charts_state.md",
+  "lines_changed": 59,
+  "session_id": "unknown",
+  "schema_version": 1
+}
