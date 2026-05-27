@@ -876,6 +876,237 @@ def assemble_sector_metrics(
 
 
 # --------------------------------------------------------------------------- #
+# New v6 sector columns (B.2 — rs windows, breadth EMA, 52wh, HHI)          #
+# --------------------------------------------------------------------------- #
+
+
+def compute_rs_windows(
+    sector_returns: pd.DataFrame,
+    nifty500_returns: pd.DataFrame,
+) -> pd.DataFrame:
+    """Compute sector RS vs Nifty 500 for 1w / 1m / 6m / 12m windows.
+
+    RS definition: simple difference — sector bottom-up return minus Nifty 500
+    return for the same window and date.  Simple diff (not price-relative ratio)
+    because the column spec says "sector return - Nifty 500 return"; the
+    price-relative version is already in ``bottomup_rs_*_nifty500``.
+
+    Args:
+        sector_returns: DataFrame with columns ``sector_name``, ``date``,
+            ``bottomup_ret_1w``, ``bottomup_ret_1m``, ``bottomup_ret_6m``,
+            ``bottomup_ret_12m``.  Output of an extended
+            :func:`compute_bottom_up_sector_metrics` that includes ret_6m/12m.
+        nifty500_returns: DataFrame with columns ``date``,
+            ``_n500_ret_1w``, ``_n500_ret_1m``, ``_n500_ret_6m``,
+            ``_n500_ret_12m``.  May be empty — all RS cols come out NaN.
+
+    Returns:
+        Long-form DataFrame with ``sector_name``, ``date``,
+        ``rs_1w``, ``rs_1m``, ``rs_6m``, ``rs_12m``.
+    """
+    expected_out_cols = ["sector_name", "date", "rs_1w", "rs_1m", "rs_6m", "rs_12m"]
+    if sector_returns.empty:
+        return pd.DataFrame(columns=expected_out_cols)
+
+    work = sector_returns[
+        [
+            "sector_name",
+            "date",
+            "bottomup_ret_1w",
+            "bottomup_ret_1m",
+            "bottomup_ret_6m",
+            "bottomup_ret_12m",
+        ]
+    ].copy()
+
+    if nifty500_returns.empty:
+        for col in ("rs_1w", "rs_1m", "rs_6m", "rs_12m"):
+            work[col] = np.nan
+        return work[expected_out_cols]
+
+    merged = work.merge(nifty500_returns, on="date", how="left")
+    merged["rs_1w"] = merged["bottomup_ret_1w"].astype("float64") - merged["_n500_ret_1w"].astype(
+        "float64"
+    )
+    merged["rs_1m"] = merged["bottomup_ret_1m"].astype("float64") - merged["_n500_ret_1m"].astype(
+        "float64"
+    )
+    merged["rs_6m"] = merged["bottomup_ret_6m"].astype("float64") - merged["_n500_ret_6m"].astype(
+        "float64"
+    )
+    merged["rs_12m"] = merged["bottomup_ret_12m"].astype("float64") - merged[
+        "_n500_ret_12m"
+    ].astype("float64")
+    log.info(
+        "rs_windows_computed",
+        sectors=merged["sector_name"].nunique(),
+        dates=merged["date"].nunique(),
+    )
+    return merged[expected_out_cols]
+
+
+def compute_breadth_per_sector(
+    constituents_metrics: pd.DataFrame,
+) -> pd.DataFrame:
+    """Per (sector, date) EMA breadth: fraction above EMA-20 and EMA-200.
+
+    Args:
+        constituents_metrics: DataFrame with columns ``sector_name``, ``date``,
+            ``ema_20_ratio`` (close / ema20; >1 means close above ema20),
+            ``extension_pct`` (close/ema200 - 1; >0 means above ema200).
+            NULL rows are excluded from both numerator and denominator.
+
+    Returns:
+        Long-form DataFrame with ``sector_name``, ``date``,
+        ``pct_above_ema20``, ``pct_above_ema200``.
+        Values are floats in [0, 1]; NaN if no valid rows for that cohort.
+    """
+    expected_cols = ["sector_name", "date", "pct_above_ema20", "pct_above_ema200"]
+    if constituents_metrics.empty:
+        return pd.DataFrame(columns=expected_cols)
+
+    # ---- pct_above_ema20 ---------------------------------------------------
+    ema20_work = constituents_metrics.dropna(subset=["ema_20_ratio"]).copy()
+    is_above_ema20 = (ema20_work["ema_20_ratio"].astype("float64") > 1.0).astype(int)
+    pct_ema20 = (
+        is_above_ema20.groupby([ema20_work["sector_name"], ema20_work["date"]], observed=True)
+        .mean()
+        .rename("pct_above_ema20")
+    )
+
+    # ---- pct_above_ema200 --------------------------------------------------
+    ema200_work = constituents_metrics.dropna(subset=["extension_pct"]).copy()
+    is_above_ema200 = (ema200_work["extension_pct"].astype("float64") > 0.0).astype(int)
+    pct_ema200 = (
+        is_above_ema200.groupby([ema200_work["sector_name"], ema200_work["date"]], observed=True)
+        .mean()
+        .rename("pct_above_ema200")
+    )
+
+    out = pd.concat([pct_ema20, pct_ema200], axis=1).reset_index()
+    log.info(
+        "ema_breadth_computed",
+        sectors=out["sector_name"].nunique(),
+        dates=out["date"].nunique(),
+    )
+    return out[expected_cols]
+
+
+def compute_52wh_per_sector(
+    constituents_metrics: pd.DataFrame,
+    proximity_threshold: float = 0.05,
+) -> pd.DataFrame:
+    """Per (sector, date) fraction of constituents within N% of 52-week high.
+
+    ``pct_52wh`` = fraction of constituents where
+    ``close_approx / rolling_max_252 > (1 - proximity_threshold)``.
+
+    The caller must supply ``rolling_max_252`` (252-day rolling maximum of
+    close_adj per instrument) in the DataFrame — this function is pure
+    computation, not data loading.
+
+    Args:
+        constituents_metrics: DataFrame with columns ``sector_name``, ``date``,
+            ``close_approx``, ``rolling_max_252``.
+            Rows with NULL in either column are excluded.
+        proximity_threshold: default 0.05 (5%). Stock qualifies when
+            ``close / max > 1 - threshold``, i.e. within 5% of the high.
+
+    Returns:
+        Long-form DataFrame with ``sector_name``, ``date``, ``pct_52wh``.
+    """
+    expected_cols = ["sector_name", "date", "pct_52wh"]
+    if constituents_metrics.empty:
+        return pd.DataFrame(columns=expected_cols)
+
+    work = constituents_metrics.dropna(subset=["close_approx", "rolling_max_252"]).copy()
+    if work.empty:
+        return pd.DataFrame(columns=expected_cols)
+
+    close = work["close_approx"].astype("float64")
+    peak = work["rolling_max_252"].astype("float64")
+    # Guard against zero-peak (shouldn't happen with real prices, but be safe)
+    ratio = np.where(peak > 0, close / peak, np.nan)
+    work["_near_52wh"] = (ratio > (1.0 - proximity_threshold)).astype("float64")
+    # rows where ratio is NaN → _near_52wh becomes 0 due to comparison, but we
+    # want them excluded. Re-null them.
+    work.loc[np.isnan(ratio), "_near_52wh"] = np.nan
+
+    pct_52wh = (
+        work["_near_52wh"]
+        .groupby([work["sector_name"], work["date"]], observed=True)
+        .mean()
+        .rename("pct_52wh")
+    )
+    out = pct_52wh.reset_index()
+    log.info(
+        "pct_52wh_computed",
+        sectors=out["sector_name"].nunique(),
+        dates=out["date"].nunique(),
+    )
+    return out[expected_cols]
+
+
+def compute_concentration_per_sector(
+    constituents_metrics: pd.DataFrame,
+) -> pd.DataFrame:
+    """Per (sector, date) Herfindahl-Hirschman Index (HHI) of market concentration.
+
+    HHI = sum(s_i^2) where s_i is constituent i's share of total sector
+    traded value.  Traded value proxy: ``avg_volume_20 * close_approx``
+    (same proxy used in :func:`_compute_traded_value_weight`).
+
+    ``de_market_cap_history`` is empty (verified 2026-05-27); traded value is
+    the canonical proxy per the existing sector pipeline design.
+
+    Range: [1/n, 1]. Single stock → 1.0. Equal weight → 1/n.
+
+    Args:
+        constituents_metrics: DataFrame with columns ``sector_name``, ``date``,
+            ``avg_volume_20``, ``close_approx``.  Rows with NULL in either
+            column (or non-positive traded value) are excluded.
+
+    Returns:
+        Long-form DataFrame with ``sector_name``, ``date``, ``hhi``.
+        NaN if no constituents with valid traded value for that cohort.
+    """
+    expected_cols = ["sector_name", "date", "hhi"]
+    if constituents_metrics.empty:
+        return pd.DataFrame(columns=expected_cols)
+
+    work = constituents_metrics.dropna(subset=["close_approx", "avg_volume_20"]).copy()
+    if work.empty:
+        return pd.DataFrame(columns=expected_cols)
+
+    vol = pd.to_numeric(work["avg_volume_20"], errors="coerce")
+    close = pd.to_numeric(work["close_approx"], errors="coerce")
+    work["_tv"] = vol * close
+    # Exclude non-positive traded values (0 or negative are data errors)
+    work = work[work["_tv"] > 0].copy()
+    if work.empty:
+        return pd.DataFrame(columns=expected_cols)
+
+    grp = work.groupby(["sector_name", "date"], observed=True)
+    tv_total = grp["_tv"].transform("sum")
+    work["_share"] = work["_tv"] / tv_total
+    work["_share_sq"] = work["_share"] ** 2
+
+    hhi = (
+        work["_share_sq"]
+        .groupby([work["sector_name"], work["date"]], observed=True)
+        .sum()
+        .rename("hhi")
+    )
+    out = hhi.reset_index()
+    log.info(
+        "hhi_computed",
+        sectors=out["sector_name"].nunique(),
+        dates=out["date"].nunique(),
+    )
+    return out[expected_cols]
+
+
+# --------------------------------------------------------------------------- #
 # DB writers                                                                  #
 # --------------------------------------------------------------------------- #
 
@@ -1026,8 +1257,12 @@ __all__ = [
     "STATES_COLUMNS",
     "assemble_sector_metrics",
     "backfill_sector_metrics",
+    "compute_52wh_per_sector",
     "compute_bottom_up_sector_metrics",
+    "compute_breadth_per_sector",
+    "compute_concentration_per_sector",
     "compute_rs_velocity",
+    "compute_rs_windows",
     "compute_sector_breadth",
     "compute_sector_states",
     "compute_top_down_sector_metrics",
