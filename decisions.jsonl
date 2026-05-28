@@ -46382,3 +46382,30 @@
 }
 {"ts":"2026-05-28T04:42:19Z","kind":"supabase_sql_executed","sql_preview":"UPDATE alembic_version SET version_num = '112';\nSELECT version_num FROM alembic_version;"}
 {"ts":"2026-05-28T04:42:30Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  n.nspname AS schema,\n  c.relname AS table_name,\n  pg_size_pretty(pg_total_relation_size(c.oid)) AS size,\n  pg_total_relation_size(c.oid) AS size_bytes,\n  (SELECT n_live_tup FROM pg_stat_user_tables WHERE relid = c.oid) AS row_count,\n  CASE WHEN c.relkind = 'r' THEN 'TABLE'\n       WHEN c.relkind = 'm' THEN 'MV'\n       WHEN c.relkind = 'p' THEN 'PARTITIONED'\n       ELSE c.relkind::text END AS kind\nFROM pg_class c\nJOIN pg_namespace n ON n.oid = c.relnamespace\nWHERE n.nspname IN ('atlas','p"}
+{
+  "ts": "2026-05-28T04:46:36Z",
+  "prev": "784a2d82a30332a5",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/v6/2026-05-28-table-census.md",
+  "lines_changed": 149,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T04:47:15Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/.github/workflows/deploy-frontend.yml",
+  "lines_changed": 94,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T04:47:42Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/deploy_frontend_v6.sh",
+  "lines_changed": 91,
+  "session_id": "unknown",
+  "schema_version": 1
+}
