@@ -58,17 +58,57 @@ function findValidation(
 // Component
 // ---------------------------------------------------------------------------
 
+// Plain-English context line for each scorecard row.
+// Goal: every row answers "what does this number mean for the trader?"
+
+function rsContextLine(rank: number | null): string {
+  if (rank == null) return 'No relative-strength data'
+  const pct = Math.round(rank * 100)
+  if (rank >= 0.8)  return `Stronger than ${pct}% of Nifty-500 peers · top quintile`
+  if (rank >= 0.6)  return `Stronger than ${pct}% of peers · above average`
+  if (rank >= 0.4)  return `Around the middle of the pack (${pct}th percentile)`
+  if (rank >= 0.2)  return `Weaker than ${100-pct}% of peers · below average`
+  return `Weaker than ${100-pct}% of peers · bottom quintile`
+}
+
+function urgencyContextLine(urgency: string): string {
+  if (urgency === 'urgent')  return 'Fresh — early in the state, signal still actionable'
+  if (urgency === 'normal')  return 'In the typical part of the state cycle'
+  if (urgency === 'late')    return 'Late — past the typical exit; signal aging'
+  return 'No urgency reading'
+}
+
+function obvContextLine(slope: number | null | undefined): string {
+  if (slope == null) return 'No OBV reading'
+  const dir = slope >= 0 ? 'rising' : 'falling'
+  const verb = slope >= 0 ? 'buyers accumulating' : 'sellers distributing'
+  return `Volume trend is ${dir} (~${Math.abs(Math.round(slope)).toLocaleString('en-IN')} shares/day) — ${verb}`
+}
+
+function atrContextLine(ratio: number | null | undefined): string {
+  if (ratio == null) return 'No volatility reading'
+  if (ratio < 0.6)  return `Volatility very contracted (${ratio.toFixed(2)}× normal) — coiled spring, breakout candidate`
+  if (ratio < 0.8)  return `Volatility contracted (${ratio.toFixed(2)}× normal) — energy building`
+  if (ratio < 1.2)  return `Volatility around normal (${ratio.toFixed(2)}×)`
+  if (ratio < 1.5)  return `Volatility expanded (${ratio.toFixed(2)}× normal) — recent move underway`
+  return `Volatility extreme (${ratio.toFixed(2)}× normal) — late-stage moves often happen here`
+}
+
+function volTierContextLine(tier: string | null | undefined): string {
+  if (!tier || tier === 'n/a')  return 'No vol-tier reading'
+  if (tier.toLowerCase().includes('low'))   return 'Lower realised volatility than the universe median — calmer mover'
+  if (tier.toLowerCase().includes('high'))  return 'Higher realised volatility than the universe median — wider swings'
+  return `${tier} realised volatility tier`
+}
+
 export function ComponentScorecard({ state, validations, obvSlope, atrRatio, realizedVolTier }: ComponentScorecardProps) {
   const rsTier      = deriveRsTier(state.rs_rank_12m)
-  const rsRankStr   = state.rs_rank_12m != null
-    ? `12-month RS rank: ${state.rs_rank_12m.toFixed(2)}`
-    : undefined
   const rsValidation = findValidation(validations, 'rs', rsTier)
 
   const stateLabel     = STATE_ROW_LABEL[state.state]
   const stateValidation = findValidation(validations, 'state', stateLabel)
 
-  const dwellLabel = `Day ${state.dwell_days}`
+  const dwellLabel = `Day ${state.dwell_days} · ${state.urgency_score}`
   const dwellValidation = findValidation(validations, 'dwell', state.state)
 
   const volTierBadge = realizedVolTier ?? 'n/a'
@@ -79,56 +119,54 @@ export function ComponentScorecard({ state, validations, obvSlope, atrRatio, rea
       data-testid="component-scorecard"
       aria-label="Signal scorecard"
     >
-      <h2 className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-3">
+      <h2 className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-1">
         Signal scorecard
       </h2>
+      <p className="font-sans text-[11px] text-ink-tertiary mb-3 max-w-prose">
+        Every row reads &ldquo;what is this and what does it mean for the trader.&rdquo;
+        Validated rows are IC-backed; decorative rows are context.
+      </p>
 
       <div>
-        {/* RS tier row */}
         <ComponentValidationRow
           componentLabel="Relative strength"
           badge={rsTier}
           validation={rsValidation}
-          contextLine={rsRankStr}
+          contextLine={rsContextLine(state.rs_rank_12m)}
         />
 
-        {/* Master state row */}
         <ComponentValidationRow
           componentLabel="Master state"
           badge={stateLabel}
           validation={stateValidation}
         />
 
-        {/* Dwell / timing row */}
         <ComponentValidationRow
           componentLabel="Dwell timing"
           badge={dwellLabel}
           validation={dwellValidation}
-          contextLine={`urgency: ${state.urgency_score}`}
+          contextLine={urgencyContextLine(state.urgency_score)}
         />
 
-        {/* OBV slope row */}
         <ComponentValidationRow
-          componentLabel="OBV slope"
+          componentLabel="Volume flow (OBV)"
           badge="Continuous"
           validation={findValidation(validations, 'obv_slope_50d', 'Continuous')}
-          contextLine={obvSlope == null ? 'computed continuously' : `slope ${obvSlope >= 0 ? '+' : ''}${Math.round(obvSlope).toLocaleString('en-IN')}/day`}
+          contextLine={obvContextLine(obvSlope)}
         />
 
-        {/* ATR contraction row */}
         <ComponentValidationRow
-          componentLabel="ATR contraction"
+          componentLabel="Volatility (ATR)"
           badge="Continuous"
           validation={findValidation(validations, 'atr_contraction_ratio', 'Continuous')}
-          contextLine={atrRatio == null ? 'computed continuously' : `ratio ${atrRatio.toFixed(2)}`}
+          contextLine={atrContextLine(atrRatio)}
         />
 
-        {/* Realized vol tier row */}
         <ComponentValidationRow
-          componentLabel="Realized vol tier"
+          componentLabel="Realised vol tier"
           badge={volTierBadge}
           validation={findValidation(validations, 'realized_vol_63', volTierBadge)}
-          contextLine={undefined}
+          contextLine={volTierContextLine(realizedVolTier)}
         />
       </div>
     </section>

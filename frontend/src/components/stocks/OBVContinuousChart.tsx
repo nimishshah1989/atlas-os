@@ -160,10 +160,16 @@ export function OBVContinuousChart({ series }: OBVContinuousChartProps) {
         </ResponsiveContainer>
       </div>
 
-      <p className="text-xs text-ink-tertiary mt-2 max-w-prose">
-        Validated_inverse at 63d horizon (IR -0.43). Cross-sectionally, falling-OBV
-        stocks outperformed; for a held Stage 2 position, falling OBV is a topping
-        warning. Zero-cross highlighted.
+      <p className="text-xs text-ink-tertiary mt-2 max-w-prose leading-relaxed">
+        <strong className="text-ink-secondary">What this is:</strong> On-Balance Volume tracks
+        whether trading volume is flowing INTO the stock (line rising = buyers in control) or
+        OUT of it (line falling = sellers in control). Vertical lines mark days the trend
+        crossed zero.{' '}
+        <strong className="text-ink-secondary">How to read it:</strong> If you already hold the
+        stock, a falling OBV line is an early topping signal — institutional money is leaving
+        before the price tells you. Historically (last 3-month window), stocks with falling
+        OBV have actually outperformed peers cross-sectionally, but that's the wrong frame for
+        a holder — for you it's a hold/trim flag, not a fresh-buy signal.
       </p>
     </section>
   )

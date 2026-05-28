@@ -43,3 +43,192 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{
+  "ts": "2026-05-28T15:56:48Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-28-tradingview-integration.md",
+  "lines_changed": 214,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T15:57:19Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/plans/2026-05-28-tradingview-integration.md",
+  "lines_changed": 15,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T16:19:52Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/stocks/OBVContinuousChart.tsx",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T16:21:05Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/stocks/ComponentScorecard.tsx",
+  "lines_changed": 114,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T16:23:35Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/etfs/ETFTraderViewHeader.tsx",
+  "lines_changed": 113,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T16:23:37Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/migrations/versions/117_tv_metrics_tables.py",
+  "lines_changed": 65,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T16:23:42Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/etfs/[ticker]/page.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T16:23:51Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/etfs/[ticker]/page.tsx",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T16:24:55Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/sectors/SectorTraderViewHeader.tsx",
+  "lines_changed": 86,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T16:25:03Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/sectors/[sector]/page.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T16:25:11Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/sectors/[sector]/page.tsx",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T16:26:25Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/funds/FundTraderViewHeader.tsx",
+  "lines_changed": 105,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T16:26:33Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/funds/[mstar_id]/page.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T16:26:40Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/funds/[mstar_id]/page.tsx",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T16:27:55Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/TodayConvictionTabs.tsx",
+  "lines_changed": 33,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T16:28:26Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/TodayConvictionTabs.tsx",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T16:28:42Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/TodayConvictionTabs.tsx",
+  "lines_changed": 19,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T16:28:55Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/TodayConvictionTabs.tsx",
+  "lines_changed": 23,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T16:29:03Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/TodayConvictionTabs.tsx",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T16:30:26Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/sectors/SectorTraderViewHeader.tsx",
+  "lines_changed": 32,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T16:30:49Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/funds/FundTraderViewHeader.tsx",
+  "lines_changed": 17,
+  "session_id": "unknown",
+  "schema_version": 1
+}

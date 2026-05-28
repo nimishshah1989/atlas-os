@@ -15,6 +15,7 @@ import { LeaderHoldingsPanel } from '@/components/ui/LeaderHoldingsPanel'
 import { buildSingleFundCommentary } from '@/lib/commentary/funds'
 import { CommentaryBlock } from '@/components/ui/CommentaryBlock'
 import { FundDeepDiveHeader } from '@/components/funds/FundDeepDiveHeader'
+import { FundTraderViewHeader } from '@/components/v6/funds/FundTraderViewHeader'
 import { FundLens1 } from '@/components/funds/FundLens1'
 import { FundLens2 } from '@/components/funds/FundLens2'
 import { FundLens3 } from '@/components/funds/FundLens3'
@@ -49,6 +50,7 @@ export default async function FundDeepDivePage({
 
   return (
     <div className="max-w-[1200px] mx-auto">
+      <FundTraderViewHeader master={master} />
       <FundDeepDiveHeader master={master} />
       <div className="px-6 py-4 border-b border-paper-rule">
         <CommentaryBlock narrative={commentary.narrative} contextCards={commentary.contextCards} />

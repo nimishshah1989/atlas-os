@@ -15,6 +15,7 @@ import { ETFSnapshotTiles } from '@/components/etfs/ETFSnapshotTiles'
 import { ETFDeepDiveTabs } from '@/components/etfs/ETFDeepDiveTabs'
 import { LeaderHoldingsPanel } from '@/components/ui/LeaderHoldingsPanel'
 import { EtfHeroStrip } from '@/components/v6/etfs/EtfHeroStrip'
+import { ETFTraderViewHeader } from '@/components/v6/etfs/ETFTraderViewHeader'
 import { PriceMultidim180d } from '@/components/v6/etfs/PriceMultidim180d'
 import { NavVsMarketPrice } from '@/components/v6/etfs/NavVsMarketPrice'
 import { TrackingError12m } from '@/components/v6/etfs/TrackingError12m'
@@ -56,6 +57,9 @@ export default async function ETFPage({
 
   return (
     <div className="max-w-[1400px] mx-auto">
+
+      {/* ── Trader-view verdict header (gates, engine state, Weinstein context) ── */}
+      <ETFTraderViewHeader etf={etf} />
 
       {/* ── Breadcrumb ──────────────────────────────────────────────────────── */}
       <div className="px-6 pt-4 pb-1 text-[12px] text-ink-tertiary font-sans">

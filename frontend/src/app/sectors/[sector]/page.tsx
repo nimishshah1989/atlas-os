@@ -17,6 +17,7 @@ import { notFound } from 'next/navigation'
 import { Suspense } from 'react'
 import { DataSourceBanner } from '@/components/v6/DataSourceBanner'
 import { SectorHeroStrip } from '@/components/v6/sectors/SectorHeroStrip'
+import { SectorTraderViewHeader } from '@/components/v6/sectors/SectorTraderViewHeader'
 import { RSWindowsTable } from '@/components/v6/sectors/RSWindowsTable'
 import { ConstituentsTable } from '@/components/v6/sectors/ConstituentsTable'
 import { TopPicksPanel } from '@/components/v6/sectors/TopPicksPanel'
@@ -92,6 +93,9 @@ export default async function SectorDetailPage({
 
   return (
     <div className="max-w-[1400px] mx-auto">
+
+      {/* Trader-view verdict header */}
+      <SectorTraderViewHeader sector={deepdive} />
 
       {/* Page header */}
       <section className="px-8 py-8 border-b border-paper-rule">

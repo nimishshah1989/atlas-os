@@ -11,6 +11,7 @@
 // Client component — tab selection is the only interactive state.
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { ActionBadge } from '@/components/v6/shared/ActionBadge'
 import type { ConvictionCallRow, ConvictionCallsResult } from '@/lib/queries/v6/landing'
 
@@ -73,17 +74,25 @@ function FundQualityBadge({ is_atlas_leader }: { is_atlas_leader: boolean }) {
 // Individual conviction row
 // ---------------------------------------------------------------------------
 
-function ConvRow({ row }: { row: ConvictionCallRow }) {
+function ConvRow({ row, tabKey }: { row: ConvictionCallRow; tabKey: TabKey }) {
   const excess = row.predicted_excess
   const isPos = excess != null && excess.startsWith('+')
   const isNeg = excess != null && excess.startsWith('-')
 
-  return (
-    <div
-      className="grid items-center gap-4 px-3 py-2 rounded-[2px] hover:bg-paper-deep transition-colors cursor-pointer"
-      style={{ gridTemplateColumns: '130px 1fr 110px 1fr 80px 72px' }}
-      role="row"
-    >
+  // Per [[everything-clickable]] memory — every symbol routes to its deep-dive
+  // page. Stocks/ETFs use the symbol directly; funds aren't routable from this
+  // row yet because mstar_id isn't returned by getTopConvictionCalls(). Falls
+  // back to clickable-but-no-href styling for funds — TODO: surface mstar_id
+  // in the landing query.
+  const href = tabKey === 'stocks' ? `/stocks/${encodeURIComponent(row.symbol)}`
+             : tabKey === 'etfs'   ? `/etfs/${encodeURIComponent(row.symbol)}`
+             : null
+
+  const rowClass = "grid items-center gap-4 px-3 py-2 rounded-[2px] hover:bg-paper-deep transition-colors cursor-pointer"
+  const rowStyle = { gridTemplateColumns: '130px 1fr 110px 1fr 80px 72px' }
+
+  const inner = (
+    <>
       {/* Symbol + NEW badge */}
       <div className="font-mono text-[13px] font-medium text-ink-primary flex items-center gap-1.5">
         {row.symbol}
@@ -130,6 +139,19 @@ function ConvRow({ row }: { row: ConvictionCallRow }) {
       >
         {excess ?? '—'}
       </div>
+    </>
+  )
+
+  if (href) {
+    return (
+      <Link href={href} className={rowClass} style={rowStyle} role="row">
+        {inner}
+      </Link>
+    )
+  }
+  return (
+    <div className={rowClass} style={rowStyle} role="row">
+      {inner}
     </div>
   )
 }
@@ -293,7 +315,7 @@ export function TodayConvictionTabs({ data }: Props) {
               <EmptyPane label={activeTab} />
             ) : (
               rows.map((row, i) => (
-                <ConvRow key={`${row.symbol}-${i}`} row={row} />
+                <ConvRow key={`${row.symbol}-${i}`} row={row} tabKey={activeTab} />
               ))
             )}
           </div>
