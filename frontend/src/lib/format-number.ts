@@ -49,3 +49,14 @@ export function formatRank(raw: string | number | null | undefined): string {
   if (!Number.isFinite(n)) return String(raw)
   return n.toFixed(2)
 }
+
+/**
+ * Sign-aware percent formatter. Input is a decimal fraction (e.g. 0.052 = 5.2%).
+ * Returns "+5.2%", "-3.1%", or "—" for null/undefined.
+ * Use this wherever a financial excess or return needs an explicit sign.
+ */
+export function fmtSignedPct(v: number | null | undefined, decimals = 1): string {
+  if (v == null) return '—'
+  const sign = v >= 0 ? '+' : ''
+  return `${sign}${(v * 100).toFixed(decimals)}%`
+}

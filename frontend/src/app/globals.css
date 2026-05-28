@@ -9,9 +9,13 @@
   --color-ink-secondary: #5A5248;
   --color-ink-tertiary:  #8C8278;
   --color-paper-rule:    #C2B8A8;
+  --color-paper-soft:    #FBF8F1;   /* lightest paper hover tint (was inline #FBF8F1) */
+  --color-ink-rule:      #DDD3BF;   /* table/border rule on paper (was inline #DDD3BF) */
+  --color-ink-4:         #9A8F82;   /* faintest ink (mockup tertiary tint) */
   --color-signal-pos:    #2F6B43;
   --color-signal-neg:    #B0492C;
   --color-signal-warn:   #B8860B;
+  --color-signal-info:   #3E5C76;   /* blue accent — narrative ribbon, intl markers */
   --color-accent:        #25394A;
   --color-teal:          #1D9E75;
 

@@ -14,6 +14,10 @@ import { MomentumSection } from '@/components/regime/MomentumSection'
 import { ParticipationSection } from '@/components/regime/ParticipationSection'
 import { TimeRangeToggle } from '@/components/ui/TimeRangeToggle'
 import { rangeToDays, type TimeRange } from '@/lib/time-range'
+// v6 landing extensions — 12-week journey + today's conviction tabs
+import { getRegimeJourney12w, getTopConvictionCalls } from '@/lib/queries/v6/landing'
+import { RegimeJourney12w } from '@/components/v6/landing/RegimeJourney12w'
+import { TodayConvictionTabs } from '@/components/v6/landing/TodayConvictionTabs'
 
 type SearchParams = Promise<{ range?: string }>
 
@@ -22,9 +26,11 @@ export default async function RegimePage({ searchParams }: { searchParams: Searc
   const historyRange = range as TimeRange
   const historyDays = rangeToDays(historyRange)
 
-  const [current, history] = await Promise.all([
+  const [current, history, journey12w, convictionCalls] = await Promise.all([
     getCurrentRegime(),
     getRegimeHistory(historyDays),
+    getRegimeJourney12w(),
+    getTopConvictionCalls(),
   ])
 
   if (!current) {
@@ -84,6 +90,12 @@ export default async function RegimePage({ searchParams }: { searchParams: Searc
       <BreadthSection current={current} history={history} />
       <MomentumSection current={current} history={history} />
       <ParticipationSection current={current} history={history} />
+
+      {/* ── NEW: 12-week regime journey (Page 01 mockup section) ── */}
+      <RegimeJourney12w cells={journey12w} />
+
+      {/* ── NEW: Today's conviction — 3-tab panel ── */}
+      <TodayConvictionTabs data={convictionCalls} />
     </div>
   )
 }

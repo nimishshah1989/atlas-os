@@ -248,3 +248,352 @@ function rsStateFromPctile(p: string | null): string | null {
   if (v >= 0.10) return 'Weak'
   return 'Laggard'
 }
+
+// ---------------------------------------------------------------------------
+// mv_etf_list_v6 — Page 07 full list (new MV-backed query)
+// ---------------------------------------------------------------------------
+
+export type EtfListV6Row = {
+  ticker: string
+  etf_name: string | null
+  fund_house: string | null
+  asset_class: string | null
+  etf_category: string | null
+  composite_score: number | null
+  is_atlas_leader: boolean | null
+  premium_bps: number | null
+  /**
+   * Tracking error — 60-day window.
+   * MV stores values in two possible scales depending on data source:
+   *   v < 1  → fractional (e.g. 0.0010 = 10 bps) — multiply × 10000 to display as bps
+   *   v >= 1 → already in bps (e.g. 10.0 = 10 bps) — use as-is
+   * Components apply: `const bps = te_60d < 1 ? te_60d * 10000 : te_60d`
+   */
+  te_60d: number | null
+  adv_20d_inr: number | null
+  adv_monthly_cr: number | null
+  ret_1d: number | null
+  ret_1w: number | null
+  ret_1m: number | null
+  ret_3m: number | null
+  ret_6m: number | null
+  ret_12m: number | null
+  rs_state: string | null
+  momentum_state: string | null
+  action: string | null           // BUY / AVOID / WATCH
+  scatter_zone: string | null     // clean_buy / discount_outlier / premium_outlier / low_adv / premium_unknown
+  signal_fire_date: string | null
+  /** atlas_tenure enum, e.g. '1m'/'3m'/'6m'/'12m' — string, NOT number */
+  signal_tenure: string | null
+  as_of_date: string | null
+  eli5: string | null
+}
+
+type MvEtfListRow = {
+  ticker: string
+  etf_name: string | null
+  fund_house: string | null
+  asset_class: string | null
+  etf_category: string | null
+  composite_score: string | null
+  is_atlas_leader: boolean | null
+  premium_bps: string | null
+  te_60d: string | null
+  adv_20d_inr: string | null
+  adv_monthly_cr: string | null
+  ret_1d: string | null
+  ret_1w: string | null
+  ret_1m: string | null
+  ret_3m: string | null
+  ret_6m: string | null
+  ret_12m: string | null
+  rs_state: string | null
+  momentum_state: string | null
+  action: string | null
+  scatter_zone: string | null
+  signal_fire_date: string | null
+  signal_tenure: string | null
+  as_of_date: string | null
+  eli5: string | null
+}
+
+/**
+ * Return all ETFs from mv_etf_list_v6, sorted by composite_score desc.
+ * Use this for the Page 07 list — it includes premium_bps, te_60d, adv_20d_inr
+ * and the derived action + scatter_zone columns.
+ */
+export async function getEtfsList(): Promise<EtfListV6Row[]> {
+  const rows = await sql<MvEtfListRow[]>`
+    SELECT
+      ticker, etf_name, fund_house, asset_class, etf_category,
+      composite_score::text, is_atlas_leader,
+      premium_bps::text, te_60d::text, adv_20d_inr::text, adv_monthly_cr::text,
+      ret_1d::text, ret_1w::text, ret_1m::text, ret_3m::text,
+      ret_6m::text, ret_12m::text,
+      rs_state, momentum_state,
+      action, scatter_zone,
+      signal_fire_date::text, signal_tenure::text,
+      as_of_date::text, eli5
+    FROM atlas.mv_etf_list_v6
+    ORDER BY composite_score DESC NULLS LAST
+  `
+
+  return rows.map((r): EtfListV6Row => ({
+    ticker: r.ticker,
+    etf_name: r.etf_name,
+    fund_house: r.fund_house,
+    asset_class: r.asset_class,
+    etf_category: r.etf_category,
+    composite_score: toNumber(r.composite_score),
+    is_atlas_leader: r.is_atlas_leader ?? null,
+    premium_bps: toNumber(r.premium_bps),
+    te_60d: toNumber(r.te_60d),
+    adv_20d_inr: toNumber(r.adv_20d_inr),
+    adv_monthly_cr: toNumber(r.adv_monthly_cr),
+    ret_1d: toNumber(r.ret_1d),
+    ret_1w: toNumber(r.ret_1w),
+    ret_1m: toNumber(r.ret_1m),
+    ret_3m: toNumber(r.ret_3m),
+    ret_6m: toNumber(r.ret_6m),
+    ret_12m: toNumber(r.ret_12m),
+    rs_state: r.rs_state,
+    momentum_state: r.momentum_state,
+    action: r.action,
+    scatter_zone: r.scatter_zone,
+    signal_fire_date: r.signal_fire_date,
+    signal_tenure: r.signal_tenure,
+    as_of_date: r.as_of_date,
+    eli5: r.eli5,
+  }))
+}
+
+// ---------------------------------------------------------------------------
+// AMC aggregate — computed from getEtfsList() result in JS (34 rows, trivial)
+// ---------------------------------------------------------------------------
+
+export type AmcAggregate = {
+  fund_house: string
+  etf_count: number
+  buy_count: number
+  avoid_count: number
+  watch_count: number
+  /** sum of adv_monthly_cr as proxy for AUM */
+  total_adv_cr: number
+  /** dominant action: BUY | AVOID | WATCH | neutral */
+  dominant_action: string
+}
+
+export function getAmcAggregates(rows: EtfListV6Row[]): AmcAggregate[] {
+  const map = new Map<string, AmcAggregate>()
+
+  for (const r of rows) {
+    const fh = r.fund_house?.toUpperCase().trim() ?? 'UNKNOWN'
+    if (!map.has(fh)) {
+      map.set(fh, {
+        fund_house: fh,
+        etf_count: 0,
+        buy_count: 0,
+        avoid_count: 0,
+        watch_count: 0,
+        total_adv_cr: 0,
+        dominant_action: 'neutral',
+      })
+    }
+    const agg = map.get(fh)!
+    agg.etf_count += 1
+    if (r.action === 'BUY') agg.buy_count += 1
+    else if (r.action === 'AVOID') agg.avoid_count += 1
+    else if (r.action === 'WATCH') agg.watch_count += 1
+    agg.total_adv_cr += r.adv_monthly_cr ?? 0
+  }
+
+  // Derive dominant_action and sort by total_adv_cr desc
+  const result = Array.from(map.values()).map((a) => ({
+    ...a,
+    dominant_action:
+      a.buy_count > a.avoid_count && a.buy_count > a.watch_count
+        ? 'BUY'
+        : a.avoid_count > a.watch_count
+          ? 'AVOID'
+          : a.watch_count > 0
+            ? 'WATCH'
+            : 'neutral',
+  }))
+
+  return result.sort((a, b) => b.total_adv_cr - a.total_adv_cr)
+}
+
+// ---------------------------------------------------------------------------
+// mv_etf_deepdive — Page 07a single-ETF deep dive
+// ---------------------------------------------------------------------------
+
+export type PriceBar = {
+  date: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
+export type PeerSetEntry = {
+  ticker: string
+  composite_score: number | null
+  matrix_conviction_score: number | null
+  adv_20d_inr: number | null
+  is_atlas_leader: boolean | null
+  rank_in_category: number | null
+  delta_composite: number | null
+}
+
+export type EtfDeepdiveRow = {
+  ticker: string
+  etf_name: string | null
+  fund_house: string | null
+  asset_class: string | null
+  etf_category: string | null
+  as_of_date: string | null
+  composite_score: number | null
+  is_atlas_leader: boolean | null
+  premium_bps: number | null
+  te_60d: number | null
+  adv_20d_inr: number | null
+  ret_1m: number | null
+  ret_3m: number | null
+  ret_6m: number | null
+  ret_12m: number | null
+  rs_state: string | null
+  action: string | null
+  eli5: string | null
+  /** 180-day OHLCV — may be null if ETF not in de_etf_ohlcv */
+  price_180d: PriceBar[] | null
+  /** peer set within same etf_category */
+  peer_set: PeerSetEntry[] | null
+}
+
+type MvDeepdiveRow = {
+  ticker: string
+  etf_name: string | null
+  fund_house: string | null
+  asset_class: string | null
+  etf_category: string | null
+  as_of_date: string | null
+  composite_score: string | null
+  is_atlas_leader: boolean | null
+  premium_bps: string | null
+  te_60d: string | null
+  adv_20d_inr: string | null
+  ret_1m: string | null
+  ret_3m: string | null
+  ret_6m: string | null
+  ret_12m: string | null
+  rs_state: string | null
+  action: string | null
+  eli5: string | null
+  price_180d: unknown | null
+  peer_set: unknown | null
+}
+
+/**
+ * Return deep-dive row for a single ETF from mv_etf_deepdive.
+ * Returns null when not found (triggers notFound() in page).
+ */
+export async function getEtfDeepdive(ticker: string): Promise<EtfDeepdiveRow | null> {
+  const rows = await sql<MvDeepdiveRow[]>`
+    SELECT
+      ticker, etf_name, fund_house, asset_class, etf_category,
+      as_of_date::text,
+      composite_score::text, is_atlas_leader,
+      premium_bps::text, te_60d::text, adv_20d_inr::text,
+      ret_1m::text, ret_3m::text, ret_6m::text, ret_12m::text,
+      rs_state, action, eli5,
+      price_180d, peer_set
+    FROM atlas.mv_etf_deepdive
+    WHERE ticker = ${ticker.toUpperCase()}
+    LIMIT 1
+  `
+
+  const r = rows[0]
+  if (!r) return null
+
+  // Parse JSONB arrays safely
+  const price_180d = parsePriceArray(r.price_180d)
+  const peer_set = parsePeerSet(r.peer_set)
+
+  return {
+    ticker: r.ticker,
+    etf_name: r.etf_name,
+    fund_house: r.fund_house,
+    asset_class: r.asset_class,
+    etf_category: r.etf_category,
+    as_of_date: r.as_of_date,
+    composite_score: toNumber(r.composite_score),
+    is_atlas_leader: r.is_atlas_leader ?? null,
+    premium_bps: toNumber(r.premium_bps),
+    te_60d: toNumber(r.te_60d),
+    adv_20d_inr: toNumber(r.adv_20d_inr),
+    ret_1m: toNumber(r.ret_1m),
+    ret_3m: toNumber(r.ret_3m),
+    ret_6m: toNumber(r.ret_6m),
+    ret_12m: toNumber(r.ret_12m),
+    rs_state: r.rs_state,
+    action: r.action,
+    eli5: r.eli5,
+    price_180d,
+    peer_set,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Private JSONB parsers
+// ---------------------------------------------------------------------------
+
+/**
+ * Convert an unknown JSONB field to number | null.
+ * JSONB numeric fields arrive as JS number already; string path handles
+ * edge cases where the driver serialises numerics as strings.
+ * Uses toNumber() for string values to satisfy the no-Number lint rule.
+ */
+function jsonbNum(v: unknown): number | null {
+  if (v == null) return null
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null
+  if (typeof v === 'string') return toNumber(v)
+  return null
+}
+
+function parsePriceArray(raw: unknown): PriceBar[] | null {
+  if (!raw || !Array.isArray(raw)) return null
+  return raw
+    .map((item): PriceBar | null => {
+      if (typeof item !== 'object' || item === null) return null
+      const o = item as Record<string, unknown>
+      return {
+        date: String(o['date'] ?? ''),
+        open: jsonbNum(o['open']) ?? 0,
+        high: jsonbNum(o['high']) ?? 0,
+        low: jsonbNum(o['low']) ?? 0,
+        close: jsonbNum(o['close']) ?? 0,
+        volume: jsonbNum(o['volume']) ?? 0,
+      }
+    })
+    .filter((x): x is PriceBar => x !== null && x.date !== '')
+}
+
+function parsePeerSet(raw: unknown): PeerSetEntry[] | null {
+  if (!raw || !Array.isArray(raw)) return null
+  return raw
+    .map((item): PeerSetEntry | null => {
+      if (typeof item !== 'object' || item === null) return null
+      const o = item as Record<string, unknown>
+      return {
+        ticker: String(o['ticker'] ?? ''),
+        composite_score: jsonbNum(o['composite_score']),
+        matrix_conviction_score: jsonbNum(o['matrix_conviction_score']),
+        adv_20d_inr: jsonbNum(o['adv_20d_inr']),
+        is_atlas_leader: typeof o['is_atlas_leader'] === 'boolean' ? o['is_atlas_leader'] : null,
+        rank_in_category: jsonbNum(o['rank_in_category']),
+        delta_composite: jsonbNum(o['delta_composite']),
+      }
+    })
+    .filter((x): x is PeerSetEntry => x !== null && x.ticker !== '')
+}
