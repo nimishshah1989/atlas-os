@@ -37,6 +37,7 @@ from atlas.agents.tools.atlas_queries import (
     query_sector_rotation_quadrants,
     query_top_conviction,
     query_top_rs_stocks,
+    query_tv_analysis,
 )
 
 
@@ -207,6 +208,17 @@ _PARAMETER_SCHEMAS: dict[str, dict[str, Any]] = {
         },
         "additionalProperties": False,
     },
+    "get_tv_analysis": {
+        "type": "object",
+        "properties": {
+            "symbol": {
+                "type": "string",
+                "description": "NSE symbol (e.g. 'RELIANCE', 'TCS'). Case-insensitive.",
+            }
+        },
+        "required": ["symbol"],
+        "additionalProperties": False,
+    },
 }
 
 
@@ -270,6 +282,13 @@ _DESCRIPTIONS: dict[str, str] = {
         "confidence_label='industry_grade' to restrict to T1 and T3 "
         "(measured IC >= 0.05)."
     ),
+    "get_tv_analysis": (
+        "Return cached TradingView screener metrics for one NSE symbol: "
+        "tv_recommend_label (STRONG_BUY/BUY/NEUTRAL/SELL/STRONG_SELL), "
+        "recommend_all, RSI-14, MACD, EMA-20/50/200, ATR-14, price, "
+        "52-week high/low, and fetched_at. Returns null when the symbol "
+        "is not in the Atlas universe or screener data is absent."
+    ),
 }
 
 
@@ -288,9 +307,10 @@ _FUNCTIONS: dict[str, Callable[..., Any]] = {
     "get_distribution_stats": query_distribution_stats,
     "get_latest_brief": query_latest_brief,
     "get_top_conviction": query_top_conviction,
+    "get_tv_analysis": query_tv_analysis,
 }
 
-# Tuple of the 10 v1 tool names — tests pin against this.
+# Tuple of all tool names — tests pin against this.
 TOOL_NAMES: tuple[str, ...] = tuple(_FUNCTIONS.keys())
 
 

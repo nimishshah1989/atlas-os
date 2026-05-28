@@ -45,7 +45,7 @@ def test_beta_is_near_one_for_identical_series():
 
 
 def test_beta_null_for_short_series():
-    short = pd.Series(NIFTY_RETURNS[:25].values)
+    short = pd.Series(NIFTY_RETURNS.iloc[:25])
     assert _compute_beta(short, short) is None
 
 

@@ -28,7 +28,7 @@ from atlas.api.trading import router as trading_router
 from atlas.api.tv_signals import router as tv_signals_router
 from atlas.tv.routes import _internal_router as tv_internal_router  # type: ignore[import]
 from atlas.tv.routes import _portfolios_router as tv_portfolios_router  # type: ignore[import]
-from atlas.tv.routes import router as tv_router
+from atlas.tv.routes import router as tv_router  # type: ignore[import]
 
 app = FastAPI(title="Atlas API", version="0.1.0")
 

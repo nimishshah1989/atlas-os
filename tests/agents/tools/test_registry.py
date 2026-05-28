@@ -10,13 +10,17 @@ from atlas.agents.tools import TOOL_NAMES, build_registry
 from atlas.agents.tools.registry import Tool
 
 
-def test_tool_names_has_exactly_11() -> None:
-    # 10 v1 tools + get_top_conviction (SP04 Stage 3).
-    assert len(TOOL_NAMES) == 11
+def test_tool_names_has_exactly_12() -> None:
+    # 10 v1 tools + get_top_conviction (SP04 Stage 3) + get_tv_analysis (TV-07).
+    assert len(TOOL_NAMES) == 12
 
 
 def test_top_conviction_is_registered() -> None:
     assert "get_top_conviction" in TOOL_NAMES
+
+
+def test_tv_analysis_is_registered() -> None:
+    assert "get_tv_analysis" in TOOL_NAMES
 
 
 def test_tool_names_are_unique() -> None:

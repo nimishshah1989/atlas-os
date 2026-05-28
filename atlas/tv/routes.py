@@ -71,10 +71,8 @@ def get_portfolio_analytics(portfolio_id: str) -> dict:
             status_code=404,
             detail=f"No closed positions found for portfolio: {portfolio_id}",
         )
-    data_as_of = None
     daily = result.get("daily_returns")
-    if daily:
-        data_as_of = daily[-1].get("date")
+    data_as_of = (daily[-1].get("date") if daily else None) or result.get("portfolio_date_end")
     return {
         "data": result,
         "meta": {

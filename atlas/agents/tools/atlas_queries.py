@@ -398,6 +398,22 @@ def query_top_conviction(
     return [{k: _to_jsonable(v) for k, v in r.items()} for r in rows]
 
 
+def query_tv_analysis(engine: Engine, *, symbol: str) -> dict[str, Any] | None:
+    """Return cached TradingView screener metrics for one symbol from atlas.tv_metrics."""
+    sql = text("""
+        SELECT symbol, tv_recommend_label, recommend_all, recommend_ma,
+               recommend_other, rsi_14, macd_macd, ema_20, ema_50, ema_200,
+               atr_14, price, high_52w, low_52w, fetched_at
+        FROM atlas.tv_metrics
+        WHERE symbol = :sym
+    """)
+    with engine.connect() as conn:
+        row = conn.execute(sql, {"sym": symbol.upper()}).mappings().first()
+    if row is None:
+        return None
+    return {k: _to_jsonable(v) for k, v in dict(row).items()}
+
+
 def _to_jsonable(value: Any) -> Any:
     """Convert SQL-row values to JSON-serialisable primitives.
 

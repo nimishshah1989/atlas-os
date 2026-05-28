@@ -58,14 +58,18 @@ def _compute_alpha(
     mkt_returns: pd.Series,
     rf_annual: Decimal,
 ) -> float | None:
-    beta = _compute_beta(port_returns, mkt_returns)
+    # Align before all calcs so beta and annualised returns use the same observation window.
+    aligned = pd.concat([port_returns, mkt_returns], axis=1).dropna()
+    if len(aligned) < _MIN_BETA_OBS:
+        return None
+    p, m = aligned.iloc[:, 0], aligned.iloc[:, 1]
+    beta = _compute_beta(p, m)
     if beta is None:
         return None
     rf = float(rf_annual)
-    n_port = max(len(port_returns), 1)
-    n_mkt = max(len(mkt_returns), 1)
-    rp = float((1 + port_returns).prod() ** (_ANNUALISE / n_port) - 1)
-    rm = float((1 + mkt_returns).prod() ** (_ANNUALISE / n_mkt) - 1)
+    n = max(len(aligned), 1)
+    rp = float((1 + p).prod() ** (_ANNUALISE / n) - 1)
+    rm = float((1 + m).prod() ** (_ANNUALISE / n) - 1)
     return rp - (rf + beta * (rm - rf))
 
 
@@ -108,14 +112,21 @@ def _fetch_portfolio_returns(portfolio_id: str, engine: Engine) -> pd.Series:
         return pd.Series(dtype=float)
 
     symbols = list({r["symbol"] for r in rows})
+    min_entry = str(min(r["entry_date"] for r in rows))
+    max_exit = str(max(r["exit_date"] for r in rows))
     prices_sql = text("""
         SELECT date, symbol, COALESCE(close_adj, close) AS close
         FROM public.de_equity_ohlcv
         WHERE symbol = ANY(:syms)
+          AND date BETWEEN :start AND :end
         ORDER BY symbol, date
     """)
     with engine.connect() as conn:
-        price_rows = conn.execute(prices_sql, {"syms": symbols}).mappings().all()
+        price_rows = (
+            conn.execute(prices_sql, {"syms": symbols, "start": min_entry, "end": max_exit})
+            .mappings()
+            .all()
+        )
 
     if not price_rows:
         return pd.Series(dtype=float)
@@ -124,7 +135,8 @@ def _fetch_portfolio_returns(portfolio_id: str, engine: Engine) -> pd.Series:
     prices["date"] = pd.to_datetime(prices["date"])
     prices = prices.pivot(index="date", columns="symbol", values="close")
     daily_rets = prices.pct_change()
-    return daily_rets.mean(axis=1).dropna()
+    result: pd.Series = daily_rets.mean(axis=1).dropna()  # type: ignore[assignment]
+    return result
 
 
 def _fetch_nifty_returns(engine: Engine, start_date: str, end_date: str) -> pd.Series:
@@ -142,7 +154,8 @@ def _fetch_nifty_returns(engine: Engine, start_date: str, end_date: str) -> pd.S
         return pd.Series(dtype=float)
     df["date"] = pd.to_datetime(df["date"])
     df = df.set_index("date").sort_index()
-    return df["close"].pct_change().dropna()
+    series: pd.Series = df["close"].pct_change().dropna()  # type: ignore[assignment]
+    return series
 
 
 def compute_portfolio_analytics(
@@ -158,8 +171,8 @@ def compute_portfolio_analytics(
     if port_returns.empty:
         return {"error": "no_data", "portfolio_id": portfolio_id}
 
-    start = str(port_returns.index.min().date())
-    end = str(port_returns.index.max().date())
+    start = str(pd.Timestamp(port_returns.index.min()).date())  # type: ignore[arg-type]
+    end = str(pd.Timestamp(port_returns.index.max()).date())  # type: ignore[arg-type]
     nifty_returns = _fetch_nifty_returns(engine, start, end)
 
     sharpe = _compute_sharpe(port_returns, rf)
@@ -179,7 +192,7 @@ def compute_portfolio_analytics(
 
     daily_returns = [
         {
-            "date": str(idx.date()),
+            "date": str(pd.Timestamp(idx).date()),  # type: ignore[arg-type]
             "portfolio_return": round(float(row["portfolio_return"]), 6),
             "nifty50_return": round(float(row["nifty50_return"]), 6),
         }
@@ -198,5 +211,6 @@ def compute_portfolio_analytics(
         "annualised_return": round(ann_return, 4),
         "observation_days": len(port_returns),
         "risk_free_rate_used": float(rf),
+        "portfolio_date_end": end,
         "daily_returns": daily_returns,
     }
