@@ -46798,3 +46798,12 @@
   "schema_version": 1
 }
 {"ts":"2026-05-28T11:42:21Z","kind":"supabase_sql_executed","sql_preview":"WITH latest AS (\n  SELECT sector_heatmap FROM atlas.mv_india_pulse ORDER BY refreshed_at DESC LIMIT 1\n)\nSELECT COUNT(*) AS total,\n       COUNT(*) FILTER (WHERE (s->>'rs_1w') IS NOT NULL) AS n_rs_1w,\n       COUNT(*) FILTER (WHERE (s->>'ret_1m') IS NOT NULL) AS n_ret_1m,\n       COUNT(*) FILTER (WHERE (s->>'ret_3m') IS NOT NULL) AS n_ret_3m\nFROM latest, LATERAL jsonb_array_elements(sector_heatmap) AS s;"}
+{
+  "ts": "2026-05-28T11:44:12Z",
+  "prev": "1da448b4489aeae3",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/etfs/ETFGatesPanel.tsx",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}

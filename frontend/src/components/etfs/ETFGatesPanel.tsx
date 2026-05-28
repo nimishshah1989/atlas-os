@@ -106,13 +106,13 @@ export function ETFGatesPanel({ etf }: { etf: ETFRow }) {
           />
         ))}
       </div>
-      {etf.is_investable && etf.weinstein_gate_pass === false && (
+      {etf.is_investable && etf.pct_stage_2 != null && etf.weinstein_gate_pass === false && (
         <div className="px-4 py-2.5 border-t border-paper-rule bg-signal-warn/10">
           <div className="font-sans text-xs font-semibold text-signal-warn mb-0.5">● 5/5 statutory gates pass — but Weinstein advisory says WAIT</div>
           <div className="font-sans text-[11px] text-ink-tertiary leading-[1.45]">The 5 gates above (strength · direction · risk · sector · market) all pass, but the ETF is currently below its 30-week MA or in Stage 3/4. Hold existing; wait for Stage 2 confirmation before adding new positions.</div>
         </div>
       )}
-      {etf.is_investable && etf.weinstein_gate_pass !== false && (
+      {etf.is_investable && etf.pct_stage_2 != null && etf.weinstein_gate_pass !== false && (
         <div className="px-4 py-2.5 border-t border-paper-rule bg-signal-pos/5">
           <span className="font-sans text-xs font-semibold text-signal-pos">
             ● All gates passed — Investable
