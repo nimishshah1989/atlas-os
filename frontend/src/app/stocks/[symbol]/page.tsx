@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+import { lookupSymbolAlias } from '@/lib/queries/symbol-aliases'
 import {
   getStockBySymbol,
   getStockMetricHistory,
@@ -42,7 +43,13 @@ export default async function StockPage({
 }) {
   const symbol = decodeURIComponent((await params).symbol).toUpperCase()
   const stock = await getStockBySymbol(symbol)
-  if (!stock) notFound()
+  if (!stock) {
+    // Try alias lookup (NSE renames / demergers) before giving up.
+    // e.g. TATAMOTORS -> TMPV, ZOMATO -> ETERNAL, L&TFH -> LTF
+    const alias = await lookupSymbolAlias(symbol)
+    if (alias) redirect(`/stocks/${alias}?renamed_from=${symbol}`)
+    notFound()
+  }
 
   // Read ?portfolio= searchParam for the Act affordance.
   const resolvedSearch = searchParams ? await searchParams : {}

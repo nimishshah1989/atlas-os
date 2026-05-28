@@ -7,30 +7,31 @@ import { Menu, X } from 'lucide-react'
 type SubLink = { href: string; label: string }
 type Group   = { key: string; label: string; links: SubLink[] }
 
+// Nav reflects the canonical v6 mockup pages at root. Cleaned 2026-05-28:
+// removed all /v6/* duplicates (parallel tree was deleted), dropped
+// /matrix + /regime (route files never existed → 404), and added the
+// 3 canonical mockup pages that had been missing from the menu:
+// /india-pulse, /markets-rs, /calls.
 export const GROUPS: Group[] = [
   {
     key: 'today',
     label: 'TODAY',
     links: [
-      { href: '/',                            label: 'Regime' },
-      { href: '/v6/today',                    label: 'Today (v6)' },
-      { href: '/intelligence/daily-brief',    label: 'Daily Brief' },
+      { href: '/',                          label: 'Regime' },
+      { href: '/india-pulse',               label: 'India Pulse' },
+      { href: '/intelligence/daily-brief',  label: 'Daily Brief' },
     ],
   },
   {
     key: 'research',
     label: 'RESEARCH',
     links: [
+      { href: '/markets-rs',  label: 'Markets RS' },
       { href: '/sectors',     label: 'Sectors' },
       { href: '/stocks',      label: 'Stocks' },
       { href: '/etfs',        label: 'ETFs' },
       { href: '/funds',       label: 'Funds' },
-      { href: '/matrix',      label: 'Matrix' },
-      { href: '/regime',      label: 'Regime (v6)' },
-      { href: '/v6/stocks',   label: 'Stocks (v6)' },
-      { href: '/v6/sectors',  label: 'Sectors (v6)' },
-      { href: '/v6/etfs',     label: 'ETFs (v6)' },
-      { href: '/v6/funds',    label: 'Funds (v6)' },
+      { href: '/calls',       label: 'Calls' },
       { href: '/global',      label: 'Global Pulse' },
       { href: '/us',          label: 'US Pulse' },
     ],
@@ -81,12 +82,12 @@ function activeGroup(pathname: string): Group {
   if (pathname.startsWith('/setup'))                        return GROUPS[3]
   if (pathname.startsWith('/strategies') || pathname.startsWith('/portfolios')) return GROUPS[2]
   if (pathname.startsWith('/methodology') || pathname.startsWith('/health'))    return GROUPS[4]
-  if (pathname.startsWith('/v6/today'))                                         return GROUPS[0]
-  if (pathname.startsWith('/sectors') || pathname.startsWith('/stocks') ||
-      pathname.startsWith('/etfs') || pathname.startsWith('/funds') ||
-      pathname.startsWith('/global') || pathname.startsWith('/us') ||
-      pathname.startsWith('/matrix') || pathname.startsWith('/regime') ||
-      pathname.startsWith('/v6'))                                               return GROUPS[1]
+  if (pathname.startsWith('/india-pulse'))                                      return GROUPS[0]
+  if (pathname.startsWith('/markets-rs') ||
+      pathname.startsWith('/sectors')    || pathname.startsWith('/stocks') ||
+      pathname.startsWith('/etfs')       || pathname.startsWith('/funds') ||
+      pathname.startsWith('/calls')      ||
+      pathname.startsWith('/global')     || pathname.startsWith('/us'))         return GROUPS[1]
   return GROUPS[0] // today is default
 }
 
