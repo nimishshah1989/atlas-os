@@ -4,10 +4,10 @@
 //   1. Empty state renders when analytics is null
 //   2. Portfolio name renders in header
 //   3. All 7 metric cells render
-//   4. Beta null renders "—" with tooltip "Requires 30+ trading days"
+//   4. Beta null renders "—" with tooltip "Requires 30+ trading days of data"
 //   5. CSV export link has correct href
-//   6. Positive Sharpe has signal-pos class; negative has signal-neg
-//   7. View Analytics link renders in portfolio page header
+//   6. Positive Sharpe has text-signal-pos class; negative has text-signal-neg
+//   7. Cumulative returns chart renders via mocked Recharts
 
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
@@ -213,12 +213,12 @@ describe('PortfolioAnalyticsClient — value colors', () => {
     )
     // The "1.23" text should be in a signal-pos element
     const sharpeEl = screen.getByText('1.23')
-    expect(sharpeEl.className).toContain('signal-pos')
+    expect(sharpeEl.className).toContain('text-signal-pos')
     // container used to suppress unused var lint
     expect(container).toBeTruthy()
   })
 
-  it('negative Sharpe value has signal-neg class', () => {
+  it('negative Sharpe value has text-signal-neg class', () => {
     render(
       <PortfolioAnalyticsClient
         portfolioId="abc"
@@ -226,9 +226,9 @@ describe('PortfolioAnalyticsClient — value colors', () => {
         analytics={NEGATIVE_ANALYTICS}
       />,
     )
-    // "-0.45" sharpe should render in signal-neg
+    // "-0.45" sharpe should render in text-signal-neg
     const sharpeEl = screen.getByText('-0.45')
-    expect(sharpeEl.className).toContain('signal-neg')
+    expect(sharpeEl.className).toContain('text-signal-neg')
   })
 })
 

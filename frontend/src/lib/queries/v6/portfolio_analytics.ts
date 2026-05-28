@@ -4,7 +4,9 @@
 // MaxDD, TWR) plus daily returns series for the cumulative returns chart.
 //
 // Returns null on 404 (portfolio has no analytics yet) or network failure.
-// Revalidates every 5 minutes — analytics are computed nightly, not live.
+
+import 'server-only'
+import { callInternalApi } from '@/lib/internal-api'
 
 export interface DailyReturn {
   date: string
@@ -18,7 +20,7 @@ export interface PortfolioAnalytics {
   calmar: number | null
   beta: number | null
   alpha: number | null
-  max_drawdown: number
+  max_drawdown: number | null
   twr: number
   annualised_return: number
   observation_days: number
@@ -29,10 +31,11 @@ export interface PortfolioAnalytics {
 export async function getPortfolioAnalytics(
   portfolioId: string,
 ): Promise<PortfolioAnalytics | null> {
-  const res = await fetch(`/v1/portfolios/${portfolioId}/analytics`, {
-    next: { revalidate: 300 },
-  })
+  const res = await callInternalApi<PortfolioAnalytics>(
+    `/v1/portfolios/${portfolioId}/analytics`,
+  )
   if (!res.ok) return null
-  const json = await res.json()
-  return (json.data as PortfolioAnalytics) ?? null
+  // Guard against API responses missing daily_returns
+  const data = res.data
+  return { ...data, daily_returns: data.daily_returns ?? [] }
 }

@@ -8,6 +8,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useMemo } from 'react'
 import {
   ResponsiveContainer,
   LineChart,
@@ -192,7 +193,20 @@ export function PortfolioAnalyticsClient({
     )
   }
 
-  const cumulativeSeries = buildCumulativeSeries(analytics.daily_returns)
+  const cumulativeSeries = useMemo(
+    () => buildCumulativeSeries(analytics.daily_returns),
+    [analytics.daily_returns],
+  )
+
+  // Memoize end-label dot renderers so Recharts doesn't reconstruct all dots on re-render
+  const portfolioDot = useMemo(
+    () => EndLabelDot('#1D9E75', 'portfolio', cumulativeSeries.length),
+    [cumulativeSeries.length],
+  )
+  const niftyDot = useMemo(
+    () => EndLabelDot('#9A8F82', 'nifty50', cumulativeSeries.length),
+    [cumulativeSeries.length],
+  )
 
   // Date range from daily returns
   const firstDate = analytics.daily_returns[0]?.date ?? null
@@ -255,7 +269,7 @@ export function PortfolioAnalyticsClient({
           label="Max Drawdown"
           value={fmtPct(analytics.max_drawdown, false)}
           subLabel="Peak to trough"
-          valueClass={analytics.max_drawdown < 0 ? 'text-signal-neg' : 'text-ink-primary'}
+          valueClass={signClass(analytics.max_drawdown)}
         />
         <MetricCell
           label="TWR"
@@ -304,7 +318,7 @@ export function PortfolioAnalyticsClient({
                   name="Portfolio"
                   stroke="#1D9E75"
                   strokeWidth={2}
-                  dot={EndLabelDot('#1D9E75', 'portfolio', cumulativeSeries.length)}
+                  dot={portfolioDot}
                   activeDot={{ r: 3, fill: '#1D9E75' }}
                 />
                 <Line
@@ -314,7 +328,7 @@ export function PortfolioAnalyticsClient({
                   stroke="#9A8F82"
                   strokeWidth={1.5}
                   strokeDasharray="5 3"
-                  dot={EndLabelDot('#9A8F82', 'nifty50', cumulativeSeries.length)}
+                  dot={niftyDot}
                   activeDot={{ r: 3, fill: '#9A8F82' }}
                 />
               </LineChart>

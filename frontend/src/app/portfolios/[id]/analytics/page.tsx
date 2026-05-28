@@ -4,7 +4,9 @@
 // Fetches analytics data server-side and passes to PortfolioAnalyticsClient.
 // No synthetic data — returns null when no analytics exist (empty state handled by client).
 
-export const dynamic = 'force-dynamic'
+// Analytics are computed nightly; ISR via revalidate:300 in getPortfolioAnalytics is sufficient.
+// Not force-dynamic — that would suppress the revalidate setting.
+export const revalidate = 300
 
 import { getPortfolioAnalytics } from '@/lib/queries/v6/portfolio_analytics'
 import { PortfolioAnalyticsClient } from '@/components/v6/PortfolioAnalyticsClient'
