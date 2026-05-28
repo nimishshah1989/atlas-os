@@ -44,7 +44,7 @@ def _load_universe_symbols(engine: Engine) -> list[str]:
 
 
 def _fetch_tv_batch(symbols: list[str]) -> pd.DataFrame:
-    from tradingview_screener import Scanner  # type: ignore[reportMissingModuleSource]
+    from tradingview_screener import Scanner  # type: ignore[import-untyped]
 
     qualified = [f"NSE:{s}" for s in symbols]
     _, df = Scanner.get_scanner_data(  # type: ignore[reportAttributeAccessIssue]
@@ -108,7 +108,8 @@ def _upsert_rows(rows: list[dict], engine: Engine) -> None:
             price            = EXCLUDED.price,
             high_52w         = EXCLUDED.high_52w,
             low_52w          = EXCLUDED.low_52w,
-            raw_payload      = EXCLUDED.raw_payload
+            raw_payload      = EXCLUDED.raw_payload,
+            updated_at       = NOW()
     """)
     with engine.begin() as conn:
         conn.execute(upsert_sql, rows)
@@ -185,3 +186,5 @@ def fetch_and_upsert_all(engine: Engine | None = None) -> None:
         log.info("tv_screener.batch_done", batch_start=i, rows=len(rows))
 
     log.info("tv_screener.complete", total_upserted=total_upserted)
+    if total_upserted == 0 and symbols:
+        raise RuntimeError("tv_screener: zero rows upserted — all batches failed or returned empty")

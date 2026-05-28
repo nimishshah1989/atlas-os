@@ -20,6 +20,8 @@ def upgrade() -> None:
             symbol          TEXT NOT NULL,
             instrument_id   UUID,
             fetched_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             tv_recommend_label  TEXT,
             recommend_all   NUMERIC(10,6),
             recommend_ma    NUMERIC(10,6),

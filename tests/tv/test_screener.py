@@ -2,8 +2,13 @@
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
+import pytest
 
-from atlas.tv.screener import _resolve_instrument_ids, fetch_and_upsert_all
+from atlas.tv.screener import (  # type: ignore[import]
+    _label,
+    _resolve_instrument_ids,
+    fetch_and_upsert_all,
+)
 
 
 def _mock_engine(rows: list[dict]):
@@ -51,8 +56,27 @@ def test_fetch_and_upsert_all_calls_upsert(monkeypatch):
             }
         ]
     )
-    monkeypatch.setattr("atlas.tv.screener._fetch_tv_batch", lambda symbols: fake_df)
+    monkeypatch.setattr("atlas.tv.screener._fetch_tv_batch", lambda _: fake_df)
     engine = _mock_engine([{"symbol": "RELIANCE", "instrument_id": "uuid-1"}])
     with patch("atlas.tv.screener._upsert_rows") as mock_upsert:
         fetch_and_upsert_all(engine=engine)
     mock_upsert.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "score,expected",
+    [
+        (0.5, "STRONG_BUY"),
+        (0.1, "BUY"),
+        (0.0, "NEUTRAL"),
+        (-0.09, "NEUTRAL"),
+        (-0.1, "SELL"),
+        (-0.49, "SELL"),
+        (-0.5, "STRONG_SELL"),
+        (-0.51, "STRONG_SELL"),
+        (None, None),
+        (float("nan"), None),
+    ],
+)
+def test_label_boundary_values(score: float | None, expected: str | None) -> None:
+    assert _label(score) == expected
