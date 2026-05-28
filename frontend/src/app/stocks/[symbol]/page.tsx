@@ -158,12 +158,22 @@ export default async function StockPage({
       )}
 
       {stockState && (
-        <section className="px-6 py-6 border-b border-paper-rule space-y-6">
-          <h2 className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider">
+        <section className="px-6 py-6 border-b border-paper-rule">
+          <h2 className="font-sans text-[10px] font-semibold text-ink-tertiary uppercase tracking-wider mb-4">
             Signal evidence
           </h2>
-          <OBVContinuousChart series={obvSeries} />
-          <ATRContractionGauge data={atrContraction} />
+          {/* ATR contraction is a Stage-2 breakout signal — irrelevant for
+              Stage 1 (still basing) and Stage 4 (declining) stocks. Show
+              OBV alone in those states; 2-up layout when both apply.
+              Matches [[two-up-chart-layout]] memory. */}
+          {(stockState.state === 'stage_2a' || stockState.state === 'stage_2b' || stockState.state === 'stage_2c') ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <OBVContinuousChart series={obvSeries} />
+              <ATRContractionGauge data={atrContraction} />
+            </div>
+          ) : (
+            <OBVContinuousChart series={obvSeries} />
+          )}
         </section>
       )}
 
@@ -177,9 +187,21 @@ export default async function StockPage({
         </section>
       )}
 
+      {/* State history (Weinstein stage timeline) demoted to expandable
+          "Show the math" per A3 amendment 2026-05-28 — Weinstein is a
+          context signal, not a prominent verdict input. The cell-math
+          composite carries the verdict load. See
+          docs/v6/2026-05-28-weinstein-a3-report.md. */}
       {stockState && stateHistory.length > 0 && (
-        <section className="px-6 py-6 border-b border-paper-rule">
-          <DwellTimeline history={stateHistory} />
+        <section className="px-6 py-4 border-b border-paper-rule">
+          <details className="font-sans text-[12px] text-ink-secondary">
+            <summary className="cursor-pointer text-accent font-medium select-none">
+              Show Weinstein stage history (context only — not a verdict input)
+            </summary>
+            <div className="pt-4">
+              <DwellTimeline history={stateHistory} />
+            </div>
+          </details>
         </section>
       )}
 

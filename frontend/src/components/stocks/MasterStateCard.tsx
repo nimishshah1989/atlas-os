@@ -133,12 +133,36 @@ export function MasterStateCard({
   const action    = getActionText(state.state, state.urgency_score)
   const urgency   = state.urgency_score
 
-  // Dwell line
-  const dwellLine = cohortBaseline == null
-    ? `Day ${state.dwell_days} · no cohort baseline yet`
-    : cohortBaseline.p75_dwell_days != null
-      ? `Day ${state.dwell_days} of ${cohortBaseline.median_dwell_days ?? '—'} (${cohortBaseline.cohort_key.replace('_', '-')} median, p75=${cohortBaseline.p75_dwell_days})`
-      : `Day ${state.dwell_days} of ${cohortBaseline.median_dwell_days ?? '—'} (${cohortBaseline.cohort_key.replace('_', '-')} median)`
+  // Dwell line — plain English describing how long this stock has been
+  // in its current state vs the typical for its cap-tier cohort.
+  // Avoids jargon (no "p75", no "median" exposed as a stat term).
+  const dwellLine = ((): string => {
+    if (cohortBaseline == null) {
+      return `In ${label.toLowerCase()} for ${state.dwell_days} day${state.dwell_days === 1 ? '' : 's'}`
+    }
+    const tier = cohortBaseline.cohort_key.split('_')[0]  // "large" / "mid" / "small"
+    const typical = cohortBaseline.median_dwell_days
+    const long = cohortBaseline.p75_dwell_days
+    if (typical == null) {
+      return `In ${label.toLowerCase()} for ${state.dwell_days} day${state.dwell_days === 1 ? '' : 's'}`
+    }
+    // How does this stock compare to the typical?
+    const ratio = state.dwell_days / typical
+    let comparison = ''
+    if (ratio >= 4) {
+      comparison = ` · ${Math.round(ratio)}× longer than typical ${tier}-cap (~${typical} days)`
+    } else if (ratio >= 1.5) {
+      comparison = ` · longer than typical ${tier}-cap (~${typical} days)`
+    } else if (ratio <= 0.5) {
+      comparison = ` · still early (typical ${tier}-cap: ~${typical} days)`
+    } else {
+      comparison = ` · near typical ${tier}-cap (~${typical} days)`
+    }
+    const longRow = long != null && state.dwell_days > long
+      ? ` · past 75th percentile (~${long} days)`
+      : ''
+    return `In ${label.toLowerCase()} for ${state.dwell_days} day${state.dwell_days === 1 ? '' : 's'}${comparison}${longRow}`
+  })()
 
   // within_state_rank breakdown
   const wsr           = state.within_state_rank
@@ -156,9 +180,12 @@ export function MasterStateCard({
       className="sticky top-14 z-30 bg-paper border-b border-paper-rule py-4 px-6"
       data-testid="master-state-card"
     >
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-        {/* Left: symbol */}
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        {/* Left: symbol — visually-hidden on this row since the symbol is
+            already shown in the breadcrumb + headline of StockDeepDiveHeader
+            directly above. Kept in the DOM for accessibility tooling that
+            may anchor to it. */}
+        <div className="sr-only">
           <div className="font-serif text-xl font-semibold text-ink-primary tracking-tight leading-none">
             {symbol}
           </div>
