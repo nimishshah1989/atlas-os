@@ -175,7 +175,7 @@ describe('PortfolioAnalyticsClient — null values', () => {
       />,
     )
     // The MetricCell with Beta label should have title attr when beta is null
-    const container = document.querySelector('[title="Requires 30+ trading days"]')
+    const container = document.querySelector('[title="Requires 30+ trading days of data"]')
     expect(container).not.toBeNull()
   })
 })

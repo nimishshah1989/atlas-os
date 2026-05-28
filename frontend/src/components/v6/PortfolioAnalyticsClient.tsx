@@ -77,6 +77,35 @@ function buildCumulativeSeries(
   })
 }
 
+// Custom dot renderer that shows a labeled circle only at the last data point.
+function EndLabelDot(color: string, dataKey: 'portfolio' | 'nifty50', totalPoints: number) {
+  // eslint-disable-next-line react/display-name
+  return (props: {
+    cx?: number; cy?: number; index?: number;
+    payload?: { portfolio: number; nifty50: number }
+  }) => {
+    const { cx = 0, cy = 0, index = 0, payload } = props
+    if (index !== totalPoints - 1 || !payload) return null
+    const val = payload[dataKey]
+    const pct = (val * 100).toFixed(1)
+    const sign = val > 0 ? '+' : ''
+    return (
+      <g>
+        <circle cx={cx} cy={cy} r={3} fill={color} />
+        <text
+          x={cx + 6}
+          y={cy + 4}
+          fill={color}
+          fontSize={10}
+          fontFamily="var(--font-mono)"
+        >
+          {sign}{pct}%
+        </text>
+      </g>
+    )
+  }
+}
+
 // ---------------------------------------------------------------------------
 // 7-metric grid
 // ---------------------------------------------------------------------------
@@ -186,7 +215,7 @@ export function PortfolioAnalyticsClient({
       </div>
 
       {/* 7-metric grid */}
-      <div className="grid grid-cols-7 border border-paper-rule rounded-[2px] bg-paper mb-6 overflow-x-auto">
+      <div className="grid grid-cols-2 md:grid-cols-7 border border-paper-rule rounded-[2px] bg-paper mb-6 overflow-x-auto">
         <MetricCell
           label="Sharpe"
           value={fmtNum(analytics.sharpe, 2)}
@@ -213,7 +242,7 @@ export function PortfolioAnalyticsClient({
           value={fmtNum(analytics.beta, 2)}
           subLabel="vs Nifty 50"
           valueClass="text-ink-primary"
-          tooltip={analytics.beta === null ? 'Requires 30+ trading days' : undefined}
+          tooltip={analytics.beta === null ? 'Requires 30+ trading days of data' : undefined}
         />
         <MetricCell
           label="Alpha (Jensen)"
@@ -242,52 +271,55 @@ export function PortfolioAnalyticsClient({
           Cumulative Returns
         </h2>
         <div className="border border-paper-rule rounded-[2px] bg-paper p-4">
-          <ResponsiveContainer width="100%" height={240}>
-            <LineChart
-              data={cumulativeSeries}
-              margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
-            >
-              <CartesianGrid stroke="rgba(194,184,168,0.3)" strokeDasharray="3 3" />
-              <XAxis
-                dataKey="date"
-                tick={{ fontSize: 10, fill: '#9A8F82', fontFamily: 'var(--font-mono)' }}
-                tickLine={false}
-                tickFormatter={(v: string) => {
-                  const d = new Date(v)
-                  if (isNaN(d.getTime())) return v
-                  return `${d.toLocaleString('en-US', { month: 'short' })} '${String(d.getFullYear()).slice(2)}`
-                }}
-                minTickGap={60}
-              />
-              <YAxis
-                tick={{ fontSize: 10, fill: '#9A8F82', fontFamily: 'var(--font-mono)' }}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(v: number) => `${(v * 100).toFixed(0)}%`}
-                width={48}
-              />
-              <Tooltip content={<ChartTooltip />} />
-              <Line
-                type="monotone"
-                dataKey="portfolio"
-                name="Portfolio"
-                stroke="#1D9E75"
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 3, fill: '#1D9E75' }}
-              />
-              <Line
-                type="monotone"
-                dataKey="nifty50"
-                name="Nifty 50"
-                stroke="#9A8F82"
-                strokeWidth={1.5}
-                strokeDasharray="5 3"
-                dot={false}
-                activeDot={{ r: 3, fill: '#9A8F82' }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          {/* h-[180px] on mobile, h-[240px] on md+ per spec */}
+          <div className="h-[180px] md:h-[240px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={cumulativeSeries}
+                margin={{ top: 8, right: 48, left: 0, bottom: 0 }}
+              >
+                <CartesianGrid stroke="rgba(194,184,168,0.3)" strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 10, fill: '#9A8F82', fontFamily: 'var(--font-mono)' }}
+                  tickLine={false}
+                  tickFormatter={(v: string) => {
+                    const d = new Date(v)
+                    if (isNaN(d.getTime())) return v
+                    return `${d.toLocaleString('en-US', { month: 'short' })} '${String(d.getFullYear()).slice(2)}`
+                  }}
+                  minTickGap={60}
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: '#9A8F82', fontFamily: 'var(--font-mono)' }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v: number) => `${(v * 100).toFixed(0)}%`}
+                  width={48}
+                />
+                <Tooltip content={<ChartTooltip />} />
+                <Line
+                  type="monotone"
+                  dataKey="portfolio"
+                  name="Portfolio"
+                  stroke="#1D9E75"
+                  strokeWidth={2}
+                  dot={EndLabelDot('#1D9E75', 'portfolio', cumulativeSeries.length)}
+                  activeDot={{ r: 3, fill: '#1D9E75' }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="nifty50"
+                  name="Nifty 50"
+                  stroke="#9A8F82"
+                  strokeWidth={1.5}
+                  strokeDasharray="5 3"
+                  dot={EndLabelDot('#9A8F82', 'nifty50', cumulativeSeries.length)}
+                  activeDot={{ r: 3, fill: '#9A8F82' }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
 
