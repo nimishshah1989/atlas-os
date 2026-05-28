@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy import text
 
 from atlas.db import get_engine
+from atlas.tv.screener import fetch_and_upsert_all
 
 router = APIRouter(prefix="/v1/tv", tags=["tv"])
 
@@ -50,8 +51,24 @@ def get_tv_metrics(symbol: str) -> dict:
         "data": row_dict,
         "meta": {
             "data_as_of": fetched_at.isoformat(),
-            "fetched_at": fetched_at.isoformat(),
+            "fetched_at": now.isoformat(),
             "is_stale": is_stale,
             "source": "tradingview-screener",
         },
     }
+
+
+_internal_router = APIRouter(prefix="/v1/tv/internal", tags=["tv-internal"])
+
+
+@_internal_router.post("/run-screener")
+def trigger_screener() -> dict:
+    """Called by pg_cron at 21:00 IST on weekdays.
+
+    Fetches latest TradingView metrics for all universe symbols and upserts into atlas.tv_metrics.
+    """
+    try:
+        fetch_and_upsert_all()
+        return {"status": "ok"}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc

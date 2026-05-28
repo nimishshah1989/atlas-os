@@ -59,8 +59,29 @@ def upgrade() -> None:
         CREATE INDEX IF NOT EXISTS ix_tv_portfolio_exports_portfolio_id
             ON atlas.tv_portfolio_exports (portfolio_id)
     """)
+    op.execute("""
+        CREATE OR REPLACE FUNCTION atlas.tv_screener_run()
+        RETURNS void LANGUAGE plpgsql AS $$
+        BEGIN
+            PERFORM http_post(
+                'http://localhost:8000/v1/tv/internal/run-screener',
+                '',
+                'application/json'
+            );
+        END;
+        $$
+    """)
+    op.execute("""
+        SELECT cron.schedule(
+            'tv_screener_nightly',
+            '30 15 * * 1-5',
+            $$ SELECT atlas.tv_screener_run() $$
+        )
+    """)
 
 
 def downgrade() -> None:
+    op.execute("SELECT cron.unschedule('tv_screener_nightly')")
+    op.execute("DROP FUNCTION IF EXISTS atlas.tv_screener_run()")
     op.execute("DROP TABLE IF EXISTS atlas.tv_portfolio_exports")
     op.execute("DROP TABLE IF EXISTS atlas.tv_metrics")
