@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Atlas v6 · Weinstein Deep-Dive Methodology</title>
+<style>
+  :root {
+    --paper: #FAFAF8; --paper-soft: #F4F2EC; --paper-rule: #E5E2DA;
+    --ink-rule: #C9C5BA; --ink-primary: #2A2724; --ink-secondary: #57534A;
+    --ink-tertiary: #8A8578; --accent: #1D9E75; --accent-soft: #1D9E7515;
+    --signal-pos: #2F6B43; --signal-neg: #B0492C; --signal-warn: #C68B2E;
+    --signal-warn-soft: rgba(198,139,46,0.12);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', system-ui, sans-serif; color: var(--ink-primary);
+         background: var(--paper); line-height: 1.6; padding: 40px 28px;
+         max-width: 1000px; margin: 0 auto; }
+  h1 { font-family: 'Lora', Georgia, serif; font-weight: 500; font-size: 30px; margin-bottom: 4px; }
+  h2 { font-family: 'Lora', Georgia, serif; font-weight: 500; font-size: 22px;
+       margin: 36px 0 10px 0; padding-top: 20px; border-top: 1px solid var(--ink-rule); }
+  h2:first-of-type { border-top: 0; padding-top: 0; }
+  h3 { font-family: 'Lora', Georgia, serif; font-weight: 500; font-size: 17px; margin: 22px 0 8px 0; }
+  h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em;
+       font-weight: 700; margin: 16px 0 6px 0; color: var(--ink-tertiary); }
+  p, li { font-size: 14px; color: var(--ink-secondary); margin-bottom: 12px; }
+  ul, ol { margin: 6px 0 14px 22px; }
+  ul li, ol li { margin-bottom: 5px; }
+  code, pre { font-family: 'JetBrains Mono', Menlo, monospace; font-size: 12.5px;
+              background: var(--paper-soft); padding: 1px 5px; border-radius: 2px; }
+  pre { padding: 14px 16px; line-height: 1.55; border: 1px solid var(--paper-rule);
+        overflow-x: auto; margin: 12px 0; white-space: pre; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 12px 0 18px 0; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--paper-rule);
+           vertical-align: top; }
+  th { background: var(--paper-soft); font-weight: 600; color: var(--ink-secondary);
+       text-transform: uppercase; letter-spacing: 0.1em; font-size: 10px;
+       border-bottom: 1px solid var(--ink-rule); }
+  .meta { color: var(--ink-tertiary); font-size: 12px; margin-bottom: 22px;
+          padding-bottom: 12px; border-bottom: 1px solid var(--paper-rule); }
+  .callout { background: var(--accent-soft); border-left: 3px solid var(--accent);
+             padding: 14px 18px; margin: 18px 0; font-size: 13px; }
+  .callout strong { color: var(--ink-primary); }
+  .warn { background: var(--signal-warn-soft); border-left: 3px solid var(--signal-warn);
+          padding: 14px 18px; margin: 18px 0; font-size: 13px; }
+  .insight { background: #EFF7F3; border-left: 3px solid var(--signal-pos);
+             padding: 14px 18px; margin: 18px 0; font-size: 13px; }
+  .insight strong { color: var(--ink-primary); }
+</style>
+</head>
+<body>
+
+<h1>Weinstein Deep-Dive — Entry-Point Methodology</h1>
+<div class="meta">
+  <strong>Status:</strong> design draft → Stream A2 dispatch &nbsp;|&nbsp;
+  <strong>Authored:</strong> 2026-05-28 (after Stream A1 reported IC fails 0.05 floor) &nbsp;|&nbsp;
+  <strong>Supersedes:</strong> the simple "stage tagging" approach in <a href="../superpowers/plans/2026-05-28-trader-view-A-weinstein-research.md">Stream A plan</a>
+</div>
+
+<h2>1. Why the first pass failed</h2>
+
+<p>Stream A1 tested whether the four-stage Weinstein classifier (Stage 1 / 2 / 3 / 4) predicts forward 6-month returns. Pooled Pearson IC across all 12 (cap × lookback) combinations failed the 0.05 floor. Best was Large 30W at −0.043.</p>
+
+<p>The failure is a methodology gap, not a Weinstein gap. We treated <strong>stage tag</strong> as the predictor. But Weinstein never claimed the steady-state stage tag is the signal — he claimed the <strong>Stage 1 → Stage 2 transition</strong>, with confirmation, is the signal. We measured the wrong thing.</p>
+
+<div class="insight">
+<strong>Read this as good news.</strong> Stage 2 average excess vs Nifty-500 was monotone-positive across all cap-tiers (Large +5.9%, Mid +6.9%, Small +10.2% at 30W). The alpha IS in Stage 2. We just need a sharper detector for <em>when a stock enters Stage 2</em>, not a tag that says <em>"currently in Stage 2."</em>
+</div>
+
+<h2>2. What Weinstein actually said</h2>
+
+<p>Stan Weinstein, <em>Secrets for Profiting in Bull and Bear Markets</em> (1988), defines the buy point with these rules (paraphrased):</p>
+
+<ol>
+  <li><strong>Stock has been in a Stage 1 base.</strong> Price has chopped sideways above and below a roughly flat 30-week MA for an extended period (multiple months minimum). No fresh lows.</li>
+  <li><strong>Stock breaks out above the top of the trading range.</strong> The base resistance — typically defined as the highest weekly close over the last 10-30 weeks — is taken out on a closing basis.</li>
+  <li><strong>The 30W MA is flat or rising at the time of breakout.</strong> Not still falling.</li>
+  <li><strong>Volume confirms.</strong> Breakout week volume materially exceeds prior-base average volume (typically 1.5× to 2×).</li>
+  <li><strong>Relative strength is improving.</strong> The stock is outperforming the broader market into the breakout, not lagging.</li>
+  <li><strong>Industry group is also basing or breaking out.</strong> Leaders in leading groups, not lone-wolf breakouts.</li>
+</ol>
+
+<p>Most pseudo-Weinstein implementations capture rule 3 alone ("price > 30W MA and MA rising"). That is necessary but not sufficient. The signal is the <strong>conjunction of all six</strong>. Each filter, applied alone, gives weak IC. Applied together, the filtered events are sparse but high-conviction.</p>
+
+<h2>3. The right unit of measurement: the transition event</h2>
+
+<p>Reframe the research question:</p>
+
+<table>
+  <thead><tr><th>Wrong question</th><th>Right question</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>"Across all dates a stock is tagged Stage 2, what is the average forward 6m return?"</td>
+      <td>"On the specific date a stock <em>enters</em> Stage 2 with confirmation, what is the forward 6m return?"</td>
+    </tr>
+    <tr>
+      <td>Tens of thousands of observations per cap-tier</td>
+      <td>Hundreds of events per cap-tier per year, max</td>
+    </tr>
+    <tr>
+      <td>Smears alpha across mid-trend dates</td>
+      <td>Isolates the entry point, where alpha is concentrated</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>An "event" is a date <code>D</code> for instrument <code>i</code> when the transition fires. Forward return is measured from <code>close(D)</code> to <code>close(D + horizon)</code>, vs benchmark. IC is computed across the event population (small N, high signal-to-noise — opposite of the dense steady-state population).</p>
+
+<h2>4. Transition detector — base rule + confluence layers</h2>
+
+<h3>4.1 Base rule (Stage 1 → Stage 2 crossover)</h3>
+
+<pre>
+A "Weinstein breakout" event fires on date D for instrument i when ALL hold:
+
+  (a) close(D)     >  MA_chosen(D)
+  (b) close(D-1)   <= MA_chosen(D-1)              # crossover this week
+  (c) slope(MA, 4-week lookback)(D)  >= 0          # MA flat or rising
+  (d) Stage_1_persistence(D, 4 weeks back) >= 0.8  # was in Stage 1 (or unclassified)
+                                                   # for >= 80% of prior 4 weeks
+                                                   # → kills V-bottom false signals
+
+Where MA_chosen ∈ {10W, 20W, 30W} per cap_tier.
+</pre>
+
+<p>This already drops the event count by 50-80% vs the steady-state Stage 2 population. The Stage_1_persistence filter (rule d) is the critical addition versus a naive crossover detector — it forces the prior structure to be a base, not a falling knife caught mid-air.</p>
+
+<h3>4.2 Confluence layers (additive, test each separately)</h3>
+
+<p>For each base event, also test whether the following layered filters lift IC. Each filter is binary (pass/fail); we measure IC of base events that pass each filter individually and in combination.</p>
+
+<table>
+  <thead><tr><th>Layer</th><th>Rule</th><th>What it filters out</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>L1 — Volume</td>
+      <td>volume(D, 5-day MA) ≥ 1.5 × volume(D, 60-day MA)</td>
+      <td>Quiet-day breakouts (no buyer follow-through)</td>
+    </tr>
+    <tr>
+      <td>L2 — Prior-high clearance</td>
+      <td>close(D) > max(close, last 13 weeks excluding D)</td>
+      <td>Failed breakouts that get sold immediately (no fresh demand)</td>
+    </tr>
+    <tr>
+      <td>L3 — RS improving</td>
+      <td>rs_rank_3m(D) > rs_rank_3m(D - 4 weeks)</td>
+      <td>Breakouts in laggards (only buy leaders)</td>
+    </tr>
+    <tr>
+      <td>L4 — Base width</td>
+      <td>Stage 1 persistence prior 12 weeks ≥ 0.7</td>
+      <td>Short bases (more reliable signals come from longer accumulations)</td>
+    </tr>
+    <tr>
+      <td>L5 — Sector confirmation</td>
+      <td>Linked sector RS rank improving over prior 4 weeks</td>
+      <td>Lone-wolf breakouts where the sector context is weak</td>
+    </tr>
+    <tr>
+      <td>L6 — Liquidity floor</td>
+      <td>avg daily traded value over prior 20d ≥ ₹5 Cr (Large) / ₹2 Cr (Mid) / ₹50 L (Small)</td>
+      <td>Illiquid breakouts that we can't actually act on</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>4.3 The 50W rule was the wrong proxy</h3>
+
+<div class="warn">
+The user flagged that "price > 50W high" will eliminate too many candidates. Correct. The right operationalization of Weinstein's "breaks above base resistance" is <strong>L2 — clears prior 13W close-high</strong>, not 50W high. 13W (~3 months) matches the typical Stage 1 base length without requiring the stock to set an all-time high. Most actionable breakouts are <em>continuation</em> moves through prior 3-month resistance, not new-all-time-high moves.
+</div>
+
+<h3>4.4 Anti-Weinstein (Stage 3→4) — symmetric for SELL signals</h3>
+
+<p>The same framework applies in reverse for SELL signals. A Stage 3→4 transition event fires when:</p>
+<pre>
+  (a') close(D)     <  MA_chosen(D)
+  (b') close(D-1)   >= MA_chosen(D-1)               # downside crossover
+  (c') slope(MA, 4-week)(D) <= 0                    # MA flat or falling
+  (d') Stage_3_persistence(D, 4 weeks back) >= 0.8  # was topping, not just one bad week
+
+With anti-confluences:
+  L1' — volume EXPANSION on the breakdown (institutional distribution)
+  L2' — clears prior 13W close-LOW (genuine breakdown, not noise)
+  L3' — RS DEGRADING over prior 4 weeks
+  L4' — Stage 3 width (topping period) ≥ 12 weeks
+</pre>
+
+<h2>5. Research plan — Stream A2</h2>
+
+<p>Discovery exercise applied to Weinstein, modeled on the existing cell-discovery framework in CONTEXT.md §"24-framework discovery model" (lines 540-580).</p>
+
+<h3>Step 1 — Cap-tier point-in-time fix</h3>
+<p>Static <code>atlas_universe_stocks.tier</code> introduces survivor bias. Backfill <code>atlas_scorecard_daily.cap_tier</code> to 2018 from trailing-60d median traded value before kicking off Step 2. <strong>Parallel workstream.</strong></p>
+
+<h3>Step 2 — Build the event detector</h3>
+<p>SQL view <code>atlas.v_weinstein_events_base</code> that flags every base-rule transition event (Stage 1→2 up, Stage 3→4 down) per instrument per date per cap-tier per MA-lookback.</p>
+
+<h3>Step 3 — Apply confluence layers</h3>
+<p>For each base event, compute boolean flags for L1-L6. Persist in <code>atlas.weinstein_event_features</code>.</p>
+
+<h3>Step 4 — IC per (cap_tier × lookback × confluence-set)</h3>
+<p>Compute forward 6m excess return per event. Group by (cap_tier × lookback × confluence-subset). Compute IC (Spearman, since events are sparse and outlier-sensitive). Output: ranked table of rule combinations.</p>
+
+<p>Confluence subsets to test (16 combinations per cap-tier × lookback, not 64 — restrict to monotone-additive layering):</p>
+<ul>
+  <li>Base alone</li>
+  <li>Base + each of L1-L6 individually (6 cases)</li>
+  <li>Base + L1+L2 (volume + prior-high) (1 case)</li>
+  <li>Base + L1+L3 (volume + RS) (1 case)</li>
+  <li>Base + L2+L3 (prior-high + RS) (1 case)</li>
+  <li>Base + L1+L2+L3 (volume + prior-high + RS — Weinstein "full"); (1 case)</li>
+  <li>Base + L4 (base width) (1 case)</li>
+  <li>Base + L1+L2+L3+L4 (1 case)</li>
+  <li>Base + L1+L2+L3+L4+L6 (full minus L5 — leave sector confluence for follow-up since it requires sector-level RS data not yet wired) (1 case)</li>
+</ul>
+
+<h3>Step 5 — Event-count floor</h3>
+<p>A rule combination wins only if:</p>
+<ul>
+  <li>IC ≥ 0.05 at 6m (CONTEXT.md floor)</li>
+  <li>Event count ≥ 50 per cap_tier per year (i.e. ~400+ over the 8-year window) so the signal is actually actionable on a portfolio-rebalancing cadence</li>
+  <li>Hit rate (% of events with forward return > 0) ≥ 60%</li>
+</ul>
+
+<h3>Step 6 — Walk-forward</h3>
+<p>Once a rule combination wins on in-sample IC, validate via 3-year-train / 1-year-test rolling windows from 2018-2026. Out-of-sample IC must remain above floor.</p>
+
+<h3>Step 7 — Lock the winners</h3>
+<p>Per cap_tier, lock the best (MA-lookback × confluence-set) combination into <code>atlas_thresholds</code>. The verdict composer (Stream C) will read these to fire WAIT vs BUY decisions.</p>
+
+<h2>6. What this changes downstream</h2>
+
+<p>The verdict composer's Weinstein veto logic in spec §4 needs to be updated. Today's plan says:</p>
+<pre>
+  if cell_state == POSITIVE and weinstein_stage == 4:
+      verdict = WAIT
+</pre>
+
+<p>After this research, the logic becomes richer:</p>
+<pre>
+  weinstein_signal_today = compute_weinstein_event(instrument, today, locked_rule_set)
+  # Returns one of: BREAKOUT_FIRED, BREAKDOWN_FIRED, NONE, IN_STAGE_2, IN_STAGE_4
+
+  if cell_state == POSITIVE:
+      if weinstein_signal == BREAKDOWN_FIRED:        verdict = WAIT, reason = "Weinstein breakdown today"
+      elif weinstein_signal == IN_STAGE_4:           verdict = WAIT, reason = "Stage 4 — wait for Stage 2 confirmation"
+      elif weinstein_signal == BREAKOUT_FIRED:       verdict = BUY,  reason = "Cell POS + Weinstein breakout confirmed"
+      else:                                          verdict = BUY  # cell alone is enough
+</pre>
+
+<p>The methodology page (Stream E) gets a much richer Weinstein section — not just "Stage 2 = uptrend" but "here are the 6 rules, here are the lookbacks per cap-tier, here is the IC of the locked rule set, here are the worked breakout examples."</p>
+
+<h2>7. Honesty</h2>
+
+<p>This research can fail. Plausible failure modes:</p>
+<ul>
+  <li>No confluence combination clears the 0.05 IC floor → Weinstein is genuinely under-powered for Indian equities given current data. Fall back to cell-only verdicts; document.</li>
+  <li>Event counts too low when confluence is tight → signal is real but not actionable at the portfolio cadence; document and let cell math drive.</li>
+  <li>Walk-forward IC degrades severely → in-sample fit was a bull-market artifact; document and pick a more conservative rule.</li>
+</ul>
+
+<p>If any of these happen, the right next step is to <strong>document the limitation</strong> and let the cell-IC composite carry the load. Weinstein becomes a context chip ("Stage 2 confirmed" / "Stage 4 — caution"), not a hard veto on the verdict.</p>
+
+</body>
+</html>
