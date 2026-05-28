@@ -7,88 +7,83 @@ import { Menu, X } from 'lucide-react'
 type SubLink = { href: string; label: string }
 type Group   = { key: string; label: string; links: SubLink[] }
 
-// Nav reflects the canonical v6 mockup pages at root. Cleaned 2026-05-28:
-// removed all /v6/* duplicates (parallel tree was deleted), dropped
-// /matrix + /regime (route files never existed → 404), and added the
-// 3 canonical mockup pages that had been missing from the menu:
-// /india-pulse, /markets-rs, /calls.
+// Nav v6.2 (2026-05-28 IA): 5 top groups — Markets Today / Deep Dive /
+// Portfolios / Admin / Reports. Per user direction:
+//   - "Research" renamed to "Deep Dive"
+//   - Markets RS moved into Deep Dive (was top-level)
+//   - Setup + Methodology + Health collapsed into Admin
+//   - Signal proposals / weight monitoring / validator / thresholds stay
+//     under Admin (still LIVE per DB write activity 2026-05-25-27)
+//   - Decision Policy removed (deprecated per user)
+//   - Intelligence + Ask Atlas + Signals removed from nav
+//   - Strategies removed from nav (Optuna-backed, dormant)
+//   - Global / US pages removed from nav (will rebuild as "Global Pulse"
+//     group when international markets work begins)
+//   - Daily Brief moved to new Reports group (repository for future
+//     daily/weekly/monthly reports)
 export const GROUPS: Group[] = [
   {
     key: 'today',
-    label: 'TODAY',
+    label: 'MARKETS TODAY',
     links: [
-      { href: '/',                          label: 'Regime' },
-      { href: '/india-pulse',               label: 'India Pulse' },
-      { href: '/intelligence/daily-brief',  label: 'Daily Brief' },
+      { href: '/',                  label: 'Regime' },
+      { href: '/india-pulse',       label: 'India Pulse' },
     ],
   },
   {
-    key: 'research',
-    label: 'RESEARCH',
+    key: 'deepdive',
+    label: 'DEEP DIVE',
     links: [
       { href: '/markets-rs',  label: 'Markets RS' },
       { href: '/sectors',     label: 'Sectors' },
       { href: '/stocks',      label: 'Stocks' },
       { href: '/etfs',        label: 'ETFs' },
       { href: '/funds',       label: 'Funds' },
-      { href: '/calls',       label: 'Calls' },
-      { href: '/global',      label: 'Global Pulse' },
-      { href: '/us',          label: 'US Pulse' },
     ],
   },
   {
     key: 'portfolios',
     label: 'PORTFOLIOS',
     links: [
-      { href: '/portfolios',  label: 'Portfolios' },
-      { href: '/strategies',  label: 'Strategies' },
-    ],
-  },
-  {
-    key: 'setup',
-    label: 'SETUP',
-    links: [
-      { href: '/setup',                label: 'Overview' },
-      { href: '/setup/policy',         label: 'Policy' },
-      { href: '/setup/new-portfolio',  label: 'New Portfolio' },
-    ],
-  },
-  {
-    key: 'reference',
-    label: 'REFERENCE',
-    links: [
-      { href: '/methodology', label: 'Methodology' },
-      { href: '/health',      label: 'Health' },
+      { href: '/calls',       label: 'Calls' },
+      { href: '/portfolios',  label: 'Custom Portfolios' },
     ],
   },
   {
     key: 'admin',
     label: 'ADMIN',
     links: [
-      { href: '/admin/thresholds',            label: 'Thresholds' },
-      { href: '/admin/composite-proposals',   label: 'Signal Proposals' },
-      { href: '/admin/validator',             label: 'Data Validator' },
-      { href: '/admin/weight-performance',    label: 'Weight Monitoring' },
-      { href: '/intelligence',                label: 'Intelligence' },
-      { href: '/intelligence/agents',         label: 'Ask Atlas' },
-      { href: '/signals',                     label: 'Signals' },
+      { href: '/health',                       label: 'Data Health' },
+      { href: '/methodology',                  label: 'Methodology' },
+      { href: '/setup',                        label: 'Setup · Customization' },
+      { href: '/admin/composite-proposals',    label: 'Signal Proposals' },
+      { href: '/admin/weight-performance',     label: 'Weight Monitoring' },
+      { href: '/admin/validator',              label: 'Validator' },
+      { href: '/admin/thresholds',             label: 'Thresholds' },
+    ],
+  },
+  {
+    key: 'reports',
+    label: 'REPORTS',
+    links: [
+      { href: '/intelligence/daily-brief', label: 'Daily Brief' },
+      // Future: weekly + monthly + quarterly reports
     ],
   },
 ]
 
 function activeGroup(pathname: string): Group {
-  if (pathname.startsWith('/admin'))                        return GROUPS[5]
-  if (pathname.startsWith('/intelligence') || pathname.startsWith('/signals')) return GROUPS[5]
-  if (pathname.startsWith('/setup'))                        return GROUPS[3]
-  if (pathname.startsWith('/strategies') || pathname.startsWith('/portfolios')) return GROUPS[2]
-  if (pathname.startsWith('/methodology') || pathname.startsWith('/health'))    return GROUPS[4]
-  if (pathname.startsWith('/india-pulse'))                                      return GROUPS[0]
+  if (pathname.startsWith('/admin') ||
+      pathname.startsWith('/setup') ||
+      pathname.startsWith('/methodology') ||
+      pathname.startsWith('/health'))                                          return GROUPS[3]
+  if (pathname.startsWith('/intelligence/daily-brief'))                        return GROUPS[4]
+  if (pathname.startsWith('/calls') || pathname.startsWith('/portfolios'))     return GROUPS[2]
+  if (pathname.startsWith('/india-pulse'))                                     return GROUPS[0]
   if (pathname.startsWith('/markets-rs') ||
       pathname.startsWith('/sectors')    || pathname.startsWith('/stocks') ||
-      pathname.startsWith('/etfs')       || pathname.startsWith('/funds') ||
-      pathname.startsWith('/calls')      ||
-      pathname.startsWith('/global')     || pathname.startsWith('/us'))         return GROUPS[1]
-  return GROUPS[0] // today is default
+      pathname.startsWith('/etfs')       || pathname.startsWith('/funds'))     return GROUPS[1]
+  return GROUPS[0] // markets-today is default for /
 }
 
 export function TopNav({ healthDot }: { healthDot?: React.ReactNode }) {
