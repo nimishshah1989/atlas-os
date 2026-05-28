@@ -12,8 +12,8 @@ upstream data.
 Untouched: jobs 1-5 (SP02 MVs already inside intel script), jobs 7-8 (intraday
 by design), job 11 (top conviction already inside intel script).
 
-Revision ID: 110
-Revises: 109
+Revision ID: 111
+Revises: 110
 Create Date: 2026-05-28 IST
 """
 
@@ -21,8 +21,8 @@ from __future__ import annotations
 
 from alembic import op
 
-revision = "110"
-down_revision = "109"
+revision = "111"
+down_revision = "110"
 branch_labels = None
 depends_on = None
 
