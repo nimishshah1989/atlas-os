@@ -26,6 +26,7 @@ from atlas.api.screen import router as screen_router
 from atlas.api.strategies import router as strategies_router
 from atlas.api.trading import router as trading_router
 from atlas.api.tv_signals import router as tv_signals_router
+from atlas.tv.routes import router as tv_router
 
 app = FastAPI(title="Atlas API", version="0.1.0")
 
@@ -62,6 +63,7 @@ app.include_router(market_router)
 app.include_router(cell_defs_router)
 app.include_router(instrument_router)
 app.include_router(rank_router)  # v6 Fund + ETF scorecard ranking (migration 093)
+app.include_router(tv_router)  # TV-05: cached TV screener metrics — /v1/tv/metrics/{symbol}
 
 
 @app.get("/health", include_in_schema=False)
