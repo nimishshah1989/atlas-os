@@ -18,6 +18,7 @@
 //   - Realized excess column shows real data (not — for all rows)
 
 import { useState, useMemo, useRef } from 'react'
+import Link from 'next/link'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { CallRow } from '@/lib/queries/v6/calls'
 import { fmtSignedPct } from '@/lib/format-number'
@@ -104,7 +105,10 @@ function RowCells({ row }: { row: CallRow }) {
     <>
       {/* Symbol · Company */}
       <td className="px-[14px] py-2 border-b border-paper-rule text-left">
-        <div className="flex flex-col gap-[1px]">
+        <Link
+          href={`/stocks/${encodeURIComponent(row.symbol)}`}
+          className="flex flex-col gap-[1px] hover:text-accent transition-colors"
+        >
           {/* M4: MV always has symbol — no signal_call_id fallback needed */}
           <span className="font-mono font-semibold text-ink-primary text-[11.5px] tracking-[0.02em]">
             {row.symbol}
@@ -112,7 +116,7 @@ function RowCells({ row }: { row: CallRow }) {
           {row.company_name && (
             <span className="text-[10px] text-ink-4 truncate max-w-[160px]">{row.company_name}</span>
           )}
-        </div>
+        </Link>
       </td>
       {/* Status — I1: from MV status column directly */}
       <td className="px-2 py-2 border-b border-paper-rule text-center">

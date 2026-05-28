@@ -227,10 +227,42 @@ export async function getSectorCards(): Promise<SectorCardRow[]> {
       verdict_abbr
     FROM atlas.mv_sector_cards
     WHERE as_of_date = (
+      -- Anchor to last fully-populated date. On a fresh trading day,
+      -- rs_1m / ret_1w / ret_12m / breadth columns can lag rs_3m by one
+      -- compute cycle. Picking MAX(as_of_date) blindly gives a partial row
+      -- with empty 1W / 12M / breadth columns. Filter on rs_1m IS NOT NULL.
       SELECT MAX(as_of_date) FROM atlas.mv_sector_cards
+      WHERE rs_1m IS NOT NULL AND ret_1w IS NOT NULL
     )
     ORDER BY rs_3m DESC NULLS LAST
   `
+
+  // mv_sector_cards.buy_signal_count counts signals TRIGGERED on T-0 only,
+  // so it almost always shows 0. Overlay live counts of OPEN BUY signals
+  // (exit_date IS NULL) grouped by sector — that's what the UI implies.
+  const liveCounts = await sql<Array<{
+    sector_name: string
+    n_open: number
+    conf_h: number
+    conf_m: number
+    conf_l: number
+  }>>`
+    SELECT
+      u.sector AS sector_name,
+      COUNT(sc.signal_call_id)::int AS n_open,
+      COUNT(CASE WHEN sc.confidence_unconditional >= 0.70 THEN 1 END)::int AS conf_h,
+      COUNT(CASE WHEN sc.confidence_unconditional >= 0.50
+                  AND sc.confidence_unconditional <  0.70 THEN 1 END)::int AS conf_m,
+      COUNT(CASE WHEN sc.confidence_unconditional <  0.50 THEN 1 END)::int AS conf_l
+    FROM atlas.atlas_signal_calls sc
+    JOIN atlas.atlas_universe_stocks u
+      ON u.instrument_id = sc.instrument_id
+     AND u.effective_to IS NULL
+    WHERE sc.action = 'POSITIVE'
+      AND sc.exit_date IS NULL
+    GROUP BY u.sector
+  `
+  const liveBySector = new Map(liveCounts.map(r => [r.sector_name, r]))
 
   return rows.map((r) => ({
     as_of_date: r.as_of_date,
@@ -249,8 +281,14 @@ export async function getSectorCards(): Promise<SectorCardRow[]> {
     pct_above_ema200: toNumber(r.pct_above_ema200),
     pct_at_52wh: toNumber(r.pct_at_52wh),
     hhi_concentration: toNumber(r.hhi_concentration),
-    buy_signal_count: r.buy_signal_count,
-    confidence_distribution: r.confidence_distribution,
+    buy_signal_count: liveBySector.get(r.sector_name)?.n_open ?? r.buy_signal_count,
+    confidence_distribution: liveBySector.has(r.sector_name)
+      ? {
+          H: liveBySector.get(r.sector_name)!.conf_h,
+          M: liveBySector.get(r.sector_name)!.conf_m,
+          L: liveBySector.get(r.sector_name)!.conf_l,
+        }
+      : r.confidence_distribution,
     verdict: r.verdict,
     verdict_abbr: r.verdict_abbr,
   }))

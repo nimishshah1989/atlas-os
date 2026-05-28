@@ -253,7 +253,9 @@ export async function getCallsLedger(
       days_in_position::text,
       predicted_excess::text,
       realized_excess_pct::text,
-      is_hit,
+      -- HIT/MISS is meaningless on a 0-4 day old call (eval window not yet
+      -- elapsed). Coerce to NULL so the UI renders '—' instead of a stale ✗.
+      CASE WHEN days_in_position < 5 THEN NULL ELSE is_hit END AS is_hit,
       status::text
     FROM atlas.mv_calls_performance
     WHERE action IN ('POSITIVE', 'NEGATIVE')

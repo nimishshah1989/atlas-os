@@ -306,12 +306,22 @@ export function SectorRRGChart({ data }: { data: SectorRRGRow[] }) {
       .map((t) => ({ x: t.rs_ratio!, y: t.rs_momentum! })),
   )
 
+  // Clamp display domain to standard RRG bounds so that one outlier sector
+  // (e.g. Conglomerate showing rs_momentum = -194 from a noisy LAG point)
+  // doesn't squish all 30 sectors into a tiny cluster at the center.
+  // Outliers are still plotted but get pulled to the chart edge.
   const allX = [...scatterData.map((d) => d.x), ...trailXY.map((t) => t.x), 100]
   const allY = [...scatterData.map((d) => d.y), ...trailXY.map((t) => t.y), 0]
-  const xMin = Math.min(...allX) - 2
-  const xMax = Math.max(...allX) + 2
-  const yMin = Math.min(...allY) - 1
-  const yMax = Math.max(...allY) + 1
+  // Data-aware domain (with padding)
+  const dataXMin = Math.min(...allX) - 2
+  const dataXMax = Math.max(...allX) + 2
+  const dataYMin = Math.min(...allY) - 1
+  const dataYMax = Math.max(...allY) + 1
+  // Standard RRG bounds (cap to keep the chart readable)
+  const xMin = Math.max(dataXMin, 85)
+  const xMax = Math.min(dataXMax, 130)
+  const yMin = Math.max(dataYMin, -15)
+  const yMax = Math.min(dataYMax, 25)
 
   if (validData.length === 0) {
     return (

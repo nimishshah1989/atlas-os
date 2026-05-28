@@ -8,11 +8,15 @@
 //
 // Columns: Ticker · Composite · Matrix conviction · ADV · Atlas leader · Rank · vs this
 
+import Link from 'next/link'
 import type { PeerSetEntry } from '@/lib/queries/v6/etfs'
 
 function fmtScore(v: number | null): string {
+  // composite_score / matrix_conviction_score come from atlas_etf_scorecard on
+  // a 0-100 scale already; do NOT multiply by 100 again (the historical
+  // *100 was a stale assumption from when scores were 0-1).
   if (v == null) return '—'
-  return (v * 100).toFixed(1)
+  return v.toFixed(1)
 }
 
 function fmtAdv(v: number | null): string {
@@ -29,9 +33,12 @@ function deltaClass(v: number | null): string {
 }
 
 function fmtDelta(v: number | null): string {
+  // delta_composite is the difference between peer.composite_score and the
+  // focus ETF's composite_score — both on 0-100 scale, so the delta is also
+  // on that scale and does NOT need * 100.
   if (v == null) return '—'
   const sign = v > 0 ? '+' : ''
-  return `${sign}${(v * 100).toFixed(1)}`
+  return `${sign}${v.toFixed(1)}`
 }
 
 export interface PeerSetTableProps {
@@ -106,9 +113,12 @@ export function PeerSetTable({ ticker, peers, category }: PeerSetTableProps) {
                 className="border-b border-paper-rule hover:bg-paper-soft transition-colors"
               >
                 <td className="px-3 py-2 text-left">
-                  <span className="font-mono font-semibold text-ink-primary text-[11.5px]">
+                  <Link
+                    href={`/etfs/${encodeURIComponent(peer.ticker)}`}
+                    className="font-mono font-semibold text-ink-primary text-[11.5px] hover:text-accent hover:underline transition-colors"
+                  >
                     {peer.ticker}
-                  </span>
+                  </Link>
                   {peer.is_atlas_leader && (
                     <span className="ml-1.5 font-mono text-[8px] font-bold px-1 py-0.5 bg-signal-pos text-paper rounded-sm">
                       LEADER

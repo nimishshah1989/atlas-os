@@ -6,6 +6,7 @@
 // Toggle between rs_1w / ret_1m / ret_3m (client-side state).
 
 import { useState } from 'react'
+import Link from 'next/link'
 import type { SectorHeatmapItem } from '@/lib/queries/v6/india_pulse'
 import { fmtPct } from './helpers'
 
@@ -35,10 +36,17 @@ function textClass(val: number | null): string {
 }
 
 export function SectorHeatmap({ sectors }: Props) {
-  // Default to '1m' because mv_india_pulse.sector_heatmap.rs_1w is currently
-  // NULL across all sectors (rs_1w only populated when 5-day RS panel is fresh).
-  // Switching default to '1m' ensures the heatmap renders colored cells on first paint.
-  const [activeWindow, setActiveWindow] = useState<Window>('1m')
+  // Hide windows where every sector is NULL so users can't pick a tab that
+  // paints all '—'. rs_1w in particular is only populated when the 5-day
+  // RS panel is fresh; on most days it's NULL across the board.
+  const has = {
+    '1w': sectors.some((s) => s.rs_1w != null),
+    '1m': sectors.some((s) => s.ret_1m != null),
+    '3m': sectors.some((s) => s.ret_3m != null),
+  } as const
+  const availableWindows = (['1w', '1m', '3m'] as Window[]).filter((w) => has[w])
+  const defaultWindow: Window = has['1m'] ? '1m' : has['3m'] ? '3m' : has['1w'] ? '1w' : '1m'
+  const [activeWindow, setActiveWindow] = useState<Window>(defaultWindow)
 
   const getValue = (s: SectorHeatmapItem): number | null => {
     switch (activeWindow) {
@@ -68,7 +76,7 @@ export function SectorHeatmap({ sectors }: Props) {
       {/* Toggle chips */}
       <div className="flex items-center gap-3 mb-4">
         <span className="text-[10px] uppercase tracking-[0.14em] text-ink-tertiary font-semibold">Window</span>
-        {(['1w', '1m', '3m'] as Window[]).map(w => (
+        {availableWindows.map(w => (
           <button
             key={w}
             onClick={() => setActiveWindow(w)}
@@ -94,10 +102,11 @@ export function SectorHeatmap({ sectors }: Props) {
         {sorted.map(s => {
           const val = getValue(s)
           return (
-            <div
+            <Link
               key={s.sector_name}
-              className={`aspect-square rounded-sm flex flex-col items-center justify-center text-center cursor-pointer hover:brightness-95 transition-all p-1 ${cellClass(val)}`}
-              title={`${s.sector_name}: ${fmtPct(val)}`}
+              href={`/sectors/${encodeURIComponent(s.sector_name)}`}
+              className={`aspect-square rounded-sm flex flex-col items-center justify-center text-center cursor-pointer hover:brightness-95 hover:ring-2 hover:ring-accent/40 transition-all p-1 ${cellClass(val)}`}
+              title={`${s.sector_name}: ${fmtPct(val)} — open sector`}
             >
               <div className={`text-[9px] font-semibold tracking-[0.04em] leading-tight ${textClass(val)}`}>
                 {s.sector_name.length > 10 ? `${s.sector_name.slice(0, 9)}…` : s.sector_name}
@@ -105,7 +114,7 @@ export function SectorHeatmap({ sectors }: Props) {
               <div className={`font-mono text-[12px] font-semibold mt-0.5 ${textClass(val)}`}>
                 {fmtPct(val)}
               </div>
-            </div>
+            </Link>
           )
         })}
       </div>

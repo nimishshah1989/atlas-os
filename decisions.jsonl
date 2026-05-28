@@ -46409,3 +46409,351 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{"ts":"2026-05-28T05:00:33Z","kind":"supabase_sql_executed","sql_preview":"SELECT sector, industry, COUNT(*) AS n_stocks\nFROM atlas.atlas_universe_stocks\nWHERE effective_to IS NULL AND sector = 'Energy'\nGROUP BY sector, industry\nORDER BY n_stocks DESC;"}
+{"ts":"2026-05-28T05:00:53Z","kind":"supabase_sql_executed","sql_preview":"DROP MATERIALIZED VIEW IF EXISTS atlas.mv_sector_deepdive;"}
+{"ts":"2026-05-28T05:01:49Z","kind":"supabase_sql_executed","sql_preview":"CREATE MATERIALIZED VIEW atlas.mv_sector_deepdive AS\nWITH latest_sector_date AS (\n  SELECT MAX(date) AS d FROM atlas.atlas_sector_metrics_daily WHERE rs_1w IS NOT NULL\n), latest_stock_date AS (\n  SELECT MAX(date) AS d FROM atlas.atlas_stock_metrics_daily WHERE rs_3m_nifty500 IS NOT NULL\n), latest_conviction_date AS (\n  SELECT MAX(date) AS d FROM atlas.atlas_stock_conviction_daily\n), latest_stock_state_date AS (\n  SELECT MAX(date) AS d FROM atlas.atlas_stock_states_daily\n), latest_sector_state_da"}
+{"ts":"2026-05-28T05:02:00Z","kind":"supabase_sql_executed","sql_preview":"CREATE UNIQUE INDEX uix_mv_sector_deepdive_sector ON atlas.mv_sector_deepdive (sector_name);\nREFRESH MATERIALIZED VIEW atlas.mv_sector_deepdive;\nSELECT sector_name, jsonb_array_length(sub_industries) AS n_sub_inds, sub_industries\nFROM atlas.mv_sector_deepdive WHERE sector_name = 'Energy';"}
+{
+  "ts": "2026-05-28T05:02:54Z",
+  "prev": "ae234bc9b9cf6456",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/v6/sectors.ts",
+  "lines_changed": 15,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T05:03:09Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/v6/sectors.ts",
+  "lines_changed": 46,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T05:03:31Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/sectors/[sector]/page.tsx",
+  "lines_changed": 47,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-28T05:03:52Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name FROM information_schema.columns\nWHERE table_schema='atlas' AND table_name='atlas_sector_states_daily'\nORDER BY ordinal_position;"}
+{
+  "ts": "2026-05-28T05:04:29Z",
+  "prev": "f1413f701122e526",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/sectors/[sector]/page.tsx",
+  "lines_changed": 81,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-28T05:33:28Z","kind":"supabase_sql_executed","sql_preview":"-- Verify each 0-row table is truly empty AND not referenced by any MV\nWITH candidates AS (\n  SELECT unnest(ARRAY[\n    'public.de_mf_holdings',\n    'public.mf_nav_history',\n    'public.de_corporate_actions',\n    'public.de_etf_holdings',\n    'public.de_market_cap_history',\n    'public.de_instrument',\n    'public.de_index_constituents',\n    'public.de_trading_calendar',\n    'public.de_mf_master',\n    'public.de_mf_lifecycle',\n    'public.de_healing_log',\n    'atlas.atlas_stock_metrics_intraday',"}
+{"ts":"2026-05-28T05:33:45Z","kind":"supabase_sql_executed","sql_preview":"SELECT 'public.de_corporate_actions' AS t, COUNT(*) FROM public.de_corporate_actions\nUNION ALL SELECT 'public.de_mf_holdings', COUNT(*) FROM public.de_mf_holdings\nUNION ALL SELECT 'public.mf_nav_history', COUNT(*) FROM public.mf_nav_history\nUNION ALL SELECT 'public.de_etf_holdings', COUNT(*) FROM public.de_etf_holdings\nUNION ALL SELECT 'public.de_market_cap_history', COUNT(*) FROM public.de_market_cap_history\nUNION ALL SELECT 'public.de_instrument', COUNT(*) FROM public.de_instrument\nUNION ALL S"}
+{"ts":"2026-05-28T05:34:14Z","kind":"supabase_sql_executed","sql_preview":"-- Drop the 2 verified-empty tables\nDROP TABLE IF EXISTS public.de_market_cap_history CASCADE;\nDROP TABLE IF EXISTS public.mf_nav_history CASCADE;\n\n-- ANALYZE all atlas + public.de_* tables so future audits see correct row counts\nANALYZE atlas.atlas_universe_stocks;\nANALYZE atlas.atlas_universe_funds;\nANALYZE atlas.atlas_universe_etfs;\nANALYZE public.de_corporate_actions;\nANALYZE public.de_mf_holdings;\nANALYZE public.de_etf_holdings;\nANALYZE public.de_instrument;\nANALYZE public.de_index_constitu"}
+{"ts":"2026-05-28T05:34:26Z","kind":"supabase_sql_executed","sql_preview":"-- For each archive candidate: rows, last-modified evidence, MV references\nWITH candidates AS (\n  SELECT unnest(ARRAY[\n    'atlas.atlas_stock_state_daily',\n    'atlas.atlas_etf_state_v2',\n    'atlas.atlas_sector_state_v2',\n    'atlas.atlas_fund_state_v2',\n    'atlas.atlas_conviction_daily',\n    'atlas.atlas_validator_findings',\n    'atlas.atlas_signal_ic_rolling',\n    'atlas.atlas_signal_weights_live_perf',\n    'atlas.atlas_weight_proposals',\n    'atlas.atlas_fund_lens_monthly',\n    'atlas.atlas"}
+{"ts":"2026-05-28T05:35:27Z","kind":"supabase_sql_executed","sql_preview":"-- Final pre-drop check: any recent writes? any pg_cron job that touches them?\nSELECT\n  schemaname || '.' || relname AS qualified,\n  n_tup_ins, n_tup_upd, n_tup_del,\n  COALESCE(last_autoanalyze, last_analyze) AS last_analyzed,\n  COALESCE(last_autovacuum, last_vacuum) AS last_vacuumed\nFROM pg_stat_user_tables\nWHERE relname IN ('atlas_fund_state_v2','atlas_sector_state_v2');\n\n-- Any pg_cron job referencing these tables?\nSELECT jobname, schedule, command\nFROM cron.job\nWHERE command ILIKE '%atlas_fu"}
+{
+  "ts": "2026-05-28T05:36:22Z",
+  "prev": "19c5cdc5b5e3ac16",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/v6/2026-05-28-table-census.md",
+  "lines_changed": 69,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-28T05:44:20Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  (SELECT COUNT(*) FROM atlas.atlas_universe_stocks WHERE effective_to IS NULL) AS active_in_universe,\n  (SELECT COUNT(*) FROM atlas.atlas_universe_stocks WHERE effective_to IS NOT NULL) AS removed_from_universe,\n  (SELECT COUNT(*) FROM atlas.atlas_universe_stocks) AS total_universe_history;\nSELECT symbol, in_universe\nFROM (VALUES\n  ('M&M'), ('M&MFIN'), ('L&TFH'), ('BAJAJ-AUTO'), ('IRFC'), ('NESTLEIND'),\n  ('ULTRACEMCO'), ('SUZLON'), ('YESBANK'), ('IDEA'), ('ZOMATO'), ('PAYTM'),\n  ('NYKAA"}
+{"ts":"2026-05-28T05:44:38Z","kind":"supabase_sql_executed","sql_preview":"-- Look for variations of the missing 3\nSELECT symbol, company_name, sector, effective_from, effective_to\nFROM atlas.atlas_universe_stocks\nWHERE symbol ILIKE '%TATA%MOT%' OR symbol ILIKE '%TATAM%' OR symbol ILIKE '%ZOMATO%'\n  OR symbol ILIKE 'ETERNAL%' OR symbol ILIKE '%L_TFH%' OR symbol ILIKE 'LTF%'\n  OR company_name ILIKE '%Tata Motors%' OR company_name ILIKE '%Zomato%'\n  OR company_name ILIKE '%L&T Finance%' OR company_name ILIKE '%Eternal%'\nORDER BY company_name, effective_to NULLS LAST\nLIMI"}
+{"ts":"2026-05-28T05:45:03Z","kind":"supabase_sql_executed","sql_preview":"-- Do expired (effective_to NOT NULL) records exist for these renamed symbols?\nSELECT symbol, company_name, effective_from, effective_to, instrument_id\nFROM atlas.atlas_universe_stocks\nWHERE symbol IN ('TATAMOTORS','ZOMATO','L&TFH')\nORDER BY symbol, effective_to NULLS LAST;\n-- How many total expired records?\nSELECT COUNT(*) AS expired_records FROM atlas.atlas_universe_stocks WHERE effective_to IS NOT NULL;"}
+{"ts":"2026-05-28T05:45:16Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name FROM information_schema.columns\nWHERE table_schema='public' AND table_name='de_symbol_history' ORDER BY ordinal_position;\nSELECT COUNT(*) FROM public.de_symbol_history;"}
+{"ts":"2026-05-28T05:45:52Z","kind":"supabase_sql_executed","sql_preview":"CREATE TABLE IF NOT EXISTS atlas.atlas_symbol_aliases (\n  old_symbol     text PRIMARY KEY,\n  new_symbol     text NOT NULL,\n  rename_kind    text NOT NULL,\n  effective_from date,\n  notes          text,\n  created_at     timestamptz NOT NULL DEFAULT now()\n);\n\nCREATE INDEX IF NOT EXISTS ix_atlas_symbol_aliases_new ON atlas.atlas_symbol_aliases (new_symbol);\n\nCOMMENT ON TABLE atlas.atlas_symbol_aliases IS\n  'Maps OLD NSE symbols (post-rename or post-demerger) to CURRENT symbols in atlas_universe_stoc"}
+{
+  "ts": "2026-05-28T05:46:07Z",
+  "prev": "d564a1d4143146cb",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/stocks/[symbol]/page.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T05:46:21Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/stocks/[symbol]/page.tsx",
+  "lines_changed": 9,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T05:46:33Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/symbol-aliases.ts",
+  "lines_changed": 25,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T05:47:46Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/nav/TopNav.tsx",
+  "lines_changed": 83,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-28T05:50:15Z","kind":"supabase_sql_executed","sql_preview":"-- Full table inventory + usage signals\nWITH base AS (\n  SELECT\n    n.nspname AS schema,\n    c.relname AS table_name,\n    c.oid,\n    pg_total_relation_size(c.oid) AS size_bytes,\n    c.relkind\n  FROM pg_class c\n  JOIN pg_namespace n ON n.oid = c.relnamespace\n  WHERE n.nspname IN ('atlas','public')\n    AND c.relkind = 'r'\n    -- Skip partition children to keep list readable; the parent shows aggregate\n    AND NOT EXISTS (SELECT 1 FROM pg_inherits WHERE inhrelid = c.oid)\n),\nstats AS (\n  SELECT\n    "}
+{
+  "ts": "2026-05-28T05:52:46Z",
+  "prev": "324c60f7623708ff",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/v6/2026-05-28-full-table-audit.md",
+  "lines_changed": 190,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-28T06:02:50Z","kind":"supabase_sql_executed","sql_preview":"-- Step 1: fresh COUNT(*) on every drop candidate to confirm truly empty (no stale-stat trap)\nSELECT 'public.de_data_anomalies' AS t, COUNT(*) FROM public.de_data_anomalies\nUNION ALL SELECT 'public.de_global_instrument_master', COUNT(*) FROM public.de_global_instrument_master\nUNION ALL SELECT 'public.de_global_technical_daily', COUNT(*) FROM public.de_global_technical_daily\nUNION ALL SELECT 'public.de_goldilocks_market_view', COUNT(*) FROM public.de_goldilocks_market_view\nUNION ALL SELECT 'publi"}
+{"ts":"2026-05-28T06:03:10Z","kind":"supabase_sql_executed","sql_preview":"DROP TABLE IF EXISTS public.de_global_technical_daily CASCADE;\nDROP TABLE IF EXISTS public.de_goldilocks_market_view CASCADE;\nDROP TABLE IF EXISTS public.de_goldilocks_sector_view CASCADE;\nDROP TABLE IF EXISTS public.de_goldilocks_stock_ideas CASCADE;\nDROP TABLE IF EXISTS public.de_mf_dividends CASCADE;\nDROP TABLE IF EXISTS public.de_migration_errors CASCADE;\nDROP TABLE IF EXISTS public.de_migration_log CASCADE;\nDROP TABLE IF EXISTS public.de_recompute_queue CASCADE;\nDROP TABLE IF EXISTS public."}
+{
+  "ts": "2026-05-28T06:05:24Z",
+  "prev": "d7afaacaa550e029",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/methodology/MethodologyV61.tsx",
+  "lines_changed": 432,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T06:05:46Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/methodology/page.tsx",
+  "lines_changed": 17,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-28T06:27:34Z","kind":"supabase_sql_executed","sql_preview":"-- Are the admin-feature tables being written nightly?\nSELECT\n  relname AS table_name,\n  n_live_tup AS rows_now,\n  n_tup_ins + n_tup_upd + n_tup_del AS lifetime_writes,\n  COALESCE(last_autoanalyze, last_analyze)::date AS last_analyzed\nFROM pg_stat_user_tables\nWHERE schemaname = 'atlas'\n  AND relname IN (\n    'atlas_weight_proposals',           -- /admin/composite-proposals\n    'atlas_signal_weights_live_perf',   -- /admin/weight-performance\n    'atlas_signal_weights',             -- weights them"}
+{
+  "ts": "2026-05-28T06:33:13Z",
+  "prev": "66ff8eaa482cc6ce",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/nav/TopNav.tsx",
+  "lines_changed": 78,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-28T06:33:55Z","kind":"supabase_sql_executed","sql_preview":"-- Verify no MV references first\nSELECT m.matviewname FROM pg_matviews m WHERE m.schemaname='atlas'\n  AND (m.definition ILIKE '%atlas_decision_policy%');\n-- If empty → safe to drop\nDROP TABLE IF EXISTS atlas.atlas_decision_policy_history CASCADE;\nDROP TABLE IF EXISTS atlas.atlas_decision_policy CASCADE;\nSELECT 'OK 2 decision_policy tables dropped' AS status;"}
+{
+  "ts": "2026-05-28T06:36:56Z",
+  "prev": "b6af4fd82b27df95",
+  "tool": "Write",
+  "file": "/Users/nimishshah/.claude/projects/-Users-nimishshah-Documents-GitHub-atlas-os/memory/feedback_atlas_explainer_flywheel.md",
+  "lines_changed": 58,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T06:42:14Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/methodology/MethodologyV62.tsx",
+  "lines_changed": 580,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T06:42:31Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/methodology/page.tsx",
+  "lines_changed": 17,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T06:44:32Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/admin/page.tsx",
+  "lines_changed": 155,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T06:45:53Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/admin/AdminTabs.tsx",
+  "lines_changed": 303,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T06:47:38Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/.claude/projects/-Users-nimishshah-Documents-GitHub-atlas-os/memory/feedback_everything_clickable.md",
+  "lines_changed": 39,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-28T07:12:38Z","kind":"supabase_sql_executed","sql_preview":"SELECT ticker, composite_score, matrix_conviction_score, peer_set->0->>'composite_score' AS first_peer_composite, peer_set->0->>'matrix_conviction_score' AS first_peer_conviction\nFROM atlas.mv_etf_deepdive\nWHERE ticker = 'JUNIORBEES' LIMIT 1;"}
+{
+  "ts": "2026-05-28T07:12:52Z",
+  "prev": "2edb1c5d1d5551f0",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/etfs/PeerSetTable.tsx",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T07:13:01Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/etfs/PeerSetTable.tsx",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T07:16:40Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/etfs/ETFGatesPanel.tsx",
+  "lines_changed": 16,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-28T07:17:27Z","kind":"supabase_sql_executed","sql_preview":"SELECT sector_name, rs_ratio_current, rs_momentum_current\nFROM atlas.mv_sector_rrg\nORDER BY ABS(rs_momentum_current) DESC NULLS LAST\nLIMIT 10;"}
+{
+  "ts": "2026-05-28T07:17:48Z",
+  "prev": "fc33ed158e2c7158",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/sectors/SectorRRGChart.tsx",
+  "lines_changed": 16,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T07:20:38Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/v6/sectors.ts",
+  "lines_changed": 33,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T07:20:45Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/v6/sectors.ts",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-28T07:21:20Z","kind":"supabase_sql_executed","sql_preview":"SELECT verdict, verdict_abbr, COUNT(*) FROM atlas.mv_sector_cards WHERE as_of_date = (SELECT MAX(as_of_date) FROM atlas.mv_sector_cards) GROUP BY 1,2 ORDER BY 1,2;"}
+{"ts":"2026-05-28T07:21:41Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  as_of_date,\n  COUNT(*) AS n_rows,\n  COUNT(rs_3m) AS n_rs_3m,\n  COUNT(rs_1m) AS n_rs_1m,\n  COUNT(ret_1w) AS n_ret_1w,\n  COUNT(ret_12m) AS n_ret_12m,\n  COUNT(pct_above_ema20) AS n_breadth,\n  COUNT(verdict_abbr) AS n_verdict\nFROM atlas.mv_sector_cards\nWHERE as_of_date >= CURRENT_DATE - 7\nGROUP BY as_of_date\nORDER BY as_of_date DESC;"}
+{
+  "ts": "2026-05-28T07:21:53Z",
+  "prev": "132c2d3bddb499dd",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/v6/sectors.ts",
+  "lines_changed": 10,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-28T07:22:16Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  as_of_date,\n  jsonb_array_length(sector_heatmap) AS n_sectors,\n  (sector_heatmap->0) AS first_item\nFROM atlas.mv_india_pulse\nORDER BY as_of_date DESC\nLIMIT 3;"}
+{"ts":"2026-05-28T07:22:25Z","kind":"supabase_sql_executed","sql_preview":"WITH expanded AS (\n  SELECT jsonb_array_elements(sector_heatmap) AS item\n  FROM atlas.mv_india_pulse\n  WHERE as_of_date = (SELECT MAX(as_of_date) FROM atlas.mv_india_pulse)\n)\nSELECT\n  COUNT(*) AS n_sectors,\n  COUNT((item->>'rs_1w')::numeric) AS n_with_rs_1w,\n  COUNT((item->>'ret_1m')::numeric) AS n_with_ret_1m,\n  COUNT((item->>'ret_3m')::numeric) AS n_with_ret_3m\nFROM expanded;"}
+{
+  "ts": "2026-05-28T07:22:40Z",
+  "prev": "53b0b149359382c1",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/india-pulse/SectorHeatmap.tsx",
+  "lines_changed": 19,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T07:22:46Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/india-pulse/SectorHeatmap.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-28T07:23:21Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  cap_tier,\n  matrix_tenure_dominant AS tenure,\n  matrix_action_sign     AS action_sign,\n  COUNT(*) AS n\nFROM atlas.mv_stock_landscape\nWHERE matrix_tenure_dominant IS NOT NULL\n  AND matrix_action_sign IS NOT NULL\nGROUP BY 1,2,3\nORDER BY 1,2,3;"}
+{"ts":"2026-05-28T07:24:01Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name FROM information_schema.columns WHERE table_schema='atlas' AND table_name='mv_stock_landscape' ORDER BY ordinal_position;"}
+{"ts":"2026-05-28T07:24:07Z","kind":"supabase_sql_executed","sql_preview":"SELECT table_schema, table_name FROM information_schema.tables WHERE table_name ILIKE '%stock_landscape%' OR table_name ILIKE '%landscape%';"}
+{"ts":"2026-05-28T07:24:14Z","kind":"supabase_sql_executed","sql_preview":"SELECT n.nspname AS schema, c.relname AS name, c.relkind FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relname ILIKE '%landscape%' OR c.relname ILIKE '%stock%matrix%';"}
+{"ts":"2026-05-28T07:24:22Z","kind":"supabase_sql_executed","sql_preview":"SELECT attname AS column_name FROM pg_attribute WHERE attrelid = 'atlas.mv_stock_landscape'::regclass AND attnum > 0 ORDER BY attnum;"}
+{"ts":"2026-05-28T07:25:05Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  days_in_position,\n  is_hit,\n  COUNT(*) AS n,\n  COUNT(predicted_excess) AS n_pred,\n  COUNT(realized_excess_pct) AS n_realized\nFROM atlas.mv_calls_performance\nWHERE action IN ('POSITIVE','NEGATIVE') AND days_in_position <= 10\nGROUP BY 1, 2\nORDER BY 1;"}
+{"ts":"2026-05-28T07:25:16Z","kind":"supabase_sql_executed","sql_preview":"SELECT COUNT(*) AS n, COUNT(predicted_excess) AS n_pred FROM atlas.atlas_signal_calls WHERE action IN ('POSITIVE','NEGATIVE');"}
+{
+  "ts": "2026-05-28T07:25:28Z",
+  "prev": "e27efa6b0c9e7bac",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/v6/calls.ts",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T07:26:01Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/calls/CallsLedger.tsx",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T07:26:12Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/calls/CallsLedger.tsx",
+  "lines_changed": 15,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T07:26:18Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/india-pulse/SectorHeatmap.tsx",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T07:26:28Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/india-pulse/SectorHeatmap.tsx",
+  "lines_changed": 18,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T07:26:37Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/etfs/PeerSetTable.tsx",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T07:26:45Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/etfs/PeerSetTable.tsx",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
