@@ -113,3 +113,19 @@ def test_portfolio_analytics_returns_404_for_no_data():
     ):
         resp = client.get("/v1/portfolios/pid-x/analytics")
     assert resp.status_code == 404
+
+
+def test_portfolio_csv_export_returns_csv():
+    header = b"Symbol,Side,Qty,Fill Price,Commission,Closing Time\n"
+    data_row = b"NSE:RELIANCE,Buy,10,2800.00,,2024-09-17 0:00:00\n"
+    csv_body = header + data_row
+    with patch("atlas.tv.routes.export_portfolio_csv", return_value=csv_body):
+        resp = client.get("/v1/portfolios/pid-1/tv-export.csv")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/csv")
+
+
+def test_portfolio_csv_export_returns_404_for_empty():
+    with patch("atlas.tv.routes.export_portfolio_csv", return_value=b"Symbol,Side\n"):
+        resp = client.get("/v1/portfolios/pid-empty/tv-export.csv")
+    assert resp.status_code == 404

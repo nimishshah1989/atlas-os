@@ -6,9 +6,11 @@ from __future__ import annotations
 import datetime
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import Response
 from sqlalchemy import text
 
 from atlas.db import get_engine
+from atlas.tv.csv_export import export_portfolio_csv  # type: ignore[import]
 from atlas.tv.portfolio_analytics import compute_portfolio_analytics  # type: ignore[import]
 from atlas.tv.screener import fetch_and_upsert_all  # type: ignore[import]
 
@@ -81,6 +83,19 @@ def get_portfolio_analytics(portfolio_id: str) -> dict:
             "source": "atlas-portfolio-analytics",
         },
     }
+
+
+@_portfolios_router.get("/{portfolio_id}/tv-export.csv")
+def download_portfolio_csv(portfolio_id: str) -> Response:
+    """Download portfolio as TradingView-compatible CSV."""
+    csv_bytes = export_portfolio_csv(portfolio_id)
+    if not csv_bytes or csv_bytes.count(b"\n") <= 1:
+        raise HTTPException(status_code=404, detail=f"No lots found for portfolio: {portfolio_id}")
+    return Response(
+        content=csv_bytes,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=portfolio-{portfolio_id}.csv"},
+    )
 
 
 _internal_router = APIRouter(prefix="/v1/tv/internal", tags=["tv-internal"])
