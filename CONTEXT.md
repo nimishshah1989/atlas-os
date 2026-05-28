@@ -525,6 +525,27 @@ user holds the instrument:
 
 `SELL` replaces the prior `TRIM` label (clearer for retail users).
 
+### WAIT (added 2026-05-28)
+
+`WAIT` is a **derived verdict**, not a cell state. It is rendered when
+the cell state is POSITIVE but a veto blocks acting on it:
+
+- **Weinstein veto:** stage = 4 (price below 30W MA AND 30W slope down)
+- **Gate veto:** any of the 5 investability gates (strength, direction,
+  risk, sector, market) fails
+
+When WAIT is rendered, the reason must be named ("Stage 4 vetoes
+positive cell" or "Risk gate fail: extension > 40%"). The underlying
+`atlas_signal_calls.action` row remains `POSITIVE` — WAIT is a
+**display-layer** override applied during verdict composition, not a
+new cell state. This preserves IC backtest semantics (the cell did
+fire positive) while preventing the trader from acting on a vetoed
+signal.
+
+Holding rule when WAIT: if user owns, render HOLD (do not add). If user
+does not own, render WAIT (do not buy). NEVER auto-promote WAIT to
+BUY without the veto clearing.
+
 **Why this kills F1:** ACCUMULATE no longer needs its own validated
 cell. It is the display variant of POSITIVE for holders. Same for
 WATCH/HOLD (NEUTRAL) and AVOID/SELL (NEGATIVE). The methodology

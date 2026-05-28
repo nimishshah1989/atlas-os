@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Atlas v6 · Trader-View Redesign · Master Spec</title>
+<style>
+  :root {
+    --paper: #FAFAF8;
+    --paper-soft: #F4F2EC;
+    --paper-rule: #E5E2DA;
+    --ink-rule: #C9C5BA;
+    --ink-primary: #2A2724;
+    --ink-secondary: #57534A;
+    --ink-tertiary: #8A8578;
+    --accent: #1D9E75;
+    --accent-soft: #1D9E7515;
+    --signal-pos: #2F6B43;
+    --signal-pos-soft: rgba(47,107,67,0.10);
+    --signal-neg: #B0492C;
+    --signal-warn: #C68B2E;
+    --signal-warn-soft: rgba(198,139,46,0.12);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    color: var(--ink-primary);
+    background: var(--paper);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    padding: 40px 28px;
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-family: 'Lora', 'Georgia', serif;
+    font-weight: 500;
+    font-size: 32px;
+    margin-bottom: 6px;
+    color: var(--ink-primary);
+  }
+  h2 {
+    font-family: 'Lora', 'Georgia', serif;
+    font-weight: 500;
+    font-size: 22px;
+    margin: 40px 0 12px 0;
+    color: var(--ink-primary);
+    padding-top: 24px;
+    border-top: 1px solid var(--ink-rule);
+  }
+  h2:first-of-type { border-top: 0; padding-top: 0; margin-top: 32px; }
+  h3 {
+    font-family: 'Lora', 'Georgia', serif;
+    font-weight: 500;
+    font-size: 16px;
+    margin: 24px 0 8px 0;
+    color: var(--ink-primary);
+  }
+  h4 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    font-weight: 700;
+    margin: 18px 0 8px 0;
+    color: var(--ink-tertiary);
+  }
+  p { margin-bottom: 14px; font-size: 14px; color: var(--ink-secondary); }
+  ul, ol { margin: 8px 0 14px 22px; font-size: 14px; color: var(--ink-secondary); }
+  ul li, ol li { margin-bottom: 6px; }
+  code, pre {
+    font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+    font-size: 12.5px;
+    background: var(--paper-soft);
+    padding: 1px 5px;
+    border-radius: 2px;
+    color: var(--ink-primary);
+  }
+  pre {
+    padding: 14px 16px;
+    line-height: 1.55;
+    border: 1px solid var(--paper-rule);
+    overflow-x: auto;
+    margin: 12px 0;
+    white-space: pre;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin: 12px 0 18px 0;
+  }
+  th, td {
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--paper-rule);
+    vertical-align: top;
+  }
+  th {
+    background: var(--paper-soft);
+    font-weight: 600;
+    color: var(--ink-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 10px;
+    border-bottom: 1px solid var(--ink-rule);
+  }
+  .meta {
+    color: var(--ink-tertiary);
+    font-size: 12px;
+    margin-bottom: 24px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--paper-rule);
+  }
+  .meta strong { color: var(--ink-secondary); }
+  .callout {
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+    padding: 14px 18px;
+    margin: 18px 0;
+    font-size: 13px;
+    color: var(--ink-secondary);
+  }
+  .callout strong { color: var(--ink-primary); }
+  .warn {
+    background: var(--signal-warn-soft);
+    border-left: 3px solid var(--signal-warn);
+    padding: 14px 18px;
+    margin: 18px 0;
+    font-size: 13px;
+    color: var(--ink-secondary);
+  }
+  .warn strong { color: var(--ink-primary); }
+  .badge {
+    display: inline-block;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 2px 8px;
+    border-radius: 2px;
+    font-weight: 700;
+  }
+  .b-pos { background: var(--signal-pos-soft); color: var(--signal-pos); }
+  .b-wait { background: var(--signal-warn-soft); color: var(--signal-warn); }
+  .b-neg { background: rgba(176,73,44,0.10); color: var(--signal-neg); }
+  .stream-card {
+    border: 1px solid var(--paper-rule);
+    border-radius: 4px;
+    padding: 16px 18px;
+    margin: 12px 0;
+    background: var(--paper);
+  }
+  .stream-card h4 { margin-top: 0; color: var(--ink-primary); }
+  .stream-card .deps {
+    font-size: 11px;
+    color: var(--ink-tertiary);
+    margin-top: 8px;
+  }
+  hr {
+    border: 0;
+    height: 1px;
+    background: var(--paper-rule);
+    margin: 28px 0;
+  }
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px dotted var(--accent); }
+  a:hover { border-bottom-style: solid; }
+</style>
+</head>
+<body>
+
+<h1>Trader-View Redesign — Master Spec</h1>
+<div class="meta">
+  <strong>Status:</strong> design-locked · ready for implementation planning &nbsp;|&nbsp;
+  <strong>Authored:</strong> 2026-05-28 &nbsp;|&nbsp;
+  <strong>Vocabulary source:</strong> CONTEXT.md §"Cell state vocabulary" (canonical, with WAIT addition committed 2026-05-28) &nbsp;|&nbsp;
+  <strong>Visual reference:</strong> <a href="../../v6/mockup-trader-view.html">docs/v6/mockup-trader-view.html</a>
+</div>
+
+<h2>1. Problem statement</h2>
+
+<p>Atlas v6 today exposes <strong>four independent decision frameworks</strong> on the same page with no precedence between them:</p>
+
+<ol>
+  <li><strong>Cell state + conviction tier</strong> — the IC-weighted pattern-match output (POSITIVE / NEUTRAL / NEGATIVE; tier T1-T5)</li>
+  <li><strong>Predicted excess + confidence</strong> — the forecast (e.g. "+7.4% over 3M, 0.71 confidence")</li>
+  <li><strong>Weinstein stage</strong> — current-cycle state classifier (Stage 1/2/3/4)</li>
+  <li><strong>5-gate investability</strong> — structural filter (strength × direction × risk × sector × market)</li>
+</ol>
+
+<p>These frameworks regularly contradict each other on the same instrument. A stock can have <span class="badge b-pos">POSITIVE</span> cell + Stage 4 (Weinstein veto). An ETF can pass all 5 gates while Weinstein says "below 30W MA, avoid new positions." The UI renders all four as if they were graded on the same axis, leaving the user to mentally reconcile contradictions on every card.</p>
+
+<div class="warn">
+  <strong>Fund-manager feedback (2026-05-28):</strong> "I am not able to see exactly what the rules are. Some of the conviction names today did not make sense when I looked at them on TradingView." Translation: methodology is not visible, decisions are not coherent, and the system fails the trust-by-transparency test that Atlas was supposed to win.
+</div>
+
+<h2>2. Solution</h2>
+
+<p>Collapse the four frameworks into a <strong>single Atlas verdict</strong> with a fixed precedence ladder. The four frameworks become <em>evidence pillars</em> that explain the verdict, not competing scores. Trader sees one decision; analyst can click through to the math.</p>
+
+<pre>
+  MARKET REGIME   ──┐  (risk-off → block all new positions)
+  SECTOR STATE    ──┤  (Avoid → block, OW → boost)
+  WEINSTEIN STAGE ──┤  (Stage 4 → veto, Stage 2 → endorse)
+  CONVICTION TIER ──┤  (T1/T2 = act, T3-T5 = watchlist)
+  CELL ACTION+IC  ──┘  (POSITIVE/NEUTRAL/NEGATIVE; predicted excess sizes)
+                ↓
+        ONE ATLAS VERDICT
+   BUY · ACCUMULATE · WATCH · HOLD · AVOID · SELL · WAIT
+</pre>
+
+<h2>3. Vocabulary (CONTEXT.md aligned, with WAIT added)</h2>
+
+<p>The cell math produces one of three states. The UI renders an ownership-aware label, plus a fourth derived label (WAIT) when a veto blocks acting on a positive cell.</p>
+
+<table>
+  <thead>
+    <tr><th>Cell state</th><th>You don't own</th><th>You own</th><th>Veto applied</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>POSITIVE</td><td><span class="badge b-pos">BUY</span></td><td><span class="badge b-pos">ACCUMULATE</span></td><td>→ <span class="badge b-wait">WAIT</span> if Weinstein Stage 4 OR any gate fails</td></tr>
+    <tr><td>NEUTRAL</td><td><span class="badge">WATCH</span></td><td><span class="badge">HOLD</span></td><td>n/a</td></tr>
+    <tr><td>NEGATIVE</td><td><span class="badge b-neg">AVOID</span></td><td><span class="badge b-neg">SELL</span></td><td>n/a</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <strong>WAIT (added to CONTEXT.md 2026-05-28):</strong> a display-layer override applied when cell state is POSITIVE but a veto blocks action. The cell row in <code>atlas_signal_calls</code> remains <code>POSITIVE</code> — WAIT is computed at render time. This preserves IC backtest semantics while preventing the trader from acting on a vetoed signal. When WAIT renders, the reason must be named ("Stage 4 vetoes positive cell" or "Risk gate fail: extension &gt; 40%").
+</div>
+
+<h2>4. Verdict derivation</h2>
+
+<p>Computed daily as part of the existing MV refresh pipeline. Output: one verdict column per instrument per day, plus a <code>verdict_reason</code> string when WAIT or AVOID/SELL fires.</p>
+
+<pre>
+def derive_verdict(cell_state, weinstein_stage, gates, user_owns):
+    # 1. NEGATIVE cells: ownership decides verb
+    if cell_state == 'NEGATIVE':
+        return ('SELL', None) if user_owns else ('AVOID', None)
+
+    # 2. NEUTRAL cells: holding pattern
+    if cell_state == 'NEUTRAL':
+        return ('HOLD', None) if user_owns else ('WATCH', None)
+
+    # 3. POSITIVE cells: check vetos before promoting to BUY/ACCUMULATE
+    if cell_state == 'POSITIVE':
+        # 3a. Weinstein veto
+        if weinstein_stage == 4:
+            return ('WAIT', 'Stage 4 vetoes positive cell')
+        # 3b. Gate veto (any fail blocks)
+        failed_gate = next((g for g in gates if not g.passed), None)
+        if failed_gate:
+            return ('WAIT', f'{failed_gate.name} gate fail')
+        # 3c. Stage 3 ambiguity → caution for new buyers
+        if weinstein_stage == 3:
+            return ('HOLD', 'Stage 3 topping') if user_owns else ('WATCH', 'Stage 3 topping')
+        # 3d. Clear path: render BUY/ACCUMULATE
+        return ('ACCUMULATE', None) if user_owns else ('BUY', None)
+</pre>
+
+<p>This logic is the <strong>single source of truth</strong>. Every page (stocks, ETFs, sectors, funds, homepage) renders from the same column.</p>
+
+<h2>5. First-called tracking + since-call return</h2>
+
+<p>Schema already exists. CONTEXT.md lines 22-29 lock the <code>signal_call_id</code> lifetime:</p>
+
+<ul>
+  <li>A row in <code>atlas_signal_calls</code> stays open while the cell state remains the same.</li>
+  <li>When state changes, the existing row gets <code>exit_date</code> set and a new row with a fresh <code>signal_call_id</code> opens.</li>
+  <li><code>entry_date</code> is therefore the canonical "first called X on" date.</li>
+</ul>
+
+<p>What we surface in the UI per instrument:</p>
+
+<ul>
+  <li><strong>First called &lt;verdict&gt; on YYYY-MM-DD</strong> (= entry_date of the currently-open signal_call_id)</li>
+  <li><strong>Days held</strong> (current_date − entry_date in trading days)</li>
+  <li><strong>Since-call return</strong> (close_today / close_at_entry − 1)</li>
+  <li><strong>Predicted band at 1M / 3M / 6M / 12M</strong> (predicted_excess prorated for elapsed time, ± σ_predicted)</li>
+  <li><strong>Drift status</strong> (within band / drift above / drift below)</li>
+</ul>
+
+<h2>6. Drift detection</h2>
+
+<p>This is the accountability lock. Without it, "predicted +7.4%" is a claim we never verify. With it, every signal_call is tracked daily against its own forecast.</p>
+
+<h4>Daily compute (per open signal_call)</h4>
+
+<pre>
+realized_excess = close_today / close_at_entry − bench_today / bench_at_entry
+elapsed_frac    = days_in_position / tenure_days  # 0.0 to 1.0
+predicted_today = predicted_excess × elapsed_frac
+σ_today         = σ_predicted × √elapsed_frac    # variance scales with time
+Z               = (realized_excess − predicted_today) / σ_today
+</pre>
+
+<h4>Drift event log</h4>
+
+<p>When <code>|Z| &gt; 2</code>, write a row to <code>atlas_drift_event_log</code> with <code>(signal_call_id, realized, predicted, σ, Z, observed_at)</code>. This is the SEBI-grade audit trail. Schema exists per CONTEXT.md lines 115-130.</p>
+
+<h4>UI surface</h4>
+
+<ul>
+  <li><strong>Within band</strong> (|Z| ≤ 1.5): green check, no chip needed</li>
+  <li><strong>Mild drift</strong> (1.5 &lt; |Z| ≤ 2): amber chip "drift +1.8σ above predicted"</li>
+  <li><strong>Significant drift</strong> (|Z| &gt; 2): red chip "drift −2.4σ — call is failing"</li>
+</ul>
+
+<p>On call close (exit_date set), final Z gets logged regardless of magnitude. This builds the rolling-IC dataset that feeds the Stage 4a weight optimization loop.</p>
+
+<h2>7. Weinstein per cap-tier research</h2>
+
+<p>A 30-week MA is the literature standard for US large-caps. Indian small-caps move at a different timescale; their full cycle can complete in 12-15 weeks. Applying 30W to a small-cap measures the wrong thing.</p>
+
+<h4>Theoretical priors (to be validated)</h4>
+
+<table>
+  <thead><tr><th>Tier</th><th>Why a different lookback may fit</th><th>First-guess lookback</th></tr></thead>
+  <tbody>
+    <tr><td>Large</td><td>Slow institutional flows, literature standard</td><td>30W</td></tr>
+    <tr><td>Mid</td><td>Faster cycles, more rotation</td><td>20W</td></tr>
+    <tr><td>Small</td><td>Retail-driven, fast accumulation/distribution</td><td>10W</td></tr>
+    <tr><td>Micro</td><td>High noise; framework may not apply</td><td>research / exclude</td></tr>
+  </tbody>
+</table>
+
+<h4>Research methodology (methodology-lock principle 1)</h4>
+
+<ol>
+  <li><strong>Pre-register the bar</strong> per cap_tier × tenure: IC ≥ 0.04 at the chosen tenure (matches the cell IC floor table in CONTEXT.md line 568-576).</li>
+  <li><strong>Candidate grid:</strong> 5W, 10W, 20W, 30W, 50W moving averages × Large / Mid / Small / Micro.</li>
+  <li><strong>Compute stage classification</strong> for each candidate (price-vs-MA + slope sign over N weeks).</li>
+  <li><strong>Compute forward IC</strong> at 1m, 3m, 6m, 12m horizons for each (cap_tier × lookback × stage) cell.</li>
+  <li><strong>Compute whipsaw rate</strong> (proportion of stocks flipping stage within 5 trading days of classification). Lower is better.</li>
+  <li><strong>Walk-forward validation</strong> across at least 5 years of Indian equity data. Out-of-sample IC must remain above floor.</li>
+  <li><strong>Lock the winners</strong> per cap_tier into <code>atlas_thresholds</code>. Update methodology page with the chosen values + the rationale.</li>
+</ol>
+
+<h4>Fund-manager point: "capture uptrend faster"</h4>
+
+<p>The fund manager flagged that Stage 1→2 transitions are too slow to capture in the current rules. Candidate fix: add a <em>fast-confirm overlay</em>. Promote Stage 1 to Stage 2 when price &gt; chosen_MA AND chosen_MA slope &gt; 0 for 3 consecutive weeks (instead of waiting for full slope inversion). Trade-off: some false-positive Stage 2 calls in exchange for earlier entry. The research workstream should test fast-confirm vs strict-confirm as a parameter.</p>
+
+<h2>8. UI pattern (canonical layout)</h2>
+
+<p>Visual reference: see the rendered mockup at <a href="../../v6/mockup-trader-view.html">docs/v6/mockup-trader-view.html</a>. Three cases (clean BUY, conflict WAIT, ownership-aware SELL) shown side-by-side with current layouts.</p>
+
+<p>Layout from top of stock-detail page:</p>
+
+<ol>
+  <li><strong>Stock header</strong> — symbol, name, sector, cap-tier, current price (1 line)</li>
+  <li><strong>Verdict block</strong> — large verdict pill (BUY / WAIT / SELL etc.), expected return + tier badge, first-called date + since-call return</li>
+  <li><strong>Why-strip</strong> — 4 chips (Cell · Weinstein · Investable · Sector) colored pass/warn/fail; conflict cases add a 5th "Reconcile" chip naming the override</li>
+  <li><strong>Tracking grid</strong> — at-call price, 1M target, 3M target, realized today, "within band" badge</li>
+  <li><strong>Show the math</strong> (collapsed by default) — IC values, gate breakdown, composite components, σ band, cell history</li>
+  <li><strong>Existing charts and panels</strong> below (RS chart, holdings, peer comparison, etc.)</li>
+</ol>
+
+<h2>9. Rollout sequence</h2>
+
+<table>
+  <thead><tr><th>Layer</th><th>Rollout pattern</th><th>Reason</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Verdict column, first_called_at, drift log (streams B + C)</td>
+      <td>All instruments at once</td>
+      <td>Single backend write; cannot be half-populated</td>
+    </tr>
+    <tr>
+      <td>Weinstein per-tier thresholds (stream A)</td>
+      <td>All instruments at once</td>
+      <td>Same — once locked, applies universally</td>
+    </tr>
+    <tr>
+      <td>Methodology page rewrite (stream E)</td>
+      <td>One page, one shot</td>
+      <td>It is one page</td>
+    </tr>
+    <tr>
+      <td>Per-page UI conversion (stream D)</td>
+      <td>/stocks → /etfs → /sectors → /funds → homepage</td>
+      <td>Each surface has its own data idiosyncrasies; learn from each before propagating</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>10. Workstreams</h2>
+
+<div class="stream-card">
+  <h4>A — Weinstein per cap-tier research</h4>
+  <p>Backtest the (cap_tier × MA lookback × stage) matrix to find the optimal MA per cap-tier. Output: locked thresholds in <code>atlas_thresholds</code>, walk-forward validation report, fast-confirm overlay decision.</p>
+  <p class="deps"><strong>Dependencies:</strong> none. <strong>Pre-req:</strong> office-hours review of research methodology before kickoff. <strong>Effort:</strong> 3-4 days.</p>
+</div>
+
+<div class="stream-card">
+  <h4>B — Drift detection wiring</h4>
+  <p>Daily realized-vs-predicted compute, Z-score, drift event log writes, UI chip on every stock page.</p>
+  <p class="deps"><strong>Dependencies:</strong> none (parallel with A and C). <strong>Effort:</strong> 2 days.</p>
+</div>
+
+<div class="stream-card">
+  <h4>C — Verdict composition + first-called surfacing</h4>
+  <p>Add <code>combined_verdict</code> + <code>verdict_reason</code> + <code>first_called_at</code> + <code>since_call_return</code> as MV columns. Apply verdict derivation logic from §4.</p>
+  <p class="deps"><strong>Dependencies:</strong> A must land before C if Weinstein veto rules depend on per-tier thresholds. C can ship with default 30W and migrate to per-tier values once A lands. <strong>Effort:</strong> 2-3 days.</p>
+</div>
+
+<div class="stream-card">
+  <h4>D — Per-page UI conversion</h4>
+  <p>Apply the trader-view pattern to /stocks/[symbol] first. Hold a checkpoint, then propagate to /etfs/[ticker], /sectors/[name], /funds/[mstar_id], homepage.</p>
+  <p class="deps"><strong>Dependencies:</strong> C must land first (UI cannot render columns that do not exist). <strong>Effort:</strong> 5-7 days, page-by-page with checkpoint after /stocks.</p>
+</div>
+
+<div class="stream-card">
+  <h4>E — Methodology page rewrite</h4>
+  <p>Plain-English explainer of: cell math, Weinstein rules (with the rules from A), drift detection, verdict derivation. Fund-manager-grade clarity per the explainer-flywheel ethos.</p>
+  <p class="deps"><strong>Dependencies:</strong> A must lock first (cannot explain rules not yet decided). <strong>Effort:</strong> 1-2 days after A.</p>
+</div>
+
+<h2>11. Open questions to lock before plans dispatch</h2>
+
+<ol>
+  <li><strong>Does Stage 3 veto a positive cell, or only downgrade to WATCH/HOLD?</strong> §4 derivation currently treats Stage 3 as a downgrade, not a veto. The alternative is veto = WAIT.</li>
+  <li><strong>What is σ_predicted calibration?</strong> Per-cell from backtest (preferred) or universal heuristic?</li>
+  <li><strong>Fast-confirm overlay for Stage 1→2:</strong> ship by default once research completes, or A/B test against strict-confirm?</li>
+  <li><strong>Ownership signal source:</strong> <code>atlas_paper_portfolio</code> (paper trading) or <code>atlas_user_lots</code> (real positions)? Determines which gets queried in the verdict derivation.</li>
+  <li><strong>Micro-cap inclusion:</strong> exclude from Weinstein framework entirely, or apply research and see if any lookback satisfies the IC floor?</li>
+</ol>
+
+<h2>12. Next action</h2>
+
+<p>Once this spec is signed off:</p>
+
+<ol>
+  <li>Office-hours review on stream A (Weinstein research methodology).</li>
+  <li>Write per-workstream plans (writing-plans skill) for A, B, C, D, E as separate documents in <code>docs/superpowers/plans/</code>.</li>
+  <li>Dispatch streams as parallel subagents via superpowers:subagent-driven-development. B + C run truly in parallel. D waits on C. A is its own research arc. E waits on A.</li>
+</ol>
+
+<p>Master spec ends here. Workstream plans expand each section into bite-sized tasks per superpowers:writing-plans conventions.</p>
+
+</body>
+</html>

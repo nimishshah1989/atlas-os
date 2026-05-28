@@ -46757,3 +46757,44 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{
+  "ts": "2026-05-28T11:14:21Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/v6/mockup-trader-view.html",
+  "lines_changed": 537,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T11:22:07Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/CONTEXT.md",
+  "lines_changed": 31,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-28T11:40:41Z","kind":"supabase_sql_executed","sql_preview":"-- (a) Check composite_score scale across the consuming surfaces\nSELECT 'atlas_etf_scorecard' AS source,\n       COUNT(*) AS n,\n       MIN(composite_score) AS mn,\n       MAX(composite_score) AS mx,\n       AVG(composite_score) AS avg,\n       MIN(matrix_conviction_score) AS mc_mn,\n       MAX(matrix_conviction_score) AS mc_mx\nFROM atlas.atlas_etf_scorecard\nWHERE composite_score IS NOT NULL;"}
+{"ts":"2026-05-28T11:40:43Z","kind":"supabase_sql_executed","sql_preview":"-- (a) Check what's in mv_etf_deepdive.peer_set JSONB\nSELECT ticker,\n       jsonb_array_length(peer_set) AS n_peers,\n       peer_set->0 AS first_peer\nFROM atlas.mv_etf_deepdive\nWHERE peer_set IS NOT NULL AND jsonb_array_length(peer_set) > 0\nLIMIT 3;"}
+{"ts":"2026-05-28T11:40:47Z","kind":"supabase_sql_executed","sql_preview":"-- (b) Check (sector orphans): signal_calls instrument_ids missing from universe\nWITH sig AS (\n  SELECT DISTINCT instrument_id FROM atlas.atlas_signal_calls\n  WHERE action='POSITIVE' AND exit_date IS NULL\n),\nuni AS (\n  SELECT DISTINCT instrument_id FROM atlas.atlas_universe_stocks\n  WHERE effective_to IS NULL\n)\nSELECT\n  (SELECT COUNT(*) FROM sig) AS open_signals,\n  (SELECT COUNT(*) FROM sig WHERE instrument_id NOT IN (SELECT instrument_id FROM uni)) AS orphan_count,\n  (SELECT COUNT(*) FROM sig W"}
+{"ts":"2026-05-28T11:40:49Z","kind":"supabase_sql_executed","sql_preview":"-- (b) Compare to MV body — how does mv_sector_cards aggregate signals?\nSELECT pg_get_viewdef('atlas.mv_sector_cards'::regclass, true) AS def_text;"}
+{"ts":"2026-05-28T11:41:02Z","kind":"supabase_sql_executed","sql_preview":"-- (f) Check weinstein_gate_pass column on ETF scorecard surfaces\nSELECT column_name, data_type, is_nullable\nFROM information_schema.columns\nWHERE table_schema = 'atlas'\n  AND column_name LIKE '%weinstein%'\nORDER BY table_name, column_name;"}
+{"ts":"2026-05-28T11:41:13Z","kind":"supabase_sql_executed","sql_preview":"SELECT table_name, column_name FROM information_schema.columns\nWHERE table_schema='atlas' AND column_name LIKE '%weinstein%'\nORDER BY table_name;"}
+{"ts":"2026-05-28T11:41:15Z","kind":"supabase_sql_executed","sql_preview":"SELECT table_name FROM information_schema.tables\nWHERE table_schema='atlas' AND table_name LIKE '%sector_rrg%';"}
+{"ts":"2026-05-28T11:41:16Z","kind":"supabase_sql_executed","sql_preview":"SELECT pg_get_viewdef('atlas.mv_calls_performance'::regclass, true) AS def;"}
+{"ts":"2026-05-28T11:41:40Z","kind":"supabase_sql_executed","sql_preview":"-- (e) RRG range diagnostic — find the actual rrg columns\nSELECT column_name FROM information_schema.columns\nWHERE table_schema='atlas' AND table_name='atlas_sector_metrics_daily'\n  AND (column_name ILIKE '%rs%' OR column_name ILIKE '%rrg%' OR column_name ILIKE '%momentum%')\nORDER BY column_name;"}
+{"ts":"2026-05-28T11:41:51Z","kind":"supabase_sql_executed","sql_preview":"-- (e) Get rs_ratio_current and rs_momentum_current distribution\nSELECT\n  MIN(rs_ratio_current) AS rr_min, MAX(rs_ratio_current) AS rr_max,\n  percentile_cont(0.05) WITHIN GROUP (ORDER BY rs_ratio_current) AS rr_p5,\n  percentile_cont(0.95) WITHIN GROUP (ORDER BY rs_ratio_current) AS rr_p95,\n  MIN(rs_momentum_current) AS rm_min, MAX(rs_momentum_current) AS rm_max,\n  percentile_cont(0.05) WITHIN GROUP (ORDER BY rs_momentum_current) AS rm_p5,\n  percentile_cont(0.95) WITHIN GROUP (ORDER BY rs_momentu"}
+{"ts":"2026-05-28T11:41:54Z","kind":"supabase_sql_executed","sql_preview":"-- (a) Confirm the focus-ETF on /etfs/[ticker] uses same scale (NOT *100)\n-- Check what the existing component renders for the focus ETF composite score\nSELECT ticker, composite_score, matrix_conviction_score\nFROM atlas.atlas_etf_scorecard\nWHERE ticker IN ('GOLDBEES','SETFNIF50')\nORDER BY ticker;"}
+{"ts":"2026-05-28T11:42:04Z","kind":"supabase_sql_executed","sql_preview":"-- (g) Heatmap: how many sectors have non-NULL rs_1w today?\nSELECT\n  jsonb_array_length(sector_heatmap) AS total_sectors,\n  COUNT(*) FILTER (WHERE (s->>'rs_1w') IS NOT NULL) AS n_with_rs_1w,\n  COUNT(*) FILTER (WHERE (s->>'ret_1m') IS NOT NULL) AS n_with_ret_1m,\n  COUNT(*) FILTER (WHERE (s->>'ret_3m') IS NOT NULL) AS n_with_ret_3m\nFROM atlas.mv_india_pulse,\n     LATERAL jsonb_array_elements(sector_heatmap) AS s\nGROUP BY sector_heatmap;"}
+{"ts":"2026-05-28T11:42:15Z","kind":"supabase_sql_executed","sql_preview":"-- (c) Distribution of days_in_position around the 5-day cutoff\nSELECT\n  COUNT(*) AS total_open,\n  COUNT(*) FILTER (WHERE days_in_position < 5) AS lt_5d,\n  COUNT(*) FILTER (WHERE days_in_position BETWEEN 5 AND 9) AS d5_9,\n  COUNT(*) FILTER (WHERE days_in_position >= 10) AS gte_10d\nFROM atlas.mv_calls_performance;"}
+{
+  "ts": "2026-05-28T11:42:18Z",
+  "prev": "f510ef5a2cbd0551",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/specs/2026-05-28-trader-view-redesign.html",
+  "lines_changed": 439,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-28T11:42:21Z","kind":"supabase_sql_executed","sql_preview":"WITH latest AS (\n  SELECT sector_heatmap FROM atlas.mv_india_pulse ORDER BY refreshed_at DESC LIMIT 1\n)\nSELECT COUNT(*) AS total,\n       COUNT(*) FILTER (WHERE (s->>'rs_1w') IS NOT NULL) AS n_rs_1w,\n       COUNT(*) FILTER (WHERE (s->>'ret_1m') IS NOT NULL) AS n_ret_1m,\n       COUNT(*) FILTER (WHERE (s->>'ret_3m') IS NOT NULL) AS n_ret_3m\nFROM latest, LATERAL jsonb_array_elements(sector_heatmap) AS s;"}
