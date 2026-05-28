@@ -46984,3 +46984,31 @@
   "schema_version": 1
 }
 {"ts":"2026-05-28T12:51:25Z","kind":"supabase_sql_executed","sql_preview":"TRUNCATE atlas.weinstein_events_base;"}
+{
+  "ts": "2026-05-28T12:52:10Z",
+  "prev": "8f60f73c6f881a13",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/specs/2026-05-28-trader-view-redesign.html",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T12:52:21Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/specs/2026-05-28-trader-view-redesign.html",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T12:52:33Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/specs/2026-05-28-trader-view-redesign.html",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-28T12:52:36Z","kind":"supabase_sql_executed","sql_preview":"-- Stream A2 Task 2 — RELAXED persistence threshold (0.8 -> 0.6)\n-- Event counts at 0.8 were 6-28/yr per cell, well below 50/yr actionable floor.\n-- Plan permits relaxing stage_1_persistence to 0.6 if events too sparse.\nINSERT INTO atlas.weinstein_events_base\n  (instrument_id, event_date, event_type, ma_lookback_weeks, cap_tier,\n   close_at_event, ma_at_event, ma_slope_pct, stage1_persist_4w, stage3_persist_4w)\nWITH daily_with_week AS (\n  SELECT p.instrument_id, p.date, p.close_adj,\n    (date_"}

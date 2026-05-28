@@ -385,20 +385,23 @@ Z               = (realized_excess − predicted_today) / σ_today
 
 <div class="stream-card">
   <h4>A — Weinstein per cap-tier research (Large / Mid / Small only)</h4>
-  <p>Backtest the (cap_tier × MA lookback × stage) matrix across 3 cap tiers × 4 lookbacks (5W, 10W, 20W, 30W) × 4 stages. Find optimal MA per cap-tier. Output: locked thresholds in <code>atlas_thresholds</code>, walk-forward validation report, fast-confirm overlay A/B harness.</p>
-  <p class="deps"><strong>Dependencies:</strong> none. <strong>Pre-req:</strong> office-hours review of research methodology before kickoff. <strong>Scope:</strong> Large/Mid/Small only — Micro defaults to no Weinstein veto. <strong>Effort:</strong> 3-4 days.</p>
+  <p><strong>A1 result (2026-05-28):</strong> naive stage-tag classifier <strong>failed the 0.05 IC floor</strong> across all 12 (cap × lookback) cells (best Large 30W at -0.043). The failure is methodological — we measured stage tag instead of transition events, which is the wrong unit for Weinstein's intent.</p>
+  <p><strong>A2 (in flight):</strong> redesigned methodology measures Stage 1→2 transition events with 6 confluence layers (volume / prior-extreme / RS trend / base width / sector / liquidity). Same discovery rigor as the 24-cell framework. Design: <a href="../../v6/2026-05-28-weinstein-deep-dive-methodology.html">weinstein-deep-dive-methodology.html</a>. Plan: <a href="../plans/2026-05-28-trader-view-A2-weinstein-deep-dive.md">A2 plan</a>.</p>
+  <p class="deps"><strong>Dependencies:</strong> none. <strong>Scope:</strong> Large/Mid/Small only — Micro defaults to no Weinstein veto. <strong>Known limitation:</strong> static <code>cap_tier</code> source (per A1 finding — `atlas_scorecard_daily.cap_tier` has only 3 days of history; full PIT backfill is a separate workstream). <strong>Effort:</strong> A1 done; A2 ~90min agent run in flight.</p>
 </div>
 
 <div class="stream-card">
   <h4>B — Drift detection wiring</h4>
   <p>Daily realized-vs-predicted compute, Z-score, drift event log writes, UI chip on every stock page.</p>
-  <p class="deps"><strong>Dependencies:</strong> none (parallel with A and C). <strong>Effort:</strong> 2 days.</p>
+  <p><strong>Stream B status (2026-05-28):</strong> compute_drift.py (23 unit tests passing) and DriftChip component shipped. Discovered the live <code>atlas_drift_event_log</code> table already exists with a <strong>cell-grain</strong> schema — divergence from the spec's signal-call-grain assumption. Grain decision pending user lock: see <a href="../../v6/2026-05-28-drift-grain-decision.md">drift-grain-decision.md</a> (recommendation: add nullable <code>signal_call_id</code> column, write at signal-grain).</p>
+  <p class="deps"><strong>Dependencies:</strong> none (parallel with A and C). <strong>Effort:</strong> 2 days. <strong>Remaining:</strong> migration 114 (signal_call_id column), migration 115 (drift MV), migration 116 (pg_cron + systemd listener), Stream D wiring.</p>
 </div>
 
 <div class="stream-card">
   <h4>C — Verdict composition + first-called surfacing</h4>
   <p>Add <code>combined_verdict</code> + <code>verdict_reason</code> + <code>first_called_at</code> + <code>since_call_return</code> as MV columns. Apply verdict derivation logic from §4.</p>
-  <p class="deps"><strong>Dependencies:</strong> A must land before C if Weinstein veto rules depend on per-tier thresholds. C can ship with default 30W and migrate to per-tier values once A lands. <strong>Effort:</strong> 2-3 days.</p>
+  <p><strong>Stream C status (2026-05-28):</strong> Python module (<code>atlas/verdict/derive.py</code>) + 11 unit tests + SQL function <code>atlas.derive_verdict()</code> all shipped with byte-for-byte parity (commits 71a31530 + 64a996f1). Migration 113 (alembic chain entry for the function) committed in ae9abb01.</p>
+  <p class="deps"><strong>Dependencies:</strong> A must land before C if Weinstein veto rules depend on per-tier thresholds. C can ship with default 30W and migrate to per-tier values once A lands. <strong>Effort:</strong> 2-3 days. <strong>Remaining:</strong> migrations 118-119 (MV column additions to stock_landscape / etf_scorecard / sector_cards / fund_scorecard).</p>
 </div>
 
 <div class="stream-card">
