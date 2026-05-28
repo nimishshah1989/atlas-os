@@ -7,6 +7,7 @@
 
 'use client'
 
+import Link from 'next/link'
 import {
   ResponsiveContainer,
   LineChart,
@@ -147,10 +148,16 @@ export function PortfolioAnalyticsClient({
     return (
       <div className="min-h-screen bg-paper px-8 py-6 max-w-5xl mx-auto">
         <h1 className="font-serif text-2xl text-ink-primary mb-6">{portfolioName}</h1>
-        <div className="flex items-center justify-center py-20">
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
           <p className="font-sans text-sm text-ink-3">
             No closed positions yet. Analytics require at least 1 completed trade.
           </p>
+          <Link
+            href={`/portfolios/${portfolioId}`}
+            className="font-sans text-sm text-accent hover:underline"
+          >
+            ← Back to portfolio
+          </Link>
         </div>
       </div>
     )
