@@ -1480,30 +1480,230 @@ git commit -m "feat(tv): portfolio CSV export in TradingView import format (TV-0
 
 **To unblock:** Run `/plan-design-review` for the portfolio analytics page layout. Once approved, implement the page consuming `GET /v1/portfolios/{id}/analytics`.
 
-### TV-05: TVChartPanel + TVMetricsBadge frontend — BLOCKED
+### Task 11: TVChartPanel + TVMetricsBadge — TV-05 (DESIGN APPROVED)
 
-**Blocked by:** Requires `.design-approved.json` before `atlas/tv/` frontend work can proceed (hook enforcement).
+**Design decisions locked (2026-05-28 /plan-design-review):**
+- **D1:** TVMetricsBadge lives in the StockHero, right side, below the price — always visible regardless of active tab
+- **D2:** Chart tab is a 4th tab: `Overview | Technicals | Chart | Audit` — Technicals tab stays, Atlas signals not removed
+- **D4:** TV chart error state = paper-deep fallback panel with "Chart unavailable. Open in TradingView ↗" link; left Atlas panel still shows normally
+- **Layout:** 36/64 split in Chart tab. Left 36% = `bg-paper-deep`, right 64% = dark `#161a25` TV iframe
+- **Mobile:** `<768px` stacks vertically (fundamentals full-width on top, chart full-width below, min-height 300px)
+- **Stale badge:** If `fetched_at > 2 days`, badge shows amber "STALE" label with date tooltip
+- **Mockup reference:** `~/.gstack/projects/atlas-os/designs/tv-integration-20260528/tv-design-mockup.html` Screen 1
 
-**To unblock:** Run `/plan-design-review` for the 36/64 stock detail split layout with TradingView chart iframe on the right and Atlas fundamentals on the left. Once `.design-approved.json` is present, implement:
-- `frontend/src/components/v6/TVChartPanel.tsx` — iframe widget wrapper
-- `frontend/src/components/v6/TVMetricsBadge.tsx` — RSI/MACD/Recommend badge
-- Wire into existing `StockDetailPage` or equivalent
+**Files:**
+- Create: `frontend/src/components/v6/TVChartPanel.tsx`
+- Create: `frontend/src/components/v6/TVMetricsBadge.tsx`
+- Modify: `frontend/src/components/v6/StockDetailClient.tsx` (add Chart tab + badge to hero)
+- Modify: `frontend/src/app/stocks/[symbol]/page.tsx` (pass tv_metrics data)
 
-### TV-06: Portfolio Analytics Page — BLOCKED
+**TVMetricsBadge spec:**
+```tsx
+// Props
+interface TVMetricsBadgeProps {
+  symbol: string
+  tvRecommendLabel: string | null   // "STRONG_BUY" | "BUY" | "NEUTRAL" | "SELL" | "STRONG_SELL"
+  recommendAll: number | null
+  rsi14: number | null
+  macdMacd: number | null
+  fetchedAt: string | null          // ISO string — drives stale detection
+}
 
-**Blocked by:** Requires `.design-approved.json`.
+// Renders: [TV Signal] [divider] [STRONG BUY pill] [divider] [RSI 62] [MACD +8.4] [divider] [↗ TradingView]
+// Pill colors: signal-pos for BUY/STRONG_BUY, signal-warn for NEUTRAL, signal-neg for SELL/STRONG_SELL
+// Stale: fetchedAt > 2 days → amber "STALE dd-MMM" text appended
+// Loading: 3 skeleton pills, bg-paper-rule, 150ms pulse animation
+// No data: render null (badge hidden if symbol not in tv_metrics)
+```
 
-**To unblock:** Run `/plan-design-review` for the portfolio analytics page layout. Once approved, implement the page consuming `GET /v1/portfolios/{id}/analytics`.
+**TVChartPanel spec:**
+```tsx
+// Props
+interface TVChartPanelProps {
+  symbol: string              // NSE symbol, e.g. "RELIANCE"
+  layoutId?: string           // TV_LAYOUT_ID_VS_NIFTY or TV_LAYOUT_ID_VS_SECTOR from config
+  tvMetrics: TVMetricsRow | null
+}
+
+// Left panel (36%): bg-paper-deep, padding 20px
+//   Section 1: "Fundamentals" — PE, ROE, EPS Growth, Debt/Equity, Market Cap, 52W High/Low
+//   Divider: 1px paper-rule
+//   Section 2: "TV Signals · as of {date}" — Recommendation pill, MA pill, Oscillators pill, RSI value, MACD value, EMA20, EMA200
+//   Each signal row: label ink-3, pill or mono value right-aligned
+
+// Right panel (64%): bg #161a25
+//   Header: ticker, timeframe buttons (1m/5m/15m/1D/1W/1M), "Open in TradingView ↗"
+//   Body: <iframe src={tvWidgetUrl} /> with onError fallback
+//   Error state: paper-deep bg, centered "Chart unavailable · Open in TradingView ↗" (ink-3 text, accent link)
+//   Footer: "Live · TradingView widget" + "Data from TradingView"
+
+// tvWidgetUrl pattern:
+// https://www.tradingview.com/widgetembed/?symbol=NSE:{symbol}&interval=D&theme=dark&style=1&locale=en
+```
+
+- [ ] **Step 1: Write TVMetricsBadge tests**
+
+```bash
+# tests/frontend/TVMetricsBadge.test.tsx
+```
+Test: renders "STRONG BUY" pill in signal-pos color; renders "STALE" label when fetchedAt > 2 days; renders null when tvRecommendLabel is null.
+
+- [ ] **Step 2: Implement TVMetricsBadge.tsx**
+
+Follow spec above. Use Atlas tokens: `text-signal-pos`, `text-signal-warn`, `text-signal-neg`. Border-radius 2px (no bubbly rounding). Letter-spacing 0.1em on pill text.
+
+- [ ] **Step 3: Write TVChartPanel tests**
+
+Test: renders left panel with fundamental metrics; shows error fallback when iframe fires onError; shows stale timestamp in TV Signals section.
+
+- [ ] **Step 4: Implement TVChartPanel.tsx**
+
+Follow spec above. Left/right split via `flex` with `width: 36%` / `flex: 1`. No CSS grid — flex preserves the split correctly under the tab container width.
+
+- [ ] **Step 5: Wire into StockDetailClient**
+
+Add `tvMetrics` prop to `StockDetailClientProps`. Add `TVMetricsBadge` in hero-right section below price. Add `{ id: 'chart', label: 'Chart' }` to `TABS` array between Technicals and Audit. Add `TVChartPanel` render block in tab content.
+
+- [ ] **Step 6: Run tests + visual check**
+
+```bash
+cd frontend && npm run test -- TVMetricsBadge TVChartPanel
+npm run dev
+# Open /stocks/RELIANCE in browser, verify Chart tab + hero badge
+```
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add frontend/src/components/v6/TVChartPanel.tsx frontend/src/components/v6/TVMetricsBadge.tsx frontend/src/components/v6/StockDetailClient.tsx
+git commit -m "feat(tv): TVChartPanel + TVMetricsBadge — Chart tab + hero badge (TV-05)"
+```
+
+---
+
+### Task 12: Portfolio Analytics Page — TV-06 (DESIGN APPROVED)
+
+**Design decisions locked (2026-05-28 /plan-design-review):**
+- **D3:** Dedicated page at `/portfolio/[id]/analytics` — not a tab
+- **Layout:** Page header → 7-metric grid (7 equal columns, border-right dividers) → returns chart (full-width, 240px height, SVG via Recharts) → 2-column lower panels (Benchmark Comparison + Observation Summary)
+- **CSV export CTA:** "↓ Export to TradingView CSV" button in page header, right side
+- **Chart:** Portfolio (teal solid) vs Nifty 50 (ink-4 dashed) cumulative returns. End labels showing final %.
+- **Mobile:** metrics grid 2-col on `<768px`, chart height 180px, lower panels stack
+- **Empty state:** "No closed positions yet. Analytics require at least 1 completed trade." + link to portfolio
+- **Null beta:** "—" with tooltip "Requires 30+ trading days of data"
+- **Mockup reference:** `~/.gstack/projects/atlas-os/designs/tv-integration-20260528/tv-design-mockup.html` Screen 2
+
+**Files:**
+- Create: `frontend/src/app/portfolio/[id]/analytics/page.tsx`
+- Create: `frontend/src/components/v6/PortfolioAnalyticsClient.tsx`
+- Modify: `frontend/src/app/portfolio/[id]/page.tsx` — add "View Analytics →" link
+
+**PortfolioAnalyticsClient spec:**
+```tsx
+interface PortfolioAnalyticsClientProps {
+  portfolioId: string
+  portfolioName: string
+  analytics: {
+    sharpe: number | null
+    sortino: number | null
+    calmar: number | null
+    beta: number | null
+    alpha: number | null
+    max_drawdown: number
+    twr: number
+    annualised_return: number
+    observation_days: number
+    risk_free_rate_used: number
+    daily_returns: Array<{ date: string; portfolio_return: number; nifty50_return: number }>
+  } | null
+}
+
+// Metrics grid: 7 columns, each cell: label (t-caption, ink-3, uppercase, tracking-wide), value (JetBrains Mono 22px), sub-label (t-caption, ink-4)
+// Null values render as "—" (em dash) with Tooltip explaining why
+// Positive values: text-signal-pos. Negative: text-signal-neg. Neutral: text-ink
+// Returns chart: Recharts LineChart, width 100%, height 240px
+//   Portfolio line: stroke="#1D9E75" strokeWidth=2
+//   Nifty 50 line: stroke="#9A8F82" strokeWidth=1.5 strokeDasharray="5 3"
+//   CartesianGrid: stroke="rgba(194,184,168,0.3)"
+//   No dot markers on lines (dot={false})
+//   Tooltip: on hover shows date, portfolio %, nifty50 %, both with +/− prefix
+```
+
+- [ ] **Step 1: Write tests**
+
+```bash
+# tests/frontend/PortfolioAnalyticsClient.test.tsx
+```
+Test: renders 7 metric cells; renders "—" for null beta with tooltip text; renders empty state when analytics is null; CSV export link points to `/v1/portfolios/{id}/tv-export.csv`.
+
+- [ ] **Step 2: Implement PortfolioAnalyticsClient.tsx**
+
+Follow spec above. Use Recharts `LineChart`. Import `Tooltip, CartesianGrid, XAxis, YAxis, Line, ResponsiveContainer` from `recharts`. Format cumulative returns: `(1 + r1) * (1 + r2) * ... - 1` computed client-side from `daily_returns`.
+
+- [ ] **Step 3: Implement analytics page**
+
+```tsx
+// frontend/src/app/portfolio/[id]/analytics/page.tsx
+import { getPortfolioAnalytics } from '@/lib/queries/v6/portfolio_analytics'
+
+export default async function PortfolioAnalyticsPage({ params }: { params: { id: string } }) {
+  const analytics = await getPortfolioAnalytics(params.id)
+  return <PortfolioAnalyticsClient portfolioId={params.id} analytics={analytics} />
+}
+```
+
+- [ ] **Step 4: Add query**
+
+```ts
+// frontend/src/lib/queries/v6/portfolio_analytics.ts
+export async function getPortfolioAnalytics(portfolioId: string) {
+  const res = await fetch(`/v1/portfolios/${portfolioId}/analytics`)
+  if (!res.ok) return null
+  const json = await res.json()
+  return json.data
+}
+```
+
+- [ ] **Step 5: Add link from portfolio page**
+
+In `frontend/src/app/portfolio/[id]/page.tsx`, add "View Analytics →" as an accent-colored link in the portfolio header.
+
+- [ ] **Step 6: Run tests + visual check**
+
+```bash
+cd frontend && npm run test -- PortfolioAnalyticsClient
+npm run dev
+# Open /portfolio/{id}/analytics in browser, verify 7-metric grid + chart
+```
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add frontend/src/app/portfolio frontend/src/components/v6/PortfolioAnalyticsClient.tsx
+git commit -m "feat(tv): portfolio analytics page — Sharpe/Sortino/Calmar/Alpha/Beta (TV-06)"
+```
 
 ---
 
 ## Execution Order Summary
 
 ```
-Task 1 → Task 2 → Task 3 → Task 4 → Task 5 (parallel) → Task 6 → Task 7 → Task 8 → Task 9
- 117 migration   pkg       screener  metrics route   pg_cron   analytics   analytics route  MCP
+Task 1 → Task 2 → Task 3 → Task 4 → Task 5 → Task 6 → Task 7 → Task 8 → Task 9 → Task 10 → Task 11 → Task 12
+ 117 migration   pkg  screener  metrics  pg_cron  analytics  analytics-route  MCP  CSV-export  TV-05  TV-06
 ```
 
 Tasks 5 and 6 can begin in parallel after Task 4 passes tests.
+Tasks 11 and 12 can begin after `.design-approved.json` is committed (done — see review report below).
 
-TV-05, TV-06 are blocked — do not start until `.design-approved.json` exists.
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | CLEAR | mode: HOLD_SCOPE, 0 critical gaps |
+| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | APPROVED | 6 issues found, 6 resolved |
+| Design Review | `/plan-design-review` | UI/UX gaps | 1 | CLEAR | score: 3/10 → 9/10, 4 decisions |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+
+- **UNRESOLVED:** 0 across all reviews
+- **VERDICT:** CEO + ENG + DESIGN CLEARED — ready to implement. `.design-approved.json` committed, TV-05 and TV-06 unblocked.
