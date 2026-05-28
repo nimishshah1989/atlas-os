@@ -554,6 +554,40 @@ cell renders BUY/ACCUMULATE with a warn-colored Stage 4 chip, not WAIT.
 Stage 3 → WATCH/HOLD downgrade retained (Q1 spec lock, separately
 reviewable). See docs/v6/2026-05-28-weinstein-a3-report.md.
 
+### Verdict source priority chain (added 2026-05-28)
+
+The cell-state vocabulary above maps tightly to `signal_call.action`,
+but most stocks (~64% on 2026-05-28) don't have an open signal_call.
+The trader-view verdict still emits a directional reading using a
+3-step priority chain:
+
+1. **`signal_call`** — open `atlas_signal_calls.action` is present. Use
+   that cell state. This is the highest-confidence path (cell math fired).
+2. **`composite_score`** — no open signal_call, but
+   `atlas_stock_conviction_daily.composite_score` is non-NULL. Map
+   sign to cell state: positive → POSITIVE, negative → NEGATIVE,
+   zero → NEUTRAL. Lower-confidence than signal_call but still a
+   directional reading.
+3. **`no_data`** — both NULL. Render `WATCH` with
+   `verdict_reason = 'No Atlas math yet'`. This is the genuinely
+   untracked state (~6% of universe).
+
+The `mv_stock_landscape_trader` view exposes a `verdict_source` column
+('signal_call' | 'composite_score' | 'no_data') so the UI can render
+context-aware confidence visuals. `conviction_tier` (T1-T5) provides
+the orthogonal confidence axis — UI color-codes the verdict pill
+based on tier, so a low-conviction composite-derived BUY renders with
+reduced saturation but still shows BUY.
+
+**Why this matters:** the prior signal_call-only logic over-WATCH'd
+the universe (475 of 747 stocks → false WATCH). Markets work on
+directional priors even with low confidence; the composite_score
+fallback honors that while reserving WATCH for genuinely-flat or
+no-data cases.
+
+Resolved 2026-05-28 after migration 115 over-WATCH'd; amended in
+migration 116.
+
 **Why this kills F1:** ACCUMULATE no longer needs its own validated
 cell. It is the display variant of POSITIVE for holders. Same for
 WATCH/HOLD (NEUTRAL) and AVOID/SELL (NEGATIVE). The methodology
