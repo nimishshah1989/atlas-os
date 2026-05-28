@@ -22,6 +22,8 @@ import { getStaticPortfolioById } from '@/lib/queries/portfolios'
 import { getEffectivePolicy } from '@/lib/queries/policy'
 import { getCurrentRegime } from '@/lib/queries/regime'
 import { StockDeepDiveHeader } from '@/components/stocks/StockDeepDiveHeader'
+import { TraderViewHeader } from '@/components/v6/stocks/TraderViewHeader'
+import { getStockTraderHeader } from '@/lib/queries/v6/stock-trader-header'
 import { StockDeepDiveBody } from '@/components/stocks/StockDeepDiveBody'
 import { IntradayStockBadge } from '@/components/stocks/IntradayStockBadge'
 import { MasterStateCard } from '@/components/stocks/MasterStateCard'
@@ -65,6 +67,7 @@ export default async function StockPage({
     validations,
     hitRate,
     footerMetrics,
+    traderHeader,
   ] = await Promise.all([
     getStockMetricHistory(stock.instrument_id, 365),
     getStockState(stock.instrument_id),
@@ -75,6 +78,7 @@ export default async function StockPage({
     getComponentValidations(),
     getHitRateForStock(stock.instrument_id, 20),
     getStockFooterMetrics(stock.instrument_id),
+    getStockTraderHeader(symbol),
   ])
 
   const [cohortBaseline, peers] = stockState
@@ -128,6 +132,7 @@ export default async function StockPage({
 
   return (
     <div className="max-w-[1200px] mx-auto">
+      <TraderViewHeader data={traderHeader} />
       <StockDeepDiveHeader stock={stock} />
 
       {stockState && (
