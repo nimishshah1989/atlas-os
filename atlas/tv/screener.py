@@ -44,10 +44,10 @@ def _load_universe_symbols(engine: Engine) -> list[str]:
 
 
 def _fetch_tv_batch(symbols: list[str]) -> pd.DataFrame:
-    from tradingview_screener import Scanner
+    from tradingview_screener import Scanner  # type: ignore[reportMissingModuleSource]
 
     qualified = [f"NSE:{s}" for s in symbols]
-    _, df = Scanner.get_scanner_data(
+    _, df = Scanner.get_scanner_data(  # type: ignore[reportAttributeAccessIssue]
         symbols=qualified,
         columns=_COLUMNS,
     )
@@ -151,8 +151,10 @@ def fetch_and_upsert_all(engine: Engine | None = None) -> None:
 
         rows = []
         for _, row in df.iterrows():
-            sym = row.get("ticker", "")
+            sym: str = str(row.get("ticker", ""))
             recommend_all = row.get("Recommend.All")
+            vol = row.get("volume")
+            vol10d = row.get("average_volume_10d_calc")
             rows.append(
                 {
                     "symbol": sym,
@@ -167,11 +169,9 @@ def fetch_and_upsert_all(engine: Engine | None = None) -> None:
                     "ema_50": row.get("EMA50"),
                     "ema_200": row.get("EMA200"),
                     "atr_14": row.get("ATR"),
-                    "volume": int(row["volume"]) if pd.notna(row.get("volume")) else None,
+                    "volume": int(row["volume"]) if bool(pd.notna(vol)) else None,
                     "volume_10d_avg": (
-                        int(row["average_volume_10d_calc"])
-                        if pd.notna(row.get("average_volume_10d_calc"))
-                        else None
+                        int(row["average_volume_10d_calc"]) if bool(pd.notna(vol10d)) else None
                     ),
                     "price": row.get("close"),
                     "high_52w": row.get("High.All"),
