@@ -46970,3 +46970,17 @@
   "schema_version": 1
 }
 {"ts":"2026-05-28T12:46:27Z","kind":"supabase_sql_executed","sql_preview":"SELECT \n  COUNT(DISTINCT p.instrument_id) AS n_stocks,\n  COUNT(*) AS n_rows,\n  MIN(p.date) AS min_date,\n  MAX(p.date) AS max_date\nFROM public.de_equity_ohlcv p\nJOIN atlas.atlas_universe_stocks u\n  ON u.instrument_id = p.instrument_id\n AND u.effective_to IS NULL\n AND u.tier IN ('Large','Mid','Small')\n AND u.in_nifty_500 = TRUE\nWHERE p.date >= '2018-01-01'\n  AND p.close_adj IS NOT NULL;"}
+{"ts":"2026-05-28T12:50:01Z","kind":"supabase_sql_executed","sql_preview":"CREATE TABLE atlas.weinstein_events_base (\n  instrument_id     uuid     NOT NULL,\n  event_date        date     NOT NULL,\n  event_type        text     NOT NULL,\n  ma_lookback_weeks int      NOT NULL,\n  cap_tier          text     NOT NULL,\n  cap_tier_source   text     NOT NULL DEFAULT 'STATIC_2026',\n  close_at_event    numeric  NOT NULL,\n  ma_at_event       numeric  NOT NULL,\n  ma_slope_pct      numeric,\n  stage1_persist_4w numeric,\n  stage3_persist_4w numeric,\n  PRIMARY KEY (instrument_id, event_"}
+{"ts":"2026-05-28T12:50:36Z","kind":"supabase_sql_executed","sql_preview":"SELECT 'row_count' AS k, COUNT(*)::text AS v FROM atlas.atlas_drift_event_log\nUNION ALL SELECT 'distinct_cells', COUNT(DISTINCT cell_id)::text FROM atlas.atlas_drift_event_log\nUNION ALL SELECT 'open_signal_calls', COUNT(*)::text FROM atlas.atlas_signal_calls WHERE exit_date IS NULL\nUNION ALL SELECT 'distinct_open_cells', COUNT(DISTINCT cell_id)::text FROM atlas.atlas_signal_calls WHERE exit_date IS NULL AND cell_id IS NOT NULL;"}
+{"ts":"2026-05-28T12:51:06Z","kind":"supabase_sql_executed","sql_preview":"-- Stream A2 Task 2 — populate weinstein_events_base\n-- cap_tier source: STATIC_2026 (atlas_universe_stocks.tier)\n-- See docs/v6/2026-05-28-weinstein-a2-cap-tier-decision.md\nINSERT INTO atlas.weinstein_events_base\n  (instrument_id, event_date, event_type, ma_lookback_weeks, cap_tier,\n   close_at_event, ma_at_event, ma_slope_pct, stage1_persist_4w, stage3_persist_4w)\nWITH daily_with_week AS (\n  SELECT\n    p.instrument_id, p.date, p.close_adj,\n    (date_trunc('week', p.date))::date AS week_start"}
+{"ts":"2026-05-28T12:51:13Z","kind":"supabase_sql_executed","sql_preview":"SELECT cap_tier, ma_lookback_weeks, event_type, COUNT(*) AS n_events\nFROM atlas.weinstein_events_base\nGROUP BY 1,2,3\nORDER BY 1,2,3;"}
+{
+  "ts": "2026-05-28T12:51:17Z",
+  "prev": "0cbd6b5034c7ab30",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/v6/2026-05-28-drift-grain-decision.md",
+  "lines_changed": 67,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-28T12:51:25Z","kind":"supabase_sql_executed","sql_preview":"TRUNCATE atlas.weinstein_events_base;"}
