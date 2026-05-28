@@ -169,6 +169,7 @@ frontend/src/app/
     <tr><td>ma_20</td><td>NUMERIC(14,4)</td><td>EMA20</td><td>20-day MA</td></tr>
     <tr><td>ma_50</td><td>NUMERIC(14,4)</td><td>EMA50</td><td>50-day MA</td></tr>
     <tr><td>ma_200</td><td>NUMERIC(14,4)</td><td>EMA200</td><td>200-day MA</td></tr>
+    <tr><td>instrument_id</td><td>UUID nullable FK</td><td>—</td><td>→ atlas_instruments.id. Populated post-upsert via symbol lookup. NULL if symbol not in Atlas universe (e.g. ETFs, indices). Allows JOIN to atlas_paper_portfolio without going through symbol text.</td></tr>
     <tr><td>fetched_at</td><td>TIMESTAMPTZ</td><td>—</td><td>staleness guard: flag if &gt; 26 h old</td></tr>
     <tr><td>created_at</td><td>TIMESTAMPTZ</td><td>—</td><td>tz-aware, standard</td></tr>
     <tr><td>updated_at</td><td>TIMESTAMPTZ</td><td>—</td><td>tz-aware, standard</td></tr>
@@ -199,8 +200,10 @@ Response 200:
   "data": {
     "symbol": "HDFCBANK",
     "recommend_all": 0.62,        // +1 = strong buy, -1 = strong sell
-    "recommend_label": "BUY",     // derived: [-1,-.5) STRONG_SELL | [-.5,-.1) SELL |
+    "tv_recommend_label": "BUY",  // derived: [-1,-.5) STRONG_SELL | [-.5,-.1) SELL |
                                   //           [-.1,.1) NEUTRAL | [.1,.5) BUY | [.5,1] STRONG_BUY
+                                  // named tv_recommend_label (not recommend_label) everywhere in
+                                  // code + API to prevent confusion with Atlas action vocabulary
     "pe": 19.2,
     "pb": 2.8,
     "eps": 84.12,
@@ -223,8 +226,8 @@ Response 200:
 }
 </pre>
 
-<h3>5.2 <code>GET /v1/portfolios/{id}/analytics</code></h3>
-<p>Returns computed performance analytics for a paper portfolio. Benchmark is Nifty 50 (symbol <code>NIFTY</code>). Price history from <code>atlas.prices_daily</code>.</p>
+<h3>5.2 <code>GET /v1/portfolios/{id}/analytics</code> <small>— user-auth required</small></h3>
+<p>Returns computed performance analytics for a paper portfolio. Benchmark is Nifty 50 (symbol <code>NIFTY 50</code> in <code>de_index_prices</code>). Price history from <code>de_equity_ohlcv.close_adj</code>. Instrument lookup: <code>atlas_paper_portfolio.instrument_id → atlas_instruments.symbol</code> for TV metrics join and sector rollup.</p>
 <pre>
 Response 200:
 {
@@ -241,7 +244,9 @@ Response 200:
     "max_drawdown": -0.087,       // peak-to-trough: min(portfolio_value / running_max - 1)
     "alpha": 0.064,               // Jensen's alpha: Rp - [Rf + β(Rm - Rf)]
                                   // Rf = 91-day T-bill (IRSTCI01INM156N proxy), Rm = Nifty 50 TWR
-    "benchmark_twr": 0.119,       // Nifty 50 TWR same period
+    "benchmark_nifty50_twr": 0.119,  // Nifty 50 TWR same period (primary benchmark)
+    "benchmark_tier_blend_twr": 0.104, // cap-weighted blend: Large→Nifty100, Mid→Nifty Midcap 150,
+                                       // Small→Nifty Smallcap 250. Weights from portfolio holdings.
     "sector_composition": [
       { "sector": "Banking", "weight": 0.28 },
       { "sector": "IT", "weight": 0.19 }
@@ -254,7 +259,7 @@ Response 200:
 }
 </pre>
 
-<h3>5.3 <code>GET /v1/portfolios/{id}/export/tv-csv</code></h3>
+<h3>5.3 <code>GET /v1/portfolios/{id}/export/tv-csv</code> <small>— user-auth required</small></h3>
 <p>Streams a CSV download in TradingView Portfolio Management import format. Returns <code>Content-Disposition: attachment; filename="atlas-portfolio-{id}-{date}.csv"</code>. Logs export to <code>tv_portfolio_exports</code>.</p>
 <div class="warn"><strong>CSV format TBD:</strong> Exact column schema to be confirmed from TV Portfolio import spec (user to provide). Endpoint is designed; column mapping will be filled in before implementation starts.</div>
 
@@ -266,13 +271,13 @@ Response 200:
   <li><strong>Left 36%</strong> — Atlas verdict badge + conviction pillars (existing) + TV Technical Rating badge (<code>TVMetricsBadge</code>) + fundamentals grid (PE, P/B, ROE, EPS growth, EV/EBITDA, D/E) + portfolio position strip if held.</li>
   <li><strong>Right 64%</strong> — <code>TVChartPanel</code>: TradingView Advanced Chart Widget iframe. Symbol auto-set to <code>NSE:{symbol}</code>. Theme: dark (<code>#131722</code>). Default interval: 1D.</li>
 </ul>
-<p>TV rating badge colour mapping: Strong Buy = teal, Buy = green, Neutral = amber, Sell = orange, Strong Sell = red. Mirrors Atlas's existing signal colour palette.</p>
+<p><strong>TV badge visual contract — explicitly separate from Atlas verdict:</strong> the badge is labelled <strong>"TV Consensus:"</strong> (not just a raw rating word), uses a blue-tinted palette (<code>#2962FF</code> spectrum, not Atlas teal/green), and sits in its own named row in the left panel under the heading "TradingView Analysis". The Atlas verdict section and the TradingView section are visually separated by a rule. The API field is named <code>tv_recommend_label</code> (not <code>recommend_label</code>) in all code and API responses to prevent ambiguity. Colour mapping: Strong Buy = <code>#1565C0</code>, Buy = <code>#1976D2</code>, Neutral = <code>#78909C</code>, Sell = <code>#E65100</code>, Strong Sell = <code>#B71C1C</code>. Never shares a colour with Atlas's teal (<code>#1D9E75</code>) or green (<code>#2F6B43</code>).</p>
 
 <h3>6.2 Portfolio analytics page — <code>/portfolios/[id]/analytics</code></h3>
 <p>New page with four zones:</p>
 <ol>
-  <li><strong>Performance header</strong> — TWR, Sharpe, Alpha, Max Drawdown, Calmar as metric tiles. Benchmark label shows "vs Nifty 50".</li>
-  <li><strong>Benchmark chart</strong> — Recharts line chart, portfolio cumulative return vs Nifty 50 over selected period (1M / 3M / 6M / 1Y / All). Drawn from <code>daily_returns</code> array in API response.</li>
+  <li><strong>Performance header</strong> — TWR, Sharpe, Alpha, Max Drawdown, Calmar as metric tiles. Shows two benchmark labels: "vs Nifty 50" (primary) and "vs tier blend" (secondary, computed from portfolio's actual cap tier weights).</li>
+  <li><strong>Benchmark chart</strong> — Recharts line chart with three lines: portfolio cumulative return, Nifty 50 (solid), tier-blend benchmark (dashed). Period selector: 1M / 3M / 6M / 1Y / All. Drawn from <code>daily_returns</code> array which carries <code>{date, portfolio_return, nifty50_return, tier_blend_return}</code>.</li>
   <li><strong>Sector composition</strong> — Recharts pie/donut. Click sector → filter holdings table.</li>
   <li><strong>Holdings table</strong> — AG Grid: symbol, qty, avg cost, current price, unrealised P&L, weight, TV Recommend label. Sortable, CSV export button in toolbar.</li>
 </ol>
@@ -300,6 +305,7 @@ Response 200:
 </table>
 
 <div class="callout"><strong>Scope:</strong> All MCP tools are read-only. No write-back to TradingView. MCP is additive — removing it does not break any core Atlas feature.</div>
+<div class="warn"><strong>Reliability note:</strong> <code>mikeh-22/tradingview-mcp</code> is a community server — not maintained by TradingView. If it breaks or goes unmaintained, the fallback is direct <code>tradingview-screener</code> Python lib calls (already used by <code>screener.py</code> for TV-02). The MCP provides richer tools (news, watchlists, alerts) beyond what screener.py covers; those features degrade gracefully to "unavailable" rather than breaking Atlas. Monitor for upstream breakage in monthly ops review.</div>
 
 <h2>8. Nightly Cron</h2>
 
@@ -328,7 +334,7 @@ Response 200:
 
 <div class="chunk">
   <div class="chunk-title"><span class="chunk-id">TV-03</span> Backend — atlas/tv/portfolio_analytics.py + routes</div>
-  <p>Implement Sharpe, Sortino, Calmar, Alpha, Beta, Max Drawdown (running maximum method), TWR, sector composition. Benchmark = Nifty 50 from prices_daily. Add <code>/v1/portfolios/{id}/analytics</code>. Tests: known portfolio with hand-computed expected values.</p>
+  <p>Implement Sharpe, Sortino, Calmar, Alpha, Beta, Max Drawdown (running maximum method), TWR, sector composition. Benchmark = Nifty 50 from <code>de_index_prices</code>. Portfolio prices from <code>de_equity_ohlcv.close_adj</code> joined via <code>atlas_paper_portfolio.instrument_id → atlas_instruments.symbol</code>. Sector uses canonical 22 via <code>atlas_sector_rollup</code>. Add <code>/v1/portfolios/{id}/analytics</code>. Tests: known portfolio with hand-computed expected values.</p>
   <div class="chunk-deps">Deps: TV-01 · Blocks: TV-06 (frontend)</div>
 </div>
 

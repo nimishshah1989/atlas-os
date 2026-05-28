@@ -1223,3 +1223,17 @@ MVs never block on ingest.
 
 Locked 2026-05-26 in /grill-with-docs (mv build session).
 
+
+---
+
+## TV Consensus (TradingView rating — distinct from Atlas verdict)
+
+`tv_recommend_label` is the display label derived from TradingView's `Recommend.All` score (−1 strong sell → +1 strong buy), aggregated from 26 technical indicators by TV's screener engine. It is **not** an Atlas verdict and must never be visually or lexically conflated with the Atlas cell state vocabulary (POSITIVE / NEUTRAL / NEGATIVE) or its display labels (BUY / HOLD / AVOID / WAIT).
+
+**Display rule:** always prefixed "TV Consensus:" on every surface. Uses a blue-tinted palette (`#2962FF` spectrum). Never shares a colour with Atlas teal (`#1D9E75`) or signal green (`#2F6B43`). Rendered in a named "TradingView Analysis" section, separated from the Atlas verdict section by a visual rule.
+
+**API contract:** the field is always named `tv_recommend_label` in code and API responses. The field `recommend_label` (without the `tv_` prefix) is reserved for Atlas action labels.
+
+**Five values:** `STRONG_BUY`, `BUY`, `NEUTRAL`, `SELL`, `STRONG_SELL` — derived from `recommend_all` score bands.
+
+Resolved 2026-05-28 in /grill-with-docs (TradingView integration spec).
