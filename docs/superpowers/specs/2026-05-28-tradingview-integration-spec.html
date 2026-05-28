@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Atlas v6 · TradingView Integration · Spec</title>
+<style>
+:root {
+  --paper: #FAFAF8; --paper-soft: #F4F2EC; --paper-rule: #E5E2DA;
+  --ink-rule: #C9C5BA; --ink: #2A2724; --ink-2: #57534A; --ink-3: #8A8578;
+  --accent: #1D9E75; --accent-soft: #1D9E7515;
+  --pos: #2F6B43; --pos-soft: rgba(47,107,67,0.10);
+  --warn: #C68B2E; --warn-soft: rgba(198,139,46,0.12);
+  --neg: #B0492C;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  color: var(--ink); background: var(--paper);
+  line-height: 1.6; -webkit-font-smoothing: antialiased;
+  padding: 40px 28px; max-width: 1000px; margin: 0 auto;
+}
+h1 { font-family: 'Lora','Georgia',serif; font-weight:500; font-size:32px; margin-bottom:6px; }
+h2 { font-family: 'Lora','Georgia',serif; font-weight:500; font-size:22px; margin:40px 0 12px; padding-top:24px; border-top:1px solid var(--ink-rule); color:var(--ink); }
+h2:first-of-type { border-top:0; padding-top:0; margin-top:32px; }
+h3 { font-family: 'Lora','Georgia',serif; font-weight:500; font-size:16px; margin:24px 0 8px; }
+h4 { font-size:12px; text-transform:uppercase; letter-spacing:0.16em; font-weight:700; margin:18px 0 8px; color:var(--ink-3); }
+p { margin-bottom:14px; font-size:14px; color:var(--ink-2); }
+ul, ol { margin:8px 0 14px 22px; font-size:14px; color:var(--ink-2); }
+li { margin-bottom:5px; }
+code { font-family:'JetBrains Mono','SF Mono',Menlo,monospace; font-size:12px; background:var(--paper-soft); padding:1px 5px; border-radius:2px; }
+pre { font-family:'JetBrains Mono','SF Mono',Menlo,monospace; font-size:12px; background:var(--paper-soft); border:1px solid var(--paper-rule); padding:14px 16px; border-radius:3px; overflow-x:auto; margin:12px 0; line-height:1.5; }
+table { width:100%; border-collapse:collapse; font-size:13px; margin:12px 0 18px; }
+th, td { text-align:left; padding:8px 12px; border-bottom:1px solid var(--paper-rule); vertical-align:top; }
+th { background:var(--paper-soft); font-weight:600; color:var(--ink-2); text-transform:uppercase; letter-spacing:0.1em; font-size:10px; border-bottom:1px solid var(--ink-rule); }
+.meta { color:var(--ink-3); font-size:12px; margin-bottom:24px; padding-bottom:14px; border-bottom:1px solid var(--paper-rule); }
+.meta strong { color:var(--ink-2); }
+.callout { background:var(--accent-soft); border-left:3px solid var(--accent); padding:14px 18px; margin:18px 0; font-size:13px; color:var(--ink-2); }
+.callout strong { color:var(--ink); }
+.warn { background:var(--warn-soft); border-left:3px solid var(--warn); padding:14px 18px; margin:18px 0; font-size:13px; color:var(--ink-2); }
+.warn strong { color:var(--ink); }
+.badge { display:inline-block; font-size:10px; text-transform:uppercase; letter-spacing:0.12em; padding:2px 8px; border-radius:2px; font-weight:700; }
+.b-scope { background:var(--accent-soft); color:var(--accent); }
+.b-defer { background:var(--paper-soft); color:var(--ink-3); border:1px solid var(--paper-rule); }
+.b-dep { background:var(--warn-soft); color:var(--warn); }
+.chunk { border:1px solid var(--paper-rule); border-radius:4px; padding:14px 16px; margin:10px 0; }
+.chunk-title { font-size:13px; font-weight:700; color:var(--ink); margin-bottom:6px; display:flex; align-items:center; gap:8px; }
+.chunk-id { font-family:monospace; font-size:11px; background:var(--paper-soft); padding:2px 7px; border-radius:2px; color:var(--ink-3); }
+.chunk-deps { font-size:11px; color:var(--ink-3); margin-top:6px; }
+.flow-grid { display:grid; grid-template-columns:1fr auto 1fr auto 1fr auto 1fr; gap:0; align-items:center; margin:16px 0; }
+.flow-box { background:var(--paper-soft); border:1px solid var(--paper-rule); border-radius:3px; padding:8px 12px; text-align:center; font-size:11px; }
+.flow-box strong { display:block; font-size:12px; color:var(--ink); margin-bottom:3px; }
+.flow-box span { color:var(--ink-3); font-size:10px; }
+.flow-arrow { text-align:center; font-size:14px; color:var(--ink-3); padding:0 4px; }
+.col-table { font-size:12px; }
+.col-table td:first-child { font-family:monospace; font-size:11px; color:var(--ink); white-space:nowrap; }
+.col-table td:nth-child(2) { color:var(--accent); font-family:monospace; font-size:11px; }
+</style>
+</head>
+<body>
+
+<h1>TradingView × Atlas Integration</h1>
+<div class="meta">
+  <strong>Status:</strong> draft · pending eng-review &nbsp;|&nbsp;
+  <strong>Date:</strong> 2026-05-28 &nbsp;|&nbsp;
+  <strong>Approach:</strong> B — Cached + MCP &nbsp;|&nbsp;
+  <strong>Depends on:</strong> SP08 (Kite auth in place), existing TV_SESSION_ID config &nbsp;|&nbsp;
+  <strong>Deferred:</strong> Pine Script webhook receiver, live Kite execution (v7)
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<h2>1. Problem Statement</h2>
+
+<p>Atlas v6 currently makes conviction calls (POSITIVE / NEUTRAL / NEGATIVE, Tier 1–5, Weinstein stage) but surfaces no fundamental context alongside them. A fund manager looking at a POSITIVE call on HDFC Bank has to leave Atlas, open TradingView, and manually verify P/E, EPS trend, and technical momentum before acting. This context-switch breaks the decision loop Atlas is meant to close.</p>
+
+<p>In parallel, Atlas manages paper portfolios (<code>atlas_paper_portfolio</code>) but has no performance analytics layer — no Sharpe ratio, no benchmark comparison, no sector composition view. A fund manager cannot answer "how is my model portfolio actually doing vs Nifty?" from within Atlas today.</p>
+
+<p>TradingView is the primary charting tool used by fund managers alongside Atlas. The goal is not to replace it — it is to make Atlas the hub that enriches decisions with TV data and tracks portfolio outcomes, while TV remains the charting tool of choice.</p>
+
+<h2>2. Solution Overview</h2>
+
+<div class="callout">
+  <strong>One-line summary:</strong> Embed TradingView's Advanced Chart on the stock deep-dive page, pull fundamental + technical data from TV's screener nightly into a cached table, build a portfolio analytics layer inside Atlas, generate TV-importable CSV exports, and wire up the community TradingView MCP server for ad-hoc agent queries.
+</div>
+
+<p>Five capabilities, built as a single <code>atlas/tv/</code> module:</p>
+<ol>
+  <li><strong>TV Advanced Chart Widget</strong> — embedded right panel on stock deep-dive (Bloomberg-style 36/64 split)</li>
+  <li><strong>TV Screener cache</strong> — nightly batch pull of fundamentals + technical ratings into <code>atlas.tv_metrics</code></li>
+  <li><strong>Portfolio analytics</strong> — Sharpe, Alpha, Max Drawdown, Time-Weighted Return, sector composition, benchmark vs Nifty 50</li>
+  <li><strong>TV Portfolio CSV export</strong> — downloadable per-portfolio CSV in TV Portfolio import format, with in-app upload guide</li>
+  <li><strong>Community TV MCP</strong> — <code>mikeh-22/tradingview-mcp</code> wired as an Atlas MCP server for Hermes (SP07) and ad-hoc Claude queries</li>
+</ol>
+
+<p>What is explicitly <span class="badge b-defer">deferred</span>: Pine Script webhook receiver, live Kite execution routing, TV Portfolio API sync (no public API exists today — designed for easy addition when TV ships one).</p>
+
+<h2>3. Architecture</h2>
+
+<h3>3.1 Data flow</h3>
+
+<div class="flow-grid">
+  <div class="flow-box"><strong>TV Screener API</strong><span>scanner.tradingview.com/india/scan · unofficial · session-auth</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box"><strong>atlas/tv/screener.py</strong><span>tradingview-screener lib · nightly batch · ~1,800 NSE stocks</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box"><strong>atlas.tv_metrics</strong><span>Supabase table · upsert on symbol · refreshed 21:00 IST</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box"><strong>Deep-Dive Left Panel</strong><span>PE / ROE / TV rating — zero latency on page load</span></div>
+</div>
+
+<div class="flow-grid">
+  <div class="flow-box"><strong>TV Advanced Chart Widget</strong><span>free iframe · symbol in URL param · no backend</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box" style="grid-column:span 5"><strong>Deep-Dive Right Panel (65%)</strong><span>full TV chart — drawing tools, multi-TF, all indicators — embedded directly</span></div>
+</div>
+
+<div class="flow-grid">
+  <div class="flow-box"><strong>atlas_paper_portfolio</strong><span>existing · lots, entry prices, quantities</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box"><strong>atlas/tv/portfolio_analytics.py</strong><span>Sharpe · Alpha · Max DD · TWR · sector composition</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box"><strong>/portfolios/[id]/analytics</strong><span>new page · benchmark chart · sector donut</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-box"><strong>TV CSV export</strong><span>/api/v1/portfolios/{id}/export/tv-csv</span></div>
+</div>
+
+<h3>3.2 Module layout</h3>
+<pre>
+atlas/
+  tv/                          ← new bounded context
+    __init__.py
+    screener.py                ← fetch + upsert tv_metrics via tradingview-screener lib
+    portfolio_analytics.py     ← Sharpe, Alpha, Max DD, TWR, benchmark, sector composition
+    csv_export.py              ← generate TV Portfolio import-format CSV
+    routes.py                  ← /v1/tv/metrics/{symbol} · /v1/portfolios/{id}/analytics
+                                  /v1/portfolios/{id}/export/tv-csv
+
+frontend/src/components/v6/
+  TVChartPanel.tsx             ← Advanced Chart Widget iframe wrapper
+  TVMetricsBadge.tsx           ← Strong Buy → Strong Sell badge with colour
+  PortfolioAnalytics.tsx       ← performance header + benchmark chart + sector donut
+
+frontend/src/app/
+  stocks/[symbol]/page.tsx     ← modified: add split layout + TVChartPanel right
+  portfolios/[id]/analytics/   ← new page shell → PortfolioAnalytics component
+</pre>
+
+<h2>4. Database</h2>
+
+<h3>4.1 <code>atlas.tv_metrics</code> — new table</h3>
+
+<table class="col-table">
+  <thead><tr><th>Column</th><th>Type</th><th>Source field (TV screener)</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>symbol</td><td>TEXT PK</td><td>—</td><td>NSE symbol, <code>NSE:</code> prefix stripped</td></tr>
+    <tr><td>recommend_all</td><td>NUMERIC(4,2)</td><td>Recommend.All</td><td>−1 strong sell → +1 strong buy</td></tr>
+    <tr><td>recommend_ma</td><td>NUMERIC(4,2)</td><td>Recommend.MA</td><td>MA sub-score only</td></tr>
+    <tr><td>recommend_other</td><td>NUMERIC(4,2)</td><td>Recommend.Other</td><td>oscillator sub-score only</td></tr>
+    <tr><td>pe</td><td>NUMERIC(10,2)</td><td>PE</td><td>trailing P/E</td></tr>
+    <tr><td>pb</td><td>NUMERIC(10,2)</td><td>price_book_ratio</td><td>P/B ratio</td></tr>
+    <tr><td>eps</td><td>NUMERIC(14,4)</td><td>EPS</td><td>₹ — Decimal, not float</td></tr>
+    <tr><td>eps_growth_ttm</td><td>NUMERIC(8,4)</td><td>EPS.Growth.TTM</td><td>TTM YoY growth rate</td></tr>
+    <tr><td>revenue_growth_ttm</td><td>NUMERIC(8,4)</td><td>Revenue.YoY</td><td>TTM YoY revenue growth</td></tr>
+    <tr><td>roe</td><td>NUMERIC(8,4)</td><td>ROE</td><td>return on equity</td></tr>
+    <tr><td>ev_ebitda</td><td>NUMERIC(10,2)</td><td>EnterpriseValue.EBITDA</td><td>EV/EBITDA multiple</td></tr>
+    <tr><td>debt_equity</td><td>NUMERIC(8,4)</td><td>total_debt_to_equity</td><td>D/E ratio</td></tr>
+    <tr><td>market_cap</td><td>NUMERIC(20,2)</td><td>market_cap_basic</td><td>₹ crore — Decimal</td></tr>
+    <tr><td>rsi_14</td><td>NUMERIC(6,2)</td><td>RSI</td><td>14-period RSI</td></tr>
+    <tr><td>ma_20</td><td>NUMERIC(14,4)</td><td>EMA20</td><td>20-day MA</td></tr>
+    <tr><td>ma_50</td><td>NUMERIC(14,4)</td><td>EMA50</td><td>50-day MA</td></tr>
+    <tr><td>ma_200</td><td>NUMERIC(14,4)</td><td>EMA200</td><td>200-day MA</td></tr>
+    <tr><td>fetched_at</td><td>TIMESTAMPTZ</td><td>—</td><td>staleness guard: flag if &gt; 26 h old</td></tr>
+    <tr><td>created_at</td><td>TIMESTAMPTZ</td><td>—</td><td>tz-aware, standard</td></tr>
+    <tr><td>updated_at</td><td>TIMESTAMPTZ</td><td>—</td><td>tz-aware, standard</td></tr>
+  </tbody>
+</table>
+
+<div class="warn"><strong>Financial data rules apply:</strong> All money columns use <code>NUMERIC</code>, never <code>FLOAT</code>. NULL in any column must propagate as NULL, not 0. The API response includes <code>data_as_of</code> (the <code>fetched_at</code> value) and <code>is_stale: true</code> if &gt; 26 h old — never silently serve stale data.</div>
+
+<h3>4.2 <code>atlas.tv_portfolio_exports</code> — new table (audit log)</h3>
+<table>
+  <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>id</td><td>UUID PK</td><td>standard</td></tr>
+    <tr><td>portfolio_id</td><td>UUID FK → atlas_paper_portfolio</td><td>indexed</td></tr>
+    <tr><td>user_id</td><td>UUID FK</td><td>Supabase auth user, indexed</td></tr>
+    <tr><td>row_count</td><td>INTEGER</td><td>number of holdings exported</td></tr>
+    <tr><td>exported_at</td><td>TIMESTAMPTZ</td><td>tz-aware</td></tr>
+  </tbody>
+</table>
+
+<h2>5. API Surface</h2>
+
+<h3>5.1 <code>GET /v1/tv/metrics/{symbol}</code></h3>
+<p>Returns cached TV screener data for one NSE symbol. Symbol is plain (e.g. <code>HDFCBANK</code> — no exchange prefix).</p>
+<pre>
+Response 200:
+{
+  "data": {
+    "symbol": "HDFCBANK",
+    "recommend_all": 0.62,        // +1 = strong buy, -1 = strong sell
+    "recommend_label": "BUY",     // derived: [-1,-.5) STRONG_SELL | [-.5,-.1) SELL |
+                                  //           [-.1,.1) NEUTRAL | [.1,.5) BUY | [.5,1] STRONG_BUY
+    "pe": 19.2,
+    "pb": 2.8,
+    "eps": 84.12,
+    "eps_growth_ttm": 0.182,
+    "revenue_growth_ttm": 0.134,
+    "roe": 0.164,
+    "ev_ebitda": 12.1,
+    "debt_equity": 0.74,
+    "market_cap": 1234567.89,
+    "rsi_14": 58.4,
+    "ma_20": 1682.4,
+    "ma_50": 1641.2,
+    "ma_200": 1558.0
+  },
+  "meta": {
+    "data_as_of": "2026-05-28T21:03:14+05:30",
+    "is_stale": false,
+    "fetched_at": "2026-05-28T21:03:14+05:30"
+  }
+}
+</pre>
+
+<h3>5.2 <code>GET /v1/portfolios/{id}/analytics</code></h3>
+<p>Returns computed performance analytics for a paper portfolio. Benchmark is Nifty 50 (symbol <code>NIFTY</code>). Price history from <code>atlas.prices_daily</code>.</p>
+<pre>
+Response 200:
+{
+  "data": {
+    "portfolio_id": "...",
+    "period_days": 365,
+    "twr": 0.183,                 // Time-Weighted Return
+    "cagr": 0.183,                // same as TWR for periods ≤ 1y; annualised otherwise
+    "sharpe": 1.42,
+    "sortino": 1.87,
+    "calmar": 2.1,
+    "alpha": 0.064,               // Jensen's alpha vs Nifty 50 (see formula in pre block above)
+    "beta": 0.91,
+    "max_drawdown": -0.087,       // peak-to-trough: min(portfolio_value / running_max - 1)
+    "alpha": 0.064,               // Jensen's alpha: Rp - [Rf + β(Rm - Rf)]
+                                  // Rf = 91-day T-bill (IRSTCI01INM156N proxy), Rm = Nifty 50 TWR
+    "benchmark_twr": 0.119,       // Nifty 50 TWR same period
+    "sector_composition": [
+      { "sector": "Banking", "weight": 0.28 },
+      { "sector": "IT", "weight": 0.19 }
+    ],
+    "daily_returns": [...],       // [{date, portfolio_return, benchmark_return}] for chart
+    "holdings_count": 14,
+    "as_of_date": "2026-05-28"
+  },
+  "meta": { "data_as_of": "2026-05-28T21:03:14+05:30", "fetched_at": "..." }
+}
+</pre>
+
+<h3>5.3 <code>GET /v1/portfolios/{id}/export/tv-csv</code></h3>
+<p>Streams a CSV download in TradingView Portfolio Management import format. Returns <code>Content-Disposition: attachment; filename="atlas-portfolio-{id}-{date}.csv"</code>. Logs export to <code>tv_portfolio_exports</code>.</p>
+<div class="warn"><strong>CSV format TBD:</strong> Exact column schema to be confirmed from TV Portfolio import spec (user to provide). Endpoint is designed; column mapping will be filled in before implementation starts.</div>
+
+<h2>6. Frontend Changes</h2>
+
+<h3>6.1 Stock deep-dive — Bloomberg split layout</h3>
+<p>The stock deep-dive page (<code>/stocks/[symbol]</code>) gains a 36/64 split layout:</p>
+<ul>
+  <li><strong>Left 36%</strong> — Atlas verdict badge + conviction pillars (existing) + TV Technical Rating badge (<code>TVMetricsBadge</code>) + fundamentals grid (PE, P/B, ROE, EPS growth, EV/EBITDA, D/E) + portfolio position strip if held.</li>
+  <li><strong>Right 64%</strong> — <code>TVChartPanel</code>: TradingView Advanced Chart Widget iframe. Symbol auto-set to <code>NSE:{symbol}</code>. Theme: dark (<code>#131722</code>). Default interval: 1D.</li>
+</ul>
+<p>TV rating badge colour mapping: Strong Buy = teal, Buy = green, Neutral = amber, Sell = orange, Strong Sell = red. Mirrors Atlas's existing signal colour palette.</p>
+
+<h3>6.2 Portfolio analytics page — <code>/portfolios/[id]/analytics</code></h3>
+<p>New page with four zones:</p>
+<ol>
+  <li><strong>Performance header</strong> — TWR, Sharpe, Alpha, Max Drawdown, Calmar as metric tiles. Benchmark label shows "vs Nifty 50".</li>
+  <li><strong>Benchmark chart</strong> — Recharts line chart, portfolio cumulative return vs Nifty 50 over selected period (1M / 3M / 6M / 1Y / All). Drawn from <code>daily_returns</code> array in API response.</li>
+  <li><strong>Sector composition</strong> — Recharts pie/donut. Click sector → filter holdings table.</li>
+  <li><strong>Holdings table</strong> — AG Grid: symbol, qty, avg cost, current price, unrealised P&L, weight, TV Recommend label. Sortable, CSV export button in toolbar.</li>
+</ol>
+
+<h3>6.3 TV CSV export — in-app guide</h3>
+<p>CSV export button on the portfolio analytics page triggers <code>/api/v1/portfolios/{id}/export/tv-csv</code>. Below the button: a collapsed "How to import into TradingView Portfolio" guide with step-by-step instructions and a screenshot placeholder. This removes the need for a user to figure out the import flow independently.</div>
+
+<h2>7. MCP Integration</h2>
+
+<p>The community MCP server <a href="https://github.com/mikeh-22/tradingview-mcp">mikeh-22/tradingview-mcp</a> is added to Atlas's MCP config. It authenticates via <code>TV_SESSION_ID</code> + <code>TV_SESSION_SIGN</code> (already in <code>atlas/config.py</code>).</p>
+
+<p>Tools exposed and their Atlas use cases:</p>
+<table>
+  <thead><tr><th>Tool</th><th>Atlas use case</th></tr></thead>
+  <tbody>
+    <tr><td><code>get_quote</code></td><td>Hermes agent (SP07) — real-time price in agent responses</td></tr>
+    <tr><td><code>get_ohlcv</code></td><td>Ad-hoc Claude queries: "show me HDFC Bank last 10 days"</td></tr>
+    <tr><td><code>screen_stocks</code></td><td>Cross-reference TV screener results against Atlas conviction calls</td></tr>
+    <tr><td><code>get_news</code></td><td>Hermes agent — surface relevant news in stock briefs</td></tr>
+    <tr><td><code>get_watchlist</code></td><td>Sync user's TV watchlist with Atlas universe</td></tr>
+    <tr><td><code>get_alerts</code></td><td>Surface pending TV price alerts in Atlas dashboard (future)</td></tr>
+    <tr><td><code>get_chart_layout</code></td><td>Pre-load saved TV chart layouts from within Atlas deep-dive</td></tr>
+    <tr><td><code>search_symbols</code></td><td>Symbol resolution for non-standard tickers</td></tr>
+  </tbody>
+</table>
+
+<div class="callout"><strong>Scope:</strong> All MCP tools are read-only. No write-back to TradingView. MCP is additive — removing it does not break any core Atlas feature.</div>
+
+<h2>8. Nightly Cron</h2>
+
+<table>
+  <thead><tr><th>Time (IST)</th><th>Job</th><th>Details</th></tr></thead>
+  <tbody>
+    <tr><td>21:00</td><td><code>tv_metrics_refresh</code></td><td>Batch fetch screener data for all ~1,800 NSE symbols via <code>tradingview-screener</code> lib. Upsert into <code>tv_metrics</code>. Expected runtime: 2–4 min. Fail-fast: if &gt; 10% symbols return NULL, abort and alert.</td></tr>
+  </tbody>
+</table>
+
+<p>Staleness handling: <code>/v1/tv/metrics/{symbol}</code> always returns <code>is_stale: true</code> if <code>fetched_at</code> &gt; 26 hours. Frontend shows a "Data as of: yesterday" label in the fundamentals panel when stale — never silently hides it.</p>
+
+<h2>9. Build Chunks</h2>
+
+<div class="chunk">
+  <div class="chunk-title"><span class="chunk-id">TV-01</span> DB migration — tv_metrics + tv_portfolio_exports</div>
+  <p>Alembic migration: CREATE TABLE atlas.tv_metrics (20 columns) + CREATE TABLE atlas.tv_portfolio_exports. Index on symbol, fetched_at. No data seeded at migration time.</p>
+  <div class="chunk-deps">Deps: none · Blocks: TV-02, TV-04</div>
+</div>
+
+<div class="chunk">
+  <div class="chunk-title"><span class="chunk-id">TV-02</span> Backend — atlas/tv/screener.py + nightly cron</div>
+  <p>Implement <code>screener.py</code>: batch fetch all NSE symbols, map TV column names to tv_metrics schema, upsert. Wire into existing pg_cron at 21:00 IST. Add <code>/v1/tv/metrics/{symbol}</code> route with staleness guard. Tests: mock TV response, verify upsert, verify stale flag at 26h+.</p>
+  <div class="chunk-deps">Deps: TV-01 · Blocks: TV-05 (frontend)</div>
+</div>
+
+<div class="chunk">
+  <div class="chunk-title"><span class="chunk-id">TV-03</span> Backend — atlas/tv/portfolio_analytics.py + routes</div>
+  <p>Implement Sharpe, Sortino, Calmar, Alpha, Beta, Max Drawdown (running maximum method), TWR, sector composition. Benchmark = Nifty 50 from prices_daily. Add <code>/v1/portfolios/{id}/analytics</code>. Tests: known portfolio with hand-computed expected values.</p>
+  <div class="chunk-deps">Deps: TV-01 · Blocks: TV-06 (frontend)</div>
+</div>
+
+<div class="chunk">
+  <div class="chunk-title"><span class="chunk-id">TV-04</span> Backend — atlas/tv/csv_export.py + export route</div>
+  <p>Implement TV Portfolio CSV generator. Column spec to be confirmed from TV import format (pending user input). Add <code>/v1/portfolios/{id}/export/tv-csv</code> with audit log write. Tests: CSV output matches expected format for a fixture portfolio.</p>
+  <div class="chunk-deps">Deps: TV-01 · <span class="badge b-dep">BLOCKED on TV CSV format spec from user</span></div>
+</div>
+
+<div class="chunk">
+  <div class="chunk-title"><span class="chunk-id">TV-05</span> Frontend — TVChartPanel + TVMetricsBadge + deep-dive split layout</div>
+  <p>Build <code>TVChartPanel.tsx</code> (Advanced Chart Widget iframe), <code>TVMetricsBadge.tsx</code> (rating label + colour). Modify <code>/stocks/[symbol]/page.tsx</code> for 36/64 split. Wire <code>/v1/tv/metrics/{symbol}</code> into left panel. Design-approved token required before edit.</p>
+  <div class="chunk-deps">Deps: TV-02</div>
+</div>
+
+<div class="chunk">
+  <div class="chunk-title"><span class="chunk-id">TV-06</span> Frontend — PortfolioAnalytics page</div>
+  <p>Build <code>PortfolioAnalytics.tsx</code>: performance metric tiles, Recharts benchmark chart (TWR vs Nifty 50), sector donut, AG Grid holdings table with TV Recommend column. Wire <code>/v1/portfolios/{id}/analytics</code>. Add CSV export button + TV import guide accordion. <em>Note: performance header + benchmark chart + sector donut + holdings table can be built while TV-04 is blocked. CSV export button is the only TV-04 dependency — wire it last.</em></p>
+  <div class="chunk-deps">Deps: TV-03 (full layout) · TV-04 (CSV button only)</div>
+</div>
+
+<div class="chunk">
+  <div class="chunk-title"><span class="chunk-id">TV-07</span> MCP — wire mikeh-22/tradingview-mcp</div>
+  <p>Add server entry to <code>.claude/mcp.json</code> (or equivalent Atlas MCP config). Verify <code>TV_SESSION_ID</code> + <code>TV_SESSION_SIGN</code> auth works. Smoke-test 3 tools: <code>get_quote</code>, <code>get_news</code>, <code>screen_stocks</code>. Update SP07 Hermes system prompt to reference available TV tools.</p>
+  <div class="chunk-deps">Deps: none (auth already in config)</div>
+</div>
+
+<h2>10. What is Deferred</h2>
+
+<table>
+  <thead><tr><th>Feature</th><th>Why deferred</th><th>When to revisit</th></tr></thead>
+  <tbody>
+    <tr><td>TV Portfolio API sync (push/pull)</td><td>TV has no public API for Portfolio Management today</td><td>When TV ships an official API</td></tr>
+    <tr><td>Pine Script webhook receiver</td><td>Scope expansion; requires alert routing logic</td><td>v7 / post-TV-08 sprint</td></tr>
+    <tr><td>Live Kite execution routing</td><td>Depends on SP08 EC2 deploy; v7 scope</td><td>After SP08 EC2 fully live</td></tr>
+    <tr><td>Intraday TV data refresh (&lt;nightly)</td><td>TV screener rate limits; adds operational complexity</td><td>If fund managers request intraday PE</td></tr>
+    <tr><td>TV Charting Library (no watermark)</td><td>Requires commercial TV license; Advanced Chart Widget (free) is sufficient</td><td>If commercial license obtained</td></tr>
+  </tbody>
+</table>
+
+<h2>11. Success Criteria</h2>
+<ul>
+  <li><code>tv_metrics</code> populated for ≥ 95% of NSE symbols after first nightly run</li>
+  <li>Deep-dive page loads with TV chart + fundamentals in &lt; 1.5 s (cached data, no live TV API call on page load)</li>
+  <li><code>/v1/tv/metrics/{symbol}</code> returns <code>is_stale: true</code> correctly when fetched_at &gt; 26 h</li>
+  <li>Portfolio analytics: Sharpe and Max Drawdown values match hand-computed test fixture to 4 decimal places</li>
+  <li>TV CSV export downloads correctly and passes TV Portfolio manual import test</li>
+  <li>MCP <code>get_quote</code> + <code>get_news</code> tools respond within 2 s from Hermes agent</li>
+  <li>Zero synthetic data — all portfolio P&L computed from real <code>prices_daily</code> rows</li>
+</ul>
+
+</body>
+</html>
