@@ -384,9 +384,9 @@ Z               = (realized_excess − predicted_today) / σ_today
 <h2>10. Workstreams</h2>
 
 <div class="stream-card">
-  <h4>A — Weinstein per cap-tier research</h4>
-  <p>Backtest the (cap_tier × MA lookback × stage) matrix to find the optimal MA per cap-tier. Output: locked thresholds in <code>atlas_thresholds</code>, walk-forward validation report, fast-confirm overlay decision.</p>
-  <p class="deps"><strong>Dependencies:</strong> none. <strong>Pre-req:</strong> office-hours review of research methodology before kickoff. <strong>Effort:</strong> 3-4 days.</p>
+  <h4>A — Weinstein per cap-tier research (Large / Mid / Small only)</h4>
+  <p>Backtest the (cap_tier × MA lookback × stage) matrix across 3 cap tiers × 4 lookbacks (5W, 10W, 20W, 30W) × 4 stages. Find optimal MA per cap-tier. Output: locked thresholds in <code>atlas_thresholds</code>, walk-forward validation report, fast-confirm overlay A/B harness.</p>
+  <p class="deps"><strong>Dependencies:</strong> none. <strong>Pre-req:</strong> office-hours review of research methodology before kickoff. <strong>Scope:</strong> Large/Mid/Small only — Micro defaults to no Weinstein veto. <strong>Effort:</strong> 3-4 days.</p>
 </div>
 
 <div class="stream-card">
@@ -413,15 +413,18 @@ Z               = (realized_excess − predicted_today) / σ_today
   <p class="deps"><strong>Dependencies:</strong> A must lock first (cannot explain rules not yet decided). <strong>Effort:</strong> 1-2 days after A.</p>
 </div>
 
-<h2>11. Open questions to lock before plans dispatch</h2>
+<h2>11. Decisions locked (2026-05-28)</h2>
 
-<ol>
-  <li><strong>Does Stage 3 veto a positive cell, or only downgrade to WATCH/HOLD?</strong> §4 derivation currently treats Stage 3 as a downgrade, not a veto. The alternative is veto = WAIT.</li>
-  <li><strong>What is σ_predicted calibration?</strong> Per-cell from backtest (preferred) or universal heuristic?</li>
-  <li><strong>Fast-confirm overlay for Stage 1→2:</strong> ship by default once research completes, or A/B test against strict-confirm?</li>
-  <li><strong>Ownership signal source:</strong> <code>atlas_paper_portfolio</code> (paper trading) or <code>atlas_user_lots</code> (real positions)? Determines which gets queried in the verdict derivation.</li>
-  <li><strong>Micro-cap inclusion:</strong> exclude from Weinstein framework entirely, or apply research and see if any lookback satisfies the IC floor?</li>
-</ol>
+<table>
+  <thead><tr><th>#</th><th>Question</th><th>Decision</th></tr></thead>
+  <tbody>
+    <tr><td>Q1</td><td>Stage 3 — veto or downgrade?</td><td><strong>Downgrade.</strong> Stage 3 is topping, not falling. Positive cell in Stage 3 may be early entry to next leg. Render WATCH (don't own) or HOLD (own) with reason "Stage 3 topping." Full WAIT reserved for Stage 4 and gate failures.</td></tr>
+    <tr><td>Q2</td><td>σ_predicted calibration?</td><td><strong>Per-cell from backtest.</strong> Universal heuristic loses the per-cell IC story. CONTEXT.md line 115 implies this.</td></tr>
+    <tr><td>Q3</td><td>Fast-confirm overlay for Stage 1→2?</td><td><strong>A/B test.</strong> Ship both classifiers in parallel for 60 days, log calls under each, compare realized IC.</td></tr>
+    <tr><td>Q4</td><td>Ownership source?</td><td><strong>atlas_paper_portfolio.</strong> User lots / broker integration is v7.</td></tr>
+    <tr><td>Q5</td><td>Micro-cap inclusion in Weinstein research?</td><td><strong>Excluded.</strong> Keep Large / Mid / Small only — consistent with the rest of the platform. Micro stocks default to no Weinstein veto (the cell math still applies).</td></tr>
+  </tbody>
+</table>
 
 <h2>12. Next action</h2>
 
