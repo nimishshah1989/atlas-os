@@ -87,30 +87,75 @@ These have data but are NOT read by v6 MVs. Keep for 30 days then drop.
 
 ---
 
-## DROP candidates — 0-row tables (~250 MB recovered)
+## DROP — executed 2026-05-28 (2 truly-empty tables)
 
-These have **0 rows** (per pg_stat_user_tables) AND are not in the active write path. Safe to drop pending one final verification.
-
-| Table | Size | Notes |
+| Table | Size | Status |
 |---|---|---|
-| `public.de_mf_holdings` | 74 MB | Empty; MF holdings live in `atlas.atlas_fund_holdings_changes` |
-| `public.mf_nav_history` | 44 MB | Empty legacy; canonical is `public.de_mf_nav_daily` |
-| `public.de_corporate_actions` | 2.9 MB | Reload daily; can stay or drop |
-| `public.de_etf_holdings` | 2.2 MB | Empty; not used |
-| `public.de_market_cap_history` | 1.5 MB | Empty; v6 uses liquidity_proxy in MVs |
-| `public.de_instrument` | 912 kB | Empty; v6 uses atlas_universe_* |
-| `public.de_index_constituents` | 864 kB | Empty |
-| `public.de_trading_calendar` | 656 kB | Empty |
-| `public.de_mf_master` | 432 kB | Empty |
-| `public.de_mf_lifecycle` | 368 kB | Empty |
-| `public.de_healing_log` | 336 kB | Empty |
-| `public.de_mf_nav_daily_y2007/2008/2009` | 6-10 MB each | Empty old partitions |
-| `atlas.atlas_stock_metrics_intraday` | 3 MB | Intraday cache; verify SP10 doesn't write here |
-| `atlas.strategy_paper_performance` | 200 kB | Strategy lab — 0 rows |
+| `public.de_market_cap_history` | 1.5 MB | ✅ DROPPED — verified 0 rows, no MV references, no code references |
+| `public.mf_nav_history` | 44 MB | ✅ DROPPED — verified 0 rows, no MV references, no code references |
 
-**Total drop candidates: ~145 MB**
+Total recovered: ~45 MB.
 
-⚠️ Per pg_stat — `atlas.atlas_universe_stocks` reads as 0 rows but has 750 entries (post-mass-update stat lag). Run `ANALYZE atlas.atlas_universe_stocks` before trusting the stat. Same for atlas_universe_funds.
+ANALYZE run on 13 tables to fix stale `pg_stat_user_tables.n_live_tup` (which was incorrectly reporting 0 for several tables that were actually full).
+
+---
+
+## NOT DROPPED — looked legacy, turned out active
+
+⚠️ The following tables LOOKED legacy (0-row pg_stat, v2 suffix, pre-v6 naming) but verification proved they're STILL ACTIVE in production. **DO NOT drop without re-verifying first.**
+
+### Active-write-path tables that report 0 rows due to stale stats
+
+Fresh `COUNT(*)` 2026-05-28:
+
+| Table | True row count | Why it stays |
+|---|---:|---|
+| `public.de_mf_holdings` | 242,654 | Active MF holdings; large dataset |
+| `public.de_etf_holdings` | 12,499 | ETF holdings |
+| `public.de_corporate_actions` | 11,500 | Loaded daily by `atlas_compute_adjustments.py` |
+| `public.de_trading_calendar` | 7,305 | Trading day calendar |
+| `public.de_index_constituents` | 2,910 | Nifty index constituents |
+| `public.de_instrument` | 2,743 | Stock master (cross-checked) |
+| `public.de_mf_master` | 1,359 | MF master |
+| `public.de_mf_lifecycle` | 1,330 | MF lifecycle events |
+| `public.de_healing_log` | 479 | Pipeline self-healing log |
+| `atlas.strategy_paper_performance` | 345 | Strategy lab paper-trading |
+
+### `*_v2` suffix tables that are STILL written by the v2 nightly pipeline
+
+The v2 pipeline lives in a separate repo at `/home/ubuntu/atlas-os-sl/` (not in this repo's `atlas/`), which is why the in-repo grep showed 0 references. Cron job `0 16 * * 1-5 /home/ubuntu/atlas-os-sl/scripts/nightly_v2.sh` writes these.
+
+| Table | Size | Active write evidence |
+|---|---|---|
+| `atlas.atlas_fund_state_v2` | 1.3 MB | n_tup_ins=9473, last analyzed 2026-05-27 (yesterday) |
+| `atlas.atlas_sector_state_v2` | 2.7 MB | n_tup_ins=10,654, n_tup_upd=7,270 |
+| `atlas.atlas_etf_state_v2` | 6.7 MB | Referenced by `frontend/src/lib/queries/etfs.ts` (LIVE) |
+
+### Other "pre-v6" tables that turn out to be in the live code path
+
+| Table | Size | Reference |
+|---|---|---|
+| `atlas.atlas_stock_state_daily` (singular!) | 216 MB | 6 references: frontend (`states.ts`, `regime-scorecard.ts`) + Python (`intelligence/states/persistence.py`, `tune_catalog.py`, `component_validator.py`, `trading/cli_states.py`). **HEAVILY USED.** |
+| `atlas.atlas_conviction_daily` | 1.6 MB | Referenced by an MV definition |
+| `atlas.atlas_mf_recommendation_daily` | 376 kB | Referenced by an MV definition |
+| `atlas.atlas_fund_lens_monthly` | 1.9 MB | 8 code references |
+| `atlas.atlas_validator_findings` | 2.9 MB | 8 references (SP04 validator chain) |
+| `atlas.atlas_signal_ic_rolling` | 256 kB | 5 references (Atlas intelligence) |
+| `atlas.atlas_signal_weights_live_perf` | 200 kB | 4 references |
+| `atlas.atlas_weight_proposals` | 168 kB | 4 references (SP04 admin proposals page reads this) |
+| `atlas.atlas_fund_decision_scores` | 1 MB | 3 references |
+| `atlas.atlas_cts_sector_pivot_daily` | 5 MB | 4 references (SP09 CTS) |
+| `atlas.atlas_stock_hit_rate_daily` | 544 kB | SP04 hit-rate engine |
+
+---
+
+## Lesson learned (write up for future cleanups)
+
+**Never trust `pg_stat_user_tables.n_live_tup`** without a fresh `COUNT(*)`. The stat is updated by autovacuum/autoanalyze, which lags bulk inserts. A 0 there is NOT a guarantee of empty.
+
+**Always grep `atlas-os-sl/` and other sibling repos** before declaring an atlas table unused. The v2 pipeline lives outside this repo.
+
+**Always check `n_tup_ins` / `n_tup_upd` from pg_stat** — even if current row count looks "small for legacy", if those numbers are growing, the table is being actively written.
 
 ---
 
