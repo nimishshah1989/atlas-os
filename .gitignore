@@ -48,3 +48,10 @@ package-lock.json
 .claire/
 .playwright-mcp/
 .remember/
+
+# Ad-hoc screenshot captures (use docs/v6/ for documentation images)
+/*.png
+/*.jpeg
+/*.jpg
+/*-snapshot.md
+/*-fullpage.png
