@@ -26,7 +26,7 @@
 | `tests/tv/test_routes.py` | Create | API smoke tests for TV routes |
 
 **BLOCKED** (pending design approval or user input):
-- `atlas/tv/csv_export.py` — TV-04: CSV column format not yet specified by user
+- `atlas/tv/csv_export.py` — TV-04: CSV export (format confirmed — see Task 10)
 - Frontend: TV-05 (TVChartPanel, TVMetricsBadge) — needs `.design-approved.json`
 - Frontend: TV-06 (Portfolio Analytics page) — needs `.design-approved.json`
 
@@ -1224,18 +1224,261 @@ git commit -m "feat(tv): wire tradingview-mcp into MCP server config (TV-07)"
 
 ---
 
+## Task 10: csv_export.py — TradingView portfolio CSV export (TV-04)
+
+**Files:**
+- Create: `atlas/tv/csv_export.py`
+- Modify: `atlas/tv/routes.py`
+- Create: `tests/tv/test_csv_export.py`
+
+**CSV format (confirmed from user-provided example):**
+
+```
+Symbol,Side,Qty,Fill Price,Commission,Closing Time
+NASDAQ:AAPL,Buy,10,217,0,2024-09-17 0:00:00
+NASDAQ:AAPL,Sell,10,240.01,,2024-09-18 0:00:00
+```
+
+Atlas mapping:
+- `Symbol` → `NSE:{symbol}` (e.g. `NSE:RELIANCE`)
+- `Side` → `Buy` for entry rows, `Sell` for exit rows
+- `Qty` → `quantity` from `atlas_paper_portfolio`
+- `Fill Price` → `entry_price` (Buy) or `exit_price` (Sell)
+- `Commission` → empty (not tracked in Atlas)
+- `Closing Time` → `entry_date` (Buy) or `exit_date` (Sell) as `YYYY-MM-DD 0:00:00`
+
+Each lot generates two rows (Buy + Sell) when the position is closed. Open positions (null exit_date) generate only a Buy row.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# tests/tv/test_csv_export.py
+import io
+import csv
+from unittest.mock import MagicMock
+from decimal import Decimal
+
+from atlas.tv.csv_export import export_portfolio_csv
+
+
+def _mock_engine(lots: list[dict]):
+    conn = MagicMock()
+    conn.__enter__ = lambda s: s
+    conn.__exit__ = MagicMock(return_value=False)
+    conn.execute.return_value.mappings.return_value.all.return_value = lots
+    engine = MagicMock()
+    engine.connect.return_value = conn
+    return engine
+
+
+_LOTS = [
+    {
+        "symbol": "RELIANCE",
+        "quantity": Decimal("10"),
+        "entry_price": Decimal("2800.00"),
+        "entry_date": "2024-09-17",
+        "exit_price": Decimal("3000.00"),
+        "exit_date": "2024-09-18",
+    },
+    {
+        "symbol": "TCS",
+        "quantity": Decimal("5"),
+        "entry_price": Decimal("3500.00"),
+        "entry_date": "2024-10-01",
+        "exit_price": None,
+        "exit_date": None,
+    },
+]
+
+
+def test_export_returns_bytes():
+    engine = _mock_engine(_LOTS)
+    result = export_portfolio_csv("pid-1", engine)
+    assert isinstance(result, bytes)
+
+
+def test_export_has_correct_header():
+    engine = _mock_engine(_LOTS)
+    csv_text = export_portfolio_csv("pid-1", engine).decode("utf-8")
+    reader = csv.DictReader(io.StringIO(csv_text))
+    assert reader.fieldnames == ["Symbol", "Side", "Qty", "Fill Price", "Commission", "Closing Time"]
+
+
+def test_export_closed_lot_generates_buy_and_sell():
+    engine = _mock_engine([_LOTS[0]])
+    csv_text = export_portfolio_csv("pid-1", engine).decode("utf-8")
+    rows = list(csv.DictReader(io.StringIO(csv_text)))
+    assert len(rows) == 2
+    buy = next(r for r in rows if r["Side"] == "Buy")
+    sell = next(r for r in rows if r["Side"] == "Sell")
+    assert buy["Symbol"] == "NSE:RELIANCE"
+    assert buy["Fill Price"] == "2800.00"
+    assert sell["Fill Price"] == "3000.00"
+
+
+def test_export_open_lot_generates_only_buy():
+    engine = _mock_engine([_LOTS[1]])
+    csv_text = export_portfolio_csv("pid-1", engine).decode("utf-8")
+    rows = list(csv.DictReader(io.StringIO(csv_text)))
+    assert len(rows) == 1
+    assert rows[0]["Side"] == "Buy"
+    assert rows[0]["Symbol"] == "NSE:TCS"
+    assert rows[0]["Closing Time"] == "2024-10-01 0:00:00"
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+```bash
+pytest tests/tv/test_csv_export.py -v
+```
+
+Expected: `ModuleNotFoundError: No module named 'atlas.tv.csv_export'`
+
+- [ ] **Step 3: Implement csv_export.py**
+
+```python
+# atlas/tv/csv_export.py
+"""Export Atlas paper portfolio as TradingView-compatible CSV.
+
+TV import format:
+  Symbol,Side,Qty,Fill Price,Commission,Closing Time
+  NSE:RELIANCE,Buy,10,2800.00,,2024-09-17 0:00:00
+  NSE:RELIANCE,Sell,10,3000.00,,2024-09-18 0:00:00
+"""
+
+from __future__ import annotations
+
+import csv
+import io
+import structlog
+from decimal import Decimal
+from sqlalchemy.engine import Engine
+
+from atlas.db import get_engine
+
+log = structlog.get_logger(__name__)
+
+_COLUMNS = ["Symbol", "Side", "Qty", "Fill Price", "Commission", "Closing Time"]
+
+
+def _fmt_date(d) -> str:
+    if d is None:
+        return ""
+    return f"{d} 0:00:00"
+
+
+def _fmt_price(p) -> str:
+    if p is None:
+        return ""
+    return f"{Decimal(str(p)):.2f}"
+
+
+def export_portfolio_csv(portfolio_id: str, engine: Engine | None = None) -> bytes:
+    """Return TV-format CSV bytes for all lots in a paper portfolio."""
+    engine = engine or get_engine()
+
+    sql = """
+        SELECT
+            au.symbol,
+            p.quantity,
+            p.entry_price,
+            p.entry_date::text AS entry_date,
+            p.exit_price,
+            p.exit_date::text AS exit_date
+        FROM atlas.atlas_paper_portfolio p
+        JOIN atlas.atlas_universe_stocks au ON au.instrument_id = p.instrument_id
+        WHERE p.portfolio_id = :pid
+        ORDER BY p.entry_date, au.symbol
+    """
+    with engine.connect() as conn:
+        rows = conn.execute(sql, {"pid": portfolio_id}).mappings().all()
+
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=_COLUMNS, lineterminator="\n")
+    writer.writeheader()
+
+    for row in rows:
+        symbol = f"NSE:{row['symbol']}"
+        qty = str(row["quantity"])
+
+        writer.writerow({
+            "Symbol": symbol,
+            "Side": "Buy",
+            "Qty": qty,
+            "Fill Price": _fmt_price(row["entry_price"]),
+            "Commission": "",
+            "Closing Time": _fmt_date(row["entry_date"]),
+        })
+
+        if row["exit_date"] is not None:
+            writer.writerow({
+                "Symbol": symbol,
+                "Side": "Sell",
+                "Qty": qty,
+                "Fill Price": _fmt_price(row["exit_price"]),
+                "Commission": "",
+                "Closing Time": _fmt_date(row["exit_date"]),
+            })
+
+    log.info("tv_csv_export.done", portfolio_id=portfolio_id, lots=len(rows))
+    return buf.getvalue().encode("utf-8")
+```
+
+- [ ] **Step 4: Add route to routes.py**
+
+Append to `atlas/tv/routes.py`:
+
+```python
+from atlas.tv.csv_export import export_portfolio_csv
+from fastapi.responses import Response
+
+
+@_portfolios_router.get("/{portfolio_id}/tv-export.csv")
+def download_portfolio_csv(portfolio_id: str):
+    """Download portfolio as TradingView-compatible CSV for manual import."""
+    csv_bytes = export_portfolio_csv(portfolio_id)
+    if not csv_bytes or csv_bytes.count(b"\n") <= 1:
+        raise HTTPException(status_code=404, detail=f"No lots found for portfolio: {portfolio_id}")
+    return Response(
+        content=csv_bytes,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=portfolio-{portfolio_id}.csv"},
+    )
+```
+
+- [ ] **Step 5: Run tests**
+
+```bash
+pytest tests/tv/test_csv_export.py -v
+```
+
+Expected: 4 tests PASS
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add atlas/tv/csv_export.py atlas/tv/routes.py tests/tv/test_csv_export.py
+git commit -m "feat(tv): portfolio CSV export in TradingView import format (TV-04)"
+```
+
+---
+
 ## BLOCKED Tasks (do not implement until unblocked)
 
-### TV-04: Portfolio CSV Export — BLOCKED
+### TV-05: TVChartPanel + TVMetricsBadge frontend — BLOCKED
 
-**Blocked by:** User has not specified the column format for the TradingView-compatible CSV.
+**Blocked by:** Requires `.design-approved.json` before `atlas/tv/` frontend work can proceed (hook enforcement).
 
-**What's needed:** The exact column names and order that TradingView's portfolio import accepts. Ask: "What columns should the CSV export contain for TradingView portfolio import? E.g., Ticker, Quantity, Entry Price, Entry Date..."
+**To unblock:** Run `/plan-design-review` for the 36/64 stock detail split layout with TradingView chart iframe on the right and Atlas fundamentals on the left. Once `.design-approved.json` is present, implement:
+- `frontend/src/components/v6/TVChartPanel.tsx` — iframe widget wrapper
+- `frontend/src/components/v6/TVMetricsBadge.tsx` — RSI/MACD/Recommend badge
+- Wire into existing `StockDetailPage` or equivalent
 
-Once unblocked, implement `atlas/tv/csv_export.py` with:
-- `export_portfolio_csv(portfolio_id: str, engine: Engine) -> bytes`
-- Route: `GET /v1/portfolios/{id}/tv-export.csv`
-- Migration entry in `tv_portfolio_exports` table (already created in Task 1)
+### TV-06: Portfolio Analytics Page — BLOCKED
+
+**Blocked by:** Requires `.design-approved.json`.
+
+**To unblock:** Run `/plan-design-review` for the portfolio analytics page layout. Once approved, implement the page consuming `GET /v1/portfolios/{id}/analytics`.
 
 ### TV-05: TVChartPanel + TVMetricsBadge frontend — BLOCKED
 
@@ -1263,4 +1506,4 @@ Task 1 → Task 2 → Task 3 → Task 4 → Task 5 (parallel) → Task 6 → Tas
 
 Tasks 5 and 6 can begin in parallel after Task 4 passes tests.
 
-TV-04, TV-05, TV-06 are blocked — do not start until explicitly unblocked.
+TV-05, TV-06 are blocked — do not start until `.design-approved.json` exists.
