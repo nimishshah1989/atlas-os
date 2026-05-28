@@ -9,6 +9,7 @@ import {
   getStockATRContraction,
   getStockFooterMetrics,
 } from '@/lib/queries/stocks'
+import { getTVMetrics } from '@/lib/api/v1'
 import {
   getStockState,
   getCohortBaseline,
@@ -68,6 +69,7 @@ export default async function StockPage({
     hitRate,
     footerMetrics,
     traderHeader,
+    tvMetrics,
   ] = await Promise.all([
     getStockMetricHistory(stock.instrument_id, 365),
     getStockState(stock.instrument_id),
@@ -79,6 +81,9 @@ export default async function StockPage({
     getHitRateForStock(stock.instrument_id, 20),
     getStockFooterMetrics(stock.instrument_id),
     getStockTraderHeader(symbol),
+    // TV-05: TradingView screener metrics for Chart tab + hero badge.
+    // Graceful null if symbol not in tv_metrics table or network failure.
+    getTVMetrics(symbol).catch(() => null),
   ])
 
   const [cohortBaseline, peers] = stockState

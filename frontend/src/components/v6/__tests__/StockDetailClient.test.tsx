@@ -27,6 +27,18 @@ vi.mock('../ConvictionTape', () => ({
   ),
 }))
 
+vi.mock('../TVMetricsBadge', () => ({
+  TVMetricsBadgeFromRow: () => <div data-testid="tv-metrics-badge-from-row" />,
+}))
+
+vi.mock('../TVChartPanel', () => ({
+  TVChartPanel: ({ symbol }: { symbol: string }) => (
+    <div data-testid="tv-chart-panel" role="tabpanel" aria-labelledby="tab-chart" id="tabpanel-chart">
+      TVChart:{symbol}
+    </div>
+  ),
+}))
+
 vi.mock('../PositionSizingWidget', () => ({
   PositionSizingWidget: ({ cellConvictionDepth }: { cellConvictionDepth: number }) => (
     <div data-testid="position-sizing-widget" data-depth={cellConvictionDepth} />
@@ -144,6 +156,7 @@ const BASE_CLIENT_PROPS: StockDetailClientProps = {
   sectorGapPp: 0,
   actionVerb: 'BUY',
   bullets: ['Strong momentum.'],
+  tvMetrics: null,
   waterfallData: null,
   rankData: null,
 }
@@ -250,6 +263,14 @@ describe('StockDetailClient — tab switching', () => {
     expect(techTab.getAttribute('aria-selected')).toBe('true')
     // Technicals panel visible — check for no technical data message
     expect(screen.getByRole('tabpanel', { name: /technicals/i })).toBeInTheDocument()
+  })
+
+  it('switches to Chart tab on click and shows TVChartPanel (TV-05)', () => {
+    render(<StockDetailClient {...BASE_CLIENT_PROPS} />)
+    const chartTab = screen.getByRole('tab', { name: 'Chart' })
+    fireEvent.click(chartTab)
+    expect(chartTab.getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByTestId('tv-chart-panel')).toBeInTheDocument()
   })
 
   it('switches to Audit tab on click', () => {
