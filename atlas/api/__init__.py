@@ -27,6 +27,7 @@ from atlas.api.strategies import router as strategies_router
 from atlas.api.trading import router as trading_router
 from atlas.api.tv_signals import router as tv_signals_router
 from atlas.tv.routes import _internal_router as tv_internal_router  # type: ignore[import]
+from atlas.tv.routes import _portfolios_router as tv_portfolios_router  # type: ignore[import]
 from atlas.tv.routes import router as tv_router
 
 app = FastAPI(title="Atlas API", version="0.1.0")
@@ -68,6 +69,9 @@ app.include_router(tv_router)  # TV-05: cached TV screener metrics — /v1/tv/me
 app.include_router(
     tv_internal_router
 )  # TV-06: internal pg_cron trigger — /v1/tv/internal/run-screener
+app.include_router(
+    tv_portfolios_router
+)  # TV-08: portfolio analytics — /v1/portfolios/{id}/analytics
 
 
 @app.get("/health", include_in_schema=False)

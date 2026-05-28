@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy import text
 
 from atlas.db import get_engine
+from atlas.tv.portfolio_analytics import compute_portfolio_analytics  # type: ignore[import]
 from atlas.tv.screener import fetch_and_upsert_all  # type: ignore[import]
 
 router = APIRouter(prefix="/v1/tv", tags=["tv"])
@@ -54,6 +55,32 @@ def get_tv_metrics(symbol: str) -> dict:
             "fetched_at": now.isoformat(),
             "is_stale": is_stale,
             "source": "tradingview-screener",
+        },
+    }
+
+
+_portfolios_router = APIRouter(prefix="/v1/portfolios", tags=["portfolios-analytics"])
+
+
+@_portfolios_router.get("/{portfolio_id}/analytics")
+def get_portfolio_analytics(portfolio_id: str) -> dict:
+    """Return Sharpe, Sortino, Calmar, Beta, Alpha, MaxDD, TWR for a portfolio."""
+    result = compute_portfolio_analytics(portfolio_id)
+    if result.get("error") == "no_data":
+        raise HTTPException(
+            status_code=404,
+            detail=f"No closed positions found for portfolio: {portfolio_id}",
+        )
+    data_as_of = None
+    daily = result.get("daily_returns")
+    if daily:
+        data_as_of = daily[-1].get("date")
+    return {
+        "data": result,
+        "meta": {
+            "data_as_of": data_as_of,
+            "fetched_at": datetime.datetime.now(tz=datetime.UTC).isoformat(),
+            "source": "atlas-portfolio-analytics",
         },
     }
 

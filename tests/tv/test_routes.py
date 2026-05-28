@@ -81,3 +81,35 @@ def test_trigger_screener_returns_500_on_exception():
     with patch("atlas.tv.routes.fetch_and_upsert_all", side_effect=RuntimeError("boom")):
         resp = client.post("/v1/tv/internal/run-screener")
     assert resp.status_code == 500
+
+
+def test_portfolio_analytics_returns_200():
+    fake_analytics = {
+        "portfolio_id": "pid-1",
+        "sharpe": 1.2,
+        "sortino": 1.8,
+        "calmar": 2.1,
+        "beta": 0.85,
+        "alpha": 0.12,
+        "max_drawdown": 0.08,
+        "twr": 0.35,
+        "annualised_return": 0.22,
+        "observation_days": 252,
+        "risk_free_rate_used": 0.065,
+        "daily_returns": [
+            {"date": "2026-01-02", "portfolio_return": 0.005, "nifty50_return": 0.003}
+        ],
+    }
+    with patch("atlas.tv.routes.compute_portfolio_analytics", return_value=fake_analytics):
+        resp = client.get("/v1/portfolios/pid-1/analytics")
+    assert resp.status_code == 200
+    assert resp.json()["data"]["sharpe"] == 1.2
+
+
+def test_portfolio_analytics_returns_404_for_no_data():
+    with patch(
+        "atlas.tv.routes.compute_portfolio_analytics",
+        return_value={"error": "no_data", "portfolio_id": "pid-x"},
+    ):
+        resp = client.get("/v1/portfolios/pid-x/analytics")
+    assert resp.status_code == 404
