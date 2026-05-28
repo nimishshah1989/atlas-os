@@ -4,6 +4,12 @@ Source of truth: docs/superpowers/specs/2026-05-28-trader-view-redesign.html §4
 Spec locks enforced here:
 - Q1: Stage 3 → WATCH/HOLD ("Stage 3 topping"), never WAIT
 - Q5: Micro cap_tier exempts from Weinstein veto entirely
+
+A3 amendment (2026-05-28): Stage 4 no longer vetoes positive cells.
+Weinstein is now a context chip on the why-strip, not a precedence-ladder
+gate. See docs/v6/2026-05-28-weinstein-a3-report.md for the empirical
+basis (no Weinstein rule cleared the 0.05 IC floor + 50 events/yr
+production gate, even with sector confluence added).
 """
 
 from atlas.verdict.derive import VerdictInput, derive_verdict
@@ -41,7 +47,11 @@ def test_positive_cell_stage2_all_gates_pass_owned_returns_ACCUMULATE():
     assert v.verdict == "ACCUMULATE"
 
 
-def test_positive_cell_stage4_returns_WAIT():
+def test_positive_cell_stage4_returns_BUY_post_a3_demotion():
+    # A3 amendment: Stage 4 no longer vetoes positive cells. Weinstein is
+    # a context chip; the verdict promotes to BUY/ACCUMULATE. The UI's
+    # why-strip is responsible for surfacing the Stage 4 warning context,
+    # not the derivation logic. See docs/v6/2026-05-28-weinstein-a3-report.md.
     v = derive_verdict(
         VerdictInput(
             cell_state="POSITIVE",
@@ -50,8 +60,21 @@ def test_positive_cell_stage4_returns_WAIT():
             gates=_ALL_GATES_PASS,
         )
     )
-    assert v.verdict == "WAIT"
-    assert v.reason == "Stage 4 vetoes positive cell"
+    assert v.verdict == "BUY"
+    assert v.reason is None
+
+
+def test_positive_cell_stage4_owned_returns_ACCUMULATE_post_a3_demotion():
+    v = derive_verdict(
+        VerdictInput(
+            cell_state="POSITIVE",
+            weinstein_stage=4,
+            user_owns=True,
+            gates=_ALL_GATES_PASS,
+        )
+    )
+    assert v.verdict == "ACCUMULATE"
+    assert v.reason is None
 
 
 def test_positive_cell_risk_gate_fail_returns_WAIT():

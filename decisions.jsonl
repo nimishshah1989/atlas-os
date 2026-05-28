@@ -47113,3 +47113,141 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{"ts":"2026-05-28T13:21:35Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name, data_type FROM information_schema.columns WHERE table_schema='atlas' AND table_name IN ('atlas_sector_metrics_daily','atlas_universe_stocks','weinstein_event_features') ORDER BY table_name, ordinal_position;"}
+{"ts":"2026-05-28T13:21:43Z","kind":"supabase_sql_executed","sql_preview":"SELECT MIN(date) AS min_date, MAX(date) AS max_date, COUNT(DISTINCT date) AS n_days, COUNT(*) AS n_rows, COUNT(DISTINCT sector_name) AS n_sectors FROM atlas.atlas_sector_metrics_daily WHERE bottomup_rs_3m_nifty500 IS NOT NULL;"}
+{"ts":"2026-05-28T13:21:49Z","kind":"supabase_sql_executed","sql_preview":"WITH sm AS (SELECT DISTINCT sector_name FROM atlas.atlas_sector_metrics_daily), us AS (SELECT DISTINCT sector FROM atlas.atlas_universe_stocks WHERE effective_to IS NULL) SELECT 'in_sm_not_us' AS bucket, sector_name AS s FROM sm WHERE sector_name NOT IN (SELECT sector FROM us) UNION ALL SELECT 'in_us_not_sm', sector FROM us WHERE sector NOT IN (SELECT sector_name FROM sm);"}
+{
+  "ts": "2026-05-28T13:22:16Z",
+  "prev": "9df813f372210ad7",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/research/sector_rs_panel.sql",
+  "lines_changed": 17,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-28T13:22:27Z","kind":"supabase_sql_executed","sql_preview":"SELECT viewname FROM pg_views WHERE schemaname='atlas' AND viewname='v_sector_rs_rank_daily';"}
+{"ts":"2026-05-28T13:23:09Z","kind":"supabase_sql_executed","sql_preview":"CREATE VIEW atlas.v_sector_rs_rank_daily AS\nSELECT\n  date,\n  sector_name,\n  bottomup_rs_3m_nifty500 AS rs_3m,\n  RANK() OVER (PARTITION BY date ORDER BY bottomup_rs_3m_nifty500 DESC NULLS LAST) AS rs_rank,\n  COUNT(*) OVER (PARTITION BY date) AS n_sectors_today,\n  PERCENT_RANK() OVER (PARTITION BY date ORDER BY bottomup_rs_3m_nifty500 NULLS FIRST) AS rs_pctile\nFROM atlas.atlas_sector_metrics_daily\nWHERE bottomup_rs_3m_nifty500 IS NOT NULL\n  AND date >= '2018-01-01';"}
+{"ts":"2026-05-28T13:23:16Z","kind":"supabase_sql_executed","sql_preview":"SELECT date_trunc('quarter', date)::date AS q, sector_name, ROUND(AVG(rs_pctile)::numeric, 3) AS avg_pctile, ROUND(AVG(rs_rank)::numeric, 1) AS avg_rank FROM atlas.v_sector_rs_rank_daily WHERE sector_name IN ('Energy','IT','Realty','Capital Goods') AND date >= '2022-01-01' AND date < '2026-01-01' GROUP BY 1,2 ORDER BY 1, 2;"}
+{"ts":"2026-05-28T13:23:41Z","kind":"supabase_sql_executed","sql_preview":"ALTER TABLE atlas.weinstein_event_features ADD COLUMN IF NOT EXISTS conf_l5_sector_rs boolean;"}
+{"ts":"2026-05-28T13:24:01Z","kind":"supabase_sql_executed","sql_preview":"WITH joined AS (\n  SELECT\n    e.event_date,\n    e.instrument_id,\n    e.ma_lookback_weeks,\n    e.event_type,\n    rs_now.rs_pctile  AS sector_pctile_now,\n    rs_old.rs_pctile  AS sector_pctile_4w_ago\n  FROM atlas.weinstein_event_features e\n  JOIN atlas.atlas_universe_stocks u\n    ON u.instrument_id = e.instrument_id AND u.effective_to IS NULL\n  LEFT JOIN atlas.v_sector_rs_rank_daily rs_now\n    ON rs_now.date = e.event_date AND rs_now.sector_name = u.sector\n  LEFT JOIN atlas.v_sector_rs_rank_daily "}
+{"ts":"2026-05-28T13:24:06Z","kind":"supabase_sql_executed","sql_preview":"SELECT cap_tier, event_type, COUNT(*) AS n_total, COUNT(conf_l5_sector_rs) AS n_with_l5, SUM((conf_l5_sector_rs)::int) AS n_pass, ROUND(AVG((conf_l5_sector_rs)::int)::numeric, 3) AS pass_rate FROM atlas.weinstein_event_features WHERE cap_tier <> 'Micro' GROUP BY 1,2 ORDER BY 1,2;"}
+{
+  "ts": "2026-05-28T13:24:23Z",
+  "prev": "23961b5a7d34fdf2",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/research/weinstein_l5_feature.sql",
+  "lines_changed": 57,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-28T13:24:44Z","kind":"supabase_sql_executed","sql_preview":"CREATE TABLE IF NOT EXISTS atlas.weinstein_a3_ic_results (\n  cap_tier text NOT NULL,\n  ma_lookback_weeks int NOT NULL,\n  event_type text NOT NULL,\n  subset_id text NOT NULL,\n  n_all int,\n  n_pass int,\n  events_per_year numeric,\n  hit_rate numeric,\n  mean_excess_pass numeric,\n  ic_spearman numeric,\n  PRIMARY KEY (cap_tier, ma_lookback_weeks, event_type, subset_id)\n);"}
+{"ts":"2026-05-28T13:25:04Z","kind":"supabase_sql_executed","sql_preview":"INSERT INTO atlas.weinstein_a3_ic_results\n  (cap_tier, ma_lookback_weeks, event_type, subset_id, n_all, n_pass, events_per_year, hit_rate, mean_excess_pass, ic_spearman)\nWITH ranked AS (\n  SELECT\n    cap_tier, ma_lookback_weeks, event_type,\n    conf_l2_prior_extreme, conf_l4_base_width, conf_l5_sector_rs, conf_l6_liquidity,\n    forward_excess_6m,\n    PERCENT_RANK() OVER (PARTITION BY cap_tier, ma_lookback_weeks, event_type ORDER BY forward_excess_6m) AS rk_fwd\n  FROM atlas.weinstein_event_featur"}
+{"ts":"2026-05-28T13:25:08Z","kind":"supabase_sql_executed","sql_preview":"SELECT COUNT(*) AS n_rows FROM atlas.weinstein_a3_ic_results;"}
+{"ts":"2026-05-28T13:25:18Z","kind":"supabase_sql_executed","sql_preview":"SELECT cap_tier, ma_lookback_weeks, event_type, subset_id, n_pass, events_per_year,\n       ROUND(hit_rate::numeric, 3) AS hit_rate,\n       ROUND(ic_spearman::numeric, 4) AS ic_raw,\n       ROUND((CASE WHEN event_type='UP' THEN ic_spearman ELSE -ic_spearman END)::numeric, 4) AS ic_signed,\n       ROUND(mean_excess_pass::numeric, 4) AS mean_excess\nFROM atlas.weinstein_a3_ic_results\nWHERE ic_spearman IS NOT NULL\n  AND (CASE WHEN event_type='UP' THEN ic_spearman ELSE -ic_spearman END) >= 0.05\n  AND ev"}
+{"ts":"2026-05-28T13:25:25Z","kind":"supabase_sql_executed","sql_preview":"SELECT cap_tier, ma_lookback_weeks, event_type, subset_id, n_pass, events_per_year,\n       ROUND(hit_rate::numeric, 3) AS hit_rate,\n       ROUND((CASE WHEN event_type='UP' THEN ic_spearman ELSE -ic_spearman END)::numeric, 4) AS ic_signed\nFROM atlas.weinstein_a3_ic_results\nWHERE ic_spearman IS NOT NULL\n  AND n_pass >= 10\nORDER BY (CASE WHEN event_type='UP' THEN ic_spearman ELSE -ic_spearman END) DESC\nLIMIT 20;"}
+{"ts":"2026-05-28T13:25:35Z","kind":"supabase_sql_executed","sql_preview":"SELECT cap_tier, ma_lookback_weeks, event_type, subset_id, n_pass, events_per_year,\n       ROUND(hit_rate::numeric, 3) AS hit_rate,\n       ROUND((CASE WHEN event_type='UP' THEN ic_spearman ELSE -ic_spearman END)::numeric, 4) AS ic_signed\nFROM atlas.weinstein_a3_ic_results\nWHERE ic_spearman IS NOT NULL\n  AND events_per_year >= 25\nORDER BY (CASE WHEN event_type='UP' THEN ic_spearman ELSE -ic_spearman END) DESC\nLIMIT 15;"}
+{"ts":"2026-05-28T13:25:47Z","kind":"supabase_sql_executed","sql_preview":"-- A2 vs A3 lift comparison: same cells, side by side\nWITH a2 AS (\n  SELECT cap_tier, ma_lookback_weeks, event_type,\n         (CASE WHEN event_type='UP' THEN ic_spearman ELSE -ic_spearman END) AS a2_ic,\n         events_per_year AS a2_eyr\n  FROM atlas.weinstein_a2_ic_results WHERE subset_id='S01_base' AND cap_tier <> 'Micro'\n),\na3 AS (\n  SELECT cap_tier, ma_lookback_weeks, event_type, subset_id,\n         (CASE WHEN event_type='UP' THEN ic_spearman ELSE -ic_spearman END) AS a3_ic,\n         events_"}
+{"ts":"2026-05-28T13:26:06Z","kind":"supabase_sql_executed","sql_preview":"-- Best A2 confluence per cell (subset != S01_base, signed IC) vs A3 best\nWITH a2_best AS (\n  SELECT DISTINCT ON (cap_tier, ma_lookback_weeks, event_type)\n    cap_tier, ma_lookback_weeks, event_type, subset_id AS a2_best_subset,\n    (CASE WHEN event_type='UP' THEN ic_spearman ELSE -ic_spearman END) AS a2_best_ic,\n    events_per_year AS a2_best_eyr\n  FROM atlas.weinstein_a2_ic_results\n  WHERE cap_tier <> 'Micro'\n    AND subset_id <> 'S01_base'\n    AND ic_spearman IS NOT NULL\n    AND events_per_ye"}
+{"ts":"2026-05-28T13:26:24Z","kind":"supabase_sql_executed","sql_preview":"-- Walk-forward IC per year for top L5 candidates\nWITH events AS (\n  SELECT\n    cap_tier, ma_lookback_weeks, event_type,\n    conf_l2_prior_extreme, conf_l4_base_width, conf_l5_sector_rs, conf_l6_liquidity,\n    forward_excess_6m,\n    EXTRACT(YEAR FROM event_date)::int AS yr\n  FROM atlas.weinstein_event_features\n  WHERE forward_excess_6m IS NOT NULL\n    AND conf_l5_sector_rs IS NOT NULL\n    AND cap_tier <> 'Micro'\n),\ncandidates AS (\n  -- (cap, look, type, subset_filter)\n  SELECT 'Large' AS cap, 5 "}
+{"ts":"2026-05-28T13:26:47Z","kind":"supabase_sql_executed","sql_preview":"-- Per-year IC for the top L5 candidates (events_per_year >= 8, ic_signed >= 0.05)\nWITH ev AS (\n  SELECT\n    cap_tier, ma_lookback_weeks, event_type,\n    conf_l2_prior_extreme, conf_l4_base_width, conf_l5_sector_rs, conf_l6_liquidity,\n    forward_excess_6m,\n    EXTRACT(YEAR FROM event_date)::int AS yr\n  FROM atlas.weinstein_event_features\n  WHERE forward_excess_6m IS NOT NULL\n    AND conf_l5_sector_rs IS NOT NULL\n    AND cap_tier <> 'Micro'\n),\nranked AS (\n  SELECT *,\n    PERCENT_RANK() OVER (PAR"}
+{"ts":"2026-05-28T13:27:04Z","kind":"supabase_sql_executed","sql_preview":"SELECT cap_tier, ma_lookback_weeks, event_type, subset_id, n_all, n_pass,\n       events_per_year,\n       ROUND(hit_rate::numeric, 4) AS hit_rate,\n       ROUND(mean_excess_pass::numeric, 6) AS mean_excess_pass,\n       ROUND(ic_spearman::numeric, 6) AS ic_spearman\nFROM atlas.weinstein_a3_ic_results\nORDER BY cap_tier, ma_lookback_weeks, event_type, subset_id;"}
+{"ts":"2026-05-28T13:27:24Z","kind":"supabase_sql_executed","sql_preview":"SELECT string_agg(line, E'\\n') AS csv\nFROM (\n  SELECT cap_tier || ',' || ma_lookback_weeks || ',' || event_type || ',' || subset_id || ','\n         || n_all || ',' || COALESCE(n_pass::text,'') || ','\n         || COALESCE(events_per_year::text,'') || ','\n         || COALESCE(ROUND(hit_rate::numeric, 4)::text,'') || ','\n         || COALESCE(ROUND(mean_excess_pass::numeric, 6)::text,'') || ','\n         || COALESCE(ROUND(ic_spearman::numeric, 6)::text,'') AS line\n  FROM atlas.weinstein_a3_ic_results"}
+{
+  "ts": "2026-05-28T13:28:51Z",
+  "prev": "4f1a452632502f88",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/v6/2026-05-28-weinstein-a3-ic-results.csv",
+  "lines_changed": 170,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T13:29:24Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/research/weinstein_l5_ic.sql",
+  "lines_changed": 105,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T13:30:28Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/v6/2026-05-28-weinstein-a3-report.md",
+  "lines_changed": 93,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T13:32:21Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/verdict/derive.py",
+  "lines_changed": 18,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T13:32:43Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/verdict/derive.py",
+  "lines_changed": 39,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T13:32:57Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/verdict/test_derive.py",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T13:33:13Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/verdict/test_derive.py",
+  "lines_changed": 28,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T13:34:15Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/114_derive_verdict_a3_amendment.py",
+  "lines_changed": 142,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T13:35:37Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/CONTEXT.md",
+  "lines_changed": 28,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T13:35:57Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/specs/2026-05-28-trader-view-redesign.html",
+  "lines_changed": 39,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T13:36:18Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/specs/2026-05-28-trader-view-redesign.html",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}

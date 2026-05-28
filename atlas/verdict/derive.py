@@ -7,6 +7,14 @@ Spec locks enforced here:
 - Q1 (2026-05-28): Stage 3 → WATCH/HOLD with reason "Stage 3 topping". NEVER WAIT for Stage 3.
 - Q5 (2026-05-28): Micro cap_tier exempts from Weinstein veto entirely.
 - Gate fail returns WAIT with the *named* gate (e.g. "Risk gate fail") not just "WAIT".
+
+A3 amendment (2026-05-28): Stream A3 sector-confluence research found NO
+Weinstein (cap_tier × lookback × confluence-subset) combination clears the
+0.05 IC floor with ≥50 events/yr and positive min OOS IC. Stage 4 → WAIT
+veto removed; Weinstein stage is now a why-strip context chip only.
+Stage 3 → WATCH/HOLD downgrade retained per Q1 lock pending separate
+review.
+See docs/v6/2026-05-28-weinstein-a3-report.md for the empirical basis.
 """
 
 from __future__ import annotations
@@ -50,10 +58,12 @@ def derive_verdict(inp: VerdictInput) -> VerdictOutput:
     1. NEGATIVE cell_state  → SELL (owns) / AVOID (doesn't own). No gates apply.
     2. NEUTRAL cell_state   → HOLD (owns) / WATCH (doesn't own). No gates apply.
     3. POSITIVE cell_state  → check vetoes before promoting to BUY/ACCUMULATE:
-       3a. Weinstein Stage 4 veto (Micro exempt — Q5 lock)
-       3b. Any gate fail → WAIT with named gate
-       3c. Weinstein Stage 3 → HOLD/WATCH with "Stage 3 topping" (Q1 lock — never WAIT)
-       3d. Clear path → BUY (not owned) / ACCUMULATE (owned)
+       3a. Any gate fail → WAIT with named gate
+       3b. Weinstein Stage 3 → HOLD/WATCH with "Stage 3 topping" (Q1 lock — never WAIT)
+       3c. Clear path → BUY (not owned) / ACCUMULATE (owned)
+
+    Stage 4 no longer vetoes (A3 amendment 2026-05-28) — Weinstein is a
+    context chip on the why-strip, not a precedence-ladder gate.
     """
     # 1. NEGATIVE cells — ownership decides verb; no gate/Weinstein logic applies
     if inp.cell_state == "NEGATIVE":
@@ -66,22 +76,20 @@ def derive_verdict(inp: VerdictInput) -> VerdictOutput:
     # 3. POSITIVE — check vetoes before promoting to BUY/ACCUMULATE
     assert inp.cell_state == "POSITIVE"
 
-    # 3a. Weinstein Stage 4 veto (Micro exempt per Q5 lock)
-    if inp.cap_tier != "Micro" and inp.weinstein_stage == 4:
-        return VerdictOutput("WAIT", "Stage 4 vetoes positive cell")
-
-    # 3b. Gate veto — any fail blocks; named gate returned in reason
+    # 3a. Gate veto — any fail blocks; named gate returned in reason
     for gate_key, passed in inp.gates.items():
         if passed is False:
             display = _GATE_DISPLAY_NAMES.get(gate_key, gate_key.replace("_", " ").title())
             return VerdictOutput("WAIT", f"{display} gate fail")
 
-    # 3c. Stage 3 ambiguity — downgrade to WATCH/HOLD (Q1 lock: never WAIT for Stage 3)
+    # 3b. Stage 3 ambiguity — downgrade to WATCH/HOLD (Q1 lock: never WAIT for Stage 3)
     if inp.cap_tier != "Micro" and inp.weinstein_stage == 3:
         return VerdictOutput(
             "HOLD" if inp.user_owns else "WATCH",
             "Stage 3 topping",
         )
 
-    # 3d. Clear path — all vetoes cleared
+    # 3c. Clear path — gates pass, Stage 1/2/4/None all promote to BUY/ACCUMULATE.
+    # Stage 4 with positive cell is rendered as BUY with a Stage 4 warn-chip
+    # on the why-strip (UI responsibility, not derivation responsibility).
     return VerdictOutput("ACCUMULATE" if inp.user_owns else "BUY", None)
