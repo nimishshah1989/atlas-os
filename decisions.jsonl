@@ -47251,3 +47251,59 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{"ts":"2026-05-28T14:04:21Z","kind":"supabase_sql_executed","sql_preview":"SELECT attname FROM pg_attribute WHERE attrelid = 'atlas.mv_stock_landscape'::regclass AND attnum > 0 ORDER BY attnum;"}
+{"ts":"2026-05-28T14:04:34Z","kind":"supabase_sql_executed","sql_preview":"SELECT table_name FROM information_schema.tables WHERE table_schema='atlas' AND (table_name ILIKE '%weinstein%' OR table_name ILIKE '%stage%' OR table_name ILIKE '%portfolio%') ORDER BY table_name;"}
+{"ts":"2026-05-28T14:05:25Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  (SELECT COUNT(*) FROM atlas.mv_stock_landscape) AS landscape_rows,\n  (SELECT COUNT(*) FROM atlas.mv_stock_landscape WHERE action IN ('POSITIVE','NEGATIVE','NEUTRAL')) AS landscape_with_cell_state,\n  (SELECT COUNT(*) FROM atlas.mv_stock_landscape WHERE cell_action IS NOT NULL) AS landscape_with_cell_action,\n  (SELECT COUNT(*) FROM atlas.atlas_paper_portfolio) AS portfolio_rows,\n  (SELECT array_agg(DISTINCT action) FROM atlas.mv_stock_landscape) AS distinct_actions;"}
+{
+  "ts": "2026-05-28T14:07:18Z",
+  "prev": "d7d0b6564f24c0d0",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/115_mv_stock_landscape_trader_view.py",
+  "lines_changed": 100,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-28T14:07:43Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name FROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_v6_clean_ohlcv' ORDER BY ordinal_position LIMIT 20;"}
+{"ts":"2026-05-28T14:07:58Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name FROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_signal_calls' ORDER BY ordinal_position;"}
+{"ts":"2026-05-28T14:09:06Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  l.symbol, l.cap_tier, l.action AS legacy_action,\n  v.verdict AS combined_verdict, v.reason AS verdict_reason,\n  sc.date AS first_called_at,\n  ROUND((p_now.close::numeric / NULLIF(p_entry.close::numeric, 0) - 1)::numeric, 6) AS since_call_return\nFROM atlas.mv_stock_landscape l\nLEFT JOIN atlas.atlas_signal_calls sc\n  ON sc.instrument_id = l.instrument_id AND sc.exit_date IS NULL\nLEFT JOIN atlas.atlas_v6_clean_ohlcv p_now\n  ON p_now.symbol = l.symbol AND p_now.date = l.as_of_date\nLEFT JOIN"}
+{
+  "ts": "2026-05-28T14:09:29Z",
+  "prev": "77eb257f4b7f1b82",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/115_mv_stock_landscape_trader_view.py",
+  "lines_changed": 33,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-28T14:10:19Z","kind":"supabase_sql_executed","sql_preview":"CREATE OR REPLACE VIEW atlas.mv_stock_landscape_trader AS\nSELECT\n  l.*,\n  v.verdict        AS combined_verdict,\n  v.reason         AS verdict_reason,\n  sc.date          AS first_called_at,\n  CASE\n    WHEN sc.date IS NOT NULL\n     AND p_now.close   IS NOT NULL\n     AND p_entry.close IS NOT NULL\n     AND p_entry.close <> 0\n    THEN ROUND((p_now.close::numeric / p_entry.close::numeric - 1)::numeric, 6)\n    ELSE NULL\n  END              AS since_call_return\nFROM atlas.mv_stock_landscape l\nLEFT JOIN a"}
+{"ts":"2026-05-28T14:11:13Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  combined_verdict, COUNT(*) AS n,\n  COUNT(first_called_at) AS n_tracked,\n  ROUND(AVG(since_call_return)::numeric, 4) AS avg_since_call_return\nFROM atlas.mv_stock_landscape_trader\nGROUP BY combined_verdict\nORDER BY combined_verdict;"}
+{"ts":"2026-05-28T14:11:26Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  COUNT(DISTINCT instrument_id) AS distinct_iid,\n  COUNT(*) AS open_calls,\n  COUNT(*)::float / COUNT(DISTINCT instrument_id) AS avg_calls_per_stock\nFROM atlas.atlas_signal_calls\nWHERE exit_date IS NULL;"}
+{"ts":"2026-05-28T14:12:09Z","kind":"supabase_sql_executed","sql_preview":"CREATE OR REPLACE VIEW atlas.mv_stock_landscape_trader AS\nWITH latest_open_call AS (\n  SELECT\n    sc.instrument_id,\n    sc.action,\n    sc.date,\n    ROW_NUMBER() OVER (\n      PARTITION BY sc.instrument_id\n      ORDER BY sc.date DESC, sc.computed_at DESC\n    ) AS rn\n  FROM atlas.atlas_signal_calls sc\n  WHERE sc.exit_date IS NULL\n)\nSELECT\n  l.*,\n  v.verdict        AS combined_verdict,\n  v.reason         AS verdict_reason,\n  sc.date          AS first_called_at,\n  CASE\n    WHEN sc.date IS NOT NULL\n  "}
+{"ts":"2026-05-28T14:13:01Z","kind":"supabase_sql_executed","sql_preview":"SELECT combined_verdict, COUNT(*) AS n, COUNT(first_called_at) AS n_tracked,\n  ROUND(AVG(since_call_return)::numeric, 4) AS avg_since_call_return\nFROM atlas.mv_stock_landscape_trader\nGROUP BY combined_verdict ORDER BY combined_verdict;"}
+{
+  "ts": "2026-05-28T14:13:22Z",
+  "prev": "65984a77938559ff",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/115_mv_stock_landscape_trader_view.py",
+  "lines_changed": 49,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T14:17:49Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/specs/2026-05-28-tradingview-integration-spec.html",
+  "lines_changed": 10,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T14:18:05Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/superpowers/specs/2026-05-28-tradingview-integration-spec.html",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
