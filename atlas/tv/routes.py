@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy import text
 
 from atlas.db import get_engine
-from atlas.tv.screener import fetch_and_upsert_all
+from atlas.tv.screener import fetch_and_upsert_all  # type: ignore[import]
 
 router = APIRouter(prefix="/v1/tv", tags=["tv"])
 
