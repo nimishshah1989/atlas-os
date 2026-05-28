@@ -5,6 +5,7 @@ Public surface:
   compute_portfolio_analytics(portfolio_id, engine) — on-demand
 """
 
+from atlas.tv.portfolio_analytics import compute_portfolio_analytics  # type: ignore[import]
 from atlas.tv.screener import fetch_and_upsert_all  # type: ignore[import]
 
-__all__ = ["fetch_and_upsert_all"]
+__all__ = ["fetch_and_upsert_all", "compute_portfolio_analytics"]
