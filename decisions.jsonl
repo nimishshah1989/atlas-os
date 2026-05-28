@@ -46335,3 +46335,50 @@
   "schema_version": 1
 }
 {"ts":"2026-05-28T03:36:51Z","kind":"supabase_sql_executed","sql_preview":"DROP INDEX IF EXISTS public.de_equity_ohlcv_instrument_date_desc_idx;\nSELECT indexname FROM pg_indexes\nWHERE schemaname='public' AND tablename='de_equity_ohlcv'\nORDER BY indexname;"}
+{
+  "ts": "2026-05-28T04:12:56Z",
+  "prev": "4ff9d14e03bfe1e0",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/etfs/page.tsx",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T04:13:09Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/sectors/[sector]/page.tsx",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-28T04:13:19Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/stocks/page.tsx",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-28T04:36:49Z","kind":"supabase_sql_executed","sql_preview":"SELECT sector_name, returns, rs_windows\nFROM atlas.mv_sector_deepdive\nWHERE sector_name = 'Energy' LIMIT 1;"}
+{"ts":"2026-05-28T04:36:57Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name FROM information_schema.columns\nWHERE table_schema='atlas' AND table_name='atlas_sector_metrics_daily'\n  AND (column_name LIKE 'rs_%' OR column_name LIKE 'bottomup_%' OR column_name LIKE 'ret_%' OR column_name LIKE 'pct_%')\nORDER BY column_name;"}
+{"ts":"2026-05-28T04:37:03Z","kind":"supabase_sql_executed","sql_preview":"SELECT date, rs_1w, rs_1m, bottomup_rs_3m_nifty500 AS rs_3m, rs_6m, rs_12m,\n  bottomup_ret_1w AS ret_1w, bottomup_ret_1m AS ret_1m, bottomup_ret_3m AS ret_3m, bottomup_ret_6m AS ret_6m,\n  pct_above_ema20\nFROM atlas.atlas_sector_metrics_daily\nWHERE sector_name='Energy' AND date >= '2026-05-20'\nORDER BY date DESC LIMIT 5;"}
+{"ts":"2026-05-28T04:37:36Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  (SELECT MAX(date) FROM atlas.atlas_sector_metrics_daily WHERE rs_1w IS NOT NULL) AS last_rs_1w,\n  (SELECT MAX(date) FROM atlas.atlas_sector_metrics_daily WHERE pct_above_ema20 IS NOT NULL) AS last_pct_ema20;"}
+{"ts":"2026-05-28T04:37:49Z","kind":"supabase_sql_executed","sql_preview":"-- Re-anchor mv_sector_deepdive's \"latest sector date\" CTE to the latest date\n-- with full RS coverage, not just MAX(date). Quickest path: just REFRESH the MV\n-- after we patch the source data — but actually, the M3 daily T-0 issue isn't\n-- fixable tonight. Better: change the MV's anchor query.\n-- Verify the affected CTE:\nSELECT pg_get_viewdef('atlas.mv_sector_deepdive'::regclass) ~ 'latest_sector_date' AS uses_latest_anchor;"}
+{"ts":"2026-05-28T04:38:07Z","kind":"supabase_sql_executed","sql_preview":"SELECT pg_get_viewdef('atlas.mv_sector_deepdive'::regclass);"}
+{"ts":"2026-05-28T04:38:30Z","kind":"supabase_sql_executed","sql_preview":"DROP MATERIALIZED VIEW IF EXISTS atlas.mv_sector_deepdive;"}
+{"ts":"2026-05-28T04:39:27Z","kind":"supabase_sql_executed","sql_preview":"CREATE MATERIALIZED VIEW atlas.mv_sector_deepdive AS\nWITH latest_sector_date AS (\n  SELECT MAX(date) AS d FROM atlas.atlas_sector_metrics_daily WHERE rs_1w IS NOT NULL\n), latest_stock_date AS (\n  SELECT MAX(date) AS d FROM atlas.atlas_stock_metrics_daily WHERE rs_3m_nifty500 IS NOT NULL\n), latest_conviction_date AS (\n  SELECT MAX(date) AS d FROM atlas.atlas_stock_conviction_daily\n), latest_stock_state_date AS (\n  SELECT MAX(date) AS d FROM atlas.atlas_stock_states_daily\n), latest_sector_state_da"}
+{"ts":"2026-05-28T04:39:40Z","kind":"supabase_sql_executed","sql_preview":"CREATE UNIQUE INDEX uix_mv_sector_deepdive_sector ON atlas.mv_sector_deepdive (sector_name);\nREFRESH MATERIALIZED VIEW atlas.mv_sector_deepdive;\nSELECT sector_name, data_as_of, returns, rs_windows, pct_above_ema20\nFROM atlas.mv_sector_deepdive WHERE sector_name = 'Energy';"}
+{
+  "ts": "2026-05-28T04:42:08Z",
+  "prev": "467ffb2a6e836e08",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/112_mv_sector_deepdive_anchor_fix.py",
+  "lines_changed": 195,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-28T04:42:19Z","kind":"supabase_sql_executed","sql_preview":"UPDATE alembic_version SET version_num = '112';\nSELECT version_num FROM alembic_version;"}
+{"ts":"2026-05-28T04:42:30Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  n.nspname AS schema,\n  c.relname AS table_name,\n  pg_size_pretty(pg_total_relation_size(c.oid)) AS size,\n  pg_total_relation_size(c.oid) AS size_bytes,\n  (SELECT n_live_tup FROM pg_stat_user_tables WHERE relid = c.oid) AS row_count,\n  CASE WHEN c.relkind = 'r' THEN 'TABLE'\n       WHEN c.relkind = 'm' THEN 'MV'\n       WHEN c.relkind = 'p' THEN 'PARTITIONED'\n       ELSE c.relkind::text END AS kind\nFROM pg_class c\nJOIN pg_namespace n ON n.oid = c.relnamespace\nWHERE n.nspname IN ('atlas','p"}
