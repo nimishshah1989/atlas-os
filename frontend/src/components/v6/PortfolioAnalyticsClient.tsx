@@ -212,7 +212,8 @@ export function PortfolioAnalyticsClient({
   const firstDate = analytics.daily_returns[0]?.date ?? null
   const lastDate = analytics.daily_returns[analytics.daily_returns.length - 1]?.date ?? null
 
-  const csvUrl = `/v1/portfolios/${portfolioId}/tv-export.csv`
+  // Route through the Next.js proxy so the browser can reach the FastAPI backend
+  const csvUrl = `/api/portfolios/${portfolioId}/tv-export`
 
   return (
     <div className="min-h-screen bg-paper px-8 py-6 max-w-5xl mx-auto">

@@ -150,34 +150,35 @@ def fetch_and_upsert_all(engine: Engine | None = None) -> None:
             log.warning("tv_screener.empty_batch", batch_start=i)
             continue
 
+        records = df.to_dict(orient="records")
         rows = []
-        for _, row in df.iterrows():
-            sym: str = str(row.get("ticker", ""))
-            recommend_all = row.get("Recommend.All")
-            vol = row.get("volume")
-            vol10d = row.get("average_volume_10d_calc")
+        for rec in records:
+            sym: str = str(rec.get("ticker", ""))
+            recommend_all = rec.get("Recommend.All")
+            vol = rec.get("volume")
+            vol10d = rec.get("average_volume_10d_calc")
             rows.append(
                 {
                     "symbol": sym,
                     "instrument_id": inst_map.get(sym),
                     "tv_recommend_label": _label(recommend_all),
                     "recommend_all": recommend_all,
-                    "recommend_ma": row.get("Recommend.MA"),
-                    "recommend_other": row.get("Recommend.Other"),
-                    "rsi_14": row.get("RSI"),
-                    "macd_macd": row.get("MACD.macd"),
-                    "ema_20": row.get("EMA20"),
-                    "ema_50": row.get("EMA50"),
-                    "ema_200": row.get("EMA200"),
-                    "atr_14": row.get("ATR"),
-                    "volume": int(row["volume"]) if bool(pd.notna(vol)) else None,
+                    "recommend_ma": rec.get("Recommend.MA"),
+                    "recommend_other": rec.get("Recommend.Other"),
+                    "rsi_14": rec.get("RSI"),
+                    "macd_macd": rec.get("MACD.macd"),
+                    "ema_20": rec.get("EMA20"),
+                    "ema_50": rec.get("EMA50"),
+                    "ema_200": rec.get("EMA200"),
+                    "atr_14": rec.get("ATR"),
+                    "volume": int(rec["volume"]) if bool(pd.notna(vol)) else None,
                     "volume_10d_avg": (
-                        int(row["average_volume_10d_calc"]) if bool(pd.notna(vol10d)) else None
+                        int(rec["average_volume_10d_calc"]) if bool(pd.notna(vol10d)) else None
                     ),
-                    "price": row.get("close"),
-                    "high_52w": row.get("High.All"),
-                    "low_52w": row.get("Low.All"),
-                    "raw_payload": row.to_json(),
+                    "price": rec.get("close"),
+                    "high_52w": rec.get("High.All"),
+                    "low_52w": rec.get("Low.All"),
+                    "raw_payload": str(rec),
                 }
             )
 

@@ -194,7 +194,7 @@ describe('PortfolioAnalyticsClient — CSV export', () => {
       />,
     )
     const link = screen.getByText(/Export to TradingView CSV/)
-    expect(link.closest('a')).toHaveAttribute('href', '/v1/portfolios/my-portfolio-id/tv-export.csv')
+    expect(link.closest('a')).toHaveAttribute('href', '/api/portfolios/my-portfolio-id/tv-export')
   })
 })
 

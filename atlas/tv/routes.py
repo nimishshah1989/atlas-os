@@ -20,7 +20,7 @@ _STALE_DAYS = 2
 
 
 @router.get("/metrics/{symbol}")
-def get_tv_metrics(symbol: str) -> dict:
+async def get_tv_metrics(symbol: str) -> dict:
     """Return cached TV screener metrics for a symbol.
 
     meta.is_stale=True if data is >2 days old.
@@ -65,7 +65,7 @@ _portfolios_router = APIRouter(prefix="/v1/portfolios", tags=["portfolios-analyt
 
 
 @_portfolios_router.get("/{portfolio_id}/analytics")
-def get_portfolio_analytics(portfolio_id: str) -> dict:
+async def get_portfolio_analytics(portfolio_id: str) -> dict:
     """Return Sharpe, Sortino, Calmar, Beta, Alpha, MaxDD, TWR for a portfolio."""
     result = compute_portfolio_analytics(portfolio_id)
     if result.get("error") == "no_data":
@@ -86,7 +86,7 @@ def get_portfolio_analytics(portfolio_id: str) -> dict:
 
 
 @_portfolios_router.get("/{portfolio_id}/tv-export.csv")
-def download_portfolio_csv(portfolio_id: str) -> Response:
+async def download_portfolio_csv(portfolio_id: str) -> Response:
     """Download portfolio as TradingView-compatible CSV."""
     csv_bytes = export_portfolio_csv(portfolio_id)
     if not csv_bytes or csv_bytes.count(b"\n") <= 1:
@@ -102,7 +102,7 @@ _internal_router = APIRouter(prefix="/v1/tv/internal", tags=["tv-internal"])
 
 
 @_internal_router.post("/run-screener")
-def trigger_screener() -> dict:
+async def trigger_screener() -> dict:
     """Called by pg_cron at 21:00 IST on weekdays.
 
     Fetches latest TradingView metrics for all universe symbols and upserts into atlas.tv_metrics.

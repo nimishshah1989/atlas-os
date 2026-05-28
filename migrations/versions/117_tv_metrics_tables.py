@@ -59,6 +59,10 @@ def upgrade() -> None:
         CREATE INDEX IF NOT EXISTS ix_tv_portfolio_exports_portfolio_id
             ON atlas.tv_portfolio_exports (portfolio_id)
     """)
+    # NOTE: The URL in tv_screener_run() assumes the FastAPI process is reachable
+    # at http://localhost:8000 from the database host.  On EC2 this is correct
+    # (both DB and API run on the same box).  If the topology changes, update
+    # the function body directly: SELECT atlas.tv_screener_run() to verify.
     op.execute("""
         CREATE OR REPLACE FUNCTION atlas.tv_screener_run()
         RETURNS void LANGUAGE plpgsql AS $$
