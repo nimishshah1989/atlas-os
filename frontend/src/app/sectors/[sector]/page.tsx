@@ -205,35 +205,134 @@ export default async function SectorDetailPage({
         </Suspense>
       </section>
 
-      {/* Section — Sub-industry decomposition (v6.1 placeholder) */}
+      {/* Section — Sub-industry decomposition (v6.1: now LIVE) */}
       <section className="px-8 py-9 border-b border-paper-rule" aria-label="Sub-industry decomposition">
         <SectionHead
           title="Sub-industry decomposition"
-          subtitle="Break the sector into sub-industries and rank by RS. Requires sub-industry classification column in atlas_universe_stocks."
+          subtitle="Sector broken into sub-industries from atlas_universe_stocks.industry, ranked by avg RS-3M vs Nifty 500. Buy/avoid counts derived from open conviction signals."
         />
-        <div className="bg-paper-soft border border-dashed border-ink-rule rounded-[2px] p-6 text-center">
-          <div className="font-sans text-[13px] font-semibold text-ink-secondary mb-1">Coming in v6.1</div>
-          <p className="font-sans text-[12px] text-ink-4 max-w-[520px] mx-auto leading-[1.55]">
-            Sub-industry grouping requires a classification field in the universe table.
-            Once available, each sub-industry will show its own RS grid and constituent count.
-          </p>
-        </div>
+        {deepdive.sub_industries.length === 0 ? (
+          <div className="bg-paper-soft border border-paper-rule rounded-[2px] p-4 text-center text-[12px] text-ink-tertiary">
+            No sub-industry classification for this sector.
+          </div>
+        ) : (
+          <div className="overflow-x-auto border border-paper-rule rounded-[2px]">
+            <table className="w-full font-sans text-[12.5px]">
+              <thead className="bg-paper-soft border-b border-paper-rule">
+                <tr>
+                  <th className="text-left px-4 py-2 font-semibold text-ink-secondary tracking-wide">Sub-industry</th>
+                  <th className="text-right px-4 py-2 font-semibold text-ink-secondary tracking-wide">Stocks</th>
+                  <th className="text-right px-4 py-2 font-semibold text-ink-secondary tracking-wide">Avg RS 3M (pp)</th>
+                  <th className="text-right px-4 py-2 font-semibold text-ink-secondary tracking-wide">Avg composite</th>
+                  <th className="text-right px-4 py-2 font-semibold text-ink-secondary tracking-wide">BUY</th>
+                  <th className="text-right px-4 py-2 font-semibold text-ink-secondary tracking-wide">AVOID</th>
+                </tr>
+              </thead>
+              <tbody>
+                {deepdive.sub_industries.map((s) => (
+                  <tr key={s.industry} className="border-b border-paper-rule/60 last:border-b-0">
+                    <td className="px-4 py-2 text-ink-primary">{s.industry}</td>
+                    <td className="text-right px-4 py-2 font-mono text-ink-secondary">{s.n_stocks}</td>
+                    <td className={`text-right px-4 py-2 font-mono ${
+                      (s.avg_rs_3m_pp ?? 0) >= 0 ? 'text-signal-pos' : 'text-signal-neg'
+                    }`}>
+                      {s.avg_rs_3m_pp !== null ? `${s.avg_rs_3m_pp >= 0 ? '+' : ''}${s.avg_rs_3m_pp.toFixed(1)}` : '—'}
+                    </td>
+                    <td className={`text-right px-4 py-2 font-mono ${
+                      (s.avg_composite_score ?? 0) >= 0 ? 'text-signal-pos' : 'text-signal-neg'
+                    }`}>
+                      {s.avg_composite_score !== null ? `${s.avg_composite_score >= 0 ? '+' : ''}${s.avg_composite_score.toFixed(2)}` : '—'}
+                    </td>
+                    <td className="text-right px-4 py-2 font-mono text-signal-pos">{s.n_buy || '—'}</td>
+                    <td className="text-right px-4 py-2 font-mono text-signal-neg">{s.n_avoid || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
-      {/* Section — Atlas methodology (v6.1 placeholder) */}
+      {/* Section — Atlas methodology · why this verdict (v6.1: now LIVE) */}
       <section className="px-8 py-9 border-b border-paper-rule" aria-label="Atlas methodology">
         <SectionHead
           title="Atlas methodology · why this verdict"
-          subtitle="Explains the signal factors, thresholds, and regime adjustments that produced the current sector verdict."
+          subtitle="Plain-English breakdown of the signal factors that produced the current sector verdict — derived from sector returns, RS vs Nifty 500, and breadth."
         />
-        <div className="bg-paper-soft border border-dashed border-ink-rule rounded-[2px] p-6 text-center">
-          <div className="font-sans text-[13px] font-semibold text-ink-secondary mb-1">Coming in v6.1</div>
-          <p className="font-sans text-[12px] text-ink-4 max-w-[520px] mx-auto leading-[1.55]">
-            The methodology panel will show the exact thresholds from{' '}
-            <code className="font-mono text-[11px]">atlas.atlas_thresholds</code>{' '}
-            that drove this verdict, including regime adjustment factors and the composite scoring breakdown.
-          </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {(() => {
+            const ret3m = deepdive.returns?.ret_3m
+            const ret6m = deepdive.returns?.ret_6m
+            const rs3m = deepdive.rs_windows?.rs_3m
+            const rs6m = deepdive.rs_windows?.rs_6m
+            const breadth = deepdive.pct_above_ema20
+            const verdict = deepdive.verdict
+            const factors = [
+              {
+                label: 'Return trend',
+                value: ret3m !== null && ret3m !== undefined
+                  ? `${ret3m >= 0 ? '+' : ''}${ret3m.toFixed(1)}% / 3M  · ${ret6m !== null && ret6m !== undefined ? (ret6m >= 0 ? '+' : '') + ret6m.toFixed(1) + '% / 6M' : '—'}`
+                  : '—',
+                signal: ret3m !== null && ret3m !== undefined && ret3m >= 10 ? 'pos'
+                      : ret3m !== null && ret3m !== undefined && ret3m <= -5 ? 'neg' : 'neu',
+                note: ret3m !== null && ret3m !== undefined && ret3m >= 20 ? 'Strong outperformance vs flat market'
+                    : ret3m !== null && ret3m !== undefined && ret3m >= 10 ? 'Positive trend confirmed'
+                    : ret3m !== null && ret3m !== undefined && ret3m <= -5 ? 'Sector under pressure'
+                    : 'Range-bound; watch for break',
+              },
+              {
+                label: 'RS vs Nifty 500',
+                value: rs3m !== null && rs3m !== undefined
+                  ? `${rs3m >= 0 ? '+' : ''}${rs3m.toFixed(1)}pp / 3M  ·  ${rs6m !== null && rs6m !== undefined ? (rs6m >= 0 ? '+' : '') + rs6m.toFixed(1) + 'pp / 6M' : '—'}`
+                  : '—',
+                signal: rs3m !== null && rs3m !== undefined && rs3m >= 5 ? 'pos'
+                      : rs3m !== null && rs3m !== undefined && rs3m <= -5 ? 'neg' : 'neu',
+                note: rs3m !== null && rs3m !== undefined && rs3m >= 20 ? 'Sector is leading the market materially'
+                    : rs3m !== null && rs3m !== undefined && rs3m >= 5 ? 'Outperforming the broad market'
+                    : rs3m !== null && rs3m !== undefined && rs3m <= -5 ? 'Lagging the broad market'
+                    : 'Tracking the market',
+              },
+              {
+                label: 'Breadth (Above EMA20)',
+                value: breadth !== null && breadth !== undefined
+                  ? `${(breadth * 100).toFixed(0)}% of stocks above 20-day EMA`
+                  : '—',
+                signal: breadth !== null && breadth !== undefined && breadth >= 0.6 ? 'pos'
+                      : breadth !== null && breadth !== undefined && breadth <= 0.4 ? 'neg' : 'neu',
+                note: breadth !== null && breadth !== undefined && breadth >= 0.7 ? 'Broad-based participation — rally has depth'
+                    : breadth !== null && breadth !== undefined && breadth >= 0.6 ? 'Healthy participation'
+                    : breadth !== null && breadth !== undefined && breadth <= 0.4 ? 'Narrow participation — rally is thin'
+                    : 'Mixed participation',
+              },
+              {
+                label: 'Verdict alignment',
+                value: verdict,
+                signal: verdict === 'Overweight' ? 'pos'
+                      : verdict === 'Underweight' || verdict === 'Avoid' ? 'neg' : 'neu',
+                note: verdict === 'Overweight'
+                  ? 'Trend + RS + breadth all positive — deploy capital'
+                  : verdict === 'Neutral'
+                  ? 'Mixed signals — maintain existing positions, no new adds'
+                  : verdict === 'Underweight' || verdict === 'Avoid'
+                  ? 'Multiple factors negative — reduce or avoid'
+                  : 'Awaiting classification',
+              },
+            ]
+            const sigCls = (s: string) => s === 'pos' ? 'border-l-signal-pos'
+                                       : s === 'neg' ? 'border-l-signal-neg'
+                                       : 'border-l-signal-warn'
+            return factors.map((f) => (
+              <div key={f.label} className={`border-l-4 ${sigCls(f.signal)} bg-paper-soft p-4 rounded-r-[2px]`}>
+                <div className="font-sans text-[11px] font-semibold text-ink-tertiary uppercase tracking-[0.08em] mb-1">{f.label}</div>
+                <div className="font-mono text-[14px] text-ink-primary mb-1">{f.value}</div>
+                <div className="font-sans text-[12px] text-ink-tertiary leading-[1.45]">{f.note}</div>
+              </div>
+            ))
+          })()}
         </div>
+        <p className="font-sans text-[11px] text-ink-tertiary mt-4 leading-[1.55]">
+          Inputs: <code className="font-mono text-[10px]">bottomup_ret_3m / 6m</code>, <code className="font-mono text-[10px]">rs_3m / 6m</code>, <code className="font-mono text-[10px]">pct_above_ema20</code> from <code className="font-mono text-[10px]">atlas_sector_metrics_daily</code>. Verdict from <code className="font-mono text-[10px]">atlas_sector_states_daily.sector_state</code>. Full threshold breakdown (regime-conditional cutoffs) coming in v6.2.
+        </p>
       </section>
 
       {/* Section — Cross-market comparison (v6.1 placeholder) */}

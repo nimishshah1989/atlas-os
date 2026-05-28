@@ -163,6 +163,16 @@ export type SectorDeepdiveRow = {
   open_signals: OpenSignalRow[]
   strength_dist: StrengthDist
   top_picks_top10: TopPickRow[]
+  sub_industries: SubIndustryRow[]
+}
+
+export type SubIndustryRow = {
+  industry: string
+  n_stocks: number
+  avg_rs_3m_pp: number | null
+  avg_composite_score: number | null
+  n_buy: number
+  n_avoid: number
 }
 
 // ── MV Query functions ────────────────────────────────────────────────────────
@@ -361,6 +371,7 @@ export async function getSectorDeepdive(sectorName: string): Promise<SectorDeepd
     open_signals: OpenSignalRow[]
     strength_dist: StrengthDist
     top_picks_top10: TopPickRow[]
+    sub_industries: SubIndustryRow[]
   }>>`
     SELECT
       sector_name,
@@ -375,7 +386,8 @@ export async function getSectorDeepdive(sectorName: string): Promise<SectorDeepd
       constituents_top30,
       open_signals,
       strength_dist,
-      top_picks_top10
+      top_picks_top10,
+      sub_industries
     FROM atlas.mv_sector_deepdive
     WHERE sector_name = ${sectorName}
     LIMIT 1
@@ -398,6 +410,7 @@ export async function getSectorDeepdive(sectorName: string): Promise<SectorDeepd
     open_signals: r.open_signals ?? [],
     strength_dist: r.strength_dist ?? { very_strong: 0, strong: 0, neutral: 0, weak: 0, very_weak: 0 },
     top_picks_top10: r.top_picks_top10 ?? [],
+    sub_industries: r.sub_industries ?? [],
   }
 }
 
