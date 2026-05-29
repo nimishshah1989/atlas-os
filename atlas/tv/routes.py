@@ -11,6 +11,7 @@ from sqlalchemy import text
 
 from atlas.db import get_engine
 from atlas.tv.csv_export import export_portfolio_csv  # type: ignore[import]
+from atlas.tv.peer_matrix import get_peer_matrix  # type: ignore[import]
 from atlas.tv.portfolio_analytics import compute_portfolio_analytics  # type: ignore[import]
 from atlas.tv.rs_ratios import compute_rs_ratios  # type: ignore[import]
 from atlas.tv.screener import fetch_and_upsert_all  # type: ignore[import]
@@ -131,5 +132,20 @@ def get_rs_ratios(symbol: str, days: int = 252) -> dict:
             "data_as_of": last_nifty_date,
             "fetched_at": datetime.datetime.now(tz=datetime.UTC).isoformat(),
             "source": "de_equity_ohlcv + de_index_prices",
+        },
+    }
+
+
+@_stocks_router.get("/{symbol}/peer-matrix")
+def stock_peer_matrix(symbol: str) -> dict:
+    """Return parent stock + top-4 sector peers with 8 pre-computed metrics."""
+    result = get_peer_matrix(symbol.upper())
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=f"No peer data for symbol: {symbol}")
+    return {
+        "data": result,
+        "meta": {
+            "fetched_at": datetime.datetime.now(tz=datetime.UTC).isoformat(),
+            "source": "atlas_universe_stocks + atlas_stock_metrics_daily",
         },
     }
