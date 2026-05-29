@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import math
+from typing import Any
 
 import pandas as pd
 import structlog
@@ -12,6 +14,25 @@ from sqlalchemy.engine import Engine
 from atlas.db import get_engine
 
 log = structlog.get_logger(__name__)
+
+
+def _json_dumps(rec: dict[str, Any]) -> str:
+    """Serialize a TV raw record to JSONB-compatible JSON. Required because
+    str(dict) emits Python repr (single quotes, NaN, datetime objects) which
+    Postgres rejects as invalid JSON. We coerce NaN/inf -> null and non-JSON
+    primitives -> str so the resulting blob is always parseable."""
+
+    def _coerce(v: Any) -> Any:
+        if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+            return None
+        if isinstance(v, str | int | bool) or v is None:
+            return v
+        if isinstance(v, float):
+            return v
+        return str(v)
+
+    return json.dumps({k: _coerce(v) for k, v in rec.items()})
+
 
 _BATCH_SIZE = 100
 
@@ -117,13 +138,14 @@ def _load_universe_symbols(engine: Engine) -> list[str]:
 
 
 def _fetch_tv_batch(symbols: list[str]) -> pd.DataFrame:
-    from tradingview_screener import Scanner  # type: ignore[import-untyped]
+    # v3.x of tradingview-screener dropped the legacy Scanner.get_scanner_data
+    # static method. Use the Query builder instead — same return shape
+    # (rows_count, DataFrame). pyproject still allows <3 for back-compat,
+    # but this code path is forward-compatible with both.
+    from tradingview_screener import Query  # type: ignore[import-untyped]
 
     qualified = [f"NSE:{s}" for s in symbols]
-    _, df = Scanner.get_scanner_data(  # type: ignore[reportAttributeAccessIssue]
-        symbols=qualified,
-        columns=_COLUMNS,
-    )
+    _, df = Query().select(*_COLUMNS).set_tickers(*qualified).get_scanner_data()
     if df.empty:
         return df
     df["ticker"] = df["ticker"].str.replace("NSE:", "", regex=False)
@@ -423,7 +445,7 @@ def fetch_and_upsert_all(engine: Engine | None = None) -> None:
                     "peg_ratio": rec.get("price_earnings_growth_ttm"),
                     "shares_outstanding": rec.get("shares_outstanding"),
                     "float_shares": rec.get("float_shares_outstanding"),
-                    "raw_payload": str(rec),
+                    "raw_payload": _json_dumps(rec),
                 }
             )
 

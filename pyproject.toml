@@ -31,8 +31,11 @@ dependencies = [
     # Logging
     "structlog>=24.0",
 
-    # TradingView screener (TV integration)
-    "tradingview-screener>=0.14.0",
+    # TradingView screener (TV integration). Pin <3.0 — v3 dropped the
+    # Scanner class that atlas/tv/screener.py imports; codebase uses the
+    # v0/v1/v2 API (Scanner.get_scanner_data) until we migrate to the
+    # new Query API.
+    "tradingview-screener>=0.14.0,<3.0",
 
     # Serving (FastAPI thin layer per architecture 10.1; UI is Streamlit)
     "fastapi>=0.110",
