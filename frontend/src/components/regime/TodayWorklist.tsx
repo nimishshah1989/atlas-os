@@ -1,8 +1,12 @@
 // frontend/src/components/regime/TodayWorklist.tsx
 // 3-count worklist: sectors entered favour / fresh breakouts / deteriorating holdings.
-// Clickable counts. Uses LinkedTicker for deteriorating symbols. Pure presentational.
+// Clickable counts. Pure presentational.
+//
+// 2026-05-29: removed inline "Fresh Breakouts" + "Review/Trim" symbol lists.
+// They duplicated the "Top conviction" table at the bottom of the page (same
+// names showed up in both). Worklist now stays as 3 numeric KPIs at the top
+// and the conviction table owns the full per-symbol grid.
 import Link from 'next/link'
-import { LinkedTicker } from '@/components/ui/LinkedToken'
 
 export type WorklistData = {
   sectorsEnteredFavour: number
@@ -80,39 +84,6 @@ export function TodayWorklist({ data }: Props) {
         </div>
       </div>
 
-      {data.breakoutSymbols.length > 0 && (
-        <div className="border border-signal-pos/20 rounded-sm bg-signal-pos/5 px-4 py-3 mb-2">
-          <div className="font-sans text-[10px] text-signal-pos uppercase tracking-wider mb-2">
-            Fresh Breakouts
-          </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-            {data.breakoutSymbols.map((sym) => (
-              <LinkedTicker
-                key={sym}
-                symbol={sym}
-                className="font-mono text-xs font-semibold"
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {data.deterioratingSymbols.length > 0 && (
-        <div className="border border-signal-neg/20 rounded-sm bg-signal-neg/5 px-4 py-3">
-          <div className="font-sans text-[10px] text-signal-neg uppercase tracking-wider mb-2">
-            Review / Trim
-          </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-            {data.deterioratingSymbols.map((sym) => (
-              <LinkedTicker
-                key={sym}
-                symbol={sym}
-                className="font-mono text-xs font-semibold"
-              />
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

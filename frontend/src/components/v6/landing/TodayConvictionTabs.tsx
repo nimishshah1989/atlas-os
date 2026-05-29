@@ -25,6 +25,9 @@ type Props = {
 // Confidence bar — for stocks and ETFs only (signal conviction probability)
 // ---------------------------------------------------------------------------
 
+// Compact confidence indicator — short bar (32px) + numeric pct.
+// Replaces the 1fr-wide full bar that ate the table. User feedback 2026-05-29:
+// "confidence should not be shown like such a big bar".
 function ConfidenceBar({ value, action }: { value: number; action: string }) {
   const fillClass =
     action === 'NEGATIVE' ? 'bg-signal-neg' :
@@ -35,17 +38,20 @@ function ConfidenceBar({ value, action }: { value: number; action: string }) {
 
   return (
     <div
-      className="h-1.5 rounded-[1px] overflow-hidden bg-paper-deep"
+      className="flex items-center gap-1.5"
       role="meter"
       aria-valuenow={pct}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-label={`Confidence: ${pct}%`}
     >
-      <div
-        className={`h-full rounded-[1px] transition-all ${fillClass}`}
-        style={{ width: `${pct}%` }}
-      />
+      <div className="h-1 w-8 rounded-[1px] overflow-hidden bg-paper-deep flex-shrink-0">
+        <div
+          className={`h-full rounded-[1px] transition-all ${fillClass}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span className="font-mono text-[11px] text-ink-secondary tabular-nums">{pct}%</span>
     </div>
   )
 }
@@ -89,7 +95,10 @@ function ConvRow({ row, tabKey }: { row: ConvictionCallRow; tabKey: TabKey }) {
              : null
 
   const rowClass = "grid items-center gap-4 px-3 py-2 rounded-[2px] hover:bg-paper-deep transition-colors cursor-pointer"
-  const rowStyle = { gridTemplateColumns: '130px 1fr 110px 1fr 80px 72px' }
+  // Column widths (user feedback 2026-05-29): confidence shrunk from 1fr → 90px,
+  // expected moved before action, "Days" added at the tail so the user can see
+  // how long a name has been on the list (e.g. "BBPower day 3").
+  const rowStyle = { gridTemplateColumns: '120px 1fr 110px 90px 72px 80px 56px' }
 
   const inner = (
     <>
@@ -128,9 +137,6 @@ function ConvRow({ row, tabKey }: { row: ConvictionCallRow; tabKey: TabKey }) {
         <ConfidenceBar value={row.confidence} action={row.action} />
       )}
 
-      {/* Action badge */}
-      <ActionBadge action={row.action} />
-
       {/* Predicted excess */}
       <div
         className={`font-mono text-[12px] text-right ${
@@ -138,6 +144,14 @@ function ConvRow({ row, tabKey }: { row: ConvictionCallRow; tabKey: TabKey }) {
         }`}
       >
         {excess ?? '—'}
+      </div>
+
+      {/* Action badge */}
+      <ActionBadge action={row.action} />
+
+      {/* Days held — null for funds (no entry_date concept) */}
+      <div className="font-mono text-[11px] text-ink-tertiary text-right tabular-nums">
+        {row.days_held != null ? `d${row.days_held}` : '—'}
       </div>
     </>
   )
@@ -230,15 +244,16 @@ function ColumnHeaders({ activeTab }: { activeTab: TabKey }) {
   const confidenceLabel = activeTab === 'funds' ? 'Quality' : 'Confidence'
   return (
     <div
-      className="grid px-3 mb-1"
-      style={{ gridTemplateColumns: '130px 1fr 110px 1fr 80px 72px' }}
+      className="grid px-3 mb-1 gap-4"
+      style={{ gridTemplateColumns: '120px 1fr 110px 90px 72px 80px 56px' }}
     >
       <span className="font-sans text-[10px] uppercase tracking-[0.14em] text-ink-tertiary font-semibold">Symbol</span>
       <span className="font-sans text-[10px] uppercase tracking-[0.14em] text-ink-tertiary font-semibold">Name / Sector</span>
       <span className="font-sans text-[10px] uppercase tracking-[0.14em] text-ink-tertiary font-semibold">Signal</span>
       <span className="font-sans text-[10px] uppercase tracking-[0.14em] text-ink-tertiary font-semibold">{confidenceLabel}</span>
-      <span className="font-sans text-[10px] uppercase tracking-[0.14em] text-ink-tertiary font-semibold">Action</span>
       <span className="font-sans text-[10px] uppercase tracking-[0.14em] text-ink-tertiary font-semibold text-right">Expected</span>
+      <span className="font-sans text-[10px] uppercase tracking-[0.14em] text-ink-tertiary font-semibold">Action</span>
+      <span className="font-sans text-[10px] uppercase tracking-[0.14em] text-ink-tertiary font-semibold text-right">Days</span>
     </div>
   )
 }
@@ -280,7 +295,7 @@ export function TodayConvictionTabs({ data }: Props) {
   return (
     <section
       className="py-10 border-b border-paper-rule"
-      aria-label="Today's conviction"
+      aria-label="Top conviction"
     >
       <div className="max-w-[1400px] mx-auto px-8">
         {/* Section header */}
@@ -289,14 +304,14 @@ export function TodayConvictionTabs({ data }: Props) {
             <h2
               className="font-serif text-[28px] font-normal tracking-[-0.011em] text-ink-primary"
             >
-              Today&apos;s conviction
+              Top conviction
             </h2>
             <p className="font-sans text-[13px] text-ink-tertiary mt-1">
-              Strongest combined signal agreement across stocks, funds, and ETFs.{' '}
+              Highest-confidence active calls across stocks, funds, and ETFs.{' '}
               <span className="inline-block px-1 py-px text-[9px] font-bold uppercase tracking-[0.14em] rounded-[2px] bg-accent text-paper align-middle">
                 NEW
               </span>{' '}
-              = signal fired at today&apos;s close.
+              = signal fired at today&apos;s close. Days column shows how long the call has been active.
             </p>
           </div>
         </div>

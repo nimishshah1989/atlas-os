@@ -159,6 +159,10 @@ export type ConvictionCallRow = {
   is_fund: boolean
   /** For fund rows: true = Atlas Leader designation, false otherwise */
   is_atlas_leader: boolean
+  /** ISO date when the underlying signal_call first fired. Null for fund rows. */
+  entry_date: string | null
+  /** Number of trading days the call has been open. Null for fund rows. */
+  days_held: number | null
 }
 
 export type ConvictionCallsResult = {
@@ -283,6 +287,18 @@ export async function getTopConvictionCalls(): Promise<ConvictionCallsResult> {
     `.catch(() => [] as RawFundRow[]),
   ])
 
+  // Compute days_held from entry_date — naive calendar-day count is good
+  // enough for a "day N on the conviction list" UI affordance. We don't
+  // bother with NSE-trading-day-only math; weekends + holidays bias the
+  // number by a couple days at most, which doesn't matter for "this call
+  // is on day 3 vs day 30".
+  const daysHeld = (entryDate: string): number => {
+    const entry = new Date(entryDate + 'T00:00:00Z').getTime()
+    const now = new Date(today + 'T00:00:00Z').getTime()
+    if (!Number.isFinite(entry) || !Number.isFinite(now)) return 0
+    return Math.max(0, Math.round((now - entry) / (1000 * 60 * 60 * 24)))
+  }
+
   const stocks: ConvictionCallRow[] = stockRows.map(r => ({
     symbol: r.symbol ?? 'UNKNOWN',
     company_name: r.company_name,
@@ -295,6 +311,8 @@ export async function getTopConvictionCalls(): Promise<ConvictionCallsResult> {
     is_new: r.entry_date === today,
     is_fund: false,
     is_atlas_leader: false,
+    entry_date: r.entry_date,
+    days_held: daysHeld(r.entry_date),
   }))
 
   const etfs: ConvictionCallRow[] = etfRows.map(r => ({
@@ -309,6 +327,8 @@ export async function getTopConvictionCalls(): Promise<ConvictionCallsResult> {
     is_new: r.entry_date === today,
     is_fund: false,
     is_atlas_leader: false,
+    entry_date: r.entry_date,
+    days_held: daysHeld(r.entry_date),
   }))
 
   const funds: ConvictionCallRow[] = fundRows.map(r => ({
@@ -325,6 +345,8 @@ export async function getTopConvictionCalls(): Promise<ConvictionCallsResult> {
     is_new: false,
     is_fund: true,
     is_atlas_leader: r.is_atlas_leader ?? false,
+    entry_date: null,
+    days_held: null,
   }))
 
   return {

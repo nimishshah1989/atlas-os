@@ -22,6 +22,8 @@ function makeStockRow(overrides: Partial<ConvictionCallRow> = {}): ConvictionCal
     is_new: false,
     is_fund: false,
     is_atlas_leader: false,
+    entry_date: '2026-05-26',
+    days_held: 3,
     ...overrides,
   }
 }
@@ -40,7 +42,7 @@ function makeEmptyResult(): ConvictionCallsResult {
 describe('TodayConvictionTabs', () => {
   it('renders the section heading', () => {
     render(<TodayConvictionTabs data={makeEmptyResult()} />)
-    expect(screen.getByText("Today's conviction")).toBeDefined()
+    expect(screen.getByText('Top conviction')).toBeDefined()
   })
 
   it('renders three tab buttons', () => {
