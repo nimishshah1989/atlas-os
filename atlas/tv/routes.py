@@ -12,9 +12,12 @@ from sqlalchemy import text
 from atlas.db import get_engine
 from atlas.tv.csv_export import export_portfolio_csv  # type: ignore[import]
 from atlas.tv.portfolio_analytics import compute_portfolio_analytics  # type: ignore[import]
+from atlas.tv.rs_ratios import compute_rs_ratios  # type: ignore[import]
 from atlas.tv.screener import fetch_and_upsert_all  # type: ignore[import]
 
 router = APIRouter(prefix="/v1/tv", tags=["tv"])
+
+_stocks_router = APIRouter(prefix="/v1/stocks", tags=["stocks-detail"])
 
 _STALE_DAYS = 2
 
@@ -113,3 +116,20 @@ async def trigger_screener() -> dict:
         return {"status": "ok"}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@_stocks_router.get("/{symbol}/rs-ratios")
+def get_rs_ratios(symbol: str, days: int = 252) -> dict:
+    """Return stock/sector and stock/Nifty50 RS ratio time series."""
+    result = compute_rs_ratios(symbol.upper(), days=days)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=f"No price data for symbol: {symbol}")
+    last_nifty_date = result["vs_nifty50"][-1]["date"] if result.get("vs_nifty50") else None
+    return {
+        "data": result,
+        "meta": {
+            "data_as_of": last_nifty_date,
+            "fetched_at": datetime.datetime.now(tz=datetime.UTC).isoformat(),
+            "source": "de_equity_ohlcv + de_index_prices",
+        },
+    }

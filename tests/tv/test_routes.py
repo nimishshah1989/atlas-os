@@ -67,6 +67,11 @@ def test_tv_metrics_stale_flag():
         "price": Decimal("3500.0"),
         "high_52w": Decimal("3800.0"),
         "low_52w": Decimal("3000.0"),
+        "pe_ttm": None,
+        "ps_current": None,
+        "pb_fbs": None,
+        "debt_to_equity": None,
+        "roe": None,
     }
     with patch("atlas.tv.routes.get_engine", return_value=_mock_conn(fake_row)):
         resp = client.get("/v1/tv/metrics/TCS")
