@@ -72,10 +72,11 @@ describe('RegimeJourney12w', () => {
   it('renders the legend with all four live regime state names', () => {
     const cells = [makeCell()]
     render(<RegimeJourney12w cells={cells} />)
-    expect(screen.getByText('Risk-On')).toBeDefined()
-    expect(screen.getByText('Constructive')).toBeDefined()
-    expect(screen.getByText('Cautious')).toBeDefined()
-    expect(screen.getByText('Risk-Off')).toBeDefined()
+    // Each label appears in both the top legend AND the explainer bullets below.
+    expect(screen.getAllByText('Risk-On').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Constructive').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Cautious').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Risk-Off').length).toBeGreaterThanOrEqual(1)
   })
 
   it('renders 12 blocks for 12 weekly cells', () => {

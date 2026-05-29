@@ -15,6 +15,28 @@
 // All colors use Atlas DS Tailwind tokens (no hardcoded hex).
 
 import type { WeeklyRegimeCell } from '@/lib/queries/v6/landing'
+import { InfoTooltip } from '@/components/ui/InfoTooltip'
+
+// Per-row tooltip content. Each metric is a regime classifier input; the
+// "translation" line is the plain-English read.
+const METRIC_TOOLTIPS = {
+  breadth: {
+    content: 'Breadth: percent of Nifty 500 stocks above their 50-day EMA. Source: atlas_market_regime_daily.pct_above_ema_50',
+    translation: 'How many stocks are above their short-term trend. >65% = broad uptrend; <50% = thinning leadership.',
+  },
+  vix: {
+    content: 'India VIX: implied 30-day volatility of Nifty 50 options. Source: NSE / Yahoo Finance ^INDIAVIX',
+    translation: 'Fear gauge. <15 calm, 15-20 normal, >20 elevated, >25 stress.',
+  },
+  mcclellan: {
+    content: 'McClellan Oscillator: 19-day vs 39-day EMA of (advancers − decliners). Source: atlas_market_regime_daily.mcclellan_oscillator',
+    translation: 'Breadth momentum. >+30 strong thrust; near zero neutral; <−30 washout / oversold breadth.',
+  },
+  trend: {
+    content: 'Trend slope: % change per day of the Nifty 500 50-day EMA. Source: atlas_market_regime_daily.nifty500_ema_50_slope (shown ×100)',
+    translation: 'Primary trend rate-of-change. +0.10%/day or higher = accelerating uptrend; near zero = stalling.',
+  },
+} as const
 
 type Props = {
   cells: WeeklyRegimeCell[]
@@ -64,9 +86,13 @@ const REGIME_BG: Record<RegimeSentiment, string> = {
   'neutral':      '#C2B8A8',
 }
 
-// Label text: dark regimes (cautious/risk-off) need light text; light regimes need dark
+// Legend pill text colour vs background:
+//   Risk-On bg is dark signal-pos green → use paper (white) for contrast.
+//   Constructive bg is signal-pos at 18% alpha → green text reads fine.
+//   Cautious / Risk-Off bgs are dark mustard / dark red-orange → paper text.
+// 2026-05-29 fix: Risk-On previously used green-on-green and was invisible.
 const REGIME_LABEL_CLASS: Record<RegimeSentiment, string> = {
-  'risk-on':      'text-signal-pos',
+  'risk-on':      'text-paper',
   'constructive': 'text-signal-pos',
   'cautious':     'text-paper',
   'risk-off':     'text-paper',
@@ -257,9 +283,10 @@ export function RegimeJourney12w({ cells }: Props) {
             >
               Trailing 12 weeks · how we got here
             </h2>
-            <p className="font-sans text-[13px] text-ink-tertiary mt-1">
+            <p className="font-sans text-[13px] text-ink-tertiary mt-1 max-w-[640px]">
               Regime call each week, alongside the four classifier inputs that drove it:
               <span className="font-medium text-ink-secondary"> Breadth, India VIX, McClellan, Trend slope</span>.
+              Hover any row label for what the metric measures and how its zones map to the regime.
             </p>
           </div>
           <RegimeLegend />
@@ -280,8 +307,9 @@ export function RegimeJourney12w({ cells }: Props) {
 
         {/* Breadth row (pct_above_ema_50 from atlas_market_regime_daily) */}
         <div style={gridStyle} className="mt-1" role="row" aria-label="Breadth % above 50D EMA per week">
-          <div className="font-sans text-[10px] uppercase tracking-[0.18em] font-semibold text-ink-tertiary flex items-center pr-2">
+          <div className="font-sans text-[10px] uppercase tracking-[0.18em] font-semibold text-ink-tertiary flex items-center pr-2 gap-1">
             Breadth&nbsp;%
+            <InfoTooltip content={METRIC_TOOLTIPS.breadth.content} translation={METRIC_TOOLTIPS.breadth.translation} />
           </div>
           {cells.map(cell => (
             <MetricCell
@@ -295,8 +323,9 @@ export function RegimeJourney12w({ cells }: Props) {
 
         {/* VIX row */}
         <div style={gridStyle} className="mt-1" role="row" aria-label="India VIX per week">
-          <div className="font-sans text-[10px] uppercase tracking-[0.18em] font-semibold text-ink-tertiary flex items-center pr-2">
+          <div className="font-sans text-[10px] uppercase tracking-[0.18em] font-semibold text-ink-tertiary flex items-center pr-2 gap-1">
             India VIX
+            <InfoTooltip content={METRIC_TOOLTIPS.vix.content} translation={METRIC_TOOLTIPS.vix.translation} />
           </div>
           {cells.map(cell => (
             <MetricCell
@@ -310,8 +339,9 @@ export function RegimeJourney12w({ cells }: Props) {
 
         {/* McClellan row (breadth momentum) */}
         <div style={gridStyle} className="mt-1" role="row" aria-label="McClellan Oscillator per week">
-          <div className="font-sans text-[10px] uppercase tracking-[0.18em] font-semibold text-ink-tertiary flex items-center pr-2">
+          <div className="font-sans text-[10px] uppercase tracking-[0.18em] font-semibold text-ink-tertiary flex items-center pr-2 gap-1">
             McClellan
+            <InfoTooltip content={METRIC_TOOLTIPS.mcclellan.content} translation={METRIC_TOOLTIPS.mcclellan.translation} />
           </div>
           {cells.map(cell => (
             <MetricCell
@@ -325,8 +355,9 @@ export function RegimeJourney12w({ cells }: Props) {
 
         {/* Trend slope row (Nifty 500 50D EMA slope) */}
         <div style={gridStyle} className="mt-1" role="row" aria-label="Nifty 500 50D EMA slope per week">
-          <div className="font-sans text-[10px] uppercase tracking-[0.18em] font-semibold text-ink-tertiary flex items-center pr-2">
+          <div className="font-sans text-[10px] uppercase tracking-[0.18em] font-semibold text-ink-tertiary flex items-center pr-2 gap-1">
             Trend
+            <InfoTooltip content={METRIC_TOOLTIPS.trend.content} translation={METRIC_TOOLTIPS.trend.translation} />
           </div>
           {cells.map(cell => (
             <MetricCell
@@ -349,6 +380,24 @@ export function RegimeJourney12w({ cells }: Props) {
               {formatDateLabel(cell.week_end_date)}
             </div>
           ))}
+        </div>
+
+        {/* How the four inputs combine into the weekly regime call. Per
+            [[atlas-explainer-flywheel]] — never a black box. */}
+        <div className="mt-5 pt-4 border-t border-paper-rule">
+          <div className="font-sans text-[10px] uppercase tracking-[0.18em] text-ink-tertiary font-semibold mb-2">
+            How the four inputs combine
+          </div>
+          <ul className="font-sans text-[12px] text-ink-secondary leading-relaxed list-disc pl-5 space-y-1 max-w-[820px]">
+            <li><span className="font-medium text-signal-pos">Risk-On</span> — breadth ≥ 65%, VIX &lt; 15, McClellan positive, trend slope &gt; +0.10%/day. All four agree.</li>
+            <li><span className="font-medium text-signal-pos">Constructive</span> — breadth 50-65% or VIX 15-20, with trend still positive. Mixed but leaning up.</li>
+            <li><span className="font-medium text-signal-warn">Cautious</span> — breadth &lt; 50%, VIX 18-22, or McClellan turning negative. Trend may still be intact but momentum thinning.</li>
+            <li><span className="font-medium text-signal-neg">Risk-Off</span> — VIX &gt; 22, McClellan &lt; −30, or trend slope flips negative. Multiple inputs agree on stress.</li>
+          </ul>
+          <p className="font-sans text-[11px] text-ink-tertiary mt-2">
+            Exact thresholds live in <span className="font-mono">atlas/compute/regime.py classify_regime_state</span>; deployment % mapping is {' '}
+            <span className="font-mono">Risk-On 100% · Constructive 70% · Cautious 40% · Risk-Off 0%</span>.
+          </p>
         </div>
       </div>
     </section>

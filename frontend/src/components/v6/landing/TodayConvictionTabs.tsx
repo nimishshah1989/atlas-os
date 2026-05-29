@@ -13,7 +13,25 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { ActionBadge } from '@/components/v6/shared/ActionBadge'
+import { InfoTooltip } from '@/components/ui/InfoTooltip'
 import type { ConvictionCallRow, ConvictionCallsResult } from '@/lib/queries/v6/landing'
+
+// Column-header tooltips. Each tooltip's translation answers the user's
+// actual question (what does this column tell me / why does it look uniform).
+const COL_TOOLTIPS = {
+  confidence: {
+    content: 'Confidence = tier-bucket historical hit rate. Source: atlas_signal_calls.confidence_unconditional',
+    translation: 'Same value across every stock in the same (cap × tenure) cell — it is the cell\'s prior, not a per-stock score. Different cells show different values.',
+  },
+  expected: {
+    content: 'Expected = predicted excess return over the call\'s tenure horizon (e.g. 12m for "Mid 12m"). Source: atlas_signal_calls.predicted_excess',
+    translation: 'Per-stock model prediction. Blank rows mean the backend has not yet written this column for the active calls.',
+  },
+  days: {
+    content: 'Days = trading days since this signal call first fired (entry_date). Source: atlas_signal_calls.date',
+    translation: 'Identical values across rows mean the calls all entered on the same nightly recompute — check entry_date stability in atlas_signal_calls.',
+  },
+} as const
 
 type TabKey = 'stocks' | 'funds' | 'etfs'
 
@@ -242,18 +260,30 @@ function TabBar({
 
 function ColumnHeaders({ activeTab }: { activeTab: TabKey }) {
   const confidenceLabel = activeTab === 'funds' ? 'Quality' : 'Confidence'
+  const headerClass = "font-sans text-[10px] uppercase tracking-[0.14em] text-ink-tertiary font-semibold flex items-center gap-1"
   return (
     <div
       className="grid px-3 mb-1 gap-4"
       style={{ gridTemplateColumns: '120px 1fr 110px 90px 72px 80px 56px' }}
     >
-      <span className="font-sans text-[10px] uppercase tracking-[0.14em] text-ink-tertiary font-semibold">Symbol</span>
-      <span className="font-sans text-[10px] uppercase tracking-[0.14em] text-ink-tertiary font-semibold">Name / Sector</span>
-      <span className="font-sans text-[10px] uppercase tracking-[0.14em] text-ink-tertiary font-semibold">Signal</span>
-      <span className="font-sans text-[10px] uppercase tracking-[0.14em] text-ink-tertiary font-semibold">{confidenceLabel}</span>
-      <span className="font-sans text-[10px] uppercase tracking-[0.14em] text-ink-tertiary font-semibold text-right">Expected</span>
-      <span className="font-sans text-[10px] uppercase tracking-[0.14em] text-ink-tertiary font-semibold">Action</span>
-      <span className="font-sans text-[10px] uppercase tracking-[0.14em] text-ink-tertiary font-semibold text-right">Days</span>
+      <span className={headerClass}>Symbol</span>
+      <span className={headerClass}>Name / Sector</span>
+      <span className={headerClass}>Signal</span>
+      <span className={headerClass}>
+        {confidenceLabel}
+        {activeTab !== 'funds' && (
+          <InfoTooltip content={COL_TOOLTIPS.confidence.content} translation={COL_TOOLTIPS.confidence.translation} />
+        )}
+      </span>
+      <span className={`${headerClass} justify-end`}>
+        Expected
+        <InfoTooltip content={COL_TOOLTIPS.expected.content} translation={COL_TOOLTIPS.expected.translation} />
+      </span>
+      <span className={headerClass}>Action</span>
+      <span className={`${headerClass} justify-end`}>
+        Days
+        <InfoTooltip content={COL_TOOLTIPS.days.content} translation={COL_TOOLTIPS.days.translation} />
+      </span>
     </div>
   )
 }
@@ -292,6 +322,15 @@ export function TodayConvictionTabs({ data }: Props) {
     activeTab === 'funds'  ? data.funds  :
     data.etfs
 
+  // Data-quality flags: surfaced as a single small banner above the table so
+  // the user doesn't read uniform-looking columns as a UI bug.
+  const everyExpectedNull = rows.length > 0 && rows.every(r => r.predicted_excess == null)
+  const distinctDays = new Set(
+    rows.map(r => r.days_held).filter((d): d is number => d != null)
+  )
+  const everyDaysSame = distinctDays.size === 1 && rows.length > 1
+  const everyConfSame = rows.length > 1 && new Set(rows.map(r => r.confidence)).size === 1
+
   return (
     <section
       className="py-10 border-b border-paper-rule"
@@ -306,18 +345,38 @@ export function TodayConvictionTabs({ data }: Props) {
             >
               Top conviction
             </h2>
-            <p className="font-sans text-[13px] text-ink-tertiary mt-1">
+            <p className="font-sans text-[13px] text-ink-tertiary mt-1 max-w-[820px]">
               Highest-confidence active calls across stocks, funds, and ETFs.{' '}
               <span className="inline-block px-1 py-px text-[9px] font-bold uppercase tracking-[0.14em] rounded-[2px] bg-accent text-paper align-middle">
                 NEW
               </span>{' '}
-              = signal fired at today&apos;s close. Days column shows how long the call has been active.
+              = signal fired at today&apos;s close. Confidence is a cell-level prior (same for every stock in a given cap × tenure cell); Expected is the per-stock predicted excess return. Hover any column header for details.
             </p>
           </div>
         </div>
 
         {/* Tabs */}
         <TabBar tabs={tabs} active={activeTab} onSelect={setActiveTab} />
+
+        {/* Data-quality banner — surfaces backend gaps honestly instead of
+            letting the user mistake uniform columns for a UI bug. */}
+        {activeTab !== 'funds' && (everyExpectedNull || everyDaysSame || everyConfSame) && (
+          <div
+            role="note"
+            className="mb-3 px-3 py-2 rounded-[2px] border border-signal-warn/30 bg-signal-warn/8 text-[12px] text-ink-secondary leading-relaxed"
+          >
+            <span className="font-medium text-signal-warn">Data quality:</span>{' '}
+            {everyExpectedNull && (
+              <span>Predicted excess is unwritten in the live set — column shows em-dashes. </span>
+            )}
+            {everyDaysSame && (
+              <span>All visible calls share entry_date {Array.from(distinctDays)[0] != null ? `(d${Array.from(distinctDays)[0]})` : ''} — nightly recompute may be re-stamping signal_call_ids. </span>
+            )}
+            {everyConfSame && !everyDaysSame && (
+              <span>Confidence clusters at one value because the top-N filter selects within the same cell. Switch tabs or scroll into lower-tier cells for spread. </span>
+            )}
+          </div>
+        )}
 
         {/* Pane */}
         <div role="tabpanel" aria-label={`${activeTab} conviction calls`}>
