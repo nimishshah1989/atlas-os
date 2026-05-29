@@ -1725,3 +1725,48 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{
+  "ts": "2026-05-29T05:09:35Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/docs/superpowers/specs/2026-05-29-stock-detail-redesign-spec.html",
+  "lines_changed": 620,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T05:25:00Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/docs/superpowers/plans/2026-05-29-stock-detail-backend-plan.md",
+  "lines_changed": 1394,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T05:34:13Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/docs/superpowers/plans/2026-05-29-stock-detail-frontend-plan.md",
+  "lines_changed": 1656,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T05:54:03Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/regime/RegimeHeadline.tsx",
+  "lines_changed": 38,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T05:54:58Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/CONTEXT.md",
+  "lines_changed": 22,
+  "session_id": "unknown",
+  "schema_version": 1
+}

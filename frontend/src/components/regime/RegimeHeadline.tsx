@@ -31,7 +31,18 @@ const CATEGORY_LABELS = [
   { key: 'participation', label: 'Participation' },
 ] as const
 
-// All four regimes in their natural progression from risk-on to risk-off
+// All four regimes in their natural progression from risk-on to risk-off.
+// `deployPct` numbers MUST match atlas/compute/regime.py DEPLOYMENT_MULTIPLIERS
+// (line 94-98 of that file). Mismatches were the source of the 2026-05-29
+// "Deploy 40% (DB) vs Cautious slider 60% (hardcoded)" contradiction the user
+// flagged. The 4 regime classifier states are canonical per CONTEXT.md
+// (Risk-On / Constructive / Cautious / Risk-Off — supersedes the older
+// "Elevated / Below-Trend" naming).
+//
+// TODO(thresholds): per the project-wide "thresholds live in atlas_thresholds,
+// not in code" rule, this array should be hydrated from atlas_thresholds on
+// the server side rather than duplicating the constants here. Filed as a
+// follow-up — fix the visible bug first, then move the source of truth.
 const ALL_REGIMES = [
   {
     state: 'Risk-On',
@@ -42,20 +53,20 @@ const ALL_REGIMES = [
   {
     state: 'Constructive',
     accentColor: '#14b8a6',
-    deployPct: 80,
-    logic: 'Strong on 3 of 4 pillars. Positive trend with breadth support, but momentum or participation not fully confirmed. 80% lets you participate while reserving dry powder.',
+    deployPct: 70,
+    logic: 'Strong on 3 of 4 pillars. Positive trend with breadth support, but momentum or participation not fully confirmed. 70% lets you participate while reserving dry powder.',
   },
   {
     state: 'Cautious',
     accentColor: '#f59e0b',
-    deployPct: 60,
-    logic: 'Mixed signals — at least 2 of 4 pillars are deteriorating. Breadth narrowing or VIX elevated. 60% preserves capital while staying engaged in leading sectors.',
+    deployPct: 40,
+    logic: 'Mixed signals — at least 2 of 4 pillars are deteriorating. Breadth narrowing or VIX elevated. 40% preserves capital while staying engaged in leading sectors.',
   },
   {
     state: 'Risk-Off',
     accentColor: '#ef4444',
-    deployPct: 40,
-    logic: 'Broad deterioration across trend, breadth, and momentum. Capital preservation takes priority. 40% keeps minimal exposure for opportunistic positions only.',
+    deployPct: 0,
+    logic: 'Broad deterioration across trend, breadth, and momentum. Capital preservation is the entire stance. 0% — sit in cash + BeES yield until at least one pillar turns.',
   },
 ] as const
 

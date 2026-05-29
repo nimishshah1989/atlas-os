@@ -168,9 +168,26 @@ Resolved 2026-05-24 in /grill-with-docs Q4.
 
 ## Regime classifier thresholds
 
-The 4-state regime classifier (Risk-On / Elevated / Risk-Off / Below-Trend)
-is rule-based on 4 inputs: `smallcap_rs_z`, `breadth_pct_above_200dma`,
-`vix_percentile`, `cross_sectional_dispersion`.
+The 4-state regime classifier — **canonical state names (live as of 2026-05-29):**
+**Risk-On / Constructive / Cautious / Risk-Off** — supersedes the original
+`Elevated / Below-Trend` naming proposed in the pre-build CEO plan. The live
+`atlas_market_regime_daily.regime_state` enum uses these four; reconciliation
+forced 2026-05-29 during regime-page rebuild after user surfaced "Cautious 60%
+(hardcoded JSX slider) vs Deploy 40% (live DB)" contradiction.
+
+State → deployment_multiplier mapping (atlas/compute/regime.py line 94-98 —
+canonical source):
+- **Risk-On:** 1.0× (deploy 100%)
+- **Constructive:** 0.7× (deploy 70%)
+- **Cautious:** 0.4× (deploy 40%)
+- **Risk-Off:** 0.0× (sit in cash + BeES yield)
+
+Frontend components rendering deployment % MUST hydrate from this canonical
+source — no hardcoded constants. Filed for follow-up: lift the per-regime
+deployment % onto `atlas_thresholds` so even the Python constants disappear.
+
+Classifier is rule-based on 4 inputs: `smallcap_rs_z`,
+`breadth_pct_above_200dma`, `vix_percentile`, `cross_sectional_dispersion`.
 
 **Threshold storage:** `atlas_thresholds` config table, loaded via
 `atlas.db.load_thresholds()`. Hook-enforced — no hardcoded constants.
