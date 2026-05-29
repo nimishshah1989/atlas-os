@@ -33,6 +33,11 @@ def test_tv_metrics_returns_200():
         "price": Decimal("2820.0"),
         "high_52w": Decimal("3000.0"),
         "low_52w": Decimal("2400.0"),
+        "pe_ttm": None,
+        "ps_current": None,
+        "pb_fbs": None,
+        "debt_to_equity": None,
+        "roe": None,
     }
     with patch("atlas.tv.routes.get_engine", return_value=_mock_conn(fake_row)):
         resp = client.get("/v1/tv/metrics/RELIANCE")

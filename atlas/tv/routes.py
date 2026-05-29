@@ -29,7 +29,8 @@ async def get_tv_metrics(symbol: str) -> dict:
         SELECT symbol, instrument_id::text, fetched_at,
                tv_recommend_label, recommend_all, recommend_ma, recommend_other,
                rsi_14, macd_macd, ema_20, ema_50, ema_200, atr_14,
-               volume, volume_10d_avg, price, high_52w, low_52w
+               volume, volume_10d_avg, price, high_52w, low_52w,
+               pe_ttm, ps_current, pb_fbs, debt_to_equity, roe
         FROM atlas.tv_metrics
         WHERE symbol = :symbol
     """)
