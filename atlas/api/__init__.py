@@ -26,6 +26,10 @@ from atlas.api.screen import router as screen_router
 from atlas.api.strategies import router as strategies_router
 from atlas.api.trading import router as trading_router
 from atlas.api.tv_signals import router as tv_signals_router
+from atlas.tv.routes import _internal_router as tv_internal_router  # type: ignore[import]
+from atlas.tv.routes import _portfolios_router as tv_portfolios_router  # type: ignore[import]
+from atlas.tv.routes import _stocks_router as tv_stocks_router  # type: ignore[import]
+from atlas.tv.routes import router as tv_router  # type: ignore[import]
 
 app = FastAPI(title="Atlas API", version="0.1.0")
 
@@ -62,6 +66,16 @@ app.include_router(market_router)
 app.include_router(cell_defs_router)
 app.include_router(instrument_router)
 app.include_router(rank_router)  # v6 Fund + ETF scorecard ranking (migration 093)
+app.include_router(tv_router)  # TV-05: cached TV screener metrics — /v1/tv/metrics/{symbol}
+app.include_router(
+    tv_internal_router
+)  # TV-06: internal pg_cron trigger — /v1/tv/internal/run-screener
+app.include_router(
+    tv_portfolios_router
+)  # TV-08: portfolio analytics — /v1/portfolios/{id}/analytics
+app.include_router(
+    tv_stocks_router
+)  # TV stock detail — /v1/stocks/{symbol}/rs-ratios + /v1/stocks/{symbol}/peer-matrix
 
 
 @app.get("/health", include_in_schema=False)

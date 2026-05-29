@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock Detail Page Redesign — Atlas OS Spec</title>
+<style>
+  :root {
+    --paper: #F8F4EC;
+    --paper-deep: #F1ECDF;
+    --ink: #1A1714;
+    --ink-3: #6B5F52;
+    --ink-4: #9A8F82;
+    --rule: #C2B8A8;
+    --teal: #1D9E75;
+    --accent: #25394A;
+    --pos: #2F6B43;
+    --neg: #B0492C;
+    --warn: #B8860B;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--paper); color: var(--ink); font-family: 'Georgia', serif; line-height: 1.6; }
+  .container { max-width: 900px; margin: 0 auto; padding: 48px 24px; }
+  h1 { font-size: 28px; font-weight: 600; margin-bottom: 8px; }
+  h2 { font-size: 20px; font-weight: 600; margin: 48px 0 16px; border-bottom: 1px solid var(--rule); padding-bottom: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 28px 0 10px; color: var(--accent); font-family: 'Courier New', monospace; text-transform: uppercase; letter-spacing: 0.08em; }
+  h4 { font-size: 13px; font-weight: 600; margin: 20px 0 8px; color: var(--ink-3); }
+  p { margin-bottom: 14px; font-size: 15px; }
+  .meta { color: var(--ink-3); font-size: 13px; margin-bottom: 40px; font-family: 'Courier New', monospace; }
+  .philosophy { background: var(--paper-deep); border-left: 3px solid var(--teal); padding: 20px 24px; margin: 24px 0; border-radius: 0 4px 4px 0; }
+  .philosophy p { margin-bottom: 8px; }
+  .philosophy p:last-child { margin-bottom: 0; }
+
+  /* Section mockups */
+  .mockup { border: 1px solid var(--rule); border-radius: 4px; background: var(--paper-deep); margin: 20px 0; overflow: hidden; }
+  .mockup-header { background: var(--ink); color: var(--paper); padding: 6px 12px; font-family: 'Courier New', monospace; font-size: 11px; letter-spacing: 0.1em; }
+  .mockup-body { padding: 20px; }
+  .event-line { font-family: 'Courier New', monospace; font-size: 13px; color: var(--ink-3); margin-bottom: 6px; }
+  .event-headline { font-size: 18px; font-weight: 600; color: var(--ink); margin-bottom: 16px; }
+  .event-headline .stage { color: var(--pos); }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 2px; font-family: 'Courier New', monospace; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; }
+  .pill-pos { background: var(--pos); color: white; }
+  .pill-neg { background: var(--neg); color: white; }
+  .pill-warn { background: var(--warn); color: white; }
+  .pill-neutral { background: var(--ink-4); color: white; }
+  .key-numbers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px; }
+  .kn { border: 1px solid var(--rule); border-radius: 3px; padding: 10px; background: var(--paper); }
+  .kn-label { font-family: 'Courier New', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-3); margin-bottom: 4px; }
+  .kn-value { font-family: 'Courier New', monospace; font-size: 16px; font-weight: 600; }
+  .kn-value.pos { color: var(--pos); }
+  .kn-value.neg { color: var(--neg); }
+
+  /* Chart mockup */
+  .chart-box { background: #161a25; border-radius: 3px; height: 280px; display: flex; align-items: center; justify-content: center; color: #9A8F82; font-family: 'Courier New', monospace; font-size: 12px; margin-bottom: 16px; }
+  .commentary-box { background: var(--paper); border: 1px solid var(--rule); border-radius: 3px; padding: 14px; font-size: 14px; line-height: 1.6; color: var(--ink); }
+  .commentary-label { font-family: 'Courier New', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--teal); margin-bottom: 8px; font-weight: 600; }
+
+  /* Fundamentals strip */
+  .fundamentals-strip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 16px 0; }
+  .fund-pill { background: var(--paper); border: 1px solid var(--rule); border-radius: 3px; padding: 10px 12px; text-align: center; }
+  .fund-label { font-family: 'Courier New', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-3); }
+  .fund-value { font-family: 'Courier New', monospace; font-size: 15px; font-weight: 600; color: var(--ink); margin-top: 3px; }
+
+  /* RS charts */
+  .rs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  .rs-chart { background: var(--paper); border: 1px solid var(--rule); border-radius: 3px; padding: 14px; }
+  .rs-chart-title { font-family: 'Courier New', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-3); margin-bottom: 8px; }
+  .rs-chart-body { background: var(--paper-deep); height: 100px; border-radius: 2px; display: flex; align-items: center; justify-content: center; color: var(--ink-4); font-size: 12px; font-family: 'Courier New', monospace; margin-bottom: 8px; }
+  .rs-status { display: flex; align-items: center; gap: 6px; }
+
+  /* Lifecycle */
+  .lifecycle-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0; }
+  .lifecycle-cell { background: var(--paper); border: 1px solid var(--rule); border-radius: 3px; padding: 14px; }
+
+  /* Peer matrix */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; font-family: 'Courier New', monospace; }
+  th { text-align: left; padding: 8px 10px; background: var(--ink); color: var(--paper); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--rule); }
+  tr.parent-row td { background: rgba(29,158,117,0.08); font-weight: 600; }
+  tr.parent-row td:first-child { border-left: 3px solid var(--teal); }
+  .cell-pos { color: var(--pos); font-weight: 600; }
+  .cell-neg { color: var(--neg); }
+  .cell-warn { color: var(--warn); }
+  .cell-neutral { color: var(--ink-3); }
+
+  /* Spec sections */
+  .spec-block { background: var(--paper-deep); border: 1px solid var(--rule); border-radius: 4px; padding: 20px; margin: 16px 0; }
+  .spec-block h4 { margin-top: 0; }
+  ul { margin: 10px 0 14px 20px; }
+  li { margin-bottom: 6px; font-size: 14px; }
+  code { font-family: 'Courier New', monospace; background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 2px; font-size: 13px; }
+  .removed { text-decoration: line-through; color: var(--neg); }
+  .new { color: var(--pos); font-weight: 600; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 2px; font-family: 'Courier New', monospace; font-size: 11px; font-weight: 600; }
+  .badge-new { background: var(--pos); color: white; }
+  .badge-modify { background: var(--warn); color: white; }
+  .badge-remove { background: var(--neg); color: white; }
+  .badge-backend { background: var(--accent); color: white; }
+  hr { border: none; border-top: 1px solid var(--rule); margin: 40px 0; }
+  .warning-box { background: #FFF8E6; border: 1px solid var(--warn); border-radius: 4px; padding: 14px 18px; margin: 16px 0; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Stock Detail Page Redesign</h1>
+<div class="meta">
+  Atlas OS · Spec 2026-05-29 · Status: APPROVED FOR IMPLEMENTATION
+</div>
+
+<!-- PHILOSOPHY -->
+<div class="philosophy">
+  <p><strong>Core principle:</strong> The page answers one question — <em>"Is this stock actionable right now, and why?"</em> — not "what are all the signals for this stock."</p>
+  <p><strong>Reading contract:</strong> Verdict in 5 seconds. Story in 30 seconds. Full evidence available without hunting.</p>
+  <p><strong>Primary user:</strong> A portfolio manager or analyst fluent in the Weinstein/RS framework who wants Atlas to lead with synthesis, then trusts them to verify the evidence.</p>
+</div>
+
+<!-- ────────────── PAGE STRUCTURE ────────────── -->
+<h2>Page Structure — Seven Sections</h2>
+<p>Single vertical scroll. No tabs. No fixed panels. Section weight matches decision importance.</p>
+
+<div class="spec-block">
+  <h4>Section Order</h4>
+  <ol style="margin-left:20px; font-size:14px;">
+    <li><strong>Event Header</strong> — What happened, when, and where in the peer ranking</li>
+    <li><strong>The Chart</strong> — TradingView price chart + Atlas commentary + 5 fundamental pills</li>
+    <li><strong>RS Confirmation</strong> — Stock vs Sector ratio + Stock vs Nifty ratio (the timing gate)</li>
+    <li><strong>Lifecycle Position</strong> — How fresh, how much upside captured, volume conviction</li>
+    <li><strong>Peer Matrix</strong> — 4–5 sector peers vs parent stock across 8 metrics</li>
+    <li><strong>Supporting Detail</strong> — Conviction tape, stage history, component scores (for analysts)</li>
+    <li><strong>Act</strong> — Position sizing if portfolio active</li>
+  </ol>
+</div>
+
+<hr>
+
+<!-- ────────────── SECTION 1 ────────────── -->
+<h2>Section 1 — Event Header</h2>
+<p>Everything above the fold. Answers: <em>what structural event occurred, how recent, and how does this stock rank in its class?</em></p>
+
+<div class="mockup">
+  <div class="mockup-header">SECTION 1 — EVENT HEADER</div>
+  <div class="mockup-body">
+    <div class="event-line">NSE · Energy · Nifty 50 · Nifty 100</div>
+    <div class="event-headline">
+      Reliance Industries &nbsp;
+      <span class="stage">STAGE 2B</span>
+    </div>
+    <div style="font-size:14px; color:#6B5F52; margin-bottom:16px;">
+      Entered Stage 2B &nbsp;·&nbsp; <strong style="color:#1A1714;">18 days ago</strong> &nbsp;·&nbsp; Rank <strong style="color:#1D9E75;">7 of 42</strong> in stage &nbsp;·&nbsp;
+      <span class="pill pill-pos">BULLISH · 3M</span>
+    </div>
+    <div class="key-numbers">
+      <div class="kn">
+        <div class="kn-label">Price</div>
+        <div class="kn-value">₹2,841</div>
+      </div>
+      <div class="kn">
+        <div class="kn-label">3M Return</div>
+        <div class="kn-value pos">+12.4%</div>
+      </div>
+      <div class="kn">
+        <div class="kn-label">RS vs Nifty</div>
+        <div class="kn-value pos">↑ +4.8%</div>
+      </div>
+      <div class="kn">
+        <div class="kn-label">Conviction</div>
+        <div class="kn-value" style="color:#1D9E75;">↑ Strong</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="spec-block">
+  <h4>Data Requirements</h4>
+  <ul>
+    <li><code>stockState.state</code> → stage label and color (existing)</li>
+    <li><code>stockState.dwell_days</code> or computed from <code>stateHistory</code> — days since state entered</li>
+    <li><code>peerRank</code> / <code>peerTotal</code> — rank of this stock among same-state peers (existing)</li>
+    <li>Conviction direction + dominant tenure from <code>convictionTape</code> (existing)</li>
+    <li>Current price, 3M return, RS vs Nifty — from <code>metricHistory</code> latest row (existing)</li>
+  </ul>
+  <h4>Design Notes</h4>
+  <ul>
+    <li>Stage label uses existing <code>STATE_LABEL</code> / <code>STATE_COLOR</code> mapping</li>
+    <li>Peer rank shown only when <code>peerRank !== null</code></li>
+    <li>Conviction pill: BULLISH (pos), BEARISH (neg), MIXED (warn), NEUTRAL (neutral) — show dominant tenure</li>
+    <li>RS vs Nifty shows percentage diff from latest <code>metricHistory</code> entry; arrow indicates 4-week trend (rising/falling)</li>
+  </ul>
+</div>
+
+<hr>
+
+<!-- ────────────── SECTION 2 ────────────── -->
+<h2>Section 2 — The Chart</h2>
+<p>The visual anchor of the page. TradingView chart shows the structural story (breakout, base, volume, key EMAs). Atlas commentary reads the chart in plain English. Fundamentals strip gives valuation context.</p>
+
+<div class="mockup">
+  <div class="mockup-header">SECTION 2 — THE CHART</div>
+  <div class="mockup-body">
+    <div class="chart-box">
+      TradingView Widget · NSE:RELIANCE · Weekly · Dark Theme<br>
+      Volume bars · EMA 20 (orange) · EMA 50 (blue) · EMA 200 (red)
+    </div>
+    <div class="commentary-box">
+      <div class="commentary-label">Atlas Chart Reading</div>
+      Broke above 18-month resistance at ₹2,780 on 2.4× average volume three weeks ago. Higher low at ₹2,620 held cleanly in April before the breakout — classic Stage 2 base structure. EMA 20 and EMA 50 both rising with price running 4% ahead of the 20-day line, not overextended.
+    </div>
+    <div class="fundamentals-strip" style="margin-top:16px;">
+      <div class="fund-pill">
+        <div class="fund-label">P/E</div>
+        <div class="fund-value">24.3×</div>
+      </div>
+      <div class="fund-pill">
+        <div class="fund-label">P/S</div>
+        <div class="fund-value">1.8×</div>
+      </div>
+      <div class="fund-pill">
+        <div class="fund-label">P/B</div>
+        <div class="fund-value">2.1×</div>
+      </div>
+      <div class="fund-pill">
+        <div class="fund-label">Debt/Eq</div>
+        <div class="fund-value">0.42</div>
+      </div>
+      <div class="fund-pill">
+        <div class="fund-label">ROE</div>
+        <div class="fund-value">9.2%</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="spec-block">
+  <h4>Chart Configuration</h4>
+  <ul>
+    <li>TradingView widget URL: <code>https://www.tradingview.com/widgetembed/?symbol=NSE:{symbol}&amp;interval=W&amp;theme=dark&amp;style=1&amp;locale=en&amp;studies=STD%3BEMA%40tv-basicstudies,STD%3BEMA%40tv-basicstudies,STD%3BEMA%40tv-basicstudies&amp;studies_overrides=...</code></li>
+    <li>Interval: Weekly (<code>W</code>) — Weinstein analysis is stage-based, weekly chart is the standard timeframe</li>
+    <li>Studies: EMA 20, EMA 50, EMA 200 as overlays; Volume in lower pane (default)</li>
+    <li>Error fallback: paper-deep background with "Chart unavailable · <a href="#">Open in TradingView ↗</a>"</li>
+    <li>Height: 320px on desktop, 220px on mobile</li>
+  </ul>
+  <h4>Atlas Commentary</h4>
+  <ul>
+    <li>Commentary is <strong>generated from Atlas data</strong>, not hardcoded. Rules:</li>
+    <li>Breakout reference: if stock crossed EMA 200 in the last 30 days → mention breakout and price level</li>
+    <li>Volume context: if latest 20D vol &gt; 63D vol avg × 1.5 → "on expanding volume"; else "volume holding"</li>
+    <li>EMA structure: mention EMA 20 slope (rising/flat/falling) and extension from EMA 20</li>
+    <li>Higher low: if state transitioned from Stage 1 → Stage 2 → note the base formation period</li>
+    <li>Commentary composed server-side from <code>metricHistory</code> + <code>stockState</code> + <code>stateHistory</code></li>
+  </ul>
+  <h4>Fundamentals Strip — Backend Extension Required</h4>
+  <div class="warning-box">
+    ⚠ <strong>New data:</strong> PE, PS, PB, Debt/Equity, ROE are not currently fetched from TradingView. Requires backend extension to <code>atlas/tv/screener.py</code> and a new migration column in <code>atlas.tv_metrics</code>. See Backend Sub-Plan.
+  </div>
+  <ul>
+    <li>Fields to add to TV screener: <code>price_earnings_ttm</code>, <code>price_sales_current</code>, <code>price_book_fbs</code>, <code>debt_to_equity</code>, <code>return_on_equity</code></li>
+    <li>Displayed as 5 pills in a horizontal strip below the commentary</li>
+    <li>If null (TV doesn't have data for this stock): show <code>—</code> placeholder</li>
+    <li>No color coding on fundamentals — they're reference data, not signals</li>
+  </ul>
+</div>
+
+<hr>
+
+<!-- ────────────── SECTION 3 ────────────── -->
+<h2>Section 3 — RS Confirmation</h2>
+<p>The timing gate. Even if Atlas says Stage 2B, a broken RS ratio means wait. Two charts: stock vs sector index, stock vs Nifty 50. Each shows whether the ratio is above or below resistance.</p>
+
+<div class="mockup">
+  <div class="mockup-header">SECTION 3 — RS CONFIRMATION</div>
+  <div class="mockup-body">
+    <div style="font-size:12px; color:#6B5F52; font-family:'Courier New',monospace; margin-bottom:12px; text-transform:uppercase; letter-spacing:0.08em;">Relative Strength Ratios — Is the move confirmed?</div>
+    <div class="rs-grid">
+      <div class="rs-chart">
+        <div class="rs-chart-title">RELIANCE ÷ Nifty Energy</div>
+        <div class="rs-chart-body">Recharts line chart · 52-week ratio · resistance line marked</div>
+        <div class="rs-status">
+          <span class="pill pill-pos">BREAKING OUT</span>
+          <span style="font-size:12px; color:#6B5F52; font-family:'Courier New',monospace;">Cleared 8-month resistance</span>
+        </div>
+      </div>
+      <div class="rs-chart">
+        <div class="rs-chart-title">RELIANCE ÷ Nifty 50</div>
+        <div class="rs-chart-body">Recharts line chart · 52-week ratio · resistance line marked</div>
+        <div class="rs-status">
+          <span class="pill pill-warn">AT RESISTANCE</span>
+          <span style="font-size:12px; color:#6B5F52; font-family:'Courier New',monospace;">3% below March ratio high</span>
+        </div>
+      </div>
+    </div>
+    <div class="commentary-box" style="margin-top:12px;">
+      <div class="commentary-label">Entry Timing</div>
+      RS vs sector confirmed — ratio broke 8-month resistance last week. RS vs Nifty still 3% below the March ratio high. Consider partial position now; add on RS vs Nifty confirmation.
+    </div>
+  </div>
+</div>
+
+<div class="spec-block">
+  <h4>Data Requirements — New API Endpoint</h4>
+  <div class="warning-box">
+    ⚠ <strong>New data:</strong> RS ratio time series requires a new backend endpoint. See Backend Sub-Plan.
+  </div>
+  <ul>
+    <li>Endpoint: <code>GET /v1/stocks/{symbol}/rs-ratios?days=252</code></li>
+    <li>Returns two series:
+      <ul>
+        <li><code>vs_sector</code>: daily ratio of stock close ÷ linked sector index close</li>
+        <li><code>vs_nifty50</code>: daily ratio of stock close ÷ Nifty 50 close</li>
+      </ul>
+    </li>
+    <li>Sector index resolved via <code>atlas_universe_stocks → sector → de_indices.linked_sector → de_index_prices</code></li>
+    <li>Resistance level = 52-week high of the ratio (rendered as a horizontal dashed line)</li>
+    <li>Status badge computed from: if current ratio &gt; 52W high × 0.97 → BREAKING OUT; if within 3% below → AT RESISTANCE; else → BELOW RESISTANCE</li>
+  </ul>
+  <h4>Chart Spec</h4>
+  <ul>
+    <li>Recharts <code>LineChart</code> — not TradingView (ratio is a derived series, not a tradeable instrument)</li>
+    <li>Ratio line: <code>stroke="#1D9E75"</code>, <code>strokeWidth=2</code>, no dots</li>
+    <li>52W high resistance line: <code>ReferenceLine y={resistance} stroke="#B8860B" strokeDasharray="4 2"</code></li>
+    <li>X axis: dates, abbreviated (Jan/Feb/...)</li>
+    <li>Y axis: ratio value, 3 decimal places</li>
+    <li>Tooltip: date + ratio value</li>
+    <li>Height: 120px per chart</li>
+  </ul>
+  <h4>Commentary</h4>
+  <ul>
+    <li>Generated server-side from ratio status badges</li>
+    <li>Template: "{sector} confirmed — {detail}. {nifty} — {detail}. {action recommendation}."</li>
+  </ul>
+</div>
+
+<hr>
+
+<!-- ────────────── SECTION 4 ────────────── -->
+<h2>Section 4 — Lifecycle Position</h2>
+<p>Answers: how far into the move are we, is there room to enter, and is volume confirming?</p>
+
+<div class="mockup">
+  <div class="mockup-header">SECTION 4 — LIFECYCLE POSITION</div>
+  <div class="mockup-body">
+    <div class="lifecycle-grid">
+      <div class="lifecycle-cell">
+        <div class="kn-label">Dwell in Stage 2B</div>
+        <div style="font-family:'Courier New',monospace; font-size:22px; font-weight:600; color:#1A1714; margin: 8px 0;">18 days</div>
+        <div style="font-size:12px; color:#6B5F52;">Typical Stage 2B: 60–360 days. Early.</div>
+      </div>
+      <div class="lifecycle-cell">
+        <div class="kn-label">Extension from Base</div>
+        <div style="font-family:'Courier New',monospace; font-size:22px; font-weight:600; color:#2F6B43; margin: 8px 0;">+4.1%</div>
+        <div style="font-size:12px; color:#6B5F52;">Above EMA20. EMA50 gap: +8.3%. Not stretched.</div>
+      </div>
+      <div class="lifecycle-cell">
+        <div class="kn-label">Volume Conviction</div>
+        <div style="font-family:'Courier New',monospace; font-size:22px; font-weight:600; color:#2F6B43; margin: 8px 0;">↑ Expanding</div>
+        <div style="font-size:12px; color:#6B5F52;">20D avg 1.6× the 63D avg. OBV rising.</div>
+      </div>
+    </div>
+    <div class="commentary-box" style="margin-top:12px;">
+      <div class="commentary-label">Position in Lifecycle</div>
+      Early in the Stage 2B move. Extension from the 20-day line is modest — not chasing. Volume is expanding on up-days, consistent with institutional accumulation rather than retail momentum.
+    </div>
+  </div>
+</div>
+
+<div class="spec-block">
+  <h4>Data Sources</h4>
+  <ul>
+    <li><strong>Dwell days:</strong> computed from <code>stateHistory</code> — days since first entry into current state</li>
+    <li><strong>Stage duration context:</strong> hardcoded typical ranges per stage (Stage 2A: 10–90 days; Stage 2B: 60–360 days; Stage 2C: 90–400 days)</li>
+    <li><strong>Extension from EMA20:</strong> <code>metricHistory[latest].ema20_ratio</code> — already computed as price/EMA20</li>
+    <li><strong>Extension from EMA50:</strong> compute as <code>(price - ema50) / ema50</code> from <code>metricHistory</code></li>
+    <li><strong>Volume conviction:</strong> <code>metricHistory[latest].vol_ratio_63d</code> — 20D avg ÷ 63D avg</li>
+    <li><strong>OBV direction:</strong> <code>footerMetrics.obv_slope</code> — positive/flat/negative</li>
+  </ul>
+  <h4>Volume Conviction Label</h4>
+  <ul>
+    <li><code>vol_ratio &gt; 1.3</code> → "↑ Expanding" (signal-pos)</li>
+    <li><code>0.8 &lt; vol_ratio ≤ 1.3</code> → "→ Stable" (ink-3)</li>
+    <li><code>vol_ratio ≤ 0.8</code> → "↓ Fading" (signal-neg)</li>
+  </ul>
+</div>
+
+<hr>
+
+<!-- ────────────── SECTION 5 ────────────── -->
+<h2>Section 5 — Peer Matrix</h2>
+<p>4–5 top sector peers compared against the parent stock across 8 key metrics. Answers: <em>is this the best stock to own in its sector right now?</em></p>
+
+<div class="mockup">
+  <div class="mockup-header">SECTION 5 — PEER MATRIX</div>
+  <div class="mockup-body">
+    <table>
+      <thead>
+        <tr>
+          <th>Stock</th>
+          <th>Stage</th>
+          <th>Conviction</th>
+          <th>RS vs Nifty</th>
+          <th>EMA20 Slope</th>
+          <th>EMA50 Slope</th>
+          <th>OBV</th>
+          <th>3M Return</th>
+          <th>Extension</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="parent-row">
+          <td>RELIANCE</td>
+          <td class="cell-pos">2B</td>
+          <td class="cell-pos">↑ Strong</td>
+          <td class="cell-pos">↑ +4.8%</td>
+          <td class="cell-pos">Rising</td>
+          <td class="cell-pos">Rising</td>
+          <td class="cell-pos">Positive</td>
+          <td class="cell-pos">+12.4%</td>
+          <td class="cell-warn">+4.1%</td>
+        </tr>
+        <tr>
+          <td>ONGC</td>
+          <td class="cell-warn">2A</td>
+          <td class="cell-warn">↑ Moderate</td>
+          <td class="cell-warn">→ +1.2%</td>
+          <td class="cell-neutral">Flat</td>
+          <td class="cell-pos">Rising</td>
+          <td class="cell-neutral">Neutral</td>
+          <td class="cell-pos">+8.1%</td>
+          <td class="cell-pos">+2.0%</td>
+        </tr>
+        <tr>
+          <td>IOC</td>
+          <td class="cell-neutral">1</td>
+          <td class="cell-neutral">→ Neutral</td>
+          <td class="cell-neg">↓ -2.1%</td>
+          <td class="cell-neg">Declining</td>
+          <td class="cell-neutral">Flat</td>
+          <td class="cell-neg">Negative</td>
+          <td class="cell-neg">-1.4%</td>
+          <td class="cell-neg">-0.8%</td>
+        </tr>
+        <tr>
+          <td>BPCL</td>
+          <td class="cell-warn">2C</td>
+          <td class="cell-warn">→ Weak</td>
+          <td class="cell-neutral">→ +0.3%</td>
+          <td class="cell-neutral">Flat</td>
+          <td class="cell-warn">Flattening</td>
+          <td class="cell-warn">Neutral</td>
+          <td class="cell-warn">+5.2%</td>
+          <td class="cell-neg">+11.8%</td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="font-size:11px; color:#9A8F82; font-family:'Courier New',monospace; margin-top:10px;">
+      Parent stock highlighted. Peers = top 4 by market cap in same NSE sector.
+    </div>
+  </div>
+</div>
+
+<div class="spec-block">
+  <h4>Peer Selection</h4>
+  <ul>
+    <li>Top 4 stocks by market cap in the same NSE sector as the parent stock</li>
+    <li>Exclude stocks in Stage 4 or Uninvestable</li>
+    <li>Parent stock always shown as first row (highlighted), even if not top 4 by mcap</li>
+    <li>Maximum 5 rows total (parent + 4 peers)</li>
+  </ul>
+  <h4>Column Definitions</h4>
+  <ul>
+    <li><strong>Stage:</strong> Weinstein state label shortened (2A, 2B, 2C, 1, 3, 4)</li>
+    <li><strong>Conviction:</strong> direction (↑/↓/→) + strength label from <code>convictionTape[dominant_tenure]</code></li>
+    <li><strong>RS vs Nifty:</strong> <code>rs_pctile_3m</code> trend shown as % diff from 50th percentile baseline; direction arrow</li>
+    <li><strong>EMA20 Slope:</strong> from <code>metricHistory</code> — classify as Rising/Flat/Declining based on 4-week slope</li>
+    <li><strong>EMA50 Slope:</strong> same classification on 8-week slope</li>
+    <li><strong>OBV:</strong> from <code>footerMetrics.obv_slope</code> — Positive/Neutral/Negative</li>
+    <li><strong>3M Return:</strong> from <code>metricHistory.ret_3m</code></li>
+    <li><strong>Extension:</strong> price / EMA20 − 1, shown as percentage</li>
+  </ul>
+  <h4>Color Coding</h4>
+  <ul>
+    <li>Positive signal → <code>signal-pos</code> text</li>
+    <li>Negative signal → <code>signal-neg</code> text</li>
+    <li>Mixed/warning signal → <code>signal-warn</code> text</li>
+    <li>Neutral → <code>ink-3</code> text</li>
+  </ul>
+  <h4>New API Endpoint Required</h4>
+  <ul>
+    <li><code>GET /v1/stocks/{symbol}/peer-matrix</code></li>
+    <li>Returns parent stock + top-4 peers with all 8 metrics pre-computed</li>
+    <li>Single endpoint to avoid N+1 fetch per peer</li>
+  </ul>
+</div>
+
+<hr>
+
+<!-- ────────────── SECTION 6 ────────────── -->
+<h2>Section 6 — Supporting Detail</h2>
+<p>For the analyst who wants to verify every data point. Present but not prominent — sits below the decision-relevant sections.</p>
+
+<div class="spec-block">
+  <h4>Content (in order)</h4>
+  <ul>
+    <li><strong>Conviction Tape:</strong> Four tenure cells (1M / 3M / 6M / 12M) each showing direction + IC score. Compact horizontal strip using existing <code>ConvictionTape</code> component</li>
+    <li><strong>Stage History:</strong> 252-day color-coded strip. Compact version — 8px height bars. Existing <code>DwellTimeline</code> component</li>
+    <li><strong>Component Scorecard:</strong> Existing <code>ComponentScorecard</code> component. Rendered at full detail for analysts who want rule-level verification</li>
+    <li><strong>Hit Rate:</strong> One-liner. Existing <code>HitRateRow</code> component</li>
+  </ul>
+  <h4>What is REMOVED from this section vs current page</h4>
+  <ul>
+    <li class="removed">Within-state peers table (30 rows)</li>
+    <li class="removed">StockDeepDiveBody (8-chart metric history with time range picker)</li>
+    <li class="removed">OBV chart as a standalone section (now in Lifecycle)</li>
+    <li class="removed">ATR gauge as a standalone section (now captured in commentary)</li>
+    <li class="removed">Standalone TVChartPanel at bottom</li>
+  </ul>
+</div>
+
+<hr>
+
+<!-- ────────────── SECTION 7 ────────────── -->
+<h2>Section 7 — Act</h2>
+<p>Unchanged from current design. Position sizing if <code>portfolioId</code> query param is present. Existing <code>ActButton</code> component.</p>
+
+<hr>
+
+<!-- ────────────── COMPONENT MAP ────────────── -->
+<h2>Component Map</h2>
+
+<div class="spec-block">
+  <h4>New Components <span class="badge badge-new">NEW</span></h4>
+  <ul>
+    <li><code>frontend/src/components/v6/stock-detail/EventHeader.tsx</code> — Section 1. Server component.</li>
+    <li><code>frontend/src/components/v6/stock-detail/StockChartPanel.tsx</code> — Section 2. TV iframe + commentary + fundamentals strip. Client component.</li>
+    <li><code>frontend/src/components/v6/stock-detail/FundamentalsStrip.tsx</code> — 5 fundamental pills. Server component.</li>
+    <li><code>frontend/src/components/v6/stock-detail/RSConfirmationPanel.tsx</code> — Section 3. Two ratio charts. Client component (Recharts).</li>
+    <li><code>frontend/src/components/v6/stock-detail/LifecyclePanel.tsx</code> — Section 4. Dwell + extension + volume. Server component.</li>
+    <li><code>frontend/src/components/v6/stock-detail/PeerMatrix.tsx</code> — Section 5. Peer comparison table. Server component.</li>
+    <li><code>frontend/src/components/v6/stock-detail/ChartCommentary.tsx</code> — Commentary generator utility (pure function, no UI).</li>
+  </ul>
+  <h4>Modified <span class="badge badge-modify">MODIFY</span></h4>
+  <ul>
+    <li><code>frontend/src/app/stocks/[symbol]/page.tsx</code> — Fetch RS ratio data + peer matrix data. Assemble new 7-section layout. Remove old section renders.</li>
+    <li><code>frontend/src/components/stocks/ComponentScorecard.tsx</code> — No changes needed, reused in Section 6.</li>
+  </ul>
+  <h4>Removed <span class="badge badge-remove">REMOVE</span></h4>
+  <ul>
+    <li><code>frontend/src/components/stocks/WithinStatePeers.tsx</code> — replaced by PeerMatrix</li>
+    <li><code>frontend/src/components/stocks/StockDeepDiveBody.tsx</code> — removed</li>
+    <li><code>frontend/src/components/v6/TVChartPanel.tsx</code> — replaced by StockChartPanel</li>
+    <li><code>frontend/src/components/v6/TVMetricsBadge.tsx</code> — replaced by FundamentalsStrip + EventHeader conviction pill</li>
+  </ul>
+</div>
+
+<hr>
+
+<!-- ────────────── BACKEND EXTENSIONS ────────────── -->
+<h2>Backend Extensions Required</h2>
+<p>This redesign requires two backend additions before frontend work can complete.</p>
+
+<div class="spec-block">
+  <h4>Extension A — TV Fundamentals in screener.py <span class="badge badge-backend">BACKEND</span></h4>
+  <ul>
+    <li>Add to <code>atlas/tv/screener.py → _COLUMNS</code>: <code>"price_earnings_ttm"</code>, <code>"price_sales_current"</code>, <code>"price_book_fbs"</code>, <code>"debt_to_equity"</code>, <code>"return_on_equity"</code></li>
+    <li>New migration (119) adding 5 nullable NUMERIC columns to <code>atlas.tv_metrics</code>: <code>pe_ttm</code>, <code>ps_current</code>, <code>pb_fbs</code>, <code>debt_to_equity</code>, <code>roe</code></li>
+    <li>Update <code>_upsert_rows</code> to include new columns</li>
+    <li>Update <code>GET /v1/tv/metrics/{symbol}</code> response to include new fields</li>
+  </ul>
+  <h4>Extension B — RS Ratio Endpoint <span class="badge badge-backend">BACKEND</span></h4>
+  <ul>
+    <li>New endpoint: <code>GET /v1/stocks/{symbol}/rs-ratios?days=252</code></li>
+    <li>Queries: <code>de_equity_ohlcv</code> for stock closes + <code>de_index_prices</code> for sector index and Nifty 50 closes</li>
+    <li>Sector index resolved: <code>atlas_universe_stocks.sector → atlas_sector_master.primary_nse_index → de_index_prices</code></li>
+    <li>Returns: <code>{ vs_sector: [{date, ratio}], vs_nifty50: [{date, ratio}], sector_index_code: string }</code></li>
+    <li>52W resistance = max ratio over the returned window (computed in endpoint, not frontend)</li>
+  </ul>
+  <h4>Extension C — Peer Matrix Endpoint <span class="badge badge-backend">BACKEND</span></h4>
+  <ul>
+    <li>New endpoint: <code>GET /v1/stocks/{symbol}/peer-matrix</code></li>
+    <li>Returns: parent stock + top 4 sector peers (by market cap, excluding Stage 4/uninvestable) with all 8 metrics pre-computed</li>
+    <li>Avoids N+1 fetches on frontend</li>
+  </ul>
+</div>
+
+<hr>
+
+<!-- ────────────── IMPLEMENTATION ORDER ────────────── -->
+<h2>Implementation Order</h2>
+<p>This spec produces two sequential implementation plans:</p>
+
+<div class="spec-block">
+  <h4>Plan A — Backend (implement first)</h4>
+  <ol style="margin-left:20px;">
+    <li>Migration 119 — TV fundamental columns</li>
+    <li>screener.py — add 5 fundamental fields to fetch + upsert</li>
+    <li>GET /v1/tv/metrics/{symbol} — extend response</li>
+    <li>GET /v1/stocks/{symbol}/rs-ratios endpoint</li>
+    <li>GET /v1/stocks/{symbol}/peer-matrix endpoint</li>
+  </ol>
+  <h4>Plan B — Frontend (after Plan A)</h4>
+  <ol style="margin-left:20px;">
+    <li>EventHeader component</li>
+    <li>StockChartPanel (TV iframe + commentary generator)</li>
+    <li>FundamentalsStrip</li>
+    <li>RSConfirmationPanel (Recharts ratio charts)</li>
+    <li>LifecyclePanel</li>
+    <li>PeerMatrix</li>
+    <li>SupportingDetail section assembly</li>
+    <li>Page assembly + old component removal</li>
+  </ol>
+</div>
+
+<hr>
+
+<div class="meta" style="margin-top:0; text-align:center;">
+  Atlas OS · Stock Detail Redesign Spec · 2026-05-29 · Approved
+</div>
+
+</div>
+</body>
+</html>

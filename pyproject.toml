@@ -31,6 +31,9 @@ dependencies = [
     # Logging
     "structlog>=24.0",
 
+    # TradingView screener (TV integration)
+    "tradingview-screener>=0.14.0",
+
     # Serving (FastAPI thin layer per architecture 10.1; UI is Streamlit)
     "fastapi>=0.110",
     "uvicorn[standard]>=0.27",

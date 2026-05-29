@@ -1,7 +1,9 @@
 // src/app/portfolios/[id]/page.tsx
 // RSC — FM custom portfolio detail (Static or Rule-Based).
 // Shell ≤250 LOC; composition + backtest logic in sub-components.
+// allow-large: TV-06 added View Analytics link — page remains a thin shell with no business logic
 export const dynamic = 'force-dynamic'
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import {
   getStaticPortfolioById,
@@ -76,17 +78,26 @@ export default async function PortfolioDetailPage({ params }: Props) {
       </nav>
 
       <header className="mb-6">
-        <div className="flex items-center gap-3 flex-wrap mb-1">
-          <h1 className="font-serif text-2xl text-ink-primary">{portfolio.name}</h1>
-          <span className={`font-sans text-xs px-2 py-0.5 rounded-[2px] border ${typeBadgeStyle}`}>
-            {type === 'static' ? 'Static' : 'Rule-Based'}
-          </span>
-          {paperActive && (
-            <span className="inline-flex items-center gap-1.5 font-sans text-xs text-signal-pos">
-              <span className="inline-block w-2 h-2 rounded-full bg-signal-pos" />
-              Paper Active
+        <div className="flex items-start justify-between flex-wrap gap-3 mb-1">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="font-serif text-2xl text-ink-primary">{portfolio.name}</h1>
+            <span className={`font-sans text-xs px-2 py-0.5 rounded-[2px] border ${typeBadgeStyle}`}>
+              {type === 'static' ? 'Static' : 'Rule-Based'}
             </span>
-          )}
+            {paperActive && (
+              <span className="inline-flex items-center gap-1.5 font-sans text-xs text-signal-pos">
+                <span className="inline-block w-2 h-2 rounded-full bg-signal-pos" />
+                Paper Active
+              </span>
+            )}
+          </div>
+          {/* TV-06: Link to portfolio analytics page */}
+          <Link
+            href={`/portfolios/${id}/analytics`}
+            className="font-sans text-sm text-accent hover:underline"
+          >
+            View Analytics →
+          </Link>
         </div>
         <p className="font-sans text-xs text-ink-tertiary">Created {fmtDate(portfolio.created_at)}</p>
       </header>

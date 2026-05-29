@@ -19,12 +19,13 @@ if (process.env.ATLAS_DB_URL.includes(':6543/')) {
   )
 }
 
-// max=10 leaves headroom under Supabase session-mode pooler's hard cap (15)
-// for parallel v6 page queries (today page fans out to 4 concurrent queries
-// plus latest-snapshot lookup).
+// max=14 sits just under Supabase session-mode pooler's hard cap (15).
+// Stock detail page fans out to 11+ concurrent queries, so we need maximum
+// pool capacity. idle_timeout aggressively recycles dead/stuck connections.
 const sql = postgres(process.env.ATLAS_DB_URL, {
-  max: 10,
-  idle_timeout: 20,
+  max: 14,
+  idle_timeout: 10,
+  max_lifetime: 60 * 5,
   connect_timeout: 10,
   // Transaction-mode pooler (Supabase) doesn't support prepared statements
   prepare: !isPooler,

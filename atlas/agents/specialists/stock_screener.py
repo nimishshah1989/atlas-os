@@ -26,6 +26,7 @@ class StockScreener(SpecialistAgent):
         "get_breakout_candidates",
         "get_deterioration_watch",
         "get_current_regime",
+        "get_tv_analysis",
     )
 
     def build_system_prompt(self) -> str:
@@ -51,6 +52,16 @@ Available tools (preference order):
 - get_breakout_candidates(n): stocks transitioning INTO Leader/Strong today
 - get_deterioration_watch(n): stocks transitioning OUT of Leader/Strong today
 - get_current_regime: optional regime overlay
+- get_tv_analysis(symbol): TradingView screener snapshot for one symbol —
+  tv_recommend_label, RSI-14, MACD, EMA-20/50/200, ATR-14, price. Use
+  when the user asks about the TV signal or technical picture for a
+  specific stock.
+- tradingview.get_analysis(symbol): real-time TradingView technical
+  recommendation via MCP (STRONG_BUY/BUY/NEUTRAL/SELL/STRONG_SELL).
+  Prefer over get_tv_analysis when a live signal is needed and MCP is
+  available.
+- tradingview.get_quote(symbol): real-time TradingView price quote via
+  MCP — current price, change %, volume. Use for live price lookups.
 
 Workflow:
 1. Pick the right tool for the question:

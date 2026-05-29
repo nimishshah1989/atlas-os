@@ -1,6 +1,6 @@
 // frontend/src/components/v6/StockDetailClient.tsx
-// Client component: hero + 3-tab layout for the v6 stock detail page.
-// Tabs: Overview / Technicals / Audit
+// Client component: hero + 4-tab layout for the v6 stock detail page.
+// Tabs: Overview / Technicals / Chart / Audit
 // AuditTrailTab is lazy-imported (E.1 fallback placeholder included).
 
 'use client'
@@ -11,8 +11,10 @@ import { MultiBenchmarkRSWaterfall } from './MultiBenchmarkRSWaterfall'
 import { RankDecompositionCards } from './RankDecompositionCards'
 import { MultiTenureReturnsTable } from './MultiTenureReturnsTable'
 import { GradeChip } from './GradeChip'
+import { TVMetricsBadgeFromRow } from './TVMetricsBadge'
+import { TVChartPanel } from './TVChartPanel'
 import { toNumber, formatPct } from '@/lib/v6/decimal'
-import type { ScreenStock } from '@/lib/api/v1'
+import type { ScreenStock, TVMetricsRow } from '@/lib/api/v1'
 import type { HoldingState } from '@/lib/queries/v6/portfolio_holdings'
 import type { StockTechnicals } from '@/lib/queries/v6/stock_technicals'
 import type { MultiTenureReturns } from '@/lib/queries/v6/multi_tenure_returns'
@@ -23,7 +25,7 @@ import type { Grade } from './GradeChip'
 
 const AuditTrailTab = lazy(() => import('./AuditTrailTab'))
 
-type Tab = 'overview' | 'technicals' | 'audit'
+type Tab = 'overview' | 'technicals' | 'chart' | 'audit'
 
 export interface StockDetailClientProps {
   stock: ScreenStock
@@ -37,6 +39,8 @@ export interface StockDetailClientProps {
   sectorGapPp: number
   actionVerb: string
   bullets: string[]
+  /** TV-05: TradingView screener metrics for the Chart tab + hero badge. null = not in tv_metrics table. */
+  tvMetrics: TVMetricsRow | null
   /** Waterfall data for Overview tab. null when no benchmark data available. */
   waterfallData: {
     stock_return: string
@@ -64,6 +68,7 @@ export interface StockDetailClientProps {
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'technicals', label: 'Technicals' },
+  { id: 'chart', label: 'Chart' },
   { id: 'audit', label: 'Audit' },
 ]
 
@@ -418,6 +423,7 @@ export function StockDetailClient({
   sectorGapPp,
   actionVerb,
   bullets,
+  tvMetrics,
   waterfallData,
   rankData,
 }: StockDetailClientProps) {
@@ -437,6 +443,13 @@ export function StockDetailClient({
         bullets={bullets}
       />
 
+      {/* TV metrics badge — always visible below hero, above tabs (TV-05) */}
+      {tvMetrics && (
+        <div className="px-6 py-3 border-b border-paper-rule bg-paper">
+          <TVMetricsBadgeFromRow symbol={stock.symbol} row={tvMetrics} />
+        </div>
+      )}
+
       {/* Tab navigation */}
       <TabNav active={activeTab} onChange={setActiveTab} />
 
@@ -452,6 +465,9 @@ export function StockDetailClient({
       )}
       {activeTab === 'technicals' && (
         <TechnicalsTab technicals={technicals} returns={returns} />
+      )}
+      {activeTab === 'chart' && (
+        <TVChartPanel symbol={stock.symbol} tvMetrics={tvMetrics} />
       )}
       {activeTab === 'audit' && (
         <AuditTab auditTrail={auditTrail} />

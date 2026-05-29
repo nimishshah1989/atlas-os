@@ -259,3 +259,51 @@ export async function getInstrument(iid: string): Promise<ApiEnvelope<ScreenStoc
   const found = stocks.find(s => s.iid === iid || s.symbol === iid) ?? null
   return { data: found, meta: nowEnvelope('demo_fixture'), source_kind: 'demo' }
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// TV metrics (TV-05)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * All Decimal-serialized numeric fields arrive as strings from the backend.
+ * Do NOT convert to float — pass strings to components and let them render.
+ * is_stale is computed by the backend (>2 days since fetch).
+ */
+export interface TVMetricsRow {
+  symbol: string
+  tv_recommend_label: string | null
+  recommend_all: string | null
+  recommend_ma: string | null
+  recommend_other: string | null
+  rsi_14: string | null
+  macd_macd: string | null
+  ema_20: string | null
+  ema_50: string | null
+  ema_200: string | null
+  atr_14: string | null
+  price: string | null
+  high_52w: string | null
+  low_52w: string | null
+  fetched_at: string | null
+  is_stale: boolean
+  // TV-fundamentals (migration 118 — may be null until backend deployed to EC2)
+  pe_ttm: number | null
+  ps_current: number | null
+  pb_fbs: number | null
+  debt_to_equity: number | null
+  roe: number | null
+}
+
+/**
+ * Fetch TV screener metrics for a single NSE symbol.
+ * Returns null on 404 (symbol not in tv_metrics table) or network failure.
+ * No demo fallback — graceful null is the right empty state.
+ */
+export async function getTVMetrics(symbol: string): Promise<TVMetricsRow | null> {
+  const live = await tryFetch<TVMetricsRow>(`/v1/tv/metrics/${encodeURIComponent(symbol)}`)
+  if (!live) return null
+  // The backend wraps data + meta; is_stale lives in meta.
+  const row = live.data
+  const isStale = (live.meta as unknown as { is_stale?: boolean }).is_stale ?? false
+  return { ...row, is_stale: isStale }
+}

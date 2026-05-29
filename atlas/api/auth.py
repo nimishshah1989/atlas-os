@@ -51,7 +51,11 @@ _EXEMPT_EXACT: frozenset[str] = frozenset(
     }
 )
 
-_SERVICE_TOKEN_PREFIXES = ("/api/v1/intraday", "/api/v1/tv/signals")
+_SERVICE_TOKEN_PREFIXES = (
+    "/api/v1/intraday",
+    "/api/v1/tv/signals",
+    "/v1/tv/internal",  # TV-06: nightly screener trigger — only pg_cron / internal callers
+)
 
 
 class _User:
@@ -95,12 +99,14 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         if path in _EXEMPT_EXACT or any(path.startswith(p) for p in _EXEMPT_PREFIXES):
             return await call_next(request)
 
-        if any(path.startswith(p) for p in _SERVICE_TOKEN_PREFIXES):
-            return await _check_service_token(request, call_next)
-
+        # Dev shortcut must come before service-token check so test suites with
+        # ATLAS_AUTH_DISABLED=true can hit internal endpoints without a real token.
         if Config.AUTH_DISABLED:
             request.state.user = _User(user_id="dev-user", role="admin")
             return await call_next(request)
+
+        if any(path.startswith(p) for p in _SERVICE_TOKEN_PREFIXES):
+            return await _check_service_token(request, call_next)
 
         secret = Config.SUPABASE_JWT_SECRET
         if not secret:
