@@ -203,7 +203,7 @@ def promote_to_leaderboard(
                  sortino_oos, calmar_oos, alpha_oos, information_ratio,
                  hit_rate, alpha_t_stat, max_drawdown)
             VALUES
-                (gen_random_uuid(), :rank, :genome_id::uuid, :name, :promoted_at,
+                (gen_random_uuid(), :rank, CAST(:genome_id AS uuid), :name, :promoted_at,
                  :sortino, :calmar, :alpha, :ir, :hit_rate, :t_stat, :max_dd)
             ON CONFLICT (genome_id) DO UPDATE
                 SET rank = EXCLUDED.rank,
