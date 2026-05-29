@@ -1661,3 +1661,67 @@
   "schema_version": 1
 }
 {"ts":"2026-05-29T04:04:44Z","kind":"supabase_sql_executed","sql_preview":"WITH latest_full AS (\n  SELECT * FROM atlas.atlas_market_regime_daily\n  WHERE pct_above_ema_50 IS NOT NULL\n  ORDER BY date DESC LIMIT 1\n),\nlatest_any AS (\n  SELECT * FROM atlas.atlas_market_regime_daily\n  ORDER BY date DESC LIMIT 1\n)\nSELECT\n  la.date AS la_date,\n  lf.date AS lf_date,\n  COALESCE(la.pct_above_ema_50, lf.pct_above_ema_50) AS breadth,\n  la.regime_state, la.india_vix, la.deployment_multiplier,\n  COALESCE(la.advances_count, lf.advances_count) AS adv\nFROM latest_any la\nLEFT JOIN latest"}
+{
+  "ts": "2026-05-29T04:33:19Z",
+  "prev": "d87005e9d56e1a17",
+  "tool": "Write",
+  "file": "/tmp/backfill_breadth.sh",
+  "lines_changed": 17,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T04:52:00Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/tmp/profile_stock_daily.py",
+  "lines_changed": 64,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T04:52:16Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/tmp/profile_stock_daily.py",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T04:52:26Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/tmp/profile_stock_daily.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T04:52:47Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/tmp/profile_stock_daily.py",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T04:56:06Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/tmp/atlas_backfill_breadth.py",
+  "lines_changed": 43,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-29T04:58:00Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  date,\n  TO_CHAR(date, 'Dy') AS dow,\n  pct_above_ema_50,\n  pct_above_ema_200,\n  advances_count,\n  mcclellan_oscillator,\n  regime_state\nFROM atlas.atlas_market_regime_daily\nWHERE date >= '2026-05-18'\nORDER BY date DESC\nLIMIT 10;"}
+{
+  "ts": "2026-05-29T05:01:36Z",
+  "prev": "38811405f056928c",
+  "tool": "Write",
+  "file": "/tmp/run_atlas_nightly.sh",
+  "lines_changed": 122,
+  "session_id": "unknown",
+  "schema_version": 1
+}
