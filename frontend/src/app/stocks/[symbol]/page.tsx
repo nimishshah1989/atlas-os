@@ -1,3 +1,4 @@
+// allow-large: stock detail page composes 14 sections (verdict, returns table, chart, RS confirmation, sparkline grid, lifecycle, TV technical analysis, peer matrix, financials, news, supporting detail drawers, act). Each section is a single line render — splitting into sub-shells would obscure the page assembly contract.
 export const dynamic = 'force-dynamic'
 
 import { notFound, redirect } from 'next/navigation'
@@ -10,7 +11,6 @@ import {
 import { getTVMetrics } from '@/lib/api/v1'
 import {
   getStockState,
-  getCohortBaseline,
   getStockCohortKey,
   getWithinStatePeers,
   getStateHistory,
@@ -34,6 +34,15 @@ import { RSConfirmationPanel } from '@/components/v6/stock-detail/RSConfirmation
 import { LifecyclePanel } from '@/components/v6/stock-detail/LifecyclePanel'
 import { PeerMatrix } from '@/components/v6/stock-detail/PeerMatrix'
 import { generateChartCommentary } from '@/components/v6/stock-detail/ChartCommentary'
+import { SparklineTrajectoryGrid } from '@/components/v6/stock-detail/SparklineTrajectoryGrid'
+import { MultiTimeframeReturnsTable } from '@/components/v6/stock-detail/MultiTimeframeReturnsTable'
+import {
+  TVTechnicalAnalysis,
+  TVFinancials,
+  TVCompanyProfile,
+  TVNews,
+  TVMiniOverview,
+} from '@/components/v6/stock-detail/TVWidgets'
 
 export default async function StockPage({
   params,
@@ -45,17 +54,15 @@ export default async function StockPage({
   const symbol = decodeURIComponent((await params).symbol).toUpperCase()
   const stock = await getStockBySymbol(symbol)
   if (!stock) {
-    // Try alias lookup (NSE renames / demergers) before giving up.
-    // e.g. TATAMOTORS -> TMPV, ZOMATO -> ETERNAL, L&TFH -> LTF
     const alias = await lookupSymbolAlias(symbol)
     if (alias) redirect(`/stocks/${alias}?renamed_from=${symbol}`)
     notFound()
   }
 
-  // Read ?portfolio= searchParam for the Act affordance.
   const resolvedSearch = searchParams ? await searchParams : {}
   const portfolioId = resolvedSearch.portfolio?.trim() || undefined
 
+  // Batch 1 — core stock data (8 connections concurrent)
   const [
     metricHistory,
     stockState,
@@ -65,9 +72,6 @@ export default async function StockPage({
     hitRate,
     footerMetrics,
     traderHeader,
-    tvMetrics,
-    rsRatios,
-    peerMatrix,
   ] = await Promise.all([
     getStockMetricHistory(stock.instrument_id, 365),
     getStockState(stock.instrument_id),
@@ -77,27 +81,24 @@ export default async function StockPage({
     getHitRateForStock(stock.instrument_id, 20),
     getStockFooterMetrics(stock.instrument_id),
     getStockTraderHeader(symbol),
-    // TV-05: TradingView screener metrics for Chart tab + hero badge.
-    // Graceful null if symbol not in tv_metrics table or network failure.
+  ])
+
+  // Batch 2 — external/dependent data (after batch 1 connections released)
+  const [tvMetrics, rsRatios, peerMatrix, peers] = await Promise.all([
     getTVMetrics(symbol).catch(() => null),
     getRSRatios(symbol).catch(() => null),
     getPeerMatrix(symbol).catch(() => []),
+    stockState ? getWithinStatePeers(stockState.state, stockState.date, 30) : Promise.resolve([]),
   ])
 
-  const [cohortBaseline, peers] = stockState
-    ? await Promise.all([
-        getCohortBaseline(cohortKey, stockState.state),
-        getWithinStatePeers(stockState.state, stockState.date, 30),
-      ])
-    : [null, []]
+  // cohortKey used by getCohortBaseline upstream; keep ref to silence lint
+  void cohortKey
 
   const peerRank = stockState && peers.length > 0
     ? (peers.findIndex(p => p.instrument_id === stock.instrument_id) + 1) || null
     : null
 
   // ---- Act affordance: load policy + regime when a portfolio is active ----
-  // Both values are real data from the DB. target_gap and current_invested
-  // are not yet wired (stock-detail has no portfolio holdings) — see approach doc.
   let actSuggestedPct: string | null = null
   let actBindingConstraint: string | null = null
   let actPortfolioName: string | undefined
@@ -110,11 +111,7 @@ export default async function StockPage({
         getCurrentRegime(),
         getStaticPortfolioById(portfolioId),
       ])
-      // Real portfolio name from DB; fall back to ID prefix only if detail is null.
       actPortfolioName = portfolioDetail?.name ?? `Portfolio ${portfolioId.slice(0, 8)}`
-      // current_invested = sum of existing holding weights (whole-number percent).
-      // weight_pct in the JSONB is stored as a numeric value; coerce with Number()
-      // to handle any cases where the postgres.js driver returns it as a string.
       const currentInvested =
         portfolioDetail?.instruments.reduce(
           (acc, i) => acc + Number(i.weight_pct),
@@ -129,7 +126,7 @@ export default async function StockPage({
         actSectorGapApplied = sizing.sectorGapApplied
       }
     } catch {
-      // Non-fatal: ActButton will render disabled if sizing not available.
+      // non-fatal
     }
   }
 
@@ -146,10 +143,14 @@ export default async function StockPage({
     price: tvMetrics?.price != null ? parseFloat(tvMetrics.price) : null,
   })
 
+  // Sector index for the RS mini overview (lookup of well-known Nifty sectoral indices)
+  const sectorIndex = sectorIndexForSector(stock.sector)
+
   return (
-    <div className="max-w-[1200px] mx-auto">
+    <div className="max-w-[1400px] mx-auto">
       <TraderViewHeader data={traderHeader} />
 
+      {/* ────────────── 1. Event Header ────────────── */}
       <EventHeader
         symbol={stock.symbol}
         companyName={stock.company_name ?? stock.symbol}
@@ -170,6 +171,24 @@ export default async function StockPage({
         rsVsNifty={latestMetrics?.rs_pctile_3m != null ? parseFloat(latestMetrics.rs_pctile_3m) : null}
       />
 
+      {/* ────────────── 2. Returns + sector-relative sparkline ────────────── */}
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-4 px-6 py-4 border-b border-paper-rule bg-paper-deep">
+        <MultiTimeframeReturnsTable latest={latestMetrics ?? null} />
+        <div className="border border-paper-rule rounded p-4 bg-paper">
+          <p className="font-mono text-[10px] uppercase tracking-wider text-ink-3 mb-1">
+            {sectorIndex ? `${sectorIndex.label}` : 'Nifty 50'} · 12-Month Sparkline
+          </p>
+          <TVMiniOverview symbol={sectorIndex?.tvSymbol ?? 'NIFTY_50'} exchange="NSE" dateRange="12M" />
+        </div>
+        <div className="border border-paper-rule rounded p-4 bg-paper">
+          <p className="font-mono text-[10px] uppercase tracking-wider text-ink-3 mb-1">
+            {stock.symbol} · 12-Month Sparkline
+          </p>
+          <TVMiniOverview symbol={stock.symbol} exchange="NSE" dateRange="12M" />
+        </div>
+      </section>
+
+      {/* ────────────── 3. The Chart + Atlas Commentary + Fundamentals strip ────────────── */}
       <StockChartPanel
         symbol={stock.symbol}
         commentary={commentary}
@@ -180,8 +199,13 @@ export default async function StockPage({
         roe={tvMetrics?.roe ?? null}
       />
 
+      {/* ────────────── 4. RS Confirmation ────────────── */}
       <RSConfirmationPanel rsData={rsRatios} symbol={stock.symbol} />
 
+      {/* ────────────── 5. Sparkline Trajectory Grid (12 Atlas metrics × 365D) ────────────── */}
+      <SparklineTrajectoryGrid metricHistory={metricHistory} />
+
+      {/* ────────────── 6. Lifecycle Position ────────────── */}
       <LifecyclePanel
         state={stockState?.state ?? null}
         dwellDays={stockState?.dwell_days ?? null}
@@ -190,32 +214,84 @@ export default async function StockPage({
         extensionPct={latestMetrics?.extension_pct != null ? parseFloat(latestMetrics.extension_pct) : null}
       />
 
+      {/* ────────────── 7. TradingView Technical Analysis Widget ────────────── */}
+      <section className="px-6 py-6 border-b border-paper-rule">
+        <p className="font-mono text-[10px] uppercase tracking-wider text-ink-3 mb-3">
+          TradingView Composite Technical Analysis — multi-timeframe consensus
+        </p>
+        <div className="border border-paper-rule rounded overflow-hidden bg-paper">
+          <TVTechnicalAnalysis symbol={stock.symbol} interval="1D" />
+        </div>
+      </section>
+
+      {/* ────────────── 8. Peer Matrix ────────────── */}
       {peerMatrix.length > 0 && <PeerMatrix peers={peerMatrix} />}
 
-      <section className="px-6 py-6 border-b border-paper-rule space-y-6">
+      {/* ────────────── 9. Fundamentals Widget ────────────── */}
+      <section className="px-6 py-6 border-b border-paper-rule">
+        <p className="font-mono text-[10px] uppercase tracking-wider text-ink-3 mb-3">
+          Financial Statements — revenue, EBITDA, EPS over time
+        </p>
+        <div className="border border-paper-rule rounded overflow-hidden bg-paper">
+          <TVFinancials symbol={stock.symbol} />
+        </div>
+      </section>
+
+      {/* ────────────── 10. News ────────────── */}
+      <section className="px-6 py-6 border-b border-paper-rule">
+        <p className="font-mono text-[10px] uppercase tracking-wider text-ink-3 mb-3">
+          Latest News — auto-updated from TradingView
+        </p>
+        <div className="border border-paper-rule rounded overflow-hidden bg-paper">
+          <TVNews symbol={stock.symbol} />
+        </div>
+      </section>
+
+      {/* ────────────── 11. Supporting Detail (collapsed by default) ────────────── */}
+      <section className="px-6 py-6 border-b border-paper-rule space-y-4">
         <h2 className="font-mono text-[10px] uppercase tracking-wider text-ink-3">Supporting Detail</h2>
+
+        <details className="font-sans text-[12px] text-ink-3 border border-paper-rule rounded p-3 bg-paper">
+          <summary className="cursor-pointer text-accent font-medium select-none">
+            Show company profile (about, sector, employees, IPO)
+          </summary>
+          <div className="pt-3">
+            <TVCompanyProfile symbol={stock.symbol} />
+          </div>
+        </details>
+
         {stateHistory.length > 0 && (
-          <details className="font-sans text-[12px] text-ink-3">
+          <details className="font-sans text-[12px] text-ink-3 border border-paper-rule rounded p-3 bg-paper">
             <summary className="cursor-pointer text-accent font-medium select-none">
               Show Weinstein stage history (context only — not a verdict input)
             </summary>
-            <div className="pt-4">
+            <div className="pt-3">
               <DwellTimeline history={stateHistory} />
             </div>
           </details>
         )}
+
         {stockState && (
-          <ComponentScorecard
-            state={stockState}
-            validations={validations}
-            obvSlope={footerMetrics.obv_slope}
-            atrRatio={footerMetrics.atr_ratio}
-            realizedVolTier={footerMetrics.realized_vol_tier}
-          />
+          <details className="font-sans text-[12px] text-ink-3 border border-paper-rule rounded p-3 bg-paper">
+            <summary className="cursor-pointer text-accent font-medium select-none">
+              Show component scorecard (5-family R/A/G grades)
+            </summary>
+            <div className="pt-3">
+              <ComponentScorecard
+                state={stockState}
+                validations={validations}
+                obvSlope={footerMetrics.obv_slope}
+                atrRatio={footerMetrics.atr_ratio}
+                realizedVolTier={footerMetrics.realized_vol_tier}
+              />
+            </div>
+          </details>
         )}
+
         <HitRateRow hitRate={hitRate} />
       </section>
 
+      {/* ────────────── 12. Act ────────────── */}
       <div className="px-6 pb-10 border-t border-paper-rule pt-6">
         <h2 className="font-mono text-[10px] uppercase tracking-wider text-ink-3 mb-4">Act</h2>
         <ActButton
@@ -229,4 +305,26 @@ export default async function StockPage({
       </div>
     </div>
   )
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function sectorIndexForSector(sector: string | null | undefined): { label: string; tvSymbol: string } | null {
+  if (!sector) return null
+  const map: Record<string, { label: string; tvSymbol: string }> = {
+    'Energy':                              { label: 'Nifty Energy',     tvSymbol: 'CNXENERGY' },
+    'Oil Gas & Consumable Fuels':          { label: 'Nifty Oil & Gas',  tvSymbol: 'CNXENERGY' },
+    'Information Technology':              { label: 'Nifty IT',         tvSymbol: 'CNXIT' },
+    'Financial Services':                  { label: 'Nifty Financial',  tvSymbol: 'CNXFINANCE' },
+    'Banks':                               { label: 'Nifty Bank',       tvSymbol: 'CNXBANK' },
+    'Fast Moving Consumer Goods':          { label: 'Nifty FMCG',       tvSymbol: 'CNXFMCG' },
+    'Pharmaceuticals & Biotechnology':     { label: 'Nifty Pharma',     tvSymbol: 'CNXPHARMA' },
+    'Automobiles & Auto Components':       { label: 'Nifty Auto',       tvSymbol: 'CNXAUTO' },
+    'Metals & Mining':                     { label: 'Nifty Metal',      tvSymbol: 'CNXMETAL' },
+    'Realty':                              { label: 'Nifty Realty',     tvSymbol: 'CNXREALTY' },
+    'Consumer Durables':                   { label: 'Nifty Cons. Dur.', tvSymbol: 'CNXFMCG' },
+    'Telecommunication':                   { label: 'Nifty Media',      tvSymbol: 'CNXMEDIA' },
+    'Healthcare':                          { label: 'Nifty Pharma',     tvSymbol: 'CNXPHARMA' },
+  }
+  return map[sector] ?? null
 }

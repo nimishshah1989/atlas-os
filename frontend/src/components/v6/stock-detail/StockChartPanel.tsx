@@ -13,13 +13,24 @@ interface StockChartPanelProps {
   roe: number | null
 }
 
+// Light-theme widgetembed URL — white background matches Atlas paper tokens.
+// `allow_symbol_change=0` prevents the chart from drifting to other symbols (the Apple bug).
 function tvUrl(symbol: string): string {
   const encodedSymbol = encodeURIComponent(`NSE:${symbol}`)
   return (
-    `https://www.tradingview.com/widgetembed/?frameElementId=tradingview_atlas` +
-    `&symbol=${encodedSymbol}&interval=W&hidesidetoolbar=1&hidetoptoolbar=0` +
-    `&symboledit=0&saveimage=0&toolbarbg=1A1714&theme=Dark&style=1` +
-    `&timezone=Asia%2FKolkata&locale=en`
+    `https://www.tradingview.com/widgetembed/?symbol=${encodedSymbol}` +
+    `&interval=D` +
+    `&hidesidetoolbar=0` +
+    `&hidetoptoolbar=0` +
+    `&symboledit=0` +
+    `&saveimage=0` +
+    `&toolbarbg=F8F4EC` +
+    `&theme=light` +
+    `&style=1` +
+    `&timezone=Asia%2FKolkata` +
+    `&allow_symbol_change=0` +
+    `&studies=%5B%22MAExp%40tv-basicstudies%22%2C%22MAExp%40tv-basicstudies%22%2C%22MAExp%40tv-basicstudies%22%2C%22Volume%40tv-basicstudies%22%5D` +
+    `&locale=en`
   )
 }
 
@@ -32,7 +43,12 @@ export function StockChartPanel({ symbol, commentary, pe, ps, pb, debtToEquity, 
         <div className="bg-paper-deep flex items-center justify-center h-[300px]">
           <div className="text-center">
             <p className="font-sans text-sm text-ink-3 mb-2">Chart unavailable</p>
-            <a href={`https://www.tradingview.com/chart/?symbol=NSE:${symbol}`} target="_blank" rel="noopener noreferrer" className="font-sans text-sm text-accent hover:underline">
+            <a
+              href={`https://www.tradingview.com/chart/?symbol=NSE:${symbol}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-sans text-sm text-accent hover:underline"
+            >
               Open in TradingView ↗
             </a>
           </div>
@@ -40,9 +56,10 @@ export function StockChartPanel({ symbol, commentary, pe, ps, pb, debtToEquity, 
       ) : (
         <iframe
           src={tvUrl(symbol)}
-          className="w-full h-[340px] md:h-[420px] border-0"
+          className="w-full h-[420px] md:h-[520px] border-0 bg-paper"
+          sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
           onError={() => setChartError(true)}
-          title={`${symbol} weekly price chart`}
+          title={`${symbol} daily price chart`}
           loading="lazy"
         />
       )}
