@@ -109,6 +109,12 @@ DROP VIEW IF EXISTS atlas.mv_stock_landscape_trader;
 
 
 def upgrade() -> None:
+    # DROP first so the column set can change across upgrades. Plain
+    # CREATE OR REPLACE VIEW refuses to drop or rename columns, which
+    # blocked the original out-of-band creation (different shape) from
+    # being replaced by the migration definition. See migration 116
+    # docstring for the column drift this resolves.
+    op.execute(_DROP_VIEW)
     op.execute(_CREATE_VIEW)
 
 

@@ -172,6 +172,10 @@ CROSS JOIN LATERAL atlas.derive_verdict(
 
 
 def upgrade() -> None:
+    # DROP first — this revision renames combined_verdict -> verdict_source,
+    # which CREATE OR REPLACE VIEW refuses to do (Postgres rejects column
+    # renames in REPLACE). Matches the pattern used in 115.
+    op.execute("DROP VIEW IF EXISTS atlas.mv_stock_landscape_trader;")
     op.execute(_CREATE_VIEW)
 
 
