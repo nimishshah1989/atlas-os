@@ -30,6 +30,11 @@ _COLUMNS = [
     "average_volume_10d_calc",
     "High.All",
     "Low.All",
+    "price_earnings_ttm",
+    "price_sales_current",
+    "price_book_fbs",
+    "debt_to_equity",
+    "return_on_equity",
 ]
 
 
@@ -82,12 +87,15 @@ def _upsert_rows(rows: list[dict], engine: Engine) -> None:
             symbol, instrument_id, fetched_at,
             tv_recommend_label, recommend_all, recommend_ma, recommend_other,
             rsi_14, macd_macd, ema_20, ema_50, ema_200, atr_14,
-            volume, volume_10d_avg, price, high_52w, low_52w, raw_payload
+            volume, volume_10d_avg, price, high_52w, low_52w,
+            pe_ttm, ps_current, pb_fbs, debt_to_equity, roe,
+            raw_payload
         ) VALUES (
             :symbol, :instrument_id, NOW(),
             :tv_recommend_label, :recommend_all, :recommend_ma, :recommend_other,
             :rsi_14, :macd_macd, :ema_20, :ema_50, :ema_200, :atr_14,
             :volume, :volume_10d_avg, :price, :high_52w, :low_52w,
+            :pe_ttm, :ps_current, :pb_fbs, :debt_to_equity, :roe,
             CAST(:raw_payload AS jsonb)
         )
         ON CONFLICT (symbol) DO UPDATE SET
@@ -108,6 +116,11 @@ def _upsert_rows(rows: list[dict], engine: Engine) -> None:
             price            = EXCLUDED.price,
             high_52w         = EXCLUDED.high_52w,
             low_52w          = EXCLUDED.low_52w,
+            pe_ttm           = EXCLUDED.pe_ttm,
+            ps_current       = EXCLUDED.ps_current,
+            pb_fbs           = EXCLUDED.pb_fbs,
+            debt_to_equity   = EXCLUDED.debt_to_equity,
+            roe              = EXCLUDED.roe,
             raw_payload      = EXCLUDED.raw_payload,
             updated_at       = NOW()
     """)
@@ -178,6 +191,11 @@ def fetch_and_upsert_all(engine: Engine | None = None) -> None:
                     "price": rec.get("close"),
                     "high_52w": rec.get("High.All"),
                     "low_52w": rec.get("Low.All"),
+                    "pe_ttm": rec.get("price_earnings_ttm"),
+                    "ps_current": rec.get("price_sales_current"),
+                    "pb_fbs": rec.get("price_book_fbs"),
+                    "debt_to_equity": rec.get("debt_to_equity"),
+                    "roe": rec.get("return_on_equity"),
                     "raw_payload": str(rec),
                 }
             )
