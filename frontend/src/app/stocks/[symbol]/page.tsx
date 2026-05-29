@@ -214,7 +214,7 @@ export default async function StockPage({
           <p className="font-mono text-[10px] uppercase tracking-wider text-ink-3 mb-1">
             {sectorIndex ? `${sectorIndex.label}` : 'Nifty 50'} · 12-Month Sparkline
           </p>
-          <TVMiniOverview symbol={sectorIndex?.tvSymbol ?? 'NIFTY_50'} exchange="NSE" dateRange="12M" />
+          <TVMiniOverview symbol={sectorIndex?.tvSymbol ?? 'NIFTY'} exchange="NSE" dateRange="12M" />
         </div>
         <div className="border border-paper-rule rounded p-4 bg-paper">
           <p className="font-mono text-[10px] uppercase tracking-wider text-ink-3 mb-1">
@@ -367,22 +367,27 @@ export default async function StockPage({
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// TV-confirmed NSE index symbols (verified against symbol-search.tradingview.com).
+// Important: TV uses `NIFTY` for Nifty 50, `BANKNIFTY` for Nifty Bank, `CNXENERGY` for Nifty Energy.
 function sectorIndexForSector(sector: string | null | undefined): { label: string; tvSymbol: string } | null {
   if (!sector) return null
   const map: Record<string, { label: string; tvSymbol: string }> = {
-    'Energy':                              { label: 'Nifty Energy',     tvSymbol: 'CNXENERGY' },
-    'Oil Gas & Consumable Fuels':          { label: 'Nifty Oil & Gas',  tvSymbol: 'CNXENERGY' },
-    'Information Technology':              { label: 'Nifty IT',         tvSymbol: 'CNXIT' },
-    'Financial Services':                  { label: 'Nifty Financial',  tvSymbol: 'CNXFINANCE' },
-    'Banks':                               { label: 'Nifty Bank',       tvSymbol: 'CNXBANK' },
-    'Fast Moving Consumer Goods':          { label: 'Nifty FMCG',       tvSymbol: 'CNXFMCG' },
-    'Pharmaceuticals & Biotechnology':     { label: 'Nifty Pharma',     tvSymbol: 'CNXPHARMA' },
-    'Automobiles & Auto Components':       { label: 'Nifty Auto',       tvSymbol: 'CNXAUTO' },
-    'Metals & Mining':                     { label: 'Nifty Metal',      tvSymbol: 'CNXMETAL' },
-    'Realty':                              { label: 'Nifty Realty',     tvSymbol: 'CNXREALTY' },
-    'Consumer Durables':                   { label: 'Nifty Cons. Dur.', tvSymbol: 'CNXFMCG' },
-    'Telecommunication':                   { label: 'Nifty Media',      tvSymbol: 'CNXMEDIA' },
-    'Healthcare':                          { label: 'Nifty Pharma',     tvSymbol: 'CNXPHARMA' },
+    'Energy':                              { label: 'Nifty Energy',           tvSymbol: 'CNXENERGY' },
+    'Oil Gas & Consumable Fuels':          { label: 'Nifty Oil & Gas',        tvSymbol: 'NIFTY_OIL_AND_GAS' },
+    'Information Technology':              { label: 'Nifty IT',               tvSymbol: 'CNXIT' },
+    'Financial Services':                  { label: 'Nifty Financial',        tvSymbol: 'CNXFINANCE' },
+    'Banks':                               { label: 'Nifty Bank',             tvSymbol: 'BANKNIFTY' },
+    'Fast Moving Consumer Goods':          { label: 'Nifty FMCG',             tvSymbol: 'CNXFMCG' },
+    'Pharmaceuticals & Biotechnology':     { label: 'Nifty Pharma',           tvSymbol: 'CNXPHARMA' },
+    'Automobiles & Auto Components':       { label: 'Nifty Auto',             tvSymbol: 'CNXAUTO' },
+    'Metals & Mining':                     { label: 'Nifty Metal',            tvSymbol: 'CNXMETAL' },
+    'Realty':                              { label: 'Nifty Realty',           tvSymbol: 'CNXREALTY' },
+    'Consumer Durables':                   { label: 'Nifty Consumer Durables', tvSymbol: 'NIFTY_CONSR_DURBL' },
+    'Telecommunication':                   { label: 'Nifty Media',            tvSymbol: 'CNXMEDIA' },
+    'Healthcare':                          { label: 'Nifty Healthcare',       tvSymbol: 'NIFTY_HEALTHCARE' },
+    'Chemicals':                           { label: 'Nifty Chemicals',        tvSymbol: 'NIFTY_CHEMICALS' },
+    'Power':                               { label: 'Nifty Energy',           tvSymbol: 'CNXENERGY' },
+    'Capital Goods':                       { label: 'Nifty India Mfg.',       tvSymbol: 'NIFTY_INDIA_MFG' },
   }
   return map[sector] ?? null
 }

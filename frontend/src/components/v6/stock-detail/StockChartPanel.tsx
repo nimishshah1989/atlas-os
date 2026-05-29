@@ -14,24 +14,22 @@ interface StockChartPanelProps {
 }
 
 // Light-theme widgetembed URL — white background matches Atlas paper tokens.
-// `allow_symbol_change=0` prevents the chart from drifting to other symbols (the Apple bug).
+// `allow_symbol_change=0` prevents the chart from drifting to other symbols.
 function tvUrl(symbol: string): string {
-  const encodedSymbol = encodeURIComponent(`NSE:${symbol}`)
-  return (
-    `https://www.tradingview.com/widgetembed/?symbol=${encodedSymbol}` +
-    `&interval=D` +
-    `&hidesidetoolbar=0` +
-    `&hidetoptoolbar=0` +
-    `&symboledit=0` +
-    `&saveimage=0` +
-    `&toolbarbg=F8F4EC` +
-    `&theme=light` +
-    `&style=1` +
-    `&timezone=Asia%2FKolkata` +
-    `&allow_symbol_change=0` +
-    `&studies=%5B%22MAExp%40tv-basicstudies%22%2C%22MAExp%40tv-basicstudies%22%2C%22MAExp%40tv-basicstudies%22%2C%22Volume%40tv-basicstudies%22%5D` +
-    `&locale=en`
-  )
+  const params = new URLSearchParams({
+    symbol: `NSE:${symbol}`,
+    interval: 'D',
+    timezone: 'Asia/Kolkata',
+    theme: 'light',
+    style: '1',
+    locale: 'en',
+    toolbar_bg: '#F8F4EC',
+    hide_side_toolbar: 'false',
+    hide_top_toolbar: 'false',
+    allow_symbol_change: 'false',
+    studies: '["MASimple@tv-basicstudies","MASimple@tv-basicstudies","MAExp@tv-basicstudies","Volume@tv-basicstudies"]',
+  })
+  return `https://www.tradingview.com/widgetembed/?${params.toString()}`
 }
 
 export function StockChartPanel({ symbol, commentary, pe, ps, pb, debtToEquity, roe }: StockChartPanelProps) {
