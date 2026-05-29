@@ -115,7 +115,7 @@ def test_fundamental_columns_present_in_upsert_row(monkeypatch):
 
     captured: list[dict] = []
 
-    def capture_upsert(rows: list[dict], eng) -> None:
+    def capture_upsert(rows: list[dict], *_: object) -> None:
         captured.extend(rows)
 
     with patch("atlas.tv.screener._upsert_rows", side_effect=capture_upsert):
