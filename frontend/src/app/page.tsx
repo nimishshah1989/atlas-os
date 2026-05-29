@@ -18,6 +18,7 @@ import { rangeToDays, type TimeRange } from '@/lib/time-range'
 import { getRegimeJourney12w, getTopConvictionCalls } from '@/lib/queries/v6/landing'
 import { RegimeJourney12w } from '@/components/v6/landing/RegimeJourney12w'
 import { TodayConvictionTabs } from '@/components/v6/landing/TodayConvictionTabs'
+import { RegimeClassifierInputs } from '@/components/regime/RegimeClassifierInputs'
 
 type SearchParams = Promise<{ range?: string }>
 
@@ -84,6 +85,15 @@ export default async function RegimePage({ searchParams }: { searchParams: Searc
         </div>
         <RegimeOverlayChart history={history} />
       </div>
+
+      {/* NEW (2026-05-29 pilot): "How we got here" — 4 LC small-multiples for
+          the regime classifier inputs. First production use of
+          AtlasLightweightChart. Sits ABOVE the four sections so you can
+          A/B them by scrolling: LC pilot at top, Recharts originals below. */}
+      <RegimeClassifierInputs
+        history={history}
+        asOf={current.date instanceof Date ? current.date.toISOString().slice(0, 10) : String(current.date).slice(0, 10)}
+      />
 
       {/* Four category sections — unchanged */}
       <TrendSection current={current} history={history} />
