@@ -20,19 +20,24 @@ import { toNumber, toNumberOr } from '@/lib/v6/decimal'
 // 12-week journey types
 // ---------------------------------------------------------------------------
 
+// 2026-05-29 (Batch 4): swapped smallcap_rs + dispersion for the actual
+// regime classifier inputs (mcclellan + trend slope) so the trailing-12w
+// panel SHOWS what the classifier USES. The four inputs match
+// atlas/compute/regime.py classify_regime_state — see also
+// RegimeClassifierInputs (the LC chart pilot above this panel).
 export type WeeklyRegimeCell = {
   /** ISO date of the last trading day in this week (displayed label). */
   week_end_date: string
   /** Regime state for the week (majority vote within window). */
   regime_state: string
-  /** Breadth % above 200-DMA — null when no data for the week. */
+  /** Breadth: % of Nifty 500 above 50D EMA — matches classifier input. */
   breadth_pct: number | null
-  /** India VIX — null when no data. */
+  /** India VIX — matches classifier input. */
   india_vix: number | null
-  /** Realized vol (dispersion proxy) — null when no data. */
-  dispersion: number | null
-  /** Small-cap RS z-score (smallcap_rs_z) — null when no data. */
-  smallcap_rs: number | null
+  /** McClellan Oscillator (breadth momentum) — matches classifier input. */
+  mcclellan: number | null
+  /** Nifty 500 50D EMA slope as % per day — trend proxy used by classifier. */
+  trend_slope: number | null
   /** True for the most recent (current) week. */
   is_current: boolean
 }
@@ -40,10 +45,10 @@ export type WeeklyRegimeCell = {
 type RawRegimeRow = {
   date: string
   regime_state: string
-  pct_above_ema_200: string | null
+  pct_above_ema_50: string | null
   india_vix: string | null
-  realized_vol_5d_nifty500: string | null
-  smallcap_rs_z: string | null
+  mcclellan_oscillator: string | null
+  nifty500_ema_50_slope: string | null
 }
 
 /**
@@ -60,13 +65,10 @@ export async function getRegimeJourney12w(): Promise<WeeklyRegimeCell[]> {
     SELECT
       date::text                                  AS date,
       regime_state,
-      pct_above_ema_200::text                     AS pct_above_ema_200,
+      pct_above_ema_50::text                      AS pct_above_ema_50,
       india_vix::text                             AS india_vix,
-      realized_vol_5d_nifty500::text              AS realized_vol_5d_nifty500,
-      NULL::text                                  AS smallcap_rs_z
-      /* smallcap_rs_z not yet present in atlas_market_regime_daily;
-         row renders with em-dash until backend exposes the column.
-         Hardcoding NULL avoids a server-component crash on prod. */
+      mcclellan_oscillator::text                  AS mcclellan_oscillator,
+      nifty500_ema_50_slope::text                 AS nifty500_ema_50_slope
     FROM atlas.atlas_market_regime_daily
     WHERE date >= CURRENT_DATE - INTERVAL '84 days'
     ORDER BY date ASC
@@ -97,8 +99,8 @@ export async function getRegimeJourney12w(): Promise<WeeklyRegimeCell[]> {
         regime_state: 'Neutral',
         breadth_pct: null,
         india_vix: null,
-        dispersion: null,
-        smallcap_rs: null,
+        mcclellan: null,
+        trend_slope: null,
         is_current: false,
       }
     }
@@ -108,18 +110,18 @@ export async function getRegimeJourney12w(): Promise<WeeklyRegimeCell[]> {
     // Find last non-null value for each metric within the bucket
     let breadthPct: number | null = null
     let indiaVix: number | null = null
-    let dispersion: number | null = null
-    let smallcapRs: number | null = null
+    let mcclellan: number | null = null
+    let trendSlope: number | null = null
 
     for (const r of bucket) {
-      const bval = toNumber(r.pct_above_ema_200)
+      const bval = toNumber(r.pct_above_ema_50)
       if (bval != null) breadthPct = Math.round(bval * 100)
       const vixVal = toNumber(r.india_vix)
       if (vixVal != null) indiaVix = vixVal
-      const dispVal = toNumber(r.realized_vol_5d_nifty500)
-      if (dispVal != null) dispersion = dispVal
-      const rsVal = toNumber(r.smallcap_rs_z)
-      if (rsVal != null) smallcapRs = rsVal
+      const mcVal = toNumber(r.mcclellan_oscillator)
+      if (mcVal != null) mcclellan = mcVal
+      const slopeVal = toNumber(r.nifty500_ema_50_slope)
+      if (slopeVal != null) trendSlope = slopeVal
     }
 
     return {
@@ -127,8 +129,9 @@ export async function getRegimeJourney12w(): Promise<WeeklyRegimeCell[]> {
       regime_state: last.regime_state,
       breadth_pct: breadthPct,
       india_vix: indiaVix != null ? Math.round(indiaVix * 10) / 10 : null,
-      dispersion: dispersion != null ? Math.round(dispersion * 10000) / 10000 : null,
-      smallcap_rs: smallcapRs != null ? Math.round(smallcapRs * 100) / 100 : null,
+      mcclellan: mcclellan != null ? Math.round(mcclellan * 10) / 10 : null,
+      // slope is a fraction like 0.0006 → show as % per day (×100)
+      trend_slope: trendSlope != null ? Math.round(trendSlope * 10000) / 100 : null,
       is_current: idx === buckets.length - 1,
     }
   })

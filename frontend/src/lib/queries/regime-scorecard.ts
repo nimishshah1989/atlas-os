@@ -123,11 +123,13 @@ async function getSectorsEnteredFavour(): Promise<string[]> {
   return rows.map((r) => r.sector)
 }
 
-type BreakoutRow = { symbol: string }
+type BreakoutRow = { symbol: string; days_in_state: number | null }
 
 async function getBreakoutCandidates(limit = 10): Promise<BreakoutRow[]> {
   return sql<BreakoutRow[]>`
-    SELECT symbol
+    SELECT
+      symbol,
+      (date - state_since_date)::int AS days_in_state
     FROM atlas.mv_breakout_candidates
     ORDER BY rs_pctile_3m DESC NULLS LAST
     LIMIT ${limit}
@@ -141,11 +143,13 @@ async function getBreakoutCount(): Promise<number> {
   return rows[0]?.cnt ?? 0
 }
 
-type DeteriorationRow = { symbol: string }
+type DeteriorationRow = { symbol: string; days_in_state: number | null }
 
 async function getDeteriorationWatch(limit = 10): Promise<DeteriorationRow[]> {
   return sql<DeteriorationRow[]>`
-    SELECT symbol
+    SELECT
+      symbol,
+      (date - state_since_date)::int AS days_in_state
     FROM atlas.mv_deterioration_watch
     ORDER BY rs_pctile_3m DESC NULLS LAST
     LIMIT ${limit}
@@ -224,8 +228,10 @@ export async function getRegimeScorecard(
     sectorsEnteredFavour: sectorsEnteredNames.length,
     freshBreakouts:       breakoutCount,
     breakoutSymbols:      breakoutRows.map((r) => r.symbol),
+    breakoutDays:         breakoutRows.map((r) => ({ symbol: r.symbol, days: r.days_in_state })),
     deterioratingCount:   deteriorationCount,
     deterioratingSymbols: deteriorationRows.map((r) => r.symbol),
+    deterioratingDays:    deteriorationRows.map((r) => ({ symbol: r.symbol, days: r.days_in_state })),
   }
 
   return {

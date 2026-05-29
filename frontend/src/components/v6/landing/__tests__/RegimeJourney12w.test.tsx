@@ -15,8 +15,8 @@ function makeCell(overrides: Partial<WeeklyRegimeCell> = {}): WeeklyRegimeCell {
     regime_state: 'Cautious',
     breadth_pct: 42,
     india_vix: 18.4,
-    dispersion: 0.087,
-    smallcap_rs: -0.34,
+    mcclellan: 4.0,
+    trend_slope: 0.06,
     is_current: false,
     ...overrides,
   }
@@ -50,30 +50,30 @@ describe('RegimeJourney12w', () => {
     expect(currentBlock).toBeDefined()
   })
 
-  it('displays all four metric row labels including Small-cap RS', () => {
+  it('displays all four classifier-input metric row labels', () => {
     const cells = [makeCell()]
     render(<RegimeJourney12w cells={cells} />)
-    expect(screen.getByText(/SC/i)).toBeDefined()
-    expect(screen.getByText(/Breadth/i)).toBeDefined()
-    expect(screen.getByText(/India VIX/i)).toBeDefined()
-    expect(screen.getByText(/Dispersion/i)).toBeDefined()
+    // Labels appear twice (subtitle + row header). At least one of each.
+    expect(screen.getAllByText(/Breadth/i).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText(/India VIX/i).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText(/McClellan/i).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText(/Trend/i).length).toBeGreaterThanOrEqual(1)
   })
 
   it('shows em-dash for null metric values', () => {
     const cells = [
-      makeCell({ breadth_pct: null, india_vix: null, dispersion: null, smallcap_rs: null }),
+      makeCell({ breadth_pct: null, india_vix: null, mcclellan: null, trend_slope: null }),
     ]
     render(<RegimeJourney12w cells={cells} />)
-    // Should have multiple em-dashes for null metric cells (4 metrics can be null)
     const dashes = screen.getAllByText('—')
     expect(dashes.length).toBeGreaterThanOrEqual(4)
   })
 
-  it('renders the legend with all four regime states', () => {
+  it('renders the legend with all four live regime state names', () => {
     const cells = [makeCell()]
     render(<RegimeJourney12w cells={cells} />)
     expect(screen.getByText('Risk-On')).toBeDefined()
-    expect(screen.getByText('Elevated')).toBeDefined()
+    expect(screen.getByText('Constructive')).toBeDefined()
     expect(screen.getByText('Cautious')).toBeDefined()
     expect(screen.getByText('Risk-Off')).toBeDefined()
   })

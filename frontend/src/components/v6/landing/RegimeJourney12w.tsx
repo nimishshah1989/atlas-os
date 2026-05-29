@@ -91,17 +91,20 @@ function vixSentiment(val: number | null): Sentiment {
   return 'neutral'
 }
 
-function dispersionSentiment(val: number | null): Sentiment {
+// McClellan Oscillator: >+30 strong thrust, <-30 washout, near zero = neutral
+function mcclellanSentiment(val: number | null): Sentiment {
   if (val == null) return 'neutral'
-  if (val >= 0.06) return 'pos'
-  return 'neutral'
+  if (val >= 30) return 'pos'
+  if (val <= -30) return 'neg'
+  if (val >= 0) return 'neutral'
+  return 'warn'
 }
 
-function smallcapRsSentiment(val: number | null): Sentiment {
-  // z-score: >0.5 = positive relative strength, <-0.5 = negative
+// Trend slope: 50D EMA % change per day. >0.1 = strong uptrend, <-0.1 = downtrend.
+function trendSlopeSentiment(val: number | null): Sentiment {
   if (val == null) return 'neutral'
-  if (val >= 0.5) return 'pos'
-  if (val <= -0.5) return 'neg'
+  if (val >= 0.10) return 'pos'
+  if (val <= -0.10) return 'neg'
   return 'neutral'
 }
 
@@ -110,9 +113,13 @@ function smallcapRsSentiment(val: number | null): Sentiment {
 // ---------------------------------------------------------------------------
 
 function RegimeLegend() {
+  // Labels match the live backend state names emitted by
+  // atlas/compute/regime.py classify_regime_state (Risk-On / Constructive /
+  // Cautious / Risk-Off). The legacy "Elevated" label was the original spec
+  // wording — superseded by "Constructive" since the 2026-05 lock.
   const items: Array<{ label: string; sentiment: RegimeSentiment }> = [
     { label: 'Risk-On',      sentiment: 'risk-on' },
-    { label: 'Elevated',     sentiment: 'constructive' },
+    { label: 'Constructive', sentiment: 'constructive' },
     { label: 'Cautious',     sentiment: 'cautious' },
     { label: 'Risk-Off',     sentiment: 'risk-off' },
   ]
@@ -187,12 +194,13 @@ function formatVix(val: number | null): string {
   return `${val.toFixed(1)}`
 }
 
-function formatDisp(val: number | null): string {
+function formatMcclellan(val: number | null): string {
   if (val == null) return '—'
-  return `.${Math.round(val * 1000).toString().padStart(3, '0')}`
+  const sign = val >= 0 ? '+' : ''
+  return `${sign}${val.toFixed(0)}`
 }
 
-function formatSmallcapRs(val: number | null): string {
+function formatTrendSlope(val: number | null): string {
   if (val == null) return '—'
   const sign = val >= 0 ? '+' : ''
   return `${sign}${val.toFixed(2)}`
@@ -250,7 +258,8 @@ export function RegimeJourney12w({ cells }: Props) {
               Trailing 12 weeks · how we got here
             </h2>
             <p className="font-sans text-[13px] text-ink-tertiary mt-1">
-              Regime call each week, alongside the four inputs that drove it.
+              Regime call each week, alongside the four classifier inputs that drove it:
+              <span className="font-medium text-ink-secondary"> Breadth, India VIX, McClellan, Trend slope</span>.
             </p>
           </div>
           <RegimeLegend />
@@ -269,23 +278,8 @@ export function RegimeJourney12w({ cells }: Props) {
         {/* Spacer */}
         <div className="h-3" />
 
-        {/* Small-cap RS row (smallcap_rs_z from atlas_market_regime_daily) */}
-        <div style={gridStyle} role="row" aria-label="Small-cap RS z-score per week">
-          <div className="font-sans text-[10px] uppercase tracking-[0.18em] font-semibold text-ink-tertiary flex items-center pr-2">
-            SC&nbsp;RS
-          </div>
-          {cells.map(cell => (
-            <MetricCell
-              key={cell.week_end_date || String(Math.random())}
-              value={formatSmallcapRs(cell.smallcap_rs)}
-              sentiment={smallcapRsSentiment(cell.smallcap_rs)}
-              label={`Small-cap RS z-score: ${formatSmallcapRs(cell.smallcap_rs)}`}
-            />
-          ))}
-        </div>
-
-        {/* Breadth row */}
-        <div style={gridStyle} className="mt-1" role="row" aria-label="Breadth % above 200-DMA per week">
+        {/* Breadth row (pct_above_ema_50 from atlas_market_regime_daily) */}
+        <div style={gridStyle} className="mt-1" role="row" aria-label="Breadth % above 50D EMA per week">
           <div className="font-sans text-[10px] uppercase tracking-[0.18em] font-semibold text-ink-tertiary flex items-center pr-2">
             Breadth&nbsp;%
           </div>
@@ -294,7 +288,7 @@ export function RegimeJourney12w({ cells }: Props) {
               key={cell.week_end_date || String(Math.random())}
               value={formatBreadth(cell.breadth_pct)}
               sentiment={breadthSentiment(cell.breadth_pct)}
-              label={`Breadth: ${formatBreadth(cell.breadth_pct)}%`}
+              label={`Breadth (% above 50D EMA): ${formatBreadth(cell.breadth_pct)}%`}
             />
           ))}
         </div>
@@ -314,17 +308,32 @@ export function RegimeJourney12w({ cells }: Props) {
           ))}
         </div>
 
-        {/* Dispersion row */}
-        <div style={gridStyle} className="mt-1" role="row" aria-label="Dispersion per week">
+        {/* McClellan row (breadth momentum) */}
+        <div style={gridStyle} className="mt-1" role="row" aria-label="McClellan Oscillator per week">
           <div className="font-sans text-[10px] uppercase tracking-[0.18em] font-semibold text-ink-tertiary flex items-center pr-2">
-            Dispersion
+            McClellan
           </div>
           {cells.map(cell => (
             <MetricCell
               key={cell.week_end_date || String(Math.random())}
-              value={formatDisp(cell.dispersion)}
-              sentiment={dispersionSentiment(cell.dispersion)}
-              label={`Dispersion: ${formatDisp(cell.dispersion)}`}
+              value={formatMcclellan(cell.mcclellan)}
+              sentiment={mcclellanSentiment(cell.mcclellan)}
+              label={`McClellan Oscillator: ${formatMcclellan(cell.mcclellan)}`}
+            />
+          ))}
+        </div>
+
+        {/* Trend slope row (Nifty 500 50D EMA slope) */}
+        <div style={gridStyle} className="mt-1" role="row" aria-label="Nifty 500 50D EMA slope per week">
+          <div className="font-sans text-[10px] uppercase tracking-[0.18em] font-semibold text-ink-tertiary flex items-center pr-2">
+            Trend
+          </div>
+          {cells.map(cell => (
+            <MetricCell
+              key={cell.week_end_date || String(Math.random())}
+              value={formatTrendSlope(cell.trend_slope)}
+              sentiment={trendSlopeSentiment(cell.trend_slope)}
+              label={`50D EMA slope: ${formatTrendSlope(cell.trend_slope)}%/day`}
             />
           ))}
         </div>
