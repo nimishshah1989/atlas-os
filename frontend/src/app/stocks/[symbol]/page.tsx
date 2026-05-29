@@ -36,6 +36,12 @@ import { PeerMatrix } from '@/components/v6/stock-detail/PeerMatrix'
 import { generateChartCommentary } from '@/components/v6/stock-detail/ChartCommentary'
 import { SparklineTrajectoryGrid } from '@/components/v6/stock-detail/SparklineTrajectoryGrid'
 import { MultiTimeframeReturnsTable } from '@/components/v6/stock-detail/MultiTimeframeReturnsTable'
+import { GatesPanel } from '@/components/v6/stock-detail/GatesPanel'
+import { ConvictionDecompositionPanel } from '@/components/v6/stock-detail/ConvictionDecompositionPanel'
+import { SectorContextStrip } from '@/components/v6/stock-detail/SectorContextStrip'
+import { SignalCallHistoryTable } from '@/components/v6/stock-detail/SignalCallHistoryTable'
+import { getConvictionWithSignals, getSectorContextForStock, getMarketRegime } from '@/lib/queries/v6/stock-detail-extra'
+import { getSignalCallsByIid } from '@/lib/queries/v6/recent_signal_calls'
 import {
   TVTechnicalAnalysis,
   TVFinancials,
@@ -84,12 +90,20 @@ export default async function StockPage({
   ])
 
   // Batch 2 — external/dependent data (after batch 1 connections released)
-  const [tvMetrics, rsRatios, peerMatrix, peers] = await Promise.all([
+  const [tvMetrics, rsRatios, peerMatrix, peers, conviction, signalCalls, regimeState] = await Promise.all([
     getTVMetrics(symbol).catch(() => null),
     getRSRatios(symbol).catch(() => null),
     getPeerMatrix(symbol).catch(() => []),
     stockState ? getWithinStatePeers(stockState.state, stockState.date, 30) : Promise.resolve([]),
+    getConvictionWithSignals(stock.instrument_id).catch(() => null),
+    getSignalCallsByIid(stock.instrument_id, 20).catch(() => []),
+    getMarketRegime().catch(() => null),
   ])
+
+  // Sector context needs sector name — fetch after we know it exists
+  const sectorContext = stock.sector
+    ? await getSectorContextForStock(stock.sector, stock.instrument_id).catch(() => null)
+    : null
 
   // cohortKey used by getCohortBaseline upstream; keep ref to silence lint
   void cohortKey
@@ -171,9 +185,31 @@ export default async function StockPage({
         rsVsNifty={latestMetrics?.rs_pctile_3m != null ? parseFloat(latestMetrics.rs_pctile_3m) : null}
       />
 
-      {/* ────────────── 2. Returns + sector-relative sparkline ────────────── */}
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-4 px-6 py-4 border-b border-paper-rule bg-paper-deep">
+      {/* ────────────── 2a. Investability Gates + Returns table ────────────── */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-4 px-6 py-4 border-b border-paper-rule bg-paper-deep">
+        <GatesPanel
+          rsPctile3m={latestMetrics?.rs_pctile_3m != null ? parseFloat(latestMetrics.rs_pctile_3m) : null}
+          ema20Ratio={latestMetrics?.ema_20_ratio != null ? parseFloat(latestMetrics.ema_20_ratio) : null}
+          extensionPct={latestMetrics?.extension_pct != null ? parseFloat(latestMetrics.extension_pct) : null}
+          sectorState={sectorContext?.sector_state ?? null}
+          regimeState={regimeState}
+        />
         <MultiTimeframeReturnsTable latest={latestMetrics ?? null} />
+      </section>
+
+      {/* ────────────── 2b. Sector context strip ────────────── */}
+      <SectorContextStrip
+        sectorName={stock.sector ?? null}
+        sectorState={sectorContext?.sector_state ?? null}
+        breadth={sectorContext?.breadth ?? null}
+        sectorRank={sectorContext?.sector_rank ?? null}
+        totalSectors={sectorContext?.total_sectors ?? null}
+        stockRankInSector={sectorContext?.stock_rank_in_sector ?? null}
+        sectorSize={sectorContext?.sector_size ?? null}
+      />
+
+      {/* ────────────── 2c. Sector vs stock 12M sparklines ────────────── */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-4 px-6 py-4 border-b border-paper-rule bg-paper-deep">
         <div className="border border-paper-rule rounded p-4 bg-paper">
           <p className="font-mono text-[10px] uppercase tracking-wider text-ink-3 mb-1">
             {sectorIndex ? `${sectorIndex.label}` : 'Nifty 50'} · 12-Month Sparkline
@@ -201,6 +237,19 @@ export default async function StockPage({
 
       {/* ────────────── 4. RS Confirmation ────────────── */}
       <RSConfirmationPanel rsData={rsRatios} symbol={stock.symbol} />
+
+      {/* ────────────── 4b. Conviction Decomposition ────────────── */}
+      {conviction && (
+        <section className="px-6 py-4 border-b border-paper-rule bg-paper-deep">
+          <ConvictionDecompositionPanel
+            signals={conviction.signals}
+            convictionScore={conviction.conviction_score}
+            confidenceLabel={conviction.confidence_label}
+            backingIc={conviction.backing_ic}
+            tier={conviction.tier}
+          />
+        </section>
+      )}
 
       {/* ────────────── 5. Sparkline Trajectory Grid (12 Atlas metrics × 365D) ────────────── */}
       <SparklineTrajectoryGrid metricHistory={metricHistory} />
@@ -257,6 +306,15 @@ export default async function StockPage({
           </summary>
           <div className="pt-3">
             <TVCompanyProfile symbol={stock.symbol} />
+          </div>
+        </details>
+
+        <details className="font-sans text-[12px] text-ink-3 border border-paper-rule rounded p-3 bg-paper">
+          <summary className="cursor-pointer text-accent font-medium select-none">
+            Show signal_call audit ledger ({signalCalls.length} {signalCalls.length === 1 ? 'event' : 'events'})
+          </summary>
+          <div className="pt-3">
+            <SignalCallHistoryTable events={signalCalls} />
           </div>
         </details>
 
