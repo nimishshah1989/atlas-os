@@ -40,7 +40,7 @@ import { GatesPanel } from '@/components/v6/stock-detail/GatesPanel'
 import { ConvictionDecompositionPanel } from '@/components/v6/stock-detail/ConvictionDecompositionPanel'
 import { SectorContextStrip } from '@/components/v6/stock-detail/SectorContextStrip'
 import { SignalCallHistoryTable } from '@/components/v6/stock-detail/SignalCallHistoryTable'
-import { getConvictionWithSignals, getSectorContextForStock, getMarketRegime } from '@/lib/queries/v6/stock-detail-extra'
+import { getConvictionWithSignals, getSectorContextForStock, getMarketRegime, getGateThresholds } from '@/lib/queries/v6/stock-detail-extra'
 import { getSignalCallsByIid } from '@/lib/queries/v6/recent_signal_calls'
 import {
   TVTechnicalAnalysis,
@@ -90,7 +90,7 @@ export default async function StockPage({
   ])
 
   // Batch 2 — external/dependent data (after batch 1 connections released)
-  const [tvMetrics, rsRatios, peerMatrix, peers, conviction, signalCalls, regimeState] = await Promise.all([
+  const [tvMetrics, rsRatios, peerMatrix, peers, conviction, signalCalls, regimeState, gateThresholds] = await Promise.all([
     getTVMetrics(symbol).catch(() => null),
     getRSRatios(symbol).catch(() => null),
     getPeerMatrix(symbol).catch(() => []),
@@ -98,6 +98,7 @@ export default async function StockPage({
     getConvictionWithSignals(stock.instrument_id).catch(() => null),
     getSignalCallsByIid(stock.instrument_id, 20).catch(() => []),
     getMarketRegime().catch(() => null),
+    getGateThresholds(),
   ])
 
   // Sector context needs sector name — fetch after we know it exists
@@ -193,6 +194,8 @@ export default async function StockPage({
           extensionPct={latestMetrics?.extension_pct != null ? parseFloat(latestMetrics.extension_pct) : null}
           sectorState={sectorContext?.sector_state ?? null}
           regimeState={regimeState}
+          rsPctileMinThreshold={gateThresholds.rsPctileMinThreshold}
+          extensionMaxThreshold={gateThresholds.extensionMaxThreshold}
         />
         <MultiTimeframeReturnsTable latest={latestMetrics ?? null} />
       </section>
@@ -383,7 +386,10 @@ function sectorIndexForSector(sector: string | null | undefined): { label: strin
     'Metals & Mining':                     { label: 'Nifty Metal',            tvSymbol: 'CNXMETAL' },
     'Realty':                              { label: 'Nifty Realty',           tvSymbol: 'CNXREALTY' },
     'Consumer Durables':                   { label: 'Nifty Consumer Durables', tvSymbol: 'NIFTY_CONSR_DURBL' },
-    'Telecommunication':                   { label: 'Nifty Media',            tvSymbol: 'CNXMEDIA' },
+    // Telecommunication has no dedicated NSE sector index on TV (NIFTY_MS_IT_TELCM is the
+    // closest, but it blends IT + Telecom + Mid/Small caps and is not a clean sector index).
+    // Falling back to Nifty 50 via map miss is more honest than mapping to a wrong sector.
+    // 'Telecommunication': intentionally omitted.
     'Healthcare':                          { label: 'Nifty Healthcare',       tvSymbol: 'NIFTY_HEALTHCARE' },
     'Chemicals':                           { label: 'Nifty Chemicals',        tvSymbol: 'NIFTY_CHEMICALS' },
     'Power':                               { label: 'Nifty Energy',           tvSymbol: 'CNXENERGY' },

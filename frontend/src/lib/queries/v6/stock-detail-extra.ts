@@ -192,3 +192,48 @@ export async function getMarketRegime(): Promise<string | null> {
     return null
   }
 }
+
+// ─── Gate thresholds from atlas_thresholds ───────────────────────────────────
+//
+// Per CLAUDE.md "Methodology thresholds live in atlas.atlas_thresholds, loaded
+// via atlas.db.load_thresholds()". We mirror the backend convention so the
+// frontend gate display stays consistent with the backend gate computation
+// when thresholds are tuned in the DB.
+
+export interface GateThresholds {
+  /** RS percentile minimum — failure threshold for the strength gate. 0..1 scale. */
+  rsPctileMinThreshold: number
+  /** Extension maximum — failure threshold for the risk gate. 0..1 fraction. */
+  extensionMaxThreshold: number
+}
+
+const DEFAULT_GATE_THRESHOLDS: GateThresholds = {
+  rsPctileMinThreshold: 0.5,
+  extensionMaxThreshold: 0.4,
+}
+
+export async function getGateThresholds(): Promise<GateThresholds> {
+  try {
+    const rows = await sql<{ key: string; value: string | null }[]>`
+      SELECT key, value::text
+      FROM atlas.atlas_thresholds
+      WHERE key IN ('rs_pctile_min_pct', 'risk_extension_high_min_pct')
+    `
+    const map = new Map(rows.map(r => [r.key, r.value]))
+    const rsPctRaw = map.get('rs_pctile_min_pct')
+    const extPctRaw = map.get('risk_extension_high_min_pct')
+    // Values stored as whole-number percents (e.g. 40 = 40%). Convert to fraction.
+    const rsPctileMinThreshold = rsPctRaw != null
+      ? Number.parseFloat(rsPctRaw) / 100
+      : DEFAULT_GATE_THRESHOLDS.rsPctileMinThreshold
+    const extensionMaxThreshold = extPctRaw != null
+      ? Number.parseFloat(extPctRaw) / 100
+      : DEFAULT_GATE_THRESHOLDS.extensionMaxThreshold
+    return {
+      rsPctileMinThreshold: Number.isFinite(rsPctileMinThreshold) ? rsPctileMinThreshold : DEFAULT_GATE_THRESHOLDS.rsPctileMinThreshold,
+      extensionMaxThreshold: Number.isFinite(extensionMaxThreshold) ? extensionMaxThreshold : DEFAULT_GATE_THRESHOLDS.extensionMaxThreshold,
+    }
+  } catch {
+    return DEFAULT_GATE_THRESHOLDS
+  }
+}

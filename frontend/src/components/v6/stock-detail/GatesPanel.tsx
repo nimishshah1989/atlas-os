@@ -9,12 +9,19 @@ interface GatesPanelProps {
   rsPctile3m: number | null
   /** EMA20 momentum ratio (price/EMA20). >1 means rising. */
   ema20Ratio: number | null
-  /** Extension from 200D EMA. Failure threshold 40% per CONTEXT WAIT example. */
+  /** Extension from 200D EMA. */
   extensionPct: number | null
   /** Sector state from atlas_sector_states_daily ('Overweight'|'Neutral'|'Avoid') */
   sectorState: string | null
-  /** Regime state from atlas_market_regime_daily ('Risk-On'|'Elevated'|'Below-Trend'|'Risk-Off') */
+  /** Regime state from atlas_market_regime_daily. Canonical 4-state names per CONTEXT.md
+   *  (locked 2026-05-29): 'Risk-On'|'Constructive'|'Cautious'|'Risk-Off'.
+   *  Only 'Risk-Off' fails the market gate; Constructive and Cautious both pass
+   *  (consistent with decisions_stock.py market_pass = [Risk-On, Constructive, Cautious]). */
   regimeState: string | null
+  /** RS-percentile failure threshold (0..1 scale). Default 0.5. Source: atlas_thresholds. */
+  rsPctileMinThreshold?: number
+  /** Extension failure threshold (0..1 fraction = 40%). Default 0.40. Source: atlas_thresholds. */
+  extensionMaxThreshold?: number
 }
 
 type GateStatus = 'PASS' | 'FAIL' | 'UNKNOWN'
@@ -25,10 +32,11 @@ interface GateResult {
   detail: string
 }
 
-function strengthGate(rsPctile: number | null): GateResult {
+function strengthGate(rsPctile: number | null, minThreshold: number): GateResult {
   if (rsPctile == null) return { name: 'Strength', status: 'UNKNOWN', detail: 'RS percentile unavailable' }
-  if (rsPctile >= 0.5) return { name: 'Strength', status: 'PASS', detail: `RS percentile ${Math.round(rsPctile * 100)} ≥ 50` }
-  return { name: 'Strength', status: 'FAIL', detail: `RS percentile ${Math.round(rsPctile * 100)} < 50 (below median)` }
+  const minPct = Math.round(minThreshold * 100)
+  if (rsPctile >= minThreshold) return { name: 'Strength', status: 'PASS', detail: `RS percentile ${Math.round(rsPctile * 100)} ≥ ${minPct}` }
+  return { name: 'Strength', status: 'FAIL', detail: `RS percentile ${Math.round(rsPctile * 100)} < ${minPct} (below threshold)` }
 }
 
 function directionGate(ema20Ratio: number | null): GateResult {
@@ -37,11 +45,12 @@ function directionGate(ema20Ratio: number | null): GateResult {
   return { name: 'Direction', status: 'FAIL', detail: `Price below EMA20 (ratio ${ema20Ratio.toFixed(3)})` }
 }
 
-function riskGate(extensionPct: number | null): GateResult {
+function riskGate(extensionPct: number | null, maxThreshold: number): GateResult {
   if (extensionPct == null) return { name: 'Risk', status: 'UNKNOWN', detail: 'Extension unavailable' }
   const extPctDisplay = `${(extensionPct * 100).toFixed(1)}%`
-  if (extensionPct > 0.40) return { name: 'Risk', status: 'FAIL', detail: `Extension ${extPctDisplay} > 40% threshold (over-extended)` }
-  return { name: 'Risk', status: 'PASS', detail: `Extension ${extPctDisplay} ≤ 40%` }
+  const maxPct = Math.round(maxThreshold * 100)
+  if (extensionPct > maxThreshold) return { name: 'Risk', status: 'FAIL', detail: `Extension ${extPctDisplay} > ${maxPct}% threshold (over-extended)` }
+  return { name: 'Risk', status: 'PASS', detail: `Extension ${extPctDisplay} ≤ ${maxPct}%` }
 }
 
 function sectorGate(sectorState: string | null): GateResult {
@@ -62,11 +71,19 @@ const STATUS_META: Record<GateStatus, { dot: string; label: string; cls: string 
   UNKNOWN: { dot: '○', label: 'N/A',     cls: 'text-ink-4' },
 }
 
-export function GatesPanel({ rsPctile3m, ema20Ratio, extensionPct, sectorState, regimeState }: GatesPanelProps) {
+export function GatesPanel({
+  rsPctile3m,
+  ema20Ratio,
+  extensionPct,
+  sectorState,
+  regimeState,
+  rsPctileMinThreshold = 0.5,
+  extensionMaxThreshold = 0.4,
+}: GatesPanelProps) {
   const gates = [
-    strengthGate(rsPctile3m),
+    strengthGate(rsPctile3m, rsPctileMinThreshold),
     directionGate(ema20Ratio),
-    riskGate(extensionPct),
+    riskGate(extensionPct, extensionMaxThreshold),
     sectorGate(sectorState),
     marketGate(regimeState),
   ]
