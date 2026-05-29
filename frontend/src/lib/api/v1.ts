@@ -286,6 +286,12 @@ export interface TVMetricsRow {
   low_52w: string | null
   fetched_at: string | null
   is_stale: boolean
+  // TV-fundamentals (migration 118 — may be null until backend deployed to EC2)
+  pe_ttm: number | null
+  ps_current: number | null
+  pb_fbs: number | null
+  debt_to_equity: number | null
+  roe: number | null
 }
 
 /**
