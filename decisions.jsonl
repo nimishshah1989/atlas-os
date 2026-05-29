@@ -2292,3 +2292,846 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{
+  "ts": "2026-05-29T12:07:13Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/v6/landing.ts",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:07:36Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/v6/landing.ts",
+  "lines_changed": 61,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:10:50Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/TodayConvictionTabs.tsx",
+  "lines_changed": 30,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:11:11Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/TodayConvictionTabs.tsx",
+  "lines_changed": 61,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:34:54Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/docs/chunks/chunk-tv-119-expanded-metrics-approach.md",
+  "lines_changed": 35,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:36:52Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/migrations/versions/119_tv_expanded_metrics.py",
+  "lines_changed": 98,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:39:59Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/components/v6/stock-detail/StockChartPanel.tsx",
+  "lines_changed": 75,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:40:29Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/components/v6/stock-detail/TVWidgets.tsx",
+  "lines_changed": 113,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:41:07Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/components/v6/stock-detail/SparklineTrajectoryGrid.tsx",
+  "lines_changed": 143,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:41:36Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/components/v6/stock-detail/MultiTimeframeReturnsTable.tsx",
+  "lines_changed": 79,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:42:05Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/lib/db.ts",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:43:22Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/app/stocks/[symbol]/page.tsx",
+  "lines_changed": 329,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:43:57Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/components/v6/stock-detail/SparklineTrajectoryGrid.tsx",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:44:10Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/components/v6/stock-detail/SparklineTrajectoryGrid.tsx",
+  "lines_changed": 9,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:44:33Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/components/v6/stock-detail/SparklineTrajectoryGrid.tsx",
+  "lines_changed": 22,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:44:50Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/components/v6/stock-detail/SparklineTrajectoryGrid.tsx",
+  "lines_changed": 22,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:45:02Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/components/v6/stock-detail/MultiTimeframeReturnsTable.tsx",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:45:15Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/components/v6/stock-detail/MultiTimeframeReturnsTable.tsx",
+  "lines_changed": 23,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:47:18Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/app/stocks/[symbol]/page.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:48:48Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/components/v6/stock-detail/SignalCallHistoryTable.tsx",
+  "lines_changed": 73,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:49:24Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/components/v6/stock-detail/GatesPanel.tsx",
+  "lines_changed": 110,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:49:45Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/components/v6/stock-detail/SectorContextStrip.tsx",
+  "lines_changed": 91,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:50:13Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/components/v6/stock-detail/ConvictionDecompositionPanel.tsx",
+  "lines_changed": 100,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:50:50Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/lib/queries/v6/stock-detail-extra.ts",
+  "lines_changed": 194,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:51:07Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/app/stocks/[symbol]/page.tsx",
+  "lines_changed": 15,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:51:24Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/app/stocks/[symbol]/page.tsx",
+  "lines_changed": 15,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:51:50Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/app/stocks/[symbol]/page.tsx",
+  "lines_changed": 38,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:52:03Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/app/stocks/[symbol]/page.tsx",
+  "lines_changed": 18,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:52:21Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/app/stocks/[symbol]/page.tsx",
+  "lines_changed": 17,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:55:18Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/components/v6/stock-detail/StockChartPanel.tsx",
+  "lines_changed": 18,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:56:03Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/app/stocks/[symbol]/page.tsx",
+  "lines_changed": 24,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:56:17Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/app/stocks/[symbol]/page.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T12:59:18Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/docs/v6/2026-05-29-stock-detail-backlog.md",
+  "lines_changed": 97,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T13:48:12Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/components/v6/etf-detail/ETFGatesPanel.tsx",
+  "lines_changed": 141,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T13:48:39Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/components/v6/etf-detail/ETFReturnsTable.tsx",
+  "lines_changed": 84,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T13:49:22Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/components/v6/etf-detail/ETFSparklineTrajectoryGrid.tsx",
+  "lines_changed": 142,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T13:50:17Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/app/etfs/[ticker]/page.tsx",
+  "lines_changed": 236,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T13:50:47Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/components/v6/etf-detail/ETFReturnsTable.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T13:53:08Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/docs/v6/2026-05-29-fund-detail-backlog.md",
+  "lines_changed": 137,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T13:54:55Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/atlas/tv/screener.py",
+  "lines_changed": 38,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T13:55:43Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/atlas/tv/screener.py",
+  "lines_changed": 128,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T13:56:16Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/atlas/tv/screener.py",
+  "lines_changed": 79,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T13:56:48Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/components/v6/stock-detail/GatesPanel.tsx",
+  "lines_changed": 19,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T13:57:15Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/components/v6/stock-detail/GatesPanel.tsx",
+  "lines_changed": 20,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T13:57:27Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/components/v6/stock-detail/GatesPanel.tsx",
+  "lines_changed": 16,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T13:57:47Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/lib/queries/v6/stock-detail-extra.ts",
+  "lines_changed": 60,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T13:57:58Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/app/stocks/[symbol]/page.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T13:58:12Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/app/stocks/[symbol]/page.tsx",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T13:58:25Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/app/stocks/[symbol]/page.tsx",
+  "lines_changed": 9,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T13:58:53Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os-tv/frontend/src/app/stocks/[symbol]/page.tsx",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T14:26:46Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/TodayConvictionTabs.tsx",
+  "lines_changed": 17,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T14:27:00Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/TodayConvictionTabs.tsx",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T14:27:06Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/TodayConvictionTabs.tsx",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T14:27:16Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/regime/TodayWorklist.tsx",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T14:27:25Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/regime/TodayWorklist.tsx",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T14:27:58Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/__tests__/TodayConvictionTabs.test.tsx",
+  "lines_changed": 18,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T14:28:03Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/__tests__/TodayConvictionTabs.test.tsx",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-29T16:50:17Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name, data_type FROM information_schema.columns WHERE table_schema='atlas' AND table_name IN ('mv_breakout_candidates','mv_deterioration_watch') ORDER BY table_name, ordinal_position;"}
+{"ts":"2026-05-29T16:50:23Z","kind":"supabase_sql_executed","sql_preview":"SELECT a.attname AS column_name, t.typname AS data_type FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 JOIN pg_type t ON t.oid = a.atttypid WHERE n.nspname='atlas' AND c.relname IN ('mv_breakout_candidates','mv_deterioration_watch') AND NOT a.attisdropped ORDER BY c.relname, a.attnum;"}
+{
+  "ts": "2026-05-29T16:50:32Z",
+  "prev": "c80fb34be1e3fcce",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/regime-scorecard.ts",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T16:50:39Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/regime-scorecard.ts",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T16:50:47Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/regime-scorecard.ts",
+  "lines_changed": 9,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T16:51:00Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/regime/TodayWorklist.tsx",
+  "lines_changed": 26,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T16:51:22Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/regime/TodayWorklist.tsx",
+  "lines_changed": 60,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T16:51:33Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/regime/TodayWorklist.tsx",
+  "lines_changed": 28,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T16:51:55Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/regime/__tests__/TodayWorklist.test.tsx",
+  "lines_changed": 18,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T16:52:03Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/regime/__tests__/TodayWorklist.test.tsx",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T16:52:17Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/regime/__tests__/TodayWorklist.test.tsx",
+  "lines_changed": 39,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T16:53:16Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/regime/TodayWorklist.tsx",
+  "lines_changed": 31,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T16:53:25Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/regime/__tests__/TodayWorklist.test.tsx",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T16:54:13Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/v6/landing.ts",
+  "lines_changed": 30,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T16:54:22Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/v6/landing.ts",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T16:54:37Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/lib/queries/v6/landing.ts",
+  "lines_changed": 42,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T16:54:50Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/RegimeJourney12w.tsx",
+  "lines_changed": 30,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T16:55:00Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/RegimeJourney12w.tsx",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T16:55:07Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/RegimeJourney12w.tsx",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T16:55:30Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/RegimeJourney12w.tsx",
+  "lines_changed": 59,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T16:55:40Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/RegimeJourney12w.tsx",
+  "lines_changed": 9,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T16:56:01Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/__tests__/RegimeJourney12w.test.tsx",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T16:56:13Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/__tests__/RegimeJourney12w.test.tsx",
+  "lines_changed": 26,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T16:56:40Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/__tests__/RegimeJourney12w.test.tsx",
+  "lines_changed": 9,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-29T17:18:55Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  sc.date AS entry_date,\n  CURRENT_DATE AS today,\n  (CURRENT_DATE - sc.date)::int AS days_held,\n  sc.cap_tier_at_trigger || ' ' || sc.tenure AS cell,\n  sc.action,\n  ROUND(sc.confidence_unconditional::numeric, 3) AS conf,\n  sc.predicted_excess,\n  u.symbol\nFROM atlas.atlas_signal_calls sc\nLEFT JOIN atlas.atlas_universe_stocks u ON u.instrument_id = sc.instrument_id\nWHERE sc.exit_date IS NULL\nORDER BY sc.confidence_unconditional DESC NULLS LAST\nLIMIT 12;"}
+{"ts":"2026-05-29T17:20:42Z","kind":"supabase_sql_executed","sql_preview":"SELECT cap_tier_at_trigger || ' ' || tenure AS cell, ROUND(confidence_unconditional::numeric, 3) AS conf, COUNT(*) AS n FROM atlas.atlas_signal_calls WHERE exit_date IS NULL GROUP BY 1, 2 ORDER BY conf DESC NULLS LAST;"}
+{
+  "ts": "2026-05-29T17:21:03Z",
+  "prev": "697f1bda3e51e59c",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/RegimeJourney12w.tsx",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T17:21:22Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/RegimeJourney12w.tsx",
+  "lines_changed": 23,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T17:21:31Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/RegimeJourney12w.tsx",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T17:21:39Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/RegimeJourney12w.tsx",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T17:21:47Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/RegimeJourney12w.tsx",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T17:21:54Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/RegimeJourney12w.tsx",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T17:22:08Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/RegimeJourney12w.tsx",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T17:22:29Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/RegimeJourney12w.tsx",
+  "lines_changed": 30,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T17:22:43Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/TodayConvictionTabs.tsx",
+  "lines_changed": 22,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T17:22:58Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/TodayConvictionTabs.tsx",
+  "lines_changed": 29,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T17:23:12Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/TodayConvictionTabs.tsx",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T17:23:21Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/TodayConvictionTabs.tsx",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T17:23:38Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/TodayConvictionTabs.tsx",
+  "lines_changed": 24,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T17:24:22Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/components/v6/landing/__tests__/RegimeJourney12w.test.tsx",
+  "lines_changed": 9,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-29T17:56:04Z","kind":"supabase_sql_executed","sql_preview":"SELECT version_num FROM alembic_version;"}
+{"ts":"2026-05-29T17:56:54Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_cell_definitions' AND column_name='display_name') AS has_display_name,\n  EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_sector_metrics_daily' AND column_name='rs_1m') AS has_sector_rs_1m,\n  EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_macro_daily' AND column_name='dii_flow') AS has_dii_fl"}

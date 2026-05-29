@@ -61,7 +61,7 @@ th { background:var(--paper-soft); font-weight:600; color:var(--ink-2); text-tra
 
 <h1>TradingView × Atlas Integration</h1>
 <div class="meta">
-  <strong>Status:</strong> draft · pending eng-review &nbsp;|&nbsp;
+  <strong>Status:</strong> eng-review: APPROVED (2026-05-28) &nbsp;|&nbsp;
   <strong>Date:</strong> 2026-05-28 &nbsp;|&nbsp;
   <strong>Approach:</strong> B — Cached + MCP &nbsp;|&nbsp;
   <strong>Depends on:</strong> SP08 (Kite auth in place), existing TV_SESSION_ID config &nbsp;|&nbsp;
@@ -103,7 +103,7 @@ th { background:var(--paper-soft); font-weight:600; color:var(--ink-2); text-tra
   <div class="flow-arrow">→</div>
   <div class="flow-box"><strong>atlas/tv/screener.py</strong><span>tradingview-screener lib · nightly batch · ~1,800 NSE stocks</span></div>
   <div class="flow-arrow">→</div>
-  <div class="flow-box"><strong>atlas.tv_metrics</strong><span>Supabase table · upsert on symbol · refreshed 21:00 IST</span></div>
+  <div class="flow-box"><strong>atlas.tv_metrics</strong><span>Supabase table · upsert on symbol · ~750 symbols · refreshed 21:00 IST</span></div>
   <div class="flow-arrow">→</div>
   <div class="flow-box"><strong>Deep-Dive Left Panel</strong><span>PE / ROE / TV rating — zero latency on page load</span></div>
 </div>
@@ -134,6 +134,8 @@ atlas/
     csv_export.py              ← generate TV Portfolio import-format CSV
     routes.py                  ← /v1/tv/metrics/{symbol} · /v1/portfolios/{id}/analytics
                                   /v1/portfolios/{id}/export/tv-csv
+                                  Register in atlas/api/__init__.py:
+                                  app.include_router(tv_router)  # TV data + portfolio analytics
 
 frontend/src/components/v6/
   TVChartPanel.tsx             ← Advanced Chart Widget iframe wrapper
@@ -169,7 +171,7 @@ frontend/src/app/
     <tr><td>ma_20</td><td>NUMERIC(14,4)</td><td>EMA20</td><td>20-day MA</td></tr>
     <tr><td>ma_50</td><td>NUMERIC(14,4)</td><td>EMA50</td><td>50-day MA</td></tr>
     <tr><td>ma_200</td><td>NUMERIC(14,4)</td><td>EMA200</td><td>200-day MA</td></tr>
-    <tr><td>instrument_id</td><td>UUID nullable FK</td><td>—</td><td>→ atlas_instruments.id. Populated post-upsert via symbol lookup. NULL if symbol not in Atlas universe (e.g. ETFs, indices). Allows JOIN to atlas_paper_portfolio without going through symbol text.</td></tr>
+    <tr><td>instrument_id</td><td>UUID nullable</td><td>—</td><td>Populated post-upsert via <code>atlas_universe_stocks.symbol</code> lookup. NULL if symbol not in Atlas universe (e.g. ETFs, indices). No FK constraint — soft link maintained by screener.py. Allows JOIN to <code>atlas_paper_portfolio</code> without going through symbol text.</td></tr>
     <tr><td>fetched_at</td><td>TIMESTAMPTZ</td><td>—</td><td>staleness guard: flag if &gt; 26 h old</td></tr>
     <tr><td>created_at</td><td>TIMESTAMPTZ</td><td>—</td><td>tz-aware, standard</td></tr>
     <tr><td>updated_at</td><td>TIMESTAMPTZ</td><td>—</td><td>tz-aware, standard</td></tr>
@@ -227,7 +229,7 @@ Response 200:
 </pre>
 
 <h3>5.2 <code>GET /v1/portfolios/{id}/analytics</code> <small>— user-auth required</small></h3>
-<p>Returns computed performance analytics for a paper portfolio. Benchmark is Nifty 50 (symbol <code>NIFTY 50</code> in <code>de_index_prices</code>). Price history from <code>de_equity_ohlcv.close_adj</code>. Instrument lookup: <code>atlas_paper_portfolio.instrument_id → atlas_instruments.symbol</code> for TV metrics join and sector rollup.</p>
+<p>Returns computed performance analytics for a paper portfolio. Benchmark is Nifty 50 (symbol <code>NIFTY 50</code> in <code>de_index_prices</code>). Price history from <code>de_equity_ohlcv.close_adj</code>. Instrument lookup: <code>atlas_paper_portfolio.instrument_id → atlas_universe_stocks.instrument_id → atlas_universe_stocks.symbol</code> for TV metrics join and sector rollup (sector from <code>atlas_universe_stocks.sector</code> cross-referenced against <code>atlas_sector_master.sector_name</code>).</p>
 <pre>
 Response 200:
 {
@@ -239,11 +241,12 @@ Response 200:
     "sharpe": 1.42,
     "sortino": 1.87,
     "calmar": 2.1,
-    "alpha": 0.064,               // Jensen's alpha vs Nifty 50 (see formula in pre block above)
-    "beta": 0.91,
-    "max_drawdown": -0.087,       // peak-to-trough: min(portfolio_value / running_max - 1)
     "alpha": 0.064,               // Jensen's alpha: Rp - [Rf + β(Rm - Rf)]
-                                  // Rf = 91-day T-bill (IRSTCI01INM156N proxy), Rm = Nifty 50 TWR
+                                  // Rf = 91-day T-bill (IRSTCI01INM156N proxy from atlas.atlas_thresholds)
+                                  // Rm = Nifty 50 TWR over same period
+    "beta": 0.91,                 // OLS regression of daily portfolio returns vs daily Nifty 50 returns
+                                  // β = cov(Rp, Rm) / var(Rm); minimum 30 trading days required
+    "max_drawdown": -0.087,       // peak-to-trough: min(portfolio_value / running_max - 1)
     "benchmark_nifty50_twr": 0.119,  // Nifty 50 TWR same period (primary benchmark)
     "benchmark_tier_blend_twr": 0.104, // cap-weighted blend: Large→Nifty100, Mid→Nifty Midcap 150,
                                        // Small→Nifty Smallcap 250. Weights from portfolio holdings.
@@ -251,7 +254,7 @@ Response 200:
       { "sector": "Banking", "weight": 0.28 },
       { "sector": "IT", "weight": 0.19 }
     ],
-    "daily_returns": [...],       // [{date, portfolio_return, benchmark_return}] for chart
+    "daily_returns": [...],       // [{date, portfolio_return, nifty50_return, tier_blend_return}] for chart
     "holdings_count": 14,
     "as_of_date": "2026-05-28"
   },
@@ -312,7 +315,7 @@ Response 200:
 <table>
   <thead><tr><th>Time (IST)</th><th>Job</th><th>Details</th></tr></thead>
   <tbody>
-    <tr><td>21:00</td><td><code>tv_metrics_refresh</code></td><td>Batch fetch screener data for all ~1,800 NSE symbols via <code>tradingview-screener</code> lib. Upsert into <code>tv_metrics</code>. Expected runtime: 2–4 min. Fail-fast: if &gt; 10% symbols return NULL, abort and alert.</td></tr>
+    <tr><td>21:00</td><td><code>tv_metrics_refresh</code></td><td>Batch fetch screener data for Atlas universe symbols only (~750 rows from <code>atlas_universe_stocks.symbol</code> — not the full NSE list). Auth: <code>TV_SESSION_ID</code> + <code>TV_SESSION_SIGN</code> (from <code>atlas/config.py</code>). Build the symbol list with <code>SELECT symbol FROM atlas.atlas_universe_stocks</code> at job start. Upsert into <code>tv_metrics</code>, then resolve <code>instrument_id</code> soft-link via same table. Expected runtime: &lt;1 min (750 vs 1,800). Fail-fast: if &gt; 10% symbols return NULL, abort and alert. CAGR formula (for portfolio analytics): <code>(end/start)^(365.25/days) - 1</code> for periods &gt; 365d; TWR for shorter periods.</td></tr>
   </tbody>
 </table>
 
@@ -321,20 +324,20 @@ Response 200:
 <h2>9. Build Chunks</h2>
 
 <div class="chunk">
-  <div class="chunk-title"><span class="chunk-id">TV-01</span> DB migration — tv_metrics + tv_portfolio_exports</div>
-  <p>Alembic migration: CREATE TABLE atlas.tv_metrics (20 columns) + CREATE TABLE atlas.tv_portfolio_exports. Index on symbol, fetched_at. No data seeded at migration time.</p>
+  <div class="chunk-title"><span class="chunk-id">TV-01</span> DB migration 117 — tv_metrics + tv_portfolio_exports</div>
+  <p>Alembic migration 117 (116 is taken by trader-view composite-score fallback): CREATE TABLE atlas.tv_metrics (20 columns, symbol TEXT PK, instrument_id UUID nullable soft-link only — no FK constraint) + CREATE TABLE atlas.tv_portfolio_exports. Index on symbol, fetched_at. No data seeded at migration time. Add <code>tradingview-screener</code> to requirements (PyPI: <code>tradingview-screener</code>). Screener batch fetches only symbols in <code>atlas_universe_stocks</code> (~750 rows), not the full NSE list (~1,800) — fetch exactly what Atlas shows.</p>
   <div class="chunk-deps">Deps: none · Blocks: TV-02, TV-04</div>
 </div>
 
 <div class="chunk">
   <div class="chunk-title"><span class="chunk-id">TV-02</span> Backend — atlas/tv/screener.py + nightly cron</div>
-  <p>Implement <code>screener.py</code>: batch fetch all NSE symbols, map TV column names to tv_metrics schema, upsert. Wire into existing pg_cron at 21:00 IST. Add <code>/v1/tv/metrics/{symbol}</code> route with staleness guard. Tests: mock TV response, verify upsert, verify stale flag at 26h+.</p>
+  <p>Implement <code>screener.py</code>: load symbol list from <code>atlas_universe_stocks</code> (~750 symbols), batch fetch via <code>tradingview-screener</code> lib, map TV column names to tv_metrics schema, upsert, then resolve <code>instrument_id</code> soft-link via same <code>atlas_universe_stocks.symbol</code> lookup. DB access uses <code>with get_engine().connect() as conn:</code> (Atlas uses sync SQLAlchemy — no async session). Wire into existing pg_cron at 21:00 IST pattern (see migration 039). Add <code>/v1/tv/metrics/{symbol}</code> route with staleness guard. Tests: mock TV response, verify upsert, verify stale flag at 26h+, verify fail-fast when &gt;10% symbols return NULL.</p>
   <div class="chunk-deps">Deps: TV-01 · Blocks: TV-05 (frontend)</div>
 </div>
 
 <div class="chunk">
   <div class="chunk-title"><span class="chunk-id">TV-03</span> Backend — atlas/tv/portfolio_analytics.py + routes</div>
-  <p>Implement Sharpe, Sortino, Calmar, Alpha, Beta, Max Drawdown (running maximum method), TWR, sector composition. Benchmark = Nifty 50 from <code>de_index_prices</code>. Portfolio prices from <code>de_equity_ohlcv.close_adj</code> joined via <code>atlas_paper_portfolio.instrument_id → atlas_instruments.symbol</code>. Sector uses canonical 22 via <code>atlas_sector_rollup</code>. Add <code>/v1/portfolios/{id}/analytics</code>. Tests: known portfolio with hand-computed expected values.</p>
+  <p>Implement Sharpe, Sortino, Calmar, Alpha, Beta, Max Drawdown (running maximum method), TWR, sector composition. Benchmark = Nifty 50 from <code>de_index_prices</code> (index_code = 'NIFTY 50'). Portfolio prices from <code>de_equity_ohlcv.close_adj</code> joined via <code>atlas_paper_portfolio.instrument_id → atlas_universe_stocks.instrument_id → atlas_universe_stocks.symbol</code>. Sector from <code>atlas_universe_stocks.sector</code> (cross-ref <code>atlas_sector_master.sector_name</code>). Add <code>/v1/portfolios/{id}/analytics</code>. Tests: known portfolio with hand-computed expected values.</p>
   <div class="chunk-deps">Deps: TV-01 · Blocks: TV-06 (frontend)</div>
 </div>
 
@@ -375,7 +378,25 @@ Response 200:
   </tbody>
 </table>
 
-<h2>11. Success Criteria</h2>
+<h2>11. What Already Exists</h2>
+<p>These components are present in the codebase and must be reused — not rebuilt:</p>
+<table>
+  <thead><tr><th>Component</th><th>Location</th><th>Used by</th></tr></thead>
+  <tbody>
+    <tr><td>TV_SESSION_ID, TV_SESSION_SIGN, TV_WEBHOOK_SECRET, TV_LAYOUT_ID_VS_NIFTY</td><td><code>atlas/config.py</code></td><td>TV-02 screener.py, TV-07 MCP auth</td></tr>
+    <tr><td><code>atlas_paper_portfolio</code> table</td><td>migration 094 — instrument_id UUID NOT NULL, entry_price, exit_price, entry_date, exit_date; no FK constraint to instruments</td><td>TV-03 analytics, TV-04 CSV export</td></tr>
+    <tr><td><code>atlas_universe_stocks</code> table</td><td>migration 002 — instrument_id UUID PK, symbol VARCHAR(32), sector VARCHAR(64), tier VARCHAR(8)</td><td>TV-02 instrument_id soft-link resolution, TV-03 JOIN path, TV-03 sector lookup</td></tr>
+    <tr><td><code>atlas_sector_master</code> table</td><td>migration 003 — sector_name VARCHAR(64) PK</td><td>TV-03 sector cross-reference</td></tr>
+    <tr><td><code>de_equity_ohlcv.close_adj</code></td><td>public schema, bhavcopy-sourced</td><td>TV-03 portfolio price history</td></tr>
+    <tr><td><code>de_index_prices</code> (index_code = 'NIFTY 50', close)</td><td>public schema</td><td>TV-03 Nifty 50 benchmark</td></tr>
+    <tr><td>Sync SQLAlchemy engine</td><td><code>with get_engine().connect() as conn:</code> pattern throughout atlas/</td><td>TV-02, TV-03 — must use sync, not async session</td></tr>
+    <tr><td>pg_cron nightly pattern</td><td>migration 039 — 21:00 IST schedule</td><td>TV-02 nightly refresh</td></tr>
+    <tr><td>SP07 Hermes agent runtime</td><td><code>atlas/agents/hermes/</code></td><td>TV-07 — add TV MCP tools to Hermes system prompt</td></tr>
+    <tr><td>Stock deep-dive page</td><td><code>frontend/src/app/stocks/[symbol]/page.tsx</code> (existing route)</td><td>TV-05 — modify for 36/64 split, do not rebuild</td></tr>
+  </tbody>
+</table>
+
+<h2>12. Success Criteria</h2>
 <ul>
   <li><code>tv_metrics</code> populated for ≥ 95% of NSE symbols after first nightly run</li>
   <li>Deep-dive page loads with TV chart + fundamentals in &lt; 1.5 s (cached data, no live TV API call on page load)</li>
@@ -383,8 +404,55 @@ Response 200:
   <li>Portfolio analytics: Sharpe and Max Drawdown values match hand-computed test fixture to 4 decimal places</li>
   <li>TV CSV export downloads correctly and passes TV Portfolio manual import test</li>
   <li>MCP <code>get_quote</code> + <code>get_news</code> tools respond within 2 s from Hermes agent</li>
-  <li>Zero synthetic data — all portfolio P&L computed from real <code>prices_daily</code> rows</li>
+  <li>Zero synthetic data — all portfolio P&L computed from real <code>de_equity_ohlcv.close_adj</code> rows</li>
 </ul>
+
+<h2>GSTACK ENG REVIEW REPORT</h2>
+<div class="callout"><strong>Verdict: APPROVED</strong> — spec is implementation-ready. No blocking issues outstanding. TV-04 (CSV export column schema) is explicitly gated on user input; TV-05/TV-06 are gated on .design-approved.json per standard frontend hook. All other chunks can begin immediately.</div>
+
+<h4>Scope Challenge (D1)</h4>
+<p><strong>Decision:</strong> Build all 7 chunks on main branch (no feature-branch decomposition). Rationale: chunks are sequentially dependent; stacking branches adds merge overhead with no isolation benefit. User approved.</p>
+
+<h4>Architecture Issues Found &amp; Resolved</h4>
+<table>
+  <thead><tr><th>#</th><th>Issue</th><th>Resolution</th><th>Evidence</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><code>atlas_instruments</code> table referenced as FK target — table does not exist in any migration</td><td>Removed FK constraint; instrument_id is a soft-link resolved via <code>atlas_universe_stocks.symbol</code> lookup</td><td>Searched 115 migrations; migration 002 is canonical instrument table (atlas_universe_stocks)</td></tr>
+    <tr><td>2</td><td><code>atlas_sector_rollup</code> referenced in TV-03 — table does not exist</td><td>Replaced with <code>atlas_sector_master</code> (migration 003, sector_name PK)</td><td>grep across migrations/versions/</td></tr>
+    <tr><td>3</td><td>Duplicate <code>"alpha"</code> key in analytics JSON response</td><td>Merged into single key with full comment block</td><td>Line-level spec review</td></tr>
+    <tr><td>4</td><td><code>daily_returns</code> schema had single <code>benchmark_return</code> field, but spec describes two benchmarks (Nifty 50 + tier blend)</td><td>Expanded to <code>{date, portfolio_return, nifty50_return, tier_blend_return}</code></td><td>Consistency check with Section 6.2 frontend spec</td></tr>
+    <tr><td>5</td><td>Success criteria referenced <code>prices_daily</code> table — does not exist</td><td>Changed to <code>de_equity_ohlcv.close_adj</code></td><td>atlas/research/sde/data.py confirms close_adj column</td></tr>
+    <tr><td>6</td><td>Migration number unspecified in TV-01</td><td>Specified as migration 116 (latest confirmed is 115)</td><td>ls migrations/versions/ sorted</td></tr>
+  </tbody>
+</table>
+
+<h4>Additions Made to Spec</h4>
+<ul>
+  <li><strong>Section 11 — What Already Exists</strong>: 10 reusable components catalogued; prevents duplication</li>
+  <li><strong>TV-01</strong>: <code>tradingview-screener</code> (PyPI) added to requirements note</li>
+  <li><strong>TV-02</strong>: Sync SQLAlchemy pattern (<code>get_engine().connect()</code>) explicitly specified; router registration in <code>atlas/api/__init__.py</code> specified; 4 test cases listed</li>
+  <li><strong>TV-03</strong>: Beta method (OLS regression, min 30 trading days) specified; full JOIN path specified; 4 test cases listed</li>
+  <li><strong>Section 8 (Nightly Cron)</strong>: CAGR formula (<code>(end/start)^(365.25/days) - 1</code> for &gt;365d, TWR otherwise) added</li>
+</ul>
+
+<h4>Open Items Before Implementation</h4>
+<table>
+  <thead><tr><th>Item</th><th>Chunk</th><th>Blocker?</th></tr></thead>
+  <tbody>
+    <tr><td>TV Portfolio CSV column schema — exact columns and format required by TradingView import</td><td>TV-04</td><td>YES — TV-04 cannot be implemented without this</td></tr>
+    <tr><td><code>.design-approved.json</code> for TVChartPanel + TVMetricsBadge + PortfolioAnalytics (frontend hook requirement)</td><td>TV-05, TV-06</td><td>YES — hook blocks Edit/Write on frontend/src/ without it</td></tr>
+  </tbody>
+</table>
+
+<h4>Risk Register</h4>
+<ul>
+  <li><strong>tradingview-screener lib reliability</strong> — unofficial lib; if TV changes scanner.tradingview.com API, batch fetch breaks. Mitigated by fail-fast guard (&gt;10% NULL → abort + alert) and community lib maintenance track record.</li>
+  <li><strong>TV_SESSION_ID rotation</strong> — TV sessions expire; config must be updated manually. Add to monthly ops review checklist.</li>
+  <li><strong>Beta computation with &lt;30 days history</strong> — TV-03 must return NULL for beta/alpha/sharpe when history is insufficient, not a degraded value. Explicitly handled in test spec.</li>
+  <li><strong>mikeh-22/tradingview-mcp community server</strong> — not maintained by TradingView; flagged in Section 7 with graceful degradation note. Monitoring cadence: monthly ops review.</li>
+</ul>
+
+<p style="color:var(--ink-3);font-size:11px;margin-top:24px">Reviewed by: plan-eng-review (gstack v1.51.0.0) · 2026-05-28 · Branch: main</p>
 
 </body>
 </html>
