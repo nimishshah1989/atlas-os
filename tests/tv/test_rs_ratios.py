@@ -19,7 +19,7 @@ from atlas.tv.rs_ratios import (  # type: ignore[import]
 
 
 def _make_engine(sector_return, stock_rows, index_rows):
-    def _execute(sql, params=None):
+    def _execute(sql, _params=None):  # type: ignore[misc]
         m = MagicMock()
         sql_str = str(sql)
         if "de_equity_ohlcv" in sql_str:

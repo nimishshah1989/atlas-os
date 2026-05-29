@@ -71,9 +71,6 @@ def _get_prices(
           AND date >= CURRENT_DATE - :days * INTERVAL '1 day'
         ORDER BY date
     """)
-    with engine.connect() as conn:
-        stock_rows = conn.execute(stock_sql, {"sym": symbol, "days": days}).mappings().all()
-
     index_sql = text("""
         SELECT date, index_code, close
         FROM public.de_index_prices
@@ -82,6 +79,7 @@ def _get_prices(
         ORDER BY date
     """)
     with engine.connect() as conn:
+        stock_rows = conn.execute(stock_sql, {"sym": symbol, "days": days}).mappings().all()
         index_rows = conn.execute(index_sql, {"codes": index_codes, "days": days}).mappings().all()
 
     if not stock_rows or not index_rows:
