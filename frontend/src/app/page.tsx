@@ -23,7 +23,7 @@ import { RegimeClassifierInputs } from '@/components/regime/RegimeClassifierInpu
 type SearchParams = Promise<{ range?: string }>
 
 export default async function RegimePage({ searchParams }: { searchParams: SearchParams }) {
-  const { range = '6M' } = await searchParams
+  const { range = '1Y' } = await searchParams
   const historyRange = range as TimeRange
   const historyDays = rangeToDays(historyRange)
 
@@ -62,7 +62,7 @@ export default async function RegimePage({ searchParams }: { searchParams: Searc
         deploymentPct={deploymentPct}
         leadingSectors={leadingSectors}
       />
-      <SignalScorecard data={scorecard} />
+      <SignalScorecard data={scorecard} regime={current} />
       <TodayWorklist data={worklist} />
 
       {/* Compact regime headline — unchanged */}
