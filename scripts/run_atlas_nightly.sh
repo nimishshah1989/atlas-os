@@ -83,6 +83,34 @@ FAILED_STEP="[5d] US Stocks daily compute (S&P 500)"
 echo "$FAILED_STEP..." | tee -a $LOG
 python3 scripts/us_stocks_daily.py 2>&1 | tee -a $LOG
 
+# --- v6 scorecards + relative-strength backfills (NON-FATAL) -----------------
+# These populate columns/tables the v6 MVs depend on but no daily writer fills:
+#   * rs_*_nifty500 on atlas_stock_metrics_daily  -> mv_stock_landscape / list
+#   * 8 v6 cols on atlas_sector_metrics_daily      -> mv_sector_deepdive
+#   * atlas_fund_scorecard (no other generator)    -> mv_fund_* (Chunk C)
+#   * atlas_etf_scorecard                          -> mv_etf_*
+# They run AFTER M2-M5 (all base tables exist) and BEFORE the pg_cron MV refresh
+# (mv_refresh_v6_all, 21:45 UTC) so the MVs pick up today's output. Each is
+# non-fatal (|| WARNING) so a scorecard miss never aborts the core pipeline.
+# See docs/v6/2026-05-30-overnight-audit.md §10 (Chunk C).
+CUR_YEAR=$(date +%Y)
+
+echo "[5e] Stock RS vs Nifty500 backfill (latest metrics date)..." | tee -a $LOG
+python3 scripts/ops/backfill_stock_rs_nifty500.py 2>&1 | tee -a $LOG \
+  || echo "WARNING: stock RS backfill failed (non-fatal)" | tee -a $LOG
+
+echo "[5f] Sector v6 columns backfill ($CUR_YEAR)..." | tee -a $LOG
+python3 scripts/sector_5y_backfill.py --start-year $CUR_YEAR --end-year $CUR_YEAR 2>&1 | tee -a $LOG \
+  || echo "WARNING: sector v6 backfill failed (non-fatal)" | tee -a $LOG
+
+echo "[5g] Fund scorecard ($TODAY)..." | tee -a $LOG
+python3 scripts/ops/run_fund_scorecard_for_date.py --date $TODAY 2>&1 | tee -a $LOG \
+  || echo "WARNING: fund scorecard failed (non-fatal)" | tee -a $LOG
+
+echo "[5h] ETF scorecard ($TODAY)..." | tee -a $LOG
+python3 scripts/ops/run_etf_scorecard_for_date.py --date $TODAY 2>&1 | tee -a $LOG \
+  || echo "WARNING: ETF scorecard failed (non-fatal)" | tee -a $LOG
+
 FAILED_STEP="[6] Health check"
 echo "$FAILED_STEP..." | tee -a $LOG
 python3 scripts/health_check_daily.py 2>&1 | tee -a $LOG
