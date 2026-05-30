@@ -1,24 +1,26 @@
 """Mutual fund scorecard pipeline — 4-layer composite ranking.
 
-Layers (weights in atlas_thresholds, ``mf_weight_*``):
+Layers (weights in atlas_thresholds, ``mf_weight_*``) — v2, IC-weighted
+(see docs/v6/fund-etf-ranking-methodology.md + scripts/ops/fund_factor_ic.py):
 
-  1. Risk-adjusted return (50%)
-     — Sharpe, Sortino, Alpha vs benchmark, MaxDD, Calmar, up/down capture
+  1. Performance (65%) — ``mf_weight_risk_adj``
+     — momentum 40% (6m + 12m return), consistency 35% (peer win-rate),
+       risk-adjusted 25% (Sharpe, Sortino, Calmar). Max-drawdown / volatility /
+       alpha / captures are NOT scored (zero forward IC) but kept in sub_metrics.
      — 3y window where available; flag confidence_low if < 3y history.
 
-  2. Holdings conviction (25%)
-     — Aggregate the 24-cell conviction tape across top-N holdings
-       (atlas_thresholds.mf_holdings_top_n, default 20), weighted by
-       position size. Conviction → numeric: POSITIVE=+1 / NEUTRAL=0 /
-       NEGATIVE=-1. Weighted average → linear-mapped to [0, 100].
+  2. Holdings conviction (15%) — prior; no pre-2026 history to validate
+     — Aggregate live conviction (atlas_stock_conviction_daily) across top-N
+       holdings (mf_holdings_top_n, default 20), weighted by position size.
+       POSITIVE=+1 / NEUTRAL=0 / NEGATIVE=-1 → weighted average → [0, 100].
      — Caveat: if holdings unjoinable (table missing or coverage = 0),
        flag holdings_unjoinable and use category median (50).
 
-  3. Style + sector (15%)
+  3. Style + sector (10%) — prior
      — Style drift across 3y window (does fund stay in stated box?)
      — Sector tilt bonus for overweighting top-ranked sectors.
 
-  4. Cost + manager (10%)
+  4. Cost + manager (10%) — prior
      — TER (40%), manager_tenure (30% cap 10y), AUM bracket (20%), age (10% cap 10y).
 
 Disclaimers surfaced in API rows:
@@ -50,7 +52,7 @@ import math
 import statistics
 import sys
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -103,10 +105,15 @@ class FundScoreRow:
 # ---------------------------------------------------------------------------
 
 
+# Top-line layer weights. The performance layer (mf_weight_risk_adj — now
+# momentum + consistency + risk-adjusted) carries the bulk because that is where
+# all empirically-measurable forward predictive power lives. Holdings + style
+# have no pre-2026 history to validate, so they are deliberately small priors
+# that the live IC loop can grow over time. See docs/v6/fund-etf-ranking-methodology.md.
 _DEFAULT_THRESHOLDS = {
-    "mf_weight_risk_adj": Decimal("0.50"),
-    "mf_weight_holdings": Decimal("0.25"),
-    "mf_weight_style_sector": Decimal("0.15"),
+    "mf_weight_risk_adj": Decimal("0.65"),
+    "mf_weight_holdings": Decimal("0.15"),
+    "mf_weight_style_sector": Decimal("0.10"),
     "mf_weight_cost_manager": Decimal("0.10"),
     "mf_holdings_top_n": Decimal("20"),
     "mf_aum_sweet_spot_min_cr": Decimal("500"),
@@ -256,6 +263,14 @@ def _alpha(fund_returns: Sequence[float], bench_returns: Sequence[float]) -> flo
 # ---------------------------------------------------------------------------
 
 
+def _cum_return(daily: Sequence[float]) -> float:
+    """Cumulative (compounded) return over a daily-return slice."""
+    c = 1.0
+    for r in daily:
+        c *= 1.0 + r
+    return c - 1.0
+
+
 @dataclass(frozen=True)
 class RiskAdjustedMetrics:
     sharpe: float
@@ -266,16 +281,23 @@ class RiskAdjustedMetrics:
     up_capture: float
     down_capture: float
     n_observations: int
+    # v2 performance signals (empirically the strongest — see
+    # scripts/ops/fund_factor_ic.py). mom_* are self-contained; consistency is
+    # peer-relative and injected in the scoring pass (default 0.5 = neutral).
+    mom_6m: float = 0.0
+    mom_12m: float = 0.0
+    consistency: float = 0.5
 
 
 def compute_risk_adjusted_metrics(
     fund_daily_returns: Sequence[float],
     benchmark_daily_returns: Sequence[float] | None = None,
 ) -> RiskAdjustedMetrics:
-    """Compute the layer-1 risk-adjusted return primitives."""
+    """Compute the layer-1 performance primitives (incl. momentum)."""
     if benchmark_daily_returns is None:
         benchmark_daily_returns = []
     up_cap, dn_cap = _capture_ratios(fund_daily_returns, benchmark_daily_returns)
+    seq = list(fund_daily_returns)
     return RiskAdjustedMetrics(
         sharpe=_sharpe(fund_daily_returns),
         sortino=_sortino(fund_daily_returns),
@@ -284,7 +306,9 @@ def compute_risk_adjusted_metrics(
         calmar=_calmar(fund_daily_returns),
         up_capture=up_cap,
         down_capture=dn_cap,
-        n_observations=len(fund_daily_returns),
+        n_observations=len(seq),
+        mom_6m=_cum_return(seq[-126:]),
+        mom_12m=_cum_return(seq[-252:]),
     )
 
 
@@ -298,31 +322,78 @@ def _normalise(values: Sequence[float], target: float) -> float:
     return ((below + 0.5 * equal) / n) * 100.0
 
 
+# Performance-layer sub-weights, derived empirically from a 195-month forward-IC
+# backtest (scripts/ops/fund_factor_ic.py). Momentum (6m/12m return) and
+# peer-relative consistency were the strongest forward predictors within
+# category; classic risk-adjusted ratios were secondary. Max-drawdown,
+# volatility, alpha and capture ratios had ~zero forward IC and are NOT scored
+# (kept in sub_metrics for transparency only).
+_PERF_W_MOMENTUM = 0.40
+_PERF_W_CONSISTENCY = 0.35
+_PERF_W_RISKADJ = 0.25
+
+
 def score_risk_adjusted_return(
     target: RiskAdjustedMetrics,
     cohort: Sequence[RiskAdjustedMetrics],
 ) -> Decimal:
-    """Score 0-100 from RiskAdjustedMetrics vs same-category cohort.
+    """Performance score 0-100 vs same-category cohort (IC-weighted).
 
-    Equal-weighted combination of percentile ranks across the six
-    sub-metrics (Sharpe, Sortino, Alpha, max_dd inverse, Calmar, up_cap
-    inverse-of-distance-from-1, down_cap inverse).
+    momentum 40% (6m + 12m return) · consistency 35% (peer win-rate) ·
+    risk-adjusted 25% (Sharpe, Sortino, Calmar). Drawdown / volatility / alpha /
+    captures are intentionally excluded — see ``_PERF_W_*`` note and
+    ``scripts/ops/fund_factor_ic.py``. When consistency is unavailable (no
+    month-anchored returns) every cohort member shares the neutral 0.5, so the
+    consistency term resolves to ~50 and momentum + risk-adjusted dominate.
     """
     if not cohort:
         return Decimal("50.00")
-    pcts: list[float] = []
-    pcts.append(_normalise([c.sharpe for c in cohort], target.sharpe))
-    pcts.append(_normalise([c.sortino for c in cohort], target.sortino))
-    pcts.append(_normalise([c.alpha for c in cohort], target.alpha))
-    # max_dd: lower is better → invert
-    pcts.append(100.0 - _normalise([c.max_dd for c in cohort], target.max_dd))
-    pcts.append(_normalise([c.calmar for c in cohort], target.calmar))
-    # up_capture: higher is better
-    pcts.append(_normalise([c.up_capture for c in cohort], target.up_capture))
-    # down_capture: lower (less of the downside) is better → invert
-    pcts.append(100.0 - _normalise([c.down_capture for c in cohort], target.down_capture))
-    score = sum(pcts) / len(pcts)
+
+    def pct(attr: str, target_val: float) -> float:
+        return _normalise([getattr(c, attr) for c in cohort], target_val)
+
+    momentum = (pct("mom_6m", target.mom_6m) + pct("mom_12m", target.mom_12m)) / 2.0
+    consistency = pct("consistency", target.consistency)
+    risk_adj = (
+        pct("sharpe", target.sharpe) + pct("sortino", target.sortino) + pct("calmar", target.calmar)
+    ) / 3.0
+    score = (
+        _PERF_W_MOMENTUM * momentum + _PERF_W_CONSISTENCY * consistency + _PERF_W_RISKADJ * risk_adj
+    )
     return Decimal(f"{score:.2f}")
+
+
+def _compute_peer_consistency(fund_inputs: Sequence[FundInput]) -> dict[int, float]:
+    """Peer-relative consistency per fund: the fraction of months its return beat
+    the contemporaneous median of its category. Needs month-anchored returns
+    (``FundInput.monthly_returns``); funds without them are omitted (stay
+    neutral). This is the production realisation of the consistency factor the
+    IC backtest validated.
+    """
+    from collections import defaultdict
+    from statistics import median
+
+    cat_months: dict[str, dict[Any, dict[int, float]]] = defaultdict(lambda: defaultdict(dict))
+    for i, fi in enumerate(fund_inputs):
+        for m, r in fi.monthly_returns:
+            cat_months[fi.fund_category][m][i] = r
+
+    out: dict[int, float] = {}
+    for months_map in cat_months.values():
+        wins: dict[int, int] = defaultdict(int)
+        tot: dict[int, int] = defaultdict(int)
+        for fund_rets in months_map.values():
+            if len(fund_rets) < 3:  # need a real peer set that month
+                continue
+            med = median(fund_rets.values())
+            for idx, r in fund_rets.items():
+                tot[idx] += 1
+                if r > med:
+                    wins[idx] += 1
+        for idx, t in tot.items():
+            if t >= 6:  # require >=6 months for a stable win-rate
+                out[idx] = wins[idx] / t
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -583,6 +654,10 @@ class FundInput:
     manager_tenure_years: float | None
     aum_cr: float | None
     fund_age_years: float | None
+    # Month-anchored returns [(month_end_date, monthly_return), ...] used for the
+    # peer-relative consistency factor. Optional: the pure-functional test path
+    # can omit it (consistency then stays neutral).
+    monthly_returns: Sequence[tuple[date, float]] = ()
 
 
 def compute_fund_scorecard(
@@ -613,13 +688,17 @@ def compute_fund_scorecard(
     leader_pct = float(thresholds.get("mf_atlas_leader_pct", Decimal("25.0")))
     avoid_pct = float(thresholds.get("mf_avoid_pct", Decimal("25.0")))
 
-    # First pass — compute layer 1 metrics, build cohorts per category
+    # First pass — compute layer 1 (performance) metrics, inject peer-relative
+    # consistency, then build per-category cohorts off the finalised metrics.
+    layer1_metrics: list[RiskAdjustedMetrics] = [
+        compute_risk_adjusted_metrics(fi.daily_returns, fi.benchmark_daily_returns)
+        for fi in fund_inputs
+    ]
+    for idx, cons in _compute_peer_consistency(fund_inputs).items():
+        layer1_metrics[idx] = replace(layer1_metrics[idx], consistency=cons)
     by_cat: dict[str, list[tuple[int, RiskAdjustedMetrics]]] = {}
-    layer1_metrics: list[RiskAdjustedMetrics] = []
     for i, fi in enumerate(fund_inputs):
-        m = compute_risk_adjusted_metrics(fi.daily_returns, fi.benchmark_daily_returns)
-        layer1_metrics.append(m)
-        by_cat.setdefault(fi.fund_category, []).append((i, m))
+        by_cat.setdefault(fi.fund_category, []).append((i, layer1_metrics[i]))
 
     # Second pass — score each fund
     pre_rows: list[FundScoreRow] = []
@@ -669,6 +748,9 @@ def compute_fund_scorecard(
             "up_capture": m.up_capture,
             "down_capture": m.down_capture,
             "n_observations": n_obs,
+            "mom_6m": m.mom_6m,
+            "mom_12m": m.mom_12m,
+            "consistency": m.consistency,
             "ter_pct": fi.ter_pct,
             "aum_cr": fi.aum_cr,
             "manager_tenure_years": fi.manager_tenure_years,
@@ -793,6 +875,7 @@ def _try_load_fund_inputs_from_engine(
 
         # NAV daily returns (best-effort)
         daily_returns: list[float] = []
+        monthly_returns: list[tuple[date, float]] = []
         nav_as_of: date | None = None
         try:
             with engine.connect() as conn:
@@ -813,6 +896,7 @@ def _try_load_fund_inputs_from_engine(
                     .all()
                 )
             prev: float | None = None
+            month_end: dict[tuple[int, int], tuple[date, float]] = {}
             for nv in navs:
                 nav_val = float(nv["nav"]) if nv["nav"] is not None else None
                 if nav_val is None or nav_val <= 0:
@@ -820,7 +904,16 @@ def _try_load_fund_inputs_from_engine(
                 if prev is not None and prev > 0:
                     daily_returns.append((nav_val - prev) / prev)
                 prev = nav_val
-                nav_as_of = nv["nav_date"]
+                cur_d: date = nv["nav_date"]
+                nav_as_of = cur_d
+                # navs are date-ascending → last write per month is the month-end NAV
+                month_end[(cur_d.year, cur_d.month)] = (cur_d, nav_val)
+            ordered = [month_end[k] for k in sorted(month_end)]
+            for j in range(1, len(ordered)):
+                p_nav = ordered[j - 1][1]
+                cur_date, cur_nav = ordered[j]
+                if p_nav > 0:
+                    monthly_returns.append((cur_date, (cur_nav - p_nav) / p_nav))
         except Exception as exc:
             log.info("fund_nav_load_failed", mstar_id=mstar_id, error=str(exc))
 
@@ -878,15 +971,21 @@ def _try_load_fund_inputs_from_engine(
                 manager_tenure_years=None,
                 aum_cr=None,
                 fund_age_years=fund_age,
+                monthly_returns=monthly_returns,
             )
         )
     return funds, cohort_ters
 
 
 def _load_conviction_for_date(engine: Engine, snapshot_date: date) -> dict[str, str]:
-    """Return {instrument_id -> best-tenure verdict} for snapshot_date.
+    """Return {instrument_id -> POSITIVE|NEUTRAL|NEGATIVE} for the holdings layer.
 
-    Prefers the 6m verdict (the canonical mid-tenure view).
+    Reads the LIVE ``atlas_stock_conviction_daily`` (the legacy
+    ``atlas_conviction_daily`` is dead — frozen at 2026-05-22 — which silently
+    froze 25% of every fund's score; that was the v1 bug). Uses the latest
+    conviction on or before ``snapshot_date`` and maps ``conviction_score`` to a
+    verdict via the same composite band the stock pages use
+    (``(score-0.5)*20`` → BUY/AVOID/WATCH at ±4).
     """
     out: dict[str, str] = {}
     try:
@@ -894,15 +993,28 @@ def _load_conviction_for_date(engine: Engine, snapshot_date: date) -> dict[str, 
             rows = conn.execute(
                 text(
                     """
-                    SELECT instrument_id::text AS instrument_id, verdict
-                    FROM atlas.atlas_conviction_daily
-                    WHERE snapshot_date = :d AND tenure = '6m'
+                    SELECT instrument_id::text AS instrument_id, conviction_score
+                    FROM atlas.atlas_stock_conviction_daily
+                    WHERE date = (
+                        SELECT MAX(date) FROM atlas.atlas_stock_conviction_daily
+                        WHERE date <= :d
+                    )
                     """
                 ),
                 {"d": snapshot_date},
             ).mappings()
             for r in rows:
-                out[r["instrument_id"]] = r["verdict"]
+                score = r["conviction_score"]
+                if score is None:
+                    continue
+                composite = (float(score) - 0.5) * 20.0
+                out[r["instrument_id"]] = (
+                    "POSITIVE"
+                    if composite >= 4.0
+                    else "NEGATIVE"
+                    if composite <= -4.0
+                    else "NEUTRAL"
+                )
     except Exception as exc:
         log.info("fund_conviction_load_failed", error=str(exc))
     return out

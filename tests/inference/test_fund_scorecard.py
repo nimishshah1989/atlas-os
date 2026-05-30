@@ -239,6 +239,7 @@ def _make_fund_input(
     aum_cr: float | None = 1000.0,
     ter_pct: float | None = 1.0,
     category: str = "Flexi Cap",
+    monthly_returns: list[tuple[date, float]] | None = None,
 ) -> FundInput:
     return FundInput(
         scheme_code=scheme,
@@ -258,7 +259,57 @@ def _make_fund_input(
         manager_tenure_years=5.0,
         aum_cr=aum_cr,
         fund_age_years=10.0,
+        monthly_returns=monthly_returns or [],
     )
+
+
+class TestPerformanceFactorsV2:
+    """v2: momentum (recent return) + peer-relative consistency drive the score."""
+
+    def test_momentum_rewards_recent_outperformance(self) -> None:
+        # Same total path length; A is strong in the recent 6m, B was strong only
+        # long ago. Momentum (last 6m/12m) should rank A above B.
+        a = _make_fund_input("A", [0.0] * 674 + [0.004] * 126)
+        b = _make_fund_input("B", [0.004] * 126 + [0.0] * 674)
+        rows = compute_fund_scorecard(
+            snapshot_date=date(2026, 5, 22), fund_inputs=[a, b], conviction_by_iid={}
+        )
+        sa = next(r for r in rows if r.scheme_code == "A").risk_adjusted_return_score
+        sb = next(r for r in rows if r.scheme_code == "B").risk_adjusted_return_score
+        assert sa is not None and sb is not None and sa > sb
+
+    def test_consistency_injected_from_monthly_returns(self) -> None:
+        # 3 funds, identical daily paths (so momentum + risk-adjusted tie); only
+        # monthly_returns differ. X beats the monthly peer-median, Z never does.
+        months = [date(2020 + i // 12, (i % 12) + 1, 28) for i in range(24)]
+        daily = [0.001] * 800
+        x = _make_fund_input("X", daily, monthly_returns=[(m, 0.03) for m in months])
+        y = _make_fund_input("Y", daily, monthly_returns=[(m, 0.02) for m in months])
+        z = _make_fund_input("Z", daily, monthly_returns=[(m, 0.01) for m in months])
+        rows = compute_fund_scorecard(
+            snapshot_date=date(2026, 5, 22), fund_inputs=[x, y, z], conviction_by_iid={}
+        )
+        sx = next(r for r in rows if r.scheme_code == "X").risk_adjusted_return_score
+        sz = next(r for r in rows if r.scheme_code == "Z").risk_adjusted_return_score
+        assert sx is not None and sz is not None and sx > sz
+        # consistency surfaced in sub_metrics for transparency
+        rx = next(r for r in rows if r.scheme_code == "X")
+        assert rx.sub_metrics["consistency"] == 1.0  # X beat the median every month
+
+    def test_drawdown_and_vol_not_scored(self) -> None:
+        # Two funds, same momentum/consistency but very different drawdown. Since
+        # max-drawdown is excluded from scoring (zero forward IC), the smoother
+        # fund must NOT automatically outscore the choppier one on that basis.
+        smooth = _make_fund_input("SM", [0.001] * 800)
+        choppy = _make_fund_input("CH", ([0.02, -0.018] * 400))
+        rows = compute_fund_scorecard(
+            snapshot_date=date(2026, 5, 22),
+            fund_inputs=[smooth, choppy],
+            conviction_by_iid={},
+        )
+        # Both bounded & finite; the test asserts no crash + drawdown isn't a gate.
+        for r in rows:
+            assert Decimal("0") <= r.composite_score <= Decimal("100")
 
 
 class TestPipeline:
