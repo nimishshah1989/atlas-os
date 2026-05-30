@@ -95,6 +95,7 @@ SIGNAL_CALL_COLUMNS: tuple[str, ...] = (
     "action",
     "confidence_unconditional",
     "confidence_regime_conditional",
+    "predicted_excess",
     "regime_state_at_call",
     "cell_active_in_regime",
 )
@@ -193,6 +194,7 @@ def _load_active_cells(engine: Engine) -> list[dict[str, Any]]:
             rule_dsl,
             confidence_unconditional,
             confidence_by_regime,
+            friction_adjusted_excess,
             stable_features,
             methodology_lock_ref,
             rule_version,
@@ -330,6 +332,11 @@ def _build_signal_row(
         conf_uncond = _to_decimal_or_none(conf_uncond, 4) or Decimal("0.0000")
     conf_regime = _to_decimal_or_none(result.confidence_regime_conditional, 4)
 
+    # predicted_excess = the cell's friction-adjusted expected excess return
+    # (a cell-level prior, same nature as confidence_unconditional). Without
+    # this the frontend "Expected" column renders em-dashes for every call.
+    pred_excess = _to_decimal_or_none(cell.get("friction_adjusted_excess"), 6)
+
     return (
         signal_call_id,
         instrument_id,
@@ -341,6 +348,7 @@ def _build_signal_row(
         action,
         conf_uncond,
         conf_regime,
+        pred_excess,
         regime.value,
         bool(result.cell_active_in_regime),
     )

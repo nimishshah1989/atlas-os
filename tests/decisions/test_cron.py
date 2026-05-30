@@ -235,13 +235,13 @@ def test_cron_writes_new_signal_on_fresh_hit() -> None:
     row_tuple = calls[0]["rows"][0]
     # (signal_call_id, instrument_id, scorecard_id, date, cell_id,
     #  cap_tier_at_trigger, tenure, action, conf_uncond, conf_regime,
-    #  regime_state_at_call, cell_active_in_regime)
+    #  predicted_excess, regime_state_at_call, cell_active_in_regime)
     assert isinstance(row_tuple[0], UUID)
     assert row_tuple[3] == td
     assert row_tuple[5] == "Mid"
     assert row_tuple[6] == "6m"
     assert row_tuple[7] == "POSITIVE"
-    assert row_tuple[10] == "Risk-On"
+    assert row_tuple[11] == "Risk-On"
 
 
 # ---------------------------------------------------------------------------
@@ -505,9 +505,9 @@ def test_cron_cell_active_in_regime_written_to_row() -> None:
 
     assert result.new_signals == 1
     row_tuple = calls[0]["rows"][0]
-    # cell_active_in_regime at index 11; regime_state_at_call at index 10
-    assert row_tuple[10] == "Risk-On"
-    assert row_tuple[11] is False
+    # predicted_excess at 10; regime_state_at_call at 11; cell_active_in_regime at 12
+    assert row_tuple[11] == "Risk-On"
+    assert row_tuple[12] is False
 
 
 def test_cron_confidence_unconditional_defaults_to_zero_when_unknown() -> None:
@@ -627,9 +627,11 @@ def test_signal_call_columns_match_migration_080_schema() -> None:
     """SIGNAL_CALL_COLUMNS must align with the columns the cron writes.
 
     Guards against drift between the cron's row-building code and the
-    table definition. The 12 columns here are the insert set; other
-    columns (id, computed_at, exit_*, predicted_excess, stable_features)
-    are either server-defaulted or filled by atlas/ledger/ on exit.
+    table definition. The 13 columns here are the insert set; other
+    columns (id, computed_at, exit_*, stable_features) are server-defaulted
+    or filled by atlas/ledger/ on exit. predicted_excess is set at trigger
+    time from the cell's friction_adjusted_excess (audit A1) — open calls
+    must carry it so the frontend "Expected" column isn't blank.
     """
     expected = (
         "signal_call_id",
@@ -642,6 +644,7 @@ def test_signal_call_columns_match_migration_080_schema() -> None:
         "action",
         "confidence_unconditional",
         "confidence_regime_conditional",
+        "predicted_excess",
         "regime_state_at_call",
         "cell_active_in_regime",
     )
