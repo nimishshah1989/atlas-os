@@ -40,7 +40,10 @@ export function SignalCallHistoryTable({ events }: SignalCallHistoryTableProps) 
             <th className="text-left  py-2 px-2 font-mono text-[9px] uppercase tracking-wider text-ink-3 font-normal">Action</th>
             <th className="text-left  py-2 px-2 font-mono text-[9px] uppercase tracking-wider text-ink-3 font-normal">Entered</th>
             <th className="text-left  py-2 px-2 font-mono text-[9px] uppercase tracking-wider text-ink-3 font-normal">Exited</th>
-            <th className="text-right py-2 px-2 font-mono text-[9px] uppercase tracking-wider text-ink-3 font-normal">Confidence</th>
+            <th
+              className="text-right py-2 px-2 font-mono text-[9px] uppercase tracking-wider text-ink-3 font-normal cursor-help"
+              title="Cell base rate — the firing cell's walk-forward unconditional hit rate. Identical for every stock in the same cell; it is not a per-stock probability."
+            >Cell base rate</th>
             <th className="text-right py-2 px-2 font-mono text-[9px] uppercase tracking-wider text-ink-3 font-normal">Predicted Excess</th>
             <th className="text-left  py-2 px-2 font-mono text-[9px] uppercase tracking-wider text-ink-3 font-normal">Status</th>
           </tr>
