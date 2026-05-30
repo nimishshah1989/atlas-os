@@ -376,3 +376,64 @@ Appended by the live session after the audit. Distinguishes done-safely vs diagn
 - **/stocks: data is current (Friday), date label reads 05-22** — cosmetic-ish, fix is Chunk A-adjacent.
 - **/funds, /etfs conviction, calls-performance: still stale** (their writers didn't run) — supervised fix.
 - Everything else (frontend coherence Chunk B, API hygiene Chunk E, dead code Chunk D) is queued and ranked above.
+
+---
+
+## 9. Chunk A+ executed — 2026-05-30 morning (supervised, autonomous)
+
+Data-layer session. Migration applied via **alembic on EC2** (alembic head now `121`),
+NOT MCP — the sanctioned write path going forward. Everything verified against the
+live DB. Zero synthetic data; the one computed backfill (stock RS) was empirically
+proven exact vs production.
+
+### Writer chain re-run → 2026-05-29 (all idempotent UPSERTs)
+1. `python -m atlas.inference.cli --target-date 2026-05-29` — daily_inference, the
+   orchestrator the audit said "last ran 05-27". Wrote **scorecard_daily (747)**,
+   **regime_daily (1, state=Elevated)**, **signal_calls (49 new)**. This is the single
+   fix for the "d3 everywhere" symptom — three stale tables in one run.
+2. `compute_conviction.py --as-of 2026-05-29 --persist` — re-persisted **703** conviction
+   rows against the now-fresh scorecard.
+3. `scripts/ops/backfill_stock_rs_nifty500.py --date 2026-05-29` (new) — populated
+   **rs_{1w,1m,3m}_nifty500** for all **747** stocks. ROOT CAUSE of mv_stock_landscape
+   freezing: no daily writer populates these nifty500 RS columns (only rs_*_tier are
+   written by M2); they were NULL for 05-29 so the MV anchor `MAX(date) WHERE
+   rs_3m_nifty500 IS NOT NULL` stuck at the last backfilled day. NOT an MV-definition
+   bug. Formula `rs_X = ret_X − NIFTY 500.ret_X` verified to 0.000000 residual vs
+   production on 05-27 for 743/747 (the 4 exceptions — CUPID/METROPOLIS/ECLERX/IRB —
+   carried stale pre-corporate-action ret_3m; current adjusted returns are *more*
+   correct per the corporate-action rule).
+4. `scripts/ops/run_etf_scorecard_for_date.py --date 2026-05-29` (new) — **etf_scorecard
+   34 rows** @ 05-29. `etf_scorecard_expand.py` can only hit MAX(snapshot_date), so this
+   targeted runner was needed.
+
+### Migration 121 (`121_v6_cron_complete_mv_refresh.py`)
+- **`mv_refresh_cron_incomplete` / `stale-mv-cascade` (CRIT) FIXED:** `mv_refresh_v6_all`
+  re-registered with **all 16 v6 MVs** (was 9). Verified: cron body now has 16 REFRESH
+  statements, schedule `45 21 * * *`, active. All 16 MVs have unique indexes →
+  CONCURRENTLY safe.
+- **`mv_stock_list_v6` anchor (Bug 1) FIXED:** `latest` CTE repointed from the dead
+  `atlas_conviction_daily` (snapshot_date, frozen 05-22) to live
+  `atlas_stock_conviction_daily` (date). This drove both the as_of_date label AND the
+  scorecard join. DROP+reCREATE (no dependents) + 3 indexes. Verified: RELIANCE row
+  `as_of_date=2026-05-29`, composite -4.81, AVOID.
+
+### Verified GREEN (live DB, all 16 MVs refreshed)
+| Surface | MV | as_of |
+|---|---|---|
+| Landing | mv_market_regime_landing | **2026-05-29** ✅ |
+| /markets-rs | mv_markets_rs_grid + detail_charts | **2026-05-29** ✅ |
+| /stocks | mv_stock_list_v6 | **2026-05-29** ✅ |
+| /stocks/[sym] | mv_stock_landscape | **2026-05-29** ✅ |
+| India Pulse, Sector cards/breadth/rrg | — | **2026-05-29** ✅ |
+| /etfs | mv_etf_list_v6 + deepdive | **2026-05-29** ✅ |
+
+### Still 05-22 — DEFERRED TO CHUNK C (not regressions; explicitly out of Chunk A+ scope)
+- **mv_fund_list_v6 / mv_fund_deepdive** — `atlas_fund_scorecard` has NO generator
+  (`fund_scorecard_7d_stale`, §4.1). Build-fresh in Chunk C.
+- **mv_sector_deepdive (`data_as_of`=05-22)** — the sector analogue of
+  `sector_metrics_null_values_05_29` (#9): the 8 v6 sector columns aren't wired into the
+  daily pipeline, so the MV anchors to the last backfilled date. Chunk C.
+- **Recurring risk:** stock `rs_*_nifty500` and the sector v6 cols have NO daily writer,
+  so mv_stock_landscape / mv_sector_deepdive will re-freeze tomorrow unless the backfill
+  is wired into `run_atlas_nightly.sh`. `scripts/ops/backfill_stock_rs_nifty500.py` is
+  the durable artifact to wire in (Chunk C).
