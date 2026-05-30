@@ -145,7 +145,12 @@ def _fetch_tv_batch(symbols: list[str]) -> pd.DataFrame:
     from tradingview_screener import Query  # type: ignore[import-untyped]
 
     qualified = [f"NSE:{s}" for s in symbols]
-    _, df = Query().select(*_COLUMNS).set_tickers(*qualified).get_scanner_data()
+    # tradingview-screener Query() defaults to range=[0, 50], so without an
+    # explicit .limit() each batch silently returns only the first 50 tickers
+    # regardless of how many are set — capping the universe at ~400 of 747.
+    _, df = (
+        Query().select(*_COLUMNS).set_tickers(*qualified).limit(len(qualified)).get_scanner_data()
+    )
     if df.empty:
         return df
     df["ticker"] = df["ticker"].str.replace("NSE:", "", regex=False)

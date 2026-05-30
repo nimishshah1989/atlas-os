@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from atlas.tv.screener import (  # type: ignore[import]
+    _fetch_tv_batch,
     _label,
     _resolve_instrument_ids,
     fetch_and_upsert_all,
@@ -20,6 +21,36 @@ def _mock_engine(rows: list[dict]):
     engine = MagicMock()
     engine.connect.return_value = conn
     return engine
+
+
+def test_fetch_tv_batch_limits_query_to_full_batch():
+    """Regression (B4): the TV Query must be limited to len(qualified). Without
+    an explicit .limit(), tradingview-screener defaults to range [0,50] and
+    silently drops every ticker past the first 50 — capping tv_metrics at ~400
+    of 747. This test fails if the .limit() call is removed."""
+    symbols = [f"SYM{i}" for i in range(60)]  # > 50 to prove the cap matters
+    fake_df = pd.DataFrame([{"ticker": "NSE:SYM0"}])
+    q = MagicMock()
+    q.select.return_value = q
+    q.set_tickers.return_value = q
+    q.limit.return_value = q
+    q.get_scanner_data.return_value = (1, fake_df)
+    with patch("tradingview_screener.Query", return_value=q):
+        _fetch_tv_batch(symbols)
+    q.limit.assert_called_once_with(60)
+    # ticker prefix is stripped on return
+    q.set_tickers.assert_called_once()
+
+
+def test_fetch_tv_batch_returns_empty_when_no_rows():
+    q = MagicMock()
+    q.select.return_value = q
+    q.set_tickers.return_value = q
+    q.limit.return_value = q
+    q.get_scanner_data.return_value = (0, pd.DataFrame())
+    with patch("tradingview_screener.Query", return_value=q):
+        out = _fetch_tv_batch(["AAA"])
+    assert out.empty
 
 
 def test_resolve_instrument_ids_maps_symbol_to_uuid():
