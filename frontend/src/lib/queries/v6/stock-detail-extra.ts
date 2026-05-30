@@ -133,14 +133,20 @@ export async function getSectorContextForStock(
         SELECT MAX(date) AS d FROM atlas.atlas_sector_states_daily
       ),
       sector_today AS (
+        -- bottomup_rs_3m_nifty500 lives on atlas_sector_metrics_daily, NOT on
+        -- atlas_sector_states_daily. Selecting it from states threw, and the
+        -- caller's catch swallowed it -> every stock showed "Sector state
+        -- unavailable" despite sector_state being populated. Join for the rank.
         SELECT
-          sector_name,
-          sector_state,
-          (participation_rs_pct::numeric / 100.0)::text AS breadth,
-          ROW_NUMBER() OVER (ORDER BY bottomup_rs_3m_nifty500 DESC NULLS LAST)::text AS sector_rank,
+          s.sector_name,
+          s.sector_state,
+          (s.participation_rs_pct::numeric / 100.0)::text AS breadth,
+          ROW_NUMBER() OVER (ORDER BY m.bottomup_rs_3m_nifty500 DESC NULLS LAST)::text AS sector_rank,
           COUNT(*) OVER ()::text AS total_sectors
-        FROM atlas.atlas_sector_states_daily
-        WHERE date = (SELECT d FROM latest_sector_date)
+        FROM atlas.atlas_sector_states_daily s
+        LEFT JOIN atlas.atlas_sector_metrics_daily m
+          ON m.sector_name = s.sector_name AND m.date = s.date
+        WHERE s.date = (SELECT d FROM latest_sector_date)
       ),
       latest_metric_date AS (
         SELECT MAX(date) AS d FROM atlas.atlas_stock_metrics_daily

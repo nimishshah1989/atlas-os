@@ -50,7 +50,11 @@ export type FullStockRow = StockRowWithSector
 export type MetricHistoryRow = {
   date: Date
   rs_pctile_3m: string | null
+  ret_1w: string | null
+  ret_1m: string | null
   ret_3m: string | null
+  ret_6m: string | null
+  ret_12m: string | null
   ema_10_ratio: string | null
   drawdown_ratio_252: string | null
   avg_volume_20: string | null
@@ -401,7 +405,11 @@ export async function getStockMetricHistory(
     SELECT
       date,
       rs_pctile_3m::text        AS rs_pctile_3m,
+      ret_1w::text              AS ret_1w,
+      ret_1m::text              AS ret_1m,
       ret_3m::text              AS ret_3m,
+      ret_6m::text              AS ret_6m,
+      ret_12m::text             AS ret_12m,
       ema_10_ratio::text        AS ema_10_ratio,
       drawdown_ratio_252::text  AS drawdown_ratio_252,
       avg_volume_20::text       AS avg_volume_20,
