@@ -13,25 +13,39 @@ from atlas.db import get_engine
 
 log = structlog.get_logger(__name__)
 
-# Sector name → NSE index code mapping (primary sector indices).
-# Falls back to NIFTY 50 for unmapped sectors.
+# Sector → NSE sector-index mapping. Falls back to NIFTY 50 for sectors with no
+# representative single-sector index (Conglomerate, Diversified, Rural, Services,
+# Telecom). Keys are the EXACT sector strings stored in
+# atlas.atlas_universe_stocks.sector; values are real index_code strings present
+# in public.de_index_prices. Both sides verified against the live DB 2026-05-30 —
+# the previous map keyed on GICS-style names that never matched, so vs_sector
+# silently collapsed onto NIFTY 50 while still being labelled "vs sector".
 _SECTOR_INDEX: dict[str, str] = {
     "Energy": "NIFTY ENERGY",
-    "Oil Gas & Consumable Fuels": "NIFTY OIL GAS",
-    "Information Technology": "NIFTY IT",
-    "Financial Services": "NIFTY FINANCIAL SERVICES",
-    "Banks": "NIFTY BANK",
-    "Fast Moving Consumer Goods": "NIFTY FMCG",
-    "Pharmaceuticals & Biotechnology": "NIFTY PHARMA",
-    "Automobiles & Auto Components": "NIFTY AUTO",
-    "Capital Goods": "NIFTY INDIA MANUFACTURING",
-    "Metals & Mining": "NIFTY METAL",
+    "Oil & Gas": "NIFTY OIL AND GAS",
+    "IT": "NIFTY IT",
+    "Financial Services": "NIFTY FIN SERVICE",
+    "Banking": "NIFTY BANK",
+    "FMCG": "NIFTY FMCG",
+    "Pharma": "NIFTY PHARMA",
+    "Automobile": "NIFTY AUTO",
+    "Capital Goods": "NIFTY INDIA MFG",
+    "Metal": "NIFTY METAL",
     "Realty": "NIFTY REALTY",
-    "Consumer Durables": "NIFTY CONSUMER DURABLES",
-    "Telecommunication": "NIFTY MEDIA",
-    "Healthcare": "NIFTY HEALTHCARE INDEX",
-    "Chemicals": "NIFTY COMMODITIES",
-    "Power": "NIFTY COMMODITIES",
+    "Consumer Durables": "NIFTY CONSR DURBL",
+    "Healthcare": "NIFTY HEALTHCARE",
+    "Chemicals": "NIFTY CHEMICALS",
+    "Media": "NIFTY MEDIA",
+    "Capital Markets": "NIFTY CAPITAL MKT",
+    "Tourism": "NIFTY IND TOURISM",
+    "Defence": "NIFTY IND DEFENCE",
+    "Digital": "NIFTY IND DIGITAL",
+    "Infrastructure": "NIFTY INFRA",
+    "Consumption": "NIFTY CONSUMPTION",
+    "MNC": "NIFTY MNC",
+    "Housing": "NIFTY HOUSING",
+    "EV & Auto": "NIFTY EV",
+    "Logistics": "NIFTY INFRALOG",
 }
 _NIFTY50 = "NIFTY 50"
 
