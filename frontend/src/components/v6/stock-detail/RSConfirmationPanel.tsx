@@ -55,7 +55,7 @@ export function RSConfirmationPanel({ rsData, symbol }: RSConfirmationPanelProps
     return (
       <section className="px-6 py-6 border-b border-paper-rule">
         <p className="font-mono text-[10px] uppercase tracking-wider text-ink-3 mb-4">Relative Strength Confirmation</p>
-        <p className="font-sans text-sm text-ink-3">RS ratio data unavailable for {symbol}. Backend endpoint may not be deployed yet.</p>
+        <p className="font-sans text-sm text-ink-3">RS ratio data unavailable for {symbol} — insufficient overlapping price history vs its sector index and Nifty 50.</p>
       </section>
     )
   }

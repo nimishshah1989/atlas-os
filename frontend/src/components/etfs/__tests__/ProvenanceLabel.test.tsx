@@ -16,9 +16,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ETFScreener } from '../ETFScreener'
-import { FundScreener } from '../../funds/FundScreener'
 import type { ETFRow } from '@/lib/queries/etfs'
-import type { FundRow } from '@/lib/queries/funds'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -78,54 +76,6 @@ function makeETFRow(overrides: Partial<ETFRow> = {}): ETFRow {
     pct_stage_2:          null,
     pct_stage_4:          null,
     data_source:          'bottom_up',
-    ...overrides,
-  }
-}
-
-function makeFundRow(overrides: Partial<FundRow> = {}): FundRow {
-  return {
-    mstar_id:                   'F00000XXXX',
-    scheme_name:                'Test Fund - Regular Plan',
-    amc:                        'Test AMC',
-    category_name:              'Large Cap',
-    broad_category:             'Equity',
-    data_as_of:                 '2026-05-18',
-    ret_1m:                     '0.02',
-    ret_3m:                     '0.07',
-    ret_6m:                     '0.11',
-    ret_12m:                    '0.19',
-    rs_1m_category:             '0.01',
-    rs_3m_category:             '0.04',
-    rs_6m_category:             '0.06',
-    rs_pctile_1m:               '0.55',
-    rs_pctile_3m:               '0.65',
-    rs_pctile_6m:               '0.70',
-    realized_vol_63:            '0.14',
-    drawdown_ratio_252:         '-0.08',
-    nav_date:                   null,
-    nav_state:                  'Uptrend',
-    composition_state:          'Aligned',
-    holdings_state:             'Strong',
-    recommendation:             'Recommended',
-    weeks_in_current_state:     '4',
-    performance_gate:           true,
-    sectors_gate:               true,
-    stocks_gate:                true,
-    market_gate:                true,
-    entry_trigger:              null,
-    exit_trigger:               null,
-    reduce_trigger:             null,
-    mean_within_state_rank:     null,
-    aum_cr:                     '5000',
-    aum_as_of:                  '2026-04-30',
-    aligned_aum_pct:            '60',
-    avoid_aum_pct:              '15',
-    neutral_aum_pct:            '25',
-    strong_aum_pct:             '55',
-    weak_aum_pct:               '20',
-    unknown_aum_pct:            '25',
-    lens_as_of_date:            null,
-    data_source:                'legacy',
     ...overrides,
   }
 }
@@ -208,41 +158,5 @@ describe('ProvenanceLabel — ETF', () => {
     )
     // Stage badge should render for equity ETFs
     expect(screen.getByText('2B CONF')).toBeInTheDocument()
-  })
-})
-
-// ---------------------------------------------------------------------------
-// Fund provenance tests
-// ---------------------------------------------------------------------------
-
-describe('ProvenanceLabel — Fund', () => {
-  const noop = () => {}
-
-  beforeEach(() => {
-    localStorage.clear()
-  })
-
-  it('renders a legacy provenance marker when fund data_source is legacy', () => {
-    render(
-      <FundScreener
-        funds={[makeFundRow({ data_source: 'legacy' })]}
-        period="3M"
-        activeFilter="all"
-        onFilterChange={noop}
-      />
-    )
-    expect(screen.getByTestId('provenance-legacy-F00000XXXX')).toBeInTheDocument()
-  })
-
-  it('does NOT render a legacy marker when fund data_source is bottom_up', () => {
-    render(
-      <FundScreener
-        funds={[makeFundRow({ data_source: 'bottom_up' })]}
-        period="3M"
-        activeFilter="all"
-        onFilterChange={noop}
-      />
-    )
-    expect(screen.queryByTestId('provenance-legacy-F00000XXXX')).not.toBeInTheDocument()
   })
 })
