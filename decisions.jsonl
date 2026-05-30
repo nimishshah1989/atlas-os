@@ -3135,3 +3135,561 @@
 }
 {"ts":"2026-05-29T17:56:04Z","kind":"supabase_sql_executed","sql_preview":"SELECT version_num FROM alembic_version;"}
 {"ts":"2026-05-29T17:56:54Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_cell_definitions' AND column_name='display_name') AS has_display_name,\n  EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_sector_metrics_daily' AND column_name='rs_1m') AS has_sector_rs_1m,\n  EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_macro_daily' AND column_name='dii_flow') AS has_dii_fl"}
+{
+  "ts": "2026-05-29T18:18:37Z",
+  "prev": "f3b69f4fb692dc1a",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/etfs/[ticker]/page.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T18:18:42Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/frontend/src/app/etfs/[ticker]/page.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T18:22:26Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/120_v6_mv_stock_list_tombstone.py",
+  "lines_changed": 55,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T18:39:25Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/trading/tournament.py",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T18:45:19Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/migrations/test_120_v6_mv_stock_list_tombstone.py",
+  "lines_changed": 73,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T18:59:08Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/115_mv_stock_landscape_trader_view.py",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T19:00:23Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/116_trader_view_composite_fallback.py",
+  "lines_changed": 10,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T19:05:19Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/pyproject.toml",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T19:06:43Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/tv/screener.py",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T19:07:55Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/tv/screener.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T19:08:13Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/tv/screener.py",
+  "lines_changed": 30,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T19:14:53Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/tv/screener.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T19:27:09Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/v6/2026-05-30-deploy-hygiene-guide.md",
+  "lines_changed": 344,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T21:16:52Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/ops/overnight_audit_workflow.js",
+  "lines_changed": 303,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T21:33:14Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/v6/2026-05-30-session-rotation-hook.md",
+  "lines_changed": 93,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T21:59:55Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/v6/2026-05-30-overnight-audit.md",
+  "lines_changed": 354,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-29T22:04:03Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/ops/_refresh_mvs.py",
+  "lines_changed": 43,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T03:11:50Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/.claude/projects/-Users-nimishshah-Documents-GitHub-atlas-os/memory/project_overnight_audit_fix_sequence.md",
+  "lines_changed": 21,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T03:19:25Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/tmp/_diag2.py",
+  "lines_changed": 57,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T03:26:21Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/tmp/_verify1.py",
+  "lines_changed": 48,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T03:28:13Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/tmp/_verify2.py",
+  "lines_changed": 39,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T03:29:51Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/tmp/_verify3.py",
+  "lines_changed": 36,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T03:31:49Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/ops/backfill_stock_rs_nifty500.py",
+  "lines_changed": 111,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T03:31:58Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/ops/backfill_stock_rs_nifty500.py",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T03:32:09Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/ops/backfill_stock_rs_nifty500.py",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T03:32:31Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/ops/run_etf_scorecard_for_date.py",
+  "lines_changed": 69,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T03:36:08Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/migrations/versions/121_v6_cron_complete_mv_refresh.py",
+  "lines_changed": 259,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T03:37:21Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/tmp/_refresh_verify.py",
+  "lines_changed": 62,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T03:41:28Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/tmp/_green.py",
+  "lines_changed": 46,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T03:42:29Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/tmp/_green2.py",
+  "lines_changed": 33,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T03:44:09Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/v6/2026-05-30-overnight-audit.md",
+  "lines_changed": 66,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T04:28:57Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/tmp/_chunkc_fresh.py",
+  "lines_changed": 31,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T04:29:56Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/ops/run_fund_scorecard_for_date.py",
+  "lines_changed": 75,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T04:32:09Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/tmp/_chunkc_verify.py",
+  "lines_changed": 44,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T04:34:19Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/run_atlas_nightly.sh",
+  "lines_changed": 33,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T04:35:38Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/tmp/_final.py",
+  "lines_changed": 39,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T04:36:19Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/v6/2026-05-30-overnight-audit.md",
+  "lines_changed": 51,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T04:56:25Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/tmp/_fund_data_depth.py",
+  "lines_changed": 48,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T04:58:43Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/ops/fund_factor_ic.py",
+  "lines_changed": 167,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T05:00:45Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/scripts/ops/fund_factor_ic.py",
+  "lines_changed": 156,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T05:13:56Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/inference/fund_scorecard.py",
+  "lines_changed": 47,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T05:14:19Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/inference/fund_scorecard.py",
+  "lines_changed": 78,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T05:14:30Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/inference/fund_scorecard.py",
+  "lines_changed": 10,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T05:14:48Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/inference/fund_scorecard.py",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T05:15:00Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/inference/fund_scorecard.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T05:15:06Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/inference/fund_scorecard.py",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T05:15:17Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/inference/fund_scorecard.py",
+  "lines_changed": 10,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T05:15:30Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/inference/fund_scorecard.py",
+  "lines_changed": 41,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T05:15:46Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/inference/fund_scorecard.py",
+  "lines_changed": 20,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T05:15:57Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/inference/fund_scorecard.py",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T05:16:05Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/inference/fund_scorecard.py",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T05:16:14Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/inference/fund_scorecard.py",
+  "lines_changed": 14,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T05:17:08Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/inference/test_fund_scorecard.py",
+  "lines_changed": 77,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T05:18:05Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/docs/v6/fund-etf-ranking-methodology.md",
+  "lines_changed": 42,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T05:18:24Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/tmp/_fund_leaderboard.py",
+  "lines_changed": 26,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T05:19:03Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/tmp/_set_fund_weights.py",
+  "lines_changed": 30,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T05:23:38Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/atlas/inference/fund_scorecard.py",
+  "lines_changed": 22,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T05:28:46Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/.claude/projects/-Users-nimishshah-Documents-GitHub-atlas-os/memory/project_fund_methodology_v2.md",
+  "lines_changed": 19,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T05:30:36Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/atlas/regime/test_classifier.py",
+  "lines_changed": 99,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T05:30:53Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/atlas/decisions/test_rule_dsl.py",
+  "lines_changed": 87,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T05:41:14Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/atlas/decisions/test_evaluator.py",
+  "lines_changed": 106,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-30T05:51:24Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/Documents/GitHub/atlas-os/tests/atlas/decisions/test_rule_dsl.py",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
