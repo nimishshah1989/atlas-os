@@ -18,11 +18,11 @@ interface Row {
 }
 
 const ROWS: Row[] = [
-  { period: '1W',  retKey: 'ret_1w' },
-  { period: '1M',  retKey: 'ret_1m' },
+  { period: '1W',  retKey: 'ret_1w',  alphaKey: 'alpha_1w' },
+  { period: '1M',  retKey: 'ret_1m',  alphaKey: 'alpha_1m' },
   { period: '3M',  retKey: 'ret_3m',  alphaKey: 'alpha_3m' },
   { period: '6M',  retKey: 'ret_6m',  alphaKey: 'alpha_6m' },
-  { period: '12M', retKey: 'ret_12m' },
+  { period: '12M', retKey: 'ret_12m', alphaKey: 'alpha_12m' },
 ]
 
 function parse(v: unknown): number | null {
@@ -56,7 +56,7 @@ export function MultiTimeframeReturnsTable({ latest }: MultiTimeframeReturnsTabl
           <tr className="border-b border-paper-rule">
             <th className="text-left py-1.5 font-mono text-[9px] uppercase tracking-wider text-ink-3 font-normal">Period</th>
             <th className="text-right py-1.5 font-mono text-[9px] uppercase tracking-wider text-ink-3 font-normal">Absolute</th>
-            <th className="text-right py-1.5 font-mono text-[9px] uppercase tracking-wider text-ink-3 font-normal">Alpha vs Nifty</th>
+            <th className="text-right py-1.5 font-mono text-[9px] uppercase tracking-wider text-ink-3 font-normal">Alpha vs Nifty 500</th>
           </tr>
         </thead>
         <tbody>

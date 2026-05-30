@@ -63,6 +63,14 @@ export type MetricHistoryRow = {
   ema_20_ratio: string | null
   vol_ratio_63: string | null
   max_drawdown_252: string | null
+  // Alpha vs Nifty 500 (excess return = stock ret − Nifty 500 ret, same window).
+  // 1w/1m/3m reuse the precomputed rs_*_nifty500 columns; 6m/12m derived from
+  // atlas_index_metrics_daily (index_code 'NIFTY 500').
+  alpha_1w: string | null
+  alpha_1m: string | null
+  alpha_3m: string | null
+  alpha_6m: string | null
+  alpha_12m: string | null
 }
 
 export type StateHistoryRow = {
@@ -403,25 +411,37 @@ export async function getStockMetricHistory(
   }
   return sql<MetricHistoryRow[]>`
     SELECT
-      date,
-      rs_pctile_3m::text        AS rs_pctile_3m,
-      ret_1w::text              AS ret_1w,
-      ret_1m::text              AS ret_1m,
-      ret_3m::text              AS ret_3m,
-      ret_6m::text              AS ret_6m,
-      ret_12m::text             AS ret_12m,
-      ema_10_ratio::text        AS ema_10_ratio,
-      drawdown_ratio_252::text  AS drawdown_ratio_252,
-      avg_volume_20::text       AS avg_volume_20,
-      extension_pct::text       AS extension_pct,
-      atr_21::text              AS atr_21,
-      ema_20_ratio::text        AS ema_20_ratio,
-      vol_ratio_63::text        AS vol_ratio_63,
-      max_drawdown_252::text    AS max_drawdown_252
-    FROM atlas.atlas_stock_metrics_daily
-    WHERE instrument_id = ${instrumentId}
-      AND date >= CURRENT_DATE - INTERVAL '1 day' * ${days}
-    ORDER BY date ASC
+      m.date,
+      m.rs_pctile_3m::text        AS rs_pctile_3m,
+      m.ret_1w::text              AS ret_1w,
+      m.ret_1m::text              AS ret_1m,
+      m.ret_3m::text              AS ret_3m,
+      m.ret_6m::text              AS ret_6m,
+      m.ret_12m::text             AS ret_12m,
+      m.ema_10_ratio::text        AS ema_10_ratio,
+      m.drawdown_ratio_252::text  AS drawdown_ratio_252,
+      m.avg_volume_20::text       AS avg_volume_20,
+      m.extension_pct::text       AS extension_pct,
+      m.atr_21::text              AS atr_21,
+      m.ema_20_ratio::text        AS ema_20_ratio,
+      m.vol_ratio_63::text        AS vol_ratio_63,
+      m.max_drawdown_252::text    AS max_drawdown_252,
+      -- Alpha vs Nifty 500 (excess return, same window as ret_X).
+      -- 1w/1m/3m: precomputed rs_*_nifty500 (= ret − Nifty500 ret).
+      m.rs_1w_nifty500::text      AS alpha_1w,
+      m.rs_1m_nifty500::text      AS alpha_1m,
+      m.rs_3m_nifty500::text      AS alpha_3m,
+      -- 6m/12m: derive from the Nifty 500 index's own ret_6m/12m on the same date.
+      CASE WHEN m.ret_6m IS NOT NULL AND idx.ret_6m IS NOT NULL
+        THEN (m.ret_6m - idx.ret_6m)::text END   AS alpha_6m,
+      CASE WHEN m.ret_12m IS NOT NULL AND idx.ret_12m IS NOT NULL
+        THEN (m.ret_12m - idx.ret_12m)::text END AS alpha_12m
+    FROM atlas.atlas_stock_metrics_daily m
+    LEFT JOIN atlas.atlas_index_metrics_daily idx
+      ON idx.index_code = 'NIFTY 500' AND idx.date = m.date
+    WHERE m.instrument_id = ${instrumentId}
+      AND m.date >= CURRENT_DATE - INTERVAL '1 day' * ${days}
+    ORDER BY m.date ASC
   `
 }
 
