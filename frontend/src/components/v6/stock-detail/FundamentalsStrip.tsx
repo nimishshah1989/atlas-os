@@ -1,20 +1,33 @@
 // frontend/src/components/v6/stock-detail/FundamentalsStrip.tsx
+//
+// The /v1/tv/metrics endpoint serializes Decimal columns as JSON strings
+// ("22.1341"), so these fields arrive as string at runtime even though the
+// API type declares number. Accept both and coerce before formatting —
+// calling .toFixed() on the raw string throws and crashes the page render.
+type Num = number | string | null
+
 interface FundamentalsStripProps {
-  pe: number | null
-  ps: number | null
-  pb: number | null
-  debtToEquity: number | null
-  roe: number | null
+  pe: Num
+  ps: Num
+  pb: Num
+  debtToEquity: Num
+  roe: Num
 }
 
-function fmt(v: number | null, decimals = 1): string {
-  if (v == null) return '—'
-  return v.toFixed(decimals)
+function toNum(v: Num): number | null {
+  if (v == null) return null
+  const n = typeof v === 'number' ? v : Number(v)
+  return Number.isFinite(n) ? n : null
 }
 
-function fmtRoe(v: number | null): string {
-  if (v == null) return '—'
-  return `${v.toFixed(1)}%`
+function fmt(v: Num, decimals = 1): string {
+  const n = toNum(v)
+  return n == null ? '—' : n.toFixed(decimals)
+}
+
+function fmtRoe(v: Num): string {
+  const n = toNum(v)
+  return n == null ? '—' : `${n.toFixed(1)}%`
 }
 
 function Pill({ label, value }: { label: string; value: string }) {
