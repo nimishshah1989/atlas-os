@@ -48,6 +48,9 @@ export type LandscapeRow = {
   // composite_trajectory_30d is JSONB: [{date: string, score: number}]
   composite_trajectory_30d: Array<{ date: string; score: number }> | null
   refreshed_at: string | null
+  // The market-data date the snapshot reflects (e.g. 2026-05-29 Friday), as
+  // opposed to refreshed_at which is the wall-clock instant the MV cron ran.
+  as_of_date: string | null
 }
 
 // ---------------------------------------------------------------------------
@@ -85,7 +88,8 @@ export async function getStocksLandscape(): Promise<LandscapeRow[]> {
       cell_action,
       cell_fire_date::text,
       composite_trajectory_30d,
-      refreshed_at::text
+      refreshed_at::text,
+      as_of_date::text
     FROM atlas.mv_stock_landscape
     ORDER BY composite_score DESC NULLS LAST
   `

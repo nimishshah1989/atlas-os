@@ -74,7 +74,10 @@ export default async function StocksPage({
   const watchCount = heroStories.stats.watchCount
   const avoidCount = heroStories.stats.avoidCount
   const highConfBuyCount = heroStories.stats.highConfBuyCount
-  const refreshedAt = landscapeData[0]?.refreshed_at ?? null
+  // "Data as of" = the market-data date (as_of_date), not refreshed_at (the
+  // wall-clock instant the nightly MV cron ran — which is the next calendar day
+  // after a post-midnight refresh, e.g. Sat 30 May for Fri 29 May data).
+  const asOfDate = landscapeData[0]?.as_of_date ?? null
 
   // Screener fallback for empty stocks
   if (stocks.length === 0 && landscapeData.length === 0) {
@@ -152,11 +155,11 @@ export default async function StocksPage({
               },
               {
                 label: 'Data as of',
-                value: refreshedAt
-                  ? new Date(refreshedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                value: asOfDate
+                  ? new Date(asOfDate + 'T12:00:00Z').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
                   : '—',
                 cls: 'text-ink-primary font-mono text-[14px]',
-                foot: 'Nightly refresh · 20:00 IST',
+                foot: 'Last trading session · refreshed nightly 20:00 IST',
               },
             ].map((tile, i) => (
               <div
