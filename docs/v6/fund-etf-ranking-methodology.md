@@ -49,27 +49,48 @@ category median (50) and stamp the reason in `raw_metrics.reasons`.
 - **expense_ratio_score** — `100 - percentile_rank(TER)` within category
   (lower TER → higher score).
 
-## Mutual fund composite (4 layers)
+## Mutual fund composite (4 layers) — v2 (empirically weighted)
+
+> **v2 (2026-05-30):** layer weights and the Performance-layer composition are
+> now **derived from a forward-IC backtest** (`scripts/ops/fund_factor_ic.py`,
+> 195 months, ~47k fund-month observations, within-category Spearman IC vs
+> forward 12m return) — not from judgement. Headline findings:
+> - **Momentum (6m/12m return)** was the strongest forward predictor
+>   (IC ≈ +0.11), and **peer-relative consistency** close behind (IC ≈ +0.10).
+> - **Max-drawdown and volatility had ~zero forward IC** within category — so
+>   they are **excluded from scoring** (kept in `sub_metrics` for display). An
+>   earlier "downside-emphasis" idea was dropped because the data refuted it.
+> - **Holdings-conviction and style have no pre-2026 history** (holdings start
+>   2026-01, conviction 2026-04) — they **cannot be empirically weighted**, so
+>   they are deliberately small priors the live IC loop can grow over time.
 
 | Layer | Weight | Threshold key |
 |---|---|---|
-| Risk-adjusted return (Sharpe, Sortino, Alpha, MaxDD, Calmar, captures) | 50% | `mf_weight_risk_adj` |
-| Holdings conviction (top-N holdings × conviction tape verdict) | 25% | `mf_weight_holdings` |
-| Style + sector (style drift + sector tilt vs leaders) | 15% | `mf_weight_style_sector` |
-| Cost + manager (TER 40% / tenure 30% / AUM 20% / age 10%) | 10% | `mf_weight_cost_manager` |
+| **Performance** (momentum 40% · consistency 35% · risk-adjusted 25%) | **65%** | `mf_weight_risk_adj` |
+| Holdings conviction (top-N holdings × conviction verdict) — prior | **15%** | `mf_weight_holdings` |
+| Style + sector (style drift + sector tilt) — prior | **10%** | `mf_weight_style_sector` |
+| Cost + manager (TER 40% / tenure 30% / AUM 20% / age 10%) — prior | **10%** | `mf_weight_cost_manager` |
 
-### Layer 1 — risk-adjusted return
+### Layer 1 — performance (IC-weighted)
 
-Equal-weighted blend of 7 percentile ranks within the fund's category
-cohort:
+Within the fund's category cohort, a weighted blend of percentile ranks:
 
-1. Sharpe (annualized, daily rf = 6%/252)
-2. Sortino (downside-only deviation; capped at 5.0 when no downside)
-3. Jensen alpha (mean of `fund_returns - bench_returns`, annualized)
-4. Max drawdown (lower is better → inverted)
-5. Calmar (annual return / max drawdown)
-6. Up-capture (higher = better)
-7. Down-capture (lower = better → inverted)
+- **Momentum — 40%** of the layer: average percentile of trailing **6m** and
+  **12m** cumulative return. Fund return persistence was the single strongest
+  forward signal in the backtest.
+- **Consistency — 35%**: peer-relative win-rate — the fraction of months the
+  fund's return beat the contemporaneous **median of its category** (needs the
+  month-anchored NAV series; neutral when unavailable).
+- **Risk-adjusted — 25%**: average percentile of **Sharpe, Sortino, Calmar**.
+
+**Not scored** (zero/near-zero forward IC, or no production benchmark series):
+max-drawdown, volatility, Jensen alpha, up/down-capture. They remain in
+`sub_metrics` so the detail page can still show them.
+
+> **Conviction-source fix (v2):** the holdings-conviction layer now reads the
+> **live** `atlas_stock_conviction_daily`. v1 read the dead
+> `atlas_conviction_daily` (frozen 2026-05-22), which silently froze 25% of
+> every fund's score — the bug that motivated this rework.
 
 ### Layer 2 — holdings conviction
 
