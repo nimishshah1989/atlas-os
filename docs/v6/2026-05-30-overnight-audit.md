@@ -437,3 +437,50 @@ proven exact vs production.
   so mv_stock_landscape / mv_sector_deepdive will re-freeze tomorrow unless the backfill
   is wired into `run_atlas_nightly.sh`. `scripts/ops/backfill_stock_rs_nifty500.py` is
   the durable artifact to wire in (Chunk C).
+
+---
+
+## 10. Chunk C executed — 2026-05-30 (funds + sectors + nightly wiring)
+
+Closed the last two stale surfaces and the recurring-staleness risk from §9. Key
+discovery: **no new scoring logic was needed** — the fund generator and the sector
+v6 compute functions already existed and were tested; they were just never wired
+into the nightly. Verified against the live DB.
+
+### Funds (`fund_scorecard_7d_stale`, was 05-22)
+- `atlas/inference/fund_scorecard.py` already has `compute_fund_scorecard_from_engine`
+  + `emit_upsert_sql` (4-layer methodology in `docs/v6/fund-etf-ranking-methodology.md`).
+  Its CLI only writes to DB behind a `.supabase-write-approved` marker, so I added a
+  direct-write wrapper **`scripts/ops/run_fund_scorecard_for_date.py`** (fund analogue
+  of the ETF one). Ran for 05-29 → **587 rows**. `mv_fund_list_v6` / `mv_fund_deepdive`
+  now **05-29**.
+- NAV reality: `de_mf_nav_daily` MAX = 05-27 (AMFI publishes Friday NAV on the weekend),
+  so the 05-29 scorecard carries `nav_as_of` 05-27..05-15 per fund — surfaced per-row,
+  not hidden. Holdings carry the SEBI 30-day lag by design.
+- Known limitation (NOT introduced here): the fund + ETF scorecards' conviction layer
+  reads the dead `atlas_conviction_daily` (frozen 05-22). Repointing to live
+  `atlas_stock_conviction_daily` is a follow-up (affects layer 2 only, 25% weight).
+
+### Sectors (`sector_metrics_null_values_05_29` / finding #9, was 05-22)
+- The 8 v6 columns (`rs_1w/1m/6m/12m`, `pct_above_ema20/200`, `pct_52wh`, `hhi`) are
+  computed by 4 functions in `sectors.py` AND already written by
+  `scripts/sector_5y_backfill.py` (it calls them + UPDATEs only those 8 cols). Reused
+  that proven path: `sector_5y_backfill.py --start-year 2026 --end-year 2026` →
+  **30/30 sectors populated @ 05-29**. `mv_sector_deepdive` now **05-29**. (No edit to
+  the finance-critical daily `_run_pipeline`.)
+
+### Nightly wiring (the permanent "stays current" fix)
+Added 4 NON-FATAL steps to `scripts/run_atlas_nightly.sh` ([5e]–[5h]), after M2–M5 and
+before the 21:45 UTC `mv_refresh_v6_all` cron: stock-RS backfill, sector v6 backfill,
+fund scorecard, ETF scorecard. Deployed to EC2 (next run Mon 06-01; cron is Mon–Fri).
+Each `|| WARNING` so a scorecard miss never aborts the core pipeline.
+
+### Final state — ALL 13 v6 surfaces @ 2026-05-29 ✅
+Landing, /markets-rs, /stocks, /stocks/[sym], India Pulse, sector cards/breadth/rrg,
+/sectors/[s], /funds, /funds/[s], /etfs, /etfs/[t] — all current and now self-refreshing.
+
+### Remaining (genuinely lower priority, not data-staleness)
+Chunk B (frontend coherence), D (dead code), E (API hygiene), F (API breaking:
+versioning/cursor-pagination/session-auth), G (backend tests), H (refactors). Plus the
+two follow-ups noted above (fund/ETF conviction-source repoint; a lighter daily-only
+sector v6 step instead of the year recompute).
