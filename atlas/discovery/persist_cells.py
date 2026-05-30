@@ -122,6 +122,27 @@ class CellMetadata:
     methodology_lock_ref: str
 
 
+# Runtime allowlists for the three enum fields interpolated into the emitted
+# (file-only, human-reviewed) SQL. The dataclass Literal types are NOT enforced
+# at runtime — line ~254 even constructs CellMetadata with a `# type: ignore`
+# from raw cell data — so this guard makes the f-string SQL provably injection
+# -safe regardless of how the metadata was built (audit finding
+# sql-injection-discovery-persist-cells, defense-in-depth).
+_ALLOWED_CAP_TIER = frozenset({"Large", "Mid", "Small"})
+_ALLOWED_TENURE = frozenset({"1m", "3m", "6m", "12m"})
+_ALLOWED_ACTION = frozenset({"POSITIVE", "NEUTRAL", "NEGATIVE"})
+
+
+def _assert_enum_safe(meta: CellMetadata) -> None:
+    """Reject any out-of-allowlist enum value before it reaches an f-string SQL."""
+    if meta.cap_tier not in _ALLOWED_CAP_TIER:
+        raise ValueError(f"cap_tier {meta.cap_tier!r} not in {sorted(_ALLOWED_CAP_TIER)}")
+    if meta.tenure not in _ALLOWED_TENURE:
+        raise ValueError(f"tenure {meta.tenure!r} not in {sorted(_ALLOWED_TENURE)}")
+    if meta.action not in _ALLOWED_ACTION:
+        raise ValueError(f"action {meta.action!r} not in {sorted(_ALLOWED_ACTION)}")
+
+
 def _parse_value(raw: Any) -> Decimal | tuple[Decimal, Decimal]:
     """Convert the JSON value field into Decimal or (low, high) tuple."""
     if isinstance(raw, list):
@@ -276,6 +297,7 @@ def emit_definition_sql(
     meta: CellMetadata,
 ) -> str:
     """Emit a single INSERT for ``atlas_cell_definitions``."""
+    _assert_enum_safe(meta)
     rule_json = _sql_quote_json(rule.model_dump(mode="json"))
     confidence_unconditional = candidate.get("tp_rate")
     fric_adj = candidate.get("friction_adjusted_excess")
@@ -320,6 +342,7 @@ def emit_candidate_sql(
     ``(cap_tier, action, tenure)`` filtered to the active partial unique
     index (``deprecated_at IS NULL``).
     """
+    _assert_enum_safe(meta)
     rule_json = _sql_quote_json(rule.model_dump(mode="json"))
     archetype = candidate["archetype"]
     ic = candidate.get("ic")
@@ -418,16 +441,14 @@ def build_sql_files(
         top1 = top_k_candidates[0]
         top1_rule = _build_cell_rule(top1, meta, rank=1)
         defs_sql_lines.append(
-            f"-- {meta.cap_tier}-{meta.tenure}-{meta.action}: "
-            f"{top1['name']} ({top1['archetype']})"
+            f"-- {meta.cap_tier}-{meta.tenure}-{meta.action}: {top1['name']} ({top1['archetype']})"
         )
         defs_sql_lines.append(emit_definition_sql(top1_rule, top1, meta))
         stats["n_definitions_emitted"] += 1
 
         # Top-1..K → atlas_cell_rule_candidates
         cands_sql_lines.append(
-            f"-- {meta.cap_tier}-{meta.tenure}-{meta.action}: "
-            f"{len(top_k_candidates)} candidate(s)"
+            f"-- {meta.cap_tier}-{meta.tenure}-{meta.action}: {len(top_k_candidates)} candidate(s)"
         )
         for rank, cand in enumerate(top_k_candidates, start=1):
             rule = _build_cell_rule(cand, meta, rank=rank)

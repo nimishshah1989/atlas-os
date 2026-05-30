@@ -14,8 +14,11 @@ Endpoints:
     GET /api/v1/intraday/prices         — {instrument_id: close} dict for all tracked stocks
     GET /api/v1/intraday/indices        — latest bar for all tracked NSE indices
 
-All routes carry the ``/v1`` prefix and are therefore exempt from
-JWTAuthMiddleware (atlas.api.auth._EXEMPT_PREFIXES includes "/v1").
+All routes sit under ``/api/v1/intraday`` and are gated by the SERVICE token,
+not exempt: ``atlas.api.auth._SERVICE_TOKEN_PREFIXES`` includes
+``/api/v1/intraday``, so JWTAuthMiddleware requires the ``ATLAS_INTERNAL_SECRET``
+header (they are called by the Next.js proxy / internal callers, never by
+browser clients directly).
 """
 
 from __future__ import annotations

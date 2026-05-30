@@ -110,11 +110,20 @@ _internal_router = APIRouter(prefix="/v1/tv/internal", tags=["tv-internal"])
 async def trigger_screener() -> dict:
     """Called by pg_cron at 21:00 IST on weekdays.
 
-    Fetches latest TradingView metrics for all universe symbols and upserts into atlas.tv_metrics.
+    Fetches latest TradingView metrics for all universe symbols and upserts into
+    atlas.tv_metrics. Response uses the standard ``{data, meta}`` envelope for
+    consistency with the rest of the API (the only caller is pg_cron, which
+    ignores the body).
     """
     try:
         fetch_and_upsert_all()
-        return {"status": "ok"}
+        return {
+            "data": {"status": "ok"},
+            "meta": {
+                "fetched_at": datetime.datetime.now(tz=datetime.UTC).isoformat(),
+                "source": "atlas.tv_metrics",
+            },
+        }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
