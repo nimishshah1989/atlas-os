@@ -181,7 +181,8 @@ export default async function StockPage({
         peerTotal={peers.length}
         convictionDirection={null}
         convictionTenure="3m"
-        currentPrice={tvMetrics?.price != null ? parseFloat(tvMetrics.price) : null}
+        convictionScore={traderHeader?.conviction_score ?? null}
+        currentPrice={traderHeader?.close_price ?? (tvMetrics?.price != null ? parseFloat(tvMetrics.price) : null)}
         ret3m={latestMetrics?.ret_3m != null ? parseFloat(latestMetrics.ret_3m) : null}
         rsVsNifty={latestMetrics?.rs_pctile_3m != null ? parseFloat(latestMetrics.rs_pctile_3m) : null}
       />

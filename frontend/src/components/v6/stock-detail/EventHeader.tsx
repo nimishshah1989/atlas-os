@@ -10,6 +10,7 @@ interface EventHeaderProps {
   peerTotal: number
   convictionDirection: 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL' | null
   convictionTenure: string | null
+  convictionScore: number | null
   currentPrice: number | null
   ret3m: number | null
   rsVsNifty: number | null
@@ -48,7 +49,7 @@ function fmtRsPctile(v: number | null): string {
 
 export function EventHeader({
   symbol, companyName, sector, indexBadges, state, dwellDays,
-  peerRank, peerTotal, convictionDirection, convictionTenure,
+  peerRank, peerTotal, convictionDirection, convictionTenure, convictionScore,
   currentPrice, ret3m, rsVsNifty,
 }: EventHeaderProps) {
   const stageMeta = state ? (STAGE_META[state] ?? { label: state.toUpperCase(), color: 'text-ink-3' }) : null
@@ -94,7 +95,7 @@ export function EventHeader({
         <MetricCell label="Price" value={fmtPrice(currentPrice)} valueClass="text-ink" />
         <MetricCell label="3M Return" value={fmtPct(ret3m)} valueClass={ret3m == null ? 'text-ink-3' : ret3m >= 0 ? 'text-signal-pos' : 'text-signal-neg'} />
         <MetricCell label="RS Percentile" value={fmtRsPctile(rsVsNifty)} valueClass={rsVsNifty == null ? 'text-ink-3' : rsVsNifty >= 0.8 ? 'text-signal-pos' : rsVsNifty >= 0.5 ? 'text-ink' : 'text-signal-neg'} unit="/100" />
-        <MetricCell label="Conviction" value={convMeta?.label ?? '—'} valueClass={convictionDirection === 'POSITIVE' ? 'text-signal-pos' : convictionDirection === 'NEGATIVE' ? 'text-signal-neg' : 'text-ink-3'} />
+        <MetricCell label="Conviction" value={convictionScore != null ? convictionScore.toFixed(2) : '—'} valueClass={convictionScore == null ? 'text-ink-3' : convictionScore >= 0.6 ? 'text-signal-pos' : convictionScore <= 0.4 ? 'text-signal-neg' : 'text-ink'} />
       </div>
     </section>
   )

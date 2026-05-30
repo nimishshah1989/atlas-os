@@ -26,6 +26,7 @@ export type StockTraderHeader = {
   cell_tenure: string | null
   cell_predicted_excess: number | null
   cell_ic: number | null
+  close_price: number | null
 }
 
 type Row = {
@@ -43,6 +44,7 @@ type Row = {
   cell_tenure: string | null
   cell_predicted_excess: string | null
   cell_ic: string | null
+  close_price: string | null
 }
 
 function toNumber(s: string | number | null | undefined): number | null {
@@ -67,7 +69,8 @@ export async function getStockTraderHeader(symbol: string): Promise<StockTraderH
       cell_action::text               AS cell_action,
       cell_tenure::text               AS cell_tenure,
       cell_predicted_excess::text     AS cell_predicted_excess,
-      cell_ic::text                   AS cell_ic
+      cell_ic::text                   AS cell_ic,
+      close_price::text               AS close_price
     FROM atlas.mv_stock_landscape_trader
     WHERE symbol = ${symbol}
     LIMIT 1
@@ -90,5 +93,6 @@ export async function getStockTraderHeader(symbol: string): Promise<StockTraderH
     cell_tenure: r.cell_tenure,
     cell_predicted_excess: toNumber(r.cell_predicted_excess),
     cell_ic: toNumber(r.cell_ic),
+    close_price: toNumber(r.close_price),
   }
 }
