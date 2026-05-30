@@ -83,7 +83,9 @@ def test_trigger_screener_returns_ok():
     with patch("atlas.tv.routes.fetch_and_upsert_all") as mock_run:
         resp = client.post("/v1/tv/internal/run-screener")
     assert resp.status_code == 200
-    assert resp.json()["status"] == "ok"
+    body = resp.json()
+    assert body["data"]["status"] == "ok"  # {data, meta} envelope
+    assert "fetched_at" in body["meta"]
     mock_run.assert_called_once()
 
 

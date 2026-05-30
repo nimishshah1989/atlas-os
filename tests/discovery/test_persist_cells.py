@@ -215,3 +215,24 @@ def test_emit_definition_sql_has_required_columns(cells_dir: Path, tmp_path: Pat
     assert "INSERT INTO atlas.atlas_cell_definitions" in defs_text
     # Must NOT use the old (incorrect) column names
     assert "methodology_ref'" not in defs_text  # old name had quote after it
+
+
+def test_assert_enum_safe_accepts_valid_metadata() -> None:
+    """The runtime enum guard passes for in-allowlist metadata."""
+    meta = persist_cells.CellMetadata(
+        cap_tier="Large", tenure="6m", action="POSITIVE", methodology_lock_ref="lock"
+    )
+    persist_cells._assert_enum_safe(meta)  # should not raise
+
+
+def test_assert_enum_safe_rejects_injected_enum() -> None:
+    """Defense-in-depth: a value outside the allowlist (e.g. an injection
+    attempt that bypassed the Literal type) is rejected before SQL emission."""
+    bad = persist_cells.CellMetadata(
+        cap_tier="Large'; DROP TABLE atlas.atlas_cell_definitions; --",  # type: ignore[arg-type]
+        tenure="6m",
+        action="POSITIVE",
+        methodology_lock_ref="lock",
+    )
+    with pytest.raises(ValueError, match="cap_tier"):
+        persist_cells._assert_enum_safe(bad)
