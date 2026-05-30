@@ -46,6 +46,13 @@ export type FundListRow = {
   amc_avg_composite: number | null
   as_of_date: string | null
   refreshed_at: string | null
+  // Period returns + RS percentile, joined from atlas_fund_metrics_daily
+  // (latest nav_date) by mstar_id = scheme_code. ~520/587 covered.
+  ret_1m: number | null
+  ret_3m: number | null
+  ret_6m: number | null
+  ret_12m: number | null
+  rs_pctile_3m: number | null
 }
 
 export type FundListPage = {
@@ -90,6 +97,11 @@ type Row = {
   amc_avg_composite: string | null
   as_of_date: string | null
   refreshed_at: string | null
+  ret_1m: string | null
+  ret_3m: string | null
+  ret_6m: string | null
+  ret_12m: string | null
+  rs_pctile_3m: string | null
 }
 
 function toNumber(s: string | number | null | undefined): number | null {
@@ -106,31 +118,40 @@ function toInt(s: number | string | null | undefined): number {
 
 export async function getFundListPage(): Promise<FundListPage> {
   const rows = await sql<Row[]>`
+    WITH latest_fm AS (SELECT MAX(nav_date) AS d FROM atlas.atlas_fund_metrics_daily)
     SELECT
-      scheme_code, isin, fund_name, amc, fund_category, fund_style,
-      broad_category, plan_type, benchmark_code,
-      aum_cr::text                       AS aum_cr,
-      composite_score::text              AS composite_score,
-      risk_adjusted_return_score::text   AS risk_adjusted_return_score,
-      holdings_conviction_score::text    AS holdings_conviction_score,
-      style_sector_score::text           AS style_sector_score,
-      cost_manager_score::text           AS cost_manager_score,
-      rank_in_category, category_size,
-      is_atlas_leader, is_avoid, confidence_low, holdings_unjoinable,
-      survivorship_exposure_pct::text    AS survivorship_exposure_pct,
-      peer_quartile, recommendation, consistency_months,
-      nav::text                          AS nav,
-      expense_ratio::text                AS expense_ratio,
-      top_holdings, sub_metrics, eli5,
-      amc_total_funds, amc_q1_count, amc_q4_count,
-      amc_avg_composite::text            AS amc_avg_composite,
-      as_of_date::text                   AS as_of_date,
-      refreshed_at::text                 AS refreshed_at
-    FROM atlas.mv_fund_list_v6
+      fl.scheme_code, fl.isin, fl.fund_name, fl.amc, fl.fund_category, fl.fund_style,
+      fl.broad_category, fl.plan_type, fl.benchmark_code,
+      fl.aum_cr::text                       AS aum_cr,
+      fl.composite_score::text              AS composite_score,
+      fl.risk_adjusted_return_score::text   AS risk_adjusted_return_score,
+      fl.holdings_conviction_score::text    AS holdings_conviction_score,
+      fl.style_sector_score::text           AS style_sector_score,
+      fl.cost_manager_score::text           AS cost_manager_score,
+      fl.rank_in_category, fl.category_size,
+      fl.is_atlas_leader, fl.is_avoid, fl.confidence_low, fl.holdings_unjoinable,
+      fl.survivorship_exposure_pct::text    AS survivorship_exposure_pct,
+      fl.peer_quartile, fl.recommendation, fl.consistency_months,
+      fl.nav::text                          AS nav,
+      fl.expense_ratio::text                AS expense_ratio,
+      fl.top_holdings, fl.sub_metrics, fl.eli5,
+      fl.amc_total_funds, fl.amc_q1_count, fl.amc_q4_count,
+      fl.amc_avg_composite::text            AS amc_avg_composite,
+      fl.as_of_date::text                   AS as_of_date,
+      fl.refreshed_at::text                 AS refreshed_at,
+      fm.ret_1m::text                       AS ret_1m,
+      fm.ret_3m::text                       AS ret_3m,
+      fm.ret_6m::text                       AS ret_6m,
+      fm.ret_12m::text                      AS ret_12m,
+      fm.rs_pctile_3m::text                 AS rs_pctile_3m
+    FROM atlas.mv_fund_list_v6 fl
+    LEFT JOIN atlas.atlas_fund_metrics_daily fm
+      ON fm.mstar_id = fl.scheme_code
+      AND fm.nav_date = (SELECT d FROM latest_fm)
     ORDER BY
-      is_atlas_leader DESC,
-      composite_score DESC NULLS LAST,
-      fund_name
+      fl.is_atlas_leader DESC,
+      fl.composite_score DESC NULLS LAST,
+      fl.fund_name
   `
 
   const out: FundListRow[] = rows.map(r => ({
@@ -170,6 +191,11 @@ export async function getFundListPage(): Promise<FundListPage> {
     amc_avg_composite: toNumber(r.amc_avg_composite),
     as_of_date: r.as_of_date,
     refreshed_at: r.refreshed_at,
+    ret_1m: toNumber(r.ret_1m),
+    ret_3m: toNumber(r.ret_3m),
+    ret_6m: toNumber(r.ret_6m),
+    ret_12m: toNumber(r.ret_12m),
+    rs_pctile_3m: toNumber(r.rs_pctile_3m),
   }))
 
   return { as_of_date: out[0]?.as_of_date ?? null, rows: out }

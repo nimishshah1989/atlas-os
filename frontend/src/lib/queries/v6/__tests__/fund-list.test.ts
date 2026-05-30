@@ -59,6 +59,11 @@ describe('getFundListPage', () => {
         amc_avg_composite: '62.5',
         as_of_date: '2026-05-22',
         refreshed_at: '2026-05-23T14:30:00Z',
+        ret_1m: '0.0123',
+        ret_3m: '0.0456',
+        ret_6m: '0.0890',
+        ret_12m: '0.2411',
+        rs_pctile_3m: '0.7647',
       },
     ])
     const p = await getFundListPage()
@@ -76,6 +81,32 @@ describe('getFundListPage', () => {
     expect(r.top_holdings).toEqual([{ symbol: 'RELIANCE', pct: 8.5 }])
     expect(r.amc_total_funds).toBe(12)
     expect(r.amc_avg_composite).toBeCloseTo(62.5)
+    // Period returns + RS percentile joined from atlas_fund_metrics_daily
+    expect(r.ret_12m).toBeCloseTo(0.2411)
+    expect(r.rs_pctile_3m).toBeCloseTo(0.7647)
+  })
+
+  it('leaves returns null when the metrics join misses (uncovered fund)', async () => {
+    sqlMock.mockResolvedValueOnce([
+      {
+        scheme_code: 'F0NOMETRICS', isin: null, fund_name: 'No Metrics Fund',
+        amc: 'AMC', fund_category: null, fund_style: null, broad_category: null,
+        plan_type: null, benchmark_code: null, aum_cr: null, composite_score: '55.0',
+        risk_adjusted_return_score: null, holdings_conviction_score: null,
+        style_sector_score: null, cost_manager_score: null, rank_in_category: null,
+        category_size: null, is_atlas_leader: false, is_avoid: false,
+        confidence_low: false, holdings_unjoinable: false, survivorship_exposure_pct: null,
+        peer_quartile: null, recommendation: null, consistency_months: null, nav: null,
+        expense_ratio: null, top_holdings: null, sub_metrics: null, eli5: null,
+        amc_total_funds: 1, amc_q1_count: 0, amc_q4_count: 0, amc_avg_composite: null,
+        as_of_date: '2026-05-29', refreshed_at: null,
+        ret_1m: null, ret_3m: null, ret_6m: null, ret_12m: null, rs_pctile_3m: null,
+      },
+    ])
+    const p = await getFundListPage()
+    expect(p.rows[0].composite_score).toBeCloseTo(55.0)
+    expect(p.rows[0].ret_12m).toBeNull()
+    expect(p.rows[0].rs_pctile_3m).toBeNull()
   })
 
   it('handles null JSONB + nullable numerics', async () => {
