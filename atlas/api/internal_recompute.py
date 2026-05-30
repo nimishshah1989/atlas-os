@@ -35,6 +35,8 @@ from atlas.api.agents import router as agents_router
 from atlas.api.intraday import router as intraday_router
 from atlas.api.kite_auth import router as kite_auth_router
 from atlas.db import get_engine
+from atlas.tv.routes import _stocks_router as tv_stocks_router
+from atlas.tv.routes import router as tv_router
 
 log = structlog.get_logger()
 
@@ -51,6 +53,13 @@ app.include_router(agents_router)
 # SP08: KiteConnect OAuth + intraday data — public routes, no Bearer required.
 app.include_router(kite_auth_router)
 app.include_router(intraday_router)
+# v6 stock-detail surfaces: TV fundamentals (/v1/tv/metrics/{sym}) + RS-ratios
+# (/v1/stocks/{sym}/rs-ratios). The frontend's ATLAS_INTERNAL_API_BASE_URL
+# targets this :8002 app, so these routes must be mounted here (they otherwise
+# live only on the public atlas.api app). Public GETs, no Bearer — consistent
+# with intraday_router above.
+app.include_router(tv_router)
+app.include_router(tv_stocks_router)
 
 # Resolved once at import time — atlas/api/internal_recompute.py → atlas-os/
 ATLAS_ROOT = Path(__file__).resolve().parent.parent.parent
