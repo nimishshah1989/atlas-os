@@ -92,12 +92,65 @@ def test_compute_rs_ratios_returns_vs_sector():
     index_rows = [{"date": d.date(), "index_code": "NIFTY 50", "close": 200.0} for d in dates] + [
         {"date": d.date(), "index_code": "NIFTY IT", "close": 150.0} for d in dates
     ]
-    engine = _make_engine("Information Technology", stock_rows, index_rows)
+    # "IT" is the real sector string in atlas.atlas_universe_stocks (not the
+    # GICS-style "Information Technology" the old mapping keyed on).
+    engine = _make_engine("IT", stock_rows, index_rows)
     result = compute_rs_ratios("TCS", days=30, engine=engine)
 
     assert "vs_sector" in result
     assert len(result["vs_sector"]) == 5
     assert result["sector_index_code"] == "NIFTY IT"
+
+
+# Real (db_sector, index_code) pairs: keys are the exact strings in
+# atlas.atlas_universe_stocks.sector; values are real index_code strings in
+# public.de_index_prices. Guards against the regression where the mapping keyed
+# on GICS-style names that never matched the DB, so vs_sector silently fell back
+# to NIFTY 50 while still being labelled "vs sector".
+_REAL_SECTOR_INDEX_PAIRS = [
+    ("Banking", "NIFTY BANK"),
+    ("Oil & Gas", "NIFTY OIL AND GAS"),
+    ("IT", "NIFTY IT"),
+    ("Financial Services", "NIFTY FIN SERVICE"),
+    ("Pharma", "NIFTY PHARMA"),
+    ("FMCG", "NIFTY FMCG"),
+    ("Automobile", "NIFTY AUTO"),
+    ("Metal", "NIFTY METAL"),
+    ("Chemicals", "NIFTY CHEMICALS"),
+    ("Healthcare", "NIFTY HEALTHCARE"),
+    ("Energy", "NIFTY ENERGY"),
+    ("Realty", "NIFTY REALTY"),
+    ("Consumer Durables", "NIFTY CONSR DURBL"),
+    ("Capital Goods", "NIFTY INDIA MFG"),
+    ("Infrastructure", "NIFTY INFRA"),
+    ("Defence", "NIFTY IND DEFENCE"),
+    ("Digital", "NIFTY IND DIGITAL"),
+    ("Capital Markets", "NIFTY CAPITAL MKT"),
+    ("Tourism", "NIFTY IND TOURISM"),
+    ("Consumption", "NIFTY CONSUMPTION"),
+    ("MNC", "NIFTY MNC"),
+    ("Housing", "NIFTY HOUSING"),
+    ("EV & Auto", "NIFTY EV"),
+    ("Media", "NIFTY MEDIA"),
+    ("Logistics", "NIFTY INFRALOG"),
+]
+
+
+@pytest.mark.parametrize("db_sector, expected_index_code", _REAL_SECTOR_INDEX_PAIRS)
+def test_compute_rs_ratios_maps_real_db_sector_to_index_code(
+    db_sector: str, expected_index_code: str
+) -> None:
+    dates = pd.date_range("2025-06-01", periods=5)
+    stock_rows = [{"date": d.date(), "close": 100.0 + i} for i, d in enumerate(dates)]
+    index_rows = [{"date": d.date(), "index_code": "NIFTY 50", "close": 200.0} for d in dates] + [
+        {"date": d.date(), "index_code": expected_index_code, "close": 150.0} for d in dates
+    ]
+
+    engine = _make_engine(db_sector, stock_rows, index_rows)
+    result = compute_rs_ratios("TEST", days=30, engine=engine)
+
+    assert result["sector_index_code"] == expected_index_code
+    assert len(result["vs_sector"]) == 5
 
 
 def test_compute_rs_ratios_breaking_out_when_at_peak():
