@@ -162,9 +162,7 @@ def provision_tv_alerts(alleyway_tool_path: str | None = None) -> dict:
         if not new_tickers and not removed_tickers:
             log.info("provisioner_no_changes")
             total_active = conn.execute(
-                text(
-                    "SELECT COUNT(DISTINCT ticker) FROM tv_alert_registry " "WHERE is_active = TRUE"
-                )
+                text("SELECT COUNT(DISTINCT ticker) FROM tv_alert_registry WHERE is_active = TRUE")
             ).scalar()
             return {
                 "added": 0,
@@ -271,7 +269,7 @@ def provision_tv_alerts(alleyway_tool_path: str | None = None) -> dict:
     # Count total active after changes
     with engine.connect() as conn:
         total_active = conn.execute(
-            text("SELECT COUNT(DISTINCT ticker) FROM tv_alert_registry " "WHERE is_active = TRUE")
+            text("SELECT COUNT(DISTINCT ticker) FROM tv_alert_registry WHERE is_active = TRUE")
         ).scalar()
 
     log.info(

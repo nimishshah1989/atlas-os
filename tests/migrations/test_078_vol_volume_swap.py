@@ -71,9 +71,9 @@ def test_theta_contraction_inserted(db_engine: sa.Engine) -> None:
             """)
         ).fetchall()
     assert len(rows) == 1, "expected exactly 1 active theta_contraction row"
-    assert (
-        abs(float(rows[0].threshold_value) - 0.95) < 1e-6
-    ), f"theta_contraction value should be 0.95, got {rows[0].threshold_value}"
+    assert abs(float(rows[0].threshold_value) - 0.95) < 1e-6, (
+        f"theta_contraction value should be 0.95, got {rows[0].threshold_value}"
+    )
 
 
 @_SKIP_INTEGRATION
@@ -90,9 +90,9 @@ def test_theta_obv_slope_neg_inserted(db_engine: sa.Engine) -> None:
             """)
         ).fetchall()
     assert len(rows) == 1, "expected exactly 1 active theta_obv_slope_neg row"
-    assert (
-        abs(float(rows[0].threshold_value) - 0.0) < 1e-6
-    ), f"theta_obv_slope_neg value should be 0.0, got {rows[0].threshold_value}"
+    assert abs(float(rows[0].threshold_value) - 0.0) < 1e-6, (
+        f"theta_obv_slope_neg value should be 0.0, got {rows[0].threshold_value}"
+    )
 
 
 @_SKIP_INTEGRATION

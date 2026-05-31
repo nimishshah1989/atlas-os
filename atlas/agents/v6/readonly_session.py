@@ -306,9 +306,7 @@ def open_readonly_session(
             log.warning(
                 "agent_acl_role_missing",
                 role=role,
-                msg=(
-                    "agent ACL: Postgres role missing; " "relying on application-layer guard only"
-                ),
+                msg=("agent ACL: Postgres role missing; relying on application-layer guard only"),
             )
         # Begin a transaction so SET LOCAL + read-only mode survive only
         # this session.

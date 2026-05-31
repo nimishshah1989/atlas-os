@@ -164,7 +164,9 @@ def main() -> int:
 
         nav_data = fetch_full_history(amfi_code)
         if len(nav_data) < MIN_MFAPI_ROWS:
-            print(f"  [{i+1}/{len(thin)}] {mstar_id}: only {len(nav_data)} rows on mfapi.in — skip")
+            print(
+                f"  [{i + 1}/{len(thin)}] {mstar_id}: only {len(nav_data)} rows on mfapi.in — skip"
+            )
             time.sleep(REQUEST_DELAY)
             continue
 
@@ -188,7 +190,7 @@ def main() -> int:
         total_inserted += inserted
         funds_recovered += 1
         print(
-            f"  [{i+1}/{len(thin)}] {mstar_id} (amfi={amfi_code}): {len(rows)} rows from mfapi → {'inserted' if not dry_run else 'would insert'} {len(rows)}"
+            f"  [{i + 1}/{len(thin)}] {mstar_id} (amfi={amfi_code}): {len(rows)} rows from mfapi → {'inserted' if not dry_run else 'would insert'} {len(rows)}"
         )
 
         time.sleep(REQUEST_DELAY)

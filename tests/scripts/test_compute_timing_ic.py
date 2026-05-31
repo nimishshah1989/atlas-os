@@ -44,9 +44,9 @@ def test_all_configs_are_3_tuples() -> None:
 
 def test_stage_filter_is_int_or_none() -> None:
     for signal_col, fwd_col, stage_filter in SIGNAL_CONFIGS:
-        assert stage_filter is None or isinstance(
-            stage_filter, int
-        ), f"stage_filter must be int or None, got {stage_filter!r} for {signal_col}/{fwd_col}"
+        assert stage_filter is None or isinstance(stage_filter, int), (
+            f"stage_filter must be int or None, got {stage_filter!r} for {signal_col}/{fwd_col}"
+        )
 
 
 def test_fwd_col_format_parseable() -> None:

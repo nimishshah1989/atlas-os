@@ -391,9 +391,9 @@ def test_integration_mv_exists_and_has_rows() -> None:
     engine = sa.create_engine(url)
     with engine.connect() as conn:
         row_count = conn.execute(sa.text("SELECT COUNT(*) FROM atlas.mv_india_pulse")).scalar()
-    assert (
-        row_count is not None and row_count >= 1260
-    ), f"expected ≥ 1260 rows (5y), got {row_count}"
+    assert row_count is not None and row_count >= 1260, (
+        f"expected ≥ 1260 rows (5y), got {row_count}"
+    )
 
 
 @_SKIP_INTEGRATION

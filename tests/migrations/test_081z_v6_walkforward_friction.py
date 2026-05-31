@@ -798,9 +798,9 @@ class TestRegimeThresholdSeeds:
             value = Decimal(row[1])
             min_allowed = Decimal(row[6])
             max_allowed = Decimal(row[7])
-            assert (
-                min_allowed <= value <= max_allowed
-            ), f"{row[0]} value {value} outside [{min_allowed}, {max_allowed}]"
+            assert min_allowed <= value <= max_allowed, (
+                f"{row[0]} value {value} outside [{min_allowed}, {max_allowed}]"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -1005,14 +1005,14 @@ class TestDowngradeEnumDrops:
         assert "atlas_friction_component" in self._record_drops()
 
     def test_does_not_drop_atlas_tenure(self) -> None:
-        assert (
-            "atlas_tenure" not in self._record_drops()
-        ), "atlas_tenure owned by 080; 081_z must not drop it"
+        assert "atlas_tenure" not in self._record_drops(), (
+            "atlas_tenure owned by 080; 081_z must not drop it"
+        )
 
     def test_does_not_drop_atlas_cap_tier(self) -> None:
-        assert (
-            "atlas_cap_tier" not in self._record_drops()
-        ), "atlas_cap_tier owned by 080; 081_z must not drop it"
+        assert "atlas_cap_tier" not in self._record_drops(), (
+            "atlas_cap_tier owned by 080; 081_z must not drop it"
+        )
 
 
 class TestDowngradeIndexDrops:

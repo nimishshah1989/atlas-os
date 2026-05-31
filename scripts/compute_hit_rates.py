@@ -58,7 +58,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     n_with_rate = sum(1 for r in rows if r.hit_rate is not None)
-    print(f"Computed hit-rate for {len(rows)} instruments " f"({n_with_rate} with sufficient n).")
+    print(f"Computed hit-rate for {len(rows)} instruments ({n_with_rate} with sufficient n).")
 
     if args.persist:
         n = upsert_hit_rates_batch(engine, rows)

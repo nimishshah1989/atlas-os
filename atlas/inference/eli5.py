@@ -46,18 +46,17 @@ _TEMPLATES: dict[str, str] = {
         "momentum with {tenure} runway."
     ),
     "consolidation_breakout": (
-        "{cap_tier}-cap broke out of a tight base on volume — clean " "breakout setup for {tenure}."
+        "{cap_tier}-cap broke out of a tight base on volume — clean breakout setup for {tenure}."
     ),
     "liquidity_expansion": (
         "Volume regime is expanding on a {cap_tier}-cap with positive RS — "
         "institutional accumulation visible over {tenure}."
     ),
     "structural": (
-        "Long-duration {cap_tier}-cap winner — structural compounder thesis "
-        "with {tenure} horizon."
+        "Long-duration {cap_tier}-cap winner — structural compounder thesis with {tenure} horizon."
     ),
     "low_vol_carry": (
-        "Low-vol {cap_tier}-cap with positive carry — risk-adjusted alpha " "over {tenure}."
+        "Low-vol {cap_tier}-cap with positive carry — risk-adjusted alpha over {tenure}."
     ),
     "breakout_with_pullback": (
         "Broke out then pulled back to support on a {cap_tier}-cap — high-"
@@ -72,7 +71,7 @@ _TEMPLATES: dict[str, str] = {
         "adjusted alpha over {tenure}."
     ),
     "liquidity_thrust_mfi": (
-        "Money Flow Index thrust on a {cap_tier}-cap — strong buying " "pressure over {tenure}."
+        "Money Flow Index thrust on a {cap_tier}-cap — strong buying pressure over {tenure}."
     ),
     "obv_thrust": (
         "On-Balance Volume thrust on a {cap_tier}-cap — accumulation "
@@ -104,7 +103,7 @@ _TEMPLATES: dict[str, str] = {
         "low-quality drift over {tenure}."
     ),
     "overextension": (
-        "{cap_tier}-cap over-extended on every dimension — mean reversion " "risk over {tenure}."
+        "{cap_tier}-cap over-extended on every dimension — mean reversion risk over {tenure}."
     ),
     "sector_drag": (
         "{cap_tier}-cap inside a weak sector with elevated vol — sector-"
@@ -115,7 +114,7 @@ _TEMPLATES: dict[str, str] = {
         "trap pattern with {tenure} downside."
     ),
     "bab_high_beta_short": (
-        "High-beta {cap_tier}-cap with deteriorating RS — leveraged " "downside over {tenure}."
+        "High-beta {cap_tier}-cap with deteriorating RS — leveraged downside over {tenure}."
     ),
     "mfi_overbought_distrib": (
         "Money Flow Index overbought with distribution on a {cap_tier}-cap "

@@ -88,9 +88,9 @@ class TestUpgrade:
     def test_upgrade_creates_exactly_three_tables(self) -> None:
         mock_ct, _, _ = self._run_upgrade()
         created_names = [c.args[0] for c in mock_ct.call_args_list]
-        assert (
-            len(created_names) == 3
-        ), f"upgrade() must create exactly 3 tables, got {len(created_names)}: {created_names}"
+        assert len(created_names) == 3, (
+            f"upgrade() must create exactly 3 tables, got {len(created_names)}: {created_names}"
+        )
 
     def test_upgrade_creates_tables_in_dependency_order(self) -> None:
         """tv_alert_registry and tv_signal_reports must come before atlas_signal_alerts
@@ -109,23 +109,23 @@ class TestUpgrade:
     def test_upgrade_creates_ticker_index_on_registry(self) -> None:
         _, mock_ci, _ = self._run_upgrade()
         index_names = [c.args[0] for c in mock_ci.call_args_list]
-        assert (
-            "idx_tv_alert_registry_ticker" in index_names
-        ), f"upgrade() must create idx_tv_alert_registry_ticker. Indexes: {index_names}"
+        assert "idx_tv_alert_registry_ticker" in index_names, (
+            f"upgrade() must create idx_tv_alert_registry_ticker. Indexes: {index_names}"
+        )
 
     def test_upgrade_creates_ticker_index_on_signal_reports(self) -> None:
         _, mock_ci, _ = self._run_upgrade()
         index_names = [c.args[0] for c in mock_ci.call_args_list]
-        assert (
-            "idx_tv_signal_reports_ticker" in index_names
-        ), f"upgrade() must create idx_tv_signal_reports_ticker. Indexes: {index_names}"
+        assert "idx_tv_signal_reports_ticker" in index_names, (
+            f"upgrade() must create idx_tv_signal_reports_ticker. Indexes: {index_names}"
+        )
 
     def test_upgrade_creates_triggered_at_index(self) -> None:
         _, mock_ci, _ = self._run_upgrade()
         index_names = [c.args[0] for c in mock_ci.call_args_list]
-        assert (
-            "idx_tv_signal_reports_triggered_at" in index_names
-        ), f"upgrade() must create idx_tv_signal_reports_triggered_at. Indexes: {index_names}"
+        assert "idx_tv_signal_reports_triggered_at" in index_names, (
+            f"upgrade() must create idx_tv_signal_reports_triggered_at. Indexes: {index_names}"
+        )
 
     # --- dedup UNIQUE index (via op.execute) --------------------------------
 
@@ -143,8 +143,7 @@ class TestUpgrade:
         executed_sql = "\n".join(str(c.args[0]) for c in mock_ex.call_args_list if c.args)
         for fragment in ("ticker", "condition_code", "chart_type", "date_trunc"):
             assert fragment in executed_sql, (
-                f"Dedup UNIQUE index SQL must reference '{fragment}'. "
-                f"SQL emitted: {executed_sql!r}"
+                f"Dedup UNIQUE index SQL must reference '{fragment}'. SQL emitted: {executed_sql!r}"
             )
 
     def test_upgrade_dedup_index_uses_hour_truncation(self) -> None:
@@ -152,7 +151,7 @@ class TestUpgrade:
         _, _, mock_ex = self._run_upgrade()
         executed_sql = "\n".join(str(c.args[0]) for c in mock_ex.call_args_list if c.args)
         assert "hour" in executed_sql.lower(), (
-            "Dedup index must truncate triggered_at to 'hour'. " f"SQL emitted: {executed_sql!r}"
+            f"Dedup index must truncate triggered_at to 'hour'. SQL emitted: {executed_sql!r}"
         )
 
 
@@ -173,32 +172,29 @@ class TestDowngrade:
         mock_dt = self._run_downgrade()
         dropped_names = [c.args[0] for c in mock_dt.call_args_list]
         assert "atlas_signal_alerts" in dropped_names, (
-            f"downgrade() must call op.drop_table('atlas_signal_alerts'). "
-            f"Dropped: {dropped_names}"
+            f"downgrade() must call op.drop_table('atlas_signal_alerts'). Dropped: {dropped_names}"
         )
 
     def test_downgrade_drops_tv_signal_reports(self) -> None:
         mock_dt = self._run_downgrade()
         dropped_names = [c.args[0] for c in mock_dt.call_args_list]
         assert "tv_signal_reports" in dropped_names, (
-            f"downgrade() must call op.drop_table('tv_signal_reports'). "
-            f"Dropped: {dropped_names}"
+            f"downgrade() must call op.drop_table('tv_signal_reports'). Dropped: {dropped_names}"
         )
 
     def test_downgrade_drops_tv_alert_registry(self) -> None:
         mock_dt = self._run_downgrade()
         dropped_names = [c.args[0] for c in mock_dt.call_args_list]
         assert "tv_alert_registry" in dropped_names, (
-            f"downgrade() must call op.drop_table('tv_alert_registry'). "
-            f"Dropped: {dropped_names}"
+            f"downgrade() must call op.drop_table('tv_alert_registry'). Dropped: {dropped_names}"
         )
 
     def test_downgrade_drops_exactly_three_tables(self) -> None:
         mock_dt = self._run_downgrade()
         dropped_names = [c.args[0] for c in mock_dt.call_args_list]
-        assert (
-            len(dropped_names) == 3
-        ), f"downgrade() must drop exactly 3 tables, got {len(dropped_names)}: {dropped_names}"
+        assert len(dropped_names) == 3, (
+            f"downgrade() must drop exactly 3 tables, got {len(dropped_names)}: {dropped_names}"
+        )
 
     def test_downgrade_drops_alerts_before_reports(self) -> None:
         """atlas_signal_alerts (FK child) must be dropped before tv_signal_reports (FK parent)."""
@@ -237,9 +233,9 @@ class TestMigrationMetadata:
 
     def test_down_revision(self) -> None:
         mod = _load_migration()
-        assert (
-            mod.down_revision == "063"
-        ), f"Expected down_revision='063', got {mod.down_revision!r}"
+        assert mod.down_revision == "063", (
+            f"Expected down_revision='063', got {mod.down_revision!r}"
+        )
 
     def test_branch_labels_none(self) -> None:
         mod = _load_migration()
@@ -270,8 +266,7 @@ class TestMigration064Integration:
         with engine.connect() as conn:
             result = conn.execute(
                 sa.text(
-                    "SELECT 1 FROM information_schema.tables "
-                    "WHERE table_name = 'tv_alert_registry'"
+                    "SELECT 1 FROM information_schema.tables WHERE table_name = 'tv_alert_registry'"
                 )
             )
             assert result.fetchone() is not None, "Table tv_alert_registry not found in DB"
@@ -281,8 +276,7 @@ class TestMigration064Integration:
         with engine.connect() as conn:
             result = conn.execute(
                 sa.text(
-                    "SELECT 1 FROM information_schema.tables "
-                    "WHERE table_name = 'tv_signal_reports'"
+                    "SELECT 1 FROM information_schema.tables WHERE table_name = 'tv_signal_reports'"
                 )
             )
             assert result.fetchone() is not None, "Table tv_signal_reports not found in DB"
@@ -302,6 +296,6 @@ class TestMigration064Integration:
         engine = self._engine()
         with engine.connect() as conn:
             result = conn.execute(
-                sa.text("SELECT 1 FROM pg_indexes " "WHERE indexname = 'idx_tv_signal_dedup'")
+                sa.text("SELECT 1 FROM pg_indexes WHERE indexname = 'idx_tv_signal_dedup'")
             )
             assert result.fetchone() is not None, "Dedup index idx_tv_signal_dedup not found in DB"

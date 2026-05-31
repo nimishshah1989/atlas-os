@@ -638,9 +638,9 @@ class TestDowngrade:
         """
         sql_list = _executed_sql_downgrade()
         for sql in sql_list:
-            assert not (
-                "atlas_tenure" in sql and "DROP TYPE" in sql.upper()
-            ), f"downgrade must not DROP TYPE atlas_tenure: {sql!r}"
+            assert not ("atlas_tenure" in sql and "DROP TYPE" in sql.upper()), (
+                f"downgrade must not DROP TYPE atlas_tenure: {sql!r}"
+            )
 
     def test_does_not_drop_atlas_exit_reason_enum(self) -> None:
         """atlas_exit_reason enum is owned by migration 080 — 084 must NOT
@@ -648,9 +648,9 @@ class TestDowngrade:
         """
         sql_list = _executed_sql_downgrade()
         for sql in sql_list:
-            assert not (
-                "atlas_exit_reason" in sql and "DROP TYPE" in sql.upper()
-            ), f"downgrade must not DROP TYPE atlas_exit_reason: {sql!r}"
+            assert not ("atlas_exit_reason" in sql and "DROP TYPE" in sql.upper()), (
+                f"downgrade must not DROP TYPE atlas_exit_reason: {sql!r}"
+            )
 
 
 # ---------------------------------------------------------------------------

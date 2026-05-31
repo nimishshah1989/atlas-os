@@ -582,9 +582,9 @@ def compute_daily(
         INSERT (~5 s aggregate); the rest is the three vectorised phases.
     """
     today = datetime.now(UTC).date()
-    assert (
-        target_date <= today
-    ), f"daily inference look-ahead violation: target_date={target_date} > today={today}"
+    assert target_date <= today, (
+        f"daily inference look-ahead violation: target_date={target_date} > today={today}"
+    )
 
     engine = db_engine or get_engine()
     started = time.time()

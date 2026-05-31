@@ -452,9 +452,9 @@ class TestEnumLifecycleUpgrade:
             mock_op.get_bind.return_value = MagicMock()
             mod.upgrade()
 
-        assert (
-            "atlas_drift_status" not in created_names
-        ), "atlas_drift_status is owned by 080 and must not be recreated"
+        assert "atlas_drift_status" not in created_names, (
+            "atlas_drift_status is owned by 080 and must not be recreated"
+        )
 
     def test_drift_action_values(self) -> None:
         """atlas_drift_action declares ('flag', 'clear', 'deprecate')."""
@@ -599,9 +599,9 @@ class TestDowngrade:
             mock_op.get_bind.return_value = MagicMock()
             mod.downgrade()
 
-        assert (
-            "atlas_drift_status" not in dropped_names
-        ), "atlas_drift_status owned by 080; 088 must not drop it"
+        assert "atlas_drift_status" not in dropped_names, (
+            "atlas_drift_status owned by 080; 088 must not drop it"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -633,8 +633,7 @@ class TestLiveDB:
 
     def test_window_order_check_rejects_inverted(self) -> None:
         pytest.skip(
-            "verify INSERT with realized_window_start > realized_window_end "
-            "raises check_violation"
+            "verify INSERT with realized_window_start > realized_window_end raises check_violation"
         )
 
     def test_n_realized_check_rejects_negative(self) -> None:

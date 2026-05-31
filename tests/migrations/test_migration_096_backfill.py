@@ -150,9 +150,9 @@ class TestUpgradeUsesInsertSelect:
             re.IGNORECASE,
         )
         for sql in sqls:
-            assert not uuid_re.search(
-                sql
-            ), f"Found hardcoded UUID literal in VALUES clause: {sql[:120]}"
+            assert not uuid_re.search(sql), (
+                f"Found hardcoded UUID literal in VALUES clause: {sql[:120]}"
+            )
 
     def test_regime_fallback_covers_non_enum_values(self) -> None:
         """The SQL must handle 'Cautious' (pre-v6 label not in atlas_regime_state enum).
@@ -189,9 +189,9 @@ class TestUpgradeUsesInsertSelect:
 
         signal_sqls = [s for s in sqls if "atlas_signal_calls" in s and "INSERT" in s.upper()]
         assert signal_sqls
-        assert (
-            "NOT EXISTS" in signal_sqls[0].upper()
-        ), "signal_calls INSERT missing NOT EXISTS idempotency guard"
+        assert "NOT EXISTS" in signal_sqls[0].upper(), (
+            "signal_calls INSERT missing NOT EXISTS idempotency guard"
+        )
 
 
 class TestDowngradeUsesDelete:

@@ -24,7 +24,7 @@ class TestPersist:
         eng = get_engine()
         with eng.begin() as c:
             c.execute(
-                text("DELETE FROM atlas.atlas_stock_conviction_daily " "WHERE date = :d"),
+                text("DELETE FROM atlas.atlas_stock_conviction_daily WHERE date = :d"),
                 {"d": _SENTINEL_DATE},
             )
             c.execute(
@@ -34,7 +34,7 @@ class TestPersist:
         yield
         with eng.begin() as c:
             c.execute(
-                text("DELETE FROM atlas.atlas_stock_conviction_daily " "WHERE date = :d"),
+                text("DELETE FROM atlas.atlas_stock_conviction_daily WHERE date = :d"),
                 {"d": _SENTINEL_DATE},
             )
             c.execute(
@@ -46,7 +46,7 @@ class TestPersist:
         eng = get_engine()
         with eng.connect() as c:
             iid = c.execute(
-                text("SELECT instrument_id::text " "FROM atlas.atlas_stock_states_daily LIMIT 1")
+                text("SELECT instrument_id::text FROM atlas.atlas_stock_states_daily LIMIT 1")
             ).scalar()
         assert iid is not None
         df = pd.DataFrame(
@@ -74,7 +74,7 @@ class TestPersist:
         eng = get_engine()
         with eng.connect() as c:
             iid = c.execute(
-                text("SELECT instrument_id::text " "FROM atlas.atlas_stock_states_daily LIMIT 1")
+                text("SELECT instrument_id::text FROM atlas.atlas_stock_states_daily LIMIT 1")
             ).scalar()
         assert iid is not None
         row = {
@@ -107,7 +107,7 @@ class TestPersist:
         eng = get_engine()
         with eng.connect() as c:
             iid = c.execute(
-                text("SELECT instrument_id::text " "FROM atlas.atlas_stock_states_daily LIMIT 1")
+                text("SELECT instrument_id::text FROM atlas.atlas_stock_states_daily LIMIT 1")
             ).scalar()
         assert iid is not None
         df = pd.DataFrame(

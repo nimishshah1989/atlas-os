@@ -336,9 +336,9 @@ class TestDowngrade:
             if m in ("drop_index", "execute")
         ]
         # Expect partial index drop via execute + two regular index drops.
-        assert (
-            len(index_ops_before) >= 3
-        ), f"expected >=3 index drops before drop_table; got {recorded}"
+        assert len(index_ops_before) >= 3, (
+            f"expected >=3 index drops before drop_table; got {recorded}"
+        )
 
     def test_does_not_drop_atlas_cell_action_enum(self) -> None:
         """The atlas_cell_action enum is owned by migration 080 — 082 must
@@ -352,9 +352,9 @@ class TestDowngrade:
         # If we had attempted to drop the enum, bind would have been called.
         # We didn't — confirm by checking bind has no drop-related calls.
         for call in bind.mock_calls:
-            assert "atlas_cell_action" not in str(
-                call
-            ), "downgrade must not drop the atlas_cell_action enum"
+            assert "atlas_cell_action" not in str(call), (
+                "downgrade must not drop the atlas_cell_action enum"
+            )
 
 
 # ---------------------------------------------------------------------------

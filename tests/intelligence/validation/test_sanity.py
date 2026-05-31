@@ -84,6 +84,6 @@ class TestSP01ValidationStrategy:
         """Validation strategy step 3: Q_top − Q_bot > 0 on a strong signal."""
         factor, returns = synthetic_universe
         spread = compute_quantile_spread(factor, returns, n_quantiles=5)
-        assert (
-            spread > 0
-        ), f"Synthetic momentum signal should have positive Q5−Q1 spread, got {spread:.4f}"
+        assert spread > 0, (
+            f"Synthetic momentum signal should have positive Q5−Q1 spread, got {spread:.4f}"
+        )

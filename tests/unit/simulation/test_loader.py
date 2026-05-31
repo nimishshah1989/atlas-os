@@ -69,6 +69,6 @@ def test_strategy_config_has_required_fields():
 def test_threshold_overrides_is_empty_dict_by_default():
     configs = load_all_configs()
     for cfg in configs:
-        assert isinstance(
-            cfg.threshold_overrides, dict
-        ), f"{cfg.name} threshold_overrides is not a dict"
+        assert isinstance(cfg.threshold_overrides, dict), (
+            f"{cfg.name} threshold_overrides is not a dict"
+        )

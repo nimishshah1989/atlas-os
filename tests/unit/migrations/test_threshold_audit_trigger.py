@@ -73,16 +73,16 @@ class TestUpgradeSQLContent:
     def test_upgrade_emits_trigger_function_name(self) -> None:
         sqls = self._run_upgrade_and_collect()
         combined = "\n".join(sqls)
-        assert (
-            "atlas.fn_threshold_audit" in combined
-        ), "upgrade() SQL must reference the audit function atlas.fn_threshold_audit"
+        assert "atlas.fn_threshold_audit" in combined, (
+            "upgrade() SQL must reference the audit function atlas.fn_threshold_audit"
+        )
 
     def test_upgrade_emits_trigger_name(self) -> None:
         sqls = self._run_upgrade_and_collect()
         combined = "\n".join(sqls)
-        assert (
-            "trg_threshold_audit" in combined
-        ), "upgrade() SQL must reference the trigger trg_threshold_audit"
+        assert "trg_threshold_audit" in combined, (
+            "upgrade() SQL must reference the trigger trg_threshold_audit"
+        )
 
     def test_upgrade_emits_current_setting_call(self) -> None:
         sqls = self._run_upgrade_and_collect()
@@ -96,33 +96,33 @@ class TestUpgradeSQLContent:
     def test_upgrade_emits_distinct_guard(self) -> None:
         sqls = self._run_upgrade_and_collect()
         combined = "\n".join(sqls)
-        assert (
-            "IS DISTINCT FROM" in combined
-        ), "upgrade() SQL must use IS DISTINCT FROM to guard against no-op updates"
+        assert "IS DISTINCT FROM" in combined, (
+            "upgrade() SQL must use IS DISTINCT FROM to guard against no-op updates"
+        )
 
     def test_upgrade_emits_threshold_value_guard(self) -> None:
         sqls = self._run_upgrade_and_collect()
         combined = "\n".join(sqls)
-        assert (
-            "threshold_value" in combined
-        ), "upgrade() SQL must reference threshold_value in the IS DISTINCT FROM guard"
+        assert "threshold_value" in combined, (
+            "upgrade() SQL must reference threshold_value in the IS DISTINCT FROM guard"
+        )
 
     def test_upgrade_emits_three_statements(self) -> None:
         mod = _load_migration()
         with patch("alembic.op.execute") as mock_exec:
             mod.upgrade()
         # CREATE FUNCTION + DROP TRIGGER + CREATE TRIGGER
-        assert (
-            mock_exec.call_count == 3
-        ), f"upgrade() should emit 3 op.execute() calls, got {mock_exec.call_count}"
+        assert mock_exec.call_count == 3, (
+            f"upgrade() should emit 3 op.execute() calls, got {mock_exec.call_count}"
+        )
 
     def test_downgrade_emits_two_statements(self) -> None:
         mod = _load_migration()
         with patch("alembic.op.execute") as mock_exec:
             mod.downgrade()
-        assert (
-            mock_exec.call_count == 2
-        ), f"downgrade() should emit 2 op.execute() calls, got {mock_exec.call_count}"
+        assert mock_exec.call_count == 2, (
+            f"downgrade() should emit 2 op.execute() calls, got {mock_exec.call_count}"
+        )
 
     def test_downgrade_emits_drop_trigger(self) -> None:
         mod = _load_migration()
@@ -130,9 +130,9 @@ class TestUpgradeSQLContent:
             mod.downgrade()
         sqls = _captured_sql_strings(mock_exec)
         combined = "\n".join(sqls)
-        assert (
-            "DROP TRIGGER IF EXISTS trg_threshold_audit" in combined
-        ), "downgrade() SQL must drop the trigger safely"
+        assert "DROP TRIGGER IF EXISTS trg_threshold_audit" in combined, (
+            "downgrade() SQL must drop the trigger safely"
+        )
 
     def test_downgrade_emits_drop_function(self) -> None:
         mod = _load_migration()
@@ -140,9 +140,9 @@ class TestUpgradeSQLContent:
             mod.downgrade()
         sqls = _captured_sql_strings(mock_exec)
         combined = "\n".join(sqls)
-        assert (
-            "DROP FUNCTION IF EXISTS atlas.fn_threshold_audit" in combined
-        ), "downgrade() SQL must drop the function safely"
+        assert "DROP FUNCTION IF EXISTS atlas.fn_threshold_audit" in combined, (
+            "downgrade() SQL must drop the function safely"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -236,15 +236,15 @@ class TestTriggerIntegration:
             row = _latest_history_row(conn, test_threshold_key)
 
         assert row is not None, "Expected a history row after UPDATE"
-        assert Decimal(str(row.old_value)) == Decimal(
-            "10.0"
-        ), f"old_value mismatch: {row.old_value}"
-        assert Decimal(str(row.new_value)) == Decimal(
-            "20.0"
-        ), f"new_value mismatch: {row.new_value}"
-        assert (
-            row.change_reason == "unit test reason"
-        ), f"change_reason mismatch: {row.change_reason!r}"
+        assert Decimal(str(row.old_value)) == Decimal("10.0"), (
+            f"old_value mismatch: {row.old_value}"
+        )
+        assert Decimal(str(row.new_value)) == Decimal("20.0"), (
+            f"new_value mismatch: {row.new_value}"
+        )
+        assert row.change_reason == "unit test reason", (
+            f"change_reason mismatch: {row.change_reason!r}"
+        )
 
     def test_trigger_logs_audit_with_null_reason_when_guc_unset(
         self,
@@ -268,9 +268,9 @@ class TestTriggerIntegration:
             row = _latest_history_row(conn, test_threshold_key)
 
         assert row is not None, "Expected a history row after UPDATE"
-        assert (
-            row.change_reason is None
-        ), f"change_reason should be NULL when GUC is unset, got {row.change_reason!r}"
+        assert row.change_reason is None, (
+            f"change_reason should be NULL when GUC is unset, got {row.change_reason!r}"
+        )
 
     def test_trigger_logs_audit_with_empty_reason_when_guc_empty_string(
         self,
@@ -293,9 +293,9 @@ class TestTriggerIntegration:
             row = _latest_history_row(conn, test_threshold_key)
 
         assert row is not None, "Expected a history row after UPDATE"
-        assert (
-            row.change_reason == ""
-        ), f"change_reason should be '' when GUC is empty string, got {row.change_reason!r}"
+        assert row.change_reason == "", (
+            f"change_reason should be '' when GUC is empty string, got {row.change_reason!r}"
+        )
 
     def test_trigger_does_not_log_when_value_unchanged(
         self,

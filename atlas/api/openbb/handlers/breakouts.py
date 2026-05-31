@@ -91,8 +91,7 @@ async def handle_breakouts(engine: Engine, query_text: str) -> AsyncGenerator[di
         TableData(
             name="Breakout Candidates",
             description=(
-                "Source: mv_breakout_candidates. "
-                "Stocks entering Leader or Strong RS state today."
+                "Source: mv_breakout_candidates. Stocks entering Leader or Strong RS state today."
             ),
             columns=_COLUMNS,
             rows=rows_out,

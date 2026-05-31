@@ -234,7 +234,7 @@ def main() -> int:
             continue
 
         print(
-            f"  [{i+1}/{len(stuck)}] {mstar_id} (amfi={amfi_code}, latest={latest_nav}) ...",
+            f"  [{i + 1}/{len(stuck)}] {mstar_id} (amfi={amfi_code}, latest={latest_nav}) ...",
             end="",
             flush=True,
         )

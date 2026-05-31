@@ -92,7 +92,7 @@ def main() -> None:
             print(f"      ✗ {msg}")
             errors.append(msg)
 
-    print(f"\n{'─'*55}")
+    print(f"\n{'─' * 55}")
     print(f"Total rows written: {total_rows:,}")
 
     if errors:

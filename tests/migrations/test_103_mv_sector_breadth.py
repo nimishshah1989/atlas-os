@@ -135,9 +135,9 @@ def test_upgrade_uses_effective_to_null_filter() -> None:
     """Universe stock join must filter effective_to IS NULL (current members only)."""
     statements = _executed_statements(_run_upgrade_with_mock())
     sql = "\n".join(statements).lower()
-    assert (
-        "effective_to is null" in sql
-    ), "Must filter atlas_universe_stocks on effective_to IS NULL"
+    assert "effective_to is null" in sql, (
+        "Must filter atlas_universe_stocks on effective_to IS NULL"
+    )
 
 
 def test_upgrade_date_spine_from_sector_metrics() -> None:
@@ -228,9 +228,9 @@ def test_upgrade_breadth_by_window_has_pct_positive() -> None:
 def test_upgrade_breadth_by_window_has_pct_top_decile_movers() -> None:
     statements = _executed_statements(_run_upgrade_with_mock())
     sql = "\n".join(statements)
-    assert (
-        "'pct_top_decile_movers'" in sql
-    ), "breadth_by_window must include pct_top_decile_movers key"
+    assert "'pct_top_decile_movers'" in sql, (
+        "breadth_by_window must include pct_top_decile_movers key"
+    )
 
 
 def test_upgrade_breadth_by_window_uses_ret_columns() -> None:
@@ -512,21 +512,21 @@ def test_mv_row_shape_latest() -> None:  # pragma: no cover
             row[6],
         )
         # constituent_count must be non-negative integer
-        assert (
-            constituent_count is not None and constituent_count >= 0
-        ), f"{sn}: constituent_count must be >= 0"
+        assert constituent_count is not None and constituent_count >= 0, (
+            f"{sn}: constituent_count must be >= 0"
+        )
         # breadth_by_window must be a list of 4 elements
         if breadth_window is not None:
             assert isinstance(breadth_window, list), f"{sn}: breadth_by_window must be a list"
             assert len(breadth_window) == 4, f"{sn}: breadth_by_window must have 4 elements"
             for elem in breadth_window:
                 assert "window" in elem, f"{sn}: breadth_by_window element missing 'window' key"
-                assert (
-                    "pct_positive" in elem
-                ), f"{sn}: breadth_by_window element missing 'pct_positive'"
-                assert (
-                    "pct_top_decile_movers" in elem
-                ), f"{sn}: breadth_by_window element missing 'pct_top_decile_movers'"
+                assert "pct_positive" in elem, (
+                    f"{sn}: breadth_by_window element missing 'pct_positive'"
+                )
+                assert "pct_top_decile_movers" in elem, (
+                    f"{sn}: breadth_by_window element missing 'pct_top_decile_movers'"
+                )
                 assert elem["window"] in (
                     "1W",
                     "1M",
@@ -683,6 +683,6 @@ def test_mv_date_range_starts_2020() -> None:  # pragma: no cover
         ).scalar()
 
     assert min_date is not None
-    assert min_date >= datetime.date(
-        2020, 1, 1
-    ), f"Expected date range starting 2020-01-01, got min_date={min_date}"
+    assert min_date >= datetime.date(2020, 1, 1), (
+        f"Expected date range starting 2020-01-01, got min_date={min_date}"
+    )

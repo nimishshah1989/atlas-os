@@ -180,7 +180,7 @@ def test_compute_vix_9d_ema_correct_length():
 
     df_in = pd.DataFrame(
         {
-            "date": [f"2024-01-{i+1:02d}" for i in range(20)],
+            "date": [f"2024-01-{i + 1:02d}" for i in range(20)],
             "india_vix": [13.0 + i * 0.1 for i in range(20)],
         }
     )
@@ -199,7 +199,7 @@ def test_compute_vix_9d_ema_first_8_rows_are_null():
 
     df_in = pd.DataFrame(
         {
-            "date": [f"2024-01-{i+1:02d}" for i in range(15)],
+            "date": [f"2024-01-{i + 1:02d}" for i in range(15)],
             "india_vix": [13.0 + i * 0.1 for i in range(15)],
         }
     )
@@ -220,7 +220,7 @@ def test_compute_vix_9d_ema_converges():
 
     df_in = pd.DataFrame(
         {
-            "date": [f"2024-01-{i+1:02d}" for i in range(15)],
+            "date": [f"2024-01-{i + 1:02d}" for i in range(15)],
             "india_vix": [13.0 + i * 0.1 for i in range(15)],
         }
     )

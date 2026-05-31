@@ -97,8 +97,7 @@ def main() -> int:
             f.write("|---|---|---|---|\n")
             for _, r in failed.head(20).iterrows():
                 f.write(
-                    f"| {r['instrument_id']} | {r['state_type']} | "
-                    f"{r['hand']} | {r['prod']} |\n"
+                    f"| {r['instrument_id']} | {r['state_type']} | {r['hand']} | {r['prod']} |\n"
                 )
             f.write("\n")
 

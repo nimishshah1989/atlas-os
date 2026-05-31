@@ -136,9 +136,9 @@ def test_contraction_fires_on_tightening_setup() -> None:
         row["low"] = peak * 0.975
     df = pd.DataFrame(rows)
     out = detect_signals(df, thresholds=THRESHOLDS)
-    assert out.tail(5)[
-        "is_contraction"
-    ].any(), "expected contraction to fire on tightening setup near 50-bar high"
+    assert out.tail(5)["is_contraction"].any(), (
+        "expected contraction to fire on tightening setup near 50-bar high"
+    )
 
 
 def test_short_series_no_crash() -> None:
@@ -199,9 +199,9 @@ def test_npc_fires_on_large_red_volume_candle() -> None:
     last["volume"] = 800_000.0  # >> prior down-day volumes
     df = pd.DataFrame(rows)
     out = detect_signals(df, thresholds=THRESHOLDS)
-    assert out.iloc[-1][
-        "is_npc"
-    ], "expected NPC to fire on large red candle near low with heavy volume"
+    assert out.iloc[-1]["is_npc"], (
+        "expected NPC to fire on large red candle near low with heavy volume"
+    )
 
 
 def test_ppc_requires_stage2() -> None:
@@ -268,6 +268,6 @@ def test_action_confidence_only_on_ppc_rows() -> None:
     out = detect_signals(df, thresholds=THRESHOLDS)
     assert "cts_action_confidence" in out.columns
     non_ppc = out[~out["is_ppc"].fillna(False)]
-    assert (
-        not non_ppc["cts_action_confidence"].fillna(False).any()
-    ), "action_confidence must be False on all non-PPC rows"
+    assert not non_ppc["cts_action_confidence"].fillna(False).any(), (
+        "action_confidence must be False on all non-PPC rows"
+    )

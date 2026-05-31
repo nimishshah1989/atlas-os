@@ -139,9 +139,9 @@ def test_upgrade_vol_uses_realized_vol_63() -> None:
     """vol_60d_ann must be computed from realized_vol_63 in stock_metrics_daily."""
     statements = _executed_statements(_run_upgrade_with_mock())
     sql = "\n".join(statements).lower()
-    assert (
-        "realized_vol_63" in sql
-    ), "vol_60d_ann must use realized_vol_63 from atlas_stock_metrics_daily"
+    assert "realized_vol_63" in sql, (
+        "vol_60d_ann must use realized_vol_63 from atlas_stock_metrics_daily"
+    )
 
 
 def test_upgrade_signals_filter_positive_action() -> None:
@@ -591,6 +591,6 @@ def test_mv_date_range_starts_2020() -> None:  # pragma: no cover
         ).scalar()
 
     assert min_date is not None
-    assert min_date >= datetime.date(
-        2020, 1, 1
-    ), f"Expected date range starting 2020-01-01, got min_date={min_date}"
+    assert min_date >= datetime.date(2020, 1, 1), (
+        f"Expected date range starting 2020-01-01, got min_date={min_date}"
+    )

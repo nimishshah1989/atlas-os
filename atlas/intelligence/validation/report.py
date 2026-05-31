@@ -63,7 +63,7 @@ def build_tearsheet_markdown(
     lines.append(f"- Turnover monthly ≤ {_CRITERIA['turnover_monthly_max']:.0%}")
     lines.append("")
     lines.append(
-        "> If criteria fail, the answer is informative, not a failure." " It drives SP04 redesign."
+        "> If criteria fail, the answer is informative, not a failure. It drives SP04 redesign."
     )
     lines.append("")
 

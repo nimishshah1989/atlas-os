@@ -157,8 +157,7 @@ class TestUpgradeAddsDeprecatedAtColumn:
         for call in mock_op.add_column.call_args_list:
             col = call.args[1]
             assert col.name == "deprecated_at", (
-                f"add_column on {call.args[0]} added column "
-                f"{col.name!r}; expected 'deprecated_at'"
+                f"add_column on {call.args[0]} added column {col.name!r}; expected 'deprecated_at'"
             )
 
     def test_added_column_is_tz_aware_datetime(self) -> None:
@@ -168,7 +167,7 @@ class TestUpgradeAddsDeprecatedAtColumn:
         for call in mock_op.add_column.call_args_list:
             col = call.args[1]
             assert isinstance(col.type, sa.DateTime), (
-                f"add_column on {call.args[0]} type is {col.type!r}; " f"expected sa.DateTime"
+                f"add_column on {call.args[0]} type is {col.type!r}; expected sa.DateTime"
             )
             assert col.type.timezone is True
 
@@ -176,16 +175,16 @@ class TestUpgradeAddsDeprecatedAtColumn:
         mock_op = _run_upgrade_with_mock()
         for call in mock_op.add_column.call_args_list:
             col = call.args[1]
-            assert (
-                col.nullable is True
-            ), f"add_column on {call.args[0]} not nullable — must be NULL by default"
+            assert col.nullable is True, (
+                f"add_column on {call.args[0]} not nullable — must be NULL by default"
+            )
 
     def test_add_column_uses_atlas_schema(self) -> None:
         mock_op = _run_upgrade_with_mock()
         for call in mock_op.add_column.call_args_list:
-            assert (
-                call.kwargs.get("schema") == "atlas"
-            ), f"add_column on {call.args[0]} not in atlas schema"
+            assert call.kwargs.get("schema") == "atlas", (
+                f"add_column on {call.args[0]} not in atlas schema"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -209,9 +208,9 @@ class TestUpgradeSetsTableComment:
         mod = _load()
         payloads = " ".join(_execute_payloads_upgrade())
         for table in mod.V5_DEPRECATED_TABLES:
-            assert (
-                f"COMMENT ON TABLE atlas.{table}" in payloads
-            ), f"COMMENT ON TABLE missing for {table}"
+            assert f"COMMENT ON TABLE atlas.{table}" in payloads, (
+                f"COMMENT ON TABLE missing for {table}"
+            )
 
     def test_comment_message_mentions_v5_and_v6_trunk(self) -> None:
         mod = _load()
@@ -228,9 +227,9 @@ class TestUpgradeSetsTableComment:
 
 def _bulk_insert_rows() -> list[dict[str, object]]:
     mock_op = _run_upgrade_with_mock()
-    assert (
-        mock_op.bulk_insert.call_count == 1
-    ), f"expected exactly one bulk_insert call, got {mock_op.bulk_insert.call_count}"
+    assert mock_op.bulk_insert.call_count == 1, (
+        f"expected exactly one bulk_insert call, got {mock_op.bulk_insert.call_count}"
+    )
     call = mock_op.bulk_insert.call_args_list[0]
     return call.args[1]
 
@@ -268,9 +267,9 @@ class TestPlaceholderSeed:
             for action in ("POSITIVE", "NEGATIVE")
             for tenure in ("6m", "12m")
         }
-        assert (
-            seen == expected
-        ), f"missing combos: {expected - seen}; extra combos: {seen - expected}"
+        assert seen == expected, (
+            f"missing combos: {expected - seen}; extra combos: {seen - expected}"
+        )
 
     def test_every_combo_appears_exactly_once(self) -> None:
         """Partial unique index uq_atlas_cell_definitions_active requires
@@ -390,9 +389,9 @@ class TestDowngrade:
         joined = " ".join(delete_payloads)
         # The constant value must NOT appear inline in the SQL string —
         # it goes via bindparams.
-        assert (
-            "PLACEHOLDER_2026-05-24" not in joined
-        ), "placeholder constant inlined into SQL; use bindparams instead"
+        assert "PLACEHOLDER_2026-05-24" not in joined, (
+            "placeholder constant inlined into SQL; use bindparams instead"
+        )
         assert ":ref" in joined
 
     def test_drops_deprecated_at_for_every_v5_table(self) -> None:
@@ -419,9 +418,9 @@ class TestDowngrade:
             None,
         )
         if first_drop_col_idx is not None:
-            assert (
-                delete_idx < first_drop_col_idx
-            ), "downgrade dropped a deprecated_at column before deleting placeholders"
+            assert delete_idx < first_drop_col_idx, (
+                "downgrade dropped a deprecated_at column before deleting placeholders"
+            )
 
     def test_drop_column_uses_atlas_schema(self) -> None:
         mock_op = _run_downgrade_with_mock()

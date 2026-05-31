@@ -348,9 +348,9 @@ class TestRetroactiveFKAdditions:
             # Signature: (constraint_name, source_table, referent_table,
             #            local_cols, remote_cols, ...)
             referent = call.args[2]
-            assert (
-                referent == "atlas_provenance_log"
-            ), f"FK referent should be atlas_provenance_log, got {referent}"
+            assert referent == "atlas_provenance_log", (
+                f"FK referent should be atlas_provenance_log, got {referent}"
+            )
 
     def test_all_fks_reference_run_id(self) -> None:
         for call in self._fk_calls():
@@ -408,9 +408,9 @@ class TestEnumReuse:
             mock_op.get_bind.return_value = MagicMock()
             mod.upgrade()
 
-        assert (
-            created_names == []
-        ), f"087 must not create any enums (introduces none); created: {created_names}"
+        assert created_names == [], (
+            f"087 must not create any enums (introduces none); created: {created_names}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -578,9 +578,9 @@ class TestDowngrade:
             mock_op.get_bind.return_value = MagicMock()
             mod.downgrade()
 
-        assert (
-            dropped_names == []
-        ), f"087 owns no enums; downgrade must not drop any: {dropped_names}"
+        assert dropped_names == [], (
+            f"087 owns no enums; downgrade must not drop any: {dropped_names}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -611,14 +611,14 @@ class TestLiveDB:
         )
 
     def test_sha256_check_rejects_non_hex(self) -> None:
-        pytest.skip("verify INSERT with input_dataset_sha256 = 'not-hex' raises " "check_violation")
+        pytest.skip("verify INSERT with input_dataset_sha256 = 'not-hex' raises check_violation")
 
     def test_code_commit_sha_check_rejects_empty(self) -> None:
         pytest.skip("verify INSERT with code_commit_sha = '' raises check_violation")
 
     def test_fk_set_null_on_provenance_delete_for_ledger(self) -> None:
         pytest.skip(
-            "verify DELETE on atlas_provenance_log row sets " "atlas_ledger.provenance_log_id NULL"
+            "verify DELETE on atlas_provenance_log row sets atlas_ledger.provenance_log_id NULL"
         )
 
     def test_fk_set_null_on_provenance_delete_for_macro_features(self) -> None:

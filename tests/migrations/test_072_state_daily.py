@@ -104,18 +104,18 @@ class TestUpgrade:
         # Column args are positional; scan all args for CheckConstraint with the right name
         call_args = mock_ct.call_args_list[0].args
         check_names = [a.name for a in call_args if isinstance(a, sa.CheckConstraint)]
-        assert (
-            "ck_state_value" in check_names
-        ), f"ck_state_value CHECK constraint not found. Constraints: {check_names}"
+        assert "ck_state_value" in check_names, (
+            f"ck_state_value CHECK constraint not found. Constraints: {check_names}"
+        )
 
     def test_check_constraint_urgency_value_present(self) -> None:
         """ck_urgency_value CHECK constraint must be emitted via create_table."""
         mock_ct, _ = self._run()
         call_args = mock_ct.call_args_list[0].args
         check_names = [a.name for a in call_args if isinstance(a, sa.CheckConstraint)]
-        assert (
-            "ck_urgency_value" in check_names
-        ), f"ck_urgency_value CHECK constraint not found. Constraints: {check_names}"
+        assert "ck_urgency_value" in check_names, (
+            f"ck_urgency_value CHECK constraint not found. Constraints: {check_names}"
+        )
 
 
 # ---------------------------------------------------------------------------

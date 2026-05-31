@@ -719,7 +719,7 @@ def main() -> int:
     _tier3_sector_states(engine, thresholds)
     _tier3_regime_states(engine, thresholds)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Total checks run: {checks_run}")
     print(f"Failures: {len(failures)}")
     if failures:

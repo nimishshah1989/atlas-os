@@ -496,9 +496,7 @@ def check_table(conn, spec: TableSpec, check_date: date) -> dict:
             )
             row = (
                 conn.execute(
-                    text(
-                        f"SELECT COUNT(*) AS total, {null_count_exprs} " f"FROM {qualified} {scope}"
-                    )
+                    text(f"SELECT COUNT(*) AS total, {null_count_exprs} FROM {qualified} {scope}")
                 )
                 .mappings()
                 .fetchone()
