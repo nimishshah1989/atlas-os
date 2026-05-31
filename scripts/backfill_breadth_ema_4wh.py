@@ -28,13 +28,14 @@ from pathlib import Path
 
 import pandas as pd
 import structlog
+from psycopg2.extras import execute_values
 from sqlalchemy import text
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from atlas.compute._session import bulk_upsert, df_to_pg_rows, open_compute_session  # noqa: E402
+from atlas.compute._session import PAGE_SIZE, df_to_pg_rows, open_compute_session  # noqa: E402
 from atlas.compute.breadth import compute_ma_breadth, compute_pct_4w_high  # noqa: E402
 from atlas.compute.regime import _load_stock_data_for_regime  # noqa: E402
 from atlas.config import Config  # noqa: E402
@@ -61,6 +62,52 @@ def _existing_dates(engine, start: date, end: date) -> set[date]:
             {"start": start, "end": end},
         )
         return {row[0] for row in result}
+
+
+def _write_breadth_updates(raw_conn, rows: list[tuple]) -> int:
+    """UPDATE-only write of the three breadth columns onto EXISTING regime rows.
+
+    ``rows`` are ``(date, pct_above_ema_20, pct_above_ema_100, pct_4w_high)``
+    tuples. Loads them into a temp table and ``UPDATE ... FROM`` the real table
+    on ``date`` so:
+
+      * dates with no regime row are skipped (never inserted), and
+      * ``regime_state`` is never touched.
+
+    An ``INSERT ... ON CONFLICT (date) DO UPDATE`` cannot be used here: PostgreSQL
+    validates NOT NULL on the candidate insert row *before* the conflict arbiter
+    redirects to DO UPDATE, so omitting ``regime_state`` (NOT NULL, no default)
+    raises a NOT-NULL violation even when the date already exists.
+
+    Does not commit — the caller owns the transaction. Returns rows updated.
+    """
+    if not rows:
+        return 0
+    cur = raw_conn.cursor()
+    cur.execute("SET statement_timeout = 0")
+    cur.execute("DROP TABLE IF EXISTS _bf_breadth")
+    cur.execute(
+        "CREATE TEMP TABLE _bf_breadth ("
+        "  date date PRIMARY KEY,"
+        "  pct_above_ema_20 numeric,"
+        "  pct_above_ema_100 numeric,"
+        "  pct_4w_high numeric"
+        ") ON COMMIT DROP"
+    )
+    execute_values(
+        cur,
+        "INSERT INTO _bf_breadth (date, pct_above_ema_20, pct_above_ema_100, pct_4w_high) VALUES %s",
+        rows,
+        page_size=PAGE_SIZE,
+    )
+    cur.execute(
+        "UPDATE atlas.atlas_market_regime_daily t "
+        "SET pct_above_ema_20 = b.pct_above_ema_20,"
+        "    pct_above_ema_100 = b.pct_above_ema_100,"
+        "    pct_4w_high = b.pct_4w_high "
+        "FROM _bf_breadth b WHERE t.date = b.date"
+    )
+    return cur.rowcount
 
 
 def backfill(
@@ -100,13 +147,15 @@ def backfill(
     if out.empty:
         return 0
 
-    written = bulk_upsert(
-        eng,
-        table="atlas.atlas_market_regime_daily",
-        columns=_WRITE_COLS,
-        rows=df_to_pg_rows(out),
-        pk_columns=["date"],
-    )
+    raw = eng.raw_connection()
+    try:
+        written = _write_breadth_updates(raw, df_to_pg_rows(out))
+        raw.commit()
+    except Exception:
+        raw.rollback()
+        raise
+    finally:
+        raw.close()
     log.info("breadth_backfill_complete", rows_written=written)
 
     # Refresh mv_india_pulse so the backfilled breadth columns become visible
