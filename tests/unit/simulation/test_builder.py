@@ -56,7 +56,7 @@ class TestValidateCustomPortfolio:
         with patch("atlas.simulation.custom.builder.open_compute_session") as mock_ctx:
             mock_ctx.return_value.__enter__ = lambda _: mock_conn
             mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
-            with pytest.raises(ValueError, match="not in.*Atlas universe"):
+            with pytest.raises(ValueError, match=r"not in.*Atlas universe"):
                 validate_custom_portfolio(insts, engine=MagicMock())
 
     def test_valid_portfolio_passes(self):

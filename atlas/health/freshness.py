@@ -86,4 +86,4 @@ def lag_threshold_days(table_name: str) -> int:
     return 2
 
 
-__all__ = ["TableFreshness", "snapshot", "TRACKED_TABLES", "lag_threshold_days"]
+__all__ = ["TRACKED_TABLES", "TableFreshness", "lag_threshold_days", "snapshot"]

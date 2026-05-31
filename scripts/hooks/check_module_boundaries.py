@@ -88,8 +88,8 @@ ALLOWED_EDGES: set[tuple[str, str]] = {
 
 
 def staged_python_files() -> list[Path]:
-    out = subprocess.check_output(  # noqa: S603
-        ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],  # noqa: S607
+    out = subprocess.check_output(
+        ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
         text=True,
     )
     paths = [Path(line.strip()) for line in out.splitlines() if line.strip()]

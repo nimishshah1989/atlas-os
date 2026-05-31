@@ -255,7 +255,6 @@ def _run_distributed_trials(n_trials: int, n_workers: int) -> None:
     """
     import subprocess
     import sys
-
     import time
 
     trials_per_worker = max(1, n_trials // n_workers)
@@ -271,7 +270,7 @@ def _run_distributed_trials(n_trials: int, n_workers: int) -> None:
         env["ATLAS_INCUBATOR_WORKER_ID"] = str(i)
         # Capture per-worker stderr so failures surface for diagnosis.
         log_path = os.path.join(log_dir, f"worker_{i:02d}.log")
-        log_file = open(log_path, "w")  # noqa: SIM115 — kept open for subprocess
+        log_file = open(log_path, "w")
         proc = subprocess.Popen(
             [sys.executable, "-m", "atlas.trading.incubator"],
             env=env,
@@ -371,6 +370,11 @@ def run_nightly(conn, config: PortfolioConfig | None = None) -> dict[str, Any]:
             log.error("no_walk_forward_windows")
             return {"status": "aborted", "reason": "no_walk_forward_windows"}
 
+    # config is resolved by every path above (passed in / loaded from DB at 345 /
+    # loaded from the worker cache at 357). Narrow PortfolioConfig | None ->
+    # PortfolioConfig for the simulate_genome / _dump_data_for_workers calls below.
+    assert config is not None
+
     # Study: file-based JournalStorage when n_jobs > 1 (multi-process) so
     # workers don't need DB connections. Single-process path uses Postgres RDB.
     n_jobs = _n_jobs()
@@ -379,9 +383,7 @@ def run_nightly(conn, config: PortfolioConfig | None = None) -> dict[str, Any]:
         study = OptunaStudy.journal(journal_path)
     else:
         db_url = os.environ.get("ATLAS_DB_URL", "")
-        study = (
-            OptunaStudy.production(db_url) if db_url else OptunaStudy("atlas_strategy_lab_v1")
-        )
+        study = OptunaStudy.production(db_url) if db_url else OptunaStudy("atlas_strategy_lab_v1")
 
     # Tuple shape: (genome, alpha_oos, information_ratio, sortino_oos)
     # Alpha is the primary score (Optuna objective). IR + Sortino are kept for
@@ -429,9 +431,7 @@ def run_nightly(conn, config: PortfolioConfig | None = None) -> dict[str, Any]:
         # then spawn N subprocess workers. Workers share a file-locked
         # JournalStorage Optuna study (zero DB connections during trials).
         log.info("coordinator_dumping_data_for_workers")
-        _dump_data_for_workers(
-            metrics_df, regime_df, corp_actions, config, walk_forward_windows
-        )
+        _dump_data_for_workers(metrics_df, regime_df, corp_actions, config, walk_forward_windows)
         log.info("coordinator_spawning_workers", n_workers=n_jobs, total_trials=n_trials)
         _run_distributed_trials(n_trials, n_jobs)
         # Reload study from journal (workers' results live there)

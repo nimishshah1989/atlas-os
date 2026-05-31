@@ -149,7 +149,7 @@ def bulk_insert(engine, df: pd.DataFrame, table: str, *, chunk_size: int = 5000)
     col_list = ", ".join(cols)
     placeholders = ", ".join([f":{c}" for c in cols])
     upsert_sql = (
-        f"INSERT INTO {table} ({col_list}) VALUES ({placeholders}) "  # noqa: S608
+        f"INSERT INTO {table} ({col_list}) VALUES ({placeholders}) "
         f"ON CONFLICT (ticker, date) DO UPDATE SET "
         + ", ".join([f"{c} = EXCLUDED.{c}" for c in cols if c not in ("ticker", "date")])
     )

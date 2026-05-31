@@ -288,7 +288,7 @@ def check_decisions_exist(engine: Engine, tier: str, today: date) -> None:
     table = table_map[tier]
     with open_compute_session(engine) as conn:
         count = conn.execute(
-            text(f"SELECT COUNT(*) FROM atlas.{table} WHERE date = :d"),  # noqa: S608 -- table is an internal constant
+            text(f"SELECT COUNT(*) FROM atlas.{table} WHERE date = :d"),
             {"d": today},
         ).scalar()
     if count == 0:

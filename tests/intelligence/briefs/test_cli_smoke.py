@@ -18,7 +18,7 @@ import pytest
 
 @pytest.mark.integration
 def test_cli_stub_mode_completes_under_15s() -> None:
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(
         [sys.executable, "scripts/generate_daily_brief.py", "--dry-run-stub"],
         capture_output=True,
         text=True,
@@ -37,7 +37,7 @@ def test_cli_stub_mode_completes_under_15s() -> None:
 def test_cli_dry_run_with_api_key() -> None:
     if not os.environ.get("ANTHROPIC_API_KEY"):
         pytest.skip("ANTHROPIC_API_KEY not set; skipping live Claude call")
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(
         [sys.executable, "scripts/generate_daily_brief.py", "--dry-run"],
         capture_output=True,
         text=True,

@@ -39,7 +39,7 @@ def run_pipe(src_cmd: str, dst_cmd: str) -> None:
 
 def row_count(dsn: str, table: str) -> int:
     r = subprocess.run(  # noqa: S603
-        ["psql", dsn, "-t", "-c", f"SELECT COUNT(*) FROM public.{table};"],  # noqa: S607
+        ["psql", dsn, "-t", "-c", f"SELECT COUNT(*) FROM public.{table};"],
         capture_output=True,
         text=True,
     )

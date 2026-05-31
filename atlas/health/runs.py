@@ -44,7 +44,7 @@ def _git_sha() -> str | None:
     if _GIT_SHA_CACHE is not None:
         return _GIT_SHA_CACHE
     try:
-        sha = subprocess.run(  # noqa: S603
+        sha = subprocess.run(
             ["git", "rev-parse", "--short=12", "HEAD"],  # noqa: S607
             capture_output=True,
             text=True,
@@ -202,4 +202,4 @@ def safe_finish(run_id: uuid.UUID | None, **kwargs: Any) -> None:
                 _time.sleep(2)
 
 
-__all__ = ["record_run", "finish_run", "safe_record", "safe_finish"]
+__all__ = ["finish_run", "record_run", "safe_finish", "safe_record"]

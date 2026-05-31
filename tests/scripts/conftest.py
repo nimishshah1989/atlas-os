@@ -18,11 +18,13 @@ def _stub_requests() -> None:
         stub.get = lambda *a, **kw: None  # type: ignore[attr-defined]
         stub.Session = object  # type: ignore[attr-defined]
 
-        # Exception hierarchy needed by production code and tests
-        class RequestException(Exception):
+        # Exception hierarchy needed by production code and tests.
+        # Names mirror the real `requests` package (RequestException is upstream's
+        # name); renaming to *Error would break the stub's drop-in compatibility.
+        class RequestException(Exception):  # noqa: N818 - mirror requests' API name
             pass
 
-        class ConnectionError(RequestException):  # noqa: A001
+        class ConnectionError(RequestException):
             pass
 
         class HTTPError(RequestException):

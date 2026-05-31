@@ -565,7 +565,7 @@ def build_persist_sql(
         # this script. All injected values are signed-off cell JSONs with
         # quote-escaping above. Mirrors aggregate_deep_search_v2.py.
         defs_lines.append(
-            "INSERT INTO atlas.atlas_cell_definitions ("  # noqa: S608
+            "INSERT INTO atlas.atlas_cell_definitions ("
             "cap_tier, action, tenure, rule_dsl, "
             "confidence_unconditional, friction_adjusted_excess, "
             "stable_features, methodology_lock_ref, "
@@ -596,7 +596,7 @@ def build_persist_sql(
             # S608: same rationale as the definitions INSERT above — text
             # emission for human review, never executed by this script.
             cands_lines.append(
-                "INSERT INTO atlas.atlas_cell_rule_candidates "  # noqa: S608
+                "INSERT INTO atlas.atlas_cell_rule_candidates "
                 "(cell_definition_id, rank, rule_dsl, archetype, ic, "
                 "friction_adjusted_excess, bh_q_value, eli5, validated, notes) "
                 "SELECT cell_id, "

@@ -80,7 +80,7 @@ async def list_weight_performance(request: Request) -> dict[str, Any]:
             days_below = 0
             for t in trail:
                 r = t.get("ratio")
-                if isinstance(r, (int, float)) and r < 0.5:  # noqa: UP038
+                if isinstance(r, (int, float)) and r < 0.5:
                     days_below += 1
             active_sets.append(
                 {

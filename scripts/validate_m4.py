@@ -109,7 +109,7 @@ def _structural_checks(engine) -> None:
         }
         global checks_run, failures
         for name, table in tables.items():
-            cnt = pd.read_sql(f"SELECT count(*) as c FROM {table}", conn).iloc[0]["c"]  # noqa: S608 -- table is a hardcoded internal constant, never user input
+            cnt = pd.read_sql(f"SELECT count(*) as c FROM {table}", conn).iloc[0]["c"]
             checks_run += 1
             if cnt == 0:
                 failures.append(f"FAIL  {name}: 0 rows (backfill not complete?)")

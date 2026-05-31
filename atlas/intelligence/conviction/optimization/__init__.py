@@ -33,16 +33,16 @@ from atlas.intelligence.conviction.optimization.smoothing import (
 )
 
 __all__ = [
-    "ICMeasurement",
-    "CandidatePayload",
     "DEFAULT_LAMBDA",
+    "CandidatePayload",
+    "ICMeasurement",
+    "apply_proposal",
+    "blend_weights",
+    "generate_candidates",
+    "insert_proposal",
     "measure_all_tiers",
     "measure_ic_for_signal",
-    "generate_candidates",
-    "blend_weights",
-    "upsert_ic_batch",
-    "insert_proposal",
-    "apply_proposal",
     "reject_proposal",
     "snooze_proposal",
+    "upsert_ic_batch",
 ]

@@ -45,7 +45,7 @@ SUSPICIOUS_PATTERNS = re.compile(
 
 
 def staged_compute_files() -> list[Path]:
-    out = subprocess.check_output(  # noqa: S603
+    out = subprocess.check_output(
         ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
         text=True,
     )

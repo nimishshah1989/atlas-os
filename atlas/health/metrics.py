@@ -211,4 +211,4 @@ def compute_metric(engine: Engine, mdef: MetricDef, target_date: date) -> object
     return val
 
 
-__all__ = ["MetricDef", "CATALOG", "compute_metric"]
+__all__ = ["CATALOG", "MetricDef", "compute_metric"]

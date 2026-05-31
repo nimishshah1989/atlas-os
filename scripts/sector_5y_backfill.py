@@ -345,14 +345,14 @@ def _update_new_cols(engine, df: pd.DataFrame) -> int:
             rows.append(row)
         execute_values(
             cur,
-            f"INSERT INTO _sector_new_cols ({col_csv}) VALUES %s",  # noqa: S608
+            f"INSERT INTO _sector_new_cols ({col_csv}) VALUES %s",
             rows,
             page_size=3000,
         )
 
         # UPDATE target from temp table
         cur.execute(
-            f"UPDATE atlas.atlas_sector_metrics_daily t "  # noqa: S608
+            f"UPDATE atlas.atlas_sector_metrics_daily t "
             f"SET {set_clause} "
             f"FROM _sector_new_cols tmp "
             f"WHERE t.sector_name = tmp.sector_name AND t.date = tmp.date"
