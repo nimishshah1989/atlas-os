@@ -186,7 +186,7 @@ def tune_single_threshold(
         else:
             optimal = None
         passed = False
-        notes = "no candidate passed IR>0.4 + |q5_q1|>0.005 gates; " "optimal is max-IR fallback"
+        notes = "no candidate passed IR>0.4 + |q5_q1|>0.005 gates; optimal is max-IR fallback"
 
     log.info(
         "tune_single_threshold_done",

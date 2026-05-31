@@ -128,7 +128,7 @@ def check_goal_post(rank: int = 1) -> dict[str, Any]:
         )
     if not c3_pass:
         reasons.append(
-            f"recommendations: {n_high} HIGH-confidence rows on " f"{latest_date} (need >=10)"
+            f"recommendations: {n_high} HIGH-confidence rows on {latest_date} (need >=10)"
         )
 
     return {

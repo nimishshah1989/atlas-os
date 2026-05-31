@@ -172,30 +172,30 @@ class Layer1Perception:
             > self.rs_average_cutoff_pct
             > self.rs_weak_cutoff_pct
         ), "RS cutoffs must be strictly decreasing: leader > strong > average > weak"
-        assert (
-            self.vol_high_ratio > self.vol_elevated_ratio
-        ), "vol_high_ratio must exceed vol_elevated_ratio"
-        assert (
-            self.momentum_accel_ema_ratio > self.momentum_decel_ema_ratio
-        ), "momentum_accel_ema_ratio must exceed momentum_decel_ema_ratio"
+        assert self.vol_high_ratio > self.vol_elevated_ratio, (
+            "vol_high_ratio must exceed vol_elevated_ratio"
+        )
+        assert self.momentum_accel_ema_ratio > self.momentum_decel_ema_ratio, (
+            "momentum_accel_ema_ratio must exceed momentum_decel_ema_ratio"
+        )
         assert (
             self.regime_risk_on_breadth_pct
             > self.regime_constructive_breadth_pct
             > self.regime_cautious_breadth_pct
         ), "Breadth thresholds must be strictly decreasing: risk_on > constructive > cautious"
-        assert (
-            self.rs_leader_exit_pct < self.rs_leader_cutoff_pct
-        ), "Leader exit threshold must be below leader entry cutoff (hysteresis dead-band)"
-        assert (
-            self.rs_strong_exit_pct < self.rs_strong_cutoff_pct
-        ), "Strong exit threshold must be below strong entry cutoff (hysteresis dead-band)"
+        assert self.rs_leader_exit_pct < self.rs_leader_cutoff_pct, (
+            "Leader exit threshold must be below leader entry cutoff (hysteresis dead-band)"
+        )
+        assert self.rs_strong_exit_pct < self.rs_strong_cutoff_pct, (
+            "Strong exit threshold must be below strong entry cutoff (hysteresis dead-band)"
+        )
         assert 0.0 <= self.ppc_conviction_boost <= 0.5, "ppc_conviction_boost must be in [0, 0.5]"
         # Core 4 invariants — keep stops sane and diversification ordering correct.
         assert 0.03 <= self.stop_loss_pct <= 0.30, "stop_loss_pct must be in [3%, 30%]"
         assert 0.001 <= self.risk_per_trade_pct <= 0.05, "risk_per_trade_pct must be in [0.1%, 5%]"
-        assert (
-            self.max_concurrent_positions > self.min_concurrent_positions
-        ), "max_concurrent_positions must exceed min_concurrent_positions (cascade)"
+        assert self.max_concurrent_positions > self.min_concurrent_positions, (
+            "max_concurrent_positions must exceed min_concurrent_positions (cascade)"
+        )
         assert self.min_concurrent_positions >= 2, "min_concurrent_positions must be >= 2"
 
 

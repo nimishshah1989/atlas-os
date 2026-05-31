@@ -601,14 +601,14 @@ def seed_etf_master(
 
     with engine.begin() as conn:
         before = conn.execute(
-            text("SELECT COUNT(*) FROM public.de_etf_master " "WHERE ticker = ANY(:tickers)"),
+            text("SELECT COUNT(*) FROM public.de_etf_master WHERE ticker = ANY(:tickers)"),
             {"tickers": tickers},
         ).scalar_one()
 
         conn.execute(upsert_sql, params_list)
 
         after = conn.execute(
-            text("SELECT COUNT(*) FROM public.de_etf_master " "WHERE ticker = ANY(:tickers)"),
+            text("SELECT COUNT(*) FROM public.de_etf_master WHERE ticker = ANY(:tickers)"),
             {"tickers": tickers},
         ).scalar_one()
 

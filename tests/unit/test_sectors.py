@@ -595,9 +595,9 @@ def test_sector_states_relative_participation_distributes_in_bear_market() -> No
         f"All-Underweight = absolute participation bug. States: {states}"
     )
     non_negative = {s: v for s, v in states.items() if v not in ("Underweight", "Avoid")}
-    assert (
-        len(non_negative) >= 2
-    ), f"Expected >=2 sectors Overweight/Neutral in bear market, got: {states}"
+    assert len(non_negative) >= 2, (
+        f"Expected >=2 sectors Overweight/Neutral in bear market, got: {states}"
+    )
 
 
 # --------------------------------------------------------------------------- #

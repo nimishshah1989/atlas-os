@@ -57,7 +57,7 @@ def print_summary(result: AuditResult, repo_root: Path) -> None:
     if result.missing:
         print(f"MISSING TABLES ({len(result.missing)}):")
         for ref in result.missing:
-            print(f"  MISSING TABLE: {ref.table} referenced in " f"{ref.source_file}:{ref.line_no}")
+            print(f"  MISSING TABLE: {ref.table} referenced in {ref.source_file}:{ref.line_no}")
         print()
 
     if result.ok:

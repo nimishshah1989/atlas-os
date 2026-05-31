@@ -25,8 +25,7 @@ def test_cli_stub_mode_completes_under_15s() -> None:
         timeout=30,
     )
     assert result.returncode in (0, 3), (
-        f"CLI exited with {result.returncode}.\n"
-        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        f"CLI exited with {result.returncode}.\nstdout: {result.stdout}\nstderr: {result.stderr}"
     )
     # exit 0 = stub printed; exit 3 = no MV data (acceptable on a fresh DB)
     if result.returncode == 0:
@@ -45,6 +44,5 @@ def test_cli_dry_run_with_api_key() -> None:
     )
     # Acceptable: 0 = success, 3 = no MV data on this DB
     assert result.returncode in (0, 3), (
-        f"CLI exited with {result.returncode}.\n"
-        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        f"CLI exited with {result.returncode}.\nstdout: {result.stdout}\nstderr: {result.stderr}"
     )

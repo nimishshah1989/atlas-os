@@ -46,8 +46,10 @@ FACTOR_CATALOG: dict[str, Callable[[pd.DataFrame], pd.Series]] = {  # type: igno
     "dist_sma_20": lambda df: _s(df, "close") / ta.sma(_s(df, "close"), length=20) - 1.0,  # type: ignore[attr-defined]
     "dist_sma_200": lambda df: _s(df, "close") / ta.sma(_s(df, "close"), length=200) - 1.0,  # type: ignore[attr-defined]
     # volatility
-    "atr_pct_14": lambda df: ta.atr(_s(df, "high"), _s(df, "low"), _s(df, "close"), length=14)  # type: ignore[attr-defined]
-    / _s(df, "close"),
+    "atr_pct_14": lambda df: (
+        ta.atr(_s(df, "high"), _s(df, "low"), _s(df, "close"), length=14)  # type: ignore[attr-defined]
+        / _s(df, "close")
+    ),
     "vol_21": lambda df: _ret(df).rolling(21).std(),
     "vol_63": lambda df: _ret(df).rolling(63).std(),
     # volume

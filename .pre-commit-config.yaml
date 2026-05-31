@@ -14,11 +14,12 @@ repos:
         args: [--fix]
       - id: ruff-format
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.13.0
-    hooks:
-      - id: mypy
-        additional_dependencies: [pydantic, types-requests, types-PyYAML]
+  # Type checking is pyright (the project + global standard: pyproject has
+  # [tool.pyright], `make typecheck` runs it, global CLAUDE.md mandates it).
+  # mypy was removed 2026-05-31 to end a two-checker split — it lived only here,
+  # was never in the dev extra, and used a different config. pyright is enforced
+  # by `make check` locally and by the ratchet gate in CI (see
+  # .github/workflows/ci.yml + scripts/ci/pyright_ratchet.py).
 
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.21.2

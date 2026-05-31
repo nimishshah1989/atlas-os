@@ -111,8 +111,8 @@ def main() -> None:
     print("=" * 60)
     print(f"Portfolio: {_TEST_PORTFOLIO_NAME}")
     print(
-        f"Instruments: {len(_INSTRUMENTS)} ({sum(1 for i in _INSTRUMENTS if i.instrument_type=='stock')} stocks, "
-        f"{sum(1 for i in _INSTRUMENTS if i.instrument_type=='fund')} funds)"
+        f"Instruments: {len(_INSTRUMENTS)} ({sum(1 for i in _INSTRUMENTS if i.instrument_type == 'stock')} stocks, "
+        f"{sum(1 for i in _INSTRUMENTS if i.instrument_type == 'fund')} funds)"
     )
     total_weight = sum(i.weight_pct for i in _INSTRUMENTS)
     print(f"Total weight: {total_weight:.2f}%")
@@ -159,8 +159,8 @@ def main() -> None:
     end = r["end_date"]
 
     print(f"  Period      : {start} → {end}")
-    print(f"  Total return: {ret*100:+.1f}%" if ret is not None else "  Total return: N/A")
-    print(f"  Max drawdown: {dd*100:.1f}%" if dd is not None else "  Max drawdown: N/A")
+    print(f"  Total return: {ret * 100:+.1f}%" if ret is not None else "  Total return: N/A")
+    print(f"  Max drawdown: {dd * 100:.1f}%" if dd is not None else "  Max drawdown: N/A")
     print(f"  Sharpe ratio: {sharpe:.3f}" if sharpe is not None else "  Sharpe ratio: N/A")
     print(f"\n  Backtest ID : {r['backtest_id']}")
     print(f"  Portfolio ID: {portfolio_id}")

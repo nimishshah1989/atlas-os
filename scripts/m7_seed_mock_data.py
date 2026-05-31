@@ -30,9 +30,7 @@ def _purge_mock_data(engine) -> int:  # type: ignore[no-untyped-def]
     """Delete all rows with positions_count = -999."""
     with engine.connect() as conn:
         result = conn.execute(
-            text(
-                "DELETE FROM atlas.strategy_paper_performance " "WHERE positions_count = :sentinel"
-            ),
+            text("DELETE FROM atlas.strategy_paper_performance WHERE positions_count = :sentinel"),
             {"sentinel": _SENTINEL},
         )
         conn.commit()

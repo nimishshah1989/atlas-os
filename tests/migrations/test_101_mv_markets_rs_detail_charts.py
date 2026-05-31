@@ -199,9 +199,9 @@ def test_upgrade_uses_rs_3m_nifty500_for_india_indices() -> None:
     """India indices must use pre-computed RS from atlas_index_metrics_daily."""
     statements = _executed_statements(_run_upgrade_with_mock())
     sql = "\n".join(statements).lower()
-    assert (
-        "rs_3m_nifty500" in sql
-    ), "India RS must come from atlas_index_metrics_daily.rs_3m_nifty500"
+    assert "rs_3m_nifty500" in sql, (
+        "India RS must come from atlas_index_metrics_daily.rs_3m_nifty500"
+    )
 
 
 def test_upgrade_includes_support_resistance_computation() -> None:
@@ -407,9 +407,9 @@ def test_mv_usd_baselines_are_inr_adjusted() -> None:  # pragma: no cover
         code, close, is_usd = row
         assert is_usd is True, f"{code}: is_usd_baseline must be true"
         assert close is not None, f"{code}: latest_close must not be NULL"
-        assert (
-            100 < float(close) < 500_000
-        ), f"{code}: latest_close {close} is outside expected INR range"
+        assert 100 < float(close) < 500_000, (
+            f"{code}: latest_close {close} is outside expected INR range"
+        )
 
 
 @_SKIP_INTEGRATION

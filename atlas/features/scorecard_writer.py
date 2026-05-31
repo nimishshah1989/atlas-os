@@ -518,9 +518,9 @@ def _compute_locked_features(
 
     # Look-ahead audit point #2 — runtime assertion that no future data leaked
     # through the query. Cheap to evaluate (single np.any).
-    assert (
-        df["date"] <= target_date
-    ).all(), "scorecard_writer look-ahead audit violation: OHLCV contains rows after target_date"
+    assert (df["date"] <= target_date).all(), (
+        "scorecard_writer look-ahead audit violation: OHLCV contains rows after target_date"
+    )
 
     # --- ret_1d for rolling vol ---------------------------------------------
     grouped_close = df.groupby("instrument_id", group_keys=False, observed=True)["close"]

@@ -81,7 +81,7 @@ def load_monthly_returns() -> tuple[pd.DataFrame, pd.Series]:
 def main() -> int:
     rets, cat = load_monthly_returns()
     months = list(rets.index)
-    print(f"Loaded {rets.shape[1]} funds x {rets.shape[0]} months " f"({months[0]}..{months[-1]})")
+    print(f"Loaded {rets.shape[1]} funds x {rets.shape[0]} months ({months[0]}..{months[-1]})")
 
     records: list[pd.DataFrame] = []
     last_m = months[-1]

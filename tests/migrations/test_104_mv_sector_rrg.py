@@ -134,9 +134,9 @@ def test_upgrade_reads_bottomup_rs_3m_nifty500() -> None:
     """rs_ratio must be derived from bottomup_rs_3m_nifty500."""
     statements = _executed_statements(_run_upgrade_with_mock())
     sql = "\n".join(statements).lower()
-    assert (
-        "bottomup_rs_3m_nifty500" in sql
-    ), "bottomup_rs_3m_nifty500 must be read from atlas_sector_metrics_daily"
+    assert "bottomup_rs_3m_nifty500" in sql, (
+        "bottomup_rs_3m_nifty500 must be read from atlas_sector_metrics_daily"
+    )
 
 
 def test_upgrade_covers_date_range_from_2020() -> None:
@@ -219,9 +219,9 @@ def test_upgrade_quadrant_uses_100_threshold_for_rs_ratio() -> None:
     statements = _executed_statements(_run_upgrade_with_mock())
     sql = "\n".join(statements)
     # Leading: rs_ratio >= 100; Lagging: rs_ratio < 100
-    assert (
-        ">= 100" in sql or ">=100" in sql
-    ), "Quadrant must use rs_ratio >= 100 for Leading/Weakening"
+    assert ">= 100" in sql or ">=100" in sql, (
+        "Quadrant must use rs_ratio >= 100 for Leading/Weakening"
+    )
     assert "< 100" in sql or "<100" in sql, "Quadrant must use rs_ratio < 100 for Lagging/Improving"
 
 
@@ -505,9 +505,9 @@ def test_mv_row_shape_latest() -> None:  # pragma: no cover
 
         # rs_ratio if non-null must be in a plausible range (80-120 for sector RS)
         if rs_ratio is not None:
-            assert (
-                50 <= float(rs_ratio) <= 150
-            ), f"{sn}: rs_ratio {rs_ratio} out of expected range [50, 150]"
+            assert 50 <= float(rs_ratio) <= 150, (
+                f"{sn}: rs_ratio {rs_ratio} out of expected range [50, 150]"
+            )
 
         # trail must be a list (possibly empty)
         assert isinstance(trail, list), f"{sn}: trail_6w must be a list"
@@ -548,9 +548,9 @@ def test_mv_trail_6w_structure() -> None:  # pragma: no cover
         for elem in trail:
             missing = required_keys - set(elem.keys())
             assert not missing, f"{sn} @ {as_of_date}: trail element missing keys: {missing}"
-            assert (
-                elem.get("quadrant") in valid_quadrants
-            ), f"{sn}: trail element has invalid quadrant '{elem.get('quadrant')}'"
+            assert elem.get("quadrant") in valid_quadrants, (
+                f"{sn}: trail element has invalid quadrant '{elem.get('quadrant')}'"
+            )
 
 
 @_SKIP_INTEGRATION
@@ -599,9 +599,9 @@ def test_mv_quadrant_distribution_sane() -> None:  # pragma: no cover
         }
 
     assert len(quadrants) >= 2, f"Expected >= 2 distinct quadrants on latest date, got: {quadrants}"
-    assert quadrants.issubset(
-        {"Leading", "Improving", "Lagging", "Weakening"}
-    ), f"Unexpected quadrant values: {quadrants}"
+    assert quadrants.issubset({"Leading", "Improving", "Lagging", "Weakening"}), (
+        f"Unexpected quadrant values: {quadrants}"
+    )
 
 
 @_SKIP_INTEGRATION
@@ -656,9 +656,9 @@ def test_mv_date_range_starts_2020() -> None:  # pragma: no cover
         min_date = conn.execute(sa.text("SELECT MIN(as_of_date) FROM atlas.mv_sector_rrg")).scalar()
 
     assert min_date is not None
-    assert min_date >= datetime.date(
-        2020, 1, 1
-    ), f"Expected date range starting 2020-01-01, got min_date={min_date}"
+    assert min_date >= datetime.date(2020, 1, 1), (
+        f"Expected date range starting 2020-01-01, got min_date={min_date}"
+    )
 
 
 @_SKIP_INTEGRATION

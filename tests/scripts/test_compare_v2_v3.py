@@ -213,9 +213,9 @@ def test_persist_sql_deprecates_v2_before_inserting_v3(tmp_path: Path) -> None:
     insert_pos = defs_sql.find("INSERT INTO atlas.atlas_cell_definitions")
     assert update_pos != -1, "missing DEPRECATE step"
     assert insert_pos != -1, "missing INSERT step"
-    assert (
-        update_pos < insert_pos
-    ), "DEPRECATE must precede INSERT (partial unique index requires v2 slot vacated)"
+    assert update_pos < insert_pos, (
+        "DEPRECATE must precede INSERT (partial unique index requires v2 slot vacated)"
+    )
 
 
 def test_persist_sql_uses_v3_methodology_lock(tmp_path: Path) -> None:

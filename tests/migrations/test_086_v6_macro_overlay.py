@@ -478,9 +478,9 @@ class TestEnumReuse:
             mock_op.get_bind.return_value = MagicMock()
             mod.upgrade()
 
-        assert (
-            created_names == []
-        ), f"086 must not create any enums (introduces none); created: {created_names}"
+        assert created_names == [], (
+            f"086 must not create any enums (introduces none); created: {created_names}"
+        )
 
     def test_does_not_recreate_regime_state(self) -> None:
         """atlas_regime_state is owned by 080."""
@@ -566,9 +566,9 @@ class TestDowngrade:
             mock_op.get_bind.return_value = MagicMock()
             mod.downgrade()
 
-        assert (
-            "atlas_regime_state" not in dropped_names
-        ), "downgrade of 086 must not drop atlas_regime_state (owned by 080)"
+        assert "atlas_regime_state" not in dropped_names, (
+            "downgrade of 086 must not drop atlas_regime_state (owned by 080)"
+        )
 
     def test_drops_no_enums_at_all(self) -> None:
         """086 owns no enums — downgrade must not drop any."""
@@ -592,9 +592,9 @@ class TestDowngrade:
             mock_op.get_bind.return_value = MagicMock()
             mod.downgrade()
 
-        assert (
-            dropped_names == []
-        ), f"086 owns no enums; downgrade must not drop any: {dropped_names}"
+        assert dropped_names == [], (
+            f"086 owns no enums; downgrade must not drop any: {dropped_names}"
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -514,9 +514,9 @@ class TestDowngrade:
         index_drops_before = [
             i for i, (m, _) in enumerate(recorded[:table_drop_idx]) if m == "drop_index"
         ]
-        assert (
-            len(index_drops_before) >= 2
-        ), f"expected >=2 index drops before drop_table; got {recorded}"
+        assert len(index_drops_before) >= 2, (
+            f"expected >=2 index drops before drop_table; got {recorded}"
+        )
 
     def test_revoke_is_conditional(self) -> None:
         """REVOKE must be wrapped in a DO block — survives missing role."""
@@ -540,18 +540,18 @@ class TestDowngrade:
         mock_op = _run_downgrade_with_mock()
         bind = mock_op.get_bind.return_value
         for call in bind.mock_calls:
-            assert "atlas_drift_status" not in str(
-                call
-            ), "downgrade must not drop the atlas_drift_status enum"
+            assert "atlas_drift_status" not in str(call), (
+                "downgrade must not drop the atlas_drift_status enum"
+            )
         # Also verify no executed SQL drops the enum.
         executed = [
             c.args[0] if isinstance(c.args[0], str) else str(c.args[0])
             for c in mock_op.execute.call_args_list
         ]
         for sql in executed:
-            assert (
-                "atlas_drift_status" not in sql or "DROP TYPE" not in sql.upper()
-            ), "downgrade must not DROP TYPE atlas_drift_status"
+            assert "atlas_drift_status" not in sql or "DROP TYPE" not in sql.upper(), (
+                "downgrade must not DROP TYPE atlas_drift_status"
+            )
 
 
 # ---------------------------------------------------------------------------

@@ -67,7 +67,7 @@ _UPDATE_SQL = """
 
 
 _SELECT_RETURN_BY_SID = (
-    "SELECT daily_return FROM strategy_paper_performance " "WHERE strategy_id='A' AND date=:d"
+    "SELECT daily_return FROM strategy_paper_performance WHERE strategy_id='A' AND date=:d"
 )
 
 _SELECT_RETURN_ALL = (

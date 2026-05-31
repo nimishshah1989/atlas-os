@@ -29,7 +29,7 @@ def _cleanup() -> None:
             {"d": _SENTINEL_DATE},
         )
         c.execute(
-            text("DELETE FROM atlas.atlas_weight_proposals " "WHERE rationale LIKE :p"),
+            text("DELETE FROM atlas.atlas_weight_proposals WHERE rationale LIKE :p"),
             {"p": "%STAGE4A_TEST%"},
         )
 

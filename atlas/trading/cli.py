@@ -435,8 +435,7 @@ def _states_classify_cmd(args: argparse.Namespace) -> int:
     n = persist_state_panel(eng, panel)
     log.info("states_classify_persisted", n_rows=n)
     print(
-        f"States classified: {n} rows persisted with"
-        f" classifier_version={args.classifier_version}"
+        f"States classified: {n} rows persisted with classifier_version={args.classifier_version}"
     )
     return 0
 

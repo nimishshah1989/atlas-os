@@ -121,9 +121,9 @@ def test_every_candidate_feature_resolves_through_panel_for_feature() -> None:
             panel_for_feature(panels, f)
         except KeyError:
             missing.append(f)
-    assert (
-        not missing
-    ), f"features referenced by candidate generator but missing from panel_for_feature: {missing}"
+    assert not missing, (
+        f"features referenced by candidate generator but missing from panel_for_feature: {missing}"
+    )
 
 
 def test_every_candidate_feature_is_in_features_allowlist() -> None:
@@ -230,9 +230,9 @@ def test_quality_momentum_vol_bands_are_tier_conditional() -> None:
             if p.feature == "realized_vol_60d" and p.cmp in ("<=", "<"):
                 vol_caps_small.append(float(p.value))  # type: ignore[arg-type]
     max_small = max(vol_caps_small, default=0)
-    assert any(
-        v >= 0.035 for v in vol_caps_small
-    ), f"Small-cap candidates should use wider vol bands; got max {max_small:.4f}"
+    assert any(v >= 0.035 for v in vol_caps_small), (
+        f"Small-cap candidates should use wider vol bands; got max {max_small:.4f}"
+    )
 
     large_cands = generate_candidates("Large", "12m", "POSITIVE")
     vol_caps_large: list[float] = []
@@ -240,9 +240,9 @@ def test_quality_momentum_vol_bands_are_tier_conditional() -> None:
         for p in c.features:
             if p.feature == "realized_vol_60d" and p.cmp in ("<=", "<"):
                 vol_caps_large.append(float(p.value))  # type: ignore[arg-type]
-    assert any(
-        v <= 0.025 for v in vol_caps_large
-    ), "Large-cap candidates should use tight vol bands"
+    assert any(v <= 0.025 for v in vol_caps_large), (
+        "Large-cap candidates should use tight vol bands"
+    )
 
 
 # ---------------------------------------------------------------------------

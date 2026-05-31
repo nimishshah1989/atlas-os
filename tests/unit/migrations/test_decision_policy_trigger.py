@@ -116,9 +116,9 @@ class TestUpgradeSQLContent:
     def test_upgrade_emits_create_atlas_decision_policy_table(self) -> None:
         sqls = self._run_upgrade_and_collect()
         combined = "\n".join(sqls)
-        assert (
-            "CREATE TABLE IF NOT EXISTS atlas.atlas_decision_policy" in combined
-        ), "upgrade() SQL must contain CREATE TABLE IF NOT EXISTS atlas.atlas_decision_policy"
+        assert "CREATE TABLE IF NOT EXISTS atlas.atlas_decision_policy" in combined, (
+            "upgrade() SQL must contain CREATE TABLE IF NOT EXISTS atlas.atlas_decision_policy"
+        )
 
     def test_upgrade_emits_create_atlas_decision_policy_history_table(self) -> None:
         sqls = self._run_upgrade_and_collect()
@@ -131,9 +131,9 @@ class TestUpgradeSQLContent:
     def test_upgrade_emits_audit_function(self) -> None:
         sqls = self._run_upgrade_and_collect()
         combined = "\n".join(sqls)
-        assert (
-            "atlas.fn_decision_policy_audit" in combined
-        ), "upgrade() SQL must reference audit function atlas.fn_decision_policy_audit"
+        assert "atlas.fn_decision_policy_audit" in combined, (
+            "upgrade() SQL must reference audit function atlas.fn_decision_policy_audit"
+        )
         assert "current_setting('atlas.change_reason', true)" in combined, (
             "upgrade() SQL must use current_setting('atlas.change_reason', true)"
             " — the ', true' second arg is required so an unset GUC returns NULL"
@@ -143,17 +143,17 @@ class TestUpgradeSQLContent:
     def test_upgrade_emits_trigger_after_update(self) -> None:
         sqls = self._run_upgrade_and_collect()
         combined = "\n".join(sqls)
-        assert (
-            "CREATE TRIGGER trg_decision_policy_audit" in combined
-        ), "upgrade() SQL must create trigger trg_decision_policy_audit"
+        assert "CREATE TRIGGER trg_decision_policy_audit" in combined, (
+            "upgrade() SQL must create trigger trg_decision_policy_audit"
+        )
         assert "AFTER UPDATE" in combined, "upgrade() SQL must specify AFTER UPDATE on the trigger"
 
     def test_upgrade_emits_distinct_guard(self) -> None:
         sqls = self._run_upgrade_and_collect()
         combined = "\n".join(sqls)
-        assert (
-            "IS DISTINCT FROM" in combined
-        ), "upgrade() SQL must use IS DISTINCT FROM to guard against no-op updates"
+        assert "IS DISTINCT FROM" in combined, (
+            "upgrade() SQL must use IS DISTINCT FROM to guard against no-op updates"
+        )
 
     def test_upgrade_emits_seed_rows(self) -> None:
         sqls = self._run_upgrade_and_collect()
@@ -166,26 +166,26 @@ class TestUpgradeSQLContent:
     def test_downgrade_emits_drop_trigger(self) -> None:
         sqls = self._run_downgrade_and_collect()
         combined = "\n".join(sqls)
-        assert (
-            "DROP TRIGGER IF EXISTS trg_decision_policy_audit" in combined
-        ), "downgrade() SQL must drop trigger trg_decision_policy_audit safely"
+        assert "DROP TRIGGER IF EXISTS trg_decision_policy_audit" in combined, (
+            "downgrade() SQL must drop trigger trg_decision_policy_audit safely"
+        )
 
     def test_downgrade_emits_drop_function(self) -> None:
         sqls = self._run_downgrade_and_collect()
         combined = "\n".join(sqls)
-        assert (
-            "DROP FUNCTION IF EXISTS atlas.fn_decision_policy_audit" in combined
-        ), "downgrade() SQL must drop function atlas.fn_decision_policy_audit safely"
+        assert "DROP FUNCTION IF EXISTS atlas.fn_decision_policy_audit" in combined, (
+            "downgrade() SQL must drop function atlas.fn_decision_policy_audit safely"
+        )
 
     def test_downgrade_emits_drop_tables(self) -> None:
         sqls = self._run_downgrade_and_collect()
         combined = "\n".join(sqls)
-        assert (
-            "DROP TABLE IF EXISTS atlas.atlas_decision_policy_history" in combined
-        ), "downgrade() SQL must drop atlas_decision_policy_history"
-        assert (
-            "DROP TABLE IF EXISTS atlas.atlas_decision_policy" in combined
-        ), "downgrade() SQL must drop atlas_decision_policy"
+        assert "DROP TABLE IF EXISTS atlas.atlas_decision_policy_history" in combined, (
+            "downgrade() SQL must drop atlas_decision_policy_history"
+        )
+        assert "DROP TABLE IF EXISTS atlas.atlas_decision_policy" in combined, (
+            "downgrade() SQL must drop atlas_decision_policy"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -290,9 +290,9 @@ class TestPolicyTriggerIntegration:
             "StateB",
             "StateC",
         ], f"new_value mismatch: {row.new_value}"
-        assert (
-            row.change_reason == "M14 unit test reason"
-        ), f"change_reason mismatch: {row.change_reason!r}"
+        assert row.change_reason == "M14 unit test reason", (
+            f"change_reason mismatch: {row.change_reason!r}"
+        )
 
     def test_trigger_logs_audit_with_null_reason_when_guc_unset(
         self,
@@ -318,9 +318,9 @@ class TestPolicyTriggerIntegration:
         assert row is not None, "Expected a history row after UPDATE"
         # Per M13's experience: current_setting(name, true) may return '' or NULL
         # depending on whether the GUC was bound earlier in the session.
-        assert (
-            row.change_reason is None or row.change_reason == ""
-        ), f"change_reason should be NULL or '' when GUC is unset, got {row.change_reason!r}"
+        assert row.change_reason is None or row.change_reason == "", (
+            f"change_reason should be NULL or '' when GUC is unset, got {row.change_reason!r}"
+        )
 
     def test_trigger_does_not_log_when_value_unchanged(
         self,
@@ -331,8 +331,7 @@ class TestPolicyTriggerIntegration:
         with db_engine.connect() as conn:
             result = conn.execute(
                 sa.text(
-                    "SELECT policy_value FROM atlas.atlas_decision_policy"
-                    " WHERE policy_key = :key"
+                    "SELECT policy_value FROM atlas.atlas_decision_policy WHERE policy_key = :key"
                 ),
                 {"key": test_policy_key},
             )
@@ -390,7 +389,7 @@ class TestPolicyTriggerIntegration:
             with db_engine.begin() as conn:
                 conn.execute(
                     sa.text(
-                        "DELETE FROM atlas.atlas_decision_policy_history" " WHERE policy_key = :key"
+                        "DELETE FROM atlas.atlas_decision_policy_history WHERE policy_key = :key"
                     ),
                     {"key": insert_key},
                 )

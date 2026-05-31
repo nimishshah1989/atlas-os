@@ -247,8 +247,10 @@ def compute_etf_gates(
 def compute_etf_exit_triggers(df: pd.DataFrame) -> pd.DataFrame:
     df["exit_market_riskoff"] = df["regime_state"] == "Risk-Off"
     df["exit_sector_avoid"] = df.apply(
-        lambda r: str(r.get("linked_sector_state", "")) == "Avoid"
-        or str(r.get("dominant_sector_state", "")) == "Avoid",
+        lambda r: (
+            str(r.get("linked_sector_state", "")) == "Avoid"
+            or str(r.get("dominant_sector_state", "")) == "Avoid"
+        ),
         axis=1,
     )
     df["exit_rs_deteriorate"] = df["rs_state"].isin(ETF_RS_WEAK)

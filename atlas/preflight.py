@@ -256,9 +256,7 @@ def _check_schema_parity(engine: Engine, report: Report) -> None:
 
     atlas_exists = _scalar(
         engine,
-        "SELECT EXISTS ("
-        "  SELECT 1 FROM information_schema.schemata WHERE schema_name = 'atlas'"
-        ")",
+        "SELECT EXISTS (  SELECT 1 FROM information_schema.schemata WHERE schema_name = 'atlas')",
     )
     report.add(
         CheckResult(
@@ -295,7 +293,7 @@ def _check_instrument_master(engine: Engine, report: Report) -> None:
 
     n500_count = _scalar(
         engine,
-        "SELECT COUNT(*) FROM public.de_instrument " "WHERE is_active = TRUE AND nifty_500 = TRUE",
+        "SELECT COUNT(*) FROM public.de_instrument WHERE is_active = TRUE AND nifty_500 = TRUE",
     )
     report.add(
         CheckResult(
@@ -328,7 +326,7 @@ def _check_instrument_master(engine: Engine, report: Report) -> None:
 
     n200_count = _scalar(
         engine,
-        "SELECT COUNT(*) FROM public.de_instrument " "WHERE is_active = TRUE AND nifty_200 = TRUE",
+        "SELECT COUNT(*) FROM public.de_instrument WHERE is_active = TRUE AND nifty_200 = TRUE",
     )
     report.add(
         CheckResult(

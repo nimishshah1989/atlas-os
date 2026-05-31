@@ -152,7 +152,7 @@ def test_compute_deep_search_features_jsonb_populates_each_instrument() -> None:
     # the spec floor that proves the bridge is firing across families.
     for iid, feats in jsonb.items():
         assert len(feats) >= 25, (
-            f"iid {iid} carries only {len(feats)} keys " f"(expected ≥ 25 from deep-search library)"
+            f"iid {iid} carries only {len(feats)} keys (expected ≥ 25 from deep-search library)"
         )
 
 

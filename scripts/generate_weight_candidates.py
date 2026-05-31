@@ -50,9 +50,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"Generated {len(candidates)} candidate(s):")
     for c in candidates:
-        print(
-            f"  {c.tier:>18s}  Δ_ic={float(c.ic_delta or 0):+.4f}  " f"top movers → {c.rationale}"
-        )
+        print(f"  {c.tier:>18s}  Δ_ic={float(c.ic_delta or 0):+.4f}  top movers → {c.rationale}")
 
     if args.persist:
         n_inserted = 0

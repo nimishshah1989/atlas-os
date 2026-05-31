@@ -139,9 +139,7 @@ def run(dry_run: bool = False) -> None:
 
     with engine.connect() as conn:
         mapping = pd.read_sql(
-            text(
-                "SELECT mstar_id, amfi_code FROM public.de_mf_master " "WHERE amfi_code IS NOT NULL"
-            ),
+            text("SELECT mstar_id, amfi_code FROM public.de_mf_master WHERE amfi_code IS NOT NULL"),
             conn,
         )
     log.info("mapping_loaded", rows=len(mapping))

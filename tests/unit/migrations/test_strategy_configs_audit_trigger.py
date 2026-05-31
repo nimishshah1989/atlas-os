@@ -96,31 +96,31 @@ class TestUpgradeSQLContent:
     def test_upgrade_adds_is_fm_authored_column(self) -> None:
         sqls = self._run_upgrade_and_collect()
         combined = "\n".join(sqls)
-        assert (
-            "is_fm_authored" in combined
-        ), "upgrade() SQL must add is_fm_authored column to strategy_configs"
+        assert "is_fm_authored" in combined, (
+            "upgrade() SQL must add is_fm_authored column to strategy_configs"
+        )
         assert "BOOLEAN" in combined, "is_fm_authored must be BOOLEAN type"
 
     def test_upgrade_adds_created_by_column(self) -> None:
         sqls = self._run_upgrade_and_collect()
         combined = "\n".join(sqls)
-        assert (
-            "created_by" in combined
-        ), "upgrade() SQL must add created_by column to strategy_configs"
+        assert "created_by" in combined, (
+            "upgrade() SQL must add created_by column to strategy_configs"
+        )
 
     def test_upgrade_creates_history_table(self) -> None:
         sqls = self._run_upgrade_and_collect()
         combined = "\n".join(sqls)
-        assert (
-            "atlas_strategy_history" in combined
-        ), "upgrade() SQL must create atlas.atlas_strategy_history table"
+        assert "atlas_strategy_history" in combined, (
+            "upgrade() SQL must create atlas.atlas_strategy_history table"
+        )
 
     def test_upgrade_emits_audit_function(self) -> None:
         sqls = self._run_upgrade_and_collect()
         combined = "\n".join(sqls)
-        assert (
-            "atlas.fn_strategy_audit" in combined
-        ), "upgrade() SQL must reference audit function atlas.fn_strategy_audit"
+        assert "atlas.fn_strategy_audit" in combined, (
+            "upgrade() SQL must reference audit function atlas.fn_strategy_audit"
+        )
         assert "current_setting('atlas.change_reason', true)" in combined, (
             "upgrade() SQL must use current_setting('atlas.change_reason', true) "
             "— the ', true' second arg is required so an unset GUC returns NULL "
@@ -130,17 +130,17 @@ class TestUpgradeSQLContent:
     def test_upgrade_emits_trigger_after_update(self) -> None:
         sqls = self._run_upgrade_and_collect()
         combined = "\n".join(sqls)
-        assert (
-            "CREATE TRIGGER trg_strategy_audit" in combined
-        ), "upgrade() SQL must create trigger trg_strategy_audit"
+        assert "CREATE TRIGGER trg_strategy_audit" in combined, (
+            "upgrade() SQL must create trigger trg_strategy_audit"
+        )
         assert "AFTER UPDATE" in combined, "upgrade() SQL must specify AFTER UPDATE on the trigger"
 
     def test_upgrade_emits_distinct_guard(self) -> None:
         sqls = self._run_upgrade_and_collect()
         combined = "\n".join(sqls)
-        assert (
-            "IS DISTINCT FROM" in combined
-        ), "upgrade() SQL must use IS DISTINCT FROM to guard against no-op updates"
+        assert "IS DISTINCT FROM" in combined, (
+            "upgrade() SQL must use IS DISTINCT FROM to guard against no-op updates"
+        )
 
     def test_upgrade_guards_both_config_and_is_active(self) -> None:
         sqls = self._run_upgrade_and_collect()
@@ -154,30 +154,30 @@ class TestUpgradeSQLContent:
     def test_downgrade_emits_drop_trigger(self) -> None:
         sqls = self._run_downgrade_and_collect()
         combined = "\n".join(sqls)
-        assert (
-            "DROP TRIGGER IF EXISTS trg_strategy_audit" in combined
-        ), "downgrade() SQL must drop trigger trg_strategy_audit safely"
+        assert "DROP TRIGGER IF EXISTS trg_strategy_audit" in combined, (
+            "downgrade() SQL must drop trigger trg_strategy_audit safely"
+        )
 
     def test_downgrade_emits_drop_function(self) -> None:
         sqls = self._run_downgrade_and_collect()
         combined = "\n".join(sqls)
-        assert (
-            "DROP FUNCTION IF EXISTS atlas.fn_strategy_audit" in combined
-        ), "downgrade() SQL must drop function atlas.fn_strategy_audit safely"
+        assert "DROP FUNCTION IF EXISTS atlas.fn_strategy_audit" in combined, (
+            "downgrade() SQL must drop function atlas.fn_strategy_audit safely"
+        )
 
     def test_downgrade_drops_history_table(self) -> None:
         sqls = self._run_downgrade_and_collect()
         combined = "\n".join(sqls)
-        assert (
-            "DROP TABLE IF EXISTS atlas.atlas_strategy_history" in combined
-        ), "downgrade() SQL must drop atlas.atlas_strategy_history table"
+        assert "DROP TABLE IF EXISTS atlas.atlas_strategy_history" in combined, (
+            "downgrade() SQL must drop atlas.atlas_strategy_history table"
+        )
 
     def test_downgrade_drops_added_columns(self) -> None:
         sqls = self._run_downgrade_and_collect()
         combined = "\n".join(sqls)
-        assert (
-            "DROP COLUMN" in combined
-        ), "downgrade() must DROP COLUMN for is_fm_authored and created_by"
+        assert "DROP COLUMN" in combined, (
+            "downgrade() must DROP COLUMN for is_fm_authored and created_by"
+        )
         assert "is_fm_authored" in combined, "downgrade() must drop is_fm_authored column"
 
 
@@ -269,9 +269,9 @@ class TestStrategyAuditTriggerIntegration:
             row = _latest_history_row(conn, test_strategy)
 
         assert row is not None, "Expected a history row after config UPDATE"
-        assert (
-            row.change_reason == "M15 test reason"
-        ), f"change_reason mismatch: {row.change_reason!r}"
+        assert row.change_reason == "M15 test reason", (
+            f"change_reason mismatch: {row.change_reason!r}"
+        )
 
     def test_trigger_does_not_fire_when_config_unchanged(
         self,
@@ -358,9 +358,9 @@ class TestStrategyAuditTriggerIntegration:
             row = _latest_history_row(conn, test_strategy)
 
         assert row is not None, "Expected a history row after UPDATE"
-        assert (
-            row.change_reason is None or row.change_reason == ""
-        ), f"change_reason should be NULL or '' when GUC is unset, got {row.change_reason!r}"
+        assert row.change_reason is None or row.change_reason == "", (
+            f"change_reason should be NULL or '' when GUC is unset, got {row.change_reason!r}"
+        )
 
     def test_trigger_fires_on_is_active_change(
         self,

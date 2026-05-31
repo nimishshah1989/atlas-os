@@ -59,9 +59,9 @@ def main() -> int:
     log.info(
         "etf_scorecard_new_col_coverage",
         total=total,
-        adv_20d_inr=f"{n_adv}/{total} ({100*n_adv/max(total,1):.1f}%)",
-        te_60d=f"{n_te}/{total} ({100*n_te/max(total,1):.1f}%)",
-        premium_bps=f"{n_prem}/{total} ({100*n_prem/max(total,1):.1f}%)",
+        adv_20d_inr=f"{n_adv}/{total} ({100 * n_adv / max(total, 1):.1f}%)",
+        te_60d=f"{n_te}/{total} ({100 * n_te / max(total, 1):.1f}%)",
+        premium_bps=f"{n_prem}/{total} ({100 * n_prem / max(total, 1):.1f}%)",
     )
 
     # 4. Write-marker check

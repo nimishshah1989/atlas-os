@@ -60,7 +60,7 @@ def test_finish_run_updates_status(engine, run_id) -> None:  # type: ignore[no-u
 
     with engine.connect() as conn:
         row = conn.execute(
-            text("SELECT status, n_findings FROM atlas.atlas_validator_runs " "WHERE id = :rid"),
+            text("SELECT status, n_findings FROM atlas.atlas_validator_runs WHERE id = :rid"),
             {"rid": str(run_id)},
         ).fetchone()
     assert row is not None
@@ -86,7 +86,7 @@ def test_upsert_finding_inserts_row(engine, run_id) -> None:  # type: ignore[no-
 
     with engine.connect() as conn:
         count = conn.execute(
-            text("SELECT COUNT(*) FROM atlas.atlas_validator_findings " "WHERE run_id = :rid"),
+            text("SELECT COUNT(*) FROM atlas.atlas_validator_findings WHERE run_id = :rid"),
             {"rid": str(run_id)},
         ).scalar()
     assert count == 1

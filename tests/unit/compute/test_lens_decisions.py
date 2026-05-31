@@ -132,9 +132,9 @@ class TestComputeHoldingsDiff:
             from_df = pd.DataFrame(columns=["instrument_id", "symbol", "weight_pct"])  # type: ignore[call-overload]
             state_map = {"IID001": (state, "Accelerating")}
             result = compute_holdings_diff(to_df, from_df, state_map, min_weight_delta_pct=0.25)
-            assert (
-                result.iloc[0]["signal_quality"] == "high"
-            ), f"Expected high for entry into {state}"
+            assert result.iloc[0]["signal_quality"] == "high", (
+                f"Expected high for entry into {state}"
+            )
 
     def test_entry_into_low_quality_state_gets_low_signal(self) -> None:
         for state in _LOW_QUALITY_STATES:
@@ -150,9 +150,9 @@ class TestComputeHoldingsDiff:
             from_df = _snapshot(("IID001", "X", 5.0))
             state_map = {"IID001": (state, "Declining")}
             result = compute_holdings_diff(to_df, from_df, state_map, min_weight_delta_pct=0.25)
-            assert (
-                result.iloc[0]["signal_quality"] == "high"
-            ), f"Expected high for exit from {state}"
+            assert result.iloc[0]["signal_quality"] == "high", (
+                f"Expected high for exit from {state}"
+            )
 
     def test_exit_from_high_quality_state_gets_low_signal(self) -> None:
         for state in _HIGH_QUALITY_STATES:

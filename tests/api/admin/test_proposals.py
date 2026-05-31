@@ -49,8 +49,7 @@ def pending_proposal_id():
     with eng.begin() as c:
         c.execute(
             text(
-                "DELETE FROM atlas.atlas_weight_proposals "
-                "WHERE rationale LIKE 'STAGE4A_API_TEST%'"
+                "DELETE FROM atlas.atlas_weight_proposals WHERE rationale LIKE 'STAGE4A_API_TEST%'"
             )
         )
 

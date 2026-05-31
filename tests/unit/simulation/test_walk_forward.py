@@ -50,9 +50,9 @@ def test_oos_windows_do_not_overlap_train_period():
     start, end = _date_range(18)
     windows = generate_oos_windows(start, end)
     for win in windows:
-        assert (
-            win["oos_start"] > win["train_end"]
-        ), f"OOS start {win['oos_start']} <= train end {win['train_end']}"
+        assert win["oos_start"] > win["train_end"], (
+            f"OOS start {win['oos_start']} <= train end {win['train_end']}"
+        )
 
 
 def test_window_structure_has_required_keys():

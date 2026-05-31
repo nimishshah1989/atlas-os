@@ -150,9 +150,9 @@ def test_pocket_pivot_volume_fires_when_above_down_day_max():
     assert "pp_vol_threshold" in out.columns
     # Last bar: volume (400k) > max down-day vol (300k)
     last = out.iloc[-1]
-    assert bool(
-        last["is_pp_volume"]
-    ), f"Expected is_pp_volume=True on spike bar, got {last['is_pp_volume']}"
+    assert bool(last["is_pp_volume"]), (
+        f"Expected is_pp_volume=True on spike bar, got {last['is_pp_volume']}"
+    )
 
 
 def test_pocket_pivot_volume_does_not_fire_when_below_down_day_max():

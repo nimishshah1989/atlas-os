@@ -4093,3 +4093,138 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{
+  "ts": "2026-05-31T12:12:27Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/.pre-commit-config.yaml",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T12:13:11Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/scripts/ci/pyright_ratchet.py",
+  "lines_changed": 146,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T12:19:53Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/scripts/ci/gate_pragma_coverage.sh",
+  "lines_changed": 65,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T12:23:32Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/scripts/ci/gate_pragma_coverage.sh",
+  "lines_changed": 14,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T12:25:42Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/.github/workflows/ci.yml",
+  "lines_changed": 97,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T12:29:37Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/ci/fixtures/README.md",
+  "lines_changed": 34,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T12:36:15Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/docs/engineering-process.md",
+  "lines_changed": 35,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T12:40:21Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/.github/workflows/ci.yml",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T12:40:32Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/ci/fixtures/README.md",
+  "lines_changed": 18,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T12:47:39Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/ci/fixtures/slim_de_dump.py",
+  "lines_changed": 95,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T12:47:56Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/ci/fixtures/slim_de_dump.py",
+  "lines_changed": 16,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T12:57:17Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/.github/workflows/ci.yml",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T12:57:33Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/docs/engineering-process.md",
+  "lines_changed": 27,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T12:57:46Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/ci/fixtures/README.md",
+  "lines_changed": 14,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T13:24:40Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/docs/engineering-process.md",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}

@@ -106,9 +106,9 @@ def test_stage1b_boundary_exclusive():
         }
     )
     out = classify_stage(df_at_boundary, thresholds=THRESHOLDS)
-    assert out.iloc[-1][
-        "is_stage1b"
-    ], "price at exactly 3% below SMA should trigger Stage 1B (<=, not <)"
+    assert out.iloc[-1]["is_stage1b"], (
+        "price at exactly 3% below SMA should trigger Stage 1B (<=, not <)"
+    )
 
     close_arr2 = np.full(n, 100.0)
     close_arr2[-1] = 96.9  # 3.1% below SMA

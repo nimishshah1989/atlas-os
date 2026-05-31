@@ -77,8 +77,7 @@ def main(argv: list[str] | None = None) -> int:
         result = subprocess.run(cmd, check=False)  # noqa: S603 — fixed argv
         if result.returncode != 0:
             print(
-                f"conviction-tape backfill failed on {cur.isoformat()} "
-                f"(exit={result.returncode})",
+                f"conviction-tape backfill failed on {cur.isoformat()} (exit={result.returncode})",
                 file=sys.stderr,
             )
             return result.returncode

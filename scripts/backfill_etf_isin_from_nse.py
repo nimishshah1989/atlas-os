@@ -69,7 +69,7 @@ def update_universe(engine, mapping: dict[str, str], dry_run: bool) -> tuple[int
     """
     with engine.connect() as conn:
         active = conn.execute(
-            text("SELECT ticker FROM atlas.atlas_universe_etfs " "WHERE effective_to IS NULL")
+            text("SELECT ticker FROM atlas.atlas_universe_etfs WHERE effective_to IS NULL")
         ).fetchall()
     active_tickers = [r[0] for r in active]
 

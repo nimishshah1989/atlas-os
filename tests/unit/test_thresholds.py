@@ -23,9 +23,9 @@ def test_keys_are_unique() -> None:
 
 @pytest.mark.parametrize("t", THRESHOLDS, ids=lambda t: t.key)
 def test_default_within_allowed_range(t: Threshold) -> None:
-    assert (
-        t.min_allowed <= t.default <= t.max_allowed
-    ), f"{t.key}: default={t.default} outside [{t.min_allowed}, {t.max_allowed}]"
+    assert t.min_allowed <= t.default <= t.max_allowed, (
+        f"{t.key}: default={t.default} outside [{t.min_allowed}, {t.max_allowed}]"
+    )
 
 
 @pytest.mark.parametrize("t", THRESHOLDS, ids=lambda t: t.key)
@@ -77,9 +77,9 @@ def test_category_distribution_matches_catalog() -> None:
     for t in THRESHOLDS:
         counts[t.category] = counts.get(t.category, 0) + 1
     # Check a few specific counts that the methodology mandates
-    assert (
-        counts.get("regime", 0) == 8
-    ), f"Expected 8 regime thresholds, got {counts.get('regime', 0)}"
+    assert counts.get("regime", 0) == 8, (
+        f"Expected 8 regime thresholds, got {counts.get('regime', 0)}"
+    )
     assert counts.get("fund", 0) == 4
     assert counts.get("decision", 0) == 1
     assert counts.get("volume", 0) == 4

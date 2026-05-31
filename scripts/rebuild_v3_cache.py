@@ -261,9 +261,7 @@ def _build_cli_parser() -> argparse.ArgumentParser:
         "--nifty500-output",
         type=Path,
         default=None,
-        help=(
-            "Path for Nifty 500 benchmark pickle. " "Defaults to <output-dir>/nifty500_cache.pkl."
-        ),
+        help=("Path for Nifty 500 benchmark pickle. Defaults to <output-dir>/nifty500_cache.pkl."),
     )
     p.add_argument(
         "--blacklist-output",

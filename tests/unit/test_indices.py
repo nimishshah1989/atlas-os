@@ -60,8 +60,7 @@ def test_compute_index_metrics_returns_correct_columns() -> None:
     out = compute_index_metrics(df)
     expected = [c for c in METRICS_COLUMNS if c != "compute_run_id"]
     assert list(out.columns) == expected, (
-        f"missing: {set(expected) - set(out.columns)}, "
-        f"extra: {set(out.columns) - set(expected)}"
+        f"missing: {set(expected) - set(out.columns)}, extra: {set(out.columns) - set(expected)}"
     )
 
 

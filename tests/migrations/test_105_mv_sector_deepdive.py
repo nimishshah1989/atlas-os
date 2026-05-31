@@ -436,9 +436,9 @@ class TestIntegrationLiveDb:
                     "WHERE effective_to IS NULL"
                 )
             ).scalar()
-        assert (
-            mv_count == sector_count
-        ), f"MV has {mv_count} rows but universe has {sector_count} distinct sectors"
+        assert mv_count == sector_count, (
+            f"MV has {mv_count} rows but universe has {sector_count} distinct sectors"
+        )
 
     def test_verdict_column_not_null(self, engine) -> None:
         from sqlalchemy import text

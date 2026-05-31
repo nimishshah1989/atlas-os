@@ -369,8 +369,7 @@ class TestParseBhavCsv:
     ) -> str:
         """Build a minimal new-format BHAV CSV row (15 columns)."""
         return (
-            f"{sym}, {series}, {dt}, 0.00, {o}, {h}, {lo}, "
-            f"{c}, {c}, {c}, {vol}, 1.00, 1, 50, 50.00"
+            f"{sym}, {series}, {dt}, 0.00, {o}, {h}, {lo}, {c}, {c}, {c}, {vol}, 1.00, 1, 50, 50.00"
         )
 
     def test_extracts_target_tickers(self):
@@ -447,9 +446,9 @@ class TestTargetEtfs:
         current_tickers = {e["ticker"] for e in TARGET_ETFS}
         for _canonical, aliases in TICKER_BHAV_ALIASES.items():
             for alias in aliases:
-                assert (
-                    alias not in current_tickers
-                ), f"Alias '{alias}' should be an old symbol, not a current ticker"
+                assert alias not in current_tickers, (
+                    f"Alias '{alias}' should be an old symbol, not a current ticker"
+                )
 
     def test_itbees_alias_includes_netfit(self):
         assert "NETFIT" in TICKER_BHAV_ALIASES.get("ITBEES", [])

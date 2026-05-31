@@ -217,8 +217,7 @@ def test_states_classify_writes_rows():
     with eng.begin() as c:
         c.execute(
             text(
-                "DELETE FROM atlas.atlas_stock_state_daily"
-                " WHERE classifier_version = 'v1.0-smoke'"
+                "DELETE FROM atlas.atlas_stock_state_daily WHERE classifier_version = 'v1.0-smoke'"
             )
         )
 
