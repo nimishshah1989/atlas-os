@@ -36,7 +36,6 @@ import argparse
 import sys
 from datetime import date, timedelta
 
-import numpy as np
 import pandas as pd
 import structlog
 from psycopg2.extras import execute_values
@@ -130,8 +129,10 @@ def _commit_update(eng, *, table, pk_cols, value_cols, frame, dry_run):
     # Per the data-integrity rule we LOG the count rather than silently dropping.
     nulled = 0
     for c in value_cols:
-        col = pd.to_numeric(out[c], errors="coerce").astype("float64")
-        invalid = (~np.isfinite(col) | (col.abs() >= 1e6)) & col.notna()
+        col = out[c].astype("float64")
+        # NaN is excluded automatically: isin([±inf]) is False for NaN, and a NaN
+        # comparison (>= 1e6) is also False, so NaN rows stay NaN (not re-counted).
+        invalid = col.isin([float("inf"), float("-inf")]) | (col.abs() >= 1e6)
         n_bad = int(invalid.sum())
         if n_bad:
             nulled += n_bad
