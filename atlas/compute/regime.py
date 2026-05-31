@@ -116,8 +116,9 @@ def _load_stock_data_for_regime(
 ) -> pd.DataFrame:
     """Stock-level metrics + states needed for breadth computation.
 
-    Pulls ``ema_50_stock``, ``ema_200_stock``, ``extension_pct`` (for
-    ``close_approx``), plus ``rs_state`` and ``momentum_state`` for the
+    Pulls ``ema_20_stock``, ``ema_50_stock``, ``ema_200_stock``,
+    ``extension_pct`` (for ``close_approx``), plus ``rs_state`` and
+    ``momentum_state`` for the
     strength-breadth family. Lookback feeds the 252d new-highs/lows window.
     """
     load_start = start_date - timedelta(days=lookback_days)
@@ -127,6 +128,7 @@ def _load_stock_data_for_regime(
             SELECT
                 m.instrument_id,
                 m.date,
+                m.ema_20_stock,
                 m.ema_50_stock,
                 m.ema_200_stock,
                 m.extension_pct,

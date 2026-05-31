@@ -71,6 +71,15 @@ def run_migrations_online() -> None:
         connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {AtlasConfig.SCHEMA_NAME}"))
         connection.commit()
 
+        # Migrations apply DDL and may refresh large materialized views, which
+        # can run well past the role-level ``statement_timeout`` (Supabase sets
+        # 2min on the app role, and that role setting overrides PGOPTIONS). A
+        # migration runner must not be killed by a *query* timeout, so disable
+        # it for the migration session. Issued before ``begin_transaction()`` so
+        # the session-level setting persists across the migration's own txn.
+        connection.execute(text("SET statement_timeout = 0"))
+        connection.commit()
+
         context.configure(
             connection=connection,
             version_table="atlas_alembic_version",

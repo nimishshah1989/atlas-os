@@ -1368,11 +1368,15 @@ backwardation (near-term stress). `vix_9d` IS ingested in
 missing data** — it is a **MV date-join bug**: `mv_india_pulse` joins
 macro `ON macro.date = as_of_date` (exact match), but `atlas_macro_daily`
 lags the regime date (live: macro 05-27 vs regime 05-29), so the latest
-MV row gets NULL macro/vix. **Fix = date-tolerant lateral join (latest
-macro row ≤ as_of_date)** + keep the macro incremental ingest current.
-The SAME root cause blanks `macro_cards` and `narrative_ribbon`.
+MV row gets NULL macro/vix. **Fix = date-tolerant join: each regime date
+uses the latest macro row ≤ as_of_date** + keep the macro incremental
+ingest current. The SAME root cause blanks `macro_cards` and
+`narrative_ribbon`.
 
-Resolved 2026-05-30 in /grill-with-docs.
+Resolved 2026-05-30 in /grill-with-docs. Mechanism refined 2026-05-31: the
+date-tolerant join is implemented as a precomputed latest-macro-date map +
+equality join (not a per-row LATERAL), which is semantically identical but
+keeps the MV refresh to seconds instead of ~30 min.
 
 ## Breadth EMA naming (DMA → EMA)
 
