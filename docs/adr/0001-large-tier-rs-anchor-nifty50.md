@@ -26,25 +26,29 @@ We analysed the blast radius before deciding scope:
   `(1+r_stock)/(1+r_bench)−1` is monotonic in `r_stock`, so the dense rank — and
   therefore `rs_pctile_*`, `rs_state`, stage-1 qualification, scorecard scoring,
   and **signal calls** — does **not** change.
-- **One sign-based breadth metric changes**: `pct_stocks_rs_positive` (regime
-  breadth, `regime.py`) thresholds the raw `rs_1m_tier` at zero (not the
-  percentile). A Large-cap can be RS-positive vs Nifty 100 but negative vs
-  Nifty 50, so this fraction shifts for the Large-cap contribution across
-  history.
-- **`participation_rs` (sector participation, `sectors.py`) does *not* change.**
-  An earlier audit fix (`fix(health-audit)`) redefined it from a raw
-  `rs_1m_tier > 0` proxy to the methodology-correct
-  `rs_state ∈ {Leader, Strong, Emerging}`. `rs_state` derives from within-tier
-  percentiles, which are invariant under the anchor change (proven above) — so
-  `participation_rs` is unaffected and is **excluded from the backfill**.
+- **No persisted breadth or decision column changes** (corrected after prod
+  introspection, 2026-05-31):
+  - `pct_stocks_rs_positive` is **not persisted anywhere** — it is computed in
+    `regime._compute_strength_breadth` but absent from regime `METRICS_COLUMNS`,
+    and confirmed absent from every prod table/view/matview. It is
+    computed-and-discarded, so there is nothing to backfill.
+  - `regime_state` / `deployment_multiplier` classify off **price breadth**
+    (`pct_above_ema_50`) + VIX + Nifty500 trend — not RS — so they are
+    unaffected by the anchor.
+  - `participation_rs` (sectors) is `rs_state`-derived (`fix(health-audit)`
+    redefined it from the old `rs_1m_tier > 0` proxy), and `rs_state` is
+    invariant under the anchor — so it is unchanged.
+  - Net: the only values that change are the **display** RS columns
+    (`rs_*_tier`, `rs_*_tier_gold`) and the new 1d/24m + sector/index columns.
 
 ## Decision
 
 1. Set `TIER_BENCHMARK["Large"] = "NIFTY50"`. Nifty 100 remains in use **only**
    for the Calls Performance anchor benchmark.
 2. Recompute only the genuinely-affected columns across ~2 years of history,
-   vectorized: `rs_*_tier`, `rs_*_tier_gold`, `pct_stocks_rs_positive`.
-   (`participation_rs` is now `rs_state`-derived and invariant — excluded.)
+   vectorized: `rs_*_tier`, `rs_*_tier_gold` (stock display RS), plus the new
+   1d/24m and sector/index columns added in M3. **No breadth/regime backfill** —
+   `pct_stocks_rs_positive` isn't persisted and `participation_rs` is invariant.
 3. **Do not** recompute `rs_pctile_*`, `rs_state`, scorecard scoring, or signal
    calls — proven invariant above. Rerunning them would be wasted cost and
    needless risk to historical decision records.
@@ -52,11 +56,11 @@ We analysed the blast radius before deciding scope:
 ## Consequences
 
 - Large-tier RS display values now match the locked methodology; the Markets /
-  Sectors / India Pulse surfaces show Nifty-50-relative strength for Large-caps.
-- Regime breadth (`pct_stocks_rs_positive`) **history** shifts to corrected
-  values (a visible, retroactive change to the India Pulse breadth timeline).
-  This is intended — the prior values were computed against the wrong anchor.
-  Sector `participation_rs` is unchanged (it is now `rs_state`-derived).
+  Sectors surfaces show Nifty-50-relative strength for Large-caps.
+- **No retroactive change to any breadth/regime timeline**: `pct_stocks_rs_positive`
+  isn't persisted, `participation_rs` is `rs_state`-derived (invariant), and
+  `regime_state` keys off price breadth — so the India Pulse breadth/regime
+  history is byte-for-byte unchanged.
 - Signal calls, scorecard verdicts, and within-tier ranks are byte-for-byte
   unchanged, so no decision/audit history is rewritten.
 - If the invariance argument is ever broken (e.g. a future consumer thresholds a

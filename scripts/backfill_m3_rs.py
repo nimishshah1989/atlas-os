@@ -14,8 +14,11 @@ Stages (run in dependency order — each commits before the next reads):
   B. indices  — ret_24m (Nifty500 24m denominator for sector 24m RS).
   C. sectors  — bottomup_rs_{1d,1w,1m,6m,12m,24m}_nifty500 (reads corrected
                 stock ret_* + index ret_24m; 3m unchanged, left as-is).
-  D. regime   — pct_stocks_rs_positive (reads corrected stock rs_1m_tier;
-                participation_rs is rs_state-derived and INVARIANT — excluded).
+
+No regime stage: ``pct_stocks_rs_positive`` is computed-and-discarded (not in
+regime METRICS_COLUMNS; absent from every prod table/view/matview), and
+``regime_state`` classifies off price breadth, not RS. ``participation_rs`` is
+rs_state-derived and invariant. So no persisted breadth/regime column changes.
 
 Every computation reuses the vectorised compute primitives (groupby pct_change /
 column arithmetic) — no row loops, no iterrows/apply.
@@ -45,7 +48,6 @@ from atlas.compute.benchmarks import (
 )
 from atlas.compute.indices import load_index_prices
 from atlas.compute.primitives import RS_WINDOWS, WINDOWS, add_returns
-from atlas.compute.regime import _compute_strength_breadth, _load_stock_data_for_regime
 from atlas.compute.sectors import (
     compute_bottom_up_sector_metrics,
     load_nifty500_returns,
@@ -223,36 +225,22 @@ def backfill_sectors(eng, *, start: date, end: date, dry_run: bool) -> int:
     )
 
 
-# --------------------------------------------------------------------------- #
-# Stage D — regime (pct_stocks_rs_positive; depends on corrected rs_1m_tier)  #
-# --------------------------------------------------------------------------- #
-
-
-def backfill_regime(eng, *, start: date, end: date, dry_run: bool) -> int:
-    stock_data = _load_stock_data_for_regime(eng, start, end)
-    if stock_data.empty:
-        log.warning("m3_regime_no_stock_data")
-        return 0
-    breadth = _compute_strength_breadth(stock_data)
-    breadth = breadth.loc[(breadth["date"] >= start) & (breadth["date"] <= end)]
-    return _commit_update(
-        eng,
-        table="atlas_market_regime_daily",
-        pk_cols=("date",),
-        value_cols=("pct_stocks_rs_positive",),
-        frame=breadth,
-        dry_run=dry_run,
-    )
+# NOTE: there is deliberately no regime stage. The brief listed
+# ``pct_stocks_rs_positive`` for backfill, but prod introspection confirmed it is
+# NOT persisted anywhere (absent from regime ``METRICS_COLUMNS`` and from every
+# table/view/matview), and ``regime_state`` classifies off price breadth
+# (``pct_above_ema_50``), not RS — so the anchor/form change touches no persisted
+# regime/breadth column. ``participation_rs`` (sectors) is likewise rs_state-derived
+# and invariant. Only display RS columns change. See ADR-0001/0002.
 
 
 _STAGES = {
     "stocks": backfill_stocks,
     "indices": backfill_indices,
     "sectors": backfill_sectors,
-    "regime": backfill_regime,
 }
-# Dependency order: stocks + indices must commit before sectors; stocks before regime.
-_ALL_ORDER = ("stocks", "indices", "sectors", "regime")
+# Dependency order: stocks + indices must commit before sectors reads them back.
+_ALL_ORDER = ("stocks", "indices", "sectors")
 
 
 def main() -> int:
