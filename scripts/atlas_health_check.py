@@ -438,7 +438,8 @@ def check_table(conn, spec: TableSpec, check_date: date) -> dict:
     # Row count
     try:
         row_count = (
-            conn.execute(text(f"SELECT COUNT(*) FROM {qualified}")).scalar() or 0  # qualified built from TableSpec literals
+            conn.execute(text(f"SELECT COUNT(*) FROM {qualified}")).scalar()
+            or 0  # qualified built from TableSpec literals
         )
     except Exception as exc:
         return _row(
@@ -496,8 +497,7 @@ def check_table(conn, spec: TableSpec, check_date: date) -> dict:
             row = (
                 conn.execute(
                     text(
-                        f"SELECT COUNT(*) AS total, {null_count_exprs} "
-                        f"FROM {qualified} {scope}"
+                        f"SELECT COUNT(*) AS total, {null_count_exprs} " f"FROM {qualified} {scope}"
                     )
                 )
                 .mappings()

@@ -312,7 +312,10 @@ def test_compute_conviction_matrix_v5_signal_weights():
     object.__setattr__(genome.layer1, "mom_low_vol_weight", 0.2)
 
     conv = compute_conviction_matrix(
-        natr_14=natr, beta_alpha_63d=beta_alpha, mom_low_vol=mom_lv, layer1=genome.layer1,
+        natr_14=natr,
+        beta_alpha_63d=beta_alpha,
+        mom_low_vol=mom_lv,
+        layer1=genome.layer1,
     )
     for d in range(n_days):
         assert conv[:, d].argmax() == 0

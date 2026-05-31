@@ -151,9 +151,7 @@ def _assert_schema(schema: str) -> str:
 def _get_latest_date(engine, schema: str) -> date:
     schema = _assert_schema(schema)
     with engine.connect() as conn:
-        row = conn.execute(
-            text(f"SELECT MAX(date) FROM {schema}.stock_ohlcv")
-        ).fetchone()
+        row = conn.execute(text(f"SELECT MAX(date) FROM {schema}.stock_ohlcv")).fetchone()
     if row and row[0]:
         return row[0]
     return date(2020, 1, 1)
