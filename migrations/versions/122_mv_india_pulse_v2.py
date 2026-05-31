@@ -57,6 +57,16 @@ WITH
 dates AS (
   SELECT date AS as_of_date FROM atlas.atlas_market_regime_daily
 ),
+-- (perf) For each regime date, the latest macro date on or before it
+-- (atlas_macro_daily has a PK on date, so this is a cheap index scan). The
+-- macro CTEs below are equality-joined on this mapped date instead of a
+-- correlated LATERAL per row, which re-evaluated the macro CTEs ~2614x and
+-- pushed the refresh to ~30min. Same "latest macro <= as_of_date" semantics.
+macro_map AS (
+  SELECT d.as_of_date,
+         (SELECT max(mm.date) FROM atlas.atlas_macro_daily mm WHERE mm.date <= d.as_of_date) AS macro_date
+  FROM dates d
+),
 regime_v5 AS (
   SELECT date, pct_above_ema_200, pct_above_ema_50, pct_above_ema_20,
          india_vix, ad_ratio, mcclellan_oscillator,
@@ -71,7 +81,7 @@ regime_v6 AS (
 macro_vix9d AS (
   SELECT date, vix_9d FROM atlas.atlas_macro_daily
 ),
-macro_sparklines AS (
+macro_sparklines AS MATERIALIZED (
   SELECT m.date,
     (SELECT jsonb_agg(jsonb_build_object('date', sp.date, 'v', sp.usdinr) ORDER BY sp.date)
        FROM atlas.atlas_macro_daily sp
@@ -257,7 +267,7 @@ dispersion_series_json AS (
       WHERE s.date > (r.date - '61 days'::interval) AND s.date <= r.date AND s.cross_sectional_dispersion IS NOT NULL) AS dispersion_60d_series
   FROM atlas.atlas_market_regime_daily r
 ),
-macro_deltas AS (
+macro_deltas AS MATERIALIZED (
   SELECT m.date, m.usdinr, m.india_10y_yield, m.brent_inr, m.cpi_yoy,
     m.fii_cash_equity_flow_cr, m.dii_flow, m.us_10y_yield, m.dxy, m.vix_9d,
     CASE WHEN m.india_10y_yield IS NOT NULL AND m.cpi_yoy IS NOT NULL THEN m.india_10y_yield - m.cpi_yoy ELSE NULL::numeric END AS real_yield,
@@ -275,7 +285,7 @@ macro_deltas AS (
     m.dxy / NULLIF(lag(m.dxy,1) OVER (ORDER BY m.date),0) - 1 AS dxy_ret_1d
   FROM atlas.atlas_macro_daily m
 ),
-macro_cards_agg AS (
+macro_cards_agg AS MATERIALIZED (
   SELECT md1.date AS as_of_date,
     jsonb_build_array(
       jsonb_build_object('id','usdinr','label','USD / INR','value',round(md1.usdinr::numeric,4),'ret_1d',round(md1.usdinr_ret_1d,6),'ret_1m',CASE WHEN md1.usdinr_1m_ago IS NOT NULL THEN round(md1.usdinr/NULLIF(md1.usdinr_1m_ago,0)-1,6) END,'sparkline_30d',sp.usdinr_spark),
@@ -310,16 +320,20 @@ SELECT d.as_of_date,
 FROM dates d
   LEFT JOIN regime_v5 rv5 ON rv5.date = d.as_of_date
   LEFT JOIN regime_v6 rv6 ON rv6.date = d.as_of_date
-  -- (C) macro is date-tolerant: pick the latest macro row on or before as_of_date.
-  LEFT JOIN LATERAL (SELECT mv.vix_9d FROM macro_vix9d mv WHERE mv.date <= d.as_of_date ORDER BY mv.date DESC LIMIT 1) mv9 ON true
-  LEFT JOIN LATERAL (SELECT md2.* FROM macro_deltas md2 WHERE md2.date <= d.as_of_date ORDER BY md2.date DESC LIMIT 1) md ON true
+  -- (C) macro is date-tolerant: map each regime date to the latest macro date
+  -- on or before it (macro_map), then equality-join the materialized macro CTEs
+  -- on that date. Same "latest macro <= as_of_date" semantics as a correlated
+  -- LATERAL, evaluated once instead of per row (was ~30min refresh).
+  LEFT JOIN macro_map mmap ON mmap.as_of_date = d.as_of_date
+  LEFT JOIN macro_vix9d mv9 ON mv9.date = mmap.macro_date
+  LEFT JOIN macro_deltas md ON md.date = mmap.macro_date
   LEFT JOIN vix_pct vp ON vp.date = d.as_of_date
   LEFT JOIN headline_json hj ON hj.as_of_date = d.as_of_date
   LEFT JOIN breadth_json bj ON bj.as_of_date = d.as_of_date
   LEFT JOIN sector_heatmap_json shj ON shj.as_of_date = d.as_of_date
   LEFT JOIN tier_leadership_json tlj ON tlj.as_of_date = d.as_of_date
   LEFT JOIN dispersion_series_json dsj ON dsj.as_of_date = d.as_of_date
-  LEFT JOIN LATERAL (SELECT mca.macro_cards FROM macro_cards_agg mca WHERE mca.as_of_date <= d.as_of_date ORDER BY mca.as_of_date DESC LIMIT 1) mcj ON true
+  LEFT JOIN macro_cards_agg mcj ON mcj.as_of_date = mmap.macro_date
 WITH NO DATA;
 """
 
