@@ -4111,3 +4111,48 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{
+  "ts": "2026-05-31T12:19:53Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/scripts/ci/gate_pragma_coverage.sh",
+  "lines_changed": 65,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T12:23:32Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/scripts/ci/gate_pragma_coverage.sh",
+  "lines_changed": 14,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T12:25:42Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/.github/workflows/ci.yml",
+  "lines_changed": 97,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T12:29:37Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/ci/fixtures/README.md",
+  "lines_changed": 34,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T12:36:15Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/docs/engineering-process.md",
+  "lines_changed": 35,
+  "session_id": "unknown",
+  "schema_version": 1
+}
