@@ -36,6 +36,7 @@ import argparse
 import sys
 from datetime import date, timedelta
 
+import numpy as np
 import pandas as pd
 import structlog
 from psycopg2.extras import execute_values
@@ -121,7 +122,24 @@ def _temp_update(
 def _commit_update(eng, *, table, pk_cols, value_cols, frame, dry_run):
     """Reindex ``frame`` to (pk + value) cols, drop all-NA value rows, write."""
     keep = [*pk_cols, *value_cols]
-    out = frame.reindex(columns=keep).dropna(subset=list(value_cols), how="all")
+    out = frame.reindex(columns=keep)
+
+    # NUMERIC(10,4) cannot hold ±inf or |x| >= 1e6. These arise from a degenerate
+    # return (a zero / near-zero price ~N trading days back, e.g. a placeholder or
+    # newly-listed index) — the return is undefined, so write NULL, not garbage.
+    # Per the data-integrity rule we LOG the count rather than silently dropping.
+    nulled = 0
+    for c in value_cols:
+        col = pd.to_numeric(out[c], errors="coerce").astype("float64")
+        invalid = (~np.isfinite(col) | (col.abs() >= 1e6)) & col.notna()
+        n_bad = int(invalid.sum())
+        if n_bad:
+            nulled += n_bad
+            out[c] = col.mask(invalid)
+    if nulled:
+        log.warning("m3_backfill_nulled_nonfinite", table=table, values_nulled=nulled)
+
+    out = out.dropna(subset=list(value_cols), how="all")
     log.info(
         "m3_backfill_stage_rowcounts",
         table=table,
