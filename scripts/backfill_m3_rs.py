@@ -92,7 +92,11 @@ def _temp_update(
     if not rows:
         return 0
     all_cols = (*pk_cols, *value_cols)
-    pk_defs = ", ".join(f"{c} {'date' if c == 'date' else 'text'}" for c in pk_cols)
+    # Temp-table PK column types MUST match the real table or the UPDATE…FROM join
+    # raises "operator does not exist: uuid = text". atlas_stock_metrics_daily keys
+    # on a UUID instrument_id; index/sector key on text; all key on a date.
+    pk_types = {"date": "date", "instrument_id": "uuid"}
+    pk_defs = ", ".join(f"{c} {pk_types.get(c, 'text')}" for c in pk_cols)
     val_defs = ", ".join(f"{c} numeric" for c in value_cols)
     pk_clause = ", ".join(pk_cols)
     set_clause = ", ".join(f"{c} = s.{c}" for c in value_cols)
