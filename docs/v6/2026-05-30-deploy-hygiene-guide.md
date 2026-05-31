@@ -309,6 +309,46 @@ decisions.jsonl as its own commit before staging other files".
 
 ---
 
+## Rule 12 — The git working tree never lives under iCloud Drive.
+
+**The pattern (2026-05-31):** the working repo lived at
+`~/Documents/GitHub/atlas-os`, and `~/Documents` was iCloud-synced with
+"Optimize Mac Storage" on. iCloud silently **evicted `.git` pack objects** to
+the cloud, leaving truncated stubs on disk. Every tool that reads git then
+hung or errored — `git status`/`stash` died with `pack … is far too short to
+be a packfile`, VS Code froze on "Initializing virtual environments", the
+`claude` CLI hung on startup reading `CLAUDE.md`, and a frontend deploy stalled
+overnight in `deploy_frontend_v6.sh`'s unbounded `until ! pgrep 'next build'`
+wait loop. A full night of work looked "lost" — it wasn't; it was stranded
+behind a corrupted object store, never pushed.
+
+**The rule:**
+
+- A git working tree MUST live **outside** any iCloud-synced location
+  (`~/Documents`, `~/Desktop`, `~/Library/Mobile Documents/…`). Canonical path:
+  `~/dev/atlas-os`.
+- Turn off System Settings → Apple ID → iCloud → **Optimize Mac Storage**, or
+  remove Desktop & Documents from iCloud sync.
+
+**Recovery procedure (if a repo is already iCloud-corrupted):**
+
+1. Don't run any git *write* against the corrupt repo (`commit`/`add`/`gc`/
+   `checkout`) — a repack can permanently destroy the truncated pack.
+2. `git clone` a fresh copy from GitHub into a non-iCloud path (`~/dev`).
+3. List files changed since the last pushed commit by mtime (metadata-only, so
+   it won't hang on offloaded files):
+   `find . -newermt "<last-commit-time>" -not -path './.git/*' -not -path './node_modules/*'`
+4. Copy *only* those files into the fresh clone (`rsync -R <files> ~/dev/atlas-os/`),
+   excluding stale untracked files that prior commits already deleted.
+5. `git status` in the clean clone confirms the recovered diff; commit to a
+   `recovery/*` branch and push.
+
+**Enforcement:** none automatable from the repo (it's a machine-local config).
+Documented here + in `CLAUDE.md` "Local workspace" so every contributor clones
+to `~/dev`, not iCloud.
+
+---
+
 ## What "commercially scalable" means in code terms
 
 Atlas can't move to product if any of these patterns recur:
