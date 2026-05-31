@@ -4093,3 +4093,21 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{
+  "ts": "2026-05-31T12:12:27Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/.pre-commit-config.yaml",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T12:13:11Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/scripts/ci/pyright_ratchet.py",
+  "lines_changed": 146,
+  "session_id": "unknown",
+  "schema_version": 1
+}
