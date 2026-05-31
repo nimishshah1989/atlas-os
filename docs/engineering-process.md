@@ -83,11 +83,30 @@ A GitHub Actions workflow that runs on every PR and blocks merge if red.
 3. **External `de_*` tables in CI = captured schema-only dump.** Migrations read
    12 `de_*` tables owned by the DE pipeline but never created by atlas
    migrations, so `alembic upgrade head` on a fresh DB needs their schema first.
-   We commit a one-time `pg_dump --schema-only -t 'public.de_*'`
-   (`ci/fixtures/external_de_tables.sql`) rather than a hand-written stub (which
-   we'd have to keep column-correct by hand) or a create-if-not-exists migration
-   (which would make atlas "own" tables it doesn't). Real schema, no live-prod
-   access in CI, regenerate only when the DE pipeline changes.
+   We commit a one-time `pg_dump --schema-only -t 'public.de_*'`, **slimmed to
+   parent tables only** by `ci/fixtures/slim_de_dump.py` (the raw prod dump
+   carried 66 partition children, RLS policies, FK constraints and sequences —
+   most of which would *fail* on a clean DB), giving
+   `ci/fixtures/external_de_tables.sql` (25 empty parent tables). Chosen over a
+   hand-written stub (would need column-correctness by hand) or a
+   create-if-not-exists migration (would make atlas "own" tables it doesn't).
+   Real schema, no live-prod access in CI, regenerate only when the DE pipeline
+   changes. Prod is PG 17.6, so the CI service + the dump client are both PG 17.
+
+4. **Migration-apply gate is reporting-only (non-blocking) for now.** With the
+   `de_*` fixture in place, `alembic upgrade head` on a fresh DB immediately
+   surfaced pre-existing migration-chain debt: migration **064** builds
+   `idx_tv_signal_dedup` on `date_trunc('hour', triggered_at)` where
+   `triggered_at` is `timestamptz` — that expression is only STABLE, never
+   IMMUTABLE, so it cannot apply to a clean Postgres. Prod has the table (it's
+   at head 122), so the committed chain has **drifted** from what actually ran
+   on prod. 106/120 migrations use raw `op.execute` SQL, so the cascade is of
+   unknown depth. Decision: mirror the pyright-debt approach — keep the job
+   running (it seeds the fixture and reports how far the chain gets) but
+   `continue-on-error: true` so it does not block merge, and burn the chain down
+   to green in a dedicated follow-up before flipping it to a required check.
+   Known immutable fix for 064 when we get there:
+   `date_trunc('hour', triggered_at, 'UTC')` (verified on PG 17).
 
 ### Pillar 3 — One-command deploy from `main`  *(~half a day)*
 Replace hand `rsync`/ssh with a single, idempotent path.
