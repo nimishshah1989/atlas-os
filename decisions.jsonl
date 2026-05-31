@@ -3936,3 +3936,97 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{"ts":"2026-05-31T09:13:13Z","kind":"supabase_sql_executed","sql_preview":"SELECT 'has_ema_20_stock_col' AS k, EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_stock_metrics_daily' AND column_name='ema_20_stock')::text AS v\nUNION ALL SELECT 'ema_20_nonnull', (SELECT count(ema_20_stock)::text FROM atlas.atlas_stock_metrics_daily)\nUNION ALL SELECT 'ema_50_nonnull', (SELECT count(ema_50_stock)::text FROM atlas.atlas_stock_metrics_daily)\nUNION ALL SELECT 'ema_200_nonnull', (SELECT count(ema_200_stock)::text FROM atlas.atlas_s"}
+{
+  "ts": "2026-05-31T09:16:15Z",
+  "prev": "d9a3e6c8ed672a20",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/tests/integration/regime/test_breadth_loader_integration.py",
+  "lines_changed": 30,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T09:17:14Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/atlas/compute/regime.py",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T09:17:23Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/atlas/compute/regime.py",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T09:32:19Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/scripts/_diag_onconflict.py",
+  "lines_changed": 39,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-31T09:33:03Z","kind":"supabase_sql_executed","sql_preview":"SELECT 'relkind' AS k, relkind::text AS v FROM pg_class WHERE oid='atlas.atlas_market_regime_daily'::regclass\nUNION ALL SELECT 'is_partitioned', (relkind='p')::text FROM pg_class WHERE oid='atlas.atlas_market_regime_daily'::regclass\nUNION ALL SELECT 'n_partitions', (SELECT count(*)::text FROM pg_inherits WHERE inhparent='atlas.atlas_market_regime_daily'::regclass)\nUNION ALL SELECT 'pk_indexdef', (SELECT indexdef FROM pg_indexes WHERE schemaname='atlas' AND tablename='atlas_market_regime_daily' A"}
+{"ts":"2026-05-31T09:33:41Z","kind":"supabase_sql_executed","sql_preview":"SELECT 'pkey_isvalid' AS k, indisvalid::text AS v FROM pg_index WHERE indexrelid='atlas.atlas_market_regime_daily_pkey'::regclass\nUNION ALL SELECT 'pkey_isready', indisready::text FROM pg_index WHERE indexrelid='atlas.atlas_market_regime_daily_pkey'::regclass\nUNION ALL SELECT 'triggers', COALESCE((SELECT string_agg(tgname,',') FROM pg_trigger WHERE tgrelid='atlas.atlas_market_regime_daily'::regclass AND NOT tgisinternal),'none')\nUNION ALL SELECT 'rules', COALESCE((SELECT string_agg(rulename,',')"}
+{
+  "ts": "2026-05-31T09:36:01Z",
+  "prev": "bdcbda5bbd3ee8e7",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/tests/integration/regime/test_breadth_backfill_write.py",
+  "lines_changed": 56,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T09:37:06Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/scripts/backfill_breadth_ema_4wh.py",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T09:37:12Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/scripts/backfill_breadth_ema_4wh.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T09:37:23Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/scripts/backfill_breadth_ema_4wh.py",
+  "lines_changed": 10,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T09:37:37Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/scripts/backfill_breadth_ema_4wh.py",
+  "lines_changed": 51,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T09:38:46Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/tests/integration/regime/test_breadth_backfill_write.py",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-31T09:52:22Z","kind":"supabase_sql_executed","sql_preview":"SELECT 'col_nonnull_p20' AS k, count(pct_above_ema_20)::text AS v FROM atlas.atlas_market_regime_daily\nUNION ALL SELECT 'col_nonnull_p100', count(pct_above_ema_100)::text FROM atlas.atlas_market_regime_daily\nUNION ALL SELECT 'col_nonnull_p4wh', count(pct_4w_high)::text FROM atlas.atlas_market_regime_daily\nUNION ALL SELECT 'newest_20ema', (SELECT (b->>'today')||' gap='||(b->>'data_gap') FROM atlas.mv_india_pulse, jsonb_array_elements(breadth_table) b WHERE as_of_date=(SELECT max(as_of_date) FROM "}
