@@ -42,6 +42,7 @@ from atlas.compute.breadth import (
     compute_ma_breadth,
     compute_mcclellan,
     compute_new_highs_lows,
+    compute_pct_4w_high,
 )
 from atlas.compute.indices import INDIA_VIX_CODE, NIFTY500_CODE
 from atlas.config import Config
@@ -61,7 +62,9 @@ METRICS_COLUMNS: tuple[str, ...] = (
     "nifty500_ema_200_slope",
     "pct_above_ema_20",
     "pct_above_ema_50",
+    "pct_above_ema_100",
     "pct_above_ema_200",
+    "pct_4w_high",
     "advances_count",
     "declines_count",
     "unchanged_count",
@@ -335,6 +338,7 @@ def compute_regime_inputs(
     ad = compute_mcclellan(ad)
     nh = compute_new_highs_lows(stock_data)
     ma = compute_ma_breadth(stock_data)
+    p4wh = compute_pct_4w_high(stock_data)
     sb = _compute_strength_breadth(stock_data)
 
     # ``ad`` is the master per-date scaffold (every trading day with ≥1 stock
@@ -342,15 +346,18 @@ def compute_regime_inputs(
     out = (
         ad.merge(nh, on="date", how="outer")
         .merge(ma, on="date", how="outer")
+        .merge(p4wh, on="date", how="outer")
         .merge(sb, on="date", how="outer")
         .merge(idx_inputs, on="date", how="outer")
     )
     out = out.sort_values("date").reset_index(drop=True)
 
-    # ``pct_above_ema_20`` is not stored at stock grain; carry through as NaN
-    # so the downstream upsert doesn't break, and document the gap.
-    if "pct_above_ema_20" not in out.columns:
-        out["pct_above_ema_20"] = np.nan
+    # MA-breadth (20/50/100/200) and 4-week-high are now computed above; any
+    # column the merge didn't produce (e.g. an empty universe slice) is carried
+    # through as NaN so the upsert column set stays stable.
+    for _col in ("pct_above_ema_20", "pct_above_ema_100", "pct_4w_high"):
+        if _col not in out.columns:
+            out[_col] = np.nan
 
     # ``ad_line_slope_21`` — 21-day slope (pct_change-equivalent) of A/D line.
     out["ad_line_slope_21"] = out["ad_line"].pct_change(periods=21)

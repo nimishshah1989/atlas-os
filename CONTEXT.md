@@ -1069,16 +1069,33 @@ No page may invent its own baseline.
 | **MSCI Emerging Markets** | Peer-market context |
 | **S&P 500 (USD-INR adjusted)** | US-market context |
 
-**Time windows for RS only:** 1w / 1m / 3m / 6m / 12m. Other windows
-(YTD, 5y, etc.) are NOT in scope for v6 user-facing pages. They may
-appear on the Methodology appendix.
+**Time windows for RS (REVISED 2026-05-30 — expanded 5 → 7):**
+**1d / 1w / 1m / 3m / 6m / 12m / 24m.** The original 5-window lock
+(1w/1m/3m/6m/12m) is superseded by user direction 2026-05-30: RS is
+computed across **7 windows** for every RS surface (India Pulse sector
+heatmap, Sectors page, Stocks, and the Markets RS 9-baseline grid).
+
+- **1d RS** is informational and structurally noisy (one-day relative
+  strength flips constantly); surfaced but never load-bearing for a
+  verdict.
+- **24m RS** requires ~2yr price history per instrument; RS is derived
+  from `de_equity_ohlcv`/`de_index_prices` (history to 2005), so the
+  backfill is price-only — no scorecard recompute needed.
+- The Markets RS grid lock ("9 baselines × 5 windows") becomes
+  **9 baselines × 7 windows**.
+- Temporal filter controls across the tool gain a **1w** option (and
+  1d/24m where the surface supports it).
+
+Other windows (YTD, 5y, etc.) remain out of scope for v6 user-facing
+pages; they may appear on the Methodology appendix.
 
 **COSPI removed:** the BSE Composite Stock Price Index is not in the v6
 baseline set. (Prior CEO plan listed it; user direction 2026-05-26
 removes it as redundant + low-relevance for the retail/family-office
 user.)
 
-Locked 2026-05-26 in /plan-design-review.
+Locked 2026-05-26 in /plan-design-review; RS windows expanded to 7
+on 2026-05-30 per user direction (Regime + India Pulse fix chunk).
 
 ## Language translation rule (no raw stats on user-facing pages)
 
@@ -1288,3 +1305,81 @@ Locked 2026-05-26 in /grill-with-docs (mv build session).
 **Five values:** `STRONG_BUY`, `BUY`, `NEUTRAL`, `SELL`, `STRONG_SELL` — derived from `recommend_all` score bands.
 
 Resolved 2026-05-28 in /grill-with-docs (TradingView integration spec).
+
+---
+
+# Regime + India Pulse fix chunk (2026-05-30)
+
+The sections below lock terms for the Regime + India Pulse data/UX fix
+chunk. Backend-first.
+
+## Relative Strength — definition, windows, baselines
+
+**RS(I, B, W)** at date T is the **window excess return** of instrument I
+over baseline B — centred on **0** (>0 = outperforming):
+
+    RS = (1 + ret_I(W)) / (1 + ret_B(W)) − 1,  ret_X(W) = close_X(T)/close_X(T−W) − 1
+
+the *relative* form (≈ ret_I − ret_B for small returns). Live storage in
+`atlas_sector_metrics_daily` is centred on 0 (e.g. rs_12m ≈ +0.63 for a
+hot sector). **Deployed code is currently inconsistent** —
+`bottomup_rs_3m_nifty500` uses the relative form while `rs_1w/1m/6m/12m`
+use plain difference `ret_I − ret_B`; this chunk standardizes ALL windows
+to the relative form. Computed **vectorized** in `atlas/compute/sectors.py`
++ `atlas/compute/benchmarks.py` — instrument return vector × baseline
+return vector per window; NEVER row-wise (`iterrows`/`apply` hook-banned).
+~750 instruments × 9 baselines × 7 windows is a sub-second numpy op.
+
+- **7 windows:** 1d / 1w / 1m / 3m / 6m / 12m / 24m (Baselines lock,
+  revised 2026-05-30).
+- **9 baselines:** the canonical set (Baseline source registry). RS is
+  computed across **all 9** — prior code computed only vs tier-anchor +
+  Nifty500; the full 9×7 matrix is the Markets RS grid contract.
+- **Per-instrument anchor RS** (Stocks/Sectors surfaces) reports RS vs
+  the tier anchor; the Markets RS page renders the full 9×7 grid.
+- **Source:** `de_equity_ohlcv` / `de_index_prices` (price-only, history
+  to 2007). No scorecard dependency — RS backfill is cheap at any depth.
+
+## Days-since-call + return-since-call (honest tracking-start)
+
+`atlas_signal_calls.date` is the **mint date** (the INACTIVE→ACTIVE
+transition that minted the `signal_call_id`; see signal_call_id lock).
+
+- **Days since call** = T_today − mint_date, rendered "in signal since
+  DD-MMM (dN)". The v6 engine began minting **2026-05-22**; there is NO
+  pre-2026-05-22 signal/scorecard history, so true historical entry
+  dates are **not recoverable and are NOT synthesized** (no-synthetic-data
+  rule). Days diverge organically as the system ages. The current "d8 for
+  everyone" is genuine system age, not a bug.
+- **Return since call** — show **both**: (a) **absolute** price return
+  `close(T)/close(mint_date) − 1`, and (b) **excess** vs the tier anchor
+  benchmark (Large→Nifty100, Mid→Midcap150, Small→Smallcap250).
+  Computed via vectorized price join; no ledger dependency required.
+
+Resolved 2026-05-30 in /grill-with-docs (user chose honest tracking-start
++ both return columns).
+
+## VIX term structure
+
+`vix_term_structure = india_vix − vix_9d`, where `vix_9d` is the 9-day
+India VIX (NSE). Reading: `> 0` contango (calm/normal), `< −0.2`
+backwardation (near-term stress). `vix_9d` IS ingested in
+`atlas_macro_daily` (live: 2752/2752 populated). The blank card is **NOT
+missing data** — it is a **MV date-join bug**: `mv_india_pulse` joins
+macro `ON macro.date = as_of_date` (exact match), but `atlas_macro_daily`
+lags the regime date (live: macro 05-27 vs regime 05-29), so the latest
+MV row gets NULL macro/vix. **Fix = date-tolerant lateral join (latest
+macro row ≤ as_of_date)** + keep the macro incremental ingest current.
+The SAME root cause blanks `macro_cards` and `narrative_ribbon`.
+
+Resolved 2026-05-30 in /grill-with-docs.
+
+## Breadth EMA naming (DMA → EMA)
+
+The breadth metrics are computed on **EMAs**, not simple moving averages.
+The "% above NNN DMA" labels are a **mislabel** — corrected to "% above
+NNN EMA". The breadth set is **20 / 50 / 100 / 200 EMA %** plus **% at
+4-week high**. Live today: `pct_above_ema_20/50/200` exist;
+`pct_above_ema_100` and `% at 4-week high` are unbuilt (both `data_gap`).
+
+Resolved 2026-05-30 in /grill-with-docs.

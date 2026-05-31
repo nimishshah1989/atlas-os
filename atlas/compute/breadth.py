@@ -223,50 +223,100 @@ def compute_new_highs_lows(
 # --------------------------------------------------------------------------- #
 
 
+def _pct_above(work: pd.DataFrame, close_col: str, ema_col: str, name: str) -> pd.Series:
+    """Per-date fraction of stocks with ``close > ema``; NULL EMA rows excluded."""
+    valid = work.dropna(subset=[close_col, ema_col])
+    above = (valid[close_col] > valid[ema_col]).astype(int)
+    counts = above.groupby(valid["date"]).agg(["sum", "count"])
+    return (counts["sum"] / counts["count"].clip(lower=1)).rename(name)
+
+
 def compute_ma_breadth(
     df_stocks: pd.DataFrame,
     *,
     close_col: str = "close_approx",
+    ema_20_col: str = "ema_20_stock",
     ema_50_col: str = "ema_50_stock",
     ema_200_col: str = "ema_200_stock",
+    group_col: str = "instrument_id",
 ) -> pd.DataFrame:
-    """Per-date fraction of stocks above their 50-/200-EMA.
+    """Per-date fraction of stocks above their 20/50/100/200-EMA.
 
-    Per methodology §11.1 (MA Breadth family) — Bhaven's anchor. Stocks where
-    the EMA is NULL (warm-up rows) are excluded from both numerator and
-    denominator, so early-listing stocks don't bias the ratio.
+    Per methodology §11.1 (MA Breadth family). Stocks where the EMA is NULL
+    (warm-up rows) are excluded from both numerator and denominator, so
+    early-listing stocks don't bias the ratio.
 
-    Args:
-        df_stocks: long stock-day frame containing the close and EMA columns.
-        close_col: column holding daily close (or close_approx).
-        ema_50_col / ema_200_col: stock-level EMA columns from
-            ``atlas_stock_metrics_daily``.
+    The 20/50/200-EMA breadth read the **stored** ``ema_20_stock`` /
+    ``ema_50_stock`` / ``ema_200_stock`` columns. The 100-EMA is **not stored**,
+    so it is computed fresh, vectorised, from ``close_col`` via a per-stock
+    ``ewm`` (no Python loop).
 
     Returns:
-        Date-indexed frame with ``pct_above_ema_50`` and ``pct_above_ema_200``
-        columns (each in [0, 1]).
+        Date-indexed frame with ``pct_above_ema_20/50/100/200`` (each in [0, 1]).
+    """
+    cols = ["pct_above_ema_20", "pct_above_ema_50", "pct_above_ema_100", "pct_above_ema_200"]
+    if df_stocks.empty:
+        return pd.DataFrame(columns=["date", *cols])
+
+    want = [group_col, "date", close_col, ema_20_col, ema_50_col, ema_200_col]
+    work = df_stocks[[c for c in want if c in df_stocks.columns]].copy()
+    if ema_20_col not in work.columns:
+        work[ema_20_col] = pd.NA
+
+    # 100-EMA computed fresh from close (not stored at stock grain). ewm runs
+    # in C per group — no iterrows. min_periods=100 so warm-up rows stay NaN
+    # and drop out of the ratio (consistent with the stored-EMA cohorts).
+    work = work.sort_values([group_col, "date"])
+    work["ema_100_stock"] = (
+        work.groupby(group_col, group_keys=False, observed=True)[close_col]
+        .transform(lambda s: s.ewm(span=100, adjust=False, min_periods=100).mean())
+        .astype("float64")
+    )
+
+    pct_20 = _pct_above(work, close_col, ema_20_col, "pct_above_ema_20")
+    pct_50 = _pct_above(work, close_col, ema_50_col, "pct_above_ema_50")
+    pct_100 = _pct_above(work, close_col, "ema_100_stock", "pct_above_ema_100")
+    pct_200 = _pct_above(work, close_col, ema_200_col, "pct_above_ema_200")
+
+    out = pd.concat([pct_20, pct_50, pct_100, pct_200], axis=1).reset_index()
+    out = out.sort_values("date").reset_index(drop=True)
+    # A date present in only some cohorts keeps NaN for the others — real signal,
+    # not imputed 0.
+    return out
+
+
+def compute_pct_4w_high(
+    df_stocks: pd.DataFrame,
+    *,
+    close_col: str = "close_approx",
+    group_col: str = "instrument_id",
+    window: int = 20,
+    tol: float = 0.001,
+) -> pd.DataFrame:
+    """Per-date fraction of stocks at (within ``tol`` of) their 4-week high.
+
+    A stock is "at a 4-week high" on date ``t`` iff ``close_t`` is within
+    ``tol`` (default 0.1%) of its trailing ``window``-day (≈4 weeks) rolling
+    max. Vectorised rolling max per stock — no Python loop.
+
+    Returns:
+        Date frame with ``pct_4w_high`` in [0, 1].
     """
     if df_stocks.empty:
-        return pd.DataFrame(columns=["date", "pct_above_ema_50", "pct_above_ema_200"])
+        return pd.DataFrame(columns=["date", "pct_4w_high"])
 
-    work = df_stocks[["date", close_col, ema_50_col, ema_200_col]].copy()
+    work = df_stocks[[group_col, "date", close_col]].copy()
+    work = work.sort_values([group_col, "date"]).reset_index(drop=True)
+    grp = work.groupby(group_col, group_keys=False, observed=True)[close_col]
+    # min_periods = window*3//4 so a stock needs ~3 weeks of history to qualify.
+    roll_max = grp.transform(lambda s: s.rolling(window, min_periods=window * 3 // 4).max())
 
-    # ---- 50-day EMA breadth -------------------------------------------------
-    valid_50 = work.dropna(subset=[close_col, ema_50_col])
-    above_50 = (valid_50[close_col] > valid_50[ema_50_col]).astype(int)
-    counts_50 = above_50.groupby(valid_50["date"]).agg(["sum", "count"])
-    pct_50 = (counts_50["sum"] / counts_50["count"].clip(lower=1)).rename("pct_above_ema_50")
+    at_high = (work[close_col] >= roll_max * (1.0 - tol)) & roll_max.notna()
+    valid = work.assign(_at=at_high).loc[roll_max.notna()]
+    counts = valid["_at"].astype(int).groupby(valid["date"]).agg(["sum", "count"])
+    pct = (counts["sum"] / counts["count"].clip(lower=1)).rename("pct_4w_high")
 
-    # ---- 200-day EMA breadth ------------------------------------------------
-    valid_200 = work.dropna(subset=[close_col, ema_200_col])
-    above_200 = (valid_200[close_col] > valid_200[ema_200_col]).astype(int)
-    counts_200 = above_200.groupby(valid_200["date"]).agg(["sum", "count"])
-    pct_200 = (counts_200["sum"] / counts_200["count"].clip(lower=1)).rename("pct_above_ema_200")
-
-    out = pd.concat([pct_50, pct_200], axis=1).reset_index()
-    out = out.sort_values("date").reset_index(drop=True)
-    # If a date is present in only one of the two cohorts, the missing column
-    # comes through as NaN — keep that signal rather than imputing 0.
+    out = pct.reset_index().sort_values("date").reset_index(drop=True)
     return out
 
 
@@ -276,4 +326,5 @@ __all__ = [
     "compute_ma_breadth",
     "compute_mcclellan",
     "compute_new_highs_lows",
+    "compute_pct_4w_high",
 ]
