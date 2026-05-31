@@ -40,6 +40,13 @@ no scoring/feature code iterates WINDOWS (verified), and vol/drawdown take their
 own window args."""
 
 
+RS_WINDOWS: tuple[str, ...] = ("1d", "1w", "1m", "3m", "6m", "12m", "24m")
+"""The 7 canonical relative-strength windows (CONTEXT.md lock). This is
+``WINDOWS`` minus ``12m_1m`` — the skip-most-recent variant feeds momentum
+scoring, not RS display surfaces. Every RS metric (tier, gold, market-vs-Nifty500)
+iterates exactly these 7 windows."""
+
+
 # --------------------------------------------------------------------------- #
 # Returns                                                                     #
 # --------------------------------------------------------------------------- #

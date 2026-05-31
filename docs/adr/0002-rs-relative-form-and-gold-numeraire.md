@@ -45,3 +45,15 @@ meaningful gold metric in relative form is the **direct** stock-vs-gold ratio.
   Nifty-50 anchor change — see [0001](0001-large-tier-rs-anchor-nifty50.md)).
 - US/global surfaces (`us_stocks.py`, `global_pipeline.py`) remain in excess
   form for now; their standardization rides with M4 (the Markets RS grid).
+- **ETFs** share `add_relative_strength`, so ETF tier RS (`rs_*_benchmark`) is
+  now relative form automatically and the ETF metrics table is backfilled along
+  with stocks. ETF gold (`rs_*_benchmark_gold`, `etfs.py`) still uses the
+  deflated-excess form and becomes **degenerate** under the relative tier RS
+  (same cancellation as the stock gold metric). It is **out of M3 scope** and
+  tracked as a follow-up to redefine as direct ETF-vs-gold (rides with M4).
+- **Sector bottom-up RS extended to the full 7-window lock** (`1d`/`24m` added
+  to `bottomup_rs_*_nifty500`, previously 3m-only persisted). This required
+  persisting the 24-month raw return `ret_24m` on **both**
+  `atlas_stock_metrics_daily` (sector numerator source) and
+  `atlas_index_metrics_daily` (Nifty500 denominator source); migration 123 adds
+  these plus the new tier/gold RS columns.

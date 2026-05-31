@@ -58,6 +58,9 @@ INDEX_WINDOWS: dict[str, int] = {
     "3m": 63,
     "6m": 126,
     "12m": 252,
+    # M3: 24m return persisted so it can serve as the Nifty500 denominator for
+    # the sector bottom-up 24m RS surface (CONTEXT.md 7-window lock).
+    "24m": 504,
 }
 
 # RS-vs-Nifty500 windows per docs/02_DATABASE_SCHEMA.md §3.3 (3 windows only).
@@ -73,6 +76,7 @@ METRICS_COLUMNS: tuple[str, ...] = (
     "ret_3m",
     "ret_6m",
     "ret_12m",
+    "ret_24m",
     "rs_1w_nifty500",
     "rs_1m_nifty500",
     "rs_3m_nifty500",
