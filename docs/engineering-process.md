@@ -108,6 +108,16 @@ A GitHub Actions workflow that runs on every PR and blocks merge if red.
    Known immutable fix for 064 when we get there:
    `date_trunc('hour', triggered_at, 'UTC')` (verified on PG 17).
 
+**Sequencing decision (2026-05-31): defer the cleanup, not the gate.** Both the
+693 pyright errors and the migration-chain replayability are deferred to a
+single **end-of-project hardening pass** (after the v6 M- and F-phases ship),
+done as one careful, focused exercise. Rationale: neither blocks building
+product — the pyright ratchet guarantees the type debt can't *grow* while we
+build (new/changed code must be clean), and new migrations are tested on EC2 by
+hand as they are today. The ratchet is precisely what makes deferral safe. The
+hardening pass will: drive pyright to ~0, make `alembic upgrade head` replay
+cleanly on a fresh DB, and flip the migration-apply job to a required check.
+
 ### Pillar 3 — One-command deploy from `main`  *(~half a day)*
 Replace hand `rsync`/ssh with a single, idempotent path.
 - `make deploy` (or a GitHub Action that fires on merge to `main`) that runs the
