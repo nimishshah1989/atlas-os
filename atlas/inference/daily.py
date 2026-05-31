@@ -309,7 +309,7 @@ def _detect_code_commit() -> str:
         # Resolve repo root from this module's location (atlas/inference/daily.py
         # → repo root is two parents up).
         repo_root = Path(__file__).resolve().parents[2]
-        result = subprocess.run(  # noqa: S603 -- fixed argv list; no shell, no untrusted input
+        result = subprocess.run(
             ["git", "rev-parse", "HEAD"],  # noqa: S607 -- git on PATH is conventional
             cwd=str(repo_root),
             capture_output=True,

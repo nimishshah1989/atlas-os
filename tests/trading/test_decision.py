@@ -295,6 +295,7 @@ def test_conviction_capped_at_1():
 def test_compute_conviction_matrix_v5_signal_weights():
     """v5 conviction: 3 alphalens-validated monotonic signals."""
     import numpy as np
+
     from atlas.trading.decision import compute_conviction_matrix
     from atlas.trading.genome import GenomeFactory
 

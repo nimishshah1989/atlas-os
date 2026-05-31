@@ -68,7 +68,7 @@ async def list_runs(
                 WHERE 1=1 {scope_clause}
                 ORDER BY started_at DESC
                 LIMIT :limit
-            """),  # noqa: S608 -- scope_clause is constructed from literals, not user input
+            """),
             {"scope": scope, "limit": limit} if scope else {"limit": limit},
         ).fetchall()
 

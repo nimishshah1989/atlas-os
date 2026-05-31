@@ -128,8 +128,8 @@ def evaluate_categorical(
 
 
 __all__ = [
-    "AnomalyResult",
     "SEVERITY_RULES",
-    "evaluate_numeric",
+    "AnomalyResult",
     "evaluate_categorical",
+    "evaluate_numeric",
 ]

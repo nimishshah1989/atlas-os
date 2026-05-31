@@ -148,4 +148,4 @@ def run_and_record(
     return result
 
 
-__all__ = ["ValidatorResult", "run_validator", "write_result", "run_and_record"]
+__all__ = ["ValidatorResult", "run_and_record", "run_validator", "write_result"]

@@ -255,7 +255,6 @@ def _run_distributed_trials(n_trials: int, n_workers: int) -> None:
     """
     import subprocess
     import sys
-
     import time
 
     trials_per_worker = max(1, n_trials // n_workers)
@@ -271,7 +270,7 @@ def _run_distributed_trials(n_trials: int, n_workers: int) -> None:
         env["ATLAS_INCUBATOR_WORKER_ID"] = str(i)
         # Capture per-worker stderr so failures surface for diagnosis.
         log_path = os.path.join(log_dir, f"worker_{i:02d}.log")
-        log_file = open(log_path, "w")  # noqa: SIM115 — kept open for subprocess
+        log_file = open(log_path, "w")
         proc = subprocess.Popen(
             [sys.executable, "-m", "atlas.trading.incubator"],
             env=env,

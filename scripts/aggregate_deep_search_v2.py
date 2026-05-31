@@ -1219,7 +1219,7 @@ def build_persist_sql(
         # ruff S608 flags any "INSERT INTO ... f-string" — suppressed because
         # we emit text to disk for human review, not execute it.
         insert_stmt = (
-            "INSERT INTO atlas_cell_definitions ("  # noqa: S608
+            "INSERT INTO atlas_cell_definitions ("
             "cell_id, tier, tenure, direction, rule_dsl, methodology_ref, notes, created_at"
             ") VALUES ("
             "gen_random_uuid(), "

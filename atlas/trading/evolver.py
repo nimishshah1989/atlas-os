@@ -185,13 +185,13 @@ def _crossover_playbook(a: RegimePlaybook, b: RegimePlaybook) -> RegimePlaybook:
         [a.exit_momentum_collapse, b.exit_momentum_collapse]
     )
     d["time_stop_days"] = random.choice([a.time_stop_days, b.time_stop_days])  # noqa: S311
-    d["min_hold_days"] = int(
-        round(_clamp(_blend(float(a.min_hold_days), float(b.min_hold_days)), 3, 15))
+    d["min_hold_days"] = round(
+        _clamp(_blend(float(a.min_hold_days), float(b.min_hold_days)), 3, 15)
     )
     sector_blend = _blend(
         float(a.max_sector_concentration_pct), float(b.max_sector_concentration_pct)
     )
-    d["max_sector_concentration_pct"] = int(round(_clamp(sector_blend, 15, 35)))
+    d["max_sector_concentration_pct"] = round(_clamp(sector_blend, 15, 35))
     _enforce_playbook_invariants(d)
     return RegimePlaybook(**d)
 
@@ -201,7 +201,7 @@ def _crossover_l1(a: Layer1Perception, b: Layer1Perception) -> Layer1Perception:
     for key, (lo, hi) in _L1_FLOAT_BOUNDS.items():
         d[key] = _clamp(_blend(getattr(a, key), getattr(b, key)), lo, hi)
     for key, lo, hi in _L1_INT_RANGES:
-        d[key] = int(round(_clamp(_blend(float(getattr(a, key)), float(getattr(b, key))), lo, hi)))
+        d[key] = round(_clamp(_blend(float(getattr(a, key)), float(getattr(b, key))), lo, hi))
     d["rs_timeframe_weights"] = _normalize_weights(
         {
             k: (a.rs_timeframe_weights.get(k, 0.0) + b.rs_timeframe_weights.get(k, 0.0)) / 2.0
@@ -227,11 +227,9 @@ def _mutate_playbook_dict(d: dict[str, Any], sigma: float) -> dict[str, Any]:
     for key, (lo, hi) in _REGIME_FLOAT_OPTIONAL.items():
         if d[key] is not None:
             d[key] = _clamp(d[key] + random.gauss(0.0, (hi - lo) * sigma), lo, hi)
-    d["min_hold_days"] = int(
-        round(_clamp(d["min_hold_days"] + random.gauss(0.0, 2.0 * sigma), 3, 15))
-    )
-    d["max_sector_concentration_pct"] = int(
-        round(_clamp(d["max_sector_concentration_pct"] + random.gauss(0.0, 5.0 * sigma), 15, 35))
+    d["min_hold_days"] = round(_clamp(d["min_hold_days"] + random.gauss(0.0, 2.0 * sigma), 3, 15))
+    d["max_sector_concentration_pct"] = round(
+        _clamp(d["max_sector_concentration_pct"] + random.gauss(0.0, 5.0 * sigma), 15, 35)
     )
     _enforce_playbook_invariants(d)
     return d
@@ -241,7 +239,7 @@ def _mutate_l1_dict(d: dict[str, Any], sigma: float) -> dict[str, Any]:
     for key, (lo, hi) in _L1_FLOAT_BOUNDS.items():
         d[key] = _clamp(d[key] + random.gauss(0.0, (hi - lo) * sigma), lo, hi)
     for key, lo, hi in _L1_INT_RANGES:
-        d[key] = int(round(_clamp(d[key] + random.gauss(0.0, (hi - lo) * sigma), lo, hi)))
+        d[key] = round(_clamp(d[key] + random.gauss(0.0, (hi - lo) * sigma), lo, hi))
     if random.random() < 0.20:  # noqa: S311
         d["require_stage2_for_entry"] = not bool(d["require_stage2_for_entry"])
     if random.random() < 0.20:  # noqa: S311

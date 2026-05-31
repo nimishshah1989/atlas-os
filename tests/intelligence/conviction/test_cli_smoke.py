@@ -17,7 +17,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 def test_cli_dry_run_end_to_end() -> None:
     """The CLI dry-run should run, print a summary, exit 0."""
     env = {**os.environ, "PYTHONPATH": str(_REPO_ROOT)}
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(
         [sys.executable, "scripts/compute_conviction.py"],
         capture_output=True,
         text=True,

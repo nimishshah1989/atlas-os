@@ -438,7 +438,7 @@ def check_table(conn, spec: TableSpec, check_date: date) -> dict:
     # Row count
     try:
         row_count = (
-            conn.execute(text(f"SELECT COUNT(*) FROM {qualified}")).scalar() or 0  # noqa: S608  # qualified built from TableSpec literals
+            conn.execute(text(f"SELECT COUNT(*) FROM {qualified}")).scalar() or 0  # qualified built from TableSpec literals
         )
     except Exception as exc:
         return _row(
@@ -466,7 +466,7 @@ def check_table(conn, spec: TableSpec, check_date: date) -> dict:
     if spec.date_column:
         try:
             last_date = conn.execute(
-                text(f"SELECT MAX({spec.date_column}) FROM {qualified}")  # noqa: S608
+                text(f"SELECT MAX({spec.date_column}) FROM {qualified}")
             ).scalar()
         except Exception as exc:
             return _row(
@@ -496,7 +496,7 @@ def check_table(conn, spec: TableSpec, check_date: date) -> dict:
             row = (
                 conn.execute(
                     text(
-                        f"SELECT COUNT(*) AS total, {null_count_exprs} "  # noqa: S608
+                        f"SELECT COUNT(*) AS total, {null_count_exprs} "
                         f"FROM {qualified} {scope}"
                     )
                 )

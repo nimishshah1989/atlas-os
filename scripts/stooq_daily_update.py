@@ -152,7 +152,7 @@ def _get_latest_date(engine, schema: str) -> date:
     schema = _assert_schema(schema)
     with engine.connect() as conn:
         row = conn.execute(
-            text(f"SELECT MAX(date) FROM {schema}.stock_ohlcv")  # noqa: S608 -- schema validated against fixed whitelist
+            text(f"SELECT MAX(date) FROM {schema}.stock_ohlcv")
         ).fetchone()
     if row and row[0]:
         return row[0]
@@ -163,7 +163,7 @@ def _get_tickers(engine, schema: str) -> list[str]:
     schema = _assert_schema(schema)
     with engine.connect() as conn:
         rows = conn.execute(
-            text(f"SELECT DISTINCT ticker FROM {schema}.stock_ohlcv ORDER BY ticker")  # noqa: S608 -- schema validated against fixed whitelist
+            text(f"SELECT DISTINCT ticker FROM {schema}.stock_ohlcv ORDER BY ticker")
         ).fetchall()
     return [r[0] for r in rows]
 
@@ -178,7 +178,7 @@ def _bulk_upsert(engine, schema: str, df: pd.DataFrame) -> int:
         INSERT INTO {schema}.stock_ohlcv ({", ".join(cols)})
         VALUES (:ticker, :date, :open, :high, :low, :close, :volume)
         ON CONFLICT (ticker, date) DO UPDATE SET {set_clause}
-    """)  # noqa: S608 -- schema validated against fixed whitelist; cols is hardcoded
+    """)
     rows = [
         {c: row[c] for c in cols}
         for row in df[cols].to_dict(orient="index").values()  # type: ignore[call-overload]

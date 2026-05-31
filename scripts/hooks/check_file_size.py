@@ -84,8 +84,8 @@ ALLOW_LARGE_RE = re.compile(r"(?:#|//)\s*allow-large:\s*(\S.*)")
 
 
 def staged_files() -> list[str]:
-    out = subprocess.check_output(  # noqa: S603
-        ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],  # noqa: S607
+    out = subprocess.check_output(
+        ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
         text=True,
     )
     return [line.strip() for line in out.splitlines() if line.strip()]

@@ -141,11 +141,27 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S106", "N802"]  # N802: test names may include uppercase verdict labels (BUY/SELL/etc.)
-"scripts/**" = ["S101", "E501"]
+# S608/S607: internal data-eng + ops scripts build SQL from code constants and
+# call known binaries; query values are bound, never user input.
+"scripts/**" = ["S101", "E501", "S608", "S607"]
 "migrations/**" = ["E501"]  # SQL string literals in migrations have long lines by nature
 "atlas/validation/m1_data_quality.py" = ["E501"]
 "atlas/preflight.py" = ["E501"]
 "atlas/trading/genome.py" = ["S311"]  # non-crypto RNG OK for genome seeding
+# S608 below: SQL assembled via f-strings from CODE CONSTANTS (static clause
+# fragments / table+column names); every user value is bound via :param. Verified
+# not an injection vector. S608 stays ON for new files so each is reviewed once.
+"atlas/agents/tools/atlas_queries.py" = ["S608"]
+"atlas/api/admin/validator.py" = ["S608"]
+"atlas/api/fund_decisions.py" = ["S608"]
+"atlas/compute/lens_composition.py" = ["S608"]
+"atlas/intelligence/conviction/composer.py" = ["S608"]
+"atlas/intelligence/validation/state_validator.py" = ["S608"]
+"atlas/simulation/core/paper_trader.py" = ["S608"]
+"atlas/simulation/core/signal_adapter.py" = ["S608"]
+# incubator: pickles its OWN strategy-genome cache (not untrusted data), uses a
+# fixed scratch dir, and a bounded retry loop that intentionally continues.
+"atlas/trading/incubator.py" = ["S301", "S108", "S112"]
 
 [tool.pyright]
 pythonVersion = "3.12"

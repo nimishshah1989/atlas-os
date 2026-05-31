@@ -96,7 +96,7 @@ def _enrich_window(engine: Engine, days: int, rs_col: str, ret_col: str, quality
                 updated_at = NOW()
             FROM outcome_states o
             WHERE c.id = o.id
-        """),  # noqa: S608 -- column/field names are string constants, not user input
+        """),
             {"cutoff": cutoff, "interval": interval},
         )
         updated = result.rowcount
@@ -148,7 +148,7 @@ def _recompute_outcome_scores(engine: Engine, window: str) -> int:
                 GROUP BY mstar_id, to_date
             ) sub
             WHERE ds.mstar_id = sub.mstar_id AND ds.period_date = sub.period_date
-        """)  # noqa: S608 -- column names are string constants, not user input
+        """)
         )
         conn.commit()
     log.info("recomputed_outcome_scores", window=window)

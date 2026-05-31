@@ -146,7 +146,7 @@ def test_states_tune_help():
     import subprocess
     import sys
 
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(
         [sys.executable, "-m", "atlas.trading.cli", "states", "tune", "--help"],
         capture_output=True,
         text=True,
@@ -165,7 +165,7 @@ def test_states_classify_help():
     import subprocess
     import sys
 
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(
         [sys.executable, "-m", "atlas.trading.cli", "states", "classify", "--help"],
         capture_output=True,
         text=True,
