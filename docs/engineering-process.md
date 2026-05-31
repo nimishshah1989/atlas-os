@@ -53,16 +53,41 @@ your Mac in seconds.
 - **Unblocks:** running the full pre-commit suite + tests locally; far fewer SSH
   round-trips.
 
-### Pillar 2 — CI on every PR  *(highest leverage; ~half a day)*
+### Pillar 2 — CI on every PR  *(highest leverage; ~half a day)* — **landing 2026-05-31**
 A GitHub Actions workflow that runs on every PR and blocks merge if red.
-- Spin up a `postgres:17` service container.
-- `pip install -e ".[dev]"`, run `ruff` + `pyright` + `pytest`.
+- Spin up a `postgres:16` service container (matches the EC2 `pg_dump` 16.x that
+  produces the fixture below).
+- `uv sync --extra dev`, run `ruff check` + `ruff format --check` + pyright
+  ratchet + `pytest tests/unit -m unit` + the pragma finance-critical gate.
 - **Apply every migration to the fresh DB** (`alembic upgrade head`) — proves
   migrations work before they ever touch prod. (This alone would have caught the
   30-min refresh and the breadth bugs pre-merge.)
 - Turn on **branch protection**: can't merge to `main` while CI is red.
 - **Unblocks:** broken code becomes impossible to ship; the coverage hook runs in
   a real environment, so no more `--no-verify`.
+
+**Decisions made while building Pillar 2 (2026-05-31):**
+
+1. **Type checker = pyright only.** The tree had a two-checker split — `make
+   typecheck` + `[tool.pyright]` + global CLAUDE.md used pyright, while
+   `.pre-commit-config.yaml` used mypy (never in the dev extra, different
+   config). mypy removed; pyright is the single standard, enforced by `make
+   check` locally and the CI ratchet.
+2. **Type debt = baseline + ratchet, not fix-all.** pyright surfaced 693
+   pre-existing errors across 113 files (never gated). Fixing all at once is a
+   huge, risky diff — many are Decimal/float money coercions where a careless
+   cast changes a calculation. Instead `ci/pyright-baseline.json` grandfathers
+   the debt and `scripts/ci/pyright_ratchet.py` fails CI only if a file's error
+   count *rises* (new/changed files must be clean). Burn the baseline down in
+   later focused PRs via `--update`.
+3. **External `de_*` tables in CI = captured schema-only dump.** Migrations read
+   12 `de_*` tables owned by the DE pipeline but never created by atlas
+   migrations, so `alembic upgrade head` on a fresh DB needs their schema first.
+   We commit a one-time `pg_dump --schema-only -t 'public.de_*'`
+   (`ci/fixtures/external_de_tables.sql`) rather than a hand-written stub (which
+   we'd have to keep column-correct by hand) or a create-if-not-exists migration
+   (which would make atlas "own" tables it doesn't). Real schema, no live-prod
+   access in CI, regenerate only when the DE pipeline changes.
 
 ### Pillar 3 — One-command deploy from `main`  *(~half a day)*
 Replace hand `rsync`/ssh with a single, idempotent path.

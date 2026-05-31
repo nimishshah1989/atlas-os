@@ -1,0 +1,97 @@
+name: CI
+
+# Pillar 2 of the engineering-process plan (docs/engineering-process.md):
+# every PR must pass before it can merge. Blocks the class of bug that shipped
+# by hand to prod (30-min MV refresh lock, breadth NOT-NULL crash) — they would
+# have failed the migration-apply job below pre-merge.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push to a PR cancels the previous in-flight run for that ref.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-types-tests:
+    name: Lint, types, unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dev dependencies
+        run: uv sync --extra dev
+
+      - name: Ruff lint
+        run: uv run ruff check atlas tests scripts
+
+      - name: Ruff format check
+        run: uv run ruff format --check atlas tests scripts
+
+      - name: Pyright ratchet (no new type errors vs ci/pyright-baseline.json)
+        run: uv run --extra dev python scripts/ci/pyright_ratchet.py
+
+      - name: Unit tests (fast, no DB)
+        run: uv run --extra dev pytest tests/unit -m unit -q
+
+      - name: Pragma finance-critical coverage gate (100%)
+        run: uv run --extra dev bash scripts/ci/gate_pragma_coverage.sh
+
+  migrations:
+    name: Migrations apply on a fresh DB
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # Fresh Postgres per run — proves `alembic upgrade head` applies cleanly
+    # before a migration can ever touch prod.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: atlas
+          POSTGRES_PASSWORD: atlas
+          POSTGRES_DB: atlas_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U atlas"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      # AtlasConfig + alembic/env.py read ATLAS_DB_URL (psycopg2 driver).
+      ATLAS_DB_URL: postgresql+psycopg2://atlas:atlas@localhost:5432/atlas_ci
+      # Plain libpq URL for the psql seed step below.
+      PGURL: postgresql://atlas:atlas@localhost:5432/atlas_ci
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dev dependencies
+        run: uv sync --extra dev
+
+      - name: Seed external DE-pipeline tables (de_*)
+        # These tables are owned by the separate data-engineering pipeline, not
+        # by atlas migrations — but migrations build MVs / indexes that read
+        # them, so a fresh DB needs their (empty) schema first. The fixture is a
+        # one-time `pg_dump --schema-only -t 'public.de_*'` captured from prod;
+        # see ci/fixtures/README.md for how to regenerate it.
+        run: psql "$PGURL" -v ON_ERROR_STOP=1 -f ci/fixtures/external_de_tables.sql
+
+      - name: alembic upgrade head
+        run: uv run alembic upgrade head
