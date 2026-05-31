@@ -47,6 +47,20 @@ touch it.
 5. **v6 module edits gated** — `atlas/{features,decisions,regime,portfolio,ledger,macro,agents}/` Edits require a chunk-level planning skill (`/grill-with-docs`, `/tdd`, or `/plan-eng-review`) invoked first in the session.
 6. **Phase 0 gated** — `git checkout -b feat/v6-phase-0-*` or migration 080 require all 4 pre-build gates closed in `~/.gstack/projects/atlas-os/v6-gates.json`.
 
+## Local workspace (NEVER under iCloud)
+
+The git working tree MUST live **outside any iCloud-synced folder** (`~/Documents`,
+`~/Desktop`, `~/Library/Mobile Documents/…`). iCloud's "Optimize Mac Storage"
+evicts `.git` pack objects, which corrupts the repo — `git`, VS Code, Claude, and
+deploys all hang with `pack … is far too short to be a packfile`.
+
+- Canonical local path: **`~/dev/atlas-os`**. Do not work in `~/Documents/GitHub/atlas-os`.
+- Disable System Settings → Apple ID → iCloud → **Optimize Mac Storage** (or remove
+  Desktop & Documents from iCloud sync).
+- Recovery if it happens again: fresh `git clone` into `~/dev`, copy over only the
+  files newer than the last commit (`find . -newermt <last-commit-time>`), commit, push.
+  Full post-mortem: `docs/v6/2026-05-30-deploy-hygiene-guide.md` Rule 12.
+
 ## Skill cadence — invoke BEFORE coding
 
 | Situation | Skill |
