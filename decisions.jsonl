@@ -4701,3 +4701,21 @@
 {"ts":"2026-05-31T18:05:22Z","kind":"supabase_sql_executed","sql_preview":"\nWITH win AS (SELECT DATE '2024-05-31' AS s, DATE '2026-05-31' AS e)\nSELECT 'stock_rs_3m_tier_nn(expect ~226k)' AS k, count(*) FILTER (WHERE rs_3m_tier IS NOT NULL)::text AS v FROM atlas.atlas_stock_metrics_daily,win WHERE date BETWEEN s AND e\nUNION ALL SELECT 'stock_ret_24m_nn(expect ~264k)', count(*) FILTER (WHERE ret_24m IS NOT NULL)::text FROM atlas.atlas_stock_metrics_daily,win WHERE date BETWEEN s AND e\nUNION ALL SELECT 'stock_ret_24m_range', concat(round(min(ret_24m),3)::text,' .. ',round"}
 {"ts":"2026-05-31T18:06:50Z","kind":"supabase_sql_executed","sql_preview":"\nREFRESH MATERIALIZED VIEW atlas.mv_india_pulse;\nREFRESH MATERIALIZED VIEW atlas.mv_sector_cards;\nREFRESH MATERIALIZED VIEW atlas.mv_sector_deepdive;\nREFRESH MATERIALIZED VIEW atlas.mv_sector_rrg;\nREFRESH MATERIALIZED VIEW atlas.mv_sector_rotation_state;"}
 {"ts":"2026-05-31T18:07:25Z","kind":"supabase_sql_executed","sql_preview":"\nSELECT 'mv_india_pulse' AS mv, count(*)::text AS rows FROM atlas.mv_india_pulse\nUNION ALL SELECT 'mv_sector_cards', count(*)::text FROM atlas.mv_sector_cards\nUNION ALL SELECT 'mv_sector_deepdive', count(*)::text FROM atlas.mv_sector_deepdive\nUNION ALL SELECT 'mv_sector_rrg', count(*)::text FROM atlas.mv_sector_rrg\nUNION ALL SELECT 'mv_sector_rotation_state', count(*)::text FROM atlas.mv_sector_rotation_state;"}
+{
+  "ts": "2026-05-31T18:34:13Z",
+  "prev": "672234ffea9bdd71",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/docs/v6/2026-06-01-remaining-work-and-committed-plan.md",
+  "lines_changed": 90,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T18:36:01Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/.gstack/projects/nimishshah1989-atlas-os/checkpoints/20260601-000537-m3-shipped-m4-handoff.md",
+  "lines_changed": 56,
+  "session_id": "unknown",
+  "schema_version": 1
+}
