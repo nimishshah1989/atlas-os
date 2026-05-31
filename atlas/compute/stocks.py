@@ -44,6 +44,7 @@ from atlas.compute.gates import (
     add_weinstein_gate,
 )
 from atlas.compute.primitives import (
+    RS_WINDOWS,
     WINDOWS,
     add_atr,
     add_emas,
@@ -79,11 +80,14 @@ METRICS_COLUMNS: tuple[str, ...] = (
     "ret_6m",
     "ret_12m",
     "ret_12m_1m",
+    "ret_24m",
+    "rs_1d_tier",
     "rs_1w_tier",
     "rs_1m_tier",
     "rs_3m_tier",
     "rs_6m_tier",
     "rs_12m_tier",
+    "rs_24m_tier",
     "rs_pctile_1w",
     "rs_pctile_1m",
     "rs_pctile_3m",
@@ -111,9 +115,13 @@ METRICS_COLUMNS: tuple[str, ...] = (
     "ma_30w_slope_4w",
     "weinstein_gate_pass",
     "stage1_base_qualifies",
+    "rs_1d_tier_gold",
     "rs_1w_tier_gold",
     "rs_1m_tier_gold",
     "rs_3m_tier_gold",
+    "rs_6m_tier_gold",
+    "rs_12m_tier_gold",
+    "rs_24m_tier_gold",
     "compute_run_id",
 )
 
@@ -221,25 +229,25 @@ def _gold_relative_strength(
     df: pd.DataFrame,
     benchmark_cache: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Append ``rs_<window>_tier_gold`` — gold-numéraire variants of tier RS.
+    """Append ``rs_<window>_tier_gold = (1+ret_stock)/(1+ret_gold) - 1``.
 
-    Per methodology §7.6: divide everything by gold's return for the same
-    window. ``RS_gold = (1 + ret_stock) / (1 + ret_gold) - (1 + ret_bench) / (1 + ret_gold)``
-    simplifies to ``(ret_stock - ret_bench) / (1 + ret_gold)``.
+    M3 (ADR-0002): DIRECT stock-vs-gold RS across all 7 RS windows. The prior
+    deflated-excess form is degenerate under the relative tier RS (the gold
+    numéraire cancels). Vectorised: date-merge gold returns, then column math.
     """
     out = df.copy()
     gold = benchmark_cache.loc[benchmark_cache["benchmark_code"] == GOLD_BENCHMARK]
     if gold.empty:
-        for w in ("1w", "1m", "3m"):
+        for w in RS_WINDOWS:
             out[f"rs_{w}_tier_gold"] = pd.NA
         return out
 
-    gold_returns = gold[["date"] + [f"ret_{w}" for w in ("1w", "1m", "3m")]].rename(
-        columns={f"ret_{w}": f"_gold_ret_{w}" for w in ("1w", "1m", "3m")}
+    gold_returns = gold[["date", *[f"ret_{w}" for w in RS_WINDOWS]]].rename(
+        columns={f"ret_{w}": f"_gold_ret_{w}" for w in RS_WINDOWS}
     )
     out = out.merge(gold_returns, on="date", how="left")
-    for w in ("1w", "1m", "3m"):
-        out[f"rs_{w}_tier_gold"] = out[f"rs_{w}_tier"] / (1 + out[f"_gold_ret_{w}"])
+    for w in RS_WINDOWS:
+        out[f"rs_{w}_tier_gold"] = (1 + out[f"ret_{w}"]) / (1 + out[f"_gold_ret_{w}"]) - 1
     out = out.drop(columns=[c for c in out.columns if c.startswith("_gold_ret_")])
     return out
 

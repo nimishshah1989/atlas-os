@@ -12,6 +12,7 @@ import pandas as pd
 import pytest
 
 from atlas.compute.indices import (
+    INDEX_WINDOWS,
     METRICS_COLUMNS,
     NIFTY500_CODE,
     compute_index_metrics,
@@ -88,6 +89,21 @@ def test_compute_index_metrics_ret_1d_first_row_is_nan() -> None:
     assert firsts["ret_1d"].isna().all()
     # And ret_12m (252-day window) at row 0 must also be NaN.
     assert firsts["ret_12m"].isna().all()
+
+
+@pytest.mark.unit
+def test_compute_index_metrics_persists_and_computes_ret_24m() -> None:
+    # M3: the Nifty500 24m return is the denominator for sector 24m RS, so it
+    # must be persisted and actually computed (504-day window).
+    assert "24m" in INDEX_WINDOWS
+    assert "ret_24m" in METRICS_COLUMNS
+    df = _make_index_frame(n=520)
+    out = compute_index_metrics(df)
+    assert "ret_24m" in out.columns
+    # compute_index_metrics returns rows already sorted by (index_code, date);
+    # tail(1) per group is the most-recent row, which has 504 prior obs → finite.
+    lasts = out.groupby("index_code", group_keys=False).tail(1)
+    assert bool(lasts["ret_24m"].notna().all())
 
 
 @pytest.mark.unit

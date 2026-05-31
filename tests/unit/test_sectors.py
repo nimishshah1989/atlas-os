@@ -219,6 +219,66 @@ def test_bottom_up_rs_vs_nifty500_division() -> None:
     assert bank["bottomup_rs_3m_nifty500"] == pytest.approx(expected_rs, rel=1e-6)
 
 
+def _one_sector_seven_window_frame() -> pd.DataFrame:
+    """Single Bank stock carrying all 7 RS-window returns (M3 full-7-window)."""
+    d = pd.Timestamp("2024-01-31").date()
+    rets = {"1d": 0.005, "1w": 0.02, "1m": 0.04, "3m": 0.09, "6m": 0.18, "12m": 0.35, "24m": 0.70}
+    return pd.DataFrame(
+        [
+            {
+                "instrument_id": "big_bank",
+                "date": d,
+                "sector_name": "Bank",
+                "tier": "Large",
+                "ema_50_stock": 100.0,
+                "ema_200_stock": 95.0,
+                "extension_pct": 0.05,
+                "avg_volume_20": 500_000,
+                "ema_10_ratio": 1.05,
+                "ema_20_ratio": 1.03,
+                "rs_state": "Strong",
+                "momentum_state": "Improving",
+                **{f"ret_{w}": v for w, v in rets.items()},
+            }
+        ]
+    ).assign(close_approx=lambda x: x["ema_200_stock"] * (1 + x["extension_pct"]))
+
+
+@pytest.mark.unit
+def test_bottom_up_rs_covers_all_seven_windows_relative_form() -> None:
+    # M3: sector market-relative RS spans 1d/1w/1m/3m/6m/12m/24m in relative form.
+    df = _one_sector_seven_window_frame()
+    d = df["date"].iloc[0]
+    n500_rets = {
+        "1d": 0.002,
+        "1w": 0.01,
+        "1m": 0.02,
+        "3m": 0.05,
+        "6m": 0.10,
+        "12m": 0.20,
+        "24m": 0.40,
+    }
+    n500 = pd.DataFrame([{"date": d, **{f"_n500_ret_{w}": v for w, v in n500_rets.items()}}])
+
+    out = compute_bottom_up_sector_metrics(df, SECTOR_MASTER, df_nifty500_returns=n500)
+    bank = out[out["sector_name"] == "Bank"].iloc[0]
+
+    for w in ("1d", "1w", "1m", "3m", "6m", "12m", "24m"):
+        col = f"bottomup_rs_{w}_nifty500"
+        assert col in out.columns, f"missing {col}"
+        expected = (1.0 + float(bank[f"bottomup_ret_{w}"])) / (1.0 + n500_rets[w]) - 1.0
+        assert bank[col] == pytest.approx(expected, rel=1e-6)
+        # single-stock sector outperforms the index every window → sign positive
+        assert bank[col] > 0
+
+
+@pytest.mark.unit
+def test_sector_metrics_persists_all_seven_bottomup_rs_windows() -> None:
+    # M3 full-7-window lock: every bottomup_rs_<w>_nifty500 must be persisted.
+    for w in ("1d", "1w", "1m", "3m", "6m", "12m", "24m"):
+        assert f"bottomup_rs_{w}_nifty500" in METRICS_COLUMNS, f"missing bottomup_rs_{w}_nifty500"
+
+
 @pytest.mark.unit
 def test_bottom_up_empty_input_returns_empty() -> None:
     empty = pd.DataFrame(

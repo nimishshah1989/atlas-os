@@ -21,15 +21,30 @@ import pandas as pd
 import pandas_ta as ta
 
 WINDOWS: dict[str, int] = {
+    "1d": 1,
     "1w": 5,
     "1m": 21,
     "3m": 63,
     "6m": 126,
     "12m": 252,
     "12m_1m": 231,
+    "24m": 504,
 }
 """Trading-day window lengths per methodology §4.1. ``12m_1m`` skips the most
-recent month (252 - 21 = 231) — the academic 12m-1m momentum convention."""
+recent month (252 - 21 = 231) — the academic 12m-1m momentum convention.
+
+RS windows expanded 5 → 7 (2026-05-30 CONTEXT.md lock): ``1d`` (1 trading day,
+informational/never load-bearing) and ``24m`` (504 trading days, ~2yr) added so
+every RS surface covers 1d/1w/1m/3m/6m/12m/24m. ``1d``/``24m`` feed RS only —
+no scoring/feature code iterates WINDOWS (verified), and vol/drawdown take their
+own window args."""
+
+
+RS_WINDOWS: tuple[str, ...] = ("1d", "1w", "1m", "3m", "6m", "12m", "24m")
+"""The 7 canonical relative-strength windows (CONTEXT.md lock). This is
+``WINDOWS`` minus ``12m_1m`` — the skip-most-recent variant feeds momentum
+scoring, not RS display surfaces. Every RS metric (tier, gold, market-vs-Nifty500)
+iterates exactly these 7 windows."""
 
 
 # --------------------------------------------------------------------------- #

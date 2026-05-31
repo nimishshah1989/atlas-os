@@ -37,6 +37,7 @@ import structlog
 from sqlalchemy.engine import Engine
 
 from atlas.compute._session import bulk_upsert, df_to_pg_rows, open_compute_session
+from atlas.compute.primitives import RS_WINDOWS
 from atlas.config import Config
 from atlas.db import get_engine, load_thresholds
 
@@ -50,7 +51,13 @@ METRICS_COLUMNS: tuple[str, ...] = (
     "bottomup_ret_1m",
     "bottomup_ret_3m",
     "bottomup_ret_6m",
+    "bottomup_rs_1d_nifty500",
+    "bottomup_rs_1w_nifty500",
+    "bottomup_rs_1m_nifty500",
     "bottomup_rs_3m_nifty500",
+    "bottomup_rs_6m_nifty500",
+    "bottomup_rs_12m_nifty500",
+    "bottomup_rs_24m_nifty500",
     "bottomup_ema_10_ratio",
     "bottomup_ema_20_ratio",
     "topdown_index_code",
@@ -113,7 +120,7 @@ def load_sector_stock_data(
 
         instrument_id, date, sector, tier, primary_nse_index,
         ema_50_stock, ema_200_stock, extension_pct, avg_volume_20,
-        ret_1w, ret_1m, ret_3m, ret_6m,
+        ret_1d, ret_1w, ret_1m, ret_3m, ret_6m, ret_12m, ret_24m,
         rs_1w_tier, rs_1m_tier, rs_3m_tier,
         ema_10_ratio, ema_20_ratio,
         rs_state, momentum_state,
@@ -134,10 +141,13 @@ def load_sector_stock_data(
                 m.ema_200_stock,
                 m.extension_pct,
                 m.avg_volume_20,
+                m.ret_1d,
                 m.ret_1w,
                 m.ret_1m,
                 m.ret_3m,
                 m.ret_6m,
+                m.ret_12m,
+                m.ret_24m,
                 m.rs_1w_tier,
                 m.rs_1m_tier,
                 m.rs_3m_tier,
@@ -240,7 +250,7 @@ def load_nifty500_returns(
     start_date: date,
     end_date: date,
 ) -> pd.DataFrame:
-    """Per-date Nifty500 ``ret_1w/1m/3m/6m`` — the bottom-up RS denominator.
+    """Per-date Nifty500 ``ret_<w>`` for all 7 RS windows — the bottom-up RS denominator.
 
     Bottom-up RS-vs-Nifty500 for a sector is computed as the weighted-mean of
     constituent stock ``ret_<w>`` divided by Nifty500 ``ret_<w>``. We read
@@ -249,7 +259,7 @@ def load_nifty500_returns(
     with open_compute_session(engine) as conn:
         df = pd.read_sql(
             """
-            SELECT date, ret_1w, ret_1m, ret_3m, ret_6m
+            SELECT date, ret_1d, ret_1w, ret_1m, ret_3m, ret_6m, ret_12m, ret_24m
             FROM atlas.atlas_index_metrics_daily
             WHERE index_code = 'NIFTY 500'
               AND date BETWEEN %(start)s AND %(end)s
@@ -260,14 +270,7 @@ def load_nifty500_returns(
         )
     if not df.empty:
         df["date"] = pd.to_datetime(df["date"]).dt.date
-        df = df.rename(
-            columns={
-                "ret_1w": "_n500_ret_1w",
-                "ret_1m": "_n500_ret_1m",
-                "ret_3m": "_n500_ret_3m",
-                "ret_6m": "_n500_ret_6m",
-            }
-        )
+        df = df.rename(columns={f"ret_{w}": f"_n500_ret_{w}" for w in RS_WINDOWS})
     log.info("nifty500_returns_loaded", rows=len(df))
     return df
 
@@ -327,13 +330,14 @@ def compute_bottom_up_sector_metrics(
             columns=[
                 "sector_name",
                 "date",
+                "bottomup_ret_1d",
                 "bottomup_ret_1w",
                 "bottomup_ret_1m",
                 "bottomup_ret_3m",
                 "bottomup_ret_6m",
-                "bottomup_rs_1w_nifty500",
-                "bottomup_rs_1m_nifty500",
-                "bottomup_rs_3m_nifty500",
+                "bottomup_ret_12m",
+                "bottomup_ret_24m",
+                *[f"bottomup_rs_{w}_nifty500" for w in RS_WINDOWS],
                 "bottomup_ema_10_ratio",
                 "bottomup_ema_20_ratio",
                 "constituent_count",
@@ -348,11 +352,18 @@ def compute_bottom_up_sector_metrics(
     # plain Python loop *over metrics* — only ~7 metrics — but the per-row
     # work inside each metric is fully vectorised via groupby.apply. No
     # per-row Python loops.
+    # M3 full-7-window: aggregate every RS-window return present on the frame.
+    # ``ret_1d``/``ret_12m``/``ret_24m`` were added to the stock loader for the
+    # 1d/12m/24m sector RS surfaces; guarded below so partial frames (older
+    # fixtures, daily slices) skip absent windows rather than KeyError.
     metric_cols = (
+        "ret_1d",
         "ret_1w",
         "ret_1m",
         "ret_3m",
         "ret_6m",
+        "ret_12m",
+        "ret_24m",
         "ema_10_ratio",
         "ema_20_ratio",
     )
@@ -374,6 +385,8 @@ def compute_bottom_up_sector_metrics(
     aggregated: dict[str, pd.Series] = {"constituent_count": counts}
 
     for metric in metric_cols:
+        if metric not in work.columns:
+            continue
         v = pd.to_numeric(work[metric], errors="coerce")
         w = work["weight"]
         # Numerator = sum(v * w) where both are finite.
@@ -397,10 +410,13 @@ def compute_bottom_up_sector_metrics(
 
     # Rename to bottomup_* + add window-specific bottomup_rs_<w>_nifty500.
     rename_map = {
+        "ret_1d": "bottomup_ret_1d",
         "ret_1w": "bottomup_ret_1w",
         "ret_1m": "bottomup_ret_1m",
         "ret_3m": "bottomup_ret_3m",
         "ret_6m": "bottomup_ret_6m",
+        "ret_12m": "bottomup_ret_12m",
+        "ret_24m": "bottomup_ret_24m",
         "ema_10_ratio": "bottomup_ema_10_ratio",
         "ema_20_ratio": "bottomup_ema_20_ratio",
     }
@@ -412,14 +428,16 @@ def compute_bottom_up_sector_metrics(
     # negative (simple ratio ret_s/ret_b inverts the economic interpretation
     # in bear markets — e.g. a sector up 30% when Nifty500 is down 1% would
     # get a large negative RS value with the simple ratio).
+    # M3 full-7-window lock: 1d/1w/1m/3m/6m/12m/24m (RS_WINDOWS).
     if df_nifty500_returns is not None and not df_nifty500_returns.empty:
         out = out.merge(df_nifty500_returns, on="date", how="left")
-        for w_label, num_col in (
-            ("1w", "bottomup_ret_1w"),
-            ("1m", "bottomup_ret_1m"),
-            ("3m", "bottomup_ret_3m"),
-        ):
+        for w_label in RS_WINDOWS:
+            num_col = f"bottomup_ret_{w_label}"
             denom_col = f"_n500_ret_{w_label}"
+            # Skip windows the sector/Nifty500 frames don't carry (partial slices).
+            if num_col not in out.columns or denom_col not in out.columns:
+                out[f"bottomup_rs_{w_label}_nifty500"] = np.nan
+                continue
             bench_price_rel = 1.0 + out[denom_col].astype("float64")
             with np.errstate(divide="ignore", invalid="ignore"):
                 rs = np.where(
@@ -430,7 +448,7 @@ def compute_bottom_up_sector_metrics(
             out[f"bottomup_rs_{w_label}_nifty500"] = rs.astype("float64")
         out = out.drop(columns=[c for c in out.columns if c.startswith("_n500_")])
     else:
-        for w_label in ("1w", "1m", "3m"):
+        for w_label in RS_WINDOWS:
             out[f"bottomup_rs_{w_label}_nifty500"] = np.nan
 
     return out

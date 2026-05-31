@@ -28,14 +28,17 @@ log = structlog.get_logger()
 
 
 TIER_BENCHMARK: Mapping[str, str] = {
-    "Large": "NIFTY100",
+    "Large": "NIFTY50",
     "Mid": "MIDCAP150",
     "Small": "SMALLCAP250",
     "Micro": "MICROCAP_CUSTOM",
 }
 """Methodology §6.2 tier → benchmark mapping. Codes match
 ``atlas_benchmark_master.benchmark_code`` populated by
-``atlas.universe.benchmarks.populate_benchmark_master``."""
+``atlas.universe.benchmarks.populate_benchmark_master``.
+
+Large-tier anchors to **Nifty 50** per the CONTEXT.md baseline lock (ADR-0001);
+Nifty 100 is reserved for the Calls Performance anchor only."""
 
 
 GOLD_BENCHMARK = "GOLD"
@@ -282,16 +285,20 @@ def add_relative_strength(
     *,
     windows: Mapping[str, int] = WINDOWS,
 ) -> pd.DataFrame:
-    """``rs_<window>_tier = ret_<window> - ret_<window>_benchmark`` for each window.
+    """``rs_<window>_tier = (1 + ret_<window>) / (1 + ret_<window>_benchmark) - 1``.
 
-    Methodology §7.1. Decimal arithmetic; ratio variant lives in M3 if needed.
+    Methodology §7.1, relative (price-ratio) form — standardized in M3
+    (ADR-0002, superseding the prior excess form ``ret - bench``). Vectorized
+    column arithmetic. Within a (date, tier) group the benchmark return is
+    constant, so this is monotonic in the instrument return — within-tier ranks,
+    states, and scoring are unchanged vs the old excess form.
     """
     out = df.copy()
     for name in windows:
         ret_col = f"ret_{name}"
         bench_col = f"ret_{name}_benchmark"
         if ret_col in out.columns and bench_col in out.columns:
-            out[f"rs_{name}_tier"] = out[ret_col] - out[bench_col]
+            out[f"rs_{name}_tier"] = (1 + out[ret_col]) / (1 + out[bench_col]) - 1
     return out
 
 
