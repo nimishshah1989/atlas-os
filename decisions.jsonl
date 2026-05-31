@@ -4228,3 +4228,57 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{
+  "ts": "2026-05-31T14:25:12Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/.ruflo/adr/0001-large-tier-rs-anchor-nifty50.md",
+  "lines_changed": 57,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T15:18:11Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/.ruflo/adr/0002-rs-relative-form-and-gold-numeraire.md",
+  "lines_changed": 47,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T15:18:48Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/tests/unit/test_benchmarks.py",
+  "lines_changed": 79,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T15:19:15Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/atlas/compute/benchmarks.py",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T15:19:27Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/atlas/compute/benchmarks.py",
+  "lines_changed": 15,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T15:19:37Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/atlas/compute/primitives.py",
+  "lines_changed": 18,
+  "session_id": "unknown",
+  "schema_version": 1
+}
