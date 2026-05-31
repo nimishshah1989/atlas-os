@@ -4030,3 +4030,12 @@
   "schema_version": 1
 }
 {"ts":"2026-05-31T09:52:22Z","kind":"supabase_sql_executed","sql_preview":"SELECT 'col_nonnull_p20' AS k, count(pct_above_ema_20)::text AS v FROM atlas.atlas_market_regime_daily\nUNION ALL SELECT 'col_nonnull_p100', count(pct_above_ema_100)::text FROM atlas.atlas_market_regime_daily\nUNION ALL SELECT 'col_nonnull_p4wh', count(pct_4w_high)::text FROM atlas.atlas_market_regime_daily\nUNION ALL SELECT 'newest_20ema', (SELECT (b->>'today')||' gap='||(b->>'data_gap') FROM atlas.mv_india_pulse, jsonb_array_elements(breadth_table) b WHERE as_of_date=(SELECT max(as_of_date) FROM "}
+{
+  "ts": "2026-05-31T09:55:14Z",
+  "prev": "2fd99b96d6cab72d",
+  "tool": "Write",
+  "file": "/Users/nimishshah/.claude/projects/-Users-nimishshah-dev-atlas-os/memory/v6-mv-and-backfill-gotchas.md",
+  "lines_changed": 16,
+  "session_id": "unknown",
+  "schema_version": 1
+}
