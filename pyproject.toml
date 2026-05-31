@@ -2,7 +2,10 @@
 name = "atlas-os"
 version = "0.1.0"
 description = "Atlas — Adaptive Technical Lens for Asset States. Indian wealth-management decision engine."
-requires-python = ">=3.11"
+# 3.12+ required: pandas-ta 0.4.71b0 (core dep) needs Py>=3.12, and EC2 runs
+# 3.12. The stale >=3.11 made uv/venv resolution fail (3.11 can't install
+# pandas-ta), which blocked running alembic/pytest/hooks locally.
+requires-python = ">=3.12"
 dependencies = [
     # Compute (per architecture 5.1)
     # pandas-ta bumped 0.3.14b0 → 0.4.71b0 (Py 3.12 + NumPy 2 compat).
@@ -118,7 +121,7 @@ include = ["atlas*"]
 exclude = ["tests*", "scripts*", "docs*", "migrations*", "src*"]
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py312"
 line-length = 100
 exclude = [
     ".venv",
