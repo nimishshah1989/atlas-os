@@ -3693,3 +3693,246 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{"ts":"2026-05-31T06:38:44Z","kind":"supabase_sql_executed","sql_preview":"-- (1) prod alembic head (the canonical table per Rule 3)\nSELECT 'atlas_head' AS check, version_num FROM atlas.atlas_alembic_version\nUNION ALL\n-- (3) stray alembic_version tables outside atlas schema (Rule 3)\nSELECT 'STRAY:'||table_schema||'.'||table_name, NULL\n  FROM information_schema.tables\n WHERE table_name='alembic_version' AND table_schema <> 'atlas';"}
+{"ts":"2026-05-31T06:39:01Z","kind":"supabase_sql_executed","sql_preview":"-- (4) CASCADE-dependents check: anything that depends on atlas.mv_india_pulse\n-- that DROP ... CASCADE would silently drop without recreating.\nSELECT DISTINCT\n  dep_rel.relkind AS dependent_kind,\n  dep_ns.nspname || '.' || dep_rel.relname AS dependent_object\nFROM pg_depend d\nJOIN pg_rewrite rw ON rw.oid = d.objid\nJOIN pg_class dep_rel ON dep_rel.oid = rw.ev_class\nJOIN pg_namespace dep_ns ON dep_ns.oid = dep_rel.relnamespace\nJOIN pg_class src ON src.oid = d.refobjid\nJOIN pg_namespace src_ns ON s"}
+{"ts":"2026-05-31T06:39:28Z","kind":"supabase_sql_executed","sql_preview":"-- broad dependency sweep on mv_india_pulse (any dependent object, any kind)\nSELECT DISTINCT classid::regclass AS dep_catalog,\n       dep.deptype,\n       COALESCE(c2.relkind::text,'-') AS kind,\n       COALESCE(n2.nspname||'.'||c2.relname, objid::text) AS dependent\nFROM pg_depend dep\nLEFT JOIN pg_class c2 ON c2.oid = dep.objid\nLEFT JOIN pg_namespace n2 ON n2.oid = c2.relnamespace\nWHERE dep.refobjid = 'atlas.mv_india_pulse'::regclass\n  AND dep.deptype <> 'i'\nORDER BY 1;"}
+{"ts":"2026-05-31T06:39:38Z","kind":"supabase_sql_executed","sql_preview":"SELECT 'mv_india_pulse'   AS src, max(as_of_date)::text AS max_date, count(*) AS rows FROM atlas.mv_india_pulse\nUNION ALL SELECT 'market_regime_daily', max(date)::text, count(*) FROM atlas.atlas_market_regime_daily\nUNION ALL SELECT 'regime_daily(v6)',    max(date)::text, count(*) FROM atlas.atlas_regime_daily\nUNION ALL SELECT 'macro_daily',         max(date)::text, count(*) FROM atlas.atlas_macro_daily\nUNION ALL SELECT 'sector_metrics_daily',max(date)::text, count(*) FROM atlas.atlas_sector_metr"}
+{"ts":"2026-05-31T06:48:13Z","kind":"supabase_sql_executed","sql_preview":"SELECT 'alembic_version' AS k, version_num AS v FROM atlas.atlas_alembic_version\nUNION ALL\nSELECT 'has_pct_above_ema_100', CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_market_regime_daily' AND column_name='pct_above_ema_100') THEN 'YES' ELSE 'NO' END\nUNION ALL\nSELECT 'has_pct_4w_high', CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_market_regime_daily' AND column_name='pct_"}
+{
+  "ts": "2026-05-31T06:50:35Z",
+  "prev": "1b5c65d5e66808c9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/migrations/env.py",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T07:54:11Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/scripts/_diag_macro_lateral_perf.py",
+  "lines_changed": 88,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-31T07:57:13Z","kind":"supabase_sql_executed","sql_preview":"SELECT 'regime_min' AS k, min(date)::text AS v FROM atlas.atlas_market_regime_daily\nUNION ALL SELECT 'macro_min', min(date)::text FROM atlas.atlas_macro_daily\nUNION ALL SELECT 'regime_max', max(date)::text FROM atlas.atlas_market_regime_daily\nUNION ALL SELECT 'macro_max', max(date)::text FROM atlas.atlas_macro_daily\nUNION ALL SELECT 'regime_dates_before_first_macro', count(*)::text FROM atlas.atlas_market_regime_daily r WHERE r.date < (SELECT min(date) FROM atlas.atlas_macro_daily)\nUNION ALL SEL"}
+{
+  "ts": "2026-05-31T08:00:42Z",
+  "prev": "9d0866e47c6f5df8",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/migrations/versions/122_mv_india_pulse_v2.py",
+  "lines_changed": 15,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T08:00:48Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/migrations/versions/122_mv_india_pulse_v2.py",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T08:00:54Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/migrations/versions/122_mv_india_pulse_v2.py",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T08:01:00Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/migrations/versions/122_mv_india_pulse_v2.py",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T08:01:09Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/migrations/versions/122_mv_india_pulse_v2.py",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T08:01:17Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/migrations/versions/122_mv_india_pulse_v2.py",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T08:01:35Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/migrations/sql/mv_india_pulse_v2.sql",
+  "lines_changed": 14,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T08:01:44Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/migrations/sql/mv_india_pulse_v2.sql",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T08:01:50Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/migrations/sql/mv_india_pulse_v2.sql",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T08:01:55Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/migrations/sql/mv_india_pulse_v2.sql",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T08:02:02Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/migrations/sql/mv_india_pulse_v2.sql",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T08:02:09Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/migrations/sql/mv_india_pulse_v2.sql",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T08:02:25Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/CONTEXT.md",
+  "lines_changed": 9,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T08:03:41Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/scripts/_diag_validate_v2_fix.py",
+  "lines_changed": 77,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T08:12:16Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/scripts/_diag_validate_v2_fix.py",
+  "lines_changed": 18,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T08:12:24Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/scripts/_diag_validate_v2_fix.py",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-05-31T08:26:14Z","kind":"supabase_sql_executed","sql_preview":"SELECT 'version' AS k, version_num AS v FROM atlas.atlas_alembic_version\nUNION ALL SELECT 'has_pct100', EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_market_regime_daily' AND column_name='pct_above_ema_100')::text\nUNION ALL SELECT 'has_4wh', EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_market_regime_daily' AND column_name='pct_4w_high')::text\nUNION ALL SELECT 'mv_is_v2_macro_map', (SELECT bool_"}
+{"ts":"2026-05-31T08:26:51Z","kind":"supabase_sql_executed","sql_preview":"SELECT as_of_date::text,\n  vix_term_structure,\n  (macro_cards IS NOT NULL) AS has_macro_cards,\n  jsonb_array_length(macro_cards) AS n_cards,\n  (narrative_ribbon->>'india_10y_yield') AS ribbon_10y,\n  jsonb_array_length(breadth_table) AS n_breadth_rows,\n  jsonb_array_length(sector_heatmap) AS n_sectors,\n  (sector_heatmap->0->>'rs_6m') AS top_sector_rs_6m\nFROM atlas.mv_india_pulse ORDER BY as_of_date DESC LIMIT 1;"}
+{"ts":"2026-05-31T08:44:16Z","kind":"supabase_sql_executed","sql_preview":"SELECT 'has_2016_04_29' AS k, EXISTS(SELECT 1 FROM atlas.atlas_market_regime_daily WHERE date='2016-04-29')::text AS v\nUNION ALL SELECT 'pk_def', (SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid='atlas.atlas_market_regime_daily'::regclass AND contype='p')\nUNION ALL SELECT 'unique_constraints', COALESCE((SELECT string_agg(conname||':'||pg_get_constraintdef(oid),' | ') FROM pg_constraint WHERE conrelid='atlas.atlas_market_regime_daily'::regclass AND contype='u'),'NONE')\nUNION AL"}
+{
+  "ts": "2026-05-31T08:46:13Z",
+  "prev": "dd33f4f1802ad3a5",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/scripts/_diag_breadth_backfill.py",
+  "lines_changed": 57,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T08:46:30Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/scripts/_diag_breadth_backfill.py",
+  "lines_changed": 59,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T08:47:36Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/scripts/_diag_breadth_backfill.py",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T08:47:42Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/scripts/_diag_breadth_backfill.py",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T08:48:47Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/scripts/_diag_breadth_backfill.py",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T08:48:53Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/scripts/_diag_breadth_backfill.py",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T08:50:54Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/scripts/_diag_breadth_backfill.py",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-05-31T08:51:01Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/scripts/_diag_breadth_backfill.py",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
