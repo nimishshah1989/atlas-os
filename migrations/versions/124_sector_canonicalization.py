@@ -54,6 +54,7 @@ _OVERRIDES: dict[str, list[str]] = {
         "DIXON", "HAVELLS", "TITAN", "TRENT",        # ex-"Consumption"
         "ASIANPAINT", "BERGEPAINT",                  # paints # judgment
         "POLYCAB",                                   # ex-"Housing" — wires & cables
+        "KEI",                                       # ex-"EV & Auto" — wires & cables (mirror POLYCAB)
     ],
 }
 
