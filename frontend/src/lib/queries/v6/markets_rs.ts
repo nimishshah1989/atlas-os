@@ -74,34 +74,10 @@ export type MarketsRsPageData = {
   as_of_date: string | null
 }
 
-// ---------------------------------------------------------------------------
-// Per-baseline staleness (data-honesty)
-// ---------------------------------------------------------------------------
-
-/**
- * A baseline lagging the freshest by more than this many calendar days is
- * flagged stale in the grid. The normal US/global 1-day timezone lag
- * (NSE closes a day ahead of S&P 500 / MSCI World) stays unflagged; the
- * weeks-stale MSCI EM proxy gets a visible marker so it is never read as
- * current.
- */
-export const MARKETS_RS_STALE_THRESHOLD_DAYS = 7
-
-/**
- * Calendar-day lag of a baseline's as_of_date behind the freshest baseline.
- * Returns null when either date is missing or unparseable (explicit NULL
- * handling — never silently treat a missing date as fresh).
- */
-export function baselineStalenessDays(
-  rowAsOf: string | null,
-  freshestAsOf: string | null,
-): number | null {
-  if (!rowAsOf || !freshestAsOf) return null
-  const a = Date.parse(rowAsOf)
-  const b = Date.parse(freshestAsOf)
-  if (Number.isNaN(a) || Number.isNaN(b)) return null
-  return Math.round((b - a) / 86_400_000)
-}
+// Per-baseline staleness helpers (MARKETS_RS_STALE_THRESHOLD_DAYS,
+// baselineStalenessDays) live in '@/lib/v6/markets-staleness' — a client-safe
+// module — because this module is 'server-only' and the client grid imports
+// them. Don't move them back here: it breaks the production build.
 
 // ---------------------------------------------------------------------------
 // Grade derivation (exported for unit tests)
