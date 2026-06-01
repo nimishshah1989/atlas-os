@@ -4719,3 +4719,19 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{"ts":"2026-06-01T03:21:24Z","kind":"supabase_sql_executed","sql_preview":"SELECT m.matviewname AS mv,\n       m.ispopulated,\n       c.reltuples::bigint AS approx_rows\nFROM pg_matviews m\nJOIN pg_class c ON c.relname = m.matviewname\nJOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = m.schemaname\nWHERE m.schemaname = 'atlas'\nORDER BY m.matviewname;"}
+{"ts":"2026-06-01T03:21:26Z","kind":"supabase_sql_executed","sql_preview":"SELECT relname AS tbl, n_live_tup AS live_rows\nFROM pg_stat_user_tables\nWHERE schemaname = 'atlas' AND relname LIKE 'atlas_%'\nORDER BY n_live_tup DESC;"}
+{"ts":"2026-06-01T03:22:26Z","kind":"supabase_sql_executed","sql_preview":"SELECT table_name, string_agg(column_name, ', ' ORDER BY ordinal_position) AS cols\nFROM information_schema.columns\nWHERE table_schema='atlas'\n  AND table_name IN ('mv_markets_rs_grid','mv_india_pulse','mv_market_regime_landing')\nGROUP BY table_name;"}
+{"ts":"2026-06-01T03:22:43Z","kind":"supabase_sql_executed","sql_preview":"SELECT c.relname AS mv,\n       string_agg(a.attname, ', ' ORDER BY a.attnum) AS cols\nFROM pg_class c\nJOIN pg_namespace n ON n.oid=c.relnamespace AND n.nspname='atlas'\nJOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped\nWHERE c.relkind='m' AND c.relname IN ('mv_markets_rs_grid','mv_india_pulse')\nGROUP BY c.relname;"}
+{"ts":"2026-06-01T03:22:46Z","kind":"supabase_sql_executed","sql_preview":"SELECT 'stock' s, max(date) d, count(*) n FROM atlas.atlas_stock_metrics_daily\nUNION ALL SELECT 'index', max(date), count(*) FROM atlas.atlas_index_metrics_daily\nUNION ALL SELECT 'sector', max(date), count(*) FROM atlas.atlas_sector_metrics_daily\nUNION ALL SELECT 'etf', max(date), count(*) FROM atlas.atlas_etf_metrics_daily;"}
+{"ts":"2026-06-01T03:23:36Z","kind":"supabase_sql_executed","sql_preview":"SELECT max(as_of_date)::text AS grid_asof, max(refreshed_at)::text AS grid_refreshed\nFROM atlas.mv_markets_rs_grid;"}
+{"ts":"2026-06-01T03:23:40Z","kind":"supabase_sql_executed","sql_preview":"SELECT max(as_of_date)::text AS ip_asof,\n       max(refreshed_at)::text AS ip_refreshed,\n       count(*) FILTER (WHERE macro_cards IS NOT NULL AND macro_cards::text <> '[]' AND macro_cards::text <> 'null') AS macro_nonnull,\n       count(*) AS total\nFROM atlas.mv_india_pulse;"}
+{
+  "ts": "2026-06-01T03:25:05Z",
+  "prev": "8030bfb6093aec26",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/docs/v6/STATUS.md",
+  "lines_changed": 135,
+  "session_id": "unknown",
+  "schema_version": 1
+}
