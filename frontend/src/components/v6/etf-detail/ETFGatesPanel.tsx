@@ -33,9 +33,15 @@ interface GateResult {
 // Per Atlas methodology: tracking error thresholds vary by category. Keys match
 // the real etf_category values emitted by mv_etf_deepdive (lowercase), so the
 // gate actually resolves a category limit instead of silently using the default.
+// Keys cover the full etf_category vocabulary enforced by the DB CHECK
+// constraint on atlas_etf_scorecard (7 values). Missing a valid category here
+// would silently fall through to the default and loosen the gate — e.g. a debt
+// ETF (tight tracking expected) getting an equity-grade limit.
 const TE_LIMITS_BPS: Record<string, number> = {
   broad_index: 40,   // index trackers must hug their benchmark tightly
+  debt:        50,   // bond-index trackers — also tight
   sector:      80,
+  smart_beta:  100,  // factor tilts drift more from a plain benchmark
   thematic:    150,
   commodity:   200,
   international: 200,

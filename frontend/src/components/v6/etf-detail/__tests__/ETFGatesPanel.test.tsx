@@ -37,6 +37,14 @@ describe('trackingGate — provisional handling of unreliable TE', () => {
     expect(trackingGate(120, 'sector').status).toBe('FAIL')
   })
 
+  it('covers the full DB category vocabulary — debt is tight (≤50), not the loose default', () => {
+    // debt + smart_beta are valid etf_category values (CHECK constraint); they
+    // must not silently fall through to the 100 bps default.
+    expect(trackingGate(45, 'debt').status).toBe('PASS')
+    expect(trackingGate(60, 'debt').status).toBe('FAIL')   // would PASS under the 100 default — the bug
+    expect(trackingGate(90, 'smart_beta').status).toBe('PASS')
+  })
+
   it('still reports N/A when TE is unavailable', () => {
     expect(trackingGate(null, 'sector').status).toBe('UNKNOWN')
   })
