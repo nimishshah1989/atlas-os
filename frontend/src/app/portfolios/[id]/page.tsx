@@ -20,6 +20,7 @@ import { KPICard } from '@/components/strategy/KPICard'
 import { ReRunBacktestButton } from '@/components/strategy/ReRunBacktestButton'
 import { EquityCurveChart } from '@/components/charts/EquityCurveChart'
 import { DrawdownChart } from '@/components/charts/DrawdownChart'
+import { getPaperPerformance } from '@/lib/queries/paper_perf'
 import { PaperTradingToggle } from './PaperTradingToggle'
 import { StaticComposition, RuleBasedComposition } from './CompositionView'
 import { PolicyPanel } from '@/components/portfolio/PolicyPanel'
@@ -61,6 +62,12 @@ export default async function PortfolioDetailPage({ params }: Props) {
   const type: 'static' | 'rule-based' = isStatic ? 'static' : 'rule-based'
   const paperActive = isStatic ? staticPortfolio!.paper_trading_active : false
   const backtests = await getBacktestsForPortfolio(id, type, 50)
+
+  // Equity/drawdown curves come from the paper-trading time-series, keyed by
+  // strategy_id. Rule-based portfolios ARE the strategy (id === strategy_id);
+  // static portfolios have no series in this schema, so they keep the chart's
+  // built-in "no paper-trading data" placeholder. Empty array → placeholder.
+  const paperPerf = type === 'rule-based' ? await getPaperPerformance(id) : []
 
   const typeBadgeStyle =
     type === 'static'
@@ -134,12 +141,12 @@ export default async function PortfolioDetailPage({ params }: Props) {
 
       <section id="equity" className="mb-8">
         <h2 className="font-sans text-xs font-semibold uppercase tracking-wide text-ink-secondary mb-3">Equity Curve</h2>
-        <EquityCurveChart data={[]} />
+        <EquityCurveChart data={paperPerf} />
       </section>
 
       <section id="drawdown" className="mb-8">
         <h2 className="font-sans text-xs font-semibold uppercase tracking-wide text-ink-secondary mb-3">Drawdown</h2>
-        <DrawdownChart data={[]} />
+        <DrawdownChart data={paperPerf} />
       </section>
 
       <section id="backtests" className="mb-8">
