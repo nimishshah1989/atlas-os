@@ -234,6 +234,7 @@ export async function getSectorCards(): Promise<SectorCardRow[]> {
       SELECT MAX(as_of_date) FROM atlas.mv_sector_cards
       WHERE rs_1m IS NOT NULL AND ret_1w IS NOT NULL
     )
+      AND LOWER(sector_name) NOT LIKE '%conglomerate%'
     ORDER BY rs_3m DESC NULLS LAST
   `
 

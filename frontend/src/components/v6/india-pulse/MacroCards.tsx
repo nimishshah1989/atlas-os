@@ -7,6 +7,7 @@
 import {
   LineChart,
   Line,
+  YAxis,
   ResponsiveContainer,
   Tooltip,
 } from 'recharts'
@@ -204,39 +205,47 @@ function MacroCardItem({ card }: { card: MacroCard }) {
 
   return (
     <div className="bg-paper border border-paper-rule rounded-sm p-4">
-      <div className="text-[10px] uppercase tracking-[0.15em] text-ink-tertiary font-semibold mb-1">
+      <div className="text-[10px] uppercase tracking-[0.15em] text-ink-tertiary font-semibold mb-1.5">
         {card.label}
       </div>
-      <div className={`font-mono text-[24px] font-medium leading-tight ${valueColor(card)}`}>
-        {fmtValue(card)}
+
+      {/* Value + sparkline side-by-side */}
+      <div className="flex items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <div className={`font-mono text-[22px] font-medium leading-tight ${valueColor(card)}`}>
+            {fmtValue(card)}
+          </div>
+          {(fmtDelta(card) || fmtRetM(card)) && (
+            <div className={`font-mono text-[10px] font-medium mt-[2px] ${deltaColor(card)}`}>
+              {[fmtDelta(card), fmtRetM(card)].filter(Boolean).join(' · ')}
+            </div>
+          )}
+        </div>
+
+        {/* Compact sparkline on the right */}
+        <div className="w-20 shrink-0" style={{ height: 40 }}>
+          {sparkData.length > 1 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={sparkData} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+                <YAxis hide domain={['auto', 'auto']} />
+                <Line
+                  type="monotone"
+                  dataKey="v"
+                  stroke={sparkColor}
+                  strokeWidth={1.5}
+                  dot={false}
+                  isAnimationActive={false}
+                />
+                <Tooltip content={<SparkTooltip />} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="w-full h-full bg-paper-deep rounded-sm opacity-40" />
+          )}
+        </div>
       </div>
-      {(fmtDelta(card) || fmtRetM(card)) && (
-        <div className={`font-mono text-[11px] font-medium mt-0.5 ${deltaColor(card)}`}>
-          {[fmtDelta(card), fmtRetM(card)].filter(Boolean).join(' · ')}
-        </div>
-      )}
 
-      {/* Sparkline */}
-      {sparkData.length > 1 ? (
-        <div className="w-full h-7 mt-2 mb-1.5">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={sparkData}>
-              <Line
-                type="monotone"
-                dataKey="v"
-                stroke={sparkColor}
-                strokeWidth={1.5}
-                dot={false}
-              />
-              <Tooltip content={<SparkTooltip />} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      ) : (
-        <div className="h-7 mt-2 mb-1.5 bg-paper-deep rounded-sm opacity-50" />
-      )}
-
-      <div className="text-[11px] text-ink-tertiary leading-[1.5] pt-1.5 border-t border-paper-rule">
+      <div className="text-[11px] text-ink-tertiary leading-[1.5] pt-2 mt-2 border-t border-paper-rule">
         {macroNote(card) || '—'}
       </div>
     </div>

@@ -3,6 +3,7 @@
 // Page 04 hero readout — 3-col layout: Leading / Lagging / Rotation pattern.
 // Derived from mv_sector_cards rows (sorted by rs_3m).
 
+import Link from 'next/link'
 import type { SectorCardRow, SectorRRGRow } from '@/lib/queries/v6/sectors'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -39,13 +40,16 @@ function SectorRow({
 }) {
   const rsPositive = rsLabel.startsWith('+')
   return (
-    <div className="grid grid-cols-[auto_1fr_auto] gap-2 items-start py-[7px] border-b border-dashed border-paper-rule last:border-b-0">
+    <Link
+      href={`/sectors/${encodeURIComponent(sector.sector_name)}`}
+      className="grid grid-cols-[auto_1fr_auto] gap-2 items-start py-[7px] border-b border-dashed border-paper-rule last:border-b-0 hover:bg-paper-deep rounded-sm transition-colors no-underline text-inherit -mx-2 px-2"
+    >
       <span
         className={`w-[7px] h-[7px] rounded-full mt-1 shrink-0 ${DOT_COLORS[color]}`}
         aria-hidden="true"
       />
       <div>
-        <span className="font-semibold text-ink-primary text-[12px]">{sector.sector_name}</span>
+        <span className="font-semibold text-ink-primary text-[12px] hover:text-teal transition-colors">{sector.sector_name}</span>
         <div className="text-[11px] text-ink-tertiary leading-[1.4]">{subtitle}</div>
       </div>
       <span
@@ -54,7 +58,7 @@ function SectorRow({
       >
         {rsLabel}
       </span>
-    </div>
+    </Link>
   )
 }
 

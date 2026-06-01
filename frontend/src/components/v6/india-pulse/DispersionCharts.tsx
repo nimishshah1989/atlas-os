@@ -119,6 +119,7 @@ export function DispersionCharts({ dispersion_60d_series, sector_heatmap }: Prop
                 axisLine={false}
                 tickFormatter={v => v.toFixed(3)}
                 width={40}
+                domain={['auto', 'auto']}
               />
               <Tooltip content={<CustomDispersionTooltip />} />
               <Line
@@ -152,15 +153,16 @@ export function DispersionCharts({ dispersion_60d_series, sector_heatmap }: Prop
         </div>
 
         {sectorData.length === 0 ? (
-          <div className="h-[220px] flex items-center justify-center text-sm text-ink-tertiary">
+          <div className="h-[280px] flex items-center justify-center text-sm text-ink-tertiary">
             No sector data available.
           </div>
         ) : (
-          <ResponsiveContainer width="100%" height={220}>
+          <ResponsiveContainer width="100%" height={Math.max(280, sectorData.length * 14)}>
             <BarChart
               data={sectorData}
-              margin={{ top: 8, right: 12, left: -8, bottom: 40 }}
+              margin={{ top: 4, right: 16, left: 0, bottom: 4 }}
               layout="vertical"
+              barSize={9}
             >
               <CartesianGrid strokeDasharray="2 4" stroke={CHART_COLORS.grid} horizontal={false} />
               <XAxis
@@ -169,6 +171,7 @@ export function DispersionCharts({ dispersion_60d_series, sector_heatmap }: Prop
                 tickLine={false}
                 axisLine={{ stroke: CHART_COLORS.grid }}
                 tickFormatter={v => `${(v * 100).toFixed(0)}%`}
+                tickCount={5}
               />
               <YAxis
                 type="category"
@@ -176,11 +179,11 @@ export function DispersionCharts({ dispersion_60d_series, sector_heatmap }: Prop
                 tick={{ fontSize: 8, fontFamily: 'var(--font-sans)', fill: CHART_COLORS.inkTertiary }}
                 tickLine={false}
                 axisLine={false}
-                width={68}
+                width={72}
               />
               <Tooltip content={<CustomSectorTooltip />} />
               <ReferenceLine x={0} stroke={CHART_COLORS.inkTertiary} strokeWidth={0.8} />
-              <Bar dataKey="rs_1w" radius={[0, 1, 1, 0]}>
+              <Bar dataKey="rs_1w" radius={[0, 2, 2, 0]}>
                 {sectorData.map(entry => (
                   <Cell key={entry.fullName} fill={barColor(entry.rs_1w)} />
                 ))}

@@ -28,7 +28,7 @@ export function InfoTooltip({ content, translation, className = '' }: Props) {
         <Tooltip.Portal>
           <Tooltip.Content
             id={tooltipId}
-            className="z-50 max-w-xs bg-paper border border-paper-rule rounded-[2px] px-3 py-2 text-xs font-sans text-ink-secondary shadow-sm"
+            className="z-50 max-w-[220px] bg-paper border border-paper-rule rounded-[2px] px-2.5 py-1.5 text-[11px] font-sans text-ink-secondary shadow-sm"
             sideOffset={4}
           >
             <span>{content}</span>
