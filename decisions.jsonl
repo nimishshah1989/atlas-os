@@ -4735,3 +4735,830 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{"ts":"2026-06-01T03:47:04Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name, data_type, numeric_precision, numeric_scale, is_nullable FROM information_schema.columns WHERE table_name = 'atlas_signal_calls' ORDER BY ordinal_position;"}
+{"ts":"2026-06-01T03:47:15Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name, data_type FROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_sector_states_daily' ORDER BY ordinal_position;"}
+{"ts":"2026-06-01T03:47:15Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  count(*) AS total_calls,\n  count(predicted_excess) AS non_null_pe,\n  count(*) FILTER (WHERE predicted_excess IS NULL) AS null_pe,\n  min(date) AS min_date, max(date) AS max_date,\n  count(*) FILTER (WHERE exit_date IS NULL) AS open_calls\nFROM atlas.atlas_signal_calls;"}
+{"ts":"2026-06-01T03:47:19Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name FROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_sector_metrics_daily' AND column_name IN ('sector_name','bottomup_rs_3m_nifty500','date') ORDER BY column_name;"}
+{"ts":"2026-06-01T03:47:27Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name, data_type FROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_stock_metrics_daily' AND column_name IN ('ret_1w','ret_1m','ret_3m','ret_6m','ret_12m','date','instrument_id') ORDER BY column_name;"}
+{"ts":"2026-06-01T03:47:27Z","kind":"supabase_sql_executed","sql_preview":"SELECT MAX(date) AS max_state_date, COUNT(*) FILTER (WHERE date = (SELECT MAX(date) FROM atlas.atlas_sector_states_daily)) AS rows_latest FROM atlas.atlas_sector_states_daily;"}
+{"ts":"2026-06-01T03:47:28Z","kind":"supabase_sql_executed","sql_preview":"SELECT max(date) AS max_date FROM atlas.atlas_stock_metrics_daily;"}
+{"ts":"2026-06-01T03:47:29Z","kind":"supabase_sql_executed","sql_preview":"SELECT sector_name, sector_state FROM atlas.atlas_sector_states_daily WHERE date = (SELECT MAX(date) FROM atlas.atlas_sector_states_daily) ORDER BY sector_name;"}
+{"ts":"2026-06-01T03:47:31Z","kind":"supabase_sql_executed","sql_preview":"SELECT DISTINCT sector FROM atlas.atlas_universe_stocks WHERE effective_to IS NULL AND sector IS NOT NULL ORDER BY sector;"}
+{"ts":"2026-06-01T03:47:37Z","kind":"supabase_sql_executed","sql_preview":"SELECT date,\n  count(*) AS rows,\n  count(ret_1w)  AS n_1w,\n  count(ret_1m)  AS n_1m,\n  count(ret_3m)  AS n_3m,\n  count(ret_6m)  AS n_6m,\n  count(ret_12m) AS n_12m\nFROM atlas.atlas_stock_metrics_daily\nWHERE date >= '2026-05-20'\nGROUP BY date ORDER BY date DESC;"}
+{"ts":"2026-06-01T03:47:37Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  count(*) AS total_cells,\n  count(*) FILTER (WHERE deprecated_at IS NULL) AS active_cells,\n  count(friction_adjusted_excess) AS non_null_fae,\n  count(*) FILTER (WHERE friction_adjusted_excess IS NULL) AS null_fae,\n  count(*) FILTER (WHERE deprecated_at IS NULL AND friction_adjusted_excess IS NOT NULL) AS active_with_fae,\n  count(*) FILTER (WHERE deprecated_at IS NULL AND friction_adjusted_excess IS NULL) AS active_null_fae\nFROM atlas.atlas_cell_definitions;"}
+{"ts":"2026-06-01T03:47:44Z","kind":"supabase_sql_executed","sql_preview":"SELECT u.instrument_id, u.sector FROM atlas.atlas_universe_stocks u WHERE u.effective_to IS NULL AND u.sector = 'IT' LIMIT 1;"}
+{"ts":"2026-06-01T03:47:46Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name FROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_stock_metrics_daily' AND column_name IN ('instrument_id','rs_pctile_3m','date');"}
+{"ts":"2026-06-01T03:47:46Z","kind":"supabase_sql_executed","sql_preview":"SELECT date,\n  count(*) AS calls,\n  count(predicted_excess) AS non_null_pe,\n  count(*) FILTER (WHERE predicted_excess IS NULL) AS null_pe,\n  min(predicted_excess) AS min_pe, max(predicted_excess) AS max_pe\nFROM atlas.atlas_signal_calls\nGROUP BY date ORDER BY date;"}
+{"ts":"2026-06-01T03:47:50Z","kind":"supabase_sql_executed","sql_preview":"SELECT u.symbol, m.date, m.ret_1w, m.ret_1m, m.ret_3m, m.ret_6m, m.ret_12m\nFROM atlas.atlas_stock_metrics_daily m\nJOIN atlas.atlas_universe_stocks u ON u.instrument_id = m.instrument_id AND u.effective_to IS NULL\nWHERE m.date = '2026-05-29' AND m.ret_3m BETWEEN 0.53 AND 0.55\nORDER BY m.ret_3m DESC LIMIT 10;"}
+{"ts":"2026-06-01T03:47:57Z","kind":"supabase_sql_executed","sql_preview":"WITH latest_sector_date AS (\n  SELECT MAX(date) AS d FROM atlas.atlas_sector_states_daily\n),\nsector_today AS (\n  SELECT\n    s.sector_name,\n    s.sector_state,\n    (s.participation_rs_pct::numeric / 100.0)::text AS breadth,\n    ROW_NUMBER() OVER (ORDER BY m.bottomup_rs_3m_nifty500 DESC NULLS LAST)::text AS sector_rank,\n    COUNT(*) OVER ()::text AS total_sectors\n  FROM atlas.atlas_sector_states_daily s\n  LEFT JOIN atlas.atlas_sector_metrics_daily m\n    ON m.sector_name = s.sector_name AND m.date "}
+{"ts":"2026-06-01T03:48:07Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  (SELECT count(*) FROM information_schema.tables WHERE table_schema='atlas' AND table_name='tv_metrics') AS tv_metrics_exists,\n  (SELECT count(*) FROM atlas.tv_metrics) AS tv_metrics_rows,\n  (SELECT count(*) FROM atlas.tv_metrics WHERE pe_ttm IS NOT NULL) AS tv_metrics_pe_nonnull,\n  (SELECT max(fetched_at)::text FROM atlas.tv_metrics) AS tv_metrics_max_fetched_at,\n  (SELECT count(*) FROM information_schema.tables WHERE table_schema='de' AND table_name='equity_ohlcv') AS de_equity_ohlcv_e"}
+{"ts":"2026-06-01T03:48:27Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  count(*) AS rows,\n  count(cell_predicted_excess) AS non_null_cpe,\n  count(*) FILTER (WHERE cell_predicted_excess IS NULL) AS null_cpe\nFROM atlas.mv_stock_landscape;"}
+{"ts":"2026-06-01T03:48:29Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  (SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='de_equity_ohlcv') AS de_equity_ohlcv_exists,\n  (SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='de_index_prices') AS de_index_prices_exists,\n  (SELECT count(*) FROM public.de_equity_ohlcv WHERE symbol='RELIANCE' AND date >= CURRENT_DATE - 300) AS reliance_ohlcv_rows,\n  (SELECT count(*) FROM public.de_index_prices WHERE index_code='NIFTY 50' AND date >= C"}
+{"ts":"2026-06-01T03:48:31Z","kind":"supabase_sql_executed","sql_preview":"SELECT u.symbol, m.ret_1w, m.ret_1m, m.ret_3m, m.ret_6m, m.ret_12m\nFROM atlas.atlas_stock_metrics_daily m\nJOIN atlas.atlas_universe_stocks u ON u.instrument_id = m.instrument_id AND u.effective_to IS NULL\nWHERE m.date='2026-05-29' AND m.ret_12m IS NULL LIMIT 5;"}
+{"ts":"2026-06-01T03:48:41Z","kind":"supabase_sql_executed","sql_preview":"SELECT matviewname FROM pg_matviews WHERE schemaname='atlas' AND matviewname IN ('mv_sector_cards','mv_sector_deepdive');"}
+{"ts":"2026-06-01T03:48:43Z","kind":"supabase_sql_executed","sql_preview":"SELECT COUNT(*) AS active_stocks, COUNT(*) FILTER (WHERE sector IS NULL) AS null_sector, COUNT(*) FILTER (WHERE sector IS NOT NULL AND sector NOT IN (SELECT sector_name FROM atlas.atlas_sector_states_daily WHERE date=(SELECT MAX(date) FROM atlas.atlas_sector_states_daily))) AS sector_not_in_states FROM atlas.atlas_universe_stocks WHERE effective_to IS NULL;"}
+{"ts":"2026-06-01T03:49:19Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  count(*) AS rows,\n  count(cell_predicted_excess) AS non_null_cpe,\n  count(*) FILTER (WHERE cell_predicted_excess IS NULL) AS null_cpe\nFROM atlas.mv_stock_landscape_trader;"}
+{"ts":"2026-06-01T03:49:37Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name FROM information_schema.columns WHERE table_name='mv_stock_landscape' AND table_schema='atlas' AND (column_name LIKE '%cell%' OR column_name LIKE '%call%' OR column_name LIKE '%signal%' OR column_name LIKE '%verdict%') ORDER BY column_name;"}
+{"ts":"2026-06-01T03:49:48Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name, data_type FROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_stock_metrics_daily' AND column_name IN ('ret_1w','ret_1m','ret_3m','ret_6m','ret_12m') ORDER BY column_name;"}
+{"ts":"2026-06-01T03:49:57Z","kind":"supabase_sql_executed","sql_preview":"WITH latest AS (SELECT MAX(date) AS d FROM atlas.atlas_stock_metrics_daily)\nSELECT\n  (SELECT d FROM latest) AS latest_date,\n  COUNT(*) AS total_rows,\n  COUNT(ret_1w) AS ret_1w_pop,\n  COUNT(ret_1m) AS ret_1m_pop,\n  COUNT(ret_3m) AS ret_3m_pop,\n  COUNT(ret_6m) AS ret_6m_pop,\n  COUNT(ret_12m) AS ret_12m_pop\nFROM atlas.atlas_stock_metrics_daily\nWHERE date = (SELECT d FROM latest);"}
+{"ts":"2026-06-01T03:49:58Z","kind":"supabase_sql_executed","sql_preview":"-- definitive bug-signature checks\nSELECT 'stocks_open_null_pe' AS check, count(*) AS n\n  FROM atlas.atlas_signal_calls WHERE exit_date IS NULL AND predicted_excess IS NULL\nUNION ALL\nSELECT 'etf_open_null_pe', count(*)\n  FROM atlas.atlas_etf_signal_calls WHERE exit_date IS NULL AND predicted_excess IS NULL\nUNION ALL\nSELECT 'etf_total_open', count(*)\n  FROM atlas.atlas_etf_signal_calls WHERE exit_date IS NULL\nUNION ALL\nSELECT 'mv_rows_with_call_but_null_cpe', count(*)\n  FROM atlas.mv_stock_landsc"}
+{"ts":"2026-06-01T03:49:58Z","kind":"supabase_sql_executed","sql_preview":"WITH latest AS (SELECT MAX(date) AS d FROM atlas.atlas_stock_metrics_daily)\nSELECT u.symbol, m.date, m.ret_1w::text, m.ret_1m::text, m.ret_3m::text, m.ret_6m::text, m.ret_12m::text\nFROM atlas.atlas_universe_stocks u\nJOIN atlas.atlas_stock_metrics_daily m ON m.instrument_id = u.instrument_id AND m.date = (SELECT d FROM latest)\nWHERE u.symbol = 'SHAILY' AND u.effective_to IS NULL;"}
+{"ts":"2026-06-01T03:50:12Z","kind":"supabase_sql_executed","sql_preview":"WITH latest AS (SELECT MAX(date) AS d FROM atlas.atlas_stock_metrics_daily)\nSELECT u.symbol, m.ret_6m::text, m.ret_12m::text\nFROM atlas.atlas_universe_stocks u\nJOIN atlas.atlas_stock_metrics_daily m ON m.instrument_id = u.instrument_id AND m.date = (SELECT d FROM latest)\nWHERE u.symbol IN ('RUBICON','PARKHOSPS','TMCV','STYL','LOTUSDEV') AND u.effective_to IS NULL\nORDER BY u.symbol;"}
+{"ts":"2026-06-01T03:50:13Z","kind":"supabase_sql_executed","sql_preview":"SELECT index_code, date, ret_6m::text, ret_12m::text FROM atlas.atlas_index_metrics_daily WHERE index_code = 'NIFTY 500' ORDER BY date DESC LIMIT 3;"}
+{"ts":"2026-06-01T03:50:38Z","kind":"supabase_sql_executed","sql_preview":"\n-- Check column existence across the relevant tables\nSELECT table_name, column_name, data_type\nFROM information_schema.columns\nWHERE table_schema='atlas'\n  AND table_name IN ('atlas_sector_states_daily','atlas_sector_metrics_daily','atlas_stock_metrics_daily')\n  AND column_name IN ('bottomup_rs_3m_nifty500','sector_name','sector_state','participation_rs_pct','date','instrument_id','rs_pctile_3m')\nORDER BY table_name, column_name;"}
+{"ts":"2026-06-01T03:52:30Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  COUNT(*) AS total_rows,\n  COUNT(macro_cards) AS macro_cards_nonnull,\n  COUNT(*) FILTER (WHERE macro_cards IS NULL) AS macro_cards_null,\n  COUNT(*) FILTER (WHERE jsonb_typeof(macro_cards) = 'array' AND jsonb_array_length(macro_cards) = 0) AS macro_cards_empty_array,\n  COUNT(*) FILTER (WHERE jsonb_typeof(macro_cards) = 'array' AND jsonb_array_length(macro_cards) > 0) AS macro_cards_nonempty,\n  COUNT(narrative_ribbon) AS narrative_nonnull,\n  COUNT(*) FILTER (WHERE narrative_ribbon IS NULL)"}
+{"ts":"2026-06-01T03:52:41Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name, data_type\nFROM information_schema.columns\nWHERE table_schema='atlas' AND table_name='mv_stock_landscape'\n  AND column_name IN ('composite_score','action','as_of_date','refreshed_at','confidence_label','conviction_tier','cell_action','matrix_action_sign')\nORDER BY column_name;"}
+{"ts":"2026-06-01T03:52:42Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  action,\n  COUNT(*) AS n,\n  MIN(composite_score) AS min_comp,\n  MAX(composite_score) AS max_comp,\n  ROUND(AVG(composite_score),4) AS avg_comp,\n  ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY composite_score)::numeric,4) AS median_comp,\n  COUNT(*) FILTER (WHERE composite_score IS NULL) AS null_comp\nFROM atlas.mv_stock_landscape\nGROUP BY action\nORDER BY action;"}
+{"ts":"2026-06-01T03:52:45Z","kind":"supabase_sql_executed","sql_preview":"WITH latest AS (\n  SELECT * FROM atlas.mv_india_pulse\n  WHERE as_of_date = (SELECT MAX(as_of_date) FROM atlas.mv_india_pulse)\n  LIMIT 1\n)\nSELECT\n  as_of_date,\n  jsonb_array_length(macro_cards) AS n_cards,\n  (SELECT jsonb_agg(jsonb_build_object('id', c->>'id', 'value', c->'value', 'value_is_null', (c->'value' IS NULL OR jsonb_typeof(c->'value')='null'), 'spark_len', CASE WHEN jsonb_typeof(c->'sparkline_30d')='array' THEN jsonb_array_length(c->'sparkline_30d') ELSE -1 END))\n     FROM jsonb_array_e"}
+{"ts":"2026-06-01T03:52:48Z","kind":"supabase_sql_executed","sql_preview":"\nSELECT\n  count(*) AS total_calls,\n  count(*) FILTER (WHERE exit_date IS NULL) AS open_calls,\n  count(predicted_excess) AS non_null_pred_excess,\n  count(*) FILTER (WHERE predicted_excess IS NULL) AS null_pred_excess,\n  count(DISTINCT predicted_excess) AS distinct_pred_excess,\n  count(DISTINCT confidence_unconditional) AS distinct_conf_uncond,\n  count(DISTINCT confidence_regime_conditional) AS distinct_conf_regime,\n  max(date) AS max_date,\n  min(date) AS min_date\nFROM atlas.atlas_signal_calls;"}
+{"ts":"2026-06-01T03:52:51Z","kind":"supabase_sql_executed","sql_preview":"\nSELECT\n  count(*) AS total_cells,\n  count(friction_adjusted_excess) AS non_null_fae,\n  count(*) FILTER (WHERE friction_adjusted_excess IS NULL) AS null_fae,\n  count(DISTINCT friction_adjusted_excess) AS distinct_fae,\n  count(confidence_unconditional) AS non_null_conf,\n  count(DISTINCT confidence_unconditional) AS distinct_conf,\n  count(*) FILTER (WHERE deprecated_at IS NULL) AS active_cells\nFROM atlas.atlas_cell_definitions;"}
+{"ts":"2026-06-01T03:52:55Z","kind":"supabase_sql_executed","sql_preview":"SELECT sector_name, rs_ratio_current, rs_momentum_current, quadrant_current\nFROM atlas.mv_sector_rrg\nWHERE as_of_date = (SELECT MAX(as_of_date) FROM atlas.mv_sector_rrg)\nORDER BY sector_name;"}
+{"ts":"2026-06-01T03:52:56Z","kind":"supabase_sql_executed","sql_preview":"SELECT quadrant_current, COUNT(*) AS n\nFROM atlas.mv_sector_rrg\nWHERE as_of_date = (SELECT MAX(as_of_date) FROM atlas.mv_sector_rrg)\nGROUP BY quadrant_current\nORDER BY quadrant_current NULLS LAST;"}
+{"ts":"2026-06-01T03:52:56Z","kind":"supabase_sql_executed","sql_preview":"SELECT a.attname AS column_name, format_type(a.atttypid, a.atttypmod) AS type\nFROM pg_attribute a\nJOIN pg_class c ON c.oid = a.attrelid\nJOIN pg_namespace n ON n.oid = c.relnamespace\nWHERE n.nspname='atlas' AND c.relname='mv_stock_landscape' AND a.attnum>0 AND NOT a.attisdropped\n  AND a.attname IN ('composite_score','action','as_of_date','refreshed_at')\nORDER BY a.attname;"}
+{"ts":"2026-06-01T03:52:57Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  MIN(as_of_date) AS min_asof,\n  MAX(as_of_date) AS max_asof,\n  COUNT(DISTINCT as_of_date) AS distinct_asof,\n  MIN(refreshed_at) AS min_refreshed,\n  MAX(refreshed_at) AS max_refreshed\nFROM atlas.mv_stock_landscape;"}
+{"ts":"2026-06-01T03:53:02Z","kind":"supabase_sql_executed","sql_preview":"\n-- Does fund_decisions exist + its columns\nSELECT table_schema, table_name\nFROM information_schema.tables\nWHERE table_name IN ('fund_decisions','mv_fund_list_v6','atlas_fund_scorecard')\nORDER BY table_name;"}
+{"ts":"2026-06-01T03:53:03Z","kind":"supabase_sql_executed","sql_preview":"\n-- D1: prove flatness per cell — for each cell, count distinct predicted_excess & confidence among its calls\nSELECT cell_id,\n       count(*) AS n_calls,\n       count(DISTINCT predicted_excess) AS distinct_pe,\n       count(DISTINCT confidence_unconditional) AS distinct_conf,\n       min(predicted_excess) AS pe,\n       min(confidence_unconditional) AS conf\nFROM atlas.atlas_signal_calls\nWHERE exit_date IS NULL\nGROUP BY cell_id\nORDER BY n_calls DESC\nLIMIT 25;"}
+{"ts":"2026-06-01T03:53:04Z","kind":"supabase_sql_executed","sql_preview":"\n-- which MVs reference predicted_excess / cell_predicted_excess\nSELECT matviewname FROM pg_matviews WHERE schemaname='atlas' AND (definition ILIKE '%predicted_excess%')\nORDER BY matviewname;"}
+{"ts":"2026-06-01T03:53:08Z","kind":"supabase_sql_executed","sql_preview":"SELECT date, india_10y_yield, cpi_yoy, (india_10y_yield - cpi_yoy) AS real_yield_calc, usdinr, dxy, brent_inr, fii_cash_equity_flow_cr, dii_flow, us_10y_yield, vix_9d\nFROM atlas.atlas_macro_daily\nWHERE date <= '2026-05-29'\nORDER BY date DESC\nLIMIT 3;"}
+{"ts":"2026-06-01T03:53:10Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name, data_type, is_nullable\nFROM information_schema.columns\nWHERE table_schema='atlas' AND table_name='atlas_sector_master'\nORDER BY ordinal_position;"}
+{"ts":"2026-06-01T03:53:10Z","kind":"supabase_sql_executed","sql_preview":"\n-- Find all relations (tables, views, matviews) with fund/decision/scorecard in name\nSELECT n.nspname AS schema, c.relname AS relname,\n  CASE c.relkind WHEN 'r' THEN 'table' WHEN 'v' THEN 'view' WHEN 'm' THEN 'matview' WHEN 'p' THEN 'part_table' ELSE c.relkind::text END AS kind\nFROM pg_class c\nJOIN pg_namespace n ON n.oid = c.relnamespace\nWHERE (c.relname ILIKE '%fund%' OR c.relname ILIKE '%decision%')\n  AND n.nspname NOT IN ('pg_catalog','information_schema')\nORDER BY n.nspname, c.relname;"}
+{"ts":"2026-06-01T03:53:11Z","kind":"supabase_sql_executed","sql_preview":"SELECT sector_name, primary_nse_index, secondary_nse_indices, notes\nFROM atlas.atlas_sector_master ORDER BY sector_name;"}
+{"ts":"2026-06-01T03:53:14Z","kind":"supabase_sql_executed","sql_preview":"\nSELECT matviewname FROM pg_matviews\nWHERE schemaname='atlas' AND (matviewname ILIKE '%conviction%' OR matviewname ILIKE '%landscape%' OR matviewname ILIKE '%trader%' OR matviewname ILIKE '%landing%')\nORDER BY matviewname;"}
+{"ts":"2026-06-01T03:53:15Z","kind":"supabase_sql_executed","sql_preview":"\n-- D2: AVOID composite distribution. Find which table/MV holds composite + recommendation tags\nSELECT matviewname FROM pg_matviews WHERE schemaname='atlas' AND (definition ILIKE '%composite%' OR definition ILIKE '%AVOID%') ORDER BY matviewname;"}
+{"ts":"2026-06-01T03:53:21Z","kind":"supabase_sql_executed","sql_preview":"\n-- columns of atlas_fund_decisions_daily\nSELECT column_name, data_type FROM information_schema.columns\nWHERE table_schema='atlas' AND table_name='atlas_fund_decisions_daily' ORDER BY ordinal_position;"}
+{"ts":"2026-06-01T03:53:22Z","kind":"supabase_sql_executed","sql_preview":"SELECT COUNT(*) AS total,\n       COUNT(*) FILTER (WHERE as_of_date IS NULL) AS null_asof,\n       COUNT(*) FILTER (WHERE composite_score IS NULL) AS null_comp\nFROM atlas.mv_stock_landscape;"}
+{"ts":"2026-06-01T03:53:22Z","kind":"supabase_sql_executed","sql_preview":"\nSELECT pg_get_viewdef('atlas.mv_top_conviction_daily'::regclass, true) AS def;"}
+{"ts":"2026-06-01T03:53:23Z","kind":"supabase_sql_executed","sql_preview":"SELECT pg_get_viewdef('atlas.mv_stock_landscape'::regclass, true) AS def;"}
+{"ts":"2026-06-01T03:53:23Z","kind":"supabase_sql_executed","sql_preview":"\n-- A2: sector_state distinct values + the gate mapping check (does 'Avoid' exist? what are real values?)\nSELECT 'sector_state_values' AS q, sector_state, COUNT(*) AS n\nFROM atlas.atlas_sector_states_daily\nWHERE date = (SELECT MAX(date) FROM atlas.atlas_sector_states_daily)\nGROUP BY sector_state\nORDER BY n DESC;"}
+{"ts":"2026-06-01T03:53:23Z","kind":"supabase_sql_executed","sql_preview":"\n-- D2: distribution of composites + recommendation in mv_stock_list_v6\nSELECT pg_get_viewdef('atlas.mv_stock_list_v6'::regclass, true) AS def;"}
+{"ts":"2026-06-01T03:53:24Z","kind":"supabase_sql_executed","sql_preview":"-- how many distinct stocks per sector in the active universe, and is sector 1:1 per stock?\nSELECT sector, COUNT(DISTINCT instrument_id) AS n_stocks\nFROM atlas.atlas_universe_stocks\nWHERE effective_to IS NULL\nGROUP BY sector\nORDER BY sector;"}
+{"ts":"2026-06-01T03:53:26Z","kind":"supabase_sql_executed","sql_preview":"SELECT c.relkind, a.attname\nFROM pg_class c\nJOIN pg_namespace n ON n.oid = c.relnamespace\nJOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped\nWHERE n.nspname='atlas' AND c.relname='mv_india_pulse'\nORDER BY a.attnum;"}
+{"ts":"2026-06-01T03:53:27Z","kind":"supabase_sql_executed","sql_preview":"SELECT c.relkind, n.nspname, c.relname\nFROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace\nWHERE c.relname IN ('mv_calls_performance','mv_stock_landscape_trader','mv_stock_landscape','atlas_signal_calls')\nORDER BY c.relname;"}
+{"ts":"2026-06-01T03:53:27Z","kind":"supabase_sql_executed","sql_preview":"SELECT version_num FROM alembic_version;"}
+{"ts":"2026-06-01T03:53:30Z","kind":"supabase_sql_executed","sql_preview":"\nSELECT 'decisions_latest' src, (SELECT MAX(date) FROM atlas.atlas_fund_decisions_daily) AS dt, recommendation, COUNT(*) n\nFROM atlas.atlas_fund_decisions_daily\nWHERE date = (SELECT MAX(date) FROM atlas.atlas_fund_decisions_daily)\nGROUP BY recommendation\nUNION ALL\nSELECT 'mv_fund_list_v6_recommendation', (SELECT MAX(as_of_date) FROM atlas.mv_fund_list_v6), recommendation, COUNT(*)\nFROM atlas.mv_fund_list_v6\nGROUP BY recommendation\nORDER BY src, n DESC;"}
+{"ts":"2026-06-01T03:53:34Z","kind":"supabase_sql_executed","sql_preview":"SELECT a.attname, format_type(a.atttypid,a.atttypmod) AS type\nFROM pg_attribute a\nJOIN pg_class c ON c.oid=a.attrelid\nJOIN pg_namespace n ON n.oid=c.relnamespace\nWHERE n.nspname='atlas' AND c.relname='mv_calls_performance' AND a.attnum>0 AND NOT a.attisdropped\nORDER BY a.attnum;"}
+{"ts":"2026-06-01T03:53:34Z","kind":"supabase_sql_executed","sql_preview":"\n-- MV freshness + scorecard latest + composite stats\nSELECT 'mv_fund_list_v6' rel, MAX(as_of_date)::text d, COUNT(*) n,\n  ROUND(AVG(composite_score)::numeric,2)::text avg_comp,\n  COUNT(*) FILTER (WHERE composite_score IS NULL)::text null_comp\nFROM atlas.mv_fund_list_v6\nUNION ALL\nSELECT 'atlas_fund_scorecard', MAX(snapshot_date)::text, COUNT(*) FILTER (WHERE snapshot_date=(SELECT MAX(snapshot_date) FROM atlas.atlas_fund_scorecard)),\n  ROUND(AVG(composite_score) FILTER (WHERE snapshot_date=(SELEC"}
+{"ts":"2026-06-01T03:53:37Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  COUNT(*) AS total_rows,\n  COUNT(predicted_excess) AS pe_nonnull,\n  COUNT(*) FILTER (WHERE predicted_excess IS NULL) AS pe_null,\n  COUNT(realized_excess_pct) AS re_nonnull,\n  COUNT(*) FILTER (WHERE realized_excess_pct IS NULL) AS re_null,\n  COUNT(*) FILTER (WHERE status='in_flight') AS in_flight,\n  COUNT(*) FILTER (WHERE status='closed') AS closed,\n  COUNT(*) FILTER (WHERE is_hit IS NOT NULL) AS is_hit_nonnull,\n  MIN(entry_date) AS min_entry, MAX(entry_date) AS max_entry,\n  MAX(refreshed"}
+{"ts":"2026-06-01T03:53:39Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  (SELECT MAX(date) FROM atlas.atlas_market_regime_daily) AS max_regime_date,\n  (SELECT MAX(date) FROM atlas.atlas_macro_daily) AS max_macro_date,\n  (SELECT MAX(as_of_date) FROM atlas.mv_india_pulse) AS max_mv_date,\n  (SELECT refreshed_at FROM atlas.mv_india_pulse ORDER BY as_of_date DESC LIMIT 1) AS latest_refreshed_at;"}
+{"ts":"2026-06-01T03:53:40Z","kind":"supabase_sql_executed","sql_preview":"\n-- D2: among latest stock_list rows, distribution of action vs composite_score\nWITH s AS (\n  SELECT\n    CASE WHEN bc.action::text='POSITIVE' THEN 'BUY' WHEN bc.action::text='NEGATIVE' THEN 'AVOID' ELSE 'WATCH' END AS action,\n    round((stc.conviction_score - 0.5) * 20::numeric, 2) AS composite_score,\n    stc.conviction_score\n  FROM atlas.atlas_universe_stocks u\n  LEFT JOIN atlas.atlas_stock_conviction_daily stc ON stc.instrument_id=u.instrument_id\n       AND stc.date=(SELECT max(date) FROM atla"}
+{"ts":"2026-06-01T03:53:42Z","kind":"supabase_sql_executed","sql_preview":"\n-- columns of atlas_stock_conviction_daily\nSELECT column_name, data_type FROM information_schema.columns\nWHERE table_schema='atlas' AND table_name='atlas_stock_conviction_daily' ORDER BY ordinal_position;"}
+{"ts":"2026-06-01T03:53:42Z","kind":"supabase_sql_executed","sql_preview":"-- Confirm a Defence-tagged stock is NOT also in another bucket (1:1), and inspect overlap candidates\nSELECT u.symbol, u.company_name, u.sector\nFROM atlas.atlas_universe_stocks u\nWHERE u.effective_to IS NULL\n  AND u.sector IN ('Defence','MNC','Tourism','Rural','Housing')\nORDER BY u.sector, u.symbol\nLIMIT 40;"}
+{"ts":"2026-06-01T03:53:44Z","kind":"supabase_sql_executed","sql_preview":"\n-- Get the mv_fund_list_v6 definition to see how recommendation is sourced\nSELECT pg_get_viewdef('atlas.mv_fund_list_v6'::regclass, true);"}
+{"ts":"2026-06-01T03:53:46Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  COUNT(*) AS total,\n  COUNT(predicted_excess) AS pe_nonnull,\n  COUNT(*) FILTER (WHERE predicted_excess IS NULL) AS pe_null,\n  COUNT(*) FILTER (WHERE exit_date IS NULL) AS open_calls,\n  MIN(date) AS min_date, MAX(date) AS max_date\nFROM atlas.atlas_signal_calls;"}
+{"ts":"2026-06-01T03:53:47Z","kind":"supabase_sql_executed","sql_preview":"SELECT pg_get_viewdef('atlas.mv_calls_performance'::regclass, true) AS def;"}
+{"ts":"2026-06-01T03:53:52Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  COUNT(*) AS rows_with_cpi,\n  MIN(cpi_yoy) AS min_cpi, MAX(cpi_yoy) AS max_cpi, AVG(cpi_yoy) AS avg_cpi,\n  MIN(india_10y_yield) AS min_10y, MAX(india_10y_yield) AS max_10y\nFROM atlas.atlas_macro_daily WHERE cpi_yoy IS NOT NULL;"}
+{"ts":"2026-06-01T03:53:58Z","kind":"supabase_sql_executed","sql_preview":"\n-- Confirm atlas_mf_recommendation_daily existence + rowcount + key shape\nSELECT 'mf_rec_daily_exists' AS k,\n  (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='atlas' AND table_name='atlas_mf_recommendation_daily')::text v\nUNION ALL\nSELECT 'fund_dec_join_to_scheme', \n  (SELECT COUNT(*)::text FROM atlas.atlas_fund_decisions_daily d\n     JOIN atlas.atlas_fund_scorecard s ON s.scheme_code = d.mstar_id AND s.snapshot_date = d.date\n   WHERE d.date = (SELECT MAX(date) FROM atlas.at"}
+{"ts":"2026-06-01T03:53:59Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  ROUND(AVG(predicted_excess),6) AS avg_pe_decimal,\n  ROUND(MIN(predicted_excess),6) AS min_pe,\n  ROUND(MAX(predicted_excess),6) AS max_pe,\n  ROUND(AVG(realized_excess_pct),4) AS avg_re_pct,\n  ROUND(MIN(realized_excess_pct),4) AS min_re_pct,\n  ROUND(MAX(realized_excess_pct),4) AS max_re_pct,\n  ROUND(AVG(is_hit::int),4) AS overall_hit_rate\nFROM atlas.mv_calls_performance\nWHERE action IN ('POSITIVE','NEGATIVE');"}
+{"ts":"2026-06-01T03:53:59Z","kind":"supabase_sql_executed","sql_preview":"\n-- H5: Weinstein stage tables — inspect atlas_fund_state_v2 + atlas_fund_states_daily columns\nSELECT table_name, column_name, data_type FROM information_schema.columns\nWHERE table_schema='atlas' AND table_name IN ('atlas_fund_state_v2','atlas_fund_states_daily')\nORDER BY table_name, ordinal_position;"}
+{"ts":"2026-06-01T03:54:00Z","kind":"supabase_sql_executed","sql_preview":"SELECT symbol, action, predicted_excess, realized_excess_pct, days_in_position, is_hit\nFROM atlas.mv_calls_performance\nWHERE action IN ('POSITIVE','NEGATIVE')\nORDER BY predicted_excess DESC NULLS LAST\nLIMIT 6;"}
+{"ts":"2026-06-01T03:54:01Z","kind":"supabase_sql_executed","sql_preview":"-- The 5 freshAvoids the page shows (action='AVOID' ORDER BY composite_score ASC)\nSELECT symbol, ROUND(composite_score,3) AS composite, conviction_score, action,\n       matrix_action_sign, cell_action, cell_id, confidence_label\nFROM atlas.mv_stock_landscape\nWHERE action='AVOID'\nORDER BY composite_score ASC NULLS LAST\nLIMIT 5;"}
+{"ts":"2026-06-01T03:54:04Z","kind":"supabase_sql_executed","sql_preview":"-- Distribution: how many AVOIDs are driven by cell signal vs composite<=-4, and their composite spread\nSELECT\n  CASE WHEN cell_action='NEGATIVE' THEN 'cell_NEGATIVE' ELSE 'composite<=-4' END AS avoid_driver,\n  COUNT(*) AS n,\n  MIN(composite_score) AS min_comp,\n  MAX(composite_score) AS max_comp,\n  COUNT(*) FILTER (WHERE composite_score > -4) AS comp_above_minus4,\n  COUNT(*) FILTER (WHERE matrix_action_sign='NEUTRAL') AS tagged_neutral\nFROM atlas.mv_stock_landscape\nWHERE action='AVOID'\nGROUP BY "}
+{"ts":"2026-06-01T03:54:09Z","kind":"supabase_sql_executed","sql_preview":"\nSELECT c.relname,\n  CASE c.relkind WHEN 'm' THEN 'matview' WHEN 'v' THEN 'view' WHEN 'r' THEN 'table' ELSE c.relkind::text END AS kind\nFROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace\nWHERE n.nspname='atlas' AND c.relname IN ('mv_stock_landscape_trader','mv_stock_landscape','mv_top_conviction_daily');"}
+{"ts":"2026-06-01T03:54:12Z","kind":"supabase_sql_executed","sql_preview":"\n-- B1/B2: confirm mv_stock_landscape_trader (what the page reads) columns + populated counts\nSELECT\n  COUNT(*) AS total_rows,\n  COUNT(close_price) AS close_price_pop,\n  COUNT(conviction_score) AS conviction_score_pop\nFROM atlas.mv_stock_landscape_trader;"}
+{"ts":"2026-06-01T03:54:13Z","kind":"supabase_sql_executed","sql_preview":"\n-- H5: what do the fund state values look like? Are they Weinstein stages?\nSELECT 'states_daily.nav_state' k, nav_state v, COUNT(*) n FROM atlas.atlas_fund_states_daily\n WHERE date=(SELECT MAX(date) FROM atlas.atlas_fund_states_daily) GROUP BY nav_state\nUNION ALL\nSELECT 'states_daily.composition_state', composition_state, COUNT(*) FROM atlas.atlas_fund_states_daily\n WHERE date=(SELECT MAX(date) FROM atlas.atlas_fund_states_daily) GROUP BY composition_state\nUNION ALL\nSELECT 'state_v2.composition"}
+{"ts":"2026-06-01T03:54:14Z","kind":"supabase_sql_executed","sql_preview":"-- confirm mv_sector_rrg columns + null counts of quadrant on latest snapshot\nSELECT\n  COUNT(*) AS total_rows,\n  COUNT(*) FILTER (WHERE quadrant_current IS NULL) AS null_quadrant,\n  COUNT(*) FILTER (WHERE rs_ratio_current IS NULL) AS null_ratio,\n  COUNT(*) FILTER (WHERE rs_momentum_current IS NULL) AS null_mom\nFROM atlas.mv_sector_rrg\nWHERE as_of_date = (SELECT MAX(as_of_date) FROM atlas.mv_sector_rrg);"}
+{"ts":"2026-06-01T03:54:15Z","kind":"supabase_sql_executed","sql_preview":"\n-- H5: is there a prior-state column to detect transitions? Check mv_fund_deepdive columns for stage/transition\nSELECT column_name, data_type FROM information_schema.columns\nWHERE table_schema='atlas' AND table_name='mv_fund_deepdive' ORDER BY ordinal_position;"}
+{"ts":"2026-06-01T03:54:19Z","kind":"supabase_sql_executed","sql_preview":"-- conviction_score distribution across whole universe (drives composite = (cs-0.5)*20)\nSELECT\n  COUNT(*) AS n,\n  ROUND(MIN(conviction_score),4) AS min_cs,\n  ROUND(MAX(conviction_score),4) AS max_cs,\n  ROUND(AVG(conviction_score),4) AS avg_cs,\n  ROUND(STDDEV(conviction_score),4) AS std_cs,\n  COUNT(*) FILTER (WHERE conviction_score < 0.5) AS below_mid,\n  COUNT(*) FILTER (WHERE conviction_score >= 0.5) AS at_or_above_mid\nFROM atlas.atlas_stock_conviction_daily\nWHERE date = (SELECT MAX(date) FROM a"}
+{"ts":"2026-06-01T03:54:24Z","kind":"supabase_sql_executed","sql_preview":"\n-- A3 + C1: ret_* counts AND alpha source columns existence/population on atlas_stock_metrics_daily\nSELECT\n  COUNT(*) AS total,\n  COUNT(ret_1w) AS ret_1w, COUNT(ret_1m) AS ret_1m, COUNT(ret_3m) AS ret_3m,\n  COUNT(ret_6m) AS ret_6m, COUNT(ret_12m) AS ret_12m,\n  COUNT(rs_1w_nifty500) AS rs1w_n500, COUNT(rs_1m_nifty500) AS rs1m_n500, COUNT(rs_3m_nifty500) AS rs3m_n500\nFROM atlas.atlas_stock_metrics_daily\nWHERE date = (SELECT MAX(date) FROM atlas.atlas_stock_metrics_daily);"}
+{"ts":"2026-06-01T03:54:25Z","kind":"supabase_sql_executed","sql_preview":"\n-- C1: does atlas_index_metrics_daily exist with NIFTY 500 ret_6m/ret_12m? (used for alpha_6m/12m derive)\nSELECT to_regclass('atlas.atlas_index_metrics_daily') AS tbl_exists;"}
+{"ts":"2026-06-01T03:54:26Z","kind":"supabase_sql_executed","sql_preview":"\n-- matview columns via pg_attribute for mv_fund_deepdive\nSELECT a.attname AS col, format_type(a.atttypid, a.atttypmod) AS typ\nFROM pg_attribute a\nWHERE a.attrelid = 'atlas.mv_fund_deepdive'::regclass AND a.attnum > 0 AND NOT a.attisdropped\nORDER BY a.attnum;"}
+{"ts":"2026-06-01T03:54:28Z","kind":"supabase_sql_executed","sql_preview":"\n-- B4: tv_metrics coverage vs universe\nSELECT\n  (SELECT COUNT(*) FROM atlas.atlas_universe_stocks WHERE effective_to IS NULL) AS universe,\n  (SELECT COUNT(*) FROM atlas.tv_metrics) AS tv_rows,\n  (SELECT COUNT(*) FROM atlas.tv_metrics WHERE pe_ttm IS NOT NULL) AS tv_pe,\n  (SELECT COUNT(*) FROM atlas.tv_metrics WHERE roe IS NOT NULL) AS tv_roe;"}
+{"ts":"2026-06-01T03:54:29Z","kind":"supabase_sql_executed","sql_preview":"\n-- Stock-level Weinstein stage: find relations with 'stage' or 'weinstein' columns\nSELECT c.relname, a.attname FROM pg_attribute a\nJOIN pg_class c ON c.oid=a.attrelid\nJOIN pg_namespace n ON n.oid=c.relnamespace\nWHERE n.nspname='atlas' AND a.attnum>0 AND NOT a.attisdropped\n  AND (a.attname ILIKE '%stage%' OR a.attname ILIKE '%weinstein%')\n  AND c.relkind IN ('r','v','m')\nORDER BY c.relname, a.attname;"}
+{"ts":"2026-06-01T03:54:30Z","kind":"supabase_sql_executed","sql_preview":"SELECT cell_name, cap_tier, tenure, action,\n  COUNT(*) AS n,\n  ROUND(AVG(predicted_excess),6) AS avg_pred_decimal,\n  ROUND(AVG(realized_excess_pct),4) AS avg_real_pct,\n  ROUND(AVG(is_hit::int),4) AS hit_rate\nFROM atlas.mv_calls_performance\nWHERE action IN ('POSITIVE','NEGATIVE')\nGROUP BY cell_name, cap_tier, tenure, action\nHAVING COUNT(*) >= 3\nORDER BY avg_real_pct DESC\nLIMIT 8;"}
+{"ts":"2026-06-01T03:54:39Z","kind":"supabase_sql_executed","sql_preview":"\n-- C1: NIFTY 500 index metrics presence + ret_6m/12m populated on latest date\nSELECT index_code, COUNT(*) AS n, COUNT(ret_6m) AS r6, COUNT(ret_12m) AS r12,\n       MAX(date) AS max_date\nFROM atlas.atlas_index_metrics_daily\nWHERE index_code = 'NIFTY 500'\nGROUP BY index_code;"}
+{"ts":"2026-06-01T03:54:41Z","kind":"supabase_sql_executed","sql_preview":"\n-- H5: grain of atlas_fund_state_v2, available dates, and a transition sample\nSELECT 'distinct_dates' k, COUNT(DISTINCT date)::text v FROM atlas.atlas_fund_state_v2\nUNION ALL SELECT 'max_date', MAX(date)::text FROM atlas.atlas_fund_state_v2\nUNION ALL SELECT 'rows_per_fund_latest',\n  (SELECT ROUND(COUNT(*)::numeric/COUNT(DISTINCT mstar_id),2)::text FROM atlas.atlas_fund_state_v2 WHERE date=(SELECT MAX(date) FROM atlas.atlas_fund_state_v2))\nUNION ALL SELECT 'distinct_funds_latest',\n  (SELECT COUN"}
+{"ts":"2026-06-01T03:54:43Z","kind":"supabase_sql_executed","sql_preview":"\n-- C1 sanity: sample ret_3m vs rs_3m_nifty500 to confirm alpha scale matches (both fractions). Also ret vs index ret.\nSELECT m.ret_3m, m.rs_3m_nifty500, m.ret_6m, idx.ret_6m AS idx_ret_6m, m.ret_12m, idx.ret_12m AS idx_ret_12m\nFROM atlas.atlas_stock_metrics_daily m\nLEFT JOIN atlas.atlas_index_metrics_daily idx\n  ON idx.index_code = 'NIFTY 500' AND idx.date = m.date\nWHERE m.date = (SELECT MAX(date) FROM atlas.atlas_stock_metrics_daily)\n  AND m.ret_3m IS NOT NULL\nORDER BY m.ret_3m DESC\nLIMIT 3;"}
+{"ts":"2026-06-01T03:54:58Z","kind":"supabase_sql_executed","sql_preview":"\n-- confirm cell_predicted_excess populated + count nulls in the trader view\nSELECT count(*) total,\n       count(cell_predicted_excess) non_null_cpe,\n       count(*) FILTER (WHERE cell_predicted_excess IS NULL) null_cpe,\n       count(DISTINCT cell_predicted_excess) distinct_cpe\nFROM atlas.mv_stock_landscape_trader;"}
+{"ts":"2026-06-01T03:55:03Z","kind":"supabase_sql_executed","sql_preview":"\n-- atlas_fund_signal_unified: does it carry recommendation + state + stage pcts? distribution at latest\nSELECT 'sig_unified_cols' k, string_agg(column_name, ', ' ORDER BY ordinal_position) v\nFROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_fund_signal_unified';"}
+{"ts":"2026-06-01T03:55:03Z","kind":"supabase_sql_executed","sql_preview":"\n-- Confirm definition: is rs_3m_nifty500 the EXCESS return (ret_3m - idx_ret_3m)? Compare against NIFTY 500 ret_3m.\nSELECT m.ret_3m, m.rs_3m_nifty500,\n       idx.ret_3m AS idx_ret_3m,\n       (m.ret_3m - idx.ret_3m) AS computed_excess_3m\nFROM atlas.atlas_stock_metrics_daily m\nLEFT JOIN atlas.atlas_index_metrics_daily idx\n  ON idx.index_code = 'NIFTY 500' AND idx.date = m.date\nWHERE m.date = (SELECT MAX(date) FROM atlas.atlas_stock_metrics_daily)\n  AND m.rs_3m_nifty500 IS NOT NULL\nORDER BY m.ret_"}
+{"ts":"2026-06-01T03:55:05Z","kind":"supabase_sql_executed","sql_preview":"\n-- Does atlas_fund_signal_unified expose recommendation, and at what date/distribution?\nSELECT recommendation, COUNT(*) n,\n  (SELECT MAX(date) FROM atlas.atlas_fund_signal_unified)::text maxdt\nFROM atlas.atlas_fund_signal_unified\nWHERE date = (SELECT MAX(date) FROM atlas.atlas_fund_signal_unified)\nGROUP BY recommendation ORDER BY n DESC;"}
+{"ts":"2026-06-01T03:55:14Z","kind":"supabase_sql_executed","sql_preview":"SELECT pg_get_viewdef('atlas.atlas_fund_signal_unified'::regclass, true);"}
+{"ts":"2026-06-01T03:55:17Z","kind":"supabase_sql_executed","sql_preview":"\nSELECT pg_get_viewdef('atlas.mv_stock_landscape_trader'::regclass, true) AS def;"}
+{"ts":"2026-06-01T03:55:17Z","kind":"supabase_sql_executed","sql_preview":"\n-- H5 transition feasibility: for one fund, show stage-pct over the 7 available dates\nSELECT mstar_id, date, pct_holdings_stage_2, pct_holdings_stage_3, pct_holdings_stage_4, composition_state\nFROM atlas.atlas_fund_state_v2\nWHERE mstar_id = (SELECT mstar_id FROM atlas.atlas_fund_state_v2 WHERE date=(SELECT MAX(date) FROM atlas.atlas_fund_state_v2) ORDER BY pct_holdings_stage_3 DESC LIMIT 1)\nORDER BY date;"}
+{"ts":"2026-06-01T03:55:25Z","kind":"supabase_sql_executed","sql_preview":"\nSELECT pg_get_functiondef('atlas.derive_verdict'::regproc) AS def;"}
+{"ts":"2026-06-01T03:55:36Z","kind":"supabase_sql_executed","sql_preview":"\n-- Does atlas_fund_decisions_daily latest date have date=05-29 and key cleanly to scheme_code; does scorecard have a recommendation col?\nSELECT 'dec_latest_date' k, MAX(date)::text v FROM atlas.atlas_fund_decisions_daily\nUNION ALL SELECT 'dec_distinct_funds_latest', COUNT(DISTINCT mstar_id)::text FROM atlas.atlas_fund_decisions_daily WHERE date=(SELECT MAX(date) FROM atlas.atlas_fund_decisions_daily)\nUNION ALL SELECT 'scorecard_has_recommendation_col', (SELECT COUNT(*)::text FROM information_sc"}
+{"ts":"2026-06-01T03:55:39Z","kind":"supabase_sql_executed","sql_preview":"\n-- how mv_stock_landscape derives `action` and `composite_score`\nSELECT regexp_replace(pg_get_viewdef('atlas.mv_stock_landscape'::regclass, true), '\\s+', ' ', 'g') AS def;"}
+{"ts":"2026-06-01T03:55:44Z","kind":"supabase_sql_executed","sql_preview":"\n-- exact \"worst AVOIDs\" the page shows + their composite (D2 evidence)\nSELECT symbol, cap_tier, action, composite_score, conviction_score, conviction_tier, confidence_label, cell_action\nFROM atlas.mv_stock_landscape\nWHERE action='AVOID'\nORDER BY composite_score ASC NULLS LAST\nLIMIT 8;"}
+{"ts":"2026-06-01T03:55:59Z","kind":"supabase_sql_executed","sql_preview":"\n-- Residual D2 incoherence: AVOID-tagged but composite NOT negative (cell-action override)\nSELECT\n  count(*) FILTER (WHERE action='AVOID' AND composite_score >= 0) AS avoid_but_nonneg_composite,\n  count(*) FILTER (WHERE action='AVOID' AND composite_score >= -1 AND composite_score < 0) AS avoid_weakly_neg,\n  count(*) FILTER (WHERE action='AVOID') AS total_avoid,\n  count(*) FILTER (WHERE action='BUY' AND composite_score < 0) AS buy_but_neg_composite,\n  count(*) FILTER (WHERE action='BUY') AS tota"}
+{"ts":"2026-06-01T03:56:04Z","kind":"supabase_sql_executed","sql_preview":"\n-- Confirm label vocabulary match + that decisions has Recommended too, and weeks_in_current_state populated\nSELECT 'dec_labels' k, recommendation v, COUNT(*) n,\n  COUNT(*) FILTER (WHERE weeks_in_current_state IS NOT NULL) wks_nonnull\nFROM atlas.atlas_fund_decisions_daily\nWHERE date=(SELECT MAX(date) FROM atlas.atlas_fund_decisions_daily)\nGROUP BY recommendation ORDER BY n DESC;"}
+{"ts":"2026-06-01T03:56:07Z","kind":"supabase_sql_executed","sql_preview":"\nSELECT c.relname AS obj, c.relkind, a.attname, format_type(a.atttypid, a.atttypmod) AS type, a.attnum\nFROM pg_attribute a\nJOIN pg_class c ON c.oid = a.attrelid\nJOIN pg_namespace n ON n.oid = c.relnamespace\nWHERE n.nspname = 'atlas'\n  AND c.relname IN ('mv_markets_rs_grid','mv_markets_rs_detail_charts')\n  AND a.attnum > 0 AND NOT a.attisdropped\nORDER BY c.relname, a.attnum;"}
+{"ts":"2026-06-01T03:56:15Z","kind":"supabase_sql_executed","sql_preview":"\nSELECT rank_order, baseline_name, latest_close_inr, as_of_date,\n       ret_1w, ret_1m, ret_3m, ret_6m, ret_12m,\n       rank_1w, rank_1m, rank_3m, rank_6m, rank_12m,\n       refreshed_at\nFROM atlas.mv_markets_rs_grid\nORDER BY rank_order;"}
+{"ts":"2026-06-01T03:56:19Z","kind":"supabase_sql_executed","sql_preview":"\n-- B4 sanity: a known microcap (SHAILY from inventory) now in tv_metrics with pe/roe?\nSELECT symbol, pe_ttm, roe, fetched_at\nFROM atlas.tv_metrics\nWHERE symbol = 'SHAILY';"}
+{"ts":"2026-06-01T03:56:19Z","kind":"supabase_sql_executed","sql_preview":"\nSELECT\n  count(*) AS n_rows,\n  count(*) FILTER (WHERE latest_close_inr IS NULL) AS null_close,\n  count(*) FILTER (WHERE ret_1w  IS NULL) AS null_1w,\n  count(*) FILTER (WHERE ret_1m  IS NULL) AS null_1m,\n  count(*) FILTER (WHERE ret_3m  IS NULL) AS null_3m,\n  count(*) FILTER (WHERE ret_6m  IS NULL) AS null_6m,\n  count(*) FILTER (WHERE ret_12m IS NULL) AS null_12m,\n  count(*) FILTER (WHERE rank_1w IS NULL) AS null_rank1w,\n  count(*) FILTER (WHERE rank_1m IS NULL) AS null_rank1m,\n  count(*) FILTER"}
+{"ts":"2026-06-01T03:56:20Z","kind":"supabase_sql_executed","sql_preview":"SELECT a.attname, format_type(a.atttypid, a.atttypmod) AS type\nFROM pg_attribute a\nJOIN pg_class c ON c.oid = a.attrelid\nJOIN pg_namespace n ON n.oid = c.relnamespace\nWHERE n.nspname = 'atlas' AND c.relname = 'mv_etf_list_v6' AND a.attnum > 0 AND NOT a.attisdropped\nORDER BY a.attnum;"}
+{"ts":"2026-06-01T03:56:21Z","kind":"supabase_sql_executed","sql_preview":"SELECT a.attname, format_type(a.atttypid, a.atttypmod) AS type\nFROM pg_attribute a\nJOIN pg_class c ON c.oid = a.attrelid\nJOIN pg_namespace n ON n.oid = c.relnamespace\nWHERE n.nspname = 'atlas' AND c.relname = 'mv_etf_deepdive' AND a.attnum > 0 AND NOT a.attisdropped\nORDER BY a.attnum;"}
+{"ts":"2026-06-01T03:56:33Z","kind":"supabase_sql_executed","sql_preview":"\nSELECT\n  count(*) AS n_rows,\n  count(DISTINCT baseline_code) AS n_baselines,\n  max(as_of_date) AS max_asof,\n  max(refreshed_at) AS max_refreshed,\n  count(*) FILTER (WHERE price_series IS NULL) AS null_price,\n  count(*) FILTER (WHERE rs_series IS NULL) AS null_rs,\n  count(*) FILTER (WHERE jsonb_array_length(COALESCE(price_series,'[]'::jsonb)) = 0) AS empty_price\nFROM atlas.mv_markets_rs_detail_charts;"}
+{"ts":"2026-06-01T03:56:34Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  count(*) AS n,\n  count(*) FILTER (WHERE etf_name IS NULL) AS null_name,\n  count(*) FILTER (WHERE fund_house IS NULL) AS null_fh,\n  count(*) FILTER (WHERE etf_category IS NULL) AS null_cat,\n  count(*) FILTER (WHERE asset_class IS NULL) AS null_ac,\n  count(*) FILTER (WHERE composite_score IS NULL) AS null_comp,\n  count(*) FILTER (WHERE premium_bps IS NULL) AS null_prem,\n  count(*) FILTER (WHERE te_60d IS NULL) AS null_te,\n  count(*) FILTER (WHERE adv_20d_inr IS NULL) AS null_adv20,\n  coun"}
+{"ts":"2026-06-01T03:56:36Z","kind":"supabase_sql_executed","sql_preview":"SELECT ticker, etf_name, fund_house, asset_class, etf_category, composite_score,\n  premium_bps, te_60d, adv_20d_inr, adv_monthly_cr, ret_1m, ret_12m,\n  rs_state, momentum_state, action, scatter_zone, signal_fire_date, signal_tenure, as_of_date,\n  left(eli5, 60) AS eli5_head\nFROM atlas.mv_etf_list_v6\nORDER BY composite_score DESC NULLS LAST\nLIMIT 6;"}
+{"ts":"2026-06-01T03:56:44Z","kind":"supabase_sql_executed","sql_preview":"\n-- For one multi-value cell, what drives distinct predicted_excess? cap_tier_at_trigger? date?\nSELECT cell_id, cap_tier_at_trigger, date, count(*) n, predicted_excess, confidence_unconditional\nFROM atlas.atlas_signal_calls\nWHERE cell_id='2a125dc4-f34c-4006-b54f-d5e16778dbc9' AND exit_date IS NULL\nGROUP BY cell_id, cap_tier_at_trigger, date, predicted_excess, confidence_unconditional\nORDER BY date, predicted_excess\nLIMIT 20;"}
+{"ts":"2026-06-01T03:56:44Z","kind":"supabase_sql_executed","sql_preview":"\nSELECT baseline_code, baseline_label, baseline_group, is_usd_baseline,\n       latest_close, rs_latest, rs_delta_3m, support_level, resistance_level,\n       jsonb_array_length(price_series) AS price_pts,\n       jsonb_array_length(rs_series) AS rs_pts,\n       jsonb_array_length(volume_series) AS vol_pts,\n       (price_series->0) AS price_first, (price_series->-1) AS price_last,\n       rs_new_high_dates, rs_new_low_dates\nFROM atlas.mv_markets_rs_detail_charts\nWHERE baseline_code IN (SELECT baselin"}
+{"ts":"2026-06-01T03:56:45Z","kind":"supabase_sql_executed","sql_preview":"SELECT a.attname AS column_name, format_type(a.atttypid, a.atttypmod) AS data_type, a.attnum\nFROM pg_attribute a\nJOIN pg_class c ON c.oid = a.attrelid\nJOIN pg_namespace n ON n.oid = c.relnamespace\nWHERE n.nspname = 'atlas' AND c.relname = 'mv_calls_performance' AND a.attnum > 0 AND NOT a.attisdropped\nORDER BY a.attnum;"}
+{"ts":"2026-06-01T03:56:51Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  count(*) AS n,\n  count(*) FILTER (WHERE fund_house IS NULL) AS null_fh,\n  count(*) FILTER (WHERE premium_bps IS NULL) AS null_prem,\n  count(*) FILTER (WHERE te_60d IS NULL) AS null_te,\n  count(*) FILTER (WHERE adv_20d_inr IS NULL) AS null_adv,\n  count(*) FILTER (WHERE eli5 IS NULL) AS null_eli5,\n  count(*) FILTER (WHERE price_180d IS NULL) AS null_price,\n  count(*) FILTER (WHERE jsonb_typeof(price_180d)='array' AND jsonb_array_length(price_180d)=0) AS empty_price,\n  count(*) FILTER (WHE"}
+{"ts":"2026-06-01T03:56:54Z","kind":"supabase_sql_executed","sql_preview":"\nSELECT baseline_code,\n       count(*) AS n_rows,\n       min(as_of_date) AS min_asof, max(as_of_date) AS max_asof,\n       max((price_series->-1->>'d')) AS latest_price_date_in_series\nFROM atlas.mv_markets_rs_detail_charts\nGROUP BY baseline_code\nORDER BY baseline_code;"}
+{"ts":"2026-06-01T03:56:55Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  count(*) FILTER (WHERE te_60d < 1) AS te_lt1,\n  count(*) FILTER (WHERE te_60d >= 1) AS te_ge1,\n  round(min(te_60d),4) AS te_min, round(max(te_60d),4) AS te_max,\n  count(*) FILTER (WHERE rs_state='INSUFFICIENT_HISTORY') AS rs_insuf,\n  count(*) FILTER (WHERE rs_state='ILLIQUID') AS rs_illiq,\n  count(*) FILTER (WHERE rs_state IN ('Leader','Strong','Average','Weak','Laggard')) AS rs_norm,\n  count(*) FILTER (WHERE asset_class='equity') AS ac_equity,\n  count(DISTINCT asset_class) AS distinct_"}
+{"ts":"2026-06-01T03:56:57Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  COUNT(*) AS total_rows,\n  COUNT(*) FILTER (WHERE action IN ('POSITIVE','NEGATIVE')) AS posneg_rows,\n  COUNT(*) FILTER (WHERE symbol IS NULL) AS symbol_null,\n  COUNT(*) FILTER (WHERE company_name IS NULL) AS company_null,\n  COUNT(*) FILTER (WHERE cell_name IS NULL) AS cell_name_null,\n  COUNT(*) FILTER (WHERE cap_tier IS NULL) AS cap_tier_null,\n  COUNT(*) FILTER (WHERE tenure IS NULL) AS tenure_null,\n  COUNT(*) FILTER (WHERE entry_date IS NULL) AS entry_date_null,\n  COUNT(*) FILTER (WHERE"}
+{"ts":"2026-06-01T03:56:59Z","kind":"supabase_sql_executed","sql_preview":"SELECT 'cap_tier' AS col, cap_tier AS val, COUNT(*) FROM atlas.mv_calls_performance GROUP BY cap_tier\nUNION ALL SELECT 'tenure', tenure, COUNT(*) FROM atlas.mv_calls_performance GROUP BY tenure\nUNION ALL SELECT 'action', action, COUNT(*) FROM atlas.mv_calls_performance GROUP BY action\nUNION ALL SELECT 'status', status, COUNT(*) FROM atlas.mv_calls_performance GROUP BY status\nORDER BY col, val;"}
+{"ts":"2026-06-01T03:57:13Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  MIN(days_in_position) AS min_days,\n  MAX(days_in_position) AS max_days,\n  ROUND(AVG(days_in_position),2) AS avg_days,\n  COUNT(*) FILTER (WHERE days_in_position < 5) AS days_lt5,\n  COUNT(*) FILTER (WHERE days_in_position >= 5) AS days_gte5,\n  COUNT(*) FILTER (WHERE realized_excess_pct = 0) AS realized_zero,\n  COUNT(*) FILTER (WHERE realized_excess_pct <> 0) AS realized_nonzero,\n  COUNT(*) FILTER (WHERE is_hit IS TRUE) AS hit_true,\n  COUNT(*) FILTER (WHERE is_hit IS FALSE) AS hit_false,\n "}
+{"ts":"2026-06-01T03:57:15Z","kind":"supabase_sql_executed","sql_preview":"SELECT symbol, company_name, cell_name, cap_tier, tenure, action, entry_date::text,\n  days_in_position,\n  ROUND(predicted_excess::numeric,4)::text AS predicted_excess,\n  ROUND(realized_excess_pct::numeric,4)::text AS realized_excess_pct,\n  is_hit, status, refreshed_at::text\nFROM atlas.mv_calls_performance\nORDER BY entry_date DESC, signal_call_id\nLIMIT 6;"}
+{"ts":"2026-06-01T03:57:29Z","kind":"supabase_sql_executed","sql_preview":"-- Verify realized vs predicted units and the cell_name/cap_tier mismatch\nSELECT\n  stock_ret_pct::text, bench_ret_pct::text, realized_excess_pct::text,\n  (stock_ret_pct - bench_ret_pct)::text AS computed_excess,\n  predicted_excess::text, cell_name, cap_tier, tenure, action\nFROM atlas.mv_calls_performance\nWHERE realized_excess_pct <> 0\nORDER BY ABS(realized_excess_pct) DESC\nLIMIT 5;"}
+{"ts":"2026-06-01T03:57:32Z","kind":"supabase_sql_executed","sql_preview":"-- Matrix cell coverage: how many of the 24 (tier×tenure×action) cells are populated\nSELECT\n  COUNT(DISTINCT (cap_tier, tenure, action)) AS populated_cells,\n  COUNT(DISTINCT (cap_tier, tenure)) FILTER (WHERE action='POSITIVE') AS pos_cells,\n  COUNT(DISTINCT (cap_tier, tenure)) FILTER (WHERE action='NEGATIVE') AS neg_cells\nFROM atlas.mv_calls_performance;"}
+{"ts":"2026-06-01T03:57:33Z","kind":"supabase_sql_executed","sql_preview":"-- Distinct cell_name values + whether embedded tier matches cap_tier\nSELECT cell_name, cap_tier, tenure, action, COUNT(*)\nFROM atlas.mv_calls_performance\nGROUP BY cell_name, cap_tier, tenure, action\nORDER BY cell_name\nLIMIT 25;"}
+{"ts":"2026-06-01T03:57:51Z","kind":"supabase_sql_executed","sql_preview":"-- Exact hero query as app runs it\nSELECT\n  COUNT(*) AS total_calls,\n  COUNT(*) FILTER (WHERE status = 'in_flight') AS open_calls,\n  COUNT(*) FILTER (WHERE status = 'closed') AS closed_calls,\n  COUNT(*) FILTER (WHERE action = 'POSITIVE') AS buy_calls,\n  COUNT(*) FILTER (WHERE action = 'NEGATIVE') AS avoid_calls,\n  AVG(realized_excess_pct)::text AS avg_realized_excess,\n  AVG(is_hit::int)::text AS overall_hit_rate,\n  MAX(refreshed_at)::date::text AS data_as_of\nFROM atlas.mv_calls_performance\nWHERE"}
+{"ts":"2026-06-01T03:57:55Z","kind":"supabase_sql_executed","sql_preview":"-- Top-six / trajectories: avg_realized_excess per cell as app computes (ORDER BY DESC)\nSELECT cap_tier, tenure, action, cell_name,\n  COUNT(*) AS call_count,\n  ROUND(AVG(is_hit::int)::numeric,3)::text AS hit_rate,\n  ROUND(AVG(realized_excess_pct)::numeric,4)::text AS avg_realized_excess,\n  ROUND(AVG(predicted_excess)::numeric,4)::text AS avg_predicted_excess,\n  COUNT(*) FILTER (WHERE status='in_flight') AS in_flight_count\nFROM atlas.mv_calls_performance\nWHERE action IN ('POSITIVE','NEGATIVE')\nGR"}
+{"ts":"2026-06-01T03:57:56Z","kind":"supabase_sql_executed","sql_preview":"SELECT pg_get_viewdef('atlas.mv_etf_list_v6'::regclass, true) AS def;"}
+{"ts":"2026-06-01T03:57:58Z","kind":"supabase_sql_executed","sql_preview":"-- Confirm the existing portfolio tables exist + row counts\nSELECT 'strategy_fm_custom_portfolios' AS tbl, COUNT(*)::text AS n FROM atlas.strategy_fm_custom_portfolios\nUNION ALL SELECT 'strategy_configs (fm)', COUNT(*)::text FROM atlas.strategy_configs WHERE is_fm_authored=TRUE\nUNION ALL SELECT 'atlas_portfolio_proposed_change', COUNT(*)::text FROM atlas.atlas_portfolio_proposed_change\nUNION ALL SELECT 'strategy_backtest_results', COUNT(*)::text FROM atlas.strategy_backtest_results;"}
+{"ts":"2026-06-01T03:58:08Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  (SELECT MAX(date)::text FROM atlas.atlas_market_regime_daily) AS regime_latest,\n  (SELECT regime_state FROM atlas.atlas_market_regime_daily ORDER BY date DESC LIMIT 1) AS regime_state,\n  (SELECT deployment_multiplier::text FROM atlas.atlas_market_regime_daily ORDER BY date DESC LIMIT 1) AS deploy_mult,\n  (SELECT MAX(date)::text FROM atlas.atlas_sector_signal_unified) AS sector_sig_latest,\n  (SELECT COUNT(*) FROM atlas.atlas_sector_signal_unified WHERE date=(SELECT MAX(date) FROM atlas.a"}
+{"ts":"2026-06-01T03:58:09Z","kind":"supabase_sql_executed","sql_preview":"-- Columns on atlas_stock_signal_unified relevant to gates + conviction picks\nSELECT column_name, data_type\nFROM information_schema.columns\nWHERE table_schema='atlas' AND table_name='atlas_stock_signal_unified'\n  AND column_name IN ('instrument_id','date','within_state_rank','rs_rank_12m','engine_state','cell_state','verdict','rs_pctile_3m','ema20_ratio','extension_pct')\nORDER BY column_name;"}
+{"ts":"2026-06-01T03:58:10Z","kind":"supabase_sql_executed","sql_preview":"SELECT ticker, te_60d, realized_vol_63, premium_bps,\n  ret_1w, ret_1m, ret_12m, rs_state, momentum_state, action, eli5\nFROM atlas.mv_etf_deepdive\nWHERE ticker IN ('MOENERGY','PHARMABEES','NIFTYBEES','GOLDBEES')\nORDER BY ticker;"}
+{"ts":"2026-06-01T03:58:27Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  count(*) AS n_active,\n  count(*) FILTER (WHERE fund_house IS NULL) AS null_fh,\n  count(*) FILTER (WHERE fund_house IS NOT NULL) AS has_fh,\n  count(DISTINCT asset_class) AS distinct_ac,\n  string_agg(DISTINCT asset_class, ',') AS asset_classes,\n  string_agg(DISTINCT theme, ',') AS themes\nFROM atlas.atlas_universe_etfs\nWHERE effective_to IS NULL;"}
+{"ts":"2026-06-01T03:58:30Z","kind":"supabase_sql_executed","sql_preview":"SELECT etf_category, count(*) AS n,\n  count(*) FILTER (WHERE action='BUY') AS buy,\n  count(*) FILTER (WHERE action='WATCH') AS watch,\n  count(*) FILTER (WHERE action='AVOID') AS avoid,\n  round(min(te_60d),4) AS te_min, round(max(te_60d),4) AS te_max,\n  count(*) FILTER (WHERE te_60d=0) AS te_zero\nFROM atlas.mv_etf_list_v6\nGROUP BY etf_category ORDER BY n DESC;"}
+{"ts":"2026-06-01T03:58:32Z","kind":"supabase_sql_executed","sql_preview":"SELECT c.relkind, a.attname, format_type(a.atttypid, a.atttypmod) AS data_type, a.attnotnull\nFROM pg_attribute a\nJOIN pg_class c ON c.oid = a.attrelid\nJOIN pg_namespace n ON n.oid = c.relnamespace\nWHERE n.nspname = 'atlas' AND c.relname = 'mv_india_pulse' AND a.attnum > 0 AND NOT a.attisdropped\nORDER BY a.attnum;"}
+{"ts":"2026-06-01T03:58:33Z","kind":"supabase_sql_executed","sql_preview":"\n-- Check existence + columns of the four base tables the page depends on\nSELECT c.relname AS table_name, c.relkind,\n       (SELECT count(*) FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped) AS n_cols\nFROM pg_class c\nJOIN pg_namespace n ON n.oid = c.relnamespace\nWHERE n.nspname = 'atlas'\n  AND c.relname IN ('strategy_fm_custom_portfolios','strategy_configs','strategy_backtest_results','atlas_universe_stocks','atlas_stock_signal_unified')\nORDER BY c.relname;"}
+{"ts":"2026-06-01T03:58:35Z","kind":"supabase_sql_executed","sql_preview":"\n-- 1. MV row count + macro_cards null/empty counts\nSELECT\n  count(*) AS total_rows,\n  count(*) FILTER (WHERE macro_cards IS NULL) AS macro_cards_null,\n  count(*) FILTER (WHERE jsonb_array_length(macro_cards) = 0) AS macro_cards_empty_array,\n  max(as_of_date) AS max_as_of_date\nFROM atlas.mv_india_pulse;"}
+{"ts":"2026-06-01T03:58:37Z","kind":"supabase_sql_executed","sql_preview":"-- Confirm mv_stock_landscape_trader has verdict + conviction + metric columns the builder needs universe-wide\nSELECT column_name, data_type\nFROM information_schema.columns\nWHERE table_schema='atlas' AND table_name='mv_stock_landscape_trader'\n  AND column_name IN ('symbol','instrument_id','sector','cap_tier','combined_verdict','verdict_source','conviction_score','conviction_tier','cell_action','cell_predicted_excess','close_price','rs_pctile_3m','ema_20_ratio','extension_pct','sector_state')\nORD"}
+{"ts":"2026-06-01T03:58:39Z","kind":"supabase_sql_executed","sql_preview":"\n-- 2. Does the MV have the v2 columns? (vix_pct_v6 etc.)\nSELECT column_name, data_type\nFROM information_schema.columns\nWHERE table_schema = 'atlas' AND table_name = 'mv_india_pulse'\nORDER BY ordinal_position;"}
+{"ts":"2026-06-01T03:58:39Z","kind":"supabase_sql_executed","sql_preview":"-- Sector state source: which table has sector_state per sector (latest), used for the sector gate\nSELECT table_name FROM information_schema.tables\nWHERE table_schema='atlas' AND table_name IN ('atlas_sector_states_daily','atlas_sector_signal_unified','mv_sector_cards')\nORDER BY table_name;"}
+{"ts":"2026-06-01T03:58:40Z","kind":"supabase_sql_executed","sql_preview":"\nSELECT c.relname AS tbl, a.attname AS col, format_type(a.atttypid, a.atttypmod) AS type, a.attnotnull\nFROM pg_class c\nJOIN pg_namespace n ON n.oid = c.relnamespace\nJOIN pg_attribute a ON a.attrelid = c.oid\nWHERE n.nspname='atlas'\n  AND c.relname IN ('strategy_fm_custom_portfolios','strategy_configs','strategy_backtest_results')\n  AND a.attnum > 0 AND NOT a.attisdropped\nORDER BY c.relname, a.attnum;"}
+{"ts":"2026-06-01T03:58:42Z","kind":"supabase_sql_executed","sql_preview":"\nSELECT\n  (SELECT count(*) FROM atlas.strategy_fm_custom_portfolios) AS n_static_portfolios,\n  (SELECT count(*) FROM atlas.strategy_configs WHERE is_fm_authored = TRUE) AS n_rulebased_fm,\n  (SELECT count(*) FROM atlas.strategy_configs) AS n_strategy_configs_total,\n  (SELECT count(*) FROM atlas.strategy_backtest_results) AS n_backtest_results,\n  (SELECT count(*) FROM atlas.strategy_backtest_results WHERE custom_portfolio_id IS NOT NULL) AS n_bt_static,\n  (SELECT count(*) FROM atlas.strategy_backt"}
+{"ts":"2026-06-01T03:58:44Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  (SELECT count(*) FROM atlas.mv_india_pulse) AS row_count,\n  (SELECT max(as_of_date) FROM atlas.mv_india_pulse) AS max_date,\n  (SELECT max(refreshed_at) FROM atlas.mv_india_pulse) AS max_refreshed,\n  now()::date - (SELECT max(as_of_date) FROM atlas.mv_india_pulse) AS days_stale;"}
+{"ts":"2026-06-01T03:58:47Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  as_of_date,\n  breadth_pct_above_200dma,\n  india_vix,\n  cross_section_dispersion,\n  smallcap_rs_z,\n  vix_spot,\n  vix_5y_pct,\n  vix_term_structure,\n  jsonb_array_length(headline_indices) AS n_headline,\n  jsonb_array_length(breadth_table) AS n_breadth,\n  jsonb_array_length(sector_heatmap) AS n_sector,\n  jsonb_array_length(dispersion_60d_series) AS n_disp,\n  jsonb_array_length(macro_cards) AS n_macro,\n  tier_leadership IS NOT NULL AS has_tier,\n  narrative_ribbon IS NOT NULL AS has_ribbon\nFR"}
+{"ts":"2026-06-01T03:58:50Z","kind":"supabase_sql_executed","sql_preview":"\n-- find mv_india_pulse and its columns via pg_attribute (matviews not in information_schema.columns)\nSELECT n.nspname AS schema, c.relname AS rel, c.relkind,\n       a.attname AS column_name, format_type(a.atttypid, a.atttypmod) AS data_type\nFROM pg_class c\nJOIN pg_namespace n ON n.oid = c.relnamespace\nJOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.relname = 'mv_india_pulse'\nORDER BY a.attnum;"}
+{"ts":"2026-06-01T03:58:51Z","kind":"supabase_sql_executed","sql_preview":"\n-- find alembic_version anywhere\nSELECT n.nspname AS schema, c.relname\nFROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace\nWHERE c.relname = 'alembic_version';"}
+{"ts":"2026-06-01T03:58:57Z","kind":"supabase_sql_executed","sql_preview":"SELECT version_num FROM public.alembic_version;"}
+{"ts":"2026-06-01T03:58:59Z","kind":"supabase_sql_executed","sql_preview":"WITH r AS (\n  SELECT * FROM atlas.mv_india_pulse WHERE as_of_date = (SELECT max(as_of_date) FROM atlas.mv_india_pulse)\n)\nSELECT 'breadth_table' AS section, jsonb_pretty(breadth_table) AS j FROM r;"}
+{"ts":"2026-06-01T03:59:00Z","kind":"supabase_sql_executed","sql_preview":"WITH r AS (\n  SELECT * FROM atlas.mv_india_pulse WHERE as_of_date = (SELECT max(as_of_date) FROM atlas.mv_india_pulse)\n)\nSELECT jsonb_pretty(headline_indices) FROM r;"}
+{"ts":"2026-06-01T03:59:00Z","kind":"supabase_sql_executed","sql_preview":"\n-- latest row: macro_cards + narrative_ribbon + refreshed_at\nSELECT as_of_date, refreshed_at,\n  jsonb_array_length(macro_cards) AS n_cards,\n  narrative_ribbon\nFROM atlas.mv_india_pulse\nWHERE as_of_date = (SELECT max(as_of_date) FROM atlas.mv_india_pulse);"}
+{"ts":"2026-06-01T03:59:02Z","kind":"supabase_sql_executed","sql_preview":"\nSELECT\n  p.id, p.name,\n  jsonb_array_length(p.instruments) AS instrument_count,\n  bt.sharpe_ratio::text AS latest_sharpe,\n  p.paper_trading_active, p.backtest_id, p.created_at\nFROM atlas.strategy_fm_custom_portfolios p\nLEFT JOIN LATERAL (\n  SELECT sharpe_ratio FROM atlas.strategy_backtest_results\n  WHERE custom_portfolio_id = p.id ORDER BY created_at DESC LIMIT 1\n) bt ON TRUE\nORDER BY p.created_at DESC;"}
+{"ts":"2026-06-01T03:59:02Z","kind":"supabase_sql_executed","sql_preview":"\n-- units of india_10y_yield vs cpi_yoy in source table\nSELECT\n  min(india_10y_yield) AS min_10y, max(india_10y_yield) AS max_10y,\n  min(cpi_yoy) AS min_cpi, max(cpi_yoy) AS max_cpi, avg(cpi_yoy) AS avg_cpi,\n  count(*) AS total_rows,\n  count(cpi_yoy) AS cpi_non_null\nFROM atlas.atlas_macro_daily;"}
+{"ts":"2026-06-01T03:59:15Z","kind":"supabase_sql_executed","sql_preview":"\n-- Why do portfolios with backtest_id still show null latest_sharpe?\n-- Check the backtests attached to static portfolios + their sharpe values\nSELECT custom_portfolio_id, id AS bt_id, backtest_type,\n       sharpe_ratio, max_drawdown, alpha_vs_nifty500, created_at\nFROM atlas.strategy_backtest_results\nWHERE custom_portfolio_id IS NOT NULL\nORDER BY custom_portfolio_id, created_at DESC;"}
+{"ts":"2026-06-01T03:59:16Z","kind":"supabase_sql_executed","sql_preview":"\n-- latest row: each macro card id + value, plus sparkline lengths\nSELECT\n  elem->>'id' AS id,\n  elem->>'value' AS value,\n  elem->>'ret_1d' AS ret_1d,\n  elem->>'ret_1m' AS ret_1m,\n  jsonb_array_length(COALESCE(elem->'sparkline_30d','[]'::jsonb)) AS spark_len\nFROM atlas.mv_india_pulse,\n     jsonb_array_elements(macro_cards) AS elem\nWHERE as_of_date = (SELECT max(as_of_date) FROM atlas.mv_india_pulse);"}
+{"ts":"2026-06-01T03:59:17Z","kind":"supabase_sql_executed","sql_preview":"\n-- Sharpe null-rate across all backtest results + distinct backtest_type\nSELECT backtest_type,\n       count(*) AS n,\n       count(sharpe_ratio) AS n_sharpe_present,\n       count(*) - count(sharpe_ratio) AS n_sharpe_null\nFROM atlas.strategy_backtest_results\nGROUP BY backtest_type\nORDER BY n DESC;"}
+{"ts":"2026-06-01T03:59:18Z","kind":"supabase_sql_executed","sql_preview":"\n-- the real_yield card value on latest row (the card, not just ribbon) + its sparkline tail\nSELECT\n  elem->>'id' AS id,\n  elem->>'value' AS card_value,\n  (SELECT jsonb_agg(p->>'v') FROM jsonb_array_elements(elem->'sparkline_30d') p\n     WHERE (p->>'date') >= '2026-05-20') AS recent_spark_values\nFROM atlas.mv_india_pulse,\n     jsonb_array_elements(macro_cards) AS elem\nWHERE as_of_date = (SELECT max(as_of_date) FROM atlas.mv_india_pulse)\n  AND elem->>'id' = 'real_yield';"}
+{"ts":"2026-06-01T03:59:18Z","kind":"supabase_sql_executed","sql_preview":"WITH r AS (\n  SELECT * FROM atlas.mv_india_pulse WHERE as_of_date = (SELECT max(as_of_date) FROM atlas.mv_india_pulse)\n)\nSELECT jsonb_pretty(tier_leadership) AS tier, jsonb_pretty(narrative_ribbon) AS ribbon, jsonb_pretty(dispersion_60d_series) AS disp FROM r;"}
+{"ts":"2026-06-01T03:59:19Z","kind":"supabase_sql_executed","sql_preview":"WITH r AS (\n  SELECT * FROM atlas.mv_india_pulse WHERE as_of_date = (SELECT max(as_of_date) FROM atlas.mv_india_pulse)\n),\nm AS (SELECT jsonb_array_elements(macro_cards) AS c FROM r)\nSELECT c->>'id' AS id, c->>'label' AS label, c->>'value' AS value, c->>'ret_1d' AS ret_1d, c->>'ret_1m' AS ret_1m,\n  jsonb_array_length(COALESCE(c->'sparkline_30d','[]'::jsonb)) AS spark_len\nFROM m;"}
+{"ts":"2026-06-01T03:59:36Z","kind":"supabase_sql_executed","sql_preview":"\n-- pg_cron jobs that touch mv_india_pulse\nSELECT jobid, schedule, command, active\nFROM cron.job\nWHERE command ILIKE '%india_pulse%' OR command ILIKE '%refresh%mv_%'\nORDER BY jobid;"}
+{"ts":"2026-06-01T03:59:40Z","kind":"supabase_sql_executed","sql_preview":"-- Universe-wide verdict distribution (the conviction-pick pool the builder filters)\nSELECT combined_verdict, COUNT(*) AS n\nFROM atlas.mv_stock_landscape_trader\nGROUP BY combined_verdict ORDER BY n DESC;"}
+{"ts":"2026-06-01T03:59:40Z","kind":"supabase_sql_executed","sql_preview":"WITH r AS (\n  SELECT * FROM atlas.mv_india_pulse WHERE as_of_date = (SELECT max(as_of_date) FROM atlas.mv_india_pulse)\n),\ns AS (SELECT jsonb_array_elements(sector_heatmap) AS c FROM r)\nSELECT\n  count(*) AS n_sectors,\n  count(*) FILTER (WHERE (c->>'rs_1w') IS NOT NULL) AS rs_1w_nonnull,\n  count(*) FILTER (WHERE (c->>'ret_1m') IS NOT NULL) AS ret_1m_nonnull,\n  count(*) FILTER (WHERE (c->>'ret_3m') IS NOT NULL) AS ret_3m_nonnull\nFROM s;"}
+{"ts":"2026-06-01T03:59:41Z","kind":"supabase_sql_executed","sql_preview":"\n-- Verify enrichment join columns exist on the two enrichment relations\nSELECT c.relname AS rel, a.attname AS col, format_type(a.atttypid,a.atttypmod) AS type\nFROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace\nJOIN pg_attribute a ON a.attrelid=c.oid\nWHERE n.nspname='atlas'\n  AND c.relname IN ('atlas_universe_stocks','atlas_stock_signal_unified')\n  AND a.attname IN ('instrument_id','symbol','sector','in_nifty_100','in_nifty_500','effective_from','engine_state','date')\n  AND a.attnum>0 A"}
+{"ts":"2026-06-01T03:59:41Z","kind":"supabase_sql_executed","sql_preview":"-- Leading sectors today: which sectors are Overweight, + freshness of sector_states_daily\nSELECT 'states_daily_latest' AS k, MAX(date)::text AS v FROM atlas.atlas_sector_states_daily\nUNION ALL\nSELECT 'overweight_sectors', STRING_AGG(sector, ', ')\nFROM atlas.atlas_sector_signal_unified\nWHERE date=(SELECT MAX(date) FROM atlas.atlas_sector_signal_unified) AND sector_state='Overweight';"}
+{"ts":"2026-06-01T03:59:44Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  count(*) AS n_recent,\n  count(*) FILTER (WHERE breadth_pct_above_200dma IS NULL) AS breadth_null,\n  count(*) FILTER (WHERE india_vix IS NULL) AS vix_null,\n  count(*) FILTER (WHERE cross_section_dispersion IS NULL) AS disp_null,\n  count(*) FILTER (WHERE smallcap_rs_z IS NULL) AS scrsz_null,\n  count(*) FILTER (WHERE vix_5y_pct IS NULL) AS vix5y_null,\n  count(*) FILTER (WHERE vix_term_structure IS NULL) AS vixterm_null,\n  count(*) FILTER (WHERE jsonb_array_length(dispersion_60d_series) < 1"}
+{"ts":"2026-06-01T03:59:49Z","kind":"supabase_sql_executed","sql_preview":"\nSELECT jsonb_array_elements(instruments) AS elem\nFROM atlas.strategy_fm_custom_portfolios\nWHERE id = '1ac911cd-005e-4e0a-98d8-bc9d4d0d4c1c'\nLIMIT 8;"}
+{"ts":"2026-06-01T03:59:50Z","kind":"supabase_sql_executed","sql_preview":"-- 1. Latest quadrant counts in mv_sector_rrg\nSELECT quadrant_current, COUNT(*) AS n\nFROM atlas.mv_sector_rrg\nWHERE as_of_date = (SELECT MAX(as_of_date) FROM atlas.mv_sector_rrg)\nGROUP BY quadrant_current\nORDER BY n DESC;"}
+{"ts":"2026-06-01T03:59:51Z","kind":"supabase_sql_executed","sql_preview":"\n-- Claim 1: predicted_excess non-null counts in both tables\nSELECT\n  'atlas_signal_calls' AS src,\n  COUNT(*) AS total,\n  COUNT(predicted_excess) AS pred_nonnull\nFROM atlas.atlas_signal_calls\nUNION ALL\nSELECT\n  'mv_calls_performance' AS src,\n  COUNT(*) AS total,\n  COUNT(predicted_excess) AS pred_nonnull\nFROM atlas.mv_calls_performance;"}
+{"ts":"2026-06-01T03:59:52Z","kind":"supabase_sql_executed","sql_preview":"-- 2. total rows latest + as_of_date\nSELECT (SELECT MAX(as_of_date) FROM atlas.mv_sector_rrg) AS rrg_max,\n       (SELECT COUNT(*) FROM atlas.mv_sector_rrg WHERE as_of_date=(SELECT MAX(as_of_date) FROM atlas.mv_sector_rrg)) AS rrg_n,\n       (SELECT MAX(as_of_date) FROM atlas.mv_sector_cards) AS cards_max,\n       (SELECT COUNT(*) FROM atlas.mv_sector_cards WHERE as_of_date=(SELECT MAX(as_of_date) FROM atlas.mv_sector_cards)) AS cards_n;"}
+{"ts":"2026-06-01T03:59:53Z","kind":"supabase_sql_executed","sql_preview":"-- 3. Does atlas_sector_master have sector_kind? List its columns + row count\nSELECT column_name, data_type\nFROM information_schema.columns\nWHERE table_schema='atlas' AND table_name='atlas_sector_master'\nORDER BY ordinal_position;"}
+{"ts":"2026-06-01T03:59:54Z","kind":"supabase_sql_executed","sql_preview":"\n-- Claim 3: scale check on predicted_excess vs realized_excess_pct\nSELECT\n  COUNT(*) AS n,\n  COUNT(predicted_excess) AS pred_n,\n  AVG(predicted_excess) AS pred_avg,\n  MIN(predicted_excess) AS pred_min,\n  MAX(predicted_excess) AS pred_max,\n  COUNT(realized_excess_pct) AS real_n,\n  AVG(realized_excess_pct) AS real_avg,\n  MIN(realized_excess_pct) AS real_min,\n  MAX(realized_excess_pct) AS real_max\nFROM atlas.mv_calls_performance\nWHERE action IN ('POSITIVE','NEGATIVE');"}
+{"ts":"2026-06-01T04:00:02Z","kind":"supabase_sql_executed","sql_preview":"\n-- Run the enrichment subquery for the same portfolio to see symbol/sector resolution + null rate\nSELECT\n  elem->>'instrument_id' AS instrument_id,\n  elem->>'instrument_type' AS instrument_type,\n  elem->>'weight_pct' AS weight_pct,\n  elem->>'target_weight_pct' AS target_weight_pct,\n  u.symbol,\n  COALESCE(u.sector,'Unknown') AS sector,\n  ss.engine_state\nFROM atlas.strategy_fm_custom_portfolios p,\n     jsonb_array_elements(p.instruments) AS elem\nLEFT JOIN LATERAL (\n  SELECT symbol, sector FROM at"}
+{"ts":"2026-06-01T04:00:04Z","kind":"supabase_sql_executed","sql_preview":"-- Sector names + constituent counts in latest RRG snapshot, plus quadrant\nSELECT r.sector_name, r.quadrant_current,\n       ROUND(r.rs_ratio_current::numeric,1) AS rs_ratio,\n       ROUND(r.rs_momentum_current::numeric,1) AS rs_mom,\n       COALESCE(c.constituent_count,0) AS n\nFROM atlas.mv_sector_rrg r\nLEFT JOIN atlas.mv_sector_cards c ON c.sector_name=r.sector_name AND c.as_of_date=r.as_of_date\nWHERE r.as_of_date=(SELECT MAX(as_of_date) FROM atlas.mv_sector_rrg)\nORDER BY n ASC, r.sector_name;"}
+{"ts":"2026-06-01T04:00:04Z","kind":"supabase_sql_executed","sql_preview":"\n-- MV definition to confirm the *100 lives in realized_excess_pct\nSELECT pg_get_viewdef('atlas.mv_calls_performance'::regclass, true) AS viewdef;"}
+{"ts":"2026-06-01T04:00:05Z","kind":"supabase_sql_executed","sql_preview":"-- master row count + which masters are NOT in latest rrg (claim: Power missing, 31 vs 30)\nSELECT COUNT(*) AS master_n FROM atlas.atlas_sector_master;"}
+{"ts":"2026-06-01T04:00:05Z","kind":"supabase_sql_executed","sql_preview":"\n-- Column types of the MV\nSELECT column_name, data_type, numeric_precision, numeric_scale\nFROM information_schema.columns\nWHERE table_schema='atlas' AND table_name='mv_calls_performance'\nORDER BY ordinal_position;"}
+{"ts":"2026-06-01T04:00:07Z","kind":"supabase_sql_executed","sql_preview":"SELECT m.sector_name AS master_only\nFROM atlas.atlas_sector_master m\nWHERE m.sector_name NOT IN (\n  SELECT sector_name FROM atlas.mv_sector_rrg\n  WHERE as_of_date=(SELECT MAX(as_of_date) FROM atlas.mv_sector_rrg)\n)\nORDER BY 1;"}
+{"ts":"2026-06-01T04:00:11Z","kind":"supabase_sql_executed","sql_preview":"SELECT regime_state, deployment_multiplier::text AS deploy_mult, COUNT(*) AS days\nFROM atlas.atlas_market_regime_daily\nWHERE deployment_multiplier IS NOT NULL\nGROUP BY regime_state, deployment_multiplier\nORDER BY MIN(deployment_multiplier);"}
+{"ts":"2026-06-01T04:00:14Z","kind":"supabase_sql_executed","sql_preview":"\n-- Is mv_calls_performance a VIEW or a MATERIALIZED VIEW?\nSELECT c.relkind,\n  CASE c.relkind WHEN 'v' THEN 'view' WHEN 'm' THEN 'matview' WHEN 'r' THEN 'table' ELSE c.relkind::text END AS kind\nFROM pg_class c\nJOIN pg_namespace n ON n.oid = c.relnamespace\nWHERE n.nspname='atlas' AND c.relname='mv_calls_performance';"}
+{"ts":"2026-06-01T04:00:15Z","kind":"supabase_sql_executed","sql_preview":"\n-- Column types via pg_attribute (works for both views and matviews)\nSELECT a.attname AS column_name, format_type(a.atttypid, a.atttypmod) AS data_type\nFROM pg_attribute a\nJOIN pg_class c ON c.oid = a.attrelid\nJOIN pg_namespace n ON n.oid = c.relnamespace\nWHERE n.nspname='atlas' AND c.relname='mv_calls_performance' AND a.attnum > 0 AND NOT a.attisdropped\nORDER BY a.attnum;"}
+{"ts":"2026-06-01T04:00:18Z","kind":"supabase_sql_executed","sql_preview":"-- Post-H3: quadrant counts EXCLUDING the 10 curated themes\nWITH themes AS (\n  SELECT unnest(ARRAY['Defence','Rural','MNC','Tourism','Housing','EV & Auto','Consumption','Conglomerate','Diversified','Services']) AS t\n)\nSELECT quadrant_current, COUNT(*) AS n\nFROM atlas.mv_sector_rrg\nWHERE as_of_date=(SELECT MAX(as_of_date) FROM atlas.mv_sector_rrg)\n  AND sector_name NOT IN (SELECT t FROM themes)\nGROUP BY quadrant_current ORDER BY n DESC;"}
+{"ts":"2026-06-01T04:00:19Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  COUNT(*) AS total_rows,\n  COUNT(*) FILTER (WHERE as_of_date IS NULL) AS null_as_of,\n  MIN(as_of_date) AS min_as_of,\n  MAX(as_of_date) AS max_as_of,\n  MAX(refreshed_at) AS max_refreshed,\n  MIN(conviction_score) AS min_conv,\n  MAX(conviction_score) AS max_conv,\n  ROUND(AVG(conviction_score)::numeric,4) AS avg_conv,\n  ROUND(STDDEV(conviction_score)::numeric,4) AS std_conv,\n  MIN(composite_score) AS min_comp,\n  MAX(composite_score) AS max_comp\nFROM atlas.mv_stock_landscape;"}
+{"ts":"2026-06-01T04:00:21Z","kind":"supabase_sql_executed","sql_preview":"-- Verify the de_instrument.sector -> universe.sector lineage claim & whether 'theme' buckets like MNC actually exist as raw sector values\nSELECT sector, COUNT(*) n\nFROM public.de_instrument\nWHERE is_active=TRUE AND sector IN ('Defence','MNC','Rural','Tourism','Housing','Digital','Telecom','Services','Diversified','Conglomerate','Consumption','EV & Auto')\nGROUP BY sector ORDER BY sector;"}
+{"ts":"2026-06-01T04:00:22Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  COUNT(*) FILTER (WHERE action='AVOID') AS avoid_total,\n  COUNT(*) FILTER (WHERE action='AVOID' AND composite_score <= -4) AS avoid_comp_neg,\n  COUNT(*) FILTER (WHERE action='AVOID' AND cell_action='NEGATIVE') AS avoid_cell_neg,\n  COUNT(*) FILTER (WHERE action='AVOID' AND cell_action='NEGATIVE' AND composite_score > -4) AS avoid_cell_neg_comp_gt,\n  COUNT(*) FILTER (WHERE action='AVOID' AND matrix_action_sign='NEUTRAL') AS avoid_matrix_neutral,\n  COUNT(*) FILTER (WHERE action='AVOID' AND "}
+{"ts":"2026-06-01T04:00:24Z","kind":"supabase_sql_executed","sql_preview":"\nSELECT status, COUNT(*) AS n,\n  MIN(entry_date) AS min_entry, MAX(entry_date) AS max_entry,\n  MIN(days_in_position) AS min_dip, MAX(days_in_position) AS max_dip,\n  COUNT(*) FILTER (WHERE days_in_position < 5) AS lt5_days\nFROM atlas.mv_calls_performance\nGROUP BY status;"}
+{"ts":"2026-06-01T04:00:29Z","kind":"supabase_sql_executed","sql_preview":"\n-- cell_name mislabeling claim: cap_tier vs cell_name display string\nSELECT cap_tier, tenure, action, cell_name, COUNT(*) AS n\nFROM atlas.mv_calls_performance\nGROUP BY cap_tier, tenure, action, cell_name\nORDER BY cap_tier, tenure, action\nLIMIT 15;"}
+{"ts":"2026-06-01T04:00:29Z","kind":"supabase_sql_executed","sql_preview":"\nSELECT\n  count(*) AS total_holdings,\n  count(elem->'target_weight_pct') AS holdings_with_target_key,\n  sum(CASE WHEN elem->>'target_weight_pct' IS NULL THEN 1 ELSE 0 END) AS holdings_target_is_null\nFROM atlas.strategy_fm_custom_portfolios p,\n     jsonb_array_elements(p.instruments) AS elem;"}
+{"ts":"2026-06-01T04:00:30Z","kind":"supabase_sql_executed","sql_preview":"\n-- Check whether portfolio_analytics serving table/view exists + has rows for these portfolios\nSELECT c.relname, c.relkind\nFROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace\nWHERE n.nspname='atlas' AND c.relname LIKE '%portfolio_analytic%';"}
+{"ts":"2026-06-01T04:00:32Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  COUNT(*) FILTER (WHERE action='AVOID' AND composite_score <= -4 AND (cell_action IS DISTINCT FROM 'NEGATIVE')) AS avoid_compdriven_only,\n  COUNT(*) FILTER (WHERE action='AVOID' AND composite_score <= -4 AND cell_action='NEGATIVE') AS avoid_both,\n  COUNT(*) FILTER (WHERE action='AVOID' AND (cell_action IS DISTINCT FROM 'NEGATIVE')) AS avoid_not_cell_neg,\n  COUNT(DISTINCT cell_action) FILTER (WHERE action='AVOID') AS distinct_cellactions,\n  MIN(composite_score) FILTER (WHERE action='AVOID"}
+{"ts":"2026-06-01T04:00:34Z","kind":"supabase_sql_executed","sql_preview":"SELECT action, cell_action, matrix_action_sign, COUNT(*) AS n,\n  MIN(composite_score) AS min_c, MAX(composite_score) AS max_c\nFROM atlas.mv_stock_landscape\nWHERE action='AVOID'\nGROUP BY action, cell_action, matrix_action_sign\nORDER BY n DESC;"}
+{"ts":"2026-06-01T04:00:39Z","kind":"supabase_sql_executed","sql_preview":"-- Is de_instrument.sector a single value per instrument? Check a few theme-tagged names and whether they ALSO appear under a true sector\n-- First: total active instruments and total across all sectors (should match if 1 sector per instrument)\nSELECT\n  (SELECT COUNT(*) FROM public.de_instrument WHERE is_active=TRUE AND sector IS NOT NULL) AS total_active_with_sector,\n  (SELECT COUNT(DISTINCT id) FROM public.de_instrument WHERE is_active=TRUE AND sector IS NOT NULL) AS distinct_ids;"}
+{"ts":"2026-06-01T04:00:40Z","kind":"supabase_sql_executed","sql_preview":"\n-- Broaden: any relation in any schema matching analytics for portfolios\nSELECT n.nspname AS schema, c.relname, c.relkind\nFROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace\nWHERE c.relname LIKE '%portfolio%analyt%' OR c.relname LIKE '%analyt%portfolio%'\nORDER BY 1,2;"}
+{"ts":"2026-06-01T04:00:41Z","kind":"supabase_sql_executed","sql_preview":"-- Pull actual constituents of Defence theme to test 'pure-play industrials' and 'spanning' claims\nSELECT u.symbol, u.sector\nFROM atlas.atlas_universe_stocks u\nWHERE u.effective_to IS NULL AND u.sector='Defence'\nORDER BY u.symbol LIMIT 25;"}
+{"ts":"2026-06-01T04:00:54Z","kind":"supabase_sql_executed","sql_preview":"\n-- Detail-page KPI null rates on the latest backtest per static portfolio\nWITH latest AS (\n  SELECT p.id,\n    (SELECT sharpe_ratio FROM atlas.strategy_backtest_results b\n       WHERE b.custom_portfolio_id=p.id ORDER BY created_at DESC LIMIT 1) AS sharpe,\n    (SELECT max_drawdown FROM atlas.strategy_backtest_results b\n       WHERE b.custom_portfolio_id=p.id ORDER BY created_at DESC LIMIT 1)::text AS mdd,\n    (SELECT alpha_vs_nifty500 FROM atlas.strategy_backtest_results b\n       WHERE b.custom_p"}
+{"ts":"2026-06-01T04:00:56Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name, data_type FROM information_schema.columns WHERE table_schema='atlas' AND table_name='mv_stock_landscape' AND column_name IN ('conviction_score','composite_score','as_of_date','refreshed_at','matrix_action_sign','cell_action','action','cell_predicted_excess') ORDER BY column_name;"}
+{"ts":"2026-06-01T04:01:03Z","kind":"supabase_sql_executed","sql_preview":"SELECT table_name FROM information_schema.tables WHERE table_schema='atlas' AND table_name LIKE 'mv_stock_landscape%';"}
+{"ts":"2026-06-01T04:01:04Z","kind":"supabase_sql_executed","sql_preview":"SELECT c.relname, c.relkind FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='atlas' AND c.relname LIKE 'mv_stock_landscape%';"}
+{"ts":"2026-06-01T04:01:10Z","kind":"supabase_sql_executed","sql_preview":"SELECT a.attname AS column_name, format_type(a.atttypid, a.atttypmod) AS type\nFROM pg_attribute a\nJOIN pg_class c ON c.oid = a.attrelid\nJOIN pg_namespace n ON n.oid = c.relnamespace\nWHERE n.nspname='atlas' AND c.relname='mv_stock_landscape' AND a.attnum > 0 AND NOT a.attisdropped\nORDER BY a.attnum;"}
+{"ts":"2026-06-01T04:01:18Z","kind":"supabase_sql_executed","sql_preview":"-- Confirm Conglomerate momentum is a data artifact: show its trail rs_ratio values\nSELECT sector_name, ROUND(rs_ratio_current::numeric,2) cur_ratio, ROUND(rs_momentum_current::numeric,2) cur_mom,\n       jsonb_array_length(trail_6w) trail_len\nFROM atlas.mv_sector_rrg\nWHERE as_of_date=(SELECT MAX(as_of_date) FROM atlas.mv_sector_rrg)\n  AND sector_name='Conglomerate';"}
+{"ts":"2026-06-01T04:01:27Z","kind":"supabase_sql_executed","sql_preview":"\n-- Is the pg_cron MV refresh job actually scheduled and live?\nSELECT jobid, schedule, jobname, active, LEFT(command, 120) AS cmd_head\nFROM cron.job\nWHERE command ILIKE '%mv_calls_performance%' OR jobname ILIKE '%mv%refresh%' OR command ILIKE '%REFRESH MATERIALIZED%'\nORDER BY jobid;"}
+{"ts":"2026-06-01T04:01:28Z","kind":"supabase_sql_executed","sql_preview":"SELECT jobname, schedule, active, command FROM cron.job WHERE command ILIKE '%mv_stock_landscape%' OR jobname ILIKE '%landscape%' OR command ILIKE '%refresh%landscape%';"}
+{"ts":"2026-06-01T04:01:28Z","kind":"supabase_sql_executed","sql_preview":"SELECT pg_get_viewdef('atlas.mv_stock_landscape_trader'::regclass, true) AS viewdef;"}
+{"ts":"2026-06-01T04:01:38Z","kind":"supabase_sql_executed","sql_preview":"SELECT count(*) AS total, count(predicted_excess) AS non_null_pe, count(DISTINCT predicted_excess) AS distinct_pe, count(DISTINCT confidence_unconditional) AS distinct_conf, max(date) AS max_date, count(*) FILTER (WHERE exit_date IS NULL) AS open_calls FROM atlas.atlas_signal_calls;"}
+{"ts":"2026-06-01T04:01:46Z","kind":"supabase_sql_executed","sql_preview":"SELECT cell_id::text, count(*) AS n, count(DISTINCT confidence_unconditional) AS distinct_conf, count(DISTINCT predicted_excess) AS distinct_pe, min(predicted_excess) AS min_pe, max(predicted_excess) AS max_pe FROM atlas.atlas_signal_calls GROUP BY cell_id ORDER BY n DESC LIMIT 5;"}
+{"ts":"2026-06-01T04:01:56Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  COUNT(*) FILTER (WHERE action='AVOID' AND cell_action='NEGATIVE') AS cell_avoid_total,\n  COUNT(*) FILTER (WHERE action='AVOID' AND cell_action='NEGATIVE' AND cell_predicted_excess IS NULL) AS cell_avoid_pe_null,\n  COUNT(*) FILTER (WHERE action='AVOID' AND cell_action='NEGATIVE' AND cell_predicted_excess >= 0) AS cell_avoid_pe_nonneg,\n  MIN(cell_predicted_excess) FILTER (WHERE action='AVOID' AND cell_action='NEGATIVE') AS min_pe,\n  MAX(cell_predicted_excess) FILTER (WHERE action='AVOID' "}
+{"ts":"2026-06-01T04:01:57Z","kind":"supabase_sql_executed","sql_preview":"SELECT DISTINCT confidence_unconditional FROM atlas.atlas_signal_calls WHERE cell_id='2a125dc4-f34c-4006-b54f-d5e16778dbc9';"}
+{"ts":"2026-06-01T04:01:58Z","kind":"supabase_sql_executed","sql_preview":"SELECT relname, relkind FROM pg_class WHERE relname IN ('mv_stock_landscape','mv_stock_landscape_trader','mv_top_conviction_daily') ORDER BY relname;"}
+{"ts":"2026-06-01T04:02:05Z","kind":"supabase_sql_executed","sql_preview":"SELECT action, count(*) AS n, round(min(composite_score),3) AS min_comp, round(max(composite_score),3) AS max_comp, round(avg(composite_score),3) AS avg_comp FROM atlas.mv_stock_landscape GROUP BY action ORDER BY action;"}
+{"ts":"2026-06-01T04:02:07Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  count(*) FILTER (WHERE action='AVOID' AND composite_score >= 0) AS avoid_pos_ge0,\n  count(*) FILTER (WHERE action='AVOID' AND composite_score > 0) AS avoid_pos_gt0,\n  count(*) FILTER (WHERE action='AVOID') AS avoid_total,\n  count(*) FILTER (WHERE action='BUY' AND composite_score < 0) AS buy_neg,\n  count(*) FILTER (WHERE action='BUY') AS buy_total,\n  round(max(composite_score) FILTER (WHERE action='AVOID'),3) AS max_avoid_comp\nFROM atlas.mv_stock_landscape;"}
+{"ts":"2026-06-01T04:02:09Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name, data_type FROM information_schema.columns WHERE table_schema='atlas' AND table_name='mv_stock_landscape_trader' ORDER BY ordinal_position;"}
+{"ts":"2026-06-01T04:02:10Z","kind":"supabase_sql_executed","sql_preview":"SELECT regime_state, deployment_multiplier, date FROM atlas.atlas_market_regime_daily ORDER BY date DESC LIMIT 1;"}
+{"ts":"2026-06-01T04:02:18Z","kind":"supabase_sql_executed","sql_preview":"SELECT 'metrics_has_col' AS check, count(*) AS n FROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_sector_metrics_daily' AND column_name='bottomup_rs_3m_nifty500'\nUNION ALL\nSELECT 'states_has_col', count(*) FROM information_schema.columns WHERE table_schema='atlas' AND table_name='atlas_sector_states_daily' AND column_name='bottomup_rs_3m_nifty500'\nUNION ALL\nSELECT 'states_has_participation_rs_pct', count(*) FROM information_schema.columns WHERE table_schema='atlas"}
+{"ts":"2026-06-01T04:02:19Z","kind":"supabase_sql_executed","sql_preview":"WITH d AS (SELECT MAX(date) m FROM atlas.atlas_sector_states_daily)\nSELECT sector_state, count(*) AS n FROM atlas.atlas_sector_states_daily WHERE date=(SELECT m FROM d) GROUP BY sector_state ORDER BY 2 DESC;"}
+{"ts":"2026-06-01T04:02:55Z","kind":"supabase_sql_executed","sql_preview":"WITH d AS (SELECT MAX(date) m FROM atlas.atlas_stock_metrics_daily)\nSELECT\n  (SELECT m FROM d) AS latest_date,\n  count(*) AS total,\n  count(ret_1w) AS ret_1w, count(ret_1m) AS ret_1m, count(ret_3m) AS ret_3m,\n  count(ret_6m) AS ret_6m, count(ret_12m) AS ret_12m,\n  count(rs_1w_nifty500) AS rs_1w_n500, count(rs_1m_nifty500) AS rs_1m_n500, count(rs_3m_nifty500) AS rs_3m_n500\nFROM atlas.atlas_stock_metrics_daily WHERE date=(SELECT m FROM d);"}
+{"ts":"2026-06-01T04:03:12Z","kind":"supabase_sql_executed","sql_preview":"SELECT combined_verdict, COUNT(*) FROM atlas.mv_stock_landscape_trader GROUP BY combined_verdict ORDER BY combined_verdict;"}
+{"ts":"2026-06-01T04:03:13Z","kind":"supabase_sql_executed","sql_preview":"SELECT date, sector_state, COUNT(*) FROM atlas.atlas_sector_signal_unified WHERE date = (SELECT MAX(date) FROM atlas.atlas_sector_signal_unified) GROUP BY date, sector_state ORDER BY sector_state;"}
+{"ts":"2026-06-01T04:03:14Z","kind":"supabase_sql_executed","sql_preview":"SELECT sector FROM atlas.atlas_sector_signal_unified WHERE date = (SELECT MAX(date) FROM atlas.atlas_sector_signal_unified) AND sector_state='Overweight' ORDER BY sector;"}
+{"ts":"2026-06-01T04:03:57Z","kind":"supabase_sql_executed","sql_preview":"-- B4: tv_metrics counts + SHAILY values\nSELECT count(*) AS total, count(pe_ttm) AS pe_ttm, count(roe) AS roe FROM atlas.tv_metrics;"}
+{"ts":"2026-06-01T04:05:04Z","kind":"supabase_sql_executed","sql_preview":"-- C1 exact arithmetic + NIFTY 500 index availability\nWITH d AS (SELECT MAX(date) m FROM atlas.atlas_stock_metrics_daily)\nSELECT u.symbol, m.ret_3m, m.rs_3m_nifty500, idx.ret_3m AS idx_ret_3m,\n  (m.ret_3m - idx.ret_3m) AS derived_alpha_3m\nFROM atlas.atlas_stock_metrics_daily m\nJOIN atlas.atlas_universe_stocks u ON u.instrument_id=m.instrument_id AND u.effective_to IS NULL\nLEFT JOIN atlas.atlas_index_metrics_daily idx ON idx.index_code='NIFTY 500' AND idx.date=m.date\nWHERE m.date=(SELECT m FROM d"}
+{"ts":"2026-06-01T04:05:05Z","kind":"supabase_sql_executed","sql_preview":"SELECT symbol, pe_ttm, roe, fetched_at FROM atlas.tv_metrics WHERE symbol='SHAILY';"}
+{"ts":"2026-06-01T04:05:18Z","kind":"supabase_sql_executed","sql_preview":"SELECT reltuples::bigint AS approx_rows FROM pg_class WHERE oid = 'atlas.mv_stock_landscape_trader'::regclass;"}
+{"ts":"2026-06-01T04:06:34Z","kind":"supabase_sql_executed","sql_preview":"SELECT count(*) AS total_in_landscape, count(*) FILTER (WHERE composite_score IS NOT NULL) AS comp_nonnull FROM atlas.mv_stock_landscape;"}
+{"ts":"2026-06-01T04:07:30Z","kind":"supabase_sql_executed","sql_preview":"SELECT 1;"}
+{"ts":"2026-06-01T04:08:47Z","kind":"supabase_sql_executed","sql_preview":"-- what kind of relation is it, and is it indexed?\nSELECT c.relkind,\n  CASE c.relkind WHEN 'm' THEN 'materialized view' WHEN 'v' THEN 'regular view' WHEN 'r' THEN 'table' ELSE c.relkind::text END AS kind,\n  pg_size_pretty(pg_total_relation_size(c.oid)) AS size\nFROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace\nWHERE n.nspname='atlas' AND c.relname='mv_stock_landscape_trader';"}
+{"ts":"2026-06-01T04:09:31Z","kind":"supabase_sql_executed","sql_preview":"SELECT count(*) FROM atlas.mv_stock_landscape_trader;"}
+{"ts":"2026-06-01T04:10:24Z","kind":"supabase_sql_executed","sql_preview":"SELECT count(*) FROM atlas.mv_stock_landscape_trader WHERE combined_verdict='BUY';"}
+{"ts":"2026-06-01T04:10:33Z","kind":"supabase_sql_executed","sql_preview":"SELECT c.relkind, pg_size_pretty(pg_relation_size(c.oid)) AS size, c.reltuples::bigint AS est_rows FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='atlas' AND c.relname='mv_stock_landscape_trader';"}
+{"ts":"2026-06-01T04:10:45Z","kind":"supabase_sql_executed","sql_preview":"SELECT LEFT(pg_get_viewdef('atlas.mv_stock_landscape_trader'::regclass, true), 2000) AS viewdef;"}
+{"ts":"2026-06-01T04:11:03Z","kind":"supabase_sql_executed","sql_preview":"SELECT c.relname, c.relkind, pg_size_pretty(pg_relation_size(c.oid)) AS size FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='atlas' AND c.relname IN ('mv_stock_landscape','atlas_v6_clean_ohlcv') ORDER BY c.relname;"}
+{"ts":"2026-06-01T04:11:22Z","kind":"supabase_sql_executed","sql_preview":"SELECT COUNT(*) AS rows FROM atlas.strategy_fm_custom_portfolios;"}
+{"ts":"2026-06-01T04:11:24Z","kind":"supabase_sql_executed","sql_preview":"SELECT c.relname, c.relkind FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='atlas' AND c.relname IN ('atlas_v6_verdict','mv_stock_verdict','atlas_stock_verdict','v_stock_verdict') ORDER BY c.relname;"}
+{"ts":"2026-06-01T04:11:35Z","kind":"supabase_sql_executed","sql_preview":"SELECT RIGHT(pg_get_viewdef('atlas.mv_stock_landscape_trader'::regclass, true), 900) AS tail;"}
+{"ts":"2026-06-01T04:11:51Z","kind":"supabase_sql_executed","sql_preview":"SELECT pg_get_functiondef('atlas.derive_verdict'::regproc) AS fndef;"}
+{"ts":"2026-06-01T04:12:21Z","kind":"supabase_sql_executed","sql_preview":"SELECT MAX(date) AS max_signal_date FROM atlas.atlas_stock_signal_unified;"}
+{"ts":"2026-06-01T04:12:32Z","kind":"supabase_sql_executed","sql_preview":"SELECT MAX(as_of_date) AS trader_as_of, COUNT(DISTINCT as_of_date) AS distinct_dates FROM atlas.mv_stock_landscape;"}
+{
+  "ts": "2026-06-01T04:20:56Z",
+  "prev": "88101c440b47ce6f",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/docs/v6/2026-06-01-track-b-frontend-plan.md",
+  "lines_changed": 70,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-06-01T04:21:47Z","kind":"supabase_sql_executed","sql_preview":"SELECT pg_get_viewdef('atlas.mv_calls_performance'::regclass, true) AS def;"}
+{
+  "ts": "2026-06-01T04:25:35Z",
+  "prev": "752098a755457aaf",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/__tests__/calls.test.ts",
+  "lines_changed": 109,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T04:27:23Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/calls.ts",
+  "lines_changed": 18,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T04:27:29Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/calls.ts",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T04:27:32Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/calls.ts",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-06-01T04:37:38Z","kind":"supabase_sql_executed","sql_preview":"SELECT jsonb_object_keys(breadth_table->0) AS breadth_row_keys\nFROM atlas.mv_india_pulse\nWHERE as_of_date = (SELECT MAX(as_of_date) FROM atlas.mv_india_pulse)\nLIMIT 1;"}
+{"ts":"2026-06-01T04:37:55Z","kind":"supabase_sql_executed","sql_preview":"SELECT elem->>'metric' AS metric, elem->>'label' AS label, (elem->>'today') AS today\nFROM atlas.mv_india_pulse,\n     LATERAL jsonb_array_elements(breadth_table) AS elem\nWHERE as_of_date = (SELECT MAX(as_of_date) FROM atlas.mv_india_pulse);"}
+{
+  "ts": "2026-06-01T04:40:14Z",
+  "prev": "955cf7024bc2012b",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/india-pulse/__tests__/india_pulse.test.tsx",
+  "lines_changed": 28,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T04:40:53Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/india-pulse/BreadthTable.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T04:41:09Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/india-pulse/BreadthTable.tsx",
+  "lines_changed": 19,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T04:41:19Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/india-pulse/BreadthTable.tsx",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T04:41:26Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/india-pulse/BreadthTable.tsx",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T04:41:33Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/india-pulse/BreadthTable.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T04:41:44Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/india-pulse/__tests__/india_pulse.test.tsx",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T04:41:50Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/india-pulse/__tests__/india_pulse.test.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T04:57:01Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/__tests__/calls.test.ts",
+  "lines_changed": 22,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T04:57:18Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/calls.ts",
+  "lines_changed": 9,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T04:57:25Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/calls.ts",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T04:57:31Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/calls.ts",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T04:57:40Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/calls.ts",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T04:57:46Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/calls.ts",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T04:58:38Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/calls/CallsHeroStrip.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T04:58:45Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/calls/CallsClient.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T04:58:52Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/calls/CallsClient.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T04:58:57Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/calls/CallsClient.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T04:59:41Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/calls/__tests__/CallsHeroStrip.test.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T04:59:43Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/calls/__tests__/CallsHeroStrip.test.tsx",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T05:09:04Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/sectors/__tests__/SectorHeroReadout.test.tsx",
+  "lines_changed": 61,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T05:09:40Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/sectors/SectorHeroReadout.tsx",
+  "lines_changed": 15,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T05:09:46Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/sectors/SectorHeroReadout.tsx",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T05:09:52Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/sectors/SectorHeroReadout.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T05:13:14Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/__tests__/portfolios/portfolios.test.ts",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T05:13:27Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/__tests__/portfolios/portfolios.test.ts",
+  "lines_changed": 23,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T05:13:59Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/portfolios.ts",
+  "lines_changed": 14,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T05:14:07Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/portfolios.ts",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-06-01T05:17:55Z","kind":"supabase_sql_executed","sql_preview":"SELECT sector, COUNT(*) AS n\nFROM atlas.mv_stock_landscape\nGROUP BY sector\nORDER BY n DESC;"}
+{"ts":"2026-06-01T05:19:16Z","kind":"supabase_sql_executed","sql_preview":"SELECT sector, symbol, company_name\nFROM atlas.mv_stock_landscape\nWHERE sector IN ('Conglomerate','Diversified','Services','Housing','Consumption','MNC','Rural')\nORDER BY sector, symbol;"}
+{"ts":"2026-06-01T05:30:12Z","kind":"supabase_sql_executed","sql_preview":"SELECT table_name\nFROM information_schema.tables\nWHERE table_schema = 'atlas'\n  AND table_name IN ('atlas_sector_rollup','atlas_sector_master','atlas_stock_sector_override','atlas_universe_stocks');\nSELECT column_name, data_type\nFROM information_schema.columns\nWHERE table_schema='atlas' AND table_name='atlas_universe_stocks'\n  AND column_name IN ('instrument_id','symbol','sector','industry','effective_to')\nORDER BY column_name;"}
+{
+  "ts": "2026-06-01T05:32:12Z",
+  "prev": "1fd4a57f839eefb2",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/migrations/versions/124_sector_canonicalization.py",
+  "lines_changed": 96,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-06-01T06:00:18Z","kind":"supabase_sql_executed","sql_preview":"SELECT ticker, etf_category, te_60d\nFROM atlas.mv_etf_list_v6\nORDER BY te_60d DESC NULLS LAST\nLIMIT 15;"}
+{"ts":"2026-06-01T06:01:35Z","kind":"supabase_sql_executed","sql_preview":"SELECT DISTINCT benchmark_code\nFROM atlas.atlas_benchmark_returns_cache\nORDER BY benchmark_code;"}
+{
+  "ts": "2026-06-01T06:28:51Z",
+  "prev": "571272db3a8bf536",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/__tests__/etfs-metric-history.test.ts",
+  "lines_changed": 69,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T06:29:07Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/etfs.ts",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T06:29:12Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/etfs.ts",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T06:33:43Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/__tests__/markets_rs.test.ts",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T06:34:02Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/__tests__/markets_rs.test.ts",
+  "lines_changed": 50,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T06:34:21Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/markets_rs.ts",
+  "lines_changed": 32,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T06:34:28Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/markets_rs.ts",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T06:34:53Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/MarketsRsClient.tsx",
+  "lines_changed": 16,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T06:35:00Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/MarketsRsClient.tsx",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T06:35:11Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/MarketsRsClient.tsx",
+  "lines_changed": 26,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T06:35:33Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/MarketsRsClient.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T06:38:30Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/migrations/versions/124_sector_canonicalization.py",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T06:41:56Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/app/portfolios/[id]/page.tsx",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T06:42:04Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/app/portfolios/[id]/page.tsx",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T06:42:09Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/app/portfolios/[id]/page.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T06:42:15Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/app/portfolios/[id]/page.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T06:44:26Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/__tests__/fund-list.test.ts",
+  "lines_changed": 15,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T06:44:44Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/fund-list.ts",
+  "lines_changed": 20,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T06:45:26Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/fund-list.ts",
+  "lines_changed": 11,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T06:48:11Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/etf-detail/__tests__/ETFGatesPanel.test.tsx",
+  "lines_changed": 60,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T06:48:41Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/etf-detail/ETFGatesPanel.tsx",
+  "lines_changed": 18,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T06:48:54Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/etf-detail/ETFGatesPanel.tsx",
+  "lines_changed": 15,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T06:49:25Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/etf-detail/ETFGatesPanel.tsx",
+  "lines_changed": 17,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T06:49:31Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/etf-detail/__tests__/ETFGatesPanel.test.tsx",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T06:49:58Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/etf-detail/__tests__/ETFGatesPanel.test.tsx",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-06-01T06:50:59Z","kind":"supabase_sql_executed","sql_preview":"SELECT\n  COUNT(*) AS open_calls,\n  COUNT(predicted_excess) AS have_predicted,\n  COUNT(DISTINCT predicted_excess) AS distinct_predicted,\n  COUNT(DISTINCT confidence_unconditional) AS distinct_confidence,\n  ROUND(MIN(predicted_excess)::numeric,4) AS min_pred,\n  ROUND(MAX(predicted_excess)::numeric,4) AS max_pred\nFROM atlas.atlas_signal_calls\nWHERE exit_date IS NULL;"}
+{
+  "ts": "2026-06-01T06:55:12Z",
+  "prev": "3868219330dd2b6e",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/landing/TodayConvictionTabs.tsx",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-06-01T07:00:43Z","kind":"supabase_sql_executed","sql_preview":"SELECT indexname, indexdef\nFROM pg_indexes\nWHERE schemaname='atlas' AND tablename='atlas_fund_metrics_daily'\n  AND (indexdef ILIKE '%mstar_id%' AND indexdef ILIKE '%nav_date%');"}
+{"ts":"2026-06-01T07:00:46Z","kind":"supabase_sql_executed","sql_preview":"EXPLAIN (ANALYZE, BUFFERS, SUMMARY)\nWITH latest_fm AS (SELECT MAX(nav_date) AS d FROM atlas.atlas_fund_metrics_daily)\nSELECT fl.scheme_code, fm.ret_3m\nFROM atlas.mv_fund_list_v6 fl\nLEFT JOIN LATERAL (\n  SELECT ret_3m FROM atlas.atlas_fund_metrics_daily fm\n  WHERE fm.mstar_id = fl.scheme_code\n    AND fm.nav_date >= (SELECT d FROM latest_fm) - INTERVAL '7 days'\n  ORDER BY fm.nav_date DESC LIMIT 1\n) fm ON TRUE;"}
+{"ts":"2026-06-01T07:01:12Z","kind":"supabase_sql_executed","sql_preview":"EXPLAIN (ANALYZE, BUFFERS, SUMMARY)\nWITH latest_fm AS (SELECT MAX(nav_date) AS d FROM atlas.atlas_fund_metrics_daily)\nSELECT fl.scheme_code, fm.ret_3m\nFROM atlas.mv_fund_list_v6 fl\nLEFT JOIN (\n  SELECT DISTINCT ON (mstar_id) mstar_id, ret_3m\n  FROM atlas.atlas_fund_metrics_daily\n  WHERE nav_date >= (SELECT d FROM latest_fm) - INTERVAL '7 days'\n  ORDER BY mstar_id, nav_date DESC\n) fm ON fm.mstar_id = fl.scheme_code;"}
+{
+  "ts": "2026-06-01T07:01:55Z",
+  "prev": "df5e8e0fef7952cb",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/fund-list.ts",
+  "lines_changed": 17,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T07:02:10Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/__tests__/fund-list.test.ts",
+  "lines_changed": 15,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-06-01T07:07:10Z","kind":"supabase_sql_executed","sql_preview":"-- canonical etf_category set (CHECK constraint) + actual distribution across both serving MVs\nSELECT 'deepdive' src, etf_category, COUNT(*) n FROM atlas.mv_etf_deepdive GROUP BY etf_category\nUNION ALL\nSELECT 'list' src, etf_category, COUNT(*) n FROM atlas.mv_etf_list_v6 GROUP BY etf_category\nORDER BY src, n DESC;"}
+{"ts":"2026-06-01T07:07:11Z","kind":"supabase_sql_executed","sql_preview":"SELECT pg_get_constraintdef(oid)\nFROM pg_constraint\nWHERE conrelid='atlas.atlas_etf_scorecard'::regclass AND contype='c'\n  AND pg_get_constraintdef(oid) ILIKE '%etf_category%';"}
+{
+  "ts": "2026-06-01T07:07:28Z",
+  "prev": "222cf4db79b0b885",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/etf-detail/ETFGatesPanel.tsx",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T07:07:38Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/etf-detail/__tests__/ETFGatesPanel.test.tsx",
+  "lines_changed": 12,
+  "session_id": "unknown",
+  "schema_version": 1
+}
