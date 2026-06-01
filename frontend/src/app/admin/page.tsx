@@ -102,14 +102,22 @@ async function getHealthRows(): Promise<Array<{
   `
 }
 
+async function getHealthCheckDate(): Promise<string | null> {
+  const rows = await sql<Array<{ d: string | null }>>`
+    SELECT MAX(check_date)::text AS d FROM atlas.atlas_data_health
+  `
+  return rows[0]?.d ?? null
+}
+
 export default async function AdminPage() {
-  const [custSummary, actSummary, healthSummary, proposals, findings, healthRows] = await Promise.all([
+  const [custSummary, actSummary, healthSummary, proposals, findings, healthRows, healthCheckDate] = await Promise.all([
     getCustomizationSummary().catch(() => []),
     getActivitySummary().catch(() => []),
     getHealthSummary().catch(() => []),
     getRecentProposals().catch(() => []),
     getRecentFindings().catch(() => []),
     getHealthRows().catch(() => []),
+    getHealthCheckDate().catch(() => null),
   ])
 
   return (
@@ -137,6 +145,7 @@ export default async function AdminPage() {
         proposals={proposals}
         findings={findings}
         healthRows={healthRows}
+        healthCheckDate={healthCheckDate}
       />
 
       <section className="px-8 py-8 bg-paper-soft border-t border-paper-rule">

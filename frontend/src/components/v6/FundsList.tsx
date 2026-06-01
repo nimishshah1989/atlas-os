@@ -49,6 +49,11 @@ export type FundRow = {
   rs_pctile_3m: string | null    // Peer quartile proxy from RS percentile
   sector_tilt: string | null     // Top-sector tilt text if available
   realized_vol_63: string | null // Annualized realized vol (63D) — X-axis for bubble chart
+  // Sub-pillar scores (0–100) — from mv_fund_list_v6
+  risk_adjusted_return_score?: string | null
+  holdings_conviction_score?: string | null
+  style_sector_score?: string | null
+  cost_manager_score?: string | null
 }
 
 export type FundsListColumn =
@@ -216,16 +221,44 @@ function toBubbleDatum(f: FundRow): BubbleDatum | null {
   }
 }
 
-/** Build placeholder SignatureCell[] from fund row. */
+function scoreToExposure(score: number | null): SignatureCell['exposure'] {
+  if (score == null) return null
+  if (score >= 65) return 'POSITIVE'
+  if (score >= 40) return 'NEUTRAL'
+  return 'NEGATIVE'
+}
+
+/** Build SignatureCell[] from fund sub-pillar scores. */
 function toSignatureCells(f: FundRow): SignatureCell[] {
-  const score = toNumber(f.composite_score)
-  const exposure: SignatureCell['exposure'] =
-    score == null ? null : score >= 60 ? 'POSITIVE' : score >= 40 ? 'NEUTRAL' : 'NEGATIVE'
+  const rarScore  = toNumber(f.risk_adjusted_return_score ?? null)
+  const hcScore   = toNumber(f.holdings_conviction_score ?? null)
+  const ssScore   = toNumber(f.style_sector_score ?? null)
+  const cmScore   = toNumber(f.cost_manager_score ?? null)
   return [
-    { factor: 'Momentum', exposure, raw_score: f.composite_score, rank_in_category: f.rank_in_category },
-    { factor: 'Quality',  exposure: null, raw_score: null, rank_in_category: null },
-    { factor: 'Value',    exposure: null, raw_score: null, rank_in_category: null },
-    { factor: 'LowVol',   exposure: null, raw_score: null, rank_in_category: null },
+    {
+      factor: 'Risk-adj. Returns',
+      exposure: scoreToExposure(rarScore),
+      raw_score: f.risk_adjusted_return_score ?? null,
+      rank_in_category: f.rank_in_category,
+    },
+    {
+      factor: 'Holdings Quality',
+      exposure: scoreToExposure(hcScore),
+      raw_score: f.holdings_conviction_score ?? null,
+      rank_in_category: null,
+    },
+    {
+      factor: 'Style Fit',
+      exposure: scoreToExposure(ssScore),
+      raw_score: f.style_sector_score ?? null,
+      rank_in_category: null,
+    },
+    {
+      factor: 'Cost Efficiency',
+      exposure: scoreToExposure(cmScore),
+      raw_score: f.cost_manager_score ?? null,
+      rank_in_category: null,
+    },
   ]
 }
 
