@@ -14,7 +14,7 @@ function fmtVal(row: BreadthRow): string {
   if (row.data_gap) return '—'
   if (row.today == null) return '—'
   const { metric, today } = row
-  if (metric === 'pct_above_200dma' || metric === 'pct_above_50dma') {
+  if (metric.startsWith('pct_above_')) {
     return `${today.toFixed(0)}%`
   }
   if (metric === 'ad_ratio') return today.toFixed(2)
@@ -50,7 +50,7 @@ function deltaColor(val: number | null, metric: string): string {
 function pbarColor(row: BreadthRow): string {
   if (row.today == null) return 'bg-signal-pos'
   const { metric, today } = row
-  if (metric === 'pct_above_200dma' || metric === 'pct_above_50dma') {
+  if (metric.startsWith('pct_above_')) {
     const pct = today // already 0-100 range from MV (rounded)
     return pct < 35 ? 'bg-signal-neg' : pct < 50 ? 'bg-signal-warn' : 'bg-signal-pos'
   }
@@ -63,7 +63,7 @@ function pbarColor(row: BreadthRow): string {
 function pbarWidth(row: BreadthRow): number {
   if (row.today == null || row.data_gap) return 0
   const { metric, today } = row
-  if (metric === 'pct_above_200dma' || metric === 'pct_above_50dma') {
+  if (metric.startsWith('pct_above_')) {
     return Math.min(100, Math.max(0, today))
   }
   if (metric === 'ad_ratio') {
@@ -78,19 +78,24 @@ function pbarWidth(row: BreadthRow): number {
   return 0
 }
 
+/** pct_above_200ema -> "200 EMA"; pct_above_50dma -> "50 DMA"; fallback "moving average". */
+function pctAboveWindowLabel(metric: string): string {
+  const m = metric.match(/^pct_above_(\d+)(ema|dma)$/i)
+  return m ? `${m[1]} ${m[2].toUpperCase()}` : 'the moving average'
+}
+
 function readsAs(row: BreadthRow): { text: string; tone: 'pos' | 'warn' | 'neg' | 'neutral' } {
   if (row.data_gap) return { text: 'Data not available in current pipeline.', tone: 'neutral' }
   if (row.today == null) return { text: 'No data for this period.', tone: 'neutral' }
   const { metric, today } = row
+  // Generalized across every % -above-moving-average window (20/50/100/200, EMA or DMA).
+  if (metric.startsWith('pct_above_')) {
+    const w = pctAboveWindowLabel(metric)
+    if (today < 35) return { text: `Structural breadth impaired — less than a third above ${w}.`, tone: 'neg' }
+    if (today < 50) return { text: `Below half-line. Less than half the Nifty 500 above ${w}.`, tone: 'warn' }
+    return { text: `Majority of Nifty 500 above ${w}. Breadth healthy.`, tone: 'pos' }
+  }
   switch (metric) {
-    case 'pct_above_200dma':
-      if (today < 35) return { text: 'Structural breadth impaired — less than a third above 200-DMA.', tone: 'neg' }
-      if (today < 50) return { text: 'Below half-line. Less than half the Nifty 500 above 200-DMA.', tone: 'warn' }
-      return { text: 'Majority of Nifty 500 above 200-DMA. Breadth healthy.', tone: 'pos' }
-    case 'pct_above_50dma':
-      if (today < 30) return { text: 'Short-term washout territory. Bottom decile historically.', tone: 'neg' }
-      if (today < 50) return { text: 'Short-term breadth impaired. Most names below 50-DMA.', tone: 'warn' }
-      return { text: 'Short-term breadth healthy. Majority above 50-DMA.', tone: 'pos' }
     case 'new_52w_highs':
       if (today < 10) return { text: 'Leadership stack thin. New highs concentrated in handful of names.', tone: 'neg' }
       return { text: 'New highs broadening. Leadership expanding.', tone: 'pos' }
@@ -122,9 +127,10 @@ const TONE_CLASS = {
 }
 
 const ROW_META: Record<string, string> = {
-  pct_above_200dma: 'Nifty 500 · canonical breadth',
-  pct_above_100dma: 'Nifty 500 · medium-term',
-  pct_above_50dma: 'Nifty 500 · short-term',
+  pct_above_200ema: 'Nifty 500 · long-term (canonical)',
+  pct_above_100ema: 'Nifty 500 · medium-term',
+  pct_above_50ema: 'Nifty 500 · short-term',
+  pct_above_20ema: 'Nifty 500 · very short-term',
   new_52w_highs: 'Count · Nifty 500',
   new_52w_lows: 'Count · Nifty 500',
   ad_ratio: '5-day rolling · Nifty 500',
@@ -170,7 +176,8 @@ export function BreadthTable({ rows }: Props) {
           {rows.map(row => {
             const reads = readsAs(row)
             const showPbar = !row.data_gap &&
-              ['pct_above_200dma', 'pct_above_50dma', 'ad_ratio', 'new_52w_highs', 'new_52w_lows'].includes(row.metric)
+              (row.metric.startsWith('pct_above_') ||
+                ['ad_ratio', 'new_52w_highs', 'new_52w_lows'].includes(row.metric))
 
             return (
               <tr key={row.metric} className="border-b border-paper-rule last:border-b-0">
@@ -202,7 +209,7 @@ export function BreadthTable({ rows }: Props) {
                         style={{ width: `${pbarWidth(row)}%` }}
                       />
                       {/* Threshold marker at 50% */}
-                      {(row.metric === 'pct_above_200dma' || row.metric === 'pct_above_50dma') && (
+                      {row.metric.startsWith('pct_above_') && (
                         <div className="absolute top-[-2px] bottom-[-2px] w-px bg-ink-tertiary" style={{ left: '50%' }} />
                       )}
                     </div>
