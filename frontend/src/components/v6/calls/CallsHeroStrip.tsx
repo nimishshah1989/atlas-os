@@ -129,7 +129,7 @@ export function CallsHeroStrip({ hero }: CallsHeroStripProps) {
       </div>
 
       <p className="mt-2 text-[10px] font-mono text-ink-4">
-        Data as of {dataAsOf} · mv_calls_performance ({hero.total_calls} calls · 576 with realized data)
+        Data as of {dataAsOf} · mv_calls_performance ({hero.total_calls} calls · {hero.realized_count} with realized data)
       </p>
     </div>
   )

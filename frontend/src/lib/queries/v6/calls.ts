@@ -40,6 +40,8 @@ export type CallsHero = {
   closed_calls: number
   buy_calls: number
   avoid_calls: number
+  /** Count of calls with non-null realized excess (data-driven, not hardcoded) */
+  realized_count: number
   /** Decimal fraction avg realized excess across all calls with data */
   avg_realized_excess: number | null
   /** Overall hit rate (win rate) as decimal fraction */
@@ -115,6 +117,7 @@ type HeroRaw = {
   closed_calls: string
   buy_calls: string
   avoid_calls: string
+  realized_count: string
   avg_realized_excess: string | null
   overall_hit_rate: string | null
   data_as_of: string | null
@@ -208,6 +211,7 @@ export async function getCallsHero(): Promise<CallsHero> {
       COUNT(*) FILTER (WHERE status = 'closed')::text                      AS closed_calls,
       COUNT(*) FILTER (WHERE action = 'POSITIVE')::text                    AS buy_calls,
       COUNT(*) FILTER (WHERE action = 'NEGATIVE')::text                    AS avoid_calls,
+      COUNT(*) FILTER (WHERE realized_excess_pct IS NOT NULL)::text         AS realized_count,
       AVG(realized_excess_pct)::text                                        AS avg_realized_excess,
       AVG(is_hit::int)::text                                                AS overall_hit_rate,
       MAX(refreshed_at)::date::text                                         AS data_as_of
@@ -222,6 +226,7 @@ export async function getCallsHero(): Promise<CallsHero> {
       closed_calls: 0,
       buy_calls: 0,
       avoid_calls: 0,
+      realized_count: 0,
       avg_realized_excess: null,
       overall_hit_rate: null,
       data_as_of: new Date().toISOString().slice(0, 10),
@@ -235,6 +240,7 @@ export async function getCallsHero(): Promise<CallsHero> {
     closed_calls: parseInt(r.closed_calls, 10),
     buy_calls: parseInt(r.buy_calls, 10),
     avoid_calls: parseInt(r.avoid_calls, 10),
+    realized_count: parseInt(r.realized_count, 10),
     avg_realized_excess: realizedPctToFraction(r.avg_realized_excess),
     overall_hit_rate: r.overall_hit_rate != null ? parseFloat(r.overall_hit_rate) : null,
     data_as_of: r.data_as_of ?? new Date().toISOString().slice(0, 10),

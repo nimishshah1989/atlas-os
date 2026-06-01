@@ -89,6 +89,27 @@ describe('getCallsHero — realized normalization', () => {
   })
 })
 
+describe('getCallsHero — data-driven counts (no hardcoded 587/576)', () => {
+  it('exposes realized_count from a COUNT(*) FILTER, driven by the query not a literal', async () => {
+    sqlMock.mockResolvedValueOnce([
+      {
+        total_calls: '636',
+        open_calls: '636',
+        closed_calls: '0',
+        buy_calls: '109',
+        avoid_calls: '527',
+        realized_count: '587',
+        avg_realized_excess: '1.23',
+        overall_hit_rate: '0.49',
+        data_as_of: '2026-05-29',
+      },
+    ])
+    const hero = await getCallsHero()
+    expect(hero.total_calls).toBe(636)
+    expect(hero.realized_count).toBe(587)
+  })
+})
+
 describe('getMatrix24Cells / getCumulativeExcessSeries — realized normalization', () => {
   it('normalizes avg_realized_excess pp→fraction in the matrix', async () => {
     sqlMock.mockResolvedValueOnce([
