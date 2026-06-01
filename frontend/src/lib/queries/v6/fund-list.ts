@@ -106,13 +106,13 @@ type Row = {
 
 function toNumber(s: string | number | null | undefined): number | null {
   if (s == null) return null
-  const n = typeof s === 'number' ? s : Number(s)
+  const n = typeof s === 'number' ? s : parseFloat(s)
   return Number.isFinite(n) ? n : null
 }
 
 function toInt(s: number | string | null | undefined): number {
   if (s == null) return 0
-  const n = typeof s === 'number' ? s : Number(s)
+  const n = typeof s === 'number' ? s : parseInt(s, 10)
   return Number.isFinite(n) ? n : 0
 }
 
@@ -145,9 +145,21 @@ export async function getFundListPage(): Promise<FundListPage> {
       fm.ret_12m::text                      AS ret_12m,
       fm.rs_pctile_3m::text                 AS rs_pctile_3m
     FROM atlas.mv_fund_list_v6 fl
-    LEFT JOIN atlas.atlas_fund_metrics_daily fm
-      ON fm.mstar_id = fl.scheme_code
-      AND fm.nav_date = (SELECT d FROM latest_fm)
+    -- Join each fund's OWN latest metrics row within a 7-day window of the
+    -- global max nav_date. A flat equality to MAX(nav_date) dropped returns for
+    -- ~10 funds whose NAV publishes 1 day behind the leader (normal AMC lag)
+    -- even though fresh data exists. The 7-day guard recovers those without
+    -- resurrecting genuinely dead funds (weeks/months stale → stay NULL).
+    -- DISTINCT ON scans the recent window once (~3k rows) and dedups to the
+    -- latest per fund: ~105ms vs ~235ms for a per-fund correlated LATERAL
+    -- (measured via EXPLAIN ANALYZE on prod, 1.05M-row table) — same result set.
+    LEFT JOIN (
+      SELECT DISTINCT ON (mstar_id)
+        mstar_id, ret_1m, ret_3m, ret_6m, ret_12m, rs_pctile_3m
+      FROM atlas.atlas_fund_metrics_daily
+      WHERE nav_date >= (SELECT d FROM latest_fm) - INTERVAL '7 days'
+      ORDER BY mstar_id, nav_date DESC
+    ) fm ON fm.mstar_id = fl.scheme_code
     ORDER BY
       fl.is_atlas_leader DESC,
       fl.composite_score DESC NULLS LAST,

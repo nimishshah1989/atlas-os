@@ -73,6 +73,7 @@ export type ETFMetricHistoryRow = {
   date: Date
   rs_pctile_3m: string | null
   rs_3m_benchmark: string | null
+  ret_1w: string | null
   ret_1m: string | null
   ret_3m: string | null
   ret_6m: string | null
@@ -305,6 +306,7 @@ export async function getETFMetricHistory(
       date,
       rs_pctile_3m::text        AS rs_pctile_3m,
       rs_3m_benchmark::text     AS rs_3m_benchmark,
+      ret_1w::text              AS ret_1w,
       ret_1m::text              AS ret_1m,
       ret_3m::text              AS ret_3m,
       ret_6m::text              AS ret_6m,

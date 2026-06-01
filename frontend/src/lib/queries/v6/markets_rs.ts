@@ -75,6 +75,35 @@ export type MarketsRsPageData = {
 }
 
 // ---------------------------------------------------------------------------
+// Per-baseline staleness (data-honesty)
+// ---------------------------------------------------------------------------
+
+/**
+ * A baseline lagging the freshest by more than this many calendar days is
+ * flagged stale in the grid. The normal US/global 1-day timezone lag
+ * (NSE closes a day ahead of S&P 500 / MSCI World) stays unflagged; the
+ * weeks-stale MSCI EM proxy gets a visible marker so it is never read as
+ * current.
+ */
+export const MARKETS_RS_STALE_THRESHOLD_DAYS = 7
+
+/**
+ * Calendar-day lag of a baseline's as_of_date behind the freshest baseline.
+ * Returns null when either date is missing or unparseable (explicit NULL
+ * handling — never silently treat a missing date as fresh).
+ */
+export function baselineStalenessDays(
+  rowAsOf: string | null,
+  freshestAsOf: string | null,
+): number | null {
+  if (!rowAsOf || !freshestAsOf) return null
+  const a = Date.parse(rowAsOf)
+  const b = Date.parse(freshestAsOf)
+  if (Number.isNaN(a) || Number.isNaN(b)) return null
+  return Math.round((b - a) / 86_400_000)
+}
+
+// ---------------------------------------------------------------------------
 // Grade derivation (exported for unit tests)
 // ---------------------------------------------------------------------------
 
@@ -195,7 +224,16 @@ export async function getMarketsRsPage(): Promise<MarketsRsPageData> {
   }))
 
   const hero = deriveHeroReadouts(grid)
-  const as_of_date = grid.find(r => r.as_of_date != null)?.as_of_date ?? null
+  // Freshest (max) baseline date — ISO YYYY-MM-DD sorts lexicographically.
+  // Never the first row: a lagging baseline (e.g. MSCI EM proxy) must not
+  // determine the page's "as of" stamp.
+  const as_of_date = grid.reduce<string | null>(
+    (max, r) =>
+      r.as_of_date != null && (max == null || r.as_of_date > max)
+        ? r.as_of_date
+        : max,
+    null,
+  )
 
   return { grid, hero, as_of_date }
 }

@@ -293,8 +293,8 @@ describe('HeadlineIndices', () => {
 
 const SAMPLE_BREADTH: BreadthRow[] = [
   {
-    metric: 'pct_above_200dma',
-    label: '% above 200 DMA',
+    metric: 'pct_above_200ema',
+    label: '% above 200 EMA',
     today: 42,
     delta_1w: -3,
     delta_1m: -16,
@@ -302,8 +302,8 @@ const SAMPLE_BREADTH: BreadthRow[] = [
     data_gap: false,
   },
   {
-    metric: 'pct_above_100dma',
-    label: '% above 100 DMA',
+    metric: 'pct_above_100ema',
+    label: '% above 100 EMA',
     today: null,
     delta_1w: null,
     delta_1m: null,
@@ -324,8 +324,8 @@ const SAMPLE_BREADTH: BreadthRow[] = [
 describe('BreadthTable', () => {
   it('renders breadth measure labels', () => {
     render(<BreadthTable rows={SAMPLE_BREADTH} />)
-    expect(screen.getByText('% above 200 DMA')).toBeInTheDocument()
-    expect(screen.getByText('% above 100 DMA')).toBeInTheDocument()
+    expect(screen.getByText('% above 200 EMA')).toBeInTheDocument()
+    expect(screen.getByText('% above 100 EMA')).toBeInTheDocument()
   })
 
   it('renders today value for non-gap row', () => {
@@ -346,6 +346,29 @@ describe('BreadthTable', () => {
   it('renders empty state when rows is empty', () => {
     render(<BreadthTable rows={[]} />)
     expect(screen.getByText('No breadth data available.')).toBeInTheDocument()
+  })
+})
+
+// Regression: mv_india_pulse v2 (migration 122) emits pct_above_{20,50,100,200}EMA
+// — NOT the *dma keys the component originally hardcoded. With dma-only handling the
+// EMA breadth rows rendered a bare number (no %), no progress bar, and no "reads as"
+// interpretation. These fixtures use the REAL MV metric keys.
+const MV_EMA_BREADTH: BreadthRow[] = [
+  { metric: 'pct_above_20ema', label: '% above 20 EMA', today: 50.4, delta_1w: 2, delta_1m: -5, delta_3m: -10, data_gap: false },
+  { metric: 'pct_above_200ema', label: '% above 200 EMA', today: 46.9, delta_1w: -3, delta_1m: -16, delta_3m: -29, data_gap: false },
+]
+
+describe('BreadthTable — real MV ema keys (regression)', () => {
+  it('formats pct_above_*ema rows as percentages, not bare numbers', () => {
+    render(<BreadthTable rows={MV_EMA_BREADTH} />)
+    expect(screen.getByText('47%')).toBeInTheDocument() // 46.9 -> 47%
+    expect(screen.getByText('50%')).toBeInTheDocument() // 50.4 -> 50%
+  })
+
+  it('renders a "reads as" interpretation for an ema breadth row (not the em-dash default)', () => {
+    render(<BreadthTable rows={MV_EMA_BREADTH} />)
+    // 200 EMA at 46.9 (<50) => below-half-line warning text
+    expect(screen.getByText(/below half-line/i)).toBeInTheDocument()
   })
 })
 

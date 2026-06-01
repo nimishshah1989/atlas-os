@@ -79,8 +79,20 @@ export type BacktestListRow = {
 }
 
 /** Unioned list of static + rule-based FM portfolios with latest backtest Sharpe. */
+/**
+ * Test-harness / auto-created portfolios pollute the FM-facing list (5 identical
+ * "… (auto-created)" rows + validate_m7_p3_* backtest-validation outputs were the
+ * entire dataset). Until a proper is_fixture flag exists on
+ * strategy_fm_custom_portfolios, exclude them by name so the list shows only real
+ * authored portfolios.
+ */
+export function isFixturePortfolioName(name: string): boolean {
+  const n = name.trim().toLowerCase()
+  return n.includes('(auto-created)') || n.startsWith('validate_')
+}
+
 export async function getAllPortfolios(): Promise<PortfolioListRow[]> {
-  return sql<PortfolioListRow[]>`
+  const rows = await sql<PortfolioListRow[]>`
     SELECT
       p.id,
       p.name,
@@ -120,6 +132,7 @@ export async function getAllPortfolios(): Promise<PortfolioListRow[]> {
 
     ORDER BY created_at DESC
   `
+  return rows.filter((r) => !isFixturePortfolioName(r.name))
 }
 
 /** Single static portfolio detail + latest backtest KPIs. Returns null if not found.

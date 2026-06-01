@@ -14,6 +14,7 @@ import {
   getStaticPortfolioById,
   getRuleBasedPortfolioById,
   getBacktestsForPortfolio,
+  isFixturePortfolioName,
 } from '@/lib/queries/portfolios'
 
 // Helper: control what sql returns next call
@@ -25,6 +26,27 @@ function mockSqlReturn(data: unknown): void {
 
 beforeEach(() => {
   vi.clearAllMocks()
+})
+
+describe('isFixturePortfolioName', () => {
+  it('flags auto-created and validate_* test-harness portfolios, keeps real ones', () => {
+    expect(isFixturePortfolioName('Atlas Test Portfolio — Stocks+Funds (auto-created)')).toBe(true)
+    expect(isFixturePortfolioName('validate_m7_p3_3d554211')).toBe(true)
+    expect(isFixturePortfolioName('My Real FM Portfolio')).toBe(false)
+    expect(isFixturePortfolioName('Nifty Momentum Sleeve')).toBe(false)
+  })
+})
+
+describe('getAllPortfolios — fixture exclusion', () => {
+  it('drops auto-created and validate_* rows from the FM-facing list', async () => {
+    mockSqlReturn([
+      { id: '1', name: 'Atlas Test Portfolio — Stocks+Funds (auto-created)', type: 'static', instrument_count: 5, latest_sharpe: null, paper_trading_active: false, created_at: '2026-05-10' },
+      { id: '2', name: 'validate_m7_p3_3d554211', type: 'static', instrument_count: 3, latest_sharpe: null, paper_trading_active: false, created_at: '2026-05-09' },
+      { id: '3', name: 'My Real FM Portfolio', type: 'static', instrument_count: 8, latest_sharpe: '1.2', paper_trading_active: true, created_at: '2026-05-30' },
+    ])
+    const result = await getAllPortfolios()
+    expect(result.map((r) => r.name)).toEqual(['My Real FM Portfolio'])
+  })
 })
 
 describe('getAllPortfolios', () => {
