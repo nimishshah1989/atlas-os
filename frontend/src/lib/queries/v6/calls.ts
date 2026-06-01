@@ -178,6 +178,19 @@ function cellLabel(cap_tier: string, tenure: string, action: string): string {
   return `${tier} ${tenure} ${dir}`
 }
 
+/**
+ * mv_calls_performance stores realized excess (and stock/bench returns) in
+ * PERCENTAGE POINTS — `round(realized * 100, 2)` in the MV SQL — whereas
+ * `predicted_excess` is a decimal fraction. Every /calls component renders
+ * excess via `fmtSignedPct`, which multiplies by 100 and expects a fraction.
+ * So realized must be normalized pp→fraction here; otherwise it is overstated
+ * 100× (e.g. a true +0.69% renders as +69%). Predicted is already a fraction
+ * and must NOT be touched. NULL stays NULL (never 0).
+ */
+function realizedPctToFraction(v: string | null): number | null {
+  return v != null ? parseFloat(v) / 100 : null
+}
+
 // ---------------------------------------------------------------------------
 // getCallsHero
 // ---------------------------------------------------------------------------
@@ -222,7 +235,7 @@ export async function getCallsHero(): Promise<CallsHero> {
     closed_calls: parseInt(r.closed_calls, 10),
     buy_calls: parseInt(r.buy_calls, 10),
     avoid_calls: parseInt(r.avoid_calls, 10),
-    avg_realized_excess: r.avg_realized_excess != null ? parseFloat(r.avg_realized_excess) : null,
+    avg_realized_excess: realizedPctToFraction(r.avg_realized_excess),
     overall_hit_rate: r.overall_hit_rate != null ? parseFloat(r.overall_hit_rate) : null,
     data_as_of: r.data_as_of ?? new Date().toISOString().slice(0, 10),
   }
@@ -276,7 +289,7 @@ export async function getCallsLedger(
     entry_date: r.entry_date,
     days_in_position: r.days_in_position != null ? parseInt(r.days_in_position, 10) : 0,
     predicted_excess: r.predicted_excess != null ? parseFloat(r.predicted_excess) : null,
-    realized_excess_pct: r.realized_excess_pct != null ? parseFloat(r.realized_excess_pct) : null,
+    realized_excess_pct: realizedPctToFraction(r.realized_excess_pct),
     is_hit: r.is_hit ?? null,
     status: r.status,
   }))
@@ -311,7 +324,7 @@ export async function getMatrix24Cells(): Promise<WinRateCell[]> {
     action: r.action,
     call_count: parseInt(r.call_count, 10),
     hit_rate: r.hit_rate != null ? parseFloat(r.hit_rate) : null,
-    avg_realized_excess: r.avg_realized_excess != null ? parseFloat(r.avg_realized_excess) : null,
+    avg_realized_excess: realizedPctToFraction(r.avg_realized_excess),
   }))
 }
 
@@ -351,7 +364,7 @@ export async function getTopSixCells(): Promise<TopSixResult> {
     action_display: actionDisplay(r.action),
     call_count: parseInt(r.call_count, 10),
     hit_rate: r.hit_rate != null ? parseFloat(r.hit_rate) : null,
-    avg_realized_excess: r.avg_realized_excess != null ? parseFloat(r.avg_realized_excess) : null,
+    avg_realized_excess: realizedPctToFraction(r.avg_realized_excess),
     avg_predicted_excess: r.avg_predicted_excess != null ? parseFloat(r.avg_predicted_excess) : null,
     in_flight_count: parseInt(r.in_flight_count, 10),
   }))
@@ -398,7 +411,7 @@ export async function getCallsSummaryByCell(): Promise<TopCell[]> {
     action_display: actionDisplay(r.action),
     call_count: parseInt(r.call_count, 10),
     hit_rate: r.hit_rate != null ? parseFloat(r.hit_rate) : null,
-    avg_realized_excess: r.avg_realized_excess != null ? parseFloat(r.avg_realized_excess) : null,
+    avg_realized_excess: realizedPctToFraction(r.avg_realized_excess),
     avg_predicted_excess: r.avg_predicted_excess != null ? parseFloat(r.avg_predicted_excess) : null,
     in_flight_count: parseInt(r.in_flight_count, 10),
   }))
@@ -425,6 +438,6 @@ export async function getCumulativeExcessSeries(): Promise<CumulativeExcessPoint
 
   return rows.map((r) => ({
     entry_date: r.entry_date,
-    avg_realized_excess: r.avg_realized_excess != null ? parseFloat(r.avg_realized_excess) : null,
+    avg_realized_excess: realizedPctToFraction(r.avg_realized_excess),
   }))
 }
