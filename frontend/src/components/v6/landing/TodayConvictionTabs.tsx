@@ -25,7 +25,7 @@ const COL_TOOLTIPS = {
   },
   expected: {
     content: 'Expected = predicted excess return over the call\'s tenure horizon (e.g. 12m for "Mid 12m"). Source: atlas_signal_calls.predicted_excess',
-    translation: 'Per-stock model prediction. Blank rows mean the backend has not yet written this column for the active calls.',
+    translation: 'The call\'s model-predicted excess for its tenure. It varies by stock but clusters by cell — stocks in the same (cap × tenure) cell often share a value. Now populated for every active call.',
   },
   days: {
     content: 'Days = trading days since this signal call first fired (entry_date). Source: atlas_signal_calls.date',
