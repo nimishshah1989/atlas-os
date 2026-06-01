@@ -140,12 +140,17 @@ export function PremiumDiscountScatter({ etfs }: PremiumDiscountScatterProps) {
   const avoidPoints = points.filter((p) => p.action === 'AVOID' && p.scatter_zone !== 'low_adv' && p.scatter_zone !== 'premium_unknown')
   const grayPoints = points.filter((p) => p.scatter_zone === 'low_adv' || p.scatter_zone === 'premium_unknown')
 
-  const hasData = points.length > 0
+  const hasPremiumData = points.some((p) => p.premium_bps != null)
 
-  if (!hasData) {
+  if (!hasPremiumData) {
     return (
-      <div className="h-72 flex items-center justify-center font-sans text-[12px] text-ink-tertiary">
-        Premium/discount data not yet available — run iNAV ingest first.
+      <div className="h-72 flex flex-col items-center justify-center gap-3 font-sans text-[12px] text-ink-tertiary border border-paper-rule rounded-[2px] bg-paper-deep">
+        <span className="text-[20px]">📡</span>
+        <div className="text-center">
+          <div className="font-medium text-ink-secondary mb-1">iNAV data not yet available</div>
+          <div>Premium/discount requires the nightly iNAV ingest to run.</div>
+          <div className="mt-1">ADV data is available — {points.length} ETFs tracked.</div>
+        </div>
       </div>
     )
   }

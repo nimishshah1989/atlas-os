@@ -5562,3 +5562,333 @@
   "session_id": "unknown",
   "schema_version": 1
 }
+{"ts":"2026-06-01T07:34:59Z","kind":"supabase_sql_executed","sql_preview":"-- Migration 124 upgrade (gated write, approved): sector canonicalization. Idempotent.\nALTER TABLE atlas.atlas_universe_stocks ADD COLUMN IF NOT EXISTS original_sector varchar;\nUPDATE atlas.atlas_universe_stocks SET original_sector = sector WHERE original_sector IS NULL;\nUPDATE atlas.atlas_universe_stocks SET sector = 'Automobile' WHERE sector = 'EV & Auto';\nUPDATE atlas.atlas_universe_stocks SET sector = 'Financial Services' WHERE symbol IN ('BAJAJHFL','M&MFIN','CHOLAHLDNG','PIRAMALFIN','POONAW"}
+{
+  "ts": "2026-06-01T08:02:36Z",
+  "prev": "38a6e2d7f6c1d12b",
+  "tool": "Write",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/v6/markets-staleness.ts",
+  "lines_changed": 34,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T08:02:56Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/markets_rs.ts",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T08:03:04Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/MarketsRsClient.tsx",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T08:03:14Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/__tests__/markets_rs.test.ts",
+  "lines_changed": 9,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T10:20:44Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/tmp/fix_db_url.py",
+  "lines_changed": 43,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T10:35:44Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/tmp/fix_db_url2.py",
+  "lines_changed": 33,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-06-01T10:46:39Z","kind":"supabase_sql_executed","sql_preview":"SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = 'atlas' AND table_name = 'mv_sector_deepdive' ORDER BY ordinal_position;"}
+{"ts":"2026-06-01T10:46:44Z","kind":"supabase_sql_executed","sql_preview":"SELECT schemaname, matviewname FROM pg_matviews WHERE schemaname = 'atlas' AND matviewname LIKE '%sector%' ORDER BY matviewname;"}
+{"ts":"2026-06-01T10:46:51Z","kind":"supabase_sql_executed","sql_preview":"SELECT attname, atttypid::regtype FROM pg_attribute WHERE attrelid = 'atlas.mv_sector_deepdive'::regclass AND attnum > 0 AND NOT attisdropped ORDER BY attnum;"}
+{
+  "ts": "2026-06-01T10:50:40Z",
+  "prev": "9100425a12232bfd",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/sectors.ts",
+  "lines_changed": 16,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T10:50:46Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/sectors.ts",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T10:51:08Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/sectors/SectorRRGChart.tsx",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T10:51:16Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/sectors/SectorRRGChart.tsx",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T10:51:24Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/sectors/SectorRRGChart.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-06-01T10:53:23Z","kind":"supabase_sql_executed","sql_preview":"SELECT attname FROM pg_attribute WHERE attrelid = 'atlas.atlas_stock_signal_unified'::regclass AND attnum > 0 AND NOT attisdropped ORDER BY attnum LIMIT 20;"}
+{"ts":"2026-06-01T10:53:30Z","kind":"supabase_sql_executed","sql_preview":"SELECT engine_state, rs_state, dwell_days, is_investable FROM atlas.atlas_stock_signal_unified WHERE date = (SELECT MAX(date) FROM atlas.atlas_stock_signal_unified) LIMIT 10;"}
+{"ts":"2026-06-01T10:53:39Z","kind":"supabase_sql_executed","sql_preview":"SELECT MAX(date) AS metrics_max FROM atlas.atlas_stock_metrics_daily; SELECT MAX(date) AS signal_max FROM atlas.atlas_stock_signal_unified;"}
+{"ts":"2026-06-01T10:53:48Z","kind":"supabase_sql_executed","sql_preview":"SELECT MAX(date) AS metrics_max FROM atlas.atlas_stock_metrics_daily;"}
+{
+  "ts": "2026-06-01T10:54:29Z",
+  "prev": "1af7e1f36a216677",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/stocks.ts",
+  "lines_changed": 17,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T10:55:01Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/tmp/fix_stocks_query.py",
+  "lines_changed": 32,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T10:55:26Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Write",
+  "file": "/tmp/fix_stocks_query2.py",
+  "lines_changed": 37,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T10:55:52Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/stocks/StocksClientShell.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T10:56:05Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/stocks/StocksClientShell.tsx",
+  "lines_changed": 1,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T10:57:41Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/stock-detail/StockChartPanel.tsx",
+  "lines_changed": 17,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-06-01T10:58:40Z","kind":"supabase_sql_executed","sql_preview":"SELECT attname FROM pg_attribute WHERE attrelid = 'atlas.mv_etf_list_v6'::regclass AND attnum > 0 AND NOT attisdropped ORDER BY attnum;"}
+{"ts":"2026-06-01T10:58:48Z","kind":"supabase_sql_executed","sql_preview":"SELECT COUNT(*) total, COUNT(premium_bps) with_premium, COUNT(adv_20d_inr) with_adv, COUNT(action) with_action FROM atlas.mv_etf_list_v6;"}
+{
+  "ts": "2026-06-01T10:59:07Z",
+  "prev": "9f9e77321731ccfe",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/etfs/PremiumDiscountScatter.tsx",
+  "lines_changed": 14,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-06-01T10:59:46Z","kind":"supabase_sql_executed","sql_preview":"SELECT rs_state, COUNT(*) FROM atlas.mv_etf_list_v6 GROUP BY rs_state ORDER BY COUNT(*) DESC;"}
+{"ts":"2026-06-01T10:59:57Z","kind":"supabase_sql_executed","sql_preview":"SELECT is_investable, COUNT(*) FROM atlas.mv_etf_list_v6 GROUP BY is_investable;"}
+{"ts":"2026-06-01T11:00:56Z","kind":"supabase_sql_executed","sql_preview":"SELECT MAX(date) FROM atlas.atlas_etf_metrics_daily;"}
+{"ts":"2026-06-01T11:01:02Z","kind":"supabase_sql_executed","sql_preview":"SELECT MAX(date) FROM atlas.atlas_etf_signal_unified;"}
+{
+  "ts": "2026-06-01T11:01:50Z",
+  "prev": "2744bd2efbc7652b",
+  "tool": "Write",
+  "file": "/tmp/fix_etf_query.py",
+  "lines_changed": 49,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T11:02:19Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/etfs.ts",
+  "lines_changed": 13,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T11:02:27Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/etfs.ts",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T11:03:39Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/FundsList.tsx",
+  "lines_changed": 8,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T11:03:54Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/FundsList.tsx",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{"ts":"2026-06-01T11:06:02Z","kind":"supabase_sql_executed","sql_preview":"SELECT attname FROM pg_attribute WHERE attrelid = 'atlas.atlas_fund_metrics_daily'::regclass AND attnum > 0 AND NOT attisdropped ORDER BY attnum LIMIT 30;"}
+{
+  "ts": "2026-06-01T11:06:21Z",
+  "prev": "ce37b01ac10fee4c",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/FundsList.tsx",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T11:07:30Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/sectors/SectorRRGChart.tsx",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T11:08:15Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/FundsList.tsx",
+  "lines_changed": 4,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T11:08:23Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/app/funds/page.tsx",
+  "lines_changed": 5,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T11:08:58Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/__tests__/FundsList.test.tsx",
+  "lines_changed": 6,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T11:11:29Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/fund-list.ts",
+  "lines_changed": 9,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T11:11:39Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/fund-list.ts",
+  "lines_changed": 7,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T11:11:51Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/fund-list.ts",
+  "lines_changed": 2,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T11:12:01Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/fund-list.ts",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T11:12:17Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/lib/queries/v6/fund-list.ts",
+  "lines_changed": 3,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T12:28:34Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/sectors/__tests__/SectorRRGChart.test.tsx",
+  "lines_changed": 9,
+  "session_id": "unknown",
+  "schema_version": 1
+}
+{
+  "ts": "2026-06-01T12:28:47Z",
+  "prev": "412ca345ccf75bf9",
+  "tool": "Edit",
+  "file": "/Users/nimishshah/dev/atlas-os/frontend/src/components/v6/etfs/__tests__/etfs-charts.test.tsx",
+  "lines_changed": 17,
+  "session_id": "unknown",
+  "schema_version": 1
+}

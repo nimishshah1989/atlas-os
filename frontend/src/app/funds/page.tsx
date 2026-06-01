@@ -30,6 +30,7 @@ function toFundRow(r: FundListRow): FundRow {
     ret_12m: r.ret_12m,
     rs_pctile_3m: r.rs_pctile_3m != null ? String(r.rs_pctile_3m) : null,
     sector_tilt: null,
+    realized_vol_63: r.realized_vol_63 ?? null,
   }
 }
 

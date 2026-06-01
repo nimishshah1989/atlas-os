@@ -110,6 +110,9 @@ export async function getAllETFs(): Promise<ETFRow[]> {
       SELECT ticker, MAX(date) AS d
       FROM atlas.atlas_etf_metrics_daily
       GROUP BY ticker
+    ),
+    latest_signal AS (
+      SELECT MAX(date) AS d FROM atlas.atlas_etf_signal_unified
     )
     SELECT
       u.ticker,
@@ -195,7 +198,7 @@ export async function getAllETFs(): Promise<ETFRow[]> {
     LEFT JOIN atlas.atlas_etf_metrics_daily m
       ON m.ticker = u.ticker AND m.date = l.d
     LEFT JOIN atlas.atlas_etf_signal_unified eu
-      ON eu.etf_ticker = u.ticker AND eu.date = l.d
+      ON eu.etf_ticker = u.ticker AND eu.date = (SELECT d FROM latest_signal)
     WHERE u.effective_to IS NULL
     ORDER BY
       (eu.pct_stage_4 IS NULL OR eu.pct_stage_4 < 0.50) DESC NULLS LAST,

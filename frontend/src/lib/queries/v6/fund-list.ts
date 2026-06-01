@@ -53,6 +53,7 @@ export type FundListRow = {
   ret_6m: number | null
   ret_12m: number | null
   rs_pctile_3m: number | null
+  realized_vol_63: string | null
 }
 
 export type FundListPage = {
@@ -102,6 +103,7 @@ type Row = {
   ret_6m: string | null
   ret_12m: string | null
   rs_pctile_3m: string | null
+  realized_vol_63: string | null
 }
 
 function toNumber(s: string | number | null | undefined): number | null {
@@ -143,7 +145,8 @@ export async function getFundListPage(): Promise<FundListPage> {
       fm.ret_3m::text                       AS ret_3m,
       fm.ret_6m::text                       AS ret_6m,
       fm.ret_12m::text                      AS ret_12m,
-      fm.rs_pctile_3m::text                 AS rs_pctile_3m
+      fm.rs_pctile_3m::text                 AS rs_pctile_3m,
+      fm.realized_vol_63::text              AS realized_vol_63
     FROM atlas.mv_fund_list_v6 fl
     -- Join each fund's OWN latest metrics row within a 7-day window of the
     -- global max nav_date. A flat equality to MAX(nav_date) dropped returns for
@@ -155,7 +158,7 @@ export async function getFundListPage(): Promise<FundListPage> {
     -- (measured via EXPLAIN ANALYZE on prod, 1.05M-row table) — same result set.
     LEFT JOIN (
       SELECT DISTINCT ON (mstar_id)
-        mstar_id, ret_1m, ret_3m, ret_6m, ret_12m, rs_pctile_3m
+        mstar_id, ret_1m, ret_3m, ret_6m, ret_12m, rs_pctile_3m, realized_vol_63
       FROM atlas.atlas_fund_metrics_daily
       WHERE nav_date >= (SELECT d FROM latest_fm) - INTERVAL '7 days'
       ORDER BY mstar_id, nav_date DESC
@@ -208,6 +211,7 @@ export async function getFundListPage(): Promise<FundListPage> {
     ret_6m: toNumber(r.ret_6m),
     ret_12m: toNumber(r.ret_12m),
     rs_pctile_3m: toNumber(r.rs_pctile_3m),
+    realized_vol_63: r.realized_vol_63 ?? null,
   }))
 
   return { as_of_date: out[0]?.as_of_date ?? null, rows: out }

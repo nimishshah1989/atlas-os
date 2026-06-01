@@ -93,6 +93,9 @@ export async function getAllStocks(params?: GetAllStocksParams): Promise<StockRo
     WITH latest AS (
       SELECT MAX(date) AS d FROM atlas.atlas_stock_metrics_daily
     ),
+    latest_signal AS (
+      SELECT MAX(date) AS d FROM atlas.atlas_stock_signal_unified
+    ),
     benchmark AS (
       SELECT
         cur.nifty500_close                          AS n500_now,
@@ -191,7 +194,7 @@ export async function getAllStocks(params?: GetAllStocksParams): Promise<StockRo
     LEFT JOIN atlas.atlas_stock_metrics_daily m
       ON m.instrument_id = u.instrument_id AND m.date = l.d
     LEFT JOIN atlas.atlas_stock_signal_unified su
-      ON su.instrument_id = u.instrument_id AND su.date = l.d
+      ON su.instrument_id = u.instrument_id AND su.date = (SELECT d FROM latest_signal)
     WHERE u.effective_to IS NULL
       AND (${sector}::text IS NULL OR u.sector = ${sector}::text)
       AND (

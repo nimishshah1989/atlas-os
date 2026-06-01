@@ -27,6 +27,10 @@ vi.mock('next/link', () => ({
   ),
 }))
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}))
+
 // ── Recharts mock — avoid heavy chart rendering in tests ──────────────────────
 
 vi.mock('recharts', () => ({
