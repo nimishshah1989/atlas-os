@@ -30,14 +30,24 @@ interface GateResult {
   detail: string
 }
 
-// Per Atlas methodology: tracking error thresholds vary by category.
+// Per Atlas methodology: tracking error thresholds vary by category. Keys match
+// the real etf_category values emitted by mv_etf_deepdive (lowercase), so the
+// gate actually resolves a category limit instead of silently using the default.
 const TE_LIMITS_BPS: Record<string, number> = {
-  'Index':       40,
-  'Sector':      80,
-  'Smart-beta':  100,
-  'Commodity':   200,
-  'International': 200,
+  broad_index: 40,   // index trackers must hug their benchmark tightly
+  sector:      80,
+  thematic:    150,
+  commodity:   200,
+  international: 200,
 }
+
+// Above this, an annualised TE is a data-quality artefact, not real tracking
+// drift: no passive ETF tracks its index 5%+ off. In v1, te_60d is computed
+// against a wrong/misaligned benchmark series (sector/thematic show 17–29%,
+// broad_index ~17% vs the <0.5% real figure), so anything past the ceiling is
+// flagged PROVISIONAL and excluded from the verdict until the POST-V1 benchmark
+// recompute. Plausible TE then resumes gating with no code change.
+export const TE_DATA_SANITY_CEILING_BPS = 500
 
 function liquidityGate(advInr: number | null): GateResult {
   if (advInr == null) return { name: 'Liquidity', status: 'UNKNOWN', detail: 'ADV unavailable' }
@@ -46,9 +56,18 @@ function liquidityGate(advInr: number | null): GateResult {
   return { name: 'Liquidity', status: 'FAIL', detail: `ADV ₹${advCr.toFixed(1)} cr < ₹3 cr (thin trading)` }
 }
 
-function trackingGate(teBps: number | null, category: string | null): GateResult {
+export function trackingGate(teBps: number | null, category: string | null): GateResult {
   if (teBps == null) return { name: 'Tracking', status: 'UNKNOWN', detail: 'TE unavailable' }
-  const limit = TE_LIMITS_BPS[category ?? ''] ?? 50
+  // v1 honesty: garbage TE (benchmark recompute pending) must not flip the
+  // verdict to WAIT. Provisional → non-gating (UNKNOWN), value still shown.
+  if (teBps > TE_DATA_SANITY_CEILING_BPS) {
+    return {
+      name: 'Tracking',
+      status: 'UNKNOWN',
+      detail: `TE ${teBps.toFixed(0)} bps — provisional (benchmark recompute pending), excluded from verdict`,
+    }
+  }
+  const limit = TE_LIMITS_BPS[category ?? ''] ?? 100
   if (teBps <= limit) return { name: 'Tracking', status: 'PASS', detail: `TE ${teBps.toFixed(0)} bps ≤ ${limit} bps (${category ?? 'category'} baseline)` }
   return { name: 'Tracking', status: 'FAIL', detail: `TE ${teBps.toFixed(0)} bps > ${limit} bps (poor tracking)` }
 }
@@ -103,9 +122,21 @@ export function ETFGatesPanel({
   ]
 
   const fails = gates.filter(g => g.status === 'FAIL')
+  const passes = gates.filter(g => g.status === 'PASS').length
+  const unknowns = gates.filter(g => g.status === 'UNKNOWN').length
   const verdict =
     fails.length === 0
-      ? { label: 'CLEAR', cls: 'bg-signal-pos text-white', note: 'All 6 gates pass — buy/accumulate signals are actionable.' }
+      ? {
+          label: 'CLEAR',
+          cls: 'bg-signal-pos text-white',
+          // Honest note: don't claim "all 6 pass" when a gate is N/A (e.g. TE
+          // provisional). A CLEAR verdict means no gate FAILS, not that every
+          // gate is green.
+          note:
+            unknowns === 0
+              ? 'All 6 gates pass — buy/accumulate signals are actionable.'
+              : `No gate fails (${passes} pass, ${unknowns} N/A) — buy/accumulate signals are actionable.`,
+        }
       : { label: 'WAIT', cls: 'bg-signal-warn text-white', note: `${fails.length} gate fail: ${fails.map(f => f.name).join(', ')}. Signals render as WAIT.` }
 
   return (
