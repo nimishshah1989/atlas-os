@@ -16,9 +16,11 @@ import {
   getMarketsRsPage,
   deriveHeroReadouts,
   deriveIndiaRsGrade,
+} from '../markets_rs'
+import {
   baselineStalenessDays,
   MARKETS_RS_STALE_THRESHOLD_DAYS,
-} from '../markets_rs'
+} from '@/lib/v6/markets-staleness'
 
 // ---------------------------------------------------------------------------
 // Fixture: 9-row grid (realistic subset — all 9 baselines)

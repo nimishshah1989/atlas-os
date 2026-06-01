@@ -19,10 +19,13 @@ import { useState } from 'react'
 import { DataSourceBanner } from '@/components/v6/DataSourceBanner'
 import { GradeChip } from '@/components/v6/GradeChip'
 import { ELI5Tooltip } from '@/components/v6/ELI5Tooltip'
+// Pure staleness helpers come from a client-safe module — NOT from the
+// 'server-only' markets_rs query module (importing runtime values from it into
+// this 'use client' component breaks the production build).
 import {
   baselineStalenessDays,
   MARKETS_RS_STALE_THRESHOLD_DAYS,
-} from '@/lib/queries/v6/markets_rs'
+} from '@/lib/v6/markets-staleness'
 import type { MarketsRsPageData, MarketsRsRow, IndiaRsGrade } from '@/lib/queries/v6/markets_rs'
 import type { Grade } from '@/components/v6/GradeChip'
 
