@@ -109,15 +109,17 @@ describe('getFundListPage', () => {
     expect(p.rows[0].rs_pctile_3m).toBeNull()
   })
 
-  it('joins each fund\'s own latest metrics within a recency window (LATERAL), not the exact global-max date', async () => {
+  it('joins each fund\'s own latest metrics within a recency window, not the exact global-max date', async () => {
     // Bug: pinning the returns join to fm.nav_date = MAX(nav_date) dropped
     // returns for ~10 funds whose latest NAV publishes 1 day behind the global
     // max (a normal AMC publishing lag), even though fresh data exists.
+    // Fix: DISTINCT ON over a 7-day window (one scan, ~2x faster than a
+    // per-fund correlated lateral — verified via EXPLAIN ANALYZE on prod).
     sqlMock.mockResolvedValueOnce([])
     await getFundListPage()
     const strings = sqlMock.mock.calls[0][0] as readonly string[]
     const text = strings.join('?')
-    expect(text).toMatch(/LATERAL/i)
+    expect(text).toMatch(/DISTINCT ON \(mstar_id\)/i)
     expect(text).toMatch(/7 days/)
     // Must NOT pin returns to exact equality with the global max (the bug).
     expect(text).not.toMatch(/fm\.nav_date\s*=\s*\(\s*SELECT d FROM latest_fm\s*\)/)

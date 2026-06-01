@@ -150,14 +150,16 @@ export async function getFundListPage(): Promise<FundListPage> {
     -- ~10 funds whose NAV publishes 1 day behind the leader (normal AMC lag)
     -- even though fresh data exists. The 7-day guard recovers those without
     -- resurrecting genuinely dead funds (weeks/months stale → stay NULL).
-    LEFT JOIN LATERAL (
-      SELECT ret_1m, ret_3m, ret_6m, ret_12m, rs_pctile_3m
-      FROM atlas.atlas_fund_metrics_daily fm
-      WHERE fm.mstar_id = fl.scheme_code
-        AND fm.nav_date >= (SELECT d FROM latest_fm) - INTERVAL '7 days'
-      ORDER BY fm.nav_date DESC
-      LIMIT 1
-    ) fm ON TRUE
+    -- DISTINCT ON scans the recent window once (~3k rows) and dedups to the
+    -- latest per fund: ~105ms vs ~235ms for a per-fund correlated LATERAL
+    -- (measured via EXPLAIN ANALYZE on prod, 1.05M-row table) — same result set.
+    LEFT JOIN (
+      SELECT DISTINCT ON (mstar_id)
+        mstar_id, ret_1m, ret_3m, ret_6m, ret_12m, rs_pctile_3m
+      FROM atlas.atlas_fund_metrics_daily
+      WHERE nav_date >= (SELECT d FROM latest_fm) - INTERVAL '7 days'
+      ORDER BY mstar_id, nav_date DESC
+    ) fm ON fm.mstar_id = fl.scheme_code
     ORDER BY
       fl.is_atlas_leader DESC,
       fl.composite_score DESC NULLS LAST,
