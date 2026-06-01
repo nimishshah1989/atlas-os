@@ -109,13 +109,21 @@ export function SectorHeroReadout({
   }
 
   // Split by quadrant using mv_sector_rrg.quadrant_current (M14)
-  const leading   = cards.filter((c) => getQuadrant(c) === 'Leading').sort((a, b) => (b.rs_3m ?? 0) - (a.rs_3m ?? 0)).slice(0, 4)
-  const lagging   = cards.filter((c) => getQuadrant(c) === 'Lagging').sort((a, b) => (a.rs_3m ?? 0) - (b.rs_3m ?? 0)).slice(0, 5)
-  const improving = cards.filter((c) => getQuadrant(c) === 'Improving').slice(0, 4)
-  const weakening = cards.filter((c) => getQuadrant(c) === 'Weakening').slice(0, 3)
+  // True per-quadrant counts drive the badges; the slices below are only the
+  // rows we render. (H4: badge previously read the 4-row slice, contradicting the
+  // RRG legend which counts the full quadrant.)
+  const leadingAll   = cards.filter((c) => getQuadrant(c) === 'Leading').sort((a, b) => (b.rs_3m ?? 0) - (a.rs_3m ?? 0))
+  const laggingAll   = cards.filter((c) => getQuadrant(c) === 'Lagging').sort((a, b) => (a.rs_3m ?? 0) - (b.rs_3m ?? 0))
+  const improvingAll = cards.filter((c) => getQuadrant(c) === 'Improving')
+  const weakeningAll = cards.filter((c) => getQuadrant(c) === 'Weakening')
 
-  const totalLeading = leading.length
-  const totalLagging = lagging.length
+  const leading   = leadingAll.slice(0, 4)
+  const lagging   = laggingAll.slice(0, 5)
+  const improving = improvingAll.slice(0, 4)
+  const weakening = weakeningAll.slice(0, 3)
+
+  const totalLeading = leadingAll.length
+  const totalLagging = laggingAll.length
 
   return (
     <div
@@ -131,8 +139,8 @@ export function SectorHeroReadout({
             className="font-serif text-[16px] text-ink-primary mb-2"
             data-testid="leading-title"
           >
-            {leading.length > 0
-              ? `${leading[0].sector_name}${leading.length > 1 ? ` + ${leading.length - 1} others` : ''} carrying the tape`
+            {totalLeading > 0
+              ? `${leading[0].sector_name}${totalLeading > 1 ? ` + ${totalLeading - 1} others` : ''} carrying the tape`
               : 'No leading sectors'}
           </div>
 
@@ -181,7 +189,7 @@ export function SectorHeroReadout({
 
         {/* Column 3 — Rotation pattern */}
         <div>
-          <BlockEye label="Rotation pattern" count={improving.length + weakening.length} color="amber" />
+          <BlockEye label="Rotation pattern" count={improvingAll.length + weakeningAll.length} color="amber" />
           <div className="font-serif text-[16px] text-ink-primary mb-2">
             Capital rotating between quadrants — watch the trail
           </div>
