@@ -16,6 +16,7 @@ type Props = {
     last_data_date: string | null; freshness_days_lag: number | null;
     null_rate_critical: string | null; notes: string | null
   }>
+  healthCheckDate?: string | null
 }
 
 const TABS = [
@@ -203,16 +204,23 @@ function ActivityTab({ summary, proposals, findings }: { summary: SummaryRow[]; 
 // TAB 3: DATA HEALTH
 // ============================================================================
 
-function HealthTab({ summary, rows }: { summary: SummaryRow[]; rows: Props['healthRows'] }) {
+function HealthTab({ summary, rows, checkDate }: { summary: SummaryRow[]; rows: Props['healthRows']; checkDate?: string | null }) {
   const [filter, setFilter] = useState<'ALL' | 'RED' | 'YELLOW' | 'GREEN'>('ALL')
   const filtered = filter === 'ALL' ? rows : rows.filter(r => r.status === filter)
 
   return (
     <div className="px-8 py-8">
       <div className="bg-paper-soft border-l-4 border-l-teal p-5 rounded-r-[2px] mb-6">
-        <div className="font-serif text-[18px] font-medium text-ink-primary mb-2">Pipeline health · check this if a number looks wrong</div>
+        <div className="flex items-baseline justify-between gap-4 mb-2">
+          <div className="font-serif text-[18px] font-medium text-ink-primary">Pipeline health · check this if a number looks wrong</div>
+          {checkDate && (
+            <span className="font-mono text-[11px] text-ink-tertiary shrink-0">
+              Last snapshot: <strong className="text-ink-secondary">{checkDate}</strong>
+            </span>
+          )}
+        </div>
         <p className="font-sans text-[14px] text-ink-secondary leading-[1.6]">
-          Every night Atlas writes a freshness + null-rate snapshot for every critical table into <code className="font-mono text-[11px] bg-paper px-1">atlas_data_health</code>. GREEN means the data is current and clean; YELLOW means a small lag or null spike (page renders, with caveat); RED means stale or empty (page cannot show today&apos;s answer — investigate). Click any row for context.
+          Every night Atlas writes a freshness + null-rate snapshot for every critical table into <code className="font-mono text-[11px] bg-paper px-1">atlas_data_health</code>. GREEN = current and clean; YELLOW = minor lag or null spike; RED = stale or empty (investigate). If any table shows RED, the corresponding page may show stale or missing data.
         </p>
       </div>
 
@@ -272,7 +280,7 @@ function HealthTab({ summary, rows }: { summary: SummaryRow[]; rows: Props['heal
 // ============================================================================
 
 export default function AdminTabs(props: Props) {
-  const [tab, setTab] = useState<'setup' | 'activity' | 'health'>('setup')
+  const [tab, setTab] = useState<'setup' | 'activity' | 'health'>('health')
 
   return (
     <div>
@@ -297,7 +305,7 @@ export default function AdminTabs(props: Props) {
 
       {tab === 'setup'    && <SetupTab    summary={props.custSummary} />}
       {tab === 'activity' && <ActivityTab summary={props.actSummary} proposals={props.proposals} findings={props.findings} />}
-      {tab === 'health'   && <HealthTab   summary={props.healthSummary} rows={props.healthRows} />}
+      {tab === 'health'   && <HealthTab   summary={props.healthSummary} rows={props.healthRows} checkDate={props.healthCheckDate} />}
     </div>
   )
 }

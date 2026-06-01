@@ -132,43 +132,111 @@ function TrajectoryRow({ row }: { row: LandscapeRow }) {
 // Main component
 // ---------------------------------------------------------------------------
 
+// ── Quick stats derived from the full landscape ──────────────────────────────
+
+function QuickStats({ data }: { data: LandscapeRow[] }) {
+  const buys   = data.filter(d => d.action === 'BUY').length
+  const avoids = data.filter(d => d.action === 'AVOID').length
+  const watch  = data.filter(d => d.action === 'WATCH').length
+
+  const topBuys = [...data]
+    .filter(d => d.action === 'BUY' && d.composite_score != null)
+    .sort((a, b) => parseFloat(b.composite_score!) - parseFloat(a.composite_score!))
+    .slice(0, 5)
+
+  const topAvoids = [...data]
+    .filter(d => d.action === 'AVOID' && d.composite_score != null)
+    .sort((a, b) => parseFloat(a.composite_score!) - parseFloat(b.composite_score!))
+    .slice(0, 5)
+
+  return (
+    <div className="bg-paper border border-paper-rule rounded-sm py-[18px] px-[22px] flex flex-col gap-5">
+      {/* Counts */}
+      <div className="grid grid-cols-3 gap-2 border-b border-paper-rule pb-4">
+        {[
+          { lbl: 'BUY', count: buys,   cls: 'text-signal-pos' },
+          { lbl: 'WATCH', count: watch, cls: 'text-signal-warn' },
+          { lbl: 'AVOID', count: avoids, cls: 'text-signal-neg' },
+        ].map(s => (
+          <div key={s.lbl} className="text-center">
+            <div className={`font-mono text-[22px] font-semibold ${s.cls}`}>{s.count}</div>
+            <div className="font-sans text-[9px] uppercase tracking-[0.14em] text-ink-tertiary font-semibold mt-0.5">{s.lbl}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Top BUYs */}
+      <div>
+        <div className="font-sans text-[9px] uppercase tracking-[0.14em] text-ink-tertiary font-semibold mb-2">
+          Top BUYs by composite
+        </div>
+        {topBuys.map(r => (
+          <div key={r.instrument_id} className="flex items-center justify-between py-1">
+            <span className="font-mono text-[12px] font-medium text-ink-primary">{r.symbol}</span>
+            <span className="font-mono text-[11px] text-signal-pos">
+              {parseFloat(r.composite_score!) >= 0 ? '+' : ''}{parseFloat(r.composite_score!).toFixed(1)}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Top AVOIDs */}
+      <div>
+        <div className="font-sans text-[9px] uppercase tracking-[0.14em] text-ink-tertiary font-semibold mb-2">
+          Top AVOIDs by composite
+        </div>
+        {topAvoids.map(r => (
+          <div key={r.instrument_id} className="flex items-center justify-between py-1">
+            <span className="font-mono text-[12px] font-medium text-ink-primary">{r.symbol}</span>
+            <span className="font-mono text-[11px] text-signal-neg">
+              {parseFloat(r.composite_score!).toFixed(1)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function CompositeTrajectoriesGrid({ data }: { data: LandscapeRow[] }) {
   const stocks = useMemo(() => pickSixStocks(data, { requireTrajectory: true }), [data])
 
   return (
-    <section className="py-9 border-b border-paper-rule">
+    <section className="py-7 border-b border-paper-rule">
       <div className="max-w-[1400px] mx-auto px-8">
-        <div className="flex items-baseline justify-between mb-5 flex-wrap gap-3">
+        <div className="flex items-baseline justify-between mb-4">
           <div>
-            <h2 className="font-serif text-[28px] font-normal tracking-tight text-ink-primary leading-none">
+            <h2 className="font-serif text-[22px] font-normal tracking-tight text-ink-primary leading-none">
               Composite trajectories · 30 days
             </h2>
-            <p className="font-sans text-[13px] text-ink-tertiary mt-1 max-w-[760px] leading-snug">
-              How the composite score has evolved for six key names. Rising = thesis strengthening.
-              Falling = early warning. Threshold for action change is at the dashed mid-line
-              (composite ≥ +4 → BUY, ≤ −4 → AVOID).
+            <p className="font-sans text-[12px] text-ink-tertiary mt-0.5 leading-snug">
+              Rising = thesis strengthening · Falling = early warning · Dashed line = zero threshold
             </p>
           </div>
         </div>
 
-        <div className="bg-paper border border-paper-rule rounded-sm py-[18px] px-[22px]">
-          {/* Column headers */}
-          <div
-            className="grid py-1 pb-[10px] font-sans text-[9px] tracking-[0.14em] uppercase text-ink-tertiary font-semibold border-b border-ink-rule"
-            style={{ gridTemplateColumns: '200px 1fr 90px', gap: '14px' }}
-          >
-            <span>Stock</span>
-            <span>30-day composite trajectory</span>
-            <span className="text-right">Today · Δ30d</span>
+        {/* 2-col: sparklines left, quick stats right */}
+        <div className="grid gap-4" style={{ gridTemplateColumns: '3fr 2fr' }}>
+          <div className="bg-paper border border-paper-rule rounded-sm py-[14px] px-[18px]">
+            <div
+              className="grid py-1 pb-[8px] font-sans text-[9px] tracking-[0.14em] uppercase text-ink-tertiary font-semibold border-b border-ink-rule"
+              style={{ gridTemplateColumns: '200px 1fr 90px', gap: '14px' }}
+            >
+              <span>Stock</span>
+              <span>30-day trajectory</span>
+              <span className="text-right">Today · Δ30d</span>
+            </div>
+
+            {stocks.length === 0 ? (
+              <div className="py-6 text-center font-sans text-[13px] text-ink-tertiary">
+                No trajectory data available. Run the nightly pipeline.
+              </div>
+            ) : (
+              stocks.map(s => <TrajectoryRow key={s.instrument_id} row={s} />)
+            )}
           </div>
 
-          {stocks.length === 0 ? (
-            <div className="py-8 text-center font-sans text-[13px] text-ink-tertiary">
-              No trajectory data available. Run the nightly pipeline.
-            </div>
-          ) : (
-            stocks.map(s => <TrajectoryRow key={s.instrument_id} row={s} />)
-          )}
+          <QuickStats data={data} />
         </div>
       </div>
     </section>

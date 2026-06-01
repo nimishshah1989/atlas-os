@@ -10,6 +10,7 @@
 // I3: DriftWarnChip for WATCH state (reused component)
 // I4: Diverging bar — negative bars extend left, positive right. No clamping to 0.
 
+import Link from 'next/link'
 import type { TopCell } from '@/lib/queries/v6/calls'
 import { fmtSignedPct } from '@/lib/format-number'
 import { DriftWarnChip } from '@/components/v6/DriftWarnChip'
@@ -87,10 +88,10 @@ export function CellTrajectories({ cells }: CellTrajectoriesProps) {
       >
         <span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-ink-4">Cell</span>
         <span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-ink-4 text-center">
-          Realized excess · negative ← 0% → positive
+          Avg outperformance vs benchmark · negative ← 0% → positive
         </span>
         <span className="text-right text-[9px] font-semibold uppercase tracking-[0.14em] text-ink-4">
-          Win rate · ex.
+          Win % · Avg excess
         </span>
       </div>
 
@@ -120,9 +121,12 @@ export function CellTrajectories({ cells }: CellTrajectoriesProps) {
             style={{ gridTemplateColumns: '220px 1fr 120px' }}
           >
             <div className="flex flex-col gap-[2px]">
-              <span className="font-mono font-semibold text-ink-primary text-[13px]">
+              <Link
+                href={`/stocks?cell=${encodeURIComponent(cell.cell_label)}`}
+                className="font-mono font-semibold text-ink-primary text-[13px] hover:text-teal transition-colors no-underline"
+              >
                 {cell.cell_label}
-              </span>
+              </Link>
               <span className="text-[10px] text-ink-4">
                 {cell.cap_tier} · {cell.action_display} · n={cell.call_count}
               </span>

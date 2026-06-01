@@ -16,7 +16,7 @@ export function TVSymbolInfo({ symbol }: TVWidgetProps) {
     <iframe
       src={url}
       className="w-full h-[180px] border-0 bg-paper"
-      sandbox="allow-scripts allow-same-origin"
+      sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-popups-to-escape-sandbox"
       title={`${symbol} info`}
       loading="lazy"
     />
@@ -35,7 +35,7 @@ export function TVTechnicalAnalysis({ symbol, interval = '1D' }: TVTechnicalAnal
     <iframe
       src={url}
       className="w-full h-[450px] border-0 bg-paper"
-      sandbox="allow-scripts allow-same-origin"
+      sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-popups-to-escape-sandbox"
       title={`${symbol} technical analysis`}
       loading="lazy"
     />
@@ -51,7 +51,7 @@ export function TVFinancials({ symbol }: TVWidgetProps) {
     <iframe
       src={url}
       className="w-full h-[550px] border-0 bg-paper"
-      sandbox="allow-scripts allow-same-origin"
+      sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-popups-to-escape-sandbox"
       title={`${symbol} financials`}
       loading="lazy"
     />
@@ -67,7 +67,7 @@ export function TVCompanyProfile({ symbol }: TVWidgetProps) {
     <iframe
       src={url}
       className="w-full h-[400px] border-0 bg-paper"
-      sandbox="allow-scripts allow-same-origin"
+      sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-popups-to-escape-sandbox"
       title={`${symbol} company profile`}
       loading="lazy"
     />
@@ -84,7 +84,7 @@ export function TVNews({ symbol }: TVWidgetProps) {
     <iframe
       src={url}
       className="w-full h-[500px] border-0 bg-paper"
-      sandbox="allow-scripts allow-same-origin allow-popups"
+      sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-popups-to-escape-sandbox"
       title={`${symbol} news`}
       loading="lazy"
     />
@@ -105,7 +105,7 @@ export function TVMiniOverview({ symbol, dateRange = '12M', exchange = 'NSE' }: 
     <iframe
       src={url}
       className="w-full h-[120px] border-0 bg-paper"
-      sandbox="allow-scripts allow-same-origin"
+      sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-popups-to-escape-sandbox"
       title={`${symbol} ${dateRange} sparkline`}
       loading="lazy"
     />

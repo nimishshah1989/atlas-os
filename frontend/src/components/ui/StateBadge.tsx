@@ -12,12 +12,10 @@ const STATE_COLORS: Record<string, StateColor> = {
   'Neutral':     'neutral',
   'Underweight': 'warn',
   'Avoid':       'neg',
-  // RS states
+  // RS states (5-tier: Leader / Strong / Average / Weak / Laggard)
   'Leader':      'pos',
   'Strong':      'pos',
-  'Emerging':    'accent',
   'Average':     'neutral',
-  'Consolidating': 'neutral',
   'Weak':        'warn',
   'Laggard':     'neg',
   // Momentum

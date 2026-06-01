@@ -255,7 +255,10 @@ export function CellMatrix({
   )
 
   function handleNavigate(cellId: string): void {
-    router.push(`/v6/cells/${encodeURIComponent(cellId)}`)
+    // Route to stocks screener filtered by cell — /v6/cells/ doesn't exist as a route.
+    // cell_id format: "{tier}-{tenure}-{direction}" e.g. "Large-12m-POSITIVE"
+    // The stocks screener accepts a cell query param for column filtering.
+    router.push(`/stocks?cell=${encodeURIComponent(cellId)}`)
   }
 
   return (

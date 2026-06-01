@@ -7,7 +7,8 @@
 // which uses risk/return axes — different semantics here).
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   ScatterChart,
   Scatter,
@@ -103,9 +104,10 @@ type DotProps = {
   cy?: number
   r?: number
   payload?: BubbleDatum
+  onClick?: (symbol: string) => void
 }
 
-function BubbleDot({ cx = 0, cy = 0, r = 6, payload }: DotProps) {
+function BubbleDot({ cx = 0, cy = 0, r = 6, payload, onClick }: DotProps) {
   if (!payload) return null
   return (
     <circle
@@ -116,9 +118,11 @@ function BubbleDot({ cx = 0, cy = 0, r = 6, payload }: DotProps) {
       fillOpacity={payload.opacity}
       stroke={payload.color}
       strokeWidth={0.5}
+      style={{ cursor: 'pointer' }}
       data-action={payload.action}
       data-symbol={payload.symbol}
       aria-label={`${payload.symbol}: RS3M ${payload.x.toFixed(1)}pp, composite ${payload.y.toFixed(2)}, action ${payload.action}`}
+      onClick={() => onClick?.(payload.symbol)}
     />
   )
 }
@@ -177,7 +181,12 @@ const FILTER_OPTIONS: { key: Filter; label: string }[] = [
 ]
 
 export function ConvictionBubbleChart({ data }: { data: LandscapeRow[] }) {
+  const router = useRouter()
   const [filter, setFilter] = useState<Filter>('all')
+
+  const handleDotClick = useCallback((symbol: string) => {
+    router.push(`/stocks/${encodeURIComponent(symbol)}`)
+  }, [router])
 
   const chartData = useMemo(() => {
     const filtered = data.filter(row => {
@@ -304,7 +313,7 @@ export function ConvictionBubbleChart({ data }: { data: LandscapeRow[] }) {
             <Scatter
               data={chartData}
               isAnimationActive={false}
-              shape={(props: DotProps) => <BubbleDot {...props} />}
+              shape={(props: DotProps) => <BubbleDot {...props} onClick={handleDotClick} />}
             />
           </ScatterChart>
         </ResponsiveContainer>

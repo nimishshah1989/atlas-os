@@ -12,6 +12,7 @@ import { StateBadge } from '@/components/ui/StateBadge'
 import { ConvictionTape } from '@/components/v6/ConvictionTape'
 import { RuleCard } from '@/components/v6/RuleCard'
 import { ELI5Tooltip } from '@/components/v6/ELI5Tooltip'
+import { InfoTooltip } from '@/components/ui/InfoTooltip'
 import type { ScreenStock, Tier, Tenure, CellRule } from '@/lib/api/v1'
 
 type Props = {
@@ -197,10 +198,20 @@ export function StocksTableV6({ stocks, cellRules }: Props) {
               <Th onClick={() => toggleSort('tape')} icon={sortIcon('tape')} align="left">
                 <ELI5Tooltip term="ic">Conviction</ELI5Tooltip>
               </Th>
-              <Th align="left">RS</Th>
+              <Th align="left">
+                <span className="flex items-center gap-0.5">
+                  RS State
+                  <InfoTooltip content="Relative Strength state vs Nifty 500. Leader = top decile RS · Strong = top quartile · Average = middle · Weak = bottom quartile · Laggard = bottom decile." />
+                </span>
+              </Th>
               <Th onClick={() => toggleSort('ret_1m')} icon={sortIcon('ret_1m')} align="right">1M</Th>
               <Th onClick={() => toggleSort('ret_3m')} icon={sortIcon('ret_3m')} align="right">3M</Th>
-              <Th onClick={() => toggleSort('rs_pctile_3m')} icon={sortIcon('rs_pctile_3m')} align="right">RS%</Th>
+              <Th onClick={() => toggleSort('rs_pctile_3m')} icon={sortIcon('rs_pctile_3m')} align="right">
+                <span className="flex items-center gap-0.5 justify-end">
+                  RS%
+                  <InfoTooltip content="3-month RS percentile rank vs all Nifty 500 stocks. 95 = top 5% · 50 = median." />
+                </span>
+              </Th>
               <Th align="left">Actions</Th>
             </tr>
           </thead>
@@ -257,7 +268,7 @@ export function StocksTableV6({ stocks, cellRules }: Props) {
                     </td>
                     <td className="px-3 py-2.5 whitespace-nowrap">
                       <a
-                        href={`/v6/stocks/${encodeURIComponent(s.iid)}`}
+                        href={`/stocks/${encodeURIComponent(s.symbol ?? s.iid)}`}
                         className="font-sans text-[11px] text-teal hover:underline"
                       >
                         Deep dive →

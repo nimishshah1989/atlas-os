@@ -21,20 +21,20 @@ import { InfoTooltip } from '@/components/ui/InfoTooltip'
 // "translation" line is the plain-English read.
 const METRIC_TOOLTIPS = {
   breadth: {
-    content: 'Breadth: percent of Nifty 500 stocks above their 50-day EMA. Source: atlas_market_regime_daily.pct_above_ema_50',
-    translation: 'How many stocks are above their short-term trend. >65% = broad uptrend; <50% = thinning leadership.',
+    content: '% of Nifty 500 stocks above their 50-day EMA.',
+    translation: '>65% = broad uptrend · <50% = thinning leadership.',
   },
   vix: {
-    content: 'India VIX: implied 30-day volatility of Nifty 50 options. Source: NSE / Yahoo Finance ^INDIAVIX',
-    translation: 'Fear gauge. <15 calm, 15-20 normal, >20 elevated, >25 stress.',
+    content: 'India VIX — implied 30-day volatility of Nifty 50 options.',
+    translation: '<15 calm · 15–20 normal · >20 elevated · >25 stress.',
   },
   mcclellan: {
-    content: 'McClellan Oscillator: 19-day vs 39-day EMA of (advancers − decliners). Source: atlas_market_regime_daily.mcclellan_oscillator',
-    translation: 'Breadth momentum. >+30 strong thrust; near zero neutral; <−30 washout / oversold breadth.',
+    content: 'McClellan Oscillator — 19d vs 39d EMA of (advancers − decliners).',
+    translation: '>+30 strong thrust · near 0 neutral · <−30 breadth washout.',
   },
   trend: {
-    content: 'Trend slope: % change per day of the Nifty 500 50-day EMA. Source: atlas_market_regime_daily.nifty500_ema_50_slope (shown ×100)',
-    translation: 'Primary trend rate-of-change. +0.10%/day or higher = accelerating uptrend; near zero = stalling.',
+    content: 'Nifty 500 50-day EMA slope (% change per day, shown ×100).',
+    translation: '+0.10%/day = accelerating uptrend · near zero = stalling.',
   },
 } as const
 

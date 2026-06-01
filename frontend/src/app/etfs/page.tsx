@@ -229,7 +229,7 @@ export default async function ETFsPage() {
             ETF Trend Map — Holding Trend Strength vs Within-State Rank
           </div>
           <p className="font-sans text-[11px] text-ink-tertiary mb-3">
-            X = holdings trend strength (stage&nbsp;2 − stage&nbsp;4 breadth). Y = mean within-state rank of holdings. Color = RS state. Bubble size = RS rank 12M. Strong-trend + high-rank (top-right) is the leadership zone.
+            X = holdings trend strength (stage&nbsp;2 − stage&nbsp;4 breadth). Y = mean within-state rank of holdings. Color = RS state. Bubble size = 20-day average volume (ADV proxy). Strong-trend + high-rank (top-right) is the leadership zone.
           </p>
           <ETFBubbleChart etfs={etfs} />
         </div>

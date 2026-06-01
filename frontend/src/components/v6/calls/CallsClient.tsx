@@ -225,16 +225,16 @@ export function CallsClient({
 
       {/* Section 5: Cumulative excess line chart (M5) */}
       <Section
-        title="Avg realized excess by entry date"
-        sub="Daily average realized excess across all calls fired on each date. Shows whether more recent calls are performing better or worse than older ones."
+        title="Signal quality over time — does recency help?"
+        sub="Each point is the average actual outperformance for all calls that fired on that calendar date. Rising trend = more recent signals are working better; flat = stable; falling = recent calls underperforming older ones."
       >
         <CumulativeExcessChart series={excessSeries} />
       </Section>
 
       {/* Section 6: Full ledger */}
       <Section
-        title={`All calls · ${hero.total_calls.toLocaleString('en-IN')}-row ledger`}
-        sub={`The full signal_call ledger from mv_calls_performance. Filter by status, direction, or search by symbol/company. Realized excess and win/loss shown for all ${hero.realized_count} calls with data. Virtual scroll renders all rows.`}
+        title={`Signal call ledger · ${hero.total_calls.toLocaleString('en-IN')} calls`}
+        sub={`Every BUY/AVOID signal call ever fired. "Model target" = what the model predicted at the time. "Actual excess" = what actually happened vs the tier benchmark. Filter by status, direction, or search by stock name.`}
       >
         <CallsLedger calls={ledger} />
       </Section>

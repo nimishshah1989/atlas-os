@@ -11,6 +11,8 @@
 // Token discipline: signal-* / paper / ink only.
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
+import { InfoTooltip } from '@/components/ui/InfoTooltip'
 import { IndustrySnapshot } from '@/components/v6/IndustrySnapshot'
 import { BubbleRiskReturnChart, type BubbleDatum } from '@/components/v6/BubbleRiskReturnChart'
 import { SignatureMatrix, type SignatureCell } from '@/components/v6/SignatureMatrix'
@@ -47,6 +49,11 @@ export type FundRow = {
   rs_pctile_3m: string | null    // Peer quartile proxy from RS percentile
   sector_tilt: string | null     // Top-sector tilt text if available
   realized_vol_63: string | null // Annualized realized vol (63D) — X-axis for bubble chart
+  // Sub-pillar scores (0–100) — from mv_fund_list_v6
+  risk_adjusted_return_score?: string | null
+  holdings_conviction_score?: string | null
+  style_sector_score?: string | null
+  cost_manager_score?: string | null
 }
 
 export type FundsListColumn =
@@ -214,16 +221,44 @@ function toBubbleDatum(f: FundRow): BubbleDatum | null {
   }
 }
 
-/** Build placeholder SignatureCell[] from fund row. */
+function scoreToExposure(score: number | null): SignatureCell['exposure'] {
+  if (score == null) return null
+  if (score >= 65) return 'POSITIVE'
+  if (score >= 40) return 'NEUTRAL'
+  return 'NEGATIVE'
+}
+
+/** Build SignatureCell[] from fund sub-pillar scores. */
 function toSignatureCells(f: FundRow): SignatureCell[] {
-  const score = toNumber(f.composite_score)
-  const exposure: SignatureCell['exposure'] =
-    score == null ? null : score >= 60 ? 'POSITIVE' : score >= 40 ? 'NEUTRAL' : 'NEGATIVE'
+  const rarScore  = toNumber(f.risk_adjusted_return_score ?? null)
+  const hcScore   = toNumber(f.holdings_conviction_score ?? null)
+  const ssScore   = toNumber(f.style_sector_score ?? null)
+  const cmScore   = toNumber(f.cost_manager_score ?? null)
   return [
-    { factor: 'Momentum', exposure, raw_score: f.composite_score, rank_in_category: f.rank_in_category },
-    { factor: 'Quality',  exposure: null, raw_score: null, rank_in_category: null },
-    { factor: 'Value',    exposure: null, raw_score: null, rank_in_category: null },
-    { factor: 'LowVol',   exposure: null, raw_score: null, rank_in_category: null },
+    {
+      factor: 'Risk-adj. Returns',
+      exposure: scoreToExposure(rarScore),
+      raw_score: f.risk_adjusted_return_score ?? null,
+      rank_in_category: f.rank_in_category,
+    },
+    {
+      factor: 'Holdings Quality',
+      exposure: scoreToExposure(hcScore),
+      raw_score: f.holdings_conviction_score ?? null,
+      rank_in_category: null,
+    },
+    {
+      factor: 'Style Fit',
+      exposure: scoreToExposure(ssScore),
+      raw_score: f.style_sector_score ?? null,
+      rank_in_category: null,
+    },
+    {
+      factor: 'Cost Efficiency',
+      exposure: scoreToExposure(cmScore),
+      raw_score: f.cost_manager_score ?? null,
+      rank_in_category: null,
+    },
   ]
 }
 
@@ -332,7 +367,18 @@ export function FundsList({ funds, snapshot, holdingMap, snapshotDate }: FundsLi
                         isNumericCol(col.key) ? 'text-right' : 'text-left',
                       ].join(' ')}
                     >
-                      {COL_LABELS[col.key]}
+                      <span className="inline-flex items-center gap-0.5">
+                        {COL_LABELS[col.key]}
+                        {col.key === 'grade' && (
+                          <InfoTooltip content="Atlas composite grade — A (best) to F (weakest). AAA = top-tier composite: strong risk-adjusted returns + high holdings conviction + low cost. FFF = weakest on all three pillars." />
+                        )}
+                        {col.key === 'composite' && (
+                          <InfoTooltip content="Composite score: weighted average of risk-adjusted return, holdings conviction, style/sector alignment, and cost efficiency. Higher = better." />
+                        )}
+                        {col.key === 'peer_quartile' && (
+                          <InfoTooltip content="Return percentile within the fund's category. Q1 = top 25% · Q4 = bottom 25%." />
+                        )}
+                      </span>
                     </th>
                   ))}
                 </tr>
@@ -363,12 +409,13 @@ export function FundsList({ funds, snapshot, holdingMap, snapshotDate }: FundsLi
                           case 'name':
                             return (
                               <td key="name" className="px-3 py-2.5 min-w-[180px]">
-                                <span
-                                  className="font-sans text-xs text-ink-primary font-medium leading-snug"
+                                <Link
+                                  href={`/funds/${encodeURIComponent(fund.iid)}`}
+                                  className="font-sans text-xs text-ink-primary font-medium leading-snug hover:text-teal transition-colors no-underline"
                                   title={fund.name ?? undefined}
                                 >
                                   {fund.name ?? fund.code}
-                                </span>
+                                </Link>
                               </td>
                             )
                           case 'category':

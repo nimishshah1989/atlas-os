@@ -53,13 +53,10 @@ export const GROUPS: Group[] = [
     key: 'admin',
     label: 'ADMIN',
     links: [
-      { href: '/health',                       label: 'Data Health' },
-      { href: '/methodology',                  label: 'Methodology' },
-      { href: '/setup',                        label: 'Setup · Customization' },
-      { href: '/admin/composite-proposals',    label: 'Signal Proposals' },
-      { href: '/admin/weight-performance',     label: 'Weight Monitoring' },
-      { href: '/admin/validator',              label: 'Validator' },
-      { href: '/admin/thresholds',             label: 'Thresholds' },
+      { href: '/admin',        label: 'Overview & Health' },
+      { href: '/setup',        label: 'Portfolio Setup' },
+      { href: '/admin/thresholds',          label: 'Thresholds' },
+      { href: '/admin/composite-proposals', label: 'Signal Proposals' },
     ],
   },
   {
@@ -76,7 +73,7 @@ function activeGroup(pathname: string): Group {
   if (pathname.startsWith('/admin') ||
       pathname.startsWith('/setup') ||
       pathname.startsWith('/methodology') ||
-      pathname.startsWith('/health'))                                          return GROUPS[3]
+      pathname.startsWith('/health'))                                         return GROUPS[3]
   if (pathname.startsWith('/intelligence/daily-brief'))                        return GROUPS[4]
   if (pathname.startsWith('/calls') || pathname.startsWith('/portfolios'))     return GROUPS[2]
   if (pathname.startsWith('/india-pulse'))                                     return GROUPS[0]
