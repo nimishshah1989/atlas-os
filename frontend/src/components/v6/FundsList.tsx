@@ -46,6 +46,7 @@ export type FundRow = {
   ret_12m: number | null         // Used as 3y CAGR proxy (v6.0)
   rs_pctile_3m: string | null    // Peer quartile proxy from RS percentile
   sector_tilt: string | null     // Top-sector tilt text if available
+  realized_vol_63: string | null // Annualized realized vol (63D) — X-axis for bubble chart
 }
 
 export type FundsListColumn =
@@ -191,12 +192,13 @@ function quartileColor(q: string): string {
   return 'text-ink-tertiary'
 }
 
-/** Build BubbleDatum from fund row — risk proxy = annualized vol from ret_6m variance guess. */
-function toBubbleDatum(f: FundRow): BubbleDatum {
-  // Risk proxy: use abs(ret_6m) * 0.5 as a rough vol stand-in (v6.0).
-  // v6.1: replace with 3y annualized monthly return σ when available.
-  const ret6m = f.ret_6m != null ? f.ret_6m * 100 : 0
-  const riskProxy = Math.abs(ret6m) * 0.4 + 2
+/** Build BubbleDatum from fund row — risk proxy = realized_vol_63 (annualized). */
+function toBubbleDatum(f: FundRow): BubbleDatum | null {
+  // Skip funds with no vol or return data — can't place meaningfully on chart.
+  if (f.realized_vol_63 == null || f.ret_6m == null) return null
+  const ret6m = f.ret_6m * 100
+  // realized_vol_63 is already a ratio (e.g. 0.18 = 18%) — convert to %
+  const riskProxy = parseFloat(f.realized_vol_63) * 100
   const aumV = toNumber(f.aum_cr) ?? 0
   const state: BubbleDatum['state'] =
     f.is_atlas_leader ? 'POSITIVE'
@@ -235,7 +237,7 @@ export function FundsList({ funds, snapshot, holdingMap, snapshotDate }: FundsLi
   const [chooserOpen, setChooserOpen] = useState(false)
 
   const bubbleData = useMemo<BubbleDatum[]>(
-    () => funds.map(toBubbleDatum),
+    () => funds.map(toBubbleDatum).filter((d): d is BubbleDatum => d !== null),
     [funds],
   )
 

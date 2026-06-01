@@ -5,7 +5,6 @@ import type { ComponentValidation } from '@/lib/queries/component_validation'
 import type { RSLeaderRow, BreakoutCandidateRow } from '@/lib/queries/leaders'
 import type { PolicyEntryParams } from '@/lib/policy-entry-filter'
 import { StockBreadthPanel } from './StockBreadthPanel'
-import { StockBubbleChart } from './StockBubbleChart'
 import { StockIntelligencePanel } from './StockIntelligencePanel'
 import { StockScreener } from './StockScreener'
 import { IntradayRSLeaders } from './IntradayRSLeaders'
@@ -80,7 +79,6 @@ export function StocksClientShell({
             activeMaFilter={maFilter}
             onMaFilter={setMaFilter}
           />
-          <StockBubbleChart stocks={stocks} />
           <StockIntelligencePanel
             stocks={stocks}
             regimeState={regimeState}

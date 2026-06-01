@@ -14,12 +14,13 @@
 // appended as the final point. The customized prop receives the scale functions
 // from the parent chart, so pixel coordinates match the axis domain exactly.
 
-import { useState, useCallback } from 'react'
+import { useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import {
   ScatterChart, Scatter, XAxis, YAxis, CartesianGrid,
   ReferenceLine, Tooltip, ResponsiveContainer, Label,
 } from 'recharts'
-import Link from 'next/link'
 import type { SectorRRGRow, TrailEntry } from '@/lib/queries/v6/sectors'
 
 // ── Color map by quadrant ─────────────────────────────────────────────────────
@@ -281,11 +282,11 @@ function QuadrantLegend({ data }: { data: SectorRRGRow[] }) {
 // ── Main exported component ───────────────────────────────────────────────────
 
 export function SectorRRGChart({ data }: { data: SectorRRGRow[] }) {
-  const [selected, setSelected] = useState<string | null>(null)
+  const router = useRouter()
 
   const handleClick = useCallback((d: SectorRRGRow) => {
-    setSelected((prev) => (prev === d.sector_name ? null : d.sector_name))
-  }, [])
+    router.push(`/sectors/${encodeURIComponent(d.sector_name)}`)
+  }, [router])
 
   // Filter rows with valid position data
   const validData = data.filter(
@@ -400,17 +401,6 @@ export function SectorRRGChart({ data }: { data: SectorRRGRow[] }) {
           </ScatterChart>
         </ResponsiveContainer>
 
-        {selected && (
-          <div className="mt-2 text-[11px] text-ink-tertiary font-sans">
-            Selected:{' '}
-            <Link
-              href={`/sectors/${encodeURIComponent(selected)}`}
-              className="text-teal underline-offset-2 hover:underline font-medium"
-            >
-              {selected} — open deep-dive →
-            </Link>
-          </div>
-        )}
       </div>
 
       <QuadrantLegend data={data} />

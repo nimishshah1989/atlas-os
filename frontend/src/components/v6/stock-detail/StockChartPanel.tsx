@@ -13,8 +13,8 @@ interface StockChartPanelProps {
   roe: number | null
 }
 
-// Light-theme widgetembed URL — white background matches Atlas paper tokens.
-// `allow_symbol_change=0` prevents the chart from drifting to other symbols.
+// Uses TradingView's supported embed-widget/advanced-chart endpoint.
+// widgetembed is deprecated and defaults to AAPL when the symbol isn't resolved.
 function tvUrl(symbol: string): string {
   const params = new URLSearchParams({
     symbol: `NSE:${symbol}`,
@@ -23,13 +23,12 @@ function tvUrl(symbol: string): string {
     theme: 'light',
     style: '1',
     locale: 'en',
-    toolbar_bg: '#F8F4EC',
-    hide_side_toolbar: 'false',
-    hide_top_toolbar: 'false',
-    allow_symbol_change: 'false',
-    studies: '["MASimple@tv-basicstudies","MASimple@tv-basicstudies","MAExp@tv-basicstudies","Volume@tv-basicstudies"]',
+    allow_symbol_change: '0',
+    hide_side_toolbar: '0',
+    save_image: '0',
+    studies: JSON.stringify(['MASimple@tv-basicstudies', 'MAExp@tv-basicstudies', 'Volume@tv-basicstudies']),
   })
-  return `https://www.tradingview.com/widgetembed/?${params.toString()}`
+  return `https://www.tradingview.com/embed-widget/advanced-chart/?${params.toString()}`
 }
 
 export function StockChartPanel({ symbol, commentary, pe, ps, pb, debtToEquity, roe }: StockChartPanelProps) {
