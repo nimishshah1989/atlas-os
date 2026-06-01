@@ -8,6 +8,7 @@
 // Matches mockup layout: tiers as rows, tenure × direction as columns.
 
 import type { CSSProperties } from 'react'
+import Link from 'next/link'
 import type { WinRateCell } from '@/lib/queries/v6/calls'
 import { fmtSignedPct } from '@/lib/format-number'
 
@@ -161,10 +162,11 @@ export function WinRateMatrix({ cells }: WinRateMatrixProps) {
                         key={`${tenure}|${action}`}
                         className={`p-0 border-b border-paper-rule text-center font-mono ${action === 'POSITIVE' ? 'border-l border-paper-rule' : ''}`}
                       >
-                        <div
-                          className={`px-1 py-2 cursor-default transition-[filter] hover:brightness-95 ${textClass}`}
+                        <Link
+                          href={`/stocks?tier=${encodeURIComponent(tier)}&tenure=${encodeURIComponent(tenure)}&direction=${encodeURIComponent(action)}`}
+                          className={`block px-1 py-2 transition-[filter] hover:brightness-90 no-underline ${textClass}`}
                           style={cellBg}
-                          title={n > 0 ? `n=${n} · win rate ${hitRateStr} · avg realized ${excessStr}` : 'No data'}
+                          title={n > 0 ? `n=${n} · win rate ${hitRateStr} · avg realized ${excessStr} — click to see stocks` : 'No data'}
                         >
                           <div className="text-[13px] font-semibold leading-none">{hitRateStr}</div>
                           <div className="text-[9px] mt-[2px] opacity-75 tracking-[0.04em]">
@@ -173,7 +175,7 @@ export function WinRateMatrix({ cells }: WinRateMatrixProps) {
                           <div className="text-[8px] mt-[1px] opacity-60 tracking-[0.04em]">
                             n={n > 0 ? n : '—'}
                           </div>
-                        </div>
+                        </Link>
                       </td>
                     )
                   }),

@@ -163,6 +163,9 @@ export async function getFundListPage(): Promise<FundListPage> {
       WHERE nav_date >= (SELECT d FROM latest_fm) - INTERVAL '7 days'
       ORDER BY mstar_id, nav_date DESC
     ) fm ON fm.mstar_id = fl.scheme_code
+    WHERE
+      -- Minimum ₹100 cr AUM: filters illiquid/micro funds (e.g. Old Bridge, niche AMCs)
+      fl.aum_cr IS NULL OR fl.aum_cr >= 100
     ORDER BY
       fl.is_atlas_leader DESC,
       fl.composite_score DESC NULLS LAST,
