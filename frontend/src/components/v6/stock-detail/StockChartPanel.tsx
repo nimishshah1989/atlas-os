@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { FundamentalsStrip } from './FundamentalsStrip'
 
 interface StockChartPanelProps {
@@ -13,53 +13,72 @@ interface StockChartPanelProps {
   roe: number | null
 }
 
-// widgetembed accepts URL params directly and resolves NSE symbols correctly.
-// embed-widget/advanced-chart requires JSON init and ignores URL params, defaulting to AAPL.
-function tvUrl(symbol: string): string {
-  const params = new URLSearchParams({
-    symbol: `NSE:${symbol}`,
-    interval: 'D',
-    timezone: 'Asia/Kolkata',
-    theme: 'light',
-    style: '1',
-    locale: 'en',
-    allow_symbol_change: '0',
-    hide_side_toolbar: '0',
-    save_image: '0',
-    studies: 'MASimple@tv-basicstudies,MAExp@tv-basicstudies,Volume@tv-basicstudies',
-  })
-  return `https://www.tradingview.com/widgetembed/?${params.toString()}`
+// TradingView Advanced Chart via the external-embedding script API.
+// The script reads its own textContent as a JSON config and resolves NSE:SYMBOL correctly.
+// widgetembed (URL-param approach) is deprecated and defaults to AAPL for many symbols.
+function TVAdvancedChart({ symbol }: { symbol: string }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    container.innerHTML = ''
+
+    const widgetDiv = document.createElement('div')
+    widgetDiv.className = 'tradingview-widget-container__widget'
+    widgetDiv.style.cssText = 'height:100%;width:100%'
+    container.appendChild(widgetDiv)
+
+    const script = document.createElement('script')
+    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js'
+    script.type = 'text/javascript'
+    script.async = true
+    script.textContent = JSON.stringify({
+      autosize: true,
+      symbol: `NSE:${symbol}`,
+      interval: 'D',
+      timezone: 'Asia/Kolkata',
+      theme: 'light',
+      style: '1',
+      locale: 'en',
+      allow_symbol_change: false,
+      calendar: false,
+      hide_side_toolbar: false,
+      studies: ['STD;SMA', 'STD;EMA', 'STD;Volume'],
+    })
+    container.appendChild(script)
+
+    return () => {
+      if (containerRef.current) containerRef.current.innerHTML = ''
+    }
+  }, [symbol])
+
+  return (
+    <div
+      className="tradingview-widget-container w-full"
+      ref={containerRef}
+      style={{ height: '480px' }}
+    />
+  )
 }
 
 export function StockChartPanel({ symbol, commentary, pe, ps, pb, debtToEquity, roe }: StockChartPanelProps) {
-  const [chartError, setChartError] = useState(false)
+  const tvOpenUrl = `https://www.tradingview.com/symbols/NSE-${encodeURIComponent(symbol)}/`
 
   return (
     <section className="border-b border-paper-rule">
-      {chartError ? (
-        <div className="bg-paper-deep flex items-center justify-center h-[300px]">
-          <div className="text-center">
-            <p className="font-sans text-sm text-ink-3 mb-2">Chart unavailable</p>
-            <a
-              href={`https://www.tradingview.com/chart/?symbol=NSE:${symbol}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-sans text-sm text-accent hover:underline"
-            >
-              Open in TradingView ↗
-            </a>
-          </div>
-        </div>
-      ) : (
-        <iframe
-          src={tvUrl(symbol)}
-          className="w-full h-[420px] md:h-[520px] border-0 bg-paper"
-          sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-          onError={() => setChartError(true)}
-          title={`${symbol} daily price chart`}
-          loading="lazy"
-        />
-      )}
+      <div className="relative">
+        <TVAdvancedChart symbol={symbol} />
+        <a
+          href={tvOpenUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="absolute top-2 right-2 font-sans text-[11px] text-ink-tertiary hover:text-teal transition-colors bg-paper/80 px-2 py-1 rounded-[2px] z-10"
+        >
+          Open in TradingView ↗
+        </a>
+      </div>
       <div className="px-6 py-4 border-t border-paper-rule bg-paper">
         <p className="font-mono text-[10px] text-teal uppercase tracking-wider mb-2">Atlas Chart Reading</p>
         <p className="font-sans text-sm text-ink leading-relaxed">{commentary}</p>

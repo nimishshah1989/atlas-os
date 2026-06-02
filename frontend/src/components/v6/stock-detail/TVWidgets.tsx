@@ -93,7 +93,7 @@ export function TVNews({ symbol }: TVWidgetProps) {
 
 // ─── Mini Symbol Overview (sparkline) ─────────────────────────────────────────
 interface TVMiniProps extends TVWidgetProps {
-  dateRange?: '1D' | '1M' | '3M' | '12M' | '60M' | 'ALL'
+  dateRange?: '1D' | '1M' | '3M' | '6M' | '12M' | '60M' | 'ALL'
   exchange?: 'NSE' | 'INDEX'
 }
 export function TVMiniOverview({ symbol, dateRange = '12M', exchange = 'NSE' }: TVMiniProps) {
