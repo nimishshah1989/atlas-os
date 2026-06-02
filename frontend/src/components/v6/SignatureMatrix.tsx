@@ -7,7 +7,15 @@
 // Token discipline: signal-* + paper + ink only.
 
 import { InfoTooltip } from '@/components/ui/InfoTooltip'
-import { signedPct } from '@/lib/v6/decimal'
+import { toNumber } from '@/lib/v6/decimal'
+
+// raw_score values are already 0-100 scale (e.g. 92.96 = 92.96/100 score).
+// signedPct() would multiply by 100 again giving +9296% — use this instead.
+function fmtScore(raw: string | null): string {
+  const n = toNumber(raw)
+  if (n === null) return '—'
+  return `${n >= 0 ? '+' : ''}${n.toFixed(1)}`
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -95,7 +103,7 @@ function FactorTile({ cell }: { cell: SignatureCell }) {
       ? 'bg-signal-neg/5 border-signal-neg/20'
       : 'bg-paper border-paper-rule'
 
-  const scoreText = signedPct(raw_score)
+  const scoreText = fmtScore(raw_score)
   const rankLabel =
     rank_in_category !== null ? `Rank ${rank_in_category}` : null
 

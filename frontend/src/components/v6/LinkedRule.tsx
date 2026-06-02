@@ -13,7 +13,7 @@ type Props = {
 export function LinkedRule({ cellId, ruleId, className = '', children }: Props) {
   return (
     <Link
-      href={`/matrix/${encodeURIComponent(cellId)}/${encodeURIComponent(ruleId)}`}
+      href={`/stocks?cell=${encodeURIComponent(cellId)}`}
       className={`font-mono text-xs text-ink-primary hover:text-teal hover:underline transition-colors ${className}`}
     >
       {children ?? ruleId}
