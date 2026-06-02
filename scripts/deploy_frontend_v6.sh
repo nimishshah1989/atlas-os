@@ -24,7 +24,7 @@ set -euo pipefail
 EC2_HOST="${EC2_HOST:-ubuntu@13.206.34.214}"
 EC2_KEY="${EC2_KEY:-$HOME/.ssh/jsl-wealth-key.pem}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEPLOY_DIR="/home/ubuntu/atlas-frontend-v2"
+DEPLOY_DIR="/home/ubuntu/atlas-os"
 STAMP="$(date +%Y%m%d_%H%M%S)"
 SKIP_RSYNC=0
 
@@ -69,7 +69,7 @@ if ssh_cmd "tail -5 /home/ubuntu/logs/deploy_${STAMP}.log | grep -q 'Build error
 fi
 
 echo "[deploy ${STAMP}] pm2 reload (rolling, zero-downtime)"
-ssh_cmd "pm2 reload atlas-frontend-v2"
+ssh_cmd "pm2 reload atlas-frontend"
 
 sleep 6
 echo "[deploy ${STAMP}] health-check https://atlas.jslwealth.in/"
