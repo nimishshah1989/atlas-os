@@ -13,8 +13,8 @@ interface StockChartPanelProps {
   roe: number | null
 }
 
-// Uses TradingView's supported embed-widget/advanced-chart endpoint.
-// widgetembed is deprecated and defaults to AAPL when the symbol isn't resolved.
+// widgetembed accepts URL params directly and resolves NSE symbols correctly.
+// embed-widget/advanced-chart requires JSON init and ignores URL params, defaulting to AAPL.
 function tvUrl(symbol: string): string {
   const params = new URLSearchParams({
     symbol: `NSE:${symbol}`,
@@ -26,9 +26,9 @@ function tvUrl(symbol: string): string {
     allow_symbol_change: '0',
     hide_side_toolbar: '0',
     save_image: '0',
-    studies: JSON.stringify(['MASimple@tv-basicstudies', 'MAExp@tv-basicstudies', 'Volume@tv-basicstudies']),
+    studies: 'MASimple@tv-basicstudies,MAExp@tv-basicstudies,Volume@tv-basicstudies',
   })
-  return `https://www.tradingview.com/embed-widget/advanced-chart/?${params.toString()}`
+  return `https://www.tradingview.com/widgetembed/?${params.toString()}`
 }
 
 export function StockChartPanel({ symbol, commentary, pe, ps, pb, debtToEquity, roe }: StockChartPanelProps) {
