@@ -55,3 +55,7 @@ package-lock.json
 /*.jpg
 /*-snapshot.md
 /*-fullpage.png
+
+# Runtime logs (never commit)
+*.log
+scripts/*.log
