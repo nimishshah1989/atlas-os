@@ -90,7 +90,14 @@ function ConfBar({ H, M, L }: { H: number; M: number; L: number }) {
 
 // ── Main table ────────────────────────────────────────────────────────────────
 
-export function SectorHeatmapTable({ cards }: { cards: SectorCardRow[] }) {
+export function SectorHeatmapTable({
+  cards,
+  idxRet1dBySector,
+}: {
+  cards: SectorCardRow[]
+  // NSE sector-index 1-day return keyed by sector name (index-level, not bottom-up).
+  idxRet1dBySector?: Record<string, number | null>
+}) {
   if (cards.length === 0) {
     return (
       <div className="text-ink-tertiary text-sm text-center py-8">No heatmap data available.</div>
@@ -127,6 +134,25 @@ export function SectorHeatmapTable({ cards }: { cards: SectorCardRow[] }) {
               }}
             >
               Sector
+            </th>
+
+            {/* 1D return — NSE sector index (not bottom-up) */}
+            <th
+              style={{
+                textAlign: 'center',
+                padding: '8px 4px',
+                fontFamily: 'Inter, sans-serif',
+                fontSize: 9,
+                letterSpacing: '0.13em',
+                textTransform: 'uppercase',
+                color: 'var(--color-ink-tertiary, #6B6157)',
+                fontWeight: 600,
+                background: 'var(--color-paper-soft, #FBF8F1)',
+                borderBottom: '1px solid var(--color-ink-rule, #DDD3BF)',
+              }}
+            >
+              1D
+              <span style={{ display: 'block', fontSize: 8, color: 'var(--color-ink-4, #9A8F82)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.04em', textTransform: 'none', marginTop: 2 }}>idx abs</span>
             </th>
 
             {/* Returns */}
@@ -237,6 +263,9 @@ export function SectorHeatmapTable({ cards }: { cards: SectorCardRow[] }) {
                   </span>
                 </div>
               </td>
+
+              {/* 1D — NSE sector index */}
+              <HmCell value={idxRet1dBySector?.[card.sector_name] ?? null} />
 
               {/* Absolute returns */}
               <HmCell value={card.ret_1w} />

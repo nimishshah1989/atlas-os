@@ -19,11 +19,13 @@ import { DataSourceBanner } from '@/components/v6/DataSourceBanner'
 import { SectorHeroStrip } from '@/components/v6/sectors/SectorHeroStrip'
 import { SectorTraderViewHeader } from '@/components/v6/sectors/SectorTraderViewHeader'
 import { RSWindowsTable } from '@/components/v6/sectors/RSWindowsTable'
+import { SectorRSRatioCharts } from '@/components/v6/sectors/SectorRSRatioCharts'
 import { ConstituentsTable } from '@/components/v6/sectors/ConstituentsTable'
 import { TopPicksPanel } from '@/components/v6/sectors/TopPicksPanel'
 import { StrengthDistChart } from '@/components/v6/sectors/StrengthDistChart'
 import { OpenSignalsPanel } from '@/components/v6/sectors/OpenSignalsPanel'
 import { getSectorDeepdive } from '@/lib/queries/v6/sectors'
+import { getSectorRatioSeries } from '@/lib/queries/v6/sector_index_rs'
 
 export const dynamic = 'force-dynamic'
 
@@ -87,7 +89,10 @@ export default async function SectorDetailPage({
   const { sector } = await params
   const decoded = decodeURIComponent(sector)
 
-  const deepdive = await getSectorDeepdive(decoded)
+  const [deepdive, ratioSeries] = await Promise.all([
+    getSectorDeepdive(decoded),
+    getSectorRatioSeries(decoded),
+  ])
 
   if (!deepdive) notFound()
 
@@ -132,32 +137,29 @@ export default async function SectorDetailPage({
 
       <DataSourceBanner source="live" asOf={deepdive.data_as_of} />
 
-      {/* Section 0 — Multidim chart (v6.1 placeholder) */}
-      <section className="px-8 py-9 border-b border-paper-rule" aria-label="Multidim sector chart">
-        <SectionHead
-          title={`${decoded} · multidim view`}
-          subtitle="Sector price + support/resistance + RS-signal diamonds + volume + 20D-MA in one frame. Requires sector OHLCV aggregate query (not yet in mv_sector_deepdive)."
-        />
-        <div className="bg-paper-soft border border-dashed border-ink-rule rounded-[2px] p-8 text-center">
-          <div className="font-sans text-[13px] font-semibold text-ink-secondary mb-2">
-            Coming in v6.1
-          </div>
-          <p className="font-sans text-[12px] text-ink-4 max-w-[560px] mx-auto leading-[1.55]">
-            The multidim chart (price + S/R + RS-signal diamonds + volume + 20D-MA stacked)
-            requires aggregated OHLCV for sector index members. This will be added as a separate
-            query layer in v6.1 when sector OHLCV aggregation is wired into the MV pipeline.
-          </p>
-        </div>
-      </section>
-
       {/* Section 1 — RS windows */}
       <section className="px-8 py-9 border-b border-paper-rule" aria-label="RS windows vs baselines">
         <SectionHead
           title="RS vs the baselines · 5 windows"
-          subtitle="Percentage-point spread between this sector and Nifty 500 over 5 time windows. Rank is relative to all sectors. Nifty 50, Gold, and S&P 500 baselines are deferred."
+          subtitle="Percentage-point spread between this sector and Nifty 500 over 5 time windows. Rank is relative to all sectors."
         />
         <Suspense fallback={<Skeleton h={200} />}>
           <RSWindowsTable sector={deepdive} />
+        </Suspense>
+      </section>
+
+      {/* Section 1b — RS ratio charts (sector index / Nifty 50) */}
+      <section className="px-8 py-9 border-b border-paper-rule" aria-label="Relative strength ratio charts">
+        <SectionHead
+          title="Relative strength · sector vs Nifty 50"
+          subtitle="Sector index divided by Nifty 50 across Daily / Weekly / Monthly intervals. A rising line means the sector is outperforming the broad market."
+        />
+        <Suspense fallback={<Skeleton h={360} />}>
+          <SectorRSRatioCharts
+            sectorName={decoded}
+            indexCode={ratioSeries.index_code}
+            daily={ratioSeries.daily}
+          />
         </Suspense>
       </section>
 
@@ -335,38 +337,8 @@ export default async function SectorDetailPage({
           })()}
         </div>
         <p className="font-sans text-[11px] text-ink-tertiary mt-4 leading-[1.55]">
-          Inputs: <code className="font-mono text-[10px]">bottomup_ret_3m / 6m</code>, <code className="font-mono text-[10px]">rs_3m / 6m</code>, <code className="font-mono text-[10px]">pct_above_ema20</code> from <code className="font-mono text-[10px]">atlas_sector_metrics_daily</code>. Verdict from <code className="font-mono text-[10px]">atlas_sector_states_daily.sector_state</code>. Full threshold breakdown (regime-conditional cutoffs) coming in v6.2.
+          Inputs: bottomup return, RS spread vs Nifty 500, and % above EMA-20 from sector metrics. Verdict from sector states model.
         </p>
-      </section>
-
-      {/* Section — Cross-market comparison (v6.1 placeholder) */}
-      <section className="px-8 py-9 border-b border-paper-rule" aria-label="Cross-market comparison">
-        <SectionHead
-          title="Cross-market · how India compares globally"
-          subtitle="India sector RS stacked against global peers (e.g., India Energy vs XLE, India IT vs QQQ). Requires global sector ETF mapping layer."
-        />
-        <div className="bg-paper-soft border border-dashed border-ink-rule rounded-[2px] p-6 text-center">
-          <div className="font-sans text-[13px] font-semibold text-ink-secondary mb-1">Coming in v6.1</div>
-          <p className="font-sans text-[12px] text-ink-4 max-w-[520px] mx-auto leading-[1.55]">
-            Cross-market panels require a mapping table from India sector names to global ETF tickers
-            (e.g., Energy → XLE, IT → QQQ), plus Stooq/yfinance ingest for those ETFs. Planned for v6.1.
-          </p>
-        </div>
-      </section>
-
-      {/* Macro overlay placeholder */}
-      <section className="px-8 py-9 border-b border-paper-rule" aria-label="Macro overlays">
-        <SectionHead
-          title="Macro overlays"
-          subtitle="Crude oil, USD/INR, and global risk indicators overlaid with sector price. Deferred — requires macro query layer not yet in mv_sector_deepdive."
-        />
-        <div className="bg-paper-soft border border-dashed border-paper-rule rounded-[2px] p-6 text-center">
-          <p className="font-sans text-[13px] text-ink-tertiary">
-            Macro overlays are planned. The Energy sector will show crude oil + USD/INR panels;
-            IT will show DXY + US10Y. This requires a separate macro time-series query layer
-            which is not yet wired to the sector deep-dive MV.
-          </p>
-        </div>
       </section>
 
       {/* Footer */}
