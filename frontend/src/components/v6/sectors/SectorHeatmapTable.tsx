@@ -11,6 +11,8 @@ import {
   type ReturnBasesPayload, type ReturnBasis, type ReturnWindow,
 } from '@/lib/queries/v6/sector_return_bases_shared'
 
+type HmSortKey = ReturnWindow | 'rs_1m' | 'rs_3m' | 'rs_6m' | 'name' | 'count' | 'signals'
+
 // ── Color intensity mapping ───────────────────────────────────────────────────
 
 function hmClass(value: number | null, thresholds = [0.10, 0.05, 0.02, -0.02, -0.05, -0.10]): string {
@@ -103,7 +105,10 @@ export function SectorHeatmapTable({
   // Dual-basis returns (index + free-float bottom-up) across all windows.
   returnBases?: ReturnBasesPayload
 }) {
-  const [basis, setBasis] = useState<ReturnBasis>('index')
+  // Default to Bottom-up — reliable for every sector (Index is sparse/"—" for some).
+  const [basis, setBasis] = useState<ReturnBasis>('bottomup')
+  const [sortKey, setSortKey] = useState<HmSortKey>('rs_3m')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
   if (cards.length === 0) {
     return (
@@ -120,8 +125,50 @@ export function SectorHeatmapTable({
     const s = bySector.get(name); return s ? basisRs(s, n500, basis, w) : null
   }
 
-  // Sort by active-basis RS 3M descending
-  const sorted = [...cards].sort((a, b) => (rs(b.sector_name, '3m') ?? -Infinity) - (rs(a.sector_name, '3m') ?? -Infinity))
+  const handleSort = (k: HmSortKey) => {
+    if (sortKey === k) setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+    else { setSortKey(k); setSortDir(k === 'name' ? 'asc' : 'desc') }
+  }
+  const getVal = (c: SectorCardRow): number => {
+    switch (sortKey) {
+      case 'count': return c.constituent_count ?? -Infinity
+      case 'signals': return c.buy_signal_count ?? -Infinity
+      case 'rs_1m': return rs(c.sector_name, '1m') ?? -Infinity
+      case 'rs_3m': return rs(c.sector_name, '3m') ?? -Infinity
+      case 'rs_6m': return rs(c.sector_name, '6m') ?? -Infinity
+      default: return ret(c.sector_name, sortKey as ReturnWindow) ?? -Infinity
+    }
+  }
+  const sorted = [...cards].sort((a, b) => {
+    if (sortKey === 'name') {
+      const d = a.sector_name.localeCompare(b.sector_name)
+      return sortDir === 'asc' ? d : -d
+    }
+    const diff = getVal(b) - getVal(a)
+    return sortDir === 'desc' ? diff : -diff
+  })
+
+  // Sortable header cell
+  function SortTh({ label, skey, sub, borderLeft }: { label: string; skey: HmSortKey; sub?: string; borderLeft?: boolean }) {
+    const active = sortKey === skey
+    return (
+      <th
+        onClick={() => handleSort(skey)}
+        aria-sort={active ? (sortDir === 'desc' ? 'descending' : 'ascending') : 'none'}
+        style={{
+          cursor: 'pointer', userSelect: 'none', textAlign: 'center', padding: '8px 4px',
+          fontFamily: 'Inter, sans-serif', fontSize: 9, letterSpacing: '0.13em', textTransform: 'uppercase',
+          color: active ? 'var(--color-ink-primary, #1A1714)' : 'var(--color-ink-tertiary, #6B6157)',
+          fontWeight: 600, background: 'var(--color-paper-soft, #FBF8F1)',
+          borderBottom: '1px solid var(--color-ink-rule, #DDD3BF)',
+          ...(borderLeft ? { borderLeft: '1px solid var(--color-ink-rule, #DDD3BF)' } : {}),
+        }}
+      >
+        {label}{active && <span style={{ marginLeft: 2 }}>{sortDir === 'desc' ? '↓' : '↑'}</span>}
+        {sub && <span style={{ display: 'block', fontSize: 8, color: 'var(--color-ink-4, #9A8F82)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.04em', textTransform: 'none', marginTop: 2 }}>{sub}</span>}
+      </th>
+    )
+  }
 
   return (
     <div className="overflow-x-auto bg-paper border border-paper-rule rounded-[2px]">
@@ -151,109 +198,38 @@ export function SectorHeatmapTable({
       >
         <thead>
           <tr>
+            {/* Sector name — sortable (A–Z) */}
             <th
+              onClick={() => handleSort('name')}
+              aria-sort={sortKey === 'name' ? (sortDir === 'desc' ? 'descending' : 'ascending') : 'none'}
               style={{
+                cursor: 'pointer', userSelect: 'none',
                 textAlign: 'left',
-                paddingLeft: 14,
-                paddingRight: 8,
-                paddingTop: 8,
-                paddingBottom: 8,
-                fontFamily: 'Inter, sans-serif',
-                fontSize: 9,
-                letterSpacing: '0.13em',
-                textTransform: 'uppercase',
-                color: 'var(--color-ink-tertiary, #6B6157)',
-                fontWeight: 600,
-                background: 'var(--color-paper-soft, #FBF8F1)',
+                paddingLeft: 14, paddingRight: 8, paddingTop: 8, paddingBottom: 8,
+                fontFamily: 'Inter, sans-serif', fontSize: 9, letterSpacing: '0.13em', textTransform: 'uppercase',
+                color: sortKey === 'name' ? 'var(--color-ink-primary, #1A1714)' : 'var(--color-ink-tertiary, #6B6157)',
+                fontWeight: 600, background: 'var(--color-paper-soft, #FBF8F1)',
                 borderBottom: '1px solid var(--color-ink-rule, #DDD3BF)',
               }}
             >
-              Sector
+              Sector{sortKey === 'name' && <span style={{ marginLeft: 2 }}>{sortDir === 'desc' ? '↓' : '↑'}</span>}
             </th>
 
-            {/* 1D return — NSE sector index (not bottom-up) */}
-            <th
-              style={{
-                textAlign: 'center',
-                padding: '8px 4px',
-                fontFamily: 'Inter, sans-serif',
-                fontSize: 9,
-                letterSpacing: '0.13em',
-                textTransform: 'uppercase',
-                color: 'var(--color-ink-tertiary, #6B6157)',
-                fontWeight: 600,
-                background: 'var(--color-paper-soft, #FBF8F1)',
-                borderBottom: '1px solid var(--color-ink-rule, #DDD3BF)',
-              }}
-            >
-              1D
-              <span style={{ display: 'block', fontSize: 8, color: 'var(--color-ink-4, #9A8F82)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.04em', textTransform: 'none', marginTop: 2 }}>abs</span>
-            </th>
+            {/* 1D */}
+            <SortTh label="1D" skey="1d" sub="abs" />
 
             {/* Returns */}
-            {['1W', '1M', '3M', '6M', '12M'].map((w) => (
-              <th
-                key={w}
-                style={{
-                  textAlign: 'center',
-                  padding: '8px 4px',
-                  fontFamily: 'Inter, sans-serif',
-                  fontSize: 9,
-                  letterSpacing: '0.13em',
-                  textTransform: 'uppercase',
-                  color: 'var(--color-ink-tertiary, #6B6157)',
-                  fontWeight: 600,
-                  background: 'var(--color-paper-soft, #FBF8F1)',
-                  borderBottom: '1px solid var(--color-ink-rule, #DDD3BF)',
-                }}
-              >
-                {w}
-                <span style={{ display: 'block', fontSize: 8, color: 'var(--color-ink-4, #9A8F82)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.04em', textTransform: 'none', marginTop: 2 }}>abs</span>
-              </th>
+            {(['1w', '1m', '3m', '6m', '12m'] as const).map((w) => (
+              <SortTh key={w} label={w.toUpperCase()} skey={w} sub="abs" />
             ))}
 
             {/* RS columns */}
-            {['1M', '3M', '6M'].map((w) => (
-              <th
-                key={`rs-${w}`}
-                style={{
-                  textAlign: 'center',
-                  padding: '8px 4px',
-                  fontFamily: 'Inter, sans-serif',
-                  fontSize: 9,
-                  letterSpacing: '0.13em',
-                  textTransform: 'uppercase',
-                  color: 'var(--color-ink-tertiary, #6B6157)',
-                  fontWeight: 600,
-                  background: 'var(--color-paper-soft, #FBF8F1)',
-                  borderBottom: '1px solid var(--color-ink-rule, #DDD3BF)',
-                  borderLeft: '1px solid var(--color-ink-rule, #DDD3BF)',
-                }}
-              >
-                RS {w}
-                <span style={{ display: 'block', fontSize: 8, color: 'var(--color-ink-4, #9A8F82)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.04em', textTransform: 'none', marginTop: 2 }}>pp vs N500</span>
-              </th>
+            {(['1m', '3m', '6m'] as const).map((w) => (
+              <SortTh key={`rs-${w}`} label={`RS ${w.toUpperCase()}`} skey={`rs_${w}` as HmSortKey} sub="pp vs N500" borderLeft />
             ))}
 
-            {/* Signal count */}
-            <th
-              style={{
-                textAlign: 'center',
-                padding: '8px 4px',
-                fontFamily: 'Inter, sans-serif',
-                fontSize: 9,
-                letterSpacing: '0.13em',
-                textTransform: 'uppercase',
-                color: 'var(--color-ink-tertiary, #6B6157)',
-                fontWeight: 600,
-                background: 'var(--color-paper-soft, #FBF8F1)',
-                borderBottom: '1px solid var(--color-ink-rule, #DDD3BF)',
-                borderLeft: '1px solid var(--color-ink-rule, #DDD3BF)',
-              }}
-            >
-              Signals
-              <span style={{ display: 'block', fontSize: 8, color: 'var(--color-ink-4, #9A8F82)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.04em', textTransform: 'none', marginTop: 2 }}>H/M/L</span>
-            </th>
+            {/* Signal count — sortable */}
+            <SortTh label="Signals" skey="signals" sub="H/M/L" borderLeft />
 
             <th
               style={{

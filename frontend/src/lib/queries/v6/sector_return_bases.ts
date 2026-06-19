@@ -42,7 +42,35 @@ type RawSectorRow = {
 export async function getSectorReturnBases(): Promise<ReturnBasesPayload> {
   const rows = await sql<RawSectorRow[]>`
     WITH sdate AS (SELECT MAX(date) d FROM atlas.atlas_stock_metrics_daily),
-    idate AS (SELECT MAX(date) d FROM atlas.atlas_index_metrics_daily),
+    -- Index codes we need returns for: each sector's primary index + Nifty 500.
+    idx_codes AS (
+      SELECT DISTINCT primary_nse_index AS code
+      FROM atlas.atlas_sector_master
+      WHERE is_active = true AND LOWER(sector_name) NOT LIKE '%conglomerate%'
+      UNION SELECT 'NIFTY 500'
+    ),
+    idx_latest AS (
+      SELECT c.code, lp.date AS d, lp.close AS c0
+      FROM idx_codes c
+      JOIN LATERAL (
+        SELECT date, close FROM public.de_index_prices
+        WHERE index_code = c.code AND close > 0 ORDER BY date DESC LIMIT 1
+      ) lp ON true
+    ),
+    -- Index returns from RAW de_index_prices. atlas_index_metrics_daily is buggy
+    -- for sparse indices — it reaches back to a stale price (e.g. FMCG 3m showed
+    -- +249.8%). Staleness guard: NULL a window when no close exists near the
+    -- target date, so we never show a wrong number (just "—").
+    idx_ret AS (
+      SELECT l.code, l.d,
+        (l.c0 / NULLIF((SELECT close FROM public.de_index_prices WHERE index_code=l.code AND close>0 AND date <  l.d       AND date >= l.d - 5   ORDER BY date DESC LIMIT 1),0) - 1) AS r1d,
+        (l.c0 / NULLIF((SELECT close FROM public.de_index_prices WHERE index_code=l.code AND close>0 AND date <= l.d - 7   AND date >= l.d - 13  ORDER BY date DESC LIMIT 1),0) - 1) AS r1w,
+        (l.c0 / NULLIF((SELECT close FROM public.de_index_prices WHERE index_code=l.code AND close>0 AND date <= l.d - 30  AND date >= l.d - 38  ORDER BY date DESC LIMIT 1),0) - 1) AS r1m,
+        (l.c0 / NULLIF((SELECT close FROM public.de_index_prices WHERE index_code=l.code AND close>0 AND date <= l.d - 91  AND date >= l.d - 103 ORDER BY date DESC LIMIT 1),0) - 1) AS r3m,
+        (l.c0 / NULLIF((SELECT close FROM public.de_index_prices WHERE index_code=l.code AND close>0 AND date <= l.d - 182 AND date >= l.d - 194 ORDER BY date DESC LIMIT 1),0) - 1) AS r6m,
+        (l.c0 / NULLIF((SELECT close FROM public.de_index_prices WHERE index_code=l.code AND close>0 AND date <= l.d - 365 AND date >= l.d - 380 ORDER BY date DESC LIMIT 1),0) - 1) AS r12m
+      FROM idx_latest l
+    ),
     -- free-float weighted bottom-up, per sector per window (weight = float_shares × price)
     con AS (
       SELECT u.sector,
@@ -67,14 +95,13 @@ export async function getSectorReturnBases(): Promise<ReturnBasesPayload> {
     )
     SELECT
       sm2.sector_name,
-      im.index_code,
-      im.ret_1d::text  AS ix_1d,  im.ret_1w::text  AS ix_1w,  im.ret_1m::text AS ix_1m,
-      im.ret_3m::text  AS ix_3m,  im.ret_6m::text  AS ix_6m,  im.ret_12m::text AS ix_12m,
+      sm2.primary_nse_index AS index_code,
+      ir.r1d::text  AS ix_1d,  ir.r1w::text  AS ix_1w,  ir.r1m::text AS ix_1m,
+      ir.r3m::text  AS ix_3m,  ir.r6m::text  AS ix_6m,  ir.r12m::text AS ix_12m,
       bu.bu_1d, bu.bu_1w, bu.bu_1m, bu.bu_3m, bu.bu_6m, bu.bu_12m,
-      im.date::text AS as_of
+      ir.d::text AS as_of
     FROM atlas.atlas_sector_master sm2
-    JOIN atlas.atlas_index_metrics_daily im
-      ON im.index_code = sm2.primary_nse_index AND im.date = (SELECT d FROM idate)
+    LEFT JOIN idx_ret ir ON ir.code = sm2.primary_nse_index
     LEFT JOIN bu ON bu.sector = sm2.sector_name
     WHERE sm2.is_active = true
       AND LOWER(sm2.sector_name) NOT LIKE '%conglomerate%'
@@ -82,14 +109,20 @@ export async function getSectorReturnBases(): Promise<ReturnBasesPayload> {
   `
 
   const baseRow = await sql<Array<RawSectorRow>>`
-    SELECT 'NIFTY 500' AS sector_name, index_code,
-      ret_1d::text AS ix_1d, ret_1w::text AS ix_1w, ret_1m::text AS ix_1m,
-      ret_3m::text AS ix_3m, ret_6m::text AS ix_6m, ret_12m::text AS ix_12m,
+    WITH l AS (
+      SELECT date AS d, close AS c0 FROM public.de_index_prices
+      WHERE index_code = 'NIFTY 500' AND close > 0 ORDER BY date DESC LIMIT 1
+    )
+    SELECT 'NIFTY 500' AS sector_name, 'NIFTY 500' AS index_code,
+      (l.c0 / NULLIF((SELECT close FROM public.de_index_prices WHERE index_code='NIFTY 500' AND close>0 AND date <  l.d       AND date >= l.d - 5   ORDER BY date DESC LIMIT 1),0) - 1)::text AS ix_1d,
+      (l.c0 / NULLIF((SELECT close FROM public.de_index_prices WHERE index_code='NIFTY 500' AND close>0 AND date <= l.d - 7   AND date >= l.d - 13  ORDER BY date DESC LIMIT 1),0) - 1)::text AS ix_1w,
+      (l.c0 / NULLIF((SELECT close FROM public.de_index_prices WHERE index_code='NIFTY 500' AND close>0 AND date <= l.d - 30  AND date >= l.d - 38  ORDER BY date DESC LIMIT 1),0) - 1)::text AS ix_1m,
+      (l.c0 / NULLIF((SELECT close FROM public.de_index_prices WHERE index_code='NIFTY 500' AND close>0 AND date <= l.d - 91  AND date >= l.d - 103 ORDER BY date DESC LIMIT 1),0) - 1)::text AS ix_3m,
+      (l.c0 / NULLIF((SELECT close FROM public.de_index_prices WHERE index_code='NIFTY 500' AND close>0 AND date <= l.d - 182 AND date >= l.d - 194 ORDER BY date DESC LIMIT 1),0) - 1)::text AS ix_6m,
+      (l.c0 / NULLIF((SELECT close FROM public.de_index_prices WHERE index_code='NIFTY 500' AND close>0 AND date <= l.d - 365 AND date >= l.d - 380 ORDER BY date DESC LIMIT 1),0) - 1)::text AS ix_12m,
       NULL AS bu_1d, NULL AS bu_1w, NULL AS bu_1m, NULL AS bu_3m, NULL AS bu_6m, NULL AS bu_12m,
-      date::text AS as_of
-    FROM atlas.atlas_index_metrics_daily
-    WHERE index_code = 'NIFTY 500'
-      AND date = (SELECT MAX(date) FROM atlas.atlas_index_metrics_daily)
+      l.d::text AS as_of
+    FROM l
   `
 
   const ixSet = (r: RawSectorRow): ReturnSet => ({

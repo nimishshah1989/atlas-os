@@ -101,13 +101,20 @@ export default async function SectorDetailPage({
   // Index-basis (cap-weighted) figures for this sector — replaces the legacy
   // equal-weighted MV returns that over-counted micro-caps.
   const bases = returnBases.sectors.find((s) => s.sector_name === decoded) ?? null
+  // Headline figures: prefer the official cap-weighted index; fall back to the
+  // free-float bottom-up where the NSE index price series is too sparse, so the
+  // hero never shows "—" or a wrong number.
   const ix = bases?.index
+  const bu = bases?.bottomup
   const n500 = returnBases.nifty500
+  const pick = (k: 'ret_3m' | 'ret_12m') => ix?.[k] ?? bu?.[k] ?? null
+  const headRet3m = pick('ret_3m')
+  const headRet12m = pick('ret_12m')
   const pct = (v: number | null | undefined) => (v == null ? null : v * 100)
-  const heroRet12m = pct(ix?.ret_12m)
-  const heroRet3m = pct(ix?.ret_3m)
+  const heroRet12m = pct(headRet12m)
+  const heroRet3m = pct(headRet3m)
   const heroRs3m =
-    ix?.ret_3m != null && n500.ret_3m != null ? (ix.ret_3m - n500.ret_3m) * 100 : null
+    headRet3m != null && n500.ret_3m != null ? (headRet3m - n500.ret_3m) * 100 : null
 
   return (
     <div className="max-w-[1400px] mx-auto">
@@ -115,8 +122,8 @@ export default async function SectorDetailPage({
       {/* Trader-view verdict header — index-basis 3M return + RS (fractions) */}
       <SectorTraderViewHeader
         sector={deepdive}
-        ret3mOverride={ix?.ret_3m ?? null}
-        rs3mOverride={ix?.ret_3m != null && n500.ret_3m != null ? ix.ret_3m - n500.ret_3m : null}
+        ret3mOverride={headRet3m}
+        rs3mOverride={headRet3m != null && n500.ret_3m != null ? headRet3m - n500.ret_3m : null}
       />
 
       {/* Page header */}
