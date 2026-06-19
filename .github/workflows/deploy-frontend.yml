@@ -9,6 +9,12 @@ on:
       - 'frontend/**'
   workflow_dispatch:
 
+# Deploys to a DEDICATED prod directory (/home/ubuntu/atlas-frontend-v2), NOT the
+# /home/ubuntu/atlas-os dev working tree. The dev tree accumulates untracked WIP
+# files; `next build` type-checks every file in the project, so a single broken
+# WIP file there failed every deploy — and a stray `next dev` in it once took
+# prod down. The dedicated dir only ever receives main's frontend source, so the
+# build is always clean. pm2 process: atlas-frontend-v2 (port 3002, behind nginx).
 jobs:
   deploy:
     name: Build, deploy + auto-rollback on EC2
@@ -28,7 +34,7 @@ jobs:
         with:
           switches: -az --exclude='.git' --exclude='node_modules' --exclude='.next' --exclude='standalone' --exclude='.env*'
           path: frontend/
-          remote_path: /home/ubuntu/atlas-os/frontend/
+          remote_path: /home/ubuntu/atlas-frontend-v2/
           remote_host: ${{ secrets.EC2_HOST }}
           remote_user: ubuntu
           remote_key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
@@ -42,7 +48,7 @@ jobs:
           command_timeout: 10m
           script: |
             set -e
-            cd /home/ubuntu/atlas-os/frontend
+            cd /home/ubuntu/atlas-frontend-v2
 
             STAMP=$(date +%Y%m%d_%H%M%S)
             LOG="/home/ubuntu/logs/deploy_${STAMP}.log"
@@ -59,7 +65,7 @@ jobs:
             echo "[deploy ${STAMP}] building (PM2 still serves the OLD build)" | tee -a "$LOG"
             if NODE_OPTIONS="--max-old-space-size=3072" npm run build >> "$LOG" 2>&1; then
               echo "[deploy ${STAMP}] build OK; pm2 reload (rolling, zero-downtime)" | tee -a "$LOG"
-              pm2 reload atlas-frontend >> "$LOG" 2>&1
+              pm2 reload atlas-frontend-v2 >> "$LOG" 2>&1
             else
               echo "[deploy ${STAMP}] build FAILED; .next untouched; serving stays old" | tee -a "$LOG"
               exit 1
@@ -70,14 +76,14 @@ jobs:
             HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" https://atlas.jslwealth.in/)
             if [ "$HTTP_CODE" = "200" ]; then
               echo "[deploy ${STAMP}] OK 200 — keeping new build" | tee -a "$LOG"
-              ls -1dt /home/ubuntu/atlas-os/frontend/.next.bak.* 2>/dev/null | tail -n +6 | xargs -r rm -rf
+              ls -1dt /home/ubuntu/atlas-frontend-v2/.next.bak.* 2>/dev/null | tail -n +6 | xargs -r rm -rf
               exit 0
             else
               echo "[deploy ${STAMP}] FAIL — got HTTP ${HTTP_CODE} — rolling back to .next.bak.${STAMP}" | tee -a "$LOG"
               if [ -d ".next.bak.${STAMP}" ]; then
                 rm -rf .next
                 mv .next.bak.${STAMP} .next
-                pm2 reload atlas-frontend >> "$LOG" 2>&1
+                pm2 reload atlas-frontend-v2 >> "$LOG" 2>&1
                 sleep 5
                 HTTP_AFTER=$(curl -sk -o /dev/null -w "%{http_code}" https://atlas.jslwealth.in/)
                 echo "[deploy ${STAMP}] after rollback: HTTP ${HTTP_AFTER}" | tee -a "$LOG"
