@@ -19,11 +19,13 @@ import { DataSourceBanner } from '@/components/v6/DataSourceBanner'
 import { SectorHeroStrip } from '@/components/v6/sectors/SectorHeroStrip'
 import { SectorTraderViewHeader } from '@/components/v6/sectors/SectorTraderViewHeader'
 import { RSWindowsTable } from '@/components/v6/sectors/RSWindowsTable'
+import { SectorRSRatioCharts } from '@/components/v6/sectors/SectorRSRatioCharts'
 import { ConstituentsTable } from '@/components/v6/sectors/ConstituentsTable'
 import { TopPicksPanel } from '@/components/v6/sectors/TopPicksPanel'
 import { StrengthDistChart } from '@/components/v6/sectors/StrengthDistChart'
 import { OpenSignalsPanel } from '@/components/v6/sectors/OpenSignalsPanel'
 import { getSectorDeepdive } from '@/lib/queries/v6/sectors'
+import { getSectorRatioSeries } from '@/lib/queries/v6/sector_index_rs'
 
 export const dynamic = 'force-dynamic'
 
@@ -87,7 +89,10 @@ export default async function SectorDetailPage({
   const { sector } = await params
   const decoded = decodeURIComponent(sector)
 
-  const deepdive = await getSectorDeepdive(decoded)
+  const [deepdive, ratioSeries] = await Promise.all([
+    getSectorDeepdive(decoded),
+    getSectorRatioSeries(decoded),
+  ])
 
   if (!deepdive) notFound()
 
@@ -140,6 +145,21 @@ export default async function SectorDetailPage({
         />
         <Suspense fallback={<Skeleton h={200} />}>
           <RSWindowsTable sector={deepdive} />
+        </Suspense>
+      </section>
+
+      {/* Section 1b — RS ratio charts (sector index / Nifty 50) */}
+      <section className="px-8 py-9 border-b border-paper-rule" aria-label="Relative strength ratio charts">
+        <SectionHead
+          title="Relative strength · sector vs Nifty 50"
+          subtitle="Sector index divided by Nifty 50 across Daily / Weekly / Monthly intervals. A rising line means the sector is outperforming the broad market."
+        />
+        <Suspense fallback={<Skeleton h={360} />}>
+          <SectorRSRatioCharts
+            sectorName={decoded}
+            indexCode={ratioSeries.index_code}
+            daily={ratioSeries.daily}
+          />
         </Suspense>
       </section>
 
