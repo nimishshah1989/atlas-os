@@ -56,7 +56,9 @@ function Cell({ v, unit }: { v: number | null; unit: '%' | 'pp' }) {
 }
 
 export function SectorReturnBasisPanel({ data, nifty500 }: Props) {
-  const [basis, setBasis] = useState<ReturnBasis>('index')
+  // Default to Bottom-up — reliable for every sector. The Index basis is missing
+  // for several NSE sector indices whose price series is too sparse (shows "—").
+  const [basis, setBasis] = useState<ReturnBasis>('bottomup')
 
   if (!data) {
     return (

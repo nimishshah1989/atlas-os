@@ -103,7 +103,8 @@ export function SectorHeatmapTable({
   // Dual-basis returns (index + free-float bottom-up) across all windows.
   returnBases?: ReturnBasesPayload
 }) {
-  const [basis, setBasis] = useState<ReturnBasis>('index')
+  // Default to Bottom-up — reliable for every sector (Index is sparse/"—" for some).
+  const [basis, setBasis] = useState<ReturnBasis>('bottomup')
 
   if (cards.length === 0) {
     return (
