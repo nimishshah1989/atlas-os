@@ -79,10 +79,22 @@ function VerdictStamp({ verdict }: { verdict: string }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function SectorHeroStrip({ sector }: { sector: SectorDeepdiveRow }) {
-  const rs3m = fmtPp(sector.rs_windows?.rs_3m ?? null)
-  const ret12m = fmtPct(sector.returns?.ret_12m ?? null)
-  const ret3m = fmtPct(sector.returns?.ret_3m ?? null)
+export function SectorHeroStrip({
+  sector,
+  // Index-basis overrides (percentage / pp units). When provided, the hero shows
+  // the cap-weighted index figures instead of the legacy equal-weighted MV values.
+  ret12mOverride,
+  ret3mOverride,
+  rs3mOverride,
+}: {
+  sector: SectorDeepdiveRow
+  ret12mOverride?: number | null
+  ret3mOverride?: number | null
+  rs3mOverride?: number | null
+}) {
+  const rs3m = fmtPp(rs3mOverride !== undefined ? rs3mOverride : (sector.rs_windows?.rs_3m ?? null))
+  const ret12m = fmtPct(ret12mOverride !== undefined ? ret12mOverride : (sector.returns?.ret_12m ?? null))
+  const ret3m = fmtPct(ret3mOverride !== undefined ? ret3mOverride : (sector.returns?.ret_3m ?? null))
   const pctEma20 = sector.pct_above_ema20 != null
     ? Math.round(sector.pct_above_ema20 * 100)
     : null
@@ -100,13 +112,13 @@ export function SectorHeroStrip({ sector }: { sector: SectorDeepdiveRow }) {
           label="12M abs return"
           value={ret12m.text}
           valueCls={ret12m.cls}
-          foot={<span>Absolute sector return, 12-month window.</span>}
+          foot={<span>Cap-weighted index return, 12-month window.</span>}
         />
         <Tile
           label="3M abs return"
           value={ret3m.text}
           valueCls={ret3m.cls}
-          foot={<span>Absolute sector return, 3-month window.</span>}
+          foot={<span>Cap-weighted index return, 3-month window.</span>}
         />
         <Tile
           label="Constituents"

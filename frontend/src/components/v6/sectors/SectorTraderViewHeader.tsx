@@ -5,6 +5,7 @@
 // Spec: docs/superpowers/specs/2026-05-28-trader-view-redesign.html §8
 
 import type { SectorDeepdiveRow } from '@/lib/queries/v6/sectors'
+import { toNumber } from '@/lib/v6/decimal'
 import {
   VerdictPill,
   WhyStrip,
@@ -24,16 +25,27 @@ function mapSectorVerdict(state: string | null | undefined): Verdict {
 
 function fmtPct(v: string | number | null | undefined, decimals = 1): string {
   if (v == null) return '—'
-  const n = typeof v === 'number' ? v : Number(v)
+  const n = typeof v === 'number' ? v : (toNumber(v) ?? NaN)
   if (!Number.isFinite(n)) return '—'
   const sign = n >= 0 ? '+' : ''
   return `${sign}${(n * 100).toFixed(decimals)}%`
 }
 
-export function SectorTraderViewHeader({ sector }: { sector: SectorDeepdiveRow }) {
+export function SectorTraderViewHeader({
+  sector,
+  // Index-basis fractions (e.g. 0.097). When provided these replace the legacy
+  // mv_sector_deepdive values, which are percentage-scaled AND equal-weighted —
+  // the old code then ×100'd them again, rendering +4930% etc.
+  rs3mOverride,
+  ret3mOverride,
+}: {
+  sector: SectorDeepdiveRow
+  rs3mOverride?: number | null
+  ret3mOverride?: number | null
+}) {
   const verdict = mapSectorVerdict(sector.verdict)
-  const rs3m = sector.rs_windows?.rs_3m ?? null
-  const ret3m = sector.returns?.ret_3m ?? null
+  const rs3m = rs3mOverride !== undefined ? rs3mOverride : (sector.rs_windows?.rs_3m ?? null)
+  const ret3m = ret3mOverride !== undefined ? ret3mOverride : (sector.returns?.ret_3m ?? null)
 
   const chips: Chip[] = [
     {
@@ -44,7 +56,7 @@ export function SectorTraderViewHeader({ sector }: { sector: SectorDeepdiveRow }
     {
       label: 'RS 3M',
       value: rs3m != null
-        ? `${rs3m >= 0 ? '+' : ''}${(rs3m * 100).toFixed(1)}% vs Nifty 500`
+        ? `${rs3m >= 0 ? '+' : ''}${(rs3m * 100).toFixed(1)}pp vs Nifty 500`
         : '—',
       state: rs3m == null ? 'neutral'
            : rs3m > 0.02 ? 'pass'

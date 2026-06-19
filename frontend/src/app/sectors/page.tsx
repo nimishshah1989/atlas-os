@@ -18,6 +18,7 @@ import { SectorHeatmapTable } from '@/components/v6/sectors/SectorHeatmapTable'
 import { SectorBreadthMVPanel } from '@/components/v6/sectors/SectorBreadthMVPanel'
 import { getSectorCards, getSectorRRG, getSectorBreadthMV } from '@/lib/queries/v6/sectors'
 import { getSectorIndexRs } from '@/lib/queries/v6/sector_index_rs'
+import { getSectorReturnBases } from '@/lib/queries/v6/sector_return_bases'
 
 export const dynamic = 'force-dynamic'
 
@@ -91,20 +92,15 @@ function SummaryBand({
 
 export default async function SectorsPage() {
   // Parallel data fetch — all independent queries
-  const [cards, rrg, breadth, indexRs] = await Promise.all([
+  const [cards, rrg, breadth, indexRs, returnBases] = await Promise.all([
     getSectorCards(),
     getSectorRRG(),
     getSectorBreadthMV(),
     getSectorIndexRs(),
+    getSectorReturnBases(),
   ])
 
   const latestDate = cards[0]?.as_of_date ?? null
-
-  // NSE sector-index 1-day return, keyed by sector name — feeds the heatmap's
-  // index-level 1D column (the other columns are bottom-up from mv_sector_cards).
-  const idxRet1dBySector: Record<string, number | null> = Object.fromEntries(
-    indexRs.sectors.map((s) => [s.sector_name, s.ret.ret_1d]),
-  )
 
   return (
     <div className="max-w-[1400px] mx-auto">
@@ -156,10 +152,10 @@ export default async function SectorsPage() {
       <section className="px-8 py-10 border-b border-paper-rule" aria-label="Sector return heatmap">
         <SectionHead
           title="Multi-window return heatmap"
-          subtitle="Absolute returns and RS spread vs Nifty 500 across 1D / 1W / 1M / 3M / 6M / 12M windows. 1D is the NSE sector index; other windows are bottom-up. Color intensity = magnitude of move."
+          subtitle="Returns and RS vs Nifty 500 across 1D / 1W / 1M / 3M / 6M / 12M. Toggle between the cap-weighted Index and the free-float cap-weighted Bottom-up basis. Color intensity = magnitude of move."
         />
         <Suspense fallback={<div className="h-64 bg-paper-rule/20 rounded-sm animate-pulse" />}>
-          <SectorHeatmapTable cards={cards} idxRet1dBySector={idxRet1dBySector} />
+          <SectorHeatmapTable cards={cards} returnBases={returnBases} />
         </Suspense>
       </section>
 

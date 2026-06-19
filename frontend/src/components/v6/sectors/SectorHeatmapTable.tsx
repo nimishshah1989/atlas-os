@@ -4,7 +4,12 @@
 // Source: mv_sector_cards (ret_1w/1m/3m/6m/12m + rs_1m/3m/6m + pct_above_ema20 + breadth).
 
 import Link from 'next/link'
+import { useState } from 'react'
 import type { SectorCardRow } from '@/lib/queries/v6/sectors'
+import {
+  basisReturn, basisRs,
+  type ReturnBasesPayload, type ReturnBasis, type ReturnWindow,
+} from '@/lib/queries/v6/sector_return_bases_shared'
 
 // ── Color intensity mapping ───────────────────────────────────────────────────
 
@@ -92,23 +97,53 @@ function ConfBar({ H, M, L }: { H: number; M: number; L: number }) {
 
 export function SectorHeatmapTable({
   cards,
-  idxRet1dBySector,
+  returnBases,
 }: {
   cards: SectorCardRow[]
-  // NSE sector-index 1-day return keyed by sector name (index-level, not bottom-up).
-  idxRet1dBySector?: Record<string, number | null>
+  // Dual-basis returns (index + free-float bottom-up) across all windows.
+  returnBases?: ReturnBasesPayload
 }) {
+  const [basis, setBasis] = useState<ReturnBasis>('index')
+
   if (cards.length === 0) {
     return (
       <div className="text-ink-tertiary text-sm text-center py-8">No heatmap data available.</div>
     )
   }
 
-  // Sort by rs_3m descending for heatmap
-  const sorted = [...cards].sort((a, b) => (b.rs_3m ?? -Infinity) - (a.rs_3m ?? -Infinity))
+  const bySector = new Map((returnBases?.sectors ?? []).map((s) => [s.sector_name, s]))
+  const n500 = returnBases?.nifty500 ?? { ret_1d: null, ret_1w: null, ret_1m: null, ret_3m: null, ret_6m: null, ret_12m: null }
+  const ret = (name: string, w: ReturnWindow): number | null => {
+    const s = bySector.get(name); return s ? basisReturn(s, basis, w) : null
+  }
+  const rs = (name: string, w: ReturnWindow): number | null => {
+    const s = bySector.get(name); return s ? basisRs(s, n500, basis, w) : null
+  }
+
+  // Sort by active-basis RS 3M descending
+  const sorted = [...cards].sort((a, b) => (rs(b.sector_name, '3m') ?? -Infinity) - (rs(a.sector_name, '3m') ?? -Infinity))
 
   return (
     <div className="overflow-x-auto bg-paper border border-paper-rule rounded-[2px]">
+      {/* Basis toggle */}
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-paper-rule bg-paper-soft">
+        <span className="text-[10px] uppercase tracking-[0.14em] text-ink-tertiary font-semibold">Return basis</span>
+        {([['index', 'Index'], ['bottomup', 'Bottom-up']] as const).map(([k, label]) => (
+          <button
+            key={k}
+            onClick={() => setBasis(k)}
+            aria-pressed={basis === k}
+            className={`px-2.5 py-0.5 text-[11px] border rounded-sm font-medium transition-colors cursor-pointer ${
+              basis === k ? 'bg-accent text-paper border-accent' : 'bg-paper text-ink-tertiary border-paper-rule hover:text-ink-secondary'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+        <span className="ml-auto font-mono text-[10px] text-ink-tertiary">
+          {basis === 'index' ? 'cap-weighted NSE indices' : 'free-float cap-weighted constituents'}
+        </span>
+      </div>
       <table
         style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}
         aria-label="Sector return heatmap"
@@ -152,7 +187,7 @@ export function SectorHeatmapTable({
               }}
             >
               1D
-              <span style={{ display: 'block', fontSize: 8, color: 'var(--color-ink-4, #9A8F82)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.04em', textTransform: 'none', marginTop: 2 }}>idx abs</span>
+              <span style={{ display: 'block', fontSize: 8, color: 'var(--color-ink-4, #9A8F82)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.04em', textTransform: 'none', marginTop: 2 }}>abs</span>
             </th>
 
             {/* Returns */}
@@ -264,20 +299,18 @@ export function SectorHeatmapTable({
                 </div>
               </td>
 
-              {/* 1D — NSE sector index */}
-              <HmCell value={idxRet1dBySector?.[card.sector_name] ?? null} />
+              {/* Returns — active basis (index or free-float bottom-up) */}
+              <HmCell value={ret(card.sector_name, '1d')} />
+              <HmCell value={ret(card.sector_name, '1w')} />
+              <HmCell value={ret(card.sector_name, '1m')} />
+              <HmCell value={ret(card.sector_name, '3m')} />
+              <HmCell value={ret(card.sector_name, '6m')} />
+              <HmCell value={ret(card.sector_name, '12m')} />
 
-              {/* Absolute returns */}
-              <HmCell value={card.ret_1w} />
-              <HmCell value={card.ret_1m} />
-              <HmCell value={card.ret_3m} />
-              <HmCell value={card.ret_6m} />
-              <HmCell value={card.ret_12m} />
-
-              {/* RS vs Nifty 500 — unit is pp (percentage point), not % */}
-              <HmCell value={card.rs_1m} unit="pp" />
-              <HmCell value={card.rs_3m} unit="pp" />
-              <HmCell value={card.rs_6m} unit="pp" />
+              {/* RS vs Nifty 500 — active basis, pp */}
+              <HmCell value={rs(card.sector_name, '1m')} unit="pp" />
+              <HmCell value={rs(card.sector_name, '3m')} unit="pp" />
+              <HmCell value={rs(card.sector_name, '6m')} unit="pp" />
 
               {/* Signal count */}
               <td
