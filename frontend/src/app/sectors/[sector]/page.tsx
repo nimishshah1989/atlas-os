@@ -18,7 +18,6 @@ import { Suspense } from 'react'
 import { DataSourceBanner } from '@/components/v6/DataSourceBanner'
 import { SectorHeroStrip } from '@/components/v6/sectors/SectorHeroStrip'
 import { SectorTraderViewHeader } from '@/components/v6/sectors/SectorTraderViewHeader'
-import { RSWindowsTable } from '@/components/v6/sectors/RSWindowsTable'
 import { SectorRSRatioCharts } from '@/components/v6/sectors/SectorRSRatioCharts'
 import { ConstituentsTable } from '@/components/v6/sectors/ConstituentsTable'
 import { TopPicksPanel } from '@/components/v6/sectors/TopPicksPanel'
@@ -26,6 +25,8 @@ import { StrengthDistChart } from '@/components/v6/sectors/StrengthDistChart'
 import { OpenSignalsPanel } from '@/components/v6/sectors/OpenSignalsPanel'
 import { getSectorDeepdive } from '@/lib/queries/v6/sectors'
 import { getSectorRatioSeries } from '@/lib/queries/v6/sector_index_rs'
+import { getSectorReturnBases } from '@/lib/queries/v6/sector_return_bases'
+import { SectorReturnBasisPanel } from '@/components/v6/sectors/SectorReturnBasisPanel'
 
 export const dynamic = 'force-dynamic'
 
@@ -89,18 +90,34 @@ export default async function SectorDetailPage({
   const { sector } = await params
   const decoded = decodeURIComponent(sector)
 
-  const [deepdive, ratioSeries] = await Promise.all([
+  const [deepdive, ratioSeries, returnBases] = await Promise.all([
     getSectorDeepdive(decoded),
     getSectorRatioSeries(decoded),
+    getSectorReturnBases(),
   ])
 
   if (!deepdive) notFound()
 
+  // Index-basis (cap-weighted) figures for this sector — replaces the legacy
+  // equal-weighted MV returns that over-counted micro-caps.
+  const bases = returnBases.sectors.find((s) => s.sector_name === decoded) ?? null
+  const ix = bases?.index
+  const n500 = returnBases.nifty500
+  const pct = (v: number | null | undefined) => (v == null ? null : v * 100)
+  const heroRet12m = pct(ix?.ret_12m)
+  const heroRet3m = pct(ix?.ret_3m)
+  const heroRs3m =
+    ix?.ret_3m != null && n500.ret_3m != null ? (ix.ret_3m - n500.ret_3m) * 100 : null
+
   return (
     <div className="max-w-[1400px] mx-auto">
 
-      {/* Trader-view verdict header */}
-      <SectorTraderViewHeader sector={deepdive} />
+      {/* Trader-view verdict header — index-basis 3M return + RS (fractions) */}
+      <SectorTraderViewHeader
+        sector={deepdive}
+        ret3mOverride={ix?.ret_3m ?? null}
+        rs3mOverride={ix?.ret_3m != null && n500.ret_3m != null ? ix.ret_3m - n500.ret_3m : null}
+      />
 
       {/* Page header */}
       <section className="px-8 py-8 border-b border-paper-rule">
@@ -125,26 +142,31 @@ export default async function SectorDetailPage({
         </div>
 
         <p className="font-sans text-[15px] text-ink-secondary max-w-[880px]">
-          Sector deep-dive: multidim returns, RS grid vs Nifty 500 across 5 windows, top-30 constituent
-          stocks ranked by composite conviction score, open signal calls, and strength distribution.
+          Sector deep-dive: returns &amp; RS vs Nifty 500 across six windows (Index / Bottom-up basis),
+          top-30 constituent stocks ranked by composite conviction score, open signal calls, and strength distribution.
         </p>
 
-        {/* Hero strip */}
+        {/* Hero strip — return tiles use the cap-weighted index basis */}
         <Suspense fallback={<Skeleton h={80} />}>
-          <SectorHeroStrip sector={deepdive} />
+          <SectorHeroStrip
+            sector={deepdive}
+            ret12mOverride={heroRet12m}
+            ret3mOverride={heroRet3m}
+            rs3mOverride={heroRs3m}
+          />
         </Suspense>
       </section>
 
       <DataSourceBanner source="live" asOf={deepdive.data_as_of} />
 
-      {/* Section 1 — RS windows */}
-      <section className="px-8 py-9 border-b border-paper-rule" aria-label="RS windows vs baselines">
+      {/* Section 1 — Returns & RS across windows, Index ⟷ Bottom-up */}
+      <section className="px-8 py-9 border-b border-paper-rule" aria-label="Sector returns and RS by basis">
         <SectionHead
-          title="RS vs the baselines · 5 windows"
-          subtitle="Percentage-point spread between this sector and Nifty 500 over 5 time windows. Rank is relative to all sectors."
+          title="Returns & RS · all windows"
+          subtitle="Sector return and relative strength vs Nifty 500 across six windows. Toggle between the cap-weighted Index and the free-float cap-weighted Bottom-up of Atlas's constituents."
         />
-        <Suspense fallback={<Skeleton h={200} />}>
-          <RSWindowsTable sector={deepdive} />
+        <Suspense fallback={<Skeleton h={260} />}>
+          <SectorReturnBasisPanel data={bases} nifty500={n500} />
         </Suspense>
       </section>
 
