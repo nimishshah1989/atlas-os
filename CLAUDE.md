@@ -13,6 +13,21 @@ scale: large
 Global engineering rules live at `~/.claude/CLAUDE.md`. This file is a thin
 pointer; substance lives in the docs below.
 
+## ⛔ ABSOLUTE RULE #0 — NO SYNTHETIC OR DERIVED DATA (ZERO TOLERANCE)
+
+**NEVER use synthetic, mocked, fabricated, placeholder, stubbed, or made-up data
+ANYWHERE — not in code, not in fixtures, and NOT IN UNIT TESTS.** Every single number
+must trace to a REAL source: the database, a real feed, a real instrument. Tests run
+against REAL records pulled from the data layer — never invented inputs. No
+default/neutral/stub score may stand in for a real computation. Do not introduce ANY
+number that is synthetic or derived in nature without the FM's **explicit prior
+knowledge and approval**.
+
+*Why this is rule #0:* synthetic-data unit tests went green while the real catalyst
+feed was broken — every filing-rich name scored 0, and fake test data hid a real defect
+in a system that allocates capital. Definition-of-done gates MUST assert on REAL produced
+output (e.g. `scripts/foundation/validate_lenses.py`), never on synthetic fixtures.
+
 ## Active track
 
 **v6** — discovery-first equity intelligence platform rebuild (post-2026-05-24).
