@@ -108,8 +108,72 @@
 
 ---
 
+## Milestone 4: Frontend — Six-Lens Surfaces (COMPLETE)
+
+### Feature flag
+- `NEXT_PUBLIC_LENS_V4=1` enables all lens UI; OFF = production byte-identical.
+- Utility: `frontend/src/lib/feature-flags.ts`
+
+### New components
+
+| Component | Path | Purpose |
+|---|---|---|
+| `LensVectorPanel` | `components/v6/stock-detail/LensVectorPanel.tsx` | 6-lens bar chart + subcomponents + risk flags for stock detail |
+| `LensRankingTable` | `components/v6/stocks/LensRankingTable.tsx` | Sortable lens ranking table (750 stocks, any lens/composite) |
+| `SectorLensHeatmap` | `components/v6/sectors/SectorLensHeatmap.tsx` | Sector-level averaged lens vector heatmap |
+
+### Query layer
+- `frontend/src/lib/queries/lens-scores.ts` — 5 functions querying `atlas.atlas_lens_scores_daily`
+  - `getLensScoreByInstrument()`, `getLensScoreBySymbol()`, `getAllLensScores()`,
+    `getLensScoresBySector()`, `getSectorLensVectors()`
+
+### Surfaces wired (all behind LENS_V4_ENABLED)
+
+| Surface | What's added |
+|---|---|
+| `/stocks/[symbol]` | LensVectorPanel after gates section |
+| `/stocks` | LensRankingTable section above existing screener |
+| `/sectors` | SectorLensHeatmap between RRG and return heatmap |
+| `/` (home) | Regime+Pulse merge: breadth table replaces old chart sections when flag ON |
+
+### Home page redesign (per markets-today-redesign.md)
+When `LENS_V4_ENABLED`:
+- **Removed**: TrendSection, BreadthSection, MomentumSection, ParticipationSection,
+  RegimeClassifierInputs, TodayConvictionTabs
+- **Added**: BreadthTable (from India Pulse) + RegimeJourney12w (kept)
+- **Preserved** (unchanged): RegimeVerdict, SignalScorecard, TodayWorklist,
+  RegimeHeadline, IntradayNiftyStrip, RegimeOverlayChart
+
+### Frontend debt audit
+Components identified for removal when flag permanently ON:
+- `app/india-pulse/` — merged into home
+- `components/regime/{TrendSection,BreadthSection,MomentumSection,ParticipationSection}`
+- `components/regime/RegimeClassifierInputs`
+- `components/v6/landing/TodayConvictionTabs`
+Not deleted yet: required for flag-OFF (production) path.
+
+### ETFs/Funds
+Deferred — lens scores are stock-level atoms; ETF/fund lens vectors require
+holdings-weighted roll-up computation (not yet in backend).
+
+### Tests
+- 22 new tests across 4 test files — **ALL PASS**
+  - `feature-flags.test.ts` (4 tests)
+  - `LensVectorPanel.test.tsx` (7 tests)
+  - `LensRankingTable.test.tsx` (7 tests)
+  - `SectorLensHeatmap.test.tsx` (4 tests)
+
+### Gate status
+- `next build`: PASS
+- `tsc --noEmit`: CLEAN (new files, pre-existing test fixture errors unrelated)
+- `next lint`: CLEAN (new files)
+- Flag OFF parity: All lens UI gated by `LENS_V4_ENABLED` — production unchanged
+
+---
+
 ## What's left for gate green
 
 - **IC ≥ floor**: Requires multiple daily pipeline runs to accumulate time-series IC.
   Infrastructure is complete; run `run_pipeline()` daily then `calibrate_lens_ic()`.
-- **Git push**: No SSH/GitHub credentials on this box. Commits saved locally on branch.
+- **ETF/Fund lens roll-ups**: Backend needs holdings-weighted aggregation before frontend can show lens vectors for ETFs/funds.
+- **Frontend debt cleanup**: Delete old components once flag is permanently ON (see audit list above).
