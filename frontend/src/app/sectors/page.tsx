@@ -18,6 +18,9 @@ import { SectorHeatmapTable } from '@/components/v6/sectors/SectorHeatmapTable'
 import { SectorBreadthMVPanel } from '@/components/v6/sectors/SectorBreadthMVPanel'
 import { getSectorCards, getSectorRRG, getSectorBreadthMV } from '@/lib/queries/v6/sectors'
 import { getSectorIndexRs } from '@/lib/queries/v6/sector_index_rs'
+import { LENS_V4_ENABLED } from '@/lib/feature-flags'
+import { getSectorLensVectors } from '@/lib/queries/lens-scores'
+import { SectorLensHeatmap } from '@/components/v6/sectors/SectorLensHeatmap'
 
 export const dynamic = 'force-dynamic'
 
@@ -91,11 +94,12 @@ function SummaryBand({
 
 export default async function SectorsPage() {
   // Parallel data fetch — all independent queries
-  const [cards, rrg, breadth, indexRs] = await Promise.all([
+  const [cards, rrg, breadth, indexRs, sectorLensVectors] = await Promise.all([
     getSectorCards(),
     getSectorRRG(),
     getSectorBreadthMV(),
     getSectorIndexRs(),
+    LENS_V4_ENABLED ? getSectorLensVectors().catch(() => []) : Promise.resolve([]),
   ])
 
   const latestDate = cards[0]?.as_of_date ?? null
@@ -151,6 +155,17 @@ export default async function SectorsPage() {
           <SectorRRGChart data={rrg} />
         </Suspense>
       </section>
+
+      {/* Section 1½ — Six-Lens sector vector (v4 feature flag) */}
+      {LENS_V4_ENABLED && sectorLensVectors.length > 0 && (
+        <section className="px-8 py-10 border-b border-paper-rule" aria-label="Sector six-lens vector">
+          <SectionHead
+            title="Sector six-lens vector"
+            subtitle="Average score across each lens for all stocks in each sector. Sorted by composite. Color intensity = magnitude."
+          />
+          <SectorLensHeatmap vectors={sectorLensVectors} />
+        </section>
+      )}
 
       {/* Section 2 — Heatmap table (consolidated: cards grid removed per M16 — heatmap is denser) */}
       <section className="px-8 py-10 border-b border-paper-rule" aria-label="Sector return heatmap">

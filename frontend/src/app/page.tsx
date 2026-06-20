@@ -19,6 +19,10 @@ import { getRegimeJourney12w, getTopConvictionCalls } from '@/lib/queries/v6/lan
 import { RegimeJourney12w } from '@/components/v6/landing/RegimeJourney12w'
 import { TodayConvictionTabs } from '@/components/v6/landing/TodayConvictionTabs'
 import { RegimeClassifierInputs } from '@/components/regime/RegimeClassifierInputs'
+// v4 lens — consolidated Regime+Pulse home
+import { LENS_V4_ENABLED } from '@/lib/feature-flags'
+import { getIndiaPulsePage } from '@/lib/queries/v6/india_pulse'
+import { BreadthTable } from '@/components/v6/india-pulse/BreadthTable'
 
 type SearchParams = Promise<{ range?: string }>
 
@@ -27,11 +31,12 @@ export default async function RegimePage({ searchParams }: { searchParams: Searc
   const historyRange = range as TimeRange
   const historyDays = rangeToDays(historyRange)
 
-  const [current, history, journey12w, convictionCalls] = await Promise.all([
+  const [current, history, journey12w, convictionCalls, pulseData] = await Promise.all([
     getCurrentRegime(),
     getRegimeHistory(historyDays),
     getRegimeJourney12w(),
     getTopConvictionCalls(),
+    LENS_V4_ENABLED ? getIndiaPulsePage().catch(() => null) : Promise.resolve(null),
   ])
 
   if (!current) {
@@ -86,26 +91,36 @@ export default async function RegimePage({ searchParams }: { searchParams: Searc
         <RegimeOverlayChart history={history} />
       </div>
 
-      {/* NEW (2026-05-29 pilot): "How we got here" — 4 LC small-multiples for
-          the regime classifier inputs. First production use of
-          AtlasLightweightChart. Sits ABOVE the four sections so you can
-          A/B them by scrolling: LC pilot at top, Recharts originals below. */}
-      <RegimeClassifierInputs
-        history={history}
-        asOf={current.date instanceof Date ? current.date.toISOString().slice(0, 10) : String(current.date).slice(0, 10)}
-      />
+      {LENS_V4_ENABLED ? (
+        <>
+          {/* ── v4: Breadth table (merged from India Pulse) ── */}
+          {pulseData?.breadth_table && pulseData.breadth_table.length > 0 && (
+            <section className="px-6 py-6 border-b border-paper-rule">
+              <h2 className="font-sans text-xs font-medium text-ink-tertiary uppercase tracking-wider mb-4">
+                Market Breadth · Nifty 500
+              </h2>
+              <BreadthTable rows={pulseData.breadth_table} />
+            </section>
+          )}
 
-      {/* Four category sections — unchanged */}
-      <TrendSection current={current} history={history} />
-      <BreadthSection current={current} history={history} />
-      <MomentumSection current={current} history={history} />
-      <ParticipationSection current={current} history={history} />
-
-      {/* ── NEW: 12-week regime journey (Page 01 mockup section) ── */}
-      <RegimeJourney12w cells={journey12w} />
-
-      {/* ── NEW: Today's conviction — 3-tab panel ── */}
-      <TodayConvictionTabs data={convictionCalls} />
+          {/* ── v4: 12-week regime journey (kept from v6) ── */}
+          <RegimeJourney12w cells={journey12w} />
+        </>
+      ) : (
+        <>
+          {/* Original (flag OFF): classifier inputs + 4 category sections + journey + conviction tabs */}
+          <RegimeClassifierInputs
+            history={history}
+            asOf={current.date instanceof Date ? current.date.toISOString().slice(0, 10) : String(current.date).slice(0, 10)}
+          />
+          <TrendSection current={current} history={history} />
+          <BreadthSection current={current} history={history} />
+          <MomentumSection current={current} history={history} />
+          <ParticipationSection current={current} history={history} />
+          <RegimeJourney12w cells={journey12w} />
+          <TodayConvictionTabs data={convictionCalls} />
+        </>
+      )}
     </div>
   )
 }

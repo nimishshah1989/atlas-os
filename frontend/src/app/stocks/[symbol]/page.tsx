@@ -47,8 +47,11 @@ import {
   TVFinancials,
   TVCompanyProfile,
   TVNews,
-  TVMiniOverview,
 } from '@/components/v6/stock-detail/TVWidgets'
+import { SparklineComparisonPanel } from '@/components/v6/stock-detail/SparklineComparisonPanel'
+import { LENS_V4_ENABLED } from '@/lib/feature-flags'
+import { getLensScoreByInstrument } from '@/lib/queries/lens-scores'
+import { LensVectorPanel } from '@/components/v6/stock-detail/LensVectorPanel'
 
 export default async function StockPage({
   params,
@@ -90,7 +93,7 @@ export default async function StockPage({
   ])
 
   // Batch 2 — external/dependent data (after batch 1 connections released)
-  const [tvMetrics, rsRatios, peerMatrix, peers, conviction, signalCalls, regimeState, gateThresholds] = await Promise.all([
+  const [tvMetrics, rsRatios, peerMatrix, peers, conviction, signalCalls, regimeState, gateThresholds, lensScore] = await Promise.all([
     getTVMetrics(symbol).catch(() => null),
     getRSRatios(symbol).catch(() => null),
     getPeerMatrix(symbol).catch(() => []),
@@ -99,6 +102,7 @@ export default async function StockPage({
     getSignalCallsByIid(stock.instrument_id, 20).catch(() => []),
     getMarketRegime().catch(() => null),
     getGateThresholds(),
+    LENS_V4_ENABLED ? getLensScoreByInstrument(stock.instrument_id).catch(() => null) : Promise.resolve(null),
   ])
 
   // Sector context needs sector name — fetch after we know it exists
@@ -201,6 +205,13 @@ export default async function StockPage({
         <MultiTimeframeReturnsTable latest={latestMetrics ?? null} />
       </section>
 
+      {/* ────────────── 2a½. Six-Lens Vector (v4 feature flag) ────────────── */}
+      {LENS_V4_ENABLED && lensScore && (
+        <section className="px-6 py-4 border-b border-paper-rule bg-paper-deep">
+          <LensVectorPanel lens={lensScore} />
+        </section>
+      )}
+
       {/* ────────────── 2b. Sector context strip ────────────── */}
       <SectorContextStrip
         sectorName={stock.sector ?? null}
@@ -212,21 +223,12 @@ export default async function StockPage({
         sectorSize={sectorContext?.sector_size ?? null}
       />
 
-      {/* ────────────── 2c. Sector vs stock 12M sparklines ────────────── */}
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-4 px-6 py-4 border-b border-paper-rule bg-paper-deep">
-        <div className="border border-paper-rule rounded p-4 bg-paper">
-          <p className="font-mono text-[10px] uppercase tracking-wider text-ink-3 mb-1">
-            {sectorIndex ? `${sectorIndex.label}` : 'Nifty 50'} · 12-Month Sparkline
-          </p>
-          <TVMiniOverview symbol={sectorIndex?.tvSymbol ?? 'NIFTY'} exchange="NSE" dateRange="12M" />
-        </div>
-        <div className="border border-paper-rule rounded p-4 bg-paper">
-          <p className="font-mono text-[10px] uppercase tracking-wider text-ink-3 mb-1">
-            {stock.symbol} · 12-Month Sparkline
-          </p>
-          <TVMiniOverview symbol={stock.symbol} exchange="NSE" dateRange="12M" />
-        </div>
-      </section>
+      {/* ────────────── 2c. Sector vs stock sparklines with period selector ────────────── */}
+      <SparklineComparisonPanel
+        symbol={stock.symbol}
+        sectorLabel={sectorIndex?.label ?? 'Nifty 50'}
+        sectorTvSymbol={sectorIndex?.tvSymbol ?? 'NIFTY'}
+      />
 
       {/* ────────────── 3. The Chart + Atlas Commentary + Fundamentals strip ────────────── */}
       <StockChartPanel
