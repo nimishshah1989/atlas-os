@@ -153,21 +153,27 @@ def score_valuation(
     evidence["dimensions_scored"] = n_scored
 
     if n_scored == 0:
-        composite = Decimal(35)
-        evidence["imputation"] = "no_data_default_fair"
-    elif n_scored <= 2:
-        total_scored = sum(scored_pts)
-        total_max = sum(Decimal(m) for m in max_pts)
-        avg_prop = total_scored / total_max if total_max else Decimal(0)
-        missing_max = Decimal(100) - total_max
-        imputed = missing_max * avg_prop * Decimal("0.6")
-        composite = total_scored + imputed
-        evidence["imputation"] = "partial_60pct"
-        evidence["imputed_points"] = float(imputed)
-    else:
-        total_scored = sum(scored_pts)
-        total_max = sum(Decimal(m) for m in max_pts)
-        composite = (total_scored / total_max * 100) if total_max else Decimal(0)
+        # No valuation inputs at all — return None rather than a fabricated
+        # neutral score. A default/stub standing in for a real computation is a
+        # RULE #0 violation (CLAUDE.md): valuation simply has no reading here.
+        # Multiplier stays neutral (1.00) so it neither boosts nor penalises the
+        # composite for a name we cannot value.
+        evidence["no_data"] = True
+        return ValuationResult(
+            pe_vs_sector=None, absolute_pe=None, price_to_book=None,
+            ev_ebitda=None, position_52w=None,
+            score=None, zone="UNKNOWN", multiplier=Decimal("1.00"),
+            evidence=evidence,
+        )
+
+    # Renormalise over the dimensions that actually have data — the same pattern
+    # the technical/fundamental lenses use. We NEVER impute points for absent
+    # dimensions: pb_fbs and revenue_growth are absent for nearly every real
+    # name, and the old 0.6 imputation manufactured up to 60% of the score from
+    # dimensions that were never measured.
+    total_scored = sum(scored_pts)
+    total_max = sum(Decimal(m) for m in max_pts)
+    composite = (total_scored / total_max * 100) if total_max else Decimal(0)
 
     zone, multiplier = _map_zone(composite, thresholds)
 
