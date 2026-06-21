@@ -46,6 +46,16 @@ income-statement-only and stale to 2024.**
   to the historical tables (now incl. `financials_annual` for ROE/D-E + Screener recent quarters) →
   rebuild journal → calibrate IC → confirm composite consumes the learned weights.
 
+## Data-coverage progress (D12, 2026-06-21)
+- **Sector map (item 3): 2,001/2,093 (95.6%) DONE-ish.** Added `instrument_master.sector`; populated
+  from atlas_universe_stocks (750 authoritative) + de_instrument.sector clean-22 direct + ISIN recovery
+  + a documented industry→nearest-actionable heuristic for ~90 thin-tail SMEs (Packaging→Capital Goods,
+  Paper→Consumer Durables, Conglomerates→Financial Services, business-services→Capital Markets, etc. —
+  FLAGGED for refinement). All 22 actionable, NO 'Other'. **92 genuine gaps** = no de_instrument source;
+  FILL from Screener (it carries sector) in the final coverage pass.
+- Items remaining: technical derivations (ATR/BB/volume/52w/sector-RS from OHLCV), P/B from equity,
+  insider signal_type classify fix, + the 92 sector gaps from Screener.
+
 ## Gotcha (added 2026-06-21)
 - `nohup python3 X &` launches a child; `kill <wrapper-pid>` misses the python child. Kill the
   ACTUAL python PID (`ps -eo pid,cmd | grep '[i]ngest_'`), or two runs race + double-load the source.
