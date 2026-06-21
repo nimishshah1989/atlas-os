@@ -25,6 +25,7 @@ from atlas.lenses.compute.fundamental import score_fundamental
 from atlas.lenses.compute.policy import score_policy
 from atlas.lenses.compute.risk_flags import compute_risk_flags
 from atlas.lenses.compute.technical import score_technical
+from atlas.lenses.compute.thresholds_view import nest_thresholds
 from atlas.lenses.compute.valuation import score_valuation
 from atlas.lenses.data.adapters import (
     is_trading_day,
@@ -35,7 +36,6 @@ from atlas.lenses.data.adapters import (
     load_instrument_sectors,
     load_policy_registry,
     load_technical_data,
-    load_valuation_data,
     purge_stale_lens_scores,
     write_lens_scores,
 )
@@ -102,99 +102,165 @@ def run_pipeline(
     log.info("lens_run_date_resolved", requested=str(as_of), resolved=str(dt))
     thresholds = load_thresholds(engine=eng)
     th = {k: float(v) if isinstance(v, Decimal) else v for k, v in thresholds.items()}
+    # Build the nested shapes compute_composite reads (lens_weights / conviction_tiers /
+    # convergence) from the FLAT DB keys, so the DB / IC-learned weights are actually
+    # consumed instead of the composite's hard-coded fallback (Loop C blocker 0a, D8).
+    th = nest_thresholds(th)
 
     log.info("lens_pipeline_start", as_of=str(dt), run_id=str(run_id))
     tech_df = load_technical_data(eng, dt)
-    fund_df = load_fundamental_data(eng)
-    val_df = load_valuation_data(eng)
+    fund_df = load_fundamental_data(eng, dt)
     cat_df = load_catalyst_data(eng, as_of=dt)
     flow_data = load_flow_data(eng, as_of=dt)
     policies = load_policy_registry(eng)
     sectors_df = load_instrument_sectors(eng)
 
     log.info("lens_data_loaded",
-             tech=len(tech_df), fund=len(fund_df), val=len(val_df),
+             tech=len(tech_df), fund=len(fund_df),
              cat=len(cat_df), flow_insider=len(flow_data["insider"]),
              policies=len(policies), instruments=len(sectors_df))
 
-    tech_idx = tech_df.set_index("instrument_id") if not tech_df.empty else tech_df
-    fund_idx = fund_df.set_index("instrument_id") if not fund_df.empty else fund_df
-    val_idx = val_df.set_index("instrument_id") if not val_df.empty else val_df
+    results, scored, skipped = score_all(
+        dt, tech_df, fund_df, cat_df, flow_data, sectors_df, policies, th, run_id)
+
+    write_lens_scores(eng, results, run_id)
+
+    # Remove rows for this date left by an EARLIER run (universe shrink / re-run)
+    # so the journal equals exactly this run's scored universe. GUARD: never purge
+    # when 0 scored — a total failure must not wipe a previously-good journal day.
+    if scored > 0:
+        purged = purge_stale_lens_scores(eng, dt, run_id, asset_class="stock")
+    else:
+        purged = 0
+        log.error("lens_pipeline_zero_scored_no_purge", as_of=str(dt),
+                  skipped=skipped, msg="0 instruments scored; skipping purge to "
+                  "protect the existing journal for this date")
+
+    summary = {
+        "as_of": str(dt), "run_id": str(run_id),
+        "instruments_scored": scored, "instruments_skipped": skipped,
+        "total_instruments": len(sectors_df), "stale_rows_purged": purged,
+    }
+    log.info("lens_pipeline_complete", **summary)
+    return summary
+
+
+def _cell(idx: Any, iid: Any, col: str) -> Any:
+    """Single cell from a (possibly duplicate-index) frame; None if absent."""
+    if idx is None or getattr(idx, "empty", True) or iid not in idx.index or col not in idx.columns:
+        return None
+    v = idx.loc[iid, col]
+    return v.iloc[0] if hasattr(v, "iloc") else v
+
+
+def _row(idx: Any, iid: Any) -> Any:
+    """The row Series for *iid*; None if absent. Collapses duplicate index to first."""
+    if idx is None or getattr(idx, "empty", True) or iid not in idx.index:
+        return None
+    r = idx.loc[iid]
+    return r.iloc[0] if isinstance(r, pd.DataFrame) else r
+
+
+def _sector_median_pe(tech_idx: Any, fund_idx: Any, sector_of: dict) -> tuple[dict, dict]:
+    """As-of PE per instrument (close_raw ÷ TTM EPS) → cross-sectional sector medians.
+
+    This is the PIT replacement for the old tv_metrics sector-median CTE: PE is
+    rebuilt for each historical date from that day's real close and the as-of TTM
+    EPS, then the median is taken across the stocks actually present in each sector
+    on that date.
+    """
+    import statistics
+    pe_by_iid: dict[Any, float] = {}
+    sector_pes: dict[str, list[float]] = {}
+    if tech_idx is None or fund_idx is None or getattr(tech_idx, "empty", True) or getattr(fund_idx, "empty", True):
+        return pe_by_iid, {}
+    for iid in fund_idx.index:
+        close_raw = _to_float(_cell(tech_idx, iid, "close_raw"))
+        eps = _to_float(_cell(fund_idx, iid, "eps_diluted_ttm"))
+        if close_raw and eps and eps > 0:
+            pe = close_raw / eps
+            pe_by_iid[iid] = pe
+            s = sector_of.get(iid)
+            if s and 0 < pe < 500:
+                sector_pes.setdefault(s, []).append(pe)
+    medians = {s: statistics.median(v) for s, v in sector_pes.items() if v}
+    return pe_by_iid, medians
+
+
+def score_all(
+    dt: date, tech_df: Any, fund_df: Any, cat_df: Any, flow_data: dict,
+    sectors_df: Any, policies: list, th: dict[str, Any], run_id: uuid.UUID,
+) -> tuple[list[dict[str, Any]], int, int]:
+    """Score the whole stock universe for one date from PRELOADED frames.
+
+    Shared by run_pipeline (nightly: per-date adapter loads) and the historical
+    backfill (per-date slices of preloaded chunk panels) so both paths emit
+    identical PIT output. Returns (results, scored, skipped)."""
+    tech_idx = tech_df.set_index("instrument_id") if (tech_df is not None and not tech_df.empty) else pd.DataFrame()
+    fund_idx = fund_df.set_index("instrument_id") if (fund_df is not None and not fund_df.empty) else pd.DataFrame()
     cat_by_iid = _group_by_iid(cat_df)
     insider_by_iid = _group_by_iid(flow_data["insider"])
     sh_by_iid = _group_by_iid(flow_data["shareholding"], sort_col="period_end")
     bulk_by_iid = _group_by_iid(flow_data["bulk_deals"])
+
+    sector_of = (dict(zip(sectors_df["instrument_id"], sectors_df["sector"]))
+                 if "sector" in sectors_df.columns else {})
+    pe_by_iid, sector_median = _sector_median_pe(tech_idx, fund_idx, sector_of)
+
     results: list[dict[str, Any]] = []
     scored, skipped = 0, 0
-
     for _, row in sectors_df.iterrows():
         iid = row["instrument_id"]
         symbol = row.get("symbol", "")
-
         try:
-            # Technical
-            t_row = tech_idx.loc[iid] if iid in tech_idx.index else None
-            if t_row is not None and hasattr(t_row, "to_dict"):
-                t = t_row.iloc[0] if isinstance(t_row, pd.DataFrame) else t_row
-                tech_result = score_technical(
-                    ema_21=_to_float(t.get("ema_21")), ema_50=_to_float(t.get("ema_50")),
-                    ema_200=_to_float(t.get("ema_200")), rsi_14=_to_float(t.get("rsi_14")),
-                    price=_to_float(t.get("price")), high_52w=_to_float(t.get("high_52w")),
-                    low_52w=_to_float(t.get("low_52w")), ret_1w=_to_float(t.get("ret_1w")),
-                    rs_1m_n500=_to_float(t.get("rs_1m_n500")), rs_3m_n500=_to_float(t.get("rs_3m_n500")),
-                    rs_6m_n500=_to_float(t.get("rs_6m_n500")), rs_12m_n500=_to_float(t.get("rs_12m_n500")),
-                    atr_14=_to_float(t.get("atr_14")), bb_width=_to_float(t.get("bb_width")),
-                    volume=_to_float(t.get("volume")),
-                    avg_volume_30d=_to_float(t.get("avg_volume_30d")),
-                    avg_volume_60d=_to_float(t.get("avg_volume_60d")),
-                    rel_volume_10d=_to_float(t.get("rel_volume_10d")),
-                    thresholds=th,
-                )
-            else:
-                tech_result = None
+            # Technical (PIT: price=adjusted close on dt; ATR/BB/vol_ratio/pos_52w/
+            # rs_*_sector from technical_daily on dt).
+            t = _row(tech_idx, iid)
+            tech_result = score_technical(
+                ema_21=_to_float(t.get("ema_21")), ema_50=_to_float(t.get("ema_50")),
+                ema_200=_to_float(t.get("ema_200")), rsi_14=_to_float(t.get("rsi_14")),
+                price=_to_float(t.get("price_adj")), ret_1w=_to_float(t.get("ret_1w")),
+                rs_1m_n500=_to_float(t.get("rs_1m_n500")), rs_3m_n500=_to_float(t.get("rs_3m_n500")),
+                rs_6m_n500=_to_float(t.get("rs_6m_n500")), rs_12m_n500=_to_float(t.get("rs_12m_n500")),
+                atr_14=_to_float(t.get("atr_14")), bb_width=_to_float(t.get("bb_width")),
+                vol_ratio_30d=_to_float(t.get("vol_ratio_30d")),
+                vol_ratio_60d=_to_float(t.get("vol_ratio_60d")),
+                pos_52w=_to_float(t.get("pos_52w")),
+                rs_1m_sector=_to_float(t.get("rs_1m_sector")),
+                rs_3m_sector=_to_float(t.get("rs_3m_sector")),
+                rs_6m_sector=_to_float(t.get("rs_6m_sector")),
+                rs_12m_sector=_to_float(t.get("rs_12m_sector")),
+                thresholds=th,
+            ) if t is not None else None
 
-            # Fundamental
-            f_row = fund_idx.loc[iid] if iid in fund_idx.index else None
-            if f_row is not None and hasattr(f_row, "to_dict"):
-                f = f_row.iloc[0] if isinstance(f_row, pd.DataFrame) else f_row
-                fund_result = score_fundamental(
-                    roe=_to_float(f.get("roe")), roa=_to_float(f.get("roa")),
-                    roic=_to_float(f.get("roic")),
-                    operating_margin=_to_float(f.get("operating_margin")),
-                    net_margin=_to_float(f.get("net_margin")),
-                    gross_margin=_to_float(f.get("gross_margin")),
-                    revenue_growth_yoy=_to_float(f.get("revenue_growth_yoy")),
-                    eps_growth_yoy=_to_float(f.get("eps_growth_yoy")),
-                    debt_to_equity=_to_float(f.get("debt_to_equity")),
-                    current_ratio=_to_float(f.get("current_ratio")),
-                    quick_ratio=_to_float(f.get("quick_ratio")),
-                    revenue_ttm=_to_float(f.get("revenue_ttm")),
-                    eps_diluted_ttm=_to_float(f.get("eps_diluted_ttm")),
-                    thresholds=th,
-                )
-            else:
-                fund_result = None
+            # Fundamental (PIT: TTM/YoY/ROE/D-E from as-of quarters + annual).
+            f = _row(fund_idx, iid)
+            fund_result = score_fundamental(
+                roe=_to_float(f.get("roe")), roa=_to_float(f.get("roa")), roic=_to_float(f.get("roic")),
+                operating_margin=_to_float(f.get("operating_margin")), net_margin=_to_float(f.get("net_margin")),
+                gross_margin=_to_float(f.get("gross_margin")),
+                revenue_growth_yoy=_to_float(f.get("revenue_growth_yoy")),
+                eps_growth_yoy=_to_float(f.get("eps_growth_yoy")),
+                debt_to_equity=_to_float(f.get("debt_to_equity")),
+                current_ratio=_to_float(f.get("current_ratio")), quick_ratio=_to_float(f.get("quick_ratio")),
+                revenue_ttm=_to_float(f.get("revenue_ttm")), eps_diluted_ttm=_to_float(f.get("eps_diluted_ttm")),
+                thresholds=th,
+            ) if f is not None else None
 
-            # Valuation
-            v_row = val_idx.loc[iid] if iid in val_idx.index else None
-            if v_row is not None and hasattr(v_row, "to_dict"):
-                v = v_row.iloc[0] if isinstance(v_row, pd.DataFrame) else v_row
-                val_result = score_valuation(
-                    pe_ttm=_to_float(v.get("pe_ttm")), pb_fbs=_to_float(v.get("pb_fbs")),
-                    ev_ebitda=_to_float(v.get("ev_ebitda")),
-                    price=_to_float(v.get("price")), high_52w=_to_float(v.get("high_52w")),
-                    low_52w=_to_float(v.get("low_52w")), ema_200=_to_float(v.get("ema_200")),
-                    sector_median_pe=_to_float(v.get("sector_median_pe")),
-                    thresholds=th,
-                )
-            else:
-                val_result = None
+            # Valuation (PIT: PE = close ÷ TTM EPS; as-of cross-sectional sector median;
+            # pb/ev have no unit-safe as-of source -> None).
+            val_result = score_valuation(
+                pe_ttm=pe_by_iid.get(iid), pb_fbs=None, ev_ebitda=None,
+                price=_to_float(t.get("close_raw")),
+                pos_52w=_to_float(t.get("pos_52w")), ema_200=_to_float(t.get("ema_200")),
+                sector_median_pe=sector_median.get(sector_of.get(iid)), thresholds=th,
+            ) if t is not None else None
 
-            # Catalyst
+            # Catalyst (already as-of via load_catalyst_data).
             filings = cat_by_iid.get(iid, [])
             cat_result = score_catalyst(filings, dt, th) if filings else None
 
-            # Flow
+            # Flow (already as-of via load_flow_data).
             insider_txns = insider_by_iid.get(iid, [])
             sh_records = sh_by_iid.get(iid, [])
             sh_current = sh_records[0] if len(sh_records) >= 1 else None
@@ -204,21 +270,16 @@ def run_pipeline(
                 insider_txns, sh_current, sh_previous, bulk_deals, th,
             ) if (insider_txns or sh_current or bulk_deals) else None
 
-            # Policy
             pol_result = score_policy(row.get("sector"), row.get("industry"), policies, th)
 
-            # Risk flags
             risk_result = compute_risk_flags(
-                insider_signals=insider_txns,
-                quarterly_margins=[],
-                annual_financials={},
+                insider_signals=insider_txns, quarterly_margins=[], annual_financials={},
                 filings=filings,
-                price=_to_float(tech_idx.loc[iid].get("price")) if iid in tech_idx.index else None,
-                ema_200=_to_float(tech_idx.loc[iid].get("ema_200")) if iid in tech_idx.index else None,
+                price=_to_float(t.get("price_adj")) if t is not None else None,
+                ema_200=_to_float(t.get("ema_200")) if t is not None else None,
                 thresholds=th,
             )
 
-            # Composite
             comp_result = compute_composite(
                 technical=_dec_or_none(tech_result.score) if tech_result else None,
                 fundamental=_dec_or_none(fund_result.score) if fund_result else None,
@@ -232,48 +293,17 @@ def run_pipeline(
                 thresholds=th,
             )
 
-            # Build result dict
             result = _build_result(
                 iid, dt, tech_idx, tech_result, fund_result, val_result,
                 cat_result, flow_result, pol_result, comp_result, risk_result, run_id,
             )
             results.append(result)
             scored += 1
-
-            if len(results) >= batch_size:
-                write_lens_scores(eng, results, run_id)
-                results.clear()
-
         except Exception:
             log.exception("lens_score_error", instrument_id=str(iid), symbol=symbol)
             skipped += 1
 
-    # Write remaining
-    if results:
-        write_lens_scores(eng, results, run_id)
-
-    # Remove any rows for this date left by an earlier run (universe shrink /
-    # re-run) so the journal reflects exactly this run's scored stock universe.
-    # GUARD: never purge when this run wrote nothing — a total failure (0 scored)
-    # must not wipe a previously-good journal day with no replacement rows.
-    if scored > 0:
-        purged = purge_stale_lens_scores(eng, dt, run_id, asset_class="stock")
-    else:
-        purged = 0
-        log.error("lens_pipeline_zero_scored_no_purge", as_of=str(dt),
-                  skipped=skipped, msg="0 instruments scored; skipping purge to "
-                  "protect the existing journal for this date")
-
-    summary = {
-        "as_of": str(dt),
-        "run_id": str(run_id),
-        "instruments_scored": scored,
-        "instruments_skipped": skipped,
-        "total_instruments": len(sectors_df),
-        "stale_rows_purged": purged,
-    }
-    log.info("lens_pipeline_complete", **summary)
-    return summary
+    return results, scored, skipped
 
 
 def _build_result(

@@ -55,3 +55,6 @@ package-lock.json
 /*.jpg
 /*-snapshot.md
 /*-fullpage.png
+
+# Loop C rebuild resume state (local only)
+scripts/foundation/.loopC_rebuild_state.json

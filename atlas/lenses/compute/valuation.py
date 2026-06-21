@@ -82,17 +82,20 @@ def _score_ev_ebitda(ev_eb: D) -> D:
     return D(0)
 
 
-def _score_52w_position(price: D, high: D, low: D, ema200: D | None) -> D:
-    span = high - low
-    if span <= 0:
-        return D(0)
-    pos = (price - low) / span * 100
+def _score_52w_position(pos_52w: D, price: D | None, ema200: D | None) -> D:
+    """52-week-position valuation score from the PIT pos_52w (0-100).
+
+    Cheaper-in-its-range = higher score (a name near its 52w low is 'value';
+    near its high is 'expensive'). pos_52w is the point-in-time field from
+    technical_daily, replacing the old (price, high_52w, low_52w) snapshot inputs.
+    """
+    pos = pos_52w  # already 0-100
     if pos <= D(20):    base = D(15)
     elif pos <= D(40):  base = D(10)
     elif pos <= D(60):  base = D(6)
     elif pos <= D(80):  base = D(3)
     else:               base = D(0)
-    if ema200 is not None and price < ema200:
+    if ema200 is not None and price is not None and price < ema200:
         base = min(base + D(3), D(15))
     return base
 
@@ -110,16 +113,21 @@ def score_valuation(
     pb_fbs: float | None,
     ev_ebitda: float | None,
     price: float | None,
-    high_52w: float | None,
-    low_52w: float | None,
+    pos_52w: float | None,
     ema_200: float | None,
     sector_median_pe: float | None,
     thresholds: dict[str, Any],
 ) -> ValuationResult:
-    """Score the Valuation lens across five dimensions."""
+    """Score the Valuation lens across its available dimensions (PIT, Loop C).
+
+    pe_ttm is the as-of PE (that day's close ÷ trailing-4Q EPS); sector_median_pe
+    is the as-of cross-sectional sector median; pos_52w is the PIT 52-week
+    position. pb_fbs / ev_ebitda have no unit-safe as-of source and arrive as None
+    (documented; the renorm drops absent dimensions — RULE #0, never imputed).
+    """
     pe, pb = _d(pe_ttm), _d(pb_fbs)
     ev_eb, pr = _d(ev_ebitda), _d(price)
-    hi, lo, ema, smed = _d(high_52w), _d(low_52w), _d(ema_200), _d(sector_median_pe)
+    pos, ema, smed = _d(pos_52w), _d(ema_200), _d(sector_median_pe)
 
     evidence: dict[str, Any] = {}
     dims: dict[str, Decimal | None] = {
@@ -144,10 +152,17 @@ def score_valuation(
         dims["ev"] = _score_ev_ebitda(ev_eb)
         scored_pts.append(dims["ev"])
         max_pts.append(20)
-    if pr is not None and hi is not None and lo is not None and hi > lo:
-        dims["w52"] = _score_52w_position(pr, hi, lo, ema)
+    if pos is not None:
+        dims["w52"] = _score_52w_position(pos, pr, ema)
         scored_pts.append(dims["w52"])
         max_pts.append(15)
+
+    # Honest degradation (RULE #0 / C8): a dimension with no real as-of source is
+    # recorded as missing, never imputed to a neutral number.
+    if pb is None or pb <= 0:
+        evidence["pb"] = {"reason": "missing"}
+    if ev_eb is None or ev_eb <= 0:
+        evidence["ev"] = {"reason": "missing"}
 
     n_scored = len(scored_pts)
     evidence["dimensions_scored"] = n_scored

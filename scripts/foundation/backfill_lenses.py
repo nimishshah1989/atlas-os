@@ -1,134 +1,274 @@
 #!/usr/bin/env python3
-"""Historical backfill for atlas_lens_scores_daily.
+"""Chunked, resumable POINT-IN-TIME rebuild of atlas.atlas_lens_scores_daily (Loop C).
 
-Runs the six-lens pipeline point-in-time for each trading day in a date range,
-producing the historical journal required by the Loop-A gate (≥250 dates).
+Scores the six lenses for every NSE session in [start, end] using ONLY information
+knowable on each date — the Loop C journal rebuild (D5/D8/D16). Architecture, for
+the shared box (GUARDRAILS §5 — be a good neighbour, never load all in memory):
 
-Usage:
-    python backfill_lenses.py                     # auto: last 300 trading days
-    python backfill_lenses.py --start 2025-05-16  # from a specific date
-    python backfill_lenses.py --workers 4         # parallelism (≤6)
+  • Sessions are split into contiguous CHUNKS, distributed over ≤6 workers.
+  • Each worker loads its chunk's panels ONCE (ohlcv + technical_daily date-range,
+    all financials, flow/catalyst over the chunk±lookback) instead of re-querying
+    per date — so ohlcv is range-scanned a handful of times, not 1,850× full-scanned.
+  • Per date it slices those panels in memory and calls the SAME scoring core the
+    nightly pipeline uses (atlas.lenses.pipeline.score_all) — identical PIT output.
+  • Resumable via a small state file: completed dates are skipped on restart; each
+    date is upserted then stale rows for that date purged, so re-running replaces
+    the old (leaky) journal day cleanly.
 
-Resumable: skips dates already present in atlas_lens_scores_daily.
+    python backfill_lenses.py --start 2019-01-01 --workers 6 --chunk-days 45
+    python backfill_lenses.py --validate-date 2026-06-19   # chunk-path vs run_pipeline
 """
 from __future__ import annotations
 
 import argparse
-import os
+import json
 import sys
 import time
+import uuid
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import date, timedelta
 from pathlib import Path
 
-# Ensure repo root is on PYTHONPATH so workers can import atlas.*
 _REPO_ROOT = str(Path(__file__).resolve().parents[2])
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
-os.environ.setdefault("PYTHONPATH", _REPO_ROOT)
 
-import _db
+import _db  # noqa: E402
+
+START = date(2019, 1, 1)
+STATE_FILE = Path(__file__).parent / ".loopC_rebuild_state.json"
 
 
-def _get_trading_dates(start: date, end: date) -> list[date]:
-    """Return real NSE trading days between start and end (inclusive).
-
-    Sourced from the NIFTY 50 session calendar (foundation_staging.index_prices),
-    NOT raw technical_daily DISTINCT dates — the latter carry sparse 2-/10-row
-    junk rows on NSE holidays (e.g. Republic Day 2026-01-26) which previously
-    leaked 6 non-session dates into the scored journal.
-    """
+def _sessions(start: date, end: date) -> list[date]:
     df = _db.read_df(
         "SELECT DISTINCT date FROM foundation_staging.index_prices "
-        "WHERE index_code = 'NIFTY 50' AND date >= :s AND date <= :e ORDER BY date",
-        params={"s": start, "e": end},
-    )
+        "WHERE index_code='NIFTY 50' AND date>=:s AND date<=:e ORDER BY date",
+        {"s": start, "e": end})
     return [d.date() if hasattr(d, "date") else d for d in df["date"].tolist()]
 
 
-def _get_done_dates() -> set[date]:
-    """Return dates already present in atlas_lens_scores_daily for stocks."""
-    df = _db.read_df(
-        "SELECT DISTINCT date FROM atlas.atlas_lens_scores_daily "
-        "WHERE asset_class = 'stock'"
-    )
-    return {d.date() if hasattr(d, "date") else d for d in df["date"].tolist()}
+def _load_done() -> set[str]:
+    if STATE_FILE.exists():
+        try:
+            return set(json.loads(STATE_FILE.read_text()).get("done", []))
+        except Exception:
+            return set()
+    return set()
 
 
-def _init_worker():
-    """Ensure repo root is on sys.path in spawned workers."""
-    import sys
+def _mark_done(new_dates: list[str]) -> None:
+    done = _load_done() | set(new_dates)
+    STATE_FILE.write_text(json.dumps({"done": sorted(done)}))
+
+
+def _chunks(items: list, size: int) -> list[list]:
+    return [items[i:i + size] for i in range(0, len(items), size)]
+
+
+def _process_chunk(chunk_dates: list[date]) -> dict:
+    """Score every date in *chunk_dates* from preloaded panels. Runs in a worker."""
+    import pandas as pd
+    from decimal import Decimal
+
     root = str(Path(__file__).resolve().parents[2])
     if root not in sys.path:
         sys.path.insert(0, root)
+    from atlas.db import get_engine, load_thresholds
+    from atlas.lenses.compute.fundamental_pit import (
+        build_fundamental_steps, fundamental_asof_from_steps)
+    from atlas.lenses.compute.thresholds_view import nest_thresholds
+    from atlas.lenses.data.adapters import (
+        REPORTING_LAG_A, REPORTING_LAG_Q, load_instrument_sectors,
+        load_policy_registry, purge_stale_lens_scores, write_lens_scores)
+    from atlas.lenses.pipeline import score_all
+
+    eng = get_engine()
+    th = nest_thresholds({k: (float(v) if isinstance(v, Decimal) else v)
+                          for k, v in load_thresholds(engine=eng).items()})
+    cstart, cend = chunk_dates[0], chunk_dates[-1]
+    look = cstart - timedelta(days=365)
+
+    def rd(sql, p):
+        return _db.read_df(sql, p)
+
+    techd = rd("""SELECT instrument_id, symbol, asset_class, ema_21, ema_50, ema_200,
+                    rsi_14, ret_1w, rs_1m_n500, rs_3m_n500, rs_6m_n500, rs_12m_n500,
+                    rs_1m_sector, rs_3m_sector, rs_6m_sector, rs_12m_sector,
+                    atr_14, bb_width, vol_ratio_30d, vol_ratio_60d, pos_52w, date
+                  FROM foundation_staging.technical_daily WHERE date BETWEEN :s AND :e""",
+              {"s": cstart, "e": cend})
+    ohlcv = rd("""SELECT instrument_id, date, close_adj, close, volume
+                  FROM foundation_staging.ohlcv_stock WHERE date BETWEEN :s AND :e""",
+               {"s": cstart, "e": cend})
+    fq = rd("""SELECT instrument_id, period_end, consolidated, revenue, ebit, pat, eps,
+                 net_margin, finance_costs, debt_equity_ratio
+               FROM foundation_staging.financials_quarterly WHERE period_end <= :e""",
+            {"e": cend})
+    fa = rd("""SELECT instrument_id, period_end, consolidated, equity, total_borrowings
+               FROM foundation_staging.financials_annual
+               WHERE period_end <= :e AND equity IS NOT NULL""", {"e": cend})
+    insider = rd("""SELECT instrument_id, symbol, signal_type, value_cr, person_name,
+                      pledge_pct_after, transaction_date, price_per_share
+                    FROM foundation_staging.lens_insider
+                    WHERE transaction_date BETWEEN :l AND :e""", {"l": look, "e": cend})
+    sh = rd("""SELECT instrument_id, symbol, period_end, promoter_pct, public_pct
+               FROM foundation_staging.lens_shareholding WHERE period_end <= :e""", {"e": cend})
+    bulk = rd("""SELECT instrument_id, symbol, deal_date, client_name, buy_sell, qty, price,
+                   is_institutional, is_superstar, superstar_name
+                 FROM foundation_staging.lens_bulk_deals
+                 WHERE deal_date BETWEEN :l AND :e""", {"l": cstart - timedelta(days=90), "e": cend})
+    filings = rd("""SELECT instrument_id, symbol, filing_date, category, category_bucket,
+                      signal_priority, subject_text, source_url
+                    FROM foundation_staging.lens_filings
+                    WHERE filing_date BETWEEN :l AND :e""", {"l": look, "e": cend})
+    sectors = load_instrument_sectors(eng)
+    policies = load_policy_registry(eng)
+
+    # normalise date columns to date objects for fast equality slicing
+    for frame, col in ((techd, "date"), (ohlcv, "date"), (insider, "transaction_date"),
+                       (sh, "period_end"), (bulk, "deal_date"), (filings, "filing_date")):
+        if not frame.empty:
+            frame[col] = pd.to_datetime(frame[col]).dt.date
+
+    # fundamental step functions (built once for the whole chunk)
+    qby: dict = {}
+    for r in fq.to_dict("records"):
+        qby.setdefault(r["instrument_id"], []).append(r)
+    aby: dict = {}
+    for r in fa.to_dict("records"):
+        aby.setdefault(r["instrument_id"], []).append(r)
+    steps = build_fundamental_steps(qby, aby, REPORTING_LAG_Q, REPORTING_LAG_A)
+    fund_iids = list(steps.keys())
+
+    ohlcv_cols = ["instrument_id", "close_adj", "close", "volume"]
+    done, total_scored = [], 0
+    for dt in chunk_dates:
+        td = techd[techd["date"] == dt]
+        if td.empty:
+            done.append(str(dt))
+            continue
+        ov = ohlcv[ohlcv["date"] == dt][ohlcv_cols]
+        tech_df = td.drop(columns=["date"]).merge(ov, on="instrument_id", how="left")
+        tech_df["price_adj"] = tech_df["close_adj"].where(
+            tech_df["close_adj"].notna() & (tech_df["close_adj"] > 0), tech_df["close"])
+        tech_df["close_raw"] = tech_df["close"]
+
+        fund_rows = [r for r in (fundamental_asof_from_steps(steps, iid, dt) for iid in fund_iids)
+                     if r is not None]
+        fund_df = pd.DataFrame(fund_rows) if fund_rows else pd.DataFrame()
+
+        # Inclusive lower bounds to match the nightly adapters exactly
+        # (load_catalyst_data / load_flow_data use filing_date >= as_of − lookback).
+        cat_df = filings[(filings["filing_date"] >= dt - timedelta(days=365))
+                         & (filings["filing_date"] <= dt)]
+        flow_data = {
+            "insider": insider[(insider["transaction_date"] >= dt - timedelta(days=365))
+                               & (insider["transaction_date"] <= dt)],
+            "shareholding": sh[sh["period_end"] <= dt],
+            "bulk_deals": bulk[(bulk["deal_date"] >= dt - timedelta(days=90))
+                               & (bulk["deal_date"] <= dt)],
+        }
+
+        rid = uuid.uuid4()
+        results, scored, _ = score_all(dt, tech_df, fund_df, cat_df, flow_data, sectors, policies, th, rid)
+        write_lens_scores(eng, results, rid)
+        if scored > 0:
+            purge_stale_lens_scores(eng, dt, rid, asset_class="stock")
+        total_scored += scored
+        done.append(str(dt))
+
+    return {"start": str(cstart), "end": str(cend), "dates": done, "scored": total_scored}
 
 
-def _run_one_date(dt: date) -> dict:
-    """Run the lens pipeline for a single date. Called in a worker process."""
-    import sys
-    root = str(Path(__file__).resolve().parents[2])
-    if root not in sys.path:
-        sys.path.insert(0, root)
-    from atlas.lenses.pipeline import run_pipeline
-    return run_pipeline(as_of=dt)
+def _validate_date(d: date) -> None:
+    """Score one date via the chunk path and via run_pipeline's adapters; compare."""
+    import pandas as pd
+    from atlas.db import get_engine
+    eng = get_engine()
+    # chunk path writes to the journal; capture before/after by reading the row set
+    res = _process_chunk([d])
+    print(f"chunk path: scored {res['scored']} for {d}")
+    after = _db.read_df(
+        "SELECT instrument_id, technical, fundamental, valuation, catalyst, flow, composite "
+        "FROM atlas.atlas_lens_scores_daily WHERE date=:d AND asset_class='stock'", {"d": d})
+    # independent recompute via the nightly adapters + score_all
+    from decimal import Decimal
+    from atlas.db import load_thresholds
+    from atlas.lenses.compute.thresholds_view import nest_thresholds
+    from atlas.lenses.data import adapters
+    from atlas.lenses.pipeline import score_all
+    th = nest_thresholds({k: (float(v) if isinstance(v, Decimal) else v)
+                          for k, v in load_thresholds(engine=eng).items()})
+    tech = adapters.load_technical_data(eng, d)
+    fund = adapters.load_fundamental_data(eng, d)
+    cat = adapters.load_catalyst_data(eng, as_of=d)
+    flow = adapters.load_flow_data(eng, as_of=d)
+    sec = adapters.load_instrument_sectors(eng)
+    pol = adapters.load_policy_registry(eng)
+    results, _, _ = score_all(d, tech, fund, cat, flow, sec, pol, th, uuid.uuid4())
+    ref = pd.DataFrame(results).set_index("instrument_id")
+    a = after.set_index("instrument_id")
+    common = a.index.intersection(ref.index)
+    mism = 0
+    for lens in ["technical", "fundamental", "valuation", "catalyst", "flow", "composite"]:
+        x = pd.to_numeric(a.loc[common, lens], errors="coerce")
+        y = pd.to_numeric(ref.loc[common, lens], errors="coerce")
+        d_ = (x - y).abs()
+        bad = int((d_ > 0.1).sum())
+        mism += bad
+        print(f"  {lens:12s} mismatches>0.1: {bad}/{len(common)}")
+    print("VALIDATION", "PASS — chunk path == run_pipeline adapters" if mism == 0 else f"FAIL ({mism})")
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Backfill lens scores historically")
-    ap.add_argument("--start", type=date.fromisoformat, default=None,
-                    help="Start date (default: 400 calendar days ago)")
-    ap.add_argument("--end", type=date.fromisoformat, default=None,
-                    help="End date (default: latest technical_daily date)")
-    ap.add_argument("--workers", type=int, default=4,
-                    help="Max parallel workers (≤6, default 4)")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--start", type=date.fromisoformat, default=START)
+    ap.add_argument("--end", type=date.fromisoformat, default=None)
+    ap.add_argument("--workers", type=int, default=6)
+    ap.add_argument("--chunk-days", type=int, default=45)
+    ap.add_argument("--validate-date", type=date.fromisoformat, default=None)
+    ap.add_argument("--reset-state", action="store_true")
     args = ap.parse_args()
 
-    end_dt = args.end or date.fromisoformat(
-        str(_db.scalar(
-            "SELECT max(date) FROM foundation_staging.index_prices "
-            "WHERE index_code = 'NIFTY 50'"
-        ))
-    )
-    start_dt = args.start or (end_dt - timedelta(days=400))
+    if args.validate_date:
+        _validate_date(args.validate_date)
+        return
+    if args.reset_state and STATE_FILE.exists():
+        STATE_FILE.unlink()
+
+    end = args.end or _db.scalar(
+        "SELECT max(date) FROM foundation_staging.index_prices WHERE index_code='NIFTY 50'")
+    if hasattr(end, "date"):
+        end = end.date()
     workers = min(args.workers, 6)
 
-    print(f"Backfill range: {start_dt} → {end_dt}, workers={workers}")
-
-    all_dates = _get_trading_dates(start_dt, end_dt)
-    done = _get_done_dates()
-    todo = [d for d in all_dates if d not in done]
-
-    print(f"Trading days in range: {len(all_dates)}, already done: {len(done)}, "
-          f"remaining: {len(todo)}")
-
+    all_sessions = _sessions(args.start, end)
+    done = _load_done()
+    todo = [d for d in all_sessions if str(d) not in done]
+    print(f"Rebuild {args.start}→{end}: {len(all_sessions)} sessions, "
+          f"{len(done)} done, {len(todo)} remaining, workers={workers}")
     if not todo:
-        print("Nothing to do — all dates already computed.")
+        print("Nothing to do.")
         return
 
+    chunks = _chunks(todo, args.chunk_days)
+    print(f"{len(chunks)} chunks of ≤{args.chunk_days} days")
     t0 = time.time()
     completed = 0
-    failed = 0
-
     with ProcessPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(_run_one_date, d): d for d in todo}
-        for fut in as_completed(futures):
-            dt = futures[fut]
+        futs = {pool.submit(_process_chunk, c): c for c in chunks}
+        for fut in as_completed(futs):
+            c = futs[fut]
             try:
-                summary = fut.result()
-                completed += 1
-                elapsed = time.time() - t0
-                rate = completed / elapsed * 60
-                print(f"  [{completed}/{len(todo)}] {dt}: "
-                      f"scored={summary['instruments_scored']}, "
-                      f"skipped={summary['instruments_skipped']} "
-                      f"({rate:.1f} dates/min)")
+                r = fut.result()
+                _mark_done(r["dates"])
+                completed += len(r["dates"])
+                rate = completed / (time.time() - t0) * 60
+                print(f"  chunk {r['start']}→{r['end']}: {len(r['dates'])} dates, "
+                      f"scored~{r['scored']} ({rate:.0f} dates/min, {completed}/{len(todo)})")
             except Exception as e:
-                failed += 1
-                print(f"  [FAIL] {dt}: {e!r}", file=sys.stderr)
-
-    elapsed = time.time() - t0
-    print(f"\nDone: {completed} dates computed, {failed} failed, "
-          f"in {elapsed:.0f}s ({elapsed/60:.1f}min)")
+                print(f"  [FAIL] chunk {c[0]}→{c[-1]}: {e!r}", file=sys.stderr)
+    print(f"\nDone: {completed} dates in {(time.time()-t0)/60:.1f} min")
 
 
 if __name__ == "__main__":

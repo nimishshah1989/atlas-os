@@ -6,8 +6,7 @@ write results to atlas.atlas_lens_scores_daily.
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
-from decimal import Decimal
+from datetime import date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -16,8 +15,7 @@ import structlog
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-from atlas.compute._session import bulk_upsert, df_to_pg_rows, open_compute_session
-from atlas.db import get_engine, load_thresholds
+from atlas.compute._session import bulk_upsert, open_compute_session
 
 log = structlog.get_logger()
 _IST = ZoneInfo("Asia/Kolkata")
@@ -60,67 +58,97 @@ def is_trading_day(engine: Engine, d: date) -> bool:
         return bool(conn.execute(sql, {"idx": _NSE_CAL_INDEX, "d": d}).scalar())
 
 
+# Financial reporting availability lags (FM-proposed, DECISIONS D-LoopC): a quarter
+# / annual filing is treated as KNOWABLE only `lag` days after its period_end (the
+# only honest as-of proxy without a filing-date column). Conservative so the journal
+# never uses a result before a human could have. Persisted to atlas_thresholds in
+# the IC step; defaulted here so the rebuild needs no DB write.
+REPORTING_LAG_Q = 60   # quarterly income statement
+REPORTING_LAG_A = 90   # annual balance sheet (filed later than quarterlies)
+
+
 def load_technical_data(engine: Engine, as_of: date) -> pd.DataFrame:
-    """Load technical daily + tv_metrics for all instruments on as_of date."""
+    """Point-in-time technical inputs for all instruments on *as_of*.
+
+    EMA/RSI/RS/ATR/BB/vol_ratio/pos_52w/rs_*_sector come from technical_daily ON
+    that date (all PIT). The as-of price comes from ohlcv_stock on that date:
+    `price_adj` (adjusted close, the basis EMA/ATR were computed on — used by the
+    technical lens) and `close_raw` (actual traded close — used for the valuation
+    PE). This replaces the old LEFT JOIN to the atlas.tv_metrics SNAPSHOT, which
+    stamped today's price/52w/volume/ATR on every historical date (the Loop C leak).
+    """
     sql = text("""
         SELECT t.instrument_id, t.symbol, t.asset_class,
-               t.ema_21, t.ema_50, t.ema_200, t.rsi_14,
-               t.ret_1w,
+               t.ema_21, t.ema_50, t.ema_200, t.rsi_14, t.ret_1w,
                t.rs_1m_n500, t.rs_3m_n500, t.rs_6m_n500, t.rs_12m_n500,
-               tv.atr_14, tv.bb_width,
-               tv.price, tv.high_52w, tv.low_52w,
-               tv.volume, tv.avg_volume_30d, tv.avg_volume_60d, tv.rel_volume_10d
+               t.rs_1m_sector, t.rs_3m_sector, t.rs_6m_sector, t.rs_12m_sector,
+               t.atr_14, t.bb_width, t.vol_ratio_30d, t.vol_ratio_60d, t.pos_52w,
+               COALESCE(o.close_adj, o.close) AS price_adj,
+               o.close AS close_raw, o.volume
         FROM foundation_staging.technical_daily t
-        LEFT JOIN atlas.tv_metrics tv ON tv.instrument_id = t.instrument_id
+        LEFT JOIN foundation_staging.ohlcv_stock o
+          ON o.instrument_id = t.instrument_id AND o.date = t.date
         WHERE t.date = :dt
     """)
     with open_compute_session(engine) as conn:
         return pd.read_sql(sql, conn, params={"dt": as_of})
 
 
-def load_fundamental_data(engine: Engine) -> pd.DataFrame:
-    """Load fundamental metrics from tv_metrics for all instruments."""
-    sql = text("""
-        SELECT instrument_id, symbol,
-               roe, roa, roic,
-               operating_margin, net_margin, gross_margin,
-               revenue_growth_yoy, eps_growth_yoy,
-               debt_to_equity, current_ratio, quick_ratio,
-               revenue_ttm, eps_diluted_ttm
-        FROM atlas.tv_metrics
-        WHERE instrument_id IS NOT NULL
-    """)
-    with open_compute_session(engine) as conn:
-        return pd.read_sql(sql, conn)
+def _fundamental_rows(qdf: pd.DataFrame, adf: pd.DataFrame) -> pd.DataFrame:
+    """Build per-instrument fundamental kwargs from an as-of quarterly panel + annual.
+
+    Pure assembly over already-as-of-filtered frames, so it is reused by both the
+    nightly single-date loader and the chunked historical backfill.
+    """
+    from atlas.lenses.compute.fundamental_pit import derive_fundamentals_asof
+    annual_by: dict = {}
+    if adf is not None and not adf.empty:
+        for r in adf.to_dict("records"):
+            annual_by.setdefault(r["instrument_id"], r)  # first = latest (DISTINCT ON)
+    rows: list[dict] = []
+    if qdf is not None and not qdf.empty:
+        for iid, grp in qdf.groupby("instrument_id"):
+            quarters = grp.sort_values("period_end", ascending=False).to_dict("records")
+            derived = derive_fundamentals_asof(quarters, annual_by.get(iid))
+            row = dict(derived["kwargs"]); row["instrument_id"] = iid
+            rows.append(row)
+    return pd.DataFrame(rows)
 
 
-def load_valuation_data(engine: Engine) -> pd.DataFrame:
-    """Load valuation metrics from tv_metrics + sector median PE."""
-    sql = text("""
-        WITH sector_medians AS (
-            SELECT
-                u.sector,
-                PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY tv.pe_ttm)
-                    FILTER (WHERE tv.pe_ttm > 0 AND tv.pe_ttm < 500)
-                    AS sector_median_pe
-            FROM atlas.tv_metrics tv
-            JOIN atlas.atlas_universe_stocks u ON u.instrument_id = tv.instrument_id
-            WHERE u.sector IS NOT NULL AND u.effective_to IS NULL
-            GROUP BY u.sector
-        )
-        SELECT tv.instrument_id, tv.symbol,
-               tv.pe_ttm, tv.pb_fbs, tv.ev_ebitda,
-               tv.price, tv.high_52w, tv.low_52w, tv.ema_200,
-               sm.sector_median_pe
-        FROM atlas.tv_metrics tv
-        JOIN foundation_staging.instrument_master im ON im.instrument_id = tv.instrument_id
-        LEFT JOIN atlas.atlas_universe_stocks u
-            ON u.instrument_id = tv.instrument_id AND u.effective_to IS NULL
-        LEFT JOIN sector_medians sm ON sm.sector = u.sector
-        WHERE tv.instrument_id IS NOT NULL AND im.asset_class = 'stock' AND im.kite_token IS NOT NULL
+def load_fundamental_data(
+    engine: Engine, as_of: date,
+    lag_q: int = REPORTING_LAG_Q, lag_a: int = REPORTING_LAG_A,
+) -> pd.DataFrame:
+    """As-of fundamental metrics derived from financials_quarterly + _annual.
+
+    Uses ONLY quarters with period_end ≤ as_of−lag_q and the latest annual with
+    period_end ≤ as_of−lag_a (dedup consolidated-else-standalone), so the result is
+    genuinely point-in-time — no future filing, no today-snapshot (Loop C 2a).
+    """
+    q_sql = text("""
+        WITH dedup AS (
+          SELECT DISTINCT ON (instrument_id, period_end)
+                 instrument_id, period_end, revenue, ebit, pat, eps,
+                 net_margin, finance_costs, debt_equity_ratio
+          FROM foundation_staging.financials_quarterly
+          WHERE period_end <= :cut
+          ORDER BY instrument_id, period_end DESC, consolidated DESC),
+        ranked AS (
+          SELECT *, row_number() OVER (PARTITION BY instrument_id ORDER BY period_end DESC) rn
+          FROM dedup)
+        SELECT * FROM ranked WHERE rn <= 8
+    """)
+    a_sql = text("""
+        SELECT DISTINCT ON (instrument_id)
+               instrument_id, period_end, equity, total_borrowings
+        FROM foundation_staging.financials_annual
+        WHERE period_end <= :cut AND equity IS NOT NULL
+        ORDER BY instrument_id, period_end DESC, consolidated DESC
     """)
     with open_compute_session(engine) as conn:
-        return pd.read_sql(sql, conn)
+        qdf = pd.read_sql(q_sql, conn, params={"cut": as_of - timedelta(days=lag_q)})
+        adf = pd.read_sql(a_sql, conn, params={"cut": as_of - timedelta(days=lag_a)})
+    return _fundamental_rows(qdf, adf)
 
 
 def load_catalyst_data(

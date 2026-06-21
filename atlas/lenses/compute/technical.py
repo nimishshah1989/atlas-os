@@ -70,29 +70,54 @@ def _score_trend(
     return Decimal(_cap(pts)).quantize(_Q2), ev
 
 
-def _score_relative_strength(
-    rs_1m: float | None, rs_3m: float | None,
-    rs_6m: float | None, rs_12m: float | None,
-    th: dict[str, Any],
-) -> tuple[Decimal | None, dict[str, Any]]:
-    wt = th.get("rs_weights", {"3m": 0.40, "1m": 0.30, "6m": 0.20, "12m": 0.10})
+def _rs_composite(rs_1m, rs_3m, rs_6m, rs_12m, wt) -> tuple[float | None, float]:
+    """Weighted RS composite over the horizons present; returns (comp, total_w)."""
     pairs = [(rs_3m, wt.get("3m", .4)), (rs_1m, wt.get("1m", .3)),
              (rs_6m, wt.get("6m", .2)), (rs_12m, wt.get("12m", .1))]
     total_w, comp = 0.0, 0.0
     for val, w in pairs:
         if val is not None:
             comp += val * w; total_w += w
-    if total_w == 0:
+    return (comp / total_w if total_w else None), total_w
+
+
+def _score_relative_strength(
+    rs_1m: float | None, rs_3m: float | None,
+    rs_6m: float | None, rs_12m: float | None,
+    th: dict[str, Any],
+    rs_1m_sector: float | None = None, rs_3m_sector: float | None = None,
+    rs_6m_sector: float | None = None, rs_12m_sector: float | None = None,
+) -> tuple[Decimal | None, dict[str, Any]]:
+    wt = th.get("rs_weights", {"3m": 0.40, "1m": 0.30, "6m": 0.20, "12m": 0.10})
+    # Market-relative RS (vs NIFTY 500) is the headline. Sector-relative RS, when
+    # available (rs_*_sector — populated in Loop C from the stock's sector index),
+    # is blended in 50/50 so a name that leads BOTH the market and its sector
+    # scores higher than one that only beats a weak sector. RS values are ratios
+    # around 1.0, so 1.0 means "in line"; blending uses the same scale.
+    comp_n500, _ = _rs_composite(rs_1m, rs_3m, rs_6m, rs_12m, wt)
+    comp_sec, _ = _rs_composite(rs_1m_sector, rs_3m_sector, rs_6m_sector, rs_12m_sector, wt)
+    if comp_n500 is None and comp_sec is None:
         return None, {"rs": "no data"}
-    comp /= total_w
-    ev: dict[str, Any] = {"rs_composite": round(comp, 4)}
-    # Tier mapping — RS values are ratios around 1.0
+    if comp_n500 is not None and comp_sec is not None:
+        comp = (comp_n500 + comp_sec) / 2.0
+    else:
+        comp = comp_n500 if comp_n500 is not None else comp_sec
+    ev: dict[str, Any] = {"rs_composite": round(comp, 4),
+                          "rs_n500": None if comp_n500 is None else round(comp_n500, 4),
+                          "rs_sector": None if comp_sec is None else round(comp_sec, 4)}
+    # Tier mapping — RS values are return DIFFERENCES vs the benchmark (stock
+    # trailing return − benchmark trailing return, a fraction centered on 0; see
+    # scripts/foundation/technicals.py:compute_relative_strength), NOT ratios
+    # around 1.0. The old 1.15/1.08/… ratio thresholds never matched the 0-centered
+    # data, so RS scored 0 for ~99% of names (a silent-zero lens defect; tech_rs
+    # was 0 for 2075/2090 on 2026-06-19). Difference-scale breakpoints below:
+    # +0.15 ≈ 15pp outperformance over the blended horizon.
     tiers = [
-        (th.get("rs_top10", 1.15), 25, "top10"),
-        (th.get("rs_top20", 1.08), 20, "top20"),
-        (th.get("rs_top40", 1.02), 15, "top40"),
-        (th.get("rs_bot20", 0.92), 10, "mid"),
-        (th.get("rs_bot10", 0.85), 5, "bot20"),
+        (th.get("rs_top10", 0.15), 25, "top10"),
+        (th.get("rs_top20", 0.08), 20, "top20"),
+        (th.get("rs_top40", 0.02), 15, "top40"),
+        (th.get("rs_bot20", -0.08), 10, "mid"),
+        (th.get("rs_bot10", -0.15), 5, "bot20"),
     ]
     pts = 0
     for threshold, score, label in tiers:
@@ -128,28 +153,36 @@ def _score_vol_contraction(
 
 
 def _score_volume(
-    rel_volume_10d: float | None, avg_volume_30d: float | None,
-    avg_volume_60d: float | None, price: float | None,
-    high_52w: float | None, low_52w: float | None,
+    vol_ratio_30d: float | None, vol_ratio_60d: float | None,
+    pos_52w: float | None,
     th: dict[str, Any],
 ) -> tuple[Decimal | None, dict[str, Any]]:
+    """Volume / participation sub-score from PIT fields in technical_daily.
+
+    vol_ratio_30d = today's volume ÷ its 30-session SMA; vol_ratio_60d ÷ 60-session
+    SMA (both derived as-of in scripts/foundation/technicals.py — NOT the leaky
+    tv_metrics snapshot). pos_52w = 52-week price position 0-100. Replaces the old
+    (rel_volume_10d, avg_volume_30d, avg_volume_60d, price, high_52w, low_52w)
+    inputs, which came from the today-snapshot and made this sub non-PIT.
+    """
     pts, ev, has = 0, {}, False
-    # Relative volume
-    if rel_volume_10d is not None:
+    # Relative volume — today vs its 30-session average (participation).
+    if vol_ratio_30d is not None:
         has = True
-        if rel_volume_10d > th.get("relvol_high", 2.0):
+        if vol_ratio_30d > th.get("relvol_high", 2.0):
             pts += 10; ev["rel_vol"] = "high"
-        elif rel_volume_10d > th.get("relvol_above", 1.2):
+        elif vol_ratio_30d > th.get("relvol_above", 1.2):
             pts += 7; ev["rel_vol"] = "above_avg"
-        elif rel_volume_10d > th.get("relvol_normal", 0.8):
+        elif vol_ratio_30d > th.get("relvol_normal", 0.8):
             pts += 5; ev["rel_vol"] = "normal"
         else:
             pts += 2
-            ev["rel_vol"] = "low" if rel_volume_10d < th.get("relvol_low", 0.5) else "below_avg"
-    # Volume trend (30d vs 60d)
-    if avg_volume_30d is not None and avg_volume_60d is not None and avg_volume_60d > 0:
+            ev["rel_vol"] = "low" if vol_ratio_30d < th.get("relvol_low", 0.5) else "below_avg"
+    # Volume trend: SMA30/SMA60 = vol_ratio_60d / vol_ratio_30d. >1 ⇒ recent volume
+    # accelerating (accumulation); <1 ⇒ fading (distribution).
+    if vol_ratio_30d and vol_ratio_60d and vol_ratio_30d > 0:
         has = True
-        ratio = avg_volume_30d / avg_volume_60d
+        ratio = vol_ratio_60d / vol_ratio_30d
         ev["vol_trend_ratio"] = round(ratio, 4)
         if ratio > th.get("vol_accum_ratio", 1.2):
             pts += 8; ev["vol_trend"] = "accumulation"
@@ -159,10 +192,10 @@ def _score_volume(
             pts += 2; ev["vol_trend"] = "distribution"
         else:
             pts += 3; ev["vol_trend"] = "flat"
-    # 52-week position
-    if price is not None and high_52w is not None and low_52w is not None and high_52w > low_52w:
+    # 52-week position (pos_52w is 0-100, PIT-derived).
+    if pos_52w is not None:
         has = True
-        pos = (price - low_52w) / (high_52w - low_52w)
+        pos = pos_52w / 100.0
         ev["52w_position"] = round(pos, 4)
         if pos >= 0.80:
             pts += 7; ev["52w_zone"] = "near_high"
@@ -178,25 +211,31 @@ def _score_volume(
 def score_technical(
     ema_21: float | None, ema_50: float | None, ema_200: float | None,
     rsi_14: float | None,
-    price: float | None, high_52w: float | None, low_52w: float | None,
+    price: float | None,
     ret_1w: float | None,
     rs_1m_n500: float | None, rs_3m_n500: float | None,
     rs_6m_n500: float | None, rs_12m_n500: float | None,
     atr_14: float | None, bb_width: float | None,
-    volume: float | None,  # noqa: ARG001 — reserved for future use
-    avg_volume_30d: float | None, avg_volume_60d: float | None,
-    rel_volume_10d: float | None,
+    vol_ratio_30d: float | None, vol_ratio_60d: float | None,
+    pos_52w: float | None,
     thresholds: dict[str, Any],
+    rs_1m_sector: float | None = None, rs_3m_sector: float | None = None,
+    rs_6m_sector: float | None = None, rs_12m_sector: float | None = None,
 ) -> TechnicalResult:
     """Score a single stock on the Technical lens (0-100).
 
     Pure function — no I/O, no DB access.  All inputs are pre-loaded scalars.
+    PIT inputs (Loop C): *price* is the as-of adjusted close; atr_14/bb_width/
+    vol_ratio_30d/vol_ratio_60d/pos_52w/rs_*_sector come from technical_daily on
+    the scoring date — NOT the tv_metrics snapshot that previously leaked here.
     """
     th = thresholds
     trend, t_ev = _score_trend(ema_21, ema_50, ema_200, price, rsi_14, ret_1w, th)
-    rs, rs_ev = _score_relative_strength(rs_1m_n500, rs_3m_n500, rs_6m_n500, rs_12m_n500, th)
+    rs, rs_ev = _score_relative_strength(
+        rs_1m_n500, rs_3m_n500, rs_6m_n500, rs_12m_n500, th,
+        rs_1m_sector, rs_3m_sector, rs_6m_sector, rs_12m_sector)
     vc, vc_ev = _score_vol_contraction(atr_14, price, bb_width, th)
-    vol, v_ev = _score_volume(rel_volume_10d, avg_volume_30d, avg_volume_60d, price, high_52w, low_52w, th)
+    vol, v_ev = _score_volume(vol_ratio_30d, vol_ratio_60d, pos_52w, th)
     evidence = {"trend": t_ev, "relative_strength": rs_ev, "vol_contraction": vc_ev, "volume": v_ev}
     subs = [s for s in (trend, rs, vc, vol) if s is not None]
     composite = (sum(subs) / len(subs) * Decimal(4)).quantize(_Q2, rounding=ROUND_HALF_UP) if subs else None

@@ -24,7 +24,11 @@ from atlas.intelligence.validation.persistence import persist_ic_result
 log = structlog.get_logger()
 
 _LENSES = ("technical", "fundamental", "valuation", "catalyst", "flow", "policy", "composite")
-_FWD_MAP: dict[int, str] = {21: "ret_1m", 63: "ret_3m", 126: "ret_6m"}
+# Forward-return horizons in NSE trading SESSIONS (1m / 3m / 6m).
+_HORIZONS = (21, 63, 126)
+_OHLCV = "foundation_staging.ohlcv_stock"
+_IDX = "foundation_staging.index_prices"
+_CAL_START = date(2019, 1, 1)
 _TIERS = ("tier_1_megacap", "tier_2_largecap", "tier_3_uppermid",
           "tier_4_lowermid", "tier_5_smallcap")
 
@@ -56,14 +60,43 @@ def _load_lens_scores(engine: Engine) -> pd.DataFrame:
     return df
 
 
-def _load_fwd_returns(engine: Engine, col: str) -> pd.DataFrame:
-    sql = f"SELECT instrument_id, date, {col} AS fwd_return FROM foundation_staging.technical_daily WHERE {col} IS NOT NULL"  # noqa: S608, E501
+def _nse_sessions(engine: Engine, start: date) -> list:
+    """The canonical NSE session grid (NIFTY-50 calendar, D9) from *start* on."""
+    sql = (f"SELECT DISTINCT date FROM {_IDX} "  # noqa: S608
+           "WHERE index_code = 'NIFTY 50' AND date >= :s ORDER BY date")
     with open_compute_session(engine) as conn:
-        df = pd.read_sql(text(sql), conn)
+        d = pd.read_sql(text(sql), conn, params={"s": start})
+    return list(pd.to_datetime(d["date"]))
+
+
+def _load_fwd_returns(engine: Engine, h: int, start: date = _CAL_START) -> pd.DataFrame:
+    """TRUE forward returns over the next *h* NSE SESSIONS, as a wide panel
+    (index = scoring date D, columns = instrument_id, value = px(D+h)/px(D) − 1).
+
+    Loop C blocker 0b (DECISIONS D8): the previous code loaded
+    ``technical_daily.ret_1m`` — the TRAILING 21-day return ending at D — and fed
+    it to the IC engine as if forward, making IC a tautology (lens vs the PAST).
+
+    Here the close panel is reindexed onto the canonical NIFTY-50 session grid
+    BEFORE shifting, so ``shift(-h)`` advances exactly *h* real NSE sessions (not
+    *h* of an illiquid name's own sparse rows — review finding #5). A name that did
+    not trade on D or on session D+h is NaN there and is dropped by the IC join.
+    One price column (adjusted close, raw fallback) is used end-to-end so the panel
+    and the C7 verifier agree (finding #6). Indexed at D so the IC engine correlates
+    lens(D) with the realised return AFTER D.
+    """
+    sql = (f"SELECT instrument_id, date, COALESCE(close_adj, close) AS px FROM {_OHLCV} "  # noqa: S608
+           "WHERE date >= :s ORDER BY date")
+    with open_compute_session(engine) as conn:
+        df = pd.read_sql(text(sql), conn, params={"s": start})
     if df.empty:
         return pd.DataFrame()
     df["date"] = pd.to_datetime(df["date"])
-    return df.pivot(index="date", columns="instrument_id", values="fwd_return")
+    df.loc[~(df["px"] > 0), "px"] = float("nan")   # bad price -> NaN (keep the slot)
+    panel = df.pivot(index="date", columns="instrument_id", values="px")
+    sessions = _nse_sessions(engine, start)
+    panel = panel.reindex(sessions)                # exact NSE grid; gaps -> NaN
+    return panel.shift(-h) / panel - 1.0
 
 
 def _factor_frame(scores: pd.DataFrame, lens: str) -> pd.DataFrame:
@@ -102,10 +135,7 @@ def calibrate_lens_ic(
 
     results: list[LensICRow] = []
     for fwd_days in periods:
-        ret_col = _FWD_MAP.get(fwd_days)
-        if not ret_col:
-            continue
-        rw = _load_fwd_returns(engine, ret_col)
+        rw = _load_fwd_returns(engine, fwd_days)
         if rw.empty:
             continue
 
@@ -148,22 +178,87 @@ def _compute_walk_forward_weights(
     return {k: v / total for k, v in raw.items()} if total > 0 else {}
 
 
+def walk_forward_folds(
+    engine: Engine,
+    forward_days: int = 63,
+    n_folds: int = 5,
+    embargo: int = 21,
+) -> list[dict]:
+    """Expanding-window walk-forward IC with PURGE + EMBARGO (Loop C C7 / D15).
+
+    The journal dates are cut into ``n_folds + 1`` contiguous segments. Fold *i*
+    trains on segments ``0..i-1`` and tests OUT-OF-SAMPLE on segment *i*; test
+    segments never overlap. A gap of ``forward_days + embargo`` sessions is purged
+    off the train tail so a training sample's *h*-session-ahead label can never
+    reach into the test window (no leakage). Returns one record per fold with the
+    per-lens train IC and OOS test IC — the input the C7 gate aggregates.
+    """
+    scores = _load_lens_scores(engine)
+    if scores.empty:
+        return []
+    rw = _load_fwd_returns(engine, forward_days)
+    if rw.empty:
+        return []
+
+    all_dates = sorted(pd.to_datetime(pd.Series(scores["date"].unique())))
+    n = len(all_dates)
+    # need a usable cross-section per segment; shrink folds rather than emit junk
+    while n_folds >= 1 and n // (n_folds + 1) < 10:
+        n_folds -= 1
+    if n_folds < 1:
+        return []
+
+    seg = n // (n_folds + 1)
+    gap = forward_days + embargo
+    folds: list[dict] = []
+    for i in range(1, n_folds + 1):
+        train_end_idx = i * seg
+        test_start_idx = train_end_idx
+        test_end_idx = (i + 1) * seg if i < n_folds else n
+        purged_end_idx = max(0, train_end_idx - gap)
+        train_dates = set(all_dates[:purged_end_idx])
+        test_dates = set(all_dates[test_start_idx:test_end_idx])
+        if len(train_dates) < 5 or len(test_dates) < 5:
+            continue
+
+        train_ic: dict[str, float] = {}
+        test_ic: dict[str, float] = {}
+        for lens in _LENSES:
+            fac = _factor_frame(scores, lens)
+            if fac.empty:
+                continue
+            lvl = fac.index.get_level_values("date")
+            tr = compute_ic_over_window(fac[lvl.isin(train_dates)], rw[rw.index.isin(train_dates)])
+            te = compute_ic_over_window(fac[lvl.isin(test_dates)], rw[rw.index.isin(test_dates)])
+            train_ic[lens] = tr.mean_ic
+            test_ic[lens] = te.mean_ic
+        folds.append({
+            "fold": i,
+            "train_n": len(train_dates), "test_n": len(test_dates),
+            "train_end": all_dates[purged_end_idx - 1] if purged_end_idx else None,
+            "test_start": all_dates[test_start_idx], "test_end": all_dates[test_end_idx - 1],
+            "train_ic": train_ic, "test_ic": test_ic,
+        })
+    log.info("walk_forward_folds_done", forward_days=forward_days, n_folds=len(folds))
+    return folds
+
+
 def propose_weights(
     engine: Engine,
     as_of_date: date | None = None,
     forward_days: int = 63,
     train_frac: float = 0.7,
     min_ic: float = 0.03,
+    embargo: int = 21,
 ) -> list[WeightProposal]:
-    """Walk-forward: train/test split, IC on train, validate on test,
-    propose IC*IR-proportional weights. Persists to atlas_weight_proposals."""
+    """Walk-forward: train/test split (PURGED+EMBARGOED), IC on train, validate on
+    test, propose IC*IR-proportional weights. Persists to atlas_weight_proposals."""
     as_of = as_of_date or date.today()
     scores = _load_lens_scores(engine)
     if scores.empty:
         log.warning("propose_weights_no_scores"); return []  # noqa: E702
 
-    ret_col = _FWD_MAP.get(forward_days, "ret_3m")
-    rw = _load_fwd_returns(engine, ret_col)
+    rw = _load_fwd_returns(engine, forward_days)
     if rw.empty:
         log.warning("propose_weights_no_returns"); return []  # noqa: E702
 
@@ -172,7 +267,13 @@ def propose_weights(
     if split_idx < 2 or len(all_dates) - split_idx < 2:
         log.warning("propose_weights_insufficient_dates", n=len(all_dates)); return []  # noqa: E702
 
-    train_dates, test_dates = set(all_dates[:split_idx]), set(all_dates[split_idx:])
+    # Purge + embargo: drop the last (forward_days + embargo) train dates so a train
+    # sample's h-session-ahead label cannot overlap the test window (review #3).
+    gap = forward_days + embargo
+    train_dates = set(all_dates[:max(0, split_idx - gap)])
+    test_dates = set(all_dates[split_idx:])
+    if len(train_dates) < 2:
+        log.warning("propose_weights_purged_too_thin", n=len(all_dates)); return []  # noqa: E702
     train_ic: dict[str, float] = {}
     test_ic: dict[str, float] = {}
     train_ir: dict[str, float] = {}
@@ -257,9 +358,7 @@ def backfill_ic_journal(
 
     ret_cache = {}
     for fd in periods:
-        rc = _FWD_MAP.get(fd)
-        if rc:
-            ret_cache[fd] = _load_fwd_returns(engine, rc)
+        ret_cache[fd] = _load_fwd_returns(engine, fd)
 
     written = 0
     cursor = start_date + timedelta(days=rolling_window_days)

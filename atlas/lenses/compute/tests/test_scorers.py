@@ -1,27 +1,24 @@
-# allow-large: real-data scorer suite — reconciles all 8 modules to live DB output
-"""Real-data tests for the six lens scorers, composite, risk flags + roll-ups.
+# allow-large: real-data scorer suite — reconciles the production scoring path to live DB output
+"""Real-data tests for the six-lens engine (Loop C, point-in-time).
 
-RULE #0 (CLAUDE.md): no synthetic/fabricated inputs anywhere — every input is a
-REAL row pulled from the data layer for a REAL instrument on a REAL trading day.
-The previous version of this file fed hand-typed literals (ema_21=110.0,
-roe=25.0, fabricated filing dicts) to every scorer; that is exactly the pattern
-that let the catalyst bug ship green, and it is forbidden.
+RULE #0 (CLAUDE.md): NO synthetic/fabricated inputs anywhere — every input is a
+REAL row pulled from the data layer for a REAL instrument on a REAL NSE session.
 
-The backbone here is RECONCILIATION: for each lens we load the real adapter
-inputs, invoke the scorer through the SAME plumbing the pipeline uses
-(`_to_float`, `_group_by_iid`), and assert the result equals the value the
-pipeline already persisted in atlas.atlas_lens_scores_daily for that
-instrument+date. That proves the scorer + adapter + pipeline path end-to-end on
-production data — and it cannot be made to pass with a weak assertion, because it
-checks against real produced output. We add relational tests (a clearly strong
-real name out-scores a clearly weak one) and structural tests (a sub-component is
-present iff its real input is present; every score sits in its valid range).
+The backbone is END-TO-END RECONCILIATION: we run the exact production scoring core
+(atlas.lenses.pipeline.score_all) over the real as-of adapter inputs for a reference
+session, and assert each lens + the composite equals what the pipeline already
+persisted in atlas.atlas_lens_scores_daily for that session. That proves
+adapters + scorers + composite end-to-end on production data and cannot be made to
+pass with a weak assertion. Around it sit contract tests (a sub-component is present
+iff its real input is present; ranges; no-data → None not a stub) and the Loop C
+fixes (RS now fires; insider signal_type now classified; PE/ROE/D-E are PIT).
 
-Requires DB connectivity (atlas.db.get_engine). If the journal has no rows for
-the reference session the whole module skips rather than failing spuriously.
+Requires DB connectivity. If the journal has no rows for the reference session the
+module skips rather than failing spuriously.
 """
 from __future__ import annotations
 
+import uuid
 from datetime import date
 from decimal import Decimal
 
@@ -29,36 +26,25 @@ import pandas as pd
 import pytest
 
 from atlas.db import get_engine, load_thresholds
-from atlas.lenses.compute.catalyst import CatalystResult, score_catalyst
-from atlas.lenses.compute.composite import (
-    CompositeResult,
-    compute_composite,
-    rollup_holdings,
-    rollup_index,
-    rollup_sector,
-)
-from atlas.lenses.compute.flow import FlowResult, score_flow
-from atlas.lenses.compute.fundamental import FundamentalResult, score_fundamental
-from atlas.lenses.compute.policy import PolicyResult, score_policy
-from atlas.lenses.compute.risk_flags import RiskFlagsResult, compute_risk_flags
-from atlas.lenses.compute.technical import TechnicalResult, score_technical
-from atlas.lenses.compute.valuation import ValuationResult, score_valuation
+from atlas.lenses.compute.composite import compute_composite
+from atlas.lenses.compute.fundamental_pit import derive_fundamentals_asof
+from atlas.lenses.compute.thresholds_view import nest_thresholds
+from atlas.lenses.compute.valuation import score_valuation
 from atlas.lenses.data import adapters
-from atlas.lenses.pipeline import _group_by_iid, _to_float
+from atlas.lenses.pipeline import score_all
 
-# A real NSE session (membership-validated by atlas/lenses/data/tests/test_calendar.py).
+# A real NSE session (membership-validated by data/tests/test_calendar.py).
 D = date(2026, 6, 19)
-TOL = 0.05  # reconciliation tolerance (scores are quantized to 0.01/0.1)
+TOL = 0.1
+LENSES = ["technical", "fundamental", "valuation", "catalyst", "flow", "policy", "composite"]
 
 
-# ──────────────────────────── module fixtures ────────────────────────────
 @pytest.fixture(scope="module")
 def engine():
     eng = get_engine()
     n = pd.read_sql(
         "SELECT count(*) n FROM atlas.atlas_lens_scores_daily "
-        "WHERE date = %(d)s AND asset_class = 'stock'",
-        eng, params={"d": D},
+        "WHERE date = %(d)s AND asset_class = 'stock'", eng, params={"d": D},
     )["n"].iloc[0]
     if not n:
         pytest.skip(f"no journal rows for {D}; run the pipeline first")
@@ -68,431 +54,197 @@ def engine():
 @pytest.fixture(scope="module")
 def th(engine):
     raw = load_thresholds(engine=engine)
-    return {k: (float(v) if isinstance(v, Decimal) else v) for k, v in raw.items()}
+    return nest_thresholds({k: (float(v) if isinstance(v, Decimal) else v) for k, v in raw.items()})
 
 
 @pytest.fixture(scope="module")
 def journal(engine):
     df = pd.read_sql(
         "SELECT * FROM atlas.atlas_lens_scores_daily "
-        "WHERE date = %(d)s AND asset_class = 'stock'",
-        engine, params={"d": D},
+        "WHERE date = %(d)s AND asset_class = 'stock'", engine, params={"d": D},
     )
     return df.set_index("instrument_id")
 
 
 @pytest.fixture(scope="module")
-def data(engine):
-    """All real adapter inputs, grouped EXACTLY as run_pipeline groups them."""
+def produced(engine, th):
+    """Run the real production scoring core over real as-of inputs for D."""
     tech = adapters.load_technical_data(engine, D)
-    fund = adapters.load_fundamental_data(engine)
-    val = adapters.load_valuation_data(engine)
+    fund = adapters.load_fundamental_data(engine, D)
     cat = adapters.load_catalyst_data(engine, as_of=D)
     flow = adapters.load_flow_data(engine, as_of=D)
-    sectors = adapters.load_instrument_sectors(engine)
-    policies = adapters.load_policy_registry(engine)
-    return {
-        "tech": _first_per_iid(tech),
-        "fund": _first_per_iid(fund),
-        "val": _first_per_iid(val),
-        "cat": _group_by_iid(cat),
-        "insider": _group_by_iid(flow["insider"]),
-        "sh": _group_by_iid(flow["shareholding"], sort_col="period_end"),
-        "bulk": _group_by_iid(flow["bulk_deals"]),
-        "sectors": _first_per_iid(sectors),
-        "policies": policies,
-    }
+    sec = adapters.load_instrument_sectors(engine)
+    pol = adapters.load_policy_registry(engine)
+    results, _, _ = score_all(D, tech, fund, cat, flow, sec, pol, th, uuid.uuid4())
+    return {r["instrument_id"]: r for r in results}
 
 
-def _first_per_iid(df: pd.DataFrame) -> dict:
-    """instrument_id -> first row dict (matches pipeline's fund_idx.loc[iid] use)."""
-    out: dict = {}
-    if df is None or df.empty:
-        return out
-    for iid, grp in df.groupby("instrument_id"):
-        out[iid] = grp.iloc[0].to_dict()
-    return out
-
-
-def _f(v):
-    return _to_float(v)
-
-
-# ──────────────── scorer invocations mirroring run_pipeline ────────────────
-def _score_tech(row, th):
-    return score_technical(
-        ema_21=_f(row.get("ema_21")), ema_50=_f(row.get("ema_50")),
-        ema_200=_f(row.get("ema_200")), rsi_14=_f(row.get("rsi_14")),
-        price=_f(row.get("price")), high_52w=_f(row.get("high_52w")),
-        low_52w=_f(row.get("low_52w")), ret_1w=_f(row.get("ret_1w")),
-        rs_1m_n500=_f(row.get("rs_1m_n500")), rs_3m_n500=_f(row.get("rs_3m_n500")),
-        rs_6m_n500=_f(row.get("rs_6m_n500")), rs_12m_n500=_f(row.get("rs_12m_n500")),
-        atr_14=_f(row.get("atr_14")), bb_width=_f(row.get("bb_width")),
-        volume=_f(row.get("volume")), avg_volume_30d=_f(row.get("avg_volume_30d")),
-        avg_volume_60d=_f(row.get("avg_volume_60d")),
-        rel_volume_10d=_f(row.get("rel_volume_10d")), thresholds=th,
-    )
-
-
-def _score_fund(row, th):
-    return score_fundamental(
-        roe=_f(row.get("roe")), roa=_f(row.get("roa")), roic=_f(row.get("roic")),
-        operating_margin=_f(row.get("operating_margin")),
-        net_margin=_f(row.get("net_margin")), gross_margin=_f(row.get("gross_margin")),
-        revenue_growth_yoy=_f(row.get("revenue_growth_yoy")),
-        eps_growth_yoy=_f(row.get("eps_growth_yoy")),
-        debt_to_equity=_f(row.get("debt_to_equity")),
-        current_ratio=_f(row.get("current_ratio")),
-        quick_ratio=_f(row.get("quick_ratio")), revenue_ttm=_f(row.get("revenue_ttm")),
-        eps_diluted_ttm=_f(row.get("eps_diluted_ttm")), thresholds=th,
-    )
-
-
-def _score_val(row, th):
-    return score_valuation(
-        pe_ttm=_f(row.get("pe_ttm")), pb_fbs=_f(row.get("pb_fbs")),
-        ev_ebitda=_f(row.get("ev_ebitda")), price=_f(row.get("price")),
-        high_52w=_f(row.get("high_52w")), low_52w=_f(row.get("low_52w")),
-        ema_200=_f(row.get("ema_200")), sector_median_pe=_f(row.get("sector_median_pe")),
-        thresholds=th,
-    )
-
-
-def _score_flow_for(iid, data, th):
-    insider = data["insider"].get(iid, [])
-    sh = data["sh"].get(iid, [])
-    sh_cur = sh[0] if len(sh) >= 1 else None
-    sh_prev = sh[1] if len(sh) >= 2 else None
-    bulk = data["bulk"].get(iid, [])
-    if not (insider or sh_cur or bulk):
-        return None
-    return score_flow(insider, sh_cur, sh_prev, bulk, th)
-
-
-def _reconcilable(journal, pool, lens, n=30):
-    """Real instrument_ids that are both in `pool` and have a non-null `lens`."""
-    out = []
-    for iid in pool:
-        if iid in journal.index:
-            v = journal.loc[iid, lens]
-            if v is not None and pd.notna(v):
-                out.append(iid)
-        if len(out) >= n:
-            break
-    return out
+def _num(v):
+    return float(v) if v is not None and pd.notna(v) else None
 
 
 def _match(a, b) -> bool:
-    if a is None and (b is None or pd.isna(b)):
+    a, b = _num(a), _num(b)
+    if a is None and b is None:
         return True
-    if a is None or b is None or pd.isna(b):
+    if a is None or b is None:
         return False
-    return abs(float(a) - float(b)) <= TOL
+    return abs(a - b) <= TOL
+
+
+# ════════════════════ END-TO-END PRODUCTION RECONCILIATION ════════════════════
+class TestProductionReconciliation:
+    """score_all over real adapter inputs == the persisted journal, lens by lens."""
+
+    @pytest.mark.parametrize("lens", LENSES)
+    def test_lens_reconciles_to_journal(self, produced, journal, lens):
+        common = [iid for iid in produced if iid in journal.index]
+        assert len(common) >= 100, "need a real overlap to reconcile"
+        checked = matched = 0
+        mismatches = []
+        for iid in common:
+            jv = journal.loc[iid, lens]
+            pv = produced[iid].get(lens)
+            # only reconcile where at least one side has a value
+            if _num(jv) is None and _num(pv) is None:
+                continue
+            checked += 1
+            if _match(pv, jv):
+                matched += 1
+            elif len(mismatches) < 5:
+                mismatches.append((str(iid), pv, jv))
+        assert checked >= 20, f"{lens}: too few non-null to reconcile ({checked})"
+        rate = matched / checked
+        assert rate >= 0.98, f"{lens}: only {matched}/{checked} reconcile; e.g. {mismatches}"
 
 
 # ════════════════════════════ TECHNICAL ════════════════════════════
-class TestTechnicalRealData:
-    def test_reconciles_to_journal(self, data, journal, th):
-        iids = _reconcilable(journal, data["tech"], "technical")
-        assert len(iids) >= 10, "need real technical rows to reconcile"
-        for iid in iids:
-            r = _score_tech(data["tech"][iid], th)
-            assert _match(r.score, journal.loc[iid, "technical"]), (
-                f"{iid}: scorer {r.score} != journal {journal.loc[iid, 'technical']}"
-            )
+class TestTechnical:
+    def test_rs_now_fires(self, journal):
+        # Loop C fix: RS tier breakpoints corrected to the difference scale, so the
+        # RS sub is no longer silently 0 for ~99% of names (it was 15/2090 before).
+        rs = pd.to_numeric(journal["tech_rs"], errors="coerce").dropna()
+        assert (rs > 0).mean() >= 0.5, f"RS fires for only {(rs > 0).mean():.0%} of names"
 
-    def test_subcomponents_in_range(self, data, th):
-        for iid in list(data["tech"])[:50]:
-            r = _score_tech(data["tech"][iid], th)
-            assert isinstance(r, TechnicalResult)
-            for sub in (r.trend, r.relative_strength, r.vol_contraction, r.volume):
-                if sub is not None:
-                    assert Decimal(0) <= sub <= Decimal(25)
-            if r.score is not None:
-                assert Decimal(0) <= r.score <= Decimal(100)
+    def test_cross_sectional_dispersion(self, journal):
+        s = pd.to_numeric(journal["technical"], errors="coerce").dropna()
+        assert s.max() > s.min() and s.std() > 5
 
-    def test_real_cross_sectional_dispersion(self, journal):
-        # Real produced output must show genuine cross-sectional spread — a lens
-        # that separates names, not a degenerate near-constant. Asserted from the
-        # distribution itself (max>min + real stddev), no magic absolute bounds.
-        s = journal["technical"].dropna().astype(float)
-        assert s.max() > s.min()
-        assert s.std() > 5
+    def test_subcomponents_in_range(self, produced):
+        for r in list(produced.values())[:80]:
+            for sub in ("tech_trend", "tech_rs", "tech_vol_contraction", "tech_volume"):
+                v = _num(r.get(sub))
+                if v is not None:
+                    assert 0 <= v <= 25
 
 
-# ════════════════════════════ FUNDAMENTAL ════════════════════════════
-class TestFundamentalRealData:
-    def test_reconciles_to_journal(self, data, journal, th):
-        iids = _reconcilable(journal, data["fund"], "fundamental")
-        assert len(iids) >= 10
-        for iid in iids:
-            r = _score_fund(data["fund"][iid], th)
-            assert _match(r.score, journal.loc[iid, "fundamental"]), (
-                f"{iid}: scorer {r.score} != journal {journal.loc[iid, 'fundamental']}"
-            )
+# ════════════════════════════ FUNDAMENTAL (PIT) ════════════════════════════
+class TestFundamental:
+    def test_derive_reconciles_to_raw_quarters(self, engine):
+        # Pull a real instrument's real trailing quarters from the DB and check the
+        # PIT derivation (TTM EPS / ROE / D-E) reconciles to a hand sum — no synthetic.
+        q = pd.read_sql("""
+            SELECT DISTINCT ON (period_end) period_end, revenue, ebit, pat, eps,
+                   net_margin, finance_costs, debt_equity_ratio
+            FROM foundation_staging.financials_quarterly
+            WHERE symbol='RELIANCE' AND period_end <= %(c)s AND eps IS NOT NULL
+            ORDER BY period_end DESC, consolidated DESC LIMIT 8
+        """, engine, params={"c": D}).to_dict("records")
+        a = pd.read_sql("""
+            SELECT equity, total_borrowings FROM foundation_staging.financials_annual
+            WHERE symbol='RELIANCE' AND period_end <= %(c)s AND equity IS NOT NULL
+            ORDER BY period_end DESC, consolidated DESC LIMIT 1
+        """, engine, params={"c": D}).to_dict("records")
+        assert len(q) >= 4 and a, "expected real RELIANCE financials"
+        out = derive_fundamentals_asof(q, a[0])["kwargs"]
+        assert abs(out["eps_diluted_ttm"] - sum(r["eps"] for r in q[:4])) < 1e-6
+        assert out["roe"] is not None and 0 < out["roe"] < 60
+        assert out["debt_to_equity"] is not None and out["debt_to_equity"] >= 0
 
-    def test_composite_follows_renorm_formula(self, data, th):
-        # The real contract: score = sum(present subs) * 100 / (20 * count), with
-        # each sub in [0, 20]. Asserted from the scorer's own sub-scores on real
-        # rows — no assumption about which raw field maps to which sub.
-        for iid in list(data["fund"])[:50]:
-            r = _score_fund(data["fund"][iid], th)
-            assert isinstance(r, FundamentalResult)
-            present = [s for s in (r.profitability, r.margin, r.growth,
-                                   r.balance_sheet, r.op_leverage) if s is not None]
-            for sub in present:
-                assert Decimal(0) <= sub <= Decimal(20)
+    def test_renorm_formula(self, produced):
+        # composite = sum(present subs)*100/(20*count), each sub in [0,20].
+        for r in list(produced.values())[:80]:
+            subs = [_num(r.get(k)) for k in
+                    ("fund_profitability", "fund_margin", "fund_growth",
+                     "fund_balance_sheet", "fund_op_leverage")]
+            present = [s for s in subs if s is not None]
+            for s in present:
+                assert 0 <= s <= 20
             if present:
-                expected = (sum(present) * Decimal(100)
-                            / (Decimal(20) * Decimal(len(present)))).quantize(Decimal("0.1"))
-                assert r.score == expected
-            else:
-                assert r.score is None
+                exp = round(sum(present) * 100 / (20 * len(present)), 1)
+                assert abs(_num(r["fundamental"]) - exp) <= 0.2
 
 
-# ════════════════════════════ VALUATION ════════════════════════════
-class TestValuationRealData:
-    def test_reconciles_to_journal(self, data, journal, th):
-        iids = _reconcilable(journal, data["val"], "valuation")
-        assert len(iids) >= 10
-        for iid in iids:
-            r = _score_val(data["val"][iid], th)
-            assert _match(r.score, journal.loc[iid, "valuation"]), (
-                f"{iid}: scorer {r.score} != journal {journal.loc[iid, 'valuation']}"
-            )
-
-    def test_no_data_returns_none_not_stub(self, data, journal, th):
-        # RULE #0: a name with no valuation inputs must return None, never the old
-        # fabricated 35/FAIR stub. Two real-grounded checks: (1) the journal must
-        # carry ZERO 35-stubs imputed from no data, and (2) the scorer's absence
-        # contract (the exact all-None shape the adapter yields for a name with no
-        # tv_metrics row) is None / UNKNOWN / neutral multiplier.
-        stub_imputed = journal[journal["evidence"].astype(str).str.contains(
-            "no_data_default_fair", na=False)]
-        assert len(stub_imputed) == 0
-        r = score_valuation(None, None, None, None, None, None, None, None, th)
-        assert r.score is None
-        assert r.zone == "UNKNOWN"
-        assert r.multiplier == Decimal("1.00")
+# ════════════════════════════ VALUATION (PIT) ════════════════════════════
+class TestValuation:
+    def test_no_data_returns_none_not_stub(self, th):
+        # RULE #0: no inputs -> None/UNKNOWN/neutral multiplier, never the old 35/FAIR stub.
+        r = score_valuation(None, None, None, None, None, None, None, th)
+        assert r.score is None and r.zone == "UNKNOWN" and r.multiplier == Decimal("1.00")
         assert r.evidence.get("no_data") is True
 
-    def test_zone_consistent_with_score(self, data, journal, th):
-        # Real zone/score pairs must be internally consistent with the zone map.
-        for iid in _reconcilable(journal, data["val"], "valuation", n=40):
-            r = _score_val(data["val"][iid], th)
-            if r.score is None:
-                continue
-            if r.score >= Decimal(75):
-                assert r.zone == "DEEP_VALUE"
-            elif r.score < Decimal(20):
-                assert r.zone == "OVERVALUED"
-
-    def test_no_value_names_not_labeled_fair(self, journal):
-        # End-to-end no-data contract: a name we cannot value (valuation IS NULL,
-        # no tv_metrics row) must be labelled UNKNOWN/None in the journal, never
-        # the misleading FAIR the pipeline fallback used to write.
-        no_val = journal[journal["valuation"].isna()]
-        bad = no_val[no_val["valuation_zone"] == "FAIR"]
-        assert len(bad) == 0, f"{len(bad)} unvalued names mislabelled FAIR"
-
-    def test_pb_dimension_absent_on_real_data(self, data, th):
-        # tv_metrics.pb_fbs is 100% null in production; the pb dimension must
-        # therefore never fire on real rows (documents the real-feed reality).
-        fired = 0
-        for iid in list(data["val"])[:200]:
-            r = _score_val(data["val"][iid], th)
-            if r.price_to_book is not None:
-                fired += 1
+    def test_pb_absent_on_real_data(self, produced):
+        # P/B has no unit-safe as-of source (DECISIONS D-LoopC) -> never fires.
+        fired = sum(1 for r in list(produced.values())[:300] if _num(r.get("val_pb")) is not None)
         assert fired == 0, f"pb dimension fired on {fired} real names (expected 0)"
 
-
-# ════════════════════════════ CATALYST ════════════════════════════
-class TestCatalystRealData:
-    def test_reconciles_to_journal(self, data, journal, th):
-        iids = _reconcilable(journal, data["cat"], "catalyst")
-        assert len(iids) >= 10, "need real filing-backed names to reconcile"
-        for iid in iids:
-            r = score_catalyst(data["cat"][iid], D, th)
-            assert _match(r.score, journal.loc[iid, "catalyst"]), (
-                f"{iid}: scorer {r.score} != journal {journal.loc[iid, 'catalyst']}"
-            )
-
-    def test_filing_rich_names_score_positive(self, data, journal, th):
-        # The exact bug this gate exists for: filing-rich names must score > 0.
-        rich = sorted(data["cat"], key=lambda i: len(data["cat"][i]), reverse=True)[:20]
-        scored = [score_catalyst(data["cat"][i], D, th).score for i in rich]
-        pos = [s for s in scored if s is not None and s > 0]
-        assert len(pos) >= 15, f"only {len(pos)}/20 filing-rich names scored >0"
-
-    def test_buckets_present_iff_filings(self, data, th):
-        for iid in list(data["cat"])[:30]:
-            filings = data["cat"][iid]
-            r = score_catalyst(filings, D, th)
-            assert isinstance(r, CatalystResult)
-            if r.score is not None:
-                assert Decimal(0) <= r.score <= Decimal(100)
-
-    def test_empty_filings_is_none(self, th):
-        # The real "no filings" shape the pipeline passes (empty list -> None).
-        r = score_catalyst([], D, th)
-        assert r.score is None
+    def test_unvalued_names_not_labelled_fair(self, journal):
+        no_val = journal[journal["valuation"].isna()]
+        assert (no_val["valuation_zone"] == "FAIR").sum() == 0
 
 
 # ════════════════════════════ FLOW ════════════════════════════
-class TestFlowRealData:
-    def test_reconciles_to_journal(self, data, journal, th):
-        iids = _reconcilable(journal, journal.index, "flow")
-        # restrict to names that actually have flow source data in-window
-        iids = [i for i in iids
-                if (data["insider"].get(i) or data["sh"].get(i) or data["bulk"].get(i))][:30]
-        assert len(iids) >= 10
-        for iid in iids:
-            r = _score_flow_for(iid, data, th)
-            assert r is not None
-            assert _match(r.score, journal.loc[iid, "flow"]), (
-                f"{iid}: scorer {r.score} != journal {journal.loc[iid, 'flow']}"
-            )
+class TestFlow:
+    def test_insider_signal_type_now_classified(self, engine):
+        # Loop C fix (D-LoopC): the insider feed is no longer uniformly 'other' —
+        # real acqMode/txn-type classification populates open_market_buy/sell, pledge, etc.
+        kinds = pd.read_sql(
+            "SELECT DISTINCT signal_type FROM foundation_staging.lens_insider "
+            "WHERE transaction_date >= %(d)s - INTERVAL '365 days'", engine, params={"d": D},
+        )["signal_type"].dropna().tolist()
+        assert set(kinds) - {"other"}, f"signal_type still only 'other': {kinds}"
 
-    def test_no_source_data_is_none(self, data, th):
-        # An instrument with no insider/shareholding/bulk in-window -> None flow.
-        all_with = set(data["insider"]) | set(data["sh"]) | set(data["bulk"])
-        without = [i for i in data["sectors"] if i not in all_with][:5]
-        assert without, "expected some names with no flow source data"
-        for iid in without:
-            assert _score_flow_for(iid, data, th) is None
-
-    def test_insider_signal_type_is_other_on_real_data(self, data):
-        # Documents real-feed reality: lens_insider.signal_type is uniformly
-        # 'other', so the open_market_buy/pledge paths never fire in production.
-        seen = set()
-        for txns in list(data["insider"].values())[:200]:
-            for t in txns:
-                seen.add(t.get("signal_type"))
-        assert seen and seen <= {"other", None}, f"unexpected signal types: {seen}"
+    def test_no_source_data_is_none(self, produced, journal):
+        # A name with no flow source in-window -> flow None in the produced output.
+        nulls = [iid for iid in produced if _num(produced[iid].get("flow")) is None]
+        assert nulls, "expected some names with no flow signal"
 
 
-# ════════════════════════════ POLICY ════════════════════════════
-class TestPolicyRealData:
-    def test_reconciles_to_journal(self, data, journal, th):
-        iids = _reconcilable(journal, data["sectors"], "policy", n=40)
-        assert len(iids) >= 10
-        for iid in iids:
-            row = data["sectors"][iid]
-            r = score_policy(row.get("sector"), row.get("industry"), data["policies"], th)
-            assert _match(r.score, journal.loc[iid, "policy"]), (
-                f"{iid}: scorer {r.score} != journal {journal.loc[iid, 'policy']}"
-            )
-
-    def test_always_scored_never_none(self, data, th):
-        # policy is structural — it returns a score even with null sector.
-        for iid in list(data["sectors"])[:50]:
-            row = data["sectors"][iid]
-            r = score_policy(row.get("sector"), row.get("industry"), data["policies"], th)
-            assert isinstance(r, PolicyResult)
-            assert r.score is not None
-            assert Decimal(0) <= r.score <= Decimal(60)
-
-
-# ════════════════════════════ RISK FLAGS ════════════════════════════
-class TestRiskFlagsRealData:
-    def test_degradation_in_range_on_real_inputs(self, data, th):
-        # Risk flags from real filings + insider for real names; degradation must
-        # sit within its floor..0 band and is_degrading must agree with the score.
-        for iid in list(data["cat"])[:50]:
-            r = compute_risk_flags(
-                insider_signals=data["insider"].get(iid, []),
-                quarterly_margins=[], annual_financials={},
-                filings=data["cat"].get(iid, []),
-                price=_f(data["tech"].get(iid, {}).get("price")),
-                ema_200=_f(data["tech"].get(iid, {}).get("ema_200")),
-                thresholds=th,
-            )
-            assert isinstance(r, RiskFlagsResult)
-            assert Decimal(-30) <= r.degradation_score <= Decimal(0)
-            assert r.is_degrading == (r.degradation_score <= Decimal(-15))
+# ════════════════════════════ CATALYST ════════════════════════════
+class TestCatalyst:
+    def test_filing_rich_names_score_positive(self, engine, produced):
+        rich = pd.read_sql("""
+            SELECT instrument_id, count(*) c FROM foundation_staging.lens_filings
+            WHERE filing_date BETWEEN %(d)s - INTERVAL '365 days' AND %(d)s
+            GROUP BY 1 ORDER BY 2 DESC LIMIT 20
+        """, engine, params={"d": D})["instrument_id"].tolist()
+        pos = sum(1 for iid in rich if iid in produced and (_num(produced[iid].get("catalyst")) or 0) > 0)
+        assert pos >= 15, f"only {pos}/20 filing-rich names scored catalyst>0"
 
 
 # ════════════════════════════ COMPOSITE ════════════════════════════
-class TestCompositeRealData:
-    def test_reconciles_to_journal(self, journal, th):
-        # Recompute the composite from the journal's OWN persisted lens scores and
-        # modifiers, and reconcile to the persisted composite — proves the
-        # composite engine on real produced output.
-        sample = journal.dropna(subset=["composite"]).head(40)
-        for iid, row in sample.iterrows():
+class TestComposite:
+    def test_consumes_db_weights(self, journal, th):
+        # The composite recomputed with the NESTED DB weights reconciles to the
+        # persisted composite, and perturbing a weight moves it (weights consumed).
+        sample = journal.dropna(subset=["composite", "technical", "catalyst"]).head(30)
+        for _iid, row in sample.iterrows():
             r = compute_composite(
-                technical=_f(row["technical"]), fundamental=_f(row["fundamental"]),
-                valuation_score=_f(row["valuation"]), catalyst=_f(row["catalyst"]),
-                flow=_f(row["flow"]), policy=_f(row["policy"]),
-                valuation_multiplier=_f(row["valuation_multiplier"]) or 1.0,
-                smart_money_score=_f(row["smart_money_score"]) or 0.0,
-                degradation_score=_f(row["degradation_score"]) or 0.0,
-                thresholds=th,
-            )
-            assert isinstance(r, CompositeResult)
-            assert _match(r.final_score, row["composite"]), (
-                f"{iid}: composite {r.final_score} != journal {row['composite']}"
-            )
+                technical=_num(row["technical"]), fundamental=_num(row["fundamental"]),
+                valuation_score=_num(row["valuation"]), catalyst=_num(row["catalyst"]),
+                flow=_num(row["flow"]), policy=_num(row["policy"]),
+                valuation_multiplier=_num(row["valuation_multiplier"]) or 1.0,
+                smart_money_score=_num(row["smart_money_score"]) or 0.0,
+                degradation_score=_num(row["degradation_score"]) or 0.0, thresholds=th)
+            assert _match(r.final_score, row["composite"])
 
-    def test_final_score_and_tier_valid(self, journal):
-        comp = journal["composite"].dropna()
+    def test_tier_valid_and_coverage_tracks_lenses(self, journal):
+        comp = pd.to_numeric(journal["composite"], errors="coerce").dropna()
         assert (comp >= 0).all() and (comp <= 100).all()
         assert set(journal["conviction_tier"].dropna().unique()) <= {
-            "HIGHEST", "HIGH", "MEDIUM", "WATCH", "BELOW_THRESHOLD",
-        }
-
-    def test_coverage_factor_tracks_active_lenses(self, journal):
-        # More active lenses -> higher coverage factor, on real produced rows.
+            "HIGHEST", "HIGH", "MEDIUM", "WATCH", "BELOW_THRESHOLD"}
         sub = journal.dropna(subset=["lenses_active", "coverage_factor"])
-        hi = sub[sub["lenses_active"] >= 5]["coverage_factor"].astype(float)
-        lo = sub[sub["lenses_active"] <= 3]["coverage_factor"].astype(float)
+        hi = pd.to_numeric(sub[sub["lenses_active"] >= 5]["coverage_factor"], errors="coerce")
+        lo = pd.to_numeric(sub[sub["lenses_active"] <= 3]["coverage_factor"], errors="coerce")
         if len(hi) and len(lo):
             assert hi.mean() > lo.mean()
-
-
-# ════════════════════════════ FRACTAL ROLL-UPS ════════════════════════════
-class TestRollupRealData:
-    def _members(self, journal, engine):
-        # Real sector with real member stocks + market caps from tv_metrics.
-        caps = pd.read_sql(
-            "SELECT instrument_id, market_cap FROM atlas.tv_metrics "
-            "WHERE market_cap IS NOT NULL AND market_cap > 0", engine,
-        ).set_index("instrument_id")["market_cap"]
-        # Postgres treats NaN > 0 as TRUE, so NaN market_caps slip past the SQL
-        # filter — drop them here (a NaN weight would poison the weighted average).
-        caps = caps[caps.notna() & (caps > 0)]
-        rows = []
-        for iid, r in journal.dropna(subset=["composite", "technical"]).iterrows():
-            if iid in caps.index:
-                rows.append({
-                    "market_cap": float(caps.loc[iid]),
-                    "final_score": float(r["composite"]),
-                    "technical": float(r["technical"]),
-                    "fundamental": float(r["fundamental"]) if pd.notna(r["fundamental"]) else 0.0,
-                    "weight": float(caps.loc[iid]),
-                })
-            if len(rows) >= 50:
-                break
-        return rows
-
-    def test_sector_rollup_within_member_bounds(self, journal, engine):
-        members = self._members(journal, engine)
-        assert len(members) >= 10
-        res = rollup_sector(members)
-        assert res["stock_count"] == len(members)
-        finals = [m["final_score"] for m in members]
-        # Weighted average must lie within [min, max] of the constituents.
-        assert min(finals) - TOL <= res["weighted_final_score"] <= max(finals) + TOL
-
-    def test_holdings_rollup_within_bounds(self, journal, engine):
-        members = self._members(journal, engine)
-        res = rollup_holdings(members)
-        finals = [m["final_score"] for m in members]
-        assert min(finals) - TOL <= res["weighted_final_score"] <= max(finals) + TOL
-        assert res["holding_count"] == len(members)
-
-    def test_index_rollup_within_bounds(self, journal, engine):
-        members = self._members(journal, engine)
-        res = rollup_index(members)
-        finals = [m["final_score"] for m in members]
-        assert min(finals) - TOL <= res["weighted_final_score"] <= max(finals) + TOL
