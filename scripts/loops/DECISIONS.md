@@ -6,6 +6,22 @@ new dated entry that supersedes it.
 
 ---
 
+## 2026-06-21 — D11: Recent-quarters backfill from SCREENER; then LOCK the tables.
+**Decision (FM):** the NSE XBRL source reachable here stops at 2024-12-31, but the
+fundamental/valuation lenses need the trailing-4-quarter (TTM) financials for the recent
+period. **Backfill the 2025-26 quarterly P&L + balance sheet from Screener.in** into
+`financials_quarterly` / `financials_annual` (with a `source` provenance marker), then
+**LOCK these tables** (treat them as frozen reference once filled + reconciled).
+**Why Screener over yfinance:** filing-sourced, India-specific, deep (≈12 quarters + ~10y
+annual + balance sheet + ROCE/ROE/D-E), and verified to expose Mar-2025..Mar-2026; yfinance
+India fundamentals are shallow/patchy. `tv_metrics` already supplies CURRENT TTM (fresh to
+2026-06-20) so the live product is not blind in the meantime.
+**Source-of-truth rule:** per (instrument, period) NSE XBRL wins on the overlap (official);
+Screener fills only the periods XBRL lacks. Reconcile a known overlap quarter (RELIANCE
+Dec-2024 ≈ ₹243,865 Cr consolidated) before trusting Screener numbers. No fabrication.
+**Go-forward (separate, later op decision):** pick ONE source for ongoing nightly fundamentals
+and align on it — NOT decided here; this entry is only the one-time backfill + lock.
+
 ## 2026-06-21 — D10: Fundamentals = COMPLETE, no partial. Full statement, all quarters.
 **Decision (FM, emphatic):** the fundamental feed must be COMPLETE — **income statement
 AND balance sheet**, for **every quarter NSE has filed through the latest (2025–26)**, for
