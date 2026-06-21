@@ -6,6 +6,32 @@ new dated entry that supersedes it.
 
 ---
 
+## 2026-06-21 — D13: Sector taxonomy — no thin standalone sector; merge <5 into relevant.
+**Rule (FM):** any sector with **fewer than 5 names** in our universe, and any raw thin-tail label
+(Conglomerate, Rural, Diversified, Services, MNC, Power, Housing, Consumption, EV & Auto), must be
+**merged into the relevant actionable sector** — never kept standalone, never 'Other'. The final
+taxonomy is the 22 actionable sectors only. Applies to ALL sector mapping including the Screener
+gap-fill (map Screener's taxonomy → the 22, merging anything thin).
+**Current state (verified 2026-06-21):** instrument_master.sector = the 22 actionable, min count
+Telecom=5 (not <5), zero thin-tail labels — already compliant. Rule is enforced going forward
+(esp. the 92-gap Screener fill).
+
+## 2026-06-21 — D12: Full DATA COVERAGE first; roll-ups GATED on a framework discussion.
+**Decision (FM):** finish the ENTIRE instrument-level data scope to full coverage BEFORE any
+roll-up. The roll-up of ETF / index / sector / mutual-fund is NOT to be started until the whole
+roll-up framework is discussed with the FM first. Right now: sole focus = full data coverage.
+**Data-coverage scope (the atom's inputs, all 6 lenses to real full coverage):**
+1. Finish the running fundamentals backfills (XBRL annual balance sheet + Screener recent quarters).
+2. Derive technical sub-components from OHLCV (we hold 25y): ATR(14), BB-width (vol contraction),
+   volume-vs-30/60d-avg (participation), 52w-position — stop using the tv_metrics snapshot; + add
+   sector-relative RS.
+3. Complete the instrument→sector map 750 → 2,093 (22 actionable, no 'Other') — unblocks valuation
+   sector-median-PE AND policy matching.
+4. Derive P/B from the balance-sheet equity now available (tv_metrics pb_fbs is 0%).
+5. Fix the insider `signal_type` classify (currently 100% 'other' → flow promoter + pledge-flag dead).
+Then the scoring/journal/IC wiring (loopC) completes the atom. ONLY AFTER all that + a framework
+discussion do roll-ups (Loop B+) begin. See `docs/atlas-six-lens-coverage-map.md`.
+
 ## 2026-06-21 — D11: Recent-quarters backfill from SCREENER; then LOCK the tables.
 **Decision (FM):** the NSE XBRL source reachable here stops at 2024-12-31, but the
 fundamental/valuation lenses need the trailing-4-quarter (TTM) financials for the recent
