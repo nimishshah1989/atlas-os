@@ -65,12 +65,21 @@ def _session() -> requests.Session:
     return s
 
 
+_MIN_TXN_DATE = dt.date(2000, 1, 1)
+
+
 def _parse_date(s: str) -> dt.date | None:
     for fmt in ("%d-%b-%Y %H:%M:%S", "%d-%b-%Y", "%d %b %Y", "%Y-%m-%d", "%d-%m-%Y"):
         try:
-            return dt.datetime.strptime(s.strip(), fmt).date()
+            d = dt.datetime.strptime(s.strip(), fmt).date()
         except (ValueError, AttributeError):
             continue
+        # Reject malformed/garbage dates (e.g. a typo'd year 2924 from the
+        # multi-format source): a real PIT disclosure is never before NSE PIT
+        # existed nor in the future. A 2-day grace absorbs any timezone edge.
+        if _MIN_TXN_DATE <= d <= dt.date.today() + dt.timedelta(days=2):
+            return d
+        return None
     return None
 
 
