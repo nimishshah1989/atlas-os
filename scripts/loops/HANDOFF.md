@@ -35,9 +35,20 @@ income-statement-only and stale to 2024.**
   **Dec-2024** (130 RELIANCE records, newest 2024-12-31, nothing filtered). There is no 2025-26
   filing to fetch; the same `--redo` auto-captures newer ones whenever the source has them. The
   fundamental lens uses the latest filed quarter as-of each date (carried forward + age-flagged).
+- **RUNNING — Screener backfill (`ingest_screener.py`, log `/tmp/screener_backfill.log`):** fills
+  the 2025-26 quarters + annual balance sheet (source='SCREENER') into financials_quarterly/annual.
+  Parser reused from jip `screener_fetcher`; basis from page CAPTION; overlap reconciliation gate
+  (Screener PAT vs XBRL PAT, 2% OR ₹1cr). Verified: RELIANCE/TCS/POLYCAB recent quarters reconcile
+  EXACT; `max(period_end)` now 2026-03-31. Quarantine ~0.5% after the small-cap rounding fix.
+  **When COMPLETE:** verify recent-quarter coverage (750 + 2,093), review quarantines, then LOCK
+  (D11). Resumable via `screener_state` (`--universe all`, no --redo = skip done).
 - **NEXT — Loop C proper:** fix the two blockers (D8) → rewire fundamental/valuation/flow/technical
-  to the historical tables (now incl. `financials_annual` for ROE/D-E) → rebuild journal 2019→
-  (latest data) → calibrate IC → confirm composite consumes the learned weights.
+  to the historical tables (now incl. `financials_annual` for ROE/D-E + Screener recent quarters) →
+  rebuild journal → calibrate IC → confirm composite consumes the learned weights.
+
+## Gotcha (added 2026-06-21)
+- `nohup python3 X &` launches a child; `kill <wrapper-pid>` misses the python child. Kill the
+  ACTUAL python PID (`ps -eo pid,cmd | grep '[i]ngest_'`), or two runs race + double-load the source.
 
 ## Key files
 - Lens engine: `atlas/lenses/{pipeline.py, data/adapters.py, compute/*.py, calibration.py}`
