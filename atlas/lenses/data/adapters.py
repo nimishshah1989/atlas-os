@@ -22,6 +22,43 @@ from atlas.db import get_engine, load_thresholds
 log = structlog.get_logger()
 _IST = ZoneInfo("Asia/Kolkata")
 
+# NSE trading-calendar source of truth. We use index-level NIFTY 50 sessions
+# (foundation_staging.index_prices) rather than raw technical_daily DISTINCT
+# dates (which carry sparse 2-/10-row junk rows on holidays) or
+# public.de_trading_calendar (which mislabels the Budget-day special Sunday
+# session as a weekend and is synthetically future-dated). Membership-by-presence
+# is what correctly KEEPS the Budget-Sunday session (2026-02-01) while rejecting
+# weekends and NSE holidays — never use weekday arithmetic.
+_NSE_CAL_INDEX = "NIFTY 50"
+
+
+def latest_trading_day(engine: Engine, ref: date | None = None) -> date:
+    """Latest real NSE trading day on or before *ref* (default today).
+
+    Resolves against the NIFTY 50 session calendar. Raises if no session
+    exists on/before *ref* (e.g. a ref before the calendar's first date).
+    """
+    ref = ref or datetime.now(_IST).date()
+    sql = text(
+        "SELECT max(date) FROM foundation_staging.index_prices "
+        "WHERE index_code = :idx AND date <= :ref"
+    )
+    with open_compute_session(engine) as conn:
+        d = conn.execute(sql, {"idx": _NSE_CAL_INDEX, "ref": ref}).scalar()
+    if d is None:
+        raise ValueError(f"No NSE trading day on or before {ref}")
+    return d
+
+
+def is_trading_day(engine: Engine, d: date) -> bool:
+    """True iff *d* is a real NSE session (present in the NIFTY 50 calendar)."""
+    sql = text(
+        "SELECT EXISTS(SELECT 1 FROM foundation_staging.index_prices "
+        "WHERE index_code = :idx AND date = :d)"
+    )
+    with open_compute_session(engine) as conn:
+        return bool(conn.execute(sql, {"idx": _NSE_CAL_INDEX, "d": d}).scalar())
+
 
 def load_technical_data(engine: Engine, as_of: date) -> pd.DataFrame:
     """Load technical daily + tv_metrics for all instruments on as_of date."""
@@ -239,3 +276,28 @@ def write_lens_scores(
         engine, "atlas.atlas_lens_scores_daily", columns, rows,
         pk_columns=["instrument_id", "date"],
     )
+
+
+def purge_stale_lens_scores(
+    engine: Engine,
+    dt: date,
+    run_id: uuid.UUID,
+    asset_class: str = "stock",
+) -> int:
+    """Delete rows for (date, asset_class) left behind by EARLIER runs.
+
+    The writer upserts by (instrument_id, date); if the scored universe shrinks
+    between runs, rows for instruments no longer in the universe would linger
+    (the cause of the 2102-vs-2093 drift). Removing rows whose compute_run_id
+    differs from the current run keeps the journal equal to exactly what this
+    run produced. Scoped by asset_class so it never touches ETF/index/sector
+    roll-ups written by a different process/run.
+    """
+    sql = text(
+        "DELETE FROM atlas.atlas_lens_scores_daily "
+        "WHERE date = :dt AND asset_class = :ac AND compute_run_id <> :rid"
+    )
+    with open_compute_session(engine) as conn:
+        res = conn.execute(sql, {"dt": dt, "ac": asset_class, "rid": run_id})
+        conn.commit()
+        return res.rowcount or 0

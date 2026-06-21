@@ -27,6 +27,8 @@ from atlas.lenses.compute.risk_flags import compute_risk_flags
 from atlas.lenses.compute.technical import score_technical
 from atlas.lenses.compute.valuation import score_valuation
 from atlas.lenses.data.adapters import (
+    is_trading_day,
+    latest_trading_day,
     load_catalyst_data,
     load_flow_data,
     load_fundamental_data,
@@ -34,6 +36,7 @@ from atlas.lenses.data.adapters import (
     load_policy_registry,
     load_technical_data,
     load_valuation_data,
+    purge_stale_lens_scores,
     write_lens_scores,
 )
 
@@ -82,8 +85,21 @@ def run_pipeline(
 ) -> dict[str, Any]:
     """Run the full six-lens scoring pipeline."""
     eng = engine or get_engine()
-    dt = as_of or date.today()
+    # Resolve the run date from the real NSE trading calendar — never wall-clock
+    # date.today() (which on a weekend/holiday would score a non-trading day from
+    # stale/empty feeds). With no as_of, snap to the latest real session; with an
+    # explicit as_of, refuse anything that is not an NSE session.
+    if as_of is None:
+        dt = latest_trading_day(eng)
+    elif is_trading_day(eng, as_of):
+        dt = as_of
+    else:
+        raise ValueError(
+            f"{as_of} is not an NSE trading day (absent from the NIFTY 50 "
+            "calendar); refusing to score a non-trading day"
+        )
     run_id = uuid.uuid4()
+    log.info("lens_run_date_resolved", requested=str(as_of), resolved=str(dt))
     thresholds = load_thresholds(engine=eng)
     th = {k: float(v) if isinstance(v, Decimal) else v for k, v in thresholds.items()}
 
@@ -236,12 +252,17 @@ def run_pipeline(
     if results:
         write_lens_scores(eng, results, run_id)
 
+    # Remove any rows for this date left by an earlier run (universe shrink /
+    # re-run) so the journal reflects exactly this run's scored stock universe.
+    purged = purge_stale_lens_scores(eng, dt, run_id, asset_class="stock")
+
     summary = {
         "as_of": str(dt),
         "run_id": str(run_id),
         "instruments_scored": scored,
         "instruments_skipped": skipped,
         "total_instruments": len(sectors_df),
+        "stale_rows_purged": purged,
     }
     log.info("lens_pipeline_complete", **summary)
     return summary

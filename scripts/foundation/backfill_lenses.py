@@ -31,10 +31,16 @@ import _db
 
 
 def _get_trading_dates(start: date, end: date) -> list[date]:
-    """Return distinct dates in technical_daily between start and end."""
+    """Return real NSE trading days between start and end (inclusive).
+
+    Sourced from the NIFTY 50 session calendar (foundation_staging.index_prices),
+    NOT raw technical_daily DISTINCT dates — the latter carry sparse 2-/10-row
+    junk rows on NSE holidays (e.g. Republic Day 2026-01-26) which previously
+    leaked 6 non-session dates into the scored journal.
+    """
     df = _db.read_df(
-        "SELECT DISTINCT date FROM foundation_staging.technical_daily "
-        "WHERE date >= :s AND date <= :e ORDER BY date",
+        "SELECT DISTINCT date FROM foundation_staging.index_prices "
+        "WHERE index_code = 'NIFTY 50' AND date >= :s AND date <= :e ORDER BY date",
         params={"s": start, "e": end},
     )
     return [d.date() if hasattr(d, "date") else d for d in df["date"].tolist()]
@@ -78,7 +84,10 @@ def main() -> None:
     args = ap.parse_args()
 
     end_dt = args.end or date.fromisoformat(
-        str(_db.scalar("SELECT max(date) FROM foundation_staging.technical_daily"))
+        str(_db.scalar(
+            "SELECT max(date) FROM foundation_staging.index_prices "
+            "WHERE index_code = 'NIFTY 50'"
+        ))
     )
     start_dt = args.start or (end_dt - timedelta(days=400))
     workers = min(args.workers, 6)
