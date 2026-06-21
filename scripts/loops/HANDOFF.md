@@ -22,15 +22,22 @@ fundamental income-stmt 90% (~12y quarterly), catalyst 99% (~20y), flow sharehol
 for fundamental/valuation instead of reading the historical tables, and (b) the XBRL feed is
 income-statement-only and stale to 2024.**
 
-## IN FLIGHT / NEXT (the fundamentals fix — COMPLETE, per DECISIONS D10)
+## IN FLIGHT / NEXT (fundamentals — COMPLETE ingester DONE, per DECISIONS D10)
 
-1. **Extend the XBRL parser to the balance sheet** (`ingest_xbrl.py` `_TAGS` + columns + context).
-   Verify the real balance-sheet tag local-names + contextRef against an actual NSE filing first.
-2. **Full `--redo` re-ingest** — all quarters through latest (2025–26), all ~2,093 instruments,
-   full statement. Long-running, resumable via `xbrl_state`; run in background.
-3. Then Loop C proper: fix the two blockers (D8) → rewire fundamental/valuation/flow/technical to
-   the historical tables → rebuild journal 2019→2026 → calibrate IC → confirm composite consumes
-   the learned weights.
+- **DONE (committed 3e49519):** `ingest_xbrl.py` now fetches the COMPLETE statement — quarterly
+  P&L + disclosed ratios AND the annual balance sheet (`financials_annual`: Equity, Borrowings →
+  real ROE/D-E). Verified on RELIANCE (FY24 equity ₹925,788 Cr, ROE 8.6%).
+- **RUNNING (background, PID launched 2026-06-21, log `/tmp/xbrl_redo.log`):** full `--redo`
+  re-ingest of all 2,093 instruments — populates `financials_annual` for the universe + the new
+  quarterly ratio columns. Resumable via `xbrl_state`. **Check it completed** (`grep COMPLETE
+  /tmp/xbrl_redo.log`) before relying on balance-sheet coverage.
+- **SOURCE REALITY (verified, not a defect):** the NSE XBRL API reachable here returns data through
+  **Dec-2024** (130 RELIANCE records, newest 2024-12-31, nothing filtered). There is no 2025-26
+  filing to fetch; the same `--redo` auto-captures newer ones whenever the source has them. The
+  fundamental lens uses the latest filed quarter as-of each date (carried forward + age-flagged).
+- **NEXT — Loop C proper:** fix the two blockers (D8) → rewire fundamental/valuation/flow/technical
+  to the historical tables (now incl. `financials_annual` for ROE/D-E) → rebuild journal 2019→
+  (latest data) → calibrate IC → confirm composite consumes the learned weights.
 
 ## Key files
 - Lens engine: `atlas/lenses/{pipeline.py, data/adapters.py, compute/*.py, calibration.py}`
