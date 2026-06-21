@@ -200,7 +200,7 @@ export function CallsClient({
       {/* Section 2: Realized win-rate matrix */}
       <Section
         title="Realized win-rate matrix"
-        sub="The 24-cell realized win-rate matrix — three tiers, four tenures, POSITIVE/NEGATIVE direction. Color-coded by win rate (% of calls that beat tier-anchor benchmark). 576 of 587 calls have realized data."
+        sub={`The 24-cell realized win-rate matrix — three tiers, four tenures, POSITIVE/NEGATIVE direction. Color-coded by win rate (% of calls that beat tier-anchor benchmark). ${hero.realized_count} of ${hero.total_calls} calls have realized data.`}
       >
         {/* C4: Removed misleading "earliest 30 days from data_as_of" text.
             Status is shown via status column from the MV instead. */}
@@ -225,16 +225,16 @@ export function CallsClient({
 
       {/* Section 5: Cumulative excess line chart (M5) */}
       <Section
-        title="Avg realized excess by entry date"
-        sub="Daily average realized excess across all calls fired on each date. Shows whether more recent calls are performing better or worse than older ones."
+        title="Signal quality over time — does recency help?"
+        sub="Each point is the average actual outperformance for all calls that fired on that calendar date. Rising trend = more recent signals are working better; flat = stable; falling = recent calls underperforming older ones."
       >
         <CumulativeExcessChart series={excessSeries} />
       </Section>
 
       {/* Section 6: Full ledger */}
       <Section
-        title={`All calls · ${hero.total_calls.toLocaleString('en-IN')}-row ledger`}
-        sub="The full signal_call ledger from mv_calls_performance. Filter by status, direction, or search by symbol/company. Realized excess and win/loss shown for all 576 calls with data. Virtual scroll renders all rows."
+        title={`Signal call ledger · ${hero.total_calls.toLocaleString('en-IN')} calls`}
+        sub={`Every BUY/AVOID signal call ever fired. "Model target" = what the model predicted at the time. "Actual excess" = what actually happened vs the tier benchmark. Filter by status, direction, or search by stock name.`}
       >
         <CallsLedger calls={ledger} />
       </Section>
@@ -243,7 +243,7 @@ export function CallsClient({
       <div className="max-w-[1400px] mx-auto px-8 py-6 pb-12 text-[12px] text-ink-4 leading-relaxed">
         <p>
           <strong className="text-ink-secondary">Data source:</strong>{' '}
-          atlas.mv_calls_performance (587 rows · refreshed nightly).
+          atlas.mv_calls_performance ({hero.total_calls.toLocaleString('en-IN')} rows · refreshed nightly).
           Win rate = % of calls where stock_ret_pct beat bench_ret_pct over the tenure window.
           Realized excess = stock_ret_pct − bench_ret_pct.
           Ticker/company from MV (no JOIN required).{' '}

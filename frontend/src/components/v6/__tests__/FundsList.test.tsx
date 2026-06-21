@@ -78,6 +78,7 @@ function makeFund(overrides: Partial<FundRow> = {}): FundRow {
     ret_12m: 0.163,
     rs_pctile_3m: '0.72',
     sector_tilt: null,
+    realized_vol_63: '0.18',
     ...overrides,
   }
 }

@@ -251,7 +251,7 @@ function TVIframePanel({ symbol }: { symbol: string }) {
             title={`TradingView chart for ${symbol}`}
             className="w-full h-full border-0"
             style={{ minHeight: '420px' }}
-            sandbox="allow-scripts allow-same-origin allow-popups"
+            sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-popups-to-escape-sandbox"
             onError={() => setIframeError(true)}
             data-testid="tv-iframe"
           />

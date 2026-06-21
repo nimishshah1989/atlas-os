@@ -18,7 +18,7 @@ export function LinkedCell({ tier, tenure, direction, className = '', children }
   const label = children ?? `${tier} ${tenure} ${direction}`
   return (
     <Link
-      href={`/matrix/${encodeURIComponent(cellId)}`}
+      href={`/stocks?cell=${encodeURIComponent(cellId)}`}
       className={`text-ink-primary hover:text-teal hover:underline transition-colors ${className}`}
     >
       {label}
@@ -29,7 +29,7 @@ export function LinkedCell({ tier, tenure, direction, className = '', children }
 export function LinkedCellById({ cellId, className = '', children }: { cellId: string; className?: string; children?: React.ReactNode }) {
   return (
     <Link
-      href={`/matrix/${encodeURIComponent(cellId)}`}
+      href={`/stocks?cell=${encodeURIComponent(cellId)}`}
       className={`text-ink-primary hover:text-teal hover:underline transition-colors ${className}`}
     >
       {children ?? cellId}

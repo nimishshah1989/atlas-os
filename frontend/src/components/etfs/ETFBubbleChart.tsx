@@ -1,14 +1,17 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import * as d3 from 'd3'
 import { rsStateColor } from '@/lib/chart-colors'
 import type { ETFRow } from '@/lib/queries/etfs'
 
-// Phase 8: bubble size driven by mean_rs_rank_12m (0–1 continuous).
-// Map rank 0–1 to radius 5–30 px.
-function rsRankToRadius(rank: number | null): number {
-  if (rank == null || rank <= 0) return 5
-  return Math.min(30, 5 + rank * 25)
+// Bubble size driven by avg_volume_20 (20-day average volume — ADV proxy).
+// Log-scaled to radius 5–24 px so high-ADV ETFs stand out without dominating.
+function advToRadius(avgVol20: string | null): number {
+  const v = avgVol20 != null ? parseFloat(avgVol20) : null
+  if (v == null || v <= 0 || !isFinite(v)) return 5
+  const log = Math.log10(v + 1)          // log10 of daily volume
+  return Math.min(24, Math.max(5, log * 2.5))
 }
 
 // Trend strength proxy: pct_stage_2 - pct_stage_4 (range -1 to +1).
@@ -36,11 +39,14 @@ export function ETFBubbleChart({
   etfs: ETFRow[]
   onSelect?: (ticker: string) => void
 }) {
+  const router = useRouter()
   const [theme, setTheme] = useState<Theme>('all')
   const svgRef  = useRef<SVGSVGElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
-  const onSelectRef = useRef(onSelect)
-  onSelectRef.current = onSelect
+  // Default onSelect: navigate to ETF detail page
+  const defaultSelect = (ticker: string) => router.push(`/etfs/${encodeURIComponent(ticker)}`)
+  const onSelectRef = useRef(onSelect ?? defaultSelect)
+  onSelectRef.current = onSelect ?? defaultSelect
 
   const filtered = theme === 'all' ? etfs : etfs.filter(e => e.theme === theme)
 
@@ -71,7 +77,7 @@ export function ETFBubbleChart({
         x: computeTrendStrength(e.pct_stage_2, e.pct_stage_4),
         // Y: mean within-state rank (0–1) across holdings
         y: e.mean_within_state_rank != null ? e.mean_within_state_rank : NaN,
-        rsRank: e.mean_rs_rank_12m,
+        avgVol: e.avg_volume_20,
       }))
       .filter(p => !isNaN(p.y))
 
@@ -180,7 +186,7 @@ export function ETFBubbleChart({
 
     node.append('circle')
       .attr('cx', p => xScale(p.x)).attr('cy', p => yScale(p.y))
-      .attr('r', p => rsRankToRadius(p.rsRank))
+      .attr('r', p => advToRadius(p.avgVol))
       .attr('fill', p => rsStateColor(p.rs_state)).attr('fill-opacity', 0.18)
       .attr('stroke', p => rsStateColor(p.rs_state)).attr('stroke-width', 1.5)
 
@@ -195,7 +201,7 @@ export function ETFBubbleChart({
       .on('mouseenter', function (event, p) {
         d3.select(this).select('circle').attr('fill-opacity', 0.32).attr('stroke-width', 2.5)
         const rankPct = p.y != null ? `${(p.y * 100).toFixed(0)}%` : '—'
-        const rsRankPct = p.rsRank != null ? `${(p.rsRank * 100).toFixed(0)}%` : '—'
+        const advStr = p.avgVol != null ? `${parseFloat(p.avgVol).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '—'
         const trendStr = p.x != null ? (p.x >= 0 ? `+${p.x.toFixed(2)}` : p.x.toFixed(2)) : '—'
         tip.style('opacity', '1')
           .style('left', `${(event.clientX as number) + 14}px`)
@@ -206,7 +212,7 @@ export function ETFBubbleChart({
             <div style="border-top:1px solid #f1f5f9;padding-top:5px;display:grid;gap:3px">
               <div style="color:#64748b">Within-state rank: <span style="font-weight:600;color:#2F6B43">${rankPct}</span></div>
               <div style="color:#64748b">Trend strength: <span style="color:#1e293b">${trendStr}</span></div>
-              <div style="color:#64748b">RS Rank 12M: <span style="color:#1e293b">${rsRankPct}</span></div>
+              <div style="color:#64748b">ADV (20d vol): <span style="color:#1e293b">${advStr}</span></div>
               <div style="color:#64748b">RS State: <span style="color:#1e293b">${p.rs_state ?? '—'}</span></div>
               <div style="color:#64748b">Momentum: <span style="color:#1e293b">${p.momentum_state ?? '—'}</span></div>
               <div style="color:#64748b;font-size:10px">${p.theme}</div>

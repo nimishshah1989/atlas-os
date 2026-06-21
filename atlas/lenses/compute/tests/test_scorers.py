@@ -591,10 +591,10 @@ class TestFlowCompositeWeights:
             thresholds=_EMPTY_TH,
         )
         # sm_raw = 0 (no bulk deals, no shareholding)
-        # sm_scaled = (0 + 10) / 25 * 100 = 40
-        # composite = promoter * 0.70 + 40 * 0.30
+        # sm_scaled = 50.0 (centered rescaling: 0 → 50)
+        # composite = promoter * 0.70 + 50.0 * 0.30
         promo = float(result.promoter)
-        expected = promo * 0.70 + 40.0 * 0.30
+        expected = promo * 0.70 + 50.0 * 0.30
         assert abs(float(result.score) - expected) < 0.1
 
 
@@ -669,7 +669,7 @@ class TestPolicyNoMatch:
 
 
 class TestPolicyNoSector:
-    """No sector/industry → None."""
+    """No sector/industry → neutral 0 score (not None)."""
 
     def test_no_sector(self) -> None:
         result = score_policy(
@@ -678,8 +678,8 @@ class TestPolicyNoSector:
             policies=[{"id": "x", "beneficiary_sectors": ["IT"]}],
             thresholds=_EMPTY_TH,
         )
-        assert result.score is None
-        assert result.tailwind is None
+        assert result.score == Decimal("0")
+        assert result.tailwind == Decimal("0")
 
 
 class TestPolicyNoPolicies:

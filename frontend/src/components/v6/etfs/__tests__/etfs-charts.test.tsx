@@ -132,21 +132,22 @@ describe('PremiumDiscountScatter', () => {
     expect(screen.getByTestId('scatter-chart')).toBeDefined()
   })
 
-  it('shows empty state when no ETFs have adv_20d_inr', () => {
+  it('shows iNAV-unavailable empty state when no ETFs have adv_20d_inr', () => {
     const etfs = [
       makeEtfRow({ adv_20d_inr: null }),
     ]
     render(<PremiumDiscountScatter etfs={etfs} />)
-    expect(screen.getByText(/iNAV ingest first/)).toBeDefined()
+    expect(screen.getByText(/iNAV data not yet available/)).toBeDefined()
   })
 
-  it('renders with null premium_bps (plots at x=0)', () => {
+  it('shows iNAV-unavailable empty state when all ETFs have null premium_bps', () => {
+    // ADV data exists but iNAV hasn't run — show informative empty state
     const etfs = [
       makeEtfRow({ ticker: 'UTINEXT50', premium_bps: null, adv_20d_inr: 5e7, scatter_zone: 'premium_unknown' }),
     ]
     render(<PremiumDiscountScatter etfs={etfs} />)
-    // Should render chart (adv_20d_inr is non-null), not empty state
-    expect(screen.getByTestId('premium-discount-scatter')).toBeDefined()
+    expect(screen.getByText(/iNAV data not yet available/)).toBeDefined()
+    expect(screen.getByText(/1 ETFs tracked/)).toBeDefined()
   })
 
   it('shapes toScatterPoints correctly: log10 y value >= 0', () => {

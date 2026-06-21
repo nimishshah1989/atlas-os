@@ -30,6 +30,11 @@ function toFundRow(r: FundListRow): FundRow {
     ret_12m: r.ret_12m,
     rs_pctile_3m: r.rs_pctile_3m != null ? String(r.rs_pctile_3m) : null,
     sector_tilt: null,
+    realized_vol_63: r.realized_vol_63 ?? null,
+    risk_adjusted_return_score: r.risk_adjusted_return_score != null ? String(r.risk_adjusted_return_score) : null,
+    holdings_conviction_score: r.holdings_conviction_score != null ? String(r.holdings_conviction_score) : null,
+    style_sector_score: r.style_sector_score != null ? String(r.style_sector_score) : null,
+    cost_manager_score: r.cost_manager_score != null ? String(r.cost_manager_score) : null,
   }
 }
 

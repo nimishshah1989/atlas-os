@@ -24,6 +24,7 @@ import {
   ReferenceArea,
   ResponsiveContainer,
 } from 'recharts'
+import { useRouter } from 'next/navigation'
 import type { EtfListV6Row } from '@/lib/queries/v6/etfs'
 
 type TooltipPayloadItem = { payload?: ScatterPoint }
@@ -132,6 +133,12 @@ export interface PremiumDiscountScatterProps {
 }
 
 export function PremiumDiscountScatter({ etfs }: PremiumDiscountScatterProps) {
+  const router = useRouter()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleDotClick = (data: any) => {
+    const ticker: string | undefined = data?.ticker ?? data?.payload?.ticker
+    if (ticker) router.push(`/etfs/${encodeURIComponent(ticker)}`)
+  }
   const points = toScatterPoints(etfs)
 
   // Split by color for separate Scatter series (Recharts doesn't support per-point fill natively)
@@ -140,12 +147,17 @@ export function PremiumDiscountScatter({ etfs }: PremiumDiscountScatterProps) {
   const avoidPoints = points.filter((p) => p.action === 'AVOID' && p.scatter_zone !== 'low_adv' && p.scatter_zone !== 'premium_unknown')
   const grayPoints = points.filter((p) => p.scatter_zone === 'low_adv' || p.scatter_zone === 'premium_unknown')
 
-  const hasData = points.length > 0
+  const hasPremiumData = points.some((p) => p.premium_bps != null)
 
-  if (!hasData) {
+  if (!hasPremiumData) {
     return (
-      <div className="h-72 flex items-center justify-center font-sans text-[12px] text-ink-tertiary">
-        Premium/discount data not yet available — run iNAV ingest first.
+      <div className="h-72 flex flex-col items-center justify-center gap-3 font-sans text-[12px] text-ink-tertiary border border-paper-rule rounded-[2px] bg-paper-deep">
+        <span className="text-[20px]">📡</span>
+        <div className="text-center">
+          <div className="font-medium text-ink-secondary mb-1">iNAV data not yet available</div>
+          <div>Premium/discount requires the nightly iNAV ingest to run.</div>
+          <div className="mt-1">ADV data is available — {points.length} ETFs tracked.</div>
+        </div>
       </div>
     )
   }
@@ -238,10 +250,10 @@ export function PremiumDiscountScatter({ etfs }: PremiumDiscountScatterProps) {
 
           <Tooltip content={<ScatterTooltipContent />} />
 
-          <Scatter name="BUY" data={buyPoints} fill="#2F6B43" r={5} opacity={0.85} />
-          <Scatter name="WATCH" data={watchPoints} fill="#B8860B" r={5} opacity={0.85} />
-          <Scatter name="AVOID" data={avoidPoints} fill="#B0492C" r={5} opacity={0.85} />
-          <Scatter name="Gray" data={grayPoints} fill="#9A8F82" r={4} opacity={0.7} />
+          <Scatter name="BUY" data={buyPoints} fill="#2F6B43" r={5} opacity={0.85} style={{ cursor: 'pointer' }} onClick={handleDotClick} />
+          <Scatter name="WATCH" data={watchPoints} fill="#B8860B" r={5} opacity={0.85} style={{ cursor: 'pointer' }} onClick={handleDotClick} />
+          <Scatter name="AVOID" data={avoidPoints} fill="#B0492C" r={5} opacity={0.85} style={{ cursor: 'pointer' }} onClick={handleDotClick} />
+          <Scatter name="Gray" data={grayPoints} fill="#9A8F82" r={4} opacity={0.7} style={{ cursor: 'pointer' }} onClick={handleDotClick} />
         </ScatterChart>
       </ResponsiveContainer>
 

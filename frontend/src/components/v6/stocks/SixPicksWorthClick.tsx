@@ -6,6 +6,7 @@
 'use client'
 
 import { useMemo } from 'react'
+import { InfoTooltip } from '@/components/ui/InfoTooltip'
 import {
   ComposedChart,
   Line,
@@ -241,19 +242,28 @@ function StockCard({ row }: { row: LandscapeRow }) {
         </span>
       </div>
 
-      {/* Multidim mini-chart */}
-      <MiniMultidimChart row={row} />
+      {/* Multidim mini-chart — line = composite score, bars = relative momentum (synthetic) */}
+      <div>
+        <div className="flex items-center justify-between mb-0.5">
+          <span className="font-sans text-[8px] text-ink-tertiary uppercase tracking-[0.12em]">Composite · 30d</span>
+          <span className="font-sans text-[8px] text-ink-tertiary">bars = momentum proxy</span>
+        </div>
+        <MiniMultidimChart row={row} />
+      </div>
 
       {/* Conviction tape */}
       <div className="flex items-center gap-[10px] pt-[6px] border-t border-paper-rule">
-        <span className="font-sans text-[9px] tracking-[0.14em] uppercase text-ink-tertiary font-semibold">
-          Tape 1m·3m·6m·12m
+        <span className="font-sans text-[9px] tracking-[0.14em] uppercase text-ink-tertiary font-semibold flex items-center gap-0.5">
+          Signal horizon
+          <InfoTooltip
+            content="Which holding horizons (1m/3m/6m/12m) have an active signal. Highlighted = dominant horizon with positive (green) or negative (red) conviction."
+          />
         </span>
         <div className="flex gap-[2px] items-center">
           {tape.map(t => <TapeSegmentEl key={t.tenure} seg={t} />)}
         </div>
         <span className="font-mono text-[10px] text-ink-tertiary ml-auto">
-          {activeSegs} / {totalSegs} active
+          {activeSegs}/{totalSegs}
         </span>
       </div>
 

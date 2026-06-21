@@ -73,6 +73,7 @@ export type ETFMetricHistoryRow = {
   date: Date
   rs_pctile_3m: string | null
   rs_3m_benchmark: string | null
+  ret_1w: string | null
   ret_1m: string | null
   ret_3m: string | null
   ret_6m: string | null
@@ -109,6 +110,9 @@ export async function getAllETFs(): Promise<ETFRow[]> {
       SELECT ticker, MAX(date) AS d
       FROM atlas.atlas_etf_metrics_daily
       GROUP BY ticker
+    ),
+    latest_signal AS (
+      SELECT MAX(date) AS d FROM atlas.atlas_etf_signal_unified
     )
     SELECT
       u.ticker,
@@ -194,7 +198,7 @@ export async function getAllETFs(): Promise<ETFRow[]> {
     LEFT JOIN atlas.atlas_etf_metrics_daily m
       ON m.ticker = u.ticker AND m.date = l.d
     LEFT JOIN atlas.atlas_etf_signal_unified eu
-      ON eu.etf_ticker = u.ticker AND eu.date = l.d
+      ON eu.etf_ticker = u.ticker AND eu.date = (SELECT d FROM latest_signal)
     WHERE u.effective_to IS NULL
     ORDER BY
       (eu.pct_stage_4 IS NULL OR eu.pct_stage_4 < 0.50) DESC NULLS LAST,
@@ -305,6 +309,7 @@ export async function getETFMetricHistory(
       date,
       rs_pctile_3m::text        AS rs_pctile_3m,
       rs_3m_benchmark::text     AS rs_3m_benchmark,
+      ret_1w::text              AS ret_1w,
       ret_1m::text              AS ret_1m,
       ret_3m::text              AS ret_3m,
       ret_6m::text              AS ret_6m,

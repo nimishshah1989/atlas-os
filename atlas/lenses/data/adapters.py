@@ -62,65 +62,116 @@ def load_valuation_data(engine: Engine) -> pd.DataFrame:
     sql = text("""
         WITH sector_medians AS (
             SELECT
-                im.sector,
+                u.sector,
                 PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY tv.pe_ttm)
                     FILTER (WHERE tv.pe_ttm > 0 AND tv.pe_ttm < 500)
                     AS sector_median_pe
             FROM atlas.tv_metrics tv
-            JOIN atlas.atlas_universe_stocks im ON im.instrument_id = tv.instrument_id
-            WHERE im.sector IS NOT NULL
-            GROUP BY im.sector
+            JOIN atlas.atlas_universe_stocks u ON u.instrument_id = tv.instrument_id
+            WHERE u.sector IS NOT NULL AND u.effective_to IS NULL
+            GROUP BY u.sector
         )
         SELECT tv.instrument_id, tv.symbol,
                tv.pe_ttm, tv.pb_fbs, tv.ev_ebitda,
                tv.price, tv.high_52w, tv.low_52w, tv.ema_200,
                sm.sector_median_pe
         FROM atlas.tv_metrics tv
-        JOIN atlas.atlas_universe_stocks im ON im.instrument_id = tv.instrument_id
-        LEFT JOIN sector_medians sm ON sm.sector = im.sector
-        WHERE tv.instrument_id IS NOT NULL AND im.effective_to IS NULL
+        JOIN foundation_staging.instrument_master im ON im.instrument_id = tv.instrument_id
+        LEFT JOIN atlas.atlas_universe_stocks u
+            ON u.instrument_id = tv.instrument_id AND u.effective_to IS NULL
+        LEFT JOIN sector_medians sm ON sm.sector = u.sector
+        WHERE tv.instrument_id IS NOT NULL AND im.asset_class = 'stock' AND im.kite_token IS NOT NULL
     """)
     with open_compute_session(engine) as conn:
         return pd.read_sql(sql, conn)
 
 
-def load_catalyst_data(engine: Engine, lookback_days: int = 365) -> pd.DataFrame:
-    """Load filings from lens_filings for each instrument (last N days)."""
-    sql = text("""
-        SELECT instrument_id, symbol, filing_date, category,
-               category_bucket, signal_priority, subject_text, source_url
-        FROM foundation_staging.lens_filings
-        WHERE filing_date >= CURRENT_DATE - :lb
-        ORDER BY instrument_id, filing_date DESC
-    """)
+def load_catalyst_data(
+    engine: Engine, lookback_days: int = 365, as_of: date | None = None,
+) -> pd.DataFrame:
+    """Load filings from lens_filings for each instrument (last N days).
+
+    When *as_of* is given, uses it as the upper bound instead of CURRENT_DATE
+    so that historical runs are point-in-time correct.
+    """
+    if as_of is not None:
+        sql = text("""
+            SELECT instrument_id, symbol, filing_date, category,
+                   category_bucket, signal_priority, subject_text, source_url
+            FROM foundation_staging.lens_filings
+            WHERE filing_date >= :as_of - :lb AND filing_date <= :as_of
+            ORDER BY instrument_id, filing_date DESC
+        """)
+        params: dict[str, Any] = {"lb": lookback_days, "as_of": as_of}
+    else:
+        sql = text("""
+            SELECT instrument_id, symbol, filing_date, category,
+                   category_bucket, signal_priority, subject_text, source_url
+            FROM foundation_staging.lens_filings
+            WHERE filing_date >= CURRENT_DATE - :lb
+            ORDER BY instrument_id, filing_date DESC
+        """)
+        params = {"lb": lookback_days}
     with open_compute_session(engine) as conn:
-        return pd.read_sql(sql, conn, params={"lb": lookback_days})
+        return pd.read_sql(sql, conn, params=params)
 
 
-def load_flow_data(engine: Engine) -> dict[str, pd.DataFrame]:
-    """Load insider transactions, shareholding, and bulk deals."""
+def load_flow_data(
+    engine: Engine, as_of: date | None = None,
+) -> dict[str, pd.DataFrame]:
+    """Load insider transactions, shareholding, and bulk deals.
+
+    When *as_of* is given, all date filters use it as the ceiling so that
+    historical runs are point-in-time correct.
+    """
     with open_compute_session(engine) as conn:
-        insider = pd.read_sql(text("""
-            SELECT instrument_id, symbol, signal_type, value_cr, person_name,
-                   pledge_pct_after, transaction_date, price_per_share
-            FROM foundation_staging.lens_insider
-            WHERE transaction_date >= CURRENT_DATE - INTERVAL '365 days'
-            ORDER BY instrument_id, transaction_date DESC
-        """), conn)
+        if as_of is not None:
+            insider = pd.read_sql(text("""
+                SELECT instrument_id, symbol, signal_type, value_cr, person_name,
+                       pledge_pct_after, transaction_date, price_per_share
+                FROM foundation_staging.lens_insider
+                WHERE transaction_date >= :as_of - INTERVAL '365 days'
+                  AND transaction_date <= :as_of
+                ORDER BY instrument_id, transaction_date DESC
+            """), conn, params={"as_of": as_of})
 
-        shareholding = pd.read_sql(text("""
-            SELECT instrument_id, symbol, period_end, promoter_pct, public_pct
-            FROM foundation_staging.lens_shareholding
-            ORDER BY instrument_id, period_end DESC
-        """), conn)
+            shareholding = pd.read_sql(text("""
+                SELECT instrument_id, symbol, period_end, promoter_pct, public_pct
+                FROM foundation_staging.lens_shareholding
+                WHERE period_end <= :as_of
+                ORDER BY instrument_id, period_end DESC
+            """), conn, params={"as_of": as_of})
 
-        bulk_deals = pd.read_sql(text("""
-            SELECT instrument_id, symbol, deal_date, client_name, buy_sell,
-                   qty, price, is_institutional, is_superstar, superstar_name
-            FROM foundation_staging.lens_bulk_deals
-            WHERE deal_date >= CURRENT_DATE - INTERVAL '90 days'
-            ORDER BY instrument_id, deal_date DESC
-        """), conn)
+            bulk_deals = pd.read_sql(text("""
+                SELECT instrument_id, symbol, deal_date, client_name, buy_sell,
+                       qty, price, is_institutional, is_superstar, superstar_name
+                FROM foundation_staging.lens_bulk_deals
+                WHERE deal_date >= :as_of - INTERVAL '90 days'
+                  AND deal_date <= :as_of
+                ORDER BY instrument_id, deal_date DESC
+            """), conn, params={"as_of": as_of})
+        else:
+            insider = pd.read_sql(text("""
+                SELECT instrument_id, symbol, signal_type, value_cr, person_name,
+                       pledge_pct_after, transaction_date, price_per_share
+                FROM foundation_staging.lens_insider
+                WHERE transaction_date >= CURRENT_DATE - INTERVAL '365 days'
+                ORDER BY instrument_id, transaction_date DESC
+            """), conn)
+
+            shareholding = pd.read_sql(text("""
+                SELECT instrument_id, symbol, period_end, promoter_pct, public_pct
+                FROM foundation_staging.lens_shareholding
+                ORDER BY instrument_id, period_end DESC
+            """), conn)
+
+            bulk_deals = pd.read_sql(text("""
+                SELECT instrument_id, symbol, deal_date, client_name, buy_sell,
+                       qty, price, is_institutional, is_superstar, superstar_name
+                FROM foundation_staging.lens_bulk_deals
+                WHERE deal_date >= CURRENT_DATE - INTERVAL '90 days'
+                ORDER BY instrument_id, deal_date DESC
+            """), conn)
 
     return {"insider": insider, "shareholding": shareholding, "bulk_deals": bulk_deals}
 
@@ -139,11 +190,17 @@ def load_policy_registry(engine: Engine) -> list[dict[str, Any]]:
 
 
 def load_instrument_sectors(engine: Engine) -> pd.DataFrame:
-    """Load sector/industry for each instrument from instrument_master."""
+    """Load sector/industry for all active stocks from instrument_master.
+
+    Sector/industry come from atlas_universe_stocks (left join), so instruments
+    not yet in the curated universe still get scored but with NULL sector.
+    """
     sql = text("""
-        SELECT instrument_id, symbol, sector, industry
-        FROM atlas.atlas_universe_stocks
-        WHERE effective_to IS NULL
+        SELECT im.instrument_id, im.symbol, u.sector, u.industry
+        FROM foundation_staging.instrument_master im
+        LEFT JOIN atlas.atlas_universe_stocks u
+            ON u.instrument_id = im.instrument_id AND u.effective_to IS NULL
+        WHERE im.asset_class = 'stock' AND im.kite_token IS NOT NULL
     """)
     with open_compute_session(engine) as conn:
         return pd.read_sql(sql, conn)

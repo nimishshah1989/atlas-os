@@ -74,6 +74,11 @@ export type MarketsRsPageData = {
   as_of_date: string | null
 }
 
+// Per-baseline staleness helpers (MARKETS_RS_STALE_THRESHOLD_DAYS,
+// baselineStalenessDays) live in '@/lib/v6/markets-staleness' — a client-safe
+// module — because this module is 'server-only' and the client grid imports
+// them. Don't move them back here: it breaks the production build.
+
 // ---------------------------------------------------------------------------
 // Grade derivation (exported for unit tests)
 // ---------------------------------------------------------------------------
@@ -195,7 +200,16 @@ export async function getMarketsRsPage(): Promise<MarketsRsPageData> {
   }))
 
   const hero = deriveHeroReadouts(grid)
-  const as_of_date = grid.find(r => r.as_of_date != null)?.as_of_date ?? null
+  // Freshest (max) baseline date — ISO YYYY-MM-DD sorts lexicographically.
+  // Never the first row: a lagging baseline (e.g. MSCI EM proxy) must not
+  // determine the page's "as of" stamp.
+  const as_of_date = grid.reduce<string | null>(
+    (max, r) =>
+      r.as_of_date != null && (max == null || r.as_of_date > max)
+        ? r.as_of_date
+        : max,
+    null,
+  )
 
   return { grid, hero, as_of_date }
 }

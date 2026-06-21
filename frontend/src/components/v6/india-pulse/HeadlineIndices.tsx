@@ -75,10 +75,8 @@ export function HeadlineIndices({ indices }: Props) {
             {idx.ret_1d != null ? `${fmtPct(idx.ret_1d)} today` : '—'}
           </div>
 
-          {/* Spark placeholder — time-series not yet in MV */}
-          <div className="my-2 h-9 bg-paper-deep rounded-sm opacity-60 flex items-center justify-center">
-            <span className="text-[8px] text-ink-tertiary italic">Pipeline gap — coming with next ingest</span>
-          </div>
+          {/* Spark placeholder — intraday price series not yet in MV */}
+          <div className="my-2 h-9 bg-paper-deep/50 rounded-sm" />
 
           {/* Window returns */}
           <div className="grid grid-cols-3 gap-1 pt-1.5 border-t border-paper-rule font-mono text-[11px]">

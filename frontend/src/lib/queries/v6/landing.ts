@@ -166,6 +166,8 @@ export type ConvictionCallRow = {
   entry_date: string | null
   /** Number of trading days the call has been open. Null for fund rows. */
   days_held: number | null
+  /** % return since signal entry date. Null for funds and when price data unavailable. */
+  ret_since_entry?: number | null
 }
 
 export type ConvictionCallsResult = {
@@ -188,6 +190,8 @@ type RawStockCallRow = {
   confidence_unconditional: string
   predicted_excess: string | null
   entry_date: string
+  entry_close: string | null
+  current_close: string | null
 }
 
 type RawEtfCallRow = {
@@ -236,7 +240,22 @@ export async function getTopConvictionCalls(): Promise<ConvictionCallsResult> {
         sc.action::text                               AS action,
         sc.confidence_unconditional::text             AS confidence_unconditional,
         sc.predicted_excess::text                     AS predicted_excess,
-        sc.date::text                                 AS entry_date
+        sc.date::text                                 AS entry_date,
+        (
+          SELECT COALESCE(o.close_adj, o.close)::text
+          FROM public.de_equity_ohlcv o
+          WHERE o.instrument_id = sc.instrument_id
+            AND o.date::date >= sc.date::date
+          ORDER BY o.date ASC
+          LIMIT 1
+        )                                             AS entry_close,
+        (
+          SELECT COALESCE(o.close_adj, o.close)::text
+          FROM public.de_equity_ohlcv o
+          WHERE o.instrument_id = sc.instrument_id
+          ORDER BY o.date DESC
+          LIMIT 1
+        )                                             AS current_close
       FROM atlas.atlas_signal_calls sc
       LEFT JOIN atlas.atlas_universe_stocks u
              ON u.instrument_id = sc.instrument_id
@@ -302,6 +321,13 @@ export async function getTopConvictionCalls(): Promise<ConvictionCallsResult> {
     return Math.max(0, Math.round((now - entry) / (1000 * 60 * 60 * 24)))
   }
 
+  const retSinceEntry = (entryClose: string | null, currentClose: string | null): number | null => {
+    const entry = entryClose != null ? parseFloat(entryClose) : null
+    const current = currentClose != null ? parseFloat(currentClose) : null
+    if (entry == null || current == null || !isFinite(entry) || !isFinite(current) || entry === 0) return null
+    return (current - entry) / entry
+  }
+
   const stocks: ConvictionCallRow[] = stockRows.map(r => ({
     symbol: r.symbol ?? 'UNKNOWN',
     company_name: r.company_name,
@@ -316,6 +342,7 @@ export async function getTopConvictionCalls(): Promise<ConvictionCallsResult> {
     is_atlas_leader: false,
     entry_date: r.entry_date,
     days_held: daysHeld(r.entry_date),
+    ret_since_entry: retSinceEntry(r.entry_close, r.current_close),
   }))
 
   const etfs: ConvictionCallRow[] = etfRows.map(r => ({
@@ -332,6 +359,7 @@ export async function getTopConvictionCalls(): Promise<ConvictionCallsResult> {
     is_atlas_leader: false,
     entry_date: r.entry_date,
     days_held: daysHeld(r.entry_date),
+    ret_since_entry: null, // ETF price join not wired — deferred
   }))
 
   const funds: ConvictionCallRow[] = fundRows.map(r => ({
@@ -350,6 +378,7 @@ export async function getTopConvictionCalls(): Promise<ConvictionCallsResult> {
     is_atlas_leader: r.is_atlas_leader ?? false,
     entry_date: null,
     days_held: null,
+    ret_since_entry: null,
   }))
 
   return {

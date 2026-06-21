@@ -20,16 +20,14 @@ import type { ConvictionCallRow, ConvictionCallsResult } from '@/lib/queries/v6/
 // actual question (what does this column tell me / why does it look uniform).
 const COL_TOOLTIPS = {
   confidence: {
-    content: 'Confidence = tier-bucket historical hit rate. Source: atlas_signal_calls.confidence_unconditional',
-    translation: 'Same value across every stock in the same (cap × tenure) cell — it is the cell\'s prior, not a per-stock score. Different cells show different values.',
+    content: 'Cell hit rate — same for every stock in the same cap × tenure cell.',
+    translation: 'Not a per-stock score. Varies across cells; identical within one.',
   },
   expected: {
-    content: 'Expected = predicted excess return over the call\'s tenure horizon (e.g. 12m for "Mid 12m"). Source: atlas_signal_calls.predicted_excess',
-    translation: 'Per-stock model prediction. Blank rows mean the backend has not yet written this column for the active calls.',
+    content: 'Predicted excess return over the call\'s tenure horizon.',
   },
   days: {
-    content: 'Days = trading days since this signal call first fired (entry_date). Source: atlas_signal_calls.date',
-    translation: 'Identical values across rows mean the calls all entered on the same nightly recompute — check entry_date stability in atlas_signal_calls.',
+    content: 'Trading days since this call first fired.',
   },
 } as const
 
@@ -113,10 +111,8 @@ function ConvRow({ row, tabKey }: { row: ConvictionCallRow; tabKey: TabKey }) {
              : null
 
   const rowClass = "grid items-center gap-4 px-3 py-2 rounded-[2px] hover:bg-paper-deep transition-colors cursor-pointer"
-  // Column widths (user feedback 2026-05-29): confidence shrunk from 1fr → 90px,
-  // expected moved before action, "Days" added at the tail so the user can see
-  // how long a name has been on the list (e.g. "BBPower day 3").
-  const rowStyle = { gridTemplateColumns: '120px 1fr 110px 90px 72px 80px 56px' }
+  // ret_since_entry replaces the old bare "Days" column — shows % move + days held stacked.
+  const rowStyle = { gridTemplateColumns: '120px 1fr 110px 90px 72px 80px 72px' }
 
   const inner = (
     <>
@@ -167,9 +163,22 @@ function ConvRow({ row, tabKey }: { row: ConvictionCallRow; tabKey: TabKey }) {
       {/* Action badge */}
       <ActionBadge action={row.action} />
 
-      {/* Days held — null for funds (no entry_date concept) */}
-      <div className="font-mono text-[11px] text-ink-tertiary text-right tabular-nums">
-        {row.days_held != null ? `d${row.days_held}` : '—'}
+      {/* Return since entry + days held stacked */}
+      <div className="text-right tabular-nums flex flex-col items-end gap-px">
+        {row.ret_since_entry != null ? (
+          <span
+            className={`font-mono text-[12px] font-semibold ${
+              row.ret_since_entry > 0 ? 'text-signal-pos' : row.ret_since_entry < 0 ? 'text-signal-neg' : 'text-ink-tertiary'
+            }`}
+          >
+            {row.ret_since_entry > 0 ? '+' : ''}{(row.ret_since_entry * 100).toFixed(1)}%
+          </span>
+        ) : (
+          <span className="font-mono text-[12px] text-ink-tertiary">—</span>
+        )}
+        {row.days_held != null && (
+          <span className="font-mono text-[9px] text-ink-tertiary">d{row.days_held}</span>
+        )}
       </div>
     </>
   )
@@ -264,7 +273,7 @@ function ColumnHeaders({ activeTab }: { activeTab: TabKey }) {
   return (
     <div
       className="grid px-3 mb-1 gap-4"
-      style={{ gridTemplateColumns: '120px 1fr 110px 90px 72px 80px 56px' }}
+      style={{ gridTemplateColumns: '120px 1fr 110px 90px 72px 80px 72px' }}
     >
       <span className={headerClass}>Symbol</span>
       <span className={headerClass}>Name / Sector</span>
@@ -277,12 +286,12 @@ function ColumnHeaders({ activeTab }: { activeTab: TabKey }) {
       </span>
       <span className={`${headerClass} justify-end`}>
         Expected
-        <InfoTooltip content={COL_TOOLTIPS.expected.content} translation={COL_TOOLTIPS.expected.translation} />
+        <InfoTooltip content={COL_TOOLTIPS.expected.content} />
       </span>
       <span className={headerClass}>Action</span>
       <span className={`${headerClass} justify-end`}>
-        Days
-        <InfoTooltip content={COL_TOOLTIPS.days.content} translation={COL_TOOLTIPS.days.translation} />
+        Since
+        <InfoTooltip content={COL_TOOLTIPS.days.content} />
       </span>
     </div>
   )

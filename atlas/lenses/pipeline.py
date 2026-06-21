@@ -91,8 +91,8 @@ def run_pipeline(
     tech_df = load_technical_data(eng, dt)
     fund_df = load_fundamental_data(eng)
     val_df = load_valuation_data(eng)
-    cat_df = load_catalyst_data(eng)
-    flow_data = load_flow_data(eng)
+    cat_df = load_catalyst_data(eng, as_of=dt)
+    flow_data = load_flow_data(eng, as_of=dt)
     policies = load_policy_registry(eng)
     sectors_df = load_instrument_sectors(eng)
 

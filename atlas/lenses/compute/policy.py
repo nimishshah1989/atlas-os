@@ -99,10 +99,10 @@ def score_policy(
 
     if not sector_n and not industry_n:
         return PolicyResult(
-            tailwind=None,
-            score=None,
+            tailwind=Decimal("0"),
+            score=Decimal("0"),
             matching_policies=[],
-            evidence={"reason": "no sector/industry provided"},
+            evidence={"reason": "no sector/industry — neutral"},
         )
 
     if not policies:

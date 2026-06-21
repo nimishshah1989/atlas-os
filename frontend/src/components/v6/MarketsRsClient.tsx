@@ -19,8 +19,25 @@ import { useState } from 'react'
 import { DataSourceBanner } from '@/components/v6/DataSourceBanner'
 import { GradeChip } from '@/components/v6/GradeChip'
 import { ELI5Tooltip } from '@/components/v6/ELI5Tooltip'
+// Pure staleness helpers come from a client-safe module — NOT from the
+// 'server-only' markets_rs query module (importing runtime values from it into
+// this 'use client' component breaks the production build).
+import {
+  baselineStalenessDays,
+  MARKETS_RS_STALE_THRESHOLD_DAYS,
+} from '@/lib/v6/markets-staleness'
 import type { MarketsRsPageData, MarketsRsRow, IndiaRsGrade } from '@/lib/queries/v6/markets_rs'
 import type { Grade } from '@/components/v6/GradeChip'
+
+// DD-MMM-YYYY without locale/timezone surprises (input is ISO YYYY-MM-DD).
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+function fmtShortDate(iso: string | null): string {
+  if (!iso) return '—'
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
+  if (!m) return iso
+  const [, y, mo, d] = m
+  return `${d}-${MONTHS_SHORT[parseInt(mo, 10) - 1]}-${y}`
+}
 
 // ---------------------------------------------------------------------------
 // Token helpers (CSS vars — no raw hex, no Tailwind colour scale classes)
@@ -729,6 +746,8 @@ export function MarketsRsClient({ data }: { data: MarketsRsPageData }) {
                     </tr>
                     {rows.map(row => {
                       const meta = BASELINE_META[row.baseline_name] ?? { flag: '•', sub: '', group: '' }
+                      const lagDays = baselineStalenessDays(row.as_of_date, as_of_date)
+                      const isStale = lagDays != null && lagDays > MARKETS_RS_STALE_THRESHOLD_DAYS
                       const cells = [
                         { ret: row.ret_1w,  rank: row.rank_1w },
                         { ret: row.ret_1m,  rank: row.rank_1m },
@@ -757,8 +776,26 @@ export function MarketsRsClient({ data }: { data: MarketsRsPageData }) {
                                 {meta.flag}
                               </div>
                               <div>
-                                <div className="font-sans font-medium" style={{ fontSize: '14px', color: 'var(--color-ink-primary)' }}>
-                                  {row.baseline_name}
+                                <div className="flex items-center gap-2">
+                                  <span className="font-sans font-medium" style={{ fontSize: '14px', color: 'var(--color-ink-primary)' }}>
+                                    {row.baseline_name}
+                                  </span>
+                                  {isStale && (
+                                    <span
+                                      className="font-sans"
+                                      title={`Last priced ${fmtShortDate(row.as_of_date)} — ${lagDays} days behind the freshest baseline (${fmtShortDate(as_of_date)}). Ranks for this row use stale data.`}
+                                      style={{
+                                        fontSize: '9px', fontWeight: 700, letterSpacing: '0.06em',
+                                        textTransform: 'uppercase', padding: '1px 5px', borderRadius: '2px',
+                                        color: 'var(--color-signal-warn)',
+                                        background: 'rgba(176,120,44,0.12)',
+                                        border: '1px solid var(--color-signal-warn)',
+                                        whiteSpace: 'nowrap',
+                                      }}
+                                    >
+                                      Stale · {fmtShortDate(row.as_of_date)}
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="font-sans" style={{ fontSize: '11px', color: 'var(--color-ink-tertiary)', marginTop: '2px' }}>
                                   {meta.sub}

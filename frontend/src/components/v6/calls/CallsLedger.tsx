@@ -366,34 +366,33 @@ export function CallsLedger({ calls }: CallsLedgerProps) {
         <table className="w-full border-collapse text-[12px]">
           <thead>
             <tr>
-              <SortTh col="symbol" label="Symbol · Company" align="left" {...thProps} />
+              <SortTh col="symbol" label="Stock" align="left" {...thProps} />
               <th className="px-2 py-[9px] text-[9px] font-semibold uppercase tracking-[0.13em] text-ink-4 bg-paper-soft border-b border-ink-rule text-center">
                 Status
               </th>
-              <SortTh col="cell_label" label="Cell" {...thProps} />
-              <SortTh col="cap_tier" label="Tier" {...thProps} />
-              <SortTh col="tenure" label="Ten." {...thProps} />
+              <SortTh col="cell_label" label="Cell (cap·horizon·signal)" {...thProps} />
+              <SortTh col="tenure" label="Horizon" {...thProps} />
               <th className="px-2 py-[9px] text-[9px] font-semibold uppercase tracking-[0.13em] text-ink-4 bg-paper-soft border-b border-ink-rule text-center">
-                Dir
+                Signal
               </th>
-              <SortTh col="entry_date" label="Opened" groupSep {...thProps} />
-              <SortTh col="days_in_position" label="Days" unit="held" {...thProps} />
+              <SortTh col="entry_date" label="Signal date" groupSep {...thProps} />
+              <SortTh col="days_in_position" label="Days open" unit="held" {...thProps} />
               <SortTh
                 col="predicted_excess"
-                label="Pred ex."
-                unit="% at call"
+                label="Model target"
+                unit="% excess predicted"
                 groupSep
                 {...thProps}
               />
               <SortTh
                 col="realized_excess_pct"
-                label="Real ex."
-                unit="% realized"
+                label="Actual excess"
+                unit="% vs benchmark"
                 groupSep
                 {...thProps}
               />
               <th className="px-2 py-[9px] text-[9px] font-semibold uppercase tracking-[0.13em] text-ink-4 bg-paper-soft border-b border-ink-rule text-center border-l border-paper-rule">
-                Hit
+                Win
               </th>
             </tr>
           </thead>

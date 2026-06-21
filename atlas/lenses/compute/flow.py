@@ -67,11 +67,30 @@ def _clamp(v: float, lo: float, hi: float) -> float:
 
 def _score_promoter(
     transactions: list[dict[str, Any]],
+    shareholding_current: dict[str, Any] | None,
     thresholds: dict[str, Any],
 ) -> tuple[float, dict[str, Any]]:
-    """Return (raw 0-100, evidence dict) for the promoter subcomponent."""
+    """Return (raw 0-100, evidence dict) for the promoter subcomponent.
+
+    Uses a base score from promoter holding level (skin-in-the-game) plus
+    transaction-level signals.
+    """
+    # Base score from promoter holding level (0-30 range)
+    holding_base = 0.0
+    promo_pct = float(shareholding_current.get("promoter_pct") or 0) if shareholding_current else 0
+    if promo_pct >= 70:
+        holding_base = 30.0
+    elif promo_pct >= 55:
+        holding_base = 22.0
+    elif promo_pct >= 40:
+        holding_base = 15.0
+    elif promo_pct >= 25:
+        holding_base = 8.0
+    elif promo_pct > 0:
+        holding_base = 3.0
+
     if not transactions:
-        return 0.0, {"reason": "no transactions"}
+        return _clamp(holding_base, 0, 100), {"reason": "shareholding level only", "promoter_pct": promo_pct, "base": holding_base}
 
     type_totals: dict[str, float] = {}
     buy_count = 0
@@ -113,12 +132,14 @@ def _score_promoter(
         lo, hi = _TYPE_CAPS.get(sig, (-999, 999))
         type_totals[sig] = _clamp(total, lo, hi)
 
-    raw = _clamp(sum(type_totals.values()), 0, 100)
+    raw = _clamp(holding_base + sum(type_totals.values()), 0, 100)
 
     evidence = {
         "buy_count": buy_count,
         "type_totals": {k: round(v, 2) for k, v in type_totals.items()},
         "transaction_count": len(details),
+        "promoter_pct": promo_pct,
+        "base": holding_base,
     }
     return raw, evidence
 
@@ -171,8 +192,8 @@ def _score_institutional(
         delta = inst_curr - inst_prev
 
         strong_thr = float(thresholds.get("flow_inst_strong_pp", 1.0))
-        mod_thr = float(thresholds.get("flow_inst_mod_pp", 0.5))
-        exit_thr = float(thresholds.get("flow_inst_exit_pp", -1.0))
+        mod_thr = float(thresholds.get("flow_inst_mod_pp", 0.3))
+        exit_thr = float(thresholds.get("flow_inst_exit_pp", -0.5))
 
         if delta >= strong_thr:
             total += 6
@@ -183,6 +204,13 @@ def _score_institutional(
         elif delta <= exit_thr:
             total -= 4
             signals.append("inst_exit")
+        # Mild signal for very small changes
+        elif delta > 0.1:
+            total += 1
+            signals.append("inst_trickle_in")
+        elif delta < -0.1:
+            total -= 1
+            signals.append("inst_trickle_out")
 
     raw = _clamp(total, -10, 15)
     return raw, {"signals": signals, "raw_total": round(total, 2)}
@@ -213,16 +241,21 @@ def score_flow(
             evidence={"reason": "no flow data"},
         )
 
-    # Promoter subcomponent (0-100)
-    promo_raw, promo_ev = _score_promoter(insider_transactions or [], thresholds)
+    # Promoter subcomponent (0-100) — uses holding level + transactions
+    promo_raw, promo_ev = _score_promoter(
+        insider_transactions or [], shareholding_current, thresholds,
+    )
 
     # Smart-money subcomponent (-10 to +15)
     sm_raw, sm_ev = _score_institutional(
         shareholding_current, shareholding_previous, bulk_deals or [], thresholds,
     )
 
-    # Rescale smart money [-10, +15] -> [0, 100]
-    sm_scaled = (sm_raw + 10.0) / 25.0 * 100.0
+    # Rescale smart money [-10, +15] -> [0, 100], centered so 0 -> 50
+    if sm_raw >= 0:
+        sm_scaled = 50.0 + (sm_raw / 15.0) * 50.0
+    else:
+        sm_scaled = 50.0 + (sm_raw / 10.0) * 50.0
 
     # Composite: 70% promoter + 30% smart money
     w_promo = float(thresholds.get("flow_w_promoter", 0.70))

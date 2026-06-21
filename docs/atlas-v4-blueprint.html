@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atlas v4 — Build Blueprint</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#14181E; --ink-soft:#3A434E; --slate:#6B7682;
+    --paper:#F2F4F6; --surface:#FFFFFF; --line:#DCE1E6; --line-strong:#C3CAD1;
+    --emerald:#0F6E5C; --emerald-deep:#0A5546; --emerald-tint:rgba(15,110,92,0.08);
+    --amber:#B5781B; --amber-tint:rgba(181,120,27,0.10);
+    --rose:#9B3B3B; --rose-tint:rgba(155,59,59,0.08);
+    --blue:#2A5C8A; --blue-tint:rgba(42,92,138,0.08);
+    --mute-tint:rgba(107,118,130,0.07);
+    --serif:"Spectral",Georgia,serif; --sans:"IBM Plex Sans",system-ui,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+    font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:54rem;margin:0 auto;padding:0 1.5rem 5rem;}
+  .eyebrow{font-family:var(--mono);font-size:.68rem;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--slate);}
+
+  header.mast{padding:3.2rem 0 2rem;border-bottom:1px solid var(--line-strong);}
+  .kicker{display:flex;align-items:center;gap:.7rem;margin-bottom:1.3rem;}
+  .kicker .mark{font-family:var(--mono);font-weight:500;letter-spacing:.2em;font-size:.78rem;color:var(--emerald-deep);}
+  .kicker .rule{flex:1;height:1px;background:var(--line);}
+  h1{font-family:var(--serif);font-weight:600;font-size:clamp(2rem,5vw,2.9rem);line-height:1.05;letter-spacing:-.01em;margin:0 0 1rem;}
+  .thesis{font-family:var(--serif);font-style:italic;font-size:clamp(1.05rem,2.2vw,1.28rem);line-height:1.5;color:var(--ink-soft);max-width:46ch;margin:0 0 1.8rem;}
+  .meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.9rem 1.3rem;}
+  .meta div{font-family:var(--mono);font-size:.72rem;}
+  .meta .lbl{color:var(--slate);letter-spacing:.04em;text-transform:uppercase;font-size:.62rem;display:block;margin-bottom:.18rem;}
+
+  .toc{margin:1.8rem 0 0;padding:1.1rem 1.2rem;border:1px solid var(--line);border-radius:9px;background:var(--surface);}
+  .toc .toc-h{font-family:var(--mono);font-size:.64rem;letter-spacing:.1em;text-transform:uppercase;color:var(--slate);margin-bottom:.7rem;}
+  .toc ol{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:.35rem 1.3rem;counter-reset:toc;}
+  @media(max-width:560px){.toc ol{grid-template-columns:1fr;}}
+  .toc li{counter-increment:toc;}
+  .toc a{text-decoration:none;color:var(--ink-soft);font-size:.85rem;display:flex;gap:.55rem;align-items:baseline;padding:.15rem 0;}
+  .toc a:hover{color:var(--emerald-deep);}
+  .toc a::before{content:counter(toc,decimal-leading-zero);font-family:var(--mono);font-size:.68rem;color:var(--emerald);}
+
+  section{padding:2.8rem 0 .3rem;border-bottom:1px solid var(--line);scroll-margin-top:1rem;}
+  section:last-of-type{border-bottom:none;}
+  .sec-head{display:flex;gap:1rem;align-items:baseline;margin-bottom:1.1rem;}
+  .sec-num{font-family:var(--mono);font-size:.8rem;color:var(--emerald);font-weight:500;padding-top:.4rem;min-width:2rem;}
+  h2{font-family:var(--serif);font-weight:600;font-size:clamp(1.4rem,3vw,1.85rem);line-height:1.12;letter-spacing:-.01em;margin:0;}
+  .sec-body{padding-left:3rem;}
+  @media(max-width:560px){.sec-body{padding-left:0;}.sec-head{gap:.6rem;}.sec-num{min-width:auto;}}
+  h3{font-family:var(--sans);font-weight:600;font-size:1.02rem;margin:1.6rem 0 .6rem;}
+  p{margin:0 0 1rem;color:var(--ink-soft);}
+  p strong,li strong,td strong{color:var(--ink);font-weight:600;}
+  .lead{font-size:1.05rem;color:var(--ink);}
+  em{font-style:italic;}
+  .mono{font-family:var(--mono);font-size:.9em;color:var(--emerald-deep);}
+
+  .principle{margin:1.6rem 0;padding:1.2rem 1.4rem;border-left:3px solid var(--emerald);background:var(--emerald-tint);border-radius:0 5px 5px 0;}
+  .principle p{margin:0;font-family:var(--serif);font-size:1.08rem;line-height:1.5;color:var(--ink);}
+  .principle .em{color:var(--emerald-deep);font-style:italic;}
+
+  /* flow diagram */
+  .flow{margin:1.4rem 0;display:flex;flex-direction:column;align-items:center;gap:.2rem;}
+  .fnode{width:100%;max-width:560px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);padding:.8rem 1.1rem;}
+  .fnode .ft{font-weight:600;font-size:.95rem;color:var(--ink);}
+  .fnode .fs{font-size:.8rem;color:var(--slate);margin-top:.1rem;}
+  .fnode.regime{background:var(--blue-tint);border-color:var(--blue);}
+  .fnode.sector{background:var(--emerald-tint);border-color:var(--emerald);}
+  .fnode.inst{background:var(--surface);}
+  .fnode.port{background:var(--ink);border-color:var(--ink);}
+  .fnode.port .ft{color:#fff;} .fnode.port .fs{color:#C5CCD3;}
+  .chev{color:var(--line-strong);font-size:1.05rem;line-height:1;}
+  .inst-kids{display:grid;grid-template-columns:repeat(4,1fr);gap:.4rem;margin-top:.6rem;}
+  @media(max-width:560px){.inst-kids{grid-template-columns:1fr 1fr;}}
+  .ik{border:1px solid var(--line);border-radius:6px;padding:.5rem .4rem;text-align:center;background:var(--mute-tint);}
+  .ik .ikt{font-family:var(--mono);font-size:.66rem;font-weight:500;color:var(--emerald-deep);letter-spacing:.02em;}
+  .ik .iks{font-size:.66rem;color:var(--slate);line-height:1.3;margin-top:.15rem;}
+
+  table{width:100%;border-collapse:collapse;margin:1.2rem 0;font-size:.86rem;}
+  th,td{text-align:left;padding:.6rem .7rem;border-bottom:1px solid var(--line);vertical-align:top;}
+  thead th{font-family:var(--mono);font-size:.62rem;letter-spacing:.05em;text-transform:uppercase;color:var(--slate);font-weight:500;border-bottom:1px solid var(--line-strong);}
+  tbody tr:hover{background:var(--mute-tint);}
+  td.lensname{font-weight:600;color:var(--ink);white-space:nowrap;}
+  .pill{display:inline-block;font-family:var(--mono);font-size:.6rem;letter-spacing:.03em;padding:.1rem .4rem;border-radius:4px;white-space:nowrap;}
+  .pill.ok{background:var(--emerald-tint);color:var(--emerald-deep);}
+  .pill.build{background:var(--amber-tint);color:#8a5b12;}
+  .pill.keep{background:var(--blue-tint);color:var(--blue);}
+
+  ul.clean{list-style:none;padding:0;margin:.8rem 0 1.1rem;}
+  ul.clean li{position:relative;padding-left:1.4rem;margin-bottom:.55rem;color:var(--ink-soft);font-size:.92rem;}
+  ul.clean li::before{content:"";position:absolute;left:0;top:.55em;width:6px;height:6px;background:var(--emerald);transform:rotate(45deg);}
+
+  .atom{margin:1.4rem 0;padding:1.2rem 1.3rem;border:1px solid var(--line-strong);border-radius:10px;background:var(--surface);}
+  .atom .lensbars{display:grid;grid-template-columns:repeat(6,1fr);gap:.5rem;margin:.4rem 0 .2rem;}
+  @media(max-width:560px){.atom .lensbars{grid-template-columns:repeat(3,1fr);}}
+  .lb{text-align:center;padding:.5rem .3rem;border:1px solid var(--emerald);border-radius:6px;background:var(--emerald-tint);}
+  .lb .lbn{font-family:var(--mono);font-size:.56rem;text-transform:uppercase;letter-spacing:.02em;color:var(--emerald-deep);line-height:1.25;}
+
+  .decisions{margin:1.4rem 0 .4rem;padding:1.4rem 1.5rem;border:1.5px solid var(--ink);border-radius:9px;background:var(--surface);}
+  .decisions .d-head{font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;margin-bottom:.9rem;}
+  .decisions ol{margin:0;padding-left:1.2rem;}
+  .decisions li{margin-bottom:.7rem;color:var(--ink-soft);}
+  .decisions li b{color:var(--ink);}
+  .rec{color:var(--emerald-deep);font-weight:600;}
+
+  footer{padding:2.2rem 0 0;}
+  .foot{font-family:var(--mono);font-size:.68rem;color:var(--slate);letter-spacing:.03em;line-height:1.7;}
+  @media print{body{background:#fff;}.toc{display:none;}section,.atom,.flow,.decisions,table{break-inside:avoid;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="mast">
+    <div class="kicker"><span class="mark">ATLAS · V4</span><span class="rule"></span><span class="eyebrow">Build Blueprint · for review</span></div>
+    <h1>One engine, every lens, every altitude</h1>
+    <p class="thesis">Built inside today's Atlas as a strict superset — better on every axis, losing nothing. The FM already trusts the surfaces, so we evolve and clean, never redesign.</p>
+    <div class="meta">
+      <div><span class="lbl">Prepared for</span>Bhaven Shah · FM</div>
+      <div><span class="lbl">Synthesises</span>Atlas (current) + Theta + Kite 25y</div>
+      <div><span class="lbl">Status</span>Blueprint → sign-off → loop</div>
+      <div><span class="lbl">Date</span>June 2026</div>
+    </div>
+    <nav class="toc">
+      <div class="toc-h">Contents</div>
+      <ol>
+        <li><a href="#spine">The spine — information flow</a></li>
+        <li><a href="#atom">The atom — daily instrument object</a></li>
+        <li><a href="#lenses">The six lenses</a></li>
+        <li><a href="#scoring">Scoring, conviction, learned weights</a></li>
+        <li><a href="#superset">Strict superset of current Atlas</a></li>
+        <li><a href="#frontend">Frontend — evolve &amp; clean</a></li>
+        <li><a href="#loops">The two loops</a></li>
+        <li><a href="#plan">Build plan (waves → gates)</a></li>
+        <li><a href="#decisions">Decisions to lock</a></li>
+      </ol>
+    </nav>
+  </header>
+
+  <!-- 1 -->
+  <section id="spine">
+    <div class="sec-head"><div class="sec-num">01</div><h2>The spine — a flow of information</h2></div>
+    <div class="sec-body">
+      <p class="lead">Every page is a step in one drill: market context → which sectors lead → which instruments within them → build and test a portfolio. Same lens vector at every altitude.</p>
+      <div class="flow">
+        <div class="fnode regime"><div class="ft">REGIME</div><div class="fs">market state · Risk-On … Risk-Off + deploy multiplier — sets risk appetite</div></div>
+        <div class="chev">▼</div>
+        <div class="fnode sector"><div class="ft">SECTOR — 22 actionable NSE sectors</div><div class="fs">6-lens sector vector + breadth + dispersion · which sectors lead, on which lens</div></div>
+        <div class="chev">▼</div>
+        <div class="fnode inst"><div class="ft">INSTRUMENT</div><div class="fs">the stock is the atom; baskets derive from it</div>
+          <div class="inst-kids">
+            <div class="ik"><div class="ikt">STOCK</div><div class="iks">the atom · 6-lens vector</div></div>
+            <div class="ik"><div class="ikt">ETF</div><div class="iks">holdings roll-up + TE</div></div>
+            <div class="ik"><div class="ikt">FUND</div><div class="iks">roll-up + active tilt</div></div>
+            <div class="ik"><div class="ikt">INDEX</div><div class="iks">constituents aggregated</div></div>
+          </div>
+        </div>
+        <div class="chev">▼</div>
+        <div class="fnode port"><div class="ft">PORTFOLIO</div><div class="fs">model portfolios + 25-year backtest, on the same lens vectors</div></div>
+      </div>
+      <p><strong>Navigation</strong> maps onto surfaces the FM already uses: Home (Regime + Pulse merged) → Sectors → Sector deep-dive → instrument-type ranking (Stocks / ETFs / Funds) → instrument deep-dive → Portfolios + backtest.</p>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section id="atom">
+    <div class="sec-head"><div class="sec-num">02</div><h2>The atom — the daily instrument object</h2></div>
+    <div class="sec-body">
+      <p>For each of ~2,000 stocks, recomputed <strong>daily</strong>: six lenses, each a composite of 3–5 orthogonal subcomponents — <strong>~20–24 readings</strong> — plus a transparent overall composite, a conviction tier, and visible risk flags.</p>
+      <div class="atom">
+        <div class="lensbars">
+          <div class="lb"><div class="lbn">Technical</div></div>
+          <div class="lb"><div class="lbn">Fundamental</div></div>
+          <div class="lb"><div class="lbn">Valuation</div></div>
+          <div class="lb"><div class="lbn">Catalyst</div></div>
+          <div class="lb"><div class="lbn">Flow</div></div>
+          <div class="lb"><div class="lbn">Policy</div></div>
+        </div>
+        <p style="margin:.7rem 0 0;font-size:.85rem;">→ <span class="mono">atlas.atlas_lens_scores_daily</span> (instrument_id, date, 6 lens scores, every subcomponent, composite, tier, risk flags, evidence refs). <strong>The same vector is fractal</strong> — it rolls up unchanged to sector (cap-weight + breadth + dispersion), ETF/fund (holdings-weight + active-tilt-vs-benchmark), and indices (constituent aggregation). One object, three altitudes.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section id="lenses">
+    <div class="sec-head"><div class="sec-num">03</div><h2>The six lenses</h2></div>
+    <div class="sec-body">
+      <p>De-duplicated from Theta — every raw metric counted once; quality + operating-leverage merged into one Fundamental lens; Valuation neutralised to a descriptor. Full field list in <span class="mono">atlas-six-lens-data-spec.md</span>.</p>
+      <table>
+        <thead><tr><th>Lens</th><th>Subcomponents</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr><td class="lensname">1 · Technical</td><td>Trend (EMA stack) · Relative Strength (vs N500 + sector) · Volatility Contraction (ATR/BB) · Volume / Participation</td><td><span class="pill ok">Kite — built</span></td></tr>
+          <tr><td class="lensname">2 · Fundamental</td><td>Profitability (ROCE/ROE) · Margin trajectory · Growth · Balance-sheet</td><td><span class="pill ok">TV levels</span> + <span class="pill build">NSE XBRL trends</span></td></tr>
+          <tr><td class="lensname">3 · Valuation</td><td>Relative cheapness (vs sector median) · Absolute cheapness</td><td><span class="pill ok">TV — in prod</span></td></tr>
+          <tr><td class="lensname">4 · Catalyst</td><td>Earnings · Capital actions · Governance — recency-weighted</td><td><span class="pill build">NSE/BSE filings</span></td></tr>
+          <tr><td class="lensname">5 · Flow</td><td>Promoter/insider · Institutional Δ · Smart-money / bulk deals</td><td><span class="pill build">NSE/BSE feeds</span></td></tr>
+          <tr><td class="lensname">6 · Policy</td><td>Sector tailwind</td><td><span class="pill keep">Registry</span></td></tr>
+          <tr><td class="lensname">⚑ Risk flags</td><td>auditor/CFO/downgrade · pledge spike · solvency — <em>visible, never hides</em></td><td>derived</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section id="scoring">
+    <div class="sec-head"><div class="sec-num">04</div><h2>Scoring, conviction, learned weights</h2></div>
+    <div class="sec-body">
+      <ul class="clean">
+        <li>Subcomponents → lens composite (smooth functions) → overall composite, <strong>renormalised over lenses-with-data</strong> (graceful partial coverage) + convergence on <em>orthogonal</em> agreement → <strong>conviction tier</strong>.</li>
+        <li><strong>Every score is evidence-linked.</strong> A Flow 80 <em>is</em> "Promoter +₹50Cr (15-Jun) · superstar entry · FII +1.3%"; a Catalyst score links the actual filing. Big events surface as flags + a daily "what changed" feed.</li>
+        <li><strong>Two views over one vector</strong> — Discovery (Flow/Fundamental/Policy-led) and Momentum (Technical/RS-led). The composite and 2×2 are <em>views you sort</em>, never gates.</li>
+        <li><strong>Weights live in</strong> <span class="mono">atlas_thresholds</span> <strong>and are learned via the IC loop</strong> — priors → IC attribution vs forward returns → walk-forward validated — <strong>bootstrapped on 25 years at build time</strong>.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section id="superset">
+    <div class="sec-head"><div class="sec-num">05</div><h2>Strict superset of current Atlas</h2></div>
+    <div class="sec-body">
+      <p>From the live capability inventory — nothing on the left is dropped.</p>
+      <table>
+        <thead><tr><th>Today's capability</th><th>In v4</th></tr></thead>
+        <tbody>
+          <tr><td><strong>22 actionable sectors</strong> + rollup (8 thin-tail merges)</td><td>Preserved as the roll-up key; sector gains the full 6-lens vector</td></tr>
+          <tr><td><strong>Drift ×4</strong> (signal-call Z · weight-set IC auto-revert · component-validation badges · validator distribution)</td><td>All preserved; the IC loop is the natural home for the weight/component drift; feeds risk flags + recalibration</td></tr>
+          <tr><td><strong>Regime ×2</strong> (v6 4-state + legacy deploy-multiplier)</td><td>Preserved — top of the spine, sets context</td></tr>
+          <tr><td><strong>Conviction</strong> (verdict + 0–100 + ELI5 + decomposition)</td><td>Becomes the composite — keep ELI5 + decomposition, now evidence-linked across 6 lenses</td></tr>
+          <tr><td><strong>RS 7-tier + breadth</strong> (market &amp; sector)</td><td>Preserved — Technical-lens subcomponents</td></tr>
+          <tr><td><strong>ETF / fund scorecards</strong> (TE · holdings conviction · style · cost)</td><td>Preserved + reframed as the holdings-weighted 6-lens roll-up + tracking quality</td></tr>
+          <tr><td><strong>IC / walk-forward / 24-cell / CTS</strong></td><td>Reused as the learning loop — lenses become signals in the existing machinery</td></tr>
+          <tr><td><strong>Calls / ledger / paper-portfolio</strong> (realized win-rate, drift status)</td><td>Preserved — the accountability spine; lens conviction stays trackable to realized excess</td></tr>
+          <tr><td><strong>Intraday (Kite WS) · TV signals · discovery</strong></td><td>Preserved</td></tr>
+          <tr><td><strong>Thresholds-in-DB · audit immutability · SEBI ledger-public</strong></td><td>Preserved (hook-enforced)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section id="frontend">
+    <div class="sec-head"><div class="sec-num">06</div><h2>Frontend — evolve &amp; clean, don't redesign</h2></div>
+    <div class="sec-body">
+      <div class="principle"><p>The FM's familiarity is a <span class="em">feature</span>. The 6-lens data flows into the surfaces that already exist; navigation and look stay. We <span class="em">clean debt</span> so v4 ships leaner — not heavier.</p></div>
+      <table>
+        <thead><tr><th>Surface</th><th>Keep</th><th>Enrich with lenses</th><th>Debt to clean</th></tr></thead>
+        <tbody>
+          <tr><td class="lensname">Home: Regime + Pulse</td><td>regime hero, breadth, RS leaders</td><td>regime sets the lens-context strip</td><td>merge Pulse into Home, drop Participation/old charts (per <span class="mono">markets-today-redesign</span>)</td></tr>
+          <tr><td class="lensname">Sectors + deep-dive</td><td>RRG, heatmap, constituents</td><td>sector 6-lens vector + breadth + dispersion; lead-lag by lens</td><td>consolidate duplicate sector panels</td></tr>
+          <tr><td class="lensname">Stocks / ETFs / Funds</td><td>tables, sparklines, gates, peer matrix</td><td>ranking by any lens/composite + deep-dive = lens vector + evidence drill-down</td><td>de-dupe overlapping list/detail components</td></tr>
+          <tr><td class="lensname">Calls</td><td>win-rate matrix, ledger</td><td>calls tagged with the lens vector at trigger</td><td>—</td></tr>
+          <tr><td class="lensname">Portfolios</td><td>KPIs, equity curve, policy</td><td>model portfolios + 25y backtest on lens signals</td><td>unify static/rule-based shells</td></tr>
+          <tr><td class="lensname">Health / Admin</td><td>validator, freshness, thresholds, IC weight-perf</td><td>lens-feed freshness + lens IC weight-proposals</td><td>—</td></tr>
+        </tbody>
+      </table>
+      <p><strong>Debt cleanup is an explicit step (W0.5)</strong> — a frontend-debt audit identifies redundant/dead/duplicate components to remove, starting from the inventory + the <span class="mono">markets-today-redesign</span> cuts. Ponytail enforces minimalism per-commit thereafter.</p>
+    </div>
+  </section>
+
+  <!-- 7 -->
+  <section id="loops">
+    <div class="sec-head"><div class="sec-num">07</div><h2>The two loops</h2></div>
+    <div class="sec-body">
+      <ul class="clean">
+        <li><strong>Build loop</strong> — orchestrated, gated waves; each stage has a written goal + a test gate; agents loop until green; human checkpoints at boundaries.</li>
+        <li><strong>Runtime IC loop</strong> — weights &amp; signal-selection learned from forward-return attribution, walk-forward gated, <strong>bootstrapped on 25y at build time</strong> (the engine ships calibrated, then refines nightly). Reuses Atlas's existing <span class="mono">atlas_signal_ic</span> / <span class="mono">atlas_signal_weights</span> machinery.</li>
+      </ul>
+      <div class="principle"><p>Same pattern at three altitudes — data foundation (harness: all-green ✅), the build (gates: tests pass), the runtime (IC: predictive accuracy). A falsifiable goal each layer drives toward. <span class="em">That</span> is the self-improving system.</p></div>
+    </div>
+  </section>
+
+  <!-- 8 -->
+  <section id="plan">
+    <div class="sec-head"><div class="sec-num">08</div><h2>Build plan — waves → gates</h2></div>
+    <div class="sec-body">
+      <table>
+        <thead><tr><th>Wave</th><th>Goal</th><th>Gate</th></tr></thead>
+        <tbody>
+          <tr><td class="lensname">W0</td><td>this blueprint signed off</td><td>human approval</td></tr>
+          <tr><td class="lensname">W0.5</td><td>frontend-debt audit + locked cleanup list</td><td>reviewed list</td></tr>
+          <tr><td class="lensname">W1</td><td><span class="mono">atlas/lenses</span> context + scores table + thresholds + migrations</td><td>schema applies clean</td></tr>
+          <tr><td class="lensname">W2</td><td>6 lens scorers (pure — ported from Theta + new Technical)</td><td>each passes unit tests <em>(6 agents parallel)</em></td></tr>
+          <tr><td class="lensname">W3</td><td>composite + fractal roll-up (sector/ETF/fund/index)</td><td>golden-case tests</td></tr>
+          <tr><td class="lensname">W4</td><td>feeds: XBRL fetcher+parser · NSE/BSE catalyst+flow · widen TV→2000+nightly</td><td>coverage + harness green</td></tr>
+          <tr><td class="lensname">W5</td><td>IC calibration on the 25y journal → learned weights</td><td>walk-forward IC ≥ floor</td></tr>
+          <tr><td class="lensname">W6</td><td>frontend: lens vector into existing surfaces + evidence drill-down + what-changed feed</td><td>visual/contract tests</td></tr>
+          <tr><td class="lensname">W7</td><td>nightly pipeline: all feeds daily + recompute all lenses + refresh views + alerts</td><td>end-to-end dry-run</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 9 -->
+  <section id="decisions">
+    <div class="sec-head"><div class="sec-num">09</div><h2>Decisions to lock before the loop</h2></div>
+    <div class="sec-body">
+      <div class="decisions">
+        <div class="d-head">Sign-off checklist</div>
+        <ol>
+          <li><b>Frontend-debt audit (W0.5)</b> — run it now so the cleanup list is concrete? <span class="rec">recommend yes</span></li>
+          <li><b>Sector aggregation</b> — <span class="rec">cap-weighted</span> vs equal-weight; fund holdings at monthly granularity.</li>
+          <li><b>IC objective</b> — <span class="rec">forward risk-adjusted return at 1m/3m/6m</span>, per-lens horizon calibration.</li>
+          <li><b>Cutover</b> — run v4 behind a flag in parallel, <span class="rec">switch when the core is green</span> (tomorrow-night target).</li>
+        </ol>
+      </div>
+      <p style="margin-top:1rem;font-size:.9rem;">Per instruction: <strong>nothing builds until this is reviewed.</strong> Recommended immediate step — run the W0.5 frontend-debt audit while you read; then with sign-off + answers, the gated build-loop begins.</p>
+    </div>
+  </section>
+
+  <footer>
+    <p class="foot">Atlas v4 · Build Blueprint &nbsp;·&nbsp; companion to <span class="mono">atlas-v4-blueprint.md</span>, <span class="mono">atlas-six-lens-data-spec.md</span><br>Internal · Jhaveri Securities Ltd. · June 2026</p>
+  </footer>
+
+</div>
+</body>
+</html>

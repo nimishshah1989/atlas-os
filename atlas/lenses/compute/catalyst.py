@@ -72,6 +72,45 @@ _TIER_A: dict[str, list[tuple[list[str], int]]] = {
 # Fallback for auditor_change when no specific keyword matches
 _AUDITOR_FALLBACK_SCORE = -5
 
+# Default score when the category is known but no keyword-rule matches subject
+_FALLBACK_SCORES: dict[str, int] = {
+    "credit_rating": 5,
+    "dividend": 5,
+    "management_cessation": -4,
+    "management_appointment": 3,
+    "auditor_change": _AUDITOR_FALLBACK_SCORE,
+    "acquisition": 8,
+    "press_release": 3,
+    "buyback": 10,
+    "bonus_split": 3,
+    "esop": 2,
+}
+
+# Map lens_filings.category values → _TIER_A keys (use before _infer_category)
+_CATEGORY_MAP: dict[str, str] = {
+    "credit rating": "credit_rating",
+    "dividend": "dividend",
+    "acquisition": "acquisition",
+    "amalgamation": "acquisition",
+    "merger": "acquisition",
+    "takeover": "acquisition",
+    "buyback": "buyback",
+    "bonus": "bonus_split",
+    "split": "bonus_split",
+    "cessation": "management_cessation",
+    "resignation": "management_cessation",
+    "appointment": "management_appointment",
+    "change in director": "management_appointment",
+    "change in auditor": "auditor_change",
+    "auditor": "auditor_change",
+    "press release": "press_release",
+    "outcome of board": "press_release",
+    "financial results": "press_release",
+    "investor presentation": "press_release",
+    "annual report": "press_release",
+    "analyst meet": "press_release",
+}
+
 # Category -> bucket mapping
 _BUCKET_MAP: dict[str, str] = {
     "credit_rating": "earnings_strategy",
@@ -122,14 +161,12 @@ def _score_filing(category: str, subject: str) -> int:
     """Return raw Tier-A score for a filing based on category + subject."""
     rules = _TIER_A.get(category)
     if rules is None:
-        return 0
+        return _FALLBACK_SCORES.get(category, 0)
     for keywords, pts in rules:
         if _match_keywords(subject, keywords):
             return pts
-    # Auditor change fallback
-    if category == "auditor_change":
-        return _AUDITOR_FALLBACK_SCORE
-    return 0
+    # Known category but no keyword match — use category-level default
+    return _FALLBACK_SCORES.get(category, 0)
 
 
 def _infer_category(bucket: str, subject: str) -> str:
@@ -195,10 +232,14 @@ def score_catalyst(
         if isinstance(filing_date, str):
             filing_date = date.fromisoformat(filing_date)
 
-        bucket_raw = (f.get("category_bucket") or "").lower()
+        # Use the category column directly when it maps to a known Tier-A key;
+        # fall back to bucket+subject inference only for unmapped categories.
+        raw_cat = (f.get("category") or "").lower().strip()
         subject = f.get("subject_text") or ""
-
-        category = _infer_category(bucket_raw, subject)
+        category = _CATEGORY_MAP.get(raw_cat)
+        if category is None:
+            bucket_raw = (f.get("category_bucket") or "").lower()
+            category = _infer_category(bucket_raw, subject)
         raw = _score_filing(category, subject)
         if raw == 0:
             continue

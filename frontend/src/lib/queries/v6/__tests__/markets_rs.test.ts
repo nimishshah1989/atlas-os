@@ -12,7 +12,15 @@ vi.mock('@/lib/db', () => ({
   default: (...args: unknown[]) => sqlMock(...args),
 }))
 
-import { getMarketsRsPage, deriveHeroReadouts, deriveIndiaRsGrade } from '../markets_rs'
+import {
+  getMarketsRsPage,
+  deriveHeroReadouts,
+  deriveIndiaRsGrade,
+} from '../markets_rs'
+import {
+  baselineStalenessDays,
+  MARKETS_RS_STALE_THRESHOLD_DAYS,
+} from '@/lib/v6/markets-staleness'
 
 // ---------------------------------------------------------------------------
 // Fixture: 9-row grid (realistic subset — all 9 baselines)
@@ -109,6 +117,48 @@ describe('getMarketsRsPage', () => {
     const result = await getMarketsRsPage()
     expect(result.grid[0].ret_1w).toBeNull()
     expect(result.grid[0].rank_1w).toBeNull()
+  })
+
+  it('reports the freshest (max) as_of_date, not the first row when a baseline lags', async () => {
+    // Prod reality: MSCI EM proxy lags the NSE close by weeks. The header stamp
+    // must reflect the freshest baseline, never an arbitrary (e.g. first) row.
+    const rows = [
+      makeRow({ rank_order: 1, baseline_name: 'Nifty 50',            as_of_date: '2026-05-26' }),
+      makeRow({ rank_order: 2, baseline_name: 'Nifty 100',           as_of_date: '2026-05-29' }),
+      makeRow({ rank_order: 9, baseline_name: 'MSCI EM (VWO proxy)', as_of_date: '2026-04-24' }),
+    ]
+    sqlMock.mockResolvedValueOnce(rows)
+    const result = await getMarketsRsPage()
+    expect(result.as_of_date).toBe('2026-05-29')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Tests: baselineStalenessDays (per-baseline staleness honesty)
+// ---------------------------------------------------------------------------
+
+describe('baselineStalenessDays', () => {
+  it('returns the calendar-day lag of a baseline behind the freshest', () => {
+    expect(baselineStalenessDays('2026-04-24', '2026-05-29')).toBe(35)
+  })
+
+  it('returns 0 for the freshest baseline itself', () => {
+    expect(baselineStalenessDays('2026-05-29', '2026-05-29')).toBe(0)
+  })
+
+  it('returns 1 for the normal US 1-day timezone lag', () => {
+    expect(baselineStalenessDays('2026-05-28', '2026-05-29')).toBe(1)
+  })
+
+  it('returns null when either date is missing or unparseable', () => {
+    expect(baselineStalenessDays(null, '2026-05-29')).toBeNull()
+    expect(baselineStalenessDays('2026-05-29', null)).toBeNull()
+    expect(baselineStalenessDays('not-a-date', '2026-05-29')).toBeNull()
+  })
+
+  it('threshold flags the weeks-stale EM proxy but not the 1-day US lag', () => {
+    expect(baselineStalenessDays('2026-04-24', '2026-05-29')! > MARKETS_RS_STALE_THRESHOLD_DAYS).toBe(true)
+    expect(baselineStalenessDays('2026-05-28', '2026-05-29')! > MARKETS_RS_STALE_THRESHOLD_DAYS).toBe(false)
   })
 })
 

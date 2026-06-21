@@ -23,17 +23,19 @@ import { KnownGapsPanel } from '@/components/health/KnownGapsPanel'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
+const DEFAULT_STATUS = { level: 'yellow' as const, message: 'Status unavailable — DB query failed', last_health_check: null }
+
 export default async function HealthPage() {
   const [status, latestRuns, allRuns, freshness, jipFreshness, anomalies, validators, validatorLatest] =
     await Promise.all([
-      getHeaderStatus(),
-      getLatestRunPerScript(),
-      getRecentRuns(30),
-      getFreshness(),
-      getJipFreshness(),
-      getLatestAnomalies(),
-      getValidatorHistory(30),
-      getValidatorLatest(),
+      getHeaderStatus().catch(() => DEFAULT_STATUS),
+      getLatestRunPerScript().catch(() => []),
+      getRecentRuns(30).catch(() => []),
+      getFreshness().catch(() => []),
+      getJipFreshness().catch(() => []),
+      getLatestAnomalies().catch(() => []),
+      getValidatorHistory(30).catch(() => []),
+      getValidatorLatest().catch(() => []),
     ])
 
   const staleTables = freshness.filter((t) => t.lag_days != null && t.lag_days > 2).length

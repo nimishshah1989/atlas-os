@@ -234,6 +234,7 @@ export async function getSectorCards(): Promise<SectorCardRow[]> {
       SELECT MAX(as_of_date) FROM atlas.mv_sector_cards
       WHERE rs_1m IS NOT NULL AND ret_1w IS NOT NULL
     )
+      AND LOWER(sector_name) NOT LIKE '%conglomerate%'
     ORDER BY rs_3m DESC NULLS LAST
   `
 
@@ -409,7 +410,6 @@ export async function getSectorDeepdive(sectorName: string): Promise<SectorDeepd
     open_signals: OpenSignalRow[]
     strength_dist: StrengthDist
     top_picks_top10: TopPickRow[]
-    sub_industries: SubIndustryRow[]
   }>>`
     SELECT
       sector_name,
@@ -424,8 +424,7 @@ export async function getSectorDeepdive(sectorName: string): Promise<SectorDeepd
       constituents_top30,
       open_signals,
       strength_dist,
-      top_picks_top10,
-      sub_industries
+      top_picks_top10
     FROM atlas.mv_sector_deepdive
     WHERE sector_name = ${sectorName}
     LIMIT 1
@@ -448,7 +447,7 @@ export async function getSectorDeepdive(sectorName: string): Promise<SectorDeepd
     open_signals: r.open_signals ?? [],
     strength_dist: r.strength_dist ?? { very_strong: 0, strong: 0, neutral: 0, weak: 0, very_weak: 0 },
     top_picks_top10: r.top_picks_top10 ?? [],
-    sub_industries: r.sub_industries ?? [],
+    sub_industries: [],
   }
 }
 
