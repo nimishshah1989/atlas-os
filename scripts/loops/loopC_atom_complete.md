@@ -8,6 +8,32 @@ ultracode
 CALIBRATED. **This loop blocks the ETF/index/fund/sector roll-ups** (Loop B+) — the atom must be
 final before anything rolls up, or every roll-up is computed twice.
 
+## CURRENT STATUS (2026-06-21) — data layer READY; this loop = wiring + blockers + rebuild + IC
+
+The input data is now in place and deep enough (verify with `validate_lenses.py --check A` + the
+queries below). What changed since the spec was first written:
+- **Fundamentals NOW HAVE HISTORY** (the old hard gap): income statement to **2026-03** (97% of
+  ~2,093, ~39 quarters/stock median) + a real **balance sheet** `foundation_staging.financials_annual`
+  (Equity/Borrowings → ROE/D-E, ~86%, ~12y/stock) — both via `ingest_screener.py` (warm-session fix)
+  with `ingest_xbrl.py` as the official backup. Reconciled to XBRL on the overlap.
+- **Technical vol-contraction/volume/52w are now PIT** (derived from 25y OHLCV in `technical_daily`:
+  `atr_14, bb_width, vol_ratio_30d/60d, pos_52w`). EMA/RSI/RS already PIT.
+- **Insider `signal_type` fixed** (real `acqMode`/`tdpTransactionType`) → promoter/pledge fire.
+- **Sector map complete** to 95.6% on `instrument_master.sector` (22 actionable, no 'Other', D13 rule).
+- Decisions locked: free-float weighting + IC-driven conviction at every altitude (D15); journal depth
+  from 2019-01-01 (D5); see `DECISIONS.md` D1–D16 and `docs/atlas-six-lens-coverage-map.md` (state).
+
+**STILL OWED — this loop's work (in order):**
+1. The two co-equal blockers (Step 0 below): composite flat→nested weights; forward-return fix.
+2. Wire every lens to the PIT source (Step 2): fundamental from `financials_quarterly` +
+   `financials_annual` as-of; **valuation history BUILT here** (it is snapshot-only today — `tv_metrics`,
+   no time dimension) from 25y price ÷ as-of TTM EPS + as-of sector-median PE; **P/B unit-safe** (do
+   NOT use `tv_metrics.market_cap` — unreliable units; use price × verified shares ÷ equity, or
+   Screener Book Value); **valuation 52w** wired to `technical_daily.pos_52w` (not the snapshot);
+   **sector-RS** (`rs_*_sector` = stock ret − its sector-index ret; 29/30 sector indices ready in
+   `technical_daily`/`index_prices`); flow as-of shareholding/insider.
+3. Rebuild the journal PIT 2019→now (Step 4). 4. IC calibration (Step 6). → journal C+ **→ A**.
+
 ## Why this loop exists (the core defect, verified against the live DB)
 
 Only the *appearance* of history exists. Measured on `atlas.atlas_lens_scores_daily` (asset_class

@@ -6,6 +6,16 @@ it's genuinely **point-in-time (PIT)** or a today-snapshot, and whether the scor
 **wired** to the right source yet. Numbers are live (the fundamentals backfill is still
 filling — cells marked 🔄 will climb to ~95%).
 
+> **UPDATE 2026-06-21 (post-backfill, authoritative):** the 🔄 cells below have LANDED.
+> Fundamentals are now historical — income **97%** to 2026-03 (~39 quarters/stock) + a real balance
+> sheet `financials_annual` **86%** (~12y/stock) → ROE/D-E real (the Screener warm-session fix).
+> Technical ATR/BB/vol/52w **100%** (PIT from 25y OHLCV). Insider classify fixed. Sector map 95.6%.
+> **TIME coverage** is the thing the % below hides: technical/catalyst/flow are decades-deep; fundamentals
+> ~10–12y; **VALUATION is a single snapshot with ZERO history** (`tv_metrics`) — its history is BUILT in
+> Loop C, not backfilled. **Two data-layer holes remain → Loop C:** sector-RS (0%) and P/B (0%, unit-safe
+> in Loop C). Sub-component note: a lens-level % is one indicator, not "all sub-components" (e.g. Technical
+> is 3½/4 — sector-RS missing).
+
 Legend: ✅ have & PIT · 🟢 have (snapshot, not yet PIT) · 🔄 filling now · ⚠️ gap/needs work
 
 | Lens · sub-component | Needs | Have? | Coverage | PIT? | Scorer wired? |

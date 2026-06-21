@@ -6,6 +6,48 @@ new dated entry that supersedes it.
 
 ---
 
+## 2026-06-21 — D16: Data layer (Phase 1a/1b) DONE; Loop C is the active work.
+The six-lens INPUT data is in place and deep: technical 25y; fundamentals NOW historical (income
+97% to 2026-03 ~39q/stock + a real balance sheet `financials_annual` 86% ~12y/stock, via the
+Screener warm-session fix, XBRL backup); catalyst/flow decades-deep; insider classify fixed; sector
+map 95.6% (no 'Other'). Two honest data-layer holes are FOLDED INTO Loop C: **sector-RS** (0%) and
+**P/B** (0% — `tv_metrics.market_cap` units are unreliable; compute unit-safe in Loop C from price ×
+verified shares ÷ equity or Screener Book Value). **Valuation has NO time history** (`tv_metrics` is a
+single snapshot) — its history is RECONSTRUCTED in Loop C, not backfilled. The journal stays C+ until
+Loop C recomputes on this data. Next = Loop C (`loopC_atom_complete.md`): 2 blockers → wire lenses to
+PIT → rebuild 2019→ → IC. State detail: `docs/atlas-six-lens-coverage-map.md`.
+
+## 2026-06-21 — D15: Free-float weighting; IC-driven conviction at every altitude; backend sequence.
+**Weighting (FM):** roll-ups are **free-float market-cap weighted** (= `market_cap × (1 − promoter_%)`,
+from tv_metrics + lens_shareholding) — reflects actual tradeable market exposure, the way NIFTY
+weights. NOT equal-weight, NOT raw full-cap. Equal-weight is a secondary toggle ("breadth view") only.
+**Conviction/composite (FM):** the composite, conviction tier, and BOTH axes of the sector 2×2 are
+the **IC-calibrated weights**, not hand-set blends. EACH altitude gets its OWN IC calibration —
+stock IC (atom), sector IC, ETF IC, fund IC — because the lenses that predict returns differ by
+altitude. The IC calibration is therefore the linchpin: nothing above the atom has trustworthy
+conviction until it lands.
+**Backend build sequence (entire backend BEFORE any front-end):**
+1. Finish the **stock atom → A**: data coverage + Loop C wiring (PIT lenses) + journal rebuild +
+   **IC calibration** (conviction becomes IC-driven). [in progress]
+2. **Sector roll-up** (free-float-weighted 6-lens + breadth + dispersion + rotation; sector IC; the 2×2).
+3. **ETF + Index roll-up** (holdings/constituent-weighted; same machinery; their IC).
+4. **Mutual funds** (the final backend part): MF tables + fund lens roll-up + active-movement (MoM
+   holdings) + fund ranking + fund IC. Gated on Morningstar APIs + table design (D14).
+5. THEN front-end (only once the entire backend is A).
+
+## 2026-06-21 — D14: Priority = journal C+→A first; MF build guidance (deferred).
+**Priority order (FM):** (1) get `atlas_lens_scores_daily` from C+ → A — finish data coverage +
+re-run the lenses on the new PIT data (Loop C wiring); (2) get ETF-holdings + index-constituents
+data to A (small fixes only — they're ~complete); (3) MF later.
+**MF guidance (captured for the deferred build):**
+- **Universe = GROWTH option, REGULAR plan funds** — the major starting universe.
+- `de_mf_nav_daily` must refresh **DAILY** (verify it's a daily job, not a one-off snapshot).
+- Holdings refresh MONTHLY on Morningstar; funds typically update ~10th–15th of the month.
+  `de_mf_holdings` is **APPEND-ONLY** with `as_of_date` — NEVER overwrite. Every monthly snapshot is
+  kept so month-over-month holdings change is preserved (the active-movement / "is the manager
+  proactively acting" signal — the differentiator).
+- FM will share **Morningstar APIs**; then design the MF table set (master/holdings/nav/risk).
+
 ## 2026-06-21 — D13: Sector taxonomy — no thin standalone sector; merge <5 into relevant.
 **Rule (FM):** any sector with **fewer than 5 names** in our universe, and any raw thin-tail label
 (Conglomerate, Rural, Diversified, Services, MNC, Power, Housing, Consumption, EV & Auto), must be

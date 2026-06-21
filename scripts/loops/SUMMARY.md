@@ -266,9 +266,23 @@ coverage-residual classification) cross-checked against real DB data. `validate_
 
 ---
 
-## What's left (post Loop A)
+## Milestone 6: Data layer complete (2026-06-21)
 
-- **Loop B** — ETF/index holdings-weighted roll-up + sector fold-up (`--check B`).
-- **Loop C** — point-in-time rebuild (fundamental/valuation/flow as-of) + XBRL refresh to 2026 +
-  journal from 2019-01-01 + walk-forward IC calibration. (FM-sequenced after hygiene + Loop B.)
-- **Frontend debt cleanup**: delete old components once the lens flag is permanently ON.
+The six-lens INPUT data is in place and deep. Key wins:
+- **Fundamentals now have history** — income statement to **2026-03** (97%, ~39 q/stock) + a real
+  **balance sheet** (`financials_annual`, 86%, ~12y) → ROE/D-E. Fetched via a rewritten
+  `ingest_screener.py` (the **warm-session fix** unlocked Screener's full tables — balance sheets
+  went 452 → 1,790), reconciled to NSE XBRL; XBRL kept as the official backup.
+- **Technical**: ATR/BB-width/volume-ratio/52w-position derived **point-in-time** from 25y OHLCV (100%).
+- **Insider**: `signal_type` classify fixed (real `acqMode` field) → promoter/pledge fire (was 100% 'other').
+- **Sector map**: 95.6% on `instrument_master.sector`, 22 actionable, **no 'Other'** (D13 thin-merge rule).
+- Two holes folded into Loop C: **sector-RS** + **P/B** (unit-safe). **Valuation has no time history** —
+  built in Loop C. See `docs/atlas-six-lens-coverage-map.md` for the full state.
+
+## What's left
+
+- **Loop C (NEXT)** — `loopC_atom_complete.md`: fix the 2 blockers → wire lenses to the PIT data →
+  rebuild the journal 2019→ → **IC calibration**. Flips `atlas_lens_scores_daily` from C+ → **A**.
+- **Roll-ups (GATED)** — sector → ETF/index → mutual funds, after the atom is A (framework discussed:
+  free-float weighting, momentum×IC-conviction 2×2, IC per altitude — D15).
+- **Front-end** — only once the entire backend is A.
