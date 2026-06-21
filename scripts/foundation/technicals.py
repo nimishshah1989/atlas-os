@@ -86,6 +86,31 @@ def above_ema_flags(close: pd.Series, tech: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def compute_volatility_volume(
+    high: pd.Series, low: pd.Series, close: pd.Series, volume: pd.Series
+) -> pd.DataFrame:
+    """ATR(14), Bollinger-band width, volume-vs-avg, and 52-week position.
+
+    All inputs are ascending, date-indexed (adjusted H/L/C + raw volume). These
+    are the point-in-time vol-contraction / participation / 52w-position signals
+    that previously leaked from the tv_metrics snapshot.
+    """
+    h, l, c, v = (s.to_numpy(dtype="float64") for s in (high, low, close, volume))
+    out = pd.DataFrame(index=close.index)
+    out["atr_14"] = talib.ATR(h, l, c, timeperiod=14)
+    upper, mid, lower = talib.BBANDS(c, timeperiod=20, nbdevup=2, nbdevdn=2)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        out["bb_width"] = np.where(mid != 0, (upper - lower) / mid, np.nan)
+        for name, w in {"30d": 30, "60d": 60}.items():
+            sma = talib.SMA(v, timeperiod=w)
+            out[f"vol_ratio_{name}"] = np.where(sma > 0, v / sma, np.nan)
+    roll_max = close.rolling(252, min_periods=20).max()
+    roll_min = close.rolling(252, min_periods=20).min()
+    rng = roll_max - roll_min
+    out["pos_52w"] = ((close - roll_min) / rng * 100).where(rng > 0)
+    return out
+
+
 def max_abs_log_jump(close: pd.Series) -> float:
     """Largest absolute 1-day log return — flags split/adjustment errors.
 

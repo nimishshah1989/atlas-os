@@ -34,9 +34,10 @@ _SRC = {
     "index": (f"{M}.index_prices", "close", "index_code = :k"),
 }
 _RS_COLS = [f"rs_{w}_{b}" for b in BENCHMARKS for w in T.RETURN_WINDOWS]
+_VV_COLS = ["atr_14", "bb_width", "vol_ratio_30d", "vol_ratio_60d", "pos_52w"]
 _TECH_COLS = (["ema_21", "ema_50", "ema_200", "rsi_14"]
               + [f"ret_{w}" for w in T.RETURN_WINDOWS] + _RS_COLS
-              + ["above_ema_21", "above_ema_50", "above_ema_200"])
+              + ["above_ema_21", "above_ema_50", "above_ema_200"] + _VV_COLS)
 
 
 def load_benchmarks() -> dict[str, pd.Series]:
@@ -76,6 +77,15 @@ def _close_series(asset_class: str, iid: str, symbol: str) -> pd.Series:
                      index=pd.DatetimeIndex(pd.to_datetime(px["date"])))
 
 
+def _ohlcv_frame(iid: str) -> pd.DataFrame:
+    """Adjusted H/L/C + raw volume for a stock, ascending date index."""
+    df = _db.read_df(
+        f"select date, high_adj, low_adj, close_adj, volume from {M}.ohlcv_stock "
+        "where instrument_id = cast(:k as uuid) order by date", {"k": iid})
+    df.index = pd.DatetimeIndex(pd.to_datetime(df["date"]))
+    return df
+
+
 def compute_one(iid, ac, sym, benches, run_id) -> int:
     close = _close_series(ac, iid, sym)
     # Drop non-positive closes: zero/blank prints in deep (2000s) history and
@@ -97,6 +107,19 @@ def compute_one(iid, ac, sym, benches, run_id) -> int:
         out[c] = tech[c].values
     for p in T.EMA_PERIODS:
         out[f"above_ema_{p}"] = flags[f"above_ema_{p}"].values
+    # volatility / volume / 52w-position (stocks only — needs H/L/V)
+    if ac == "stock":
+        o = _ohlcv_frame(iid)
+        mask = o["close_adj"].astype(float) > 0
+        vv = T.compute_volatility_volume(
+            o["high_adj"].astype(float)[mask], o["low_adj"].astype(float)[mask],
+            o["close_adj"].astype(float)[mask], o["volume"].astype(float)[mask],
+        ).reindex(close.index)
+        for c in _VV_COLS:
+            out[c] = vv[c].values
+    else:
+        for c in _VV_COLS:
+            out[c] = None
     out["compute_run_id"] = run_id
     cols = ["instrument_id", "asset_class", "symbol", "date"] + _TECH_COLS + ["compute_run_id"]
     out = out[cols].astype(object).where(pd.notna(out), None)
