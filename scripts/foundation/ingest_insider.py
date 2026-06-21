@@ -112,15 +112,17 @@ def ingest_symbol(s: requests.Session, iid: str, symbol: str) -> int:
         person = (rec.get("acqName") or rec.get("personName") or "")[:500]
         if not person:
             continue
-        txn_type = rec.get("tkdAcquDiswordsAcq") or rec.get("transactionType") or ""
-        acq_mode = rec.get("secAcq") or rec.get("acquisitionMode") or ""
+        # Real NSE PIT fields: acqMode='Market Purchase/Sale/Pledge/...' (the type),
+        # tdpTransactionType='Buy/Sell', secAcq=share COUNT (not a mode), secVal=value.
+        txn_type = rec.get("acqMode") or rec.get("tdpTransactionType") or ""
+        acq_mode = rec.get("secType") or rec.get("derivativeType") or ""
         sig = _classify(txn_type, acq_mode)
-        secs = _num(rec.get("secVal") or rec.get("securitiesTraded"))
+        secs = _num(rec.get("secAcq") or rec.get("securitiesTraded"))
         value = _num(rec.get("secVal"))
         if value is not None:
             value = round(value / 1e7, 4)  # → crores
-        price = _num(rec.get("befAcqSharesPercentage"))  # not always price
-        pledge_after = _num(rec.get("aftAcqSharesPercentage"))
+        price = _num(rec.get("befAcqSharesPer"))  # holding % before (proxy)
+        pledge_after = _num(rec.get("afterAcqSharesPer"))  # holding % after
         rows.append({
             "instrument_id": iid, "symbol": symbol,
             "transaction_date": td, "person_name": person,
