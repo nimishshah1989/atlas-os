@@ -211,12 +211,13 @@ class TestTechnicalRealData:
             if r.score is not None:
                 assert Decimal(0) <= r.score <= Decimal(100)
 
-    def test_strong_outscores_weak(self, journal):
-        # Relational over REAL produced output: the journal's strongest technical
-        # name must out-score its weakest. Pure, data-grounded, no fabrication.
-        s = journal["technical"].dropna()
-        assert float(s.max()) > float(s.min())
-        assert float(s.max()) >= 60 and float(s.min()) <= 40
+    def test_real_cross_sectional_dispersion(self, journal):
+        # Real produced output must show genuine cross-sectional spread — a lens
+        # that separates names, not a degenerate near-constant. Asserted from the
+        # distribution itself (max>min + real stddev), no magic absolute bounds.
+        s = journal["technical"].dropna().astype(float)
+        assert s.max() > s.min()
+        assert s.std() > 5
 
 
 # ════════════════════════════ FUNDAMENTAL ════════════════════════════
@@ -285,6 +286,14 @@ class TestValuationRealData:
                 assert r.zone == "DEEP_VALUE"
             elif r.score < Decimal(20):
                 assert r.zone == "OVERVALUED"
+
+    def test_no_value_names_not_labeled_fair(self, journal):
+        # End-to-end no-data contract: a name we cannot value (valuation IS NULL,
+        # no tv_metrics row) must be labelled UNKNOWN/None in the journal, never
+        # the misleading FAIR the pipeline fallback used to write.
+        no_val = journal[journal["valuation"].isna()]
+        bad = no_val[no_val["valuation_zone"] == "FAIR"]
+        assert len(bad) == 0, f"{len(bad)} unvalued names mislabelled FAIR"
 
     def test_pb_dimension_absent_on_real_data(self, data, th):
         # tv_metrics.pb_fbs is 100% null in production; the pb dimension must

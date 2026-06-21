@@ -256,6 +256,13 @@ coverage-residual classification) cross-checked against real DB data. `validate_
    catalyst) are genuinely point-in-time in the journal; fundamental/valuation/flow are today's
    `tv_metrics`/snapshot stamped backward. IC is therefore **not yet trustworthy** — Loop C makes
    fundamental/valuation/flow as-of, extends the journal to **2019-01-01**, then calibrates IC.
+4. **Composite ignores DB-configured weights (Loop C BLOCKER, found in Loop A review)**:
+   `compute_composite` reads `thresholds.get("lens_weights")` / `conviction_tiers` (nested dicts),
+   but `load_thresholds()` returns FLAT keys (`lens_weight_technical`, `lens_conviction_*`). So the
+   engine ALWAYS falls back to the hardcoded `_DEFAULT_WEIGHTS`/`_DEFAULT_CONVICTION` and silently
+   ignores the DB-tuned values (violates arch rule #3). Pre-existing, NOT touched by Loop A — but it
+   means **IC-learned weights would be ignored** unless this mapping is fixed FIRST in Loop C.
+   (The reconciliation tests pass precisely because pipeline and tests share the same fallbacks.)
 
 ---
 

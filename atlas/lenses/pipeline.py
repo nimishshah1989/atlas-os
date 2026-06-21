@@ -254,7 +254,15 @@ def run_pipeline(
 
     # Remove any rows for this date left by an earlier run (universe shrink /
     # re-run) so the journal reflects exactly this run's scored stock universe.
-    purged = purge_stale_lens_scores(eng, dt, run_id, asset_class="stock")
+    # GUARD: never purge when this run wrote nothing — a total failure (0 scored)
+    # must not wipe a previously-good journal day with no replacement rows.
+    if scored > 0:
+        purged = purge_stale_lens_scores(eng, dt, run_id, asset_class="stock")
+    else:
+        purged = 0
+        log.error("lens_pipeline_zero_scored_no_purge", as_of=str(dt),
+                  skipped=skipped, msg="0 instruments scored; skipping purge to "
+                  "protect the existing journal for this date")
 
     summary = {
         "as_of": str(dt),
@@ -306,7 +314,9 @@ def _build_result(
         # Composite & meta
         "composite": _dec_or_none(comp_result.final_score),
         "conviction_tier": comp_result.conviction_tier,
-        "valuation_zone": vr.zone if vr else "FAIR",
+        # No valuation row at all -> 'UNKNOWN' (matches the scorer's no-data
+        # contract); never the misleading 'FAIR' label for a name we can't value.
+        "valuation_zone": vr.zone if vr else "UNKNOWN",
         "valuation_multiplier": _dec_or_none(vr.multiplier) if vr else 1.0,
         "smart_money_score": sm, "degradation_score": _dec_or_none(risk_result.degradation_score),
         "risk_flags": json.dumps(list(risk_result.flags)),
