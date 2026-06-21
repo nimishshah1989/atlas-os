@@ -118,15 +118,42 @@ def _detect_basis(html: str) -> bool:
 
 
 # ── fetch ──
-def fetch(symbol: str) -> tuple[str | None, bool]:
-    """Return (html, is_consolidated). Tries /consolidated/ then falls back to standalone."""
-    for suffix, _ in (("consolidated/", True), ("", False)):
+_SESSION = None
+
+
+def _session() -> requests.Session:
+    """Warmed session — Screener serves DATA-LESS skeleton pages to cold/cookieless
+    requests for many names; visiting the homepage first sets the cookies that
+    unlock the full financial tables."""
+    global _SESSION
+    if _SESSION is None:
+        s = requests.Session()
+        s.headers.update(_H)
         try:
-            r = requests.get(f"{_BASE}/company/{symbol}/{suffix}", headers=_H, timeout=25)
+            s.get(_BASE + "/", timeout=20)
+        except Exception:
+            pass
+        _SESSION = s
+    return _SESSION
+
+
+def fetch(symbol: str, _retry: bool = True) -> tuple[str | None, bool]:
+    """Return (html, is_consolidated). Requires a FULL page (has `data-date-key`,
+    the period columns) — a skeleton without it is rejected and retried with a
+    fresh warm session (handles Screener's intermittent stripping)."""
+    s = _session()
+    for suffix in ("consolidated/", ""):
+        try:
+            r = s.get(f"{_BASE}/company/{symbol}/{suffix}", timeout=25)
         except Exception:
             continue
-        if r.status_code == 200 and 'id="quarters"' in r.text:
+        if r.status_code == 200 and "data-date-key" in r.text:
             return r.text, _detect_basis(r.text)
+    if _retry:  # got a skeleton / failure — re-warm once and retry
+        global _SESSION
+        _SESSION = None
+        time.sleep(2)
+        return fetch(symbol, _retry=False)
     return None, False
 
 
