@@ -194,9 +194,12 @@ def _reconciles(iid, consol, q_rows) -> tuple[bool, str]:
             xp, sp = xmap[pe], float(row["pat"])
             if xp == 0:
                 continue
-            if abs(sp - xp) / abs(xp) <= _RECON_TOL:
+            # Combined tolerance: 2% relative OR ₹1cr absolute. Screener displays
+            # whole crores, so on small-caps a ±0.5cr rounding blows past a pure
+            # relative bound while the value is genuinely correct.
+            if abs(sp - xp) <= max(_RECON_TOL * abs(xp), 1.0):
                 return True, f"ok@{pe} screener={sp} xbrl={xp}"
-            return False, f"DIVERGE@{pe} screener={sp} xbrl={xp} ({abs(sp-xp)/abs(xp):.1%})"
+            return False, f"DIVERGE@{pe} screener={sp} xbrl={xp} (Δ{abs(sp-xp):.1f}cr)"
     return True, "no_shared_quarter"  # overlap exists but no shared quarter w/ pat; accept
 
 
