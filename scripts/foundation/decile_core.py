@@ -47,20 +47,16 @@ def latest_date():
     return _db.scalar(f"SELECT max(date) FROM {L} WHERE asset_class='stock'")
 
 
-def deciles(date, caps: pd.DataFrame | None = None) -> pd.DataFrame:
-    """Per-(cap, lens) decile + leadership badge/strength for one journal date.
-
-    Returns one row per stock with: symbol, name, sector, cap, the raw lens scores,
-    d_<lens> deciles (1-10, NaN=no signal), lead (top-decile count over CONV),
-    lead_t2 (top-2-decile count), lead2 (>=2 top-decile flag), strength (avg conv decile).
-    """
-    j = _db.read_df(
-        f"SELECT instrument_id, symbol, name, sector, {','.join(LENSES)} "
-        f"FROM {L} t JOIN foundation_staging.instrument_master im USING (instrument_id) "
-        f"WHERE t.asset_class='stock' AND t.date=:d", {"d": str(date)})
+def add_deciles(j: pd.DataFrame, caps: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Add per-(cap, lens) deciles + leadership badge/strength to a frame that already
+    has instrument_id + the LENSES score columns. Cohort cut WITHIN cap; null = no signal.
+    Adds: cap, d_<lens> (1-10, NaN=no signal), lead (top-decile count over CONV), lead_t2
+    (top-2-decile count), lead2 (>=2 flag), strength (avg conviction decile)."""
+    j = j.copy()
     j["instrument_id"] = j["instrument_id"].astype(str)
-    caps = cap_bucket() if caps is None else caps
-    j = j.merge(caps, on="instrument_id", how="left")
+    if "cap" not in j.columns:
+        caps = cap_bucket() if caps is None else caps
+        j = j.merge(caps, on="instrument_id", how="left")
     j["cap"] = j["cap"].fillna("micro")
     for lens in LENSES:
         j[f"d_{lens}"] = np.nan
@@ -75,3 +71,13 @@ def deciles(date, caps: pd.DataFrame | None = None) -> pd.DataFrame:
     j["lead2"] = (j["lead"] >= 2).astype(int)
     j["strength"] = j[[f"d_{c}" for c in CONV]].mean(axis=1)
     return j
+
+
+def deciles(date, caps: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Per-(cap, lens) decile + leadership/strength for one journal date (one row/stock,
+    incl. symbol/name/sector + raw lens scores)."""
+    j = _db.read_df(
+        f"SELECT instrument_id, symbol, name, sector, {','.join(LENSES)} "
+        f"FROM {L} t JOIN foundation_staging.instrument_master im USING (instrument_id) "
+        f"WHERE t.asset_class='stock' AND t.date=:d", {"d": str(date)})
+    return add_deciles(j, caps)
