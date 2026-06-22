@@ -1,6 +1,26 @@
 # Atlas v4 six-lens — HANDOFF / STATE (for the next session)
 
-## ⭐ RESUME HERE (2026-06-22 — Loop C ON-READ done + green; next = FAST gate + consolidation + delivery + roll-ups)
+## ⭐ RESUME HERE (2026-06-22 — ATOM IS FINAL; next = ROLL-UPS + consolidation + frontend replicate)
+**THE STOCK ATOM IS COMPLETE + LOCKED (committed cb80201).** Six-lens, point-in-time, IC-calibrated,
+WITH the delivery-% accumulation enrichment. Gates ALL GREEN: `validate_loopC --mode full` (C1-C9),
+`validate_lenses --check A` (immutable), `pytest atlas/lenses` (32). Composite is ON-READ (D19).
+- **Delivery enrichment landed (D24):** `delivery_daily` (own table, joined into the daily frame,
+  feeds ONLY Flow), complete 2019-09→2026-06-19 (filled the stale 2.5mo from NSE sec_bhavdata).
+  **Flow OOS IC 0.0058 → 0.0232 (~4×, sign-stab 1.00) → Flow is now the TOP lens** (weight 0.302;
+  technical 0.279 / catalyst 0.231 / fundamental 0.188). Scripts: `backfill_delivery.py`,
+  `fetch_delivery.py`. (Minor follow-up: `atlas_signal_ic` per-row provenance lags — the --commit
+  guard skipped its sweep; the load-bearing weights are correct. Refresh on a cleared-state run.)
+- **NEXT (the plan, D21-D23):** (1) ROLL-UPS — sector (NSE-index-weight proxy) → ETF/index → fund,
+  ON-READ, per-altitude IC (loopB_rollup_framework.md). (2) CONSOLIDATION (D22) — bring de_etf_*/
+  de_mf_*/de_index_* into foundation_staging (additive, no drops; data_catalog.md). (3) FRONTEND —
+  REPLICATE the existing Atlas frontend onto v4 behind NEXT_PUBLIC_LENS_V4, validate, go live, retire
+  old, THEN clear tables. Clear NOTHING before go-live.
+- **PERF discipline (FM, standing):** load-once + vectorize (COPY bulk reads, pandas/numpy), never
+  chatty per-row DB loops. Run heavy gates SOLO. The full validate_loopC is ~8-10 min (was 35).
+
+---
+
+## (prior) 2026-06-22 — Loop C ON-READ done + green (superseded by ATOM FINAL above)
 **DONE this session (committed):**
 - **On-read repoint complete + GREEN.** `validate_loopC` C6/C8 + 3 pytest tests compute composite/coverage
   ON-READ from stored sub-scores × live DB weights (never the stale stored composite). `validate_lenses
