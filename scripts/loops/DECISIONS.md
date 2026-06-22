@@ -6,6 +6,108 @@ new dated entry that supersedes it.
 
 ---
 
+## 2026-06-22 — D23: GO-LIVE SEQUENCE (FM) — make v4 live+accurate FIRST; replicate (not rebuild) the frontend; clear tables DEAD LAST.
+**Decision (FM, sequencing — overrides any urge to clean up early):**
+1. **Clear NOTHING now.** No table drops until the very end. The keep/crap audit (D22/data_catalog) is a
+   STAGED plan for later, not an action item. The shared DB still serves the LIVE old Atlas.
+2. **First: get THIS version (v4 six-lens) absolutely live, working, fully wired, and numbers-accurate
+   exactly as the FM needs** — backend complete (atom → delivery → roll-ups, all on the self-contained
+   `foundation_staging`) + validated against ground truth.
+3. **Frontend = REPLICATE the current Atlas frontend, do NOT rebuild it.** Reuse the existing Atlas
+   pages/components, wire them to the validated v4 data (+ the lens surfaces already added behind
+   `NEXT_PUBLIC_LENS_V4`, OFF). Same product, now powered by the clean v4 backend. It goes live only
+   when everything is proper + numbers validated.
+4. **Then retire the old Atlas → THEN clear out all the legacy tables** (the D22 crap-list), FM-approved,
+   once nothing live depends on them.
+- **Implication for the consolidation (D22):** "bring tables into `foundation_staging`" is part of
+  WIRING v4, done as the roll-up build proceeds — additive, safe, no drops. The drop step is the last
+  thing that happens, after go-live + old-Atlas retirement.
+
+## 2026-06-22 — D22: SELF-CONTAINED ENVIRONMENT (FM) — every table Atlas v4 needs lives in the Atlas env; NO cross-environment reads.
+**Decision (FM, foundational):** this version of Atlas must be fully self-contained — **every single table
+it reads must exist in the Atlas environment** (the `foundation_staging` raw/derived schema + the `atlas`
+computed-output schema in THIS Supabase project). It may NOT read from any other environment. Anything
+currently borrowed from the legacy `public.de_*` layer must be **brought in or duplicated** into the Atlas
+environment, and the code repointed — so the legacy `public.de_*` environment(s) can then be CLEARED.
+- **D22a (FM) — ONE schema: everything in `foundation_staging`.** Every table Atlas needs — raw feeds,
+  derived feeds, AND the computed outputs currently in the `atlas` schema (atom, thresholds, signals,
+  regime, decisions, roll-ups) — consolidates into `foundation_staging`. Single place to point at when
+  clearing other environments.
+  - **Sequencing (honest):** NEW brought-in feed tables (de_etf_*, de_mf_*, de_index_*, delivery, etc.)
+    land in `foundation_staging` immediately (no conflict). Moving the EXISTING `atlas.*` outputs is a
+    deliberate, validated **consolidation pass** — the immutable gate `validate_lenses.py` and ~26 code
+    refs point at `atlas.atlas_lens_scores_daily` etc., so the atom table is moved with a parity check +
+    a coordinated repoint AFTER the atom is locked (don't destabilize the just-greened atom mid-flight).
+    End-state: nothing in `atlas` or `public.de_*`; everything in `foundation_staging`.
+
+- **D22b (FM) — classify + NAME tables by role.** `raw_*` for direct external feeds (prices, NAV,
+  holdings, filings, masters) — MANDATORY; `ref_*` masters, `derived_*` computed, `cfg_*` config,
+  `ops_*` pipeline state — recommended, naming "optional" per FM. Full mapping in
+  `scripts/loops/data_catalog.md` (the source of truth). NEW + brought-in tables follow it now; EXISTING
+  tables rename via backward-compat VIEWS in a sequenced pass after the atom lock (non-breaking). Apply
+  to the INSTRUMENT/stock tables too (ohlcv_stock→raw_equity_ohlcv, technical_daily→derived_technical_daily,
+  atom→derived_lens_scores_daily, …), not just the roll-up tables. **Scope reality:** v4 uses ~30 real
+  tables; the `atlas` schema's other ~125 tables (old/v6/strategy, mostly empty) + the `public.de_*`
+  legacy (incl. empty yearly partitions) are OUT of v4 scope and part of the environment-clearing.
+- **Already native (no action):** `foundation_staging.{ohlcv_stock, instrument_master, index_prices,
+  technical_daily, financials_quarterly, financials_annual, lens_filings, lens_insider, lens_shareholding}`
+  + the `atlas.atlas_*` outputs — the clean foundation already replaces de_equity_ohlcv / de_instrument /
+  de_index_prices etc.
+- **Still borrowed from `public.de_*` → must be brought in (audit 2026-06-22):** `de_equity_ohlcv`
+  (delivery_pct — already the loopD migration), `de_etf_holdings`, `de_etf_ohlcv`, `de_etf_master`,
+  `de_index_constituents`, `de_index_master`, `de_mf_master`, `de_mf_holdings`, `de_mf_nav_daily`,
+  `de_sector_mapping` (already covered by instrument_master.sector + atlas_sector_master — verify),
+  `de_corporate_actions`, `de_global_prices`. (`de_trading_calendar` is NOT to be used — D9.)
+- **Method:** duplicate each into `foundation_staging` (copy as-is is acceptable per FM; clean-model later
+  if needed), repoint every code reference off `public.de_*`, validate row-parity, THEN the legacy env is
+  clearable. Mostly mechanical; runs as background migration jobs. The roll-up build (Loop B) reads the
+  LOCAL copies, never `public.de_*`. loopB_rollup_framework.md + loopD_delivery.md updated to reflect this.
+
+## 2026-06-22 — D21: Roll-up framework locked (on-read; weighting; sector-proxy; MF on existing de_mf_*).
+Design settled with FM for the sector→ETF/index→fund roll-ups (`loopB_rollup_framework.md`). Build the
+COMPUTE only after the atom is FINAL (delivery-% + sector-RS in); design is done now.
+- **Roll-ups are ON-READ too (extends D19):** a higher altitude's vector = weight-weighted average of
+  constituents' lens SUB-scores, composite via the same on-read function. NOT materialised — an atom
+  rebuild or weight edit flows up for free. Only per-altitude IC weights are persisted (learned, not derived).
+- **Weighting rule:** ETF/index/fund carry their OWN disclosed weights (`de_etf_holdings.weight`,
+  `de_index_constituents.weight_pct`, `de_mf_holdings.weight_pct`) → use them directly. Free-float cap
+  weighting (D15) is needed ONLY for the **sector** fold-up (members have no given weights). Equal-weight
+  stays a secondary "breadth view" toggle.
+- **D21a (FM) — sector weighting = proxy from the NSE sector-index constituent weights**
+  (`de_index_constituents` for the matching sector index) where one exists; equal-weight + breadth
+  elsewhere. Chosen over ingesting a free-float cap source because `tv_metrics.market_cap` units are
+  unreliable (D17) and the sector-index weights are already free-float-based and trustworthy. Ships now.
+- **D21b (FM) — mutual funds build on the existing `de_mf_*` tables NOW** (1,359 funds, 243K append-only
+  holdings with `instrument_id` look-through + `as_of_date`, daily NAV) — they already support
+  look-through, active-movement (MoM holdings delta), per-SEBI-category ranking vs Category Benchmark
+  (`primary_benchmark`), and NAV returns. Fold in the FM's Morningstar APIs later if they add depth;
+  do NOT block fund roll-up on them.
+- **Fund altitude (D18 carried):** universe = Regular plan · Equity · Growth option; recommend-not-advise;
+  rank WITHIN `category_name`; FULL sub-component transparency on the fund page; edge = look-through +
+  active-movement; fund IC calibrated PER category. ETF IC: use an ETF price/NAV series if available,
+  else inherit the tracked-index IC as a proxy (open item 2).
+
+## 2026-06-22 — D20: Loop C closed ON-READ; DB statement_timeout root-cause fixed; lens_filings indexed.
+- **On-read gate repoint DONE:** `validate_loopC.py` C6/C8 and the 3 composite-dependent pytest tests now
+  compute the composite/coverage **on-read** from stored sub-scores × live DB weights (never the
+  vestigial/stale stored composite column, which is 0/60-reconciling at recent dates). C6 asserts the
+  on-read composite computes, is weight-sensitive, and tracks the DB (IC-learned) weights not the
+  hard-coded defaults; C8 computes coverage on-read (early 0.628 < late 0.955) + a scan-free no-source
+  invariant. `validate_lenses --check A` = **GREEN 12/12** on the 3.9M-row journal.
+- **Root-cause found + fixed (the "gate is slow/timing out" saga):** Supabase's pooler multiplexes
+  physical backends per-transaction, so `_db.py`'s connect-time `SET statement_timeout` only stuck to
+  ONE backend — sibling checkouts fell back to the **2-minute role default** (proven: fresh checkouts
+  alternated 10min/2min; a `pg_sleep(130)` died at exactly 120.0s). Invisible until Loop C grew the
+  journal 7× (276→1854 dates = 3.9M rows) so heavy gate aggregates crossed 2 min. **Fix:** `_db.read_df`
+  /`scalar` now run each query in one transaction with `SET LOCAL statement_timeout` (pooler-proof,
+  configurable via `ATLAS_STMT_TIMEOUT_MS`, default 20 min) — verified every checkout now reports 20min.
+  No gate logic or data touched. This also de-risks the delivery rebuild + every future recalibration.
+- **lens_filings(instrument_id) index added** (CONCURRENTLY, 2.2s) — the immutable gate's catalyst checks
+  were scanning the 297 MB index-less table twice (~224s each → ~11 min run); near-instant now.
+- **Gate hygiene lesson:** run the heavy full-table gates (`validate_lenses --check A`, `validate_loopC
+  --mode full`) SOLO — concurrent full scans contend and trip the per-query budget (it was self-inflicted
+  contention, not bloat: the journal is only 1.1% dead tuples, VACUUMed 2026-06-22 03:00).
+
 ## 2026-06-22 — D19: Composite is ON-READ (not materialized); next data enrichment = delivery % via a tmux goal-loop.
 - **Composite/conviction/coverage are computed ON READ** from the stored lens sub-scores × the live
   `atlas_thresholds` weights — NOT stored. Proven: a full date's composites compute in **0.075s** in

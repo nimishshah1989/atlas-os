@@ -1,10 +1,33 @@
 # Atlas v4 six-lens — HANDOFF / STATE (for the next session)
 
-## ⭐ RESUME HERE (Loop C is 95% done — finish it ON-READ, ~20 min)
-**DONE + safe in the DB:** lens sub-scores rebuilt PIT (1854 dates × 2093), both blockers
-fixed, RS defect fixed, IC calibrated, learned weights LIVE in `atlas_thresholds`
-(technical 0.32 / catalyst 0.26 / flow 0.22 / fundamental 0.20; policy=0 FYI-only) +
-`atlas_signal_weights` (20 active rows) + `atlas_signal_ic` (21 rows). All code committed.
+## ⭐ RESUME HERE (2026-06-22 — Loop C ON-READ done + green; next = FAST gate + consolidation + delivery + roll-ups)
+**DONE this session (committed):**
+- **On-read repoint complete + GREEN.** `validate_loopC` C6/C8 + 3 pytest tests compute composite/coverage
+  ON-READ from stored sub-scores × live DB weights (never the stale stored composite). `validate_lenses
+  --check A` = **GREEN 12/12**; `pytest atlas/lenses` = **30 passed**; C6/C8 individually green.
+- **Root-caused + fixed the "gate is slow/timing-out" bug:** Supabase's pooler resets the connect-time
+  `SET statement_timeout`, so most `_db` queries silently got the **2-min role default** (proven: a
+  pg_sleep(130) died at 120.0s). Fixed `_db.read_df/scalar` → per-transaction `SET LOCAL` (20-min,
+  `ATLAS_STMT_TIMEOUT_MS`). Added `lens_filings(instrument_id)` index (catalyst checks were scanning a
+  297MB index-less table twice). validate_lenses --check A 11min→faster.
+- **PERF lesson (FM, important):** the gates were SLOW because of a chatty-DB antipattern (per-row scalar
+  loops + repeated server-side GROUP BYs over the REMOTE pooler), NOT the data. Proven: loading the whole
+  3.9M-row journal ONCE via COPY = 54.7s, then C1 time-variance vectorized in pandas = **3.26s**. The full
+  validate_loopC was ~35min for what is ~1min of load-once-vectorize. **NEXT: rewrite validate_loopC (+ IC
+  + roll-ups) to load-once-then-vectorize** (one bulk COPY → in-memory numpy/pandas; cache to local parquet
+  for instant re-runs). This is the standing performance discipline.
+
+**FM DIRECTIVES THIS SESSION (see DECISIONS D19–D23):**
+- D21 roll-up framework locked (on-read; sector=NSE-sector-index-weight proxy; MF on existing de_mf_*).
+- D22 ONE self-contained environment = `foundation_staging`; no cross-env reads; bring/duplicate every
+  borrowed `public.de_*` table in; raw_/derived_ naming (data_catalog.md). NAMING deferred (D-latest).
+- D23 GO-LIVE SEQUENCE: make v4 live+accurate FIRST → **replicate (NOT rebuild) the current Atlas frontend**
+  onto v4 behind `NEXT_PUBLIC_LENS_V4` → validate numbers → go live → retire old Atlas → THEN clear tables.
+  **Clear NOTHING now.**
+
+**Older context (still true):** lens sub-scores rebuilt PIT (1854 dates × 2093), both blockers fixed, RS
+defect fixed, IC calibrated, learned weights LIVE in `atlas_thresholds` (technical 0.32 / catalyst 0.26 /
+flow 0.22 / fundamental 0.20; policy=0 FYI-only) + `atlas_signal_weights` (20 active) + `atlas_signal_ic` (21).
 
 **The one decision that ends the saga: composite is ON-READ, NOT materialized.** Proven:
 computing every stock's composite for a date = **0.075s** in pandas (`compute_composite` over
