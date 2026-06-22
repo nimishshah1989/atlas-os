@@ -35,6 +35,7 @@ MIRRORS = [
     ("atlas.atlas_sector_master", "atlas_sector_master", []),
     ("atlas.atlas_signal_weights", "atlas_signal_weights", []),
     ("atlas.atlas_signal_ic", "atlas_signal_ic", []),
+    ("atlas.atlas_market_regime_daily", "atlas_market_regime_daily", [["date"]]),  # Page-1 regime state
 ]
 JOURNAL_SRC = "atlas.atlas_lens_scores_daily"
 JOURNAL_FS = "atlas_lens_scores_daily"
