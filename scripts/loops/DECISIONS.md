@@ -7,9 +7,11 @@ new dated entry that supersedes it.
 ---
 
 ## 2026-06-22 — D27: SCORING METHODOLOGY (FM) — per-dimension DECILES + LEADERSHIP-BREADTH, not the cap-weighted composite.
-**FM call, validated by data.** The single composite score is hard to interpret and (at roll-up altitudes)
-actively misleading. Replace the *headline* with a decile + leadership framing; keep the IC-composite only
-as one optional sort.
+**FM call. The decile/leadership framing is the better DISPLAY at every altitude (interpretable, honest,
+transparent) — that stands on its own. As a PREDICTOR it is altitude-dependent (see evidence below): better
+than the composite at the fund level, no better at the sector level.** The single composite score is hard to
+interpret and (at the fund roll-up) actively misleading. Replace the *headline* with a decile + leadership
+framing; keep the IC-composite only as one optional sort.
 - **Instrument level:** each lens shown as a cross-sectional **decile D1-D10** (rank-based: robust, scale-free,
   comparable across time) + a **leadership badge = how many of the 4 conviction lenses (technical/fundamental/
   catalyst/flow) are TOP-DECILE** (top-decile in all 4 = a genuine multi-factor leader). Valuation = its own
@@ -19,12 +21,20 @@ as one optional sort.
 - **Roll-ups (fund/sector/ETF):** headline = **LEADERSHIP BREADTH** = the weight/% of constituents that are
   top-decile leaders (top-decile in >=2 lenses), NOT a cap-weighted composite average. Plus active-movement
   (is the manager adding leaders MoM).
-- **Evidence (same 6 recent fund snapshots):** cap-weighted composite fund IC = -0.21/-0.24 (60/90d,
+- **Evidence — FUND (6 recent snapshots, ~1 regime):** cap-weighted composite fund IC = -0.21/-0.24 (60/90d,
   actively negative); **leadership-breadth fund IC = +0.016/+0.007 (POSITIVE)** — the decile/leadership
-  framing FLIPS the sign. Honest caveats: small recent sample (5 snaps), so +0.016 is weakly positive, not
-  strong — leadership-breadth is honest + non-misleading + interpretable, not a magic predictor. (Evidence
-  scripts inline; supersedes the 'composite is the headline' assumption in D19/D21 for the PRODUCT surface.
-  The on-read composite + IC weights still exist as one sortable signal.)
+  framing FLIPS the sign. Theoretically sensible (funds ARE bottom-up stock-pickers). Honest caveat: tiny
+  recent sample, so +0.016 is *suggestive, not proven* — weakly positive, not strong.
+- **Evidence — SECTOR (90 monthly sessions, 7.5y, ALL regimes):** cap-weighted composite sector IC =
+  -0.006/-0.025/-0.039 (1m/3m/6m); **leadership-breadth sector IC = -0.011/-0.061/-0.057** — *both* mildly
+  contrarian; counting leaders does NOT manufacture a sector-rotation predictor. Well-sampled = a real
+  finding (consistent w/ D25): high-leadership sectors slightly mean-revert; sector TIMING is not predicted
+  by bottom-up stock leadership.
+- **Synthesis:** leadership-breadth is the right FRAME everywhere, a better METRIC than the composite where it
+  can be (funds), and honestly NOT a sector-timing signal. Roll-ups lead with TRANSPARENCY (per D26), not a
+  timing claim; the fund predictive hint is revisited when historical holdings exist. (Evidence scripts
+  inline; supersedes the 'composite is the headline' assumption in D19/D21 for the PRODUCT surface. The
+  on-read composite + IC weights still exist as one sortable signal.)
 - **Why it works:** cap-weighting + averaging washes out the leaders (a few mega-caps dominate; the average
   is a momentum proxy that mean-reverts); COUNTING genuine multi-factor leaders preserves the signal and is
   legible. This is the methodology for the product surface (instrument page + roll-up pages + the 2x2).
