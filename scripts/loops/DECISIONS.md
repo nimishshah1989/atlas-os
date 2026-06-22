@@ -28,6 +28,14 @@ new dated entry that supersedes it.
   sector roll-up as a DESCRIPTIVE view (the vectors/breadth/dispersion are correct + useful) and not a
   rotation predictor. The roll-up DATA is sound; only the predictive conviction at the sector altitude
   is unproven.
+- **FM hypothesis tested (derive a sector from its SECTOR ETF — the exact index basket — for tighter
+  benchmark alignment):** `test_sector_via_etf.py` over 15 sectors with a clean tracking ETF =
+  **−0.006 (1m) / −0.025 (3m) / −0.039 (6m)** — NOT stronger; mildly CONTRARIAN, worsening with horizon.
+  **Conclusion: the atom is a stock-SELECTION signal (stock composite IC +0.034 @6m — picks the right
+  stocks), NOT a sector-TIMING signal** (rotation is macro/flow-driven; strongest sectors have already
+  run → mild mean-reversion). Bottom-up selection alpha ≠ top-down sector-timing alpha. → Sector roll-up
+  stays a DESCRIPTIVE view; the atom's edge is leveraged at the FUND altitude (does a fund hold the right
+  STOCKS, where IC should be POSITIVE). Recommend proceeding to the fund roll-up (D18).
 
 ## 2026-06-22 — D24: Delivery-% accumulation lands; Flow IC ~4×'d; Flow is now the top lens (atom FINAL inputs).
 The agreed atom-input enrichment (D19) is built, validated, and recalibrated on COMPLETE data.
