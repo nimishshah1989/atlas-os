@@ -6,6 +6,29 @@ new dated entry that supersedes it.
 
 ---
 
+## 2026-06-22 — D25: Roll-ups Phase 1 — sector roll-up built (free-float from ETF holdings); rotation IC weak → sectors need own calibration.
+- **Sector taxonomy (FM):** merged Telecom (5 names) → Media → **21 actionable sectors**.
+- **Free-float weighting source (FM: "proper weights or free-float"):** every in-DB candidate failed
+  (de_index_constituents weights NULL, tv_metrics.market_cap inconsistent 47-96× off, shares_outstanding
+  empty; Screener market_cap is reliable but per-stock scraping is flaky + throttled at ~2000 scale).
+  **SOLUTION (already local, no fetch): the index-ETF holding weights ARE free-float-cap weights** —
+  `public.de_etf_holdings` for the Angel One Nifty Total Market ETF (750) + Motilal Nifty 500 (501) +
+  size-index ETFs; verified HDFCBANK 6% / RELIANCE 5% = the NIFTY 500 free-float weights. Covers the
+  ~795 investable names; the micro-cap tail (not in any broad ETF) has ~0 free-float weight (correctly
+  ~excluded from cap-weighting, still counted in breadth). `rollup_sectors.py` `_weights()` uses it.
+- **Sector roll-up built (`rollup_sectors.py` → `foundation_staging.sector_lens_daily`, 21×1854 = 38,934
+  rows in 68s):** free-float-weighted 6-lens vector + per-lens breadth (% members ≥60) + dispersion;
+  composite ON-READ (sub-scores × DB lens weights). Load-once COPY + vectorized.
+- **Sector IC (`calibrate_sectors.py`) — HONEST negative result:** cross-sectional sector-rotation IC
+  (does the composite rank which sector outperforms its NSE index) = **+0.008 (1m), +0.003 (3m),
+  −0.007 (6m)** — essentially uncorrelated. The bottom-up composite with STOCK lens weights does NOT
+  predict sector rotation. This is the D15 thesis confirmed: **each altitude needs its OWN IC** — sector
+  rotation is macro/flow-driven, not an average of stock conviction. **Open (FM):** (a) calibrate
+  sector-specific lens weights / use the breadth-momentum 2×2 as the rotation signal, or (b) treat the
+  sector roll-up as a DESCRIPTIVE view (the vectors/breadth/dispersion are correct + useful) and not a
+  rotation predictor. The roll-up DATA is sound; only the predictive conviction at the sector altitude
+  is unproven.
+
 ## 2026-06-22 — D24: Delivery-% accumulation lands; Flow IC ~4×'d; Flow is now the top lens (atom FINAL inputs).
 The agreed atom-input enrichment (D19) is built, validated, and recalibrated on COMPLETE data.
 - **New input — delivery % accumulation (Flow lens).** `foundation_staging.delivery_daily` (own table,
