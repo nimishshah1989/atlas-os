@@ -6,6 +6,29 @@ new dated entry that supersedes it.
 
 ---
 
+## 2026-06-22 — D27: SCORING METHODOLOGY (FM) — per-dimension DECILES + LEADERSHIP-BREADTH, not the cap-weighted composite.
+**FM call, validated by data.** The single composite score is hard to interpret and (at roll-up altitudes)
+actively misleading. Replace the *headline* with a decile + leadership framing; keep the IC-composite only
+as one optional sort.
+- **Instrument level:** each lens shown as a cross-sectional **decile D1-D10** (rank-based: robust, scale-free,
+  comparable across time) + a **leadership badge = how many of the 4 conviction lenses (technical/fundamental/
+  catalyst/flow) are TOP-DECILE** (top-decile in all 4 = a genuine multi-factor leader). Valuation = its own
+  decile (cheap->expensive), shown openly, not a hidden multiplier. Every lens drills down to its
+  sub-components + the actual evidence (the corporate action driving catalyst, the rising delivery ratio
+  driving flow accumulation, etc.) — Atlas is a research/transparency tool, not a 'buy this' oracle.
+- **Roll-ups (fund/sector/ETF):** headline = **LEADERSHIP BREADTH** = the weight/% of constituents that are
+  top-decile leaders (top-decile in >=2 lenses), NOT a cap-weighted composite average. Plus active-movement
+  (is the manager adding leaders MoM).
+- **Evidence (same 6 recent fund snapshots):** cap-weighted composite fund IC = -0.21/-0.24 (60/90d,
+  actively negative); **leadership-breadth fund IC = +0.016/+0.007 (POSITIVE)** — the decile/leadership
+  framing FLIPS the sign. Honest caveats: small recent sample (5 snaps), so +0.016 is weakly positive, not
+  strong — leadership-breadth is honest + non-misleading + interpretable, not a magic predictor. (Evidence
+  scripts inline; supersedes the 'composite is the headline' assumption in D19/D21 for the PRODUCT surface.
+  The on-read composite + IC weights still exist as one sortable signal.)
+- **Why it works:** cap-weighting + averaging washes out the leaders (a few mega-caps dominate; the average
+  is a momentum proxy that mean-reverts); COUNTING genuine multi-factor leaders preserves the signal and is
+  legible. This is the methodology for the product surface (instrument page + roll-up pages + the 2x2).
+
 ## 2026-06-22 — D26: Fund IC negative on available data; roll-ups don't carry the atom's edge -> roll-ups = TRANSPARENCY, atom = the predictor.
 - **Fund IC test (`test_fund_ic.py`):** holdings-weighted atom composite vs forward fund NAV return,
   cross-sectional across ~1300 equity funds. **IC = -0.12 (30d), -0.21 (60d), -0.24 (90d)** — strongly
