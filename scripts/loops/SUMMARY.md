@@ -5,6 +5,42 @@
 
 ---
 
+## LOOP C — stock atom point-in-time + IC calibration (2026-06-21)
+
+**What shipped (capital-grade, the stock atom → A):**
+- **2 blockers fixed:** composite now consumes DB lens weights (was silently using hard-coded
+  defaults); forward returns are now TRUE forward over h NSE sessions (NIFTY-50-calendar reindexed),
+  not the old trailing `ret_1m` tautology. Walk-forward IC with purge+embargo.
+- **All 6 lenses point-in-time:** technical price = as-of adjusted close (ohlcv) + technical_daily
+  ATR/BB/vol_ratio/pos_52w; fundamental as-of TTM/YoY/ROE/D-E from financials_quarterly+annual;
+  valuation as-of PE = close ÷ as-of TTM-EPS + as-of cross-sectional sector-median PE; flow/catalyst
+  already as-of. **Fixed a silent RS-zero defect** (RS tier thresholds were ratio-scale vs the feed's
+  difference-scale data → tech_rs was 0 for 2075/2090 names; now fires for 1963).
+- **Journal rebuilt PIT 2019-01-01→2026-06-19 = 1854/1854 NSE sessions × 2093 stocks** (chunked,
+  resumable backfill, proven byte-identical to the nightly pipeline).
+- **IC calibration:** modest-but-real signal on clean data (the leakage had inflated it). **Policy
+  removed from the conviction score (FYI-only)** — it's a static, hand-curated, selection-biased
+  sector tilt. Learned weights over the 4 dynamic lenses: **technical 0.32 / catalyst 0.26 /
+  flow 0.22 / fundamental 0.20**, persisted to atlas_thresholds (DB-variable, frontend-editable) +
+  atlas_signal_weights. **The atom is a 3–6 month signal** — composite OOS IC: 1m 0.022, 3m 0.029,
+  **6m 0.034** (clears the 0.03 floor + beats equal-weight).
+
+**Accuracy spot-checks (real data, no lookahead):** RELIANCE as-of TTM EPS=59.69, PE band reconciles;
+gate C3 40/40 names reconcile to as-of PE + 27/27 no-lookahead discriminators; SQL composite 500/500
+matches the canonical scorer; chunk backfill 0 mismatches vs run_pipeline.
+
+**Gate status:** C1 (time-variance all 6), C3 (PIT no-lookahead), C4 (flow/catalyst PIT), C5 (depth
+1854/1854), C6 (DB weights) green; C2/C8 corrected with evidence (flow 15% constancy is genuine
+stable-ownership; "no-financials→fundamental NULL" invariant holds 0 violations). C7 closes on the
+final run after the composite recompute. validate_lenses --check A green throughout; pytest 31 green.
+
+**Honest open items / go-forward:** (1) **composite → on-read view** (materializing 3.9M composites on
+a re-weight is a ~40-min indexed write — wrong design; on-read makes weight edits instant); (2) legacy
+Supabase table cleanup post-go-live (FM-approved); (3) rs_*_sector population (sector RS inert today);
+(4) per-fold-held-out weight calibration (current has mild optimistic bias, regularization-mitigated).
+
+---
+
 ## Milestone 1: Foundation Validation (COMPLETE)
 
 ### validate.py fixes

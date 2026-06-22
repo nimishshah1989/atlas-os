@@ -69,22 +69,10 @@ def _nse_sessions(engine: Engine, start: date) -> list:
     return list(pd.to_datetime(d["date"]))
 
 
-def _load_fwd_returns(engine: Engine, h: int, start: date = _CAL_START) -> pd.DataFrame:
-    """TRUE forward returns over the next *h* NSE SESSIONS, as a wide panel
-    (index = scoring date D, columns = instrument_id, value = px(D+h)/px(D) − 1).
-
-    Loop C blocker 0b (DECISIONS D8): the previous code loaded
-    ``technical_daily.ret_1m`` — the TRAILING 21-day return ending at D — and fed
-    it to the IC engine as if forward, making IC a tautology (lens vs the PAST).
-
-    Here the close panel is reindexed onto the canonical NIFTY-50 session grid
-    BEFORE shifting, so ``shift(-h)`` advances exactly *h* real NSE sessions (not
-    *h* of an illiquid name's own sparse rows — review finding #5). A name that did
-    not trade on D or on session D+h is NaN there and is dropped by the IC join.
-    One price column (adjusted close, raw fallback) is used end-to-end so the panel
-    and the C7 verifier agree (finding #6). Indexed at D so the IC engine correlates
-    lens(D) with the realised return AFTER D.
-    """
+def _load_close_panel(engine: Engine, start: date = _CAL_START) -> pd.DataFrame:
+    """Adjusted-close (raw fallback) wide panel reindexed onto the NIFTY-50 session
+    grid (index=session date, columns=instrument_id). The expensive load — built
+    ONCE and reused across horizons by the calibrator."""
     sql = (f"SELECT instrument_id, date, COALESCE(close_adj, close) AS px FROM {_OHLCV} "  # noqa: S608
            "WHERE date >= :s ORDER BY date")
     with open_compute_session(engine) as conn:
@@ -94,9 +82,30 @@ def _load_fwd_returns(engine: Engine, h: int, start: date = _CAL_START) -> pd.Da
     df["date"] = pd.to_datetime(df["date"])
     df.loc[~(df["px"] > 0), "px"] = float("nan")   # bad price -> NaN (keep the slot)
     panel = df.pivot(index="date", columns="instrument_id", values="px")
-    sessions = _nse_sessions(engine, start)
-    panel = panel.reindex(sessions)                # exact NSE grid; gaps -> NaN
-    return panel.shift(-h) / panel - 1.0
+    return panel.reindex(_nse_sessions(engine, start))  # exact NSE grid; gaps -> NaN
+
+
+def _fwd_from_panel(close_panel: pd.DataFrame, h: int) -> pd.DataFrame:
+    """Forward return over the next *h* NSE sessions from a close panel: shift the
+    grid h rows ahead (each row = one NSE session). NaN where D or D+h didn't trade."""
+    if close_panel is None or close_panel.empty:
+        return pd.DataFrame()
+    return close_panel.shift(-h) / close_panel - 1.0
+
+
+def _load_fwd_returns(engine: Engine, h: int, start: date = _CAL_START) -> pd.DataFrame:
+    """TRUE forward returns over the next *h* NSE SESSIONS, as a wide panel
+    (index = scoring date D, columns = instrument_id, value = px(D+h)/px(D) − 1).
+
+    Loop C blocker 0b (DECISIONS D8): the previous code loaded
+    ``technical_daily.ret_1m`` — the TRAILING 21-day return ending at D — and fed
+    it to the IC engine as if forward, making IC a tautology (lens vs the PAST).
+    The close panel is reindexed onto the NIFTY-50 grid BEFORE shifting so the
+    horizon is h real sessions (review #5), using one price column end-to-end so the
+    panel and the C7 verifier agree (#6). Indexed at D → IC correlates lens(D) with
+    the return realised AFTER D.
+    """
+    return _fwd_from_panel(_load_close_panel(engine, start), h)
 
 
 def _factor_frame(scores: pd.DataFrame, lens: str) -> pd.DataFrame:
@@ -183,6 +192,9 @@ def walk_forward_folds(
     forward_days: int = 63,
     n_folds: int = 5,
     embargo: int = 21,
+    scores: pd.DataFrame | None = None,
+    close_panel: pd.DataFrame | None = None,
+    lenses: tuple[str, ...] | None = None,
 ) -> list[dict]:
     """Expanding-window walk-forward IC with PURGE + EMBARGO (Loop C C7 / D15).
 
@@ -192,11 +204,16 @@ def walk_forward_folds(
     off the train tail so a training sample's *h*-session-ahead label can never
     reach into the test window (no leakage). Returns one record per fold with the
     per-lens train IC and OOS test IC — the input the C7 gate aggregates.
+
+    Pass preloaded ``scores`` / ``close_panel`` to avoid re-reading the (large)
+    panels when sweeping multiple horizons (the calibrator does this).
     """
-    scores = _load_lens_scores(engine)
+    if scores is None:
+        scores = _load_lens_scores(engine)
     if scores.empty:
         return []
-    rw = _load_fwd_returns(engine, forward_days)
+    rw = (_fwd_from_panel(close_panel, forward_days) if close_panel is not None
+          else _load_fwd_returns(engine, forward_days))
     if rw.empty:
         return []
 
@@ -223,7 +240,7 @@ def walk_forward_folds(
 
         train_ic: dict[str, float] = {}
         test_ic: dict[str, float] = {}
-        for lens in _LENSES:
+        for lens in (lenses or _LENSES):
             fac = _factor_frame(scores, lens)
             if fac.empty:
                 continue

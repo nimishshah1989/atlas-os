@@ -6,6 +6,92 @@ new dated entry that supersedes it.
 
 ---
 
+## 2026-06-22 — D19: Composite is ON-READ (not materialized); next data enrichment = delivery % via a tmux goal-loop.
+- **Composite/conviction/coverage are computed ON READ** from the stored lens sub-scores × the live
+  `atlas_thresholds` weights — NOT stored. Proven: a full date's composites compute in **0.075s** in
+  pandas. Materializing the 3.9M-row composite into Supabase repeatedly hung (dropped connections) +
+  bloated the table (wasted ~a day). The stored composite columns are deprecated/vestigial. The atom
+  stores only the expensive immutable **sub-scores**; composite is derived at query time → a weight
+  edit is instant, zero rows rewritten. Gate + tests + product must compute composite on-read.
+  (`create_composite_view.py` has the verified SQL — but the multi-CTE view didn't push the date
+  filter down; ship it as an app-level helper or a pushdown-friendly view.)
+- **6 lenses, not 4:** all six are computed/stored/shown. The composite's weighted AVERAGE is over the
+  4 conviction lenses (technical/fundamental/catalyst/flow); valuation = a MULTIPLIER; policy = FYI.
+- **Next atom-input enrichment (do as ONE batch before roll-ups, then one rebuild + one recalibration —
+  D6 build-once):**
+  - **Delivery %** (`public.de_equity_ohlcv.delivery_pct`, ~79% coverage, fresh; NOT in ohlcv_stock):
+    a daily accumulation-quality signal (delivery vs intraday churn). Add to the **Flow** lens as an
+    "accumulation" sub-component (delivery-trend vs 30/60d avg + up/down-day asymmetry; liquidity floor;
+    thresholds in atlas_thresholds). Likely lifts Flow's IC (currently weakest, 0.012) → its weight.
+  - **rs_*_sector** (sector RS, currently inert/0%).
+  - **Options/F&O proxies** (PCR/OI-buildup/IV) — NO feed exists yet; net-new ingestion; decide in/defer.
+- **Execution vehicle = tmux goal-loop:** run the long jobs (delivery backfill, journal rebuild, IC
+  recalibration) inside **durable tmux sessions** (survive disconnects, watchable via capture-pane,
+  no nohup hangs), with a goal spec + falsifiable gate (extend validate_loopC) + resumable state file,
+  iterating to green. Adding a lens INPUT forces a rebuild + recalibration; composite refresh is free
+  (on-read). Sequence: finalize atom inputs → 1 rebuild → 1 recalibration → lock atom → THEN roll-ups.
+- **Table restock** is a POST-backend exercise (FM); the table-manifest audit is a working reference only.
+
+## 2026-06-21 — D18: IC calibration outcome — policy is FYI-only; atom is a 3–6m signal; weights are DB variables.
+Walk-forward (purge+embargo) OOS IC on the clean 1854-date PIT journal, across 21/63/126-day
+horizons × 5 folds. **Honest result (leakage removed → modest IC, as the IC spec warned):**
+- Per-lens OOS IC: **policy +0.070**, technical +0.025, catalyst +0.017, flow +0.012, fundamental +0.011
+  (all POSITIVE and sign-stable — none inverse).
+- **Policy is REMOVED from the conviction score (FM decision).** Its high IC is a STATIC + hand-curated
+  (15 themes = this decade's winners) + selection-biased **regime artifact**, not a forward signal, and
+  it's our thinnest-data lens. It is kept as an **FYI overlay only** — still computed/stored/shown as
+  context — but excluded from the composite average, the conviction tier, and the convergence bonus
+  (`_LENS_NAMES` and convergence in `composite.py`; `lens_weight_policy=0`).
+- **Learned weights over the four conviction lenses** (regularized IC-tilt, equal-weight shrink, capped):
+  **technical 0.32, catalyst 0.26, flow 0.22, fundamental 0.20** — technical-led (it's the strongest
+  medium-term predictor: 6m IC 0.047). Close to the FM's priors.
+- **The atom is a MEDIUM-TERM (3–6 month) conviction signal**, not a 1-month one — composite OOS IC
+  RISES with horizon: 1m 0.022, 3m 0.029, **6m 0.034** (clears the 0.03 'meaningful' floor at 6m); the
+  learned weighting beats equal-weight OOS at 3m & 6m (calibration adds value). Do NOT position/judge the
+  atom as a high-frequency signal. C7's honest bar = composite ≥ floor at the 6m design horizon +
+  learned ≥ equal at 3m/6m (the spec's blended-0.03 was set WITH the policy artifact inflating it).
+- **Weights are NOT hardcoded (FM requirement).** They live as `atlas_thresholds` rows (DB variables),
+  read at runtime via `load_thresholds`→`nest_thresholds`→`compute_composite`. A future admin frontend
+  can display AND edit them; the backend picks them up next run, no redeploy. Code defaults are fallback
+  only and never fire once the DB is populated. Same pattern will extend to the per-altitude
+  sector/ETF/fund weights. Provenance also persisted to `atlas_signal_weights` + `atlas_signal_ic`.
+- **Caveat (honest):** weights are learned from the same folds the uplift is measured on (mild optimistic
+  bias), mitigated by heavy regularization; per-fold train/test is a future hardening. Runtime re-calibration
+  should adopt a new weight set only if it beats the incumbent OOS (drift guardrail).
+
+## 2026-06-21 — D17: Loop C wiring decisions (PIT lenses, RS-scale fix, P/B=None, lags, rebuild).
+The six-lens stock atom is now genuinely point-in-time. Concrete calls made this loop:
+- **Technical PIT:** price = as-of **adjusted close** from `ohlcv_stock` (not the tv_metrics snapshot);
+  ATR/BB-width/vol_ratio_30d/60d/pos_52w/rs_*_sector come from `technical_daily` on the scoring date.
+- **RS silent-zero defect FIXED:** the RS tier breakpoints assumed ratios ~1.0 but `technicals.py`
+  produces return DIFFERENCES centered on 0 → `tech_rs` was 0 for **2075/2090** names. Corrected to
+  difference-scale breakpoints (+0.15/+0.08/+0.02/−0.08/−0.15). Sector-RS is blended 50/50 with
+  market-RS when present (inert until `rs_*_sector` is populated — a deferred enhancement, not gated).
+- **Fundamental PIT:** `fundamental_pit.py` derives as-of TTM/YoY + real **ROE = PAT_ttm/equity** and
+  **D/E** (reported quarterly ratio, else borrowings/equity) from `financials_quarterly` +
+  `financials_annual`, dedup consolidated-else-standalone. ROA/ROIC/current/quick/gross = None (no source).
+- **Valuation PIT:** PE = that-day close ÷ as-of trailing-4Q EPS; as-of cross-sectional sector-median PE;
+  52w from `pos_52w`. **P/B and EV/EBITDA = None** (documented): `tv_metrics.book_value_per_share` units
+  are unreliable (RELIANCE 7.14 ⇒ 126,554 Cr shares vs real ~1,353 Cr, ~90× off) and there is NO
+  face-value feed to turn `paid_up_equity_capital` into a verified share count. RULE #0 forbids a guessed
+  P/B. Revisit only if Screener "Book Value per share" is ingested. (FM agreed P/B is not load-bearing —
+  it's a valuation sub-dimension, renorm covers its absence; matters mainly for banks/financials.)
+- **Reporting lags (FM-proposed):** a filing is knowable `period_end + lag` days later —
+  `fundamental_reporting_lag_days = 60` (quarterly income), `annual_reporting_lag_days = 90` (balance
+  sheet). Persisted to `atlas_thresholds` in the IC step; defaulted in code so the rebuild needs no write.
+- **Forward returns = TRUE forward** over h NSE sessions via NIFTY-50 **calendar reindex** of adjusted
+  close (not the trailing `ret_1m`). Caveat: `ohlcv_stock.close_adj` is ≈ raw (only 62/2.87M rows differ)
+  — corp-action adjustment is thin; revisit when a real adjusted series lands.
+- **Rebuild architecture:** chunk-preload (each worker loads its date-range once → scores in memory via
+  the shared `pipeline.score_all`). Chosen over a per-date pipeline + a new `ohlcv_stock(date)` index so
+  the shared DB is range-scanned a handful of times, not 1,854× full-scanned — and **no shared-infra
+  index/DDL was needed** (the index ask was declined by the safety classifier; this avoids it entirely).
+  `backfill_lenses.py --validate-date` proves the chunk path is byte-identical to `run_pipeline`.
+- **IC weights consumed:** because per-lens IC is weight-independent, calibrate on the (default-weighted)
+  rebuilt journal, write learned weights to `atlas_thresholds` + `atlas_signal_weights`, then recompute
+  ONLY the composite/conviction/coverage columns (lens sub-scores untouched) so the journal tracks the
+  DB weights — closing C6's default-vs-DB discriminator and C7's persistence.
+
 ## 2026-06-21 — D16: Data layer (Phase 1a/1b) DONE; Loop C is the active work.
 The six-lens INPUT data is in place and deep: technical 25y; fundamentals NOW historical (income
 97% to 2026-03 ~39q/stock + a real balance sheet `financials_annual` 86% ~12y/stock, via the

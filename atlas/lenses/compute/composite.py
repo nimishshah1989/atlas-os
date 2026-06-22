@@ -22,8 +22,16 @@ _Q2 = Decimal("0.01")
 _ZERO = Decimal(0)
 _HUNDRED = Decimal(100)
 
-_LENS_NAMES = ("technical", "fundamental", "catalyst", "flow", "policy")
+# Conviction-forming lenses (weighted average). POLICY is deliberately EXCLUDED
+# (Loop C, FM decision): it is a STATIC, hand-curated, selection-biased sector tilt
+# (15 themes = this decade's winners), so it is kept as an FYI overlay only — still
+# computed/stored and shown as context, but it does NOT drive the composite,
+# conviction tier, or convergence. Valuation is also not here — it acts as a
+# multiplier, not an averaged lens.
+_LENS_NAMES = ("technical", "fundamental", "catalyst", "flow")
 _ALL_LENS_NAMES = ("technical", "fundamental", "valuation", "catalyst", "flow", "policy")
+# Lenses excluded from the convergence count (FYI / modifier, not conviction drivers).
+_NON_CONVICTION = frozenset({"policy", "valuation"})
 
 BREAKPOINTS: dict[str, list[tuple[int, int]]] = {
     "technical":   [(0, 0), (15, 25), (30, 50), (45, 70), (60, 85), (80, 95), (100, 100)],
@@ -53,11 +61,10 @@ def _rescale(raw: float, breakpoints: list[tuple[int, int]]) -> float:
 
 
 _DEFAULT_WEIGHTS: dict[str, float] = {
-    "technical": 0.20,
-    "fundamental": 0.20,
-    "catalyst": 0.25,
-    "flow": 0.25,
-    "policy": 0.10,
+    "technical": 0.222,
+    "fundamental": 0.222,
+    "catalyst": 0.278,
+    "flow": 0.278,
 }
 
 _DEFAULT_CONVERGENCE = {
@@ -179,7 +186,8 @@ def compute_composite(
 
     # Step 3: convergence bonus
     conv_threshold = conv_cfg.get("threshold", 40)
-    converging = sum(1 for v in rescaled.values() if float(v) >= conv_threshold)
+    converging = sum(1 for lens, v in rescaled.items()
+                     if lens not in _NON_CONVICTION and float(v) >= conv_threshold)
 
     if converging >= 4:
         conv_mult = conv_cfg.get("4plus", 1.15)
