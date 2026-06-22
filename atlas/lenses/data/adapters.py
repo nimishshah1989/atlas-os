@@ -83,11 +83,15 @@ def load_technical_data(engine: Engine, as_of: date) -> pd.DataFrame:
                t.rs_1m_n500, t.rs_3m_n500, t.rs_6m_n500, t.rs_12m_n500,
                t.rs_1m_sector, t.rs_3m_sector, t.rs_6m_sector, t.rs_12m_sector,
                t.atr_14, t.bb_width, t.vol_ratio_30d, t.vol_ratio_60d, t.pos_52w,
+               d.delivery_pct, d.delivery_avg_30d, d.delivery_avg_60d,
+               d.delivery_trend, d.delivery_updown_asym,
                COALESCE(o.close_adj, o.close) AS price_adj,
                o.close AS close_raw, o.volume
         FROM foundation_staging.technical_daily t
         LEFT JOIN foundation_staging.ohlcv_stock o
           ON o.instrument_id = t.instrument_id AND o.date = t.date
+        LEFT JOIN foundation_staging.delivery_daily d
+          ON d.instrument_id = t.instrument_id AND d.date = t.date
         WHERE t.date = :dt
     """)
     with open_compute_session(engine) as conn:
@@ -286,7 +290,7 @@ def write_lens_scores(
         "fund_profitability", "fund_margin", "fund_growth", "fund_balance_sheet", "fund_op_leverage",
         "val_pe_vs_sector", "val_absolute_pe", "val_pb", "val_ev_ebitda", "val_52w_position",
         "cat_earnings_strategy", "cat_capital_action", "cat_governance",
-        "flow_promoter", "flow_institutional", "flow_smart_money",
+        "flow_promoter", "flow_institutional", "flow_smart_money", "flow_accumulation",
         "policy_tailwind",
         "composite", "conviction_tier", "valuation_zone", "valuation_multiplier",
         "smart_money_score", "degradation_score",

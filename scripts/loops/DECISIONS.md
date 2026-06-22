@@ -6,6 +6,37 @@ new dated entry that supersedes it.
 
 ---
 
+## 2026-06-22 — D24: Delivery-% accumulation lands; Flow IC ~4×'d; Flow is now the top lens (atom FINAL inputs).
+The agreed atom-input enrichment (D19) is built, validated, and recalibrated on COMPLETE data.
+- **New input — delivery % accumulation (Flow lens).** `foundation_staging.delivery_daily` (own table,
+  LEFT-joined into the daily frame; delivery feeds ONLY Flow, NOT the technical score — FM-clarified):
+  raw delivery_pct + 30/60d averages + up/down-day asymmetry, PIT (trailing windows ≤ D), computed
+  vectorized (load-once COPY + groupby-rolling; the slow per-group transform-lambda was replaced).
+  Coverage 2019-09-30→2026-06-19, 2.27M rows, 99% with a 30d avg. Source `public.de_equity_ohlcv`; the
+  standard CM bhavcopy carries NO delivery, so the missing 2026-04-07→06-19 (~50 sessions, feed was
+  stale) were fetched from NSE **sec_bhavdata_full** (`fetch_delivery.py`) — 101,915 rows filled. "Can't
+  run IC on incomplete data" (FM) — so the feed was completed BEFORE recalibration.
+- **Accumulation sub-component is MEDIUM-TERM (matches Flow's cadence + the 3-6m horizon — FM point):**
+  it reads SMOOTHED quantities (this-month avg vs prior-2-month avg + month-long up/down asymmetry), NOT
+  today's raw delivery, so Flow stays a slow conviction signal that merely fills the gap between
+  quarterly shareholding updates. Composite weights promoter/smart/accumulation, renormalised over
+  PRESENT sub-components (delivery-absent names keep the prior 70/30 exactly; RULE #0 None below the
+  liquidity floor = no 30d-avg). Thresholds in `atlas_thresholds` (DB-editable). `flow_accumulation`
+  stored per row (full sub-component transparency, D18).
+- **Journal rebuilt PIT 2019-01-01→2026-06-19** with delivery (1854/1854 dates; accumulation fires for
+  95% of names on a recent session). Then **recalibrated on the delivery-enriched journal**:
+  - **Flow OOS IC 0.0058 → 0.0232 (~4×), sign-stability 1.00** (every one of 15 folds positive). Flow
+    went from the WEAKEST conviction lens to nearly the strongest (technical 0.0252).
+  - **Learned weights (persisted to `atlas_thresholds` + `atlas_signal_weights`): flow 0.302 (now the
+    HIGHEST), technical 0.279, catalyst 0.231, fundamental 0.188** (policy/valuation 0). Composite OOS
+    IC 0.0317 > equal-weight 0.0287 (calibration still adds value).
+  - Composite stays ON-READ (D19): `calibrate_loopC --commit` was fixed to persist weights + IC ONLY,
+    NOT re-materialise the 3.9M composite column (which the on-read path ignores). Caveat: the --commit
+    IC-sweep guard skipped re-writing `atlas_signal_ic` (saw recent pre-delivery rows); the load-bearing
+    WEIGHTS are correct, the per-row IC provenance table lags — refresh on a future cleared-state run.
+- **C9 gate added** to `validate_loopC` (delivery populated + PIT-reconciled to source + accumulation
+  fires/None-not-0 + Flow weight elevated). Atom FINAL once C1-C9 + check A + pytest green.
+
 ## 2026-06-22 — D23: GO-LIVE SEQUENCE (FM) — make v4 live+accurate FIRST; replicate (not rebuild) the frontend; clear tables DEAD LAST.
 **Decision (FM, sequencing — overrides any urge to clean up early):**
 1. **Clear NOTHING now.** No table drops until the very end. The keep/crap audit (D22/data_catalog) is a

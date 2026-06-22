@@ -260,15 +260,25 @@ def score_all(
             filings = cat_by_iid.get(iid, [])
             cat_result = score_catalyst(filings, dt, th) if filings else None
 
-            # Flow (already as-of via load_flow_data).
+            # Flow (already as-of via load_flow_data; delivery-% accumulation comes from
+            # the technical frame t, which carries the as-of delivery signals).
             insider_txns = insider_by_iid.get(iid, [])
             sh_records = sh_by_iid.get(iid, [])
             sh_current = sh_records[0] if len(sh_records) >= 1 else None
             sh_previous = sh_records[1] if len(sh_records) >= 2 else None
             bulk_deals = bulk_by_iid.get(iid, [])
+            delivery = None
+            if t is not None and _to_float(t.get("delivery_avg_30d")) is not None:
+                delivery = {
+                    "delivery_pct": _to_float(t.get("delivery_pct")),
+                    "delivery_avg_30d": _to_float(t.get("delivery_avg_30d")),
+                    "delivery_avg_60d": _to_float(t.get("delivery_avg_60d")),
+                    "delivery_trend": _to_float(t.get("delivery_trend")),
+                    "delivery_updown_asym": _to_float(t.get("delivery_updown_asym")),
+                }
             flow_result = score_flow(
-                insider_txns, sh_current, sh_previous, bulk_deals, th,
-            ) if (insider_txns or sh_current or bulk_deals) else None
+                insider_txns, sh_current, sh_previous, bulk_deals, th, delivery=delivery,
+            ) if (insider_txns or sh_current or bulk_deals or delivery) else None
 
             pol_result = score_policy(row.get("sector"), row.get("industry"), policies, th)
 
@@ -338,7 +348,7 @@ def _build_result(
         "cat_capital_action": _g(cr, "capital_action"), "cat_governance": _g(cr, "governance"),
         # Flow sub
         "flow_promoter": _g(flr, "promoter"), "flow_institutional": _g(flr, "institutional"),
-        "flow_smart_money": _g(flr, "smart_money"),
+        "flow_smart_money": _g(flr, "smart_money"), "flow_accumulation": _g(flr, "accumulation"),
         # Policy sub
         "policy_tailwind": _g(pr, "tailwind"),
         # Composite & meta

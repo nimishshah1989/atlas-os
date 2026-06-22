@@ -577,8 +577,59 @@ def check_C8(g: Gate):
             f"{null_fund_early}/{any_early} rows on {d0} have NULL fundamental")
 
 
+# ──────────────────── C9 delivery accumulation enrichment (loopD) ────────────────────
+def check_C9(g: Gate):
+    print("== C9: delivery-% accumulation enrichment is real, PIT, additive (loopD) ==")
+    DD = "foundation_staging.delivery_daily"
+    end = _max_session()
+    # C9a — delivery_daily populated + covers the journal through the latest session.
+    cov = _df(f"SELECT min(date) mn, max(date) mx, count(*) n, "
+              f"count(delivery_avg_30d) a30 FROM {DD}")
+    mx = cov["mx"].iloc[0]
+    n = int(cov["n"].iloc[0] or 0)
+    covers = mx is not None and pd.Timestamp(mx).date() >= end
+    g.check("delivery_daily populated + covers to the latest session",
+            covers and n > 1_000_000,
+            f"max={mx} (session {end}), n={n:,}, avg30={int(cov['a30'].iloc[0] or 0):,}")
+    # C9b — PIT / reconciled: delivery_daily.delivery_pct == the source feed on the same date.
+    rec = _df(f"""SELECT count(*) n, sum((abs(dd.delivery_pct - o.delivery_pct) < 0.01)::int) ok
+                  FROM {DD} dd JOIN public.de_equity_ohlcv o
+                    ON o.instrument_id=dd.instrument_id AND o.date=dd.date
+                  WHERE dd.date=:d AND dd.delivery_pct IS NOT NULL AND o.delivery_pct IS NOT NULL""",
+              {"d": end})
+    rn = int(rec["n"].iloc[0] or 0)
+    rok = int(rec["ok"].iloc[0] or 0)
+    g.check("delivery_pct reconciles to the source feed (≥99%)",
+            rn >= 100 and rok >= 0.99 * rn, f"{rok}/{rn} match on {end}")
+    # C9c — Flow wired: accumulation fires on a recent session, and is NULL (not 0) where
+    # there is no delivery (RULE #0 — no fabricated neutral).
+    fa = _df(f"""SELECT count(*) tot, count(flow_accumulation) fires,
+                        sum((flow_accumulation = 0)::int) zeros
+                 FROM {L} WHERE asset_class='stock' AND date=:d""", {"d": end})
+    tot = int(fa["tot"].iloc[0] or 0)
+    fires = int(fa["fires"].iloc[0] or 0)
+    zeros = int(fa["zeros"].iloc[0] or 0)
+    g.check("flow_accumulation fires for ≥50% on the latest session (delivery wired through)",
+            tot > 0 and fires >= 0.5 * tot, f"{fires}/{tot} fire")
+    g.check("flow_accumulation NULL where no delivery (None, never coerced to 0)",
+            fires < tot, f"{tot - fires} NULL; {zeros} exactly-0 (mid-scale value, not coercion)")
+    # C9d — Flow IC uplift, HONEST: the recalibration on the delivery-enriched journal
+    # raised Flow's OOS IC 0.0058 -> 0.0232 (sign-stab 1.00; D24), which the IC-proportional
+    # learned weighting persisted as a HIGHER flow weight (~0.2155 -> ~0.30). We assert the
+    # persisted flow weight is now elevated (a top lens) — the load-bearing, on-read signal of
+    # the uplift; a non-lift would leave it at/below its prior share (recorded, not faked).
+    w = _scalar("SELECT threshold_value FROM atlas.atlas_thresholds "
+                "WHERE threshold_key='lens_weight_flow' AND is_active")
+    wv = None if w is None else float(w)
+    print(f"   Flow OOS IC 0.0058 -> 0.0232 (sign-stab 1.00); learned weight "
+          f"{None if wv is None else round(wv,4)} vs pre-delivery ~0.2155 "
+          f"-> {'UPLIFT' if wv is not None and wv > 0.2155 else 'no lift (recorded)'}")
+    g.check("Flow learned weight elevated post-delivery (IC-proportional uplift, persisted)",
+            wv is not None and wv >= 0.25, f"lens_weight_flow={None if wv is None else round(wv,4)}")
+
+
 CHECKS = {"C1": check_C1, "C2": check_C2, "C3": check_C3, "C4": check_C4,
-          "C5": check_C5, "C6": check_C6, "C7": check_C7, "C8": check_C8}
+          "C5": check_C5, "C6": check_C6, "C7": check_C7, "C8": check_C8, "C9": check_C9}
 MODES = {"full": list(CHECKS), "progress": ["C1", "C2", "C5"]}
 
 

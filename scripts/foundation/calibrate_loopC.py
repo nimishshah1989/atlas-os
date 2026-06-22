@@ -321,11 +321,10 @@ def main() -> None:
         print(f"\n  IC rows already persisted ({existing_ic}) — skipping IC sweep.")
     print("  persisting weights (atlas_signal_weights + atlas_thresholds)…")
     persist_weights(eng, weights, stats, as_of)
-    th = nest_thresholds({k: (float(v) if isinstance(v, Decimal) else v)
-                          for k, v in load_thresholds(engine=eng).items()})
-    print("  recomputing journal composites with learned weights…", flush=True)
-    recompute_composites(eng, th, commit=True)
-    print("  ✅ committed.")
+    # Composite is ON-READ (D19) — NOT materialised. We persist the learned weights + IC
+    # only; the composite/conviction/coverage reflect them at query time, so there is no
+    # 3.9M-row rewrite (that repeatedly hung + bloated Supabase — the abandoned design).
+    print("  ✅ committed (weights + IC persisted; composite is on-read, not materialised).")
 
 
 if __name__ == "__main__":

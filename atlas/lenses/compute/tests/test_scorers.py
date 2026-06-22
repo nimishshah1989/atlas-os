@@ -225,6 +225,43 @@ class TestCatalyst:
         assert pos >= 15, f"only {pos}/20 filing-rich names scored catalyst>0"
 
 
+# ════════════════════════════ FLOW ACCUMULATION (delivery %) ════════════════════════════
+class TestFlowAccumulation:
+    """Delivery-% accumulation sub-component on REAL delivery_daily rows (loopD)."""
+
+    def test_accumulation_fires_on_real_delivery(self, engine):
+        from atlas.lenses.compute.flow import score_flow
+        rows = pd.read_sql(
+            "SELECT delivery_pct, delivery_avg_30d, delivery_avg_60d, delivery_updown_asym "
+            "FROM foundation_staging.delivery_daily "
+            "WHERE delivery_avg_30d IS NOT NULL AND delivery_avg_60d IS NOT NULL "
+            "ORDER BY date DESC LIMIT 60", engine).to_dict("records")
+        assert len(rows) >= 20, "expected real delivery rows with a 30d/60d average"
+        fired = 0
+        for r in rows:
+            delivery = {k: (float(v) if v is not None and pd.notna(v) else None) for k, v in r.items()}
+            res = score_flow([], None, None, [], {}, delivery=delivery)
+            if res.accumulation is not None:
+                assert 0 <= float(res.accumulation) <= 100
+                fired += 1
+        assert fired >= 0.9 * len(rows), f"accumulation fired only {fired}/{len(rows)}"
+
+    def test_accumulation_none_below_liquidity_floor(self, engine):
+        # REAL rows with a delivery print but no 30d average yet (insufficient history /
+        # illiquid) -> accumulation None (the liquidity floor), never a fabricated stub.
+        from atlas.lenses.compute.flow import score_flow
+        rows = pd.read_sql(
+            "SELECT delivery_pct, delivery_avg_30d, delivery_avg_60d, delivery_updown_asym "
+            "FROM foundation_staging.delivery_daily "
+            "WHERE delivery_pct IS NOT NULL AND delivery_avg_30d IS NULL LIMIT 20",
+            engine).to_dict("records")
+        assert rows, "expected real rows below the 30d-average floor"
+        for r in rows:
+            delivery = {k: (float(v) if v is not None and pd.notna(v) else None) for k, v in r.items()}
+            res = score_flow([], None, None, [], {}, delivery=delivery)
+            assert res.accumulation is None
+
+
 # ════════════════════════════ COMPOSITE ════════════════════════════
 class TestComposite:
     def test_consumes_db_weights(self, journal, th):

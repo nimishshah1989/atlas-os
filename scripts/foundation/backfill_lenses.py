@@ -91,11 +91,16 @@ def _process_chunk(chunk_dates: list[date]) -> dict:
     def rd(sql, p):
         return _db.read_df(sql, p)
 
-    techd = rd("""SELECT instrument_id, symbol, asset_class, ema_21, ema_50, ema_200,
-                    rsi_14, ret_1w, rs_1m_n500, rs_3m_n500, rs_6m_n500, rs_12m_n500,
-                    rs_1m_sector, rs_3m_sector, rs_6m_sector, rs_12m_sector,
-                    atr_14, bb_width, vol_ratio_30d, vol_ratio_60d, pos_52w, date
-                  FROM foundation_staging.technical_daily WHERE date BETWEEN :s AND :e""",
+    techd = rd("""SELECT t.instrument_id, t.symbol, t.asset_class, t.ema_21, t.ema_50, t.ema_200,
+                    t.rsi_14, t.ret_1w, t.rs_1m_n500, t.rs_3m_n500, t.rs_6m_n500, t.rs_12m_n500,
+                    t.rs_1m_sector, t.rs_3m_sector, t.rs_6m_sector, t.rs_12m_sector,
+                    t.atr_14, t.bb_width, t.vol_ratio_30d, t.vol_ratio_60d, t.pos_52w,
+                    d.delivery_pct, d.delivery_avg_30d, d.delivery_avg_60d,
+                    d.delivery_trend, d.delivery_updown_asym, t.date
+                  FROM foundation_staging.technical_daily t
+                  LEFT JOIN foundation_staging.delivery_daily d
+                    ON d.instrument_id = t.instrument_id AND d.date = t.date
+                  WHERE t.date BETWEEN :s AND :e""",
               {"s": cstart, "e": cend})
     ohlcv = rd("""SELECT instrument_id, date, close_adj, close, volume
                   FROM foundation_staging.ohlcv_stock WHERE date BETWEEN :s AND :e""",
