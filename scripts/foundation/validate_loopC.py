@@ -26,10 +26,12 @@ The eight assertions (see scripts/loops/loopC_atom_complete.md):
 from __future__ import annotations
 
 import argparse
+import io
 import sys
 from datetime import date, timedelta
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 import _db
@@ -111,6 +113,40 @@ def _onread_ctx():
     return _ONREAD["cc"], _ONREAD["nest"], _ONREAD["th"], _ONREAD["flat"]
 
 
+# LOAD-ONCE: the structural checks (C1/C2/C5) pull the entire stock journal in a SINGLE
+# bulk COPY (the fast path — ~55s for 3.9M rows over the remote pooler) and then compute
+# everything VECTORIZED in pandas (~3s), instead of issuing repeated server-side GROUP BYs
+# (each a fresh full-table scan + network round-trip). One transfer, not dozens.
+_JOURNAL_DF: pd.DataFrame | None = None
+
+
+def _journal_stock() -> pd.DataFrame:
+    """Entire stock journal (instrument_id, date, 6 lens sub-scores), loaded once via COPY."""
+    global _JOURNAL_DF
+    if _JOURNAL_DF is None:
+        raw = _db.engine().raw_connection()
+        try:
+            buf = io.StringIO()
+            raw.cursor().copy_expert(
+                f"COPY (SELECT instrument_id, date, technical, fundamental, valuation, "
+                f"catalyst, flow, policy FROM {L} WHERE asset_class='stock') "
+                "TO STDOUT WITH CSV HEADER", buf)
+            buf.seek(0)
+            _JOURNAL_DF = pd.read_csv(buf, parse_dates=["date"])
+        finally:
+            raw.close()
+    return _JOURNAL_DF
+
+
+def _vary_counts(df: pd.DataFrame, lens: str) -> tuple[int, int, int]:
+    """(pop, vary, stamped) for instruments with >5 non-null `lens` rows — vectorized."""
+    sub = df.loc[df[lens].notna(), ["instrument_id", lens]]
+    agg = sub.groupby("instrument_id")[lens].agg(n="size", d="nunique")
+    elig = agg[agg["n"] > 5]
+    pop = len(elig)
+    return pop, int((elig["d"] > 1).sum()), int((elig["d"] == 1).sum())
+
+
 def _onread_composite(cc, r, thr):
     """CompositeResult computed on-read from a journal row's stored sub-scores × `thr`."""
     def f(v):
@@ -137,24 +173,16 @@ class Gate:
 
 # ───────────────────────────── C1 time-variance ─────────────────────────────
 def check_C1(g: Gate):
-    print("== C1: within-instrument time-variance, all six lenses ==")
+    print("== C1: within-instrument time-variance, all six lenses (in-memory) ==")
+    df = _journal_stock()
     for lens, floor in C1_FLOORS.items():
-        r = _df(f"""
-            WITH t AS (
-              SELECT instrument_id, count(*) n, count(DISTINCT {lens}) d
-              FROM {L} WHERE asset_class='stock' AND {lens} IS NOT NULL
-              GROUP BY 1 HAVING count(*) > 5)
-            SELECT count(*) pop, sum((d>1)::int) vary FROM t""")
-        pop = int(r["pop"].iloc[0] or 0)
-        vary = int(r["vary"].iloc[0] or 0)
+        pop, vary, _ = _vary_counts(df, lens)
         frac = vary / pop if pop else 0.0
         g.check(f"{lens} varies ≥{floor:.0%}", frac >= floor,
                 f"{vary}/{pop} = {frac:.0%}")
     # policy is structural — assert it is (correctly) static, not a leak masquerading as signal
-    pr = _df(f"""WITH t AS (SELECT instrument_id, count(DISTINCT policy) d FROM {L}
-                 WHERE asset_class='stock' AND policy IS NOT NULL GROUP BY 1 HAVING count(*)>5)
-                 SELECT count(*) pop, sum((d>1)::int) vary FROM t""")
-    pol_frac = (int(pr["vary"].iloc[0] or 0) / int(pr["pop"].iloc[0] or 1))
+    ppop, pvary, _ = _vary_counts(df, "policy")
+    pol_frac = pvary / ppop if ppop else 0.0
     g.check("policy is structural (static by design)", pol_frac <= 0.05,
             f"{pol_frac:.0%} vary (expected ~0)")
 
@@ -173,15 +201,9 @@ def check_C2(g: Gate):
     # is 20% (still an order of magnitude below the ~100% snapshot-leak it replaced),
     # NOT a weakened bar — a feed-appropriate one. (Loop C C2; evidence in SUMMARY.)
     ceilings = {"fundamental": 0.05, "valuation": 0.05, "flow": 0.20}
+    df = _journal_stock()
     for lens, ceil in ceilings.items():
-        r = _df(f"""
-            WITH t AS (
-              SELECT instrument_id, count(*) n, count(DISTINCT {lens}) d
-              FROM {L} WHERE asset_class='stock' AND {lens} IS NOT NULL
-              GROUP BY 1 HAVING count(*) > 5)
-            SELECT count(*) pop, sum((d=1)::int) stamped FROM t""")
-        pop = int(r["pop"].iloc[0] or 0)
-        stamped = int(r["stamped"].iloc[0] or 0)
+        pop, _, stamped = _vary_counts(df, lens)
         frac = stamped / pop if pop else 1.0
         g.check(f"{lens} stamped < {ceil:.0%}", frac < ceil, f"{stamped}/{pop} = {frac:.1%}")
 
@@ -282,34 +304,29 @@ def check_C4(g: Gate):
 
 # ───────────────────────────── C5 depth ─────────────────────────────
 def check_C5(g: Gate):
-    print("== C5: depth — every NIFTY-50 session scored (runtime-derived), ≥80% deep ==")
+    print("== C5: depth — every NIFTY-50 session scored (in-memory), ≥80% deep ==")
     end = _max_session()
     sess = _sessions(START, end)
     nsess = len(sess)
-    jdates = _df(f"SELECT DISTINCT date FROM {L} WHERE asset_class='stock' "
-                 "AND date>=:s AND date<=:e", {"s": START, "e": end})
-    njournal = len(jdates)
+    df = _journal_stock()
+    win = df[(df["date"] >= pd.Timestamp(START)) & (df["date"] <= pd.Timestamp(end))]
+    njournal = int(win["date"].nunique())
     g.check(f"journal distinct dates == NIFTY-50 sessions ({nsess}, runtime-derived)",
             njournal == nsess, f"journal={njournal} sessions={nsess}")
-    # per-instrument depth credited from first tradable session (late listings ok)
-    depth = _df(f"""
-        WITH first_seen AS (
-          SELECT instrument_id, min(date) f0 FROM {TD}
-          WHERE date>=:s AND date<=:e GROUP BY 1),
-        expected AS (
-          SELECT fs.instrument_id,
-                 (SELECT count(*) FROM {IDX} WHERE index_code='NIFTY 50'
-                    AND date>=fs.f0 AND date<=:e) exp_dates
-          FROM first_seen fs),
-        got AS (
-          SELECT instrument_id, count(DISTINCT date) g FROM {L}
-          WHERE asset_class='stock' AND date>=:s AND date<=:e GROUP BY 1)
-        SELECT count(*) pop,
-               sum((g.g >= 0.95*e.exp_dates)::int) deep
-        FROM expected e JOIN got g USING (instrument_id)
-        WHERE e.exp_dates > 0""", {"s": START, "e": end})
-    pop = int(depth["pop"].iloc[0] or 0)
-    deep = int(depth["deep"].iloc[0] or 0)
+    # got per instrument (in-memory). expected = # NIFTY-50 sessions on/after each
+    # instrument's first tradable session (from technical_daily — one server-side aggregate,
+    # 2,093 rows), vectorized via searchsorted. Late listings credited from their start.
+    got = win.groupby("instrument_id")["date"].nunique().rename("got")
+    first_seen = _df(f"SELECT instrument_id, min(date) f0 FROM {TD} "
+                     "WHERE date>=:s AND date<=:e GROUP BY 1", {"s": START, "e": end})
+    first_seen["instrument_id"] = first_seen["instrument_id"].astype(str)
+    sess_arr = np.array([np.datetime64(d) for d in sess])  # sorted NIFTY-50 sessions
+    f0 = pd.to_datetime(first_seen["f0"]).values.astype("datetime64[ns]")
+    first_seen["exp"] = len(sess_arr) - np.searchsorted(sess_arr, f0, side="left")
+    m = first_seen.set_index("instrument_id").join(got, how="inner")
+    m = m[m["exp"] > 0]
+    pop = len(m)
+    deep = int((m["got"] >= 0.95 * m["exp"]).sum())
     frac = deep / pop if pop else 0.0
     g.check("≥80% instruments scored on ≥95% of their tradable sessions",
             frac >= 0.80, f"{deep}/{pop} = {frac:.0%}")

@@ -6,6 +6,7 @@ weights to atlas_weight_proposals.
 """
 from __future__ import annotations
 
+import io
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -47,11 +48,29 @@ class WeightProposal:
 
 # -- data loaders -----------------------------------------------------------
 
+def _copy_df(engine: Engine, sql: str) -> pd.DataFrame:
+    """Bulk read via server-side COPY (CSV) — ~10-20x faster than read_sql for the
+    million-row IC loaders (one transfer vs row-by-row materialisation). `sql` is an
+    internal query, never user input. statement_timeout is raised in the SAME
+    transaction (pooler-proof) so a multi-million-row COPY can't hit the 2-min default.
+    """
+    raw = engine.raw_connection()
+    try:
+        cur = raw.cursor()
+        cur.execute("SET LOCAL statement_timeout = '1200000'")  # 20 min, in-txn
+        buf = io.StringIO()
+        cur.copy_expert(f"COPY ({sql}) TO STDOUT WITH CSV HEADER", buf)  # noqa: S608
+        raw.rollback()  # read-only — release the txn
+        buf.seek(0)
+        return pd.read_csv(buf)
+    finally:
+        raw.close()
+
+
 def _load_lens_scores(engine: Engine) -> pd.DataFrame:
     cols = ", ".join(_LENSES)
-    sql = f"SELECT instrument_id, date, {cols} FROM atlas.atlas_lens_scores_daily ORDER BY date"  # noqa: S608
-    with open_compute_session(engine) as conn:
-        df = pd.read_sql(text(sql), conn)
+    df = _copy_df(engine, f"SELECT instrument_id, date, {cols} "  # noqa: S608
+                  "FROM atlas.atlas_lens_scores_daily ORDER BY date")
     if df.empty:
         return df
     df["date"] = pd.to_datetime(df["date"])
@@ -73,13 +92,12 @@ def _load_close_panel(engine: Engine, start: date = _CAL_START) -> pd.DataFrame:
     """Adjusted-close (raw fallback) wide panel reindexed onto the NIFTY-50 session
     grid (index=session date, columns=instrument_id). The expensive load — built
     ONCE and reused across horizons by the calibrator."""
-    sql = (f"SELECT instrument_id, date, COALESCE(close_adj, close) AS px FROM {_OHLCV} "  # noqa: S608
-           "WHERE date >= :s ORDER BY date")
-    with open_compute_session(engine) as conn:
-        df = pd.read_sql(text(sql), conn, params={"s": start})
+    df = _copy_df(engine, f"SELECT instrument_id, date, COALESCE(close_adj, close) AS px "  # noqa: S608
+                  f"FROM {_OHLCV} WHERE date >= '{start.isoformat()}' ORDER BY date")
     if df.empty:
         return pd.DataFrame()
     df["date"] = pd.to_datetime(df["date"])
+    df["px"] = pd.to_numeric(df["px"], errors="coerce")
     df.loc[~(df["px"] > 0), "px"] = float("nan")   # bad price -> NaN (keep the slot)
     panel = df.pivot(index="date", columns="instrument_id", values="px")
     return panel.reindex(_nse_sessions(engine, start))  # exact NSE grid; gaps -> NaN
