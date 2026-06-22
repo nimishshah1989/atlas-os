@@ -6,6 +6,25 @@ new dated entry that supersedes it.
 
 ---
 
+## 2026-06-22 — D26: Fund IC negative on available data; roll-ups don't carry the atom's edge -> roll-ups = TRANSPARENCY, atom = the predictor.
+- **Fund IC test (`test_fund_ic.py`):** holdings-weighted atom composite vs forward fund NAV return,
+  cross-sectional across ~1300 equity funds. **IC = -0.12 (30d), -0.21 (60d), -0.24 (90d)** — strongly
+  NEGATIVE, worsening with horizon. **HEAVY CAVEAT:** de_mf_holdings only spans 6 monthly snapshots
+  (2026-01..05) — ONE regime, 5 usable points; the atom was validated over 1854 days. No historical
+  holdings exist to test other regimes. So this is INCONCLUSIVE on whether the fund composite is truly
+  contrarian vs a momentum-reversal-regime artifact (the atom tilts to technical/catalyst/accumulation =
+  'hot' names that mean-revert in a reversal window).
+- **Synthesis across both tested altitudes:** sector IC ~0/contrarian (D25) + fund IC negative -> rolling
+  the atom up does NOT produce a validated PREDICTOR. The atom's proven edge is STOCK SELECTION
+  (composite IC +0.034 @6m, 7.5y walk-forward). Bottom-up selection alpha does not transfer to top-down
+  sector-timing or fund-ranking on the data we have.
+- **Reframe (for FM decision):** build the roll-ups (sector / ETF / fund) as DESCRIPTIVE + TRANSPARENCY
+  tools — what's held, how the holdings score on the atom, fund active-movement (MoM holdings delta),
+  per-category context — which directly serves the D18 'recommend-not-advise + full sub-component
+  transparency' goal — and do NOT position the roll-up composite as an outperformance predictor (no
+  per-altitude IC claim) until historical holdings allow a real multi-regime test. The STOCK atom remains
+  the validated signal. test_sector_via_etf.py / test_fund_ic.py are the evidence.
+
 ## 2026-06-22 — D25: Roll-ups Phase 1 — sector roll-up built (free-float from ETF holdings); rotation IC weak → sectors need own calibration.
 - **Sector taxonomy (FM):** merged Telecom (5 names) → Media → **21 actionable sectors**.
 - **Free-float weighting source (FM: "proper weights or free-float"):** every in-DB candidate failed
