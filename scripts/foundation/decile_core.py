@@ -16,7 +16,7 @@ import pandas as pd
 
 import _db
 
-L = "atlas.atlas_lens_scores_daily"
+L = "foundation_staging.atlas_lens_scores_daily"   # canonical journal (D22 consolidated)
 CONV = ["technical", "fundamental", "catalyst", "flow"]   # feed leadership badge
 LENSES = CONV + ["valuation"]                              # valuation = own decile
 BROAD = "F00001PXO0"                                      # Nifty Total Market ETF (750)
@@ -31,7 +31,7 @@ def cap_bucket() -> pd.DataFrame:
              SELECT instrument_id, weight,
                     row_number() OVER (PARTITION BY instrument_id ORDER BY
                       CASE ticker WHEN :b1 THEN 1 WHEN :b2 THEN 2 ELSE 3 END, weight DESC) rn
-             FROM public.de_etf_holdings WHERE ticker IN (:b1, :b2) AND weight > 0)
+             FROM foundation_staging.de_etf_holdings WHERE ticker IN (:b1, :b2) AND weight > 0)
            SELECT instrument_id, weight FROM r WHERE rn = 1""",
         {"b1": BROAD, "b2": BROAD2})
     w["instrument_id"] = w["instrument_id"].astype(str)

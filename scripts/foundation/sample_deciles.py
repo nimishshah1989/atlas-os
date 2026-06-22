@@ -46,11 +46,11 @@ def run() -> None:
     print(lc.to_string())
 
     # fund leadership-breadth on the latest holdings snapshot (real funds)
-    snap = _db.scalar("SELECT max(as_of_date) FROM public.de_mf_holdings")
+    snap = _db.scalar("SELECT max(as_of_date) FROM foundation_staging.de_mf_holdings")
     leadmap = dict(zip(j["instrument_id"], j["lead2"].astype(float)))
     funds = _db.read_df(
         """SELECT m.fund_name, h.instrument_id, h.weight_pct
-           FROM public.de_mf_holdings h JOIN public.de_mf_master m USING (mstar_id)
+           FROM foundation_staging.de_mf_holdings h JOIN foundation_staging.de_mf_master m USING (mstar_id)
            WHERE h.as_of_date=:d AND h.instrument_id IS NOT NULL AND h.weight_pct>0
              AND m.broad_category='Equity' AND m.is_active
              AND (m.fund_name ILIKE '%%parag parikh flexi%%' OR m.fund_name ILIKE '%%nippon%%large cap%%'
