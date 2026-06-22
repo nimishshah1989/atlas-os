@@ -79,14 +79,14 @@ export async function getCurrentRegime(): Promise<MarketRegimeRow | null> {
   const rows = await sql<MarketRegimeRow[]>`
     WITH latest_full AS (
       SELECT *
-      FROM atlas.atlas_market_regime_daily
+      FROM foundation_staging.atlas_market_regime_daily
       WHERE pct_above_ema_50 IS NOT NULL
       ORDER BY date DESC
       LIMIT 1
     ),
     latest_any AS (
       SELECT *
-      FROM atlas.atlas_market_regime_daily
+      FROM foundation_staging.atlas_market_regime_daily
       ORDER BY date DESC
       LIMIT 1
     )
@@ -143,7 +143,7 @@ export async function getRegimeHistory(days: number): Promise<RegimeHistoryRow[]
       india_vix,
       nifty500_ema_50_slope,
       nifty500_ema_200_slope
-    FROM atlas.atlas_market_regime_daily
+    FROM foundation_staging.atlas_market_regime_daily
     WHERE date >= NOW() - (${days} || ' days')::INTERVAL
     ORDER BY date ASC
   `
