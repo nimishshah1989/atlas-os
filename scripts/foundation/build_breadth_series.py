@@ -19,24 +19,38 @@ TGT = "foundation_staging.breadth_nifty500_daily"
 SQL = f"""
 DROP TABLE IF EXISTS {TGT} CASCADE;
 CREATE TABLE {TGT} AS
-SELECT t.date,
-       count(*)                              AS n_members,
-       sum((t.above_ema_21)::int)            AS above_21,
-       sum((t.above_ema_50)::int)            AS above_50,
-       sum((t.above_ema_200)::int)           AS above_200,
-       sum((t.pos_52w >= 95)::int)           AS at_52w_high,   -- pos_52w is 0-100
-       sum((t.pos_52w <= 5)::int)            AS at_52w_low,
-       sum((t.pos_52w >= 95)::int)
-         - sum((t.pos_52w <= 5)::int)        AS net_new_highs,
-       round(avg(t.rsi_14)::numeric, 2)      AS avg_rsi_14,
-       round(avg(t.ret_3m)::numeric, 4)      AS avg_ret_3m
-FROM foundation_staging.technical_daily t
-JOIN foundation_staging.de_index_constituents c
-  ON c.instrument_id = t.instrument_id
- AND c.index_code = 'NIFTY 500'
- AND c.effective_to IS NULL
-WHERE t.asset_class = 'stock'
-GROUP BY t.date;
+WITH idx AS (
+  -- Nifty 500 INDEX price momentum (robust; avg-constituent ret_3m is outlier-skewed,
+  -- max ~2000% from microcaps). 63 trading sessions ~= 3 months.
+  SELECT date,
+         close AS idx_close,
+         close / NULLIF(lag(close, 63) OVER (ORDER BY date), 0) - 1 AS idx_ret_3m
+  FROM foundation_staging.index_prices
+  WHERE index_code = 'NIFTY 500'
+),
+breadth AS (
+  SELECT t.date,
+         count(*)                              AS n_members,
+         sum((t.above_ema_21)::int)            AS above_21,
+         sum((t.above_ema_50)::int)            AS above_50,
+         sum((t.above_ema_200)::int)           AS above_200,
+         sum((t.pos_52w >= 95)::int)           AS at_52w_high,   -- pos_52w is 0-100
+         sum((t.pos_52w <= 5)::int)            AS at_52w_low,
+         sum((t.pos_52w >= 95)::int)
+           - sum((t.pos_52w <= 5)::int)        AS net_new_highs,
+         round(avg(t.rsi_14)::numeric, 2)      AS avg_rsi_14
+  FROM foundation_staging.technical_daily t
+  JOIN foundation_staging.de_index_constituents c
+    ON c.instrument_id = t.instrument_id
+   AND c.index_code = 'NIFTY 500'
+   AND c.effective_to IS NULL
+  WHERE t.asset_class = 'stock'
+  GROUP BY t.date
+)
+SELECT b.*,
+       round(i.idx_close::numeric, 2)  AS idx_close,
+       round(i.idx_ret_3m::numeric, 4) AS idx_ret_3m
+FROM breadth b LEFT JOIN idx i ON i.date = b.date;
 ALTER TABLE {TGT} ADD PRIMARY KEY (date);
 """
 
@@ -46,7 +60,7 @@ def run() -> None:
     n = _db.scalar(f"SELECT count(*) FROM {TGT}")
     rng = _db.read_df(f"SELECT min(date) mn, max(date) mx FROM {TGT}")
     print(f"built {TGT}: {n} trading days, {rng.iloc[0]['mn']} .. {rng.iloc[0]['mx']}")
-    head = _db.read_df(f"SELECT date, n_members, above_21, above_50, above_200, net_new_highs, avg_rsi_14 "
+    head = _db.read_df(f"SELECT date, n_members, above_21, above_50, above_200, net_new_highs, avg_rsi_14, idx_ret_3m "
                        f"FROM {TGT} ORDER BY date DESC LIMIT 5")
     print(head.to_string(index=False))
 

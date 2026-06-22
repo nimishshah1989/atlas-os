@@ -19,10 +19,10 @@ import { getRegimeJourney12w, getTopConvictionCalls } from '@/lib/queries/v6/lan
 import { RegimeJourney12w } from '@/components/v6/landing/RegimeJourney12w'
 import { TodayConvictionTabs } from '@/components/v6/landing/TodayConvictionTabs'
 import { RegimeClassifierInputs } from '@/components/regime/RegimeClassifierInputs'
-// v4 lens — consolidated Regime+Pulse home
+// v4 lens — consolidated Regime+Pulse home (native breadth from foundation_staging)
 import { LENS_V4_ENABLED } from '@/lib/feature-flags'
-import { getIndiaPulsePage } from '@/lib/queries/v6/india_pulse'
-import { BreadthTable } from '@/components/v6/india-pulse/BreadthTable'
+import { getBreadthSeries } from '@/lib/queries/v6/breadth'
+import { BreadthCountCharts } from '@/components/regime/BreadthCountCharts'
 
 type SearchParams = Promise<{ range?: string }>
 
@@ -31,12 +31,12 @@ export default async function RegimePage({ searchParams }: { searchParams: Searc
   const historyRange = range as TimeRange
   const historyDays = rangeToDays(historyRange)
 
-  const [current, history, journey12w, convictionCalls, pulseData] = await Promise.all([
+  const [current, history, journey12w, convictionCalls, breadthSeries] = await Promise.all([
     getCurrentRegime(),
     getRegimeHistory(historyDays),
     getRegimeJourney12w(),
     getTopConvictionCalls(),
-    LENS_V4_ENABLED ? getIndiaPulsePage().catch(() => null) : Promise.resolve(null),
+    LENS_V4_ENABLED ? getBreadthSeries(10).catch(() => []) : Promise.resolve([]),
   ])
 
   if (!current) {
@@ -54,6 +54,7 @@ export default async function RegimePage({ searchParams }: { searchParams: Searc
   const { scorecard, worklist, leadingSectorNames } = await getRegimeScorecard(current.pct_above_ema_50)
 
   const deploymentPct = Math.round(parseFloat(current.deployment_multiplier) * 100)
+  const breadthLatest = breadthSeries.length ? breadthSeries[breadthSeries.length - 1] : null
 
   // leadingSectorNames = sectors that entered Overweight today (were not Overweight yesterday).
   // Empty list on days with no new entries — verdict renders without the sector clause.
@@ -67,7 +68,7 @@ export default async function RegimePage({ searchParams }: { searchParams: Searc
         deploymentPct={deploymentPct}
         leadingSectors={leadingSectors}
       />
-      <SignalScorecard data={scorecard} regime={current} />
+      <SignalScorecard data={scorecard} regime={current} breadth={LENS_V4_ENABLED ? breadthLatest : null} />
       <TodayWorklist data={worklist} />
 
       {/* Compact regime headline — unchanged */}
@@ -93,15 +94,8 @@ export default async function RegimePage({ searchParams }: { searchParams: Searc
 
       {LENS_V4_ENABLED ? (
         <>
-          {/* ── v4: Breadth table (merged from India Pulse) ── */}
-          {pulseData?.breadth_table && pulseData.breadth_table.length > 0 && (
-            <section className="px-6 py-6 border-b border-paper-rule">
-              <h2 className="font-sans text-xs font-medium text-ink-tertiary uppercase tracking-wider mb-4">
-                Market Breadth · Nifty 500
-              </h2>
-              <BreadthTable rows={pulseData.breadth_table} />
-            </section>
-          )}
+          {/* ── v4: native Nifty-500 breadth count charts (foundation_staging) ── */}
+          {breadthSeries.length > 0 && <BreadthCountCharts series={breadthSeries} />}
 
           {/* ── v4: 12-week regime journey (kept from v6) ── */}
           <RegimeJourney12w cells={journey12w} />

@@ -15,6 +15,7 @@
 import { InfoTooltip } from '@/components/ui/InfoTooltip'
 import { metric } from '@/lib/metric-registry'
 import type { MarketRegimeRow } from '@/lib/queries/regime'
+import type { BreadthRow } from '@/lib/queries/v6/breadth'
 
 export type ScorecardTile = {
   label: string
@@ -236,11 +237,58 @@ function buildParticipationTile(data: ScorecardData['participation'], r: MarketR
   }
 }
 
+// ─── v4 native tiles (from foundation_staging breadth series) ─────────────
+// markets-today-redesign spec B: Breadth shows absolute COUNTS above 21/50/200-EMA;
+// Momentum shows 3 indicators (N500 3M return, net new highs, RSI-14). Participation dropped.
+
+function buildBreadthCountsTile(b: BreadthRow): TileContent {
+  const n = b.n_members || 1
+  const p50 = b.above_50 / n
+  const signal: Signal = p50 >= 0.6 ? 'pos' : p50 >= 0.45 ? 'neutral' : 'neg'
+  const chip = p50 >= 0.6 ? 'broad' : p50 >= 0.45 ? 'mixed' : 'narrow'
+  const subs = [
+    { label: '> 21-EMA', value: `${b.above_21} / ${n}` },
+    { label: '> 50-EMA', value: `${b.above_50} / ${n}` },
+    { label: '> 200-EMA', value: `${b.above_200} / ${n}` },
+  ]
+  const commentary = signal === 'pos'
+    ? `${b.above_50} of ${n} Nifty-500 names hold above their 50-EMA — broad participation.`
+    : signal === 'neg'
+      ? `Narrow — only ${b.above_50} of ${n} above their 50-EMA.`
+      : 'Mixed — about half the index above its 50-EMA.'
+  return { primary: `${b.above_50}`, primarySub: `of ${n} > 50-EMA`, subs, signal, chip, commentary }
+}
+
+function buildMomentumNativeTile(b: BreadthRow): TileContent {
+  const ret3m = b.idx_ret_3m == null ? NaN : parseFloat(b.idx_ret_3m) // Nifty 500 INDEX 3m return
+  const rsi = b.avg_rsi_14 == null ? NaN : parseFloat(b.avg_rsi_14)
+  const nnh = b.net_new_highs
+  const signal: Signal = !Number.isFinite(rsi)
+    ? 'neutral'
+    : rsi >= 55 && nnh > 0 ? 'pos' : rsi >= 45 ? 'neutral' : 'neg'
+  const chip = nnh > 20 ? 'thrust up' : nnh > 0 ? 'rising' : nnh > -20 ? 'fading' : 'washout'
+  const subs: { label: string; value: string }[] = [
+    { label: 'Net new highs', value: `${nnh >= 0 ? '+' : ''}${nnh}` },
+  ]
+  if (Number.isFinite(rsi)) subs.push({ label: 'N500 RSI(14)', value: rsi.toFixed(0) })
+  if (Number.isFinite(nnh)) subs.push({ label: 'thrust', value: chip })
+  const commentary = signal === 'pos'
+    ? `Momentum firm — N500 +${(ret3m * 100).toFixed(1)}% / 3m, ${nnh} net new highs, RSI ${Number.isFinite(rsi) ? rsi.toFixed(0) : '?'}.`
+    : signal === 'neg'
+      ? 'Momentum weak — net new lows and soft RSI.'
+      : 'Momentum neutral — highs and lows roughly balanced.'
+  const primary = Number.isFinite(ret3m) ? `${ret3m >= 0 ? '+' : ''}${(ret3m * 100).toFixed(1)}%` : 'n/a'
+  return { primary, primarySub: 'Nifty 500 · 3M return', subs, signal, chip, commentary }
+}
+
 // ─── tile renderer ──────────────────────────────────────────────────────
 
 type Props = {
   data: ScorecardData
   regime: MarketRegimeRow
+  /** v4: when provided, render the 3-tile native scorecard (Trend + Breadth counts +
+   *  Momentum), sourced from foundation_staging. Absent → legacy 4-tile version. */
+  breadth?: BreadthRow | null
 }
 
 function buildContent(key: keyof ScorecardData, data: ScorecardData, regime: MarketRegimeRow): TileContent {
@@ -321,17 +369,24 @@ function ScorecardTileCard({
   )
 }
 
-export function SignalScorecard({ data, regime }: Props) {
+export function SignalScorecard({ data, regime, breadth }: Props) {
+  const native = breadth != null
   const tiles: Array<{
     key: keyof ScorecardData
     tile: ScorecardTile
     content: TileContent
-  }> = [
-    { key: 'trend',         tile: data.trend,         content: buildContent('trend', data, regime) },
-    { key: 'breadth',       tile: data.breadth,       content: buildContent('breadth', data, regime) },
-    { key: 'momentum',      tile: data.momentum,      content: buildContent('momentum', data, regime) },
-    { key: 'participation', tile: data.participation, content: buildContent('participation', data, regime) },
-  ]
+  }> = native
+    ? [
+        { key: 'trend',    tile: data.trend,    content: buildContent('trend', data, regime) },
+        { key: 'breadth',  tile: { ...data.breadth, label: 'Breadth' },   content: buildBreadthCountsTile(breadth!) },
+        { key: 'momentum', tile: { ...data.momentum, label: 'Momentum' }, content: buildMomentumNativeTile(breadth!) },
+      ]
+    : [
+        { key: 'trend',         tile: data.trend,         content: buildContent('trend', data, regime) },
+        { key: 'breadth',       tile: data.breadth,       content: buildContent('breadth', data, regime) },
+        { key: 'momentum',      tile: data.momentum,      content: buildContent('momentum', data, regime) },
+        { key: 'participation', tile: data.participation, content: buildContent('participation', data, regime) },
+      ]
 
   return (
     <div className="px-6 py-4 border-b border-paper-rule">
@@ -340,11 +395,12 @@ export function SignalScorecard({ data, regime }: Props) {
           Bottom-Up Signal Scorecard
         </div>
         <div className="font-sans text-[10px] text-ink-tertiary/60 mt-0.5">
-          Built from individual stock states — the engine&apos;s own breadth read.
-          Click any tile to jump to the detail section.
+          {native
+            ? 'Trend · Breadth (counts above EMA) · Momentum — Nifty 500, from the foundation.'
+            : 'Built from individual stock states — the engine’s own breadth read. Click any tile to jump to the detail section.'}
         </div>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${native ? 'lg:grid-cols-3' : 'lg:grid-cols-4'} gap-3`}>
         {tiles.map(({ key, tile, content }) => (
           <ScorecardTileCard key={key} tileKey={key} tile={tile} content={content} />
         ))}
