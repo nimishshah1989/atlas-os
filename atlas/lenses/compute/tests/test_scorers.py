@@ -36,7 +36,10 @@ from atlas.lenses.pipeline import score_all
 # A real NSE session (membership-validated by data/tests/test_calendar.py).
 D = date(2026, 6, 19)
 TOL = 0.1
-LENSES = ["technical", "fundamental", "valuation", "catalyst", "flow", "policy", "composite"]
+# Composite is ON-READ (D19) — NOT materialized; it is reconciled on-read in
+# TestComposite, never against the vestigial/stale stored `composite` column. The six
+# lens SUB-scores ARE materialized and reconcile end-to-end here.
+LENSES = ["technical", "fundamental", "valuation", "catalyst", "flow", "policy"]
 
 
 @pytest.fixture(scope="module")
@@ -225,9 +228,37 @@ class TestCatalyst:
 # ════════════════════════════ COMPOSITE ════════════════════════════
 class TestComposite:
     def test_consumes_db_weights(self, journal, th):
-        # The composite recomputed with the NESTED DB weights reconciles to the
-        # persisted composite, and perturbing a weight moves it (weights consumed).
-        sample = journal.dropna(subset=["composite", "technical", "catalyst"]).head(30)
+        # Composite is ON-READ (D19): computed from the stored lens SUB-scores × the live
+        # DB weights, never materialized. We assert the on-read compute is well-formed AND
+        # genuinely weight-sensitive (perturbing a weight MOVES it) — NOT that it matches
+        # the vestigial/stale stored `composite` column.
+        sample = journal.dropna(subset=["technical", "catalyst"]).head(30)
+        pth = {**th, "lens_weights": {**th["lens_weights"], "technical": 0.0, "catalyst": 0.5}}
+
+        def _comp(row, thr):
+            return compute_composite(
+                technical=_num(row["technical"]), fundamental=_num(row["fundamental"]),
+                valuation_score=_num(row["valuation"]), catalyst=_num(row["catalyst"]),
+                flow=_num(row["flow"]), policy=_num(row["policy"]),
+                valuation_multiplier=_num(row["valuation_multiplier"]) or 1.0,
+                smart_money_score=_num(row["smart_money_score"]) or 0.0,
+                degradation_score=_num(row["degradation_score"]) or 0.0, thresholds=thr)
+
+        moved = 0
+        for _iid, row in sample.iterrows():
+            base = _comp(row, th)
+            assert 0 <= float(base.final_score) <= 100
+            if abs(float(base.final_score) - float(_comp(row, pth).final_score)) > 0.5:
+                moved += 1
+        assert moved >= 0.6 * len(sample), f"only {moved}/{len(sample)} move on perturbation"
+
+    def test_tier_valid_and_coverage_tracks_lenses(self, journal, th):
+        # On-read (D19): compute composite/tier/coverage from the stored sub-scores × DB
+        # weights (never the stale stored columns). lenses_active counts the 4 CONVICTION
+        # lenses only (policy is FYI, valuation a multiplier), so its max is 4; coverage =
+        # sqrt(Σ present conviction-lens weights), so more lenses -> higher coverage.
+        sample = journal.dropna(subset=["technical"]).head(400)
+        out = []
         for _iid, row in sample.iterrows():
             r = compute_composite(
                 technical=_num(row["technical"]), fundamental=_num(row["fundamental"]),
@@ -236,15 +267,13 @@ class TestComposite:
                 valuation_multiplier=_num(row["valuation_multiplier"]) or 1.0,
                 smart_money_score=_num(row["smart_money_score"]) or 0.0,
                 degradation_score=_num(row["degradation_score"]) or 0.0, thresholds=th)
-            assert _match(r.final_score, row["composite"])
-
-    def test_tier_valid_and_coverage_tracks_lenses(self, journal):
-        comp = pd.to_numeric(journal["composite"], errors="coerce").dropna()
-        assert (comp >= 0).all() and (comp <= 100).all()
-        assert set(journal["conviction_tier"].dropna().unique()) <= {
+            out.append((r.lenses_active, float(r.coverage_factor),
+                        float(r.final_score), r.conviction_tier))
+        assert out, "need real journal rows to compute on-read"
+        assert all(0 <= fs <= 100 for _, _, fs, _ in out)
+        assert {tier for *_, tier in out} <= {
             "HIGHEST", "HIGH", "MEDIUM", "WATCH", "BELOW_THRESHOLD"}
-        sub = journal.dropna(subset=["lenses_active", "coverage_factor"])
-        hi = pd.to_numeric(sub[sub["lenses_active"] >= 5]["coverage_factor"], errors="coerce")
-        lo = pd.to_numeric(sub[sub["lenses_active"] <= 3]["coverage_factor"], errors="coerce")
-        if len(hi) and len(lo):
-            assert hi.mean() > lo.mean()
+        hi = [cf for la, cf, _, _ in out if la == 4]
+        lo = [cf for la, cf, _, _ in out if la <= 3]
+        if hi and lo:
+            assert sum(hi) / len(hi) > sum(lo) / len(lo)

@@ -23,6 +23,15 @@ from sqlalchemy.engine import Engine
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _ENV_FILE = _REPO_ROOT / "frontend" / ".env.local"
 
+# Per-query statement_timeout, applied as SET LOCAL inside each query's transaction.
+# WHY not the connect-time SET alone: Supabase's pooler multiplexes physical backends
+# per-transaction, so a `SET statement_timeout` issued once on connect only sticks to
+# whichever backend served it — sibling checkouts fall back to the 2-min role default
+# (verified: fresh checkouts alternate 10min / 2min). Heavy analytical queries over the
+# grown 3.9M-row journal then die at ~120s. SET LOCAL runs in the SAME transaction as the
+# query, so it always applies regardless of which backend the pooler picks. Tune via env.
+_STMT_TIMEOUT_MS = int(os.environ.get("ATLAS_STMT_TIMEOUT_MS", "1200000"))  # 20 min default
+
 
 @lru_cache(maxsize=1)
 def db_url() -> str:
@@ -49,30 +58,39 @@ def db_url() -> str:
 
 @lru_cache(maxsize=1)
 def engine() -> Engine:
-    """Process-wide SQLAlchemy engine. Modest pool; statement timeout raised
-    reliably via a per-connection SET (connect_args options are silently dropped
-    by the Supabase pooler)."""
+    """Process-wide SQLAlchemy engine. Modest pool. The statement_timeout is set
+    on connect AND (the reliable path) per-transaction via SET LOCAL in read_df/
+    scalar — the pooler routes each transaction to a possibly-different backend, so
+    the connect-time SET alone leaks back to the 2-min role default (connect_args
+    options are likewise dropped by the Supabase pooler)."""
     eng = create_engine(db_url(), pool_pre_ping=True,
                          connect_args={"connect_timeout": 30})
 
     @event.listens_for(eng, "connect")
     def _set_timeout(dbapi_conn, _record):  # noqa: ANN001
         cur = dbapi_conn.cursor()
-        cur.execute("set statement_timeout = '600000'")  # 600s
+        cur.execute(f"set statement_timeout = '{_STMT_TIMEOUT_MS}'")
         cur.close()
 
     return eng
 
 
+def _apply_timeout(conn) -> None:
+    """SET LOCAL the statement_timeout for the current transaction (pooler-proof)."""
+    conn.execute(text(f"SET LOCAL statement_timeout = '{_STMT_TIMEOUT_MS}'"))
+
+
 def read_df(sql: str, params: dict | None = None) -> pd.DataFrame:
-    """Run a read query and return a DataFrame."""
-    with engine().connect() as conn:
+    """Run a read query and return a DataFrame (with a reliable statement_timeout)."""
+    with engine().begin() as conn:  # one transaction → one backend → SET LOCAL sticks
+        _apply_timeout(conn)
         return pd.read_sql_query(text(sql), conn, params=params or {})
 
 
 def scalar(sql: str, params: dict | None = None):
-    """Run a query returning a single scalar."""
-    with engine().connect() as conn:
+    """Run a query returning a single scalar (with a reliable statement_timeout)."""
+    with engine().begin() as conn:
+        _apply_timeout(conn)
         return conn.execute(text(sql), params or {}).scalar()
 
 
