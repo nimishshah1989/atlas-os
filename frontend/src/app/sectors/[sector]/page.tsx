@@ -26,6 +26,8 @@ import { StrengthDistChart } from '@/components/v6/sectors/StrengthDistChart'
 import { OpenSignalsPanel } from '@/components/v6/sectors/OpenSignalsPanel'
 import { getSectorDeepdive } from '@/lib/queries/v6/sectors'
 import { getSectorRatioSeries } from '@/lib/queries/v6/sector_index_rs'
+import { LENS_V4_ENABLED } from '@/lib/feature-flags'
+import { SectorDeepDiveV4 } from '@/components/v6/sectors/SectorDeepDiveV4'
 
 export const dynamic = 'force-dynamic'
 
@@ -88,6 +90,9 @@ export default async function SectorDetailPage({
 }) {
   const { sector } = await params
   const decoded = decodeURIComponent(sector)
+
+  // v4: revamped lens-first deep-dive (native foundation_staging)
+  if (LENS_V4_ENABLED) return <SectorDeepDiveV4 sector={decoded} />
 
   const [deepdive, ratioSeries] = await Promise.all([
     getSectorDeepdive(decoded),
