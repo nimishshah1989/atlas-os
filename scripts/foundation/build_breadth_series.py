@@ -38,6 +38,7 @@ breadth AS (
          sum((t.pos_52w <= 5)::int)            AS at_52w_low,
          sum((t.pos_52w >= 95)::int)
            - sum((t.pos_52w <= 5)::int)        AS net_new_highs,
+         sum((t.ema_50 > t.ema_200)::int)      AS gc_50_200,     -- golden cross: 50-EMA > 200-EMA
          round(avg(t.rsi_14)::numeric, 2)      AS avg_rsi_14
   FROM foundation_staging.technical_daily t
   JOIN foundation_staging.de_index_constituents c
@@ -60,7 +61,7 @@ def run() -> None:
     n = _db.scalar(f"SELECT count(*) FROM {TGT}")
     rng = _db.read_df(f"SELECT min(date) mn, max(date) mx FROM {TGT}")
     print(f"built {TGT}: {n} trading days, {rng.iloc[0]['mn']} .. {rng.iloc[0]['mx']}")
-    head = _db.read_df(f"SELECT date, n_members, above_21, above_50, above_200, net_new_highs, avg_rsi_14, idx_ret_3m "
+    head = _db.read_df(f"SELECT date, n_members, above_21, above_50, above_200, gc_50_200, net_new_highs, avg_rsi_14, idx_ret_3m "
                        f"FROM {TGT} ORDER BY date DESC LIMIT 5")
     print(head.to_string(index=False))
 

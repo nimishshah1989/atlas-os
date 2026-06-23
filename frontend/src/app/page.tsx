@@ -22,7 +22,11 @@ import { RegimeClassifierInputs } from '@/components/regime/RegimeClassifierInpu
 // v4 lens — consolidated Regime+Pulse home (native breadth from foundation_staging)
 import { LENS_V4_ENABLED } from '@/lib/feature-flags'
 import { getBreadthSeries } from '@/lib/queries/v6/breadth'
+import { getTierReturns, getMacroContext, getBreadthTable } from '@/lib/queries/v6/market_pulse'
 import { BreadthCountCharts } from '@/components/regime/BreadthCountCharts'
+import { BreadthDetailTable } from '@/components/regime/BreadthDetailTable'
+import { TierReturnsTable } from '@/components/regime/TierReturnsTable'
+import { MacroContextTable } from '@/components/regime/MacroContextTable'
 
 type SearchParams = Promise<{ range?: string }>
 
@@ -35,7 +39,7 @@ export default async function RegimePage({ searchParams }: { searchParams: Searc
     getCurrentRegime(),
     getRegimeHistory(historyDays),
     getRegimeJourney12w(),
-    getTopConvictionCalls(),
+    LENS_V4_ENABLED ? Promise.resolve(null) : getTopConvictionCalls(),  // conviction tabs cut in v4
     LENS_V4_ENABLED ? getBreadthSeries(10).catch(() => []) : Promise.resolve([]),
   ])
 
@@ -55,6 +59,15 @@ export default async function RegimePage({ searchParams }: { searchParams: Searc
 
   const deploymentPct = Math.round(parseFloat(current.deployment_multiplier) * 100)
   const breadthLatest = breadthSeries.length ? breadthSeries[breadthSeries.length - 1] : null
+
+  // v4 Markets-Today tables (native foundation_staging): tier returns, macro, breadth detail
+  const [tierReturns, macro, breadthTable] = LENS_V4_ENABLED
+    ? await Promise.all([
+        getTierReturns().catch(() => ({ windows: [], smallcap_rs_z: null })),
+        getMacroContext().catch(() => ({ rows: [], as_of: null })),
+        getBreadthTable().catch(() => ({ rows: [], as_of: null })),
+      ])
+    : [{ windows: [], smallcap_rs_z: null }, { rows: [], as_of: null }, { rows: [], as_of: null }]
 
   // leadingSectorNames = sectors that entered Overweight today (were not Overweight yesterday).
   // Empty list on days with no new entries — verdict renders without the sector clause.
@@ -94,8 +107,13 @@ export default async function RegimePage({ searchParams }: { searchParams: Searc
 
       {LENS_V4_ENABLED ? (
         <>
-          {/* ── v4: native Nifty-500 breadth count charts (foundation_staging) ── */}
+          {/* ── v4: native Nifty-500 breadth count charts (2×2, foundation_staging) ── */}
           {breadthSeries.length > 0 && <BreadthCountCharts series={breadthSeries} />}
+
+          {/* ── v4: detailed breadth table + tier returns + macro context (native fs) ── */}
+          {breadthTable.rows.length > 0 && <BreadthDetailTable rows={breadthTable.rows} as_of={breadthTable.as_of} />}
+          {tierReturns.windows.length > 0 && <TierReturnsTable data={tierReturns} />}
+          {macro.rows.length > 0 && <MacroContextTable rows={macro.rows} as_of={macro.as_of} />}
 
           {/* ── v4: 12-week regime journey (kept from v6) ── */}
           <RegimeJourney12w cells={journey12w} />
@@ -112,7 +130,7 @@ export default async function RegimePage({ searchParams }: { searchParams: Searc
           <MomentumSection current={current} history={history} />
           <ParticipationSection current={current} history={history} />
           <RegimeJourney12w cells={journey12w} />
-          <TodayConvictionTabs data={convictionCalls} />
+          <TodayConvictionTabs data={convictionCalls!} />
         </>
       )}
     </div>

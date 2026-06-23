@@ -36,6 +36,13 @@ MIRRORS = [
     ("atlas.atlas_signal_weights", "atlas_signal_weights", []),
     ("atlas.atlas_signal_ic", "atlas_signal_ic", []),
     ("atlas.atlas_market_regime_daily", "atlas_market_regime_daily", [["date"]]),  # Page-1 regime state
+    ("atlas.atlas_macro_daily", "atlas_macro_daily", [["date"]]),                  # Page-A macro context
+    ("atlas.mv_sector_cards", "mv_sector_cards", [["sector_name"]]),               # Page-B sector list
+    ("atlas.mv_sector_rrg", "mv_sector_rrg", [["sector_name"]]),                   # Page-B RRG
+    ("atlas.mv_sector_breadth", "mv_sector_breadth", [["sector_name"]]),           # Page-B breadth
+    ("atlas.mv_sector_deepdive", "mv_sector_deepdive", [["sector_name"]]),         # Page-C deep-dive
+    ("atlas.atlas_index_metrics_daily", "atlas_index_metrics_daily", [["date"]]),  # Page-B sector index RS
+    ("atlas.mv_markets_rs_grid", "mv_markets_rs_grid", []),                        # Page-B global RS grid
 ]
 JOURNAL_SRC = "atlas.atlas_lens_scores_daily"
 JOURNAL_FS = "atlas_lens_scores_daily"

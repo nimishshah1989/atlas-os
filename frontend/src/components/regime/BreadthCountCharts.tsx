@@ -52,10 +52,11 @@ function Toggle<T extends string>({ options, value, onChange }: {
   )
 }
 
-const CHARTS: { field: keyof BreadthRow; label: string; color: 'teal' | 'pos' | 'ink' }[] = [
+const CHARTS: { field: keyof BreadthRow; label: string; color: 'teal' | 'pos' | 'ink' | 'warn' }[] = [
   { field: 'above_21', label: 'Above 21-EMA', color: 'teal' },
   { field: 'above_50', label: 'Above 50-EMA', color: 'pos' },
   { field: 'above_200', label: 'Above 200-EMA', color: 'ink' },
+  { field: 'gc_50_200', label: '50-EMA > 200-EMA (golden cross)', color: 'warn' },
 ]
 
 export function BreadthCountCharts({ series }: { series: BreadthRow[] }) {
@@ -82,7 +83,7 @@ export function BreadthCountCharts({ series }: { series: BreadthRow[] }) {
           </h2>
           {latest && (
             <div className="font-sans text-[10px] text-ink-tertiary/70 mt-0.5">
-              of {latest.n_members} members · {latest.above_21} &gt; 21-EMA · {latest.above_50} &gt; 50-EMA · {latest.above_200} &gt; 200-EMA
+              of {latest.n_members} members · {latest.above_21} &gt; 21-EMA · {latest.above_50} &gt; 50-EMA · {latest.above_200} &gt; 200-EMA · {latest.gc_50_200} golden-cross
             </div>
           )}
         </div>
@@ -91,7 +92,7 @@ export function BreadthCountCharts({ series }: { series: BreadthRow[] }) {
           <Toggle options={['1D', '1W', '1M']} value={freq} onChange={setFreq} />
         </div>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {CHARTS.map(c => (
           <AtlasLightweightChart
             key={c.field}

@@ -12,6 +12,7 @@ export type BreadthRow = {
   above_21: number
   above_50: number
   above_200: number
+  gc_50_200: number // # of N500 stocks with 50-EMA > 200-EMA (golden cross)
   net_new_highs: number
   avg_rsi_14: string | null
   idx_ret_3m: string | null // Nifty 500 INDEX 3-month return (robust price momentum)
@@ -21,7 +22,7 @@ export type BreadthRow = {
 export async function getBreadthSeries(years = 10): Promise<BreadthRow[]> {
   return sql<BreadthRow[]>`
     SELECT to_char(date, 'YYYY-MM-DD') AS date,
-           n_members, above_21, above_50, above_200, net_new_highs,
+           n_members, above_21, above_50, above_200, gc_50_200, net_new_highs,
            avg_rsi_14, idx_ret_3m
     FROM foundation_staging.breadth_nifty500_daily
     WHERE date >= NOW() - (${years} || ' years')::INTERVAL
