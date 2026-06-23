@@ -8,8 +8,8 @@
 // and an apples-to-apples comparison against a base index.
 //
 // Source:
-//   atlas.atlas_sector_master       — sector_name → primary_nse_index (active)
-//   atlas.atlas_index_metrics_daily — index_code, ret_1d/1w/1m/3m/6m/12m (latest)
+//   foundation_staging.atlas_sector_master       — sector_name → primary_nse_index (active)
+//   foundation_staging.atlas_index_metrics_daily — index_code, ret_1d/1w/1m/3m/6m/12m (latest)
 //
 // Returns are decimal fractions (0.0034 = +0.34%), same convention as the rest
 // of the v6 surface — multiply by 100 only at display time.
@@ -97,12 +97,12 @@ export async function getSectorIndexRs(): Promise<SectorIndexRsPayload> {
       im.ret_6m::text,
       im.ret_12m::text,
       im.date::text
-    FROM atlas.atlas_index_metrics_daily im
-    LEFT JOIN atlas.atlas_sector_master sm
+    FROM foundation_staging.atlas_index_metrics_daily im
+    LEFT JOIN foundation_staging.atlas_sector_master sm
       ON sm.primary_nse_index = im.index_code
      AND sm.is_active = true
      AND LOWER(sm.sector_name) NOT LIKE '%conglomerate%'
-    WHERE im.date = (SELECT MAX(date) FROM atlas.atlas_index_metrics_daily)
+    WHERE im.date = (SELECT MAX(date) FROM foundation_staging.atlas_index_metrics_daily)
       AND (sm.sector_name IS NOT NULL OR im.index_code IN ('NIFTY 50', 'NIFTY 500'))
     ORDER BY sm.sector_name NULLS LAST
   `
@@ -156,7 +156,7 @@ export async function getSectorRatioSeries(sectorName: string): Promise<SectorRa
     JOIN public.de_index_prices n
       ON n.date = s.date AND n.index_code = 'NIFTY 50'
     WHERE s.index_code = (
-      SELECT primary_nse_index FROM atlas.atlas_sector_master
+      SELECT primary_nse_index FROM foundation_staging.atlas_sector_master
       WHERE sector_name = ${sectorName} AND is_active = true
       LIMIT 1
     )

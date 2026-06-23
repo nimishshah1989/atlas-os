@@ -21,6 +21,7 @@ import { getSectorIndexRs } from '@/lib/queries/v6/sector_index_rs'
 import { LENS_V4_ENABLED } from '@/lib/feature-flags'
 import { getSectorLensVectors } from '@/lib/queries/lens-scores'
 import { SectorLensHeatmap } from '@/components/v6/sectors/SectorLensHeatmap'
+import { SectorsPageV4 } from '@/components/v6/sectors/SectorsPageV4'
 
 export const dynamic = 'force-dynamic'
 
@@ -93,6 +94,9 @@ function SummaryBand({
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default async function SectorsPage() {
+  // v4: merged Sectors ⊕ Markets-RS layout, native foundation_staging.
+  if (LENS_V4_ENABLED) return <SectorsPageV4 />
+
   // Parallel data fetch — all independent queries
   const [cards, rrg, breadth, indexRs, sectorLensVectors] = await Promise.all([
     getSectorCards(),

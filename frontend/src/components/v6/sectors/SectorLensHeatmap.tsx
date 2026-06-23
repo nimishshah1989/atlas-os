@@ -19,6 +19,9 @@ type Props = {
 
 const LENS_KEYS = ['technical', 'fundamental', 'valuation', 'catalyst', 'flow', 'policy'] as const
 
+// postgres returns NUMERIC as string — coerce defensively so .toFixed works.
+const num = (v: number | string | null): number | null => (v == null ? null : Number(v))
+
 const LENS_LABELS: Record<string, string> = {
   technical: 'Tech',
   fundamental: 'Fund',
@@ -62,10 +65,10 @@ export function SectorLensHeatmap({ vectors }: Props) {
                 </a>
               </td>
               <td className="px-3 py-2 text-right font-semibold tabular-nums text-ink-primary">
-                {row.composite?.toFixed(1) ?? '—'}
+                {num(row.composite)?.toFixed(1) ?? '—'}
               </td>
               {LENS_KEYS.map(k => {
-                const v = row[k]
+                const v = num(row[k])
                 return (
                   <td key={k} className={`px-2 py-2 text-center tabular-nums font-medium ${cellColor(v)}`}>
                     {v?.toFixed(0) ?? '—'}

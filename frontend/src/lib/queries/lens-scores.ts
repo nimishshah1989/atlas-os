@@ -100,8 +100,8 @@ const LENS_COLS = `
 export async function getLensScoreByInstrument(instrumentId: string): Promise<LensScore | null> {
   const rows = await sql.unsafe(`
     SELECT ${LENS_COLS}
-    FROM atlas.atlas_lens_scores_daily l
-    JOIN atlas.instrument_master i ON i.instrument_id = l.instrument_id
+    FROM foundation_staging.atlas_lens_scores_daily l
+    JOIN foundation_staging.instrument_master i ON i.instrument_id = l.instrument_id
     WHERE l.instrument_id = $1
     ORDER BY l.date DESC
     LIMIT 1
@@ -113,8 +113,8 @@ export async function getLensScoreByInstrument(instrumentId: string): Promise<Le
 export async function getLensScoreBySymbol(symbol: string): Promise<LensScore | null> {
   const rows = await sql.unsafe(`
     SELECT ${LENS_COLS}
-    FROM atlas.atlas_lens_scores_daily l
-    JOIN atlas.instrument_master i ON i.instrument_id = l.instrument_id
+    FROM foundation_staging.atlas_lens_scores_daily l
+    JOIN foundation_staging.instrument_master i ON i.instrument_id = l.instrument_id
     WHERE i.symbol = $1
     ORDER BY l.date DESC
     LIMIT 1
@@ -130,8 +130,8 @@ export async function getAllLensScores(): Promise<LensScoreSummary[]> {
       i.symbol, i.name, i.sector,
       l.technical, l.fundamental, l.valuation, l.catalyst, l.flow, l.policy,
       l.composite, l.conviction_tier, l.risk_flags
-    FROM atlas.atlas_lens_scores_daily l
-    JOIN atlas.instrument_master i ON i.instrument_id = l.instrument_id
+    FROM foundation_staging.atlas_lens_scores_daily l
+    JOIN foundation_staging.instrument_master i ON i.instrument_id = l.instrument_id
     ORDER BY l.instrument_id, l.date DESC
   `)
   return rows as unknown as LensScoreSummary[]
@@ -145,8 +145,8 @@ export async function getLensScoresBySector(sector: string): Promise<LensScoreSu
       i.symbol, i.name, i.sector,
       l.technical, l.fundamental, l.valuation, l.catalyst, l.flow, l.policy,
       l.composite, l.conviction_tier, l.risk_flags
-    FROM atlas.atlas_lens_scores_daily l
-    JOIN atlas.instrument_master i ON i.instrument_id = l.instrument_id
+    FROM foundation_staging.atlas_lens_scores_daily l
+    JOIN foundation_staging.instrument_master i ON i.instrument_id = l.instrument_id
     WHERE i.sector = $1
     ORDER BY l.instrument_id, l.date DESC
   `, [sector])
@@ -171,8 +171,8 @@ export async function getSectorLensVectors(): Promise<Array<{
         i.sector,
         l.technical, l.fundamental, l.valuation, l.catalyst, l.flow, l.policy,
         l.composite
-      FROM atlas.atlas_lens_scores_daily l
-      JOIN atlas.instrument_master i ON i.instrument_id = l.instrument_id
+      FROM foundation_staging.atlas_lens_scores_daily l
+      JOIN foundation_staging.instrument_master i ON i.instrument_id = l.instrument_id
       WHERE i.sector IS NOT NULL
       ORDER BY l.instrument_id, l.date DESC
     )

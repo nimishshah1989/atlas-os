@@ -10,10 +10,10 @@
 // Rank is computed in-app by ordering on participation_rs desc.
 //
 // MV queries for /sectors (Page 04) and /sectors/[sector] (Page 04a):
-//   getSectorCards()      — atlas.mv_sector_cards (latest snapshot, 30 rows)
-//   getSectorBreadthMV()  — atlas.mv_sector_breadth (latest snapshot, 30 rows)
-//   getSectorRRG()        — atlas.mv_sector_rrg (latest snapshot, 30 rows + trail_6w JSONB)
-//   getSectorDeepdive()   — atlas.mv_sector_deepdive (single row per sector, ~30 total)
+//   getSectorCards()      — foundation_staging.mv_sector_cards (latest snapshot, 30 rows)
+//   getSectorBreadthMV()  — foundation_staging.mv_sector_breadth (latest snapshot, 30 rows)
+//   getSectorRRG()        — foundation_staging.mv_sector_rrg (latest snapshot, 30 rows + trail_6w JSONB)
+//   getSectorDeepdive()   — foundation_staging.mv_sector_deepdive (single row per sector, ~30 total)
 
 import 'server-only'
 import sql from '@/lib/db'
@@ -225,13 +225,13 @@ export async function getSectorCards(): Promise<SectorCardRow[]> {
       confidence_distribution,
       verdict,
       verdict_abbr
-    FROM atlas.mv_sector_cards
+    FROM foundation_staging.mv_sector_cards
     WHERE as_of_date = (
       -- Anchor to last fully-populated date. On a fresh trading day,
       -- rs_1m / ret_1w / ret_12m / breadth columns can lag rs_3m by one
       -- compute cycle. Picking MAX(as_of_date) blindly gives a partial row
       -- with empty 1W / 12M / breadth columns. Filter on rs_1m IS NOT NULL.
-      SELECT MAX(as_of_date) FROM atlas.mv_sector_cards
+      SELECT MAX(as_of_date) FROM foundation_staging.mv_sector_cards
       WHERE rs_1m IS NOT NULL AND ret_1w IS NOT NULL
     )
       AND LOWER(sector_name) NOT LIKE '%conglomerate%'
@@ -325,9 +325,9 @@ export async function getSectorBreadthMV(sectorName?: string): Promise<SectorBre
       breadth_by_strength,
       top_movers,
       bottom_movers
-    FROM atlas.mv_sector_breadth
+    FROM foundation_staging.mv_sector_breadth
     WHERE as_of_date = (
-      SELECT MAX(as_of_date) FROM atlas.mv_sector_breadth
+      SELECT MAX(as_of_date) FROM foundation_staging.mv_sector_breadth
     )
     ${sectorName != null ? sql`AND sector_name = ${sectorName}` : sql``}
     ORDER BY sector_name
@@ -370,12 +370,12 @@ export async function getSectorRRG(): Promise<SectorRRGRow[]> {
       r.quadrant_current,
       r.trail_6w,
       COALESCE(c.constituent_count, 0) AS constituent_count
-    FROM atlas.mv_sector_rrg r
-    LEFT JOIN atlas.mv_sector_cards c
+    FROM foundation_staging.mv_sector_rrg r
+    LEFT JOIN foundation_staging.mv_sector_cards c
       ON c.sector_name = r.sector_name
      AND c.as_of_date = r.as_of_date
     WHERE r.as_of_date = (
-      SELECT MAX(as_of_date) FROM atlas.mv_sector_rrg
+      SELECT MAX(as_of_date) FROM foundation_staging.mv_sector_rrg
     )
     ORDER BY r.sector_name
   `
@@ -425,7 +425,7 @@ export async function getSectorDeepdive(sectorName: string): Promise<SectorDeepd
       open_signals,
       strength_dist,
       top_picks_top10
-    FROM atlas.mv_sector_deepdive
+    FROM foundation_staging.mv_sector_deepdive
     WHERE sector_name = ${sectorName}
     LIMIT 1
   `
