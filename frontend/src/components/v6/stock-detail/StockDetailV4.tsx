@@ -10,7 +10,6 @@ import { notFound } from 'next/navigation'
 
 import { getStockBySymbol, getStockMetricHistory } from '@/lib/queries/stocks'
 import { getStockState } from '@/lib/queries/states'
-import { getTVMetrics } from '@/lib/api/v1'
 import { toNumber } from '@/lib/v6/decimal'
 import { getStockDecile, getStockRSMatrix, getStockChartSeries } from '@/lib/queries/v6/stock_lens'
 
@@ -18,9 +17,7 @@ import { StockLensCardV4 } from './StockLensCardV4'
 import { StockRSMatrix } from './StockRSMatrix'
 import { StockPriceEMAChart } from './StockPriceEMAChart'
 import { StockRSChart } from './StockRSChart'
-import { StockChartPanel } from './StockChartPanel'
 import { LifecyclePanel } from './LifecyclePanel'
-import { generateChartCommentary } from './ChartCommentary'
 import { TVTechnicalAnalysis, TVFinancials, TVCompanyProfile, TVNews } from './TVWidgets'
 
 const CAP_LABEL: Record<string, string> = { large: 'Large-cap', mid: 'Mid-cap', small: 'Small-cap', micro: 'Micro-cap' }
@@ -34,26 +31,14 @@ export async function StockDetailV4({ symbol }: { symbol: string }) {
   ])
   if (!stock) notFound()
 
-  // Batch 2 — chart series + TV metrics + Weinstein inputs (released batch-1 connections first).
-  const [chartRows, tvMetrics, stockState, metricHistory] = await Promise.all([
+  // Batch 2 — chart series + Weinstein inputs (released batch-1 connections first).
+  const [chartRows, stockState, metricHistory] = await Promise.all([
     getStockChartSeries(symbol, 5).catch(() => []),
-    getTVMetrics(symbol).catch(() => null),
     getStockState(stock.instrument_id).catch(() => null),
     getStockMetricHistory(stock.instrument_id, 365).catch(() => []),
   ])
 
   const latest = metricHistory.length > 0 ? metricHistory[metricHistory.length - 1] : null
-
-  const commentary = generateChartCommentary({
-    state: stockState?.state ?? null,
-    dwellDays: stockState?.dwell_days ?? null,
-    stateSinceDate: null,
-    ema20Ratio: toNumber(latest?.ema_20_ratio),
-    volRatio63: toNumber(latest?.vol_ratio_63),
-    extension: toNumber(latest?.extension_pct),
-    high52w: toNumber(tvMetrics?.high_52w),
-    price: toNumber(tvMetrics?.price),
-  })
 
   const capLabel = decile?.cap ? (CAP_LABEL[decile.cap] ?? decile.cap) : null
   const sector = stock.sector ?? decile?.sector ?? null
@@ -117,17 +102,6 @@ export async function StockDetailV4({ symbol }: { symbol: string }) {
           <StockRSChart rows={chartRows} symbol={stock.symbol} />
         </>
       )}
-
-      {/* ── TV Advanced chart + Atlas reading + fundamentals strip ── */}
-      <StockChartPanel
-        symbol={stock.symbol}
-        commentary={commentary}
-        pe={tvMetrics?.pe_ttm ?? null}
-        ps={tvMetrics?.ps_current ?? null}
-        pb={tvMetrics?.pb_fbs ?? null}
-        debtToEquity={tvMetrics?.debt_to_equity ?? null}
-        roe={tvMetrics?.roe ?? null}
-      />
 
       {/* ── Weinstein lifecycle ── */}
       <LifecyclePanel

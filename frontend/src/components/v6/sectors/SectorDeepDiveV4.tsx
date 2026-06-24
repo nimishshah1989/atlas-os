@@ -1,6 +1,7 @@
 // SectorDeepDiveV4 — revamped sector deep-dive (behind LENS_V4). Drops the verdict header,
 // open-signals, sub-industry, and methodology cruft. Keeps the RS windows table, the D/W/M
-// RS-ratio charts, the constituents drill, top picks, and strength distribution. Adds the
+// Lightweight RS-ratio charts (TV's Advanced-Chart embed refuses NSE index symbols), the
+// constituents drill, top picks, and strength distribution. Adds the
 // native lens read, two 2x2s of the sector's stocks, within-sector breadth, and sector
 // fundamentals + fund-flow tables. All new data from foundation_staging.
 import Link from 'next/link'
@@ -9,7 +10,7 @@ import { Suspense } from 'react'
 import { DataSourceBanner } from '@/components/v6/DataSourceBanner'
 import { SectorHeroStrip } from '@/components/v6/sectors/SectorHeroStrip'
 import { RSWindowsTable } from '@/components/v6/sectors/RSWindowsTable'
-import { SectorRSRatioTV } from '@/components/v6/sectors/SectorRSRatioTV'
+import { SectorRSRatioCharts } from '@/components/v6/sectors/SectorRSRatioCharts'
 import { ConstituentsTable } from '@/components/v6/sectors/ConstituentsTable'
 import { TopPicksPanel } from '@/components/v6/sectors/TopPicksPanel'
 import { StrengthDistChart } from '@/components/v6/sectors/StrengthDistChart'
@@ -19,6 +20,7 @@ import { SectorBreadthWithin } from '@/components/v6/sectors/SectorBreadthWithin
 import { SectorFundamentalsTable } from '@/components/v6/sectors/SectorFundamentalsTable'
 import { SectorFundFlowTable } from '@/components/v6/sectors/SectorFundFlowTable'
 import { getSectorDeepdive } from '@/lib/queries/v6/sectors'
+import { getSectorRatioSeries } from '@/lib/queries/v6/sector_index_rs'
 import { getSectorLensVector, getSectorStocks, getSectorFundamentals, getSectorFundFlow } from '@/lib/queries/v6/sector_lens'
 
 function SectionHead({ title, subtitle }: { title: string; subtitle?: string }) {
@@ -33,8 +35,9 @@ const Skeleton = ({ h = 48 }: { h?: number }) => <div style={{ height: h }} clas
 
 export async function SectorDeepDiveV4({ sector }: { sector: string }) {
   // Batched fetches — Supabase session pooler caps clients at 15.
-  const [deepdive, lensVector] = await Promise.all([
+  const [deepdive, ratioSeries, lensVector] = await Promise.all([
     getSectorDeepdive(sector),
+    getSectorRatioSeries(sector),
     getSectorLensVector(sector).catch(() => null),
   ])
   if (!deepdive) notFound()
@@ -70,9 +73,11 @@ export async function SectorDeepDiveV4({ sector }: { sector: string }) {
         <SectionHead title="RS vs the baselines · 5 windows" subtitle="Percentage-point spread vs Nifty 500 over 5 windows; rank relative to all sectors." />
         <Suspense fallback={<Skeleton h={200} />}><RSWindowsTable sector={deepdive} /></Suspense>
       </section>
-      <section className="px-8 py-9 border-b border-paper-rule" aria-label="RS ratio chart">
-        <SectionHead title="Relative strength · sector vs Nifty 50" subtitle="Sector index ÷ Nifty 50 — rising = outperforming the broad market. Live TradingView ratio chart; switch Daily / Weekly / Monthly in-chart." />
-        <SectorRSRatioTV sectorName={sector} />
+      <section className="px-8 py-9 border-b border-paper-rule" aria-label="RS ratio charts">
+        <SectionHead title="Relative strength · sector vs Nifty 50" subtitle="Sector index ÷ Nifty 50 across Daily / Weekly / Monthly. Rising = outperforming the broad market." />
+        <Suspense fallback={<Skeleton h={360} />}>
+          <SectorRSRatioCharts sectorName={sector} indexCode={ratioSeries.index_code} daily={ratioSeries.daily} />
+        </Suspense>
       </section>
 
       {/* NEW: lens read + 2x2 + within-sector breadth */}

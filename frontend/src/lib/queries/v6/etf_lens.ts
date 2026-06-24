@@ -13,6 +13,25 @@
 import 'server-only'
 import sql from '@/lib/db'
 import { toNumber, toNumberOr } from '@/lib/v6/decimal'
+import type { StockChartRow } from './stock_lens'
+
+// ── ETF price + RS series for the native Lightweight charts (price ÷ Nifty 50/500) ──
+// Reuses the StockChartRow shape so the stock-detail StockPriceEMAChart / StockRSChart render
+// it directly. From ohlcv_etf (keyed by the bridged NSE ticker) — TV's Advanced-Chart embed
+// refuses NSE symbols, so we draw our own (the FM-confirmed "comes out really well" path).
+export async function getEtfChartSeries(nseTicker: string, years = 5): Promise<StockChartRow[]> {
+  return sql<StockChartRow[]>`
+    SELECT to_char(o.date,'YYYY-MM-DD') AS date, o.close::text,
+           (o.close / NULLIF(n50.close, 0))::text  AS rs_n50,
+           (o.close / NULLIF(n500.close, 0))::text AS rs_n500
+    FROM foundation_staging.ohlcv_etf o
+    LEFT JOIN foundation_staging.index_prices n50  ON n50.date = o.date  AND n50.index_code = 'NIFTY 50'
+    LEFT JOIN foundation_staging.index_prices n500 ON n500.date = o.date AND n500.index_code = 'NIFTY 500'
+    WHERE o.ticker = ${nseTicker} AND o.close > 0
+      AND o.date >= NOW() - (${years} || ' years')::INTERVAL
+    ORDER BY o.date ASC
+  `
+}
 
 // Per-stock scored CTE (deciles within cap cohort, leadership, strength, raw lens subscores, RS).
 // No user input — all literals; shared by the list + detail roll-ups via sql.unsafe.

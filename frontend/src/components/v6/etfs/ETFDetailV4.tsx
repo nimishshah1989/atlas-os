@@ -6,8 +6,9 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
-import { getEtfLensDetail, type EtfLensDetail, type EtfHolding } from '@/lib/queries/v6/etf_lens'
-import { TVRatioChart } from '@/components/charts/TVRatioChart'
+import { getEtfLensDetail, getEtfChartSeries, type EtfLensDetail, type EtfHolding } from '@/lib/queries/v6/etf_lens'
+import { StockPriceEMAChart } from '@/components/v6/stock-detail/StockPriceEMAChart'
+import { StockRSChart } from '@/components/v6/stock-detail/StockRSChart'
 
 const HOLDING_CAP = 50
 
@@ -103,6 +104,8 @@ function HoldingsTable({ holdings }: { holdings: EtfHolding[] }) {
 export async function ETFDetailV4({ fcode }: { fcode: string }) {
   const etf = await getEtfLensDetail(fcode)
   if (!etf) notFound()
+  // Native Lightweight charts (price ÷ index) for bridged ETFs — TV's embed refuses NSE symbols.
+  const etfRows = etf.nse_ticker ? await getEtfChartSeries(etf.nse_ticker).catch(() => []) : []
 
   const breadthPct = etf.breadth == null ? '—' : `${(etf.breadth * 100).toFixed(0)}%`
   const expenseStr = etf.expense == null ? null : `${etf.expense.toFixed(2)}%` // already in percent units
@@ -154,31 +157,20 @@ export async function ETFDetailV4({ fcode }: { fcode: string }) {
         <LensVector etf={etf} />
       </section>
 
-      {/* ── Charts (matched ETFs only) ── */}
-      <section className="px-8 py-9 border-b border-paper-rule" aria-label="Price & RS charts">
-        <div className="mb-5">
+      {/* ── Charts (native Lightweight; bridged ETFs only) ── */}
+      {etfRows.length > 0 && etf.nse_ticker ? (
+        <>
+          <StockPriceEMAChart rows={etfRows} symbol={etf.nse_ticker} />
+          <StockRSChart rows={etfRows} symbol={etf.nse_ticker} />
+        </>
+      ) : (
+        <section className="px-8 py-9 border-b border-paper-rule" aria-label="Price & RS charts">
           <h2 className="font-serif text-[28px] font-normal tracking-tight text-ink-primary">Price &amp; relative strength</h2>
-          {etf.benchmark && (
-            <p className="font-sans text-[13px] text-ink-tertiary mt-1">Benchmark: {etf.benchmark}</p>
-          )}
-        </div>
-        {etf.nse_ticker ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <TVRatioChart symbol={`NSE:${etf.nse_ticker}`} title="Price" interval="W" height={360} />
-            <TVRatioChart
-              symbol={`NSE:${etf.nse_ticker}/NSE:NIFTY`}
-              title="RS vs Nifty 50"
-              subtitle="Rising = outperforming the broad market"
-              interval="W"
-              height={300}
-            />
-          </div>
-        ) : (
-          <p className="font-sans text-[13px] text-ink-tertiary italic">
+          <p className="font-sans text-[13px] text-ink-tertiary italic mt-2">
             No NSE price series mapped for this ETF — lens roll-up only.
           </p>
-        )}
-      </section>
+        </section>
+      )}
 
       {/* ── Look-through holdings ── */}
       <section className="px-8 py-9 border-b border-paper-rule" aria-label="Look-through holdings">

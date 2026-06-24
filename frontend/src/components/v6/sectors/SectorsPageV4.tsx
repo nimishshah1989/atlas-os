@@ -14,6 +14,7 @@ import { CapTierRSCharts } from '@/components/v6/sectors/CapTierRSCharts'
 import { getSectorCards, getSectorRRG, getSectorBreadthMV } from '@/lib/queries/v6/sectors'
 import { getSectorIndexRs } from '@/lib/queries/v6/sector_index_rs'
 import { getSectorLensVectors } from '@/lib/queries/lens-scores'
+import { getCapTierRS } from '@/lib/queries/v6/rs_charts'
 import { getMarketsRsPage, type MarketsRsRow } from '@/lib/queries/v6/markets_rs'
 
 function SectionHead({ title, subtitle }: { title: string; subtitle?: string }) {
@@ -62,8 +63,9 @@ export async function SectorsPageV4() {
     getSectorBreadthMV(),
     getSectorIndexRs(),
   ])
-  const [lensVectors, marketsRs] = await Promise.all([
+  const [lensVectors, capTierRS, marketsRs] = await Promise.all([
     getSectorLensVectors().catch(() => []),
+    getCapTierRS(10).catch(() => []),
     getMarketsRsPage().catch(() => ({ grid: [] as MarketsRsRow[], as_of_date: null })),
   ])
   const latestDate = cards[0]?.as_of_date ?? null
@@ -110,8 +112,8 @@ export async function SectorsPageV4() {
         <SectorBreadthTable rows={breadth} />
       </section>
 
-      {/* Cap-tier RS charts — direct TradingView ratio embeds */}
-      <CapTierRSCharts />
+      {/* Cap-tier RS charts — native */}
+      {capTierRS.length > 0 && <CapTierRSCharts series={capTierRS} />}
 
       {/* Global cross-market RS grid — folded from Markets-RS */}
       {marketsRs.grid.length > 0 && (

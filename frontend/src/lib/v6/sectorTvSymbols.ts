@@ -65,13 +65,3 @@ export function sectorRatioSymbol(sectorName: string): string | null {
   const idx = SECTOR_TV_INDEX[sectorName]
   return idx ? `${idx}/${NIFTY_TV}` : null
 }
-
-/**
- * Exchange-prefixed TradingView ratio symbol for the Advanced-Chart EMBED
- * (both legs need the NSE: prefix to resolve), e.g. "NSE:CNXIT/NSE:NIFTY".
- * Null when the sector has no mapped TradingView index symbol.
- */
-export function sectorRatioEmbedSymbol(sectorName: string): string | null {
-  const idx = SECTOR_TV_INDEX[sectorName]
-  return idx ? `NSE:${idx}/NSE:${NIFTY_TV}` : null
-}
