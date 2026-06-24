@@ -28,7 +28,9 @@ export async function getStockRSMatrix(symbol: string): Promise<RSMatrix | null>
   `
   if (r.length === 0) return null
   const x = r[0]
-  const num = (v: string | null | undefined) => (v == null ? null : toNumber(v))
+  // RS values are return DIFFERENCES stored as fractions (0.131 = +13.1 percentage points);
+  // the matrix renders + colours them as pp, so scale to pp here.
+  const num = (v: string | null | undefined) => { const t = v == null ? null : toNumber(v); return t == null ? null : t * 100 }
   const cells = (prefix: string, windows: string[]) =>
     windows.map(w => ({ window: w.toUpperCase(), v: num(x[`rs_${w}_${prefix}`]) }))
   return {
@@ -159,6 +161,110 @@ export type StockListRow = {
   lead: number; strength: number | null
   rs_1m: number | null; rs_3m: number | null; rs_6m: number | null; rs_sector_3m: number | null
   ret_3m: number | null; liq_cr: number | null
+}
+
+// ── Real numbers behind the scores (the "deep dive": actual inputs, not just 0–100) ──
+// Every value traces to a real source row (technical_daily / ohlcv_stock / delivery_daily /
+// lens_shareholding / financials_quarterly) — RULE #0. Feeds the lens-card drill-down + VWAP.
+export type StockEvidence = {
+  as_of: string | null; close: number | null
+  ema21: number | null; ema50: number | null; ema200: number | null; rsi: number | null
+  dist_ema50: number | null; dist_ema200: number | null
+  atr: number | null; bb_width: number | null; vol_ratio_30d: number | null; vol_ratio_60d: number | null; pos_52w: number | null
+  rs_1m: number | null; rs_3m: number | null; rs_6m: number | null; rs_sector_3m: number | null
+  vwap_252: number | null; vwap_dist: number | null
+  delivery_pct: number | null; delivery_30d: number | null; delivery_60d: number | null; delivery_asym: number | null
+  promoter_pct: number | null
+  pe_ttm: number | null; eps_ttm: number | null
+}
+
+export async function getStockEvidence(symbol: string): Promise<StockEvidence | null> {
+  const r = await sql<Record<string, string>[]>`
+    WITH im AS (SELECT instrument_id FROM foundation_staging.instrument_master WHERE symbol = ${symbol} LIMIT 1),
+    td AS (SELECT t.* FROM foundation_staging.technical_daily t, im
+           WHERE t.instrument_id = im.instrument_id AND t.asset_class='stock' ORDER BY t.date DESC LIMIT 1),
+    px AS (SELECT o.date, o.close FROM foundation_staging.ohlcv_stock o, im
+           WHERE o.instrument_id = im.instrument_id AND o.close > 0 ORDER BY o.date DESC LIMIT 1),
+    vw AS (SELECT sum(close*volume)/NULLIF(sum(volume),0) AS vwap_252
+           FROM (SELECT o.close, o.volume FROM foundation_staging.ohlcv_stock o, im
+                 WHERE o.instrument_id = im.instrument_id AND o.close > 0 AND o.volume > 0
+                 ORDER BY o.date DESC LIMIT 252) z),
+    dl AS (SELECT d.* FROM foundation_staging.delivery_daily d, im
+           WHERE d.instrument_id = im.instrument_id ORDER BY d.date DESC LIMIT 1),
+    sh AS (SELECT s.promoter_pct FROM foundation_staging.lens_shareholding s, im
+           WHERE s.instrument_id = im.instrument_id ORDER BY s.period_end DESC LIMIT 1),
+    fin AS (SELECT sum(eps) AS eps_ttm FROM (SELECT f.eps FROM foundation_staging.financials_quarterly f, im
+            WHERE f.instrument_id = im.instrument_id AND f.consolidated ORDER BY f.period_end DESC LIMIT 4) q)
+    SELECT to_char(px.date,'YYYY-MM-DD') AS as_of, px.close,
+      td.ema_21, td.ema_50, td.ema_200, td.rsi_14, td.atr_14, td.bb_width,
+      td.vol_ratio_30d, td.vol_ratio_60d, td.pos_52w,
+      td.rs_1m_n500, td.rs_3m_n500, td.rs_6m_n500, td.rs_3m_sector,
+      (px.close - td.ema_50)  / NULLIF(td.ema_50,0)  * 100 AS dist_ema50,
+      (px.close - td.ema_200) / NULLIF(td.ema_200,0) * 100 AS dist_ema200,
+      vw.vwap_252, (px.close - vw.vwap_252) / NULLIF(vw.vwap_252,0) * 100 AS vwap_dist,
+      dl.delivery_pct, dl.delivery_avg_30d, dl.delivery_avg_60d, dl.delivery_updown_asym,
+      sh.promoter_pct, fin.eps_ttm, px.close / NULLIF(fin.eps_ttm,0) AS pe_ttm
+    FROM px LEFT JOIN td ON true LEFT JOIN vw ON true LEFT JOIN dl ON true LEFT JOIN sh ON true LEFT JOIN fin ON true`
+  if (r.length === 0) return null
+  const x = r[0]; const n = (k: string) => (x[k] == null ? null : toNumber(x[k]))
+  return {
+    as_of: x.as_of, close: n('close'),
+    ema21: n('ema_21'), ema50: n('ema_50'), ema200: n('ema_200'), rsi: n('rsi_14'),
+    dist_ema50: n('dist_ema50'), dist_ema200: n('dist_ema200'),
+    atr: n('atr_14'), bb_width: n('bb_width'), vol_ratio_30d: n('vol_ratio_30d'), vol_ratio_60d: n('vol_ratio_60d'), pos_52w: n('pos_52w'),
+    rs_1m: n('rs_1m_n500'), rs_3m: n('rs_3m_n500'), rs_6m: n('rs_6m_n500'), rs_sector_3m: n('rs_3m_sector'),
+    vwap_252: n('vwap_252'), vwap_dist: n('vwap_dist'),
+    delivery_pct: n('delivery_pct'), delivery_30d: n('delivery_avg_30d'), delivery_60d: n('delivery_avg_60d'), delivery_asym: n('delivery_updown_asym'),
+    promoter_pct: n('promoter_pct'), pe_ttm: n('pe_ttm'), eps_ttm: n('eps_ttm'),
+  }
+}
+
+// ── Last 8 quarters (Screener-style trend table) — XBRL financials_quarterly ──
+export type StockQuarter = {
+  period_end: string; revenue: number | null; ebitda: number | null; pat: number | null; eps: number | null
+  ebitda_margin: number | null; net_margin: number | null; debt_equity: number | null
+  rev_yoy: number | null; pat_yoy: number | null
+}
+export async function getStockFundamentals(symbol: string): Promise<StockQuarter[]> {
+  const rows = await sql<Record<string, string>[]>`
+    SELECT to_char(f.period_end,'YYYY-MM-DD') AS period_end,
+      f.revenue, f.ebitda, f.pat, f.eps, f.ebitda_margin, f.net_margin, f.debt_equity_ratio
+    FROM foundation_staging.financials_quarterly f
+    JOIN foundation_staging.instrument_master im ON im.instrument_id = f.instrument_id
+    WHERE im.symbol = ${symbol} AND f.consolidated
+    ORDER BY f.period_end DESC LIMIT 12`
+  const n = (v: string | null) => (v == null ? null : toNumber(v))
+  const pct = (v: string | null) => { const t = v == null ? null : toNumber(v); return t == null ? null : t * 100 } // margins stored as fractions
+  const q = rows.map(r => ({
+    period_end: r.period_end, revenue: n(r.revenue), ebitda: n(r.ebitda), pat: n(r.pat), eps: n(r.eps),
+    ebitda_margin: pct(r.ebitda_margin), net_margin: pct(r.net_margin), debt_equity: n(r.debt_equity_ratio),
+  }))
+  // YoY = quarter vs the same quarter a year ago (4 rows back, newest-first).
+  const yoy = (cur: number | null, prior: number | null) =>
+    cur == null || prior == null || prior === 0 ? null : (cur - prior) / Math.abs(prior) * 100
+  return q.slice(0, 8).map((r, i) => ({
+    ...r,
+    rev_yoy: yoy(r.revenue, q[i + 4]?.revenue ?? null),
+    pat_yoy: yoy(r.pat, q[i + 4]?.pat ?? null),
+  }))
+}
+
+// ── Recent corporate announcements (replaces the empty TV "Top Stories") — lens_filings ──
+export type StockFiling = {
+  date: string; category: string | null; bucket: string | null; priority: string | null
+  subject: string | null; url: string | null
+}
+export async function getStockAnnouncements(symbol: string, limit = 20): Promise<StockFiling[]> {
+  const rows = await sql<Record<string, string>[]>`
+    SELECT to_char(f.filing_date,'YYYY-MM-DD') AS date, f.category, f.category_bucket AS bucket,
+           f.signal_priority AS priority, f.subject_text AS subject, f.source_url AS url
+    FROM foundation_staging.lens_filings f
+    JOIN foundation_staging.instrument_master im ON im.instrument_id = f.instrument_id
+    WHERE im.symbol = ${symbol}
+    ORDER BY f.filing_date DESC, f.nse_seq_id DESC LIMIT ${limit}`
+  return rows.map(r => ({
+    date: r.date, category: r.category, bucket: r.bucket, priority: r.priority, subject: r.subject, url: r.url,
+  }))
 }
 
 export async function getLensAsOf(): Promise<string | null> {

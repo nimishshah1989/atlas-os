@@ -11,14 +11,16 @@ import { notFound } from 'next/navigation'
 import { getStockBySymbol, getStockMetricHistory } from '@/lib/queries/stocks'
 import { getStockState } from '@/lib/queries/states'
 import { toNumber } from '@/lib/v6/decimal'
-import { getStockDecile, getStockRSMatrix, getStockChartSeries } from '@/lib/queries/v6/stock_lens'
+import { getStockDecile, getStockRSMatrix, getStockChartSeries, getStockEvidence, getStockFundamentals, getStockAnnouncements } from '@/lib/queries/v6/stock_lens'
+import { StockFundamentalsTable } from './StockFundamentalsTable'
+import { StockAnnouncementsPanel } from './StockAnnouncementsPanel'
 
 import { StockLensCardV4 } from './StockLensCardV4'
 import { StockRSMatrix } from './StockRSMatrix'
 import { StockPriceEMAChart } from './StockPriceEMAChart'
 import { StockRSChart } from './StockRSChart'
 import { LifecyclePanel } from './LifecyclePanel'
-import { TVTechnicalAnalysis, TVFinancials, TVCompanyProfile, TVNews } from './TVWidgets'
+import { TVTechnicalAnalysis, TVCompanyProfile } from './TVWidgets'
 
 const CAP_LABEL: Record<string, string> = { large: 'Large-cap', mid: 'Mid-cap', small: 'Small-cap', micro: 'Micro-cap' }
 
@@ -39,6 +41,14 @@ export async function StockDetailV4({ symbol }: { symbol: string }) {
   ])
 
   const latest = metricHistory.length > 0 ? metricHistory[metricHistory.length - 1] : null
+
+  // Batch 3 — the REAL numbers behind the scores: evidence (technicals/flow/valuation/VWAP),
+  // the 8-quarter financials, and corporate announcements (all native foundation_staging).
+  const [evidence, fundamentals, announcements] = await Promise.all([
+    getStockEvidence(symbol).catch(() => null),
+    getStockFundamentals(symbol).catch(() => []),
+    getStockAnnouncements(symbol).catch(() => []),
+  ])
 
   const capLabel = decile?.cap ? (CAP_LABEL[decile.cap] ?? decile.cap) : null
   const sector = stock.sector ?? decile?.sector ?? null
@@ -83,9 +93,32 @@ export async function StockDetailV4({ symbol }: { symbol: string }) {
         </p>
       </section>
 
+      {/* ── Price & VWAP snapshot (real numbers at a glance) ── */}
+      {evidence && (
+        <section className="px-8 py-5 border-b border-paper-rule" aria-label="Price and VWAP snapshot">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-px bg-paper-rule border border-paper-rule rounded-[2px] overflow-hidden">
+            {[
+              { label: 'Price', value: evidence.close == null ? '—' : `₹${evidence.close.toFixed(1)}`, foot: evidence.as_of ?? '', tone: 'neutral' as const },
+              { label: 'VWAP · 1Y anchor', value: evidence.vwap_252 == null ? '—' : `₹${evidence.vwap_252.toFixed(0)}`,
+                foot: evidence.vwap_dist == null ? '252-session' : `${evidence.vwap_dist >= 0 ? '+' : ''}${evidence.vwap_dist.toFixed(1)}% from VWAP`,
+                tone: (evidence.vwap_dist == null ? 'neutral' : evidence.vwap_dist >= 0 ? 'pos' : 'neg') as 'pos' | 'neg' | 'neutral' },
+              { label: 'P/E · TTM', value: evidence.pe_ttm == null ? '—' : `${evidence.pe_ttm.toFixed(1)}×`, foot: evidence.eps_ttm == null ? 'no TTM EPS' : `TTM EPS ₹${evidence.eps_ttm.toFixed(1)}`, tone: 'neutral' as const },
+              { label: '52-week range', value: evidence.pos_52w == null ? '—' : `${evidence.pos_52w.toFixed(0)}%`, foot: 'position low→high', tone: 'neutral' as const },
+              { label: 'RSI(14)', value: evidence.rsi == null ? '—' : evidence.rsi.toFixed(0), foot: 'momentum', tone: 'neutral' as const },
+            ].map(t => (
+              <div key={t.label} className="bg-paper px-4 py-3">
+                <div className="font-sans text-[9px] uppercase tracking-[0.16em] text-ink-tertiary mb-1 font-semibold">{t.label}</div>
+                <div className={`font-mono text-[20px] leading-none tabular-nums ${t.tone === 'pos' ? 'text-signal-pos' : t.tone === 'neg' ? 'text-signal-neg' : 'text-ink-primary'}`}>{t.value}</div>
+                <div className="font-sans text-[10px] text-ink-tertiary mt-1">{t.foot}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* ── Lens decile card (centerpiece) ── */}
       {decile ? (
-        <StockLensCardV4 decile={decile} />
+        <StockLensCardV4 decile={decile} metrics={evidence} />
       ) : (
         <section className="px-8 py-9 border-b border-paper-rule">
           <p className="font-sans text-[13px] text-ink-tertiary italic">No lens scores recorded for {stock.symbol}.</p>
@@ -122,25 +155,11 @@ export async function StockDetailV4({ symbol }: { symbol: string }) {
         </div>
       </section>
 
-      {/* ── TV Financials ── */}
-      <section className="px-8 py-6 border-b border-paper-rule">
-        <p className="font-mono text-[10px] uppercase tracking-wider text-ink-tertiary mb-3">
-          Financial Statements — revenue, EBITDA, EPS over time
-        </p>
-        <div className="border border-paper-rule rounded-[2px] overflow-hidden bg-paper">
-          <TVFinancials symbol={stock.symbol} />
-        </div>
-      </section>
+      {/* ── Quarterly financials (native XBRL — replaces the TV Financials widget) ── */}
+      <StockFundamentalsTable quarters={fundamentals} />
 
-      {/* ── TV News ── */}
-      <section className="px-8 py-6 border-b border-paper-rule">
-        <p className="font-mono text-[10px] uppercase tracking-wider text-ink-tertiary mb-3">
-          Latest News — auto-updated from TradingView
-        </p>
-        <div className="border border-paper-rule rounded-[2px] overflow-hidden bg-paper">
-          <TVNews symbol={stock.symbol} />
-        </div>
-      </section>
+      {/* ── Corporate announcements (native filings — replaces TV "Top Stories") ── */}
+      <StockAnnouncementsPanel filings={announcements} />
 
       {/* ── TV Company profile (collapsed) ── */}
       <section className="px-8 py-6 border-b border-paper-rule">
