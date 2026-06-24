@@ -18,7 +18,7 @@ import { toNumber, toNumberOr } from '@/lib/v6/decimal'
 // No user input — all literals; shared by the list + detail roll-ups via sql.unsafe.
 const SCORED_STOCKS = `
   latest AS (SELECT max(date) d FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'),
-  tdl AS (SELECT max(date) d FROM foundation_staging.technical_daily),
+  tdl AS (SELECT max(date) d FROM foundation_staging.technical_daily WHERE asset_class='stock'),  -- asset_class filter uses the class_date index (unfiltered max(date) seq-scans 6.9M rows)
   cap AS (
     SELECT instrument_id,
       CASE WHEN bool_or(index_code='NIFTY 100') THEN 'large'

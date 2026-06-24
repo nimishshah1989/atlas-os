@@ -171,7 +171,7 @@ export async function getLensAsOf(): Promise<string | null> {
 export async function getStocksDecileList(): Promise<StockListRow[]> {
   const rows = await sql<Record<string, string>[]>`
     WITH latest AS (SELECT max(date) d FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'),
-    tdl AS (SELECT max(date) d FROM foundation_staging.technical_daily),  -- RS/ret as-of; normally == the lens date (technicals computed first) and matches the detail RS-matrix basis
+    tdl AS (SELECT max(date) d FROM foundation_staging.technical_daily WHERE asset_class='stock'),  -- RS/ret as-of (asset_class filter uses the class_date index — an unfiltered max(date) seq-scans 6.9M rows)
 
     cap AS (
       SELECT instrument_id,

@@ -166,15 +166,18 @@ export async function getSectorLensVectors(): Promise<Array<{
   stock_count: number
 }>> {
   const rows = await sql.unsafe(`
-    WITH latest AS (
-      SELECT DISTINCT ON (l.instrument_id)
-        i.sector,
+    WITH ld AS (
+      SELECT max(date) d FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'
+    ),
+    latest AS (
+      -- the latest-DATE snapshot (uses the class_date index ~2k rows); replaces a DISTINCT ON
+      -- that scanned the whole 3.9M-row journal to pick the last row per instrument.
+      SELECT i.sector,
         l.technical, l.fundamental, l.valuation, l.catalyst, l.flow, l.policy,
         l.composite
       FROM foundation_staging.atlas_lens_scores_daily l
       JOIN foundation_staging.instrument_master i ON i.instrument_id = l.instrument_id
-      WHERE i.sector IS NOT NULL
-      ORDER BY l.instrument_id, l.date DESC
+      WHERE i.sector IS NOT NULL AND l.asset_class='stock' AND l.date = (SELECT d FROM ld)
     )
     SELECT
       sector,
