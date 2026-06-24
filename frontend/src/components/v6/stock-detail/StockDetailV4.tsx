@@ -1,17 +1,15 @@
-// allow-large: v4 stock detail page assembles the lens card, RS matrix, the two native
-// EMA charts, and the kept TV widgets + Weinstein lifecycle into one ordered page. Each
-// section is a single-line render; splitting into sub-shells would obscure the page contract.
-// StockDetailV4 — the v4 stock detail page (behind LENS_V4). Lens-first, native
-// foundation_staging. Drops the trader-view verdict header, conviction decomposition,
-// and gates/confidence cruft. Keeps the TV Advanced chart, TV technical/financials/
-// news/profile widgets, and the Weinstein lifecycle panel from the old detail page.
+// allow-large: v4 stock detail page assembles the price/VWAP snapshot, the lens card (real
+// numbers behind every score), RS matrix, the two native Lightweight EMA charts, the 8-quarter
+// financials table, and corporate announcements into one ordered page. Single-line renders.
+// StockDetailV4 — the v4 stock detail page (behind LENS_V4). Lens-first and FULLY native
+// foundation_staging (no atlas.* / public.de_* reads — fs-only for the legacy retirement).
+// Drops the trader-view verdict header, the TV Advanced chart + TV Financials/News widgets
+// (TV's embed refuses NSE symbols / the data was unhelpful), and the Weinstein lifecycle panel
+// (its only inputs were legacy atlas metrics; the Technical lens now shows the real trend numbers).
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
-import { getStockBySymbol, getStockMetricHistory } from '@/lib/queries/stocks'
-import { getStockState } from '@/lib/queries/states'
-import { toNumber } from '@/lib/v6/decimal'
-import { getStockDecile, getStockRSMatrix, getStockChartSeries, getStockEvidence, getStockFundamentals, getStockAnnouncements } from '@/lib/queries/v6/stock_lens'
+import { getStockDecile, getStockRSMatrix, getStockChartSeries, getStockEvidence, getStockFundamentals, getStockAnnouncements, getStockHeader } from '@/lib/queries/v6/stock_lens'
 import { StockFundamentalsTable } from './StockFundamentalsTable'
 import { StockAnnouncementsPanel } from './StockAnnouncementsPanel'
 
@@ -19,32 +17,23 @@ import { StockLensCardV4 } from './StockLensCardV4'
 import { StockRSMatrix } from './StockRSMatrix'
 import { StockPriceEMAChart } from './StockPriceEMAChart'
 import { StockRSChart } from './StockRSChart'
-import { LifecyclePanel } from './LifecyclePanel'
 import { TVTechnicalAnalysis, TVCompanyProfile } from './TVWidgets'
 
 const CAP_LABEL: Record<string, string> = { large: 'Large-cap', mid: 'Mid-cap', small: 'Small-cap', micro: 'Micro-cap' }
 
 export async function StockDetailV4({ symbol }: { symbol: string }) {
-  // Batch 1 — core stock + lens + RS matrix (Supabase session pooler caps clients at 15).
+  // Batch 1 — instrument header (fs) + lens + RS matrix (Supabase session pooler caps clients at 15).
   const [stock, decile, rsMatrix] = await Promise.all([
-    getStockBySymbol(symbol),
+    getStockHeader(symbol),
     getStockDecile(symbol).catch(() => null),
     getStockRSMatrix(symbol).catch(() => null),
   ])
   if (!stock) notFound()
 
-  // Batch 2 — chart series + Weinstein inputs (released batch-1 connections first).
-  const [chartRows, stockState, metricHistory] = await Promise.all([
+  // Batch 2 — chart series + the REAL numbers behind the scores: evidence (technicals/flow/
+  // valuation/VWAP), the 8-quarter financials, and corporate announcements. All native fs.
+  const [chartRows, evidence, fundamentals, announcements] = await Promise.all([
     getStockChartSeries(symbol, 5).catch(() => []),
-    getStockState(stock.instrument_id).catch(() => null),
-    getStockMetricHistory(stock.instrument_id, 365).catch(() => []),
-  ])
-
-  const latest = metricHistory.length > 0 ? metricHistory[metricHistory.length - 1] : null
-
-  // Batch 3 — the REAL numbers behind the scores: evidence (technicals/flow/valuation/VWAP),
-  // the 8-quarter financials, and corporate announcements (all native foundation_staging).
-  const [evidence, fundamentals, announcements] = await Promise.all([
     getStockEvidence(symbol).catch(() => null),
     getStockFundamentals(symbol).catch(() => []),
     getStockAnnouncements(symbol).catch(() => []),
@@ -52,7 +41,7 @@ export async function StockDetailV4({ symbol }: { symbol: string }) {
 
   const capLabel = decile?.cap ? (CAP_LABEL[decile.cap] ?? decile.cap) : null
   const sector = stock.sector ?? decile?.sector ?? null
-  const name = stock.company_name ?? decile?.name ?? stock.symbol
+  const name = stock.name ?? decile?.name ?? stock.symbol
 
   return (
     <div className="max-w-[1400px] mx-auto">
@@ -135,15 +124,6 @@ export async function StockDetailV4({ symbol }: { symbol: string }) {
           <StockRSChart rows={chartRows} symbol={stock.symbol} />
         </>
       )}
-
-      {/* ── Weinstein lifecycle ── */}
-      <LifecyclePanel
-        state={stockState?.state ?? null}
-        dwellDays={stockState?.dwell_days ?? null}
-        ema20Ratio={toNumber(latest?.ema_20_ratio)}
-        volRatio63={toNumber(latest?.vol_ratio_63)}
-        extensionPct={toNumber(latest?.extension_pct)}
-      />
 
       {/* ── TV Technical Analysis ── */}
       <section className="px-8 py-6 border-b border-paper-rule">

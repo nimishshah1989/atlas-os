@@ -267,6 +267,17 @@ export async function getStockAnnouncements(symbol: string, limit = 20): Promise
   }))
 }
 
+// Minimal instrument header from foundation_staging (replaces the legacy atlas.* getStockBySymbol
+// on the v4 detail path — keeps the page fs-only for the legacy retirement).
+export type StockHeader = { instrument_id: string; symbol: string; name: string | null; sector: string | null }
+export async function getStockHeader(symbol: string): Promise<StockHeader | null> {
+  const r = await sql<StockHeader[]>`
+    SELECT instrument_id::text AS instrument_id, symbol, name, sector
+    FROM foundation_staging.instrument_master
+    WHERE symbol = ${symbol} AND asset_class='stock' LIMIT 1`
+  return r[0] ?? null
+}
+
 export async function getLensAsOf(): Promise<string | null> {
   const r = await sql<{ d: string | null }[]>`
     SELECT to_char(max(date),'YYYY-MM-DD') AS d
