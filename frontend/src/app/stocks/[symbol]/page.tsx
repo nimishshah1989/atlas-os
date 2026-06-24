@@ -52,6 +52,7 @@ import { SparklineComparisonPanel } from '@/components/v6/stock-detail/Sparkline
 import { LENS_V4_ENABLED } from '@/lib/feature-flags'
 import { getLensScoreByInstrument } from '@/lib/queries/lens-scores'
 import { LensVectorPanel } from '@/components/v6/stock-detail/LensVectorPanel'
+import { StockDetailV4 } from '@/components/v6/stock-detail/StockDetailV4'
 
 export default async function StockPage({
   params,
@@ -61,6 +62,10 @@ export default async function StockPage({
   searchParams?: Promise<{ portfolio?: string }>
 }) {
   const symbol = decodeURIComponent((await params).symbol).toUpperCase()
+
+  // v4 (behind LENS_V4): lens-first detail page, native foundation_staging.
+  if (LENS_V4_ENABLED) return <StockDetailV4 symbol={symbol} />
+
   const stock = await getStockBySymbol(symbol)
   if (!stock) {
     const alias = await lookupSymbolAlias(symbol)
