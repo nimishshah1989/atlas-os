@@ -9,6 +9,8 @@ export const dynamic = 'force-dynamic'
 import { getFundListPage, type FundListRow } from '@/lib/queries/v6/fund-list'
 import { getIndustrySnapshot } from '@/lib/queries/v6/industry_snapshot'
 import { FundsList, type FundRow } from '@/components/v6/FundsList'
+import { LENS_V4_ENABLED } from '@/lib/feature-flags'
+import { FundsPageV4 } from '@/components/v6/funds/FundsPageV4'
 
 /** Map the composite-scorecard row to the FundsList table row shape. */
 function toFundRow(r: FundListRow): FundRow {
@@ -39,6 +41,8 @@ function toFundRow(r: FundListRow): FundRow {
 }
 
 export default async function FundsPage() {
+  if (LENS_V4_ENABLED) return <FundsPageV4 />
+
   const [page, snapshot] = await Promise.all([
     getFundListPage(),
     getIndustrySnapshot('funds'),

@@ -34,8 +34,8 @@ export async function getEtfChartSeries(nseTicker: string, years = 5): Promise<S
 }
 
 // Per-stock scored CTE (deciles within cap cohort, leadership, strength, raw lens subscores, RS).
-// No user input — all literals; shared by the list + detail roll-ups via sql.unsafe.
-const SCORED_STOCKS = `
+// No user input — all literals; shared by the ETF + fund roll-ups via sql.unsafe.
+export const SCORED_STOCKS = `
   latest AS (SELECT max(date) d FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'),
   tdl AS (SELECT max(date) d FROM foundation_staging.technical_daily WHERE asset_class='stock'),  -- asset_class filter uses the class_date index (unfiltered max(date) seq-scans 6.9M rows)
   cap AS (
