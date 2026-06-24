@@ -13,8 +13,13 @@ import { HeroStories } from '@/components/v6/etfs/HeroStories'
 import { AmcTileRow } from '@/components/v6/etfs/AmcTileRow'
 import { PremiumDiscountScatter } from '@/components/v6/etfs/PremiumDiscountScatter'
 import { CategoryBands } from '@/components/v6/etfs/CategoryBands'
+import { LENS_V4_ENABLED } from '@/lib/feature-flags'
+import { ETFsPageV4 } from '@/components/v6/etfs/ETFsPageV4'
 
 export default async function ETFsPage() {
+  // v4 lens-first ETF list. Flag-off path below is byte-identical.
+  if (LENS_V4_ENABLED) return <ETFsPageV4 />
+
   const [etfs, regime, validations, etfListV6] = await Promise.all([
     getAllETFs(),
     getCurrentRegime(),

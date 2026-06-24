@@ -27,6 +27,8 @@ import {
   TVCompanyProfile,
   TVMiniOverview,
 } from '@/components/v6/stock-detail/TVWidgets'
+import { LENS_V4_ENABLED } from '@/lib/feature-flags'
+import { ETFDetailV4 } from '@/components/v6/etfs/ETFDetailV4'
 
 type Params = Promise<{ ticker: string }>
 type SearchParams = Promise<{ tab?: string; range?: string }>
@@ -41,6 +43,9 @@ export default async function ETFPage({
   const { ticker } = await params
   const { tab = 'overview' } = await searchParams
   const decoded = decodeURIComponent(ticker)
+
+  // v4 lens-first ETF detail (fcode-keyed). Flag-off path below is byte-identical.
+  if (LENS_V4_ENABLED) return <ETFDetailV4 fcode={decoded} />
 
   // Batch 1 — core ETF data (6 connections concurrent)
   const [etf, metricHistory, stateHistory, holdings, leaderHoldings, deepdive] = await Promise.all([
