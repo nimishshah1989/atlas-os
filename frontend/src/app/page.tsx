@@ -27,10 +27,16 @@ import { BreadthCountCharts } from '@/components/regime/BreadthCountCharts'
 import { BreadthDetailTable } from '@/components/regime/BreadthDetailTable'
 import { TierReturnsTable } from '@/components/regime/TierReturnsTable'
 import { MacroContextTable } from '@/components/regime/MacroContextTable'
+// v4 redesign — "Graphite Terminal" Market Pulse (native fs, drops the Weinstein verdict/scorecard/worklist)
+import { MarketPulseV4 } from '@/components/v4/market-pulse/MarketPulseV4'
 
 type SearchParams = Promise<{ range?: string }>
 
 export default async function RegimePage({ searchParams }: { searchParams: SearchParams }) {
+  // v4 redesign pilot — the new Market Pulse fetches its own native-fs data.
+  // Flag-off path below is unchanged (byte-identical).
+  if (LENS_V4_ENABLED) return <MarketPulseV4 />
+
   const { range = '1Y' } = await searchParams
   const historyRange = range as TimeRange
   const historyDays = rangeToDays(historyRange)
