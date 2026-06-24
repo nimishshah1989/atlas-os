@@ -9,16 +9,19 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { StockListRow } from '@/lib/queries/v6/stock_lens'
 import { StocksBubble2x2 } from './StocksBubble2x2'
+import { Panel } from '@/components/v4/ui/Panel'
+import { decileColor } from '@/components/v4/ui/decile'
 
 // ── colour helpers (shared idioms) ────────────────────────────────────────
-const decileText = (d: number | null) =>
-  d == null ? 'text-ink-tertiary' : d >= 8 ? 'text-signal-pos' : d >= 5 ? 'text-ink-secondary' : 'text-signal-neg'
+// Decile cells colour the figure via the shared perceptual ramp (decileColor);
+// null falls back to the tertiary text token.
+const decileStyle = (d: number | null) => ({ color: d == null ? 'var(--color-txt-3)' : decileColor(d) })
 
 const leadText = (lead: number) =>
-  lead >= 3 ? 'text-signal-pos' : lead === 2 ? 'text-teal' : lead === 1 ? 'text-signal-warn' : 'text-ink-tertiary'
+  lead >= 3 ? 'text-sig-pos' : lead === 2 ? 'text-brand' : lead === 1 ? 'text-sig-warn' : 'text-txt-3'
 
 const pctText = (v: number | null) =>
-  v == null ? 'text-ink-tertiary' : v >= 0 ? 'text-signal-pos' : 'text-signal-neg'
+  v == null ? 'text-txt-3' : v >= 0 ? 'text-sig-pos' : 'text-sig-neg'
 
 const fmtPct = (v: number | null) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%`)
 
@@ -96,12 +99,12 @@ function numFor(s: StockListRow, key: SortKey): number {
   }
 }
 
-const CONTROL = 'font-sans text-[12px] bg-paper border border-paper-rule rounded-sm px-2 py-1 text-ink-secondary'
+const CONTROL = 'font-sans text-[12px] bg-surface-raised border border-edge-rule rounded-tile px-2 py-1 text-txt-2'
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="font-sans text-[10px] uppercase tracking-wider text-ink-tertiary">{label}</span>
+      <span className="font-sans text-[10px] uppercase tracking-wider text-txt-3">{label}</span>
       {children}
     </label>
   )
@@ -174,28 +177,28 @@ export function StocksScreenerV4({ stocks }: { stocks: StockListRow[] }) {
   }
 
   return (
-    <>
+    <div className="flex flex-col gap-5">
       {/* (A) The 2×2 — respects active filters/screens */}
-      <section className="px-8 py-10 border-b border-paper-rule" aria-label="Strength × Leadership 2×2">
-        <div className="mb-5">
-          <h2 className="font-serif text-[28px] font-normal tracking-tight text-ink-primary">Strength × Leadership</h2>
-          <p className="font-sans text-[13px] text-ink-tertiary max-w-[760px] leading-[1.45] mt-1">
-            Each dot is a stock — x = average conviction decile, y = how many of the 4 conviction lenses it leads.
-            Bubble size = ~20-session liquidity, colour = leadership. Click any dot for its evidence.
-          </p>
-        </div>
+      <Panel
+        eyebrow="Map"
+        title="Strength × Leadership"
+        info={{
+          title: 'How to read the 2×2',
+          body: 'Each dot is a stock — x = average conviction decile, y = how many of the 4 conviction lenses it leads. Bubble size = ~20-session liquidity, colour = leadership. Click any dot for its evidence.',
+        }}
+      >
         <StocksBubble2x2 stocks={filtered} />
-      </section>
+      </Panel>
 
       {/* (B) Filter + smart-screen bar + (C) table */}
-      <section className="px-8 py-10 border-b border-paper-rule" aria-label="Stock screener">
-        <div className="mb-5">
-          <h2 className="font-serif text-[28px] font-normal tracking-tight text-ink-primary">Screen the universe</h2>
-          <p className="font-sans text-[13px] text-ink-tertiary max-w-[760px] leading-[1.45] mt-1">
-            Filter by cap, sector and conviction, or jump to a smart screen. Every column header sorts. Click a row for the full lens read.
-          </p>
-        </div>
-
+      <Panel
+        eyebrow="Screener"
+        title="Screen the universe"
+        info={{
+          title: 'Screening the universe',
+          body: 'Filter by cap, sector and conviction, or jump to a smart screen. Every column header sorts. Click a row for the full lens read.',
+        }}
+      >
         {/* control row */}
         <div className="flex flex-wrap items-end gap-4 mb-4">
           <Field label="Cap">
@@ -241,12 +244,12 @@ export function StocksScreenerV4({ stocks }: { stocks: StockListRow[] }) {
           <button
             type="button"
             onClick={clearAll}
-            className="font-sans text-[12px] bg-paper border border-paper-rule rounded-sm px-3 py-1 text-ink-secondary hover:border-ink-tertiary transition-colors self-end"
+            className="font-sans text-[12px] bg-surface-raised border border-edge-rule rounded-tile px-3 py-1 text-txt-2 hover:border-edge-strong transition-colors self-end"
           >
             Clear all
           </button>
 
-          <span className="font-mono text-[12px] text-ink-tertiary self-end ml-auto">
+          <span className="font-num text-[12px] tabular-nums text-txt-3 self-end ml-auto">
             {shown} of {total} stocks
           </span>
         </div>
@@ -260,8 +263,10 @@ export function StocksScreenerV4({ stocks }: { stocks: StockListRow[] }) {
                 key={sc.id}
                 type="button"
                 onClick={() => setScreen(active ? null : sc.id)}
-                className={`font-sans text-[12px] rounded-sm px-3 py-1 transition-colors ${
-                  active ? 'bg-ink-primary text-paper' : 'bg-paper border border-paper-rule text-ink-secondary hover:border-ink-tertiary'
+                className={`font-sans text-[12px] rounded-tile px-3 py-1 transition-colors ${
+                  active
+                    ? 'border border-brand bg-brand-soft text-brand'
+                    : 'bg-surface-raised border border-edge-rule text-txt-2 hover:border-edge-strong'
                 }`}
               >
                 {sc.label}
@@ -274,7 +279,7 @@ export function StocksScreenerV4({ stocks }: { stocks: StockListRow[] }) {
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
-              <tr className="border-b border-paper-rule">
+              <tr className="border-b border-edge-rule">
                 {COLS.map(col => {
                   const isSorted = effectiveSortKey === col.key
                   const emphasized = lensFocus != null && col.emphLens === lensFocus
@@ -285,7 +290,7 @@ export function StocksScreenerV4({ stocks }: { stocks: StockListRow[] }) {
                       onClick={() => toggleSort(col.key)}
                       className={`font-sans text-[10px] uppercase tracking-wider pb-2 px-2 cursor-pointer select-none whitespace-nowrap ${
                         col.align === 'right' ? 'text-right' : 'text-left'
-                      } ${emphasized ? 'text-ink-primary font-semibold' : 'text-ink-tertiary'} hover:text-ink-secondary`}
+                      } ${emphasized ? 'text-txt-1 font-semibold' : 'text-txt-3'} hover:text-txt-2`}
                     >
                       {col.label}{arrow}
                     </th>
@@ -300,29 +305,29 @@ export function StocksScreenerV4({ stocks }: { stocks: StockListRow[] }) {
                   <tr
                     key={s.symbol}
                     onClick={() => router.push('/stocks/' + s.symbol)}
-                    className="border-b border-paper-rule/50 cursor-pointer hover:bg-paper-soft"
+                    className="border-b border-edge-hair cursor-pointer hover:bg-surface-raised"
                   >
-                    <td className="py-1.5 px-2 font-mono text-[12px] font-semibold text-ink-primary whitespace-nowrap">{s.symbol}</td>
-                    <td className="py-1.5 px-2 font-sans text-[11px] text-ink-tertiary whitespace-nowrap">{s.cap}</td>
-                    <td className="py-1.5 px-2 font-sans text-[11px] text-ink-secondary truncate max-w-[160px]">{s.sector ?? '—'}</td>
+                    <td className="py-1.5 px-2 font-num text-[12px] font-semibold tabular-nums text-txt-1 whitespace-nowrap">{s.symbol}</td>
+                    <td className="py-1.5 px-2 font-sans text-[11px] text-txt-3 whitespace-nowrap">{s.cap}</td>
+                    <td className="py-1.5 px-2 font-sans text-[11px] text-txt-2 truncate max-w-[160px]">{s.sector ?? '—'}</td>
 
-                    <td className={`py-1.5 px-2 text-right font-mono text-[12px] ${decileText(s.d_tech)} ${emph('d_tech')}`}>{s.d_tech ?? '—'}</td>
-                    <td className={`py-1.5 px-2 text-right font-mono text-[12px] ${decileText(s.d_fund)} ${emph('d_fund')}`}>{s.d_fund ?? '—'}</td>
-                    <td className={`py-1.5 px-2 text-right font-mono text-[12px] ${decileText(s.d_cat)} ${emph('d_cat')}`}>{s.d_cat ?? '—'}</td>
-                    <td className={`py-1.5 px-2 text-right font-mono text-[12px] ${decileText(s.d_flow)} ${emph('d_flow')}`}>{s.d_flow ?? '—'}</td>
-                    <td className={`py-1.5 px-2 text-right font-mono text-[12px] ${decileText(s.d_val)} ${emph('d_val')}`}>{s.d_val ?? '—'}</td>
+                    <td className={`py-1.5 px-2 text-right font-num text-[12px] tabular-nums ${emph('d_tech')}`} style={decileStyle(s.d_tech)}>{s.d_tech ?? '—'}</td>
+                    <td className={`py-1.5 px-2 text-right font-num text-[12px] tabular-nums ${emph('d_fund')}`} style={decileStyle(s.d_fund)}>{s.d_fund ?? '—'}</td>
+                    <td className={`py-1.5 px-2 text-right font-num text-[12px] tabular-nums ${emph('d_cat')}`} style={decileStyle(s.d_cat)}>{s.d_cat ?? '—'}</td>
+                    <td className={`py-1.5 px-2 text-right font-num text-[12px] tabular-nums ${emph('d_flow')}`} style={decileStyle(s.d_flow)}>{s.d_flow ?? '—'}</td>
+                    <td className={`py-1.5 px-2 text-right font-num text-[12px] tabular-nums ${emph('d_val')}`} style={decileStyle(s.d_val)}>{s.d_val ?? '—'}</td>
 
-                    <td className="py-1.5 px-2 text-right font-mono text-[12px] text-ink-secondary">
+                    <td className="py-1.5 px-2 text-right font-num text-[12px] tabular-nums text-txt-2">
                       {s.strength == null ? '—' : s.strength.toFixed(1)}
                     </td>
-                    <td className={`py-1.5 px-2 text-right font-mono text-[12px] ${leadText(s.lead)}`}>{s.lead}/4</td>
+                    <td className={`py-1.5 px-2 text-right font-num text-[12px] tabular-nums ${leadText(s.lead)}`}>{s.lead}/4</td>
 
-                    <td className={`py-1.5 px-2 text-right font-mono text-[12px] ${pctText(s.rs_1m)}`}>{fmtPct(s.rs_1m)}</td>
-                    <td className={`py-1.5 px-2 text-right font-mono text-[12px] ${pctText(s.rs_3m)}`}>{fmtPct(s.rs_3m)}</td>
-                    <td className={`py-1.5 px-2 text-right font-mono text-[12px] ${pctText(s.rs_6m)}`}>{fmtPct(s.rs_6m)}</td>
-                    <td className={`py-1.5 px-2 text-right font-mono text-[12px] ${pctText(s.rs_sector_3m)}`}>{fmtPct(s.rs_sector_3m)}</td>
+                    <td className={`py-1.5 px-2 text-right font-num text-[12px] tabular-nums ${pctText(s.rs_1m)}`}>{fmtPct(s.rs_1m)}</td>
+                    <td className={`py-1.5 px-2 text-right font-num text-[12px] tabular-nums ${pctText(s.rs_3m)}`}>{fmtPct(s.rs_3m)}</td>
+                    <td className={`py-1.5 px-2 text-right font-num text-[12px] tabular-nums ${pctText(s.rs_6m)}`}>{fmtPct(s.rs_6m)}</td>
+                    <td className={`py-1.5 px-2 text-right font-num text-[12px] tabular-nums ${pctText(s.rs_sector_3m)}`}>{fmtPct(s.rs_sector_3m)}</td>
 
-                    <td className="py-1.5 px-2 text-right font-mono text-[12px] text-ink-secondary">{fmtLiq(s.liq_cr)}</td>
+                    <td className="py-1.5 px-2 text-right font-num text-[12px] tabular-nums text-txt-2">{fmtLiq(s.liq_cr)}</td>
                   </tr>
                 )
               })}
@@ -331,11 +336,11 @@ export function StocksScreenerV4({ stocks }: { stocks: StockListRow[] }) {
         </div>
 
         {truncated && (
-          <p className="font-sans text-[11px] text-ink-tertiary mt-3">
+          <p className="font-sans text-[11px] text-txt-3 mt-3">
             showing top {ROW_CAP} of {shown} — refine filters to narrow
           </p>
         )}
-      </section>
-    </>
+      </Panel>
+    </div>
   )
 }
