@@ -42,6 +42,8 @@ export type SectorStock = {
 
 // Deciles cut WITHIN cap cohort across the whole universe (D27), then filtered to the sector.
 // ntile partitions by (cap, score-is-null) so nulls form their own bucket and are nulled out.
+// The cohort is the FULL cap universe (no sector filter on `j`) so a stock's decile is identical
+// here and on the /stocks list + detail; the sector filter is applied after ntile (final WHERE).
 export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
   const rows = await sql<Record<string, string>[]>`
     WITH latest AS (
@@ -62,7 +64,7 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
       FROM foundation_staging.atlas_lens_scores_daily l
       JOIN foundation_staging.instrument_master im ON im.instrument_id = l.instrument_id
       LEFT JOIN cap c ON c.instrument_id = l.instrument_id
-      WHERE l.asset_class='stock' AND l.date=(SELECT d FROM latest) AND im.sector IS NOT NULL
+      WHERE l.asset_class='stock' AND l.date=(SELECT d FROM latest)
     ),
     dec AS (
       SELECT symbol, name, sector, cap, t, f, ca, fl, va,
@@ -74,7 +76,7 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
       FROM j
     )
     SELECT symbol, name, cap, d_tech, d_fund, d_cat, d_flow, d_val,
-      ((d_tech=10)::int + (d_fund=10)::int + (d_cat=10)::int + (d_flow=10)::int) AS lead,
+      (COALESCE((d_tech=10)::int,0) + COALESCE((d_fund=10)::int,0) + COALESCE((d_cat=10)::int,0) + COALESCE((d_flow=10)::int,0)) AS lead,
       ((COALESCE(d_tech,0)+COALESCE(d_fund,0)+COALESCE(d_cat,0)+COALESCE(d_flow,0))::float
         / NULLIF((d_tech IS NOT NULL)::int+(d_fund IS NOT NULL)::int+(d_cat IS NOT NULL)::int+(d_flow IS NOT NULL)::int,0)) AS strength
     FROM dec WHERE sector = ${sector}

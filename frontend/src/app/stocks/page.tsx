@@ -16,12 +16,16 @@ import type { PolicyEntryParams } from '@/lib/policy-entry-filter'
 import { LENS_V4_ENABLED } from '@/lib/feature-flags'
 import { getAllLensScores } from '@/lib/queries/lens-scores'
 import { LensRankingTable } from '@/components/v6/stocks/LensRankingTable'
+import { StocksPageV4 } from '@/components/v6/stocks/StocksPageV4'
 
 export default async function StocksPage({
   searchParams,
 }: {
   searchParams: Promise<{ sector?: string; index?: string; portfolio?: string }>
 }) {
+  // v4 lens-first stocks funnel — flag-off path below is left byte-identical.
+  if (LENS_V4_ENABLED) return <StocksPageV4 />
+
   const params = await searchParams
   const sectorFilter  = params.sector?.trim() || undefined
   const indexFilter   = params.index?.trim() || undefined

@@ -119,7 +119,7 @@ export async function getStockDecile(symbol: string): Promise<StockDecile | null
       technical, fundamental, valuation, catalyst, flow, policy,
       d_technical, d_fundamental, d_valuation, d_catalyst, d_flow,
       ${sql(SUB_COLS)}, evidence,
-      ((d_technical=10)::int+(d_fundamental=10)::int+(d_catalyst=10)::int+(d_flow=10)::int) AS lead,
+      (COALESCE((d_technical=10)::int,0)+COALESCE((d_fundamental=10)::int,0)+COALESCE((d_catalyst=10)::int,0)+COALESCE((d_flow=10)::int,0)) AS lead,
       ((COALESCE(d_technical,0)+COALESCE(d_fundamental,0)+COALESCE(d_catalyst,0)+COALESCE(d_flow,0))::float
         / NULLIF((d_technical IS NOT NULL)::int+(d_fundamental IS NOT NULL)::int+(d_catalyst IS NOT NULL)::int+(d_flow IS NOT NULL)::int,0)) AS strength
     FROM dec WHERE symbol = ${symbol} LIMIT 1
@@ -146,4 +146,88 @@ function parseEvidence(e: unknown): unknown {
   if (e == null) return null
   if (typeof e !== 'string') return e
   try { return JSON.parse(e) } catch { return null }
+}
+
+// ── Universe decile list (the /stocks funnel: leadership strip + 2×2 + table) ──
+// The whole scored universe with per-lens deciles cut within cap cohort (D27), leadership,
+// strength, compact RS (vs N500 + sector) and a ≈20-session turnover liquidity proxy. Returned
+// unfiltered — the screen/filter/sort all run client-side on this single fetch (the universe
+// is ~2k rows, well under what's worth re-querying per interaction; matches the pool budget).
+export type StockListRow = {
+  symbol: string; name: string | null; sector: string | null; cap: string
+  d_tech: number | null; d_fund: number | null; d_cat: number | null; d_flow: number | null; d_val: number | null
+  lead: number; strength: number | null
+  rs_1m: number | null; rs_3m: number | null; rs_6m: number | null; rs_sector_3m: number | null
+  ret_3m: number | null; liq_cr: number | null
+}
+
+export async function getLensAsOf(): Promise<string | null> {
+  const r = await sql<{ d: string | null }[]>`
+    SELECT to_char(max(date),'YYYY-MM-DD') AS d
+    FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'`
+  return r[0]?.d ?? null
+}
+
+export async function getStocksDecileList(): Promise<StockListRow[]> {
+  const rows = await sql<Record<string, string>[]>`
+    WITH latest AS (SELECT max(date) d FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'),
+    tdl AS (SELECT max(date) d FROM foundation_staging.technical_daily),  -- RS/ret as-of; normally == the lens date (technicals computed first) and matches the detail RS-matrix basis
+
+    cap AS (
+      SELECT instrument_id,
+        CASE WHEN bool_or(index_code='NIFTY 100') THEN 'large'
+             WHEN bool_or(index_code='NIFTY MIDCAP 150') THEN 'mid'
+             WHEN bool_or(index_code='NIFTY SMLCAP 250') THEN 'small' ELSE 'micro' END AS cap
+      FROM foundation_staging.de_index_constituents
+      WHERE effective_to IS NULL AND index_code IN ('NIFTY 100','NIFTY MIDCAP 150','NIFTY SMLCAP 250')
+      GROUP BY instrument_id
+    ),
+    rs AS (
+      SELECT instrument_id, rs_1m_n500, rs_3m_n500, rs_6m_n500, rs_3m_sector, ret_3m
+      FROM foundation_staging.technical_daily
+      WHERE asset_class='stock' AND date=(SELECT d FROM tdl)
+    ),
+    liq AS (  -- ≈20-session avg traded value (₹ Cr): a 30-calendar-day window ≈ 20 NSE sessions
+      SELECT instrument_id, avg(close * volume) / 1e7 AS liq_cr
+      FROM foundation_staging.ohlcv_stock
+      WHERE date >= (SELECT d FROM tdl) - INTERVAL '30 days' AND close > 0 AND volume > 0
+      GROUP BY instrument_id
+    ),
+    j AS (
+      SELECT l.instrument_id, im.symbol, im.name, im.sector, COALESCE(c.cap,'micro') AS cap,
+             l.technical::float t, l.fundamental::float f, l.catalyst::float ca, l.flow::float fl, l.valuation::float va
+      FROM foundation_staging.atlas_lens_scores_daily l
+      JOIN foundation_staging.instrument_master im ON im.instrument_id = l.instrument_id
+      LEFT JOIN cap c ON c.instrument_id = l.instrument_id
+      WHERE l.asset_class='stock' AND l.date=(SELECT d FROM latest)
+    ),
+    dec AS (
+      SELECT instrument_id, symbol, name, sector, cap,
+        CASE WHEN t  IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(t  IS NULL) ORDER BY t)  END d_tech,
+        CASE WHEN f  IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(f  IS NULL) ORDER BY f)  END d_fund,
+        CASE WHEN ca IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(ca IS NULL) ORDER BY ca) END d_cat,
+        CASE WHEN fl IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(fl IS NULL) ORDER BY fl) END d_flow,
+        CASE WHEN va IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(va IS NULL) ORDER BY va) END d_val
+      FROM j
+    )
+    SELECT d.symbol, d.name, d.sector, d.cap,
+      d.d_tech, d.d_fund, d.d_cat, d.d_flow, d.d_val,
+      (COALESCE((d.d_tech=10)::int,0) + COALESCE((d.d_fund=10)::int,0)
+        + COALESCE((d.d_cat=10)::int,0) + COALESCE((d.d_flow=10)::int,0)) AS lead,  -- a NULL lens = not-top-decile (0), NOT a NULL-collapse of the whole sum
+      ((COALESCE(d.d_tech,0)+COALESCE(d.d_fund,0)+COALESCE(d.d_cat,0)+COALESCE(d.d_flow,0))::float
+        / NULLIF((d.d_tech IS NOT NULL)::int+(d.d_fund IS NOT NULL)::int+(d.d_cat IS NOT NULL)::int+(d.d_flow IS NOT NULL)::int,0)) AS strength,
+      rs.rs_1m_n500, rs.rs_3m_n500, rs.rs_6m_n500, rs.rs_3m_sector, rs.ret_3m, liq.liq_cr
+    FROM dec d
+    LEFT JOIN rs  ON rs.instrument_id  = d.instrument_id
+    LEFT JOIN liq ON liq.instrument_id = d.instrument_id
+    ORDER BY strength DESC NULLS LAST
+  `
+  const n = (v: string | null) => (v == null ? null : toNumber(v))
+  return rows.map(r => ({
+    symbol: r.symbol, name: r.name, sector: r.sector, cap: r.cap,
+    d_tech: n(r.d_tech), d_fund: n(r.d_fund), d_cat: n(r.d_cat), d_flow: n(r.d_flow), d_val: n(r.d_val),
+    lead: toNumberOr(r.lead, 0), strength: n(r.strength),
+    rs_1m: n(r.rs_1m_n500), rs_3m: n(r.rs_3m_n500), rs_6m: n(r.rs_6m_n500), rs_sector_3m: n(r.rs_3m_sector),
+    ret_3m: n(r.ret_3m), liq_cr: n(r.liq_cr),
+  }))
 }
