@@ -51,6 +51,7 @@ METRICS_COLUMNS: tuple[str, ...] = (
     "bottomup_ret_1m",
     "bottomup_ret_3m",
     "bottomup_ret_6m",
+    "bottomup_ret_12m",  # A4: persist true 12m (was computed then dropped → ret_12m NULL)
     "bottomup_rs_1d_nifty500",
     "bottomup_rs_1w_nifty500",
     "bottomup_rs_1m_nifty500",

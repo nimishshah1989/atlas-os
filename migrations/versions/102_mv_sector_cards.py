@@ -105,6 +105,7 @@ metrics AS (
     smd.bottomup_ret_1m                AS ret_1m,
     smd.bottomup_ret_3m                AS ret_3m,
     smd.bottomup_ret_6m                AS ret_6m,
+    smd.bottomup_ret_12m,              -- A4: true 12m (direct), not back-derived
     -- RS columns (added migration 097)
     smd.rs_1w,
     smd.rs_1m,
@@ -232,12 +233,16 @@ SELECT
   ROUND(m.ret_1m::numeric,  4)                               AS ret_1m,
   ROUND(m.ret_3m::numeric,  4)                               AS ret_3m,
   ROUND(m.ret_6m::numeric,  4)                               AS ret_6m,
-  -- ret_12m: back-derived from rs_12m + nifty500_ret_12m
-  CASE
-    WHEN m.rs_12m IS NOT NULL AND nr.n500_ret_12m IS NOT NULL
-    THEN ROUND((m.rs_12m + nr.n500_ret_12m)::numeric, 4)
-    ELSE NULL
-  END                                                         AS ret_12m,
+  -- ret_12m: true bottom-up 12m (A4); fall back to rs_12m + nifty500_ret_12m only
+  -- when the stored 12m is absent (pre-backfill rows).
+  COALESCE(
+    ROUND(m.bottomup_ret_12m::numeric, 4),
+    CASE
+      WHEN m.rs_12m IS NOT NULL AND nr.n500_ret_12m IS NOT NULL
+      THEN ROUND((m.rs_12m + nr.n500_ret_12m)::numeric, 4)
+      ELSE NULL
+    END
+  )                                                           AS ret_12m,
 
   -- ---- RS vs Nifty 500 ----
   ROUND(m.rs_1m::numeric,   4)                               AS rs_1m,
