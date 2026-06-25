@@ -25,13 +25,8 @@ function fmtDate(d: unknown): string | null {
 }
 
 export async function MarketPulseV4() {
-  // Group A — regime + latest breadth counts + scored universe (for spotlight + sectors)
-  const [regime, breadthSeries, stocksList] = await Promise.all([
-    getCurrentRegime().catch(() => null),
-    getBreadthSeries(1).catch(() => []),
-    getStocksDecileList().catch(() => []),
-  ])
-
+  // Regime first (alone) so we can early-return without holding other connections.
+  const regime = await getCurrentRegime().catch(() => null)
   if (!regime) {
     return (
       <div className="min-h-screen bg-surface-base font-sans text-txt-1">
@@ -42,8 +37,14 @@ export async function MarketPulseV4() {
     )
   }
 
-  // Group B — the three native market-pulse tables
-  const [tier, macro, breadthTable] = await Promise.all([
+  // The scored universe is the heavy query (~2k rows) — fetch it ALONE so it never
+  // holds a connection alongside the others, keeping Market Pulse within the dev
+  // session pooler's 15-client cap under concurrent browser load.
+  const stocksList = await getStocksDecileList().catch(() => [])
+
+  // The remaining native-fs panels — all light, batched together.
+  const [breadthSeries, tier, macro, breadthTable] = await Promise.all([
+    getBreadthSeries(1).catch(() => []),
     getTierReturns().catch(() => ({ windows: [], smallcap_rs_z: null })),
     getMacroContext().catch(() => ({ rows: [], as_of: null })),
     getBreadthTable().catch(() => ({ rows: [], as_of: null })),
