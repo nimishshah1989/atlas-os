@@ -8,18 +8,22 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { getFundLensDetail, type FundLensDetail, type FundHolding, type FundMove } from '@/lib/queries/v6/fund_lens'
+import { Panel } from '@/components/v4/ui/Panel'
+import { StatCard, type Tone } from '@/components/v4/ui/StatCard'
+import { decileColor } from '@/components/v4/ui/decile'
 
 const HOLDING_CAP = 50
 
 // ── colour helpers (shared idioms with the stocks / ETF pages) ────────────
-const decileText = (d: number | null) =>
-  d == null ? 'text-ink-tertiary' : d >= 8 ? 'text-signal-pos' : d >= 5 ? 'text-ink-secondary' : 'text-signal-neg'
+// per-stock deciles take the shared perceptual ramp via inline style (decileColor);
+// null falls back to the tertiary text token.
+const decileStyle = (d: number | null) => ({ color: d == null ? 'var(--color-txt-3)' : decileColor(d) })
 
 const leadText = (lead: number) =>
-  lead >= 3 ? 'text-signal-pos' : lead === 2 ? 'text-teal' : lead === 1 ? 'text-signal-warn' : 'text-ink-tertiary'
+  lead >= 3 ? 'text-sig-pos' : lead === 2 ? 'text-brand' : lead === 1 ? 'text-sig-warn' : 'text-txt-3'
 
 const pctText = (v: number | null) =>
-  v == null ? 'text-ink-tertiary' : v >= 0 ? 'text-signal-pos' : 'text-signal-neg'
+  v == null ? 'text-txt-3' : v >= 0 ? 'text-sig-pos' : 'text-sig-neg'
 
 // rs_3m is a FRACTION (0.05 = +5%) → ×100 for display.
 const fmtRs = (v: number | null) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%`)
@@ -34,21 +38,21 @@ const LENS_VECTOR: { key: keyof Pick<FundLensDetail, 'v_tech' | 'v_fund' | 'v_ca
   { key: 'v_flow', label: 'Flow' },
   { key: 'v_val', label: 'Valuation' },
 ]
-const barColor = (v: number) => (v >= 80 ? 'bg-signal-pos' : v >= 50 ? 'bg-signal-warn' : 'bg-signal-neg')
+const barColor = (v: number) => (v >= 80 ? 'bg-sig-pos' : v >= 50 ? 'bg-sig-warn' : 'bg-sig-neg')
 
 function LensVector({ fund }: { fund: FundLensDetail }) {
   const scored = LENS_VECTOR
     .map(l => ({ label: l.label, v: fund[l.key] }))
     .filter((x): x is { label: string; v: number } => x.v != null)
   return (
-    <div className="space-y-2 max-w-[560px]">
-      {scored.length === 0 && <p className="font-sans text-[13px] text-ink-tertiary italic">No scored holdings.</p>}
+    <div className="max-w-[560px] space-y-2">
+      {scored.length === 0 && <p className="font-sans text-[13px] italic text-txt-3">No scored holdings.</p>}
       {scored.map(l => (
         <div key={l.label} className="flex items-center gap-3">
-          <span className="w-[96px] shrink-0 font-sans text-xs text-ink-secondary">{l.label}</span>
-          <span className="w-[34px] shrink-0 font-mono text-xs tabular-nums text-ink-primary text-right">{l.v.toFixed(0)}</span>
-          <span className="flex-1 h-[7px] bg-paper-deep rounded-[2px] overflow-hidden">
-            <span className={`block h-full rounded-[2px] ${barColor(l.v)}`} style={{ width: `${Math.min(100, l.v)}%` }} />
+          <span className="w-[96px] shrink-0 font-sans text-xs text-txt-2">{l.label}</span>
+          <span className="w-[34px] shrink-0 text-right font-num text-xs tabular-nums text-txt-1">{l.v.toFixed(0)}</span>
+          <span className="h-[7px] flex-1 overflow-hidden rounded-tile bg-surface-inset">
+            <span className={`block h-full rounded-tile ${barColor(l.v)}`} style={{ width: `${Math.min(100, l.v)}%` }} />
           </span>
         </div>
       ))}
@@ -58,17 +62,17 @@ function LensVector({ fund }: { fund: FundLensDetail }) {
 
 // ── active-movement: one column of moves (added / exited) ─────────────────
 function MoveList({ moves }: { moves: FundMove[] }) {
-  if (moves.length === 0) return <p className="font-sans text-[13px] text-ink-tertiary italic">—</p>
+  if (moves.length === 0) return <p className="font-sans text-[13px] italic text-txt-3">—</p>
   return (
     <div className="space-y-1">
       {moves.map(m => (
-        <div key={m.symbol} className="flex items-center justify-between gap-3 py-1 border-b border-paper-rule/50">
-          <a href={`/stocks/${m.symbol}`} className="font-mono text-[12px] font-semibold text-ink-primary no-underline hover:text-teal hover:underline truncate">
+        <div key={m.symbol} className="flex items-center justify-between gap-3 border-b border-edge-hair py-1">
+          <a href={`/stocks/${m.symbol}`} className="truncate font-num text-[12px] font-semibold tabular-nums text-txt-1 no-underline hover:text-brand hover:underline">
             {m.symbol}
           </a>
-          <span className="font-sans text-[11px] text-ink-tertiary truncate flex-1 min-w-0">{m.name ?? ''}</span>
-          <span className="font-mono text-[12px] tabular-nums text-ink-secondary shrink-0">{fmtWeight(m.weight)}</span>
-          <span className={`font-mono text-[11px] tabular-nums shrink-0 ${m.lead >= 2 ? 'text-signal-pos' : 'text-ink-tertiary'}`}>{m.lead}/4</span>
+          <span className="min-w-0 flex-1 truncate font-sans text-[11px] text-txt-3">{m.name ?? ''}</span>
+          <span className="shrink-0 font-num text-[12px] tabular-nums text-txt-2">{fmtWeight(m.weight)}</span>
+          <span className={`shrink-0 font-num text-[11px] tabular-nums ${m.lead >= 2 ? 'text-sig-pos' : 'text-txt-3'}`}>{m.lead}/4</span>
         </div>
       ))}
     </div>
@@ -79,28 +83,28 @@ function ActiveMovement({ fund }: { fund: FundLensDetail }) {
   const mv = fund.movement
   if (!mv) {
     return (
-      <p className="font-sans text-[13px] text-ink-tertiary italic">
+      <p className="font-sans text-[13px] italic text-txt-3">
         Only one holdings snapshot — month-over-month movement needs a second disclosure.
       </p>
     )
   }
   return (
     <>
-      <div className="flex flex-wrap items-center gap-3 mb-5">
-        <span className="font-mono text-[12px] font-semibold px-2.5 py-1 rounded-sm bg-paper-soft border border-paper-rule text-signal-pos">
+      <div className="mb-5 flex flex-wrap items-center gap-3">
+        <span className="rounded-tile border border-sig-pos/30 bg-sig-pos/10 px-2.5 py-1 font-num text-[12px] font-semibold tabular-nums text-sig-pos">
           +{mv.leaders_added} leaders added
         </span>
-        <span className="font-mono text-[12px] font-semibold px-2.5 py-1 rounded-sm bg-paper-soft border border-paper-rule text-signal-neg">
+        <span className="rounded-tile border border-sig-neg/30 bg-sig-neg/10 px-2.5 py-1 font-num text-[12px] font-semibold tabular-nums text-sig-neg">
           {mv.leaders_dropped} leaders dropped
         </span>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-[920px]">
+      <div className="grid max-w-[920px] grid-cols-1 gap-8 md:grid-cols-2">
         <div>
-          <h3 className="font-sans text-[10px] uppercase tracking-wider text-ink-tertiary font-semibold mb-2">Added</h3>
+          <h3 className="mb-2 font-num text-[10px] uppercase tracking-[0.14em] text-sig-pos">Added ↑</h3>
           <MoveList moves={mv.added} />
         </div>
         <div>
-          <h3 className="font-sans text-[10px] uppercase tracking-wider text-ink-tertiary font-semibold mb-2">Exited</h3>
+          <h3 className="mb-2 font-num text-[10px] uppercase tracking-[0.14em] text-sig-neg">Exited ↓</h3>
           <MoveList moves={mv.exited} />
         </div>
       </div>
@@ -116,36 +120,36 @@ function HoldingsTable({ holdings }: { holdings: FundHolding[] }) {
     <div className="overflow-x-auto">
       <table className="w-full border-collapse">
         <thead>
-          <tr className="border-b border-paper-rule">
+          <tr className="border-b border-edge-rule">
             {(['Symbol', 'Sector'] as const).map(h => (
-              <th key={h} className="font-sans text-[10px] uppercase tracking-wider pb-2 px-2 text-left text-ink-tertiary whitespace-nowrap">{h}</th>
+              <th key={h} className="whitespace-nowrap px-2 pb-2 text-left font-sans text-[10px] uppercase tracking-wider text-txt-3">{h}</th>
             ))}
             {(['Weight', 'Tch', 'Fnd', 'Cat', 'Flw', 'Val', 'Lead', 'RS 3M'] as const).map(h => (
-              <th key={h} className="font-sans text-[10px] uppercase tracking-wider pb-2 px-2 text-right text-ink-tertiary whitespace-nowrap">{h}</th>
+              <th key={h} className="whitespace-nowrap px-2 pb-2 text-right font-sans text-[10px] uppercase tracking-wider text-txt-3">{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
           {rows.map(h => (
-            <tr key={h.symbol} className="border-b border-paper-rule/50 hover:bg-paper-soft">
-              <td className="py-1.5 px-2 font-mono text-[12px] font-semibold whitespace-nowrap">
-                <a href={`/stocks/${h.symbol}`} className="text-ink-primary no-underline hover:text-teal hover:underline">{h.symbol}</a>
+            <tr key={h.symbol} className="border-b border-edge-hair hover:bg-surface-raised">
+              <td className="whitespace-nowrap px-2 py-1.5 font-num text-[12px] font-semibold tabular-nums">
+                <a href={`/stocks/${h.symbol}`} className="text-txt-1 no-underline hover:text-brand hover:underline">{h.symbol}</a>
               </td>
-              <td className="py-1.5 px-2 font-sans text-[11px] text-ink-secondary truncate max-w-[160px]">{h.sector ?? '—'}</td>
-              <td className="py-1.5 px-2 text-right font-mono text-[12px] tabular-nums text-ink-secondary">{fmtWeight(h.weight)}</td>
-              <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums ${decileText(h.d_tech)}`}>{h.d_tech ?? '—'}</td>
-              <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums ${decileText(h.d_fund)}`}>{h.d_fund ?? '—'}</td>
-              <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums ${decileText(h.d_cat)}`}>{h.d_cat ?? '—'}</td>
-              <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums ${decileText(h.d_flow)}`}>{h.d_flow ?? '—'}</td>
-              <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums ${decileText(h.d_val)}`}>{h.d_val ?? '—'}</td>
-              <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums ${leadText(h.lead)}`}>{h.lead}/4</td>
-              <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums ${pctText(h.rs_3m)}`}>{fmtRs(h.rs_3m)}</td>
+              <td className="max-w-[160px] truncate px-2 py-1.5 font-sans text-[11px] text-txt-2">{h.sector ?? '—'}</td>
+              <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums text-txt-2">{fmtWeight(h.weight)}</td>
+              <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={decileStyle(h.d_tech)}>{h.d_tech ?? '—'}</td>
+              <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={decileStyle(h.d_fund)}>{h.d_fund ?? '—'}</td>
+              <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={decileStyle(h.d_cat)}>{h.d_cat ?? '—'}</td>
+              <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={decileStyle(h.d_flow)}>{h.d_flow ?? '—'}</td>
+              <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={decileStyle(h.d_val)}>{h.d_val ?? '—'}</td>
+              <td className={`px-2 py-1.5 text-right font-num text-[12px] tabular-nums ${leadText(h.lead)}`}>{h.lead}/4</td>
+              <td className={`px-2 py-1.5 text-right font-num text-[12px] tabular-nums ${pctText(h.rs_3m)}`}>{fmtRs(h.rs_3m)}</td>
             </tr>
           ))}
         </tbody>
       </table>
       {truncated && (
-        <p className="font-sans text-[11px] text-ink-tertiary mt-3">
+        <p className="mt-3 font-sans text-[11px] text-txt-3">
           showing top {HOLDING_CAP} of {holdings.length} holdings by weight
         </p>
       )}
@@ -158,90 +162,80 @@ export async function FundDetailV4({ mstarId }: { mstarId: string }) {
   if (!fund) notFound()
 
   const breadthPct = fund.breadth == null ? '—' : `${(fund.breadth * 100).toFixed(0)}%`
-  const expenseStr = fund.expense == null ? null : `expense ${fund.expense.toFixed(2)}%` // already in percent units
-  const navStr = fund.nav == null ? null
-    : `NAV ₹${fund.nav.toFixed(2)}${fund.nav_date ? ` (${fund.nav_date})` : ''}`
-  const subParts = [
-    fund.category,
-    fund.amc,
-    expenseStr,
-    `${fund.n_holdings} holdings`,
-    navStr,
-    fund.isin,
-  ].filter((x): x is string => !!x)
+  const subParts = [fund.category, fund.amc, fund.isin].filter((x): x is string => !!x)
+
+  // headline stat tiles (real numbers at a glance)
+  const tiles: { label: string; value: string; sub?: string; tone?: Tone }[] = [
+    { label: 'Leadership-breadth', value: breadthPct, tone: 'pos', sub: `${fund.n_leaders} of ${fund.n_holdings} lead ≥2 lenses` },
+    { label: 'Holdings', value: String(fund.n_holdings), sub: 'scored look-through names' },
+    { label: 'NAV', value: fund.nav == null ? '—' : `₹${fund.nav.toFixed(2)}`, sub: fund.nav_date ?? 'latest disclosure' },
+    { label: 'Expense', value: fund.expense == null ? '—' : `${fund.expense.toFixed(2)}%`, sub: 'regular-plan TER' },
+  ]
 
   return (
-    <div className="max-w-[1400px] mx-auto">
+    <div className="mx-auto max-w-[1280px] space-y-6 px-6 py-7">
       {/* ── Header ── */}
-      <section className="px-8 py-9 border-b border-paper-rule">
-        <nav className="font-sans text-[12px] text-ink-tertiary mb-3" aria-label="Breadcrumb">
-          <Link href="/" className="text-teal hover:underline no-underline">Atlas</Link> ›{' '}
-          <Link href="/funds" className="text-teal hover:underline no-underline">Funds</Link> ›{' '}
+      <header>
+        <nav className="mb-3 font-sans text-[12px] text-txt-3" aria-label="Breadcrumb">
+          <Link href="/" className="text-brand no-underline hover:underline">Atlas</Link> ›{' '}
+          <Link href="/funds" className="text-brand no-underline hover:underline">Funds</Link> ›{' '}
           <span aria-current="page">{fund.name}</span>
         </nav>
-        <div className="flex items-start justify-between gap-6 flex-wrap">
-          <div className="min-w-0 flex-1">
-            <h1 className="font-serif text-[44px] font-normal tracking-[-0.011em] text-ink-primary leading-[1.05]">{fund.name}</h1>
-            <div className="font-mono text-[12px] text-ink-tertiary mt-2">{subParts.join(' · ')}</div>
-            <p className="font-sans text-[15px] text-ink-secondary max-w-[760px] mt-3">
-              How this fund&apos;s holdings score on the six lenses, weighted by holding weight — plus what the
-              manager is actively buying and selling. A transparency roll-up of the stock atom — descriptive,
-              <em> not</em> a forecast of outperformance.
-            </p>
-          </div>
-          {/* leadership-breadth headline badge */}
-          <div className="shrink-0 bg-paper-soft border border-paper-rule rounded-sm px-5 py-4 text-center min-w-[180px]">
-            <div className="font-mono text-[40px] font-medium leading-none text-signal-pos">{breadthPct}</div>
-            <div className="font-sans text-[10px] uppercase tracking-[0.14em] text-ink-tertiary font-semibold mt-2">leadership-breadth</div>
-            <div className="font-sans text-[11px] text-ink-tertiary mt-1 leading-snug">
-              {fund.n_leaders} of {fund.n_holdings} holdings lead ≥2 lenses
-            </div>
-          </div>
+        <h1 className="font-display text-[32px] font-bold leading-tight tracking-tight text-txt-1">{fund.name}</h1>
+        {subParts.length > 0 && <div className="mt-2 font-num text-[12px] tabular-nums text-txt-3">{subParts.join(' · ')}</div>}
+        <p className="mt-3 max-w-[760px] font-sans text-[15px] text-txt-2">
+          How this fund&apos;s holdings score on the six lenses, weighted by holding weight — plus what the
+          manager is actively buying and selling. A transparency roll-up of the stock atom — descriptive,
+          <em> not</em> a forecast of outperformance.
+        </p>
+
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {tiles.map(t => <StatCard key={t.label} label={t.label} value={t.value} sub={t.sub} tone={t.tone ?? 'neutral'} />)}
         </div>
-      </section>
+      </header>
 
       {/* ── Holdings-weighted six-lens vector ── */}
-      <section className="px-8 py-9 border-b border-paper-rule" aria-label="Holdings-weighted lens vector">
-        <div className="mb-5">
-          <h2 className="font-serif text-[28px] font-normal tracking-tight text-ink-primary">How the holdings score on each lens</h2>
-          <p className="font-sans text-[13px] text-ink-tertiary max-w-[760px] leading-[1.45] mt-1">
-            How the fund&apos;s holdings score on each lens (weight-weighted) — descriptive, not a forecast.
-          </p>
-        </div>
+      <Panel
+        eyebrow="Six-lens read"
+        title="How the holdings score on each lens"
+        info={{
+          title: 'Holdings-weighted lens vector',
+          body: 'How the fund’s holdings score on each lens, weighted by holding weight (0–100). Descriptive, not a forecast.',
+        }}
+      >
         <LensVector fund={fund} />
-      </section>
+      </Panel>
 
       {/* ── Active-movement panel (the fund differentiator) ── */}
-      <section className="px-8 py-9 border-b border-paper-rule" aria-label="Active movement">
-        <div className="mb-5">
-          <h2 className="font-serif text-[28px] font-normal tracking-tight text-ink-primary">
-            Active movement{fund.movement?.prior_date ? ` · since ${fund.movement.prior_date}` : ''}
-          </h2>
-          <p className="font-sans text-[13px] text-ink-tertiary max-w-[760px] leading-[1.45] mt-1">
-            What the manager bought and sold between the last two monthly disclosures — and whether the net
-            move added top-decile leaders.
-          </p>
-        </div>
+      <Panel
+        eyebrow="Differentiator"
+        title={`Active movement${fund.movement?.prior_date ? ` · since ${fund.movement.prior_date}` : ''}`}
+        info={{
+          title: 'Active movement',
+          body: 'What the manager bought and sold between the last two monthly disclosures — and whether the net move added top-decile leaders.',
+        }}
+      >
         <ActiveMovement fund={fund} />
-      </section>
+      </Panel>
 
       {/* ── Look-through holdings ── */}
-      <section className="px-8 py-9 border-b border-paper-rule" aria-label="Look-through holdings">
-        <div className="mb-5">
-          <h2 className="font-serif text-[28px] font-normal tracking-tight text-ink-primary">Look-through holdings</h2>
-          <p className="font-sans text-[13px] text-ink-tertiary max-w-[760px] leading-[1.45] mt-1">
-            Every holding by weight, with each name&apos;s lens deciles, leadership and 3-month RS. Click a symbol for its full evidence.
-          </p>
-        </div>
+      <Panel
+        eyebrow="Look-through"
+        title="Look-through holdings"
+        info={{
+          title: 'Look-through holdings',
+          body: 'Every holding by weight, with each name’s lens deciles, leadership and 3-month RS. Click a symbol for its full evidence.',
+        }}
+      >
         {fund.holdings.length > 0
           ? <HoldingsTable holdings={fund.holdings} />
-          : <p className="font-sans text-[13px] text-ink-tertiary italic">No scored holdings for this fund.</p>}
-      </section>
+          : <p className="font-sans text-[13px] italic text-txt-3">No scored holdings for this fund.</p>}
+      </Panel>
 
-      <div className="px-8 py-6 font-sans text-[12px] text-ink-tertiary leading-[1.6]">
-        Native from <strong className="text-ink-secondary">foundation_staging</strong> — the lens journal looked through
+      <div className="font-sans text-[12px] leading-[1.6] text-txt-3">
+        Native from <strong className="text-txt-2">foundation_staging</strong> — the lens journal looked through
         de_mf_holdings; identity + NAV from Morningstar (de_mf_master / de_mf_nav_daily).{' '}
-        <Link href="/funds" className="text-teal hover:underline">← Back to Funds</Link>
+        <Link href="/funds" className="text-brand hover:underline">← Back to Funds</Link>
       </div>
     </div>
   )

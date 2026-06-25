@@ -11,10 +11,10 @@ import type { FundLensRow } from '@/lib/queries/v6/fund_lens'
 // ── colour helpers (shared idioms with the stocks / ETF pages) ────────────
 // Weighted lens scores are 0..100, so band cuts are ×10 from the decile helper.
 const scoreText = (v: number | null) =>
-  v == null ? 'text-ink-tertiary' : v >= 80 ? 'text-signal-pos' : v >= 50 ? 'text-ink-secondary' : 'text-signal-neg'
+  v == null ? 'text-txt-3' : v >= 80 ? 'text-sig-pos' : v >= 50 ? 'text-txt-2' : 'text-sig-neg'
 
 const breadthText = (b: number | null) =>
-  b == null ? 'text-ink-tertiary' : b >= 0.2 ? 'text-signal-pos' : b >= 0.1 ? 'text-teal' : 'text-ink-secondary'
+  b == null ? 'text-txt-3' : b >= 0.2 ? 'text-sig-pos' : b >= 0.1 ? 'text-brand' : 'text-txt-2'
 
 const fmtScore = (v: number | null) => (v == null ? '—' : v.toFixed(0))
 const fmtBreadth = (b: number | null) => (b == null ? '—' : `${(b * 100).toFixed(0)}%`)
@@ -58,7 +58,7 @@ function numFor(r: FundLensRow, key: SortKey): number {
   }
 }
 
-const CONTROL = 'font-sans text-[12px] bg-paper border border-paper-rule rounded-sm px-2 py-1 text-ink-secondary'
+const CONTROL = 'font-sans text-[12px] bg-surface-raised border border-edge-rule rounded-tile px-2 py-1 text-txt-2'
 
 export function FundLensTable({ funds }: { funds: FundLensRow[] }) {
   const router = useRouter()
@@ -100,15 +100,15 @@ export function FundLensTable({ funds }: { funds: FundLensRow[] }) {
   return (
     <div>
       {/* control row */}
-      <div className="flex flex-wrap items-end gap-4 mb-4">
+      <div className="mb-4 flex flex-wrap items-end gap-4">
         <label className="flex flex-col gap-1">
-          <span className="font-sans text-[10px] uppercase tracking-wider text-ink-tertiary">Category</span>
+          <span className="font-sans text-[10px] uppercase tracking-wider text-txt-3">Category</span>
           <select className={CONTROL} value={category} onChange={e => setCategory(e.target.value)}>
             <option value="all">All</option>
             {categories.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </label>
-        <span className="font-mono text-[12px] text-ink-tertiary self-end ml-auto">
+        <span className="ml-auto self-end font-num text-[12px] tabular-nums text-txt-3">
           {shown} of {total} funds
         </span>
       </div>
@@ -116,7 +116,7 @@ export function FundLensTable({ funds }: { funds: FundLensRow[] }) {
       <div className="overflow-x-auto">
         <table className="w-full border-collapse">
           <thead>
-            <tr className="border-b border-paper-rule">
+            <tr className="border-b border-edge-rule">
               {COLS.map(col => {
                 const isSorted = sortKey === col.key
                 const arrow = isSorted ? (sortDir === 'desc' ? ' ▼' : ' ▲') : ''
@@ -126,7 +126,7 @@ export function FundLensTable({ funds }: { funds: FundLensRow[] }) {
                     onClick={() => toggleSort(col.key)}
                     className={`font-sans text-[10px] uppercase tracking-wider pb-2 px-2 cursor-pointer select-none whitespace-nowrap ${
                       col.align === 'right' ? 'text-right' : 'text-left'
-                    } ${isSorted ? 'text-ink-primary font-semibold' : 'text-ink-tertiary'} hover:text-ink-secondary`}
+                    } ${isSorted ? 'text-txt-1 font-semibold' : 'text-txt-3'} hover:text-txt-2`}
                   >
                     {col.label}{arrow}
                   </th>
@@ -139,20 +139,20 @@ export function FundLensTable({ funds }: { funds: FundLensRow[] }) {
               <tr
                 key={f.mstar_id}
                 onClick={() => router.push('/funds/' + f.mstar_id)}
-                className="border-b border-paper-rule/50 cursor-pointer hover:bg-paper-soft"
+                className="cursor-pointer border-b border-edge-hair hover:bg-surface-raised"
               >
-                <td className="py-1.5 px-2 font-sans text-[12px] font-medium text-ink-primary max-w-[260px] truncate">{f.name}</td>
-                <td className="py-1.5 px-2 font-sans text-[11px] text-ink-secondary truncate max-w-[160px]">{f.category ?? '—'}</td>
-                <td className="py-1.5 px-2 font-sans text-[11px] text-ink-secondary truncate max-w-[140px]">{f.amc ?? '—'}</td>
-                <td className="py-1.5 px-2 text-right font-mono text-[12px] tabular-nums text-ink-secondary">{f.n_holdings}</td>
-                <td className="py-1.5 px-2 text-right font-mono text-[12px] tabular-nums text-ink-secondary">{f.n_leaders}</td>
-                <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums font-semibold ${breadthText(f.breadth)}`}>{fmtBreadth(f.breadth)}</td>
-                <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums ${scoreText(f.v_tech)}`}>{fmtScore(f.v_tech)}</td>
-                <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums ${scoreText(f.v_fund)}`}>{fmtScore(f.v_fund)}</td>
-                <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums ${scoreText(f.v_cat)}`}>{fmtScore(f.v_cat)}</td>
-                <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums ${scoreText(f.v_flow)}`}>{fmtScore(f.v_flow)}</td>
-                <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums ${scoreText(f.v_val)}`}>{fmtScore(f.v_val)}</td>
-                <td className="py-1.5 px-2 text-right font-mono text-[12px] tabular-nums text-ink-secondary">{fmtExpense(f.expense)}</td>
+                <td className="max-w-[260px] truncate px-2 py-1.5 font-sans text-[12px] font-medium text-txt-1">{f.name}</td>
+                <td className="max-w-[160px] truncate px-2 py-1.5 font-sans text-[11px] text-txt-2">{f.category ?? '—'}</td>
+                <td className="max-w-[140px] truncate px-2 py-1.5 font-sans text-[11px] text-txt-2">{f.amc ?? '—'}</td>
+                <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums text-txt-2">{f.n_holdings}</td>
+                <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums text-txt-2">{f.n_leaders}</td>
+                <td className={`px-2 py-1.5 text-right font-num text-[12px] tabular-nums font-semibold ${breadthText(f.breadth)}`}>{fmtBreadth(f.breadth)}</td>
+                <td className={`px-2 py-1.5 text-right font-num text-[12px] tabular-nums ${scoreText(f.v_tech)}`}>{fmtScore(f.v_tech)}</td>
+                <td className={`px-2 py-1.5 text-right font-num text-[12px] tabular-nums ${scoreText(f.v_fund)}`}>{fmtScore(f.v_fund)}</td>
+                <td className={`px-2 py-1.5 text-right font-num text-[12px] tabular-nums ${scoreText(f.v_cat)}`}>{fmtScore(f.v_cat)}</td>
+                <td className={`px-2 py-1.5 text-right font-num text-[12px] tabular-nums ${scoreText(f.v_flow)}`}>{fmtScore(f.v_flow)}</td>
+                <td className={`px-2 py-1.5 text-right font-num text-[12px] tabular-nums ${scoreText(f.v_val)}`}>{fmtScore(f.v_val)}</td>
+                <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums text-txt-2">{fmtExpense(f.expense)}</td>
               </tr>
             ))}
           </tbody>

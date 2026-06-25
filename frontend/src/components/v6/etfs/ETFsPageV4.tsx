@@ -4,8 +4,11 @@
 // top-decile leaders in ≥2 conviction lenses), NOT a composite. This is a TRANSPARENCY view —
 // what's held, how it scores — explicitly NOT an outperformance predictor.
 // Order: 1. leadership-breadth strip + a few top cards · 2. the sortable lens table.
+import Link from 'next/link'
 import { getEtfLensList, type EtfLensRow } from '@/lib/queries/v6/etf_lens'
 import { EtfLensTable } from './EtfLensTable'
+import { Panel } from '@/components/v4/ui/Panel'
+import { StatCard, type Tone } from '@/components/v4/ui/StatCard'
 
 const LENS_LABEL: { key: keyof Pick<EtfLensRow, 'v_tech' | 'v_fund' | 'v_cat' | 'v_flow' | 'v_val'>; label: string }[] = [
   { key: 'v_tech', label: 'Technical' },
@@ -30,22 +33,22 @@ function topLens(e: EtfLensRow): { label: string; v: number } | null {
 function TopCard({ e }: { e: EtfLensRow }) {
   const tl = topLens(e)
   return (
-    <a href={`/etfs/${e.fcode}`}
-       className="block bg-paper border border-paper-rule rounded-sm p-3 no-underline hover:border-ink-tertiary transition-colors">
-      <div className="flex items-baseline justify-between gap-2 mb-0.5">
-        <span className="font-sans text-[13px] font-semibold text-ink-primary leading-snug line-clamp-2">{e.name}</span>
-        <span className="font-mono text-[15px] font-semibold text-signal-pos shrink-0">
+    <Link href={`/etfs/${e.fcode}`}
+       className="group/card block rounded-tile border border-edge-hair bg-surface-raised px-3.5 py-3 no-underline shadow-tile transition-colors hover:border-edge-strong">
+      <div className="mb-0.5 flex items-baseline justify-between gap-2">
+        <span className="line-clamp-2 font-sans text-[13px] font-semibold leading-snug text-txt-1">{e.name}</span>
+        <span className="shrink-0 font-num text-[15px] font-semibold tabular-nums text-sig-pos">
           {e.breadth == null ? '—' : `${(e.breadth * 100).toFixed(0)}%`}
         </span>
       </div>
-      <div className="font-sans text-[11px] text-ink-tertiary truncate mb-2">{e.category ?? '—'}</div>
-      <div className="flex items-center justify-between gap-1 pt-2 border-t border-paper-rule/60">
-        <span className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider">
+      <div className="mb-2 truncate font-sans text-[11px] text-txt-3">{e.category ?? '—'}</div>
+      <div className="flex items-center justify-between gap-1 border-t border-edge-hair pt-2">
+        <span className="font-num text-[10px] uppercase tracking-wider text-txt-3">
           {e.n_leaders} of {e.n_holdings} lead
         </span>
-        {tl && <span className="font-mono text-[10px] text-teal">{tl.label} {tl.v.toFixed(0)}</span>}
+        {tl && <span className="font-num text-[10px] tabular-nums text-brand">{tl.label} {tl.v.toFixed(0)}</span>}
       </div>
-    </a>
+    </Link>
   )
 }
 
@@ -62,78 +65,68 @@ export async function ETFsPageV4() {
   // top-breadth ETFs for the cards (rows already arrive ranked by breadth desc).
   const top = etfs.filter(e => e.breadth != null).slice(0, 6)
 
-  const strip = [
-    { label: 'NSE equity ETFs', value: String(universeCount), cls: 'text-ink-primary',
-      foot: 'Holdings-weighted lens roll-up' },
-    { label: 'Breadth ≥ 10%', value: String(withBreadth), cls: 'text-signal-pos',
-      foot: '≥10% of weight leads ≥2 lenses' },
-    { label: 'Sector ETFs', value: String(sectorCount), cls: 'text-ink-primary', foot: 'Category names a sector' },
-    { label: 'Index / broad', value: String(broadCount), cls: 'text-ink-primary', foot: 'Index / broad-market mandate' },
+  const strip: { label: string; value: string; sub: string; tone: Tone }[] = [
+    { label: 'NSE equity ETFs', value: String(universeCount), tone: 'neutral',
+      sub: 'Holdings-weighted lens roll-up' },
+    { label: 'Breadth ≥ 10%', value: String(withBreadth), tone: 'pos',
+      sub: '≥10% of weight leads ≥2 lenses' },
+    { label: 'Sector ETFs', value: String(sectorCount), tone: 'neutral', sub: 'Category names a sector' },
+    { label: 'Index / broad', value: String(broadCount), tone: 'neutral', sub: 'Index / broad-market mandate' },
     { label: 'Avg expense', value: avgExpense == null ? '—' : `${avgExpense.toFixed(2)}%`,
-      cls: 'text-ink-primary font-mono text-[20px]', foot: 'Mean expense ratio across the set' },
+      tone: 'neutral', sub: 'Mean expense ratio across the set' },
   ]
 
   return (
-    <div className="max-w-[1400px] mx-auto">
+    <div className="mx-auto max-w-[1280px] space-y-6 px-6 py-7">
       {/* Header + leadership-breadth strip */}
-      <section className="px-8 py-8 border-b border-paper-rule">
-        <div className="font-sans text-[12px] text-ink-tertiary mb-3">
-          <a href="/" className="text-teal no-underline hover:underline">Atlas</a> › ETFs
+      <header>
+        <nav className="mb-3 font-num text-[11px] text-txt-3" aria-label="Breadcrumb">
+          <Link href="/" className="text-brand hover:underline">Atlas</Link> › ETFs
+        </nav>
+        <div className="mb-2 flex flex-wrap items-baseline gap-4">
+          <h1 className="font-display text-[40px] font-bold leading-none tracking-tight text-txt-1">ETFs</h1>
+          <span className="font-num text-[12px] text-txt-3">{universeCount} NSE equity ETFs · holdings-weighted lens roll-up</span>
         </div>
-        <div className="flex items-baseline gap-4 flex-wrap mb-2">
-          <h1 className="font-serif text-[44px] font-normal tracking-[-0.011em] text-ink-primary leading-[1.1]">ETFs</h1>
-          <span className="font-mono text-[12px] text-ink-tertiary">{universeCount} NSE equity ETFs · holdings-weighted lens roll-up</span>
-        </div>
-        <p className="font-sans text-[15px] text-ink-secondary max-w-[880px]">
-          Each ETF is a <strong>holdings-weighted roll-up</strong> of the stock atom. The headline is
-          <strong> leadership-breadth</strong> — the share of holdings weight that are top-decile leaders
+        <p className="max-w-[880px] font-sans text-[14px] leading-[1.5] text-txt-2">
+          Each ETF is a <strong className="text-txt-1">holdings-weighted roll-up</strong> of the stock atom. The headline is
+          <strong className="text-txt-1"> leadership-breadth</strong> — the share of holdings weight that are top-decile leaders
           (top-decile in ≥2 conviction lenses). This is a transparency view of what each ETF holds and how
           those holdings score on the six lenses — descriptive, <em>not</em> a forecast of outperformance.
         </p>
 
-        <div className="mt-6 bg-paper-soft border border-paper-rule rounded-sm overflow-hidden grid"
-             style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
-          {strip.map((t, i) => (
-            <div key={t.label} className={`px-[18px] py-[14px] ${i < 4 ? 'border-r border-paper-rule' : ''}`}>
-              <div className="font-sans text-[9px] tracking-[0.18em] uppercase text-ink-tertiary font-semibold mb-1">{t.label}</div>
-              <div className={`font-mono text-[22px] font-medium leading-none ${t.cls}`}>{t.value}</div>
-              <div className="font-sans text-[11px] text-ink-tertiary mt-1 leading-snug">{t.foot}</div>
-            </div>
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {strip.map(t => (
+            <StatCard key={t.label} label={t.label} value={t.value} sub={t.sub} tone={t.tone} />
           ))}
         </div>
-      </section>
+      </header>
 
       {/* Highest leadership-breadth */}
       {top.length > 0 && (
-        <section className="px-8 py-9 border-b border-paper-rule" aria-label="Highest leadership-breadth ETFs">
-          <div className="mb-4">
-            <h2 className="font-serif text-[28px] font-normal tracking-tight text-ink-primary">Highest leadership-breadth</h2>
-            <p className="font-sans text-[13px] text-ink-tertiary mt-1 max-w-[760px]">
-              The ETFs whose holdings carry the most leader weight right now. Click any for the holdings-weighted lens read and look-through.
-            </p>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <Panel
+          eyebrow="Leader weight"
+          title="Highest leadership-breadth"
+          info={{ body: 'The ETFs whose holdings carry the most leader weight right now. Click any for the holdings-weighted lens read and look-through.' }}
+        >
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
             {top.map(e => <TopCard key={e.fcode} e={e} />)}
           </div>
-        </section>
+        </Panel>
       )}
 
       {/* The sortable lens table (client: sort + category filter) */}
-      <section className="px-8 py-10 border-b border-paper-rule" aria-label="ETF lens table">
-        <div className="mb-5">
-          <h2 className="font-serif text-[28px] font-normal tracking-tight text-ink-primary">All NSE equity ETFs</h2>
-          <p className="font-sans text-[13px] text-ink-tertiary max-w-[760px] leading-[1.45] mt-1">
-            Ranked by leadership-breadth. Every column header sorts; filter by category. The five lens scores are
-            holdings-weighted (0–100). Click a row for the full roll-up.
-          </p>
-        </div>
+      <Panel
+        eyebrow="Universe"
+        title="All NSE equity ETFs"
+        info={{ body: 'Ranked by leadership-breadth. Every column header sorts; filter by category. The five lens scores are holdings-weighted (0–100). Click a row for the full roll-up.' }}
+      >
         <EtfLensTable etfs={etfs} />
-      </section>
+      </Panel>
 
-      <div className="px-8 py-6 font-sans text-[12px] text-ink-tertiary leading-[1.6]">
-        Native from <strong className="text-ink-secondary">foundation_staging</strong> — the lens journal looked through
+      <p className="font-sans text-[12px] leading-[1.6] text-txt-3">
+        Native from <strong className="text-txt-2">foundation_staging</strong> — the lens journal looked through
         de_etf_holdings; identity from Morningstar (de_mf_master).
-      </div>
+      </p>
     </div>
   )
 }

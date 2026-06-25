@@ -9,18 +9,21 @@ import { notFound } from 'next/navigation'
 import { getEtfLensDetail, getEtfChartSeries, type EtfLensDetail, type EtfHolding } from '@/lib/queries/v6/etf_lens'
 import { StockPriceEMAChart } from '@/components/v6/stock-detail/StockPriceEMAChart'
 import { StockRSChart } from '@/components/v6/stock-detail/StockRSChart'
+import { Panel } from '@/components/v4/ui/Panel'
+import { StatCard } from '@/components/v4/ui/StatCard'
+import { decileColor } from '@/components/v4/ui/decile'
 
 const HOLDING_CAP = 50
 
 // ── colour helpers (shared idioms with the stocks pages) ──────────────────
-const decileText = (d: number | null) =>
-  d == null ? 'text-ink-tertiary' : d >= 8 ? 'text-signal-pos' : d >= 5 ? 'text-ink-secondary' : 'text-signal-neg'
+// Per-holding deciles colour the figure via the shared perceptual ramp; null → tertiary.
+const decileStyle = (d: number | null) => ({ color: d == null ? 'var(--color-txt-3)' : decileColor(d) })
 
 const leadText = (lead: number) =>
-  lead >= 3 ? 'text-signal-pos' : lead === 2 ? 'text-teal' : lead === 1 ? 'text-signal-warn' : 'text-ink-tertiary'
+  lead >= 3 ? 'text-sig-pos' : lead === 2 ? 'text-brand' : lead === 1 ? 'text-sig-warn' : 'text-txt-3'
 
 const pctText = (v: number | null) =>
-  v == null ? 'text-ink-tertiary' : v >= 0 ? 'text-signal-pos' : 'text-signal-neg'
+  v == null ? 'text-txt-3' : v >= 0 ? 'text-sig-pos' : 'text-sig-neg'
 
 const fmtRs = (v: number | null) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%`)
 
@@ -32,24 +35,27 @@ const LENS_VECTOR: { key: keyof Pick<EtfLensDetail, 'v_tech' | 'v_fund' | 'v_cat
   { key: 'v_flow', label: 'Flow' },
   { key: 'v_val', label: 'Valuation' },
 ]
-const barColor = (v: number) => (v >= 80 ? 'bg-signal-pos' : v >= 50 ? 'bg-signal-warn' : 'bg-signal-neg')
 
 function LensVector({ etf }: { etf: EtfLensDetail }) {
   const scored = LENS_VECTOR
     .map(l => ({ label: l.label, v: etf[l.key] }))
     .filter((x): x is { label: string; v: number } => x.v != null)
   return (
-    <div className="space-y-2 max-w-[560px]">
-      {scored.length === 0 && <p className="font-sans text-[13px] text-ink-tertiary italic">No scored holdings.</p>}
-      {scored.map(l => (
-        <div key={l.label} className="flex items-center gap-3">
-          <span className="w-[96px] shrink-0 font-sans text-xs text-ink-secondary">{l.label}</span>
-          <span className="w-[34px] shrink-0 font-mono text-xs tabular-nums text-ink-primary text-right">{l.v.toFixed(0)}</span>
-          <span className="flex-1 h-[7px] bg-paper-deep rounded-[2px] overflow-hidden">
-            <span className={`block h-full rounded-[2px] ${barColor(l.v)}`} style={{ width: `${Math.min(100, l.v)}%` }} />
-          </span>
-        </div>
-      ))}
+    <div className="max-w-[560px] space-y-2">
+      {scored.length === 0 && <p className="font-sans text-[13px] italic text-txt-3">No scored holdings.</p>}
+      {scored.map(l => {
+        // score 0..100 → decile band (score/10) for the shared ramp colour.
+        const color = decileColor(Math.round(l.v / 10))
+        return (
+          <div key={l.label} className="flex items-center gap-3">
+            <span className="w-[96px] shrink-0 font-sans text-xs text-txt-2">{l.label}</span>
+            <span className="w-[34px] shrink-0 text-right font-num text-xs tabular-nums" style={{ color }}>{l.v.toFixed(0)}</span>
+            <span className="h-[7px] flex-1 overflow-hidden rounded-tile bg-surface-inset">
+              <span className="block h-full rounded-tile" style={{ width: `${Math.min(100, l.v)}%`, background: color }} />
+            </span>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -62,38 +68,38 @@ function HoldingsTable({ holdings }: { holdings: EtfHolding[] }) {
     <div className="overflow-x-auto">
       <table className="w-full border-collapse">
         <thead>
-          <tr className="border-b border-paper-rule">
+          <tr className="border-b border-edge-rule">
             {(['Symbol', 'Sector'] as const).map(h => (
-              <th key={h} className="font-sans text-[10px] uppercase tracking-wider pb-2 px-2 text-left text-ink-tertiary whitespace-nowrap">{h}</th>
+              <th key={h} className="whitespace-nowrap px-2 pb-2 text-left font-sans text-[10px] uppercase tracking-wider text-txt-3">{h}</th>
             ))}
             {(['Weight', 'Tch', 'Fnd', 'Cat', 'Flw', 'Val', 'Lead', 'RS 3M'] as const).map(h => (
-              <th key={h} className="font-sans text-[10px] uppercase tracking-wider pb-2 px-2 text-right text-ink-tertiary whitespace-nowrap">{h}</th>
+              <th key={h} className="whitespace-nowrap px-2 pb-2 text-right font-sans text-[10px] uppercase tracking-wider text-txt-3">{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
           {rows.map(h => (
-            <tr key={h.symbol} className="border-b border-paper-rule/50 hover:bg-paper-soft">
-              <td className="py-1.5 px-2 font-mono text-[12px] font-semibold whitespace-nowrap">
-                <a href={`/stocks/${h.symbol}`} className="text-ink-primary no-underline hover:text-teal hover:underline">{h.symbol}</a>
+            <tr key={h.symbol} className="border-b border-edge-hair hover:bg-surface-raised">
+              <td className="whitespace-nowrap px-2 py-1.5 font-num text-[12px] font-semibold tabular-nums">
+                <Link href={`/stocks/${h.symbol}`} className="text-txt-1 hover:text-brand hover:underline">{h.symbol}</Link>
               </td>
-              <td className="py-1.5 px-2 font-sans text-[11px] text-ink-secondary truncate max-w-[160px]">{h.sector ?? '—'}</td>
-              <td className="py-1.5 px-2 text-right font-mono text-[12px] tabular-nums text-ink-secondary">
+              <td className="max-w-[160px] truncate px-2 py-1.5 font-sans text-[11px] text-txt-2">{h.sector ?? '—'}</td>
+              <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums text-txt-2">
                 {h.weight == null ? '—' : `${(h.weight * 100).toFixed(2)}%`}
               </td>
-              <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums ${decileText(h.d_tech)}`}>{h.d_tech ?? '—'}</td>
-              <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums ${decileText(h.d_fund)}`}>{h.d_fund ?? '—'}</td>
-              <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums ${decileText(h.d_cat)}`}>{h.d_cat ?? '—'}</td>
-              <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums ${decileText(h.d_flow)}`}>{h.d_flow ?? '—'}</td>
-              <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums ${decileText(h.d_val)}`}>{h.d_val ?? '—'}</td>
-              <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums ${leadText(h.lead)}`}>{h.lead}/4</td>
-              <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums ${pctText(h.rs_3m)}`}>{fmtRs(h.rs_3m)}</td>
+              <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={decileStyle(h.d_tech)}>{h.d_tech ?? '—'}</td>
+              <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={decileStyle(h.d_fund)}>{h.d_fund ?? '—'}</td>
+              <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={decileStyle(h.d_cat)}>{h.d_cat ?? '—'}</td>
+              <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={decileStyle(h.d_flow)}>{h.d_flow ?? '—'}</td>
+              <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={decileStyle(h.d_val)}>{h.d_val ?? '—'}</td>
+              <td className={`px-2 py-1.5 text-right font-num text-[12px] tabular-nums ${leadText(h.lead)}`}>{h.lead}/4</td>
+              <td className={`px-2 py-1.5 text-right font-num text-[12px] tabular-nums ${pctText(h.rs_3m)}`}>{fmtRs(h.rs_3m)}</td>
             </tr>
           ))}
         </tbody>
       </table>
       {truncated && (
-        <p className="font-sans text-[11px] text-ink-tertiary mt-3">
+        <p className="mt-3 font-sans text-[11px] text-txt-3">
           showing top {HOLDING_CAP} of {holdings.length} holdings by weight
         </p>
       )}
@@ -118,78 +124,74 @@ export async function ETFDetailV4({ fcode }: { fcode: string }) {
   ].filter((x): x is string => !!x)
 
   return (
-    <div className="max-w-[1400px] mx-auto">
+    <div className="mx-auto max-w-[1280px] space-y-6 px-6 py-7">
       {/* ── Header ── */}
-      <section className="px-8 py-9 border-b border-paper-rule">
-        <nav className="font-sans text-[12px] text-ink-tertiary mb-3" aria-label="Breadcrumb">
-          <Link href="/" className="text-teal hover:underline no-underline">Atlas</Link> ›{' '}
-          <Link href="/etfs" className="text-teal hover:underline no-underline">ETFs</Link> ›{' '}
+      <header>
+        <nav className="mb-3 font-num text-[11px] text-txt-3" aria-label="Breadcrumb">
+          <Link href="/" className="text-brand hover:underline">Atlas</Link> ›{' '}
+          <Link href="/etfs" className="text-brand hover:underline">ETFs</Link> ›{' '}
           <span aria-current="page">{etf.name}</span>
         </nav>
-        <div className="flex items-start justify-between gap-6 flex-wrap">
+        <div className="flex flex-wrap items-start justify-between gap-6">
           <div className="min-w-0 flex-1">
-            <h1 className="font-serif text-[44px] font-normal tracking-[-0.011em] text-ink-primary leading-[1.05]">{etf.name}</h1>
-            <div className="font-mono text-[12px] text-ink-tertiary mt-2">{subParts.join(' · ')}</div>
-            <p className="font-sans text-[15px] text-ink-secondary max-w-[760px] mt-3">
+            <h1 className="font-display text-[36px] font-bold leading-[1.05] tracking-tight text-txt-1">{etf.name}</h1>
+            <div className="mt-2 font-num text-[12px] text-txt-3">{subParts.join(' · ')}</div>
+            <p className="mt-3 max-w-[760px] font-sans text-[14px] leading-[1.5] text-txt-2">
               How this ETF&apos;s holdings score on the six lenses, weighted by holding weight. A transparency
               roll-up of the stock atom — descriptive, <em>not</em> a forecast of outperformance.
             </p>
           </div>
           {/* leadership-breadth headline badge */}
-          <div className="shrink-0 bg-paper-soft border border-paper-rule rounded-sm px-5 py-4 text-center min-w-[180px]">
-            <div className="font-mono text-[40px] font-medium leading-none text-signal-pos">{breadthPct}</div>
-            <div className="font-sans text-[10px] uppercase tracking-[0.14em] text-ink-tertiary font-semibold mt-2">leadership-breadth</div>
-            <div className="font-sans text-[11px] text-ink-tertiary mt-1 leading-snug">
-              {etf.n_leaders} of {etf.n_holdings} holdings lead ≥2 lenses
-            </div>
+          <div className="w-[200px] shrink-0">
+            <StatCard
+              label="Leadership-breadth"
+              value={breadthPct}
+              tone="pos"
+              sub={`${etf.n_leaders} of ${etf.n_holdings} holdings lead ≥2 lenses`}
+            />
           </div>
         </div>
-      </section>
+      </header>
 
       {/* ── Holdings-weighted six-lens vector ── */}
-      <section className="px-8 py-9 border-b border-paper-rule" aria-label="Holdings-weighted lens vector">
-        <div className="mb-5">
-          <h2 className="font-serif text-[28px] font-normal tracking-tight text-ink-primary">How the holdings score on each lens</h2>
-          <p className="font-sans text-[13px] text-ink-tertiary max-w-[760px] leading-[1.45] mt-1">
-            Weight-weighted average of each holding&apos;s lens score (0–100) — descriptive, not a forecast.
-          </p>
-        </div>
+      <Panel
+        eyebrow="Lens read"
+        title="How the holdings score on each lens"
+        info={{ body: 'Weight-weighted average of each holding’s lens score (0–100) — descriptive, not a forecast.' }}
+      >
         <LensVector etf={etf} />
-      </section>
+      </Panel>
 
       {/* ── Charts (native Lightweight; bridged ETFs only) ── */}
       {etfRows.length > 0 && etf.nse_ticker ? (
-        <>
+        <Panel eyebrow="Trend" title="Price & relative strength" bodyClassName="space-y-8 px-5 py-4">
           <StockPriceEMAChart rows={etfRows} symbol={etf.nse_ticker} />
           <StockRSChart rows={etfRows} symbol={etf.nse_ticker} />
-        </>
+        </Panel>
       ) : (
-        <section className="px-8 py-9 border-b border-paper-rule" aria-label="Price & RS charts">
-          <h2 className="font-serif text-[28px] font-normal tracking-tight text-ink-primary">Price &amp; relative strength</h2>
-          <p className="font-sans text-[13px] text-ink-tertiary italic mt-2">
+        <Panel eyebrow="Trend" title="Price & relative strength">
+          <p className="font-sans text-[13px] italic text-txt-3">
             No NSE price series mapped for this ETF — lens roll-up only.
           </p>
-        </section>
+        </Panel>
       )}
 
       {/* ── Look-through holdings ── */}
-      <section className="px-8 py-9 border-b border-paper-rule" aria-label="Look-through holdings">
-        <div className="mb-5">
-          <h2 className="font-serif text-[28px] font-normal tracking-tight text-ink-primary">Look-through holdings</h2>
-          <p className="font-sans text-[13px] text-ink-tertiary max-w-[760px] leading-[1.45] mt-1">
-            Every holding by weight, with each name&apos;s lens deciles, leadership and 3-month RS. Click a symbol for its full evidence.
-          </p>
-        </div>
+      <Panel
+        eyebrow="Look-through"
+        title="Look-through holdings"
+        info={{ body: 'Every holding by weight, with each name’s lens deciles, leadership and 3-month RS. Click a symbol for its full evidence.' }}
+      >
         {etf.holdings.length > 0
           ? <HoldingsTable holdings={etf.holdings} />
-          : <p className="font-sans text-[13px] text-ink-tertiary italic">No scored holdings for this ETF.</p>}
-      </section>
+          : <p className="font-sans text-[13px] italic text-txt-3">No scored holdings for this ETF.</p>}
+      </Panel>
 
-      <div className="px-8 py-6 font-sans text-[12px] text-ink-tertiary leading-[1.6]">
-        Native from <strong className="text-ink-secondary">foundation_staging</strong> — the lens journal looked through
+      <p className="font-sans text-[12px] leading-[1.6] text-txt-3">
+        Native from <strong className="text-txt-2">foundation_staging</strong> — the lens journal looked through
         de_etf_holdings; identity from Morningstar (de_mf_master).{' '}
-        <Link href="/etfs" className="text-teal hover:underline">← Back to ETFs</Link>
-      </div>
+        <Link href="/etfs" className="text-brand hover:underline">← Back to ETFs</Link>
+      </p>
     </div>
   )
 }

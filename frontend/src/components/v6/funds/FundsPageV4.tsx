@@ -7,6 +7,8 @@
 // Order: 1. leadership-breadth strip + a few top cards · 2. the sortable lens table.
 import { getFundLensList, type FundLensRow } from '@/lib/queries/v6/fund_lens'
 import { FundLensTable } from './FundLensTable'
+import { Panel } from '@/components/v4/ui/Panel'
+import { StatCard, type Tone } from '@/components/v4/ui/StatCard'
 
 const LENS_LABEL: { key: keyof Pick<FundLensRow, 'v_tech' | 'v_fund' | 'v_cat' | 'v_flow' | 'v_val'>; label: string }[] = [
   { key: 'v_tech', label: 'Technical' },
@@ -29,19 +31,19 @@ function TopCard({ f }: { f: FundLensRow }) {
   const tl = topLens(f)
   return (
     <a href={`/funds/${f.mstar_id}`}
-       className="block bg-paper border border-paper-rule rounded-sm p-3 no-underline hover:border-ink-tertiary transition-colors">
-      <div className="flex items-baseline justify-between gap-2 mb-0.5">
-        <span className="font-sans text-[13px] font-semibold text-ink-primary leading-snug line-clamp-2">{f.name}</span>
-        <span className="font-mono text-[15px] font-semibold text-signal-pos shrink-0">
+       className="block rounded-tile border border-edge-hair bg-surface-panel p-3.5 shadow-tile no-underline transition-colors hover:border-edge-strong">
+      <div className="mb-0.5 flex items-baseline justify-between gap-2">
+        <span className="line-clamp-2 font-sans text-[13px] font-semibold leading-snug text-txt-1">{f.name}</span>
+        <span className="shrink-0 font-num text-[15px] font-semibold tabular-nums text-sig-pos">
           {f.breadth == null ? '—' : `${(f.breadth * 100).toFixed(0)}%`}
         </span>
       </div>
-      <div className="font-sans text-[11px] text-ink-tertiary truncate mb-2">{f.category ?? '—'}</div>
-      <div className="flex items-center justify-between gap-1 pt-2 border-t border-paper-rule/60">
-        <span className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider">
+      <div className="mb-2 truncate font-sans text-[11px] text-txt-3">{f.category ?? '—'}</div>
+      <div className="flex items-center justify-between gap-1 border-t border-edge-hair pt-2">
+        <span className="font-sans text-[10px] uppercase tracking-wider text-txt-3">
           {f.n_leaders} of {f.n_holdings} lead
         </span>
-        {tl && <span className="font-mono text-[10px] text-teal">{tl.label} {tl.v.toFixed(0)}</span>}
+        {tl && <span className="font-num text-[10px] tabular-nums text-brand">{tl.label} {tl.v.toFixed(0)}</span>}
       </div>
     </a>
   )
@@ -60,29 +62,26 @@ export async function FundsPageV4() {
   // top-breadth funds for the cards (rows already arrive ranked by breadth desc).
   const top = funds.filter(f => f.breadth != null).slice(0, 6)
 
-  const strip = [
-    { label: 'Equity funds', value: String(universeCount), cls: 'text-ink-primary',
-      foot: 'Regular Growth · holdings-weighted roll-up' },
-    { label: 'Breadth ≥ 20%', value: String(withBreadth), cls: 'text-signal-pos',
-      foot: '≥20% of weight leads ≥2 lenses' },
-    { label: 'Categories', value: String(categoryCount), cls: 'text-ink-primary', foot: 'Distinct SEBI categories' },
-    { label: 'AMCs', value: String(amcCount), cls: 'text-ink-primary', foot: 'Distinct asset managers' },
-    { label: 'Avg expense', value: avgExpense == null ? '—' : `${avgExpense.toFixed(2)}%`,
-      cls: 'text-ink-primary font-mono text-[20px]', foot: 'Mean expense ratio across the set' },
+  const strip: { label: string; value: string; tone: Tone; sub: string }[] = [
+    { label: 'Equity funds', value: String(universeCount), tone: 'neutral', sub: 'Regular Growth · holdings-weighted roll-up' },
+    { label: 'Breadth ≥ 20%', value: String(withBreadth), tone: 'pos', sub: '≥20% of weight leads ≥2 lenses' },
+    { label: 'Categories', value: String(categoryCount), tone: 'neutral', sub: 'Distinct SEBI categories' },
+    { label: 'AMCs', value: String(amcCount), tone: 'neutral', sub: 'Distinct asset managers' },
+    { label: 'Avg expense', value: avgExpense == null ? '—' : `${avgExpense.toFixed(2)}%`, tone: 'neutral', sub: 'Mean expense ratio across the set' },
   ]
 
   return (
-    <div className="max-w-[1400px] mx-auto">
+    <div className="mx-auto max-w-[1280px] space-y-6 px-6 py-7">
       {/* Header + leadership-breadth strip */}
-      <section className="px-8 py-8 border-b border-paper-rule">
-        <div className="font-sans text-[12px] text-ink-tertiary mb-3">
-          <a href="/" className="text-teal no-underline hover:underline">Atlas</a> › Funds
+      <header>
+        <div className="mb-3 font-sans text-[12px] text-txt-3">
+          <a href="/" className="text-brand no-underline hover:underline">Atlas</a> › Funds
         </div>
-        <div className="flex items-baseline gap-4 flex-wrap mb-2">
-          <h1 className="font-serif text-[44px] font-normal tracking-[-0.011em] text-ink-primary leading-[1.1]">Funds</h1>
-          <span className="font-mono text-[12px] text-ink-tertiary">{universeCount} equity funds (Regular Growth) · holdings-weighted lens roll-up</span>
+        <div className="mb-2 flex flex-wrap items-baseline gap-4">
+          <h1 className="font-display text-[32px] font-bold tracking-tight text-txt-1">Funds</h1>
+          <span className="font-num text-[12px] tabular-nums text-txt-3">{universeCount} equity funds (Regular Growth) · holdings-weighted lens roll-up</span>
         </div>
-        <p className="font-sans text-[15px] text-ink-secondary max-w-[880px]">
+        <p className="max-w-[880px] font-sans text-[15px] text-txt-2">
           Each fund is a <strong>holdings-weighted roll-up</strong> of the stock atom. The headline is
           <strong> leadership-breadth</strong> — the share of holdings weight that are top-decile leaders
           (top-decile in ≥2 conviction lenses). The fund-specific differentiator, on each detail page, is
@@ -90,47 +89,43 @@ export async function FundsPageV4() {
           transparency view of what each fund holds and how it scores — descriptive, <em>not</em> a forecast of outperformance.
         </p>
 
-        <div className="mt-6 bg-paper-soft border border-paper-rule rounded-sm overflow-hidden grid"
-             style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
-          {strip.map((t, i) => (
-            <div key={t.label} className={`px-[18px] py-[14px] ${i < 4 ? 'border-r border-paper-rule' : ''}`}>
-              <div className="font-sans text-[9px] tracking-[0.18em] uppercase text-ink-tertiary font-semibold mb-1">{t.label}</div>
-              <div className={`font-mono text-[22px] font-medium leading-none ${t.cls}`}>{t.value}</div>
-              <div className="font-sans text-[11px] text-ink-tertiary mt-1 leading-snug">{t.foot}</div>
-            </div>
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {strip.map(t => (
+            <StatCard key={t.label} label={t.label} value={t.value} sub={t.sub} tone={t.tone} />
           ))}
         </div>
-      </section>
+      </header>
 
       {/* Highest leadership-breadth */}
       {top.length > 0 && (
-        <section className="px-8 py-9 border-b border-paper-rule" aria-label="Highest leadership-breadth funds">
-          <div className="mb-4">
-            <h2 className="font-serif text-[28px] font-normal tracking-tight text-ink-primary">Highest leadership-breadth</h2>
-            <p className="font-sans text-[13px] text-ink-tertiary mt-1 max-w-[760px]">
-              The funds whose holdings carry the most leader weight right now. Click any for the holdings-weighted lens read, active-movement and look-through.
-            </p>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <Panel
+          eyebrow="Leaders"
+          title="Highest leadership-breadth"
+          info={{
+            title: 'Highest leadership-breadth',
+            body: 'The funds whose holdings carry the most leader weight right now. Click any for the holdings-weighted lens read, active-movement and look-through.',
+          }}
+        >
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
             {top.map(f => <TopCard key={f.mstar_id} f={f} />)}
           </div>
-        </section>
+        </Panel>
       )}
 
       {/* The sortable lens table (client: sort + category filter) */}
-      <section className="px-8 py-10 border-b border-paper-rule" aria-label="Fund lens table">
-        <div className="mb-5">
-          <h2 className="font-serif text-[28px] font-normal tracking-tight text-ink-primary">All equity funds</h2>
-          <p className="font-sans text-[13px] text-ink-tertiary max-w-[760px] leading-[1.45] mt-1">
-            Ranked by leadership-breadth. Every column header sorts; filter by category. The five lens scores are
-            holdings-weighted (0–100). Click a row for the full roll-up.
-          </p>
-        </div>
+      <Panel
+        eyebrow="Screener"
+        title="All equity funds"
+        info={{
+          title: 'All equity funds',
+          body: 'Ranked by leadership-breadth. Every column header sorts; filter by category. The five lens scores are holdings-weighted (0–100). Click a row for the full roll-up.',
+        }}
+      >
         <FundLensTable funds={funds} />
-      </section>
+      </Panel>
 
-      <div className="px-8 py-6 font-sans text-[12px] text-ink-tertiary leading-[1.6]">
-        Native from <strong className="text-ink-secondary">foundation_staging</strong> — the lens journal looked through
+      <div className="font-sans text-[12px] leading-[1.6] text-txt-3">
+        Native from <strong className="text-txt-2">foundation_staging</strong> — the lens journal looked through
         de_mf_holdings; identity + NAV from Morningstar (de_mf_master / de_mf_nav_daily).
       </div>
     </div>

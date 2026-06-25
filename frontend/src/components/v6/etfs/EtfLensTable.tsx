@@ -6,15 +6,17 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { EtfLensRow } from '@/lib/queries/v6/etf_lens'
+import { decileColor } from '@/components/v4/ui/decile'
 
 // ── colour helpers (shared idioms with the stocks pages) ──────────────────
-// Lens scores here are 0..100 (holdings-weighted), so the band cuts are scaled ×10
-// from the decile helper: ≥80 strong, ≥50 neutral, else weak.
-const scoreText = (v: number | null) =>
-  v == null ? 'text-ink-tertiary' : v >= 80 ? 'text-signal-pos' : v >= 50 ? 'text-ink-secondary' : 'text-signal-neg'
+// Lens scores here are 0..100 (holdings-weighted); colour the figure with the shared
+// perceptual ramp by mapping the score to its decile band (score/10), so a held lens
+// reads on the same scale as the stock deciles. null → tertiary text token.
+const scoreStyle = (v: number | null) =>
+  ({ color: v == null ? 'var(--color-txt-3)' : decileColor(Math.round(v / 10)) })
 
 const breadthText = (b: number | null) =>
-  b == null ? 'text-ink-tertiary' : b >= 0.1 ? 'text-signal-pos' : b >= 0.05 ? 'text-teal' : 'text-ink-secondary'
+  b == null ? 'text-txt-3' : b >= 0.1 ? 'text-sig-pos' : b >= 0.05 ? 'text-brand' : 'text-txt-2'
 
 const fmtScore = (v: number | null) => (v == null ? '—' : v.toFixed(0))
 const fmtBreadth = (b: number | null) => (b == null ? '—' : `${(b * 100).toFixed(0)}%`)
@@ -58,7 +60,7 @@ function numFor(r: EtfLensRow, key: SortKey): number {
   }
 }
 
-const CONTROL = 'font-sans text-[12px] bg-paper border border-paper-rule rounded-sm px-2 py-1 text-ink-secondary'
+const CONTROL = 'font-sans text-[12px] bg-surface-raised border border-edge-rule rounded-tile px-2 py-1 text-txt-2'
 
 export function EtfLensTable({ etfs }: { etfs: EtfLensRow[] }) {
   const router = useRouter()
@@ -100,15 +102,15 @@ export function EtfLensTable({ etfs }: { etfs: EtfLensRow[] }) {
   return (
     <div>
       {/* control row */}
-      <div className="flex flex-wrap items-end gap-4 mb-4">
+      <div className="mb-4 flex flex-wrap items-end gap-4">
         <label className="flex flex-col gap-1">
-          <span className="font-sans text-[10px] uppercase tracking-wider text-ink-tertiary">Category</span>
+          <span className="font-sans text-[10px] uppercase tracking-wider text-txt-3">Category</span>
           <select className={CONTROL} value={category} onChange={e => setCategory(e.target.value)}>
             <option value="all">All</option>
             {categories.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </label>
-        <span className="font-mono text-[12px] text-ink-tertiary self-end ml-auto">
+        <span className="ml-auto self-end font-num text-[12px] tabular-nums text-txt-3">
           {shown} of {total} ETFs
         </span>
       </div>
@@ -116,7 +118,7 @@ export function EtfLensTable({ etfs }: { etfs: EtfLensRow[] }) {
       <div className="overflow-x-auto">
         <table className="w-full border-collapse">
           <thead>
-            <tr className="border-b border-paper-rule">
+            <tr className="border-b border-edge-rule">
               {COLS.map(col => {
                 const isSorted = sortKey === col.key
                 const arrow = isSorted ? (sortDir === 'desc' ? ' ▼' : ' ▲') : ''
@@ -126,7 +128,7 @@ export function EtfLensTable({ etfs }: { etfs: EtfLensRow[] }) {
                     onClick={() => toggleSort(col.key)}
                     className={`font-sans text-[10px] uppercase tracking-wider pb-2 px-2 cursor-pointer select-none whitespace-nowrap ${
                       col.align === 'right' ? 'text-right' : 'text-left'
-                    } ${isSorted ? 'text-ink-primary font-semibold' : 'text-ink-tertiary'} hover:text-ink-secondary`}
+                    } ${isSorted ? 'text-txt-1 font-semibold' : 'text-txt-3'} hover:text-txt-2`}
                   >
                     {col.label}{arrow}
                   </th>
@@ -139,21 +141,21 @@ export function EtfLensTable({ etfs }: { etfs: EtfLensRow[] }) {
               <tr
                 key={e.fcode}
                 onClick={() => router.push('/etfs/' + e.fcode)}
-                className="border-b border-paper-rule/50 cursor-pointer hover:bg-paper-soft"
+                className="cursor-pointer border-b border-edge-hair hover:bg-surface-raised"
               >
-                <td className="py-1.5 px-2 font-sans text-[12px] font-medium text-ink-primary max-w-[260px] truncate">{e.name}</td>
-                <td className="py-1.5 px-2 font-sans text-[11px] text-ink-secondary truncate max-w-[160px]">{e.category ?? '—'}</td>
-                <td className="py-1.5 px-2 text-right font-mono text-[12px] tabular-nums text-ink-secondary">{e.n_holdings}</td>
-                <td className="py-1.5 px-2 text-right font-mono text-[12px] tabular-nums text-ink-secondary">{e.n_leaders}</td>
-                <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums font-semibold ${breadthText(e.breadth)}`}>{fmtBreadth(e.breadth)}</td>
-                <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums ${scoreText(e.v_tech)}`}>{fmtScore(e.v_tech)}</td>
-                <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums ${scoreText(e.v_fund)}`}>{fmtScore(e.v_fund)}</td>
-                <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums ${scoreText(e.v_cat)}`}>{fmtScore(e.v_cat)}</td>
-                <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums ${scoreText(e.v_flow)}`}>{fmtScore(e.v_flow)}</td>
-                <td className={`py-1.5 px-2 text-right font-mono text-[12px] tabular-nums ${scoreText(e.v_val)}`}>{fmtScore(e.v_val)}</td>
-                <td className="py-1.5 px-2 text-right font-mono text-[12px] tabular-nums text-ink-secondary">{fmtExpense(e.expense)}</td>
-                <td className="py-1.5 px-2 font-mono text-[10px] text-ink-tertiary whitespace-nowrap">
-                  {e.nse_ticker ? <span className="px-1.5 py-0.5 bg-paper-deep border border-paper-rule rounded-[2px]">{e.nse_ticker}</span> : '—'}
+                <td className="max-w-[260px] truncate px-2 py-1.5 font-sans text-[12px] font-medium text-txt-1">{e.name}</td>
+                <td className="max-w-[160px] truncate px-2 py-1.5 font-sans text-[11px] text-txt-2">{e.category ?? '—'}</td>
+                <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums text-txt-2">{e.n_holdings}</td>
+                <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums text-txt-2">{e.n_leaders}</td>
+                <td className={`px-2 py-1.5 text-right font-num text-[12px] font-semibold tabular-nums ${breadthText(e.breadth)}`}>{fmtBreadth(e.breadth)}</td>
+                <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={scoreStyle(e.v_tech)}>{fmtScore(e.v_tech)}</td>
+                <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={scoreStyle(e.v_fund)}>{fmtScore(e.v_fund)}</td>
+                <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={scoreStyle(e.v_cat)}>{fmtScore(e.v_cat)}</td>
+                <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={scoreStyle(e.v_flow)}>{fmtScore(e.v_flow)}</td>
+                <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={scoreStyle(e.v_val)}>{fmtScore(e.v_val)}</td>
+                <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums text-txt-2">{fmtExpense(e.expense)}</td>
+                <td className="whitespace-nowrap px-2 py-1.5 font-num text-[10px] text-txt-3">
+                  {e.nse_ticker ? <span className="rounded-tile border border-edge-rule bg-surface-inset px-1.5 py-0.5">{e.nse_ticker}</span> : '—'}
                 </td>
               </tr>
             ))}
