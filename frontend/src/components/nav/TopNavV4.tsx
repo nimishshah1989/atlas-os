@@ -44,6 +44,7 @@ export function TopNavV4({ healthDot }: { healthDot?: React.ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={false}
                 className={`relative rounded-tile px-3 py-1.5 font-sans text-[12px] font-medium transition-colors ${
                   active ? 'text-txt-1' : 'text-txt-3 hover:text-txt-1'
                 }`}
