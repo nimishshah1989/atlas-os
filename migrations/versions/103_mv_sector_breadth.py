@@ -89,7 +89,7 @@ sector_scalars AS (
   SELECT
     date                   AS as_of_date,
     sector_name,
-    pct_above_ema20,
+    pct_above_ema21,
     participation_50       AS pct_above_ema50,
     pct_above_ema200,
     pct_52wh               AS pct_at_52wh
@@ -309,8 +309,8 @@ SELECT
   -- ---- Constituent count (current snapshot) ----
   COALESCE(cc.constituent_count, 0)                                   AS constituent_count,
 
-  -- ---- EMA breadth scalars (fractions 0.0–1.0, NULL before backfill) ----
-  ROUND(ss.pct_above_ema20::numeric,  4)                              AS pct_above_ema20,
+  -- ---- EMA breadth scalars (fractions 0.0–1.0; EMA21 = canonical, A1) ----
+  ROUND(ss.pct_above_ema21::numeric,  4)                              AS pct_above_ema21,
   ROUND(ss.pct_above_ema50::numeric,  4)                              AS pct_above_ema50,
   ROUND(ss.pct_above_ema200::numeric, 4)                              AS pct_above_ema200,
   ROUND(ss.pct_at_52wh::numeric,      4)                              AS pct_at_52wh,

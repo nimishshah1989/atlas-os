@@ -68,6 +68,8 @@ METRICS_COLUMNS: tuple[str, ...] = (
     "participation_50",
     "participation_rs",
     "leadership_concentration",
+    "pct_above_ema21",   # A1: canonical EMA21 breadth from technical_daily.above_ema_21
+    "pct_above_ema200",  # A1: canonical EMA200 breadth from technical_daily.above_ema_200
     "rs_velocity",  # SP02: 4-week rate-of-change of bottomup_rs_3m_nifty500
     "compute_run_id",
 )
@@ -272,6 +274,54 @@ def load_nifty500_returns(
         df["date"] = pd.to_datetime(df["date"]).dt.date
         df = df.rename(columns={f"ret_{w}": f"_n500_ret_{w}" for w in RS_WINDOWS})
     log.info("nifty500_returns_loaded", rows=len(df))
+    return df
+
+
+def load_sector_ema_breadth(
+    engine: Engine,
+    start_date: date,
+    end_date: date,
+) -> pd.DataFrame:
+    """Per (sector, date) canonical EMA21 / EMA200 participation.
+
+    A1 fix: the breadth scalars must use the LOCKED system standard EMA **21**
+    (``technical_daily.above_ema_21``), not the metrics-layer EMA20. We read the
+    canonical boolean flags from ``foundation_staging.technical_daily`` and map to
+    sector via the current universe (``atlas_universe_stocks``, ``effective_to IS
+    NULL``) — the SAME constituent set the breadth/cards MVs use, so the fraction
+    denominators reconcile across surfaces.
+
+    Returns long-form ``sector_name, date, pct_above_ema21, pct_above_ema200``
+    (fractions in [0, 1]). Rows where ``above_ema_21`` is NULL (warm-up) are
+    excluded from both numerator and denominator.
+    """
+    with open_compute_session(engine) as conn:
+        df = pd.read_sql(
+            """
+            SELECT
+                u.sector AS sector_name,
+                td.date,
+                AVG(CASE WHEN td.above_ema_21  THEN 1.0 ELSE 0.0 END) AS pct_above_ema21,
+                AVG(CASE WHEN td.above_ema_200 THEN 1.0 ELSE 0.0 END) AS pct_above_ema200
+            FROM foundation_staging.technical_daily td
+            JOIN atlas.atlas_universe_stocks u
+                ON u.instrument_id = td.instrument_id
+               AND u.effective_to IS NULL
+            WHERE td.asset_class = 'stock'
+              AND td.date BETWEEN %(start)s AND %(end)s
+              AND td.above_ema_21 IS NOT NULL
+            GROUP BY u.sector, td.date
+            """,
+            conn,
+            params={"start": start_date, "end": end_date},
+        )
+    if not df.empty:
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+    log.info(
+        "sector_ema_breadth_loaded",
+        rows=len(df),
+        sectors=df["sector_name"].nunique() if not df.empty else 0,
+    )
     return df
 
 
@@ -877,10 +927,13 @@ def assemble_sector_metrics(
     df_bottomup: pd.DataFrame,
     df_topdown: pd.DataFrame,
     df_breadth: pd.DataFrame,
+    df_ema_breadth: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
-    """Outer-join the three frames into the schema layout.
+    """Outer-join the frames into the schema layout.
 
     Output columns match :data:`METRICS_COLUMNS` minus ``compute_run_id``.
+    ``df_ema_breadth`` (A1) carries the canonical ``pct_above_ema21`` /
+    ``pct_above_ema200`` from :func:`load_sector_ema_breadth`.
     """
     if df_bottomup.empty:
         return pd.DataFrame(columns=[c for c in METRICS_COLUMNS if c != "compute_run_id"])
@@ -888,6 +941,8 @@ def assemble_sector_metrics(
     keys = ["sector_name", "date"]
     out = df_bottomup.merge(df_topdown, on=keys, how="left")
     out = out.merge(df_breadth, on=keys, how="left")
+    if df_ema_breadth is not None and not df_ema_breadth.empty:
+        out = out.merge(df_ema_breadth, on=keys, how="left")
 
     schema_cols = [c for c in METRICS_COLUMNS if c != "compute_run_id"]
     return out.reindex(columns=schema_cols)
@@ -1209,8 +1264,10 @@ def _run_pipeline(
     )
     breadth = compute_sector_breadth(stock_data, sector_master)
     topdown = compute_top_down_sector_metrics(index_metrics, sector_master)
+    # A1: canonical EMA21/EMA200 participation from technical_daily (the missing breadth).
+    ema_breadth = load_sector_ema_breadth(engine, start_date=start, end_date=end)
 
-    metrics = assemble_sector_metrics(bottomup, topdown, breadth)
+    metrics = assemble_sector_metrics(bottomup, topdown, breadth, ema_breadth)
 
     # SP02: compute rs_velocity after assembly (needs full sector × date frame).
     # ``load_thresholds`` returns ``dict[str, Decimal]`` → coerce to int.
@@ -1286,6 +1343,7 @@ __all__ = [
     "compute_top_down_sector_metrics",
     "load_index_metrics",
     "load_nifty500_returns",
+    "load_sector_ema_breadth",
     "load_sector_master",
     "load_sector_stock_data",
     "run_daily_sector_metrics",

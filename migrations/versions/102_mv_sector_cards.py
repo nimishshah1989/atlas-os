@@ -111,8 +111,8 @@ metrics AS (
     smd.bottomup_rs_3m_nifty500        AS rs_3m,
     smd.rs_6m,
     smd.rs_12m,
-    -- Breadth (added migration 097)
-    smd.pct_above_ema20,
+    -- Breadth (EMA21 = canonical, A1)
+    smd.pct_above_ema21,
     smd.pct_above_ema200,
     smd.pct_52wh                       AS pct_at_52wh,
     smd.hhi                            AS hhi_concentration
@@ -246,7 +246,7 @@ SELECT
 
   -- ---- Risk / breadth ----
   ROUND(sv.vol_60d_ann::numeric, 4)                          AS vol_60d_ann,
-  ROUND(m.pct_above_ema20::numeric,  4)                      AS pct_above_ema20,
+  ROUND(m.pct_above_ema21::numeric,  4)                      AS pct_above_ema21,
   ROUND(m.pct_above_ema200::numeric, 4)                      AS pct_above_ema200,
   ROUND(m.pct_at_52wh::numeric,      4)                      AS pct_at_52wh,
   ROUND(m.hhi_concentration::numeric, 4)                     AS hhi_concentration,
