@@ -6,9 +6,9 @@ const pct = (v: number | null) => (v == null ? '—' : `${v.toFixed(1)}%`)
 const num = (v: number | null) => (v == null ? '—' : v.toFixed(2))
 // margins: higher better; leverage: lower better
 const cmp = (s: number | null, u: number | null, lowerBetter = false) => {
-  if (s == null || u == null) return 'text-ink-secondary'
+  if (s == null || u == null) return 'text-txt-2'
   const better = lowerBetter ? s < u : s > u
-  return better ? 'text-signal-pos' : 'text-signal-neg'
+  return better ? 'text-sig-pos' : 'text-sig-neg'
 }
 
 export function SectorFundamentalsTable({ data }: { data: SectorFundamentals }) {
@@ -18,17 +18,17 @@ export function SectorFundamentalsTable({ data }: { data: SectorFundamentals }) 
     { label: 'Debt / equity', s: data.debt_equity, u: data.u_debt_equity, fmt: num, low: true },
   ]
   return (
-    <section className="px-8 py-10 border-b border-paper-rule" aria-label="Sector fundamentals">
+    <section className="px-8 py-10 border-b border-edge-hair" aria-label="Sector fundamentals">
       <div className="mb-5">
-        <h2 className="font-serif text-[28px] font-normal tracking-tight text-ink-primary">Sector fundamentals</h2>
-        <p className="font-sans text-[13px] text-ink-tertiary max-w-[760px] leading-[1.45] mt-1">
+        <h2 className="font-display text-[28px] font-normal tracking-tight text-txt-1">Sector fundamentals</h2>
+        <p className="font-sans text-[13px] text-txt-3 max-w-[760px] leading-[1.45] mt-1">
           Constituent-average profitability and leverage (latest filed quarter) vs the all-stock universe.
-          {' '}{data.n} of the sector's stocks have financials.
+          {' '}{data.n} of the sector&apos;s stocks have financials.
         </p>
       </div>
       <table className="w-full text-right max-w-[640px]">
         <thead>
-          <tr className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider border-b border-paper-rule">
+          <tr className="font-num text-[10px] text-txt-3 uppercase tracking-wider border-b border-edge-hair">
             <th className="text-left py-1.5 font-medium">Metric</th>
             <th className="py-1.5 font-medium">Sector</th>
             <th className="py-1.5 font-medium">Universe</th>
@@ -36,10 +36,10 @@ export function SectorFundamentalsTable({ data }: { data: SectorFundamentals }) 
         </thead>
         <tbody>
           {rows.map(r => (
-            <tr key={r.label} className="border-b border-paper-rule/40">
-              <td className="text-left py-1.5 font-sans text-xs text-ink-secondary">{r.label}</td>
-              <td className={`py-1.5 font-mono text-xs tabular-nums ${cmp(r.s, r.u, r.low)}`}>{r.fmt(r.s)}</td>
-              <td className="py-1.5 font-mono text-xs tabular-nums text-ink-tertiary">{r.fmt(r.u)}</td>
+            <tr key={r.label} className="border-b border-edge-hair">
+              <td className="text-left py-1.5 font-sans text-xs text-txt-2">{r.label}</td>
+              <td className={`py-1.5 font-num text-xs tabular-nums ${cmp(r.s, r.u, r.low)}`}>{r.fmt(r.s)}</td>
+              <td className="py-1.5 font-num text-xs tabular-nums text-txt-3">{r.fmt(r.u)}</td>
             </tr>
           ))}
         </tbody>

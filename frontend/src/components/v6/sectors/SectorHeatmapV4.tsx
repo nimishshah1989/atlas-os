@@ -2,7 +2,7 @@
 
 // SectorHeatmapV4 — multi-window sector return/RS heatmap, click-sortable on every column,
 // verdict + signal-confidence columns dropped (v4 strips the conviction cruft). Numbers shown
-// with a continuous heat tint. Source: foundation_staging.mv_sector_cards via getSectorCards().
+// with a continuous RAG heat tint. Source: foundation_staging.mv_sector_cards via getSectorCards().
 
 import { useState } from 'react'
 import Link from 'next/link'
@@ -10,14 +10,24 @@ import type { SectorCardRow } from '@/lib/queries/v6/sectors'
 
 type Col = { key: string; label: string; sub: string; get: (c: SectorCardRow) => number | null; unit: '%' | 'pp' }
 
-function heatStyle(v: number | null): React.CSSProperties {
-  if (v == null) return { color: '#9A8F82' }
-  const p = v * 100
-  const a = (Math.min(Math.abs(p) / 10, 1) * 0.36).toFixed(2)
-  return p >= 0 ? { background: `rgba(47,107,67,${a})` } : { background: `rgba(176,73,44,${a})` }
+// RAG heat tint. The numeric scale differs by unit:
+//   '%'  values are decimal fractions (×100 → percent), normalised over ±10%.
+//   'pp' values are ALREADY percentage points (rs_* columns), normalised over ±5pp.
+function heatStyle(v: number | null, unit: '%' | 'pp'): React.CSSProperties {
+  if (v == null) return { color: 'var(--color-txt-3)' }
+  const mag = unit === '%' ? Math.abs(v * 100) / 10 : Math.abs(v) / 5
+  const a = (Math.min(mag, 1) * 0.36).toFixed(2)
+  const sig = v >= 0 ? 'var(--color-sig-pos)' : 'var(--color-sig-neg)'
+  return { background: `color-mix(in srgb, ${sig} ${Math.round(parseFloat(a) * 100)}%, transparent)` }
 }
-const fmt = (v: number | null, unit: '%' | 'pp') =>
-  v == null ? '—' : `${v * 100 >= 0 ? '+' : ''}${(v * 100).toFixed(1)}${unit}`
+
+// RETURN columns are decimal fractions → ×100, suffix '%'.
+// RS columns are already percentage points → show verbatim, suffix 'pp'.
+const fmt = (v: number | null, unit: '%' | 'pp') => {
+  if (v == null) return '—'
+  const n = unit === '%' ? v * 100 : v
+  return `${n >= 0 ? '+' : ''}${n.toFixed(1)}${unit}`
+}
 
 export function SectorHeatmapV4({
   cards, idxRet1dBySector,
@@ -35,7 +45,7 @@ export function SectorHeatmapV4({
   ]
   const [sortKey, setSortKey] = useState('rs_3m')
   const [dir, setDir] = useState<1 | -1>(-1)
-  if (cards.length === 0) return <div className="text-ink-tertiary text-sm text-center py-8">No heatmap data.</div>
+  if (cards.length === 0) return <div className="text-txt-3 text-sm text-center py-8">No heatmap data.</div>
 
   const col = COLS.find(c => c.key === sortKey)!
   const sorted = [...cards].sort((a, b) => {
@@ -47,10 +57,10 @@ export function SectorHeatmapV4({
   const onSort = (k: string) => { if (k === sortKey) setDir(d => (d === 1 ? -1 : 1)); else { setSortKey(k); setDir(-1) } }
   const arrow = (k: string) => (k === sortKey ? (dir === -1 ? ' ↓' : ' ↑') : '')
 
-  const th = "px-1.5 py-2 font-sans text-[9px] font-semibold uppercase tracking-wider text-ink-tertiary bg-paper-soft border-b border-ink-rule cursor-pointer select-none hover:text-ink-primary"
+  const th = "px-1.5 py-2 font-num text-[9px] font-semibold uppercase tracking-wider text-txt-3 bg-surface-raised border-b border-edge-rule cursor-pointer select-none hover:text-txt-1"
 
   return (
-    <div className="overflow-x-auto bg-paper border border-paper-rule rounded-[2px]">
+    <div className="overflow-x-auto rounded-tile border border-edge-hair bg-surface-panel">
       <table className="w-full border-collapse text-xs" data-testid="sector-heatmap-v4">
         <thead>
           <tr>
@@ -58,21 +68,21 @@ export function SectorHeatmapV4({
             {COLS.map(c => (
               <th key={c.key} className={`text-center ${th}`} onClick={() => onSort(c.key)}>
                 {c.label}{arrow(c.key)}
-                <span className="block font-mono text-[8px] text-ink-4 tracking-normal normal-case mt-0.5">{c.sub}</span>
+                <span className="block font-num text-[8px] text-txt-3 tracking-normal normal-case mt-0.5">{c.sub}</span>
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
           {sorted.map(card => (
-            <tr key={card.sector_name} className="border-b border-paper-deep hover:bg-paper-soft/60 transition-colors">
+            <tr key={card.sector_name} className="border-b border-edge-hair hover:bg-surface-raised/60 transition-colors">
               <td className="text-left py-[7px] px-3.5">
                 <div className="flex items-center gap-2">
                   <Link href={`/sectors/${encodeURIComponent(card.sector_name)}`}
-                    className="font-medium text-ink-primary text-[12.5px] hover:text-teal transition-colors">
+                    className="font-medium text-txt-1 text-[12.5px] hover:text-brand transition-colors">
                     {card.sector_name}
                   </Link>
-                  <span className="font-mono text-[9px] text-ink-tertiary bg-paper-deep px-[5px] py-px rounded-[2px]">
+                  <span className="font-num text-[9px] text-txt-3 bg-surface-inset px-[5px] py-px rounded-tile">
                     {card.constituent_count}
                   </span>
                 </div>
@@ -80,7 +90,7 @@ export function SectorHeatmapV4({
               {COLS.map(c => {
                 const v = c.get(card)
                 return (
-                  <td key={c.key} className="text-center font-mono text-[11.5px] tabular-nums border-b border-paper-deep" style={heatStyle(v)}>
+                  <td key={c.key} className="text-center font-num text-[11.5px] tabular-nums border-b border-edge-hair" style={heatStyle(v, c.unit)}>
                     <div className="px-1 py-[7px]">{fmt(v, c.unit)}</div>
                   </td>
                 )

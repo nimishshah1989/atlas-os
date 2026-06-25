@@ -35,11 +35,11 @@ function resample(rows: CapTierRSRow[], freq: Freq): CapTierRSRow[] {
 
 function Toggle<T extends string>({ options, value, onChange }: { options: T[]; value: T; onChange: (v: T) => void }) {
   return (
-    <div className="inline-flex rounded-sm border border-paper-rule overflow-hidden">
+    <div className="inline-flex rounded-tile border border-edge-rule overflow-hidden">
       {options.map(o => (
         <button key={o} onClick={() => onChange(o)}
-          className={`px-2 py-0.5 font-sans text-[10px] tracking-wide transition-colors ${
-            o === value ? 'bg-ink-primary text-paper' : 'bg-paper text-ink-tertiary hover:text-ink-secondary'}`}>
+          className={`px-2 py-0.5 font-num text-[10px] tracking-wide transition-colors ${
+            o === value ? 'bg-brand-soft text-brand' : 'bg-surface-raised text-txt-3 hover:text-txt-2'}`}>
           {o}
         </button>
       ))}
@@ -76,24 +76,41 @@ export function CapTierRSCharts({ series }: { series: CapTierRSRow[] }) {
   }, [data])
 
   return (
-    <section className="px-8 py-10 border-b border-paper-rule" aria-label="Cap-tier relative strength">
-      <div className="flex items-baseline justify-between mb-5 flex-wrap gap-3">
-        <div>
-          <h2 className="font-serif text-[28px] font-normal tracking-tight text-ink-primary">Cap-tier relative strength</h2>
-          <p className="font-sans text-[13px] text-ink-tertiary max-w-[720px] leading-[1.45] mt-1">
-            Each tier index ÷ Nifty 500, rebased to 100 at window start — above 100 = outperforming the broad market.
-          </p>
+    <section className="rounded-panel border border-edge-hair bg-surface-panel shadow-panel" aria-label="Cap-tier relative strength">
+      <header className="flex items-baseline justify-between gap-3 flex-wrap border-b border-edge-hair px-5 py-3.5">
+        <div className="min-w-0">
+          <div className="font-num text-[9px] uppercase tracking-[0.14em] text-txt-3">Cap tiers</div>
+          <h2 className="font-display text-[15px] font-medium leading-tight text-txt-1">Cap-tier relative strength</h2>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <Toggle options={['10Y', '5Y', '2Y']} value={history} onChange={setHistory} />
           <Toggle options={['1D', '1W', '1M']} value={freq} onChange={setFreq} />
         </div>
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {rebased.map(t => (
-          <AtlasLightweightChart key={t.field} title={t.label} yLabel="RS vs Nifty 500 (=100)"
-            height={200} showLastValue series={[{ name: t.label, color: t.color, data: t.points }]} />
-        ))}
+      </header>
+      <div className="px-5 py-4">
+        <p className="font-sans text-[12.5px] text-txt-2 max-w-[760px] leading-[1.5] mb-4">
+          Each tier index ÷ Nifty 500, <strong className="text-txt-1 font-medium">rebased to 100 at the window start</strong>.
+          The latest plotted value is the running outperformance: e.g. 123.7 = +23.7% vs Nifty 500 over the window; below 100 = lagging.
+        </p>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {rebased.map(t => {
+            const latest = t.points.length ? t.points[t.points.length - 1].value : null
+            return (
+              <div key={t.field}>
+                <AtlasLightweightChart title={t.label} yLabel="RS vs Nifty 500 (=100)"
+                  height={200} showLastValue series={[{ name: t.label, color: t.color, data: t.points }]} />
+                {latest != null && (
+                  <p className="font-num text-[11px] tabular-nums text-txt-3 mt-1">
+                    latest <span className="text-txt-1 font-semibold">{latest.toFixed(1)}</span> ={' '}
+                    <span className={latest >= 100 ? 'text-sig-pos' : 'text-sig-neg'}>
+                      {latest >= 100 ? '+' : ''}{(latest - 100).toFixed(1)}%
+                    </span>{' '}vs Nifty 500 since window start
+                  </p>
+                )}
+              </div>
+            )
+          })}
+        </div>
       </div>
     </section>
   )
