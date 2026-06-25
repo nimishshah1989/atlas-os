@@ -14,6 +14,7 @@ import { Panel } from '../ui/Panel'
 import { DecileLadder } from '../ui/DecileLadder'
 import { stockToLadder } from '../adapters/stockToLadder'
 import { RegimeChip, BreadthTablePanel, TierReturnsPanel, MacroPanel, SectorLeadershipPanel, type SectorRollup } from './MarketPulsePanels'
+import { MarketPulseBreadthCharts } from './MarketPulseBreadthCharts'
 
 const fmtInt = (n: number | null | undefined) => (n == null ? '—' : Math.round(n).toLocaleString('en-IN'))
 const fmtSigned = (n: number | null | undefined) => (n == null ? '—' : `${n >= 0 ? '+' : ''}${Math.round(n).toLocaleString('en-IN')}`)
@@ -126,6 +127,11 @@ export async function MarketPulseV4() {
           {breadthTable.rows.length > 0 && <BreadthTablePanel rows={breadthTable.rows} asOf={breadthTable.as_of} />}
           {tier.windows.length > 0 && <TierReturnsPanel data={tier} />}
         </div>
+
+        {/* breadth participation history — §3.e */}
+        {breadthSeries.length > 1 && (
+          <div className="mb-6"><MarketPulseBreadthCharts series={breadthSeries} /></div>
+        )}
 
         {/* conviction spotlight — the signature Decile Ladder, real data */}
         {ladder && spotlight && (
