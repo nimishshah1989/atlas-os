@@ -35,17 +35,17 @@ export function ProposalDiffTable({ current, proposed }: Props) {
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-xs">
         <thead>
-          <tr className="border-b border-paper-rule bg-paper">
-            <th className="px-3 py-1.5 text-left font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary">
+          <tr className="border-b border-edge-hair bg-surface-panel">
+            <th className="px-3 py-1.5 text-left font-sans text-[10px] font-semibold uppercase tracking-wider text-txt-3">
               Signal
             </th>
-            <th className="px-3 py-1.5 text-right font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary">
+            <th className="px-3 py-1.5 text-right font-sans text-[10px] font-semibold uppercase tracking-wider text-txt-3">
               Current
             </th>
-            <th className="px-3 py-1.5 text-right font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary">
+            <th className="px-3 py-1.5 text-right font-sans text-[10px] font-semibold uppercase tracking-wider text-txt-3">
               Proposed
             </th>
-            <th className="px-3 py-1.5 text-right font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary">
+            <th className="px-3 py-1.5 text-right font-sans text-[10px] font-semibold uppercase tracking-wider text-txt-3">
               Δ
             </th>
           </tr>
@@ -54,23 +54,23 @@ export function ProposalDiffTable({ current, proposed }: Props) {
           {rows.map((r) => {
             const deltaColor =
               r.delta > 0.01
-                ? 'text-signal-pos'
+                ? 'text-sig-pos'
                 : r.delta < -0.01
-                  ? 'text-signal-neg'
-                  : 'text-ink-tertiary'
+                  ? 'text-sig-neg'
+                  : 'text-txt-3'
             const sign = r.delta >= 0 ? '+' : ''
             return (
-              <tr key={r.signal} className="border-b border-paper-rule/40">
-                <td className="px-3 py-1 font-sans text-ink-primary" title={r.signal}>
+              <tr key={r.signal} className="border-b border-edge-hair">
+                <td className="px-3 py-1 font-sans text-txt-1" title={r.signal}>
                   {SIGNAL_LABELS[r.signal] ?? r.signal}
                 </td>
-                <td className="px-3 py-1 text-right font-mono text-ink-secondary tabular-nums">
+                <td className="px-3 py-1 text-right font-num text-txt-2 tabular-nums">
                   {r.current.toFixed(3)}
                 </td>
-                <td className="px-3 py-1 text-right font-mono text-ink-primary tabular-nums">
+                <td className="px-3 py-1 text-right font-num text-txt-1 tabular-nums">
                   {r.proposed.toFixed(3)}
                 </td>
-                <td className={`px-3 py-1 text-right font-mono tabular-nums ${deltaColor}`}>
+                <td className={`px-3 py-1 text-right font-num tabular-nums ${deltaColor}`}>
                   {sign}
                   {r.delta.toFixed(3)}
                 </td>

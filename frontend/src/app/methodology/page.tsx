@@ -10,7 +10,7 @@ export const metadata = {
 
 export default function MethodologyPage() {
   return (
-    <main className="min-h-screen bg-paper">
+    <main className="min-h-screen bg-surface-base">
       <MethodologyV62 />
     </main>
   )

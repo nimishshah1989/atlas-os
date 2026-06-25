@@ -19,7 +19,7 @@ export default async function ValidatorAdminPage() {
   ])
 
   return (
-    <main className="min-h-screen bg-paper px-8 py-6 max-w-6xl mx-auto">
+    <main className="min-h-screen bg-surface-panel px-8 py-6 max-w-6xl mx-auto">
       <ValidatorDashboard
         runs={runs}
         groups={groups}

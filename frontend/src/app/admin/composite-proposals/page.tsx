@@ -34,21 +34,21 @@ export default async function CompositeProposalsPage() {
   ])
 
   return (
-    <main className="min-h-screen bg-paper px-8 py-6 max-w-7xl mx-auto">
+    <main className="min-h-screen bg-surface-panel px-8 py-6 max-w-7xl mx-auto">
       <header className="mb-6">
-        <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider">
+        <div className="font-sans text-[10px] text-txt-3 uppercase tracking-wider">
           Atlas · Admin · Composite
         </div>
-        <h1 className="font-serif text-2xl text-ink-primary mt-1">
+        <h1 className="font-display text-2xl text-txt-1 mt-1">
           Conviction Weight Proposals
         </h1>
-        <p className="font-sans text-xs text-ink-secondary mt-1">
+        <p className="font-sans text-xs text-txt-2 mt-1">
           Stage 4a auto-optimization loop. Candidates re-weight per-tier signals
           using rolling out-of-sample IC. Approval applies a 15% Bayesian blend
           toward the candidate; the existing weight set is bookended with
           effective_to=today and the new set takes effect tomorrow.
         </p>
-        <p className="font-sans text-[11px] text-ink-tertiary mt-2">
+        <p className="font-sans text-[11px] text-txt-3 mt-2">
           {proposals.length} pending proposal{proposals.length === 1 ? '' : 's'}
         </p>
       </header>
@@ -56,8 +56,8 @@ export default async function CompositeProposalsPage() {
       <RevertBanner reverts={reverts} />
 
       {proposals.length === 0 ? (
-        <div className="border border-paper-rule rounded-sm bg-white p-6">
-          <p className="font-sans text-sm text-ink-secondary">
+        <div className="border border-edge-hair rounded-panel bg-surface-panel p-6">
+          <p className="font-sans text-sm text-txt-2">
             No pending proposals. The nightly generator only emits a candidate
             when the rolling IC re-weight differs materially (|Δ| ≥ 0.05) from
             the active weights.
@@ -77,34 +77,34 @@ export default async function CompositeProposalsPage() {
             const deltaSign = delta !== null && delta >= 0 ? '+' : ''
             const deltaColor =
               delta !== null && delta > 0
-                ? 'text-signal-pos'
+                ? 'text-sig-pos'
                 : delta !== null && delta < 0
-                  ? 'text-signal-neg'
-                  : 'text-ink-tertiary'
+                  ? 'text-sig-neg'
+                  : 'text-txt-3'
 
             return (
               <div
                 key={p.id}
-                className="border border-paper-rule rounded-sm bg-white p-5"
+                className="border border-edge-hair rounded-panel bg-surface-panel p-5"
               >
                 <div className="flex items-baseline justify-between mb-2 flex-wrap gap-2">
                   <div>
-                    <h2 className="font-serif text-lg text-ink-primary">
+                    <h2 className="font-display text-lg text-txt-1">
                       {tierLabel}
                     </h2>
-                    <div className="font-sans text-[11px] text-ink-tertiary mt-0.5">
+                    <div className="font-sans text-[11px] text-txt-3 mt-0.5">
                       Generated {fmtDate(p.created_at)} ·{' '}
-                      <code className="font-mono">{p.generator_version}</code>
+                      <code className="font-num">{p.generator_version}</code>
                     </div>
                   </div>
-                  <div className="flex items-baseline gap-3 font-mono text-xs">
-                    <span className="text-ink-secondary">
+                  <div className="flex items-baseline gap-3 font-num text-xs tabular-nums">
+                    <span className="text-txt-2">
                       Current IC{' '}
-                      <span className="text-ink-primary">{currentIc}</span>
+                      <span className="text-txt-1">{currentIc}</span>
                     </span>
-                    <span className="text-ink-secondary">
+                    <span className="text-txt-2">
                       Proposed IC{' '}
-                      <span className="text-ink-primary">{ic}</span>
+                      <span className="text-txt-1">{ic}</span>
                     </span>
                     <span className={deltaColor}>
                       Δ {deltaSign}
@@ -113,7 +113,7 @@ export default async function CompositeProposalsPage() {
                   </div>
                 </div>
                 {p.rationale && (
-                  <p className="font-sans text-xs text-ink-secondary mb-3 italic">
+                  <p className="font-sans text-xs text-txt-2 mb-3 italic">
                     {p.rationale}
                   </p>
                 )}

@@ -19,15 +19,15 @@ const TIER_LABEL: Record<string, string> = {
 
 function statusPill(daysBelow: number, nTrail: number) {
   if (nTrail < 60) {
-    return { label: 'Bootstrap', cls: 'bg-ink-tertiary/10 text-ink-secondary border-ink-tertiary/30' }
+    return { label: 'Bootstrap', cls: 'bg-surface-inset text-txt-2 border-edge-rule' }
   }
   if (daysBelow === nTrail) {
-    return { label: 'Revert imminent', cls: 'bg-signal-neg/10 text-signal-neg border-signal-neg/30' }
+    return { label: 'Revert imminent', cls: 'bg-sig-neg-soft text-sig-neg border-sig-neg/40' }
   }
   if (daysBelow >= 15) {
-    return { label: 'Watch', cls: 'bg-signal-warn/10 text-signal-warn border-signal-warn/30' }
+    return { label: 'Watch', cls: 'bg-sig-warn/10 text-sig-warn border-sig-warn/40' }
   }
-  return { label: 'OK', cls: 'bg-teal/10 text-teal border-teal/30' }
+  return { label: 'OK', cls: 'bg-brand-soft text-brand border-brand/30' }
 }
 
 export default async function WeightPerformancePage() {
@@ -37,15 +37,15 @@ export default async function WeightPerformancePage() {
   ])
 
   return (
-    <main className="min-h-screen bg-paper px-8 py-6 max-w-7xl mx-auto">
+    <main className="min-h-screen bg-surface-panel px-8 py-6 max-w-7xl mx-auto">
       <header className="mb-6">
-        <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider">
+        <div className="font-sans text-[10px] text-txt-3 uppercase tracking-wider">
           Atlas · Admin · Stage 4c
         </div>
-        <h1 className="font-serif text-2xl text-ink-primary mt-1">
+        <h1 className="font-display text-2xl text-txt-1 mt-1">
           Weight-Set Live Performance
         </h1>
-        <p className="font-sans text-xs text-ink-secondary mt-1">
+        <p className="font-sans text-xs text-txt-2 mt-1">
           Realized IC of every currently-active weight set over the last 30 days.
           Red dashed line in each sparkline is the 0.5× predicted-IC auto-revert
           threshold. Grey dashed line is the predicted IC from the seed metadata.
@@ -56,8 +56,8 @@ export default async function WeightPerformancePage() {
 
       <div className="space-y-3">
         {activeSets.length === 0 ? (
-          <div className="border border-paper-rule rounded-sm bg-white p-6">
-            <p className="font-sans text-sm text-ink-tertiary">
+          <div className="border border-edge-hair rounded-panel bg-surface-panel p-6">
+            <p className="font-sans text-sm text-txt-3">
               No active weight sets found.
             </p>
           </div>
@@ -67,32 +67,32 @@ export default async function WeightPerformancePage() {
             return (
               <div
                 key={s.version}
-                className="border border-paper-rule rounded-sm bg-white p-4"
+                className="border border-edge-hair rounded-panel bg-surface-panel p-4"
               >
                 <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-4">
                   <div>
-                    <div className="font-serif text-base text-ink-primary">
+                    <div className="font-display text-base text-txt-1">
                       {TIER_LABEL[s.tier] ?? s.tier}
                     </div>
-                    <div className="font-mono text-[10px] text-ink-tertiary truncate">
+                    <div className="font-num text-[10px] text-txt-3 truncate">
                       {s.version}
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="font-sans text-[10px] text-ink-tertiary">
+                    <div className="font-sans text-[10px] text-txt-3">
                       Predicted IC
                     </div>
-                    <div className="font-mono text-xs text-ink-primary tabular-nums">
+                    <div className="font-num text-xs text-txt-1 tabular-nums">
                       {s.predicted_ic
                         ? parseFloat(s.predicted_ic).toFixed(4)
                         : '—'}
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="font-sans text-[10px] text-ink-tertiary">
+                    <div className="font-sans text-[10px] text-txt-3">
                       Below threshold
                     </div>
-                    <div className="font-mono text-xs text-ink-primary tabular-nums">
+                    <div className="font-num text-xs text-txt-1 tabular-nums">
                       {s.days_below_threshold}/{s.n_trail_rows}d
                     </div>
                   </div>
@@ -110,7 +110,7 @@ export default async function WeightPerformancePage() {
                 </div>
                 <div className="flex justify-end mt-2">
                   <span
-                    className={`inline-flex px-2 py-0.5 rounded text-[10px] font-semibold border ${pill.cls}`}
+                    className={`inline-flex px-2 py-0.5 rounded-tile text-[10px] font-semibold border ${pill.cls}`}
                   >
                     {pill.label}
                   </span>

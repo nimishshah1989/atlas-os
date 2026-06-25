@@ -2,9 +2,9 @@
 import type { HealthHeaderStatus } from '@/lib/queries/health'
 
 const LEVEL_STYLES: Record<HealthHeaderStatus['level'], string> = {
-  green: 'bg-signal-pos-soft text-signal-pos-strong border-signal-pos-rule',
-  yellow: 'bg-signal-warn-soft text-signal-warn-strong border-signal-warn-rule',
-  red: 'bg-signal-neg-soft text-signal-neg-strong border-signal-neg-rule',
+  green: 'bg-sig-pos-soft text-sig-pos border-sig-pos/40',
+  yellow: 'bg-sig-warn/10 text-sig-warn border-sig-warn/40',
+  red: 'bg-sig-neg-soft text-sig-neg border-sig-neg/40',
 }
 
 const LEVEL_LABEL: Record<HealthHeaderStatus['level'], string> = {
@@ -39,13 +39,13 @@ export function HealthHeader({ status }: { status: HealthHeaderStatus }) {
           <div className="font-sans text-[11px] font-semibold tracking-[0.22em]">
             {LEVEL_LABEL[status.level]}
           </div>
-          <div className="font-serif text-2xl mt-1">{status.message}</div>
+          <div className="font-display text-2xl mt-1">{status.message}</div>
         </div>
         <div className="text-right">
-          <div className="font-sans text-[11px] tracking-[0.22em] text-ink-3">
+          <div className="font-sans text-[11px] tracking-[0.22em] text-txt-3">
             LAST CHECK
           </div>
-          <div className="font-mono text-sm mt-1 tabular-nums">
+          <div className="font-num text-sm mt-1 tabular-nums">
             {formatTs(status.last_health_check)}
           </div>
         </div>

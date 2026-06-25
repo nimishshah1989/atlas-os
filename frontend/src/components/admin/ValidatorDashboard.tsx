@@ -21,20 +21,20 @@ const SURFACE_NOTES: Record<string, string> = {
 }
 
 function severity_cls(s: string) {
-  if (s === 'P0') return 'text-signal-neg font-semibold'
-  if (s === 'P1') return 'text-signal-warn'
-  if (s === 'P2') return 'text-ink-secondary'
-  return 'text-ink-tertiary'
+  if (s === 'P0') return 'text-sig-neg font-semibold'
+  if (s === 'P1') return 'text-sig-warn'
+  if (s === 'P2') return 'text-txt-2'
+  return 'text-txt-3'
 }
 
 function SeverityPill({ s }: { s: string }) {
   const cls =
-    s === 'P0' ? 'bg-signal-neg/10 text-signal-neg border-signal-neg/30' :
-    s === 'P1' ? 'bg-signal-warn/10 text-signal-warn border-signal-warn/30' :
-    s === 'P2' ? 'bg-ink-tertiary/10 text-ink-secondary border-paper-rule' :
-                 'bg-paper text-ink-tertiary border-paper-rule'
+    s === 'P0' ? 'bg-sig-neg-soft text-sig-neg border-sig-neg/30' :
+    s === 'P1' ? 'bg-sig-warn/10 text-sig-warn border-sig-warn/30' :
+    s === 'P2' ? 'bg-surface-inset text-txt-2 border-edge-hair' :
+                 'bg-surface-raised text-txt-3 border-edge-hair'
   return (
-    <span className={`inline-block px-1.5 py-0.5 rounded border font-mono text-[10px] font-medium ${cls}`}>
+    <span className={`inline-block px-1.5 py-0.5 rounded-tile border font-num text-[10px] font-medium tabular-nums ${cls}`}>
       {s}
     </span>
   )
@@ -55,23 +55,23 @@ function RouteCard({ route, summary }: { route: string; summary: RouteSummary | 
   const p0 = summary?.p0 ?? 0
   const p1 = summary?.p1 ?? 0
   const isClean = !summary || (p0 === 0 && p1 === 0 && (summary.p2 ?? 0) === 0)
-  const borderCls = p0 > 0 ? 'border-signal-neg/50 bg-signal-neg/5'
-    : p1 > 0 ? 'border-signal-warn/40 bg-signal-warn/4'
-    : 'border-paper-rule bg-paper'
+  const borderCls = p0 > 0 ? 'border-sig-neg/50 bg-sig-neg-soft'
+    : p1 > 0 ? 'border-sig-warn/40 bg-sig-warn/10'
+    : 'border-edge-hair bg-surface-panel'
 
   return (
-    <div className={`border rounded-sm p-3 ${borderCls}`}>
+    <div className={`border rounded-tile p-3 ${borderCls}`}>
       <div className="flex items-center justify-between mb-1.5">
-        <span className="font-sans text-xs font-semibold text-ink-primary">{meta?.label ?? route}</span>
+        <span className="font-sans text-xs font-semibold text-txt-1">{meta?.label ?? route}</span>
         {isClean
-          ? <span className="font-mono text-[10px] text-teal">✓ clean</span>
+          ? <span className="font-num text-[10px] text-sig-pos">✓ clean</span>
           : p0 > 0
-            ? <span className="font-mono text-[10px] text-signal-neg">{p0} P0</span>
-            : <span className="font-mono text-[10px] text-signal-warn">{p1} P1</span>}
+            ? <span className="font-num text-[10px] text-sig-neg tabular-nums">{p0} P0</span>
+            : <span className="font-num text-[10px] text-sig-warn tabular-nums">{p1} P1</span>}
       </div>
-      <div className="font-mono text-[10px] text-ink-tertiary">{route}</div>
+      <div className="font-num text-[10px] text-txt-3">{route}</div>
       {meta && (
-        <div className="font-sans text-[10px] text-ink-tertiary mt-1">
+        <div className="font-sans text-[10px] text-txt-3 mt-1">
           {meta.count} pts · {meta.fields.join(', ')}
         </div>
       )}
@@ -81,12 +81,12 @@ function RouteCard({ route, summary }: { route: string; summary: RouteSummary | 
 
 // 7-day sparkline using inline bar charts (no external lib)
 function TrendBar({ days }: { days: DayTrend[] }) {
-  if (!days.length) return <p className="font-sans text-xs text-ink-tertiary">No trend data yet.</p>
+  if (!days.length) return <p className="font-sans text-xs text-txt-3">No trend data yet.</p>
   return (
     <div className="overflow-x-auto">
       <table className="w-full font-sans text-xs">
         <thead>
-          <tr className="text-ink-tertiary text-[10px] uppercase tracking-wider border-b border-paper-rule">
+          <tr className="text-txt-3 text-[10px] uppercase tracking-wider border-b border-edge-hair">
             <th className="px-3 py-2 text-left">Date</th>
             <th className="px-3 py-2 text-right">P0</th>
             <th className="px-3 py-2 text-right">P1</th>
@@ -96,12 +96,12 @@ function TrendBar({ days }: { days: DayTrend[] }) {
         </thead>
         <tbody>
           {days.map((d, i) => (
-            <tr key={d.run_date} className={`border-b border-paper-rule ${i % 2 === 0 ? 'bg-white' : 'bg-paper'}`}>
-              <td className="px-3 py-2 font-mono text-ink-secondary">{d.run_date}</td>
-              <td className={`px-3 py-2 text-right font-mono ${Number(d.p0) > 0 ? 'text-signal-neg font-semibold' : 'text-ink-tertiary'}`}>{d.p0}</td>
-              <td className={`px-3 py-2 text-right font-mono ${Number(d.p1) > 0 ? 'text-signal-warn' : 'text-ink-tertiary'}`}>{d.p1}</td>
-              <td className="px-3 py-2 text-right font-mono text-ink-tertiary">{d.p2}</td>
-              <td className="px-3 py-2 text-right font-mono text-ink-primary">{d.total}</td>
+            <tr key={d.run_date} className={`border-b border-edge-hair ${i % 2 === 0 ? 'bg-surface-panel' : 'bg-surface-raised'}`}>
+              <td className="px-3 py-2 font-num text-txt-2 tabular-nums">{d.run_date}</td>
+              <td className={`px-3 py-2 text-right font-num tabular-nums ${Number(d.p0) > 0 ? 'text-sig-neg font-semibold' : 'text-txt-3'}`}>{d.p0}</td>
+              <td className={`px-3 py-2 text-right font-num tabular-nums ${Number(d.p1) > 0 ? 'text-sig-warn' : 'text-txt-3'}`}>{d.p1}</td>
+              <td className="px-3 py-2 text-right font-num text-txt-3 tabular-nums">{d.p2}</td>
+              <td className="px-3 py-2 text-right font-num text-txt-1 tabular-nums">{d.total}</td>
             </tr>
           ))}
         </tbody>
@@ -130,36 +130,36 @@ export function ValidatorDashboard({ runs, groups, routeSummary, trend }: Props)
     <div className="space-y-8">
       {/* Header */}
       <header>
-        <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider">Atlas · Admin · Validator</div>
-        <h1 className="font-serif text-2xl text-ink-primary mt-1">Frontend Accuracy Validator</h1>
-        <p className="font-sans text-xs text-ink-secondary mt-1 max-w-2xl">
+        <div className="font-num text-[10px] text-txt-3 uppercase tracking-wider">Atlas · Admin · Validator</div>
+        <h1 className="font-display text-2xl font-semibold text-txt-1 mt-1">Frontend Accuracy Validator</h1>
+        <p className="font-sans text-xs text-txt-2 mt-1 max-w-2xl">
           Phase C nightly Playwright scan — diffs DOM values against SQL source-of-truth across 6 routes and ~1,495 data points.
           Runs after the nightly compute pipeline. No LLM tokens — purely deterministic.
         </p>
         {latestRun && (
-          <p className="font-sans text-[11px] text-ink-tertiary mt-2">
-            Last run: <span className="text-ink-secondary">{fmtDate(latestRun.started_at)} IST</span>
+          <p className="font-sans text-[11px] text-txt-3 mt-2">
+            Last run: <span className="text-txt-2">{fmtDate(latestRun.started_at)} IST</span>
             &nbsp;·&nbsp;{latestRun.n_findings ?? 0} finding(s)
             &nbsp;·&nbsp;
-            <span className={latestRun.status === 'success' ? 'text-teal' : 'text-signal-neg'}>{latestRun.status}</span>
+            <span className={latestRun.status === 'success' ? 'text-sig-pos' : 'text-sig-neg'}>{latestRun.status}</span>
           </p>
         )}
       </header>
 
       {/* P0 alert banner */}
       {totalP0 > 0 ? (
-        <div className="border border-signal-neg/40 bg-signal-neg/5 rounded-sm px-4 py-3">
-          <p className="font-sans text-sm font-semibold text-signal-neg">
+        <div className="border border-sig-neg/40 bg-sig-neg-soft rounded-panel px-4 py-3">
+          <p className="font-sans text-sm font-semibold text-sig-neg">
             ⚠ {totalP0} P0 finding{totalP0 > 1 ? 's' : ''} — data shown on Atlas does not match the DB
           </p>
-          <p className="font-sans text-xs text-signal-neg/80 mt-1">
+          <p className="font-sans text-xs text-sig-neg/80 mt-1">
             P0 means the frontend value differs from the DB by more than 10× tolerance. These are incorrect numbers shown to users. Investigate immediately.
           </p>
         </div>
       ) : (
-        <div className="border border-teal/30 bg-teal/5 rounded-sm px-4 py-3">
-          <p className="font-sans text-sm font-semibold text-teal">✓ P0 clear — no critical data mismatches</p>
-          <p className="font-sans text-xs text-teal/70 mt-0.5">
+        <div className="border border-sig-pos/30 bg-sig-pos-soft rounded-panel px-4 py-3">
+          <p className="font-sans text-sm font-semibold text-sig-pos">✓ P0 clear — no critical data mismatches</p>
+          <p className="font-sans text-xs text-sig-pos/70 mt-0.5">
             All values on Atlas match their DB source within tolerance. {totalP1 > 0 && `${totalP1} P1 data gaps exist (see below).`}
           </p>
         </div>
@@ -167,22 +167,22 @@ export function ValidatorDashboard({ runs, groups, routeSummary, trend }: Props)
 
       {/* Summary + Route health matrix */}
       <section>
-        <h2 className="font-sans text-sm font-semibold text-ink-primary mb-3">Route health — latest run</h2>
+        <h2 className="font-sans text-sm font-semibold text-txt-1 mb-3">Route health — latest run</h2>
         <div className="grid grid-cols-3 gap-3 mb-4">
-          <div className={`border rounded-sm p-3 ${totalP0 > 0 ? 'border-signal-neg/40 bg-signal-neg/5' : 'border-paper-rule'}`}>
-            <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider">P0 · Critical</div>
-            <div className={`font-mono text-3xl mt-1 ${totalP0 > 0 ? 'text-signal-neg' : 'text-ink-tertiary'}`}>{totalP0}</div>
-            <div className="font-sans text-[10px] text-ink-tertiary mt-1">Wrong values shown to users</div>
+          <div className={`border rounded-tile p-3 ${totalP0 > 0 ? 'border-sig-neg/40 bg-sig-neg-soft' : 'border-edge-hair bg-surface-panel'}`}>
+            <div className="font-num text-[10px] text-txt-3 uppercase tracking-wider">P0 · Critical</div>
+            <div className={`font-display text-3xl mt-1 tabular-nums ${totalP0 > 0 ? 'text-sig-neg' : 'text-txt-3'}`}>{totalP0}</div>
+            <div className="font-sans text-[10px] text-txt-3 mt-1">Wrong values shown to users</div>
           </div>
-          <div className={`border rounded-sm p-3 ${totalP1 > 0 ? 'border-signal-warn/40 bg-signal-warn/4' : 'border-paper-rule'}`}>
-            <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider">P1 · Data gaps</div>
-            <div className={`font-mono text-3xl mt-1 ${totalP1 > 0 ? 'text-signal-warn' : 'text-ink-tertiary'}`}>{totalP1}</div>
-            <div className="font-sans text-[10px] text-ink-tertiary mt-1">Frontend shows null; DB has data</div>
+          <div className={`border rounded-tile p-3 ${totalP1 > 0 ? 'border-sig-warn/40 bg-sig-warn/10' : 'border-edge-hair bg-surface-panel'}`}>
+            <div className="font-num text-[10px] text-txt-3 uppercase tracking-wider">P1 · Data gaps</div>
+            <div className={`font-display text-3xl mt-1 tabular-nums ${totalP1 > 0 ? 'text-sig-warn' : 'text-txt-3'}`}>{totalP1}</div>
+            <div className="font-sans text-[10px] text-txt-3 mt-1">Frontend shows null; DB has data</div>
           </div>
-          <div className="border border-paper-rule rounded-sm p-3">
-            <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-wider">P2 · Minor</div>
-            <div className="font-mono text-3xl mt-1 text-ink-tertiary">{totalP2}</div>
-            <div className="font-sans text-[10px] text-ink-tertiary mt-1">Within tolerance but non-zero</div>
+          <div className="border border-edge-hair bg-surface-panel rounded-tile p-3">
+            <div className="font-num text-[10px] text-txt-3 uppercase tracking-wider">P2 · Minor</div>
+            <div className="font-display text-3xl mt-1 text-txt-3 tabular-nums">{totalP2}</div>
+            <div className="font-sans text-[10px] text-txt-3 mt-1">Within tolerance but non-zero</div>
           </div>
         </div>
         <div className="grid grid-cols-3 gap-3">
@@ -195,17 +195,17 @@ export function ValidatorDashboard({ runs, groups, routeSummary, trend }: Props)
       {/* Aggregated findings */}
       {groups.length > 0 && (
         <section>
-          <h2 className="font-sans text-sm font-semibold text-ink-primary mb-3">
+          <h2 className="font-sans text-sm font-semibold text-txt-1 mb-3">
             Findings — aggregated by field
           </h2>
-          <p className="font-sans text-[11px] text-ink-tertiary mb-3">
+          <p className="font-sans text-[11px] text-txt-3 mb-3">
             Rows are grouped by (route · field · severity). Count shows how many instruments are affected.
             P0 = wrong value displayed. P1 = field absent on frontend but exists in DB.
           </p>
-          <div className="border border-paper-rule rounded-sm overflow-hidden">
+          <div className="border border-edge-hair rounded-panel shadow-panel overflow-hidden">
             <table className="w-full font-sans text-xs">
               <thead>
-                <tr className="bg-paper-rule/30 border-b border-paper-rule text-ink-tertiary text-[10px] uppercase tracking-wider">
+                <tr className="bg-surface-raised border-b border-edge-hair text-txt-3 text-[10px] uppercase tracking-wider">
                   <th className="px-3 py-2 text-left w-14">Sev</th>
                   <th className="px-3 py-2 text-left">Route</th>
                   <th className="px-3 py-2 text-left">Field</th>
@@ -219,14 +219,14 @@ export function ValidatorDashboard({ runs, groups, routeSummary, trend }: Props)
                 {groups.map((g, i) => {
                   const note = SURFACE_NOTES[g.surface] ?? ''
                   return (
-                    <tr key={i} className={`border-b border-paper-rule last:border-0 ${i % 2 === 0 ? 'bg-white' : 'bg-paper'}`}>
+                    <tr key={i} className={`border-b border-edge-hair last:border-0 ${i % 2 === 0 ? 'bg-surface-panel' : 'bg-surface-raised'}`}>
                       <td className="px-3 py-2.5"><SeverityPill s={g.severity} /></td>
-                      <td className="px-3 py-2.5 font-mono text-[10px] text-ink-tertiary">{g.route ?? '—'}</td>
-                      <td className={`px-3 py-2.5 font-mono text-[10px] ${severity_cls(g.severity)}`}>{g.surface}</td>
-                      <td className="px-3 py-2.5 text-right font-mono font-semibold text-ink-primary">{g.count}</td>
-                      <td className="px-3 py-2.5 text-right font-mono text-ink-secondary text-[10px]">{g.sample_expected ?? '—'}</td>
-                      <td className="px-3 py-2.5 text-right font-mono text-signal-neg text-[10px]">{g.sample_actual ?? '—'}</td>
-                      <td className="px-3 py-2.5 text-ink-tertiary max-w-xs text-[10px] leading-relaxed">
+                      <td className="px-3 py-2.5 font-num text-[10px] text-txt-3">{g.route ?? '—'}</td>
+                      <td className={`px-3 py-2.5 font-num text-[10px] ${severity_cls(g.severity)}`}>{g.surface}</td>
+                      <td className="px-3 py-2.5 text-right font-num font-semibold text-txt-1 tabular-nums">{g.count}</td>
+                      <td className="px-3 py-2.5 text-right font-num text-txt-2 text-[10px] tabular-nums">{g.sample_expected ?? '—'}</td>
+                      <td className="px-3 py-2.5 text-right font-num text-sig-neg text-[10px] tabular-nums">{g.sample_actual ?? '—'}</td>
+                      <td className="px-3 py-2.5 text-txt-3 max-w-xs text-[10px] leading-relaxed">
                         {note || (g.severity === 'P1' ? 'Frontend shows null; DB has a value. Data not reaching this component.' : 'Value mismatch beyond tolerance.')}
                       </td>
                     </tr>
@@ -240,27 +240,27 @@ export function ValidatorDashboard({ runs, groups, routeSummary, trend }: Props)
 
       {groups.length === 0 && (
         <section>
-          <div className="border border-paper-rule rounded-sm p-8 text-center">
-            <p className="font-sans text-sm text-teal">All data points match — no findings in latest run.</p>
+          <div className="border border-edge-hair bg-surface-panel rounded-panel p-8 text-center">
+            <p className="font-sans text-sm text-sig-pos">All data points match — no findings in latest run.</p>
           </div>
         </section>
       )}
 
       {/* 7-day trend */}
       <section>
-        <h2 className="font-sans text-sm font-semibold text-ink-primary mb-3">7-day trend</h2>
-        <div className="border border-paper-rule rounded-sm overflow-hidden">
+        <h2 className="font-sans text-sm font-semibold text-txt-1 mb-3">7-day trend</h2>
+        <div className="border border-edge-hair rounded-panel shadow-panel overflow-hidden">
           <TrendBar days={trend} />
         </div>
       </section>
 
       {/* Run history */}
       <section>
-        <h2 className="font-sans text-sm font-semibold text-ink-primary mb-3">Run history</h2>
-        <div className="border border-paper-rule rounded-sm overflow-hidden">
+        <h2 className="font-sans text-sm font-semibold text-txt-1 mb-3">Run history</h2>
+        <div className="border border-edge-hair rounded-panel shadow-panel overflow-hidden">
           <table className="w-full font-sans text-xs">
             <thead>
-              <tr className="bg-paper-rule/30 border-b border-paper-rule text-ink-tertiary text-[10px] uppercase tracking-wider">
+              <tr className="bg-surface-raised border-b border-edge-hair text-txt-3 text-[10px] uppercase tracking-wider">
                 <th className="px-3 py-2 text-left">Started (IST)</th>
                 <th className="px-3 py-2 text-left">Scope</th>
                 <th className="px-3 py-2 text-left">Status</th>
@@ -274,16 +274,16 @@ export function ValidatorDashboard({ runs, groups, routeSummary, trend }: Props)
                   ? Math.round((new Date(r.completed_at).getTime() - new Date(r.started_at).getTime()) / 1000)
                   : null
                 return (
-                  <tr key={r.id} className={`border-b border-paper-rule last:border-0 ${i % 2 === 0 ? 'bg-white' : 'bg-paper'}`}>
-                    <td className="px-3 py-2 font-mono text-ink-secondary text-[10px]">{fmtDate(r.started_at)}</td>
-                    <td className="px-3 py-2 text-ink-primary">{r.scope}</td>
+                  <tr key={r.id} className={`border-b border-edge-hair last:border-0 ${i % 2 === 0 ? 'bg-surface-panel' : 'bg-surface-raised'}`}>
+                    <td className="px-3 py-2 font-num text-txt-2 text-[10px] tabular-nums">{fmtDate(r.started_at)}</td>
+                    <td className="px-3 py-2 text-txt-1">{r.scope}</td>
                     <td className="px-3 py-2">
-                      <span className={`font-mono text-[10px] ${r.status === 'success' ? 'text-teal' : 'text-signal-neg'}`}>
+                      <span className={`font-num text-[10px] ${r.status === 'success' ? 'text-sig-pos' : 'text-sig-neg'}`}>
                         {r.status}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-right font-mono text-ink-primary">{r.n_findings ?? '—'}</td>
-                    <td className="px-3 py-2 text-right font-mono text-ink-tertiary text-[10px]">
+                    <td className="px-3 py-2 text-right font-num text-txt-1 tabular-nums">{r.n_findings ?? '—'}</td>
+                    <td className="px-3 py-2 text-right font-num text-txt-3 text-[10px] tabular-nums">
                       {dur != null ? `${dur}s` : '—'}
                     </td>
                   </tr>
@@ -295,9 +295,9 @@ export function ValidatorDashboard({ runs, groups, routeSummary, trend }: Props)
       </section>
 
       {/* Coverage callout */}
-      <section className="border border-paper-rule rounded-sm p-4 bg-paper-rule/5">
-        <h3 className="font-sans text-xs font-semibold text-ink-primary mb-2">Sampling coverage</h3>
-        <div className="grid grid-cols-2 gap-x-8 gap-y-1 font-sans text-[11px] text-ink-secondary">
+      <section className="border border-edge-hair rounded-panel p-4 bg-surface-raised">
+        <h3 className="font-sans text-xs font-semibold text-txt-1 mb-2">Sampling coverage</h3>
+        <div className="grid grid-cols-2 gap-x-8 gap-y-1 font-sans text-[11px] text-txt-2">
           <div>Stocks — 50/~750 per run · all rotated in ~15 days</div>
           <div>ETFs — all ~17 per run · 100% daily</div>
           <div>Funds — all ~387 per run · 100% daily</div>
@@ -305,7 +305,7 @@ export function ValidatorDashboard({ runs, groups, routeSummary, trend }: Props)
           <div>Regime — 1 row per run · 100% daily</div>
           <div>Intelligence — ~23 conviction rows · daily</div>
         </div>
-        <p className="font-sans text-[10px] text-ink-tertiary mt-2">
+        <p className="font-sans text-[10px] text-txt-3 mt-2">
           Within 30 days: 100% of stocks, ETFs, funds, sectors, and regime data will have been verified at least once.
         </p>
       </section>
