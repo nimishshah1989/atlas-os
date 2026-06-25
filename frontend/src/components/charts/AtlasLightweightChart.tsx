@@ -126,12 +126,12 @@ export function AtlasLightweightChart({
     const txt = tk ? tk.txt2 : '#8A8578'
     const gridC = tk ? tk.grid : '#F4F2EC'
     const border = tk ? tk.rule : '#E5E2DA'
-    const cross = tk ? tk.txt3 : '#C9C5BA'
+    const cross = tk ? tk.tick : '#C9C5BA'
     const crossBg = tk ? tk.txt1 : '#2A2724'
     const seriesColor = (c?: SeriesColor): string =>
       tk ? ({ teal: tk.brand, pos: tk.pos, neg: tk.neg, warn: tk.warn, ink: tk.txt2 } as Record<SeriesColor, string>)[c ?? 'teal'] : COLOR_MAP[c ?? 'teal']
     const overlayColor = (k: SeriesOverlay): string =>
-      tk ? ({ ema20: tk.brand, ema50: tk.warn, ema200: tk.txt3 } as Record<SeriesOverlay, string>)[k] : OVERLAY_COLOR[k]
+      tk ? ({ ema20: tk.brand, ema50: tk.warn, ema200: tk.tick } as Record<SeriesOverlay, string>)[k] : OVERLAY_COLOR[k]
 
     const options: DeepPartial<ChartOptions> = {
       width: el.clientWidth,
