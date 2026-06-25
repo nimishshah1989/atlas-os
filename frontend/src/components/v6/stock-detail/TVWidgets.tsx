@@ -2,6 +2,8 @@
 
 // Reusable TradingView embed widgets. All use light theme to match Atlas paper aesthetic.
 // Each is a thin iframe wrapper — no client-side state, just URL composition.
+// TODO: theme-sync — colorTheme is pinned to 'light'; make TV iframes react to the
+// active light/dark v4 theme once a reliable embed theme bridge exists.
 
 interface TVWidgetProps {
   symbol: string
@@ -15,7 +17,7 @@ export function TVSymbolInfo({ symbol }: TVWidgetProps) {
   return (
     <iframe
       src={url}
-      className="w-full h-[180px] border-0 bg-paper"
+      className="w-full h-[180px] border-0 bg-surface-panel"
       sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-popups-to-escape-sandbox"
       title={`${symbol} info`}
       loading="lazy"
@@ -34,7 +36,7 @@ export function TVTechnicalAnalysis({ symbol, interval = '1D' }: TVTechnicalAnal
   return (
     <iframe
       src={url}
-      className="w-full h-[450px] border-0 bg-paper"
+      className="w-full h-[450px] border-0 bg-surface-panel"
       sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-popups-to-escape-sandbox"
       title={`${symbol} technical analysis`}
       loading="lazy"
@@ -50,7 +52,7 @@ export function TVFinancials({ symbol }: TVWidgetProps) {
   return (
     <iframe
       src={url}
-      className="w-full h-[550px] border-0 bg-paper"
+      className="w-full h-[550px] border-0 bg-surface-panel"
       sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-popups-to-escape-sandbox"
       title={`${symbol} financials`}
       loading="lazy"
@@ -66,7 +68,7 @@ export function TVCompanyProfile({ symbol }: TVWidgetProps) {
   return (
     <iframe
       src={url}
-      className="w-full h-[400px] border-0 bg-paper"
+      className="w-full h-[400px] border-0 bg-surface-panel"
       sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-popups-to-escape-sandbox"
       title={`${symbol} company profile`}
       loading="lazy"
@@ -83,7 +85,7 @@ export function TVNews({ symbol }: TVWidgetProps) {
   return (
     <iframe
       src={url}
-      className="w-full h-[500px] border-0 bg-paper"
+      className="w-full h-[500px] border-0 bg-surface-panel"
       sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-popups-to-escape-sandbox"
       title={`${symbol} news`}
       loading="lazy"
@@ -104,7 +106,7 @@ export function TVMiniOverview({ symbol, dateRange = '12M', exchange = 'NSE' }: 
   return (
     <iframe
       src={url}
-      className="w-full h-[120px] border-0 bg-paper"
+      className="w-full h-[120px] border-0 bg-surface-panel"
       sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-popups-to-escape-sandbox"
       title={`${symbol} ${dateRange} sparkline`}
       loading="lazy"

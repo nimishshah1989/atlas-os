@@ -21,7 +21,10 @@ export type ThemeTokens = {
   decile: (d: number | null | undefined) => string
 }
 
-function read(): ThemeTokens {
+function read(): ThemeTokens | null {
+  // Only the v4 surfaces carry data-theme. Off-theme (legacy / flag-off) → null,
+  // so shared components (e.g. AtlasLightweightChart) keep their legacy look.
+  if (!document.documentElement.hasAttribute('data-theme')) return null
   const cs = getComputedStyle(document.documentElement)
   const v = (n: string) => cs.getPropertyValue(n).trim()
   const ramp = Array.from({ length: 10 }, (_, i) => v(`--decile-${i + 1}`))

@@ -49,17 +49,17 @@ const ROWS: Row[] = [
 function YoYChip({ label, value }: { label: string; value: number | null }) {
   if (value == null) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-[2px] border border-paper-rule px-2 py-1 font-mono text-[11px] tabular-nums text-ink-tertiary">
+      <span className="inline-flex items-center gap-1 rounded-tile border border-edge-hair px-2 py-1 font-num text-[11px] tabular-nums text-txt-3">
         {label} <span>n/a</span>
       </span>
     )
   }
   const up = value >= 0
   const cls = up
-    ? 'border-signal-pos/30 bg-signal-pos/10 text-signal-pos'
-    : 'border-signal-neg/30 bg-signal-neg/10 text-signal-neg'
+    ? 'border-sig-pos/30 bg-sig-pos/10 text-sig-pos'
+    : 'border-sig-neg/30 bg-sig-neg/10 text-sig-neg'
   return (
-    <span className={`inline-flex items-center gap-1 rounded-[2px] border px-2 py-1 font-mono text-[11px] tabular-nums ${cls}`}>
+    <span className={`inline-flex items-center gap-1 rounded-tile border px-2 py-1 font-num text-[11px] tabular-nums ${cls}`}>
       {label} <span>{up ? '+' : ''}{value.toFixed(1)}% YoY</span>
     </span>
   )
@@ -68,8 +68,8 @@ function YoYChip({ label, value }: { label: string; value: number | null }) {
 function Heading() {
   return (
     <div className="mb-[18px]">
-      <h2 className="font-serif text-[26px] font-normal tracking-tight text-ink-primary">Quarterly financials</h2>
-      <p className="mt-1 max-w-[760px] font-sans text-[13px] leading-[1.45] text-ink-tertiary">
+      <h2 className="font-display text-[26px] font-normal tracking-tight text-txt-1">Quarterly financials</h2>
+      <p className="mt-1 max-w-[760px] font-sans text-[13px] leading-[1.45] text-txt-3">
         Last 8 quarters from the company&rsquo;s filings (₹ crore) — revenue, profit, margins and the growth trend.
       </p>
     </div>
@@ -79,9 +79,9 @@ function Heading() {
 export function StockFundamentalsTable({ quarters }: { quarters: StockQuarter[] }) {
   if (quarters.length === 0) {
     return (
-      <section className="border-b border-paper-rule px-8 py-9" aria-label="Quarterly financials">
+      <section className="border-b border-edge-hair px-8 py-9" aria-label="Quarterly financials">
         <Heading />
-        <p className="font-sans text-[13px] text-ink-tertiary">No quarterly financials available.</p>
+        <p className="font-sans text-[13px] text-txt-3">No quarterly financials available.</p>
       </section>
     )
   }
@@ -91,20 +91,20 @@ export function StockFundamentalsTable({ quarters }: { quarters: StockQuarter[] 
   const newest = quarters[0] // newest quarter drives the YoY chips
 
   return (
-    <section className="border-b border-paper-rule px-8 py-9" aria-label="Quarterly financials">
+    <section className="border-b border-edge-hair px-8 py-9" aria-label="Quarterly financials">
       <Heading />
-      <div className="overflow-hidden rounded-[2px] border border-paper-rule bg-paper">
+      <div className="overflow-hidden rounded-tile border border-edge-hair bg-surface-panel">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
               <tr>
-                <th className="sticky left-0 z-10 bg-paper-soft px-4 py-[11px] text-left font-sans text-[9px] font-semibold uppercase tracking-[0.18em] text-ink-tertiary [border-bottom:1px_solid_var(--color-paper-rule)]">
+                <th className="sticky left-0 z-10 bg-surface-panel px-4 py-[11px] text-left font-num text-[9px] font-semibold uppercase tracking-[0.18em] text-txt-3 border-b border-edge-rule">
                   Metric
                 </th>
                 {cols.map((q) => (
                   <th
                     key={q.period_end}
-                    className="bg-paper-soft px-4 py-[11px] text-right font-mono text-[11px] font-semibold tabular-nums text-ink-secondary [border-bottom:1px_solid_var(--color-paper-rule)]"
+                    className="bg-surface-panel px-4 py-[11px] text-right font-num text-[11px] font-semibold tabular-nums text-txt-2 border-b border-edge-rule"
                   >
                     {quarterLabel(q.period_end)}
                   </th>
@@ -114,7 +114,7 @@ export function StockFundamentalsTable({ quarters }: { quarters: StockQuarter[] 
             <tbody>
               {ROWS.map((row) => (
                 <tr key={row.label}>
-                  <td className="sticky left-0 z-10 bg-paper px-4 py-[10px] text-left font-sans text-[12px] font-medium text-ink-secondary [border-bottom:1px_solid_#F1ECDF]">
+                  <td className="sticky left-0 z-10 bg-surface-panel px-4 py-[10px] text-left font-sans text-[12px] font-medium text-txt-2 border-b border-edge-hair">
                     {row.label}
                   </td>
                   {cols.map((q) => {
@@ -122,9 +122,9 @@ export function StockFundamentalsTable({ quarters }: { quarters: StockQuarter[] 
                     return (
                       <td
                         key={q.period_end}
-                        className="px-4 py-[10px] text-right font-mono text-[12px] tabular-nums text-ink-primary [border-bottom:1px_solid_#F1ECDF]"
+                        className="px-4 py-[10px] text-right font-num text-[12px] tabular-nums text-txt-1 border-b border-edge-hair"
                       >
-                        {text === '—' ? <span className="text-ink-tertiary">—</span> : text}
+                        {text === '—' ? <span className="text-txt-3">—</span> : text}
                       </td>
                     )
                   })}
@@ -133,8 +133,8 @@ export function StockFundamentalsTable({ quarters }: { quarters: StockQuarter[] 
             </tbody>
           </table>
         </div>
-        <div className="flex flex-wrap items-center gap-2 border-t border-paper-rule bg-paper-soft px-4 py-3">
-          <span className="font-sans text-[10px] uppercase tracking-wider text-ink-tertiary">
+        <div className="flex flex-wrap items-center gap-2 border-t border-edge-hair bg-surface-panel px-4 py-3">
+          <span className="font-num text-[10px] uppercase tracking-wider text-txt-3">
             YoY growth · {quarterLabel(newest.period_end)}
           </span>
           <YoYChip label="Revenue" value={newest.rev_yoy} />

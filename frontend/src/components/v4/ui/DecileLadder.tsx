@@ -30,11 +30,12 @@ export type DecileLadderProps = {
 
 const numTone = (t?: LadderNumber['tone']) =>
   t === 'pos' ? 'text-sig-pos' : t === 'neg' ? 'text-sig-neg' : 'text-txt-1'
-const subColor = (v: number) => (v >= 60 ? 'var(--color-sig-pos)' : v >= 45 ? 'var(--color-sig-warn)' : 'var(--color-sig-neg)')
 
 function LadderRow({ lens, open }: { lens: LadderLens; open: boolean }) {
   const { decile, score } = lens
-  const subs = (lens.subs ?? []).filter((s) => s.v != null)
+  // §1.1: the 0–100 sub-component scores do NOT reconcile with the decile/raw headline
+  // (e.g. D10/80 over ~20 sub-bars — different scales). Per FM, we DROP them and let the
+  // real numbers carry the breakdown. `subs` stays on the type but is no longer rendered.
   const numbers = lens.numbers ?? []
   const evidence = lens.evidence ?? []
 
@@ -67,20 +68,6 @@ function LadderRow({ lens, open }: { lens: LadderLens; open: boolean }) {
           </div>
         )}
         {lens.pointer && <p className="font-sans text-[11px] italic text-txt-3">{lens.pointer}</p>}
-        {subs.length > 0 && (
-          <div className="space-y-1.5">
-            <p className="font-num text-[9px] uppercase tracking-[0.14em] text-txt-3">How the score breaks down · 0–100</p>
-            {subs.map((s) => (
-              <div key={s.label} className="flex items-center gap-3">
-                <span className="w-[150px] shrink-0 font-sans text-[11px] text-txt-3">{s.label}</span>
-                <span className="w-[30px] shrink-0 text-right font-num text-[11px] tabular-nums text-txt-2">{s.v.toFixed(0)}</span>
-                <span className="h-[5px] flex-1 overflow-hidden rounded-full bg-surface-inset">
-                  <span className="block h-full rounded-full" style={{ width: `${Math.min(100, Math.max(0, s.v))}%`, background: subColor(s.v) }} />
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
         {evidence.length > 0 && (
           <div className="border-l-2 border-brand/60 pl-3">
             <p className="mb-1 font-num text-[9px] uppercase tracking-[0.14em] text-brand">Evidence</p>

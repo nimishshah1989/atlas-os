@@ -36,7 +36,7 @@ function RSCell({ value }: { value: number | null }) {
         style={{ padding: '12px 8px', fontFamily: "'JetBrains Mono', Consolas, monospace", fontSize: 13, fontWeight: 500, color: '#1A1714', ...style }}
         aria-label={text}
       >
-        {value != null ? text : <span className="text-ink-tertiary">—</span>}
+        {value != null ? text : <span className="text-txt-3">—</span>}
       </div>
     </td>
   )
@@ -59,15 +59,15 @@ export function StockRSMatrix({ matrix }: { matrix: RSMatrix }) {
     row.cells.find(c => c.window === col) ?? null
 
   return (
-    <section className="px-8 py-9 border-b border-paper-rule" aria-label="Relative strength matrix">
+    <section className="px-8 py-9 border-b border-edge-hair" aria-label="Relative strength matrix">
       <div className="mb-[18px]">
-        <h2 className="font-serif text-[26px] font-normal tracking-tight text-ink-primary">Relative strength · always on</h2>
-        <p className="font-sans text-[13px] text-ink-tertiary max-w-[760px] leading-[1.45] mt-1">
+        <h2 className="font-display text-[26px] font-normal tracking-tight text-txt-1">Relative strength · always on</h2>
+        <p className="font-sans text-[13px] text-txt-3 max-w-[760px] leading-[1.45] mt-1">
           Percentage-point spread vs each baseline across six windows. Green = outperforming, red = lagging.
-          {matrix.as_of && <> Data as of <span className="font-mono text-ink-secondary">{matrix.as_of}</span>.</>}
+          {matrix.as_of && <> Data as of <span className="font-num text-txt-2">{matrix.as_of}</span>.</>}
         </p>
       </div>
-      <div className="bg-paper border border-paper-rule rounded-[2px] overflow-hidden" data-testid="stock-rs-matrix">
+      <div className="bg-surface-panel border border-edge-hair rounded-tile overflow-hidden" data-testid="stock-rs-matrix">
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
@@ -79,17 +79,17 @@ export function StockRSMatrix({ matrix }: { matrix: RSMatrix }) {
             {matrix.rows.map(row => (
               <tr key={row.baseline}>
                 <td style={{ padding: '14px 16px', textAlign: 'left', fontFamily: 'Inter, sans-serif', borderBottom: '1px solid #F1ECDF' }}>
-                  <div className="font-medium text-ink-primary text-[13px]">{row.baseline}</div>
-                  <div className="text-[10px] text-ink-tertiary mt-[1px]">{ROW_SUB[row.baseline] ?? ''}</div>
+                  <div className="font-medium text-txt-1 text-[13px]">{row.baseline}</div>
+                  <div className="text-[10px] text-txt-3 mt-[1px]">{ROW_SUB[row.baseline] ?? ''}</div>
                 </td>
                 {COLS.map(col => <RSCell key={col} value={cellFor(row, col)?.v ?? null} />)}
               </tr>
             ))}
           </tbody>
         </table>
-        <div className="px-4 py-2 border-t border-paper-rule bg-paper-soft">
-          <p className="font-sans text-[11px] text-ink-tertiary">
-            From <strong className="text-ink-secondary">foundation_staging.technical_daily</strong>. Sector row covers 1M–12M (1D/1W not stored).
+        <div className="px-4 py-2 border-t border-edge-hair bg-surface-panel">
+          <p className="font-sans text-[11px] text-txt-3">
+            From <strong className="text-txt-2">foundation_staging.technical_daily</strong>. Sector row covers 1M–12M (1D/1W not stored).
           </p>
         </div>
       </div>

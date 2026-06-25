@@ -22,11 +22,11 @@ function filingDate(date: string): string {
 function priorityClass(priority: string | null): string {
   switch ((priority ?? '').toUpperCase()) {
     case 'HIGH':
-      return 'bg-signal-pos/10 text-signal-pos border-signal-pos/30'
+      return 'bg-sig-pos/10 text-sig-pos border-sig-pos/30'
     case 'MEDIUM':
-      return 'bg-signal-warn/10 text-signal-warn border-signal-warn/30'
+      return 'bg-sig-warn/10 text-sig-warn border-sig-warn/30'
     default: // LOW or unknown
-      return 'text-ink-tertiary border-paper-rule'
+      return 'text-txt-3 border-edge-hair'
   }
 }
 function priorityLabel(priority: string | null): string {
@@ -39,8 +39,8 @@ const MAX_VISIBLE = 15
 function Heading() {
   return (
     <div className="mb-[18px]">
-      <h2 className="font-serif text-[26px] font-normal tracking-tight text-ink-primary">Corporate announcements</h2>
-      <p className="mt-1 max-w-[760px] font-sans text-[13px] leading-[1.45] text-ink-tertiary">
+      <h2 className="font-display text-[26px] font-normal tracking-tight text-txt-1">Corporate announcements</h2>
+      <p className="mt-1 max-w-[760px] font-sans text-[13px] leading-[1.45] text-txt-3">
         Filings to the exchange — capital actions, earnings and governance. Most recent first.
       </p>
     </div>
@@ -50,34 +50,34 @@ function Heading() {
 function Subject({ subject, url }: { subject: string | null; url: string | null }) {
   const text = subject ?? '—'
   if (url == null) {
-    return <span className="font-sans text-[13px] text-ink-secondary">{text}</span>
+    return <span className="font-sans text-[13px] text-txt-2">{text}</span>
   }
   return (
     <a
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="font-sans text-[13px] text-ink-secondary hover:text-teal hover:underline"
+      className="font-sans text-[13px] text-txt-2 hover:text-brand hover:underline"
     >
       {text}
-      <span aria-hidden className="ml-0.5 text-ink-tertiary">↗</span>
+      <span aria-hidden className="ml-0.5 text-txt-3">↗</span>
     </a>
   )
 }
 
 function FilingRow({ filing }: { filing: StockFiling }) {
   return (
-    <li className="flex flex-col gap-1 border-b border-paper-rule/50 py-2 last:border-b-0 sm:flex-row sm:items-baseline sm:gap-3">
-      <span className="shrink-0 font-mono text-[11px] tabular-nums text-ink-tertiary sm:w-[88px]">
+    <li className="flex flex-col gap-1 border-b border-edge-hair py-2 last:border-b-0 sm:flex-row sm:items-baseline sm:gap-3">
+      <span className="shrink-0 font-num text-[11px] tabular-nums text-txt-3 sm:w-[88px]">
         {filingDate(filing.date)}
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className={`rounded-[2px] border px-1.5 py-0.5 font-mono text-[9px] uppercase ${priorityClass(filing.priority)}`}>
+          <span className={`rounded-tile border px-1.5 py-0.5 font-num text-[9px] uppercase ${priorityClass(filing.priority)}`}>
             {priorityLabel(filing.priority)}
           </span>
           {filing.bucket && (
-            <span className="font-sans text-[10px] uppercase tracking-wider text-ink-tertiary">{filing.bucket}</span>
+            <span className="font-num text-[10px] uppercase tracking-wider text-txt-3">{filing.bucket}</span>
           )}
         </div>
         <Subject subject={filing.subject} url={filing.url} />
@@ -89,9 +89,9 @@ function FilingRow({ filing }: { filing: StockFiling }) {
 export function StockAnnouncementsPanel({ filings }: { filings: StockFiling[] }) {
   if (filings.length === 0) {
     return (
-      <section className="border-b border-paper-rule px-8 py-9" aria-label="Corporate announcements">
+      <section className="border-b border-edge-hair px-8 py-9" aria-label="Corporate announcements">
         <Heading />
-        <p className="font-sans text-[13px] text-ink-tertiary">No recent corporate announcements.</p>
+        <p className="font-sans text-[13px] text-txt-3">No recent corporate announcements.</p>
       </section>
     )
   }
@@ -100,15 +100,15 @@ export function StockAnnouncementsPanel({ filings }: { filings: StockFiling[] })
   const overflow = filings.length - visible.length
 
   return (
-    <section className="border-b border-paper-rule px-8 py-9" aria-label="Corporate announcements">
+    <section className="border-b border-edge-hair px-8 py-9" aria-label="Corporate announcements">
       <Heading />
-      <ul className="rounded-[2px] border border-paper-rule bg-paper px-4">
+      <ul className="rounded-tile border border-edge-hair bg-surface-panel px-4">
         {visible.map((f, i) => (
           <FilingRow key={`${f.date}-${i}`} filing={f} />
         ))}
       </ul>
       {overflow > 0 && (
-        <p className="mt-2 font-sans text-[11px] text-ink-tertiary">…and {overflow} more.</p>
+        <p className="mt-2 font-sans text-[11px] text-txt-3">…and {overflow} more.</p>
       )}
     </section>
   )
