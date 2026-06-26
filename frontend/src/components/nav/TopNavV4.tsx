@@ -17,8 +17,6 @@ export const NAV_V4: NavItem[] = [
   { href: '/stocks', label: 'Stocks' },
   { href: '/etfs', label: 'ETF' },
   { href: '/funds', label: 'Funds' },
-  { href: '/portfolios', label: 'Portfolio Manager' },
-  { href: '/admin', label: 'Admin' },
 ]
 
 function isActive(pathname: string, item: NavItem): boolean {
