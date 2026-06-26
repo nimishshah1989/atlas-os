@@ -74,7 +74,7 @@ export async function SectorsPageV4() {
       <Panel
         eyebrow="Returns"
         title="Multi-window return heatmap"
-        info={{ body: 'Left block = absolute return (%). Right block = RS, “relative strength” in percentage points (pp) = the sector’s return minus the Nifty 500’s over the same window — positive pp means the sector beat the broad market. Click any column to sort.' }}
+        info={{ body: 'Two blocks, both in %. “Return” is each sector index’s own move. “vs Nifty 500” is the sector’s return minus the Nifty 500’s over the same window — positive means it beat the broad market. Greener = stronger, redder = weaker. Click any column to sort.' }}
         bodyClassName="px-2 py-2"
       >
         <SectorHeatmapV4 cards={cards} idxRet1dBySector={idxRet1dBySector} />
