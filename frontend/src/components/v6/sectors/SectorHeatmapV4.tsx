@@ -10,22 +10,22 @@ import type { SectorCardRow } from '@/lib/queries/v6/sectors'
 
 type Col = { key: string; label: string; sub: string; get: (c: SectorCardRow) => number | null; unit: '%' | 'pp' }
 
-// RAG heat tint. The numeric scale differs by unit:
-//   '%'  values are decimal fractions (×100 → percent), normalised over ±10%.
-//   'pp' values are ALREADY percentage points (rs_* columns), normalised over ±5pp.
+// RAG heat tint. BOTH units are stored as decimal FRACTIONS (×100 → display):
+//   '%'  absolute return, normalised over ±10%.
+//   'pp' relative strength = sector return − Nifty 500 return, normalised over ±15pp.
 function heatStyle(v: number | null, unit: '%' | 'pp'): React.CSSProperties {
   if (v == null) return { color: 'var(--color-txt-3)' }
-  const mag = unit === '%' ? Math.abs(v * 100) / 10 : Math.abs(v) / 5
+  const mag = unit === '%' ? Math.abs(v * 100) / 10 : Math.abs(v * 100) / 15
   const a = (Math.min(mag, 1) * 0.36).toFixed(2)
   const sig = v >= 0 ? 'var(--color-sig-pos)' : 'var(--color-sig-neg)'
   return { background: `color-mix(in srgb, ${sig} ${Math.round(parseFloat(a) * 100)}%, transparent)` }
 }
 
-// RETURN columns are decimal fractions → ×100, suffix '%'.
-// RS columns are already percentage points → show verbatim, suffix 'pp'.
+// Both RETURN and RS columns are decimal fractions in the MV → ×100 for display.
+// '%' = absolute return; 'pp' = relative strength (sector minus Nifty 500), in points.
 const fmt = (v: number | null, unit: '%' | 'pp') => {
   if (v == null) return '—'
-  const n = unit === '%' ? v * 100 : v
+  const n = v * 100
   return `${n >= 0 ? '+' : ''}${n.toFixed(1)}${unit}`
 }
 

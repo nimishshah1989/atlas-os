@@ -129,3 +129,64 @@ export async function getBreadthTable(): Promise<{ rows: BreadthTableRow[]; as_o
   ]
   return { rows, as_of: r[0]?.date ?? null }
 }
+
+// ── Sector performance — for each sector, the NSE index ÷ NIFTY 50 relative-trend series
+// (~65 sessions; building vs fading) PLUS the sector index's own 1w/1m return. All computed
+// straight from index_prices (the mv_sector_cards.ret_* columns are a known bad source —
+// duplicated rows + impossible values — so we don't use them here). One batched query. ──
+export type SectorPerf = { spark: number[]; ret_1w: number | null; ret_1m: number | null }
+export async function getSectorPerf(): Promise<Record<string, SectorPerf>> {
+  const rows = await sql<Array<{ sector_name: string; idx_close: string; ratio: string }>>`
+    WITH n50 AS (
+      SELECT date, close FROM foundation_staging.index_prices
+      WHERE index_code = 'NIFTY 50' AND date >= CURRENT_DATE - 110 AND close > 0
+    )
+    SELECT sm.sector_name, ip.close::text AS idx_close, (ip.close / n.close)::text AS ratio
+    FROM foundation_staging.atlas_sector_master sm
+    JOIN foundation_staging.index_prices ip
+      ON ip.index_code = sm.primary_nse_index AND ip.date >= CURRENT_DATE - 110 AND ip.close > 0
+    JOIN n50 n ON n.date = ip.date
+    WHERE sm.is_active
+    ORDER BY sm.sector_name, ip.date
+  `
+  const ratios: Record<string, number[]> = {}
+  const closes: Record<string, number[]> = {}
+  for (const r of rows) {
+    const ra = Number(r.ratio), cl = Number(r.idx_close)
+    if (Number.isFinite(ra)) (ratios[r.sector_name] ??= []).push(ra)
+    if (Number.isFinite(cl)) (closes[r.sector_name] ??= []).push(cl)
+  }
+  const ret = (s: number[], k: number) => (s.length > k && s[s.length - 1 - k] ? (s[s.length - 1] - s[s.length - 1 - k]) / s[s.length - 1 - k] * 100 : null)
+  const out: Record<string, SectorPerf> = {}
+  for (const k of Object.keys(ratios)) {
+    out[k] = { spark: ratios[k].slice(-65), ret_1w: ret(closes[k] ?? [], 5), ret_1m: ret(closes[k] ?? [], 21) }
+  }
+  return out
+}
+
+// ── Broad-market index strip — latest level + 1d / 1w / 1m % change for the headline
+// indices, so the page opens with "where the market is" at a glance. ──
+export type IndexQuote = { code: string; label: string; close: number | null; d1: number | null; d1w: number | null; d1m: number | null }
+const STRIP: Array<[string, string]> = [
+  ['NIFTY 50', 'Nifty 50'], ['NIFTY BANK', 'Bank Nifty'],
+  ['NIFTY MIDCAP 150', 'Midcap 150'], ['NIFTY SMLCAP 250', 'Smallcap 250'],
+]
+export async function getIndexStrip(): Promise<IndexQuote[]> {
+  const rows = await sql<Array<{ index_code: string; date: string; close: string }>>`
+    SELECT index_code, to_char(date,'YYYY-MM-DD') AS date, close::text
+    FROM foundation_staging.index_prices
+    WHERE index_code = ANY(${STRIP.map((s) => s[0])}) AND close > 0
+      AND date >= CURRENT_DATE - 60
+    ORDER BY index_code, date
+  `
+  const byCode = new Map<string, number[]>()
+  for (const r of rows) {
+    const v = Number(r.close)
+    if (Number.isFinite(v)) (byCode.get(r.index_code) ?? byCode.set(r.index_code, []).get(r.index_code)!).push(v)
+  }
+  const chg = (s: number[], k: number) => (s.length > k && s[s.length - 1 - k] ? (s[s.length - 1] - s[s.length - 1 - k]) / s[s.length - 1 - k] * 100 : null)
+  return STRIP.map(([code, label]) => {
+    const s = byCode.get(code) ?? []
+    return { code, label, close: s.length ? s[s.length - 1] : null, d1: chg(s, 1), d1w: chg(s, 5), d1m: chg(s, 21) }
+  })
+}

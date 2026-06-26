@@ -94,8 +94,8 @@ export async function getEtfsForDate(snapshotDate: string): Promise<EtfV6Row[]> 
     FROM foundation_staging.atlas_etf_scorecard s
     LEFT JOIN foundation_staging.atlas_universe_etfs u
       ON u.ticker = s.ticker
-     AND u.effective_to IS NULL
-    LEFT JOIN atlas.atlas_etf_metrics_daily m
+     AND u.is_active
+    LEFT JOIN foundation_staging.atlas_etf_metrics_daily m
       ON m.ticker = s.ticker
      AND m.date   = s.snapshot_date
     WHERE s.snapshot_date = ${snapshotDate}
@@ -194,8 +194,8 @@ export async function getEtfDetail(
     FROM foundation_staging.atlas_etf_scorecard s
     LEFT JOIN foundation_staging.atlas_universe_etfs u
       ON u.ticker = s.ticker
-     AND u.effective_to IS NULL
-    LEFT JOIN atlas.atlas_etf_metrics_daily m
+     AND u.is_active
+    LEFT JOIN foundation_staging.atlas_etf_metrics_daily m
       ON m.ticker   = s.ticker
      AND m.date     = s.snapshot_date
     WHERE s.instrument_id = ${iid}::uuid
@@ -334,7 +334,7 @@ export async function getEtfsList(): Promise<EtfListV6Row[]> {
       action, scatter_zone,
       signal_fire_date::text, signal_tenure::text,
       as_of_date::text, eli5
-    FROM atlas.mv_etf_list_v6
+    FROM foundation_staging.mv_etf_list_v6
     ORDER BY composite_score DESC NULLS LAST
   `
 
@@ -508,7 +508,7 @@ export async function getEtfDeepdive(ticker: string): Promise<EtfDeepdiveRow | n
       ret_1m::text, ret_3m::text, ret_6m::text, ret_12m::text,
       rs_state, action, eli5,
       price_180d, peer_set
-    FROM atlas.mv_etf_deepdive
+    FROM foundation_staging.mv_etf_deepdive
     WHERE ticker = ${ticker.toUpperCase()}
     LIMIT 1
   `

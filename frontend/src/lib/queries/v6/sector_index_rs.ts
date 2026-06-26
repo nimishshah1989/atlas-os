@@ -152,8 +152,8 @@ export type SectorRatioSeries = {
 export async function getSectorRatioSeries(sectorName: string): Promise<SectorRatioSeries> {
   const rows = await sql<Array<{ date: string; index_code: string; ratio: string }>>`
     SELECT s.date::text AS date, s.index_code, (s.close / n.close)::text AS ratio
-    FROM public.de_index_prices s
-    JOIN public.de_index_prices n
+    FROM foundation_staging.index_prices s
+    JOIN foundation_staging.index_prices n
       ON n.date = s.date AND n.index_code = 'NIFTY 50'
     WHERE s.index_code = (
       SELECT primary_nse_index FROM foundation_staging.atlas_sector_master

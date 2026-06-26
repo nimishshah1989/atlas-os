@@ -1,19 +1,16 @@
-// ── MARKET PULSE (pilot of the "Graphite Terminal" language) ──
-// Native foundation_staging only (no atlas.* reads — the Weinstein verdict/
-// scorecard/worklist of §3.a are dropped). Leads with highlighted real numbers,
-// clickable stat tiles, sector leadership, and the signature Decile Ladder fed
-// by the day's highest-conviction stock. Server component; data batched into
-// ≤3 Promise.all groups for the session pooler.
-import Link from 'next/link'
+// ── MARKET PULSE (the "Graphite Terminal" language) ──
+// A self-explanatory market summary: an index strip (where the market is), breadth as real
+// counts (today vs a week / month ago), and a concise Sector Leadership split (the 5 strongest
+// vs 5 weakest sectors, with why). The heatmap + RRG rotation live on the sector page, not here.
+// Server component; queries batched for the session pooler.
 import { getCurrentRegime } from '@/lib/queries/regime'
 import { getBreadthSeries } from '@/lib/queries/v6/breadth'
-import { getTierReturns, getMacroContext, getBreadthTable } from '@/lib/queries/v6/market_pulse'
-import { getStocksDecileList, getStockDecile, getStockEvidence } from '@/lib/queries/v6/stock_lens'
+import { getTierReturns, getIndexStrip } from '@/lib/queries/v6/market_pulse'
+import { getStocksDecileList } from '@/lib/queries/v6/stock_lens'
 import { StatCard, type Tone } from '../ui/StatCard'
 import { Panel } from '../ui/Panel'
-import { DecileLadder } from '../ui/DecileLadder'
-import { stockToLadder } from '../adapters/stockToLadder'
-import { RegimeChip, BreadthTablePanel, TierReturnsPanel, MacroPanel, SectorLeadershipPanel, type SectorRollup } from './MarketPulsePanels'
+import { RegimeChip, BreadthTablePanel, TierReturnsPanel, SectorLeadershipPanel, type SectorRollup, type BreadthCountRow } from './MarketPulsePanels'
+import { IndexStrip } from './IndexStrip'
 import { MarketPulseBreadthCharts } from './MarketPulseBreadthCharts'
 
 const fmtInt = (n: number | null | undefined) => (n == null ? '—' : Math.round(n).toLocaleString('en-IN'))
@@ -42,41 +39,40 @@ export async function MarketPulseV4() {
   // session pooler's 15-client cap under concurrent browser load.
   const stocksList = await getStocksDecileList().catch(() => [])
 
-  // The remaining native-fs panels — all light, batched together.
-  const [breadthSeries, tier, macro, breadthTable] = await Promise.all([
+  // The remaining native-fs panels — light, batched together.
+  const [breadthSeries, tier, indexStrip] = await Promise.all([
     getBreadthSeries(1).catch(() => []),
     getTierReturns().catch(() => ({ windows: [], smallcap_rs_z: null })),
-    getMacroContext().catch(() => ({ rows: [], as_of: null })),
-    getBreadthTable().catch(() => ({ rows: [], as_of: null })),
+    getIndexStrip().catch(() => []),
   ])
 
-  // Spotlight = highest-leadership name today (ties → higher strength)
-  const spotlight = [...stocksList]
-    .filter((r) => r.lead != null)
-    .sort((a, b) => b.lead - a.lead || (b.strength ?? 0) - (a.strength ?? 0))[0] ?? null
-
-  // Group C — the spotlight stock's full lens read + real numbers
-  const [spotDecile, spotEvidence] = spotlight
-    ? await Promise.all([getStockDecile(spotlight.symbol).catch(() => null), getStockEvidence(spotlight.symbol).catch(() => null)])
-    : [null, null]
-  const ladder = spotDecile ? stockToLadder(spotDecile, spotEvidence) : null
-
-  // Sector leadership — real, derived from per-stock strength (≥5 names per sector)
-  const bySector = new Map<string, { sum: number; n: number; leaders: number }>()
+  // Sector leadership — average conviction per sector (≥5 names). A stock "leads" a lens when
+  // it sits in the top three deciles of its cap cohort (D≥8). Split into 5 strongest / weakest.
+  const LEAD_D = 8
+  const bySector = new Map<string, { sum: number; n: number; tech: number; fund: number }>()
   for (const r of stocksList) {
     if (!r.sector || r.strength == null) continue
-    const e = bySector.get(r.sector) ?? { sum: 0, n: 0, leaders: 0 }
+    const e = bySector.get(r.sector) ?? { sum: 0, n: 0, tech: 0, fund: 0 }
     e.sum += r.strength
     e.n += 1
-    if (r.lead >= 2) e.leaders += 1
+    if ((r.d_tech ?? 0) >= LEAD_D) e.tech += 1
+    if ((r.d_fund ?? 0) >= LEAD_D) e.fund += 1
     bySector.set(r.sector, e)
   }
   const sectors: SectorRollup[] = [...bySector.entries()]
     .filter(([, e]) => e.n >= 5)
-    .map(([name, e]) => ({ name, avg: e.sum / e.n, n: e.n, leaders: e.leaders }))
+    .map(([name, e]) => ({ name, avg: e.sum / e.n, n: e.n, techLeaders: e.tech, fundLeaders: e.fund }))
     .sort((a, b) => b.avg - a.avg)
   const topSectors = sectors.slice(0, 5)
   const weakSectors = sectors.slice(-5).reverse()
+
+  // Market breadth as ABSOLUTE COUNTS at three points in time (today, a week ago, a month
+  // ago) — straight from the Nifty-500 breadth series. The trend reads directly, no deltas.
+  const bAgo = (k: number) => (breadthSeries.length > k ? breadthSeries[breadthSeries.length - 1 - k] : null)
+  const bCountRow = (label: string, field: 'above_21' | 'above_50' | 'above_200' | 'gc_50_200' | 'net_new_highs'): BreadthCountRow => {
+    const at = (row: ReturnType<typeof bAgo>) => (row ? (row[field] as number) : null)
+    return { label, today: at(bAgo(0)), wkAgo: at(bAgo(5)), moAgo: at(bAgo(21)) }
+  }
 
   // Stat tiles (real breadth counts; clickable → filtered lists)
   const b = breadthSeries.length ? breadthSeries[breadthSeries.length - 1] : null
@@ -99,6 +95,9 @@ export async function MarketPulseV4() {
           <RegimeChip state={regime.regime_state} deploymentPct={deploymentPct} />
         </header>
 
+        {/* broad-market index strip */}
+        {indexStrip.length > 0 && <IndexStrip quotes={indexStrip} />}
+
         {/* stat grid */}
         <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {b && (
@@ -118,45 +117,34 @@ export async function MarketPulseV4() {
             tone={tier.smallcap_rs_z == null ? 'neutral' : tier.smallcap_rs_z >= 0 ? 'pos' : 'neg'} sub="vs large-cap · 1y" />
         </div>
 
-        {/* sector leadership */}
-        {topSectors.length > 0 && (
+        {/* sector leadership — concise leading / lagging split */}
+        {sectors.length > 0 && (
           <div className="mb-6"><SectorLeadershipPanel top={topSectors} weak={weakSectors} /></div>
         )}
 
-        {/* breadth + cap-tier */}
+        {/* breadth (absolute counts) + cap-tier returns */}
         <div className="mb-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
-          {breadthTable.rows.length > 0 && <BreadthTablePanel rows={breadthTable.rows} asOf={breadthTable.as_of} />}
+          {b && (
+            <BreadthTablePanel
+              rows={[
+                bCountRow('Above 21-EMA', 'above_21'),
+                bCountRow('Above 50-EMA', 'above_50'),
+                bCountRow('Above 200-EMA', 'above_200'),
+                bCountRow('Golden crosses', 'gc_50_200'),
+                bCountRow('Net new highs', 'net_new_highs'),
+              ]}
+              total={b.n_members}
+              asOf={b.date}
+            />
+          )}
           {tier.windows.length > 0 && <TierReturnsPanel data={tier} />}
         </div>
 
-        {/* breadth participation history — §3.e */}
+        {/* breadth participation history */}
         {breadthSeries.length > 1 && (
           <div className="mb-6"><MarketPulseBreadthCharts series={breadthSeries} /></div>
         )}
 
-        {/* conviction spotlight — the signature Decile Ladder, real data */}
-        {ladder && spotlight && (
-          <div className="mb-6">
-            <Panel
-              eyebrow="Highest conviction today"
-              title={spotlight.symbol}
-              action={<Link href={`/stocks/${spotlight.symbol}`} className="font-num text-[11px] text-brand hover:underline">Open stock →</Link>}
-            >
-              <p className="mb-4 font-sans text-[12px] text-txt-2">{spotlight.name ?? spotlight.symbol} · {ladder.cohortLabel}{spotlight.sector ? ` · ${spotlight.sector}` : ''}</p>
-              <DecileLadder
-                lenses={ladder.lenses}
-                strength={ladder.strength}
-                leadership={ladder.leadership}
-                cohortLabel={ladder.cohortLabel}
-                defaultOpenKey={ladder.topLensKey ?? undefined}
-                note={<>Each lens is a <strong className="text-txt-1">decile within its cap cohort</strong> (D10 = top 10%) — no black-box composite. Expand a lens for the real numbers behind the score.</>}
-              />
-            </Panel>
-          </div>
-        )}
-
-        {/* macro */}
-        {macro.rows.length > 0 && <MacroPanel rows={macro.rows} asOf={macro.as_of} />}
       </div>
     </div>
   )

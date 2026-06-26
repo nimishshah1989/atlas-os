@@ -1,5 +1,7 @@
-// SectorBreadthTable — compact table form of sector EMA participation (replaces the
-// card grid; occupies less space, all numbers filled). Sorted by %>EMA21 desc.
+'use client'
+// SectorBreadthTable — compact table form of sector EMA participation. Every numeric
+// column header sorts (FM 2026-06-26). Default: %>EMA21 desc.
+import { useState } from 'react'
 import type { SectorBreadthMVRow } from '@/lib/queries/v6/sectors'
 
 const pct = (v: number | null) => (v == null ? '—' : `${(v * 100).toFixed(0)}%`)
@@ -9,20 +11,48 @@ const heat = (v: number | null) => {
   return p >= 60 ? 'text-sig-pos' : p >= 40 ? 'text-txt-2' : 'text-sig-neg'
 }
 
+type SortKey = 'constituent_count' | 'pct_above_ema21' | 'pct_above_ema50' | 'pct_above_ema200'
+
 export function SectorBreadthTable({ rows }: { rows: SectorBreadthMVRow[] }) {
+  const [sortKey, setSortKey] = useState<SortKey>('pct_above_ema21')
+  const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc')
+
   if (rows.length === 0) {
     return <div className="py-6 text-center font-sans text-sm text-txt-3">Breadth data unavailable.</div>
   }
-  const sorted = [...rows].sort((a, b) => (b.pct_above_ema21 ?? -1) - (a.pct_above_ema21 ?? -1))
+
+  function onSort(k: SortKey) {
+    if (k === sortKey) setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+    else { setSortKey(k); setSortDir('desc') }
+  }
+  const sorted = [...rows].sort((a, b) => {
+    const va = (a[sortKey] ?? -1) as number
+    const vb = (b[sortKey] ?? -1) as number
+    return sortDir === 'desc' ? vb - va : va - vb
+  })
+
+  function SortTh({ label, k }: { label: string; k: SortKey }) {
+    const active = sortKey === k
+    return (
+      <th
+        onClick={() => onSort(k)}
+        className={`py-1.5 font-semibold cursor-pointer select-none hover:text-txt-1 ${active ? 'text-txt-1' : ''}`}
+        aria-sort={active ? (sortDir === 'desc' ? 'descending' : 'ascending') : 'none'}
+      >
+        {label}{active && <span className="ml-0.5">{sortDir === 'desc' ? '↓' : '↑'}</span>}
+      </th>
+    )
+  }
+
   return (
     <table className="w-full text-right" data-testid="sector-breadth-table">
       <thead>
         <tr className="font-num text-[10px] text-txt-3 uppercase tracking-wider border-b border-edge-rule">
           <th className="text-left py-1.5 font-semibold">Sector</th>
-          <th className="py-1.5 font-semibold">Stocks</th>
-          <th className="py-1.5 font-semibold">&gt; EMA21</th>
-          <th className="py-1.5 font-semibold">&gt; EMA50</th>
-          <th className="py-1.5 font-semibold">&gt; EMA200</th>
+          <SortTh label="Stocks" k="constituent_count" />
+          <SortTh label="&gt; EMA21" k="pct_above_ema21" />
+          <SortTh label="&gt; EMA50" k="pct_above_ema50" />
+          <SortTh label="&gt; EMA200" k="pct_above_ema200" />
           <th className="text-left py-1.5 font-semibold pl-6">Top movers</th>
         </tr>
       </thead>

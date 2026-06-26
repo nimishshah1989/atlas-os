@@ -26,8 +26,16 @@ export async function SectorsPageV4() {
   ])
   const capTierRS = await getCapTierRS(10).catch(() => [])
   const latestDate = cards[0]?.as_of_date ?? null
+
+  // CANONICAL 21 sectors = exactly what mv_sector_cards carries at the latest snapshot.
+  // The pulse grid (atlas_sector_master) and RRG (mv_sector_rrg) still carry the old
+  // 30-name taxonomy (EV & Auto, Housing, Consumption, Diversified, Services, Telecom…),
+  // so filter every sector list down to the canonical set — one source of truth for the page.
+  const canonical = new Set(cards.map(c => c.sector_name))
+  const rrgC = rrg.filter(r => canonical.has(r.sector_name))
+  const indexRsC = { ...indexRs, sectors: indexRs.sectors.filter(s => canonical.has(s.sector_name)) }
   const idxRet1dBySector: Record<string, number | null> = Object.fromEntries(
-    indexRs.sectors.map(s => [s.sector_name, s.ret.ret_1d]),
+    indexRsC.sectors.map(s => [s.sector_name, s.ret.ret_1d]),
   )
 
   return (
@@ -50,9 +58,9 @@ export async function SectorsPageV4() {
         info={{ body: 'Each sector index’s return minus a selectable base index (Nifty 50 / 500) over the chosen window. Tiles open the sector.' }}
         bodyClassName="px-5 py-4 space-y-6"
       >
-        <SectorPulseGrid data={indexRs} />
+        <SectorPulseGrid data={indexRsC} />
         <Suspense fallback={<div className="h-40 rounded-tile bg-surface-inset animate-pulse" />}>
-          <SectorHeroReadout cards={cards} rrg={rrg} />
+          <SectorHeroReadout cards={cards} rrg={rrgC} />
         </Suspense>
       </Panel>
 
@@ -66,7 +74,7 @@ export async function SectorsPageV4() {
       <Panel
         eyebrow="Returns"
         title="Multi-window return heatmap"
-        info={{ body: 'Absolute returns + RS spread vs Nifty 500 across windows. Click any column to sort. 1D = NSE sector index; rest bottom-up.' }}
+        info={{ body: 'Left block = absolute return (%). Right block = RS, “relative strength” in percentage points (pp) = the sector’s return minus the Nifty 500’s over the same window — positive pp means the sector beat the broad market. Click any column to sort.' }}
         bodyClassName="px-2 py-2"
       >
         <SectorHeatmapV4 cards={cards} idxRet1dBySector={idxRet1dBySector} />

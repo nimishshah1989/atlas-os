@@ -286,7 +286,7 @@ function QuadrantLegend({ data, theme }: { data: SectorRRGRow[]; theme: ThemeTok
         </div>
         <div className="text-[11.5px] text-txt-2 leading-[1.55] space-y-1.5">
           <div>Sectors rotate <strong className="font-medium text-txt-1">counter-clockwise</strong>: Leading → Weakening → Lagging → Improving → back.</div>
-          <div><strong className="font-medium text-txt-1">X-axis</strong>: RS-ratio (100 = parity with Nifty 500). Above 100 = outperforming.</div>
+          <div><strong className="font-medium text-txt-1">X-axis</strong>: RS-ratio vs Nifty 500. Divider = the sector median, so right = stronger-than-peers, left = weaker.</div>
           <div><strong className="font-medium text-txt-1">Y-axis</strong>: RS-momentum (rate-of-change). Above 0 = accelerating RS.</div>
           <div>Bubble size = # constituents. Trail = 6-week history.</div>
         </div>
@@ -310,8 +310,23 @@ export function SectorRRGChart({ data }: { data: SectorRRGRow[] }) {
     (d) => d.rs_ratio_current != null && d.rs_momentum_current != null,
   )
 
+  // The MV's rs_ratio is currently mis-normalised — every sector lands above 100, so an
+  // x=100 divider pins them all in the right half (no Lagging/red, trails off-screen).
+  // Until the MV is re-normalised, divide on the cross-sectional MEDIAN rs_ratio so the
+  // graph reads as a true RELATIVE rotation: ~half the sectors fall left (Improving/Lagging,
+  // incl. red), trails sit inside the domain. Quadrant is recomputed vs the median for the
+  // dot colour + legend (the stored quadrant_current assumed the 100 divider).
+  const ratiosSorted = [...validData.map((d) => d.rs_ratio_current!)].sort((a, b) => a - b)
+  const midRatio = ratiosSorted.length ? ratiosSorted[Math.floor(ratiosSorted.length / 2)] : 100
+  const quadVsMid = (x: number, y: number): Quad =>
+    x >= midRatio ? (y >= 0 ? 'Leading' : 'Weakening') : (y >= 0 ? 'Improving' : 'Lagging')
+  const reData: SectorRRGRow[] = validData.map((d) => ({
+    ...d,
+    quadrant_current: quadVsMid(d.rs_ratio_current!, d.rs_momentum_current!),
+  }))
+
   // Convert to scatter-ready format
-  const scatterData = validData.map((d) => ({
+  const scatterData = reData.map((d) => ({
     ...d,
     x: d.rs_ratio_current!,
     y: d.rs_momentum_current!,
@@ -328,18 +343,19 @@ export function SectorRRGChart({ data }: { data: SectorRRGRow[] }) {
   // (e.g. Conglomerate showing rs_momentum = -194 from a noisy LAG point)
   // doesn't squish all 30 sectors into a tiny cluster at the center.
   // Outliers are still plotted but get pulled to the chart edge.
-  const allX = [...scatterData.map((d) => d.x), ...trailXY.map((t) => t.x), 100]
+  const allX = [...scatterData.map((d) => d.x), ...trailXY.map((t) => t.x)]
   const allY = [...scatterData.map((d) => d.y), ...trailXY.map((t) => t.y), 0]
-  // Data-aware domain (with padding)
-  const dataXMin = Math.min(...allX) - 2
-  const dataXMax = Math.max(...allX) + 2
-  const dataYMin = Math.min(...allY) - 1
-  const dataYMax = Math.max(...allY) + 1
-  // Standard RRG bounds (cap to keep the chart readable)
-  const xMin = Math.max(dataXMin, 85)
-  const xMax = Math.min(dataXMax, 130)
-  const yMin = Math.max(dataYMin, -15)
-  const yMax = Math.min(dataYMax, 25)
+  // Data-aware domain (with padding) — must INCLUDE the trail points (rs_ratio up to ~165)
+  // so trails render inside the plot instead of being clipped off the right edge.
+  const dataXMin = Math.min(...allX) - 3
+  const dataXMax = Math.max(...allX) + 3
+  const dataYMin = Math.min(...allY) - 2
+  const dataYMax = Math.max(...allY) + 2
+  // Cap only against pathological outliers; otherwise hug the data.
+  const xMin = Math.max(dataXMin, 60)
+  const xMax = Math.min(dataXMax, 220)
+  const yMin = Math.max(dataYMin, -60)
+  const yMax = Math.min(dataYMax, 60)
 
   // Theme-resolved chart chrome colours (neutral fallbacks pre-mount / off-theme)
   const grid = t?.grid ?? '#88888822'
@@ -376,8 +392,8 @@ export function SectorRRGChart({ data }: { data: SectorRRGRow[] }) {
           <ScatterChart margin={{ top: 20, right: 80, bottom: 40, left: 40 }}>
             <CartesianGrid strokeDasharray="2 4" stroke={grid} />
 
-            {/* Quadrant reference lines at x=100 and y=0 */}
-            <ReferenceLine x={100} stroke={zeroLine} strokeWidth={0.8} />
+            {/* Quadrant divider on the MEDIAN rs_ratio (see note above) + momentum=0 */}
+            <ReferenceLine x={midRatio} stroke={zeroLine} strokeWidth={0.8} />
             <ReferenceLine y={0} stroke={zeroLine} strokeWidth={0.8} />
 
             <XAxis
@@ -389,7 +405,7 @@ export function SectorRRGChart({ data }: { data: SectorRRGRow[] }) {
               stroke={axisLine}
             >
               <Label
-                value="RS-ratio (price vs Nifty 500, rebased to 100)"
+                value="RS-ratio vs Nifty 500 — divider = sector median (relative rotation)"
                 position="insideBottom"
                 offset={-20}
                 style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, fill: axisLabel, fontWeight: 600 }}
@@ -415,7 +431,7 @@ export function SectorRRGChart({ data }: { data: SectorRRGRow[] }) {
             <Tooltip content={<RRGTooltip />} />
 
             {/* Trail polylines — Recharts 3.x injects xAxisMap/yAxisMap into direct children */}
-            <TrailOverlay sectors={validData} theme={t} />
+            <TrailOverlay sectors={reData} theme={t} />
 
             {/* Current position dots */}
             <Scatter
@@ -429,7 +445,7 @@ export function SectorRRGChart({ data }: { data: SectorRRGRow[] }) {
 
       </div>
 
-      <QuadrantLegend data={data} theme={t} />
+      <QuadrantLegend data={reData} theme={t} />
     </div>
   )
 }

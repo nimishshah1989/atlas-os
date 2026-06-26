@@ -28,7 +28,7 @@ export function MarketPulseBreadthCharts({ series }: { series: BreadthRow[] }) {
           return (
             <div key={c.key}>
               <p className="mb-1.5 font-num text-[10px] uppercase tracking-wider text-txt-3">{c.label}</p>
-              <AtlasLightweightChart height={148} series={[{ name: c.label, color: c.color, data }]} />
+              <AtlasLightweightChart height={148} precision={0} series={[{ name: c.label, color: c.color, data }]} />
             </div>
           )
         })}

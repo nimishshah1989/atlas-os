@@ -124,7 +124,7 @@ export async function getFundListPage(): Promise<FundListPage> {
     SELECT
       fl.scheme_code, fl.isin, fl.fund_name, fl.amc, fl.fund_category, fl.fund_style,
       fl.broad_category, fl.plan_type, fl.benchmark_code,
-      fl.aum_cr::text                       AS aum_cr,
+      uf.aum_cr::text                       AS aum_cr,
       fl.composite_score::text              AS composite_score,
       fl.risk_adjusted_return_score::text   AS risk_adjusted_return_score,
       fl.holdings_conviction_score::text    AS holdings_conviction_score,
@@ -163,9 +163,14 @@ export async function getFundListPage(): Promise<FundListPage> {
       WHERE nav_date >= (SELECT d FROM latest_fm) - INTERVAL '7 days'
       ORDER BY mstar_id, nav_date DESC
     ) fm ON fm.mstar_id = fl.scheme_code
+    -- AUM comes from the Atlas-owned universe (true ₹ crore, fund-total, refreshed weekly
+    -- by ingest_fund_master.py) — NOT mv_fund_list_v6.aum_cr, which is stale ₹ lakh and
+    -- plan-split (would render ~100× too large). Keeps list AUM consistent with the
+    -- fund detail header (which also reads atlas_universe_funds).
+    LEFT JOIN foundation_staging.atlas_universe_funds uf ON uf.mstar_id = fl.scheme_code
     WHERE
       -- Minimum ₹100 cr AUM: filters illiquid/micro funds (e.g. Old Bridge, niche AMCs)
-      fl.aum_cr IS NULL OR fl.aum_cr >= 100
+      uf.aum_cr IS NULL OR uf.aum_cr >= 100
     ORDER BY
       fl.is_atlas_leader DESC,
       fl.composite_score DESC NULLS LAST,

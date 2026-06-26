@@ -84,7 +84,7 @@ export async function getConvictionWithSignals(instrumentId: string): Promise<Co
         backing_ic::text         AS backing_ic,
         tier,
         contributing_signals
-      FROM atlas.atlas_stock_conviction_daily
+      FROM foundation_staging.atlas_stock_conviction_daily
       WHERE instrument_id = ${instrumentId}::uuid
       ORDER BY date DESC
       LIMIT 1
@@ -130,7 +130,7 @@ export async function getSectorContextForStock(
   try {
     const rows = await sql<SectorContextRow[]>`
       WITH latest_sector_date AS (
-        SELECT MAX(date) AS d FROM atlas.atlas_sector_states_daily
+        SELECT MAX(date) AS d FROM foundation_staging.atlas_sector_states_daily
       ),
       sector_today AS (
         -- bottomup_rs_3m_nifty500 lives on atlas_sector_metrics_daily, NOT on
@@ -143,21 +143,21 @@ export async function getSectorContextForStock(
           (s.participation_rs_pct::numeric / 100.0)::text AS breadth,
           ROW_NUMBER() OVER (ORDER BY m.bottomup_rs_3m_nifty500 DESC NULLS LAST)::text AS sector_rank,
           COUNT(*) OVER ()::text AS total_sectors
-        FROM atlas.atlas_sector_states_daily s
-        LEFT JOIN atlas.atlas_sector_metrics_daily m
+        FROM foundation_staging.atlas_sector_states_daily s
+        LEFT JOIN foundation_staging.atlas_sector_metrics_daily m
           ON m.sector_name = s.sector_name AND m.date = s.date
         WHERE s.date = (SELECT d FROM latest_sector_date)
       ),
       latest_metric_date AS (
-        SELECT MAX(date) AS d FROM atlas.atlas_stock_metrics_daily
+        SELECT MAX(date) AS d FROM foundation_staging.atlas_stock_metrics_daily
       ),
       stock_ranks AS (
         SELECT
           m.instrument_id,
           ROW_NUMBER() OVER (PARTITION BY u.sector ORDER BY m.rs_pctile_3m DESC NULLS LAST)::text AS stock_rank,
           COUNT(*) OVER (PARTITION BY u.sector)::text AS sector_size
-        FROM atlas.atlas_stock_metrics_daily m
-        JOIN atlas.atlas_universe_stocks u ON u.instrument_id = m.instrument_id AND u.effective_to IS NULL
+        FROM foundation_staging.atlas_stock_metrics_daily m
+        JOIN foundation_staging.instrument_master u ON u.instrument_id = m.instrument_id AND u.is_active
         WHERE m.date = (SELECT d FROM latest_metric_date) AND u.sector = ${sectorName}
       )
       SELECT
@@ -189,7 +189,7 @@ export async function getMarketRegime(): Promise<string | null> {
   try {
     const rows = await sql<{ regime_state: string | null }[]>`
       SELECT regime_state::text
-      FROM atlas.atlas_market_regime_daily
+      FROM foundation_staging.atlas_market_regime_daily
       ORDER BY date DESC
       LIMIT 1
     `
@@ -201,7 +201,7 @@ export async function getMarketRegime(): Promise<string | null> {
 
 // ─── Gate thresholds from atlas_thresholds ───────────────────────────────────
 //
-// Per CLAUDE.md "Methodology thresholds live in atlas.atlas_thresholds, loaded
+// Per CLAUDE.md "Methodology thresholds live in foundation_staging.atlas_thresholds, loaded
 // via atlas.db.load_thresholds()". We mirror the backend convention so the
 // frontend gate display stays consistent with the backend gate computation
 // when thresholds are tuned in the DB.
@@ -222,7 +222,7 @@ export async function getGateThresholds(): Promise<GateThresholds> {
   try {
     const rows = await sql<{ key: string; value: string | null }[]>`
       SELECT key, value::text
-      FROM atlas.atlas_thresholds
+      FROM foundation_staging.atlas_thresholds
       WHERE key IN ('rs_pctile_min_pct', 'risk_extension_high_min_pct')
     `
     const map = new Map(rows.map(r => [r.key, r.value]))

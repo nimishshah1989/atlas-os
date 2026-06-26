@@ -1,7 +1,7 @@
 // frontend/src/lib/queries/v6/sector_breadth.ts
 //
 // Server-only query for per-sector breadth metrics, derived on-the-fly from
-// atlas.atlas_scorecard_daily.features (JSONB).
+// foundation_staging.atlas_scorecard_daily.features (JSONB).
 //
 // NOTE: atlas_sector_breadth_daily does NOT exist (confirmed A.0 audit,
 // 2026-05-26). Breadth is computed here via aggregation over the scorecard
@@ -86,7 +86,7 @@ export async function getSectorBreadth(sector?: string): Promise<SectorBreadth[]
   const rows = sector != null
     ? await sql<BreadthRow[]>`
         WITH latest AS (
-          SELECT MAX(date) AS d FROM atlas.atlas_scorecard_daily
+          SELECT MAX(date) AS d FROM foundation_staging.atlas_scorecard_daily
         ),
         universe AS (
           SELECT
@@ -109,10 +109,10 @@ export async function getSectorBreadth(sector?: string): Promise<SectorBreadth[]
               THEN 1 ELSE 0
             END AS above_200,
             (sd.features->>'rs_residual_1m')::numeric AS rs_residual_1m
-          FROM atlas.atlas_scorecard_daily sd
-          JOIN atlas.atlas_universe_stocks us
+          FROM foundation_staging.atlas_scorecard_daily sd
+          JOIN foundation_staging.instrument_master us
             ON us.instrument_id = sd.instrument_id
-           AND us.effective_to IS NULL
+           AND us.is_active
           WHERE sd.date = (SELECT d FROM latest)
         )
         SELECT
@@ -130,7 +130,7 @@ export async function getSectorBreadth(sector?: string): Promise<SectorBreadth[]
       `
     : await sql<BreadthRow[]>`
         WITH latest AS (
-          SELECT MAX(date) AS d FROM atlas.atlas_scorecard_daily
+          SELECT MAX(date) AS d FROM foundation_staging.atlas_scorecard_daily
         ),
         universe AS (
           SELECT
@@ -153,10 +153,10 @@ export async function getSectorBreadth(sector?: string): Promise<SectorBreadth[]
               THEN 1 ELSE 0
             END AS above_200,
             (sd.features->>'rs_residual_1m')::numeric AS rs_residual_1m
-          FROM atlas.atlas_scorecard_daily sd
-          JOIN atlas.atlas_universe_stocks us
+          FROM foundation_staging.atlas_scorecard_daily sd
+          JOIN foundation_staging.instrument_master us
             ON us.instrument_id = sd.instrument_id
-           AND us.effective_to IS NULL
+           AND us.is_active
           WHERE sd.date = (SELECT d FROM latest)
         )
         SELECT

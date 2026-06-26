@@ -64,6 +64,8 @@ export interface AtlasLightweightChartProps {
   compact?: boolean
   showLastValue?: boolean
   className?: string
+  /** Price-scale decimal places. 0 = whole numbers (e.g. counts of stocks). Default 2. */
+  precision?: number
 }
 
 // ── Legacy (off-theme) palette — unchanged paper/ink ────────────────────────
@@ -111,6 +113,7 @@ export function AtlasLightweightChart({
   compact = false,
   showLastValue = false,
   className = '',
+  precision,
 }: AtlasLightweightChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -177,6 +180,7 @@ export function AtlasLightweightChart({
         priceLineVisible: false,
         lastValueVisible: showLastValue,
         title: s.name,
+        ...(precision != null ? { priceFormat: { type: 'price' as const, precision, minMove: 1 / 10 ** precision } } : {}),
       })
       primary.setData(s.data.map((p) => ({ time: toLcTime(p.time), value: p.value })))
       seriesRefsRef.current.push(primary)
@@ -209,7 +213,7 @@ export function AtlasLightweightChart({
       chartRef.current = null
       seriesRefsRef.current = []
     }
-  }, [series, height, compact, showLastValue, tk])
+  }, [series, height, compact, showLastValue, tk, precision])
 
   const lastValue = series[0]?.data.at(-1)?.value
   const lastDelta = (() => {

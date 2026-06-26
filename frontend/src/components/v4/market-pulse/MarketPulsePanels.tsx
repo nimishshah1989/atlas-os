@@ -3,7 +3,7 @@
 // these only format + lay out. Units per the market_pulse recon: tier returns &
 // spreads are FRACTIONS (×100 for display); macro values are already in `unit`.
 import Link from 'next/link'
-import type { TierReturns, MacroRow, BreadthTableRow } from '@/lib/queries/v6/market_pulse'
+import type { TierReturns, MacroRow } from '@/lib/queries/v6/market_pulse'
 import { Panel } from '../ui/Panel'
 import { DecileMeter } from '../ui/DecileMeter'
 
@@ -39,41 +39,34 @@ export function RegimeChip({ state, deploymentPct }: { state: string; deployment
   )
 }
 
-// ── breadth detail (§3.e/§3.f — # stocks as integers, not decimals) ──────────
-function fmtBreadth(kind: BreadthTableRow['kind'], v: number | null): string {
-  if (v == null) return '—'
-  if (kind === 'pct') return `${v.toFixed(1)}%`
-  if (kind === 'count') return Math.round(v).toLocaleString('en-IN')
-  if (kind === 'ratio') return v.toFixed(2)
-  return signed(v, 0)
-}
-function fmtBreadthDelta(kind: BreadthTableRow['kind'], v: number | null): string {
-  if (v == null) return '—'
-  if (kind === 'pct') return `${signed(v, 1)}pp`
-  if (kind === 'ratio') return signed(v, 2)
-  return signed(v, 0)
-}
-export function BreadthTablePanel({ rows, asOf }: { rows: BreadthTableRow[]; asOf: string | null }) {
+// ── breadth detail — ABSOLUTE COUNTS of Nifty-500 names at three points in time, so the
+// trend reads directly (today vs a week ago vs a month ago — no deltas to decode). ──
+export type BreadthCountRow = { label: string; today: number | null; wkAgo: number | null; moAgo: number | null }
+const fmtCount = (v: number | null) => (v == null ? '—' : Math.round(v).toLocaleString('en-IN'))
+export function BreadthTablePanel({ rows, total, asOf }: { rows: BreadthCountRow[]; total: number | null; asOf: string | null }) {
   return (
     <Panel
       eyebrow="Participation"
       title="Market breadth"
-      info={{ title: 'Market breadth', body: 'How many Nifty 500 names participate in the move. Counts are instruments, not percentages; Δ columns are the change over the trailing week and month.' }}
+      info={{ title: 'Market breadth', body: 'How many of the Nifty 500 are taking part — counts of names, not percentages. Above-EMA rows count names trading above that moving average; golden crosses are names whose 50-EMA sits above their 200-EMA; net new highs is 52-week highs minus lows. Each column is the count on that day, so you can read the trend directly.' }}
       bodyClassName="px-2 pb-3 pt-1"
     >
+      <p className="px-2 pb-2 font-sans text-[11.5px] leading-snug text-txt-2">
+        Number of Nifty 500 stocks{total ? <> out of <span className="font-num tabular-nums text-txt-1">{fmtCount(total)}</span></> : ''} participating — compare today with a week and a month ago to see if breadth is widening or narrowing.
+      </p>
       <table className="w-full border-collapse">
         <thead>
           <tr className="border-b border-edge-hair">
-            <Head>Metric</Head><Head right>Today</Head><Head right>Δ 1w</Head><Head right>Δ 1m</Head>
+            <Head>Metric</Head><Head right>Today</Head><Head right>1 wk ago</Head><Head right>1 mo ago</Head>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.metric} className="border-b border-edge-hair/60 last:border-0">
+            <tr key={r.label} className="border-b border-edge-hair/60 last:border-0">
               <td className="px-2 py-1.5 font-sans text-[12px] text-txt-2">{r.label}</td>
-              <td className="px-2 py-1.5 text-right"><Num>{fmtBreadth(r.kind, r.today)}</Num></td>
-              <td className="px-2 py-1.5 text-right"><Num color={toneColor(r.d1w)}>{fmtBreadthDelta(r.kind, r.d1w)}</Num></td>
-              <td className="px-2 py-1.5 text-right"><Num color={toneColor(r.d1m)}>{fmtBreadthDelta(r.kind, r.d1m)}</Num></td>
+              <td className="px-2 py-1.5 text-right"><Num>{fmtCount(r.today)}</Num></td>
+              <td className="px-2 py-1.5 text-right"><Num color="var(--color-txt-3)">{fmtCount(r.wkAgo)}</Num></td>
+              <td className="px-2 py-1.5 text-right"><Num color="var(--color-txt-3)">{fmtCount(r.moAgo)}</Num></td>
             </tr>
           ))}
         </tbody>
@@ -94,6 +87,9 @@ export function TierReturnsPanel({ data }: { data: TierReturns }) {
       info={{ title: 'Returns by size', body: 'Total return of each size cohort over five windows, plus the small/mid-cap spread vs large-cap. A positive spread means smaller caps are leading. The z-score gauges how stretched small-cap leadership is vs its own 1-year norm.' }}
       bodyClassName="px-2 pb-3 pt-1"
     >
+      <p className="px-2 pb-2 font-sans text-[11.5px] leading-snug text-txt-2">
+        How each size band has performed. <span className="text-txt-1">SC−LC</span> / <span className="text-txt-1">MC−LC</span> are small- and mid-cap returns minus large-cap — positive means smaller companies are leading the market.
+      </p>
       <table className="w-full border-collapse">
         <thead>
           <tr className="border-b border-edge-hair">
@@ -162,19 +158,22 @@ export function MacroPanel({ rows, asOf }: { rows: MacroRow[]; asOf: string | nu
   )
 }
 
-// ── sector leadership (§3.c — green vs deteriorating, derived from real stock
-// strength; "deteriorating" = the weakest current cohorts pending MoM deltas) ──
-export type SectorRollup = { name: string; avg: number; n: number; leaders: number }
-function SectorRow({ s }: { s: SectorRollup }) {
+// ── sector leadership — concise Leading / Lagging split (top 5 vs bottom 5), each sector
+// scored by its stocks' average conviction with the technical/fundamental leader counts that
+// explain WHY it's there. Server-rendered; rows click through to the sector page. ──────────
+export type SectorRollup = { name: string; avg: number; n: number; techLeaders: number; fundLeaders: number }
+function SectorMiniRow({ s }: { s: SectorRollup }) {
+  const tone = s.avg >= 6 ? 'var(--color-sig-pos)' : s.avg < 4 ? 'var(--color-sig-neg)' : 'var(--color-txt-1)'
   return (
-    <Link
-      href={`/sectors/${encodeURIComponent(s.name)}`}
-      className="-mx-2 flex items-center gap-3 rounded-tile px-2 py-1.5 transition-colors hover:bg-surface-raised"
-    >
-      <span className="w-[132px] shrink-0 truncate font-sans text-[12px] text-txt-1">{s.name}</span>
-      <span className="flex-1"><DecileMeter decile={Math.round(s.avg)} size="sm" /></span>
-      <span className="w-[34px] shrink-0 text-right font-num text-[12px] tabular-nums text-txt-1">{s.avg.toFixed(1)}</span>
-      <span className="w-[64px] shrink-0 text-right font-num text-[10px] tabular-nums text-txt-3">{s.leaders}/{s.n} lead</span>
+    <Link href={`/sectors/${encodeURIComponent(s.name)}`} className="-mx-2 block rounded-tile px-2 py-1.5 transition-colors hover:bg-surface-raised">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="truncate font-sans text-[12.5px] font-medium text-txt-1">{s.name}</span>
+        <span className="shrink-0 font-num text-[12px] tabular-nums" style={{ color: tone }}>{s.avg.toFixed(1)}<span className="text-[10px] text-txt-3">/10</span></span>
+      </div>
+      <div className="mt-1 flex items-center gap-2">
+        <DecileMeter decile={Math.round(s.avg)} size="sm" />
+        <span className="shrink-0 font-num text-[10px] tabular-nums text-txt-3">{s.techLeaders} tech · {s.fundLeaders} fund · of {s.n}</span>
+      </div>
     </Link>
   )
 }
@@ -183,16 +182,19 @@ export function SectorLeadershipPanel({ top, weak }: { top: SectorRollup[]; weak
     <Panel
       eyebrow="Rotation"
       title="Sector leadership"
-      info={{ title: 'Sector leadership', body: 'Sectors ranked by the average conviction decile of their constituents (D10 = top). The left column leads; the right column lags. Click a sector to drill in.' }}
+      info={{ title: 'How to read this', body: <>Each sector is scored by the <strong>average conviction decile</strong> of its stocks — where each stock sits from 1 (bottom) to 10 (top) versus peers of its own size. <strong>Tech</strong> counts names with leading price action (top three deciles); <strong>fund</strong> counts names with leading financials — so you can see why a sector leads. Click any sector to drill in.</>}}
     >
+      <p className="mb-2.5 font-sans text-[11.5px] leading-snug text-txt-2">
+        The 5 strongest and 5 weakest sectors by their stocks’ average conviction (1–10). The small line shows how many names lead on <span className="text-txt-1">price (tech)</span> vs <span className="text-txt-1">fundamentals (fund)</span>.
+      </p>
       <div className="grid grid-cols-1 gap-x-8 gap-y-1 sm:grid-cols-2">
         <div>
           <p className="mb-1.5 font-num text-[9px] uppercase tracking-[0.14em] text-sig-pos">Leading</p>
-          {top.map((s) => <SectorRow key={s.name} s={s} />)}
+          {top.map((s) => <SectorMiniRow key={s.name} s={s} />)}
         </div>
         <div>
           <p className="mb-1.5 font-num text-[9px] uppercase tracking-[0.14em] text-sig-neg">Lagging</p>
-          {weak.map((s) => <SectorRow key={s.name} s={s} />)}
+          {weak.map((s) => <SectorMiniRow key={s.name} s={s} />)}
         </div>
       </div>
     </Panel>

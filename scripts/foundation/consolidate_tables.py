@@ -24,9 +24,11 @@ FS = "foundation_staging"
 
 # (source_fqn, fs_name, [index column-lists])
 MIRRORS = [
-    ("public.de_mf_holdings", "de_mf_holdings", [["as_of_date"], ["mstar_id"], ["instrument_id"]]),
-    ("public.de_mf_master", "de_mf_master", [["mstar_id"]]),
-    ("public.de_mf_nav_daily", "de_mf_nav_daily", [["mstar_id", "nav_date"]]),
+    # NOTE: de_mf_holdings, de_mf_master, atlas_universe_funds, de_mf_nav_daily are now
+    # ATLAS-OWNED in foundation_staging (written directly by ingest_mf_holdings.py +
+    # ingest_fund_master.py + ingest_nav.py — all sourced from Morningstar/AMFI, no JIP).
+    # They are NOT mirrored — re-adding them would clobber the fresh Atlas data with the
+    # stale public.de_* / atlas.* sources. (Consolidation steps 1/1b/2 — kill the mirror.)
     ("public.de_etf_holdings", "de_etf_holdings", [["ticker"], ["instrument_id"]]),
     ("public.de_etf_master", "de_etf_master", [["ticker"]]),
     ("public.de_index_constituents", "de_index_constituents", []),
@@ -44,19 +46,26 @@ MIRRORS = [
     ("atlas.mv_sector_deepdive", "mv_sector_deepdive", [["sector_name"]]),         # Page-C deep-dive
     ("atlas.atlas_index_metrics_daily", "atlas_index_metrics_daily", [["date"]]),  # Page-B sector index RS
     ("atlas.mv_markets_rs_grid", "mv_markets_rs_grid", []),                        # Page-B global RS grid
-    # ETF + Fund scorecards — single-schema: the /etfs + /funds pages + landing
-    # conviction tabs read these directly; mirror so the whole platform reads ONE
-    # schema (foundation_staging). (mv_*_v6 do not exist — pages read scorecards.)
-    ("atlas.atlas_etf_scorecard", "atlas_etf_scorecard", [["snapshot_date"], ["instrument_id"], ["ticker"]]),
-    ("atlas.atlas_fund_scorecard", "atlas_fund_scorecard", [["snapshot_date"], ["scheme_code"]]),
-    ("atlas.atlas_fund_states_daily", "atlas_fund_states_daily", [["date"], ["mstar_id"]]),
-    ("atlas.atlas_fund_metrics_daily", "atlas_fund_metrics_daily", [["date"], ["mstar_id"]]),
-    ("atlas.atlas_etf_signal_calls", "atlas_etf_signal_calls", [["call_date"]]),
-    # Universe master tables — single-schema enrichment for the board surfaces:
-    # fund AUM + scheme_name (held-by panel, /funds), ETF ticker/name (/etfs).
-    # aum_cr is stored in ₹ LAKH (see funds_holding_stock.ts). Mirror so the board
-    # never reaches back into atlas.* for names/AUM.
-    ("atlas.atlas_universe_funds", "atlas_universe_funds", [["mstar_id"]]),
+    # Sector roll-up + regime detail the board reads (M3-derived). Published into the schema.
+    # (atlas_universe_stocks is NOT mirrored — those joins reuse instrument_master.)
+    ("atlas.atlas_sector_states_daily", "atlas_sector_states_daily", [["date"]]),
+    ("atlas.atlas_sector_metrics_daily", "atlas_sector_metrics_daily", [["date"]]),
+    # Stocks + ETF board pages (stocks-landscape / stock-detail-extra / stock-trader-header /
+    # etfs / sector_breadth) — publish their derived tables so the whole board reads fs only.
+    ("atlas.mv_stock_landscape", "mv_stock_landscape", []),
+    ("atlas.mv_stock_landscape_trader", "mv_stock_landscape_trader", []),
+    ("atlas.atlas_scorecard_daily", "atlas_scorecard_daily", [["instrument_id"]]),
+    ("atlas.atlas_stock_metrics_daily", "atlas_stock_metrics_daily", [["instrument_id", "date"]]),
+    ("atlas.atlas_etf_metrics_daily", "atlas_etf_metrics_daily", [["instrument_id", "date"]]),
+    ("atlas.mv_etf_list_v6", "mv_etf_list_v6", []),
+    ("atlas.mv_etf_deepdive", "mv_etf_deepdive", []),
+    # RETIRED methodology — NOT mirrored (board no longer reads them; tables dropped):
+    #   M5: atlas_signal_calls, atlas_stock_conviction_daily, atlas_etf_signal_calls
+    #   M4: atlas_fund_scorecard, atlas_fund_states_daily, atlas_fund_metrics_daily,
+    #       atlas_etf_scorecard  (funds/ETFs run on the clean fund_lens/etf_lens roll-ups)
+    # ETF universe — still mirrored from atlas (ETF ingestion not yet repointed).
+    # atlas_universe_funds is NOT here: it is Atlas-owned (ingest_fund_master.py refreshes
+    # AUM in TRUE ₹ crore + category in place). Mirroring it would clobber the fresh AUM.
     ("atlas.atlas_universe_etfs", "atlas_universe_etfs", [["ticker"]]),
 ]
 JOURNAL_SRC = "atlas.atlas_lens_scores_daily"

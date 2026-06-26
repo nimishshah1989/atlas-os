@@ -1,6 +1,6 @@
 // frontend/src/lib/queries/v6/recent_signal_calls.ts
 //
-// Query: individual signal_call events from atlas.atlas_signal_calls.
+// Query: individual signal_call events from foundation_staging.atlas_signal_calls.
 // Three public functions:
 //   getRecentSignalCalls  → today-page "recent activity" feed
 //   getSignalCallsByIid   → stock-detail audit trail
@@ -100,8 +100,8 @@ export async function getRecentSignalCalls(
       sc.date::text AS entry_date, NULL::text AS entry_price,
       sc.confidence_unconditional::text, sc.predicted_excess::text,
       sc.exit_date::text, (sc.exit_date IS NULL) AS is_active
-    FROM atlas.atlas_signal_calls sc
-    LEFT JOIN atlas.atlas_universe_stocks us ON us.instrument_id = sc.instrument_id
+    FROM foundation_staging.atlas_signal_calls sc
+    LEFT JOIN foundation_staging.instrument_master us ON us.instrument_id = sc.instrument_id
     WHERE sc.date >= CURRENT_DATE - (${days} || ' days')::interval
     ORDER BY sc.date DESC, sc.computed_at DESC
     LIMIT ${limit}
@@ -126,8 +126,8 @@ export async function getSignalCallsByIid(
       sc.date::text AS entry_date, NULL::text AS entry_price,
       sc.confidence_unconditional::text, sc.predicted_excess::text,
       sc.exit_date::text, (sc.exit_date IS NULL) AS is_active
-    FROM atlas.atlas_signal_calls sc
-    LEFT JOIN atlas.atlas_universe_stocks us ON us.instrument_id = sc.instrument_id
+    FROM foundation_staging.atlas_signal_calls sc
+    LEFT JOIN foundation_staging.instrument_master us ON us.instrument_id = sc.instrument_id
     WHERE sc.instrument_id = ${iid}::uuid
     ORDER BY sc.date DESC, sc.computed_at DESC
     LIMIT ${limit}
@@ -152,8 +152,8 @@ export async function getSignalCallsByCell(
       sc.date::text AS entry_date, NULL::text AS entry_price,
       sc.confidence_unconditional::text, sc.predicted_excess::text,
       sc.exit_date::text, (sc.exit_date IS NULL) AS is_active
-    FROM atlas.atlas_signal_calls sc
-    LEFT JOIN atlas.atlas_universe_stocks us ON us.instrument_id = sc.instrument_id
+    FROM foundation_staging.atlas_signal_calls sc
+    LEFT JOIN foundation_staging.instrument_master us ON us.instrument_id = sc.instrument_id
     WHERE sc.cell_id = ${cell_id}::uuid
     ORDER BY sc.date DESC, sc.computed_at DESC
     LIMIT ${limit}

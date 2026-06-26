@@ -238,33 +238,9 @@ export async function getSectorCards(): Promise<SectorCardRow[]> {
     ORDER BY rs_3m DESC NULLS LAST
   `
 
-  // mv_sector_cards.buy_signal_count counts signals TRIGGERED on T-0 only,
-  // so it almost always shows 0. Overlay live counts of OPEN BUY signals
-  // (exit_date IS NULL) grouped by sector — that's what the UI implies.
-  const liveCounts = await sql<Array<{
-    sector_name: string
-    n_open: number
-    conf_h: number
-    conf_m: number
-    conf_l: number
-  }>>`
-    SELECT
-      u.sector AS sector_name,
-      COUNT(sc.signal_call_id)::int AS n_open,
-      COUNT(CASE WHEN sc.confidence_unconditional >= 0.70 THEN 1 END)::int AS conf_h,
-      COUNT(CASE WHEN sc.confidence_unconditional >= 0.50
-                  AND sc.confidence_unconditional <  0.70 THEN 1 END)::int AS conf_m,
-      COUNT(CASE WHEN sc.confidence_unconditional <  0.50 THEN 1 END)::int AS conf_l
-    FROM atlas.atlas_signal_calls sc
-    JOIN atlas.atlas_universe_stocks u
-      ON u.instrument_id = sc.instrument_id
-     AND u.effective_to IS NULL
-    WHERE sc.action = 'POSITIVE'
-      AND sc.exit_date IS NULL
-    GROUP BY u.sector
-  `
-  const liveBySector = new Map(liveCounts.map(r => [r.sector_name, r]))
-
+  // The live open-BUY-signal overlay (M5 atlas_signal_calls) was retired in the
+  // single-schema consolidation — the simplified product drops the conviction-call
+  // methodology. Sector cards now use only the base roll-up counts/distribution.
   return rows.map((r) => ({
     as_of_date: r.as_of_date,
     sector_name: r.sector_name,
@@ -282,14 +258,8 @@ export async function getSectorCards(): Promise<SectorCardRow[]> {
     pct_above_ema200: toNumber(r.pct_above_ema200),
     pct_at_52wh: toNumber(r.pct_at_52wh),
     hhi_concentration: toNumber(r.hhi_concentration),
-    buy_signal_count: liveBySector.get(r.sector_name)?.n_open ?? r.buy_signal_count,
-    confidence_distribution: liveBySector.has(r.sector_name)
-      ? {
-          H: liveBySector.get(r.sector_name)!.conf_h,
-          M: liveBySector.get(r.sector_name)!.conf_m,
-          L: liveBySector.get(r.sector_name)!.conf_l,
-        }
-      : r.confidence_distribution,
+    buy_signal_count: r.buy_signal_count,
+    confidence_distribution: r.confidence_distribution,
     verdict: r.verdict,
     verdict_abbr: r.verdict_abbr,
   }))
@@ -488,8 +458,8 @@ export async function getSectorsForDate(snapshotDate: string): Promise<ScreenSec
       m.bottomup_rs_3m_nifty500::text AS bottomup_rs_3m_nifty500,
       m.participation_50::text       AS participation_50,
       m.constituent_count
-    FROM atlas.atlas_sector_states_daily s
-    LEFT JOIN atlas.atlas_sector_metrics_daily m
+    FROM foundation_staging.atlas_sector_states_daily s
+    LEFT JOIN foundation_staging.atlas_sector_metrics_daily m
       ON m.sector_name = s.sector_name
      AND m.date        = s.date
     WHERE s.date = ${snapshotDate}

@@ -96,7 +96,10 @@ function RsStateBadge({ state }: { state: string | null }) {
 
 // ── Sort types ────────────────────────────────────────────────────────────────
 
-type SortKey = 'composite' | 'ret_1m' | 'ret_3m' | 'rs_3m'
+// Action / composite-score / confidence columns removed (FM 2026-06-26): they came from
+// the separate atlas conviction model, not the six-lens decile system, and read as an
+// unexplained black box. The table now shows only fresh, explainable return + RS data.
+type SortKey = 'ret_1m' | 'ret_3m' | 'rs_3m'
 
 // Shared <th> style — tokenised header chrome.
 const thStyle: React.CSSProperties = {
@@ -115,7 +118,7 @@ const thStyle: React.CSSProperties = {
 
 export function ConstituentsTable({ constituents }: { constituents: ConstituentRow[] }) {
   const router = useRouter()
-  const [sortKey, setSortKey] = useState<SortKey>('composite')
+  const [sortKey, setSortKey] = useState<SortKey>('ret_3m')
   const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc')
 
   if (constituents.length === 0) {
@@ -136,7 +139,6 @@ export function ConstituentsTable({ constituents }: { constituents: ConstituentR
   }
 
   const getVal = (r: ConstituentRow): number => {
-    if (sortKey === 'composite') return r.composite_score ?? -Infinity
     if (sortKey === 'ret_1m') return r.ret_1m ?? -Infinity
     if (sortKey === 'ret_3m') return r.ret_3m ?? -Infinity
     if (sortKey === 'rs_3m') return r.rs_3m_nifty500_pp ?? -Infinity
@@ -198,13 +200,6 @@ export function ConstituentsTable({ constituents }: { constituents: ConstituentR
               <span style={{ display: 'block', fontSize: 8, color: 'var(--color-txt-3)', fontFamily: 'var(--font-num), monospace', letterSpacing: '0.04em', textTransform: 'none', marginTop: 2, fontWeight: 400 }}>abs</span>
             </th>
             <SortTh label="RS 3M" skey="rs_3m" unit="vs N500" />
-            <th style={{ ...thStyle, textAlign: 'center' }}>
-              Conf
-            </th>
-            <th style={{ ...thStyle, textAlign: 'center' }}>
-              Action
-            </th>
-            <SortTh label="Score" skey="composite" unit="composite" />
           </tr>
         </thead>
         <tbody>
@@ -213,9 +208,6 @@ export function ConstituentsTable({ constituents }: { constituents: ConstituentR
             const r3m = fmtPct(c.ret_3m)
             const r1w = fmtPct(c.ret_1w)
             const rs3m = fmtPp(c.rs_3m_nifty500_pp)
-            const score = c.composite_score != null
-              ? { text: `${c.composite_score >= 0 ? '+' : ''}${c.composite_score.toFixed(1)}`, cls: c.composite_score >= 0 ? 'text-sig-pos' : 'text-sig-neg' }
-              : { text: '—', cls: 'text-txt-3' }
 
             return (
               <tr
@@ -256,15 +248,6 @@ export function ConstituentsTable({ constituents }: { constituents: ConstituentR
                 </td>
                 <td style={{ padding: '7px 8px', textAlign: 'center', fontFamily: 'var(--font-num), monospace', fontVariantNumeric: 'tabular-nums', fontSize: '11.5px', color: numColor(rs3m.cls) }}>
                   {rs3m.text}
-                </td>
-                <td style={{ padding: '7px 8px', textAlign: 'center' }}>
-                  <ConfPip band={c.confidence_band} />
-                </td>
-                <td style={{ padding: '7px 8px', textAlign: 'center' }}>
-                  <ActionChip action={c.action} />
-                </td>
-                <td style={{ padding: '7px 8px', textAlign: 'center', fontFamily: 'var(--font-num), monospace', fontVariantNumeric: 'tabular-nums', fontSize: '11.5px', color: numColor(score.cls), fontWeight: 600 }}>
-                  {score.text}
                 </td>
               </tr>
             )

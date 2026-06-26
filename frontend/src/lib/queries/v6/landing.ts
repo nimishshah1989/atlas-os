@@ -69,7 +69,7 @@ export async function getRegimeJourney12w(): Promise<WeeklyRegimeCell[]> {
       india_vix::text                             AS india_vix,
       mcclellan_oscillator::text                  AS mcclellan_oscillator,
       nifty500_ema_50_slope::text                 AS nifty500_ema_50_slope
-    FROM atlas.atlas_market_regime_daily
+    FROM foundation_staging.atlas_market_regime_daily
     WHERE date >= CURRENT_DATE - INTERVAL '84 days'
     ORDER BY date ASC
   `
@@ -226,6 +226,14 @@ type RawFundRow = {
  * Row counts are small (<100 per tab) — in-process processing is fine.
  */
 export async function getTopConvictionCalls(): Promise<ConvictionCallsResult> {
+  // The conviction-call methodology (M5 signal_calls + M4 fund scorecard) was retired in the
+  // single-schema consolidation — the simplified product drops IC/conviction/decision scoring.
+  // Returns empty so this panel carries NO dependency on the removed atlas.* tables. The view
+  // itself is rebuilt separately from the clean six-lens roll-ups.
+  return { stocks: [], stocks_new_count: 0, etfs: [], etfs_new_count: 0, funds: [], funds_new_count: 0 }
+}
+
+async function _getTopConvictionCalls_retired(): Promise<ConvictionCallsResult> {
   const today = new Date().toISOString().slice(0, 10)
 
   const [stockRows, etfRows, fundRows] = await Promise.all([
@@ -233,7 +241,7 @@ export async function getTopConvictionCalls(): Promise<ConvictionCallsResult> {
     sql<RawStockCallRow[]>`
       SELECT
         u.symbol,
-        u.company_name,
+        u.name AS company_name,
         u.sector,
         sc.cap_tier_at_trigger::text                  AS cap_tier,
         sc.tenure::text                               AS tenure,
@@ -243,7 +251,7 @@ export async function getTopConvictionCalls(): Promise<ConvictionCallsResult> {
         sc.date::text                                 AS entry_date,
         (
           SELECT COALESCE(o.close_adj, o.close)::text
-          FROM public.de_equity_ohlcv o
+          FROM foundation_staging.ohlcv_stock o
           WHERE o.instrument_id = sc.instrument_id
             AND o.date::date >= sc.date::date
           ORDER BY o.date ASC
@@ -251,13 +259,13 @@ export async function getTopConvictionCalls(): Promise<ConvictionCallsResult> {
         )                                             AS entry_close,
         (
           SELECT COALESCE(o.close_adj, o.close)::text
-          FROM public.de_equity_ohlcv o
+          FROM foundation_staging.ohlcv_stock o
           WHERE o.instrument_id = sc.instrument_id
           ORDER BY o.date DESC
           LIMIT 1
         )                                             AS current_close
-      FROM atlas.atlas_signal_calls sc
-      LEFT JOIN atlas.atlas_universe_stocks u
+      FROM foundation_staging.atlas_signal_calls sc
+      LEFT JOIN foundation_staging.instrument_master u
              ON u.instrument_id = sc.instrument_id
       WHERE sc.exit_date IS NULL
       ORDER BY sc.confidence_unconditional DESC NULLS LAST

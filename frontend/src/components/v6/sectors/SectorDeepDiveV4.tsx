@@ -84,15 +84,10 @@ export async function SectorDeepDiveV4({ sector }: { sector: string }) {
       {fundamentals && <SectorFundamentalsTable data={fundamentals} />}
       {fundflow && <SectorFundFlowTable data={fundflow} />}
 
-      {/* Instrument drill — kept */}
-      {deepdive.top_picks_top10.length > 0 && (
-        <section className="px-8 py-9 border-b border-edge-hair" aria-label="Top picks">
-          <SectionHead title="Top picks" subtitle="Highest-composite constituents in the sector." />
-          <Suspense fallback={<Skeleton h={160} />}><TopPicksPanel picks={deepdive.top_picks_top10} /></Suspense>
-        </section>
-      )}
+      {/* Top-picks table removed (FM 2026-06-26) — redundant with the full constituents
+          table below; that table already surfaces the strongest names by return/RS. */}
       <section className="px-8 py-9 border-b border-edge-hair" aria-label="Constituents">
-        <SectionHead title="Constituents · top 30" subtitle="Stocks ranked by composite. Click headers to re-sort." />
+        <SectionHead title="Constituents · top 30" subtitle="The sector's stocks, ranked by 3-month return. Click any header to re-sort." />
         <Suspense fallback={<Skeleton h={400} />}><ConstituentsTable constituents={deepdive.constituents_top30} /></Suspense>
       </section>
       <section className="px-8 py-9 border-b border-edge-hair" aria-label="Strength distribution">
