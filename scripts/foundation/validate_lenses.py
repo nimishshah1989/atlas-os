@@ -19,10 +19,14 @@ import sys
 
 import _db
 
-L = "atlas.atlas_lens_scores_daily"
+# Single read schema: validate exactly what the platform serves (foundation_staging).
+L = "foundation_staging.atlas_lens_scores_daily"
 SEC = "atlas.atlas_sector_lens_daily"
 IM = "foundation_staging.instrument_master"
 FILINGS = "foundation_staging.lens_filings"
+# Coverage universe = Atlas's active set (NIFTY 500 = 498, FM 2026-06-25). Completeness
+# is measured against the universe we actually score, not every kite_token instrument.
+ACTIVE = f"{IM} where asset_class='stock' and kite_token is not null and is_active"
 LENSES = ["technical", "fundamental", "valuation", "catalyst", "flow", "policy"]
 
 
@@ -45,20 +49,25 @@ class Gate:
 # ─────────────────────────── LOOP A ───────────────────────────
 def check_A(g: Gate):
     print("== Loop A gate: instrument-level completeness + correctness ==")
-    n_uni = _q(f"select count(*) from {IM} where asset_class='stock' and kite_token is not null")
+    n_uni = _q(f"select count(*) from {ACTIVE}")
     mx = _q(f"select max(date) from {L} where asset_class='stock'")
     g.check("latest date exists", mx is not None, str(mx))
 
-    # 1. FULL universe scored (≥95% of the ~2000 stock universe), not 750
+    # 1. FULL coverage universe scored (≥95% of the active NIFTY 500), not 750
     n_scored = _q(f"select count(distinct instrument_id) from {L} where asset_class='stock' and date=:d", {"d": mx})
     g.check("universe coverage ≥95%", n_scored >= 0.95 * n_uni, f"{n_scored}/{n_uni} stocks scored")
 
-    # 2. CATALYST is grounded: names with ≥50 filings must mostly score >0 (the bug)
+    # 2. CATALYST is grounded: filing-rich names IN COVERAGE (≥50 filings) must mostly
+    #    score >0 — the original bug was catalyst=0 for names with hundreds of filings.
     rich = _q(f"""
-        with f as (select instrument_id, count(*) c from {FILINGS} group by 1 having count(*) >= 50)
+        with f as (select instrument_id, count(*) c from {FILINGS}
+                   where instrument_id in (select instrument_id from {ACTIVE})
+                   group by 1 having count(*) >= 50)
         select count(*) from f""")
     rich_pos = _q(f"""
-        with f as (select instrument_id, count(*) c from {FILINGS} group by 1 having count(*) >= 50)
+        with f as (select instrument_id, count(*) c from {FILINGS}
+                   where instrument_id in (select instrument_id from {ACTIVE})
+                   group by 1 having count(*) >= 50)
         select count(*) from f join {L} l on l.instrument_id=f.instrument_id and l.date=:d
         where l.catalyst > 0""", {"d": mx})
     frac = (rich_pos / rich) if rich else 0

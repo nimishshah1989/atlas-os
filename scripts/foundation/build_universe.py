@@ -69,12 +69,23 @@ def build() -> dict:
     de = _db.read_df("select id, symbol from public.de_instrument")
     de_id = {str(r.symbol).strip(): str(r.id) for r in de.itertuples()}
 
+    # Coverage universe = NIFTY 500. is_active for a stock means "in Atlas coverage",
+    # NOT "tradeable on NSE" (tradeability is preserved in public.de_instrument). The
+    # FM-decided universe (2026-06-25) is the Nifty 500; restricting is_active to it is
+    # what scopes the data-integrity gate's "every active stock has a sector" /
+    # "≤21 canonical sectors" checks to the board universe instead of the full ~2,375.
+    n500 = _db.read_df(
+        "select instrument_id from public.de_index_constituents "
+        "where index_code = 'NIFTY 500' and effective_to is null")
+    n500_ids = {str(x).strip() for x in n500["instrument_id"]}
+
     rows = []
     # stocks
     for r in eq.itertuples():
         iid = de_id.get(r.symbol) or uuid_for("stock", r.symbol)
         rows.append((iid, "stock", r.symbol, r.name, r.isin, r.series,
-                     r.listing_date, cash_tok.get(r.symbol), "NSE", True, "NSE_EQUITY_L"))
+                     r.listing_date, cash_tok.get(r.symbol), "NSE", iid in n500_ids,
+                     "NSE_EQUITY_L"))
     # etfs — cash instruments not in EQUITY_L whose symbol/name looks like an ETF.
     # Exclude indicative-NAV feed instruments (…INAV / "NAV"): not tradeable.
     for sym, tok in cash_tok.items():

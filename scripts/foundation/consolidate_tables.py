@@ -33,6 +33,7 @@ MIRRORS = [
     ("public.de_trading_calendar", "de_trading_calendar", []),
     ("atlas.atlas_thresholds", "atlas_thresholds", []),
     ("atlas.atlas_sector_master", "atlas_sector_master", []),
+    ("atlas.policy_registry", "policy_registry", []),                              # Policy alert layer (D3)
     ("atlas.atlas_signal_weights", "atlas_signal_weights", []),
     ("atlas.atlas_signal_ic", "atlas_signal_ic", []),
     ("atlas.atlas_market_regime_daily", "atlas_market_regime_daily", [["date"]]),  # Page-1 regime state
@@ -43,6 +44,20 @@ MIRRORS = [
     ("atlas.mv_sector_deepdive", "mv_sector_deepdive", [["sector_name"]]),         # Page-C deep-dive
     ("atlas.atlas_index_metrics_daily", "atlas_index_metrics_daily", [["date"]]),  # Page-B sector index RS
     ("atlas.mv_markets_rs_grid", "mv_markets_rs_grid", []),                        # Page-B global RS grid
+    # ETF + Fund scorecards — single-schema: the /etfs + /funds pages + landing
+    # conviction tabs read these directly; mirror so the whole platform reads ONE
+    # schema (foundation_staging). (mv_*_v6 do not exist — pages read scorecards.)
+    ("atlas.atlas_etf_scorecard", "atlas_etf_scorecard", [["snapshot_date"], ["instrument_id"], ["ticker"]]),
+    ("atlas.atlas_fund_scorecard", "atlas_fund_scorecard", [["snapshot_date"], ["scheme_code"]]),
+    ("atlas.atlas_fund_states_daily", "atlas_fund_states_daily", [["date"], ["mstar_id"]]),
+    ("atlas.atlas_fund_metrics_daily", "atlas_fund_metrics_daily", [["date"], ["mstar_id"]]),
+    ("atlas.atlas_etf_signal_calls", "atlas_etf_signal_calls", [["call_date"]]),
+    # Universe master tables — single-schema enrichment for the board surfaces:
+    # fund AUM + scheme_name (held-by panel, /funds), ETF ticker/name (/etfs).
+    # aum_cr is stored in ₹ LAKH (see funds_holding_stock.ts). Mirror so the board
+    # never reaches back into atlas.* for names/AUM.
+    ("atlas.atlas_universe_funds", "atlas_universe_funds", [["mstar_id"]]),
+    ("atlas.atlas_universe_etfs", "atlas_universe_etfs", [["ticker"]]),
 ]
 JOURNAL_SRC = "atlas.atlas_lens_scores_daily"
 JOURNAL_FS = "atlas_lens_scores_daily"
@@ -72,10 +87,24 @@ def _copy_mirror(src: str, fs_name: str, indexes: list[list[str]]) -> None:
     print(f"  {fs_name:24s} {_rows(tgt):>9d} rows  (src {_rows(src):>9d})  {time.time()-t0:5.1f}s")
 
 
+def _sync_journal_latest(tgt: str) -> None:
+    """Single-schema publish: copy the freshly-scored latest date from the atlas
+    compute layer into the served foundation_staging journal, so the platform's one
+    read schema stays current every run without rebuilding the whole 3.9M-row table.
+    Idempotent (delete-then-insert that date)."""
+    latest = _db.scalar(f"SELECT max(date) FROM {JOURNAL_SRC}")
+    if latest is None:
+        return
+    _db.exec_sql(f"DELETE FROM {tgt} WHERE date = :d", {"d": latest})
+    _db.exec_sql(f"INSERT INTO {tgt} SELECT * FROM {JOURNAL_SRC} WHERE date = :d", {"d": latest})
+    n = int(_db.scalar(f"SELECT count(*) FROM {tgt} WHERE date = :d", {"d": latest}) or 0)
+    print(f"  {JOURNAL_FS:24s} synced latest date {latest} ({n} rows) from {JOURNAL_SRC}")
+
+
 def _copy_journal(force: bool) -> None:
     tgt = f"{FS}.{JOURNAL_FS}"
     if _exists(JOURNAL_FS) and not force:
-        print(f"  {JOURNAL_FS:24s} EXISTS ({_rows(tgt)} rows) — skipped (canonical; --force-journal to rebuild)")
+        _sync_journal_latest(tgt)
         return
     t0 = time.time()
     _db.exec_sql(f"DROP TABLE IF EXISTS {tgt} CASCADE")

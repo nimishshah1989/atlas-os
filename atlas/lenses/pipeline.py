@@ -202,6 +202,9 @@ def score_all(
     insider_by_iid = _group_by_iid(flow_data["insider"])
     sh_by_iid = _group_by_iid(flow_data["shareholding"], sort_col="period_end")
     bulk_by_iid = _group_by_iid(flow_data["bulk_deals"])
+    mf_df = flow_data.get("mf")
+    mf_delta_by_iid = (dict(zip(mf_df["instrument_id"], mf_df["mf_mom_delta"]))
+                       if mf_df is not None and not mf_df.empty else {})
 
     sector_of = (dict(zip(sectors_df["instrument_id"], sectors_df["sector"]))
                  if "sector" in sectors_df.columns else {})
@@ -244,13 +247,16 @@ def score_all(
                 debt_to_equity=_to_float(f.get("debt_to_equity")),
                 current_ratio=_to_float(f.get("current_ratio")), quick_ratio=_to_float(f.get("quick_ratio")),
                 revenue_ttm=_to_float(f.get("revenue_ttm")), eps_diluted_ttm=_to_float(f.get("eps_diluted_ttm")),
+                roce=_to_float(f.get("roce")),
                 thresholds=th,
             ) if f is not None else None
 
             # Valuation (PIT: PE = close ÷ TTM EPS; as-of cross-sectional sector median;
-            # pb/ev have no unit-safe as-of source -> None).
+            # P/B + EV/EBITDA from Screener's ready ratios snapshot — FM D1).
             val_result = score_valuation(
-                pe_ttm=pe_by_iid.get(iid), pb_fbs=None, ev_ebitda=None,
+                pe_ttm=pe_by_iid.get(iid),
+                pb_fbs=_to_float(f.get("scr_pb")) if f is not None else None,
+                ev_ebitda=_to_float(f.get("scr_ev_ebitda")) if f is not None else None,
                 price=_to_float(t.get("close_raw")),
                 pos_52w=_to_float(t.get("pos_52w")), ema_200=_to_float(t.get("ema_200")),
                 sector_median_pe=sector_median.get(sector_of.get(iid)), thresholds=th,
@@ -276,9 +282,11 @@ def score_all(
                     "delivery_trend": _to_float(t.get("delivery_trend")),
                     "delivery_updown_asym": _to_float(t.get("delivery_updown_asym")),
                 }
+            mf_delta = _to_float(mf_delta_by_iid.get(iid))
             flow_result = score_flow(
-                insider_txns, sh_current, sh_previous, bulk_deals, th, delivery=delivery,
-            ) if (insider_txns or sh_current or bulk_deals or delivery) else None
+                insider_txns, sh_current, sh_previous, bulk_deals, th,
+                delivery=delivery, mf_delta=mf_delta,
+            ) if (insider_txns or sh_current or bulk_deals or delivery or mf_delta is not None) else None
 
             pol_result = score_policy(row.get("sector"), row.get("industry"), policies, th)
 
@@ -360,7 +368,21 @@ def _build_result(
         "valuation_multiplier": _dec_or_none(vr.multiplier) if vr else 1.0,
         "smart_money_score": sm, "degradation_score": _dec_or_none(risk_result.degradation_score),
         "risk_flags": json.dumps(list(risk_result.flags)),
-        "evidence": json.dumps(comp_result.evidence),
+        # Persist the per-lens sub-component evidence alongside the composite evidence so
+        # the glass-box frontend can show every sub-score's RAW INPUT (e.g. roe/roce for
+        # profitability, mf_mom_delta for institutional) + the rule it hit — not just the
+        # points. Single-schema: the raw inputs travel with the scores in the journal.
+        "evidence": json.dumps({
+            **comp_result.evidence,
+            "lenses": {
+                "technical": getattr(tr, "evidence", None),
+                "fundamental": getattr(fr, "evidence", None),
+                "valuation": getattr(vr, "evidence", None),
+                "catalyst": getattr(cr, "evidence", None),
+                "flow": getattr(flr, "evidence", None),
+                "policy": getattr(pr, "evidence", None),
+            },
+        }, default=str),
         "lenses_active": comp_result.lenses_active,
         "coverage_factor": _dec_or_none(comp_result.coverage_factor),
         "compute_run_id": run_id, "computed_at": datetime.now(_IST),

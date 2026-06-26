@@ -155,10 +155,25 @@ def _score_institutional(
     sh_previous: dict[str, Any] | None,
     bulk_deals: list[dict[str, Any]],
     thresholds: dict[str, Any],
+    mf_delta: float | None = None,
 ) -> tuple[float, dict[str, Any]]:
-    """Return (raw -10 to +15, evidence dict) for smart-money subcomponent."""
+    """Return (raw -10 to +15, evidence dict) for smart-money subcomponent.
+
+    Primary real signal = the matched-fund mutual-fund MoM weight delta (mf_delta,
+    in percentage points; see load_mf_flow). It is continuous, so the institutional
+    sub-score becomes a real distribution instead of the old ~8 discrete buckets.
+    Bulk-deal + shareholding-QoQ signals add on top. mf_delta None ⇒ no MF data for
+    this name ⇒ contributes nothing (genuine neutral, never a stub).
+    """
     total = 0.0
     signals: list[str] = []
+
+    # Mutual-fund matched accumulation/distribution (continuous, the main signal).
+    if mf_delta is not None:
+        scale = float(thresholds.get("flow_mf_scale", 1.0))
+        mf_pts = _clamp(mf_delta * scale, -10.0, 12.0)
+        total += mf_pts
+        signals.append(f"mf_mom_delta={round(mf_delta, 2)}pp")
 
     # Superstar / institutional bulk-deal signals
     for deal in bulk_deals:
@@ -296,6 +311,7 @@ def score_flow(
     bulk_deals: list[dict[str, Any]],
     thresholds: dict[str, Any],
     delivery: dict[str, Any] | None = None,
+    mf_delta: float | None = None,
 ) -> FlowResult:
     """Score flow signals into a 0-100 composite.
 
@@ -306,10 +322,11 @@ def score_flow(
     """
     has_insiders = bool(insider_transactions)
     has_sh = shareholding_current is not None or bool(bulk_deals)
+    has_mf = mf_delta is not None
     accum_raw, accum_ev = _score_accumulation(delivery, thresholds)
     has_accum = accum_raw is not None
 
-    if not has_insiders and not has_sh and not has_accum:
+    if not has_insiders and not has_sh and not has_accum and not has_mf:
         return FlowResult(
             promoter=None,
             institutional=None,
@@ -323,6 +340,7 @@ def score_flow(
     # bulk-deal data (else promoter defaults to 0 and smart to neutral 50, which would
     # wrongly dilute a delivery-only name). Accumulation rides on top when present.
     base_present = has_insiders or has_sh
+    has_inst = base_present or has_mf  # smart-money present via bulk/SH OR mutual-fund flow
     w_promo = float(thresholds.get("flow_w_promoter", 0.70))
     w_sm = float(thresholds.get("flow_w_smart_money", 0.30))
     w_accum = float(thresholds.get("flow_w_accumulation", 0.25))
@@ -333,12 +351,14 @@ def score_flow(
     if base_present:
         promo_raw, promo_ev = _score_promoter(
             insider_transactions or [], shareholding_current, thresholds)
+        parts.append((promo_raw, w_promo))
+    if has_inst:
         sm_raw, sm_ev = _score_institutional(
-            shareholding_current, shareholding_previous, bulk_deals or [], thresholds)
+            shareholding_current, shareholding_previous, bulk_deals or [], thresholds,
+            mf_delta=mf_delta)
         # Rescale smart money [-10, +15] -> [0, 100], centered so 0 -> 50
         sm_scaled = (50.0 + (sm_raw / 15.0) * 50.0 if sm_raw >= 0
                      else 50.0 + (sm_raw / 10.0) * 50.0)
-        parts.append((promo_raw, w_promo))
         parts.append((sm_scaled, w_sm))
     if has_accum:
         parts.append((accum_raw, w_accum))

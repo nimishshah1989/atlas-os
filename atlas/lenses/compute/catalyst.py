@@ -57,6 +57,17 @@ _TIER_A: dict[str, list[tuple[list[str], int]]] = {
         (["litigation"], -3),
         (["adverse"], -5),
     ],
+    # Order-book momentum — real NSE "Bagging/Awarding of orders/contracts" filings
+    # (the thesis for infra/capital-goods/defence/PSU names: L&T, RVNL, BEL, BHEL,
+    # KEC, NCC…). Previously these landed in category='other' → governance LOW (+3
+    # noise); now first-class in the high-weight earnings bucket. Subject keywords are
+    # ranked: an explicit award/LoA outranks a generic "received an order".
+    "order_win": [
+        (["awarding", "awarded", "letter of award", "loa", "work order"], 12),
+        (["bagging", "bagged", "secures", "secured", "wins order", "won order"], 11),
+        (["receiving of order", "order win", "order received", "order book"], 10),
+        ([], 8),  # any order/contract win filing routed here
+    ],
     "buyback": [
         ([], 10),  # any buyback filing
     ],
@@ -84,6 +95,7 @@ _FALLBACK_SCORES: dict[str, int] = {
     "buyback": 10,
     "bonus_split": 3,
     "esop": 2,
+    "order_win": 8,
 }
 
 # Map lens_filings.category values → _TIER_A keys (use before _infer_category)
@@ -123,6 +135,7 @@ _BUCKET_MAP: dict[str, str] = {
     "buyback": "capital_action",
     "bonus_split": "capital_action",
     "esop": "governance",
+    "order_win": "earnings_strategy",  # business momentum → highest-weight bucket
 }
 
 
@@ -147,6 +160,26 @@ def _recency_multiplier(filing_date: date, as_of: date, thresholds: dict[str, An
     if days <= t3:
         return 0.5
     return 0.3
+
+
+def _is_order_win(subject: str) -> bool:
+    """True iff the filing is a genuine business order/contract WIN — not a
+    regulatory 'order' (SEBI 'Action(s) taken or orders passed', 'orders
+    initiated'). The real NSE subjects are 'Bagging/Receiving of orders/contracts'
+    and 'Awarding of order(s)/contract(s)'. Require an explicit win verb, or both
+    'order' and 'contract' present, while excluding regulatory/legal phrasing."""
+    s = subject.lower()
+    if any(bad in s for bad in ("orders passed", "order passed", "orders initiated",
+                                "action(s) taken", "action taken", "penalty", "adjudicat",
+                                "show cause", "sebi", "tribunal", "court")):
+        return False
+    if any(win in s for win in ("bagging", "bagged", "awarding of order", "awarded",
+                                "letter of award", "work order", "receiving of order",
+                                "secures order", "secured order", "wins order", "won order",
+                                "order win", "order received", "order book")):
+        return True
+    # 'order(s)/contract(s)' co-occurrence is the canonical NSE order-win subject
+    return ("order" in s and "contract" in s)
 
 
 def _match_keywords(text: str, keywords: list[str]) -> bool:
@@ -238,8 +271,11 @@ def score_catalyst(
         subject = f.get("subject_text") or ""
         category = _CATEGORY_MAP.get(raw_cat)
         if category is None:
-            bucket_raw = (f.get("category_bucket") or "").lower()
-            category = _infer_category(bucket_raw, subject)
+            if _is_order_win(subject):
+                category = "order_win"
+            else:
+                bucket_raw = (f.get("category_bucket") or "").lower()
+                category = _infer_category(bucket_raw, subject)
         raw = _score_filing(category, subject)
         if raw == 0:
             continue

@@ -45,14 +45,17 @@ D = Decimal  # shorthand inside scorers
 
 
 def _score_pe_vs_sector(pe: D, sector_med: D) -> D:
+    """Cheaper-than-sector scores higher. Continuous linear ramp on the real
+    discount ratio r = pe / sector_median: 25 at r→0 down to 0 at r≥1.5. Continuous
+    (FM D2 allowed) so the genuine PE-discount granularity is preserved — a real
+    cross-sectional distribution, not 5 coarse buckets. RULE #0: pe and sector_med
+    are both real as-of values (close÷TTM-EPS, cross-sectional sector median)."""
     if pe <= 0 or sector_med <= 0:
         return D(0)
     r = pe / sector_med
-    if r < D("0.5"):   return D(25)
-    if r < D("0.75"):  return D(18)
-    if r < D("1.0"):   return D(12)
-    if r < D("1.5"):   return D(6)
-    return D(0)
+    if r >= D("1.5"):
+        return D(0)
+    return ((D("1.5") - r) / D("1.5") * D(25)).quantize(D("0.01"))
 
 
 def _score_absolute_pe(pe: D) -> D:

@@ -65,6 +65,10 @@ def is_trading_day(engine: Engine, d: date) -> bool:
 # the IC step; defaulted here so the rebuild needs no DB write.
 REPORTING_LAG_Q = 60   # quarterly income statement
 REPORTING_LAG_A = 90   # annual balance sheet (filed later than quarterlies)
+# Screener ready-ratio snapshot validity: overlay only lens dates within this many
+# days of the snapshot (PIT guard for historical re-scoring — older dates use the
+# ROE derived from Screener's historical financials instead).
+SCREENER_SNAPSHOT_WINDOW = 75
 
 
 def load_technical_data(engine: Engine, as_of: date) -> pd.DataFrame:
@@ -152,7 +156,49 @@ def load_fundamental_data(
     with open_compute_session(engine) as conn:
         qdf = pd.read_sql(q_sql, conn, params={"cut": as_of - timedelta(days=lag_q)})
         adf = pd.read_sql(a_sql, conn, params={"cut": as_of - timedelta(days=lag_a)})
-    return _fundamental_rows(qdf, adf)
+        # Screener ready-ratios are a CURRENT snapshot (one as_of), so they may only
+        # overlay lens dates within the snapshot's validity window — stamping today's
+        # ROE on a 2020 score would be non-PIT. Historical backfill dates fall outside
+        # the window and keep their PIT-derived ROE (from Screener historical financials).
+        snap = conn.execute(text(
+            "SELECT max(as_of) FROM foundation_staging.screener_ratios")).scalar()
+        sr = None
+        if snap is not None and as_of >= snap - timedelta(days=SCREENER_SNAPSHOT_WINDOW):
+            sr = pd.read_sql(text(
+                "SELECT instrument_id, roe AS scr_roe, roce AS scr_roce, pb AS scr_pb, "
+                "ev_ebitda AS scr_ev_ebitda, stock_pe AS scr_pe "
+                "FROM foundation_staging.screener_ratios"), conn)
+    return _merge_screener_ratios(_fundamental_rows(qdf, adf), sr)
+
+
+def _merge_screener_ratios(fdf: pd.DataFrame, sr: pd.DataFrame) -> pd.DataFrame:
+    """Overlay Screener's ready ratios (FM decision D1) onto the derived frame.
+
+    RULE #0: Screener ROE (a sane, ready value) REPLACES the XBRL-derived ROE whose
+    near-zero/negative-equity denominators produced the −3,754%…+1,598% tails; ROCE,
+    P/B, EV/EBITDA and Screener P/E are added for the profitability + valuation lenses.
+    LEFT join — an instrument with no Screener snapshot keeps its derived values and
+    gets None for the Screener-only fields (never imputed).
+    """
+    if fdf is None or fdf.empty:
+        return fdf
+    if "roce" not in fdf.columns:
+        fdf["roce"] = None
+    for c in ("scr_pb", "scr_ev_ebitda", "scr_pe"):
+        fdf[c] = None
+    if sr is None or sr.empty:
+        return fdf
+    fdf = fdf.copy()
+    fdf["_k"] = fdf["instrument_id"].astype(str)
+    sr = sr.copy()
+    sr["_k"] = sr["instrument_id"].astype(str)
+    sr = sr.drop(columns=["instrument_id"])
+    m = fdf.drop(columns=["roce", "scr_pb", "scr_ev_ebitda", "scr_pe"]).merge(
+        sr, on="_k", how="left").drop(columns=["_k"])
+    # Screener ROE wins where present; else keep the derived ROE.
+    m["roe"] = m["scr_roe"].where(m["scr_roe"].notna(), m["roe"])
+    m["roce"] = m["scr_roce"]
+    return m
 
 
 def load_catalyst_data(
@@ -242,7 +288,52 @@ def load_flow_data(
                 ORDER BY instrument_id, deal_date DESC
             """), conn)
 
-    return {"insider": insider, "shareholding": shareholding, "bulk_deals": bulk_deals}
+    mf = load_mf_flow(engine, as_of)
+    return {"insider": insider, "shareholding": shareholding,
+            "bulk_deals": bulk_deals, "mf": mf}
+
+
+def load_mf_flow(engine: Engine, as_of: date | None = None) -> pd.DataFrame:
+    """Mutual-fund month-on-month institutional flow per instrument (real signal).
+
+    de_mf_holdings carries monthly snapshots of every fund's weight_pct in each
+    stock. A naive Σ(weight_pct) MoM delta is biased by how many funds reported
+    that month (e.g. 2026-04-06 reported 550 funds vs 2026-05-04's 1,306). So we
+    use a MATCHED-FUND delta: over only the funds present in BOTH the latest two
+    well-covered snapshots (≥800 funds, ≤ as_of), Σ(weight_now − weight_prev). This
+    isolates genuine accumulation/distribution by the same funds and is centred at
+    ~0 (no fund-count artifact). RULE #0: a stock with no MF holding gets no row →
+    the flow scorer treats it as genuine neutral, never a stub.
+    """
+    ceil = as_of or datetime.now(_IST).date()
+    with open_compute_session(engine) as conn:
+        # Pick the latest two real monthly snapshots ≤ as_of. The fund-coverage floor
+        # only excludes junk partial snapshots (e.g. 2026-01-31 had 1 fund); real
+        # snapshots carry ~550-1,300 funds. The matched-fund INNER JOIN below compares
+        # only funds present in BOTH, so an uneven fund count between the two months
+        # introduces no bias.
+        snaps = pd.read_sql(text("""
+            SELECT as_of_date FROM foundation_staging.de_mf_holdings
+            WHERE as_of_date <= :ceil
+            GROUP BY as_of_date HAVING count(DISTINCT mstar_id) >= 400
+            ORDER BY as_of_date DESC LIMIT 2
+        """), conn, params={"ceil": ceil})
+        if len(snaps) < 2:
+            return pd.DataFrame(columns=["instrument_id", "mf_mom_delta", "mf_matched_funds"])
+        cur_d, prv_d = snaps["as_of_date"].iloc[0], snaps["as_of_date"].iloc[1]
+        mf = pd.read_sql(text("""
+            WITH cur AS (SELECT instrument_id, mstar_id, weight_pct
+                         FROM foundation_staging.de_mf_holdings WHERE as_of_date = :cur),
+                 prv AS (SELECT instrument_id, mstar_id, weight_pct
+                         FROM foundation_staging.de_mf_holdings WHERE as_of_date = :prv)
+            SELECT c.instrument_id,
+                   sum(c.weight_pct - p.weight_pct) AS mf_mom_delta,
+                   count(*) AS mf_matched_funds
+            FROM cur c JOIN prv p
+              ON p.instrument_id = c.instrument_id AND p.mstar_id = c.mstar_id
+            GROUP BY c.instrument_id
+        """), conn, params={"cur": cur_d, "prv": prv_d})
+    return mf
 
 
 def load_policy_registry(engine: Engine) -> list[dict[str, Any]]:
@@ -264,12 +355,16 @@ def load_instrument_sectors(engine: Engine) -> pd.DataFrame:
     Sector/industry come from atlas_universe_stocks (left join), so instruments
     not yet in the curated universe still get scored but with NULL sector.
     """
+    # Bound to the Atlas coverage universe (is_active = NIFTY 500, FM 2026-06-25).
+    # This is the durable single-universe fix: the lens journal equals exactly the
+    # 498 scored names, instead of every kite_token instrument (the old 2,093).
     sql = text("""
         SELECT im.instrument_id, im.symbol, u.sector, u.industry
         FROM foundation_staging.instrument_master im
         LEFT JOIN atlas.atlas_universe_stocks u
             ON u.instrument_id = im.instrument_id AND u.effective_to IS NULL
         WHERE im.asset_class = 'stock' AND im.kite_token IS NOT NULL
+          AND im.is_active
     """)
     with open_compute_session(engine) as conn:
         return pd.read_sql(sql, conn)

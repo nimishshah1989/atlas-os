@@ -44,22 +44,53 @@ def _t(th: dict[str, Any], key: str, default: float) -> float:
 
 
 def _profitability(
-    roe: Decimal | None, roic: Decimal | None, th: dict[str, Any],
+    roe: Decimal | None, roce: Decimal | None, net_margin: Decimal | None,
+    th: dict[str, Any],
 ) -> tuple[Decimal | None, dict[str, Any]]:
-    if roe is None:
-        return None, {"reason": "roe missing"}
-    if roe >= _t(th, "prof_roe_high", 20):
-        base = 20
-    elif roe >= _t(th, "prof_roe_good", 15):
-        base = 16
-    elif roe >= _t(th, "prof_roe_ok", 12):
-        base = 12
-    elif roe >= _t(th, "prof_roe_low", 8):
-        base = 8
-    else:
-        base = 4
-    bonus = 2 if (roic is not None and roic > _t(th, "prof_roic_bonus", 15)) else 0
-    return _D(_cap(base + bonus)), {"roe": str(roe), "roic_bonus": bonus}
+    """Profitability sub-score (0-20) COMPOSED from real Screener ROE + ROCE +
+    net-margin step rules. Composition of multiple real signals (not a single
+    bucket) is what makes this a genuine cross-sectional distribution instead of a
+    5-value placeholder — every term is a legible step ("ROE 18% ≥ 15% → 9"), plus
+    a small continuous quality premium proportional to the actual ROE so two names
+    in the same bucket still separate by real signal (RULE #0: all inputs real,
+    none imputed). roic param retired (cash-less ROIC dropped; FM chose ROCE)."""
+    if roe is None and roce is None:
+        return None, {"reason": "roe and roce both missing"}
+    pts, ev = 0.0, {}
+    if roe is not None:
+        if roe >= _t(th, "prof_roe_high", 20):
+            r = 11.0
+        elif roe >= _t(th, "prof_roe_good", 15):
+            r = 9.0
+        elif roe >= _t(th, "prof_roe_ok", 12):
+            r = 7.0
+        elif roe >= _t(th, "prof_roe_low", 8):
+            r = 4.0
+        else:
+            r = 2.0
+        # continuous quality premium (0..+1): real ROE granularity, not bucket-widening
+        r += min(max(float(roe), 0.0) / 100.0, 1.0)
+        pts += r
+        ev["roe"] = str(roe)
+    if roce is not None:
+        if roce >= _t(th, "prof_roce_high", 20):
+            pts += 7
+        elif roce >= _t(th, "prof_roce_good", 15):
+            pts += 5
+        elif roce >= _t(th, "prof_roce_ok", 12):
+            pts += 3
+        elif roce >= _t(th, "prof_roce_low", 8):
+            pts += 2
+        else:
+            pts += 1
+        ev["roce"] = str(roce)
+    if net_margin is not None:
+        if net_margin >= _t(th, "prof_nm_high", 15):
+            pts += 2
+        elif net_margin >= _t(th, "prof_nm_ok", 8):
+            pts += 1
+        ev["net_margin"] = str(net_margin)
+    return _D(str(min(round(pts, 2), 20.0))), ev
 
 
 def _margin(
@@ -197,20 +228,22 @@ def score_fundamental(
     quick_ratio: float | None,
     revenue_ttm: float | None, eps_diluted_ttm: float | None,
     thresholds: dict[str, Any],
+    roce: float | None = None,
 ) -> FundamentalResult:
     """Score a stock on the Fundamental lens (0-100).
 
-    All numeric inputs are raw floats from tv_metrics; *thresholds* supplies
+    Profitability inputs (roe, roce) are Screener's ready ratios (FM D1); margins/
+    growth/balance-sheet from the as-of XBRL+Screener frame. *thresholds* supplies
     tunables (missing keys fall back to coded defaults).
     """
     th = thresholds or {}
-    d_roe, d_roic = _d(roe), _d(roic)
+    d_roe, d_roce = _d(roe), _d(roce)
     d_op, d_net = _d(operating_margin), _d(net_margin)
     d_rev_g, d_eps_g = _d(revenue_growth_yoy), _d(eps_growth_yoy)
     d_de, d_cr, d_qr = _d(debt_to_equity), _d(current_ratio), _d(quick_ratio)
 
     evidence: dict[str, Any] = {}
-    prof, evidence["profitability"] = _profitability(d_roe, d_roic, th)
+    prof, evidence["profitability"] = _profitability(d_roe, d_roce, d_net, th)
     mar, evidence["margin"] = _margin(d_op, d_net, th)
     gro, evidence["growth"] = _growth(d_rev_g, d_eps_g, th)
     bs, evidence["balance_sheet"] = _balance_sheet(d_de, d_cr, d_qr, th)

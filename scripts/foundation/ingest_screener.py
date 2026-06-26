@@ -117,6 +117,46 @@ def _detect_basis(html: str) -> bool:
     return False  # 'Standalone Figures' or single-basis 'Figures in Rs'
 
 
+# ── top-ratios panel (P/E, Book Value, ROE, ROCE, Market Cap, …) ──
+# These are Screener.in's READY, point-in-time market ratios (the panel at the top
+# of every company page). FM decision D1 (2026-06-25): ingest these ready ratios
+# rather than derive — one consistent real source for the valuation + profitability
+# lens inputs. RULE #0: every value parsed verbatim from the page; absent ⇒ None.
+_RATIO_LABELS = {
+    "Market Cap": "market_cap", "Current Price": "current_price",
+    "Stock P/E": "stock_pe", "Book Value": "book_value",
+    "ROCE": "roce", "ROE": "roe", "Dividend Yield": "div_yield",
+    "Face Value": "face_value", "Debt to equity": "debt_to_equity",
+    "EV/EBITDA": "ev_ebitda", "EV / EBITDA": "ev_ebitda",
+}
+
+
+def _top_ratios(html: str) -> dict:
+    """Parse the #top-ratios <ul> into {field: float}. First .number per <li>
+    (so 'High / Low' with two numbers contributes only its first, which we ignore).
+    """
+    m = re.search(r'<ul id="top-ratios">(.*?)</ul>', html, re.DOTALL)
+    if not m:
+        return {}
+    out: dict = {}
+    for li in re.findall(r"<li[^>]*>(.*?)</li>", m.group(1), re.DOTALL):
+        nm = re.search(r'<span class="name">(.*?)</span>', li, re.DOTALL)
+        if not nm:
+            continue
+        label = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", nm.group(1))).strip()
+        field = _RATIO_LABELS.get(label)
+        if not field:
+            continue
+        num = re.search(r'<span class="number">(.*?)</span>', li, re.DOTALL)
+        if num:
+            out[field] = _f(num.group(1))
+    # Derived: P/B = price ÷ book value (both real ready scalars). EV/EBITDA stays
+    # whatever the panel exposed (None if absent — display-only, valuation 0% weight).
+    px, bv = out.get("current_price"), out.get("book_value")
+    out["pb"] = round(px / bv, 4) if (px and bv and bv != 0) else None
+    return out
+
+
 # ── fetch ──
 _SESSION = None
 
@@ -162,6 +202,20 @@ def ddl() -> None:
     create table if not exists {M}.screener_state (
         instrument_id uuid primary key, symbol text not null, status text not null,
         quarters integer, annuals integer, note text,
+        updated_at timestamptz not null default now()
+    );""")
+    # One-row-per-instrument snapshot of Screener's ready market ratios. Justified
+    # standalone table (not sprawl): single small (~498-row) PIT snapshot the lens
+    # adapter LEFT JOINs by instrument_id; nothing else fits its shape (these are
+    # market-ratios, not period-end fundamentals, so they don't belong on the
+    # quarterly/annual rows). Source-stamped for the frontend's Screener.in chip.
+    _db.exec_script(f"""
+    create table if not exists {M}.screener_ratios (
+        instrument_id uuid primary key, symbol text not null,
+        stock_pe numeric, pb numeric, ev_ebitda numeric, roe numeric, roce numeric,
+        market_cap numeric, book_value numeric, current_price numeric,
+        div_yield numeric, debt_to_equity numeric,
+        as_of date not null, source text not null default 'SCREENER',
         updated_at timestamptz not null default now()
     );""")
 
@@ -236,10 +290,26 @@ def _existing_periods(iid, table, consol) -> set:
     return {r.period_end for r in df.itertuples()}
 
 
+def _store_ratios(iid: str, symbol: str, html: str) -> bool:
+    """Parse + upsert the Screener top-ratios snapshot. Returns True if any captured."""
+    r = _top_ratios(html)
+    if not any(r.get(k) is not None for k in ("stock_pe", "roe", "roce", "pb", "book_value")):
+        return False
+    row = {"instrument_id": iid, "symbol": symbol,
+           "stock_pe": r.get("stock_pe"), "pb": r.get("pb"), "ev_ebitda": r.get("ev_ebitda"),
+           "roe": r.get("roe"), "roce": r.get("roce"), "market_cap": r.get("market_cap"),
+           "book_value": r.get("book_value"), "current_price": r.get("current_price"),
+           "div_yield": r.get("div_yield"), "debt_to_equity": r.get("debt_to_equity"),
+           "as_of": date.today(), "source": "SCREENER"}
+    _db.upsert_df(f"{M}.screener_ratios", pd.DataFrame([row]), ["instrument_id"])
+    return True
+
+
 def ingest_symbol(iid: str, symbol: str) -> tuple[int, int, str]:
     html, consol = fetch(symbol)
     if not html:
         return 0, 0, "fetch_failed"
+    _store_ratios(iid, symbol, html)
     rows = _section_rows(html, "quarters", _PL_ROW_MAP, "quarterly") + \
         _section_rows(html, "profit-loss", _PL_ROW_MAP, "annual") + \
         _section_rows(html, "balance-sheet", _BS_ROW_MAP, "annual")
