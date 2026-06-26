@@ -9,6 +9,13 @@ import { getFundLensList, type FundLensRow } from '@/lib/queries/v6/fund_lens'
 import { FundLensTable } from './FundLensTable'
 import { Panel } from '@/components/v4/ui/Panel'
 import { StatCard, type Tone } from '@/components/v4/ui/StatCard'
+import { LensBubbleChart, type BubblePoint } from '@/components/v4/ui/LensBubbleChart'
+
+// Mean of the present holdings-weighted lens scores (0–100), or null if none scored.
+function avgFundLens(f: FundLensRow): number | null {
+  const v = [f.v_tech, f.v_fund, f.v_cat, f.v_flow, f.v_val].filter((x): x is number => x != null)
+  return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null
+}
 
 const LENS_LABEL: { key: keyof Pick<FundLensRow, 'v_tech' | 'v_fund' | 'v_cat' | 'v_flow' | 'v_val'>; label: string }[] = [
   { key: 'v_tech', label: 'Technical' },
@@ -62,6 +69,26 @@ export async function FundsPageV4() {
   // top-breadth funds for the cards (rows already arrive ranked by breadth desc).
   const top = funds.filter(f => f.breadth != null).slice(0, 6)
 
+  // Bubble landscape: x = leadership-breadth %, y = avg holdings-weighted lens score,
+  // size = #holdings (diversification), tone by breadth. Real values only.
+  const bubbles: BubblePoint[] = funds
+    .map((f) => {
+      const al = avgFundLens(f)
+      if (f.breadth == null || al == null) return null
+      const br = f.breadth * 100
+      return {
+        id: f.mstar_id,
+        label: f.name,
+        x: br,
+        y: al,
+        size: f.n_holdings || 1,
+        tone: br >= 50 ? 'pos' : br >= 20 ? 'neutral' : 'neg',
+        href: `/funds/${f.mstar_id}`,
+        sub: `${f.category ?? '—'} · ${f.n_holdings} holdings · ${f.n_leaders} leaders`,
+      } as BubblePoint
+    })
+    .filter((p): p is BubblePoint => p != null)
+
   const strip: { label: string; value: string; tone: Tone; sub: string }[] = [
     { label: 'Equity funds', value: String(universeCount), tone: 'neutral', sub: 'Regular Growth · holdings-weighted roll-up' },
     { label: 'Breadth ≥ 20%', value: String(withBreadth), tone: 'pos', sub: '≥20% of weight leads ≥2 lenses' },
@@ -109,6 +136,25 @@ export async function FundsPageV4() {
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
             {top.map(f => <TopCard key={f.mstar_id} f={f} />)}
           </div>
+        </Panel>
+      )}
+
+      {/* Bubble landscape — leadership-breadth vs lens score, sized by holdings */}
+      {bubbles.length > 0 && (
+        <Panel
+          eyebrow="Landscape"
+          title="Leadership-breadth vs lens score"
+          info={{ body: 'Each bubble is a fund: x = leadership-breadth (share of weight that are leaders), y = average holdings-weighted lens score, size = number of holdings. Top-right = broad leadership. Hover for detail, click to open.' }}
+          bodyClassName="px-2 py-2"
+        >
+          <LensBubbleChart
+            points={bubbles}
+            xLabel="Leadership-breadth (%)"
+            yLabel="Avg lens score (0–100)"
+            sizeLabel="# holdings"
+            xFmt={(v) => `${v.toFixed(0)}%`}
+            yFmt={(v) => v.toFixed(0)}
+          />
         </Panel>
       )}
 

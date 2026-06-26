@@ -9,6 +9,16 @@ import { getEtfLensList, type EtfLensRow } from '@/lib/queries/v6/etf_lens'
 import { EtfLensTable } from './EtfLensTable'
 import { Panel } from '@/components/v4/ui/Panel'
 import { StatCard, type Tone } from '@/components/v4/ui/StatCard'
+import { LensBubbleChart, type BubblePoint } from '@/components/v4/ui/LensBubbleChart'
+
+const cleanEtfCat = (c: string | null): string =>
+  (c ?? '—').replace(/^India\s+Fund\s*[-–—]?\s*/i, '').trim() || (c ?? '—')
+
+// Mean of the present holdings-weighted lens scores (0–100), or null if none scored.
+function avgLens(e: EtfLensRow): number | null {
+  const v = [e.v_tech, e.v_fund, e.v_cat, e.v_flow, e.v_val].filter((x): x is number => x != null)
+  return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null
+}
 
 const LENS_LABEL: { key: keyof Pick<EtfLensRow, 'v_tech' | 'v_fund' | 'v_cat' | 'v_flow' | 'v_val'>; label: string }[] = [
   { key: 'v_tech', label: 'Technical' },
@@ -65,6 +75,26 @@ export async function ETFsPageV4() {
   // top-breadth ETFs for the cards (rows already arrive ranked by breadth desc).
   const top = etfs.filter(e => e.breadth != null).slice(0, 6)
 
+  // Bubble landscape: x = leadership-breadth %, y = avg holdings-weighted lens score,
+  // size = #holdings (diversification), tone by breadth. Real values only.
+  const bubbles: BubblePoint[] = etfs
+    .map((e) => {
+      const al = avgLens(e)
+      if (e.breadth == null || al == null) return null
+      const br = e.breadth * 100
+      return {
+        id: e.fcode,
+        label: e.name,
+        x: br,
+        y: al,
+        size: e.n_holdings || 1,
+        tone: br >= 50 ? 'pos' : br >= 20 ? 'neutral' : 'neg',
+        href: `/etfs/${e.fcode}`,
+        sub: `${cleanEtfCat(e.category)} · ${e.n_holdings} holdings · ${e.n_leaders} leaders`,
+      } as BubblePoint
+    })
+    .filter((p): p is BubblePoint => p != null)
+
   const strip: { label: string; value: string; sub: string; tone: Tone }[] = [
     { label: 'NSE equity ETFs', value: String(universeCount), tone: 'neutral',
       sub: 'Holdings-weighted lens roll-up' },
@@ -111,6 +141,25 @@ export async function ETFsPageV4() {
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
             {top.map(e => <TopCard key={e.fcode} e={e} />)}
           </div>
+        </Panel>
+      )}
+
+      {/* Bubble landscape — leadership-breadth vs lens score, sized by holdings */}
+      {bubbles.length > 0 && (
+        <Panel
+          eyebrow="Landscape"
+          title="Leadership-breadth vs lens score"
+          info={{ body: 'Each bubble is an ETF: x = leadership-breadth (share of weight that are leaders), y = average holdings-weighted lens score, size = number of holdings. Top-right = broad leadership. Hover for detail, click to open.' }}
+          bodyClassName="px-2 py-2"
+        >
+          <LensBubbleChart
+            points={bubbles}
+            xLabel="Leadership-breadth (%)"
+            yLabel="Avg lens score (0–100)"
+            sizeLabel="# holdings"
+            xFmt={(v) => `${v.toFixed(0)}%`}
+            yFmt={(v) => v.toFixed(0)}
+          />
         </Panel>
       )}
 

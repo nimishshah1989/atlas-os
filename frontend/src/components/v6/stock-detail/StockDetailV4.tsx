@@ -10,8 +10,10 @@ import { getStockDecile, getStockRSMatrix, getStockChartSeries, getStockEvidence
 import { getFundsHoldingStock } from '@/lib/queries/v6/funds_holding_stock'
 import { getEtfsHoldingStock } from '@/lib/queries/v6/etfs_holding_stock'
 import { getPolicyAlertsForStock } from '@/lib/queries/v6/policy_alerts'
+import { getSectorCards } from '@/lib/queries/v6/sectors'
 import { HeldByPanel } from './HeldByPanel'
 import { PolicyAlertPanel } from './PolicyAlertPanel'
+import { OwnSectorStrip } from './OwnSectorStrip'
 import { StockFundamentalsTable } from './StockFundamentalsTable'
 import { StockAnnouncementsPanel } from './StockAnnouncementsPanel'
 import { StockRSMatrix } from './StockRSMatrix'
@@ -45,7 +47,7 @@ export async function StockDetailV4({ symbol }: { symbol: string }) {
   if (!stock) notFound()
 
   // Batch 2 — chart series + the REAL numbers (evidence), 8-quarter financials, announcements.
-  const [chartRows, evidence, fundamentals, announcements, fundsHolding, etfsHolding, policyAlerts] = await Promise.all([
+  const [chartRows, evidence, fundamentals, announcements, fundsHolding, etfsHolding, policyAlerts, sectorCards] = await Promise.all([
     cached(() => getStockChartSeries(symbol, 5), `chart:${symbol}`).catch(() => []),
     cached(() => getStockEvidence(symbol), `ev:${symbol}`).catch(() => null),
     cached(() => getStockFundamentals(symbol), `fnd:${symbol}`).catch(() => []),
@@ -53,7 +55,12 @@ export async function StockDetailV4({ symbol }: { symbol: string }) {
     cached(() => getFundsHoldingStock(stock.instrument_id), `fh:${stock.instrument_id}`).catch(() => []),
     cached(() => getEtfsHoldingStock(stock.instrument_id), `eh:${stock.instrument_id}`).catch(() => []),
     cached(() => getPolicyAlertsForStock(stock.sector ?? null), `pol:${stock.sector ?? 'none'}`).catch(() => []),
+    cached(() => getSectorCards(), 'sectorcards').catch(() => []),
   ])
+  // Own-sector index — the stock's own sector card (fresh mv_sector_cards), for context.
+  const sectorCard = (stock.sector
+    ? sectorCards.find((c) => c.sector_name === stock.sector)
+    : null) ?? null
 
   const capLabel = decile?.cap ? (CAP_LABEL[decile.cap] ?? decile.cap) : null
   const sector = stock.sector ?? decile?.sector ?? null
@@ -115,6 +122,9 @@ export async function StockDetailV4({ symbol }: { symbol: string }) {
           </div>
         </section>
       )}
+
+      {/* ── Own-sector index (context) ── */}
+      <OwnSectorStrip card={sectorCard} symbol={stock.symbol} />
 
       {/* ── Six-lens DecileLadder (centerpiece) ── */}
       <section className={SECTION}>
