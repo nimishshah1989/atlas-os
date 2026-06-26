@@ -43,8 +43,6 @@ dependencies = [
     # Serving (FastAPI thin layer per architecture 10.1; UI is Streamlit)
     "fastapi>=0.110",
     "uvicorn[standard]>=0.27",
-    # OpenBB BYO Copilot SSE streaming (SP03)
-    "sse-starlette>=2.0",
 
     # External data sources used during M0 gap-fill / M1 reference checks
     "yfinance>=0.2",

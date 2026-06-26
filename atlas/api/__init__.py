@@ -18,7 +18,6 @@ from atlas.api.instrument import router as instrument_router
 from atlas.api.intraday import router as intraday_router
 from atlas.api.kite_auth import router as kite_auth_router
 from atlas.api.market import router as market_router
-from atlas.api.openbb.router import openbb_router
 from atlas.api.portfolios import router as portfolios_router
 from atlas.api.portfolios import rule_based_router
 from atlas.api.rank import router as rank_router
@@ -59,7 +58,6 @@ app.include_router(cts_sectors_router)  # SP09 Phase 2: sector CTS snapshot — 
 app.include_router(tv_signals_router)  # SP10: TV webhook receiver + signal report feed
 app.include_router(trading_router)  # Strategy Lab — /api/trading/*
 app.include_router(fund_decisions_router)  # MF holdings decision history
-app.include_router(openbb_router)  # SP03: OpenBB BYO Copilot — /v1/agents.json + /v1/query
 # v6 /v1 endpoints — screen.*, market.regime, cell.definitions, instrument/{iid}, rank.*
 app.include_router(screen_router)
 app.include_router(market_router)
