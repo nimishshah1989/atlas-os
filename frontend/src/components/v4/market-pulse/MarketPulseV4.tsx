@@ -9,7 +9,7 @@ import { getTierReturns, getIndexStrip } from '@/lib/queries/v6/market_pulse'
 import { getStocksDecileList } from '@/lib/queries/v6/stock_lens'
 import { StatCard, type Tone } from '../ui/StatCard'
 import { Panel } from '../ui/Panel'
-import { RegimeChip, BreadthTablePanel, TierReturnsPanel, SectorLeadershipPanel, type SectorRollup, type BreadthCountRow } from './MarketPulsePanels'
+import { RegimeChip, BreadthTablePanel, TierReturnsPanel, SectorLeadershipPanel, type SectorRollup, type StockLensRow, type BreadthCountRow } from './MarketPulsePanels'
 import { IndexStrip } from './IndexStrip'
 import { MarketPulseBreadthCharts } from './MarketPulseBreadthCharts'
 
@@ -50,6 +50,7 @@ export async function MarketPulseV4() {
   // it sits in the top three deciles of its cap cohort (D≥8). Split into 5 strongest / weakest.
   const LEAD_D = 8
   const bySector = new Map<string, { sum: number; n: number; tech: number; fund: number }>()
+  const stocksBySector: Record<string, StockLensRow[]> = {}
   for (const r of stocksList) {
     if (!r.sector || r.strength == null) continue
     const e = bySector.get(r.sector) ?? { sum: 0, n: 0, tech: 0, fund: 0 }
@@ -58,6 +59,11 @@ export async function MarketPulseV4() {
     if ((r.d_tech ?? 0) >= LEAD_D) e.tech += 1
     if ((r.d_fund ?? 0) >= LEAD_D) e.fund += 1
     bySector.set(r.sector, e)
+    ;(stocksBySector[r.sector] ??= []).push({
+      symbol: r.symbol, name: r.name,
+      d_tech: r.d_tech, d_fund: r.d_fund, d_cat: r.d_cat, d_flow: r.d_flow, d_val: r.d_val,
+      lead: r.lead, strength: r.strength,
+    })
   }
   const sectors: SectorRollup[] = [...bySector.entries()]
     .filter(([, e]) => e.n >= 5)
@@ -119,7 +125,7 @@ export async function MarketPulseV4() {
 
         {/* sector leadership — concise leading / lagging split */}
         {sectors.length > 0 && (
-          <div className="mb-6"><SectorLeadershipPanel top={topSectors} weak={weakSectors} /></div>
+          <div className="mb-6"><SectorLeadershipPanel top={topSectors} weak={weakSectors} stocksBySector={stocksBySector} /></div>
         )}
 
         {/* breadth (absolute counts) + cap-tier returns */}

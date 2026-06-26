@@ -2,10 +2,9 @@
 // leadership, regime chip). All values arrive pre-fetched from foundation_staging;
 // these only format + lay out. Units per the market_pulse recon: tier returns &
 // spreads are FRACTIONS (×100 for display); macro values are already in `unit`.
-import Link from 'next/link'
 import type { TierReturns, MacroRow } from '@/lib/queries/v6/market_pulse'
 import { Panel } from '../ui/Panel'
-import { DecileMeter } from '../ui/DecileMeter'
+import { SectorLeadershipBoard } from './SectorLeadershipBoard'
 
 // ── formatting ───────────────────────────────────────────────────────────────
 const signed = (n: number, d: number) => `${n >= 0 ? '+' : ''}${n.toFixed(d)}`
@@ -159,44 +158,24 @@ export function MacroPanel({ rows, asOf }: { rows: MacroRow[]; asOf: string | nu
 }
 
 // ── sector leadership — concise Leading / Lagging split (top 5 vs bottom 5), each sector
-// scored by its stocks' average conviction with the technical/fundamental leader counts that
-// explain WHY it's there. Server-rendered; rows click through to the sector page. ──────────
-export type SectorRollup = { name: string; avg: number; n: number; techLeaders: number; fundLeaders: number }
-function SectorMiniRow({ s }: { s: SectorRollup }) {
-  const tone = s.avg >= 6 ? 'var(--color-sig-pos)' : s.avg < 4 ? 'var(--color-sig-neg)' : 'var(--color-txt-1)'
-  return (
-    <Link href={`/sectors/${encodeURIComponent(s.name)}`} className="-mx-2 block rounded-tile px-2 py-1.5 transition-colors hover:bg-surface-raised">
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="truncate font-sans text-[12.5px] font-medium text-txt-1">{s.name}</span>
-        <span className="shrink-0 font-num text-[12px] tabular-nums" style={{ color: tone }}>{s.avg.toFixed(1)}<span className="text-[10px] text-txt-3">/10</span></span>
-      </div>
-      <div className="mt-1 flex items-center gap-2">
-        <DecileMeter decile={Math.round(s.avg)} size="sm" />
-        <span className="shrink-0 font-num text-[10px] tabular-nums text-txt-3">{s.techLeaders} tech · {s.fundLeaders} fund · of {s.n}</span>
-      </div>
-    </Link>
-  )
-}
-export function SectorLeadershipPanel({ top, weak }: { top: SectorRollup[]; weak: SectorRollup[] }) {
+// EXPANDABLE into the breakdown behind its score: a stocks × lens table. The interactive
+// board (client) handles expand; this panel supplies framing + the always-on explainer. ──
+export type { SectorRollup, StockLensRow } from './SectorLeadershipBoard'
+export function SectorLeadershipPanel({ top, weak, stocksBySector }: {
+  top: SectorRollup[]
+  weak: SectorRollup[]
+  stocksBySector: Record<string, StockLensRow[]>
+}) {
   return (
     <Panel
       eyebrow="Rotation"
       title="Sector leadership"
-      info={{ title: 'How to read this', body: <>Each sector is scored by the <strong>average conviction decile</strong> of its stocks — where each stock sits from 1 (bottom) to 10 (top) versus peers of its own size. <strong>Tech</strong> counts names with leading price action (top three deciles); <strong>fund</strong> counts names with leading financials — so you can see why a sector leads. Click any sector to drill in.</>}}
+      info={{ title: 'How to read this', body: <>Each sector is scored by the <strong>average conviction decile</strong> of its stocks — where each stock sits from 1 (bottom) to 10 (top) versus peers of its own size. <strong>Tech</strong> counts names with leading price action (top three deciles); <strong>fund</strong> counts names with leading financials. <strong>Click any sector to expand it</strong> into a table of its stocks scored across every lens.</>}}
     >
       <p className="mb-2.5 font-sans text-[11.5px] leading-snug text-txt-2">
-        The 5 strongest and 5 weakest sectors by their stocks’ average conviction (1–10). The small line shows how many names lead on <span className="text-txt-1">price (tech)</span> vs <span className="text-txt-1">fundamentals (fund)</span>.
+        The 5 strongest and 5 weakest sectors by their stocks’ average conviction (1–10). <span className="text-txt-1">Click a sector</span> to expand its stocks scored across all five lenses.
       </p>
-      <div className="grid grid-cols-1 gap-x-8 gap-y-1 sm:grid-cols-2">
-        <div>
-          <p className="mb-1.5 font-num text-[9px] uppercase tracking-[0.14em] text-sig-pos">Leading</p>
-          {top.map((s) => <SectorMiniRow key={s.name} s={s} />)}
-        </div>
-        <div>
-          <p className="mb-1.5 font-num text-[9px] uppercase tracking-[0.14em] text-sig-neg">Lagging</p>
-          {weak.map((s) => <SectorMiniRow key={s.name} s={s} />)}
-        </div>
-      </div>
+      <SectorLeadershipBoard top={top} weak={weak} stocksBySector={stocksBySector} />
     </Panel>
   )
 }
