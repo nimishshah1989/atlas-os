@@ -91,7 +91,11 @@ def _score_promoter(
         holding_base = 3.0
 
     if not transactions:
-        return _clamp(holding_base, 0, 100), {"reason": "shareholding level only", "promoter_pct": promo_pct, "base": holding_base}
+        return _clamp(holding_base, 0, 100), {
+            "reason": "shareholding level only",
+            "promoter_pct": promo_pct,
+            "base": holding_base,
+        }
 
     type_totals: dict[str, float] = {}
     buy_count = 0
@@ -238,7 +242,8 @@ def _score_institutional(
 
 
 def _score_accumulation(
-    delivery: dict[str, Any] | None, thresholds: dict[str, Any],
+    delivery: dict[str, Any] | None,
+    thresholds: dict[str, Any],
 ) -> tuple[float | None, dict[str, Any]]:
     """Delivery-% accumulation sub-score (0-100), or None below the liquidity floor.
 
@@ -350,15 +355,19 @@ def score_flow(
     promo_ev = sm_ev = {"reason": "no base flow data"}
     if base_present:
         promo_raw, promo_ev = _score_promoter(
-            insider_transactions or [], shareholding_current, thresholds)
+            insider_transactions or [], shareholding_current, thresholds
+        )
         parts.append((promo_raw, w_promo))
     if has_inst:
         sm_raw, sm_ev = _score_institutional(
-            shareholding_current, shareholding_previous, bulk_deals or [], thresholds,
-            mf_delta=mf_delta)
+            shareholding_current,
+            shareholding_previous,
+            bulk_deals or [],
+            thresholds,
+            mf_delta=mf_delta,
+        )
         # Rescale smart money [-10, +15] -> [0, 100], centered so 0 -> 50
-        sm_scaled = (50.0 + (sm_raw / 15.0) * 50.0 if sm_raw >= 0
-                     else 50.0 + (sm_raw / 10.0) * 50.0)
+        sm_scaled = 50.0 + (sm_raw / 15.0) * 50.0 if sm_raw >= 0 else 50.0 + (sm_raw / 10.0) * 50.0
         parts.append((sm_scaled, w_sm))
     if has_accum:
         parts.append((accum_raw, w_accum))
@@ -378,8 +387,10 @@ def score_flow(
             "promoter": promo_ev,
             "smart_money": sm_ev,
             "accumulation": accum_ev,
-            "weights": {"promoter": w_promo if base_present else 0.0,
-                        "smart_money": w_sm if base_present else 0.0,
-                        "accumulation": w_accum if has_accum else 0.0},
+            "weights": {
+                "promoter": w_promo if base_present else 0.0,
+                "smart_money": w_sm if base_present else 0.0,
+                "accumulation": w_accum if has_accum else 0.0,
+            },
         },
     )

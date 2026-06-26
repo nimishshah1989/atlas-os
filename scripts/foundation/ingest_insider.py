@@ -6,34 +6,44 @@ Resumable via lens_insider_state; safe to kill/restart.
 
 Run: python ingest_insider.py [--limit N] [--redo]
 """
+
 from __future__ import annotations
 
 import argparse
 import datetime as dt
 import time
 
+import _db
 import pandas as pd
 import requests
-
-import _db
 from harness import STAGING_SCHEMA
 
 M = STAGING_SCHEMA
-_H = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/118.0",
-      "Accept": "application/json, text/plain, */*",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Referer": "https://www.nseindia.com/companies-listing/corporate-filings-insider-trading"}
+_H = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/118.0",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.nseindia.com/companies-listing/corporate-filings-insider-trading",
+}
 _API = "https://www.nseindia.com/api/corporates-pit"
 
 _SIGNAL = {
-    "market purchase": "open_market_buy", "market sale": "open_market_sell",
-    "off market": "off_market", "allotment": "preferential_allotment",
-    "esos": "esop_exercise", "esop": "esop_exercise",
-    "pledge": "pledge_increase", "revocation": "pledge_decrease",
-    "invocation": "pledge_increase", "creeping acquisition": "creeping_acquisition",
-    "acquisition": "open_market_buy", "disposal": "open_market_sell",
-    "buy": "open_market_buy", "sell": "open_market_sell",
-    "sale": "open_market_sell", "purchase": "open_market_buy",
+    "market purchase": "open_market_buy",
+    "market sale": "open_market_sell",
+    "off market": "off_market",
+    "allotment": "preferential_allotment",
+    "esos": "esop_exercise",
+    "esop": "esop_exercise",
+    "pledge": "pledge_increase",
+    "revocation": "pledge_decrease",
+    "invocation": "pledge_increase",
+    "creeping acquisition": "creeping_acquisition",
+    "acquisition": "open_market_buy",
+    "disposal": "open_market_sell",
+    "buy": "open_market_buy",
+    "sell": "open_market_sell",
+    "sale": "open_market_sell",
+    "purchase": "open_market_buy",
 }
 
 
@@ -123,14 +133,21 @@ def ingest_symbol(s: requests.Session, iid: str, symbol: str) -> int:
             value = round(value / 1e7, 4)  # → crores
         price = _num(rec.get("befAcqSharesPer"))  # holding % before (proxy)
         pledge_after = _num(rec.get("afterAcqSharesPer"))  # holding % after
-        rows.append({
-            "instrument_id": iid, "symbol": symbol,
-            "transaction_date": td, "person_name": person,
-            "person_category": (rec.get("personCategory") or "")[:200],
-            "signal_type": sig, "securities_traded": secs,
-            "value_cr": value, "price_per_share": price,
-            "pledge_pct_after": pledge_after, "acq_mode": acq_mode[:200],
-        })
+        rows.append(
+            {
+                "instrument_id": iid,
+                "symbol": symbol,
+                "transaction_date": td,
+                "person_name": person,
+                "person_category": (rec.get("personCategory") or "")[:200],
+                "signal_type": sig,
+                "securities_traded": secs,
+                "value_cr": value,
+                "price_per_share": price,
+                "pledge_pct_after": pledge_after,
+                "acq_mode": acq_mode[:200],
+            }
+        )
     if not rows:
         return 0
     pk = ["instrument_id", "transaction_date", "person_name", "signal_type"]
@@ -141,7 +158,8 @@ def ingest_symbol(s: requests.Session, iid: str, symbol: str) -> int:
 def targets(only_pending: bool, limit):
     df = _db.read_df(
         f"select instrument_id, symbol from {M}.instrument_master "
-        "where asset_class='stock' and kite_token is not null order by symbol")
+        "where asset_class='stock' and kite_token is not null order by symbol"
+    )
     df["instrument_id"] = df["instrument_id"].astype(str)
     if only_pending:
         done = _db.read_df(f"select instrument_id from {M}.lens_insider_state where status='done'")
@@ -152,30 +170,57 @@ def targets(only_pending: bool, limit):
 def run(only_pending=True, limit=None) -> dict:
     ddl()
     tgt = targets(only_pending, limit)
-    total = len(tgt); done = err = rtot = 0
+    total = len(tgt)
+    done = err = rtot = 0
     s = _session()
     print(f"[insider] targets={total}", flush=True)
     for n, r in enumerate(tgt.itertuples(), 1):
         iid, sym = r.instrument_id, r.symbol
         try:
             cnt = ingest_symbol(s, iid, sym)
-            _db.upsert_df(f"{M}.lens_insider_state", pd.DataFrame([{
-                "instrument_id": iid, "symbol": sym,
-                "status": "done" if cnt else "no_data",
-                "records": cnt, "error": None,
-                "updated_at": dt.datetime.now(dt.UTC)}]), ["instrument_id"])
-            done += 1; rtot += cnt
+            _db.upsert_df(
+                f"{M}.lens_insider_state",
+                pd.DataFrame(
+                    [
+                        {
+                            "instrument_id": iid,
+                            "symbol": sym,
+                            "status": "done" if cnt else "no_data",
+                            "records": cnt,
+                            "error": None,
+                            "updated_at": dt.datetime.now(dt.UTC),
+                        }
+                    ]
+                ),
+                ["instrument_id"],
+            )
+            done += 1
+            rtot += cnt
         except Exception as e:
             msg = repr(e)[:300]
-            _db.upsert_df(f"{M}.lens_insider_state", pd.DataFrame([{
-                "instrument_id": iid, "symbol": sym, "status": "error",
-                "records": None, "error": msg,
-                "updated_at": dt.datetime.now(dt.UTC)}]), ["instrument_id"])
+            _db.upsert_df(
+                f"{M}.lens_insider_state",
+                pd.DataFrame(
+                    [
+                        {
+                            "instrument_id": iid,
+                            "symbol": sym,
+                            "status": "error",
+                            "records": None,
+                            "error": msg,
+                            "updated_at": dt.datetime.now(dt.UTC),
+                        }
+                    ]
+                ),
+                ["instrument_id"],
+            )
             err += 1
             if any(t in msg for t in ("403", "401", "Connection", "Timeout")):
                 s = _session()
         if n % 25 == 0 or n == total:
-            print(f"[insider] {n}/{total} done={done} err={err} records={rtot} last={sym}", flush=True)
+            print(
+                f"[insider] {n}/{total} done={done} err={err} records={rtot} last={sym}", flush=True
+            )
         time.sleep(1.0)
     print(f"[insider] COMPLETE done={done} err={err} records={rtot}", flush=True)
     return {"targets": total, "done": done, "err": err, "records": rtot}

@@ -660,7 +660,7 @@ def test_cache_mode_loads_real_universe_smoke() -> None:
     """
     from pathlib import Path as _Path
 
-    cache_pkl = _Path("/tmp/sde_ohlcv_cache.pkl")  # noqa: S108 — dev cache path
+    cache_pkl = _Path("/tmp/sde_ohlcv_cache.pkl")
     if not cache_pkl.exists():
         pytest.skip("real cache pickle missing — skipped in CI")
     sweep = WalkForwardSweep(mode="cache")

@@ -13,6 +13,7 @@ Two classes:
 Run:  python consolidate_tables.py            # copy everything (skips journal if present)
       python consolidate_tables.py --force-journal
 """
+
 from __future__ import annotations
 
 import sys
@@ -35,17 +36,25 @@ MIRRORS = [
     ("public.de_trading_calendar", "de_trading_calendar", []),
     ("atlas.atlas_thresholds", "atlas_thresholds", []),
     ("atlas.atlas_sector_master", "atlas_sector_master", []),
-    ("atlas.policy_registry", "policy_registry", []),                              # Policy alert layer (D3)
+    ("atlas.policy_registry", "policy_registry", []),  # Policy alert layer (D3)
     ("atlas.atlas_signal_weights", "atlas_signal_weights", []),
     ("atlas.atlas_signal_ic", "atlas_signal_ic", []),
-    ("atlas.atlas_market_regime_daily", "atlas_market_regime_daily", [["date"]]),  # Page-1 regime state
-    ("atlas.atlas_macro_daily", "atlas_macro_daily", [["date"]]),                  # Page-A macro context
-    ("atlas.mv_sector_cards", "mv_sector_cards", [["sector_name"]]),               # Page-B sector list
-    ("atlas.mv_sector_rrg", "mv_sector_rrg", [["sector_name"]]),                   # Page-B RRG
-    ("atlas.mv_sector_breadth", "mv_sector_breadth", [["sector_name"]]),           # Page-B breadth
-    ("atlas.mv_sector_deepdive", "mv_sector_deepdive", [["sector_name"]]),         # Page-C deep-dive
-    ("atlas.atlas_index_metrics_daily", "atlas_index_metrics_daily", [["date"]]),  # Page-B sector index RS
-    ("atlas.mv_markets_rs_grid", "mv_markets_rs_grid", []),                        # Page-B global RS grid
+    (
+        "atlas.atlas_market_regime_daily",
+        "atlas_market_regime_daily",
+        [["date"]],
+    ),  # Page-1 regime state
+    ("atlas.atlas_macro_daily", "atlas_macro_daily", [["date"]]),  # Page-A macro context
+    ("atlas.mv_sector_cards", "mv_sector_cards", [["sector_name"]]),  # Page-B sector list
+    ("atlas.mv_sector_rrg", "mv_sector_rrg", [["sector_name"]]),  # Page-B RRG
+    ("atlas.mv_sector_breadth", "mv_sector_breadth", [["sector_name"]]),  # Page-B breadth
+    ("atlas.mv_sector_deepdive", "mv_sector_deepdive", [["sector_name"]]),  # Page-C deep-dive
+    (
+        "atlas.atlas_index_metrics_daily",
+        "atlas_index_metrics_daily",
+        [["date"]],
+    ),  # Page-B sector index RS
+    ("atlas.mv_markets_rs_grid", "mv_markets_rs_grid", []),  # Page-B global RS grid
     # Sector roll-up + regime detail the board reads (M3-derived). Published into the schema.
     # (atlas_universe_stocks is NOT mirrored — those joins reuse instrument_master.)
     ("atlas.atlas_sector_states_daily", "atlas_sector_states_daily", [["date"]]),
@@ -73,9 +82,13 @@ JOURNAL_FS = "atlas_lens_scores_daily"
 
 
 def _exists(name: str) -> bool:
-    return bool(_db.scalar(
-        "SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "
-        "WHERE n.nspname=:s AND c.relname=:t", {"s": FS, "t": name}))
+    return bool(
+        _db.scalar(
+            "SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "
+            "WHERE n.nspname=:s AND c.relname=:t",
+            {"s": FS, "t": name},
+        )
+    )
 
 
 def _rows(fqn: str) -> int:
@@ -91,9 +104,11 @@ def _copy_mirror(src: str, fs_name: str, indexes: list[list[str]]) -> None:
         idx = f"ix_{fs_name}_{'_'.join(cols)}"
         try:
             _db.exec_sql(f"CREATE INDEX {idx} ON {tgt} ({', '.join(cols)})")
-        except Exception as e:  # noqa: BLE001  (best-effort: bad col shouldn't abort the copy)
+        except Exception as e:
             print(f"    ! index {idx} skipped: {str(e).splitlines()[0][:80]}")
-    print(f"  {fs_name:24s} {_rows(tgt):>9d} rows  (src {_rows(src):>9d})  {time.time()-t0:5.1f}s")
+    print(
+        f"  {fs_name:24s} {_rows(tgt):>9d} rows  (src {_rows(src):>9d})  {time.time() - t0:5.1f}s"
+    )
 
 
 def _sync_journal_latest(tgt: str) -> None:
@@ -118,9 +133,11 @@ def _copy_journal(force: bool) -> None:
     t0 = time.time()
     _db.exec_sql(f"DROP TABLE IF EXISTS {tgt} CASCADE")
     _db.exec_sql(f"CREATE TABLE {tgt} AS SELECT * FROM {JOURNAL_SRC}")
-    print(f"    data copied in {time.time()-t0:.0f}s, adding PK…")
+    print(f"    data copied in {time.time() - t0:.0f}s, adding PK…")
     _db.exec_sql(f"ALTER TABLE {tgt} ADD PRIMARY KEY (instrument_id, date)")
-    print(f"  {JOURNAL_FS:24s} {_rows(tgt):>9d} rows  (src {_rows(JOURNAL_SRC):>9d})  {time.time()-t0:5.1f}s  [CANONICAL]")
+    print(
+        f"  {JOURNAL_FS:24s} {_rows(tgt):>9d} rows  (src {_rows(JOURNAL_SRC):>9d})  {time.time() - t0:5.1f}s  [CANONICAL]"
+    )
 
 
 def run(force_journal: bool) -> None:

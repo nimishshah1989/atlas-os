@@ -9,20 +9,23 @@ to the NSE instrument, and upserts a fresh snapshot dated with the pull date. Ru
 Config from env (defaults = the configured holdings service):
   MSTAR_ACCESSCODE · MSTAR_HOLDINGS_SERVICE · ATLAS_DB_URL
 """
+
 from __future__ import annotations
+
+import datetime
 import os
 import time
 import uuid
-import datetime
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import requests
 import psycopg2
+import requests
 from psycopg2.extras import execute_values
 
 try:  # load repo-root .env so creds/DB resolve under cron + manual runs alike
     from dotenv import load_dotenv
+
     load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
 except Exception:
     pass
@@ -76,20 +79,30 @@ def parse_fund(xml_bytes: bytes):
         return
     fund = data.get("_id")
     for hd in root.iter("HoldingDetail"):
-        g = lambda t: (hd.find(t).text if hd.find(t) is not None else None)
-        yield {"mstar_id": fund, "isin": g("ISIN"), "holding_name": g("Name"),
-               "weight_pct": _f(g("Weighting")), "shares_held": _i(g("NumberOfShare")),
-               "market_value": _f(g("MarketValue")), "sector_code": g("SectorId")}
+        g = lambda t, hd=hd: hd.find(t).text if hd.find(t) is not None else None
+        yield {
+            "mstar_id": fund,
+            "isin": g("ISIN"),
+            "holding_name": g("Name"),
+            "weight_pct": _f(g("Weighting")),
+            "shares_held": _i(g("NumberOfShare")),
+            "market_value": _f(g("MarketValue")),
+            "sector_code": g("SectorId"),
+        }
 
 
 def main() -> None:
     conn = psycopg2.connect(DB)
     cur = conn.cursor()
-    cur.execute("SELECT isin, instrument_id FROM foundation_staging.instrument_master "
-                "WHERE isin IS NOT NULL AND asset_class='stock'")
+    cur.execute(
+        "SELECT isin, instrument_id FROM foundation_staging.instrument_master "
+        "WHERE isin IS NOT NULL AND asset_class='stock'"
+    )
     isin_map = {r[0]: r[1] for r in cur.fetchall()}
-    cur.execute("SELECT DISTINCT mstar_id FROM foundation_staging.atlas_universe_funds "
-                "WHERE mstar_id IS NOT NULL")
+    cur.execute(
+        "SELECT DISTINCT mstar_id FROM foundation_staging.atlas_universe_funds "
+        "WHERE mstar_id IS NOT NULL"
+    )
     funds = [r[0] for r in cur.fetchall()]
     print(f"fetching holdings for {len(funds)} funds @ {WORKERS} workers ...", flush=True)
 
@@ -108,23 +121,42 @@ def main() -> None:
                     if not h["isin"]:
                         continue
                     iid = isin_map.get(h["isin"])
-                    rows.append((str(uuid.uuid4()), h["mstar_id"], today, h["holding_name"],
-                                 h["isin"], iid, h["weight_pct"], h["shares_held"],
-                                 h["market_value"], h["sector_code"], iid is not None))
+                    rows.append(
+                        (
+                            str(uuid.uuid4()),
+                            h["mstar_id"],
+                            today,
+                            h["holding_name"],
+                            h["isin"],
+                            iid,
+                            h["weight_pct"],
+                            h["shares_held"],
+                            h["market_value"],
+                            h["sector_code"],
+                            iid is not None,
+                        )
+                    )
             except ET.ParseError:
                 miss += 1
             if i % 100 == 0:
                 print(f"  {i}/{len(funds)} ...", flush=True)
 
     cur.execute("DELETE FROM foundation_staging.de_mf_holdings WHERE as_of_date=%s", (today,))
-    execute_values(cur,
+    execute_values(
+        cur,
         "INSERT INTO foundation_staging.de_mf_holdings "
         "(id, mstar_id, as_of_date, holding_name, isin, instrument_id, weight_pct, "
-        " shares_held, market_value, sector_code, is_mapped) VALUES %s", rows, page_size=5000)
+        " shares_held, market_value, sector_code, is_mapped) VALUES %s",
+        rows,
+        page_size=5000,
+    )
     conn.commit()
     mapped = sum(1 for r in rows if r[10])
-    print(f"DONE · {ok} funds fetched ({miss} failed) · {len(rows)} holdings · as_of {today} · "
-          f"mapped {mapped}/{len(rows)} ({100*mapped//max(len(rows),1)}%)", flush=True)
+    print(
+        f"DONE · {ok} funds fetched ({miss} failed) · {len(rows)} holdings · as_of {today} · "
+        f"mapped {mapped}/{len(rows)} ({100 * mapped // max(len(rows), 1)}%)",
+        flush=True,
+    )
     cur.close()
     conn.close()
 

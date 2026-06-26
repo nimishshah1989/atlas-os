@@ -62,7 +62,7 @@ from sqlalchemy.engine import Engine
 # Defaults
 # ---------------------------------------------------------------------------
 
-DEFAULT_OUTPUT = Path("/tmp/sde_ohlcv_cache_v3_uniaware.pkl")  # noqa: S108
+DEFAULT_OUTPUT = Path("/tmp/sde_ohlcv_cache_v3_uniaware.pkl")
 DEFAULT_SINCE = date(2014, 1, 1)
 CHUNK_SIZE = 200_000
 NIFTY500_INDEX_SYMBOL = "NIFTY 500"

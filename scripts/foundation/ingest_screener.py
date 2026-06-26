@@ -16,6 +16,7 @@ jip-data-engine/app/pipelines/fundamentals/screener_fetcher.py.
 
 Run: python ingest_screener.py [--limit N] [--symbols A,B] [--universe 750|all] [--redo]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -24,27 +25,53 @@ import time
 from calendar import monthrange
 from datetime import UTC, date, datetime
 
+import _db
 import pandas as pd
 import requests
-
-import _db
 from harness import STAGING_SCHEMA
 
 M = STAGING_SCHEMA
 _BASE = "https://www.screener.in"
-_H = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      "Accept": "text/html,application/xhtml+xml", "Referer": "https://www.screener.in/"}
-_MONTH = {"Jan": "01", "Feb": "02", "Mar": "03", "Apr": "04", "May": "05", "Jun": "06",
-          "Jul": "07", "Aug": "08", "Sep": "09", "Oct": "10", "Nov": "11", "Dec": "12"}
+_H = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Accept": "text/html,application/xhtml+xml",
+    "Referer": "https://www.screener.in/",
+}
+_MONTH = {
+    "Jan": "01",
+    "Feb": "02",
+    "Mar": "03",
+    "Apr": "04",
+    "May": "05",
+    "Jun": "06",
+    "Jul": "07",
+    "Aug": "08",
+    "Sep": "09",
+    "Oct": "10",
+    "Nov": "11",
+    "Dec": "12",
+}
 _RECON_TOL = 0.02  # 2% on PAT at the overlap quarter
 
-_PL_ROW_MAP = {"Sales": "revenue", "Revenue": "revenue", "Expenses": "total_expenses",
-               "Operating Profit": "ebitda", "Other Income": "other_income",
-               "Interest": "finance_costs", "Depreciation": "depreciation",
-               "Profit before tax": "pbt", "Tax %": "tax_pct", "Net Profit": "pat",
-               "EPS in Rs": "eps"}
-_BS_ROW_MAP = {"Equity Capital": "equity_capital", "Reserves": "reserves",
-               "Borrowings": "total_borrowings", "Total Assets": "equity_and_liabilities"}
+_PL_ROW_MAP = {
+    "Sales": "revenue",
+    "Revenue": "revenue",
+    "Expenses": "total_expenses",
+    "Operating Profit": "ebitda",
+    "Other Income": "other_income",
+    "Interest": "finance_costs",
+    "Depreciation": "depreciation",
+    "Profit before tax": "pbt",
+    "Tax %": "tax_pct",
+    "Net Profit": "pat",
+    "EPS in Rs": "eps",
+}
+_BS_ROW_MAP = {
+    "Equity Capital": "equity_capital",
+    "Reserves": "reserves",
+    "Borrowings": "total_borrowings",
+    "Total Assets": "equity_and_liabilities",
+}
 
 
 # ── parser (ported from jip screener_fetcher; regex, no bs4) ──
@@ -77,8 +104,10 @@ def _table(html: str, section: str) -> dict:
     out: dict = {"headers": [], "rows": {}}
     th = re.search(r"<thead>(.*?)</thead>", t, re.DOTALL)
     if th:
-        out["headers"] = [re.sub(r"<.*?>", "", h).strip()
-                          for h in re.findall(r"<th[^>]*>(.*?)</th>", th.group(1), re.DOTALL)]
+        out["headers"] = [
+            re.sub(r"<.*?>", "", h).strip()
+            for h in re.findall(r"<th[^>]*>(.*?)</th>", th.group(1), re.DOTALL)
+        ]
     tb = re.search(r"<tbody>(.*?)</tbody>", t, re.DOTALL)
     if tb:
         for rm in re.finditer(r"<tr[^>]*>(.*?)</tr>", tb.group(1), re.DOTALL):
@@ -88,8 +117,9 @@ def _table(html: str, section: str) -> dict:
             name = re.sub(r"&nbsp;", " ", re.sub(r"<[^>]+>", "", cells[0], flags=re.DOTALL))
             name = name.strip().rstrip("+").strip()
             if name:
-                out["rows"][name] = [re.sub(r"<[^>]+>", "", c, flags=re.DOTALL).strip()
-                                     for c in cells[1:]]
+                out["rows"][name] = [
+                    re.sub(r"<[^>]+>", "", c, flags=re.DOTALL).strip() for c in cells[1:]
+                ]
     return out
 
 
@@ -123,11 +153,17 @@ def _detect_basis(html: str) -> bool:
 # rather than derive — one consistent real source for the valuation + profitability
 # lens inputs. RULE #0: every value parsed verbatim from the page; absent ⇒ None.
 _RATIO_LABELS = {
-    "Market Cap": "market_cap", "Current Price": "current_price",
-    "Stock P/E": "stock_pe", "Book Value": "book_value",
-    "ROCE": "roce", "ROE": "roe", "Dividend Yield": "div_yield",
-    "Face Value": "face_value", "Debt to equity": "debt_to_equity",
-    "EV/EBITDA": "ev_ebitda", "EV / EBITDA": "ev_ebitda",
+    "Market Cap": "market_cap",
+    "Current Price": "current_price",
+    "Stock P/E": "stock_pe",
+    "Book Value": "book_value",
+    "ROCE": "roce",
+    "ROE": "roe",
+    "Dividend Yield": "div_yield",
+    "Face Value": "face_value",
+    "Debt to equity": "debt_to_equity",
+    "EV/EBITDA": "ev_ebitda",
+    "EV / EBITDA": "ev_ebitda",
 }
 
 
@@ -231,15 +267,33 @@ def _quarterly_rows(iid, symbol, consol, rows) -> list[dict]:
         fc, pbt = r.get("finance_costs"), r.get("pbt")
         ebitda = r.get("ebitda")
         ebit = (pbt + fc) if (pbt is not None and fc is not None) else None
-        tax = round(pbt * r["tax_pct"] / 100, 4) if (pbt is not None and r.get("tax_pct") is not None) else None
-        out.append({"instrument_id": iid, "symbol": symbol, "period_end": r["period_end"],
-                    "consolidated": consol, "revenue": rev, "other_income": r.get("other_income"),
-                    "total_expenses": r.get("total_expenses"), "finance_costs": fc,
-                    "depreciation": r.get("depreciation"), "ebit": ebit, "ebitda": ebitda,
-                    "pbt": pbt, "tax": tax, "pat": pat, "eps": r.get("eps"),
-                    "ebitda_margin": round(ebitda / rev, 4) if (ebitda and rev) else None,
-                    "net_margin": round(pat / rev, 4) if (pat and rev) else None,
-                    "source": "SCREENER"})
+        tax = (
+            round(pbt * r["tax_pct"] / 100, 4)
+            if (pbt is not None and r.get("tax_pct") is not None)
+            else None
+        )
+        out.append(
+            {
+                "instrument_id": iid,
+                "symbol": symbol,
+                "period_end": r["period_end"],
+                "consolidated": consol,
+                "revenue": rev,
+                "other_income": r.get("other_income"),
+                "total_expenses": r.get("total_expenses"),
+                "finance_costs": fc,
+                "depreciation": r.get("depreciation"),
+                "ebit": ebit,
+                "ebitda": ebitda,
+                "pbt": pbt,
+                "tax": tax,
+                "pat": pat,
+                "eps": r.get("eps"),
+                "ebitda_margin": round(ebitda / rev, 4) if (ebitda and rev) else None,
+                "net_margin": round(pat / rev, 4) if (pat and rev) else None,
+                "source": "SCREENER",
+            }
+        )
     return out
 
 
@@ -253,10 +307,18 @@ def _annual_rows(iid, symbol, consol, rows) -> list[dict]:
         tb = r.get("total_borrowings")
         if equity is None and tb is None:
             continue
-        out.append({"instrument_id": iid, "symbol": symbol, "period_end": r["period_end"],
-                    "consolidated": consol, "equity": equity, "total_borrowings": tb,
-                    "equity_and_liabilities": r.get("equity_and_liabilities"),
-                    "source": "SCREENER"})
+        out.append(
+            {
+                "instrument_id": iid,
+                "symbol": symbol,
+                "period_end": r["period_end"],
+                "consolidated": consol,
+                "equity": equity,
+                "total_borrowings": tb,
+                "equity_and_liabilities": r.get("equity_and_liabilities"),
+                "source": "SCREENER",
+            }
+        )
     return out
 
 
@@ -265,7 +327,8 @@ def _reconciles(iid, consol, q_rows) -> tuple[bool, str]:
     xbrl = _db.read_df(
         f"select period_end, pat from {M}.financials_quarterly "
         "where instrument_id=:i and consolidated=:c and source='NSE_XBRL' and pat is not null",
-        {"i": iid, "c": consol})
+        {"i": iid, "c": consol},
+    )
     if xbrl.empty:
         return True, "no_xbrl_overlap"  # nothing to reconcile against; accept (it's a fill)
     xmap = {r.period_end: float(r.pat) for r in xbrl.itertuples()}
@@ -280,13 +343,15 @@ def _reconciles(iid, consol, q_rows) -> tuple[bool, str]:
             # relative bound while the value is genuinely correct.
             if abs(sp - xp) <= max(_RECON_TOL * abs(xp), 1.0):
                 return True, f"ok@{pe} screener={sp} xbrl={xp}"
-            return False, f"DIVERGE@{pe} screener={sp} xbrl={xp} (Δ{abs(sp-xp):.1f}cr)"
+            return False, f"DIVERGE@{pe} screener={sp} xbrl={xp} (Δ{abs(sp - xp):.1f}cr)"
     return True, "no_shared_quarter"  # overlap exists but no shared quarter w/ pat; accept
 
 
 def _existing_periods(iid, table, consol) -> set:
-    df = _db.read_df(f"select period_end from {M}.{table} where instrument_id=:i and consolidated=:c",
-                     {"i": iid, "c": consol})
+    df = _db.read_df(
+        f"select period_end from {M}.{table} where instrument_id=:i and consolidated=:c",
+        {"i": iid, "c": consol},
+    )
     return {r.period_end for r in df.itertuples()}
 
 
@@ -295,12 +360,22 @@ def _store_ratios(iid: str, symbol: str, html: str) -> bool:
     r = _top_ratios(html)
     if not any(r.get(k) is not None for k in ("stock_pe", "roe", "roce", "pb", "book_value")):
         return False
-    row = {"instrument_id": iid, "symbol": symbol,
-           "stock_pe": r.get("stock_pe"), "pb": r.get("pb"), "ev_ebitda": r.get("ev_ebitda"),
-           "roe": r.get("roe"), "roce": r.get("roce"), "market_cap": r.get("market_cap"),
-           "book_value": r.get("book_value"), "current_price": r.get("current_price"),
-           "div_yield": r.get("div_yield"), "debt_to_equity": r.get("debt_to_equity"),
-           "as_of": date.today(), "source": "SCREENER"}
+    row = {
+        "instrument_id": iid,
+        "symbol": symbol,
+        "stock_pe": r.get("stock_pe"),
+        "pb": r.get("pb"),
+        "ev_ebitda": r.get("ev_ebitda"),
+        "roe": r.get("roe"),
+        "roce": r.get("roce"),
+        "market_cap": r.get("market_cap"),
+        "book_value": r.get("book_value"),
+        "current_price": r.get("current_price"),
+        "div_yield": r.get("div_yield"),
+        "debt_to_equity": r.get("debt_to_equity"),
+        "as_of": date.today(),
+        "source": "SCREENER",
+    }
     _db.upsert_df(f"{M}.screener_ratios", pd.DataFrame([row]), ["instrument_id"])
     return True
 
@@ -310,9 +385,11 @@ def ingest_symbol(iid: str, symbol: str) -> tuple[int, int, str]:
     if not html:
         return 0, 0, "fetch_failed"
     _store_ratios(iid, symbol, html)
-    rows = _section_rows(html, "quarters", _PL_ROW_MAP, "quarterly") + \
-        _section_rows(html, "profit-loss", _PL_ROW_MAP, "annual") + \
-        _section_rows(html, "balance-sheet", _BS_ROW_MAP, "annual")
+    rows = (
+        _section_rows(html, "quarters", _PL_ROW_MAP, "quarterly")
+        + _section_rows(html, "profit-loss", _PL_ROW_MAP, "annual")
+        + _section_rows(html, "balance-sheet", _BS_ROW_MAP, "annual")
+    )
     q = _quarterly_rows(iid, symbol, consol, rows)
     a = _annual_rows(iid, symbol, consol, rows)
     ok, note = _reconciles(iid, consol, q)
@@ -323,25 +400,42 @@ def ingest_symbol(iid: str, symbol: str) -> tuple[int, int, str]:
     have_a = _existing_periods(iid, "financials_annual", consol)
     q = [r for r in q if r["period_end"] not in have_q]
     a = [r for r in a if r["period_end"] not in have_a]
-    nq = _db.upsert_df(f"{M}.financials_quarterly", pd.DataFrame(q),
-                       ["instrument_id", "period_end", "consolidated"]) if q else 0
-    na = _db.upsert_df(f"{M}.financials_annual", pd.DataFrame(a),
-                       ["instrument_id", "period_end", "consolidated"]) if a else 0
+    nq = (
+        _db.upsert_df(
+            f"{M}.financials_quarterly",
+            pd.DataFrame(q),
+            ["instrument_id", "period_end", "consolidated"],
+        )
+        if q
+        else 0
+    )
+    na = (
+        _db.upsert_df(
+            f"{M}.financials_annual",
+            pd.DataFrame(a),
+            ["instrument_id", "period_end", "consolidated"],
+        )
+        if a
+        else 0
+    )
     return nq, na, note
 
 
 def targets(universe: str, only_pending: bool, limit, symbols):
     if symbols:
         df = _db.read_df(
-            f"select instrument_id, symbol from {M}.instrument_master "
-            "where symbol = any(:s)", {"s": symbols})
+            f"select instrument_id, symbol from {M}.instrument_master where symbol = any(:s)",
+            {"s": symbols},
+        )
     elif universe == "750":
         df = _db.read_df("""select im.instrument_id, im.symbol from foundation_staging.instrument_master im
             join atlas.atlas_universe_stocks u on u.instrument_id=im.instrument_id and u.effective_to is null
             order by im.symbol""")
     else:
-        df = _db.read_df(f"select instrument_id, symbol from {M}.instrument_master "
-                         "where asset_class='stock' and kite_token is not null order by symbol")
+        df = _db.read_df(
+            f"select instrument_id, symbol from {M}.instrument_master "
+            "where asset_class='stock' and kite_token is not null order by symbol"
+        )
     df["instrument_id"] = df["instrument_id"].astype(str)
     if only_pending:
         done = _db.read_df(f"select instrument_id from {M}.screener_state where status='done'")
@@ -352,7 +446,9 @@ def targets(universe: str, only_pending: bool, limit, symbols):
 def run(universe="750", only_pending=True, limit=None, symbols=None) -> dict:
     ddl()
     tgt = targets(universe, only_pending, limit, symbols)
-    total = len(tgt); done = quar = err = 0; qtot = atot = 0
+    total = len(tgt)
+    done = quar = err = 0
+    qtot = atot = 0
     print(f"[screener] targets={total}", flush=True)
     for n, r in enumerate(tgt.itertuples(), 1):
         iid, sym = r.instrument_id, r.symbol
@@ -362,23 +458,64 @@ def run(universe="750", only_pending=True, limit=None, symbols=None) -> dict:
             if status == "quarantined":
                 quar += 1
             else:
-                done += 1; qtot += nq; atot += na
-            _db.upsert_df(f"{M}.screener_state", pd.DataFrame([{
-                "instrument_id": iid, "symbol": sym, "status": status,
-                "quarters": nq, "annuals": na, "note": note[:200],
-                "updated_at": datetime.now(UTC)}]), ["instrument_id"])
+                done += 1
+                qtot += nq
+                atot += na
+            _db.upsert_df(
+                f"{M}.screener_state",
+                pd.DataFrame(
+                    [
+                        {
+                            "instrument_id": iid,
+                            "symbol": sym,
+                            "status": status,
+                            "quarters": nq,
+                            "annuals": na,
+                            "note": note[:200],
+                            "updated_at": datetime.now(UTC),
+                        }
+                    ]
+                ),
+                ["instrument_id"],
+            )
         except Exception as e:
             err += 1
-            _db.upsert_df(f"{M}.screener_state", pd.DataFrame([{
-                "instrument_id": iid, "symbol": sym, "status": "error",
-                "quarters": None, "annuals": None, "note": repr(e)[:200],
-                "updated_at": datetime.now(UTC)}]), ["instrument_id"])
+            _db.upsert_df(
+                f"{M}.screener_state",
+                pd.DataFrame(
+                    [
+                        {
+                            "instrument_id": iid,
+                            "symbol": sym,
+                            "status": "error",
+                            "quarters": None,
+                            "annuals": None,
+                            "note": repr(e)[:200],
+                            "updated_at": datetime.now(UTC),
+                        }
+                    ]
+                ),
+                ["instrument_id"],
+            )
         if n % 20 == 0 or n == total:
-            print(f"[screener] {n}/{total} done={done} quar={quar} err={err} "
-                  f"q={qtot} a={atot} last={sym}", flush=True)
+            print(
+                f"[screener] {n}/{total} done={done} quar={quar} err={err} "
+                f"q={qtot} a={atot} last={sym}",
+                flush=True,
+            )
         time.sleep(1.0)  # polite: ~1 req/s
-    print(f"[screener] COMPLETE done={done} quarantined={quar} err={err} quarters={qtot} annuals={atot}", flush=True)
-    return {"targets": total, "done": done, "quarantined": quar, "err": err, "quarters": qtot, "annuals": atot}
+    print(
+        f"[screener] COMPLETE done={done} quarantined={quar} err={err} quarters={qtot} annuals={atot}",
+        flush=True,
+    )
+    return {
+        "targets": total,
+        "done": done,
+        "quarantined": quar,
+        "err": err,
+        "quarters": qtot,
+        "annuals": atot,
+    }
 
 
 def main():

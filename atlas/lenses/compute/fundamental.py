@@ -4,6 +4,7 @@ Pure function, no I/O.  Consumes tv_metrics snapshot fields and a thresholds
 dict; emits a FundamentalResult with five subcomponents (each 0-20) and a
 composite 0-100 score.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -44,7 +45,9 @@ def _t(th: dict[str, Any], key: str, default: float) -> float:
 
 
 def _profitability(
-    roe: Decimal | None, roce: Decimal | None, net_margin: Decimal | None,
+    roe: Decimal | None,
+    roce: Decimal | None,
+    net_margin: Decimal | None,
     th: dict[str, Any],
 ) -> tuple[Decimal | None, dict[str, Any]]:
     """Profitability sub-score (0-20) COMPOSED from real Screener ROE + ROCE +
@@ -94,7 +97,9 @@ def _profitability(
 
 
 def _margin(
-    op_margin: Decimal | None, net_margin: Decimal | None, th: dict[str, Any],
+    op_margin: Decimal | None,
+    net_margin: Decimal | None,
+    th: dict[str, Any],
 ) -> tuple[Decimal | None, dict[str, Any]]:
     if op_margin is None and net_margin is None:
         return None, {"reason": "margins missing"}
@@ -123,7 +128,9 @@ def _margin(
 
 
 def _growth(
-    rev_g: Decimal | None, eps_g: Decimal | None, th: dict[str, Any],
+    rev_g: Decimal | None,
+    eps_g: Decimal | None,
+    th: dict[str, Any],
 ) -> tuple[Decimal | None, dict[str, Any]]:
     if rev_g is None and eps_g is None:
         return None, {"reason": "growth metrics missing"}
@@ -152,7 +159,9 @@ def _growth(
 
 
 def _balance_sheet(
-    de: Decimal | None, cr: Decimal | None, qr: Decimal | None,
+    de: Decimal | None,
+    cr: Decimal | None,
+    qr: Decimal | None,
     th: dict[str, Any],
 ) -> tuple[Decimal | None, dict[str, Any]]:
     if de is None and cr is None and qr is None:
@@ -160,7 +169,8 @@ def _balance_sheet(
     pts, ev = 0, {}
     if de is not None:
         if de < 0:
-            pts += 10; ev["de_note"] = "net_cash"
+            pts += 10
+            ev["de_note"] = "net_cash"
         elif de < _t(th, "bs_de_low", 0.3):
             pts += 10
         elif de < _t(th, "bs_de_ok", 0.5):
@@ -196,8 +206,10 @@ def _balance_sheet(
 
 
 def _op_leverage(
-    rev_g: Decimal | None, op_margin: Decimal | None,
-    de: Decimal | None, th: dict[str, Any],
+    rev_g: Decimal | None,
+    op_margin: Decimal | None,
+    de: Decimal | None,
+    th: dict[str, Any],
 ) -> tuple[Decimal | None, dict[str, Any]]:
     if rev_g is None:
         return None, {"reason": "revenue growth missing"}
@@ -220,13 +232,19 @@ def _op_leverage(
 
 
 def score_fundamental(
-    roe: float | None, roa: float | None, roic: float | None,
-    operating_margin: float | None, net_margin: float | None,
+    roe: float | None,
+    roa: float | None,
+    roic: float | None,
+    operating_margin: float | None,
+    net_margin: float | None,
     gross_margin: float | None,
-    revenue_growth_yoy: float | None, eps_growth_yoy: float | None,
-    debt_to_equity: float | None, current_ratio: float | None,
+    revenue_growth_yoy: float | None,
+    eps_growth_yoy: float | None,
+    debt_to_equity: float | None,
+    current_ratio: float | None,
     quick_ratio: float | None,
-    revenue_ttm: float | None, eps_diluted_ttm: float | None,
+    revenue_ttm: float | None,
+    eps_diluted_ttm: float | None,
     thresholds: dict[str, Any],
     roce: float | None = None,
 ) -> FundamentalResult:
@@ -257,7 +275,11 @@ def score_fundamental(
         composite = None
 
     return FundamentalResult(
-        profitability=prof, margin=mar, growth=gro,
-        balance_sheet=bs, op_leverage=olev,
-        score=composite, evidence=evidence,
+        profitability=prof,
+        margin=mar,
+        growth=gro,
+        balance_sheet=bs,
+        op_leverage=olev,
+        score=composite,
+        evidence=evidence,
     )

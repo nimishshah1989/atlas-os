@@ -9,19 +9,19 @@ signal' (NaN), never fabricated into a rank. Leadership badge counts how many of
 conviction lenses (technical/fundamental/catalyst/flow) are top-decile; valuation is its
 own decile and never feeds the badge. Strength = mean conviction decile (1-10).
 """
+
 from __future__ import annotations
 
+import _db
 import numpy as np
 import pandas as pd
 
-import _db
-
-L = "foundation_staging.atlas_lens_scores_daily"   # canonical journal (D22 consolidated)
-CONV = ["technical", "fundamental", "catalyst", "flow"]   # feed leadership badge
-LENSES = CONV + ["valuation"]                              # valuation = own decile
-BROAD = "F00001PXO0"                                      # Nifty Total Market ETF (750)
-BROAD2 = "F00001GZXV"                                     # Nifty 500 fallback
-MIN_COHORT = 20                                           # need >=20 non-null to rank
+L = "foundation_staging.atlas_lens_scores_daily"  # canonical journal (D22 consolidated)
+CONV = ["technical", "fundamental", "catalyst", "flow"]  # feed leadership badge
+LENSES = [*CONV, "valuation"]  # valuation = own decile
+BROAD = "F00001PXO0"  # Nifty Total Market ETF (750)
+BROAD2 = "F00001GZXV"  # Nifty 500 fallback
+MIN_COHORT = 20  # need >=20 non-null to rank
 
 
 def cap_bucket() -> pd.DataFrame:
@@ -33,13 +33,16 @@ def cap_bucket() -> pd.DataFrame:
                       CASE ticker WHEN :b1 THEN 1 WHEN :b2 THEN 2 ELSE 3 END, weight DESC) rn
              FROM foundation_staging.de_etf_holdings WHERE ticker IN (:b1, :b2) AND weight > 0)
            SELECT instrument_id, weight FROM r WHERE rn = 1""",
-        {"b1": BROAD, "b2": BROAD2})
+        {"b1": BROAD, "b2": BROAD2},
+    )
     w["instrument_id"] = w["instrument_id"].astype(str)
     w = w.sort_values("weight", ascending=False).reset_index(drop=True)
     w["rank"] = np.arange(1, len(w) + 1)
     w["cap"] = np.select(
         [w["rank"] <= 100, w["rank"] <= 250, w["rank"] <= 500],
-        ["large", "mid", "small"], default="micro")
+        ["large", "mid", "small"],
+        default="micro",
+    )
     return w[["instrument_id", "cap"]]
 
 
@@ -79,5 +82,7 @@ def deciles(date, caps: pd.DataFrame | None = None) -> pd.DataFrame:
     j = _db.read_df(
         f"SELECT instrument_id, symbol, name, sector, {','.join(LENSES)} "
         f"FROM {L} t JOIN foundation_staging.instrument_master im USING (instrument_id) "
-        f"WHERE t.asset_class='stock' AND t.date=:d", {"d": str(date)})
+        f"WHERE t.asset_class='stock' AND t.date=:d",
+        {"d": str(date)},
+    )
     return add_deciles(j, caps)

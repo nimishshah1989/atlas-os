@@ -3,6 +3,7 @@
 Pure function, no I/O.  Five dimensions (PE-vs-sector, absolute PE,
 price-to-book, EV/EBITDA, 52-week position) map to zone + multiplier.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -41,6 +42,7 @@ def _d(v: float | int | None) -> Decimal | None:
     except (InvalidOperation, ValueError, TypeError):
         return None
 
+
 D = Decimal  # shorthand inside scorers
 
 
@@ -59,29 +61,44 @@ def _score_pe_vs_sector(pe: D, sector_med: D) -> D:
 
 
 def _score_absolute_pe(pe: D) -> D:
-    if pe <= 0:  return D(0)
-    if pe < D(8):   return D(25)
-    if pe < D(15):  return D(18)
-    if pe < D(25):  return D(10)
-    if pe < D(40):  return D(3)
+    if pe <= 0:
+        return D(0)
+    if pe < D(8):
+        return D(25)
+    if pe < D(15):
+        return D(18)
+    if pe < D(25):
+        return D(10)
+    if pe < D(40):
+        return D(3)
     return D(0)
 
 
 def _score_price_to_book(pb: D) -> D:
-    if pb <= 0:  return D(0)
-    if pb < D(1):  return D(15)
-    if pb < D(2):  return D(10)
-    if pb < D(4):  return D(5)
-    if pb < D(6):  return D(2)
+    if pb <= 0:
+        return D(0)
+    if pb < D(1):
+        return D(15)
+    if pb < D(2):
+        return D(10)
+    if pb < D(4):
+        return D(5)
+    if pb < D(6):
+        return D(2)
     return D(0)
 
 
 def _score_ev_ebitda(ev_eb: D) -> D:
-    if ev_eb <= 0:   return D(0)
-    if ev_eb < D(6):   return D(20)
-    if ev_eb < D(10):  return D(14)
-    if ev_eb < D(15):  return D(8)
-    if ev_eb < D(20):  return D(3)
+    if ev_eb <= 0:
+        return D(0)
+    if ev_eb < D(6):
+        return D(20)
+    if ev_eb < D(10):
+        return D(14)
+    if ev_eb < D(15):
+        return D(8)
+    if ev_eb < D(20):
+        return D(3)
     return D(0)
 
 
@@ -93,11 +110,16 @@ def _score_52w_position(pos_52w: D, price: D | None, ema200: D | None) -> D:
     technical_daily, replacing the old (price, high_52w, low_52w) snapshot inputs.
     """
     pos = pos_52w  # already 0-100
-    if pos <= D(20):    base = D(15)
-    elif pos <= D(40):  base = D(10)
-    elif pos <= D(60):  base = D(6)
-    elif pos <= D(80):  base = D(3)
-    else:               base = D(0)
+    if pos <= D(20):
+        base = D(15)
+    elif pos <= D(40):
+        base = D(10)
+    elif pos <= D(60):
+        base = D(6)
+    elif pos <= D(80):
+        base = D(3)
+    else:
+        base = D(0)
     if ema200 is not None and price is not None and price < ema200:
         base = min(base + D(3), D(15))
     return base
@@ -134,7 +156,11 @@ def score_valuation(
 
     evidence: dict[str, Any] = {}
     dims: dict[str, Decimal | None] = {
-        "pe_sector": None, "abs_pe": None, "pb": None, "ev": None, "w52": None,
+        "pe_sector": None,
+        "abs_pe": None,
+        "pb": None,
+        "ev": None,
+        "w52": None,
     }
     max_pts: list[int] = []
     scored_pts: list[Decimal] = []
@@ -178,9 +204,14 @@ def score_valuation(
         # composite for a name we cannot value.
         evidence["no_data"] = True
         return ValuationResult(
-            pe_vs_sector=None, absolute_pe=None, price_to_book=None,
-            ev_ebitda=None, position_52w=None,
-            score=None, zone="UNKNOWN", multiplier=Decimal("1.00"),
+            pe_vs_sector=None,
+            absolute_pe=None,
+            price_to_book=None,
+            ev_ebitda=None,
+            position_52w=None,
+            score=None,
+            zone="UNKNOWN",
+            multiplier=Decimal("1.00"),
             evidence=evidence,
         )
 

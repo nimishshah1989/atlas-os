@@ -10,10 +10,13 @@ twice → ~50s). ohlcv_stock has no date index, so the stocks-list 30-day turnov
 Both indexes are ADDITIVE (no data change) and built CONCURRENTLY (reads + writes continue), on
 foundation_staging tables (v4's own). IF NOT EXISTS = idempotent.
 """
+
 from __future__ import annotations
+
 import time
-import psycopg2
+
 import _db
+import psycopg2
 
 INDEXES = [
     ("ix_fs_lens_class_date", "foundation_staging.atlas_lens_scores_daily", "(asset_class, date)"),
@@ -31,7 +34,7 @@ def main() -> None:
             t0 = time.time()
             print(f"creating {name} on {tbl} {cols} …", flush=True)
             cur.execute(f"CREATE INDEX CONCURRENTLY IF NOT EXISTS {name} ON {tbl} {cols}")
-            print(f"  done in {time.time()-t0:.0f}s", flush=True)
+            print(f"  done in {time.time() - t0:.0f}s", flush=True)
         cur.close()
     finally:
         conn.close()

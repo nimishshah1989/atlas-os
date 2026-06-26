@@ -3,6 +3,7 @@
 Called by nightly cron or ad-hoc. Loads data, scores each instrument across
 all 6 lenses, computes composite + conviction, writes to atlas_lens_scores_daily.
 """
+
 from __future__ import annotations
 
 import json
@@ -115,13 +116,19 @@ def run_pipeline(
     policies = load_policy_registry(eng)
     sectors_df = load_instrument_sectors(eng)
 
-    log.info("lens_data_loaded",
-             tech=len(tech_df), fund=len(fund_df),
-             cat=len(cat_df), flow_insider=len(flow_data["insider"]),
-             policies=len(policies), instruments=len(sectors_df))
+    log.info(
+        "lens_data_loaded",
+        tech=len(tech_df),
+        fund=len(fund_df),
+        cat=len(cat_df),
+        flow_insider=len(flow_data["insider"]),
+        policies=len(policies),
+        instruments=len(sectors_df),
+    )
 
     results, scored, skipped = score_all(
-        dt, tech_df, fund_df, cat_df, flow_data, sectors_df, policies, th, run_id)
+        dt, tech_df, fund_df, cat_df, flow_data, sectors_df, policies, th, run_id
+    )
 
     write_lens_scores(eng, results, run_id)
 
@@ -132,14 +139,21 @@ def run_pipeline(
         purged = purge_stale_lens_scores(eng, dt, run_id, asset_class="stock")
     else:
         purged = 0
-        log.error("lens_pipeline_zero_scored_no_purge", as_of=str(dt),
-                  skipped=skipped, msg="0 instruments scored; skipping purge to "
-                  "protect the existing journal for this date")
+        log.error(
+            "lens_pipeline_zero_scored_no_purge",
+            as_of=str(dt),
+            skipped=skipped,
+            msg="0 instruments scored; skipping purge to "
+            "protect the existing journal for this date",
+        )
 
     summary = {
-        "as_of": str(dt), "run_id": str(run_id),
-        "instruments_scored": scored, "instruments_skipped": skipped,
-        "total_instruments": len(sectors_df), "stale_rows_purged": purged,
+        "as_of": str(dt),
+        "run_id": str(run_id),
+        "instruments_scored": scored,
+        "instruments_skipped": skipped,
+        "total_instruments": len(sectors_df),
+        "stale_rows_purged": purged,
     }
     log.info("lens_pipeline_complete", **summary)
     return summary
@@ -170,9 +184,15 @@ def _sector_median_pe(tech_idx: Any, fund_idx: Any, sector_of: dict) -> tuple[di
     on that date.
     """
     import statistics
+
     pe_by_iid: dict[Any, float] = {}
     sector_pes: dict[str, list[float]] = {}
-    if tech_idx is None or fund_idx is None or getattr(tech_idx, "empty", True) or getattr(fund_idx, "empty", True):
+    if (
+        tech_idx is None
+        or fund_idx is None
+        or getattr(tech_idx, "empty", True)
+        or getattr(fund_idx, "empty", True)
+    ):
         return pe_by_iid, {}
     for iid in fund_idx.index:
         close_raw = _to_float(_cell(tech_idx, iid, "close_raw"))
@@ -188,26 +208,47 @@ def _sector_median_pe(tech_idx: Any, fund_idx: Any, sector_of: dict) -> tuple[di
 
 
 def score_all(
-    dt: date, tech_df: Any, fund_df: Any, cat_df: Any, flow_data: dict,
-    sectors_df: Any, policies: list, th: dict[str, Any], run_id: uuid.UUID,
+    dt: date,
+    tech_df: Any,
+    fund_df: Any,
+    cat_df: Any,
+    flow_data: dict,
+    sectors_df: Any,
+    policies: list,
+    th: dict[str, Any],
+    run_id: uuid.UUID,
 ) -> tuple[list[dict[str, Any]], int, int]:
     """Score the whole stock universe for one date from PRELOADED frames.
 
     Shared by run_pipeline (nightly: per-date adapter loads) and the historical
     backfill (per-date slices of preloaded chunk panels) so both paths emit
     identical PIT output. Returns (results, scored, skipped)."""
-    tech_idx = tech_df.set_index("instrument_id") if (tech_df is not None and not tech_df.empty) else pd.DataFrame()
-    fund_idx = fund_df.set_index("instrument_id") if (fund_df is not None and not fund_df.empty) else pd.DataFrame()
+    tech_idx = (
+        tech_df.set_index("instrument_id")
+        if (tech_df is not None and not tech_df.empty)
+        else pd.DataFrame()
+    )
+    fund_idx = (
+        fund_df.set_index("instrument_id")
+        if (fund_df is not None and not fund_df.empty)
+        else pd.DataFrame()
+    )
     cat_by_iid = _group_by_iid(cat_df)
     insider_by_iid = _group_by_iid(flow_data["insider"])
     sh_by_iid = _group_by_iid(flow_data["shareholding"], sort_col="period_end")
     bulk_by_iid = _group_by_iid(flow_data["bulk_deals"])
     mf_df = flow_data.get("mf")
-    mf_delta_by_iid = (dict(zip(mf_df["instrument_id"], mf_df["mf_mom_delta"]))
-                       if mf_df is not None and not mf_df.empty else {})
+    mf_delta_by_iid = (
+        dict(zip(mf_df["instrument_id"], mf_df["mf_mom_delta"], strict=False))
+        if mf_df is not None and not mf_df.empty
+        else {}
+    )
 
-    sector_of = (dict(zip(sectors_df["instrument_id"], sectors_df["sector"]))
-                 if "sector" in sectors_df.columns else {})
+    sector_of = (
+        dict(zip(sectors_df["instrument_id"], sectors_df["sector"], strict=False))
+        if "sector" in sectors_df.columns
+        else {}
+    )
     pe_by_iid, sector_median = _sector_median_pe(tech_idx, fund_idx, sector_of)
 
     results: list[dict[str, Any]] = []
@@ -219,48 +260,73 @@ def score_all(
             # Technical (PIT: price=adjusted close on dt; ATR/BB/vol_ratio/pos_52w/
             # rs_*_sector from technical_daily on dt).
             t = _row(tech_idx, iid)
-            tech_result = score_technical(
-                ema_21=_to_float(t.get("ema_21")), ema_50=_to_float(t.get("ema_50")),
-                ema_200=_to_float(t.get("ema_200")), rsi_14=_to_float(t.get("rsi_14")),
-                price=_to_float(t.get("price_adj")), ret_1w=_to_float(t.get("ret_1w")),
-                rs_1m_n500=_to_float(t.get("rs_1m_n500")), rs_3m_n500=_to_float(t.get("rs_3m_n500")),
-                rs_6m_n500=_to_float(t.get("rs_6m_n500")), rs_12m_n500=_to_float(t.get("rs_12m_n500")),
-                atr_14=_to_float(t.get("atr_14")), bb_width=_to_float(t.get("bb_width")),
-                vol_ratio_30d=_to_float(t.get("vol_ratio_30d")),
-                vol_ratio_60d=_to_float(t.get("vol_ratio_60d")),
-                pos_52w=_to_float(t.get("pos_52w")),
-                rs_1m_sector=_to_float(t.get("rs_1m_sector")),
-                rs_3m_sector=_to_float(t.get("rs_3m_sector")),
-                rs_6m_sector=_to_float(t.get("rs_6m_sector")),
-                rs_12m_sector=_to_float(t.get("rs_12m_sector")),
-                thresholds=th,
-            ) if t is not None else None
+            tech_result = (
+                score_technical(
+                    ema_21=_to_float(t.get("ema_21")),
+                    ema_50=_to_float(t.get("ema_50")),
+                    ema_200=_to_float(t.get("ema_200")),
+                    rsi_14=_to_float(t.get("rsi_14")),
+                    price=_to_float(t.get("price_adj")),
+                    ret_1w=_to_float(t.get("ret_1w")),
+                    rs_1m_n500=_to_float(t.get("rs_1m_n500")),
+                    rs_3m_n500=_to_float(t.get("rs_3m_n500")),
+                    rs_6m_n500=_to_float(t.get("rs_6m_n500")),
+                    rs_12m_n500=_to_float(t.get("rs_12m_n500")),
+                    atr_14=_to_float(t.get("atr_14")),
+                    bb_width=_to_float(t.get("bb_width")),
+                    vol_ratio_30d=_to_float(t.get("vol_ratio_30d")),
+                    vol_ratio_60d=_to_float(t.get("vol_ratio_60d")),
+                    pos_52w=_to_float(t.get("pos_52w")),
+                    rs_1m_sector=_to_float(t.get("rs_1m_sector")),
+                    rs_3m_sector=_to_float(t.get("rs_3m_sector")),
+                    rs_6m_sector=_to_float(t.get("rs_6m_sector")),
+                    rs_12m_sector=_to_float(t.get("rs_12m_sector")),
+                    thresholds=th,
+                )
+                if t is not None
+                else None
+            )
 
             # Fundamental (PIT: TTM/YoY/ROE/D-E from as-of quarters + annual).
             f = _row(fund_idx, iid)
-            fund_result = score_fundamental(
-                roe=_to_float(f.get("roe")), roa=_to_float(f.get("roa")), roic=_to_float(f.get("roic")),
-                operating_margin=_to_float(f.get("operating_margin")), net_margin=_to_float(f.get("net_margin")),
-                gross_margin=_to_float(f.get("gross_margin")),
-                revenue_growth_yoy=_to_float(f.get("revenue_growth_yoy")),
-                eps_growth_yoy=_to_float(f.get("eps_growth_yoy")),
-                debt_to_equity=_to_float(f.get("debt_to_equity")),
-                current_ratio=_to_float(f.get("current_ratio")), quick_ratio=_to_float(f.get("quick_ratio")),
-                revenue_ttm=_to_float(f.get("revenue_ttm")), eps_diluted_ttm=_to_float(f.get("eps_diluted_ttm")),
-                roce=_to_float(f.get("roce")),
-                thresholds=th,
-            ) if f is not None else None
+            fund_result = (
+                score_fundamental(
+                    roe=_to_float(f.get("roe")),
+                    roa=_to_float(f.get("roa")),
+                    roic=_to_float(f.get("roic")),
+                    operating_margin=_to_float(f.get("operating_margin")),
+                    net_margin=_to_float(f.get("net_margin")),
+                    gross_margin=_to_float(f.get("gross_margin")),
+                    revenue_growth_yoy=_to_float(f.get("revenue_growth_yoy")),
+                    eps_growth_yoy=_to_float(f.get("eps_growth_yoy")),
+                    debt_to_equity=_to_float(f.get("debt_to_equity")),
+                    current_ratio=_to_float(f.get("current_ratio")),
+                    quick_ratio=_to_float(f.get("quick_ratio")),
+                    revenue_ttm=_to_float(f.get("revenue_ttm")),
+                    eps_diluted_ttm=_to_float(f.get("eps_diluted_ttm")),
+                    roce=_to_float(f.get("roce")),
+                    thresholds=th,
+                )
+                if f is not None
+                else None
+            )
 
             # Valuation (PIT: PE = close ÷ TTM EPS; as-of cross-sectional sector median;
             # P/B + EV/EBITDA from Screener's ready ratios snapshot — FM D1).
-            val_result = score_valuation(
-                pe_ttm=pe_by_iid.get(iid),
-                pb_fbs=_to_float(f.get("scr_pb")) if f is not None else None,
-                ev_ebitda=_to_float(f.get("scr_ev_ebitda")) if f is not None else None,
-                price=_to_float(t.get("close_raw")),
-                pos_52w=_to_float(t.get("pos_52w")), ema_200=_to_float(t.get("ema_200")),
-                sector_median_pe=sector_median.get(sector_of.get(iid)), thresholds=th,
-            ) if t is not None else None
+            val_result = (
+                score_valuation(
+                    pe_ttm=pe_by_iid.get(iid),
+                    pb_fbs=_to_float(f.get("scr_pb")) if f is not None else None,
+                    ev_ebitda=_to_float(f.get("scr_ev_ebitda")) if f is not None else None,
+                    price=_to_float(t.get("close_raw")),
+                    pos_52w=_to_float(t.get("pos_52w")),
+                    ema_200=_to_float(t.get("ema_200")),
+                    sector_median_pe=sector_median.get(sector_of.get(iid)),
+                    thresholds=th,
+                )
+                if t is not None
+                else None
+            )
 
             # Catalyst (already as-of via load_catalyst_data).
             filings = cat_by_iid.get(iid, [])
@@ -283,15 +349,26 @@ def score_all(
                     "delivery_updown_asym": _to_float(t.get("delivery_updown_asym")),
                 }
             mf_delta = _to_float(mf_delta_by_iid.get(iid))
-            flow_result = score_flow(
-                insider_txns, sh_current, sh_previous, bulk_deals, th,
-                delivery=delivery, mf_delta=mf_delta,
-            ) if (insider_txns or sh_current or bulk_deals or delivery or mf_delta is not None) else None
+            flow_result = (
+                score_flow(
+                    insider_txns,
+                    sh_current,
+                    sh_previous,
+                    bulk_deals,
+                    th,
+                    delivery=delivery,
+                    mf_delta=mf_delta,
+                )
+                if (insider_txns or sh_current or bulk_deals or delivery or mf_delta is not None)
+                else None
+            )
 
             pol_result = score_policy(row.get("sector"), row.get("industry"), policies, th)
 
             risk_result = compute_risk_flags(
-                insider_signals=insider_txns, quarterly_margins=[], annual_financials={},
+                insider_signals=insider_txns,
+                quarterly_margins=[],
+                annual_financials={},
                 filings=filings,
                 price=_to_float(t.get("price_adj")) if t is not None else None,
                 ema_200=_to_float(t.get("ema_200")) if t is not None else None,
@@ -306,14 +383,26 @@ def score_all(
                 flow=_dec_or_none(flow_result.score) if flow_result else None,
                 policy=_dec_or_none(pol_result.score) if pol_result else None,
                 valuation_multiplier=float(val_result.multiplier) if val_result else 1.0,
-                smart_money_score=float(flow_result.smart_money) if flow_result and flow_result.smart_money else 0.0,
+                smart_money_score=float(flow_result.smart_money)
+                if flow_result and flow_result.smart_money
+                else 0.0,
                 degradation_score=float(risk_result.degradation_score),
                 thresholds=th,
             )
 
             result = _build_result(
-                iid, dt, tech_idx, tech_result, fund_result, val_result,
-                cat_result, flow_result, pol_result, comp_result, risk_result, run_id,
+                iid,
+                dt,
+                tech_idx,
+                tech_result,
+                fund_result,
+                val_result,
+                cat_result,
+                flow_result,
+                pol_result,
+                comp_result,
+                risk_result,
+                run_id,
             )
             results.append(result)
             scored += 1
@@ -325,38 +414,67 @@ def score_all(
 
 
 def _build_result(
-    iid: Any, dt: date, tech_idx: Any,
-    tech_result: Any, fund_result: Any, val_result: Any,
-    cat_result: Any, flow_result: Any, pol_result: Any,
-    comp_result: Any, risk_result: Any, run_id: uuid.UUID,
+    iid: Any,
+    dt: date,
+    tech_idx: Any,
+    tech_result: Any,
+    fund_result: Any,
+    val_result: Any,
+    cat_result: Any,
+    flow_result: Any,
+    pol_result: Any,
+    comp_result: Any,
+    risk_result: Any,
+    run_id: uuid.UUID,
 ) -> dict[str, Any]:
     """Assemble the flat result dict for one instrument."""
-    tr, fr, vr, cr, flr, pr = tech_result, fund_result, val_result, cat_result, flow_result, pol_result
+    tr, fr, vr, cr, flr, pr = (
+        tech_result,
+        fund_result,
+        val_result,
+        cat_result,
+        flow_result,
+        pol_result,
+    )
     asset = tech_idx.loc[iid].get("asset_class", "stock") if iid in tech_idx.index else "stock"
     sm = _g(flr, "smart_money") if flr and flr.smart_money else 0.0
     return {
-        "instrument_id": iid, "date": dt, "asset_class": asset,
+        "instrument_id": iid,
+        "date": dt,
+        "asset_class": asset,
         # Lens headline scores
-        "technical": _g(tr, "score"), "fundamental": _g(fr, "score"),
-        "valuation": _g(vr, "score"), "catalyst": _g(cr, "score"),
-        "flow": _g(flr, "score"), "policy": _g(pr, "score"),
+        "technical": _g(tr, "score"),
+        "fundamental": _g(fr, "score"),
+        "valuation": _g(vr, "score"),
+        "catalyst": _g(cr, "score"),
+        "flow": _g(flr, "score"),
+        "policy": _g(pr, "score"),
         # Technical sub
-        "tech_trend": _g(tr, "trend"), "tech_rs": _g(tr, "relative_strength"),
-        "tech_vol_contraction": _g(tr, "vol_contraction"), "tech_volume": _g(tr, "volume"),
+        "tech_trend": _g(tr, "trend"),
+        "tech_rs": _g(tr, "relative_strength"),
+        "tech_vol_contraction": _g(tr, "vol_contraction"),
+        "tech_volume": _g(tr, "volume"),
         # Fundamental sub
-        "fund_profitability": _g(fr, "profitability"), "fund_margin": _g(fr, "margin"),
-        "fund_growth": _g(fr, "growth"), "fund_balance_sheet": _g(fr, "balance_sheet"),
+        "fund_profitability": _g(fr, "profitability"),
+        "fund_margin": _g(fr, "margin"),
+        "fund_growth": _g(fr, "growth"),
+        "fund_balance_sheet": _g(fr, "balance_sheet"),
         "fund_op_leverage": _g(fr, "op_leverage"),
         # Valuation sub
-        "val_pe_vs_sector": _g(vr, "pe_vs_sector"), "val_absolute_pe": _g(vr, "absolute_pe"),
-        "val_pb": _g(vr, "price_to_book"), "val_ev_ebitda": _g(vr, "ev_ebitda"),
+        "val_pe_vs_sector": _g(vr, "pe_vs_sector"),
+        "val_absolute_pe": _g(vr, "absolute_pe"),
+        "val_pb": _g(vr, "price_to_book"),
+        "val_ev_ebitda": _g(vr, "ev_ebitda"),
         "val_52w_position": _g(vr, "position_52w"),
         # Catalyst sub
         "cat_earnings_strategy": _g(cr, "earnings_strategy"),
-        "cat_capital_action": _g(cr, "capital_action"), "cat_governance": _g(cr, "governance"),
+        "cat_capital_action": _g(cr, "capital_action"),
+        "cat_governance": _g(cr, "governance"),
         # Flow sub
-        "flow_promoter": _g(flr, "promoter"), "flow_institutional": _g(flr, "institutional"),
-        "flow_smart_money": _g(flr, "smart_money"), "flow_accumulation": _g(flr, "accumulation"),
+        "flow_promoter": _g(flr, "promoter"),
+        "flow_institutional": _g(flr, "institutional"),
+        "flow_smart_money": _g(flr, "smart_money"),
+        "flow_accumulation": _g(flr, "accumulation"),
         # Policy sub
         "policy_tailwind": _g(pr, "tailwind"),
         # Composite & meta
@@ -366,24 +484,29 @@ def _build_result(
         # contract); never the misleading 'FAIR' label for a name we can't value.
         "valuation_zone": vr.zone if vr else "UNKNOWN",
         "valuation_multiplier": _dec_or_none(vr.multiplier) if vr else 1.0,
-        "smart_money_score": sm, "degradation_score": _dec_or_none(risk_result.degradation_score),
+        "smart_money_score": sm,
+        "degradation_score": _dec_or_none(risk_result.degradation_score),
         "risk_flags": json.dumps(list(risk_result.flags)),
         # Persist the per-lens sub-component evidence alongside the composite evidence so
         # the glass-box frontend can show every sub-score's RAW INPUT (e.g. roe/roce for
         # profitability, mf_mom_delta for institutional) + the rule it hit — not just the
         # points. Single-schema: the raw inputs travel with the scores in the journal.
-        "evidence": json.dumps({
-            **comp_result.evidence,
-            "lenses": {
-                "technical": getattr(tr, "evidence", None),
-                "fundamental": getattr(fr, "evidence", None),
-                "valuation": getattr(vr, "evidence", None),
-                "catalyst": getattr(cr, "evidence", None),
-                "flow": getattr(flr, "evidence", None),
-                "policy": getattr(pr, "evidence", None),
+        "evidence": json.dumps(
+            {
+                **comp_result.evidence,
+                "lenses": {
+                    "technical": getattr(tr, "evidence", None),
+                    "fundamental": getattr(fr, "evidence", None),
+                    "valuation": getattr(vr, "evidence", None),
+                    "catalyst": getattr(cr, "evidence", None),
+                    "flow": getattr(flr, "evidence", None),
+                    "policy": getattr(pr, "evidence", None),
+                },
             },
-        }, default=str),
+            default=str,
+        ),
         "lenses_active": comp_result.lenses_active,
         "coverage_factor": _dec_or_none(comp_result.coverage_factor),
-        "compute_run_id": run_id, "computed_at": datetime.now(_IST),
+        "compute_run_id": run_id,
+        "computed_at": datetime.now(_IST),
     }

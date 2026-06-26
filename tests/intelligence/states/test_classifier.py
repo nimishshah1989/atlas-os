@@ -498,7 +498,7 @@ def _full_thresholds():
     - theta_vol_mult (stage_2a) removed (volume requirement dropped)
     - theta_obv_slope_neg (stage_3) added
     """
-    tv = lambda v: ThresholdValue(float(v), None, None)  # noqa: E731
+    tv = lambda v: ThresholdValue(float(v), None, None)
     return {
         # Uninvestable
         ("theta_liq", "uninvestable"): tv(100_000),

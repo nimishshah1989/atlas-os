@@ -23,18 +23,21 @@ Config from env (defaults = the configured master service/universe):
 Run:  python ingest_fund_master.py            # refresh
       python ingest_fund_master.py --dry-run  # fetch + parse + report, no writes
 """
+
 from __future__ import annotations
+
+import datetime
 import os
 import sys
-import datetime
 import xml.etree.ElementTree as ET
 
-import requests
 import psycopg2
+import requests
 from psycopg2.extras import execute_values
 
 try:  # load repo-root .env so creds/DB resolve under cron + manual runs alike
     from dotenv import load_dotenv
+
     load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
 except Exception:
     pass
@@ -53,13 +56,13 @@ RUPEES_PER_CRORE = 10_000_000  # 1 crore = 1e7
 def fetch_universe(retries: int = 3) -> bytes:
     url = f"{MSTAR_BASE}/{SVC}/universeid/{UNIV}?accesscode={AC}"
     last = None
-    for a in range(retries):
+    for _a in range(retries):
         try:
             r = requests.get(url, timeout=180)
             if r.status_code == 200 and r.content.rstrip().endswith(b"</response>"):
                 return r.content
             last = f"HTTP {r.status_code} ({len(r.content)}b)"
-        except requests.RequestException as e:  # noqa: BLE001
+        except requests.RequestException as e:
             last = str(e)
     raise SystemExit(f"master universe fetch failed after {retries} tries: {last}")
 
@@ -81,8 +84,7 @@ def _date(v):
 def parse_universe(xml_bytes: bytes):
     root = ET.fromstring(xml_bytes)
     for data in root.iter("data"):
-        g = lambda t: (data.find(f".//{t}").text  # noqa: E731
-                       if data.find(f".//{t}") is not None else None)
+        g = lambda t, d=data: d.find(f".//{t}").text if d.find(f".//{t}") is not None else None
         mid = g("FSCBI-MStarID")
         if not mid:
             continue
@@ -120,15 +122,29 @@ def main() -> None:
     cur = conn.cursor()
 
     # Take clean ownership: de_mf_master needs a unique key on mstar_id for UPSERT.
-    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_de_mf_master_mstar_id "
-                "ON foundation_staging.de_mf_master (mstar_id)")
+    cur.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_de_mf_master_mstar_id "
+        "ON foundation_staging.de_mf_master (mstar_id)"
+    )
 
     # 1) de_mf_master — UPSERT mstar-provided columns; preserve amc_name (not in feed).
-    master_rows = [(f["mstar_id"], f["amfi_code"], f["isin"], f["fund_name"],
-                    f["category_name"], f["broad_category"], f["is_index_fund"],
-                    f["inception_date"], f["benchmark"], f["expense_ratio"])
-                   for f in funds]
-    execute_values(cur,
+    master_rows = [
+        (
+            f["mstar_id"],
+            f["amfi_code"],
+            f["isin"],
+            f["fund_name"],
+            f["category_name"],
+            f["broad_category"],
+            f["is_index_fund"],
+            f["inception_date"],
+            f["benchmark"],
+            f["expense_ratio"],
+        )
+        for f in funds
+    ]
+    execute_values(
+        cur,
         "INSERT INTO foundation_staging.de_mf_master "
         "(mstar_id, amfi_code, isin, fund_name, category_name, broad_category, "
         " is_index_fund, inception_date, primary_benchmark, expense_ratio, "
@@ -141,17 +157,29 @@ def main() -> None:
         "  primary_benchmark=EXCLUDED.primary_benchmark, expense_ratio=EXCLUDED.expense_ratio, "
         "  is_active=TRUE, updated_at=now()",
         master_rows,
-        template="(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,TRUE,now())", page_size=2000)
+        template="(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,TRUE,now())",
+        page_size=2000,
+    )
     master_n = cur.rowcount
 
     # 2) atlas_universe_funds — UPDATE the curated universe in place (no insert).
     #    AUM in TRUE ₹ crore. Join the feed by mstar_id via a VALUES list.
     #    (benchmark_code stays a short CODE; the master gives a full index NAME, which
     #    belongs in de_mf_master.primary_benchmark — not forced into the 32-char code col.)
-    univ_rows = [(f["mstar_id"], f["aum_cr"], f["aum_as_of"], f["category_name"],
-                  f["broad_category"], f["inception_date"])
-                 for f in funds if f["aum_cr"] is not None or f["category_name"]]
-    execute_values(cur,
+    univ_rows = [
+        (
+            f["mstar_id"],
+            f["aum_cr"],
+            f["aum_as_of"],
+            f["category_name"],
+            f["broad_category"],
+            f["inception_date"],
+        )
+        for f in funds
+        if f["aum_cr"] is not None or f["category_name"]
+    ]
+    execute_values(
+        cur,
         "UPDATE foundation_staging.atlas_universe_funds u SET "
         "  aum_cr = v.aum_cr, aum_as_of = v.aum_as_of, "
         "  category_name = COALESCE(v.category_name, u.category_name), "
@@ -162,12 +190,17 @@ def main() -> None:
         "                      inception_date) "
         "WHERE u.mstar_id = v.mstar_id",
         univ_rows,
-        template="(%s,%s::numeric,%s::date,%s,%s,%s::date)", page_size=2000)
+        template="(%s,%s::numeric,%s::date,%s,%s,%s::date)",
+        page_size=2000,
+    )
     univ_n = cur.rowcount
 
     conn.commit()
-    print(f"DONE · de_mf_master upserted {master_n} · atlas_universe_funds updated {univ_n} "
-          f"(AUM in true ₹ crore)", flush=True)
+    print(
+        f"DONE · de_mf_master upserted {master_n} · atlas_universe_funds updated {univ_n} "
+        f"(AUM in true ₹ crore)",
+        flush=True,
+    )
     cur.close()
     conn.close()
 

@@ -63,7 +63,7 @@ from sqlalchemy.engine import Engine
 # Defaults — keep aligned with atlas.discovery.engine.{OHLCV_,NIFTY500_,...}
 # ---------------------------------------------------------------------------
 
-DEFAULT_OUTPUT = Path("/tmp/sde_ohlcv_cache_v3.pkl")  # noqa: S108
+DEFAULT_OUTPUT = Path("/tmp/sde_ohlcv_cache_v3.pkl")
 DEFAULT_SINCE = date(2014, 1, 1)
 CHUNK_SIZE = 200_000  # rows per fetchmany
 NIFTY500_INDEX_SYMBOL = "NIFTY 500"

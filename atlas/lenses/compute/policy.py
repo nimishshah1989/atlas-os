@@ -127,12 +127,14 @@ def score_policy(
             int(thresholds.get("policy_default_pts", 5)),
         )
         raw_total += pts
-        matched.append({
-            "policy_id": pol.get("id") or pol.get("policy_id"),
-            "name": pol.get("name") or pol.get("title", ""),
-            "priority": priority,
-            "points": pts,
-        })
+        matched.append(
+            {
+                "policy_id": pol.get("id") or pol.get("policy_id"),
+                "name": pol.get("name") or pol.get("title", ""),
+                "priority": priority,
+                "points": pts,
+            }
+        )
 
     tailwind = _clamp(raw_total, 0, 100)
     score = tailwind  # single-component lens; score = tailwind

@@ -10,22 +10,27 @@ cap = shares × price × (1 − promoter%). Rate-limited, resumable (skips alrea
     python fetch_marketcap.py            # all stocks
     python fetch_marketcap.py --limit 50 # smoke test
 """
+
 from __future__ import annotations
 
 import argparse
 import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
+import _db
 import pandas as pd
 import requests
 
-import _db
-
-_H = {"User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
-      "Accept": "text/html,*/*", "Referer": "https://www.screener.in/"}
+_H = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,*/*",
+    "Referer": "https://www.screener.in/",
+}
 _tls = threading.local()
 
 
@@ -34,13 +39,15 @@ def _session() -> requests.Session:
     a shared session across threads races, so each worker gets its own)."""
     s = getattr(_tls, "s", None)
     if s is None:
-        s = requests.Session(); s.headers.update(_H)
+        s = requests.Session()
+        s.headers.update(_H)
         try:
             s.get("https://www.screener.in/", timeout=20)  # warm cookies
         except Exception:
             pass
         _tls.s = s
     return s
+
 
 M = "foundation_staging"
 TGT = f"{M}.equity_marketcap"
@@ -53,8 +60,9 @@ def ensure_table() -> None:
 
 
 def _topval(html: str, label: str) -> float | None:
-    m = re.search(re.escape(label) + r'\s*</span>.*?<span class="number">\s*([0-9,]+\.?[0-9]*)',
-                  html, re.S)
+    m = re.search(
+        re.escape(label) + r'\s*</span>.*?<span class="number">\s*([0-9,]+\.?[0-9]*)', html, re.S
+    )
     return float(m.group(1).replace(",", "")) if m else None
 
 
@@ -75,36 +83,51 @@ def _fetch_one(r) -> dict | None:
     mc = _topval(html, "Market Cap") if html else None
     if not mc:
         return None
-    return {"instrument_id": str(r["instrument_id"]), "symbol": r["symbol"],
-            "market_cap_cr": mc, "face_value": _topval(html, "Face Value"),
-            "fetched_at": datetime.now(timezone.utc)}
+    return {
+        "instrument_id": str(r["instrument_id"]),
+        "symbol": r["symbol"],
+        "market_cap_cr": mc,
+        "face_value": _topval(html, "Face Value"),
+        "fetched_at": datetime.now(UTC),
+    }
 
 
 def run(limit: int | None, workers: int = 6) -> None:
     ensure_table()
-    done = set(_db.read_df(f"SELECT symbol FROM {TGT} WHERE market_cap_cr IS NOT NULL")["symbol"].tolist())
-    uni = _db.read_df(f"SELECT instrument_id, symbol FROM {M}.instrument_master "
-                      "WHERE asset_class='stock' AND symbol IS NOT NULL ORDER BY symbol")
+    done = set(
+        _db.read_df(f"SELECT symbol FROM {TGT} WHERE market_cap_cr IS NOT NULL")["symbol"].tolist()
+    )
+    uni = _db.read_df(
+        f"SELECT instrument_id, symbol FROM {M}.instrument_master "
+        "WHERE asset_class='stock' AND symbol IS NOT NULL ORDER BY symbol"
+    )
     todo = [r for _, r in uni.iterrows() if r["symbol"] not in done]
     if limit:
         todo = todo[:limit]
-    print(f"{len(done)} already done; fetching {len(todo)} (of {len(uni)}) on {workers} workers",
-          flush=True)
+    print(
+        f"{len(done)} already done; fetching {len(todo)} (of {len(uni)}) on {workers} workers",
+        flush=True,
+    )
     batch, ok, miss, n = [], 0, 0, 0
     with ThreadPoolExecutor(max_workers=workers) as pool:
         for res in pool.map(_fetch_one, todo):
             n += 1
             if res:
-                batch.append(res); ok += 1
+                batch.append(res)
+                ok += 1
             else:
                 miss += 1
             if len(batch) >= 100:
-                _db.upsert_df(TGT, pd.DataFrame(batch), ["instrument_id"]); batch = []
+                _db.upsert_df(TGT, pd.DataFrame(batch), ["instrument_id"])
+                batch = []
                 print(f"  {n}/{len(todo)} ok={ok} miss={miss}", flush=True)
     if batch:
         _db.upsert_df(TGT, pd.DataFrame(batch), ["instrument_id"])
-    print(f"DONE: ok={ok} miss={miss}; total in table="
-          f"{_db.scalar(f'SELECT count(*) FROM {TGT} WHERE market_cap_cr IS NOT NULL')}", flush=True)
+    print(
+        f"DONE: ok={ok} miss={miss}; total in table="
+        f"{_db.scalar(f'SELECT count(*) FROM {TGT} WHERE market_cap_cr IS NOT NULL')}",
+        flush=True,
+    )
 
 
 def main() -> None:

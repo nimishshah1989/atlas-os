@@ -13,6 +13,7 @@ NEW dict that is the flat dict PLUS the nested keys — so the per-lens scorers,
 which read flat keys (``ema_aligned_all``, ``rs_top10``…), keep working unchanged
 while the composite finally consumes the DB weights. Pure, no I/O.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -35,8 +36,14 @@ def nest_thresholds(flat: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = dict(flat)
 
     if "lens_weights" not in out:
-        defaults = {"technical": 0.20, "fundamental": 0.20, "valuation": 0.00,
-                    "catalyst": 0.25, "flow": 0.25, "policy": 0.10}
+        defaults = {
+            "technical": 0.20,
+            "fundamental": 0.20,
+            "valuation": 0.00,
+            "catalyst": 0.25,
+            "flow": 0.25,
+            "policy": 0.10,
+        }
         out["lens_weights"] = {
             lens: _g(flat, f"lens_weight_{lens}", defaults[lens]) for lens in _LENSES
         }
@@ -51,14 +58,16 @@ def nest_thresholds(flat: dict[str, Any]) -> dict[str, Any]:
 
     if "conviction_tiers" not in out:
         out["conviction_tiers"] = {
-            "HIGHEST": {"min_score": _g(flat, "lens_conviction_highest_score", 70),
-                        "min_lenses": _g(flat, "lens_conviction_highest_min_layers", 3)},
-            "HIGH": {"min_score": _g(flat, "lens_conviction_high_score", 58),
-                     "min_lenses": _g(flat, "lens_conviction_high_min_layers", 2)},
-            "MEDIUM": {"min_score": _g(flat, "lens_conviction_medium_score", 45),
-                       "min_lenses": 0},
-            "WATCH": {"min_score": _g(flat, "lens_conviction_watch_score", 30),
-                      "min_lenses": 0},
+            "HIGHEST": {
+                "min_score": _g(flat, "lens_conviction_highest_score", 70),
+                "min_lenses": _g(flat, "lens_conviction_highest_min_layers", 3),
+            },
+            "HIGH": {
+                "min_score": _g(flat, "lens_conviction_high_score", 58),
+                "min_lenses": _g(flat, "lens_conviction_high_min_layers", 2),
+            },
+            "MEDIUM": {"min_score": _g(flat, "lens_conviction_medium_score", 45), "min_lenses": 0},
+            "WATCH": {"min_score": _g(flat, "lens_conviction_watch_score", 30), "min_lenses": 0},
             "BELOW_THRESHOLD": {"min_score": 0, "min_lenses": 0},
         }
 

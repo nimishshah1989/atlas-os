@@ -11,6 +11,7 @@ policy excluded (FYI-only), valuation is the multiplier.
     python recompute_sql.py --verify     # compare SQL vs canonical scorer on a sample (no write)
     python recompute_sql.py --apply      # verify, then run the single in-DB UPDATE
 """
+
 from __future__ import annotations
 
 import argparse
@@ -22,7 +23,10 @@ _ROOT = str(Path(__file__).resolve().parents[2])
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
+import itertools  # noqa: E402
+
 import _db  # noqa: E402
+
 from atlas.db import load_thresholds  # noqa: E402
 from atlas.lenses.compute.composite import BREAKPOINTS  # noqa: E402
 
@@ -35,10 +39,11 @@ def _rescale_sql(col: str) -> str:
     rounded to 2 dp to match the scorer's quantize."""
     bps = BREAKPOINTS[col]
     parts = [f"WHEN {col} IS NULL OR {col} <= {bps[0][0]} THEN NULL"]
-    for (x0, y0), (x1, y1) in zip(bps[:-1], bps[1:]):
+    for (x0, y0), (x1, y1) in itertools.pairwise(bps):
         # within (x0, x1]: y0 + (raw-x0)/(x1-x0)*(y1-y0)
         parts.append(
-            f"WHEN {col} <= {x1} THEN round(({y0} + ({col}-{x0})::numeric/{x1 - x0}*{y1 - y0})::numeric, 2)")
+            f"WHEN {col} <= {x1} THEN round(({y0} + ({col}-{x0})::numeric/{x1 - x0}*{y1 - y0})::numeric, 2)"
+        )
     parts.append(f"ELSE {bps[-1][1]}")
     return "CASE " + " ".join(parts) + " END"
 
@@ -49,8 +54,10 @@ def build_sql(weights: dict, th: dict, where_extra: str = "") -> str:
     c2 = float(th.get("lens_convergence_2", 1.06))
     c3 = float(th.get("lens_convergence_3", 1.10))
     c4 = float(th.get("lens_convergence_4plus", 1.15))
-    hi_s = float(th.get("lens_conviction_highest_score", 70)); hi_l = int(float(th.get("lens_conviction_highest_min_layers", 3)))
-    h_s = float(th.get("lens_conviction_high_score", 58)); h_l = int(float(th.get("lens_conviction_high_min_layers", 2)))
+    hi_s = float(th.get("lens_conviction_highest_score", 70))
+    hi_l = int(float(th.get("lens_conviction_highest_min_layers", 3)))
+    h_s = float(th.get("lens_conviction_high_score", 58))
+    h_l = int(float(th.get("lens_conviction_high_min_layers", 2)))
     m_s = float(th.get("lens_conviction_medium_score", 45))
     wa_s = float(th.get("lens_conviction_watch_score", 30))
 
@@ -103,8 +110,10 @@ FROM fin
 def verify(weights, th) -> bool:
     """Compare the SQL composite to the canonical compute_composite on a real sample."""
     import pandas as pd
+
     from atlas.lenses.compute.composite import compute_composite
     from atlas.lenses.compute.thresholds_view import nest_thresholds
+
     mx = _db.scalar("SELECT max(date) FROM atlas.atlas_lens_scores_daily WHERE asset_class='stock'")
     sql_sel = build_sql(weights, th, where_extra=" AND date = :d")
     got = _db.read_df(sql_sel.replace(":d", f"'{mx}'")).set_index("instrument_id")
@@ -112,25 +121,36 @@ def verify(weights, th) -> bool:
         "SELECT instrument_id, technical, fundamental, valuation, catalyst, flow, policy, "
         "valuation_multiplier, smart_money_score, degradation_score "
         "FROM atlas.atlas_lens_scores_daily WHERE asset_class='stock' AND date=:d",
-        {"d": mx}).set_index("instrument_id")
+        {"d": mx},
+    ).set_index("instrument_id")
     thn = nest_thresholds({k: (float(v) if isinstance(v, Decimal) else v) for k, v in th.items()})
 
-    def f(v): return float(v) if v is not None and pd.notna(v) else None
+    def f(v):
+        return float(v) if v is not None and pd.notna(v) else None
+
     bad = 0
     for iid in raw.index[:500]:
         r = raw.loc[iid]
         c = compute_composite(
-            technical=f(r.technical), fundamental=f(r.fundamental), valuation_score=f(r.valuation),
-            catalyst=f(r.catalyst), flow=f(r.flow), policy=f(r.policy),
+            technical=f(r.technical),
+            fundamental=f(r.fundamental),
+            valuation_score=f(r.valuation),
+            catalyst=f(r.catalyst),
+            flow=f(r.flow),
+            policy=f(r.policy),
             valuation_multiplier=f(r.valuation_multiplier) or 1.0,
             smart_money_score=f(r.smart_money_score) or 0.0,
-            degradation_score=f(r.degradation_score) or 0.0, thresholds=thn)
+            degradation_score=f(r.degradation_score) or 0.0,
+            thresholds=thn,
+        )
         sql_c = float(got.loc[iid, "composite"]) if iid in got.index else None
         if sql_c is None or abs(sql_c - float(c.final_score)) > 0.1:
             bad += 1
             if bad <= 5:
-                print(f"   mismatch {iid}: sql={sql_c} canonical={c.final_score} "
-                      f"tier sql={got.loc[iid,'conviction_tier']} canon={c.conviction_tier}")
+                print(
+                    f"   mismatch {iid}: sql={sql_c} canonical={c.final_score} "
+                    f"tier sql={got.loc[iid, 'conviction_tier']} canon={c.conviction_tier}"
+                )
     print(f"   verify: {500 - bad}/500 match within 0.1 (composite)")
     return bad == 0
 
@@ -140,10 +160,16 @@ def _pg_connect():
     raises promptly instead of hanging forever (the failure mode that stalled the
     first attempt). Bounded statement timeout so a stuck statement cancels, not hangs."""
     import psycopg2
+
     dsn = _db.db_url().replace("postgresql+psycopg2://", "postgresql://")
-    conn = psycopg2.connect(dsn, keepalives=1, keepalives_idle=30,
-                            keepalives_interval=10, keepalives_count=5,
-                            options="-c statement_timeout=300000")  # 300s/statement
+    conn = psycopg2.connect(
+        dsn,
+        keepalives=1,
+        keepalives_idle=30,
+        keepalives_interval=10,
+        keepalives_count=5,
+        options="-c statement_timeout=300000",
+    )  # 300s/statement
     conn.autocommit = False
     return conn
 
@@ -152,9 +178,13 @@ def apply_robust(weights, th, start_year: int):
     """Materialize composites month-by-month (small batches) with keepalives + retry.
     Resumable: only touches >= start_year."""
     import time
+
     import psycopg2
-    mn, mx = _db.scalar("SELECT min(date) FROM atlas.atlas_lens_scores_daily WHERE asset_class='stock'"), \
-        _db.scalar("SELECT max(date) FROM atlas.atlas_lens_scores_daily WHERE asset_class='stock'")
+
+    mn, mx = (
+        _db.scalar("SELECT min(date) FROM atlas.atlas_lens_scores_daily WHERE asset_class='stock'"),
+        _db.scalar("SELECT max(date) FROM atlas.atlas_lens_scores_daily WHERE asset_class='stock'"),
+    )
     # month windows from max(start_year-01, mn) .. mx
     months = []
     y, m = max(start_year, mn.year), 1 if start_year > mn.year else mn.month
@@ -162,17 +192,20 @@ def apply_robust(weights, th, start_year: int):
         months.append((y, m))
         m += 1
         if m > 12:
-            y += 1; m = 1
+            y += 1
+            m = 1
     print(f"   {len(months)} monthly batches from {months[0]} to {months[-1]}", flush=True)
     t0 = time.time()
-    for (y, m) in months:
+    for y, m in months:
         lo = f"{y}-{m:02d}-01"
         hi = f"{y}-{m:02d}-31"
         sel = build_sql(weights, th, where_extra=f" AND date >= '{lo}' AND date <= '{hi}'")
-        upd = (f"WITH src AS ({sel}) UPDATE atlas.atlas_lens_scores_daily l "
-               "SET composite=src.composite, conviction_tier=src.conviction_tier, "
-               "coverage_factor=src.coverage_factor, lenses_active=src.lenses_active "
-               "FROM src WHERE l.instrument_id=src.instrument_id AND l.date=src.date AND l.asset_class='stock'")
+        upd = (
+            f"WITH src AS ({sel}) UPDATE atlas.atlas_lens_scores_daily l "
+            "SET composite=src.composite, conviction_tier=src.conviction_tier, "
+            "coverage_factor=src.coverage_factor, lenses_active=src.lenses_active "
+            "FROM src WHERE l.instrument_id=src.instrument_id AND l.date=src.date AND l.asset_class='stock'"
+        )
         for attempt in range(1, 4):
             conn = None
             try:
@@ -181,10 +214,12 @@ def apply_robust(weights, th, start_year: int):
                     cur.execute(upd)
                     nrows = cur.rowcount
                 conn.commit()
-                print(f"   {y}-{m:02d}: {nrows} rows ({time.time()-t0:.0f}s)", flush=True)
+                print(f"   {y}-{m:02d}: {nrows} rows ({time.time() - t0:.0f}s)", flush=True)
                 break
             except (psycopg2.OperationalError, psycopg2.errors.QueryCanceled) as e:
-                print(f"   {y}-{m:02d} attempt {attempt} failed: {repr(e)[:80]}; retrying", flush=True)
+                print(
+                    f"   {y}-{m:02d} attempt {attempt} failed: {repr(e)[:80]}; retrying", flush=True
+                )
                 time.sleep(3)
             finally:
                 if conn is not None:
@@ -192,7 +227,7 @@ def apply_robust(weights, th, start_year: int):
         else:
             print(f"   ❌ {y}-{m:02d} failed after 3 attempts", flush=True)
             sys.exit(1)
-    print(f"✅ robust recompute done in {time.time()-t0:.0f}s")
+    print(f"✅ robust recompute done in {time.time() - t0:.0f}s")
 
 
 def main():
@@ -223,31 +258,40 @@ def main():
     # cost is Postgres physically rewriting 3.9M indexed rows, so we batch by year
     # (short transactions) with the per-session statement timeout lifted.
     import time
+
     from atlas.db import get_engine
+
     raw = get_engine().raw_connection()
     t0 = time.time()
     try:
         with raw.cursor() as cur:
             cur.execute("SET statement_timeout = 0")  # lift the 600s cap for this session
-            cur.execute("SELECT min(date), max(date) FROM atlas.atlas_lens_scores_daily "
-                        "WHERE asset_class='stock'")  # indexed, fast
+            cur.execute(
+                "SELECT min(date), max(date) FROM atlas.atlas_lens_scores_daily "
+                "WHERE asset_class='stock'"
+            )  # indexed, fast
             mn, mx = cur.fetchone()
             years = list(range(mn.year, mx.year + 1))
             print(f"   recomputing {mn}..{mx} by year: {years}", flush=True)
             for yr in years:
-                sel = build_sql(weights, th, where_extra=f" AND date >= '{yr}-01-01' AND date <= '{yr}-12-31'")
+                sel = build_sql(
+                    weights, th, where_extra=f" AND date >= '{yr}-01-01' AND date <= '{yr}-12-31'"
+                )
                 cur.execute(
                     f"WITH src AS ({sel}) "
                     "UPDATE atlas.atlas_lens_scores_daily l "
                     "SET composite=src.composite, conviction_tier=src.conviction_tier, "
                     "coverage_factor=src.coverage_factor, lenses_active=src.lenses_active "
                     "FROM src WHERE l.instrument_id=src.instrument_id AND l.date=src.date "
-                    "AND l.asset_class='stock'")
+                    "AND l.asset_class='stock'"
+                )
                 raw.commit()
-                print(f"   {yr}: {cur.rowcount} rows  ({time.time()-t0:.0f}s elapsed)", flush=True)
+                print(
+                    f"   {yr}: {cur.rowcount} rows  ({time.time() - t0:.0f}s elapsed)", flush=True
+                )
     finally:
         raw.close()
-    print(f"✅ in-DB recompute done in {time.time()-t0:.0f}s")
+    print(f"✅ in-DB recompute done in {time.time() - t0:.0f}s")
 
 
 if __name__ == "__main__":

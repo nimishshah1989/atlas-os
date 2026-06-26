@@ -7,38 +7,55 @@ in one call — so this is a single-shot fetch, not a per-symbol loop.
 
 Run: python ingest_bulk_deals.py
 """
+
 from __future__ import annotations
 
-import argparse
 import datetime as dt
-import json
-import time
-
-import pandas as pd
-import requests
 
 import _db
+import pandas as pd
+import requests
 from harness import STAGING_SCHEMA
 
 M = STAGING_SCHEMA
-_H = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/118.0",
-      "Accept": "application/json, text/plain, */*",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Referer": "https://www.nseindia.com/market-data/large-deals"}
+_H = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/118.0",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.nseindia.com/market-data/large-deals",
+}
 _API = "https://www.nseindia.com/api/snapshot-capital-market-largedeal"
 
 # Institutional keywords for detection
-_INST_KW = ["mutual fund", "insurance", "pension", "provident",
-            "bank of", "fii", "dii", "securities", "capital", "asset management",
-            "investment", "trustee", "custody", "clearing", "depository"]
+_INST_KW = [
+    "mutual fund",
+    "insurance",
+    "pension",
+    "provident",
+    "bank of",
+    "fii",
+    "dii",
+    "securities",
+    "capital",
+    "asset management",
+    "investment",
+    "trustee",
+    "custody",
+    "clearing",
+    "depository",
+]
 
 # Superstar investors (curated, partial — extend as needed)
 _SUPERSTARS = {
-    "kacholia": "Ashish Kacholia", "kedia": "Vijay Kedia",
-    "damani": "Radhakishan Damani", "jhunjhunwala": "Jhunjhunwala Legacy",
+    "kacholia": "Ashish Kacholia",
+    "kedia": "Vijay Kedia",
+    "damani": "Radhakishan Damani",
+    "jhunjhunwala": "Jhunjhunwala Legacy",
     "rekha jhunjhunwala": "Jhunjhunwala Legacy",
-    "dolly khanna": "Dolly Khanna", "porinju": "Porinju Veliyath",
-    "sunil singhania": "Sunil Singhania", "anil kumar goel": "Anil Kumar Goel",
+    "dolly khanna": "Dolly Khanna",
+    "porinju": "Porinju Veliyath",
+    "sunil singhania": "Sunil Singhania",
+    "anil kumar goel": "Anil Kumar Goel",
     "mukul agrawal": "Mukul Agrawal",
 }
 
@@ -101,8 +118,9 @@ def run() -> dict:
     # Build symbol → instrument_id mapping
     im = _db.read_df(
         f"select instrument_id, symbol from {M}.instrument_master "
-        "where asset_class='stock' and kite_token is not null")
-    sym_to_iid = dict(zip(im["symbol"], im["instrument_id"].astype(str)))
+        "where asset_class='stock' and kite_token is not null"
+    )
+    sym_to_iid = dict(zip(im["symbol"], im["instrument_id"].astype(str), strict=False))
 
     s = _session()
     r = s.get(_API, timeout=30)
@@ -127,16 +145,21 @@ def run() -> dict:
             price = _num(d.get("wAvgPrice") or d.get("avgPrice") or d.get("price"))
             iid = sym_to_iid.get(sym)
             ss_name = _match_superstar(client)
-            rows.append({
-                "instrument_id": iid, "symbol": sym,
-                "deal_date": dd, "deal_type": deal_type,
-                "client_name": client, "buy_sell": bs,
-                "qty": int(qty) if qty else None,
-                "price": round(price, 2) if price else None,
-                "is_institutional": _is_institutional(client),
-                "is_superstar": ss_name is not None,
-                "superstar_name": ss_name,
-            })
+            rows.append(
+                {
+                    "instrument_id": iid,
+                    "symbol": sym,
+                    "deal_date": dd,
+                    "deal_type": deal_type,
+                    "client_name": client,
+                    "buy_sell": bs,
+                    "qty": int(qty) if qty else None,
+                    "price": round(price, 2) if price else None,
+                    "is_institutional": _is_institutional(client),
+                    "is_superstar": ss_name is not None,
+                    "superstar_name": ss_name,
+                }
+            )
 
     if not rows:
         print("[bulk_deals] no deals found", flush=True)
@@ -145,10 +168,13 @@ def run() -> dict:
     pk = ["symbol", "deal_date", "client_name", "buy_sell"]
     df = pd.DataFrame(rows).drop_duplicates(subset=pk, keep="last")
     n = _db.upsert_df(f"{M}.lens_bulk_deals", df, pk)
-    print(f"[bulk_deals] upserted {n} deals "
-          f"(bulk={sum(1 for r in rows if r['deal_type']=='BULK')}, "
-          f"block={sum(1 for r in rows if r['deal_type']=='BLOCK')}, "
-          f"superstars={sum(1 for r in rows if r['is_superstar'])})", flush=True)
+    print(
+        f"[bulk_deals] upserted {n} deals "
+        f"(bulk={sum(1 for r in rows if r['deal_type'] == 'BULK')}, "
+        f"block={sum(1 for r in rows if r['deal_type'] == 'BLOCK')}, "
+        f"superstars={sum(1 for r in rows if r['is_superstar'])})",
+        flush=True,
+    )
     return {"deals": n}
 
 

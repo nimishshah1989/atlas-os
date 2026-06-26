@@ -69,7 +69,7 @@ METRICS_COLUMNS: tuple[str, ...] = (
     "participation_50",
     "participation_rs",
     "leadership_concentration",
-    "pct_above_ema21",   # A1: canonical EMA21 breadth from technical_daily.above_ema_21
+    "pct_above_ema21",  # A1: canonical EMA21 breadth from technical_daily.above_ema_21
     "pct_above_ema200",  # A1: canonical EMA200 breadth from technical_daily.above_ema_200
     "rs_velocity",  # SP02: 4-week rate-of-change of bottomup_rs_3m_nifty500
     "compute_run_id",

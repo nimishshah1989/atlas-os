@@ -54,7 +54,10 @@ def check_A(g: Gate):
     g.check("latest date exists", mx is not None, str(mx))
 
     # 1. FULL coverage universe scored (≥95% of the active NIFTY 500), not 750
-    n_scored = _q(f"select count(distinct instrument_id) from {L} where asset_class='stock' and date=:d", {"d": mx})
+    n_scored = _q(
+        f"select count(distinct instrument_id) from {L} where asset_class='stock' and date=:d",
+        {"d": mx},
+    )
     g.check("universe coverage ≥95%", n_scored >= 0.95 * n_uni, f"{n_scored}/{n_uni} stocks scored")
 
     # 2. CATALYST is grounded: filing-rich names IN COVERAGE (≥50 filings) must mostly
@@ -64,25 +67,39 @@ def check_A(g: Gate):
                    where instrument_id in (select instrument_id from {ACTIVE})
                    group by 1 having count(*) >= 50)
         select count(*) from f""")
-    rich_pos = _q(f"""
+    rich_pos = _q(
+        f"""
         with f as (select instrument_id, count(*) c from {FILINGS}
                    where instrument_id in (select instrument_id from {ACTIVE})
                    group by 1 having count(*) >= 50)
         select count(*) from f join {L} l on l.instrument_id=f.instrument_id and l.date=:d
-        where l.catalyst > 0""", {"d": mx})
+        where l.catalyst > 0""",
+        {"d": mx},
+    )
     frac = (rich_pos / rich) if rich else 0
-    g.check("catalyst grounded (filing-rich names score >0)", frac >= 0.60,
-            f"{rich_pos}/{rich} filing-rich names have catalyst>0 ({frac:.0%})")
+    g.check(
+        "catalyst grounded (filing-rich names score >0)",
+        frac >= 0.60,
+        f"{rich_pos}/{rich} filing-rich names have catalyst>0 ({frac:.0%})",
+    )
 
     # 3. FLOW non-degenerate (not all ~12) and meaningfully populated
     fstd = _q(f"select stddev(flow) from {L} where asset_class='stock' and date=:d", {"d": mx}) or 0
-    fpos = _q(f"select count(*) from {L} where asset_class='stock' and date=:d and flow>0", {"d": mx})
-    g.check("flow non-degenerate", float(fstd) >= 5 and fpos >= 0.40 * n_scored,
-            f"stddev={float(fstd):.1f}, {fpos} names flow>0")
+    fpos = _q(
+        f"select count(*) from {L} where asset_class='stock' and date=:d and flow>0", {"d": mx}
+    )
+    g.check(
+        "flow non-degenerate",
+        float(fstd) >= 5 and fpos >= 0.40 * n_scored,
+        f"stddev={float(fstd):.1f}, {fpos} names flow>0",
+    )
 
     # 4. Every lens populated for ≥80% of scored instruments
     for lens in LENSES:
-        nn = _q(f"select count(*) from {L} where asset_class='stock' and date=:d and {lens} is not null", {"d": mx})
+        nn = _q(
+            f"select count(*) from {L} where asset_class='stock' and date=:d and {lens} is not null",
+            {"d": mx},
+        )
         g.check(f"{lens} coverage ≥80%", nn >= 0.80 * n_scored, f"{nn}/{n_scored}")
 
     # 5. HISTORICAL journal exists (not a single date): many dates + deep per-instrument history
@@ -91,7 +108,11 @@ def check_A(g: Gate):
     deep = _q(f"""select count(*) from (
         select instrument_id, count(*) c from {L} where asset_class='stock' group by 1 having count(*) >= 250
     ) t""")
-    g.check("≥80% instruments have ≥250 historical dates", deep >= 0.80 * n_uni, f"{deep} instruments deep")
+    g.check(
+        "≥80% instruments have ≥250 historical dates",
+        deep >= 0.80 * n_uni,
+        f"{deep} instruments deep",
+    )
 
 
 # ─────────────────────────── LOOP B ───────────────────────────
@@ -100,14 +121,20 @@ def check_B(g: Gate):
     # ETFs with holdings must each have a lens vector
     n_etf_hold = _q("select count(distinct ticker) from public.de_etf_holdings")
     n_etf_scored = _q(f"select count(distinct instrument_id) from {L} where asset_class='etf'")
-    g.check("ETF lens coverage", n_etf_scored >= 0.90 * (n_etf_hold or 1),
-            f"{n_etf_scored} ETFs scored vs {n_etf_hold} with holdings")
+    g.check(
+        "ETF lens coverage",
+        n_etf_scored >= 0.90 * (n_etf_hold or 1),
+        f"{n_etf_scored} ETFs scored vs {n_etf_hold} with holdings",
+    )
 
     # Indices with constituents must each have a lens vector
     n_idx_con = _q("select count(distinct index_code) from public.de_index_constituents")
     n_idx_scored = _q(f"select count(distinct instrument_id) from {L} where asset_class='index'")
-    g.check("index lens coverage", n_idx_scored >= 0.80 * (n_idx_con or 1),
-            f"{n_idx_scored} indices scored vs {n_idx_con} with constituents")
+    g.check(
+        "index lens coverage",
+        n_idx_scored >= 0.80 * (n_idx_con or 1),
+        f"{n_idx_scored} indices scored vs {n_idx_con} with constituents",
+    )
 
     # Sector roll-up table exists + every actionable sector has a vector
     sec_n = _q(f"select count(distinct sector) from {SEC}") or 0
@@ -116,10 +143,15 @@ def check_B(g: Gate):
     # Mapping completeness: every stock/ETF/index has a sector
     unmapped = _q(f"""select count(*) from {IM}
         where kite_token is not null and (sector is null or sector='')""")
-    has_sector_col = _q(f"select count(*) from information_schema.columns where table_schema='foundation_staging' "
-                        "and table_name='instrument_master' and column_name='sector'")
-    g.check("instrument→sector mapping complete", bool(has_sector_col) and unmapped == 0,
-            f"{unmapped} unmapped" if has_sector_col else "no sector column on instrument_master")
+    has_sector_col = _q(
+        "select count(*) from information_schema.columns where table_schema='foundation_staging' "
+        "and table_name='instrument_master' and column_name='sector'"
+    )
+    g.check(
+        "instrument→sector mapping complete",
+        bool(has_sector_col) and unmapped == 0,
+        f"{unmapped} unmapped" if has_sector_col else "no sector column on instrument_master",
+    )
 
     # Roll-up sanity: a sector score must lie within its constituents' min/max (weighted avg property)
     bad = _q(f"""

@@ -13,6 +13,7 @@ and D/E = total_borrowings/equity are genuine, not the old tv_metrics snapshot.
 Metrics with no real source (ROA/ROIC/current/quick/gross) stay ``None`` and the
 scorer's renorm drops them — never a fabricated stand-in (RULE #0).
 """
+
 from __future__ import annotations
 
 import bisect
@@ -20,8 +21,8 @@ from datetime import date, timedelta
 from typing import Any
 
 # Income-statement fields summed/averaged over the trailing window.
-_TTM_Q = 4   # quarters in a trailing-twelve-month window
-_YOY_Q = 8   # quarters needed to compare TTM vs year-ago TTM
+_TTM_Q = 4  # quarters in a trailing-twelve-month window
+_YOY_Q = 8  # quarters needed to compare TTM vs year-ago TTM
 
 
 def _num(v: Any) -> float | None:
@@ -56,11 +57,19 @@ def derive_fundamentals_asof(
     """
     ev: dict[str, Any] = {"quarters_available": len(quarters)}
     out: dict[str, Any] = {
-        "roe": None, "roa": None, "roic": None,
-        "operating_margin": None, "net_margin": None, "gross_margin": None,
-        "revenue_growth_yoy": None, "eps_growth_yoy": None,
-        "debt_to_equity": None, "current_ratio": None, "quick_ratio": None,
-        "revenue_ttm": None, "eps_diluted_ttm": None,
+        "roe": None,
+        "roa": None,
+        "roic": None,
+        "operating_margin": None,
+        "net_margin": None,
+        "gross_margin": None,
+        "revenue_growth_yoy": None,
+        "eps_growth_yoy": None,
+        "debt_to_equity": None,
+        "current_ratio": None,
+        "quick_ratio": None,
+        "revenue_ttm": None,
+        "eps_diluted_ttm": None,
     }
 
     rev_ttm = _ttm_sum(quarters, "revenue", 0, _TTM_Q)
@@ -133,6 +142,7 @@ def derive_fundamentals_asof(
 # reporting_lag). For any scoring date D the as-of kwargs = the step whose
 # availability ≤ D. Identical semantics to derive_fundamentals_asof, far fewer calls.
 
+
 def _dedup_sort(records: list[dict], key_field: str = "period_end") -> list[dict]:
     """One row per period_end (prefer consolidated), ascending by period_end."""
     best: dict[Any, dict] = {}
@@ -155,7 +165,8 @@ def _as_date(v: Any) -> date | None:
 def build_fundamental_steps(
     quarters_by_iid: dict[Any, list[dict]],
     annual_by_iid: dict[Any, list[dict]],
-    lag_q: int, lag_a: int,
+    lag_q: int,
+    lag_a: int,
 ) -> dict[Any, tuple[list[date], list[dict]]]:
     """Per-instrument (availability_dates, kwargs) step functions.
 
@@ -169,10 +180,16 @@ def build_fundamental_steps(
         q_sorted = _dedup_sort(quarters_by_iid.get(iid, []))
         a_sorted = _dedup_sort(annual_by_iid.get(iid, []))
         # availability dates (period_end + lag) for every filing
-        q_avail = [(_as_date(r["period_end"]) + timedelta(days=lag_q), r) for r in q_sorted
-                   if _as_date(r["period_end"]) is not None]
-        a_avail = [(_as_date(r["period_end"]) + timedelta(days=lag_a), r) for r in a_sorted
-                   if _as_date(r["period_end"]) is not None]
+        q_avail = [
+            (_as_date(r["period_end"]) + timedelta(days=lag_q), r)
+            for r in q_sorted
+            if _as_date(r["period_end"]) is not None
+        ]
+        a_avail = [
+            (_as_date(r["period_end"]) + timedelta(days=lag_a), r)
+            for r in a_sorted
+            if _as_date(r["period_end"]) is not None
+        ]
         change_points = sorted({cp for cp, _ in q_avail} | {cp for cp, _ in a_avail})
         if not change_points:
             continue
@@ -192,7 +209,8 @@ def build_fundamental_steps(
             a_known = [r for (av, r) in a_avail if av <= cp]
             annual = a_known[-1] if a_known else None
             derived = derive_fundamentals_asof(q_known_desc, annual)
-            row = dict(derived["kwargs"]); row["instrument_id"] = iid
+            row = dict(derived["kwargs"])
+            row["instrument_id"] = iid
             avail_dates.append(cp)
             kwargs_list.append(row)
         steps[iid] = (avail_dates, kwargs_list)
@@ -200,7 +218,9 @@ def build_fundamental_steps(
 
 
 def fundamental_asof_from_steps(
-    steps: dict[Any, tuple[list[date], list[dict]]], iid: Any, d: date,
+    steps: dict[Any, tuple[list[date], list[dict]]],
+    iid: Any,
+    d: date,
 ) -> dict | None:
     """The as-of fundamental kwargs row for *iid* on date *d* (None if not yet knowable)."""
     entry = steps.get(iid)

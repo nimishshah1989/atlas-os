@@ -22,6 +22,7 @@ session-pooler cap (the dev server holds ~14 of 15).
     python backfill_sector_rs.py            # full history (batched by year)
     python backfill_sector_rs.py --latest   # only the most recent date (fast; lights the RS matrix)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -30,9 +31,8 @@ import sys
 import time
 import warnings
 
-import pandas as pd
-
 import _db
+import pandas as pd
 
 FS = "foundation_staging"
 # Sector RS windows = the 4 sector columns on technical_daily (no 1d/1w sector).
@@ -52,7 +52,8 @@ def _index_returns(conn) -> pd.DataFrame:
     px = pd.read_sql(
         f"select index_code, date, close from {FS}.index_prices "
         f"where index_code = any(%(codes)s) order by index_code, date",
-        conn, params={"codes": codes},
+        conn,
+        params={"codes": codes},
     )
     px["close"] = px["close"].astype(float)
     px = px[px["close"] > 0]  # drop zero/blank deep-history prints (matches compute_all)
@@ -78,14 +79,16 @@ def _write_sector_index_returns(conn, long: pd.DataFrame) -> None:
         f"""CREATE TABLE {FS}.sector_index_returns (
                 index_code text NOT NULL, date date NOT NULL,
                 ret_1m numeric, ret_3m numeric, ret_6m numeric, ret_12m numeric,
-                PRIMARY KEY (index_code, date))""")
+                PRIMARY KEY (index_code, date))"""
+    )
     buf = io.StringIO()
     long.to_csv(buf, index=False, header=False)
     buf.seek(0)
     cur.copy_expert(
         f"COPY {FS}.sector_index_returns "
         "(index_code, date, ret_1m, ret_3m, ret_6m, ret_12m) FROM STDIN WITH CSV",
-        buf)
+        buf,
+    )
     cur.execute(f"ANALYZE {FS}.sector_index_returns")
     conn.commit()
     cur.close()
@@ -115,15 +118,17 @@ def _batched_update(conn, latest_only: bool) -> int:
     if latest_only:
         batches = [(hi, hi + pd.Timedelta(days=1))]
     else:  # one batch per calendar year — each ~600k rows, a bounded transaction
-        batches = [(pd.Timestamp(y, 1, 1).date(), pd.Timestamp(y + 1, 1, 1).date())
-                   for y in range(lo.year, hi.year + 1)]
+        batches = [
+            (pd.Timestamp(y, 1, 1).date(), pd.Timestamp(y + 1, 1, 1).date())
+            for y in range(lo.year, hi.year + 1)
+        ]
     total = 0
     for blo, bhi in batches:
         t0 = time.time()
         cur.execute(_UPDATE, {"lo": str(blo), "hi": str(bhi)})
         conn.commit()
         total += cur.rowcount
-        print(f"  {blo}..{bhi}  updated {cur.rowcount:>7,}  ({time.time()-t0:5.1f}s)")
+        print(f"  {blo}..{bhi}  updated {cur.rowcount:>7,}  ({time.time() - t0:5.1f}s)")
     cur.close()
     return total
 
@@ -141,7 +146,9 @@ def _verify(conn) -> None:
               on r.index_code = m.primary_nse_index and r.date = t.date
             where t.symbol in ('TCS','HDFCBANK','RELIANCE','SUNPHARMA','TATAMOTORS')
               and t.date = (select max(date) from {FS}.technical_daily)
-            order by t.symbol""", conn)
+            order by t.symbol""",
+        conn,
+    )
     pd.set_option("display.width", 200)
     print(df.to_string(index=False))
     bad = df[(df["rs_3m_sector"].astype(float) - df["expected"].astype(float)).abs() > 1e-9]
@@ -149,26 +156,35 @@ def _verify(conn) -> None:
     cov = pd.read_sql(
         f"""select count(*) n,
                    count(rs_3m_sector) has_3m, count(rs_12m_sector) has_12m
-            from {FS}.technical_daily""", conn)
-    print(f"\ncoverage: {int(cov['has_3m'][0]):,} / {int(cov['n'][0]):,} rows have rs_3m_sector "
-          f"({100*cov['has_3m'][0]/cov['n'][0]:.1f}%); rs_12m_sector {int(cov['has_12m'][0]):,}")
+            from {FS}.technical_daily""",
+        conn,
+    )
+    print(
+        f"\ncoverage: {int(cov['has_3m'][0]):,} / {int(cov['n'][0]):,} rows have rs_3m_sector "
+        f"({100 * cov['has_3m'][0] / cov['n'][0]:.1f}%); rs_12m_sector {int(cov['has_12m'][0]):,}"
+    )
     print("VERIFY OK ✓")
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--latest", action="store_true",
-                    help="only update the most recent date (fast; lights the RS matrix)")
+    ap.add_argument(
+        "--latest",
+        action="store_true",
+        help="only update the most recent date (fast; lights the RS matrix)",
+    )
     args = ap.parse_args()
     warnings.filterwarnings("ignore", message="pandas only supports SQLAlchemy")
     conn = _db.engine().raw_connection()
     try:
-        print(f"=== sector-RS backfill -> {FS}.technical_daily ({'LATEST' if args.latest else 'FULL'}) ===")
+        print(
+            f"=== sector-RS backfill -> {FS}.technical_daily ({'LATEST' if args.latest else 'FULL'}) ==="
+        )
         t0 = time.time()
         long = _index_returns(conn)
         _write_sector_index_returns(conn, long)
         n = _batched_update(conn, args.latest)
-        print(f"\ntotal rows updated: {n:,} in {time.time()-t0:.0f}s")
+        print(f"\ntotal rows updated: {n:,} in {time.time() - t0:.0f}s")
         _verify(conn)
     finally:
         conn.close()

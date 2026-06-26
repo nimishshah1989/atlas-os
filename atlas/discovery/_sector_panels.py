@@ -25,7 +25,7 @@ import numpy as np
 import pandas as pd
 
 # Path the parallel subagent staged sector mapping at.
-DEFAULT_SECTOR_MAPPING_PATH = Path("/tmp/deep_search_v2/sector_mapping.csv")  # noqa: S108
+DEFAULT_SECTOR_MAPPING_PATH = Path("/tmp/deep_search_v2/sector_mapping.csv")
 
 # Minimum members per sector to compute statistics. Below this, LOO cohort
 # means are degenerate (1 peer → division by 0 → NaN; 2 peers → noisy).

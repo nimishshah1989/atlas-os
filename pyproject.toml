@@ -134,6 +134,14 @@ select = ["E", "F", "I", "N", "W", "UP", "B", "RUF", "S"]
 ignore = [
     "S101",   # assert allowed in tests + DoD checks
     "S110",   # try-except-pass used for defensive connection cleanup
+    "S112",   # try-except-continue used for defensive per-item skips in batch loops
+    "S314",   # ElementTree on FIRST-PARTY trusted feeds (Morningstar/AMFI), not user input
+    "S108",   # /tmp paths in dev/ops scripts are intentional scratch
+    "E741",   # ambiguous single-letter names (l, I, O) are idiomatic in quant code (RS, IC, …)
+    "E731",   # assigning a lambda to a local is fine for tight inline helpers
+    "N802",   # function names may use domain casing (RSI, EMA, …) in the analytics layer
+    "N806",   # local variable casing (X, IC, RS) follows finance/maths convention
+    "N812",   # import aliases may keep upstream casing
     "RUF001", # mathematical unicode (σ) in string literals is intentional
     "RUF002", # mathematical unicode (×, −, σ, –) in docstrings is intentional
     "RUF003", # mathematical unicode (×) in comments is intentional

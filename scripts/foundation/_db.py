@@ -63,11 +63,10 @@ def engine() -> Engine:
     scalar — the pooler routes each transaction to a possibly-different backend, so
     the connect-time SET alone leaks back to the 2-min role default (connect_args
     options are likewise dropped by the Supabase pooler)."""
-    eng = create_engine(db_url(), pool_pre_ping=True,
-                         connect_args={"connect_timeout": 30})
+    eng = create_engine(db_url(), pool_pre_ping=True, connect_args={"connect_timeout": 30})
 
     @event.listens_for(eng, "connect")
-    def _set_timeout(dbapi_conn, _record):  # noqa: ANN001
+    def _set_timeout(dbapi_conn, _record):
         cur = dbapi_conn.cursor()
         cur.execute(f"set statement_timeout = '{_STMT_TIMEOUT_MS}'")
         cur.close()
@@ -118,8 +117,10 @@ def upsert_df(table: str, df: pd.DataFrame, conflict_cols: list[str]) -> int:
         return 0
     cols = list(df.columns)
     updates = [c for c in cols if c not in conflict_cols]
-    set_clause = ", ".join(f"{c} = excluded.{c}" for c in updates) or \
-        f"{conflict_cols[0]} = excluded.{conflict_cols[0]}"
+    set_clause = (
+        ", ".join(f"{c} = excluded.{c}" for c in updates)
+        or f"{conflict_cols[0]} = excluded.{conflict_cols[0]}"
+    )
     collist = ", ".join(cols)
     sql = (
         f"insert into {table} ({collist}) values %s "
@@ -130,6 +131,7 @@ def upsert_df(table: str, df: pd.DataFrame, conflict_cols: list[str]) -> int:
     raw = engine().raw_connection()
     try:
         from psycopg2.extras import execute_values
+
         with raw.cursor() as cur:
             execute_values(cur, sql, rows, page_size=1000)
         raw.commit()

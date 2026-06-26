@@ -7,45 +7,66 @@ Resumable via lens_filings_state; safe to kill/restart.
 
 Run: python ingest_filings.py [--limit N] [--redo]
 """
+
 from __future__ import annotations
 
 import argparse
 import datetime as dt
 import time
 
+import _db
 import pandas as pd
 import requests
-
-import _db
 from harness import STAGING_SCHEMA
 
 M = STAGING_SCHEMA
-_H = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/118.0",
-      "Accept": "application/json, text/plain, */*",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Referer": "https://www.nseindia.com/companies-listing/corporate-filings-announcements"}
+_H = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/118.0",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.nseindia.com/companies-listing/corporate-filings-announcements",
+}
 _API = "https://www.nseindia.com/api/corporate-announcements"
 
 # Category classification: keyword → (bucket, priority)
 _CATS = {
-    "concall": ("earnings", "HIGH"), "analyst meet": ("earnings", "HIGH"),
-    "outcome of board": ("earnings", "HIGH"), "financial results": ("earnings", "HIGH"),
+    "concall": ("earnings", "HIGH"),
+    "analyst meet": ("earnings", "HIGH"),
+    "outcome of board": ("earnings", "HIGH"),
+    "financial results": ("earnings", "HIGH"),
     "investor presentation": ("earnings", "MEDIUM"),
     "annual report": ("earnings", "MEDIUM"),
-    "acquisition": ("capital", "HIGH"), "amalgamation": ("capital", "HIGH"),
-    "merger": ("capital", "HIGH"), "buyback": ("capital", "HIGH"),
-    "credit rating": ("capital", "MEDIUM"), "dividend": ("capital", "MEDIUM"),
-    "bonus": ("capital", "MEDIUM"), "split": ("capital", "MEDIUM"),
+    "acquisition": ("capital", "HIGH"),
+    "amalgamation": ("capital", "HIGH"),
+    "merger": ("capital", "HIGH"),
+    "buyback": ("capital", "HIGH"),
+    "credit rating": ("capital", "MEDIUM"),
+    "dividend": ("capital", "MEDIUM"),
+    "bonus": ("capital", "MEDIUM"),
+    "split": ("capital", "MEDIUM"),
     "press release": ("capital", "MEDIUM"),
-    "appointment": ("governance", "MEDIUM"), "cessation": ("governance", "MEDIUM"),
-    "resignation": ("governance", "MEDIUM"), "change in director": ("governance", "MEDIUM"),
-    "auditor": ("governance", "HIGH"), "change in auditor": ("governance", "HIGH"),
+    "appointment": ("governance", "MEDIUM"),
+    "cessation": ("governance", "MEDIUM"),
+    "resignation": ("governance", "MEDIUM"),
+    "change in director": ("governance", "MEDIUM"),
+    "auditor": ("governance", "HIGH"),
+    "change in auditor": ("governance", "HIGH"),
     "takeover": ("governance", "MEDIUM"),
 }
 # Procedural: skip
-_SKIP = {"newspaper", "advertisement", "certificate", "trading window",
-         "shareholders meeting", "annual general meeting", "postal ballot",
-         "book closure", "record date", "listing", "compliance certificate"}
+_SKIP = {
+    "newspaper",
+    "advertisement",
+    "certificate",
+    "trading window",
+    "shareholders meeting",
+    "annual general meeting",
+    "postal ballot",
+    "book closure",
+    "record date",
+    "listing",
+    "compliance certificate",
+}
 
 
 def ddl() -> None:
@@ -118,12 +139,24 @@ def ingest_symbol(s: requests.Session, iid: str, symbol: str) -> int:
         if not seq:
             continue
         att = rec.get("attchmntFile") or rec.get("an_attachment") or ""
-        url = att if att.startswith("http") else (
-            f"https://archives.nseindia.com/corporate/ann/{att}" if att else None)
-        rows.append({"instrument_id": iid, "symbol": symbol, "filing_date": fd,
-                     "category": cat, "category_bucket": bucket,
-                     "signal_priority": prio, "subject_text": subject,
-                     "source_url": url, "nse_seq_id": seq})
+        url = (
+            att
+            if att.startswith("http")
+            else (f"https://archives.nseindia.com/corporate/ann/{att}" if att else None)
+        )
+        rows.append(
+            {
+                "instrument_id": iid,
+                "symbol": symbol,
+                "filing_date": fd,
+                "category": cat,
+                "category_bucket": bucket,
+                "signal_priority": prio,
+                "subject_text": subject,
+                "source_url": url,
+                "nse_seq_id": seq,
+            }
+        )
     if not rows:
         return 0
     df = pd.DataFrame(rows).drop_duplicates(subset=["instrument_id", "nse_seq_id"], keep="last")
@@ -133,7 +166,8 @@ def ingest_symbol(s: requests.Session, iid: str, symbol: str) -> int:
 def targets(only_pending: bool, limit):
     df = _db.read_df(
         f"select instrument_id, symbol from {M}.instrument_master "
-        "where asset_class='stock' and kite_token is not null order by symbol")
+        "where asset_class='stock' and kite_token is not null order by symbol"
+    )
     df["instrument_id"] = df["instrument_id"].astype(str)
     if only_pending:
         done = _db.read_df(f"select instrument_id from {M}.lens_filings_state where status='done'")
@@ -144,30 +178,57 @@ def targets(only_pending: bool, limit):
 def run(only_pending=True, limit=None) -> dict:
     ddl()
     tgt = targets(only_pending, limit)
-    total = len(tgt); done = err = ftot = 0
+    total = len(tgt)
+    done = err = ftot = 0
     s = _session()
     print(f"[filings] targets={total}", flush=True)
     for n, r in enumerate(tgt.itertuples(), 1):
         iid, sym = r.instrument_id, r.symbol
         try:
             f = ingest_symbol(s, iid, sym)
-            _db.upsert_df(f"{M}.lens_filings_state", pd.DataFrame([{
-                "instrument_id": iid, "symbol": sym,
-                "status": "done" if f else "no_data",
-                "filings": f, "error": None,
-                "updated_at": dt.datetime.now(dt.UTC)}]), ["instrument_id"])
-            done += 1; ftot += f
+            _db.upsert_df(
+                f"{M}.lens_filings_state",
+                pd.DataFrame(
+                    [
+                        {
+                            "instrument_id": iid,
+                            "symbol": sym,
+                            "status": "done" if f else "no_data",
+                            "filings": f,
+                            "error": None,
+                            "updated_at": dt.datetime.now(dt.UTC),
+                        }
+                    ]
+                ),
+                ["instrument_id"],
+            )
+            done += 1
+            ftot += f
         except Exception as e:
             msg = repr(e)[:300]
-            _db.upsert_df(f"{M}.lens_filings_state", pd.DataFrame([{
-                "instrument_id": iid, "symbol": sym, "status": "error",
-                "filings": None, "error": msg,
-                "updated_at": dt.datetime.now(dt.UTC)}]), ["instrument_id"])
+            _db.upsert_df(
+                f"{M}.lens_filings_state",
+                pd.DataFrame(
+                    [
+                        {
+                            "instrument_id": iid,
+                            "symbol": sym,
+                            "status": "error",
+                            "filings": None,
+                            "error": msg,
+                            "updated_at": dt.datetime.now(dt.UTC),
+                        }
+                    ]
+                ),
+                ["instrument_id"],
+            )
             err += 1
             if any(t in msg for t in ("403", "401", "Connection", "Timeout")):
                 s = _session()
         if n % 25 == 0 or n == total:
-            print(f"[filings] {n}/{total} done={done} err={err} filings={ftot} last={sym}", flush=True)
+            print(
+                f"[filings] {n}/{total} done={done} err={err} filings={ftot} last={sym}", flush=True
+            )
         time.sleep(1.0)
     print(f"[filings] COMPLETE done={done} err={err} filings={ftot}", flush=True)
     return {"targets": total, "done": done, "err": err, "filings": ftot}

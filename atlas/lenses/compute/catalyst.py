@@ -12,6 +12,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
+
 @dataclass(frozen=True, slots=True)
 class CatalystResult:
     earnings_strategy: Decimal | None
@@ -169,17 +170,45 @@ def _is_order_win(subject: str) -> bool:
     and 'Awarding of order(s)/contract(s)'. Require an explicit win verb, or both
     'order' and 'contract' present, while excluding regulatory/legal phrasing."""
     s = subject.lower()
-    if any(bad in s for bad in ("orders passed", "order passed", "orders initiated",
-                                "action(s) taken", "action taken", "penalty", "adjudicat",
-                                "show cause", "sebi", "tribunal", "court")):
+    if any(
+        bad in s
+        for bad in (
+            "orders passed",
+            "order passed",
+            "orders initiated",
+            "action(s) taken",
+            "action taken",
+            "penalty",
+            "adjudicat",
+            "show cause",
+            "sebi",
+            "tribunal",
+            "court",
+        )
+    ):
         return False
-    if any(win in s for win in ("bagging", "bagged", "awarding of order", "awarded",
-                                "letter of award", "work order", "receiving of order",
-                                "secures order", "secured order", "wins order", "won order",
-                                "order win", "order received", "order book")):
+    if any(
+        win in s
+        for win in (
+            "bagging",
+            "bagged",
+            "awarding of order",
+            "awarded",
+            "letter of award",
+            "work order",
+            "receiving of order",
+            "secures order",
+            "secured order",
+            "wins order",
+            "won order",
+            "order win",
+            "order received",
+            "order book",
+        )
+    ):
         return True
     # 'order(s)/contract(s)' co-occurrence is the canonical NSE order-win subject
-    return ("order" in s and "contract" in s)
+    return "order" in s and "contract" in s
 
 
 def _match_keywords(text: str, keywords: list[str]) -> bool:
@@ -286,14 +315,16 @@ def score_catalyst(
         bucket_key = _BUCKET_MAP.get(category, "earnings_strategy")
         bucket_totals[bucket_key] += weighted
 
-        filing_details.append({
-            "category": category,
-            "subject": subject[:80],
-            "raw": raw,
-            "recency": recency,
-            "weighted": round(weighted, 2),
-            "bucket": bucket_key,
-        })
+        filing_details.append(
+            {
+                "category": category,
+                "subject": subject[:80],
+                "raw": raw,
+                "recency": recency,
+                "weighted": round(weighted, 2),
+                "bucket": bucket_key,
+            }
+        )
 
     # Clamp each bucket 0-100
     es = Decimal(str(round(_clamp(bucket_totals["earnings_strategy"], 0, 100), 2)))
@@ -315,8 +346,6 @@ def score_catalyst(
         evidence={
             "filing_count": len(filing_details),
             "filings": filing_details,
-            "bucket_totals_raw": {
-                k: round(v, 2) for k, v in bucket_totals.items()
-            },
+            "bucket_totals_raw": {k: round(v, 2) for k, v in bucket_totals.items()},
         },
     )

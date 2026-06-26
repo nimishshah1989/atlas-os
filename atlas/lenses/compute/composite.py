@@ -3,19 +3,20 @@
 Ported from Theta's gem_scorer.py, adapted for the six-lens architecture.
 Pure function, no I/O.
 """  # allow-large: composite is the most complex scoring module
+
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 __all__ = [
     "CompositeResult",
     "compute_composite",
-    "rollup_sector",
     "rollup_holdings",
     "rollup_index",
+    "rollup_sector",
 ]
 
 _Q2 = Decimal("0.01")
@@ -34,12 +35,12 @@ _ALL_LENS_NAMES = ("technical", "fundamental", "valuation", "catalyst", "flow", 
 _NON_CONVICTION = frozenset({"policy", "valuation"})
 
 BREAKPOINTS: dict[str, list[tuple[int, int]]] = {
-    "technical":   [(0, 0), (15, 25), (30, 50), (45, 70), (60, 85), (80, 95), (100, 100)],
+    "technical": [(0, 0), (15, 25), (30, 50), (45, 70), (60, 85), (80, 95), (100, 100)],
     "fundamental": [(0, 0), (10, 25), (20, 50), (30, 70), (50, 85), (75, 95), (100, 100)],
-    "valuation":   [(0, 0), (15, 25), (30, 50), (45, 70), (60, 85), (80, 95), (100, 100)],
-    "catalyst":    [(0, 0), (8, 20), (18, 50), (30, 70), (45, 85), (70, 95), (100, 100)],
-    "flow":        [(0, 0), (10, 25), (20, 50), (30, 70), (50, 85), (75, 95), (100, 100)],
-    "policy":      [(0, 0), (10, 25), (20, 50), (35, 70), (50, 85), (75, 95), (100, 100)],
+    "valuation": [(0, 0), (15, 25), (30, 50), (45, 70), (60, 85), (80, 95), (100, 100)],
+    "catalyst": [(0, 0), (8, 20), (18, 50), (30, 70), (45, 85), (70, 95), (100, 100)],
+    "flow": [(0, 0), (10, 25), (20, 50), (30, 70), (50, 85), (75, 95), (100, 100)],
+    "policy": [(0, 0), (10, 25), (20, 50), (35, 70), (50, 85), (75, 95), (100, 100)],
 }
 
 
@@ -75,11 +76,11 @@ _DEFAULT_CONVERGENCE = {
 }
 
 _DEFAULT_CONVICTION = {
-    "HIGHEST":          {"min_score": 70, "min_lenses": 3},
-    "HIGH":             {"min_score": 58, "min_lenses": 2},
-    "MEDIUM":           {"min_score": 45, "min_lenses": 0},
-    "WATCH":            {"min_score": 30, "min_lenses": 0},
-    "BELOW_THRESHOLD":  {"min_score": 0,  "min_lenses": 0},
+    "HIGHEST": {"min_score": 70, "min_lenses": 3},
+    "HIGH": {"min_score": 58, "min_lenses": 2},
+    "MEDIUM": {"min_score": 45, "min_lenses": 0},
+    "WATCH": {"min_score": 30, "min_lenses": 0},
+    "BELOW_THRESHOLD": {"min_score": 0, "min_lenses": 0},
 }
 
 _CONVICTION_ORDER = ["HIGHEST", "HIGH", "MEDIUM", "WATCH", "BELOW_THRESHOLD"]
@@ -102,7 +103,9 @@ def _clamp(v: float, lo: float = 0.0, hi: float = 100.0) -> float:
 
 
 def _determine_conviction(
-    score: float, active: int, th: dict[str, Any],
+    score: float,
+    active: int,
+    th: dict[str, Any],
 ) -> str:
     tiers = th.get("conviction_tiers", _DEFAULT_CONVICTION)
     for tier in _CONVICTION_ORDER:
@@ -174,8 +177,7 @@ def compute_composite(
 
     total_active_weight = sum(active_weights.values())
     normalized_avg = sum(
-        float(rescaled[lens]) * (w / total_active_weight)
-        for lens, w in active_weights.items()
+        float(rescaled[lens]) * (w / total_active_weight) for lens, w in active_weights.items()
     )
     coverage_factor = math.sqrt(total_active_weight)
     weighted_avg = normalized_avg * coverage_factor
@@ -186,8 +188,11 @@ def compute_composite(
 
     # Step 3: convergence bonus
     conv_threshold = conv_cfg.get("threshold", 40)
-    converging = sum(1 for lens, v in rescaled.items()
-                     if lens not in _NON_CONVICTION and float(v) >= conv_threshold)
+    converging = sum(
+        1
+        for lens, v in rescaled.items()
+        if lens not in _NON_CONVICTION and float(v) >= conv_threshold
+    )
 
     if converging >= 4:
         conv_mult = conv_cfg.get("4plus", 1.15)
@@ -206,7 +211,8 @@ def compute_composite(
     val_mult = _clamp(valuation_multiplier, 0.75, 1.15)
     final = _clamp(
         base_composite * val_mult + smart_money_score + degradation_score,
-        0.0, 100.0,
+        0.0,
+        100.0,
     )
     evidence["valuation_multiplier"] = val_mult
     evidence["smart_money_score"] = smart_money_score
@@ -251,8 +257,12 @@ def _breadth_stats(items: list[dict[str, Any]], key: str = "final_score") -> dic
     n = len(scores)
     mean = sum(scores) / n
     variance = sum((s - mean) ** 2 for s in scores) / n
-    return {"count": n, "breadth_above_50": round(sum(1 for s in scores if s >= 50) / n, 4),
-            "mean_score": round(mean, 4), "dispersion": round(math.sqrt(variance), 4)}
+    return {
+        "count": n,
+        "breadth_above_50": round(sum(1 for s in scores if s >= 50) / n, 4),
+        "mean_score": round(mean, 4),
+        "dispersion": round(math.sqrt(variance), 4),
+    }
 
 
 def _weighted_final(items: list[dict[str, Any]], wk: str) -> tuple[float, float]:
@@ -260,17 +270,24 @@ def _weighted_final(items: list[dict[str, Any]], wk: str) -> tuple[float, float]
     tw = sum(float(it.get(wk, 0)) for it in items)
     if tw <= 0:
         return 0.0, 0.0
-    wf = sum(float(it.get("final_score", 0)) * float(it.get(wk, 0)) / tw
-             for it in items if it.get("final_score") is not None and float(it.get(wk, 0)) > 0)
+    wf = sum(
+        float(it.get("final_score", 0)) * float(it.get(wk, 0)) / tw
+        for it in items
+        if it.get("final_score") is not None and float(it.get(wk, 0)) > 0
+    )
     return round(wf, 4), round(tw, 4)
 
 
 def rollup_sector(stock_scores: list[dict[str, Any]]) -> dict[str, Any]:
     """Cap-weighted average of stock lens vectors within a sector + breadth + dispersion."""
     wf, tc = _weighted_final(stock_scores, "market_cap")
-    return {"lens_averages": _weighted_lens_avg(stock_scores, "market_cap"),
-            "weighted_final_score": wf, "breadth": _breadth_stats(stock_scores),
-            "total_market_cap": tc, "stock_count": len(stock_scores)}
+    return {
+        "lens_averages": _weighted_lens_avg(stock_scores, "market_cap"),
+        "weighted_final_score": wf,
+        "breadth": _breadth_stats(stock_scores),
+        "total_market_cap": tc,
+        "stock_count": len(stock_scores),
+    }
 
 
 def rollup_holdings(
@@ -281,14 +298,17 @@ def rollup_holdings(
     lens_avg = _weighted_lens_avg(holding_scores, "weight")
     wf, tw = _weighted_final(holding_scores, "weight")
     result: dict[str, Any] = {
-        "lens_averages": lens_avg, "weighted_final_score": wf,
+        "lens_averages": lens_avg,
+        "weighted_final_score": wf,
         "breadth": _breadth_stats(holding_scores),
-        "total_weight": tw, "holding_count": len(holding_scores),
+        "total_weight": tw,
+        "holding_count": len(holding_scores),
     }
     if benchmark_scores is not None:
         result["active_tilt"] = {
             lens: round(avg - benchmark_scores[lens], 4)
-            for lens, avg in lens_avg.items() if lens in benchmark_scores
+            for lens, avg in lens_avg.items()
+            if lens in benchmark_scores
         }
     return result
 
@@ -296,6 +316,10 @@ def rollup_holdings(
 def rollup_index(constituent_scores: list[dict[str, Any]]) -> dict[str, Any]:
     """Constituent-weighted roll-up for indices."""
     wf, tw = _weighted_final(constituent_scores, "weight")
-    return {"lens_averages": _weighted_lens_avg(constituent_scores, "weight"),
-            "weighted_final_score": wf, "breadth": _breadth_stats(constituent_scores),
-            "total_weight": tw, "constituent_count": len(constituent_scores)}
+    return {
+        "lens_averages": _weighted_lens_avg(constituent_scores, "weight"),
+        "weighted_final_score": wf,
+        "breadth": _breadth_stats(constituent_scores),
+        "total_weight": tw,
+        "constituent_count": len(constituent_scores),
+    }

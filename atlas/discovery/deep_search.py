@@ -513,8 +513,8 @@ def run_single_cell(
     tier: Tier,
     tenure: Tenure,
     direction: Direction,
-    cache_dir: str | Path = "/tmp",  # noqa: S108
-    output_dir: str | Path = "/tmp/deep_search_v2",  # noqa: S108
+    cache_dir: str | Path = "/tmp",
+    output_dir: str | Path = "/tmp/deep_search_v2",
     panels: FeaturePanels | None = None,
     use_panel_cache: bool = True,
     cache_path: str | Path | None = None,
@@ -647,12 +647,12 @@ def _build_cli_parser() -> Any:
     )
     parser.add_argument(
         "--cache-dir",
-        default="/tmp",  # noqa: S108  # dev-only cache root
+        default="/tmp",  # dev-only cache root
         help="Directory containing OHLCV/Nifty cache pickles (default: /tmp)",
     )
     parser.add_argument(
         "--output-dir",
-        default="/tmp/deep_search_v2",  # noqa: S108  # dev-only output root
+        default="/tmp/deep_search_v2",  # dev-only output root
         help="Where to write <tier>-<tenure>-<direction>.json (default: /tmp/deep_search_v2)",
     )
     parser.add_argument(

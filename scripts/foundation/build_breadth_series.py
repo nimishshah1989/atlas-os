@@ -10,6 +10,7 @@ Re-runnable (nightly): DROP + rebuild.
 
     python build_breadth_series.py
 """
+
 from __future__ import annotations
 
 import _db
@@ -61,8 +62,10 @@ def run() -> None:
     n = _db.scalar(f"SELECT count(*) FROM {TGT}")
     rng = _db.read_df(f"SELECT min(date) mn, max(date) mx FROM {TGT}")
     print(f"built {TGT}: {n} trading days, {rng.iloc[0]['mn']} .. {rng.iloc[0]['mx']}")
-    head = _db.read_df(f"SELECT date, n_members, above_21, above_50, above_200, gc_50_200, net_new_highs, avg_rsi_14, idx_ret_3m "
-                       f"FROM {TGT} ORDER BY date DESC LIMIT 5")
+    head = _db.read_df(
+        f"SELECT date, n_members, above_21, above_50, above_200, gc_50_200, net_new_highs, avg_rsi_14, idx_ret_3m "
+        f"FROM {TGT} ORDER BY date DESC LIMIT 5"
+    )
     print(head.to_string(index=False))
 
 

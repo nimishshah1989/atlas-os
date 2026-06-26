@@ -16,6 +16,7 @@ fixes (RS now fires; insider signal_type now classified; PE/ROE/D-E are PIT).
 Requires DB connectivity. If the journal has no rows for the reference session the
 module skips rather than failing spuriously.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -47,7 +48,9 @@ def engine():
     eng = get_engine()
     n = pd.read_sql(
         "SELECT count(*) n FROM atlas.atlas_lens_scores_daily "
-        "WHERE date = %(d)s AND asset_class = 'stock'", eng, params={"d": D},
+        "WHERE date = %(d)s AND asset_class = 'stock'",
+        eng,
+        params={"d": D},
     )["n"].iloc[0]
     if not n:
         pytest.skip(f"no journal rows for {D}; run the pipeline first")
@@ -63,8 +66,9 @@ def th(engine):
 @pytest.fixture(scope="module")
 def journal(engine):
     df = pd.read_sql(
-        "SELECT * FROM atlas.atlas_lens_scores_daily "
-        "WHERE date = %(d)s AND asset_class = 'stock'", engine, params={"d": D},
+        "SELECT * FROM atlas.atlas_lens_scores_daily WHERE date = %(d)s AND asset_class = 'stock'",
+        engine,
+        params={"d": D},
     )
     return df.set_index("instrument_id")
 
@@ -146,18 +150,26 @@ class TestFundamental:
     def test_derive_reconciles_to_raw_quarters(self, engine):
         # Pull a real instrument's real trailing quarters from the DB and check the
         # PIT derivation (TTM EPS / ROE / D-E) reconciles to a hand sum — no synthetic.
-        q = pd.read_sql("""
+        q = pd.read_sql(
+            """
             SELECT DISTINCT ON (period_end) period_end, revenue, ebit, pat, eps,
                    net_margin, finance_costs, debt_equity_ratio
             FROM foundation_staging.financials_quarterly
             WHERE symbol='RELIANCE' AND period_end <= %(c)s AND eps IS NOT NULL
             ORDER BY period_end DESC, consolidated DESC LIMIT 8
-        """, engine, params={"c": D}).to_dict("records")
-        a = pd.read_sql("""
+        """,
+            engine,
+            params={"c": D},
+        ).to_dict("records")
+        a = pd.read_sql(
+            """
             SELECT equity, total_borrowings FROM foundation_staging.financials_annual
             WHERE symbol='RELIANCE' AND period_end <= %(c)s AND equity IS NOT NULL
             ORDER BY period_end DESC, consolidated DESC LIMIT 1
-        """, engine, params={"c": D}).to_dict("records")
+        """,
+            engine,
+            params={"c": D},
+        ).to_dict("records")
         assert len(q) >= 4 and a, "expected real RELIANCE financials"
         out = derive_fundamentals_asof(q, a[0])["kwargs"]
         assert abs(out["eps_diluted_ttm"] - sum(r["eps"] for r in q[:4])) < 1e-6
@@ -167,9 +179,16 @@ class TestFundamental:
     def test_renorm_formula(self, produced):
         # composite = sum(present subs)*100/(20*count), each sub in [0,20].
         for r in list(produced.values())[:80]:
-            subs = [_num(r.get(k)) for k in
-                    ("fund_profitability", "fund_margin", "fund_growth",
-                     "fund_balance_sheet", "fund_op_leverage")]
+            subs = [
+                _num(r.get(k))
+                for k in (
+                    "fund_profitability",
+                    "fund_margin",
+                    "fund_growth",
+                    "fund_balance_sheet",
+                    "fund_op_leverage",
+                )
+            ]
             present = [s for s in subs if s is not None]
             for s in present:
                 assert 0 <= s <= 20
@@ -201,10 +220,16 @@ class TestFlow:
     def test_insider_signal_type_now_classified(self, engine):
         # Loop C fix (D-LoopC): the insider feed is no longer uniformly 'other' —
         # real acqMode/txn-type classification populates open_market_buy/sell, pledge, etc.
-        kinds = pd.read_sql(
-            "SELECT DISTINCT signal_type FROM foundation_staging.lens_insider "
-            "WHERE transaction_date >= %(d)s - INTERVAL '365 days'", engine, params={"d": D},
-        )["signal_type"].dropna().tolist()
+        kinds = (
+            pd.read_sql(
+                "SELECT DISTINCT signal_type FROM foundation_staging.lens_insider "
+                "WHERE transaction_date >= %(d)s - INTERVAL '365 days'",
+                engine,
+                params={"d": D},
+            )["signal_type"]
+            .dropna()
+            .tolist()
+        )
         assert set(kinds) - {"other"}, f"signal_type still only 'other': {kinds}"
 
     def test_no_source_data_is_none(self, produced, journal):
@@ -216,12 +241,18 @@ class TestFlow:
 # ════════════════════════════ CATALYST ════════════════════════════
 class TestCatalyst:
     def test_filing_rich_names_score_positive(self, engine, produced):
-        rich = pd.read_sql("""
+        rich = pd.read_sql(
+            """
             SELECT instrument_id, count(*) c FROM foundation_staging.lens_filings
             WHERE filing_date BETWEEN %(d)s - INTERVAL '365 days' AND %(d)s
             GROUP BY 1 ORDER BY 2 DESC LIMIT 20
-        """, engine, params={"d": D})["instrument_id"].tolist()
-        pos = sum(1 for iid in rich if iid in produced and (_num(produced[iid].get("catalyst")) or 0) > 0)
+        """,
+            engine,
+            params={"d": D},
+        )["instrument_id"].tolist()
+        pos = sum(
+            1 for iid in rich if iid in produced and (_num(produced[iid].get("catalyst")) or 0) > 0
+        )
         assert pos >= 15, f"only {pos}/20 filing-rich names scored catalyst>0"
 
 
@@ -231,15 +262,20 @@ class TestFlowAccumulation:
 
     def test_accumulation_fires_on_real_delivery(self, engine):
         from atlas.lenses.compute.flow import score_flow
+
         rows = pd.read_sql(
             "SELECT delivery_pct, delivery_avg_30d, delivery_avg_60d, delivery_updown_asym "
             "FROM foundation_staging.delivery_daily "
             "WHERE delivery_avg_30d IS NOT NULL AND delivery_avg_60d IS NOT NULL "
-            "ORDER BY date DESC LIMIT 60", engine).to_dict("records")
+            "ORDER BY date DESC LIMIT 60",
+            engine,
+        ).to_dict("records")
         assert len(rows) >= 20, "expected real delivery rows with a 30d/60d average"
         fired = 0
         for r in rows:
-            delivery = {k: (float(v) if v is not None and pd.notna(v) else None) for k, v in r.items()}
+            delivery = {
+                k: (float(v) if v is not None and pd.notna(v) else None) for k, v in r.items()
+            }
             res = score_flow([], None, None, [], {}, delivery=delivery)
             if res.accumulation is not None:
                 assert 0 <= float(res.accumulation) <= 100
@@ -250,14 +286,18 @@ class TestFlowAccumulation:
         # REAL rows with a delivery print but no 30d average yet (insufficient history /
         # illiquid) -> accumulation None (the liquidity floor), never a fabricated stub.
         from atlas.lenses.compute.flow import score_flow
+
         rows = pd.read_sql(
             "SELECT delivery_pct, delivery_avg_30d, delivery_avg_60d, delivery_updown_asym "
             "FROM foundation_staging.delivery_daily "
             "WHERE delivery_pct IS NOT NULL AND delivery_avg_30d IS NULL LIMIT 20",
-            engine).to_dict("records")
+            engine,
+        ).to_dict("records")
         assert rows, "expected real rows below the 30d-average floor"
         for r in rows:
-            delivery = {k: (float(v) if v is not None and pd.notna(v) else None) for k, v in r.items()}
+            delivery = {
+                k: (float(v) if v is not None and pd.notna(v) else None) for k, v in r.items()
+            }
             res = score_flow([], None, None, [], {}, delivery=delivery)
             assert res.accumulation is None
 
@@ -274,12 +314,17 @@ class TestComposite:
 
         def _comp(row, thr):
             return compute_composite(
-                technical=_num(row["technical"]), fundamental=_num(row["fundamental"]),
-                valuation_score=_num(row["valuation"]), catalyst=_num(row["catalyst"]),
-                flow=_num(row["flow"]), policy=_num(row["policy"]),
+                technical=_num(row["technical"]),
+                fundamental=_num(row["fundamental"]),
+                valuation_score=_num(row["valuation"]),
+                catalyst=_num(row["catalyst"]),
+                flow=_num(row["flow"]),
+                policy=_num(row["policy"]),
                 valuation_multiplier=_num(row["valuation_multiplier"]) or 1.0,
                 smart_money_score=_num(row["smart_money_score"]) or 0.0,
-                degradation_score=_num(row["degradation_score"]) or 0.0, thresholds=thr)
+                degradation_score=_num(row["degradation_score"]) or 0.0,
+                thresholds=thr,
+            )
 
         moved = 0
         for _iid, row in sample.iterrows():
@@ -298,18 +343,29 @@ class TestComposite:
         out = []
         for _iid, row in sample.iterrows():
             r = compute_composite(
-                technical=_num(row["technical"]), fundamental=_num(row["fundamental"]),
-                valuation_score=_num(row["valuation"]), catalyst=_num(row["catalyst"]),
-                flow=_num(row["flow"]), policy=_num(row["policy"]),
+                technical=_num(row["technical"]),
+                fundamental=_num(row["fundamental"]),
+                valuation_score=_num(row["valuation"]),
+                catalyst=_num(row["catalyst"]),
+                flow=_num(row["flow"]),
+                policy=_num(row["policy"]),
                 valuation_multiplier=_num(row["valuation_multiplier"]) or 1.0,
                 smart_money_score=_num(row["smart_money_score"]) or 0.0,
-                degradation_score=_num(row["degradation_score"]) or 0.0, thresholds=th)
-            out.append((r.lenses_active, float(r.coverage_factor),
-                        float(r.final_score), r.conviction_tier))
+                degradation_score=_num(row["degradation_score"]) or 0.0,
+                thresholds=th,
+            )
+            out.append(
+                (r.lenses_active, float(r.coverage_factor), float(r.final_score), r.conviction_tier)
+            )
         assert out, "need real journal rows to compute on-read"
         assert all(0 <= fs <= 100 for _, _, fs, _ in out)
         assert {tier for *_, tier in out} <= {
-            "HIGHEST", "HIGH", "MEDIUM", "WATCH", "BELOW_THRESHOLD"}
+            "HIGHEST",
+            "HIGH",
+            "MEDIUM",
+            "WATCH",
+            "BELOW_THRESHOLD",
+        }
         hi = [cf for la, cf, _, _ in out if la == 4]
         lo = [cf for la, cf, _, _ in out if la <= 3]
         if hi and lo:

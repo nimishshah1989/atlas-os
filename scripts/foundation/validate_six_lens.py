@@ -13,27 +13,29 @@ Prints a one-screen summary. Exit 0 = gate green; exit 1 = gate red.
 
 Run: python validate_six_lens.py
 """
+
 from __future__ import annotations
 
 import sys
 
 import _db
-from harness import STAGING_SCHEMA, GREEN, RED, YEL, DIM, RST
+from harness import DIM, GREEN, RED, RST, STAGING_SCHEMA, YEL
 
 M = STAGING_SCHEMA
 
 
 def _n500_symbols() -> set[str]:
     df = _db.read_df(
-        "select symbol from public.de_instrument "
-        "where nifty_500 = true and is_active = true")
+        "select symbol from public.de_instrument where nifty_500 = true and is_active = true"
+    )
     return set(df["symbol"])
 
 
 def _staging_symbols() -> set[str]:
     df = _db.read_df(
         f"select symbol from {M}.instrument_master "
-        "where asset_class='stock' and kite_token is not null")
+        "where asset_class='stock' and kite_token is not null"
+    )
     return set(df["symbol"])
 
 
@@ -42,17 +44,27 @@ def _check_financials(n500: set[str]) -> dict:
     try:
         df = _db.read_df(
             f"select symbol, count(*) n from {M}.financials_quarterly "
-            "where consolidated = true group by symbol")
+            "where consolidated = true group by symbol"
+        )
     except Exception:
-        return {"name": "financials_quarterly", "total": 0, "pass": 0,
-                "n500_total": len(n500), "n500_pass": 0,
-                "note": "table missing or empty"}
-    counts = dict(zip(df["symbol"], df["n"]))
+        return {
+            "name": "financials_quarterly",
+            "total": 0,
+            "pass": 0,
+            "n500_total": len(n500),
+            "n500_pass": 0,
+            "note": "table missing or empty",
+        }
+    counts = dict(zip(df["symbol"], df["n"], strict=False))
     n500_pass = sum(1 for s in n500 if counts.get(s, 0) >= 8)
-    return {"name": "financials_quarterly", "total": len(counts),
-            "pass": sum(1 for v in counts.values() if v >= 8),
-            "n500_total": len(n500), "n500_pass": n500_pass,
-            "note": f"≥8q threshold"}
+    return {
+        "name": "financials_quarterly",
+        "total": len(counts),
+        "pass": sum(1 for v in counts.values() if v >= 8),
+        "n500_total": len(n500),
+        "n500_pass": n500_pass,
+        "note": "≥8q threshold",
+    }
 
 
 def _check_tv_metrics(n500: set[str]) -> dict:
@@ -60,69 +72,107 @@ def _check_tv_metrics(n500: set[str]) -> dict:
     try:
         df = _db.read_df("select symbol from atlas.tv_metrics")
     except Exception:
-        return {"name": "tv_metrics", "total": 0, "pass": 0,
-                "n500_total": len(n500), "n500_pass": 0,
-                "note": "table missing"}
+        return {
+            "name": "tv_metrics",
+            "total": 0,
+            "pass": 0,
+            "n500_total": len(n500),
+            "n500_pass": 0,
+            "note": "table missing",
+        }
     syms = set(df["symbol"])
     n500_pass = len(n500 & syms)
-    return {"name": "tv_metrics", "total": len(syms), "pass": len(syms),
-            "n500_total": len(n500), "n500_pass": n500_pass,
-            "note": ""}
+    return {
+        "name": "tv_metrics",
+        "total": len(syms),
+        "pass": len(syms),
+        "n500_total": len(n500),
+        "n500_pass": n500_pass,
+        "note": "",
+    }
 
 
 def _check_filings(n500: set[str]) -> dict:
     """lens_filings: ≥1 filing per N500."""
     try:
-        df = _db.read_df(
-            f"select symbol, count(*) n from {M}.lens_filings group by symbol")
+        df = _db.read_df(f"select symbol, count(*) n from {M}.lens_filings group by symbol")
     except Exception:
-        return {"name": "lens_filings", "total": 0, "pass": 0,
-                "n500_total": len(n500), "n500_pass": 0,
-                "note": "table missing or empty"}
+        return {
+            "name": "lens_filings",
+            "total": 0,
+            "pass": 0,
+            "n500_total": len(n500),
+            "n500_pass": 0,
+            "note": "table missing or empty",
+        }
     syms = set(df["symbol"])
     n500_pass = len(n500 & syms)
-    return {"name": "lens_filings", "total": len(syms),
-            "pass": len(syms), "n500_total": len(n500),
-            "n500_pass": n500_pass, "note": ""}
+    return {
+        "name": "lens_filings",
+        "total": len(syms),
+        "pass": len(syms),
+        "n500_total": len(n500),
+        "n500_pass": n500_pass,
+        "note": "",
+    }
 
 
 def _check_insider(n500: set[str]) -> dict:
     """lens_insider: present for N500 (some stocks genuinely have no PIT filings)."""
     try:
-        df = _db.read_df(
-            f"select symbol, count(*) n from {M}.lens_insider group by symbol")
+        df = _db.read_df(f"select symbol, count(*) n from {M}.lens_insider group by symbol")
     except Exception:
-        return {"name": "lens_insider", "total": 0, "pass": 0,
-                "n500_total": len(n500), "n500_pass": 0,
-                "note": "table missing or empty"}
+        return {
+            "name": "lens_insider",
+            "total": 0,
+            "pass": 0,
+            "n500_total": len(n500),
+            "n500_pass": 0,
+            "note": "table missing or empty",
+        }
     syms = set(df["symbol"])
     # Also count stocks processed (even if no data) via state table
     try:
-        st = _db.read_df(f"select symbol from {M}.lens_insider_state where status in ('done','no_data')")
+        st = _db.read_df(
+            f"select symbol from {M}.lens_insider_state where status in ('done','no_data')"
+        )
         processed = set(st["symbol"])
     except Exception:
         processed = syms
     n500_pass = len(n500 & processed)
-    return {"name": "lens_insider", "total": len(syms),
-            "pass": len(processed), "n500_total": len(n500),
-            "n500_pass": n500_pass,
-            "note": f"{len(syms)} with data, {len(processed)} processed"}
+    return {
+        "name": "lens_insider",
+        "total": len(syms),
+        "pass": len(processed),
+        "n500_total": len(n500),
+        "n500_pass": n500_pass,
+        "note": f"{len(syms)} with data, {len(processed)} processed",
+    }
 
 
 def _check_shareholding(n500: set[str]) -> dict:
     """lens_shareholding: ≥1 quarter per N500."""
     try:
-        df = _db.read_df(
-            f"select symbol, count(*) n from {M}.lens_shareholding group by symbol")
+        df = _db.read_df(f"select symbol, count(*) n from {M}.lens_shareholding group by symbol")
     except Exception:
-        return {"name": "lens_shareholding", "total": 0, "pass": 0,
-                "n500_total": len(n500), "n500_pass": 0,
-                "note": "table missing or empty"}
+        return {
+            "name": "lens_shareholding",
+            "total": 0,
+            "pass": 0,
+            "n500_total": len(n500),
+            "n500_pass": 0,
+            "note": "table missing or empty",
+        }
     syms = set(df["symbol"])
     n500_pass = len(n500 & syms)
-    return {"name": "lens_shareholding", "total": len(syms),
-            "pass": len(syms), "n500_total": len(n500),
-            "n500_pass": n500_pass, "note": ""}
+    return {
+        "name": "lens_shareholding",
+        "total": len(syms),
+        "pass": len(syms),
+        "n500_total": len(n500),
+        "n500_pass": n500_pass,
+        "note": "",
+    }
 
 
 def _check_bulk_deals() -> dict:
@@ -131,9 +181,14 @@ def _check_bulk_deals() -> dict:
         n = _db.scalar(f"select count(*) from {M}.lens_bulk_deals")
     except Exception:
         n = 0
-    return {"name": "lens_bulk_deals", "total": n, "pass": n,
-            "n500_total": "-", "n500_pass": "-",
-            "note": "snapshot (not per-symbol)"}
+    return {
+        "name": "lens_bulk_deals",
+        "total": n,
+        "pass": n,
+        "n500_total": "-",
+        "n500_pass": "-",
+        "note": "snapshot (not per-symbol)",
+    }
 
 
 def run() -> bool:
@@ -141,9 +196,9 @@ def run() -> bool:
     staging = _staging_symbols()
     n500_in_staging = n500 & staging
 
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f" SIX-LENS DATA GATE — N500={len(n500)}, in staging={len(n500_in_staging)}")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
     checks = [
         _check_financials(n500_in_staging),
@@ -174,10 +229,12 @@ def run() -> bool:
             if not c["total"]:
                 all_green = False
 
-        print(f"  {c['name']:<25s} total={c['total']:<6} N500={status}"
-              + (f"  {DIM}{c['note']}{RST}" if c.get("note") else ""))
+        print(
+            f"  {c['name']:<25s} total={c['total']:<6} N500={status}"
+            + (f"  {DIM}{c['note']}{RST}" if c.get("note") else "")
+        )
 
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
     if all_green:
         print(f"  {GREEN}GATE: GREEN — all feeds populated for N500 core{RST}")
     else:

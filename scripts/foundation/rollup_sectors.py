@@ -14,16 +14,16 @@ Load-once + vectorized: COPY the journal once, map sector + weight per instrumen
     python rollup_sectors.py            # (re)build sector_lens_daily
     python rollup_sectors.py --date 2026-06-19   # preview one date, write nothing
 """
+
 from __future__ import annotations
 
 import argparse
 import io
 from datetime import date
 
+import _db
 import numpy as np
 import pandas as pd
-
-import _db
 
 M = "foundation_staging"
 L = "atlas.atlas_lens_scores_daily"
@@ -47,7 +47,9 @@ def _journal() -> pd.DataFrame:
         buf = io.StringIO()
         raw.cursor().copy_expert(
             f"COPY (SELECT instrument_id, date, {','.join(SUBS)} FROM {L} "
-            "WHERE asset_class='stock') TO STDOUT WITH CSV HEADER", buf)
+            "WHERE asset_class='stock') TO STDOUT WITH CSV HEADER",
+            buf,
+        )
         buf.seek(0)
         return pd.read_csv(buf, parse_dates=["date"])
     finally:
@@ -96,22 +98,30 @@ def compute(write: bool, one: date | None = None) -> pd.DataFrame:
     g = df.groupby(["sector", "date"], sort=False)
     for (sec, dt), grp in g:
         wts = grp["ff_weight"].to_numpy()
-        row = {"sector": sec, "date": dt.date(), "n_constituents": int(len(grp)),
-               "total_free_float_cr": float(wts.sum())}
-        comps = []
+        row = {
+            "sector": sec,
+            "date": dt.date(),
+            "n_constituents": len(grp),
+            "total_free_float_cr": float(wts.sum()),
+        }
         for s in SUBS:
             v = grp[s].to_numpy(dtype=float)
             mask = ~np.isnan(v)
             tw = wts[mask].sum()
             row[s] = round(float((v[mask] * wts[mask]).sum() / tw), 2) if tw > 0 else None
-            row[f"breadth_{s}"] = round(float((v[mask] >= STRONG).mean()), 4) if mask.any() else None
+            row[f"breadth_{s}"] = (
+                round(float((v[mask] >= STRONG).mean()), 4) if mask.any() else None
+            )
         # dispersion = stdev of the 4 conviction sub-scores' member spread (proxy via technical)
         tv = grp["technical"].to_numpy(dtype=float)
         row["dispersion"] = round(float(np.nanstd(tv)), 2) if (~np.isnan(tv)).any() else None
         out_rows.append(row)
     res = pd.DataFrame(out_rows)
-    print(f"sectors×dates computed: {len(res)} (sectors={res['sector'].nunique()}, "
-          f"dates={res['date'].nunique()})", flush=True)
+    print(
+        f"sectors×dates computed: {len(res)} (sectors={res['sector'].nunique()}, "
+        f"dates={res['date'].nunique()})",
+        flush=True,
+    )
     if write and not res.empty:
         ensure_table()
         _db.upsert_df(TGT, res, ["sector", "date"])

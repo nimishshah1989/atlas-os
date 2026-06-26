@@ -13,6 +13,7 @@ weekday-based. The two load-bearing cases:
 A weekday-arithmetic implementation would get BOTH of these wrong; only reading
 the real calendar gets them right.
 """
+
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -34,10 +35,7 @@ def engine():
     # Skip (don't fail) if the calendar source is unreachable/empty in this env.
     with eng.connect() as conn:
         n = conn.execute(
-            text(
-                "SELECT count(*) FROM foundation_staging.index_prices "
-                "WHERE index_code = :idx"
-            ),
+            text("SELECT count(*) FROM foundation_staging.index_prices WHERE index_code = :idx"),
             {"idx": _NSE_CAL_INDEX},
         ).scalar()
     if not n:

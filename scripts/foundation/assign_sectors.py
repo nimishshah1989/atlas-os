@@ -19,6 +19,7 @@ memory v4-d13-taxonomy-mismatch):
     extend-universe / gate-exclude).
 These keep the remaining ~126 unmapped until the fold map is approved.
 """
+
 from __future__ import annotations
 
 import _db
@@ -42,15 +43,23 @@ _FILL_SAFE = f"""
 
 
 def _unmapped() -> int:
-    return int(_db.scalar(
-        "SELECT count(*) FROM foundation_staging.instrument_master "
-        "WHERE asset_class='stock' AND is_active AND (sector IS NULL OR sector='')") or 0)
+    return int(
+        _db.scalar(
+            "SELECT count(*) FROM foundation_staging.instrument_master "
+            "WHERE asset_class='stock' AND is_active AND (sector IS NULL OR sector='')"
+        )
+        or 0
+    )
 
 
 def _distinct() -> int:
-    return int(_db.scalar(
-        "SELECT count(DISTINCT sector) FROM foundation_staging.instrument_master "
-        "WHERE asset_class='stock' AND is_active AND sector IS NOT NULL AND sector<>''") or 0)
+    return int(
+        _db.scalar(
+            "SELECT count(DISTINCT sector) FROM foundation_staging.instrument_master "
+            "WHERE asset_class='stock' AND is_active AND sector IS NOT NULL AND sector<>''"
+        )
+        or 0
+    )
 
 
 def run() -> dict:
@@ -58,9 +67,11 @@ def run() -> dict:
     _db.exec_sql(_FILL_SAFE)
     after_unmapped, after_distinct = _unmapped(), _distinct()
     res = {
-        "unmapped_before": before_unmapped, "unmapped_after": after_unmapped,
+        "unmapped_before": before_unmapped,
+        "unmapped_after": after_unmapped,
         "mapped": before_unmapped - after_unmapped,
-        "distinct_before": before_distinct, "distinct_after": after_distinct,
+        "distinct_before": before_distinct,
+        "distinct_after": after_distinct,
     }
     print(res)
     if after_distinct > 21:

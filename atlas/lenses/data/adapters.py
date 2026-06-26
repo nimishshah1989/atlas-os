@@ -3,6 +3,7 @@
 Read from foundation_staging + atlas tables, feed data to pure scorers,
 write results to atlas.atlas_lens_scores_daily.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -63,8 +64,8 @@ def is_trading_day(engine: Engine, d: date) -> bool:
 # only honest as-of proxy without a filing-date column). Conservative so the journal
 # never uses a result before a human could have. Persisted to atlas_thresholds in
 # the IC step; defaulted here so the rebuild needs no DB write.
-REPORTING_LAG_Q = 60   # quarterly income statement
-REPORTING_LAG_A = 90   # annual balance sheet (filed later than quarterlies)
+REPORTING_LAG_Q = 60  # quarterly income statement
+REPORTING_LAG_A = 90  # annual balance sheet (filed later than quarterlies)
 # Screener ready-ratio snapshot validity: overlay only lens dates within this many
 # days of the snapshot (PIT guard for historical re-scoring — older dates use the
 # ROE derived from Screener's historical financials instead).
@@ -109,6 +110,7 @@ def _fundamental_rows(qdf: pd.DataFrame, adf: pd.DataFrame) -> pd.DataFrame:
     nightly single-date loader and the chunked historical backfill.
     """
     from atlas.lenses.compute.fundamental_pit import derive_fundamentals_asof
+
     annual_by: dict = {}
     if adf is not None and not adf.empty:
         for r in adf.to_dict("records"):
@@ -118,14 +120,17 @@ def _fundamental_rows(qdf: pd.DataFrame, adf: pd.DataFrame) -> pd.DataFrame:
         for iid, grp in qdf.groupby("instrument_id"):
             quarters = grp.sort_values("period_end", ascending=False).to_dict("records")
             derived = derive_fundamentals_asof(quarters, annual_by.get(iid))
-            row = dict(derived["kwargs"]); row["instrument_id"] = iid
+            row = dict(derived["kwargs"])
+            row["instrument_id"] = iid
             rows.append(row)
     return pd.DataFrame(rows)
 
 
 def load_fundamental_data(
-    engine: Engine, as_of: date,
-    lag_q: int = REPORTING_LAG_Q, lag_a: int = REPORTING_LAG_A,
+    engine: Engine,
+    as_of: date,
+    lag_q: int = REPORTING_LAG_Q,
+    lag_a: int = REPORTING_LAG_A,
 ) -> pd.DataFrame:
     """As-of fundamental metrics derived from financials_quarterly + _annual.
 
@@ -160,14 +165,19 @@ def load_fundamental_data(
         # overlay lens dates within the snapshot's validity window — stamping today's
         # ROE on a 2020 score would be non-PIT. Historical backfill dates fall outside
         # the window and keep their PIT-derived ROE (from Screener historical financials).
-        snap = conn.execute(text(
-            "SELECT max(as_of) FROM foundation_staging.screener_ratios")).scalar()
+        snap = conn.execute(
+            text("SELECT max(as_of) FROM foundation_staging.screener_ratios")
+        ).scalar()
         sr = None
         if snap is not None and as_of >= snap - timedelta(days=SCREENER_SNAPSHOT_WINDOW):
-            sr = pd.read_sql(text(
-                "SELECT instrument_id, roe AS scr_roe, roce AS scr_roce, pb AS scr_pb, "
-                "ev_ebitda AS scr_ev_ebitda, stock_pe AS scr_pe "
-                "FROM foundation_staging.screener_ratios"), conn)
+            sr = pd.read_sql(
+                text(
+                    "SELECT instrument_id, roe AS scr_roe, roce AS scr_roce, pb AS scr_pb, "
+                    "ev_ebitda AS scr_ev_ebitda, stock_pe AS scr_pe "
+                    "FROM foundation_staging.screener_ratios"
+                ),
+                conn,
+            )
     return _merge_screener_ratios(_fundamental_rows(qdf, adf), sr)
 
 
@@ -193,8 +203,11 @@ def _merge_screener_ratios(fdf: pd.DataFrame, sr: pd.DataFrame) -> pd.DataFrame:
     sr = sr.copy()
     sr["_k"] = sr["instrument_id"].astype(str)
     sr = sr.drop(columns=["instrument_id"])
-    m = fdf.drop(columns=["roce", "scr_pb", "scr_ev_ebitda", "scr_pe"]).merge(
-        sr, on="_k", how="left").drop(columns=["_k"])
+    m = (
+        fdf.drop(columns=["roce", "scr_pb", "scr_ev_ebitda", "scr_pe"])
+        .merge(sr, on="_k", how="left")
+        .drop(columns=["_k"])
+    )
     # Screener ROE wins where present; else keep the derived ROE.
     m["roe"] = m["scr_roe"].where(m["scr_roe"].notna(), m["roe"])
     m["roce"] = m["scr_roce"]
@@ -202,7 +215,9 @@ def _merge_screener_ratios(fdf: pd.DataFrame, sr: pd.DataFrame) -> pd.DataFrame:
 
 
 def load_catalyst_data(
-    engine: Engine, lookback_days: int = 365, as_of: date | None = None,
+    engine: Engine,
+    lookback_days: int = 365,
+    as_of: date | None = None,
 ) -> pd.DataFrame:
     """Load filings from lens_filings for each instrument (last N days).
 
@@ -232,7 +247,8 @@ def load_catalyst_data(
 
 
 def load_flow_data(
-    engine: Engine, as_of: date | None = None,
+    engine: Engine,
+    as_of: date | None = None,
 ) -> dict[str, pd.DataFrame]:
     """Load insider transactions, shareholding, and bulk deals.
 
@@ -241,56 +257,76 @@ def load_flow_data(
     """
     with open_compute_session(engine) as conn:
         if as_of is not None:
-            insider = pd.read_sql(text("""
+            insider = pd.read_sql(
+                text("""
                 SELECT instrument_id, symbol, signal_type, value_cr, person_name,
                        pledge_pct_after, transaction_date, price_per_share
                 FROM foundation_staging.lens_insider
                 WHERE transaction_date >= :as_of - INTERVAL '365 days'
                   AND transaction_date <= :as_of
                 ORDER BY instrument_id, transaction_date DESC
-            """), conn, params={"as_of": as_of})
+            """),
+                conn,
+                params={"as_of": as_of},
+            )
 
-            shareholding = pd.read_sql(text("""
+            shareholding = pd.read_sql(
+                text("""
                 SELECT instrument_id, symbol, period_end, promoter_pct, public_pct
                 FROM foundation_staging.lens_shareholding
                 WHERE period_end <= :as_of
                 ORDER BY instrument_id, period_end DESC
-            """), conn, params={"as_of": as_of})
+            """),
+                conn,
+                params={"as_of": as_of},
+            )
 
-            bulk_deals = pd.read_sql(text("""
+            bulk_deals = pd.read_sql(
+                text("""
                 SELECT instrument_id, symbol, deal_date, client_name, buy_sell,
                        qty, price, is_institutional, is_superstar, superstar_name
                 FROM foundation_staging.lens_bulk_deals
                 WHERE deal_date >= :as_of - INTERVAL '90 days'
                   AND deal_date <= :as_of
                 ORDER BY instrument_id, deal_date DESC
-            """), conn, params={"as_of": as_of})
+            """),
+                conn,
+                params={"as_of": as_of},
+            )
         else:
-            insider = pd.read_sql(text("""
+            insider = pd.read_sql(
+                text("""
                 SELECT instrument_id, symbol, signal_type, value_cr, person_name,
                        pledge_pct_after, transaction_date, price_per_share
                 FROM foundation_staging.lens_insider
                 WHERE transaction_date >= CURRENT_DATE - INTERVAL '365 days'
                 ORDER BY instrument_id, transaction_date DESC
-            """), conn)
+            """),
+                conn,
+            )
 
-            shareholding = pd.read_sql(text("""
+            shareholding = pd.read_sql(
+                text("""
                 SELECT instrument_id, symbol, period_end, promoter_pct, public_pct
                 FROM foundation_staging.lens_shareholding
                 ORDER BY instrument_id, period_end DESC
-            """), conn)
+            """),
+                conn,
+            )
 
-            bulk_deals = pd.read_sql(text("""
+            bulk_deals = pd.read_sql(
+                text("""
                 SELECT instrument_id, symbol, deal_date, client_name, buy_sell,
                        qty, price, is_institutional, is_superstar, superstar_name
                 FROM foundation_staging.lens_bulk_deals
                 WHERE deal_date >= CURRENT_DATE - INTERVAL '90 days'
                 ORDER BY instrument_id, deal_date DESC
-            """), conn)
+            """),
+                conn,
+            )
 
     mf = load_mf_flow(engine, as_of)
-    return {"insider": insider, "shareholding": shareholding,
-            "bulk_deals": bulk_deals, "mf": mf}
+    return {"insider": insider, "shareholding": shareholding, "bulk_deals": bulk_deals, "mf": mf}
 
 
 def load_mf_flow(engine: Engine, as_of: date | None = None) -> pd.DataFrame:
@@ -312,16 +348,21 @@ def load_mf_flow(engine: Engine, as_of: date | None = None) -> pd.DataFrame:
         # snapshots carry ~550-1,300 funds. The matched-fund INNER JOIN below compares
         # only funds present in BOTH, so an uneven fund count between the two months
         # introduces no bias.
-        snaps = pd.read_sql(text("""
+        snaps = pd.read_sql(
+            text("""
             SELECT as_of_date FROM foundation_staging.de_mf_holdings
             WHERE as_of_date <= :ceil
             GROUP BY as_of_date HAVING count(DISTINCT mstar_id) >= 400
             ORDER BY as_of_date DESC LIMIT 2
-        """), conn, params={"ceil": ceil})
+        """),
+            conn,
+            params={"ceil": ceil},
+        )
         if len(snaps) < 2:
             return pd.DataFrame(columns=["instrument_id", "mf_mom_delta", "mf_matched_funds"])
         cur_d, prv_d = snaps["as_of_date"].iloc[0], snaps["as_of_date"].iloc[1]
-        mf = pd.read_sql(text("""
+        mf = pd.read_sql(
+            text("""
             WITH cur AS (SELECT instrument_id, mstar_id, weight_pct
                          FROM foundation_staging.de_mf_holdings WHERE as_of_date = :cur),
                  prv AS (SELECT instrument_id, mstar_id, weight_pct
@@ -332,7 +373,10 @@ def load_mf_flow(engine: Engine, as_of: date | None = None) -> pd.DataFrame:
             FROM cur c JOIN prv p
               ON p.instrument_id = c.instrument_id AND p.mstar_id = c.mstar_id
             GROUP BY c.instrument_id
-        """), conn, params={"cur": cur_d, "prv": prv_d})
+        """),
+            conn,
+            params={"cur": cur_d, "prv": prv_d},
+        )
     return mf
 
 
@@ -379,28 +423,64 @@ def write_lens_scores(
     if not results:
         return 0
     columns = [
-        "instrument_id", "date", "asset_class",
-        "technical", "fundamental", "valuation", "catalyst", "flow", "policy",
-        "tech_trend", "tech_rs", "tech_vol_contraction", "tech_volume",
-        "fund_profitability", "fund_margin", "fund_growth", "fund_balance_sheet", "fund_op_leverage",
-        "val_pe_vs_sector", "val_absolute_pe", "val_pb", "val_ev_ebitda", "val_52w_position",
-        "cat_earnings_strategy", "cat_capital_action", "cat_governance",
-        "flow_promoter", "flow_institutional", "flow_smart_money", "flow_accumulation",
+        "instrument_id",
+        "date",
+        "asset_class",
+        "technical",
+        "fundamental",
+        "valuation",
+        "catalyst",
+        "flow",
+        "policy",
+        "tech_trend",
+        "tech_rs",
+        "tech_vol_contraction",
+        "tech_volume",
+        "fund_profitability",
+        "fund_margin",
+        "fund_growth",
+        "fund_balance_sheet",
+        "fund_op_leverage",
+        "val_pe_vs_sector",
+        "val_absolute_pe",
+        "val_pb",
+        "val_ev_ebitda",
+        "val_52w_position",
+        "cat_earnings_strategy",
+        "cat_capital_action",
+        "cat_governance",
+        "flow_promoter",
+        "flow_institutional",
+        "flow_smart_money",
+        "flow_accumulation",
         "policy_tailwind",
-        "composite", "conviction_tier", "valuation_zone", "valuation_multiplier",
-        "smart_money_score", "degradation_score",
-        "risk_flags", "evidence",
-        "lenses_active", "coverage_factor",
-        "compute_run_id", "computed_at",
+        "composite",
+        "conviction_tier",
+        "valuation_zone",
+        "valuation_multiplier",
+        "smart_money_score",
+        "degradation_score",
+        "risk_flags",
+        "evidence",
+        "lenses_active",
+        "coverage_factor",
+        "compute_run_id",
+        "computed_at",
     ]
     rows = []
     now = datetime.now(_IST)
     rid = run_id or uuid.uuid4()
     for r in results:
-        row = tuple(r.get(c, rid if c == "compute_run_id" else now if c == "computed_at" else None) for c in columns)
+        row = tuple(
+            r.get(c, rid if c == "compute_run_id" else now if c == "computed_at" else None)
+            for c in columns
+        )
         rows.append(row)
     return bulk_upsert(
-        engine, "atlas.atlas_lens_scores_daily", columns, rows,
+        engine,
+        "atlas.atlas_lens_scores_daily",
+        columns,
+        rows,
         pk_columns=["instrument_id", "date"],
     )
 

@@ -23,24 +23,29 @@ foundation_staging here). Missing/illiquid -> NULL (RULE #0, never 0).
     python backfill_delivery.py            # full (re)build of delivery_daily
     python backfill_delivery.py --check IID # preview computed signals for one instrument
 """
+
 from __future__ import annotations
 
 import argparse
 import io
 import time
 
+import _db
 import numpy as np
 import pandas as pd
-
-import _db
 
 M = "foundation_staging"
 SRC = "public.de_equity_ohlcv"
 TARGET = f"{M}.delivery_daily"
 START = "2019-01-01"
 
-DELIVERY_COLS = ["delivery_pct", "delivery_avg_30d", "delivery_avg_60d",
-                 "delivery_trend", "delivery_updown_asym"]
+DELIVERY_COLS = [
+    "delivery_pct",
+    "delivery_avg_30d",
+    "delivery_avg_60d",
+    "delivery_trend",
+    "delivery_updown_asym",
+]
 _KEYS = ["instrument_id", "date"]
 _ALL = _KEYS + DELIVERY_COLS
 
@@ -50,7 +55,8 @@ def ensure_table_fresh() -> None:
     _db.exec_sql(
         f"CREATE TABLE {TARGET} (instrument_id uuid NOT NULL, date date NOT NULL, "
         "delivery_pct numeric, delivery_avg_30d numeric, delivery_avg_60d numeric, "
-        "delivery_trend numeric, delivery_updown_asym numeric)")
+        "delivery_trend numeric, delivery_updown_asym numeric)"
+    )
 
 
 def load_delivery() -> pd.DataFrame:
@@ -63,7 +69,9 @@ def load_delivery() -> pd.DataFrame:
         cur.copy_expert(
             f"COPY (SELECT instrument_id, date, delivery_pct, close, volume FROM {SRC} "
             f"WHERE delivery_pct IS NOT NULL AND date >= '{START}' "
-            "ORDER BY instrument_id, date) TO STDOUT WITH CSV HEADER", buf)
+            "ORDER BY instrument_id, date) TO STDOUT WITH CSV HEADER",
+            buf,
+        )
         raw.rollback()
         buf.seek(0)
         return pd.read_csv(buf, parse_dates=["date"])
@@ -79,13 +87,18 @@ def compute_signals(df: pd.DataFrame) -> pd.DataFrame:
     df = df.sort_values(_KEYS).reset_index(drop=True)
 
     def roll(col, w, mp):
-        return (df.groupby("instrument_id", sort=False)[col]
-                .rolling(w, min_periods=mp).mean().reset_index(level=0, drop=True))
+        return (
+            df.groupby("instrument_id", sort=False)[col]
+            .rolling(w, min_periods=mp)
+            .mean()
+            .reset_index(level=0, drop=True)
+        )
 
     df["delivery_avg_30d"] = roll("delivery_pct", 30, 15)
     df["delivery_avg_60d"] = roll("delivery_pct", 60, 30)
     df["delivery_trend"] = np.where(
-        df["delivery_avg_30d"] > 0, df["delivery_pct"] / df["delivery_avg_30d"] - 1.0, np.nan)
+        df["delivery_avg_30d"] > 0, df["delivery_pct"] / df["delivery_avg_30d"] - 1.0, np.nan
+    )
     # up/down-day asymmetry: close-to-close direction (flat / first-of-group excluded from both)
     diff = df.groupby("instrument_id", sort=False)["close"].diff()
     df["_d_up"] = df["delivery_pct"].where(diff > 0)
@@ -119,15 +132,18 @@ def run() -> dict:
     ensure_table_fresh()
     print("delivery_daily (re)created", flush=True)
     df = load_delivery()
-    print(f"loaded {len(df):,} delivery rows in {time.time()-t0:.0f}s", flush=True)
+    print(f"loaded {len(df):,} delivery rows in {time.time() - t0:.0f}s", flush=True)
     t1 = time.time()
     df = compute_signals(df)
-    print(f"computed signals in {time.time()-t1:.0f}s "
-          f"(avg30 non-null {df['delivery_avg_30d'].notna().mean():.0%})", flush=True)
+    print(
+        f"computed signals in {time.time() - t1:.0f}s "
+        f"(avg30 non-null {df['delivery_avg_30d'].notna().mean():.0%})",
+        flush=True,
+    )
     t2 = time.time()
     n = write_copy(df)
-    print(f"COPY -> delivery_daily: {n:,} rows in {time.time()-t2:.0f}s", flush=True)
-    print(f"DONE in {time.time()-t0:.0f}s total", flush=True)
+    print(f"COPY -> delivery_daily: {n:,} rows in {time.time() - t2:.0f}s", flush=True)
+    print(f"DONE in {time.time() - t0:.0f}s total", flush=True)
     return {"rows": n}
 
 

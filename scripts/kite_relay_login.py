@@ -7,6 +7,7 @@ Two steps so a human can hand over one fresh code in between:
 
 Avoids browser address-bar copying and avoids retry loops (one twofa attempt).
 """
+
 from __future__ import annotations
 
 import json
@@ -18,7 +19,9 @@ from pathlib import Path
 import requests
 
 _REPO = Path(__file__).resolve().parents[1]
-_STATE = Path("/tmp/claude-1000/-home-ubuntu-atlas-os/e6126a13-7711-4b3d-a338-2dfda44b6a45/scratchpad/kite_relay_state.json")
+_STATE = Path(
+    "/tmp/claude-1000/-home-ubuntu-atlas-os/e6126a13-7711-4b3d-a338-2dfda44b6a45/scratchpad/kite_relay_state.json"
+)
 
 
 def _load_env() -> None:
@@ -33,9 +36,11 @@ def start() -> None:
     _load_env()
     s = requests.Session()
     s.headers["User-Agent"] = "Mozilla/5.0"
-    r = s.post("https://kite.zerodha.com/api/login",
-               data={"user_id": os.environ["KITE_USER_ID"],
-                     "password": os.environ["KITE_PASSWORD"]}, timeout=15)
+    r = s.post(
+        "https://kite.zerodha.com/api/login",
+        data={"user_id": os.environ["KITE_USER_ID"], "password": os.environ["KITE_PASSWORD"]},
+        timeout=15,
+    )
     j = r.json()
     if j.get("status") != "success":
         sys.exit(f"login failed: {j.get('message', r.text[:160])}")
@@ -54,24 +59,35 @@ def finish(code: str) -> None:
     sys.path.insert(0, str(_REPO / "scripts" / "foundation"))
     sys.path.insert(0, str(_REPO / "scripts"))
     import _db
-    from atlas.intraday.auth import exchange_request_token, store_access_token
     from kite_autologin import _find_request_token
+
+    from atlas.intraday.auth import exchange_request_token, store_access_token
 
     st = json.loads(_STATE.read_text())
     s = requests.Session()
     s.headers["User-Agent"] = "Mozilla/5.0"
     s.cookies = requests.utils.cookiejar_from_dict(st["cookies"])
 
-    r2 = s.post("https://kite.zerodha.com/api/twofa",
-                data={"user_id": st["user_id"], "request_id": st["request_id"],
-                      "twofa_value": code.strip(), "twofa_type": st["twofa_type"]}, timeout=15)
+    r2 = s.post(
+        "https://kite.zerodha.com/api/twofa",
+        data={
+            "user_id": st["user_id"],
+            "request_id": st["request_id"],
+            "twofa_value": code.strip(),
+            "twofa_type": st["twofa_type"],
+        },
+        timeout=15,
+    )
     j2 = r2.json()
     if j2.get("status") != "success":
         sys.exit(f"twofa failed: {j2.get('message', r2.text[:160])}")
 
     api_key = os.environ["KITE_API_KEY"]
-    resp = s.get(f"https://kite.zerodha.com/connect/login?api_key={api_key}&v=3",
-                 allow_redirects=True, timeout=15)
+    resp = s.get(
+        f"https://kite.zerodha.com/connect/login?api_key={api_key}&v=3",
+        allow_redirects=True,
+        timeout=15,
+    )
     rt = _find_request_token(resp)
     if not rt:
         sys.exit("authenticated, but could not capture request_token")
@@ -79,9 +95,13 @@ def finish(code: str) -> None:
     store_access_token(access_token, conn_str=_db.db_url())
 
     from kiteconnect import KiteConnect
-    k = KiteConnect(api_key=api_key); k.set_access_token(access_token)
+
+    k = KiteConnect(api_key=api_key)
+    k.set_access_token(access_token)
     p = k.profile()
-    print(f"OK — Kite session live for {p.get('user_id')} ({p.get('user_name','')}). Token stored.")
+    print(
+        f"OK — Kite session live for {p.get('user_id')} ({p.get('user_name', '')}). Token stored."
+    )
 
 
 if __name__ == "__main__":

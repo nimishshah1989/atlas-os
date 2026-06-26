@@ -14,13 +14,14 @@ Credentials come from .env (chmod 600, gitignored):
 Run:  .venv/bin/python scripts/kite_autologin.py
 Exit 0 on success (token stored + verified), non-zero otherwise.
 """
+
 from __future__ import annotations
 
 import os
 import re
 import sys
 from pathlib import Path
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import parse_qs, urlparse
 
 import pyotp
 import requests
@@ -68,6 +69,7 @@ def auto_login() -> str:
     _load_env()
     sys.path.insert(0, str(_REPO / "scripts" / "foundation"))
     import _db
+
     from atlas.intraday.auth import exchange_request_token, store_access_token
 
     api_key = _need("KITE_API_KEY")
@@ -79,8 +81,11 @@ def auto_login() -> str:
     s.headers["User-Agent"] = "Mozilla/5.0"
 
     # 1. password login → request_id
-    r = s.post("https://kite.zerodha.com/api/login",
-               data={"user_id": user_id, "password": password}, timeout=15)
+    r = s.post(
+        "https://kite.zerodha.com/api/login",
+        data={"user_id": user_id, "password": password},
+        timeout=15,
+    )
     j = r.json()
     if j.get("status") != "success":
         sys.exit(f"login failed: {j.get('message', r.text[:160])}")
@@ -91,17 +96,27 @@ def auto_login() -> str:
 
     # 2. twofa with the time-based code
     code = pyotp.TOTP(totp_secret).now()
-    r2 = s.post("https://kite.zerodha.com/api/twofa",
-                data={"user_id": user_id, "request_id": request_id,
-                      "twofa_value": code, "twofa_type": twofa_type}, timeout=15)
+    r2 = s.post(
+        "https://kite.zerodha.com/api/twofa",
+        data={
+            "user_id": user_id,
+            "request_id": request_id,
+            "twofa_value": code,
+            "twofa_type": twofa_type,
+        },
+        timeout=15,
+    )
     j2 = r2.json()
     if j2.get("status") != "success":
         sys.exit(f"twofa failed: {j2.get('message', r2.text[:160])}")
 
     # 3. OAuth connect → capture request_token from the redirect chain
     try:
-        resp = s.get(f"https://kite.zerodha.com/connect/login?api_key={api_key}&v=3",
-                     allow_redirects=True, timeout=15)
+        resp = s.get(
+            f"https://kite.zerodha.com/connect/login?api_key={api_key}&v=3",
+            allow_redirects=True,
+            timeout=15,
+        )
         request_token = _find_request_token(resp)
     except requests.exceptions.RequestException as e:
         # redirect_url host may be unreachable; the token is still in the failed URL
@@ -123,11 +138,14 @@ def main() -> None:
     token = auto_login()
     # verify the token actually works
     from kiteconnect import KiteConnect
+
     kite = KiteConnect(api_key=os.environ["KITE_API_KEY"])
     kite.set_access_token(token)
     profile = kite.profile()
-    print(f"OK — Kite session live for {profile.get('user_id')} "
-          f"({profile.get('user_name', '')}). Token stored encrypted.")
+    print(
+        f"OK — Kite session live for {profile.get('user_id')} "
+        f"({profile.get('user_name', '')}). Token stored encrypted."
+    )
 
 
 if __name__ == "__main__":

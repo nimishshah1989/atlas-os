@@ -442,7 +442,7 @@ def _generate_synthetic_universe(
 # Default cache file locations. Overridable via WalkForwardSweep(cache_dir=...).
 # /tmp is the agreed-upon scp target for EC2-pulled OHLCV pickles; not used
 # at runtime in production (production reads from Supabase).
-DEFAULT_CACHE_DIR = Path("/tmp")  # noqa: S108
+DEFAULT_CACHE_DIR = Path("/tmp")
 OHLCV_CACHE_FILENAME = "sde_ohlcv_cache.pkl"
 NIFTY500_CACHE_FILENAME = "nifty500_cache.pkl"
 BLACKLIST_FILENAME = "iid_blacklist.json"

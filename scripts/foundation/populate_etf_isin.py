@@ -11,13 +11,17 @@ their authoritative NSE ISIN would need an NSE securities-master fetch).
 Note: the holdings look-through itself is already ~100% via instrument_id (de_mf_holdings 99.7%,
 de_etf_holdings 99.5%); this is identity completeness, not a look-through fix.
 """
+
 from __future__ import annotations
+
 import _db
 
 
 def main() -> None:
-    before = _db.scalar("SELECT count(*) FROM foundation_staging.instrument_master "
-                        "WHERE asset_class='etf' AND isin IS NOT NULL")
+    before = _db.scalar(
+        "SELECT count(*) FROM foundation_staging.instrument_master "
+        "WHERE asset_class='etf' AND isin IS NOT NULL"
+    )
     _db.exec_sql("""
       UPDATE foundation_staging.instrument_master im SET isin = sub.isin
       FROM (
@@ -30,9 +34,13 @@ def main() -> None:
         GROUP BY im2.instrument_id
       ) sub
       WHERE im.instrument_id = sub.instrument_id AND im.isin IS NULL""")
-    after = _db.scalar("SELECT count(*) FROM foundation_staging.instrument_master "
-                       "WHERE asset_class='etf' AND isin IS NOT NULL")
-    total = _db.scalar("SELECT count(*) FROM foundation_staging.instrument_master WHERE asset_class='etf'")
+    after = _db.scalar(
+        "SELECT count(*) FROM foundation_staging.instrument_master "
+        "WHERE asset_class='etf' AND isin IS NOT NULL"
+    )
+    total = _db.scalar(
+        "SELECT count(*) FROM foundation_staging.instrument_master WHERE asset_class='etf'"
+    )
     print(f"instrument_master ETF isin: {before} -> {after} of {total} rows")
 
 

@@ -9,6 +9,7 @@ same-day data (published EOD). Idempotent; resumable (re-run re-fills).
 
     python fetch_delivery.py --start 2026-04-07 --end 2026-06-19
 """
+
 from __future__ import annotations
 
 import argparse
@@ -16,22 +17,28 @@ import io
 import time
 from datetime import date
 
+import _db
 import pandas as pd
 import requests
 
-import _db
-
-H = {"User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
-     "Accept": "text/csv,*/*", "Referer": "https://www.nseindia.com/"}
+H = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/csv,*/*",
+    "Referer": "https://www.nseindia.com/",
+}
 ARCH = "https://archives.nseindia.com/products/content/sec_bhavdata_full_{}.csv"
 EQ_SERIES = {"EQ", "BE", "BZ", "SM", "ST"}
 
 
 def sessions(start: date, end: date) -> list[date]:
-    d = _db.read_df("SELECT DISTINCT date FROM foundation_staging.index_prices "
-                    "WHERE index_code='NIFTY 50' AND date>=:s AND date<=:e ORDER BY date",
-                    {"s": start, "e": end})
+    d = _db.read_df(
+        "SELECT DISTINCT date FROM foundation_staging.index_prices "
+        "WHERE index_code='NIFTY 50' AND date>=:s AND date<=:e ORDER BY date",
+        {"s": start, "e": end},
+    )
     return [x.date() if hasattr(x, "date") else x for x in d["date"].tolist()]
 
 
@@ -59,9 +66,13 @@ def fetch_one(d: date) -> pd.DataFrame | None:
 def run(start: date, end: date) -> None:
     sess = sessions(start, end)
     print(f"{len(sess)} sessions {sess[0]}..{sess[-1]}", flush=True)
-    im = _db.read_df("SELECT instrument_id, symbol FROM foundation_staging.instrument_master "
-                     "WHERE asset_class='stock'")
-    sym2iid = dict(zip(im["symbol"].astype(str).str.strip(), im["instrument_id"].astype(str)))
+    im = _db.read_df(
+        "SELECT instrument_id, symbol FROM foundation_staging.instrument_master "
+        "WHERE asset_class='stock'"
+    )
+    sym2iid = dict(
+        zip(im["symbol"].astype(str).str.strip(), im["instrument_id"].astype(str), strict=False)
+    )
     frames, missing = [], []
     for d in sess:
         f = fetch_one(d)
@@ -73,29 +84,40 @@ def run(start: date, end: date) -> None:
             print(f"  {d}: {len(f)} delivery rows", flush=True)
         time.sleep(0.6)
     if not frames:
-        print("no delivery fetched"); return
+        print("no delivery fetched")
+        return
     allf = pd.concat(frames, ignore_index=True)
     allf["instrument_id"] = allf["SYMBOL"].map(sym2iid)
     allf = allf[allf["instrument_id"].notna()]
-    print(f"mapped {len(allf)} rows -> {allf['instrument_id'].nunique()} instruments; "
-          f"{len(missing)} missing sessions", flush=True)
+    print(
+        f"mapped {len(allf)} rows -> {allf['instrument_id'].nunique()} instruments; "
+        f"{len(missing)} missing sessions",
+        flush=True,
+    )
 
     out = allf[["instrument_id", "date", "DELIV_PER"]].rename(columns={"DELIV_PER": "delivery_pct"})
     out["date"] = out["date"].astype(str)
-    csv = io.StringIO(); out.to_csv(csv, index=False, header=False); csv.seek(0)
+    csv = io.StringIO()
+    out.to_csv(csv, index=False, header=False)
+    csv.seek(0)
     raw = _db.engine().raw_connection()
     try:
         cur = raw.cursor()
         cur.execute("SET LOCAL statement_timeout = '1200000'")
         cur.execute("DROP TABLE IF EXISTS public._deliv_fill")
-        cur.execute("CREATE UNLOGGED TABLE public._deliv_fill "
-                    "(instrument_id uuid, date date, delivery_pct numeric)")
-        cur.copy_expert("COPY public._deliv_fill (instrument_id,date,delivery_pct) "
-                        "FROM STDIN WITH CSV", csv)
+        cur.execute(
+            "CREATE UNLOGGED TABLE public._deliv_fill "
+            "(instrument_id uuid, date date, delivery_pct numeric)"
+        )
+        cur.copy_expert(
+            "COPY public._deliv_fill (instrument_id,date,delivery_pct) FROM STDIN WITH CSV", csv
+        )
         cur.execute("CREATE INDEX ON public._deliv_fill (instrument_id, date)")
-        cur.execute("UPDATE public.de_equity_ohlcv o SET delivery_pct = f.delivery_pct "
-                    "FROM public._deliv_fill f "
-                    "WHERE o.instrument_id = f.instrument_id AND o.date = f.date")
+        cur.execute(
+            "UPDATE public.de_equity_ohlcv o SET delivery_pct = f.delivery_pct "
+            "FROM public._deliv_fill f "
+            "WHERE o.instrument_id = f.instrument_id AND o.date = f.date"
+        )
         n = cur.rowcount
         cur.execute("DROP TABLE IF EXISTS public._deliv_fill")
         raw.commit()

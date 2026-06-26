@@ -24,14 +24,15 @@ import io
 import zipfile
 from datetime import date, datetime
 
+import _db
 import pandas as pd
 import requests
 
-import _db
-
 NSE_HEADERS = {
-    "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                   "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ),
     "Accept": "text/csv,application/zip,*/*",
     "Referer": "https://www.nseindia.com/",
 }
@@ -67,14 +68,34 @@ def download_indices(d: date) -> pd.DataFrame:
 
 def parse_cm(raw: pd.DataFrame) -> pd.DataFrame:
     """Normalise UDiFF rows to canonical OHLCV columns (one row per instrument)."""
-    df = raw.rename(columns={
-        "TckrSymb": "symbol", "ISIN": "isin", "SctySrs": "series",
-        "OpnPric": "open", "HghPric": "high", "LwPric": "low", "ClsPric": "close",
-        "PrvsClsgPric": "prev_close", "TtlTradgVol": "volume",
-        "TtlNbOfTxsExctd": "trades", "TradDt": "date",
-    })
-    keep = ["symbol", "isin", "series", "date", "open", "high", "low", "close",
-            "prev_close", "volume", "trades"]
+    df = raw.rename(
+        columns={
+            "TckrSymb": "symbol",
+            "ISIN": "isin",
+            "SctySrs": "series",
+            "OpnPric": "open",
+            "HghPric": "high",
+            "LwPric": "low",
+            "ClsPric": "close",
+            "PrvsClsgPric": "prev_close",
+            "TtlTradgVol": "volume",
+            "TtlNbOfTxsExctd": "trades",
+            "TradDt": "date",
+        }
+    )
+    keep = [
+        "symbol",
+        "isin",
+        "series",
+        "date",
+        "open",
+        "high",
+        "low",
+        "close",
+        "prev_close",
+        "volume",
+        "trades",
+    ]
     df = df[keep].copy()
     df["date"] = pd.to_datetime(df["date"]).dt.date
     for c in ("open", "high", "low", "close", "prev_close"):
@@ -87,11 +108,17 @@ def parse_cm(raw: pd.DataFrame) -> pd.DataFrame:
 
 
 def parse_indices(raw: pd.DataFrame) -> pd.DataFrame:
-    df = raw.rename(columns={
-        "Index Name": "index_code", "Index Date": "date",
-        "Open Index Value": "open", "High Index Value": "high",
-        "Low Index Value": "low", "Closing Index Value": "close", "Volume": "volume",
-    })[["index_code", "date", "open", "high", "low", "close", "volume"]].copy()
+    df = raw.rename(
+        columns={
+            "Index Name": "index_code",
+            "Index Date": "date",
+            "Open Index Value": "open",
+            "High Index Value": "high",
+            "Low Index Value": "low",
+            "Closing Index Value": "close",
+            "Volume": "volume",
+        }
+    )[["index_code", "date", "open", "high", "low", "close", "volume"]].copy()
     df["index_code"] = df["index_code"].astype(str).str.strip().str.upper()  # match de_index_prices
     df["date"] = pd.to_datetime(df["date"], format="%d-%m-%Y").dt.date
     for c in ("open", "high", "low", "close"):
@@ -104,8 +131,8 @@ def parse_indices(raw: pd.DataFrame) -> pd.DataFrame:
 def instrument_map() -> pd.DataFrame:
     """de_instrument rows for matching bhavcopy symbols → instrument_id."""
     return _db.read_df(
-        "select id as instrument_id, symbol, isin, nifty_500, is_active "
-        "from public.de_instrument")
+        "select id as instrument_id, symbol, isin, nifty_500, is_active from public.de_instrument"
+    )
 
 
 def etf_tickers() -> set[str]:
@@ -114,8 +141,9 @@ def etf_tickers() -> set[str]:
 
 
 # ── Write to staging ─────────────────────────────────────────────────────────
-def write_stocks(parsed: pd.DataFrame, imap: pd.DataFrame, source: str,
-                 only_symbols: list[str] | None = None) -> int:
+def write_stocks(
+    parsed: pd.DataFrame, imap: pd.DataFrame, source: str, only_symbols: list[str] | None = None
+) -> int:
     """Map equity rows to instrument_id and upsert into ohlcv_stock (adj=raw at ingest)."""
     eq = parsed[parsed["series"].isin(["EQ", "BE", "BZ"])].copy()
     if only_symbols:
@@ -127,17 +155,28 @@ def write_stocks(parsed: pd.DataFrame, imap: pd.DataFrame, source: str,
     miss = eq["instrument_id"].isna()
     eq.loc[miss, "instrument_id"] = eq.loc[miss, "symbol"].map(by_sym)
     eq = eq.dropna(subset=["instrument_id"])
-    out = pd.DataFrame({
-        "instrument_id": eq["instrument_id"].astype(str),
-        "symbol": eq["symbol"], "date": eq["date"],
-        "open": eq["open"], "high": eq["high"], "low": eq["low"], "close": eq["close"],
-        "prev_close": eq["prev_close"],
-        # at ingest, adjusted = raw (factor 1); back-adjustment runs in adjust step
-        "open_adj": eq["open"], "high_adj": eq["high"], "low_adj": eq["low"],
-        "close_adj": eq["close"], "adj_factor": 1.0,
-        "volume": eq["volume"], "trades": eq["trades"], "series": eq["series"],
-        "source": source,
-    })
+    out = pd.DataFrame(
+        {
+            "instrument_id": eq["instrument_id"].astype(str),
+            "symbol": eq["symbol"],
+            "date": eq["date"],
+            "open": eq["open"],
+            "high": eq["high"],
+            "low": eq["low"],
+            "close": eq["close"],
+            "prev_close": eq["prev_close"],
+            # at ingest, adjusted = raw (factor 1); back-adjustment runs in adjust step
+            "open_adj": eq["open"],
+            "high_adj": eq["high"],
+            "low_adj": eq["low"],
+            "close_adj": eq["close"],
+            "adj_factor": 1.0,
+            "volume": eq["volume"],
+            "trades": eq["trades"],
+            "series": eq["series"],
+            "source": source,
+        }
+    )
     return _db.upsert_df("foundation_staging.ohlcv_stock", out, ["instrument_id", "date"])
 
 
@@ -154,8 +193,13 @@ def ingest_day(d: date, only_symbols: list[str] | None = None) -> dict:
     imap = instrument_map()
     n_stock = write_stocks(stocks, imap, source="NSE_UDIFF_CM", only_symbols=only_symbols)
     n_index = write_indices(indices, source="NSE_IND_CLOSE_ALL")
-    return {"date": str(d), "cm_rows": len(stocks), "index_rows": len(indices),
-            "stocks_written": n_stock, "indices_written": n_index}
+    return {
+        "date": str(d),
+        "cm_rows": len(stocks),
+        "index_rows": len(indices),
+        "stocks_written": n_stock,
+        "indices_written": n_index,
+    }
 
 
 def main():

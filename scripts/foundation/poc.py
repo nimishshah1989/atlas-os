@@ -26,18 +26,27 @@ from __future__ import annotations
 
 from datetime import date
 
-import pandas as pd
-
 import _db
 import compute
 import ingest_bhavcopy as ing
+import pandas as pd
 from harness import STAGING_SCHEMA
 
-POC_SYMBOLS = ["HCLTECH", "SUNPHARMA", "BHARTIARTL", "INDIGO", "POWERGRID",
-               "CIPLA", "HINDUNILVR", "ASIANPAINT", "COALINDIA", "TECHM"]
+POC_SYMBOLS = [
+    "HCLTECH",
+    "SUNPHARMA",
+    "BHARTIARTL",
+    "INDIGO",
+    "POWERGRID",
+    "CIPLA",
+    "HINDUNILVR",
+    "ASIANPAINT",
+    "COALINDIA",
+    "TECHM",
+]
 SEED_START = "2016-04-07"
-SEED_END = "2026-06-17"          # T-1; the latest day comes from real Bhavcopy
-LATEST_DAY = date(2026, 6, 18)   # most recent NSE trading day with Bhavcopy
+SEED_END = "2026-06-17"  # T-1; the latest day comes from real Bhavcopy
+LATEST_DAY = date(2026, 6, 18)  # most recent NSE trading day with Bhavcopy
 BENCH_CODES = ["NIFTY 50", "NIFTY 500"]
 
 
@@ -51,7 +60,8 @@ def seed_indices() -> int:
         "select index_code, date, open, high, low, close, volume "
         "from public.de_index_prices "
         "where index_code = any(:codes) and date between :a and :b",
-        {"codes": BENCH_CODES, "a": SEED_START, "b": SEED_END})
+        {"codes": BENCH_CODES, "a": SEED_START, "b": SEED_END},
+    )
     df["source"] = "seed:de_index_prices"
     n = _db.upsert_df(f"{STAGING_SCHEMA}.index_prices", df, ["index_code", "date"])
     print(f"  indices seeded: {n} rows")
@@ -61,7 +71,8 @@ def seed_indices() -> int:
 def _poc_instrument_ids() -> dict[str, str]:
     df = _db.read_df(
         "select id, symbol from public.de_instrument where symbol = any(:syms)",
-        {"syms": POC_SYMBOLS})
+        {"syms": POC_SYMBOLS},
+    )
     return {r.symbol: str(r.id) for r in df.itertuples()}
 
 
@@ -75,7 +86,8 @@ def seed_stocks() -> int:
         "       o.open_adj, o.high_adj, o.low_adj, o.close_adj, o.volume, o.trades "
         "from public.de_equity_ohlcv o "
         "where o.instrument_id = any(cast(:ids as uuid[])) and o.date between :a and :b",
-        {"ids": ids, "a": SEED_START, "b": SEED_END})
+        {"ids": ids, "a": SEED_START, "b": SEED_END},
+    )
     df["instrument_id"] = df["instrument_id"].astype(str)
     close = pd.to_numeric(df["close"], errors="coerce")
     cadj = pd.to_numeric(df["close_adj"], errors="coerce")
@@ -98,12 +110,15 @@ def reconcile_latest() -> dict:
     step(f"reconcile ingested {LATEST_DAY} close vs de_* (parse correctness)")
     stg = _db.read_df(
         f"select symbol, close from {STAGING_SCHEMA}.ohlcv_stock "
-        "where date = :d and symbol = any(:syms)", {"d": LATEST_DAY, "syms": POC_SYMBOLS})
+        "where date = :d and symbol = any(:syms)",
+        {"d": LATEST_DAY, "syms": POC_SYMBOLS},
+    )
     de = _db.read_df(
         "select i.symbol, o.close from public.de_equity_ohlcv o "
         "join public.de_instrument i on i.id=o.instrument_id "
         "where o.date = :d and i.symbol = any(:syms)",
-        {"d": LATEST_DAY, "syms": POC_SYMBOLS})
+        {"d": LATEST_DAY, "syms": POC_SYMBOLS},
+    )
     m = stg.merge(de, on="symbol", suffixes=("_bhav", "_de"))
     m["abs_diff"] = (m["close_bhav"].astype(float) - m["close_de"].astype(float)).abs()
     worst = float(m["abs_diff"].max()) if len(m) else None
@@ -132,6 +147,7 @@ def main():
     step("run harness on staging profile (the definition of done)")
     print()
     from harness import run as harness_run
+
     harness_run("staging", symbols=POC_SYMBOLS, limit=None, metrics_sample=None)
 
 
