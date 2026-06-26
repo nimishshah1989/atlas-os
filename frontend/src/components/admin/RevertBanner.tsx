@@ -25,24 +25,24 @@ export function RevertBanner({ reverts }: Props) {
   if (recent.length === 0) return null
 
   return (
-    <div className="border border-signal-neg/30 bg-signal-neg/5 rounded-sm px-4 py-3 mb-4">
+    <div className="border border-sig-neg/30 bg-sig-neg-soft rounded-panel px-4 py-3 mb-4">
       <div className="flex items-baseline justify-between mb-1">
-        <h2 className="font-sans text-[11px] text-signal-neg uppercase tracking-wider font-semibold">
+        <h2 className="font-sans text-[11px] text-sig-neg uppercase tracking-wider font-semibold">
           ⚠ Auto-revert{recent.length === 1 ? '' : 's'} fired
         </h2>
-        <span className="font-sans text-[10px] text-ink-tertiary">
+        <span className="font-sans text-[10px] text-txt-3">
           last 24 hours
         </span>
       </div>
       <ul className="space-y-1">
         {recent.map((r) => (
-          <li key={r.id} className="font-sans text-xs text-ink-secondary">
+          <li key={r.id} className="font-sans text-xs text-txt-2">
             {TIER_LABEL[r.tier] ?? r.tier}: realized IC averaged{' '}
-            <span className="font-mono">
+            <span className="font-num tabular-nums">
               {r.realized_ic_avg ? parseFloat(r.realized_ic_avg).toFixed(4) : '—'}
             </span>{' '}
             vs predicted{' '}
-            <span className="font-mono">
+            <span className="font-num tabular-nums">
               {r.predicted_holdout_ic
                 ? parseFloat(r.predicted_holdout_ic).toFixed(4)
                 : '—'}

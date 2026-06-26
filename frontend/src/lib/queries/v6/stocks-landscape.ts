@@ -1,7 +1,7 @@
 // frontend/src/lib/queries/v6/stocks-landscape.ts
 //
 // Query layer for Page 05 Stocks — Landscape extension.
-// Sources: atlas.mv_stock_landscape (747 rows, refreshed nightly)
+// Sources: foundation_staging.mv_stock_landscape (747 rows, refreshed nightly)
 //
 // Three exported functions:
 //   getStocksLandscape()  — full 747-row dataset for bubble chart + six picks
@@ -90,7 +90,7 @@ export async function getStocksLandscape(): Promise<LandscapeRow[]> {
       composite_trajectory_30d,
       refreshed_at::text,
       as_of_date::text
-    FROM atlas.mv_stock_landscape
+    FROM foundation_staging.mv_stock_landscape
     ORDER BY composite_score DESC NULLS LAST
   `
   return rows
@@ -127,7 +127,7 @@ export async function getMatrixCells(): Promise<MatrixCellAgg[]> {
       matrix_action_sign     AS action_sign,
       COUNT(*)::text                                   AS count,
       AVG(cell_ic) FILTER (WHERE cell_ic IS NOT NULL)::text AS avg_ic
-    FROM atlas.mv_stock_landscape
+    FROM foundation_staging.mv_stock_landscape
     WHERE
       matrix_tenure_dominant IS NOT NULL
       AND matrix_action_sign IS NOT NULL
@@ -185,7 +185,7 @@ export async function getHeroStories(): Promise<HeroStories> {
         rs_3m_nifty500::text AS rs_3m_nifty500,
         action, confidence_label,
         matrix_tenure_dominant, matrix_action_sign
-      FROM atlas.mv_stock_landscape
+      FROM foundation_staging.mv_stock_landscape
       WHERE action = 'BUY'
       ORDER BY composite_score DESC NULLS LAST
       LIMIT 5
@@ -198,7 +198,7 @@ export async function getHeroStories(): Promise<HeroStories> {
         rs_3m_nifty500::text AS rs_3m_nifty500,
         action, confidence_label,
         matrix_tenure_dominant, matrix_action_sign
-      FROM atlas.mv_stock_landscape
+      FROM foundation_staging.mv_stock_landscape
       WHERE action = 'AVOID'
       ORDER BY composite_score ASC NULLS LAST
       LIMIT 5
@@ -211,7 +211,7 @@ export async function getHeroStories(): Promise<HeroStories> {
         rs_3m_nifty500::text AS rs_3m_nifty500,
         action, confidence_label,
         matrix_tenure_dominant, matrix_action_sign
-      FROM atlas.mv_stock_landscape
+      FROM foundation_staging.mv_stock_landscape
       WHERE
         action = 'BUY'
         AND confidence_label IN ('industry_grade', 'high_confidence', 'tier_1')
@@ -226,7 +226,7 @@ export async function getHeroStories(): Promise<HeroStories> {
         rs_3m_nifty500::text AS rs_3m_nifty500,
         action, confidence_label,
         matrix_tenure_dominant, matrix_action_sign
-      FROM atlas.mv_stock_landscape
+      FROM foundation_staging.mv_stock_landscape
       WHERE
         action IN ('BUY', 'WATCH')
         AND composite_score < 2
@@ -241,7 +241,7 @@ export async function getHeroStories(): Promise<HeroStories> {
         COUNT(*) FILTER (
           WHERE confidence_label IN ('industry_grade', 'high_confidence', 'tier_1')
         )::text AS high_conf
-      FROM atlas.mv_stock_landscape
+      FROM foundation_staging.mv_stock_landscape
       GROUP BY action
     `,
   ])

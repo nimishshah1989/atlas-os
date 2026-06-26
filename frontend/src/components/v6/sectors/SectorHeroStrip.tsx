@@ -8,18 +8,18 @@ import type { SectorDeepdiveRow } from '@/lib/queries/v6/sectors'
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtPct(v: number | null, decimals = 1): { text: string; cls: string } {
-  if (v == null) return { text: '—', cls: 'text-ink-tertiary' }
+  if (v == null) return { text: '—', cls: 'text-txt-3' }
   return {
     text: `${v >= 0 ? '+' : ''}${v.toFixed(decimals)}%`,
-    cls: v >= 0 ? 'text-signal-pos' : 'text-signal-neg',
+    cls: v >= 0 ? 'text-sig-pos' : 'text-sig-neg',
   }
 }
 
 function fmtPp(v: number | null): { text: string; cls: string } {
-  if (v == null) return { text: '—', cls: 'text-ink-tertiary' }
+  if (v == null) return { text: '—', cls: 'text-txt-3' }
   return {
     text: `${v >= 0 ? '+' : ''}${v.toFixed(1)}pp`,
-    cls: v >= 0 ? 'text-signal-pos' : 'text-signal-neg',
+    cls: v >= 0 ? 'text-sig-pos' : 'text-sig-neg',
   }
 }
 
@@ -35,17 +35,17 @@ function Tile({
 }) {
   return (
     <div
-      className="px-5 py-[18px] border-r border-paper-rule last:border-r-0"
+      className="px-5 py-[18px] border-r border-edge-hair last:border-r-0"
       aria-label={`${label}: ${value}`}
     >
-      <div className="font-sans text-[9px] uppercase tracking-[0.18em] text-ink-tertiary font-semibold mb-1.5">
+      <div className="font-num text-[9px] uppercase tracking-[0.18em] text-txt-3 font-semibold mb-1.5">
         {label}
       </div>
-      <div className={`font-mono text-[22px] font-medium leading-[1.05] ${valueCls ?? 'text-ink-primary'}`}>
+      <div className={`font-num text-[22px] font-medium tabular-nums leading-[1.05] ${valueCls ?? 'text-txt-1'}`}>
         {value}
       </div>
       {foot && (
-        <div className="font-sans text-[11px] text-ink-tertiary mt-1 leading-[1.4]">{foot}</div>
+        <div className="font-sans text-[11px] text-txt-3 mt-1 leading-[1.4]">{foot}</div>
       )}
     </div>
   )
@@ -56,10 +56,10 @@ function Tile({
 function VerdictStamp({ verdict }: { verdict: string }) {
   const cls =
     verdict === 'Overweight' || verdict === 'OW'
-      ? 'bg-signal-pos text-paper'
+      ? 'bg-sig-pos text-surface-base'
       : verdict === 'Underweight' || verdict === 'Avoid' || verdict === 'UW'
-      ? 'bg-signal-neg text-paper'
-      : 'bg-signal-warn/15 text-signal-warn border border-signal-warn/30'
+      ? 'bg-sig-neg text-surface-base'
+      : 'bg-sig-warn/15 text-sig-warn border border-sig-warn/30'
 
   const label =
     verdict === 'Overweight' ? 'OVERWEIGHT'
@@ -70,7 +70,7 @@ function VerdictStamp({ verdict }: { verdict: string }) {
 
   return (
     <span
-      className={`inline-flex font-mono text-[11px] px-[9px] py-[3px] rounded-[2px] font-semibold tracking-[0.06em] ${cls}`}
+      className={`inline-flex font-num text-[11px] px-[9px] py-[3px] rounded-tile font-semibold tracking-[0.06em] ${cls}`}
     >
       {label}
     </span>
@@ -79,28 +79,16 @@ function VerdictStamp({ verdict }: { verdict: string }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function SectorHeroStrip({
-  sector,
-  // Index-basis overrides (percentage / pp units). When provided, the hero shows
-  // the cap-weighted index figures instead of the legacy equal-weighted MV values.
-  ret12mOverride,
-  ret3mOverride,
-  rs3mOverride,
-}: {
-  sector: SectorDeepdiveRow
-  ret12mOverride?: number | null
-  ret3mOverride?: number | null
-  rs3mOverride?: number | null
-}) {
-  const rs3m = fmtPp(rs3mOverride !== undefined ? rs3mOverride : (sector.rs_windows?.rs_3m ?? null))
-  const ret12m = fmtPct(ret12mOverride !== undefined ? ret12mOverride : (sector.returns?.ret_12m ?? null))
-  const ret3m = fmtPct(ret3mOverride !== undefined ? ret3mOverride : (sector.returns?.ret_3m ?? null))
-  const pctEma20 = sector.pct_above_ema20 != null
-    ? Math.round(sector.pct_above_ema20 * 100)
+export function SectorHeroStrip({ sector }: { sector: SectorDeepdiveRow }) {
+  const rs3m = fmtPp(sector.rs_windows?.rs_3m ?? null)
+  const ret12m = fmtPct(sector.returns?.ret_12m ?? null)
+  const ret3m = fmtPct(sector.returns?.ret_3m ?? null)
+  const pctEma20 = sector.pct_above_ema21 != null
+    ? Math.round(sector.pct_above_ema21 * 100)
     : null
 
   return (
-    <div className="bg-paper-soft border border-paper-rule rounded-[2px] mt-6 overflow-hidden">
+    <div className="bg-surface-panel border border-edge-hair rounded-panel shadow-panel mt-6 overflow-hidden">
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
         <Tile
           label="RS · 3M vs Nifty 500"
@@ -126,13 +114,13 @@ export function SectorHeroStrip({
           foot={<span>Current universe members.</span>}
         />
         <Tile
-          label="Above EMA20"
+          label="Above EMA21"
           value={pctEma20 != null ? `${pctEma20}%` : '—'}
-          valueCls={pctEma20 != null && pctEma20 >= 60 ? 'text-signal-pos' : pctEma20 != null && pctEma20 < 40 ? 'text-signal-neg' : 'text-signal-warn'}
+          valueCls={pctEma20 != null && pctEma20 >= 60 ? 'text-sig-pos' : pctEma20 != null && pctEma20 < 40 ? 'text-sig-neg' : 'text-sig-warn'}
           foot={<span>Stocks above 20-day moving average.</span>}
         />
         <div className="px-5 py-[18px] flex flex-col justify-center items-start gap-1">
-          <div className="font-sans text-[9px] uppercase tracking-[0.18em] text-ink-tertiary font-semibold mb-1.5">
+          <div className="font-num text-[9px] uppercase tracking-[0.18em] text-txt-3 font-semibold mb-1.5">
             Verdict
           </div>
           <VerdictStamp verdict={sector.verdict} />

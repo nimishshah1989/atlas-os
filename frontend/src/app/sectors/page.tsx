@@ -18,9 +18,12 @@ import { SectorHeatmapTable } from '@/components/v6/sectors/SectorHeatmapTable'
 import { SectorBreadthMVPanel } from '@/components/v6/sectors/SectorBreadthMVPanel'
 import { getSectorCards, getSectorRRG, getSectorBreadthMV } from '@/lib/queries/v6/sectors'
 import { getSectorIndexRs } from '@/lib/queries/v6/sector_index_rs'
-import { getSectorReturnBases } from '@/lib/queries/v6/sector_return_bases'
+import { LENS_V4_ENABLED } from '@/lib/feature-flags'
+import { getSectorLensVectors } from '@/lib/queries/lens-scores'
+import { SectorLensHeatmap } from '@/components/v6/sectors/SectorLensHeatmap'
+import { SectorsPageV4 } from '@/components/v6/sectors/SectorsPageV4'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 
@@ -91,16 +94,25 @@ function SummaryBand({
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default async function SectorsPage() {
+  // v4: merged Sectors ⊕ Markets-RS layout, native foundation_staging.
+  if (LENS_V4_ENABLED) return <SectorsPageV4 />
+
   // Parallel data fetch — all independent queries
-  const [cards, rrg, breadth, indexRs, returnBases] = await Promise.all([
+  const [cards, rrg, breadth, indexRs, sectorLensVectors] = await Promise.all([
     getSectorCards(),
     getSectorRRG(),
     getSectorBreadthMV(),
     getSectorIndexRs(),
-    getSectorReturnBases(),
+    LENS_V4_ENABLED ? getSectorLensVectors().catch(() => []) : Promise.resolve([]),
   ])
 
   const latestDate = cards[0]?.as_of_date ?? null
+
+  // NSE sector-index 1-day return, keyed by sector name — feeds the heatmap's
+  // index-level 1D column (the other columns are bottom-up from mv_sector_cards).
+  const idxRet1dBySector: Record<string, number | null> = Object.fromEntries(
+    indexRs.sectors.map((s) => [s.sector_name, s.ret.ret_1d]),
+  )
 
   return (
     <div className="max-w-[1400px] mx-auto">
@@ -148,14 +160,25 @@ export default async function SectorsPage() {
         </Suspense>
       </section>
 
+      {/* Section 1½ — Six-Lens sector vector (v4 feature flag) */}
+      {LENS_V4_ENABLED && sectorLensVectors.length > 0 && (
+        <section className="px-8 py-10 border-b border-paper-rule" aria-label="Sector six-lens vector">
+          <SectionHead
+            title="Sector six-lens vector"
+            subtitle="Average score across each lens for all stocks in each sector. Sorted by composite. Color intensity = magnitude."
+          />
+          <SectorLensHeatmap vectors={sectorLensVectors} />
+        </section>
+      )}
+
       {/* Section 2 — Heatmap table (consolidated: cards grid removed per M16 — heatmap is denser) */}
       <section className="px-8 py-10 border-b border-paper-rule" aria-label="Sector return heatmap">
         <SectionHead
           title="Multi-window return heatmap"
-          subtitle="Returns and RS vs Nifty 500 across 1D / 1W / 1M / 3M / 6M / 12M. Toggle between the cap-weighted Index and the free-float cap-weighted Bottom-up basis. Color intensity = magnitude of move."
+          subtitle="Absolute returns and RS spread vs Nifty 500 across 1D / 1W / 1M / 3M / 6M / 12M windows. 1D is the NSE sector index; other windows are bottom-up. Color intensity = magnitude of move."
         />
         <Suspense fallback={<div className="h-64 bg-paper-rule/20 rounded-sm animate-pulse" />}>
-          <SectorHeatmapTable cards={cards} returnBases={returnBases} />
+          <SectorHeatmapTable cards={cards} idxRet1dBySector={idxRet1dBySector} />
         </Suspense>
       </section>
 

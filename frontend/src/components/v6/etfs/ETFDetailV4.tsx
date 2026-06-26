@@ -1,0 +1,197 @@
+// ETFDetailV4 — the v4 ETF detail page (behind LENS_V4). Lens-first, native foundation_staging.
+// An ETF is a holdings-weighted roll-up of the stock atom (D26/D27): the HEADLINE is
+// LEADERSHIP-BREADTH (% of holdings weight that are top-decile leaders in ≥2 conviction lenses),
+// NOT a composite. The 6-lens vector + look-through are a TRANSPARENCY view of what's held and
+// how it scores — descriptive, explicitly NOT positioned as an outperformance predictor.
+import Link from 'next/link'
+import { notFound } from 'next/navigation'
+
+import { getEtfLensDetail, getEtfChartSeries, type EtfLensDetail, type EtfHolding } from '@/lib/queries/v6/etf_lens'
+import { StockPriceEMAChart } from '@/components/v6/stock-detail/StockPriceEMAChart'
+import { StockRSChart } from '@/components/v6/stock-detail/StockRSChart'
+import { Panel } from '@/components/v4/ui/Panel'
+import { StatCard } from '@/components/v4/ui/StatCard'
+import { decileColor } from '@/components/v4/ui/decile'
+
+const HOLDING_CAP = 50
+
+// ── colour helpers (shared idioms with the stocks pages) ──────────────────
+// Per-holding deciles colour the figure via the shared perceptual ramp; null → tertiary.
+const decileStyle = (d: number | null) => ({ color: d == null ? 'var(--color-txt-3)' : decileColor(d) })
+
+const leadText = (lead: number) =>
+  lead >= 3 ? 'text-sig-pos' : lead === 2 ? 'text-brand' : lead === 1 ? 'text-sig-warn' : 'text-txt-3'
+
+const pctText = (v: number | null) =>
+  v == null ? 'text-txt-3' : v >= 0 ? 'text-sig-pos' : 'text-sig-neg'
+
+const fmtRs = (v: number | null) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%`)
+
+// ── holdings-weighted six-lens vector (0..100, bars) ──────────────────────
+const LENS_VECTOR: { key: keyof Pick<EtfLensDetail, 'v_tech' | 'v_fund' | 'v_cat' | 'v_flow' | 'v_val'>; label: string }[] = [
+  { key: 'v_tech', label: 'Technical' },
+  { key: 'v_fund', label: 'Fundamental' },
+  { key: 'v_cat', label: 'Catalyst' },
+  { key: 'v_flow', label: 'Flow' },
+  { key: 'v_val', label: 'Valuation' },
+]
+
+function LensVector({ etf }: { etf: EtfLensDetail }) {
+  const scored = LENS_VECTOR
+    .map(l => ({ label: l.label, v: etf[l.key] }))
+    .filter((x): x is { label: string; v: number } => x.v != null)
+  return (
+    <div className="max-w-[560px] space-y-2">
+      {scored.length === 0 && <p className="font-sans text-[13px] italic text-txt-3">No scored holdings.</p>}
+      {scored.map(l => {
+        // score 0..100 → decile band (score/10) for the shared ramp colour.
+        const color = decileColor(Math.round(l.v / 10))
+        return (
+          <div key={l.label} className="flex items-center gap-3">
+            <span className="w-[96px] shrink-0 font-sans text-xs text-txt-2">{l.label}</span>
+            <span className="w-[34px] shrink-0 text-right font-num text-xs tabular-nums" style={{ color }}>{l.v.toFixed(0)}</span>
+            <span className="h-[7px] flex-1 overflow-hidden rounded-tile bg-surface-inset">
+              <span className="block h-full rounded-tile" style={{ width: `${Math.min(100, l.v)}%`, background: color }} />
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── look-through holdings table (sorted by weight desc upstream) ──────────
+function HoldingsTable({ holdings }: { holdings: EtfHolding[] }) {
+  const rows = holdings.slice(0, HOLDING_CAP)
+  const truncated = holdings.length > HOLDING_CAP
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse">
+        <thead>
+          <tr className="border-b border-edge-rule">
+            {(['Symbol', 'Sector'] as const).map(h => (
+              <th key={h} className="whitespace-nowrap px-2 pb-2 text-left font-sans text-[10px] uppercase tracking-wider text-txt-3">{h}</th>
+            ))}
+            {(['Weight', 'Tch', 'Fnd', 'Cat', 'Flw', 'Val', 'Lead', 'RS 3M'] as const).map(h => (
+              <th key={h} className="whitespace-nowrap px-2 pb-2 text-right font-sans text-[10px] uppercase tracking-wider text-txt-3">{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(h => (
+            <tr key={h.symbol} className="border-b border-edge-hair hover:bg-surface-raised">
+              <td className="whitespace-nowrap px-2 py-1.5 font-num text-[12px] font-semibold tabular-nums">
+                <Link href={`/stocks/${h.symbol}`} className="text-txt-1 hover:text-brand hover:underline">{h.symbol}</Link>
+              </td>
+              <td className="max-w-[160px] truncate px-2 py-1.5 font-sans text-[11px] text-txt-2">{h.sector ?? '—'}</td>
+              <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums text-txt-2">
+                {h.weight == null ? '—' : `${(h.weight * 100).toFixed(2)}%`}
+              </td>
+              <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={decileStyle(h.d_tech)}>{h.d_tech ?? '—'}</td>
+              <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={decileStyle(h.d_fund)}>{h.d_fund ?? '—'}</td>
+              <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={decileStyle(h.d_cat)}>{h.d_cat ?? '—'}</td>
+              <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={decileStyle(h.d_flow)}>{h.d_flow ?? '—'}</td>
+              <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={decileStyle(h.d_val)}>{h.d_val ?? '—'}</td>
+              <td className={`px-2 py-1.5 text-right font-num text-[12px] tabular-nums ${leadText(h.lead)}`}>{h.lead}/4</td>
+              <td className={`px-2 py-1.5 text-right font-num text-[12px] tabular-nums ${pctText(h.rs_3m)}`}>{fmtRs(h.rs_3m)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {truncated && (
+        <p className="mt-3 font-sans text-[11px] text-txt-3">
+          showing top {HOLDING_CAP} of {holdings.length} holdings by weight
+        </p>
+      )}
+    </div>
+  )
+}
+
+export async function ETFDetailV4({ fcode }: { fcode: string }) {
+  const etf = await getEtfLensDetail(fcode)
+  if (!etf) notFound()
+  // Native Lightweight charts (price ÷ index) for bridged ETFs — TV's embed refuses NSE symbols.
+  const etfRows = etf.nse_ticker ? await getEtfChartSeries(etf.nse_ticker).catch(() => []) : []
+
+  const breadthPct = etf.breadth == null ? '—' : `${(etf.breadth * 100).toFixed(0)}%`
+  const expenseStr = etf.expense == null ? null : `${etf.expense.toFixed(2)}%` // already in percent units
+  const subParts = [
+    etf.category,
+    etf.amc,
+    expenseStr ? `expense ${expenseStr}` : null,
+    `${etf.n_holdings} holdings`,
+    etf.isin,
+  ].filter((x): x is string => !!x)
+
+  return (
+    <div className="mx-auto max-w-[1280px] space-y-6 px-6 py-7">
+      {/* ── Header ── */}
+      <header>
+        <nav className="mb-3 font-num text-[11px] text-txt-3" aria-label="Breadcrumb">
+          <Link href="/" className="text-brand hover:underline">Atlas</Link> ›{' '}
+          <Link href="/etfs" className="text-brand hover:underline">ETFs</Link> ›{' '}
+          <span aria-current="page">{etf.name}</span>
+        </nav>
+        <div className="flex flex-wrap items-start justify-between gap-6">
+          <div className="min-w-0 flex-1">
+            <h1 className="font-display text-[36px] font-bold leading-[1.05] tracking-tight text-txt-1">{etf.name}</h1>
+            <div className="mt-2 font-num text-[12px] text-txt-3">{subParts.join(' · ')}</div>
+            <p className="mt-3 max-w-[760px] font-sans text-[14px] leading-[1.5] text-txt-2">
+              How this ETF&apos;s holdings score on the six lenses, weighted by holding weight. A transparency
+              roll-up of the stock atom — descriptive, <em>not</em> a forecast of outperformance.
+            </p>
+          </div>
+          {/* leadership-breadth headline badge */}
+          <div className="w-[200px] shrink-0">
+            <StatCard
+              label="Leadership-breadth"
+              value={breadthPct}
+              tone="pos"
+              sub={`${etf.n_leaders} of ${etf.n_holdings} holdings lead ≥2 lenses`}
+            />
+          </div>
+        </div>
+      </header>
+
+      {/* ── Holdings-weighted six-lens vector ── */}
+      <Panel
+        eyebrow="Lens read"
+        title="How the holdings score on each lens"
+        info={{ body: 'Weight-weighted average of each holding’s lens score (0–100) — descriptive, not a forecast.' }}
+      >
+        <LensVector etf={etf} />
+      </Panel>
+
+      {/* ── Charts (native Lightweight; bridged ETFs only) ── */}
+      {etfRows.length > 0 && etf.nse_ticker ? (
+        <Panel eyebrow="Trend" title="Price & relative strength" bodyClassName="space-y-8 px-5 py-4">
+          <StockPriceEMAChart rows={etfRows} symbol={etf.nse_ticker} />
+          <StockRSChart rows={etfRows} symbol={etf.nse_ticker} />
+        </Panel>
+      ) : (
+        <Panel eyebrow="Trend" title="Price & relative strength">
+          <p className="font-sans text-[13px] italic text-txt-3">
+            No NSE price series mapped for this ETF — lens roll-up only.
+          </p>
+        </Panel>
+      )}
+
+      {/* ── Look-through holdings ── */}
+      <Panel
+        eyebrow="Look-through"
+        title="Look-through holdings"
+        info={{ body: 'Every holding by weight, with each name’s lens deciles, leadership and 3-month RS. Click a symbol for its full evidence.' }}
+      >
+        {etf.holdings.length > 0
+          ? <HoldingsTable holdings={etf.holdings} />
+          : <p className="font-sans text-[13px] italic text-txt-3">No scored holdings for this ETF.</p>}
+      </Panel>
+
+      <p className="font-sans text-[12px] leading-[1.6] text-txt-3">
+        Native from <strong className="text-txt-2">foundation_staging</strong> — the lens journal looked through
+        de_etf_holdings; identity from Morningstar (de_mf_master).{' '}
+        <Link href="/etfs" className="text-brand hover:underline">← Back to ETFs</Link>
+      </p>
+    </div>
+  )
+}

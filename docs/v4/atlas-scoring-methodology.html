@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Atlas — Scoring Methodology &amp; Data Lineage</title>
+<style>
+  :root{--ink:#14181f;--mut:#5b6675;--line:#e3e8ef;--bg:#fff;--head:#0f172a;--good:#15803d;--warn:#b45309;--bad:#b91c1c;--chip:#f1f5f9;}
+  *{box-sizing:border-box}
+  body{font-family:-apple-system,Inter,Segoe UI,Roboto,sans-serif;color:var(--ink);margin:0;background:#f7f9fc;line-height:1.5}
+  .wrap{max-width:1180px;margin:0 auto;padding:40px 28px 80px}
+  h1{font-size:30px;margin:0 0 4px;letter-spacing:-.02em}
+  h2{font-size:21px;margin:44px 0 6px;letter-spacing:-.01em;border-bottom:2px solid var(--head);padding-bottom:6px}
+  h3{font-size:16px;margin:26px 0 8px;color:var(--head)}
+  .sub{color:var(--mut);font-size:14px;margin:0 0 8px}
+  p{font-size:14px}
+  table{border-collapse:collapse;width:100%;margin:12px 0 8px;font-size:12.5px;background:#fff;border:1px solid var(--line)}
+  th,td{border:1px solid var(--line);padding:7px 9px;text-align:left;vertical-align:top}
+  th{background:#f1f5f9;font-weight:600;color:var(--head)}
+  td.num,th.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+  code{background:var(--chip);padding:1px 5px;border-radius:4px;font-size:11.5px}
+  .src{color:#1d4ed8}
+  .good{color:var(--good);font-weight:600}.warn{color:var(--warn);font-weight:600}.bad{color:var(--bad);font-weight:600}
+  .w{display:inline-block;min-width:46px;font-weight:700}
+  .legend td{font-size:12.5px}
+  .note{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px 14px;margin:14px 0;font-size:13px}
+  .ok{background:#f0fdf4;border-color:#bbf7d0}
+  .pill{display:inline-block;font-size:11px;padding:1px 8px;border-radius:99px;background:var(--chip);color:var(--mut);margin-left:6px}
+  caption{caption-side:top;text-align:left;font-size:12px;color:var(--mut);padding:0 0 4px}
+</style>
+</head>
+<body><div class="wrap">
+
+<h1>Atlas — Scoring Methodology &amp; Data Lineage</h1>
+<p class="sub">Generated 2026-06-25 from the live scorer code. Every formula below is transcribed verbatim from the pure scoring functions (<code>atlas/lenses/compute/*.py</code>); every input is traced to its exact source table/column and ultimate origin (Kite / XBRL / NSE). Defaults shown; all thresholds live in <code>atlas.atlas_thresholds</code>.</p>
+
+<h2>0 · How a stock's score is built</h2>
+<p>Each stock is scored by six <strong>lenses</strong>, each producing a <strong>0–100</strong>. Four lenses are blended by weight into the <strong>composite</strong>; two (Valuation, Policy) are computed for display but carry <strong>0% weight</strong> today. A lens that has no data is dropped and the remaining weights renormalise — scores are never imputed (Rule #0).</p>
+<table>
+<caption>Composite weights — from <code>atlas.atlas_thresholds.lens_weight_*</code> (active, sum = 1.00)</caption>
+<thead><tr><th>Lens</th><th class="num">Weight</th><th>What it captures</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td><strong>Technical</strong></td><td class="num">30%</td><td>Trend, relative strength, volatility contraction, volume</td><td><span class="good">real</span></td></tr>
+<tr><td><strong>Flow</strong></td><td class="num">25%</td><td>Promoter + institutional + delivery accumulation</td><td><span class="good">real</span> (promoter); institutional MoM fund-flow wired</td></tr>
+<tr><td><strong>Fundamental</strong></td><td class="num">25%</td><td>Profitability, margin, growth, balance sheet, op-leverage</td><td><span class="warn">mostly real</span>; balance-sheet fields being filled</td></tr>
+<tr><td><strong>Catalyst</strong></td><td class="num">20%</td><td>Corporate filings / announcements</td><td><span class="good">real</span> (1,600 distinct)</td></tr>
+<tr><td>Valuation</td><td class="num">0%</td><td>PE-vs-sector, abs PE, PB, EV/EBITDA, 52w</td><td>display-only</td></tr>
+<tr><td>Policy</td><td class="num">0%</td><td>—</td><td>→ reframed to alerts/agent</td></tr>
+</tbody></table>
+<p><strong>Conviction tier</strong> (from composite + how many lenses are aligned): <code>≥70 &amp; ≥3 lenses → HIGHEST</code> · <code>≥58 &amp; ≥2 → HIGH</code> · <code>≥45 → MEDIUM</code> · <code>≥30 → WATCH</code> · else below-watch.</p>
+
+<!-- ============ TECHNICAL ============ -->
+<h2>1 · Technical lens <span class="pill">weight 30%</span></h2>
+<p class="sub">Composite = average of the present sub-scores × 4 (each sub-score is 0–25). Source for all inputs: <code class="src">foundation_staging.technical_daily</code> (computed daily by <code>compute_all.py</code> from <code>ohlcv_stock</code> ← Kite, split/bonus-adjusted at source). <code>atlas/lenses/compute/technical.py</code>.</p>
+<table>
+<thead><tr><th>Sub-score</th><th class="num">Max</th><th>Exact rule (default thresholds)</th><th>Inputs → source</th></tr></thead>
+<tbody>
+<tr><td><strong>Trend</strong></td><td class="num">25</td>
+<td>EMA alignment: <code>ema21&gt;ema50&gt;ema200</code> +10; one pair aligned +6; else 0. &nbsp;Price vs EMA200: <code>&gt;+5%</code> +5; <code>&gt;0</code> +3; <code>&gt;−5%</code> +1. &nbsp;Slope (ret_1w): <code>&gt;+2%</code> +5; <code>&gt;0</code> +3; flat-down +1. &nbsp;RSI: <code>50–70</code> +5; <code>30–50</code> +3; <code>&gt;70</code> +2; <code>&lt;30</code> +1.</td>
+<td class="src">ema_21, ema_50, ema_200, rsi_14, ret_1w, close</td></tr>
+<tr><td><strong>Relative Strength</strong></td><td class="num">25</td>
+<td>Weighted RS = 3m·0.40 + 1m·0.30 + 6m·0.20 + 12m·0.10 (vs Nifty 500), blended 50/50 with the same vs the sector index. RS = stock return − benchmark return (centred on 0). Tier: <code>≥+0.15</code> 25; <code>≥+0.08</code> 20; <code>≥+0.02</code> 15; <code>≥−0.08</code> 10; <code>≥−0.15</code> 5; else 0.</td>
+<td class="src">rs_1m/3m/6m/12m (vs n500 &amp; sector)</td></tr>
+<tr><td><strong>Vol Contraction</strong></td><td class="num">25</td>
+<td>ATR% = atr_14 ÷ price: <code>&lt;2%</code> 25; <code>&lt;3%</code> 20; <code>&lt;4%</code> 15; <code>&lt;6%</code> 10; else 5. Bollinger bonus +5 if <code>bb_width&lt;0.10</code> (cap 25).</td>
+<td class="src">atr_14, close, bb_width</td></tr>
+<tr><td><strong>Volume</strong></td><td class="num">25</td>
+<td>Rel-vol (today ÷ 30d avg): <code>&gt;2.0</code> +10; <code>&gt;1.2</code> +7; <code>&gt;0.8</code> +5; else +2. &nbsp;Trend (60d÷30d): <code>&gt;1.2</code> +8; <code>&gt;1.0</code> +5; <code>&lt;0.8</code> +2; else +3. &nbsp;52w pos: <code>≥80</code> +7; <code>≥20</code> +5; else +3.</td>
+<td class="src">vol_ratio_30d, vol_ratio_60d, pos_52w</td></tr>
+</tbody></table>
+
+<!-- ============ FLOW ============ -->
+<h2>2 · Flow lens <span class="pill">weight 25%</span></h2>
+<p class="sub">Composite = weighted avg of present sub-scores: Promoter 0.70, Smart-money 0.30, Accumulation 0.25 (renormalised). <code>atlas/lenses/compute/flow.py</code>. Sources are SEBI/NSE disclosure feeds landed in <code class="src">foundation_staging.lens_*</code>.</p>
+<table>
+<thead><tr><th>Sub-score</th><th class="num">Range</th><th>Exact rule (defaults)</th><th>Inputs → source</th></tr></thead>
+<tbody>
+<tr><td><strong>Promoter</strong> <span class="good">real</span></td><td class="num">0–100</td>
+<td>Holding base: <code>≥70%</code> 30; <code>≥55%</code> 22; <code>≥40%</code> 15; <code>≥25%</code> 8; <code>&gt;0</code> 3. &nbsp;+ insider events: open-mkt buy +9 (×1.3–1.56 by ₹ size, +25 cap), pledge-decrease +6 (×1.5 if pledge&lt;2%, +15 cap), warrant/creeping +7, sell −5 (−20 cap), pledge-increase −8.</td>
+<td class="src">lens_shareholding.promoter_pct; lens_insider.signal_type, value_cr, pledge_pct_after</td></tr>
+<tr><td><strong>Institutional / smart-money</strong> <span class="warn">partial</span></td><td class="num">−10…+15 → 0–100</td>
+<td>Bulk deals: superstar buy +10 / sell −8; institutional buy +5 / sell −5. &nbsp;Shareholding QoQ (inst = 100−promoter): Δ<code>≥1.0pp</code> +6; <code>≥0.3</code> +3; <code>≤−0.5</code> −4; small ±1. Clamp [−10,+15], rescale → 0–100 (<code>0→50</code>). <strong>Mutual-fund holdings NOT wired</strong> → most stocks land at the modal 50.</td>
+<td class="src">lens_bulk_deals.is_superstar/is_institutional/buy_sell; lens_shareholding.promoter_pct (QoQ)</td></tr>
+<tr><td><strong>Accumulation</strong> <span class="good">real</span></td><td class="num">0–100</td>
+<td>Base 50 ±8 by 30d delivery% (≥60 / ≤25). Trend (30d vs 60d): <code>≥0.12</code> +20; <code>≥0.05</code> +10; symmetric down. Up/down-day asymmetry: <code>≥8</code> +15; <code>≥3</code> +8; symmetric down. <em>None</em> if illiquid (no stub).</td>
+<td class="src">delivery_daily.delivery_avg_30d / _60d / _updown_asym</td></tr>
+</tbody></table>
+
+<!-- ============ CATALYST ============ -->
+<h2>3 · Catalyst lens <span class="pill">weight 20%</span></h2>
+<p class="sub">Composite = Earnings-strategy 0.55 + Capital-action 0.30 + Governance 0.15. Each filing scored × recency multiplier (<code>≤90d 1.0 · ≤180d 0.8 · ≤365d 0.5 · &gt;365d 0.3</code>), summed per bucket, clamped 0–100. Source: <code class="src">foundation_staging.lens_filings</code> (NSE announcements, 365-day lookback). <code>atlas/lenses/compute/catalyst.py</code>.</p>
+<table>
+<thead><tr><th>Bucket <span class="pill">weight</span></th><th>Representative point values (× recency)</th><th>Inputs → source</th></tr></thead>
+<tbody>
+<tr><td><strong>Earnings strategy</strong> <span class="pill">0.55</span></td>
+<td>Credit-rating upgrade +15 / reaffirm +5 / downgrade −10 / watch −5. Order-win +10, partnership/expansion +8, patent +6, litigation −3, adverse −5.</td>
+<td class="src">lens_filings.category, subject_text, filing_date</td></tr>
+<tr><td><strong>Capital action</strong> <span class="pill">0.30</span></td>
+<td>Acquisition (strategic/majority) +12, JV/stake +8; buyback +10; special/interim dividend +10 / final +5; bonus +5 / split +3.</td>
+<td class="src">lens_filings.category, subject_text</td></tr>
+<tr><td><strong>Governance</strong> <span class="pill">0.15</span></td>
+<td>Auditor mid-term change −12; CFO/CEO/MD exit −8 / other exec −4; senior appointment +5 / KMP +3; ESOP +2.</td>
+<td class="src">lens_filings.category, subject_text</td></tr>
+</tbody></table>
+
+<!-- ============ FUNDAMENTAL ============ -->
+<h2>4 · Fundamental lens <span class="pill">weight 25%</span></h2>
+<p class="sub">Composite = average of the present sub-scores × 5 (each 0–20; renormalised over present ones). Inputs derived as-of from <code class="src">foundation_staging.financials_quarterly</code> (TTM = trailing 4 quarters) + <code class="src">financials_annual</code> — both from <strong>XBRL</strong> (60-day lag on quarterly, 90-day on annual). <code>fundamental.py</code> + <code>fundamental_pit.py</code>.</p>
+<table>
+<thead><tr><th>Sub-score</th><th class="num">Max</th><th>Exact rule (defaults)</th><th>Input → exact source / formula</th></tr></thead>
+<tbody>
+<tr><td><strong>Profitability</strong></td><td class="num">20</td>
+<td>ROE: <code>≥20</code> 20; <code>≥15</code> 16; <code>≥12</code> 12; <code>≥8</code> 8; else 4. +2 if ROIC&gt;15.</td>
+<td><code>roe = PAT_ttm ÷ equity ×100</code> (PAT from <span class="src">financials_quarterly.pat</span>, equity from <span class="src">financials_annual.equity</span>). <span class="bad">roic = None (not sourced)</span> → the +2 never fires.</td></tr>
+<tr><td><strong>Margin</strong></td><td class="num">20</td>
+<td>Op-margin: <code>&gt;20</code> 14; <code>&gt;15</code> 11; <code>&gt;10</code> 8; <code>&gt;5</code> 5; else 2. Net-margin: <code>&gt;15</code> +6; <code>&gt;10</code> +4; <code>&gt;5</code> +2.</td>
+<td><code>op = EBIT_ttm ÷ rev_ttm</code>, <code>net = PAT_ttm ÷ rev_ttm</code> (<span class="src">financials_quarterly.ebit/revenue/pat</span>).</td></tr>
+<tr><td><strong>Growth</strong></td><td class="num">20</td>
+<td>Rev YoY: <code>&gt;25</code> 12; <code>&gt;15</code> 9; <code>&gt;8</code> 6; <code>&gt;0</code> 3. EPS YoY: <code>&gt;30</code> +8; <code>&gt;15</code> +6; <code>&gt;5</code> +4; <code>&gt;0</code> +2.</td>
+<td><code>(ttm ÷ prior_ttm −1)</code> on <span class="src">financials_quarterly.revenue</span> and <span class="src">.eps</span>.</td></tr>
+<tr><td><strong>Balance sheet</strong></td><td class="num">20</td>
+<td>D/E: net-cash/<code>&lt;0.3</code> 10; <code>&lt;0.5</code> 8; <code>&lt;1.0</code> 6; <code>&lt;1.5</code> 4; else 2. Current ratio &amp; quick ratio each add up to +5.</td>
+<td><code>D/E</code> from <span class="src">financials_quarterly.debt_equity_ratio</span> (or borrowings÷equity). <span class="bad">current_ratio, quick_ratio = None (not sourced)</span>.</td></tr>
+<tr><td><strong>Operating leverage</strong></td><td class="num">20</td>
+<td>High growth(&gt;15)+expanding margin(&gt;15)+low D/E → 20; high growth + one → 15; moderate(&gt;8) → 10; positive → 5; declining → 0.</td>
+<td>composite of growth, op-margin, D/E above (all real).</td></tr>
+</tbody></table>
+
+<!-- ============ VALUATION ============ -->
+<h2>5 · Valuation lens <span class="pill">weight 0% — display only</span></h2>
+<p class="sub">Computed and shown as a cheap/expensive <strong>zone</strong> + a multiplier, but currently carries <strong>0% conviction weight</strong>. Composite renormalises over dimensions that have data. <code>valuation.py</code>.</p>
+<table>
+<thead><tr><th>Dimension</th><th class="num">Max</th><th>Exact rule</th><th>Input → exact source</th></tr></thead>
+<tbody>
+<tr><td>PE vs sector</td><td class="num">25</td><td>PE÷sector-median: <code>&lt;0.5</code> 25; <code>&lt;0.75</code> 18; <code>&lt;1.0</code> 12; <code>&lt;1.5</code> 6; else 0.</td><td><strong>P/E is COMPUTED, not sourced:</strong> <code>close ÷ eps_ttm</code> — close from <span class="src">ohlcv_stock.close</span> (Kite), eps from <span class="src">financials_quarterly.eps</span> (XBRL). Sector median = cross-sectional median of those PEs.</td></tr>
+<tr><td>Absolute PE</td><td class="num">25</td><td><code>&lt;8</code> 25; <code>&lt;15</code> 18; <code>&lt;25</code> 10; <code>&lt;40</code> 3; else 0.</td><td>same computed PE.</td></tr>
+<tr><td>Price / Book</td><td class="num">15</td><td><code>&lt;1</code> 15; <code>&lt;2</code> 10; <code>&lt;4</code> 5; <code>&lt;6</code> 2; else 0.</td><td><span class="bad">P/B = None — no source wired.</span> Dimension dropped.</td></tr>
+<tr><td>EV / EBITDA</td><td class="num">20</td><td><code>&lt;6</code> 20; <code>&lt;10</code> 14; <code>&lt;15</code> 8; <code>&lt;20</code> 3; else 0.</td><td><span class="bad">EV/EBITDA = None — no source wired.</span> Dimension dropped.</td></tr>
+<tr><td>52-week position</td><td class="num">15</td><td><code>≤20</code> 15; <code>≤40</code> 10; <code>≤60</code> 6; <code>≤80</code> 3; else 0 (+3 if below EMA200).</td><td><span class="src">technical_daily.pos_52w, ema_200</span>.</td></tr>
+</tbody></table>
+<p class="sub">Zone → multiplier: DEEP_VALUE(≥75) 1.15 · CHEAP(≥55) 1.08 · FAIR(≥35) 1.00 · EXPENSIVE(≥20) 0.90 · OVERVALUED(&lt;20) 0.75.</p>
+
+<!-- ============ SOURCES ============ -->
+<h2>6 · Data lineage — origin of every input</h2>
+<table class="legend">
+<thead><tr><th>Domain</th><th>DB table (read by scorers)</th><th>Ultimate origin</th><th>State</th></tr></thead>
+<tbody>
+<tr><td>Prices / technicals</td><td><code>foundation_staging.technical_daily</code> ← <code>ohlcv_stock</code></td><td><strong>Kite</strong> (split/bonus-adjusted at source)</td><td><span class="good">real</span>; freshness being refreshed</td></tr>
+<tr><td>Fundamentals</td><td><code>financials_quarterly</code>, <code>financials_annual</code></td><td><strong>XBRL</strong></td><td><span class="warn">real but 5 fields empty</span>: roic, roa, gross_margin, current_ratio, quick_ratio</td></tr>
+<tr><td>Valuation ratios</td><td>P/E computed in pipeline; P/B, EV/EBITDA absent</td><td>Kite price ÷ XBRL EPS</td><td><span class="bad">P/B &amp; EV/EBITDA not wired</span></td></tr>
+<tr><td>Insider / shareholding / bulk deals</td><td><code>lens_insider</code>, <code>lens_shareholding</code>, <code>lens_bulk_deals</code></td><td><strong>SEBI / NSE</strong> disclosures</td><td><span class="good">real</span></td></tr>
+<tr><td>Delivery</td><td><code>delivery_daily</code></td><td><strong>NSE</strong></td><td><span class="good">real</span></td></tr>
+<tr><td>Filings / announcements</td><td><code>lens_filings</code></td><td><strong>NSE</strong></td><td><span class="good">real</span> (1,600 distinct)</td></tr>
+<tr><td>Mutual-fund holdings</td><td><code>de_mf_holdings</code> (6 monthly snapshots)</td><td>Morningstar</td><td><span class="warn">present but NOT wired into the institutional sub-score</span></td></tr>
+</tbody></table>
+
+<div class="note">
+<strong>Honest gaps (what is NOT real today, so it must be fixed or not shown):</strong>
+<ul>
+<li><span class="bad">Empty fundamentals:</span> roic, roa, gross_margin, current_ratio, quick_ratio — available in XBRL, not extracted yet. (ROE has dirty tails from tiny-equity denominators → needs a validity guard.)</li>
+<li><span class="bad">Valuation P/B &amp; EV/EBITDA:</span> no source wired — these dimensions are dropped (and Valuation is 0% weight anyway).</li>
+<li><span class="warn">Institutional flow:</span> mutual-fund holdings exist (6 months) but aren't wired, so most stocks sit at the neutral 50 inside the smart-money sub-score (~9% of the composite).</li>
+<li><span class="warn">Policy:</span> reframed out of scoring → informational alert layer + future news agent.</li>
+</ul>
+</div>
+<div class="note ok"><strong>What is fully real today:</strong> the entire Technical lens, Catalyst, Flow-promoter &amp; Flow-accumulation, and the bulk of Fundamental (profitability, margins, growth, D/E) — i.e. the large majority of the conviction score traces to real Kite/XBRL/NSE data.</div>
+
+</div></body></html>

@@ -18,6 +18,7 @@ import { Suspense } from 'react'
 import { DataSourceBanner } from '@/components/v6/DataSourceBanner'
 import { SectorHeroStrip } from '@/components/v6/sectors/SectorHeroStrip'
 import { SectorTraderViewHeader } from '@/components/v6/sectors/SectorTraderViewHeader'
+import { RSWindowsTable } from '@/components/v6/sectors/RSWindowsTable'
 import { SectorRSRatioCharts } from '@/components/v6/sectors/SectorRSRatioCharts'
 import { ConstituentsTable } from '@/components/v6/sectors/ConstituentsTable'
 import { TopPicksPanel } from '@/components/v6/sectors/TopPicksPanel'
@@ -25,10 +26,10 @@ import { StrengthDistChart } from '@/components/v6/sectors/StrengthDistChart'
 import { OpenSignalsPanel } from '@/components/v6/sectors/OpenSignalsPanel'
 import { getSectorDeepdive } from '@/lib/queries/v6/sectors'
 import { getSectorRatioSeries } from '@/lib/queries/v6/sector_index_rs'
-import { getSectorReturnBases } from '@/lib/queries/v6/sector_return_bases'
-import { SectorReturnBasisPanel } from '@/components/v6/sectors/SectorReturnBasisPanel'
+import { LENS_V4_ENABLED } from '@/lib/feature-flags'
+import { SectorDeepDiveV4 } from '@/components/v6/sectors/SectorDeepDiveV4'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 // ── Section header ────────────────────────────────────────────────────────────
 
@@ -90,10 +91,12 @@ export default async function SectorDetailPage({
   const { sector } = await params
   const decoded = decodeURIComponent(sector)
 
-  const [deepdive, ratioSeries, returnBases] = await Promise.all([
+  // v4: revamped lens-first deep-dive (native foundation_staging)
+  if (LENS_V4_ENABLED) return <SectorDeepDiveV4 sector={decoded} />
+
+  const [deepdive, ratioSeries] = await Promise.all([
     getSectorDeepdive(decoded),
     getSectorRatioSeries(decoded),
-    getSectorReturnBases(),
   ])
 
   if (!deepdive) notFound()
@@ -166,14 +169,18 @@ export default async function SectorDetailPage({
 
       <DataSourceBanner source="live" asOf={deepdive.data_as_of} />
 
-      {/* Section 1 — Returns & RS across windows, Index ⟷ Bottom-up */}
-      <section className="px-8 py-9 border-b border-paper-rule" aria-label="Sector returns and RS by basis">
+      {/* Section 1 — RS windows */}
+      <section className="px-8 py-9 border-b border-paper-rule" aria-label="RS windows vs baselines">
         <SectionHead
-          title="Returns & RS · all windows"
-          subtitle="Sector return and relative strength vs Nifty 500 across six windows. Toggle between the cap-weighted Index and the free-float cap-weighted Bottom-up of Atlas's constituents."
+          title="RS vs the baselines · 5 windows"
+          subtitle="Percentage-point spread between this sector and Nifty 500 over 5 time windows. Rank is relative to all sectors."
         />
-        <Suspense fallback={<Skeleton h={260} />}>
-          <SectorReturnBasisPanel data={bases} nifty500={n500} />
+        <Suspense fallback={<Skeleton h={360} />}>
+          <SectorRSRatioCharts
+            sectorName={decoded}
+            indexCode={ratioSeries.index_code}
+            daily={ratioSeries.daily}
+          />
         </Suspense>
       </section>
 
@@ -300,7 +307,7 @@ export default async function SectorDetailPage({
             const ret6m = deepdive.returns?.ret_6m
             const rs3m = deepdive.rs_windows?.rs_3m
             const rs6m = deepdive.rs_windows?.rs_6m
-            const breadth = deepdive.pct_above_ema20
+            const breadth = deepdive.pct_above_ema21
             const verdict = deepdive.verdict
             const factors = [
               {

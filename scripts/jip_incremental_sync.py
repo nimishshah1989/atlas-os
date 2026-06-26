@@ -43,11 +43,16 @@ JIP_DB_URL = (
 
 # Tables to sync with their date column names
 # de_source_files must come first — de_equity_ohlcv has a FK on it
+# NAV is now Atlas-owned (scripts/foundation/ingest_nav.py pulls from AMFI/mfapi.in into
+# foundation_staging.de_mf_nav_daily directly) — removed from the JIP sync (consolidation
+# step 2). The remaining OHLCV tables are still synced ONLY because the legacy dirty pages
+# (Market Pulse, sector pulse) still read public.de_equity_ohlcv / de_index_prices; once
+# step 5 repoints those pages to foundation_staging.ohlcv_stock / index_prices, this whole
+# script is retired.
 TABLES: list[tuple[str, str]] = [
     ("de_source_files", "created_at"),
     ("de_equity_ohlcv", "date"),
     ("de_index_prices", "date"),
-    ("de_mf_nav_daily", "nav_date"),
     ("de_etf_ohlcv", "date"),
     ("de_cron_run", "started_at"),
     ("de_pipeline_log", "started_at"),

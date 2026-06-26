@@ -1,7 +1,7 @@
 'use client'
 // frontend/src/components/v6/sectors/SectorHeatmapTable.tsx
 // Multi-window return heatmap table — Page 04 Sectors.
-// Source: mv_sector_cards (ret_1w/1m/3m/6m/12m + rs_1m/3m/6m + pct_above_ema20 + breadth).
+// Source: mv_sector_cards (ret_1w/1m/3m/6m/12m + rs_1m/3m/6m + pct_above_ema21 + breadth).
 
 import Link from 'next/link'
 import { useState } from 'react'
@@ -99,17 +99,12 @@ function ConfBar({ H, M, L }: { H: number; M: number; L: number }) {
 
 export function SectorHeatmapTable({
   cards,
-  returnBases,
+  idxRet1dBySector,
 }: {
   cards: SectorCardRow[]
-  // Dual-basis returns (index + free-float bottom-up) across all windows.
-  returnBases?: ReturnBasesPayload
+  // NSE sector-index 1-day return keyed by sector name (index-level, not bottom-up).
+  idxRet1dBySector?: Record<string, number | null>
 }) {
-  // Default to Bottom-up — reliable for every sector (Index is sparse/"—" for some).
-  const [basis, setBasis] = useState<ReturnBasis>('bottomup')
-  const [sortKey, setSortKey] = useState<HmSortKey>('rs_3m')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
-
   if (cards.length === 0) {
     return (
       <div className="text-ink-tertiary text-sm text-center py-8">No heatmap data available.</div>
@@ -215,8 +210,24 @@ export function SectorHeatmapTable({
               Sector{sortKey === 'name' && <span style={{ marginLeft: 2 }}>{sortDir === 'desc' ? '↓' : '↑'}</span>}
             </th>
 
-            {/* 1D */}
-            <SortTh label="1D" skey="1d" sub="abs" />
+            {/* 1D return — NSE sector index (not bottom-up) */}
+            <th
+              style={{
+                textAlign: 'center',
+                padding: '8px 4px',
+                fontFamily: 'Inter, sans-serif',
+                fontSize: 9,
+                letterSpacing: '0.13em',
+                textTransform: 'uppercase',
+                color: 'var(--color-ink-tertiary, #6B6157)',
+                fontWeight: 600,
+                background: 'var(--color-paper-soft, #FBF8F1)',
+                borderBottom: '1px solid var(--color-ink-rule, #DDD3BF)',
+              }}
+            >
+              1D
+              <span style={{ display: 'block', fontSize: 8, color: 'var(--color-ink-4, #9A8F82)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.04em', textTransform: 'none', marginTop: 2 }}>idx abs</span>
+            </th>
 
             {/* Returns */}
             {(['1w', '1m', '3m', '6m', '12m'] as const).map((w) => (
@@ -275,13 +286,15 @@ export function SectorHeatmapTable({
                 </div>
               </td>
 
-              {/* Returns — active basis (index or free-float bottom-up) */}
-              <HmCell value={ret(card.sector_name, '1d')} />
-              <HmCell value={ret(card.sector_name, '1w')} />
-              <HmCell value={ret(card.sector_name, '1m')} />
-              <HmCell value={ret(card.sector_name, '3m')} />
-              <HmCell value={ret(card.sector_name, '6m')} />
-              <HmCell value={ret(card.sector_name, '12m')} />
+              {/* 1D — NSE sector index */}
+              <HmCell value={idxRet1dBySector?.[card.sector_name] ?? null} />
+
+              {/* Absolute returns */}
+              <HmCell value={card.ret_1w} />
+              <HmCell value={card.ret_1m} />
+              <HmCell value={card.ret_3m} />
+              <HmCell value={card.ret_6m} />
+              <HmCell value={card.ret_12m} />
 
               {/* RS vs Nifty 500 — active basis, pp */}
               <HmCell value={rs(card.sector_name, '1m')} unit="pp" />

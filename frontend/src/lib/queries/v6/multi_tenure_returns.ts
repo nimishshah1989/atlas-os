@@ -2,7 +2,7 @@
 //
 // Multi-tenure absolute returns for a single stock or a batch.
 //
-// Source: atlas.atlas_stock_metrics_daily
+// Source: foundation_staging.atlas_stock_metrics_daily
 //   Columns: ret_1d, ret_1w, ret_1m, ret_3m, ret_6m, ret_12m (NUMERIC)
 //   One row per (instrument_id, date); we always pull the LATEST date.
 //
@@ -55,7 +55,7 @@ export async function getMultiTenureReturns(
       ret_3m::text          AS ret_3m,
       ret_6m::text          AS ret_6m,
       ret_12m::text         AS ret_12m
-    FROM atlas.atlas_stock_metrics_daily
+    FROM foundation_staging.atlas_stock_metrics_daily
     WHERE instrument_id = ${iid}::uuid
     ORDER BY date DESC
     LIMIT 1
@@ -86,7 +86,7 @@ export async function getMultiTenureReturnsBatch(
       ret_3m::text          AS ret_3m,
       ret_6m::text          AS ret_6m,
       ret_12m::text         AS ret_12m
-    FROM atlas.atlas_stock_metrics_daily
+    FROM foundation_staging.atlas_stock_metrics_daily
     WHERE instrument_id::text = ANY(${iids}::text[])
     ORDER BY instrument_id, date DESC
   `

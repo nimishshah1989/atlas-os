@@ -43,9 +43,9 @@ const KNOWN_GAPS: GapEntry[] = [
 ]
 
 const SEV_STYLE: Record<GapSeverity, string> = {
-  stale: 'border-l-signal-neg bg-signal-neg-soft',
-  warn:  'border-l-signal-warn bg-signal-warn-soft',
-  ok:    'border-l-signal-pos bg-signal-pos-soft',
+  stale: 'border-l-sig-neg bg-sig-neg-soft',
+  warn:  'border-l-sig-warn bg-sig-warn/10',
+  ok:    'border-l-sig-pos bg-sig-pos-soft',
 }
 
 const SEV_LABEL: Record<GapSeverity, string> = {
@@ -55,23 +55,23 @@ const SEV_LABEL: Record<GapSeverity, string> = {
 }
 
 const SEV_LABEL_STYLE: Record<GapSeverity, string> = {
-  stale: 'text-signal-neg-strong',
-  warn:  'text-signal-warn-strong',
-  ok:    'text-signal-pos-strong',
+  stale: 'text-sig-neg',
+  warn:  'text-sig-warn',
+  ok:    'text-sig-pos',
 }
 
 export function KnownGapsPanel() {
   return (
-    <div className="px-6 py-5 border-b border-paper-rule">
+    <div className="px-6 py-5 border-b border-edge-hair">
       <div className="flex items-baseline justify-between mb-3">
-        <h2 className="font-sans text-xs font-medium text-ink-3 uppercase tracking-[0.22em]">
+        <h2 className="font-sans text-xs font-medium text-txt-3 uppercase tracking-[0.22em]">
           Known data gaps
         </h2>
-        <span className="font-sans text-[10px] text-ink-4">
+        <span className="font-sans text-[10px] text-txt-3">
           Last reviewed 2026-05-20
         </span>
       </div>
-      <p className="font-sans text-[11px] text-ink-secondary mb-4 leading-relaxed">
+      <p className="font-sans text-[11px] text-txt-2 mb-4 leading-relaxed">
         The items below are known, standing data gaps that the live pipeline metrics above may not
         fully capture. They are listed honestly — no item is presented as green when it is not.
         The live freshness table above is the authoritative source for day-to-day lag.
@@ -88,11 +88,11 @@ export function KnownGapsPanel() {
               >
                 {SEV_LABEL[gap.severity]}
               </span>
-              <span className="font-sans text-[12px] font-medium text-ink-primary">
+              <span className="font-sans text-[12px] font-medium text-txt-1">
                 {gap.title}
               </span>
             </div>
-            <p className="font-sans text-[11px] text-ink-secondary leading-relaxed">
+            <p className="font-sans text-[11px] text-txt-2 leading-relaxed">
               {gap.detail}
             </p>
           </li>

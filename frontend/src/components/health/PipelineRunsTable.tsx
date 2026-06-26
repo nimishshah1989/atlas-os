@@ -2,9 +2,9 @@
 import type { PipelineRun } from '@/lib/queries/health'
 
 const STATUS_DOT: Record<PipelineRun['status'], string> = {
-  success: 'bg-signal-pos',
-  failed: 'bg-signal-neg',
-  running: 'bg-signal-info',
+  success: 'bg-sig-pos',
+  failed: 'bg-sig-neg',
+  running: 'bg-brand',
 }
 
 function formatStarted(d: Date): string {
@@ -38,14 +38,14 @@ export function PipelineRunsTable({
   title?: string
 }) {
   return (
-    <div className="px-6 py-5 border-b border-paper-rule">
-      <h2 className="font-sans text-xs font-medium text-ink-3 uppercase tracking-[0.22em] mb-3">
+    <div className="px-6 py-5 border-b border-edge-hair">
+      <h2 className="font-sans text-xs font-medium text-txt-3 uppercase tracking-[0.22em] mb-3">
         {title ?? `Pipeline runs · last ${runs.length}`}
       </h2>
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="text-left font-sans text-[10px] font-semibold tracking-[0.18em] uppercase text-ink-3 border-b border-ink-rule">
+            <tr className="text-left font-sans text-[10px] font-semibold tracking-[0.18em] uppercase text-txt-3 border-b border-edge-rule">
               <th className="py-2 pr-4">Script</th>
               <th className="py-2 pr-4">Phase</th>
               <th className="py-2 pr-4">Started (IST)</th>
@@ -58,19 +58,19 @@ export function PipelineRunsTable({
             {runs.map((r) => (
               <tr
                 key={r.run_id}
-                className="border-b border-paper-rule hover:bg-paper-soft"
+                className="border-b border-edge-hair hover:bg-surface-raised"
               >
                 <td className="py-2 pr-4 font-sans text-[13px]">{r.script_name}</td>
-                <td className="py-2 pr-4 font-sans text-[12px] text-ink-3">
+                <td className="py-2 pr-4 font-sans text-[12px] text-txt-3">
                   {r.phase ?? '—'}
                 </td>
-                <td className="py-2 pr-4 font-mono text-[12px] tabular-nums">
+                <td className="py-2 pr-4 font-num text-[12px] tabular-nums">
                   {formatStarted(r.started_at)}
                 </td>
-                <td className="py-2 pr-4 font-mono text-[12px] tabular-nums text-right">
+                <td className="py-2 pr-4 font-num text-[12px] tabular-nums text-right">
                   {formatDuration(r.duration_seconds)}
                 </td>
-                <td className="py-2 pr-4 font-mono text-[12px] tabular-nums text-right">
+                <td className="py-2 pr-4 font-num text-[12px] tabular-nums text-right">
                   {formatRows(r.rows_written)}
                 </td>
                 <td className="py-2 pl-4">
@@ -85,7 +85,7 @@ export function PipelineRunsTable({
             ))}
             {runs.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-3 font-sans text-sm text-ink-3">
+                <td colSpan={6} className="py-3 font-sans text-sm text-txt-3">
                   No pipeline runs recorded yet.
                 </td>
               </tr>

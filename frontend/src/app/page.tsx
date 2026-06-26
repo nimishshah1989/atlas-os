@@ -1,4 +1,6 @@
 // frontend/src/app/page.tsx
+export const revalidate = 300
+
 import { Suspense } from 'react'
 import { getCurrentRegime, getRegimeHistory } from '@/lib/queries/regime'
 import { getRegimeScorecard } from '@/lib/queries/regime-scorecard'
@@ -19,19 +21,34 @@ import { getRegimeJourney12w, getTopConvictionCalls } from '@/lib/queries/v6/lan
 import { RegimeJourney12w } from '@/components/v6/landing/RegimeJourney12w'
 import { TodayConvictionTabs } from '@/components/v6/landing/TodayConvictionTabs'
 import { RegimeClassifierInputs } from '@/components/regime/RegimeClassifierInputs'
+// v4 lens — consolidated Regime+Pulse home (native breadth from foundation_staging)
+import { LENS_V4_ENABLED } from '@/lib/feature-flags'
+import { getBreadthSeries } from '@/lib/queries/v6/breadth'
+import { getTierReturns, getMacroContext, getBreadthTable } from '@/lib/queries/v6/market_pulse'
+import { BreadthCountCharts } from '@/components/regime/BreadthCountCharts'
+import { BreadthDetailTable } from '@/components/regime/BreadthDetailTable'
+import { TierReturnsTable } from '@/components/regime/TierReturnsTable'
+import { MacroContextTable } from '@/components/regime/MacroContextTable'
+// v4 redesign — "Graphite Terminal" Market Pulse (native fs, drops the Weinstein verdict/scorecard/worklist)
+import { MarketPulseV4 } from '@/components/v4/market-pulse/MarketPulseV4'
 
 type SearchParams = Promise<{ range?: string }>
 
 export default async function RegimePage({ searchParams }: { searchParams: SearchParams }) {
+  // v4 redesign pilot — the new Market Pulse fetches its own native-fs data.
+  // Flag-off path below is unchanged (byte-identical).
+  if (LENS_V4_ENABLED) return <MarketPulseV4 />
+
   const { range = '1Y' } = await searchParams
   const historyRange = range as TimeRange
   const historyDays = rangeToDays(historyRange)
 
-  const [current, history, journey12w, convictionCalls] = await Promise.all([
+  const [current, history, journey12w, convictionCalls, breadthSeries] = await Promise.all([
     getCurrentRegime(),
     getRegimeHistory(historyDays),
     getRegimeJourney12w(),
-    getTopConvictionCalls(),
+    LENS_V4_ENABLED ? Promise.resolve(null) : getTopConvictionCalls(),  // conviction tabs cut in v4
+    LENS_V4_ENABLED ? getBreadthSeries(10).catch(() => []) : Promise.resolve([]),
   ])
 
   if (!current) {
@@ -49,6 +66,16 @@ export default async function RegimePage({ searchParams }: { searchParams: Searc
   const { scorecard, worklist, leadingSectorNames } = await getRegimeScorecard(current.pct_above_ema_50)
 
   const deploymentPct = Math.round(parseFloat(current.deployment_multiplier) * 100)
+  const breadthLatest = breadthSeries.length ? breadthSeries[breadthSeries.length - 1] : null
+
+  // v4 Markets-Today tables (native foundation_staging): tier returns, macro, breadth detail
+  const [tierReturns, macro, breadthTable] = LENS_V4_ENABLED
+    ? await Promise.all([
+        getTierReturns().catch(() => ({ windows: [], smallcap_rs_z: null })),
+        getMacroContext().catch(() => ({ rows: [], as_of: null })),
+        getBreadthTable().catch(() => ({ rows: [], as_of: null })),
+      ])
+    : [{ windows: [], smallcap_rs_z: null }, { rows: [], as_of: null }, { rows: [], as_of: null }]
 
   // leadingSectorNames = sectors that entered Overweight today (were not Overweight yesterday).
   // Empty list on days with no new entries — verdict renders without the sector clause.
@@ -62,7 +89,7 @@ export default async function RegimePage({ searchParams }: { searchParams: Searc
         deploymentPct={deploymentPct}
         leadingSectors={leadingSectors}
       />
-      <SignalScorecard data={scorecard} regime={current} />
+      <SignalScorecard data={scorecard} regime={current} breadth={LENS_V4_ENABLED ? breadthLatest : null} />
       <TodayWorklist data={worklist} />
 
       {/* Compact regime headline — unchanged */}
@@ -86,26 +113,34 @@ export default async function RegimePage({ searchParams }: { searchParams: Searc
         <RegimeOverlayChart history={history} />
       </div>
 
-      {/* NEW (2026-05-29 pilot): "How we got here" — 4 LC small-multiples for
-          the regime classifier inputs. First production use of
-          AtlasLightweightChart. Sits ABOVE the four sections so you can
-          A/B them by scrolling: LC pilot at top, Recharts originals below. */}
-      <RegimeClassifierInputs
-        history={history}
-        asOf={current.date instanceof Date ? current.date.toISOString().slice(0, 10) : String(current.date).slice(0, 10)}
-      />
+      {LENS_V4_ENABLED ? (
+        <>
+          {/* ── v4: native Nifty-500 breadth count charts (2×2, foundation_staging) ── */}
+          {breadthSeries.length > 0 && <BreadthCountCharts series={breadthSeries} />}
 
-      {/* Four category sections — unchanged */}
-      <TrendSection current={current} history={history} />
-      <BreadthSection current={current} history={history} />
-      <MomentumSection current={current} history={history} />
-      <ParticipationSection current={current} history={history} />
+          {/* ── v4: detailed breadth table + tier returns + macro context (native fs) ── */}
+          {breadthTable.rows.length > 0 && <BreadthDetailTable rows={breadthTable.rows} as_of={breadthTable.as_of} />}
+          {tierReturns.windows.length > 0 && <TierReturnsTable data={tierReturns} />}
+          {macro.rows.length > 0 && <MacroContextTable rows={macro.rows} as_of={macro.as_of} />}
 
-      {/* ── NEW: 12-week regime journey (Page 01 mockup section) ── */}
-      <RegimeJourney12w cells={journey12w} />
-
-      {/* ── NEW: Today's conviction — 3-tab panel ── */}
-      <TodayConvictionTabs data={convictionCalls} />
+          {/* ── v4: 12-week regime journey (kept from v6) ── */}
+          <RegimeJourney12w cells={journey12w} />
+        </>
+      ) : (
+        <>
+          {/* Original (flag OFF): classifier inputs + 4 category sections + journey + conviction tabs */}
+          <RegimeClassifierInputs
+            history={history}
+            asOf={current.date instanceof Date ? current.date.toISOString().slice(0, 10) : String(current.date).slice(0, 10)}
+          />
+          <TrendSection current={current} history={history} />
+          <BreadthSection current={current} history={history} />
+          <MomentumSection current={current} history={history} />
+          <ParticipationSection current={current} history={history} />
+          <RegimeJourney12w cells={journey12w} />
+          <TodayConvictionTabs data={convictionCalls!} />
+        </>
+      )}
     </div>
   )
 }

@@ -104,8 +104,8 @@ function SectorCard({ card, rank }: { card: SectorCardRow; rank: number }) {
           3M abs: <span className={`font-mono font-medium ${r3m.cls}`}>{r3m.text}</span>
         </div>
         <div className="font-sans text-[11px] text-ink-tertiary">
-          {card.pct_above_ema20 != null
-            ? `${Math.round(card.pct_above_ema20 * 100)}% >EMA20`
+          {card.pct_above_ema21 != null
+            ? `${Math.round(card.pct_above_ema21 * 100)}% >EMA21`
             : card.vol_60d_ann != null
             ? `vol ${Math.round((card.vol_60d_ann ?? 0) * 100)}%`
             : ''}

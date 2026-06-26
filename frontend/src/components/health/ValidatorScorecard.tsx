@@ -28,13 +28,13 @@ function statsFromRuns(runs: ValidatorRun[]): Stats[] {
 
 function Sparkline({ history }: { history: ValidatorRun[] }) {
   if (history.length < 2) {
-    return <span className="font-mono text-[10px] text-ink-4">—</span>
+    return <span className="font-num text-[10px] text-txt-3">—</span>
   }
   const w = 90
   const h = 18
   const step = w / Math.max(history.length - 1, 1)
-  const passColor = 'var(--signal-pos)'
-  const failColor = 'var(--signal-neg)'
+  const passColor = 'var(--color-sig-pos)'
+  const failColor = 'var(--color-sig-neg)'
   return (
     <svg width={w} height={h} aria-hidden="true">
       {history.map((r, i) => {
@@ -50,8 +50,8 @@ function Sparkline({ history }: { history: ValidatorRun[] }) {
 export function ValidatorScorecard({ runs }: { runs: ValidatorRun[] }) {
   const stats = statsFromRuns(runs)
   return (
-    <div className="px-6 py-5 border-b border-paper-rule">
-      <h2 className="font-sans text-xs font-medium text-ink-3 uppercase tracking-[0.22em] mb-3">
+    <div className="px-6 py-5 border-b border-edge-hair">
+      <h2 className="font-sans text-xs font-medium text-txt-3 uppercase tracking-[0.22em] mb-3">
         Validator scorecard · last 30 days
       </h2>
       <div className="space-y-2">
@@ -60,28 +60,28 @@ export function ValidatorScorecard({ runs }: { runs: ValidatorRun[] }) {
           return (
             <div
               key={s.validator}
-              className="flex items-center justify-between gap-4 border-b border-paper-rule pb-2 last:border-b-0 last:pb-0"
+              className="flex items-center justify-between gap-4 border-b border-edge-hair pb-2 last:border-b-0 last:pb-0"
             >
               <div className="flex items-center gap-3">
-                <span className="font-mono text-sm w-6">{s.validator}</span>
+                <span className="font-num text-sm w-6">{s.validator}</span>
                 {s.latest ? (
-                  <span className="font-mono text-[12px] tabular-nums">
+                  <span className="font-num text-[12px] tabular-nums">
                     {s.latest.total_checks - s.latest.failures}/{s.latest.total_checks}{' '}
                     <span
                       className={
-                        isFail ? 'text-signal-neg' : 'text-signal-pos'
+                        isFail ? 'text-sig-neg' : 'text-sig-pos'
                       }
                     >
                       {s.latest.status}
                     </span>
                   </span>
                 ) : (
-                  <span className="font-mono text-[12px] text-ink-4">no runs</span>
+                  <span className="font-num text-[12px] text-txt-3">no runs</span>
                 )}
               </div>
               <div className="flex items-center gap-4">
                 <Sparkline history={s.history} />
-                <span className="font-mono text-[12px] tabular-nums w-12 text-right">
+                <span className="font-num text-[12px] tabular-nums w-12 text-right">
                   {(s.passRate * 100).toFixed(1)}%
                 </span>
               </div>

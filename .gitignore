@@ -56,6 +56,6 @@ package-lock.json
 /*-snapshot.md
 /*-fullpage.png
 
-# Runtime logs (never commit)
-*.log
-scripts/*.log
+# Loop C rebuild resume state (local only)
+scripts/foundation/.loopC_rebuild_state.json
+scripts/validator_night_run.log

@@ -1,0 +1,47 @@
+{
+  "components/global/GlobalPulseShell.tsx -> @/components/global/GlobalCountryBubbleChart": {
+    "id": 78937,
+    "files": [
+      "static/chunks/8512-3fde19307ce40e9a.js",
+      "static/chunks/8937.33fa61c1f89ae6b8.js"
+    ]
+  },
+  "components/global/GlobalPulseShell.tsx -> @/components/global/GlobalRegimeOverlayChart": {
+    "id": 84368,
+    "files": [
+      "static/chunks/4368.a411ca79d15f76d4.js"
+    ]
+  },
+  "components/us/USPulseShell.tsx -> @/components/etfs/ETFBubbleChart": {
+    "id": 82886,
+    "files": [
+      "static/chunks/5131-666a57479ea56e0d.js",
+      "static/chunks/8512-3fde19307ce40e9a.js",
+      "static/chunks/2886.29be72268946997e.js"
+    ]
+  },
+  "components/us/USPulseShell.tsx -> @/components/us/USRRGChart": {
+    "id": 570,
+    "files": [
+      "static/chunks/5131-666a57479ea56e0d.js",
+      "static/chunks/8512-3fde19307ce40e9a.js",
+      "static/chunks/570.229ead3af0662931.js"
+    ]
+  },
+  "components/us/USPulseShell.tsx -> @/components/us/USSectorBubbleChart": {
+    "id": 18997,
+    "files": [
+      "static/chunks/5131-666a57479ea56e0d.js",
+      "static/chunks/8512-3fde19307ce40e9a.js",
+      "static/chunks/8997.77b767c83d56465e.js"
+    ]
+  },
+  "components/us/USPulseShell.tsx -> @/components/us/USStockBubbleChart": {
+    "id": 36323,
+    "files": [
+      "static/chunks/5131-666a57479ea56e0d.js",
+      "static/chunks/8512-3fde19307ce40e9a.js",
+      "static/chunks/6323.bc2ad44793aea672.js"
+    ]
+  }
+}

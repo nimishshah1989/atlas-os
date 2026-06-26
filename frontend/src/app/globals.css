@@ -26,6 +26,41 @@
 
   /* ── Radii ── */
   --radius-card: 2px;
+
+  /* ════════════════════════════════════════════════════════════════
+     Atlas v4 design language (LENS_V4 surfaces only). New token NAMES;
+     legacy paper/ink tokens above are untouched → flag-off byte-identical.
+     These @theme values are the DEFAULT = "Daylight Desk" (light). The dark
+     "Graphite Terminal" set lives in the html[data-theme="dark"] override
+     below; the nav toggle flips data-theme. Numbers are serious tabular Inter.
+     ════════════════════════════════════════════════════════════════ */
+  --color-surface-base:   #EDF1F6;   /* cool light canvas (NOT warm paper) */
+  --color-surface-panel:  #FFFFFF;   /* raised white glass panel */
+  --color-surface-raised: #F6F8FB;   /* further-raised: stat tiles, table headers */
+  --color-surface-inset:  #E4E9F0;   /* recessed: meter tracks, wells */
+  --color-edge-hair:      #0c142114;  /* ~8% cool ink — hairline */
+  --color-edge-rule:      #0c142124;  /* ~14% — table rules */
+  --color-edge-strong:    #0c142138;  /* ~22% — emphasis dividers */
+  --color-txt-1:          #131922;   /* near-black cool slate */
+  --color-txt-2:          #4B5666;   /* secondary */
+  --color-txt-3:          #8A94A4;   /* tertiary / eyebrow labels */
+  --color-sig-pos:        #0C8A56;   /* RAG green — deep emerald, legible on white */
+  --color-sig-neg:        #D23A2E;   /* RAG red */
+  --color-sig-warn:       #B07A09;   /* RAG amber — gold, distinct from red on white */
+  --color-sig-pos-soft:   #0c8a5614;
+  --color-sig-neg-soft:   #d23a2e14;
+  --color-brand:          #2D63D8;   /* structural accent — links, RS lines (used sparingly) */
+  --color-brand-soft:     #2d63d814;
+
+  /* type roles — serious, professional, NOT a display/quirk face (FM feedback) */
+  --font-display: var(--font-inter, system-ui, sans-serif);
+  --font-num:     var(--font-inter, system-ui, sans-serif);
+
+  /* layered glass shadow + softer radii (escape the 2px newspaper corners) */
+  --shadow-panel: 0 1px 2px 0 #1018280a, 0 12px 28px -14px #10182824;
+  --shadow-tile:  0 1px 2px 0 #10182810;
+  --radius-panel: 12px;
+  --radius-tile:  9px;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -37,3 +72,44 @@ html {
 }
 
 [data-numeric], .tabular { font-variant-numeric: tabular-nums; }
+
+/* ── Atlas v4 day/night themes ──────────────────────────────────────────────
+   The decile ramp (coral → amber → mint) is theme-scoped so a decile reads on
+   either surface; decileColor() returns var(--decile-N). Light is the default
+   (@theme above + :root ramp). data-theme is set pre-paint by the inline script
+   in layout.tsx and flipped by the nav toggle. Flag-off pages never get
+   data-theme, so the legacy paper theme is untouched. */
+:root {
+  /* RAG decile ramp (light) — red → gold → emerald, all deep enough to read on white */
+  --decile-1:  #D23A2E; --decile-2:  #CF5324; --decile-3:  #C26C12; --decile-4:  #B07A09; --decile-5:  #978410;
+  --decile-6:  #768A1E; --decile-7:  #4F8A34; --decile-8:  #2A8A4B; --decile-9:  #138C55; --decile-10: #0C8A56;
+}
+
+html[data-theme="light"] { background-color: var(--color-surface-base); color: var(--color-txt-1); }
+
+html[data-theme="dark"] {
+  background-color: var(--color-surface-base);
+  color: var(--color-txt-1);
+  --color-surface-base:   #0D1014;
+  --color-surface-panel:  #161B22;
+  --color-surface-raised: #1C232D;
+  --color-surface-inset:  #0A0D11;
+  --color-edge-hair:      #ffffff14;
+  --color-edge-rule:      #ffffff24;
+  --color-edge-strong:    #ffffff38;
+  --color-txt-1:          #E8ECF1;
+  --color-txt-2:          #99A3B2;
+  --color-txt-3:          #5E6979;
+  --color-sig-pos:        #2FD68C;
+  --color-sig-neg:        #FB6A5E;
+  --color-sig-warn:       #F9B428;
+  --color-sig-pos-soft:   #2fd68c22;
+  --color-sig-neg-soft:   #fb6a5e22;
+  --color-brand:          #5B9DF9;
+  --color-brand-soft:     #5b9df922;
+  --shadow-panel: 0 1px 0 0 #ffffff0f inset, 0 1px 2px 0 #00000066, 0 10px 30px -12px #000000b3;
+  --shadow-tile:  0 1px 0 0 #ffffff0a inset, 0 1px 2px 0 #0000004d;
+  /* RAG decile ramp (dark) — coral → amber → mint, luminous on graphite */
+  --decile-1:  #FB6A5E; --decile-2:  #F9805A; --decile-3:  #F59A50; --decile-4:  #F2B246; --decile-5:  #E7C24A;
+  --decile-6:  #C6C85A; --decile-7:  #97CD6E; --decile-8:  #66D286; --decile-9:  #46D58C; --decile-10: #2FD68C;
+}

@@ -25,8 +25,8 @@ export async function getLatestSnapshotDate(): Promise<string> {
   const rows = await sql<{ d: string | null }[]>`
     SELECT GREATEST(
       (SELECT MAX(snapshot_date) FROM atlas.atlas_conviction_daily),
-      (SELECT MAX(snapshot_date) FROM atlas.atlas_etf_scorecard),
-      (SELECT MAX(snapshot_date) FROM atlas.atlas_fund_scorecard),
+      (SELECT MAX(snapshot_date) FROM foundation_staging.atlas_etf_scorecard),
+      (SELECT MAX(snapshot_date) FROM foundation_staging.atlas_fund_scorecard),
       (SELECT MAX(date)          FROM atlas.atlas_scorecard_daily),
       (SELECT MAX(date)          FROM atlas.atlas_market_regime_daily),
       (SELECT MAX(date)          FROM atlas.atlas_sector_states_daily)

@@ -66,24 +66,21 @@ export function relValue(
   return s - b
 }
 
-// Color scale on percentage-point spread (val is a decimal fraction).
-function cellClass(val: number | null): string {
-  if (val == null) return 'bg-paper border border-paper-rule'
+// RAG heat tint on the percentage-point spread (val is a decimal fraction).
+// Tint opacity steps with magnitude; colour-mix keeps it theme-aware.
+function cellStyle(val: number | null): React.CSSProperties {
+  if (val == null) return {}
   const pp = val * 100
-  if (pp >= 3.0) return 'bg-[rgba(47,107,67,0.55)]'
-  if (pp >= 1.5) return 'bg-[rgba(47,107,67,0.30)]'
-  if (pp > 0.3) return 'bg-[rgba(47,107,67,0.15)]'
-  if (pp >= -0.3) return 'bg-paper border border-paper-rule'
-  if (pp >= -1.5) return 'bg-[rgba(176,73,44,0.15)]'
-  if (pp >= -3.0) return 'bg-[rgba(176,73,44,0.30)]'
-  return 'bg-[rgba(176,73,44,0.55)]'
+  const sig = pp >= 0 ? 'var(--color-sig-pos)' : 'var(--color-sig-neg)'
+  const a = Math.abs(pp) >= 3.0 ? 55 : Math.abs(pp) >= 1.5 ? 30 : Math.abs(pp) > 0.3 ? 15 : 0
+  if (a === 0) return {}
+  return { background: `color-mix(in srgb, ${sig} ${a}%, transparent)` }
 }
 
-function textClass(val: number | null): string {
-  if (val == null) return 'text-ink-secondary'
-  const pp = val * 100
-  if (pp >= 3.0 || pp <= -3.0) return 'text-paper'
-  return 'text-ink-secondary'
+// Null / near-flat tiles get an explicit hairline so they read as cells.
+function cellClass(val: number | null): string {
+  const pp = val == null ? 0 : val * 100
+  return Math.abs(pp) <= 0.3 ? 'border border-edge-hair' : ''
 }
 
 function Toggle<T extends string>({
@@ -96,16 +93,16 @@ function Toggle<T extends string>({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[10px] uppercase tracking-[0.14em] text-ink-tertiary font-semibold">{label}</span>
+      <span className="text-[10px] uppercase tracking-[0.14em] text-txt-3 font-semibold">{label}</span>
       <div className="flex gap-1">
         {options.map((o) => (
           <button
             key={o.key}
             onClick={() => onChange(o.key)}
-            className={`px-2.5 py-0.5 text-[11px] border rounded-sm font-medium transition-colors cursor-pointer ${
+            className={`px-2.5 py-0.5 text-[11px] rounded-tile font-medium transition-colors cursor-pointer ${
               active === o.key
-                ? 'bg-accent text-paper border-accent'
-                : 'bg-paper text-ink-tertiary border-paper-rule hover:text-ink-secondary'
+                ? 'border border-brand bg-brand-soft text-brand'
+                : 'bg-surface-raised border border-edge-rule text-txt-3 hover:border-edge-strong hover:text-txt-2'
             }`}
             aria-pressed={active === o.key}
           >
@@ -136,16 +133,11 @@ export function SectorPulseGrid({ data }: Props) {
   const bear = rows.filter((r) => (r.val ?? 0) < -0.003).length
 
   return (
-    <section className="mt-7" aria-label="Sector relative-return pulse">
+    <section aria-label="Sector relative-return pulse">
       <div className="flex items-baseline justify-between flex-wrap gap-3 mb-3">
-        <div>
-          <h2 className="font-serif text-[22px] font-normal tracking-tight text-ink-primary">
-            Sector pulse · relative to {baseLabel}
-          </h2>
-          <p className="font-sans text-[12px] text-ink-tertiary mt-0.5">
-            Each sector index&apos;s return minus {baseLabel} over the selected window. Click a tile to open the sector.
-          </p>
-        </div>
+        <p className="font-sans text-[12px] text-txt-3">
+          Relative to <span className="text-txt-2 font-medium">{baseLabel}</span> · {WINDOWS.find((w) => w.key === window)?.label} window.
+        </p>
         <div className="flex items-center gap-5 flex-wrap">
           <Toggle label="Base" options={BASES} active={base} onChange={setBase} />
           <Toggle label="Window" options={WINDOWS} active={window} onChange={setWindow} />
@@ -157,27 +149,28 @@ export function SectorPulseGrid({ data }: Props) {
           <Link
             key={sector.sector_name}
             href={`/sectors/${encodeURIComponent(sector.sector_name)}`}
-            className={`rounded-sm flex flex-col items-center justify-center text-center cursor-pointer hover:brightness-95 hover:ring-2 hover:ring-accent/40 transition-all px-2 py-3 ${cellClass(val)}`}
+            className={`rounded-tile flex flex-col items-center justify-center text-center cursor-pointer hover:brightness-95 hover:ring-2 hover:ring-brand/40 transition-all px-2 py-3 ${cellClass(val)}`}
+            style={cellStyle(val)}
             title={`${sector.sector_name} (${sector.nse_index_code}): ${fmtPct(val)} vs ${baseLabel} — open sector`}
           >
-            <div className={`text-[10px] font-semibold tracking-[0.03em] leading-tight ${textClass(val)}`}>
+            <div className="text-[10px] font-semibold tracking-[0.03em] leading-tight text-txt-2">
               {sector.sector_name}
             </div>
-            <div className={`font-mono text-[13px] font-semibold mt-1 ${textClass(val)}`}>
+            <div className="font-num text-[13px] font-semibold tabular-nums mt-1 text-txt-1">
               {fmtPct(val)}
             </div>
           </Link>
         ))}
       </div>
 
-      <div className="flex items-center gap-4 mt-3 text-[11px] text-ink-tertiary">
+      <div className="flex items-center gap-4 mt-3 text-[11px] text-txt-3">
         <span className="flex items-center gap-1.5">
-          <span className="inline-block w-2 h-2 rounded-full bg-signal-pos" /> Outperform: {bull}
+          <span className="inline-block w-2 h-2 rounded-full bg-sig-pos" /> Outperform: {bull}
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block w-2 h-2 rounded-full bg-signal-neg" /> Underperform: {bear}
+          <span className="inline-block w-2 h-2 rounded-full bg-sig-neg" /> Underperform: {bear}
         </span>
-        <span className="ml-2 font-mono text-[10px]">−3pp · 0 · +3pp colour scale</span>
+        <span className="ml-2 font-num text-[10px] tabular-nums">−3pp · 0 · +3pp colour scale</span>
       </div>
     </section>
   )

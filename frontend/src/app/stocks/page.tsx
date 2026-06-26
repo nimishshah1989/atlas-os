@@ -1,5 +1,5 @@
 // allow-large: Page 05 stocks landscape — stories + bubble + 24-cell matrix + trajectories + cards + table. Cleanup tracked post-presentation.
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 import { getAllStocks } from '@/lib/queries/stocks'
 import { getCurrentRegime } from '@/lib/queries/regime'
@@ -13,12 +13,19 @@ import { ConvictionLandscapeSection } from '@/components/v6/stocks/ConvictionLan
 import { CompositeTrajectoriesGrid } from '@/components/v6/stocks/CompositeTrajectoriesGrid'
 import { SixPicksWorthClick } from '@/components/v6/stocks/SixPicksWorthClick'
 import type { PolicyEntryParams } from '@/lib/policy-entry-filter'
+import { LENS_V4_ENABLED } from '@/lib/feature-flags'
+import { getAllLensScores } from '@/lib/queries/lens-scores'
+import { LensRankingTable } from '@/components/v6/stocks/LensRankingTable'
+import { StocksPageV4 } from '@/components/v6/stocks/StocksPageV4'
 
 export default async function StocksPage({
   searchParams,
 }: {
   searchParams: Promise<{ sector?: string; index?: string; portfolio?: string }>
 }) {
+  // v4 lens-first stocks funnel — flag-off path below is left byte-identical.
+  if (LENS_V4_ENABLED) return <StocksPageV4 />
+
   const params = await searchParams
   const sectorFilter  = params.sector?.trim() || undefined
   const indexFilter   = params.index?.trim() || undefined
@@ -51,7 +58,7 @@ export default async function StocksPage({
   // Load all data in parallel — landscape queries are independent of screener queries.
   const [
     stocks, regime, validations, leaders, breakouts, deterioration,
-    landscapeData, matrixCells, heroStories,
+    landscapeData, matrixCells, heroStories, lensScores,
   ] = await Promise.all([
     getAllStocks({ sectorFilter, indexFilter }),
     getCurrentRegime(),
@@ -66,6 +73,7 @@ export default async function StocksPage({
       freshBuys: [], freshAvoids: [], highConfBuys: [], exitCandidates: [],
       stats: { totalUniverse: 0, buyCount: 0, watchCount: 0, avoidCount: 0, highConfBuyCount: 0 },
     })),
+    LENS_V4_ENABLED ? getAllLensScores().catch(() => []) : Promise.resolve([]),
   ])
 
   // Hero stats derived from landscape data (preferred) or screener data (fallback)
@@ -203,6 +211,21 @@ export default async function StocksPage({
       {landscapeData.length > 0 ? (
         <SixPicksWorthClick data={landscapeData} />
       ) : null}
+
+      {/* ── Six-Lens Ranking (v4 feature flag) ────────────────────────── */}
+      {LENS_V4_ENABLED && lensScores.length > 0 && (
+        <section className="py-9 border-b border-paper-rule">
+          <div className="max-w-[1400px] mx-auto px-8">
+            <h2 className="font-serif text-[28px] font-normal tracking-tight text-ink-primary leading-none mb-1">
+              Six-Lens Ranking
+            </h2>
+            <p className="font-sans text-[13px] text-ink-tertiary mb-6">
+              {lensScores.length} instruments scored across 6 orthogonal lenses. Sort by any lens or the composite.
+            </p>
+            <LensRankingTable scores={lensScores} />
+          </div>
+        </section>
+      )}
 
       {/* ── Existing screener (preserved) ────────────────────────────────── */}
       <section className="py-9">

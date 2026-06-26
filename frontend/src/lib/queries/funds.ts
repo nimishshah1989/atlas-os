@@ -140,7 +140,7 @@ export async function getFundMaster(mstar_id: string): Promise<FundMasterRow | n
     SELECT
       uf.mstar_id, uf.scheme_name, uf.amc, uf.category_name, uf.broad_category,
       uf.inception_date,
-      (SELECT MAX(nav_date)::text FROM atlas.atlas_fund_metrics_daily WHERE mstar_id = ${mstar_id}) AS data_as_of,
+      (SELECT MAX(nav_date)::text FROM foundation_staging.atlas_fund_metrics_daily WHERE mstar_id = ${mstar_id}) AS data_as_of,
       uf.aum_cr::text AS aum_cr, uf.aum_as_of::text AS aum_as_of,
       fu.nav_state, fu.nav_state_as_of,
       fu.composition_state,
@@ -160,7 +160,7 @@ export async function getFundMaster(mstar_id: string): Promise<FundMasterRow | n
       NULL::boolean AS add_trigger,
       -- C5: provenance. Migration-087 view is a legacy passthrough only.
       'legacy'::text AS data_source
-    FROM atlas.atlas_universe_funds uf
+    FROM foundation_staging.atlas_universe_funds uf
     LEFT JOIN atlas.atlas_fund_signal_unified fu
       ON fu.mstar_id = uf.mstar_id
       AND fu.date = (SELECT MAX(date) FROM atlas.atlas_fund_signal_unified)
@@ -190,7 +190,7 @@ export async function getFundMetricHistory(
       rs_6m_category::text AS rs_6m_category,
       realized_vol_63::text AS realized_vol_63,
       drawdown_ratio_252::text AS drawdown_ratio_252
-    FROM atlas.atlas_fund_metrics_daily
+    FROM foundation_staging.atlas_fund_metrics_daily
     WHERE mstar_id = ${mstar_id}
       AND nav_date >= CURRENT_DATE - (${days} || ' days')::interval
     ORDER BY nav_date ASC

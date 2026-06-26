@@ -59,20 +59,20 @@ export function ProposalActionBar({ proposalId, apiBase = '' }: Props) {
         onChange={(e) => setNotes(e.target.value)}
         rows={2}
         placeholder="Reviewer notes (optional)"
-        className="w-full border border-paper-rule rounded-sm px-2 py-1 font-sans text-xs text-ink-primary bg-white"
+        className="w-full border border-edge-hair rounded-tile px-2 py-1 font-sans text-xs text-txt-1 bg-surface-panel"
       />
       <div className="flex items-center gap-2 flex-wrap">
         <button
           onClick={() => dispatch('approve')}
           disabled={busy !== null}
-          className="px-3 py-1.5 font-sans text-xs font-semibold rounded-sm bg-teal text-white hover:opacity-90 disabled:opacity-50"
+          className="px-3 py-1.5 font-sans text-xs font-semibold rounded-tile bg-brand text-surface-panel hover:opacity-90 disabled:opacity-50"
         >
           {busy === 'approve' ? 'Applying…' : 'Approve (15% blend)'}
         </button>
         <button
           onClick={() => dispatch('reject')}
           disabled={busy !== null}
-          className="px-3 py-1.5 font-sans text-xs font-semibold rounded-sm border border-paper-rule text-ink-primary hover:bg-paper-rule/30 disabled:opacity-50"
+          className="px-3 py-1.5 font-sans text-xs font-semibold rounded-tile border border-edge-hair text-txt-1 hover:bg-surface-raised disabled:opacity-50"
         >
           {busy === 'reject' ? 'Rejecting…' : 'Reject'}
         </button>
@@ -80,18 +80,18 @@ export function ProposalActionBar({ proposalId, apiBase = '' }: Props) {
           type="date"
           value={snoozeUntil}
           onChange={(e) => setSnoozeUntil(e.target.value)}
-          className="px-2 py-1 border border-paper-rule rounded-sm font-sans text-xs text-ink-primary bg-white"
+          className="px-2 py-1 border border-edge-hair rounded-tile font-sans text-xs text-txt-1 bg-surface-panel"
         />
         <button
           onClick={() => dispatch('snooze')}
           disabled={busy !== null}
-          className="px-3 py-1.5 font-sans text-xs font-semibold rounded-sm border border-paper-rule text-ink-secondary hover:bg-paper-rule/30 disabled:opacity-50"
+          className="px-3 py-1.5 font-sans text-xs font-semibold rounded-tile border border-edge-hair text-txt-2 hover:bg-surface-raised disabled:opacity-50"
         >
           {busy === 'snooze' ? 'Snoozing…' : 'Snooze until…'}
         </button>
       </div>
       {error && (
-        <p className="font-sans text-[11px] text-signal-neg mt-1">{error}</p>
+        <p className="font-sans text-[11px] text-sig-neg mt-1">{error}</p>
       )}
     </div>
   )

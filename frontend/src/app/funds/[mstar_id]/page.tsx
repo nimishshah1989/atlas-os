@@ -1,4 +1,4 @@
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 import { notFound } from 'next/navigation'
 import {
@@ -16,6 +16,8 @@ import { buildSingleFundCommentary } from '@/lib/commentary/funds'
 import { CommentaryBlock } from '@/components/ui/CommentaryBlock'
 import { FundDeepDiveHeader } from '@/components/funds/FundDeepDiveHeader'
 import { FundTraderViewHeader } from '@/components/v6/funds/FundTraderViewHeader'
+import { LENS_V4_ENABLED } from '@/lib/feature-flags'
+import { FundDetailV4 } from '@/components/v6/funds/FundDetailV4'
 import { FundLens1 } from '@/components/funds/FundLens1'
 import { FundLens2 } from '@/components/funds/FundLens2'
 import { FundLens3 } from '@/components/funds/FundLens3'
@@ -31,6 +33,8 @@ export default async function FundDeepDivePage({
   params: Promise<{ mstar_id: string }>
 }) {
   const { mstar_id } = await params
+
+  if (LENS_V4_ENABLED) return <FundDetailV4 mstarId={mstar_id} />
 
   const [master, metricHistory, lens, decisionHistory, holdings, navHistory, lensHistory, leaderHoldings] =
     await Promise.all([

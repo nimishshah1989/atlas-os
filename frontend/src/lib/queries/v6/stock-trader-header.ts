@@ -1,6 +1,6 @@
 // frontend/src/lib/queries/v6/stock-trader-header.ts
 //
-// Reads atlas.mv_stock_landscape_trader for the trader-view header on
+// Reads foundation_staging.mv_stock_landscape_trader for the trader-view header on
 // /stocks/[symbol]. Exposes verdict + source + tracking columns; the
 // rest of the stock detail page continues to read mv_stock_deepdive.
 //
@@ -71,7 +71,7 @@ export async function getStockTraderHeader(symbol: string): Promise<StockTraderH
       cell_predicted_excess::text     AS cell_predicted_excess,
       cell_ic::text                   AS cell_ic,
       close_price::text               AS close_price
-    FROM atlas.mv_stock_landscape_trader
+    FROM foundation_staging.mv_stock_landscape_trader
     WHERE symbol = ${symbol}
     LIMIT 1
   `

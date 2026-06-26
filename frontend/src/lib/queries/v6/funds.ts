@@ -78,15 +78,15 @@ export async function getFundsForDate(snapshotDate: string): Promise<ScreenFund[
       lm.ret_6m::text                AS ret_6m,
       lm.ret_12m::text               AS ret_12m,
       lm.rs_pctile_3m::text          AS rs_pctile_3m
-    FROM atlas.atlas_fund_scorecard s
-    LEFT JOIN atlas.atlas_universe_funds u
+    FROM foundation_staging.atlas_fund_scorecard s
+    LEFT JOIN foundation_staging.atlas_universe_funds u
       ON u.mstar_id = s.scheme_code
      AND u.effective_to IS NULL
-    LEFT JOIN atlas.atlas_fund_metrics_daily lm
+    LEFT JOIN foundation_staging.atlas_fund_metrics_daily lm
       ON lm.mstar_id = s.scheme_code
      AND lm.nav_date = (
        SELECT MAX(nav_date)
-       FROM atlas.atlas_fund_metrics_daily
+       FROM foundation_staging.atlas_fund_metrics_daily
        WHERE nav_date <= ${snapshotDate}
      )
     WHERE s.snapshot_date = ${snapshotDate}
@@ -210,15 +210,15 @@ export async function getFundRowsForDate(snapshotDate: string): Promise<FundList
       lm.rs_pctile_3m::text                           AS rs_pctile_3m,
       s.amc                                           AS amc,
       s.fund_style                                    AS fund_style
-    FROM atlas.atlas_fund_scorecard s
-    LEFT JOIN atlas.atlas_universe_funds u
+    FROM foundation_staging.atlas_fund_scorecard s
+    LEFT JOIN foundation_staging.atlas_universe_funds u
       ON u.mstar_id = s.scheme_code
      AND u.effective_to IS NULL
-    LEFT JOIN atlas.atlas_fund_metrics_daily lm
+    LEFT JOIN foundation_staging.atlas_fund_metrics_daily lm
       ON lm.mstar_id = s.scheme_code
      AND lm.nav_date = (
        SELECT MAX(nav_date)
-       FROM atlas.atlas_fund_metrics_daily
+       FROM foundation_staging.atlas_fund_metrics_daily
        WHERE nav_date <= ${snapshotDate}
      )
     WHERE s.snapshot_date = ${snapshotDate}
@@ -371,21 +371,21 @@ export async function getFundDetail(code: string): Promise<FundDetail | null> {
       s.snapshot_date::text                           AS snapshot_date,
       s.nav_as_of::text                               AS nav_as_of,
       s.holdings_as_of::text                          AS holdings_as_of
-    FROM atlas.atlas_fund_scorecard s
-    LEFT JOIN atlas.atlas_universe_funds u
+    FROM foundation_staging.atlas_fund_scorecard s
+    LEFT JOIN foundation_staging.atlas_universe_funds u
       ON u.mstar_id = s.scheme_code
      AND u.effective_to IS NULL
-    LEFT JOIN atlas.atlas_fund_metrics_daily lm
+    LEFT JOIN foundation_staging.atlas_fund_metrics_daily lm
       ON lm.mstar_id = s.scheme_code
      AND lm.nav_date = (
        SELECT MAX(nav_date)
-       FROM atlas.atlas_fund_metrics_daily
+       FROM foundation_staging.atlas_fund_metrics_daily
        WHERE mstar_id = s.scheme_code
      )
     WHERE s.scheme_code = ${code}
       AND s.snapshot_date = (
         SELECT MAX(snapshot_date)
-        FROM atlas.atlas_fund_scorecard
+        FROM foundation_staging.atlas_fund_scorecard
         WHERE scheme_code = ${code}
       )
     LIMIT 1

@@ -3,7 +3,7 @@
 // Query: "which funds hold this stock?" — consumed by the stock detail page
 // (§6.4 "Funds holding this stock" section).
 //
-// Source: atlas.atlas_fund_scorecard.top_holdings JSONB
+// Source: foundation_staging.atlas_fund_scorecard.top_holdings JSONB
 //
 // JSONB shape (per atlas/inference/fund_scorecard.py drilldown builder):
 //   [
@@ -12,8 +12,10 @@
 //     ...
 //   ]
 //
-// aum_cr lives in sub_metrics JSONB under key "aum_cr" (NOT a top-level column).
-// Confirmed from fund_scorecard.py line 673: sub_metrics["aum_cr"] = fi.aum_cr.
+// AUM: the scorecard's sub_metrics->>'aum_cr' is empty in live data, so AUM is
+// sourced from foundation_staging.atlas_universe_funds.aum_cr (single-schema). As of
+// the 1b consolidation that column holds TRUE ₹ crore (ingest_fund_master.py writes
+// fund size in ₹ / 1e7, fresh from Morningstar) — used directly, no scaling.
 //
 // Snapshot staleness: we always use MAX(snapshot_date). If that snapshot is
 // older than 7 days the frontend should surface a "data as of" badge; that
@@ -49,33 +51,23 @@ type Row = {
  * @returns    FundHolding[] — empty array when no fund holds this stock
  */
 export async function getFundsHoldingStock(iid: string): Promise<FundHolding[]> {
+  // Sourced from RAW holdings (foundation_staging.de_mf_holdings, Atlas-owned weekly
+  // snapshot) — NOT the retired M4 fund scorecard. "Which funds hold this stock" is a raw
+  // holdings lookup; AUM/name come from the curated universe. The composite-grade badge was
+  // dropped with the scorecard methodology (the simplified product ranks by AUM/weight).
   const rows = await sql<Row[]>`
     SELECT
-      fs.scheme_code                                  AS fund_code,
-      COALESCE(fs.fund_name, fs.scheme_code)          AS fund_name,
-      (fs.sub_metrics->>'aum_cr')::text               AS aum_cr,
-      (h->>'weight_pct')::text                        AS weight_pct,
-      CASE
-        WHEN fs.composite_score >= 90 THEN 'AAA'
-        WHEN fs.composite_score >= 80 THEN 'AA'
-        WHEN fs.composite_score >= 70 THEN 'A'
-        WHEN fs.composite_score >= 60 THEN 'BBB'
-        WHEN fs.composite_score >= 50 THEN 'BB'
-        ELSE 'B'
-      END AS atlas_grade
-    FROM atlas.atlas_fund_scorecard fs
-    CROSS JOIN LATERAL jsonb_array_elements(fs.top_holdings) AS h
-    WHERE fs.snapshot_date = (
-            SELECT MAX(snapshot_date) FROM atlas.atlas_fund_scorecard
-          )
-      -- Live data has ~36 rows with instrument_id='None' (Python None bleeding
-      -- through the writer); filter as text BEFORE the uuid cast so we don't
-      -- crash on every stock detail page.
-      AND (h->>'instrument_id') IS NOT NULL
-      AND (h->>'instrument_id') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-      AND (h->>'instrument_id')::uuid = ${iid}::uuid
-      AND (h->>'weight_pct')::numeric >= 0.5
-    ORDER BY (fs.sub_metrics->>'aum_cr')::numeric DESC NULLS LAST
+      h.mstar_id                                       AS fund_code,
+      COALESCE(uf.scheme_name, h.mstar_id)             AS fund_name,
+      uf.aum_cr::text                                  AS aum_cr,
+      h.weight_pct::text                               AS weight_pct,
+      ''                                               AS atlas_grade
+    FROM foundation_staging.de_mf_holdings h
+    JOIN foundation_staging.atlas_universe_funds uf ON uf.mstar_id = h.mstar_id
+    WHERE h.as_of_date = (SELECT MAX(as_of_date) FROM foundation_staging.de_mf_holdings)
+      AND h.instrument_id = ${iid}::uuid
+      AND h.weight_pct >= 0.5
+    ORDER BY uf.aum_cr DESC NULLS LAST
     LIMIT 10
   `
 

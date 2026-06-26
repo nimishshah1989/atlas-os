@@ -100,7 +100,7 @@ export function SectorBreadthPanel({ breadth, className = '' }: SectorBreadthPan
       </p>
 
       <div className="space-y-2" aria-label="EMA breadth gauges">
-        <GaugeBar pctStr={breadth.pct_above_sma20} label="Above EMA20" />
+        <GaugeBar pctStr={breadth.pct_above_sma20} label="Above EMA21" />
         <GaugeBar pctStr={breadth.pct_above_sma50} label="Above EMA50" />
         <GaugeBar pctStr={breadth.pct_above_sma200} label="Above EMA200" />
       </div>

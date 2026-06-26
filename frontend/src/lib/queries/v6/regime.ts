@@ -44,7 +44,7 @@ export async function getCurrentRegime(): Promise<MarketRegime> {
         pct_above_ema_50::text              AS pct_above_ema_50,
         pct_in_strong_states::text          AS pct_in_strong_states,
         pct_weinstein_pass::text            AS pct_weinstein_pass
-      FROM atlas.atlas_market_regime_daily
+      FROM foundation_staging.atlas_market_regime_daily
       ORDER BY date DESC
       LIMIT 1
     `,
@@ -53,7 +53,7 @@ export async function getCurrentRegime(): Promise<MarketRegime> {
         date::text                          AS date,
         pct_above_ema_50::text              AS pct_above_ema_50,
         regime_state
-      FROM atlas.atlas_market_regime_daily
+      FROM foundation_staging.atlas_market_regime_daily
       ORDER BY date DESC
       LIMIT 60
     `,
@@ -169,7 +169,7 @@ export async function getRegimeDetail(): Promise<RegimeDetail> {
       pct_above_ema_200::text                 AS breadth_pct_above_200dma,
       india_vix::text                         AS vix_percentile,
       realized_vol_5d_nifty500::text          AS cross_sectional_dispersion
-    FROM atlas.atlas_market_regime_daily
+    FROM foundation_staging.atlas_market_regime_daily
     ORDER BY date DESC
     LIMIT 84
   `

@@ -3,6 +3,15 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { Menu, X } from 'lucide-react'
+import { TopNavV4 } from './TopNavV4'
+
+// v4 redesign — flat 7-page IA + Graphite Terminal skin behind the flag.
+// Pure dispatcher (no hooks) so the early branch is lint-safe; flag-off renders
+// the byte-identical legacy nav below.
+export function TopNav({ healthDot }: { healthDot?: React.ReactNode }) {
+  if (process.env.NEXT_PUBLIC_LENS_V4 === '1') return <TopNavV4 healthDot={healthDot} />
+  return <TopNavLegacy healthDot={healthDot} />
+}
 
 type SubLink = { href: string; label: string }
 type Group   = { key: string; label: string; links: SubLink[] }
@@ -83,7 +92,7 @@ function activeGroup(pathname: string): Group {
   return GROUPS[0] // markets-today is default for /
 }
 
-export function TopNav({ healthDot }: { healthDot?: React.ReactNode }) {
+function TopNavLegacy({ healthDot }: { healthDot?: React.ReactNode }) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
   const active = activeGroup(pathname)

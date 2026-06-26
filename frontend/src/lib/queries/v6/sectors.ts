@@ -10,10 +10,10 @@
 // Rank is computed in-app by ordering on participation_rs desc.
 //
 // MV queries for /sectors (Page 04) and /sectors/[sector] (Page 04a):
-//   getSectorCards()      — atlas.mv_sector_cards (latest snapshot, 30 rows)
-//   getSectorBreadthMV()  — atlas.mv_sector_breadth (latest snapshot, 30 rows)
-//   getSectorRRG()        — atlas.mv_sector_rrg (latest snapshot, 30 rows + trail_6w JSONB)
-//   getSectorDeepdive()   — atlas.mv_sector_deepdive (single row per sector, ~30 total)
+//   getSectorCards()      — foundation_staging.mv_sector_cards (latest snapshot, 30 rows)
+//   getSectorBreadthMV()  — foundation_staging.mv_sector_breadth (latest snapshot, 30 rows)
+//   getSectorRRG()        — foundation_staging.mv_sector_rrg (latest snapshot, 30 rows + trail_6w JSONB)
+//   getSectorDeepdive()   — foundation_staging.mv_sector_deepdive (single row per sector, ~30 total)
 
 import 'server-only'
 import sql from '@/lib/db'
@@ -37,7 +37,7 @@ export type SectorCardRow = {
   rs_3m: number | null
   rs_6m: number | null
   vol_60d_ann: number | null
-  pct_above_ema20: number | null
+  pct_above_ema21: number | null
   pct_above_ema200: number | null
   pct_at_52wh: number | null
   hhi_concentration: number | null
@@ -67,7 +67,7 @@ export type SectorBreadthMVRow = {
   as_of_date: string
   sector_name: string
   constituent_count: number
-  pct_above_ema20: number | null
+  pct_above_ema21: number | null
   pct_above_ema50: number | null
   pct_above_ema200: number | null
   pct_at_52wh: number | null
@@ -156,7 +156,7 @@ export type SectorDeepdiveRow = {
     rs_6m: number | null
     rs_12m: number | null
   }
-  pct_above_ema20: number | null
+  pct_above_ema21: number | null
   pct_above_ema200: number | null
   pct_at_52wh: number | null
   constituents_top30: ConstituentRow[]
@@ -195,7 +195,7 @@ export async function getSectorCards(): Promise<SectorCardRow[]> {
     rs_3m: string | null
     rs_6m: string | null
     vol_60d_ann: string | null
-    pct_above_ema20: string | null
+    pct_above_ema21: string | null
     pct_above_ema200: string | null
     pct_at_52wh: string | null
     hhi_concentration: string | null
@@ -217,7 +217,7 @@ export async function getSectorCards(): Promise<SectorCardRow[]> {
       rs_3m::text,
       rs_6m::text,
       vol_60d_ann::text,
-      pct_above_ema20::text,
+      pct_above_ema21::text,
       pct_above_ema200::text,
       pct_at_52wh::text,
       hhi_concentration::text,
@@ -225,46 +225,22 @@ export async function getSectorCards(): Promise<SectorCardRow[]> {
       confidence_distribution,
       verdict,
       verdict_abbr
-    FROM atlas.mv_sector_cards
+    FROM foundation_staging.mv_sector_cards
     WHERE as_of_date = (
       -- Anchor to last fully-populated date. On a fresh trading day,
       -- rs_1m / ret_1w / ret_12m / breadth columns can lag rs_3m by one
       -- compute cycle. Picking MAX(as_of_date) blindly gives a partial row
       -- with empty 1W / 12M / breadth columns. Filter on rs_1m IS NOT NULL.
-      SELECT MAX(as_of_date) FROM atlas.mv_sector_cards
+      SELECT MAX(as_of_date) FROM foundation_staging.mv_sector_cards
       WHERE rs_1m IS NOT NULL AND ret_1w IS NOT NULL
     )
       AND LOWER(sector_name) NOT LIKE '%conglomerate%'
     ORDER BY rs_3m DESC NULLS LAST
   `
 
-  // mv_sector_cards.buy_signal_count counts signals TRIGGERED on T-0 only,
-  // so it almost always shows 0. Overlay live counts of OPEN BUY signals
-  // (exit_date IS NULL) grouped by sector — that's what the UI implies.
-  const liveCounts = await sql<Array<{
-    sector_name: string
-    n_open: number
-    conf_h: number
-    conf_m: number
-    conf_l: number
-  }>>`
-    SELECT
-      u.sector AS sector_name,
-      COUNT(sc.signal_call_id)::int AS n_open,
-      COUNT(CASE WHEN sc.confidence_unconditional >= 0.70 THEN 1 END)::int AS conf_h,
-      COUNT(CASE WHEN sc.confidence_unconditional >= 0.50
-                  AND sc.confidence_unconditional <  0.70 THEN 1 END)::int AS conf_m,
-      COUNT(CASE WHEN sc.confidence_unconditional <  0.50 THEN 1 END)::int AS conf_l
-    FROM atlas.atlas_signal_calls sc
-    JOIN atlas.atlas_universe_stocks u
-      ON u.instrument_id = sc.instrument_id
-     AND u.effective_to IS NULL
-    WHERE sc.action = 'POSITIVE'
-      AND sc.exit_date IS NULL
-    GROUP BY u.sector
-  `
-  const liveBySector = new Map(liveCounts.map(r => [r.sector_name, r]))
-
+  // The live open-BUY-signal overlay (M5 atlas_signal_calls) was retired in the
+  // single-schema consolidation — the simplified product drops the conviction-call
+  // methodology. Sector cards now use only the base roll-up counts/distribution.
   return rows.map((r) => ({
     as_of_date: r.as_of_date,
     sector_name: r.sector_name,
@@ -278,18 +254,12 @@ export async function getSectorCards(): Promise<SectorCardRow[]> {
     rs_3m: toNumber(r.rs_3m),
     rs_6m: toNumber(r.rs_6m),
     vol_60d_ann: toNumber(r.vol_60d_ann),
-    pct_above_ema20: toNumber(r.pct_above_ema20),
+    pct_above_ema21: toNumber(r.pct_above_ema21),
     pct_above_ema200: toNumber(r.pct_above_ema200),
     pct_at_52wh: toNumber(r.pct_at_52wh),
     hhi_concentration: toNumber(r.hhi_concentration),
-    buy_signal_count: liveBySector.get(r.sector_name)?.n_open ?? r.buy_signal_count,
-    confidence_distribution: liveBySector.has(r.sector_name)
-      ? {
-          H: liveBySector.get(r.sector_name)!.conf_h,
-          M: liveBySector.get(r.sector_name)!.conf_m,
-          L: liveBySector.get(r.sector_name)!.conf_l,
-        }
-      : r.confidence_distribution,
+    buy_signal_count: r.buy_signal_count,
+    confidence_distribution: r.confidence_distribution,
     verdict: r.verdict,
     verdict_abbr: r.verdict_abbr,
   }))
@@ -304,7 +274,7 @@ export async function getSectorBreadthMV(sectorName?: string): Promise<SectorBre
     as_of_date: string
     sector_name: string
     constituent_count: number
-    pct_above_ema20: string | null
+    pct_above_ema21: string | null
     pct_above_ema50: string | null
     pct_above_ema200: string | null
     pct_at_52wh: string | null
@@ -317,7 +287,7 @@ export async function getSectorBreadthMV(sectorName?: string): Promise<SectorBre
       as_of_date::text,
       sector_name,
       constituent_count,
-      pct_above_ema20::text,
+      pct_above_ema21::text,
       pct_above_ema50::text,
       pct_above_ema200::text,
       pct_at_52wh::text,
@@ -325,9 +295,9 @@ export async function getSectorBreadthMV(sectorName?: string): Promise<SectorBre
       breadth_by_strength,
       top_movers,
       bottom_movers
-    FROM atlas.mv_sector_breadth
+    FROM foundation_staging.mv_sector_breadth
     WHERE as_of_date = (
-      SELECT MAX(as_of_date) FROM atlas.mv_sector_breadth
+      SELECT MAX(as_of_date) FROM foundation_staging.mv_sector_breadth
     )
     ${sectorName != null ? sql`AND sector_name = ${sectorName}` : sql``}
     ORDER BY sector_name
@@ -337,7 +307,7 @@ export async function getSectorBreadthMV(sectorName?: string): Promise<SectorBre
     as_of_date: r.as_of_date,
     sector_name: r.sector_name,
     constituent_count: r.constituent_count,
-    pct_above_ema20: toNumber(r.pct_above_ema20),
+    pct_above_ema21: toNumber(r.pct_above_ema21),
     pct_above_ema50: toNumber(r.pct_above_ema50),
     pct_above_ema200: toNumber(r.pct_above_ema200),
     pct_at_52wh: toNumber(r.pct_at_52wh),
@@ -370,12 +340,12 @@ export async function getSectorRRG(): Promise<SectorRRGRow[]> {
       r.quadrant_current,
       r.trail_6w,
       COALESCE(c.constituent_count, 0) AS constituent_count
-    FROM atlas.mv_sector_rrg r
-    LEFT JOIN atlas.mv_sector_cards c
+    FROM foundation_staging.mv_sector_rrg r
+    LEFT JOIN foundation_staging.mv_sector_cards c
       ON c.sector_name = r.sector_name
      AND c.as_of_date = r.as_of_date
     WHERE r.as_of_date = (
-      SELECT MAX(as_of_date) FROM atlas.mv_sector_rrg
+      SELECT MAX(as_of_date) FROM foundation_staging.mv_sector_rrg
     )
     ORDER BY r.sector_name
   `
@@ -403,7 +373,7 @@ export async function getSectorDeepdive(sectorName: string): Promise<SectorDeepd
     data_as_of: string
     returns: SectorDeepdiveRow['returns']
     rs_windows: SectorDeepdiveRow['rs_windows']
-    pct_above_ema20: string | null
+    pct_above_ema21: string | null
     pct_above_ema200: string | null
     pct_at_52wh: string | null
     constituents_top30: ConstituentRow[]
@@ -418,14 +388,14 @@ export async function getSectorDeepdive(sectorName: string): Promise<SectorDeepd
       data_as_of::text,
       returns,
       rs_windows,
-      pct_above_ema20::text,
+      pct_above_ema21::text,
       pct_above_ema200::text,
       pct_at_52wh::text,
       constituents_top30,
       open_signals,
       strength_dist,
       top_picks_top10
-    FROM atlas.mv_sector_deepdive
+    FROM foundation_staging.mv_sector_deepdive
     WHERE sector_name = ${sectorName}
     LIMIT 1
   `
@@ -440,7 +410,7 @@ export async function getSectorDeepdive(sectorName: string): Promise<SectorDeepd
     data_as_of: r.data_as_of,
     returns: r.returns,
     rs_windows: r.rs_windows,
-    pct_above_ema20: toNumber(r.pct_above_ema20),
+    pct_above_ema21: toNumber(r.pct_above_ema21),
     pct_above_ema200: toNumber(r.pct_above_ema200),
     pct_at_52wh: toNumber(r.pct_at_52wh),
     constituents_top30: r.constituents_top30 ?? [],
@@ -488,8 +458,8 @@ export async function getSectorsForDate(snapshotDate: string): Promise<ScreenSec
       m.bottomup_rs_3m_nifty500::text AS bottomup_rs_3m_nifty500,
       m.participation_50::text       AS participation_50,
       m.constituent_count
-    FROM atlas.atlas_sector_states_daily s
-    LEFT JOIN atlas.atlas_sector_metrics_daily m
+    FROM foundation_staging.atlas_sector_states_daily s
+    LEFT JOIN foundation_staging.atlas_sector_metrics_daily m
       ON m.sector_name = s.sector_name
      AND m.date        = s.date
     WHERE s.date = ${snapshotDate}

@@ -65,9 +65,9 @@ async function getFundSnapshot(): Promise<IndustrySnapshot> {
       AVG(
         NULLIF((sub_metrics->>'aum_cr')::numeric, 0)
       )::text                                           AS median_aum_cr
-    FROM atlas.atlas_fund_scorecard
+    FROM foundation_staging.atlas_fund_scorecard
     WHERE snapshot_date = (
-      SELECT MAX(snapshot_date) FROM atlas.atlas_fund_scorecard
+      SELECT MAX(snapshot_date) FROM foundation_staging.atlas_fund_scorecard
     )
   `
 
@@ -76,9 +76,9 @@ async function getFundSnapshot(): Promise<IndustrySnapshot> {
       amc,
       AVG(composite_score)::text  AS avg_composite,
       COUNT(*)::text              AS n_funds
-    FROM atlas.atlas_fund_scorecard
+    FROM foundation_staging.atlas_fund_scorecard
     WHERE snapshot_date = (
-      SELECT MAX(snapshot_date) FROM atlas.atlas_fund_scorecard
+      SELECT MAX(snapshot_date) FROM foundation_staging.atlas_fund_scorecard
     )
       AND amc IS NOT NULL
     GROUP BY amc
@@ -116,9 +116,9 @@ async function getEtfSnapshot(): Promise<IndustrySnapshot> {
       AVG(
         NULLIF((raw_metrics->>'aum_cr')::numeric, 0)
       )::text                                           AS median_aum_cr
-    FROM atlas.atlas_etf_scorecard
+    FROM foundation_staging.atlas_etf_scorecard
     WHERE snapshot_date = (
-      SELECT MAX(snapshot_date) FROM atlas.atlas_etf_scorecard
+      SELECT MAX(snapshot_date) FROM foundation_staging.atlas_etf_scorecard
     )
   `
 
@@ -131,9 +131,9 @@ async function getEtfSnapshot(): Promise<IndustrySnapshot> {
       SPLIT_PART(etf_name, ' ETF', 1) AS amc,
       AVG(composite_score)::text       AS avg_composite,
       COUNT(*)::text                   AS n_funds
-    FROM atlas.atlas_etf_scorecard
+    FROM foundation_staging.atlas_etf_scorecard
     WHERE snapshot_date = (
-      SELECT MAX(snapshot_date) FROM atlas.atlas_etf_scorecard
+      SELECT MAX(snapshot_date) FROM foundation_staging.atlas_etf_scorecard
     )
       AND etf_name IS NOT NULL
     GROUP BY SPLIT_PART(etf_name, ' ETF', 1)

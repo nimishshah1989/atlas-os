@@ -22,7 +22,7 @@ function makeCard(overrides: Partial<SectorCardRow> = {}): SectorCardRow {
     as_of_date: '2026-06-19', sector_name: 'Banking', constituent_count: 12,
     ret_1w: 0.01, ret_1m: 0.02, ret_3m: 0.03, ret_6m: 0.04, ret_12m: 0.05,
     rs_1m: 0.01, rs_3m: 0.02, rs_6m: 0.03, vol_60d_ann: 0.1,
-    pct_above_ema20: 0.6, pct_above_ema200: 0.5, pct_at_52wh: 0.2, hhi_concentration: 0.1,
+    pct_above_ema21: 0.6, pct_above_ema200: 0.5, pct_at_52wh: 0.2, hhi_concentration: 0.1,
     buy_signal_count: 1, confidence_distribution: { H: 1, M: 0, L: 0 },
     verdict: 'Overweight', verdict_abbr: 'OW', ...overrides,
   }

@@ -87,7 +87,7 @@ export function PolicyPageClient({
       <div className="mb-6">
         <label
           htmlFor="portfolio-selector"
-          className="font-sans text-xs font-semibold uppercase tracking-wider text-ink-tertiary block mb-1"
+          className="font-sans text-xs font-semibold uppercase tracking-wider text-txt-3 block mb-1"
         >
           Editing policy for
         </label>
@@ -95,7 +95,7 @@ export function PolicyPageClient({
           id="portfolio-selector"
           value={portfolioId ?? ''}
           onChange={handleSelectorChange}
-          className="font-sans text-sm border border-paper-rule rounded-[2px] px-3 py-2 bg-paper text-ink-primary focus:outline-none focus:border-accent w-72"
+          className="font-sans text-sm border border-edge-hair rounded-tile px-3 py-2 bg-surface-panel text-txt-1 focus:outline-none focus:border-brand w-72"
         >
           <option value="">House Default</option>
           {portfolios.map((p) => (
@@ -110,7 +110,7 @@ export function PolicyPageClient({
       {saveState.kind === 'success' && (
         <div
           data-testid="save-success"
-          className="mb-4 px-3 py-2 rounded-[2px] border border-signal-pos/40 bg-signal-pos/5 font-sans text-xs text-signal-pos"
+          className="mb-4 px-3 py-2 rounded-tile border border-sig-pos/40 bg-sig-pos-soft font-sans text-xs text-sig-pos"
         >
           Policy saved successfully.
         </div>
@@ -118,7 +118,7 @@ export function PolicyPageClient({
       {saveState.kind === 'error' && (
         <div
           data-testid="save-error"
-          className="mb-4 px-3 py-2 rounded-[2px] border border-signal-neg/40 bg-signal-neg/5 font-sans text-xs text-signal-neg"
+          className="mb-4 px-3 py-2 rounded-tile border border-sig-neg/40 bg-sig-neg-soft font-sans text-xs text-sig-neg"
         >
           {saveState.message}
         </div>

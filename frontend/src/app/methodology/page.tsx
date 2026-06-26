@@ -1,5 +1,5 @@
 // allow-large: thin server wrapper around MethodologyV62 client component
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 import MethodologyV62 from '@/components/methodology/MethodologyV62'
 
@@ -10,7 +10,7 @@ export const metadata = {
 
 export default function MethodologyPage() {
   return (
-    <main className="min-h-screen bg-paper">
+    <main className="min-h-screen bg-surface-base">
       <MethodologyV62 />
     </main>
   )

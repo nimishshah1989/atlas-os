@@ -60,7 +60,7 @@ export function SectorRSRatioCharts({ sectorName, indexCode, daily }: Props) {
 
   if (daily.length === 0) {
     return (
-      <div className="bg-paper-soft border border-paper-rule rounded-[2px] p-4 text-center text-[12px] text-ink-tertiary">
+      <div className="bg-surface-panel border border-edge-hair rounded-panel shadow-panel p-4 text-center text-[12px] text-txt-3">
         Relative-strength chart unavailable — no index price history mapped for {sectorName}.
       </div>
     )
@@ -84,7 +84,7 @@ export function SectorRSRatioCharts({ sectorName, indexCode, daily }: Props) {
           />
         ))}
       </div>
-      <p className="font-sans text-[11px] text-ink-tertiary mt-3">
+      <p className="font-sans text-[11px] text-txt-3 mt-3">
         Ratio of the sector index to Nifty 50 (rising = outperforming), from daily index closes.
         {tvSymbol && (
           <>
@@ -93,7 +93,7 @@ export function SectorRSRatioCharts({ sectorName, indexCode, daily }: Props) {
               href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(tvSymbol)}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-teal hover:underline"
+              className="text-brand hover:underline"
             >
               Open live on TradingView ↗
             </a>

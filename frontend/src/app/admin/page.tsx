@@ -121,21 +121,29 @@ export default async function AdminPage() {
   ])
 
   return (
-    <main className="min-h-screen bg-paper">
+    <main className="min-h-screen bg-surface-base">
       {/* Hero */}
-      <section className="px-8 py-10 border-b border-paper-rule">
-        <div className="font-sans text-[10px] text-ink-tertiary uppercase tracking-[0.14em] mb-2">Atlas · Admin</div>
-        <h1 className="font-serif text-[34px] font-normal tracking-tight text-ink-primary leading-tight mb-3">
+      <section className="px-8 py-10 border-b border-edge-hair">
+        <div className="font-num text-[10px] text-txt-3 uppercase tracking-[0.14em] mb-2">Atlas · Admin</div>
+        <h1 className="font-display text-[34px] font-semibold tracking-tight text-txt-1 leading-tight mb-3">
           Engine control + activity + health
         </h1>
-        <p className="font-sans text-[15px] text-ink-secondary leading-[1.55] max-w-[820px]">
+        <p className="font-sans text-[15px] text-txt-2 leading-[1.55] max-w-[820px]">
           Atlas auto-tunes itself every day. This page lets you see <strong>what changed</strong>, <strong>why</strong>, and <strong>what improved</strong> — without needing to click-approve every adjustment. Three tabs:
         </p>
-        <ul className="font-sans text-[13px] text-ink-tertiary leading-[1.6] mt-3 ml-4 max-w-[820px] list-disc">
-          <li><strong className="text-ink-secondary">Setup &amp; Customization</strong> — the thresholds + weights + auto-approval rules driving the engine right now.</li>
-          <li><strong className="text-ink-secondary">Engine Activity</strong> — last 30 days of auto-changes with the math that triggered them. The flywheel in action.</li>
-          <li><strong className="text-ink-secondary">Data Health</strong> — every critical table&apos;s freshness + null-rate at a glance. If a number on the site looks wrong, start here.</li>
+        <ul className="font-sans text-[13px] text-txt-3 leading-[1.6] mt-3 ml-4 max-w-[820px] list-disc">
+          <li><strong className="text-txt-2">Setup &amp; Customization</strong> — the thresholds + weights + auto-approval rules driving the engine right now.</li>
+          <li><strong className="text-txt-2">Engine Activity</strong> — last 30 days of auto-changes with the math that triggered them. The flywheel in action.</li>
+          <li><strong className="text-txt-2">Data Health</strong> — every critical table&apos;s freshness + null-rate at a glance. If a number on the site looks wrong, start here.</li>
         </ul>
+
+        {/* Admin sub-pages — Methodology · Data Health · Thresholds · IC Optimization */}
+        <nav className="mt-6 flex flex-wrap gap-2 font-sans text-[12px] font-medium">
+          <Link href="/methodology" className="rounded-tile border border-edge-hair bg-surface-panel px-3 py-1.5 text-txt-2 shadow-tile transition-colors hover:border-edge-strong hover:text-txt-1">Methodology</Link>
+          <Link href="/health" className="rounded-tile border border-edge-hair bg-surface-panel px-3 py-1.5 text-txt-2 shadow-tile transition-colors hover:border-edge-strong hover:text-txt-1">Data Health</Link>
+          <Link href="/admin/thresholds" className="rounded-tile border border-edge-hair bg-surface-panel px-3 py-1.5 text-txt-2 shadow-tile transition-colors hover:border-edge-strong hover:text-txt-1">Thresholds</Link>
+          <Link href="/admin/composite-proposals" className="rounded-tile border border-edge-hair bg-surface-panel px-3 py-1.5 text-txt-2 shadow-tile transition-colors hover:border-edge-strong hover:text-txt-1">IC Optimization</Link>
+        </nav>
       </section>
 
       <AdminTabs
@@ -148,15 +156,15 @@ export default async function AdminPage() {
         healthCheckDate={healthCheckDate}
       />
 
-      <section className="px-8 py-8 bg-paper-soft border-t border-paper-rule">
-        <div className="font-sans text-[11px] text-ink-tertiary uppercase tracking-wider mb-2">Direct access (drill-down pages)</div>
+      <section className="px-8 py-8 bg-surface-panel border-t border-edge-hair">
+        <div className="font-num text-[11px] text-txt-3 uppercase tracking-wider mb-2">Direct access (drill-down pages)</div>
         <div className="flex flex-wrap gap-3 text-[13px]">
-          <Link href="/admin/thresholds"            className="text-teal hover:underline">→ Thresholds editor</Link>
-          <Link href="/admin/composite-proposals"   className="text-teal hover:underline">→ Signal proposals</Link>
-          <Link href="/admin/weight-performance"    className="text-teal hover:underline">→ Weight monitoring</Link>
-          <Link href="/admin/validator"             className="text-teal hover:underline">→ Validator</Link>
-          <Link href="/health"                      className="text-teal hover:underline">→ Data health (full)</Link>
-          <Link href="/methodology"                 className="text-teal hover:underline">→ Methodology</Link>
+          <Link href="/admin/thresholds"            className="text-brand hover:underline">→ Thresholds editor</Link>
+          <Link href="/admin/composite-proposals"   className="text-brand hover:underline">→ Signal proposals</Link>
+          <Link href="/admin/weight-performance"    className="text-brand hover:underline">→ Weight monitoring</Link>
+          <Link href="/admin/validator"             className="text-brand hover:underline">→ Validator</Link>
+          <Link href="/health"                      className="text-brand hover:underline">→ Data health (full)</Link>
+          <Link href="/methodology"                 className="text-brand hover:underline">→ Methodology</Link>
         </div>
       </section>
     </main>

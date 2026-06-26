@@ -1,7 +1,7 @@
 // frontend/src/lib/queries/v6/markets_rs.ts
 //
 // Data layer for /markets-rs (Page 03 — Markets Relative Strength).
-// Source: atlas.mv_markets_rs_grid — 9 rows, pre-computed nightly.
+// Source: foundation_staging.mv_markets_rs_grid — 9 rows, pre-computed nightly.
 //
 // Exports:
 //   getMarketsRsPage()   — full page data (grid + hero readouts)
@@ -178,7 +178,7 @@ export async function getMarketsRsPage(): Promise<MarketsRsPageData> {
       rank_12m,
       as_of_date::text          AS as_of_date,
       refreshed_at::text        AS refreshed_at
-    FROM atlas.mv_markets_rs_grid
+    FROM foundation_staging.mv_markets_rs_grid
     ORDER BY rank_order
   `
 

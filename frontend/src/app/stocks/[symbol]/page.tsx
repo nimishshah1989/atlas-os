@@ -1,5 +1,5 @@
 // allow-large: stock detail page composes 14 sections (verdict, returns table, chart, RS confirmation, sparkline grid, lifecycle, TV technical analysis, peer matrix, financials, news, supporting detail drawers, act). Each section is a single line render — splitting into sub-shells would obscure the page assembly contract.
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 import { notFound, redirect } from 'next/navigation'
 import { lookupSymbolAlias } from '@/lib/queries/symbol-aliases'
@@ -49,6 +49,10 @@ import {
   TVNews,
 } from '@/components/v6/stock-detail/TVWidgets'
 import { SparklineComparisonPanel } from '@/components/v6/stock-detail/SparklineComparisonPanel'
+import { LENS_V4_ENABLED } from '@/lib/feature-flags'
+import { getLensScoreByInstrument } from '@/lib/queries/lens-scores'
+import { LensVectorPanel } from '@/components/v6/stock-detail/LensVectorPanel'
+import { StockDetailV4 } from '@/components/v6/stock-detail/StockDetailV4'
 
 export default async function StockPage({
   params,
@@ -58,6 +62,10 @@ export default async function StockPage({
   searchParams?: Promise<{ portfolio?: string }>
 }) {
   const symbol = decodeURIComponent((await params).symbol).toUpperCase()
+
+  // v4 (behind LENS_V4): lens-first detail page, native foundation_staging.
+  if (LENS_V4_ENABLED) return <StockDetailV4 symbol={symbol} />
+
   const stock = await getStockBySymbol(symbol)
   if (!stock) {
     const alias = await lookupSymbolAlias(symbol)
@@ -90,7 +98,7 @@ export default async function StockPage({
   ])
 
   // Batch 2 — external/dependent data (after batch 1 connections released)
-  const [tvMetrics, rsRatios, peerMatrix, peers, conviction, signalCalls, regimeState, gateThresholds] = await Promise.all([
+  const [tvMetrics, rsRatios, peerMatrix, peers, conviction, signalCalls, regimeState, gateThresholds, lensScore] = await Promise.all([
     getTVMetrics(symbol).catch(() => null),
     getRSRatios(symbol).catch(() => null),
     getPeerMatrix(symbol).catch(() => []),
@@ -99,6 +107,7 @@ export default async function StockPage({
     getSignalCallsByIid(stock.instrument_id, 20).catch(() => []),
     getMarketRegime().catch(() => null),
     getGateThresholds(),
+    LENS_V4_ENABLED ? getLensScoreByInstrument(stock.instrument_id).catch(() => null) : Promise.resolve(null),
   ])
 
   // Sector context needs sector name — fetch after we know it exists
@@ -200,6 +209,13 @@ export default async function StockPage({
         />
         <MultiTimeframeReturnsTable latest={latestMetrics ?? null} />
       </section>
+
+      {/* ────────────── 2a½. Six-Lens Vector (v4 feature flag) ────────────── */}
+      {LENS_V4_ENABLED && lensScore && (
+        <section className="px-6 py-4 border-b border-paper-rule bg-paper-deep">
+          <LensVectorPanel lens={lensScore} />
+        </section>
+      )}
 
       {/* ────────────── 2b. Sector context strip ────────────── */}
       <SectorContextStrip
