@@ -1,4 +1,4 @@
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 // /funds — leads with the v2 IC-weighted composite scorecard ranking
 // (composite_score, Atlas grade, rank-in-category, momentum). Sources the

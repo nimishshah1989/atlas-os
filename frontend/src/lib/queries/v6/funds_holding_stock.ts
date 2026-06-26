@@ -3,7 +3,7 @@
 // Query: "which funds hold this stock?" — consumed by the stock detail page
 // (§6.4 "Funds holding this stock" section).
 //
-// Source: atlas.atlas_fund_scorecard.top_holdings JSONB
+// Source: foundation_staging.atlas_fund_scorecard.top_holdings JSONB
 //
 // JSONB shape (per atlas/inference/fund_scorecard.py drilldown builder):
 //   [
@@ -12,8 +12,10 @@
 //     ...
 //   ]
 //
-// aum_cr lives in sub_metrics JSONB under key "aum_cr" (NOT a top-level column).
-// Confirmed from fund_scorecard.py line 673: sub_metrics["aum_cr"] = fi.aum_cr.
+// AUM: the scorecard's sub_metrics->>'aum_cr' is empty in live data, so AUM is
+// sourced from foundation_staging.atlas_universe_funds.aum_cr (single-schema). That
+// column is stored in ₹ LAKH despite its name (verified: Parag Parikh Flexi Cap =
+// 8,840,389.80 → ₹88,404 cr; median ₹1,184 cr) — divided by 100 here to ₹ crore.
 //
 // Snapshot staleness: we always use MAX(snapshot_date). If that snapshot is
 // older than 7 days the frontend should surface a "data as of" badge; that
@@ -52,8 +54,8 @@ export async function getFundsHoldingStock(iid: string): Promise<FundHolding[]> 
   const rows = await sql<Row[]>`
     SELECT
       fs.scheme_code                                  AS fund_code,
-      COALESCE(fs.fund_name, fs.scheme_code)          AS fund_name,
-      (fs.sub_metrics->>'aum_cr')::text               AS aum_cr,
+      COALESCE(fs.fund_name, uf.scheme_name, fs.scheme_code) AS fund_name,
+      (uf.aum_cr / 100.0)::text                       AS aum_cr,
       (h->>'weight_pct')::text                        AS weight_pct,
       CASE
         WHEN fs.composite_score >= 90 THEN 'AAA'
@@ -63,10 +65,11 @@ export async function getFundsHoldingStock(iid: string): Promise<FundHolding[]> 
         WHEN fs.composite_score >= 50 THEN 'BB'
         ELSE 'B'
       END AS atlas_grade
-    FROM atlas.atlas_fund_scorecard fs
+    FROM foundation_staging.atlas_fund_scorecard fs
     CROSS JOIN LATERAL jsonb_array_elements(fs.top_holdings) AS h
+    LEFT JOIN foundation_staging.atlas_universe_funds uf ON uf.mstar_id = fs.scheme_code
     WHERE fs.snapshot_date = (
-            SELECT MAX(snapshot_date) FROM atlas.atlas_fund_scorecard
+            SELECT MAX(snapshot_date) FROM foundation_staging.atlas_fund_scorecard
           )
       -- Live data has ~36 rows with instrument_id='None' (Python None bleeding
       -- through the writer); filter as text BEFORE the uuid cast so we don't
@@ -75,7 +78,7 @@ export async function getFundsHoldingStock(iid: string): Promise<FundHolding[]> 
       AND (h->>'instrument_id') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       AND (h->>'instrument_id')::uuid = ${iid}::uuid
       AND (h->>'weight_pct')::numeric >= 0.5
-    ORDER BY (fs.sub_metrics->>'aum_cr')::numeric DESC NULLS LAST
+    ORDER BY uf.aum_cr DESC NULLS LAST
     LIMIT 10
   `
 

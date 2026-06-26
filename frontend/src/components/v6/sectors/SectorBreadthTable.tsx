@@ -1,5 +1,5 @@
 // SectorBreadthTable — compact table form of sector EMA participation (replaces the
-// card grid; occupies less space, all numbers filled). Sorted by %>EMA20 desc.
+// card grid; occupies less space, all numbers filled). Sorted by %>EMA21 desc.
 import type { SectorBreadthMVRow } from '@/lib/queries/v6/sectors'
 
 const pct = (v: number | null) => (v == null ? '—' : `${(v * 100).toFixed(0)}%`)
@@ -13,14 +13,14 @@ export function SectorBreadthTable({ rows }: { rows: SectorBreadthMVRow[] }) {
   if (rows.length === 0) {
     return <div className="py-6 text-center font-sans text-sm text-txt-3">Breadth data unavailable.</div>
   }
-  const sorted = [...rows].sort((a, b) => (b.pct_above_ema20 ?? -1) - (a.pct_above_ema20 ?? -1))
+  const sorted = [...rows].sort((a, b) => (b.pct_above_ema21 ?? -1) - (a.pct_above_ema21 ?? -1))
   return (
     <table className="w-full text-right" data-testid="sector-breadth-table">
       <thead>
         <tr className="font-num text-[10px] text-txt-3 uppercase tracking-wider border-b border-edge-rule">
           <th className="text-left py-1.5 font-semibold">Sector</th>
           <th className="py-1.5 font-semibold">Stocks</th>
-          <th className="py-1.5 font-semibold">&gt; EMA20</th>
+          <th className="py-1.5 font-semibold">&gt; EMA21</th>
           <th className="py-1.5 font-semibold">&gt; EMA50</th>
           <th className="py-1.5 font-semibold">&gt; EMA200</th>
           <th className="text-left py-1.5 font-semibold pl-6">Top movers</th>
@@ -35,7 +35,7 @@ export function SectorBreadthTable({ rows }: { rows: SectorBreadthMVRow[] }) {
               </a>
             </td>
             <td className="py-1.5 font-num text-[11px] tabular-nums text-txt-3">{r.constituent_count}</td>
-            <td className={`py-1.5 font-num text-xs tabular-nums ${heat(r.pct_above_ema20)}`}>{pct(r.pct_above_ema20)}</td>
+            <td className={`py-1.5 font-num text-xs tabular-nums ${heat(r.pct_above_ema21)}`}>{pct(r.pct_above_ema21)}</td>
             <td className={`py-1.5 font-num text-xs tabular-nums ${heat(r.pct_above_ema50)}`}>{pct(r.pct_above_ema50)}</td>
             <td className={`py-1.5 font-num text-xs tabular-nums ${heat(r.pct_above_ema200)}`}>{pct(r.pct_above_ema200)}</td>
             <td className="text-left py-1.5 pl-6">

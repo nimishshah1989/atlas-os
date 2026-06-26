@@ -80,7 +80,7 @@ export async function getSectorFunds(
       uf.broad_category,
       q.sector_weight_pct,
       q.sector_rank,
-      (SELECT MAX(nav_date)::text FROM atlas.atlas_fund_metrics_daily) AS data_as_of,
+      (SELECT MAX(nav_date)::text FROM foundation_staging.atlas_fund_metrics_daily) AS data_as_of,
       fm.ret_1m::text           AS ret_1m,
       fm.ret_3m::text           AS ret_3m,
       fm.ret_6m::text           AS ret_6m,
@@ -102,9 +102,9 @@ export async function getSectorFunds(
     FROM qualifying q
     JOIN atlas.atlas_universe_funds uf ON uf.mstar_id = q.mstar_id
       AND uf.plan_type = 'Regular'
-    LEFT JOIN atlas.atlas_fund_metrics_daily fm
+    LEFT JOIN foundation_staging.atlas_fund_metrics_daily fm
       ON fm.mstar_id = uf.mstar_id
-      AND fm.nav_date = (SELECT MAX(nav_date) FROM atlas.atlas_fund_metrics_daily)
+      AND fm.nav_date = (SELECT MAX(nav_date) FROM foundation_staging.atlas_fund_metrics_daily)
     LEFT JOIN atlas.atlas_fund_signal_unified fu
       ON fu.mstar_id = uf.mstar_id
       AND fu.date = (SELECT MAX(date) FROM atlas.atlas_fund_signal_unified)

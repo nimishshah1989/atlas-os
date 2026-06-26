@@ -29,7 +29,7 @@ import { getSectorRatioSeries } from '@/lib/queries/v6/sector_index_rs'
 import { LENS_V4_ENABLED } from '@/lib/feature-flags'
 import { SectorDeepDiveV4 } from '@/components/v6/sectors/SectorDeepDiveV4'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 // ── Section header ────────────────────────────────────────────────────────────
 
@@ -276,7 +276,7 @@ export default async function SectorDetailPage({
             const ret6m = deepdive.returns?.ret_6m
             const rs3m = deepdive.rs_windows?.rs_3m
             const rs6m = deepdive.rs_windows?.rs_6m
-            const breadth = deepdive.pct_above_ema20
+            const breadth = deepdive.pct_above_ema21
             const verdict = deepdive.verdict
             const factors = [
               {

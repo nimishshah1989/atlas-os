@@ -36,6 +36,29 @@ function priorityLabel(priority: string | null): string {
 
 const MAX_VISIBLE = 15
 
+// Plain-language gloss of WHAT a filing is (FM 2026-06-26: a one-line summary + expand,
+// not just a raw link). Keyed by the catalyst category, then the bucket, then a generic
+// fallback. Real categories only — nothing fabricated about the specific filing.
+const CATEGORY_GLOSS: Record<string, string> = {
+  order_win: 'A new order / contract win — real business momentum, routed to the high-weight earnings bucket of the Catalyst lens.',
+  buyback: 'A share buyback — the company is returning cash and signalling the board sees the stock as undervalued.',
+  bonus_split: 'A bonus issue or stock split — value-neutral, but often a confidence signal and it improves liquidity.',
+  dividend: 'A dividend declaration — a cash return to shareholders.',
+  earnings: 'A results / earnings filing — the most material category for the fundamental picture.',
+  esop: 'An employee stock-option (ESOP) action — routine compensation / governance housekeeping.',
+  litigation: 'A legal or regulatory matter — a potential governance risk or contingent liability.',
+}
+const BUCKET_GLOSS: Record<string, string> = {
+  earnings_strategy: 'Business & earnings momentum — the highest-weight Catalyst bucket.',
+  capital_action: 'A capital action (buyback / dividend / split) — how the company is managing its equity.',
+  governance: 'A governance / disclosure filing — lower signal weight, context only.',
+}
+function glossFor(f: StockFiling): string {
+  if (f.category && CATEGORY_GLOSS[f.category]) return CATEGORY_GLOSS[f.category]
+  if (f.bucket && BUCKET_GLOSS[f.bucket]) return BUCKET_GLOSS[f.bucket]
+  return 'An exchange filing — open the original disclosure on NSE for the full text.'
+}
+
 function Heading() {
   return (
     <div className="mb-[18px]">
@@ -47,41 +70,44 @@ function Heading() {
   )
 }
 
-function Subject({ subject, url }: { subject: string | null; url: string | null }) {
-  const text = subject ?? '—'
-  if (url == null) {
-    return <span className="font-sans text-[13px] text-txt-2">{text}</span>
-  }
-  return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="font-sans text-[13px] text-txt-2 hover:text-brand hover:underline"
-    >
-      {text}
-      <span aria-hidden className="ml-0.5 text-txt-3">↗</span>
-    </a>
-  )
-}
-
+// One filing = a native <details>: the SUMMARY is the one-liner (date · chips · subject);
+// expanding reveals the plain-language gloss + the link to the original NSE filing.
 function FilingRow({ filing }: { filing: StockFiling }) {
+  const subject = filing.subject ?? '—'
   return (
-    <li className="flex flex-col gap-1 border-b border-edge-hair py-2 last:border-b-0 sm:flex-row sm:items-baseline sm:gap-3">
-      <span className="shrink-0 font-num text-[11px] tabular-nums text-txt-3 sm:w-[88px]">
-        {filingDate(filing.date)}
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className={`rounded-tile border px-1.5 py-0.5 font-num text-[9px] uppercase ${priorityClass(filing.priority)}`}>
-            {priorityLabel(filing.priority)}
+    <li className="border-b border-edge-hair last:border-b-0">
+      <details className="group/f py-2">
+        <summary className="flex cursor-pointer list-none select-none flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
+          <span className="shrink-0 font-num text-[11px] tabular-nums text-txt-3 sm:w-[88px]">
+            {filingDate(filing.date)}
           </span>
-          {filing.bucket && (
-            <span className="font-num text-[10px] uppercase tracking-wider text-txt-3">{filing.bucket}</span>
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`rounded-tile border px-1.5 py-0.5 font-num text-[9px] uppercase ${priorityClass(filing.priority)}`}>
+                {priorityLabel(filing.priority)}
+              </span>
+              {filing.bucket && (
+                <span className="font-num text-[10px] uppercase tracking-wider text-txt-3">{filing.bucket}</span>
+              )}
+            </div>
+            <span className="font-sans text-[13px] text-txt-2">{subject}</span>
+          </div>
+          <span aria-hidden className="shrink-0 self-start font-num text-[12px] text-txt-3 transition-transform group-open/f:rotate-90 sm:self-center">›</span>
+        </summary>
+        <div className="mt-2 flex flex-col gap-2 pl-0 sm:pl-[100px]">
+          <p className="font-sans text-[12.5px] leading-[1.5] text-txt-2">{glossFor(filing)}</p>
+          {filing.url && (
+            <a
+              href={filing.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-num text-[11px] text-brand hover:underline"
+            >
+              View original filing on NSE ↗
+            </a>
           )}
         </div>
-        <Subject subject={filing.subject} url={filing.url} />
-      </div>
+      </details>
     </li>
   )
 }

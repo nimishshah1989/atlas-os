@@ -91,8 +91,8 @@ export async function getEtfsForDate(snapshotDate: string): Promise<EtfV6Row[]> 
       m.ret_6m::text                                   AS ret_6m,
       m.ret_12m::text                                  AS ret_12m,
       m.rs_pctile_3m::text                             AS rs_pctile_3m
-    FROM atlas.atlas_etf_scorecard s
-    LEFT JOIN atlas.atlas_universe_etfs u
+    FROM foundation_staging.atlas_etf_scorecard s
+    LEFT JOIN foundation_staging.atlas_universe_etfs u
       ON u.ticker = s.ticker
      AND u.effective_to IS NULL
     LEFT JOIN atlas.atlas_etf_metrics_daily m
@@ -191,8 +191,8 @@ export async function getEtfDetail(
       m.ret_12m::text                                    AS ret_12m,
       m.rs_pctile_3m::text                               AS rs_pctile_3m,
       s.top_holdings                                     AS top_holdings
-    FROM atlas.atlas_etf_scorecard s
-    LEFT JOIN atlas.atlas_universe_etfs u
+    FROM foundation_staging.atlas_etf_scorecard s
+    LEFT JOIN foundation_staging.atlas_universe_etfs u
       ON u.ticker = s.ticker
      AND u.effective_to IS NULL
     LEFT JOIN atlas.atlas_etf_metrics_daily m

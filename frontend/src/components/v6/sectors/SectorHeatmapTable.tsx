@@ -1,7 +1,7 @@
 'use client'
 // frontend/src/components/v6/sectors/SectorHeatmapTable.tsx
 // Multi-window return heatmap table — Page 04 Sectors.
-// Source: mv_sector_cards (ret_1w/1m/3m/6m/12m + rs_1m/3m/6m + pct_above_ema20 + breadth).
+// Source: mv_sector_cards (ret_1w/1m/3m/6m/12m + rs_1m/3m/6m + pct_above_ema21 + breadth).
 
 import Link from 'next/link'
 import type { SectorCardRow } from '@/lib/queries/v6/sectors'

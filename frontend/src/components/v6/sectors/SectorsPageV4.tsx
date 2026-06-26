@@ -10,11 +10,9 @@ import { SectorPulseGrid } from '@/components/v6/sectors/SectorPulseGrid'
 import { SectorRRGChart } from '@/components/v6/sectors/SectorRRGChart'
 import { SectorHeatmapV4 } from '@/components/v6/sectors/SectorHeatmapV4'
 import { SectorBreadthTable } from '@/components/v6/sectors/SectorBreadthTable'
-import { SectorLensHeatmap } from '@/components/v6/sectors/SectorLensHeatmap'
 import { CapTierRSCharts } from '@/components/v6/sectors/CapTierRSCharts'
 import { getSectorCards, getSectorRRG, getSectorBreadthMV } from '@/lib/queries/v6/sectors'
 import { getSectorIndexRs } from '@/lib/queries/v6/sector_index_rs'
-import { getSectorLensVectors } from '@/lib/queries/lens-scores'
 import { getCapTierRS } from '@/lib/queries/v6/rs_charts'
 
 export async function SectorsPageV4() {
@@ -26,10 +24,7 @@ export async function SectorsPageV4() {
     getSectorBreadthMV(),
     getSectorIndexRs(),
   ])
-  const [lensVectors, capTierRS] = await Promise.all([
-    getSectorLensVectors().catch(() => []),
-    getCapTierRS(10).catch(() => []),
-  ])
+  const capTierRS = await getCapTierRS(10).catch(() => [])
   const latestDate = cards[0]?.as_of_date ?? null
   const idxRet1dBySector: Record<string, number | null> = Object.fromEntries(
     indexRs.sectors.map(s => [s.sector_name, s.ret.ret_1d]),
@@ -63,17 +58,9 @@ export async function SectorsPageV4() {
 
       {latestDate && <DataSourceBanner source="live" asOf={latestDate} />}
 
-      {/* Six-lens sector vector */}
-      {lensVectors.length > 0 && (
-        <Panel
-          eyebrow="Six lenses"
-          title="Sector six-lens vector"
-          info={{ body: 'Average lens score per sector (technical · fundamental · valuation · catalyst · flow · policy). Sorted by composite.' }}
-          bodyClassName="px-2 py-2"
-        >
-          <SectorLensHeatmap vectors={lensVectors} />
-        </Panel>
-      )}
+      {/* (Removed the composite-sorted six-lens heatmap — FM 2026-06-26: sectors are read by
+          VERDICT + returns + breadth, not a composite score. The per-sector six-lens vector
+          lives on the sector DETAIL page, where it's decile-framed.) */}
 
       {/* Multi-window heatmap — sortable, no verdict cruft */}
       <Panel
@@ -89,7 +76,7 @@ export async function SectorsPageV4() {
       <Panel
         eyebrow="Breadth"
         title="Sector breadth · EMA participation"
-        info={{ body: 'Share of each sector’s constituents above the 20 / 50 / 200-EMA. Sorted by EMA20 participation.' }}
+        info={{ body: 'Share of each sector’s constituents above the 21 / 50 / 200-EMA. Sorted by EMA21 participation.' }}
         bodyClassName="px-5 py-4"
       >
         <SectorBreadthTable rows={breadth} />

@@ -41,7 +41,7 @@ function TopCard({ e }: { e: EtfLensRow }) {
           {e.breadth == null ? '—' : `${(e.breadth * 100).toFixed(0)}%`}
         </span>
       </div>
-      <div className="mb-2 truncate font-sans text-[11px] text-txt-3">{e.category ?? '—'}</div>
+      <div className="mb-2 truncate font-sans text-[11px] text-txt-3">{(e.category ?? '—').replace(/^India\s+Fund\s*[-–—]?\s*/i, '').trim() || '—'}</div>
       <div className="flex items-center justify-between gap-1 border-t border-edge-hair pt-2">
         <span className="font-num text-[10px] uppercase tracking-wider text-txt-3">
           {e.n_leaders} of {e.n_holdings} lead

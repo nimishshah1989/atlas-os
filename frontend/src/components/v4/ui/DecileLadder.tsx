@@ -56,12 +56,12 @@ function LadderRow({ lens, open }: { lens: LadderLens; open: boolean }) {
       <div className="space-y-3.5 pb-4 pl-[124px] pr-2 pt-1">
         {numbers.length > 0 && (
           <div>
-            <p className="mb-2 font-num text-[9px] uppercase tracking-[0.14em] text-txt-3">The actual numbers</p>
-            <div className="grid grid-cols-2 gap-x-7 gap-y-1.5 sm:grid-cols-3">
+            <p className="mb-2 font-num text-[10px] uppercase tracking-[0.14em] text-txt-2">The actual numbers</p>
+            <div className="grid grid-cols-2 gap-x-7 gap-y-2 sm:grid-cols-3">
               {numbers.map((n) => (
-                <div key={n.label} className="flex items-baseline justify-between gap-2 border-b border-edge-hair py-1">
-                  <span className="font-sans text-[11px] text-txt-3">{n.label}</span>
-                  <span className={`font-num text-[13px] tabular-nums ${numTone(n.tone)}`}>{n.value}</span>
+                <div key={n.label} className="flex items-baseline justify-between gap-2 border-b border-edge-hair py-1.5">
+                  <span className="font-sans text-[12.5px] text-txt-2">{n.label}</span>
+                  <span className={`font-num text-[15px] font-medium tabular-nums ${numTone(n.tone)}`}>{n.value}</span>
                 </div>
               ))}
             </div>
@@ -70,9 +70,9 @@ function LadderRow({ lens, open }: { lens: LadderLens; open: boolean }) {
         {lens.pointer && <p className="font-sans text-[11px] italic text-txt-3">{lens.pointer}</p>}
         {evidence.length > 0 && (
           <div className="border-l-2 border-brand/60 pl-3">
-            <p className="mb-1 font-num text-[9px] uppercase tracking-[0.14em] text-brand">Evidence</p>
+            <p className="mb-1 font-num text-[10px] uppercase tracking-[0.14em] text-brand">Evidence</p>
             {evidence.map((line, i) => (
-              <p key={i} className="font-sans text-[12px] leading-[1.5] text-txt-2">{line}</p>
+              <p key={i} className="font-sans text-[12.5px] leading-[1.55] text-txt-2">{line}</p>
             ))}
           </div>
         )}

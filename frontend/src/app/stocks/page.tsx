@@ -1,5 +1,5 @@
 // allow-large: Page 05 stocks landscape — stories + bubble + 24-cell matrix + trajectories + cards + table. Cleanup tracked post-presentation.
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 import { getAllStocks } from '@/lib/queries/stocks'
 import { getCurrentRegime } from '@/lib/queries/regime'

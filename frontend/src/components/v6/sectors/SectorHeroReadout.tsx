@@ -153,7 +153,7 @@ export function SectorHeroReadout({
               key={s.sector_name}
               sector={s}
               color="green"
-              subtitle={`1M ${fmtPct(s.ret_1m)} · 3M ${fmtPct(s.ret_3m)} · ${s.buy_signal_count} BUY firing · ${s.pct_above_ema20 != null ? `${Math.round(s.pct_above_ema20 * 100)}% >EMA20` : ''}`}
+              subtitle={`1M ${fmtPct(s.ret_1m)} · 3M ${fmtPct(s.ret_3m)} · ${s.buy_signal_count} BUY firing · ${s.pct_above_ema21 != null ? `${Math.round(s.pct_above_ema21 * 100)}% >EMA21` : ''}`}
               rsLabel={fmtPp(s.rs_3m)}
             />
           ))}

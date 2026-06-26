@@ -34,7 +34,7 @@ function makeCard(overrides: Partial<SectorCardRow> = {}): SectorCardRow {
     rs_3m: 0.084,
     rs_6m: 0.062,
     vol_60d_ann: 0.142,
-    pct_above_ema20: 0.78,
+    pct_above_ema21: 0.78,
     pct_above_ema200: 0.65,
     pct_at_52wh: 0.42,
     hhi_concentration: 0.12,

@@ -1,4 +1,6 @@
 // frontend/src/app/page.tsx
+export const revalidate = 300
+
 import { Suspense } from 'react'
 import { getCurrentRegime, getRegimeHistory } from '@/lib/queries/regime'
 import { getRegimeScorecard } from '@/lib/queries/regime-scorecard'

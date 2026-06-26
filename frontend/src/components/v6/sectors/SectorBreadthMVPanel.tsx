@@ -47,7 +47,7 @@ function BreadthCard({ row }: { row: SectorBreadthMVRow }) {
       </div>
 
       <div className="space-y-2 mb-4" aria-label="EMA breadth gauges">
-        <GaugeBar label="Above EMA20" value={row.pct_above_ema20} />
+        <GaugeBar label="Above EMA21" value={row.pct_above_ema21} />
         <GaugeBar label="Above EMA50" value={row.pct_above_ema50} />
         <GaugeBar label="Above EMA200" value={row.pct_above_ema200} />
       </div>
@@ -82,9 +82,9 @@ export function SectorBreadthMVPanel({ rows }: { rows: SectorBreadthMVRow[] }) {
     )
   }
 
-  // Sort by pct_above_ema20 desc (broadest participation first)
+  // Sort by pct_above_ema21 desc (broadest participation first)
   const sorted = [...rows].sort(
-    (a, b) => (b.pct_above_ema20 ?? -1) - (a.pct_above_ema20 ?? -1),
+    (a, b) => (b.pct_above_ema21 ?? -1) - (a.pct_above_ema21 ?? -1),
   )
 
   return (

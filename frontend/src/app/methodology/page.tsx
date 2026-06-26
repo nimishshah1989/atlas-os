@@ -1,5 +1,5 @@
 // allow-large: thin server wrapper around MethodologyV62 client component
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 import MethodologyV62 from '@/components/methodology/MethodologyV62'
 

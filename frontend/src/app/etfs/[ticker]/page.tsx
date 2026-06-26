@@ -1,5 +1,5 @@
 // allow-large: ETF detail page composes 14 sections (verdict, gates, returns, sector context, mini-sparklines, chart+commentary, NAV-fair-value, tracking error, peer matrix, sparkline trajectory grid, technical analysis, holdings, news, supporting drawers). Mirrors the stock detail template; splitting into sub-shells would obscure the page assembly contract.
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 import { notFound } from 'next/navigation'
 import {

@@ -1,5 +1,5 @@
 // allow-large: stock detail page composes 14 sections (verdict, returns table, chart, RS confirmation, sparkline grid, lifecycle, TV technical analysis, peer matrix, financials, news, supporting detail drawers, act). Each section is a single line render — splitting into sub-shells would obscure the page assembly contract.
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 import { notFound, redirect } from 'next/navigation'
 import { lookupSymbolAlias } from '@/lib/queries/symbol-aliases'

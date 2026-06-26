@@ -120,7 +120,7 @@ function toInt(s: number | string | null | undefined): number {
 
 export async function getFundListPage(): Promise<FundListPage> {
   const rows = await sql<Row[]>`
-    WITH latest_fm AS (SELECT MAX(nav_date) AS d FROM atlas.atlas_fund_metrics_daily)
+    WITH latest_fm AS (SELECT MAX(nav_date) AS d FROM foundation_staging.atlas_fund_metrics_daily)
     SELECT
       fl.scheme_code, fl.isin, fl.fund_name, fl.amc, fl.fund_category, fl.fund_style,
       fl.broad_category, fl.plan_type, fl.benchmark_code,
@@ -159,7 +159,7 @@ export async function getFundListPage(): Promise<FundListPage> {
     LEFT JOIN (
       SELECT DISTINCT ON (mstar_id)
         mstar_id, ret_1m, ret_3m, ret_6m, ret_12m, rs_pctile_3m, realized_vol_63
-      FROM atlas.atlas_fund_metrics_daily
+      FROM foundation_staging.atlas_fund_metrics_daily
       WHERE nav_date >= (SELECT d FROM latest_fm) - INTERVAL '7 days'
       ORDER BY mstar_id, nav_date DESC
     ) fm ON fm.mstar_id = fl.scheme_code

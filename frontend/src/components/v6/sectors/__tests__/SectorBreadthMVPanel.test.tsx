@@ -23,7 +23,7 @@ function makeBreadthRow(overrides: Partial<SectorBreadthMVRow> = {}): SectorBrea
     as_of_date: '2026-05-27',
     sector_name: 'Energy',
     constituent_count: 62,
-    pct_above_ema20: 0.72,
+    pct_above_ema21: 0.72,
     pct_above_ema50: 0.65,
     pct_above_ema200: 0.55,
     pct_at_52wh: 0.18,
@@ -49,7 +49,7 @@ function makeCardRow(overrides: Partial<SectorCardRow> = {}): SectorCardRow {
     rs_3m: 0.08,
     rs_6m: 0.10,
     vol_60d_ann: 0.22,
-    pct_above_ema20: 0.72,
+    pct_above_ema21: 0.72,
     pct_above_ema200: 0.55,
     pct_at_52wh: 0.18,
     hhi_concentration: 0.12,
@@ -94,7 +94,7 @@ describe('SectorBreadthMVPanel', () => {
 
   it('renders EMA gauge labels', () => {
     render(<SectorBreadthMVPanel rows={[makeBreadthRow()]} />)
-    expect(screen.getAllByText(/Above EMA20/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Above EMA21/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Above EMA50/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Above EMA200/).length).toBeGreaterThan(0)
   })

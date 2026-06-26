@@ -23,7 +23,7 @@ import { getSectorLensVectors } from '@/lib/queries/lens-scores'
 import { SectorLensHeatmap } from '@/components/v6/sectors/SectorLensHeatmap'
 import { SectorsPageV4 } from '@/components/v6/sectors/SectorsPageV4'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 

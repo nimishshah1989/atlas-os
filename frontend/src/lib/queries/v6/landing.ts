@@ -277,11 +277,11 @@ export async function getTopConvictionCalls(): Promise<ConvictionCallsResult> {
         esc.confidence_unconditional::text            AS confidence_unconditional,
         esc.predicted_excess::text                    AS predicted_excess,
         esc.date::text                                AS entry_date
-      FROM atlas.atlas_etf_signal_calls esc
-      JOIN atlas.atlas_etf_scorecard s
+      FROM foundation_staging.atlas_etf_signal_calls esc
+      JOIN foundation_staging.atlas_etf_scorecard s
              ON s.instrument_id = esc.etf_instrument_id
-            AND s.snapshot_date = (SELECT MAX(snapshot_date) FROM atlas.atlas_etf_scorecard)
-      LEFT JOIN atlas.atlas_universe_etfs u
+            AND s.snapshot_date = (SELECT MAX(snapshot_date) FROM foundation_staging.atlas_etf_scorecard)
+      LEFT JOIN foundation_staging.atlas_universe_etfs u
              ON u.ticker = s.ticker
             AND u.effective_to IS NULL
       WHERE esc.exit_date IS NULL
@@ -298,11 +298,11 @@ export async function getTopConvictionCalls(): Promise<ConvictionCallsResult> {
         fs.composite_score::text                     AS composite_score,
         fs.is_atlas_leader,
         fs.is_avoid
-      FROM atlas.atlas_fund_scorecard fs
-      LEFT JOIN atlas.atlas_universe_funds uf
+      FROM foundation_staging.atlas_fund_scorecard fs
+      LEFT JOIN foundation_staging.atlas_universe_funds uf
              ON uf.mstar_id = fs.scheme_code
       WHERE fs.snapshot_date = (
-        SELECT MAX(snapshot_date) FROM atlas.atlas_fund_scorecard
+        SELECT MAX(snapshot_date) FROM foundation_staging.atlas_fund_scorecard
       )
       ORDER BY fs.composite_score DESC NULLS LAST
       LIMIT 15

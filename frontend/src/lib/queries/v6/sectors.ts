@@ -37,7 +37,7 @@ export type SectorCardRow = {
   rs_3m: number | null
   rs_6m: number | null
   vol_60d_ann: number | null
-  pct_above_ema20: number | null
+  pct_above_ema21: number | null
   pct_above_ema200: number | null
   pct_at_52wh: number | null
   hhi_concentration: number | null
@@ -67,7 +67,7 @@ export type SectorBreadthMVRow = {
   as_of_date: string
   sector_name: string
   constituent_count: number
-  pct_above_ema20: number | null
+  pct_above_ema21: number | null
   pct_above_ema50: number | null
   pct_above_ema200: number | null
   pct_at_52wh: number | null
@@ -156,7 +156,7 @@ export type SectorDeepdiveRow = {
     rs_6m: number | null
     rs_12m: number | null
   }
-  pct_above_ema20: number | null
+  pct_above_ema21: number | null
   pct_above_ema200: number | null
   pct_at_52wh: number | null
   constituents_top30: ConstituentRow[]
@@ -195,7 +195,7 @@ export async function getSectorCards(): Promise<SectorCardRow[]> {
     rs_3m: string | null
     rs_6m: string | null
     vol_60d_ann: string | null
-    pct_above_ema20: string | null
+    pct_above_ema21: string | null
     pct_above_ema200: string | null
     pct_at_52wh: string | null
     hhi_concentration: string | null
@@ -217,7 +217,7 @@ export async function getSectorCards(): Promise<SectorCardRow[]> {
       rs_3m::text,
       rs_6m::text,
       vol_60d_ann::text,
-      pct_above_ema20::text,
+      pct_above_ema21::text,
       pct_above_ema200::text,
       pct_at_52wh::text,
       hhi_concentration::text,
@@ -278,7 +278,7 @@ export async function getSectorCards(): Promise<SectorCardRow[]> {
     rs_3m: toNumber(r.rs_3m),
     rs_6m: toNumber(r.rs_6m),
     vol_60d_ann: toNumber(r.vol_60d_ann),
-    pct_above_ema20: toNumber(r.pct_above_ema20),
+    pct_above_ema21: toNumber(r.pct_above_ema21),
     pct_above_ema200: toNumber(r.pct_above_ema200),
     pct_at_52wh: toNumber(r.pct_at_52wh),
     hhi_concentration: toNumber(r.hhi_concentration),
@@ -304,7 +304,7 @@ export async function getSectorBreadthMV(sectorName?: string): Promise<SectorBre
     as_of_date: string
     sector_name: string
     constituent_count: number
-    pct_above_ema20: string | null
+    pct_above_ema21: string | null
     pct_above_ema50: string | null
     pct_above_ema200: string | null
     pct_at_52wh: string | null
@@ -317,7 +317,7 @@ export async function getSectorBreadthMV(sectorName?: string): Promise<SectorBre
       as_of_date::text,
       sector_name,
       constituent_count,
-      pct_above_ema20::text,
+      pct_above_ema21::text,
       pct_above_ema50::text,
       pct_above_ema200::text,
       pct_at_52wh::text,
@@ -337,7 +337,7 @@ export async function getSectorBreadthMV(sectorName?: string): Promise<SectorBre
     as_of_date: r.as_of_date,
     sector_name: r.sector_name,
     constituent_count: r.constituent_count,
-    pct_above_ema20: toNumber(r.pct_above_ema20),
+    pct_above_ema21: toNumber(r.pct_above_ema21),
     pct_above_ema50: toNumber(r.pct_above_ema50),
     pct_above_ema200: toNumber(r.pct_above_ema200),
     pct_at_52wh: toNumber(r.pct_at_52wh),
@@ -403,7 +403,7 @@ export async function getSectorDeepdive(sectorName: string): Promise<SectorDeepd
     data_as_of: string
     returns: SectorDeepdiveRow['returns']
     rs_windows: SectorDeepdiveRow['rs_windows']
-    pct_above_ema20: string | null
+    pct_above_ema21: string | null
     pct_above_ema200: string | null
     pct_at_52wh: string | null
     constituents_top30: ConstituentRow[]
@@ -418,7 +418,7 @@ export async function getSectorDeepdive(sectorName: string): Promise<SectorDeepd
       data_as_of::text,
       returns,
       rs_windows,
-      pct_above_ema20::text,
+      pct_above_ema21::text,
       pct_above_ema200::text,
       pct_at_52wh::text,
       constituents_top30,
@@ -440,7 +440,7 @@ export async function getSectorDeepdive(sectorName: string): Promise<SectorDeepd
     data_as_of: r.data_as_of,
     returns: r.returns,
     rs_windows: r.rs_windows,
-    pct_above_ema20: toNumber(r.pct_above_ema20),
+    pct_above_ema21: toNumber(r.pct_above_ema21),
     pct_above_ema200: toNumber(r.pct_above_ema200),
     pct_at_52wh: toNumber(r.pct_at_52wh),
     constituents_top30: r.constituents_top30 ?? [],

@@ -1,5 +1,5 @@
 // allow-large: Page 07 ETF list — multi-section composition (AMC tiles + NAV scatter + story cards + table). Cleanup tracked post-presentation.
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 import { getAllETFs } from '@/lib/queries/etfs'
 import { getCurrentRegime } from '@/lib/queries/regime'

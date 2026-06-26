@@ -34,12 +34,31 @@ function ratio2(v: number | null): string {
   return v == null ? '—' : v.toFixed(2)
 }
 
-type Row = { label: string; fmt: (q: StockQuarter) => string }
+// Sequential (quarter-on-quarter) % change vs the prior column. Uses |prev| so a swing
+// through a loss still reads with the right sign. null when either side is missing/zero.
+function qoq(cur: number | null, prev: number | null): number | null {
+  if (cur == null || prev == null || prev === 0) return null
+  return ((cur - prev) / Math.abs(prev)) * 100
+}
+function qoqStr(cur: number | null, prev: number | null): string {
+  const v = qoq(cur, prev)
+  return v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`
+}
+
+// `delta` rows are the %-change lines (FM 2026-06-26): rendered indented + sign-coloured.
+type Row = {
+  label: string
+  fmt: (q: StockQuarter, prev: StockQuarter | null) => string
+  delta?: (q: StockQuarter, prev: StockQuarter | null) => number | null
+  indent?: boolean
+}
 const ROWS: Row[] = [
   { label: 'Revenue (₹cr)', fmt: (q) => crore(q.revenue) },
+  { label: '↳ change QoQ', indent: true, fmt: (q, p) => qoqStr(q.revenue, p?.revenue ?? null), delta: (q, p) => qoq(q.revenue, p?.revenue ?? null) },
   { label: 'EBITDA (₹cr)', fmt: (q) => crore(q.ebitda) },
   { label: 'EBITDA margin', fmt: (q) => pct1(q.ebitda_margin) },
   { label: 'PAT (₹cr)', fmt: (q) => crore(q.pat) },
+  { label: '↳ change QoQ', indent: true, fmt: (q, p) => qoqStr(q.pat, p?.pat ?? null), delta: (q, p) => qoq(q.pat, p?.pat ?? null) },
   { label: 'Net margin', fmt: (q) => pct1(q.net_margin) },
   { label: 'EPS (₹)', fmt: (q) => eps2(q.eps) },
   { label: 'D/E', fmt: (q) => ratio2(q.debt_equity) },
@@ -112,17 +131,22 @@ export function StockFundamentalsTable({ quarters }: { quarters: StockQuarter[] 
               </tr>
             </thead>
             <tbody>
-              {ROWS.map((row) => (
-                <tr key={row.label}>
-                  <td className="sticky left-0 z-10 bg-surface-panel px-4 py-[10px] text-left font-sans text-[12px] font-medium text-txt-2 border-b border-edge-hair">
+              {ROWS.map((row, ri) => (
+                <tr key={`${row.label}-${ri}`}>
+                  <td className={`sticky left-0 z-10 bg-surface-panel px-4 ${row.indent ? 'py-[7px] pl-7 font-sans text-[11px] text-txt-3' : 'py-[10px] font-sans text-[12px] font-medium text-txt-2'} text-left border-b border-edge-hair`}>
                     {row.label}
                   </td>
-                  {cols.map((q) => {
-                    const text = row.fmt(q)
+                  {cols.map((q, i) => {
+                    const prev = i > 0 ? cols[i - 1] : null
+                    const text = row.fmt(q, prev)
+                    const dv = row.delta ? row.delta(q, prev) : null
+                    const tone = row.delta
+                      ? (dv == null ? 'text-txt-3' : dv >= 0 ? 'text-sig-pos' : 'text-sig-neg')
+                      : 'text-txt-1'
                     return (
                       <td
                         key={q.period_end}
-                        className="px-4 py-[10px] text-right font-num text-[12px] tabular-nums text-txt-1 border-b border-edge-hair"
+                        className={`px-4 ${row.indent ? 'py-[7px] text-[11px]' : 'py-[10px] text-[12px]'} text-right font-num tabular-nums ${tone} border-b border-edge-hair`}
                       >
                         {text === '—' ? <span className="text-txt-3">—</span> : text}
                       </td>

@@ -135,10 +135,10 @@ export const getSwitchProposals: () => Promise<SwitchProposal[]> = cache(
         s.scheme_code,
         COALESCE(s.fund_name, u.scheme_name) AS fund_name
       FROM atlas.atlas_mf_recommendation_daily r
-      LEFT JOIN atlas.atlas_fund_scorecard s
+      LEFT JOIN foundation_staging.atlas_fund_scorecard s
         ON s.scheme_code = r.mf_instrument_id::text
        AND s.snapshot_date = (
-         SELECT MAX(snapshot_date) FROM atlas.atlas_fund_scorecard
+         SELECT MAX(snapshot_date) FROM foundation_staging.atlas_fund_scorecard
        )
       LEFT JOIN atlas.atlas_universe_funds u
         ON u.mstar_id = r.mf_instrument_id::text
@@ -180,10 +180,10 @@ export const getSwitchProposals: () => Promise<SwitchProposal[]> = cache(
           s.scheme_code,
           COALESCE(s.fund_name, u.scheme_name) AS fund_name
         FROM atlas.atlas_mf_recommendation_daily r
-        LEFT JOIN atlas.atlas_fund_scorecard s
+        LEFT JOIN foundation_staging.atlas_fund_scorecard s
           ON s.scheme_code = r.mf_instrument_id::text
          AND s.snapshot_date = (
-           SELECT MAX(snapshot_date) FROM atlas.atlas_fund_scorecard
+           SELECT MAX(snapshot_date) FROM foundation_staging.atlas_fund_scorecard
          )
         LEFT JOIN atlas.atlas_universe_funds u
           ON u.mstar_id = r.mf_instrument_id::text

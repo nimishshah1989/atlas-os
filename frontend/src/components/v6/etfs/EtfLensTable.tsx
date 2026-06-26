@@ -5,8 +5,15 @@
 // D26/D27). Presentational only — every value pre-coerced to number|null server-side.
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import type { EtfLensRow } from '@/lib/queries/v6/etf_lens'
 import { decileColor } from '@/components/v4/ui/decile'
+
+// Morningstar prefixes every Indian ETF category with a redundant "India Fund " (so the
+// filter read "India Fund Equity", "India Fund Large-Cap", …). Strip it for display — FM
+// 2026-06-26. The underlying value keeps the full string so filtering is unaffected.
+const cleanCat = (c: string | null): string =>
+  (c ?? '—').replace(/^India\s+Fund\s*[-–—]?\s*/i, '').trim() || (c ?? '—')
 
 // ── colour helpers (shared idioms with the stocks pages) ──────────────────
 // Lens scores here are 0..100 (holdings-weighted); colour the figure with the shared
@@ -107,7 +114,7 @@ export function EtfLensTable({ etfs }: { etfs: EtfLensRow[] }) {
           <span className="font-sans text-[10px] uppercase tracking-wider text-txt-3">Category</span>
           <select className={CONTROL} value={category} onChange={e => setCategory(e.target.value)}>
             <option value="all">All</option>
-            {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            {categories.map(c => <option key={c} value={c}>{cleanCat(c)}</option>)}
           </select>
         </label>
         <span className="ml-auto self-end font-num text-[12px] tabular-nums text-txt-3">
@@ -143,8 +150,12 @@ export function EtfLensTable({ etfs }: { etfs: EtfLensRow[] }) {
                 onClick={() => router.push('/etfs/' + e.fcode)}
                 className="cursor-pointer border-b border-edge-hair hover:bg-surface-raised"
               >
-                <td className="max-w-[260px] truncate px-2 py-1.5 font-sans text-[12px] font-medium text-txt-1">{e.name}</td>
-                <td className="max-w-[160px] truncate px-2 py-1.5 font-sans text-[11px] text-txt-2">{e.category ?? '—'}</td>
+                {/* Real <Link> on the name so the row is navigable before hydration +
+                    keyboard/middle-click accessible (the row onClick is a convenience). */}
+                <td className="max-w-[260px] truncate px-2 py-1.5 font-sans text-[12px] font-medium">
+                  <Link href={`/etfs/${e.fcode}`} className="text-txt-1 no-underline hover:text-brand hover:underline">{e.name}</Link>
+                </td>
+                <td className="max-w-[160px] truncate px-2 py-1.5 font-sans text-[11px] text-txt-2">{cleanCat(e.category)}</td>
                 <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums text-txt-2">{e.n_holdings}</td>
                 <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums text-txt-2">{e.n_leaders}</td>
                 <td className={`px-2 py-1.5 text-right font-num text-[12px] font-semibold tabular-nums ${breadthText(e.breadth)}`}>{fmtBreadth(e.breadth)}</td>

@@ -83,8 +83,8 @@ export function SectorHeroStrip({ sector }: { sector: SectorDeepdiveRow }) {
   const rs3m = fmtPp(sector.rs_windows?.rs_3m ?? null)
   const ret12m = fmtPct(sector.returns?.ret_12m ?? null)
   const ret3m = fmtPct(sector.returns?.ret_3m ?? null)
-  const pctEma20 = sector.pct_above_ema20 != null
-    ? Math.round(sector.pct_above_ema20 * 100)
+  const pctEma20 = sector.pct_above_ema21 != null
+    ? Math.round(sector.pct_above_ema21 * 100)
     : null
 
   return (
@@ -114,7 +114,7 @@ export function SectorHeroStrip({ sector }: { sector: SectorDeepdiveRow }) {
           foot={<span>Current universe members.</span>}
         />
         <Tile
-          label="Above EMA20"
+          label="Above EMA21"
           value={pctEma20 != null ? `${pctEma20}%` : '—'}
           valueCls={pctEma20 != null && pctEma20 >= 60 ? 'text-sig-pos' : pctEma20 != null && pctEma20 < 40 ? 'text-sig-neg' : 'text-sig-warn'}
           foot={<span>Stocks above 20-day moving average.</span>}
