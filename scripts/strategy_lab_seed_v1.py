@@ -34,11 +34,10 @@ from typing import Any
 import optuna
 import pandas as pd
 import structlog
-from sqlalchemy import create_engine, text
-
 from atlas.trading.config import PortfolioConfig
 from atlas.trading.genome import GenomeFactory
 from atlas.trading.simulator import simulate_genome
+from sqlalchemy import create_engine, text
 
 log = structlog.get_logger()
 

@@ -32,9 +32,10 @@ def main() -> int:
     log.info("m7_daily_start", date=str(today))
 
     # Import here to avoid import-time DB connection
-    from atlas.db import get_engine
     from atlas.simulation.core.metrics import backfill_daily_returns
     from atlas.simulation.strategies.runner import run_nightly
+
+    from atlas.db import get_engine
 
     engine = get_engine()
 

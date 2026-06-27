@@ -17,7 +17,7 @@ def test_cli_smoke_exit_0_and_tearsheet_content(tmp_path: pytest.TempPathFactory
     """Run CLI over a short date window; assert exit 0 and markdown content."""
     output_file = tmp_path / "smoke_tearsheet.md"  # type: ignore[operator]
 
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(
         [
             sys.executable,
             "scripts/run_signal_validation.py",
@@ -54,7 +54,7 @@ def test_cli_unsupported_signal_exits_2(tmp_path: pytest.TempPathFactory) -> Non
     """Unknown signal name must return exit code 2."""
     output_file = tmp_path / "bad_signal.md"  # type: ignore[operator]
 
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(
         [
             sys.executable,
             "scripts/run_signal_validation.py",

@@ -24,12 +24,11 @@ from typing import Any
 
 import pandas as pd
 import structlog
-from sqlalchemy import create_engine, text
-from sqlalchemy.engine import Connection
-
 from atlas.trading.config import PortfolioConfig
 from atlas.trading.genome import Genome
 from atlas.trading.simulator import simulate_genome
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Connection
 
 log = structlog.get_logger()
 

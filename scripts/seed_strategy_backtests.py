@@ -43,12 +43,13 @@ from sqlalchemy.engine import Engine
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from atlas.compute._session import open_compute_session
-from atlas.db import get_engine
 from atlas.simulation.backtest.engine import BacktestResult, run_backtest
 from atlas.simulation.backtest.report import write_backtest_result
 from atlas.simulation.core.signal_adapter import SignalMatrix
 from atlas.simulation.strategies.loader import StrategyConfig, load_all_configs
+
+from atlas.compute._session import open_compute_session
+from atlas.db import get_engine
 
 log = structlog.get_logger()
 

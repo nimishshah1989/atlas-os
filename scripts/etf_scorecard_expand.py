@@ -37,8 +37,9 @@ def _latest_snapshot_date(engine) -> date:  # type: ignore[no-untyped-def]
 
 
 def main() -> int:
-    from atlas.db import get_engine
     from atlas.inference.etf_scorecard import compute_etf_scorecard, emit_upsert_sql
+
+    from atlas.db import get_engine
 
     engine = get_engine()
 

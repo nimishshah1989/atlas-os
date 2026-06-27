@@ -146,7 +146,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "S106", "N802"]  # N802: test names may include uppercase verdict labels (BUY/SELL/etc.)
+"tests/**" = ["S101", "S106", "N802", "S603"]  # N802: uppercase verdict labels (BUY/SELL); S603: CLI smoke tests subprocess the project's own binary, no untrusted input
 # S608/S607: internal data-eng + ops scripts build SQL from code constants and
 # call known binaries; query values are bound, never user input.
 "scripts/**" = ["S101", "E501", "S608", "S607"]

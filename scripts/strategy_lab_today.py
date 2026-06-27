@@ -40,9 +40,6 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import structlog
-from sqlalchemy import create_engine, text
-from sqlalchemy.engine import Connection
-
 from atlas.trading.decision import apply_entry_rules, compute_conviction
 from atlas.trading.genome import Genome
 from atlas.trading.perception import (
@@ -53,6 +50,8 @@ from atlas.trading.perception import (
     derive_rs_state,
     derive_vol_state,
 )
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Connection
 
 log = structlog.get_logger()
 

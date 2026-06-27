@@ -78,6 +78,7 @@ def _run_sensibility(
     """
     from atlas.agents.validator.persistence import finish_run, upsert_finding
     from atlas.agents.validator.sensibility_scanner import TABLE_WHITELIST, scan_table
+
     from atlas.db import get_engine
 
     engine = get_engine()
@@ -140,6 +141,7 @@ def _run_schema_coverage(dry_run: bool) -> int:
     """
     from atlas.agents.validator.persistence import finish_run, upsert_finding
     from atlas.agents.validator.schema_scanner import scan_coverage
+
     from atlas.db import get_engine
 
     engine = get_engine()

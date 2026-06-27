@@ -55,6 +55,7 @@ def main() -> int:
 
     from atlas.agents.validator.persistence import finish_run, start_run, upsert_finding
     from atlas.agents.validator.route_crawler import run_crawl
+
     from atlas.db import get_engine
 
     engine = get_engine()

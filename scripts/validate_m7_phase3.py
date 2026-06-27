@@ -377,10 +377,10 @@ def check_6_api_e2e(engine: Engine, real_ids: list[str]) -> Result:
     r = Result("API end-to-end (FastAPI TestClient against real DB)")
     portfolio_id: str | None = None
     try:
+        from atlas.api.portfolios import router
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
-        from atlas.api.portfolios import router
         from atlas.db import get_engine as real_get_engine
 
         app = FastAPI()
