@@ -10,7 +10,7 @@ import { Suspense } from 'react'
 import { DataSourceBanner } from '@/components/v6/DataSourceBanner'
 import { SectorHeroStrip } from '@/components/v6/sectors/SectorHeroStrip'
 import { SectorRSRatioCharts } from '@/components/v6/sectors/SectorRSRatioCharts'
-import { ConstituentsTable } from '@/components/v6/sectors/ConstituentsTable'
+import { SectorConstituentsTable } from '@/components/v6/sectors/SectorConstituentsTable'
 import { TopPicksPanel } from '@/components/v6/sectors/TopPicksPanel'
 import { StrengthDistChart } from '@/components/v6/sectors/StrengthDistChart'
 import { ScoreDerivationTree } from '@/components/v6/shared/ScoreDerivationTree'
@@ -103,8 +103,8 @@ export async function SectorDeepDiveV4({ sector }: { sector: string }) {
       {/* Top-picks table removed (FM 2026-06-26) — redundant with the full constituents
           table below; that table already surfaces the strongest names by return/RS. */}
       <section className="px-8 py-9 border-b border-edge-hair" aria-label="Constituents">
-        <SectionHead title="Constituents · top 30" subtitle="The sector's stocks, ranked by 3-month return. Click any header to re-sort." />
-        <Suspense fallback={<Skeleton h={400} />}><ConstituentsTable constituents={deepdive.constituents_top30} /></Suspense>
+        <SectionHead title={`Constituents · all ${stocks.length}`} subtitle="Every constituent across all lenses — deciles, strength, leadership, returns, relative strength (vs Nifty 500 and vs the sector), and liquidity. Click any header to sort; click a name to open it." />
+        <SectorConstituentsTable stocks={stocks} />
       </section>
       <section className="px-8 py-9 border-b border-edge-hair" aria-label="Strength distribution">
         <SectionHead title="Constituent strength distribution" subtitle="NTILE(5) on 3M absolute return within sector." />
