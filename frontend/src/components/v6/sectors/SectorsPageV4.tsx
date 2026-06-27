@@ -13,6 +13,7 @@ import { SectorBreadthTable } from '@/components/v6/sectors/SectorBreadthTable'
 import { CapTierRSCharts } from '@/components/v6/sectors/CapTierRSCharts'
 import { getSectorCards, getSectorRRG, getSectorBreadthMV, getSectorBreadthTrend, getAllSectorConstituents } from '@/lib/queries/v6/sectors'
 import { getSectorIndexRs } from '@/lib/queries/v6/sector_index_rs'
+import { getAllSectorLensVectors } from '@/lib/queries/v6/sector_lens'
 import { getCapTierRS } from '@/lib/queries/v6/rs_charts'
 
 export async function SectorsPageV4() {
@@ -28,6 +29,8 @@ export async function SectorsPageV4() {
   const capTierRS = await getCapTierRS(10).catch(() => [])
   // All sectors' constituents in ONE query → the heatmap expands a sector row inline (no 21× fetch).
   const constituents = await getAllSectorConstituents().catch(() => ({}))
+  // All sectors' lens vectors → the scores table shows the composite + component lens scores.
+  const lensVectors = await getAllSectorLensVectors().catch(() => ({}))
   const latestDate = cards[0]?.as_of_date ?? null
 
   // CANONICAL 21 sectors = exactly what mv_sector_cards carries at the latest snapshot.
@@ -113,14 +116,14 @@ export async function SectorsPageV4() {
         <SectorHeatmapV4 rows={heatRows} bases={heatBases} constituents={constituents} />
       </Panel>
 
-      {/* Sector breadth — compact table */}
+      {/* Sector scores — composite + component lens scores; click a row to derive the score */}
       <Panel
-        eyebrow="Breadth"
-        title="Sector breadth · EMA participation"
-        info={{ body: 'Share of each sector’s constituents above the 21 / 50 / 200-EMA. Sorted by EMA21 participation. The EMA21-trend column shows that share now · 1 week ago · 1 month ago (5 / 21 trading sessions back) so you can see breadth widening or narrowing — green if up vs a month ago, red if down.' }}
+        eyebrow="Scores"
+        title="Sector scores · conviction & breadth"
+        info={{ body: 'Each sector’s 0–100 conviction score (composite = 0.30·Technical + 0.25·Fundamental + 0.25·Flow + 0.20·Catalyst, over the free-float-weighted sector lens vector) plus its four component lens scores and one breadth read. Click a sector to see exactly how its score is derived, the rest of the breadth detail, and its top movers.' }}
         bodyClassName="px-5 py-4"
       >
-        <SectorBreadthTable rows={breadth} trend={breadthTrend} />
+        <SectorBreadthTable rows={breadth} trend={breadthTrend} lensBySector={lensVectors} />
       </Panel>
 
       {/* Cap-tier RS charts — native */}

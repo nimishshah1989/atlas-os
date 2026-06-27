@@ -35,6 +35,28 @@ export async function getSectorLensVector(sector: string): Promise<SectorLensVec
   }
 }
 
+// All sectors' lens vectors at the latest date, keyed by sector — for the /sectors scores table.
+export async function getAllSectorLensVectors(): Promise<Record<string, SectorLensVector>> {
+  const rows = await sql<Record<string, string>[]>`
+    SELECT sector, technical, fundamental, valuation, catalyst, flow, policy,
+           breadth_technical, breadth_fundamental, breadth_flow, dispersion, n_constituents
+    FROM foundation_staging.sector_lens_daily
+    WHERE date = (SELECT max(date) FROM foundation_staging.sector_lens_daily)
+  `
+  const n = (v: string | null) => (v == null ? null : Number(v))
+  const out: Record<string, SectorLensVector> = {}
+  for (const x of rows) {
+    out[x.sector] = {
+      technical: n(x.technical), fundamental: n(x.fundamental), valuation: n(x.valuation),
+      catalyst: n(x.catalyst), flow: n(x.flow), policy: n(x.policy),
+      breadth_technical: n(x.breadth_technical), breadth_fundamental: n(x.breadth_fundamental),
+      breadth_flow: n(x.breadth_flow), dispersion: n(x.dispersion),
+      n_constituents: x.n_constituents == null ? null : Number(x.n_constituents),
+    }
+  }
+  return out
+}
+
 export type SectorStock = {
   symbol: string; name: string | null; cap: string
   d_tech: number | null; d_fund: number | null; d_cat: number | null; d_flow: number | null; d_val: number | null
