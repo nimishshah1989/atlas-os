@@ -6,12 +6,13 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
-import { getEtfLensDetail, getEtfChartSeries, type EtfLensDetail, type EtfHolding } from '@/lib/queries/v6/etf_lens'
+import { getEtfLensDetail, getEtfChartSeries, type EtfHolding } from '@/lib/queries/v6/etf_lens'
 import { StockPriceEMAChart } from '@/components/v6/stock-detail/StockPriceEMAChart'
 import { StockRSChart } from '@/components/v6/stock-detail/StockRSChart'
 import { Panel } from '@/components/v4/ui/Panel'
 import { StatCard } from '@/components/v4/ui/StatCard'
 import { decileColor } from '@/components/v4/ui/decile'
+import { HoldingsLensRead } from '@/components/v6/shared/HoldingsLensRead'
 
 const HOLDING_CAP = 50
 
@@ -26,39 +27,6 @@ const pctText = (v: number | null) =>
   v == null ? 'text-txt-3' : v >= 0 ? 'text-sig-pos' : 'text-sig-neg'
 
 const fmtRs = (v: number | null) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%`)
-
-// ── holdings-weighted six-lens vector (0..100, bars) ──────────────────────
-const LENS_VECTOR: { key: keyof Pick<EtfLensDetail, 'v_tech' | 'v_fund' | 'v_cat' | 'v_flow' | 'v_val'>; label: string }[] = [
-  { key: 'v_tech', label: 'Technical' },
-  { key: 'v_fund', label: 'Fundamental' },
-  { key: 'v_cat', label: 'Catalyst' },
-  { key: 'v_flow', label: 'Flow' },
-  { key: 'v_val', label: 'Valuation' },
-]
-
-function LensVector({ etf }: { etf: EtfLensDetail }) {
-  const scored = LENS_VECTOR
-    .map(l => ({ label: l.label, v: etf[l.key] }))
-    .filter((x): x is { label: string; v: number } => x.v != null)
-  return (
-    <div className="max-w-[560px] space-y-2">
-      {scored.length === 0 && <p className="font-sans text-[13px] italic text-txt-3">No scored holdings.</p>}
-      {scored.map(l => {
-        // score 0..100 → decile band (score/10) for the shared ramp colour.
-        const color = decileColor(Math.round(l.v / 10))
-        return (
-          <div key={l.label} className="flex items-center gap-3">
-            <span className="w-[96px] shrink-0 font-sans text-xs text-txt-2">{l.label}</span>
-            <span className="w-[34px] shrink-0 text-right font-num text-xs tabular-nums" style={{ color }}>{l.v.toFixed(0)}</span>
-            <span className="h-[7px] flex-1 overflow-hidden rounded-tile bg-surface-inset">
-              <span className="block h-full rounded-tile" style={{ width: `${Math.min(100, l.v)}%`, background: color }} />
-            </span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
 
 // ── look-through holdings table (sorted by weight desc upstream) ──────────
 function HoldingsTable({ holdings }: { holdings: EtfHolding[] }) {
@@ -153,13 +121,13 @@ export async function ETFDetailV4({ fcode }: { fcode: string }) {
         </div>
       </header>
 
-      {/* ── Holdings-weighted six-lens vector ── */}
+      {/* ── Holdings-weighted six-lens vector (click a lens → how it's built) ── */}
       <Panel
         eyebrow="Lens read"
         title="How the holdings score on each lens"
-        info={{ body: 'Weight-weighted average of each holding’s lens score (0–100) — descriptive, not a forecast.' }}
+        info={{ body: 'Weight-weighted average of each holding’s lens score (0–100). Click any lens to see how it’s built — the weighted average, how many holdings lead it (top-3 decile), and the top leaders by weight. Descriptive, not a forecast.' }}
       >
-        <LensVector etf={etf} />
+        <HoldingsLensRead vector={etf} holdings={etf.holdings} weightLabel="weight" />
       </Panel>
 
       {/* ── Charts (native Lightweight; bridged ETFs only) ── */}

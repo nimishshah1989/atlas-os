@@ -11,6 +11,7 @@ import { getFundLensDetail, type FundLensDetail, type FundHolding, type FundMove
 import { Panel } from '@/components/v4/ui/Panel'
 import { StatCard, type Tone } from '@/components/v4/ui/StatCard'
 import { decileColor } from '@/components/v4/ui/decile'
+import { HoldingsLensRead } from '@/components/v6/shared/HoldingsLensRead'
 
 const HOLDING_CAP = 50
 
@@ -29,36 +30,6 @@ const pctText = (v: number | null) =>
 const fmtRs = (v: number | null) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%`)
 // weight is a PERCENT (6.17 = 6.17%) → render as-is, NO ×100.
 const fmtWeight = (w: number | null) => (w == null ? '—' : `${w.toFixed(2)}%`)
-
-// ── holdings-weighted six-lens vector (0..100, bars) ──────────────────────
-const LENS_VECTOR: { key: keyof Pick<FundLensDetail, 'v_tech' | 'v_fund' | 'v_cat' | 'v_flow' | 'v_val'>; label: string }[] = [
-  { key: 'v_tech', label: 'Technical' },
-  { key: 'v_fund', label: 'Fundamental' },
-  { key: 'v_cat', label: 'Catalyst' },
-  { key: 'v_flow', label: 'Flow' },
-  { key: 'v_val', label: 'Valuation' },
-]
-const barColor = (v: number) => (v >= 80 ? 'bg-sig-pos' : v >= 50 ? 'bg-sig-warn' : 'bg-sig-neg')
-
-function LensVector({ fund }: { fund: FundLensDetail }) {
-  const scored = LENS_VECTOR
-    .map(l => ({ label: l.label, v: fund[l.key] }))
-    .filter((x): x is { label: string; v: number } => x.v != null)
-  return (
-    <div className="max-w-[560px] space-y-2">
-      {scored.length === 0 && <p className="font-sans text-[13px] italic text-txt-3">No scored holdings.</p>}
-      {scored.map(l => (
-        <div key={l.label} className="flex items-center gap-3">
-          <span className="w-[96px] shrink-0 font-sans text-xs text-txt-2">{l.label}</span>
-          <span className="w-[34px] shrink-0 text-right font-num text-xs tabular-nums text-txt-1">{l.v.toFixed(0)}</span>
-          <span className="h-[7px] flex-1 overflow-hidden rounded-tile bg-surface-inset">
-            <span className={`block h-full rounded-tile ${barColor(l.v)}`} style={{ width: `${Math.min(100, l.v)}%` }} />
-          </span>
-        </div>
-      ))}
-    </div>
-  )
-}
 
 // ── active-movement: one column of moves (added / exited) ─────────────────
 function MoveList({ moves }: { moves: FundMove[] }) {
@@ -200,10 +171,10 @@ export async function FundDetailV4({ mstarId }: { mstarId: string }) {
         title="How the holdings score on each lens"
         info={{
           title: 'Holdings-weighted lens vector',
-          body: 'How the fund’s holdings score on each lens, weighted by holding weight (0–100). Descriptive, not a forecast.',
+          body: 'How the fund’s holdings score on each lens, weighted by holding weight (0–100). Click any lens to see how it’s built — the weighted average, how many holdings lead it (top-3 decile), and the top leaders by weight. Descriptive, not a forecast.',
         }}
       >
-        <LensVector fund={fund} />
+        <HoldingsLensRead vector={fund} holdings={fund.holdings} weightLabel="weight" />
       </Panel>
 
       {/* ── Active-movement panel (the fund differentiator) ── */}
