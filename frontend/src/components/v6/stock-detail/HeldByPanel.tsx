@@ -4,6 +4,7 @@
 import Link from 'next/link'
 import type { FundHolding } from '@/lib/queries/v6/funds_holding_stock'
 import type { EtfHolding } from '@/lib/queries/v6/etfs_holding_stock'
+import { TermInfo } from '@/components/v6/shared/TermInfo'
 
 const SECTION = 'px-8 py-8 border-b border-edge-hair'
 
@@ -39,9 +40,9 @@ export function HeldByPanel({ funds, etfs, symbol }: {
               <thead>
                 <tr className="border-b border-edge-rule text-left text-[10px] uppercase tracking-wider text-txt-3">
                   <th className="py-1.5 font-semibold">Fund</th>
-                  <th className="py-1.5 text-right font-semibold">Weight</th>
-                  <th className="py-1.5 text-right font-semibold">AUM ₹cr</th>
-                  <th className="py-1.5 text-right font-semibold">Grade</th>
+                  <th className="py-1.5 text-right font-semibold">Weight<TermInfo term="holding_weight" /></th>
+                  <th className="py-1.5 text-right font-semibold">AUM ₹cr<TermInfo term="aum" /></th>
+                  <th className="py-1.5 text-right font-semibold">Grade<TermInfo term="atlas_grade" /></th>
                 </tr>
               </thead>
               <tbody>
@@ -71,8 +72,8 @@ export function HeldByPanel({ funds, etfs, symbol }: {
               <thead>
                 <tr className="border-b border-edge-rule text-left text-[10px] uppercase tracking-wider text-txt-3">
                   <th className="py-1.5 font-semibold">ETF</th>
-                  <th className="py-1.5 text-right font-semibold">Weight</th>
-                  <th className="py-1.5 text-right font-semibold">Grade</th>
+                  <th className="py-1.5 text-right font-semibold">Weight<TermInfo term="holding_weight" /></th>
+                  <th className="py-1.5 text-right font-semibold">Grade<TermInfo term="atlas_grade" /></th>
                 </tr>
               </thead>
               <tbody>

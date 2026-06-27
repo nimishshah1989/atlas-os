@@ -1,6 +1,8 @@
 // ETF returns table — 1M/3M/6M/12M absolute return + RS percentile + alpha vs benchmark.
 // Pure server component. Mirrors the stock MultiTimeframeReturnsTable pattern.
 
+import { TermInfo } from '@/components/v6/shared/TermInfo'
+
 type RowDict = Record<string, unknown>
 
 interface ETFReturnsTableProps {
@@ -59,8 +61,8 @@ export function ETFReturnsTable({ latest }: ETFReturnsTableProps) {
         <thead>
           <tr className="border-b border-paper-rule">
             <th className="text-left  py-1.5 font-mono text-[9px] uppercase tracking-wider text-ink-3 font-normal">Period</th>
-            <th className="text-right py-1.5 font-mono text-[9px] uppercase tracking-wider text-ink-3 font-normal">Return</th>
-            <th className="text-right py-1.5 font-mono text-[9px] uppercase tracking-wider text-ink-3 font-normal">RS Rank</th>
+            <th className="text-right py-1.5 font-mono text-[9px] uppercase tracking-wider text-ink-3 font-normal">Return<TermInfo term="ret_window" /></th>
+            <th className="text-right py-1.5 font-mono text-[9px] uppercase tracking-wider text-ink-3 font-normal">RS Rank<TermInfo term="rs" /></th>
           </tr>
         </thead>
         <tbody>

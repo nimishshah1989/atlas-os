@@ -11,6 +11,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import type { SectorConstituentMatrixRow } from '@/lib/queries/v6/sectors'
+import { TermInfo } from '@/components/v6/shared/TermInfo'
 
 // The return windows every matrix row carries — a sector index OR one of its constituents — so
 // the column getters work for both and a constituent renders in the SAME columns as its sector.
@@ -29,7 +30,7 @@ export type BaseRet = { ret_1m: number | null; ret_3m: number | null; ret_6m: nu
 export type BaseKey = 'NIFTY 50' | 'NIFTY 500'
 const BASE_LABEL: Record<BaseKey, string> = { 'NIFTY 50': 'Nifty 50', 'NIFTY 500': 'Nifty 500' }
 
-type Col = { key: string; label: string; group: 'ret' | 'rs'; get: (c: RetRow) => number | null; scale: number }
+type Col = { key: string; label: string; group: 'ret' | 'rs'; get: (c: RetRow) => number | null; scale: number; term?: string }
 
 // Heat tint: strong enough that colour, not the number, tells the story. `scale` is the %
 // magnitude that saturates the tint for that block.
@@ -63,15 +64,15 @@ export function SectorHeatmapV4({ rows, bases, constituents }: {
 
   const b = bases[base]
   const COLS: Col[] = [
-    { key: 'ret_1d', label: '1D', group: 'ret', get: c => c.ret_1d, scale: 3 },
-    { key: 'ret_1w', label: '1W', group: 'ret', get: c => c.ret_1w, scale: 6 },
-    { key: 'ret_1m', label: '1M', group: 'ret', get: c => c.ret_1m, scale: 10 },
-    { key: 'ret_3m', label: '3M', group: 'ret', get: c => c.ret_3m, scale: 15 },
-    { key: 'ret_6m', label: '6M', group: 'ret', get: c => c.ret_6m, scale: 22 },
-    { key: 'ret_12m', label: '1Y', group: 'ret', get: c => c.ret_12m, scale: 35 },
-    { key: 'rs_1m', label: '1M', group: 'rs', get: c => rel(c.ret_1m, b.ret_1m), scale: 12 },
-    { key: 'rs_3m', label: '3M', group: 'rs', get: c => rel(c.ret_3m, b.ret_3m), scale: 15 },
-    { key: 'rs_6m', label: '6M', group: 'rs', get: c => rel(c.ret_6m, b.ret_6m), scale: 20 },
+    { key: 'ret_1d', label: '1D', group: 'ret', get: c => c.ret_1d, scale: 3, term: 'ret_window' },
+    { key: 'ret_1w', label: '1W', group: 'ret', get: c => c.ret_1w, scale: 6, term: 'ret_window' },
+    { key: 'ret_1m', label: '1M', group: 'ret', get: c => c.ret_1m, scale: 10, term: 'ret_window' },
+    { key: 'ret_3m', label: '3M', group: 'ret', get: c => c.ret_3m, scale: 15, term: 'ret_window' },
+    { key: 'ret_6m', label: '6M', group: 'ret', get: c => c.ret_6m, scale: 22, term: 'ret_window' },
+    { key: 'ret_12m', label: '1Y', group: 'ret', get: c => c.ret_12m, scale: 35, term: 'ret_window' },
+    { key: 'rs_1m', label: '1M', group: 'rs', get: c => rel(c.ret_1m, b.ret_1m), scale: 12, term: 'rs' },
+    { key: 'rs_3m', label: '3M', group: 'rs', get: c => rel(c.ret_3m, b.ret_3m), scale: 15, term: 'rs' },
+    { key: 'rs_6m', label: '6M', group: 'rs', get: c => rel(c.ret_6m, b.ret_6m), scale: 20, term: 'rs' },
   ]
   const firstRs = COLS.findIndex(c => c.group === 'rs')
   if (rows.length === 0) return <div className="text-txt-3 text-sm text-center py-8">No heatmap data.</div>
@@ -122,7 +123,7 @@ export function SectorHeatmapV4({ rows, bases, constituents }: {
               <th className={`text-left pl-3.5 ${th}`} onClick={() => onSort('sector_name')}>Sector</th>
               {COLS.map((c, i) => (
                 <th key={c.key} className={`text-center ${th} ${i === firstRs ? divCls : ''}`} onClick={() => onSort(c.key)}>
-                  {c.label}{arrow(c.key)}
+                  {c.label}{c.term && <TermInfo term={c.term} />}{arrow(c.key)}
                 </th>
               ))}
             </tr>

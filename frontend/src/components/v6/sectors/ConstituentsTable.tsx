@@ -190,15 +190,15 @@ export function ConstituentsTable({ constituents }: { constituents: ConstituentR
               Stock
             </th>
             <th style={{ ...thStyle, textAlign: 'left' }}>
-              Tier
+              Tier<TermInfo term="cap_tier" />
             </th>
             <th style={{ ...thStyle, textAlign: 'center' }}>
               RS State<TermInfo term="rs_state" />
             </th>
-            <SortTh label="1M" skey="ret_1m" unit="abs" />
-            <SortTh label="3M" skey="ret_3m" unit="abs" />
+            <SortTh label="1M" skey="ret_1m" unit="abs" term="ret_window" />
+            <SortTh label="3M" skey="ret_3m" unit="abs" term="ret_window" />
             <th style={{ ...thStyle, textAlign: 'center' }}>
-              1W
+              1W<TermInfo term="ret_window" />
               <span style={{ display: 'block', fontSize: 8, color: 'var(--color-txt-3)', fontFamily: 'var(--font-num), monospace', letterSpacing: '0.04em', textTransform: 'none', marginTop: 2, fontWeight: 400 }}>abs</span>
             </th>
             <SortTh label="RS 3M" skey="rs_3m" unit="vs N500" term="rs" />

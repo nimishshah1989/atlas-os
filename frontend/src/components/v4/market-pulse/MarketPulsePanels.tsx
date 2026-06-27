@@ -5,6 +5,7 @@
 import type { TierReturns, MacroRow } from '@/lib/queries/v6/market_pulse'
 import { Panel } from '../ui/Panel'
 import { SectorLeadershipBoard } from './SectorLeadershipBoard'
+import { TermInfo } from '@/components/v6/shared/TermInfo'
 
 // ── formatting ───────────────────────────────────────────────────────────────
 const signed = (n: number, d: number) => `${n >= 0 ? '+' : ''}${n.toFixed(d)}`
@@ -42,6 +43,14 @@ export function RegimeChip({ state, deploymentPct }: { state: string; deployment
 // trend reads directly (today vs a week ago vs a month ago — no deltas to decode). ──
 export type BreadthCountRow = { label: string; today: number | null; wkAgo: number | null; moAgo: number | null }
 const fmtCount = (v: number | null) => (v == null ? '—' : Math.round(v).toLocaleString('en-IN'))
+// Resolve a breadth metric row label → its glossary term (explainer on the row label).
+const breadthTerm = (label: string): string | undefined => {
+  const l = label.toLowerCase()
+  if (l.includes('golden')) return 'golden_cross'
+  if (l.includes('new high')) return 'net_new_highs'
+  if (l.includes('ema')) return 'above_ema_count'
+  return undefined
+}
 export function BreadthTablePanel({ rows, total, asOf }: { rows: BreadthCountRow[]; total: number | null; asOf: string | null }) {
   return (
     <Panel
@@ -62,7 +71,7 @@ export function BreadthTablePanel({ rows, total, asOf }: { rows: BreadthCountRow
         <tbody>
           {rows.map((r) => (
             <tr key={r.label} className="border-b border-edge-hair/60 last:border-0">
-              <td className="px-2 py-1.5 font-sans text-[12px] text-txt-2">{r.label}</td>
+              <td className="px-2 py-1.5 font-sans text-[12px] text-txt-2">{r.label}{breadthTerm(r.label) && <TermInfo term={breadthTerm(r.label)} />}</td>
               <td className="px-2 py-1.5 text-right"><Num>{fmtCount(r.today)}</Num></td>
               <td className="px-2 py-1.5 text-right"><Num color="var(--color-txt-3)">{fmtCount(r.wkAgo)}</Num></td>
               <td className="px-2 py-1.5 text-right"><Num color="var(--color-txt-3)">{fmtCount(r.moAgo)}</Num></td>
@@ -92,7 +101,7 @@ export function TierReturnsPanel({ data }: { data: TierReturns }) {
       <table className="w-full border-collapse">
         <thead>
           <tr className="border-b border-edge-hair">
-            <Head>Window</Head><Head right>Small 250</Head><Head right>Mid 150</Head><Head right>Nifty 100</Head><Head right>SC−LC</Head><Head right>MC−LC</Head>
+            <Head>Window</Head><Head right>Small 250<TermInfo term="tier_return" /></Head><Head right>Mid 150<TermInfo term="tier_return" /></Head><Head right>Nifty 100<TermInfo term="tier_return" /></Head><Head right>SC−LC<TermInfo term="tier_return" /></Head><Head right>MC−LC<TermInfo term="tier_return" /></Head>
           </tr>
         </thead>
         <tbody>
@@ -110,7 +119,7 @@ export function TierReturnsPanel({ data }: { data: TierReturns }) {
       </table>
       {z != null && (
         <p className="px-2 pt-2.5 font-sans text-[11px] text-txt-2">
-          Small-cap relative strength is{' '}
+          Small-cap relative strength<TermInfo term="smallcap_rs_z" /> is{' '}
           <span className="font-num tabular-nums" style={{ color: toneColor(z) }}>{signed(z, 1)}σ</span>{' '}
           vs its 1-year norm — {Math.abs(z) >= 1.5 ? 'stretched' : 'within normal range'}.
         </p>

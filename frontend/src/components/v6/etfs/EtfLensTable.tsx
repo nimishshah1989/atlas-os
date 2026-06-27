@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import type { EtfLensRow } from '@/lib/queries/v6/etf_lens'
 import { decileColor } from '@/components/v4/ui/decile'
+import { TermInfo } from '@/components/v6/shared/TermInfo'
 
 // Morningstar prefixes every Indian ETF category with a redundant "India Fund " (so the
 // filter read "India Fund Equity", "India Fund Large-Cap", …). Strip it for display — FM
@@ -35,19 +36,19 @@ type SortKey =
   | 'name' | 'category' | 'n_holdings' | 'n_leaders' | 'breadth'
   | LensKey | 'expense' | 'nse_ticker'
 
-type Col = { key: SortKey; label: string; align: 'left' | 'right' }
+type Col = { key: SortKey; label: string; align: 'left' | 'right'; term?: string }
 const COLS: Col[] = [
   { key: 'name', label: 'Name', align: 'left' },
   { key: 'category', label: 'Category', align: 'left' },
-  { key: 'n_holdings', label: 'Holdings', align: 'right' },
-  { key: 'n_leaders', label: 'Leaders', align: 'right' },
-  { key: 'breadth', label: 'Leadership-breadth', align: 'right' },
-  { key: 'v_tech', label: 'Tch', align: 'right' },
-  { key: 'v_fund', label: 'Fnd', align: 'right' },
-  { key: 'v_cat', label: 'Cat', align: 'right' },
-  { key: 'v_flow', label: 'Flw', align: 'right' },
-  { key: 'v_val', label: 'Val', align: 'right' },
-  { key: 'expense', label: 'Expense', align: 'right' },
+  { key: 'n_holdings', label: 'Holdings', align: 'right', term: 'holdings_count' },
+  { key: 'n_leaders', label: 'Leaders', align: 'right', term: 'leaders_count' },
+  { key: 'breadth', label: 'Leadership-breadth', align: 'right', term: 'leadership_breadth' },
+  { key: 'v_tech', label: 'Tch', align: 'right', term: 'weighted_lens' },
+  { key: 'v_fund', label: 'Fnd', align: 'right', term: 'weighted_lens' },
+  { key: 'v_cat', label: 'Cat', align: 'right', term: 'weighted_lens' },
+  { key: 'v_flow', label: 'Flw', align: 'right', term: 'weighted_lens' },
+  { key: 'v_val', label: 'Val', align: 'right', term: 'weighted_lens' },
+  { key: 'expense', label: 'Expense', align: 'right', term: 'expense' },
   { key: 'nse_ticker', label: 'NSE', align: 'left' },
 ]
 
@@ -137,7 +138,7 @@ export function EtfLensTable({ etfs }: { etfs: EtfLensRow[] }) {
                       col.align === 'right' ? 'text-right' : 'text-left'
                     } ${isSorted ? 'text-txt-1 font-semibold' : 'text-txt-3'} hover:text-txt-2`}
                   >
-                    {col.label}{arrow}
+                    {col.label}{col.term && <TermInfo term={col.term} />}{arrow}
                   </th>
                 )
               })}

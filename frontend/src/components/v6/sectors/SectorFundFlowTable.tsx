@@ -2,6 +2,7 @@
 // delivery asymmetry (smart-money concentration), and the institutional flow sub-score, vs
 // the universe. Native foundation_staging.delivery_daily + journal. Server component.
 import type { SectorFundFlow } from '@/lib/queries/v6/sector_lens'
+import { TermInfo } from '@/components/v6/shared/TermInfo'
 
 const pct = (v: number | null) => (v == null ? '—' : `${v.toFixed(1)}%`)
 const signed = (v: number | null) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(2)}`)
@@ -11,10 +12,10 @@ const cmp = (s: number | null, u: number | null) =>
 
 export function SectorFundFlowTable({ data }: { data: SectorFundFlow }) {
   const rows = [
-    { label: 'Delivery % (30d avg)', s: data.deliv_30d, u: data.u_deliv_30d, fmt: pct },
-    { label: 'Delivery % (60d avg)', s: data.deliv_60d, u: null, fmt: pct },
-    { label: 'Up/down delivery asym', s: data.updown, u: data.u_updown, fmt: signed },
-    { label: 'Institutional flow score', s: data.flow_inst, u: null, fmt: num },
+    { label: 'Delivery % (30d avg)', s: data.deliv_30d, u: data.u_deliv_30d, fmt: pct, term: 'delivery' },
+    { label: 'Delivery % (60d avg)', s: data.deliv_60d, u: null, fmt: pct, term: 'delivery' },
+    { label: 'Up/down delivery asym', s: data.updown, u: data.u_updown, fmt: signed, term: 'delivery_asym' },
+    { label: 'Institutional flow score', s: data.flow_inst, u: null, fmt: num, term: 'inst_flow' },
   ]
   return (
     <section className="px-8 py-10 border-b border-edge-hair" aria-label="Sector fund flow">
@@ -36,7 +37,7 @@ export function SectorFundFlowTable({ data }: { data: SectorFundFlow }) {
         <tbody>
           {rows.map(r => (
             <tr key={r.label} className="border-b border-edge-hair">
-              <td className="text-left py-1.5 font-sans text-xs text-txt-2">{r.label}</td>
+              <td className="text-left py-1.5 font-sans text-xs text-txt-2">{r.label}{r.term && <TermInfo term={r.term} />}</td>
               <td className={`py-1.5 font-num text-xs tabular-nums ${cmp(r.s, r.u)}`}>{r.fmt(r.s)}</td>
               <td className="py-1.5 font-num text-xs tabular-nums text-txt-3">{r.u == null ? '—' : r.fmt(r.u)}</td>
             </tr>
