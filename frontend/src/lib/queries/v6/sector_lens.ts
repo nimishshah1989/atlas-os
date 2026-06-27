@@ -7,6 +7,7 @@
 //  - getSectorFundFlow(): delivery 30d/60d + up/down asymmetry + institutional flow by sector
 import 'server-only'
 import sql from '@/lib/db'
+import { LEAD_DECILE } from '@/lib/queries/v6/stock_lens'
 
 export type SectorLensVector = {
   technical: number | null; fundamental: number | null; valuation: number | null
@@ -76,7 +77,7 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
       FROM j
     )
     SELECT symbol, name, cap, d_tech, d_fund, d_cat, d_flow, d_val,
-      (COALESCE((d_tech=10)::int,0) + COALESCE((d_fund=10)::int,0) + COALESCE((d_cat=10)::int,0) + COALESCE((d_flow=10)::int,0)) AS lead,
+      (COALESCE((d_tech>=${LEAD_DECILE})::int,0) + COALESCE((d_fund>=${LEAD_DECILE})::int,0) + COALESCE((d_cat>=${LEAD_DECILE})::int,0) + COALESCE((d_flow>=${LEAD_DECILE})::int,0)) AS lead,
       ((COALESCE(d_tech,0)+COALESCE(d_fund,0)+COALESCE(d_cat,0)+COALESCE(d_flow,0))::float
         / NULLIF((d_tech IS NOT NULL)::int+(d_fund IS NOT NULL)::int+(d_cat IS NOT NULL)::int+(d_flow IS NOT NULL)::int,0)) AS strength
     FROM dec WHERE sector = ${sector}

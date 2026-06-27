@@ -46,7 +46,11 @@ MIRRORS = [
     ),  # Page-1 regime state
     ("atlas.atlas_macro_daily", "atlas_macro_daily", [["date"]]),  # Page-A macro context
     ("atlas.mv_sector_cards", "mv_sector_cards", [["sector_name"]]),  # Page-B sector list
-    ("atlas.mv_sector_rrg", "mv_sector_rrg", [["sector_name"]]),  # Page-B RRG
+    # mv_sector_rrg is NO LONGER mirrored — it is now built NATIVELY in
+    # foundation_staging from index_prices by build_sector_rrg.py (JdK RS-ratio /
+    # RS-momentum vs Nifty 500). The atlas.* source carried a stale, broken snapshot
+    # (21/30 sectors stuck on "Leading", rs-ratios inflated above 100, e.g. Energy
+    # "Weakening" at +15pp momentum). Mirroring it would clobber the corrected native table.
     ("atlas.mv_sector_breadth", "mv_sector_breadth", [["sector_name"]]),  # Page-B breadth
     ("atlas.mv_sector_deepdive", "mv_sector_deepdive", [["sector_name"]]),  # Page-C deep-dive
     # atlas_index_metrics_daily is NO LONGER mirrored — it is now built NATIVELY in

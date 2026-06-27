@@ -7,6 +7,12 @@ import 'server-only'
 import sql from '@/lib/db'
 import { toNumber, toNumberOr } from '@/lib/v6/decimal'
 
+// A stock "leads" a lens when it sits in the top THREE deciles of its cap cohort
+// (D≥8), not only the top decile (D=10) — top-decile-on-everything makes leaders
+// vanishingly rare. Single source of truth for the threshold (used in the lead
+// counts below and by the Market Pulse sector roll-up).
+export const LEAD_DECILE = 8
+
 // ── RS matrix ─────────────────────────────────────────────────────────────
 export type RSMatrix = {
   as_of: string | null
@@ -121,7 +127,7 @@ export async function getStockDecile(symbol: string): Promise<StockDecile | null
       technical, fundamental, valuation, catalyst, flow, policy,
       d_technical, d_fundamental, d_valuation, d_catalyst, d_flow,
       ${sql(SUB_COLS)}, evidence,
-      (COALESCE((d_technical=10)::int,0)+COALESCE((d_fundamental=10)::int,0)+COALESCE((d_catalyst=10)::int,0)+COALESCE((d_flow=10)::int,0)) AS lead,
+      (COALESCE((d_technical>=${LEAD_DECILE})::int,0)+COALESCE((d_fundamental>=${LEAD_DECILE})::int,0)+COALESCE((d_catalyst>=${LEAD_DECILE})::int,0)+COALESCE((d_flow>=${LEAD_DECILE})::int,0)) AS lead,
       ((COALESCE(d_technical,0)+COALESCE(d_fundamental,0)+COALESCE(d_catalyst,0)+COALESCE(d_flow,0))::float
         / NULLIF((d_technical IS NOT NULL)::int+(d_fundamental IS NOT NULL)::int+(d_catalyst IS NOT NULL)::int+(d_flow IS NOT NULL)::int,0)) AS strength
     FROM dec WHERE symbol = ${symbol} LIMIT 1
@@ -329,8 +335,8 @@ export async function getStocksDecileList(): Promise<StockListRow[]> {
     )
     SELECT d.symbol, d.name, d.sector, d.cap,
       d.d_tech, d.d_fund, d.d_cat, d.d_flow, d.d_val,
-      (COALESCE((d.d_tech=10)::int,0) + COALESCE((d.d_fund=10)::int,0)
-        + COALESCE((d.d_cat=10)::int,0) + COALESCE((d.d_flow=10)::int,0)) AS lead,  -- a NULL lens = not-top-decile (0), NOT a NULL-collapse of the whole sum
+      (COALESCE((d.d_tech>=${LEAD_DECILE})::int,0) + COALESCE((d.d_fund>=${LEAD_DECILE})::int,0)
+        + COALESCE((d.d_cat>=${LEAD_DECILE})::int,0) + COALESCE((d.d_flow>=${LEAD_DECILE})::int,0)) AS lead,  -- top-3-decile (D≥8); a NULL lens = not-leading (0), NOT a NULL-collapse of the whole sum
       ((COALESCE(d.d_tech,0)+COALESCE(d.d_fund,0)+COALESCE(d.d_cat,0)+COALESCE(d.d_flow,0))::float
         / NULLIF((d.d_tech IS NOT NULL)::int+(d.d_fund IS NOT NULL)::int+(d.d_cat IS NOT NULL)::int+(d.d_flow IS NOT NULL)::int,0)) AS strength,
       rs.rs_1m_n500, rs.rs_3m_n500, rs.rs_6m_n500, rs.rs_3m_sector, rs.ret_3m, liq.liq_cr

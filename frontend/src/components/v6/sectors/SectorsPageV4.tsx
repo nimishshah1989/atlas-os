@@ -40,6 +40,8 @@ export async function SectorsPageV4() {
   const retBySector = Object.fromEntries(indexRsC.sectors.map(s => [s.sector_name, s.ret]))
   const cardBySector = Object.fromEntries(cards.map(c => [c.sector_name, c]))
   const rel = (a: number | null, b: number | null) => (a != null && b != null ? a - b : null)
+  // Heatmap gets raw sector returns + both base vectors; it computes RS for the selected
+  // base (Nifty 50 / 500) client-side, so the toggle needs no refetch.
   const heatRows = [...canonical].map((name) => {
     const r = retBySector[name]
     return {
@@ -47,11 +49,10 @@ export async function SectorsPageV4() {
       constituent_count: cardBySector[name]?.constituent_count ?? 0,
       ret_1d: r?.ret_1d ?? null, ret_1w: r?.ret_1w ?? null, ret_1m: r?.ret_1m ?? null,
       ret_3m: r?.ret_3m ?? null, ret_6m: r?.ret_6m ?? null, ret_12m: r?.ret_12m ?? null,
-      rs_1m: rel(r?.ret_1m ?? null, n500?.ret_1m ?? null),
-      rs_3m: rel(r?.ret_3m ?? null, n500?.ret_3m ?? null),
-      rs_6m: rel(r?.ret_6m ?? null, n500?.ret_6m ?? null),
     }
   })
+  const pick = (w: typeof n500) => ({ ret_1m: w?.ret_1m ?? null, ret_3m: w?.ret_3m ?? null, ret_6m: w?.ret_6m ?? null })
+  const heatBases = { 'NIFTY 50': pick(indexRs.bases['NIFTY 50']), 'NIFTY 500': pick(n500) }
   // Hero readout (Leading/Lagging/Rotation) reads the SAME corrected returns — RS vs
   // Nifty 500 over 1m/3m drives the split; breadth + signal counts come from the cards.
   const heroRows = [...canonical].map((name) => {
@@ -106,7 +107,7 @@ export async function SectorsPageV4() {
         info={{ body: 'Two blocks, both in %. “Return” is each sector index’s own move. “vs Nifty 500” is the sector’s return minus the Nifty 500’s over the same window — positive means it beat the broad market. Greener = stronger, redder = weaker. Click any column to sort.' }}
         bodyClassName="px-2 py-2"
       >
-        <SectorHeatmapV4 rows={heatRows} />
+        <SectorHeatmapV4 rows={heatRows} bases={heatBases} />
       </Panel>
 
       {/* Sector breadth — compact table */}

@@ -6,7 +6,7 @@
 import { getCurrentRegime } from '@/lib/queries/regime'
 import { getBreadthSeries } from '@/lib/queries/v6/breadth'
 import { getTierReturns, getIndexStrip } from '@/lib/queries/v6/market_pulse'
-import { getStocksDecileList } from '@/lib/queries/v6/stock_lens'
+import { getStocksDecileList, LEAD_DECILE } from '@/lib/queries/v6/stock_lens'
 import { StatCard, type Tone } from '../ui/StatCard'
 import { Panel } from '../ui/Panel'
 import { RegimeChip, BreadthTablePanel, TierReturnsPanel, SectorLeadershipPanel, type SectorRollup, type StockLensRow, type BreadthCountRow } from './MarketPulsePanels'
@@ -48,7 +48,7 @@ export async function MarketPulseV4() {
 
   // Sector leadership — average conviction per sector (≥5 names). A stock "leads" a lens when
   // it sits in the top three deciles of its cap cohort (D≥8). Split into 5 strongest / weakest.
-  const LEAD_D = 8
+  const LEAD_D = LEAD_DECILE
   const bySector = new Map<string, { sum: number; n: number; tech: number; fund: number }>()
   const stocksBySector: Record<string, StockLensRow[]> = {}
   for (const r of stocksList) {

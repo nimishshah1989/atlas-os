@@ -1,7 +1,8 @@
 'use client'
 // SectorBreadthTable — compact table form of sector EMA participation. Every numeric
-// column header sorts (FM 2026-06-26). Default: %>EMA21 desc.
+// column header sorts (FM 2026-06-26). Default: %>EMA21 desc. Top movers link to the stock.
 import { useState } from 'react'
+import Link from 'next/link'
 import type { SectorBreadthMVRow } from '@/lib/queries/v6/sectors'
 
 const pct = (v: number | null) => (v == null ? '—' : `${(v * 100).toFixed(0)}%`)
@@ -71,7 +72,10 @@ export function SectorBreadthTable({ rows }: { rows: SectorBreadthMVRow[] }) {
             <td className="text-left py-1.5 pl-6">
               <span className="flex flex-wrap gap-x-2">
                 {r.top_movers.slice(0, 3).map(m => (
-                  <span key={m.symbol} className="font-num text-[10px] tabular-nums text-sig-pos">{m.symbol} +{m.ret_pct.toFixed(1)}%</span>
+                  <Link key={m.symbol} href={`/stocks/${encodeURIComponent(m.symbol)}`}
+                    className="font-num text-[10px] tabular-nums text-sig-pos no-underline hover:underline">
+                    {m.symbol} +{m.ret_pct.toFixed(1)}%
+                  </Link>
                 ))}
               </span>
             </td>

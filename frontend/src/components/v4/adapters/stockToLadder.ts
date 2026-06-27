@@ -32,9 +32,20 @@ function lensNumbers(key: string, ev: StockEvidence | null, le: Record<string, u
   const x = (v: number | null, suffix = '', d = 1) => (v == null ? '—' : `${v.toFixed(d)}${suffix}`)
   const keep = (ns: LadderNumber[]) => ns.filter((n) => n.value !== '—')
   switch (key) {
-    case 'technical':
+    case 'technical': {
       if (!ev) return []
-      return [
+      // 21/50/200-EMA stacking — the textbook trend structure (21>50>200 = up).
+      const stack = (ev.ema21 != null && ev.ema50 != null && ev.ema200 != null)
+        ? (ev.ema21 > ev.ema50 && ev.ema50 > ev.ema200
+            ? { value: 'Up · 21>50>200', tone: 'pos' as const }
+            : (ev.ema21 < ev.ema50 && ev.ema50 < ev.ema200
+                ? { value: 'Down · 21<50<200', tone: 'neg' as const }
+                : { value: 'Mixed', tone: 'neutral' as const }))
+        : { value: '—', tone: 'neutral' as const }
+      return keep([
+        // VWAP distance first — the mean-reversion signal (price tends to revert to its 1-yr VWAP).
+        { label: 'Price vs VWAP (1y)', value: pct(ev.vwap_dist), tone: tone(ev.vwap_dist) },
+        { label: 'EMA trend stack', value: stack.value, tone: stack.tone },
         { label: 'Price vs 200-EMA', value: pct(ev.dist_ema200), tone: tone(ev.dist_ema200) },
         { label: 'Price vs 50-EMA', value: pct(ev.dist_ema50), tone: tone(ev.dist_ema50) },
         { label: 'RSI(14)', value: x(ev.rsi, '', 0) },
@@ -42,8 +53,11 @@ function lensNumbers(key: string, ev: StockEvidence | null, le: Record<string, u
         { label: 'RS vs sector · 3M', value: pct(ev.rs_sector_3m == null ? null : ev.rs_sector_3m * 100), tone: tone(ev.rs_sector_3m) },
         { label: '52-week range', value: x(ev.pos_52w, '%', 0) },
         { label: 'Volume vs 30d avg', value: x(ev.vol_ratio_30d, '×', 2) },
-        { label: 'Bollinger-band width', value: x(ev.bb_width, '', 3) },
-      ]
+        { label: 'Volume vs 60d avg', value: x(ev.vol_ratio_60d, '×', 2) },
+        { label: 'ATR(14) · volatility', value: x(ev.atr, '', 1) },
+        { label: 'Bollinger width · vol contraction', value: x(ev.bb_width, '', 3) },
+      ])
+    }
     case 'fundamental': {
       // Real inputs the scorer used — Screener.in ready ratios + as-of financials.
       const prof = (le.profitability as Record<string, unknown>) ?? {}
