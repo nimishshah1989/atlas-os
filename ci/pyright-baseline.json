@@ -1,5 +1,5 @@
 {
-  "_total": 1004,
+  "_total": 1013,
   "atlas/api/instrument.py": 1,
   "atlas/api/internal_recompute.py": 6,
   "atlas/api/screen.py": 1,
@@ -54,6 +54,8 @@
   "scripts/foundation/backfill_delivery.py": 4,
   "scripts/foundation/backfill_lenses.py": 15,
   "scripts/foundation/backfill_sector_rs.py": 7,
+  "scripts/foundation/build_index_metrics.py": 2,
+  "scripts/foundation/build_sector_rrg.py": 2,
   "scripts/foundation/build_universe.py": 12,
   "scripts/foundation/calibrate_loopC.py": 16,
   "scripts/foundation/calibrate_sectors.py": 3,
@@ -76,6 +78,7 @@
   "scripts/foundation/ingest_xbrl.py": 3,
   "scripts/foundation/poc.py": 13,
   "scripts/foundation/recompute_sql.py": 7,
+  "scripts/foundation/reconcile_portal.py": 5,
   "scripts/foundation/rollup_sectors.py": 7,
   "scripts/foundation/sample_deciles.py": 6,
   "scripts/foundation/sector_view.py": 5,

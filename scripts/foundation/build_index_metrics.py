@@ -53,9 +53,10 @@ def _series(code: str) -> pd.Series:
 
 def build(all_dates: bool) -> int:
     codes = [
-        r for r in _db.read_df(
-            f"select distinct index_code from {M}.index_prices"
-        )["index_code"].tolist()
+        r
+        for r in _db.read_df(f"select distinct index_code from {M}.index_prices")[
+            "index_code"
+        ].tolist()
     ]
     n500 = _series(N500)
     if n500.empty:
@@ -96,8 +97,11 @@ def build(all_dates: bool) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--all-dates", action="store_true",
-                    help="backfill full history (default: latest priced date only)")
+    ap.add_argument(
+        "--all-dates",
+        action="store_true",
+        help="backfill full history (default: latest priced date only)",
+    )
     args = ap.parse_args()
     build(args.all_dates)
     return 0

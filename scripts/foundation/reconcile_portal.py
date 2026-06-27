@@ -30,7 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date
 
 from scripts.foundation._db import read_df, scalar
@@ -77,15 +77,18 @@ def add(**kw) -> None:
 
 def as_of() -> date:
     return scalar(
-        "select max(date) from foundation_staging.index_prices "
-        "where index_code='NIFTY 50'"
+        "select max(date) from foundation_staging.index_prices where index_code='NIFTY 50'"
     )
 
 
 # ── ground-truth recompute: calendar-anchored index returns ──────────────────
 
-_WINDOWS = [("ret_1m", "1 month"), ("ret_3m", "3 months"),
-            ("ret_6m", "6 months"), ("ret_12m", "12 months")]
+_WINDOWS = [
+    ("ret_1m", "1 month"),
+    ("ret_3m", "3 months"),
+    ("ret_6m", "6 months"),
+    ("ret_12m", "12 months"),
+]
 
 
 def recompute_index_returns(codes: list[str], d: date) -> dict[str, dict[str, float]]:
@@ -104,10 +107,10 @@ def recompute_index_returns(codes: list[str], d: date) -> dict[str, dict[str, fl
         with p as (select index_code, cast(:d as date) d from (values {vals}) v(index_code))
         select c.index_code, {sel} from p c order by c.index_code
     """
-    fs = read_df(base.format(tbl="foundation_staging.index_prices"),
-                 {"d": d}).set_index("index_code")
-    de = read_df(base.format(tbl="public.de_index_prices"),
-                 {"d": d}).set_index("index_code")
+    fs = read_df(base.format(tbl="foundation_staging.index_prices"), {"d": d}).set_index(
+        "index_code"
+    )
+    de = read_df(base.format(tbl="public.de_index_prices"), {"d": d}).set_index("index_code")
     out: dict[str, dict[str, float]] = {}
     for code in fs.index:
         out[code] = {}
@@ -134,9 +137,10 @@ def check_returns(d: date) -> None:
         from foundation_staging.atlas_sector_master
         where is_active and primary_nse_index is not null
     """)
-    codes = sorted(set(smap["primary_nse_index"]) |
-                   {"NIFTY 50", "NIFTY 500", "NIFTY 100",
-                    "NIFTY MIDCAP 150", "NIFTY SMALLCAP 250"})
+    codes = sorted(
+        set(smap["primary_nse_index"])
+        | {"NIFTY 50", "NIFTY 500", "NIFTY 100", "NIFTY MIDCAP 150", "NIFTY SMALLCAP 250"}
+    )
     truth = recompute_index_returns(codes, d)
 
     # what the sectors-page heatmap reads: the sector INDEX return from the natively-
@@ -156,10 +160,17 @@ def check_returns(d: date) -> None:
             stored = None
             if code in imet.index and imet.at[code, k] is not None:
                 stored = float(imet.at[code, k]) * 100
-            add(family="returns", page="Sectors · heatmap",
-                metric=f"sector_index.{k}", scope=sec,
-                stored=stored, recomputed=t, tol=1.0, unit="%",
-                note=f"index={code}")
+            add(
+                family="returns",
+                page="Sectors · heatmap",
+                metric=f"sector_index.{k}",
+                scope=sec,
+                stored=stored,
+                recomputed=t,
+                tol=1.0,
+                unit="%",
+                note=f"index={code}",
+            )
 
     # broad / cap-tier indices used by Market Pulse + base toggles
     for code, page, label in [
@@ -174,9 +185,17 @@ def check_returns(d: date) -> None:
             s = None
             if code in imet.index and imet.at[code, k] is not None:
                 s = float(imet.at[code, k]) * 100
-            add(family="returns", page=page,
-                metric=f"atlas_index_metrics.{k}", scope=label,
-                stored=s, recomputed=t, tol=1.0, unit="%", note=f"index={code}")
+            add(
+                family="returns",
+                page=page,
+                metric=f"atlas_index_metrics.{k}",
+                scope=label,
+                stored=s,
+                recomputed=t,
+                tol=1.0,
+                unit="%",
+                note=f"index={code}",
+            )
 
 
 # ── FAMILY: market breadth counts (Market Pulse) ─────────────────────────────
@@ -192,30 +211,49 @@ def check_breadth(d: date) -> None:
         where date=(select max(date) from foundation_staging.breadth_nifty500_daily)
     """)
     if stored.empty:
-        add(family="breadth", page="Market Pulse · breadth",
-            metric="breadth counts", scope="Nifty 500",
-            stored=None, recomputed=None, tol=0, unit="count",
-            note="breadth_nifty500_daily empty/absent — wire source")
+        add(
+            family="breadth",
+            page="Market Pulse · breadth",
+            metric="breadth counts",
+            scope="Nifty 500",
+            stored=None,
+            recomputed=None,
+            tol=0,
+            unit="count",
+            note="breadth_nifty500_daily empty/absent — wire source",
+        )
         return
     srow = stored.iloc[0]
     bdate = srow["date"]
-    recount = read_df("""
+    recount = read_df(
+        """
         select
           count(*) filter (where above_ema_21)  a21,
           count(*) filter (where above_ema_50)  a50,
           count(*) filter (where above_ema_200) a200
         from foundation_staging.technical_daily
         where date=:bd and asset_class='stock'
-    """, {"bd": bdate}).iloc[0]
-    for fld, rc, lbl in [("above_21", "a21", "Above 21-EMA"),
-                         ("above_50", "a50", "Above 50-EMA"),
-                         ("above_200", "a200", "Above 200-EMA")]:
+    """,
+        {"bd": bdate},
+    ).iloc[0]
+    for fld, rc, _lbl in [
+        ("above_21", "a21", "Above 21-EMA"),
+        ("above_50", "a50", "Above 50-EMA"),
+        ("above_200", "a200", "Above 200-EMA"),
+    ]:
         s = None if srow[fld] is None else float(srow[fld])
         r = None if recount[rc] is None else float(recount[rc])
-        add(family="breadth", page="Market Pulse · breadth",
-            metric=f"breadth.{fld}", scope="Nifty 500",
-            stored=s, recomputed=r, tol=2, unit="count",
-            note=f"recount of technical_daily flags on {bdate}")
+        add(
+            family="breadth",
+            page="Market Pulse · breadth",
+            metric=f"breadth.{fld}",
+            scope="Nifty 500",
+            stored=s,
+            recomputed=r,
+            tol=2,
+            unit="count",
+            note=f"recount of technical_daily flags on {bdate}",
+        )
 
 
 # ── FAMILY: lens scores — structural / distributional (the six-lens journal) ──
@@ -226,10 +264,17 @@ def check_lens(d: date) -> None:
     from a second source, but we CAN assert the invariants that must hold of a real
     decile field: 1–10 range, sane coverage, fresh snapshot, no all-equal collapse."""
     latest = scalar("select max(date) from foundation_staging.atlas_lens_scores_daily")
-    add(family="lens", page="Stocks / Sectors · lens",
-        metric="snapshot freshness", scope="atlas_lens_scores_daily",
-        stored=(latest - d).days if latest else None, recomputed=0, tol=4,
-        unit="days stale", note=f"latest={latest}, portal as_of={d}")
+    add(
+        family="lens",
+        page="Stocks / Sectors · lens",
+        metric="snapshot freshness",
+        scope="atlas_lens_scores_daily",
+        stored=(latest - d).days if latest else None,
+        recomputed=0,
+        tol=4,
+        unit="days stale",
+        note=f"latest={latest}, portal as_of={d}",
+    )
 
     stats = read_df("""
         select count(*) n,
@@ -243,13 +288,29 @@ def check_lens(d: date) -> None:
     n = int(stats["n"]) or 1
     # all non-null technical deciles must be in 1..10
     bad = n - int(stats["tech_ok"]) - (n - int(stats["tech_nn"]))
-    add(family="lens", page="Stocks · lens", metric="technical decile in 1..10",
-        scope="all stocks", stored=float(bad), recomputed=0, tol=0, unit="rows out of range",
-        note=f"{stats['tech_nn']}/{n} non-null")
+    add(
+        family="lens",
+        page="Stocks · lens",
+        metric="technical decile in 1..10",
+        scope="all stocks",
+        stored=float(bad),
+        recomputed=0,
+        tol=0,
+        unit="rows out of range",
+        note=f"{stats['tech_nn']}/{n} non-null",
+    )
     # a real decile field must spread across the scale, not collapse to one value
-    add(family="lens", page="Stocks · lens", metric="technical decile spread",
-        scope="all stocks", stored=float(stats["tech_distinct"]), recomputed=10,
-        tol=4, unit="distinct values", note="≥6 distinct expected for a live decile")
+    add(
+        family="lens",
+        page="Stocks · lens",
+        metric="technical decile spread",
+        scope="all stocks",
+        stored=float(stats["tech_distinct"]),
+        recomputed=10,
+        tol=4,
+        unit="distinct values",
+        note="≥6 distinct expected for a live decile",
+    )
 
 
 # ── render ────────────────────────────────────────────────────────────────────
@@ -268,21 +329,25 @@ def render_table() -> str:
         s = "—" if c.stored is None else f"{c.stored:,.2f}"
         r = "—" if c.recomputed is None else f"{c.recomputed:,.2f}"
         dl = "—" if c.delta is None else f"{c.delta:,.2f}"
-        out.append(f"{icon[c.status]:3} {c.page[:w['pg']]:<{w['pg']}} {c.metric[:w['me']]:<{w['me']}} "
-                   f"{c.scope[:w['sc']]:<{w['sc']}} {s:>9} {r:>9} {dl:>7}  {c.unit}")
+        out.append(
+            f"{icon[c.status]:3} {c.page[: w['pg']]:<{w['pg']}} {c.metric[: w['me']]:<{w['me']}} "
+            f"{c.scope[: w['sc']]:<{w['sc']}} {s:>9} {r:>9} {dl:>7}  {c.unit}"
+        )
     # summary
     from collections import Counter
+
     cnt = Counter(c.status for c in RESULTS)
     out.append("")
-    out.append(f"SUMMARY  PASS {cnt['PASS']}  FAIL {cnt['FAIL']}  "
-               f"MISSING {cnt['MISSING']}  NO-TRUTH {cnt['NO-TRUTH']}  (total {len(RESULTS)})")
+    out.append(
+        f"SUMMARY  PASS {cnt['PASS']}  FAIL {cnt['FAIL']}  "
+        f"MISSING {cnt['MISSING']}  NO-TRUTH {cnt['NO-TRUTH']}  (total {len(RESULTS)})"
+    )
     return "\n".join(out)
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--family", choices=["returns", "breadth", "lens", "all"],
-                    default="all")
+    ap.add_argument("--family", choices=["returns", "breadth", "lens", "all"], default="all")
     ap.add_argument("--json", help="also write full results to this path")
     ap.add_argument("--fail-only", action="store_true", help="print only FAIL/MISSING rows")
     args = ap.parse_args()
@@ -307,9 +372,12 @@ def main() -> int:
 
     if args.json:
         with open(args.json, "w") as f:
-            json.dump([{**c.__dict__, "status": c.status,
-                        "delta": c.delta} for c in RESULTS], f,
-                      indent=2, default=str)
+            json.dump(
+                [{**c.__dict__, "status": c.status, "delta": c.delta} for c in RESULTS],
+                f,
+                indent=2,
+                default=str,
+            )
 
     return 1 if any(c.status == "FAIL" for c in RESULTS) else 0
 

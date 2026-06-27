@@ -84,21 +84,24 @@ export function SectorStock2x2({ stocks }: { stocks: SectorStock[] }) {
   return (
     <section className="px-8 py-10 border-b border-edge-hair" aria-label="Sector stocks 2x2">
       <div className="mb-5">
-        <h2 className="font-display text-[28px] font-normal tracking-tight text-txt-1">The sector&apos;s stocks · 2×2</h2>
+        <h2 className="font-display text-[28px] font-normal tracking-tight text-txt-1">
+          The sector&apos;s stocks · 2×2 <span className="font-num text-[15px] text-txt-3">· {stocks.length} constituent{stocks.length === 1 ? '' : 's'}</span>
+        </h2>
         <p className="font-sans text-[13px] text-txt-3 max-w-[760px] leading-[1.45] mt-1">
           Each dot is a constituent; deciles are cut within its cap cohort. Bubble size = cap tier
           (large → micro). Colour = how many of the 4 conviction lenses it leads (grey 0 · amber 1 ·
-          brand 2 · green 3–4). Click a dot → that stock.
+          brand 2 · green 3–4). Click a dot → that stock. A small sector simply has few dots
+          (e.g. a 4-name sector shows 4).
         </p>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <div>
-          <div className="font-num text-[11px] text-txt-3 uppercase tracking-wider mb-2">Momentum × Quality</div>
+          <div className="font-num text-[11px] text-txt-3 uppercase tracking-wider mb-2">Momentum × Quality <span className="text-txt-2">· {momQual.length} plotted</span></div>
           <Quad data={momQual} xLabel="Technical decile" yLabel="Fundamental decile"
             xDomain={[0.5, 10.5]} yDomain={[0.5, 10.5]} xMid={5.5} yMid={5.5} />
         </div>
         <div>
-          <div className="font-num text-[11px] text-txt-3 uppercase tracking-wider mb-2">Strength × Leadership</div>
+          <div className="font-num text-[11px] text-txt-3 uppercase tracking-wider mb-2">Strength × Leadership <span className="text-txt-2">· {strLead.length} plotted</span></div>
           <Quad data={strLead} xLabel="Strength (avg decile)" yLabel="Leadership (# lenses)"
             xDomain={[0.5, 10.5]} yDomain={[-0.3, 4.3]} xMid={5.5} yMid={2} />
         </div>

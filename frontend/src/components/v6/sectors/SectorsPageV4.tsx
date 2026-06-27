@@ -11,17 +11,18 @@ import { SectorRRGChart } from '@/components/v6/sectors/SectorRRGChart'
 import { SectorHeatmapV4 } from '@/components/v6/sectors/SectorHeatmapV4'
 import { SectorBreadthTable } from '@/components/v6/sectors/SectorBreadthTable'
 import { CapTierRSCharts } from '@/components/v6/sectors/CapTierRSCharts'
-import { getSectorCards, getSectorRRG, getSectorBreadthMV } from '@/lib/queries/v6/sectors'
+import { getSectorCards, getSectorRRG, getSectorBreadthMV, getSectorBreadthTrend } from '@/lib/queries/v6/sectors'
 import { getSectorIndexRs } from '@/lib/queries/v6/sector_index_rs'
 import { getCapTierRS } from '@/lib/queries/v6/rs_charts'
 
 export async function SectorsPageV4() {
   // Two sequential batches — the Supabase session pooler caps total clients at 15, and each
   // of these queries fans out internally; a single 6-way Promise.all overruns it.
-  const [cards, rrg, breadth, indexRs] = await Promise.all([
+  const [cards, rrg, breadth, breadthTrend, indexRs] = await Promise.all([
     getSectorCards(),
     getSectorRRG(),
     getSectorBreadthMV(),
+    getSectorBreadthTrend(),
     getSectorIndexRs(),
   ])
   const capTierRS = await getCapTierRS(10).catch(() => [])
@@ -114,10 +115,10 @@ export async function SectorsPageV4() {
       <Panel
         eyebrow="Breadth"
         title="Sector breadth · EMA participation"
-        info={{ body: 'Share of each sector’s constituents above the 21 / 50 / 200-EMA. Sorted by EMA21 participation.' }}
+        info={{ body: 'Share of each sector’s constituents above the 21 / 50 / 200-EMA. Sorted by EMA21 participation. The EMA21-trend column shows that share now · 1 week ago · 1 month ago (5 / 21 trading sessions back) so you can see breadth widening or narrowing — green if up vs a month ago, red if down.' }}
         bodyClassName="px-5 py-4"
       >
-        <SectorBreadthTable rows={breadth} />
+        <SectorBreadthTable rows={breadth} trend={breadthTrend} />
       </Panel>
 
       {/* Cap-tier RS charts — native */}

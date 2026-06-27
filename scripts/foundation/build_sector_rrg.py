@@ -38,8 +38,8 @@ N500 = "NIFTY 500"
 TABLE = f"{M}.mv_sector_rrg"
 
 SMA_WEEKS = 10  # RS-ratio trend window
-MOM_SHIFT = 4   # RS-momentum look-back (weeks); lands magnitudes in ~-25..+25
-TRAIL_LEN = 6   # weekly points kept in trail_6w
+MOM_SHIFT = 4  # RS-momentum look-back (weeks); lands magnitudes in ~-25..+25
+TRAIL_LEN = 6  # weekly points kept in trail_6w
 
 
 def _series(code: str) -> pd.Series:
@@ -105,7 +105,7 @@ def _rrg_frame(sector_close: pd.Series, bench: pd.Series) -> pd.DataFrame:
     out["week_end_date"] = [d.date() for d in week_end]
     out = out.dropna(subset=["rs_ratio", "rs_momentum"])
     out["quadrant"] = [
-        _quadrant(r, m) for r, m in zip(out["rs_ratio"], out["rs_momentum"])
+        _quadrant(r, m) for r, m in zip(out["rs_ratio"], out["rs_momentum"], strict=True)
     ]
     return out
 
@@ -130,8 +130,7 @@ def _ensure_unique_index() -> None:
         """
     )
     _db.exec_sql(
-        f"create unique index ux_sector_rrg_date_sector "
-        f"on {TABLE} (as_of_date, sector_name)"
+        f"create unique index ux_sector_rrg_date_sector on {TABLE} (as_of_date, sector_name)"
     )
 
 
@@ -156,24 +155,22 @@ def build() -> int:
         if len(frame) < TRAIL_LEN:
             skipped.append(f"{sector} ({len(frame)} weekly points < {TRAIL_LEN})")
             continue
-        trail = frame.tail(TRAIL_LEN)
-        latest = trail.iloc[-1]
+        tail = frame.tail(TRAIL_LEN)
+        wk = [str(x) for x in tail["week_end_date"].tolist()]
+        rr = [round(float(x), 2) for x in tail["rs_ratio"].tolist()]
+        mm = [round(float(x), 2) for x in tail["rs_momentum"].tolist()]
+        qq = [str(x) for x in tail["quadrant"].tolist()]
         trail_json = [
-            {
-                "week_end_date": str(row.week_end_date),
-                "rs_ratio": round(float(row.rs_ratio), 2),
-                "rs_momentum": round(float(row.rs_momentum), 2),
-                "quadrant": row.quadrant,
-            }
-            for row in trail.itertuples()
+            {"week_end_date": wk[i], "rs_ratio": rr[i], "rs_momentum": mm[i], "quadrant": qq[i]}
+            for i in range(len(wk))
         ]
         rows.append(
             {
                 "as_of_date": as_of,
                 "sector_name": sector,
-                "rs_ratio_current": round(float(latest.rs_ratio), 2),
-                "rs_momentum_current": round(float(latest.rs_momentum), 2),
-                "quadrant_current": latest.quadrant,
+                "rs_ratio_current": rr[-1],
+                "rs_momentum_current": mm[-1],
+                "quadrant_current": qq[-1],
                 "trail_6w": json.dumps(trail_json),
                 "refreshed_at": now,
             }
@@ -188,8 +185,9 @@ def build() -> int:
     if skipped:
         print(f"[sector_rrg] skipped: {'; '.join(skipped)}")
     print(
-        df[["sector_name", "rs_ratio_current", "rs_momentum_current",
-            "quadrant_current"]].to_string(index=False)
+        df[
+            ["sector_name", "rs_ratio_current", "rs_momentum_current", "quadrant_current"]
+        ].to_string(index=False)
     )
     return n
 

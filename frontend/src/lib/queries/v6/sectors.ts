@@ -318,6 +318,75 @@ export async function getSectorBreadthMV(sectorName?: string): Promise<SectorBre
   }))
 }
 
+// ── EMA21 participation trend (computed on the fly — no stored table) ──────────
+
+export type SectorBreadthTrendRow = {
+  sector_name: string
+  /** Fraction (0..1) of constituents above the 21-EMA at the latest session. */
+  ema21_now: number | null
+  /** Same, ~1 week ago (5 trading sessions before latest). */
+  ema21_1w: number | null
+  /** Same, ~1 month ago (21 trading sessions before latest). */
+  ema21_1m: number | null
+}
+
+/**
+ * Per-sector % of constituents above the 21-EMA at three anchor dates: latest,
+ * ~1 week ago (5 sessions back) and ~1 month ago (21 sessions back).
+ *
+ * Computed live from foundation_staging.technical_daily — no stored table / cron
+ * (FM: no table sprawl). The 3 anchor dates are resolved first from the last 22
+ * distinct trading dates so the aggregation touches exactly those 3 dates, never
+ * the full history. Sector names join to instrument_master.sector, which matches
+ * mv_sector_breadth.sector_name.
+ */
+export async function getSectorBreadthTrend(): Promise<SectorBreadthTrendRow[]> {
+  const rows = await sql<Array<{
+    sector_name: string
+    ema21_now: string | null
+    ema21_1w: string | null
+    ema21_1m: string | null
+  }>>`
+    WITH anchors AS (
+      SELECT
+        MAX(date) FILTER (WHERE rn = 1)  AS d_now,
+        MAX(date) FILTER (WHERE rn = 6)  AS d_1w,
+        MAX(date) FILTER (WHERE rn = 22) AS d_1m
+      FROM (
+        SELECT date, ROW_NUMBER() OVER (ORDER BY date DESC) AS rn
+        FROM (
+          SELECT DISTINCT date
+          FROM foundation_staging.technical_daily
+          WHERE asset_class = 'stock'
+          ORDER BY date DESC
+          LIMIT 22
+        ) z
+      ) r
+    )
+    SELECT
+      im.sector AS sector_name,
+      AVG(CASE WHEN td.date = a.d_now THEN td.above_ema_21::int END)::text AS ema21_now,
+      AVG(CASE WHEN td.date = a.d_1w  THEN td.above_ema_21::int END)::text AS ema21_1w,
+      AVG(CASE WHEN td.date = a.d_1m  THEN td.above_ema_21::int END)::text AS ema21_1m
+    FROM foundation_staging.technical_daily td
+    JOIN foundation_staging.instrument_master im
+      ON im.instrument_id = td.instrument_id
+    CROSS JOIN anchors a
+    WHERE td.asset_class = 'stock'
+      AND im.sector IS NOT NULL
+      AND td.date IN (a.d_now, a.d_1w, a.d_1m)
+    GROUP BY im.sector
+    ORDER BY im.sector
+  `
+
+  return rows.map((r) => ({
+    sector_name: r.sector_name,
+    ema21_now: toNumber(r.ema21_now),
+    ema21_1w: toNumber(r.ema21_1w),
+    ema21_1m: toNumber(r.ema21_1m),
+  }))
+}
+
 /**
  * Latest snapshot of mv_sector_rrg — 30 rows with trail_6w JSONB.
  * Used for: RRG 4-quadrant scatter chart.
