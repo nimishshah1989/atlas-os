@@ -23,8 +23,22 @@ const LENSES: { key: keyof SectorLensVector; label: string; dkey: DKey | null; b
 ]
 
 const pct = (v: number | null) => (v == null ? null : `${(v <= 1 ? v * 100 : v).toFixed(0)}%`)
+const fmtRet = (r: number | null) => (r == null ? '—' : `${r >= 0 ? '+' : '−'}${Math.abs(r * 100).toFixed(1)}%`)
+const toneRet = (r: number | null): 'pos' | 'neg' | 'neutral' => (r == null ? 'neutral' : r >= 0 ? 'pos' : 'neg')
+const retMetrics = (s: SectorStock) => [
+  { label: '1D', value: fmtRet(s.ret_1d), tone: toneRet(s.ret_1d) },
+  { label: '1W', value: fmtRet(s.ret_1w), tone: toneRet(s.ret_1w) },
+  { label: '1M', value: fmtRet(s.ret_1m), tone: toneRet(s.ret_1m) },
+]
+// decile distribution summary for a lens ("5 at D10 · 4 at D8–9 · …") — how the aggregate forms.
+function distribution(stocks: SectorStock[], dkey: DKey): string {
+  const ds = stocks.map((s) => s[dkey] as number | null).filter((d): d is number => d != null)
+  const band = (lo: number, hi: number) => ds.filter((d) => d >= lo && d <= hi).length
+  const parts = [[10, 10, 'D10'], [8, 9, 'D8–9'], [5, 7, 'D5–7'], [1, 4, 'D1–4']] as const
+  return parts.map(([lo, hi, lbl]) => `${band(lo, hi)} at ${lbl}`).join(' · ')
+}
 
-const CONSTITUENT_CAP = 15
+const CONSTITUENT_CAP = 30
 
 export function sectorToDerivation(sector: string, vector: SectorLensVector, stocks: SectorStock[]): DerivRoot {
   const n = stocks.length
@@ -41,6 +55,10 @@ export function sectorToDerivation(sector: string, vector: SectorLensVector, sto
       // constituents that have a decile for THIS lens, ranked by contribution (decile = its weight-proxy
       // here, since per-constituent free-float weights aren't exposed by getSectorStocks — sort by decile,
       // omit weightPct rather than invent a weight; RULE #0).
+      // constituents that have a decile for THIS lens, ranked by decile — shown IN PLACE with
+      // their 1D/1W/1M returns (the symbol links out only as a secondary action). RULE #0: real
+      // per-constituent returns from technical_daily; per-name free-float weights aren't exposed,
+      // so we rank by decile and omit weightPct rather than invent one.
       const ranked = l.dkey
         ? stocks
             .filter(s => (s[l.dkey!] as number | null) != null)
@@ -50,12 +68,13 @@ export function sectorToDerivation(sector: string, vector: SectorLensVector, sto
               id: `${l.key}-${s.symbol}`,
               label: s.symbol,
               decile: s[l.dkey!] as number,
+              metrics: retMetrics(s),
               href: `/stocks/${s.symbol}`,
             }))
         : []
       const breadthV = l.breadthKey ? (vector[l.breadthKey] as number | null) : null
       const bits = [
-        `free-float-weighted avg of ${n} constituents`,
+        l.dkey ? distribution(stocks, l.dkey) : `free-float-weighted avg of ${n}`,
         breadthV != null ? `breadth ${pct(breadthV)}` : null,
         vector.dispersion != null ? `dispersion ${vector.dispersion.toFixed(1)}` : null,
       ].filter(Boolean).join(' · ')
@@ -64,7 +83,7 @@ export function sectorToDerivation(sector: string, vector: SectorLensVector, sto
         label: l.label,
         score: l.v,
         term: l.term,
-        formula: `${l.label} ${l.v.toFixed(0)} = ${bits}`,
+        formula: `${l.label} ${l.v.toFixed(0)} — ${bits}`,
         children: ranked.length ? ranked : undefined,
       }
     })

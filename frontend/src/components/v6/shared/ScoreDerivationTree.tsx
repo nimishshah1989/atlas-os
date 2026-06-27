@@ -24,7 +24,8 @@ export type DerivNode = {
   tone?: 'pos' | 'neg' | 'neutral'
   term?: string                  // glossary key → eye-icon explainer
   formula?: string               // roll-up shown atop this node's child column
-  href?: string                  // constituent → its own page
+  href?: string                  // optional secondary link (NOT the primary action)
+  metrics?: { label: string; value: string; tone?: 'pos' | 'neg' | 'neutral' }[] // aligned columns (e.g. 1d/1w/1m)
   children?: DerivNode[]
 }
 export type DerivRoot = {
@@ -46,41 +47,53 @@ function Chip({ n }: { n: DerivNode }) {
   return null
 }
 
+function MetricCells({ metrics }: { metrics: NonNullable<DerivNode['metrics']> }) {
+  return <>{metrics.map((m) => (
+    <span key={m.label} title={m.label} className={`w-[40px] shrink-0 text-right font-num text-[10.5px] tabular-nums ${toneCls(m.tone)}`}>{m.value}</span>
+  ))}</>
+}
+
 function NodeRow({ n, selected, onSelect }: { n: DerivNode; selected: boolean; onSelect: () => void }) {
   const hasKids = !!n.children?.length
-  const inner = (
-    <>
-      <span className="flex min-w-0 items-center gap-1">
-        <span className="truncate font-sans text-[12px] text-txt-1">{n.label}</span>
-        {n.term && <TermInfo term={n.term} />}
-      </span>
-      <span className="flex shrink-0 items-center gap-2">
-        {n.value != null
-          ? <span className={`font-num text-[12px] tabular-nums ${toneCls(n.tone)}`}>{n.value}</span>
-          : <Chip n={n} />}
-        {n.weightPct != null && <span className="font-num text-[9px] tabular-nums text-txt-3">{(n.weightPct).toFixed(n.weightPct < 10 ? 1 : 0)}%</span>}
-        {(hasKids || n.href) && <span className="font-num text-[11px] text-txt-3">›</span>}
-      </span>
-    </>
+  const labelEl = (
+    <span className="flex min-w-0 items-center gap-1">
+      {n.href
+        ? <Link href={n.href} onClick={(e) => e.stopPropagation()} className="truncate font-num text-[12px] text-txt-1 hover:text-brand hover:underline">{n.label}</Link>
+        : <span className="truncate font-sans text-[12px] text-txt-1">{n.label}</span>}
+      {n.term && <TermInfo term={n.term} />}
+    </span>
   )
-  const cls = `flex w-full items-center justify-between gap-2 rounded-tile border px-2.5 py-1.5 text-left transition-colors ${selected ? 'border-brand bg-surface-raised' : 'border-edge-hair bg-surface-panel hover:bg-surface-raised/60'}`
-  // contribution bar under the row (when it's a weighted contributor)
+  const right = (
+    <span className="flex shrink-0 items-center gap-2">
+      {(n.decile != null || n.score != null) && <Chip n={n} />}
+      {n.value != null && <span className={`font-num text-[12px] tabular-nums ${toneCls(n.tone)}`}>{n.value}</span>}
+      {n.metrics?.length ? <MetricCells metrics={n.metrics} /> : null}
+      {n.weightPct != null && <span className="w-[34px] shrink-0 text-right font-num text-[9px] tabular-nums text-txt-3">{n.weightPct.toFixed(n.weightPct < 10 ? 1 : 0)}%</span>}
+      {hasKids && <span className="font-num text-[11px] text-txt-3">›</span>}
+    </span>
+  )
+  const cls = `flex w-full items-center justify-between gap-2 rounded-tile border px-2.5 py-1.5 text-left transition-colors ${selected ? 'border-brand bg-surface-raised' : 'border-edge-hair bg-surface-panel'} ${hasKids ? 'hover:bg-surface-raised/60' : ''}`
   const bar = n.contribution != null && n.score != null ? (
     <span className="mt-0.5 block h-[3px] w-full overflow-hidden rounded-full bg-surface-inset">
       <span className="block h-full rounded-full" style={{ width: `${Math.min(100, n.score)}%`, background: scoreColor(n.score) }} />
     </span>
   ) : null
 
-  if (!hasKids && n.href) {
-    return <div><Link href={n.href} className={cls}>{inner}</Link>{bar}</div>
-  }
-  return <div><button type="button" onClick={onSelect} className={cls} aria-expanded={selected}>{inner}</button>{bar}</div>
+  // nodes with children drill (button); leaves (variables / constituents) display in place.
+  if (hasKids) return <div><button type="button" onClick={onSelect} className={cls} aria-expanded={selected}>{labelEl}{right}</button>{bar}</div>
+  return <div><div className={`${cls} cursor-default`}>{labelEl}{right}</div>{bar}</div>
 }
 
 function Column({ nodes, parentFormula, selectedId, onSelect }: { nodes: DerivNode[]; parentFormula?: string; selectedId?: string; onSelect: (id: string) => void }) {
+  const metricLabels = nodes.find((x) => x.metrics?.length)?.metrics?.map((m) => m.label)
   return (
-    <div className="flex w-[260px] shrink-0 flex-col gap-1.5 border-l border-edge-rule pl-3">
+    <div className="flex w-[300px] shrink-0 flex-col gap-1.5 border-l border-edge-rule pl-3">
       {parentFormula && <p className="px-0.5 font-num text-[9px] leading-snug text-txt-3">{parentFormula}</p>}
+      {metricLabels && (
+        <div className="flex items-center justify-end gap-2 pr-7 font-num text-[8px] uppercase tracking-wider text-txt-3">
+          {metricLabels.map((l) => <span key={l} className="w-[40px] text-right">{l}</span>)}
+        </div>
+      )}
       {nodes.map((n) => <NodeRow key={n.id} n={n} selected={n.id === selectedId} onSelect={() => onSelect(n.id)} />)}
     </div>
   )
