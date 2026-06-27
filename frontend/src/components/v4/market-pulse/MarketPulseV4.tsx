@@ -7,6 +7,8 @@ import { getCurrentRegime } from '@/lib/queries/regime'
 import { getBreadthSeries } from '@/lib/queries/v6/breadth'
 import { getTierReturns, getIndexStrip } from '@/lib/queries/v6/market_pulse'
 import { getStocksDecileList, LEAD_DECILE } from '@/lib/queries/v6/stock_lens'
+import { getSectorIndexRs } from '@/lib/queries/v6/sector_index_rs'
+import { getSectorBreadthMV } from '@/lib/queries/v6/sectors'
 import { StatCard, type Tone } from '../ui/StatCard'
 import { Panel } from '../ui/Panel'
 import { RegimeChip, BreadthTablePanel, TierReturnsPanel, SectorLeadershipPanel, type SectorRollup, type StockLensRow, type BreadthCountRow } from './MarketPulsePanels'
@@ -40,11 +42,30 @@ export async function MarketPulseV4() {
   const stocksList = await getStocksDecileList().catch(() => [])
 
   // The remaining native-fs panels — light, batched together.
-  const [breadthSeries, tier, indexStrip] = await Promise.all([
+  const [breadthSeries, tier, indexStrip, indexRs, sectorBreadth] = await Promise.all([
     getBreadthSeries(10).catch(() => []),
     getTierReturns().catch(() => ({ windows: [], smallcap_rs_z: null })),
     getIndexStrip().catch(() => []),
+    getSectorIndexRs().catch(() => null),
+    getSectorBreadthMV().catch(() => []),
   ])
+  // Per-sector enrichment for the leadership table: RS vs Nifty 50 (sector index − Nifty 50, per
+  // window) and the count of constituents above EMA21/EMA50 (pct × tracked count). Real fs only.
+  const n50 = indexRs?.bases['NIFTY 50']
+  const rsBySector = new Map(
+    (indexRs?.sectors ?? []).map((s) => [s.sector_name, {
+      rs_1w: s.ret.ret_1w != null && n50?.ret_1w != null ? s.ret.ret_1w - n50.ret_1w : null,
+      rs_1m: s.ret.ret_1m != null && n50?.ret_1m != null ? s.ret.ret_1m - n50.ret_1m : null,
+      rs_3m: s.ret.ret_3m != null && n50?.ret_3m != null ? s.ret.ret_3m - n50.ret_3m : null,
+    }]),
+  )
+  const emaBySector = new Map(
+    sectorBreadth.map((r) => [r.sector_name, {
+      ema21: r.pct_above_ema21 != null ? Math.round(r.pct_above_ema21 * r.constituent_count) : null,
+      ema50: r.pct_above_ema50 != null ? Math.round(r.pct_above_ema50 * r.constituent_count) : null,
+      emaTotal: r.constituent_count ?? null,
+    }]),
+  )
 
   // Sector leadership — average conviction per sector (≥5 names). A stock "leads" a lens when
   // it sits in the top three deciles of its cap cohort (D≥8). Split into 5 strongest / weakest.
@@ -67,7 +88,15 @@ export async function MarketPulseV4() {
   }
   const sectors: SectorRollup[] = [...bySector.entries()]
     .filter(([, e]) => e.n >= 5)
-    .map(([name, e]) => ({ name, avg: e.sum / e.n, n: e.n, techLeaders: e.tech, fundLeaders: e.fund }))
+    .map(([name, e]) => {
+      const rs = rsBySector.get(name)
+      const ema = emaBySector.get(name)
+      return {
+        name, avg: e.sum / e.n, n: e.n, techLeaders: e.tech, fundLeaders: e.fund,
+        rs_1w: rs?.rs_1w ?? null, rs_1m: rs?.rs_1m ?? null, rs_3m: rs?.rs_3m ?? null,
+        ema21: ema?.ema21 ?? null, ema50: ema?.ema50 ?? null, emaTotal: ema?.emaTotal ?? null,
+      }
+    })
     .sort((a, b) => b.avg - a.avg)
   const topSectors = sectors.slice(0, 5)
   const weakSectors = sectors.slice(-5).reverse()

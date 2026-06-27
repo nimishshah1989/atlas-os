@@ -77,6 +77,8 @@ export type StockDecile = {
   symbol: string; name: string | null; sector: string | null; cap: string
   lens: { key: string; label: string; score: number | null; decile: number | null; subs: { label: string; v: number | null }[] }[]
   lead: number; strength: number | null
+  composite: number | null        // the 0–100 weighted conviction score (atlas_lens_scores_daily.composite)
+  conviction_tier: string | null  // HIGHEST / HIGH / MEDIUM / WATCH / BELOW_THRESHOLD
   evidence: unknown
 }
 
@@ -125,6 +127,7 @@ export async function getStockDecile(symbol: string): Promise<StockDecile | null
     )
     SELECT symbol, name, sector, cap,
       technical, fundamental, valuation, catalyst, flow, policy,
+      composite, conviction_tier,
       d_technical, d_fundamental, d_valuation, d_catalyst, d_flow,
       ${sql(SUB_COLS)}, evidence,
       (COALESCE((d_technical>=${LEAD_DECILE})::int,0)+COALESCE((d_fundamental>=${LEAD_DECILE})::int,0)+COALESCE((d_catalyst>=${LEAD_DECILE})::int,0)+COALESCE((d_flow>=${LEAD_DECILE})::int,0)) AS lead,
@@ -144,6 +147,7 @@ export async function getStockDecile(symbol: string): Promise<StockDecile | null
   return {
     symbol: x.symbol, name: x.name, sector: x.sector, cap: x.cap, lens,
     lead: toNumberOr(x.lead, 0), strength: num(x.strength),
+    composite: num(x.composite), conviction_tier: x.conviction_tier ?? null,
     evidence: parseEvidence(x.evidence),
   }
 }
@@ -306,9 +310,18 @@ export async function getStocksDecileList(): Promise<StockListRow[]> {
       GROUP BY instrument_id
     ),
     rs AS (
-      SELECT instrument_id, rs_1m_n500, rs_3m_n500, rs_6m_n500, rs_3m_sector, ret_3m
+      SELECT instrument_id, rs_1m_n500, rs_3m_n500, rs_6m_n500, ret_3m
       FROM foundation_staging.technical_daily
       WHERE asset_class='stock' AND date=(SELECT d FROM tdl)
+    ),
+    sec_ret AS (  -- each sector's own NSE-index 3M return → real RS-vs-sector (stock 3M − sector-index 3M).
+      SELECT sm.sector_name, max(aim.ret_3m::float) AS sret_3m
+      FROM foundation_staging.atlas_sector_master sm
+      JOIN foundation_staging.atlas_index_metrics_daily aim
+        ON aim.index_code = sm.primary_nse_index
+       AND aim.date = (SELECT max(date) FROM foundation_staging.atlas_index_metrics_daily)
+      WHERE sm.is_active = true
+      GROUP BY sm.sector_name
     ),
     liq AS (  -- ≈20-session avg traded value (₹ Cr): a 30-calendar-day window ≈ 20 NSE sessions
       SELECT instrument_id, avg(close * volume) / 1e7 AS liq_cr
@@ -339,9 +352,11 @@ export async function getStocksDecileList(): Promise<StockListRow[]> {
         + COALESCE((d.d_cat>=${LEAD_DECILE})::int,0) + COALESCE((d.d_flow>=${LEAD_DECILE})::int,0)) AS lead,  -- top-3-decile (D≥8); a NULL lens = not-leading (0), NOT a NULL-collapse of the whole sum
       ((COALESCE(d.d_tech,0)+COALESCE(d.d_fund,0)+COALESCE(d.d_cat,0)+COALESCE(d.d_flow,0))::float
         / NULLIF((d.d_tech IS NOT NULL)::int+(d.d_fund IS NOT NULL)::int+(d.d_cat IS NOT NULL)::int+(d.d_flow IS NOT NULL)::int,0)) AS strength,
-      rs.rs_1m_n500, rs.rs_3m_n500, rs.rs_6m_n500, rs.rs_3m_sector, rs.ret_3m, liq.liq_cr
+      rs.rs_1m_n500, rs.rs_3m_n500, rs.rs_6m_n500,
+      (rs.ret_3m - sr.sret_3m) AS rs_3m_sector, rs.ret_3m, liq.liq_cr
     FROM dec d
     LEFT JOIN rs  ON rs.instrument_id  = d.instrument_id
+    LEFT JOIN sec_ret sr ON sr.sector_name = d.sector
     LEFT JOIN liq ON liq.instrument_id = d.instrument_id
     ORDER BY strength DESC NULLS LAST
   `

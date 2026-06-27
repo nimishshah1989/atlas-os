@@ -16,6 +16,10 @@ const scoreText = (v: number | null) =>
 const breadthText = (b: number | null) =>
   b == null ? 'text-txt-3' : b >= 0.2 ? 'text-sig-pos' : b >= 0.1 ? 'text-brand' : 'text-txt-2'
 
+// Fund composite score (0–100, from the scorecard): green strong / brand decent / red weak.
+const compositeText = (v: number | null) =>
+  v == null ? 'text-txt-3' : v >= 60 ? 'text-sig-pos' : v >= 45 ? 'text-brand' : 'text-sig-neg'
+
 const fmtScore = (v: number | null) => (v == null ? '—' : v.toFixed(0))
 const fmtBreadth = (b: number | null) => (b == null ? '—' : `${(b * 100).toFixed(0)}%`)
 const fmtExpense = (e: number | null) => (e == null ? '—' : `${e.toFixed(2)}%`) // already in percent units
@@ -24,12 +28,14 @@ type LensKey = 'v_tech' | 'v_fund' | 'v_cat' | 'v_flow' | 'v_val'
 
 type SortKey =
   | 'name' | 'category' | 'amc' | 'n_holdings' | 'n_leaders' | 'breadth'
-  | LensKey | 'expense'
+  | LensKey | 'expense' | 'composite' | 'cat_rank'
 
 type Col = { key: SortKey; label: string; align: 'left' | 'right' }
 const COLS: Col[] = [
   { key: 'name', label: 'Name', align: 'left' },
   { key: 'category', label: 'Category', align: 'left' },
+  { key: 'cat_rank', label: 'Cat rank', align: 'right' },
+  { key: 'composite', label: 'Score', align: 'right' },
   { key: 'amc', label: 'AMC', align: 'left' },
   { key: 'n_holdings', label: 'Holdings', align: 'right' },
   { key: 'n_leaders', label: 'Leaders', align: 'right' },
@@ -47,6 +53,8 @@ function numFor(r: FundLensRow, key: SortKey): number {
   switch (key) {
     case 'n_holdings': return r.n_holdings
     case 'n_leaders': return r.n_leaders
+    case 'composite': return r.composite ?? -Infinity
+    case 'cat_rank': return r.cat_rank ?? Infinity // rank 1 is best → nulls sink last on asc
     case 'breadth': return r.breadth ?? -Infinity
     case 'v_tech': return r.v_tech ?? -Infinity
     case 'v_fund': return r.v_fund ?? -Infinity
@@ -91,7 +99,7 @@ export function FundLensTable({ funds }: { funds: FundLensRow[] }) {
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir(d => (d === 'desc' ? 'asc' : 'desc'))
-    else { setSortKey(key); setSortDir(key === 'expense' ? 'asc' : 'desc') }
+    else { setSortKey(key); setSortDir(key === 'expense' || key === 'cat_rank' ? 'asc' : 'desc') }
   }
 
   const total = funds.length
@@ -143,6 +151,10 @@ export function FundLensTable({ funds }: { funds: FundLensRow[] }) {
               >
                 <td className="max-w-[260px] truncate px-2 py-1.5 font-sans text-[12px] font-medium text-txt-1">{f.name}</td>
                 <td className="max-w-[160px] truncate px-2 py-1.5 font-sans text-[11px] text-txt-2">{f.category ?? '—'}</td>
+                <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums text-txt-2">
+                  {f.cat_rank != null ? <><span className="font-semibold text-txt-1">{f.cat_rank}</span><span className="text-txt-3">/{f.cat_size}</span></> : '—'}
+                </td>
+                <td className={`px-2 py-1.5 text-right font-num text-[12px] tabular-nums font-semibold ${compositeText(f.composite)}`}>{fmtScore(f.composite)}</td>
                 <td className="max-w-[140px] truncate px-2 py-1.5 font-sans text-[11px] text-txt-2">{f.amc ?? '—'}</td>
                 <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums text-txt-2">{f.n_holdings}</td>
                 <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums text-txt-2">{f.n_leaders}</td>

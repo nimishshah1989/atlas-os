@@ -22,12 +22,9 @@ function Ema21Trend({ t }: { t: SectorBreadthTrendRow | undefined }) {
   const tint = delta == null ? 'text-txt-3' : delta > 0.02 ? 'text-sig-pos' : delta < -0.02 ? 'text-sig-neg' : 'text-txt-2'
   const n = (v: number | null) => (v == null ? '—' : `${(v * 100).toFixed(0)}`)
   return (
-    <span className={`tabular-nums ${tint}`} title="% above EMA21 — now · 1w ago · 1m ago">
-      {n(t.ema21_now)}
-      <span className="text-txt-3"> · </span>
-      <span className="text-txt-3">{n(t.ema21_1w)}</span>
-      <span className="text-txt-3"> · </span>
-      <span className="text-txt-3">{n(t.ema21_1m)}</span>
+    <span className={`tabular-nums ${tint}`} title="% of the sector's stocks above their 21-EMA — now · 1 week ago · 1 month ago">
+      {n(t.ema21_now)}%
+      <span className="text-txt-3"> · {n(t.ema21_1w)} · {n(t.ema21_1m)}</span>
     </span>
   )
 }
@@ -79,8 +76,14 @@ export function SectorBreadthTable({
           <SortTh label="&gt; EMA21" k="pct_above_ema21" term="breadth_ema" />
           <SortTh label="&gt; EMA50" k="pct_above_ema50" />
           <SortTh label="&gt; EMA200" k="pct_above_ema200" />
-          <th className="py-1.5 font-semibold pl-4" title="% above EMA21 — now · 1w ago · 1m ago">EMA21 trend<TermInfo term="breadth_ema" /></th>
-          <th className="text-left py-1.5 font-semibold pl-6">Top movers</th>
+          <th className="py-1.5 font-semibold pl-4" title="% of the sector's stocks above their 21-EMA at three dates">
+            EMA21 trend<TermInfo term="breadth_ema" />
+            <span className="block font-num text-[8px] normal-case tracking-normal text-txt-3">now · 1w · 1m (% &gt; EMA21)</span>
+          </th>
+          <th className="text-left py-1.5 font-semibold pl-6">
+            Top movers
+            <span className="block font-num text-[8px] normal-case tracking-normal text-txt-3">1-month return</span>
+          </th>
         </tr>
       </thead>
       <tbody>
