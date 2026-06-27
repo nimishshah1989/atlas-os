@@ -1,6 +1,7 @@
 // SectorFundamentalsTable — aggregate sector fundamentals (margins, leverage) vs the
 // all-stock universe. Native foundation_staging.financials_quarterly. Server component.
 import type { SectorFundamentals } from '@/lib/queries/v6/sector_lens'
+import { TermInfo } from '@/components/v6/shared/TermInfo'
 
 const pct = (v: number | null) => (v == null ? '—' : `${v.toFixed(1)}%`)
 const num = (v: number | null) => (v == null ? '—' : v.toFixed(2))
@@ -13,9 +14,9 @@ const cmp = (s: number | null, u: number | null, lowerBetter = false) => {
 
 export function SectorFundamentalsTable({ data }: { data: SectorFundamentals }) {
   const rows = [
-    { label: 'EBITDA margin', s: data.ebitda_margin, u: data.u_ebitda_margin, fmt: pct, low: false },
-    { label: 'Net margin', s: data.net_margin, u: data.u_net_margin, fmt: pct, low: false },
-    { label: 'Debt / equity', s: data.debt_equity, u: data.u_debt_equity, fmt: num, low: true },
+    { label: 'EBITDA margin', s: data.ebitda_margin, u: data.u_ebitda_margin, fmt: pct, low: false, term: 'ebitda_margin' },
+    { label: 'Net margin', s: data.net_margin, u: data.u_net_margin, fmt: pct, low: false, term: 'net_margin' },
+    { label: 'Debt / equity', s: data.debt_equity, u: data.u_debt_equity, fmt: num, low: true, term: 'debt_equity' },
   ]
   return (
     <section className="px-8 py-10 border-b border-edge-hair" aria-label="Sector fundamentals">
@@ -37,7 +38,7 @@ export function SectorFundamentalsTable({ data }: { data: SectorFundamentals }) 
         <tbody>
           {rows.map(r => (
             <tr key={r.label} className="border-b border-edge-hair">
-              <td className="text-left py-1.5 font-sans text-xs text-txt-2">{r.label}</td>
+              <td className="text-left py-1.5 font-sans text-xs text-txt-2">{r.label}{r.term && <TermInfo term={r.term} />}</td>
               <td className={`py-1.5 font-num text-xs tabular-nums ${cmp(r.s, r.u, r.low)}`}>{r.fmt(r.s)}</td>
               <td className="py-1.5 font-num text-xs tabular-nums text-txt-3">{r.fmt(r.u)}</td>
             </tr>

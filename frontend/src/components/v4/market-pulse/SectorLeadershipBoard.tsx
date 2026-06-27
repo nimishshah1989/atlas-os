@@ -6,6 +6,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { DecileMeter } from '../ui/DecileMeter'
 import { decileColor } from '../ui/decile'
+import { TermInfo } from '@/components/v6/shared/TermInfo'
 
 export type SectorRollup = {
   name: string; avg: number; n: number; techLeaders: number; fundLeaders: number
@@ -59,9 +60,9 @@ function SectorBreakdown({ name, stocks }: { name: string; stocks: StockLensRow[
           <tr className="border-b border-edge-hair">
             <th className="px-3 py-1.5 text-left font-num text-[9px] font-medium uppercase tracking-[0.12em] text-txt-3">Stock</th>
             {LENSES.map(([, label]) => (
-              <th key={label} className="px-2 py-1.5 text-right font-num text-[9px] font-medium uppercase tracking-[0.12em] text-txt-3">{label}</th>
+              <th key={label} className="px-2 py-1.5 text-right font-num text-[9px] font-medium uppercase tracking-[0.12em] text-txt-3">{label}<TermInfo term="decile" /></th>
             ))}
-            <th className="px-3 py-1.5 text-right font-num text-[9px] font-medium uppercase tracking-[0.12em] text-txt-3">Leads</th>
+            <th className="px-3 py-1.5 text-right font-num text-[9px] font-medium uppercase tracking-[0.12em] text-txt-3">Leads<TermInfo term="lead" /></th>
           </tr>
         </thead>
         <tbody>
@@ -121,12 +122,12 @@ function SectorTable({ rows, open, toggle }: { rows: SectorRollup[]; open: strin
       <thead>
         <tr className="border-b border-edge-rule">
           <th className="px-2 py-1 text-left font-num text-[9px] font-medium uppercase tracking-[0.1em] text-txt-3">Sector</th>
-          <th className={NUM_TH}>Conviction</th>
-          <th className={NUM_TH} title="Sector index vs Nifty 50, 1 week">RS 1W</th>
-          <th className={NUM_TH} title="Sector index vs Nifty 50, 1 month">RS 1M</th>
-          <th className={NUM_TH} title="Sector index vs Nifty 50, 3 months">RS 3M</th>
-          <th className={NUM_TH} title="Constituents above their 21-EMA">&gt;EMA21</th>
-          <th className={NUM_TH} title="Constituents above their 50-EMA">&gt;EMA50</th>
+          <th className={NUM_TH}>Conviction<TermInfo term="strength" /></th>
+          <th className={NUM_TH} title="Sector index vs Nifty 50, 1 week">RS 1W<TermInfo term="rs" /></th>
+          <th className={NUM_TH} title="Sector index vs Nifty 50, 1 month">RS 1M<TermInfo term="rs" /></th>
+          <th className={NUM_TH} title="Sector index vs Nifty 50, 3 months">RS 3M<TermInfo term="rs" /></th>
+          <th className={NUM_TH} title="Constituents above their 21-EMA">&gt;EMA21<TermInfo term="above_ema_count" /></th>
+          <th className={NUM_TH} title="Constituents above their 50-EMA">&gt;EMA50<TermInfo term="above_ema_count" /></th>
         </tr>
       </thead>
       <tbody>

@@ -3,6 +3,7 @@
 // quarters as COLUMNS (oldest→newest, left→right) so the trend reads naturally.
 // Pure presentational server component — data already fetched via getStockFundamentals().
 import type { StockQuarter } from '@/lib/queries/v6/stock_lens'
+import { TermInfo } from '@/components/v6/shared/TermInfo'
 
 // Two-digit calendar month → short name. String-keyed so we never coerce via Number().
 const MON: Record<string, string> = {
@@ -51,25 +52,26 @@ type Row = {
   fmt: (q: StockQuarter, prev: StockQuarter | null) => string
   delta?: (q: StockQuarter, prev: StockQuarter | null) => number | null
   indent?: boolean
+  term?: string
 }
 const ROWS: Row[] = [
-  { label: 'Revenue (₹cr)', fmt: (q) => crore(q.revenue) },
-  { label: '↳ change QoQ', indent: true, fmt: (q, p) => qoqStr(q.revenue, p?.revenue ?? null), delta: (q, p) => qoq(q.revenue, p?.revenue ?? null) },
-  { label: 'EBITDA (₹cr)', fmt: (q) => crore(q.ebitda) },
-  { label: 'EBITDA margin', fmt: (q) => pct1(q.ebitda_margin) },
-  { label: 'PAT (₹cr)', fmt: (q) => crore(q.pat) },
-  { label: '↳ change QoQ', indent: true, fmt: (q, p) => qoqStr(q.pat, p?.pat ?? null), delta: (q, p) => qoq(q.pat, p?.pat ?? null) },
-  { label: 'Net margin', fmt: (q) => pct1(q.net_margin) },
-  { label: 'EPS (₹)', fmt: (q) => eps2(q.eps) },
-  { label: 'D/E', fmt: (q) => ratio2(q.debt_equity) },
+  { label: 'Revenue (₹cr)', fmt: (q) => crore(q.revenue), term: 'revenue' },
+  { label: '↳ change QoQ', indent: true, fmt: (q, p) => qoqStr(q.revenue, p?.revenue ?? null), delta: (q, p) => qoq(q.revenue, p?.revenue ?? null), term: 'qoq_change' },
+  { label: 'EBITDA (₹cr)', fmt: (q) => crore(q.ebitda), term: 'ebitda' },
+  { label: 'EBITDA margin', fmt: (q) => pct1(q.ebitda_margin), term: 'ebitda_margin' },
+  { label: 'PAT (₹cr)', fmt: (q) => crore(q.pat), term: 'pat' },
+  { label: '↳ change QoQ', indent: true, fmt: (q, p) => qoqStr(q.pat, p?.pat ?? null), delta: (q, p) => qoq(q.pat, p?.pat ?? null), term: 'qoq_change' },
+  { label: 'Net margin', fmt: (q) => pct1(q.net_margin), term: 'net_margin' },
+  { label: 'EPS (₹)', fmt: (q) => eps2(q.eps), term: 'eps' },
+  { label: 'D/E', fmt: (q) => ratio2(q.debt_equity), term: 'debt_equity' },
 ]
 
 // YoY chip — colored by sign (green ≥0, red <0). null → muted "n/a".
-function YoYChip({ label, value }: { label: string; value: number | null }) {
+function YoYChip({ label, value, term }: { label: string; value: number | null; term?: string }) {
   if (value == null) {
     return (
       <span className="inline-flex items-center gap-1 rounded-tile border border-edge-hair px-2 py-1 font-num text-[11px] tabular-nums text-txt-3">
-        {label} <span>n/a</span>
+        {label}{term && <TermInfo term={term} />} <span>n/a</span>
       </span>
     )
   }
@@ -79,7 +81,7 @@ function YoYChip({ label, value }: { label: string; value: number | null }) {
     : 'border-sig-neg/30 bg-sig-neg/10 text-sig-neg'
   return (
     <span className={`inline-flex items-center gap-1 rounded-tile border px-2 py-1 font-num text-[11px] tabular-nums ${cls}`}>
-      {label} <span>{up ? '+' : ''}{value.toFixed(1)}% YoY</span>
+      {label}{term && <TermInfo term={term} />} <span>{up ? '+' : ''}{value.toFixed(1)}% YoY</span>
     </span>
   )
 }
@@ -134,7 +136,7 @@ export function StockFundamentalsTable({ quarters }: { quarters: StockQuarter[] 
               {ROWS.map((row, ri) => (
                 <tr key={`${row.label}-${ri}`}>
                   <td className={`sticky left-0 z-10 bg-surface-panel px-4 ${row.indent ? 'py-[7px] pl-7 font-sans text-[11px] text-txt-3' : 'py-[10px] font-sans text-[12px] font-medium text-txt-2'} text-left border-b border-edge-hair`}>
-                    {row.label}
+                    {row.label}{row.term && <TermInfo term={row.term} />}
                   </td>
                   {cols.map((q, i) => {
                     const prev = i > 0 ? cols[i - 1] : null
@@ -161,8 +163,8 @@ export function StockFundamentalsTable({ quarters }: { quarters: StockQuarter[] 
           <span className="font-num text-[10px] uppercase tracking-wider text-txt-3">
             YoY growth · {quarterLabel(newest.period_end)}
           </span>
-          <YoYChip label="Revenue" value={newest.rev_yoy} />
-          <YoYChip label="PAT" value={newest.pat_yoy} />
+          <YoYChip label="Revenue" value={newest.rev_yoy} term="rev_growth" />
+          <YoYChip label="PAT" value={newest.pat_yoy} term="eps_growth" />
         </div>
       </div>
     </section>

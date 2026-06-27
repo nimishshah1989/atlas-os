@@ -14,6 +14,7 @@ import { StatCard } from '@/components/v4/ui/StatCard'
 import { decileColor } from '@/components/v4/ui/decile'
 import { ScoreDerivationTree } from '@/components/v6/shared/ScoreDerivationTree'
 import { holdingsToDerivation } from '@/components/v4/adapters/holdingsToDerivation'
+import { TermInfo } from '@/components/v6/shared/TermInfo'
 
 const HOLDING_CAP = 50
 
@@ -38,11 +39,11 @@ function HoldingsTable({ holdings }: { holdings: EtfHolding[] }) {
       <table className="w-full border-collapse">
         <thead>
           <tr className="border-b border-edge-rule">
-            {(['Symbol', 'Sector'] as const).map(h => (
-              <th key={h} className="whitespace-nowrap px-2 pb-2 text-left font-sans text-[10px] uppercase tracking-wider text-txt-3">{h}</th>
+            {([['Symbol', undefined], ['Sector', 'sector_name']] as const).map(([h, term]) => (
+              <th key={h} className="whitespace-nowrap px-2 pb-2 text-left font-sans text-[10px] uppercase tracking-wider text-txt-3">{h}{term && <TermInfo term={term} />}</th>
             ))}
-            {(['Weight', 'Tch', 'Fnd', 'Cat', 'Flw', 'Val', 'Lead', 'RS 3M'] as const).map(h => (
-              <th key={h} className="whitespace-nowrap px-2 pb-2 text-right font-sans text-[10px] uppercase tracking-wider text-txt-3">{h}</th>
+            {([['Weight', 'holding_weight'], ['Tch', 'decile'], ['Fnd', 'decile'], ['Cat', 'decile'], ['Flw', 'decile'], ['Val', 'decile'], ['Lead', 'lead'], ['RS 3M', 'rs']] as const).map(([h, term]) => (
+              <th key={h} className="whitespace-nowrap px-2 pb-2 text-right font-sans text-[10px] uppercase tracking-wider text-txt-3">{h}{term && <TermInfo term={term} />}</th>
             ))}
           </tr>
         </thead>

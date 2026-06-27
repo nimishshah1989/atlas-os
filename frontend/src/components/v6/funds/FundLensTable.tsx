@@ -7,6 +7,7 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { FundLensRow } from '@/lib/queries/v6/fund_lens'
+import { TermInfo } from '@/components/v6/shared/TermInfo'
 
 // ── colour helpers (shared idioms with the stocks / ETF pages) ────────────
 // Weighted lens scores are 0..100, so band cuts are ×10 from the decile helper.
@@ -30,22 +31,22 @@ type SortKey =
   | 'name' | 'category' | 'amc' | 'n_holdings' | 'n_leaders' | 'breadth'
   | LensKey | 'expense' | 'composite' | 'cat_rank'
 
-type Col = { key: SortKey; label: string; align: 'left' | 'right' }
+type Col = { key: SortKey; label: string; align: 'left' | 'right'; term?: string }
 const COLS: Col[] = [
   { key: 'name', label: 'Name', align: 'left' },
   { key: 'category', label: 'Category', align: 'left' },
-  { key: 'cat_rank', label: 'Cat rank', align: 'right' },
-  { key: 'composite', label: 'Score', align: 'right' },
+  { key: 'cat_rank', label: 'Cat rank', align: 'right', term: 'cat_rank' },
+  { key: 'composite', label: 'Score', align: 'right', term: 'fund_score' },
   { key: 'amc', label: 'AMC', align: 'left' },
-  { key: 'n_holdings', label: 'Holdings', align: 'right' },
-  { key: 'n_leaders', label: 'Leaders', align: 'right' },
-  { key: 'breadth', label: 'Leadership-breadth', align: 'right' },
-  { key: 'v_tech', label: 'Tch', align: 'right' },
-  { key: 'v_fund', label: 'Fnd', align: 'right' },
-  { key: 'v_cat', label: 'Cat', align: 'right' },
-  { key: 'v_flow', label: 'Flw', align: 'right' },
-  { key: 'v_val', label: 'Val', align: 'right' },
-  { key: 'expense', label: 'Expense', align: 'right' },
+  { key: 'n_holdings', label: 'Holdings', align: 'right', term: 'holdings_count' },
+  { key: 'n_leaders', label: 'Leaders', align: 'right', term: 'leaders_count' },
+  { key: 'breadth', label: 'Leadership-breadth', align: 'right', term: 'leadership_breadth' },
+  { key: 'v_tech', label: 'Tch', align: 'right', term: 'weighted_lens' },
+  { key: 'v_fund', label: 'Fnd', align: 'right', term: 'weighted_lens' },
+  { key: 'v_cat', label: 'Cat', align: 'right', term: 'weighted_lens' },
+  { key: 'v_flow', label: 'Flw', align: 'right', term: 'weighted_lens' },
+  { key: 'v_val', label: 'Val', align: 'right', term: 'weighted_lens' },
+  { key: 'expense', label: 'Expense', align: 'right', term: 'expense' },
 ]
 
 // numeric value for a sort key; nulls sink to -Infinity so they sort last on desc.
@@ -136,7 +137,7 @@ export function FundLensTable({ funds }: { funds: FundLensRow[] }) {
                       col.align === 'right' ? 'text-right' : 'text-left'
                     } ${isSorted ? 'text-txt-1 font-semibold' : 'text-txt-3'} hover:text-txt-2`}
                   >
-                    {col.label}{arrow}
+                    {col.label}{col.term && <TermInfo term={col.term} />}{arrow}
                   </th>
                 )
               })}

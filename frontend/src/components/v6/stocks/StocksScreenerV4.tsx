@@ -11,6 +11,7 @@ import type { StockListRow } from '@/lib/queries/v6/stock_lens'
 import { StocksBubble2x2 } from './StocksBubble2x2'
 import { Panel } from '@/components/v4/ui/Panel'
 import { decileColor } from '@/components/v4/ui/decile'
+import { TermInfo } from '@/components/v6/shared/TermInfo'
 
 // ── colour helpers (shared idioms) ────────────────────────────────────────
 // Decile cells colour the figure via the shared perceptual ramp (decileColor);
@@ -59,23 +60,23 @@ type SortKey =
   | 'strength' | 'lead'
   | 'rs_1m' | 'rs_3m' | 'rs_6m' | 'rs_sector_3m' | 'liq_cr'
 
-type Col = { key: SortKey; label: string; align: 'left' | 'right'; emphLens?: LensKey }
+type Col = { key: SortKey; label: string; align: 'left' | 'right'; emphLens?: LensKey; term?: string }
 const COLS: Col[] = [
   { key: 'symbol', label: 'Symbol', align: 'left' },
-  { key: 'cap', label: 'Cap', align: 'left' },
-  { key: 'sector', label: 'Sector', align: 'left' },
-  { key: 'd_tech', label: 'Tch', align: 'right', emphLens: 'd_tech' },
-  { key: 'd_fund', label: 'Fnd', align: 'right', emphLens: 'd_fund' },
-  { key: 'd_cat', label: 'Cat', align: 'right', emphLens: 'd_cat' },
-  { key: 'd_flow', label: 'Flw', align: 'right', emphLens: 'd_flow' },
-  { key: 'd_val', label: 'Val', align: 'right', emphLens: 'd_val' },
-  { key: 'strength', label: 'Strength', align: 'right' },
-  { key: 'lead', label: 'Lead', align: 'right' },
-  { key: 'rs_1m', label: 'RS 1M', align: 'right' },
-  { key: 'rs_3m', label: 'RS 3M', align: 'right' },
-  { key: 'rs_6m', label: 'RS 6M', align: 'right' },
-  { key: 'rs_sector_3m', label: 'RS Sec 3M', align: 'right' },
-  { key: 'liq_cr', label: 'Liq(₹Cr)', align: 'right' },
+  { key: 'cap', label: 'Cap', align: 'left', term: 'cap_tier' },
+  { key: 'sector', label: 'Sector', align: 'left', term: 'sector_name' },
+  { key: 'd_tech', label: 'Tch', align: 'right', emphLens: 'd_tech', term: 'decile' },
+  { key: 'd_fund', label: 'Fnd', align: 'right', emphLens: 'd_fund', term: 'decile' },
+  { key: 'd_cat', label: 'Cat', align: 'right', emphLens: 'd_cat', term: 'decile' },
+  { key: 'd_flow', label: 'Flw', align: 'right', emphLens: 'd_flow', term: 'decile' },
+  { key: 'd_val', label: 'Val', align: 'right', emphLens: 'd_val', term: 'decile' },
+  { key: 'strength', label: 'Strength', align: 'right', term: 'strength' },
+  { key: 'lead', label: 'Lead', align: 'right', term: 'lead' },
+  { key: 'rs_1m', label: 'RS 1M', align: 'right', term: 'rs' },
+  { key: 'rs_3m', label: 'RS 3M', align: 'right', term: 'rs' },
+  { key: 'rs_6m', label: 'RS 6M', align: 'right', term: 'rs' },
+  { key: 'rs_sector_3m', label: 'RS Sec 3M', align: 'right', term: 'rs_sector' },
+  { key: 'liq_cr', label: 'Liq(₹Cr)', align: 'right', term: 'liq' },
 ]
 
 // Show the whole scored universe (~498). Kept as a generous guardrail, not a 300-row truncation.
@@ -293,7 +294,7 @@ export function StocksScreenerV4({ stocks }: { stocks: StockListRow[] }) {
                         col.align === 'right' ? 'text-right' : 'text-left'
                       } ${emphasized ? 'text-txt-1 font-semibold' : 'text-txt-3'} hover:text-txt-2`}
                     >
-                      {col.label}{arrow}
+                      {col.label}{col.term && <TermInfo term={col.term} />}{arrow}
                     </th>
                   )
                 })}
