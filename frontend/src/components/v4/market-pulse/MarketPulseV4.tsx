@@ -41,7 +41,7 @@ export async function MarketPulseV4() {
 
   // The remaining native-fs panels — light, batched together.
   const [breadthSeries, tier, indexStrip] = await Promise.all([
-    getBreadthSeries(1).catch(() => []),
+    getBreadthSeries(10).catch(() => []),
     getTierReturns().catch(() => ({ windows: [], smallcap_rs_z: null })),
     getIndexStrip().catch(() => []),
   ])
