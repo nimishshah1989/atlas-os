@@ -11,7 +11,7 @@ import { SectorRRGChart } from '@/components/v6/sectors/SectorRRGChart'
 import { SectorHeatmapV4 } from '@/components/v6/sectors/SectorHeatmapV4'
 import { SectorBreadthTable } from '@/components/v6/sectors/SectorBreadthTable'
 import { CapTierRSCharts } from '@/components/v6/sectors/CapTierRSCharts'
-import { getSectorCards, getSectorRRG, getSectorBreadthMV, getSectorBreadthTrend } from '@/lib/queries/v6/sectors'
+import { getSectorCards, getSectorRRG, getSectorBreadthMV, getSectorBreadthTrend, getAllSectorConstituents } from '@/lib/queries/v6/sectors'
 import { getSectorIndexRs } from '@/lib/queries/v6/sector_index_rs'
 import { getCapTierRS } from '@/lib/queries/v6/rs_charts'
 
@@ -26,6 +26,8 @@ export async function SectorsPageV4() {
     getSectorIndexRs(),
   ])
   const capTierRS = await getCapTierRS(10).catch(() => [])
+  // All sectors' constituents in ONE query → the heatmap expands a sector row inline (no 21× fetch).
+  const constituents = await getAllSectorConstituents().catch(() => ({}))
   const latestDate = cards[0]?.as_of_date ?? null
 
   // CANONICAL 21 sectors = exactly what mv_sector_cards carries at the latest snapshot.
@@ -105,10 +107,10 @@ export async function SectorsPageV4() {
       <Panel
         eyebrow="Returns"
         title="Multi-window return heatmap"
-        info={{ body: 'Two blocks, both in %. “Return” is each sector index’s own move. “vs Nifty 500” is the sector’s return minus the Nifty 500’s over the same window — positive means it beat the broad market. Greener = stronger, redder = weaker. Click any column to sort.' }}
+        info={{ body: 'Two blocks, both in %. “Return” is each sector index’s own move. “vs Nifty 500” is the sector’s return minus the Nifty 500’s over the same window — positive means it beat the broad market. Greener = stronger, redder = weaker. Click any column to sort; click the ▸ on a sector to drop its constituent stocks inline in the same matrix.' }}
         bodyClassName="px-2 py-2"
       >
-        <SectorHeatmapV4 rows={heatRows} bases={heatBases} />
+        <SectorHeatmapV4 rows={heatRows} bases={heatBases} constituents={constituents} />
       </Panel>
 
       {/* Sector breadth — compact table */}

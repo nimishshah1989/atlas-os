@@ -10,20 +10,26 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import type { SectorConstituentMatrixRow } from '@/lib/queries/v6/sectors'
 
-// Returns are decimal fractions (×100 = %). RS is computed here = sector return − base return.
-export type SectorHeatRow = {
-  sector_name: string
-  constituent_count: number
+// The return windows every matrix row carries — a sector index OR one of its constituents — so
+// the column getters work for both and a constituent renders in the SAME columns as its sector.
+type RetRow = {
   ret_1d: number | null; ret_1w: number | null; ret_1m: number | null
   ret_3m: number | null; ret_6m: number | null; ret_12m: number | null
+}
+
+// Returns are decimal fractions (×100 = %). RS is computed here = sector return − base return.
+export type SectorHeatRow = RetRow & {
+  sector_name: string
+  constituent_count: number
 }
 
 export type BaseRet = { ret_1m: number | null; ret_3m: number | null; ret_6m: number | null }
 export type BaseKey = 'NIFTY 50' | 'NIFTY 500'
 const BASE_LABEL: Record<BaseKey, string> = { 'NIFTY 50': 'Nifty 50', 'NIFTY 500': 'Nifty 500' }
 
-type Col = { key: string; label: string; group: 'ret' | 'rs'; get: (c: SectorHeatRow) => number | null; scale: number }
+type Col = { key: string; label: string; group: 'ret' | 'rs'; get: (c: RetRow) => number | null; scale: number }
 
 // Heat tint: strong enough that colour, not the number, tells the story. `scale` is the %
 // magnitude that saturates the tint for that block.
@@ -44,10 +50,16 @@ const fmt = (v: number | null) => {
 
 const rel = (a: number | null, b: number | null) => (a != null && b != null ? a - b : null)
 
-export function SectorHeatmapV4({ rows, bases }: { rows: SectorHeatRow[]; bases: Record<BaseKey, BaseRet> }) {
+export function SectorHeatmapV4({ rows, bases, constituents }: {
+  rows: SectorHeatRow[]
+  bases: Record<BaseKey, BaseRet>
+  constituents?: Record<string, SectorConstituentMatrixRow[]>
+}) {
   const [base, setBase] = useState<BaseKey>('NIFTY 500')
   const [sortKey, setSortKey] = useState('ret_3m')
   const [dir, setDir] = useState<1 | -1>(-1)
+  const [open, setOpen] = useState<Set<string>>(new Set())
+  const toggle = (name: string) => setOpen((s) => { const n = new Set(s); n.has(name) ? n.delete(name) : n.add(name); return n })
 
   const b = bases[base]
   const COLS: Col[] = [
@@ -65,12 +77,13 @@ export function SectorHeatmapV4({ rows, bases }: { rows: SectorHeatRow[]; bases:
   if (rows.length === 0) return <div className="text-txt-3 text-sm text-center py-8">No heatmap data.</div>
 
   const col = COLS.find(c => c.key === sortKey)!
-  const sorted = [...rows].sort((a, b2) => {
+  const cmp = (a: RetRow, b2: RetRow) => {
     const av = col.get(a), bv = col.get(b2)
     if (av == null) return 1
     if (bv == null) return -1
     return (av - bv) * dir
-  })
+  }
+  const sorted = [...rows].sort(cmp)
   const onSort = (k: string) => { if (k === sortKey) setDir(d => (d === 1 ? -1 : 1)); else { setSortKey(k); setDir(-1) } }
   const arrow = (k: string) => (k === sortKey ? (dir === -1 ? ' ↓' : ' ↑') : '')
 
@@ -115,29 +128,64 @@ export function SectorHeatmapV4({ rows, bases }: { rows: SectorHeatRow[]; bases:
             </tr>
           </thead>
           <tbody>
-            {sorted.map(card => (
-              <tr key={card.sector_name} className="border-b border-edge-hair hover:bg-surface-raised/60 transition-colors">
-                <td className="text-left py-[7px] px-3.5">
-                  <div className="flex items-center gap-2">
-                    <Link href={`/sectors/${encodeURIComponent(card.sector_name)}`}
-                      className="font-medium text-txt-1 text-[12.5px] hover:text-brand transition-colors">
-                      {card.sector_name}
+            {sorted.map(card => {
+              const kids = constituents?.[card.sector_name]
+              const canExpand = !!kids?.length
+              const isOpen = open.has(card.sector_name)
+              return (
+                <tr key={card.sector_name} className="border-b border-edge-hair hover:bg-surface-raised/60 transition-colors">
+                  <td className="text-left py-[7px] px-3.5">
+                    <div className="flex items-center gap-1.5">
+                      {canExpand ? (
+                        <button type="button" onClick={() => toggle(card.sector_name)} aria-expanded={isOpen}
+                          aria-label={isOpen ? `Collapse ${card.sector_name}` : `Expand ${card.sector_name} constituents`}
+                          className="w-[14px] shrink-0 font-num text-[10px] text-txt-3 hover:text-txt-1 transition-colors">
+                          {isOpen ? '▾' : '▸'}
+                        </button>
+                      ) : <span className="w-[14px] shrink-0" />}
+                      <Link href={`/sectors/${encodeURIComponent(card.sector_name)}`}
+                        className="font-medium text-txt-1 text-[12.5px] hover:text-brand transition-colors">
+                        {card.sector_name}
+                      </Link>
+                      <span className="font-num text-[9px] text-txt-3 bg-surface-inset px-[5px] py-px rounded-tile">
+                        {card.constituent_count}
+                      </span>
+                    </div>
+                  </td>
+                  {COLS.map((c, i) => {
+                    const v = c.get(card)
+                    return (
+                      <td key={c.key} className={`text-center font-num text-[11.5px] tabular-nums ${i === firstRs ? divCls : ''}`} style={heatStyle(v, c.scale)}>
+                        <div className="px-1.5 py-[7px]">{fmt(v)}</div>
+                      </td>
+                    )
+                  })}
+                </tr>
+              )
+            }).flatMap((row, idx) => {
+              // splice each sector's constituent sub-rows (when open) directly under it, in the SAME columns.
+              const card = sorted[idx]
+              const kids = constituents?.[card.sector_name]
+              if (!open.has(card.sector_name) || !kids?.length) return [row]
+              const subRows = [...kids].sort(cmp).map((s) => (
+                <tr key={`${card.sector_name}::${s.symbol}`} className="border-b border-edge-hair/60 bg-surface-inset/40">
+                  <td className="text-left py-[5px] pl-[34px] pr-3.5">
+                    <Link href={`/stocks/${s.symbol}`} className="font-num text-[11.5px] text-txt-2 hover:text-brand transition-colors">
+                      {s.symbol}
                     </Link>
-                    <span className="font-num text-[9px] text-txt-3 bg-surface-inset px-[5px] py-px rounded-tile">
-                      {card.constituent_count}
-                    </span>
-                  </div>
-                </td>
-                {COLS.map((c, i) => {
-                  const v = c.get(card)
-                  return (
-                    <td key={c.key} className={`text-center font-num text-[11.5px] tabular-nums ${i === firstRs ? divCls : ''}`} style={heatStyle(v, c.scale)}>
-                      <div className="px-1.5 py-[7px]">{fmt(v)}</div>
-                    </td>
-                  )
-                })}
-              </tr>
-            ))}
+                  </td>
+                  {COLS.map((c, i) => {
+                    const v = c.get(s)
+                    return (
+                      <td key={c.key} className={`text-center font-num text-[11px] tabular-nums ${i === firstRs ? divCls : ''}`} style={heatStyle(v, c.scale)}>
+                        <div className="px-1.5 py-[5px]">{fmt(v)}</div>
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))
+              return [row, ...subRows]
+            })}
           </tbody>
         </table>
       </div>
