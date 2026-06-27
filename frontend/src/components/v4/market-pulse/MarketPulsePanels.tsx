@@ -160,6 +160,7 @@ export function MacroPanel({ rows, asOf }: { rows: MacroRow[]; asOf: string | nu
 // ── sector leadership — concise Leading / Lagging split (top 5 vs bottom 5), each sector
 // EXPANDABLE into the breakdown behind its score: a stocks × lens table. The interactive
 // board (client) handles expand; this panel supplies framing + the always-on explainer. ──
+import type { SectorRollup, StockLensRow } from './SectorLeadershipBoard'
 export type { SectorRollup, StockLensRow } from './SectorLeadershipBoard'
 export function SectorLeadershipPanel({ top, weak, stocksBySector }: {
   top: SectorRollup[]

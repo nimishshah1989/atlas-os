@@ -7,7 +7,11 @@ import Link from 'next/link'
 import { DecileMeter } from '../ui/DecileMeter'
 import { decileColor } from '../ui/decile'
 
-export type SectorRollup = { name: string; avg: number; n: number; techLeaders: number; fundLeaders: number }
+export type SectorRollup = {
+  name: string; avg: number; n: number; techLeaders: number; fundLeaders: number
+  rs_1w: number | null; rs_1m: number | null; rs_3m: number | null   // sector index vs Nifty 50 (fractions)
+  ema21: number | null; ema50: number | null; emaTotal: number | null // # constituents above EMA21/EMA50, of emaTotal
+}
 export type StockLensRow = {
   symbol: string
   name: string | null
@@ -79,26 +83,56 @@ function SectorBreakdown({ name, stocks }: { name: string; stocks: StockLensRow[
   )
 }
 
+// RS (sector index vs Nifty 50) and EMA-participation formatting.
+const fmtRS = (v: number | null) => (v == null ? '—' : `${v >= 0 ? '+' : '−'}${Math.abs(v * 100).toFixed(1)}`)
+const rsTone = (v: number | null) => (v == null ? 'text-txt-3' : v > 0.0005 ? 'text-sig-pos' : v < -0.0005 ? 'text-sig-neg' : 'text-txt-2')
+const fmtEma = (c: number | null, tot: number | null) => (c == null ? '—' : tot != null ? `${c}/${tot}` : `${c}`)
+
+const NUM_TH = 'px-2 py-1 text-right font-num text-[9px] font-medium uppercase tracking-[0.1em] text-txt-3'
+
 function SectorRow({ s, open, onToggle }: { s: SectorRollup; open: boolean; onToggle: () => void }) {
   const tone = s.avg >= 6 ? 'var(--color-sig-pos)' : s.avg < 4 ? 'var(--color-sig-neg)' : 'var(--color-txt-1)'
   return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-expanded={open}
-      className={`-mx-2 block w-full rounded-tile px-2 py-1.5 text-left transition-colors hover:bg-surface-raised ${open ? 'bg-surface-raised' : ''}`}
-    >
-      <div className="flex items-baseline justify-between gap-2">
+    <tr onClick={onToggle} aria-expanded={open}
+      className={`cursor-pointer border-b border-edge-hair/60 transition-colors hover:bg-surface-raised ${open ? 'bg-surface-raised' : ''}`}>
+      <td className="px-2 py-1.5">
         <span className="flex items-center gap-1.5 truncate font-sans text-[12.5px] font-medium text-txt-1">
           <span className="font-num text-[10px] text-txt-3">{open ? '▾' : '▸'}</span>{s.name}
         </span>
-        <span className="shrink-0 font-num text-[12px] tabular-nums" style={{ color: tone }}>{s.avg.toFixed(1)}<span className="text-[10px] text-txt-3">/10</span></span>
-      </div>
-      <div className="mt-1 flex items-center gap-2 pl-3.5">
-        <DecileMeter decile={Math.round(s.avg)} size="sm" />
-        <span className="shrink-0 font-num text-[10px] tabular-nums text-txt-3">{s.techLeaders} tech · {s.fundLeaders} fund · of {s.n}</span>
-      </div>
-    </button>
+      </td>
+      <td className="px-2 py-1.5">
+        <span className="flex items-center justify-end gap-1.5">
+          <DecileMeter decile={Math.round(s.avg)} size="sm" />
+          <span className="w-[34px] shrink-0 text-right font-num text-[12px] tabular-nums" style={{ color: tone }}>{s.avg.toFixed(1)}</span>
+        </span>
+      </td>
+      <td className={`px-2 py-1.5 text-right font-num text-[11.5px] tabular-nums ${rsTone(s.rs_1w)}`}>{fmtRS(s.rs_1w)}</td>
+      <td className={`px-2 py-1.5 text-right font-num text-[11.5px] tabular-nums ${rsTone(s.rs_1m)}`}>{fmtRS(s.rs_1m)}</td>
+      <td className={`px-2 py-1.5 text-right font-num text-[11.5px] tabular-nums ${rsTone(s.rs_3m)}`}>{fmtRS(s.rs_3m)}</td>
+      <td className="px-2 py-1.5 text-right font-num text-[11.5px] tabular-nums text-txt-2">{fmtEma(s.ema21, s.emaTotal)}</td>
+      <td className="px-2 py-1.5 text-right font-num text-[11.5px] tabular-nums text-txt-2">{fmtEma(s.ema50, s.emaTotal)}</td>
+    </tr>
+  )
+}
+
+function SectorTable({ rows, open, toggle }: { rows: SectorRollup[]; open: string | null; toggle: (n: string) => void }) {
+  return (
+    <table className="w-full border-collapse">
+      <thead>
+        <tr className="border-b border-edge-rule">
+          <th className="px-2 py-1 text-left font-num text-[9px] font-medium uppercase tracking-[0.1em] text-txt-3">Sector</th>
+          <th className={NUM_TH}>Conviction</th>
+          <th className={NUM_TH} title="Sector index vs Nifty 50, 1 week">RS 1W</th>
+          <th className={NUM_TH} title="Sector index vs Nifty 50, 1 month">RS 1M</th>
+          <th className={NUM_TH} title="Sector index vs Nifty 50, 3 months">RS 3M</th>
+          <th className={NUM_TH} title="Constituents above their 21-EMA">&gt;EMA21</th>
+          <th className={NUM_TH} title="Constituents above their 50-EMA">&gt;EMA50</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((s) => <SectorRow key={s.name} s={s} open={open === s.name} onToggle={() => toggle(s.name)} />)}
+      </tbody>
+    </table>
   )
 }
 
@@ -114,17 +148,19 @@ export function SectorLeadershipBoard({
   const [open, setOpen] = useState<string | null>(null)
   const toggle = (n: string) => setOpen((cur) => (cur === n ? null : n))
   return (
-    <div>
-      <div className="grid grid-cols-1 gap-x-8 gap-y-1 sm:grid-cols-2">
-        <div>
-          <p className="mb-1.5 font-num text-[9px] uppercase tracking-[0.14em] text-sig-pos">Leading</p>
-          {top.map((s) => <SectorRow key={s.name} s={s} open={open === s.name} onToggle={() => toggle(s.name)} />)}
-        </div>
-        <div>
-          <p className="mb-1.5 font-num text-[9px] uppercase tracking-[0.14em] text-sig-neg">Lagging</p>
-          {weak.map((s) => <SectorRow key={s.name} s={s} open={open === s.name} onToggle={() => toggle(s.name)} />)}
-        </div>
+    <div className="space-y-4">
+      <div>
+        <p className="mb-1 font-num text-[9px] uppercase tracking-[0.14em] text-sig-pos">Leading · strongest conviction</p>
+        <SectorTable rows={top} open={open} toggle={toggle} />
       </div>
+      <div>
+        <p className="mb-1 font-num text-[9px] uppercase tracking-[0.14em] text-sig-neg">Lagging · weakest conviction</p>
+        <SectorTable rows={weak} open={open} toggle={toggle} />
+      </div>
+      <p className="font-num text-[9.5px] text-txt-3">
+        Conviction = avg constituent decile (1–10). RS = sector index minus Nifty 50 over each window (% pts).
+        &gt;EMA21 / &gt;EMA50 = constituents above that EMA, of the sector’s tracked count. Click a row for the per-stock decile breakdown.
+      </p>
       {open && <SectorBreakdown name={open} stocks={stocksBySector[open] ?? []} />}
     </div>
   )
