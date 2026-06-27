@@ -49,11 +49,11 @@ MIRRORS = [
     ("atlas.mv_sector_rrg", "mv_sector_rrg", [["sector_name"]]),  # Page-B RRG
     ("atlas.mv_sector_breadth", "mv_sector_breadth", [["sector_name"]]),  # Page-B breadth
     ("atlas.mv_sector_deepdive", "mv_sector_deepdive", [["sector_name"]]),  # Page-C deep-dive
-    (
-        "atlas.atlas_index_metrics_daily",
-        "atlas_index_metrics_daily",
-        [["date"]],
-    ),  # Page-B sector index RS
+    # atlas_index_metrics_daily is NO LONGER mirrored — it is now built NATIVELY in
+    # foundation_staging from index_prices by build_index_metrics.py (calendar-anchored
+    # returns). The atlas.* source carried row-count-anchored returns that drift onto the
+    # wrong date on gap-ridden index series (Nifty 50 3m: 6.9% mirror vs 3.2% true) and
+    # left Media/Tourism NULL. Mirroring it would clobber the corrected native table.
     ("atlas.mv_markets_rs_grid", "mv_markets_rs_grid", []),  # Page-B global RS grid
     # Sector roll-up + regime detail the board reads (M3-derived). Published into the schema.
     # (atlas_universe_stocks is NOT mirrored — those joins reuse instrument_master.)

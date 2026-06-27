@@ -1,10 +1,26 @@
 'use client'
 // frontend/src/components/v6/sectors/SectorHeroReadout.tsx
 // Page 04 hero readout — 3-col layout: Leading / Lagging / Rotation pattern.
-// Derived from mv_sector_cards rows (sorted by rs_3m).
+//
+// Derived from the CORRECTED sector-index returns (atlas_index_metrics_daily via
+// getSectorIndexRs), NOT mv_sector_cards/mv_sector_rrg — those mirrors carried the
+// row-offset-inflated returns and stale quadrants that put every sector in "Leading"
+// (0 lagging) and showed Media at +51.8%. Leading/lagging is the sign of RS vs Nifty
+// 500 over 3m; rotation is whether 1m RS is accelerating (improving) or fading
+// (weakening) relative to 3m RS. Breadth/signal fields still come from the cards row.
 
 import Link from 'next/link'
-import type { SectorCardRow, SectorRRGRow } from '@/lib/queries/v6/sectors'
+
+// One row of corrected sector data the readout renders.
+export type SectorHeroRow = {
+  sector_name: string
+  ret_1m: number | null
+  ret_3m: number | null
+  rs_1m: number | null
+  rs_3m: number | null
+  pct_above_ema21: number | null
+  buy_signal_count: number
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -33,7 +49,7 @@ const DOT_COLORS: Record<DotColor, string> = {
 function SectorRow({
   sector, color, subtitle, rsLabel,
 }: {
-  sector: SectorCardRow
+  sector: SectorHeroRow
   color: DotColor
   subtitle: string
   rsLabel: string
@@ -87,39 +103,23 @@ function BlockEye({
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function SectorHeroReadout({
-  cards,
-  rrg,
+  rows,
 }: {
-  cards: SectorCardRow[]
-  rrg?: SectorRRGRow[]
+  rows: SectorHeroRow[]
 }) {
-  if (cards.length === 0) return null
+  if (rows.length === 0) return null
 
-  // Build quadrant lookup from mv_sector_rrg when available (M14 fix).
-  // Falls back to rs_3m-based heuristic when RRG data is absent.
-  const quadrantMap = new Map<string, string | null>()
-  if (rrg) {
-    for (const row of rrg) {
-      quadrantMap.set(row.sector_name, row.quadrant_current)
-    }
-  }
+  // Leading vs lagging = sign of 3m RS vs Nifty 500 (did the sector beat the broad
+  // market). Rotation = momentum: 1m RS accelerating above 3m RS (improving) or fading
+  // below it (weakening). All from corrected returns — no stale-quadrant dependency.
+  const rs3 = (c: SectorHeroRow) => c.rs_3m ?? 0
+  const momentum = (c: SectorHeroRow) => (c.rs_1m ?? 0) - (c.rs_3m ?? 0)
 
-  function getQuadrant(card: SectorCardRow): string {
-    const fromRrg = quadrantMap.get(card.sector_name)
-    if (fromRrg) return fromRrg
-    // Fallback heuristic
-    if ((card.rs_3m ?? 0) > 0) return 'Leading'
-    return 'Lagging'
-  }
-
-  // Split by quadrant using mv_sector_rrg.quadrant_current (M14)
-  // True per-quadrant counts drive the badges; the slices below are only the
-  // rows we render. (H4: badge previously read the 4-row slice, contradicting the
-  // RRG legend which counts the full quadrant.)
-  const leadingAll   = cards.filter((c) => getQuadrant(c) === 'Leading').sort((a, b) => (b.rs_3m ?? 0) - (a.rs_3m ?? 0))
-  const laggingAll   = cards.filter((c) => getQuadrant(c) === 'Lagging').sort((a, b) => (a.rs_3m ?? 0) - (b.rs_3m ?? 0))
-  const improvingAll = cards.filter((c) => getQuadrant(c) === 'Improving')
-  const weakeningAll = cards.filter((c) => getQuadrant(c) === 'Weakening')
+  const leadingAll = rows.filter((c) => rs3(c) > 0).sort((a, b) => rs3(b) - rs3(a))
+  const laggingAll = rows.filter((c) => rs3(c) <= 0).sort((a, b) => rs3(a) - rs3(b))
+  // Improving: lagging on RS but momentum turning up. Weakening: leading but fading.
+  const improvingAll = laggingAll.filter((c) => momentum(c) > 0).sort((a, b) => momentum(b) - momentum(a))
+  const weakeningAll = leadingAll.filter((c) => momentum(c) < 0).sort((a, b) => momentum(a) - momentum(b))
 
   const leading   = leadingAll.slice(0, 4)
   const lagging   = laggingAll.slice(0, 5)

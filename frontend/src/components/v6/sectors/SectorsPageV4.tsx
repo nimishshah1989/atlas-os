@@ -32,11 +32,40 @@ export async function SectorsPageV4() {
   // 30-name taxonomy (EV & Auto, Housing, Consumption, Diversified, Services, Telecom…),
   // so filter every sector list down to the canonical set — one source of truth for the page.
   const canonical = new Set(cards.map(c => c.sector_name))
-  const rrgC = rrg.filter(r => canonical.has(r.sector_name))
   const indexRsC = { ...indexRs, sectors: indexRs.sectors.filter(s => canonical.has(s.sector_name)) }
-  const idxRet1dBySector: Record<string, number | null> = Object.fromEntries(
-    indexRsC.sectors.map(s => [s.sector_name, s.ret.ret_1d]),
-  )
+  // Heatmap rows use the REAL stored sector-index returns (atlas_index_metrics_daily via
+  // getSectorIndexRs) — mv_sector_cards' return columns are a corrupt bottom-up reconstruction
+  // (inflated 2–5×). RS = sector return − Nifty 500 return over the same window.
+  const n500 = indexRs.bases['NIFTY 500']
+  const retBySector = Object.fromEntries(indexRsC.sectors.map(s => [s.sector_name, s.ret]))
+  const cardBySector = Object.fromEntries(cards.map(c => [c.sector_name, c]))
+  const rel = (a: number | null, b: number | null) => (a != null && b != null ? a - b : null)
+  const heatRows = [...canonical].map((name) => {
+    const r = retBySector[name]
+    return {
+      sector_name: name,
+      constituent_count: cardBySector[name]?.constituent_count ?? 0,
+      ret_1d: r?.ret_1d ?? null, ret_1w: r?.ret_1w ?? null, ret_1m: r?.ret_1m ?? null,
+      ret_3m: r?.ret_3m ?? null, ret_6m: r?.ret_6m ?? null, ret_12m: r?.ret_12m ?? null,
+      rs_1m: rel(r?.ret_1m ?? null, n500?.ret_1m ?? null),
+      rs_3m: rel(r?.ret_3m ?? null, n500?.ret_3m ?? null),
+      rs_6m: rel(r?.ret_6m ?? null, n500?.ret_6m ?? null),
+    }
+  })
+  // Hero readout (Leading/Lagging/Rotation) reads the SAME corrected returns — RS vs
+  // Nifty 500 over 1m/3m drives the split; breadth + signal counts come from the cards.
+  const heroRows = [...canonical].map((name) => {
+    const r = retBySector[name]
+    const c = cardBySector[name]
+    return {
+      sector_name: name,
+      ret_1m: r?.ret_1m ?? null, ret_3m: r?.ret_3m ?? null,
+      rs_1m: rel(r?.ret_1m ?? null, n500?.ret_1m ?? null),
+      rs_3m: rel(r?.ret_3m ?? null, n500?.ret_3m ?? null),
+      pct_above_ema21: c?.pct_above_ema21 ?? null,
+      buy_signal_count: c?.buy_signal_count ?? 0,
+    }
+  })
 
   return (
     <div className="mx-auto max-w-[1280px] px-6 py-7 space-y-6">
@@ -60,7 +89,7 @@ export async function SectorsPageV4() {
       >
         <SectorPulseGrid data={indexRsC} />
         <Suspense fallback={<div className="h-40 rounded-tile bg-surface-inset animate-pulse" />}>
-          <SectorHeroReadout cards={cards} rrg={rrgC} />
+          <SectorHeroReadout rows={heroRows} />
         </Suspense>
       </Panel>
 
@@ -77,7 +106,7 @@ export async function SectorsPageV4() {
         info={{ body: 'Two blocks, both in %. “Return” is each sector index’s own move. “vs Nifty 500” is the sector’s return minus the Nifty 500’s over the same window — positive means it beat the broad market. Greener = stronger, redder = weaker. Click any column to sort.' }}
         bodyClassName="px-2 py-2"
       >
-        <SectorHeatmapV4 cards={cards} idxRet1dBySector={idxRet1dBySector} />
+        <SectorHeatmapV4 rows={heatRows} />
       </Panel>
 
       {/* Sector breadth — compact table */}

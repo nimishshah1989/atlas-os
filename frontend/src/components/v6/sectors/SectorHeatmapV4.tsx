@@ -7,9 +7,19 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import type { SectorCardRow } from '@/lib/queries/v6/sectors'
 
-type Col = { key: string; label: string; group: 'ret' | 'rs'; get: (c: SectorCardRow) => number | null; scale: number }
+// Returns are the REAL sector-index returns (stored in atlas_index_metrics_daily, fetched via
+// getSectorIndexRs) — NOT mv_sector_cards, whose bottom-up return columns are corrupt/inflated.
+// `rs_*` = sector return − Nifty 500 return over the same window. All values are decimal fractions.
+export type SectorHeatRow = {
+  sector_name: string
+  constituent_count: number
+  ret_1d: number | null; ret_1w: number | null; ret_1m: number | null
+  ret_3m: number | null; ret_6m: number | null; ret_12m: number | null
+  rs_1m: number | null; rs_3m: number | null; rs_6m: number | null
+}
+
+type Col = { key: string; label: string; group: 'ret' | 'rs'; get: (c: SectorHeatRow) => number | null; scale: number }
 
 // Heat tint: strong enough that colour, not the number, tells the story. Values are decimal
 // fractions (×100 = %); `scale` is the % magnitude that saturates the tint for that block.
@@ -28,11 +38,10 @@ const fmt = (v: number | null) => {
   return `${n < 0 ? '−' : ''}${Math.abs(n).toFixed(1)}%`
 }
 
-export function SectorHeatmapV4({
-  cards, idxRet1dBySector,
-}: { cards: SectorCardRow[]; idxRet1dBySector?: Record<string, number | null> }) {
+export function SectorHeatmapV4({ rows }: { rows: SectorHeatRow[] }) {
+  const cards = rows
   const COLS: Col[] = [
-    { key: 'ret_1d', label: '1D', group: 'ret', get: c => idxRet1dBySector?.[c.sector_name] ?? null, scale: 3 },
+    { key: 'ret_1d', label: '1D', group: 'ret', get: c => c.ret_1d, scale: 3 },
     { key: 'ret_1w', label: '1W', group: 'ret', get: c => c.ret_1w, scale: 6 },
     { key: 'ret_1m', label: '1M', group: 'ret', get: c => c.ret_1m, scale: 10 },
     { key: 'ret_3m', label: '3M', group: 'ret', get: c => c.ret_3m, scale: 15 },

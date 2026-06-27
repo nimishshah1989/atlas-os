@@ -41,9 +41,33 @@ def rsi(close: pd.Series, period: int = RSI_PERIOD) -> pd.Series:
     return pd.Series(out, index=close.index)
 
 
+# Month+ windows are anchored by CALENDAR duration, not a fixed row count. A row-
+# count offset (close.shift(N)) silently lands on the wrong calendar date whenever
+# the series has a trading-day gap (an index feed missing a session, a holiday the
+# feed skipped), and that wrong anchor often straddles a sharp move — inflating a
+# "3-month return" by several points (Nifty 50: 6.9% row-anchored vs 3.2% true).
+# Calendar anchoring is robust to gaps and cross-validated across two independent
+# price feeds to <0.1pp (2026-06-26; see docs/v4/2026-06-26-data-source-map.md).
+# 1d/1w stay session-anchored — a "day"/"week" is naturally trading sessions and
+# short windows don't accumulate gap drift.
+_CALENDAR_MONTHS: dict[str, int] = {"1m": 1, "3m": 3, "6m": 6, "12m": 12}
+
+
 def trailing_return(close: pd.Series, window: int) -> pd.Series:
     """Simple trailing return over `window` trading days: c[t]/c[t-window]-1."""
     return close / close.shift(window) - 1.0
+
+
+def windowed_return(close: pd.Series, name: str) -> pd.Series:
+    """Trailing return for a named window. 1m/3m/6m/12m are calendar-anchored:
+    c[t] / (last close on/before t − N months) − 1. 1d/1w are session offsets."""
+    months = _CALENDAR_MONTHS.get(name)
+    if months is None:
+        return trailing_return(close, RETURN_WINDOWS[name])
+    anchors = close.index - pd.DateOffset(months=months)
+    # asof → last close at/before each anchor date (NaN before the series starts)
+    base = close.asof(anchors)
+    return pd.Series(close.to_numpy() / base.to_numpy() - 1.0, index=close.index)
 
 
 def compute_price_technicals(close: pd.Series) -> pd.DataFrame:
@@ -56,8 +80,8 @@ def compute_price_technicals(close: pd.Series) -> pd.DataFrame:
     for p in EMA_PERIODS:
         out[f"ema_{p}"] = ema(close, p)
     out[f"rsi_{RSI_PERIOD}"] = rsi(close, RSI_PERIOD)
-    for name, w in RETURN_WINDOWS.items():
-        out[f"ret_{name}"] = trailing_return(close, w)
+    for name in RETURN_WINDOWS:
+        out[f"ret_{name}"] = windowed_return(close, name)
     return out
 
 
@@ -71,9 +95,9 @@ def compute_relative_strength(
     """
     bench = bench_close.reindex(stock_close.index).ffill()
     out = pd.DataFrame(index=stock_close.index)
-    for name, w in RETURN_WINDOWS.items():
-        s = trailing_return(stock_close, w)
-        b = trailing_return(bench, w)
+    for name in RETURN_WINDOWS:
+        s = windowed_return(stock_close, name)
+        b = windowed_return(bench, name)
         out[f"rs_{name}_{suffix}"] = s - b
     return out
 
