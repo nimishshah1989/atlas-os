@@ -12,7 +12,8 @@ import { StockRSChart } from '@/components/v6/stock-detail/StockRSChart'
 import { Panel } from '@/components/v4/ui/Panel'
 import { StatCard } from '@/components/v4/ui/StatCard'
 import { decileColor } from '@/components/v4/ui/decile'
-import { HoldingsLensRead } from '@/components/v6/shared/HoldingsLensRead'
+import { ScoreDerivationTree } from '@/components/v6/shared/ScoreDerivationTree'
+import { holdingsToDerivation } from '@/components/v4/adapters/holdingsToDerivation'
 
 const HOLDING_CAP = 50
 
@@ -121,14 +122,17 @@ export async function ETFDetailV4({ fcode }: { fcode: string }) {
         </div>
       </header>
 
-      {/* ── Holdings-weighted six-lens vector (click a lens → how it's built) ── */}
-      <Panel
-        eyebrow="Lens read"
-        title="How the holdings score on each lens"
-        info={{ body: 'Weight-weighted average of each holding’s lens score (0–100). Click any lens to see how it’s built — the weighted average, how many holdings lead it (top-3 decile), and the top leaders by weight. Descriptive, not a forecast.' }}
-      >
-        <HoldingsLensRead vector={etf} holdings={etf.holdings} weightLabel="weight" />
-      </Panel>
+      {/* ── Glass box: Score-Derivation Tree (Leadership-breadth → lens → holdings by contribution) ── */}
+      <section aria-label="How the score is built">
+        <div className="mb-4">
+          <p className="font-num text-[9px] uppercase tracking-[0.14em] text-txt-3">Glass box</p>
+          <h2 className="font-display text-[22px] font-medium tracking-tight text-txt-1">How the score is built</h2>
+          <p className="mt-1 max-w-[760px] font-sans text-[13px] text-txt-2">
+            Click a lens to expand its holdings, ranked by contribution (weight × decile); each name links to its own evidence. Descriptive, not a forecast.
+          </p>
+        </div>
+        <ScoreDerivationTree root={holdingsToDerivation(etf.name, etf, etf.holdings)} />
+      </section>
 
       {/* ── Charts (native Lightweight; bridged ETFs only) ── */}
       {etfRows.length > 0 && etf.nse_ticker ? (
