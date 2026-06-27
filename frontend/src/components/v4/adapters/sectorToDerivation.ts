@@ -7,10 +7,7 @@
 import type { SectorLensVector, SectorStock } from '@/lib/queries/v6/sector_lens'
 import type { DerivRoot, DerivNode } from '@/components/v6/shared/ScoreDerivationTree'
 import { bandNodes } from './decileBands'
-
-// The composite the sector conviction expresses (lens_weight_* in atlas_thresholds; valuation/policy=0).
-// TODO(thresholds-panel): read live so the tree tracks FM edits.
-const COMPOSITE_FORMULA = 'free-float-weighted lens vector · composite 0.30·Tech + 0.25·Fund + 0.25·Flow + 0.20·Cat'
+import { sectorComposite, compositeContributions } from '@/lib/v6/sectorScore'
 
 // lens key → {label, the per-constituent decile field, the lens breadth field, glossary term}
 type DKey = 'd_tech' | 'd_fund' | 'd_cat' | 'd_flow' | 'd_val'
@@ -33,9 +30,12 @@ const retMetrics = (s: SectorStock) => [
 ]
 export function sectorToDerivation(sector: string, vector: SectorLensVector, stocks: SectorStock[]): DerivRoot {
   const n = stocks.length
-  // headline = sector conviction = mean of constituents' strength (avg-decile, 0–10).
+  // headline = the sector COMPOSITE (0–100), derived from the lens components — the same number
+  // shown on the /sectors scores table. (Mean-decile "strength" is shown as a secondary read.)
+  const composite = sectorComposite(vector)
+  const contribs = compositeContributions(vector)
   const withStrength = stocks.filter((s): s is SectorStock & { strength: number } => s.strength != null)
-  const conviction = withStrength.length
+  const strength = withStrength.length
     ? withStrength.reduce((a, s) => a + s.strength, 0) / withStrength.length
     : null
 
@@ -79,11 +79,28 @@ export function sectorToDerivation(sector: string, vector: SectorLensVector, sto
   return {
     title: sector,
     headline: {
-      label: 'Conviction',
-      value: conviction != null ? `${conviction.toFixed(1)}/10` : '—',
-      decile: conviction != null ? Math.round(conviction) : null,
+      label: 'Sector score',
+      value: composite != null ? `${composite.toFixed(0)}` : '—',
+      decile: composite != null ? Math.max(1, Math.min(10, Math.round(composite / 10))) : null,
     },
-    formula: `= ${COMPOSITE_FORMULA}`,
-    lenses,
+    formula: composite != null
+      ? `Sector score ${composite.toFixed(0)}/100 · avg-decile strength ${strength != null ? strength.toFixed(1) : '—'}/10`
+      : '= 0.30·Tech + 0.25·Fund + 0.25·Flow + 0.20·Cat (free-float-weighted)',
+    // Prepend a "Sector score" node that DERIVES the headline from the lens components (weight × score),
+    // so the number is glass-box; the per-lens nodes (with their decile bands) follow.
+    lenses: composite != null
+      ? [{
+          id: 'sector-score',
+          label: 'Sector score',
+          score: composite,
+          formula: `Sector score ${composite.toFixed(0)}/100 = Σ (lens score × weight), free-float-weighted lens vector`,
+          children: contribs.map((c) => ({
+            id: `contrib-${c.key}`,
+            label: `${c.short} · weight ${c.weight.toFixed(2)}`,
+            value: `${c.score.toFixed(0)} → ${c.contrib.toFixed(1)}`,
+            tone: 'neutral' as const,
+          })),
+        } as DerivNode, ...lenses]
+      : lenses,
   }
 }
