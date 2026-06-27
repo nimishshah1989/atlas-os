@@ -19,12 +19,12 @@ on:
 # into a clean source checkout, local-rsync frontend into the serving dir, build,
 # pm2-reload, health-check, auto-rollback.
 #
-# Layout on EC2:
-#   /home/ubuntu/atlas-prod-src    — clean git checkout of main (deploy source)
-#   /home/ubuntu/atlas-frontend-v2 — serving dir (pm2: atlas-frontend-v2, :3002)
-# The dev tree (/home/ubuntu/atlas-os) is never touched, so WIP / `next dev`
-# there can no longer affect prod. .env.local is managed out-of-band in the
-# serving dir (excluded from the sync).
+# Layout on EC2 (consolidated 2026-06-27 — one frontend process, no stale copies):
+#   /home/ubuntu/atlas-prod-src   — clean git checkout of main (deploy source)
+#   /home/ubuntu/atlas-os/frontend — serving dir (pm2: atlas-frontend-v3, :3004),
+#                                    the SAME process nginx serves at atlas.jslwealth.in.
+# .env.local lives in the serving dir and is excluded from the sync. The stale
+# atlas-frontend / atlas-frontend-v2 (:3002/:3005) processes were retired.
 jobs:
   deploy:
     name: Build + deploy on EC2 (git pull, no rsync action)
@@ -42,7 +42,10 @@ jobs:
           script: |
             set -e
             SRC=/home/ubuntu/atlas-prod-src
-            APP=/home/ubuntu/atlas-frontend-v2
+            # Deploy to the process nginx actually serves (atlas-frontend-v3 / :3004).
+            # Previously this targeted atlas-frontend-v2 (:3002), which nginx does NOT serve —
+            # so main deploys never reached the live site and it drifted.
+            APP=/home/ubuntu/atlas-os/frontend
             STAMP=$(date +%Y%m%d_%H%M%S)
             LOG=/home/ubuntu/logs/deploy_${STAMP}.log
             mkdir -p /home/ubuntu/logs
@@ -66,11 +69,16 @@ jobs:
             echo "[deploy ${STAMP}] backing up current .next → .next.bak.${STAMP}" | tee -a "$LOG"
             [ -d .next ] && cp -r .next ".next.bak.${STAMP}"
 
+            # Clear the ISR/fetch cache so the new build prerenders fresh data — without this,
+            # Next.js bakes stale ISR pages across rebuilds (the "half and half" / stale-Media bug).
+            echo "[deploy ${STAMP}] clearing .next/cache (avoid stale ISR)" | tee -a "$LOG"
+            rm -rf .next/cache
+
             echo "[deploy ${STAMP}] npm ci + build (PM2 still serves the OLD build)" | tee -a "$LOG"
             npm ci --prefer-offline >> "$LOG" 2>&1
             if NODE_OPTIONS="--max-old-space-size=3072" npm run build >> "$LOG" 2>&1; then
               echo "[deploy ${STAMP}] build OK; pm2 reload (rolling, zero-downtime)" | tee -a "$LOG"
-              pm2 reload atlas-frontend-v2 >> "$LOG" 2>&1
+              pm2 reload atlas-frontend-v3 >> "$LOG" 2>&1
             else
               echo "[deploy ${STAMP}] build FAILED; .next untouched; serving stays old" | tee -a "$LOG"
               exit 1
@@ -88,7 +96,7 @@ jobs:
               if [ -d "$APP/.next.bak.${STAMP}" ]; then
                 rm -rf "$APP/.next"
                 mv "$APP/.next.bak.${STAMP}" "$APP/.next"
-                pm2 reload atlas-frontend-v2 >> "$LOG" 2>&1
+                pm2 reload atlas-frontend-v3 >> "$LOG" 2>&1
                 sleep 5
                 HTTP_AFTER=$(curl -sk -o /dev/null -w "%{http_code}" https://atlas.jslwealth.in/)
                 echo "[deploy ${STAMP}] after rollback: HTTP ${HTTP_AFTER}" | tee -a "$LOG"

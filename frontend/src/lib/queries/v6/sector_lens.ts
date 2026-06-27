@@ -39,6 +39,7 @@ export type SectorStock = {
   symbol: string; name: string | null; cap: string
   d_tech: number | null; d_fund: number | null; d_cat: number | null; d_flow: number | null; d_val: number | null
   lead: number; strength: number | null
+  ret_1d: number | null; ret_1w: number | null; ret_1m: number | null
 }
 
 // Deciles cut WITHIN cap cohort across the whole universe (D27), then filtered to the sector.
@@ -61,14 +62,18 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
     ),
     j AS (
       SELECT l.instrument_id, im.symbol, im.name, im.sector, COALESCE(c.cap,'micro') AS cap,
-             l.technical::float t, l.fundamental::float f, l.catalyst::float ca, l.flow::float fl, l.valuation::float va
+             l.technical::float t, l.fundamental::float f, l.catalyst::float ca, l.flow::float fl, l.valuation::float va,
+             td.ret_1d::float r1d, td.ret_1w::float r1w, td.ret_1m::float r1m
       FROM foundation_staging.atlas_lens_scores_daily l
       JOIN foundation_staging.instrument_master im ON im.instrument_id = l.instrument_id
       LEFT JOIN cap c ON c.instrument_id = l.instrument_id
+      LEFT JOIN foundation_staging.technical_daily td
+        ON td.instrument_id = l.instrument_id AND td.asset_class='stock'
+        AND td.date = (SELECT d FROM latest)
       WHERE l.asset_class='stock' AND l.date=(SELECT d FROM latest)
     ),
     dec AS (
-      SELECT symbol, name, sector, cap, t, f, ca, fl, va,
+      SELECT symbol, name, sector, cap, t, f, ca, fl, va, r1d, r1w, r1m,
         CASE WHEN t  IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(t  IS NULL) ORDER BY t)  END d_tech,
         CASE WHEN f  IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(f  IS NULL) ORDER BY f)  END d_fund,
         CASE WHEN ca IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(ca IS NULL) ORDER BY ca) END d_cat,
@@ -76,7 +81,7 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
         CASE WHEN va IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(va IS NULL) ORDER BY va) END d_val
       FROM j
     )
-    SELECT symbol, name, cap, d_tech, d_fund, d_cat, d_flow, d_val,
+    SELECT symbol, name, cap, d_tech, d_fund, d_cat, d_flow, d_val, r1d, r1w, r1m,
       (COALESCE((d_tech>=${LEAD_DECILE})::int,0) + COALESCE((d_fund>=${LEAD_DECILE})::int,0) + COALESCE((d_cat>=${LEAD_DECILE})::int,0) + COALESCE((d_flow>=${LEAD_DECILE})::int,0)) AS lead,
       ((COALESCE(d_tech,0)+COALESCE(d_fund,0)+COALESCE(d_cat,0)+COALESCE(d_flow,0))::float
         / NULLIF((d_tech IS NOT NULL)::int+(d_fund IS NOT NULL)::int+(d_cat IS NOT NULL)::int+(d_flow IS NOT NULL)::int,0)) AS strength
@@ -88,6 +93,7 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
     symbol: r.symbol, name: r.name, cap: r.cap,
     d_tech: n(r.d_tech), d_fund: n(r.d_fund), d_cat: n(r.d_cat), d_flow: n(r.d_flow), d_val: n(r.d_val),
     lead: Number(r.lead ?? 0), strength: n(r.strength),
+    ret_1d: n(r.r1d), ret_1w: n(r.r1w), ret_1m: n(r.r1m),
   }))
 }
 

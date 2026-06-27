@@ -13,7 +13,8 @@ import { SectorRSRatioCharts } from '@/components/v6/sectors/SectorRSRatioCharts
 import { ConstituentsTable } from '@/components/v6/sectors/ConstituentsTable'
 import { TopPicksPanel } from '@/components/v6/sectors/TopPicksPanel'
 import { StrengthDistChart } from '@/components/v6/sectors/StrengthDistChart'
-import { SectorLensRead } from '@/components/v6/sectors/SectorLensRead'
+import { ScoreDerivationTree } from '@/components/v6/shared/ScoreDerivationTree'
+import { sectorToDerivation } from '@/components/v4/adapters/sectorToDerivation'
 import { SectorStock2x2 } from '@/components/v6/sectors/SectorStock2x2'
 import { SectorBreadthWithin } from '@/components/v6/sectors/SectorBreadthWithin'
 import { SectorFundamentalsTable } from '@/components/v6/sectors/SectorFundamentalsTable'
@@ -75,8 +76,19 @@ export async function SectorDeepDiveV4({ sector }: { sector: string }) {
         </Suspense>
       </section>
 
-      {/* NEW: lens read + 2x2 + within-sector breadth */}
-      {lensVector && <SectorLensRead vector={lensVector} stocks={stocks} />}
+      {/* Glass box: canonical Score-Derivation Tree (Conviction → lens → constituents by contribution) */}
+      {lensVector && (
+        <section className="px-8 py-10 border-b border-edge-hair" aria-label="How the score is built">
+          <div className="mb-4">
+            <p className="font-num text-[9px] uppercase tracking-[0.14em] text-txt-3">Glass box</p>
+            <h2 className="font-display text-[28px] font-normal tracking-tight text-txt-1">How the score is built</h2>
+            <p className="mt-1 max-w-[820px] font-sans text-[13px] text-txt-2">
+              Click a lens to expand its constituents, ranked by contribution; each name links to its own evidence. The eye icon on any term explains it.
+            </p>
+          </div>
+          <ScoreDerivationTree root={sectorToDerivation(sector, lensVector, stocks)} />
+        </section>
+      )}
       {stocks.length > 0 && <SectorStock2x2 stocks={stocks} />}
       {stocks.length > 0 && <SectorBreadthWithin stocks={stocks} />}
 

@@ -46,7 +46,7 @@ export const SCORED_STOCKS = `
     FROM foundation_staging.de_index_constituents
     WHERE effective_to IS NULL AND index_code IN ('NIFTY 100','NIFTY MIDCAP 150','NIFTY SMLCAP 250')
     GROUP BY instrument_id),
-  rs AS (SELECT instrument_id, rs_3m_n500, rs_1m_n500 FROM foundation_staging.technical_daily
+  rs AS (SELECT instrument_id, rs_3m_n500, rs_1m_n500, ret_1d, ret_1w, ret_1m FROM foundation_staging.technical_daily
          WHERE asset_class='stock' AND date=(SELECT d FROM tdl)),
   j AS (
     SELECT l.instrument_id, im.symbol, COALESCE(c.cap,'micro') AS cap,
@@ -69,7 +69,7 @@ export const SCORED_STOCKS = `
       (COALESCE((d.d_tech=10)::int,0)+COALESCE((d.d_fund=10)::int,0)+COALESCE((d.d_cat=10)::int,0)+COALESCE((d.d_flow=10)::int,0)) AS lead,
       ((COALESCE(d.d_tech,0)+COALESCE(d.d_fund,0)+COALESCE(d.d_cat,0)+COALESCE(d.d_flow,0))::float
         / NULLIF((d.d_tech IS NOT NULL)::int+(d.d_fund IS NOT NULL)::int+(d.d_cat IS NOT NULL)::int+(d.d_flow IS NOT NULL)::int,0)) AS strength,
-      rs.rs_1m_n500, rs.rs_3m_n500
+      rs.rs_1m_n500, rs.rs_3m_n500, rs.ret_1d, rs.ret_1w, rs.ret_1m
     FROM dec d LEFT JOIN rs ON rs.instrument_id = d.instrument_id),
   etf_nse AS (  -- deterministic ETF identity bridge: Morningstar fund_name ⇄ NSE instrument name.
                 -- 1 row per mstar_id (min ticker) so a name matching >1 NSE row can't fan out the holdings join.
@@ -134,6 +134,7 @@ export type EtfHolding = {
   symbol: string; weight: number | null; sector: string | null
   d_tech: number | null; d_fund: number | null; d_cat: number | null; d_flow: number | null; d_val: number | null
   lead: number; strength: number | null; rs_3m: number | null
+  ret_1d: number | null; ret_1w: number | null; ret_1m: number | null
 }
 export type EtfLensDetail = EtfLensRow & {
   isin: string | null; amc: string | null; benchmark: string | null
@@ -156,7 +157,8 @@ export async function getEtfLensDetail(fcode: string): Promise<EtfLensDetail | n
   const hrows = await sql.unsafe(`
     WITH ${SCORED_STOCKS}
     SELECT h.weight, s.symbol, im.sector,
-      s.d_tech, s.d_fund, s.d_cat, s.d_flow, s.d_val, COALESCE(s.lead,0) AS lead, s.strength, s.rs_3m_n500
+      s.d_tech, s.d_fund, s.d_cat, s.d_flow, s.d_val, COALESCE(s.lead,0) AS lead, s.strength, s.rs_3m_n500,
+      s.ret_1d, s.ret_1w, s.ret_1m
     FROM foundation_staging.de_etf_holdings h
     JOIN scored s ON s.instrument_id = h.instrument_id
     JOIN foundation_staging.instrument_master im ON im.instrument_id = h.instrument_id
@@ -173,6 +175,7 @@ export async function getEtfLensDetail(fcode: string): Promise<EtfLensDetail | n
       symbol: r.symbol, weight: n(r.weight), sector: r.sector,
       d_tech: n(r.d_tech), d_fund: n(r.d_fund), d_cat: n(r.d_cat), d_flow: n(r.d_flow), d_val: n(r.d_val),
       lead: toNumberOr(r.lead, 0), strength: n(r.strength), rs_3m: n(r.rs_3m_n500),
+      ret_1d: n(r.ret_1d), ret_1w: n(r.ret_1w), ret_1m: n(r.ret_1m),
     })),
   }
 }

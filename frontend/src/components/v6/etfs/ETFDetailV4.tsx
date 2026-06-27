@@ -6,12 +6,14 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
-import { getEtfLensDetail, getEtfChartSeries, type EtfLensDetail, type EtfHolding } from '@/lib/queries/v6/etf_lens'
+import { getEtfLensDetail, getEtfChartSeries, type EtfHolding } from '@/lib/queries/v6/etf_lens'
 import { StockPriceEMAChart } from '@/components/v6/stock-detail/StockPriceEMAChart'
 import { StockRSChart } from '@/components/v6/stock-detail/StockRSChart'
 import { Panel } from '@/components/v4/ui/Panel'
 import { StatCard } from '@/components/v4/ui/StatCard'
 import { decileColor } from '@/components/v4/ui/decile'
+import { ScoreDerivationTree } from '@/components/v6/shared/ScoreDerivationTree'
+import { holdingsToDerivation } from '@/components/v4/adapters/holdingsToDerivation'
 
 const HOLDING_CAP = 50
 
@@ -26,39 +28,6 @@ const pctText = (v: number | null) =>
   v == null ? 'text-txt-3' : v >= 0 ? 'text-sig-pos' : 'text-sig-neg'
 
 const fmtRs = (v: number | null) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%`)
-
-// ── holdings-weighted six-lens vector (0..100, bars) ──────────────────────
-const LENS_VECTOR: { key: keyof Pick<EtfLensDetail, 'v_tech' | 'v_fund' | 'v_cat' | 'v_flow' | 'v_val'>; label: string }[] = [
-  { key: 'v_tech', label: 'Technical' },
-  { key: 'v_fund', label: 'Fundamental' },
-  { key: 'v_cat', label: 'Catalyst' },
-  { key: 'v_flow', label: 'Flow' },
-  { key: 'v_val', label: 'Valuation' },
-]
-
-function LensVector({ etf }: { etf: EtfLensDetail }) {
-  const scored = LENS_VECTOR
-    .map(l => ({ label: l.label, v: etf[l.key] }))
-    .filter((x): x is { label: string; v: number } => x.v != null)
-  return (
-    <div className="max-w-[560px] space-y-2">
-      {scored.length === 0 && <p className="font-sans text-[13px] italic text-txt-3">No scored holdings.</p>}
-      {scored.map(l => {
-        // score 0..100 → decile band (score/10) for the shared ramp colour.
-        const color = decileColor(Math.round(l.v / 10))
-        return (
-          <div key={l.label} className="flex items-center gap-3">
-            <span className="w-[96px] shrink-0 font-sans text-xs text-txt-2">{l.label}</span>
-            <span className="w-[34px] shrink-0 text-right font-num text-xs tabular-nums" style={{ color }}>{l.v.toFixed(0)}</span>
-            <span className="h-[7px] flex-1 overflow-hidden rounded-tile bg-surface-inset">
-              <span className="block h-full rounded-tile" style={{ width: `${Math.min(100, l.v)}%`, background: color }} />
-            </span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
 
 // ── look-through holdings table (sorted by weight desc upstream) ──────────
 function HoldingsTable({ holdings }: { holdings: EtfHolding[] }) {
@@ -153,14 +122,17 @@ export async function ETFDetailV4({ fcode }: { fcode: string }) {
         </div>
       </header>
 
-      {/* ── Holdings-weighted six-lens vector ── */}
-      <Panel
-        eyebrow="Lens read"
-        title="How the holdings score on each lens"
-        info={{ body: 'Weight-weighted average of each holding’s lens score (0–100) — descriptive, not a forecast.' }}
-      >
-        <LensVector etf={etf} />
-      </Panel>
+      {/* ── Glass box: Score-Derivation Tree (Leadership-breadth → lens → holdings by contribution) ── */}
+      <section aria-label="How the score is built">
+        <div className="mb-4">
+          <p className="font-num text-[9px] uppercase tracking-[0.14em] text-txt-3">Glass box</p>
+          <h2 className="font-display text-[22px] font-medium tracking-tight text-txt-1">How the score is built</h2>
+          <p className="mt-1 max-w-[760px] font-sans text-[13px] text-txt-2">
+            Click a lens to expand its holdings, ranked by contribution (weight × decile); each name links to its own evidence. Descriptive, not a forecast.
+          </p>
+        </div>
+        <ScoreDerivationTree root={holdingsToDerivation(etf.name, etf, etf.holdings)} />
+      </section>
 
       {/* ── Charts (native Lightweight; bridged ETFs only) ── */}
       {etfRows.length > 0 && etf.nse_ticker ? (

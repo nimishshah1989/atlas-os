@@ -62,6 +62,7 @@ export type FundHolding = {
   symbol: string; weight: number | null; sector: string | null
   d_tech: number | null; d_fund: number | null; d_cat: number | null; d_flow: number | null; d_val: number | null
   lead: number; rs_3m: number | null
+  ret_1d: number | null; ret_1w: number | null; ret_1m: number | null
 }
 export type FundMove = { symbol: string; name: string | null; weight: number | null; lead: number }
 export type FundActiveMovement = {
@@ -89,7 +90,8 @@ export async function getFundLensDetail(mstarId: string): Promise<FundLensDetail
     sql.unsafe(`
       WITH ${SCORED_STOCKS}
       SELECT h.weight_pct AS weight, s.symbol, im.sector,
-        s.d_tech, s.d_fund, s.d_cat, s.d_flow, s.d_val, COALESCE(s.lead,0) AS lead, s.rs_3m_n500
+        s.d_tech, s.d_fund, s.d_cat, s.d_flow, s.d_val, COALESCE(s.lead,0) AS lead, s.rs_3m_n500,
+        s.ret_1d, s.ret_1w, s.ret_1m
       FROM foundation_staging.de_mf_holdings h
       JOIN scored s ON s.instrument_id = h.instrument_id
       JOIN foundation_staging.instrument_master im ON im.instrument_id = h.instrument_id
@@ -110,6 +112,7 @@ export async function getFundLensDetail(mstarId: string): Promise<FundLensDetail
       symbol: r.symbol, weight: n(r.weight), sector: r.sector,
       d_tech: n(r.d_tech), d_fund: n(r.d_fund), d_cat: n(r.d_cat), d_flow: n(r.d_flow), d_val: n(r.d_val),
       lead: toNumberOr(r.lead, 0), rs_3m: n(r.rs_3m_n500),
+      ret_1d: n(r.ret_1d), ret_1w: n(r.ret_1w), ret_1m: n(r.ret_1m),
     })),
     movement,
   }
