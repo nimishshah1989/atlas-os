@@ -26,6 +26,7 @@ export type BandItem = {
   decile: number          // this item's decile for the lens being banded
   weight: number | null   // share weight as a % (holdings) or null (sectors → count-share)
   href?: string
+  value?: string | null   // the constituent's DRIVER for this lens (e.g. "Acquisition +8", "RS +22%")
   metrics?: DerivNode['metrics']
 }
 
@@ -50,6 +51,7 @@ export function bandNodes(keyPrefix: string, items: BandItem[]): DerivNode[] {
       label: i.symbol,
       decile: i.decile,
       weightPct: hasWeights ? i.weight : null,
+      value: i.value ?? null,
       metrics: i.metrics,
       href: i.href,
     }))
