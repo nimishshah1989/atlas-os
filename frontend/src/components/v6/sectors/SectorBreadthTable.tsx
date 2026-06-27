@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import type { SectorBreadthMVRow, SectorBreadthTrendRow } from '@/lib/queries/v6/sectors'
+import { TermInfo } from '@/components/v6/shared/TermInfo'
 
 const pct = (v: number | null) => (v == null ? '—' : `${(v * 100).toFixed(0)}%`)
 const heat = (v: number | null) => {
@@ -56,7 +57,7 @@ export function SectorBreadthTable({
     return sortDir === 'desc' ? vb - va : va - vb
   })
 
-  function SortTh({ label, k }: { label: string; k: SortKey }) {
+  function SortTh({ label, k, term }: { label: string; k: SortKey; term?: string }) {
     const active = sortKey === k
     return (
       <th
@@ -64,7 +65,7 @@ export function SectorBreadthTable({
         className={`py-1.5 font-semibold cursor-pointer select-none hover:text-txt-1 ${active ? 'text-txt-1' : ''}`}
         aria-sort={active ? (sortDir === 'desc' ? 'descending' : 'ascending') : 'none'}
       >
-        {label}{active && <span className="ml-0.5">{sortDir === 'desc' ? '↓' : '↑'}</span>}
+        {label}{term && <TermInfo term={term} />}{active && <span className="ml-0.5">{sortDir === 'desc' ? '↓' : '↑'}</span>}
       </th>
     )
   }
@@ -75,10 +76,10 @@ export function SectorBreadthTable({
         <tr className="font-num text-[10px] text-txt-3 uppercase tracking-wider border-b border-edge-rule">
           <th className="text-left py-1.5 font-semibold">Sector</th>
           <SortTh label="Stocks" k="constituent_count" />
-          <SortTh label="&gt; EMA21" k="pct_above_ema21" />
+          <SortTh label="&gt; EMA21" k="pct_above_ema21" term="breadth_ema" />
           <SortTh label="&gt; EMA50" k="pct_above_ema50" />
           <SortTh label="&gt; EMA200" k="pct_above_ema200" />
-          <th className="py-1.5 font-semibold pl-4" title="% above EMA21 — now · 1w ago · 1m ago">EMA21 trend</th>
+          <th className="py-1.5 font-semibold pl-4" title="% above EMA21 — now · 1w ago · 1m ago">EMA21 trend<TermInfo term="breadth_ema" /></th>
           <th className="text-left py-1.5 font-semibold pl-6">Top movers</th>
         </tr>
       </thead>
