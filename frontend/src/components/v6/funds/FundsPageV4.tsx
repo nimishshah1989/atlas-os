@@ -70,21 +70,25 @@ export async function FundsPageV4() {
   const top = funds.filter(f => f.breadth != null).slice(0, 6)
 
   // Bubble landscape: x = leadership-breadth %, y = avg holdings-weighted lens score,
-  // size = #holdings (diversification), tone by breadth. Real values only.
+  // size = #holdings (diversification). COLOUR = the scorecard quality score (composite) so the
+  // tint reads as "good/ok/weak fund", not the harsh breadth bar that turned ~85% of funds red.
+  // Funds without a scorecard composite are neutral (grey), never a fake colour. Real values only.
   const bubbles: BubblePoint[] = funds
     .map((f) => {
       const al = avgFundLens(f)
       if (f.breadth == null || al == null) return null
       const br = f.breadth * 100
+      const tone: BubblePoint['tone'] =
+        f.composite == null ? 'neutral' : f.composite >= 60 ? 'pos' : f.composite >= 45 ? 'neutral' : 'neg'
       return {
         id: f.mstar_id,
         label: f.name,
         x: br,
         y: al,
         size: f.n_holdings || 1,
-        tone: br >= 50 ? 'pos' : br >= 20 ? 'neutral' : 'neg',
+        tone,
         href: `/funds/${f.mstar_id}`,
-        sub: `${f.category ?? '—'} · ${f.n_holdings} holdings · ${f.n_leaders} leaders`,
+        sub: `${f.category ?? '—'} · ${f.n_holdings} holdings · ${f.composite != null ? `score ${f.composite.toFixed(0)} · rank ${f.cat_rank}/${f.cat_size}` : 'unscored'}`,
       } as BubblePoint
     })
     .filter((p): p is BubblePoint => p != null)
@@ -144,7 +148,7 @@ export async function FundsPageV4() {
         <Panel
           eyebrow="Landscape"
           title="Leadership-breadth vs lens score"
-          info={{ body: 'Each bubble is a fund: x = leadership-breadth (share of weight that are leaders), y = average holdings-weighted lens score, size = number of holdings. Top-right = broad leadership. Hover for detail, click to open.' }}
+          info={{ body: 'Each bubble is a fund: x = leadership-breadth (share of weight that are leaders), y = average holdings-weighted lens score, size = number of holdings, COLOUR = the fund quality score (green ≥60 · grey 45–60 or unscored · red <45). Top-right = broad leadership. Hover for detail, click to open.' }}
           bodyClassName="px-2 py-2"
         >
           <LensBubbleChart

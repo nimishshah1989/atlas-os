@@ -21,6 +21,9 @@ export type FundLensRow = {
   mstar_id: string; name: string; amc: string | null; category: string | null; benchmark: string | null; expense: number | null
   n_holdings: number; n_leaders: number; breadth: number | null
   v_tech: number | null; v_fund: number | null; v_cat: number | null; v_flow: number | null; v_val: number | null
+  // Fund quality score + within-category rank from the Atlas fund scorecard (risk-adj return +
+  // holdings conviction + style + cost). Ranked within the DISPLAYED cohort so N/M matches the list.
+  composite: number | null; cat_rank: number | null; cat_size: number | null
 }
 function mapRow(r: Record<string, string>): FundLensRow {
   const n = (v: string | null) => (v == null ? null : toNumber(v))
@@ -28,6 +31,9 @@ function mapRow(r: Record<string, string>): FundLensRow {
     mstar_id: r.mstar_id, name: r.name, amc: r.amc, category: r.category, benchmark: r.benchmark, expense: n(r.expense),
     n_holdings: toNumberOr(r.n_holdings, 0), n_leaders: toNumberOr(r.n_leaders, 0), breadth: n(r.breadth),
     v_tech: n(r.v_tech), v_fund: n(r.v_fund), v_cat: n(r.v_cat), v_flow: n(r.v_flow), v_val: n(r.v_val),
+    composite: n(r.composite),
+    cat_rank: r.cat_rank == null ? null : toNumberOr(r.cat_rank, 0),
+    cat_size: r.cat_size == null ? null : toNumberOr(r.cat_size, 0),
   }
 }
 
@@ -44,16 +50,35 @@ const ROLLUP = `
   sum(h.weight_pct*s.fl) FILTER (WHERE s.fl IS NOT NULL) / NULLIF(sum(h.weight_pct) FILTER (WHERE s.fl IS NOT NULL),0) AS v_flow,
   sum(h.weight_pct*s.va) FILTER (WHERE s.va IS NOT NULL) / NULLIF(sum(h.weight_pct) FILTER (WHERE s.va IS NOT NULL),0) AS v_val`
 
+// Fund quality score = atlas_fund_scorecard.composite_score, joined by Morningstar F-code
+// (scheme_code == de_mf_master.mstar_id). The within-category rank is computed over the funds
+// actually shown (Regular-plan equity, ≥5 scored holdings) so "N / M" matches this list — NOT the
+// scorecard's own rank_in_category, whose cohort includes Direct/IDCW duplicates. RULE #0: real
+// scorecard scores only; a fund without a scorecard row shows no score/rank rather than a fake one.
+const FUND_SCORECARD = `
+  SELECT scheme_code, composite_score
+  FROM foundation_staging.atlas_fund_scorecard
+  WHERE snapshot_date = (SELECT max(snapshot_date) FROM foundation_staging.atlas_fund_scorecard)`
+
 export async function getFundLensList(): Promise<FundLensRow[]> {
   const rows = await sql.unsafe(`
-    WITH ${SCORED_STOCKS}
-    SELECT ${ROLLUP}
-    FROM foundation_staging.de_mf_master mm
-    JOIN foundation_staging.de_mf_holdings h ON h.mstar_id = mm.mstar_id AND h.as_of_date = ${LATEST} AND h.weight_pct > 0
-    JOIN scored s ON s.instrument_id = h.instrument_id
-    WHERE ${EQUITY_FUND_FILTER}
-    GROUP BY mm.mstar_id, mm.fund_name, mm.amc_name, mm.category_name, mm.primary_benchmark, mm.expense_ratio
-    HAVING count(h.instrument_id) >= 5
+    WITH ${SCORED_STOCKS},
+    sc AS (${FUND_SCORECARD}),
+    roll AS (
+      SELECT ${ROLLUP}, max(sc.composite_score) AS composite
+      FROM foundation_staging.de_mf_master mm
+      JOIN foundation_staging.de_mf_holdings h ON h.mstar_id = mm.mstar_id AND h.as_of_date = ${LATEST} AND h.weight_pct > 0
+      JOIN scored s ON s.instrument_id = h.instrument_id
+      LEFT JOIN sc ON sc.scheme_code = mm.mstar_id
+      WHERE ${EQUITY_FUND_FILTER}
+      GROUP BY mm.mstar_id, mm.fund_name, mm.amc_name, mm.category_name, mm.primary_benchmark, mm.expense_ratio
+      HAVING count(h.instrument_id) >= 5
+    )
+    SELECT *,
+      CASE WHEN composite IS NOT NULL
+           THEN rank() OVER (PARTITION BY category ORDER BY composite DESC) END AS cat_rank,
+      count(composite) OVER (PARTITION BY category) AS cat_size
+    FROM roll
     ORDER BY breadth DESC NULLS LAST`) as unknown as Record<string, string>[]
   return rows.map(mapRow)
 }

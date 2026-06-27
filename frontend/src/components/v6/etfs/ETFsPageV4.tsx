@@ -76,21 +76,24 @@ export async function ETFsPageV4() {
   const top = etfs.filter(e => e.breadth != null).slice(0, 6)
 
   // Bubble landscape: x = leadership-breadth %, y = avg holdings-weighted lens score,
-  // size = #holdings (diversification), tone by breadth. Real values only.
+  // size = #holdings (diversification). COLOUR = the avg lens score (quality), so the tint reads
+  // as "strong/ok/weak ETF" instead of the breadth bar that painted almost every ETF red. ETFs
+  // have no fund-scorecard composite, so the holdings-weighted avg lens score is the quality proxy.
   const bubbles: BubblePoint[] = etfs
     .map((e) => {
       const al = avgLens(e)
       if (e.breadth == null || al == null) return null
       const br = e.breadth * 100
+      const tone: BubblePoint['tone'] = al >= 60 ? 'pos' : al >= 45 ? 'neutral' : 'neg'
       return {
         id: e.fcode,
         label: e.name,
         x: br,
         y: al,
         size: e.n_holdings || 1,
-        tone: br >= 50 ? 'pos' : br >= 20 ? 'neutral' : 'neg',
+        tone,
         href: `/etfs/${e.fcode}`,
-        sub: `${cleanEtfCat(e.category)} · ${e.n_holdings} holdings · ${e.n_leaders} leaders`,
+        sub: `${cleanEtfCat(e.category)} · ${e.n_holdings} holdings · ${e.n_leaders} leaders · lens ${al.toFixed(0)}`,
       } as BubblePoint
     })
     .filter((p): p is BubblePoint => p != null)
@@ -149,7 +152,7 @@ export async function ETFsPageV4() {
         <Panel
           eyebrow="Landscape"
           title="Leadership-breadth vs lens score"
-          info={{ body: 'Each bubble is an ETF: x = leadership-breadth (share of weight that are leaders), y = average holdings-weighted lens score, size = number of holdings. Top-right = broad leadership. Hover for detail, click to open.' }}
+          info={{ body: 'Each bubble is an ETF: x = leadership-breadth (share of weight that are leaders), y = average holdings-weighted lens score, size = number of holdings, COLOUR = avg lens score (green ≥60 · grey 45–60 · red <45). Top-right = broad leadership. Hover for detail, click to open.' }}
           bodyClassName="px-2 py-2"
         >
           <LensBubbleChart
