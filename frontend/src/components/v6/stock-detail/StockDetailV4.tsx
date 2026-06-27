@@ -23,6 +23,8 @@ import { TVTechnicalAnalysis, TVCompanyProfile } from './TVWidgets'
 import { DecileLadder } from '@/components/v4/ui/DecileLadder'
 import { StatCard, type Tone } from '@/components/v4/ui/StatCard'
 import { stockToLadder } from '@/components/v4/adapters/stockToLadder'
+import { stockToDerivation } from '@/components/v4/adapters/stockToDerivation'
+import { ScoreDerivationTree } from '@/components/v6/shared/ScoreDerivationTree'
 
 const CAP_LABEL: Record<string, string> = { large: 'Large-cap', mid: 'Mid-cap', small: 'Small-cap', micro: 'Micro-cap' }
 const SECTION = 'px-8 py-8 border-b border-edge-hair'
@@ -66,6 +68,7 @@ export async function StockDetailV4({ symbol }: { symbol: string }) {
   const sector = stock.sector ?? decile?.sector ?? null
   const name = stock.name ?? decile?.name ?? stock.symbol
   const ladder = decile ? stockToLadder(decile, evidence) : null
+  const deriv = ladder ? stockToDerivation(stock.symbol, stock.name ?? null, ladder) : null
   // Glass-box: the exact conviction maths (FM 2026-06-26 — show the decile + composite
   // calculation, don't just print the result). Strength = mean of the 4 SCORED-lens
   // deciles (Technical / Fundamental / Catalyst / Flow); Valuation + Policy are shown
@@ -179,6 +182,20 @@ export async function StockDetailV4({ symbol }: { symbol: string }) {
           </details>
         )}
       </section>
+
+      {/* ── Score derivation tree (canonical glass-box: composite → lens → sub-component → variable) ── */}
+      {deriv && (
+        <section className={SECTION}>
+          <div className="mb-4">
+            <p className="font-num text-[9px] uppercase tracking-[0.14em] text-txt-3">Glass box</p>
+            <h2 className="font-display text-[22px] font-medium tracking-tight text-txt-1">How the score is built</h2>
+            <p className="mt-1 max-w-[760px] font-sans text-[13px] text-txt-2">
+              Click a lens to expand its sub-components, then drill to the actual values. The eye icon on any term explains it.
+            </p>
+          </div>
+          <ScoreDerivationTree root={deriv} />
+        </section>
+      )}
 
       {/* ── Policy as a RAG sector-policy alert (NOT a score) ── */}
       <PolicyAlertPanel alerts={policyAlerts} sector={stock.sector ?? null} />
