@@ -62,6 +62,9 @@ export type SectorStock = {
   d_tech: number | null; d_fund: number | null; d_cat: number | null; d_flow: number | null; d_val: number | null
   lead: number; strength: number | null
   ret_1d: number | null; ret_1w: number | null; ret_1m: number | null
+  ret_3m: number | null; ret_6m: number | null; ret_12m: number | null
+  rs_1m: number | null; rs_3m: number | null; rs_6m: number | null; rs_sector_3m: number | null
+  liq_cr: number | null
 }
 
 // Deciles cut WITHIN cap cohort across the whole universe (D27), then filtered to the sector.
@@ -82,10 +85,27 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
       WHERE effective_to IS NULL AND index_code IN ('NIFTY 100','NIFTY MIDCAP 150','NIFTY SMLCAP 250')
       GROUP BY instrument_id
     ),
+    sec_ret AS (  -- each sector's own NSE-index 3M return → real RS-vs-sector (stock 3M − sector-index 3M)
+      SELECT sm.sector_name, max(aim.ret_3m::float) AS sret_3m
+      FROM foundation_staging.atlas_sector_master sm
+      JOIN foundation_staging.atlas_index_metrics_daily aim
+        ON aim.index_code = sm.primary_nse_index
+       AND aim.date = (SELECT max(date) FROM foundation_staging.atlas_index_metrics_daily)
+      WHERE sm.is_active = true
+      GROUP BY sm.sector_name
+    ),
+    liq AS (  -- ≈20-session avg traded value (₹ Cr)
+      SELECT instrument_id, avg(close * volume) / 1e7 AS liq_cr
+      FROM foundation_staging.ohlcv_stock
+      WHERE date >= (SELECT d FROM latest) - INTERVAL '30 days' AND close > 0 AND volume > 0
+      GROUP BY instrument_id
+    ),
     j AS (
       SELECT l.instrument_id, im.symbol, im.name, im.sector, COALESCE(c.cap,'micro') AS cap,
              l.technical::float t, l.fundamental::float f, l.catalyst::float ca, l.flow::float fl, l.valuation::float va,
-             td.ret_1d::float r1d, td.ret_1w::float r1w, td.ret_1m::float r1m
+             td.ret_1d::float r1d, td.ret_1w::float r1w, td.ret_1m::float r1m,
+             td.ret_3m::float r3m, td.ret_6m::float r6m, td.ret_12m::float r12m,
+             td.rs_1m_n500::float rs1m, td.rs_3m_n500::float rs3m, td.rs_6m_n500::float rs6m
       FROM foundation_staging.atlas_lens_scores_daily l
       JOIN foundation_staging.instrument_master im ON im.instrument_id = l.instrument_id
       LEFT JOIN cap c ON c.instrument_id = l.instrument_id
@@ -95,7 +115,7 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
       WHERE l.asset_class='stock' AND l.date=(SELECT d FROM latest)
     ),
     dec AS (
-      SELECT symbol, name, sector, cap, t, f, ca, fl, va, r1d, r1w, r1m,
+      SELECT instrument_id, symbol, name, sector, cap, t, f, ca, fl, va, r1d, r1w, r1m, r3m, r6m, r12m, rs1m, rs3m, rs6m,
         CASE WHEN t  IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(t  IS NULL) ORDER BY t)  END d_tech,
         CASE WHEN f  IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(f  IS NULL) ORDER BY f)  END d_fund,
         CASE WHEN ca IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(ca IS NULL) ORDER BY ca) END d_cat,
@@ -103,11 +123,16 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
         CASE WHEN va IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(va IS NULL) ORDER BY va) END d_val
       FROM j
     )
-    SELECT symbol, name, cap, d_tech, d_fund, d_cat, d_flow, d_val, r1d, r1w, r1m,
-      (COALESCE((d_tech>=${LEAD_DECILE})::int,0) + COALESCE((d_fund>=${LEAD_DECILE})::int,0) + COALESCE((d_cat>=${LEAD_DECILE})::int,0) + COALESCE((d_flow>=${LEAD_DECILE})::int,0)) AS lead,
-      ((COALESCE(d_tech,0)+COALESCE(d_fund,0)+COALESCE(d_cat,0)+COALESCE(d_flow,0))::float
-        / NULLIF((d_tech IS NOT NULL)::int+(d_fund IS NOT NULL)::int+(d_cat IS NOT NULL)::int+(d_flow IS NOT NULL)::int,0)) AS strength
-    FROM dec WHERE sector = ${sector}
+    SELECT d.symbol, d.name, d.cap, d.d_tech, d.d_fund, d.d_cat, d.d_flow, d.d_val,
+      d.r1d, d.r1w, d.r1m, d.r3m, d.r6m, d.r12m, d.rs1m, d.rs3m, d.rs6m,
+      (d.r3m - sr.sret_3m) AS rs_sector_3m, liq.liq_cr,
+      (COALESCE((d.d_tech>=${LEAD_DECILE})::int,0) + COALESCE((d.d_fund>=${LEAD_DECILE})::int,0) + COALESCE((d.d_cat>=${LEAD_DECILE})::int,0) + COALESCE((d.d_flow>=${LEAD_DECILE})::int,0)) AS lead,
+      ((COALESCE(d.d_tech,0)+COALESCE(d.d_fund,0)+COALESCE(d.d_cat,0)+COALESCE(d.d_flow,0))::float
+        / NULLIF((d.d_tech IS NOT NULL)::int+(d.d_fund IS NOT NULL)::int+(d.d_cat IS NOT NULL)::int+(d.d_flow IS NOT NULL)::int,0)) AS strength
+    FROM dec d
+    LEFT JOIN sec_ret sr ON sr.sector_name = d.sector
+    LEFT JOIN liq ON liq.instrument_id = d.instrument_id
+    WHERE d.sector = ${sector}
     ORDER BY strength DESC NULLS LAST
   `
   const n = (v: string | null) => (v == null ? null : Number(v))
@@ -116,6 +141,9 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
     d_tech: n(r.d_tech), d_fund: n(r.d_fund), d_cat: n(r.d_cat), d_flow: n(r.d_flow), d_val: n(r.d_val),
     lead: Number(r.lead ?? 0), strength: n(r.strength),
     ret_1d: n(r.r1d), ret_1w: n(r.r1w), ret_1m: n(r.r1m),
+    ret_3m: n(r.r3m), ret_6m: n(r.r6m), ret_12m: n(r.r12m),
+    rs_1m: n(r.rs1m), rs_3m: n(r.rs3m), rs_6m: n(r.rs6m), rs_sector_3m: n(r.rs_sector_3m),
+    liq_cr: n(r.liq_cr),
   }))
 }
 

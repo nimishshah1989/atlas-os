@@ -75,8 +75,9 @@ export async function getFundLensList(): Promise<FundLensRow[]> {
       HAVING count(h.instrument_id) >= 5
     )
     SELECT *,
+      -- NULLS LAST so funds without a scorecard composite don't grab the top ranks (they get no rank).
       CASE WHEN composite IS NOT NULL
-           THEN rank() OVER (PARTITION BY category ORDER BY composite DESC) END AS cat_rank,
+           THEN rank() OVER (PARTITION BY category ORDER BY composite DESC NULLS LAST) END AS cat_rank,
       count(composite) OVER (PARTITION BY category) AS cat_size
     FROM roll
     ORDER BY breadth DESC NULLS LAST`) as unknown as Record<string, string>[]

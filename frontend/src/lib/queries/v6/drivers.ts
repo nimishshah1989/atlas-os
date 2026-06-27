@@ -21,11 +21,25 @@ const num = (v: unknown): number | null => {
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {})
 const signed = (n: number, d = 0) => `${n >= 0 ? '+' : '−'}${Math.abs(n).toFixed(d)}`
 
-// Catalyst → the single most-weighted scoring filing (the real event: order win, acquisition, …).
+// Routine large-shareholder / governance disclosures dominate by weight but say little about the
+// company — deprioritise them so the DIFFERENTIATING event (buyback, real acquisition, results,
+// dividend, order win) surfaces as the driver instead of the same generic text on every name.
+function isLowSignalFiling(f: Record<string, unknown>): boolean {
+  const subj = String(f.subject ?? '').toLowerCase()
+  if (/disclosure under sebi|general update|^updates|analyst|investor meet|con\.? call|allotment of securities|change in management|trading window/.test(subj)) return true
+  return f.bucket === 'governance'
+}
+
+// Catalyst → the most meaningful scoring filing (real event first, then by weight).
 function catalystDriver(le: Record<string, unknown>): string | null {
   const filings = Array.isArray(le.filings) ? (le.filings as Record<string, unknown>[]) : []
   if (!filings.length) return null
-  const top = [...filings].sort((a, b) => Math.abs(num(b.weighted) ?? 0) - Math.abs(num(a.weighted) ?? 0))[0]
+  const ranked = [...filings].sort((a, b) => {
+    const la = isLowSignalFiling(a) ? 1 : 0, lb = isLowSignalFiling(b) ? 1 : 0
+    if (la !== lb) return la - lb // a real corporate event before a routine disclosure
+    return Math.abs(num(b.weighted) ?? 0) - Math.abs(num(a.weighted) ?? 0)
+  })
+  const top = ranked[0]
   const w = num(top.weighted) ?? 0
   if (w === 0) return null
   const order = top.category === 'order_win' ? ' (order win)' : ''
