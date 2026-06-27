@@ -160,6 +160,7 @@ export type StockLadder = {
   leadership: { n: number; of: number }
   cohortLabel: string
   topLensKey: string | null
+  evidence: unknown   // raw per-lens evidence JSONB → catalyst filings + flow inputs for the score tree
 }
 
 export function stockToLadder(decile: StockDecile, ev: StockEvidence | null): StockLadder {
@@ -188,5 +189,6 @@ export function stockToLadder(decile: StockDecile, ev: StockEvidence | null): St
     leadership: { n: decile.lead, of: 4 },
     cohortLabel: CAP_LABEL[decile.cap] ?? decile.cap,
     topLensKey,
+    evidence: decile.evidence,
   }
 }
