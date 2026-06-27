@@ -4,6 +4,7 @@
 // (technical_daily) via getStockRSMatrix(). Server component.
 // Color-scale mirrors RSWindowsTable so the whole app reads the same.
 import type { RSMatrix } from '@/lib/queries/v6/stock_lens'
+import { TermInfo } from '@/components/v6/shared/TermInfo'
 
 const COLS = ['1D', '1W', '1M', '3M', '6M', '12M']
 
@@ -61,7 +62,7 @@ export function StockRSMatrix({ matrix }: { matrix: RSMatrix }) {
   return (
     <section className="px-8 py-9 border-b border-edge-hair" aria-label="Relative strength matrix">
       <div className="mb-[18px]">
-        <h2 className="font-display text-[26px] font-normal tracking-tight text-txt-1">Relative strength · always on</h2>
+        <h2 className="font-display text-[26px] font-normal tracking-tight text-txt-1">Relative strength · always on<TermInfo term="rs" /></h2>
         <p className="font-sans text-[13px] text-txt-3 max-w-[760px] leading-[1.45] mt-1">
           Percentage-point spread vs each baseline across six windows. Green = outperforming, red = lagging.
           {matrix.as_of && <> Data as of <span className="font-num text-txt-2">{matrix.as_of}</span>.</>}
@@ -71,7 +72,7 @@ export function StockRSMatrix({ matrix }: { matrix: RSMatrix }) {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              <th style={{ ...thStyle, textAlign: 'left', width: '26%', paddingLeft: 16 }}>Baseline</th>
+              <th style={{ ...thStyle, textAlign: 'left', width: '26%', paddingLeft: 16 }}>Baseline<TermInfo term="baseline" /></th>
               {COLS.map(c => <th key={c} style={thStyle}>{c}</th>)}
             </tr>
           </thead>

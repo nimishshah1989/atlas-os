@@ -265,6 +265,51 @@ export async function getSectorCards(): Promise<SectorCardRow[]> {
   }))
 }
 
+// A sector's constituent stock as a row in the /sectors return/RS matrix (inline drill-down).
+// Same return windows as the sector heatmap so a constituent renders in the SAME columns; RS is
+// computed client-side vs the selected base, exactly like the sector rows.
+export type SectorConstituentMatrixRow = {
+  sector: string
+  symbol: string
+  name: string | null
+  ret_1d: number | null; ret_1w: number | null; ret_1m: number | null
+  ret_3m: number | null; ret_6m: number | null; ret_12m: number | null
+}
+
+// ALL sectors' constituents in ONE grouped query (not 21× per-sector) → keyed by sector for the
+// list-page inline expand. Universe = the scored stock universe (atlas_lens_scores_daily), so the
+// names + counts match the sector DETAIL page; returns are the native calendar-anchored windows
+// from technical_daily. RULE #0: every number is a real fs row; missing → null, never synthetic.
+export async function getAllSectorConstituents(): Promise<Record<string, SectorConstituentMatrixRow[]>> {
+  const rows = await sql<Array<{
+    sector: string; symbol: string; name: string | null
+    r1d: string | null; r1w: string | null; r1m: string | null
+    r3m: string | null; r6m: string | null; r12m: string | null
+  }>>`
+    WITH latest AS (
+      SELECT max(date) d FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'
+    )
+    SELECT im.sector, im.symbol, im.name,
+           td.ret_1d::float r1d, td.ret_1w::float r1w, td.ret_1m::float r1m,
+           td.ret_3m::float r3m, td.ret_6m::float r6m, td.ret_12m::float r12m
+    FROM foundation_staging.atlas_lens_scores_daily l
+    JOIN foundation_staging.instrument_master im ON im.instrument_id = l.instrument_id
+    LEFT JOIN foundation_staging.technical_daily td
+      ON td.instrument_id = l.instrument_id AND td.asset_class='stock' AND td.date=(SELECT d FROM latest)
+    WHERE l.asset_class='stock' AND l.date=(SELECT d FROM latest) AND im.sector IS NOT NULL
+    ORDER BY im.sector, td.ret_3m DESC NULLS LAST
+  `
+  const out: Record<string, SectorConstituentMatrixRow[]> = {}
+  for (const r of rows) {
+    ;(out[r.sector] ??= []).push({
+      sector: r.sector, symbol: r.symbol, name: r.name,
+      ret_1d: toNumber(r.r1d), ret_1w: toNumber(r.r1w), ret_1m: toNumber(r.r1m),
+      ret_3m: toNumber(r.r3m), ret_6m: toNumber(r.r6m), ret_12m: toNumber(r.r12m),
+    })
+  }
+  return out
+}
+
 /**
  * Latest snapshot of mv_sector_breadth — 30 rows.
  * Used for: breadth panel on list page and detail page.

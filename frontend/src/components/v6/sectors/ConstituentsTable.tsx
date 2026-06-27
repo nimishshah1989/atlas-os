@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { ConstituentRow } from '@/lib/queries/v6/sectors'
+import { TermInfo } from '@/components/v6/shared/TermInfo'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -153,7 +154,7 @@ export function ConstituentsTable({ constituents }: { constituents: ConstituentR
     return sortDir === 'desc' ? diff : -diff
   })
 
-  function SortTh({ label, skey, unit }: { label: string; skey: SortKey; unit?: string }) {
+  function SortTh({ label, skey, unit, term }: { label: string; skey: SortKey; unit?: string; term?: string }) {
     const active = sortKey === skey
     return (
       <th
@@ -169,6 +170,7 @@ export function ConstituentsTable({ constituents }: { constituents: ConstituentR
         aria-sort={active ? (sortDir === 'desc' ? 'descending' : 'ascending') : 'none'}
       >
         {label}
+        {term && <TermInfo term={term} />}
         {active && <span style={{ marginLeft: 3 }}>{sortDir === 'desc' ? '↓' : '↑'}</span>}
         {unit && (
           <span style={{ display: 'block', fontSize: 8, color: 'var(--color-txt-3)', fontFamily: 'var(--font-num), monospace', letterSpacing: '0.04em', textTransform: 'none', marginTop: 2, fontWeight: 400 }}>
@@ -191,7 +193,7 @@ export function ConstituentsTable({ constituents }: { constituents: ConstituentR
               Tier
             </th>
             <th style={{ ...thStyle, textAlign: 'center' }}>
-              RS State
+              RS State<TermInfo term="rs_state" />
             </th>
             <SortTh label="1M" skey="ret_1m" unit="abs" />
             <SortTh label="3M" skey="ret_3m" unit="abs" />
@@ -199,7 +201,7 @@ export function ConstituentsTable({ constituents }: { constituents: ConstituentR
               1W
               <span style={{ display: 'block', fontSize: 8, color: 'var(--color-txt-3)', fontFamily: 'var(--font-num), monospace', letterSpacing: '0.04em', textTransform: 'none', marginTop: 2, fontWeight: 400 }}>abs</span>
             </th>
-            <SortTh label="RS 3M" skey="rs_3m" unit="vs N500" />
+            <SortTh label="RS 3M" skey="rs_3m" unit="vs N500" term="rs" />
           </tr>
         </thead>
         <tbody>

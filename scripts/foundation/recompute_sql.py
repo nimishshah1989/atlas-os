@@ -48,7 +48,7 @@ def _rescale_sql(col: str) -> str:
     return "CASE " + " ".join(parts) + " END"
 
 
-def build_sql(weights: dict, th: dict, where_extra: str = "") -> str:
+def build_sql(weights: dict, th: dict, where_extra: str = "", schema: str = "atlas") -> str:
     w = {l: float(weights[l]) for l in CONV}
     conv_thr = float(th.get("lens_convergence_threshold", 40))
     c2 = float(th.get("lens_convergence_2", 1.06))

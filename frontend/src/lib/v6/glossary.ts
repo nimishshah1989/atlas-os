@@ -27,6 +27,14 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
     title: 'Relative strength (RS)',
     body: "The stock's return minus the benchmark's over the same window (in percentage points). Positive = it's beating the market; this is leadership vs the index, not absolute return.",
   },
+  rs_state: {
+    title: 'RS state',
+    body: 'A label for the stock’s relative-strength trend vs the market — Leader / Strong / Emerging / Consolidating / Weak / Laggard — read from its RS level and slope, not a single window.',
+  },
+  baseline: {
+    title: 'Baseline',
+    body: 'The index a stock’s relative strength is measured against: Nifty 50 (large-cap anchor), Nifty 500 (broad market), or its own sector index.',
+  },
   vol_contraction: {
     title: 'Volatility contraction (Bollinger width)',
     body: 'How tight the Bollinger Bands are (band width ÷ price). A low/contracting value means volatility is coiling — often a setup that precedes a sharp move once it expands.',
@@ -68,6 +76,9 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   ev_ebitda: { title: 'EV / EBITDA', body: 'Enterprise value ÷ operating earnings before D&A — a capital-structure-neutral valuation multiple, good for cross-company comparison.' },
   // ── structure / scoring ──
   decile: { title: 'Decile (within cohort)', body: 'The stock’s rank from 1 (bottom 10%) to 10 (top 10%) versus peers of its OWN size cohort. D8–10 = leading, D1–4 = lagging.' },
+  breadth_ema: { title: '% above EMA', body: 'Share of a sector’s constituents trading above their N-day exponential moving average. High participation = a broad advance; low = a narrow one carried by a few names.' },
+  top_decile: { title: 'Top-decile count', body: 'How many of the sector’s stocks rank in the top decile (D10) of their cap cohort on this lens. More top-decile names = broader leadership, not a one-stock story.' },
+  leadership_dist: { title: 'Leadership distribution', body: 'For each stock, how many conviction lenses it leads (top-decile) on — counted across the sector. 3–4/4 = multi-factor leaders; 0/4 = no edge on any lens.' },
   conviction: { title: 'Conviction', body: 'The headline 1–10 read = the average decile across the conviction lenses, with a boost when multiple lenses agree (convergence).' },
   dispersion: { title: 'Dispersion', body: 'How much the constituents disagree. Low dispersion = a broad, aligned move; high = the score is driven by a few names pulling in different directions.' },
   free_float_weight: { title: 'Free-float weight', body: 'Each constituent’s share of the sector by free-float market cap (the tradeable portion). Bigger names move the sector score more.' },

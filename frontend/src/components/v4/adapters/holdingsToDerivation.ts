@@ -5,6 +5,7 @@
 // RULE #0: every number traces to a real foundation_staging field (holdings-weighted vector +
 // per-holding deciles + weights) — no synthetic fallback; an absent datum renders as absence.
 import type { DerivRoot, DerivNode } from '@/components/v6/shared/ScoreDerivationTree'
+import { bandNodes } from './decileBands'
 
 // Minimal shape this adapter needs from a holding — satisfied by both EtfHolding and FundHolding.
 export type LensHolding = {
@@ -34,8 +35,6 @@ const LENSES: { vkey: VectorKey; dkey: DecileKey; label: string; term?: string }
   { vkey: 'v_val', dkey: 'd_val', label: 'Valuation', term: 'pe' },
 ]
 
-const HOLDING_CAP = 15
-
 // Weight may be a FRACTION (ETF, 0.0617) or a PERCENT (fund, 6.17) — normalise either to a %.
 const toPct = (w: number | null): number | null => (w == null ? null : w <= 1 ? w * 100 : w)
 
@@ -48,14 +47,6 @@ const retMetrics = (h: LensHolding) => [
   { label: '1W', value: fmtRet(h.ret_1w), tone: toneRet(h.ret_1w) },
   { label: '1M', value: fmtRet(h.ret_1m), tone: toneRet(h.ret_1m) },
 ]
-// decile distribution summary for a lens ("5 at D10 · 4 at D8–9 · …") over the holdings.
-function distribution(holdings: LensHolding[], dkey: DecileKey): string {
-  const ds = holdings.map((h) => h[dkey]).filter((d): d is number => d != null)
-  const band = (lo: number, hi: number) => ds.filter((d) => d >= lo && d <= hi).length
-  const parts = [[10, 10, 'D10'], [8, 9, 'D8–9'], [5, 7, 'D5–7'], [1, 4, 'D1–4']] as const
-  return parts.map(([lo, hi, lbl]) => `${band(lo, hi)} at ${lbl}`).join(' · ')
-}
-
 export function holdingsToDerivation(name: string, vector: HoldingsVector, holdings: LensHolding[]): DerivRoot {
   const n = holdings.length
   const breadthPct = vector.breadth == null ? null : vector.breadth * 100
@@ -64,28 +55,28 @@ export function holdingsToDerivation(name: string, vector: HoldingsVector, holdi
     .map(l => ({ ...l, v: vector[l.vkey] ?? null }))
     .filter((l): l is typeof l & { v: number } => l.v != null)
     .map(l => {
-      // holdings ranked by contribution = weight × this holding's lens decile (the real driver),
-      // shown IN PLACE with their 1D/1W/1M returns; the symbol links out only as a secondary action.
-      const ranked = holdings
+      // The composition for THIS lens = its holdings grouped into decile BANDS (D10 / D8–9 /
+      // D5–7 / D1–4); each band's bar is its holdings-WEIGHT share (the real driver), so the
+      // bands show where the fund's weight actually sits. Names sit under their band with their
+      // own weight + real 1D/1W/1M returns; the symbol links out only as a secondary action.
+      const banded = bandNodes(l.vkey, holdings
         .filter(h => h[l.dkey] != null)
-        .map(h => ({ h, contrib: (toPct(h.weight) ?? 0) * (h[l.dkey] as number) }))
-        .sort((a, b) => b.contrib - a.contrib)
-        .slice(0, HOLDING_CAP)
-        .map<DerivNode>(({ h }) => ({
+        .map(h => ({
           id: `${l.vkey}-${h.symbol}`,
-          label: h.symbol,
+          symbol: h.symbol,
           decile: h[l.dkey] as number,
-          weightPct: toPct(h.weight),
+          weight: toPct(h.weight),
           metrics: retMetrics(h),
           href: `/stocks/${h.symbol}`,
-        }))
+        })))
+      const nWithDecile = holdings.filter(h => h[l.dkey] != null).length
       return {
         id: l.vkey,
         label: l.label,
         score: l.v,
         term: l.term,
-        formula: `${l.label} ${l.v.toFixed(0)} — ${distribution(holdings, l.dkey)} · holdings-weighted avg of ${n} · ranked by contribution (weight × decile)`,
-        children: ranked.length ? ranked : undefined,
+        formula: `${l.label} ${l.v.toFixed(0)} — ${nWithDecile} of ${n} holdings across decile bands (weight-share bars) · holdings-weighted`,
+        children: banded.length ? banded : undefined,
       }
     })
 

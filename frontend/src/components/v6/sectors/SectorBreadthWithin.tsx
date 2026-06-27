@@ -2,6 +2,7 @@
 // sector's stocks are top-decile (and top-2-decile) on each lens, plus the leadership
 // distribution. Native (decile-derived). Server component.
 import type { SectorStock } from '@/lib/queries/v6/sector_lens'
+import { TermInfo } from '@/components/v6/shared/TermInfo'
 
 const LENSES: { key: keyof SectorStock; label: string }[] = [
   { key: 'd_tech', label: 'Technical' },
@@ -31,8 +32,8 @@ export function SectorBreadthWithin({ stocks }: { stocks: SectorStock[] }) {
           <thead>
             <tr className="font-num text-[10px] text-txt-3 uppercase tracking-wider border-b border-edge-hair">
               <th className="text-left py-1.5 font-medium">Lens</th>
-              <th className="py-1.5 font-medium">Top decile</th>
-              <th className="py-1.5 font-medium">Top 2 deciles</th>
+              <th className="py-1.5 font-medium">Top decile<TermInfo term="top_decile" /></th>
+              <th className="py-1.5 font-medium">Top 2 deciles<TermInfo term="decile" /></th>
             </tr>
           </thead>
           <tbody>
@@ -46,7 +47,7 @@ export function SectorBreadthWithin({ stocks }: { stocks: SectorStock[] }) {
           </tbody>
         </table>
         <div>
-          <div className="font-num text-[10px] text-txt-3 uppercase tracking-wider mb-2">Leadership distribution (# lenses top-decile)</div>
+          <div className="font-num text-[10px] text-txt-3 uppercase tracking-wider mb-2">Leadership distribution (# lenses top-decile)<TermInfo term="leadership_dist" /></div>
           <div className="space-y-1.5">
             {leadDist.map(({ l, c }) => (
               <div key={l} className="flex items-center gap-3">
