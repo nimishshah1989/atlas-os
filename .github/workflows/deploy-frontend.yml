@@ -76,7 +76,10 @@ jobs:
 
             echo "[deploy ${STAMP}] npm ci + build (PM2 still serves the OLD build)" | tee -a "$LOG"
             npm ci --prefer-offline >> "$LOG" 2>&1
-            if NODE_OPTIONS="--max-old-space-size=3072" npm run build >> "$LOG" 2>&1; then
+            # NEXT_PUBLIC_LENS_V4 is BAKED at build time (feature-flags.ts). Without it the bundle
+            # falls back to the pre-v4 nav (the 2026-06-27 "old Atlas glimpses" regression). The
+            # serving-dir .env.local also carries it, but set it here too so a fresh box can't drift.
+            if NODE_OPTIONS="--max-old-space-size=3072" NEXT_PUBLIC_LENS_V4=1 LENS_V4_ENABLED=1 npm run build >> "$LOG" 2>&1; then
               echo "[deploy ${STAMP}] build OK; pm2 reload (rolling, zero-downtime)" | tee -a "$LOG"
               pm2 reload atlas-frontend-v3 >> "$LOG" 2>&1
             else
@@ -84,15 +87,19 @@ jobs:
               exit 1
             fi
 
-            echo "[deploy ${STAMP}] health-check" | tee -a "$LOG"
+            echo "[deploy ${STAMP}] health-check (HTTP 200 + v4 nav marker)" | tee -a "$LOG"
             sleep 5
-            HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" https://atlas.jslwealth.in/)
-            if [ "$HTTP_CODE" = "200" ]; then
-              echo "[deploy ${STAMP}] OK 200 — keeping new build" | tee -a "$LOG"
+            BODY=$(curl -sk -w "\n%{http_code}" https://atlas.jslwealth.in/)
+            HTTP_CODE=$(printf '%s' "$BODY" | tail -n1)
+            # Assert the v4 surface actually shipped: the v4 nav has "Sector View"; the pre-v4 nav
+            # has "India Pulse". Guards against a flag-less build serving a 200 OLD page (it would
+            # otherwise pass and stick). If the marker is missing, treat it as a failed deploy.
+            if [ "$HTTP_CODE" = "200" ] && printf '%s' "$BODY" | grep -q "Sector View"; then
+              echo "[deploy ${STAMP}] OK 200 + v4 nav — keeping new build" | tee -a "$LOG"
               ls -1dt "$APP"/.next.bak.* 2>/dev/null | tail -n +6 | xargs -r rm -rf
               exit 0
             else
-              echo "[deploy ${STAMP}] FAIL — got HTTP ${HTTP_CODE} — rolling back to .next.bak.${STAMP}" | tee -a "$LOG"
+              echo "[deploy ${STAMP}] FAIL — HTTP ${HTTP_CODE} or missing v4 nav — rolling back to .next.bak.${STAMP}" | tee -a "$LOG"
               if [ -d "$APP/.next.bak.${STAMP}" ]; then
                 rm -rf "$APP/.next"
                 mv "$APP/.next.bak.${STAMP}" "$APP/.next"
