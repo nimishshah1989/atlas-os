@@ -25,6 +25,8 @@ export type DerivNode = {
   term?: string                  // glossary key → eye-icon explainer
   formula?: string               // roll-up shown atop this node's child column
   href?: string                  // optional secondary link (NOT the primary action)
+  bar?: number | null            // 0–100: renders a share bar (e.g. a decile band's weight/count share)
+  accent?: string                // colour for the bar + a leading dot (e.g. a band's decile colour)
   metrics?: { label: string; value: string; tone?: 'pos' | 'neg' | 'neutral' }[] // aligned columns (e.g. 1d/1w/1m)
   children?: DerivNode[]
 }
@@ -57,6 +59,7 @@ function NodeRow({ n, selected, onSelect }: { n: DerivNode; selected: boolean; o
   const hasKids = !!n.children?.length
   const labelEl = (
     <span className="flex min-w-0 items-center gap-1">
+      {n.accent && <span className="h-2 w-2 shrink-0 rounded-[2px]" style={{ background: n.accent }} />}
       {n.href
         ? <Link href={n.href} onClick={(e) => e.stopPropagation()} className="truncate font-num text-[12px] text-txt-1 hover:text-brand hover:underline">{n.label}</Link>
         : <span className="truncate font-sans text-[12px] text-txt-1">{n.label}</span>}
@@ -73,9 +76,12 @@ function NodeRow({ n, selected, onSelect }: { n: DerivNode; selected: boolean; o
     </span>
   )
   const cls = `flex w-full items-center justify-between gap-2 rounded-tile border px-2.5 py-1.5 text-left transition-colors ${selected ? 'border-brand bg-surface-raised' : 'border-edge-hair bg-surface-panel'} ${hasKids ? 'hover:bg-surface-raised/60' : ''}`
-  const bar = n.contribution != null && n.score != null ? (
+  // share bar (n.bar, e.g. decile-band weight share) takes priority; falls back to the score bar.
+  const barPct = n.bar != null ? n.bar : n.contribution != null && n.score != null ? n.score : null
+  const barColor = n.accent ?? (n.score != null ? scoreColor(n.score) : 'var(--color-brand)')
+  const bar = barPct != null ? (
     <span className="mt-0.5 block h-[3px] w-full overflow-hidden rounded-full bg-surface-inset">
-      <span className="block h-full rounded-full" style={{ width: `${Math.min(100, n.score)}%`, background: scoreColor(n.score) }} />
+      <span className="block h-full rounded-full" style={{ width: `${Math.min(100, Math.max(2, barPct))}%`, background: barColor }} />
     </span>
   ) : null
 

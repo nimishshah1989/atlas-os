@@ -6,6 +6,7 @@
 // per-constituent deciles) — no synthetic fallback; an absent datum renders as absence.
 import type { SectorLensVector, SectorStock } from '@/lib/queries/v6/sector_lens'
 import type { DerivRoot, DerivNode } from '@/components/v6/shared/ScoreDerivationTree'
+import { bandNodes } from './decileBands'
 
 // The composite the sector conviction expresses (lens_weight_* in atlas_thresholds; valuation/policy=0).
 // TODO(thresholds-panel): read live so the tree tracks FM edits.
@@ -30,16 +31,6 @@ const retMetrics = (s: SectorStock) => [
   { label: '1W', value: fmtRet(s.ret_1w), tone: toneRet(s.ret_1w) },
   { label: '1M', value: fmtRet(s.ret_1m), tone: toneRet(s.ret_1m) },
 ]
-// decile distribution summary for a lens ("5 at D10 · 4 at D8–9 · …") — how the aggregate forms.
-function distribution(stocks: SectorStock[], dkey: DKey): string {
-  const ds = stocks.map((s) => s[dkey] as number | null).filter((d): d is number => d != null)
-  const band = (lo: number, hi: number) => ds.filter((d) => d >= lo && d <= hi).length
-  const parts = [[10, 10, 'D10'], [8, 9, 'D8–9'], [5, 7, 'D5–7'], [1, 4, 'D1–4']] as const
-  return parts.map(([lo, hi, lbl]) => `${band(lo, hi)} at ${lbl}`).join(' · ')
-}
-
-const CONSTITUENT_CAP = 30
-
 export function sectorToDerivation(sector: string, vector: SectorLensVector, stocks: SectorStock[]): DerivRoot {
   const n = stocks.length
   // headline = sector conviction = mean of constituents' strength (avg-decile, 0–10).
@@ -52,29 +43,26 @@ export function sectorToDerivation(sector: string, vector: SectorLensVector, sto
     .map(l => ({ ...l, v: vector[l.key] as number | null }))
     .filter((l): l is typeof l & { v: number } => l.v != null)
     .map(l => {
-      // constituents that have a decile for THIS lens, ranked by contribution (decile = its weight-proxy
-      // here, since per-constituent free-float weights aren't exposed by getSectorStocks — sort by decile,
-      // omit weightPct rather than invent a weight; RULE #0).
-      // constituents that have a decile for THIS lens, ranked by decile — shown IN PLACE with
-      // their 1D/1W/1M returns (the symbol links out only as a secondary action). RULE #0: real
-      // per-constituent returns from technical_daily; per-name free-float weights aren't exposed,
-      // so we rank by decile and omit weightPct rather than invent one.
-      const ranked = l.dkey
-        ? stocks
+      // The composition for THIS lens = its constituents grouped into decile BANDS (D10 / D8–9 /
+      // D5–7 / D1–4), each band a bar (count-share — per-name free-float weights aren't exposed
+      // by getSectorStocks, so the bar is by count, not weight; RULE #0). Names sit under their
+      // band with real 1D/1W/1M returns; the symbol links out only as a secondary action.
+      const banded = l.dkey
+        ? bandNodes(l.key, stocks
             .filter(s => (s[l.dkey!] as number | null) != null)
-            .sort((a, b) => (b[l.dkey!] as number) - (a[l.dkey!] as number))
-            .slice(0, CONSTITUENT_CAP)
-            .map<DerivNode>(s => ({
+            .map(s => ({
               id: `${l.key}-${s.symbol}`,
-              label: s.symbol,
+              symbol: s.symbol,
               decile: s[l.dkey!] as number,
+              weight: null,
               metrics: retMetrics(s),
               href: `/stocks/${s.symbol}`,
-            }))
+            })))
         : []
+      const nWithDecile = l.dkey ? stocks.filter(s => (s[l.dkey!] as number | null) != null).length : n
       const breadthV = l.breadthKey ? (vector[l.breadthKey] as number | null) : null
       const bits = [
-        l.dkey ? distribution(stocks, l.dkey) : `free-float-weighted avg of ${n}`,
+        `${nWithDecile} names across decile bands`,
         breadthV != null ? `breadth ${pct(breadthV)}` : null,
         vector.dispersion != null ? `dispersion ${vector.dispersion.toFixed(1)}` : null,
       ].filter(Boolean).join(' · ')
@@ -84,7 +72,7 @@ export function sectorToDerivation(sector: string, vector: SectorLensVector, sto
         score: l.v,
         term: l.term,
         formula: `${l.label} ${l.v.toFixed(0)} — ${bits}`,
-        children: ranked.length ? ranked : undefined,
+        children: banded.length ? banded : undefined,
       }
     })
 
