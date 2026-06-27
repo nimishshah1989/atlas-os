@@ -155,6 +155,8 @@ function evidenceFor(evidence: unknown, lensKey: string): string[] {
 export type StockLadder = {
   lenses: LadderLens[]
   strength: number | null
+  composite: number | null
+  conviction_tier: string | null
   leadership: { n: number; of: number }
   cohortLabel: string
   topLensKey: string | null
@@ -181,6 +183,8 @@ export function stockToLadder(decile: StockDecile, ev: StockEvidence | null): St
   return {
     lenses,
     strength: decile.strength,
+    composite: decile.composite,
+    conviction_tier: decile.conviction_tier,
     leadership: { n: decile.lead, of: 4 },
     cohortLabel: CAP_LABEL[decile.cap] ?? decile.cap,
     topLensKey,

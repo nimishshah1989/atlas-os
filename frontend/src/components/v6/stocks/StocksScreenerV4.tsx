@@ -74,11 +74,12 @@ const COLS: Col[] = [
   { key: 'rs_1m', label: 'RS 1M', align: 'right' },
   { key: 'rs_3m', label: 'RS 3M', align: 'right' },
   { key: 'rs_6m', label: 'RS 6M', align: 'right' },
-  { key: 'rs_sector_3m', label: 'Sec', align: 'right' },
+  { key: 'rs_sector_3m', label: 'RS Sec 3M', align: 'right' },
   { key: 'liq_cr', label: 'Liq(₹Cr)', align: 'right' },
 ]
 
-const ROW_CAP = 300
+// Show the whole scored universe (~498). Kept as a generous guardrail, not a 300-row truncation.
+const ROW_CAP = 1000
 
 // numeric value for a sort key; nulls sink to -Infinity so they sort last on desc.
 function numFor(s: StockListRow, key: SortKey): number {
