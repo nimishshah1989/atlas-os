@@ -152,6 +152,71 @@ export function lagThresholdDays(table: string): number {
 }
 
 // ---------------------------------------------------------------------------
+// Foundation-staging freshness — the tables the LIVE v4 product actually reads
+// (not the legacy atlas.* mirror). Each row carries a 3-state RAG by lag vs its
+// own cadence, plus what it powers. Drives the Admin "Data status" tab.
+// ---------------------------------------------------------------------------
+
+export type Rag = 'green' | 'amber' | 'red'
+export type FoundationFreshness = {
+  table: string
+  label: string
+  cadence: string
+  feeds: string
+  latest_date: Date | null
+  lag_days: number | null
+  row_count: number
+  rag: Rag
+}
+
+// ok = expected max lag (days) at this cadence (weekends padded); warn = amber ceiling, beyond = red.
+const FOUNDATION_TABLES: { table: string; date_col: string; label: string; cadence: string; feeds: string; ok: number; warn: number }[] = [
+  { table: 'ohlcv_stock',             date_col: 'date',          label: 'Stock prices (OHLCV)',     cadence: 'Daily',   feeds: 'Returns · RS · technicals',    ok: 4,  warn: 7 },
+  { table: 'technical_daily',         date_col: 'date',          label: 'Technical metrics',        cadence: 'Daily',   feeds: 'RS · EMA · RSI · returns',     ok: 4,  warn: 7 },
+  { table: 'atlas_lens_scores_daily', date_col: 'date',          label: 'Lens scores + composite',  cadence: 'Daily',   feeds: 'Conviction score · deciles',   ok: 4,  warn: 7 },
+  { table: 'sector_lens_daily',       date_col: 'date',          label: 'Sector lens vectors',      cadence: 'Daily',   feeds: 'Sector pages',                 ok: 4,  warn: 7 },
+  { table: 'atlas_index_metrics_daily', date_col: 'date',        label: 'Index returns',            cadence: 'Daily',   feeds: 'Sector RS · benchmarks',       ok: 4,  warn: 7 },
+  { table: 'mv_sector_cards',         date_col: 'as_of_date',    label: 'Sector cards',             cadence: 'Daily',   feeds: '/sectors heatmap + hero',      ok: 4,  warn: 7 },
+  { table: 'mv_sector_breadth',       date_col: 'as_of_date',    label: 'Sector breadth',           cadence: 'Daily',   feeds: 'Breadth table',                ok: 4,  warn: 7 },
+  { table: 'de_mf_nav_daily',         date_col: 'nav_date',      label: 'Fund NAVs',                cadence: 'Daily',   feeds: 'Fund pages',                   ok: 4,  warn: 7 },
+  { table: 'atlas_fund_scorecard',    date_col: 'snapshot_date', label: 'Fund scorecard',           cadence: 'Daily',   feeds: 'Fund ranking + score',         ok: 7,  warn: 14 },
+  { table: 'de_mf_holdings',          date_col: 'as_of_date',    label: 'Fund holdings',            cadence: 'Monthly', feeds: 'Fund roll-ups + look-through', ok: 40, warn: 60 },
+  { table: 'de_etf_holdings',         date_col: 'as_of_date',    label: 'ETF holdings',             cadence: 'Monthly', feeds: 'ETF roll-ups + look-through',  ok: 40, warn: 60 },
+]
+
+export async function getFoundationFreshness(): Promise<FoundationFreshness[]> {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return Promise.all(
+    FOUNDATION_TABLES.map(async (t) => {
+      const rows = await sql<{ row_count: string; latest_date: Date | null }[]>`
+        SELECT
+          (SELECT reltuples::bigint FROM pg_class
+            JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace
+            WHERE nspname = 'foundation_staging' AND relname = ${t.table})::text AS row_count,
+          MAX(${sql(t.date_col)}) AS latest_date
+        FROM foundation_staging.${sql(t.table)}
+      `.catch(() => [] as { row_count: string; latest_date: Date | null }[])
+      const r = rows[0]
+      const latest = r?.latest_date ? new Date(r.latest_date) : null
+      const lag = latest ? Math.floor((today.getTime() - latest.getTime()) / 86_400_000) : null
+      const rag: Rag = lag == null ? 'red' : lag <= t.ok ? 'green' : lag <= t.warn ? 'amber' : 'red'
+      return {
+        table: t.table, label: t.label, cadence: t.cadence, feeds: t.feeds,
+        latest_date: latest, lag_days: lag, row_count: Number(r?.row_count ?? 0), rag,
+      }
+    }),
+  )
+}
+
+// Worst-of RAG across rows → the headline health light.
+export function overallRag(rows: { rag: Rag }[]): Rag {
+  if (rows.some((r) => r.rag === 'red')) return 'red'
+  if (rows.some((r) => r.rag === 'amber')) return 'amber'
+  return 'green'
+}
+
+// ---------------------------------------------------------------------------
 // JIP source sync freshness — public.de_* tables
 // ---------------------------------------------------------------------------
 
