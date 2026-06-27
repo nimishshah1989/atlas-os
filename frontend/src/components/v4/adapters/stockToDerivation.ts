@@ -36,34 +36,120 @@ const LENS_TERM: Record<string, string | undefined> = {
   valuation: 'pe', flow: 'smart_money',
 }
 
+type Sub = { label: string; v: number | null }
+
+// ── evidence readers — surface the ACTUAL drivers the scorer used for catalyst & flow ──
+function evNum(v: unknown): number | null {
+  if (v == null) return null
+  const n = typeof v === 'number' ? v : Number(v)
+  return Number.isFinite(n) ? n : null
+}
+function lensEv(evidence: unknown, key: string): Record<string, unknown> {
+  if (!evidence || typeof evidence !== 'object') return {}
+  const lenses = (evidence as Record<string, unknown>).lenses
+  if (!lenses || typeof lenses !== 'object') return {}
+  return ((lenses as Record<string, unknown>)[key] as Record<string, unknown>) ?? {}
+}
+const signed = (n: number) => `${n >= 0 ? '+' : '−'}${Math.abs(n)}`
+
+// Catalyst: each bucket sub-component → the SPECIFIC filings that scored it (subject + points),
+// so "high catalyst because of an order win / acquisition" is visible, not a bare number.
+function catalystChildren(evidence: unknown, subs: Sub[]): DerivNode[] {
+  const le = lensEv(evidence, 'catalyst')
+  const filings = Array.isArray(le.filings) ? (le.filings as Record<string, unknown>[]) : []
+  const subScore = (label: string) => subs.find((s) => s.label === label)?.v ?? null
+  const BUCKETS: [string, string][] = [['earnings_strategy', 'Earnings'], ['capital_action', 'Capital action'], ['governance', 'Governance']]
+  return BUCKETS.map(([bk, label]) => {
+    const fs = filings
+      .filter((f) => f.bucket === bk)
+      .sort((a, b) => Math.abs(evNum(b.weighted) ?? 0) - Math.abs(evNum(a.weighted) ?? 0))
+      .slice(0, 6)
+    const kids: DerivNode[] = fs.map((f, i) => {
+      const w = evNum(f.weighted) ?? 0
+      const isOrder = f.category === 'order_win'
+      return {
+        id: `cat-${bk}-${i}`,
+        label: `${String(f.subject ?? 'Filing')}${isOrder ? ' · order win' : ''}`,
+        value: signed(w), tone: w > 0 ? 'pos' : w < 0 ? 'neg' : 'neutral',
+      }
+    })
+    return {
+      id: `cat-${bk}`, label, score: subScore(label),
+      formula: fs.length ? `${label} ${subScore(label)?.toFixed(0) ?? ''} — ${fs.length} scoring filing${fs.length > 1 ? 's' : ''} (most-weighted first)` : undefined,
+      children: kids.length ? kids : undefined,
+    }
+  }).filter((n) => n.score != null || n.children)
+}
+
+// Flow: each sub-component → its blend weight + the actual input (promoter %, MF MoM, delivery %).
+function flowChildren(evidence: unknown, subs: Sub[]): DerivNode[] {
+  const le = lensEv(evidence, 'flow')
+  const weights = (le.weights as Record<string, unknown>) ?? {}
+  const prom = (le.promoter as Record<string, unknown>) ?? {}
+  const sm = (le.smart_money as Record<string, unknown>) ?? {}
+  const acc = (le.accumulation as Record<string, unknown>) ?? {}
+  const subScore = (label: string) => subs.find((s) => s.label === label)?.v ?? null
+  const wpct = (k: string) => { const w = evNum(weights[k]); return w == null ? null : w * 100 }
+  const out: DerivNode[] = []
+  // Promoter
+  const promKids: DerivNode[] = []
+  const ppct = evNum(prom.promoter_pct); if (ppct != null) promKids.push({ id: 'flow-prom-pct', label: 'Promoter holding', value: `${ppct.toFixed(1)}%` })
+  const ptc = evNum(prom.transaction_count); if (ptc) promKids.push({ id: 'flow-prom-tc', label: 'Insider transactions', value: `${ptc}` })
+  out.push({ id: 'flow-promoter', label: 'Promoter', score: subScore('Promoter'), weightPct: wpct('promoter'), children: promKids.length ? promKids : undefined })
+  // Smart money (MF / institutional signals)
+  const sigs = Array.isArray(sm.signals) ? (sm.signals as string[]) : []
+  const smKids: DerivNode[] = sigs.map((s, i) => { const [k, vv] = s.split('='); return { id: `flow-sm-${i}`, label: k.replace(/_/g, ' '), value: vv ?? s } })
+  out.push({ id: 'flow-smart', label: 'Smart money', score: subScore('Smart money'), weightPct: wpct('smart_money'), children: smKids.length ? smKids : undefined })
+  // Accumulation (delivery)
+  const accKids: DerivNode[] = []
+  const d30 = evNum(acc.delivery_30d ?? acc.delivery_avg_30d ?? acc.delivery)
+  if (d30 != null) accKids.push({ id: 'flow-acc-d', label: 'Delivery · 30d avg', value: `${d30.toFixed(0)}%` })
+  else if (typeof acc.reason === 'string') accKids.push({ id: 'flow-acc-r', label: 'Delivery', value: String(acc.reason) })
+  out.push({ id: 'flow-acc', label: 'Accumulation (delivery)', score: subScore('Accumulation (delivery)'), weightPct: wpct('accumulation'), children: accKids.length ? accKids : undefined })
+  // any remaining sub (e.g. Institutional) with a score but no separate evidence block
+  for (const s of subs) if (!out.some((o) => o.label === s.label) && s.v != null) out.push({ id: `flow-${s.label}`, label: s.label, score: s.v })
+  return out
+}
+
 export function stockToDerivation(symbol: string, name: string | null, ladder: StockLadder): DerivRoot {
   const strength = ladder.strength
 
   const lenses: DerivNode[] = ladder.lenses.map((l) => {
     const additive = ADDITIVE.has(l.key)
-    // sub-component nodes; each pulls its underlying variables (from the lens's actual numbers)
-    const subNodes: DerivNode[] = l.subs.map((s) => {
-      const m = SUB_MAP[s.label]
-      const kids: DerivNode[] = (m?.vars ?? [])
-        .flatMap((kw) => l.numbers.filter((nm) => nm.label.includes(kw)))
-        .map((nm) => ({ id: `${l.key}-${s.label}-${nm.label}`, label: nm.label, value: nm.value, tone: nm.tone }))
-      return {
-        id: `${l.key}-${s.label}`,
-        label: s.label,
-        score: s.v,
-        term: m?.term,
-        children: kids.length ? kids : undefined,
-      }
-    })
-    // any actual numbers not already mapped under a sub-component → an "Underlying inputs" node
-    const mappedLabels = new Set(subNodes.flatMap((sn) => (sn.children ?? []).map((k) => k.label)))
-    const leftover = l.numbers.filter((nm) => !mappedLabels.has(nm.label))
-    const children: DerivNode[] = [...subNodes]
-    if (leftover.length) {
-      children.push({
-        id: `${l.key}-inputs`, label: 'Underlying inputs',
-        children: leftover.map((nm) => ({ id: `${l.key}-in-${nm.label}`, label: nm.label, value: nm.value, tone: nm.tone })),
+    const subs = l.subs ?? []
+    const numbers = l.numbers ?? []
+    let children: DerivNode[]
+    if (l.key === 'catalyst') {
+      // catalyst: the specific filings that scored each bucket (the real events).
+      children = catalystChildren(ladder.evidence, subs)
+    } else if (l.key === 'flow') {
+      // flow: each sub-component's blend weight + its actual input (delivery, MF flow, promoter).
+      children = flowChildren(ladder.evidence, subs)
+    } else {
+      // technical / fundamental / valuation: sub-component → its underlying variables (actual numbers).
+      const subNodes: DerivNode[] = subs.map((s) => {
+        const m = SUB_MAP[s.label]
+        const kids: DerivNode[] = (m?.vars ?? [])
+          .flatMap((kw) => numbers.filter((nm) => nm.label.includes(kw)))
+          .map((nm) => ({ id: `${l.key}-${s.label}-${nm.label}`, label: nm.label, value: nm.value, tone: nm.tone }))
+        return {
+          id: `${l.key}-${s.label}`,
+          label: s.label,
+          score: s.v,
+          term: m?.term,
+          children: kids.length ? kids : undefined,
+        }
       })
+      // any actual numbers not already mapped under a sub-component → an "Underlying inputs" node
+      const mappedLabels = new Set(subNodes.flatMap((sn) => (sn.children ?? []).map((k) => k.label)))
+      const leftover = numbers.filter((nm) => !mappedLabels.has(nm.label))
+      children = [...subNodes]
+      if (leftover.length) {
+        children.push({
+          id: `${l.key}-inputs`, label: 'Underlying inputs',
+          children: leftover.map((nm) => ({ id: `${l.key}-in-${nm.label}`, label: nm.label, value: nm.value, tone: nm.tone })),
+        })
+      }
     }
     return {
       id: l.key,
