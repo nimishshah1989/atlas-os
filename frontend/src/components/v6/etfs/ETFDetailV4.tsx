@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { getEtfLensDetail, getEtfChartSeries, type EtfHolding } from '@/lib/queries/v6/etf_lens'
+import { getConstituentDrivers } from '@/lib/queries/v6/drivers'
 import { StockPriceEMAChart } from '@/components/v6/stock-detail/StockPriceEMAChart'
 import { StockRSChart } from '@/components/v6/stock-detail/StockRSChart'
 import { Panel } from '@/components/v4/ui/Panel'
@@ -80,6 +81,8 @@ function HoldingsTable({ holdings }: { holdings: EtfHolding[] }) {
 export async function ETFDetailV4({ fcode }: { fcode: string }) {
   const etf = await getEtfLensDetail(fcode)
   if (!etf) notFound()
+  // Per-holding drivers (top catalyst filing, flow input, RS, ROE) → shown on each name in the tree.
+  const drivers = await getConstituentDrivers(etf.holdings.map((h) => h.symbol)).catch(() => ({}))
   // Native Lightweight charts (price ÷ index) for bridged ETFs — TV's embed refuses NSE symbols.
   const etfRows = etf.nse_ticker ? await getEtfChartSeries(etf.nse_ticker).catch(() => []) : []
 
@@ -132,7 +135,7 @@ export async function ETFDetailV4({ fcode }: { fcode: string }) {
             Click a lens to expand its holdings, ranked by contribution (weight × decile); each name links to its own evidence. Descriptive, not a forecast.
           </p>
         </div>
-        <ScoreDerivationTree root={holdingsToDerivation(etf.name, etf, etf.holdings)} />
+        <ScoreDerivationTree root={holdingsToDerivation(etf.name, etf, etf.holdings, drivers)} />
       </section>
 
       {/* ── Charts (native Lightweight; bridged ETFs only) ── */}

@@ -22,6 +22,7 @@ import { SectorFundFlowTable } from '@/components/v6/sectors/SectorFundFlowTable
 import { getSectorDeepdive } from '@/lib/queries/v6/sectors'
 import { getSectorRatioSeries } from '@/lib/queries/v6/sector_index_rs'
 import { getSectorLensVector, getSectorStocks, getSectorFundamentals, getSectorFundFlow } from '@/lib/queries/v6/sector_lens'
+import { getConstituentDrivers } from '@/lib/queries/v6/drivers'
 
 function SectionHead({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
@@ -46,6 +47,9 @@ export async function SectorDeepDiveV4({ sector }: { sector: string }) {
     getSectorFundamentals(sector).catch(() => null),
     getSectorFundFlow(sector).catch(() => null),
   ])
+  // Per-constituent drivers (top catalyst filing, flow input, RS, ROE) → shown on each name in the
+  // score tree so the sector's lens scores read bottom-up from real constituent drivers.
+  const drivers = await getConstituentDrivers(stocks.map((s) => s.symbol)).catch(() => ({}))
 
   return (
     <div className="max-w-[1400px] mx-auto">
@@ -86,7 +90,7 @@ export async function SectorDeepDiveV4({ sector }: { sector: string }) {
               Click a lens to expand its constituents, ranked by contribution; each name links to its own evidence. The eye icon on any term explains it.
             </p>
           </div>
-          <ScoreDerivationTree root={sectorToDerivation(sector, lensVector, stocks)} />
+          <ScoreDerivationTree root={sectorToDerivation(sector, lensVector, stocks, drivers)} />
         </section>
       )}
       {stocks.length > 0 && <SectorStock2x2 stocks={stocks} />}

@@ -6,8 +6,14 @@
 // per-constituent deciles) — no synthetic fallback; an absent datum renders as absence.
 import type { SectorLensVector, SectorStock } from '@/lib/queries/v6/sector_lens'
 import type { DerivRoot, DerivNode } from '@/components/v6/shared/ScoreDerivationTree'
+import type { LensDrivers } from '@/lib/queries/v6/drivers'
 import { bandNodes } from './decileBands'
 import { sectorComposite, compositeContributions } from '@/lib/v6/sectorScore'
+
+// lens key → the driver field on LensDrivers (only the 4 conviction lenses have a per-name driver)
+const DRIVER_KEY: Record<string, keyof LensDrivers | undefined> = {
+  technical: 'technical', fundamental: 'fundamental', catalyst: 'catalyst', flow: 'flow',
+}
 
 // lens key → {label, the per-constituent decile field, the lens breadth field, glossary term}
 type DKey = 'd_tech' | 'd_fund' | 'd_cat' | 'd_flow' | 'd_val'
@@ -21,7 +27,7 @@ const LENSES: { key: keyof SectorLensVector; label: string; dkey: DKey | null; b
 ]
 
 const pct = (v: number | null) => (v == null ? null : `${(v <= 1 ? v * 100 : v).toFixed(0)}%`)
-export function sectorToDerivation(sector: string, vector: SectorLensVector, stocks: SectorStock[]): DerivRoot {
+export function sectorToDerivation(sector: string, vector: SectorLensVector, stocks: SectorStock[], drivers: Record<string, LensDrivers> = {}): DerivRoot {
   const n = stocks.length
   // headline = the sector COMPOSITE (0–100), derived from the lens components — the same number
   // shown on the /sectors scores table. (Mean-decile "strength" is shown as a secondary read.)
@@ -37,9 +43,10 @@ export function sectorToDerivation(sector: string, vector: SectorLensVector, sto
     .filter((l): l is typeof l & { v: number } => l.v != null)
     .map(l => {
       // The composition for THIS lens = its constituents grouped into decile BANDS (D10 / D8–9 /
-      // D5–7 / D1–4), each band a bar (count-share — per-name free-float weights aren't exposed by
-      // getSectorStocks; RULE #0). Each name shows its DECILE on this lens (the score-relevant rank),
-      // NOT price returns — returns don't explain the score. The symbol links out as a secondary action.
+      // D5–7 / D1–4). Each name shows its DECILE on this lens + its DRIVER — WHY it scores there
+      // (top catalyst filing, flow input, RS, ROE) — and links to its own /stocks page. This is how
+      // the sector's lens score is built bottom-up from its constituents' real drivers.
+      const dk = DRIVER_KEY[l.key]
       const banded = l.dkey
         ? bandNodes(l.key, stocks
             .filter(s => (s[l.dkey!] as number | null) != null)
@@ -48,6 +55,7 @@ export function sectorToDerivation(sector: string, vector: SectorLensVector, sto
               symbol: s.symbol,
               decile: s[l.dkey!] as number,
               weight: null,
+              value: dk ? (drivers[s.symbol]?.[dk] ?? null) : null,
               href: `/stocks/${s.symbol}`,
             })))
         : []

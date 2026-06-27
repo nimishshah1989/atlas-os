@@ -5,7 +5,13 @@
 // RULE #0: every number traces to a real foundation_staging field (holdings-weighted vector +
 // per-holding deciles + weights) — no synthetic fallback; an absent datum renders as absence.
 import type { DerivRoot, DerivNode } from '@/components/v6/shared/ScoreDerivationTree'
+import type { LensDrivers } from '@/lib/queries/v6/drivers'
 import { bandNodes } from './decileBands'
+
+// holdings lens vkey → the driver field on LensDrivers (the 4 conviction lenses)
+const DRIVER_KEY: Record<string, keyof LensDrivers | undefined> = {
+  v_tech: 'technical', v_fund: 'fundamental', v_cat: 'catalyst', v_flow: 'flow',
+}
 
 // Minimal shape this adapter needs from a holding — satisfied by both EtfHolding and FundHolding.
 export type LensHolding = {
@@ -38,16 +44,7 @@ const LENSES: { vkey: VectorKey; dkey: DecileKey; label: string; term?: string }
 // Weight may be a FRACTION (ETF, 0.0617) or a PERCENT (fund, 6.17) — normalise either to a %.
 const toPct = (w: number | null): number | null => (w == null ? null : w <= 1 ? w * 100 : w)
 
-// Return formatting/tone — mirrors sectorToDerivation.ts (real ret_1d/1w/1m from technical_daily;
-// an absent return renders as "—", never a synthetic zero — RULE #0).
-const fmtRet = (r: number | null) => (r == null ? '—' : `${r >= 0 ? '+' : '−'}${Math.abs(r * 100).toFixed(1)}%`)
-const toneRet = (r: number | null): 'pos' | 'neg' | 'neutral' => (r == null ? 'neutral' : r >= 0 ? 'pos' : 'neg')
-const retMetrics = (h: LensHolding) => [
-  { label: '1D', value: fmtRet(h.ret_1d), tone: toneRet(h.ret_1d) },
-  { label: '1W', value: fmtRet(h.ret_1w), tone: toneRet(h.ret_1w) },
-  { label: '1M', value: fmtRet(h.ret_1m), tone: toneRet(h.ret_1m) },
-]
-export function holdingsToDerivation(name: string, vector: HoldingsVector, holdings: LensHolding[]): DerivRoot {
+export function holdingsToDerivation(name: string, vector: HoldingsVector, holdings: LensHolding[], drivers: Record<string, LensDrivers> = {}): DerivRoot {
   const n = holdings.length
   const breadthPct = vector.breadth == null ? null : vector.breadth * 100
 
@@ -56,9 +53,10 @@ export function holdingsToDerivation(name: string, vector: HoldingsVector, holdi
     .filter((l): l is typeof l & { v: number } => l.v != null)
     .map(l => {
       // The composition for THIS lens = its holdings grouped into decile BANDS (D10 / D8–9 /
-      // D5–7 / D1–4); each band's bar is its holdings-WEIGHT share (the real driver), so the
-      // bands show where the fund's weight actually sits. Names sit under their band with their
-      // own weight + real 1D/1W/1M returns; the symbol links out only as a secondary action.
+      // D5–7 / D1–4); each band's bar is its holdings-WEIGHT share. Each name shows its weight +
+      // its DRIVER for this lens — WHY it scores there (top catalyst filing, flow input, RS, ROE) —
+      // and links to its own /stocks page. This builds the fund/ETF lens score from its holdings.
+      const dk = DRIVER_KEY[l.vkey]
       const banded = bandNodes(l.vkey, holdings
         .filter(h => h[l.dkey] != null)
         .map(h => ({
@@ -66,7 +64,7 @@ export function holdingsToDerivation(name: string, vector: HoldingsVector, holdi
           symbol: h.symbol,
           decile: h[l.dkey] as number,
           weight: toPct(h.weight),
-          metrics: retMetrics(h),
+          value: dk ? (drivers[h.symbol]?.[dk] ?? null) : null,
           href: `/stocks/${h.symbol}`,
         })))
       const nWithDecile = holdings.filter(h => h[l.dkey] != null).length
