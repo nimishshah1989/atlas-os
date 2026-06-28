@@ -1,15 +1,20 @@
 // FundsPageV4 — lens-first /funds. All data native foundation_staging.
 // The list is a FUNNEL into the fund roll-up atom. Funds are a holdings-weighted roll-up of
-// the stock atom (D26/D27): the HEADLINE is LEADERSHIP-BREADTH (% of holdings weight that are
-// top-decile leaders in ≥2 conviction lenses), NOT a composite. This is a TRANSPARENCY view —
-// what's held, how it scores — explicitly NOT an outperformance predictor. The fund-specific
-// differentiator (on each detail page) is ACTIVE-MOVEMENT: month-over-month holdings deltas.
+// the stock atom (D26/D27): the headline strip is LEADERSHIP-BREADTH, and the score/rank is a
+// DERIVED composite of the same holdings-weighted lenses (fundScore.ts) — the same blend used for
+// sectors and stocks, not a standalone scorecard. This is a TRANSPARENCY view — what's held, how it
+// scores — explicitly NOT an outperformance predictor. The fund-specific differentiator (on each
+// detail page) is ACTIVE-MOVEMENT: month-over-month holdings deltas.
 // Order: 1. leadership-breadth strip + a few top cards · 2. the sortable lens table.
 import { getFundLensList, type FundLensRow } from '@/lib/queries/v6/fund_lens'
 import { FundLensTable } from './FundLensTable'
 import { Panel } from '@/components/v4/ui/Panel'
 import { StatCard, type Tone } from '@/components/v4/ui/StatCard'
 import { LensBubbleChart, type BubblePoint } from '@/components/v4/ui/LensBubbleChart'
+
+// Strip Morningstar's redundant "India Fund " category prefix for display (filtering uses raw value).
+const cleanCat = (c: string | null): string =>
+  (c ?? '—').replace(/^India\s+Fund\s*[-–—]?\s*/i, '').trim() || (c ?? '—')
 
 // Mean of the present holdings-weighted lens scores (0–100), or null if none scored.
 function avgFundLens(f: FundLensRow): number | null {
@@ -45,7 +50,7 @@ function TopCard({ f }: { f: FundLensRow }) {
           {f.breadth == null ? '—' : `${(f.breadth * 100).toFixed(0)}%`}
         </span>
       </div>
-      <div className="mb-2 truncate font-sans text-[11px] text-txt-3">{f.category ?? '—'}</div>
+      <div className="mb-2 truncate font-sans text-[11px] text-txt-3">{cleanCat(f.category)}</div>
       <div className="flex items-center justify-between gap-1 border-t border-edge-hair pt-2">
         <span className="font-sans text-[10px] uppercase tracking-wider text-txt-3">
           {f.n_leaders} of {f.n_holdings} lead
@@ -88,7 +93,7 @@ export async function FundsPageV4() {
         size: f.n_holdings || 1,
         tone,
         href: `/funds/${f.mstar_id}`,
-        sub: `${f.category ?? '—'} · ${f.n_holdings} holdings · ${f.composite != null ? `score ${f.composite.toFixed(0)} · rank ${f.cat_rank}/${f.cat_size}` : 'unscored'}`,
+        sub: `${cleanCat(f.category)} · ${f.n_holdings} holdings · ${f.composite != null ? `score ${f.composite.toFixed(0)} · rank ${f.cat_rank}/${f.cat_size}` : 'unscored'}`,
       } as BubblePoint
     })
     .filter((p): p is BubblePoint => p != null)
