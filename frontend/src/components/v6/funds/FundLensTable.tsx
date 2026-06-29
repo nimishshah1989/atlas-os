@@ -9,6 +9,9 @@ import { useRouter } from 'next/navigation'
 import type { FundLensRow } from '@/lib/queries/v6/fund_lens'
 import { fundCompositeContributions } from '@/lib/v6/fundScore'
 import type { LensWeightMap } from '@/lib/v6/sectorScore'
+import { pctBand } from '@/lib/v6/rankHistory'
+import type { FundRankHistory } from '@/lib/queries/v6/fund_rank_history'
+import { RankSliceBar } from './RankSliceBar'
 import { TermInfo } from '@/components/v6/shared/TermInfo'
 
 // ── colour helpers (shared idioms with the stocks / ETF pages) ────────────
@@ -22,6 +25,10 @@ const breadthText = (b: number | null) =>
 // Fund composite score (0–100): derived from the holdings-weighted lens blend (fundScore.ts).
 const compositeText = (v: number | null) =>
   v == null ? 'text-txt-3' : v >= 60 ? 'text-sig-pos' : v >= 45 ? 'text-brand' : 'text-sig-neg'
+
+// Within-category percentile tag colour (item j). Top 10% = strong green … Bottom 50% = muted red.
+const bandClass = (b: string | null): string =>
+  b === 'Top 10%' ? 'text-sig-pos' : b === 'Top 20%' ? 'text-brand' : b === 'Top 50%' ? 'text-txt-2' : 'text-sig-neg'
 
 const fmtScore = (v: number | null) => (v == null ? '—' : v.toFixed(0))
 const fmtBreadth = (b: number | null) => (b == null ? '—' : `${(b * 100).toFixed(0)}%`)
@@ -45,13 +52,14 @@ type LensKey = 'v_tech' | 'v_fund' | 'v_cat' | 'v_flow' | 'v_val'
 
 type SortKey =
   | 'name' | 'category' | 'amc' | 'n_holdings' | 'n_leaders' | 'breadth'
-  | LensKey | 'expense' | 'composite' | 'cat_rank' | 'aum_cr'
+  | LensKey | 'expense' | 'composite' | 'cat_rank' | 'aum_cr' | 'rank_trend'
 
-type Col = { key: SortKey; label: string; align: 'left' | 'right'; term?: string }
+type Col = { key: SortKey; label: string; align: 'left' | 'right'; term?: string; sortable?: boolean }
 const COLS: Col[] = [
   { key: 'name', label: 'Name', align: 'left' },
   { key: 'category', label: 'Category', align: 'left' },
   { key: 'cat_rank', label: 'Cat rank', align: 'right', term: 'cat_rank' },
+  { key: 'rank_trend', label: 'Rank trend', align: 'left', term: 'rank_trend', sortable: false },
   { key: 'composite', label: 'Score', align: 'right', term: 'fund_score' },
   { key: 'amc', label: 'AMC', align: 'left' },
   { key: 'n_holdings', label: 'Holdings', align: 'right', term: 'holdings_count' },
@@ -87,7 +95,15 @@ function numFor(r: FundLensRow, key: SortKey): number {
 
 const CONTROL = 'font-sans text-[12px] bg-surface-raised border border-edge-rule rounded-tile px-2 py-1 text-txt-2'
 
-export function FundLensTable({ funds, weights }: { funds: FundLensRow[]; weights?: LensWeightMap }) {
+export function FundLensTable({
+  funds,
+  weights,
+  history,
+}: {
+  funds: FundLensRow[]
+  weights?: LensWeightMap
+  history?: Record<string, FundRankHistory>
+}) {
   const router = useRouter()
 
   const [category, setCategory] = useState<string>('all')
@@ -120,6 +136,7 @@ export function FundLensTable({ funds, weights }: { funds: FundLensRow[]; weight
   }, [filtered, sortKey, sortDir])
 
   function toggleSort(key: SortKey) {
+    if (key === 'rank_trend') return // display-only column
     if (sortKey === key) setSortDir(d => (d === 'desc' ? 'asc' : 'desc'))
     else { setSortKey(key); setSortDir(key === 'expense' || key === 'cat_rank' ? 'asc' : 'desc') }
   }
@@ -156,15 +173,16 @@ export function FundLensTable({ funds, weights }: { funds: FundLensRow[]; weight
           <thead>
             <tr className="border-b border-edge-rule">
               {COLS.map(col => {
-                const isSorted = sortKey === col.key
+                const sortable = col.sortable !== false
+                const isSorted = sortable && sortKey === col.key
                 const arrow = isSorted ? (sortDir === 'desc' ? ' ▼' : ' ▲') : ''
                 return (
                   <th
                     key={col.key}
                     onClick={() => toggleSort(col.key)}
-                    className={`font-sans text-[10px] uppercase tracking-wider pb-2 px-2 cursor-pointer select-none whitespace-nowrap ${
+                    className={`font-sans text-[10px] uppercase tracking-wider pb-2 px-2 select-none whitespace-nowrap ${
                       col.align === 'right' ? 'text-right' : 'text-left'
-                    } ${isSorted ? 'text-txt-1 font-semibold' : 'text-txt-3'} hover:text-txt-2`}
+                    } ${sortable ? 'cursor-pointer hover:text-txt-2' : ''} ${isSorted ? 'text-txt-1 font-semibold' : 'text-txt-3'}`}
                   >
                     {col.label}{col.term && <TermInfo term={col.term} />}{arrow}
                   </th>
@@ -176,6 +194,8 @@ export function FundLensTable({ funds, weights }: { funds: FundLensRow[]; weight
             {sorted.map(f => {
               const isOpen = openId === f.mstar_id
               const contribs = f.composite != null ? fundCompositeContributions(f, weights) : []
+              const h = history?.[f.mstar_id]
+              const band = pctBand(f.cat_rank, f.cat_size)
               return (
               <Fragment key={f.mstar_id}>
               <tr
@@ -184,8 +204,21 @@ export function FundLensTable({ funds, weights }: { funds: FundLensRow[]; weight
               >
                 <td className="max-w-[260px] truncate px-2 py-1.5 font-sans text-[12px] font-medium text-txt-1">{f.name}</td>
                 <td className="max-w-[160px] truncate px-2 py-1.5 font-sans text-[11px] text-txt-2">{cleanCat(f.category)}</td>
-                <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums text-txt-2">
-                  {f.cat_rank != null ? <><span className="font-semibold text-txt-1">{f.cat_rank}</span><span className="text-txt-3">/{f.cat_size}</span></> : '—'}
+                <td className="px-2 py-1.5 text-right align-middle">
+                  <div className="font-num text-[12px] tabular-nums text-txt-2">
+                    {f.cat_rank != null ? <><span className="font-semibold text-txt-1">{f.cat_rank}</span><span className="text-txt-3">/{f.cat_size}</span></> : '—'}
+                  </div>
+                  {band && <div className={`font-sans text-[9px] font-medium leading-tight ${bandClass(band)}`}>{band}</div>}
+                </td>
+                <td className="px-2 py-1.5 align-middle">
+                  {h ? (
+                    <div className="flex flex-col gap-0.5">
+                      <RankSliceBar slices={h.slices} />
+                      <span className="whitespace-nowrap font-num text-[9px] tabular-nums text-txt-3">
+                        stable {h.stableDays}d · swing {h.swing30 ?? '—'}/{h.swing90 ?? '—'}
+                      </span>
+                    </div>
+                  ) : <span className="font-num text-[11px] text-txt-3">—</span>}
                 </td>
                 <td className={`px-2 py-1.5 text-right font-num text-[12px] tabular-nums font-semibold ${compositeText(f.composite)}`}>
                   <button
@@ -231,8 +264,8 @@ export function FundLensTable({ funds, weights }: { funds: FundLensRow[]; weight
                       </div>
                       <div className="mt-1.5 text-[10px] text-txt-3">
                         Each lens is the holdings-weighted average of the fund’s constituents; the composite weights them
-                        0.30 / 0.25 / 0.25 / 0.20 (Tch / Fnd / Flw / Cat). Valuation is context, not scored. Weights
-                        renormalise over the lenses present.
+                        by the live weights above (from the thresholds panel), renormalised over the lenses present.
+                        Valuation is context, not scored.
                       </div>
                     </div>
                   </td>

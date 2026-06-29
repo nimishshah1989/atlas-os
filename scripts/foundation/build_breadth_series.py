@@ -8,6 +8,19 @@ Universe: CURRENT Nifty 500 membership applied across all history (spec D: accep
 membership for all dates). Materialised tiny (~one row/day) so the frontend reads it directly.
 Re-runnable (nightly): DROP + rebuild.
 
+BROAD-TRADING DAYS ONLY (fixes the "breadth dips to 0" chart bug): two kinds of non-normal
+sessions produced junk breadth rows that rendered as dips toward zero —
+  • NSE HOLIDAYS that carry a few spurious OHLCV rows (~10 instruments). No NIFTY 500 index
+    close (market shut); dropped by the INNER JOIN on the index.
+  • DIWALI MUHURAT special sessions (e.g. 2016-10-30, 2017-10-19, 2018-11-07): a real ~1-hour
+    session WITH an index close but only ~15-40 stocks recorded, so breadth over 4-13 members
+    is meaningless. Dropped by the broad-trading gate below.
+We therefore emit breadth ONLY for days where (a) the NIFTY 500 index actually closed AND
+(b) the broad market traded — at least MIN_TRADED stocks have an OHLCV row. Verified over the
+last 12y: real sessions have ≥ 498 stocks while every artifact has ≤ 38, so the gate is a clean
+cut that drops nothing real. (Holidays/Muhurat have no full bhavcopy to backfill — the broad
+market wasn't open.)
+
     python build_breadth_series.py
 """
 
@@ -16,11 +29,17 @@ from __future__ import annotations
 import _db
 
 TGT = "foundation_staging.breadth_nifty500_daily"
+MIN_TRADED = 100  # min stocks with an OHLCV row for the day to count as a broad-trading session
+                  # (artifacts ≤ 38, real sessions ≥ 498 — see module docstring)
 
 SQL = f"""
 DROP TABLE IF EXISTS {TGT} CASCADE;
 CREATE TABLE {TGT} AS
-WITH idx AS (
+WITH traded AS (
+  -- broad-trading days only: drops NSE-holiday artifacts and Diwali Muhurat micro-sessions
+  SELECT date FROM foundation_staging.ohlcv_stock GROUP BY date HAVING count(*) >= {MIN_TRADED}
+),
+idx AS (
   -- Nifty 500 INDEX price momentum (robust; avg-constituent ret_3m is outlier-skewed,
   -- max ~2000% from microcaps). 63 trading sessions ~= 3 months.
   SELECT date,
@@ -52,7 +71,9 @@ breadth AS (
 SELECT b.*,
        round(i.idx_close::numeric, 2)  AS idx_close,
        round(i.idx_ret_3m::numeric, 4) AS idx_ret_3m
-FROM breadth b LEFT JOIN idx i ON i.date = b.date;
+FROM breadth b
+JOIN idx i ON i.date = b.date          -- INNER: index closed that day (drops holiday artifacts)
+JOIN traded tr ON tr.date = b.date;    -- INNER: broad market traded (drops Muhurat micro-sessions)
 ALTER TABLE {TGT} ADD PRIMARY KEY (date);
 """
 
