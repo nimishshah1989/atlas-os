@@ -2,6 +2,7 @@
 'use client'
 import { useState } from 'react'
 import { useThemeTokens } from '@/components/v4/ui/useThemeTokens'
+import { LensMindMap } from './LensMindMap'
 
 // ============================================================================
 // Atoms
@@ -580,6 +581,7 @@ export default function MethodologyV62() {
       <EngineFlow />
       <CellExplainer />
       <ConvictionMath />
+      <LensMindMap />
       <Flywheel />
       <AutoOptCycle />
       <CompactConcepts />
