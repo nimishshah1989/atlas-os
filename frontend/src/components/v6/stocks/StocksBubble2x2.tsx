@@ -17,8 +17,9 @@ type Pt = { x: number; y: number; z: number; symbol: string; lead: number; liq: 
 export function StocksBubble2x2({ stocks }: { stocks: StockListRow[] }) {
   const router = useRouter()
   const t = useThemeTokens()
+  // lead is 0..2 (D9+ in Technical and/or Flow). 2 = leads BOTH active lenses = leader (green).
   const leadColor = (lead: number) =>
-    !t ? '#888888' : lead >= 3 ? t.pos : lead === 2 ? t.brand : lead === 1 ? t.warn : t.tick
+    !t ? '#888888' : lead >= 2 ? t.pos : lead === 1 ? t.warn : t.tick
 
   const scored = stocks.filter((s) => s.strength != null)
   // null liquidity → the dataset's smallest known value, so the bubble still renders
@@ -56,18 +57,18 @@ export function StocksBubble2x2({ stocks }: { stocks: StockListRow[] }) {
           <CartesianGrid stroke={grid} />
           <XAxis type="number" dataKey="x" domain={[0.5, 10.5]} tick={{ fontSize: 10, fill: tick }}
             label={{ value: 'Strength (avg decile)', position: 'bottom', fontSize: 11, fill: label }} />
-          <YAxis type="number" dataKey="y" domain={[-0.3, 4.3]} tick={{ fontSize: 10, fill: tick }}
-            label={{ value: 'Leadership (# lenses)', angle: -90, position: 'insideLeft', fontSize: 11, fill: label }} />
+          <YAxis type="number" dataKey="y" domain={[-0.3, 2.3]} ticks={[0, 1, 2]} tick={{ fontSize: 10, fill: tick }}
+            label={{ value: 'Leadership (# of 2 lenses)', angle: -90, position: 'insideLeft', fontSize: 11, fill: label }} />
           <ZAxis type="number" dataKey="z" range={[30, 400]} />
           <ReferenceLine x={5.5} stroke={ref} strokeDasharray="3 3" />
-          <ReferenceLine y={2} stroke={ref} strokeDasharray="3 3" />
+          <ReferenceLine y={1.5} stroke={ref} strokeDasharray="3 3" />
           <Tooltip cursor={{ strokeDasharray: '3 3' }}
             content={({ active, payload }) => {
               if (!active || !payload?.length) return null
               const p = payload[0].payload as Pt
               return (
                 <div className="rounded-tile border border-edge-rule bg-surface-raised px-2.5 py-1.5 font-num text-[11px] tabular-nums text-txt-1 shadow-panel">
-                  {p.symbol} · Strength {p.x.toFixed(1)} / Lead {p.lead}/4 · ₹{Math.round(p.liq)}cr
+                  {p.symbol} · Strength {p.x.toFixed(1)} / Lead {p.lead}/2 · ₹{Math.round(p.liq)}cr
                 </div>
               )
             }} />

@@ -4,16 +4,17 @@
 // SUM their sub-component points; catalyst & flow are weighted averages of 0–100 sub-scores.
 import type { StockLadder } from './stockToLadder'
 import type { DerivRoot, DerivNode } from '@/components/v6/shared/ScoreDerivationTree'
+import { DEFAULT_WEIGHTS, type LensWeightMap } from '@/lib/v6/sectorScore'
 
-// Composite lens weights (atlas_thresholds.lens_weight_*; valuation/policy = 0). The composite
-// (0–100 conviction score) = Σ weight·lens_score, then a convergence boost (≥2 agreeing lenses)
-// and a valuation multiplier — so the weighted sum is the BACKBONE, not the exact final value
-// (which is read from the DB). TODO(thresholds-panel): read these live so the tree tracks FM edits.
-const COMPOSITE_WEIGHTS: { key: string; short: string; w: number }[] = [
-  { key: 'technical', short: 'Tech', w: 0.30 },
-  { key: 'fundamental', short: 'Fund', w: 0.25 },
-  { key: 'flow', short: 'Flow', w: 0.25 },
-  { key: 'catalyst', short: 'Cat', w: 0.20 },
+// Composite lens weights are read live from atlas_thresholds (lens_weight_*) and passed in, so the
+// tree tracks the FM's edits in the /thresholds panel. The composite (0–100 conviction score) =
+// Σ weight·lens_score, then a convergence boost (≥2 agreeing lenses) and a valuation multiplier — so
+// the weighted sum is the BACKBONE, not the exact final value (which is read from the DB).
+const LENS_SHORT: { key: keyof LensWeightMap; short: string }[] = [
+  { key: 'technical', short: 'Tech' },
+  { key: 'fundamental', short: 'Fund' },
+  { key: 'flow', short: 'Flow' },
+  { key: 'catalyst', short: 'Cat' },
 ]
 const TIER_LABEL: Record<string, string> = {
   HIGHEST: 'Highest', HIGH: 'High', MEDIUM: 'Medium', WATCH: 'Watch', BELOW_THRESHOLD: 'Below threshold',
@@ -111,7 +112,7 @@ function flowChildren(evidence: unknown, subs: Sub[]): DerivNode[] {
   return out
 }
 
-export function stockToDerivation(symbol: string, name: string | null, ladder: StockLadder): DerivRoot {
+export function stockToDerivation(symbol: string, name: string | null, ladder: StockLadder, weights: LensWeightMap = DEFAULT_WEIGHTS): DerivRoot {
   const strength = ladder.strength
 
   const lenses: DerivNode[] = ladder.lenses.map((l) => {
@@ -167,7 +168,7 @@ export function stockToDerivation(symbol: string, name: string | null, ladder: S
   // Conviction-score breakdown: the real 0–100 composite + tier as the headline, with each
   // conviction lens's weighted contribution (lens score × weight) shown so the number is glass-box.
   const scoreByKey = new Map(ladder.lenses.map((l) => [l.key, l.score]))
-  const contribs = COMPOSITE_WEIGHTS.map((c) => ({ ...c, score: scoreByKey.get(c.key) ?? null }))
+  const contribs = LENS_SHORT.map((c) => ({ ...c, w: weights[c.key], score: scoreByKey.get(c.key) ?? null }))
     .filter((c): c is typeof c & { score: number } => c.score != null)
   const composite = ladder.composite
   const tier = ladder.conviction_tier
@@ -202,7 +203,7 @@ export function stockToDerivation(symbol: string, name: string | null, ladder: S
     headline,
     formula: composite != null
       ? `Conviction score ${composite.toFixed(0)}/100 · avg-decile strength ${strength != null ? strength.toFixed(1) : '—'}/10`
-      : '= 0.30·Tech + 0.25·Fund + 0.25·Flow + 0.20·Cat',
+      : '= ' + LENS_SHORT.filter((c) => weights[c.key] > 0).map((c) => `${weights[c.key].toFixed(2)}·${c.short}`).join(' + '),
     lenses: convictionNode ? [convictionNode, ...lenses] : lenses,
   }
 }

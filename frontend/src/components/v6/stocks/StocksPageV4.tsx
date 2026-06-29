@@ -14,7 +14,7 @@ import { decileColor } from '@/components/v4/ui/decile'
 
 const CAP_LABEL: Record<string, string> = { large: 'large', mid: 'mid', small: 'small', micro: 'micro' }
 const leadColor = (lead: number) =>
-  lead >= 3 ? 'text-sig-pos' : lead === 2 ? 'text-brand' : lead === 1 ? 'text-sig-warn' : 'text-txt-3'
+  lead >= 2 ? 'text-sig-pos' : lead === 1 ? 'text-sig-warn' : 'text-txt-3'
 
 // A compact decile pip used inside the "top doing great" cards. The figure takes
 // the shared perceptual ramp (decileColor); null falls back to the tertiary token.
@@ -39,7 +39,7 @@ function TopCard({ s }: { s: StockListRow }) {
        className="block rounded-tile border border-edge-hair bg-surface-panel p-3.5 shadow-tile no-underline hover:border-edge-strong transition-colors">
       <div className="flex items-baseline justify-between gap-2 mb-0.5">
         <span className="font-num text-[14px] font-semibold tabular-nums text-txt-1 truncate">{s.symbol}</span>
-        <span className={`font-num text-[11px] font-semibold tabular-nums ${leadColor(s.lead)}`}>{s.lead}/4</span>
+        <span className={`font-num text-[11px] font-semibold tabular-nums ${leadColor(s.lead)}`}>{s.lead}/2</span>
       </div>
       <div className="font-sans text-[11px] text-txt-3 truncate mb-2">{s.name ?? s.sector ?? '—'}</div>
       <div className="mb-2"><DecileMeter decile={Math.round(s.strength ?? 0)} size="sm" /></div>
@@ -60,14 +60,14 @@ function TopCard({ s }: { s: StockListRow }) {
 export async function StocksPageV4() {
   const [stocks, asOf] = await Promise.all([getStocksDecileList(), getLensAsOf()])
 
-  const leaders = stocks.filter(s => s.lead >= 3)
+  const leaders = stocks.filter(s => s.lead >= 2)
   const capCount = (c: string) => leaders.filter(s => s.cap === c).length
   const top = [...leaders].sort((a, b) => (b.strength ?? 0) - (a.strength ?? 0)).slice(0, 6)
   const universeCount = stocks.length
 
   const strip: { label: string; value: string; tone: Tone; sub: string }[] = [
-    { label: 'Multi-factor leaders', value: String(leaders.length), tone: 'pos',
-      sub: `Top-decile in ≥3 of 4 conviction lenses · ${universeCount} scored` },
+    { label: 'Leaders', value: String(leaders.length), tone: 'pos',
+      sub: `D9/D10 in both active lenses (Technical & Flow) · ${universeCount} scored` },
     { label: 'Large', value: String(capCount('large')), tone: 'neutral', sub: 'NIFTY 100 cohort' },
     { label: 'Mid', value: String(capCount('mid')), tone: 'neutral', sub: 'Midcap 150 cohort' },
     { label: 'Small', value: String(capCount('small')), tone: 'neutral', sub: 'Smallcap 250 cohort' },
@@ -90,8 +90,8 @@ export async function StocksPageV4() {
         </div>
         <p className="font-sans text-[15px] text-txt-2 max-w-[860px]">
           The universe as a funnel into each name. Every lens is a <strong>decile within its cap cohort</strong>;
-          leadership counts how many of the four conviction lenses (technical · fundamental · catalyst · flow)
-          a stock leads. Screen, then click through to the stock&apos;s evidence.
+          leadership counts how many of the two active conviction lenses (technical · flow) a stock leads at
+          D9/D10. Screen, then click through to the stock&apos;s evidence.
         </p>
 
         <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">

@@ -9,6 +9,8 @@ import 'server-only'
 import sql from '@/lib/db'
 import { toNumber, toNumberOr } from '@/lib/v6/decimal'
 import { fundComposite, rankFundsInCategory } from '@/lib/v6/fundScore'
+import type { LensWeightMap } from '@/lib/v6/sectorScore'
+import { getLensWeights } from './lens_weights'
 import { SCORED_STOCKS } from './etf_lens'
 
 const LATEST = `(SELECT max(as_of_date) FROM foundation_staging.de_mf_holdings)`
@@ -28,7 +30,7 @@ export type FundLensRow = {
   // computed below over the DISPLAYED cohort so "N / M" matches this list.
   composite: number | null; cat_rank: number | null; cat_size: number | null
 }
-function mapRow(r: Record<string, string>): FundLensRow {
+function mapRow(r: Record<string, string>, weights?: LensWeightMap): FundLensRow {
   const n = (v: string | null) => (v == null ? null : toNumber(v))
   const v_tech = n(r.v_tech), v_fund = n(r.v_fund), v_cat = n(r.v_cat), v_flow = n(r.v_flow)
   return {
@@ -36,7 +38,7 @@ function mapRow(r: Record<string, string>): FundLensRow {
     aum_cr: n(r.aum_cr),
     n_holdings: toNumberOr(r.n_holdings, 0), n_leaders: toNumberOr(r.n_leaders, 0), breadth: n(r.breadth),
     v_tech, v_fund, v_cat, v_flow, v_val: n(r.v_val),
-    composite: fundComposite({ v_tech, v_fund, v_flow, v_cat }),
+    composite: fundComposite({ v_tech, v_fund, v_flow, v_cat }, weights),
     cat_rank: null, cat_size: null, // assigned per-category after fetch (see getFundLensList)
   }
 }
@@ -69,7 +71,8 @@ export async function getFundLensList(): Promise<FundLensRow[]> {
     ORDER BY breadth DESC NULLS LAST`) as unknown as Record<string, string>[]
   // Composite + within-category rank are DERIVED from the lens vector (fundScore.ts) — no dependency
   // on the standalone atlas_fund_scorecard pipeline, so the rank is always as fresh as the lenses.
-  return rankFundsInCategory(rows.map(mapRow))
+  const weights = await getLensWeights()
+  return rankFundsInCategory(rows.map((r) => mapRow(r, weights)))
 }
 
 export type FundHolding = {
@@ -118,7 +121,7 @@ export async function getFundLensDetail(mstarId: string): Promise<FundLensDetail
   ])
 
   const n = (v: string | null) => (v == null ? null : toNumber(v))
-  const base = mapRow(head[0])
+  const base = mapRow(head[0], await getLensWeights())
   return {
     ...base, isin: head[0].isin,
     nav: nav[0] ? n(nav[0].nav) : null, nav_date: nav[0]?.nav_date ?? null, nav_1y: null,
