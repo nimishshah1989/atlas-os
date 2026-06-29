@@ -11,6 +11,7 @@ import { FundLensTable } from './FundLensTable'
 import { Panel } from '@/components/v4/ui/Panel'
 import { StatCard, type Tone } from '@/components/v4/ui/StatCard'
 import { LensBubbleChart, type BubblePoint } from '@/components/v4/ui/LensBubbleChart'
+import { quartileCuts, relativeTone } from '@/lib/v6/bubbleTone'
 
 // Strip Morningstar's redundant "India Fund " category prefix for display (filtering uses raw value).
 const cleanCat = (c: string | null): string =>
@@ -78,13 +79,16 @@ export async function FundsPageV4() {
   // size = #holdings (diversification). COLOUR = the scorecard quality score (composite) so the
   // tint reads as "good/ok/weak fund", not the harsh breadth bar that turned ~85% of funds red.
   // Funds without a scorecard composite are neutral (grey), never a fake colour. Real values only.
+  // Colour bubbles by quartile of the fund score WITHIN the shown set, so the colour shows relative
+  // quality (top 25% green, bottom 25% red, middle grey) instead of an absolute cut that — given the
+  // composite clusters ~42–55 — painted every fund red with zero green.
+  const [scoreLo, scoreHi] = quartileCuts(funds.map((f) => f.composite).filter((v): v is number => v != null))
   const bubbles: BubblePoint[] = funds
     .map((f) => {
       const al = avgFundLens(f)
       if (f.breadth == null || al == null) return null
       const br = f.breadth * 100
-      const tone: BubblePoint['tone'] =
-        f.composite == null ? 'neutral' : f.composite >= 60 ? 'pos' : f.composite >= 45 ? 'neutral' : 'neg'
+      const tone: BubblePoint['tone'] = relativeTone(f.composite, scoreLo, scoreHi)
       return {
         id: f.mstar_id,
         label: f.name,
@@ -153,7 +157,7 @@ export async function FundsPageV4() {
         <Panel
           eyebrow="Landscape"
           title="Leadership-breadth vs lens score"
-          info={{ body: 'Each bubble is a fund: x = leadership-breadth (share of weight that are leaders), y = average holdings-weighted lens score, size = number of holdings, COLOUR = the fund quality score (green ≥60 · grey 45–60 or unscored · red <45). Top-right = broad leadership. Hover for detail, click to open.' }}
+          info={{ body: 'Each bubble is a fund: x = leadership-breadth (share of weight that are leaders), y = average holdings-weighted lens score, size = number of holdings, COLOUR = fund score relative to peers (green = top quartile · grey = middle · red = bottom quartile · grey if unscored). Top-right = broad leadership. Hover for detail, click to open.' }}
           bodyClassName="px-2 py-2"
         >
           <LensBubbleChart

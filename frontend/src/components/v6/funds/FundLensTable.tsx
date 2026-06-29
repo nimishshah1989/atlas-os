@@ -144,7 +144,9 @@ export function FundLensTable({ funds }: { funds: FundLensRow[] }) {
           </select>
         </label>
         <span className="ml-auto self-end font-num text-[12px] tabular-nums text-txt-3">
-          {shown} of {total} funds
+          {shown} of {total} funds · {category === 'all'
+            ? `ranked within ${categories.length} SEBI categories`
+            : `ranked within ${cleanCat(category)}`}
         </span>
       </div>
 
