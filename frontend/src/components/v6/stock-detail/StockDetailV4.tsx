@@ -71,14 +71,13 @@ export async function StockDetailV4({ symbol }: { symbol: string }) {
   const name = stock.name ?? decile?.name ?? stock.symbol
   const ladder = decile ? stockToLadder(decile, evidence) : null
   const deriv = ladder ? stockToDerivation(stock.symbol, stock.name ?? null, ladder, lensWeights) : null
-  // Glass-box: the exact conviction maths (FM 2026-06-26 — show the decile + composite
-  // calculation, don't just print the result). Strength = mean of the 4 SCORED-lens
-  // deciles (Technical / Fundamental / Catalyst / Flow); Valuation + Policy are shown
-  // for context but not scored. `dOf` pulls each lens's real decile from the ladder.
+  // Glass-box: the exact conviction maths (FM 2-lens model — show the decile + composite
+  // calculation, don't just print the result). Strength = mean of the 2 ACTIVE conviction-lens
+  // deciles (Technical & Flow); Fundamental, Catalyst, Valuation & Policy are shown for context
+  // but carry weight 0, so they are NOT scored in. `dOf` pulls each lens's real decile.
   const dOf = (k: string) => ladder?.lenses.find((l) => l.key === k)?.decile ?? null
   const SCORED_LENSES: { k: string; label: string }[] = [
-    { k: 'technical', label: 'Technical' }, { k: 'fundamental', label: 'Fundamental' },
-    { k: 'catalyst', label: 'Catalyst' }, { k: 'flow', label: 'Flow' },
+    { k: 'technical', label: 'Technical' }, { k: 'flow', label: 'Flow' },
   ]
   const dStr = (k: string) => { const d = dOf(k); return d == null ? '—' : `D${d}` }
 
@@ -166,18 +165,18 @@ export async function StockDetailV4({ symbol }: { symbol: string }) {
                 D1 = bottom 10%. A decile is simply where this stock sits versus its size-peers on that lens &mdash; no weighting, no black box.
               </p>
               <p>
-                <strong className="text-txt-1">Conviction</strong> — the average of the four <em>scored</em>-lens deciles:
+                <strong className="text-txt-1">Conviction</strong> — the average of the two <em>active</em> conviction-lens deciles (Technical &amp; Flow):
               </p>
               <div className="rounded-tile border border-edge-hair bg-surface-inset px-3 py-2 font-num text-[14px] tabular-nums text-txt-1">
-                ( {SCORED_LENSES.map((l) => dStr(l.k)).join(' + ')} ) ÷ 4 ={' '}
+                ( {SCORED_LENSES.map((l) => dStr(l.k)).join(' + ')} ) ÷ {SCORED_LENSES.length} ={' '}
                 <strong className="text-txt-1">{ladder.strength != null ? ladder.strength.toFixed(1) : '—'}</strong>
                 <span className="ml-2 font-sans text-[11px] text-txt-3">
                   ({SCORED_LENSES.map((l) => l.label).join(' · ')})
                 </span>
               </div>
               <p className="text-txt-3">
-                <strong>Valuation</strong> and <strong>Policy</strong> are shown for context but are <strong>not</strong> scored into
-                conviction (FM-locked methodology). Full detail on the{' '}
+                <strong>Fundamental</strong>, <strong>Catalyst</strong>, <strong>Valuation</strong> and <strong>Policy</strong> are shown for
+                context but carry weight 0 in the current model, so they are <strong>not</strong> scored into conviction. Full detail on the{' '}
                 <Link href="/methodology" className="text-brand hover:underline">methodology page ↗</Link>.
               </p>
             </div>

@@ -90,7 +90,7 @@ export function SectorConstituentsTable({ stocks }: { stocks: SectorStock[] }) {
                 if (c.kind === 'text') return <td key={c.key} className="px-2 py-1.5 text-left font-sans text-[11px] text-txt-3">{String(v ?? '—')}</td>
                 if (c.kind === 'decile') return <td key={c.key} className="px-2 py-1.5 text-right"><DChip d={v as number | null} /></td>
                 if (c.kind === 'num') return <td key={c.key} className="px-2 py-1.5 text-right font-num text-[11.5px] tabular-nums text-txt-1">{v == null ? '—' : (v as number).toFixed(1)}</td>
-                if (c.kind === 'lead') return <td key={c.key} className="px-2 py-1.5 text-right font-num text-[11px] tabular-nums text-txt-2">{v as number}<span className="text-txt-3">/4</span></td>
+                if (c.kind === 'lead') return <td key={c.key} className="px-2 py-1.5 text-right font-num text-[11px] tabular-nums text-txt-2">{v as number}<span className="text-txt-3">/2</span></td>
                 if (c.kind === 'liq') return <td key={c.key} className="px-2 py-1.5 text-right font-num text-[11px] tabular-nums text-txt-3">{fmtLiq(v as number | null)}</td>
                 // pct (returns / RS)
                 return <td key={c.key} className={`px-2 py-1.5 text-right font-num text-[11.5px] tabular-nums ${pctTone(v as number | null)}`}>{fmtPct(v as number | null)}</td>

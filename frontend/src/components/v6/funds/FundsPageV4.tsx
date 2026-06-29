@@ -9,6 +9,7 @@
 import { getFundLensList, type FundLensRow } from '@/lib/queries/v6/fund_lens'
 import { getLensWeights } from '@/lib/queries/v6/lens_weights'
 import { getFundRankHistory } from '@/lib/queries/v6/fund_rank_history'
+import { getFundRsMatrix, getFundHoldingsEma } from '@/lib/queries/v6/fund_metrics'
 import { FundLensTable } from './FundLensTable'
 import { Panel } from '@/components/v4/ui/Panel'
 import { StatCard, type Tone } from '@/components/v4/ui/StatCard'
@@ -65,13 +66,17 @@ function TopCard({ f }: { f: FundLensRow }) {
 }
 
 export async function FundsPageV4() {
-  const [funds, weights, historyMap] = await Promise.all([
+  const [funds, weights, historyMap, rsMap, emaMap] = await Promise.all([
     getFundLensList(),
     getLensWeights(),
     getFundRankHistory(),
+    getFundRsMatrix(),
+    getFundHoldingsEma(),
   ])
-  // Map → plain object so it serialises across the server→client boundary into FundLensTable.
+  // Maps → plain objects so they serialise across the server→client boundary into FundLensTable.
   const history = Object.fromEntries(historyMap)
+  const rs = Object.fromEntries(rsMap)
+  const ema = Object.fromEntries(emaMap)
 
   const universeCount = funds.length
   const withBreadth = funds.filter(f => (f.breadth ?? 0) >= 0.2).length
@@ -188,7 +193,7 @@ export async function FundsPageV4() {
           body: 'Ranked by leadership-breadth. Every column header sorts; filter by category. The five lens scores are holdings-weighted (0–100). Click a row for the full roll-up.',
         }}
       >
-        <FundLensTable funds={funds} weights={weights} history={history} />
+        <FundLensTable funds={funds} weights={weights} history={history} rs={rs} ema={ema} />
       </Panel>
 
       <div className="font-sans text-[12px] leading-[1.6] text-txt-3">

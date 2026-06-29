@@ -126,9 +126,9 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
     SELECT d.symbol, d.name, d.cap, d.d_tech, d.d_fund, d.d_cat, d.d_flow, d.d_val,
       d.r1d, d.r1w, d.r1m, d.r3m, d.r6m, d.r12m, d.rs1m, d.rs3m, d.rs6m,
       (d.r3m - sr.sret_3m) AS rs_sector_3m, liq.liq_cr,
-      (COALESCE((d.d_tech>=${LEAD_DECILE})::int,0) + COALESCE((d.d_fund>=${LEAD_DECILE})::int,0) + COALESCE((d.d_cat>=${LEAD_DECILE})::int,0) + COALESCE((d.d_flow>=${LEAD_DECILE})::int,0)) AS lead,
-      ((COALESCE(d.d_tech,0)+COALESCE(d.d_fund,0)+COALESCE(d.d_cat,0)+COALESCE(d.d_flow,0))::float
-        / NULLIF((d.d_tech IS NOT NULL)::int+(d.d_fund IS NOT NULL)::int+(d.d_cat IS NOT NULL)::int+(d.d_flow IS NOT NULL)::int,0)) AS strength
+      (COALESCE((d.d_tech>=${LEAD_DECILE})::int,0) + COALESCE((d.d_flow>=${LEAD_DECILE})::int,0)) AS lead,  -- 2-lens: Technical & Flow only (0..2)
+      ((COALESCE(d.d_tech,0)+COALESCE(d.d_flow,0))::float
+        / NULLIF((d.d_tech IS NOT NULL)::int+(d.d_flow IS NOT NULL)::int,0)) AS strength
     FROM dec d
     LEFT JOIN sec_ret sr ON sr.sector_name = d.sector
     LEFT JOIN liq ON liq.instrument_id = d.instrument_id

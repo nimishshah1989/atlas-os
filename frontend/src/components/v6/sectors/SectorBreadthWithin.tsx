@@ -17,7 +17,8 @@ export function SectorBreadthWithin({ stocks }: { stocks: SectorStock[] }) {
   if (n === 0) return null
   const count = (key: keyof SectorStock, min: number) =>
     stocks.filter(s => (s[key] as number | null) != null && (s[key] as number) >= min).length
-  const leadDist = [4, 3, 2, 1, 0].map(l => ({ l, c: stocks.filter(s => s.lead === l).length }))
+  // 2-lens leadership: lead is 0..2 (top-2-decile in Technical and/or Flow).
+  const leadDist = [2, 1, 0].map(l => ({ l, c: stocks.filter(s => s.lead === l).length }))
 
   return (
     <section className="px-8 py-10 border-b border-edge-hair" aria-label="Within-sector breadth">
@@ -47,11 +48,11 @@ export function SectorBreadthWithin({ stocks }: { stocks: SectorStock[] }) {
           </tbody>
         </table>
         <div>
-          <div className="font-num text-[10px] text-txt-3 uppercase tracking-wider mb-2">Leadership distribution (# lenses top-decile)<TermInfo term="leadership_dist" /></div>
+          <div className="font-num text-[10px] text-txt-3 uppercase tracking-wider mb-2">Leadership distribution (# of Technical &amp; Flow top-2-decile)<TermInfo term="leadership_dist" /></div>
           <div className="space-y-1.5">
             {leadDist.map(({ l, c }) => (
               <div key={l} className="flex items-center gap-3">
-                <span className="w-[60px] shrink-0 font-num text-xs tabular-nums text-txt-2">{l} / 4</span>
+                <span className="w-[60px] shrink-0 font-num text-xs tabular-nums text-txt-2">{l} / 2</span>
                 <span className="w-[28px] shrink-0 font-num text-xs tabular-nums text-txt-1 text-right">{c}</span>
                 <span className="flex-1 h-[7px] bg-surface-inset rounded-tile overflow-hidden">
                   <span className={`block h-full rounded-tile ${l >= 2 ? 'bg-sig-pos' : l === 1 ? 'bg-sig-warn' : 'bg-txt-3/40'}`}

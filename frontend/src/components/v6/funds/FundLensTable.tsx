@@ -11,7 +11,10 @@ import { fundCompositeContributions } from '@/lib/v6/fundScore'
 import type { LensWeightMap } from '@/lib/v6/sectorScore'
 import { pctBand } from '@/lib/v6/rankHistory'
 import type { FundRankHistory } from '@/lib/queries/v6/fund_rank_history'
+import type { FundRsMatrix, FundEma } from '@/lib/queries/v6/fund_metrics'
 import { RankSliceBar } from './RankSliceBar'
+import { FundRsMatrixCell } from './FundRsMatrixCell'
+import { FundEmaCell } from './FundEmaCell'
 import { TermInfo } from '@/components/v6/shared/TermInfo'
 
 // ── colour helpers (shared idioms with the stocks / ETF pages) ────────────
@@ -52,7 +55,7 @@ type LensKey = 'v_tech' | 'v_fund' | 'v_cat' | 'v_flow' | 'v_val'
 
 type SortKey =
   | 'name' | 'category' | 'amc' | 'n_holdings' | 'n_leaders' | 'breadth'
-  | LensKey | 'expense' | 'composite' | 'cat_rank' | 'aum_cr' | 'rank_trend'
+  | LensKey | 'expense' | 'composite' | 'cat_rank' | 'aum_cr' | 'rank_trend' | 'rs_matrix' | 'ema_breadth'
 
 type Col = { key: SortKey; label: string; align: 'left' | 'right'; term?: string; sortable?: boolean }
 const COLS: Col[] = [
@@ -61,8 +64,10 @@ const COLS: Col[] = [
   { key: 'cat_rank', label: 'Cat rank', align: 'right', term: 'cat_rank' },
   { key: 'rank_trend', label: 'Rank trend', align: 'left', term: 'rank_trend', sortable: false },
   { key: 'composite', label: 'Score', align: 'right', term: 'fund_score' },
+  { key: 'rs_matrix', label: 'RS vs N50 / N500', align: 'left', term: 'fund_rs', sortable: false },
   { key: 'amc', label: 'AMC', align: 'left' },
   { key: 'n_holdings', label: 'Holdings', align: 'right', term: 'holdings_count' },
+  { key: 'ema_breadth', label: '# > EMA 21/50/200', align: 'left', term: 'fund_ema', sortable: false },
   { key: 'n_leaders', label: 'Leaders', align: 'right', term: 'leaders_count' },
   { key: 'breadth', label: 'Leadership-breadth', align: 'right', term: 'leadership_breadth' },
   { key: 'v_tech', label: 'Tch', align: 'right', term: 'weighted_lens' },
@@ -99,10 +104,14 @@ export function FundLensTable({
   funds,
   weights,
   history,
+  rs,
+  ema,
 }: {
   funds: FundLensRow[]
   weights?: LensWeightMap
   history?: Record<string, FundRankHistory>
+  rs?: Record<string, FundRsMatrix>
+  ema?: Record<string, FundEma>
 }) {
   const router = useRouter()
 
@@ -136,7 +145,7 @@ export function FundLensTable({
   }, [filtered, sortKey, sortDir])
 
   function toggleSort(key: SortKey) {
-    if (key === 'rank_trend') return // display-only column
+    if (key === 'rank_trend' || key === 'rs_matrix' || key === 'ema_breadth') return // display-only columns
     if (sortKey === key) setSortDir(d => (d === 'desc' ? 'asc' : 'desc'))
     else { setSortKey(key); setSortDir(key === 'expense' || key === 'cat_rank' ? 'asc' : 'desc') }
   }
@@ -196,6 +205,8 @@ export function FundLensTable({
               const contribs = f.composite != null ? fundCompositeContributions(f, weights) : []
               const h = history?.[f.mstar_id]
               const band = pctBand(f.cat_rank, f.cat_size)
+              const frs = rs?.[f.mstar_id]
+              const fema = ema?.[f.mstar_id]
               return (
               <Fragment key={f.mstar_id}>
               <tr
@@ -214,7 +225,10 @@ export function FundLensTable({
                   {h ? (
                     <div className="flex flex-col gap-0.5">
                       <RankSliceBar slices={h.slices} />
-                      <span className="whitespace-nowrap font-num text-[9px] tabular-nums text-txt-3">
+                      <span
+                        className="whitespace-nowrap font-num text-[9px] tabular-nums text-txt-3"
+                        title={`Held the current rank for ${h.stableDays} day(s). Rank swing (best−worst rank): ${h.swing30 ?? '—'} over 30 days, ${h.swing90 ?? '—'} over 90 days — smaller = steadier.`}
+                      >
                         stable {h.stableDays}d · swing {h.swing30 ?? '—'}/{h.swing90 ?? '—'}
                       </span>
                     </div>
@@ -231,8 +245,10 @@ export function FundLensTable({
                     {fmtScore(f.composite)}
                   </button>
                 </td>
+                <td className="px-2 py-1.5 align-middle"><FundRsMatrixCell rs={frs} /></td>
                 <td className="max-w-[140px] truncate px-2 py-1.5 font-sans text-[11px] text-txt-2">{f.amc ?? '—'}</td>
                 <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums text-txt-2">{f.n_holdings}</td>
+                <td className="px-2 py-1.5 align-middle"><FundEmaCell ema={fema} /></td>
                 <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums text-txt-2">{f.n_leaders}</td>
                 <td className={`px-2 py-1.5 text-right font-num text-[12px] tabular-nums font-semibold ${breadthText(f.breadth)}`}>{fmtBreadth(f.breadth)}</td>
                 <td className={`px-2 py-1.5 text-right font-num text-[12px] tabular-nums ${scoreText(f.v_tech)}`}>{fmtScore(f.v_tech)}</td>

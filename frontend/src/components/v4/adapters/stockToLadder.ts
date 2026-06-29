@@ -186,7 +186,7 @@ export function stockToLadder(decile: StockDecile, ev: StockEvidence | null): St
     strength: decile.strength,
     composite: decile.composite,
     conviction_tier: decile.conviction_tier,
-    leadership: { n: decile.lead, of: 4 },
+    leadership: { n: decile.lead, of: 2 }, // 2-lens: D9/D10 in Technical & Flow
     cohortLabel: CAP_LABEL[decile.cap] ?? decile.cap,
     topLensKey,
     evidence: decile.evidence,
