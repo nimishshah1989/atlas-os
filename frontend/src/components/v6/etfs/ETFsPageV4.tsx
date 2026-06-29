@@ -10,6 +10,7 @@ import { EtfLensTable } from './EtfLensTable'
 import { Panel } from '@/components/v4/ui/Panel'
 import { StatCard, type Tone } from '@/components/v4/ui/StatCard'
 import { LensBubbleChart, type BubblePoint } from '@/components/v4/ui/LensBubbleChart'
+import { quartileCuts, relativeTone } from '@/lib/v6/bubbleTone'
 
 const cleanEtfCat = (c: string | null): string =>
   (c ?? '—').replace(/^India\s+Fund\s*[-–—]?\s*/i, '').trim() || (c ?? '—')
@@ -79,12 +80,15 @@ export async function ETFsPageV4() {
   // size = #holdings (diversification). COLOUR = the avg lens score (quality), so the tint reads
   // as "strong/ok/weak ETF" instead of the breadth bar that painted almost every ETF red. ETFs
   // have no fund-scorecard composite, so the holdings-weighted avg lens score is the quality proxy.
+  // Colour by quartile of avg lens WITHIN the shown ETFs (top 25% green, bottom 25% red, middle
+  // grey) — an absolute cut painted every ETF red because avg lens clusters ~40–49.
+  const [alLo, alHi] = quartileCuts(etfs.map(avgLens).filter((v): v is number => v != null))
   const bubbles: BubblePoint[] = etfs
     .map((e) => {
       const al = avgLens(e)
       if (e.breadth == null || al == null) return null
       const br = e.breadth * 100
-      const tone: BubblePoint['tone'] = al >= 60 ? 'pos' : al >= 45 ? 'neutral' : 'neg'
+      const tone: BubblePoint['tone'] = relativeTone(al, alLo, alHi)
       return {
         id: e.fcode,
         label: e.name,
@@ -152,7 +156,7 @@ export async function ETFsPageV4() {
         <Panel
           eyebrow="Landscape"
           title="Leadership-breadth vs lens score"
-          info={{ body: 'Each bubble is an ETF: x = leadership-breadth (share of weight that are leaders), y = average holdings-weighted lens score, size = number of holdings, COLOUR = avg lens score (green ≥60 · grey 45–60 · red <45). Top-right = broad leadership. Hover for detail, click to open.' }}
+          info={{ body: 'Each bubble is an ETF: x = leadership-breadth (share of weight that are leaders), y = average holdings-weighted lens score, size = number of holdings, COLOUR = avg lens relative to peers (green = top quartile · grey = middle · red = bottom quartile). Top-right = broad leadership. Hover for detail, click to open.' }}
           bodyClassName="px-2 py-2"
         >
           <LensBubbleChart

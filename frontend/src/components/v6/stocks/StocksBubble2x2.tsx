@@ -26,9 +26,18 @@ export function StocksBubble2x2({ stocks }: { stocks: StockListRow[] }) {
   const liqVals = scored.map((s) => s.liq_cr).filter((v): v is number => v != null)
   const liqFloor = liqVals.length ? Math.min(...liqVals) : 1
 
+  // Leadership is an integer 0–4, so all ~500 stocks would stack onto 5 lines and hide each other.
+  // Spread each within a ±0.32 band by a DETERMINISTIC per-symbol offset (stable across rerenders),
+  // so every stock is a visible dot. The tooltip still shows the exact lead count.
+  const jitter = (sym: string): number => {
+    let h = 0
+    for (let i = 0; i < sym.length; i++) h = (h * 31 + sym.charCodeAt(i)) >>> 0
+    return ((h % 1000) / 1000 - 0.5) * 0.64
+  }
+
   const data: Pt[] = scored.map((s) => {
     const liq = s.liq_cr ?? liqFloor
-    return { x: Math.round((s.strength as number) * 10) / 10, y: s.lead, z: liq, symbol: s.symbol, lead: s.lead, liq }
+    return { x: Math.round((s.strength as number) * 10) / 10, y: s.lead + jitter(s.symbol), z: liq, symbol: s.symbol, lead: s.lead, liq }
   })
 
   const grid = t?.grid ?? '#88888822'
@@ -38,6 +47,10 @@ export function StocksBubble2x2({ stocks }: { stocks: StockListRow[] }) {
 
   return (
     <div className="rounded-tile border border-edge-hair bg-surface-inset/50 p-3">
+      <div className="mb-1 flex items-center justify-between px-1">
+        <span className="font-num text-[10px] uppercase tracking-wider text-txt-3">Size = liquidity · colour = leadership</span>
+        <span className="font-num text-[10px] tabular-nums text-txt-3">{data.length} stocks</span>
+      </div>
       <ResponsiveContainer width="100%" height={360}>
         <ScatterChart margin={{ top: 12, right: 16, bottom: 28, left: 8 }}>
           <CartesianGrid stroke={grid} />
