@@ -4,8 +4,8 @@ export const revalidate = 300
 import MethodologyV62 from '@/components/methodology/MethodologyV62'
 
 export const metadata = {
-  title: 'How Atlas thinks · Methodology',
-  description: 'Atlas v6.2 methodology — deep interactive explainer: engine, cells, conviction math, flywheel, auto-optimization loop.',
+  title: 'Methodology · How every score is built',
+  description: 'How Atlas scores every stock across six lenses, blends four into a 0–100 conviction score, and rolls it up to sectors, funds and ETFs — with the real sub-components of each lens.',
 }
 
 export default function MethodologyPage() {
