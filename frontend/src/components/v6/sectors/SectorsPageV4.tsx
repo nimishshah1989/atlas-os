@@ -3,6 +3,7 @@
 // multi-window heatmap (sortable, no verdict cruft) → breadth table → cap-tier RS
 // charts → RRG at the bottom.
 import { Suspense } from 'react'
+import { getLensWeights } from '@/lib/queries/v6/lens_weights'
 import { DataSourceBanner } from '@/components/v6/DataSourceBanner'
 import { Panel } from '@/components/v4/ui/Panel'
 import { SectorHeroReadout } from '@/components/v6/sectors/SectorHeroReadout'
@@ -31,6 +32,7 @@ export async function SectorsPageV4() {
   const constituents = await getAllSectorConstituents().catch(() => ({}))
   // All sectors' lens vectors → the scores table shows the composite + component lens scores.
   const lensVectors = await getAllSectorLensVectors().catch(() => ({}))
+  const lensWeights = await getLensWeights().catch(() => undefined)
   const latestDate = cards[0]?.as_of_date ?? null
 
   // CANONICAL 21 sectors = exactly what mv_sector_cards carries at the latest snapshot.
@@ -123,7 +125,7 @@ export async function SectorsPageV4() {
         info={{ body: 'Each sector’s 0–100 conviction score (composite = 0.30·Technical + 0.25·Fundamental + 0.25·Flow + 0.20·Catalyst, over the free-float-weighted sector lens vector) plus its four component lens scores and one breadth read. Click a sector to see exactly how its score is derived, the rest of the breadth detail, and its top movers.' }}
         bodyClassName="px-5 py-4"
       >
-        <SectorBreadthTable rows={breadth} trend={breadthTrend} lensBySector={lensVectors} />
+        <SectorBreadthTable rows={breadth} trend={breadthTrend} lensBySector={lensVectors} weights={lensWeights} />
       </Panel>
 
       {/* Cap-tier RS charts — native */}

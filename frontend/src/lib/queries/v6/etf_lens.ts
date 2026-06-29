@@ -66,9 +66,13 @@ export const SCORED_STOCKS = `
   scored AS (
     SELECT d.instrument_id, d.symbol, d.cap, d.t, d.f, d.ca, d.fl, d.va,
       d.d_tech, d.d_fund, d.d_cat, d.d_flow, d.d_val,
-      (COALESCE((d.d_tech=10)::int,0)+COALESCE((d.d_fund=10)::int,0)+COALESCE((d.d_cat=10)::int,0)+COALESCE((d.d_flow=10)::int,0)) AS lead,
-      ((COALESCE(d.d_tech,0)+COALESCE(d.d_fund,0)+COALESCE(d.d_cat,0)+COALESCE(d.d_flow,0))::float
-        / NULLIF((d.d_tech IS NOT NULL)::int+(d.d_fund IS NOT NULL)::int+(d.d_cat IS NOT NULL)::int+(d.d_flow IS NOT NULL)::int,0)) AS strength,
+      -- LEADER = top-2-decile (D9/D10) in BOTH active conviction lenses (Technical & Flow). lead is
+      -- 0..2; a leader has lead = 2. (FM 2-lens model: Fundamental/Catalyst weight 0, so they no
+      -- longer count toward leadership.) Roll-ups filter on lead >= 2 = leads both active lenses.
+      (COALESCE((d.d_tech>=9)::int,0)+COALESCE((d.d_flow>=9)::int,0)) AS lead,
+      -- strength = mean of the ACTIVE-lens deciles (Technical & Flow), matching the 2-lens conviction.
+      ((COALESCE(d.d_tech,0)+COALESCE(d.d_flow,0))::float
+        / NULLIF((d.d_tech IS NOT NULL)::int+(d.d_flow IS NOT NULL)::int,0)) AS strength,
       rs.rs_1m_n500, rs.rs_3m_n500, rs.ret_1d, rs.ret_1w, rs.ret_1m
     FROM dec d LEFT JOIN rs ON rs.instrument_id = d.instrument_id),
   etf_nse AS (  -- deterministic ETF identity bridge: Morningstar fund_name ⇄ NSE instrument name.

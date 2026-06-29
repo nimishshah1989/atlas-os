@@ -8,7 +8,7 @@ import type { SectorLensVector, SectorStock } from '@/lib/queries/v6/sector_lens
 import type { DerivRoot, DerivNode } from '@/components/v6/shared/ScoreDerivationTree'
 import type { LensDrivers } from '@/lib/queries/v6/drivers'
 import { bandNodes } from './decileBands'
-import { sectorComposite, compositeContributions } from '@/lib/v6/sectorScore'
+import { sectorComposite, compositeContributions, type LensWeightMap } from '@/lib/v6/sectorScore'
 
 // lens key → the driver field on LensDrivers (only the 4 conviction lenses have a per-name driver)
 const DRIVER_KEY: Record<string, keyof LensDrivers | undefined> = {
@@ -27,12 +27,12 @@ const LENSES: { key: keyof SectorLensVector; label: string; dkey: DKey | null; b
 ]
 
 const pct = (v: number | null) => (v == null ? null : `${(v <= 1 ? v * 100 : v).toFixed(0)}%`)
-export function sectorToDerivation(sector: string, vector: SectorLensVector, stocks: SectorStock[], drivers: Record<string, LensDrivers> = {}): DerivRoot {
+export function sectorToDerivation(sector: string, vector: SectorLensVector, stocks: SectorStock[], drivers: Record<string, LensDrivers> = {}, weights?: LensWeightMap): DerivRoot {
   const n = stocks.length
   // headline = the sector COMPOSITE (0–100), derived from the lens components — the same number
   // shown on the /sectors scores table. (Mean-decile "strength" is shown as a secondary read.)
-  const composite = sectorComposite(vector)
-  const contribs = compositeContributions(vector)
+  const composite = sectorComposite(vector, weights)
+  const contribs = compositeContributions(vector, weights)
   const withStrength = stocks.filter((s): s is SectorStock & { strength: number } => s.strength != null)
   const strength = withStrength.length
     ? withStrength.reduce((a, s) => a + s.strength, 0) / withStrength.length

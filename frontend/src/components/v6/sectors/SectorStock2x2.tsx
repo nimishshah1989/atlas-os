@@ -27,7 +27,7 @@ function Quad({ data, xLabel, yLabel, xDomain, yDomain, xMid, yMid }: {
   const router = useRouter()
   const t = useThemeTokens()
   const leadColor = (lead: number) =>
-    !t ? '#888888' : lead >= 3 ? t.pos : lead === 2 ? t.brand : lead === 1 ? t.warn : t.tick
+    !t ? '#888888' : lead >= 2 ? t.pos : lead === 1 ? t.warn : t.tick
 
   const grid = t?.grid ?? '#88888822'
   const tick = t?.tick ?? '#888888'
@@ -52,7 +52,7 @@ function Quad({ data, xLabel, yLabel, xDomain, yDomain, xMid, yMid }: {
               const p = payload[0].payload as Pt
               return (
                 <div className="rounded-tile border border-edge-rule bg-surface-raised px-2.5 py-1.5 font-num text-[11px] tabular-nums text-txt-1 shadow-panel">
-                  {p.symbol} · {xLabel.split(' ')[0]} {p.x} / {yLabel.split(' ')[0]} {p.y} · {p.lead}/4 · {p.cap}
+                  {p.symbol} · {xLabel.split(' ')[0]} {p.x} / {yLabel.split(' ')[0]} {p.y} · {p.lead}/2 · {p.cap}
                 </div>
               )
             }} />
@@ -89,9 +89,9 @@ export function SectorStock2x2({ stocks }: { stocks: SectorStock[] }) {
         </h2>
         <p className="font-sans text-[13px] text-txt-3 max-w-[760px] leading-[1.45] mt-1">
           Each dot is a constituent; deciles are cut within its cap cohort. Bubble size = cap tier
-          (large → micro). Colour = how many of the 4 conviction lenses it leads (grey 0 · amber 1 ·
-          brand 2 · green 3–4). Click a dot → that stock. A small sector simply has few dots
-          (e.g. a 4-name sector shows 4).
+          (large → micro). Colour = how many of the 2 active lenses (Technical &amp; Flow) it leads at
+          D9/D10 (grey 0 · amber 1 · green 2). Click a dot → that stock. A small sector simply has few
+          dots (e.g. a 4-name sector shows 4).
         </p>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -102,8 +102,8 @@ export function SectorStock2x2({ stocks }: { stocks: SectorStock[] }) {
         </div>
         <div>
           <div className="font-num text-[11px] text-txt-3 uppercase tracking-wider mb-2">Strength × Leadership <span className="text-txt-2">· {strLead.length} plotted</span></div>
-          <Quad data={strLead} xLabel="Strength (avg decile)" yLabel="Leadership (# lenses)"
-            xDomain={[0.5, 10.5]} yDomain={[-0.3, 4.3]} xMid={5.5} yMid={2} />
+          <Quad data={strLead} xLabel="Strength (avg decile)" yLabel="Leadership (# of 2)"
+            xDomain={[0.5, 10.5]} yDomain={[-0.3, 2.3]} xMid={5.5} yMid={1.5} />
         </div>
       </div>
     </section>

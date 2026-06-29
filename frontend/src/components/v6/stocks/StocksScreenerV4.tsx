@@ -19,7 +19,7 @@ import { TermInfo } from '@/components/v6/shared/TermInfo'
 const decileStyle = (d: number | null) => ({ color: d == null ? 'var(--color-txt-3)' : decileColor(d) })
 
 const leadText = (lead: number) =>
-  lead >= 3 ? 'text-sig-pos' : lead === 2 ? 'text-brand' : lead === 1 ? 'text-sig-warn' : 'text-txt-3'
+  lead >= 2 ? 'text-sig-pos' : lead === 1 ? 'text-sig-warn' : 'text-txt-3'
 
 const pctText = (v: number | null) =>
   v == null ? 'text-txt-3' : v >= 0 ? 'text-sig-pos' : 'text-sig-neg'
@@ -45,7 +45,7 @@ const LENS_FOCUS: { label: string; key: LensKey | null }[] = [
 // ── smart screens (one active at a time) ──────────────────────────────────
 type ScreenId = 'leaders' | 'cheap' | 'accum' | 'catalyst' | 'breakout' | 'quality'
 const SCREENS: { id: ScreenId; label: string; pred: (s: StockListRow) => boolean }[] = [
-  { id: 'leaders', label: 'Multi-factor leaders ≥3', pred: s => s.lead >= 3 },
+  { id: 'leaders', label: 'Leaders (Tech & Flow)', pred: s => s.lead >= 2 },
   { id: 'cheap', label: 'Cheap & strong', pred: s => (s.d_val ?? 0) >= 8 && (s.strength ?? 0) >= 7 },
   { id: 'accum', label: 'Rising accumulation', pred: s => (s.d_flow ?? 0) >= 8 },
   { id: 'catalyst', label: 'Fresh catalyst', pred: s => (s.d_cat ?? 0) >= 8 },
@@ -186,7 +186,7 @@ export function StocksScreenerV4({ stocks }: { stocks: StockListRow[] }) {
         title="Strength × Leadership"
         info={{
           title: 'How to read the 2×2',
-          body: 'Each dot is a stock — x = average conviction decile, y = how many of the 4 conviction lenses it leads. Bubble size = ~20-session liquidity, colour = leadership. Click any dot for its evidence.',
+          body: 'Each dot is a stock — x = average decile across the active lenses (Technical & Flow), y = how many of those 2 lenses it leads (D9/D10). Bubble size = ~20-session liquidity, colour = leadership. Click any dot for its evidence.',
         }}
       >
         <StocksBubble2x2 stocks={filtered} />
@@ -322,7 +322,7 @@ export function StocksScreenerV4({ stocks }: { stocks: StockListRow[] }) {
                     <td className="py-1.5 px-2 text-right font-num text-[12px] tabular-nums text-txt-2">
                       {s.strength == null ? '—' : s.strength.toFixed(1)}
                     </td>
-                    <td className={`py-1.5 px-2 text-right font-num text-[12px] tabular-nums ${leadText(s.lead)}`}>{s.lead}/4</td>
+                    <td className={`py-1.5 px-2 text-right font-num text-[12px] tabular-nums ${leadText(s.lead)}`}>{s.lead}/2</td>
 
                     <td className={`py-1.5 px-2 text-right font-num text-[12px] tabular-nums ${pctText(s.rs_1m)}`}>{fmtPct(s.rs_1m)}</td>
                     <td className={`py-1.5 px-2 text-right font-num text-[12px] tabular-nums ${pctText(s.rs_3m)}`}>{fmtPct(s.rs_3m)}</td>

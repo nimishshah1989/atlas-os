@@ -10,6 +10,7 @@ import { getStockDecile, getStockRSMatrix, getStockChartSeries, getStockEvidence
 import { getFundsHoldingStock } from '@/lib/queries/v6/funds_holding_stock'
 import { getEtfsHoldingStock } from '@/lib/queries/v6/etfs_holding_stock'
 import { getPolicyAlertsForStock } from '@/lib/queries/v6/policy_alerts'
+import { getLensWeights } from '@/lib/queries/v6/lens_weights'
 import { getSectorCards } from '@/lib/queries/v6/sectors'
 import { HeldByPanel } from './HeldByPanel'
 import { PolicyAlertPanel } from './PolicyAlertPanel'
@@ -59,6 +60,7 @@ export async function StockDetailV4({ symbol }: { symbol: string }) {
     cached(() => getPolicyAlertsForStock(stock.sector ?? null), `pol:${stock.sector ?? 'none'}`).catch(() => []),
     cached(() => getSectorCards(), 'sectorcards').catch(() => []),
   ])
+  const lensWeights = await cached(() => getLensWeights(), 'lensweights').catch(() => undefined)
   // Own-sector index — the stock's own sector card (fresh mv_sector_cards), for context.
   const sectorCard = (stock.sector
     ? sectorCards.find((c) => c.sector_name === stock.sector)
@@ -68,7 +70,7 @@ export async function StockDetailV4({ symbol }: { symbol: string }) {
   const sector = stock.sector ?? decile?.sector ?? null
   const name = stock.name ?? decile?.name ?? stock.symbol
   const ladder = decile ? stockToLadder(decile, evidence) : null
-  const deriv = ladder ? stockToDerivation(stock.symbol, stock.name ?? null, ladder) : null
+  const deriv = ladder ? stockToDerivation(stock.symbol, stock.name ?? null, ladder, lensWeights) : null
   // Glass-box: the exact conviction maths (FM 2026-06-26 — show the decile + composite
   // calculation, don't just print the result). Strength = mean of the 4 SCORED-lens
   // deciles (Technical / Fundamental / Catalyst / Flow); Valuation + Policy are shown

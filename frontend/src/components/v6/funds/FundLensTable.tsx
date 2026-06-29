@@ -8,6 +8,7 @@ import { Fragment, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { FundLensRow } from '@/lib/queries/v6/fund_lens'
 import { fundCompositeContributions } from '@/lib/v6/fundScore'
+import type { LensWeightMap } from '@/lib/v6/sectorScore'
 import { TermInfo } from '@/components/v6/shared/TermInfo'
 
 // ── colour helpers (shared idioms with the stocks / ETF pages) ────────────
@@ -86,7 +87,7 @@ function numFor(r: FundLensRow, key: SortKey): number {
 
 const CONTROL = 'font-sans text-[12px] bg-surface-raised border border-edge-rule rounded-tile px-2 py-1 text-txt-2'
 
-export function FundLensTable({ funds }: { funds: FundLensRow[] }) {
+export function FundLensTable({ funds, weights }: { funds: FundLensRow[]; weights?: LensWeightMap }) {
   const router = useRouter()
 
   const [category, setCategory] = useState<string>('all')
@@ -174,7 +175,7 @@ export function FundLensTable({ funds }: { funds: FundLensRow[] }) {
           <tbody>
             {sorted.map(f => {
               const isOpen = openId === f.mstar_id
-              const contribs = f.composite != null ? fundCompositeContributions(f) : []
+              const contribs = f.composite != null ? fundCompositeContributions(f, weights) : []
               return (
               <Fragment key={f.mstar_id}>
               <tr

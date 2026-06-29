@@ -9,7 +9,7 @@
 // model whose compute pipeline was removed and whose inputs were never shown), so the fund rank is
 // now (a) explicable from the columns on screen, (b) consistent with sectors/stocks, and (c) always
 // as fresh as the stock scores + holdings it rolls up from — no stale standalone pipeline.
-import { sectorComposite, compositeContributions, type LensVec, type Contribution } from './sectorScore'
+import { sectorComposite, compositeContributions, type LensVec, type LensWeightMap, type Contribution } from './sectorScore'
 
 export type FundLensVec = { v_tech: number | null; v_fund: number | null; v_flow: number | null; v_cat: number | null }
 
@@ -18,14 +18,14 @@ function toLensVec(r: FundLensVec): LensVec {
   return { technical: r.v_tech, fundamental: r.v_fund, flow: r.v_flow, catalyst: r.v_cat }
 }
 
-// Composite 0–100, or null when no conviction lens is present.
-export function fundComposite(r: FundLensVec): number | null {
-  return sectorComposite(toLensVec(r))
+// Composite 0–100, or null when no weighted lens is present. Weights come from atlas_thresholds.
+export function fundComposite(r: FundLensVec, weights?: LensWeightMap): number | null {
+  return sectorComposite(toLensVec(r), weights)
 }
 
 // Per-lens weighted contributions (Σ contrib = composite) for the glass-box derivation tree.
-export function fundCompositeContributions(r: FundLensVec): Contribution[] {
-  return compositeContributions(toLensVec(r))
+export function fundCompositeContributions(r: FundLensVec, weights?: LensWeightMap): Contribution[] {
+  return compositeContributions(toLensVec(r), weights)
 }
 
 type Rankable = { category: string | null; composite: number | null; breadth: number | null; mstar_id: string }

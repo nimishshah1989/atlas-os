@@ -9,7 +9,7 @@ import Link from 'next/link'
 import type { SectorBreadthMVRow, SectorBreadthTrendRow } from '@/lib/queries/v6/sectors'
 import type { SectorLensVector } from '@/lib/queries/v6/sector_lens'
 import { TermInfo } from '@/components/v6/shared/TermInfo'
-import { sectorComposite, compositeContributions } from '@/lib/v6/sectorScore'
+import { sectorComposite, compositeContributions, type LensWeightMap } from '@/lib/v6/sectorScore'
 
 const pct = (v: number | null) => (v == null ? '—' : `${(v * 100).toFixed(0)}%`)
 const breadthHeat = (v: number | null) => (v == null ? 'text-txt-3' : v * 100 >= 60 ? 'text-sig-pos' : v * 100 >= 40 ? 'text-txt-2' : 'text-sig-neg')
@@ -44,10 +44,12 @@ export function SectorBreadthTable({
   rows,
   trend = [],
   lensBySector = {},
+  weights,
 }: {
   rows: SectorBreadthMVRow[]
   trend?: SectorBreadthTrendRow[]
   lensBySector?: Record<string, SectorLensVector>
+  weights?: LensWeightMap
 }) {
   const trendBySector = new Map(trend.map((t) => [t.sector_name, t]))
   const [sortKey, setSortKey] = useState<SortKey>('composite')
@@ -58,7 +60,7 @@ export function SectorBreadthTable({
 
   const data: Row[] = rows.map((r) => {
     const vec = lensBySector[r.sector_name]
-    return { ...r, vec, composite: vec ? sectorComposite(vec) : null }
+    return { ...r, vec, composite: vec ? sectorComposite(vec, weights) : null }
   })
 
   const valOf = (r: Row): number => {
@@ -98,7 +100,7 @@ export function SectorBreadthTable({
       <tbody>
         {sorted.map((r) => {
           const isOpen = open === r.sector_name
-          const contribs = r.vec ? compositeContributions(r.vec) : []
+          const contribs = r.vec ? compositeContributions(r.vec, weights) : []
           return (
             <>
               <tr key={r.sector_name}
