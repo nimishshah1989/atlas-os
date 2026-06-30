@@ -8,6 +8,7 @@
 import 'server-only'
 import sql from '@/lib/db'
 import { LEAD_DECILE } from '@/lib/queries/v6/stock_lens'
+import { aggregateMargins, perConstituentMargins, type RawFin, type ConstituentFin } from '@/lib/v6/sectorFin'
 
 export type SectorLensVector = {
   technical: number | null; fundamental: number | null; valuation: number | null
@@ -161,72 +162,92 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
 }
 
 export type SectorFundamentals = {
-  n: number; ebitda_margin: number | null; net_margin: number | null; debt_equity: number | null
-  u_ebitda_margin: number | null; u_net_margin: number | null; u_debt_equity: number | null
+  n: number; ebitda_margin: number | null; net_margin: number | null; pct_profitable: number | null
+  u_ebitda_margin: number | null; u_net_margin: number | null; u_pct_profitable: number | null
+  constituents: ConstituentFin[] // per-stock margins — the within-sector drill
 }
 
+// Revenue-WEIGHTED sector margins (Σebitda/Σrevenue), computed from raw components via the
+// tested pure aggregator — NOT a simple average of per-stock ratios (which a single
+// tiny-revenue loss-maker wrecked, pushing the universe negative). debt/equity dropped:
+// debt_equity_ratio is ~99.5% null in the feed, so it was a near-empty column. % profitable
+// (share of constituents with PAT>0) replaces it — robust and a real sector-health read.
+// Scoped to the SCORED constituents (the same set as the rest of the page — the "N
+// constituents" header and the constituents table), so the drill count matches everywhere;
+// universe = the full scored universe (Nifty 500), apples-to-apples with sector RS/deciles.
 export async function getSectorFundamentals(sector: string): Promise<SectorFundamentals | null> {
   const r = await sql<Record<string, string>[]>`
-    WITH latest_fin AS (
+    WITH ld AS (SELECT max(date) d FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'),
+    scored AS (SELECT instrument_id FROM foundation_staging.atlas_lens_scores_daily
+               WHERE asset_class='stock' AND date=(SELECT d FROM ld)),
+    latest_fin AS (
       SELECT DISTINCT ON (fq.instrument_id) fq.instrument_id,
-             fq.ebitda_margin::float em, fq.net_margin::float nm, fq.debt_equity_ratio::float de
+             fq.ebitda::float ebitda, fq.revenue::float revenue, fq.pat::float pat
       FROM foundation_staging.financials_quarterly fq
       WHERE fq.consolidated ORDER BY fq.instrument_id, fq.period_end DESC
-    ),
-    joined AS (
-      SELECT im.sector, lf.em, lf.nm, lf.de
-      FROM foundation_staging.instrument_master im JOIN latest_fin lf ON lf.instrument_id = im.instrument_id
-      WHERE im.asset_class='stock' AND im.sector IS NOT NULL
     )
-    SELECT
-      count(*) FILTER (WHERE sector = ${sector}) AS n,
-      avg(em) FILTER (WHERE sector = ${sector}) AS ebitda_margin,
-      avg(nm) FILTER (WHERE sector = ${sector}) AS net_margin,
-      avg(de) FILTER (WHERE sector = ${sector}) AS debt_equity,
-      avg(em) AS u_ebitda_margin, avg(nm) AS u_net_margin, avg(de) AS u_debt_equity
-    FROM joined
+    SELECT im.symbol, im.sector, lf.ebitda, lf.revenue, lf.pat
+    FROM foundation_staging.instrument_master im
+    JOIN scored sc ON sc.instrument_id = im.instrument_id
+    JOIN latest_fin lf ON lf.instrument_id = im.instrument_id
+    WHERE im.asset_class='stock' AND im.sector IS NOT NULL
   `
-  if (r.length === 0 || Number(r[0].n) === 0) return null
-  const n = (v: string | null) => (v == null ? null : Number(v))
-  const x = r[0]
+  const num = (v: string | null) => (v == null ? null : Number(v))
+  const all: RawFin[] = r.map((x) => ({ symbol: x.symbol, ebitda: num(x.ebitda), revenue: num(x.revenue), pat: num(x.pat) }))
+  const sectorRows = r.filter((x) => x.sector === sector).map((x): RawFin => ({ symbol: x.symbol, ebitda: num(x.ebitda), revenue: num(x.revenue), pat: num(x.pat) }))
+  const sec = aggregateMargins(sectorRows)
+  if (sec.n === 0) return null
+  const uni = aggregateMargins(all)
   return {
-    n: Number(x.n), ebitda_margin: n(x.ebitda_margin), net_margin: n(x.net_margin), debt_equity: n(x.debt_equity),
-    u_ebitda_margin: n(x.u_ebitda_margin), u_net_margin: n(x.u_net_margin), u_debt_equity: n(x.u_debt_equity),
+    n: sec.n, ebitda_margin: sec.ebitda_margin, net_margin: sec.net_margin, pct_profitable: sec.pct_profitable,
+    u_ebitda_margin: uni.ebitda_margin, u_net_margin: uni.net_margin, u_pct_profitable: uni.pct_profitable,
+    constituents: perConstituentMargins(sectorRows),
   }
 }
 
+export type ConstituentFlow = {
+  symbol: string; deliv_30d: number | null; deliv_60d: number | null; updown: number | null; flow_inst: number | null
+}
 export type SectorFundFlow = {
   n: number; deliv_30d: number | null; deliv_60d: number | null; updown: number | null; flow_inst: number | null
-  u_deliv_30d: number | null; u_updown: number | null
+  u_deliv_30d: number | null; u_deliv_60d: number | null; u_updown: number | null; u_flow_inst: number | null
+  constituents: ConstituentFlow[] // per-stock flow — the within-sector drill
 }
 
+// Delivery / flow are equal-weighted means across constituents (each is already a
+// normalised 0–100 per-stock value, so equal-weighting is the right breadth read — unlike
+// margins, which must be revenue-weighted). Also returns the per-constituent rows so the
+// table can drill into "which names drive the sector number". Scoped to the SCORED
+// constituents (same set as the rest of the page), so counts match everywhere.
 export async function getSectorFundFlow(sector: string): Promise<SectorFundFlow | null> {
   const r = await sql<Record<string, string>[]>`
     WITH dl AS (SELECT max(date) d FROM foundation_staging.delivery_daily),
     jl AS (SELECT max(date) d FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'),
-    joined AS (
-      SELECT im.sector, d.delivery_avg_30d::float a30, d.delivery_avg_60d::float a60,
-             d.delivery_updown_asym::float ud, l.flow_institutional::float fi
-      FROM foundation_staging.instrument_master im
-      JOIN foundation_staging.delivery_daily d ON d.instrument_id = im.instrument_id AND d.date=(SELECT d FROM dl)
-      LEFT JOIN foundation_staging.atlas_lens_scores_daily l
-        ON l.instrument_id = im.instrument_id AND l.date=(SELECT d FROM jl) AND l.asset_class='stock'
-      WHERE im.asset_class='stock' AND im.sector IS NOT NULL
-    )
-    SELECT
-      count(*) FILTER (WHERE sector = ${sector}) AS n,
-      avg(a30) FILTER (WHERE sector = ${sector}) AS deliv_30d,
-      avg(a60) FILTER (WHERE sector = ${sector}) AS deliv_60d,
-      avg(ud)  FILTER (WHERE sector = ${sector}) AS updown,
-      avg(fi)  FILTER (WHERE sector = ${sector}) AS flow_inst,
-      avg(a30) AS u_deliv_30d, avg(ud) AS u_updown
-    FROM joined
+    scored AS (SELECT instrument_id, flow_institutional FROM foundation_staging.atlas_lens_scores_daily
+               WHERE asset_class='stock' AND date=(SELECT d FROM jl))
+    SELECT im.symbol, im.sector, d.delivery_avg_30d::float a30, d.delivery_avg_60d::float a60,
+           d.delivery_updown_asym::float ud, sc.flow_institutional::float fi
+    FROM foundation_staging.instrument_master im
+    JOIN scored sc ON sc.instrument_id = im.instrument_id
+    LEFT JOIN foundation_staging.delivery_daily d ON d.instrument_id = im.instrument_id AND d.date=(SELECT d FROM dl)
+    WHERE im.asset_class='stock' AND im.sector IS NOT NULL
   `
-  if (r.length === 0 || Number(r[0].n) === 0) return null
-  const n = (v: string | null) => (v == null ? null : Number(v))
-  const x = r[0]
+  const num = (v: string | null) => (v == null ? null : Number(v))
+  const mean = (xs: (number | null)[]) => {
+    const v = xs.filter((x): x is number => x != null)
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null
+  }
+  const sectorRows = r.filter((x) => x.sector === sector)
+  if (sectorRows.length === 0) return null
+  const col = (rows: Record<string, string>[], k: string) => mean(rows.map((x) => num(x[k])))
+  const constituents: ConstituentFlow[] = sectorRows
+    .map((x) => ({ symbol: x.symbol, deliv_30d: num(x.a30), deliv_60d: num(x.a60), updown: num(x.ud), flow_inst: num(x.fi) }))
+    .sort((a, b) => (b.deliv_30d ?? -Infinity) - (a.deliv_30d ?? -Infinity))
   return {
-    n: Number(x.n), deliv_30d: n(x.deliv_30d), deliv_60d: n(x.deliv_60d), updown: n(x.updown),
-    flow_inst: n(x.flow_inst), u_deliv_30d: n(x.u_deliv_30d), u_updown: n(x.u_updown),
+    n: sectorRows.length,
+    deliv_30d: col(sectorRows, 'a30'), deliv_60d: col(sectorRows, 'a60'),
+    updown: col(sectorRows, 'ud'), flow_inst: col(sectorRows, 'fi'),
+    u_deliv_30d: col(r, 'a30'), u_deliv_60d: col(r, 'a60'), u_updown: col(r, 'ud'), u_flow_inst: col(r, 'fi'),
+    constituents,
   }
 }

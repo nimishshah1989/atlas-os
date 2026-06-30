@@ -101,9 +101,15 @@ export async function SectorDeepDiveV4({ sector }: { sector: string }) {
       {stocks.length > 0 && <SectorStock2x2 stocks={stocks} />}
       {stocks.length > 0 && <SectorBreadthWithin stocks={stocks} />}
 
-      {/* NEW: fundamentals + fund flow */}
-      {fundamentals && <SectorFundamentalsTable data={fundamentals} />}
-      {fundflow && <SectorFundFlowTable data={fundflow} />}
+      {/* Fundamentals + fund flow, side-by-side — both clickable to the within-sector drill */}
+      {(fundamentals || fundflow) && (
+        <section className="px-8 py-10 border-b border-edge-hair" aria-label="Sector fundamentals and fund flow">
+          <div className="grid lg:grid-cols-2 gap-x-14 gap-y-10">
+            {fundamentals && <SectorFundamentalsTable data={fundamentals} />}
+            {fundflow && <SectorFundFlowTable data={fundflow} />}
+          </div>
+        </section>
+      )}
 
       {/* Top-picks table removed (FM 2026-06-26) — redundant with the full constituents
           table below; that table already surfaces the strongest names by return/RS. */}

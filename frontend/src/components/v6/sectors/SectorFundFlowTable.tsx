@@ -1,49 +1,40 @@
 // SectorFundFlowTable — sector fund-flow: constituent-average delivery (30d/60d), up/down
-// delivery asymmetry (smart-money concentration), and the institutional flow sub-score, vs
-// the universe. Native foundation_staging.delivery_daily + journal. Server component.
+// delivery asymmetry (smart-money accumulation vs distribution), and the institutional flow
+// sub-score, vs the universe. Every row drills into the per-constituent "within the sector"
+// view. Native foundation_staging.delivery_daily + journal.
 import type { SectorFundFlow } from '@/lib/queries/v6/sector_lens'
-import { TermInfo } from '@/components/v6/shared/TermInfo'
-
-const pct = (v: number | null) => (v == null ? '—' : `${v.toFixed(1)}%`)
-const signed = (v: number | null) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(2)}`)
-const num = (v: number | null) => (v == null ? '—' : v.toFixed(0))
-const cmp = (s: number | null, u: number | null) =>
-  s == null || u == null ? 'text-txt-2' : s > u ? 'text-sig-pos' : s < u ? 'text-sig-neg' : 'text-txt-2'
+import { MetricBreakdownTable, type MetricRow } from '@/components/v6/sectors/MetricBreakdownTable'
 
 export function SectorFundFlowTable({ data }: { data: SectorFundFlow }) {
-  const rows = [
-    { label: 'Delivery % (30d avg)', s: data.deliv_30d, u: data.u_deliv_30d, fmt: pct, term: 'delivery' },
-    { label: 'Delivery % (60d avg)', s: data.deliv_60d, u: null, fmt: pct, term: 'delivery' },
-    { label: 'Up/down delivery asym', s: data.updown, u: data.u_updown, fmt: signed, term: 'delivery_asym' },
-    { label: 'Institutional flow score', s: data.flow_inst, u: null, fmt: num, term: 'inst_flow' },
+  const c = data.constituents
+  const rows: MetricRow[] = [
+    {
+      key: 'd30', label: 'Delivery % (30d avg)', term: 'delivery',
+      sector: data.deliv_30d, universe: data.u_deliv_30d, format: 'pct',
+      breakdown: c.map((x) => ({ symbol: x.symbol, value: x.deliv_30d })),
+    },
+    {
+      key: 'd60', label: 'Delivery % (60d avg)', term: 'delivery',
+      sector: data.deliv_60d, universe: data.u_deliv_60d, format: 'pct',
+      breakdown: c.map((x) => ({ symbol: x.symbol, value: x.deliv_60d })),
+    },
+    {
+      key: 'asym', label: 'Up/down delivery asym', term: 'delivery_asym',
+      sector: data.updown, universe: data.u_updown, format: 'signed',
+      breakdown: c.map((x) => ({ symbol: x.symbol, value: x.updown })),
+    },
+    {
+      key: 'inst', label: 'Institutional flow score', term: 'inst_flow',
+      sector: data.flow_inst, universe: data.u_flow_inst, format: 'num0',
+      breakdown: c.map((x) => ({ symbol: x.symbol, value: x.flow_inst })),
+    },
   ]
   return (
-    <section className="px-8 py-10 border-b border-edge-hair" aria-label="Sector fund flow">
-      <div className="mb-5">
-        <h2 className="font-display text-[28px] font-normal tracking-tight text-txt-1">Sector fund flow</h2>
-        <p className="font-sans text-[13px] text-txt-3 max-w-[760px] leading-[1.45] mt-1">
-          Constituent-average delivery (conviction of holding), up-vs-down-day delivery asymmetry
-          (smart-money concentration), and the institutional-flow sub-score. {data.n} stocks with data.
-        </p>
-      </div>
-      <table className="tbl-centered w-full text-right max-w-[640px]">
-        <thead>
-          <tr className="font-num text-[10px] text-txt-3 uppercase tracking-wider border-b border-edge-hair">
-            <th className="text-left py-1.5 font-medium">Metric</th>
-            <th className="py-1.5 font-medium">Sector</th>
-            <th className="py-1.5 font-medium">Universe</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(r => (
-            <tr key={r.label} className="border-b border-edge-hair">
-              <td className="text-left py-1.5 font-sans text-xs text-txt-2">{r.label}{r.term && <TermInfo term={r.term} />}</td>
-              <td className={`py-1.5 font-num text-xs tabular-nums ${cmp(r.s, r.u)}`}>{r.fmt(r.s)}</td>
-              <td className="py-1.5 font-num text-xs tabular-nums text-txt-3">{r.u == null ? '—' : r.fmt(r.u)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
+    <MetricBreakdownTable
+      title="Sector fund flow"
+      subtitle={`Constituent-average delivery (conviction of holding), up-vs-down-day delivery asymmetry (accumulation vs distribution), and the institutional-flow sub-score. ${data.n} stocks with data.`}
+      footnote="Click any row to see which constituents drive the sector number (highest first)."
+      rows={rows}
+    />
   )
 }

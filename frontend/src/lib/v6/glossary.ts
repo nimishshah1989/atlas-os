@@ -68,8 +68,9 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   roe: { title: 'Return on equity (ROE)', body: 'Net profit as a percent of shareholders’ equity — how efficiently the company turns equity into profit.' },
   roce: { title: 'Return on capital (ROCE)', body: 'Operating profit as a percent of total capital employed (equity + debt) — profitability of the whole capital base, independent of financing.' },
   op_margin: { title: 'Operating margin', body: 'Operating profit ÷ revenue. Core profitability before interest and tax — pricing power and cost control.' },
-  net_margin: { title: 'Net margin', body: 'Net profit ÷ revenue — the bottom-line take after all costs, interest and tax.' },
+  net_margin: { title: 'Net margin', body: 'Net profit ÷ revenue — the bottom-line take after all costs, interest and tax. At sector level this is revenue-weighted (sector-total PAT ÷ sector-total revenue), so the big names count more, not equally.' },
   debt_equity: { title: 'Debt / equity', body: 'Total debt ÷ shareholders’ equity — balance-sheet leverage. Lower is safer; high gearing amplifies both returns and risk.' },
+  pct_profitable: { title: '% profitable', body: 'Share of the sector’s constituents that posted a positive bottom line (PAT > 0) in the latest filed quarter. A breadth read: high = profitability is broad-based; low = the sector’s margin is carried by a few names while many run losses.' },
   // ── valuation ──
   pe: { title: 'P/E (TTM)', body: 'Price ÷ trailing-12-month earnings per share — rupees paid per rupee of earnings. Compared to the stock’s own history and its sector.' },
   pb: { title: 'P/B', body: 'Price ÷ book value per share — valuation against net assets; most meaningful for financials and asset-heavy businesses.' },
@@ -119,7 +120,7 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   atlas_grade: { title: 'Atlas grade', body: 'A coarse letter grade (A best) summarising the holder fund/ETF’s overall lens quality — a quick read on whether a strong or weak vehicle holds this stock.' },
   ebitda: { title: 'EBITDA', body: 'Earnings before interest, tax, depreciation and amortisation (₹ crore) — operating cash profit before financing and accounting charges.' },
   // ── fundamentals ──
-  ebitda_margin: { title: 'EBITDA margin', body: 'EBITDA ÷ revenue — operating profitability before depreciation, interest and tax.' },
+  ebitda_margin: { title: 'EBITDA margin', body: 'EBITDA ÷ revenue — operating profitability before depreciation, interest and tax. At sector level this is revenue-weighted: sector-total EBITDA ÷ sector-total revenue (not a flat average of each stock’s margin), so a ₹18,000 Cr major counts more than a ₹50 Cr micro-cap and a single tiny loss-maker can’t distort the read. Click the row to see every constituent’s own margin.' },
   rev_growth: { title: 'Revenue growth (YoY)', body: 'Revenue this quarter vs the same quarter a year ago, as a percent — the top-line trend.' },
   eps_growth: { title: 'EPS growth (YoY)', body: 'Earnings per share this quarter vs the same quarter a year ago — bottom-line growth per share.' },
   qoq_change: { title: 'Change QoQ', body: 'Percent change in the line above versus the immediately preceding quarter (this quarter ÷ last quarter − 1). The sequential trend, not year-over-year.' },
@@ -127,8 +128,8 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   pat: { title: 'Net profit (PAT)', body: 'Profit after tax for the quarter (₹ crore) — the bottom line.' },
   eps: { title: 'EPS', body: 'Earnings per share for the quarter (₹) — net profit divided by shares outstanding.' },
   // ── flow (sector / stock) ──
-  delivery_asym: { title: 'Up/down-day delivery asymmetry', body: 'Average delivery % on up-days minus down-days (percentage points). Positive = heavier real buying into strength than selling into weakness — accumulation.' },
-  inst_flow: { title: 'Institutional flow score', body: 'A blended measure of institutional / informed accumulation across the sector’s constituents (delivery strength, bulk/block deals, ownership change).' },
+  delivery_asym: { title: 'Up/down-day delivery asymmetry', body: 'Delivery % on up-days minus delivery % on down-days, in percentage points. It asks: on the days a stock rose, did more shares actually change hands (get delivered) than on the days it fell? POSITIVE = heavier real buying into strength than selling into weakness → accumulation (smart money adding on up-days). NEGATIVE = delivery clusters on down-days → distribution (real selling into declines). Around 0 = no directional bias. Roughly ranges −19…+18 across stocks.' },
+  inst_flow: { title: 'Institutional flow score', body: 'A blended 0–100 measure of institutional / informed accumulation across the sector’s constituents (delivery strength, bulk/block deals, ownership change). 50 = neutral; above = net accumulation, below = net distribution.' },
   // ── breadth / market pulse ──
   pct_positive: { title: '% positive', body: 'Share of the sector’s constituents with a positive return over the window — a breadth read of how broad the move is.' },
   pct_top_decile_movers: { title: '% top-decile movers', body: 'Share of the sector’s constituents whose return ranks in the top decile of the whole universe over the window — concentration of the strongest movers.' },
