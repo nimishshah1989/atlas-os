@@ -76,6 +76,33 @@ function idxClose(code: string, months: number): string {
            ORDER BY date DESC LIMIT 1)`
 }
 
+export type FundGolden = { n_priced: number; golden: number }
+
+// How many of each fund's latest-snapshot holdings are in a GOLDEN CROSS (EMA50 > EMA200) —
+// the dominant driver now that Technical is ~90% of the composite and EMA-structure based.
+// Counted over the SAME scored holdings basis as the Holdings column (INNER JOIN the lens
+// journal), DISTINCT by instrument. golden ≤ n_priced ≤ holdings.
+export async function getFundGoldenCross(): Promise<Map<string, FundGolden>> {
+  const rows = (await sql`
+    WITH snap AS (SELECT max(as_of_date) d FROM foundation_staging.de_mf_holdings),
+    ld AS (SELECT max(date) d FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'),
+    tdl AS (SELECT max(date) d FROM foundation_staging.technical_daily WHERE asset_class='stock')
+    SELECT h.mstar_id,
+      count(DISTINCT h.instrument_id) FILTER (WHERE t.instrument_id IS NOT NULL)::int AS n_priced,
+      count(DISTINCT h.instrument_id) FILTER (WHERE t.ema_50 > t.ema_200)::int AS golden
+    FROM foundation_staging.de_mf_holdings h
+    JOIN foundation_staging.atlas_lens_scores_daily l
+      ON l.instrument_id = h.instrument_id AND l.asset_class='stock' AND l.date = (SELECT d FROM ld)
+    LEFT JOIN foundation_staging.technical_daily t
+      ON t.instrument_id = h.instrument_id AND t.asset_class='stock' AND t.date = (SELECT d FROM tdl)
+    WHERE h.as_of_date = (SELECT d FROM snap) AND h.weight_pct > 0
+    GROUP BY h.mstar_id
+  `) as unknown as { mstar_id: string; n_priced: number; golden: number }[]
+  const out = new Map<string, FundGolden>()
+  for (const r of rows) out.set(r.mstar_id, { n_priced: r.n_priced, golden: r.golden })
+  return out
+}
+
 export type FundEma = { n_priced: number; a21: number; a50: number; a200: number }
 
 // How many of each fund's latest-snapshot holdings sit above their 21/50/200-day EMA.

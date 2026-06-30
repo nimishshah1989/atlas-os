@@ -1,8 +1,10 @@
-"""Flow lens scorer — promoter + institutional / smart-money signals.
+"""Flow lens scorer — DELIVERY ONLY (FM 2026-06-30).
 
-Pure function, no I/O.  Consumes insider transactions, shareholding snapshots,
-and bulk-deal dicts; emits a FlowResult with promoter, institutional, and
-smart_money subcomponents plus a composite 0-100 score.
+Pure function, no I/O. Flow = the delivery-% accumulation sub-score (sustained level +
+30d/60d trend + up/down-day asymmetry). Promoter and institutional/smart-money signals
+were removed from the lens; their scorers remain below only because the pipeline still
+passes those inputs, but they no longer contribute to the score. None below the
+liquidity floor (no 30d delivery average), never a stub.
 """
 
 from __future__ import annotations
@@ -318,79 +320,30 @@ def score_flow(
     delivery: dict[str, Any] | None = None,
     mf_delta: float | None = None,
 ) -> FlowResult:
-    """Score flow signals into a 0-100 composite.
+    """Score the Flow lens — DELIVERY ONLY (FM 2026-06-30).
 
-    Sub-components: promoter (holding level + insider txns), smart-money (bulk deals +
-    institutional QoQ), and accumulation (delivery-% trend/asymmetry). The composite is
-    a weight-normalised average over the PRESENT sub-components — so a name without a
-    delivery signal renormalises over promoter+smart (its prior behaviour), never imputed.
+    Promoter and smart-money/institutional sub-components were REMOVED from the Flow lens.
+    Flow is now exactly the delivery-% accumulation sub-score (level + 30d/60d trend +
+    up/down-day asymmetry; see _score_accumulation). A name with no delivery history (below
+    the liquidity floor) has NO flow reading → None, never a stub. The other arguments are
+    retained for signature compatibility with the pipeline but are no longer scored.
     """
-    has_insiders = bool(insider_transactions)
-    has_sh = shareholding_current is not None or bool(bulk_deals)
-    has_mf = mf_delta is not None
     accum_raw, accum_ev = _score_accumulation(delivery, thresholds)
-    has_accum = accum_raw is not None
-
-    if not has_insiders and not has_sh and not has_accum and not has_mf:
+    if accum_raw is None:
         return FlowResult(
             promoter=None,
             institutional=None,
             smart_money=None,
             accumulation=None,
             score=None,
-            evidence={"reason": "no flow data"},
+            evidence={"reason": "no delivery data — flow is delivery-only"},
         )
-
-    # Promoter + smart-money base — only when there is real insider / shareholding /
-    # bulk-deal data (else promoter defaults to 0 and smart to neutral 50, which would
-    # wrongly dilute a delivery-only name). Accumulation rides on top when present.
-    base_present = has_insiders or has_sh
-    has_inst = base_present or has_mf  # smart-money present via bulk/SH OR mutual-fund flow
-    w_promo = float(thresholds.get("flow_w_promoter", 0.70))
-    w_sm = float(thresholds.get("flow_w_smart_money", 0.30))
-    w_accum = float(thresholds.get("flow_w_accumulation", 0.25))
-
-    parts: list[tuple[float, float]] = []
-    promo_raw = sm_raw = sm_scaled = None
-    promo_ev = sm_ev = {"reason": "no base flow data"}
-    if base_present:
-        promo_raw, promo_ev = _score_promoter(
-            insider_transactions or [], shareholding_current, thresholds
-        )
-        parts.append((promo_raw, w_promo))
-    if has_inst:
-        sm_raw, sm_ev = _score_institutional(
-            shareholding_current,
-            shareholding_previous,
-            bulk_deals or [],
-            thresholds,
-            mf_delta=mf_delta,
-        )
-        # Rescale smart money [-10, +15] -> [0, 100], centered so 0 -> 50
-        sm_scaled = 50.0 + (sm_raw / 15.0) * 50.0 if sm_raw >= 0 else 50.0 + (sm_raw / 10.0) * 50.0
-        parts.append((sm_scaled, w_sm))
-    if has_accum:
-        parts.append((accum_raw, w_accum))
-
-    # Weight-normalised over PRESENT sub-components. With base present and no delivery
-    # this is exactly the prior 70/30; delivery only renormalises, never imputes.
-    tw = sum(w for _, w in parts)
-    composite = _clamp(sum(s * w for s, w in parts) / tw, 0, 100) if tw > 0 else 0.0
-
+    score = Decimal(str(round(accum_raw, 2)))
     return FlowResult(
-        promoter=Decimal(str(round(promo_raw, 2))) if promo_raw is not None else None,
-        institutional=Decimal(str(round(sm_scaled, 2))) if sm_scaled is not None else None,
-        smart_money=Decimal(str(round(sm_raw, 2))) if sm_raw is not None else None,
-        accumulation=Decimal(str(round(accum_raw, 2))) if has_accum else None,
-        score=Decimal(str(round(composite, 2))),
-        evidence={
-            "promoter": promo_ev,
-            "smart_money": sm_ev,
-            "accumulation": accum_ev,
-            "weights": {
-                "promoter": w_promo if base_present else 0.0,
-                "smart_money": w_sm if base_present else 0.0,
-                "accumulation": w_accum if has_accum else 0.0,
-            },
-        },
+        promoter=None,
+        institutional=None,
+        smart_money=None,
+        accumulation=score,
+        score=score,
+        evidence={"accumulation": accum_ev, "components": "delivery_only"},
     )

@@ -163,7 +163,11 @@ def compute_composite(
     lenses_active = len(active_weights)
     evidence: dict[str, Any] = {"lenses_active_names": list(active_weights.keys())}
 
-    if lenses_active == 0:
+    total_active_weight = sum(active_weights.values())
+    # No lens carrying a NON-ZERO weight is present (e.g. a name missing both Technical and
+    # Flow, the only weighted lenses) → no conviction reading. Degrade gracefully rather than
+    # dividing by zero (which previously dropped the instrument from the journal entirely).
+    if lenses_active == 0 or total_active_weight <= 0:
         return CompositeResult(
             base_composite=_ZERO,
             final_score=_ZERO,
@@ -174,8 +178,6 @@ def compute_composite(
             convergence_multiplier=Decimal(1),
             evidence=evidence,
         )
-
-    total_active_weight = sum(active_weights.values())
     normalized_avg = sum(
         float(rescaled[lens]) * (w / total_active_weight) for lens, w in active_weights.items()
     )

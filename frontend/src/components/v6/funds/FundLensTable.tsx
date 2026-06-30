@@ -11,7 +11,7 @@ import { fundCompositeContributions } from '@/lib/v6/fundScore'
 import type { LensWeightMap } from '@/lib/v6/sectorScore'
 import { pctBand } from '@/lib/v6/rankHistory'
 import type { FundRankHistory } from '@/lib/queries/v6/fund_rank_history'
-import type { FundRsMatrix, FundEma } from '@/lib/queries/v6/fund_metrics'
+import type { FundRsMatrix, FundEma, FundGolden } from '@/lib/queries/v6/fund_metrics'
 import { RankSliceBar } from './RankSliceBar'
 import { FundRsMatrixCell } from './FundRsMatrixCell'
 import { FundEmaCell } from './FundEmaCell'
@@ -55,7 +55,7 @@ type LensKey = 'v_tech' | 'v_fund' | 'v_cat' | 'v_flow' | 'v_val'
 
 type SortKey =
   | 'name' | 'category' | 'amc' | 'n_holdings' | 'n_leaders' | 'breadth'
-  | LensKey | 'expense' | 'composite' | 'cat_rank' | 'aum_cr' | 'rank_trend' | 'rs_matrix' | 'ema_breadth'
+  | LensKey | 'expense' | 'composite' | 'cat_rank' | 'aum_cr' | 'rank_trend' | 'rs_matrix' | 'ema_breadth' | 'golden'
 
 type Col = { key: SortKey; label: string; align: 'left' | 'right' | 'center'; term?: string; sortable?: boolean }
 const COLS: Col[] = [
@@ -67,6 +67,7 @@ const COLS: Col[] = [
   { key: 'rs_matrix', label: 'RS vs N50 / N500', align: 'center', term: 'fund_rs', sortable: false },
   { key: 'amc', label: 'AMC', align: 'left' },
   { key: 'n_holdings', label: 'Holdings', align: 'right', term: 'holdings_count' },
+  { key: 'golden', label: '# Golden cross', align: 'center', term: 'golden_cross' },
   { key: 'ema_breadth', label: '# > EMA 21/50/200', align: 'center', term: 'fund_ema', sortable: false },
   { key: 'n_leaders', label: 'Leaders', align: 'right', term: 'leaders_count' },
   { key: 'breadth', label: 'Leadership-breadth', align: 'right', term: 'leadership_breadth' },
@@ -106,12 +107,14 @@ export function FundLensTable({
   history,
   rs,
   ema,
+  golden,
 }: {
   funds: FundLensRow[]
   weights?: LensWeightMap
   history?: Record<string, FundRankHistory>
   rs?: Record<string, FundRsMatrix>
   ema?: Record<string, FundEma>
+  golden?: Record<string, FundGolden>
 }) {
   const router = useRouter()
 
@@ -139,10 +142,11 @@ export function FundLensTable({
       if (sortKey === 'name') return sign * a.name.localeCompare(b.name)
       if (sortKey === 'category') return sign * (a.category ?? '').localeCompare(b.category ?? '')
       if (sortKey === 'amc') return sign * (a.amc ?? '').localeCompare(b.amc ?? '')
+      if (sortKey === 'golden') return sign * ((golden?.[a.mstar_id]?.golden ?? -Infinity) - (golden?.[b.mstar_id]?.golden ?? -Infinity))
       return sign * (numFor(a, sortKey) - numFor(b, sortKey))
     })
     return out
-  }, [filtered, sortKey, sortDir])
+  }, [filtered, sortKey, sortDir, golden])
 
   function toggleSort(key: SortKey) {
     if (key === 'rank_trend' || key === 'rs_matrix' || key === 'ema_breadth') return // display-only columns
@@ -248,6 +252,19 @@ export function FundLensTable({
                 <td className="px-2 py-1.5 text-center align-middle"><FundRsMatrixCell rs={frs} /></td>
                 <td className="max-w-[140px] truncate px-2 py-1.5 font-sans text-[11px] text-txt-2">{f.amc ?? '—'}</td>
                 <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums text-txt-2">{f.n_holdings}</td>
+                <td className="px-2 py-1.5 text-center align-middle">
+                  {(() => {
+                    const g = golden?.[f.mstar_id]
+                    if (!g || g.n_priced === 0) return <span className="font-num text-[11px] text-txt-3">—</span>
+                    const share = g.golden / g.n_priced
+                    const tone = share >= 0.6 ? 'text-sig-pos' : share >= 0.4 ? 'text-txt-1' : 'text-sig-neg'
+                    return (
+                      <span className={`font-num text-[12px] tabular-nums font-semibold ${tone}`} title={`${g.golden} of ${g.n_priced} priced holdings have EMA50 > EMA200 (a golden cross — long-term uptrend)`}>
+                        {g.golden}<span className="font-normal text-txt-3">/{g.n_priced}</span>
+                      </span>
+                    )
+                  })()}
+                </td>
                 <td className="px-2 py-1.5 text-center align-middle"><FundEmaCell ema={fema} /></td>
                 <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums text-txt-2">{f.n_leaders}</td>
                 <td className={`px-2 py-1.5 text-right font-num text-[12px] tabular-nums font-semibold ${breadthText(f.breadth)}`}>{fmtBreadth(f.breadth)}</td>

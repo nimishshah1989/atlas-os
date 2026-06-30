@@ -95,8 +95,17 @@ def load_technical_data(engine: Engine, as_of: date) -> pd.DataFrame:
         FROM foundation_staging.technical_daily t
         LEFT JOIN foundation_staging.ohlcv_stock o
           ON o.instrument_id = t.instrument_id AND o.date = t.date
-        LEFT JOIN foundation_staging.delivery_daily d
-          ON d.instrument_id = t.instrument_id AND d.date = t.date
+        -- Delivery feed lags the price/EMA feed by a few sessions, so an exact d.date = t.date
+        -- join nulls out delivery for the whole universe on a fresh scoring date. Take each
+        -- name's MOST RECENT delivery snapshot on or before the scoring date instead — PIT-safe
+        -- (never future) and lag-resilient, so the (now delivery-only) Flow lens still scores.
+        LEFT JOIN LATERAL (
+          SELECT dd.delivery_pct, dd.delivery_avg_30d, dd.delivery_avg_60d,
+                 dd.delivery_trend, dd.delivery_updown_asym
+          FROM foundation_staging.delivery_daily dd
+          WHERE dd.instrument_id = t.instrument_id AND dd.date <= :dt
+          ORDER BY dd.date DESC LIMIT 1
+        ) d ON true
         WHERE t.date = :dt
     """)
     with open_compute_session(engine) as conn:

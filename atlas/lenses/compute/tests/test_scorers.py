@@ -35,7 +35,7 @@ from atlas.lenses.data import adapters
 from atlas.lenses.pipeline import score_all
 
 # A real NSE session (membership-validated by data/tests/test_calendar.py).
-D = date(2026, 6, 19)
+D = date(2026, 6, 29)  # recomputed with the new Technical(EMA)+Flow(delivery) scorers
 TOL = 0.1
 # Composite is ON-READ (D19) — NOT materialized; it is reconciled on-read in
 # TestComposite, never against the vestigial/stale stored `composite` column. The six
@@ -205,10 +205,15 @@ class TestValuation:
         assert r.score is None and r.zone == "UNKNOWN" and r.multiplier == Decimal("1.00")
         assert r.evidence.get("no_data") is True
 
-    def test_pb_absent_on_real_data(self, produced):
-        # P/B has no unit-safe as-of source (DECISIONS D-LoopC) -> never fires.
-        fired = sum(1 for r in list(produced.values())[:300] if _num(r.get("val_pb")) is not None)
-        assert fired == 0, f"pb dimension fired on {fired} real names (expected 0)"
+    def test_pb_scored_when_data_present(self, produced):
+        # The P/B as-of source (Screener ready ratios) is now populated, so the P/B
+        # dimension fires for the large majority of names (was a known gap; data is real,
+        # weight-0 valuation so it only tunes the multiplier). Contract: when present it is
+        # a valid 0-15 score, never a stub.
+        vals = [_num(r.get("val_pb")) for r in list(produced.values())[:300]]
+        fired = [v for v in vals if v is not None]
+        assert len(fired) >= 200, f"pb dimension fired on only {len(fired)}/300 (expected most)"
+        assert all(0 <= v <= 15 for v in fired)
 
     def test_unvalued_names_not_labelled_fair(self, journal):
         no_val = journal[journal["valuation"].isna()]
@@ -232,10 +237,19 @@ class TestFlow:
         )
         assert set(kinds) - {"other"}, f"signal_type still only 'other': {kinds}"
 
-    def test_no_source_data_is_none(self, produced, journal):
-        # A name with no flow source in-window -> flow None in the produced output.
-        nulls = [iid for iid in produced if _num(produced[iid].get("flow")) is None]
-        assert nulls, "expected some names with no flow signal"
+    def test_flow_is_delivery_only(self, produced):
+        # FM 2026-06-30: Flow = the delivery accumulation sub-score ONLY. On real produced
+        # output, flow must EQUAL flow_accumulation everywhere (both present or both None) —
+        # promoter / smart-money no longer contribute — and never be a stub.
+        checked = 0
+        for r in produced.values():
+            f, acc = _num(r.get("flow")), _num(r.get("flow_accumulation"))
+            assert (f is None) == (acc is None), "flow must be present iff delivery is"
+            if f is not None:
+                assert abs(f - acc) <= TOL, f"flow {f} != accumulation {acc}"
+                assert _num(r.get("flow_promoter")) is None and _num(r.get("flow_smart_money")) is None
+                checked += 1
+        assert checked >= 100, f"too few delivery-scored names to verify ({checked})"
 
 
 # ════════════════════════════ CATALYST ════════════════════════════
@@ -300,6 +314,52 @@ class TestFlowAccumulation:
             }
             res = score_flow([], None, None, [], {}, delivery=delivery)
             assert res.accumulation is None
+
+
+# ════════════════════════════ TECHNICAL — EMA-RS + Trend rescale (FM 2026-06-30) ════════════════════════════
+class TestTechnicalEmaRS:
+    def test_rs_is_ema_structure(self):
+        from atlas.lenses.compute.technical import _score_relative_strength as rs
+
+        assert float(rs(110, 105, 100, {})[0]) == 25.0  # 21>50>200 → 10+15
+        assert float(rs(104, 105, 100, {})[0]) == 10.0  # 50>200 only (golden cross)
+        assert float(rs(106, 95, 100, {})[0]) == 15.0  # 21>50 only
+        assert float(rs(95, 96, 100, {})[0]) == 0.0  # neither
+        assert rs(None, 105, 100, {})[0] is None  # missing ema → no reading
+
+    def test_trend_rescales_to_25_without_rsi(self):
+        from atlas.lenses.compute.technical import _score_trend
+
+        # aligned (21>50>200) + price >5% over EMA200 + steep up-week: pre-rescale 20 → ×1.25 = 25.
+        pts = _score_trend(110, 105, 100, 200, 65, 0.03, {})[0]
+        assert float(pts) == 25.0
+
+    def test_lens_is_trend_plus_rs_times_two(self):
+        from atlas.lenses.compute.technical import score_technical
+
+        # Two sub-scores only (vol-contraction + volume removed): (trend + rs) × 2.
+        r = score_technical(110, 105, 100, 65, 200, 0.03, None, None, None, None, None, None, None, None, None, {})
+        assert r.vol_contraction is None and r.volume is None
+        assert float(r.score) == float(r.trend) * 2 + float(r.relative_strength) * 2
+
+
+# ════════════════════════════ FLOW — delivery only (FM 2026-06-30) ════════════════════════════
+class TestFlowDeliveryOnly:
+    def test_flow_equals_accumulation(self):
+        from atlas.lenses.compute.flow import score_flow
+
+        d = {"delivery_avg_30d": 62, "delivery_avg_60d": 55, "delivery_updown_asym": 9}
+        r = score_flow([], {"promoter_pct": 50}, {"promoter_pct": 48}, [{"buy_sell": "buy", "is_superstar": True}], {}, delivery=d, mf_delta=3.0)
+        # promoter / smart-money no longer contribute — flow IS the delivery sub-score.
+        assert r.promoter is None and r.smart_money is None and r.institutional is None
+        assert r.score == r.accumulation and r.score is not None
+
+    def test_no_delivery_is_none_not_a_stub(self):
+        from atlas.lenses.compute.flow import score_flow
+
+        # Rich promoter / bulk / MF data but NO delivery → flow has no reading.
+        r = score_flow([{"signal_type": "open_market_buy", "value_cr": 9}], {"promoter_pct": 70}, None, [], {}, delivery=None, mf_delta=5.0)
+        assert r.score is None
 
 
 # ════════════════════════════ COMPOSITE ════════════════════════════
