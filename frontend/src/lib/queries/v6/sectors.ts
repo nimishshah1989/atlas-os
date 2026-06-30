@@ -291,14 +291,15 @@ export async function getAllSectorConstituents(): Promise<Record<string, SectorC
     WITH latest AS (
       SELECT max(date) d FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'
     ),
-    ff AS (  -- free-float market cap = market cap × non-promoter, non-ESOP share (sector concentration)
+    ff AS (  -- free-float market cap = market cap × non-promoter, non-ESOP share (sector concentration).
+             -- Shareholding required (INNER) so no name gets a fabricated 100%-free-float weight.
       SELECT mc.instrument_id,
-        mc.market_cap * (100 - COALESCE(sh.promoter_pct,0) - COALESCE(sh.employee_trusts_pct,0)) / 100.0 AS ff_mcap
+        mc.market_cap * (100 - sh.promoter_pct - COALESCE(sh.employee_trusts_pct,0)) / 100.0 AS ff_mcap
       FROM (SELECT DISTINCT ON (instrument_id) instrument_id, market_cap FROM foundation_staging.screener_ratios
             WHERE market_cap IS NOT NULL ORDER BY instrument_id, as_of DESC NULLS LAST) mc
-      LEFT JOIN (SELECT DISTINCT ON (instrument_id) instrument_id, promoter_pct, employee_trusts_pct
-                 FROM foundation_staging.lens_shareholding ORDER BY instrument_id, period_end DESC) sh
-        ON sh.instrument_id = mc.instrument_id
+      JOIN (SELECT DISTINCT ON (instrument_id) instrument_id, promoter_pct, employee_trusts_pct
+            FROM foundation_staging.lens_shareholding WHERE promoter_pct IS NOT NULL
+            ORDER BY instrument_id, period_end DESC) sh ON sh.instrument_id = mc.instrument_id
     )
     SELECT im.sector, im.symbol, im.name,
            td.ret_1d::float r1d, td.ret_1w::float r1w, td.ret_1m::float r1m,

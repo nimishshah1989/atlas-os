@@ -125,14 +125,17 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
         CASE WHEN va IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(va IS NULL) ORDER BY va) END d_val
       FROM j
     ),
-    ff AS (  -- free-float market cap = market cap × non-promoter, non-ESOP share (concentration view)
+    ff AS (  -- free-float market cap = market cap × non-promoter, non-ESOP share (concentration view).
+             -- Shareholding required (INNER) so no name gets a fabricated 100%-free-float weight.
+             -- (equity_marketcap union was tried + verified a no-op for the scored universe — the
+             -- uncovered names lack market cap in EVERY source, not just screener_ratios.)
       SELECT mc.instrument_id,
-        mc.market_cap * (100 - COALESCE(sh.promoter_pct,0) - COALESCE(sh.employee_trusts_pct,0)) / 100.0 AS ff_mcap
+        mc.market_cap * (100 - sh.promoter_pct - COALESCE(sh.employee_trusts_pct,0)) / 100.0 AS ff_mcap
       FROM (SELECT DISTINCT ON (instrument_id) instrument_id, market_cap FROM foundation_staging.screener_ratios
             WHERE market_cap IS NOT NULL ORDER BY instrument_id, as_of DESC NULLS LAST) mc
-      LEFT JOIN (SELECT DISTINCT ON (instrument_id) instrument_id, promoter_pct, employee_trusts_pct
-                 FROM foundation_staging.lens_shareholding ORDER BY instrument_id, period_end DESC) sh
-        ON sh.instrument_id = mc.instrument_id
+      JOIN (SELECT DISTINCT ON (instrument_id) instrument_id, promoter_pct, employee_trusts_pct
+            FROM foundation_staging.lens_shareholding WHERE promoter_pct IS NOT NULL
+            ORDER BY instrument_id, period_end DESC) sh ON sh.instrument_id = mc.instrument_id
     )
     SELECT d.symbol, d.name, d.cap, d.d_tech, d.d_fund, d.d_cat, d.d_flow, d.d_val,
       d.r1d, d.r1w, d.r1m, d.r3m, d.r6m, d.r12m, d.rs1m, d.rs3m, d.rs6m,

@@ -61,8 +61,10 @@ export function SectorConstituentsTable({ stocks }: { stocks: SectorStock[] }) {
   const onSort = (k: keyof SectorStock) => { if (k === sortKey) setDir((d) => (d === 'desc' ? 'asc' : 'desc')); else { setSortKey(k); setDir('desc') } }
 
   const th = 'px-2 py-1.5 font-num text-[9.5px] font-semibold uppercase tracking-wider text-txt-3 cursor-pointer select-none hover:text-txt-1 whitespace-nowrap'
+  const ffCovered = stocks.filter((s) => s.ff_weight != null).length
 
   return (
+   <div>
     <div className="overflow-x-auto rounded-tile border border-edge-hair bg-surface-panel" data-testid="sector-constituents-table">
       <table className="tbl-centered w-full border-collapse text-xs">
         <thead>
@@ -102,5 +104,10 @@ export function SectorConstituentsTable({ stocks }: { stocks: SectorStock[] }) {
         </tbody>
       </table>
     </div>
+    <p className="mt-2 font-sans text-[11px] leading-[1.5] text-txt-3">
+      <strong className="text-txt-2">FF wt</strong> = free-float weight within this sector’s constituents (live, un-capped) — a concentration read, <em>not</em> the NSE index weight.
+      {ffCovered < stocks.length && ` Covers ${ffCovered} of ${stocks.length} names; the rest lack a market-cap or shareholding reading.`}
+    </p>
+   </div>
   )
 }
