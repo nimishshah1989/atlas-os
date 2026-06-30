@@ -105,6 +105,7 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
     j AS (
       SELECT l.instrument_id, im.symbol, im.name, im.sector, COALESCE(c.cap,'micro') AS cap,
              l.technical::float t, l.fundamental::float f, l.catalyst::float ca, l.flow::float fl, l.valuation::float va,
+             l.composite::float comp,
              td.ret_1d::float r1d, td.ret_1w::float r1w, td.ret_1m::float r1m,
              td.ret_3m::float r3m, td.ret_6m::float r6m, td.ret_12m::float r12m,
              td.rs_1m_n500::float rs1m, td.rs_3m_n500::float rs3m, td.rs_6m_n500::float rs6m
@@ -117,12 +118,13 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
       WHERE l.asset_class='stock' AND l.date=(SELECT d FROM latest)
     ),
     dec AS (
-      SELECT instrument_id, symbol, name, sector, cap, t, f, ca, fl, va, r1d, r1w, r1m, r3m, r6m, r12m, rs1m, rs3m, rs6m,
+      SELECT instrument_id, symbol, name, sector, cap, t, f, ca, fl, va, comp, r1d, r1w, r1m, r3m, r6m, r12m, rs1m, rs3m, rs6m,
         CASE WHEN t  IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(t  IS NULL) ORDER BY t)  END d_tech,
         CASE WHEN f  IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(f  IS NULL) ORDER BY f)  END d_fund,
         CASE WHEN ca IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(ca IS NULL) ORDER BY ca) END d_cat,
         CASE WHEN fl IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(fl IS NULL) ORDER BY fl) END d_flow,
-        CASE WHEN va IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(va IS NULL) ORDER BY va) END d_val
+        CASE WHEN va IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(va IS NULL) ORDER BY va) END d_val,
+        CASE WHEN comp IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(comp IS NULL) ORDER BY comp) END d_composite
       FROM j
     ),
     ff AS (  -- free-float market cap = market cap × non-promoter, non-ESOP share (concentration view).
@@ -140,7 +142,7 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
     SELECT d.symbol, d.name, d.cap, d.d_tech, d.d_fund, d.d_cat, d.d_flow, d.d_val,
       d.r1d, d.r1w, d.r1m, d.r3m, d.r6m, d.r12m, d.rs1m, d.rs3m, d.rs6m,
       (d.r3m - sr.sret_3m) AS rs_sector_3m, liq.liq_cr,
-      (COALESCE((d.d_tech>=${LEAD_DECILE})::int,0) + COALESCE((d.d_flow>=${LEAD_DECILE})::int,0)) AS lead,  -- 2-lens: Technical & Flow only (0..2)
+      (COALESCE((d.d_composite>=10)::int,0)) AS lead,  -- LEADER = top decile (D10) of composite within cap cohort (one rule; 0/1)
       ((COALESCE(d.d_tech,0)+COALESCE(d.d_flow,0))::float
         / NULLIF((d.d_tech IS NOT NULL)::int+(d.d_flow IS NOT NULL)::int,0)) AS strength,
       -- free-float weight WITHIN this sector: the window runs after the sector WHERE, so it sums the sector only

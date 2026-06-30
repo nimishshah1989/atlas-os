@@ -29,6 +29,7 @@ export type FundLensRow = {
   // holdings-weighted lens vector — derived, not a standalone scorecard. cat_rank/cat_size are
   // computed below over the DISPLAYED cohort so "N / M" matches this list.
   composite: number | null; cat_rank: number | null; cat_size: number | null
+  has_12m: boolean // ≥12 months of NAV history — funds younger than this are NOT ranked (FM)
 }
 function mapRow(r: Record<string, string>, weights?: LensWeightMap): FundLensRow {
   const n = (v: string | null) => (v == null ? null : toNumber(v))
@@ -40,6 +41,7 @@ function mapRow(r: Record<string, string>, weights?: LensWeightMap): FundLensRow
     v_tech, v_fund, v_cat, v_flow, v_val: n(r.v_val),
     composite: fundComposite({ v_tech, v_fund, v_flow, v_cat }, weights),
     cat_rank: null, cat_size: null, // assigned per-category after fetch (see getFundLensList)
+    has_12m: r.has_12m === 't' || r.has_12m === 'true',
   }
 }
 
@@ -48,8 +50,8 @@ const ROLLUP = `
   mm.mstar_id AS mstar_id, mm.fund_name AS name, mm.amc_name AS amc, mm.category_name AS category,
   mm.primary_benchmark AS benchmark, mm.expense_ratio AS expense,
   count(h.instrument_id) AS n_holdings,
-  count(*) FILTER (WHERE COALESCE(s.lead,0) >= 2) AS n_leaders,
-  sum(h.weight_pct) FILTER (WHERE COALESCE(s.lead,0) >= 2) / NULLIF(sum(h.weight_pct),0) AS breadth,
+  count(*) FILTER (WHERE COALESCE(s.lead,0) >= 1) AS n_leaders,
+  sum(h.weight_pct) FILTER (WHERE COALESCE(s.lead,0) >= 1) / NULLIF(sum(h.weight_pct),0) AS breadth,
   sum(h.weight_pct*s.t)  FILTER (WHERE s.t  IS NOT NULL) / NULLIF(sum(h.weight_pct) FILTER (WHERE s.t  IS NOT NULL),0) AS v_tech,
   sum(h.weight_pct*s.f)  FILTER (WHERE s.f  IS NOT NULL) / NULLIF(sum(h.weight_pct) FILTER (WHERE s.f  IS NOT NULL),0) AS v_fund,
   sum(h.weight_pct*s.ca) FILTER (WHERE s.ca IS NOT NULL) / NULLIF(sum(h.weight_pct) FILTER (WHERE s.ca IS NOT NULL),0) AS v_cat,
@@ -59,12 +61,16 @@ const ROLLUP = `
 // AUM (₹ crore) for the size filter/column — from atlas_universe_funds, joined by Morningstar F-code.
 export async function getFundLensList(): Promise<FundLensRow[]> {
   const rows = await sql.unsafe(`
-    WITH ${SCORED_STOCKS}
-    SELECT ${ROLLUP}, max(uf.aum_cr) AS aum_cr
+    WITH ${SCORED_STOCKS},
+    navlife AS (  -- ≥12 months of NAV history? funds younger than a year are not ranked
+      SELECT mstar_id, (min(nav_date) <= (SELECT max(nav_date) FROM foundation_staging.de_mf_nav_daily) - interval '12 months') AS has_12m
+      FROM foundation_staging.de_mf_nav_daily GROUP BY mstar_id)
+    SELECT ${ROLLUP}, max(uf.aum_cr) AS aum_cr, bool_or(nl.has_12m) AS has_12m
     FROM foundation_staging.de_mf_master mm
     JOIN foundation_staging.de_mf_holdings h ON h.mstar_id = mm.mstar_id AND h.as_of_date = ${LATEST} AND h.weight_pct > 0
     JOIN scored s ON s.instrument_id = h.instrument_id
     LEFT JOIN foundation_staging.atlas_universe_funds uf ON uf.mstar_id = mm.mstar_id
+    LEFT JOIN navlife nl ON nl.mstar_id = mm.mstar_id
     WHERE ${EQUITY_FUND_FILTER}
     GROUP BY mm.mstar_id, mm.fund_name, mm.amc_name, mm.category_name, mm.primary_benchmark, mm.expense_ratio
     HAVING count(h.instrument_id) >= 5

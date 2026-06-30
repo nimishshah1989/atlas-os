@@ -50,26 +50,27 @@ export const SCORED_STOCKS = `
          WHERE asset_class='stock' AND date=(SELECT d FROM tdl)),
   j AS (
     SELECT l.instrument_id, im.symbol, COALESCE(c.cap,'micro') AS cap,
-           l.technical::float t, l.fundamental::float f, l.catalyst::float ca, l.flow::float fl, l.valuation::float va
+           l.technical::float t, l.fundamental::float f, l.catalyst::float ca, l.flow::float fl, l.valuation::float va,
+           l.composite::float comp
     FROM foundation_staging.atlas_lens_scores_daily l
     JOIN foundation_staging.instrument_master im ON im.instrument_id = l.instrument_id
     LEFT JOIN cap c ON c.instrument_id = l.instrument_id
     WHERE l.asset_class='stock' AND l.date=(SELECT d FROM latest)),
   dec AS (
-    SELECT instrument_id, symbol, cap, t, f, ca, fl, va,
+    SELECT instrument_id, symbol, cap, t, f, ca, fl, va, comp,
       CASE WHEN t  IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(t  IS NULL) ORDER BY t)  END d_tech,
       CASE WHEN f  IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(f  IS NULL) ORDER BY f)  END d_fund,
       CASE WHEN ca IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(ca IS NULL) ORDER BY ca) END d_cat,
       CASE WHEN fl IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(fl IS NULL) ORDER BY fl) END d_flow,
-      CASE WHEN va IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(va IS NULL) ORDER BY va) END d_val
+      CASE WHEN va IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(va IS NULL) ORDER BY va) END d_val,
+      CASE WHEN comp IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(comp IS NULL) ORDER BY comp) END d_composite
     FROM j),
   scored AS (
     SELECT d.instrument_id, d.symbol, d.cap, d.t, d.f, d.ca, d.fl, d.va,
-      d.d_tech, d.d_fund, d.d_cat, d.d_flow, d.d_val,
-      -- LEADER = top-2-decile (D9/D10) in BOTH active conviction lenses (Technical & Flow). lead is
-      -- 0..2; a leader has lead = 2. (FM 2-lens model: Fundamental/Catalyst weight 0, so they no
-      -- longer count toward leadership.) Roll-ups filter on lead >= 2 = leads both active lenses.
-      (COALESCE((d.d_tech>=9)::int,0)+COALESCE((d.d_flow>=9)::int,0)) AS lead,
+      d.d_tech, d.d_fund, d.d_cat, d.d_flow, d.d_val, d.d_composite,
+      -- LEADER = TOP DECILE (D10) by composite within the stock's cap cohort (FM 2026-06-30:
+      -- one simple rule). lead is 0/1; a leader has lead = 1. Roll-ups filter on lead >= 1.
+      (COALESCE((d.d_composite>=10)::int,0)) AS lead,
       -- strength = mean of the ACTIVE-lens deciles (Technical & Flow), matching the 2-lens conviction.
       ((COALESCE(d.d_tech,0)+COALESCE(d.d_flow,0))::float
         / NULLIF((d.d_tech IS NOT NULL)::int+(d.d_flow IS NOT NULL)::int,0)) AS strength,
@@ -111,8 +112,8 @@ const ROLLUP_SELECT = `
   mm.mstar_id AS fcode, mm.fund_name AS name, mm.category_name AS category, mm.expense_ratio AS expense,
   max(en.nse_ticker) AS nse_ticker,
   count(h.instrument_id) AS n_holdings,
-  count(*) FILTER (WHERE COALESCE(s.lead,0) >= 2) AS n_leaders,
-  sum(h.weight) FILTER (WHERE COALESCE(s.lead,0) >= 2) / NULLIF(sum(h.weight),0) AS breadth,
+  count(*) FILTER (WHERE COALESCE(s.lead,0) >= 1) AS n_leaders,
+  sum(h.weight) FILTER (WHERE COALESCE(s.lead,0) >= 1) / NULLIF(sum(h.weight),0) AS breadth,
   sum(h.weight*s.t)  FILTER (WHERE s.t  IS NOT NULL) / NULLIF(sum(h.weight) FILTER (WHERE s.t  IS NOT NULL),0) AS v_tech,
   sum(h.weight*s.f)  FILTER (WHERE s.f  IS NOT NULL) / NULLIF(sum(h.weight) FILTER (WHERE s.f  IS NOT NULL),0) AS v_fund,
   sum(h.weight*s.ca) FILTER (WHERE s.ca IS NOT NULL) / NULLIF(sum(h.weight) FILTER (WHERE s.ca IS NOT NULL),0) AS v_cat,

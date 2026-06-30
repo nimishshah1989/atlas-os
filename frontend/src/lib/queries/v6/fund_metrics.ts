@@ -62,6 +62,31 @@ export async function getFundRsMatrix(): Promise<Map<string, FundRsMatrix>> {
   return out
 }
 
+// Absolute NAV total return per fund over 1W / 1M / 3M / 6M / 12M (calendar-anchored, the same
+// NAV-anchoring as the RS matrix). Shown on /funds next to the RS cell so you see the raw return
+// AND the relative read side by side.
+export type FundReturns = { w1: number | null; m1: number | null; m3: number | null; m6: number | null; m12: number | null }
+export async function getFundReturns(): Promise<Map<string, FundReturns>> {
+  const rows = (await sql.unsafe(`
+    WITH asof AS (SELECT max(nav_date) d FROM foundation_staging.de_mf_nav_daily)
+    SELECT mm.mstar_id, ${navAt(0)} r0,
+      (SELECT v.nav FROM foundation_staging.de_mf_nav_daily v
+       WHERE v.mstar_id = mm.mstar_id AND v.nav_date <= (SELECT d FROM asof) - interval '7 days'
+       ORDER BY v.nav_date DESC LIMIT 1) rw,
+      ${navAt(1)} r1, ${navAt(3)} r3, ${navAt(6)} r6, ${navAt(12)} r12
+    FROM foundation_staging.de_mf_master mm WHERE ${EQUITY}
+  `)) as unknown as Record<string, string>[]
+  const out = new Map<string, FundReturns>()
+  for (const r of rows) {
+    const num = (v: string | null) => (v == null ? null : toNumber(v))
+    const now = num(r.r0)
+    if (now == null) continue
+    const ret = (then: number | null) => (then == null || then === 0 ? null : now / then - 1)
+    out.set(r.mstar_id, { w1: ret(num(r.rw)), m1: ret(num(r.r1)), m3: ret(num(r.r3)), m6: ret(num(r.r6)), m12: ret(num(r.r12)) })
+  }
+  return out
+}
+
 // NAV nearest to (as-of − N months), per fund, via the (mstar_id, nav_date) index.
 function navAt(months: number): string {
   const back = months === 0 ? '' : ` - interval '${months} months'`

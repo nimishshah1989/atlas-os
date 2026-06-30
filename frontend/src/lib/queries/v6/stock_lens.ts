@@ -123,7 +123,8 @@ export async function getStockDecile(symbol: string): Promise<StockDecile | null
         CASE WHEN f  IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(f  IS NULL) ORDER BY f)  END d_fundamental,
         CASE WHEN ca IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(ca IS NULL) ORDER BY ca) END d_catalyst,
         CASE WHEN fl IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(fl IS NULL) ORDER BY fl) END d_flow,
-        CASE WHEN va IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(va IS NULL) ORDER BY va) END d_valuation
+        CASE WHEN va IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(va IS NULL) ORDER BY va) END d_valuation,
+        CASE WHEN composite IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(composite IS NULL) ORDER BY composite) END d_composite
       FROM j
     )
     SELECT symbol, name, sector, cap,
@@ -131,7 +132,8 @@ export async function getStockDecile(symbol: string): Promise<StockDecile | null
       composite, conviction_tier,
       d_technical, d_fundamental, d_valuation, d_catalyst, d_flow,
       ${sql(SUB_COLS)}, evidence,
-      (COALESCE((d_technical>=${LEAD_DECILE})::int,0)+COALESCE((d_flow>=${LEAD_DECILE})::int,0)) AS lead,
+      -- LEADER = top decile (D10) of composite within cap cohort (one rule). lead 0/1.
+      (COALESCE((d_composite>=10)::int,0)) AS lead,
       ((COALESCE(d_technical,0)+COALESCE(d_flow,0))::float
         / NULLIF((d_technical IS NOT NULL)::int+(d_flow IS NOT NULL)::int,0)) AS strength
     FROM dec WHERE symbol = ${symbol} LIMIT 1
@@ -332,7 +334,8 @@ export async function getStocksDecileList(): Promise<StockListRow[]> {
     ),
     j AS (
       SELECT l.instrument_id, im.symbol, im.name, im.sector, COALESCE(c.cap,'micro') AS cap,
-             l.technical::float t, l.fundamental::float f, l.catalyst::float ca, l.flow::float fl, l.valuation::float va
+             l.technical::float t, l.fundamental::float f, l.catalyst::float ca, l.flow::float fl, l.valuation::float va,
+             l.composite::float comp
       FROM foundation_staging.atlas_lens_scores_daily l
       JOIN foundation_staging.instrument_master im ON im.instrument_id = l.instrument_id
       LEFT JOIN cap c ON c.instrument_id = l.instrument_id
@@ -344,12 +347,13 @@ export async function getStocksDecileList(): Promise<StockListRow[]> {
         CASE WHEN f  IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(f  IS NULL) ORDER BY f)  END d_fund,
         CASE WHEN ca IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(ca IS NULL) ORDER BY ca) END d_cat,
         CASE WHEN fl IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(fl IS NULL) ORDER BY fl) END d_flow,
-        CASE WHEN va IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(va IS NULL) ORDER BY va) END d_val
+        CASE WHEN va IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(va IS NULL) ORDER BY va) END d_val,
+        CASE WHEN comp IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(comp IS NULL) ORDER BY comp) END d_composite
       FROM j
     )
     SELECT d.symbol, d.name, d.sector, d.cap,
       d.d_tech, d.d_fund, d.d_cat, d.d_flow, d.d_val,
-      (COALESCE((d.d_tech>=${LEAD_DECILE})::int,0) + COALESCE((d.d_flow>=${LEAD_DECILE})::int,0)) AS lead,  -- 2-lens: D9/D10 in Technical & Flow only (0..2); a NULL lens = not-leading (0)
+      (COALESCE((d.d_composite>=10)::int,0)) AS lead,  -- LEADER = top decile (D10) of composite within cap cohort (one rule; 0/1)
       ((COALESCE(d.d_tech,0)+COALESCE(d.d_flow,0))::float
         / NULLIF((d.d_tech IS NOT NULL)::int+(d.d_flow IS NOT NULL)::int,0)) AS strength,
       rs.rs_1m_n500, rs.rs_3m_n500, rs.rs_6m_n500,

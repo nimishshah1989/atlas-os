@@ -47,7 +47,7 @@ LENSES = ["technical", "fundamental", "valuation", "catalyst", "flow", "policy"]
 def engine():
     eng = get_engine()
     n = pd.read_sql(
-        "SELECT count(*) n FROM atlas.atlas_lens_scores_daily "
+        "SELECT count(*) n FROM foundation_staging.atlas_lens_scores_daily "
         "WHERE date = %(d)s AND asset_class = 'stock'",
         eng,
         params={"d": D},
@@ -66,7 +66,7 @@ def th(engine):
 @pytest.fixture(scope="module")
 def journal(engine):
     df = pd.read_sql(
-        "SELECT * FROM atlas.atlas_lens_scores_daily WHERE date = %(d)s AND asset_class = 'stock'",
+        "SELECT * FROM foundation_staging.atlas_lens_scores_daily WHERE date = %(d)s AND asset_class = 'stock'",
         engine,
         params={"d": D},
     )
@@ -327,6 +327,15 @@ class TestTechnicalEmaRS:
         assert float(rs(95, 96, 100, {})[0]) == 0.0  # neither
         assert rs(None, 105, 100, {})[0] is None  # missing ema → no reading
 
+    def test_young_stock_scores_without_ema200(self):
+        # Recent IPO: no EMA200 yet, but EMA21>EMA50 → it STILL scores (golden cross just can't
+        # fire). Was previously blank, which let it float to the top of the strength sort.
+        from atlas.lenses.compute.technical import _score_relative_strength as rs, score_technical
+
+        assert float(rs(110, 105, None, {})[0]) == 15.0  # EMA21>EMA50 fires, golden cross can't
+        r = score_technical(110, 105, None, 60, 200, 0.03, None, None, None, None, None, None, None, None, None, {})
+        assert r.score is not None and float(r.score) > 0  # not blank anymore
+
     def test_trend_rescales_to_25_without_rsi(self):
         from atlas.lenses.compute.technical import _score_trend
 
@@ -426,7 +435,6 @@ class TestComposite:
             "WATCH",
             "BELOW_THRESHOLD",
         }
-        hi = [cf for la, cf, _, _ in out if la == 4]
-        lo = [cf for la, cf, _, _ in out if la <= 3]
-        if hi and lo:
-            assert sum(hi) / len(hi) > sum(lo) / len(lo)
+        # FM 2026-06-30: ALL multipliers stripped — the composite is now a pure weighted blend,
+        # so the coverage factor is a constant 1.0 (no √Σweight haircut) for every name.
+        assert all(cf == 1.0 for _la, cf, _, _ in out)

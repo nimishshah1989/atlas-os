@@ -36,31 +36,35 @@ def _score_trend(
     ret_1w: float | None,
     th: dict[str, Any],
 ) -> tuple[Decimal | None, dict[str, Any]]:
-    if ema_21 is None or ema_50 is None or ema_200 is None or price is None:
+    # Young stocks lack EMA200 — still score on EMA21/50 + slope (the EMA200-dependent terms
+    # just don't fire). Need at least EMA21 + EMA50 + price.
+    if ema_21 is None or ema_50 is None or price is None:
         return None, {"trend": "insufficient data"}
     pts, ev = 0, {}
+    has200 = ema_200 is not None
     # EMA alignment
-    if ema_21 > ema_50 > ema_200:
+    if has200 and ema_21 > ema_50 > ema_200:
         pts += th.get("ema_aligned_all", 10)
         ev["ema_alignment"] = "bullish"
-    elif ema_21 > ema_50 or ema_50 > ema_200:
+    elif ema_21 > ema_50 or (has200 and ema_50 > ema_200):
         pts += th.get("ema_aligned_partial", 6)
         ev["ema_alignment"] = "partial"
     else:
         ev["ema_alignment"] = "inverted"
-    # Price vs EMA-200
-    pct = (price - ema_200) / ema_200 if ema_200 != 0 else 0
-    if pct > th.get("price_above_ema200_strong", 0.05):
-        pts += 5
-        ev["price_vs_ema200"] = "strong_above"
-    elif pct > 0:
-        pts += 3
-        ev["price_vs_ema200"] = "above"
-    elif pct > th.get("price_below_ema200_weak", -0.05):
-        pts += 1
-        ev["price_vs_ema200"] = "slightly_below"
-    else:
-        ev["price_vs_ema200"] = "well_below"
+    # Price vs EMA-200 (only when EMA200 exists)
+    if has200:
+        pct = (price - ema_200) / ema_200 if ema_200 != 0 else 0
+        if pct > th.get("price_above_ema200_strong", 0.05):
+            pts += 5
+            ev["price_vs_ema200"] = "strong_above"
+        elif pct > 0:
+            pts += 3
+            ev["price_vs_ema200"] = "above"
+        elif pct > th.get("price_below_ema200_weak", -0.05):
+            pts += 1
+            ev["price_vs_ema200"] = "slightly_below"
+        else:
+            ev["price_vs_ema200"] = "well_below"
     # EMA-21 slope proxy
     if ret_1w is not None:
         if ret_1w > th.get("slope_strong_pct", 0.02):
@@ -94,16 +98,18 @@ def _score_relative_strength(
     cross / long-term up) → 10; EMA21 > EMA50 (medium-term up) → 15. Max 25. Needs all
     three EMAs; returns None (no data) if any is missing.
     """
-    if ema_21 is None or ema_50 is None or ema_200 is None:
+    # Young stocks (recent IPOs) lack a 200-day EMA — they should STILL score, not blank.
+    # Need at least EMA21 + EMA50; the golden-cross term simply can't fire until EMA200 exists.
+    if ema_21 is None or ema_50 is None:
         return None, {"rs": "no ema data"}
     pts = 0
-    golden = ema_50 > ema_200
+    golden = ema_200 is not None and ema_50 > ema_200
     fast = ema_21 > ema_50
     if golden:
         pts += int(th.get("rs_golden_cross_pts", 10))
     if fast:
         pts += int(th.get("rs_fast_above_mid_pts", 15))
-    ev = {"ema50_gt_ema200": golden, "ema21_gt_ema50": fast, "rs_pts": pts}
+    ev = {"ema50_gt_ema200": golden, "ema21_gt_ema50": fast, "rs_pts": pts, "ema200": ema_200 is not None}
     return Decimal(pts).quantize(_Q2), ev
 
 

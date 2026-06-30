@@ -28,7 +28,7 @@ export function fundCompositeContributions(r: FundLensVec, weights?: LensWeightM
   return compositeContributions(toLensVec(r), weights)
 }
 
-type Rankable = { category: string | null; composite: number | null; breadth: number | null; mstar_id: string }
+type Rankable = { category: string | null; composite: number | null; breadth: number | null; mstar_id: string; has_12m?: boolean }
 
 // Stamp cat_rank / cat_size on each fund, ranked WITHIN its SEBI category over the cohort passed in
 // (the displayed list), so "N / M" always matches what's on screen. Order: composite desc, then
@@ -38,7 +38,9 @@ type Rankable = { category: string | null; composite: number | null; breadth: nu
 export function rankFundsInCategory<T extends Rankable>(rows: T[]): (T & { cat_rank: number | null; cat_size: number | null })[] {
   const scoredByCat = new Map<string, T[]>()
   for (const r of rows) {
-    if (r.composite == null) continue
+    // Funds with no composite, OR with < 12 months of NAV history (has_12m === false), are NOT
+    // ranked (cat_rank null) and don't count toward cat_size — a track record is required (FM).
+    if (r.composite == null || r.has_12m === false) continue
     const key = r.category ?? '—'
     ;(scoredByCat.get(key) ?? scoredByCat.set(key, []).get(key)!).push(r)
   }

@@ -487,7 +487,9 @@ def write_lens_scores(
         rows.append(row)
     return bulk_upsert(
         engine,
-        "atlas.atlas_lens_scores_daily",
+        # Write DIRECTLY to foundation_staging — the single table the frontend reads. Kills the
+        # old atlas.* → foundation_staging.* sync step (and the divergence it caused).
+        "foundation_staging.atlas_lens_scores_daily",
         columns,
         rows,
         pk_columns=["instrument_id", "date"],
@@ -510,7 +512,7 @@ def purge_stale_lens_scores(
     roll-ups written by a different process/run.
     """
     sql = text(
-        "DELETE FROM atlas.atlas_lens_scores_daily "
+        "DELETE FROM foundation_staging.atlas_lens_scores_daily "
         "WHERE date = :dt AND asset_class = :ac AND compute_run_id <> :rid"
     )
     with open_compute_session(engine) as conn:

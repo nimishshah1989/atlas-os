@@ -77,14 +77,18 @@ def sanity_check() -> dict[str, str]:
     return result
 
 
-_VALID_SCHEMAS = frozenset({"atlas", "us_atlas", "global_atlas"})
+_VALID_SCHEMAS = frozenset({"foundation_staging", "atlas", "us_atlas", "global_atlas"})
 
 
 def load_thresholds(
-    schema: str = "atlas",
+    schema: str = "foundation_staging",
     engine: Engine | None = None,
 ) -> dict[str, Decimal]:
     """Read all active thresholds from ``{schema}.atlas_thresholds`` once per run.
+
+    Default is ``foundation_staging`` — the SINGLE source the frontend also reads, so the
+    pipeline and the rendered site can never run on different weights (the atlas/fs split that
+    let the stored composite use 0.6/0.4 while the funds page used 0.9/0.1).
 
     Per architecture 5.6: every classifier function takes thresholds as a
     parameter rather than looking them up independently. This is the single
