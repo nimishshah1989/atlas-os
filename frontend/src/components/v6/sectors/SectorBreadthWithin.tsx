@@ -29,7 +29,7 @@ export function SectorBreadthWithin({ stocks }: { stocks: SectorStock[] }) {
         </p>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-10 gap-y-6">
-        <table className="w-full text-right">
+        <table className="tbl-centered w-full text-right">
           <thead>
             <tr className="font-num text-[10px] text-txt-3 uppercase tracking-wider border-b border-edge-hair">
               <th className="text-left py-1.5 font-medium">Lens</th>

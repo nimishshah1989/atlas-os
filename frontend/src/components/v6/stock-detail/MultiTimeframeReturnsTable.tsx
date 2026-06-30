@@ -51,7 +51,7 @@ export function MultiTimeframeReturnsTable({ latest }: MultiTimeframeReturnsTabl
   return (
     <div className="border border-paper-rule rounded p-4 bg-paper">
       <p className="font-mono text-[10px] uppercase tracking-wider text-ink-3 mb-3">Returns by Horizon</p>
-      <table className="w-full text-[12px] font-mono">
+      <table className="tbl-centered w-full text-[12px] font-mono">
         <thead>
           <tr className="border-b border-paper-rule">
             <th className="text-left py-1.5 font-mono text-[9px] uppercase tracking-wider text-ink-3 font-normal">Period</th>

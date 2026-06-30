@@ -97,7 +97,7 @@ export async function StockDetailV4({ symbol }: { symbol: string }) {
     : []
 
   return (
-    <div className="mx-auto max-w-[1280px]">
+    <div className="mx-auto max-w-[1680px]">
       {/* ── Header ── */}
       <section className="border-b border-edge-hair px-8 py-8">
         <nav className="mb-3 font-num text-[11px] text-txt-3" aria-label="Breadcrumb">

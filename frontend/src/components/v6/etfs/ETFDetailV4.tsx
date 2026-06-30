@@ -41,7 +41,7 @@ function HoldingsTable({ holdings }: { holdings: EtfHolding[] }) {
   const truncated = holdings.length > HOLDING_CAP
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse">
+      <table className="tbl-centered w-full border-collapse">
         <thead>
           <tr className="border-b border-edge-rule">
             {([['Symbol', undefined], ['Sector', 'sector_name']] as const).map(([h, term]) => (
@@ -105,7 +105,7 @@ export async function ETFDetailV4({ fcode }: { fcode: string }) {
   ].filter((x): x is string => !!x)
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6 px-6 py-7">
+    <div className="mx-auto max-w-[1680px] space-y-6 px-6 py-7">
       {/* ── Header ── */}
       <header>
         <nav className="mb-3 font-num text-[11px] text-txt-3" aria-label="Breadcrumb">

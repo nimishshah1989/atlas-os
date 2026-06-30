@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sectorComposition, computeFundRiskStats, type NavPoint } from '../fundStats'
+import { sectorComposition, computeFundRiskStats, pivotSectorHistory, type NavPoint } from '../fundStats'
 
 describe('sectorComposition', () => {
   it('groups holdings by sector, sums weight, counts, sorted desc', () => {
@@ -21,6 +21,24 @@ describe('sectorComposition', () => {
 // Risk math is a pure algorithm — these are explicit hand-computed series (testing the formula,
 // not market data). The live page additionally shows REAL fund NAV stats (rule #0 end-to-end).
 const mk = (navs: number[]): NavPoint[] => navs.map((nav, i) => ({ d: `2026-${String((i % 12) + 1).padStart(2, '0')}-01`, nav }))
+
+describe('pivotSectorHistory', () => {
+  it('pivots (date,sector,weight) tuples into a sector × date matrix, sectors by latest weight', () => {
+    const out = pivotSectorHistory([
+      { d: '2026-02-28', sector: 'Financials', w: 40 }, { d: '2026-02-28', sector: 'IT', w: 10 },
+      { d: '2026-06-26', sector: 'Financials', w: 45 }, { d: '2026-06-26', sector: 'IT', w: 8 },
+      { d: '2026-06-26', sector: 'Energy', w: 5 },
+    ])
+    expect(out.dates).toEqual(['2026-02-28', '2026-06-26'])
+    // ordered by the latest snapshot's weight: Financials 45, IT 8, Energy 5
+    expect(out.rows.map((r) => r.sector)).toEqual(['Financials', 'IT', 'Energy'])
+    expect(out.rows[0].weights).toEqual([40, 45]) // Financials
+    expect(out.rows[2].weights).toEqual([null, 5]) // Energy absent in the first snapshot
+  })
+  it('returns empty when there are no rows', () => {
+    expect(pivotSectorHistory([])).toEqual({ dates: [], rows: [] })
+  })
+})
 
 describe('computeFundRiskStats', () => {
   it('max drawdown = worst peak-to-trough decline', () => {

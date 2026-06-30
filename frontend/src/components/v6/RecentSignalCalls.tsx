@@ -147,7 +147,7 @@ export function RecentSignalCalls({ calls }: RecentSignalCallsProps) {
 
   return (
     <div className="border border-paper-rule rounded-[2px] bg-paper overflow-x-auto">
-      <table className="w-full min-w-[600px]">
+      <table className="tbl-centered w-full min-w-[600px]">
         <thead className="border-b border-paper-rule">
           <tr>
             <SortTh col="ticker" label="Ticker" activeCol={sortCol} dir={sortDir} onSort={handleSort} className="pl-4" />

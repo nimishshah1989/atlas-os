@@ -65,6 +65,7 @@ export type SectorStock = {
   ret_3m: number | null; ret_6m: number | null; ret_12m: number | null
   rs_1m: number | null; rs_3m: number | null; rs_6m: number | null; rs_sector_3m: number | null
   liq_cr: number | null
+  ff_weight: number | null // free-float weight within the sector (% of sector free-float market cap)
 }
 
 // Deciles cut WITHIN cap cohort across the whole universe (D27), then filtered to the sector.
@@ -122,16 +123,28 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
         CASE WHEN fl IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(fl IS NULL) ORDER BY fl) END d_flow,
         CASE WHEN va IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(va IS NULL) ORDER BY va) END d_val
       FROM j
+    ),
+    ff AS (  -- free-float market cap = market cap × non-promoter, non-ESOP share (concentration view)
+      SELECT mc.instrument_id,
+        mc.market_cap * (100 - COALESCE(sh.promoter_pct,0) - COALESCE(sh.employee_trusts_pct,0)) / 100.0 AS ff_mcap
+      FROM (SELECT DISTINCT ON (instrument_id) instrument_id, market_cap FROM foundation_staging.screener_ratios
+            WHERE market_cap IS NOT NULL ORDER BY instrument_id, as_of DESC NULLS LAST) mc
+      LEFT JOIN (SELECT DISTINCT ON (instrument_id) instrument_id, promoter_pct, employee_trusts_pct
+                 FROM foundation_staging.lens_shareholding ORDER BY instrument_id, period_end DESC) sh
+        ON sh.instrument_id = mc.instrument_id
     )
     SELECT d.symbol, d.name, d.cap, d.d_tech, d.d_fund, d.d_cat, d.d_flow, d.d_val,
       d.r1d, d.r1w, d.r1m, d.r3m, d.r6m, d.r12m, d.rs1m, d.rs3m, d.rs6m,
       (d.r3m - sr.sret_3m) AS rs_sector_3m, liq.liq_cr,
       (COALESCE((d.d_tech>=${LEAD_DECILE})::int,0) + COALESCE((d.d_flow>=${LEAD_DECILE})::int,0)) AS lead,  -- 2-lens: Technical & Flow only (0..2)
       ((COALESCE(d.d_tech,0)+COALESCE(d.d_flow,0))::float
-        / NULLIF((d.d_tech IS NOT NULL)::int+(d.d_flow IS NOT NULL)::int,0)) AS strength
+        / NULLIF((d.d_tech IS NOT NULL)::int+(d.d_flow IS NOT NULL)::int,0)) AS strength,
+      -- free-float weight WITHIN this sector: the window runs after the sector WHERE, so it sums the sector only
+      round((100.0 * ff.ff_mcap / NULLIF(sum(ff.ff_mcap) OVER (), 0))::numeric, 2) AS ff_weight
     FROM dec d
     LEFT JOIN sec_ret sr ON sr.sector_name = d.sector
     LEFT JOIN liq ON liq.instrument_id = d.instrument_id
+    LEFT JOIN ff ON ff.instrument_id = d.instrument_id
     WHERE d.sector = ${sector}
     ORDER BY strength DESC NULLS LAST
   `
@@ -143,7 +156,7 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
     ret_1d: n(r.r1d), ret_1w: n(r.r1w), ret_1m: n(r.r1m),
     ret_3m: n(r.r3m), ret_6m: n(r.r6m), ret_12m: n(r.r12m),
     rs_1m: n(r.rs1m), rs_3m: n(r.rs3m), rs_6m: n(r.rs6m), rs_sector_3m: n(r.rs_sector_3m),
-    liq_cr: n(r.liq_cr),
+    liq_cr: n(r.liq_cr), ff_weight: n(r.ff_weight),
   }))
 }
 

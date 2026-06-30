@@ -114,7 +114,7 @@ export async function ETFsPageV4() {
   ]
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6 px-6 py-7">
+    <div className="mx-auto max-w-[1680px] space-y-6 px-6 py-7">
       {/* Header + leadership-breadth strip */}
       <header>
         <nav className="mb-3 font-num text-[11px] text-txt-3" aria-label="Breadcrumb">

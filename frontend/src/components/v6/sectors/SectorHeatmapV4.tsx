@@ -107,7 +107,7 @@ export function SectorHeatmapV4({ rows, bases, constituents }: {
       </div>
 
       <div className="overflow-x-auto rounded-tile border border-edge-hair bg-surface-panel">
-        <table className="w-full border-collapse text-xs" data-testid="sector-heatmap-v4">
+        <table className="tbl-centered w-full border-collapse text-xs" data-testid="sector-heatmap-v4">
           <thead>
             {/* group header band */}
             <tr className="border-b border-edge-hair">

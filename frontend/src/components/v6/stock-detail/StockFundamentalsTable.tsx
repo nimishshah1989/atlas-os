@@ -116,7 +116,7 @@ export function StockFundamentalsTable({ quarters }: { quarters: StockQuarter[] 
       <Heading />
       <div className="overflow-hidden rounded-tile border border-edge-hair bg-surface-panel">
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
+          <table className="tbl-centered w-full border-collapse">
             <thead>
               <tr>
                 <th className="sticky left-0 z-10 bg-surface-panel px-4 py-[11px] text-left font-num text-[9px] font-semibold uppercase tracking-[0.18em] text-txt-3 border-b border-edge-rule">

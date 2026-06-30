@@ -26,7 +26,7 @@ export function SectorFundFlowTable({ data }: { data: SectorFundFlow }) {
           (smart-money concentration), and the institutional-flow sub-score. {data.n} stocks with data.
         </p>
       </div>
-      <table className="w-full text-right max-w-[640px]">
+      <table className="tbl-centered w-full text-right max-w-[640px]">
         <thead>
           <tr className="font-num text-[10px] text-txt-3 uppercase tracking-wider border-b border-edge-hair">
             <th className="text-left py-1.5 font-medium">Metric</th>

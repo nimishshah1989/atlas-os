@@ -55,7 +55,7 @@ export function SectorLensHeatmap({ vectors }: Props) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-xs font-sans border-collapse">
+      <table className="tbl-centered w-full text-xs font-sans border-collapse">
         <thead>
           <tr className="border-b border-edge-rule">
             <th className="text-left px-3 py-2 font-num text-[9px] uppercase tracking-wider font-semibold text-txt-3">Sector</th>

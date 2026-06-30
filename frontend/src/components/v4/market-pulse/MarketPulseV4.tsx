@@ -29,7 +29,7 @@ export async function MarketPulseV4() {
   if (!regime) {
     return (
       <div className="min-h-screen bg-surface-base font-sans text-txt-1">
-        <div className="mx-auto max-w-[1280px] px-6 py-10">
+        <div className="mx-auto max-w-[1680px] px-6 py-10">
           <Panel title="No regime data"><p className="font-sans text-[13px] text-txt-2">Run the nightly pipeline first.</p></Panel>
         </div>
       </div>
@@ -119,7 +119,7 @@ export async function MarketPulseV4() {
 
   return (
     <div className="min-h-screen bg-surface-base font-sans text-txt-1">
-      <div className="mx-auto max-w-[1280px] px-6 py-7">
+      <div className="mx-auto max-w-[1680px] px-6 py-7">
         {/* header band */}
         <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>

@@ -124,7 +124,7 @@ export function Matrix24Cell({ cells }: { cells: MatrixCellAgg[] }) {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-[12px]" aria-label="24-cell methodology matrix">
+        <table className="tbl-centered w-full border-collapse text-[12px]" aria-label="24-cell methodology matrix">
           <thead>
             <tr>
               <th className="text-left pl-[10px] pb-[6px] pt-[6px] font-sans text-[9px] tracking-[0.14em] uppercase text-ink-tertiary font-semibold bg-paper-soft border-b border-ink-rule" />

@@ -691,7 +691,7 @@ export function MarketsRsClient({ data }: { data: MarketsRsPageData }) {
           </div>
         ) : (
           <div style={{ border: '1px solid var(--color-paper-rule)', borderRadius: '2px', overflow: 'hidden' }}>
-            <table className="w-full" style={{ borderCollapse: 'collapse' }}>
+            <table className="tbl-centered w-full" style={{ borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
                   <th

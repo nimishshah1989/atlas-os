@@ -78,7 +78,7 @@ export async function StocksPageV4() {
   ]
 
   return (
-    <div className="mx-auto max-w-[1280px] px-6 py-7">
+    <div className="mx-auto max-w-[1680px] px-6 py-7">
       {/* Header + leadership strip */}
       <header className="mb-6">
         <div className="font-sans text-[12px] text-txt-3 mb-3">

@@ -60,7 +60,7 @@ export function DataStatusPanel({
           <p className="mt-0.5 font-sans text-[11px] text-txt-3">The tables the live site reads. Green = fresh for its cadence, amber = lagging, red = stale.</p>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-[12px]">
+          <table className="tbl-centered w-full border-collapse text-[12px]">
             <thead>
               <tr className="border-b border-edge-rule font-num text-[10px] uppercase tracking-wider text-txt-3">
                 <th className="px-4 py-1.5 text-left font-semibold">Table</th>

@@ -124,7 +124,7 @@ export function EtfLensTable({ etfs }: { etfs: EtfLensRow[] }) {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse">
+        <table className="tbl-centered w-full border-collapse">
           <thead>
             <tr className="border-b border-edge-rule">
               {COLS.map(col => {

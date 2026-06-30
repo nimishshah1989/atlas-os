@@ -7,10 +7,11 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
-import { getFundLensDetail, getFundNavMonthly, type FundLensDetail, type FundHolding, type FundMove } from '@/lib/queries/v6/fund_lens'
-import { sectorComposition, computeFundRiskStats } from '@/lib/v6/fundStats'
+import { getFundLensDetail, getFundNavMonthly, getFundSectorHistory, type FundLensDetail, type FundHolding, type FundMove } from '@/lib/queries/v6/fund_lens'
+import { sectorComposition, computeFundRiskStats, pivotSectorHistory } from '@/lib/v6/fundStats'
 import { FundRiskStats } from './FundRiskStats'
 import { FundSectorComposition } from './FundSectorComposition'
+import { FundSectorHistory } from './FundSectorHistory'
 import { Panel } from '@/components/v4/ui/Panel'
 import { StatCard, type Tone } from '@/components/v4/ui/StatCard'
 import { decileColor } from '@/components/v4/ui/decile'
@@ -97,7 +98,7 @@ function HoldingsTable({ holdings }: { holdings: FundHolding[] }) {
   const truncated = holdings.length > HOLDING_CAP
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse">
+      <table className="tbl-centered w-full border-collapse">
         <thead>
           <tr className="border-b border-edge-rule">
             {([['Symbol', undefined], ['Sector', 'sector_name']] as const).map(([h, term]) => (
@@ -148,6 +149,7 @@ export async function FundDetailV4({ mstarId }: { mstarId: string }) {
   const navMonthly = await getFundNavMonthly(mstarId).catch(() => [])
   const riskStats = computeFundRiskStats(navMonthly)
   const sectors = sectorComposition(fund.holdings.map((h) => ({ sector: h.sector, weight: h.weight })))
+  const sectorHistory = pivotSectorHistory(await getFundSectorHistory(mstarId).catch(() => []))
 
   const breadthPct = fund.breadth == null ? '—' : `${(fund.breadth * 100).toFixed(0)}%`
   const subParts = [fund.category, fund.amc, fund.isin].filter((x): x is string => !!x)
@@ -161,7 +163,7 @@ export async function FundDetailV4({ mstarId }: { mstarId: string }) {
   ]
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6 px-6 py-7">
+    <div className="mx-auto max-w-[1680px] space-y-6 px-6 py-7">
       {/* ── Header ── */}
       <header>
         <nav className="mb-3 font-sans text-[12px] text-txt-3" aria-label="Breadcrumb">
@@ -171,10 +173,16 @@ export async function FundDetailV4({ mstarId }: { mstarId: string }) {
         </nav>
         <h1 className="font-display text-[32px] font-bold leading-tight tracking-tight text-txt-1">{fund.name}</h1>
         {subParts.length > 0 && <div className="mt-2 font-num text-[12px] tabular-nums text-txt-3">{subParts.join(' · ')}</div>}
-        <p className="mt-3 max-w-[760px] font-sans text-[15px] text-txt-2">
+        <p className="mt-3 max-w-[820px] font-sans text-[15px] text-txt-2">
           How this fund&apos;s holdings score on the six lenses, weighted by holding weight — plus what the
           manager is actively buying and selling. A transparency roll-up of the stock atom — descriptive,
           <em> not</em> a forecast of outperformance.
+        </p>
+        <p className="mt-2 max-w-[820px] rounded-tile border-l-2 border-brand bg-surface-raised px-3 py-2 font-sans text-[12.5px] leading-[1.5] text-txt-2">
+          <strong className="text-txt-1">What&apos;s a &ldquo;leader&rdquo;?</strong> A holding that ranks in the
+          <strong className="text-txt-1"> top two deciles (D9 / D10)</strong> of its size cohort on
+          <strong className="text-txt-1"> BOTH</strong> active conviction lenses — <strong className="text-txt-1">Technical and Flow</strong>.
+          <em> Leadership-breadth</em> is the share of the fund&apos;s weight sitting in those leaders.
         </p>
 
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -204,6 +212,17 @@ export async function FundDetailV4({ mstarId }: { mstarId: string }) {
           info={{ body: 'Where the fund is invested, by sector — each holding’s weight summed into its sector. From the latest disclosed portfolio.' }}
         >
           <FundSectorComposition slices={sectors} />
+        </Panel>
+      )}
+
+      {/* ── Sector composition over time (how the mix has shifted) ── */}
+      {sectorHistory.dates.length >= 2 && (
+        <Panel
+          eyebrow="Composition · over time"
+          title="How the sector mix has shifted"
+          info={{ body: 'The fund’s sector weights at each of its last few disclosed holdings snapshots, so you can see where the manager has been adding or trimming. Δ = latest − earliest weight.' }}
+        >
+          <FundSectorHistory history={sectorHistory} />
         </Panel>
       )}
 

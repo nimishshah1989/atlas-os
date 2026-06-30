@@ -32,7 +32,7 @@ export function SignalCallHistoryTable({ events }: SignalCallHistoryTableProps) 
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-[12px] font-mono">
+      <table className="tbl-centered w-full text-[12px] font-mono">
         <thead>
           <tr className="border-b border-paper-rule">
             <th className="text-left  py-2 px-2 font-mono text-[9px] uppercase tracking-wider text-ink-3 font-normal">Cell</th>

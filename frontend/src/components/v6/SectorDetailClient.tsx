@@ -216,7 +216,7 @@ function ConstituentTable({ stocks, heldIidSet }: { stocks: StockV6Row[]; heldIi
           onReset={() => setVisibleCols(DEFAULT_VISIBLE)} open={chooserOpen} onOpenChange={setChooserOpen} />
       </div>
       <div className="overflow-x-auto border border-paper-rule rounded-[2px]">
-        <table className="w-full border-collapse" aria-label="Sector constituents" role="table">
+        <table className="tbl-centered w-full border-collapse" aria-label="Sector constituents" role="table">
           <thead>
             <tr className="border-b border-paper-rule bg-paper-deep/40">
               {visible.has('symbol')    && <th className={`${TH_BASE} text-left`} scope="col" aria-label="Symbol">Symbol</th>}

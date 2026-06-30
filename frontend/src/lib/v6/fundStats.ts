@@ -23,6 +23,27 @@ export function sectorComposition(holdings: { sector: string | null; weight: num
     .sort((a, b) => b.weight - a.weight)
 }
 
+// ── sector composition over time (how the holdings' sector mix has shifted) ──
+export type SectorHistory = { dates: string[]; rows: { sector: string; weights: (number | null)[] }[] }
+
+// Pivot (date, sector, weight) tuples into a sector × date matrix. Dates ascending; sectors ordered
+// by the LATEST snapshot's weight (biggest current bets on top); a sector absent in a snapshot → null.
+export function pivotSectorHistory(tuples: { d: string; sector: string; w: number }[]): SectorHistory {
+  if (tuples.length === 0) return { dates: [], rows: [] }
+  const dates = [...new Set(tuples.map((t) => t.d))].sort()
+  const dateIdx = new Map(dates.map((d, i) => [d, i]))
+  const bySector = new Map<string, (number | null)[]>()
+  for (const t of tuples) {
+    if (!bySector.has(t.sector)) bySector.set(t.sector, dates.map(() => null))
+    bySector.get(t.sector)![dateIdx.get(t.d)!] = t.w
+  }
+  const latest = dates.length - 1
+  const rows = [...bySector.entries()]
+    .map(([sector, weights]) => ({ sector, weights }))
+    .sort((a, b) => (b.weights[latest] ?? -1) - (a.weights[latest] ?? -1))
+  return { dates, rows }
+}
+
 export type NavPoint = { d: string; nav: number }
 export type FundRiskStats = {
   months: number

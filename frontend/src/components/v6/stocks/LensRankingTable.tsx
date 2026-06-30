@@ -112,7 +112,7 @@ export function LensRankingTable({ scores }: Props) {
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="w-full text-xs font-sans">
+        <table className="tbl-centered w-full text-xs font-sans">
           <thead>
             <tr className="border-b border-paper-rule text-ink-tertiary">
               <th className="text-left px-2 py-2 font-medium cursor-pointer select-none" onClick={() => toggleSort('symbol')}>

@@ -73,6 +73,11 @@ html {
 
 [data-numeric], .tabular { font-variant-numeric: tabular-nums; }
 
+/* FM: data tables center every column EXCEPT the first (the label), which stays left-aligned.
+   Marker class on <table>; the descendant selectors out-specify Tailwind's per-cell text-* utilities. */
+.tbl-centered th, .tbl-centered td { text-align: center; }
+.tbl-centered th:first-child, .tbl-centered td:first-child { text-align: left; }
+
 /* ── Atlas v4 day/night themes ──────────────────────────────────────────────
    The decile ramp (coral → amber → mint) is theme-scoped so a decile reads on
    either surface; decileColor() returns var(--decile-N). Light is the default

@@ -116,7 +116,7 @@ export function TierLeadership({ tier_leadership }: Props) {
           const rowByWindow = Object.fromEntries(returns_table.map(r => [r.window, r]))
 
           return (
-            <table className="w-full border-collapse text-[12.5px]">
+            <table className="tbl-centered w-full border-collapse text-[12.5px]">
               <thead>
                 <tr>
                   <th className="text-left text-[9px] uppercase tracking-[0.18em] text-ink-tertiary font-semibold py-2 border-b border-ink-rule">

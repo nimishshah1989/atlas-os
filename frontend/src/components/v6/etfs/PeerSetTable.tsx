@@ -85,7 +85,7 @@ export function PeerSetTable({ ticker, peers, category }: PeerSetTableProps) {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-[12px]" aria-label={`${ticker} peer set`}>
+        <table className="tbl-centered w-full border-collapse text-[12px]" aria-label={`${ticker} peer set`}>
           <thead>
             <tr className="bg-paper-soft border-b border-ink-rule">
               {[

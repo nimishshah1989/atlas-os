@@ -9,11 +9,12 @@ import type { SectorStock } from '@/lib/queries/v6/sector_lens'
 import { decileColor } from '@/components/v4/ui/decile'
 import { TermInfo } from '@/components/v6/shared/TermInfo'
 
-type Kind = 'sym' | 'text' | 'decile' | 'pct' | 'num' | 'lead' | 'liq'
+type Kind = 'sym' | 'text' | 'decile' | 'pct' | 'num' | 'lead' | 'liq' | 'ffwt'
 type Col = { key: keyof SectorStock; label: string; kind: Kind; term?: string }
 const COLS: Col[] = [
   { key: 'symbol', label: 'Stock', kind: 'sym' },
   { key: 'cap', label: 'Cap', kind: 'text', term: 'cap_tier' },
+  { key: 'ff_weight', label: 'FF wt', kind: 'ffwt', term: 'ff_weight' },
   { key: 'd_tech', label: 'Tch', kind: 'decile', term: 'decile' },
   { key: 'd_fund', label: 'Fnd', kind: 'decile', term: 'decile' },
   { key: 'd_cat', label: 'Cat', kind: 'decile', term: 'decile' },
@@ -63,7 +64,7 @@ export function SectorConstituentsTable({ stocks }: { stocks: SectorStock[] }) {
 
   return (
     <div className="overflow-x-auto rounded-tile border border-edge-hair bg-surface-panel" data-testid="sector-constituents-table">
-      <table className="w-full border-collapse text-xs">
+      <table className="tbl-centered w-full border-collapse text-xs">
         <thead>
           <tr className="border-b border-edge-rule">
             {COLS.map((c) => {
@@ -92,6 +93,7 @@ export function SectorConstituentsTable({ stocks }: { stocks: SectorStock[] }) {
                 if (c.kind === 'num') return <td key={c.key} className="px-2 py-1.5 text-right font-num text-[11.5px] tabular-nums text-txt-1">{v == null ? '—' : (v as number).toFixed(1)}</td>
                 if (c.kind === 'lead') return <td key={c.key} className="px-2 py-1.5 text-right font-num text-[11px] tabular-nums text-txt-2">{v as number}<span className="text-txt-3">/2</span></td>
                 if (c.kind === 'liq') return <td key={c.key} className="px-2 py-1.5 text-right font-num text-[11px] tabular-nums text-txt-3">{fmtLiq(v as number | null)}</td>
+                if (c.kind === 'ffwt') return <td key={c.key} className="px-2 py-1.5 text-right font-num text-[11.5px] tabular-nums text-txt-1">{v == null ? '—' : `${(v as number).toFixed(1)}%`}</td>
                 // pct (returns / RS)
                 return <td key={c.key} className={`px-2 py-1.5 text-right font-num text-[11.5px] tabular-nums ${pctTone(v as number | null)}`}>{fmtPct(v as number | null)}</td>
               })}

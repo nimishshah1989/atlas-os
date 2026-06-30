@@ -8,7 +8,7 @@ import { ThresholdsPanelV4 } from '@/components/v6/thresholds/ThresholdsPanelV4'
 export default async function ThresholdsPage() {
   const rows = await getThresholds()
   return (
-    <div className="mx-auto max-w-[1100px] px-6 py-7">
+    <div className="mx-auto max-w-[1440px] px-6 py-7">
       <div className="mb-5">
         <div className="mb-2 font-num text-[11px] uppercase tracking-[0.14em] text-txt-3">
           <a href="/" className="text-brand no-underline hover:underline">Atlas</a> › Thresholds

@@ -182,3 +182,22 @@ export async function getFundNavMonthly(mstarId: string): Promise<FundNavPoint[]
     ) q ORDER BY nav_date ASC`
   return rows.map((r) => ({ d: r.d, nav: toNumberOr(r.nav, 0) }))
 }
+
+// Holdings sector composition for the last (up to 6) disclosed snapshots — to show how the fund's
+// sector mix has shifted. Sector comes from the mapped instrument (instrument_master.sector); the
+// weights are the raw holding weights summed per sector per snapshot.
+export async function getFundSectorHistory(mstarId: string): Promise<{ d: string; sector: string; w: number }[]> {
+  const rows = await sql<{ d: string; sector: string; w: string }[]>`
+    WITH snaps AS (
+      SELECT DISTINCT as_of_date FROM foundation_staging.de_mf_holdings
+      WHERE mstar_id = ${mstarId} ORDER BY as_of_date DESC LIMIT 6)
+    SELECT to_char(h.as_of_date,'YYYY-MM-DD') AS d,
+           COALESCE(im.sector,'Unclassified') AS sector,
+           sum(h.weight_pct)::text AS w
+    FROM foundation_staging.de_mf_holdings h
+    JOIN snaps s ON s.as_of_date = h.as_of_date
+    LEFT JOIN foundation_staging.instrument_master im ON im.instrument_id = h.instrument_id
+    WHERE h.mstar_id = ${mstarId} AND h.weight_pct > 0
+    GROUP BY h.as_of_date, COALESCE(im.sector,'Unclassified')`
+  return rows.map((r) => ({ d: r.d, sector: r.sector, w: toNumberOr(r.w, 0) }))
+}

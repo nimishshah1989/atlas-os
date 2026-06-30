@@ -64,7 +64,7 @@ function VolPill({ regime }: { regime: string }) {
 export function SectorLadder({ sectors }: Props) {
   return (
     <div className="overflow-x-auto border border-paper-rule rounded-[2px]">
-      <table className="w-full border-collapse">
+      <table className="tbl-centered w-full border-collapse">
         <thead>
           <tr className="border-b border-paper-rule bg-paper">
             <th className="px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary text-right">#</th>

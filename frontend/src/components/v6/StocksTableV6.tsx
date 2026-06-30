@@ -189,7 +189,7 @@ export function StocksTableV6({ stocks, cellRules }: Props) {
       </div>
 
       <div className="overflow-x-auto border-b border-paper-rule">
-        <table className="w-full border-collapse">
+        <table className="tbl-centered w-full border-collapse">
           <thead>
             <tr className="border-b border-paper-rule bg-paper">
               <Th onClick={() => toggleSort('symbol')} icon={sortIcon('symbol')} align="left">Symbol</Th>

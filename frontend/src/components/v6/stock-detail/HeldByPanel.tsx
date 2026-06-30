@@ -36,7 +36,7 @@ export function HeldByPanel({ funds, etfs, symbol }: {
           {funds.length === 0 ? (
             <p className="font-sans text-[12px] italic text-txt-3">No tracked fund holds {symbol} ≥0.5%.</p>
           ) : (
-            <table className="w-full font-num text-[12px]">
+            <table className="tbl-centered w-full font-num text-[12px]">
               <thead>
                 <tr className="border-b border-edge-rule text-left text-[10px] uppercase tracking-wider text-txt-3">
                   <th className="py-1.5 font-semibold">Fund</th>
@@ -68,7 +68,7 @@ export function HeldByPanel({ funds, etfs, symbol }: {
           {etfs.length === 0 ? (
             <p className="font-sans text-[12px] italic text-txt-3">No tracked ETF holds {symbol} ≥0.5%.</p>
           ) : (
-            <table className="w-full font-num text-[12px]">
+            <table className="tbl-centered w-full font-num text-[12px]">
               <thead>
                 <tr className="border-b border-edge-rule text-left text-[10px] uppercase tracking-wider text-txt-3">
                   <th className="py-1.5 font-semibold">ETF</th>

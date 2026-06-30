@@ -146,7 +146,7 @@ export function BreadthTable({ rows }: Props) {
 
   return (
     <>
-      <table className="w-full border-collapse text-[13px] bg-paper border border-paper-rule rounded-sm">
+      <table className="tbl-centered w-full border-collapse text-[13px] bg-paper border border-paper-rule rounded-sm">
         <thead>
           <tr>
             <th className="text-left text-[9px] uppercase tracking-[0.18em] text-ink-tertiary font-semibold px-3 py-2 border-b border-ink-rule bg-paper-deep w-[22%]">

@@ -124,7 +124,7 @@ export async function FundsPageV4() {
   ]
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6 px-6 py-7">
+    <div className="mx-auto max-w-[1680px] space-y-6 px-6 py-7">
       {/* Header + leadership-breadth strip */}
       <header>
         <div className="mb-3 font-sans text-[12px] text-txt-3">

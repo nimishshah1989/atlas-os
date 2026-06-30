@@ -50,7 +50,7 @@ export function PeerMatrix({ peers }: PeerMatrixProps) {
     <section className="px-6 py-6 border-b border-paper-rule">
       <p className="font-mono text-[10px] uppercase tracking-wider text-ink-3 mb-4">Peer Matrix — How does this stock stack up in its sector?</p>
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-[12px]">
+        <table className="tbl-centered w-full border-collapse text-[12px]">
           <thead>
             <tr className="border-b border-paper-rule">
               {HEADERS.map(h => <th key={h} className="text-left py-2 px-2 font-mono text-[9px] uppercase tracking-wider text-ink-3 font-normal whitespace-nowrap">{h}</th>)}

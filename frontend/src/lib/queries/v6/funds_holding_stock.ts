@@ -67,6 +67,10 @@ export async function getFundsHoldingStock(iid: string): Promise<FundHolding[]> 
     WHERE h.as_of_date = (SELECT MAX(as_of_date) FROM foundation_staging.de_mf_holdings)
       AND h.instrument_id = ${iid}::uuid
       AND h.weight_pct >= 0.5
+      -- Regular plans only — drop the Direct duplicates of the same scheme ("Dir Gr" / "Direct")
+      AND uf.scheme_name NOT ILIKE '%Dir Gr%'
+      AND uf.scheme_name NOT ILIKE '%Direct%'
+      AND uf.scheme_name NOT ILIKE '%IDCW%'
     ORDER BY uf.aum_cr DESC NULLS LAST
     LIMIT 10
   `
