@@ -36,8 +36,8 @@ const fmtLiq = (v: number | null) => (v == null ? '—' : v < 10 ? v.toFixed(1) 
 
 function DChip({ d }: { d: number | null }) {
   if (d == null) return <span className="text-txt-3">—</span>
-  const c = decileColor(d)
-  return <span className="inline-block rounded px-1.5 py-0.5 font-num text-[10.5px] font-semibold tabular-nums" style={{ background: `color-mix(in srgb, ${c} 20%, transparent)`, color: c }}>{d}</span>
+  // tinted text only — no pale chip fill (FM: calmer, less "Excel highlight")
+  return <span className="font-num text-[10.5px] font-semibold tabular-nums" style={{ color: decileColor(d) }}>{d}</span>
 }
 
 export function SectorConstituentsTable({ stocks }: { stocks: SectorStock[] }) {

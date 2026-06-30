@@ -42,8 +42,8 @@ const scoreColor = (v: number) => (v >= 60 ? 'var(--color-sig-pos)' : v >= 45 ? 
 
 function Chip({ n }: { n: DerivNode }) {
   if (n.decile != null) {
-    const c = decileColor(n.decile)
-    return <span className="rounded px-1.5 py-0.5 font-num text-[10px] font-semibold tabular-nums" style={{ background: `color-mix(in srgb, ${c} 20%, transparent)`, color: c }}>D{n.decile}</span>
+    // tinted text only — no pale chip fill (FM: less "Excel highlight")
+    return <span className="font-num text-[10px] font-semibold tabular-nums" style={{ color: decileColor(n.decile) }}>D{n.decile}</span>
   }
   if (n.score != null) return <span className="font-num text-[11px] tabular-nums text-txt-2">{n.score.toFixed(0)}<span className="text-[8px] text-txt-3">/100</span></span>
   return null
