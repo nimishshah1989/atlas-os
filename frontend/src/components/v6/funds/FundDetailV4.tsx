@@ -14,6 +14,8 @@ import { decileColor } from '@/components/v4/ui/decile'
 import { ScoreDerivationTree } from '@/components/v6/shared/ScoreDerivationTree'
 import { holdingsToDerivation } from '@/components/v4/adapters/holdingsToDerivation'
 import { getConstituentDrivers } from '@/lib/queries/v6/drivers'
+import { getConstituentLensTrees } from '@/lib/queries/v6/constituent_trees'
+import { getLensWeights } from '@/lib/queries/v6/lens_weights'
 import { TermInfo } from '@/components/v6/shared/TermInfo'
 
 const HOLDING_CAP = 50
@@ -136,6 +138,9 @@ export async function FundDetailV4({ mstarId }: { mstarId: string }) {
   if (!fund) notFound()
   // Per-holding drivers (top catalyst filing, flow input, RS, ROE) → shown on each name in the tree.
   const drivers = await getConstituentDrivers(fund.holdings.map((h) => h.symbol)).catch(() => ({}))
+  const lensWeights = await getLensWeights().catch(() => undefined)
+  // Per-holding lens→sub-component mini-trees (drill-to-atom: expand a holding inline in the tree).
+  const constituentTrees = await getConstituentLensTrees(fund.holdings.map((h) => h.symbol)).catch(() => ({}))
 
   const breadthPct = fund.breadth == null ? '—' : `${(fund.breadth * 100).toFixed(0)}%`
   const subParts = [fund.category, fund.amc, fund.isin].filter((x): x is string => !!x)
@@ -179,7 +184,7 @@ export async function FundDetailV4({ mstarId }: { mstarId: string }) {
             Click a lens to expand its holdings, ranked by contribution (weight × decile); each name links to its own evidence. Descriptive, not a forecast.
           </p>
         </div>
-        <ScoreDerivationTree root={holdingsToDerivation(fund.name, fund, fund.holdings, drivers)} />
+        <ScoreDerivationTree root={holdingsToDerivation(fund.name, fund, fund.holdings, drivers, lensWeights, constituentTrees)} />
       </section>
 
       {/* ── Active-movement panel (the fund differentiator) ── */}

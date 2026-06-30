@@ -85,8 +85,25 @@ function NodeRow({ n, selected, onSelect }: { n: DerivNode; selected: boolean; o
     </span>
   ) : null
 
-  // nodes with children drill (button); leaves (variables / constituents) display in place.
-  if (hasKids) return <div><button type="button" onClick={onSelect} className={cls} aria-expanded={selected}>{labelEl}{right}</button>{bar}</div>
+  // nodes with children drill (role=button div — NOT a <button>, since the label may itself be a
+  // secondary <a> link, e.g. a constituent that both drills inline AND links to its stock page;
+  // a nested <a> in <button> is invalid HTML). leaves (variables) display in place.
+  if (hasKids)
+    return (
+      <div>
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={onSelect}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect() } }}
+          className={`${cls} cursor-pointer`}
+          aria-expanded={selected}
+        >
+          {labelEl}{right}
+        </div>
+        {bar}
+      </div>
+    )
   return <div><div className={`${cls} cursor-default`}>{labelEl}{right}</div>{bar}</div>
 }
 

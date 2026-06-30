@@ -24,6 +24,7 @@ import { getSectorDeepdive } from '@/lib/queries/v6/sectors'
 import { getSectorRatioSeries } from '@/lib/queries/v6/sector_index_rs'
 import { getSectorLensVector, getSectorStocks, getSectorFundamentals, getSectorFundFlow } from '@/lib/queries/v6/sector_lens'
 import { getConstituentDrivers } from '@/lib/queries/v6/drivers'
+import { getConstituentLensTrees } from '@/lib/queries/v6/constituent_trees'
 
 function SectionHead({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
@@ -52,6 +53,8 @@ export async function SectorDeepDiveV4({ sector }: { sector: string }) {
   // score tree so the sector's lens scores read bottom-up from real constituent drivers.
   const drivers = await getConstituentDrivers(stocks.map((s) => s.symbol)).catch(() => ({}))
   const lensWeights = await getLensWeights().catch(() => undefined)
+  // Per-constituent lens→sub-component mini-trees (drill-to-atom: expand a name inline in the tree).
+  const constituentTrees = await getConstituentLensTrees(stocks.map((s) => s.symbol)).catch(() => ({}))
 
   return (
     <div className="max-w-[1400px] mx-auto">
@@ -92,7 +95,7 @@ export async function SectorDeepDiveV4({ sector }: { sector: string }) {
               Click a lens to expand its constituents, ranked by contribution; each name links to its own evidence. The eye icon on any term explains it.
             </p>
           </div>
-          <ScoreDerivationTree root={sectorToDerivation(sector, lensVector, stocks, drivers, lensWeights)} />
+          <ScoreDerivationTree root={sectorToDerivation(sector, lensVector, stocks, drivers, lensWeights, constituentTrees)} />
         </section>
       )}
       {stocks.length > 0 && <SectorStock2x2 stocks={stocks} />}

@@ -6,7 +6,10 @@
 // per-holding deciles + weights) — no synthetic fallback; an absent datum renders as absence.
 import type { DerivRoot, DerivNode } from '@/components/v6/shared/ScoreDerivationTree'
 import type { LensDrivers } from '@/lib/queries/v6/drivers'
+import type { ConstituentLens } from '@/lib/queries/v6/constituent_trees'
+import type { LensWeightMap } from '@/lib/v6/sectorScore'
 import { bandNodes } from './decileBands'
+import { constituentLensChildren } from './constituentTree'
 
 // holdings lens vkey → the driver field on LensDrivers (the 4 conviction lenses)
 const DRIVER_KEY: Record<string, keyof LensDrivers | undefined> = {
@@ -44,7 +47,7 @@ const LENSES: { vkey: VectorKey; dkey: DecileKey; label: string; term?: string }
 // Weight may be a FRACTION (ETF, 0.0617) or a PERCENT (fund, 6.17) — normalise either to a %.
 const toPct = (w: number | null): number | null => (w == null ? null : w <= 1 ? w * 100 : w)
 
-export function holdingsToDerivation(name: string, vector: HoldingsVector, holdings: LensHolding[], drivers: Record<string, LensDrivers> = {}): DerivRoot {
+export function holdingsToDerivation(name: string, vector: HoldingsVector, holdings: LensHolding[], drivers: Record<string, LensDrivers> = {}, weights?: LensWeightMap, trees: Record<string, ConstituentLens> = {}): DerivRoot {
   const n = holdings.length
   const breadthPct = vector.breadth == null ? null : vector.breadth * 100
 
@@ -66,6 +69,7 @@ export function holdingsToDerivation(name: string, vector: HoldingsVector, holdi
           weight: toPct(h.weight),
           value: dk ? (drivers[h.symbol]?.[dk] ?? null) : null,
           href: `/stocks/${h.symbol}`,
+          children: trees[h.symbol] ? constituentLensChildren(trees[h.symbol], weights) : undefined,
         })))
       const nWithDecile = holdings.filter(h => h[l.dkey] != null).length
       return {

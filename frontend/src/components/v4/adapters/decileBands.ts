@@ -28,6 +28,7 @@ export type BandItem = {
   href?: string
   value?: string | null   // the constituent's DRIVER for this lens (e.g. "Acquisition +8", "RS +22%")
   metrics?: DerivNode['metrics']
+  children?: DerivNode[]  // drill-to-atom: the constituent's own lens→sub-component mini-tree
 }
 
 // Group items into decile-band parent nodes. Each band shows count + share (by weight when
@@ -54,6 +55,7 @@ export function bandNodes(keyPrefix: string, items: BandItem[]): DerivNode[] {
       value: i.value ?? null,
       metrics: i.metrics,
       href: i.href,
+      children: i.children, // drill-to-atom: expand the constituent into its own lens tree inline
     }))
     if (inBand.length > NAME_CAP)
       kids.push({ id: `${keyPrefix}-${b.label}-more`, label: `+${inBand.length - NAME_CAP} more` })
