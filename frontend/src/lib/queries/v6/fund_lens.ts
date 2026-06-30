@@ -183,6 +183,45 @@ export async function getFundNavMonthly(mstarId: string): Promise<FundNavPoint[]
   return rows.map((r) => ({ d: r.d, nav: toNumberOr(r.nav, 0) }))
 }
 
+// Month-end fund NAV + Nifty 50 + Nifty 500 closes over the fund's last ~5 years, aligned on
+// the month bucket — the parent series for the equity-curve + RS chart. Same two baselines the
+// /funds RS matrix uses. Rebasing/RS happen in the tested pure builder (buildFundCurves).
+export type FundEquityPoint = { d: string; fund: number; nifty50: number | null; nifty500: number | null }
+export async function getFundEquityCurve(mstarId: string): Promise<FundEquityPoint[]> {
+  const rows = await sql<{ d: string; fund: string; nifty50: string | null; nifty500: string | null }[]>`
+    WITH range AS (
+      SELECT (max(nav_date) - interval '5 years')::date AS start
+      FROM foundation_staging.de_mf_nav_daily WHERE mstar_id = ${mstarId}
+    ),
+    fund_me AS (  -- last NAV in each month (month-end)
+      SELECT DISTINCT ON (date_trunc('month', nav_date))
+        date_trunc('month', nav_date)::date AS m, to_char(nav_date,'YYYY-MM-DD') AS d, nav::float AS nav
+      FROM foundation_staging.de_mf_nav_daily
+      WHERE mstar_id = ${mstarId} AND nav > 0 AND nav_date >= (SELECT start FROM range)
+      ORDER BY date_trunc('month', nav_date), nav_date DESC
+    ),
+    idx_me AS (  -- last close in each month for the two baselines
+      SELECT index_code, date_trunc('month', date)::date AS m,
+             (array_agg(close ORDER BY date DESC))[1]::float AS c
+      FROM foundation_staging.index_prices
+      WHERE index_code IN ('NIFTY 50','NIFTY 500') AND date >= (SELECT start FROM range)
+      GROUP BY index_code, date_trunc('month', date)
+    )
+    SELECT f.d, f.nav::text AS fund,
+      (max(i.c) FILTER (WHERE i.index_code='NIFTY 50'))::text  AS nifty50,
+      (max(i.c) FILTER (WHERE i.index_code='NIFTY 500'))::text AS nifty500
+    FROM fund_me f
+    LEFT JOIN idx_me i ON i.m = f.m
+    GROUP BY f.d, f.m, f.nav
+    ORDER BY f.m ASC`
+  return rows.map((r) => ({
+    d: r.d,
+    fund: toNumberOr(r.fund, 0),
+    nifty50: r.nifty50 == null ? null : toNumber(r.nifty50),
+    nifty500: r.nifty500 == null ? null : toNumber(r.nifty500),
+  }))
+}
+
 // Holdings sector composition for the last (up to 6) disclosed snapshots — to show how the fund's
 // sector mix has shifted. Sector comes from the mapped instrument (instrument_master.sector); the
 // weights are the raw holding weights summed per sector per snapshot.

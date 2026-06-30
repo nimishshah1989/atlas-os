@@ -10,6 +10,7 @@ import { notFound } from 'next/navigation'
 import { getFundLensDetail, getFundNavMonthly, getFundSectorHistory, type FundLensDetail, type FundHolding, type FundMove } from '@/lib/queries/v6/fund_lens'
 import { sectorComposition, computeFundRiskStats, pivotSectorHistory } from '@/lib/v6/fundStats'
 import { FundRiskStats } from './FundRiskStats'
+import { FundEquityCurves } from './FundEquityCurves'
 import { FundSectorComposition } from './FundSectorComposition'
 import { FundSectorHistory } from './FundSectorHistory'
 import { Panel } from '@/components/v4/ui/Panel'
@@ -203,6 +204,9 @@ export async function FundDetailV4({ mstarId }: { mstarId: string }) {
           <FundRiskStats stats={riskStats} />
         </section>
       )}
+
+      {/* ── Growth + relative strength vs Nifty 50 / 500 (from NAV + index history) ── */}
+      <FundEquityCurves mstarId={mstarId} />
 
       {/* ── Sector composition (from holdings) ── */}
       {sectors.length > 0 && (
