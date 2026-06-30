@@ -170,10 +170,15 @@ export function SectorHeatmapV4({ rows, bases, constituents }: {
               if (!open.has(card.sector_name) || !kids?.length) return [row]
               const subRows = [...kids].sort(cmp).map((s) => (
                 <tr key={`${card.sector_name}::${s.symbol}`} className="border-b border-edge-hair/60 bg-surface-inset/40">
-                  <td className="text-left py-[5px] pl-[34px] pr-3.5">
+                  <td className="text-left py-[5px] pl-[34px] pr-3.5 whitespace-nowrap">
                     <Link href={`/stocks/${s.symbol}`} className="font-num text-[11.5px] text-txt-2 hover:text-brand transition-colors">
                       {s.symbol}
                     </Link>
+                    {s.ff_weight != null && (
+                      <span className="ml-2 font-num text-[10px] tabular-nums text-txt-3" title={`Free-float weight in ${card.sector_name}: ${s.ff_weight.toFixed(1)}%`}>
+                        {s.ff_weight.toFixed(1)}%
+                      </span>
+                    )}
                   </td>
                   {COLS.map((c, i) => {
                     const v = c.get(s)

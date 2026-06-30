@@ -79,18 +79,25 @@ function idxClose(code: string, months: number): string {
 export type FundEma = { n_priced: number; a21: number; a50: number; a200: number }
 
 // How many of each fund's latest-snapshot holdings sit above their 21/50/200-day EMA.
+// Counted over the SAME SCORED holdings as the "Holdings" column (INNER JOIN the lens journal), and
+// DISTINCT by instrument (de_mf_holdings can carry the same name in >1 row) — so the counts can
+// never exceed the fund's holdings count (the earlier bug: a50 > Holdings, because EMA was over ALL
+// technically-priced names while Holdings counts only lens-scored ones).
 export async function getFundHoldingsEma(): Promise<Map<string, FundEma>> {
   const rows = (await sql`
     WITH snap AS (SELECT max(as_of_date) d FROM foundation_staging.de_mf_holdings),
+    ld AS (SELECT max(date) d FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'),
     tdl AS (SELECT max(date) d FROM foundation_staging.technical_daily WHERE asset_class='stock')
     SELECT h.mstar_id,
-      count(t.instrument_id)::int AS n_priced,
-      count(*) FILTER (WHERE t.above_ema_21)::int  AS a21,
-      count(*) FILTER (WHERE t.above_ema_50)::int  AS a50,
-      count(*) FILTER (WHERE t.above_ema_200)::int AS a200
+      count(DISTINCT h.instrument_id) FILTER (WHERE t.instrument_id IS NOT NULL)::int AS n_priced,
+      count(DISTINCT h.instrument_id) FILTER (WHERE t.above_ema_21)::int  AS a21,
+      count(DISTINCT h.instrument_id) FILTER (WHERE t.above_ema_50)::int  AS a50,
+      count(DISTINCT h.instrument_id) FILTER (WHERE t.above_ema_200)::int AS a200
     FROM foundation_staging.de_mf_holdings h
-    JOIN foundation_staging.technical_daily t
-      ON t.instrument_id = h.instrument_id AND t.date = (SELECT d FROM tdl) AND t.asset_class='stock'
+    JOIN foundation_staging.atlas_lens_scores_daily l
+      ON l.instrument_id = h.instrument_id AND l.asset_class='stock' AND l.date = (SELECT d FROM ld)
+    LEFT JOIN foundation_staging.technical_daily t
+      ON t.instrument_id = h.instrument_id AND t.asset_class='stock' AND t.date = (SELECT d FROM tdl)
     WHERE h.as_of_date = (SELECT d FROM snap) AND h.weight_pct > 0
     GROUP BY h.mstar_id
   `) as unknown as { mstar_id: string; n_priced: number; a21: number; a50: number; a200: number }[]

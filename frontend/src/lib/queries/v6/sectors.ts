@@ -274,6 +274,7 @@ export type SectorConstituentMatrixRow = {
   name: string | null
   ret_1d: number | null; ret_1w: number | null; ret_1m: number | null
   ret_3m: number | null; ret_6m: number | null; ret_12m: number | null
+  ff_weight: number | null // free-float weight within the sector (% of sector free-float market cap)
 }
 
 // ALL sectors' constituents in ONE grouped query (not 21× per-sector) → keyed by sector for the
@@ -285,19 +286,31 @@ export async function getAllSectorConstituents(): Promise<Record<string, SectorC
     sector: string; symbol: string; name: string | null
     r1d: string | null; r1w: string | null; r1m: string | null
     r3m: string | null; r6m: string | null; r12m: string | null
+    ff_weight: string | null
   }>>`
     WITH latest AS (
       SELECT max(date) d FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'
+    ),
+    ff AS (  -- free-float market cap = market cap × non-promoter, non-ESOP share (sector concentration)
+      SELECT mc.instrument_id,
+        mc.market_cap * (100 - COALESCE(sh.promoter_pct,0) - COALESCE(sh.employee_trusts_pct,0)) / 100.0 AS ff_mcap
+      FROM (SELECT DISTINCT ON (instrument_id) instrument_id, market_cap FROM foundation_staging.screener_ratios
+            WHERE market_cap IS NOT NULL ORDER BY instrument_id, as_of DESC NULLS LAST) mc
+      LEFT JOIN (SELECT DISTINCT ON (instrument_id) instrument_id, promoter_pct, employee_trusts_pct
+                 FROM foundation_staging.lens_shareholding ORDER BY instrument_id, period_end DESC) sh
+        ON sh.instrument_id = mc.instrument_id
     )
     SELECT im.sector, im.symbol, im.name,
            td.ret_1d::float r1d, td.ret_1w::float r1w, td.ret_1m::float r1m,
-           td.ret_3m::float r3m, td.ret_6m::float r6m, td.ret_12m::float r12m
+           td.ret_3m::float r3m, td.ret_6m::float r6m, td.ret_12m::float r12m,
+           round((100.0 * ff.ff_mcap / NULLIF(sum(ff.ff_mcap) OVER (PARTITION BY im.sector), 0))::numeric, 2) AS ff_weight
     FROM foundation_staging.atlas_lens_scores_daily l
     JOIN foundation_staging.instrument_master im ON im.instrument_id = l.instrument_id
     LEFT JOIN foundation_staging.technical_daily td
       ON td.instrument_id = l.instrument_id AND td.asset_class='stock' AND td.date=(SELECT d FROM latest)
+    LEFT JOIN ff ON ff.instrument_id = l.instrument_id
     WHERE l.asset_class='stock' AND l.date=(SELECT d FROM latest) AND im.sector IS NOT NULL
-    ORDER BY im.sector, td.ret_3m DESC NULLS LAST
+    ORDER BY im.sector, ff_weight DESC NULLS LAST
   `
   const out: Record<string, SectorConstituentMatrixRow[]> = {}
   for (const r of rows) {
@@ -305,6 +318,7 @@ export async function getAllSectorConstituents(): Promise<Record<string, SectorC
       sector: r.sector, symbol: r.symbol, name: r.name,
       ret_1d: toNumber(r.r1d), ret_1w: toNumber(r.r1w), ret_1m: toNumber(r.r1m),
       ret_3m: toNumber(r.r3m), ret_6m: toNumber(r.r6m), ret_12m: toNumber(r.r12m),
+      ff_weight: toNumber(r.ff_weight),
     })
   }
   return out
