@@ -30,9 +30,9 @@ function Row({ label, rs, ret, baseline }: { label: string; rs: FundRsMatrix['n5
           <span
             key={w.key}
             title={`${w.label} RS vs ${baseline}: ${pct(v)}  (fund ${pct(r, false)} − ${baseline} ${pct(idx, false)})`}
-            className={`text-right font-num text-[10px] tabular-nums ${tone(v)}`}
+            className={`text-center font-num text-[10px] tabular-nums ${tone(v)}`}
           >
-            {v == null ? '—' : `${v > 0 ? '+' : ''}${(v * 100).toFixed(0)}`}
+            {v == null ? '—' : `${v > 0 ? '+' : ''}${(v * 100).toFixed(0)}%`}
           </span>
         )
       })}
@@ -43,10 +43,10 @@ function Row({ label, rs, ret, baseline }: { label: string; rs: FundRsMatrix['n5
 export function FundRsMatrixCell({ rs }: { rs?: FundRsMatrix }) {
   if (!rs || rs.ret.m3 == null) return <span className="font-num text-[11px] text-txt-3">—</span>
   return (
-    <div className="inline-grid grid-cols-[auto_repeat(4,1fr)] items-center gap-x-1.5 gap-y-0.5">
+    <div className="inline-grid grid-cols-[auto_repeat(4,1fr)] items-center justify-items-center gap-x-2 gap-y-0.5">
       <span />
       {WINDOWS.map((w) => (
-        <span key={w.key} className="text-right font-num text-[8px] uppercase tracking-wide text-txt-3">{w.label}</span>
+        <span key={w.key} className="text-center font-num text-[8px] uppercase tracking-wide text-txt-3">{w.label}</span>
       ))}
       <Row label="N50" rs={rs.n50} ret={rs.ret} baseline="Nifty 50" />
       <Row label="N500" rs={rs.n500} ret={rs.ret} baseline="Nifty 500" />

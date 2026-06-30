@@ -17,16 +17,16 @@ function tone(share: number): string {
 export function FundEmaCell({ ema }: { ema?: FundEma }) {
   if (!ema || ema.n_priced === 0) return <span className="font-num text-[11px] text-txt-3">—</span>
   const n = ema.n_priced
+  // The 21/50/200 sequence is implied by the column header, so we show the counts only.
   return (
-    <div className="inline-flex items-center gap-2">
+    <div className="inline-flex items-center justify-center gap-2.5">
       {BARS.map((b) => {
         const c = ema[b.key]
         const share = n > 0 ? c / n : 0
         return (
           <span key={b.key} title={`${c} of ${n} holdings above the ${b.label}-day EMA (${Math.round(share * 100)}%)`}
-            className="font-num text-[11px] tabular-nums">
-            <span className="text-txt-3">{b.label}</span>{' '}
-            <span className={tone(share)}>{c}</span>
+            className={`font-num text-[11px] tabular-nums ${tone(share)}`}>
+            {c}
           </span>
         )
       })}

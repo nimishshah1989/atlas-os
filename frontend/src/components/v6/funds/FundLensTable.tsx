@@ -57,17 +57,17 @@ type SortKey =
   | 'name' | 'category' | 'amc' | 'n_holdings' | 'n_leaders' | 'breadth'
   | LensKey | 'expense' | 'composite' | 'cat_rank' | 'aum_cr' | 'rank_trend' | 'rs_matrix' | 'ema_breadth'
 
-type Col = { key: SortKey; label: string; align: 'left' | 'right'; term?: string; sortable?: boolean }
+type Col = { key: SortKey; label: string; align: 'left' | 'right' | 'center'; term?: string; sortable?: boolean }
 const COLS: Col[] = [
   { key: 'name', label: 'Name', align: 'left' },
   { key: 'category', label: 'Category', align: 'left' },
   { key: 'cat_rank', label: 'Cat rank', align: 'right', term: 'cat_rank' },
   { key: 'rank_trend', label: 'Rank trend', align: 'left', term: 'rank_trend', sortable: false },
   { key: 'composite', label: 'Score', align: 'right', term: 'fund_score' },
-  { key: 'rs_matrix', label: 'RS vs N50 / N500', align: 'left', term: 'fund_rs', sortable: false },
+  { key: 'rs_matrix', label: 'RS vs N50 / N500', align: 'center', term: 'fund_rs', sortable: false },
   { key: 'amc', label: 'AMC', align: 'left' },
   { key: 'n_holdings', label: 'Holdings', align: 'right', term: 'holdings_count' },
-  { key: 'ema_breadth', label: '# > EMA 21/50/200', align: 'left', term: 'fund_ema', sortable: false },
+  { key: 'ema_breadth', label: '# > EMA 21/50/200', align: 'center', term: 'fund_ema', sortable: false },
   { key: 'n_leaders', label: 'Leaders', align: 'right', term: 'leaders_count' },
   { key: 'breadth', label: 'Leadership-breadth', align: 'right', term: 'leadership_breadth' },
   { key: 'v_tech', label: 'Tch', align: 'right', term: 'weighted_lens' },
@@ -190,7 +190,7 @@ export function FundLensTable({
                     key={col.key}
                     onClick={() => toggleSort(col.key)}
                     className={`font-sans text-[10px] uppercase tracking-wider pb-2 px-2 select-none whitespace-nowrap ${
-                      col.align === 'right' ? 'text-right' : 'text-left'
+                      col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'
                     } ${sortable ? 'cursor-pointer hover:text-txt-2' : ''} ${isSorted ? 'text-txt-1 font-semibold' : 'text-txt-3'}`}
                   >
                     {col.label}{col.term && <TermInfo term={col.term} />}{arrow}
@@ -245,10 +245,10 @@ export function FundLensTable({
                     {fmtScore(f.composite)}
                   </button>
                 </td>
-                <td className="px-2 py-1.5 align-middle"><FundRsMatrixCell rs={frs} /></td>
+                <td className="px-2 py-1.5 text-center align-middle"><FundRsMatrixCell rs={frs} /></td>
                 <td className="max-w-[140px] truncate px-2 py-1.5 font-sans text-[11px] text-txt-2">{f.amc ?? '—'}</td>
                 <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums text-txt-2">{f.n_holdings}</td>
-                <td className="px-2 py-1.5 align-middle"><FundEmaCell ema={fema} /></td>
+                <td className="px-2 py-1.5 text-center align-middle"><FundEmaCell ema={fema} /></td>
                 <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums text-txt-2">{f.n_leaders}</td>
                 <td className={`px-2 py-1.5 text-right font-num text-[12px] tabular-nums font-semibold ${breadthText(f.breadth)}`}>{fmtBreadth(f.breadth)}</td>
                 <td className={`px-2 py-1.5 text-right font-num text-[12px] tabular-nums ${scoreText(f.v_tech)}`}>{fmtScore(f.v_tech)}</td>
