@@ -168,3 +168,17 @@ export async function getFundActiveMovement(mstarId: string): Promise<FundActive
     added: added.slice(0, 12), exited: exited.slice(0, 12),
   }
 }
+
+// Month-end NAV series (one point per calendar month, ascending) for the risk/return ratios on the
+// fund detail page. The full history is small (a few hundred points at most), so we fetch it all.
+export type FundNavPoint = { d: string; nav: number }
+export async function getFundNavMonthly(mstarId: string): Promise<FundNavPoint[]> {
+  const rows = await sql<{ d: string; nav: string }[]>`
+    SELECT to_char(nav_date,'YYYY-MM-DD') AS d, nav::text AS nav FROM (
+      SELECT DISTINCT ON (date_trunc('month', nav_date)) nav_date, nav
+      FROM foundation_staging.de_mf_nav_daily
+      WHERE mstar_id = ${mstarId} AND nav > 0
+      ORDER BY date_trunc('month', nav_date), nav_date DESC
+    ) q ORDER BY nav_date ASC`
+  return rows.map((r) => ({ d: r.d, nav: toNumberOr(r.nav, 0) }))
+}

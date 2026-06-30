@@ -7,7 +7,10 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
-import { getFundLensDetail, type FundLensDetail, type FundHolding, type FundMove } from '@/lib/queries/v6/fund_lens'
+import { getFundLensDetail, getFundNavMonthly, type FundLensDetail, type FundHolding, type FundMove } from '@/lib/queries/v6/fund_lens'
+import { sectorComposition, computeFundRiskStats } from '@/lib/v6/fundStats'
+import { FundRiskStats } from './FundRiskStats'
+import { FundSectorComposition } from './FundSectorComposition'
 import { Panel } from '@/components/v4/ui/Panel'
 import { StatCard, type Tone } from '@/components/v4/ui/StatCard'
 import { decileColor } from '@/components/v4/ui/decile'
@@ -141,6 +144,10 @@ export async function FundDetailV4({ mstarId }: { mstarId: string }) {
   const lensWeights = await getLensWeights().catch(() => undefined)
   // Per-holding lens→sub-component mini-trees (drill-to-atom: expand a holding inline in the tree).
   const constituentTrees = await getConstituentLensTrees(fund.holdings.map((h) => h.symbol)).catch(() => ({}))
+  // Decision analytics: NAV-derived risk/return ratios + holdings sector composition.
+  const navMonthly = await getFundNavMonthly(mstarId).catch(() => [])
+  const riskStats = computeFundRiskStats(navMonthly)
+  const sectors = sectorComposition(fund.holdings.map((h) => ({ sector: h.sector, weight: h.weight })))
 
   const breadthPct = fund.breadth == null ? '—' : `${(fund.breadth * 100).toFixed(0)}%`
   const subParts = [fund.category, fund.amc, fund.isin].filter((x): x is string => !!x)
@@ -174,6 +181,31 @@ export async function FundDetailV4({ mstarId }: { mstarId: string }) {
           {tiles.map(t => <StatCard key={t.label} label={t.label} value={t.value} sub={t.sub} tone={t.tone ?? 'neutral'} />)}
         </div>
       </header>
+
+      {/* ── Risk & return (from NAV history) ── */}
+      {riskStats.months >= 2 && (
+        <section aria-label="Risk and return">
+          <div className="mb-3">
+            <p className="font-num text-[9px] uppercase tracking-[0.14em] text-txt-3">Risk &amp; return</p>
+            <h2 className="font-display text-[22px] font-medium tracking-tight text-txt-1">How the fund has performed</h2>
+            <p className="mt-1 max-w-[760px] font-sans text-[13px] text-txt-2">
+              Compound returns and the risk taken to earn them, from the fund&apos;s own NAV history.
+            </p>
+          </div>
+          <FundRiskStats stats={riskStats} />
+        </section>
+      )}
+
+      {/* ── Sector composition (from holdings) ── */}
+      {sectors.length > 0 && (
+        <Panel
+          eyebrow="Composition"
+          title="Sector mix of the holdings"
+          info={{ body: 'Where the fund is invested, by sector — each holding’s weight summed into its sector. From the latest disclosed portfolio.' }}
+        >
+          <FundSectorComposition slices={sectors} />
+        </Panel>
+      )}
 
       {/* ── Glass box: Score-Derivation Tree (Leadership-breadth → lens → holdings by contribution) ── */}
       <section aria-label="How the score is built">

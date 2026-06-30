@@ -7,6 +7,8 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { getEtfLensDetail, getEtfChartSeries, type EtfHolding } from '@/lib/queries/v6/etf_lens'
+import { sectorComposition } from '@/lib/v6/fundStats'
+import { FundSectorComposition } from '@/components/v6/funds/FundSectorComposition'
 import { getConstituentDrivers } from '@/lib/queries/v6/drivers'
 import { getConstituentLensTrees } from '@/lib/queries/v6/constituent_trees'
 import { getLensWeights } from '@/lib/queries/v6/lens_weights'
@@ -88,6 +90,7 @@ export async function ETFDetailV4({ fcode }: { fcode: string }) {
   const lensWeights = await getLensWeights().catch(() => undefined)
   // Per-holding lens→sub-component mini-trees (drill-to-atom: expand a holding inline in the tree).
   const constituentTrees = await getConstituentLensTrees(etf.holdings.map((h) => h.symbol)).catch(() => ({}))
+  const sectors = sectorComposition(etf.holdings.map((h) => ({ sector: h.sector, weight: h.weight })))
   // Native Lightweight charts (price ÷ index) for bridged ETFs — TV's embed refuses NSE symbols.
   const etfRows = etf.nse_ticker ? await getEtfChartSeries(etf.nse_ticker).catch(() => []) : []
 
@@ -130,6 +133,17 @@ export async function ETFDetailV4({ fcode }: { fcode: string }) {
           </div>
         </div>
       </header>
+
+      {/* ── Sector composition (from holdings) ── */}
+      {sectors.length > 0 && (
+        <Panel
+          eyebrow="Composition"
+          title="Sector mix of the holdings"
+          info={{ body: 'Where the ETF is invested, by sector — each holding’s weight summed into its sector. From the latest disclosed basket.' }}
+        >
+          <FundSectorComposition slices={sectors} />
+        </Panel>
+      )}
 
       {/* ── Glass box: Score-Derivation Tree (Leadership-breadth → lens → holdings by contribution) ── */}
       <section aria-label="How the score is built">
