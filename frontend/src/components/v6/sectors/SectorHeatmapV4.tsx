@@ -18,6 +18,16 @@ import { TermInfo } from '@/components/v6/shared/TermInfo'
 type RetRow = {
   ret_1d: number | null; ret_1w: number | null; ret_1m: number | null
   ret_3m: number | null; ret_6m: number | null; ret_12m: number | null
+  wt?: number | null         // sector row: top-3 free-float concentration · set in the component
+  ff_weight?: number | null  // constituent row: its free-float weight within the sector
+}
+
+// Top-3 free-float concentration of a sector = sum of its three largest constituents' free-float
+// weights. A high number (e.g. Defence ~80%) = a top-heavy sector dominated by a few names.
+function top3Conc(kids?: { ff_weight: number | null }[]): number | null {
+  if (!kids?.length) return null
+  const top = kids.filter((k) => k.ff_weight != null).sort((a, b) => (b.ff_weight as number) - (a.ff_weight as number)).slice(0, 3)
+  return top.length ? top.reduce((s, k) => s + (k.ff_weight as number), 0) : null
 }
 
 // Returns are decimal fractions (×100 = %). RS is computed here = sector return − base return.
@@ -77,14 +87,19 @@ export function SectorHeatmapV4({ rows, bases, constituents }: {
   const firstRs = COLS.findIndex(c => c.group === 'rs')
   if (rows.length === 0) return <div className="text-txt-3 text-sm text-center py-8">No heatmap data.</div>
 
-  const col = COLS.find(c => c.key === sortKey)!
+  // 'wt' is a dedicated weight column (sector = top-3 concentration, constituent = its weight),
+  // not one of the heat-tinted return columns.
+  const wtOf = (c: RetRow) => c.wt ?? c.ff_weight ?? null
+  const getVal = (c: RetRow) => (sortKey === 'wt' ? wtOf(c) : (COLS.find(x => x.key === sortKey)?.get(c) ?? null))
   const cmp = (a: RetRow, b2: RetRow) => {
-    const av = col.get(a), bv = col.get(b2)
+    const av = getVal(a), bv = getVal(b2)
     if (av == null) return 1
     if (bv == null) return -1
     return (av - bv) * dir
   }
-  const sorted = [...rows].sort(cmp)
+  // stamp each sector with its top-3 concentration so the Wt column + sort work on sector rows
+  const rowsWithWt: SectorHeatRow[] = rows.map(r => ({ ...r, wt: top3Conc(constituents?.[r.sector_name]) }))
+  const sorted = [...rowsWithWt].sort(cmp)
   const onSort = (k: string) => { if (k === sortKey) setDir(d => (d === 1 ? -1 : 1)); else { setSortKey(k); setDir(-1) } }
   const arrow = (k: string) => (k === sortKey ? (dir === -1 ? ' ↓' : ' ↑') : '')
 
@@ -112,6 +127,7 @@ export function SectorHeatmapV4({ rows, bases, constituents }: {
             {/* group header band */}
             <tr className="border-b border-edge-hair">
               <th className="bg-surface-raised" />
+              <th className="bg-surface-raised" />
               <th colSpan={firstRs} className="px-2 py-1.5 text-left font-num text-[9px] font-semibold uppercase tracking-[0.14em] text-txt-2 bg-surface-raised">
                 Return
               </th>
@@ -121,6 +137,7 @@ export function SectorHeatmapV4({ rows, bases, constituents }: {
             </tr>
             <tr className="border-b border-edge-rule">
               <th className={`text-left pl-3.5 ${th}`} onClick={() => onSort('sector_name')}>Sector</th>
+              <th className={`text-center ${th}`} onClick={() => onSort('wt')}>Wt<TermInfo term="ff_weight" />{arrow('wt')}</th>
               {COLS.map((c, i) => (
                 <th key={c.key} className={`text-center ${th} ${i === firstRs ? divCls : ''}`} onClick={() => onSort(c.key)}>
                   {c.label}{c.term && <TermInfo term={c.term} />}{arrow(c.key)}
@@ -151,7 +168,15 @@ export function SectorHeatmapV4({ rows, bases, constituents }: {
                       <span className="font-num text-[9px] text-txt-3 bg-surface-inset px-[5px] py-px rounded-tile">
                         {card.constituent_count}
                       </span>
+                      {card.wt != null && (
+                        <span className="font-num text-[9.5px] tabular-nums text-txt-3 whitespace-nowrap" title={`Top-3 free-float concentration — the 3 largest names are ${card.wt.toFixed(0)}% of ${card.sector_name}'s free float`}>
+                          · top-3 <span className={`font-semibold ${card.wt >= 60 ? 'text-sig-neg' : card.wt >= 40 ? 'text-sig-warn' : 'text-txt-2'}`}>{card.wt.toFixed(0)}%</span>
+                        </span>
+                      )}
                     </div>
+                  </td>
+                  <td className="text-center font-num text-[11px] tabular-nums text-txt-3">
+                    <div className="px-1.5 py-[7px]">{card.wt == null ? '—' : `${card.wt.toFixed(0)}%`}</div>
                   </td>
                   {COLS.map((c, i) => {
                     const v = c.get(card)
@@ -174,11 +199,9 @@ export function SectorHeatmapV4({ rows, bases, constituents }: {
                     <Link href={`/stocks/${s.symbol}`} className="font-num text-[11.5px] text-txt-2 hover:text-brand transition-colors">
                       {s.symbol}
                     </Link>
-                    {s.ff_weight != null && (
-                      <span className="ml-2 font-num text-[10px] tabular-nums text-txt-3" title={`Free-float weight in ${card.sector_name}: ${s.ff_weight.toFixed(1)}%`}>
-                        {s.ff_weight.toFixed(1)}%
-                      </span>
-                    )}
+                  </td>
+                  <td className="text-center font-num text-[11px] tabular-nums text-txt-2">
+                    <div className="px-1.5 py-[5px]">{s.ff_weight == null ? '—' : `${s.ff_weight.toFixed(1)}%`}</div>
                   </td>
                   {COLS.map((c, i) => {
                     const v = c.get(s)
