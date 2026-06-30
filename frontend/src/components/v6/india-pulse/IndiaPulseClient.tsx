@@ -51,7 +51,7 @@ export function IndiaPulseClient({ data }: Props) {
 
       {/* Page header */}
       <section className="border-b border-paper-rule pb-6">
-        <div className="max-w-[1400px] mx-auto px-8 pt-8">
+        <div className="max-w-[1680px] mx-auto px-8 pt-8">
           <div className="text-[12px] text-ink-tertiary mb-3">
             <Link href="/" className="text-accent no-underline hover:underline">Atlas</Link>
             {' › '}India Pulse
@@ -74,7 +74,7 @@ export function IndiaPulseClient({ data }: Props) {
 
       {/* Section 1 — Headline indices */}
       <section className="border-b border-paper-rule py-10">
-        <div className="max-w-[1400px] mx-auto px-8">
+        <div className="max-w-[1680px] mx-auto px-8">
           <div className="flex items-baseline justify-between mb-5">
             <div>
               <h2 className="font-serif text-[28px] font-normal tracking-[-0.011em] text-ink-primary">
@@ -92,7 +92,7 @@ export function IndiaPulseClient({ data }: Props) {
 
       {/* Section 2 — Breadth */}
       <section className="border-b border-paper-rule py-10">
-        <div className="max-w-[1400px] mx-auto px-8">
+        <div className="max-w-[1680px] mx-auto px-8">
           <div className="flex items-baseline justify-between mb-5">
             <div>
               <h2 className="font-serif text-[28px] font-normal tracking-[-0.011em] text-ink-primary">
@@ -110,7 +110,7 @@ export function IndiaPulseClient({ data }: Props) {
 
       {/* Section 3 — Dispersion & concentration */}
       <section className="border-b border-paper-rule py-10">
-        <div className="max-w-[1400px] mx-auto px-8">
+        <div className="max-w-[1680px] mx-auto px-8">
           <div className="mb-5">
             <h2 className="font-serif text-[28px] font-normal tracking-[-0.011em] text-ink-primary">
               Dispersion &amp; concentration
@@ -130,7 +130,7 @@ export function IndiaPulseClient({ data }: Props) {
 
       {/* Section 4 — Volatility */}
       <section className="border-b border-paper-rule py-10">
-        <div className="max-w-[1400px] mx-auto px-8">
+        <div className="max-w-[1680px] mx-auto px-8">
           <div className="mb-5">
             <h2 className="font-serif text-[28px] font-normal tracking-[-0.011em] text-ink-primary">
               Volatility
@@ -146,7 +146,7 @@ export function IndiaPulseClient({ data }: Props) {
 
       {/* Section 5 — Tier leadership */}
       <section className="border-b border-paper-rule py-10">
-        <div className="max-w-[1400px] mx-auto px-8">
+        <div className="max-w-[1680px] mx-auto px-8">
           <div className="mb-5">
             <h2 className="font-serif text-[28px] font-normal tracking-[-0.011em] text-ink-primary">
               Tier leadership · mid &amp; small vs large
@@ -163,7 +163,7 @@ export function IndiaPulseClient({ data }: Props) {
 
       {/* Section 6 — Sectoral heatmap */}
       <section className="border-b border-paper-rule py-10">
-        <div className="max-w-[1400px] mx-auto px-8">
+        <div className="max-w-[1680px] mx-auto px-8">
           <div className="mb-5">
             <h2 className="font-serif text-[28px] font-normal tracking-[-0.011em] text-ink-primary">
               Sectoral indices · heatmap
@@ -179,7 +179,7 @@ export function IndiaPulseClient({ data }: Props) {
 
       {/* Section 7 — Macro context */}
       <section className="border-b border-paper-rule py-10">
-        <div className="max-w-[1400px] mx-auto px-8">
+        <div className="max-w-[1680px] mx-auto px-8">
           <div className="mb-5">
             <h2 className="font-serif text-[28px] font-normal tracking-[-0.011em] text-ink-primary">
               Macro context
@@ -196,7 +196,7 @@ export function IndiaPulseClient({ data }: Props) {
       </section>
 
       {/* Footnote */}
-      <section className="max-w-[1400px] mx-auto px-8">
+      <section className="max-w-[1680px] mx-auto px-8">
         <div className="py-6 text-[12px] text-ink-tertiary leading-[1.6]">
           Regime classifier is rule-based on four signals (small-cap RS Z, breadth % &gt; 200DMA, VIX percentile,
           cross-sectional dispersion) — see CONTEXT.md §Regime classifier thresholds. Macro context is sourced

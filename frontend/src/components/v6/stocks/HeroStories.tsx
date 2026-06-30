@@ -175,7 +175,7 @@ export function HeroStories({ data }: { data: HeroStoriesData }) {
 
   return (
     <section className="py-9 border-b border-paper-rule">
-      <div className="max-w-[1400px] mx-auto px-8">
+      <div className="max-w-[1680px] mx-auto px-8">
         <div className="flex items-baseline justify-between mb-5 flex-wrap gap-3">
           <div>
             <h2 className="font-serif text-[28px] font-normal tracking-tight text-ink-primary leading-none">

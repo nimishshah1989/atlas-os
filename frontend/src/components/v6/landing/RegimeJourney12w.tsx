@@ -243,7 +243,7 @@ export function RegimeJourney12w({ cells }: Props) {
         className="py-8 border-b border-paper-rule"
         aria-label="12-week regime journey — no data"
       >
-        <div className="max-w-[1400px] mx-auto px-8">
+        <div className="max-w-[1680px] mx-auto px-8">
           <div className="h-12 flex items-center justify-center bg-paper-deep border border-paper-rule rounded-[2px]">
             <span className="font-sans text-xs text-ink-tertiary">No regime history data</span>
           </div>
@@ -274,7 +274,7 @@ export function RegimeJourney12w({ cells }: Props) {
       className="py-8 border-b border-paper-rule"
       aria-label="Trailing 12 weeks regime journey"
     >
-      <div className="max-w-[1400px] mx-auto px-8">
+      <div className="max-w-[1680px] mx-auto px-8">
         {/* Header */}
         <div className="flex items-baseline justify-between mb-4">
           <div>

@@ -83,7 +83,7 @@ export function TodayClient({
   const topSectors = sectors.slice(0, 5)
 
   return (
-    <div className="max-w-[1400px] mx-auto">
+    <div className="max-w-[1680px] mx-auto">
       {/* Page header */}
       <div className="px-6 py-4 border-b border-paper-rule">
         <div className="font-sans text-[10px] uppercase tracking-wider text-ink-tertiary mb-1">

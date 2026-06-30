@@ -57,7 +57,7 @@ export async function SectorDeepDiveV4({ sector }: { sector: string }) {
   const constituentTrees = await getConstituentLensTrees(stocks.map((s) => s.symbol)).catch(() => ({}))
 
   return (
-    <div className="max-w-[1400px] mx-auto">
+    <div className="max-w-[1680px] mx-auto">
       <section className="px-8 py-8 border-b border-edge-hair">
         <nav className="font-sans text-[12px] text-txt-3 mb-3" aria-label="Breadcrumb">
           <Link href="/" className="text-brand hover:underline no-underline">Atlas</Link> ›{' '}

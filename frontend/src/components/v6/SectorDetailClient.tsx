@@ -307,7 +307,7 @@ export function SectorDetailClient({
   const bubbleData = useMemo(() => stocks.map(toBubbleDatum), [stocks])
 
   return (
-    <div className="max-w-[1400px] mx-auto">
+    <div className="max-w-[1680px] mx-auto">
 
       {/* Hero */}
       <header className="px-6 py-5 border-b border-paper-rule" aria-label={`Sector detail hero for ${sectorName}`}>

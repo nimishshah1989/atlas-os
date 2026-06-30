@@ -335,7 +335,7 @@ export function SixPicksWorthClick({ data }: { data: LandscapeRow[] }) {
 
   return (
     <section className="py-9 border-b border-paper-rule">
-      <div className="max-w-[1400px] mx-auto px-8">
+      <div className="max-w-[1680px] mx-auto px-8">
         <div className="mb-5">
           <h2 className="font-serif text-[28px] font-normal tracking-tight text-ink-primary leading-none">
             Six picks worth a click

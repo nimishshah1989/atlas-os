@@ -345,7 +345,7 @@ export function TodayConvictionTabs({ data }: Props) {
       className="py-10 border-b border-paper-rule"
       aria-label="Top conviction"
     >
-      <div className="max-w-[1400px] mx-auto px-8">
+      <div className="max-w-[1680px] mx-auto px-8">
         {/* Section header */}
         <div className="flex items-baseline justify-between mb-6">
           <div>

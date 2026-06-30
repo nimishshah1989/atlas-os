@@ -487,7 +487,7 @@ export function MarketsRsClient({ data }: { data: MarketsRsPageData }) {
   const [activeWindow] = useState<'1w' | '1m' | '3m' | '6m' | '12m'>('3m')
 
   return (
-    <div className="max-w-[1400px] mx-auto">
+    <div className="max-w-[1680px] mx-auto">
       {/* ======================================================
           PAGE HEAD
           ====================================================== */}
