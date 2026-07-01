@@ -6,13 +6,16 @@ Generic over asset class: pulls the adjusted close from the right staging table
 RSI14, returns, RS vs N50/N500, and above-EMA flags via the canonical technicals
 module, and upserts to foundation_staging.technical_daily.
 
-Resumability: every instrument's outcome is recorded in compute_state; re-running
-skips status='done'. Run after (or alongside) the backfill, in the background.
+Incremental BY DATE: a normal run recomputes only instruments whose source OHLCV
+extends beyond what technical_daily already holds, and writes only the new tail
+(EMAs/RS are still derived from the full history, so the appended rows are exact).
+A new trading day therefore costs ~1 upsert/instrument, not a full-history rewrite.
+`compute_state` still records each instrument's outcome for visibility.
 
-    python compute_all.py                  # all instruments with OHLCV, pending
+    python compute_all.py                  # incremental: only instruments with new dates
     python compute_all.py --asset stock
     python compute_all.py --limit 20        # smoke test
-    python compute_all.py --redo
+    python compute_all.py --redo|--full     # full recompute + rewrite of ALL history
 """
 
 from __future__ import annotations
@@ -56,7 +59,39 @@ def load_benchmarks() -> dict[str, pd.Series]:
     return out
 
 
-def targets(asset_classes, only_pending, limit, shard=None) -> pd.DataFrame:
+def tech_max_dates() -> dict[str, object]:
+    """Per-instrument latest date already in technical_daily (keyed by instrument_id).
+
+    This is the incremental floor: an instrument is recomputed only when its source
+    OHLCV has a date beyond this. Keyed by instrument_id (technical_daily carries it
+    for every asset class)."""
+    df = _db.read_df(
+        f"select instrument_id::text id, max(date) d from {M}.technical_daily group by 1"
+    )
+    return dict(zip(df["id"], df["d"], strict=False))
+
+
+def _source_max_dates() -> dict[tuple, object]:
+    """Per-instrument latest available SOURCE date, keyed by (asset_class, key) where
+    key = instrument_id for stocks (ohlcv_stock), else the symbol (etf→ticker,
+    index→index_code) — mirroring `_close_series`'s keying."""
+    out: dict[tuple, object] = {}
+    for ac, (tbl, keycol) in {
+        "stock": ("ohlcv_stock", "instrument_id::text"),
+        "etf": ("ohlcv_etf", "ticker"),
+        "index": ("index_prices", "index_code"),
+    }.items():
+        df = _db.read_df(f"select {keycol} k, max(date) d from {M}.{tbl} group by 1")
+        for r in df.itertuples(index=False):
+            out[(ac, str(r.k))] = r.d
+    return out
+
+
+def targets(asset_classes, incremental, limit, shard=None, floor=None) -> pd.DataFrame:
+    """Instruments to (re)compute. When `incremental`, keep only those whose source
+    OHLCV extends beyond what technical_daily already holds — i.e. compute missing
+    DATES per instrument, not 'every instrument that isn't done'. `floor` = the
+    tech_max_dates() map (computed once by the caller)."""
     q = (
         f"select instrument_id, asset_class, symbol from {M}.instrument_master "
         "where kite_token is not null"
@@ -70,9 +105,17 @@ def targets(asset_classes, only_pending, limit, shard=None) -> pd.DataFrame:
     if shard:  # k/N: stable hash on uuid hex → disjoint, coordination-free shards
         k, n = shard
         df = df[df["instrument_id"].map(lambda u: int(u.replace("-", "")[:8], 16) % n == k)]
-    if only_pending:
-        done = _db.read_df(f"select instrument_id from {M}.compute_state where status='done'")
-        df = df[~df["instrument_id"].isin(set(done["instrument_id"].astype(str)))]
+    if incremental:
+        floor = floor if floor is not None else tech_max_dates()
+        src = _source_max_dates()
+
+        def _stale(r) -> bool:
+            key = r.instrument_id if r.asset_class == "stock" else r.symbol
+            s = src.get((r.asset_class, str(key)))
+            tm = floor.get(r.instrument_id)
+            return s is not None and (tm is None or s > tm)
+
+        df = df[df.apply(_stale, axis=1)]
     df = df.sort_values("asset_class")
     return df.head(limit) if limit else df
 
@@ -97,7 +140,7 @@ def _ohlcv_frame(iid: str) -> pd.DataFrame:
     return df
 
 
-def compute_one(iid, ac, sym, benches, run_id) -> int:
+def compute_one(iid, ac, sym, benches, run_id, floor=None) -> int:
     close = _close_series(ac, iid, sym)
     # Drop non-positive closes: zero/blank prints in deep (2000s) history and
     # spurious pre-listing rows. They are bad data (the cleanliness axis flags
@@ -137,7 +180,15 @@ def compute_one(iid, ac, sym, benches, run_id) -> int:
             out[c] = None
     out["compute_run_id"] = run_id
     cols = ["instrument_id", "asset_class", "symbol", "date", *_TECH_COLS, "compute_run_id"]
-    out = out[cols].astype(object).where(pd.notna(out), None)
+    out = out[cols]
+    # Incremental: EMAs/RS are recomputed from the FULL close series (so the new
+    # rows are correct), but only the tail beyond the stored floor is written —
+    # a normal daily run upserts ~1 row/instrument instead of the whole history.
+    if floor is not None:
+        out = out[[d > floor for d in out["date"]]]
+        if out.empty:
+            return 0
+    out = out.astype(object).where(pd.notna(out), None)
     return _db.upsert_df(f"{M}.technical_daily", out, ["instrument_id", "date"])
 
 
@@ -162,20 +213,26 @@ def _mark(iid, ac, sym, status, rows=None, last=None, err=None):
     )
 
 
-def run(asset_classes=None, only_pending=True, limit=None, shard=None) -> dict:
+def run(asset_classes=None, incremental=True, limit=None, shard=None) -> dict:
     run_id = str(uuid.uuid4())
     benches = load_benchmarks()
     for suf, s in benches.items():
         if s.empty:
             raise RuntimeError(f"benchmark {suf} empty — backfill indices first")
-    tgt = targets(asset_classes, only_pending, limit, shard)
+    # Compute the incremental floor once (per-instrument last computed date) and
+    # reuse it for both target selection and per-instrument tail-write filtering.
+    floor = tech_max_dates() if incremental else {}
+    tgt = targets(asset_classes, incremental, limit, shard, floor=floor)
     total = len(tgt)
     done = err = nodata = rows_tot = 0
-    print(f"[compute] targets={total} classes={asset_classes or 'all'}", flush=True)
+    mode = "incremental" if incremental else "full"
+    print(f"[compute] targets={total} classes={asset_classes or 'all'} mode={mode}", flush=True)
     for n, r in enumerate(tgt.itertuples(), 1):
         iid, ac, sym = r.instrument_id, r.asset_class, r.symbol
         try:
-            w = compute_one(iid, ac, sym, benches, run_id)
+            w = compute_one(
+                iid, ac, sym, benches, run_id, floor=floor.get(iid) if incremental else None
+            )
             if w == 0:
                 _mark(iid, ac, sym, "no_data")
                 nodata += 1
@@ -207,14 +264,20 @@ def main():
     ap = argparse.ArgumentParser(description="Compute TA-Lib technicals for all → technical_daily")
     ap.add_argument("--asset", nargs="*", choices=["stock", "etf", "index"])
     ap.add_argument("--limit", type=int)
-    ap.add_argument("--redo", action="store_true")
+    ap.add_argument(
+        "--redo",
+        "--full",
+        dest="redo",
+        action="store_true",
+        help="full recompute+rewrite of ALL history (default is incremental by date)",
+    )
     ap.add_argument("--shard", help="k/N — process stable shard k of N (parallel workers)")
     args = ap.parse_args()
     shard = None
     if args.shard:
         k, n = args.shard.split("/")
         shard = (int(k), int(n))
-    run(asset_classes=args.asset, only_pending=not args.redo, limit=args.limit, shard=shard)
+    run(asset_classes=args.asset, incremental=not args.redo, limit=args.limit, shard=shard)
 
 
 if __name__ == "__main__":
