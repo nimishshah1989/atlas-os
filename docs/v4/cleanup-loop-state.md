@@ -18,7 +18,9 @@
 | D6 | **Remove `mfwatch`** product (schema + pg_cron job 47 + Supabase edge fn). |
 | D7 | **Drop `us_atlas` + `global_atlas`** schemas + their crons (etf_global/stooq/us_daily) + orphan US/global frontend. |
 | D8 | **Kill retired IC/conviction/strategy/CTS/decisions cluster** — stop `run_atlas_intelligence_nightly.sh`; delete 56 orphan query files + 6 orphan + 3 non-core endpoints; drop atlas.* strategy/cts/conviction/decisions/signal tables. |
-| — | Logged: gstack-decision-log `ea5057b1` (mandate), `e98bc6d9` (D3-D6 gate). |
+| D9 | Drop manifest APPROVED; execute only after migrate → green nightly → backup → show final list. |
+| D10 | **Prices = Kite ONLY (single source)** — stocks + ETFs + indices. Purge `NSE_IND_CLOSE_ALL` (bhavcopy) + `KITE_HISTORICAL`-stale + seed rows; guard bhavcopy off `ohlcv_*`/`index_prices`. No multi-source. |
+| — | Logged: gstack-decision-log `ea5057b1` (mandate), `e98bc6d9` (D3-D6), `44608306` (D7-D9). |
 
 ## Goal tracker
 | Goal | Definition of done (runnable gate) | Status | Evidence |
@@ -34,9 +36,12 @@
 Status legend: ⏳ not started · 🔨 in progress · 🧪 built, verifying · ✅ done (green gate) · ⛔ blocked (gate)
 
 ## Progress log (execution)
+- **2026-07-01 — P1b DONE ✅ index_code truncation fixed + native builder self-heals.** Widened `foundation_staging.atlas_index_metrics_daily.index_code` varchar(32→64) (source `index_prices` has codes to 54 chars, 252 indices); `build_index_metrics.py` now idempotently ensures the width. RAN it → index metrics fresh **06-25→06-30**, 249 indices written, 54-char codes stored (sector-RS lag fixed). **Footgun found:** `build_index_metrics.py` imports `from scripts.foundation import _db` (needs `python -m scripts.foundation.build_index_metrics`, NOT direct) while `compute_all.py` uses bare `import _db`; `scripts/foundation/` has no `__init__.py`. Inconsistent invocation is why it silently never ran in the nightly → G2 orchestrator must standardize; G7 hygiene.
 - **2026-07-01 — P1a DONE ✅ `compute_all.py` incremental by date.** Replaced status='done' skip with per-instrument date-staleness (`tech_max_dates()` vs `_source_max_dates()`); `compute_one` writes only the tail beyond the floor (EMAs still derived from full history). `--redo`/`--full` = full rebuild. Verified on REAL data: incremental targets on current data = 135 (all indices genuinely behind; stocks/ETFs current) vs full = 2540; lowering a floor 5d makes an instrument reappear. ruff clean. Fixes original problem #2 (a new day no longer no-ops). Also surfaced a real gap: 135 index technicals lag `index_prices` — the incremental daily run now closes this automatically.
 
 ## Findings log
+- **2026-07-01 — ⭐ROOT CAUSE of the whole 06-25 staleness cliff: Kite ingestion died 06-25.** `index_prices` has 3 sources: `KITE_HISTORICAL` (136 idx, frozen **06-25** — Kite login broke, stale TOTP per FM brief), `NSE_IND_CLOSE_ALL` (160 idx, bhavcopy, fresh 06-30), `seed` (2). The 16 stale sector indices (Defence/Digital/EV/Capital Markets/Tourism/… — newer thematic ones) are Kite-only → froze when Kite died. The 14 fresh (Auto/Bank/IT/…) are also in bhavcopy so stayed fresh. Same 06-25 cliff = Market Pulse regime/macro. **FM directive D10: Kite is the SINGLE price source** (no bhavcopy remap, no multi-source). **Valid Kite token EXISTS now** (login 07-01 05:54 UTC, valid to 18:29 UTC) → can re-pull immediately.
+  - **Kite-only build (top G2 task):** `ingest_kite.py` is stock-only (writes `ohlcv_stock`, NSE-equity segment, needs `--symbols`, reads `public.de_instrument`). Must: (1) extend to indices (INDICES segment tokens) + ETFs; (2) default to full universe from `instrument_master` (drop `public.de_instrument` dep); (3) re-pull stocks+ETFs+indices to latest; (4) PURGE `NSE_IND_CLOSE_ALL` + stale `KITE_HISTORICAL` + seed rows from `index_prices`/`ohlcv_*`; (5) guard `ingest_bhavcopy.py` off `ohlcv_*`/`index_prices`; (6) dedup index codes (Kite short-code is canonical; sector_master already uses them).
 - **2026-07-01 — Market Pulse "26 June" staleness (root cause).** Headline "as of" = `regime.date` ([MarketPulseV4.tsx:117]) from `foundation_staging.atlas_market_regime_daily`, frozen at 2026-06-25. Raw+lens tables fresh to 06-30; but M3-derived surfaces (regime/macro/index_metrics/sector_lens) in `foundation_staging` froze at 06-25 because the **atlas.*→foundation_staging mirror + manual `rollup_sectors.py` stopped running**. Same tables in legacy `atlas` schema are fresh to 06-30. → Fix under G1+G2 as an early visible win.
 
 ## EXECUTION PLAN (all gates cleared 2026-07-01; drive-hard) — decisions D5-D9
