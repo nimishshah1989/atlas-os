@@ -71,9 +71,10 @@ def tech_max_dates() -> dict[str, object]:
     return dict(zip(df["id"], df["d"], strict=False))
 
 
-def _source_max_dates() -> dict[tuple, object]:
-    """Per-instrument latest available SOURCE date, keyed by (asset_class, key) where
-    key = instrument_id for stocks (ohlcv_stock), else the symbol (etf→ticker,
+def _source_max_dates(cutoff) -> dict[tuple, object]:
+    """Per-instrument latest available SOURCE date (capped at the EOD cutoff, so an
+    in-session partial day doesn't mark the universe stale), keyed by (asset_class,
+    key) where key = instrument_id for stocks, else the symbol (etf→ticker,
     index→index_code) — mirroring `_close_series`'s keying."""
     out: dict[tuple, object] = {}
     for ac, (tbl, keycol) in {
@@ -81,13 +82,16 @@ def _source_max_dates() -> dict[tuple, object]:
         "etf": ("ohlcv_etf", "ticker"),
         "index": ("index_prices", "index_code"),
     }.items():
-        df = _db.read_df(f"select {keycol} k, max(date) d from {M}.{tbl} group by 1")
+        df = _db.read_df(
+            f"select {keycol} k, max(date) d from {M}.{tbl} where date <= :c group by 1",
+            {"c": cutoff},
+        )
         for r in df.itertuples(index=False):
             out[(ac, str(r.k))] = r.d
     return out
 
 
-def targets(asset_classes, incremental, limit, shard=None, floor=None) -> pd.DataFrame:
+def targets(asset_classes, incremental, limit, shard=None, floor=None, cutoff=None) -> pd.DataFrame:
     """Instruments to (re)compute. When `incremental`, keep only those whose source
     OHLCV extends beyond what technical_daily already holds — i.e. compute missing
     DATES per instrument, not 'every instrument that isn't done'. `floor` = the
@@ -107,7 +111,7 @@ def targets(asset_classes, incremental, limit, shard=None, floor=None) -> pd.Dat
         df = df[df["instrument_id"].map(lambda u: int(u.replace("-", "")[:8], 16) % n == k)]
     if incremental:
         floor = floor if floor is not None else tech_max_dates()
-        src = _source_max_dates()
+        src = _source_max_dates(cutoff if cutoff is not None else _db.eod_cutoff())
 
         def _stale(r) -> bool:
             key = r.instrument_id if r.asset_class == "stock" else r.symbol
@@ -140,8 +144,12 @@ def _ohlcv_frame(iid: str) -> pd.DataFrame:
     return df
 
 
-def compute_one(iid, ac, sym, benches, run_id, floor=None) -> int:
+def compute_one(iid, ac, sym, benches, run_id, floor=None, cutoff=None) -> int:
     close = _close_series(ac, iid, sym)
+    # EOD anchor: drop the current in-session day — calculations are as-of the last
+    # complete EOD; today's partial candle is live-only.
+    if cutoff is not None:
+        close = close[[d.date() <= cutoff for d in close.index]]
     # Drop non-positive closes: zero/blank prints in deep (2000s) history and
     # spurious pre-listing rows. They are bad data (the cleanliness axis flags
     # them separately) and a zero denominator overflows the return columns.
@@ -219,19 +227,30 @@ def run(asset_classes=None, incremental=True, limit=None, shard=None) -> dict:
     for suf, s in benches.items():
         if s.empty:
             raise RuntimeError(f"benchmark {suf} empty — backfill indices first")
-    # Compute the incremental floor once (per-instrument last computed date) and
-    # reuse it for both target selection and per-instrument tail-write filtering.
+    # EOD anchor: never compute past the last complete trading day (today's partial
+    # is live-only). Compute the incremental floor once and reuse it for both target
+    # selection and per-instrument tail-write filtering.
+    cutoff = _db.eod_cutoff()
     floor = tech_max_dates() if incremental else {}
-    tgt = targets(asset_classes, incremental, limit, shard, floor=floor)
+    tgt = targets(asset_classes, incremental, limit, shard, floor=floor, cutoff=cutoff)
     total = len(tgt)
     done = err = nodata = rows_tot = 0
     mode = "incremental" if incremental else "full"
-    print(f"[compute] targets={total} classes={asset_classes or 'all'} mode={mode}", flush=True)
+    print(
+        f"[compute] targets={total} classes={asset_classes or 'all'} mode={mode} eod={cutoff}",
+        flush=True,
+    )
     for n, r in enumerate(tgt.itertuples(), 1):
         iid, ac, sym = r.instrument_id, r.asset_class, r.symbol
         try:
             w = compute_one(
-                iid, ac, sym, benches, run_id, floor=floor.get(iid) if incremental else None
+                iid,
+                ac,
+                sym,
+                benches,
+                run_id,
+                floor=floor.get(iid) if incremental else None,
+                cutoff=cutoff,
             )
             if w == 0:
                 _mark(iid, ac, sym, "no_data")

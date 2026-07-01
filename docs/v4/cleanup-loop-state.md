@@ -19,7 +19,8 @@
 | D7 | **Drop `us_atlas` + `global_atlas`** schemas + their crons (etf_global/stooq/us_daily) + orphan US/global frontend. |
 | D8 | **Kill retired IC/conviction/strategy/CTS/decisions cluster** — stop `run_atlas_intelligence_nightly.sh`; delete 56 orphan query files + 6 orphan + 3 non-core endpoints; drop atlas.* strategy/cts/conviction/decisions/signal tables. |
 | D9 | Drop manifest APPROVED; execute only after migrate → green nightly → backup → show final list. |
-| D10 | **Prices = Kite ONLY (single source)** — stocks + ETFs + indices. Purge `NSE_IND_CLOSE_ALL` (bhavcopy) + `KITE_HISTORICAL`-stale + seed rows; guard bhavcopy off `ohlcv_*`/`index_prices`. No multi-source. |
+| D10 | **Prices = Kite ONLY (single source)** — stocks + ETFs + indices. Purge `NSE_IND_CLOSE_ALL` (bhavcopy) + `KITE_HISTORICAL`-stale + seed rows; guard bhavcopy off `ohlcv_*`/`index_prices`. No multi-source. (Exception: 3 broad indices Kite lacks — Smallcap250/Microcap250/TotalMarket — stay bhavcopy, one-source-per-instrument preserved.) |
+| D11 | **All calculations as-of last COMPLETE EOD; current day = live-only** (+ some live data points). Scored layer never ingests an in-session partial candle. Impl: `_db.eod_cutoff()` (today if ≥16:00 IST else yesterday) — compute_all + build_index_metrics anchor to it; daily orchestrator runs post-close so today naturally = EOD. Intraday job handles current-day live (indices/sector). |
 | — | Logged: gstack-decision-log `ea5057b1` (mandate), `e98bc6d9` (D3-D6), `44608306` (D7-D9). |
 
 ## Goal tracker

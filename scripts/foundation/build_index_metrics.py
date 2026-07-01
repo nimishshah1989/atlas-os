@@ -77,7 +77,14 @@ def build(all_dates: bool) -> int:
                 where primary_nse_index is not null
             ) or index_code in ({broad_lit})"""
     )["index_code"].tolist()
-    n500 = _series(N500)
+    # EOD anchor: calculations are as-of the last COMPLETE trading day; today's
+    # in-session partial candle is live-only and must not enter the scored metrics.
+    cutoff = _db.eod_cutoff()
+
+    def _to_eod(s: pd.Series) -> pd.Series:
+        return s[[d.date() <= cutoff for d in s.index]]
+
+    n500 = _to_eod(_series(N500))
     if n500.empty:
         raise RuntimeError("NIFTY 500 series empty — cannot compute RS")
     # benchmark returns per window, calendar-anchored, on the benchmark's own dates
@@ -87,7 +94,7 @@ def build(all_dates: bool) -> int:
     now = dt.datetime.now(dt.UTC)
     frames: list[pd.DataFrame] = []
     for code in codes:
-        s = _series(code)
+        s = _to_eod(_series(code))
         if len(s) < 2:
             continue
         out = pd.DataFrame(index=s.index)
