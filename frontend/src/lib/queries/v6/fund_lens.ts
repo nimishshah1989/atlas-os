@@ -41,7 +41,7 @@ function mapRow(r: Record<string, string>, weights?: LensWeightMap): FundLensRow
     v_tech, v_fund, v_cat, v_flow, v_val: n(r.v_val),
     composite: fundComposite({ v_tech, v_fund, v_flow, v_cat }, weights),
     cat_rank: null, cat_size: null, // assigned per-category after fetch (see getFundLensList)
-    has_12m: r.has_12m === 't' || r.has_12m === 'true',
+    has_12m: r.has_12m === 't' || r.has_12m === 'true' || (r.has_12m as unknown) === true,
   }
 }
 
@@ -65,7 +65,7 @@ export async function getFundLensList(): Promise<FundLensRow[]> {
     navlife AS (  -- ≥12 months of NAV history? funds younger than a year are not ranked
       SELECT mstar_id, (min(nav_date) <= (SELECT max(nav_date) FROM foundation_staging.de_mf_nav_daily) - interval '12 months') AS has_12m
       FROM foundation_staging.de_mf_nav_daily GROUP BY mstar_id)
-    SELECT ${ROLLUP}, max(uf.aum_cr) AS aum_cr, bool_or(nl.has_12m) AS has_12m
+    SELECT ${ROLLUP}, max(uf.aum_cr) AS aum_cr, (bool_or(nl.has_12m))::text AS has_12m
     FROM foundation_staging.de_mf_master mm
     JOIN foundation_staging.de_mf_holdings h ON h.mstar_id = mm.mstar_id AND h.as_of_date = ${LATEST} AND h.weight_pct > 0
     JOIN scored s ON s.instrument_id = h.instrument_id
