@@ -556,7 +556,7 @@ def apply_dislocation_override(
 # --------------------------------------------------------------------------- #
 
 
-_VALID_SCHEMAS = frozenset({"atlas", "us_atlas", "global_atlas"})
+_VALID_SCHEMAS = frozenset({"foundation_staging", "atlas", "us_atlas", "global_atlas"})
 
 
 def _write_metrics(

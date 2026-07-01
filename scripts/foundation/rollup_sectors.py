@@ -26,7 +26,7 @@ import numpy as np
 import pandas as pd
 
 M = "foundation_staging"
-L = "atlas.atlas_lens_scores_daily"
+L = f"{M}.atlas_lens_scores_daily"  # single schema — reads the live lens journal in fs
 TGT = f"{M}.sector_lens_daily"
 SUBS = ["technical", "fundamental", "valuation", "catalyst", "flow", "policy"]
 STRONG = 60.0  # breadth threshold: a member is "strong" on a lens if its sub-score >= 60
@@ -68,14 +68,14 @@ def _weights() -> pd.DataFrame:
     """
     return _db.read_df(f"""
         WITH broad AS (
-          SELECT ticker FROM public.de_etf_holdings WHERE weight IS NOT NULL
+          SELECT ticker FROM foundation_staging.de_etf_holdings WHERE weight IS NOT NULL
           GROUP BY ticker HAVING count(*) >= 200),
         ranked AS (
           SELECT h.instrument_id, h.weight,
                  row_number() OVER (PARTITION BY h.instrument_id ORDER BY
                    CASE h.ticker WHEN 'F00001PXO0' THEN 1 WHEN 'F00001GZXV' THEN 2 ELSE 3 END,
                    h.weight DESC NULLS LAST) rn
-          FROM public.de_etf_holdings h JOIN broad USING (ticker)
+          FROM foundation_staging.de_etf_holdings h JOIN broad USING (ticker)
           WHERE h.weight IS NOT NULL AND h.weight > 0)
         SELECT im.instrument_id, im.sector, r.weight AS ff_weight
         FROM {M}.instrument_master im
