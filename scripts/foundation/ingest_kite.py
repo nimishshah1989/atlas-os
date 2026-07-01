@@ -34,7 +34,7 @@ sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[2]
 KITE_DAY_CHUNK = 2000  # Kite caps a 'day'-interval request at 2000 days
 HIST_START = date(2016, 4, 7)
 MIN_INTERVAL = 0.34  # ≥0.34s between request STARTS ≈ 2.9/s (Kite cap 3/s)
-SOURCE = "KITE_HISTORICAL"
+SOURCE = "KITE"  # single canonical price source (stocks/ETFs/indices)
 
 _last_call = [0.0]
 
@@ -66,17 +66,6 @@ def kite_client():
     return kite
 
 
-def token_map(kite, symbols: list[str]) -> dict[str, int]:
-    """Map NSE tradingsymbol → instrument_token for the requested symbols."""
-    want = set(symbols)
-    out = {}
-    for it in kite.instruments("NSE"):
-        sym = it.get("tradingsymbol", "")
-        if sym in want and it.get("instrument_token"):
-            out[sym] = int(it["instrument_token"])
-    return out
-
-
 def fetch_history(kite, token: int, start: date, end: date) -> pd.DataFrame:
     """Daily candles for one instrument_token across [start, end], chunked."""
     frames, cur = [], start
@@ -94,63 +83,125 @@ def fetch_history(kite, token: int, start: date, end: date) -> pd.DataFrame:
     return df.drop_duplicates("date").sort_values("date")
 
 
-def _staging_rows(df: pd.DataFrame, iid: str, symbol: str) -> pd.DataFrame:
-    # Kite candles are taken as already adjusted ⇒ adj == raw, factor 1.
+# Per-asset write target, PK, and the key used for the incremental floor lookup.
+_TABLE = {"stock": "ohlcv_stock", "etf": "ohlcv_etf", "index": "index_prices"}
+_PK = {
+    "stock": ["instrument_id", "date"],
+    "etf": ["ticker", "date"],
+    "index": ["index_code", "date"],
+}
+_KEYCOL = {"stock": "instrument_id::text", "etf": "ticker", "index": "index_code"}
+_INCR_BUFFER = 5  # re-fetch a few days of overlap so a missed session self-heals
+
+
+def targets(asset_classes: list[str] | None) -> pd.DataFrame:
+    """Universe to ingest, straight from instrument_master (the kite_token owner).
+    No public.de_instrument lookup, no per-run NSE-segment symbol→token remap —
+    stocks, ETFs and indices all carry their kite_token here."""
+    q = (
+        "select instrument_id::text instrument_id, asset_class, symbol, isin, kite_token "
+        "from foundation_staging.instrument_master where kite_token is not null"
+    )
+    params: dict = {}
+    if asset_classes:
+        q += " and asset_class = any(:ac)"
+        params["ac"] = asset_classes
+    return _db.read_df(q, params)
+
+
+def _last_dates(asset_class: str) -> dict[str, date]:
+    """Per-instrument last stored date in the asset's table (the incremental floor)."""
+    key = _KEYCOL[asset_class]
+    df = _db.read_df(
+        f"select {key} k, max(date) d from {STAGING_SCHEMA}.{_TABLE[asset_class]} group by 1"
+    )
+    return dict(zip(df["k"].astype(str), df["d"], strict=False))
+
+
+def _rows(df: pd.DataFrame, ac: str, r) -> pd.DataFrame:
+    """Build the upsert frame for one instrument. Kite candles are taken as already
+    corp-action adjusted ⇒ adj == raw, factor 1 (indices carry no adj columns)."""
+    base = {
+        "date": df["date"],
+        "open": df["open"],
+        "high": df["high"],
+        "low": df["low"],
+        "close": df["close"],
+        "volume": df["volume"].astype("Int64"),
+        "source": SOURCE,
+    }
+    if ac == "index":
+        return pd.DataFrame({"index_code": r.symbol, **base})
+    if ac == "etf":
+        return pd.DataFrame(
+            {
+                "ticker": r.symbol,
+                "isin": r.isin,
+                **base,
+                "close_adj": df["close"],
+                "adj_factor": 1.0,
+            }
+        )
     return pd.DataFrame(
         {
-            "instrument_id": iid,
-            "symbol": symbol,
-            "date": df["date"],
-            "open": df["open"],
-            "high": df["high"],
-            "low": df["low"],
-            "close": df["close"],
+            "instrument_id": r.instrument_id,
+            "symbol": r.symbol,
+            **base,
             "open_adj": df["open"],
             "high_adj": df["high"],
             "low_adj": df["low"],
             "close_adj": df["close"],
             "adj_factor": 1.0,
-            "volume": df["volume"].astype("Int64"),
             "series": "EQ",
-            "source": SOURCE,
         }
     )
 
 
-def _resolve_ids(symbols: list[str]) -> dict[str, str]:
-    df = _db.read_df(
-        "select id, symbol from public.de_instrument where symbol = any(:s)", {"s": symbols}
-    )
-    return {r.symbol: str(r.id) for r in df.itertuples()}
-
-
-def ingest(symbols: list[str], start: date = HIST_START, end: date | None = None) -> dict:
-    end = end or date.today()
+def ingest(asset_classes=None, start: date | None = None, end: date | None = None) -> dict:
+    """Pull daily candles from Kite for the instrument_master universe and write each
+    asset class to its own table. When `start` is None the pull is incremental — each
+    instrument starts a few days before its last stored date (full history if new)."""
     kite = kite_client()
-    tmap = token_map(kite, symbols)
-    ids = _resolve_ids(symbols)
-    written, missing = 0, []
-    for sym in symbols:
-        if sym not in tmap or sym not in ids:
-            missing.append(sym)
-            continue
-        df = fetch_history(kite, tmap[sym], start, end)
-        if df.empty:
-            missing.append(sym)
-            continue
-        rows = _staging_rows(df, ids[sym], sym)
-        written += _db.upsert_df(f"{STAGING_SCHEMA}.ohlcv_stock", rows, ["instrument_id", "date"])
-    return {"symbols": len(symbols), "written": written, "missing": missing}
+    end = end or date.today()
+    tgt = targets(asset_classes)
+    written = {"stock": 0, "etf": 0, "index": 0}
+    missing: list[str] = []
+    for ac in sorted(tgt["asset_class"].unique()):
+        floors = _last_dates(ac) if start is None else {}
+        sub = tgt[tgt["asset_class"] == ac]
+        for n, r in enumerate(sub.itertuples(index=False), 1):
+            key = r.instrument_id if ac == "stock" else r.symbol
+            st = start or (
+                floors[str(key)] - timedelta(days=_INCR_BUFFER)
+                if floors.get(str(key))
+                else HIST_START
+            )
+            if st > end:
+                continue
+            df = fetch_history(kite, int(r.kite_token), st, end)
+            if df.empty:
+                missing.append(r.symbol)
+                continue
+            written[ac] += _db.upsert_df(
+                f"{STAGING_SCHEMA}.{_TABLE[ac]}", _rows(df, ac, r), _PK[ac]
+            )
+            if n % 50 == 0:
+                print(f"[kite] {ac} {n}/{len(sub)} written={written[ac]:,}", flush=True)
+    print(f"[kite] COMPLETE written={written} missing={len(missing)}", flush=True)
+    return {"written": written, "missing": missing}
 
 
 def verify(symbol: str, start: date = HIST_START, end: date | None = None) -> dict:
-    """Pull one symbol and report the cleanliness jump-check — is Kite adjusted?"""
+    """Pull one symbol via its stored kite_token and report the cleanliness jump-check."""
     end = end or date.today()
     kite = kite_client()
-    tmap = token_map(kite, [symbol])
-    if symbol not in tmap:
-        return {"symbol": symbol, "error": "no instrument_token on NSE"}
-    df = fetch_history(kite, tmap[symbol], start, end)
+    tok = _db.scalar(
+        f"select kite_token from {STAGING_SCHEMA}.instrument_master where symbol = :s",
+        {"s": symbol},
+    )
+    if not tok:
+        return {"symbol": symbol, "error": "no kite_token in instrument_master"}
+    df = fetch_history(kite, int(tok), start, end)
     c = pd.to_numeric(df["close"], errors="coerce").to_numpy()
     lr = np.abs(c[1:] / c[:-1] - 1) if len(c) > 1 else np.array([0.0])
     i = int(np.nanargmax(lr))
@@ -167,22 +218,18 @@ def verify(symbol: str, start: date = HIST_START, end: date | None = None) -> di
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Ingest Kite historical OHLCV → staging")
+    ap = argparse.ArgumentParser(description="Ingest Kite daily OHLCV → staging (single source)")
+    ap.add_argument("--verify", metavar="SYMBOL", help="pull one symbol and print the jump-check")
     ap.add_argument(
-        "--verify",
-        metavar="SYMBOL",
-        help="pull one symbol and print the jump-check (is Kite adjusted?)",
+        "--asset", nargs="*", choices=["stock", "etf", "index"], help="limit asset classes"
     )
-    ap.add_argument("--symbols", nargs="*", help="symbols to ingest")
-    ap.add_argument("--start", default=str(HIST_START))
+    ap.add_argument("--start", help="YYYY-MM-DD; omit for incremental (per-instrument last date)")
     args = ap.parse_args()
-    start = datetime.strptime(args.start, "%Y-%m-%d").date()
+    start = datetime.strptime(args.start, "%Y-%m-%d").date() if args.start else None
     if args.verify:
-        print(verify(args.verify, start=start))
-    elif args.symbols:
-        print(ingest(args.symbols, start=start))
+        print(verify(args.verify, start=start or HIST_START))
     else:
-        ap.error("pass --verify SYMBOL or --symbols ...")
+        print(ingest(asset_classes=args.asset, start=start))
 
 
 if __name__ == "__main__":
