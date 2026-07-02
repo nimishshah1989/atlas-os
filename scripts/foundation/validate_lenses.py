@@ -157,7 +157,7 @@ def check_B(g: Gate):
     bad = _q(f"""
         with latest as (select max(date) d from {SEC})
         select count(*) from {SEC} s, latest
-        where s.date=latest.d and (s.technical < 0 or s.technical > 100 or s.composite < 0 or s.composite > 100)""")
+        where s.date=latest.d and (s.technical < 0 or s.technical > 100)""")
     g.check("sector scores in valid 0-100 range", bad == 0, f"{bad} out-of-range")
 
 

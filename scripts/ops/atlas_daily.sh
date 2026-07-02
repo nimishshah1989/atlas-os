@@ -50,9 +50,19 @@ step "build_fund_rank_history"   $PY scripts/foundation/build_fund_rank_history.
 step "build_breadth_series"      $PY scripts/foundation/build_breadth_series.py
 step "regime"                    $PY -c "from atlas.compute.regime import run_daily_regime; run_daily_regime(schema='foundation_staging')"
 
-# 3. GATES (assert on REAL produced output — rule #0). Deploy only if BOTH pass.
+# 3. GATES (assert on REAL produced output — rule #0). Deploy only if ALL pass.
+# Run gates DIRECTLY (not via step): step() records a failure but always returns 0,
+# so `step ... || GATE_OK=0` never fired — a failed gate could still deploy. And
+# validate_lenses requires --check A|B (calling it bare errors rc=2 every run).
 GATE_OK=1
-step "validate_lenses"  $PY scripts/foundation/validate_lenses.py || GATE_OK=0
+for chk in A B; do
+  echo "--- validate_lenses ($chk) ---" | tee -a "$LOG"
+  if $PY scripts/foundation/validate_lenses.py --check "$chk" >>"$LOG" 2>&1; then
+    echo "  ok: validate_lenses $chk" | tee -a "$LOG"
+  else
+    echo "  FAIL: validate_lenses $chk" | tee -a "$LOG"; FAILURES+=("validate_lenses:$chk"); GATE_OK=0
+  fi
+done
 if $PY scripts/ops/freshness_guard.py --eod "$EOD" >>"$LOG" 2>&1; then
   echo "  ok: freshness_guard" | tee -a "$LOG"
 else
