@@ -212,8 +212,15 @@ def ingest_day(d: date, only_symbols: list[str] | None = None) -> dict:
     # Bhavcopy no longer sources stock/ETF prices (Kite is the single source, D10).
     # It only fills the few broad indices Kite lacks. write_stocks() is retained but
     # never called from the daily path — guarded to prevent accidental reintroduction.
-    raw_idx = download_indices(d)
-    indices = parse_indices(raw_idx)
+    # NSE's ind_close_all_<DDMMYYYY>.csv isn't published until the evening, so a post-close
+    # 16:00 run 404s. That's EXPECTED and NON-FATAL: bhavcopy only fills the 3 broad indices
+    # Kite lacks (Smallcap/Microcap/TotalMarket); they simply carry the prior session until a
+    # later run picks up the file. Skip gracefully rather than failing the whole orchestrator.
+    try:
+        indices = parse_indices(download_indices(d))
+    except Exception as e:
+        print(f"[bhavcopy] index file for {d} unavailable ({type(e).__name__}); skipping", flush=True)
+        return {"date": str(d), "index_rows": 0, "stocks_written": 0, "indices_written": 0}
     n_index = write_indices(indices, source="NSE_IND_CLOSE_ALL")
     return {
         "date": str(d),

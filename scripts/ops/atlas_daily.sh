@@ -71,11 +71,28 @@ else
   echo "  FAIL: freshness_guard" | tee -a "$LOG"; FAILURES+=("freshness_guard"); GATE_OK=0
 fi
 
-# 4. SERVE — flush the Next fetch-cache + reload so the board re-reads the fresh EOD.
-#    Skipped if a gate failed (don't publish a stale/broken board).
+# 4. SERVE — REBUILD then reload, with a .next backup + rollback on build failure
+#    (mirrors atlas-auto-deploy.sh). The board's home/sectors/stocks pages are static-ISR:
+#    they bake the "as of" EOD date at BUILD time, so a bare reload wouldn't advance them —
+#    only a rebuild re-prerenders them. Skipped if a gate failed. HYGIENE: reload ONLY after
+#    the build completes (never mid-build — that corrupts .next and 500s the whole board).
 if [ "$GATE_OK" = "1" ]; then
-  rm -rf "$REPO/frontend/.next/cache/fetch-cache"
-  step "deploy (pm2 reload)" pm2 reload atlas-frontend-v3
+  echo "--- deploy (rebuild + reload) ---" | tee -a "$LOG"
+  cd "$REPO/frontend"
+  STAMP=$(date +%Y%m%d_%H%M%S)
+  [ -d .next ] && cp -r .next ".next.bak.$STAMP"
+  rm -rf .next/cache/fetch-cache
+  if NEXT_PUBLIC_LENS_V4=1 NODE_OPTIONS='--max-old-space-size=3072' npm run build >>"$LOG" 2>&1 \
+     && [ -f .next/BUILD_ID ]; then
+    rm -rf .next/cache/fetch-cache
+    pm2 reload atlas-frontend-v3 --update-env >>"$LOG" 2>&1 && echo "  ok: deploy (rebuild + reload)" | tee -a "$LOG"
+    ls -1dt "$REPO/frontend"/.next.bak.* 2>/dev/null | tail -n +4 | xargs -r rm -rf  # keep 3 backups
+  else
+    echo "  FAIL: build — rolling back to previous .next" | tee -a "$LOG"; FAILURES+=("deploy_build")
+    rm -rf .next && mv ".next.bak.$STAMP" .next 2>/dev/null
+    pm2 reload atlas-frontend-v3 --update-env >>"$LOG" 2>&1
+  fi
+  cd "$REPO"
 else
   echo "  SKIP deploy — a gate failed; keeping last-good board" | tee -a "$LOG"
 fi
