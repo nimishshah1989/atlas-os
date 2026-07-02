@@ -1,5 +1,5 @@
 // src/lib/queries/health.ts — M12 backend health observability queries.
-// Reads from atlas.atlas_pipeline_runs, atlas_validator_results, atlas_health_daily.
+// Reads from foundation_staging.atlas_pipeline_runs, atlas_validator_results, atlas_health_daily.
 
 import 'server-only'
 import sql from '@/lib/db'
@@ -36,7 +36,7 @@ export async function getRecentRuns(limit = 30): Promise<PipelineRun[]> {
       error_message,
       host,
       EXTRACT(EPOCH FROM (ended_at - started_at))::int AS duration_seconds
-    FROM atlas.atlas_pipeline_runs
+    FROM foundation_staging.atlas_pipeline_runs
     ORDER BY started_at DESC
     LIMIT ${limit}
   `
@@ -58,7 +58,7 @@ export async function getLatestRunPerScript(): Promise<PipelineRun[]> {
       error_message,
       host,
       EXTRACT(EPOCH FROM (ended_at - started_at))::int AS duration_seconds
-    FROM atlas.atlas_pipeline_runs
+    FROM foundation_staging.atlas_pipeline_runs
     ORDER BY script_name, started_at DESC
   `
   return rows
@@ -217,7 +217,9 @@ export function overallRag(rows: { rag: Rag }[]): Rag {
 }
 
 // ---------------------------------------------------------------------------
-// JIP source sync freshness — public.de_* tables
+// Data source freshness. TODO(G6): these still read the legacy public.de_* raw
+// tables via DYNAMIC refs (not caught by schema_gate); repoint to the fs
+// freshness registry (freshness_guard's table list) before the public.* DROP.
 // ---------------------------------------------------------------------------
 
 const JIP_TABLES: { name: string; date_col: string }[] = [
@@ -287,7 +289,7 @@ export type AnomalyRow = {
 export async function getLatestAnomalies(): Promise<AnomalyRow[]> {
   // Most-recent data_date that has any rows.
   const dateRows = await sql<{ d: Date | null }[]>`
-    SELECT MAX(data_date) AS d FROM atlas.atlas_health_daily
+    SELECT MAX(data_date) AS d FROM foundation_staging.atlas_health_daily
   `
   const d = dateRows[0]?.d
   if (!d) return []
@@ -306,7 +308,7 @@ export async function getLatestAnomalies(): Promise<AnomalyRow[]> {
       is_anomaly,
       severity,
       notes
-    FROM atlas.atlas_health_daily
+    FROM foundation_staging.atlas_health_daily
     WHERE data_date = ${d}
       AND is_anomaly = TRUE
     ORDER BY
@@ -323,7 +325,7 @@ export async function getLatestAnomalies(): Promise<AnomalyRow[]> {
 
 export async function getLatestHealthDate(): Promise<Date | null> {
   const r = await sql<{ d: Date | null }[]>`
-    SELECT MAX(data_date) AS d FROM atlas.atlas_health_daily
+    SELECT MAX(data_date) AS d FROM foundation_staging.atlas_health_daily
   `
   return r[0]?.d ?? null
 }
@@ -350,7 +352,7 @@ export async function getValidatorHistory(days = 30): Promise<ValidatorRun[]> {
       total_checks,
       failures,
       status
-    FROM atlas.atlas_validator_results
+    FROM foundation_staging.atlas_validator_results
     WHERE ran_at >= NOW() - (${days}::int * INTERVAL '1 day')
     ORDER BY validator, ran_at DESC
   `
@@ -367,7 +369,7 @@ export async function getValidatorLatest(): Promise<ValidatorRun[]> {
       total_checks,
       failures,
       status
-    FROM atlas.atlas_validator_results
+    FROM foundation_staging.atlas_validator_results
     ORDER BY validator, ran_at DESC
   `
   return rows
@@ -386,19 +388,19 @@ export type HealthHeaderStatus = {
 export async function getHeaderStatus(): Promise<HealthHeaderStatus> {
   const [hcRows, anomRows, valRows] = await Promise.all([
     sql<{ ts: Date | null }[]>`
-      SELECT MAX(computed_at) AS ts FROM atlas.atlas_health_daily
+      SELECT MAX(computed_at) AS ts FROM foundation_staging.atlas_health_daily
     `,
     sql<{ severity: string; n: string }[]>`
       SELECT severity, COUNT(*)::text AS n
-      FROM atlas.atlas_health_daily
-      WHERE data_date = (SELECT MAX(data_date) FROM atlas.atlas_health_daily)
+      FROM foundation_staging.atlas_health_daily
+      WHERE data_date = (SELECT MAX(data_date) FROM foundation_staging.atlas_health_daily)
         AND is_anomaly = TRUE
       GROUP BY severity
     `,
     // Latest result per validator — prevents old test runs from inflating FAIL count.
     sql<{ validator: string; status: string }[]>`
       SELECT DISTINCT ON (validator) validator, status
-      FROM atlas.atlas_validator_results
+      FROM foundation_staging.atlas_validator_results
       ORDER BY validator, ran_at DESC
     `,
   ])
