@@ -22,11 +22,16 @@ EOD=$($PY -c "import _db; print(_db.eod_cutoff())")
 echo "=== atlas_daily EOD=$EOD  $(date -Is) ===" | tee -a "$LOG"
 
 FAILURES=()
-step() {  # step "name" cmd...   (non-fatal; records failures)
+RUNFILE=$(mktemp /tmp/atlas_daily_runs.XXXXXX)   # per-step timings → health snapshot
+trap 'rm -f "$RUNFILE"' EXIT
+step() {  # step "name" cmd...   (non-fatal; records failures + a run row)
   local name="$1"; shift
+  local start; start=$(date -Is)
   echo "--- $name ---" | tee -a "$LOG"
-  if "$@" >>"$LOG" 2>&1; then echo "  ok: $name" | tee -a "$LOG"
-  else echo "  FAIL: $name (rc=$?)" | tee -a "$LOG"; FAILURES+=("$name"); fi
+  local st
+  if "$@" >>"$LOG" 2>&1; then echo "  ok: $name" | tee -a "$LOG"; st=success
+  else echo "  FAIL: $name (rc=$?)" | tee -a "$LOG"; FAILURES+=("$name"); st=failed; fi
+  printf '%s\t%s\t%s\t%s\n' "$name" "$start" "$(date -Is)" "$st" >> "$RUNFILE"
 }
 
 # 0. Ensure a Kite token (the 08:50 cron normally has it; re-try once if missing).
@@ -63,20 +68,21 @@ step "regime"                    $PY -c "from atlas.compute.regime import run_da
 # Run gates DIRECTLY (not via step): step() records a failure but always returns 0,
 # so `step ... || GATE_OK=0` never fired — a failed gate could still deploy. And
 # validate_lenses requires --check A|B (calling it bare errors rc=2 every run).
+# Gate steps are recorded into the runfile too (as pipeline_runs rows), so /health shows
+# each night's real gate outcome. gate() mirrors step() but drives GATE_OK on a real fail.
 GATE_OK=1
-for chk in A B; do
-  echo "--- validate_lenses ($chk) ---" | tee -a "$LOG"
-  if $PY scripts/foundation/validate_lenses.py --check "$chk" >>"$LOG" 2>&1; then
-    echo "  ok: validate_lenses $chk" | tee -a "$LOG"
-  else
-    echo "  FAIL: validate_lenses $chk" | tee -a "$LOG"; FAILURES+=("validate_lenses:$chk"); GATE_OK=0
-  fi
-done
-if $PY scripts/ops/freshness_guard.py --eod "$EOD" >>"$LOG" 2>&1; then
-  echo "  ok: freshness_guard" | tee -a "$LOG"
-else
-  echo "  FAIL: freshness_guard" | tee -a "$LOG"; FAILURES+=("freshness_guard"); GATE_OK=0
-fi
+gate() {  # gate "name" cmd...
+  local name="$1"; shift
+  local start; start=$(date -Is)
+  echo "--- $name ---" | tee -a "$LOG"
+  local st
+  if "$@" >>"$LOG" 2>&1; then echo "  ok: $name" | tee -a "$LOG"; st=success
+  else echo "  FAIL: $name" | tee -a "$LOG"; FAILURES+=("$name"); GATE_OK=0; st=failed; fi
+  printf '%s\t%s\t%s\t%s\n' "$name" "$start" "$(date -Is)" "$st" >> "$RUNFILE"
+}
+gate "validate_lenses_A" $PY scripts/foundation/validate_lenses.py --check A
+gate "validate_lenses_B" $PY scripts/foundation/validate_lenses.py --check B
+gate "freshness_guard"   $PY scripts/ops/freshness_guard.py --eod "$EOD"
 
 # 4. SERVE — REBUILD then reload, with a .next backup + rollback on build failure
 #    (mirrors atlas-auto-deploy.sh). The board's home/sectors/stocks pages are static-ISR:
@@ -103,6 +109,13 @@ if [ "$GATE_OK" = "1" ]; then
 else
   echo "  SKIP deploy — a gate failed; keeping last-good board" | tee -a "$LOG"
 fi
+
+# 4b. OBSERVABILITY — write the nightly health snapshot (per-step runs + validator
+#     outcomes + live freshness) so /health and /admin/data-status show THIS run, not a
+#     frozen clone. Non-fatal; all rows are real produced output (rule #0).
+$PY scripts/ops/write_health_snapshot.py --runfile "$RUNFILE" --eod "$EOD" >>"$LOG" 2>&1 \
+  && echo "  ok: write_health_snapshot" | tee -a "$LOG" \
+  || { echo "  FAIL: write_health_snapshot" | tee -a "$LOG"; FAILURES+=("write_health_snapshot"); }
 
 # 5. REPORT (Telegram alert on any failure).
 if [ ${#FAILURES[@]} -eq 0 ]; then
