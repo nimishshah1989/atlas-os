@@ -44,11 +44,11 @@ Status legend: ⏳ not started · 🔨 in progress · 🧪 built, verifying · �
   - **Built clean (rc=0) + DEPLOYED** (rebuild → single reload after BUILD_ID, per hygiene); all 7 routes 200; stamps + RS-Sec column verified live. **Release branch pushed to origin** (fast-forward, backup).
   - **TAILS (small):** ETFDetailV4/FundDetailV4 as-of stamps; delete 3 orphan proxy routes (cts-brief/signals-screenshot/intraday — dead FastAPI proxies, no FE callers).
 
-## ⛔ G7 — FM-GATED FINAL STEPS (do NOT do autonomously; D3/D4 gate branch-DROP + big integrations)
-1. **Prune 13 merged branches** (fully contained in release, safe `git branch -d`): feat/atlas-strategy-lab, feat/m13-thresholds-admin, feat/m14-decision-policy, feat/mf-holdings-history, feat/v4-six-lens, feat/v6-B3-etf-scorecard-expand, feat/v6-deep-search-all-cells, feat/v6-m3-rs-baselines, feat/v6-sector-return-basis, feat/v6-sectors-pulse-rs-charts, fix/deploy-dedicated-dir, sp09-deploy, worktree-feat+sp09-cts-timing-engine. **KEEP:** feat/m15-simulation-frontend + flow-promoter-recenter-pending-review (memory: held work).
-2. **Land release/v4-consolidation-live → main** (main is divergent: +17 on main / +56 on release vs merge-base → needs a real merge, not FF; open a PR for review). Prod serves the release branch + auto-deploy is dormant-off-main, so the merge won't trigger a deploy.
-3. **ponytail + headroom** — FM installs (CC plugin + `pip install headroom-ai`), then run.
-4. **atlas_validator_results** legacy M2-M5 CHECK constraint → FM-approved one-line ALTER to allow modern validator names (gate outcomes currently land in pipeline_runs instead).
+## G7 — status (2026-07-02 session 3, FM authorized "finish all")
+1. ✅ **Pruned all 13 merged branches** (10 via `-d`, 3 via `-D` after `merge-base --is-ancestor HEAD` confirmed). Remaining local: feat/m15-simulation-frontend + flow-promoter-recenter-pending-review (held) + main + release.
+2. ⏳ **Land release → main = PR #139** (already open, release→main). Retitled + re-bodied to the full G1–G7 scope; mergeable:true (58 commits, +5958/−132374). **MERGE is auto-mode-classifier-gated** (self-approval / no human review) → FM clicks Merge on PR #139, or adds a Bash permission rule. Prod serves the release branch + auto-deploy is dormant-off-main, so the merge won't trigger a deploy.
+3. ⏳ **ponytail + headroom** — FM installs (CC plugin + `pip install headroom-ai`), then run.
+4. ⏳ **atlas_validator_results** M2-M5 CHECK ALTER — auto-mode-classifier-gated (prod schema DROP) → run outside auto mode: `ALTER TABLE atlas_foundation.atlas_validator_results DROP CONSTRAINT chk_validator_results_validator;` then the nightly can write validator rows (today the gate outcomes already land in atlas_pipeline_runs, so /health is live).
 
 - **2026-07-02 (session 3) — G4 (data model) mostly landed + G6 health-writer backend.**
   - **Baseline confirmed green:** the 16:00 nightly's two failures (ingest_bhavcopy indices, validate_lenses B) were STALE — both fixes (check_B 8b1a68ec, bhavcopy graceful 5627fd45) were committed AFTER the 16:00 IST run (the cron log stamps IST; `git log` showed UTC — commit 11:01 UTC = 16:31 IST). Re-ran both manually: pass. bhavcopy now returns rc=0 (indices published by evening; graceful-0 even on 404). schema_gate=0.
