@@ -1,0 +1,179 @@
+{
+  "version": 3,
+  "pages404": true,
+  "caseSensitive": false,
+  "basePath": "",
+  "redirects": [
+    {
+      "source": "/:path+/",
+      "destination": "/:path+",
+      "internal": true,
+      "statusCode": 308,
+      "regex": "^(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))/$"
+    }
+  ],
+  "headers": [],
+  "dynamicRoutes": [
+    {
+      "page": "/api/admin/proposals/[id]/[action]",
+      "regex": "^/api/admin/proposals/([^/]+?)/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid",
+        "nxtPaction": "nxtPaction"
+      },
+      "namedRegex": "^/api/admin/proposals/(?<nxtPid>[^/]+?)/(?<nxtPaction>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/agents/[action]",
+      "regex": "^/api/agents/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPaction": "nxtPaction"
+      },
+      "namedRegex": "^/api/agents/(?<nxtPaction>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/portfolios/[id]/tv-export",
+      "regex": "^/api/portfolios/([^/]+?)/tv\\-export(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/portfolios/(?<nxtPid>[^/]+?)/tv\\-export(?:/)?$"
+    },
+    {
+      "page": "/etfs/[ticker]",
+      "regex": "^/etfs/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPticker": "nxtPticker"
+      },
+      "namedRegex": "^/etfs/(?<nxtPticker>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/funds/[mstar_id]",
+      "regex": "^/funds/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPmstar_id": "nxtPmstar_id"
+      },
+      "namedRegex": "^/funds/(?<nxtPmstar_id>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/sectors/[sector]",
+      "regex": "^/sectors/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPsector": "nxtPsector"
+      },
+      "namedRegex": "^/sectors/(?<nxtPsector>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/stocks/[symbol]",
+      "regex": "^/stocks/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPsymbol": "nxtPsymbol"
+      },
+      "namedRegex": "^/stocks/(?<nxtPsymbol>[^/]+?)(?:/)?$"
+    }
+  ],
+  "staticRoutes": [
+    {
+      "page": "/",
+      "regex": "^/(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/(?:/)?$"
+    },
+    {
+      "page": "/_not-found",
+      "regex": "^/_not\\-found(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_not\\-found(?:/)?$"
+    },
+    {
+      "page": "/admin",
+      "regex": "^/admin(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin(?:/)?$"
+    },
+    {
+      "page": "/admin/data-status",
+      "regex": "^/admin/data\\-status(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/data\\-status(?:/)?$"
+    },
+    {
+      "page": "/admin/methodology",
+      "regex": "^/admin/methodology(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/methodology(?:/)?$"
+    },
+    {
+      "page": "/admin/thresholds",
+      "regex": "^/admin/thresholds(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/thresholds(?:/)?$"
+    },
+    {
+      "page": "/etfs",
+      "regex": "^/etfs(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/etfs(?:/)?$"
+    },
+    {
+      "page": "/funds",
+      "regex": "^/funds(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/funds(?:/)?$"
+    },
+    {
+      "page": "/health",
+      "regex": "^/health(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/health(?:/)?$"
+    },
+    {
+      "page": "/login",
+      "regex": "^/login(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/login(?:/)?$"
+    },
+    {
+      "page": "/methodology",
+      "regex": "^/methodology(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/methodology(?:/)?$"
+    },
+    {
+      "page": "/sectors",
+      "regex": "^/sectors(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/sectors(?:/)?$"
+    },
+    {
+      "page": "/stocks",
+      "regex": "^/stocks(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/stocks(?:/)?$"
+    },
+    {
+      "page": "/thresholds",
+      "regex": "^/thresholds(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/thresholds(?:/)?$"
+    }
+  ],
+  "dataRoutes": [],
+  "rsc": {
+    "header": "RSC",
+    "varyHeader": "RSC, Next-Router-State-Tree, Next-Router-Prefetch, Next-Router-Segment-Prefetch",
+    "prefetchHeader": "Next-Router-Prefetch",
+    "didPostponeHeader": "x-nextjs-postponed",
+    "contentTypeHeader": "text/x-component",
+    "suffix": ".rsc",
+    "prefetchSuffix": ".prefetch.rsc",
+    "prefetchSegmentHeader": "Next-Router-Segment-Prefetch",
+    "prefetchSegmentSuffix": ".segment.rsc",
+    "prefetchSegmentDirSuffix": ".segments"
+  },
+  "rewriteHeaders": {
+    "pathHeader": "x-nextjs-rewritten-path",
+    "queryHeader": "x-nextjs-rewritten-query"
+  },
+  "rewrites": []
+}
