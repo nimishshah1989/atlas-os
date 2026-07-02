@@ -162,7 +162,10 @@ def ingest(asset_classes=None, start: date | None = None, end: date | None = Non
     asset class to its own table. When `start` is None the pull is incremental — each
     instrument starts a few days before its last stored date (full history if new)."""
     kite = kite_client()
-    end = end or date.today()
+    # EOD anchor (D11): the daily ingest stops at the last COMPLETE trading day; the
+    # in-session current day is live-only (a separate intraday path pulls it). Pass an
+    # explicit `end` (e.g. date.today() via --live) only for the live/intraday mechanism.
+    end = end or _db.eod_cutoff()
     tgt = targets(asset_classes)
     written = {"stock": 0, "etf": 0, "index": 0}
     missing: list[str] = []
