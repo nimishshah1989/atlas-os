@@ -172,10 +172,84 @@ def _rows(df: pd.DataFrame, ac: str, r) -> pd.DataFrame:
     )
 
 
+def ingest_eod(asset_classes=None, as_of: date | None = None) -> dict:
+    """Daily EOD append via Kite's BATCHED quote() (~500 instruments/call) — the
+    no-throttle path for the nightly refresh (per-instrument historical_data does
+    ~2000 calls and trips Kite's burst limit; quote() does it in ~5). quote() returns
+    the day's OHLC + volume; run POST-CLOSE so it's the final EOD. Stamps the
+    eod_cutoff date and REFUSES any instrument whose quote timestamp isn't that day
+    (guards against a mid-session run stamping a partial candle)."""
+    kite = kite_client()
+    as_of = as_of or _db.eod_cutoff()
+    tgt = targets(asset_classes)
+    written = {"stock": 0, "etf": 0, "index": 0}
+    skipped = 0
+    for ac in sorted(tgt["asset_class"].unique()):
+        sub = tgt[tgt["asset_class"] == ac]
+        by_tok = {int(r.kite_token): r for r in sub.itertuples(index=False)}
+        toks = list(by_tok)
+        rows = []
+        for i in range(0, len(toks), 400):  # Kite quote() cap is 500/call
+            _rate_limit()
+            for kstr, d in kite.quote(toks[i : i + 400]).items():
+                r = by_tok.get(int(kstr))
+                ts = d.get("timestamp")
+                if r is None or not d.get("ohlc"):
+                    continue
+                if (ts.date() if hasattr(ts, "date") else None) != as_of:
+                    skipped += 1  # market not yet closed for as_of (or stale) — don't stamp
+                    continue
+                o = d["ohlc"]
+                base = {
+                    "date": as_of,
+                    "open": o["open"],
+                    "high": o["high"],
+                    "low": o["low"],
+                    "close": o["close"],
+                    "volume": int(d.get("volume") or 0),
+                    "source": SOURCE,
+                }
+                if ac == "index":
+                    rows.append({"index_code": r.symbol, **base})
+                elif ac == "etf":
+                    rows.append(
+                        {
+                            "ticker": r.symbol,
+                            "isin": r.isin,
+                            **base,
+                            "close_adj": o["close"],
+                            "adj_factor": 1.0,
+                        }
+                    )
+                else:
+                    rows.append(
+                        {
+                            "instrument_id": r.instrument_id,
+                            "symbol": r.symbol,
+                            **base,
+                            "open_adj": o["open"],
+                            "high_adj": o["high"],
+                            "low_adj": o["low"],
+                            "close_adj": o["close"],
+                            "adj_factor": 1.0,
+                            "series": "EQ",
+                        }
+                    )
+        if rows:
+            written[ac] += _db.upsert_df(
+                f"{STAGING_SCHEMA}.{_TABLE[ac]}", pd.DataFrame(rows), _PK[ac]
+            )
+    print(f"[kite-eod] as_of={as_of} written={written} skipped(not-{as_of})={skipped}", flush=True)
+    return {"as_of": str(as_of), "written": written, "skipped": skipped}
+
+
 def ingest(asset_classes=None, start: date | None = None, end: date | None = None) -> dict:
     """Pull daily candles from Kite for the instrument_master universe and write each
     asset class to its own table. When `start` is None the pull is incremental — each
-    instrument starts a few days before its last stored date (full history if new)."""
+    instrument starts a few days before its last stored date (full history if new).
+
+    This uses per-instrument historical_data — for BACKFILL only. The nightly EOD
+    append uses ingest_eod() (batched quote(), no throttle)."""
     kite = kite_client()
     # EOD anchor (D11): the daily ingest stops at the last COMPLETE trading day; the
     # in-session current day is live-only (a separate intraday path pulls it). Pass an
@@ -242,10 +316,17 @@ def main():
         "--asset", nargs="*", choices=["stock", "etf", "index"], help="limit asset classes"
     )
     ap.add_argument("--start", help="YYYY-MM-DD; omit for incremental (per-instrument last date)")
+    ap.add_argument(
+        "--eod",
+        action="store_true",
+        help="daily EOD append via batched quote() (no throttle) — run POST-CLOSE",
+    )
     args = ap.parse_args()
     start = datetime.strptime(args.start, "%Y-%m-%d").date() if args.start else None
     if args.verify:
         print(verify(args.verify, start=start or HIST_START))
+    elif args.eod:
+        print(ingest_eod(asset_classes=args.asset))
     else:
         print(ingest(asset_classes=args.asset, start=start))
 
