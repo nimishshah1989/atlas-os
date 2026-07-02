@@ -33,7 +33,7 @@ class Config:
     DB_URL: str = os.environ.get("ATLAS_DB_URL", "")
 
     # Schemas — atlas writes to its own schema; reads from public.de_*
-    SCHEMA_NAME: str = "atlas"
+    SCHEMA_NAME: str = "atlas_foundation"
     SOURCE_SCHEMA: str = "public"
 
     # Universe lock — set at M1 execution time. Default to today; override via env.
