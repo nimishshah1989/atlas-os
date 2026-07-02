@@ -75,31 +75,15 @@ export type TableFreshness = {
   lag_days: number | null
 }
 
+// The derived tables the live product serves — all in the single atlas_foundation schema.
 const TRACKED_TABLES: { schema: string; name: string; date_col: string | null }[] = [
-  { schema: 'atlas',        name: 'atlas_index_metrics_daily',   date_col: 'date' },
-  { schema: 'atlas',        name: 'atlas_sector_metrics_daily',  date_col: 'date' },
-  { schema: 'atlas',        name: 'atlas_sector_states_daily',   date_col: 'date' },
-  { schema: 'atlas',        name: 'atlas_market_regime_daily',   date_col: 'date' },
-  { schema: 'atlas',        name: 'atlas_stock_metrics_daily',   date_col: 'date' },
-  { schema: 'atlas',        name: 'atlas_stock_states_daily',    date_col: 'date' },
-  { schema: 'atlas',        name: 'atlas_etf_metrics_daily',     date_col: 'date' },
-  { schema: 'atlas',        name: 'atlas_etf_states_daily',      date_col: 'date' },
-  { schema: 'atlas',        name: 'atlas_fund_metrics_daily',    date_col: 'nav_date' },
-  { schema: 'atlas',        name: 'atlas_fund_lens_monthly',     date_col: 'as_of_date' },
-  { schema: 'atlas',        name: 'atlas_fund_states_daily',     date_col: 'date' },
-  { schema: 'atlas',        name: 'atlas_stock_decisions_daily', date_col: 'date' },
-  { schema: 'atlas',        name: 'atlas_etf_decisions_daily',   date_col: 'date' },
-  { schema: 'atlas',        name: 'atlas_fund_decisions_daily',  date_col: 'date' },
-  { schema: 'us_atlas',     name: 'stock_ohlcv',                 date_col: 'date' },
-  { schema: 'us_atlas',     name: 'atlas_etf_metrics_daily',     date_col: 'date' },
-  { schema: 'us_atlas',     name: 'atlas_etf_states_daily',      date_col: 'date' },
-  { schema: 'us_atlas',     name: 'atlas_stock_metrics_daily',   date_col: 'date' },
-  { schema: 'us_atlas',     name: 'atlas_stock_states_daily',    date_col: 'date' },
-  { schema: 'us_atlas',     name: 'atlas_market_regime_daily',   date_col: 'date' },
-  { schema: 'global_atlas', name: 'stock_ohlcv',                 date_col: 'date' },
-  { schema: 'global_atlas', name: 'atlas_etf_metrics_daily',     date_col: 'date' },
-  { schema: 'global_atlas', name: 'atlas_etf_states_daily',      date_col: 'date' },
-  { schema: 'global_atlas', name: 'atlas_market_regime_daily',   date_col: 'date' },
+  { schema: 'atlas_foundation', name: 'technical_daily',           date_col: 'date' },
+  { schema: 'atlas_foundation', name: 'atlas_lens_scores_daily',   date_col: 'date' },
+  { schema: 'atlas_foundation', name: 'sector_lens_daily',         date_col: 'date' },
+  { schema: 'atlas_foundation', name: 'fund_rank_daily',           date_col: 'date' },
+  { schema: 'atlas_foundation', name: 'atlas_index_metrics_daily', date_col: 'date' },
+  { schema: 'atlas_foundation', name: 'atlas_market_regime_daily', date_col: 'date' },
+  { schema: 'atlas_foundation', name: 'breadth_nifty500_daily',    date_col: 'date' },
 ]
 
 export async function getFreshness(): Promise<TableFreshness[]> {
@@ -108,7 +92,7 @@ export async function getFreshness(): Promise<TableFreshness[]> {
 
   return Promise.all(
     TRACKED_TABLES.map(async ({ schema, name, date_col }) => {
-      const display = schema === 'atlas' ? name : `${schema}.${name}`
+      const display = name
       if (date_col) {
         const rows = await sql<{ row_count: string; latest_date: Date | null }[]>`
           SELECT
@@ -217,20 +201,19 @@ export function overallRag(rows: { rag: Rag }[]): Rag {
 }
 
 // ---------------------------------------------------------------------------
-// Data source freshness. TODO(G6): these still read the legacy public.de_* raw
-// tables via DYNAMIC refs (not caught by schema_gate); repoint to the fs
-// freshness registry (freshness_guard's table list) before the public.* DROP.
+// Data SOURCE freshness — the Atlas-owned raw/ingested tables (Kite prices, AMFI
+// NAV, Morningstar holdings, NSE delivery). All in the single atlas_foundation
+// schema (the legacy JIP public.de_* sources were retired).
 // ---------------------------------------------------------------------------
 
-const JIP_TABLES: { name: string; date_col: string }[] = [
-  { name: 'de_source_files',  date_col: 'created_at' },
-  { name: 'de_equity_ohlcv',  date_col: 'date' },
-  { name: 'de_index_prices',  date_col: 'date' },
-  { name: 'de_mf_nav_daily',  date_col: 'nav_date' },
-  { name: 'de_etf_ohlcv',     date_col: 'date' },
-  { name: 'de_global_prices', date_col: 'date' },
-  { name: 'de_etf_holdings',  date_col: 'as_of_date' },
-  { name: 'de_cron_run',      date_col: 'started_at' },
+const SOURCE_TABLES: { name: string; date_col: string }[] = [
+  { name: 'ohlcv_stock',     date_col: 'date' },
+  { name: 'ohlcv_etf',       date_col: 'date' },
+  { name: 'index_prices',    date_col: 'date' },
+  { name: 'de_mf_nav_daily', date_col: 'nav_date' },
+  { name: 'de_mf_holdings',  date_col: 'as_of_date' },
+  { name: 'de_etf_holdings', date_col: 'as_of_date' },
+  { name: 'delivery_daily',  date_col: 'date' },
 ]
 
 export async function getJipFreshness(): Promise<TableFreshness[]> {
@@ -238,15 +221,15 @@ export async function getJipFreshness(): Promise<TableFreshness[]> {
   today.setHours(0, 0, 0, 0)
 
   return Promise.all(
-    JIP_TABLES.map(async ({ name, date_col }) => {
-      // Use pg_stat_user_tables estimate for row count; MAX() is index-backed.
+    SOURCE_TABLES.map(async ({ name, date_col }) => {
+      // reltuples estimate for row count; MAX() is index-backed.
       const rows = await sql<{ row_count: string; latest_date: Date | null }[]>`
         SELECT
           (SELECT reltuples::bigint FROM pg_class
             JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace
-            WHERE nspname = 'public' AND relname = ${name})::text AS row_count,
+            WHERE nspname = 'atlas_foundation' AND relname = ${name})::text AS row_count,
           MAX(${sql(date_col)}) AS latest_date
-        FROM public.${sql(name)}
+        FROM atlas_foundation.${sql(name)}
       `
       const r = rows[0]
       const latest = r?.latest_date ? new Date(r.latest_date) : null
