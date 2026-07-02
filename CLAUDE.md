@@ -83,12 +83,12 @@ deploys all hang with `pack … is far too short to be a packfile`.
 | Start of v6 chunk | `/grill-with-docs` (lock terms vs CONTEXT.md) |
 | Bugfix or new feature | `/tdd` |
 | New feature / module | `/plan-eng-review` (full review) or just grill-with-docs (mini) |
-| Refactor existing | `simplify` |
+| Refactor existing | `simplify` (or `/ponytail-review` the diff) |
 | UI components | `frontend-design:frontend-design` |
 | Unclear scope | `superpowers:brainstorming` or `office-hours` |
 | Multi-step plan | `superpowers:writing-plans` |
 | Before claiming done | `superpowers:verification-before-completion` |
-| Pre-merge | `/review` + `/codex review` |
+| Pre-merge | `/review` + `/codex review` + `/ponytail-review` (over-engineering) |
 | Ship | `/ship` then `/land-and-deploy` |
 | Session end | `/context-save` (or wait for Stop hook to auto-write) |
 | Session start (gap > 1 day) | `/context-restore` |

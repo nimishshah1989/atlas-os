@@ -47,18 +47,14 @@ jobs:
         run: uv run --extra dev bash scripts/ci/gate_pragma_coverage.sh
 
   migrations:
-    name: Migrations apply on a fresh DB (reporting-only)
+    name: Migrations apply on a fresh DB
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # NON-BLOCKING for now. The de_* seed works, but `alembic upgrade head` on a
-    # fresh DB surfaces pre-existing migration-chain debt (first crack: 064's
-    # idx_tv_signal_dedup builds a functional index on a non-IMMUTABLE
-    # date_trunc(timestamptz) — can't apply to a clean DB, so the committed
-    # chain has drifted from what ran on prod). 106/120 migrations use raw SQL,
-    # so the cascade is unknown-depth. Same call as the pyright debt: surface it,
-    # don't block on it, burn it down in a dedicated follow-up, then flip this to
-    # required. Tracked in docs/engineering-process.md (Pillar 2).
-    continue-on-error: true
+    # BLOCKING. The 125-revision pre-consolidation chain (drifted from prod:
+    # non-IMMUTABLE functional indexes, retired-subsystem migrations, dropped
+    # schemas) was squashed into a single baseline — a verbatim pg_dump of the
+    # live atlas_foundation schema (migrations/versions/0001_baseline_*). A fresh
+    # DB now reproduces prod exactly, so this gate is real again.
 
     # Fresh Postgres per run — proves `alembic upgrade head` applies cleanly
     # before a migration can ever touch prod.

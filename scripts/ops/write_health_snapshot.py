@@ -17,10 +17,9 @@ tables. Nothing synthetic.
 Runfile is TSV, one line per orchestrator step (compute steps AND gate steps):
     <script_name>\t<started_iso>\t<ended_iso>\t<status>
 
-NOTE: atlas_validator_results is NOT written here — it carries a legacy CHECK constraint
-whitelisting only the retired M2-M5 validator names, so the modern gate outcomes are
-recorded as pipeline_runs rows instead (the /health runs panel reads them). Modernising
-that constraint is an FM-gated one-line ALTER (tracked in cleanup-loop-state.md).
+The gate steps (validate_lenses_A/B, freshness_guard) are ALSO written to
+atlas_validator_results (its old M2-M5-only CHECK constraint was dropped 2026-07-02), so
+the /health validator panel shows the current run's gate outcomes.
 """
 
 from __future__ import annotations
@@ -101,6 +100,46 @@ def _write_runs(runfile: str, host: str, sha: str | None) -> int:
     return _insert("atlas_foundation.atlas_pipeline_runs", pd.DataFrame(rows))
 
 
+# Gate step (runfile) → validator table. Names kept <=16 (validator col limit); status is
+# PASS/FAIL (the surviving chk_validator_results_status constraint).
+_GATE_VALIDATORS = {
+    "validate_lenses_A": "lens_gate_A",
+    "validate_lenses_B": "lens_gate_B",
+    "freshness_guard": "freshness_guard",
+}
+
+
+def _write_validators(runfile: str, host: str, sha: str | None) -> int:
+    import pandas as pd
+
+    rows = []
+    with open(runfile) as fh:
+        for line in fh:
+            parts = line.rstrip("\n").split("\t")
+            if len(parts) < 4:
+                continue
+            name, _started, ended, status = parts[0], parts[1], parts[2], parts[3]
+            vname = _GATE_VALIDATORS.get(name)
+            if not vname:
+                continue
+            ok = status == "success"
+            rows.append(
+                {
+                    "run_id": str(uuid.uuid4()),
+                    "validator": vname,
+                    "ran_at": ended or str(pd.Timestamp.now(tz="Asia/Kolkata")),
+                    "total_checks": 1,
+                    "failures": 0 if ok else 1,
+                    "status": "PASS" if ok else "FAIL",
+                    "host": host,
+                    "git_sha": sha,
+                }
+            )
+    if not rows:
+        return 0
+    return _insert("atlas_foundation.atlas_validator_results", pd.DataFrame(rows))
+
+
 def _write_freshness(eod: str) -> int:
     """One health_daily row per tracked table: freshness lag (days) vs the EOD anchor."""
     import pandas as pd
@@ -148,8 +187,9 @@ def main() -> None:
     host = socket.gethostname()
     sha = _git_sha()
     nr = _write_runs(args.runfile, host, sha)
+    nv = _write_validators(args.runfile, host, sha)
     nf = _write_freshness(args.eod)
-    print(f"health snapshot: {nr} runs, {nf} freshness rows (git {sha})")
+    print(f"health snapshot: {nr} runs, {nv} validators, {nf} freshness rows (git {sha})")
 
 
 if __name__ == "__main__":
