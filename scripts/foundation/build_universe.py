@@ -8,13 +8,18 @@ Universe = what we can source cleanly from Kite:
               and are not in EQUITY_L.
   • indices — Kite's INDICES segment (NIFTY 50/500/BANK + sector/thematic).
 
-instrument_id continuity: reuse public.de_instrument.id where the stock symbol
-matches (so existing Atlas instrument_ids keep working); otherwise a deterministic
-uuid5 of the symbol. Idempotent: safe to re-run.
+instrument_id continuity: reuse the EXISTING atlas_foundation.instrument_master id
+where the stock symbol matches (so existing Atlas instrument_ids keep working);
+otherwise a deterministic uuid5 of the symbol. Idempotent: safe to re-run.
+
+`--dry-run` computes the would-be active set and prints the diff vs the current
+instrument_master WITHOUT writing — use it to prove the scored universe is stable
+before the weekly cron mutates it.
 """
 
 from __future__ import annotations
 
+import argparse
 import io
 import re
 import uuid
@@ -59,7 +64,7 @@ def fetch_equity_list() -> pd.DataFrame:
     return out
 
 
-def build() -> dict:
+def build(dry_run: bool = False) -> dict:
     eq = fetch_equity_list()
     eq_syms = set(eq["symbol"])
 
@@ -71,16 +76,22 @@ def build() -> dict:
     cash_name = {i["tradingsymbol"]: (i.get("name") or "") for i in nse if i["segment"] == "NSE"}
     idx = [i for i in nse if i["segment"] == "INDICES"]
 
-    de = _db.read_df("select id, symbol from public.de_instrument")
+    # instrument_id continuity is now self-sourced from instrument_master (the canonical
+    # ids descend from the former public.de_instrument, which was dropped in the
+    # single-schema consolidation). Existing ids are preserved; new symbols get a uuid5.
+    de = _db.read_df(
+        "select instrument_id as id, symbol from atlas_foundation.instrument_master "
+        "where asset_class = 'stock'"
+    )
     de_id = {str(r.symbol).strip(): str(r.id) for r in de.itertuples()}
 
     # Coverage universe = NIFTY 500. is_active for a stock means "in Atlas coverage",
-    # NOT "tradeable on NSE" (tradeability is preserved in public.de_instrument). The
-    # FM-decided universe (2026-06-25) is the Nifty 500; restricting is_active to it is
-    # what scopes the data-integrity gate's "every active stock has a sector" /
-    # "≤21 canonical sectors" checks to the board universe instead of the full ~2,375.
+    # NOT "tradeable on NSE". The FM-decided universe (2026-06-25) is the Nifty 500;
+    # restricting is_active to it is what scopes the data-integrity gate's "every active
+    # stock has a sector" / "≤21 canonical sectors" checks to the board universe instead
+    # of the full ~2,375. Membership now lives in atlas_foundation (single schema).
     n500 = _db.read_df(
-        "select instrument_id from public.de_index_constituents "
+        "select instrument_id from atlas_foundation.de_index_constituents "
         "where index_code = 'NIFTY 500' and effective_to is null"
     )
     n500_ids = {str(x).strip() for x in n500["instrument_id"]}
@@ -161,6 +172,40 @@ def build() -> dict:
         "source",
     ]
     df = pd.DataFrame(rows, columns=cols).drop_duplicates("instrument_id")
+
+    # Before/after guardrail: prove the scored universe (active stocks) is stable before
+    # the write. Membership can legitimately drift on an NSE NIFTY-500 reconstitution;
+    # the diff surfaces exactly which symbols flip so a change is never silent.
+    cur_active = set(
+        _db.read_df(
+            "select instrument_id::text id from atlas_foundation.instrument_master "
+            "where asset_class = 'stock' and is_active"
+        )["id"]
+    )
+    new_active = set(df.loc[(df["asset_class"] == "stock") & (df["is_active"]), "instrument_id"])
+    added, removed = new_active - cur_active, cur_active - new_active
+    print(
+        f"  active stocks: {len(cur_active)} -> {len(new_active)} "
+        f"(+{len(added)} / -{len(removed)})"
+    )
+    if added or removed:
+        sym = {str(r.instrument_id): r.symbol for r in df.itertuples()}
+        if added:
+            print("    ADDED:  ", ", ".join(sorted(sym.get(i, i) for i in added)))
+        if removed:
+            rem = _db.read_df(
+                "select instrument_id::text id, symbol from atlas_foundation.instrument_master "
+                "where instrument_id = any(%(ids)s)",
+                {"ids": list(removed)},
+            )
+            print("    REMOVED:", ", ".join(sorted(rem["symbol"])))
+
+    if dry_run:
+        print("  DRY RUN — no write.")
+        by = df.groupby("asset_class").size().to_dict()
+        return {"written": 0, "dry_run": True, "would_write": len(df), "by_class": by}
+
+    df["updated_at"] = pd.Timestamp.now(tz="Asia/Kolkata")  # stamp the refresh (G6 freshness)
     n = _db.upsert_df("atlas_foundation.instrument_master", df, ["instrument_id"])
 
     counts = (
@@ -172,4 +217,7 @@ def build() -> dict:
 
 
 if __name__ == "__main__":
-    print(build())
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--dry-run", action="store_true", help="compute + diff the universe, no write")
+    args = ap.parse_args()
+    print(build(dry_run=args.dry_run))

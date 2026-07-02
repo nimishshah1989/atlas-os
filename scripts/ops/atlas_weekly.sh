@@ -15,6 +15,13 @@ FAILURES=()
 step() { local n="$1"; shift; echo "--- $n ---" | tee -a "$LOG"
   if "$@" >>"$LOG" 2>&1; then echo "  ok: $n" | tee -a "$LOG"; else echo "  FAIL: $n" | tee -a "$LOG"; FAILURES+=("$n"); fi; }
 
+# Universe membership + sector guard first, so the fund/holdings ingests below key off a
+# fresh instrument_master. build_universe refreshes NIFTY-500 membership from live NSE
+# (active-stock diff printed; a reconstitution is surfaced, never silent); assign_sectors
+# guards the ≤21-sector mapping and loudly reports any un-sectored active name.
+step "build_universe"      $PY scripts/foundation/build_universe.py
+step "assign_sectors"      $PY scripts/foundation/assign_sectors.py
+
 step "ingest_fund_master"  $PY scripts/foundation/ingest_fund_master.py
 step "ingest_mf_holdings"  $PY scripts/foundation/ingest_mf_holdings.py
 step "ingest_screener"     $PY scripts/foundation/ingest_screener.py

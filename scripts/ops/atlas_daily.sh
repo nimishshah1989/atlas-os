@@ -45,6 +45,10 @@ step "ingest_bulk_deals"         $PY scripts/foundation/ingest_bulk_deals.py
 
 # 2. COMPUTE cascade (EOD-anchored, single schema).
 step "compute_all (technicals)"  $PY scripts/foundation/compute_all.py
+# Sector relative-strength (rs_{1m,3m,6m,12m}_sector) for the latest date — depends on
+# compute_all's ret_W and the sector index prices. --latest keeps it fast (one date);
+# score_technical does NOT consume these (display-only), so this never shifts composites.
+step "backfill_sector_rs"        $PY scripts/foundation/backfill_sector_rs.py --latest
 step "build_index_metrics"       $PY -m scripts.foundation.build_index_metrics
 step "lens_daily"                $PY scripts/lens_daily.py --as-of "$EOD"
 step "rollup_sectors"            $PY scripts/foundation/rollup_sectors.py
