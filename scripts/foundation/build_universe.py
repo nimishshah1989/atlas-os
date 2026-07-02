@@ -185,8 +185,7 @@ def build(dry_run: bool = False) -> dict:
     new_active = set(df.loc[(df["asset_class"] == "stock") & (df["is_active"]), "instrument_id"])
     added, removed = new_active - cur_active, cur_active - new_active
     print(
-        f"  active stocks: {len(cur_active)} -> {len(new_active)} "
-        f"(+{len(added)} / -{len(removed)})"
+        f"  active stocks: {len(cur_active)} -> {len(new_active)} (+{len(added)} / -{len(removed)})"
     )
     if added or removed:
         sym = {str(r.instrument_id): r.symbol for r in df.itertuples()}

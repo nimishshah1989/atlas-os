@@ -30,11 +30,13 @@ import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))  # scripts/foundation -> _db, fund_rank_core
+sys.path.insert(
+    0, str(Path(__file__).resolve().parent)
+)  # scripts/foundation -> _db, fund_rank_core
 
+import _db
 import fund_rank_core as core
 import pandas as pd
-import _db
 
 TGT = "atlas_foundation.fund_rank_daily"
 
@@ -64,7 +66,8 @@ CREATE INDEX IF NOT EXISTS ix_fund_rank_daily_cat_date ON {TGT} (category, date)
 
 # Per-day rollup: holdings-weighted lens vector per fund @ date :d, carry-forward holdings.
 # Mirrors fund_lens.ts ROLLUP + SCORED_STOCKS (deciles within cap cohort) EXACTLY.
-ROLLUP_SQL = """
+ROLLUP_SQL = (
+    """
 WITH cap AS (
   SELECT instrument_id,
     CASE WHEN bool_or(index_code='NIFTY 100') THEN 'large'
@@ -103,10 +106,13 @@ FROM atlas_foundation.de_mf_master mm
 JOIN atlas_foundation.de_mf_holdings h
   ON h.mstar_id = mm.mstar_id AND h.as_of_date = (SELECT d FROM snap) AND h.weight_pct > 0
 JOIN scored s ON s.instrument_id = h.instrument_id
-WHERE """ + EQUITY_FUND_FILTER + """
+WHERE """
+    + EQUITY_FUND_FILTER
+    + """
 GROUP BY mm.mstar_id, mm.category_name
 HAVING count(h.instrument_id) >= 5
 """
+)
 
 
 def _weights() -> dict:
@@ -158,20 +164,34 @@ def build_day(day, weights: dict) -> pd.DataFrame:
     rows = []
     for r in df.itertuples():
         vec = {"v_tech": r.v_tech, "v_fund": r.v_fund, "v_flow": r.v_flow, "v_cat": r.v_cat}
-        rows.append({
-            "mstar_id": r.mstar_id, "category": r.category,
-            "breadth": float(r.breadth) if r.breadth is not None else None,
-            "n_scored": int(r.n_scored),
-            "composite": core.composite(vec, weights),
-        })
+        rows.append(
+            {
+                "mstar_id": r.mstar_id,
+                "category": r.category,
+                "breadth": float(r.breadth) if r.breadth is not None else None,
+                "n_scored": int(r.n_scored),
+                "composite": core.composite(vec, weights),
+            }
+        )
     ranked = [r for r in core.rank_in_category(rows) if r["composite"] is not None]
     out = pd.DataFrame(ranked)
     if out.empty:
         return out
     out["date"] = day
     out["composite"] = out["composite"].round(3)
-    return out[["date", "mstar_id", "category", "composite", "breadth", "n_scored",
-                "cat_rank", "cat_size", "pct_band"]]
+    return out[
+        [
+            "date",
+            "mstar_id",
+            "category",
+            "composite",
+            "breadth",
+            "n_scored",
+            "cat_rank",
+            "cat_size",
+            "pct_band",
+        ]
+    ]
 
 
 def run(start: str | None, end: str | None, rebuild: bool, latest: bool) -> None:
@@ -200,7 +220,9 @@ def run(start: str | None, end: str | None, rebuild: bool, latest: bool) -> None
     print(f"building {TGT}: {len(days)} days {days[0]}..{days[-1]} · weights={weights}")
 
     # idempotent: clear the range, then insert day by day
-    _db.exec_sql(f"DELETE FROM {TGT} WHERE date BETWEEN :a AND :b", {"a": str(days[0]), "b": str(days[-1])})
+    _db.exec_sql(
+        f"DELETE FROM {TGT} WHERE date BETWEEN :a AND :b", {"a": str(days[0]), "b": str(days[-1])}
+    )
     total = 0
     for i, day in enumerate(days):
         out = build_day(day, weights)
@@ -208,15 +230,19 @@ def run(start: str | None, end: str | None, rebuild: bool, latest: bool) -> None
             continue
         total += _db.upsert_df(TGT, out, conflict_cols=["mstar_id", "date"])
         if i % 10 == 0 or i == len(days) - 1:
-            print(f"  [{i+1}/{len(days)}] {day}: {len(out)} funds (running total {total})")
+            print(f"  [{i + 1}/{len(days)}] {day}: {len(out)} funds (running total {total})")
     print(f"done: {total} fund-day rows across {len(days)} days")
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--start", help="first date (YYYY-MM-DD); default = first usable holdings snapshot")
+    ap.add_argument(
+        "--start", help="first date (YYYY-MM-DD); default = first usable holdings snapshot"
+    )
     ap.add_argument("--end", help="last date (YYYY-MM-DD); default = latest stock-lens date")
-    ap.add_argument("--latest", action="store_true", help="only the newest lens date (nightly append)")
+    ap.add_argument(
+        "--latest", action="store_true", help="only the newest lens date (nightly append)"
+    )
     ap.add_argument("--rebuild", action="store_true", help="DROP + full rebuild")
     args = ap.parse_args()
     run(args.start, args.end, args.rebuild, args.latest)

@@ -109,7 +109,12 @@ def _score_relative_strength(
         pts += int(th.get("rs_golden_cross_pts", 10))
     if fast:
         pts += int(th.get("rs_fast_above_mid_pts", 15))
-    ev = {"ema50_gt_ema200": golden, "ema21_gt_ema50": fast, "rs_pts": pts, "ema200": ema_200 is not None}
+    ev = {
+        "ema50_gt_ema200": golden,
+        "ema21_gt_ema50": fast,
+        "rs_pts": pts,
+        "ema200": ema_200 is not None,
+    }
     return Decimal(pts).quantize(_Q2), ev
 
 

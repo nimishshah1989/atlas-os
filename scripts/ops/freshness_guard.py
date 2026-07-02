@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "foundation"))
-import _db  # noqa: E402
+import _db
 
 M = "atlas_foundation"
 

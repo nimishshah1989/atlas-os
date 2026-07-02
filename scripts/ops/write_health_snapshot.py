@@ -69,9 +69,7 @@ TRACKED = [
 
 def _git_sha() -> str | None:
     try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"], text=True
-        ).strip()
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], text=True).strip()
     except Exception:
         return None
 
@@ -111,9 +109,7 @@ def _write_freshness(eod: str) -> int:
     rows = []
     for tbl, dcol in TRACKED:
         try:
-            r = _db.read_df(
-                f"select count(*) n, max({dcol}) mx from atlas_foundation.{tbl}"
-            )
+            r = _db.read_df(f"select count(*) n, max({dcol}) mx from atlas_foundation.{tbl}")
         except Exception:
             continue
         n = int(r["n"][0])

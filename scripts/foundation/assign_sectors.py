@@ -23,10 +23,7 @@ from __future__ import annotations
 
 import _db
 
-_ACTIVE_STOCK = (
-    "FROM atlas_foundation.instrument_master "
-    "WHERE asset_class='stock' AND is_active"
-)
+_ACTIVE_STOCK = "FROM atlas_foundation.instrument_master WHERE asset_class='stock' AND is_active"
 
 
 def _unmapped_symbols() -> list[str]:
@@ -39,8 +36,7 @@ def _unmapped_symbols() -> list[str]:
 def _distinct() -> int:
     return int(
         _db.scalar(
-            f"SELECT count(DISTINCT sector) {_ACTIVE_STOCK} "
-            "AND sector IS NOT NULL AND sector<>''"
+            f"SELECT count(DISTINCT sector) {_ACTIVE_STOCK} AND sector IS NOT NULL AND sector<>''"
         )
         or 0
     )

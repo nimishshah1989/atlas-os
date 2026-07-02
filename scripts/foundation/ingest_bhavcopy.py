@@ -219,7 +219,9 @@ def ingest_day(d: date, only_symbols: list[str] | None = None) -> dict:
     try:
         indices = parse_indices(download_indices(d))
     except Exception as e:
-        print(f"[bhavcopy] index file for {d} unavailable ({type(e).__name__}); skipping", flush=True)
+        print(
+            f"[bhavcopy] index file for {d} unavailable ({type(e).__name__}); skipping", flush=True
+        )
         return {"date": str(d), "index_rows": 0, "stocks_written": 0, "indices_written": 0}
     n_index = write_indices(indices, source="NSE_IND_CLOSE_ALL")
     return {

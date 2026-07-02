@@ -135,7 +135,6 @@ def compute_composite(
     """
     th = thresholds
     weights = th.get("lens_weights", _DEFAULT_WEIGHTS)
-    conv_cfg = th.get("convergence", _DEFAULT_CONVERGENCE)
 
     raw_scores: dict[str, float | None] = {
         "technical": technical,
@@ -189,7 +188,6 @@ def compute_composite(
     )
     coverage_factor = 1.0
     conv_mult = 1.0
-    converging = 0
     base_composite = _clamp(normalized_avg, 0.0, 100.0)
     final = base_composite
     evidence["normalized_avg"] = round(normalized_avg, 4)

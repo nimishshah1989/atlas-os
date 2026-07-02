@@ -30,7 +30,7 @@ import _db
 
 TGT = "atlas_foundation.breadth_nifty500_daily"
 MIN_TRADED = 100  # min stocks with an OHLCV row for the day to count as a broad-trading session
-                  # (artifacts ≤ 38, real sessions ≥ 498 — see module docstring)
+# (artifacts ≤ 38, real sessions ≥ 498 — see module docstring)
 
 SQL = f"""
 DROP TABLE IF EXISTS {TGT} CASCADE;

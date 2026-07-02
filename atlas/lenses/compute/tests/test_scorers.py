@@ -66,7 +66,8 @@ def th(engine):
 @pytest.fixture(scope="module")
 def journal(engine):
     df = pd.read_sql(
-        "SELECT * FROM atlas_foundation.atlas_lens_scores_daily WHERE date = %(d)s AND asset_class = 'stock'",
+        "SELECT * FROM atlas_foundation.atlas_lens_scores_daily "
+        "WHERE date = %(d)s AND asset_class = 'stock'",
         engine,
         params={"d": D},
     )
@@ -247,7 +248,9 @@ class TestFlow:
             assert (f is None) == (acc is None), "flow must be present iff delivery is"
             if f is not None:
                 assert abs(f - acc) <= TOL, f"flow {f} != accumulation {acc}"
-                assert _num(r.get("flow_promoter")) is None and _num(r.get("flow_smart_money")) is None
+                assert (
+                    _num(r.get("flow_promoter")) is None and _num(r.get("flow_smart_money")) is None
+                )
                 checked += 1
         assert checked >= 100, f"too few delivery-scored names to verify ({checked})"
 
@@ -316,7 +319,7 @@ class TestFlowAccumulation:
             assert res.accumulation is None
 
 
-# ════════════════════════════ TECHNICAL — EMA-RS + Trend rescale (FM 2026-06-30) ════════════════════════════
+# ═══════════════ TECHNICAL — EMA-RS + Trend rescale (FM 2026-06-30) ═══════════════
 class TestTechnicalEmaRS:
     def test_rs_is_ema_structure(self):
         from atlas.lenses.compute.technical import _score_relative_strength as rs
@@ -330,10 +333,13 @@ class TestTechnicalEmaRS:
     def test_young_stock_scores_without_ema200(self):
         # Recent IPO: no EMA200 yet, but EMA21>EMA50 → it STILL scores (golden cross just can't
         # fire). Was previously blank, which let it float to the top of the strength sort.
-        from atlas.lenses.compute.technical import _score_relative_strength as rs, score_technical
+        from atlas.lenses.compute.technical import _score_relative_strength as rs
+        from atlas.lenses.compute.technical import score_technical
 
         assert float(rs(110, 105, None, {})[0]) == 15.0  # EMA21>EMA50 fires, golden cross can't
-        r = score_technical(110, 105, None, 60, 200, 0.03, None, None, None, None, None, None, None, None, None, {})
+        r = score_technical(
+            110, 105, None, 60, 200, 0.03, None, None, None, None, None, None, None, None, None, {}
+        )
         assert r.score is not None and float(r.score) > 0  # not blank anymore
 
     def test_trend_rescales_to_25_without_rsi(self):
@@ -347,7 +353,9 @@ class TestTechnicalEmaRS:
         from atlas.lenses.compute.technical import score_technical
 
         # Two sub-scores only (vol-contraction + volume removed): (trend + rs) × 2.
-        r = score_technical(110, 105, 100, 65, 200, 0.03, None, None, None, None, None, None, None, None, None, {})
+        r = score_technical(
+            110, 105, 100, 65, 200, 0.03, None, None, None, None, None, None, None, None, None, {}
+        )
         assert r.vol_contraction is None and r.volume is None
         assert float(r.score) == float(r.trend) * 2 + float(r.relative_strength) * 2
 
@@ -358,7 +366,15 @@ class TestFlowDeliveryOnly:
         from atlas.lenses.compute.flow import score_flow
 
         d = {"delivery_avg_30d": 62, "delivery_avg_60d": 55, "delivery_updown_asym": 9}
-        r = score_flow([], {"promoter_pct": 50}, {"promoter_pct": 48}, [{"buy_sell": "buy", "is_superstar": True}], {}, delivery=d, mf_delta=3.0)
+        r = score_flow(
+            [],
+            {"promoter_pct": 50},
+            {"promoter_pct": 48},
+            [{"buy_sell": "buy", "is_superstar": True}],
+            {},
+            delivery=d,
+            mf_delta=3.0,
+        )
         # promoter / smart-money no longer contribute — flow IS the delivery sub-score.
         assert r.promoter is None and r.smart_money is None and r.institutional is None
         assert r.score == r.accumulation and r.score is not None
@@ -367,7 +383,15 @@ class TestFlowDeliveryOnly:
         from atlas.lenses.compute.flow import score_flow
 
         # Rich promoter / bulk / MF data but NO delivery → flow has no reading.
-        r = score_flow([{"signal_type": "open_market_buy", "value_cr": 9}], {"promoter_pct": 70}, None, [], {}, delivery=None, mf_delta=5.0)
+        r = score_flow(
+            [{"signal_type": "open_market_buy", "value_cr": 9}],
+            {"promoter_pct": 70},
+            None,
+            [],
+            {},
+            delivery=None,
+            mf_delta=5.0,
+        )
         assert r.score is None
 
 

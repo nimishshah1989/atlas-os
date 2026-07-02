@@ -20,8 +20,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import fund_rank_core as core
 import _db
+import fund_rank_core as core
 
 # --- verbatim copy of etf_lens.ts SCORED_STOCKS (the production nightly CTE) -----------
 SCORED_STOCKS = """
@@ -92,12 +92,19 @@ def main() -> None:
     rows = []
     for r in prod.itertuples():
         vec = {"v_tech": r.v_tech, "v_fund": r.v_fund, "v_flow": r.v_flow, "v_cat": r.v_cat}
-        rows.append({"mstar_id": r.mstar_id, "category": r.category,
-                     "breadth": float(r.breadth) if r.breadth is not None else None,
-                     "composite": core.composite(vec, weights)})
-    prod_ranked = {r["mstar_id"]: r for r in core.rank_in_category(rows) if r["composite"] is not None}
+        rows.append(
+            {
+                "mstar_id": r.mstar_id,
+                "category": r.category,
+                "breadth": float(r.breadth) if r.breadth is not None else None,
+                "composite": core.composite(vec, weights),
+            }
+        )
+    prod_ranked = {
+        r["mstar_id"]: r for r in core.rank_in_category(rows) if r["composite"] is not None
+    }
 
-    mx = _db.scalar(f"SELECT max(date) FROM atlas_foundation.fund_rank_daily")
+    mx = _db.scalar("SELECT max(date) FROM atlas_foundation.fund_rank_daily")
     stored_df = _db.read_df(
         "SELECT mstar_id, cat_rank, cat_size, composite, pct_band FROM atlas_foundation.fund_rank_daily WHERE date = :d",
         {"d": str(mx)},
@@ -112,8 +119,8 @@ def main() -> None:
     size_mismatch, comp_mismatch = [], []
     tie_swaps, real_rank_errors = [], []
     TIE_EPS = 0.01  # composites equal within a cent are genuine ties; their order is broken by
-                    # breadth, which is non-deterministic (ntile tie-ordering at decile edges) —
-                    # the funds page itself reshuffles these on reload, so a ±rank here is expected.
+    # breadth, which is non-deterministic (ntile tie-ordering at decile edges) —
+    # the funds page itself reshuffles these on reload, so a ±rank here is expected.
     for mid, pr in prod_ranked.items():
         st = stored.get(mid)
         if st is None:
@@ -125,7 +132,9 @@ def main() -> None:
         if int(st.cat_rank) != int(pr["cat_rank"]):
             # who does production rank at the position this fund got in storage?
             neighbour = prod_at.get((pr["category"], int(st.cat_rank)))
-            is_tie = neighbour is not None and abs(neighbour["composite"] - pr["composite"]) <= TIE_EPS
+            is_tie = (
+                neighbour is not None and abs(neighbour["composite"] - pr["composite"]) <= TIE_EPS
+            )
             (tie_swaps if is_tie else real_rank_errors).append(
                 (mid, pr["cat_rank"], int(st.cat_rank), round(pr["composite"], 4))
             )
@@ -136,13 +145,22 @@ def main() -> None:
     print(f"  cohort:    only-in-production={len(only_prod)}  only-in-stored={len(only_stored)}")
     print(f"  cat_size mismatches: {len(size_mismatch)}")
     print(f"  composite mismatches (>0.01): {len(comp_mismatch)}")
-    print(f"  rank: {len(tie_swaps)} benign tie-swaps (equal composite), {len(real_rank_errors)} REAL errors")
-    for label, lst in [("cohort+", sorted(only_prod)[:8]), ("cohort-", sorted(only_stored)[:8]),
-                       ("size", size_mismatch[:8]), ("comp", comp_mismatch[:8]),
-                       ("REAL rank err", real_rank_errors[:8])]:
+    print(
+        f"  rank: {len(tie_swaps)} benign tie-swaps (equal composite), {len(real_rank_errors)} REAL errors"
+    )
+    for label, lst in [
+        ("cohort+", sorted(only_prod)[:8]),
+        ("cohort-", sorted(only_stored)[:8]),
+        ("size", size_mismatch[:8]),
+        ("comp", comp_mismatch[:8]),
+        ("REAL rank err", real_rank_errors[:8]),
+    ]:
         if lst:
             print(f"    e.g. {label}: {lst}")
-    print("RESULT:", "✅ PASS — history today reproduces the live funds page (ties aside)" if ok else "❌ FAIL")
+    print(
+        "RESULT:",
+        "✅ PASS — history today reproduces the live funds page (ties aside)" if ok else "❌ FAIL",
+    )
     sys.exit(0 if ok else 1)
 
 

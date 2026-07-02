@@ -76,9 +76,7 @@ def add(**kw) -> None:
 
 
 def as_of() -> date:
-    return scalar(
-        "select max(date) from atlas_foundation.index_prices where index_code='NIFTY 50'"
-    )
+    return scalar("select max(date) from atlas_foundation.index_prices where index_code='NIFTY 50'")
 
 
 # ── ground-truth recompute: calendar-anchored index returns ──────────────────
@@ -107,9 +105,7 @@ def recompute_index_returns(codes: list[str], d: date) -> dict[str, dict[str, fl
         with p as (select index_code, cast(:d as date) d from (values {vals}) v(index_code))
         select c.index_code, {sel} from p c order by c.index_code
     """
-    fs = read_df(base.format(tbl="atlas_foundation.index_prices"), {"d": d}).set_index(
-        "index_code"
-    )
+    fs = read_df(base.format(tbl="atlas_foundation.index_prices"), {"d": d}).set_index("index_code")
     de = read_df(base.format(tbl="public.de_index_prices"), {"d": d}).set_index("index_code")
     out: dict[str, dict[str, float]] = {}
     for code in fs.index:

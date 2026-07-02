@@ -30,7 +30,7 @@ M = "atlas_foundation"
 
 
 def _freshness(eod: dt.date) -> tuple[bool, str]:
-    r = subprocess.run(
+    r = subprocess.run(  # noqa: S603 — calls the project's own freshness_guard.py, no untrusted input
         [sys.executable, str(Path(__file__).with_name("freshness_guard.py")), "--eod", str(eod)],
         capture_output=True,
         text=True,
@@ -40,7 +40,10 @@ def _freshness(eod: dt.date) -> tuple[bool, str]:
 
 def _coverage(eod: dt.date) -> list[str]:
     fails = []
-    n = _db.scalar(f"select count(*) from {M}.atlas_lens_scores_daily where date=:d and asset_class='stock'", {"d": eod})
+    n = _db.scalar(
+        f"select count(*) from {M}.atlas_lens_scores_daily where date=:d and asset_class='stock'",
+        {"d": eod},
+    )
     if not n:
         return [f"coverage: no stock lens rows on {eod}"]
     nonzero = _db.scalar(
@@ -48,7 +51,9 @@ def _coverage(eod: dt.date) -> list[str]:
         {"d": eod},
     )
     if nonzero / n < 0.95:
-        fails.append(f"coverage: only {nonzero}/{n} stocks have composite>0 (<95%) — silent-zero risk")
+        fails.append(
+            f"coverage: only {nonzero}/{n} stocks have composite>0 (<95%) — silent-zero risk"
+        )
     for lens in ("technical", "fundamental", "flow", "catalyst"):
         c = _db.scalar(
             f"select count({lens}) from {M}.atlas_lens_scores_daily where date=:d and asset_class='stock'",
@@ -73,7 +78,11 @@ def _outliers(eod: dt.date) -> list[str]:
         lr = np.abs(np.log(c[1:] / c[:-1]))
         if lr.size and np.nanmax(lr) > 0.40:
             bad.append(sym)
-    return [f"outliers: {len(bad)} stocks with >40% 1-day jump last week ({', '.join(bad[:8])})"] if bad else []
+    return (
+        [f"outliers: {len(bad)} stocks with >40% 1-day jump last week ({', '.join(bad[:8])})"]
+        if bad
+        else []
+    )
 
 
 def main() -> int:
@@ -97,7 +106,7 @@ def main() -> int:
         from atlas.intraday.notify import send_message_sync
 
         send_message_sync(report)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         print(f"[qa_weekly] notify failed: {e}")
     return rc
 

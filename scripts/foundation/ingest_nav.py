@@ -81,8 +81,7 @@ def main() -> None:
     last: dict[str, datetime.date] = {}
     if not full:
         cur.execute(
-            "SELECT mstar_id, max(nav_date) FROM atlas_foundation.de_mf_nav_daily "
-            "GROUP BY mstar_id"
+            "SELECT mstar_id, max(nav_date) FROM atlas_foundation.de_mf_nav_daily GROUP BY mstar_id"
         )
         last = {r[0]: r[1] for r in cur.fetchall()}
     print(
