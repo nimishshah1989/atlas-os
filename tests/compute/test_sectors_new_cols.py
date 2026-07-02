@@ -23,7 +23,6 @@ from datetime import date
 import numpy as np
 import pandas as pd
 import pytest
-
 from atlas.compute.sectors import (
     compute_52wh_per_sector,
     compute_breadth_per_sector,

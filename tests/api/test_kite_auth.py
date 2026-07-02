@@ -17,9 +17,9 @@ os.environ.setdefault("ATLAS_AUTH_DISABLED", "true")
 from unittest.mock import patch
 
 import pytest
+from atlas.api import app
 from fastapi.testclient import TestClient
 
-from atlas.api import app
 from atlas.config import Config
 
 

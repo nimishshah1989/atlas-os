@@ -6,13 +6,13 @@ from datetime import date
 
 import pandas as pd
 import pytest
-from sqlalchemy import text
-
-from atlas.db import get_engine
 from atlas.intelligence.conviction.persistence import (
     persist_conviction_batch,
     persist_tier_membership_batch,
 )
+from sqlalchemy import text
+
+from atlas.db import get_engine
 
 _SENTINEL_DATE = date(1990, 1, 1)
 

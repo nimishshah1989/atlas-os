@@ -8,7 +8,6 @@ from decimal import Decimal
 from unittest.mock import MagicMock
 
 import pytest
-
 from atlas.intelligence.briefs.context import DailyMarketContext
 from atlas.intelligence.briefs.generator import DailyBrief, generate_brief
 from atlas.intelligence.briefs.prompts import PROMPT_VERSION, STRUCTURED_TOOL, SYSTEM_PROMPT

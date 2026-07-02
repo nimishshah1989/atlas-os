@@ -9,9 +9,9 @@ from datetime import date
 
 import pandas as pd
 import pytest
+from atlas.intelligence.validation.factor_loader import load_decision_state_factor
 
 from atlas.db import get_engine
-from atlas.intelligence.validation.factor_loader import load_decision_state_factor
 
 
 @pytest.mark.integration

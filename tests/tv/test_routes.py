@@ -7,9 +7,8 @@ os.environ.setdefault("ATLAS_AUTH_DISABLED", "true")
 
 from unittest.mock import MagicMock, patch
 
-from fastapi.testclient import TestClient
-
 from atlas.api import app  # type: ignore[import]
+from fastapi.testclient import TestClient
 
 client = TestClient(app)
 

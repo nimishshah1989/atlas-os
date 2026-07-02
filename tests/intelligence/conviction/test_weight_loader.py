@@ -5,12 +5,12 @@ from __future__ import annotations
 from decimal import Decimal
 
 import pytest
-
-from atlas.db import get_engine
 from atlas.intelligence.conviction.weight_loader import (
     TierWeightSet,
     load_active_weights,
 )
+
+from atlas.db import get_engine
 
 
 @pytest.mark.integration

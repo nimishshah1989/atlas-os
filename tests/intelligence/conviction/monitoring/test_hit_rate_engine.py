@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-
 from atlas.intelligence.conviction.monitoring.hit_rate_engine import (
     DEFAULT_LOOKBACK_WINDOW,
     MIN_OBSERVATIONS,

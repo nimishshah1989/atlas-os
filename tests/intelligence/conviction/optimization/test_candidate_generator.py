@@ -6,7 +6,6 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
-
 from atlas.intelligence.conviction.optimization.candidate_generator import (
     MATERIAL_CHANGE_THRESHOLD,
     _build_rationale,

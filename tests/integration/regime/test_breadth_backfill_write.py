@@ -16,9 +16,9 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
+from scripts.backfill_breadth_ema_4wh import _write_breadth_updates
 
 from atlas.db import get_engine
-from scripts.backfill_breadth_ema_4wh import _write_breadth_updates
 
 
 @pytest.mark.integration

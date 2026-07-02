@@ -11,7 +11,6 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
-
 from atlas.tv.rs_ratios import (  # type: ignore[import]
     _classify_rs_status,
     compute_rs_ratios,
@@ -197,9 +196,8 @@ def test_compute_rs_ratios_unknown_sector_falls_back_to_nifty50():
 
 
 def test_rs_ratios_route_returns_200():
-    from fastapi.testclient import TestClient
-
     from atlas.api import app  # type: ignore[import]
+    from fastapi.testclient import TestClient
 
     fake_result = {
         "symbol": "RELIANCE",
@@ -226,9 +224,8 @@ def test_rs_ratios_route_returns_200():
 
 
 def test_rs_ratios_route_returns_404_for_no_data():
-    from fastapi.testclient import TestClient
-
     from atlas.api import app  # type: ignore[import]
+    from fastapi.testclient import TestClient
 
     with patch(
         "atlas.tv.routes.compute_rs_ratios",

@@ -7,14 +7,14 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import text
-
-from atlas.db import get_engine
 from atlas.intelligence.conviction.monitoring.drift_detector import (
     DEFAULT_N_DAYS_THRESHOLD,
     DEFAULT_RATIO_THRESHOLD,
     detect_drift,
 )
+from sqlalchemy import text
+
+from atlas.db import get_engine
 
 _needs_db = pytest.mark.skipif(not os.getenv("ATLAS_DB_URL"), reason="needs ATLAS_DB_URL")
 

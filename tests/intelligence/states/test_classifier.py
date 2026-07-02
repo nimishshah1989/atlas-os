@@ -485,7 +485,6 @@ def test_stage_3_not_fired_when_obv_slope_positive_and_price_ok():
 # ---------------------------------------------------------------------------
 
 import pandas as pd  # noqa: E402
-
 from atlas.intelligence.states.classifier import classify_state_panel  # noqa: E402
 from atlas.intelligence.states.thresholds import ThresholdValue  # noqa: E402
 

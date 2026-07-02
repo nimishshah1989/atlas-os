@@ -12,12 +12,12 @@ from datetime import date
 import numpy as np
 import pandas as pd
 import pytest
-
-from atlas.db import get_engine
 from atlas.intelligence.validation.forward_returns import (
     compute_forward_returns,
     load_price_matrix,
 )
+
+from atlas.db import get_engine
 
 
 @pytest.mark.integration

@@ -5,7 +5,6 @@ from __future__ import annotations
 from decimal import Decimal
 
 import pytest
-
 from atlas.intelligence.conviction.optimization.smoothing import (
     DEFAULT_LAMBDA,
     blend_weights,
