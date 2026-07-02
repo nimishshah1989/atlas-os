@@ -94,7 +94,15 @@ def auto_login() -> str:
     # login step says this account expects rather than hardcoding.
     twofa_type = j["data"].get("twofa_type", "app_code")
 
-    # 2. twofa with the time-based code
+    # 2. twofa with the time-based code.
+    # Boundary safety: TOTP codes are valid for a 30s window. If we're in the last
+    # few seconds of a window, the code can roll over before Zerodha validates it
+    # (→ "Invalid App Code" even with the correct secret). Wait for a fresh window
+    # so the code we post always has ample validity in transit.
+    import time as _t
+
+    if 30 - int(_t.time()) % 30 < 6:
+        _t.sleep(6)
     code = pyotp.TOTP(totp_secret).now()
     r2 = s.post(
         "https://kite.zerodha.com/api/twofa",
@@ -108,7 +116,7 @@ def auto_login() -> str:
     )
     j2 = r2.json()
     if j2.get("status") != "success":
-        sys.exit(f"twofa failed: {j2.get('message', r2.text[:160])}")
+        sys.exit(f"twofa failed (twofa_type={twofa_type}): {j2.get('message', r2.text[:160])}")
 
     # 3. OAuth connect → capture request_token from the redirect chain
     try:
