@@ -4,9 +4,13 @@
 Method (handoff 2026-06-23 task 1, FM-endorsed formula):
     rs_W_sector(stock, date) = ret_W(stock) - ret_W(sector_index)
 where ret_W(stock) is ALREADY in technical_daily and ret_W(sector_index) is the sector
-index's own positional trailing return over W trading days (1m=21, 3m=63, 6m=126, 12m=252 —
-identical to technicals.RETURN_WINDOWS / compute_relative_strength). The stock's sector index
-comes from instrument_master.sector -> atlas_sector_master.primary_nse_index -> index_prices.
+index's OWN trailing return over the SAME window. Both use the single canonical return
+definition `technicals.windowed_return` — 1m/3m/6m/12m are CALENDAR-anchored (close[t] /
+close.asof(t − N months) − 1), matching how technical_daily.ret_W and atlas_index_metrics_daily
+are computed. (A prior version used a positional c/c.shift(63) sector return, which mixed a
+calendar stock return with a positional sector return — basis-inconsistent, and it disagreed
+with the frontend's own inline RS. Fixed 2026-07-02.) The stock's sector index comes from
+instrument_master.sector -> atlas_sector_master.primary_nse_index -> index_prices.
 
 Why this shape (NOT a per-row UPDATE): an in-place per-row UPDATE on the 6.95M-row
 technical_daily hung before. Instead we precompute a tiny sector_index_returns table
@@ -33,6 +37,7 @@ import warnings
 
 import _db
 import pandas as pd
+import technicals as T
 
 FS = "atlas_foundation"
 # Sector RS windows = the 4 sector columns on technical_daily (no 1d/1w sector).
@@ -60,10 +65,13 @@ def _index_returns(conn) -> pd.DataFrame:
     frames = []
     for code, g in px.groupby("index_code", sort=False):
         g = g.sort_values("date")
+        # Calendar-anchored trailing returns via the canonical windowed_return — the SAME
+        # definition technical_daily.ret_W and build_index_metrics use, so the RS subtraction
+        # stays on one consistent basis (see module docstring).
+        c = pd.Series(g["close"].to_numpy(), index=pd.to_datetime(g["date"].to_numpy()))
         out = pd.DataFrame({"index_code": code, "date": g["date"].values})
-        c = g["close"]
-        for w, n in WINDOWS.items():
-            out[f"ret_{w}"] = (c / c.shift(n) - 1.0).values
+        for w in WINDOWS:
+            out[f"ret_{w}"] = T.windowed_return(c, w).to_numpy()
         frames.append(out)
     long = pd.concat(frames, ignore_index=True)
     ret_cols = [f"ret_{w}" for w in WINDOWS]
