@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Native index-metrics builder — calendar-anchored returns from staging OHLCV.
 
-Replaces the legacy mirror of ``atlas.atlas_index_metrics_daily`` (which carried
+Replaces the legacy mirror ``atlas_index_metrics_daily`` (which carried
 row-count-anchored returns that drift onto the wrong calendar date on a gap-ridden
 index series — Nifty 50 3m read 6.9% vs a true 3.2%). This computes every index's
 trailing returns DIRECTLY from ``foundation_staging.index_prices`` using the single

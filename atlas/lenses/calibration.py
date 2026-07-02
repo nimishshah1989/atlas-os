@@ -91,7 +91,7 @@ def _load_lens_scores(engine: Engine) -> pd.DataFrame:
     df = _copy_df(
         engine,
         f"SELECT instrument_id, date, {cols} "  # noqa: S608
-        "FROM atlas.atlas_lens_scores_daily ORDER BY date",
+        "FROM foundation_staging.atlas_lens_scores_daily ORDER BY date",
     )
     if df.empty:
         return df

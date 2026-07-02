@@ -111,7 +111,7 @@ _INCR_BUFFER = 5  # re-fetch a few days of overlap so a missed session self-heal
 
 def targets(asset_classes: list[str] | None) -> pd.DataFrame:
     """Universe to ingest, straight from instrument_master (the kite_token owner).
-    No public.de_instrument lookup, no per-run NSE-segment symbol→token remap —
+    No cross-schema instrument lookup, no per-run NSE-segment symbol→token remap —
     stocks, ETFs and indices all carry their kite_token here."""
     q = (
         "select instrument_id::text instrument_id, asset_class, symbol, isin, kite_token "

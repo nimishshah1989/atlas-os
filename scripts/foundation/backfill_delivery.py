@@ -17,8 +17,8 @@ use only sessions <= D, in SESSIONS not calendar days):
 The Flow accumulation sub-component reads the SMOOTHED quantities (avg_30d vs avg_60d +
 asymmetry) so it is medium-term, matching Flow's quarterly cadence (see compute/flow.py).
 
-Source: public.de_equity_ohlcv.delivery_pct (~72.6% coverage, 2019+; D22 brings it INTO
-foundation_staging here). Missing/illiquid -> NULL (RULE #0, never 0).
+Source: foundation_staging.delivery_raw.delivery_pct (~72.6% coverage, 2019+; Atlas NSE
+fetch via fetch_delivery.py) joined to ohlcv_stock.close. Missing/illiquid -> NULL (RULE #0).
 
     python backfill_delivery.py            # full (re)build of delivery_daily
     python backfill_delivery.py --check IID # preview computed signals for one instrument
@@ -35,7 +35,7 @@ import numpy as np
 import pandas as pd
 
 M = "foundation_staging"
-SRC = "public.de_equity_ohlcv"
+SRC = f"{M}.delivery_raw"  # Atlas-owned delivery (decoupled from the legacy JIP source)
 TARGET = f"{M}.delivery_daily"
 START = "2019-01-01"
 
@@ -60,16 +60,21 @@ def ensure_table_fresh() -> None:
 
 
 def load_delivery() -> pd.DataFrame:
-    """COPY the whole delivery series (instrument_id, date, delivery_pct, close, volume)."""
+    """COPY the whole delivery series (instrument_id, date, delivery_pct, close).
+
+    delivery_pct comes from the Atlas-owned delivery_raw (NSE fetch); close comes from
+    ohlcv_stock (Kite) for the up/down-day asymmetry — a single-schema join."""
     raw = _db.engine().raw_connection()
     try:
         cur = raw.cursor()
         cur.execute("SET LOCAL statement_timeout = '1200000'")
         buf = io.StringIO()
         cur.copy_expert(
-            f"COPY (SELECT instrument_id, date, delivery_pct, close, volume FROM {SRC} "
-            f"WHERE delivery_pct IS NOT NULL AND date >= '{START}' "
-            "ORDER BY instrument_id, date) TO STDOUT WITH CSV HEADER",
+            "COPY (SELECT r.instrument_id, r.date, r.delivery_pct, o.close "
+            f"FROM {SRC} r JOIN {M}.ohlcv_stock o "
+            "ON o.instrument_id = r.instrument_id AND o.date = r.date "
+            f"WHERE r.delivery_pct IS NOT NULL AND r.date >= '{START}' "
+            "ORDER BY r.instrument_id, r.date) TO STDOUT WITH CSV HEADER",
             buf,
         )
         raw.rollback()

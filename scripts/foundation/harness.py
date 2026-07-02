@@ -13,9 +13,7 @@ made runnable. Three axes, each a set of checks, evaluated PER INSTRUMENT:
                    N50/N500 × 6 windows) present for every priced date, and a
                    recompute-and-diff matches what is stored.
 
-Runs against two profiles:
-  --profile live     → current public.de_* / atlas.atlas_* tables (baseline)
-  --profile staging  → the clean foundation_staging.* tables (PoC / loop target)
+Runs against the single foundation_staging.* schema (the live data foundation).
 
 Output: a per-axis PASS/FAIL summary + green-count to stdout, top failures with
 reasons, and a full per-instrument JSON to output/. Definition of done = green
@@ -78,31 +76,6 @@ class Profile:
 
 
 PROFILES: dict[str, Profile] = {
-    "live": Profile(
-        name="live",
-        stock_ohlcv="public.de_equity_ohlcv",
-        stock_close_adj="close_adj",
-        index_table="public.de_index_prices",
-        index_code_col="index_code",
-        index_close_col="close",
-        stock_tech="atlas.atlas_stock_metrics_daily",
-        # live stores 20-EMA (not 21) and has no RSI column — target columns absent.
-        tech_ema_cols={50: "ema_50_stock", 200: "ema_200_stock"},
-        tech_rsi_col=None,
-        tech_ret_cols={
-            "1d": "ret_1d",
-            "1w": "ret_1w",
-            "1m": "ret_1m",
-            "3m": "ret_3m",
-            "6m": "ret_6m",
-            "12m": "ret_12m",
-        },
-        tech_rs_cols={
-            "rs_1w_n500": "rs_1w_nifty500",
-            "rs_1m_n500": "rs_1m_nifty500",
-            "rs_3m_n500": "rs_3m_nifty500",
-        },
-    ),
     "staging": Profile(
         name="staging",
         stock_ohlcv=f"{STAGING_SCHEMA}.ohlcv_stock",
@@ -110,7 +83,7 @@ PROFILES: dict[str, Profile] = {
         index_table=f"{STAGING_SCHEMA}.index_prices",
         index_code_col="index_code",
         index_close_col="close",
-        stock_tech=f"{STAGING_SCHEMA}.technical_stock",
+        stock_tech=f"{STAGING_SCHEMA}.technical_daily",
         tech_ema_cols={21: "ema_21", 50: "ema_50", 200: "ema_200"},
         tech_rsi_col="rsi_14",
         tech_ret_cols={k: f"ret_{k}" for k in T.RETURN_WINDOWS},
@@ -131,15 +104,15 @@ def get_calendar(p: Profile) -> pd.DatetimeIndex:
 
 
 def load_stock_universe(symbols: list[str] | None, limit: int | None) -> pd.DataFrame:
-    """Current Nifty 500 membership (docs §4: current membership for all history)."""
-    where = "i.nifty_500 and i.is_active"
+    """Current Nifty 500 membership (is_active on instrument_master = curated universe)."""
+    where = "i.asset_class = 'stock' and i.kite_token is not null and i.is_active"
     params: dict = {}
     if symbols:
         where += " and i.symbol = any(:syms)"
         params["syms"] = symbols
     sql = f"""
-        select i.id as instrument_id, i.symbol, i.listing_date
-        from public.de_instrument i
+        select i.instrument_id, i.symbol, i.listing_date
+        from foundation_staging.instrument_master i
         where {where}
         order by i.symbol
     """
@@ -505,7 +478,7 @@ def _report(profile, rows, summary):
 
 def main():
     ap = argparse.ArgumentParser(description="Atlas data-foundation harness")
-    ap.add_argument("--profile", choices=list(PROFILES), default="live")
+    ap.add_argument("--profile", choices=list(PROFILES), default="staging")
     ap.add_argument("--symbols", nargs="*", help="restrict to these NSE symbols")
     ap.add_argument("--limit", type=int, help="cap universe size")
     ap.add_argument(

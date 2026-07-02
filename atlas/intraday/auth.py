@@ -87,7 +87,7 @@ def store_access_token(access_token: str, *, conn_str: str) -> None:
                 # Close all existing active sessions
                 cur.execute(
                     """
-                    UPDATE atlas.atlas_kite_session
+                    UPDATE foundation_staging.atlas_kite_session
                     SET session_type = 'closed', updated_at = NOW()
                     WHERE session_type = 'active'
                     """
@@ -99,7 +99,7 @@ def store_access_token(access_token: str, *, conn_str: str) -> None:
                 # Insert new active session with encrypted token
                 cur.execute(
                     """
-                    INSERT INTO atlas.atlas_kite_session
+                    INSERT INTO foundation_staging.atlas_kite_session
                         (access_token_enc, session_type, expires_at)
                     VALUES
                         (pgp_sym_encrypt(%s, %s), 'active', %s)
@@ -133,7 +133,7 @@ def get_valid_access_token(*, conn_str: str) -> str:
             cur.execute(
                 """
                 SELECT pgp_sym_decrypt(access_token_enc, %s)
-                FROM atlas.atlas_kite_session
+                FROM foundation_staging.atlas_kite_session
                 WHERE session_type = 'active'
                   AND expires_at > NOW()
                 ORDER BY login_time DESC

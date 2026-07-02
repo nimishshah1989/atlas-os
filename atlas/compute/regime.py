@@ -114,42 +114,48 @@ def _load_stock_data_for_regime(
     end_date: date,
     lookback_days: int = 900,
 ) -> pd.DataFrame:
-    """Stock-level metrics + states needed for breadth computation.
+    """Stock-level EMAs + RS + derived strength states for breadth, from
+    foundation_staging (single-schema; no atlas.* mirror).
 
-    Pulls ``ema_20_stock``, ``ema_50_stock``, ``ema_200_stock``,
-    ``extension_pct`` (for ``close_approx``), plus ``rs_state`` and
-    ``momentum_state`` for the
-    strength-breadth family. Lookback feeds the 252d new-highs/lows window.
+    Reads ``technical_daily`` (EMAs 21/50/200, RS-vs-Nifty500, above-EMA flags)
+    joined to ``ohlcv_stock`` (real adjusted close) for the active Nifty-500
+    universe (``instrument_master.is_active``). The strength-breadth state
+    fields are derived NATIVELY from the technical columns (the retired atlas
+    states table is gone):
+
+      * ``weinstein_gate_pass`` := price above its 200-EMA (Weinstein Stage-2 gate).
+      * ``rs_state`` = 'Strong' := above both 50- and 200-EMA with positive 3m RS
+        vs Nifty 500 (else 'Neutral').
+
+    ``ema_21`` stands in for the 20-EMA cohort (native technicals store 21, not
+    20); the regime STATE keys off 50-EMA breadth, so this only shifts the
+    display-only 20-EMA cohort. Lookback feeds the 252d new-highs/lows window.
     """
     load_start = start_date - timedelta(days=lookback_days)
     with open_compute_session(engine) as conn:
         df = pd.read_sql(
             """
             SELECT
-                m.instrument_id,
-                m.date,
-                m.ema_20_stock,
-                m.ema_50_stock,
-                m.ema_200_stock,
-                m.extension_pct,
-                m.rs_1m_tier,
-                s.rs_state,
-                s.momentum_state,
-                s.weinstein_gate_pass,
+                t.instrument_id,
+                t.date,
+                t.ema_21     AS ema_20_stock,
+                t.ema_50     AS ema_50_stock,
+                t.ema_200    AS ema_200_stock,
+                t.rs_1m_n500 AS rs_1m_tier,
+                t.rs_3m_n500,
+                t.above_ema_50,
+                t.above_ema_200,
                 COALESCE(o.close_adj, o.close) AS close_real
-            FROM atlas.atlas_stock_metrics_daily m
-            JOIN atlas.atlas_universe_stocks u
-                ON u.instrument_id = m.instrument_id
-                AND u.effective_to IS NULL
-            LEFT JOIN atlas.atlas_stock_states_daily s
-                ON s.instrument_id = m.instrument_id
-                AND s.date = m.date
-            LEFT JOIN public.de_equity_ohlcv o
-                ON o.instrument_id = m.instrument_id
-                AND o.date = m.date
-            WHERE m.date BETWEEN %(start)s AND %(end)s
-              AND u.in_nifty_500 = TRUE
-            ORDER BY m.instrument_id, m.date
+            FROM foundation_staging.technical_daily t
+            JOIN foundation_staging.instrument_master im
+                ON im.instrument_id = t.instrument_id
+                AND im.is_active
+                AND im.asset_class = 'stock'
+            LEFT JOIN foundation_staging.ohlcv_stock o
+                ON o.instrument_id = t.instrument_id
+                AND o.date = t.date
+            WHERE t.date BETWEEN %(start)s AND %(end)s
+            ORDER BY t.instrument_id, t.date
             """,
             conn,
             params={"start": load_start, "end": end_date},
@@ -160,16 +166,18 @@ def _load_stock_data_for_regime(
         return df
 
     df["date"] = pd.to_datetime(df["date"]).dt.date
-    # Breadth (new highs/lows, MA breadth) computes off close_approx. Use the
-    # real adjusted close from de_equity_ohlcv — it is complete and reliable.
-    # Fall back to the ema_200×(1+extension_pct) reconstruction only where the
-    # OHLCV row is missing, so a sparse ema_200 column can never silently
-    # collapse breadth to zero again (see 2026-05 breadth regression).
-    close_real = df["close_real"].astype("float64")
-    ema200 = df["ema_200_stock"].astype("float64")
-    ext = df["extension_pct"].astype("float64")
-    reconstructed = ema200 * (1.0 + ext)
-    df["close_approx"] = close_real.where(close_real.notna(), reconstructed)
+    # Breadth computes off close_approx = the real adjusted close from ohlcv_stock
+    # (complete + reliable in the Kite-sourced single-schema path — no ema×extension
+    # reconstruction needed, unlike the old sparse-ema_200 atlas path).
+    df["close_approx"] = df["close_real"].astype("float64")
+    # Native strength-breadth states (REAL, derived from the technical columns):
+    above_50 = df["above_ema_50"].fillna(False).astype(bool)
+    above_200 = df["above_ema_200"].fillna(False).astype(bool)
+    df["weinstein_gate_pass"] = above_200
+    df["rs_state"] = np.where(
+        above_50 & above_200 & (df["rs_3m_n500"].astype("float64") > 0), "Strong", "Neutral"
+    )
+    df["momentum_state"] = None  # not persisted (dropped by METRICS_COLUMNS reindex)
     return df
 
 
@@ -191,7 +199,7 @@ def _load_index_inputs(
         prices = pd.read_sql(
             """
             SELECT index_code, date, close
-            FROM public.de_index_prices
+            FROM foundation_staging.index_prices
             WHERE index_code IN ('NIFTY 500', 'INDIA VIX')
               AND date BETWEEN %(start)s AND %(end)s
               AND close IS NOT NULL
@@ -203,7 +211,7 @@ def _load_index_inputs(
         idx_metrics = pd.read_sql(
             """
             SELECT date, realized_vol_5d, vol_252_median
-            FROM atlas.atlas_index_metrics_daily
+            FROM foundation_staging.atlas_index_metrics_daily
             WHERE index_code = 'INDIA VIX'
               AND date BETWEEN %(start)s AND %(end)s
             """,

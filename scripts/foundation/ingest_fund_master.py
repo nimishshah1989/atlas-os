@@ -8,8 +8,8 @@ master metadata (de_mf_master was stuck at 2026-05-05; atlas_universe_funds AUM 
     GET /v2/service/mf/{MSTAR_MASTER_SERVICE}/universeid/{MSTAR_MASTER_UNIVERSE}?accesscode=
 
 (the HOLDINGS service's universe call is >130MB and times out — that one must stay per-fund;
-see ingest_mf_holdings.py.) This writes DIRECTLY into foundation_staging — no public.de_*
-hop, no consolidate mirror.
+see ingest_mf_holdings.py.) This writes DIRECTLY into foundation_staging — no legacy
+raw-schema hop, no consolidate mirror.
 
 It refreshes two tables:
   * de_mf_master       — UPSERT every fund's metadata by mstar_id (preserves amc_name, which

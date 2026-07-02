@@ -10,8 +10,8 @@ the www.nseindia.com/api/* JSON endpoints):
   • Indices close-all                    — all index OHLC for the day
       content/indices/ind_close_all_<DDMMYYYY>.csv
 
-Stocks are matched to public.de_instrument by ISIN (then symbol) to obtain the
-instrument_id. ETFs are matched against the existing de_etf_ohlcv ticker set.
+Stocks are matched to the instrument master by ISIN (then symbol) to obtain the
+instrument_id. ETFs are matched against the existing ohlcv_etf ticker set.
 Writes raw OHLCV into foundation_staging; adjustment + technicals run separately.
 
 Cost rule: pure-Python download/parse; emits only small counts.
@@ -129,14 +129,15 @@ def parse_indices(raw: pd.DataFrame) -> pd.DataFrame:
 
 # ── Universe mapping ─────────────────────────────────────────────────────────
 def instrument_map() -> pd.DataFrame:
-    """de_instrument rows for matching bhavcopy symbols → instrument_id."""
+    """instrument_master rows for matching bhavcopy symbols → instrument_id."""
     return _db.read_df(
-        "select id as instrument_id, symbol, isin, nifty_500, is_active from public.de_instrument"
+        "select instrument_id, symbol, isin, is_active from foundation_staging.instrument_master "
+        "where asset_class='stock'"
     )
 
 
 def etf_tickers() -> set[str]:
-    df = _db.read_df("select distinct ticker from public.de_etf_ohlcv")
+    df = _db.read_df("select distinct ticker from foundation_staging.ohlcv_etf")
     return set(df["ticker"].astype(str).str.strip())
 
 

@@ -1,7 +1,7 @@
 """Data adapters for the six-lens scoring engine.
 
-Read from foundation_staging + atlas tables, feed data to pure scorers,
-write results to atlas.atlas_lens_scores_daily.
+Read from foundation_staging, feed data to pure scorers,
+write results to foundation_staging.atlas_lens_scores_daily.
 """
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ def load_technical_data(engine: Engine, as_of: date) -> pd.DataFrame:
     that date (all PIT). The as-of price comes from ohlcv_stock on that date:
     `price_adj` (adjusted close, the basis EMA/ATR were computed on — used by the
     technical lens) and `close_raw` (actual traded close — used for the valuation
-    PE). This replaces the old LEFT JOIN to the atlas.tv_metrics SNAPSHOT, which
+    PE). This replaces the old LEFT JOIN to the legacy tv_metrics SNAPSHOT, which
     stamped today's price/52w/volume/ATR on every historical date (the Loop C leak).
     """
     sql = text("""
@@ -390,11 +390,11 @@ def load_mf_flow(engine: Engine, as_of: date | None = None) -> pd.DataFrame:
 
 
 def load_policy_registry(engine: Engine) -> list[dict[str, Any]]:
-    """Load active policies from atlas.policy_registry."""
+    """Load active policies from foundation_staging.policy_registry."""
     sql = text("""
         SELECT policy_id, policy_name, description, impact,
                beneficiary_sectors, beneficiary_keywords
-        FROM atlas.policy_registry
+        FROM foundation_staging.policy_registry
         WHERE is_active = TRUE
     """)
     with open_compute_session(engine) as conn:
@@ -405,17 +405,16 @@ def load_policy_registry(engine: Engine) -> list[dict[str, Any]]:
 def load_instrument_sectors(engine: Engine) -> pd.DataFrame:
     """Load sector/industry for all active stocks from instrument_master.
 
-    Sector/industry come from atlas_universe_stocks (left join), so instruments
-    not yet in the curated universe still get scored but with NULL sector.
+    Sector + industry are native columns on instrument_master (the single
+    universe/sector reference); instruments outside the curated universe are
+    excluded by the is_active filter below.
     """
     # Bound to the Atlas coverage universe (is_active = NIFTY 500, FM 2026-06-25).
     # This is the durable single-universe fix: the lens journal equals exactly the
     # 498 scored names, instead of every kite_token instrument (the old 2,093).
     sql = text("""
-        SELECT im.instrument_id, im.symbol, u.sector, u.industry
+        SELECT im.instrument_id, im.symbol, im.sector, im.industry
         FROM foundation_staging.instrument_master im
-        LEFT JOIN atlas.atlas_universe_stocks u
-            ON u.instrument_id = im.instrument_id AND u.effective_to IS NULL
         WHERE im.asset_class = 'stock' AND im.kite_token IS NOT NULL
           AND im.is_active
     """)
@@ -428,7 +427,7 @@ def write_lens_scores(
     results: list[dict[str, Any]],
     run_id: uuid.UUID | None = None,
 ) -> int:
-    """Upsert scored results into atlas.atlas_lens_scores_daily."""
+    """Upsert scored results into foundation_staging.atlas_lens_scores_daily."""
     if not results:
         return 0
     columns = [

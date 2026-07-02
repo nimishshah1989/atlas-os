@@ -7,7 +7,7 @@ REAL row pulled from the data layer for a REAL instrument on a REAL NSE session.
 The backbone is END-TO-END RECONCILIATION: we run the exact production scoring core
 (atlas.lenses.pipeline.score_all) over the real as-of adapter inputs for a reference
 session, and assert each lens + the composite equals what the pipeline already
-persisted in atlas.atlas_lens_scores_daily for that session. That proves
+persisted in foundation_staging.atlas_lens_scores_daily for that session. That proves
 adapters + scorers + composite end-to-end on production data and cannot be made to
 pass with a weak assertion. Around it sit contract tests (a sub-component is present
 iff its real input is present; ranges; no-data → None not a stub) and the Loop C

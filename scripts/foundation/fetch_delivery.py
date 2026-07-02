@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Fetch NSE security-wise delivery (sec_bhavdata_full) for a date range and fill the
-NULL delivery_pct in public.de_equity_ohlcv (rows exist, delivery missing) so the
-delivery_daily backfill can compute a COMPLETE rolling series to the latest session.
+"""Fetch NSE security-wise delivery (sec_bhavdata_full) and upsert it into
+foundation_staging.delivery_raw (Atlas-owned, single-schema) so the delivery_daily
+backfill can compute a COMPLETE rolling series to the latest session.
 
 The standard UDiFF CM bhavcopy (ingest_bhavcopy.py) carries NO delivery; delivery lives
 in the separate sec_bhavdata_full_<DDMMYYYY>.csv (cols incl DELIV_QTY, DELIV_PER). PIT
 same-day data (published EOD). Idempotent; resumable (re-run re-fills).
 
-    python fetch_delivery.py --start 2026-04-07 --end 2026-06-19
+    python fetch_delivery.py                          # incremental (since last, → EOD)
+    python fetch_delivery.py --start 2026-04-07 --end 2026-06-19   # explicit range
 """
 
 from __future__ import annotations
@@ -65,6 +66,9 @@ def fetch_one(d: date) -> pd.DataFrame | None:
 
 def run(start: date, end: date) -> None:
     sess = sessions(start, end)
+    if not sess:
+        print("no sessions in window — nothing to fetch", flush=True)
+        return
     print(f"{len(sess)} sessions {sess[0]}..{sess[-1]}", flush=True)
     im = _db.read_df(
         "SELECT instrument_id, symbol FROM foundation_staging.instrument_master "
@@ -97,42 +101,38 @@ def run(start: date, end: date) -> None:
 
     out = allf[["instrument_id", "date", "DELIV_PER"]].rename(columns={"DELIV_PER": "delivery_pct"})
     out["date"] = out["date"].astype(str)
-    csv = io.StringIO()
-    out.to_csv(csv, index=False, header=False)
-    csv.seek(0)
-    raw = _db.engine().raw_connection()
-    try:
-        cur = raw.cursor()
-        cur.execute("SET LOCAL statement_timeout = '1200000'")
-        cur.execute("DROP TABLE IF EXISTS public._deliv_fill")
-        cur.execute(
-            "CREATE UNLOGGED TABLE public._deliv_fill "
-            "(instrument_id uuid, date date, delivery_pct numeric)"
-        )
-        cur.copy_expert(
-            "COPY public._deliv_fill (instrument_id,date,delivery_pct) FROM STDIN WITH CSV", csv
-        )
-        cur.execute("CREATE INDEX ON public._deliv_fill (instrument_id, date)")
-        cur.execute(
-            "UPDATE public.de_equity_ohlcv o SET delivery_pct = f.delivery_pct "
-            "FROM public._deliv_fill f "
-            "WHERE o.instrument_id = f.instrument_id AND o.date = f.date"
-        )
-        n = cur.rowcount
-        cur.execute("DROP TABLE IF EXISTS public._deliv_fill")
-        raw.commit()
-        print(f"UPDATE de_equity_ohlcv.delivery_pct: {n} rows filled", flush=True)
-    finally:
-        raw.close()
+    # Upsert into the Atlas-owned raw delivery table (single-schema; no public.* hop).
+    _db.exec_sql(
+        "CREATE TABLE IF NOT EXISTS foundation_staging.delivery_raw ("
+        "instrument_id uuid NOT NULL, date date NOT NULL, delivery_pct numeric, "
+        "PRIMARY KEY (instrument_id, date))"
+    )
+    n = _db.upsert_df("foundation_staging.delivery_raw", out, ["instrument_id", "date"])
+    print(f"upsert foundation_staging.delivery_raw: {n} rows", flush=True)
     print("DONE", flush=True)
+
+
+def _default_window() -> tuple[date, date]:
+    """Incremental window: a few sessions before the latest delivery_raw date (overlap
+    self-heals a missed day) → last complete EOD. Full 2019+ if delivery_raw is empty."""
+    end = _db.eod_cutoff()
+    last = _db.read_df("SELECT max(date) mx FROM foundation_staging.delivery_raw", {}).iloc[0]["mx"]
+    if last is None:
+        return date.fromisoformat("2019-01-01"), end
+    return (pd.Timestamp(last) - pd.Timedelta(days=7)).date(), end
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--start", type=date.fromisoformat, required=True)
-    ap.add_argument("--end", type=date.fromisoformat, required=True)
+    ap.add_argument("--start", type=date.fromisoformat, default=None)
+    ap.add_argument("--end", type=date.fromisoformat, default=None)
     args = ap.parse_args()
-    run(args.start, args.end)
+    if args.start and args.end:
+        run(args.start, args.end)
+    else:
+        s, e = _default_window()
+        print(f"incremental delivery window {s}..{e}", flush=True)
+        run(s, e)
 
 
 if __name__ == "__main__":

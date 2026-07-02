@@ -5,7 +5,7 @@ Zerodha access tokens expire at midnight IST, so this runs every morning (cron)
 BEFORE the data pull. No browser: it drives Kite's login + twofa endpoints with
 `requests`, generates the 6-digit code from the stored TOTP secret (pyotp),
 captures the OAuth `request_token`, exchanges it for an access_token, and stores
-it encrypted in atlas.atlas_kite_session (reusing atlas.intraday.auth).
+it encrypted in foundation_staging.atlas_kite_session (reusing atlas.intraday.auth).
 
 Credentials come from .env (chmod 600, gitignored):
   KITE_API_KEY, KITE_API_SECRET, KITE_TOKEN_ENCRYPTION_KEY,

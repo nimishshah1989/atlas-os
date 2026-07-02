@@ -21,7 +21,7 @@ import _db
 
 # Single read schema: validate exactly what the platform serves (foundation_staging).
 L = "foundation_staging.atlas_lens_scores_daily"
-SEC = "atlas.atlas_sector_lens_daily"
+SEC = "foundation_staging.sector_lens_daily"
 IM = "foundation_staging.instrument_master"
 FILINGS = "foundation_staging.lens_filings"
 # Coverage universe = Atlas's active set (NIFTY 500 = 498, FM 2026-06-25). Completeness
@@ -119,7 +119,7 @@ def check_A(g: Gate):
 def check_B(g: Gate):
     print("== Loop B gate: ETF/index/sector holdings roll-up + sector mapping ==")
     # ETFs with holdings must each have a lens vector
-    n_etf_hold = _q("select count(distinct ticker) from public.de_etf_holdings")
+    n_etf_hold = _q("select count(distinct ticker) from foundation_staging.de_etf_holdings")
     n_etf_scored = _q(f"select count(distinct instrument_id) from {L} where asset_class='etf'")
     g.check(
         "ETF lens coverage",
@@ -128,7 +128,7 @@ def check_B(g: Gate):
     )
 
     # Indices with constituents must each have a lens vector
-    n_idx_con = _q("select count(distinct index_code) from public.de_index_constituents")
+    n_idx_con = _q("select count(distinct index_code) from foundation_staging.de_index_constituents")
     n_idx_scored = _q(f"select count(distinct instrument_id) from {L} where asset_class='index'")
     g.check(
         "index lens coverage",
