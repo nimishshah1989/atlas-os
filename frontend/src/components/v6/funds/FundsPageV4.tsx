@@ -6,7 +6,7 @@
 // scores — explicitly NOT an outperformance predictor. The fund-specific differentiator (on each
 // detail page) is ACTIVE-MOVEMENT: month-over-month holdings deltas.
 // Order: 1. leadership-breadth strip + a few top cards · 2. the sortable lens table.
-import { getFundLensList, type FundLensRow } from '@/lib/queries/v6/fund_lens'
+import { getFundLensList, getFundsAsOf, type FundLensRow } from '@/lib/queries/v6/fund_lens'
 import { getLensWeights } from '@/lib/queries/v6/lens_weights'
 import { getFundRankHistory } from '@/lib/queries/v6/fund_rank_history'
 import { getFundRsMatrix, getFundHoldingsEma, getFundGoldenCross, getFundReturns } from '@/lib/queries/v6/fund_metrics'
@@ -66,7 +66,7 @@ function TopCard({ f }: { f: FundLensRow }) {
 }
 
 export async function FundsPageV4() {
-  const [funds, weights, historyMap, rsMap, emaMap, goldenMap, returnsMap] = await Promise.all([
+  const [funds, weights, historyMap, rsMap, emaMap, goldenMap, returnsMap, asOf] = await Promise.all([
     getFundLensList(),
     getLensWeights(),
     getFundRankHistory(),
@@ -74,6 +74,7 @@ export async function FundsPageV4() {
     getFundHoldingsEma(),
     getFundGoldenCross(),
     getFundReturns(),
+    getFundsAsOf(),
   ])
   // Maps → plain objects so they serialise across the server→client boundary into FundLensTable.
   const history = Object.fromEntries(historyMap)
@@ -137,6 +138,7 @@ export async function FundsPageV4() {
         <div className="mb-2 flex flex-wrap items-baseline gap-4">
           <h1 className="font-display text-[32px] font-bold tracking-tight text-txt-1">Funds</h1>
           <span className="font-num text-[12px] tabular-nums text-txt-3">{universeCount} equity funds (Regular Growth) · holdings-weighted lens roll-up</span>
+          {asOf && <span className="font-sans text-[11px] text-txt-3">· holdings as of {asOf}</span>}
         </div>
         <p className="max-w-[880px] font-sans text-[15px] text-txt-2">
           Each fund is a <strong>holdings-weighted roll-up</strong> of the stock atom. The headline is

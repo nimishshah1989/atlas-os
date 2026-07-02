@@ -312,19 +312,11 @@ export async function getStocksDecileList(): Promise<StockListRow[]> {
       WHERE effective_to IS NULL AND index_code IN ('NIFTY 100','NIFTY MIDCAP 150','NIFTY SMLCAP 250')
       GROUP BY instrument_id
     ),
-    rs AS (
-      SELECT instrument_id, rs_1m_n500, rs_3m_n500, rs_6m_n500, ret_3m
+    rs AS (  -- rs_3m_sector is the CANONICAL stored RS-vs-sector (stock 3M − sector-index 3M,
+             -- both calendar-anchored via backfill_sector_rs); read it, never recompute inline.
+      SELECT instrument_id, rs_1m_n500, rs_3m_n500, rs_6m_n500, ret_3m, rs_3m_sector
       FROM atlas_foundation.technical_daily
       WHERE asset_class='stock' AND date=(SELECT d FROM tdl)
-    ),
-    sec_ret AS (  -- each sector's own NSE-index 3M return → real RS-vs-sector (stock 3M − sector-index 3M).
-      SELECT sm.sector_name, max(aim.ret_3m::float) AS sret_3m
-      FROM atlas_foundation.atlas_sector_master sm
-      JOIN atlas_foundation.atlas_index_metrics_daily aim
-        ON aim.index_code = sm.primary_nse_index
-       AND aim.date = (SELECT max(date) FROM atlas_foundation.atlas_index_metrics_daily)
-      WHERE sm.is_active = true
-      GROUP BY sm.sector_name
     ),
     liq AS (  -- ≈20-session avg traded value (₹ Cr): a 30-calendar-day window ≈ 20 NSE sessions
       SELECT instrument_id, avg(close * volume) / 1e7 AS liq_cr
@@ -357,10 +349,9 @@ export async function getStocksDecileList(): Promise<StockListRow[]> {
       ((COALESCE(d.d_tech,0)+COALESCE(d.d_flow,0))::float
         / NULLIF((d.d_tech IS NOT NULL)::int+(d.d_flow IS NOT NULL)::int,0)) AS strength,
       rs.rs_1m_n500, rs.rs_3m_n500, rs.rs_6m_n500,
-      (rs.ret_3m - sr.sret_3m) AS rs_3m_sector, rs.ret_3m, liq.liq_cr
+      rs.rs_3m_sector, rs.ret_3m, liq.liq_cr
     FROM dec d
     LEFT JOIN rs  ON rs.instrument_id  = d.instrument_id
-    LEFT JOIN sec_ret sr ON sr.sector_name = d.sector
     LEFT JOIN liq ON liq.instrument_id = d.instrument_id
     ORDER BY strength DESC NULLS LAST
   `

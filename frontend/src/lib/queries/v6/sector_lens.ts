@@ -87,15 +87,6 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
       WHERE effective_to IS NULL AND index_code IN ('NIFTY 100','NIFTY MIDCAP 150','NIFTY SMLCAP 250')
       GROUP BY instrument_id
     ),
-    sec_ret AS (  -- each sector's own NSE-index 3M return → real RS-vs-sector (stock 3M − sector-index 3M)
-      SELECT sm.sector_name, max(aim.ret_3m::float) AS sret_3m
-      FROM atlas_foundation.atlas_sector_master sm
-      JOIN atlas_foundation.atlas_index_metrics_daily aim
-        ON aim.index_code = sm.primary_nse_index
-       AND aim.date = (SELECT max(date) FROM atlas_foundation.atlas_index_metrics_daily)
-      WHERE sm.is_active = true
-      GROUP BY sm.sector_name
-    ),
     liq AS (  -- ≈20-session avg traded value (₹ Cr)
       SELECT instrument_id, avg(close * volume) / 1e7 AS liq_cr
       FROM atlas_foundation.ohlcv_stock
@@ -108,7 +99,8 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
              l.composite::float comp,
              td.ret_1d::float r1d, td.ret_1w::float r1w, td.ret_1m::float r1m,
              td.ret_3m::float r3m, td.ret_6m::float r6m, td.ret_12m::float r12m,
-             td.rs_1m_n500::float rs1m, td.rs_3m_n500::float rs3m, td.rs_6m_n500::float rs6m
+             td.rs_1m_n500::float rs1m, td.rs_3m_n500::float rs3m, td.rs_6m_n500::float rs6m,
+             td.rs_3m_sector::float rs_sec3m  -- canonical stored RS-vs-sector (read, never recompute)
       FROM atlas_foundation.atlas_lens_scores_daily l
       JOIN atlas_foundation.instrument_master im ON im.instrument_id = l.instrument_id
       LEFT JOIN cap c ON c.instrument_id = l.instrument_id
@@ -118,7 +110,7 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
       WHERE l.asset_class='stock' AND l.date=(SELECT d FROM latest)
     ),
     dec AS (
-      SELECT instrument_id, symbol, name, sector, cap, t, f, ca, fl, va, comp, r1d, r1w, r1m, r3m, r6m, r12m, rs1m, rs3m, rs6m,
+      SELECT instrument_id, symbol, name, sector, cap, t, f, ca, fl, va, comp, r1d, r1w, r1m, r3m, r6m, r12m, rs1m, rs3m, rs6m, rs_sec3m,
         CASE WHEN t  IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(t  IS NULL) ORDER BY t)  END d_tech,
         CASE WHEN f  IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(f  IS NULL) ORDER BY f)  END d_fund,
         CASE WHEN ca IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(ca IS NULL) ORDER BY ca) END d_cat,
@@ -141,14 +133,13 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
     )
     SELECT d.symbol, d.name, d.cap, d.d_tech, d.d_fund, d.d_cat, d.d_flow, d.d_val,
       d.r1d, d.r1w, d.r1m, d.r3m, d.r6m, d.r12m, d.rs1m, d.rs3m, d.rs6m,
-      (d.r3m - sr.sret_3m) AS rs_sector_3m, liq.liq_cr,
+      d.rs_sec3m AS rs_sector_3m, liq.liq_cr,
       (COALESCE((d.d_composite>=10)::int,0)) AS lead,  -- LEADER = top decile (D10) of composite within cap cohort (one rule; 0/1)
       ((COALESCE(d.d_tech,0)+COALESCE(d.d_flow,0))::float
         / NULLIF((d.d_tech IS NOT NULL)::int+(d.d_flow IS NOT NULL)::int,0)) AS strength,
       -- free-float weight WITHIN this sector: the window runs after the sector WHERE, so it sums the sector only
       round((100.0 * ff.ff_mcap / NULLIF(sum(ff.ff_mcap) OVER (), 0))::numeric, 2) AS ff_weight
     FROM dec d
-    LEFT JOIN sec_ret sr ON sr.sector_name = d.sector
     LEFT JOIN liq ON liq.instrument_id = d.instrument_id
     LEFT JOIN ff ON ff.instrument_id = d.instrument_id
     WHERE d.sector = ${sector}

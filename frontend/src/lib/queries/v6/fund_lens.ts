@@ -234,3 +234,11 @@ export async function getFundSectorHistory(mstarId: string): Promise<{ d: string
     GROUP BY h.as_of_date, COALESCE(im.sector,'Unclassified')`
   return rows.map((r) => ({ d: r.d, sector: r.sector, w: toNumberOr(r.w, 0) }))
 }
+
+// Data-as-of date for the /funds page banner = the latest MF-holdings snapshot the roll-up
+// is computed from (weekly cadence). Single source of the page's freshness stamp.
+export async function getFundsAsOf(): Promise<string | null> {
+  const rows = await sql<{ d: string | null }[]>`
+    SELECT to_char(max(as_of_date),'YYYY-MM-DD') AS d FROM atlas_foundation.de_mf_holdings`
+  return rows[0]?.d ?? null
+}

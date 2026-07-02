@@ -184,3 +184,12 @@ export async function getEtfLensDetail(fcode: string): Promise<EtfLensDetail | n
     })),
   }
 }
+
+// Data-as-of date for the /etfs page banner = the latest scored date of the stock atom the
+// ETF holdings-weighted roll-up is derived from. Single source of the page's freshness stamp.
+export async function getEtfsAsOf(): Promise<string | null> {
+  const rows = await sql<{ d: string | null }[]>`
+    SELECT to_char(max(date),'YYYY-MM-DD') AS d
+    FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock'`
+  return rows[0]?.d ?? null
+}
