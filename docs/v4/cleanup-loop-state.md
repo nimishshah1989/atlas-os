@@ -143,6 +143,16 @@ Pause only at: prod deploy · force-push · the actual DROP (after migrate+green
 | fund_rank_daily | 06-30 ✅ | — |
 | de_mf_holdings | 06-26 | 05-04 (public) |
 
-## Next actions
-1. G1 kickoff: full table inventory across all schemas (producers/consumers), map cross-schema deps.
-2. Draft the G2 refresh matrix → **FM sign-off gate**.
+## ✅ DONE (G1/G2/cleanup, sessions 2a-2d, 2026-07-02)
+Single schema `atlas_foundation` (gate=0); rename done; ALL legacy schemas + pg_cron DROPPED; clean 6-job crontab; orchestrator complete (NAV+bulk_deals added); gate bugs + freshness-completeness fixed; nightly deploy rebuilds; bhavcopy 404 graceful; ~758 dead files + ~2GB box dirs removed; board live at 07-02, all routes 200. See progress log entries "session 2b/2c/2d".
+
+## ▶ REMAINING (G3–G7) — NEXT SESSION, drive to 100%
+**Ops:** `cd /home/ubuntu/atlas-os; set -a; source .env; set +a; PYTHONPATH=.:scripts/foundation .venv/bin/python <script>`. Branch `release/v4-consolidation-live`. THIS box=prod (pm2 atlas-frontend-v3 :3004). Gates: `scripts/ops/schema_gate.py`(=0), `scripts/foundation/validate_lenses.py --check A/B`, `scripts/ops/freshness_guard.py`. **⚠️DEPLOY HYGIENE: never `pm2 reload` while a FE build runs → corrupts .next → 500s; wait for `.next/BUILD_ID`.** Autonomy: drive hard; pause only at destructive DROP / force-push (prod deploy pre-authorized).
+
+- **G4 (data model — biggest, needs testing):** (a) `instrument_master` universe stale at 06-25 → wire `build_universe.py`+`assign_sectors.py` into `atlas_weekly.sh` (TEST: universe stays 498 active, sectors intact, before/after diff). (b) `technical_daily.rs_sector` is ALL NULL on latest date → `backfill_sector_rs.py` isn't running; wire into daily compute after `compute_all` (verify it fills rs_1m/3m/6m/12m_sector; check what live query reads it). (c) ETF scorecard covers 34/126 universe — decide: expand coverage or accept (FM flagged). (d) also-kept-but-not-croned: `build_sector_rrg`(mv_sector_rrg), `fetch_marketcap`(equity_marketcap — note: no `as_of` col, check schema), `populate_etf_isin`, `ingest_xbrl`. (e) double-calc audit; document each KEEP table (source/formula) in admin methodology tab.
+- **G6 (freshness/provenance):** `atlas_foundation.{atlas_pipeline_runs,atlas_health_daily,atlas_validator_results}` have NO live writer (old writers were deleted — they wrote dead atlas.*) → /health + /admin/data-status show a frozen clone. Wire the orchestrator to write a pipeline_run row + freshness/validator snapshot each night. Add "as of <EOD>" stamp to EVERY page (Market Pulse has it; extend to stocks/etfs/funds/sectors/detail). One freshness registry (reuse freshness_guard's KEY_TABLES + health.ts's FOUNDATION_TABLES).
+- **G3 (pure-reader):** confirm no scoring MATH in reachable FE — `frontend/src/lib/v6/fundScore.ts` + `sectorScore.ts` still exist; trace if a live page computes composite via them (vs reading precomputed cols) → delete if dead, or materialize into fs cols. Verify no other orphan API routes (14 exist; check each is fetched).
+- **G5 (zero hardcoding):** `grep -rnE "[^a-z_](0\.[0-9]+|[0-9]{2,})" atlas/lenses/compute` for numeric scoring constants → move any to atlas_thresholds; confirm /admin/thresholds covers them.
+- **G7 (pristine repo):** FM installs ponytail (github.com/DietrichGebert/ponytail) + headroom (github.com/headroomlabs-ai/headroom); prune merged/dead git branches; final /review or workflow across arch/bugs/CI; land to main.
+- **Verify tomorrow's 16:00 nightly ran fully green** (first run with all fixes: deploy-rebuild + graceful bhavcopy + check_B fixed + NAV/bulk_deals). Log: `/home/ubuntu/logs/atlas_daily_cron.log` + timestamped.
+- Remaining ambiguous .sh to triage (superseded by atlas_daily?): scripts/foundation/{run_pipeline,refresh_v4_derived,_refresh_breadth}.sh.
