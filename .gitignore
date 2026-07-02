@@ -59,3 +59,4 @@ package-lock.json
 # Loop C rebuild resume state (local only)
 scripts/foundation/.loopC_rebuild_state.json
 scripts/validator_night_run.log
+frontend/.next.bak*

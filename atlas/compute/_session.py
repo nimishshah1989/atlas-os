@@ -1,6 +1,6 @@
 """Compute-session helpers: timeout disablement + bulk upserts.
 
-Per ``prds/00_INFRA_DECISIONS.md`` and ``prds/M2_BUILD_PLAN.md`` §1 R3:
+Design note:
 
 * Supabase's pooler enforces a default ``statement_timeout``. Long compute
   queries (loading 2.3 M OHLCV rows, writing 50-column metric pages) hit it.

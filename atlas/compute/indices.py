@@ -1,6 +1,6 @@
 """Index metrics pipeline (M3 Phase A).
 
-Per ``docs/00_METHODOLOGY_LOCK.md`` §9 and ``docs/02_DATABASE_SCHEMA.md`` §3.3.
+Per the lens methodology (§9) and the index-metrics schema.
 
 Computes per-(index_code, date) metrics across the 75 NSE indices in the
 curated universe (135 codes are available in ``atlas_foundation.index_prices``;
@@ -47,7 +47,7 @@ NIFTY500_CODE = "NIFTY 500"
 
 INDIA_VIX_CODE = "INDIA VIX"
 """Reference code for India VIX series. The schema has no VIX-special
-columns (per docs/02_DATABASE_SCHEMA.md §3.3 — ``realized_vol_5d`` and
+columns (``realized_vol_5d`` and
 ``vol_252_median`` are computed for *every* index, since the regime
 classifier reads them off the ``NIFTY 500`` row)."""
 
@@ -63,7 +63,7 @@ INDEX_WINDOWS: dict[str, int] = {
     "24m": 504,
 }
 
-# RS-vs-Nifty500 windows per docs/02_DATABASE_SCHEMA.md §3.3 (3 windows only).
+# RS-vs-Nifty500 windows (3 windows only).
 RS_WINDOWS: tuple[str, ...] = ("1w", "1m", "3m")
 
 

@@ -1,15 +1,13 @@
-"""Atlas — Adaptive Technical Lens for Asset States.
+"""Atlas — equity-intelligence compute modulith.
 
-Reads from JIP Data Core's ``public.de_*`` tables and writes to its own
-``atlas`` schema. Per ``docs/01_BACKEND_ARCHITECTURE.md`` Section 1.
+Reads and writes the single ``atlas_foundation`` Postgres schema. Bounded contexts:
 
-The package is laid out per architecture Section 11:
+- ``atlas.compute``   — index metrics, breadth, regime
+- ``atlas.intraday``  — current-day live indices/sector engine
+- ``atlas.lenses``    — the lens scorers + composite
 
-- ``atlas.universe``  — Layer 2 reference data (M1)
-- ``atlas.compute``   — Layer 3 metric, state, and decision pipelines (M2-M5)
-- ``atlas.validation`` — Five-tier validation framework
-- ``atlas.orchestration`` — Pipeline runner, stage definitions, notifications
-- ``atlas.api``       — Thin FastAPI serving layer (post-M5)
+Shared kernel: ``atlas.primitives`` / ``atlas.db`` / ``atlas.config``. Ingestion
+lives in ``scripts/foundation/``; the nightly orchestrator in ``scripts/ops/``.
 """
 
 from __future__ import annotations

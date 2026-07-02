@@ -24,7 +24,7 @@ _IST = ZoneInfo("Asia/Kolkata")
 # NSE trading-calendar source of truth. We use index-level NIFTY 50 sessions
 # (atlas_foundation.index_prices) rather than raw technical_daily DISTINCT
 # dates (which carry sparse 2-/10-row junk rows on holidays) or
-# public.de_trading_calendar (which mislabels the Budget-day special Sunday
+# the trading-calendar table (which mislabels the Budget-day special Sunday
 # session as a weekend and is synthetically future-dated). Membership-by-presence
 # is what correctly KEEPS the Budget-Sunday session (2026-02-01) while rejecting
 # weekends and NSE holidays — never use weekday arithmetic.

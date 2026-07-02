@@ -1,7 +1,7 @@
 # Atlas Engineering Process — target workflow & adoption plan
 
 **Status:** plan (2026-05-31). Owner: Nimish. Companion to
-`docs/v6/2026-05-30-deploy-hygiene-guide.md` (which lists the *rules*; this lists
+`docs/deploy-hygiene.md` (which lists the *rules*; this lists
 the *machinery* that enforces them automatically).
 
 ## Why this exists

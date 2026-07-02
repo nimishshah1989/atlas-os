@@ -2,8 +2,8 @@
 // ThresholdsPanelV4 over atlas_foundation.atlas_thresholds.
 export const dynamic = 'force-dynamic'
 
-import { getThresholds } from '@/lib/queries/v6/thresholds'
-import { ThresholdsPanelV4 } from '@/components/v6/thresholds/ThresholdsPanelV4'
+import { getThresholds } from '@/lib/queries/thresholds'
+import { ThresholdsPanelV4 } from '@/components/thresholds/ThresholdsPanelV4'
 
 export default async function AdminThresholdsPage() {
   const rows = await getThresholds()

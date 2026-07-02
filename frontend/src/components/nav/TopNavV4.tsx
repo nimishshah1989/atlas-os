@@ -7,7 +7,7 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { Menu, X } from 'lucide-react'
-import { ThemeToggle } from '@/components/v4/ui/ThemeToggle'
+import { ThemeToggle } from '@/components/ui/ThemeToggle'
 
 type NavItem = { href: string; label: string; exact?: boolean }
 

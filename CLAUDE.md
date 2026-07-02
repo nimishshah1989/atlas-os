@@ -3,15 +3,17 @@ nimish-os: 1.0
 project: atlas-os
 domain: fintech
 regime: [SEBI, DPDP]
-stack: [python, fastapi, postgres]
+stack: [python, nextjs, postgres]
 has_frontend: true
 scale: large
 ---
 
 # atlas-os
 
-Global engineering rules live at `~/.claude/CLAUDE.md`. This file is a thin
-pointer; substance lives in the docs below.
+Atlas is a discovery-first **equity-intelligence board** for Indian markets: it
+ingests real market data nightly, scores stocks / ETFs / funds / sectors through a
+lens methodology, and serves it as a glass-box web board. Global engineering rules
+live at `~/.claude/CLAUDE.md`; this file holds only Atlas-specific substance.
 
 ## ⛔ ABSOLUTE RULE #0 — NO SYNTHETIC OR DERIVED DATA (ZERO TOLERANCE)
 
@@ -28,90 +30,76 @@ feed was broken — every filing-rich name scored 0, and fake test data hid a re
 in a system that allocates capital. Definition-of-done gates MUST assert on REAL produced
 output (e.g. `scripts/foundation/validate_lenses.py`), never on synthetic fixtures.
 
-## Active track
+## Shape of the system
 
-**v6** — discovery-first equity intelligence platform rebuild (post-2026-05-24).
-Read `docs/v6/runbook.html` FIRST every v6 session. Phase 2 (SP01-SP10) still
-exists as a parallel surface; read `docs/phase2/00-master-plan.html` if you
-touch it.
+- **One database schema: `atlas_foundation`** (Supabase Postgres). There is no other
+  data schema. Every read and write goes here. `scripts/ops/schema_gate.py` keeps it 0.
+- **Ingestion (`scripts/foundation/`)** pulls from real sources only — Kite (OHLCV),
+  NSE (bhavcopy/filings/bulk-deals), AMFI (NAV), Morningstar (holdings), screener.in
+  (fundamentals). These are the ONLY external boundaries; nothing else calls off-box.
+- **Compute (`atlas/` modulith + `scripts/foundation/compute_all.py`)** derives the
+  lenses and composite; results land in `atlas_foundation`.
+- **Board (`frontend/`)** is Next.js reading `atlas_foundation` directly via Supabase.
+  No FastAPI backend, no internal-service HTTP calls — the board is self-contained.
+- **Orchestrator: `scripts/ops/atlas_daily.sh`** (16:00 IST cron) runs the whole
+  pipeline + gates + writes the health snapshot. Weekly/QA orchestrators alongside.
+- **Migrations** are squashed to a single baseline (`migrations/versions/0001_baseline_*`
+  = a verbatim dump of the live schema). Prod schema is managed directly, not by alembic.
 
-## Required reading (every session)
+## Architectural rules (some HOOK-ENFORCED — don't fight)
 
-1. `docs/v6/runbook.html` — build runbook (bootstrap, per-chunk loop, gates)
-2. `CONTEXT.md` — domain glossary (auto-loaded with this file)
-3. `~/.gstack/projects/atlas-os/ceo-plans/2026-05-24-atlas-v6-product-spec.md` — CEO plan
-4. `~/.gstack/projects/atlas-os/eng-plans/2026-05-24-atlas-v6-eng-review.html` — eng review
+1. **Single schema.** All tables in `atlas_foundation`. No new schemas. No cross-schema refs.
+2. **Self-contained.** No runtime dependency on any external service except the ingestion
+   sources above. The frontend never proxies to an internal API.
+3. **Modulith.** Each top-level `atlas/` package (`compute`, `intraday`, `lenses`) is a
+   bounded context. No cross-context imports except via `atlas.primitives`/`atlas.db`/`atlas.config`.
+4. **No hardcoded methodology numbers.** Every weight/threshold lives in
+   `atlas_foundation.atlas_thresholds`, editable from `/admin/thresholds`.
+5. **Decimal for money. Tz-aware datetimes.** Float-for-money is rejected by global hooks.
+6. **Tiered file-size limits**: 600 LOC source / 800 LOC tests / 250 LOC page shells.
+   Escape valve: `# allow-large: <reason>` (Python) / `// allow-large: <reason>` (TS).
+7. A PreToolUse hook gates edits to `atlas/**`, `frontend/src/**`, `migrations/versions/**`
+   until a planning skill (`/tdd`, `/grill-with-docs`, or `/plan-eng-review`) runs in the session.
 
-## Pointers (read on demand)
+## Deploy hygiene (a prod outage came from breaking this)
 
-- `docs/health-audit-rules.md` — 2026-05 audit guardrails (compute / frontend / arch)
-- `docs/agents/supabase-mcp.md` — Supabase MCP tiers + marker protocol
-- `docs/agents/issue-tracker.md` — GitHub issues via `gh` CLI
-- `docs/agents/triage-labels.md` — five canonical triage roles
-- `docs/agents/domain.md` — CONTEXT.md + ADR conventions
-- `decisions.jsonl` — append-only hash-chained audit log (Ruflo-managed)
-- `.ruflo/adr/` — ADRs for hard-to-reverse decisions
-- `<consolidation>/docs/atlas-signal-discovery/methodology-lock-2026-05-23.md` — methodology lock
-
-## Architectural rules (HOOK-ENFORCED — don't fight)
-
-1. **Modulith**. Each top-level `atlas/` package is a bounded context. No cross-context imports except via `atlas.primitives`, `atlas.db`, `atlas.config` or a context's public `__init__.py`.
-2. **Tiered file-size limits**: 600 LOC source / 800 LOC tests / 250 LOC page shells. Escape valve: `# allow-large: <reason>` (Python) or `// allow-large: <reason>` (TS).
-3. **Methodology thresholds** live in `atlas.atlas_thresholds`, loaded via `atlas.db.load_thresholds()`. No hardcoded constants in code.
-4. **Decimal for money. Tz-aware datetimes.** Float for money is rejected by global hooks.
-5. **v6 module edits gated** — `atlas/{features,decisions,regime,portfolio,ledger,macro,agents}/` Edits require a chunk-level planning skill (`/grill-with-docs`, `/tdd`, or `/plan-eng-review`) invoked first in the session.
-6. **Phase 0 gated** — `git checkout -b feat/v6-phase-0-*` or migration 080 require all 4 pre-build gates closed in `~/.gstack/projects/atlas-os/v6-gates.json`.
-
-## Local workspace (NEVER under iCloud)
-
-The git working tree MUST live **outside any iCloud-synced folder** (`~/Documents`,
-`~/Desktop`, `~/Library/Mobile Documents/…`). iCloud's "Optimize Mac Storage"
-evicts `.git` pack objects, which corrupts the repo — `git`, VS Code, Claude, and
-deploys all hang with `pack … is far too short to be a packfile`.
-
-- Canonical local path: **`~/dev/atlas-os`**. Do not work in `~/Documents/GitHub/atlas-os`.
-- Disable System Settings → Apple ID → iCloud → **Optimize Mac Storage** (or remove
-  Desktop & Documents from iCloud sync).
-- Recovery if it happens again: fresh `git clone` into `~/dev`, copy over only the
-  files newer than the last commit (`find . -newermt <last-commit-time>`), commit, push.
-  Full post-mortem: `docs/v6/2026-05-30-deploy-hygiene-guide.md` Rule 12.
+This box IS prod (pm2 `atlas-frontend-v3` :3004 + live Supabase). NEVER `pm2 reload` while a
+build runs — it corrupts `.next` and 500s the board. Deploy = rebuild to completion → confirm
+`frontend/.next/BUILD_ID` exists → `rm -rf .next/cache/fetch-cache` → **reload once**. Home/
+sectors/stocks are static-ISR (the "as of" date bakes at build), so only a rebuild advances it.
+Full post-mortem: `docs/deploy-hygiene.md`.
 
 ## Skill cadence — invoke BEFORE coding
 
 | Situation | Skill |
 |---|---|
-| Start of v6 chunk | `/grill-with-docs` (lock terms vs CONTEXT.md) |
 | Bugfix or new feature | `/tdd` |
-| New feature / module | `/plan-eng-review` (full review) or just grill-with-docs (mini) |
-| Refactor existing | `simplify` (or `/ponytail-review` the diff) |
+| New feature / module | `/plan-eng-review` (or `/grill-with-docs` for a mini review) |
+| Refactor existing | `simplify` (and `/ponytail-review` the diff) |
 | UI components | `frontend-design:frontend-design` |
-| Unclear scope | `superpowers:brainstorming` or `office-hours` |
-| Multi-step plan | `superpowers:writing-plans` |
+| Unclear scope | `superpowers:brainstorming` |
 | Before claiming done | `superpowers:verification-before-completion` |
-| Pre-merge | `/review` + `/codex review` + `/ponytail-review` (over-engineering) |
+| Pre-merge | `/review` + `/ponytail-review` (over-engineering) |
 | Ship | `/ship` then `/land-and-deploy` |
-| Session end | `/context-save` (or wait for Stop hook to auto-write) |
-| Session start (gap > 1 day) | `/context-restore` |
-| Weekly | `/retro` |
-| Monthly (cathedral test) | `/zoom-out` |
-| Quarterly | `/improve-codebase-architecture` |
-| Stuck > 3 attempts | `/codex:rescue` or `/diagnose` |
+| Stuck > 3 attempts | `/diagnose` |
 
-PreToolUse hook blocks Edit/Write on `atlas/**`, `frontend/src/**`,
-`migrations/versions/**` unless one of the planning skills was invoked
-earlier in the session.
+## Pointers (read on demand)
 
-## API design (v6 endpoints)
+- `CONTEXT.md` — domain glossary (auto-loaded with this file)
+- `docs/refresh-schedule.md` · `docs/table-census.md` — the data pipeline + table inventory
+- `docs/deploy.md` · `docs/deploy-hygiene.md` — deploy process + the outage post-mortem
+- `docs/engineering-process.md` — CI gates (pragma coverage, pyright ratchet)
+- `docs/health-audit-rules.md` — compute/frontend/arch audit guardrails
+- `docs/adr/` — architecture decision records · `docs/agents/` — agent-workflow conventions
+- `decisions.jsonl` — append-only hash-chained decision log
 
-- Bloomberg-style terse URLs (`/v1/screen.stocks`), versioned, immutable.
-- Pydantic v2 every request/response. Schema = contract. OpenAPI auto-gen.
-- Response envelope: `{"data": ..., "meta": {"data_as_of", "fetched_at", "source"}}`.
-- Error envelope: `{"error_code", "field", "message", "context"}`.
-- Cursor pagination. Never offset. `X-RateLimit-*` headers. `Idempotency-Key` on writes.
-- Auth = Supabase JWT in middleware; `request.state.user` carries `user_id`, `role`.
+## Local workspace (NEVER under iCloud)
+
+The git tree MUST live outside any iCloud-synced folder — iCloud "Optimize Mac Storage"
+evicts `.git` pack objects and corrupts the repo (`pack … far too short to be a packfile`).
+Canonical local path: **`~/dev/atlas-os`**.
 
 ## What goes in this file
 
-Project-only conventions, paths, and pointers. NOT a place to duplicate
-global rules from `~/.claude/CLAUDE.md`. Keep this file under 120 lines —
-long CLAUDE.md files dilute their own enforcement.
+Atlas-only conventions, paths, and pointers — not a copy of global rules. Keep it under
+120 lines; long CLAUDE.md files dilute their own enforcement.

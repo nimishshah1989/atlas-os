@@ -1,7 +1,7 @@
 """Breadth primitives shared by sector aggregation (M3 Phase B) and market
 regime classification (M3 Phase C).
 
-Per ``docs/00_METHODOLOGY_LOCK.md`` §10.4 (sector breadth) and §11.1
+Per the lens methodology.1
 (market regime A/D, MA, new highs/lows, strength breadth families).
 
 Vectorisation discipline:

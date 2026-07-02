@@ -2,8 +2,8 @@
 export const revalidate = 300
 
 import MethodologyV62 from '@/components/methodology/MethodologyV62'
-import { getLensWeights } from '@/lib/queries/v6/lens_weights'
-import { getMethodologyThresholds } from '@/lib/queries/v6/methodology'
+import { getLensWeights } from '@/lib/queries/lens_weights'
+import { getMethodologyThresholds } from '@/lib/queries/methodology'
 
 export const metadata = {
   title: 'Methodology · How every score is built',

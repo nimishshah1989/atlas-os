@@ -26,15 +26,8 @@ from pathlib import Path
 # Adjust as new contexts appear.
 CONTEXTS: tuple[str, ...] = (
     "atlas.compute",
-    "atlas.health",
-    "atlas.universe",
-    "atlas.validation",
-    "atlas.simulation",
-    "atlas.api",
-    # Phase 2: validator agent — read-only DB access via shared kernel only
-    "atlas.agents",
-    # Phase 2: signal validation, composites, briefs — Pillars I & II
-    "atlas.intelligence",
+    "atlas.intraday",
+    "atlas.lenses",
 )
 
 SHARED_KERNEL: tuple[str, ...] = (
