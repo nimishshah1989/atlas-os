@@ -26,12 +26,12 @@ def _q(sql, p=None):
 
 
 # Single read schema: the whole v4 platform (frontend + this gate) reads
-# foundation_staging; atlas.* is the upstream compute layer, published into
-# foundation_staging by consolidate_tables.py. Validate exactly what is served.
-LD = "foundation_staging.atlas_lens_scores_daily"
-MVB = "foundation_staging.mv_sector_breadth"
-MVC = "foundation_staging.mv_sector_cards"
-IM = "foundation_staging.instrument_master"
+# atlas_foundation; atlas.* is the upstream compute layer, published into
+# atlas_foundation by consolidate_tables.py. Validate exactly what is served.
+LD = "atlas_foundation.atlas_lens_scores_daily"
+MVB = "atlas_foundation.mv_sector_breadth"
+MVC = "atlas_foundation.mv_sector_cards"
+IM = "atlas_foundation.instrument_master"
 
 
 class Gate:
@@ -70,7 +70,7 @@ def main():
     # 1 — FRESHNESS (nothing stale; lens journal current with the technicals)
     lens_d = _q(f"select max(date) from {LD} where asset_class='stock'")
     tech_d = _q(
-        "select max(date) from foundation_staging.technical_daily where asset_class='stock'"
+        "select max(date) from atlas_foundation.technical_daily where asset_class='stock'"
     )
     mvb_d = _q(f"select max(as_of_date) from {MVB}")
     g.check(
@@ -104,7 +104,7 @@ def main():
     # so the old "policy_tailwind >30 distinct" placeholder check no longer applies. Assert the
     # alert layer is REAL instead: the registry is populated AND policy→sector matching produces
     # signals for a meaningful set of names (stocks whose sector/keywords hit an active policy).
-    n_pol = _q("select count(*) from foundation_staging.policy_registry where is_active = true")
+    n_pol = _q("select count(*) from atlas_foundation.policy_registry where is_active = true")
     g.check(
         "policy registry populated (alert layer)", (n_pol or 0) >= 5, f"{n_pol} active policies"
     )
@@ -119,7 +119,7 @@ def main():
     )
 
     # 3 — SECTOR BREADTH EMA21 + EMA200 populated at the latest date
-    has21 = _col_exists("foundation_staging", "mv_sector_breadth", "pct_above_ema21")
+    has21 = _col_exists("atlas_foundation", "mv_sector_breadth", "pct_above_ema21")
     g.check(
         "breadth uses EMA21 column (not EMA20)",
         has21,

@@ -7,7 +7,7 @@ REAL row pulled from the data layer for a REAL instrument on a REAL NSE session.
 The backbone is END-TO-END RECONCILIATION: we run the exact production scoring core
 (atlas.lenses.pipeline.score_all) over the real as-of adapter inputs for a reference
 session, and assert each lens + the composite equals what the pipeline already
-persisted in foundation_staging.atlas_lens_scores_daily for that session. That proves
+persisted in atlas_foundation.atlas_lens_scores_daily for that session. That proves
 adapters + scorers + composite end-to-end on production data and cannot be made to
 pass with a weak assertion. Around it sit contract tests (a sub-component is present
 iff its real input is present; ranges; no-data → None not a stub) and the Loop C
@@ -47,7 +47,7 @@ LENSES = ["technical", "fundamental", "valuation", "catalyst", "flow", "policy"]
 def engine():
     eng = get_engine()
     n = pd.read_sql(
-        "SELECT count(*) n FROM foundation_staging.atlas_lens_scores_daily "
+        "SELECT count(*) n FROM atlas_foundation.atlas_lens_scores_daily "
         "WHERE date = %(d)s AND asset_class = 'stock'",
         eng,
         params={"d": D},
@@ -66,7 +66,7 @@ def th(engine):
 @pytest.fixture(scope="module")
 def journal(engine):
     df = pd.read_sql(
-        "SELECT * FROM foundation_staging.atlas_lens_scores_daily WHERE date = %(d)s AND asset_class = 'stock'",
+        "SELECT * FROM atlas_foundation.atlas_lens_scores_daily WHERE date = %(d)s AND asset_class = 'stock'",
         engine,
         params={"d": D},
     )
@@ -154,7 +154,7 @@ class TestFundamental:
             """
             SELECT DISTINCT ON (period_end) period_end, revenue, ebit, pat, eps,
                    net_margin, finance_costs, debt_equity_ratio
-            FROM foundation_staging.financials_quarterly
+            FROM atlas_foundation.financials_quarterly
             WHERE symbol='RELIANCE' AND period_end <= %(c)s AND eps IS NOT NULL
             ORDER BY period_end DESC, consolidated DESC LIMIT 8
         """,
@@ -163,7 +163,7 @@ class TestFundamental:
         ).to_dict("records")
         a = pd.read_sql(
             """
-            SELECT equity, total_borrowings FROM foundation_staging.financials_annual
+            SELECT equity, total_borrowings FROM atlas_foundation.financials_annual
             WHERE symbol='RELIANCE' AND period_end <= %(c)s AND equity IS NOT NULL
             ORDER BY period_end DESC, consolidated DESC LIMIT 1
         """,
@@ -227,7 +227,7 @@ class TestFlow:
         # real acqMode/txn-type classification populates open_market_buy/sell, pledge, etc.
         kinds = (
             pd.read_sql(
-                "SELECT DISTINCT signal_type FROM foundation_staging.lens_insider "
+                "SELECT DISTINCT signal_type FROM atlas_foundation.lens_insider "
                 "WHERE transaction_date >= %(d)s - INTERVAL '365 days'",
                 engine,
                 params={"d": D},
@@ -257,7 +257,7 @@ class TestCatalyst:
     def test_filing_rich_names_score_positive(self, engine, produced):
         rich = pd.read_sql(
             """
-            SELECT instrument_id, count(*) c FROM foundation_staging.lens_filings
+            SELECT instrument_id, count(*) c FROM atlas_foundation.lens_filings
             WHERE filing_date BETWEEN %(d)s - INTERVAL '365 days' AND %(d)s
             GROUP BY 1 ORDER BY 2 DESC LIMIT 20
         """,
@@ -279,7 +279,7 @@ class TestFlowAccumulation:
 
         rows = pd.read_sql(
             "SELECT delivery_pct, delivery_avg_30d, delivery_avg_60d, delivery_updown_asym "
-            "FROM foundation_staging.delivery_daily "
+            "FROM atlas_foundation.delivery_daily "
             "WHERE delivery_avg_30d IS NOT NULL AND delivery_avg_60d IS NOT NULL "
             "ORDER BY date DESC LIMIT 60",
             engine,
@@ -303,7 +303,7 @@ class TestFlowAccumulation:
 
         rows = pd.read_sql(
             "SELECT delivery_pct, delivery_avg_30d, delivery_avg_60d, delivery_updown_asym "
-            "FROM foundation_staging.delivery_daily "
+            "FROM atlas_foundation.delivery_daily "
             "WHERE delivery_pct IS NOT NULL AND delivery_avg_30d IS NULL LIMIT 20",
             engine,
         ).to_dict("records")

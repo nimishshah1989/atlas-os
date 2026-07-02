@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ingest NSE corporate announcements → foundation_staging.lens_filings.
+"""Ingest NSE corporate announcements → atlas_foundation.lens_filings.
 
 Powers the Catalyst lens. Ported from jip-india/india_alpha/fetchers/nse_filings_fetcher.py.
 Uses the same NSE-session cookie pattern as ingest_xbrl.py (proven, sync requests).

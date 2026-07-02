@@ -1,7 +1,7 @@
 #!/bin/bash
 # Atlas v4 DAILY orchestrator (Mon–Fri, POST-CLOSE ~16:00 IST). The single canonical
 # daily refresh, replacing the JIP/M2-M5/intelligence cron tangle. All writes land in
-# ONE schema (foundation_staging). Calculations anchor to the last COMPLETE EOD (D11).
+# ONE schema (atlas_foundation). Calculations anchor to the last COMPLETE EOD (D11).
 # Prices are Kite-only via the batched quote() path (no historical-burst throttle).
 #
 # Non-fatal step model: a failed step never aborts the chain; failures are collected
@@ -48,7 +48,7 @@ step "lens_daily"                $PY scripts/lens_daily.py --as-of "$EOD"
 step "rollup_sectors"            $PY scripts/foundation/rollup_sectors.py
 step "build_fund_rank_history"   $PY scripts/foundation/build_fund_rank_history.py --latest
 step "build_breadth_series"      $PY scripts/foundation/build_breadth_series.py
-step "regime"                    $PY -c "from atlas.compute.regime import run_daily_regime; run_daily_regime(schema='foundation_staging')"
+step "regime"                    $PY -c "from atlas.compute.regime import run_daily_regime; run_daily_regime(schema='atlas_foundation')"
 
 # 3. GATES (assert on REAL produced output — rule #0). Deploy only if ALL pass.
 # Run gates DIRECTLY (not via step): step() records a failure but always returns 0,

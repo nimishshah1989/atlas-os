@@ -8,7 +8,7 @@ so the daily history's "today" row equals exactly what the funds page shows. The
 lives here ONCE and is unit-tested against the documented TS outputs
 (tests/scripts/test_fund_rank_core.py) — change one side, the parity test breaks.
 
-Weights come from foundation_staging.atlas_thresholds (the /thresholds panel), never
+Weights come from atlas_foundation.atlas_thresholds (the /thresholds panel), never
 hard-coded. composite() takes them as an argument; the builder reads them once per run.
 """
 

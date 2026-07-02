@@ -12,7 +12,7 @@ the www.nseindia.com/api/* JSON endpoints):
 
 Stocks are matched to the instrument master by ISIN (then symbol) to obtain the
 instrument_id. ETFs are matched against the existing ohlcv_etf ticker set.
-Writes raw OHLCV into foundation_staging; adjustment + technicals run separately.
+Writes raw OHLCV into atlas_foundation; adjustment + technicals run separately.
 
 Cost rule: pure-Python download/parse; emits only small counts.
 """
@@ -131,13 +131,13 @@ def parse_indices(raw: pd.DataFrame) -> pd.DataFrame:
 def instrument_map() -> pd.DataFrame:
     """instrument_master rows for matching bhavcopy symbols → instrument_id."""
     return _db.read_df(
-        "select instrument_id, symbol, isin, is_active from foundation_staging.instrument_master "
+        "select instrument_id, symbol, isin, is_active from atlas_foundation.instrument_master "
         "where asset_class='stock'"
     )
 
 
 def etf_tickers() -> set[str]:
-    df = _db.read_df("select distinct ticker from foundation_staging.ohlcv_etf")
+    df = _db.read_df("select distinct ticker from atlas_foundation.ohlcv_etf")
     return set(df["ticker"].astype(str).str.strip())
 
 
@@ -191,7 +191,7 @@ def write_stocks(
             "source": source,
         }
     )
-    return _db.upsert_df("foundation_staging.ohlcv_stock", out, ["instrument_id", "date"])
+    return _db.upsert_df("atlas_foundation.ohlcv_stock", out, ["instrument_id", "date"])
 
 
 # Source discipline (FM D10): prices come from Kite ONLY. Bhavcopy is barred from
@@ -205,7 +205,7 @@ def write_indices(parsed: pd.DataFrame, source: str) -> int:
     out = parsed[parsed["index_code"].isin(KITE_LESS_INDICES)].assign(source=source)
     if out.empty:
         return 0
-    return _db.upsert_df("foundation_staging.index_prices", out, ["index_code", "date"])
+    return _db.upsert_df("atlas_foundation.index_prices", out, ["index_code", "date"])
 
 
 def ingest_day(d: date, only_symbols: list[str] | None = None) -> dict:

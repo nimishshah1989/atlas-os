@@ -3,7 +3,7 @@
 Per ``docs/00_METHODOLOGY_LOCK.md`` §9 and ``docs/02_DATABASE_SCHEMA.md`` §3.3.
 
 Computes per-(index_code, date) metrics across the 75 NSE indices in the
-curated universe (135 codes are available in ``foundation_staging.index_prices``;
+curated universe (135 codes are available in ``atlas_foundation.index_prices``;
 this module computes for every code present and lets the universe layer
 filter which rows persist downstream).
 
@@ -42,7 +42,7 @@ log = structlog.get_logger()
 
 NIFTY500_CODE = "NIFTY 500"
 """Index code used as the RS denominator. Must match
-``foundation_staging.index_prices.index_code`` exactly (verified via
+``atlas_foundation.index_prices.index_code`` exactly (verified via
 ``atlas/preflight.py`` benchmark check)."""
 
 INDIA_VIX_CODE = "INDIA VIX"
@@ -118,7 +118,7 @@ def load_index_prices(
         df = pd.read_sql(
             """
             SELECT index_code, date, open, high, low, close
-            FROM foundation_staging.index_prices
+            FROM atlas_foundation.index_prices
             WHERE date BETWEEN %(start)s AND %(end)s
               AND close IS NOT NULL
             ORDER BY index_code, date
@@ -319,7 +319,7 @@ def _write_metrics(
     payload = df.reindex(columns=list(METRICS_COLUMNS))
     return bulk_upsert(
         engine,
-        table="foundation_staging.atlas_index_metrics_daily",
+        table="atlas_foundation.atlas_index_metrics_daily",
         columns=list(METRICS_COLUMNS),
         rows=df_to_pg_rows(payload),
         pk_columns=["index_code", "date"],

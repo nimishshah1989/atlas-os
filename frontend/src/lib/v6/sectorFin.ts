@@ -4,7 +4,7 @@
 // single tiny-revenue loss-maker (stored margin −423 = −42,300%) dragged the whole
 // universe average negative. Revenue-weighting (Σebitda/Σrevenue) is both the correct
 // aggregate and naturally outlier-robust. Pure functions so they're unit-tested on REAL
-// records pulled from foundation_staging (rule #0) — no DB, no synthetic inputs.
+// records pulled from atlas_foundation (rule #0) — no DB, no synthetic inputs.
 
 export type RawFin = {
   symbol: string

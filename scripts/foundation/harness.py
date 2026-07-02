@@ -13,7 +13,7 @@ made runnable. Three axes, each a set of checks, evaluated PER INSTRUMENT:
                    N50/N500 × 6 windows) present for every priced date, and a
                    recompute-and-diff matches what is stored.
 
-Runs against the single foundation_staging.* schema (the live data foundation).
+Runs against the single atlas_foundation.* schema (the live data foundation).
 
 Output: a per-axis PASS/FAIL summary + green-count to stdout, top failures with
 reasons, and a full per-instrument JSON to output/. Definition of done = green
@@ -48,7 +48,7 @@ RSI_ATOL = 0.05
 RET_ATOL = 1e-4
 RS_ATOL = 1e-4
 
-STAGING_SCHEMA = "foundation_staging"
+STAGING_SCHEMA = "atlas_foundation"
 OUT_DIR = Path(__file__).resolve().parents[2] / "output"
 
 CAL_INDEX = "NIFTY 50"  # reference series defining the NSE trading calendar
@@ -112,7 +112,7 @@ def load_stock_universe(symbols: list[str] | None, limit: int | None) -> pd.Data
         params["syms"] = symbols
     sql = f"""
         select i.instrument_id, i.symbol, i.listing_date
-        from foundation_staging.instrument_master i
+        from atlas_foundation.instrument_master i
         where {where}
         order by i.symbol
     """

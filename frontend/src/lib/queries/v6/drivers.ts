@@ -88,10 +88,10 @@ export async function getConstituentDrivers(symbols: string[]): Promise<Record<s
   if (uniq.length === 0) return {}
   const rows = await sql<{ symbol: string; evidence: unknown }[]>`
     SELECT im.symbol, l.evidence
-    FROM foundation_staging.atlas_lens_scores_daily l
-    JOIN foundation_staging.instrument_master im ON im.instrument_id = l.instrument_id
+    FROM atlas_foundation.atlas_lens_scores_daily l
+    JOIN atlas_foundation.instrument_master im ON im.instrument_id = l.instrument_id
     WHERE l.asset_class = 'stock'
-      AND l.date = (SELECT max(date) FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock')
+      AND l.date = (SELECT max(date) FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock')
       AND im.symbol = ANY(${uniq})
   `
   const out: Record<string, LensDrivers> = {}

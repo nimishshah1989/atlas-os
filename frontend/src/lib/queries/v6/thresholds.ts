@@ -1,4 +1,4 @@
-// Thresholds control panel data — foundation_staging.atlas_thresholds ONLY (no atlas.*).
+// Thresholds control panel data — atlas_foundation.atlas_thresholds ONLY (no atlas.*).
 // Every methodology knob the FM can retune (lens weights, conviction, RS, regime, gates…)
 // already carries value + min/max + default + description, so the panel is a thin editor over
 // this table. Edits persist here; the composite is re-blended from cached lens sub-scores by
@@ -27,7 +27,7 @@ export async function getThresholds(): Promise<ThresholdRow[]> {
   const rows = await sql<Array<Record<string, string | null>>>`
     SELECT threshold_key, threshold_value, category, description, units,
            min_allowed, max_allowed, default_value, last_modified_by, last_modified_at
-    FROM foundation_staging.atlas_thresholds
+    FROM atlas_foundation.atlas_thresholds
     WHERE is_active
     ORDER BY category, threshold_key
   `
@@ -57,7 +57,7 @@ export async function updateThresholds(
 ): Promise<{ updated: string[]; rejected: { key: string; reason: string }[] }> {
   const current = await sql<Array<Record<string, string | null>>>`
     SELECT threshold_key, min_allowed, max_allowed
-    FROM foundation_staging.atlas_thresholds WHERE is_active
+    FROM atlas_foundation.atlas_thresholds WHERE is_active
   `
   const bounds = new Map(current.map((r) => [r.threshold_key as string, { min: num(r.min_allowed), max: num(r.max_allowed) }]))
   const updated: string[] = []
@@ -70,7 +70,7 @@ export async function updateThresholds(
     if (b.min != null && e.value < b.min) { rejected.push({ key: e.key, reason: `below min ${b.min}` }); continue }
     if (b.max != null && e.value > b.max) { rejected.push({ key: e.key, reason: `above max ${b.max}` }); continue }
     await sql`
-      UPDATE foundation_staging.atlas_thresholds
+      UPDATE atlas_foundation.atlas_thresholds
       SET threshold_value = ${e.value}, last_modified_by = ${modifiedBy}, last_modified_at = now()
       WHERE threshold_key = ${e.key} AND is_active
     `

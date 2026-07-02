@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Fetch NSE security-wise delivery (sec_bhavdata_full) and upsert it into
-foundation_staging.delivery_raw (Atlas-owned, single-schema) so the delivery_daily
+atlas_foundation.delivery_raw (Atlas-owned, single-schema) so the delivery_daily
 backfill can compute a COMPLETE rolling series to the latest session.
 
 The standard UDiFF CM bhavcopy (ingest_bhavcopy.py) carries NO delivery; delivery lives
@@ -36,7 +36,7 @@ EQ_SERIES = {"EQ", "BE", "BZ", "SM", "ST"}
 
 def sessions(start: date, end: date) -> list[date]:
     d = _db.read_df(
-        "SELECT DISTINCT date FROM foundation_staging.index_prices "
+        "SELECT DISTINCT date FROM atlas_foundation.index_prices "
         "WHERE index_code='NIFTY 50' AND date>=:s AND date<=:e ORDER BY date",
         {"s": start, "e": end},
     )
@@ -71,7 +71,7 @@ def run(start: date, end: date) -> None:
         return
     print(f"{len(sess)} sessions {sess[0]}..{sess[-1]}", flush=True)
     im = _db.read_df(
-        "SELECT instrument_id, symbol FROM foundation_staging.instrument_master "
+        "SELECT instrument_id, symbol FROM atlas_foundation.instrument_master "
         "WHERE asset_class='stock'"
     )
     sym2iid = dict(
@@ -103,12 +103,12 @@ def run(start: date, end: date) -> None:
     out["date"] = out["date"].astype(str)
     # Upsert into the Atlas-owned raw delivery table (single-schema; no public.* hop).
     _db.exec_sql(
-        "CREATE TABLE IF NOT EXISTS foundation_staging.delivery_raw ("
+        "CREATE TABLE IF NOT EXISTS atlas_foundation.delivery_raw ("
         "instrument_id uuid NOT NULL, date date NOT NULL, delivery_pct numeric, "
         "PRIMARY KEY (instrument_id, date))"
     )
-    n = _db.upsert_df("foundation_staging.delivery_raw", out, ["instrument_id", "date"])
-    print(f"upsert foundation_staging.delivery_raw: {n} rows", flush=True)
+    n = _db.upsert_df("atlas_foundation.delivery_raw", out, ["instrument_id", "date"])
+    print(f"upsert atlas_foundation.delivery_raw: {n} rows", flush=True)
     print("DONE", flush=True)
 
 
@@ -116,7 +116,7 @@ def _default_window() -> tuple[date, date]:
     """Incremental window: a few sessions before the latest delivery_raw date (overlap
     self-heals a missed day) → last complete EOD. Full 2019+ if delivery_raw is empty."""
     end = _db.eod_cutoff()
-    last = _db.read_df("SELECT max(date) mx FROM foundation_staging.delivery_raw", {}).iloc[0]["mx"]
+    last = _db.read_df("SELECT max(date) mx FROM atlas_foundation.delivery_raw", {}).iloc[0]["mx"]
     if last is None:
         return date.fromisoformat("2019-01-01"), end
     return (pd.Timestamp(last) - pd.Timedelta(days=7)).date(), end

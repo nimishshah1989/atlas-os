@@ -428,7 +428,7 @@ def targets(universe: str, only_pending: bool, limit, symbols):
             {"s": symbols},
         )
     elif universe == "750":
-        df = _db.read_df("""select instrument_id, symbol from foundation_staging.instrument_master
+        df = _db.read_df("""select instrument_id, symbol from atlas_foundation.instrument_master
             where asset_class='stock' and kite_token is not null and is_active
             order by symbol""")
     else:

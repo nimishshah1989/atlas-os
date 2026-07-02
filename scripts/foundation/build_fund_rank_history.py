@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Daily FUND-RANK HISTORY — foundation_staging.fund_rank_daily.
+"""Daily FUND-RANK HISTORY — atlas_foundation.fund_rank_daily.
 
 A fund's rank moves every day even though its holdings are only refreshed monthly,
 because the rank is the holdings-weighted lens composite re-scored against THAT day's
@@ -15,7 +15,7 @@ holdings snapshot) to today by, for each trading day D:
      holdings — via fund_rank_core (the faithful port of fundScore.ts), so the D = today
      row equals exactly what the funds page renders.
 
-Weights come from foundation_staging.atlas_thresholds (the /thresholds panel) — never
+Weights come from atlas_foundation.atlas_thresholds (the /thresholds panel) — never
 hard-coded. Idempotent: re-running a date range DELETEs then re-INSERTs those days.
 
     python build_fund_rank_history.py                 # full backfill (first snapshot -> latest lens date)
@@ -36,7 +36,7 @@ import fund_rank_core as core
 import pandas as pd
 import _db
 
-TGT = "foundation_staging.fund_rank_daily"
+TGT = "atlas_foundation.fund_rank_daily"
 
 # Identical to fund_lens.ts EQUITY_FUND_FILTER — one scheme per portfolio (no Direct/IDCW dupes),
 # equity only. Keeps the ranked cohort identical to what the funds page displays.
@@ -70,7 +70,7 @@ WITH cap AS (
     CASE WHEN bool_or(index_code='NIFTY 100') THEN 'large'
          WHEN bool_or(index_code='NIFTY MIDCAP 150') THEN 'mid'
          WHEN bool_or(index_code='NIFTY SMLCAP 250') THEN 'small' ELSE 'micro' END AS cap
-  FROM foundation_staging.de_index_constituents
+  FROM atlas_foundation.de_index_constituents
   WHERE effective_to IS NULL AND index_code IN ('NIFTY 100','NIFTY MIDCAP 150','NIFTY SMLCAP 250')
   GROUP BY instrument_id),
 j AS (
@@ -78,8 +78,8 @@ j AS (
   -- ntile decile cohort (and therefore lead -> breadth, the rank tiebreaker) is identical.
   SELECT l.instrument_id, COALESCE(c.cap,'micro') AS cap,
          l.technical::float t, l.fundamental::float f, l.catalyst::float ca, l.flow::float fl
-  FROM foundation_staging.atlas_lens_scores_daily l
-  JOIN foundation_staging.instrument_master im ON im.instrument_id = l.instrument_id
+  FROM atlas_foundation.atlas_lens_scores_daily l
+  JOIN atlas_foundation.instrument_master im ON im.instrument_id = l.instrument_id
   LEFT JOIN cap c ON c.instrument_id = l.instrument_id
   WHERE l.asset_class='stock' AND l.date = :d),
 dec AS (
@@ -91,7 +91,7 @@ scored AS (
   SELECT instrument_id, t, f, ca, fl,
     (COALESCE((d_tech>=9)::int,0)+COALESCE((d_flow>=9)::int,0)) AS lead
   FROM dec),
-snap AS (SELECT max(as_of_date) AS d FROM foundation_staging.de_mf_holdings WHERE as_of_date <= :d)
+snap AS (SELECT max(as_of_date) AS d FROM atlas_foundation.de_mf_holdings WHERE as_of_date <= :d)
 SELECT mm.mstar_id, mm.category_name AS category,
   count(h.instrument_id) AS n_scored,
   sum(h.weight_pct) FILTER (WHERE COALESCE(s.lead,0) >= 2) / NULLIF(sum(h.weight_pct),0) AS breadth,
@@ -99,8 +99,8 @@ SELECT mm.mstar_id, mm.category_name AS category,
   sum(h.weight_pct*s.f)  FILTER (WHERE s.f  IS NOT NULL) / NULLIF(sum(h.weight_pct) FILTER (WHERE s.f  IS NOT NULL),0) AS v_fund,
   sum(h.weight_pct*s.ca) FILTER (WHERE s.ca IS NOT NULL) / NULLIF(sum(h.weight_pct) FILTER (WHERE s.ca IS NOT NULL),0) AS v_cat,
   sum(h.weight_pct*s.fl) FILTER (WHERE s.fl IS NOT NULL) / NULLIF(sum(h.weight_pct) FILTER (WHERE s.fl IS NOT NULL),0) AS v_flow
-FROM foundation_staging.de_mf_master mm
-JOIN foundation_staging.de_mf_holdings h
+FROM atlas_foundation.de_mf_master mm
+JOIN atlas_foundation.de_mf_holdings h
   ON h.mstar_id = mm.mstar_id AND h.as_of_date = (SELECT d FROM snap) AND h.weight_pct > 0
 JOIN scored s ON s.instrument_id = h.instrument_id
 WHERE """ + EQUITY_FUND_FILTER + """
@@ -110,10 +110,10 @@ HAVING count(h.instrument_id) >= 5
 
 
 def _weights() -> dict:
-    """The live composite weights from foundation_staging.atlas_thresholds (same row the
+    """The live composite weights from atlas_foundation.atlas_thresholds (same row the
     frontend's getLensWeights reads), so backend history and frontend page agree."""
     df = _db.read_df(
-        """SELECT threshold_key, threshold_value FROM foundation_staging.atlas_thresholds
+        """SELECT threshold_key, threshold_value FROM atlas_foundation.atlas_thresholds
            WHERE threshold_key IN ('lens_weight_technical','lens_weight_fundamental',
                                    'lens_weight_flow','lens_weight_catalyst')"""
     )
@@ -129,7 +129,7 @@ def _weights() -> dict:
 def _trading_days(start: str | None, end: str | None) -> list:
     """Distinct stock-lens dates in range — the days a fund rank can be computed for."""
     df = _db.read_df(
-        """SELECT DISTINCT date FROM foundation_staging.atlas_lens_scores_daily
+        """SELECT DISTINCT date FROM atlas_foundation.atlas_lens_scores_daily
            WHERE asset_class='stock'
              AND (CAST(:s AS date) IS NULL OR date >= CAST(:s AS date))
              AND (CAST(:e AS date) IS NULL OR date <= CAST(:e AS date)) ORDER BY date""",
@@ -144,7 +144,7 @@ def _default_start() -> str:
     return str(
         _db.scalar(
             """SELECT min(as_of_date) FROM (
-                 SELECT as_of_date FROM foundation_staging.de_mf_holdings
+                 SELECT as_of_date FROM atlas_foundation.de_mf_holdings
                  GROUP BY as_of_date HAVING count(DISTINCT mstar_id) >= 20) q"""
         )
     )
@@ -181,14 +181,14 @@ def run(start: str | None, end: str | None, rebuild: bool, latest: bool) -> None
 
     if latest:
         mx = _db.scalar(
-            "SELECT max(date) FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'"
+            "SELECT max(date) FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock'"
         )
         start = end = str(mx)
     else:
         start = start or _default_start()
         end = end or str(
             _db.scalar(
-                "SELECT max(date) FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'"
+                "SELECT max(date) FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock'"
             )
         )
 

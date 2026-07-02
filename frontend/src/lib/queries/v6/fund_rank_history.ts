@@ -1,4 +1,4 @@
-// Fund rank-history read layer — foundation_staging.fund_rank_daily (built nightly by
+// Fund rank-history read layer — atlas_foundation.fund_rank_daily (built nightly by
 // scripts/foundation/build_fund_rank_history.py). One compact per-fund series powers the
 // daily-slice bar, the "rank stable X days" badge and the 30d/90d rank-swing columns on the
 // funds table. Derived stats are computed from the SAME slices via the pure helpers in
@@ -25,8 +25,8 @@ export async function getFundRankHistory(): Promise<Map<string, FundRankHistory>
     SELECT mstar_id,
       json_agg(json_build_object('d', to_char(date,'YYYY-MM-DD'), 'r', cat_rank, 's', cat_size)
                ORDER BY date) AS slices
-    FROM foundation_staging.fund_rank_daily
-    WHERE date >= (SELECT max(date) - INTERVAL '180 days' FROM foundation_staging.fund_rank_daily)
+    FROM atlas_foundation.fund_rank_daily
+    WHERE date >= (SELECT max(date) - INTERVAL '180 days' FROM atlas_foundation.fund_rank_daily)
     GROUP BY mstar_id
   `) as unknown as { mstar_id: string; slices: RankSlice[] }[]
 

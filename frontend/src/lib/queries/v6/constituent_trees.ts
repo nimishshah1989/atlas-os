@@ -24,10 +24,10 @@ export async function getConstituentLensTrees(symbols: string[]): Promise<Record
   if (uniq.length === 0) return {}
   const rows = (await sql.unsafe(
     `SELECT im.symbol, ${COLS.map((c) => `l.${c}::float AS ${c}`).join(', ')}
-     FROM foundation_staging.atlas_lens_scores_daily l
-     JOIN foundation_staging.instrument_master im ON im.instrument_id = l.instrument_id
+     FROM atlas_foundation.atlas_lens_scores_daily l
+     JOIN atlas_foundation.instrument_master im ON im.instrument_id = l.instrument_id
      WHERE l.asset_class='stock'
-       AND l.date = (SELECT max(date) FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock')
+       AND l.date = (SELECT max(date) FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock')
        AND im.symbol = ANY($1)`,
     [uniq],
   )) as unknown as Record<string, number | string | null>[]

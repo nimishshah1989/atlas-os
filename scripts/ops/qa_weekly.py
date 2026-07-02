@@ -26,7 +26,7 @@ _FND = Path(__file__).resolve().parents[1] / "foundation"
 sys.path.insert(0, str(_FND))
 import _db  # noqa: E402
 
-M = "foundation_staging"
+M = "atlas_foundation"
 
 
 def _freshness(eod: dt.date) -> tuple[bool, str]:

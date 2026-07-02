@@ -287,7 +287,7 @@ def load_sector_ema_breadth(
 
     A1 fix: the breadth scalars must use the LOCKED system standard EMA **21**
     (``technical_daily.above_ema_21``), not the metrics-layer EMA20. We read the
-    canonical boolean flags from ``foundation_staging.technical_daily`` and map to
+    canonical boolean flags from ``atlas_foundation.technical_daily`` and map to
     sector via the current universe (``atlas_universe_stocks``, ``effective_to IS
     NULL``) — the SAME constituent set the breadth/cards MVs use, so the fraction
     denominators reconcile across surfaces.
@@ -304,7 +304,7 @@ def load_sector_ema_breadth(
                 td.date,
                 AVG(CASE WHEN td.above_ema_21  THEN 1.0 ELSE 0.0 END) AS pct_above_ema21,
                 AVG(CASE WHEN td.above_ema_200 THEN 1.0 ELSE 0.0 END) AS pct_above_ema200
-            FROM foundation_staging.technical_daily td
+            FROM atlas_foundation.technical_daily td
             JOIN atlas.atlas_universe_stocks u
                 ON u.instrument_id = td.instrument_id
                AND u.effective_to IS NULL

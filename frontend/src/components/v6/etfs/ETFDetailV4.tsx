@@ -1,4 +1,4 @@
-// ETFDetailV4 — the v4 ETF detail page (behind LENS_V4). Lens-first, native foundation_staging.
+// ETFDetailV4 — the v4 ETF detail page (behind LENS_V4). Lens-first, native atlas_foundation.
 // An ETF is a holdings-weighted roll-up of the stock atom (D26/D27): the HEADLINE is
 // LEADERSHIP-BREADTH (% of holdings weight that are top-decile leaders in ≥2 conviction lenses),
 // NOT a composite. The 6-lens vector + look-through are a TRANSPARENCY view of what's held and
@@ -183,7 +183,7 @@ export async function ETFDetailV4({ fcode }: { fcode: string }) {
       </Panel>
 
       <p className="font-sans text-[12px] leading-[1.6] text-txt-3">
-        Native from <strong className="text-txt-2">foundation_staging</strong> — the lens journal looked through
+        Native from <strong className="text-txt-2">atlas_foundation</strong> — the lens journal looked through
         de_etf_holdings; identity from Morningstar (de_mf_master).{' '}
         <Link href="/etfs" className="text-brand hover:underline">← Back to ETFs</Link>
       </p>

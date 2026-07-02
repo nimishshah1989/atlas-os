@@ -4,7 +4,7 @@
 // decile band (D10 / D8–9 / D5–7 / D1–4) → names. The decile distribution IS the
 // composition — each band is the aggregate's "sub-component", a bar showing its count +
 // free-float/holdings-weight share. RULE #0: deciles, weights and returns are all real
-// (foundation_staging); an absent datum renders as absence, never a synthetic fill.
+// (atlas_foundation); an absent datum renders as absence, never a synthetic fill.
 import { decileColor } from '@/components/v4/ui/decile'
 import type { DerivNode } from '@/components/v6/shared/ScoreDerivationTree'
 

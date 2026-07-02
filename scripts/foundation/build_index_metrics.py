@@ -4,7 +4,7 @@
 Replaces the legacy mirror ``atlas_index_metrics_daily`` (which carried
 row-count-anchored returns that drift onto the wrong calendar date on a gap-ridden
 index series — Nifty 50 3m read 6.9% vs a true 3.2%). This computes every index's
-trailing returns DIRECTLY from ``foundation_staging.index_prices`` using the single
+trailing returns DIRECTLY from ``atlas_foundation.index_prices`` using the single
 canonical definition in ``technicals.windowed_return`` (month+ windows anchored by
 calendar duration, cross-validated across two feeds to <0.1pp).
 
@@ -34,7 +34,7 @@ import pandas as pd
 from scripts.foundation import _db
 from scripts.foundation import technicals as T
 
-M = "foundation_staging"
+M = "atlas_foundation"
 N500 = "NIFTY 500"
 RET_COLS = [f"ret_{w}" for w in T.RETURN_WINDOWS]  # ret_1d..ret_12m
 RS_COLS = ["rs_1w_nifty500", "rs_1m_nifty500", "rs_3m_nifty500"]

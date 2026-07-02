@@ -1,5 +1,5 @@
 // src/lib/queries/v6/stock_lens.ts
-// Native stock detail lens data — all from foundation_staging:
+// Native stock detail lens data — all from atlas_foundation:
 //  - getStockRSMatrix(): RS vs Nifty 50 / Nifty 500 / Sector across timeframes (technical_daily)
 //  - getStockDecile(): the stock's per-lens DECILE (cut within cap cohort, universe-wide, D27)
 //    + leadership + strength + raw lens scores + sub-components + evidence (for the drill-down)
@@ -28,8 +28,8 @@ export async function getStockRSMatrix(symbol: string): Promise<RSMatrix | null>
            t.rs_1d_n50, t.rs_1w_n50, t.rs_1m_n50, t.rs_3m_n50, t.rs_6m_n50, t.rs_12m_n50,
            t.rs_1d_n500, t.rs_1w_n500, t.rs_1m_n500, t.rs_3m_n500, t.rs_6m_n500, t.rs_12m_n500,
            t.rs_1m_sector, t.rs_3m_sector, t.rs_6m_sector, t.rs_12m_sector
-    FROM foundation_staging.technical_daily t
-    JOIN foundation_staging.instrument_master im ON im.instrument_id = t.instrument_id
+    FROM atlas_foundation.technical_daily t
+    JOIN atlas_foundation.instrument_master im ON im.instrument_id = t.instrument_id
     WHERE im.symbol = ${symbol} AND t.asset_class='stock'
     ORDER BY t.date DESC LIMIT 1
   `
@@ -63,10 +63,10 @@ export async function getStockChartSeries(symbol: string, years = 5): Promise<St
     SELECT to_char(o.date,'YYYY-MM-DD') AS date, o.close::text,
            (o.close / NULLIF(n50.close, 0))::text  AS rs_n50,
            (o.close / NULLIF(n500.close, 0))::text AS rs_n500
-    FROM foundation_staging.ohlcv_stock o
-    JOIN foundation_staging.instrument_master im ON im.instrument_id = o.instrument_id
-    LEFT JOIN foundation_staging.index_prices n50  ON n50.date = o.date  AND n50.index_code = 'NIFTY 50'
-    LEFT JOIN foundation_staging.index_prices n500 ON n500.date = o.date AND n500.index_code = 'NIFTY 500'
+    FROM atlas_foundation.ohlcv_stock o
+    JOIN atlas_foundation.instrument_master im ON im.instrument_id = o.instrument_id
+    LEFT JOIN atlas_foundation.index_prices n50  ON n50.date = o.date  AND n50.index_code = 'NIFTY 50'
+    LEFT JOIN atlas_foundation.index_prices n500 ON n500.date = o.date AND n500.index_code = 'NIFTY 500'
     WHERE im.symbol = ${symbol} AND o.close > 0
       AND o.date >= NOW() - (${years} || ' years')::INTERVAL
     ORDER BY o.date ASC
@@ -99,21 +99,21 @@ const SUB_COLS = Object.values(SUBS).flat().map(([c]) => c)
 
 export async function getStockDecile(symbol: string): Promise<StockDecile | null> {
   const rows = await sql<Record<string, string>[]>`
-    WITH latest AS (SELECT max(date) d FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'),
+    WITH latest AS (SELECT max(date) d FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock'),
     cap AS (
       SELECT instrument_id,
         CASE WHEN bool_or(index_code='NIFTY 100') THEN 'large'
              WHEN bool_or(index_code='NIFTY MIDCAP 150') THEN 'mid'
              WHEN bool_or(index_code='NIFTY SMLCAP 250') THEN 'small' ELSE 'micro' END AS cap
-      FROM foundation_staging.de_index_constituents
+      FROM atlas_foundation.de_index_constituents
       WHERE effective_to IS NULL AND index_code IN ('NIFTY 100','NIFTY MIDCAP 150','NIFTY SMLCAP 250')
       GROUP BY instrument_id
     ),
     j AS (
       SELECT l.*, im.symbol, im.name, im.sector, COALESCE(c.cap,'micro') AS cap,
              l.technical::float t, l.fundamental::float f, l.catalyst::float ca, l.flow::float fl, l.valuation::float va
-      FROM foundation_staging.atlas_lens_scores_daily l
-      JOIN foundation_staging.instrument_master im ON im.instrument_id = l.instrument_id
+      FROM atlas_foundation.atlas_lens_scores_daily l
+      JOIN atlas_foundation.instrument_master im ON im.instrument_id = l.instrument_id
       LEFT JOIN cap c ON c.instrument_id = l.instrument_id
       WHERE l.asset_class='stock' AND l.date=(SELECT d FROM latest)
     ),
@@ -193,20 +193,20 @@ export type StockEvidence = {
 
 export async function getStockEvidence(symbol: string): Promise<StockEvidence | null> {
   const r = await sql<Record<string, string>[]>`
-    WITH im AS (SELECT instrument_id FROM foundation_staging.instrument_master WHERE symbol = ${symbol} LIMIT 1),
-    td AS (SELECT t.* FROM foundation_staging.technical_daily t, im
+    WITH im AS (SELECT instrument_id FROM atlas_foundation.instrument_master WHERE symbol = ${symbol} LIMIT 1),
+    td AS (SELECT t.* FROM atlas_foundation.technical_daily t, im
            WHERE t.instrument_id = im.instrument_id AND t.asset_class='stock' ORDER BY t.date DESC LIMIT 1),
-    px AS (SELECT o.date, o.close FROM foundation_staging.ohlcv_stock o, im
+    px AS (SELECT o.date, o.close FROM atlas_foundation.ohlcv_stock o, im
            WHERE o.instrument_id = im.instrument_id AND o.close > 0 ORDER BY o.date DESC LIMIT 1),
     vw AS (SELECT sum(close*volume)/NULLIF(sum(volume),0) AS vwap_252
-           FROM (SELECT o.close, o.volume FROM foundation_staging.ohlcv_stock o, im
+           FROM (SELECT o.close, o.volume FROM atlas_foundation.ohlcv_stock o, im
                  WHERE o.instrument_id = im.instrument_id AND o.close > 0 AND o.volume > 0
                  ORDER BY o.date DESC LIMIT 252) z),
-    dl AS (SELECT d.* FROM foundation_staging.delivery_daily d, im
+    dl AS (SELECT d.* FROM atlas_foundation.delivery_daily d, im
            WHERE d.instrument_id = im.instrument_id ORDER BY d.date DESC LIMIT 1),
-    sh AS (SELECT s.promoter_pct FROM foundation_staging.lens_shareholding s, im
+    sh AS (SELECT s.promoter_pct FROM atlas_foundation.lens_shareholding s, im
            WHERE s.instrument_id = im.instrument_id ORDER BY s.period_end DESC LIMIT 1),
-    fin AS (SELECT sum(eps) AS eps_ttm FROM (SELECT f.eps FROM foundation_staging.financials_quarterly f, im
+    fin AS (SELECT sum(eps) AS eps_ttm FROM (SELECT f.eps FROM atlas_foundation.financials_quarterly f, im
             WHERE f.instrument_id = im.instrument_id AND f.consolidated ORDER BY f.period_end DESC LIMIT 4) q)
     SELECT to_char(px.date,'YYYY-MM-DD') AS as_of, px.close,
       td.ema_21, td.ema_50, td.ema_200, td.rsi_14, td.atr_14, td.bb_width,
@@ -242,8 +242,8 @@ export async function getStockFundamentals(symbol: string): Promise<StockQuarter
   const rows = await sql<Record<string, string>[]>`
     SELECT to_char(f.period_end,'YYYY-MM-DD') AS period_end,
       f.revenue, f.ebitda, f.pat, f.eps, f.ebitda_margin, f.net_margin, f.debt_equity_ratio
-    FROM foundation_staging.financials_quarterly f
-    JOIN foundation_staging.instrument_master im ON im.instrument_id = f.instrument_id
+    FROM atlas_foundation.financials_quarterly f
+    JOIN atlas_foundation.instrument_master im ON im.instrument_id = f.instrument_id
     WHERE im.symbol = ${symbol} AND f.consolidated
     ORDER BY f.period_end DESC LIMIT 12`
   const n = (v: string | null) => (v == null ? null : toNumber(v))
@@ -271,8 +271,8 @@ export async function getStockAnnouncements(symbol: string, limit = 20): Promise
   const rows = await sql<Record<string, string>[]>`
     SELECT to_char(f.filing_date,'YYYY-MM-DD') AS date, f.category, f.category_bucket AS bucket,
            f.signal_priority AS priority, f.subject_text AS subject, f.source_url AS url
-    FROM foundation_staging.lens_filings f
-    JOIN foundation_staging.instrument_master im ON im.instrument_id = f.instrument_id
+    FROM atlas_foundation.lens_filings f
+    JOIN atlas_foundation.instrument_master im ON im.instrument_id = f.instrument_id
     WHERE im.symbol = ${symbol}
     ORDER BY f.filing_date DESC, f.nse_seq_id DESC LIMIT ${limit}`
   return rows.map(r => ({
@@ -280,13 +280,13 @@ export async function getStockAnnouncements(symbol: string, limit = 20): Promise
   }))
 }
 
-// Minimal instrument header from foundation_staging (replaces the legacy atlas.* getStockBySymbol
+// Minimal instrument header from atlas_foundation (replaces the legacy atlas.* getStockBySymbol
 // on the v4 detail path — keeps the page fs-only for the legacy retirement).
 export type StockHeader = { instrument_id: string; symbol: string; name: string | null; sector: string | null }
 export async function getStockHeader(symbol: string): Promise<StockHeader | null> {
   const r = await sql<StockHeader[]>`
     SELECT instrument_id::text AS instrument_id, symbol, name, sector
-    FROM foundation_staging.instrument_master
+    FROM atlas_foundation.instrument_master
     WHERE symbol = ${symbol} AND asset_class='stock' LIMIT 1`
   return r[0] ?? null
 }
@@ -294,41 +294,41 @@ export async function getStockHeader(symbol: string): Promise<StockHeader | null
 export async function getLensAsOf(): Promise<string | null> {
   const r = await sql<{ d: string | null }[]>`
     SELECT to_char(max(date),'YYYY-MM-DD') AS d
-    FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'`
+    FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock'`
   return r[0]?.d ?? null
 }
 
 export async function getStocksDecileList(): Promise<StockListRow[]> {
   const rows = await sql<Record<string, string>[]>`
-    WITH latest AS (SELECT max(date) d FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'),
-    tdl AS (SELECT max(date) d FROM foundation_staging.technical_daily WHERE asset_class='stock'),  -- RS/ret as-of (asset_class filter uses the class_date index — an unfiltered max(date) seq-scans 6.9M rows)
+    WITH latest AS (SELECT max(date) d FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock'),
+    tdl AS (SELECT max(date) d FROM atlas_foundation.technical_daily WHERE asset_class='stock'),  -- RS/ret as-of (asset_class filter uses the class_date index — an unfiltered max(date) seq-scans 6.9M rows)
 
     cap AS (
       SELECT instrument_id,
         CASE WHEN bool_or(index_code='NIFTY 100') THEN 'large'
              WHEN bool_or(index_code='NIFTY MIDCAP 150') THEN 'mid'
              WHEN bool_or(index_code='NIFTY SMLCAP 250') THEN 'small' ELSE 'micro' END AS cap
-      FROM foundation_staging.de_index_constituents
+      FROM atlas_foundation.de_index_constituents
       WHERE effective_to IS NULL AND index_code IN ('NIFTY 100','NIFTY MIDCAP 150','NIFTY SMLCAP 250')
       GROUP BY instrument_id
     ),
     rs AS (
       SELECT instrument_id, rs_1m_n500, rs_3m_n500, rs_6m_n500, ret_3m
-      FROM foundation_staging.technical_daily
+      FROM atlas_foundation.technical_daily
       WHERE asset_class='stock' AND date=(SELECT d FROM tdl)
     ),
     sec_ret AS (  -- each sector's own NSE-index 3M return → real RS-vs-sector (stock 3M − sector-index 3M).
       SELECT sm.sector_name, max(aim.ret_3m::float) AS sret_3m
-      FROM foundation_staging.atlas_sector_master sm
-      JOIN foundation_staging.atlas_index_metrics_daily aim
+      FROM atlas_foundation.atlas_sector_master sm
+      JOIN atlas_foundation.atlas_index_metrics_daily aim
         ON aim.index_code = sm.primary_nse_index
-       AND aim.date = (SELECT max(date) FROM foundation_staging.atlas_index_metrics_daily)
+       AND aim.date = (SELECT max(date) FROM atlas_foundation.atlas_index_metrics_daily)
       WHERE sm.is_active = true
       GROUP BY sm.sector_name
     ),
     liq AS (  -- ≈20-session avg traded value (₹ Cr): a 30-calendar-day window ≈ 20 NSE sessions
       SELECT instrument_id, avg(close * volume) / 1e7 AS liq_cr
-      FROM foundation_staging.ohlcv_stock
+      FROM atlas_foundation.ohlcv_stock
       WHERE date >= (SELECT d FROM tdl) - INTERVAL '30 days' AND close > 0 AND volume > 0
       GROUP BY instrument_id
     ),
@@ -336,8 +336,8 @@ export async function getStocksDecileList(): Promise<StockListRow[]> {
       SELECT l.instrument_id, im.symbol, im.name, im.sector, COALESCE(c.cap,'micro') AS cap,
              l.technical::float t, l.fundamental::float f, l.catalyst::float ca, l.flow::float fl, l.valuation::float va,
              l.composite::float comp
-      FROM foundation_staging.atlas_lens_scores_daily l
-      JOIN foundation_staging.instrument_master im ON im.instrument_id = l.instrument_id
+      FROM atlas_foundation.atlas_lens_scores_daily l
+      JOIN atlas_foundation.instrument_master im ON im.instrument_id = l.instrument_id
       LEFT JOIN cap c ON c.instrument_id = l.instrument_id
       WHERE l.asset_class='stock' AND l.date=(SELECT d FROM latest)
     ),

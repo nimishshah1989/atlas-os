@@ -3,7 +3,7 @@
 // CapTierRSCharts — relative strength of each cap tier vs Nifty 500, as line charts via
 // TradingView Lightweight Charts. Each line = (tier index ÷ Nifty 500), rebased to 100 at
 // the start of the selected window so "above 100 = outperforming Nifty 500". Shared period
-// (10Y/5Y/2Y) + frequency (1D/1W/1M) toggles. Native foundation_staging.index_prices.
+// (10Y/5Y/2Y) + frequency (1D/1W/1M) toggles. Native atlas_foundation.index_prices.
 
 import { useMemo, useState } from 'react'
 import { AtlasLightweightChart } from '@/components/charts/AtlasLightweightChart'

@@ -2,7 +2,7 @@
 // Aggregate path (like a sector): Leadership-breadth → lens → HOLDINGS (ranked by contribution =
 // holding weight × that name's lens decile), each holding linking to its own /stocks page.
 // The headline is LEADERSHIP-BREADTH (the real ETF/fund headline), NOT a composite score.
-// RULE #0: every number traces to a real foundation_staging field (holdings-weighted vector +
+// RULE #0: every number traces to a real atlas_foundation field (holdings-weighted vector +
 // per-holding deciles + weights) — no synthetic fallback; an absent datum renders as absence.
 import type { DerivRoot, DerivNode } from '@/components/v6/shared/ScoreDerivationTree'
 import type { LensDrivers } from '@/lib/queries/v6/drivers'

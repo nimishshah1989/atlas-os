@@ -25,21 +25,21 @@ import _db
 
 # --- verbatim copy of etf_lens.ts SCORED_STOCKS (the production nightly CTE) -----------
 SCORED_STOCKS = """
-  latest AS (SELECT max(date) d FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'),
-  tdl AS (SELECT max(date) d FROM foundation_staging.technical_daily WHERE asset_class='stock'),
+  latest AS (SELECT max(date) d FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock'),
+  tdl AS (SELECT max(date) d FROM atlas_foundation.technical_daily WHERE asset_class='stock'),
   cap AS (
     SELECT instrument_id,
       CASE WHEN bool_or(index_code='NIFTY 100') THEN 'large'
            WHEN bool_or(index_code='NIFTY MIDCAP 150') THEN 'mid'
            WHEN bool_or(index_code='NIFTY SMLCAP 250') THEN 'small' ELSE 'micro' END AS cap
-    FROM foundation_staging.de_index_constituents
+    FROM atlas_foundation.de_index_constituents
     WHERE effective_to IS NULL AND index_code IN ('NIFTY 100','NIFTY MIDCAP 150','NIFTY SMLCAP 250')
     GROUP BY instrument_id),
   j AS (
     SELECT l.instrument_id, COALESCE(c.cap,'micro') AS cap,
            l.technical::float t, l.fundamental::float f, l.catalyst::float ca, l.flow::float fl, l.valuation::float va
-    FROM foundation_staging.atlas_lens_scores_daily l
-    JOIN foundation_staging.instrument_master im ON im.instrument_id = l.instrument_id
+    FROM atlas_foundation.atlas_lens_scores_daily l
+    JOIN atlas_foundation.instrument_master im ON im.instrument_id = l.instrument_id
     LEFT JOIN cap c ON c.instrument_id = l.instrument_id
     WHERE l.asset_class='stock' AND l.date=(SELECT d FROM latest)),
   dec AS (
@@ -65,9 +65,9 @@ SELECT mm.mstar_id, mm.category_name AS category,
   sum(h.weight_pct*s.f)  FILTER (WHERE s.f  IS NOT NULL) / NULLIF(sum(h.weight_pct) FILTER (WHERE s.f  IS NOT NULL),0) AS v_fund,
   sum(h.weight_pct*s.ca) FILTER (WHERE s.ca IS NOT NULL) / NULLIF(sum(h.weight_pct) FILTER (WHERE s.ca IS NOT NULL),0) AS v_cat,
   sum(h.weight_pct*s.fl) FILTER (WHERE s.fl IS NOT NULL) / NULLIF(sum(h.weight_pct) FILTER (WHERE s.fl IS NOT NULL),0) AS v_flow
-FROM foundation_staging.de_mf_master mm
-JOIN foundation_staging.de_mf_holdings h
-  ON h.mstar_id = mm.mstar_id AND h.as_of_date = (SELECT max(as_of_date) FROM foundation_staging.de_mf_holdings) AND h.weight_pct > 0
+FROM atlas_foundation.de_mf_master mm
+JOIN atlas_foundation.de_mf_holdings h
+  ON h.mstar_id = mm.mstar_id AND h.as_of_date = (SELECT max(as_of_date) FROM atlas_foundation.de_mf_holdings) AND h.weight_pct > 0
 JOIN scored s ON s.instrument_id = h.instrument_id
 WHERE {EQUITY_FUND_FILTER}
 GROUP BY mm.mstar_id, mm.category_name
@@ -77,7 +77,7 @@ HAVING count(h.instrument_id) >= 5
 
 def main() -> None:
     weights_df = _db.read_df(
-        """SELECT threshold_key, threshold_value FROM foundation_staging.atlas_thresholds
+        """SELECT threshold_key, threshold_value FROM atlas_foundation.atlas_thresholds
            WHERE threshold_key LIKE 'lens_weight_%'"""
     )
     wm = {r.threshold_key: float(r.threshold_value) for r in weights_df.itertuples()}
@@ -97,9 +97,9 @@ def main() -> None:
                      "composite": core.composite(vec, weights)})
     prod_ranked = {r["mstar_id"]: r for r in core.rank_in_category(rows) if r["composite"] is not None}
 
-    mx = _db.scalar(f"SELECT max(date) FROM foundation_staging.fund_rank_daily")
+    mx = _db.scalar(f"SELECT max(date) FROM atlas_foundation.fund_rank_daily")
     stored_df = _db.read_df(
-        "SELECT mstar_id, cat_rank, cat_size, composite, pct_band FROM foundation_staging.fund_rank_daily WHERE date = :d",
+        "SELECT mstar_id, cat_rank, cat_size, composite, pct_band FROM atlas_foundation.fund_rank_daily WHERE date = :d",
         {"d": str(mx)},
     )
     stored = {r.mstar_id: r for r in stored_df.itertuples()}

@@ -24,7 +24,7 @@ from atlas.lenses.compute.thresholds_view import nest_thresholds
 
 SUBS = ["technical", "fundamental", "valuation", "catalyst", "flow", "policy"]
 HORIZONS = [21, 63, 126]
-IDX = "foundation_staging.index_prices"
+IDX = "atlas_foundation.index_prices"
 
 
 def _th():

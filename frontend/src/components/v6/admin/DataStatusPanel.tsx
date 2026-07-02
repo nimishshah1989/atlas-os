@@ -1,5 +1,5 @@
 // DataStatusPanel — the Admin "Data status" tab. A simple RAG read of the data behind the live
-// product: an overall health light, the foundation_staging product tables (last update + lag +
+// product: an overall health light, the atlas_foundation product tables (last update + lag +
 // what each powers), the JIP inbound sources, and the recent pipeline runs. Server component —
 // all data is fetched in the page and passed in. RULE #0: every date is a real MAX() from the table.
 import type { FoundationFreshness, Rag, TableFreshness, PipelineRun } from '@/lib/queries/health'
@@ -53,10 +53,10 @@ export function DataStatusPanel({
         </div>
       </div>
 
-      {/* foundation_staging product tables */}
+      {/* atlas_foundation product tables */}
       <section className="rounded-panel border border-edge-hair bg-surface-panel">
         <div className="border-b border-edge-hair px-4 py-2.5">
-          <h2 className="font-display text-[15px] font-medium text-txt-1">Product data · foundation_staging</h2>
+          <h2 className="font-display text-[15px] font-medium text-txt-1">Product data · atlas_foundation</h2>
           <p className="mt-0.5 font-sans text-[11px] text-txt-3">The tables the live site reads. Green = fresh for its cadence, amber = lagging, red = stale.</p>
         </div>
         <div className="overflow-x-auto">
@@ -104,7 +104,7 @@ export function DataStatusPanel({
 
       <p className="font-sans text-[11px] leading-[1.6] text-txt-3">
         JIP threshold = {jipLagThresholdDays('')}d. Holdings tables refresh monthly, so a higher lag is normal there.
-        Native from <strong className="text-txt-2">foundation_staging</strong> + the JIP source sync.
+        Native from <strong className="text-txt-2">atlas_foundation</strong> + the JIP source sync.
       </p>
     </div>
   )

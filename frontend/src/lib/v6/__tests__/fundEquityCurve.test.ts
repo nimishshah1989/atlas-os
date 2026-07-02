@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { buildFundCurves, type EqPoint } from '../fundEquityCurve'
 
 // REAL month-end NAV + index closes for Quant Small Cap (mstar F0GBR06SGW) and
-// Nifty 50 / Nifty 500, Feb→Jun 2026, pulled from foundation_staging — NO synthetic
+// Nifty 50 / Nifty 500, Feb→Jun 2026, pulled from atlas_foundation — NO synthetic
 // inputs (rule #0). The fund ran +18.5% while Nifty 50 fell, so it exercises both a
 // rising equity curve and RS lines climbing above 100.
 const QUANT: EqPoint[] = [

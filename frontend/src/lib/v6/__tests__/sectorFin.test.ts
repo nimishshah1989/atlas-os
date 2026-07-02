@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { aggregateMargins, perConstituentMargins, type RawFin } from '../sectorFin'
 
 // REAL latest-consolidated quarterly financials pulled from
-// foundation_staging.financials_quarterly (snapshot 2026-06-29) for six Chemicals
+// atlas_foundation.financials_quarterly (snapshot 2026-06-29) for six Chemicals
 // constituents — NO synthetic inputs (rule #0). EIDPARRY is loss-making (pat < 0),
 // so this fixture exercises the outlier-robustness that the old simple-average-of-
 // ratios aggregation lacked (a micro-cap with a −423 stored margin dragged the whole

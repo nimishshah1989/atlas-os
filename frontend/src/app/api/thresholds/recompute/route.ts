@@ -1,5 +1,5 @@
 // POST /api/thresholds/recompute — re-blend the composite from cached lens sub-scores using the
-// CURRENT saved weights, in foundation_staging. Two modes via { apply?: boolean }:
+// CURRENT saved weights, in atlas_foundation. Two modes via { apply?: boolean }:
 //   apply=false (default) → preview: how many composites/tiers would shift (no write).
 //   apply=true            → verify-gated single in-DB UPDATE of the latest snapshot.
 // Delegates to scripts/foundation/recompute_composite_fast.py so the math stays the ONE canonical

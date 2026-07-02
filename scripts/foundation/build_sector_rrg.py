@@ -5,7 +5,7 @@ Replaces the legacy mirror of ``atlas.mv_sector_rrg`` (which carried a stale,
 broken snapshot — 21 of 30 sectors stuck on "Leading" with rs-ratios inflated
 far above 100, and inconsistencies like Energy "Weakening" sitting at +15pp
 momentum). This computes every canonical sector's rotation DIRECTLY from
-``foundation_staging.index_prices`` against the Nifty 500 benchmark.
+``atlas_foundation.index_prices`` against the Nifty 500 benchmark.
 
 RRG math (JdK Relative Rotation Graph, centered to reproduce the standard frame):
   1. RS(t) = sector_close(t) / nifty500_close(t) on common trading dates.
@@ -17,7 +17,7 @@ RRG math (JdK Relative Rotation Graph, centered to reproduce the standard frame)
      Lagging (<100, <0), Improving (<100, >=0).
   6. ``*_current`` = latest week; ``trail_6w`` = last 6 weekly points, oldest-first.
 
-Writes one row per canonical sector into ``foundation_staging.mv_sector_rrg``,
+Writes one row per canonical sector into ``atlas_foundation.mv_sector_rrg``,
 keyed on (as_of_date, sector_name). ``as_of_date`` = latest priced date.
 
 Run:
@@ -33,7 +33,7 @@ import pandas as pd
 
 from scripts.foundation import _db
 
-M = "foundation_staging"
+M = "atlas_foundation"
 N500 = "NIFTY 500"
 TABLE = f"{M}.mv_sector_rrg"
 

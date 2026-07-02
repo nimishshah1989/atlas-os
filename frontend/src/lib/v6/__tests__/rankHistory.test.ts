@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { pctBand, stableDays, rankSwing, type RankSlice } from '../rankHistory'
 
-// REAL daily rank series (foundation_staging.fund_rank_daily) for the #1 India Small-Cap
+// REAL daily rank series (atlas_foundation.fund_rank_daily) for the #1 India Small-Cap
 // fund, ascending by date — NO synthetic data (rule #0). It sits at rank 1 except a single
 // dip to rank 2 on 2026-06-22, so it exercises the trailing-stability + swing logic.
 const SMALLCAP_LEADER: RankSlice[] = [

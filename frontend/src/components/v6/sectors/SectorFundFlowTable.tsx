@@ -1,7 +1,7 @@
 // SectorFundFlowTable — sector fund-flow: constituent-average delivery (30d/60d), up/down
 // delivery asymmetry (smart-money accumulation vs distribution), and the institutional flow
 // sub-score, vs the universe. Every row drills into the per-constituent "within the sector"
-// view. Native foundation_staging.delivery_daily + journal.
+// view. Native atlas_foundation.delivery_daily + journal.
 import type { SectorFundFlow } from '@/lib/queries/v6/sector_lens'
 import { MetricBreakdownTable, type MetricRow } from '@/components/v6/sectors/MetricBreakdownTable'
 

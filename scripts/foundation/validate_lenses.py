@@ -19,11 +19,11 @@ import sys
 
 import _db
 
-# Single read schema: validate exactly what the platform serves (foundation_staging).
-L = "foundation_staging.atlas_lens_scores_daily"
-SEC = "foundation_staging.sector_lens_daily"
-IM = "foundation_staging.instrument_master"
-FILINGS = "foundation_staging.lens_filings"
+# Single read schema: validate exactly what the platform serves (atlas_foundation).
+L = "atlas_foundation.atlas_lens_scores_daily"
+SEC = "atlas_foundation.sector_lens_daily"
+IM = "atlas_foundation.instrument_master"
+FILINGS = "atlas_foundation.lens_filings"
 # Coverage universe = Atlas's active set (NIFTY 500 = 498, FM 2026-06-25). Completeness
 # is measured against the universe we actually score, not every kite_token instrument.
 ACTIVE = f"{IM} where asset_class='stock' and kite_token is not null and is_active"
@@ -119,7 +119,7 @@ def check_A(g: Gate):
 def check_B(g: Gate):
     print("== Loop B gate: ETF/index/sector holdings roll-up + sector mapping ==")
     # ETFs with holdings must each have a lens vector
-    n_etf_hold = _q("select count(distinct ticker) from foundation_staging.de_etf_holdings")
+    n_etf_hold = _q("select count(distinct ticker) from atlas_foundation.de_etf_holdings")
     n_etf_scored = _q(f"select count(distinct instrument_id) from {L} where asset_class='etf'")
     g.check(
         "ETF lens coverage",
@@ -128,7 +128,7 @@ def check_B(g: Gate):
     )
 
     # Indices with constituents must each have a lens vector
-    n_idx_con = _q("select count(distinct index_code) from foundation_staging.de_index_constituents")
+    n_idx_con = _q("select count(distinct index_code) from atlas_foundation.de_index_constituents")
     n_idx_scored = _q(f"select count(distinct instrument_id) from {L} where asset_class='index'")
     g.check(
         "index lens coverage",
@@ -144,7 +144,7 @@ def check_B(g: Gate):
     unmapped = _q(f"""select count(*) from {IM}
         where kite_token is not null and (sector is null or sector='')""")
     has_sector_col = _q(
-        "select count(*) from information_schema.columns where table_schema='foundation_staging' "
+        "select count(*) from information_schema.columns where table_schema='atlas_foundation' "
         "and table_name='instrument_master' and column_name='sector'"
     )
     g.check(

@@ -20,7 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "foundation"))
 import _db  # noqa: E402
 
-M = "foundation_staging"
+M = "atlas_foundation"
 
 # (table, date_col, max_lag_trading_days) — most must be exactly at the EOD; a few
 # feeds legitimately lag (delivery T+1, holdings weekly) so carry a tolerance.

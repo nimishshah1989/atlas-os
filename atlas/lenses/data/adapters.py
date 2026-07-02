@@ -1,7 +1,7 @@
 """Data adapters for the six-lens scoring engine.
 
-Read from foundation_staging, feed data to pure scorers,
-write results to foundation_staging.atlas_lens_scores_daily.
+Read from atlas_foundation, feed data to pure scorers,
+write results to atlas_foundation.atlas_lens_scores_daily.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ log = structlog.get_logger()
 _IST = ZoneInfo("Asia/Kolkata")
 
 # NSE trading-calendar source of truth. We use index-level NIFTY 50 sessions
-# (foundation_staging.index_prices) rather than raw technical_daily DISTINCT
+# (atlas_foundation.index_prices) rather than raw technical_daily DISTINCT
 # dates (which carry sparse 2-/10-row junk rows on holidays) or
 # public.de_trading_calendar (which mislabels the Budget-day special Sunday
 # session as a weekend and is synthetically future-dated). Membership-by-presence
@@ -39,7 +39,7 @@ def latest_trading_day(engine: Engine, ref: date | None = None) -> date:
     """
     ref = ref or datetime.now(_IST).date()
     sql = text(
-        "SELECT max(date) FROM foundation_staging.index_prices "
+        "SELECT max(date) FROM atlas_foundation.index_prices "
         "WHERE index_code = :idx AND date <= :ref"
     )
     with open_compute_session(engine) as conn:
@@ -52,7 +52,7 @@ def latest_trading_day(engine: Engine, ref: date | None = None) -> date:
 def is_trading_day(engine: Engine, d: date) -> bool:
     """True iff *d* is a real NSE session (present in the NIFTY 50 calendar)."""
     sql = text(
-        "SELECT EXISTS(SELECT 1 FROM foundation_staging.index_prices "
+        "SELECT EXISTS(SELECT 1 FROM atlas_foundation.index_prices "
         "WHERE index_code = :idx AND date = :d)"
     )
     with open_compute_session(engine) as conn:
@@ -92,8 +92,8 @@ def load_technical_data(engine: Engine, as_of: date) -> pd.DataFrame:
                d.delivery_trend, d.delivery_updown_asym,
                COALESCE(o.close_adj, o.close) AS price_adj,
                o.close AS close_raw, o.volume
-        FROM foundation_staging.technical_daily t
-        LEFT JOIN foundation_staging.ohlcv_stock o
+        FROM atlas_foundation.technical_daily t
+        LEFT JOIN atlas_foundation.ohlcv_stock o
           ON o.instrument_id = t.instrument_id AND o.date = t.date
         -- Delivery feed lags the price/EMA feed by a few sessions, so an exact d.date = t.date
         -- join nulls out delivery for the whole universe on a fresh scoring date. Take each
@@ -102,7 +102,7 @@ def load_technical_data(engine: Engine, as_of: date) -> pd.DataFrame:
         LEFT JOIN LATERAL (
           SELECT dd.delivery_pct, dd.delivery_avg_30d, dd.delivery_avg_60d,
                  dd.delivery_trend, dd.delivery_updown_asym
-          FROM foundation_staging.delivery_daily dd
+          FROM atlas_foundation.delivery_daily dd
           WHERE dd.instrument_id = t.instrument_id AND dd.date <= :dt
           ORDER BY dd.date DESC LIMIT 1
         ) d ON true
@@ -152,7 +152,7 @@ def load_fundamental_data(
           SELECT DISTINCT ON (instrument_id, period_end)
                  instrument_id, period_end, revenue, ebit, pat, eps,
                  net_margin, finance_costs, debt_equity_ratio
-          FROM foundation_staging.financials_quarterly
+          FROM atlas_foundation.financials_quarterly
           WHERE period_end <= :cut
           ORDER BY instrument_id, period_end DESC, consolidated DESC),
         ranked AS (
@@ -163,7 +163,7 @@ def load_fundamental_data(
     a_sql = text("""
         SELECT DISTINCT ON (instrument_id)
                instrument_id, period_end, equity, total_borrowings
-        FROM foundation_staging.financials_annual
+        FROM atlas_foundation.financials_annual
         WHERE period_end <= :cut AND equity IS NOT NULL
         ORDER BY instrument_id, period_end DESC, consolidated DESC
     """)
@@ -175,7 +175,7 @@ def load_fundamental_data(
         # ROE on a 2020 score would be non-PIT. Historical backfill dates fall outside
         # the window and keep their PIT-derived ROE (from Screener historical financials).
         snap = conn.execute(
-            text("SELECT max(as_of) FROM foundation_staging.screener_ratios")
+            text("SELECT max(as_of) FROM atlas_foundation.screener_ratios")
         ).scalar()
         sr = None
         if snap is not None and as_of >= snap - timedelta(days=SCREENER_SNAPSHOT_WINDOW):
@@ -183,7 +183,7 @@ def load_fundamental_data(
                 text(
                     "SELECT instrument_id, roe AS scr_roe, roce AS scr_roce, pb AS scr_pb, "
                     "ev_ebitda AS scr_ev_ebitda, stock_pe AS scr_pe "
-                    "FROM foundation_staging.screener_ratios"
+                    "FROM atlas_foundation.screener_ratios"
                 ),
                 conn,
             )
@@ -237,7 +237,7 @@ def load_catalyst_data(
         sql = text("""
             SELECT instrument_id, symbol, filing_date, category,
                    category_bucket, signal_priority, subject_text, source_url
-            FROM foundation_staging.lens_filings
+            FROM atlas_foundation.lens_filings
             WHERE filing_date >= :as_of - :lb AND filing_date <= :as_of
             ORDER BY instrument_id, filing_date DESC
         """)
@@ -246,7 +246,7 @@ def load_catalyst_data(
         sql = text("""
             SELECT instrument_id, symbol, filing_date, category,
                    category_bucket, signal_priority, subject_text, source_url
-            FROM foundation_staging.lens_filings
+            FROM atlas_foundation.lens_filings
             WHERE filing_date >= CURRENT_DATE - :lb
             ORDER BY instrument_id, filing_date DESC
         """)
@@ -270,7 +270,7 @@ def load_flow_data(
                 text("""
                 SELECT instrument_id, symbol, signal_type, value_cr, person_name,
                        pledge_pct_after, transaction_date, price_per_share
-                FROM foundation_staging.lens_insider
+                FROM atlas_foundation.lens_insider
                 WHERE transaction_date >= :as_of - INTERVAL '365 days'
                   AND transaction_date <= :as_of
                 ORDER BY instrument_id, transaction_date DESC
@@ -282,7 +282,7 @@ def load_flow_data(
             shareholding = pd.read_sql(
                 text("""
                 SELECT instrument_id, symbol, period_end, promoter_pct, public_pct
-                FROM foundation_staging.lens_shareholding
+                FROM atlas_foundation.lens_shareholding
                 WHERE period_end <= :as_of
                 ORDER BY instrument_id, period_end DESC
             """),
@@ -294,7 +294,7 @@ def load_flow_data(
                 text("""
                 SELECT instrument_id, symbol, deal_date, client_name, buy_sell,
                        qty, price, is_institutional, is_superstar, superstar_name
-                FROM foundation_staging.lens_bulk_deals
+                FROM atlas_foundation.lens_bulk_deals
                 WHERE deal_date >= :as_of - INTERVAL '90 days'
                   AND deal_date <= :as_of
                 ORDER BY instrument_id, deal_date DESC
@@ -307,7 +307,7 @@ def load_flow_data(
                 text("""
                 SELECT instrument_id, symbol, signal_type, value_cr, person_name,
                        pledge_pct_after, transaction_date, price_per_share
-                FROM foundation_staging.lens_insider
+                FROM atlas_foundation.lens_insider
                 WHERE transaction_date >= CURRENT_DATE - INTERVAL '365 days'
                 ORDER BY instrument_id, transaction_date DESC
             """),
@@ -317,7 +317,7 @@ def load_flow_data(
             shareholding = pd.read_sql(
                 text("""
                 SELECT instrument_id, symbol, period_end, promoter_pct, public_pct
-                FROM foundation_staging.lens_shareholding
+                FROM atlas_foundation.lens_shareholding
                 ORDER BY instrument_id, period_end DESC
             """),
                 conn,
@@ -327,7 +327,7 @@ def load_flow_data(
                 text("""
                 SELECT instrument_id, symbol, deal_date, client_name, buy_sell,
                        qty, price, is_institutional, is_superstar, superstar_name
-                FROM foundation_staging.lens_bulk_deals
+                FROM atlas_foundation.lens_bulk_deals
                 WHERE deal_date >= CURRENT_DATE - INTERVAL '90 days'
                 ORDER BY instrument_id, deal_date DESC
             """),
@@ -359,7 +359,7 @@ def load_mf_flow(engine: Engine, as_of: date | None = None) -> pd.DataFrame:
         # introduces no bias.
         snaps = pd.read_sql(
             text("""
-            SELECT as_of_date FROM foundation_staging.de_mf_holdings
+            SELECT as_of_date FROM atlas_foundation.de_mf_holdings
             WHERE as_of_date <= :ceil
             GROUP BY as_of_date HAVING count(DISTINCT mstar_id) >= 400
             ORDER BY as_of_date DESC LIMIT 2
@@ -373,9 +373,9 @@ def load_mf_flow(engine: Engine, as_of: date | None = None) -> pd.DataFrame:
         mf = pd.read_sql(
             text("""
             WITH cur AS (SELECT instrument_id, mstar_id, weight_pct
-                         FROM foundation_staging.de_mf_holdings WHERE as_of_date = :cur),
+                         FROM atlas_foundation.de_mf_holdings WHERE as_of_date = :cur),
                  prv AS (SELECT instrument_id, mstar_id, weight_pct
-                         FROM foundation_staging.de_mf_holdings WHERE as_of_date = :prv)
+                         FROM atlas_foundation.de_mf_holdings WHERE as_of_date = :prv)
             SELECT c.instrument_id,
                    sum(c.weight_pct - p.weight_pct) AS mf_mom_delta,
                    count(*) AS mf_matched_funds
@@ -390,11 +390,11 @@ def load_mf_flow(engine: Engine, as_of: date | None = None) -> pd.DataFrame:
 
 
 def load_policy_registry(engine: Engine) -> list[dict[str, Any]]:
-    """Load active policies from foundation_staging.policy_registry."""
+    """Load active policies from atlas_foundation.policy_registry."""
     sql = text("""
         SELECT policy_id, policy_name, description, impact,
                beneficiary_sectors, beneficiary_keywords
-        FROM foundation_staging.policy_registry
+        FROM atlas_foundation.policy_registry
         WHERE is_active = TRUE
     """)
     with open_compute_session(engine) as conn:
@@ -414,7 +414,7 @@ def load_instrument_sectors(engine: Engine) -> pd.DataFrame:
     # 498 scored names, instead of every kite_token instrument (the old 2,093).
     sql = text("""
         SELECT im.instrument_id, im.symbol, im.sector, im.industry
-        FROM foundation_staging.instrument_master im
+        FROM atlas_foundation.instrument_master im
         WHERE im.asset_class = 'stock' AND im.kite_token IS NOT NULL
           AND im.is_active
     """)
@@ -427,7 +427,7 @@ def write_lens_scores(
     results: list[dict[str, Any]],
     run_id: uuid.UUID | None = None,
 ) -> int:
-    """Upsert scored results into foundation_staging.atlas_lens_scores_daily."""
+    """Upsert scored results into atlas_foundation.atlas_lens_scores_daily."""
     if not results:
         return 0
     columns = [
@@ -486,9 +486,9 @@ def write_lens_scores(
         rows.append(row)
     return bulk_upsert(
         engine,
-        # Write DIRECTLY to foundation_staging — the single table the frontend reads. Kills the
-        # old atlas.* → foundation_staging.* sync step (and the divergence it caused).
-        "foundation_staging.atlas_lens_scores_daily",
+        # Write DIRECTLY to atlas_foundation — the single table the frontend reads. Kills the
+        # old atlas.* → atlas_foundation.* sync step (and the divergence it caused).
+        "atlas_foundation.atlas_lens_scores_daily",
         columns,
         rows,
         pk_columns=["instrument_id", "date"],
@@ -511,7 +511,7 @@ def purge_stale_lens_scores(
     roll-ups written by a different process/run.
     """
     sql = text(
-        "DELETE FROM foundation_staging.atlas_lens_scores_daily "
+        "DELETE FROM atlas_foundation.atlas_lens_scores_daily "
         "WHERE date = :dt AND asset_class = :ac AND compute_run_id <> :rid"
     )
     with open_compute_session(engine) as conn:

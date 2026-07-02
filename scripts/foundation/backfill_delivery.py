@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Backfill delivery-% accumulation signals into foundation_staging.delivery_daily.
+"""Backfill delivery-% accumulation signals into atlas_foundation.delivery_daily.
 
 Load-once + vectorized + fast write: pull the whole delivery series via COPY, compute
 PIT rolling signals in pandas (fast groupby-rolling), and bulk-load a FRESH delivery_daily
@@ -17,7 +17,7 @@ use only sessions <= D, in SESSIONS not calendar days):
 The Flow accumulation sub-component reads the SMOOTHED quantities (avg_30d vs avg_60d +
 asymmetry) so it is medium-term, matching Flow's quarterly cadence (see compute/flow.py).
 
-Source: foundation_staging.delivery_raw.delivery_pct (~72.6% coverage, 2019+; Atlas NSE
+Source: atlas_foundation.delivery_raw.delivery_pct (~72.6% coverage, 2019+; Atlas NSE
 fetch via fetch_delivery.py) joined to ohlcv_stock.close. Missing/illiquid -> NULL (RULE #0).
 
     python backfill_delivery.py            # full (re)build of delivery_daily
@@ -34,7 +34,7 @@ import _db
 import numpy as np
 import pandas as pd
 
-M = "foundation_staging"
+M = "atlas_foundation"
 SRC = f"{M}.delivery_raw"  # Atlas-owned delivery (decoupled from the legacy JIP source)
 TARGET = f"{M}.delivery_daily"
 START = "2019-01-01"

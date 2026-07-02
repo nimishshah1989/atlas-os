@@ -3,10 +3,10 @@
 -- schema, validate to all-green, then cut over. NEVER mutate live de_*/atlas_*.
 -- Decimal for money (numeric), tz-aware timestamps (timestamptz). Idempotent DDL.
 
-create schema if not exists foundation_staging;
+create schema if not exists atlas_foundation;
 
 -- ── Raw + adjusted stock OHLCV (NSE Bhavcopy sourced) ──────────────────────
-create table if not exists foundation_staging.ohlcv_stock (
+create table if not exists atlas_foundation.ohlcv_stock (
     instrument_id uuid        not null,
     symbol        text        not null,
     date          date        not null,
@@ -27,10 +27,10 @@ create table if not exists foundation_staging.ohlcv_stock (
     ingested_at   timestamptz  not null default now(),
     primary key (instrument_id, date)
 );
-create index if not exists ix_fs_ohlcv_stock_symbol on foundation_staging.ohlcv_stock (symbol, date);
+create index if not exists ix_fs_ohlcv_stock_symbol on atlas_foundation.ohlcv_stock (symbol, date);
 
 -- ── ETF OHLCV ──────────────────────────────────────────────────────────────
-create table if not exists foundation_staging.ohlcv_etf (
+create table if not exists atlas_foundation.ohlcv_etf (
     ticker      text not null,
     isin        text,
     date        date not null,
@@ -47,7 +47,7 @@ create table if not exists foundation_staging.ohlcv_etf (
 );
 
 -- ── Index EOD prices ───────────────────────────────────────────────────────
-create table if not exists foundation_staging.index_prices (
+create table if not exists atlas_foundation.index_prices (
     index_code  text not null,
     date        date not null,
     open        numeric(18,6),
@@ -61,7 +61,7 @@ create table if not exists foundation_staging.index_prices (
 );
 
 -- ── Corporate actions (drive deterministic back-adjustment) ────────────────
-create table if not exists foundation_staging.corp_action (
+create table if not exists atlas_foundation.corp_action (
     instrument_id uuid not null,
     symbol        text not null,
     ex_date       date not null,
@@ -74,7 +74,7 @@ create table if not exists foundation_staging.corp_action (
 );
 
 -- ── TA-Lib technicals (the metrics axis target) ───────────────────────────
-create table if not exists foundation_staging.technical_stock (
+create table if not exists atlas_foundation.technical_stock (
     instrument_id uuid not null,
     date          date not null,
     ema_21        numeric(18,6),
@@ -108,7 +108,7 @@ create table if not exists foundation_staging.technical_stock (
 );
 
 -- ── Authoritative instrument master (the universe registry) ───────────────
-create table if not exists foundation_staging.instrument_master (
+create table if not exists atlas_foundation.instrument_master (
     instrument_id uuid not null,
     asset_class   text not null,            -- stock | etf | index
     symbol        text not null,            -- NSE tradingsymbol / index code
@@ -125,12 +125,12 @@ create table if not exists foundation_staging.instrument_master (
     primary key (instrument_id)
 );
 create unique index if not exists ux_fs_master_class_symbol
-    on foundation_staging.instrument_master (asset_class, symbol);
+    on atlas_foundation.instrument_master (asset_class, symbol);
 create index if not exists ix_fs_master_token
-    on foundation_staging.instrument_master (kite_token);
+    on atlas_foundation.instrument_master (kite_token);
 
 -- ── Per-instrument backfill progress (resumability) ───────────────────────
-create table if not exists foundation_staging.backfill_state (
+create table if not exists atlas_foundation.backfill_state (
     instrument_id uuid not null,
     asset_class   text not null,
     symbol        text not null,
@@ -146,7 +146,7 @@ create table if not exists foundation_staging.backfill_state (
 -- ── Corp-action events that are TRUE discontinuities (demerger whitelist) ──
 -- The cleanliness jump-check skips these ex-dates: a demerger/spin-off price
 -- drop is a real value separation, not a data error.
-create table if not exists foundation_staging.corp_action_event (
+create table if not exists atlas_foundation.corp_action_event (
     symbol      text not null,
     ex_date     date not null,
     event_type  text not null,              -- demerger | spinoff | scheme | special
@@ -160,7 +160,7 @@ create table if not exists foundation_staging.corp_action_event (
 -- One technicals surface keyed by instrument_id (from instrument_master), so the
 -- materialized-view layer reads a single table. RS is vs N50/N500 (meaningful for
 -- stocks/ETFs; ~0 for the benchmark indices themselves).
-create table if not exists foundation_staging.technical_daily (
+create table if not exists atlas_foundation.technical_daily (
     instrument_id uuid not null,
     asset_class   text not null,
     symbol        text not null,
@@ -179,10 +179,10 @@ create table if not exists foundation_staging.technical_daily (
     primary key (instrument_id, date)
 );
 create index if not exists ix_fs_tech_daily_class_date
-    on foundation_staging.technical_daily (asset_class, date);
+    on atlas_foundation.technical_daily (asset_class, date);
 
 -- ── Per-instrument compute progress (resumability) ────────────────────────
-create table if not exists foundation_staging.compute_state (
+create table if not exists atlas_foundation.compute_state (
     instrument_id uuid not null,
     asset_class   text not null,
     symbol        text not null,
@@ -195,7 +195,7 @@ create table if not exists foundation_staging.compute_state (
 );
 
 -- ── Ingest/compute provenance (loop heartbeat) ────────────────────────────
-create table if not exists foundation_staging.ingest_run (
+create table if not exists atlas_foundation.ingest_run (
     run_id      uuid not null default gen_random_uuid(),
     kind        text not null,        -- ingest_bhavcopy | compute_technicals | poc
     as_of_date  date,

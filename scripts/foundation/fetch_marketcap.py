@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ingest Screener market cap + face value per stock -> foundation_staging.equity_marketcap.
+"""Ingest Screener market cap + face value per stock -> atlas_foundation.equity_marketcap.
 
 The weighting source for roll-ups (D24/D21a follow-up): every in-DB candidate failed
 (de_index_constituents weights NULL, tv_metrics.market_cap inconsistent, shares_outstanding
@@ -49,7 +49,7 @@ def _session() -> requests.Session:
     return s
 
 
-M = "foundation_staging"
+M = "atlas_foundation"
 TGT = f"{M}.equity_marketcap"
 
 

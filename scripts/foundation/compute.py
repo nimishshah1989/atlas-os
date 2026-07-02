@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Compute TA-Lib technicals from staging OHLCV → foundation_staging.technical_stock.
+"""Compute TA-Lib technicals from staging OHLCV → atlas_foundation.technical_stock.
 
-Reads adjusted closes from foundation_staging.ohlcv_stock and the N50/N500
-benchmarks from foundation_staging.index_prices, computes the metrics axis target
+Reads adjusted closes from atlas_foundation.ohlcv_stock and the N50/N500
+benchmarks from atlas_foundation.index_prices, computes the metrics axis target
 (EMA 21/50/200, RSI14, returns, RS × 6 windows × 2 benchmarks, above-EMA flags)
 via the canonical technicals module, and idempotently upserts the result.
 

@@ -1,5 +1,5 @@
 // /thresholds — the FM methodology control panel. Server shell: read every knob from
-// foundation_staging.atlas_thresholds and hand it to the editable client panel.
+// atlas_foundation.atlas_thresholds and hand it to the editable client panel.
 export const dynamic = 'force-dynamic' // always show the current saved values
 
 import { getThresholds } from '@/lib/queries/v6/thresholds'
@@ -17,7 +17,7 @@ export default async function ThresholdsPage() {
           Methodology control panel
         </h1>
         <p className="max-w-[820px] font-sans text-[14px] text-txt-2">
-          Every threshold and weight the scoring uses, live from <strong className="text-txt-1">foundation_staging.atlas_thresholds</strong>.
+          Every threshold and weight the scoring uses, live from <strong className="text-txt-1">atlas_foundation.atlas_thresholds</strong>.
           Edit within each knob’s allowed range, <strong className="text-txt-1">Save</strong>, then <strong className="text-txt-1">Preview</strong> the
           impact and <strong className="text-txt-1">Commit</strong> to re-blend the live composite from the cached lens scores — seconds, because only the
           weighting re-runs. {rows.length} active knobs.

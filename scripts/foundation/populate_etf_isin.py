@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Populate foundation_staging.instrument_master.isin for NSE ETF rows (FM ask: complete the
+"""Populate atlas_foundation.instrument_master.isin for NSE ETF rows (FM ask: complete the
 instrument-master identity so ETF/fund equity look-through is robust).
 
 Stock rows already carry ISIN; ETF rows did not. The authoritative ETF ISIN lives only on the
@@ -19,15 +19,15 @@ import _db
 
 def main() -> None:
     before = _db.scalar(
-        "SELECT count(*) FROM foundation_staging.instrument_master "
+        "SELECT count(*) FROM atlas_foundation.instrument_master "
         "WHERE asset_class='etf' AND isin IS NOT NULL"
     )
     _db.exec_sql("""
-      UPDATE foundation_staging.instrument_master im SET isin = sub.isin
+      UPDATE atlas_foundation.instrument_master im SET isin = sub.isin
       FROM (
         SELECT im2.instrument_id, min(mm.isin) AS isin
-        FROM foundation_staging.instrument_master im2
-        JOIN foundation_staging.de_mf_master mm
+        FROM atlas_foundation.instrument_master im2
+        JOIN atlas_foundation.de_mf_master mm
           ON mm.is_etf AND upper(regexp_replace(mm.fund_name,'[^A-Za-z0-9]','','g'))
                         = upper(regexp_replace(im2.name,'[^A-Za-z0-9]','','g'))
         WHERE im2.asset_class='etf'
@@ -35,11 +35,11 @@ def main() -> None:
       ) sub
       WHERE im.instrument_id = sub.instrument_id AND im.isin IS NULL""")
     after = _db.scalar(
-        "SELECT count(*) FROM foundation_staging.instrument_master "
+        "SELECT count(*) FROM atlas_foundation.instrument_master "
         "WHERE asset_class='etf' AND isin IS NOT NULL"
     )
     total = _db.scalar(
-        "SELECT count(*) FROM foundation_staging.instrument_master WHERE asset_class='etf'"
+        "SELECT count(*) FROM atlas_foundation.instrument_master WHERE asset_class='etf'"
     )
     print(f"instrument_master ETF isin: {before} -> {after} of {total} rows")
 

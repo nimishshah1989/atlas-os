@@ -3,7 +3,7 @@
 // Query: "which funds hold this stock?" — consumed by the stock detail page
 // (§6.4 "Funds holding this stock" section).
 //
-// Source: foundation_staging.atlas_fund_scorecard.top_holdings JSONB
+// Source: atlas_foundation.atlas_fund_scorecard.top_holdings JSONB
 //
 // JSONB shape (per atlas/inference/fund_scorecard.py drilldown builder):
 //   [
@@ -13,7 +13,7 @@
 //   ]
 //
 // AUM: the scorecard's sub_metrics->>'aum_cr' is empty in live data, so AUM is
-// sourced from foundation_staging.atlas_universe_funds.aum_cr (single-schema). As of
+// sourced from atlas_foundation.atlas_universe_funds.aum_cr (single-schema). As of
 // the 1b consolidation that column holds TRUE ₹ crore (ingest_fund_master.py writes
 // fund size in ₹ / 1e7, fresh from Morningstar) — used directly, no scaling.
 //
@@ -51,7 +51,7 @@ type Row = {
  * @returns    FundHolding[] — empty array when no fund holds this stock
  */
 export async function getFundsHoldingStock(iid: string): Promise<FundHolding[]> {
-  // Sourced from RAW holdings (foundation_staging.de_mf_holdings, Atlas-owned weekly
+  // Sourced from RAW holdings (atlas_foundation.de_mf_holdings, Atlas-owned weekly
   // snapshot) — NOT the retired M4 fund scorecard. "Which funds hold this stock" is a raw
   // holdings lookup; AUM/name come from the curated universe. The composite-grade badge was
   // dropped with the scorecard methodology (the simplified product ranks by AUM/weight).
@@ -62,9 +62,9 @@ export async function getFundsHoldingStock(iid: string): Promise<FundHolding[]> 
       uf.aum_cr::text                                  AS aum_cr,
       h.weight_pct::text                               AS weight_pct,
       ''                                               AS atlas_grade
-    FROM foundation_staging.de_mf_holdings h
-    JOIN foundation_staging.atlas_universe_funds uf ON uf.mstar_id = h.mstar_id
-    WHERE h.as_of_date = (SELECT MAX(as_of_date) FROM foundation_staging.de_mf_holdings)
+    FROM atlas_foundation.de_mf_holdings h
+    JOIN atlas_foundation.atlas_universe_funds uf ON uf.mstar_id = h.mstar_id
+    WHERE h.as_of_date = (SELECT MAX(as_of_date) FROM atlas_foundation.de_mf_holdings)
       AND h.instrument_id = ${iid}::uuid
       AND h.weight_pct >= 0.5
       -- Regular plans only — drop the Direct duplicates of the same scheme ("Dir Gr" / "Direct")

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Page-1 (Markets Today) data layer: the Nifty-500 BREADTH SERIES, computed natively from
-foundation_staging.technical_daily (no atlas.* dependency). One row per trading day with the
+atlas_foundation.technical_daily (no atlas.* dependency). One row per trading day with the
 absolute COUNTS of Nifty-500 constituents above the 21/50/200-EMA (the markets-today-redesign
 spec wants counts, not %), plus net-new-highs and median momentum for the SignalScorecard.
 
@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import _db
 
-TGT = "foundation_staging.breadth_nifty500_daily"
+TGT = "atlas_foundation.breadth_nifty500_daily"
 MIN_TRADED = 100  # min stocks with an OHLCV row for the day to count as a broad-trading session
                   # (artifacts ≤ 38, real sessions ≥ 498 — see module docstring)
 
@@ -37,7 +37,7 @@ DROP TABLE IF EXISTS {TGT} CASCADE;
 CREATE TABLE {TGT} AS
 WITH traded AS (
   -- broad-trading days only: drops NSE-holiday artifacts and Diwali Muhurat micro-sessions
-  SELECT date FROM foundation_staging.ohlcv_stock GROUP BY date HAVING count(*) >= {MIN_TRADED}
+  SELECT date FROM atlas_foundation.ohlcv_stock GROUP BY date HAVING count(*) >= {MIN_TRADED}
 ),
 idx AS (
   -- Nifty 500 INDEX price momentum (robust; avg-constituent ret_3m is outlier-skewed,
@@ -45,7 +45,7 @@ idx AS (
   SELECT date,
          close AS idx_close,
          close / NULLIF(lag(close, 63) OVER (ORDER BY date), 0) - 1 AS idx_ret_3m
-  FROM foundation_staging.index_prices
+  FROM atlas_foundation.index_prices
   WHERE index_code = 'NIFTY 500'
 ),
 breadth AS (
@@ -60,8 +60,8 @@ breadth AS (
            - sum((t.pos_52w <= 5)::int)        AS net_new_highs,
          sum((t.ema_50 > t.ema_200)::int)      AS gc_50_200,     -- golden cross: 50-EMA > 200-EMA
          round(avg(t.rsi_14)::numeric, 2)      AS avg_rsi_14
-  FROM foundation_staging.technical_daily t
-  JOIN foundation_staging.de_index_constituents c
+  FROM atlas_foundation.technical_daily t
+  JOIN atlas_foundation.de_index_constituents c
     ON c.instrument_id = t.instrument_id
    AND c.index_code = 'NIFTY 500'
    AND c.effective_to IS NULL

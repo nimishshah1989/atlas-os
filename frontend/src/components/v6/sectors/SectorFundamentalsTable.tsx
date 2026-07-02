@@ -1,6 +1,6 @@
 // SectorFundamentalsTable — revenue-weighted sector margins (Σebitda/Σrevenue) + share of
 // constituents that are profitable, vs the all-stock universe. Every row drills into the
-// per-constituent "within the sector" view. Native foundation_staging.financials_quarterly.
+// per-constituent "within the sector" view. Native atlas_foundation.financials_quarterly.
 import type { SectorFundamentals } from '@/lib/queries/v6/sector_lens'
 import { MetricBreakdownTable, type MetricRow } from '@/components/v6/sectors/MetricBreakdownTable'
 

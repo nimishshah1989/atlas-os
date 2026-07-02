@@ -115,7 +115,7 @@ def targets(asset_classes: list[str] | None) -> pd.DataFrame:
     stocks, ETFs and indices all carry their kite_token here."""
     q = (
         "select instrument_id::text instrument_id, asset_class, symbol, isin, kite_token "
-        "from foundation_staging.instrument_master where kite_token is not null"
+        "from atlas_foundation.instrument_master where kite_token is not null"
     )
     params: dict = {}
     if asset_classes:

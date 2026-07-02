@@ -1,6 +1,6 @@
 // "Held by" panel for the stock detail page — closes the navigation loop:
 // stock → the funds & ETFs that hold it (reverse of the holdings drill).
-// Pure server component. Real data only (foundation_staging); empty = "not held".
+// Pure server component. Real data only (atlas_foundation); empty = "not held".
 import Link from 'next/link'
 import type { FundHolding } from '@/lib/queries/v6/funds_holding_stock'
 import type { EtfHolding } from '@/lib/queries/v6/etfs_holding_stock'

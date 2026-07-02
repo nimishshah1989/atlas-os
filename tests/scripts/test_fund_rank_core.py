@@ -5,7 +5,7 @@ This Python core MUST produce the IDENTICAL number to the live frontend
 (`frontend/src/lib/v6/fundScore.ts` → `sectorScore.ts`), because the history's
 "today" row has to equal what the funds page shows. The fixtures below are the SAME
 REAL holdings-weighted lens vectors used in the TS test (fundScore.test.ts) — real
-records pulled from foundation_staging (snapshot 2026-06-26), NO synthetic inputs
+records pulled from atlas_foundation (snapshot 2026-06-26), NO synthetic inputs
 (rule #0). Reproducing the TS expected outputs here proves the port is faithful.
 """
 
@@ -24,7 +24,7 @@ import fund_rank_core as C  # noqa: E402
 
 pytestmark = pytest.mark.unit
 
-# Real holdings-weighted lens vectors (foundation_staging, 2026-06-26 snapshot) — three
+# Real holdings-weighted lens vectors (atlas_foundation, 2026-06-26 snapshot) — three
 # India Multi-Cap funds. Same fixtures as the TS test; NOT synthetic.
 BANK_OF_INDIA = {"v_tech": 62.09, "v_fund": 54.47, "v_flow": 25.25, "v_cat": 48.9}
 GROWW = {"v_tech": 68.61, "v_fund": 63.8, "v_flow": 23.52, "v_cat": 47.95}

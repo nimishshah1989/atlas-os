@@ -34,7 +34,7 @@ import warnings
 import _db
 import pandas as pd
 
-FS = "foundation_staging"
+FS = "atlas_foundation"
 # Sector RS windows = the 4 sector columns on technical_daily (no 1d/1w sector).
 WINDOWS = {"1m": 21, "3m": 63, "6m": 126, "12m": 252}
 RS_COLS = [f"rs_{w}_sector" for w in WINDOWS]

@@ -10,7 +10,7 @@ from atlas.lenses.pipeline import run_pipeline
 days = [
     d.date() if hasattr(d, "date") else d
     for d in _db.read_df(
-        "select distinct date from foundation_staging.index_prices where index_code='NIFTY 50' and date between '2026-03-01' and '2026-06-24' order by date"
+        "select distinct date from atlas_foundation.index_prices where index_code='NIFTY 50' and date between '2026-03-01' and '2026-06-24' order by date"
     )["date"]
 ]
 print(f"re-scoring {len(days)} trading days 2026-03-01..06-24 via run_pipeline", flush=True)

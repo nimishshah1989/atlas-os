@@ -40,11 +40,11 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 L = "atlas.atlas_lens_scores_daily"
-TD = "foundation_staging.technical_daily"
-FQ = "foundation_staging.financials_quarterly"
-OHLCV = "foundation_staging.ohlcv_stock"
-IDX = "foundation_staging.index_prices"
-IM = "foundation_staging.instrument_master"
+TD = "atlas_foundation.technical_daily"
+FQ = "atlas_foundation.financials_quarterly"
+OHLCV = "atlas_foundation.ohlcv_stock"
+IDX = "atlas_foundation.index_prices"
+IM = "atlas_foundation.instrument_master"
 START = date(2019, 1, 1)
 
 # Non-policy lenses that must become genuinely point-in-time. C1 variance floors
@@ -719,7 +719,7 @@ def check_C8(g: Gate):
 # ──────────────────── C9 delivery accumulation enrichment (loopD) ────────────────────
 def check_C9(g: Gate):
     print("== C9: delivery-% accumulation enrichment is real, PIT, additive (loopD) ==")
-    DD = "foundation_staging.delivery_daily"
+    DD = "atlas_foundation.delivery_daily"
     end = _max_session()
     # C9a — delivery_daily populated + covers the journal through the latest session.
     cov = _df(

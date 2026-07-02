@@ -1,7 +1,7 @@
 // allow-large: v4 stock detail assembles header + price/VWAP StatCards + the six-lens
 // DecileLadder (real numbers behind every score) + RS matrix + two theme-aware EMA charts
 // + 8-quarter financials + corporate announcements + TV widgets into one ordered page.
-// StockDetailV4 — lens-first, FULLY native foundation_staging (no atlas.* / public.de_* reads).
+// StockDetailV4 — lens-first, FULLY native atlas_foundation (no atlas.* / public.de_* reads).
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { unstable_cache } from 'next/cache'
@@ -236,7 +236,7 @@ export async function StockDetailV4({ symbol }: { symbol: string }) {
       </section>
 
       <div className="px-8 py-6 font-sans text-[12px] leading-[1.6] text-txt-3">
-        Native from <strong className="text-txt-2">foundation_staging</strong> — lens journal, technical_daily, ohlcv_stock; TradingView for the live instrument view.{' '}
+        Native from <strong className="text-txt-2">atlas_foundation</strong> — lens journal, technical_daily, ohlcv_stock; TradingView for the live instrument view.{' '}
         {sector && <Link href={`/sectors/${encodeURIComponent(sector)}`} className="text-brand hover:underline">← Back to {sector}</Link>}
       </div>
     </div>

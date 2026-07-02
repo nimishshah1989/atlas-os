@@ -8,7 +8,7 @@ twice → ~50s). ohlcv_stock has no date index, so the stocks-list 30-day turnov
 1.6 GB scan.
 
 Both indexes are ADDITIVE (no data change) and built CONCURRENTLY (reads + writes continue), on
-foundation_staging tables (v4's own). IF NOT EXISTS = idempotent.
+atlas_foundation tables (v4's own). IF NOT EXISTS = idempotent.
 """
 
 from __future__ import annotations
@@ -19,8 +19,8 @@ import _db
 import psycopg2
 
 INDEXES = [
-    ("ix_fs_lens_class_date", "foundation_staging.atlas_lens_scores_daily", "(asset_class, date)"),
-    ("ix_fs_ohlcv_stock_date", "foundation_staging.ohlcv_stock", "(date)"),
+    ("ix_fs_lens_class_date", "atlas_foundation.atlas_lens_scores_daily", "(asset_class, date)"),
+    ("ix_fs_ohlcv_stock_date", "atlas_foundation.ohlcv_stock", "(date)"),
 ]
 
 

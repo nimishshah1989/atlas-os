@@ -1,6 +1,6 @@
 """Real-data tests for the NSE trading-calendar helpers (RULE #0 compliant).
 
-These tests assert against REAL rows in foundation_staging.index_prices (the
+These tests assert against REAL rows in atlas_foundation.index_prices (the
 NIFTY 50 session calendar) — never synthetic inputs. They prove the helpers are
 MEMBERSHIP-based (a date is a trading day iff a real session row exists), not
 weekday-based. The two load-bearing cases:
@@ -35,7 +35,7 @@ def engine():
     # Skip (don't fail) if the calendar source is unreachable/empty in this env.
     with eng.connect() as conn:
         n = conn.execute(
-            text("SELECT count(*) FROM foundation_staging.index_prices WHERE index_code = :idx"),
+            text("SELECT count(*) FROM atlas_foundation.index_prices WHERE index_code = :idx"),
             {"idx": _NSE_CAL_INDEX},
         ).scalar()
     if not n:
@@ -49,7 +49,7 @@ def _row_exists(eng, d: date) -> bool:
         return bool(
             conn.execute(
                 text(
-                    "SELECT EXISTS(SELECT 1 FROM foundation_staging.index_prices "
+                    "SELECT EXISTS(SELECT 1 FROM atlas_foundation.index_prices "
                     "WHERE index_code = :idx AND date = :d)"
                 ),
                 {"idx": _NSE_CAL_INDEX, "d": d},

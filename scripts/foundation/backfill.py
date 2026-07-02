@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Full Kite backfill: 25y OHLCV for the whole universe → staging (resumable).
 
-Drives foundation_staging.instrument_master (kite_token not null) through Kite's
+Drives atlas_foundation.instrument_master (kite_token not null) through Kite's
 historical API into the right staging table per asset class:
     stock → ohlcv_stock (instrument_id)   etf → ohlcv_etf (ticker)   index → index_prices (index_code)
 

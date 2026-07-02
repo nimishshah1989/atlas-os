@@ -1,5 +1,5 @@
 // src/lib/queries/v6/sector_lens.ts
-// Native sector deep-dive lens data — all from foundation_staging:
+// Native sector deep-dive lens data — all from atlas_foundation:
 //  - getSectorLensVector(): the 6-lens sector vector + breadth + dispersion (sector_lens_daily)
 //  - getSectorStocks(): the sector's stocks with per-lens DECILES (cut within cap cohort,
 //    universe-wide, the D27 way) + leadership badge + strength — feeds the 2x2s + within breadth
@@ -21,7 +21,7 @@ export async function getSectorLensVector(sector: string): Promise<SectorLensVec
   const r = await sql<Record<string, string>[]>`
     SELECT technical, fundamental, valuation, catalyst, flow, policy,
            breadth_technical, breadth_fundamental, breadth_flow, dispersion, n_constituents
-    FROM foundation_staging.sector_lens_daily
+    FROM atlas_foundation.sector_lens_daily
     WHERE sector = ${sector} ORDER BY date DESC LIMIT 1
   `
   if (r.length === 0) return null
@@ -41,8 +41,8 @@ export async function getAllSectorLensVectors(): Promise<Record<string, SectorLe
   const rows = await sql<Record<string, string>[]>`
     SELECT sector, technical, fundamental, valuation, catalyst, flow, policy,
            breadth_technical, breadth_fundamental, breadth_flow, dispersion, n_constituents
-    FROM foundation_staging.sector_lens_daily
-    WHERE date = (SELECT max(date) FROM foundation_staging.sector_lens_daily)
+    FROM atlas_foundation.sector_lens_daily
+    WHERE date = (SELECT max(date) FROM atlas_foundation.sector_lens_daily)
   `
   const n = (v: string | null) => (v == null ? null : Number(v))
   const out: Record<string, SectorLensVector> = {}
@@ -76,29 +76,29 @@ export type SectorStock = {
 export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
   const rows = await sql<Record<string, string>[]>`
     WITH latest AS (
-      SELECT max(date) d FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'
+      SELECT max(date) d FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock'
     ),
     cap AS (
       SELECT instrument_id,
         CASE WHEN bool_or(index_code='NIFTY 100') THEN 'large'
              WHEN bool_or(index_code='NIFTY MIDCAP 150') THEN 'mid'
              WHEN bool_or(index_code='NIFTY SMLCAP 250') THEN 'small' ELSE 'micro' END AS cap
-      FROM foundation_staging.de_index_constituents
+      FROM atlas_foundation.de_index_constituents
       WHERE effective_to IS NULL AND index_code IN ('NIFTY 100','NIFTY MIDCAP 150','NIFTY SMLCAP 250')
       GROUP BY instrument_id
     ),
     sec_ret AS (  -- each sector's own NSE-index 3M return → real RS-vs-sector (stock 3M − sector-index 3M)
       SELECT sm.sector_name, max(aim.ret_3m::float) AS sret_3m
-      FROM foundation_staging.atlas_sector_master sm
-      JOIN foundation_staging.atlas_index_metrics_daily aim
+      FROM atlas_foundation.atlas_sector_master sm
+      JOIN atlas_foundation.atlas_index_metrics_daily aim
         ON aim.index_code = sm.primary_nse_index
-       AND aim.date = (SELECT max(date) FROM foundation_staging.atlas_index_metrics_daily)
+       AND aim.date = (SELECT max(date) FROM atlas_foundation.atlas_index_metrics_daily)
       WHERE sm.is_active = true
       GROUP BY sm.sector_name
     ),
     liq AS (  -- ≈20-session avg traded value (₹ Cr)
       SELECT instrument_id, avg(close * volume) / 1e7 AS liq_cr
-      FROM foundation_staging.ohlcv_stock
+      FROM atlas_foundation.ohlcv_stock
       WHERE date >= (SELECT d FROM latest) - INTERVAL '30 days' AND close > 0 AND volume > 0
       GROUP BY instrument_id
     ),
@@ -109,10 +109,10 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
              td.ret_1d::float r1d, td.ret_1w::float r1w, td.ret_1m::float r1m,
              td.ret_3m::float r3m, td.ret_6m::float r6m, td.ret_12m::float r12m,
              td.rs_1m_n500::float rs1m, td.rs_3m_n500::float rs3m, td.rs_6m_n500::float rs6m
-      FROM foundation_staging.atlas_lens_scores_daily l
-      JOIN foundation_staging.instrument_master im ON im.instrument_id = l.instrument_id
+      FROM atlas_foundation.atlas_lens_scores_daily l
+      JOIN atlas_foundation.instrument_master im ON im.instrument_id = l.instrument_id
       LEFT JOIN cap c ON c.instrument_id = l.instrument_id
-      LEFT JOIN foundation_staging.technical_daily td
+      LEFT JOIN atlas_foundation.technical_daily td
         ON td.instrument_id = l.instrument_id AND td.asset_class='stock'
         AND td.date = (SELECT d FROM latest)
       WHERE l.asset_class='stock' AND l.date=(SELECT d FROM latest)
@@ -133,10 +133,10 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
              -- uncovered names lack market cap in EVERY source, not just screener_ratios.)
       SELECT mc.instrument_id,
         mc.market_cap * (100 - sh.promoter_pct - COALESCE(sh.employee_trusts_pct,0)) / 100.0 AS ff_mcap
-      FROM (SELECT DISTINCT ON (instrument_id) instrument_id, market_cap FROM foundation_staging.screener_ratios
+      FROM (SELECT DISTINCT ON (instrument_id) instrument_id, market_cap FROM atlas_foundation.screener_ratios
             WHERE market_cap IS NOT NULL ORDER BY instrument_id, as_of DESC NULLS LAST) mc
       JOIN (SELECT DISTINCT ON (instrument_id) instrument_id, promoter_pct, employee_trusts_pct
-            FROM foundation_staging.lens_shareholding WHERE promoter_pct IS NOT NULL
+            FROM atlas_foundation.lens_shareholding WHERE promoter_pct IS NOT NULL
             ORDER BY instrument_id, period_end DESC) sh ON sh.instrument_id = mc.instrument_id
     )
     SELECT d.symbol, d.name, d.cap, d.d_tech, d.d_fund, d.d_cat, d.d_flow, d.d_val,
@@ -182,17 +182,17 @@ export type SectorFundamentals = {
 // universe = the full scored universe (Nifty 500), apples-to-apples with sector RS/deciles.
 export async function getSectorFundamentals(sector: string): Promise<SectorFundamentals | null> {
   const r = await sql<Record<string, string>[]>`
-    WITH ld AS (SELECT max(date) d FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'),
-    scored AS (SELECT instrument_id FROM foundation_staging.atlas_lens_scores_daily
+    WITH ld AS (SELECT max(date) d FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock'),
+    scored AS (SELECT instrument_id FROM atlas_foundation.atlas_lens_scores_daily
                WHERE asset_class='stock' AND date=(SELECT d FROM ld)),
     latest_fin AS (
       SELECT DISTINCT ON (fq.instrument_id) fq.instrument_id,
              fq.ebitda::float ebitda, fq.revenue::float revenue, fq.pat::float pat
-      FROM foundation_staging.financials_quarterly fq
+      FROM atlas_foundation.financials_quarterly fq
       WHERE fq.consolidated ORDER BY fq.instrument_id, fq.period_end DESC
     )
     SELECT im.symbol, im.sector, lf.ebitda, lf.revenue, lf.pat
-    FROM foundation_staging.instrument_master im
+    FROM atlas_foundation.instrument_master im
     JOIN scored sc ON sc.instrument_id = im.instrument_id
     JOIN latest_fin lf ON lf.instrument_id = im.instrument_id
     WHERE im.asset_class='stock' AND im.sector IS NOT NULL
@@ -226,15 +226,15 @@ export type SectorFundFlow = {
 // constituents (same set as the rest of the page), so counts match everywhere.
 export async function getSectorFundFlow(sector: string): Promise<SectorFundFlow | null> {
   const r = await sql<Record<string, string>[]>`
-    WITH dl AS (SELECT max(date) d FROM foundation_staging.delivery_daily),
-    jl AS (SELECT max(date) d FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'),
-    scored AS (SELECT instrument_id, flow_institutional FROM foundation_staging.atlas_lens_scores_daily
+    WITH dl AS (SELECT max(date) d FROM atlas_foundation.delivery_daily),
+    jl AS (SELECT max(date) d FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock'),
+    scored AS (SELECT instrument_id, flow_institutional FROM atlas_foundation.atlas_lens_scores_daily
                WHERE asset_class='stock' AND date=(SELECT d FROM jl))
     SELECT im.symbol, im.sector, d.delivery_avg_30d::float a30, d.delivery_avg_60d::float a60,
            d.delivery_updown_asym::float ud, sc.flow_institutional::float fi
-    FROM foundation_staging.instrument_master im
+    FROM atlas_foundation.instrument_master im
     JOIN scored sc ON sc.instrument_id = im.instrument_id
-    LEFT JOIN foundation_staging.delivery_daily d ON d.instrument_id = im.instrument_id AND d.date=(SELECT d FROM dl)
+    LEFT JOIN atlas_foundation.delivery_daily d ON d.instrument_id = im.instrument_id AND d.date=(SELECT d FROM dl)
     WHERE im.asset_class='stock' AND im.sector IS NOT NULL
   `
   const num = (v: string | null) => (v == null ? null : Number(v))

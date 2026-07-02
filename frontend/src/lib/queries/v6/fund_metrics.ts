@@ -19,7 +19,7 @@ const EQUITY = `mm.is_active AND NOT mm.is_etf
 // RS = fund NAV return − index return, per window, vs Nifty 50 and Nifty 500.
 export async function getFundRsMatrix(): Promise<Map<string, FundRsMatrix>> {
   const rows = (await sql.unsafe(`
-    WITH asof AS (SELECT max(nav_date) d FROM foundation_staging.de_mf_nav_daily),
+    WITH asof AS (SELECT max(nav_date) d FROM atlas_foundation.de_mf_nav_daily),
     ic AS (  -- index close at the as-of date and each look-back anchor (one scan per point)
       SELECT
         ${idxClose("NIFTY 500", 0)} p500_0, ${idxClose("NIFTY 500", 1)} p500_1, ${idxClose("NIFTY 500", 3)} p500_3, ${idxClose("NIFTY 500", 6)} p500_6, ${idxClose("NIFTY 500", 12)} p500_12,
@@ -29,7 +29,7 @@ export async function getFundRsMatrix(): Promise<Map<string, FundRsMatrix>> {
       n.r0, n.r1, n.r3, n.r6, n.r12,
       ic.p500_0, ic.p500_1, ic.p500_3, ic.p500_6, ic.p500_12,
       ic.p50_0, ic.p50_1, ic.p50_3, ic.p50_6, ic.p50_12
-    FROM foundation_staging.de_mf_master mm
+    FROM atlas_foundation.de_mf_master mm
     CROSS JOIN ic
     CROSS JOIN LATERAL (
       SELECT ${navAt(0)} r0, ${navAt(1)} r1, ${navAt(3)} r3, ${navAt(6)} r6, ${navAt(12)} r12
@@ -68,13 +68,13 @@ export async function getFundRsMatrix(): Promise<Map<string, FundRsMatrix>> {
 export type FundReturns = { w1: number | null; m1: number | null; m3: number | null; m6: number | null; m12: number | null }
 export async function getFundReturns(): Promise<Map<string, FundReturns>> {
   const rows = (await sql.unsafe(`
-    WITH asof AS (SELECT max(nav_date) d FROM foundation_staging.de_mf_nav_daily)
+    WITH asof AS (SELECT max(nav_date) d FROM atlas_foundation.de_mf_nav_daily)
     SELECT mm.mstar_id, ${navAt(0)} r0,
-      (SELECT v.nav FROM foundation_staging.de_mf_nav_daily v
+      (SELECT v.nav FROM atlas_foundation.de_mf_nav_daily v
        WHERE v.mstar_id = mm.mstar_id AND v.nav_date <= (SELECT d FROM asof) - interval '7 days'
        ORDER BY v.nav_date DESC LIMIT 1) rw,
       ${navAt(1)} r1, ${navAt(3)} r3, ${navAt(6)} r6, ${navAt(12)} r12
-    FROM foundation_staging.de_mf_master mm WHERE ${EQUITY}
+    FROM atlas_foundation.de_mf_master mm WHERE ${EQUITY}
   `)) as unknown as Record<string, string>[]
   const out = new Map<string, FundReturns>()
   for (const r of rows) {
@@ -90,13 +90,13 @@ export async function getFundReturns(): Promise<Map<string, FundReturns>> {
 // NAV nearest to (as-of − N months), per fund, via the (mstar_id, nav_date) index.
 function navAt(months: number): string {
   const back = months === 0 ? '' : ` - interval '${months} months'`
-  return `(SELECT v.nav FROM foundation_staging.de_mf_nav_daily v
+  return `(SELECT v.nav FROM atlas_foundation.de_mf_nav_daily v
            WHERE v.mstar_id = mm.mstar_id AND v.nav_date <= (SELECT d FROM asof)${back}
            ORDER BY v.nav_date DESC LIMIT 1)`
 }
 function idxClose(code: string, months: number): string {
   const back = months === 0 ? '' : ` - interval '${months} months'`
-  return `(SELECT close FROM foundation_staging.index_prices
+  return `(SELECT close FROM atlas_foundation.index_prices
            WHERE index_code = '${code}' AND date <= (SELECT d FROM asof)${back}
            ORDER BY date DESC LIMIT 1)`
 }
@@ -109,16 +109,16 @@ export type FundGolden = { n_priced: number; golden: number }
 // journal), DISTINCT by instrument. golden ≤ n_priced ≤ holdings.
 export async function getFundGoldenCross(): Promise<Map<string, FundGolden>> {
   const rows = (await sql`
-    WITH snap AS (SELECT max(as_of_date) d FROM foundation_staging.de_mf_holdings),
-    ld AS (SELECT max(date) d FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'),
-    tdl AS (SELECT max(date) d FROM foundation_staging.technical_daily WHERE asset_class='stock')
+    WITH snap AS (SELECT max(as_of_date) d FROM atlas_foundation.de_mf_holdings),
+    ld AS (SELECT max(date) d FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock'),
+    tdl AS (SELECT max(date) d FROM atlas_foundation.technical_daily WHERE asset_class='stock')
     SELECT h.mstar_id,
       count(DISTINCT h.instrument_id) FILTER (WHERE t.instrument_id IS NOT NULL)::int AS n_priced,
       count(DISTINCT h.instrument_id) FILTER (WHERE t.ema_50 > t.ema_200)::int AS golden
-    FROM foundation_staging.de_mf_holdings h
-    JOIN foundation_staging.atlas_lens_scores_daily l
+    FROM atlas_foundation.de_mf_holdings h
+    JOIN atlas_foundation.atlas_lens_scores_daily l
       ON l.instrument_id = h.instrument_id AND l.asset_class='stock' AND l.date = (SELECT d FROM ld)
-    LEFT JOIN foundation_staging.technical_daily t
+    LEFT JOIN atlas_foundation.technical_daily t
       ON t.instrument_id = h.instrument_id AND t.asset_class='stock' AND t.date = (SELECT d FROM tdl)
     WHERE h.as_of_date = (SELECT d FROM snap) AND h.weight_pct > 0
     GROUP BY h.mstar_id
@@ -137,18 +137,18 @@ export type FundEma = { n_priced: number; a21: number; a50: number; a200: number
 // technically-priced names while Holdings counts only lens-scored ones).
 export async function getFundHoldingsEma(): Promise<Map<string, FundEma>> {
   const rows = (await sql`
-    WITH snap AS (SELECT max(as_of_date) d FROM foundation_staging.de_mf_holdings),
-    ld AS (SELECT max(date) d FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'),
-    tdl AS (SELECT max(date) d FROM foundation_staging.technical_daily WHERE asset_class='stock')
+    WITH snap AS (SELECT max(as_of_date) d FROM atlas_foundation.de_mf_holdings),
+    ld AS (SELECT max(date) d FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock'),
+    tdl AS (SELECT max(date) d FROM atlas_foundation.technical_daily WHERE asset_class='stock')
     SELECT h.mstar_id,
       count(DISTINCT h.instrument_id) FILTER (WHERE t.instrument_id IS NOT NULL)::int AS n_priced,
       count(DISTINCT h.instrument_id) FILTER (WHERE t.above_ema_21)::int  AS a21,
       count(DISTINCT h.instrument_id) FILTER (WHERE t.above_ema_50)::int  AS a50,
       count(DISTINCT h.instrument_id) FILTER (WHERE t.above_ema_200)::int AS a200
-    FROM foundation_staging.de_mf_holdings h
-    JOIN foundation_staging.atlas_lens_scores_daily l
+    FROM atlas_foundation.de_mf_holdings h
+    JOIN atlas_foundation.atlas_lens_scores_daily l
       ON l.instrument_id = h.instrument_id AND l.asset_class='stock' AND l.date = (SELECT d FROM ld)
-    LEFT JOIN foundation_staging.technical_daily t
+    LEFT JOIN atlas_foundation.technical_daily t
       ON t.instrument_id = h.instrument_id AND t.asset_class='stock' AND t.date = (SELECT d FROM tdl)
     WHERE h.as_of_date = (SELECT d FROM snap) AND h.weight_pct > 0
     GROUP BY h.mstar_id

@@ -3,7 +3,7 @@
 // charts (TV's Advanced-Chart embed refuses NSE index symbols), the constituents drill, top
 // picks, and strength distribution. Adds the native lens read, two 2x2s of the sector's
 // stocks, within-sector breadth, and sector fundamentals + fund-flow tables. All new data
-// from foundation_staging.
+// from atlas_foundation.
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Suspense } from 'react'
@@ -125,7 +125,7 @@ export async function SectorDeepDiveV4({ sector }: { sector: string }) {
       </section>
 
       <div className="px-8 py-6 font-sans text-[12px] text-txt-3 leading-[1.6]">
-        Native from <strong className="text-txt-2">foundation_staging</strong> — sector deep-dive, lens journal, financials, delivery.{' '}
+        Native from <strong className="text-txt-2">atlas_foundation</strong> — sector deep-dive, lens journal, financials, delivery.{' '}
         <Link href="/sectors" className="text-brand hover:underline">← Back to Sectors</Link>
       </div>
     </div>

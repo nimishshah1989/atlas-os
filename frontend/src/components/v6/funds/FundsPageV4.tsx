@@ -1,4 +1,4 @@
-// FundsPageV4 — lens-first /funds. All data native foundation_staging.
+// FundsPageV4 — lens-first /funds. All data native atlas_foundation.
 // The list is a FUNNEL into the fund roll-up atom. Funds are a holdings-weighted roll-up of
 // the stock atom (D26/D27): the headline strip is LEADERSHIP-BREADTH, and the score/rank is a
 // DERIVED composite of the same holdings-weighted lenses (fundScore.ts) — the same blend used for
@@ -201,7 +201,7 @@ export async function FundsPageV4() {
       </Panel>
 
       <div className="font-sans text-[12px] leading-[1.6] text-txt-3">
-        Native from <strong className="text-txt-2">foundation_staging</strong> — the lens journal looked through
+        Native from <strong className="text-txt-2">atlas_foundation</strong> — the lens journal looked through
         de_mf_holdings; identity + NAV from Morningstar (de_mf_master / de_mf_nav_daily).
       </div>
     </div>

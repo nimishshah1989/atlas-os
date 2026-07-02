@@ -1,4 +1,4 @@
-// Single source of truth for the lens composite weights: foundation_staging.atlas_thresholds.
+// Single source of truth for the lens composite weights: atlas_foundation.atlas_thresholds.
 // The FM edits these in the /thresholds panel; both the backend stock composite and every frontend
 // roll-up (sector / fund / ETF) read the SAME values, so a weight change in one place moves
 // everything. Server-only — pages fetch once and thread the weights into the pure score helpers.
@@ -10,7 +10,7 @@ import { DEFAULT_WEIGHTS } from '@/lib/v6/sectorScore'
 export async function getLensWeights(): Promise<LensWeightMap> {
   const rows = (await sql`
     SELECT threshold_key, threshold_value
-    FROM foundation_staging.atlas_thresholds
+    FROM atlas_foundation.atlas_thresholds
     WHERE threshold_key IN ('lens_weight_technical','lens_weight_fundamental','lens_weight_flow','lens_weight_catalyst')
   `) as unknown as { threshold_key: string; threshold_value: string }[]
   const m = new Map(rows.map((r) => [r.threshold_key, Number(r.threshold_value)]))

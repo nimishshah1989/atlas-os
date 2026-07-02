@@ -1,6 +1,6 @@
 // Pure helpers for the fund rank-history visuals (daily-slice bar, stability, swing) and
 // the within-category percentile tag. Pure + client-safe so the table cell and any tests
-// derive the same numbers. The daily data comes from foundation_staging.fund_rank_daily
+// derive the same numbers. The daily data comes from atlas_foundation.fund_rank_daily
 // (see lib/queries/v6/fund_rank_history.ts); the math here mirrors the backend
 // scripts/foundation/fund_rank_core.py (pct_band) so a fund's tag is identical either side.
 

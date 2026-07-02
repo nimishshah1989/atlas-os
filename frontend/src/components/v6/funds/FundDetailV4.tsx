@@ -1,4 +1,4 @@
-// FundDetailV4 — the v4 mutual-fund detail page. Lens-first, native foundation_staging.
+// FundDetailV4 — the v4 mutual-fund detail page. Lens-first, native atlas_foundation.
 // A fund is a holdings-weighted roll-up of the stock atom (D26/D27): the HEADLINE is
 // LEADERSHIP-BREADTH (% of holdings weight that are top-decile leaders in ≥2 conviction lenses),
 // NOT a composite. The fund-specific differentiator is ACTIVE-MOVEMENT — the month-over-month
@@ -269,7 +269,7 @@ export async function FundDetailV4({ mstarId }: { mstarId: string }) {
       </Panel>
 
       <div className="font-sans text-[12px] leading-[1.6] text-txt-3">
-        Native from <strong className="text-txt-2">foundation_staging</strong> — the lens journal looked through
+        Native from <strong className="text-txt-2">atlas_foundation</strong> — the lens journal looked through
         de_mf_holdings; identity + NAV from Morningstar (de_mf_master / de_mf_nav_daily).{' '}
         <Link href="/funds" className="text-brand hover:underline">← Back to Funds</Link>
       </div>

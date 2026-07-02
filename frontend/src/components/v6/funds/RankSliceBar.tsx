@@ -1,7 +1,7 @@
 // RankSliceBar — a thin daily-slice strip of a fund's category rank over time. One vertical
 // slice per trading day, coloured green (best in category) → red (worst) by the within-category
 // percentile (rank-1)/(size-1). Hover a slice for its date + rank. Pure/presentational; the
-// data is foundation_staging.fund_rank_daily via getFundRankHistory.
+// data is atlas_foundation.fund_rank_daily via getFundRankHistory.
 import type { RankSlice } from '@/lib/v6/rankHistory'
 
 // green (best) → amber → red (worst). Continuous so the eye reads the trajectory, not buckets.

@@ -10,7 +10,7 @@ this validates the whole clean dataset (stocks + ETFs + indices) for adoption:
   3. METRICS     — technical_daily has a row for every priced date (compute parity);
                    plus a sampled TA-Lib recompute-and-diff for correctness.
 
-Reads only foundation_staging.* Prints per-asset-class PASS/FAIL + green-count and
+Reads only atlas_foundation.* Prints per-asset-class PASS/FAIL + green-count and
 writes per-instrument detail to output/. Run after the backfill + compute.
 """
 

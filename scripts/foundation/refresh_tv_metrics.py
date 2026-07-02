@@ -2,7 +2,7 @@
 """Widen TV metrics to full ~2000 stock universe.
 
 Calls the existing atlas.tv.screener._fetch_tv_batch for all stocks in
-foundation_staging.instrument_master and upserts into atlas.tv_metrics.
+atlas_foundation.instrument_master and upserts into atlas.tv_metrics.
 Uses the production screener's column set and upsert logic — this is just
 a wider universe driver, not a reimplementation.
 

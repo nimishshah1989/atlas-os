@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { constituentLensChildren } from '../constituentTree'
 import type { ConstituentLens } from '@/lib/queries/v6/constituent_trees'
 
-// REAL sub-component scores for RELIANCE (foundation_staging.atlas_lens_scores_daily, latest date) —
+// REAL sub-component scores for RELIANCE (atlas_foundation.atlas_lens_scores_daily, latest date) —
 // NOT synthetic (rule #0). Technical 45 = Trend 4 + Rel.strength 5 + Vol-contraction 25 + Volume 11
 // (the technical sub-components are points that SUM to the lens score). flow_accumulation is null →
 // it must be skipped. Only the fields the builder reads are populated; the rest are null.

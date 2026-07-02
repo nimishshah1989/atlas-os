@@ -1,6 +1,6 @@
 // src/lib/queries/v6/rs_charts.ts
 // Cap-tier relative-strength series — each tier index ÷ Nifty 500, daily, from
-// foundation_staging.index_prices. Powers the RS charts on the Sectors page
+// atlas_foundation.index_prices. Powers the RS charts on the Sectors page
 // (small/mid/micro-cap + juniorBeES vs Nifty 500). Native fs; no atlas dependency.
 import 'server-only'
 import sql from '@/lib/db'
@@ -20,11 +20,11 @@ export async function getCapTierRS(years = 10): Promise<CapTierRSRow[]> {
            (mc.close / n.close)::text AS mc,
            (mi.close / n.close)::text AS micro,
            (jr.close / n.close)::text AS junior
-    FROM foundation_staging.index_prices n
-    LEFT JOIN foundation_staging.index_prices sc ON sc.date = n.date AND sc.index_code = 'NIFTY SMLCAP 250'
-    LEFT JOIN foundation_staging.index_prices mc ON mc.date = n.date AND mc.index_code = 'NIFTY MIDCAP 150'
-    LEFT JOIN foundation_staging.index_prices mi ON mi.date = n.date AND mi.index_code = 'NIFTY MICROCAP250'
-    LEFT JOIN foundation_staging.index_prices jr ON jr.date = n.date AND jr.index_code = 'NIFTY NEXT 50'
+    FROM atlas_foundation.index_prices n
+    LEFT JOIN atlas_foundation.index_prices sc ON sc.date = n.date AND sc.index_code = 'NIFTY SMLCAP 250'
+    LEFT JOIN atlas_foundation.index_prices mc ON mc.date = n.date AND mc.index_code = 'NIFTY MIDCAP 150'
+    LEFT JOIN atlas_foundation.index_prices mi ON mi.date = n.date AND mi.index_code = 'NIFTY MICROCAP250'
+    LEFT JOIN atlas_foundation.index_prices jr ON jr.date = n.date AND jr.index_code = 'NIFTY NEXT 50'
     WHERE n.index_code = 'NIFTY 500' AND n.close > 0 AND n.date >= NOW() - (${years} || ' years')::INTERVAL
     ORDER BY n.date ASC
   `

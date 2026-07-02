@@ -31,8 +31,8 @@ log = structlog.get_logger()
 _LENSES = ("technical", "fundamental", "valuation", "catalyst", "flow", "policy", "composite")
 # Forward-return horizons in NSE trading SESSIONS (1m / 3m / 6m).
 _HORIZONS = (21, 63, 126)
-_OHLCV = "foundation_staging.ohlcv_stock"
-_IDX = "foundation_staging.index_prices"
+_OHLCV = "atlas_foundation.ohlcv_stock"
+_IDX = "atlas_foundation.index_prices"
 _CAL_START = date(2019, 1, 1)
 _TIERS = (
     "tier_1_megacap",
@@ -91,7 +91,7 @@ def _load_lens_scores(engine: Engine) -> pd.DataFrame:
     df = _copy_df(
         engine,
         f"SELECT instrument_id, date, {cols} "  # noqa: S608
-        "FROM foundation_staging.atlas_lens_scores_daily ORDER BY date",
+        "FROM atlas_foundation.atlas_lens_scores_daily ORDER BY date",
     )
     if df.empty:
         return df

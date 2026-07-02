@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Fast composite re-blend for the Thresholds control panel — foundation_staging only.
+"""Fast composite re-blend for the Thresholds control panel — atlas_foundation only.
 
-The FM edits lens weights / conviction thresholds in foundation_staging.atlas_thresholds;
+The FM edits lens weights / conviction thresholds in atlas_foundation.atlas_thresholds;
 this re-blends the composite + conviction_tier for every stock from the ALREADY-CACHED
 per-lens sub-scores (the expensive part), with ONE in-DB UPDATE. Seconds, because only the
 cheap weighted blend re-runs — the lens features are untouched.
 
 Faithful to the canonical scorer: it reuses recompute_sql.build_sql (the exact SQL that is
 cross-checked against atlas.lenses.compute.composite.compute_composite) — just pointed at
-foundation_staging instead of the legacy atlas schema, and scoped to the latest snapshot by
+atlas_foundation instead of the legacy atlas schema, and scoped to the latest snapshot by
 default so the live frontend reflects the retune immediately.
 
 Usage:
@@ -34,7 +34,7 @@ from sqlalchemy import text
 
 from atlas.db import load_thresholds
 
-SCHEMA = "foundation_staging"
+SCHEMA = "atlas_foundation"
 TABLE = f"{SCHEMA}.atlas_lens_scores_daily"
 
 
@@ -79,7 +79,7 @@ def compute_impact(all_dates: bool = False) -> dict:
 
 def apply(all_dates: bool = False) -> dict:
     """Verify the SQL still matches the canonical scorer, then write composite + conviction_tier
-    back into foundation_staging in a single UPDATE. Verify-gated so a faithful recompute is the
+    back into atlas_foundation in a single UPDATE. Verify-gated so a faithful recompute is the
     only thing that can write (rule #0)."""
     weights, th = _weights_and_th()
     if not R.verify(weights, th):  # canonical cross-check (samples the latest snapshot)

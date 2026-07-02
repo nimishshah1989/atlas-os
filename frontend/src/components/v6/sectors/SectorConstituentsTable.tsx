@@ -2,7 +2,7 @@
 // SectorConstituentsTable — every constituent of the sector in one dense, sortable table: the five
 // lens deciles (cut within cap cohort), strength, leadership, returns (1M/3M), relative strength
 // (vs Nifty 500 over 1M/3M/6M and vs the sector index, 3M), and liquidity. Every column sorts; each
-// name links to its instrument page. All from getSectorStocks (real foundation_staging). RULE #0.
+// name links to its instrument page. All from getSectorStocks (real atlas_foundation). RULE #0.
 import { useState } from 'react'
 import Link from 'next/link'
 import type { SectorStock } from '@/lib/queries/v6/sector_lens'

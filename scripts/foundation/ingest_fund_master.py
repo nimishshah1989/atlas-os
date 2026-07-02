@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Atlas-owned Morningstar Fund-Master ingestion → foundation_staging (single-schema).
+"""Atlas-owned Morningstar Fund-Master ingestion → atlas_foundation (single-schema).
 
 Step 1b of the data consolidation. Replaces the dead external data-engine pull for fund
 master metadata (de_mf_master was stuck at 2026-05-05; atlas_universe_funds AUM stuck at
@@ -8,7 +8,7 @@ master metadata (de_mf_master was stuck at 2026-05-05; atlas_universe_funds AUM 
     GET /v2/service/mf/{MSTAR_MASTER_SERVICE}/universeid/{MSTAR_MASTER_UNIVERSE}?accesscode=
 
 (the HOLDINGS service's universe call is >130MB and times out — that one must stay per-fund;
-see ingest_mf_holdings.py.) This writes DIRECTLY into foundation_staging — no legacy
+see ingest_mf_holdings.py.) This writes DIRECTLY into atlas_foundation — no legacy
 raw-schema hop, no consolidate mirror.
 
 It refreshes two tables:
@@ -124,7 +124,7 @@ def main() -> None:
     # Take clean ownership: de_mf_master needs a unique key on mstar_id for UPSERT.
     cur.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_de_mf_master_mstar_id "
-        "ON foundation_staging.de_mf_master (mstar_id)"
+        "ON atlas_foundation.de_mf_master (mstar_id)"
     )
 
     # 1) de_mf_master — UPSERT mstar-provided columns; preserve amc_name (not in feed).
@@ -145,7 +145,7 @@ def main() -> None:
     ]
     execute_values(
         cur,
-        "INSERT INTO foundation_staging.de_mf_master "
+        "INSERT INTO atlas_foundation.de_mf_master "
         "(mstar_id, amfi_code, isin, fund_name, category_name, broad_category, "
         " is_index_fund, inception_date, primary_benchmark, expense_ratio, "
         " is_active, updated_at) "
@@ -180,7 +180,7 @@ def main() -> None:
     ]
     execute_values(
         cur,
-        "UPDATE foundation_staging.atlas_universe_funds u SET "
+        "UPDATE atlas_foundation.atlas_universe_funds u SET "
         "  aum_cr = v.aum_cr, aum_as_of = v.aum_as_of, "
         "  category_name = COALESCE(v.category_name, u.category_name), "
         "  broad_category = COALESCE(v.broad_category, u.broad_category), "

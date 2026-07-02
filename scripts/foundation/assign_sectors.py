@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assign sector to active stocks in foundation_staging.instrument_master (A2).
+"""Assign sector to active stocks in atlas_foundation.instrument_master (A2).
 
 Durable, idempotent, chain-runnable. Runs AFTER build_universe.py (which writes
 instrument rows but no sector) and is safe to re-run.
@@ -25,14 +25,14 @@ from __future__ import annotations
 import _db
 
 _ACTIONABLE = """
-  SELECT DISTINCT sector FROM foundation_staging.instrument_master
+  SELECT DISTINCT sector FROM atlas_foundation.instrument_master
   WHERE asset_class='stock' AND is_active AND sector IS NOT NULL AND sector <> ''
 """
 
 # Safe COALESCE: de_instrument.sector fallback, restricted to the existing actionable
 # set so distinct-sector count cannot grow.
 _FILL_SAFE = f"""
-  UPDATE foundation_staging.instrument_master im
+  UPDATE atlas_foundation.instrument_master im
      SET sector = di.sector, updated_at = now()
     FROM public.de_instrument di
    WHERE di.symbol = im.symbol
@@ -45,7 +45,7 @@ _FILL_SAFE = f"""
 def _unmapped() -> int:
     return int(
         _db.scalar(
-            "SELECT count(*) FROM foundation_staging.instrument_master "
+            "SELECT count(*) FROM atlas_foundation.instrument_master "
             "WHERE asset_class='stock' AND is_active AND (sector IS NULL OR sector='')"
         )
         or 0
@@ -55,7 +55,7 @@ def _unmapped() -> int:
 def _distinct() -> int:
     return int(
         _db.scalar(
-            "SELECT count(DISTINCT sector) FROM foundation_staging.instrument_master "
+            "SELECT count(DISTINCT sector) FROM atlas_foundation.instrument_master "
             "WHERE asset_class='stock' AND is_active AND sector IS NOT NULL AND sector<>''"
         )
         or 0

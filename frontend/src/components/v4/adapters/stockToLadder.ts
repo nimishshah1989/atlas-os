@@ -1,7 +1,7 @@
 // Adapter: a stock's StockDecile + StockEvidence → the generic DecileLadder model.
 // All stock-specific "real numbers" logic lives here (ported from the
 // StockLensCardV4 seed) so DecileLadder itself stays dumb + reusable. RULE #0:
-// every value traces to a real foundation_staging field — no synthetic fallback.
+// every value traces to a real atlas_foundation field — no synthetic fallback.
 import type { StockDecile, StockEvidence } from '@/lib/queries/v6/stock_lens'
 import type { LadderLens, LadderNumber } from '../ui/DecileLadder'
 

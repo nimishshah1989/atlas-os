@@ -7,7 +7,7 @@
 // Match logic mirrors the backend score_policy (_policy_matches): a policy applies
 // when any beneficiary_sector bidirectionally substring-matches the stock's sector,
 // or any beneficiary_keyword appears in the sector text. Single-schema: reads
-// foundation_staging.policy_registry (mirrored by consolidate_tables.py).
+// atlas_foundation.policy_registry (mirrored by consolidate_tables.py).
 import 'server-only'
 import sql from '@/lib/db'
 
@@ -33,7 +33,7 @@ export async function getPolicyAlertsForStock(sector: string | null): Promise<Po
   if (!sector) return []
   const rows = await sql<Row[]>`
     SELECT policy_id, policy_name, description, impact
-    FROM foundation_staging.policy_registry
+    FROM atlas_foundation.policy_registry
     WHERE is_active AND (
       -- Exact match always; loose bidirectional substring ONLY when the sector name is
       -- ≥4 chars — else short names like "IT" spuriously match "utIlities"/"capItal goods".

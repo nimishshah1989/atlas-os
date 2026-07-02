@@ -42,7 +42,7 @@ STATE_FILE = Path(__file__).parent / ".loopC_rebuild_state.json"
 
 def _sessions(start: date, end: date) -> list[date]:
     df = _db.read_df(
-        "SELECT DISTINCT date FROM foundation_staging.index_prices "
+        "SELECT DISTINCT date FROM atlas_foundation.index_prices "
         "WHERE index_code='NIFTY 50' AND date>=:s AND date<=:e ORDER BY date",
         {"s": start, "e": end},
     )
@@ -112,52 +112,52 @@ def _process_chunk(chunk_dates: list[date]) -> dict:
                     t.atr_14, t.bb_width, t.vol_ratio_30d, t.vol_ratio_60d, t.pos_52w,
                     d.delivery_pct, d.delivery_avg_30d, d.delivery_avg_60d,
                     d.delivery_trend, d.delivery_updown_asym, t.date
-                  FROM foundation_staging.technical_daily t
-                  LEFT JOIN foundation_staging.delivery_daily d
+                  FROM atlas_foundation.technical_daily t
+                  LEFT JOIN atlas_foundation.delivery_daily d
                     ON d.instrument_id = t.instrument_id AND d.date = t.date
                   WHERE t.date BETWEEN :s AND :e""",
         {"s": cstart, "e": cend},
     )
     ohlcv = rd(
         """SELECT instrument_id, date, close_adj, close, volume
-                  FROM foundation_staging.ohlcv_stock WHERE date BETWEEN :s AND :e""",
+                  FROM atlas_foundation.ohlcv_stock WHERE date BETWEEN :s AND :e""",
         {"s": cstart, "e": cend},
     )
     fq = rd(
         """SELECT instrument_id, period_end, consolidated, revenue, ebit, pat, eps,
                  net_margin, finance_costs, debt_equity_ratio
-               FROM foundation_staging.financials_quarterly WHERE period_end <= :e""",
+               FROM atlas_foundation.financials_quarterly WHERE period_end <= :e""",
         {"e": cend},
     )
     fa = rd(
         """SELECT instrument_id, period_end, consolidated, equity, total_borrowings
-               FROM foundation_staging.financials_annual
+               FROM atlas_foundation.financials_annual
                WHERE period_end <= :e AND equity IS NOT NULL""",
         {"e": cend},
     )
     insider = rd(
         """SELECT instrument_id, symbol, signal_type, value_cr, person_name,
                       pledge_pct_after, transaction_date, price_per_share
-                    FROM foundation_staging.lens_insider
+                    FROM atlas_foundation.lens_insider
                     WHERE transaction_date BETWEEN :l AND :e""",
         {"l": look, "e": cend},
     )
     sh = rd(
         """SELECT instrument_id, symbol, period_end, promoter_pct, public_pct
-               FROM foundation_staging.lens_shareholding WHERE period_end <= :e""",
+               FROM atlas_foundation.lens_shareholding WHERE period_end <= :e""",
         {"e": cend},
     )
     bulk = rd(
         """SELECT instrument_id, symbol, deal_date, client_name, buy_sell, qty, price,
                    is_institutional, is_superstar, superstar_name
-                 FROM foundation_staging.lens_bulk_deals
+                 FROM atlas_foundation.lens_bulk_deals
                  WHERE deal_date BETWEEN :l AND :e""",
         {"l": cstart - timedelta(days=90), "e": cend},
     )
     filings = rd(
         """SELECT instrument_id, symbol, filing_date, category, category_bucket,
                       signal_priority, subject_text, source_url
-                    FROM foundation_staging.lens_filings
+                    FROM atlas_foundation.lens_filings
                     WHERE filing_date BETWEEN :l AND :e""",
         {"l": look, "e": cend},
     )
@@ -306,7 +306,7 @@ def main() -> None:
         STATE_FILE.unlink()
 
     end = args.end or _db.scalar(
-        "SELECT max(date) FROM foundation_staging.index_prices WHERE index_code='NIFTY 50'"
+        "SELECT max(date) FROM atlas_foundation.index_prices WHERE index_code='NIFTY 50'"
     )
     if hasattr(end, "date"):
         end = end.date()

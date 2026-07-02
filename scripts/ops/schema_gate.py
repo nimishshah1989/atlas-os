@@ -3,7 +3,7 @@
 
 Scans ONLY the live-imported files (the scripts the orchestrator runs + the modules
 they import + the reachable frontend queries) for any DB reference to a schema other
-than foundation_staging. Prints every hit as file:line and exits 1 if the count is
+than atlas_foundation. Prints every hit as file:line and exits 1 if the count is
 not zero. No eyeballing, no orphan-file confusion — a provable number.
 
     python scripts/ops/schema_gate.py            # full report + exit code
@@ -102,7 +102,7 @@ def main() -> int:
     if args.count:
         print(total)
         return 0 if total == 0 else 1
-    print("=== SINGLE-SCHEMA GATE — references outside foundation_staging in LIVE code ===")
+    print("=== SINGLE-SCHEMA GATE — references outside atlas_foundation in LIVE code ===")
     print(f"\nBACKEND ({len(be)}):")
     for h in be:
         print(f"  {h}")

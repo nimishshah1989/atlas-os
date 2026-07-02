@@ -1,4 +1,4 @@
-// StocksPageV4 — lens-first /stocks (behind LENS_V4). All data native foundation_staging.
+// StocksPageV4 — lens-first /stocks (behind LENS_V4). All data native atlas_foundation.
 // The list is a FUNNEL into the stock-detail atom. Order per the stocks-pages plan §B:
 //   1. leadership strip + a few "top doing great" cards
 //   2. one strong 2×2 (Strength × Leadership, size=liquidity, colour=leadership)
@@ -123,7 +123,7 @@ export async function StocksPageV4() {
       <StocksScreenerV4 stocks={stocks} />
 
       <div className="mt-6 font-sans text-[12px] text-txt-3 leading-[1.6]">
-        Native from <strong className="text-txt-2">foundation_staging</strong> — the lens journal, technical_daily RS, and a 20-session turnover proxy.
+        Native from <strong className="text-txt-2">atlas_foundation</strong> — the lens journal, technical_daily RS, and a 20-session turnover proxy.
       </div>
     </div>
   )

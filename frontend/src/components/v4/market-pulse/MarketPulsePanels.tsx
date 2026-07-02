@@ -1,5 +1,5 @@
 // Market Pulse — the dumb panel renderers (breadth, cap-tier, macro, sector
-// leadership, regime chip). All values arrive pre-fetched from foundation_staging;
+// leadership, regime chip). All values arrive pre-fetched from atlas_foundation;
 // these only format + lay out. Units per the market_pulse recon: tier returns &
 // spreads are FRACTIONS (×100 for display); macro values are already in `unit`.
 import type { TierReturns, MacroRow } from '@/lib/queries/v6/market_pulse'

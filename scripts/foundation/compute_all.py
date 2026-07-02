@@ -4,7 +4,7 @@
 Generic over asset class: pulls the adjusted close from the right staging table
 (stock→ohlcv_stock, etf→ohlcv_etf, index→index_prices), computes EMA 21/50/200,
 RSI14, returns, RS vs N50/N500, and above-EMA flags via the canonical technicals
-module, and upserts to foundation_staging.technical_daily.
+module, and upserts to atlas_foundation.technical_daily.
 
 Incremental BY DATE: a normal run recomputes only instruments whose source OHLCV
 extends beyond what technical_daily already holds, and writes only the new tail

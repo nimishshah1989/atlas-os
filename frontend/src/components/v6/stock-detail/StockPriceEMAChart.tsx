@@ -2,7 +2,7 @@
 
 // StockPriceEMAChart — the stock CLOSE with EMA 20/50/200 overlays, via the Atlas
 // Lightweight chart wrapper (theme-aware; auto-computes the EMAs from overlays:[...]).
-// Period toggle (5Y/2Y/1Y) trims the window. Native foundation_staging.
+// Period toggle (5Y/2Y/1Y) trims the window. Native atlas_foundation.
 import { useMemo, useState } from 'react'
 import { AtlasLightweightChart } from '@/components/charts/AtlasLightweightChart'
 import { toNumber } from '@/lib/v6/decimal'
@@ -46,7 +46,7 @@ export function StockPriceEMAChart({ rows, symbol }: { rows: StockChartRow[]; sy
         <div>
           <p className="font-num text-[9px] uppercase tracking-[0.14em] text-txt-3">Trend</p>
           <h2 className="font-display text-[18px] font-medium text-txt-1">Price · EMA 20 / 50 / 200</h2>
-          <p className="mt-0.5 max-w-[640px] font-sans text-[12px] text-txt-3">{symbol} daily close with the three trend EMAs · foundation_staging.ohlcv_stock.</p>
+          <p className="mt-0.5 max-w-[640px] font-sans text-[12px] text-txt-3">{symbol} daily close with the three trend EMAs · atlas_foundation.ohlcv_stock.</p>
         </div>
         <Toggle options={['5Y', '2Y', '1Y']} value={history} onChange={setHistory} />
       </div>

@@ -4,7 +4,7 @@ import { fundComposite, fundCompositeContributions, rankFundsInCategory } from '
 // Fund composite = the SAME glass-box blend used for sectors/stocks
 // (0.30·Tech + 0.25·Fund + 0.25·Flow + 0.20·Cat, renormalised over present lenses),
 // applied to the fund's holdings-weighted lens vector. Fixtures below are REAL
-// holdings-weighted lens vectors pulled from foundation_staging (snapshot 2026-06-26)
+// holdings-weighted lens vectors pulled from atlas_foundation (snapshot 2026-06-26)
 // for three India Multi-Cap funds — NO synthetic inputs (rule #0).
 const BANK_OF_INDIA = { v_tech: 62.09, v_fund: 54.47, v_flow: 25.25, v_cat: 48.9 }
 const GROWW = { v_tech: 68.61, v_fund: 63.8, v_flow: 23.52, v_cat: 47.95 }

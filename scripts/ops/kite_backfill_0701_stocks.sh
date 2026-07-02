@@ -12,7 +12,7 @@ TARGET=2000
 LOG=/home/ubuntu/logs/kite_backfill_0701.log
 echo "=== 07-01 stock backfill start $(date -Is) ===" | tee -a "$LOG"
 for i in $(seq 1 40); do
-  n=$($PY -c "import _db; print(_db.scalar(\"select count(*) from foundation_staging.ohlcv_stock where date='2026-07-01'\"))")
+  n=$($PY -c "import _db; print(_db.scalar(\"select count(*) from atlas_foundation.ohlcv_stock where date='2026-07-01'\"))")
   echo "[backfill] pass $i — stocks@07-01=$n/$TARGET $(date -Is)" | tee -a "$LOG"
   if [ "$n" -ge "$TARGET" ]; then echo "[backfill] COMPLETE" | tee -a "$LOG"; break; fi
   $PY scripts/foundation/ingest_kite.py --asset stock >> "$LOG" 2>&1 || true

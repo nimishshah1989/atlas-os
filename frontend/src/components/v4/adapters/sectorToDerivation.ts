@@ -2,7 +2,7 @@
 // ScoreDerivationTree model. Aggregate path (unlike a stock): Conviction → lens → CONSTITUENTS
 // (ranked by contribution = that name's lens decile × its weight if available, else by the decile),
 // each constituent linking to its own /stocks page (where its full instrument tree lives).
-// RULE #0: every number traces to a real foundation_staging query (sector_lens_daily +
+// RULE #0: every number traces to a real atlas_foundation query (sector_lens_daily +
 // per-constituent deciles) — no synthetic fallback; an absent datum renders as absence.
 import type { SectorLensVector, SectorStock } from '@/lib/queries/v6/sector_lens'
 import type { DerivRoot, DerivNode } from '@/components/v6/shared/ScoreDerivationTree'

@@ -1,4 +1,4 @@
-// ETFsPageV4 — lens-first /etfs (behind LENS_V4). All data native foundation_staging.
+// ETFsPageV4 — lens-first /etfs (behind LENS_V4). All data native atlas_foundation.
 // The list is a FUNNEL into the ETF roll-up atom. ETFs are a holdings-weighted roll-up of
 // the stock atom (D26/D27): the HEADLINE is LEADERSHIP-BREADTH (% of holdings weight that are
 // top-decile leaders in ≥2 conviction lenses), NOT a composite. This is a TRANSPARENCY view —
@@ -180,7 +180,7 @@ export async function ETFsPageV4() {
       </Panel>
 
       <p className="font-sans text-[12px] leading-[1.6] text-txt-3">
-        Native from <strong className="text-txt-2">foundation_staging</strong> — the lens journal looked through
+        Native from <strong className="text-txt-2">atlas_foundation</strong> — the lens journal looked through
         de_etf_holdings; identity from Morningstar (de_mf_master).
       </p>
     </div>

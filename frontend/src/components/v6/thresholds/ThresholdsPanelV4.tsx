@@ -1,6 +1,6 @@
 'use client'
 // ThresholdsPanelV4 — the FM's methodology control panel. Every knob in
-// foundation_staging.atlas_thresholds, visible + editable within its own min/max, grouped by
+// atlas_foundation.atlas_thresholds, visible + editable within its own min/max, grouped by
 // category. Lens weights are the hero (with a live "sums to 1.00" check). Save persists; Preview
 // shows how the composite would shift (no write); Commit re-blends the live scores in seconds.
 // The math is the canonical scorer (via the recompute engine) — this panel only edits inputs.

@@ -3,7 +3,7 @@
 // StockRSChart — relative strength of the stock vs a baseline, rebased to 100 at the
 // start of the selected window (above 100 = outperforming since window start). Baseline
 // toggle (Nifty 50 / Nifty 500). EMA 20/50/200 overlaid. Theme-aware Atlas Lightweight
-// wrapper. Native foundation_staging via getStockChartSeries().
+// wrapper. Native atlas_foundation via getStockChartSeries().
 import { useMemo, useState } from 'react'
 import { AtlasLightweightChart } from '@/components/charts/AtlasLightweightChart'
 import { toNumber } from '@/lib/v6/decimal'

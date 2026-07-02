@@ -1,6 +1,6 @@
 // LensMindMap — the conviction score decomposed into its real lenses and sub-components.
 // Every node here is REAL and traceable: the six lenses and their sub-components are the columns
-// stored in foundation_staging.atlas_lens_scores_daily (tech_trend, fund_profitability, …); the
+// stored in atlas_foundation.atlas_lens_scores_daily (tech_trend, fund_profitability, …); the
 // lens WEIGHTS, convergence boosts and conviction tiers are read LIVE from atlas_thresholds (passed
 // in as props), so the mind-map always matches the engine; the inputs listed under each node are the
 // actual fields the scorers read (atlas/lenses/compute/*.py). A top-down tree: Composite → 6 lenses.

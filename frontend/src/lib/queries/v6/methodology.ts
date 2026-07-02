@@ -1,4 +1,4 @@
-// Live methodology thresholds — the single source of truth (foundation_staging.atlas_thresholds,
+// Live methodology thresholds — the single source of truth (atlas_foundation.atlas_thresholds,
 // the same table the /thresholds panel edits and the scoring engine reads). The public methodology
 // page renders these so its weights, convergence boosts and conviction tiers always match the live
 // engine — no hard-coded numbers that can drift from the model.
@@ -20,7 +20,7 @@ export type MethodologyThresholds = {
 export async function getMethodologyThresholds(): Promise<MethodologyThresholds> {
   const rows = (await sql`
     SELECT threshold_key, threshold_value
-    FROM foundation_staging.atlas_thresholds
+    FROM atlas_foundation.atlas_thresholds
     WHERE is_active AND (threshold_key LIKE 'lens_weight_%'
        OR threshold_key LIKE 'lens_convergence_%'
        OR threshold_key LIKE 'lens_conviction_%')

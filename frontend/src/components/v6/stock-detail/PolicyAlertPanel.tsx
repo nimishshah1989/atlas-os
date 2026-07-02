@@ -1,6 +1,6 @@
 // PolicyAlertPanel — policy as a RAG (Red/Amber/Green) sector-policy ALERT + a
 // one-line description, NOT a score (FM 2026-06-26). Pure server component, real
-// data only (foundation_staging.policy_registry). Renders nothing when no policy
+// data only (atlas_foundation.policy_registry). Renders nothing when no policy
 // applies to the sector — no empty box, no fabricated "neutral".
 import type { PolicyAlert } from '@/lib/queries/v6/policy_alerts'
 

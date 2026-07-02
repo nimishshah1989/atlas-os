@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""D22 consolidation: bring every table v4 uses into foundation_staging (additive, no
+"""D22 consolidation: bring every table v4 uses into atlas_foundation (additive, no
 drops of the originals — D23). Reads from the live source schemas (atlas.*, public.de_*),
-writes copies into foundation_staging. Idempotent.
+writes copies into atlas_foundation. Idempotent.
 
 Two classes:
   - MIRRORS  — borrowed feeds + atlas config that have an external source of truth. Safe to
     re-sync every run: DROP + CREATE AS SELECT + add the indexes the v4 queries need.
-  - JOURNAL  — atlas.atlas_lens_scores_daily becomes CANONICAL in foundation_staging. Copied
+  - JOURNAL  — atlas.atlas_lens_scores_daily becomes CANONICAL in atlas_foundation. Copied
     ONCE with its PK (instrument_id, date) so the lens pipeline can upsert here going forward.
     Never auto-dropped (would destroy fresh v4 writes); use --force-journal to rebuild.
 
@@ -21,12 +21,12 @@ import time
 
 import _db
 
-FS = "foundation_staging"
+FS = "atlas_foundation"
 
 # (source_fqn, fs_name, [index column-lists])
 MIRRORS = [
     # NOTE: de_mf_holdings, de_mf_master, atlas_universe_funds, de_mf_nav_daily are now
-    # ATLAS-OWNED in foundation_staging (written directly by ingest_mf_holdings.py +
+    # ATLAS-OWNED in atlas_foundation (written directly by ingest_mf_holdings.py +
     # ingest_fund_master.py + ingest_nav.py — all sourced from Morningstar/AMFI, no JIP).
     # They are NOT mirrored — re-adding them would clobber the fresh Atlas data with the
     # stale public.de_* / atlas.* sources. (Consolidation steps 1/1b/2 — kill the mirror.)
@@ -47,14 +47,14 @@ MIRRORS = [
     ("atlas.atlas_macro_daily", "atlas_macro_daily", [["date"]]),  # Page-A macro context
     ("atlas.mv_sector_cards", "mv_sector_cards", [["sector_name"]]),  # Page-B sector list
     # mv_sector_rrg is NO LONGER mirrored — it is now built NATIVELY in
-    # foundation_staging from index_prices by build_sector_rrg.py (JdK RS-ratio /
+    # atlas_foundation from index_prices by build_sector_rrg.py (JdK RS-ratio /
     # RS-momentum vs Nifty 500). The atlas.* source carried a stale, broken snapshot
     # (21/30 sectors stuck on "Leading", rs-ratios inflated above 100, e.g. Energy
     # "Weakening" at +15pp momentum). Mirroring it would clobber the corrected native table.
     ("atlas.mv_sector_breadth", "mv_sector_breadth", [["sector_name"]]),  # Page-B breadth
     ("atlas.mv_sector_deepdive", "mv_sector_deepdive", [["sector_name"]]),  # Page-C deep-dive
     # atlas_index_metrics_daily is NO LONGER mirrored — it is now built NATIVELY in
-    # foundation_staging from index_prices by build_index_metrics.py (calendar-anchored
+    # atlas_foundation from index_prices by build_index_metrics.py (calendar-anchored
     # returns). The atlas.* source carried row-count-anchored returns that drift onto the
     # wrong date on gap-ridden index series (Nifty 50 3m: 6.9% mirror vs 3.2% true) and
     # left Media/Tourism NULL. Mirroring it would clobber the corrected native table.
@@ -117,7 +117,7 @@ def _copy_mirror(src: str, fs_name: str, indexes: list[list[str]]) -> None:
 
 def _sync_journal_latest(tgt: str) -> None:
     """Single-schema publish: copy the freshly-scored latest date from the atlas
-    compute layer into the served foundation_staging journal, so the platform's one
+    compute layer into the served atlas_foundation journal, so the platform's one
     read schema stays current every run without rebuilding the whole 3.9M-row table.
     Idempotent (delete-then-insert that date)."""
     latest = _db.scalar(f"SELECT max(date) FROM {JOURNAL_SRC}")
@@ -149,7 +149,7 @@ def run(force_journal: bool) -> None:
     print("MIRRORS (re-synced from source):")
     for src, fs_name, idx in MIRRORS:
         _copy_mirror(src, fs_name, idx)
-    print("JOURNAL (canonical in foundation_staging):")
+    print("JOURNAL (canonical in atlas_foundation):")
     _copy_journal(force_journal)
     print("done.")
 

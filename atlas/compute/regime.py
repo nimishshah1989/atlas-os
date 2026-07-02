@@ -115,7 +115,7 @@ def _load_stock_data_for_regime(
     lookback_days: int = 900,
 ) -> pd.DataFrame:
     """Stock-level EMAs + RS + derived strength states for breadth, from
-    foundation_staging (single-schema; no atlas.* mirror).
+    atlas_foundation (single-schema; no atlas.* mirror).
 
     Reads ``technical_daily`` (EMAs 21/50/200, RS-vs-Nifty500, above-EMA flags)
     joined to ``ohlcv_stock`` (real adjusted close) for the active Nifty-500
@@ -146,12 +146,12 @@ def _load_stock_data_for_regime(
                 t.above_ema_50,
                 t.above_ema_200,
                 COALESCE(o.close_adj, o.close) AS close_real
-            FROM foundation_staging.technical_daily t
-            JOIN foundation_staging.instrument_master im
+            FROM atlas_foundation.technical_daily t
+            JOIN atlas_foundation.instrument_master im
                 ON im.instrument_id = t.instrument_id
                 AND im.is_active
                 AND im.asset_class = 'stock'
-            LEFT JOIN foundation_staging.ohlcv_stock o
+            LEFT JOIN atlas_foundation.ohlcv_stock o
                 ON o.instrument_id = t.instrument_id
                 AND o.date = t.date
             WHERE t.date BETWEEN %(start)s AND %(end)s
@@ -199,7 +199,7 @@ def _load_index_inputs(
         prices = pd.read_sql(
             """
             SELECT index_code, date, close
-            FROM foundation_staging.index_prices
+            FROM atlas_foundation.index_prices
             WHERE index_code IN ('NIFTY 500', 'INDIA VIX')
               AND date BETWEEN %(start)s AND %(end)s
               AND close IS NOT NULL
@@ -211,7 +211,7 @@ def _load_index_inputs(
         idx_metrics = pd.read_sql(
             """
             SELECT date, realized_vol_5d, vol_252_median
-            FROM foundation_staging.atlas_index_metrics_daily
+            FROM atlas_foundation.atlas_index_metrics_daily
             WHERE index_code = 'INDIA VIX'
               AND date BETWEEN %(start)s AND %(end)s
             """,
@@ -564,7 +564,7 @@ def apply_dislocation_override(
 # --------------------------------------------------------------------------- #
 
 
-_VALID_SCHEMAS = frozenset({"foundation_staging", "atlas", "us_atlas", "global_atlas"})
+_VALID_SCHEMAS = frozenset({"atlas_foundation", "atlas", "us_atlas", "global_atlas"})
 
 
 def _write_metrics(

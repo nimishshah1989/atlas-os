@@ -1,5 +1,5 @@
 // src/lib/queries/v6/fund_lens.ts
-// Native mutual-fund lens roll-up — all from foundation_staging. Funds are a holdings-weighted
+// Native mutual-fund lens roll-up — all from atlas_foundation. Funds are a holdings-weighted
 // roll-up of the stock atom (D26/D27/D21b): the headline is LEADERSHIP-BREADTH (% of holdings
 // weight that are top-decile leaders in ≥2 conviction lenses), ranked WITHIN the SEBI category —
 // NOT a composite. The fund-specific differentiator is ACTIVE-MOVEMENT: the month-over-month
@@ -13,7 +13,7 @@ import type { LensWeightMap } from '@/lib/v6/sectorScore'
 import { getLensWeights } from './lens_weights'
 import { SCORED_STOCKS } from './etf_lens'
 
-const LATEST = `(SELECT max(as_of_date) FROM foundation_staging.de_mf_holdings)`
+const LATEST = `(SELECT max(as_of_date) FROM atlas_foundation.de_mf_holdings)`
 // Universe (D21b): Regular plan · Equity · Growth option. Drop debt/liquid/gilt, and the Direct-plan
 // + dividend (IDCW) duplicates of the same portfolio so each scheme appears once.
 const EQUITY_FUND_FILTER = `NOT mm.is_etf AND mm.is_active
@@ -63,13 +63,13 @@ export async function getFundLensList(): Promise<FundLensRow[]> {
   const rows = await sql.unsafe(`
     WITH ${SCORED_STOCKS},
     navlife AS (  -- ≥12 months of NAV history? funds younger than a year are not ranked
-      SELECT mstar_id, (min(nav_date) <= (SELECT max(nav_date) FROM foundation_staging.de_mf_nav_daily) - interval '12 months') AS has_12m
-      FROM foundation_staging.de_mf_nav_daily GROUP BY mstar_id)
+      SELECT mstar_id, (min(nav_date) <= (SELECT max(nav_date) FROM atlas_foundation.de_mf_nav_daily) - interval '12 months') AS has_12m
+      FROM atlas_foundation.de_mf_nav_daily GROUP BY mstar_id)
     SELECT ${ROLLUP}, max(uf.aum_cr) AS aum_cr, (bool_or(nl.has_12m))::text AS has_12m
-    FROM foundation_staging.de_mf_master mm
-    JOIN foundation_staging.de_mf_holdings h ON h.mstar_id = mm.mstar_id AND h.as_of_date = ${LATEST} AND h.weight_pct > 0
+    FROM atlas_foundation.de_mf_master mm
+    JOIN atlas_foundation.de_mf_holdings h ON h.mstar_id = mm.mstar_id AND h.as_of_date = ${LATEST} AND h.weight_pct > 0
     JOIN scored s ON s.instrument_id = h.instrument_id
-    LEFT JOIN foundation_staging.atlas_universe_funds uf ON uf.mstar_id = mm.mstar_id
+    LEFT JOIN atlas_foundation.atlas_universe_funds uf ON uf.mstar_id = mm.mstar_id
     LEFT JOIN navlife nl ON nl.mstar_id = mm.mstar_id
     WHERE ${EQUITY_FUND_FILTER}
     GROUP BY mm.mstar_id, mm.fund_name, mm.amc_name, mm.category_name, mm.primary_benchmark, mm.expense_ratio
@@ -101,8 +101,8 @@ export async function getFundLensDetail(mstarId: string): Promise<FundLensDetail
   const head = await sql.unsafe(`
     WITH ${SCORED_STOCKS}
     SELECT ${ROLLUP}, max(mm.isin) AS isin
-    FROM foundation_staging.de_mf_master mm
-    JOIN foundation_staging.de_mf_holdings h ON h.mstar_id = mm.mstar_id AND h.as_of_date = ${LATEST} AND h.weight_pct > 0
+    FROM atlas_foundation.de_mf_master mm
+    JOIN atlas_foundation.de_mf_holdings h ON h.mstar_id = mm.mstar_id AND h.as_of_date = ${LATEST} AND h.weight_pct > 0
     JOIN scored s ON s.instrument_id = h.instrument_id
     WHERE mm.mstar_id = $1 AND ${EQUITY_FUND_FILTER}
     GROUP BY mm.mstar_id, mm.fund_name, mm.amc_name, mm.category_name, mm.primary_benchmark, mm.expense_ratio`,
@@ -115,14 +115,14 @@ export async function getFundLensDetail(mstarId: string): Promise<FundLensDetail
       SELECT h.weight_pct AS weight, s.symbol, im.sector,
         s.d_tech, s.d_fund, s.d_cat, s.d_flow, s.d_val, COALESCE(s.lead,0) AS lead, s.rs_3m_n500,
         s.ret_1d, s.ret_1w, s.ret_1m
-      FROM foundation_staging.de_mf_holdings h
+      FROM atlas_foundation.de_mf_holdings h
       JOIN scored s ON s.instrument_id = h.instrument_id
-      JOIN foundation_staging.instrument_master im ON im.instrument_id = h.instrument_id
+      JOIN atlas_foundation.instrument_master im ON im.instrument_id = h.instrument_id
       WHERE h.mstar_id = $1 AND h.as_of_date = ${LATEST} AND h.weight_pct > 0
       ORDER BY h.weight_pct DESC`, [mstarId]) as unknown as Promise<Record<string, string>[]>,
     sql<Record<string, string>[]>`
       SELECT nav, to_char(nav_date,'YYYY-MM-DD') AS nav_date, nav_change_pct
-      FROM foundation_staging.de_mf_nav_daily WHERE mstar_id = ${mstarId} ORDER BY nav_date DESC LIMIT 1`,
+      FROM atlas_foundation.de_mf_nav_daily WHERE mstar_id = ${mstarId} ORDER BY nav_date DESC LIMIT 1`,
     getFundActiveMovement(mstarId),
   ])
 
@@ -145,14 +145,14 @@ export async function getFundLensDetail(mstarId: string): Promise<FundLensDetail
 // and whether the net move added top-decile leaders (the D27 fund differentiator).
 export async function getFundActiveMovement(mstarId: string): Promise<FundActiveMovement | null> {
   const snaps = await sql<{ d: string }[]>`
-    SELECT to_char(as_of_date,'YYYY-MM-DD') AS d FROM foundation_staging.de_mf_holdings
+    SELECT to_char(as_of_date,'YYYY-MM-DD') AS d FROM atlas_foundation.de_mf_holdings
     WHERE mstar_id = ${mstarId} GROUP BY as_of_date ORDER BY as_of_date DESC LIMIT 2`
   if (snaps.length < 2) return null
   const [curD, prvD] = [snaps[0].d, snaps[1].d]
   const rows = await sql.unsafe(`
     WITH ${SCORED_STOCKS},
-    cur AS (SELECT instrument_id, weight_pct, holding_name FROM foundation_staging.de_mf_holdings WHERE mstar_id=$1 AND as_of_date=$2 AND weight_pct > 0),
-    prv AS (SELECT instrument_id, weight_pct FROM foundation_staging.de_mf_holdings WHERE mstar_id=$1 AND as_of_date=$3 AND weight_pct > 0)
+    cur AS (SELECT instrument_id, weight_pct, holding_name FROM atlas_foundation.de_mf_holdings WHERE mstar_id=$1 AND as_of_date=$2 AND weight_pct > 0),
+    prv AS (SELECT instrument_id, weight_pct FROM atlas_foundation.de_mf_holdings WHERE mstar_id=$1 AND as_of_date=$3 AND weight_pct > 0)
     SELECT 'added' AS kind, s.symbol, c.holding_name AS name, c.weight_pct AS weight, COALESCE(s.lead,0) AS lead
     FROM cur c LEFT JOIN prv p ON p.instrument_id=c.instrument_id
     LEFT JOIN scored s ON s.instrument_id=c.instrument_id
@@ -182,7 +182,7 @@ export async function getFundNavMonthly(mstarId: string): Promise<FundNavPoint[]
   const rows = await sql<{ d: string; nav: string }[]>`
     SELECT to_char(nav_date,'YYYY-MM-DD') AS d, nav::text AS nav FROM (
       SELECT DISTINCT ON (date_trunc('month', nav_date)) nav_date, nav
-      FROM foundation_staging.de_mf_nav_daily
+      FROM atlas_foundation.de_mf_nav_daily
       WHERE mstar_id = ${mstarId} AND nav > 0
       ORDER BY date_trunc('month', nav_date), nav_date DESC
     ) q ORDER BY nav_date ASC`
@@ -198,14 +198,14 @@ export async function getFundEquityCurve(mstarId: string): Promise<FundEquityPoi
   const rows = await sql<{ d: string; fund: string; nifty50: string | null; nifty500: string | null }[]>`
     WITH range AS (
       SELECT (max(nav_date) - interval '5 years')::date AS start
-      FROM foundation_staging.de_mf_nav_daily WHERE mstar_id = ${mstarId}
+      FROM atlas_foundation.de_mf_nav_daily WHERE mstar_id = ${mstarId}
     )
     SELECT to_char(v.nav_date,'YYYY-MM-DD') AS d, v.nav::text AS fund,
       i50.close::text  AS nifty50,
       i500.close::text AS nifty500
-    FROM foundation_staging.de_mf_nav_daily v
-    LEFT JOIN foundation_staging.index_prices i50  ON i50.index_code='NIFTY 50'  AND i50.date  = v.nav_date
-    LEFT JOIN foundation_staging.index_prices i500 ON i500.index_code='NIFTY 500' AND i500.date = v.nav_date
+    FROM atlas_foundation.de_mf_nav_daily v
+    LEFT JOIN atlas_foundation.index_prices i50  ON i50.index_code='NIFTY 50'  AND i50.date  = v.nav_date
+    LEFT JOIN atlas_foundation.index_prices i500 ON i500.index_code='NIFTY 500' AND i500.date = v.nav_date
     WHERE v.mstar_id = ${mstarId} AND v.nav > 0 AND v.nav_date >= (SELECT start FROM range)
     ORDER BY v.nav_date ASC`
   return rows.map((r) => ({
@@ -222,14 +222,14 @@ export async function getFundEquityCurve(mstarId: string): Promise<FundEquityPoi
 export async function getFundSectorHistory(mstarId: string): Promise<{ d: string; sector: string; w: number }[]> {
   const rows = await sql<{ d: string; sector: string; w: string }[]>`
     WITH snaps AS (
-      SELECT DISTINCT as_of_date FROM foundation_staging.de_mf_holdings
+      SELECT DISTINCT as_of_date FROM atlas_foundation.de_mf_holdings
       WHERE mstar_id = ${mstarId} ORDER BY as_of_date DESC LIMIT 6)
     SELECT to_char(h.as_of_date,'YYYY-MM-DD') AS d,
            COALESCE(im.sector,'Unclassified') AS sector,
            sum(h.weight_pct)::text AS w
-    FROM foundation_staging.de_mf_holdings h
+    FROM atlas_foundation.de_mf_holdings h
     JOIN snaps s ON s.as_of_date = h.as_of_date
-    LEFT JOIN foundation_staging.instrument_master im ON im.instrument_id = h.instrument_id
+    LEFT JOIN atlas_foundation.instrument_master im ON im.instrument_id = h.instrument_id
     WHERE h.mstar_id = ${mstarId} AND h.weight_pct > 0
     GROUP BY h.as_of_date, COALESCE(im.sector,'Unclassified')`
   return rows.map((r) => ({ d: r.d, sector: r.sector, w: toNumberOr(r.w, 0) }))

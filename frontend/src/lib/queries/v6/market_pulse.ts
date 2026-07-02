@@ -1,5 +1,5 @@
 // src/lib/queries/v6/market_pulse.ts
-// Native Markets-Today tables — all from foundation_staging (no atlas.* dependency):
+// Native Markets-Today tables — all from atlas_foundation (no atlas.* dependency):
 //  - getTierReturns(): SC/MC/LC tier returns + spreads across windows (from index_prices)
 //  - getMacroContext(): macro context table (from atlas_macro_daily, mirrored)
 //  - getBreadthTable(): the detailed 9-row breadth table (from atlas_market_regime_daily, mirrored)
@@ -25,7 +25,7 @@ export async function getTierReturns(): Promise<TierReturns> {
   const rows = await sql<{ index_code: string; rn: number; close: string }[]>`
     SELECT index_code, close::text,
            row_number() OVER (PARTITION BY index_code ORDER BY date DESC) AS rn
-    FROM foundation_staging.index_prices
+    FROM atlas_foundation.index_prices
     WHERE index_code IN (${TIER_CODES.lc}, ${TIER_CODES.mc}, ${TIER_CODES.sc})
       AND date >= NOW() - INTERVAL '2 years' AND close > 0
   `
@@ -48,8 +48,8 @@ export async function getTierReturns(): Promise<TierReturns> {
   const z = await sql<{ z: string | null }[]>`
     WITH r AS (
       SELECT s.date, s.close / l.close AS ratio
-      FROM foundation_staging.index_prices s
-      JOIN foundation_staging.index_prices l ON l.date = s.date AND l.index_code = ${TIER_CODES.lc}
+      FROM atlas_foundation.index_prices s
+      JOIN atlas_foundation.index_prices l ON l.date = s.date AND l.index_code = ${TIER_CODES.lc}
       WHERE s.index_code = ${TIER_CODES.sc} AND s.date >= NOW() - INTERVAL '1 year' AND l.close > 0
     )
     SELECT ((SELECT ratio FROM r ORDER BY date DESC LIMIT 1) - avg(ratio)) / NULLIF(stddev(ratio), 0) AS z
@@ -68,7 +68,7 @@ export async function getMacroContext(): Promise<{ rows: MacroRow[]; as_of: stri
   const r = await sql<Record<string, string>[]>`
     SELECT to_char(date,'YYYY-MM-DD') AS date, usdinr, dxy, india_10y_yield, us_10y_yield,
            brent_inr, cpi_yoy, fii_cash_equity_flow_cr, dii_flow
-    FROM foundation_staging.atlas_macro_daily ORDER BY date DESC LIMIT 25
+    FROM atlas_foundation.atlas_macro_daily ORDER BY date DESC LIMIT 25
   `
   if (r.length === 0) return { rows: [], as_of: null }
   const num = (v: string | null | undefined) => (v == null ? null : parseFloat(v))
@@ -106,7 +106,7 @@ export async function getBreadthTable(): Promise<{ rows: BreadthTableRow[]; as_o
     SELECT to_char(date,'YYYY-MM-DD') AS date, pct_above_ema_20, pct_above_ema_50,
            pct_above_ema_100, pct_above_ema_200, new_52w_highs, new_52w_lows,
            ad_ratio, mcclellan_oscillator, ad_line
-    FROM foundation_staging.atlas_market_regime_daily
+    FROM atlas_foundation.atlas_market_regime_daily
     WHERE pct_above_ema_50 IS NOT NULL ORDER BY date DESC LIMIT 25
   `
   if (r.length === 0) return { rows: [], as_of: null }
@@ -138,12 +138,12 @@ export type SectorPerf = { spark: number[]; ret_1w: number | null; ret_1m: numbe
 export async function getSectorPerf(): Promise<Record<string, SectorPerf>> {
   const rows = await sql<Array<{ sector_name: string; idx_close: string; ratio: string }>>`
     WITH n50 AS (
-      SELECT date, close FROM foundation_staging.index_prices
+      SELECT date, close FROM atlas_foundation.index_prices
       WHERE index_code = 'NIFTY 50' AND date >= CURRENT_DATE - 110 AND close > 0
     )
     SELECT sm.sector_name, ip.close::text AS idx_close, (ip.close / n.close)::text AS ratio
-    FROM foundation_staging.atlas_sector_master sm
-    JOIN foundation_staging.index_prices ip
+    FROM atlas_foundation.atlas_sector_master sm
+    JOIN atlas_foundation.index_prices ip
       ON ip.index_code = sm.primary_nse_index AND ip.date >= CURRENT_DATE - 110 AND ip.close > 0
     JOIN n50 n ON n.date = ip.date
     WHERE sm.is_active
@@ -174,7 +174,7 @@ const STRIP: Array<[string, string]> = [
 export async function getIndexStrip(): Promise<IndexQuote[]> {
   const rows = await sql<Array<{ index_code: string; date: string; close: string }>>`
     SELECT index_code, to_char(date,'YYYY-MM-DD') AS date, close::text
-    FROM foundation_staging.index_prices
+    FROM atlas_foundation.index_prices
     WHERE index_code = ANY(${STRIP.map((s) => s[0])}) AND close > 0
       AND date >= CURRENT_DATE - 60
     ORDER BY index_code, date

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ingest NSE quarterly shareholding patterns → foundation_staging.lens_shareholding.
+"""Ingest NSE quarterly shareholding patterns → atlas_foundation.lens_shareholding.
 
 Powers the Flow lens (institutional ownership sub-signal). Ported from jip-india.
 The NSE corporate-share-holdings-master API returns a flat list of quarterly

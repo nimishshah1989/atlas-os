@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the authoritative instrument master → foundation_staging.instrument_master.
+"""Build the authoritative instrument master → atlas_foundation.instrument_master.
 
 Universe = what we can source cleanly from Kite:
   • stocks  — NSE's official EQUITY_L.csv (symbol, name, series, ISIN, listing),
@@ -161,7 +161,7 @@ def build() -> dict:
         "source",
     ]
     df = pd.DataFrame(rows, columns=cols).drop_duplicates("instrument_id")
-    n = _db.upsert_df("foundation_staging.instrument_master", df, ["instrument_id"])
+    n = _db.upsert_df("atlas_foundation.instrument_master", df, ["instrument_id"])
 
     counts = (
         df.groupby("asset_class")
