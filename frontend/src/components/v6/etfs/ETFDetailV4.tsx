@@ -6,7 +6,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
-import { getEtfLensDetail, getEtfChartSeries, type EtfHolding } from '@/lib/queries/v6/etf_lens'
+import { getEtfLensDetail, getEtfChartSeries, getEtfsAsOf, type EtfHolding } from '@/lib/queries/v6/etf_lens'
 import { sectorComposition } from '@/lib/v6/fundStats'
 import { FundSectorComposition } from '@/components/v6/funds/FundSectorComposition'
 import { getConstituentDrivers } from '@/lib/queries/v6/drivers'
@@ -93,6 +93,7 @@ export async function ETFDetailV4({ fcode }: { fcode: string }) {
   const sectors = sectorComposition(etf.holdings.map((h) => ({ sector: h.sector, weight: h.weight })))
   // Native Lightweight charts (price ÷ index) for bridged ETFs — TV's embed refuses NSE symbols.
   const etfRows = etf.nse_ticker ? await getEtfChartSeries(etf.nse_ticker).catch(() => []) : []
+  const asOf = await getEtfsAsOf().catch(() => null)
 
   const breadthPct = etf.breadth == null ? '—' : `${(etf.breadth * 100).toFixed(0)}%`
   const expenseStr = etf.expense == null ? null : `${etf.expense.toFixed(2)}%` // already in percent units
@@ -102,6 +103,7 @@ export async function ETFDetailV4({ fcode }: { fcode: string }) {
     expenseStr ? `expense ${expenseStr}` : null,
     `${etf.n_holdings} holdings`,
     etf.isin,
+    asOf ? `as of ${asOf}` : null,
   ].filter((x): x is string => !!x)
 
   return (

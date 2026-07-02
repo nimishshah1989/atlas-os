@@ -7,7 +7,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
-import { getFundLensDetail, getFundNavMonthly, getFundSectorHistory, type FundLensDetail, type FundHolding, type FundMove } from '@/lib/queries/v6/fund_lens'
+import { getFundLensDetail, getFundNavMonthly, getFundSectorHistory, getFundsAsOf, type FundLensDetail, type FundHolding, type FundMove } from '@/lib/queries/v6/fund_lens'
 import { sectorComposition, computeFundRiskStats, pivotSectorHistory } from '@/lib/v6/fundStats'
 import { FundRiskStats } from './FundRiskStats'
 import { FundEquityCurves } from './FundEquityCurves'
@@ -152,8 +152,9 @@ export async function FundDetailV4({ mstarId }: { mstarId: string }) {
   const sectors = sectorComposition(fund.holdings.map((h) => ({ sector: h.sector, weight: h.weight })))
   const sectorHistory = pivotSectorHistory(await getFundSectorHistory(mstarId).catch(() => []))
 
+  const asOf = await getFundsAsOf().catch(() => null)
   const breadthPct = fund.breadth == null ? '—' : `${(fund.breadth * 100).toFixed(0)}%`
-  const subParts = [fund.category, fund.amc, fund.isin].filter((x): x is string => !!x)
+  const subParts = [fund.category, fund.amc, fund.isin, asOf ? `holdings as of ${asOf}` : null].filter((x): x is string => !!x)
 
   // headline stat tiles (real numbers at a glance)
   const tiles: { label: string; value: string; sub?: string; tone?: Tone }[] = [
