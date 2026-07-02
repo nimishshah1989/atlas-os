@@ -52,6 +52,9 @@ step "backfill_sector_rs"        $PY scripts/foundation/backfill_sector_rs.py --
 step "build_index_metrics"       $PY -m scripts.foundation.build_index_metrics
 step "lens_daily"                $PY scripts/lens_daily.py --as-of "$EOD"
 step "rollup_sectors"            $PY scripts/foundation/rollup_sectors.py
+# Sector RRG (relative-rotation quadrants) for the sectors page — index-derived, cheap;
+# was frozen at 06-25 (no producer croned). Refresh after the sector roll-up.
+step "build_sector_rrg"          $PY scripts/foundation/build_sector_rrg.py
 step "build_fund_rank_history"   $PY scripts/foundation/build_fund_rank_history.py --latest
 step "build_breadth_series"      $PY scripts/foundation/build_breadth_series.py
 step "regime"                    $PY -c "from atlas.compute.regime import run_daily_regime; run_daily_regime(schema='atlas_foundation')"

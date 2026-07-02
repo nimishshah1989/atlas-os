@@ -21,11 +21,17 @@ step() { local n="$1"; shift; echo "--- $n ---" | tee -a "$LOG"
 # guards the ≤21-sector mapping and loudly reports any un-sectored active name.
 step "build_universe"      $PY scripts/foundation/build_universe.py
 step "assign_sectors"      $PY scripts/foundation/assign_sectors.py
+# populate_etf_isin MUST follow build_universe: build_universe recreates ETF rows with a
+# NULL isin, so the Morningstar-holdings bridge has to be re-filled after every rebuild.
+step "populate_etf_isin"   $PY scripts/foundation/populate_etf_isin.py
 
 step "ingest_fund_master"  $PY scripts/foundation/ingest_fund_master.py
 step "ingest_mf_holdings"  $PY scripts/foundation/ingest_mf_holdings.py
 step "ingest_screener"     $PY scripts/foundation/ingest_screener.py
 step "ingest_shareholding" $PY scripts/foundation/ingest_shareholding.py
+# Market cap (screener scrape — slow, weekly cadence is fine) + fundamentals (XBRL filings).
+step "fetch_marketcap"     $PY scripts/foundation/fetch_marketcap.py
+step "ingest_xbrl"         $PY scripts/foundation/ingest_xbrl.py
 
 if [ ${#FAILURES[@]} -eq 0 ]; then echo "=== atlas_weekly COMPLETE — all green ===" | tee -a "$LOG"
 else MSG="atlas_weekly FAILURES: ${FAILURES[*]}"; echo "=== $MSG ===" | tee -a "$LOG"
