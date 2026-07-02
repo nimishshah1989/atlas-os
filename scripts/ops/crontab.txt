@@ -1,0 +1,29 @@
+# ══════════════════════════════════════════════════════════════════════
+# Atlas v4 — CLEAN crontab (single Kite-sourced, single-schema pipeline).
+# All times UTC. IST = UTC+5:30.
+# Legacy JIP / M2–M5 nightly / intelligence / amfi-late / health_check /
+# port-3002 watchdog crons RETIRED 2026-07-02 — superseded by the atlas_daily
+# orchestrator writing the single atlas_foundation schema (Kite-only prices).
+# ══════════════════════════════════════════════════════════════════════
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+
+# Kite headless TOTP login — 08:50 IST Mon–Fri (fresh access token for the day)
+20 3 * * 1-5  /home/ubuntu/atlas-os/.venv/bin/python /home/ubuntu/atlas-os/scripts/kite_autologin.py >> /home/ubuntu/logs/kite_autologin.log 2>&1
+
+# Atlas v4 DAILY EOD orchestrator — 16:00 IST Mon–Fri
+#   Kite ingest (prices/indices/delivery/filings/insider/NAV/bulk) → compute_all →
+#   index_metrics → lens → rollups → fund rank → breadth → regime → gates → deploy
+30 10 * * 1-5 /home/ubuntu/atlas-os/scripts/ops/atlas_daily.sh >> /home/ubuntu/logs/atlas_daily_cron.log 2>&1
+
+# Atlas v4 WEEKLY — Sat 12:30 IST (fund master + holdings, screener, shareholding)
+0 7 * * 6     /home/ubuntu/atlas-os/scripts/ops/atlas_weekly.sh >> /home/ubuntu/logs/atlas_weekly_cron.log 2>&1
+
+# Atlas v4 SUNDAY QA — Sun 10:00 IST (freshness / silent-zero / outlier audit → alert)
+30 4 * * 0    /home/ubuntu/atlas-os/scripts/ops/atlas_sunday_qa.sh >> /home/ubuntu/logs/atlas_sunday_qa_cron.log 2>&1
+
+# Auto-deploy on push to origin/main — every 5 min (no-op unless HEAD=main & clean)
+*/5 * * * *   /home/ubuntu/atlas-auto-deploy.sh
+
+# Frontend watchdog — restart the LIVE pm2 app if :3004 is down (every 5 min)
+*/5 * * * *   curl -sf http://localhost:3004/ -o /dev/null || (logger -t atlas-frontend-v3 'port 3004 down — restarting'; pm2 restart atlas-frontend-v3)
