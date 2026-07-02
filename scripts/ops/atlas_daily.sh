@@ -37,6 +37,7 @@ $PY -c "import _db; from atlas.intraday.auth import get_valid_access_token; get_
 step "ingest_eod (kite quote)"   $PY scripts/foundation/ingest_kite.py --eod
 step "ingest_bhavcopy (indices)" $PY scripts/foundation/ingest_bhavcopy.py --date "$EOD"
 step "fetch_delivery"            $PY scripts/foundation/fetch_delivery.py
+step "backfill_delivery"         $PY scripts/foundation/backfill_delivery.py
 step "ingest_filings"            $PY scripts/foundation/ingest_filings.py
 step "ingest_insider"            $PY scripts/foundation/ingest_insider.py
 
