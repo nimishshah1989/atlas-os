@@ -1,5 +1,5 @@
 {
-  "_total": 613,
+  "_total": 614,
   "atlas/compute/breadth.py": 16,
   "atlas/compute/indices.py": 1,
   "atlas/compute/primitives.py": 6,
@@ -42,7 +42,7 @@
   "scripts/foundation/test_sector_via_etf.py": 5,
   "scripts/foundation/validate_lenses.py": 5,
   "scripts/foundation/verify_fund_rank.py": 18,
-  "scripts/kite_autologin.py": 3,
+  "scripts/kite_autologin.py": 4,
   "scripts/ops/freshness_guard.py": 1,
   "scripts/ops/qa_weekly.py": 1,
   "scripts/ops/write_health_snapshot.py": 1,
