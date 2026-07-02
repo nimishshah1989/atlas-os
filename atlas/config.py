@@ -60,10 +60,6 @@ class Config:
     SUPABASE_JWT_ISSUER: str = os.environ.get("SUPABASE_JWT_ISSUER", "")
     AUTH_DISABLED: bool = os.environ.get("ATLAS_AUTH_DISABLED", "false").lower() == "true"
 
-    # Internal service-to-service token — used by the Next.js proxy for
-    # /api/v1/intraday/* routes. Never expose to browser clients.
-    ATLAS_INTERNAL_SECRET: str = os.environ.get("ATLAS_INTERNAL_SECRET", "")
-
     # OpenBB BYO Copilot — SP03. Empty = dev mode (auth bypassed).
     OPENBB_BACKEND_API_KEY: str = os.environ.get("OPENBB_BACKEND_API_KEY", "")
 

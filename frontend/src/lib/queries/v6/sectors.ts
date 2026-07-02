@@ -18,7 +18,25 @@
 import 'server-only'
 import sql from '@/lib/db'
 import { toNumber } from '@/lib/v6/decimal'
-import type { ScreenSector } from '@/lib/api/v1'
+
+// Shape the /v6/sectors page consumes. Owned here since the old external v1 API
+// client (its only other definer) was removed — atlas reads sectors from
+// atlas_foundation directly, no off-box calls.
+export interface ScreenSector {
+  sector_iid: string
+  sector_name: string
+  rank: number
+  rank_change: number
+  days_in_state: number
+  sector_state: string
+  breadth_pct_stage_2: number | null
+  vol_regime: string
+  rs_pct_cross_sector: number | null
+  ret_1m: number | null
+  ret_3m: number | null
+  rrg_quadrant: string | null
+  cells_favored_today: string[]
+}
 
 // ── MV types ──────────────────────────────────────────────────────────────────
 
