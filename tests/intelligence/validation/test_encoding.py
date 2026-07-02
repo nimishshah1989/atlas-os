@@ -2,7 +2,6 @@
 
 import pandas as pd
 import pytest
-
 from atlas.intelligence.validation.encoding import (
     DIMENSION_WEIGHTS,
     SENTINEL_STATES,

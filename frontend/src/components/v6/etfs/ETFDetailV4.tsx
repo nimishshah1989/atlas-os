@@ -1,4 +1,4 @@
-// ETFDetailV4 — the v4 ETF detail page (behind LENS_V4). Lens-first, native foundation_staging.
+// ETFDetailV4 — the v4 ETF detail page (behind LENS_V4). Lens-first, native atlas_foundation.
 // An ETF is a holdings-weighted roll-up of the stock atom (D26/D27): the HEADLINE is
 // LEADERSHIP-BREADTH (% of holdings weight that are top-decile leaders in ≥2 conviction lenses),
 // NOT a composite. The 6-lens vector + look-through are a TRANSPARENCY view of what's held and
@@ -6,8 +6,12 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
-import { getEtfLensDetail, getEtfChartSeries, type EtfHolding } from '@/lib/queries/v6/etf_lens'
+import { getEtfLensDetail, getEtfChartSeries, getEtfsAsOf, type EtfHolding } from '@/lib/queries/v6/etf_lens'
+import { sectorComposition } from '@/lib/v6/fundStats'
+import { FundSectorComposition } from '@/components/v6/funds/FundSectorComposition'
 import { getConstituentDrivers } from '@/lib/queries/v6/drivers'
+import { getConstituentLensTrees } from '@/lib/queries/v6/constituent_trees'
+import { getLensWeights } from '@/lib/queries/v6/lens_weights'
 import { StockPriceEMAChart } from '@/components/v6/stock-detail/StockPriceEMAChart'
 import { StockRSChart } from '@/components/v6/stock-detail/StockRSChart'
 import { Panel } from '@/components/v4/ui/Panel'
@@ -37,7 +41,7 @@ function HoldingsTable({ holdings }: { holdings: EtfHolding[] }) {
   const truncated = holdings.length > HOLDING_CAP
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse">
+      <table className="tbl-centered w-full border-collapse">
         <thead>
           <tr className="border-b border-edge-rule">
             {([['Symbol', undefined], ['Sector', 'sector_name']] as const).map(([h, term]) => (
@@ -83,8 +87,13 @@ export async function ETFDetailV4({ fcode }: { fcode: string }) {
   if (!etf) notFound()
   // Per-holding drivers (top catalyst filing, flow input, RS, ROE) → shown on each name in the tree.
   const drivers = await getConstituentDrivers(etf.holdings.map((h) => h.symbol)).catch(() => ({}))
+  const lensWeights = await getLensWeights().catch(() => undefined)
+  // Per-holding lens→sub-component mini-trees (drill-to-atom: expand a holding inline in the tree).
+  const constituentTrees = await getConstituentLensTrees(etf.holdings.map((h) => h.symbol)).catch(() => ({}))
+  const sectors = sectorComposition(etf.holdings.map((h) => ({ sector: h.sector, weight: h.weight })))
   // Native Lightweight charts (price ÷ index) for bridged ETFs — TV's embed refuses NSE symbols.
   const etfRows = etf.nse_ticker ? await getEtfChartSeries(etf.nse_ticker).catch(() => []) : []
+  const asOf = await getEtfsAsOf().catch(() => null)
 
   const breadthPct = etf.breadth == null ? '—' : `${(etf.breadth * 100).toFixed(0)}%`
   const expenseStr = etf.expense == null ? null : `${etf.expense.toFixed(2)}%` // already in percent units
@@ -94,10 +103,11 @@ export async function ETFDetailV4({ fcode }: { fcode: string }) {
     expenseStr ? `expense ${expenseStr}` : null,
     `${etf.n_holdings} holdings`,
     etf.isin,
+    asOf ? `as of ${asOf}` : null,
   ].filter((x): x is string => !!x)
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6 px-6 py-7">
+    <div className="mx-auto max-w-[1680px] space-y-6 px-6 py-7">
       {/* ── Header ── */}
       <header>
         <nav className="mb-3 font-num text-[11px] text-txt-3" aria-label="Breadcrumb">
@@ -126,6 +136,17 @@ export async function ETFDetailV4({ fcode }: { fcode: string }) {
         </div>
       </header>
 
+      {/* ── Sector composition (from holdings) ── */}
+      {sectors.length > 0 && (
+        <Panel
+          eyebrow="Composition"
+          title="Sector mix of the holdings"
+          info={{ body: 'Where the ETF is invested, by sector — each holding’s weight summed into its sector. From the latest disclosed basket.' }}
+        >
+          <FundSectorComposition slices={sectors} />
+        </Panel>
+      )}
+
       {/* ── Glass box: Score-Derivation Tree (Leadership-breadth → lens → holdings by contribution) ── */}
       <section aria-label="How the score is built">
         <div className="mb-4">
@@ -135,7 +156,7 @@ export async function ETFDetailV4({ fcode }: { fcode: string }) {
             Click a lens to expand its holdings, ranked by contribution (weight × decile); each name links to its own evidence. Descriptive, not a forecast.
           </p>
         </div>
-        <ScoreDerivationTree root={holdingsToDerivation(etf.name, etf, etf.holdings, drivers)} />
+        <ScoreDerivationTree root={holdingsToDerivation(etf.name, etf, etf.holdings, drivers, lensWeights, constituentTrees)} />
       </section>
 
       {/* ── Charts (native Lightweight; bridged ETFs only) ── */}
@@ -164,7 +185,7 @@ export async function ETFDetailV4({ fcode }: { fcode: string }) {
       </Panel>
 
       <p className="font-sans text-[12px] leading-[1.6] text-txt-3">
-        Native from <strong className="text-txt-2">foundation_staging</strong> — the lens journal looked through
+        Native from <strong className="text-txt-2">atlas_foundation</strong> — the lens journal looked through
         de_etf_holdings; identity from Morningstar (de_mf_master).{' '}
         <Link href="/etfs" className="text-brand hover:underline">← Back to ETFs</Link>
       </p>

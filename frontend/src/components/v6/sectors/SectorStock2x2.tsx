@@ -1,8 +1,8 @@
 'use client'
 
 // SectorStock2x2 — two 2x2 maps of the sector's stocks, deciles cut within cap cohort (D27):
-//   A) Momentum (Technical decile) × Quality (Fundamental decile)
-//   B) Strength (avg conviction decile) × Leadership (# of 4 lenses top-decile)
+//   A) Momentum (Technical decile) × Quality (Fundamental decile — context lens)
+//   B) Strength (avg of the 2 active deciles) × Leadership (# of Technical & Flow top-2-decile, 0..2)
 // Bubble SIZE = cap tier (large→largest … micro→smallest), a market-cap proxy.
 // Dot COLOUR = leadership badge. Click a dot → /stocks/<symbol>. Theme-aware: colours
 // come from useThemeTokens so the chart recolours live with the day/night toggle.

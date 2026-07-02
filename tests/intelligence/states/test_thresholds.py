@@ -2,7 +2,6 @@ import os
 
 import pytest
 import sqlalchemy as sa
-
 from atlas.intelligence.states.thresholds import (
     ThresholdValue,
     get,

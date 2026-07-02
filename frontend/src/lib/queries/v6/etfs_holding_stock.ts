@@ -2,9 +2,9 @@
 //
 // Query: "which ETFs hold this stock?" — the reverse of the ETF holdings drill,
 // rendered on the stock detail page alongside "funds holding this stock".
-// Single-schema: all reads from foundation_staging.
+// Single-schema: all reads from atlas_foundation.
 //
-//   foundation_staging.de_etf_holdings (ticker, instrument_id, weight)
+//   atlas_foundation.de_etf_holdings (ticker, instrument_id, weight)
 //   ⨝ de_etf_master (ticker → name)
 //   ⨝ atlas_etf_scorecard (latest composite_score → grade), left join
 import 'server-only'
@@ -41,11 +41,11 @@ export async function getEtfsHoldingStock(iid: string): Promise<EtfHolding[]> {
         WHEN sc.composite_score IS NOT NULL THEN 'B'
         ELSE '—'
       END                                             AS atlas_grade
-    FROM foundation_staging.de_etf_holdings h
-    LEFT JOIN foundation_staging.de_etf_master m ON m.ticker = h.ticker
-    LEFT JOIN foundation_staging.atlas_etf_scorecard sc
+    FROM atlas_foundation.de_etf_holdings h
+    LEFT JOIN atlas_foundation.de_etf_master m ON m.ticker = h.ticker
+    LEFT JOIN atlas_foundation.atlas_etf_scorecard sc
       ON sc.ticker = h.ticker
-     AND sc.snapshot_date = (SELECT MAX(snapshot_date) FROM foundation_staging.atlas_etf_scorecard)
+     AND sc.snapshot_date = (SELECT MAX(snapshot_date) FROM atlas_foundation.atlas_etf_scorecard)
     WHERE h.instrument_id = ${iid}::uuid
       AND h.weight >= 0.005
     ORDER BY h.weight DESC NULLS LAST

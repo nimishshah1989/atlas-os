@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-
 from atlas.intelligence.states.features import (
     atr_14,
     base_depth,

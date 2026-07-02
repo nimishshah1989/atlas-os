@@ -55,7 +55,7 @@ function SectorBreakdown({ name, stocks }: { name: string; stocks: StockLensRow[
         </span>
         <Link href={`/sectors/${encodeURIComponent(name)}`} className="shrink-0 font-num text-[11px] text-brand hover:underline">Open sector →</Link>
       </div>
-      <table className="mt-1.5 w-full border-collapse">
+      <table className="tbl-centered mt-1.5 w-full border-collapse">
         <thead>
           <tr className="border-b border-edge-hair">
             <th className="px-3 py-1.5 text-left font-num text-[9px] font-medium uppercase tracking-[0.12em] text-txt-3">Stock</th>
@@ -118,7 +118,7 @@ function SectorRow({ s, open, onToggle }: { s: SectorRollup; open: boolean; onTo
 
 function SectorTable({ rows, open, toggle }: { rows: SectorRollup[]; open: string | null; toggle: (n: string) => void }) {
   return (
-    <table className="w-full border-collapse">
+    <table className="tbl-centered w-full border-collapse">
       <thead>
         <tr className="border-b border-edge-rule">
           <th className="px-2 py-1 text-left font-num text-[9px] font-medium uppercase tracking-[0.1em] text-txt-3">Sector</th>

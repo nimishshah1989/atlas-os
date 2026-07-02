@@ -1,6 +1,6 @@
 // "Held by" panel for the stock detail page — closes the navigation loop:
 // stock → the funds & ETFs that hold it (reverse of the holdings drill).
-// Pure server component. Real data only (foundation_staging); empty = "not held".
+// Pure server component. Real data only (atlas_foundation); empty = "not held".
 import Link from 'next/link'
 import type { FundHolding } from '@/lib/queries/v6/funds_holding_stock'
 import type { EtfHolding } from '@/lib/queries/v6/etfs_holding_stock'
@@ -36,7 +36,7 @@ export function HeldByPanel({ funds, etfs, symbol }: {
           {funds.length === 0 ? (
             <p className="font-sans text-[12px] italic text-txt-3">No tracked fund holds {symbol} ≥0.5%.</p>
           ) : (
-            <table className="w-full font-num text-[12px]">
+            <table className="tbl-centered w-full font-num text-[12px]">
               <thead>
                 <tr className="border-b border-edge-rule text-left text-[10px] uppercase tracking-wider text-txt-3">
                   <th className="py-1.5 font-semibold">Fund</th>
@@ -68,7 +68,7 @@ export function HeldByPanel({ funds, etfs, symbol }: {
           {etfs.length === 0 ? (
             <p className="font-sans text-[12px] italic text-txt-3">No tracked ETF holds {symbol} ≥0.5%.</p>
           ) : (
-            <table className="w-full font-num text-[12px]">
+            <table className="tbl-centered w-full font-num text-[12px]">
               <thead>
                 <tr className="border-b border-edge-rule text-left text-[10px] uppercase tracking-wider text-txt-3">
                   <th className="py-1.5 font-semibold">ETF</th>

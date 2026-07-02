@@ -8,7 +8,6 @@
 import numpy as np
 import pandas as pd
 import pytest
-
 from atlas.intelligence.validation.ic_engine import (
     compute_ic_over_window,
     compute_quantile_spread,

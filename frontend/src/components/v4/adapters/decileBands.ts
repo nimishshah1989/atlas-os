@@ -4,7 +4,7 @@
 // decile band (D10 / D8–9 / D5–7 / D1–4) → names. The decile distribution IS the
 // composition — each band is the aggregate's "sub-component", a bar showing its count +
 // free-float/holdings-weight share. RULE #0: deciles, weights and returns are all real
-// (foundation_staging); an absent datum renders as absence, never a synthetic fill.
+// (atlas_foundation); an absent datum renders as absence, never a synthetic fill.
 import { decileColor } from '@/components/v4/ui/decile'
 import type { DerivNode } from '@/components/v6/shared/ScoreDerivationTree'
 
@@ -28,6 +28,7 @@ export type BandItem = {
   href?: string
   value?: string | null   // the constituent's DRIVER for this lens (e.g. "Acquisition +8", "RS +22%")
   metrics?: DerivNode['metrics']
+  children?: DerivNode[]  // drill-to-atom: the constituent's own lens→sub-component mini-tree
 }
 
 // Group items into decile-band parent nodes. Each band shows count + share (by weight when
@@ -54,6 +55,7 @@ export function bandNodes(keyPrefix: string, items: BandItem[]): DerivNode[] {
       value: i.value ?? null,
       metrics: i.metrics,
       href: i.href,
+      children: i.children, // drill-to-atom: expand the constituent into its own lens tree inline
     }))
     if (inBand.length > NAME_CAP)
       kids.push({ id: `${keyPrefix}-${b.label}-more`, label: `+${inBand.length - NAME_CAP} more` })

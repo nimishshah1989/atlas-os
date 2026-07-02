@@ -13,7 +13,6 @@ from datetime import date
 
 import pandas as pd
 import pytest
-
 from atlas.intelligence.states.component_validator import (
     _classify_status,
     _compute_q5_q1_spread,

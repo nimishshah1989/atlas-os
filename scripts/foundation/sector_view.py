@@ -17,8 +17,8 @@ import _db
 import decile_core as dc
 import pandas as pd
 
-IDX = "foundation_staging.index_prices"
-SM = "foundation_staging.atlas_sector_master"
+IDX = "atlas_foundation.index_prices"
+SM = "atlas_foundation.atlas_sector_master"
 BENCH = "NIFTY 50"
 WINDOWS = [("1m", 21), ("3m", 63), ("6m", 126), ("1y", 252)]
 

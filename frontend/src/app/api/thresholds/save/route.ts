@@ -1,4 +1,4 @@
-// POST /api/thresholds/save — persist FM threshold edits to foundation_staging.atlas_thresholds.
+// POST /api/thresholds/save — persist FM threshold edits to atlas_foundation.atlas_thresholds.
 // Each value is validated/clamped server-side against its own min/max (authoritative); the body
 // is { edits: [{key, value}], modifiedBy? }. Does NOT recompute — that's a separate explicit step.
 import { NextResponse } from 'next/server'

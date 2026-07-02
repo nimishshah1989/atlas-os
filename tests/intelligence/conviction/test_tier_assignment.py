@@ -5,12 +5,12 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-
-from atlas.db import get_engine
 from atlas.intelligence.conviction.tier_assignment import (
     assign_tier_from_rank,
     compute_tier_membership,
 )
+
+from atlas.db import get_engine
 
 
 class TestAssignTierFromRank:

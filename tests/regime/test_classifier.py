@@ -14,7 +14,6 @@ Covers:
 from __future__ import annotations
 
 import pytest
-
 from atlas.regime.classifier import (
     RegimeInputs,
     RegimeState,

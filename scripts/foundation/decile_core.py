@@ -16,7 +16,7 @@ import _db
 import numpy as np
 import pandas as pd
 
-L = "foundation_staging.atlas_lens_scores_daily"  # canonical journal (D22 consolidated)
+L = "atlas_foundation.atlas_lens_scores_daily"  # canonical journal (D22 consolidated)
 CONV = ["technical", "fundamental", "catalyst", "flow"]  # feed leadership badge
 LENSES = [*CONV, "valuation"]  # valuation = own decile
 BROAD = "F00001PXO0"  # Nifty Total Market ETF (750)
@@ -31,7 +31,7 @@ def cap_bucket() -> pd.DataFrame:
              SELECT instrument_id, weight,
                     row_number() OVER (PARTITION BY instrument_id ORDER BY
                       CASE ticker WHEN :b1 THEN 1 WHEN :b2 THEN 2 ELSE 3 END, weight DESC) rn
-             FROM foundation_staging.de_etf_holdings WHERE ticker IN (:b1, :b2) AND weight > 0)
+             FROM atlas_foundation.de_etf_holdings WHERE ticker IN (:b1, :b2) AND weight > 0)
            SELECT instrument_id, weight FROM r WHERE rn = 1""",
         {"b1": BROAD, "b2": BROAD2},
     )
@@ -81,7 +81,7 @@ def deciles(date, caps: pd.DataFrame | None = None) -> pd.DataFrame:
     incl. symbol/name/sector + raw lens scores)."""
     j = _db.read_df(
         f"SELECT instrument_id, symbol, name, sector, {','.join(LENSES)} "
-        f"FROM {L} t JOIN foundation_staging.instrument_master im USING (instrument_id) "
+        f"FROM {L} t JOIN atlas_foundation.instrument_master im USING (instrument_id) "
         f"WHERE t.asset_class='stock' AND t.date=:d",
         {"d": str(date)},
     )

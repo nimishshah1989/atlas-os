@@ -1,4 +1,4 @@
-// StocksPageV4 — lens-first /stocks (behind LENS_V4). All data native foundation_staging.
+// StocksPageV4 — lens-first /stocks (behind LENS_V4). All data native atlas_foundation.
 // The list is a FUNNEL into the stock-detail atom. Order per the stocks-pages plan §B:
 //   1. leadership strip + a few "top doing great" cards
 //   2. one strong 2×2 (Strength × Leadership, size=liquidity, colour=leadership)
@@ -14,7 +14,7 @@ import { decileColor } from '@/components/v4/ui/decile'
 
 const CAP_LABEL: Record<string, string> = { large: 'large', mid: 'mid', small: 'small', micro: 'micro' }
 const leadColor = (lead: number) =>
-  lead >= 2 ? 'text-sig-pos' : lead === 1 ? 'text-sig-warn' : 'text-txt-3'
+  lead >= 1 ? 'text-sig-pos' : 'text-txt-3'  // leader = top-decile composite (0/1)
 
 // A compact decile pip used inside the "top doing great" cards. The figure takes
 // the shared perceptual ramp (decileColor); null falls back to the tertiary token.
@@ -39,7 +39,7 @@ function TopCard({ s }: { s: StockListRow }) {
        className="block rounded-tile border border-edge-hair bg-surface-panel p-3.5 shadow-tile no-underline hover:border-edge-strong transition-colors">
       <div className="flex items-baseline justify-between gap-2 mb-0.5">
         <span className="font-num text-[14px] font-semibold tabular-nums text-txt-1 truncate">{s.symbol}</span>
-        <span className={`font-num text-[11px] font-semibold tabular-nums ${leadColor(s.lead)}`}>{s.lead}/2</span>
+        <span className={`font-num text-[11px] font-semibold tabular-nums ${leadColor(s.lead)}`}>{s.lead >= 1 ? 'Leader' : '—'}</span>
       </div>
       <div className="font-sans text-[11px] text-txt-3 truncate mb-2">{s.name ?? s.sector ?? '—'}</div>
       <div className="mb-2"><DecileMeter decile={Math.round(s.strength ?? 0)} size="sm" /></div>
@@ -60,7 +60,7 @@ function TopCard({ s }: { s: StockListRow }) {
 export async function StocksPageV4() {
   const [stocks, asOf] = await Promise.all([getStocksDecileList(), getLensAsOf()])
 
-  const leaders = stocks.filter(s => s.lead >= 2)
+  const leaders = stocks.filter(s => s.lead >= 1)
   const capCount = (c: string) => leaders.filter(s => s.cap === c).length
   const top = [...leaders].sort((a, b) => (b.strength ?? 0) - (a.strength ?? 0)).slice(0, 6)
   const universeCount = stocks.length
@@ -78,7 +78,7 @@ export async function StocksPageV4() {
   ]
 
   return (
-    <div className="mx-auto max-w-[1280px] px-6 py-7">
+    <div className="mx-auto max-w-[1680px] px-6 py-7">
       {/* Header + leadership strip */}
       <header className="mb-6">
         <div className="font-sans text-[12px] text-txt-3 mb-3">
@@ -123,7 +123,7 @@ export async function StocksPageV4() {
       <StocksScreenerV4 stocks={stocks} />
 
       <div className="mt-6 font-sans text-[12px] text-txt-3 leading-[1.6]">
-        Native from <strong className="text-txt-2">foundation_staging</strong> — the lens journal, technical_daily RS, and a 20-session turnover proxy.
+        Native from <strong className="text-txt-2">atlas_foundation</strong> — the lens journal, technical_daily RS, and a 20-session turnover proxy.
       </div>
     </div>
   )

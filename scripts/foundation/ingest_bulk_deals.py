@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ingest NSE bulk/block deals → foundation_staging.lens_bulk_deals.
+"""Ingest NSE bulk/block deals → atlas_foundation.lens_bulk_deals.
 
 Powers the Flow lens (smart-money sub-signal). Ported from jip-india.
 Unlike the per-symbol fetchers, the deals endpoint returns ALL recent deals

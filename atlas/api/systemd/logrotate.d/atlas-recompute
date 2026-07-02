@@ -1,9 +1,0 @@
-/var/log/atlas/recompute-*.log {
-    daily
-    rotate 30
-    compress
-    missingok
-    notifempty
-    copytruncate
-    su ubuntu ubuntu
-}

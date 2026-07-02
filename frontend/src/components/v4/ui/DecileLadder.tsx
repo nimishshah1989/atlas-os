@@ -104,7 +104,7 @@ export function DecileLadder({ lenses, strength, leadership, cohortLabel, note, 
               >
                 {leadership.n}/{leadership.of}
               </div>
-              <div className="mt-0.5 font-sans text-[10px] text-txt-3">lenses top-decile</div>
+              <div className="mt-0.5 font-sans text-[10px] text-txt-3">active lenses · Tech &amp; Flow</div>
             </div>
           )}
           {note && <div className="min-w-[200px] flex-1 self-center font-sans text-[12px] leading-[1.5] text-txt-2">{note}</div>}

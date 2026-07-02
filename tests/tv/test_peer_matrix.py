@@ -10,7 +10,6 @@ os.environ.setdefault("ATLAS_AUTH_DISABLED", "true")
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from atlas.tv.peer_matrix import (  # type: ignore[import]
     _classify_conviction,
     _classify_ema_slope,
@@ -167,9 +166,8 @@ def test_get_peer_matrix_returns_error_when_no_rows():
 
 
 def test_peer_matrix_route_returns_200():
-    from fastapi.testclient import TestClient
-
     from atlas.api import app  # type: ignore[import]
+    from fastapi.testclient import TestClient
 
     fake_result = {
         "symbol": "RELIANCE",
@@ -200,9 +198,8 @@ def test_peer_matrix_route_returns_200():
 
 
 def test_peer_matrix_route_returns_404_for_no_data():
-    from fastapi.testclient import TestClient
-
     from atlas.api import app  # type: ignore[import]
+    from fastapi.testclient import TestClient
 
     with patch(
         "atlas.tv.routes.get_peer_matrix", return_value={"error": "no_data", "symbol": "GHOST"}

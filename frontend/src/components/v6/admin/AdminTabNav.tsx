@@ -4,8 +4,10 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
+// Methodology now lives on the public /methodology page (visual mind-map + expandable tree +
+// live weights/thresholds), so it is linked there rather than as an admin sub-tab.
 const TABS = [
-  { href: '/admin/methodology', label: 'Methodology' },
+  { href: '/methodology', label: 'Methodology' },
   { href: '/admin/thresholds', label: 'Thresholds' },
   { href: '/admin/data-status', label: 'Data status' },
 ]

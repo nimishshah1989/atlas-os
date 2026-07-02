@@ -15,7 +15,7 @@ Ground-truth convention (established 2026-06-26):
   session-count-anchored. The stored tables count back a fixed number of *rows*;
   on a series with trading-day gaps that lands on the wrong calendar date and can
   inflate a return by several points (Nifty 50 3m: stored 6.9% vs true 3.2%).
-  Cross-validated: two independent feeds (foundation_staging.index_prices [Kite]
+  Cross-validated: two independent feeds (atlas_foundation.index_prices [Kite]
   and public.de_index_prices [JIP]) agree to <0.1pp under calendar anchoring.
 
 Run:
@@ -76,9 +76,7 @@ def add(**kw) -> None:
 
 
 def as_of() -> date:
-    return scalar(
-        "select max(date) from foundation_staging.index_prices where index_code='NIFTY 50'"
-    )
+    return scalar("select max(date) from atlas_foundation.index_prices where index_code='NIFTY 50'")
 
 
 # ── ground-truth recompute: calendar-anchored index returns ──────────────────
@@ -92,7 +90,7 @@ _WINDOWS = [
 
 
 def recompute_index_returns(codes: list[str], d: date) -> dict[str, dict[str, float]]:
-    """Calendar-anchored returns per index from foundation_staging.index_prices,
+    """Calendar-anchored returns per index from atlas_foundation.index_prices,
     cross-checked against public.de_index_prices. Returns {code: {ret_3m: pct,…}}.
     A window is left out (None) when the two feeds disagree by >0.5pp — that flags
     a raw-data defect rather than a silently-wrong "truth"."""
@@ -107,9 +105,7 @@ def recompute_index_returns(codes: list[str], d: date) -> dict[str, dict[str, fl
         with p as (select index_code, cast(:d as date) d from (values {vals}) v(index_code))
         select c.index_code, {sel} from p c order by c.index_code
     """
-    fs = read_df(base.format(tbl="foundation_staging.index_prices"), {"d": d}).set_index(
-        "index_code"
-    )
+    fs = read_df(base.format(tbl="atlas_foundation.index_prices"), {"d": d}).set_index("index_code")
     de = read_df(base.format(tbl="public.de_index_prices"), {"d": d}).set_index("index_code")
     out: dict[str, dict[str, float]] = {}
     for code in fs.index:
@@ -134,7 +130,7 @@ def check_returns(d: date) -> None:
     # sector_name -> primary index, the exact map the sectors page uses
     smap = read_df("""
         select sector_name, primary_nse_index
-        from foundation_staging.atlas_sector_master
+        from atlas_foundation.atlas_sector_master
         where is_active and primary_nse_index is not null
     """)
     codes = sorted(
@@ -149,8 +145,8 @@ def check_returns(d: date) -> None:
     # deprecated for display — they were a reconstruction inflated 2–6×.)
     imet = read_df("""
         select index_code, ret_1m, ret_3m, ret_6m, ret_12m
-        from foundation_staging.atlas_index_metrics_daily
-        where date=(select max(date) from foundation_staging.atlas_index_metrics_daily)
+        from atlas_foundation.atlas_index_metrics_daily
+        where date=(select max(date) from atlas_foundation.atlas_index_metrics_daily)
     """).set_index("index_code")
 
     for _, row in smap.iterrows():
@@ -207,8 +203,8 @@ def check_breadth(d: date) -> None:
     above_ema flags in technical_daily on the same date."""
     stored = read_df("""
         select date, above_21, above_50, above_200, n_members
-        from foundation_staging.breadth_nifty500_daily
-        where date=(select max(date) from foundation_staging.breadth_nifty500_daily)
+        from atlas_foundation.breadth_nifty500_daily
+        where date=(select max(date) from atlas_foundation.breadth_nifty500_daily)
     """)
     if stored.empty:
         add(
@@ -231,7 +227,7 @@ def check_breadth(d: date) -> None:
           count(*) filter (where above_ema_21)  a21,
           count(*) filter (where above_ema_50)  a50,
           count(*) filter (where above_ema_200) a200
-        from foundation_staging.technical_daily
+        from atlas_foundation.technical_daily
         where date=:bd and asset_class='stock'
     """,
         {"bd": bdate},
@@ -263,7 +259,7 @@ def check_lens(d: date) -> None:
     """The lens deciles are the core methodology output; we can't recompute them
     from a second source, but we CAN assert the invariants that must hold of a real
     decile field: 1–10 range, sane coverage, fresh snapshot, no all-equal collapse."""
-    latest = scalar("select max(date) from foundation_staging.atlas_lens_scores_daily")
+    latest = scalar("select max(date) from atlas_foundation.atlas_lens_scores_daily")
     add(
         family="lens",
         page="Stocks / Sectors · lens",
@@ -281,8 +277,8 @@ def check_lens(d: date) -> None:
                count(*) filter (where technical between 1 and 10) tech_ok,
                count(*) filter (where technical is not null) tech_nn,
                count(distinct technical) tech_distinct
-        from foundation_staging.atlas_lens_scores_daily
-        where date=(select max(date) from foundation_staging.atlas_lens_scores_daily)
+        from atlas_foundation.atlas_lens_scores_daily
+        where date=(select max(date) from atlas_foundation.atlas_lens_scores_daily)
           and asset_class='stock'
     """).iloc[0]
     n = int(stats["n"]) or 1

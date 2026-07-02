@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Atlas-owned MF NAV ingestion → foundation_staging.de_mf_nav_daily (single-schema).
+"""Atlas-owned MF NAV ingestion → atlas_foundation.de_mf_nav_daily (single-schema).
 
 Step 2 of the data consolidation. Replaces the JIP-RDS NAV sync (jip_incremental_sync.py
 copied de_mf_nav_daily out of the external data-engine) AND the JIP-coupled stuck-funds
 patch (amfi_nav_backfill.py looked AMFI codes up in the JIP RDS). Both are killed by this.
 
 Source = mfapi.in (the free AMFI NAV mirror). The mstar_id -> amfi_code map now comes from
-foundation_staging.de_mf_master (refreshed by ingest_fund_master.py from Morningstar), so
+atlas_foundation.de_mf_master (refreshed by ingest_fund_master.py from Morningstar), so
 there is NO external-DB dependency at all. Incremental by default: per fund, fetch only NAVs
 newer than the latest already stored. Idempotent (ON CONFLICT DO NOTHING). Parallel.
 
@@ -67,22 +67,21 @@ def main() -> None:
     # Take clean ownership: a unique key on (nav_date, mstar_id) for idempotent upsert.
     cur.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_de_mf_nav_daily_date_mstar "
-        "ON foundation_staging.de_mf_nav_daily (nav_date, mstar_id)"
+        "ON atlas_foundation.de_mf_nav_daily (nav_date, mstar_id)"
     )
     conn.commit()
 
     cur.execute(
         "SELECT u.mstar_id, m.amfi_code "
-        "FROM foundation_staging.atlas_universe_funds u "
-        "JOIN foundation_staging.de_mf_master m ON m.mstar_id = u.mstar_id "
+        "FROM atlas_foundation.atlas_universe_funds u "
+        "JOIN atlas_foundation.de_mf_master m ON m.mstar_id = u.mstar_id "
         "WHERE m.amfi_code IS NOT NULL"
     )
     funds = [(r[0], int(r[1])) for r in cur.fetchall()]
     last: dict[str, datetime.date] = {}
     if not full:
         cur.execute(
-            "SELECT mstar_id, max(nav_date) FROM foundation_staging.de_mf_nav_daily "
-            "GROUP BY mstar_id"
+            "SELECT mstar_id, max(nav_date) FROM atlas_foundation.de_mf_nav_daily GROUP BY mstar_id"
         )
         last = {r[0]: r[1] for r in cur.fetchall()}
     print(
@@ -126,7 +125,7 @@ def main() -> None:
     if rows:
         execute_values(
             cur,
-            "INSERT INTO foundation_staging.de_mf_nav_daily "
+            "INSERT INTO atlas_foundation.de_mf_nav_daily "
             "(nav_date, mstar_id, nav, data_status) VALUES %s "
             "ON CONFLICT (nav_date, mstar_id) DO NOTHING",
             rows,
@@ -134,7 +133,7 @@ def main() -> None:
         )
         conn.commit()
     mx = None
-    cur.execute("SELECT max(nav_date) FROM foundation_staging.de_mf_nav_daily")
+    cur.execute("SELECT max(nav_date) FROM atlas_foundation.de_mf_nav_daily")
     mx = cur.fetchone()[0]
     print(f"DONE · {len(rows)} candidate rows · max nav_date now {mx}", flush=True)
     cur.close()

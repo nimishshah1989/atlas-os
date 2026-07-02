@@ -8,7 +8,6 @@ from decimal import Decimal
 
 import pandas as pd
 import pytest
-
 from atlas.intelligence.conviction.composer import (
     CONFIDENCE_LABEL_THRESHOLD,
     apply_weights_to_percentile_ranks,

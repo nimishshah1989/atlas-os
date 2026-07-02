@@ -3,11 +3,11 @@
 from datetime import date
 
 import pytest
+from atlas.intelligence.validation.ic_engine import ICResult
+from atlas.intelligence.validation.persistence import persist_ic_result
 from sqlalchemy import text
 
 from atlas.db import get_engine
-from atlas.intelligence.validation.ic_engine import ICResult
-from atlas.intelligence.validation.persistence import persist_ic_result
 
 
 @pytest.mark.integration

@@ -1,11 +1,11 @@
-// ETFsPageV4 — lens-first /etfs (behind LENS_V4). All data native foundation_staging.
+// ETFsPageV4 — lens-first /etfs (behind LENS_V4). All data native atlas_foundation.
 // The list is a FUNNEL into the ETF roll-up atom. ETFs are a holdings-weighted roll-up of
 // the stock atom (D26/D27): the HEADLINE is LEADERSHIP-BREADTH (% of holdings weight that are
 // top-decile leaders in ≥2 conviction lenses), NOT a composite. This is a TRANSPARENCY view —
 // what's held, how it scores — explicitly NOT an outperformance predictor.
 // Order: 1. leadership-breadth strip + a few top cards · 2. the sortable lens table.
 import Link from 'next/link'
-import { getEtfLensList, type EtfLensRow } from '@/lib/queries/v6/etf_lens'
+import { getEtfLensList, getEtfsAsOf, type EtfLensRow } from '@/lib/queries/v6/etf_lens'
 import { EtfLensTable } from './EtfLensTable'
 import { Panel } from '@/components/v4/ui/Panel'
 import { StatCard, type Tone } from '@/components/v4/ui/StatCard'
@@ -64,7 +64,7 @@ function TopCard({ e }: { e: EtfLensRow }) {
 }
 
 export async function ETFsPageV4() {
-  const etfs = await getEtfLensList()
+  const [etfs, asOf] = await Promise.all([getEtfLensList(), getEtfsAsOf()])
 
   const universeCount = etfs.length
   const withBreadth = etfs.filter(e => (e.breadth ?? 0) >= 0.1).length
@@ -114,7 +114,7 @@ export async function ETFsPageV4() {
   ]
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6 px-6 py-7">
+    <div className="mx-auto max-w-[1680px] space-y-6 px-6 py-7">
       {/* Header + leadership-breadth strip */}
       <header>
         <nav className="mb-3 font-num text-[11px] text-txt-3" aria-label="Breadcrumb">
@@ -123,6 +123,7 @@ export async function ETFsPageV4() {
         <div className="mb-2 flex flex-wrap items-baseline gap-4">
           <h1 className="font-display text-[40px] font-bold leading-none tracking-tight text-txt-1">ETFs</h1>
           <span className="font-num text-[12px] text-txt-3">{universeCount} NSE equity ETFs · holdings-weighted lens roll-up</span>
+          {asOf && <span className="font-sans text-[11px] text-txt-3">· as of {asOf}</span>}
         </div>
         <p className="max-w-[880px] font-sans text-[14px] leading-[1.5] text-txt-2">
           Each ETF is a <strong className="text-txt-1">holdings-weighted roll-up</strong> of the stock atom. The headline is
@@ -180,7 +181,7 @@ export async function ETFsPageV4() {
       </Panel>
 
       <p className="font-sans text-[12px] leading-[1.6] text-txt-3">
-        Native from <strong className="text-txt-2">foundation_staging</strong> — the lens journal looked through
+        Native from <strong className="text-txt-2">atlas_foundation</strong> — the lens journal looked through
         de_etf_holdings; identity from Morningstar (de_mf_master).
       </p>
     </div>

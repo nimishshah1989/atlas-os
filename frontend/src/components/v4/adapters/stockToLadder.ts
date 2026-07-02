@@ -1,7 +1,7 @@
 // Adapter: a stock's StockDecile + StockEvidence → the generic DecileLadder model.
 // All stock-specific "real numbers" logic lives here (ported from the
 // StockLensCardV4 seed) so DecileLadder itself stays dumb + reusable. RULE #0:
-// every value traces to a real foundation_staging field — no synthetic fallback.
+// every value traces to a real atlas_foundation field — no synthetic fallback.
 import type { StockDecile, StockEvidence } from '@/lib/queries/v6/stock_lens'
 import type { LadderLens, LadderNumber } from '../ui/DecileLadder'
 
@@ -186,7 +186,7 @@ export function stockToLadder(decile: StockDecile, ev: StockEvidence | null): St
     strength: decile.strength,
     composite: decile.composite,
     conviction_tier: decile.conviction_tier,
-    leadership: { n: decile.lead, of: 4 },
+    leadership: { n: decile.lead, of: 2 }, // 2-lens: D9/D10 in Technical & Flow
     cohortLabel: CAP_LABEL[decile.cap] ?? decile.cap,
     topLensKey,
     evidence: decile.evidence,

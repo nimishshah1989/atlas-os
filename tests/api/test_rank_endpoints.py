@@ -20,10 +20,10 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from atlas.api import app
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
-from atlas.api import app
 from atlas.config import Config
 
 

@@ -1,5 +1,5 @@
 // src/lib/queries/v6/etf_lens.ts
-// Native ETF lens roll-up — all from foundation_staging. ETFs are a holdings-weighted roll-up
+// Native ETF lens roll-up — all from atlas_foundation. ETFs are a holdings-weighted roll-up
 // of the stock atom (D26/D27): the headline is LEADERSHIP-BREADTH (% of holdings weight that are
 // top-decile leaders in ≥2 conviction lenses), NOT a cap-weighted composite. Plus the
 // holdings-weighted 6-lens vector (descriptive) and a look-through to each holding's deciles.
@@ -24,9 +24,9 @@ export async function getEtfChartSeries(nseTicker: string, years = 5): Promise<S
     SELECT to_char(o.date,'YYYY-MM-DD') AS date, o.close::text,
            (o.close / NULLIF(n50.close, 0))::text  AS rs_n50,
            (o.close / NULLIF(n500.close, 0))::text AS rs_n500
-    FROM foundation_staging.ohlcv_etf o
-    LEFT JOIN foundation_staging.index_prices n50  ON n50.date = o.date  AND n50.index_code = 'NIFTY 50'
-    LEFT JOIN foundation_staging.index_prices n500 ON n500.date = o.date AND n500.index_code = 'NIFTY 500'
+    FROM atlas_foundation.ohlcv_etf o
+    LEFT JOIN atlas_foundation.index_prices n50  ON n50.date = o.date  AND n50.index_code = 'NIFTY 50'
+    LEFT JOIN atlas_foundation.index_prices n500 ON n500.date = o.date AND n500.index_code = 'NIFTY 500'
     WHERE o.ticker = ${nseTicker} AND o.close > 0
       AND o.date >= NOW() - (${years} || ' years')::INTERVAL
     ORDER BY o.date ASC
@@ -36,40 +36,41 @@ export async function getEtfChartSeries(nseTicker: string, years = 5): Promise<S
 // Per-stock scored CTE (deciles within cap cohort, leadership, strength, raw lens subscores, RS).
 // No user input — all literals; shared by the ETF + fund roll-ups via sql.unsafe.
 export const SCORED_STOCKS = `
-  latest AS (SELECT max(date) d FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'),
-  tdl AS (SELECT max(date) d FROM foundation_staging.technical_daily WHERE asset_class='stock'),  -- asset_class filter uses the class_date index (unfiltered max(date) seq-scans 6.9M rows)
+  latest AS (SELECT max(date) d FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock'),
+  tdl AS (SELECT max(date) d FROM atlas_foundation.technical_daily WHERE asset_class='stock'),  -- asset_class filter uses the class_date index (unfiltered max(date) seq-scans 6.9M rows)
   cap AS (
     SELECT instrument_id,
       CASE WHEN bool_or(index_code='NIFTY 100') THEN 'large'
            WHEN bool_or(index_code='NIFTY MIDCAP 150') THEN 'mid'
            WHEN bool_or(index_code='NIFTY SMLCAP 250') THEN 'small' ELSE 'micro' END AS cap
-    FROM foundation_staging.de_index_constituents
+    FROM atlas_foundation.de_index_constituents
     WHERE effective_to IS NULL AND index_code IN ('NIFTY 100','NIFTY MIDCAP 150','NIFTY SMLCAP 250')
     GROUP BY instrument_id),
-  rs AS (SELECT instrument_id, rs_3m_n500, rs_1m_n500, ret_1d, ret_1w, ret_1m FROM foundation_staging.technical_daily
+  rs AS (SELECT instrument_id, rs_3m_n500, rs_1m_n500, ret_1d, ret_1w, ret_1m FROM atlas_foundation.technical_daily
          WHERE asset_class='stock' AND date=(SELECT d FROM tdl)),
   j AS (
     SELECT l.instrument_id, im.symbol, COALESCE(c.cap,'micro') AS cap,
-           l.technical::float t, l.fundamental::float f, l.catalyst::float ca, l.flow::float fl, l.valuation::float va
-    FROM foundation_staging.atlas_lens_scores_daily l
-    JOIN foundation_staging.instrument_master im ON im.instrument_id = l.instrument_id
+           l.technical::float t, l.fundamental::float f, l.catalyst::float ca, l.flow::float fl, l.valuation::float va,
+           l.composite::float comp
+    FROM atlas_foundation.atlas_lens_scores_daily l
+    JOIN atlas_foundation.instrument_master im ON im.instrument_id = l.instrument_id
     LEFT JOIN cap c ON c.instrument_id = l.instrument_id
     WHERE l.asset_class='stock' AND l.date=(SELECT d FROM latest)),
   dec AS (
-    SELECT instrument_id, symbol, cap, t, f, ca, fl, va,
+    SELECT instrument_id, symbol, cap, t, f, ca, fl, va, comp,
       CASE WHEN t  IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(t  IS NULL) ORDER BY t)  END d_tech,
       CASE WHEN f  IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(f  IS NULL) ORDER BY f)  END d_fund,
       CASE WHEN ca IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(ca IS NULL) ORDER BY ca) END d_cat,
       CASE WHEN fl IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(fl IS NULL) ORDER BY fl) END d_flow,
-      CASE WHEN va IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(va IS NULL) ORDER BY va) END d_val
+      CASE WHEN va IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(va IS NULL) ORDER BY va) END d_val,
+      CASE WHEN comp IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(comp IS NULL) ORDER BY comp) END d_composite
     FROM j),
   scored AS (
     SELECT d.instrument_id, d.symbol, d.cap, d.t, d.f, d.ca, d.fl, d.va,
-      d.d_tech, d.d_fund, d.d_cat, d.d_flow, d.d_val,
-      -- LEADER = top-2-decile (D9/D10) in BOTH active conviction lenses (Technical & Flow). lead is
-      -- 0..2; a leader has lead = 2. (FM 2-lens model: Fundamental/Catalyst weight 0, so they no
-      -- longer count toward leadership.) Roll-ups filter on lead >= 2 = leads both active lenses.
-      (COALESCE((d.d_tech>=9)::int,0)+COALESCE((d.d_flow>=9)::int,0)) AS lead,
+      d.d_tech, d.d_fund, d.d_cat, d.d_flow, d.d_val, d.d_composite,
+      -- LEADER = TOP DECILE (D10) by composite within the stock's cap cohort (FM 2026-06-30:
+      -- one simple rule). lead is 0/1; a leader has lead = 1. Roll-ups filter on lead >= 1.
+      (COALESCE((d.d_composite>=10)::int,0)) AS lead,
       -- strength = mean of the ACTIVE-lens deciles (Technical & Flow), matching the 2-lens conviction.
       ((COALESCE(d.d_tech,0)+COALESCE(d.d_flow,0))::float
         / NULLIF((d.d_tech IS NOT NULL)::int+(d.d_flow IS NOT NULL)::int,0)) AS strength,
@@ -79,8 +80,8 @@ export const SCORED_STOCKS = `
                 -- 1 row per mstar_id (min ticker) so a name matching >1 NSE row can't fan out the holdings join.
     SELECT mstar_id, min(nse_ticker) AS nse_ticker FROM (
       SELECT mm.mstar_id, im.symbol AS nse_ticker
-      FROM foundation_staging.de_mf_master mm
-      JOIN foundation_staging.instrument_master im
+      FROM atlas_foundation.de_mf_master mm
+      JOIN atlas_foundation.instrument_master im
         ON im.asset_class='etf'
        AND upper(regexp_replace(im.name,'[^A-Za-z0-9]','','g')) = upper(regexp_replace(mm.fund_name,'[^A-Za-z0-9]','','g'))
       WHERE mm.is_etf) b
@@ -111,8 +112,8 @@ const ROLLUP_SELECT = `
   mm.mstar_id AS fcode, mm.fund_name AS name, mm.category_name AS category, mm.expense_ratio AS expense,
   max(en.nse_ticker) AS nse_ticker,
   count(h.instrument_id) AS n_holdings,
-  count(*) FILTER (WHERE COALESCE(s.lead,0) >= 2) AS n_leaders,
-  sum(h.weight) FILTER (WHERE COALESCE(s.lead,0) >= 2) / NULLIF(sum(h.weight),0) AS breadth,
+  count(*) FILTER (WHERE COALESCE(s.lead,0) >= 1) AS n_leaders,
+  sum(h.weight) FILTER (WHERE COALESCE(s.lead,0) >= 1) / NULLIF(sum(h.weight),0) AS breadth,
   sum(h.weight*s.t)  FILTER (WHERE s.t  IS NOT NULL) / NULLIF(sum(h.weight) FILTER (WHERE s.t  IS NOT NULL),0) AS v_tech,
   sum(h.weight*s.f)  FILTER (WHERE s.f  IS NOT NULL) / NULLIF(sum(h.weight) FILTER (WHERE s.f  IS NOT NULL),0) AS v_fund,
   sum(h.weight*s.ca) FILTER (WHERE s.ca IS NOT NULL) / NULLIF(sum(h.weight) FILTER (WHERE s.ca IS NOT NULL),0) AS v_cat,
@@ -123,8 +124,8 @@ export async function getEtfLensList(): Promise<EtfLensRow[]> {
   const rows = await sql.unsafe(`
     WITH ${SCORED_STOCKS}
     SELECT ${ROLLUP_SELECT}
-    FROM foundation_staging.de_mf_master mm
-    JOIN foundation_staging.de_etf_holdings h ON h.ticker = mm.mstar_id AND h.weight IS NOT NULL
+    FROM atlas_foundation.de_mf_master mm
+    JOIN atlas_foundation.de_etf_holdings h ON h.ticker = mm.mstar_id AND h.weight IS NOT NULL
     JOIN scored s ON s.instrument_id = h.instrument_id   -- INNER: scored, mapped holdings only (cash/unmapped excluded from the breadth base)
     LEFT JOIN etf_nse en ON en.mstar_id = mm.mstar_id
     WHERE ${EQUITY_ETF_FILTER}
@@ -149,8 +150,8 @@ export async function getEtfLensDetail(fcode: string): Promise<EtfLensDetail | n
   const head = await sql.unsafe(`
     WITH ${SCORED_STOCKS}
     SELECT ${ROLLUP_SELECT}, max(mm.isin) AS isin, max(mm.amc_name) AS amc, max(mm.primary_benchmark) AS benchmark
-    FROM foundation_staging.de_mf_master mm
-    JOIN foundation_staging.de_etf_holdings h ON h.ticker = mm.mstar_id AND h.weight IS NOT NULL
+    FROM atlas_foundation.de_mf_master mm
+    JOIN atlas_foundation.de_etf_holdings h ON h.ticker = mm.mstar_id AND h.weight IS NOT NULL
     JOIN scored s ON s.instrument_id = h.instrument_id   -- same INNER basis as the look-through table below (consistent n_holdings)
     LEFT JOIN etf_nse en ON en.mstar_id = mm.mstar_id
     WHERE mm.mstar_id = $1 AND mm.is_etf
@@ -163,9 +164,9 @@ export async function getEtfLensDetail(fcode: string): Promise<EtfLensDetail | n
     SELECT h.weight, s.symbol, im.sector,
       s.d_tech, s.d_fund, s.d_cat, s.d_flow, s.d_val, COALESCE(s.lead,0) AS lead, s.strength, s.rs_3m_n500,
       s.ret_1d, s.ret_1w, s.ret_1m
-    FROM foundation_staging.de_etf_holdings h
+    FROM atlas_foundation.de_etf_holdings h
     JOIN scored s ON s.instrument_id = h.instrument_id
-    JOIN foundation_staging.instrument_master im ON im.instrument_id = h.instrument_id
+    JOIN atlas_foundation.instrument_master im ON im.instrument_id = h.instrument_id
     WHERE h.ticker = $1 AND h.weight IS NOT NULL
     ORDER BY h.weight DESC`,
     [fcode]) as unknown as Record<string, string>[]
@@ -182,4 +183,13 @@ export async function getEtfLensDetail(fcode: string): Promise<EtfLensDetail | n
       ret_1d: n(r.ret_1d), ret_1w: n(r.ret_1w), ret_1m: n(r.ret_1m),
     })),
   }
+}
+
+// Data-as-of date for the /etfs page banner = the latest scored date of the stock atom the
+// ETF holdings-weighted roll-up is derived from. Single source of the page's freshness stamp.
+export async function getEtfsAsOf(): Promise<string | null> {
+  const rows = await sql<{ d: string | null }[]>`
+    SELECT to_char(max(date),'YYYY-MM-DD') AS d
+    FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock'`
+  return rows[0]?.d ?? null
 }

@@ -6,9 +6,6 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import text
-
-from atlas.db import get_engine
 from atlas.intelligence.conviction.optimization.ic_monitor import ICMeasurement
 from atlas.intelligence.conviction.optimization.persistence import (
     apply_proposal,
@@ -17,6 +14,9 @@ from atlas.intelligence.conviction.optimization.persistence import (
     snooze_proposal,
     upsert_ic_batch,
 )
+from sqlalchemy import text
+
+from atlas.db import get_engine
 
 _SENTINEL_DATE = date(1990, 1, 1)
 

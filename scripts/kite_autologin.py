@@ -5,7 +5,7 @@ Zerodha access tokens expire at midnight IST, so this runs every morning (cron)
 BEFORE the data pull. No browser: it drives Kite's login + twofa endpoints with
 `requests`, generates the 6-digit code from the stored TOTP secret (pyotp),
 captures the OAuth `request_token`, exchanges it for an access_token, and stores
-it encrypted in atlas.atlas_kite_session (reusing atlas.intraday.auth).
+it encrypted in atlas_foundation.atlas_kite_session (reusing atlas.intraday.auth).
 
 Credentials come from .env (chmod 600, gitignored):
   KITE_API_KEY, KITE_API_SECRET, KITE_TOKEN_ENCRYPTION_KEY,
@@ -94,7 +94,15 @@ def auto_login() -> str:
     # login step says this account expects rather than hardcoding.
     twofa_type = j["data"].get("twofa_type", "app_code")
 
-    # 2. twofa with the time-based code
+    # 2. twofa with the time-based code.
+    # Boundary safety: TOTP codes are valid for a 30s window. If we're in the last
+    # few seconds of a window, the code can roll over before Zerodha validates it
+    # (→ "Invalid App Code" even with the correct secret). Wait for a fresh window
+    # so the code we post always has ample validity in transit.
+    import time as _t
+
+    if 30 - int(_t.time()) % 30 < 6:
+        _t.sleep(6)
     code = pyotp.TOTP(totp_secret).now()
     r2 = s.post(
         "https://kite.zerodha.com/api/twofa",
@@ -108,7 +116,7 @@ def auto_login() -> str:
     )
     j2 = r2.json()
     if j2.get("status") != "success":
-        sys.exit(f"twofa failed: {j2.get('message', r2.text[:160])}")
+        sys.exit(f"twofa failed (twofa_type={twofa_type}): {j2.get('message', r2.text[:160])}")
 
     # 3. OAuth connect → capture request_token from the redirect chain
     try:

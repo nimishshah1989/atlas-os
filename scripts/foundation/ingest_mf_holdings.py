@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Atlas-owned Morningstar Fund-Holdings ingestion → foundation_staging.de_mf_holdings.
+"""Atlas-owned Morningstar Fund-Holdings ingestion → atlas_foundation.de_mf_holdings.
 
 Replaces the dead external data-engine pull (holdings were stuck at 2026-05-04 — the
 engine stopped fetching them ~8 weeks ago). Pulls Fund Holdings Detail PER FUND from
@@ -95,12 +95,12 @@ def main() -> None:
     conn = psycopg2.connect(DB)
     cur = conn.cursor()
     cur.execute(
-        "SELECT isin, instrument_id FROM foundation_staging.instrument_master "
+        "SELECT isin, instrument_id FROM atlas_foundation.instrument_master "
         "WHERE isin IS NOT NULL AND asset_class='stock'"
     )
     isin_map = {r[0]: r[1] for r in cur.fetchall()}
     cur.execute(
-        "SELECT DISTINCT mstar_id FROM foundation_staging.atlas_universe_funds "
+        "SELECT DISTINCT mstar_id FROM atlas_foundation.atlas_universe_funds "
         "WHERE mstar_id IS NOT NULL"
     )
     funds = [r[0] for r in cur.fetchall()]
@@ -141,10 +141,10 @@ def main() -> None:
             if i % 100 == 0:
                 print(f"  {i}/{len(funds)} ...", flush=True)
 
-    cur.execute("DELETE FROM foundation_staging.de_mf_holdings WHERE as_of_date=%s", (today,))
+    cur.execute("DELETE FROM atlas_foundation.de_mf_holdings WHERE as_of_date=%s", (today,))
     execute_values(
         cur,
-        "INSERT INTO foundation_staging.de_mf_holdings "
+        "INSERT INTO atlas_foundation.de_mf_holdings "
         "(id, mstar_id, as_of_date, holding_name, isin, instrument_id, weight_pct, "
         " shares_held, market_value, sector_code, is_mapped) VALUES %s",
         rows,

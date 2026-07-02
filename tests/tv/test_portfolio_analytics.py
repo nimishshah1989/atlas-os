@@ -3,7 +3,6 @@ from decimal import Decimal
 
 import numpy as np
 import pandas as pd
-
 from atlas.tv.portfolio_analytics import (  # type: ignore[import]
     _compute_alpha,
     _compute_beta,

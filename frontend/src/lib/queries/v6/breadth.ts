@@ -1,5 +1,5 @@
 // src/lib/queries/v6/breadth.ts
-// Native Nifty-500 breadth series — reads foundation_staging.breadth_nifty500_daily
+// Native Nifty-500 breadth series — reads atlas_foundation.breadth_nifty500_daily
 // (built from fs.technical_daily; 26y of daily counts above 21/50/200-EMA + momentum).
 // Powers the merged Markets Today page: the 3 breadth count charts + the SignalScorecard
 // breadth/momentum tiles. No atlas.* dependency.
@@ -24,7 +24,7 @@ export async function getBreadthSeries(years = 10): Promise<BreadthRow[]> {
     SELECT to_char(date, 'YYYY-MM-DD') AS date,
            n_members, above_21, above_50, above_200, gc_50_200, net_new_highs,
            avg_rsi_14, idx_ret_3m
-    FROM foundation_staging.breadth_nifty500_daily
+    FROM atlas_foundation.breadth_nifty500_daily
     WHERE date >= NOW() - (${years} || ' years')::INTERVAL
     ORDER BY date ASC
   `

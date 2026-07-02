@@ -42,8 +42,8 @@ const scoreColor = (v: number) => (v >= 60 ? 'var(--color-sig-pos)' : v >= 45 ? 
 
 function Chip({ n }: { n: DerivNode }) {
   if (n.decile != null) {
-    const c = decileColor(n.decile)
-    return <span className="rounded px-1.5 py-0.5 font-num text-[10px] font-semibold tabular-nums" style={{ background: `color-mix(in srgb, ${c} 20%, transparent)`, color: c }}>D{n.decile}</span>
+    // tinted text only — no pale chip fill (FM: less "Excel highlight")
+    return <span className="font-num text-[10px] font-semibold tabular-nums" style={{ color: decileColor(n.decile) }}>D{n.decile}</span>
   }
   if (n.score != null) return <span className="font-num text-[11px] tabular-nums text-txt-2">{n.score.toFixed(0)}<span className="text-[8px] text-txt-3">/100</span></span>
   return null
@@ -85,8 +85,25 @@ function NodeRow({ n, selected, onSelect }: { n: DerivNode; selected: boolean; o
     </span>
   ) : null
 
-  // nodes with children drill (button); leaves (variables / constituents) display in place.
-  if (hasKids) return <div><button type="button" onClick={onSelect} className={cls} aria-expanded={selected}>{labelEl}{right}</button>{bar}</div>
+  // nodes with children drill (role=button div — NOT a <button>, since the label may itself be a
+  // secondary <a> link, e.g. a constituent that both drills inline AND links to its stock page;
+  // a nested <a> in <button> is invalid HTML). leaves (variables) display in place.
+  if (hasKids)
+    return (
+      <div>
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={onSelect}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect() } }}
+          className={`${cls} cursor-pointer`}
+          aria-expanded={selected}
+        >
+          {labelEl}{right}
+        </div>
+        {bar}
+      </div>
+    )
   return <div><div className={`${cls} cursor-default`}>{labelEl}{right}</div>{bar}</div>
 }
 

@@ -22,8 +22,8 @@ from atlas.lenses.compute.thresholds_view import nest_thresholds
 
 SUBS = ["technical", "fundamental", "valuation", "catalyst", "flow", "policy"]
 HORIZONS = [21, 63, 126]
-SLD = "foundation_staging.sector_lens_daily"
-IDX = "foundation_staging.index_prices"
+SLD = "atlas_foundation.sector_lens_daily"
+IDX = "atlas_foundation.index_prices"
 SM = "atlas.atlas_sector_master"
 
 

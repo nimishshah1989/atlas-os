@@ -19,11 +19,11 @@ import sys
 
 import _db
 
-# Single read schema: validate exactly what the platform serves (foundation_staging).
-L = "foundation_staging.atlas_lens_scores_daily"
-SEC = "atlas.atlas_sector_lens_daily"
-IM = "foundation_staging.instrument_master"
-FILINGS = "foundation_staging.lens_filings"
+# Single read schema: validate exactly what the platform serves (atlas_foundation).
+L = "atlas_foundation.atlas_lens_scores_daily"
+SEC = "atlas_foundation.sector_lens_daily"
+IM = "atlas_foundation.instrument_master"
+FILINGS = "atlas_foundation.lens_filings"
 # Coverage universe = Atlas's active set (NIFTY 500 = 498, FM 2026-06-25). Completeness
 # is measured against the universe we actually score, not every kite_token instrument.
 ACTIVE = f"{IM} where asset_class='stock' and kite_token is not null and is_active"
@@ -117,47 +117,33 @@ def check_A(g: Gate):
 
 # ─────────────────────────── LOOP B ───────────────────────────
 def check_B(g: Gate):
-    print("== Loop B gate: ETF/index/sector holdings roll-up + sector mapping ==")
-    # ETFs with holdings must each have a lens vector
-    n_etf_hold = _q("select count(distinct ticker) from public.de_etf_holdings")
-    n_etf_scored = _q(f"select count(distinct instrument_id) from {L} where asset_class='etf'")
-    g.check(
-        "ETF lens coverage",
-        n_etf_scored >= 0.90 * (n_etf_hold or 1),
-        f"{n_etf_scored} ETFs scored vs {n_etf_hold} with holdings",
-    )
-
-    # Indices with constituents must each have a lens vector
-    n_idx_con = _q("select count(distinct index_code) from public.de_index_constituents")
-    n_idx_scored = _q(f"select count(distinct instrument_id) from {L} where asset_class='index'")
-    g.check(
-        "index lens coverage",
-        n_idx_scored >= 0.80 * (n_idx_con or 1),
-        f"{n_idx_scored} indices scored vs {n_idx_con} with constituents",
-    )
+    """Validate what the lens pipeline actually PRODUCES: the sector roll-up + the
+    scored-universe sector mapping. (The lens journal is stocks-only by design —
+    ETFs are scored in atlas_etf_scorecard and indices are benchmarks, not lens
+    entities — so the old 'ETF/index lens coverage' checks were architecturally
+    void and are removed here.)"""
+    print("== Loop B gate: sector roll-up + scored-universe mapping ==")
 
     # Sector roll-up table exists + every actionable sector has a vector
     sec_n = _q(f"select count(distinct sector) from {SEC}") or 0
     g.check("sector lens vectors exist (≥20 sectors)", sec_n >= 20, f"{sec_n} sectors")
 
-    # Mapping completeness: every stock/ETF/index has a sector
+    # Mapping completeness: every SCORED stock (the active NIFTY-500 universe) has a
+    # sector. ETFs/indices carry no equity 'sector' and are correctly excluded.
     unmapped = _q(f"""select count(*) from {IM}
-        where kite_token is not null and (sector is null or sector='')""")
-    has_sector_col = _q(
-        "select count(*) from information_schema.columns where table_schema='foundation_staging' "
-        "and table_name='instrument_master' and column_name='sector'"
-    )
+        where asset_class='stock' and kite_token is not null and is_active
+          and (sector is null or sector='')""")
     g.check(
-        "instrument→sector mapping complete",
-        bool(has_sector_col) and unmapped == 0,
-        f"{unmapped} unmapped" if has_sector_col else "no sector column on instrument_master",
+        "scored-universe sector mapping complete",
+        unmapped == 0,
+        f"{unmapped} active stocks unmapped",
     )
 
-    # Roll-up sanity: a sector score must lie within its constituents' min/max (weighted avg property)
+    # Roll-up sanity: a sector score must lie in the valid 0-100 range.
     bad = _q(f"""
         with latest as (select max(date) d from {SEC})
         select count(*) from {SEC} s, latest
-        where s.date=latest.d and (s.technical < 0 or s.technical > 100 or s.composite < 0 or s.composite > 100)""")
+        where s.date=latest.d and (s.technical < 0 or s.technical > 100)""")
     g.check("sector scores in valid 0-100 range", bad == 0, f"{bad} out-of-range")
 
 

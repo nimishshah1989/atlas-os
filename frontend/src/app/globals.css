@@ -44,11 +44,11 @@
   --color-txt-1:          #131922;   /* near-black cool slate */
   --color-txt-2:          #4B5666;   /* secondary */
   --color-txt-3:          #8A94A4;   /* tertiary / eyebrow labels */
-  --color-sig-pos:        #0C8A56;   /* RAG green — deep emerald, legible on white */
-  --color-sig-neg:        #D23A2E;   /* RAG red */
-  --color-sig-warn:       #B07A09;   /* RAG amber — gold, distinct from red on white */
-  --color-sig-pos-soft:   #0c8a5614;
-  --color-sig-neg-soft:   #d23a2e14;
+  --color-sig-pos:        #2D8561;   /* RAG green — MUTED emerald (FM: less "over-vomited excel") */
+  --color-sig-neg:        #B84D45;   /* RAG red — muted brick, less alarming */
+  --color-sig-warn:       #A07A2B;   /* RAG amber — muted gold */
+  --color-sig-pos-soft:   #2d856114;
+  --color-sig-neg-soft:   #b84d4514;
   --color-brand:          #2D63D8;   /* structural accent — links, RS lines (used sparingly) */
   --color-brand-soft:     #2d63d814;
 
@@ -73,6 +73,11 @@ html {
 
 [data-numeric], .tabular { font-variant-numeric: tabular-nums; }
 
+/* FM: data tables center every column EXCEPT the first (the label), which stays left-aligned.
+   Marker class on <table>; the descendant selectors out-specify Tailwind's per-cell text-* utilities. */
+.tbl-centered th, .tbl-centered td { text-align: center; }
+.tbl-centered th:first-child, .tbl-centered td:first-child { text-align: left; }
+
 /* ── Atlas v4 day/night themes ──────────────────────────────────────────────
    The decile ramp (coral → amber → mint) is theme-scoped so a decile reads on
    either surface; decileColor() returns var(--decile-N). Light is the default
@@ -80,9 +85,10 @@ html {
    in layout.tsx and flipped by the nav toggle. Flag-off pages never get
    data-theme, so the legacy paper theme is untouched. */
 :root {
-  /* RAG decile ramp (light) — red → gold → emerald, all deep enough to read on white */
-  --decile-1:  #D23A2E; --decile-2:  #CF5324; --decile-3:  #C26C12; --decile-4:  #B07A09; --decile-5:  #978410;
-  --decile-6:  #768A1E; --decile-7:  #4F8A34; --decile-8:  #2A8A4B; --decile-9:  #138C55; --decile-10: #0C8A56;
+  /* RAG decile ramp (light) — MUTED red → olive → green (desaturated ~50% so dense decile
+     tables read calm, not like a highlighted Excel sheet — FM feedback). */
+  --decile-1:  #AF635D; --decile-2:  #AD6F58; --decile-3:  #A77C4F; --decile-4:  #9E834A; --decile-5:  #91884E;
+  --decile-6:  #818B55; --decile-7:  #6D8B60; --decile-8:  #5B8B6B; --decile-9:  #4F8C70; --decile-10: #4C8B70;
 }
 
 html[data-theme="light"] { background-color: var(--color-surface-base); color: var(--color-txt-1); }
@@ -100,16 +106,16 @@ html[data-theme="dark"] {
   --color-txt-1:          #E8ECF1;
   --color-txt-2:          #99A3B2;
   --color-txt-3:          #5E6979;
-  --color-sig-pos:        #2FD68C;
-  --color-sig-neg:        #FB6A5E;
-  --color-sig-warn:       #F9B428;
-  --color-sig-pos-soft:   #2fd68c22;
-  --color-sig-neg-soft:   #fb6a5e22;
+  --color-sig-pos:        #4FC490;   /* MUTED mint (FM: calmer RAG) */
+  --color-sig-neg:        #DE7870;   /* muted coral */
+  --color-sig-warn:       #DDAC4A;   /* muted gold */
+  --color-sig-pos-soft:   #4fc49022;
+  --color-sig-neg-soft:   #de787022;
   --color-brand:          #5B9DF9;
   --color-brand-soft:     #5b9df922;
   --shadow-panel: 0 1px 0 0 #ffffff0f inset, 0 1px 2px 0 #00000066, 0 10px 30px -12px #000000b3;
   --shadow-tile:  0 1px 0 0 #ffffff0a inset, 0 1px 2px 0 #0000004d;
-  /* RAG decile ramp (dark) — coral → amber → mint, luminous on graphite */
-  --decile-1:  #FB6A5E; --decile-2:  #F9805A; --decile-3:  #F59A50; --decile-4:  #F2B246; --decile-5:  #E7C24A;
-  --decile-6:  #C6C85A; --decile-7:  #97CD6E; --decile-8:  #66D286; --decile-9:  #46D58C; --decile-10: #2FD68C;
+  /* RAG decile ramp (dark) — MUTED coral → olive → mint (desaturated ~50% — FM feedback). */
+  --decile-1:  #CA827C; --decile-2:  #C98D7A; --decile-3:  #C79A75; --decile-4:  #C6A670; --decile-5:  #C0AE72;
+  --decile-6:  #B0B17A; --decile-7:  #98B384; --decile-8:  #80B690; --decile-9:  #70B793; --decile-10: #64B893;
 }

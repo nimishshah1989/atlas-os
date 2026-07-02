@@ -1,6 +1,6 @@
 """Catalyst lens scorer — corporate filings / announcements signal.
 
-Pure function, no I/O.  Consumes filing dicts from foundation_staging.lens_filings
+Pure function, no I/O.  Consumes filing dicts from atlas_foundation.lens_filings
 and a thresholds dict; emits a CatalystResult with bucket subcomponents and a
 composite 0-100 score.
 """

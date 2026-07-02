@@ -428,9 +428,9 @@ def targets(universe: str, only_pending: bool, limit, symbols):
             {"s": symbols},
         )
     elif universe == "750":
-        df = _db.read_df("""select im.instrument_id, im.symbol from foundation_staging.instrument_master im
-            join atlas.atlas_universe_stocks u on u.instrument_id=im.instrument_id and u.effective_to is null
-            order by im.symbol""")
+        df = _db.read_df("""select instrument_id, symbol from atlas_foundation.instrument_master
+            where asset_class='stock' and kite_token is not null and is_active
+            order by symbol""")
     else:
         df = _db.read_df(
             f"select instrument_id, symbol from {M}.instrument_master "

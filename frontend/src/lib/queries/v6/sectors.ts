@@ -10,10 +10,10 @@
 // Rank is computed in-app by ordering on participation_rs desc.
 //
 // MV queries for /sectors (Page 04) and /sectors/[sector] (Page 04a):
-//   getSectorCards()      — foundation_staging.mv_sector_cards (latest snapshot, 30 rows)
-//   getSectorBreadthMV()  — foundation_staging.mv_sector_breadth (latest snapshot, 30 rows)
-//   getSectorRRG()        — foundation_staging.mv_sector_rrg (latest snapshot, 30 rows + trail_6w JSONB)
-//   getSectorDeepdive()   — foundation_staging.mv_sector_deepdive (single row per sector, ~30 total)
+//   getSectorCards()      — atlas_foundation.mv_sector_cards (latest snapshot, 30 rows)
+//   getSectorBreadthMV()  — atlas_foundation.mv_sector_breadth (latest snapshot, 30 rows)
+//   getSectorRRG()        — atlas_foundation.mv_sector_rrg (latest snapshot, 30 rows + trail_6w JSONB)
+//   getSectorDeepdive()   — atlas_foundation.mv_sector_deepdive (single row per sector, ~30 total)
 
 import 'server-only'
 import sql from '@/lib/db'
@@ -225,13 +225,13 @@ export async function getSectorCards(): Promise<SectorCardRow[]> {
       confidence_distribution,
       verdict,
       verdict_abbr
-    FROM foundation_staging.mv_sector_cards
+    FROM atlas_foundation.mv_sector_cards
     WHERE as_of_date = (
       -- Anchor to last fully-populated date. On a fresh trading day,
       -- rs_1m / ret_1w / ret_12m / breadth columns can lag rs_3m by one
       -- compute cycle. Picking MAX(as_of_date) blindly gives a partial row
       -- with empty 1W / 12M / breadth columns. Filter on rs_1m IS NOT NULL.
-      SELECT MAX(as_of_date) FROM foundation_staging.mv_sector_cards
+      SELECT MAX(as_of_date) FROM atlas_foundation.mv_sector_cards
       WHERE rs_1m IS NOT NULL AND ret_1w IS NOT NULL
     )
       AND LOWER(sector_name) NOT LIKE '%conglomerate%'
@@ -274,6 +274,7 @@ export type SectorConstituentMatrixRow = {
   name: string | null
   ret_1d: number | null; ret_1w: number | null; ret_1m: number | null
   ret_3m: number | null; ret_6m: number | null; ret_12m: number | null
+  ff_weight: number | null // free-float weight within the sector (% of sector free-float market cap)
 }
 
 // ALL sectors' constituents in ONE grouped query (not 21× per-sector) → keyed by sector for the
@@ -285,19 +286,32 @@ export async function getAllSectorConstituents(): Promise<Record<string, SectorC
     sector: string; symbol: string; name: string | null
     r1d: string | null; r1w: string | null; r1m: string | null
     r3m: string | null; r6m: string | null; r12m: string | null
+    ff_weight: string | null
   }>>`
     WITH latest AS (
-      SELECT max(date) d FROM foundation_staging.atlas_lens_scores_daily WHERE asset_class='stock'
+      SELECT max(date) d FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock'
+    ),
+    ff AS (  -- free-float market cap = market cap × non-promoter, non-ESOP share (sector concentration).
+             -- Shareholding required (INNER) so no name gets a fabricated 100%-free-float weight.
+      SELECT mc.instrument_id,
+        mc.market_cap * (100 - sh.promoter_pct - COALESCE(sh.employee_trusts_pct,0)) / 100.0 AS ff_mcap
+      FROM (SELECT DISTINCT ON (instrument_id) instrument_id, market_cap FROM atlas_foundation.screener_ratios
+            WHERE market_cap IS NOT NULL ORDER BY instrument_id, as_of DESC NULLS LAST) mc
+      JOIN (SELECT DISTINCT ON (instrument_id) instrument_id, promoter_pct, employee_trusts_pct
+            FROM atlas_foundation.lens_shareholding WHERE promoter_pct IS NOT NULL
+            ORDER BY instrument_id, period_end DESC) sh ON sh.instrument_id = mc.instrument_id
     )
     SELECT im.sector, im.symbol, im.name,
            td.ret_1d::float r1d, td.ret_1w::float r1w, td.ret_1m::float r1m,
-           td.ret_3m::float r3m, td.ret_6m::float r6m, td.ret_12m::float r12m
-    FROM foundation_staging.atlas_lens_scores_daily l
-    JOIN foundation_staging.instrument_master im ON im.instrument_id = l.instrument_id
-    LEFT JOIN foundation_staging.technical_daily td
+           td.ret_3m::float r3m, td.ret_6m::float r6m, td.ret_12m::float r12m,
+           round((100.0 * ff.ff_mcap / NULLIF(sum(ff.ff_mcap) OVER (PARTITION BY im.sector), 0))::numeric, 2) AS ff_weight
+    FROM atlas_foundation.atlas_lens_scores_daily l
+    JOIN atlas_foundation.instrument_master im ON im.instrument_id = l.instrument_id
+    LEFT JOIN atlas_foundation.technical_daily td
       ON td.instrument_id = l.instrument_id AND td.asset_class='stock' AND td.date=(SELECT d FROM latest)
+    LEFT JOIN ff ON ff.instrument_id = l.instrument_id
     WHERE l.asset_class='stock' AND l.date=(SELECT d FROM latest) AND im.sector IS NOT NULL
-    ORDER BY im.sector, td.ret_3m DESC NULLS LAST
+    ORDER BY im.sector, ff_weight DESC NULLS LAST
   `
   const out: Record<string, SectorConstituentMatrixRow[]> = {}
   for (const r of rows) {
@@ -305,6 +319,7 @@ export async function getAllSectorConstituents(): Promise<Record<string, SectorC
       sector: r.sector, symbol: r.symbol, name: r.name,
       ret_1d: toNumber(r.r1d), ret_1w: toNumber(r.r1w), ret_1m: toNumber(r.r1m),
       ret_3m: toNumber(r.r3m), ret_6m: toNumber(r.r6m), ret_12m: toNumber(r.r12m),
+      ff_weight: toNumber(r.ff_weight),
     })
   }
   return out
@@ -340,9 +355,9 @@ export async function getSectorBreadthMV(sectorName?: string): Promise<SectorBre
       breadth_by_strength,
       top_movers,
       bottom_movers
-    FROM foundation_staging.mv_sector_breadth
+    FROM atlas_foundation.mv_sector_breadth
     WHERE as_of_date = (
-      SELECT MAX(as_of_date) FROM foundation_staging.mv_sector_breadth
+      SELECT MAX(as_of_date) FROM atlas_foundation.mv_sector_breadth
     )
     ${sectorName != null ? sql`AND sector_name = ${sectorName}` : sql``}
     ORDER BY sector_name
@@ -379,7 +394,7 @@ export type SectorBreadthTrendRow = {
  * Per-sector % of constituents above the 21-EMA at three anchor dates: latest,
  * ~1 week ago (5 sessions back) and ~1 month ago (21 sessions back).
  *
- * Computed live from foundation_staging.technical_daily — no stored table / cron
+ * Computed live from atlas_foundation.technical_daily — no stored table / cron
  * (FM: no table sprawl). The 3 anchor dates are resolved first from the last 22
  * distinct trading dates so the aggregation touches exactly those 3 dates, never
  * the full history. Sector names join to instrument_master.sector, which matches
@@ -401,7 +416,7 @@ export async function getSectorBreadthTrend(): Promise<SectorBreadthTrendRow[]> 
         SELECT date, ROW_NUMBER() OVER (ORDER BY date DESC) AS rn
         FROM (
           SELECT DISTINCT date
-          FROM foundation_staging.technical_daily
+          FROM atlas_foundation.technical_daily
           WHERE asset_class = 'stock'
           ORDER BY date DESC
           LIMIT 22
@@ -413,8 +428,8 @@ export async function getSectorBreadthTrend(): Promise<SectorBreadthTrendRow[]> 
       AVG(CASE WHEN td.date = a.d_now THEN td.above_ema_21::int END)::text AS ema21_now,
       AVG(CASE WHEN td.date = a.d_1w  THEN td.above_ema_21::int END)::text AS ema21_1w,
       AVG(CASE WHEN td.date = a.d_1m  THEN td.above_ema_21::int END)::text AS ema21_1m
-    FROM foundation_staging.technical_daily td
-    JOIN foundation_staging.instrument_master im
+    FROM atlas_foundation.technical_daily td
+    JOIN atlas_foundation.instrument_master im
       ON im.instrument_id = td.instrument_id
     CROSS JOIN anchors a
     WHERE td.asset_class = 'stock'
@@ -454,12 +469,12 @@ export async function getSectorRRG(): Promise<SectorRRGRow[]> {
       r.quadrant_current,
       r.trail_6w,
       COALESCE(c.constituent_count, 0) AS constituent_count
-    FROM foundation_staging.mv_sector_rrg r
-    LEFT JOIN foundation_staging.mv_sector_cards c
+    FROM atlas_foundation.mv_sector_rrg r
+    LEFT JOIN atlas_foundation.mv_sector_cards c
       ON c.sector_name = r.sector_name
      AND c.as_of_date = r.as_of_date
     WHERE r.as_of_date = (
-      SELECT MAX(as_of_date) FROM foundation_staging.mv_sector_rrg
+      SELECT MAX(as_of_date) FROM atlas_foundation.mv_sector_rrg
     )
     ORDER BY r.sector_name
   `
@@ -509,7 +524,7 @@ export async function getSectorDeepdive(sectorName: string): Promise<SectorDeepd
       open_signals,
       strength_dist,
       top_picks_top10
-    FROM foundation_staging.mv_sector_deepdive
+    FROM atlas_foundation.mv_sector_deepdive
     WHERE sector_name = ${sectorName}
     LIMIT 1
   `
@@ -572,8 +587,8 @@ export async function getSectorsForDate(snapshotDate: string): Promise<ScreenSec
       m.bottomup_rs_3m_nifty500::text AS bottomup_rs_3m_nifty500,
       m.participation_50::text       AS participation_50,
       m.constituent_count
-    FROM foundation_staging.atlas_sector_states_daily s
-    LEFT JOIN foundation_staging.atlas_sector_metrics_daily m
+    FROM atlas_foundation.atlas_sector_states_daily s
+    LEFT JOIN atlas_foundation.atlas_sector_metrics_daily m
       ON m.sector_name = s.sector_name
      AND m.date        = s.date
     WHERE s.date = ${snapshotDate}

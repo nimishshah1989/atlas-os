@@ -5,6 +5,18 @@
 // fabricated hit rates, no aspirational "24-cell matrix" / conviction-% / auto-optimization claims.
 import { useState } from 'react'
 import { LensMindMap } from './LensMindMap'
+import { MethodologyTree } from '@/components/v6/admin/MethodologyTree'
+import { buildMethodology } from '@/lib/v6/methodologySpec'
+import type { LensWeightMap } from '@/lib/v6/sectorScore'
+import type { MethodologyThresholds } from '@/lib/queries/v6/methodology'
+
+// The live blend string from the weights — only the lenses that carry weight (e.g. the 2-lens model).
+function blendString(w: LensWeightMap): string {
+  const parts = ([
+    ['Technical', w.technical], ['Fundamental', w.fundamental], ['Flow', w.flow], ['Catalyst', w.catalyst],
+  ] as const).filter(([, x]) => x > 0).map(([n, x]) => `${x.toFixed(2)} ${n}`)
+  return parts.length ? parts.join(' + ') : '—'
+}
 
 // ── atoms ──────────────────────────────────────────────────────────────────
 function SectionHead({ kicker, title, sub }: { kicker: string; title: string; sub?: string }) {
@@ -50,7 +62,9 @@ function Hero() {
 }
 
 // ── 2. the nightly engine (accurate, qualitative — no fabricated counts) ─────
-const STEPS = [
+// The blend in step 3 is built from the LIVE weights, so it tracks the thresholds panel.
+function buildSteps(blend: string) {
+  return [
   {
     n: 1, label: 'Data comes in', sub: 'every weekday night',
     body: 'Fresh inputs land for the whole universe: NSE prices, volume and delivery; quarterly & annual financials plus ready ratios; exchange filings (announcements); insider deals, bulk deals and shareholding; and the latest monthly mutual-fund holdings.',
@@ -63,7 +77,7 @@ const STEPS = [
   },
   {
     n: 3, label: 'Lenses → conviction', sub: 'scoring',
-    body: 'Each of the six lenses is scored 0–100 from its sub-components. Four are blended — 0.30 Technical + 0.25 Fundamental + 0.25 Flow + 0.20 Catalyst — with a boost when lenses agree and a valuation multiplier, giving a 0–100 composite and a conviction tier. Valuation and Policy are context, not part of the blend.',
+    body: `Each of the six lenses is scored 0–100 from its sub-components. The scored lenses are blended — ${blend} — renormalised over the lenses present, with a boost when lenses agree and a valuation multiplier, giving a 0–100 composite and a conviction tier. Lenses with weight 0 (and Valuation and Policy) are context, not part of the blend.`,
     input: 'signals + thresholds', output: '0–100 composite + tier',
   },
   {
@@ -71,10 +85,12 @@ const STEPS = [
     body: 'The stock score is the atom. It rolls up free-float-weighted to sectors and holdings-weighted to funds and ETFs, so a fund’s lens read is literally its holdings’ scores weighted by position size. Results are materialised so the site is fresh each morning.',
     input: 'stock scores + weights', output: 'sector / fund / ETF scores',
   },
-]
+  ]
+}
 
-function EngineFlow() {
+function EngineFlow({ weights }: { weights: LensWeightMap }) {
   const [active, setActive] = useState(1)
+  const STEPS = buildSteps(blendString(weights))
   const step = STEPS.find((s) => s.n === active) ?? STEPS[0]
   return (
     <section className="px-8 py-12 border-b border-edge-hair bg-surface-panel">
@@ -152,12 +168,83 @@ function Honesty() {
   )
 }
 
-export function MethodologyV62() {
+// ── 3b. the expandable tree — every lens → sub-component → metric, with the calculation ──
+function DetailedTree({ weights }: { weights: LensWeightMap }) {
+  return (
+    <section className="px-8 py-12 border-b border-edge-hair">
+      <SectionHead kicker="Every node, expandable" title="The whole model, click to open"
+        sub="The conviction score breaks into its lenses, each into sub-components, each into the real metrics behind it — then how a single stock’s read rolls up to a sector, an ETF / fund, and a category ranking. Each metric’s definition is the same one behind its info-icon on the tables. Lens weights are live." />
+      <div className="max-w-[920px]">
+        <MethodologyTree roots={buildMethodology(weights)} />
+      </div>
+    </section>
+  )
+}
+
+// ── 3c. the live thresholds, straight from atlas_thresholds ──
+function ThresholdsPanel({ weights, thresholds }: { weights: LensWeightMap; thresholds: MethodologyThresholds }) {
+  const { convergence: cv, conviction: cn } = thresholds
+  const lensRows: { k: string; v: number }[] = [
+    { k: 'Technical', v: weights.technical }, { k: 'Fundamental', v: weights.fundamental },
+    { k: 'Flow', v: weights.flow }, { k: 'Catalyst', v: weights.catalyst },
+  ]
+  return (
+    <section className="px-8 py-12 border-b border-edge-hair bg-surface-panel">
+      <SectionHead kicker="Live values" title="Weights & thresholds"
+        sub="Read live from atlas_thresholds — the same row the scoring engine reads and the control panel edits. Change a value there and every score, and this page, move together." />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <Card accent="teal">
+          <div className="font-display text-[15px] font-medium text-txt-1 mb-2">Lens weights</div>
+          <table className="w-full font-num text-[12px] tabular-nums">
+            <tbody>
+              {lensRows.map((r) => (
+                <tr key={r.k} className="border-b border-edge-hair/60 last:border-0">
+                  <td className="py-1 text-txt-2">{r.k}</td>
+                  <td className="py-1 text-right text-txt-1">{r.v.toFixed(2)}</td>
+                  <td className="py-1 pl-2 text-right text-txt-3">{r.v > 0 ? `${Math.round(r.v * 100)}%` : 'context'}</td>
+                </tr>
+              ))}
+              <tr><td className="pt-1 text-txt-3 text-[11px]" colSpan={3}>Valuation &amp; Policy: context (weight 0)</td></tr>
+            </tbody>
+          </table>
+        </Card>
+        <Card accent="teal">
+          <div className="font-display text-[15px] font-medium text-txt-1 mb-2">Convergence boost</div>
+          <div className="font-sans text-[12px] leading-[1.6] text-txt-2">
+            Applied when scored lenses agree (each ≥ <span className="font-num text-txt-1">{cv.agreeMin}</span>):
+          </div>
+          <table className="mt-2 w-full font-num text-[12px] tabular-nums">
+            <tbody>
+              <tr className="border-b border-edge-hair/60"><td className="py-1 text-txt-2">2 lenses</td><td className="py-1 text-right text-txt-1">×{cv.boost2.toFixed(2)}</td></tr>
+              <tr className="border-b border-edge-hair/60"><td className="py-1 text-txt-2">3 lenses</td><td className="py-1 text-right text-txt-1">×{cv.boost3.toFixed(2)}</td></tr>
+              <tr><td className="py-1 text-txt-2">4+ lenses</td><td className="py-1 text-right text-txt-1">×{cv.boost4plus.toFixed(2)}</td></tr>
+            </tbody>
+          </table>
+        </Card>
+        <Card accent="teal">
+          <div className="font-display text-[15px] font-medium text-txt-1 mb-2">Conviction tiers</div>
+          <table className="w-full font-num text-[12px] tabular-nums">
+            <tbody>
+              <tr className="border-b border-edge-hair/60"><td className="py-1 text-sig-pos">HIGHEST</td><td className="py-1 text-right text-txt-1">≥ {cn.highestScore}, {cn.highestLayers}+ lenses</td></tr>
+              <tr className="border-b border-edge-hair/60"><td className="py-1 text-txt-1">HIGH</td><td className="py-1 text-right text-txt-1">≥ {cn.highScore}, {cn.highLayers}+</td></tr>
+              <tr className="border-b border-edge-hair/60"><td className="py-1 text-txt-2">MEDIUM</td><td className="py-1 text-right text-txt-1">≥ {cn.mediumScore}</td></tr>
+              <tr><td className="py-1 text-txt-2">WATCH</td><td className="py-1 text-right text-txt-1">≥ {cn.watchScore}</td></tr>
+            </tbody>
+          </table>
+        </Card>
+      </div>
+    </section>
+  )
+}
+
+export function MethodologyV62({ weights, thresholds }: { weights: LensWeightMap; thresholds: MethodologyThresholds }) {
   return (
     <div>
       <Hero />
-      <EngineFlow />
-      <LensMindMap />
+      <EngineFlow weights={weights} />
+      <LensMindMap weights={weights} thresholds={thresholds} />
+      <DetailedTree weights={weights} />
+      <ThresholdsPanel weights={weights} thresholds={thresholds} />
       <Rollups />
       <Honesty />
       <section className="px-8 py-10 bg-surface-panel">

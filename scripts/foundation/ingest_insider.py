@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ingest NSE SEBI PIT (insider trading disclosures) → foundation_staging.lens_insider.
+"""Ingest NSE SEBI PIT (insider trading disclosures) → atlas_foundation.lens_insider.
 
 Powers the Flow lens (insider sub-signal). Ported from jip-india.
 Resumable via lens_insider_state; safe to kill/restart.

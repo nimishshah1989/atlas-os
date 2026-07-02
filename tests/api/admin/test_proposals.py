@@ -14,13 +14,13 @@ os.environ.setdefault("ATLAS_AUTH_DISABLED", "true")
 from decimal import Decimal
 
 import pytest
+from atlas.api import app
+from atlas.intelligence.conviction.optimization.persistence import insert_proposal
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
-from atlas.api import app
 from atlas.config import Config
 from atlas.db import get_engine
-from atlas.intelligence.conviction.optimization.persistence import insert_proposal
 
 
 @pytest.fixture(scope="module")

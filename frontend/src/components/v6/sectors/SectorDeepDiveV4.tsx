@@ -3,7 +3,7 @@
 // charts (TV's Advanced-Chart embed refuses NSE index symbols), the constituents drill, top
 // picks, and strength distribution. Adds the native lens read, two 2x2s of the sector's
 // stocks, within-sector breadth, and sector fundamentals + fund-flow tables. All new data
-// from foundation_staging.
+// from atlas_foundation.
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Suspense } from 'react'
@@ -24,6 +24,7 @@ import { getSectorDeepdive } from '@/lib/queries/v6/sectors'
 import { getSectorRatioSeries } from '@/lib/queries/v6/sector_index_rs'
 import { getSectorLensVector, getSectorStocks, getSectorFundamentals, getSectorFundFlow } from '@/lib/queries/v6/sector_lens'
 import { getConstituentDrivers } from '@/lib/queries/v6/drivers'
+import { getConstituentLensTrees } from '@/lib/queries/v6/constituent_trees'
 
 function SectionHead({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
@@ -52,9 +53,11 @@ export async function SectorDeepDiveV4({ sector }: { sector: string }) {
   // score tree so the sector's lens scores read bottom-up from real constituent drivers.
   const drivers = await getConstituentDrivers(stocks.map((s) => s.symbol)).catch(() => ({}))
   const lensWeights = await getLensWeights().catch(() => undefined)
+  // Per-constituent lens→sub-component mini-trees (drill-to-atom: expand a name inline in the tree).
+  const constituentTrees = await getConstituentLensTrees(stocks.map((s) => s.symbol)).catch(() => ({}))
 
   return (
-    <div className="max-w-[1400px] mx-auto">
+    <div className="max-w-[1680px] mx-auto">
       <section className="px-8 py-8 border-b border-edge-hair">
         <nav className="font-sans text-[12px] text-txt-3 mb-3" aria-label="Breadcrumb">
           <Link href="/" className="text-brand hover:underline no-underline">Atlas</Link> ›{' '}
@@ -92,15 +95,21 @@ export async function SectorDeepDiveV4({ sector }: { sector: string }) {
               Click a lens to expand its constituents, ranked by contribution; each name links to its own evidence. The eye icon on any term explains it.
             </p>
           </div>
-          <ScoreDerivationTree root={sectorToDerivation(sector, lensVector, stocks, drivers, lensWeights)} />
+          <ScoreDerivationTree root={sectorToDerivation(sector, lensVector, stocks, drivers, lensWeights, constituentTrees)} />
         </section>
       )}
       {stocks.length > 0 && <SectorStock2x2 stocks={stocks} />}
       {stocks.length > 0 && <SectorBreadthWithin stocks={stocks} />}
 
-      {/* NEW: fundamentals + fund flow */}
-      {fundamentals && <SectorFundamentalsTable data={fundamentals} />}
-      {fundflow && <SectorFundFlowTable data={fundflow} />}
+      {/* Fundamentals + fund flow, side-by-side — both clickable to the within-sector drill */}
+      {(fundamentals || fundflow) && (
+        <section className="px-8 py-10 border-b border-edge-hair" aria-label="Sector fundamentals and fund flow">
+          <div className="grid lg:grid-cols-2 gap-x-14 gap-y-10">
+            {fundamentals && <SectorFundamentalsTable data={fundamentals} />}
+            {fundflow && <SectorFundFlowTable data={fundflow} />}
+          </div>
+        </section>
+      )}
 
       {/* Top-picks table removed (FM 2026-06-26) — redundant with the full constituents
           table below; that table already surfaces the strongest names by return/RS. */}
@@ -116,7 +125,7 @@ export async function SectorDeepDiveV4({ sector }: { sector: string }) {
       </section>
 
       <div className="px-8 py-6 font-sans text-[12px] text-txt-3 leading-[1.6]">
-        Native from <strong className="text-txt-2">foundation_staging</strong> — sector deep-dive, lens journal, financials, delivery.{' '}
+        Native from <strong className="text-txt-2">atlas_foundation</strong> — sector deep-dive, lens journal, financials, delivery.{' '}
         <Link href="/sectors" className="text-brand hover:underline">← Back to Sectors</Link>
       </div>
     </div>

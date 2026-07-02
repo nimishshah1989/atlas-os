@@ -11,6 +11,7 @@ as plain Python and emit only small summaries — the model never streams raw ro
 
 from __future__ import annotations
 
+import datetime as dt
 import os
 import re
 from functools import lru_cache
@@ -77,6 +78,23 @@ def engine() -> Engine:
 def _apply_timeout(conn) -> None:
     """SET LOCAL the statement_timeout for the current transaction (pooler-proof)."""
     conn.execute(text(f"SET LOCAL statement_timeout = '{_STMT_TIMEOUT_MS}'"))
+
+
+def eod_cutoff() -> dt.date:
+    """The last COMPLETE trading day to anchor EOD calculations on.
+
+    House rule (FM 2026-07-01): *all calculations are as of the last EOD; the current
+    day is for live/intraday only.* The scored layer must never ingest a partial
+    in-session candle. Returns today (IST) once the market has closed + a finalization
+    buffer (>= 16:00 IST), otherwise yesterday's calendar date. Callers then anchor to
+    the latest available data date <= this cutoff (which lands on the last trading day,
+    skipping weekends/holidays automatically)."""
+    ist = dt.timezone(dt.timedelta(hours=5, minutes=30))
+    now = dt.datetime.now(ist)
+    cutoff = now.date()
+    if now.hour < 16:  # before 16:00 IST → today is still live / in-session
+        cutoff = cutoff - dt.timedelta(days=1)
+    return cutoff
 
 
 def read_df(sql: str, params: dict | None = None) -> pd.DataFrame:

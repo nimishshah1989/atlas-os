@@ -2,12 +2,14 @@
 // ScoreDerivationTree model. Aggregate path (unlike a stock): Conviction → lens → CONSTITUENTS
 // (ranked by contribution = that name's lens decile × its weight if available, else by the decile),
 // each constituent linking to its own /stocks page (where its full instrument tree lives).
-// RULE #0: every number traces to a real foundation_staging query (sector_lens_daily +
+// RULE #0: every number traces to a real atlas_foundation query (sector_lens_daily +
 // per-constituent deciles) — no synthetic fallback; an absent datum renders as absence.
 import type { SectorLensVector, SectorStock } from '@/lib/queries/v6/sector_lens'
 import type { DerivRoot, DerivNode } from '@/components/v6/shared/ScoreDerivationTree'
 import type { LensDrivers } from '@/lib/queries/v6/drivers'
+import type { ConstituentLens } from '@/lib/queries/v6/constituent_trees'
 import { bandNodes } from './decileBands'
+import { constituentLensChildren } from './constituentTree'
 import { sectorComposite, compositeContributions, type LensWeightMap } from '@/lib/v6/sectorScore'
 
 // lens key → the driver field on LensDrivers (only the 4 conviction lenses have a per-name driver)
@@ -27,7 +29,7 @@ const LENSES: { key: keyof SectorLensVector; label: string; dkey: DKey | null; b
 ]
 
 const pct = (v: number | null) => (v == null ? null : `${(v <= 1 ? v * 100 : v).toFixed(0)}%`)
-export function sectorToDerivation(sector: string, vector: SectorLensVector, stocks: SectorStock[], drivers: Record<string, LensDrivers> = {}, weights?: LensWeightMap): DerivRoot {
+export function sectorToDerivation(sector: string, vector: SectorLensVector, stocks: SectorStock[], drivers: Record<string, LensDrivers> = {}, weights?: LensWeightMap, trees: Record<string, ConstituentLens> = {}): DerivRoot {
   const n = stocks.length
   // headline = the sector COMPOSITE (0–100), derived from the lens components — the same number
   // shown on the /sectors scores table. (Mean-decile "strength" is shown as a secondary read.)
@@ -57,6 +59,7 @@ export function sectorToDerivation(sector: string, vector: SectorLensVector, sto
               weight: null,
               value: dk ? (drivers[s.symbol]?.[dk] ?? null) : null,
               href: `/stocks/${s.symbol}`,
+              children: trees[s.symbol] ? constituentLensChildren(trees[s.symbol], weights) : undefined,
             })))
         : []
       const nWithDecile = l.dkey ? stocks.filter(s => (s[l.dkey!] as number | null) != null).length : n

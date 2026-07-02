@@ -135,7 +135,6 @@ def compute_composite(
     """
     th = thresholds
     weights = th.get("lens_weights", _DEFAULT_WEIGHTS)
-    conv_cfg = th.get("convergence", _DEFAULT_CONVERGENCE)
 
     raw_scores: dict[str, float | None] = {
         "technical": technical,
@@ -146,24 +145,31 @@ def compute_composite(
         "policy": policy,
     }
 
-    # Step 1: rescale all available lens scores
+    # Step 1: use RAW lens scores — no rescaling/transform (FM 2026-06-30: clean up scoring,
+    # the composite is just the plain weighted blend of the lens scores, identical to the
+    # fund/sector/ETF roll-up). Any non-null lens score counts (0 is a real low score).
     rescaled: dict[str, Decimal] = {}
     for lens in _ALL_LENS_NAMES:
         raw = raw_scores.get(lens)
-        if raw is not None and raw > 0:
-            bps = th.get(f"breakpoints_{lens}", BREAKPOINTS.get(lens, []))
-            rescaled[lens] = Decimal(str(round(_rescale(raw, bps), 4))).quantize(_Q2)
+        if raw is not None:
+            rescaled[lens] = Decimal(str(round(float(raw), 4))).quantize(_Q2)
 
     # Step 2: coverage-adjusted weighted average (valuation excluded from avg)
     active_weights: dict[str, float] = {}
     for lens in _LENS_NAMES:
         if lens in rescaled:
-            active_weights[lens] = weights.get(lens, _DEFAULT_WEIGHTS.get(lens, 0.0))
+            # default 0.0 (NOT the legacy _DEFAULT_WEIGHTS) — a lens absent from the live weight
+            # map carries NO weight, so weight-0 lenses can never leak into the blend.
+            active_weights[lens] = weights.get(lens, 0.0)
 
     lenses_active = len(active_weights)
     evidence: dict[str, Any] = {"lenses_active_names": list(active_weights.keys())}
 
-    if lenses_active == 0:
+    total_active_weight = sum(active_weights.values())
+    # No lens carrying a NON-ZERO weight is present (e.g. a name missing both Technical and
+    # Flow, the only weighted lenses) → no conviction reading. Degrade gracefully rather than
+    # dividing by zero (which previously dropped the instrument from the journal entirely).
+    if lenses_active == 0 or total_active_weight <= 0:
         return CompositeResult(
             base_composite=_ZERO,
             final_score=_ZERO,
@@ -174,49 +180,18 @@ def compute_composite(
             convergence_multiplier=Decimal(1),
             evidence=evidence,
         )
-
-    total_active_weight = sum(active_weights.values())
+    # PURE weighted average — Σ(w·score)/Σw over the weighted lenses present. NO coverage
+    # factor, NO convergence boost, NO valuation multiplier, NO smart-money / degradation
+    # add-ons (FM 2026-06-30: all multipliers stripped). final == base == the plain blend.
     normalized_avg = sum(
         float(rescaled[lens]) * (w / total_active_weight) for lens, w in active_weights.items()
     )
-    coverage_factor = math.sqrt(total_active_weight)
-    weighted_avg = normalized_avg * coverage_factor
-
+    coverage_factor = 1.0
+    conv_mult = 1.0
+    base_composite = _clamp(normalized_avg, 0.0, 100.0)
+    final = base_composite
     evidence["normalized_avg"] = round(normalized_avg, 4)
-    evidence["coverage_factor"] = round(coverage_factor, 4)
-    evidence["weighted_avg"] = round(weighted_avg, 4)
-
-    # Step 3: convergence bonus
-    conv_threshold = conv_cfg.get("threshold", 40)
-    converging = sum(
-        1
-        for lens, v in rescaled.items()
-        if lens not in _NON_CONVICTION and float(v) >= conv_threshold
-    )
-
-    if converging >= 4:
-        conv_mult = conv_cfg.get("4plus", 1.15)
-    elif converging >= 3:
-        conv_mult = conv_cfg.get("3", 1.10)
-    elif converging >= 2:
-        conv_mult = conv_cfg.get("2", 1.06)
-    else:
-        conv_mult = 1.0
-
-    base_composite = _clamp(weighted_avg * conv_mult, 0.0, 100.0)
-    evidence["converging_lenses"] = converging
-    evidence["convergence_multiplier"] = conv_mult
-
-    # Step 4: apply modifiers
-    val_mult = _clamp(valuation_multiplier, 0.75, 1.15)
-    final = _clamp(
-        base_composite * val_mult + smart_money_score + degradation_score,
-        0.0,
-        100.0,
-    )
-    evidence["valuation_multiplier"] = val_mult
-    evidence["smart_money_score"] = smart_money_score
-    evidence["degradation_score"] = degradation_score
+    evidence["multipliers"] = "stripped — pure weighted blend"
 
     # Step 5: conviction tier
     conviction = _determine_conviction(final, lenses_active, th)

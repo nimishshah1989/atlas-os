@@ -1,5 +1,5 @@
 // SectorsPageV4 — the Sectors list page (behind LENS_V4). All data native from
-// foundation_staging. Order: pulse + leading/lagging headline → 6-lens vector →
+// atlas_foundation. Order: pulse + leading/lagging headline → 6-lens vector →
 // multi-window heatmap (sortable, no verdict cruft) → breadth table → cap-tier RS
 // charts → RRG at the bottom.
 import { Suspense } from 'react'
@@ -77,7 +77,7 @@ export async function SectorsPageV4() {
   })
 
   return (
-    <div className="mx-auto max-w-[1280px] px-6 py-7 space-y-6">
+    <div className="mx-auto max-w-[1680px] px-6 py-7 space-y-6">
       {/* Header */}
       <div>
         <div className="font-num text-[11px] uppercase tracking-[0.14em] text-txt-3 mb-2">
@@ -144,7 +144,7 @@ export async function SectorsPageV4() {
       </Panel>
 
       <div className="font-sans text-[12px] text-txt-3 leading-[1.6]">
-        Native from <strong className="text-txt-2">foundation_staging</strong> — sector cards / RRG / breadth, index prices, and the lens journal.
+        Native from <strong className="text-txt-2">atlas_foundation</strong> — sector cards / RRG / breadth, index prices, and the lens journal.
       </div>
     </div>
   )

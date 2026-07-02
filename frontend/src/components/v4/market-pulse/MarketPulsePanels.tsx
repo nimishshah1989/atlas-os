@@ -1,5 +1,5 @@
 // Market Pulse — the dumb panel renderers (breadth, cap-tier, macro, sector
-// leadership, regime chip). All values arrive pre-fetched from foundation_staging;
+// leadership, regime chip). All values arrive pre-fetched from atlas_foundation;
 // these only format + lay out. Units per the market_pulse recon: tier returns &
 // spreads are FRACTIONS (×100 for display); macro values are already in `unit`.
 import type { TierReturns, MacroRow } from '@/lib/queries/v6/market_pulse'
@@ -62,7 +62,7 @@ export function BreadthTablePanel({ rows, total, asOf }: { rows: BreadthCountRow
       <p className="px-2 pb-2 font-sans text-[11.5px] leading-snug text-txt-2">
         Number of Nifty 500 stocks{total ? <> out of <span className="font-num tabular-nums text-txt-1">{fmtCount(total)}</span></> : ''} participating — compare today with a week and a month ago to see if breadth is widening or narrowing.
       </p>
-      <table className="w-full border-collapse">
+      <table className="tbl-centered w-full border-collapse">
         <thead>
           <tr className="border-b border-edge-hair">
             <Head>Metric</Head><Head right>Today</Head><Head right>1 wk ago</Head><Head right>1 mo ago</Head>
@@ -98,7 +98,7 @@ export function TierReturnsPanel({ data }: { data: TierReturns }) {
       <p className="px-2 pb-2 font-sans text-[11.5px] leading-snug text-txt-2">
         How each size band has performed. <span className="text-txt-1">SC−LC</span> / <span className="text-txt-1">MC−LC</span> are small- and mid-cap returns minus large-cap — positive means smaller companies are leading the market.
       </p>
-      <table className="w-full border-collapse">
+      <table className="tbl-centered w-full border-collapse">
         <thead>
           <tr className="border-b border-edge-hair">
             <Head>Window</Head><Head right>Small 250<TermInfo term="tier_return" /></Head><Head right>Mid 150<TermInfo term="tier_return" /></Head><Head right>Nifty 100<TermInfo term="tier_return" /></Head><Head right>SC−LC<TermInfo term="tier_return" /></Head><Head right>MC−LC<TermInfo term="tier_return" /></Head>
@@ -144,7 +144,7 @@ export function MacroPanel({ rows, asOf }: { rows: MacroRow[]; asOf: string | nu
       info={{ title: 'Macro context', body: 'The rates, currency and flow backdrop equities trade against. Δ 1m is the one-month change; green/red marks the direction of travel, not whether it helps or hurts.' }}
       bodyClassName="px-2 pb-3 pt-1"
     >
-      <table className="w-full border-collapse">
+      <table className="tbl-centered w-full border-collapse">
         <thead>
           <tr className="border-b border-edge-hair">
             <Head>Indicator</Head><Head right>Value</Head><Head right>Δ 1d</Head><Head right>Δ 1m</Head>

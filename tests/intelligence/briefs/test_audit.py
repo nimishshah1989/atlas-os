@@ -6,12 +6,12 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import text
-
-from atlas.db import get_engine
 from atlas.intelligence.briefs.audit import persist_brief
 from atlas.intelligence.briefs.context import DailyMarketContext
 from atlas.intelligence.briefs.generator import DailyBrief
+from sqlalchemy import text
+
+from atlas.db import get_engine
 
 
 @pytest.mark.integration

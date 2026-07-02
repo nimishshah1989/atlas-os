@@ -20,9 +20,9 @@ from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
+from atlas.api import app
 from fastapi.testclient import TestClient
 
-from atlas.api import app
 from atlas.config import Config
 
 _SERVICE_HEADERS = {"Authorization": "Bearer test-service-secret"}

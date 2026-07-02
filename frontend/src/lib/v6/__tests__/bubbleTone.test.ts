@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { quartileCuts, relativeTone } from '../bubbleTone'
 
-// REAL fund composites pulled from foundation_staging (snapshot 2026-06-26) — the actual values
+// REAL fund composites pulled from atlas_foundation (snapshot 2026-06-26) — the actual values
 // that made every bubble red under the old 60/45 cut. They cluster ~42–55 (rule #0: real data).
 const REAL_FUND_COMPOSITES = [
   48.34, 52.0, 50.51, 44.4, 43.85, 43.24, 42.94, 41.27, 39.33, 39.21, 37.87, 35.52,

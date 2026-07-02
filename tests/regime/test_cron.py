@@ -26,8 +26,6 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pandas as pd
 import pytest
-from sqlalchemy.engine import Engine
-
 from atlas.regime.classifier import RegimeState, RegimeThresholds
 from atlas.regime.cron import (
     _resolve_thresholds,
@@ -37,6 +35,7 @@ from atlas.regime.cron import (
     compute_smallcap_rs_z,
     compute_vix_percentile,
 )
+from sqlalchemy.engine import Engine
 
 # ---------------------------------------------------------------------------
 # Synthetic frame helpers

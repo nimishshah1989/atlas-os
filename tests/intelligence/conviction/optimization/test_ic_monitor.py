@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-
 from atlas.intelligence.conviction.optimization.ic_monitor import (
     DEFAULT_FORWARD_HORIZON,
     DEFAULT_LOOKBACK_DAYS,

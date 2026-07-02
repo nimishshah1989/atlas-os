@@ -10,9 +10,9 @@ the www.nseindia.com/api/* JSON endpoints):
   • Indices close-all                    — all index OHLC for the day
       content/indices/ind_close_all_<DDMMYYYY>.csv
 
-Stocks are matched to public.de_instrument by ISIN (then symbol) to obtain the
-instrument_id. ETFs are matched against the existing de_etf_ohlcv ticker set.
-Writes raw OHLCV into foundation_staging; adjustment + technicals run separately.
+Stocks are matched to the instrument master by ISIN (then symbol) to obtain the
+instrument_id. ETFs are matched against the existing ohlcv_etf ticker set.
+Writes raw OHLCV into atlas_foundation; adjustment + technicals run separately.
 
 Cost rule: pure-Python download/parse; emits only small counts.
 """
@@ -129,22 +129,36 @@ def parse_indices(raw: pd.DataFrame) -> pd.DataFrame:
 
 # ── Universe mapping ─────────────────────────────────────────────────────────
 def instrument_map() -> pd.DataFrame:
-    """de_instrument rows for matching bhavcopy symbols → instrument_id."""
+    """instrument_master rows for matching bhavcopy symbols → instrument_id."""
     return _db.read_df(
-        "select id as instrument_id, symbol, isin, nifty_500, is_active from public.de_instrument"
+        "select instrument_id, symbol, isin, is_active from atlas_foundation.instrument_master "
+        "where asset_class='stock'"
     )
 
 
 def etf_tickers() -> set[str]:
-    df = _db.read_df("select distinct ticker from public.de_etf_ohlcv")
+    df = _db.read_df("select distinct ticker from atlas_foundation.ohlcv_etf")
     return set(df["ticker"].astype(str).str.strip())
 
 
 # ── Write to staging ─────────────────────────────────────────────────────────
 def write_stocks(
-    parsed: pd.DataFrame, imap: pd.DataFrame, source: str, only_symbols: list[str] | None = None
+    parsed: pd.DataFrame,
+    imap: pd.DataFrame,
+    source: str,
+    only_symbols: list[str] | None = None,
+    allow: bool = False,
 ) -> int:
-    """Map equity rows to instrument_id and upsert into ohlcv_stock (adj=raw at ingest)."""
+    """Map equity rows to instrument_id and upsert into ohlcv_stock (adj=raw at ingest).
+
+    GUARDED (FM D10): stock OHLCV comes from Kite only. This refuses to run unless
+    `allow=True` is passed explicitly, so bhavcopy can never silently re-become the
+    stock price source."""
+    if not allow:
+        raise RuntimeError(
+            "bhavcopy is barred from writing ohlcv_stock (prices = Kite only, D10); "
+            "pass allow=True only for a deliberate, reviewed backfill"
+        )
     eq = parsed[parsed["series"].isin(["EQ", "BE", "BZ"])].copy()
     if only_symbols:
         eq = eq[eq["symbol"].isin(only_symbols)]
@@ -177,27 +191,43 @@ def write_stocks(
             "source": source,
         }
     )
-    return _db.upsert_df("foundation_staging.ohlcv_stock", out, ["instrument_id", "date"])
+    return _db.upsert_df("atlas_foundation.ohlcv_stock", out, ["instrument_id", "date"])
+
+
+# Source discipline (FM D10): prices come from Kite ONLY. Bhavcopy is barred from
+# writing stock/ETF OHLCV entirely, and may write index_prices ONLY for the handful
+# of broad indices Kite's historical API does not carry.
+KITE_LESS_INDICES = ("NIFTY SMALLCAP 250", "NIFTY MICROCAP 250", "NIFTY TOTAL MARKET")
 
 
 def write_indices(parsed: pd.DataFrame, source: str) -> int:
-    out = parsed.assign(source=source)
-    return _db.upsert_df("foundation_staging.index_prices", out, ["index_code", "date"])
+    # Only the indices Kite can't supply — everything else is Kite-sourced (single source).
+    out = parsed[parsed["index_code"].isin(KITE_LESS_INDICES)].assign(source=source)
+    if out.empty:
+        return 0
+    return _db.upsert_df("atlas_foundation.index_prices", out, ["index_code", "date"])
 
 
 def ingest_day(d: date, only_symbols: list[str] | None = None) -> dict:
-    raw_cm = download_cm(d)
-    raw_idx = download_indices(d)
-    stocks = parse_cm(raw_cm)
-    indices = parse_indices(raw_idx)
-    imap = instrument_map()
-    n_stock = write_stocks(stocks, imap, source="NSE_UDIFF_CM", only_symbols=only_symbols)
+    # Bhavcopy no longer sources stock/ETF prices (Kite is the single source, D10).
+    # It only fills the few broad indices Kite lacks. write_stocks() is retained but
+    # never called from the daily path — guarded to prevent accidental reintroduction.
+    # NSE's ind_close_all_<DDMMYYYY>.csv isn't published until the evening, so a post-close
+    # 16:00 run 404s. That's EXPECTED and NON-FATAL: bhavcopy only fills the 3 broad indices
+    # Kite lacks (Smallcap/Microcap/TotalMarket); they simply carry the prior session until a
+    # later run picks up the file. Skip gracefully rather than failing the whole orchestrator.
+    try:
+        indices = parse_indices(download_indices(d))
+    except Exception as e:
+        print(
+            f"[bhavcopy] index file for {d} unavailable ({type(e).__name__}); skipping", flush=True
+        )
+        return {"date": str(d), "index_rows": 0, "stocks_written": 0, "indices_written": 0}
     n_index = write_indices(indices, source="NSE_IND_CLOSE_ALL")
     return {
         "date": str(d),
-        "cm_rows": len(stocks),
         "index_rows": len(indices),
-        "stocks_written": n_stock,
+        "stocks_written": 0,  # bhavcopy barred from stock OHLCV (D10)
         "indices_written": n_index,
     }
 

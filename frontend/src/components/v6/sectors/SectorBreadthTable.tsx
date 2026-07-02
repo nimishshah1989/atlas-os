@@ -87,7 +87,7 @@ export function SectorBreadthTable({
 
   const NCOLS = 9
   return (
-    <table className="w-full text-right" data-testid="sector-breadth-table">
+    <table className="tbl-centered w-full text-right" data-testid="sector-breadth-table">
       <thead>
         <tr className="font-num text-[10px] text-txt-3 uppercase tracking-wider border-b border-edge-rule">
           <th className="text-left py-1.5 font-semibold pl-5">Sector</th>

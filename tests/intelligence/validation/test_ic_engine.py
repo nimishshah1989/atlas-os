@@ -3,7 +3,6 @@
 import numpy as np
 import pandas as pd
 import pytest
-
 from atlas.intelligence.validation.ic_engine import (
     ICResult,
     compute_ic_over_window,

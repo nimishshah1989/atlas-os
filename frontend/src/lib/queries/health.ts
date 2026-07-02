@@ -1,5 +1,5 @@
 // src/lib/queries/health.ts — M12 backend health observability queries.
-// Reads from atlas.atlas_pipeline_runs, atlas_validator_results, atlas_health_daily.
+// Reads from atlas_foundation.atlas_pipeline_runs, atlas_validator_results, atlas_health_daily.
 
 import 'server-only'
 import sql from '@/lib/db'
@@ -36,7 +36,7 @@ export async function getRecentRuns(limit = 30): Promise<PipelineRun[]> {
       error_message,
       host,
       EXTRACT(EPOCH FROM (ended_at - started_at))::int AS duration_seconds
-    FROM atlas.atlas_pipeline_runs
+    FROM atlas_foundation.atlas_pipeline_runs
     ORDER BY started_at DESC
     LIMIT ${limit}
   `
@@ -58,7 +58,7 @@ export async function getLatestRunPerScript(): Promise<PipelineRun[]> {
       error_message,
       host,
       EXTRACT(EPOCH FROM (ended_at - started_at))::int AS duration_seconds
-    FROM atlas.atlas_pipeline_runs
+    FROM atlas_foundation.atlas_pipeline_runs
     ORDER BY script_name, started_at DESC
   `
   return rows
@@ -75,31 +75,15 @@ export type TableFreshness = {
   lag_days: number | null
 }
 
+// The derived tables the live product serves — all in the single atlas_foundation schema.
 const TRACKED_TABLES: { schema: string; name: string; date_col: string | null }[] = [
-  { schema: 'atlas',        name: 'atlas_index_metrics_daily',   date_col: 'date' },
-  { schema: 'atlas',        name: 'atlas_sector_metrics_daily',  date_col: 'date' },
-  { schema: 'atlas',        name: 'atlas_sector_states_daily',   date_col: 'date' },
-  { schema: 'atlas',        name: 'atlas_market_regime_daily',   date_col: 'date' },
-  { schema: 'atlas',        name: 'atlas_stock_metrics_daily',   date_col: 'date' },
-  { schema: 'atlas',        name: 'atlas_stock_states_daily',    date_col: 'date' },
-  { schema: 'atlas',        name: 'atlas_etf_metrics_daily',     date_col: 'date' },
-  { schema: 'atlas',        name: 'atlas_etf_states_daily',      date_col: 'date' },
-  { schema: 'atlas',        name: 'atlas_fund_metrics_daily',    date_col: 'nav_date' },
-  { schema: 'atlas',        name: 'atlas_fund_lens_monthly',     date_col: 'as_of_date' },
-  { schema: 'atlas',        name: 'atlas_fund_states_daily',     date_col: 'date' },
-  { schema: 'atlas',        name: 'atlas_stock_decisions_daily', date_col: 'date' },
-  { schema: 'atlas',        name: 'atlas_etf_decisions_daily',   date_col: 'date' },
-  { schema: 'atlas',        name: 'atlas_fund_decisions_daily',  date_col: 'date' },
-  { schema: 'us_atlas',     name: 'stock_ohlcv',                 date_col: 'date' },
-  { schema: 'us_atlas',     name: 'atlas_etf_metrics_daily',     date_col: 'date' },
-  { schema: 'us_atlas',     name: 'atlas_etf_states_daily',      date_col: 'date' },
-  { schema: 'us_atlas',     name: 'atlas_stock_metrics_daily',   date_col: 'date' },
-  { schema: 'us_atlas',     name: 'atlas_stock_states_daily',    date_col: 'date' },
-  { schema: 'us_atlas',     name: 'atlas_market_regime_daily',   date_col: 'date' },
-  { schema: 'global_atlas', name: 'stock_ohlcv',                 date_col: 'date' },
-  { schema: 'global_atlas', name: 'atlas_etf_metrics_daily',     date_col: 'date' },
-  { schema: 'global_atlas', name: 'atlas_etf_states_daily',      date_col: 'date' },
-  { schema: 'global_atlas', name: 'atlas_market_regime_daily',   date_col: 'date' },
+  { schema: 'atlas_foundation', name: 'technical_daily',           date_col: 'date' },
+  { schema: 'atlas_foundation', name: 'atlas_lens_scores_daily',   date_col: 'date' },
+  { schema: 'atlas_foundation', name: 'sector_lens_daily',         date_col: 'date' },
+  { schema: 'atlas_foundation', name: 'fund_rank_daily',           date_col: 'date' },
+  { schema: 'atlas_foundation', name: 'atlas_index_metrics_daily', date_col: 'date' },
+  { schema: 'atlas_foundation', name: 'atlas_market_regime_daily', date_col: 'date' },
+  { schema: 'atlas_foundation', name: 'breadth_nifty500_daily',    date_col: 'date' },
 ]
 
 export async function getFreshness(): Promise<TableFreshness[]> {
@@ -108,7 +92,7 @@ export async function getFreshness(): Promise<TableFreshness[]> {
 
   return Promise.all(
     TRACKED_TABLES.map(async ({ schema, name, date_col }) => {
-      const display = schema === 'atlas' ? name : `${schema}.${name}`
+      const display = name
       if (date_col) {
         const rows = await sql<{ row_count: string; latest_date: Date | null }[]>`
           SELECT
@@ -193,9 +177,9 @@ export async function getFoundationFreshness(): Promise<FoundationFreshness[]> {
         SELECT
           (SELECT reltuples::bigint FROM pg_class
             JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace
-            WHERE nspname = 'foundation_staging' AND relname = ${t.table})::text AS row_count,
+            WHERE nspname = 'atlas_foundation' AND relname = ${t.table})::text AS row_count,
           MAX(${sql(t.date_col)}) AS latest_date
-        FROM foundation_staging.${sql(t.table)}
+        FROM atlas_foundation.${sql(t.table)}
       `.catch(() => [] as { row_count: string; latest_date: Date | null }[])
       const r = rows[0]
       const latest = r?.latest_date ? new Date(r.latest_date) : null
@@ -217,18 +201,19 @@ export function overallRag(rows: { rag: Rag }[]): Rag {
 }
 
 // ---------------------------------------------------------------------------
-// JIP source sync freshness — public.de_* tables
+// Data SOURCE freshness — the Atlas-owned raw/ingested tables (Kite prices, AMFI
+// NAV, Morningstar holdings, NSE delivery). All in the single atlas_foundation
+// schema (the legacy JIP public.de_* sources were retired).
 // ---------------------------------------------------------------------------
 
-const JIP_TABLES: { name: string; date_col: string }[] = [
-  { name: 'de_source_files',  date_col: 'created_at' },
-  { name: 'de_equity_ohlcv',  date_col: 'date' },
-  { name: 'de_index_prices',  date_col: 'date' },
-  { name: 'de_mf_nav_daily',  date_col: 'nav_date' },
-  { name: 'de_etf_ohlcv',     date_col: 'date' },
-  { name: 'de_global_prices', date_col: 'date' },
-  { name: 'de_etf_holdings',  date_col: 'as_of_date' },
-  { name: 'de_cron_run',      date_col: 'started_at' },
+const SOURCE_TABLES: { name: string; date_col: string }[] = [
+  { name: 'ohlcv_stock',     date_col: 'date' },
+  { name: 'ohlcv_etf',       date_col: 'date' },
+  { name: 'index_prices',    date_col: 'date' },
+  { name: 'de_mf_nav_daily', date_col: 'nav_date' },
+  { name: 'de_mf_holdings',  date_col: 'as_of_date' },
+  { name: 'de_etf_holdings', date_col: 'as_of_date' },
+  { name: 'delivery_daily',  date_col: 'date' },
 ]
 
 export async function getJipFreshness(): Promise<TableFreshness[]> {
@@ -236,15 +221,15 @@ export async function getJipFreshness(): Promise<TableFreshness[]> {
   today.setHours(0, 0, 0, 0)
 
   return Promise.all(
-    JIP_TABLES.map(async ({ name, date_col }) => {
-      // Use pg_stat_user_tables estimate for row count; MAX() is index-backed.
+    SOURCE_TABLES.map(async ({ name, date_col }) => {
+      // reltuples estimate for row count; MAX() is index-backed.
       const rows = await sql<{ row_count: string; latest_date: Date | null }[]>`
         SELECT
           (SELECT reltuples::bigint FROM pg_class
             JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace
-            WHERE nspname = 'public' AND relname = ${name})::text AS row_count,
+            WHERE nspname = 'atlas_foundation' AND relname = ${name})::text AS row_count,
           MAX(${sql(date_col)}) AS latest_date
-        FROM public.${sql(name)}
+        FROM atlas_foundation.${sql(name)}
       `
       const r = rows[0]
       const latest = r?.latest_date ? new Date(r.latest_date) : null
@@ -287,7 +272,7 @@ export type AnomalyRow = {
 export async function getLatestAnomalies(): Promise<AnomalyRow[]> {
   // Most-recent data_date that has any rows.
   const dateRows = await sql<{ d: Date | null }[]>`
-    SELECT MAX(data_date) AS d FROM atlas.atlas_health_daily
+    SELECT MAX(data_date) AS d FROM atlas_foundation.atlas_health_daily
   `
   const d = dateRows[0]?.d
   if (!d) return []
@@ -306,7 +291,7 @@ export async function getLatestAnomalies(): Promise<AnomalyRow[]> {
       is_anomaly,
       severity,
       notes
-    FROM atlas.atlas_health_daily
+    FROM atlas_foundation.atlas_health_daily
     WHERE data_date = ${d}
       AND is_anomaly = TRUE
     ORDER BY
@@ -323,7 +308,7 @@ export async function getLatestAnomalies(): Promise<AnomalyRow[]> {
 
 export async function getLatestHealthDate(): Promise<Date | null> {
   const r = await sql<{ d: Date | null }[]>`
-    SELECT MAX(data_date) AS d FROM atlas.atlas_health_daily
+    SELECT MAX(data_date) AS d FROM atlas_foundation.atlas_health_daily
   `
   return r[0]?.d ?? null
 }
@@ -350,7 +335,7 @@ export async function getValidatorHistory(days = 30): Promise<ValidatorRun[]> {
       total_checks,
       failures,
       status
-    FROM atlas.atlas_validator_results
+    FROM atlas_foundation.atlas_validator_results
     WHERE ran_at >= NOW() - (${days}::int * INTERVAL '1 day')
     ORDER BY validator, ran_at DESC
   `
@@ -367,7 +352,7 @@ export async function getValidatorLatest(): Promise<ValidatorRun[]> {
       total_checks,
       failures,
       status
-    FROM atlas.atlas_validator_results
+    FROM atlas_foundation.atlas_validator_results
     ORDER BY validator, ran_at DESC
   `
   return rows
@@ -386,19 +371,19 @@ export type HealthHeaderStatus = {
 export async function getHeaderStatus(): Promise<HealthHeaderStatus> {
   const [hcRows, anomRows, valRows] = await Promise.all([
     sql<{ ts: Date | null }[]>`
-      SELECT MAX(computed_at) AS ts FROM atlas.atlas_health_daily
+      SELECT MAX(computed_at) AS ts FROM atlas_foundation.atlas_health_daily
     `,
     sql<{ severity: string; n: string }[]>`
       SELECT severity, COUNT(*)::text AS n
-      FROM atlas.atlas_health_daily
-      WHERE data_date = (SELECT MAX(data_date) FROM atlas.atlas_health_daily)
+      FROM atlas_foundation.atlas_health_daily
+      WHERE data_date = (SELECT MAX(data_date) FROM atlas_foundation.atlas_health_daily)
         AND is_anomaly = TRUE
       GROUP BY severity
     `,
     // Latest result per validator — prevents old test runs from inflating FAIL count.
     sql<{ validator: string; status: string }[]>`
       SELECT DISTINCT ON (validator) validator, status
-      FROM atlas.atlas_validator_results
+      FROM atlas_foundation.atlas_validator_results
       ORDER BY validator, ran_at DESC
     `,
   ])

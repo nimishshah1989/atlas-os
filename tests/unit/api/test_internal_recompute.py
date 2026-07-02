@@ -57,6 +57,7 @@ def mock_engine() -> MagicMock:
 def client(mock_engine: MagicMock) -> Any:
     """TestClient with get_engine overridden to a MagicMock."""
     from atlas.api.internal_recompute import app
+
     from atlas.db import get_engine
 
     app.dependency_overrides[get_engine] = lambda: mock_engine
@@ -134,6 +135,7 @@ class TestConcurrencyCheck:
         engine_mock = _make_engine_mock(existing_run_id=existing)
 
         from atlas.api.internal_recompute import app
+
         from atlas.db import get_engine
 
         app.dependency_overrides[get_engine] = lambda: engine_mock
@@ -158,6 +160,7 @@ class TestConcurrencyCheck:
         engine_mock = _make_engine_mock(existing_run_id=existing)
 
         from atlas.api.internal_recompute import app
+
         from atlas.db import get_engine
 
         app.dependency_overrides[get_engine] = lambda: engine_mock
@@ -237,6 +240,7 @@ class TestHappyPath:
         mock_file.__exit__.return_value = None
 
         from atlas.api.internal_recompute import app
+
         from atlas.db import get_engine
 
         app.dependency_overrides[get_engine] = lambda: engine_mock

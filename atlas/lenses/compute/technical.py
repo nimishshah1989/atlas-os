@@ -1,8 +1,11 @@
 """Technical lens scorer — pure function, no I/O.
 
-Computes a 0-100 composite from four subcomponents:
-Trend (0-25) | Relative Strength (0-25) | Vol Contraction (0-25) | Volume (0-25)
-"""  # allow-large: four dense scoring sub-functions
+Computes a 0-100 composite from TWO subcomponents (FM 2026-06-30 — Volatility-contraction
+and Volume removed; RSI dropped from Trend):
+  Trend (0-25, EMA stack + price-vs-EMA200 + slope, rescaled ×1.25)
+  Relative Strength (0-25, EMA structure: EMA50>EMA200 → 10, EMA21>EMA50 → 15)
+Lens = mean(present subs) × 4 = (Trend + RS) × 2.
+"""  # allow-large: dense scoring sub-functions
 
 from __future__ import annotations
 
@@ -33,31 +36,35 @@ def _score_trend(
     ret_1w: float | None,
     th: dict[str, Any],
 ) -> tuple[Decimal | None, dict[str, Any]]:
-    if ema_21 is None or ema_50 is None or ema_200 is None or price is None:
+    # Young stocks lack EMA200 — still score on EMA21/50 + slope (the EMA200-dependent terms
+    # just don't fire). Need at least EMA21 + EMA50 + price.
+    if ema_21 is None or ema_50 is None or price is None:
         return None, {"trend": "insufficient data"}
     pts, ev = 0, {}
+    has200 = ema_200 is not None
     # EMA alignment
-    if ema_21 > ema_50 > ema_200:
+    if has200 and ema_21 > ema_50 > ema_200:
         pts += th.get("ema_aligned_all", 10)
         ev["ema_alignment"] = "bullish"
-    elif ema_21 > ema_50 or ema_50 > ema_200:
+    elif ema_21 > ema_50 or (has200 and ema_50 > ema_200):
         pts += th.get("ema_aligned_partial", 6)
         ev["ema_alignment"] = "partial"
     else:
         ev["ema_alignment"] = "inverted"
-    # Price vs EMA-200
-    pct = (price - ema_200) / ema_200 if ema_200 != 0 else 0
-    if pct > th.get("price_above_ema200_strong", 0.05):
-        pts += 5
-        ev["price_vs_ema200"] = "strong_above"
-    elif pct > 0:
-        pts += 3
-        ev["price_vs_ema200"] = "above"
-    elif pct > th.get("price_below_ema200_weak", -0.05):
-        pts += 1
-        ev["price_vs_ema200"] = "slightly_below"
-    else:
-        ev["price_vs_ema200"] = "well_below"
+    # Price vs EMA-200 (only when EMA200 exists)
+    if has200:
+        pct = (price - ema_200) / ema_200 if ema_200 != 0 else 0
+        if pct > th.get("price_above_ema200_strong", 0.05):
+            pts += 5
+            ev["price_vs_ema200"] = "strong_above"
+        elif pct > 0:
+            pts += 3
+            ev["price_vs_ema200"] = "above"
+        elif pct > th.get("price_below_ema200_weak", -0.05):
+            pts += 1
+            ev["price_vs_ema200"] = "slightly_below"
+        else:
+            ev["price_vs_ema200"] = "well_below"
     # EMA-21 slope proxy
     if ret_1w is not None:
         if ret_1w > th.get("slope_strong_pct", 0.02):
@@ -71,91 +78,43 @@ def _score_trend(
         else:
             pts += 1
             ev["ema21_slope"] = "flat_down"
-    # RSI context
-    if rsi_14 is not None:
-        if 50 <= rsi_14 <= 70:
-            pts += 5
-            ev["rsi_zone"] = "healthy"
-        elif 30 <= rsi_14 < 50:
-            pts += 3
-            ev["rsi_zone"] = "recovery"
-        elif rsi_14 > 70:
-            pts += 2
-            ev["rsi_zone"] = "extended"
-        else:
-            pts += 1
-            ev["rsi_zone"] = "oversold"
+    # RSI term REMOVED (FM 2026-06-30). The remaining components (EMA stack + price-vs-EMA200
+    # + slope) max out at 20; rescale ×1.25 so a perfect trend still tops out at 25.
+    pts = pts * 1.25
+    ev["rescaled_x1_25"] = True
     return Decimal(_cap(pts)).quantize(_Q2), ev
 
 
-def _rs_composite(rs_1m, rs_3m, rs_6m, rs_12m, wt) -> tuple[float | None, float]:
-    """Weighted RS composite over the horizons present; returns (comp, total_w)."""
-    pairs = [
-        (rs_3m, wt.get("3m", 0.4)),
-        (rs_1m, wt.get("1m", 0.3)),
-        (rs_6m, wt.get("6m", 0.2)),
-        (rs_12m, wt.get("12m", 0.1)),
-    ]
-    total_w, comp = 0.0, 0.0
-    for val, w in pairs:
-        if val is not None:
-            comp += val * w
-            total_w += w
-    return (comp / total_w if total_w else None), total_w
-
-
 def _score_relative_strength(
-    rs_1m: float | None,
-    rs_3m: float | None,
-    rs_6m: float | None,
-    rs_12m: float | None,
+    ema_21: float | None,
+    ema_50: float | None,
+    ema_200: float | None,
     th: dict[str, Any],
-    rs_1m_sector: float | None = None,
-    rs_3m_sector: float | None = None,
-    rs_6m_sector: float | None = None,
-    rs_12m_sector: float | None = None,
 ) -> tuple[Decimal | None, dict[str, Any]]:
-    wt = th.get("rs_weights", {"3m": 0.40, "1m": 0.30, "6m": 0.20, "12m": 0.10})
-    # Market-relative RS (vs NIFTY 500) is the headline. Sector-relative RS, when
-    # available (rs_*_sector — populated in Loop C from the stock's sector index),
-    # is blended in 50/50 so a name that leads BOTH the market and its sector
-    # scores higher than one that only beats a weak sector. RS values are ratios
-    # around 1.0, so 1.0 means "in line"; blending uses the same scale.
-    comp_n500, _ = _rs_composite(rs_1m, rs_3m, rs_6m, rs_12m, wt)
-    comp_sec, _ = _rs_composite(rs_1m_sector, rs_3m_sector, rs_6m_sector, rs_12m_sector, wt)
-    if comp_n500 is None and comp_sec is None:
-        return None, {"rs": "no data"}
-    if comp_n500 is not None and comp_sec is not None:
-        comp = (comp_n500 + comp_sec) / 2.0
-    else:
-        comp = comp_n500 if comp_n500 is not None else comp_sec
-    ev: dict[str, Any] = {
-        "rs_composite": round(comp, 4),
-        "rs_n500": None if comp_n500 is None else round(comp_n500, 4),
-        "rs_sector": None if comp_sec is None else round(comp_sec, 4),
-    }
-    # Tier mapping — RS values are return DIFFERENCES vs the benchmark (stock
-    # trailing return − benchmark trailing return, a fraction centered on 0; see
-    # scripts/foundation/technicals.py:compute_relative_strength), NOT ratios
-    # around 1.0. The old 1.15/1.08/… ratio thresholds never matched the 0-centered
-    # data, so RS scored 0 for ~99% of names (a silent-zero lens defect; tech_rs
-    # was 0 for 2075/2090 on 2026-06-19). Difference-scale breakpoints below:
-    # +0.15 ≈ 15pp outperformance over the blended horizon.
-    tiers = [
-        (th.get("rs_top10", 0.15), 25, "top10"),
-        (th.get("rs_top20", 0.08), 20, "top20"),
-        (th.get("rs_top40", 0.02), 15, "top40"),
-        (th.get("rs_bot20", -0.08), 10, "mid"),
-        (th.get("rs_bot10", -0.15), 5, "bot20"),
-    ]
+    """RS sub-score (0-25) — EMA-STRUCTURE based (FM 2026-06-30).
+
+    Redefined from the old return-vs-benchmark RS to a pure moving-average alignment
+    read: a stock in a healthy uptrend has its EMAs stacked. EMA50 > EMA200 (golden
+    cross / long-term up) → 10; EMA21 > EMA50 (medium-term up) → 15. Max 25. Needs all
+    three EMAs; returns None (no data) if any is missing.
+    """
+    # Young stocks (recent IPOs) lack a 200-day EMA — they should STILL score, not blank.
+    # Need at least EMA21 + EMA50; the golden-cross term simply can't fire until EMA200 exists.
+    if ema_21 is None or ema_50 is None:
+        return None, {"rs": "no ema data"}
     pts = 0
-    for threshold, score, label in tiers:
-        if comp >= threshold:
-            pts = score
-            ev["rs_tier"] = label
-            break
-    else:
-        ev["rs_tier"] = "bot10"
+    golden = ema_200 is not None and ema_50 > ema_200
+    fast = ema_21 > ema_50
+    if golden:
+        pts += int(th.get("rs_golden_cross_pts", 10))
+    if fast:
+        pts += int(th.get("rs_fast_above_mid_pts", 15))
+    ev = {
+        "ema50_gt_ema200": golden,
+        "ema21_gt_ema50": fast,
+        "rs_pts": pts,
+        "ema200": ema_200 is not None,
+    }
     return Decimal(pts).quantize(_Q2), ev
 
 
@@ -287,21 +246,13 @@ def score_technical(
     """
     th = thresholds
     trend, t_ev = _score_trend(ema_21, ema_50, ema_200, price, rsi_14, ret_1w, th)
-    rs, rs_ev = _score_relative_strength(
-        rs_1m_n500,
-        rs_3m_n500,
-        rs_6m_n500,
-        rs_12m_n500,
-        th,
-        rs_1m_sector,
-        rs_3m_sector,
-        rs_6m_sector,
-        rs_12m_sector,
-    )
-    vc, vc_ev = _score_vol_contraction(atr_14, price, bb_width, th)
-    vol, v_ev = _score_volume(vol_ratio_30d, vol_ratio_60d, pos_52w, th)
-    evidence = {"trend": t_ev, "relative_strength": rs_ev, "vol_contraction": vc_ev, "volume": v_ev}
-    subs = [s for s in (trend, rs, vc, vol) if s is not None]
+    # RS is now EMA-structure based; Volatility-contraction and Volume are REMOVED from the
+    # Technical lens (FM 2026-06-30). With two present sub-scores (each 0-25), the lens is
+    # mean(trend, rs) × 4 = (trend + rs) × 2 → 0-100.
+    rs, rs_ev = _score_relative_strength(ema_21, ema_50, ema_200, th)
+    vc, vol = None, None
+    evidence = {"trend": t_ev, "relative_strength": rs_ev}
+    subs = [s for s in (trend, rs) if s is not None]
     composite = (
         (sum(subs) / len(subs) * Decimal(4)).quantize(_Q2, rounding=ROUND_HALF_UP) if subs else None
     )

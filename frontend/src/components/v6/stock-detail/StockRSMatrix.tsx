@@ -1,6 +1,6 @@
 // StockRSMatrix — the always-visible RS matrix for the v4 stock detail page.
 // Rows {Nifty 50, Nifty 500, Sector} × cols {1D,1W,1M,3M,6M,12M}, color-scaled
-// (green positive / red negative pp), "—" for null. Native foundation_staging
+// (green positive / red negative pp), "—" for null. Native atlas_foundation
 // (technical_daily) via getStockRSMatrix(). Server component.
 // Color-scale mirrors RSWindowsTable so the whole app reads the same.
 import type { RSMatrix } from '@/lib/queries/v6/stock_lens'
@@ -90,7 +90,7 @@ export function StockRSMatrix({ matrix }: { matrix: RSMatrix }) {
         </table>
         <div className="px-4 py-2 border-t border-edge-hair bg-surface-panel">
           <p className="font-sans text-[11px] text-txt-3">
-            From <strong className="text-txt-2">foundation_staging.technical_daily</strong>. Sector row covers 1M–12M (1D/1W not stored).
+            From <strong className="text-txt-2">atlas_foundation.technical_daily</strong>. Sector row covers 1M–12M (1D/1W not stored).
           </p>
         </div>
       </div>

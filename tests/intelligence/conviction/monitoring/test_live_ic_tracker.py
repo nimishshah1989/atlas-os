@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-
 from atlas.intelligence.conviction.monitoring.live_ic_tracker import (
     DEFAULT_FORWARD_HORIZON,
     DEFAULT_LOOKBACK_DAYS,

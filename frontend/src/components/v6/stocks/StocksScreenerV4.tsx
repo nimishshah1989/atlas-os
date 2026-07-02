@@ -19,7 +19,7 @@ import { TermInfo } from '@/components/v6/shared/TermInfo'
 const decileStyle = (d: number | null) => ({ color: d == null ? 'var(--color-txt-3)' : decileColor(d) })
 
 const leadText = (lead: number) =>
-  lead >= 2 ? 'text-sig-pos' : lead === 1 ? 'text-sig-warn' : 'text-txt-3'
+  lead >= 1 ? 'text-sig-pos' : 'text-txt-3'  // leader = top-decile composite (0/1)
 
 const pctText = (v: number | null) =>
   v == null ? 'text-txt-3' : v >= 0 ? 'text-sig-pos' : 'text-sig-neg'
@@ -45,7 +45,7 @@ const LENS_FOCUS: { label: string; key: LensKey | null }[] = [
 // ── smart screens (one active at a time) ──────────────────────────────────
 type ScreenId = 'leaders' | 'cheap' | 'accum' | 'catalyst' | 'breakout' | 'quality'
 const SCREENS: { id: ScreenId; label: string; pred: (s: StockListRow) => boolean }[] = [
-  { id: 'leaders', label: 'Leaders (Tech & Flow)', pred: s => s.lead >= 2 },
+  { id: 'leaders', label: 'Leaders (top-decile)', pred: s => s.lead >= 1 },
   { id: 'cheap', label: 'Cheap & strong', pred: s => (s.d_val ?? 0) >= 8 && (s.strength ?? 0) >= 7 },
   { id: 'accum', label: 'Rising accumulation', pred: s => (s.d_flow ?? 0) >= 8 },
   { id: 'catalyst', label: 'Fresh catalyst', pred: s => (s.d_cat ?? 0) >= 8 },
@@ -279,7 +279,7 @@ export function StocksScreenerV4({ stocks }: { stocks: StockListRow[] }) {
 
         {/* (C) decile table */}
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
+          <table className="tbl-centered w-full border-collapse">
             <thead>
               <tr className="border-b border-edge-rule">
                 {COLS.map(col => {
@@ -322,7 +322,7 @@ export function StocksScreenerV4({ stocks }: { stocks: StockListRow[] }) {
                     <td className="py-1.5 px-2 text-right font-num text-[12px] tabular-nums text-txt-2">
                       {s.strength == null ? '—' : s.strength.toFixed(1)}
                     </td>
-                    <td className={`py-1.5 px-2 text-right font-num text-[12px] tabular-nums ${leadText(s.lead)}`}>{s.lead}/2</td>
+                    <td className={`py-1.5 px-2 text-right font-num text-[12px] tabular-nums ${leadText(s.lead)}`}>{s.lead >= 1 ? 'Leader' : '—'}</td>
 
                     <td className={`py-1.5 px-2 text-right font-num text-[12px] tabular-nums ${pctText(s.rs_1m)}`}>{fmtPct(s.rs_1m)}</td>
                     <td className={`py-1.5 px-2 text-right font-num text-[12px] tabular-nums ${pctText(s.rs_3m)}`}>{fmtPct(s.rs_3m)}</td>

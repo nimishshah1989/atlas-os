@@ -1,5 +1,5 @@
 // Admin · Thresholds — the methodology control panel (edit knobs + recompute). Reuses the same
-// ThresholdsPanelV4 over foundation_staging.atlas_thresholds.
+// ThresholdsPanelV4 over atlas_foundation.atlas_thresholds.
 export const dynamic = 'force-dynamic'
 
 import { getThresholds } from '@/lib/queries/v6/thresholds'
@@ -10,7 +10,7 @@ export default async function AdminThresholdsPage() {
   return (
     <div>
       <p className="mb-4 max-w-[820px] font-sans text-[14px] text-txt-2">
-        Every threshold and weight the scoring uses, live from <strong className="text-txt-1">foundation_staging.atlas_thresholds</strong>.
+        Every threshold and weight the scoring uses, live from <strong className="text-txt-1">atlas_foundation.atlas_thresholds</strong>.
         Edit within each knob’s allowed range, <strong className="text-txt-1">Save</strong>, then <strong className="text-txt-1">Preview</strong> the
         impact and <strong className="text-txt-1">Commit</strong> to re-blend the live composite from the cached lens scores. {rows.length} active knobs.
       </p>

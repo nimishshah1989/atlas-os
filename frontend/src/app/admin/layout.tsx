@@ -5,7 +5,7 @@ import { AdminTabNav } from '@/components/v6/admin/AdminTabNav'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mx-auto max-w-[1100px] px-6 py-7">
+    <div className="mx-auto max-w-[1440px] px-6 py-7">
       <div className="mb-4">
         <div className="mb-2 font-num text-[11px] uppercase tracking-[0.14em] text-txt-3">
           <a href="/" className="text-brand no-underline hover:underline">Atlas</a> › Admin

@@ -1,4 +1,4 @@
-// FundsPageV4 — lens-first /funds. All data native foundation_staging.
+// FundsPageV4 — lens-first /funds. All data native atlas_foundation.
 // The list is a FUNNEL into the fund roll-up atom. Funds are a holdings-weighted roll-up of
 // the stock atom (D26/D27): the headline strip is LEADERSHIP-BREADTH, and the score/rank is a
 // DERIVED composite of the same holdings-weighted lenses (fundScore.ts) — the same blend used for
@@ -6,8 +6,10 @@
 // scores — explicitly NOT an outperformance predictor. The fund-specific differentiator (on each
 // detail page) is ACTIVE-MOVEMENT: month-over-month holdings deltas.
 // Order: 1. leadership-breadth strip + a few top cards · 2. the sortable lens table.
-import { getFundLensList, type FundLensRow } from '@/lib/queries/v6/fund_lens'
+import { getFundLensList, getFundsAsOf, type FundLensRow } from '@/lib/queries/v6/fund_lens'
 import { getLensWeights } from '@/lib/queries/v6/lens_weights'
+import { getFundRankHistory } from '@/lib/queries/v6/fund_rank_history'
+import { getFundRsMatrix, getFundHoldingsEma, getFundGoldenCross, getFundReturns } from '@/lib/queries/v6/fund_metrics'
 import { FundLensTable } from './FundLensTable'
 import { Panel } from '@/components/v4/ui/Panel'
 import { StatCard, type Tone } from '@/components/v4/ui/StatCard'
@@ -64,7 +66,22 @@ function TopCard({ f }: { f: FundLensRow }) {
 }
 
 export async function FundsPageV4() {
-  const [funds, weights] = await Promise.all([getFundLensList(), getLensWeights()])
+  const [funds, weights, historyMap, rsMap, emaMap, goldenMap, returnsMap, asOf] = await Promise.all([
+    getFundLensList(),
+    getLensWeights(),
+    getFundRankHistory(),
+    getFundRsMatrix(),
+    getFundHoldingsEma(),
+    getFundGoldenCross(),
+    getFundReturns(),
+    getFundsAsOf(),
+  ])
+  // Maps → plain objects so they serialise across the server→client boundary into FundLensTable.
+  const history = Object.fromEntries(historyMap)
+  const rs = Object.fromEntries(rsMap)
+  const ema = Object.fromEntries(emaMap)
+  const golden = Object.fromEntries(goldenMap)
+  const returns = Object.fromEntries(returnsMap)
 
   const universeCount = funds.length
   const withBreadth = funds.filter(f => (f.breadth ?? 0) >= 0.2).length
@@ -112,7 +129,7 @@ export async function FundsPageV4() {
   ]
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6 px-6 py-7">
+    <div className="mx-auto max-w-[1680px] space-y-6 px-6 py-7">
       {/* Header + leadership-breadth strip */}
       <header>
         <div className="mb-3 font-sans text-[12px] text-txt-3">
@@ -121,6 +138,7 @@ export async function FundsPageV4() {
         <div className="mb-2 flex flex-wrap items-baseline gap-4">
           <h1 className="font-display text-[32px] font-bold tracking-tight text-txt-1">Funds</h1>
           <span className="font-num text-[12px] tabular-nums text-txt-3">{universeCount} equity funds (Regular Growth) · holdings-weighted lens roll-up</span>
+          {asOf && <span className="font-sans text-[11px] text-txt-3">· holdings as of {asOf}</span>}
         </div>
         <p className="max-w-[880px] font-sans text-[15px] text-txt-2">
           Each fund is a <strong>holdings-weighted roll-up</strong> of the stock atom. The headline is
@@ -181,11 +199,11 @@ export async function FundsPageV4() {
           body: 'Ranked by leadership-breadth. Every column header sorts; filter by category. The five lens scores are holdings-weighted (0–100). Click a row for the full roll-up.',
         }}
       >
-        <FundLensTable funds={funds} weights={weights} />
+        <FundLensTable funds={funds} weights={weights} history={history} rs={rs} ema={ema} golden={golden} returns={returns} />
       </Panel>
 
       <div className="font-sans text-[12px] leading-[1.6] text-txt-3">
-        Native from <strong className="text-txt-2">foundation_staging</strong> — the lens journal looked through
+        Native from <strong className="text-txt-2">atlas_foundation</strong> — the lens journal looked through
         de_mf_holdings; identity + NAV from Morningstar (de_mf_master / de_mf_nav_daily).
       </div>
     </div>

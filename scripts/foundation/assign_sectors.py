@@ -1,81 +1,59 @@
 #!/usr/bin/env python3
-"""Assign sector to active stocks in foundation_staging.instrument_master (A2).
+"""Guard the sector mapping of the active scored universe (A2).
 
-Durable, idempotent, chain-runnable. Runs AFTER build_universe.py (which writes
-instrument rows but no sector) and is safe to re-run.
+Durable, idempotent, chain-runnable. Runs AFTER build_universe.py (which writes/refreshes
+instrument rows but never touches `sector`) and is safe to re-run.
 
-STAGE A2 — SAFE PART (FM-pre-approved COALESCE fallback, remediation plan A2):
-  Fill sector for unmapped active stocks from `public.de_instrument.sector`, but
-  ONLY where that raw sector is already one of the existing actionable sectors in
-  instrument_master. The actionable set is self-defining (distinct current sectors),
-  so this can NEVER introduce a new distinct sector — "≤21 canonical" stays green.
-  Curated overrides on already-mapped rows are left untouched.
+SOURCE OF TRUTH: `atlas_foundation.instrument_master.sector` IS the sector classification
+now. The former raw fallback (`public.de_instrument.sector`) was dropped in the single-schema
+consolidation, and no other per-stock sector source survived — every remaining sector-bearing
+table (mv_stock_landscape, sector_lens_daily) is DERIVED from instrument_master, so filling
+from it would be circular. There is therefore nothing to COALESCE from.
 
-HELD FOR FM SIGN-OFF (methodology — NOT applied here; see backlog
-docs/v4/2026-06-25-master-execution-backlog.md "BLOCKER surfaced 2026-06-25" and
-memory v4-d13-taxonomy-mismatch):
-  • the real 31→≤21 NSE thin-tail fold (Services/Diversified/Telecom/MNC/Power/…)
-  • a source for the 111 active stocks with no de_instrument row (industry / index /
-    extend-universe / gate-exclude).
-These keep the remaining ~126 unmapped until the fold map is approved.
+What this script does instead (RULE #0 — never fabricate a sector):
+  • REPORT the count + symbols of any active stock with no sector (loud, so an NSE
+    reconstitution that adds an un-sectored name is caught rather than silently scored blank).
+  • GUARD that the distinct actionable-sector count stays ≤ 21 (the FM-locked canonical fold).
+A non-zero unmapped count is surfaced but is NON-FATAL (the weekly cron continues); adding the
+curated sector for a new name is an FM step (the 31→≤21 fold map is FM-held — see
+memory v4-d13-taxonomy-mismatch).
 """
 
 from __future__ import annotations
 
 import _db
 
-_ACTIONABLE = """
-  SELECT DISTINCT sector FROM foundation_staging.instrument_master
-  WHERE asset_class='stock' AND is_active AND sector IS NOT NULL AND sector <> ''
-"""
-
-# Safe COALESCE: de_instrument.sector fallback, restricted to the existing actionable
-# set so distinct-sector count cannot grow.
-_FILL_SAFE = f"""
-  UPDATE foundation_staging.instrument_master im
-     SET sector = di.sector, updated_at = now()
-    FROM public.de_instrument di
-   WHERE di.symbol = im.symbol
-     AND im.asset_class = 'stock' AND im.is_active
-     AND (im.sector IS NULL OR im.sector = '')
-     AND di.sector IN ({_ACTIONABLE})
-"""
+_ACTIVE_STOCK = "FROM atlas_foundation.instrument_master WHERE asset_class='stock' AND is_active"
 
 
-def _unmapped() -> int:
-    return int(
-        _db.scalar(
-            "SELECT count(*) FROM foundation_staging.instrument_master "
-            "WHERE asset_class='stock' AND is_active AND (sector IS NULL OR sector='')"
-        )
-        or 0
+def _unmapped_symbols() -> list[str]:
+    df = _db.read_df(
+        f"SELECT symbol {_ACTIVE_STOCK} AND (sector IS NULL OR sector='') ORDER BY symbol"
     )
+    return list(df["symbol"])
 
 
 def _distinct() -> int:
     return int(
         _db.scalar(
-            "SELECT count(DISTINCT sector) FROM foundation_staging.instrument_master "
-            "WHERE asset_class='stock' AND is_active AND sector IS NOT NULL AND sector<>''"
+            f"SELECT count(DISTINCT sector) {_ACTIVE_STOCK} AND sector IS NOT NULL AND sector<>''"
         )
         or 0
     )
 
 
 def run() -> dict:
-    before_unmapped, before_distinct = _unmapped(), _distinct()
-    _db.exec_sql(_FILL_SAFE)
-    after_unmapped, after_distinct = _unmapped(), _distinct()
-    res = {
-        "unmapped_before": before_unmapped,
-        "unmapped_after": after_unmapped,
-        "mapped": before_unmapped - after_unmapped,
-        "distinct_before": before_distinct,
-        "distinct_after": after_distinct,
-    }
+    unmapped = _unmapped_symbols()
+    distinct = _distinct()
+    res = {"unmapped": len(unmapped), "distinct_sectors": distinct}
     print(res)
-    if after_distinct > 21:
-        raise SystemExit(f"GUARD TRIPPED: distinct sectors {after_distinct} > 21 — aborting")
+    if unmapped:
+        print(
+            f"  ⚠️  {len(unmapped)} active stock(s) have NO sector — curate in instrument_master "
+            f"(FM fold map): {', '.join(unmapped)}"
+        )
+    if distinct > 21:
+        raise SystemExit(f"GUARD TRIPPED: distinct sectors {distinct} > 21 — aborting")
     return res
 
 
