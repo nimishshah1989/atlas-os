@@ -117,43 +117,29 @@ def check_A(g: Gate):
 
 # ─────────────────────────── LOOP B ───────────────────────────
 def check_B(g: Gate):
-    print("== Loop B gate: ETF/index/sector holdings roll-up + sector mapping ==")
-    # ETFs with holdings must each have a lens vector
-    n_etf_hold = _q("select count(distinct ticker) from atlas_foundation.de_etf_holdings")
-    n_etf_scored = _q(f"select count(distinct instrument_id) from {L} where asset_class='etf'")
-    g.check(
-        "ETF lens coverage",
-        n_etf_scored >= 0.90 * (n_etf_hold or 1),
-        f"{n_etf_scored} ETFs scored vs {n_etf_hold} with holdings",
-    )
-
-    # Indices with constituents must each have a lens vector
-    n_idx_con = _q("select count(distinct index_code) from atlas_foundation.de_index_constituents")
-    n_idx_scored = _q(f"select count(distinct instrument_id) from {L} where asset_class='index'")
-    g.check(
-        "index lens coverage",
-        n_idx_scored >= 0.80 * (n_idx_con or 1),
-        f"{n_idx_scored} indices scored vs {n_idx_con} with constituents",
-    )
+    """Validate what the lens pipeline actually PRODUCES: the sector roll-up + the
+    scored-universe sector mapping. (The lens journal is stocks-only by design —
+    ETFs are scored in atlas_etf_scorecard and indices are benchmarks, not lens
+    entities — so the old 'ETF/index lens coverage' checks were architecturally
+    void and are removed here.)"""
+    print("== Loop B gate: sector roll-up + scored-universe mapping ==")
 
     # Sector roll-up table exists + every actionable sector has a vector
     sec_n = _q(f"select count(distinct sector) from {SEC}") or 0
     g.check("sector lens vectors exist (≥20 sectors)", sec_n >= 20, f"{sec_n} sectors")
 
-    # Mapping completeness: every stock/ETF/index has a sector
+    # Mapping completeness: every SCORED stock (the active NIFTY-500 universe) has a
+    # sector. ETFs/indices carry no equity 'sector' and are correctly excluded.
     unmapped = _q(f"""select count(*) from {IM}
-        where kite_token is not null and (sector is null or sector='')""")
-    has_sector_col = _q(
-        "select count(*) from information_schema.columns where table_schema='atlas_foundation' "
-        "and table_name='instrument_master' and column_name='sector'"
-    )
+        where asset_class='stock' and kite_token is not null and is_active
+          and (sector is null or sector='')""")
     g.check(
-        "instrument→sector mapping complete",
-        bool(has_sector_col) and unmapped == 0,
-        f"{unmapped} unmapped" if has_sector_col else "no sector column on instrument_master",
+        "scored-universe sector mapping complete",
+        unmapped == 0,
+        f"{unmapped} active stocks unmapped",
     )
 
-    # Roll-up sanity: a sector score must lie within its constituents' min/max (weighted avg property)
+    # Roll-up sanity: a sector score must lie in the valid 0-100 range.
     bad = _q(f"""
         with latest as (select max(date) d from {SEC})
         select count(*) from {SEC} s, latest
