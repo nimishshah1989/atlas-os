@@ -66,13 +66,28 @@ def kite_client():
     return kite
 
 
+def _historical_with_retry(kite, token: int, start: date, end: date, retries: int = 4):
+    """Kite's historical API throttles a sustained burst (2000+ calls) by rejecting
+    with a transient 'invalid token'/network error even though the token is valid.
+    Retry with exponential backoff so a whole-universe pull doesn't die mid-run."""
+    for attempt in range(retries):
+        _rate_limit()
+        try:
+            return kite.historical_data(token, start, end, "day")
+        except Exception as e:
+            msg = str(e).lower()
+            transient = "invalid token" in msg or "timed out" in msg or "network" in msg
+            if attempt == retries - 1 or not transient:
+                raise
+            time.sleep(2**attempt)  # 1s, 2s, 4s — lets the throttle window clear
+
+
 def fetch_history(kite, token: int, start: date, end: date) -> pd.DataFrame:
     """Daily candles for one instrument_token across [start, end], chunked."""
     frames, cur = [], start
     while cur <= end:
         chunk_end = min(cur + timedelta(days=KITE_DAY_CHUNK), end)
-        _rate_limit()
-        candles = kite.historical_data(token, cur, chunk_end, "day")
+        candles = _historical_with_retry(kite, token, cur, chunk_end)
         if candles:
             frames.append(pd.DataFrame(candles))
         cur = chunk_end + timedelta(days=1)
