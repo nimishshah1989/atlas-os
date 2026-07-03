@@ -69,6 +69,55 @@ BOARD_TABLES = [
     ("de_etf_holdings", "as_of_date", 8),  # Morningstar, weekly
 ]
 
+# ── PRODUCER REGISTRY — the invariant that makes the 2026-07 incident unrepeatable ──
+# Root cause of that incident: the consolidation deleted the builders while the board
+# still read their tables, and NOTHING tied a guarded table to a producer — so the
+# orphaning went unnoticed for a week+ until the tables visibly went stale. This registry
+# makes the link explicit and CI-enforced: every guarded table maps to a producer TOKEN
+# (script filename or function) that MUST appear in an orchestrator. Delete a builder, or
+# drop its cron step, and tests/unit/test_producer_registry.py goes RED before it can
+# merge — the staleness guard below is the runtime half; this is the build-time half.
+ORCHESTRATORS = ["scripts/ops/atlas_daily.sh", "scripts/ops/atlas_weekly.sh"]
+PRODUCERS = {
+    "ohlcv_stock": "ingest_kite.py",
+    "ohlcv_etf": "ingest_kite.py",
+    "index_prices": "ingest_bhavcopy.py",
+    "technical_daily": "compute_all.py",
+    "atlas_lens_scores_daily": "lens_daily.py",
+    "sector_lens_daily": "rollup_sectors.py",
+    "fund_rank_daily": "build_fund_rank_history.py",
+    "atlas_index_metrics_daily": "build_index_metrics",
+    "atlas_market_regime_daily": "run_daily_regime",
+    "breadth_nifty500_daily": "build_breadth_series.py",
+    "de_mf_nav_daily": "ingest_nav.py",
+    "delivery_daily": "fetch_delivery.py",
+    "mv_sector_cards": "build_sector_cards.py",
+    "mv_sector_breadth": "build_sector_cards.py",
+    "mv_sector_deepdive": "build_sector_cards.py",
+    "atlas_macro_daily": "ingest_macro.py",
+    "de_mf_holdings": "ingest_mf_holdings.py",
+    "de_etf_holdings": "ingest_etf_holdings.py",
+}
+
+
+def check_producers() -> list[str]:
+    """Every guarded table must have a producer wired into an orchestrator. Pure
+    filesystem — the build-time half of the freshness contract. Returns violations
+    (empty = healthy). Enforced by tests/unit/test_producer_registry.py."""
+    repo = Path(__file__).resolve().parents[2]
+    orch = "\n".join((repo / o).read_text() for o in ORCHESTRATORS if (repo / o).exists())
+    problems = []
+    for table, _col, _lag in KEY_TABLES + BOARD_TABLES:
+        token = PRODUCERS.get(table)
+        if token is None:
+            problems.append(f"{table}: guarded but absent from PRODUCERS registry")
+        elif token not in orch:
+            problems.append(
+                f"{table}: producer '{token}' not wired into any orchestrator (orphaned)"
+            )
+    return problems
+
+
 # Per-instrument tables whose EOD row-count should stay ~stable vs the prior session.
 # A sharp drop = an INCOMPLETE ingest even though max(date) looks fresh — the exact
 # failure that blanked the 2026-07-01 board (10/2287 stocks ingested, yet max(date)
@@ -138,6 +187,13 @@ def main() -> int:
     args = ap.parse_args()
     eod = args.eod or _db.eod_cutoff()
     print(f"[freshness_guard] EOD={eod}")
+    # Build-time contract (also hard-enforced in CI): every guarded table has a live
+    # producer. Print here for operator visibility if the cron is edited on the box.
+    prod_problems = check_producers()
+    if prod_problems:
+        print(f"[freshness_guard] ⚠️  PRODUCER CONTRACT — {len(prod_problems)} orphaned table(s):")
+        for p in prod_problems:
+            print(f"    - {p}")
     stale = check(eod)
     print("  ── derived board tables (warn-only) ──")
     warn = check_board(eod)
