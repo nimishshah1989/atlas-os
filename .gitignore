@@ -11,6 +11,11 @@ build/
 .venv/
 venv/
 
+# Tool caches (regenerated on every run)
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
 # IDE
 .vscode/
 .idea/
