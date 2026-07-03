@@ -129,6 +129,12 @@ export function TierReturnsPanel({ data }: { data: TierReturns }) {
 }
 
 // ── macro context ─────────────────────────────────────────────────────────────
+// 'YYYY-MM-DD' → 'Jun 25' (no Date parse — avoids tz drift on a bare date string).
+function fmtAsOf(d: string): string {
+  const M = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const [, m, day] = d.split('-')
+  return `${M[Number(m) - 1] ?? m} ${Number(day)}`
+}
 function fmtMacro(unit: string, v: number | null): string {
   if (v == null) return '—'
   if (unit === '%') return `${v.toFixed(2)}%`
@@ -153,7 +159,17 @@ export function MacroPanel({ rows, asOf }: { rows: MacroRow[]; asOf: string | nu
         <tbody>
           {rows.map((r) => (
             <tr key={r.id} className="border-b border-edge-hair/60 last:border-0">
-              <td className="px-2 py-1.5 font-sans text-[12px] text-txt-2">{r.label}</td>
+              <td className="px-2 py-1.5 font-sans text-[12px] text-txt-2">
+                {r.label}
+                {r.stale_as_of && (
+                  <span
+                    className="ml-1.5 font-num text-[9px] uppercase tracking-wider text-sig-warn"
+                    title={`No live daily feed — last real value, carried forward since ${r.stale_as_of}`}
+                  >
+                    · carried {fmtAsOf(r.stale_as_of)}
+                  </span>
+                )}
+              </td>
               <td className="px-2 py-1.5 text-right"><Num>{fmtMacro(r.unit, r.value)}</Num></td>
               <td className="px-2 py-1.5 text-right"><Num color={toneColor(r.d1)}>{r.d1 == null ? '—' : signed(r.d1, 2)}</Num></td>
               <td className="px-2 py-1.5 text-right"><Num color={toneColor(r.d1m)}>{r.d1m == null ? '—' : signed(r.d1m, 2)}</Num></td>
