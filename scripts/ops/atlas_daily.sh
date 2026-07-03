@@ -60,6 +60,11 @@ step "rollup_sectors"            $PY scripts/foundation/rollup_sectors.py
 # Sector RRG (relative-rotation quadrants) for the sectors page — index-derived, cheap;
 # was frozen at 06-25 (no producer croned). Refresh after the sector roll-up.
 step "build_sector_rrg"          $PY scripts/foundation/build_sector_rrg.py
+# Sector cards / breadth / deepdive — the three derived board tables the /sectors +
+# stock-detail pages render. Their old builder (atlas/compute/sectors.py) was purged in
+# the consolidation and they silently froze at 06-24/25; this lean rebuild reads only fresh
+# tables (index metrics + technical_daily + lens journal). Must run after build_index_metrics.
+step "build_sector_cards"        $PY scripts/foundation/build_sector_cards.py
 step "build_fund_rank_history"   $PY scripts/foundation/build_fund_rank_history.py --latest
 step "build_breadth_series"      $PY scripts/foundation/build_breadth_series.py
 step "regime"                    $PY -c "from atlas.compute.regime import run_daily_regime; run_daily_regime(schema='atlas_foundation')"
