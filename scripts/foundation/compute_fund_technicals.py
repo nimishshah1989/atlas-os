@@ -79,7 +79,10 @@ def run(incremental: bool = True, limit: int | None = None) -> dict:
         floor = dict(zip(df["mstar_id"], df["d"], strict=False))
     ids = targets(incremental, limit, cutoff)
     done = err = rows_tot = 0
-    print(f"[fund-tech] targets={len(ids)} mode={'incr' if incremental else 'full'} eod={cutoff}", flush=True)
+    print(
+        f"[fund-tech] targets={len(ids)} mode={'incr' if incremental else 'full'} eod={cutoff}",
+        flush=True,
+    )
     for n, mid in enumerate(ids, 1):
         try:
             rows_tot += compute_one(mid, run_id, floor.get(mid) if incremental else None, cutoff)

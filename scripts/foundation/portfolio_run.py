@@ -73,12 +73,16 @@ def load_universe(asset_classes: list[str]) -> pd.DataFrame:
                 }
             )
         )
-    return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(
-        columns=["instrument_key", "asset_class", "symbol"]
+    return (
+        pd.concat(parts, ignore_index=True)
+        if parts
+        else pd.DataFrame(columns=["instrument_key", "asset_class", "symbol"])
     )
 
 
-def load_tech(universe: pd.DataFrame, cols: tuple[str, ...], since: dt.date, until: dt.date) -> pd.DataFrame:
+def load_tech(
+    universe: pd.DataFrame, cols: tuple[str, ...], since: dt.date, until: dt.date
+) -> pd.DataFrame:
     """EMA panel (instrument_key, date, <cols>) across asset classes."""
     collist = ", ".join(cols)
     parts = []
@@ -90,7 +94,9 @@ def load_tech(universe: pd.DataFrame, cols: tuple[str, ...], since: dt.date, unt
                     where t.instrument_id::text = any(:ks) and t.date between :a and :b
                     order by t.date""",
                 {
-                    "ks": universe.loc[universe["asset_class"] != "fund", "instrument_key"].tolist(),
+                    "ks": universe.loc[
+                        universe["asset_class"] != "fund", "instrument_key"
+                    ].tolist(),
                     "a": since,
                     "b": until,
                 },
@@ -103,7 +109,9 @@ def load_tech(universe: pd.DataFrame, cols: tuple[str, ...], since: dt.date, unt
                     from {M}.technical_fund_daily
                     where mstar_id = any(:ks) and date between :a and :b order by date""",
                 {
-                    "ks": universe.loc[universe["asset_class"] == "fund", "instrument_key"].tolist(),
+                    "ks": universe.loc[
+                        universe["asset_class"] == "fund", "instrument_key"
+                    ].tolist(),
                     "a": since,
                     "b": until,
                 },
@@ -229,11 +237,11 @@ def _basket_state(p: dict, universe: pd.DataFrame) -> pd.Series:
 
 def run_window(p: dict, start: dt.date, end: dt.date, mode: str):
     """Load panels and replay. Modes:
-      backtest — day-loop over trading dates in [start, end], inception-seeded at the first
-      init     — single-day loop at the last trading date <= end, inception-seeded
-      resume   — continue live state over trading dates AFTER `start` (= last marked date);
-                 only signals detected on/after `start` are eligible (one shot each,
-                 same as backtest semantics)
+    backtest — day-loop over trading dates in [start, end], inception-seeded at the first
+    init     — single-day loop at the last trading date <= end, inception-seeded
+    resume   — continue live state over trading dates AFTER `start` (= last marked date);
+               only signals detected on/after `start` are eligible (one shot each,
+               same as backtest semantics)
     """
     universe = load_universe(list(p["asset_classes"]))
     strat = _strategy(p)
@@ -329,10 +337,13 @@ def cmd_create(a) -> None:
 
 def cmd_init(a) -> None:
     p = load_portfolio(a.portfolio_id)
-    if open_positions(a.portfolio_id) or not _db.read_df(
-        f"select 1 from {M}.portfolio_nav_daily where portfolio_id=:p and run_type='live' limit 1",
-        {"p": a.portfolio_id},
-    ).empty:
+    if (
+        open_positions(a.portfolio_id)
+        or not _db.read_df(
+            f"select 1 from {M}.portfolio_nav_daily where portfolio_id=:p and run_type='live' limit 1",
+            {"p": a.portfolio_id},
+        ).empty
+    ):
         raise SystemExit("portfolio already initialized — use mark")
     run_id = str(uuid.uuid4())
     inc = p["inception_date"]
@@ -343,7 +354,9 @@ def cmd_init(a) -> None:
 
 def cmd_mark(a) -> None:
     eod = _db.eod_cutoff()
-    ports = _db.read_df(f"select portfolio_id::text pid from {M}.portfolio_master where status='active'")
+    ports = _db.read_df(
+        f"select portfolio_id::text pid from {M}.portfolio_master where status='active'"
+    )
     done = skipped = 0
     for pid in ports["pid"]:
         p = load_portfolio(pid)
@@ -470,8 +483,17 @@ def cmd_trade(a) -> None:
         ]
     )
     write_results(a.portfolio_id, "live", run_id, pd.DataFrame(), navs)
-    print(json.dumps({"side": a.side, "symbol": row.iloc[0]["symbol"], "qty": str(qty),
-                      "price": str(price), "value": str(value)}))
+    print(
+        json.dumps(
+            {
+                "side": a.side,
+                "symbol": row.iloc[0]["symbol"],
+                "qty": str(qty),
+                "price": str(price),
+                "value": str(value),
+            }
+        )
+    )
 
 
 def main():
@@ -482,8 +504,12 @@ def main():
     c.add_argument("--name", required=True)
     c.add_argument("--kind", choices=["strategy", "basket"], required=True)
     c.add_argument("--strategy", default=None)
-    c.add_argument("--params", default=None, help='JSON, e.g. {"fast":50,"slow":200} or {"picks":[...]}')
-    c.add_argument("--asset-classes", nargs="+", default=["stock"], choices=["stock", "etf", "fund"])
+    c.add_argument(
+        "--params", default=None, help='JSON, e.g. {"fast":50,"slow":200} or {"picks":[...]}'
+    )
+    c.add_argument(
+        "--asset-classes", nargs="+", default=["stock"], choices=["stock", "etf", "fund"]
+    )
     c.add_argument("--capital", type=Decimal, default=None)
     c.add_argument("--cap-pct", type=Decimal, default=None)
     c.set_defaults(fn=cmd_create)

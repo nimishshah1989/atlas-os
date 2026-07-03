@@ -203,8 +203,15 @@ def replay(
 def _empty_trades() -> pd.DataFrame:
     return pd.DataFrame(
         columns=[
-            "trade_date", "asset_class", "instrument_key", "symbol",
-            "side", "qty", "price", "value", "reason",
+            "trade_date",
+            "asset_class",
+            "instrument_key",
+            "symbol",
+            "side",
+            "qty",
+            "price",
+            "value",
+            "reason",
         ]
     )
 
