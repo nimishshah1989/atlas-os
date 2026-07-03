@@ -327,13 +327,17 @@ def build() -> None:
     nb = _db.upsert_df(f"{M}.mv_sector_breadth", breadth_df, ["as_of_date", "sector_name"])
     nd = _db.upsert_df(f"{M}.mv_sector_deepdive", deep_df, ["sector_name"])
 
-    # self-check: the getSectorCards anchor requires non-null rs_1m AND ret_1w, else the
-    # sectors page renders nothing. Fail loudly here rather than blank the board.
+    # self-check (raise, NOT assert — must survive `python -O`): the getSectorCards anchor
+    # requires non-null rs_1m AND ret_1w, else the sectors page renders nothing. Fail loudly
+    # here rather than blank the board.
     anchored = cards_df[cards_df["rs_1m"].notna() & cards_df["ret_1w"].notna()]
-    assert len(anchored) == len(cards_df), (
-        "cards missing rs_1m/ret_1w — sectors page anchor would drop them"
-    )
-    assert nc == nb == nd, f"row-count mismatch cards={nc} breadth={nb} deep={nd}"
+    if len(anchored) != len(cards_df):
+        raise RuntimeError(
+            f"cards missing rs_1m/ret_1w in {len(cards_df) - len(anchored)} sector(s) — "
+            "sectors page anchor would drop them"
+        )
+    if not nc == nb == nd:
+        raise RuntimeError(f"row-count mismatch cards={nc} breadth={nb} deep={nd}")
     print(f"[sector_cards] as_of={as_of} (tech={tech_asof}) sectors={nc}")
     print(f"[sector_cards] verdicts: {cards_df['verdict'].value_counts().to_dict()}")
     print(
