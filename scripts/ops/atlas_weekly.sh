@@ -27,6 +27,9 @@ step "populate_etf_isin"   $PY scripts/foundation/populate_etf_isin.py
 
 step "ingest_fund_master"  $PY scripts/foundation/ingest_fund_master.py
 step "ingest_mf_holdings"  $PY scripts/foundation/ingest_mf_holdings.py
+# ETF holdings (same Morningstar service, keyed by mstar_id) — had no producer croned and
+# froze at 05-04 (59d); feeds the /etfs+/funds lens roll-ups and sector free-float weights.
+step "ingest_etf_holdings" $PY scripts/foundation/ingest_etf_holdings.py
 step "ingest_screener"     $PY scripts/foundation/ingest_screener.py
 step "ingest_shareholding" $PY scripts/foundation/ingest_shareholding.py
 # Market cap (screener scrape — slow, weekly cadence is fine) + fundamentals (XBRL filings).

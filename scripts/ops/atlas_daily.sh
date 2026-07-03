@@ -55,6 +55,10 @@ step "compute_all (technicals)"  $PY scripts/foundation/compute_all.py
 # score_technical does NOT consume these (display-only), so this never shifts composites.
 step "backfill_sector_rs"        $PY scripts/foundation/backfill_sector_rs.py --latest
 step "build_index_metrics"       $PY -m scripts.foundation.build_index_metrics
+# Macro overlay (FRED FX/rates/brent + carry-forward of the lagging India-10Y/CPI/FII/DII)
+# for the market-pulse strip — its old 5-source runner was purged; froze at 06-25. Needs
+# technical_daily (the trading calendar) fresh, so runs after compute_all.
+step "ingest_macro"              $PY scripts/foundation/ingest_macro.py
 step "lens_daily"                $PY scripts/lens_daily.py --as-of "$EOD"
 step "rollup_sectors"            $PY scripts/foundation/rollup_sectors.py
 # Sector RRG (relative-rotation quadrants) for the sectors page — index-derived, cheap;
