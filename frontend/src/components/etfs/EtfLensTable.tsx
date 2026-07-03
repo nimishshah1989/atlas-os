@@ -9,6 +9,7 @@ import Link from 'next/link'
 import type { EtfLensRow } from '@/lib/queries/etf_lens'
 import { decileColor } from '@/components/ui/decile'
 import { TermInfo } from '@/components/shared/TermInfo'
+import { AddToBasketButton } from '@/components/portfolios/AddToBasketButton'
 
 // Morningstar prefixes every Indian ETF category with a redundant "India Fund " (so the
 // filter read "India Fund Equity", "India Fund Large-Cap", …). Strip it for display — FM
@@ -153,8 +154,13 @@ export function EtfLensTable({ etfs }: { etfs: EtfLensRow[] }) {
               >
                 {/* Real <Link> on the name so the row is navigable before hydration +
                     keyboard/middle-click accessible (the row onClick is a convenience). */}
-                <td className="max-w-[260px] truncate px-2 py-1.5 font-sans text-[12px] font-medium">
-                  <Link href={`/etfs/${e.fcode}`} className="text-txt-1 no-underline hover:text-brand hover:underline">{e.name}</Link>
+                <td className="max-w-[260px] px-2 py-1.5 font-sans text-[12px] font-medium">
+                  <span className="inline-block max-w-[220px] truncate align-middle">
+                    <Link href={`/etfs/${e.fcode}`} className="text-txt-1 no-underline hover:text-brand hover:underline">{e.name}</Link>
+                  </span>
+                  {e.nse_ticker && (
+                    <span className="ml-1 inline-block align-middle"><AddToBasketButton pick={{ key: `etf:${e.nse_ticker}`, label: e.nse_ticker }} /></span>
+                  )}
                 </td>
                 <td className="max-w-[160px] truncate px-2 py-1.5 font-sans text-[11px] text-txt-2">{cleanCat(e.category)}</td>
                 <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums text-txt-2">{e.n_holdings}</td>

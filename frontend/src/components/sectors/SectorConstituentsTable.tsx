@@ -8,6 +8,7 @@ import Link from 'next/link'
 import type { SectorStock } from '@/lib/queries/sector_lens'
 import { decileColor } from '@/components/ui/decile'
 import { TermInfo } from '@/components/shared/TermInfo'
+import { AddToBasketDialog } from '@/components/portfolios/AddToBasketDialog'
 
 type Kind = 'sym' | 'text' | 'decile' | 'pct' | 'num' | 'lead' | 'liq' | 'ffwt'
 type Col = { key: keyof SectorStock; label: string; kind: Kind; term?: string }
@@ -44,6 +45,15 @@ function DChip({ d }: { d: number | null }) {
 export function SectorConstituentsTable({ stocks }: { stocks: SectorStock[] }) {
   const [sortKey, setSortKey] = useState<keyof SectorStock>('strength')
   const [dir, setDir] = useState<'asc' | 'desc'>('desc')
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const togglePick = (sym: string) =>
+    setPicked((prev) => {
+      const next = new Set(prev)
+      if (next.has(sym)) next.delete(sym)
+      else next.add(sym)
+      return next
+    })
   if (stocks.length === 0) return <div className="py-6 text-center font-sans text-sm text-txt-3">No constituent data.</div>
 
   const num = (s: SectorStock, k: keyof SectorStock): number => {
@@ -69,6 +79,7 @@ export function SectorConstituentsTable({ stocks }: { stocks: SectorStock[] }) {
       <table className="tbl-centered w-full border-collapse text-xs">
         <thead>
           <tr className="border-b border-edge-rule">
+            <th className="w-7 px-2 py-1.5" aria-label="Select for basket" />
             {COLS.map((c) => {
               const active = sortKey === c.key
               return (
@@ -83,6 +94,15 @@ export function SectorConstituentsTable({ stocks }: { stocks: SectorStock[] }) {
         <tbody>
           {sorted.map((s) => (
             <tr key={s.symbol} className="border-b border-edge-hair/60 hover:bg-surface-raised">
+              <td className="px-2 py-1.5">
+                <input
+                  type="checkbox"
+                  checked={picked.has(s.symbol)}
+                  onChange={() => togglePick(s.symbol)}
+                  aria-label={`Select ${s.symbol} for basket`}
+                  className="accent-[var(--color-brand)]"
+                />
+              </td>
               {COLS.map((c) => {
                 const v = s[c.key]
                 if (c.kind === 'sym') return (
@@ -104,6 +124,25 @@ export function SectorConstituentsTable({ stocks }: { stocks: SectorStock[] }) {
         </tbody>
       </table>
     </div>
+    {picked.size > 0 && (
+      <div className="mt-2 flex items-center gap-3">
+        <button
+          onClick={() => setDialogOpen(true)}
+          className="rounded-tile bg-brand px-3 py-1.5 font-sans text-[12px] font-semibold text-white"
+        >
+          Add {picked.size} to basket
+        </button>
+        <button onClick={() => setPicked(new Set())} className="font-sans text-[12px] text-txt-3 hover:text-txt-1">
+          Clear selection
+        </button>
+      </div>
+    )}
+    {dialogOpen && (
+      <AddToBasketDialog
+        picks={[...picked].map((sym) => ({ key: `stock:${sym}`, label: sym }))}
+        onClose={() => setDialogOpen(false)}
+      />
+    )}
     <p className="mt-2 font-sans text-[11px] leading-[1.5] text-txt-3">
       <strong className="text-txt-2">FF wt</strong> = free-float weight within this sector’s constituents (live, un-capped) — a concentration read, <em>not</em> the NSE index weight.
       {ffCovered < stocks.length && ` Covers ${ffCovered} of ${stocks.length} names; the rest lack a market-cap or shareholding reading.`}
