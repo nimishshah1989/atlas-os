@@ -22,6 +22,7 @@ that returns nothing is skipped, never fabricated. Run WEEKLY (atlas_weekly.sh).
 from __future__ import annotations
 
 import datetime
+import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import _db
@@ -52,8 +53,13 @@ def main() -> None:
             if not xml:
                 miss += 1
                 continue
+            try:  # one malformed payload must not abort the whole refresh (matches mf ingest)
+                holdings = list(parse_fund(xml))
+            except ET.ParseError:
+                miss += 1
+                continue
             ok += 1
-            for h in parse_fund(xml):
+            for h in holdings:
                 iid = isin_map.get(h["isin"]) if h["isin"] else None
                 if iid is None or h["weight_pct"] is None:
                     continue  # look-through bridge keeps only mapped equity holdings
