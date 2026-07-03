@@ -47,9 +47,10 @@ class EmaCross:
             flips["event"] = st.loc[flips.index].map({True: "entry", False: "exit"})
             frames.append(flips)
         if not frames:
-            return pd.DataFrame(columns=["instrument_key", "date", "event"])
-        out = pd.concat(frames, ignore_index=True)
-        return out[["instrument_key", "date", "event"]].sort_values("date", ignore_index=True)
+            return pd.DataFrame(columns=pd.Index(["instrument_key", "date", "event"]))
+        out = pd.DataFrame(pd.concat(frames, ignore_index=True))
+        out = pd.DataFrame(out[["instrument_key", "date", "event"]]).sort_values(by="date")
+        return out.reset_index(drop=True)
 
     def state(self, tech: pd.DataFrame) -> pd.Series:
         """Point-in-time state (fast>slow, bool) at each instrument's LAST row —

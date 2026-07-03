@@ -56,14 +56,16 @@ def check_a_marked_at_eod() -> None:
               on n.portfolio_id = m.portfolio_id and n.run_type = 'live'
             where m.status = 'active' group by 1""",
     )
-    for r in df.itertuples():
+    for r in df.to_dict("records"):
         # the EOD cutoff can be a holiday/weekend; fresh == last trading day covered
         lag = _db.scalar(
             f"select count(distinct date) from {M}.ohlcv_stock where date > :a and date <= :b",
-            {"a": r.last, "b": eod},
+            {"a": r["last"], "b": eod},
         )
         if lag and lag > 0:
-            fail(f"A: {r.name} live NAV stale — last={r.last}, {lag} session(s) behind EOD {eod}")
+            fail(
+                f"A: {r['name']} live NAV stale — last={r['last']}, {lag} session(s) behind EOD {eod}"
+            )
 
 
 def check_b_nav_reconciles() -> None:
@@ -107,15 +109,17 @@ def check_b_nav_reconciles() -> None:
         """,
         {"px_floor": floor},
     )
-    for r in df.itertuples():
-        tol = Decimal("0.01") * (r.calc_pos + 1)
-        if abs(Decimal(r.nav) - (Decimal(r.cash) + Decimal(r.calc_invested))) > tol:
+    for r in df.to_dict("records"):
+        tol = Decimal("0.01") * (r["calc_pos"] + 1)
+        if abs(Decimal(r["nav"]) - (Decimal(r["cash"]) + Decimal(r["calc_invested"]))) > tol:
             fail(
-                f"B: {r.name}/{r.run_type} nav {r.nav} != cash {r.cash} + "
-                f"recomputed invested {r.calc_invested} on {r.date}"
+                f"B: {r['name']}/{r['run_type']} nav {r['nav']} != cash {r['cash']} + "
+                f"recomputed invested {r['calc_invested']} on {r['date']}"
             )
-        if r.calc_pos != r.n_positions:
-            fail(f"B: {r.name}/{r.run_type} n_positions {r.n_positions} != derived {r.calc_pos}")
+        if r["calc_pos"] != r["n_positions"]:
+            fail(
+                f"B: {r['name']}/{r['run_type']} n_positions {r['n_positions']} != derived {r['calc_pos']}"
+            )
 
 
 def check_c_trade_prices() -> None:
@@ -137,10 +141,10 @@ def check_c_trade_prices() -> None:
              and f.mstar_id = t.instrument_key and f.nav_date = t.trade_date
             where coalesce(o.close_adj, e.close_adj, f.nav) is distinct from t.price"""
     )
-    for r in df.itertuples():
+    for r in df.to_dict("records"):
         fail(
-            f"C: {r.name}/{r.run_type} {r.symbol} @ {r.trade_date} traded {r.price} "
-            f"!= stored {r.stored}"
+            f"C: {r['name']}/{r['run_type']} {r['symbol']} @ {r['trade_date']} traded {r['price']} "
+            f"!= stored {r['stored']}"
         )
 
 
@@ -150,8 +154,8 @@ def check_d_cash_never_negative() -> None:
             from {M}.portfolio_nav_daily n join {M}.portfolio_master m using (portfolio_id)
             group by 1, 2 having min(n.cash) < 0"""
     )
-    for r in df.itertuples():
-        fail(f"D: {r.name}/{r.run_type} cash went negative ({r.worst})")
+    for r in df.to_dict("records"):
+        fail(f"D: {r['name']}/{r['run_type']} cash went negative ({r['worst']})")
 
 
 def check_e_position_cap() -> None:
@@ -164,10 +168,10 @@ def check_e_position_cap() -> None:
             where t.side = 'buy'
               and t.value > n.nav * m.max_position_pct * 1.001"""
     )
-    for r in df.itertuples():
+    for r in df.to_dict("records"):
         fail(
-            f"E: {r.name}/{r.run_type} buy {r.symbol} {r.value} on {r.trade_date} "
-            f"exceeds cap {r.max_position_pct} of nav {r.nav}"
+            f"E: {r['name']}/{r['run_type']} buy {r['symbol']} {r['value']} on {r['trade_date']} "
+            f"exceeds cap {r['max_position_pct']} of nav {r['nav']}"
         )
 
 

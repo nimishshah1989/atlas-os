@@ -52,21 +52,20 @@ def compute_one(mstar_id: str, run_id: str, floor, cutoff) -> int:
     )
     if len(px) < 2:
         return 0
-    nav = pd.Series(
-        px["nav"].astype(float).values, index=pd.DatetimeIndex(pd.to_datetime(px["nav_date"]))
-    )
-    out = pd.DataFrame(index=nav.index)
+    idx = pd.DatetimeIndex(pd.to_datetime(px["nav_date"]))
+    nav = pd.Series(px["nav"].astype(float).values, index=idx)
+    out = pd.DataFrame(index=idx)
     out["mstar_id"] = mstar_id
-    out["date"] = [d.date() for d in nav.index]
+    out["date"] = [d.date() for d in idx]
     out["nav"] = nav.values
     for p in T.EMA_PERIODS:
         out[f"ema_{p}"] = T.ema(nav, p).values
     out["compute_run_id"] = run_id
     if floor is not None:  # incremental: EMAs from full history, write only the new tail
-        out = out[[d > floor for d in out["date"]]]
+        out = out.loc[[d > floor for d in out["date"]]]
         if out.empty:
             return 0
-    out = out.astype(object).where(pd.notna(out), None)
+    out = pd.DataFrame(out.astype(object).where(pd.notna(out), None))
     return _db.upsert_df(f"{M}.technical_fund_daily", out, ["mstar_id", "date"])
 
 

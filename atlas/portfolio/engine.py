@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import ROUND_DOWN, Decimal
+from typing import cast
 
 import pandas as pd
 
@@ -40,7 +41,7 @@ def _qty_for(alloc: Decimal, price: Decimal, asset_class: str) -> Decimal:
 def replay(
     cfg: PortfolioConfig,
     prices: pd.DataFrame,
-    events: pd.DataFrame,
+    events: pd.DataFrame | None,
     inception_state: pd.Series | None,
     composite: pd.DataFrame | None,
     asset_class: dict[str, str],
@@ -82,15 +83,15 @@ def replay(
     exits_at: dict[object, list[str]] = {}
     if events is not None and not events.empty:
         date_idx = pd.Index(dates)
-        for ev in events.itertuples(index=False):
-            pos = date_idx.searchsorted(ev.date, side="right")
+        for ev in events.to_dict("records"):
+            pos = int(date_idx.searchsorted(ev["date"], side="right"))
             if pos >= len(dates):
                 continue  # signal at the last close — executes on a future run
             d = dates[pos]
-            if ev.event == "entry":
-                entries_at.setdefault(d, []).append((ev.instrument_key, ev.date))
+            if ev["event"] == "entry":
+                entries_at.setdefault(d, []).append((ev["instrument_key"], ev["date"]))
             else:
-                exits_at.setdefault(d, []).append(ev.instrument_key)
+                exits_at.setdefault(d, []).append(ev["instrument_key"])
 
     positions: dict[str, Decimal] = dict(start_positions or {})
     cash = start_cash if start_cash is not None else Decimal(cfg.initial_capital)
@@ -169,12 +170,12 @@ def replay(
     def _comp(k, sig_date) -> float:
         if comp_panel is None or k not in comp_panel.columns:
             return float("-inf")
-        s = comp_panel[k].asof(sig_date)
-        return float("-inf") if pd.isna(s) else float(s)
+        v = cast("float | None", comp_panel[k].asof(sig_date))
+        return float("-inf") if v is None or pd.isna(v) else float(v)
 
     for i, d in enumerate(dates):
         if i == 0 and not positions and inception_state is not None:
-            picks = [(k, d) for k, v in inception_state.items() if v]
+            picks: list[tuple[str, object]] = [(str(k), d) for k, v in inception_state.items() if v]
             _enter(d, picks, "inception")
         else:
             for k in exits_at.get(d, []):
@@ -202,19 +203,21 @@ def replay(
 
 def _empty_trades() -> pd.DataFrame:
     return pd.DataFrame(
-        columns=[
-            "trade_date",
-            "asset_class",
-            "instrument_key",
-            "symbol",
-            "side",
-            "qty",
-            "price",
-            "value",
-            "reason",
-        ]
+        columns=pd.Index(
+            [
+                "trade_date",
+                "asset_class",
+                "instrument_key",
+                "symbol",
+                "side",
+                "qty",
+                "price",
+                "value",
+                "reason",
+            ]
+        )
     )
 
 
 def _empty_navs() -> pd.DataFrame:
-    return pd.DataFrame(columns=["date", "nav", "cash", "invested", "n_positions"])
+    return pd.DataFrame(columns=pd.Index(["date", "nav", "cash", "invested", "n_positions"]))

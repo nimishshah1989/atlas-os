@@ -22,6 +22,7 @@ import sys
 import uuid
 from decimal import Decimal
 from pathlib import Path
+from typing import cast
 
 import _db
 import pandas as pd
@@ -76,7 +77,7 @@ def load_universe(asset_classes: list[str]) -> pd.DataFrame:
     return (
         pd.concat(parts, ignore_index=True)
         if parts
-        else pd.DataFrame(columns=["instrument_key", "asset_class", "symbol"])
+        else pd.DataFrame(columns=pd.Index(["instrument_key", "asset_class", "symbol"]))
     )
 
 
@@ -187,7 +188,11 @@ def open_positions(pid: str, run_type: str = "live") -> dict[str, Decimal]:
             where portfolio_id = :p and run_type = :r group by 1""",
         {"p": pid, "r": run_type},
     )
-    return {r.instrument_key: Decimal(r.qty) for r in df.itertuples() if Decimal(r.qty) != 0}
+    return {
+        r["instrument_key"]: Decimal(r["qty"])
+        for r in df.to_dict("records")
+        if Decimal(r["qty"]) != 0
+    }
 
 
 # ── writers ────────────────────────────────────────────────────────────────
@@ -384,9 +389,10 @@ def _summary(navs: pd.DataFrame, trades: pd.DataFrame) -> dict:
     out = {"start": str(nav.index[0]), "end": str(nav.index[-1]), "n_trades": len(trades)}
     peak = nav.cummax()
     out["max_drawdown_pct"] = round(float(((nav - peak) / peak).min()) * 100, 2)
+    last_date = cast(dt.date, nav.index[-1])
     for label, days in (("1y", 365), ("3y", 365 * 3), ("5y", 365 * 5)):
-        anchor = nav.index[-1] - dt.timedelta(days=days)
-        base = nav[nav.index <= anchor]
+        anchor = last_date - dt.timedelta(days=days)
+        base = cast(pd.Series, nav[nav.index <= anchor])
         if not base.empty:
             out[f"return_{label}_pct"] = round((nav.iloc[-1] / base.iloc[-1] - 1) * 100, 2)
     out["total_return_pct"] = round((nav.iloc[-1] / nav.iloc[0] - 1) * 100, 2)
@@ -417,11 +423,11 @@ def cmd_trade(a) -> None:
         raise SystemExit("manual trades are for baskets only")
     ac, key = a.key.split(":", 1)
     universe = load_universe([ac])
-    row = universe[universe["instrument_key"] == key]
+    row = universe.loc[universe["instrument_key"] == key]
     if row.empty:
         raise SystemExit(f"{a.key} not in the {ac} universe")
     eod = _db.eod_cutoff()
-    series = load_prices(row, eod - dt.timedelta(days=10), eod)[key].dropna()
+    series = cast(pd.Series, load_prices(row, eod - dt.timedelta(days=10), eod)[key]).dropna()
     price, trade_date = Decimal(series.iloc[-1]), series.index[-1]
     positions = open_positions(a.portfolio_id)
     last = _db.read_df(
@@ -464,7 +470,7 @@ def cmd_trade(a) -> None:
     new_cash = cash - value if a.side == "buy" else cash + value
     positions = open_positions(a.portfolio_id)
     universe_all = load_universe(list(p["asset_classes"]))
-    held = universe_all[universe_all["instrument_key"].isin(positions)]
+    held = universe_all.loc[universe_all["instrument_key"].isin(positions)]
     invested = Decimal("0")
     if not held.empty:
         px = load_prices(held, eod - dt.timedelta(days=10), eod).ffill()
