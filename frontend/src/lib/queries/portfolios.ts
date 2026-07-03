@@ -30,8 +30,8 @@ const strategyLabel = (key: string | null, params: Record<string, unknown> | nul
 export async function getPortfolios(): Promise<PortfolioSummary[]> {
   const rows = await sql<Array<Record<string, unknown>>>`
     SELECT m.portfolio_id, m.name, m.kind, m.strategy_key, m.params, m.asset_classes,
-           m.initial_capital, m.max_position_pct, m.inception_date,
-           ln.date AS nav_date, ln.nav, ln.cash, ln.n_positions,
+           m.initial_capital, m.max_position_pct, m.inception_date::text AS inception_date,
+           ln.date::text AS nav_date, ln.nav, ln.cash, ln.n_positions,
            bt.total_pct AS bt_total_pct, bt.years AS bt_years
     FROM atlas_foundation.portfolio_master m
     LEFT JOIN LATERAL (

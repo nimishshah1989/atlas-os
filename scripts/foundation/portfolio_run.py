@@ -243,7 +243,8 @@ def _basket_state(p: dict, universe: pd.DataFrame) -> pd.Series:
 def run_window(p: dict, start: dt.date, end: dt.date, mode: str):
     """Load panels and replay. Modes:
     backtest — day-loop over trading dates in [start, end], inception-seeded at the first
-    init     — single-day loop at the last trading date <= end, inception-seeded
+    init     — single-day loop at the last trading date <= end; strategies book
+               NOTHING (all-cash first NAV row), baskets book the FM's picks
     resume   — continue live state over trading dates AFTER `start` (= last marked date);
                only signals detected on/after `start` are eligible (one shot each,
                same as backtest semantics)
@@ -262,16 +263,17 @@ def run_window(p: dict, start: dt.date, end: dt.date, mode: str):
         loop_dates = [d for d in prices.index if d > start]
     if not loop_dates:
         return _no_op()
-    d0 = loop_dates[0]
 
+    # FM rule (2026-07-03): a strategy portfolio NEVER buys names already past their
+    # crossover — it starts 100% cash and enters only on crossover EVENTS from its
+    # window onward (init books nothing; the nightly mark takes it from there).
+    # Only FM baskets seed holdings at inception (those are explicit picks).
     events, inception = None, None
     if strat is not None:
-        tech = load_tech(universe, strat.required_columns(), lookback, end)
-        events = strat.events(tech)
-        if mode == "resume":
+        if mode != "init":
+            tech = load_tech(universe, strat.required_columns(), lookback, end)
+            events = strat.events(tech)
             events = events[events["date"] >= start]
-        else:
-            inception = strat.state(tech[tech["date"] <= d0])
     elif mode != "resume":
         inception = _basket_state(p, universe)
 

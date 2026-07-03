@@ -59,8 +59,8 @@ def replay(
                  Trades fill ONLY at real prints; valuation carries the last known
                  price forward (suspended names keep their last close).
     events     — (instrument_key, date, event) from a strategy; empty for baskets.
-    inception_state — bool per instrument_key: seed holdings at dates[0] when the
-                 portfolio starts flat (strategy state, or the FM's basket picks).
+    inception_state — bool per instrument_key: seed holdings at dates[0] (FM basket
+                 picks only — strategy portfolios start all-cash and enter on events).
     composite  — (instrument_key, date, composite) for candidate ranking, or None.
     start_positions/start_cash — resume state for the nightly increment.
 
