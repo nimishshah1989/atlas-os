@@ -17,6 +17,7 @@ import { FundRsMatrixCell } from './FundRsMatrixCell'
 import { FundReturnsCell } from './FundReturnsCell'
 import { FundEmaCell } from './FundEmaCell'
 import { TermInfo } from '@/components/shared/TermInfo'
+import { AddToBasketButton } from '@/components/portfolios/AddToBasketButton'
 
 // ── colour helpers (shared idioms with the stocks / ETF pages) ────────────
 // Weighted lens scores are 0..100, so band cuts are ×10 from the decile helper.
@@ -221,7 +222,10 @@ export function FundLensTable({
                 onClick={() => router.push('/funds/' + f.mstar_id)}
                 className="cursor-pointer border-b border-edge-hair hover:bg-surface-raised"
               >
-                <td className="max-w-[260px] truncate px-2 py-1.5 font-sans text-[12px] font-medium text-txt-1">{f.name}</td>
+                <td className="max-w-[260px] px-2 py-1.5 font-sans text-[12px] font-medium text-txt-1">
+                  <span className="inline-block max-w-[220px] truncate align-middle">{f.name}</span>
+                  <span className="ml-1 inline-block align-middle"><AddToBasketButton pick={{ key: `fund:${f.mstar_id}`, label: f.name.slice(0, 40) }} /></span>
+                </td>
                 <td className="max-w-[160px] truncate px-2 py-1.5 font-sans text-[11px] text-txt-2">{cleanCat(f.category)}</td>
                 <td className="px-2 py-1.5 text-right align-middle">
                   <div className="font-num text-[12px] tabular-nums text-txt-2">

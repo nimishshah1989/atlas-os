@@ -12,6 +12,7 @@ import { StocksBubble2x2 } from './StocksBubble2x2'
 import { Panel } from '@/components/ui/Panel'
 import { decileColor } from '@/components/ui/decile'
 import { TermInfo } from '@/components/shared/TermInfo'
+import { AddToBasketButton } from '@/components/portfolios/AddToBasketButton'
 
 // ── colour helpers (shared idioms) ────────────────────────────────────────
 // Decile cells colour the figure via the shared perceptual ramp (decileColor);
@@ -309,7 +310,10 @@ export function StocksScreenerV4({ stocks }: { stocks: StockListRow[] }) {
                     onClick={() => router.push('/stocks/' + s.symbol)}
                     className="border-b border-edge-hair cursor-pointer hover:bg-surface-raised"
                   >
-                    <td className="py-1.5 px-2 font-num text-[12px] font-semibold tabular-nums text-txt-1 whitespace-nowrap">{s.symbol}</td>
+                    <td className="py-1.5 px-2 font-num text-[12px] font-semibold tabular-nums text-txt-1 whitespace-nowrap">
+                      {s.symbol}
+                      <span className="ml-1 inline-block align-middle"><AddToBasketButton pick={{ key: `stock:${s.symbol}`, label: s.symbol }} /></span>
+                    </td>
                     <td className="py-1.5 px-2 font-sans text-[11px] text-txt-3 whitespace-nowrap">{s.cap}</td>
                     <td className="py-1.5 px-2 font-sans text-[11px] text-txt-2 truncate max-w-[160px]">{s.sector ?? '—'}</td>
 

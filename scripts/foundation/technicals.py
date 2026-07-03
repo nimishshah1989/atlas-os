@@ -25,7 +25,7 @@ RETURN_WINDOWS: dict[str, int] = {
     "12m": 252,
 }
 
-EMA_PERIODS = (21, 50, 200)  # docs §4: breadth uses 21-EMA (not 20), plus 50/200.
+EMA_PERIODS = (10, 21, 50, 200)  # docs §4: breadth 21-EMA + 50/200; 10 for fast crossovers.
 RSI_PERIOD = 14
 
 

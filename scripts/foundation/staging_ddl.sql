@@ -165,7 +165,7 @@ create table if not exists atlas_foundation.technical_daily (
     asset_class   text not null,
     symbol        text not null,
     date          date not null,
-    ema_21 numeric(18,6), ema_50 numeric(18,6), ema_200 numeric(18,6),
+    ema_10 numeric(18,6), ema_21 numeric(18,6), ema_50 numeric(18,6), ema_200 numeric(18,6),
     rsi_14 numeric(12,6),
     ret_1d numeric(16,8), ret_1w numeric(16,8), ret_1m numeric(16,8),
     ret_3m numeric(16,8), ret_6m numeric(16,8), ret_12m numeric(16,8),
@@ -173,13 +173,30 @@ create table if not exists atlas_foundation.technical_daily (
     rs_3m_n50 numeric(16,8), rs_6m_n50 numeric(16,8), rs_12m_n50 numeric(16,8),
     rs_1d_n500 numeric(16,8), rs_1w_n500 numeric(16,8), rs_1m_n500 numeric(16,8),
     rs_3m_n500 numeric(16,8), rs_6m_n500 numeric(16,8), rs_12m_n500 numeric(16,8),
-    above_ema_21 boolean, above_ema_50 boolean, above_ema_200 boolean,
+    above_ema_10 boolean, above_ema_21 boolean, above_ema_50 boolean, above_ema_200 boolean,
     compute_run_id uuid,
     computed_at timestamptz not null default now(),
     primary key (instrument_id, date)
 );
 create index if not exists ix_fs_tech_daily_class_date
     on atlas_foundation.technical_daily (asset_class, date);
+-- ema_10 added 2026-07 (fast-crossover portfolio strategies); idempotent for live DB
+alter table atlas_foundation.technical_daily add column if not exists ema_10 numeric(18,6);
+alter table atlas_foundation.technical_daily add column if not exists above_ema_10 boolean;
+
+-- ── Fund technicals: EMAs over NAV (funds have mstar_id, no instrument_id) ──
+-- Uses raw `nav` (AMFI growth-plan NAV needs no corp-action adjustment; nav_adj is
+-- unpopulated). Slim by design: crossover strategies need only the EMA ladder;
+-- returns/risk already live on de_mf_nav_daily.
+create table if not exists atlas_foundation.technical_fund_daily (
+    mstar_id  text not null,
+    date      date not null,
+    nav       numeric(18,6),
+    ema_10 numeric(18,6), ema_21 numeric(18,6), ema_50 numeric(18,6), ema_200 numeric(18,6),
+    compute_run_id uuid,
+    computed_at timestamptz not null default now(),
+    primary key (mstar_id, date)
+);
 
 -- ── Per-instrument compute progress (resumability) ────────────────────────
 create table if not exists atlas_foundation.compute_state (
