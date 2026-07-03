@@ -174,6 +174,8 @@ const FOUNDATION_TABLES: { table: string; date_col: string; label: string; caden
   { table: 'mv_sector_breadth',         date_col: 'as_of_date', label: 'Sector breadth',          cadence: 'Daily', feeds: 'Breadth table',             ok: 4, warn: 7 },
   { table: 'mv_sector_deepdive',        date_col: 'data_as_of', label: 'Sector deep-dive',        cadence: 'Daily', feeds: '/sectors/[name]',           ok: 4, warn: 7 },
   { table: 'atlas_macro_daily',         date_col: 'date',       label: 'Macro overlay',           cadence: 'Daily', feeds: 'Market-pulse macro strip',   ok: 4, warn: 7 },
+  { table: 'portfolio_nav_daily',       date_col: 'date',       label: 'Portfolio NAV marks',     cadence: 'Daily', feeds: '/portfolios paper-track',    ok: 4, warn: 7 },
+  { table: 'technical_fund_daily',      date_col: 'date',       label: 'Fund EMAs (NAV-based)',   cadence: 'Daily', feeds: 'Fund crossover strategies',  ok: 4, warn: 7 },
 ]
 
 export async function getFoundationFreshness(): Promise<FoundationFreshness[]> {

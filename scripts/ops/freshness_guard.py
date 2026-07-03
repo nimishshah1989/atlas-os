@@ -67,6 +67,10 @@ BOARD_TABLES = [
     # are repointed to native holdings and the tables are dropped, so they're gone from here.
     ("de_mf_holdings", "as_of_date", 8),  # Morningstar, weekly
     ("de_etf_holdings", "as_of_date", 8),  # Morningstar, weekly
+    # Portfolio layer (WARN-tier: a stale paper-track pages the FM, it doesn't
+    # freeze the board deploy; validate_portfolios.py is the correctness gate).
+    ("portfolio_nav_daily", "date", 1),
+    ("technical_fund_daily", "date", 1),
 ]
 
 # ── PRODUCER REGISTRY — the invariant that makes the 2026-07 incident unrepeatable ──
@@ -97,6 +101,8 @@ PRODUCERS = {
     "atlas_macro_daily": "ingest_macro.py",
     "de_mf_holdings": "ingest_mf_holdings.py",
     "de_etf_holdings": "ingest_etf_holdings.py",
+    "portfolio_nav_daily": "portfolio_run.py",
+    "technical_fund_daily": "compute_fund_technicals.py",
 }
 
 

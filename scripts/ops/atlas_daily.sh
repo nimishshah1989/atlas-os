@@ -72,6 +72,11 @@ step "build_sector_cards"        $PY scripts/foundation/build_sector_cards.py
 step "build_fund_rank_history"   $PY scripts/foundation/build_fund_rank_history.py --latest
 step "build_breadth_series"      $PY scripts/foundation/build_breadth_series.py
 step "regime"                    $PY -c "from atlas.compute.regime import run_daily_regime; run_daily_regime(schema='atlas_foundation')"
+# Portfolio layer: fund EMAs (NAV-based, needs ingest_nav), then execute pending
+# strategy signals + mark-to-market every active portfolio. Runs after lens_daily —
+# entry overflow ranks by the same-day composite.
+step "compute_fund_technicals"   $PY scripts/foundation/compute_fund_technicals.py
+step "portfolio_mark"            $PY scripts/foundation/portfolio_run.py mark
 
 # 3. GATES (assert on REAL produced output — rule #0). Deploy only if ALL pass.
 # Run gates DIRECTLY (not via step): step() records a failure but always returns 0,
@@ -93,6 +98,9 @@ gate "validate_lenses_A" $PY scripts/foundation/validate_lenses.py --check A
 gate "validate_lenses_B" $PY scripts/foundation/validate_lenses.py --check B
 gate "validate_lenses_C" $PY scripts/foundation/validate_lenses.py --check C
 gate "freshness_guard"   $PY scripts/ops/freshness_guard.py --eod "$EOD"
+# Portfolio accounting checks alert but don't block the board deploy (step, not gate);
+# promote to gate() after a clean month.
+step "validate_portfolios"       $PY scripts/foundation/validate_portfolios.py
 
 # 4. SERVE — REBUILD then reload, with a .next backup + rollback on build failure
 #    (mirrors atlas-auto-deploy.sh). The board's home/sectors/stocks pages are static-ISR:
