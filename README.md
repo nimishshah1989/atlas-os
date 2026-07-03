@@ -1,117 +1,60 @@
 # atlas-os
 
-Atlas — Adaptive Technical Lens for Asset States. Indian wealth-management
-decision engine. Reads OHLCV / NAV / holdings from JIP Data Core (Layer 1,
-read-only), computes the four primitives + states + decisions per the
-methodology lock (Layer 3), serves results via a thin FastAPI + Streamlit
-stack.
+Atlas is a discovery-first **equity-intelligence board** for Indian markets. It ingests
+real market data nightly, scores stocks / ETFs / funds / sectors through a transparent
+lens methodology, and serves the result as a glass-box web board.
 
-This repo follows the layout defined in `docs/01_BACKEND_ARCHITECTURE.md`
-Section 11.
+It is self-contained: one Postgres schema, its own ingestion, its own compute, its own
+frontend. Nothing routes through an external service except the raw data feeds.
 
-## Sources of truth
+## Architecture
 
-| Document | Owns |
-|---|---|
-| `docs/00_METHODOLOGY_LOCK.md` | What the system computes (formulas, states, decisions) |
-| `docs/01_BACKEND_ARCHITECTURE.md` | How the system is built (conventions, libraries, topology) |
-| `docs/02_DATABASE_SCHEMA.md` | Every column of every table |
-| `docs/03_VALIDATION_FRAMEWORK.md` | What "done" means for every milestone |
-| `docs/04_THRESHOLD_CATALOG.md` | The 35 tunable thresholds + tuning discipline |
-| `docs/milestones/ATLAS_M*.md` | Build-time instructions for milestone N |
-| `prds/00_INFRA_DECISIONS.md` | Decisions taken at build start (Supabase pivot, F1-F7 fixes, etc.) |
+```
+feeds ─▶ scripts/foundation/  ─▶  atlas_foundation  ─▶  frontend/ (Next.js board)
+(Kite, NSE, AMFI,   ingest + compute       (single Supabase        reads Postgres
+ Morningstar,       (atlas/ modulith)       Postgres schema)        directly
+ screener.in)
+```
 
-When milestone docs and the methodology lock disagree, **methodology wins**.
-The seven drifts found in the M5 milestone draft (F1-F7) have been patched
-to match methodology — see `prds/00_INFRA_DECISIONS.md` Section 5.
+- **`atlas_foundation`** is the only data schema. Every read/write goes here.
+- **`atlas/`** — the compute modulith (`compute`, `intraday`, `lenses`) + `config`/`db`.
+- **`scripts/foundation/`** — ingestion + derived-table builders (all real sources).
+- **`scripts/ops/atlas_daily.sh`** — the nightly orchestrator (19:30 IST): ingest →
+  compute → gates → health snapshot.
+- **`frontend/`** — Next.js board reading `atlas_foundation` via Supabase. No API backend.
+- **`migrations/`** — a single squashed baseline that reproduces the live schema.
 
-## Build sequencing
-
-| Milestone | Status | Description |
-|---|---|---|
-| M0 — Data Core Prep | ✅ Complete | Gap fill, ETF holdings ingest, JIP cleanup |
-| M1 — Schema + Reference | ⏳ In progress | This repo's current focus. Awaits Supabase migration of JIP tables. |
-| M2 — Stock + ETF Metrics | Pending M1 signoff | The four primitives + state classification |
-| M3 — Sector + Market Regime | Pending M2 | Aggregation + regime classifier |
-| M4 — MF Three-Lens | Pending M3 | Fund decision support |
-| M5 — Decision Engine | Pending M4 | Investability + entry/exit triggers |
-
-## Running M1
-
-### One-time setup
+## Running it
 
 ```bash
-# 1. Install deps + this package in editable mode
+# Python env
 python -m venv .venv && source .venv/bin/activate
-pip install -e '.[dev]'
+uv sync --extra dev                    # or: pip install -e '.[dev]'
+cp .env.example .env                    # set ATLAS_DB_URL (Supabase connection string)
 
-# 2. Configure DB connection
-cp .env.example .env
-# Edit .env — set ATLAS_DB_URL to your Supabase connection string
+# Verify DB connectivity
+PYTHONPATH=.:scripts/foundation .venv/bin/python -c "import _db; print(_db.eod_cutoff())"
 
-# 3. Verify connectivity
-python -m atlas.db
-# Expected output: PostgreSQL version, current_database, current_user
+# Run the nightly pipeline once (ingest → compute → gates)
+bash scripts/ops/atlas_daily.sh
+
+# Unit tests (fast, real records — no synthetic data; see RULE #0 in CLAUDE.md)
+pytest tests/unit -m unit -q
+
+# Frontend
+cd frontend && npm install && npm run dev      # dev board on :3000
 ```
 
-### Apply migrations + lock universe
+## Gates
 
-```bash
-python scripts/m1_run.py
-```
+- `scripts/ops/schema_gate.py` — proves every live read is in `atlas_foundation` (must be 0).
+- `scripts/foundation/validate_lenses.py --check A|B` — asserts on REAL produced scores.
+- `scripts/ops/freshness_guard.py` — fails loud if any served table is stale.
+- CI (`.github/workflows/ci.yml`): ruff + pyright ratchet + unit tests + a fresh-DB
+  `alembic upgrade head` against the baseline.
 
-This is idempotent — re-running upserts existing rows. Output is the M1
-readiness summary with row counts per universe table.
+## Docs
 
-### Run unit tests
-
-```bash
-pytest tests/unit/
-```
-
-Unit tests cover the pure-Python helpers (tier classification, ETF theme
-classification, fund category mapping, threshold catalog integrity). They
-run without a database.
-
-### Validation report
-
-After `m1_run.py` succeeds:
-
-```bash
-python -m atlas.validation.tier1_raw   # not yet implemented (M1 Phase D)
-```
-
-## Layout
-
-```
-atlas-os/
-├── docs/                     foundation + milestone docs (source of truth)
-├── prds/                     decisions and inventories from M0
-├── output/                   M0 artefacts (GAP_MAP, validation, inventory)
-├── migrations/               Alembic migrations 001-010 → atlas schema + roles
-├── atlas/                    main package
-│   ├── config.py             ATLAS_DB_URL + lock date
-│   ├── db.py                 SQLAlchemy engine + load_thresholds helper
-│   └── universe/             M1 universe lock (sectors, stocks, ETFs, …)
-├── scripts/
-│   └── m1_run.py             M1 entry point — migrations + universe lock
-├── tests/unit/               pure-Python tests (no DB)
-├── src/atlas_os/             legacy M0-inventory module — kept for reference
-├── pyproject.toml
-├── alembic.ini
-└── .env.example
-```
-
-## Hooks and engineering rules
-
-This project obeys the global rules in `~/.claude/CLAUDE.md`:
-
-- No `float` for money — `NUMERIC(18,4)` or `NUMERIC(20,4)` everywhere.
-- No bare `except:` clauses.
-- Library discipline (architecture 5.5): EMAs from pandas-ta, drawdowns from
-  empyrical, no hand-rolled formulas at the primitive layer.
-- Threshold discipline (architecture 5.6): every classification rule receives
-  thresholds as a dict argument; never hardcoded.
-- Tier 1-5 validation per milestone DoD.
-
-Pre-commit hooks (see `.pre-commit-config.yaml`) enforce these at edit time.
+`CLAUDE.md` (engineering rules) · `CONTEXT.md` (glossary) · `docs/refresh-schedule.md` +
+`docs/table-census.md` (data model) · `docs/deploy.md` + `docs/deploy-hygiene.md` ·
+`docs/engineering-process.md` (CI gates) · `docs/adr/` (decisions).

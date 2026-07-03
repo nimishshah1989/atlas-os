@@ -1,6 +1,6 @@
 """Market regime classifier (M3 Phase C).
 
-Per ``docs/00_METHODOLOGY_LOCK.md`` §11 and ``docs/02_DATABASE_SCHEMA.md``
+Per the lens methodology.md``
 §3.5 (``atlas_market_regime_daily``).
 
 One row per trading day. The regime answers a single question — *how
@@ -88,7 +88,7 @@ METRICS_COLUMNS: tuple[str, ...] = (
     "dislocation_started",
     "compute_run_id",
 )
-"""Mirrors ``docs/02_DATABASE_SCHEMA.md`` §3.5 column order. Two columns
+"""Matches the served column order. Two columns
 ``pct_above_ema_20`` and ``nifty500_ema_50_slope`` are computed best-effort
 and may be NaN where EMA20 isn't materialised in the stock table."""
 

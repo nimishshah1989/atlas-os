@@ -2381,3 +2381,6 @@ ALTER TABLE atlas_foundation.sector_index_returns ENABLE ROW LEVEL SECURITY;
 --
 
 
+
+-- Fast MAX(date) for the data-status freshness panel (added 2026-07-03).
+CREATE INDEX IF NOT EXISTS idx_technical_daily_date ON atlas_foundation.technical_daily (date);

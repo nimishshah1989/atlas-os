@@ -1,5 +1,5 @@
 #!/bin/bash
-# Atlas v4 DAILY orchestrator (Mon–Fri, POST-CLOSE ~16:00 IST). The single canonical
+# Atlas v4 DAILY orchestrator (Mon–Fri, POST-CLOSE ~19:30 IST (after NSE bhavcopy publishes)). The single canonical
 # daily refresh, replacing the JIP/M2-M5/intelligence cron tangle. All writes land in
 # ONE schema (atlas_foundation). Calculations anchor to the last COMPLETE EOD (D11).
 # Prices are Kite-only via the batched quote() path (no historical-burst throttle).

@@ -28,7 +28,7 @@ import {
   type ChartOptions,
   LineSeries,
 } from 'lightweight-charts'
-import { useThemeTokens } from '@/components/v4/ui/useThemeTokens'
+import { useThemeTokens } from '@/components/ui/useThemeTokens'
 
 // ── Public types ──────────────────────────────────────────────────────────
 

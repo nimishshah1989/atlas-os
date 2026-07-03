@@ -1,6 +1,6 @@
 # Atlas — Domain glossary
 
-This file is the canonical glossary for Atlas v6 terms. It is updated as
+This file is the canonical glossary for Atlas terms. It is updated as
 ambiguities get resolved during planning sessions. It is NOT a spec, NOT
 a scratch pad — only a glossary.
 
@@ -569,7 +569,7 @@ events/yr AND positive min OOS IC), even with the missing 6th confluence
 **why-strip context chip** on the trader-view UI: Stage 4 + positive
 cell renders BUY/ACCUMULATE with a warn-colored Stage 4 chip, not WAIT.
 Stage 3 → WATCH/HOLD downgrade retained (Q1 spec lock, separately
-reviewable). See docs/v6/2026-05-28-weinstein-a3-report.md.
+reviewable).
 
 ### Verdict source priority chain (added 2026-05-28)
 

@@ -30,20 +30,22 @@ type Group   = { key: string; label: string; links: SubLink[] }
 //     group when international markets work begins)
 //   - Daily Brief moved to new Reports group (repository for future
 //     daily/weekly/monthly reports)
+// Only live pages. Links to unbuilt/retired features (india-pulse, markets-rs,
+// calls, portfolios, setup, composite-proposals, intelligence/daily-brief) were
+// pruned — re-add a link when its page.tsx exists, not before, so the nav never
+// 404s.
 export const GROUPS: Group[] = [
   {
     key: 'today',
     label: 'MARKETS TODAY',
     links: [
       { href: '/',                  label: 'Regime' },
-      { href: '/india-pulse',       label: 'India Pulse' },
     ],
   },
   {
     key: 'deepdive',
     label: 'DEEP DIVE',
     links: [
-      { href: '/markets-rs',  label: 'Markets RS' },
       { href: '/sectors',     label: 'Sectors' },
       { href: '/stocks',      label: 'Stocks' },
       { href: '/etfs',        label: 'ETFs' },
@@ -51,45 +53,23 @@ export const GROUPS: Group[] = [
     ],
   },
   {
-    key: 'portfolios',
-    label: 'PORTFOLIOS',
-    links: [
-      { href: '/calls',       label: 'Calls' },
-      { href: '/portfolios',  label: 'Custom Portfolios' },
-    ],
-  },
-  {
     key: 'admin',
     label: 'ADMIN',
     links: [
-      { href: '/admin',        label: 'Overview & Health' },
-      { href: '/setup',        label: 'Portfolio Setup' },
-      { href: '/admin/thresholds',          label: 'Thresholds' },
-      { href: '/admin/composite-proposals', label: 'Signal Proposals' },
-    ],
-  },
-  {
-    key: 'reports',
-    label: 'REPORTS',
-    links: [
-      { href: '/intelligence/daily-brief', label: 'Daily Brief' },
-      // Future: weekly + monthly + quarterly reports
+      { href: '/admin',            label: 'Overview & Health' },
+      { href: '/admin/thresholds', label: 'Thresholds' },
     ],
   },
 ]
 
 function activeGroup(pathname: string): Group {
+  const byKey = (k: string) => GROUPS.find(g => g.key === k) ?? GROUPS[0]
   if (pathname.startsWith('/admin') ||
-      pathname.startsWith('/setup') ||
       pathname.startsWith('/methodology') ||
-      pathname.startsWith('/health'))                                         return GROUPS[3]
-  if (pathname.startsWith('/intelligence/daily-brief'))                        return GROUPS[4]
-  if (pathname.startsWith('/calls') || pathname.startsWith('/portfolios'))     return GROUPS[2]
-  if (pathname.startsWith('/india-pulse'))                                     return GROUPS[0]
-  if (pathname.startsWith('/markets-rs') ||
-      pathname.startsWith('/sectors')    || pathname.startsWith('/stocks') ||
-      pathname.startsWith('/etfs')       || pathname.startsWith('/funds'))     return GROUPS[1]
-  return GROUPS[0] // markets-today is default for /
+      pathname.startsWith('/health'))                                         return byKey('admin')
+  if (pathname.startsWith('/sectors') || pathname.startsWith('/stocks') ||
+      pathname.startsWith('/etfs')    || pathname.startsWith('/funds'))       return byKey('deepdive')
+  return byKey('today') // markets-today is default for /
 }
 
 function TopNavLegacy({ healthDot }: { healthDot?: React.ReactNode }) {

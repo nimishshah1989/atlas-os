@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 import { getFoundationFreshness, getJipFreshness, getRecentRuns, overallRag } from '@/lib/queries/health'
-import { DataStatusPanel } from '@/components/v6/admin/DataStatusPanel'
+import { DataStatusPanel } from '@/components/admin/DataStatusPanel'
 
 export default async function AdminDataStatusPage() {
   const [foundation, jip, runs] = await Promise.all([

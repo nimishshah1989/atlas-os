@@ -4,8 +4,8 @@
 // lens WEIGHTS, convergence boosts and conviction tiers are read LIVE from atlas_thresholds (passed
 // in as props), so the mind-map always matches the engine; the inputs listed under each node are the
 // actual fields the scorers read (atlas/lenses/compute/*.py). A top-down tree: Composite → 6 lenses.
-import type { LensWeightMap } from '@/lib/v6/sectorScore'
-import type { MethodologyThresholds } from '@/lib/queries/v6/methodology'
+import type { LensWeightMap } from '@/lib/sectorScore'
+import type { MethodologyThresholds } from '@/lib/queries/methodology'
 
 type Leaf = { name: string; inputs: string; weight?: string }
 type Lens = {

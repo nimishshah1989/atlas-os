@@ -47,7 +47,7 @@ def rsi(close: pd.Series, period: int = RSI_PERIOD) -> pd.Series:
 # feed skipped), and that wrong anchor often straddles a sharp move — inflating a
 # "3-month return" by several points (Nifty 50: 6.9% row-anchored vs 3.2% true).
 # Calendar anchoring is robust to gaps and cross-validated across two independent
-# price feeds to <0.1pp (2026-06-26; see docs/v4/2026-06-26-data-source-map.md).
+# price feeds to <0.1pp.
 # 1d/1w stay session-anchored — a "day"/"week" is naturally trading sessions and
 # short windows don't accumulate gap drift.
 _CALENDAR_MONTHS: dict[str, int] = {"1m": 1, "3m": 3, "6m": 6, "12m": 12}

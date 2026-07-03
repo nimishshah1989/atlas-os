@@ -5,10 +5,10 @@
 // fabricated hit rates, no aspirational "24-cell matrix" / conviction-% / auto-optimization claims.
 import { useState } from 'react'
 import { LensMindMap } from './LensMindMap'
-import { MethodologyTree } from '@/components/v6/admin/MethodologyTree'
-import { buildMethodology } from '@/lib/v6/methodologySpec'
-import type { LensWeightMap } from '@/lib/v6/sectorScore'
-import type { MethodologyThresholds } from '@/lib/queries/v6/methodology'
+import { MethodologyTree } from '@/components/admin/MethodologyTree'
+import { buildMethodology } from '@/lib/methodologySpec'
+import type { LensWeightMap } from '@/lib/sectorScore'
+import type { MethodologyThresholds } from '@/lib/queries/methodology'
 
 // The live blend string from the weights — only the lenses that carry weight (e.g. the 2-lens model).
 function blendString(w: LensWeightMap): string {

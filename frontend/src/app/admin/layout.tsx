@@ -1,7 +1,7 @@
 // /admin — operator console. Three tabs: Methodology (how the scores are built, in plain terms),
 // Thresholds (edit the knobs + recompute), Data status (freshness RAG). Shared header + tab nav;
 // each tab is its own route so it fetches only what it needs.
-import { AdminTabNav } from '@/components/v6/admin/AdminTabNav'
+import { AdminTabNav } from '@/components/admin/AdminTabNav'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (

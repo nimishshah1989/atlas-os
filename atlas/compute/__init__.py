@@ -1,6 +1,6 @@
 """Atlas-M2 compute layer.
 
-Per ``docs/01_BACKEND_ARCHITECTURE.md`` §5 and ``docs/milestones/ATLAS_M2_*.md``.
+Per the compute architecture.
 
 Public surface:
 
@@ -17,7 +17,6 @@ Public surface:
 The flow: ``benchmarks → primitives → gates → states → write``. Each step is
 vectorised across the entire universe in a single C-level call (no Python loops).
 
-See ``prds/M2_BUILD_PLAN.md`` for the full vectorisation strategy and time budget.
 """
 
 from atlas.compute._session import (

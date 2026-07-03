@@ -2,8 +2,8 @@
 // atlas_foundation.atlas_thresholds and hand it to the editable client panel.
 export const dynamic = 'force-dynamic' // always show the current saved values
 
-import { getThresholds } from '@/lib/queries/v6/thresholds'
-import { ThresholdsPanelV4 } from '@/components/v6/thresholds/ThresholdsPanelV4'
+import { getThresholds } from '@/lib/queries/thresholds'
+import { ThresholdsPanelV4 } from '@/components/thresholds/ThresholdsPanelV4'
 
 export default async function ThresholdsPage() {
   const rows = await getThresholds()

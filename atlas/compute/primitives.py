@@ -1,6 +1,6 @@
 """Atlas-M2 primitive computations.
 
-Per ``docs/00_METHODOLOGY_LOCK.md`` §7 and ``docs/01_BACKEND_ARCHITECTURE.md`` §5.5.
+Per the lens methodology.
 
 The four primitives — Relative Strength, RS Momentum, Relative Risk, Volume —
 plus EMAs and ATR are computed here. Every formula maps to a vetted library
@@ -10,7 +10,7 @@ ratios).
 
 Vectorisation pattern: every function takes a DataFrame containing the *whole
 universe* (all instruments, all dates) and uses ``groupby(instrument_id)`` so
-the per-instrument loop runs in C, not Python. See ``prds/M2_BUILD_PLAN.md``
+the per-instrument loop runs in C, not Python.
 §3 for the time budget this pattern hits.
 """
 
@@ -120,7 +120,7 @@ def add_atr(
     """Append ``atr_{length}`` via ``pandas_ta.atr`` (Wilder smoothing).
 
     Required by methodology §13.4 trigger 6 (M5 ATR-stop exit) — included in
-    M2 to avoid a re-run when M5 lands. See ``prds/00_INFRA_DECISIONS.md`` §6.
+    M2 to avoid a re-run when M5 lands.
     """
     out = df.copy().sort_values([group_col, "date"])
     col = f"atr_{length}"

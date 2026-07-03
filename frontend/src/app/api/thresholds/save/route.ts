@@ -2,7 +2,7 @@
 // Each value is validated/clamped server-side against its own min/max (authoritative); the body
 // is { edits: [{key, value}], modifiedBy? }. Does NOT recompute — that's a separate explicit step.
 import { NextResponse } from 'next/server'
-import { updateThresholds, type ThresholdEdit } from '@/lib/queries/v6/thresholds'
+import { updateThresholds, type ThresholdEdit } from '@/lib/queries/thresholds'
 
 export const dynamic = 'force-dynamic'
 
