@@ -45,13 +45,15 @@ export function MarketPulseBreadthCharts({ series }: { series: BreadthRow[] }) {
         </div>
         <span className="font-num text-[10px] tabular-nums text-txt-3">{sliced.length.toLocaleString('en-IN')} days</span>
       </div>
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+      {/* Stacked full-width — the FM reads these closely, so each gets the whole panel
+          width and a taller frame rather than being cramped into a 2-up grid. */}
+      <div className="grid grid-cols-1 gap-8">
         {CHARTS.map((c) => {
           const data = sliced.map((r) => ({ time: r.date, value: r[c.key] }))
           return (
             <div key={c.key}>
-              <p className="mb-1.5 font-num text-[10px] uppercase tracking-wider text-txt-3">{c.label}</p>
-              <AtlasLightweightChart height={148} precision={0} series={[{ name: c.label, color: c.color, data }]} />
+              <p className="mb-2 font-num text-[12px] uppercase tracking-wider text-txt-2">{c.label}</p>
+              <AtlasLightweightChart height={300} precision={0} series={[{ name: c.label, color: c.color, data }]} />
             </div>
           )
         })}
