@@ -37,11 +37,13 @@ _SRC = {
 }
 _RS_COLS = [f"rs_{w}_{b}" for b in BENCHMARKS for w in T.RETURN_WINDOWS]
 _VV_COLS = ["atr_14", "bb_width", "vol_ratio_30d", "vol_ratio_60d", "pos_52w"]
+_EMA_COLS = [f"ema_{p}" for p in T.EMA_PERIODS]
 _TECH_COLS = (
-    ["ema_21", "ema_50", "ema_200", "rsi_14"]
+    _EMA_COLS
+    + ["rsi_14"]
     + [f"ret_{w}" for w in T.RETURN_WINDOWS]
     + _RS_COLS
-    + ["above_ema_21", "above_ema_50", "above_ema_200"]
+    + [f"above_ema_{p}" for p in T.EMA_PERIODS]
     + _VV_COLS
 )
 
@@ -165,7 +167,7 @@ def compute_one(iid, ac, sym, benches, run_id, floor=None, cutoff=None) -> int:
     out["asset_class"] = ac
     out["symbol"] = sym
     out["date"] = [d.date() for d in close.index]
-    for c in ["ema_21", "ema_50", "ema_200", "rsi_14"] + [f"ret_{w}" for w in T.RETURN_WINDOWS]:
+    for c in _EMA_COLS + ["rsi_14"] + [f"ret_{w}" for w in T.RETURN_WINDOWS]:
         out[c] = tech[c].values
     for c in _RS_COLS:
         out[c] = tech[c].values
