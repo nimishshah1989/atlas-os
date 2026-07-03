@@ -119,9 +119,9 @@ def check_A(g: Gate):
 def check_B(g: Gate):
     """Validate what the lens pipeline actually PRODUCES: the sector roll-up + the
     scored-universe sector mapping. (The lens journal is stocks-only by design —
-    ETFs are scored in atlas_etf_scorecard and indices are benchmarks, not lens
-    entities — so the old 'ETF/index lens coverage' checks were architecturally
-    void and are removed here.)"""
+    ETFs are scored as a native holdings-weighted roll-up of the stock atom (etf_lens),
+    and indices are benchmarks, not lens entities — so the old 'ETF/index lens coverage'
+    checks were architecturally void and are removed here.)"""
     print("== Loop B gate: sector roll-up + scored-universe mapping ==")
 
     # Sector roll-up table exists + every actionable sector has a vector

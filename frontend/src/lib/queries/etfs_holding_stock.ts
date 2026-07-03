@@ -6,7 +6,10 @@
 //
 //   atlas_foundation.de_etf_holdings (ticker, instrument_id, weight)
 //   ⨝ de_etf_master (ticker → name)
-//   ⨝ atlas_etf_scorecard (latest composite_score → grade), left join
+//
+// The composite-grade badge was dropped with the atlas_etf_scorecard methodology
+// (retired FM 2026-07-03 — the simplified product ranks ETFs on the native lens
+// roll-up, not a standalone scorecard), matching the funds-holding panel.
 import 'server-only'
 import sql from '@/lib/db'
 
@@ -14,7 +17,7 @@ export type EtfHolding = {
   ticker: string
   etf_name: string
   weight_pct: string   // the stock's weight inside the ETF (%)
-  atlas_grade: string  // from the ETF's composite_score, or '—' if unscored
+  atlas_grade: string  // retired with atlas_etf_scorecard — always '' (kept for panel shape)
 }
 
 type Row = {
@@ -29,23 +32,12 @@ export async function getEtfsHoldingStock(iid: string): Promise<EtfHolding[]> {
   const rows = await sql<Row[]>`
     SELECT
       h.ticker                                        AS ticker,
-      COALESCE(m.name, sc.etf_name, h.ticker)         AS etf_name,
+      COALESCE(m.name, h.ticker)                      AS etf_name,
       -- de_etf_holdings.weight is a FRACTION (0..1) — ×100 to a display percent.
       (h.weight * 100)::text                          AS weight_pct,
-      CASE
-        WHEN sc.composite_score >= 90 THEN 'AAA'
-        WHEN sc.composite_score >= 80 THEN 'AA'
-        WHEN sc.composite_score >= 70 THEN 'A'
-        WHEN sc.composite_score >= 60 THEN 'BBB'
-        WHEN sc.composite_score >= 50 THEN 'BB'
-        WHEN sc.composite_score IS NOT NULL THEN 'B'
-        ELSE '—'
-      END                                             AS atlas_grade
+      ''                                              AS atlas_grade
     FROM atlas_foundation.de_etf_holdings h
     LEFT JOIN atlas_foundation.de_etf_master m ON m.ticker = h.ticker
-    LEFT JOIN atlas_foundation.atlas_etf_scorecard sc
-      ON sc.ticker = h.ticker
-     AND sc.snapshot_date = (SELECT MAX(snapshot_date) FROM atlas_foundation.atlas_etf_scorecard)
     WHERE h.instrument_id = ${iid}::uuid
       AND h.weight >= 0.005
     ORDER BY h.weight DESC NULLS LAST

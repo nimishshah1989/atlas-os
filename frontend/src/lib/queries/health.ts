@@ -163,7 +163,8 @@ const FOUNDATION_TABLES: { table: string; date_col: string; label: string; caden
   { table: 'mv_sector_cards',         date_col: 'as_of_date',    label: 'Sector cards',             cadence: 'Daily',   feeds: '/sectors heatmap + hero',      ok: 4,  warn: 7 },
   { table: 'mv_sector_breadth',       date_col: 'as_of_date',    label: 'Sector breadth',           cadence: 'Daily',   feeds: 'Breadth table',                ok: 4,  warn: 7 },
   { table: 'de_mf_nav_daily',         date_col: 'nav_date',      label: 'Fund NAVs',                cadence: 'Daily',   feeds: 'Fund pages',                   ok: 4,  warn: 7 },
-  { table: 'atlas_fund_scorecard',    date_col: 'snapshot_date', label: 'Fund scorecard',           cadence: 'Daily',   feeds: 'Fund ranking + score',         ok: 7,  warn: 14 },
+  // atlas_fund_scorecard RETIRED (FM 2026-07-03) — /funds ranks on the native lens composite;
+  // the scorecard table is dropped, so it's no longer listed here (would error the query).
   { table: 'de_mf_holdings',          date_col: 'as_of_date',    label: 'Fund holdings',            cadence: 'Monthly', feeds: 'Fund roll-ups + look-through', ok: 40, warn: 60 },
   { table: 'de_etf_holdings',         date_col: 'as_of_date',    label: 'ETF holdings',             cadence: 'Monthly', feeds: 'ETF roll-ups + look-through',  ok: 40, warn: 60 },
 ]
