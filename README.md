@@ -19,7 +19,7 @@ feeds ─▶ scripts/foundation/  ─▶  atlas_foundation  ─▶  frontend/ (N
 - **`atlas_foundation`** is the only data schema. Every read/write goes here.
 - **`atlas/`** — the compute modulith (`compute`, `intraday`, `lenses`) + `config`/`db`.
 - **`scripts/foundation/`** — ingestion + derived-table builders (all real sources).
-- **`scripts/ops/atlas_daily.sh`** — the nightly orchestrator (16:00 IST): ingest →
+- **`scripts/ops/atlas_daily.sh`** — the nightly orchestrator (19:30 IST): ingest →
   compute → gates → health snapshot.
 - **`frontend/`** — Next.js board reading `atlas_foundation` via Supabase. No API backend.
 - **`migrations/`** — a single squashed baseline that reproduces the live schema.

@@ -41,7 +41,7 @@ output (e.g. `scripts/foundation/validate_lenses.py`), never on synthetic fixtur
   lenses and composite; results land in `atlas_foundation`.
 - **Board (`frontend/`)** is Next.js reading `atlas_foundation` directly via Supabase.
   No FastAPI backend, no internal-service HTTP calls — the board is self-contained.
-- **Orchestrator: `scripts/ops/atlas_daily.sh`** (16:00 IST cron) runs the whole
+- **Orchestrator: `scripts/ops/atlas_daily.sh`** (19:30 IST cron) runs the whole
   pipeline + gates + writes the health snapshot. Weekly/QA orchestrators alongside.
 - **Migrations** are squashed to a single baseline (`migrations/versions/0001_baseline_*`
   = a verbatim dump of the live schema). Prod schema is managed directly, not by alembic.
