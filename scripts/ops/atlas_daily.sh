@@ -91,6 +91,7 @@ gate() {  # gate "name" cmd...
 }
 gate "validate_lenses_A" $PY scripts/foundation/validate_lenses.py --check A
 gate "validate_lenses_B" $PY scripts/foundation/validate_lenses.py --check B
+gate "validate_lenses_C" $PY scripts/foundation/validate_lenses.py --check C
 gate "freshness_guard"   $PY scripts/ops/freshness_guard.py --eod "$EOD"
 
 # 4. SERVE — REBUILD then reload, with a .next backup + rollback on build failure

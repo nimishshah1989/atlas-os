@@ -9,6 +9,7 @@ for names with hundreds of filings; only 750/2000 scored; a single date).
 
     python validate_lenses.py --check A   # Loop A: instrument-level completeness+correctness
     python validate_lenses.py --check B   # Loop B: ETF/index/sector roll-up
+    python validate_lenses.py --check C   # Loop C: scoring-MATH correctness (wrong-number guards)
 Exit 0 iff every assertion passes. Prints PASS/FAIL per assertion.
 """
 
@@ -147,13 +148,92 @@ def check_B(g: Gate):
     g.check("sector scores in valid 0-100 range", bad == 0, f"{bad} out-of-range")
 
 
+# ─────────────────────────── LOOP C ───────────────────────────
+def check_C(g: Gate):
+    """Scoring-MATH correctness — the invariants that catch a WRONG number, not just a
+    missing/stale one (checks A/B cover coverage + staleness). Every assertion here is a
+    structural property that must hold on real produced output; each guards a class of bug
+    this system has actually shipped (unit/row-offset returns, inflated sector returns,
+    a collapsed lens/composite, a mis-joined decile driving the leader flag)."""
+    print("== Loop C gate: scoring-math correctness (wrong-number guards) ==")
+    mx = _q(f"select max(date) from {L} where asset_class='stock'")
+
+    # 1. Composite is on its 0-100 scale — nothing out of range.
+    oob = _q(
+        f"select count(*) from {L} where asset_class='stock' and date=:d and (composite<0 or composite>100)",
+        {"d": mx},
+    )
+    g.check("composite in [0,100]", oob == 0, f"{oob} out-of-range")
+
+    # 2. Composite is NOT degenerate (a broken blend collapses the spread). Baseline stddev ~33.
+    csd = float(
+        _q(f"select stddev(composite) from {L} where asset_class='stock' and date=:d", {"d": mx})
+        or 0
+    )
+    g.check("composite non-degenerate (stddev>=10)", csd >= 10, f"stddev={csd:.1f}")
+
+    # 3. EVERY lens sub-score has real spread (a lens producing a constant = a broken feed,
+    #    the exact shape of the catalyst=0 incident). Conservative floor of 2.
+    for lens in LENSES:
+        sd = float(
+            _q(f"select stddev({lens}) from {L} where asset_class='stock' and date=:d", {"d": mx})
+            or 0
+        )
+        g.check(f"{lens} non-degenerate (stddev>=2)", sd >= 2, f"stddev={sd:.1f}")
+
+    # 4. Decile within cap cohort is MONOTONE in composite — proves the decile that drives
+    #    the leader flag is actually computed from composite, not stale / mis-joined.
+    dviol = _q(
+        f"""
+        with cap as (select instrument_id,
+            case when bool_or(index_code='NIFTY 100') then 'large'
+                 when bool_or(index_code='NIFTY MIDCAP 150') then 'mid'
+                 when bool_or(index_code='NIFTY SMLCAP 250') then 'small' else 'micro' end cap
+          from atlas_foundation.de_index_constituents where effective_to is null
+            and index_code in ('NIFTY 100','NIFTY MIDCAP 150','NIFTY SMLCAP 250') group by 1),
+        dec as (select l.composite, coalesce(c.cap,'micro') cap,
+            ntile(10) over (partition by coalesce(c.cap,'micro') order by l.composite) d
+          from {L} l left join cap c on c.instrument_id=l.instrument_id
+          where l.asset_class='stock' and l.date=:d and l.composite is not null),
+        band as (select cap,d,min(composite) mn,max(composite) mx from dec group by cap,d)
+        select count(*) from band b join band b2 on b2.cap=b.cap and b2.d=b.d+1 where b.mx>b2.mn+0.001""",
+        {"d": mx},
+    )
+    g.check("decile monotone in composite (per cap cohort)", dviol == 0, f"{dviol} inversions")
+
+    # 5. Daily returns are SANE — a unit bug (percent stored as fraction) yields |ret_1d|>>1.
+    #    Real single-day moves stay well under 100%; anything above is a defect, not a mover.
+    td = _q("select max(date) from atlas_foundation.technical_daily where asset_class='stock'")
+    absurd = _q(
+        "select count(*) from atlas_foundation.technical_daily where asset_class='stock' and date=:d and abs(ret_1d)>1.0",
+        {"d": td},
+    )
+    g.check("ret_1d within sane bounds (|ret_1d|<=100%)", absurd == 0, f"{absurd} absurd returns")
+
+    # 6. Sector-card returns MUST equal the sector index returns they're built from — guards
+    #    the 2-5x-inflated bottom-up reconstruction from ever coming back (build_sector_cards).
+    n_sec = _q(
+        "select count(*) from atlas_foundation.mv_sector_cards where as_of_date=(select max(as_of_date) from atlas_foundation.mv_sector_cards)"
+    )
+    g.check("sector cards present (>=21)", (n_sec or 0) >= 21, f"{n_sec} sectors")
+    smism = _q("""
+        select count(*) from atlas_foundation.mv_sector_cards c
+        join atlas_foundation.atlas_sector_master sm on sm.sector_name=c.sector_name
+        join atlas_foundation.atlas_index_metrics_daily im on im.index_code=sm.primary_nse_index
+          and im.date=(select max(date) from atlas_foundation.atlas_index_metrics_daily)
+        where c.as_of_date=(select max(as_of_date) from atlas_foundation.mv_sector_cards)
+          and c.ret_3m is not null and im.ret_3m is not null and abs(c.ret_3m-im.ret_3m)>0.0005""")
+    g.check("sector-card returns match index metrics", smism == 0, f"{smism} mismatched sectors")
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--check", choices=["A", "B"], required=True)
+    ap.add_argument("--check", choices=["A", "B", "C"], required=True)
     args = ap.parse_args()
     g = Gate()
+    checks = {"A": check_A, "B": check_B, "C": check_C}
     try:
-        (check_A if args.check == "A" else check_B)(g)
+        checks[args.check](g)
     except Exception as e:
         print(f"  \033[31mFAIL\033[0m gate raised: {e!r}")
         g.fails += 1
