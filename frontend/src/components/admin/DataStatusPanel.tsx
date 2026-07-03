@@ -103,8 +103,9 @@ export function DataStatusPanel({
       </section>
 
       <p className="font-sans text-[11px] leading-[1.6] text-txt-3">
-        JIP threshold = {jipLagThresholdDays('')}d. Holdings tables refresh monthly, so a higher lag is normal there.
-        Native from <strong className="text-txt-2">atlas_foundation</strong> + the JIP source sync.
+        Source threshold = {jipLagThresholdDays('')}d for daily feeds; the Morningstar holdings refresh
+        weekly ({jipLagThresholdDays('de_mf_holdings')}d), so a higher lag is normal there.
+        Native from <strong className="text-txt-2">atlas_foundation</strong> — product tables + source feeds.
       </p>
     </div>
   )

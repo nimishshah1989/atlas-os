@@ -54,7 +54,8 @@ def _insert(table: str, df) -> int:
     return len(rows)
 
 
-# The derived tables the live product serves (mirror of health.ts TRACKED_TABLES).
+# The derived tables the live product serves (mirror of health.ts TRACKED_TABLES /
+# FOUNDATION_TABLES). Covers every derived table the freshness guard watches.
 TRACKED = [
     ("technical_daily", "date"),
     ("atlas_lens_scores_daily", "date"),
@@ -63,6 +64,10 @@ TRACKED = [
     ("atlas_index_metrics_daily", "date"),
     ("atlas_market_regime_daily", "date"),
     ("breadth_nifty500_daily", "date"),
+    ("mv_sector_cards", "as_of_date"),
+    ("mv_sector_breadth", "as_of_date"),
+    ("mv_sector_deepdive", "data_as_of"),
+    ("atlas_macro_daily", "date"),
 ]
 
 

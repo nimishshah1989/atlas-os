@@ -84,6 +84,10 @@ const TRACKED_TABLES: { schema: string; name: string; date_col: string | null }[
   { schema: 'atlas_foundation', name: 'atlas_index_metrics_daily', date_col: 'date' },
   { schema: 'atlas_foundation', name: 'atlas_market_regime_daily', date_col: 'date' },
   { schema: 'atlas_foundation', name: 'breadth_nifty500_daily',    date_col: 'date' },
+  { schema: 'atlas_foundation', name: 'mv_sector_cards',           date_col: 'as_of_date' },
+  { schema: 'atlas_foundation', name: 'mv_sector_breadth',         date_col: 'as_of_date' },
+  { schema: 'atlas_foundation', name: 'mv_sector_deepdive',        date_col: 'data_as_of' },
+  { schema: 'atlas_foundation', name: 'atlas_macro_daily',         date_col: 'date' },
 ]
 
 export async function getFreshness(): Promise<TableFreshness[]> {
@@ -154,19 +158,22 @@ export type FoundationFreshness = {
 }
 
 // ok = expected max lag (days) at this cadence (weekends padded); warn = amber ceiling, beyond = red.
+// The DERIVED / computed tables the live product serves — one per producer step in the
+// pipeline. This MUST cover every derived table the freshness guard watches (BOARD_TABLES +
+// the computed KEY_TABLES); raw external feeds live in SOURCE_TABLES below. Kept in lockstep
+// with scripts/ops/freshness_guard.py by tests/unit/test_health_surface.py (drift → CI red).
 const FOUNDATION_TABLES: { table: string; date_col: string; label: string; cadence: string; feeds: string; ok: number; warn: number }[] = [
-  { table: 'ohlcv_stock',             date_col: 'date',          label: 'Stock prices (OHLCV)',     cadence: 'Daily',   feeds: 'Returns · RS · technicals',    ok: 4,  warn: 7 },
-  { table: 'technical_daily',         date_col: 'date',          label: 'Technical metrics',        cadence: 'Daily',   feeds: 'RS · EMA · RSI · returns',     ok: 4,  warn: 7 },
-  { table: 'atlas_lens_scores_daily', date_col: 'date',          label: 'Lens scores + composite',  cadence: 'Daily',   feeds: 'Conviction score · deciles',   ok: 4,  warn: 7 },
-  { table: 'sector_lens_daily',       date_col: 'date',          label: 'Sector lens vectors',      cadence: 'Daily',   feeds: 'Sector pages',                 ok: 4,  warn: 7 },
-  { table: 'atlas_index_metrics_daily', date_col: 'date',        label: 'Index returns',            cadence: 'Daily',   feeds: 'Sector RS · benchmarks',       ok: 4,  warn: 7 },
-  { table: 'mv_sector_cards',         date_col: 'as_of_date',    label: 'Sector cards',             cadence: 'Daily',   feeds: '/sectors heatmap + hero',      ok: 4,  warn: 7 },
-  { table: 'mv_sector_breadth',       date_col: 'as_of_date',    label: 'Sector breadth',           cadence: 'Daily',   feeds: 'Breadth table',                ok: 4,  warn: 7 },
-  { table: 'de_mf_nav_daily',         date_col: 'nav_date',      label: 'Fund NAVs',                cadence: 'Daily',   feeds: 'Fund pages',                   ok: 4,  warn: 7 },
-  // atlas_fund_scorecard RETIRED (FM 2026-07-03) — /funds ranks on the native lens composite;
-  // the scorecard table is dropped, so it's no longer listed here (would error the query).
-  { table: 'de_mf_holdings',          date_col: 'as_of_date',    label: 'Fund holdings',            cadence: 'Monthly', feeds: 'Fund roll-ups + look-through', ok: 40, warn: 60 },
-  { table: 'de_etf_holdings',         date_col: 'as_of_date',    label: 'ETF holdings',             cadence: 'Monthly', feeds: 'ETF roll-ups + look-through',  ok: 40, warn: 60 },
+  { table: 'technical_daily',           date_col: 'date',       label: 'Technical metrics',       cadence: 'Daily', feeds: 'RS · EMA · RSI · returns',   ok: 4, warn: 7 },
+  { table: 'atlas_lens_scores_daily',   date_col: 'date',       label: 'Lens scores + composite', cadence: 'Daily', feeds: 'Conviction score · deciles', ok: 4, warn: 7 },
+  { table: 'sector_lens_daily',         date_col: 'date',       label: 'Sector lens vectors',     cadence: 'Daily', feeds: 'Sector scores',             ok: 4, warn: 7 },
+  { table: 'fund_rank_daily',           date_col: 'date',       label: 'Fund ranks',              cadence: 'Daily', feeds: '/funds ranking + history',   ok: 4, warn: 7 },
+  { table: 'atlas_index_metrics_daily', date_col: 'date',       label: 'Index returns',           cadence: 'Daily', feeds: 'Sector RS · benchmarks',     ok: 4, warn: 7 },
+  { table: 'atlas_market_regime_daily', date_col: 'date',       label: 'Market regime',           cadence: 'Daily', feeds: 'Regime chip · market pulse', ok: 4, warn: 7 },
+  { table: 'breadth_nifty500_daily',    date_col: 'date',       label: 'Breadth (Nifty 500)',     cadence: 'Daily', feeds: 'Breadth charts',            ok: 4, warn: 7 },
+  { table: 'mv_sector_cards',           date_col: 'as_of_date', label: 'Sector cards',            cadence: 'Daily', feeds: '/sectors heatmap + hero',    ok: 4, warn: 7 },
+  { table: 'mv_sector_breadth',         date_col: 'as_of_date', label: 'Sector breadth',          cadence: 'Daily', feeds: 'Breadth table',             ok: 4, warn: 7 },
+  { table: 'mv_sector_deepdive',        date_col: 'data_as_of', label: 'Sector deep-dive',        cadence: 'Daily', feeds: '/sectors/[name]',           ok: 4, warn: 7 },
+  { table: 'atlas_macro_daily',         date_col: 'date',       label: 'Macro overlay',           cadence: 'Daily', feeds: 'Market-pulse macro strip',   ok: 4, warn: 7 },
 ]
 
 export async function getFoundationFreshness(): Promise<FoundationFreshness[]> {
@@ -207,14 +214,17 @@ export function overallRag(rows: { rag: Rag }[]): Rag {
 // schema (the legacy JIP public.de_* sources were retired).
 // ---------------------------------------------------------------------------
 
+// Raw EXTERNAL feeds (Kite / NSE bhavcopy / AMFI / Morningstar / delivery). Daily unless
+// noted; holdings are weekly (see jipLagThresholdDays). Together with FOUNDATION_TABLES this
+// covers every table the freshness guard watches.
 const SOURCE_TABLES: { name: string; date_col: string }[] = [
   { name: 'ohlcv_stock',     date_col: 'date' },
   { name: 'ohlcv_etf',       date_col: 'date' },
   { name: 'index_prices',    date_col: 'date' },
   { name: 'de_mf_nav_daily', date_col: 'nav_date' },
-  { name: 'de_mf_holdings',  date_col: 'as_of_date' },
-  { name: 'de_etf_holdings', date_col: 'as_of_date' },
   { name: 'delivery_daily',  date_col: 'date' },
+  { name: 'de_mf_holdings',  date_col: 'as_of_date' },  // Morningstar — weekly
+  { name: 'de_etf_holdings', date_col: 'as_of_date' },  // Morningstar — weekly
 ]
 
 export async function getJipFreshness(): Promise<TableFreshness[]> {
@@ -247,8 +257,9 @@ export async function getJipFreshness(): Promise<TableFreshness[]> {
   )
 }
 
-export function jipLagThresholdDays(_table: string): number {
-  return 2
+export function jipLagThresholdDays(table: string): number {
+  // Morningstar holdings refresh weekly (guard tol=8d); every other feed is daily.
+  return table === 'de_mf_holdings' || table === 'de_etf_holdings' ? 8 : 2
 }
 
 // ---------------------------------------------------------------------------
