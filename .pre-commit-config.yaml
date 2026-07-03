@@ -7,6 +7,22 @@
 # Pinned versions to prevent silent rule drift across releases.
 
 repos:
+  # Standard hygiene pack — the "auto-clean junk on commit" layer. Self-contained
+  # (no global deps), so this is the portable core every repo should carry.
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      - id: check-merge-conflict          # blocks committing a half-resolved merge
+      - id: check-case-conflict           # blocks names that collide on case-insensitive FS
+      - id: check-added-large-files       # blocks a stray big blob sneaking in
+        args: [--maxkb=1024]
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.7.4
     hooks:
@@ -45,7 +61,10 @@ repos:
     hooks:
       - id: pragma-coverage
         name: pragma finance-critical coverage (100%)
-        entry: bash -c "exec $HOME/.claude/gates/gate-pragma-coverage.sh"
+        # Graceful-skip if the global gate isn't installed on this machine, so
+        # `pre-commit install` never breaks commits in an env without ~/.claude/gates.
+        # CI still enforces this (scripts/ci/gate_pragma_coverage.sh) — the source of truth.
+        entry: bash -c 'g=$HOME/.claude/gates/gate-pragma-coverage.sh; [ -x "$g" ] && exec "$g" || { echo "skip pragma-coverage (gate not installed; CI enforces)"; exit 0; }'
         language: system
         pass_filenames: false
         files: \.py$
@@ -57,7 +76,7 @@ repos:
     hooks:
       - id: verify-decisions-chain
         name: decisions.jsonl SHA-256 chain integrity
-        entry: bash -c "exec $HOME/.claude/hooks/lib/verify-chain.sh"
+        entry: bash -c 'h=$HOME/.claude/hooks/lib/verify-chain.sh; [ -x "$h" ] && exec "$h" || exit 0'
         language: system
         pass_filenames: false
         files: ^decisions\.jsonl$
