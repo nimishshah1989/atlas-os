@@ -59,9 +59,14 @@ export async function getTierReturns(): Promise<TierReturns> {
 }
 
 // ── Macro context ─────────────────────────────────────────────────────────
+// `stale_as_of` is the last date a field's value actually CHANGED. Several macro fields
+// are carry-forward (FRED FX lags a few days; India-10Y/CPI/FII/DII have no live daily
+// feed and hold their last real value) — so a raw "as of today" would pass a weeks-old
+// FII flow off as today's. When a tile's real as-of predates the latest row, we surface
+// that date so the number is never read as fresher than it is. RULE #0 honesty.
 export type MacroRow = {
   id: string; label: string; value: number | null; unit: string
-  d1: number | null; d1m: number | null
+  d1: number | null; d1m: number | null; stale_as_of: string | null
 }
 
 export async function getMacroContext(): Promise<{ rows: MacroRow[]; as_of: string | null }> {
@@ -71,6 +76,43 @@ export async function getMacroContext(): Promise<{ rows: MacroRow[]; as_of: stri
     FROM atlas_foundation.atlas_macro_daily ORDER BY date DESC LIMIT 25
   `
   if (r.length === 0) return { rows: [], as_of: null }
+  // Per-field last-CHANGE date across full history → the honest "real as-of" of each tile.
+  const chg = await sql<Record<string, string | null>[]>`
+    WITH d AS (
+      SELECT date,
+        lag(usdinr)                  OVER (ORDER BY date) AS p_usdinr,   usdinr,
+        lag(dxy)                     OVER (ORDER BY date) AS p_dxy,      dxy,
+        lag(india_10y_yield)         OVER (ORDER BY date) AS p_i10,      india_10y_yield,
+        lag(us_10y_yield)            OVER (ORDER BY date) AS p_u10,      us_10y_yield,
+        lag(brent_inr)               OVER (ORDER BY date) AS p_brent,    brent_inr,
+        lag(cpi_yoy)                 OVER (ORDER BY date) AS p_cpi,      cpi_yoy,
+        lag(fii_cash_equity_flow_cr) OVER (ORDER BY date) AS p_fii,      fii_cash_equity_flow_cr,
+        lag(dii_flow)                OVER (ORDER BY date) AS p_dii,      dii_flow
+      FROM atlas_foundation.atlas_macro_daily
+    )
+    SELECT
+      to_char(max(date) FILTER (WHERE usdinr                  IS DISTINCT FROM p_usdinr),'YYYY-MM-DD') AS usdinr,
+      to_char(max(date) FILTER (WHERE dxy                     IS DISTINCT FROM p_dxy),   'YYYY-MM-DD') AS dxy,
+      to_char(max(date) FILTER (WHERE india_10y_yield         IS DISTINCT FROM p_i10),   'YYYY-MM-DD') AS india_10y_yield,
+      to_char(max(date) FILTER (WHERE us_10y_yield            IS DISTINCT FROM p_u10),   'YYYY-MM-DD') AS us_10y_yield,
+      to_char(max(date) FILTER (WHERE brent_inr               IS DISTINCT FROM p_brent), 'YYYY-MM-DD') AS brent_inr,
+      to_char(max(date) FILTER (WHERE cpi_yoy                 IS DISTINCT FROM p_cpi),   'YYYY-MM-DD') AS cpi_yoy,
+      to_char(max(date) FILTER (WHERE fii_cash_equity_flow_cr IS DISTINCT FROM p_fii),   'YYYY-MM-DD') AS fii_cash_equity_flow_cr,
+      to_char(max(date) FILTER (WHERE dii_flow                IS DISTINCT FROM p_dii),   'YYYY-MM-DD') AS dii_flow
+    FROM d
+  `
+  const latest = r[0]?.date ?? null
+  const changed = chg[0] ?? {}
+  // A field's real as-of — surfaced only when it's carried MEANINGFULLY (>4 calendar days,
+  // i.e. beyond a long weekend). This flags the genuinely-frozen fields (FII/DII have no
+  // live feed and stay pinned to their last real day, lag growing nightly) without noising
+  // up the normal 1–3 day FRED publication lag on the FX/rate tiles.
+  const staleOf = (k: string) => {
+    const c = changed[k]
+    if (c == null || latest == null) return null
+    const days = Math.round((Date.parse(latest) - Date.parse(c)) / 86_400_000)
+    return days > 4 ? c : null
+  }
   const num = (v: string | null | undefined) => (v == null ? null : parseFloat(v))
   const at = (i: number, k: string) => num(r[i]?.[k])
   const delta = (k: string, i: number) => {
@@ -82,17 +124,18 @@ export async function getMacroContext(): Promise<{ rows: MacroRow[]; as_of: stri
     const y = at(i, 'india_10y_yield'), c = at(i, 'cpi_yoy')
     return y != null && c != null && c >= 1 ? y - c : null
   }
+  const olderOf = (a: string | null, b: string | null) => (a && b ? (a < b ? a : b) : (a ?? b))
   const rows: MacroRow[] = [
-    { id: 'usdinr', label: 'USD / INR', value: at(0, 'usdinr'), unit: '', d1: delta('usdinr', 1), d1m: delta('usdinr', 21) },
-    { id: 'india_10y', label: 'India 10Y yield', value: at(0, 'india_10y_yield'), unit: '%', d1: delta('india_10y_yield', 1), d1m: delta('india_10y_yield', 21) },
-    { id: 'us_10y', label: 'US 10Y yield', value: at(0, 'us_10y_yield'), unit: '%', d1: delta('us_10y_yield', 1), d1m: delta('us_10y_yield', 21) },
-    { id: 'real_yield', label: 'Real yield (10Y − CPI)', value: realYield(0), unit: '%', d1: null, d1m: null },
-    { id: 'brent_inr', label: 'Brent (INR)', value: at(0, 'brent_inr'), unit: '₹', d1: delta('brent_inr', 1), d1m: delta('brent_inr', 21) },
-    { id: 'dxy', label: 'DXY (dollar index)', value: at(0, 'dxy'), unit: '', d1: delta('dxy', 1), d1m: delta('dxy', 21) },
-    { id: 'fii', label: 'FII cash (₹cr)', value: at(0, 'fii_cash_equity_flow_cr'), unit: '₹cr', d1: null, d1m: null },
-    { id: 'dii', label: 'DII flow (₹cr)', value: at(0, 'dii_flow'), unit: '₹cr', d1: null, d1m: null },
+    { id: 'usdinr', label: 'USD / INR', value: at(0, 'usdinr'), unit: '', d1: delta('usdinr', 1), d1m: delta('usdinr', 21), stale_as_of: staleOf('usdinr') },
+    { id: 'india_10y', label: 'India 10Y yield', value: at(0, 'india_10y_yield'), unit: '%', d1: delta('india_10y_yield', 1), d1m: delta('india_10y_yield', 21), stale_as_of: staleOf('india_10y_yield') },
+    { id: 'us_10y', label: 'US 10Y yield', value: at(0, 'us_10y_yield'), unit: '%', d1: delta('us_10y_yield', 1), d1m: delta('us_10y_yield', 21), stale_as_of: staleOf('us_10y_yield') },
+    { id: 'real_yield', label: 'Real yield (10Y − CPI)', value: realYield(0), unit: '%', d1: null, d1m: null, stale_as_of: olderOf(staleOf('india_10y_yield'), staleOf('cpi_yoy')) },
+    { id: 'brent_inr', label: 'Brent (INR)', value: at(0, 'brent_inr'), unit: '₹', d1: delta('brent_inr', 1), d1m: delta('brent_inr', 21), stale_as_of: staleOf('brent_inr') },
+    { id: 'dxy', label: 'DXY (dollar index)', value: at(0, 'dxy'), unit: '', d1: delta('dxy', 1), d1m: delta('dxy', 21), stale_as_of: staleOf('dxy') },
+    { id: 'fii', label: 'FII cash (₹cr)', value: at(0, 'fii_cash_equity_flow_cr'), unit: '₹cr', d1: null, d1m: null, stale_as_of: staleOf('fii_cash_equity_flow_cr') },
+    { id: 'dii', label: 'DII flow (₹cr)', value: at(0, 'dii_flow'), unit: '₹cr', d1: null, d1m: null, stale_as_of: staleOf('dii_flow') },
   ]
-  return { rows, as_of: r[0]?.date ?? null }
+  return { rows, as_of: latest }
 }
 
 // ── Detailed breadth table (9 rows) ───────────────────────────────────────
