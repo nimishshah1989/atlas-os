@@ -52,7 +52,12 @@ KEY_TABLES = [
 # the health snapshot (so they show RED on /admin/data-status), but they don't fail the
 # gate. Their fix is to restore the builders the consolidation removed, not to block.
 BOARD_TABLES = [
-    ("atlas_sector_metrics_daily", "date", 1),
+    # NOTE: atlas_sector_metrics_daily is intentionally NOT here — it's a legacy
+    # intermediate that no live board page renders (its only reader, getSectorsForDate,
+    # survives solely in a unit test). The lean sector rebuild (build_sector_cards.py)
+    # derives mv_sector_cards returns straight from the fresh atlas_index_metrics_daily,
+    # bypassing this table. Guarding a table the board doesn't render contradicts the
+    # guard's charter, so it's dropped rather than fed a dead row.
     ("mv_sector_cards", "as_of_date", 1),
     ("mv_sector_breadth", "as_of_date", 1),
     ("mv_sector_deepdive", "data_as_of", 1),
