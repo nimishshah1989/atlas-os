@@ -59,7 +59,7 @@ BOARD_TABLES = [
     ("atlas_macro_daily", "date", 3),
     ("atlas_etf_scorecard", "snapshot_date", 2),
     ("atlas_fund_scorecard", "snapshot_date", 2),
-    ("de_mf_holdings", "as_of_date", 8),   # Morningstar, weekly
+    ("de_mf_holdings", "as_of_date", 8),  # Morningstar, weekly
     ("de_etf_holdings", "as_of_date", 8),  # Morningstar, weekly
 ]
 
@@ -139,7 +139,9 @@ def main() -> int:
     print("  ── derived board tables (warn-only) ──")
     warn = check_board(eod)
     if warn:
-        print(f"[freshness_guard] ⚠️  WARN — {len(warn)} derived board table(s) stale (NOT blocking):")
+        print(
+            f"[freshness_guard] ⚠️  WARN — {len(warn)} derived board table(s) stale (NOT blocking):"
+        )
         for w in warn:
             print(f"    - {w}")
     if stale:
@@ -147,8 +149,10 @@ def main() -> int:
         for s in stale:
             print(f"    - {s}")
         return 1
-    print("[freshness_guard] PASS — all CORE tables fresh to EOD"
-          + (f" ({len(warn)} derived table(s) flagged, see WARN above)" if warn else ""))
+    print(
+        "[freshness_guard] PASS — all CORE tables fresh to EOD"
+        + (f" ({len(warn)} derived table(s) flagged, see WARN above)" if warn else "")
+    )
     return 0
 
 
