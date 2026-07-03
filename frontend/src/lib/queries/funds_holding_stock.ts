@@ -3,32 +3,23 @@
 // Query: "which funds hold this stock?" — consumed by the stock detail page
 // (§6.4 "Funds holding this stock" section).
 //
-// Source: atlas_foundation.atlas_fund_scorecard.top_holdings JSONB
+// Source: atlas_foundation.de_mf_holdings (Atlas-owned weekly Morningstar snapshot),
+// joined to atlas_universe_funds for the scheme name + AUM. NOT the retired M4
+// atlas_fund_scorecard (dropped FM 2026-07-03 with the scorecard methodology) — this
+// is a raw holdings look-up; the composite-grade badge was dropped with it.
 //
-// JSONB shape (per atlas/inference/fund_scorecard.py drilldown builder):
-//   [
-//     { "instrument_id": "<uuid>", "symbol": "<ticker>",
-//       "weight_pct": 4.25,  "verdict": "POSITIVE|NEUTRAL|NEGATIVE|null" },
-//     ...
-//   ]
+// AUM: atlas_foundation.atlas_universe_funds.aum_cr — TRUE ₹ crore (ingest_fund_master.py
+// writes fund size in ₹ / 1e7, fresh from Morningstar), used directly, no scaling.
 //
-// AUM: the scorecard's sub_metrics->>'aum_cr' is empty in live data, so AUM is
-// sourced from atlas_foundation.atlas_universe_funds.aum_cr (single-schema). As of
-// the 1b consolidation that column holds TRUE ₹ crore (ingest_fund_master.py writes
-// fund size in ₹ / 1e7, fresh from Morningstar) — used directly, no scaling.
-//
-// Snapshot staleness: we always use MAX(snapshot_date). If that snapshot is
-// older than 7 days the frontend should surface a "data as of" badge; that
-// staleness check lives in the component layer (not here). This function
-// returns whatever the latest snapshot has.
+// Snapshot staleness: we always use MAX(as_of_date) of de_mf_holdings.
 
 import 'server-only'
 import sql from '@/lib/db'
 
 export type FundHolding = {
-  fund_code: string   // atlas_fund_scorecard.scheme_code
-  fund_name: string   // atlas_fund_scorecard.fund_name
-  aum_cr: string      // stringified Decimal — INR crore (from sub_metrics->>'aum_cr')
+  fund_code: string   // de_mf_holdings.mstar_id
+  fund_name: string   // atlas_universe_funds.scheme_name
+  aum_cr: string      // stringified Decimal — INR crore (atlas_universe_funds.aum_cr)
   weight_pct: string  // stringified Decimal — fund's weight in this stock
   atlas_grade: string // derived from composite_score: AAA/AA/A/BBB/BB/B
 }

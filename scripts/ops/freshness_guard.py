@@ -62,8 +62,9 @@ BOARD_TABLES = [
     ("mv_sector_breadth", "as_of_date", 1),
     ("mv_sector_deepdive", "data_as_of", 1),
     ("atlas_macro_daily", "date", 3),
-    ("atlas_etf_scorecard", "snapshot_date", 2),
-    ("atlas_fund_scorecard", "snapshot_date", 2),
+    # atlas_etf_scorecard + atlas_fund_scorecard RETIRED (FM 2026-07-03): /funds + /etfs
+    # moved to the native lens composite; the scorecard pipeline was purged. Their FE reads
+    # are repointed to native holdings and the tables are dropped, so they're gone from here.
     ("de_mf_holdings", "as_of_date", 8),  # Morningstar, weekly
     ("de_etf_holdings", "as_of_date", 8),  # Morningstar, weekly
 ]
