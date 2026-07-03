@@ -1,0 +1,213 @@
+"""Shared portfolio day-loop — the ONE accounting engine for backtest replay and
+the nightly live mark. Pure (no I/O): panels in, trades + NAV series out. All
+money is Decimal.
+
+Timing contract: an event detected at the close of session `e` executes at the
+close of the NEXT session in `dates` — EOD data only exists after the close, so
+same-close fills would be lookahead. This makes live and backtest identical.
+
+Slot model: slots = floor(1 / max_position_pct). When entry candidates exceed
+open slots, the FM rule is hold the top names by Atlas composite (as of the
+signal date); ties/missing composite rank last, deterministic by key.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from decimal import ROUND_DOWN, Decimal
+
+import pandas as pd
+
+_MONEY = Decimal("0.01")
+_FUND_QTY = Decimal("0.001")  # MF units trade in fractions; stocks/ETFs whole units
+
+
+@dataclass(frozen=True)
+class PortfolioConfig:
+    portfolio_id: str
+    kind: str  # 'strategy' | 'basket'
+    initial_capital: Decimal
+    max_position_pct: Decimal
+
+
+def _qty_for(alloc: Decimal, price: Decimal, asset_class: str) -> Decimal:
+    q = alloc / price
+    if asset_class == "fund":
+        return q.quantize(_FUND_QTY, rounding=ROUND_DOWN)
+    return q.to_integral_value(rounding=ROUND_DOWN)
+
+
+def replay(
+    cfg: PortfolioConfig,
+    prices: pd.DataFrame,
+    events: pd.DataFrame,
+    inception_state: pd.Series | None,
+    composite: pd.DataFrame | None,
+    asset_class: dict[str, str],
+    symbols: dict[str, str],
+    start_positions: dict[str, Decimal] | None = None,
+    start_cash: Decimal | None = None,
+    loop_dates: list | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Run the day-loop over `loop_dates` (default: all of `prices.index`).
+    Pass the FULL price panel even when looping few dates — valuation carry-forward
+    and inception price-lookback both need the history before the first loop date.
+
+    prices     — date-indexed frame (real trading sessions), one Decimal column per
+                 instrument_key; NaN where the instrument had no print that session.
+                 Trades fill ONLY at real prints; valuation carries the last known
+                 price forward (suspended names keep their last close).
+    events     — (instrument_key, date, event) from a strategy; empty for baskets.
+    inception_state — bool per instrument_key: seed holdings at dates[0] when the
+                 portfolio starts flat (strategy state, or the FM's basket picks).
+    composite  — (instrument_key, date, composite) for candidate ranking, or None.
+    start_positions/start_cash — resume state for the nightly increment.
+
+    Returns (trades, navs): trades (trade_date, asset_class, instrument_key,
+    symbol, side, qty, price, value, reason), navs (date, nav, cash, invested,
+    n_positions).
+    """
+    dates = list(loop_dates) if loop_dates is not None else list(prices.index)
+    if not dates:
+        return _empty_trades(), _empty_navs()
+    marks = prices.ffill()  # valuation only — a suspended name is worth its last close
+
+    comp_panel = None
+    if composite is not None and not composite.empty:
+        comp_panel = composite.pivot(index="date", columns="instrument_key", values="composite")
+        comp_panel = comp_panel.sort_index().ffill()
+
+    # Map each event to its execution date: first trading date AFTER the event.
+    entries_at: dict[object, list[tuple[str, object]]] = {}
+    exits_at: dict[object, list[str]] = {}
+    if events is not None and not events.empty:
+        date_idx = pd.Index(dates)
+        for ev in events.itertuples(index=False):
+            pos = date_idx.searchsorted(ev.date, side="right")
+            if pos >= len(dates):
+                continue  # signal at the last close — executes on a future run
+            d = dates[pos]
+            if ev.event == "entry":
+                entries_at.setdefault(d, []).append((ev.instrument_key, ev.date))
+            else:
+                exits_at.setdefault(d, []).append(ev.instrument_key)
+
+    positions: dict[str, Decimal] = dict(start_positions or {})
+    cash = start_cash if start_cash is not None else Decimal(cfg.initial_capital)
+    slots = int(Decimal(1) / Decimal(cfg.max_position_pct))
+    trades: list[dict] = []
+    navs: list[dict] = []
+
+    def _px(d, k):
+        """Real print at d, or None — trades never fill at a carried-forward price.
+        ponytail: an exit whose instrument never prints again (delisting) stays
+        held at its last close; add a delisting sweep if that ever bites."""
+        v = prices.at[d, k] if k in prices.columns else None
+        return None if v is None or pd.isna(v) else Decimal(v)
+
+    def _fill(d, k, lookback: bool):
+        """(price, trade_date) for a fill at d. Inception fills may look back to the
+        instrument's own LAST real print (e.g. fund NAV lags stock EOD by a session)
+        — FM rule: inception captures the last available price. Signal fills never
+        look back."""
+        p = _px(d, k)
+        if p is not None:
+            return p, d
+        if not lookback or k not in prices.columns:
+            return None
+        s = prices.loc[:d, k].dropna()
+        return (Decimal(s.iloc[-1]), s.index[-1]) if len(s) else None
+
+    def _mark(d) -> Decimal:
+        def val(k):
+            v = marks.at[d, k] if k in marks.columns else None
+            return Decimal(0) if v is None or pd.isna(v) else Decimal(v)
+
+        return sum((q * val(k) for k, q in positions.items()), Decimal(0))
+
+    def _book(trade_date, k, side, qty, price, reason):
+        nonlocal cash
+        value = (qty * price).quantize(_MONEY)
+        cash = cash - value if side == "buy" else cash + value
+        trades.append(
+            {
+                "trade_date": trade_date,
+                "asset_class": asset_class.get(k, "stock"),
+                "instrument_key": k,
+                "symbol": symbols.get(k, k),
+                "side": side,
+                "qty": qty,
+                "price": price,
+                "value": value,
+                "reason": reason,
+            }
+        )
+
+    def _enter(d, candidates: list[tuple[str, object]], reason: str):
+        lookback = reason == "inception"
+        cands = [
+            (k, sig, fill)
+            for k, sig in candidates
+            if k not in positions and (fill := _fill(d, k, lookback)) is not None
+        ]
+        open_slots = slots - len(positions)
+        if open_slots <= 0 or not cands:
+            return
+        if len(cands) > open_slots:
+            cands.sort(key=lambda c: (-_comp(c[0], c[1]), c[0]))
+            cands = cands[:open_slots]
+        nav_now = cash + _mark(d)
+        remaining = len(cands)
+        for k, _sig, (price, trade_date) in cands:
+            alloc = min(nav_now * Decimal(cfg.max_position_pct), cash / remaining)
+            remaining -= 1
+            qty = _qty_for(alloc, price, asset_class.get(k, "stock"))
+            if qty > 0:
+                _book(trade_date, k, "buy", qty, price, reason)
+                positions[k] = qty
+
+    def _comp(k, sig_date) -> float:
+        if comp_panel is None or k not in comp_panel.columns:
+            return float("-inf")
+        s = comp_panel[k].asof(sig_date)
+        return float("-inf") if pd.isna(s) else float(s)
+
+    for i, d in enumerate(dates):
+        if i == 0 and not positions and inception_state is not None:
+            picks = [(k, d) for k, v in inception_state.items() if v]
+            _enter(d, picks, "inception")
+        else:
+            for k in exits_at.get(d, []):
+                price = _px(d, k)
+                if k in positions and price:
+                    _book(d, k, "sell", positions.pop(k), price, "signal")
+            _enter(d, entries_at.get(d, []), "signal")
+
+        invested = _mark(d).quantize(_MONEY)
+        navs.append(
+            {
+                "date": d,
+                "nav": (cash + invested).quantize(_MONEY),
+                "cash": cash.quantize(_MONEY),
+                "invested": invested,
+                "n_positions": len(positions),
+            }
+        )
+
+    return (
+        pd.DataFrame(trades) if trades else _empty_trades(),
+        pd.DataFrame(navs) if navs else _empty_navs(),
+    )
+
+
+def _empty_trades() -> pd.DataFrame:
+    return pd.DataFrame(
+        columns=[
+            "trade_date", "asset_class", "instrument_key", "symbol",
+            "side", "qty", "price", "value", "reason",
+        ]
+    )
+
+
+def _empty_navs() -> pd.DataFrame:
+    return pd.DataFrame(columns=["date", "nav", "cash", "invested", "n_positions"])
