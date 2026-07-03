@@ -77,19 +77,16 @@ COMPLETENESS_TABLES = {
 COMPLETENESS_MIN_FRAC = 0.5  # EOD count must be >= 50% of the prior session's count
 
 
-def _lag(eod: dt.date, table: str, col: str) -> tuple[object, object]:
-    mx = _db.scalar(f"select max({col}) from {M}.{table}")
-    return mx, (None if mx is None else (eod - mx).days)
-
-
 def check_board(eod: dt.date) -> list[str]:
-    """Derived board tables — reported loudly but NON-blocking (WARN tier)."""
+    """Derived board tables — reported loudly but NON-blocking (WARN tier). Same
+    max(date)-vs-tolerance logic as check(); kept separate so these never fail the gate."""
     warn = []
     for table, col, lag in BOARD_TABLES:
-        mx, behind = _lag(eod, table, col)
+        mx = _db.scalar(f"select max({col}) from {M}.{table}")
         if mx is None:
             warn.append(f"{table}: EMPTY")
             continue
+        behind = (eod - mx).days
         status = "OK" if behind <= lag else "STALE"
         print(f"  [{status}] {table:<28} max={mx} (eod={eod}, behind={behind}d, tol={lag})")
         if behind > lag:
