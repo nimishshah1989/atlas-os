@@ -2,7 +2,8 @@
 // backtest growth vs NIFTY 500, risk box (reusing the fund math), holdings by
 // sector, and the raw trade log. Everything rendered is stored engine output.
 import { notFound } from 'next/navigation'
-import { getPortfolioDetail, type NavPointRow, type Holding, type TradeRow } from '@/lib/queries/portfolios'
+import { getPortfolioDetail, type NavPointRow, type Holding } from '@/lib/queries/portfolios'
+import { TradesTable } from './TradesTable'
 import { computeFundRiskStats, sectorComposition, type NavPoint } from '@/lib/fundStats'
 import { FundRiskStats } from '@/components/funds/FundRiskStats'
 import { AtlasLightweightChart, type ChartSeries } from '@/components/charts/AtlasLightweightChart'
@@ -35,6 +36,12 @@ function maxDrawdownDaily(points: NavPointRow[]): number | null {
 
 const rebase = (pts: NavPointRow[]): { time: string; value: number }[] =>
   pts.length ? pts.map((p) => ({ time: p.d, value: (p.nav / pts[0].nav) * 100 })) : []
+
+const totalPct = (pts: NavPointRow[]): number | null =>
+  pts.length > 1 ? (pts[pts.length - 1].nav / pts[0].nav - 1) * 100 : null
+
+const postTaxTotalPct = (pts: NavPointRow[], tax: number): number | null =>
+  pts.length > 1 ? ((pts[pts.length - 1].nav - tax) / pts[0].nav - 1) * 100 : null
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
@@ -111,39 +118,10 @@ function SectorBars({ holdings }: { holdings: Holding[] }) {
   )
 }
 
-function TradeLog({ trades }: { trades: TradeRow[] }) {
-  const live = trades.filter((t) => t.runType === 'live')
-  const shown = live.length ? live : trades
-  return (
-    <table className="w-full min-w-[640px]">
-      <thead>
-        <tr className="border-b border-edge-rule">
-          {['Date', 'Instrument', 'Side', 'Qty', 'Price', 'Value', 'Reason'].map((h, i) => (
-            <th key={h} className={`px-3 py-2 font-num text-[10px] uppercase tracking-wider text-txt-3 ${i <= 1 ? 'text-left' : 'text-right'}`}>{h}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {shown.slice(0, 60).map((t, i) => (
-          <tr key={i} className="border-b border-edge-hair">
-            <td className="px-3 py-1.5 font-num text-[11.5px] tabular-nums text-txt-2">{t.date}</td>
-            <td className="px-3 py-1.5 font-num text-[12px] font-semibold tabular-nums text-txt-1">{t.symbol}</td>
-            <td className={`px-3 py-1.5 text-right font-sans text-[11px] font-semibold uppercase ${t.side === 'buy' ? 'text-sig-pos' : 'text-sig-neg'}`}>{t.side}</td>
-            <td className="px-3 py-1.5 text-right font-num text-[11.5px] tabular-nums text-txt-2">{t.qty.toLocaleString('en-IN')}</td>
-            <td className="px-3 py-1.5 text-right font-num text-[11.5px] tabular-nums text-txt-2">{t.price.toFixed(2)}</td>
-            <td className="px-3 py-1.5 text-right font-num text-[11.5px] tabular-nums text-txt-1">{inr(t.value)}</td>
-            <td className="px-3 py-1.5 text-right font-sans text-[11px] text-txt-3">{t.reason}{live.length === 0 ? ' · backtest' : ''}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  )
-}
-
 export async function PortfolioDetailV4({ id }: { id: string }) {
   const detail = await getPortfolioDetail(id).catch(() => null)
   if (!detail) notFound()
-  const { summary: s, holdings, liveNav, backtestNav, benchmark, trades } = detail
+  const { summary: s, holdings, liveNav, backtestNav, benchmark, trades, totals } = detail
 
   const btStats = computeFundRiskStats(monthly(backtestNav))
   const btMaxDd = maxDrawdownDaily(backtestNav)
@@ -171,11 +149,16 @@ export async function PortfolioDetailV4({ id }: { id: string }) {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
         <Stat label={`NAV · ${s.navDate ?? '—'}`} value={inr(s.nav)} />
         <Stat label="Since inception" value={pct(s.sinceInceptionPct)} tone={retTone(s.sinceInceptionPct)} />
         <Stat label="Open positions" value={s.nPositions?.toString() ?? '—'} />
         <Stat label="Cash" value={inr(s.cash)} />
+        <Stat label="Costs paid (in NAV)" value={inr(totals.live.costs)} />
+        <Stat
+          label="Tax accrued · post-tax NAV"
+          value={s.nav != null ? `${inr(totals.live.tax)} · ${inr(s.nav - totals.live.tax)}` : '—'}
+        />
       </div>
 
       {backtestNav.length > 5 && (
@@ -188,7 +171,20 @@ export async function PortfolioDetailV4({ id }: { id: string }) {
             <div>
               <AtlasLightweightChart series={btSeries} height={300} title="Growth of ₹100 vs NIFTY 500" asOf={btStats.navTo ?? ''} precision={0} />
             </div>
-            <FundRiskStats stats={stats} />
+            <div>
+              <FundRiskStats stats={stats} />
+              {backtestNav.length > 0 && (
+                <p className="mt-3 rounded-tile border border-edge-hair bg-surface-raised px-3 py-2 font-sans text-[12px] leading-[1.55] text-txt-2">
+                  Execution costs of <strong className="text-txt-1">{inr(totals.backtest.costs)}</strong> are already
+                  inside this curve. Realized tax (FIFO, STCG/LTCG netted per FY):{' '}
+                  <strong className="text-txt-1">{inr(totals.backtest.tax)}</strong> → post-tax total return{' '}
+                  <strong className={retTone(postTaxTotalPct(backtestNav, totals.backtest.tax))}>
+                    {pct(postTaxTotalPct(backtestNav, totals.backtest.tax))}
+                  </strong>
+                  {' '}vs {pct(totalPct(backtestNav))} pre-tax.
+                </p>
+              )}
+            </div>
           </div>
         </Panel>
       )}
@@ -212,8 +208,13 @@ export async function PortfolioDetailV4({ id }: { id: string }) {
         <HoldingsTable holdings={holdings} nav={s.nav} />
       </Panel>
 
-      <Panel eyebrow="Audit trail" title="Trades" bodyClassName="overflow-x-auto">
-        <TradeLog trades={trades} />
+      <Panel
+        eyebrow="Audit trail"
+        title="Transactions"
+        info={{ body: 'Every fill with its execution cost (STT/stamp/exchange/GST at the booked rates) and, on sells, the FIFO realized P&L, holding days, STCG/LTCG bucket and provisional tax. Rates are editable on /admin/thresholds.' }}
+        bodyClassName="px-5 py-4"
+      >
+        <TradesTable trades={trades} />
       </Panel>
     </div>
   )
