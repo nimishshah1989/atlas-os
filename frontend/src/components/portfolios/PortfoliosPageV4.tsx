@@ -50,8 +50,7 @@ function Card({ p }: { p: PortfolioSummary }) {
       </p>
       {p.nav == null ? (
         <p className="mb-3 rounded-tile border border-edge-hair bg-surface-raised px-2.5 py-2 font-sans text-[11.5px] leading-[1.45] text-txt-3">
-          Dormant — backtest hasn&rsquo;t cleared the bar (beat NIFTY 500 with a shallower
-          drawdown). Goes live only when it earns it.
+          Awaiting first mark — goes live at the next EOD cycle.
         </p>
       ) : (
         <div className="mb-3 flex items-baseline justify-between">
