@@ -164,9 +164,11 @@ def replay(
         open_slots = slots - len(positions)
         if open_slots <= 0 or not cands:
             return
-        if len(cands) > open_slots:
-            cands.sort(key=lambda c: (-_comp(c[0], c[1]), c[0]))
-            cands = cands[:open_slots]
+        # ALWAYS sort (composite desc, key): same-day sizing divides remaining cash
+        # in candidate order, so arrival order (SQL scan order) must never matter —
+        # replays have to be bit-reproducible run to run
+        cands.sort(key=lambda c: (-_comp(c[0], c[1]), c[0]))
+        cands = cands[:open_slots]
         nav_now = cash + _mark(d)
         remaining = len(cands)
         for k, _sig, (price, trade_date) in cands:
