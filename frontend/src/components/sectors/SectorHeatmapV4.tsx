@@ -12,6 +12,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import type { SectorConstituentMatrixRow } from '@/lib/queries/sectors'
 import { TermInfo } from '@/components/shared/TermInfo'
+import { AddToBasketDialog } from '@/components/portfolios/AddToBasketDialog'
 
 // The return windows every matrix row carries — a sector index OR one of its constituents — so
 // the column getters work for both and a constituent renders in the SAME columns as its sector.
@@ -71,6 +72,10 @@ export function SectorHeatmapV4({ rows, bases, constituents }: {
   const [dir, setDir] = useState<1 | -1>(-1)
   const [open, setOpen] = useState<Set<string>>(new Set())
   const toggle = (name: string) => setOpen((s) => { const n = new Set(s); n.has(name) ? n.delete(name) : n.add(name); return n })
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [basketOpen, setBasketOpen] = useState(false)
+  const togglePick = (sym: string) =>
+    setPicked((prev) => { const n = new Set(prev); n.has(sym) ? n.delete(sym) : n.add(sym); return n })
 
   const b = bases[base]
   const COLS: Col[] = [
@@ -195,7 +200,14 @@ export function SectorHeatmapV4({ rows, bases, constituents }: {
               if (!open.has(card.sector_name) || !kids?.length) return [row]
               const subRows = [...kids].sort(cmp).map((s) => (
                 <tr key={`${card.sector_name}::${s.symbol}`} className="border-b border-edge-hair/60 bg-surface-inset/40">
-                  <td className="text-left py-[5px] pl-[34px] pr-3.5 whitespace-nowrap">
+                  <td className="text-left py-[5px] pl-[16px] pr-3.5 whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={picked.has(s.symbol)}
+                      onChange={() => togglePick(s.symbol)}
+                      aria-label={`Select ${s.symbol} for basket`}
+                      className="mr-1.5 align-middle accent-[var(--color-brand)]"
+                    />
                     <Link href={`/stocks/${s.symbol}`} className="font-num text-[11.5px] text-txt-2 hover:text-brand transition-colors">
                       {s.symbol}
                     </Link>
@@ -218,6 +230,25 @@ export function SectorHeatmapV4({ rows, bases, constituents }: {
           </tbody>
         </table>
       </div>
+      {picked.size > 0 && (
+        <div className="mt-2 flex items-center gap-3 px-1">
+          <button
+            onClick={() => setBasketOpen(true)}
+            className="rounded-tile bg-brand px-3 py-1.5 font-sans text-[12px] font-semibold text-white"
+          >
+            Add {picked.size} to basket
+          </button>
+          <button onClick={() => setPicked(new Set())} className="font-sans text-[12px] text-txt-3 hover:text-txt-1">
+            Clear selection
+          </button>
+        </div>
+      )}
+      {basketOpen && (
+        <AddToBasketDialog
+          picks={[...picked].map((sym) => ({ key: `stock:${sym}`, label: sym }))}
+          onClose={() => setBasketOpen(false)}
+        />
+      )}
     </div>
   )
 }
