@@ -92,8 +92,20 @@ export type TradeRow = {
   qty: number
   price: number
   value: number
+  cost: number | null
+  realizedPnl: number | null
+  holdingDays: number | null
+  taxBucket: string | null
+  tax: number | null
   reason: string
   runType: string
+}
+
+export type CostTaxTotals = {
+  costs: number
+  realized: number
+  tax: number
+  nTrades: number
 }
 
 export type PortfolioDetail = {
@@ -103,6 +115,7 @@ export type PortfolioDetail = {
   backtestNav: NavPointRow[]
   benchmark: NavPointRow[] // NIFTY 500 close over the backtest window
   trades: TradeRow[]
+  totals: { live: CostTaxTotals; backtest: CostTaxTotals }
 }
 
 export async function getPortfolioDetail(id: string): Promise<PortfolioDetail | null> {
@@ -193,11 +206,27 @@ export async function getPortfolioDetail(id: string): Promise<PortfolioDetail | 
     WHERE index_code = 'NIFTY 500' AND date >= ${String(btStart)} ORDER BY date
   `
   const trades = await sql<Array<Record<string, unknown>>>`
-    SELECT trade_date::text AS date, symbol, side, qty, price, value, reason, run_type
+    SELECT trade_date::text AS date, symbol, side, qty, price, value, cost,
+           realized_pnl, holding_days, tax_bucket, tax, reason, run_type
     FROM atlas_foundation.portfolio_trades
     WHERE portfolio_id = ${id}
-    ORDER BY trade_date DESC, trade_id DESC LIMIT 200
+    ORDER BY trade_date DESC, trade_id DESC LIMIT 400
   `
+  const totalRows = await sql<Array<Record<string, unknown>>>`
+    SELECT run_type, count(*) AS n, coalesce(sum(cost), 0) AS costs,
+           coalesce(sum(realized_pnl), 0) AS realized, coalesce(sum(tax), 0) AS tax
+    FROM atlas_foundation.portfolio_trades
+    WHERE portfolio_id = ${id} GROUP BY run_type
+  `
+  const totalsFor = (rt: string): CostTaxTotals => {
+    const r = totalRows.find((x) => x.run_type === rt)
+    return {
+      costs: r ? Number(r.costs) : 0,
+      realized: r ? Number(r.realized) : 0,
+      tax: r ? Number(r.tax) : 0,
+      nTrades: r ? Number(r.n) : 0,
+    }
+  }
   const toNav = (rs: Array<Record<string, unknown>>): NavPointRow[] =>
     rs.map((r) => ({ d: String(r.d), nav: Number(r.nav) }))
   return {
@@ -213,9 +242,15 @@ export async function getPortfolioDetail(id: string): Promise<PortfolioDetail | 
       qty: Number(r.qty),
       price: Number(r.price),
       value: Number(r.value),
+      cost: r.cost != null ? Number(r.cost) : null,
+      realizedPnl: r.realized_pnl != null ? Number(r.realized_pnl) : null,
+      holdingDays: r.holding_days != null ? Number(r.holding_days) : null,
+      taxBucket: r.tax_bucket ? String(r.tax_bucket) : null,
+      tax: r.tax != null ? Number(r.tax) : null,
       reason: String(r.reason),
       runType: String(r.run_type),
     })),
+    totals: { live: totalsFor('live'), backtest: totalsFor('backtest') },
   }
 }
 

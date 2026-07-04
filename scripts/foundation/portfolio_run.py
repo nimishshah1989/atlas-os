@@ -30,6 +30,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from atlas.portfolio import PortfolioConfig, get_strategy, replay
 from atlas.portfolio.engine import _qty_for
+from atlas.portfolio.tax import TaxRates, enrich_trades, summarize
 
 M = "atlas_foundation"
 
@@ -195,6 +196,55 @@ def open_positions(pid: str, run_type: str = "live") -> dict[str, Decimal]:
     }
 
 
+# ── cost / tax knobs (atlas_thresholds, category=portfolio) ────────────────
+
+
+def load_cost_tax():
+    th = _db.read_df(
+        f"select threshold_key k, threshold_value v from {M}.atlas_thresholds "
+        "where category = 'portfolio' and is_active"
+    )
+    m = {r["k"]: Decimal(str(r["v"])) for r in th.to_dict("records")}
+    costs = {
+        ac: (m[f"portfolio_cost_{ac}_buy_pct"], m[f"portfolio_cost_{ac}_sell_pct"])
+        for ac in ("stock", "etf", "fund")
+    }
+    rates = TaxRates(
+        stcg=m["portfolio_tax_stcg_pct"],
+        ltcg=m["portfolio_tax_ltcg_pct"],
+        ltcg_exemption=m["portfolio_tax_ltcg_exemption_inr"],
+        ltcg_days=int(m["portfolio_tax_ltcg_days"]),
+    )
+    return costs, rates
+
+
+_TAX_COLS = ["realized_pnl", "holding_days", "tax_bucket", "tax"]
+
+
+def _enrich_new_trades(pid: str, run_type: str, new: pd.DataFrame, rates: TaxRates) -> pd.DataFrame:
+    """FIFO needs the FULL trade history — prepend stored trades, enrich, take the tail."""
+    if new.empty or not (new["side"] == "sell").any():
+        out = new.copy()
+        for c in _TAX_COLS:
+            out[c] = None
+        return out
+    prior = _db.read_df(
+        f"""select trade_date, asset_class, instrument_key, symbol, side, qty, price,
+                   value, cost, reason
+            from {M}.portfolio_trades where portfolio_id = :p and run_type = :r
+            order by trade_date, trade_id""",
+        {"p": pid, "r": run_type},
+    )
+    cols = list(prior.columns if not prior.empty else new.columns)
+    combined = pd.DataFrame(pd.concat([prior, new[cols]], ignore_index=True))
+    enriched = enrich_trades(combined, rates)
+    tail = enriched.tail(len(new)).reset_index(drop=True)
+    out = new.reset_index(drop=True).copy()
+    for c in _TAX_COLS:
+        out[c] = tail[c].values
+    return out
+
+
 # ── writers ────────────────────────────────────────────────────────────────
 
 
@@ -286,6 +336,7 @@ def run_window(p: dict, start: dt.date, end: dt.date, mode: str):
             {"p": str(p["portfolio_id"])},
         )
         start_cash = Decimal(last.iloc[0]["cash"])
+    costs, _rates = load_cost_tax()
     return replay(
         _cfg(p),
         prices=prices,
@@ -297,6 +348,7 @@ def run_window(p: dict, start: dt.date, end: dt.date, mode: str):
         start_positions=start_positions,
         start_cash=start_cash,
         loop_dates=loop_dates,
+        costs=costs,
     )
 
 
@@ -355,6 +407,8 @@ def cmd_init(a) -> None:
     run_id = str(uuid.uuid4())
     inc = p["inception_date"]
     trades, navs = run_window(p, inc, inc, "init")
+    _, rates = load_cost_tax()
+    trades = _enrich_new_trades(a.portfolio_id, "live", trades, rates)
     write_results(a.portfolio_id, "live", run_id, trades, navs)
     print(json.dumps({"trades": len(trades), "nav_date": str(navs.iloc[0]["date"])}))
 
@@ -380,6 +434,8 @@ def cmd_mark(a) -> None:
             continue
         run_id = str(uuid.uuid4())
         trades, navs = run_window(p, last, eod, "resume")
+        _, rates = load_cost_tax()
+        trades = _enrich_new_trades(pid, "live", trades, rates)
         write_results(pid, "live", run_id, trades, navs)
         done += 1
         print(f"[mark] {p['name']}: +{len(navs)} nav rows, {len(trades)} trades", flush=True)
@@ -415,8 +471,20 @@ def cmd_backtest(a) -> None:
                 {"p": a.portfolio_id},
             )
     trades, navs = run_window(p, start, eod, "backtest")
-    write_results(a.portfolio_id, "backtest", run_id, trades, navs)
-    print(json.dumps(_summary(navs, trades), default=str))
+    _, rates = load_cost_tax()
+    enriched = enrich_trades(trades, rates) if not trades.empty else trades
+    persist = enriched.drop(columns=["realized_st", "realized_lt"], errors="ignore")
+    write_results(a.portfolio_id, "backtest", run_id, persist, navs)
+    out = _summary(navs, trades)
+    if not trades.empty and (trades["side"] == "sell").any():
+        s = summarize(enriched, rates)
+        out["tax_total"] = float(s["tax_total"])
+        out["post_tax_total_return_pct"] = round(
+            (float(navs.iloc[-1]["nav"]) - float(s["tax_total"])) / float(navs.iloc[0]["nav"]) * 100
+            - 100,
+            2,
+        )
+    print(json.dumps(out, default=str))
 
 
 def cmd_trade(a) -> None:
@@ -440,10 +508,13 @@ def cmd_trade(a) -> None:
     if last.empty:
         raise SystemExit("portfolio not initialized")
     nav, cash = Decimal(last.iloc[0]["nav"]), Decimal(last.iloc[0]["cash"])
+    costs, rates = load_cost_tax()
+    buy_rate, sell_rate = costs[ac]
     if a.side == "buy":
         if key in positions:
             raise SystemExit("already held — sell first or extend engine for top-ups")
-        qty = _qty_for(min(nav * Decimal(p["max_position_pct"]), cash), price, ac)
+        alloc = min(nav * Decimal(p["max_position_pct"]), cash)
+        qty = _qty_for(alloc / (1 + buy_rate), price, ac)
         if qty <= 0:
             raise SystemExit("insufficient cash for one unit")
     else:
@@ -451,6 +522,7 @@ def cmd_trade(a) -> None:
             raise SystemExit("not held")
         qty = positions[key]
     value = (qty * price).quantize(Decimal("0.01"))
+    cost = (value * (buy_rate if a.side == "buy" else sell_rate)).quantize(Decimal("0.01"))
     trades = pd.DataFrame(
         [
             {
@@ -462,14 +534,16 @@ def cmd_trade(a) -> None:
                 "qty": qty,
                 "price": price,
                 "value": value,
+                "cost": cost,
                 "reason": "manual",
             }
         ]
     )
+    trades = _enrich_new_trades(a.portfolio_id, "live", trades, rates)
     run_id = str(uuid.uuid4())
     write_results(a.portfolio_id, "live", run_id, trades, pd.DataFrame())
     # refresh today's NAV row to reflect the trade
-    new_cash = cash - value if a.side == "buy" else cash + value
+    new_cash = cash - value - cost if a.side == "buy" else cash + value - cost
     positions = open_positions(a.portfolio_id)
     universe_all = load_universe(list(p["asset_classes"]))
     held = universe_all.loc[universe_all["instrument_key"].isin(positions)]
