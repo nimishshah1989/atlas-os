@@ -32,6 +32,15 @@ export type PortfolioSummary = {
 const strategyLabel = (key: string | null, params: Record<string, unknown> | null): string | null => {
   if (!params) return key
   if (key === 'ema_cross') return `EMA ${params.fast}/${params.slow} crossover`
+  if (key === 'rank_policy') {
+    const names: Record<string, string> = {
+      sector_leaders: 'Sector Leaders (rank-driven)',
+      conviction: 'Conviction Concentrate (rank-driven)',
+      quality_momentum: 'Quality Momentum (rank-driven)',
+      rotation: 'Sector Rotation (rank-driven)',
+    }
+    return names[String(params.mode)] ?? 'Rank-driven'
+  }
   if (key === 'atlas_policy') {
     const parts = [`EMA ${params.fast}/${params.slow}`]
     if (params.confirm_200) parts.push('>200')

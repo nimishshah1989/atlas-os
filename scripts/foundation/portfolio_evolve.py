@@ -295,9 +295,11 @@ def main():
     if a.portfolio_id:
         ids = [a.portfolio_id]
     else:
+        # ONLY atlas_policy portfolios evolve here — rank_policy/desk system rows
+        # have different param spaces and would crash the neighbour grid
         ids = _db.read_df(
             f"select portfolio_id::text pid from {M}.portfolio_master "
-            "where origin = 'system' and status = 'active'"
+            "where origin = 'system' and status = 'active' and strategy_key = 'atlas_policy'"
         )["pid"].tolist()
     for pid in ids:
         # anti-noise: skip if a change landed within min_days_change (unless seeding)

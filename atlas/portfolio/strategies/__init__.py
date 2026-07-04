@@ -4,8 +4,13 @@ from __future__ import annotations
 
 from .atlas_policy import AtlasPolicy
 from .ema_cross import EmaCross
+from .rank_policy import RankPolicy
 
-STRATEGIES: dict[str, type] = {EmaCross.key: EmaCross, AtlasPolicy.key: AtlasPolicy}
+STRATEGIES: dict[str, type] = {
+    EmaCross.key: EmaCross,
+    AtlasPolicy.key: AtlasPolicy,
+    RankPolicy.key: RankPolicy,
+}
 
 
 def get_strategy(key: str, params: dict):
