@@ -40,6 +40,10 @@ from atlas.portfolio.tax import enrich_trades, summarize
 M = "atlas_foundation"
 
 
+class TradeError(Exception):
+    """A refused/impossible manual trade — callers decide whether it is fatal."""
+
+
 # ── writers ────────────────────────────────────────────────────────────────
 
 
@@ -314,42 +318,46 @@ def cmd_backtest(a) -> None:
     print(json.dumps(rebuild_backtest(a.portfolio_id, a.years), default=str))
 
 
-def cmd_trade(a) -> None:
-    p = load_portfolio(a.portfolio_id)
+def book_trade(pid: str, side: str, ckey: str) -> dict:
+    """Book ONE trade for a basket-kind portfolio at the last EOD close, with
+    cost + FIFO tax enrichment and a refreshed NAV row. `ckey` = <asset_class>:<key>.
+    Shared by the manual CLI and the Atlas Desk orchestrator — every booked trade
+    goes through this single audited path. Raises TradeError on any refusal."""
+    p = load_portfolio(pid)
     if p["kind"] != "basket":
-        raise SystemExit("manual trades are for baskets only")
-    ac, key = a.key.split(":", 1)
+        raise TradeError("manual trades are for baskets only")
+    ac, key = ckey.split(":", 1)
     universe = load_universe([ac])
     row = universe.loc[universe["instrument_key"] == key]
     if row.empty:
-        raise SystemExit(f"{a.key} not in the {ac} universe")
+        raise TradeError(f"{ckey} not in the {ac} universe")
     eod = _db.eod_cutoff()
     series = cast(pd.Series, load_prices(row, eod - dt.timedelta(days=10), eod)[key]).dropna()
     price, trade_date = Decimal(series.iloc[-1]), series.index[-1]
-    positions = open_positions(a.portfolio_id)
+    positions = open_positions(pid)
     last = _db.read_df(
         f"""select nav, cash from {M}.portfolio_nav_daily
             where portfolio_id=:p and run_type='live' order by date desc limit 1""",
-        {"p": a.portfolio_id},
+        {"p": pid},
     )
     if last.empty:
-        raise SystemExit("portfolio not initialized")
+        raise TradeError("portfolio not initialized")
     nav, cash = Decimal(last.iloc[0]["nav"]), Decimal(last.iloc[0]["cash"])
     costs, rates = load_cost_tax()
     buy_rate, sell_rate = costs[ac]
-    if a.side == "buy":
+    if side == "buy":
         if key in positions:
-            raise SystemExit("already held — sell first or extend engine for top-ups")
+            raise TradeError("already held — sell first or extend engine for top-ups")
         alloc = min(nav * Decimal(p["max_position_pct"]), cash)
         qty = _qty_for(alloc / (1 + buy_rate), price, ac)
         if qty <= 0:
-            raise SystemExit("insufficient cash for one unit")
+            raise TradeError("insufficient cash for one unit")
     else:
         if key not in positions:
-            raise SystemExit("not held")
+            raise TradeError("not held")
         qty = positions[key]
     value = (qty * price).quantize(Decimal("0.01"))
-    cost = (value * (buy_rate if a.side == "buy" else sell_rate)).quantize(Decimal("0.01"))
+    cost = (value * (buy_rate if side == "buy" else sell_rate)).quantize(Decimal("0.01"))
     trades = pd.DataFrame(
         [
             {
@@ -357,7 +365,7 @@ def cmd_trade(a) -> None:
                 "asset_class": ac,
                 "instrument_key": key,
                 "symbol": row.iloc[0]["symbol"],
-                "side": a.side,
+                "side": side,
                 "qty": qty,
                 "price": price,
                 "value": value,
@@ -366,12 +374,12 @@ def cmd_trade(a) -> None:
             }
         ]
     )
-    trades = _enrich_new_trades(a.portfolio_id, "live", trades, rates)
+    trades = _enrich_new_trades(pid, "live", trades, rates)
     run_id = str(uuid.uuid4())
-    write_results(a.portfolio_id, "live", run_id, trades, pd.DataFrame())
+    write_results(pid, "live", run_id, trades, pd.DataFrame())
     # refresh today's NAV row to reflect the trade
-    new_cash = cash - value - cost if a.side == "buy" else cash + value - cost
-    positions = open_positions(a.portfolio_id)
+    new_cash = cash - value - cost if side == "buy" else cash + value - cost
+    positions = open_positions(pid)
     universe_all = load_universe(list(p["asset_classes"]))
     held = universe_all.loc[universe_all["instrument_key"].isin(positions)]
     invested = Decimal("0")
@@ -391,18 +399,22 @@ def cmd_trade(a) -> None:
             }
         ]
     )
-    write_results(a.portfolio_id, "live", run_id, pd.DataFrame(), navs)
-    print(
-        json.dumps(
-            {
-                "side": a.side,
-                "symbol": row.iloc[0]["symbol"],
-                "qty": str(qty),
-                "price": str(price),
-                "value": str(value),
-            }
-        )
-    )
+    write_results(pid, "live", run_id, pd.DataFrame(), navs)
+    return {
+        "side": side,
+        "symbol": str(row.iloc[0]["symbol"]),
+        "qty": str(qty),
+        "price": str(price),
+        "value": str(value),
+        "trade_date": str(trade_date),
+    }
+
+
+def cmd_trade(a) -> None:
+    try:
+        print(json.dumps(book_trade(a.portfolio_id, a.side, a.key)))
+    except TradeError as e:
+        raise SystemExit(str(e)) from e
 
 
 def main():

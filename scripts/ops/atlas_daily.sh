@@ -77,6 +77,9 @@ step "regime"                    $PY -c "from atlas.compute.regime import run_da
 # entry overflow ranks by the same-day composite.
 step "compute_fund_technicals"   $PY scripts/foundation/compute_fund_technicals.py
 step "portfolio_mark"            $PY scripts/foundation/portfolio_run.py mark
+# Atlas Desk: agent cycle AFTER the mark (agents see tonight's marked book).
+# Missing LLM key or malformed agent output ⇒ the desk does nothing (safe).
+step "desk_run"                  $PY scripts/foundation/desk_run.py
 
 # 3. GATES (assert on REAL produced output — rule #0). Deploy only if ALL pass.
 # Run gates DIRECTLY (not via step): step() records a failure but always returns 0,

@@ -142,3 +142,31 @@ FROM (VALUES
     ('portfolio_evolve_min_trades',       5,  'Minimum train-window trades for a candidate to be considered', 'trades', 1, 50)
 ) AS s(k, v, d, u, lo, hi)
 WHERE NOT EXISTS (SELECT 1 FROM atlas_foundation.atlas_thresholds t WHERE t.threshold_key = s.k);
+
+-- ── Atlas Desk B1: per-cycle journal + desk knobs (spec 2026-07-04) ─────────
+-- One row per desk per nightly cycle: the inputs digest, every agent's raw
+-- output, what was actually booked, and any rejections — the desk's audit trail
+-- and (in B2) its learning substrate.
+CREATE TABLE IF NOT EXISTS atlas_foundation.desk_journal (
+    id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    portfolio_id uuid NOT NULL REFERENCES atlas_foundation.portfolio_master(portfolio_id),
+    cycle_date   date NOT NULL,
+    ts           timestamptz NOT NULL DEFAULT now(),
+    scout        jsonb,
+    risk         jsonb,
+    pm           jsonb,
+    applied      jsonb NOT NULL DEFAULT '[]',
+    errors       jsonb NOT NULL DEFAULT '[]',
+    inputs_digest jsonb
+);
+CREATE INDEX IF NOT EXISTS ix_desk_journal ON atlas_foundation.desk_journal (portfolio_id, cycle_date);
+
+INSERT INTO atlas_foundation.atlas_thresholds
+    (threshold_key, threshold_value, category, description, units, min_allowed, max_allowed, default_value, is_active)
+SELECT k, v, 'portfolio', d, u, lo, hi, v, TRUE
+FROM (VALUES
+    ('desk_max_orders_per_cycle', 5,  'Hard cap on desk orders booked per nightly cycle', 'orders', 1::numeric, 12::numeric),
+    ('desk_sector_cap',           3,  'Hard cap on desk holdings per sector',             'names',  1, 6),
+    ('desk_watchlist_size',       40, 'Top-N by composite fed to the desk agents',        'names',  10, 100)
+) AS s(k, v, d, u, lo, hi)
+WHERE NOT EXISTS (SELECT 1 FROM atlas_foundation.atlas_thresholds t WHERE t.threshold_key = s.k);
