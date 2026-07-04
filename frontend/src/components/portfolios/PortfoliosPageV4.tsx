@@ -73,11 +73,9 @@ function Card({ p }: { p: PortfolioSummary }) {
           </div>
         </div>
         <div>
-          <div className="font-num text-[9px] uppercase tracking-wider text-txt-3">
-            Backtest{p.btYears != null ? ` ${p.btYears.toFixed(0)}y` : ''}
-          </div>
-          <div className={`font-num text-[13px] font-semibold tabular-nums ${retTone(p.btTotalPct)}`}>
-            {pct(p.btTotalPct)}
+          <div className="font-num text-[9px] uppercase tracking-wider text-txt-3">5Y CAGR · backtest</div>
+          <div className={`font-num text-[13px] font-semibold tabular-nums ${retTone(p.btCagr5Pct)}`}>
+            {p.btCagr5Pct == null ? '—' : `${p.btCagr5Pct > 0 ? '+' : ''}${p.btCagr5Pct.toFixed(1)}%`}
           </div>
         </div>
       </div>
