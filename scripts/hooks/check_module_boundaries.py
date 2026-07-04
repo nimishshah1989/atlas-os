@@ -29,6 +29,7 @@ CONTEXTS: tuple[str, ...] = (
     "atlas.intraday",
     "atlas.lenses",
     "atlas.portfolio",  # pure strategy/engine math; I/O lives in scripts/foundation
+    "atlas.desk",  # pure agent prompts/validators; I/O lives in scripts/foundation
 )
 
 SHARED_KERNEL: tuple[str, ...] = (

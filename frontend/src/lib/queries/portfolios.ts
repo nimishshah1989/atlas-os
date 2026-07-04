@@ -30,8 +30,17 @@ export type PortfolioSummary = {
   strategyKey: string | null
 }
 
+const DESK_CHARTER_LABEL: Record<string, string> = {
+  sector_leaders: 'Sector Leaders',
+  conviction: 'Conviction',
+  quality_momentum: 'Quality Momentum',
+  rotation: 'Rotation',
+}
+
 const strategyLabel = (key: string | null, params: Record<string, unknown> | null): string | null => {
   if (!params) return key
+  if (params.desk === true)
+    return `Agent desk · ${DESK_CHARTER_LABEL[String(params.charter)] ?? String(params.charter)}`
   if (key === 'ema_cross') return `EMA ${params.fast}/${params.slow} crossover`
   if (key === 'rank_policy') {
     const names: Record<string, string> = {
@@ -176,6 +185,16 @@ export type PortfolioDetail = {
   totals: { live: CostTaxTotals; backtest: CostTaxTotals }
   atlas: AtlasRead
   policyJournal: PolicyJournalEntry[]
+  deskJournal: DeskCycle[]
+}
+
+export type DeskCycle = {
+  d: string
+  scout: Record<string, unknown> | null
+  risk: Record<string, unknown> | null
+  pm: Record<string, unknown> | null
+  applied: Record<string, unknown>[]
+  errors: string[]
 }
 
 export type PolicyJournalEntry = {
@@ -371,6 +390,11 @@ export async function getPortfolioDetail(id: string): Promise<PortfolioDetail | 
     FROM atlas_foundation.portfolio_policy_journal
     WHERE portfolio_id = ${id} ORDER BY ts DESC LIMIT 20
   `
+  const deskJournal = await sql<Array<Record<string, unknown>>>`
+    SELECT cycle_date::text AS d, scout, risk, pm, applied, errors
+    FROM atlas_foundation.desk_journal
+    WHERE portfolio_id = ${id} ORDER BY cycle_date DESC, ts DESC LIMIT 15
+  `
 
   const toNav = (rs: Array<Record<string, unknown>>): NavPointRow[] =>
     rs.map((r) => ({ d: String(r.d), nav: Number(r.nav) }))
@@ -403,6 +427,14 @@ export async function getPortfolioDetail(id: string): Promise<PortfolioDetail | 
       oldParams: (r.old_params as Record<string, unknown> | null) ?? null,
       newParams: (r.new_params as Record<string, unknown> | null) ?? null,
       evidence: (r.evidence as Record<string, unknown>) ?? {},
+    })),
+    deskJournal: deskJournal.map((r) => ({
+      d: String(r.d),
+      scout: (r.scout as Record<string, unknown> | null) ?? null,
+      risk: (r.risk as Record<string, unknown> | null) ?? null,
+      pm: (r.pm as Record<string, unknown> | null) ?? null,
+      applied: (r.applied as Record<string, unknown>[]) ?? [],
+      errors: (r.errors as string[]) ?? [],
     })),
   }
 }
