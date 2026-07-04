@@ -34,6 +34,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import _db
+import pandas as pd
 import portfolio_data as pdata
 from portfolio_run import TradeError, book_trade
 
@@ -137,9 +138,8 @@ def assemble_inputs(p: dict, knobs: dict) -> dict:
     )
     watchlist = snapshot.head(watch_n)
     sector_ranks = (
-        snapshot.groupby("sector", as_index=False)["composite"]
-        .mean()
-        .sort_values("composite", ascending=False)
+        pd.DataFrame(snapshot.groupby("sector", as_index=False)["composite"].mean())
+        .sort_values(by="composite", ascending=False)
         .head(12)
     )
     regime = _db.scalar(
@@ -176,11 +176,11 @@ def assemble_inputs(p: dict, knobs: dict) -> dict:
             order by dj.ts desc""",
         {"p": str(p["portfolio_id"])},
     )
-    inval_map = (
+    inval_map: dict[str, str] = (
         {} if inval.empty else dict(zip(inval["symbol"], inval["invalidation"], strict=False))
     )
     if not holdings.empty:
-        holdings["invalidation"] = holdings["symbol"].map(inval_map).fillna("")
+        holdings["invalidation"] = holdings["symbol"].map(lambda s: inval_map.get(str(s), ""))
 
     # the deterministic twin's current membership = one candidate signal
     charter = p["params"].get("charter", "sector_leaders")
