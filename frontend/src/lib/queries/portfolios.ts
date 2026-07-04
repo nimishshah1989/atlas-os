@@ -25,6 +25,8 @@ export type PortfolioSummary = {
   sinceInceptionPct: number | null
   btTotalPct: number | null
   btYears: number | null
+  params: Record<string, unknown> | null
+  strategyKey: string | null
 }
 
 const strategyLabel = (key: string | null, params: Record<string, unknown> | null): string | null => {
@@ -84,6 +86,8 @@ export async function getPortfolios(): Promise<PortfolioSummary[]> {
       r.nav != null ? (Number(r.nav) / Number(r.initial_capital) - 1) * 100 : null,
     btTotalPct: r.bt_total_pct != null ? Number(r.bt_total_pct) : null,
     btYears: r.bt_years != null ? Number(r.bt_years) : null,
+    params: (r.params as Record<string, unknown> | null) ?? null,
+    strategyKey: r.strategy_key ? String(r.strategy_key) : null,
   }))
 }
 
