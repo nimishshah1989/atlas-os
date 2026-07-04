@@ -25,6 +25,7 @@ export type PortfolioSummary = {
   sinceInceptionPct: number | null
   btTotalPct: number | null
   btYears: number | null
+  btCagr5Pct: number | null
   params: Record<string, unknown> | null
   strategyKey: string | null
 }
@@ -57,7 +58,7 @@ export async function getPortfolios(): Promise<PortfolioSummary[]> {
     SELECT m.portfolio_id, m.name, m.kind, m.origin, m.strategy_key, m.params, m.asset_classes,
            m.initial_capital, m.max_position_pct, m.inception_date::text AS inception_date,
            ln.date::text AS nav_date, ln.nav, ln.cash, ln.n_positions,
-           bt.total_pct AS bt_total_pct, bt.years AS bt_years
+           bt.total_pct AS bt_total_pct, bt.years AS bt_years, bt.cagr5_pct AS bt_cagr5_pct
     FROM atlas_foundation.portfolio_master m
     LEFT JOIN LATERAL (
       SELECT date, nav, cash, n_positions FROM atlas_foundation.portfolio_nav_daily n
@@ -66,13 +67,23 @@ export async function getPortfolios(): Promise<PortfolioSummary[]> {
     ) ln ON true
     LEFT JOIN LATERAL (
       SELECT (l.nav / nullif(f.nav, 0) - 1) * 100 AS total_pct,
-             (l.date - f.date) / 365.25 AS years
+             (l.date - f.date) / 365.25 AS years,
+             -- uniform card metric: annualized return over the LAST 5 backtest
+             -- years (or the full span when shorter, still annualized; >=1y only)
+             CASE WHEN l.date - b.date >= 365 THEN
+               (power((l.nav / nullif(b.nav, 0))::float8,
+                      1.0 / ((l.date - b.date) / 365.25)) - 1) * 100
+             END AS cagr5_pct
       FROM (SELECT nav, date FROM atlas_foundation.portfolio_nav_daily
             WHERE portfolio_id = m.portfolio_id AND run_type = 'backtest'
             ORDER BY date ASC LIMIT 1) f,
            (SELECT nav, date FROM atlas_foundation.portfolio_nav_daily
             WHERE portfolio_id = m.portfolio_id AND run_type = 'backtest'
-            ORDER BY date DESC LIMIT 1) l
+            ORDER BY date DESC LIMIT 1) l,
+           LATERAL (SELECT nav, date FROM atlas_foundation.portfolio_nav_daily
+            WHERE portfolio_id = m.portfolio_id AND run_type = 'backtest'
+              AND date >= l.date - interval '5 years'
+            ORDER BY date ASC LIMIT 1) b
     ) bt ON true
     WHERE m.status = 'active'
     ORDER BY m.created_at
@@ -95,6 +106,7 @@ export async function getPortfolios(): Promise<PortfolioSummary[]> {
       r.nav != null ? (Number(r.nav) / Number(r.initial_capital) - 1) * 100 : null,
     btTotalPct: r.bt_total_pct != null ? Number(r.bt_total_pct) : null,
     btYears: r.bt_years != null ? Number(r.bt_years) : null,
+    btCagr5Pct: r.bt_cagr5_pct != null ? Number(r.bt_cagr5_pct) : null,
     params: (r.params as Record<string, unknown> | null) ?? null,
     strategyKey: r.strategy_key ? String(r.strategy_key) : null,
   }))
