@@ -97,8 +97,8 @@ class RankPolicy:
             return pd.DataFrame(df[["instrument_key", "date", "_enter", "_stay"]])
 
         # sector modes: strength = mean constituent composite per (date, sector)
-        strength = df.groupby(["date", "sector"], as_index=False)["composite"].mean()
-        strength = strength.rename(columns={"composite": "_s"})
+        strength = pd.DataFrame(df.groupby(["date", "sector"], as_index=False)["composite"].mean())
+        strength["_s"] = strength.pop("composite")
         strength["_srk"] = strength.groupby("date")["_s"].rank(ascending=False, method="min")
 
         if self.mode == "rotation":
