@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation'
 import { getPortfolioDetail, type NavPointRow, type Holding, type AtlasRead } from '@/lib/queries/portfolios'
 import { TradesTable } from './TradesTable'
 import { PolicyJournal } from './PolicyJournal'
+import { DeskLog } from './DeskLog'
 import { describeStrategy } from '@/lib/strategyDescription'
 import { decileColor } from '@/components/ui/decile'
 import { computeFundRiskStats, type NavPoint } from '@/lib/fundStats'
@@ -188,8 +189,9 @@ function HowItWorks({ explain, isSystem }: { explain: NonNullable<ReturnType<typ
 export async function PortfolioDetailV4({ id }: { id: string }) {
   const detail = await getPortfolioDetail(id).catch(() => null)
   if (!detail) notFound()
-  const { summary: s, holdings, liveNav, backtestNav, benchmark, trades, totals, atlas, policyJournal } = detail
+  const { summary: s, holdings, liveNav, backtestNav, benchmark, trades, totals, atlas, policyJournal, deskJournal } = detail
   const isSystem = s.category === 'system'
+  const isDesk = s.params?.desk === true
   const explain = describeStrategy(s.kind, s.params, s.assetClasses, s.maxPositionPct, s.strategyKey)
 
   const btStats = computeFundRiskStats(monthly(backtestNav))
@@ -309,7 +311,18 @@ export async function PortfolioDetailV4({ id }: { id: string }) {
         <HoldingsTable holdings={holdings} nav={s.nav} />
       </Panel>
 
-      {isSystem && (
+      {isDesk && (
+        <Panel
+          eyebrow="Desk log"
+          title="The desk's nightly judgment"
+          info={{ body: 'Every night after the marks: the Scout reads the fresh Atlas ranks and flags what changed; the Risk & Tax officer approves, defers or vetoes each proposal (weighing STCG vs LTCG and concentration); the PM issues orders, each with a thesis and a falsifiable exit condition. All of it is journaled — including the nights it correctly does nothing.' }}
+          bodyClassName="px-5 py-4"
+        >
+          <DeskLog cycles={deskJournal} />
+        </Panel>
+      )}
+
+      {isSystem && !isDesk && (
         <Panel
           eyebrow="Learning log"
           title="How the policy has evolved"

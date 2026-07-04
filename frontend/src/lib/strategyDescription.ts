@@ -73,6 +73,18 @@ export function describeStrategy(
   const slots = Math.floor(1 / maxPositionPct)
   const capPct = Math.round(maxPositionPct * 100)
 
+  if (kind === 'basket' && params?.desk === true) {
+    const slots = Math.floor(1 / maxPositionPct)
+    return {
+      headline: 'An agent-run trading desk over Atlas’s ranks (forward-only)',
+      entry: 'Every night after the marks, a Scout agent reads the fresh Atlas data (composite ranks, sector strength, relative strength, regime) and proposes additions; a Risk & Tax officer approves, resizes, defers or vetoes each; the PM buys only Risk-approved names, recording a thesis and a falsifiable exit condition per position.',
+      exit: 'The Scout checks every holding’s stated exit condition and rank health daily; sells go through the same Risk review (a short-term-gain exit is deferred unless the thesis-break is urgent). The whole book exits new-entry mode in Risk-Off regimes.',
+      universe: universeText(assetClasses),
+      selection: 'Judgment over the ranked watchlist — the agents choose among Atlas’s top-conviction names, never outside them.',
+      sizing: `One standard slot per buy (~${Math.round(maxPositionPct * 100)}% of the book, ${slots} slots), execution costs and FIFO tax included. Hard caps (orders/night, per-sector, Risk-Off block) are enforced in code, not by the model.`,
+      guards: ['This desk is never backtested — LLM hindsight makes historical replays meaningless; it is judged live against its deterministic twin and NIFTY 500.'],
+    }
+  }
   if (kind === 'basket') {
     return {
       headline: 'A hand-picked basket — no automated rule',

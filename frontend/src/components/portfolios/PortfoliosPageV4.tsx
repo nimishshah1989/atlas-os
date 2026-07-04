@@ -46,7 +46,7 @@ function Card({ p }: { p: PortfolioSummary }) {
       </div>
       <h3 className="font-display text-[16px] font-semibold leading-snug text-txt-1">{p.name}</h3>
       <p className="mb-3 font-sans text-[11.5px] text-txt-3">
-        {p.kind === 'strategy' ? p.strategyLabel : 'FM-picked instruments'} · {p.assetClasses.join(' + ')}
+        {p.strategyLabel ?? 'FM-picked instruments'} · {p.assetClasses.join(' + ')}
       </p>
       {p.nav == null ? (
         <p className="mb-3 rounded-tile border border-edge-hair bg-surface-raised px-2.5 py-2 font-sans text-[11.5px] leading-[1.45] text-txt-3">
