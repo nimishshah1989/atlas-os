@@ -27,8 +27,19 @@ export type PortfolioSummary = {
   btYears: number | null
 }
 
-const strategyLabel = (key: string | null, params: Record<string, unknown> | null) =>
-  key === 'ema_cross' && params ? `EMA ${params.fast}/${params.slow} crossover` : key
+const strategyLabel = (key: string | null, params: Record<string, unknown> | null): string | null => {
+  if (!params) return key
+  if (key === 'ema_cross') return `EMA ${params.fast}/${params.slow} crossover`
+  if (key === 'atlas_policy') {
+    const parts = [`EMA ${params.fast}/${params.slow}`]
+    if (params.confirm_200) parts.push('>200')
+    if (params.rs_min != null) parts.push(`RS≥${(Number(params.rs_min) * 100).toFixed(0)}%`)
+    if (params.min_composite != null) parts.push(`comp≥${params.min_composite}`)
+    if (params.regime_gate) parts.push('regime-gated')
+    return parts.join(' · ')
+  }
+  return key
+}
 
 export async function getPortfolios(): Promise<PortfolioSummary[]> {
   const rows = await sql<Array<Record<string, unknown>>>`
@@ -139,6 +150,15 @@ export type PortfolioDetail = {
   trades: TradeRow[]
   totals: { live: CostTaxTotals; backtest: CostTaxTotals }
   atlas: AtlasRead
+  policyJournal: PolicyJournalEntry[]
+}
+
+export type PolicyJournalEntry = {
+  ts: string
+  kind: 'evaluation' | 'change'
+  oldParams: Record<string, unknown> | null
+  newParams: Record<string, unknown> | null
+  evidence: Record<string, unknown>
 }
 
 export async function getPortfolioDetail(id: string): Promise<PortfolioDetail | null> {
@@ -321,6 +341,12 @@ export async function getPortfolioDetail(id: string): Promise<PortfolioDetail | 
     sectorVsBenchmark,
   }
 
+  const journal = await sql<Array<Record<string, unknown>>>`
+    SELECT ts::text AS ts, kind, old_params, new_params, evidence
+    FROM atlas_foundation.portfolio_policy_journal
+    WHERE portfolio_id = ${id} ORDER BY ts DESC LIMIT 20
+  `
+
   const toNav = (rs: Array<Record<string, unknown>>): NavPointRow[] =>
     rs.map((r) => ({ d: String(r.d), nav: Number(r.nav) }))
   return {
@@ -346,6 +372,13 @@ export async function getPortfolioDetail(id: string): Promise<PortfolioDetail | 
     })),
     totals: { live: totalsFor('live'), backtest: totalsFor('backtest') },
     atlas,
+    policyJournal: journal.map((r) => ({
+      ts: String(r.ts),
+      kind: r.kind as 'evaluation' | 'change',
+      oldParams: (r.old_params as Record<string, unknown> | null) ?? null,
+      newParams: (r.new_params as Record<string, unknown> | null) ?? null,
+      evidence: (r.evidence as Record<string, unknown>) ?? {},
+    })),
   }
 }
 
@@ -357,6 +390,45 @@ export async function listBaskets(): Promise<{ id: string; name: string }[]> {
     WHERE kind = 'basket' AND status = 'active' ORDER BY name
   `
   return rows.map((r) => ({ id: String(r.portfolio_id), name: String(r.name) }))
+}
+
+// Backtest curves for every portfolio, rebased to 100, for the board compare chart.
+// Monthly-sampled to keep the payload light; NIFTY 500 included as the benchmark line.
+export type CompareCurve = { name: string; category: PortfolioCategory; points: { d: string; v: number }[] }
+
+export async function getCompareCurves(): Promise<CompareCurve[]> {
+  const rows = await sql<Array<Record<string, unknown>>>`
+    WITH m AS (
+      SELECT n.portfolio_id, pm.name, pm.origin, pm.kind,
+             to_char(n.date, 'YYYY-MM') AS ym, max(n.date) AS d
+      FROM atlas_foundation.portfolio_nav_daily n
+      JOIN atlas_foundation.portfolio_master pm USING (portfolio_id)
+      WHERE n.run_type = 'backtest' AND pm.status = 'active'
+      GROUP BY 1, 2, 3, 4, 5
+    )
+    SELECT m.portfolio_id, m.name, m.origin, m.kind, m.d::text AS d, n.nav
+    FROM m JOIN atlas_foundation.portfolio_nav_daily n
+      ON n.portfolio_id = m.portfolio_id AND n.run_type = 'backtest' AND n.date = m.d
+    ORDER BY m.name, m.d
+  `
+  const byId = new Map<string, { name: string; category: PortfolioCategory; pts: { d: string; nav: number }[] }>()
+  for (const r of rows) {
+    const id = String(r.portfolio_id)
+    if (!byId.has(id))
+      byId.set(id, {
+        name: String(r.name),
+        category: (r.origin === 'system' ? 'system' : r.kind === 'basket' ? 'basket' : 'rule') as PortfolioCategory,
+        pts: [],
+      })
+    byId.get(id)!.pts.push({ d: String(r.d), nav: Number(r.nav) })
+  }
+  return [...byId.values()]
+    .filter((c) => c.pts.length > 2)
+    .map((c) => ({
+      name: c.name,
+      category: c.category,
+      points: c.pts.map((p) => ({ d: p.d, v: (p.nav / c.pts[0].nav) * 100 })),
+    }))
 }
 
 // UI picks are "stock:SYMBOL" / "etf:SYMBOL" / "fund:MSTAR_ID"; the engine keys
