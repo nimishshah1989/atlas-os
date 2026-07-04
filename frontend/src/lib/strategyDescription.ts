@@ -20,6 +20,49 @@ const universeText = (assetClasses: string[]): string => {
   return `Trades ${list}${scored}.`
 }
 
+function describeRankPolicy(
+  p: Record<string, unknown>,
+  assetClasses: string[],
+  maxPositionPct: number,
+): StrategyExplainer {
+  const slots = Math.floor(1 / maxPositionPct)
+  const capPct = Math.round(maxPositionPct * 100)
+  const buf = Number(p.exit_buffer ?? 5)
+  const mode = String(p.mode)
+  const M: Record<string, { headline: string; entry: string; exitCore: string }> = {
+    sector_leaders: {
+      headline: `Sector Leaders — the top ${p.n_per_sector} names in each of the ${p.n_sectors} strongest sectors`,
+      entry: `Every session, sectors are ranked by the average Atlas conviction of their constituents. A name enters when its sector is among the top ${p.n_sectors} AND it is one of the top ${p.n_per_sector} names in that sector by composite score.`,
+      exitCore: `its sector falls out of the top ${Number(p.n_sectors) + buf}, or the name drops below the top ${Number(p.n_per_sector) + buf} in its sector`,
+    },
+    conviction: {
+      headline: `Conviction Concentrate — the ${p.n_names} highest-conviction names in the market`,
+      entry: `Every session, all scored names are ranked by Atlas composite. A name enters when it is in the top ${p.n_names} market-wide (at most ${p.sector_cap} names from any one sector).`,
+      exitCore: `it falls below rank ${Number(p.n_names) + buf}`,
+    },
+    quality_momentum: {
+      headline: `Quality Momentum — top-conviction names that are ALSO outperforming and in an uptrend`,
+      entry: `A name enters only when it is top-${p.n_names} by Atlas composite AND outperforming the NIFTY 500 over 3 months AND above its 200-day EMA — conviction, relative strength and trend all confirmed at once.`,
+      exitCore: `it falls below rank ${Number(p.n_names) + buf}, starts underperforming the NIFTY 500, or loses its 200-day EMA`,
+    },
+    rotation: {
+      headline: `Sector Rotation — catching sectors as they turn, before they lead`,
+      entry: `Sectors are ranked by how much their strength rank has IMPROVED over the last ${p.lookback} sessions, starting from a below-median base. A name enters when its sector is among the ${p.n_sectors} fastest improvers and it is top-${p.n_per_sector} there by composite.`,
+      exitCore: `its sector stops improving (and hasn't graduated to an outright leader), or the name drops past the buffer`,
+    },
+  }
+  const m = M[mode] ?? M.conviction
+  return {
+    headline: m.headline,
+    entry: m.entry,
+    exit: `Holds until ${m.exitCore}. The buffer is deliberate hysteresis — winners are left to run instead of being churned out on small rank wiggles, which also lets gains reach the long-term tax rate.`,
+    universe: `Trades stocks drawn from the Atlas-scored Nifty 500, evaluated every session.`,
+    selection: `When more names qualify than there are open slots, the highest Atlas composite wins the slot.`,
+    sizing: `Starts 100% in cash and buys the qualifying set at the next session's close (no look-ahead). Each position capped at ${capPct}% (~${slots} slots), execution costs in the NAV, FIFO tax ledger on every sale.`,
+    guards: [],
+  }
+}
+
 export function describeStrategy(
   kind: 'strategy' | 'basket',
   params: Record<string, unknown> | null,
@@ -42,6 +85,7 @@ export function describeStrategy(
     }
   }
 
+  if (params && strategyKey === 'rank_policy') return describeRankPolicy(params, assetClasses, maxPositionPct)
   if (!params || (strategyKey !== 'ema_cross' && strategyKey !== 'atlas_policy')) return null
 
   const fast = Number(params.fast)

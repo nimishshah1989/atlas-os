@@ -48,12 +48,19 @@ function Card({ p }: { p: PortfolioSummary }) {
       <p className="mb-3 font-sans text-[11.5px] text-txt-3">
         {p.kind === 'strategy' ? p.strategyLabel : 'FM-picked instruments'} · {p.assetClasses.join(' + ')}
       </p>
-      <div className="mb-3 flex items-baseline justify-between">
-        <span className="font-num text-[22px] font-semibold tabular-nums text-txt-1">{inr(p.nav)}</span>
-        <span className={`font-num text-[14px] font-semibold tabular-nums ${retTone(p.sinceInceptionPct)}`}>
-          {pct(p.sinceInceptionPct)}
-        </span>
-      </div>
+      {p.nav == null ? (
+        <p className="mb-3 rounded-tile border border-edge-hair bg-surface-raised px-2.5 py-2 font-sans text-[11.5px] leading-[1.45] text-txt-3">
+          Dormant — backtest hasn&rsquo;t cleared the bar (beat NIFTY 500 with a shallower
+          drawdown). Goes live only when it earns it.
+        </p>
+      ) : (
+        <div className="mb-3 flex items-baseline justify-between">
+          <span className="font-num text-[22px] font-semibold tabular-nums text-txt-1">{inr(p.nav)}</span>
+          <span className={`font-num text-[14px] font-semibold tabular-nums ${retTone(p.sinceInceptionPct)}`}>
+            {pct(p.sinceInceptionPct)}
+          </span>
+        </div>
+      )}
       <div className="grid grid-cols-3 gap-2 border-t border-edge-hair pt-2.5">
         <div>
           <div className="font-num text-[9px] uppercase tracking-wider text-txt-3">Positions</div>

@@ -54,7 +54,7 @@ def load_universe(asset_classes: list[str]) -> pd.DataFrame:
         # not every listed name — composite ranking is the FM's selection rule.
         parts.append(
             _db.read_df(
-                f"""select i.instrument_id::text as instrument_key, i.asset_class, i.symbol
+                f"""select i.instrument_id::text as instrument_key, i.asset_class, i.symbol, i.sector
                     from {M}.instrument_master i
                     where i.is_active and i.kite_token is not null and i.asset_class = any(:ac)
                       and (i.asset_class <> 'stock' or exists (
@@ -72,13 +72,14 @@ def load_universe(asset_classes: list[str]) -> pd.DataFrame:
                     "instrument_key": f["mstar_id"],
                     "asset_class": "fund",
                     "symbol": f["scheme_name"],
+                    "sector": None,
                 }
             )
         )
     return (
         pd.concat(parts, ignore_index=True)
         if parts
-        else pd.DataFrame(columns=pd.Index(["instrument_key", "asset_class", "symbol"]))
+        else pd.DataFrame(columns=pd.Index(["instrument_key", "asset_class", "symbol", "sector"]))
     )
 
 
@@ -318,23 +319,37 @@ def run_window(p: dict, start: dt.date, end: dt.date, mode: str):
     # crossover — it starts 100% cash and enters only on crossover EVENTS from its
     # window onward (init books nothing; the nightly mark takes it from there).
     # Only FM baskets seed holdings at inception (those are explicit picks).
-    composite = load_composite(universe, lookback, end)
+    # rank/rotation strategies need pre-window history for their signals
+    sig_lookback = min(lookback, start - dt.timedelta(days=200))
+    composite = load_composite(universe, sig_lookback, end)
     events, inception = None, None
     if strat is not None:
         if mode != "init":
-            tech = load_tech(universe, strat.required_columns(), lookback, end)
-            # policy strategies may condition on composite / market regime
-            if getattr(strat, "needs_composite", False):
-                tech = tech.merge(composite, on=["instrument_key", "date"], how="left")
+            cols = strat.required_columns()
+            if cols:
+                tech = load_tech(universe, cols, sig_lookback, end)
+                if getattr(strat, "needs_composite", False):
+                    tech = tech.merge(composite, on=["instrument_key", "date"], how="left")
+            else:
+                tech = composite.copy()  # composite IS the panel (rank strategies)
+            if getattr(strat, "needs_sector", False):
+                tech = tech.merge(
+                    universe[["instrument_key", "sector"]], on="instrument_key", how="left"
+                )
             if getattr(strat, "needs_regime", False):
                 regime = _db.read_df(
                     f"""select date, regime_state from {M}.atlas_market_regime_daily
                         where date between :a and :b""",
-                    {"a": lookback, "b": end},
+                    {"a": sig_lookback, "b": end},
                 )
                 tech = tech.merge(regime, on="date", how="left")
-            events = strat.events(tech)
-            events = events[events["date"] >= start]
+            if getattr(strat, "membership", False):
+                # membership strategies: state before `start` informs the scan;
+                # emissions begin AT `start` (current members enter at next close)
+                events = strat.events(tech, floor=start)
+            else:
+                events = strat.events(tech)
+                events = events[events["date"] >= start]
     elif mode != "resume":
         inception = _basket_state(p, universe)
 
