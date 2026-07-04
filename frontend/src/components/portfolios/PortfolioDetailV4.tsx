@@ -2,9 +2,10 @@
 // backtest growth vs NIFTY 500, risk box (reusing the fund math), holdings by
 // sector, and the raw trade log. Everything rendered is stored engine output.
 import { notFound } from 'next/navigation'
-import { getPortfolioDetail, type NavPointRow, type Holding } from '@/lib/queries/portfolios'
+import { getPortfolioDetail, type NavPointRow, type Holding, type AtlasRead } from '@/lib/queries/portfolios'
 import { TradesTable } from './TradesTable'
-import { computeFundRiskStats, sectorComposition, type NavPoint } from '@/lib/fundStats'
+import { decileColor } from '@/components/ui/decile'
+import { computeFundRiskStats, type NavPoint } from '@/lib/fundStats'
 import { FundRiskStats } from '@/components/funds/FundRiskStats'
 import { AtlasLightweightChart, type ChartSeries } from '@/components/charts/AtlasLightweightChart'
 import { Panel } from '@/components/ui/Panel'
@@ -52,15 +53,19 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: str
   )
 }
 
+const scoreStyle = (v: number | null) => ({
+  color: v == null ? 'var(--color-txt-3)' : decileColor(Math.min(10, Math.max(1, Math.ceil(v / 10)))),
+})
+
 function HoldingsTable({ holdings, nav }: { holdings: Holding[]; nav: number | null }) {
   if (holdings.length === 0)
     return <p className="px-5 py-4 font-sans text-[13px] italic text-txt-3">No open positions.</p>
   return (
-    <table className="w-full min-w-[760px]">
+    <table className="w-full min-w-[1080px]">
       <thead>
         <tr className="border-b border-edge-rule">
-          {['Instrument', 'Sector', 'Qty', 'Avg cost', 'Last', 'Value', 'Weight', 'P&L'].map((h, i) => (
-            <th key={h} className={`px-3 py-2 font-num text-[10px] uppercase tracking-wider text-txt-3 ${i <= 1 ? 'text-left' : 'text-right'}`}>{h}</th>
+          {['Instrument', 'Sector', 'Qty', 'Avg cost', 'Last', 'Value', 'Weight', 'P&L', 'Comp', 'Tech', 'Flow', 'Val', 'RS 3M', 'EMA 50/200'].map((h, i) => (
+            <th key={h} className={`px-2.5 py-2 font-num text-[10px] uppercase tracking-wider text-txt-3 ${i <= 1 ? 'text-left' : 'text-right'}`}>{h}</th>
           ))}
         </tr>
       </thead>
@@ -68,25 +73,47 @@ function HoldingsTable({ holdings, nav }: { holdings: Holding[]; nav: number | n
         {holdings.map((h) => {
           const avgCost = h.qty ? h.netCost / h.qty : null
           const pnlPct = h.value != null && h.netCost ? (h.value / h.netCost - 1) * 100 : null
+          const score = (v: number | null) => (
+            <td className="px-2.5 py-2 text-right font-num text-[11.5px] font-semibold tabular-nums" style={scoreStyle(v)}>
+              {v == null ? '—' : v.toFixed(0)}
+            </td>
+          )
           return (
             <tr key={h.instrumentKey} className="border-b border-edge-hair">
-              <td className="px-3 py-2">
+              <td className="px-2.5 py-2">
                 {h.assetClass === 'stock' ? (
                   <a href={`/stocks/${h.symbol}`} className="font-num text-[12.5px] font-semibold tabular-nums text-txt-1 no-underline hover:text-brand hover:underline">{h.symbol}</a>
                 ) : (
                   <span className="font-num text-[12.5px] font-semibold tabular-nums text-txt-1">{h.symbol}</span>
                 )}
-                <div className="max-w-[240px] truncate font-sans text-[10.5px] text-txt-3">{h.name ?? h.assetClass}</div>
+                <div className="max-w-[220px] truncate font-sans text-[10.5px] text-txt-3">
+                  {h.riskFlags && !['[]', '{}'].includes(h.riskFlags.trim()) && (
+                    <span className="mr-1 text-sig-warn" title={h.riskFlags}>⚑</span>
+                  )}
+                  {h.name ?? h.assetClass}
+                </div>
               </td>
-              <td className="max-w-[140px] truncate px-3 py-2 font-sans text-[11.5px] text-txt-2">{h.sector ?? '—'}</td>
-              <td className="px-3 py-2 text-right font-num text-[12px] tabular-nums text-txt-2">{h.qty.toLocaleString('en-IN')}</td>
-              <td className="px-3 py-2 text-right font-num text-[12px] tabular-nums text-txt-2">{avgCost == null ? '—' : avgCost.toFixed(2)}</td>
-              <td className="px-3 py-2 text-right font-num text-[12px] tabular-nums text-txt-2">{h.lastPrice == null ? '—' : h.lastPrice.toFixed(2)}</td>
-              <td className="px-3 py-2 text-right font-num text-[12.5px] font-semibold tabular-nums text-txt-1">{inr(h.value)}</td>
-              <td className="px-3 py-2 text-right font-num text-[12px] tabular-nums text-txt-2">
+              <td className="max-w-[130px] truncate px-2.5 py-2 font-sans text-[11.5px] text-txt-2">{h.sector ?? '—'}</td>
+              <td className="px-2.5 py-2 text-right font-num text-[12px] tabular-nums text-txt-2">{h.qty.toLocaleString('en-IN')}</td>
+              <td className="px-2.5 py-2 text-right font-num text-[12px] tabular-nums text-txt-2">{avgCost == null ? '—' : avgCost.toFixed(2)}</td>
+              <td className="px-2.5 py-2 text-right font-num text-[12px] tabular-nums text-txt-2">{h.lastPrice == null ? '—' : h.lastPrice.toFixed(2)}</td>
+              <td className="px-2.5 py-2 text-right font-num text-[12.5px] font-semibold tabular-nums text-txt-1">{inr(h.value)}</td>
+              <td className="px-2.5 py-2 text-right font-num text-[12px] tabular-nums text-txt-2">
                 {h.value != null && nav ? `${((h.value / nav) * 100).toFixed(1)}%` : '—'}
               </td>
-              <td className={`px-3 py-2 text-right font-num text-[12px] tabular-nums ${retTone(pnlPct)}`}>{pct(pnlPct)}</td>
+              <td className={`px-2.5 py-2 text-right font-num text-[12px] tabular-nums ${retTone(pnlPct)}`}>{pct(pnlPct)}</td>
+              {score(h.composite)}
+              {score(h.lensTech)}
+              {score(h.lensFlow)}
+              {score(h.lensVal)}
+              <td className={`px-2.5 py-2 text-right font-num text-[11.5px] tabular-nums ${retTone(h.rs3m != null ? h.rs3m * 100 : null)}`}>
+                {h.rs3m == null ? '—' : `${h.rs3m >= 0 ? '+' : ''}${(h.rs3m * 100).toFixed(1)}%`}
+              </td>
+              <td className="px-2.5 py-2 text-right font-num text-[11.5px] tabular-nums">
+                <span className={h.aboveEma50 ? 'text-sig-pos' : 'text-txt-3'}>{h.aboveEma50 == null ? '—' : h.aboveEma50 ? '✓' : '✗'}</span>
+                <span className="mx-0.5 text-txt-3">/</span>
+                <span className={h.aboveEma200 ? 'text-sig-pos' : 'text-txt-3'}>{h.aboveEma200 == null ? '—' : h.aboveEma200 ? '✓' : '✗'}</span>
+              </td>
             </tr>
           )
         })}
@@ -95,25 +122,35 @@ function HoldingsTable({ holdings, nav }: { holdings: Holding[]; nav: number | n
   )
 }
 
-function SectorBars({ holdings }: { holdings: Holding[] }) {
-  const total = holdings.reduce((a, h) => a + (h.value ?? 0), 0)
-  if (!total) return null
-  const slices = sectorComposition(
-    holdings.map((h) => ({ sector: h.sector, weight: ((h.value ?? 0) / total) * 100 })),
-  )
+function SectorVsBench({ atlas }: { atlas: AtlasRead }) {
+  const rows = atlas.sectorVsBenchmark
+  if (!rows.length) return <p className="font-sans text-[13px] italic text-txt-3">No positions yet.</p>
+  const max = Math.max(...rows.map((r) => Math.max(r.port, r.bench)), 1)
   return (
-    <div className="space-y-1.5">
-      {slices.map((s) => (
-        <div key={s.sector} className="flex items-center gap-2">
-          <span className="w-44 shrink-0 truncate font-sans text-[11.5px] text-txt-2">{s.sector}</span>
-          <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-raised">
-            <div className="h-full rounded-full bg-brand/70" style={{ width: `${Math.min(100, s.weight)}%` }} />
+    <div className="space-y-2">
+      {rows.map((r) => {
+        const diff = r.port - r.bench
+        return (
+          <div key={r.sector}>
+            <div className="mb-0.5 flex items-baseline justify-between">
+              <span className="truncate font-sans text-[11.5px] text-txt-2">{r.sector}</span>
+              <span className="font-num text-[10.5px] tabular-nums text-txt-3">
+                {r.port.toFixed(1)}% vs {r.bench.toFixed(1)}%{' '}
+                <span className={diff >= 0 ? 'text-sig-pos' : 'text-sig-neg'}>
+                  ({diff >= 0 ? '+' : ''}{diff.toFixed(1)})
+                </span>
+              </span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-surface-raised">
+              <div className="h-full rounded-full bg-brand/70" style={{ width: `${(r.port / max) * 100}%` }} />
+            </div>
+            <div className="mt-px h-1 overflow-hidden rounded-full bg-surface-raised">
+              <div className="h-full rounded-full bg-txt-3/50" style={{ width: `${(r.bench / max) * 100}%` }} />
+            </div>
           </div>
-          <span className="w-16 shrink-0 text-right font-num text-[11.5px] tabular-nums text-txt-1">
-            {s.weight.toFixed(1)}% <span className="text-txt-3">·{s.count}</span>
-          </span>
-        </div>
-      ))}
+        )
+      })}
+      <p className="pt-1 font-sans text-[10.5px] text-txt-3">Thick bar = this portfolio · thin bar = NIFTY 500 sector weight.</p>
     </div>
   )
 }
@@ -121,7 +158,7 @@ function SectorBars({ holdings }: { holdings: Holding[] }) {
 export async function PortfolioDetailV4({ id }: { id: string }) {
   const detail = await getPortfolioDetail(id).catch(() => null)
   if (!detail) notFound()
-  const { summary: s, holdings, liveNav, backtestNav, benchmark, trades, totals } = detail
+  const { summary: s, holdings, liveNav, backtestNav, benchmark, trades, totals, atlas } = detail
 
   const btStats = computeFundRiskStats(monthly(backtestNav))
   const btMaxDd = maxDrawdownDaily(backtestNav)
@@ -199,10 +236,32 @@ export async function PortfolioDetailV4({ id }: { id: string }) {
             </p>
           )}
         </Panel>
-        <Panel eyebrow="Exposure" title="Holdings by sector" bodyClassName="px-5 py-4">
-          <SectorBars holdings={holdings} />
+        <Panel
+          eyebrow="Exposure"
+          title="Sector weights vs NIFTY 500"
+          info={{ body: 'Portfolio sector weights (by market value) against the live NIFTY 500 sector weights from index constituents — where this book is over- and under-weight the market.' }}
+          bodyClassName="px-5 py-4"
+        >
+          <SectorVsBench atlas={atlas} />
         </Panel>
       </div>
+
+      {holdings.length > 0 && (
+        <Panel
+          eyebrow="Atlas read"
+          title="What the lens engine says about this book"
+          info={{ body: 'Value-weighted over current holdings, from the latest lens snapshot and technicals: composite score, internal breadth (share of book above its 50/200 EMA), relative strength vs NIFTY 500 over 3 months, and any active risk flags.' }}
+          bodyClassName="px-5 py-4"
+        >
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
+            <Stat label="Weighted composite" value={atlas.weightedComposite == null ? '—' : atlas.weightedComposite.toFixed(1)} />
+            <Stat label="Above 50 EMA" value={atlas.breadth50 == null ? '—' : `${atlas.breadth50.toFixed(0)}%`} tone={atlas.breadth50 != null && atlas.breadth50 >= 60 ? 'text-sig-pos' : undefined} />
+            <Stat label="Above 200 EMA" value={atlas.breadth200 == null ? '—' : `${atlas.breadth200.toFixed(0)}%`} tone={atlas.breadth200 != null && atlas.breadth200 >= 60 ? 'text-sig-pos' : undefined} />
+            <Stat label="Weighted RS 3M" value={atlas.weightedRs3m == null ? '—' : `${atlas.weightedRs3m >= 0 ? '+' : ''}${(atlas.weightedRs3m * 100).toFixed(1)}%`} tone={retTone(atlas.weightedRs3m)} />
+            <Stat label="Risk flags" value={String(atlas.flaggedCount)} tone={atlas.flaggedCount > 0 ? 'text-sig-warn' : undefined} />
+          </div>
+        </Panel>
+      )}
 
       <Panel eyebrow="Open positions" title={`Holdings (${holdings.length})`} bodyClassName="overflow-x-auto">
         <HoldingsTable holdings={holdings} nav={s.nav} />

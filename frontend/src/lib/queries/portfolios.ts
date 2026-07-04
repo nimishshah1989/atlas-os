@@ -6,10 +6,13 @@
 import 'server-only'
 import sql from '@/lib/db'
 
+export type PortfolioCategory = 'rule' | 'system' | 'basket'
+
 export type PortfolioSummary = {
   id: string
   name: string
   kind: 'strategy' | 'basket'
+  category: PortfolioCategory
   strategyLabel: string | null
   assetClasses: string[]
   initialCapital: number
@@ -29,7 +32,7 @@ const strategyLabel = (key: string | null, params: Record<string, unknown> | nul
 
 export async function getPortfolios(): Promise<PortfolioSummary[]> {
   const rows = await sql<Array<Record<string, unknown>>>`
-    SELECT m.portfolio_id, m.name, m.kind, m.strategy_key, m.params, m.asset_classes,
+    SELECT m.portfolio_id, m.name, m.kind, m.origin, m.strategy_key, m.params, m.asset_classes,
            m.initial_capital, m.max_position_pct, m.inception_date::text AS inception_date,
            ln.date::text AS nav_date, ln.nav, ln.cash, ln.n_positions,
            bt.total_pct AS bt_total_pct, bt.years AS bt_years
@@ -56,6 +59,7 @@ export async function getPortfolios(): Promise<PortfolioSummary[]> {
     id: String(r.portfolio_id),
     name: String(r.name),
     kind: r.kind as 'strategy' | 'basket',
+    category: (r.origin === 'system' ? 'system' : r.kind === 'basket' ? 'basket' : 'rule') as PortfolioCategory,
     strategyLabel: strategyLabel(r.strategy_key as string | null, r.params as Record<string, unknown> | null),
     assetClasses: (r.asset_classes as string[]) ?? [],
     initialCapital: Number(r.initial_capital),
@@ -82,6 +86,24 @@ export type Holding = {
   netCost: number
   lastPrice: number | null
   value: number | null
+  // Atlas read (stocks/ETFs from the latest lens snapshot; funds null)
+  composite: number | null
+  lensTech: number | null
+  lensFlow: number | null
+  lensVal: number | null
+  rs3m: number | null
+  aboveEma50: boolean | null
+  aboveEma200: boolean | null
+  riskFlags: string | null
+}
+
+export type AtlasRead = {
+  weightedComposite: number | null
+  breadth50: number | null // % of equity holdings (by value) above their 50 EMA
+  breadth200: number | null
+  weightedRs3m: number | null
+  flaggedCount: number
+  sectorVsBenchmark: { sector: string; port: number; bench: number }[]
 }
 
 export type NavPointRow = { d: string; nav: number }
@@ -116,6 +138,7 @@ export type PortfolioDetail = {
   benchmark: NavPointRow[] // NIFTY 500 close over the backtest window
   trades: TradeRow[]
   totals: { live: CostTaxTotals; backtest: CostTaxTotals }
+  atlas: AtlasRead
 }
 
 export async function getPortfolioDetail(id: string): Promise<PortfolioDetail | null> {
@@ -176,12 +199,29 @@ export async function getPortfolioDetail(id: string): Promise<PortfolioDetail | 
     `
     for (const r of rows) lastPrice.set(String(r.k), Number(r.price))
   }
+  // Atlas lens read for equity holdings (latest snapshot + latest technicals)
+  const lens = new Map<string, Record<string, unknown>>()
+  if (equityKeys.length) {
+    const rows = await sql<Array<Record<string, unknown>>>`
+      SELECT s.instrument_id::text AS k, s.composite, s.technical, s.flow, s.valuation,
+             s.risk_flags, t.above_ema_50, t.above_ema_200, t.rs_3m_n500
+      FROM atlas_foundation.atlas_lens_scores_daily s
+      LEFT JOIN atlas_foundation.technical_daily t
+        ON t.instrument_id = s.instrument_id
+       AND t.date = (SELECT max(date) FROM atlas_foundation.technical_daily)
+      WHERE s.instrument_id = ANY (${equityKeys}::uuid[])
+        AND s.date = (SELECT max(date) FROM atlas_foundation.atlas_lens_scores_daily)
+    `
+    for (const r of rows) lens.set(String(r.k), r)
+  }
+  const num = (v: unknown) => (v == null ? null : Number(v))
   const holdings: Holding[] = pos
     .map((r) => {
       const k = String(r.instrument_key)
       const price = lastPrice.get(k) ?? null
       const qty = Number(r.qty)
       const m = meta.get(k)
+      const l = lens.get(k)
       return {
         assetClass: String(r.asset_class),
         instrumentKey: k,
@@ -192,6 +232,14 @@ export async function getPortfolioDetail(id: string): Promise<PortfolioDetail | 
         netCost: Number(r.net_cost),
         lastPrice: price,
         value: price != null ? qty * price : null,
+        composite: num(l?.composite),
+        lensTech: num(l?.technical),
+        lensFlow: num(l?.flow),
+        lensVal: num(l?.valuation),
+        rs3m: num(l?.rs_3m_n500),
+        aboveEma50: l?.above_ema_50 == null ? null : Boolean(l.above_ema_50),
+        aboveEma200: l?.above_ema_200 == null ? null : Boolean(l.above_ema_200),
+        riskFlags: l?.risk_flags ? String(l.risk_flags) : null,
       }
     })
     .sort((a, b) => (b.value ?? -1) - (a.value ?? -1))
@@ -227,6 +275,52 @@ export async function getPortfolioDetail(id: string): Promise<PortfolioDetail | 
       nTrades: r ? Number(r.n) : 0,
     }
   }
+  // portfolio-level Atlas read (value-weighted over holdings that carry the signal)
+  const wavg = (get: (h: Holding) => number | null): number | null => {
+    const rows = holdings.filter((h) => h.value != null && get(h) != null)
+    const tot = rows.reduce((a, h) => a + (h.value as number), 0)
+    return tot > 0 ? rows.reduce((a, h) => a + (h.value as number) * (get(h) as number), 0) / tot : null
+  }
+  const share = (pred: (h: Holding) => boolean | null): number | null => {
+    const rows = holdings.filter((h) => h.value != null && pred(h) != null)
+    const tot = rows.reduce((a, h) => a + (h.value as number), 0)
+    return tot > 0
+      ? (rows.filter((h) => pred(h)).reduce((a, h) => a + (h.value as number), 0) / tot) * 100
+      : null
+  }
+  const benchRows = await sql<Array<Record<string, unknown>>>`
+    SELECT im.sector, sum(dic.weight_pct) AS w
+    FROM atlas_foundation.de_index_constituents dic
+    JOIN atlas_foundation.instrument_master im USING (instrument_id)
+    WHERE dic.index_code = 'NIFTY 500' AND dic.effective_to IS NULL AND im.sector IS NOT NULL
+    GROUP BY 1
+  `
+  const bench = new Map(benchRows.map((r) => [String(r.sector), Number(r.w)]))
+  const totVal = holdings.reduce((a, h) => a + (h.value ?? 0), 0)
+  const portBySector = new Map<string, number>()
+  for (const h of holdings) {
+    if (h.value == null) continue
+    const sec = h.sector ?? (h.assetClass === 'fund' ? 'Funds' : 'Unclassified')
+    portBySector.set(sec, (portBySector.get(sec) ?? 0) + h.value)
+  }
+  const sectorVsBenchmark = [...new Set([...portBySector.keys()])]
+    .map((sector) => ({
+      sector,
+      port: totVal > 0 ? ((portBySector.get(sector) ?? 0) / totVal) * 100 : 0,
+      bench: bench.get(sector) ?? 0,
+    }))
+    .sort((a, b) => b.port - a.port)
+  const flagged = (h: Holding) =>
+    h.riskFlags != null && !['[]', '{}', ''].includes(h.riskFlags.trim())
+  const atlas: AtlasRead = {
+    weightedComposite: wavg((h) => h.composite),
+    breadth50: share((h) => h.aboveEma50),
+    breadth200: share((h) => h.aboveEma200),
+    weightedRs3m: wavg((h) => h.rs3m),
+    flaggedCount: holdings.filter(flagged).length,
+    sectorVsBenchmark,
+  }
+
   const toNav = (rs: Array<Record<string, unknown>>): NavPointRow[] =>
     rs.map((r) => ({ d: String(r.d), nav: Number(r.nav) }))
   return {
@@ -251,6 +345,7 @@ export async function getPortfolioDetail(id: string): Promise<PortfolioDetail | 
       runType: String(r.run_type),
     })),
     totals: { live: totalsFor('live'), backtest: totalsFor('backtest') },
+    atlas,
   }
 }
 

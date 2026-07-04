@@ -110,3 +110,10 @@ FROM (VALUES
     ('portfolio_tax_ltcg_days',          365,    'Holding days threshold for LTCG on listed equity/MF',  'days',     180, 1100)
 ) AS s(k, v, d, u, lo, hi)
 WHERE NOT EXISTS (SELECT 1 FROM atlas_foundation.atlas_thresholds t WHERE t.threshold_key = s.k);
+
+-- ── Portfolio origin (kanban categories, 2026-07 feature f) ────────────────
+-- rule-based = kind 'strategy' + origin 'fm' · system-generated = origin 'system'
+-- (Phase 3 expert agent) · FM basket = kind 'basket'.
+ALTER TABLE atlas_foundation.portfolio_master
+    ADD COLUMN IF NOT EXISTS origin text NOT NULL DEFAULT 'fm'
+    CHECK (origin IN ('fm', 'system'));
