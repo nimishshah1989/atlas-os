@@ -4,6 +4,7 @@
 import { notFound } from 'next/navigation'
 import { getPortfolioDetail, type NavPointRow, type Holding, type AtlasRead } from '@/lib/queries/portfolios'
 import { TradesTable } from './TradesTable'
+import { PolicyJournal } from './PolicyJournal'
 import { decileColor } from '@/components/ui/decile'
 import { computeFundRiskStats, type NavPoint } from '@/lib/fundStats'
 import { FundRiskStats } from '@/components/funds/FundRiskStats'
@@ -158,7 +159,8 @@ function SectorVsBench({ atlas }: { atlas: AtlasRead }) {
 export async function PortfolioDetailV4({ id }: { id: string }) {
   const detail = await getPortfolioDetail(id).catch(() => null)
   if (!detail) notFound()
-  const { summary: s, holdings, liveNav, backtestNav, benchmark, trades, totals, atlas } = detail
+  const { summary: s, holdings, liveNav, backtestNav, benchmark, trades, totals, atlas, policyJournal } = detail
+  const isSystem = s.category === 'system'
 
   const btStats = computeFundRiskStats(monthly(backtestNav))
   const btMaxDd = maxDrawdownDaily(backtestNav)
@@ -176,7 +178,7 @@ export async function PortfolioDetailV4({ id }: { id: string }) {
     <div className="mx-auto max-w-[1400px] space-y-6 px-6 py-7">
       <div>
         <p className="font-num text-[9px] uppercase tracking-[0.14em] text-txt-3">
-          {s.kind === 'strategy' ? `Rule-based · ${s.strategyLabel}` : 'FM basket'} · {s.assetClasses.join(' + ')} · inception {s.inceptionDate}
+          {isSystem ? `System-generated · ${s.strategyLabel}` : s.kind === 'strategy' ? `Rule-based · ${s.strategyLabel}` : 'FM basket'} · {s.assetClasses.join(' + ')} · inception {s.inceptionDate}
         </p>
         <h1 className="font-display text-[28px] font-medium tracking-tight text-txt-1">{s.name}</h1>
         <p className="mt-1 max-w-[860px] font-sans text-[13px] text-txt-2">
@@ -266,6 +268,17 @@ export async function PortfolioDetailV4({ id }: { id: string }) {
       <Panel eyebrow="Open positions" title={`Holdings (${holdings.length})`} bodyClassName="overflow-x-auto">
         <HoldingsTable holdings={holdings} nav={s.nav} />
       </Panel>
+
+      {isSystem && (
+        <Panel
+          eyebrow="Learning log"
+          title="How the policy has evolved"
+          info={{ body: 'Each weekly walk-forward cycle: candidate policies are scored on a training window, validated out-of-sample, and a challenger is adopted only if it beats the champion’s excess return over NIFTY 500 while keeping max drawdown below the benchmark’s. Every evaluation and change is journaled here with its evidence.' }}
+          bodyClassName="px-5 py-4"
+        >
+          <PolicyJournal entries={policyJournal} />
+        </Panel>
+      )}
 
       <Panel
         eyebrow="Audit trail"

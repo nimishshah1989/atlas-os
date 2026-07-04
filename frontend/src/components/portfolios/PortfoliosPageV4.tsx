@@ -2,7 +2,9 @@
 // category: rule-based strategy simulations · system-generated (the learning
 // expert agent) · FM baskets. Every figure is stored engine output.
 import Link from 'next/link'
-import { getPortfolios, type PortfolioSummary, type PortfolioCategory } from '@/lib/queries/portfolios'
+import { getPortfolios, getCompareCurves, type PortfolioSummary, type PortfolioCategory } from '@/lib/queries/portfolios'
+import { AtlasLightweightChart, type ChartSeries } from '@/components/charts/AtlasLightweightChart'
+import { Panel } from '@/components/ui/Panel'
 
 const inr = (v: number | null) =>
   v == null ? '—' : `₹${v.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
@@ -76,8 +78,20 @@ function Card({ p }: { p: PortfolioSummary }) {
   )
 }
 
+const CURVE_COLOR: Record<PortfolioCategory, ChartSeries['color']> = {
+  rule: 'teal',
+  system: 'warn',
+  basket: 'ink',
+}
+
 export async function PortfoliosPageV4() {
-  const portfolios = await getPortfolios()
+  const [portfolios, curves] = await Promise.all([getPortfolios(), getCompareCurves()])
+  const compareSeries: ChartSeries[] = curves.map((c) => ({
+    name: c.name,
+    data: c.points.map((p) => ({ time: p.d, value: p.v })),
+    color: CURVE_COLOR[c.category],
+    lineWidth: c.category === 'system' ? 2 : 1,
+  }))
   const groups: { cat: PortfolioCategory; items: PortfolioSummary[] }[] = (
     ['rule', 'system', 'basket'] as PortfolioCategory[]
   )
@@ -98,6 +112,17 @@ export async function PortfoliosPageV4() {
 
       {portfolios.length === 0 && (
         <p className="font-sans text-[13px] italic text-txt-3">No portfolios yet.</p>
+      )}
+
+      {compareSeries.length > 1 && (
+        <Panel
+          eyebrow="Backtest horse-race"
+          title="Every rulebook, ₹100 rebased"
+          info={{ body: 'Each portfolio’s backtest NAV rebased to 100 at the start of its history (month-end sampled). Rule-based = teal, system-generated = amber, FM baskets = grey. Costs are already in each curve.' }}
+          bodyClassName="px-5 py-4"
+        >
+          <AtlasLightweightChart series={compareSeries} height={320} yLabel="Growth of ₹100 · backtest" precision={0} />
+        </Panel>
       )}
       {groups.map(({ cat, items }) => (
         <section key={cat} aria-label={CATEGORY[cat].label}>

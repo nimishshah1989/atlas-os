@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from .atlas_policy import AtlasPolicy
 from .ema_cross import EmaCross
 
-STRATEGIES: dict[str, type] = {EmaCross.key: EmaCross}
+STRATEGIES: dict[str, type] = {EmaCross.key: EmaCross, AtlasPolicy.key: AtlasPolicy}
 
 
 def get_strategy(key: str, params: dict):

@@ -117,3 +117,28 @@ WHERE NOT EXISTS (SELECT 1 FROM atlas_foundation.atlas_thresholds t WHERE t.thre
 ALTER TABLE atlas_foundation.portfolio_master
     ADD COLUMN IF NOT EXISTS origin text NOT NULL DEFAULT 'fm'
     CHECK (origin IN ('fm', 'system'));
+
+-- ── System-generated portfolios: policy journal + evolve knobs (feature a) ──
+-- Every evaluation/change the walk-forward champion/challenger makes is journaled
+-- with full evidence — the "learning log" rendered on the portfolio deepdive.
+CREATE TABLE IF NOT EXISTS atlas_foundation.portfolio_policy_journal (
+    id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    portfolio_id uuid NOT NULL REFERENCES atlas_foundation.portfolio_master(portfolio_id),
+    ts           timestamptz NOT NULL DEFAULT now(),
+    kind         text NOT NULL CHECK (kind IN ('evaluation', 'change')),
+    old_params   jsonb,
+    new_params   jsonb,
+    evidence     jsonb NOT NULL
+);
+
+INSERT INTO atlas_foundation.atlas_thresholds
+    (threshold_key, threshold_value, category, description, units, min_allowed, max_allowed, default_value, is_active)
+SELECT k, v, 'portfolio', d, u, lo, hi, v, TRUE
+FROM (VALUES
+    ('portfolio_evolve_train_years',      3,  'Walk-forward TRAIN window for system-portfolio policy search', 'years',  1::numeric, 5::numeric),
+    ('portfolio_evolve_val_months',       12, 'Out-of-sample VALIDATION window (never trained on)',           'months', 6, 24),
+    ('portfolio_evolve_min_improve_pp',   2,  'Challenger must beat champion by this many pp of excess return on validation', 'pp', 0, 10),
+    ('portfolio_evolve_min_days_change',  28, 'Minimum days between policy changes (anti noise-chasing)',     'days',   7, 120),
+    ('portfolio_evolve_min_trades',       5,  'Minimum train-window trades for a candidate to be considered', 'trades', 1, 50)
+) AS s(k, v, d, u, lo, hi)
+WHERE NOT EXISTS (SELECT 1 FROM atlas_foundation.atlas_thresholds t WHERE t.threshold_key = s.k);

@@ -318,10 +318,21 @@ def run_window(p: dict, start: dt.date, end: dt.date, mode: str):
     # crossover — it starts 100% cash and enters only on crossover EVENTS from its
     # window onward (init books nothing; the nightly mark takes it from there).
     # Only FM baskets seed holdings at inception (those are explicit picks).
+    composite = load_composite(universe, lookback, end)
     events, inception = None, None
     if strat is not None:
         if mode != "init":
             tech = load_tech(universe, strat.required_columns(), lookback, end)
+            # policy strategies may condition on composite / market regime
+            if getattr(strat, "needs_composite", False):
+                tech = tech.merge(composite, on=["instrument_key", "date"], how="left")
+            if getattr(strat, "needs_regime", False):
+                regime = _db.read_df(
+                    f"""select date, regime_state from {M}.atlas_market_regime_daily
+                        where date between :a and :b""",
+                    {"a": lookback, "b": end},
+                )
+                tech = tech.merge(regime, on="date", how="left")
             events = strat.events(tech)
             events = events[events["date"] >= start]
     elif mode != "resume":
@@ -342,7 +353,7 @@ def run_window(p: dict, start: dt.date, end: dt.date, mode: str):
         prices=prices,
         events=events,
         inception_state=inception,
-        composite=load_composite(universe, lookback, end),
+        composite=composite,
         asset_class=dict(zip(universe["instrument_key"], universe["asset_class"], strict=False)),
         symbols=dict(zip(universe["instrument_key"], universe["symbol"], strict=False)),
         start_positions=start_positions,
@@ -375,14 +386,15 @@ def cmd_create(a) -> None:
     pid = str(uuid.uuid4())
     _db.exec_sql(
         f"""insert into {M}.portfolio_master
-            (portfolio_id, name, kind, strategy_key, params, asset_classes,
+            (portfolio_id, name, kind, origin, strategy_key, params, asset_classes,
              initial_capital, max_position_pct, inception_date)
-            values (:id, :name, :kind, :sk, cast(:params as jsonb), :ac,
+            values (:id, :name, :kind, :origin, :sk, cast(:params as jsonb), :ac,
                     :cap, :pct, :inc)""",
         {
             "id": pid,
             "name": a.name,
             "kind": a.kind,
+            "origin": a.origin,
             "sk": a.strategy if a.kind == "strategy" else None,
             "params": json.dumps(params),
             "ac": a.asset_classes,
@@ -457,10 +469,12 @@ def _summary(navs: pd.DataFrame, trades: pd.DataFrame) -> dict:
     return out
 
 
-def cmd_backtest(a) -> None:
-    p = load_portfolio(a.portfolio_id)
+def rebuild_backtest(pid: str, years: float = 5) -> dict:
+    """Delete + replay the backtest run for one portfolio (idempotent). Returns the
+    summary dict. Reusable by the CLI and by portfolio_evolve on a policy promotion."""
+    p = load_portfolio(pid)
     eod = _db.eod_cutoff()
-    start = eod - dt.timedelta(days=int(a.years * 365))
+    start = eod - dt.timedelta(days=int(years * 365))
     run_id = str(uuid.uuid4())
     with _db.engine().begin() as conn:
         from sqlalchemy import text
@@ -468,13 +482,13 @@ def cmd_backtest(a) -> None:
         for tbl in ("portfolio_trades", "portfolio_nav_daily"):
             conn.execute(
                 text(f"delete from {M}.{tbl} where portfolio_id=:p and run_type='backtest'"),
-                {"p": a.portfolio_id},
+                {"p": pid},
             )
     trades, navs = run_window(p, start, eod, "backtest")
     _, rates = load_cost_tax()
     enriched = enrich_trades(trades, rates) if not trades.empty else trades
     persist = enriched.drop(columns=["realized_st", "realized_lt"], errors="ignore")
-    write_results(a.portfolio_id, "backtest", run_id, persist, navs)
+    write_results(pid, "backtest", run_id, persist, navs)
     out = _summary(navs, trades)
     if not trades.empty and (trades["side"] == "sell").any():
         s = summarize(enriched, rates)
@@ -484,7 +498,11 @@ def cmd_backtest(a) -> None:
             - 100,
             2,
         )
-    print(json.dumps(out, default=str))
+    return out
+
+
+def cmd_backtest(a) -> None:
+    print(json.dumps(rebuild_backtest(a.portfolio_id, a.years), default=str))
 
 
 def cmd_trade(a) -> None:
@@ -594,6 +612,7 @@ def main():
     )
     c.add_argument("--capital", type=Decimal, default=None)
     c.add_argument("--cap-pct", type=Decimal, default=None)
+    c.add_argument("--origin", choices=["fm", "system"], default="fm")
     c.set_defaults(fn=cmd_create)
 
     i = sub.add_parser("init")

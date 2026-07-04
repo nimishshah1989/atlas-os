@@ -36,6 +36,13 @@ step "ingest_shareholding" $PY scripts/foundation/ingest_shareholding.py
 step "fetch_marketcap"     $PY scripts/foundation/fetch_marketcap.py
 step "ingest_xbrl"         $PY scripts/foundation/ingest_xbrl.py
 
+# System-generated portfolios: the walk-forward expert agent. Weekly cadence (its own
+# anti-noise floor is min_days_change); evaluates each system portfolio's policy on an
+# out-of-sample window and promotes a challenger only if it clears the bar (excess return
+# over NIFTY 500 with max-drawdown below it), journaling the evidence. Reads only fresh
+# scored tables, so it runs last. On promotion it re-runs that portfolio's backtest.
+step "portfolio_evolve"    $PY scripts/foundation/portfolio_evolve.py
+
 if [ ${#FAILURES[@]} -eq 0 ]; then echo "=== atlas_weekly COMPLETE — all green ===" | tee -a "$LOG"
 else MSG="atlas_weekly FAILURES: ${FAILURES[*]}"; echo "=== $MSG ===" | tee -a "$LOG"
   $PY -c "from atlas.intraday.notify import send_message_sync; send_message_sync('⚠️ $MSG')" >>"$LOG" 2>&1 || true; fi
