@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation'
 import { getPortfolioDetail, type NavPointRow, type Holding, type AtlasRead } from '@/lib/queries/portfolios'
 import { TradesTable } from './TradesTable'
 import { PolicyJournal } from './PolicyJournal'
+import { describeStrategy } from '@/lib/strategyDescription'
 import { decileColor } from '@/components/ui/decile'
 import { computeFundRiskStats, type NavPoint } from '@/lib/fundStats'
 import { FundRiskStats } from '@/components/funds/FundRiskStats'
@@ -156,11 +157,40 @@ function SectorVsBench({ atlas }: { atlas: AtlasRead }) {
   )
 }
 
+function HowItWorks({ explain, isSystem }: { explain: NonNullable<ReturnType<typeof describeStrategy>>; isSystem: boolean }) {
+  const rows: [string, string][] = [
+    ['Buy rule', explain.entry],
+    ['Sell rule', explain.exit],
+    ['Universe', explain.universe],
+    ['Which names', explain.selection],
+    ['Position sizing', explain.sizing],
+  ]
+  return (
+    <div>
+      <p className="mb-3 font-sans text-[14px] font-medium text-txt-1">{explain.headline}.</p>
+      <dl className="space-y-2.5">
+        {rows.map(([k, v]) => (
+          <div key={k} className="grid grid-cols-[110px_1fr] gap-3 sm:grid-cols-[130px_1fr]">
+            <dt className="font-num text-[10px] uppercase tracking-wider text-txt-3 pt-0.5">{k}</dt>
+            <dd className="font-sans text-[13px] leading-[1.55] text-txt-2">{v}</dd>
+          </div>
+        ))}
+      </dl>
+      {isSystem && (
+        <p className="mt-3 border-t border-edge-hair pt-3 font-sans text-[12px] italic leading-[1.5] text-txt-3">
+          This rulebook was chosen by the system&rsquo;s walk-forward search, not hand-written — the exact filters above are what won on out-of-sample data. See the Learning log below for how it got here and what it rejected.
+        </p>
+      )}
+    </div>
+  )
+}
+
 export async function PortfolioDetailV4({ id }: { id: string }) {
   const detail = await getPortfolioDetail(id).catch(() => null)
   if (!detail) notFound()
   const { summary: s, holdings, liveNav, backtestNav, benchmark, trades, totals, atlas, policyJournal } = detail
   const isSystem = s.category === 'system'
+  const explain = describeStrategy(s.kind, s.params, s.assetClasses, s.maxPositionPct, s.strategyKey)
 
   const btStats = computeFundRiskStats(monthly(backtestNav))
   const btMaxDd = maxDrawdownDaily(backtestNav)
@@ -182,11 +212,21 @@ export async function PortfolioDetailV4({ id }: { id: string }) {
         </p>
         <h1 className="font-display text-[28px] font-medium tracking-tight text-txt-1">{s.name}</h1>
         <p className="mt-1 max-w-[860px] font-sans text-[13px] text-txt-2">
-          Started with {inr(s.initialCapital)}, max {Math.round(s.maxPositionPct * 100)}% per position
-          ({Math.floor(1 / s.maxPositionPct)} slots). Signals detected at one close execute at the next
-          session&rsquo;s close; entries beyond open slots are ranked by Atlas composite.
+          Started with {inr(s.initialCapital)} · max {Math.round(s.maxPositionPct * 100)}% per position
+          ({Math.floor(1 / s.maxPositionPct)} slots).
         </p>
       </div>
+
+      {explain && (
+        <Panel
+          eyebrow={isSystem ? 'System-designed strategy' : s.kind === 'basket' ? 'Manual basket' : 'Rule-based strategy'}
+          title="How this strategy works"
+          info={{ body: 'A plain-English description of exactly what this portfolio does — its buy and sell rules, universe, and how positions are chosen and sized. Generated from the live strategy parameters, so it always matches what is actually running.' }}
+          bodyClassName="px-5 py-4"
+        >
+          <HowItWorks explain={explain} isSystem={isSystem} />
+        </Panel>
+      )}
 
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
         <Stat label={`NAV · ${s.navDate ?? '—'}`} value={inr(s.nav)} />
