@@ -49,6 +49,7 @@ def replay(
     start_positions: dict[str, Decimal] | None = None,
     start_cash: Decimal | None = None,
     loop_dates: list | None = None,
+    costs: dict[str, tuple[Decimal, Decimal]] | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Run the day-loop over `loop_dates` (default: all of `prices.index`).
     Pass the FULL price panel even when looping few dates — valuation carry-forward
@@ -63,6 +64,9 @@ def replay(
                  picks only — strategy portfolios start all-cash and enter on events).
     composite  — (instrument_key, date, composite) for candidate ranking, or None.
     start_positions/start_cash — resume state for the nightly increment.
+    costs      — {asset_class: (buy_rate, sell_rate)} execution-cost fractions;
+                 cost = value × rate, deducted from cash on BOTH sides (real
+                 outflows — STT/stamp/txn/GST). Sizing reserves for the buy cost.
 
     Returns (trades, navs): trades (trade_date, asset_class, instrument_key,
     symbol, side, qty, price, value, reason), navs (date, nav, cash, invested,
@@ -126,10 +130,15 @@ def replay(
 
         return sum((q * val(k) for k, q in positions.items()), Decimal(0))
 
+    def _rate(k, side) -> Decimal:
+        pair = (costs or {}).get(asset_class.get(k, "stock"))
+        return Decimal(0) if pair is None else Decimal(pair[0 if side == "buy" else 1])
+
     def _book(trade_date, k, side, qty, price, reason):
         nonlocal cash
         value = (qty * price).quantize(_MONEY)
-        cash = cash - value if side == "buy" else cash + value
+        cost = (value * _rate(k, side)).quantize(_MONEY)
+        cash = cash - value - cost if side == "buy" else cash + value - cost
         trades.append(
             {
                 "trade_date": trade_date,
@@ -140,6 +149,7 @@ def replay(
                 "qty": qty,
                 "price": price,
                 "value": value,
+                "cost": cost,
                 "reason": reason,
             }
         )
@@ -162,7 +172,8 @@ def replay(
         for k, _sig, (price, trade_date) in cands:
             alloc = min(nav_now * Decimal(cfg.max_position_pct), cash / remaining)
             remaining -= 1
-            qty = _qty_for(alloc, price, asset_class.get(k, "stock"))
+            # reserve for the buy-side execution cost so cash never goes negative
+            qty = _qty_for(alloc / (1 + _rate(k, "buy")), price, asset_class.get(k, "stock"))
             if qty > 0:
                 _book(trade_date, k, "buy", qty, price, reason)
                 positions[k] = qty
@@ -213,6 +224,7 @@ def _empty_trades() -> pd.DataFrame:
                 "qty",
                 "price",
                 "value",
+                "cost",
                 "reason",
             ]
         )

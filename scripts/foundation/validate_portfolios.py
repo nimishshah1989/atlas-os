@@ -175,6 +175,43 @@ def check_e_position_cap() -> None:
         )
 
 
+def check_f_cost_cash_identity_and_ledger() -> None:
+    # Full-history cash identity INCLUDING execution costs: latest stored cash must
+    # equal initial capital plus every signed flow (buy: -(value+cost), sell: value-cost).
+    df = _db.read_df(
+        f"""with latest as (
+              select portfolio_id, run_type, cash, date,
+                     row_number() over (partition by portfolio_id, run_type order by date desc) rn
+              from {M}.portfolio_nav_daily)
+            select m.name, l.run_type, l.cash,
+                   m.initial_capital
+                   + coalesce(sum(case when t.side = 'sell' then t.value - coalesce(t.cost, 0)
+                                       else -(t.value + coalesce(t.cost, 0)) end), 0) expected
+            from latest l
+            join {M}.portfolio_master m using (portfolio_id)
+            left join {M}.portfolio_trades t
+              on (t.portfolio_id, t.run_type) = (l.portfolio_id, l.run_type)
+             and t.trade_date <= l.date
+            where l.rn = 1
+            group by 1, 2, 3, m.initial_capital"""
+    )
+    for r in df.to_dict("records"):
+        if abs(Decimal(r["cash"]) - Decimal(r["expected"])) > Decimal("0.05"):
+            fail(
+                f"F: {r['name']}/{r['run_type']} cash {r['cash']} != capital+flows {r['expected']}"
+            )
+    bad = _db.read_df(
+        f"""select m.name, t.run_type, count(*) n from {M}.portfolio_trades t
+            join {M}.portfolio_master m using (portfolio_id)
+            where t.side = 'sell' and (t.realized_pnl is null or t.tax is null or t.cost is null)
+            group by 1, 2"""
+    )
+    for r in bad.to_dict("records"):
+        fail(
+            f"F: {r['name']}/{r['run_type']} has {r['n']} sell(s) missing cost/realized/tax ledger"
+        )
+
+
 def main() -> None:
     n = _db.scalar(f"select count(*) from {M}.portfolio_master where status = 'active'")
     print(f"[validate-portfolios] active portfolios: {n}", flush=True)
@@ -187,6 +224,7 @@ def main() -> None:
         check_c_trade_prices,
         check_d_cash_never_negative,
         check_e_position_cap,
+        check_f_cost_cash_identity_and_ledger,
     ):
         print(f"[validate-portfolios] {chk.__name__}", flush=True)
         chk()

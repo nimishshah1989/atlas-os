@@ -70,3 +70,43 @@ SELECT 'portfolio_max_position_pct', 0.08, 'portfolio',
        'fraction', 0.01, 0.25, 0.08, TRUE
 WHERE NOT EXISTS (SELECT 1 FROM atlas_foundation.atlas_thresholds
                   WHERE threshold_key = 'portfolio_max_position_pct');
+
+-- ── Execution costs + Indian capital-gains tax (2026-07, feature b) ────────
+-- Trade ledger columns: cost = total execution charges (STT/stamp/txn/GST) at the
+-- booked rate; sells additionally carry FIFO-derived realized P&L and tax fields.
+ALTER TABLE atlas_foundation.portfolio_trades ADD COLUMN IF NOT EXISTS cost numeric(18,2);
+ALTER TABLE atlas_foundation.portfolio_trades ADD COLUMN IF NOT EXISTS realized_pnl numeric(18,2);
+ALTER TABLE atlas_foundation.portfolio_trades ADD COLUMN IF NOT EXISTS holding_days integer;
+ALTER TABLE atlas_foundation.portfolio_trades ADD COLUMN IF NOT EXISTS tax_bucket text;
+ALTER TABLE atlas_foundation.portfolio_trades ADD COLUMN IF NOT EXISTS tax numeric(18,2);
+
+-- Cost rates per asset class and side (fractions of trade value; editable knobs).
+-- Seeds approximate NSE delivery economics: STT 0.1% both sides (stocks), stamp
+-- 0.015% buy, exchange+SEBI+GST ~0.0035%; ETFs: stamp 0.015% buy, STT 0.001% sell;
+-- MFs: stamp 0.005% buy, STT 0.001% equity redemption.
+INSERT INTO atlas_foundation.atlas_thresholds
+    (threshold_key, threshold_value, category, description, units, min_allowed, max_allowed, default_value, is_active)
+SELECT k, v, 'portfolio', d, 'fraction', 0, 0.02, v, TRUE
+FROM (VALUES
+    ('portfolio_cost_stock_buy_pct',  0.00118, 'Equity delivery BUY cost: STT 0.1% + stamp 0.015% + txn/SEBI/GST'),
+    ('portfolio_cost_stock_sell_pct', 0.00103, 'Equity delivery SELL cost: STT 0.1% + txn/SEBI/GST'),
+    ('portfolio_cost_etf_buy_pct',    0.00019, 'ETF BUY cost: stamp 0.015% + txn/GST'),
+    ('portfolio_cost_etf_sell_pct',   0.00005, 'ETF SELL cost: STT 0.001% + txn/GST'),
+    ('portfolio_cost_fund_buy_pct',   0.00005, 'MF BUY cost: stamp duty 0.005%'),
+    ('portfolio_cost_fund_sell_pct',  0.00001, 'Equity MF redemption STT 0.001%')
+) AS s(k, v, d)
+WHERE NOT EXISTS (SELECT 1 FROM atlas_foundation.atlas_thresholds t WHERE t.threshold_key = s.k);
+
+-- Capital-gains tax knobs (equity/equity-MF, FY2026 law). LTCG exemption is per
+-- financial year and applied PER PORTFOLIO here (approximation — the real 1.25L
+-- exemption is per taxpayer across all holdings).
+INSERT INTO atlas_foundation.atlas_thresholds
+    (threshold_key, threshold_value, category, description, units, min_allowed, max_allowed, default_value, is_active)
+SELECT k, v, 'portfolio', d, u, lo, hi, v, TRUE
+FROM (VALUES
+    ('portfolio_tax_stcg_pct',          0.20,   'STCG rate on equity/equity-MF (held < LTCG threshold)', 'fraction', 0::numeric, 0.5::numeric),
+    ('portfolio_tax_ltcg_pct',          0.125,  'LTCG rate on equity/equity-MF above the FY exemption',  'fraction', 0, 0.5),
+    ('portfolio_tax_ltcg_exemption_inr', 125000, 'LTCG exemption per financial year (per portfolio)',    'INR',      0, 1000000),
+    ('portfolio_tax_ltcg_days',          365,    'Holding days threshold for LTCG on listed equity/MF',  'days',     180, 1100)
+) AS s(k, v, d, u, lo, hi)
+WHERE NOT EXISTS (SELECT 1 FROM atlas_foundation.atlas_thresholds t WHERE t.threshold_key = s.k);
