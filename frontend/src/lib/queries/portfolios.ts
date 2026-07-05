@@ -5,7 +5,8 @@
 // beyond joins and percentages.
 import 'server-only'
 import sql from '@/lib/db'
-import { computeSeriesMetrics, type SeriesMetrics } from '@/lib/portfolioMetrics'
+import { computeSeriesMetrics, computeWindowMetrics, type SeriesMetrics, type WindowMetrics } from '@/lib/portfolioMetrics'
+import { describeStrategy } from '@/lib/strategyDescription'
 
 export type PortfolioCategory = 'rule' | 'system' | 'basket'
 
@@ -508,14 +509,17 @@ export type LeaderboardRow = {
   category: PortfolioCategory | 'benchmark'
   isDesk: boolean
   record: string // e.g. "7.5y backtest" | "live 3d"
+  blurb: string // one-line what-this-book-does, for the per-row eye icon
   metrics: SeriesMetrics
+  windows: { w1: WindowMetrics; w3: WindowMetrics; w5: WindowMetrics }
   livePct: number | null // since-inception live paper-track, all books
   nPositions: number | null
 }
 
 export async function getLeaderboard(): Promise<LeaderboardRow[]> {
   const masters = await sql<Array<Record<string, unknown>>>`
-    SELECT m.portfolio_id, m.name, m.kind, m.origin, m.params, ln.n_positions,
+    SELECT m.portfolio_id, m.name, m.kind, m.origin, m.params, m.strategy_key,
+           m.asset_classes, m.max_position_pct, ln.n_positions,
            lp.live_pct
     FROM atlas_foundation.portfolio_master m
     LEFT JOIN LATERAL (
@@ -557,13 +561,26 @@ export async function getLeaderboard(): Promise<LeaderboardRow[]> {
     const record = useBt
       ? `${(spanDays / 365.25).toFixed(1)}y backtest`
       : `live ${Math.round(spanDays)}d`
+    const explain = describeStrategy(
+      m.kind as 'strategy' | 'basket',
+      params,
+      (m.asset_classes as string[]) ?? ['stock'],
+      Number(m.max_position_pct),
+      m.strategy_key ? String(m.strategy_key) : null,
+    )
     return {
       id: pid,
       name: String(m.name),
       category: (m.origin === 'system' ? 'system' : m.kind === 'basket' ? 'basket' : 'rule') as PortfolioCategory,
       isDesk: params?.desk === true,
       record,
+      blurb: explain ? `${explain.headline}. ${explain.entry}` : 'FM-picked basket.',
       metrics: computeSeriesMetrics(pts),
+      windows: {
+        w1: computeWindowMetrics(pts, 1),
+        w3: computeWindowMetrics(pts, 3),
+        w5: computeWindowMetrics(pts, 5),
+      },
       livePct: m.live_pct != null ? Number(m.live_pct) : null,
       nPositions: m.n_positions != null ? Number(m.n_positions) : null,
     }
@@ -584,7 +601,13 @@ export async function getLeaderboard(): Promise<LeaderboardRow[]> {
     category: 'benchmark',
     isDesk: false,
     record: `${(benchSpan / 365.25).toFixed(1)}y index`,
+    blurb: 'The NIFTY 500 index itself — the market every book here is trying to beat.',
     metrics: computeSeriesMetrics(benchPts),
+    windows: {
+      w1: computeWindowMetrics(benchPts, 1),
+      w3: computeWindowMetrics(benchPts, 3),
+      w5: computeWindowMetrics(benchPts, 5),
+    },
     livePct: null,
     nPositions: null,
   })
