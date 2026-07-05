@@ -5,6 +5,7 @@
 // beyond joins and percentages.
 import 'server-only'
 import sql from '@/lib/db'
+import { computeSeriesMetrics, type SeriesMetrics } from '@/lib/portfolioMetrics'
 
 export type PortfolioCategory = 'rule' | 'system' | 'basket'
 
@@ -497,77 +498,98 @@ export async function getCompareCurves(): Promise<CompareCurve[]> {
     }))
 }
 
-// A2 leaderboard: every portfolio's LIVE record vs NIFTY 500 over its own life —
-// desks vs their deterministic twins vs rule portfolios vs FM baskets, one table.
+// A2 leaderboard — straight numbers, no derived comparisons: CAGR / Vol / Sharpe /
+// MaxDD / Calmar per book, computed on each book's MEANINGFUL record (backtest for
+// strategy portfolios, live for forward-only desks and baskets). NIFTY 500 is just
+// another row. The reader compares; the table doesn't editorialize.
 export type LeaderboardRow = {
-  id: string
+  id: string | null // null = the NIFTY 500 benchmark row
   name: string
-  category: PortfolioCategory
+  category: PortfolioCategory | 'benchmark'
   isDesk: boolean
-  inception: string
-  livePct: number | null
-  n500Pct: number | null // NIFTY 500 over the same window
-  excessPp: number | null
-  maxDdPct: number | null
+  record: string // e.g. "7.5y backtest" | "live 3d"
+  metrics: SeriesMetrics
+  livePct: number | null // since-inception live paper-track, all books
   nPositions: number | null
 }
 
 export async function getLeaderboard(): Promise<LeaderboardRow[]> {
-  const rows = await sql<Array<Record<string, unknown>>>`
-    WITH span AS (
-      SELECT n.portfolio_id, min(n.date) d0, max(n.date) d1
-      FROM atlas_foundation.portfolio_nav_daily n WHERE n.run_type = 'live'
-      GROUP BY 1
-    ), perf AS (
-      SELECT s.portfolio_id, s.d0, s.d1,
-             (SELECT nav FROM atlas_foundation.portfolio_nav_daily
-              WHERE portfolio_id = s.portfolio_id AND run_type='live' AND date = s.d0) nav0,
-             (SELECT nav FROM atlas_foundation.portfolio_nav_daily
-              WHERE portfolio_id = s.portfolio_id AND run_type='live' AND date = s.d1) nav1,
-             (SELECT min(nav / nullif(peak, 0) - 1) FROM (
-                SELECT nav, max(nav) OVER (ORDER BY date) peak
-                FROM atlas_foundation.portfolio_nav_daily
-                WHERE portfolio_id = s.portfolio_id AND run_type='live') x) live_dd
-      FROM span s
-    )
-    SELECT m.portfolio_id, m.name, m.kind, m.origin, m.params,
-           p.d0::text inception, p.d1,
-           (p.nav1 / nullif(p.nav0, 0) - 1) * 100 live_pct,
-           p.live_dd * 100 max_dd_pct,
-           (SELECT (b1.close / nullif(b0.close, 0) - 1) * 100
-            FROM atlas_foundation.index_prices b0, atlas_foundation.index_prices b1
-            WHERE b0.index_code = 'NIFTY 500' AND b1.index_code = 'NIFTY 500'
-              AND b0.date = (SELECT max(date) FROM atlas_foundation.index_prices
-                             WHERE index_code='NIFTY 500' AND date <= p.d0)
-              AND b1.date = (SELECT max(date) FROM atlas_foundation.index_prices
-                             WHERE index_code='NIFTY 500' AND date <= p.d1)) n500_pct,
-           ln.n_positions
+  const masters = await sql<Array<Record<string, unknown>>>`
+    SELECT m.portfolio_id, m.name, m.kind, m.origin, m.params, ln.n_positions,
+           lp.live_pct
     FROM atlas_foundation.portfolio_master m
-    JOIN perf p ON p.portfolio_id = m.portfolio_id
     LEFT JOIN LATERAL (
       SELECT n_positions FROM atlas_foundation.portfolio_nav_daily
       WHERE portfolio_id = m.portfolio_id AND run_type='live'
       ORDER BY date DESC LIMIT 1) ln ON true
+    LEFT JOIN LATERAL (
+      SELECT (l.nav / nullif(f.nav, 0) - 1) * 100 AS live_pct
+      FROM (SELECT nav FROM atlas_foundation.portfolio_nav_daily
+            WHERE portfolio_id = m.portfolio_id AND run_type='live'
+            ORDER BY date ASC LIMIT 1) f,
+           (SELECT nav FROM atlas_foundation.portfolio_nav_daily
+            WHERE portfolio_id = m.portfolio_id AND run_type='live'
+            ORDER BY date DESC LIMIT 1) l
+    ) lp ON true
     WHERE m.status = 'active'
-    ORDER BY (p.nav1 / nullif(p.nav0, 0)) DESC NULLS LAST
   `
-  return rows.map((r) => {
-    const live = r.live_pct != null ? Number(r.live_pct) : null
-    const n500 = r.n500_pct != null ? Number(r.n500_pct) : null
-    const params = (r.params as Record<string, unknown> | null) ?? null
+  const series = await sql<Array<Record<string, unknown>>>`
+    SELECT portfolio_id::text pid, run_type, date::text d, nav
+    FROM atlas_foundation.portfolio_nav_daily ORDER BY date
+  `
+  const byBook = new Map<string, { d: string; nav: number }[]>()
+  for (const r of series) {
+    const k = `${r.pid}:${r.run_type}`
+    if (!byBook.has(k)) byBook.set(k, [])
+    byBook.get(k)!.push({ d: String(r.d), nav: Number(r.nav) })
+  }
+
+  const rows: LeaderboardRow[] = masters.map((m) => {
+    const pid = String(m.portfolio_id)
+    const params = (m.params as Record<string, unknown> | null) ?? null
+    const bt = byBook.get(`${pid}:backtest`) ?? []
+    const live = byBook.get(`${pid}:live`) ?? []
+    const useBt = bt.length > live.length
+    const pts = useBt ? bt : live
+    const spanDays = pts.length > 1
+      ? (new Date(pts[pts.length - 1].d).getTime() - new Date(pts[0].d).getTime()) / 86400000
+      : 0
+    const record = useBt
+      ? `${(spanDays / 365.25).toFixed(1)}y backtest`
+      : `live ${Math.round(spanDays)}d`
     return {
-      id: String(r.portfolio_id),
-      name: String(r.name),
-      category: (r.origin === 'system' ? 'system' : r.kind === 'basket' ? 'basket' : 'rule') as PortfolioCategory,
+      id: pid,
+      name: String(m.name),
+      category: (m.origin === 'system' ? 'system' : m.kind === 'basket' ? 'basket' : 'rule') as PortfolioCategory,
       isDesk: params?.desk === true,
-      inception: String(r.inception),
-      livePct: live,
-      n500Pct: n500,
-      excessPp: live != null && n500 != null ? live - n500 : null,
-      maxDdPct: r.max_dd_pct != null ? Number(r.max_dd_pct) : null,
-      nPositions: r.n_positions != null ? Number(r.n_positions) : null,
+      record,
+      metrics: computeSeriesMetrics(pts),
+      livePct: m.live_pct != null ? Number(m.live_pct) : null,
+      nPositions: m.n_positions != null ? Number(m.n_positions) : null,
     }
   })
+
+  // NIFTY 500 over the common backtest span, as a plain row
+  const bench = await sql<Array<Record<string, unknown>>>`
+    SELECT date::text d, close AS nav FROM atlas_foundation.index_prices
+    WHERE index_code = 'NIFTY 500' AND date >= '2019-01-07' ORDER BY date
+  `
+  const benchPts = bench.map((r) => ({ d: String(r.d), nav: Number(r.nav) }))
+  const benchSpan = benchPts.length > 1
+    ? (new Date(benchPts[benchPts.length - 1].d).getTime() - new Date(benchPts[0].d).getTime()) / 86400000
+    : 0
+  rows.push({
+    id: null,
+    name: 'NIFTY 500',
+    category: 'benchmark',
+    isDesk: false,
+    record: `${(benchSpan / 365.25).toFixed(1)}y index`,
+    metrics: computeSeriesMetrics(benchPts),
+    livePct: null,
+    nPositions: null,
+  })
+
+  return rows.sort((a, b) => (b.metrics.cagr ?? -9) - (a.metrics.cagr ?? -9))
 }
 
 // UI picks are "stock:SYMBOL" / "etf:SYMBOL" / "fund:MSTAR_ID"; the engine keys
