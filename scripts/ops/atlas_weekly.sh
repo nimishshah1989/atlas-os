@@ -42,6 +42,10 @@ step "ingest_xbrl"         $PY scripts/foundation/ingest_xbrl.py
 # over NIFTY 500 with max-drawdown below it), journaling the evidence. Reads only fresh
 # scored tables, so it runs last. On promotion it re-runs that portfolio's backtest.
 step "portfolio_evolve"    $PY scripts/foundation/portfolio_evolve.py
+# Desk weekly reflection: updates each desk's lessons from forward outcome stamps
+# (confidence earned/decayed), retires dead lessons. Needs the week's desk_journal
+# + desk_outcomes rows, both written nightly by desk_run.
+step "desk_reflect"        $PY scripts/foundation/desk_reflect.py
 
 if [ ${#FAILURES[@]} -eq 0 ]; then echo "=== atlas_weekly COMPLETE — all green ===" | tee -a "$LOG"
 else MSG="atlas_weekly FAILURES: ${FAILURES[*]}"; echo "=== $MSG ===" | tee -a "$LOG"

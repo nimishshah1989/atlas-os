@@ -8,20 +8,28 @@ price, breach a cap, or bypass the audited book_trade path (rule #0).
 
 from .prompts import (
     CHARTERS,
+    build_debate_messages,
     build_pm_messages,
+    build_reflect_messages,
     build_risk_messages,
     build_scout_messages,
+    validate_debate,
     validate_pm,
+    validate_reflect,
     validate_risk,
     validate_scout,
 )
 
 __all__ = [
     "CHARTERS",
+    "build_debate_messages",
     "build_pm_messages",
+    "build_reflect_messages",
     "build_risk_messages",
     "build_scout_messages",
+    "validate_debate",
     "validate_pm",
+    "validate_reflect",
     "validate_risk",
     "validate_scout",
 ]
