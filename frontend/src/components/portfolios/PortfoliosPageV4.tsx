@@ -2,6 +2,7 @@
 // category: rule-based strategy simulations · system-generated (the learning
 // expert agent) · FM baskets. Every figure is stored engine output.
 import Link from 'next/link'
+import { Leaderboard } from './Leaderboard'
 import { getPortfolios, getCompareCurves, type PortfolioSummary, type PortfolioCategory } from '@/lib/queries/portfolios'
 import { AtlasLightweightChart, type ChartSeries } from '@/components/charts/AtlasLightweightChart'
 import { Panel } from '@/components/ui/Panel'
@@ -117,6 +118,8 @@ export async function PortfoliosPageV4() {
       {portfolios.length === 0 && (
         <p className="font-sans text-[13px] italic text-txt-3">No portfolios yet.</p>
       )}
+
+      <Leaderboard />
 
       {compareSeries.length > 1 && (
         <Panel

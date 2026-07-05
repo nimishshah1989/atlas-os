@@ -186,6 +186,7 @@ export type PortfolioDetail = {
   atlas: AtlasRead
   policyJournal: PolicyJournalEntry[]
   deskJournal: DeskCycle[]
+  deskLessons: { lesson: string; confidence: number }[]
 }
 
 export type DeskCycle = {
@@ -395,6 +396,10 @@ export async function getPortfolioDetail(id: string): Promise<PortfolioDetail | 
     FROM atlas_foundation.desk_journal
     WHERE portfolio_id = ${id} ORDER BY cycle_date DESC, ts DESC LIMIT 15
   `
+  const deskLessons = await sql<Array<Record<string, unknown>>>`
+    SELECT lesson, confidence FROM atlas_foundation.desk_lessons
+    WHERE portfolio_id = ${id} AND active ORDER BY confidence DESC, ts DESC LIMIT 6
+  `
 
   const toNav = (rs: Array<Record<string, unknown>>): NavPointRow[] =>
     rs.map((r) => ({ d: String(r.d), nav: Number(r.nav) }))
@@ -435,6 +440,10 @@ export async function getPortfolioDetail(id: string): Promise<PortfolioDetail | 
       pm: (r.pm as Record<string, unknown> | null) ?? null,
       applied: (r.applied as Record<string, unknown>[]) ?? [],
       errors: (r.errors as string[]) ?? [],
+    })),
+    deskLessons: deskLessons.map((r) => ({
+      lesson: String(r.lesson),
+      confidence: Number(r.confidence),
     })),
   }
 }
@@ -486,6 +495,79 @@ export async function getCompareCurves(): Promise<CompareCurve[]> {
       category: c.category,
       points: c.pts.map((p) => ({ d: p.d, v: (p.nav / c.pts[0].nav) * 100 })),
     }))
+}
+
+// A2 leaderboard: every portfolio's LIVE record vs NIFTY 500 over its own life —
+// desks vs their deterministic twins vs rule portfolios vs FM baskets, one table.
+export type LeaderboardRow = {
+  id: string
+  name: string
+  category: PortfolioCategory
+  isDesk: boolean
+  inception: string
+  livePct: number | null
+  n500Pct: number | null // NIFTY 500 over the same window
+  excessPp: number | null
+  maxDdPct: number | null
+  nPositions: number | null
+}
+
+export async function getLeaderboard(): Promise<LeaderboardRow[]> {
+  const rows = await sql<Array<Record<string, unknown>>>`
+    WITH span AS (
+      SELECT n.portfolio_id, min(n.date) d0, max(n.date) d1
+      FROM atlas_foundation.portfolio_nav_daily n WHERE n.run_type = 'live'
+      GROUP BY 1
+    ), perf AS (
+      SELECT s.portfolio_id, s.d0, s.d1,
+             (SELECT nav FROM atlas_foundation.portfolio_nav_daily
+              WHERE portfolio_id = s.portfolio_id AND run_type='live' AND date = s.d0) nav0,
+             (SELECT nav FROM atlas_foundation.portfolio_nav_daily
+              WHERE portfolio_id = s.portfolio_id AND run_type='live' AND date = s.d1) nav1,
+             (SELECT min(nav / nullif(peak, 0) - 1) FROM (
+                SELECT nav, max(nav) OVER (ORDER BY date) peak
+                FROM atlas_foundation.portfolio_nav_daily
+                WHERE portfolio_id = s.portfolio_id AND run_type='live') x) live_dd
+      FROM span s
+    )
+    SELECT m.portfolio_id, m.name, m.kind, m.origin, m.params,
+           p.d0::text inception, p.d1,
+           (p.nav1 / nullif(p.nav0, 0) - 1) * 100 live_pct,
+           p.live_dd * 100 max_dd_pct,
+           (SELECT (b1.close / nullif(b0.close, 0) - 1) * 100
+            FROM atlas_foundation.index_prices b0, atlas_foundation.index_prices b1
+            WHERE b0.index_code = 'NIFTY 500' AND b1.index_code = 'NIFTY 500'
+              AND b0.date = (SELECT max(date) FROM atlas_foundation.index_prices
+                             WHERE index_code='NIFTY 500' AND date <= p.d0)
+              AND b1.date = (SELECT max(date) FROM atlas_foundation.index_prices
+                             WHERE index_code='NIFTY 500' AND date <= p.d1)) n500_pct,
+           ln.n_positions
+    FROM atlas_foundation.portfolio_master m
+    JOIN perf p ON p.portfolio_id = m.portfolio_id
+    LEFT JOIN LATERAL (
+      SELECT n_positions FROM atlas_foundation.portfolio_nav_daily
+      WHERE portfolio_id = m.portfolio_id AND run_type='live'
+      ORDER BY date DESC LIMIT 1) ln ON true
+    WHERE m.status = 'active'
+    ORDER BY (p.nav1 / nullif(p.nav0, 0)) DESC NULLS LAST
+  `
+  return rows.map((r) => {
+    const live = r.live_pct != null ? Number(r.live_pct) : null
+    const n500 = r.n500_pct != null ? Number(r.n500_pct) : null
+    const params = (r.params as Record<string, unknown> | null) ?? null
+    return {
+      id: String(r.portfolio_id),
+      name: String(r.name),
+      category: (r.origin === 'system' ? 'system' : r.kind === 'basket' ? 'basket' : 'rule') as PortfolioCategory,
+      isDesk: params?.desk === true,
+      inception: String(r.inception),
+      livePct: live,
+      n500Pct: n500,
+      excessPp: live != null && n500 != null ? live - n500 : null,
+      maxDdPct: r.max_dd_pct != null ? Number(r.max_dd_pct) : null,
+      nPositions: r.n_positions != null ? Number(r.n_positions) : null,
+    }
+  })
 }
 
 // UI picks are "stock:SYMBOL" / "etf:SYMBOL" / "fund:MSTAR_ID"; the engine keys

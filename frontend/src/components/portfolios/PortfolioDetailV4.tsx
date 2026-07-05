@@ -318,6 +318,19 @@ export async function PortfolioDetailV4({ id }: { id: string }) {
           info={{ body: 'Every night after the marks: the Scout reads the fresh Atlas ranks and flags what changed; the Risk & Tax officer approves, defers or vetoes each proposal (weighing STCG vs LTCG and concentration); the PM issues orders, each with a thesis and a falsifiable exit condition. All of it is journaled — including the nights it correctly does nothing.' }}
           bodyClassName="px-5 py-4"
         >
+          {detail.deskLessons.length > 0 && (
+            <div className="mb-4 rounded-tile border border-edge-hair bg-surface-raised px-3 py-2.5">
+              <p className="mb-1.5 font-num text-[9px] uppercase tracking-wider text-txt-3">
+                Lessons earned from outcomes (confidence-weighted, weekly reflection)
+              </p>
+              {detail.deskLessons.map((l, i) => (
+                <p key={i} className="font-sans text-[12px] leading-[1.5] text-txt-2">
+                  <span className="font-num text-[10.5px] tabular-nums text-txt-3">{(l.confidence * 100).toFixed(0)}%</span>{' '}
+                  {l.lesson}
+                </p>
+              ))}
+            </div>
+          )}
           <DeskLog cycles={deskJournal} />
         </Panel>
       )}
