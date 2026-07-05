@@ -170,3 +170,35 @@ FROM (VALUES
     ('desk_watchlist_size',       40, 'Top-N by composite fed to the desk agents',        'names',  10, 100)
 ) AS s(k, v, d, u, lo, hi)
 WHERE NOT EXISTS (SELECT 1 FROM atlas_foundation.atlas_thresholds t WHERE t.threshold_key = s.k);
+
+-- ── Atlas Desk B2: outcome stamps + distilled lessons (spec 2026-07-04) ─────
+-- Outcomes: what actually happened after each desk decision — booked orders get
+-- T+5/T+20/T+60 marks; deferred/vetoed proposals get the opportunity cost of the
+-- road not taken. The reflection agent learns ONLY from these forward stamps.
+CREATE TABLE IF NOT EXISTS atlas_foundation.desk_outcomes (
+    id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    portfolio_id uuid NOT NULL REFERENCES atlas_foundation.portfolio_master(portfolio_id),
+    kind         text NOT NULL CHECK (kind IN ('order', 'rejected')),
+    symbol       text NOT NULL,
+    side         text,
+    decision_date date NOT NULL,
+    t5_pct       numeric(10,4),
+    t20_pct      numeric(10,4),
+    t60_pct      numeric(10,4),
+    stamped_at   timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (portfolio_id, kind, symbol, decision_date)
+);
+
+-- Lessons: the desk's distilled memory. Confidence is EARNED — the weekly
+-- reflection raises it when later outcomes confirm a lesson and decays it when
+-- they don't, so bad lessons die instead of compounding.
+CREATE TABLE IF NOT EXISTS atlas_foundation.desk_lessons (
+    id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    portfolio_id uuid NOT NULL REFERENCES atlas_foundation.portfolio_master(portfolio_id),
+    ts           timestamptz NOT NULL DEFAULT now(),
+    lesson       text NOT NULL,
+    tags         jsonb NOT NULL DEFAULT '{}',
+    confidence   numeric(4,3) NOT NULL DEFAULT 0.5,
+    active       boolean NOT NULL DEFAULT true
+);
+CREATE INDEX IF NOT EXISTS ix_desk_lessons ON atlas_foundation.desk_lessons (portfolio_id, active);

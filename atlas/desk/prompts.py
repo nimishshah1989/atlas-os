@@ -160,3 +160,71 @@ def validate_pm(out: dict, approved: dict[str, str]) -> list[str]:
         if not _str(o.get("thesis", "")) or not _str(o.get("invalidation", "")):
             errs.append(f"{sym}: thesis and invalidation required")
     return errs
+
+
+# ── B2: Bull/Bear debate (contested moves only) + weekly Reflection ─────────
+
+_DEBATE_SYS = """You are the {side} in a structured debate on an Indian equity
+paper-trading desk. The desk is considering: {action_desc}.
+Argue the strongest HONEST {stance} case, grounded ONLY in the provided Atlas
+data — attack the weakest point of the opposing thesis. No invented facts.
+Output ONLY JSON:
+{{"points": [str, str, str], "confidence": 0.0-1.0}}"""
+
+
+def build_debate_messages(side: str, action_desc: str, evidence: dict) -> list[dict]:
+    stance = "supporting" if side == "BULL" else "opposing"
+    return _msgs(_DEBATE_SYS.format(side=side, action_desc=action_desc, stance=stance), evidence)
+
+
+def validate_debate(out: dict) -> list[str]:
+    pts = out.get("points")
+    conf = out.get("confidence")
+    if not isinstance(pts, list) or not (1 <= len(pts) <= 4) or not all(_str(p) for p in pts):
+        return ["points must be 1-4 non-empty strings"]
+    if not isinstance(conf, (int, float)) or not 0 <= conf <= 1:
+        return ["confidence must be 0..1"]
+    return []
+
+
+_REFLECT_SYS = """You are the weekly REFLECTION of an Indian equity paper-trading
+desk. Charter: {charter}
+
+You are given: the desk's decisions with FORWARD outcomes (T+5/T+20/T+60 price
+moves after each booked order, and what deferred/vetoed names did afterwards),
+plus the desk's existing lessons with confidences.
+
+Tasks:
+1. For each EXISTING lesson, judge from this week's outcomes whether it was
+   confirmed, contradicted, or untested → new confidence (0.1-0.95; small steps,
+   ±0.1 max; untested decays slightly).
+2. Write AT MOST 3 NEW lessons — only patterns the outcomes actually support,
+   phrased as actionable guidance. No platitudes; cite the pattern.
+Output ONLY JSON:
+{{"updates": [{{"id": int, "confidence": float, "basis": str}}, ...],
+  "new_lessons": [{{"lesson": str,
+     "tags": {{"regime": str|null, "sector": str|null, "action": str|null}},
+     "basis": str}}, ...]}}"""
+
+
+def build_reflect_messages(charter_key: str, inputs: dict) -> list[dict]:
+    return _msgs(_REFLECT_SYS.format(charter=CHARTERS[charter_key]), inputs)
+
+
+def validate_reflect(out: dict, known_ids: set[int]) -> list[str]:
+    errs = []
+    ups = out.get("updates", [])
+    news = out.get("new_lessons", [])
+    if not isinstance(ups, list) or not isinstance(news, list) or len(news) > 3:
+        return ["updates must be a list and new_lessons a list of ≤3"]
+    for u in ups:
+        if not isinstance(u, dict) or u.get("id") not in known_ids:
+            errs.append(f"update for unknown lesson id: {u}")
+        elif (
+            not isinstance(u.get("confidence"), (int, float)) or not 0.05 <= u["confidence"] <= 0.95
+        ):
+            errs.append(f"lesson {u.get('id')}: confidence out of range")
+    for n in news:
+        if not isinstance(n, dict) or not _str(n.get("lesson", "")) or not _str(n.get("basis", "")):
+            errs.append(f"bad new lesson: {n}")
+    return errs

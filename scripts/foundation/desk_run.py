@@ -39,9 +39,11 @@ import portfolio_data as pdata
 from portfolio_run import TradeError, book_trade
 
 from atlas.desk import (
+    build_debate_messages,
     build_pm_messages,
     build_risk_messages,
     build_scout_messages,
+    validate_debate,
     validate_pm,
     validate_risk,
     validate_scout,
@@ -188,6 +190,11 @@ def assemble_inputs(p: dict, knobs: dict) -> dict:
     universe = pdata.load_universe(["stock"])
     panel = pdata.load_composite(universe, eod - dt.timedelta(days=140), eod)
     panel = panel.merge(universe[["instrument_key", "sector"]], on="instrument_key", how="left")
+    if twin.required_columns():  # e.g. quality_momentum needs RS + 200-EMA state
+        tech_extra = pdata.load_tech(
+            universe, twin.required_columns(), eod - dt.timedelta(days=140), eod
+        )
+        panel = panel.merge(tech_extra, on=["instrument_key", "date"], how="left")
     regime_df = _db.read_df(
         f"select date, regime_state from {M}.atlas_market_regime_daily where date >= :a",
         {"a": eod - dt.timedelta(days=140)},
@@ -197,9 +204,17 @@ def assemble_inputs(p: dict, knobs: dict) -> dict:
     key2sym = dict(zip(universe["instrument_key"], universe["symbol"], strict=False))
     twin_targets = sorted(key2sym[k] for k, v in members.items() if v and k in key2sym)
 
+    # distilled memory: this desk's active lessons, highest conviction first
+    lessons = _db.read_df(
+        f"""select lesson, tags, confidence from {M}.desk_lessons
+            where portfolio_id = :p and active order by confidence desc, ts desc limit 5""",
+        {"p": str(p["portfolio_id"])},
+    )
+
     return {
         "cycle_date": str(eod),
         "regime": regime,
+        "lessons_from_experience": lessons.to_dict("records"),
         "portfolio": {
             "nav": float(
                 _db.scalar(
@@ -223,9 +238,21 @@ def assemble_inputs(p: dict, knobs: dict) -> dict:
 # ── hard, code-enforced constraints (never delegated to the model) ──────────
 
 
-def hard_filter(orders: list[dict], inputs: dict, knobs: dict) -> tuple[list[dict], list[str]]:
+_CONSTRAINT_CHECKS = {
+    # standing constraints a validated reflection can promote (desk_reflect.py);
+    # each maps to a field the watchlist snapshot already carries
+    "require_rs_positive": lambda w: w.get("rs_3m_n500") is not None and float(w["rs_3m_n500"]) > 0,
+    "require_above_200": lambda w: bool(w.get("above_ema_200")),
+    "min_composite_60": lambda w: w.get("composite") is not None and float(w["composite"]) >= 60,
+}
+
+
+def hard_filter(
+    orders: list[dict], inputs: dict, knobs: dict, constraints: list[str] | None = None
+) -> tuple[list[dict], list[str]]:
     ok, rejected = [], []
     held = {h["symbol"] for h in inputs["portfolio"]["holdings"]}
+    watch_by_sym = {w["symbol"]: w for w in inputs["watchlist_top_by_composite"]}
     sector_of = {w["symbol"]: w["sector"] for w in inputs["watchlist_top_by_composite"]}
     for h in inputs["portfolio"]["holdings"]:
         sector_of.setdefault(h["symbol"], h["sector"])
@@ -248,6 +275,12 @@ def hard_filter(orders: list[dict], inputs: dict, knobs: dict) -> tuple[list[dic
             rejected.append(f"{sym}: not held")
         elif side == "buy" and sector_count.get(sector_of.get(sym, "?"), 0) >= knobs["sector_cap"]:
             rejected.append(f"{sym}: sector cap {knobs['sector_cap']} reached")
+        elif side == "buy" and any(
+            not _CONSTRAINT_CHECKS[c](watch_by_sym.get(sym, {}))
+            for c in (constraints or [])
+            if c in _CONSTRAINT_CHECKS
+        ):
+            rejected.append(f"{sym}: blocked by standing constraint (earned from reflection)")
         else:
             ok.append(o)
             seen.add(sym)
@@ -278,7 +311,14 @@ def run_cycle(p: dict, knobs: dict) -> dict:
     inputs = assemble_inputs(p, knobs)
     sym2key = inputs.pop("_universe_sym2key")
     known = set(sym2key) | {h["symbol"] for h in inputs["portfolio"]["holdings"]}
-    journal = {"scout": None, "risk": None, "pm": None, "applied": [], "errors": []}
+    journal = {
+        "scout": None,
+        "risk": None,
+        "pm": None,
+        "debates": None,
+        "applied": [],
+        "errors": [],
+    }
 
     try:
         scout = llm_call(build_scout_messages(charter, inputs))
@@ -315,10 +355,44 @@ def run_cycle(p: dict, knobs: dict) -> dict:
             journal["errors"].append("risk approved nothing — desk holds")
             return journal
 
+        # Bull/Bear debate on CONTESTED approved moves (≤2/cycle, token budget):
+        # exits of holdings and high-urgency adds — the two places impulsive
+        # churn hides. Transcripts go to the PM, who decides with both cases heard.
+        debates = {}
+        contested = [
+            x
+            for x in proposals
+            if x["symbol"] in approved and (x["action"] == "exit" or x.get("urgency") == "high")
+        ][:2]
+        for x in contested:
+            desc = f"{'selling' if x['action'] == 'exit' else 'buying'} {x['symbol']}"
+            evidence = {
+                "proposal": x,
+                "holding": next(
+                    (h for h in inputs["portfolio"]["holdings"] if h["symbol"] == x["symbol"]),
+                    None,
+                ),
+                "watchlist_row": next(
+                    (w for w in inputs["watchlist_top_by_composite"] if w["symbol"] == x["symbol"]),
+                    None,
+                ),
+                "regime": inputs["regime"],
+            }
+            sides = {}
+            for side_name in ("BULL", "BEAR"):
+                reply = llm_call(build_debate_messages(side_name, desc, evidence), max_tokens=1500)
+                if validate_debate(reply):
+                    continue  # a broken debate side is dropped, not fatal
+                sides[side_name.lower()] = reply
+            if sides:
+                debates[x["symbol"]] = sides
+        journal["debates"] = debates or None
+
         pm = llm_call(
             build_pm_messages(
                 charter,
                 {
+                    "debates": debates,
                     "approved_proposals": [
                         {
                             **x,
@@ -340,7 +414,9 @@ def run_cycle(p: dict, knobs: dict) -> dict:
             journal["errors"] += errs
             return journal
 
-        orders, rejected = hard_filter(pm.get("orders", []), inputs, knobs)
+        orders, rejected = hard_filter(
+            pm.get("orders", []), inputs, knobs, p["params"].get("standing_constraints")
+        )
         journal["errors"] += rejected
         for o in orders:
             ckey = sym2key.get(o["symbol"])
@@ -355,6 +431,76 @@ def run_cycle(p: dict, knobs: dict) -> dict:
     except RuntimeError as e:
         journal["errors"].append(str(e))
     return journal
+
+
+def stamp_outcomes() -> None:
+    """Nightly: mark every past desk decision with what ACTUALLY happened.
+    Booked orders and rejected/deferred proposals both get T+5/T+20/T+60 marks
+    (close_adj move since decision date) — the reflection agent learns only from
+    these forward stamps, never from hindsight."""
+    sessions = _db.read_df(
+        f"select date from {M}.index_prices where index_code='NIFTY 50' "
+        "and date >= current_date - interval '8 months' order by date"
+    )["date"].tolist()
+    if len(sessions) < 6:
+        return
+
+    # decisions = booked orders (from journal.applied) + rejected adds/exits
+    decisions = _db.read_df(
+        f"""select dj.portfolio_id::text pid, dj.cycle_date,
+                   a->>'symbol' symbol, a->>'side' side, 'order' as kind
+            from {M}.desk_journal dj, jsonb_array_elements(dj.applied) a
+            union
+            select dj.portfolio_id::text, dj.cycle_date,
+                   pr->>'symbol', pr->>'action', 'rejected'
+            from {M}.desk_journal dj, jsonb_array_elements(dj.scout->'proposals') pr
+            where pr->>'action' in ('add','exit')
+              and not exists (select 1 from jsonb_array_elements(dj.applied) a2
+                              where a2->>'symbol' = pr->>'symbol')"""
+    )
+    n = 0
+    for r in decisions.to_dict("records"):
+        base = _db.scalar(
+            f"""select o.close_adj from {M}.ohlcv_stock o
+                join {M}.instrument_master i using (instrument_id)
+                where i.symbol = :s and o.date <= :d order by o.date desc limit 1""",
+            {"s": r["symbol"], "d": r["cycle_date"]},
+        )
+        if not base:
+            continue
+        stamps: dict[str, float] = {}
+        later = [d for d in sessions if d > r["cycle_date"]]
+        for col, horizon in (("t5_pct", 5), ("t20_pct", 20), ("t60_pct", 60)):
+            if len(later) < horizon:
+                continue
+            px = _db.scalar(
+                f"""select o.close_adj from {M}.ohlcv_stock o
+                    join {M}.instrument_master i using (instrument_id)
+                    where i.symbol = :s and o.date <= :d order by o.date desc limit 1""",
+                {"s": r["symbol"], "d": later[horizon - 1]},
+            )
+            if px:
+                stamps[col] = round((float(px) / float(base) - 1) * 100, 2)
+        if not stamps:
+            continue
+        sets = ", ".join(f"{c} = :{c}" for c in stamps)
+        _db.exec_sql(
+            f"""insert into {M}.desk_outcomes (portfolio_id, kind, symbol, side, decision_date,
+                    {", ".join(stamps)})
+                values (:p, :k, :s, :sd, :d, {", ".join(":" + c for c in stamps)})
+                on conflict (portfolio_id, kind, symbol, decision_date)
+                do update set {sets}, stamped_at = now()""",
+            {
+                "p": r["pid"],
+                "k": r["kind"],
+                "s": r["symbol"],
+                "sd": r["side"],
+                "d": r["cycle_date"],
+                **stamps,
+            },
+        )
+        n += 1
+    print(f"[desk] outcomes stamped: {n}", flush=True)
 
 
 def main() -> None:
@@ -379,18 +525,29 @@ def main() -> None:
             print(f"[desk] {pid}: cycle {eod} already ran — skipping", flush=True)
             continue
         p = pdata.load_portfolio(pid)
-        journal = run_cycle(p, knobs)
+        try:
+            journal = run_cycle(p, knobs)
+        except Exception as e:  # one desk's crash must never starve the others
+            journal = {
+                "scout": None,
+                "risk": None,
+                "pm": None,
+                "debates": None,
+                "applied": [],
+                "errors": [f"cycle crashed: {type(e).__name__}: {e}"],
+            }
         _db.exec_sql(
             f"""insert into {M}.desk_journal
-                (portfolio_id, cycle_date, scout, risk, pm, applied, errors)
+                (portfolio_id, cycle_date, scout, risk, pm, debates, applied, errors)
                 values (:p, :d, cast(:s as jsonb), cast(:r as jsonb), cast(:m as jsonb),
-                        cast(:ap as jsonb), cast(:er as jsonb))""",
+                        cast(:db as jsonb), cast(:ap as jsonb), cast(:er as jsonb))""",
             {
                 "p": pid,
                 "d": eod,
                 "s": json.dumps(journal["scout"], default=str),
                 "r": json.dumps(journal["risk"], default=str),
                 "m": json.dumps(journal["pm"], default=str),
+                "db": json.dumps(journal.get("debates"), default=str),
                 "ap": json.dumps(journal["applied"], default=str),
                 "er": json.dumps(journal["errors"], default=str),
             },
@@ -400,6 +557,7 @@ def main() -> None:
             f"errors={len(journal['errors'])}",
             flush=True,
         )
+    stamp_outcomes()
 
 
 if __name__ == "__main__":
