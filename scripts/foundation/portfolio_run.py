@@ -27,12 +27,14 @@ from portfolio_data import (
     _enrich_new_trades,
     load_composite,
     load_cost_tax,
+    load_instruments,
     load_portfolio,
     load_prices,
     load_tech,
     load_universe,
     open_entry_dates,
     open_positions,
+    stored_live_cash,
 )
 
 from atlas.portfolio import PortfolioConfig, get_strategy, replay
@@ -122,7 +124,6 @@ def run_window(p: dict, start: dt.date, end: dt.date, mode: str):
                 mode,
                 fund_categories=s["categories"],
                 capital=(cap * Decimal(str(s["weight"]))).quantize(Decimal("0.01")),
-                sleeve_id=f"sleeve{i}",
             )
             for i, s in enumerate(sleeves)
         ]
@@ -160,13 +161,23 @@ def _run_slice(
     mode: str,
     fund_categories: list | None = None,
     capital: Decimal | None = None,
-    sleeve_id: str | None = None,
 ):
     """One independent replay over a (optionally cap-filtered) universe.
-    `capital`/`sleeve_id` set only for blend sleeves; resume state for a sleeve is
-    reconstructed from the trades of instruments in that sleeve's universe."""
+    `capital` is set only for blend sleeves; sleeve resume state is scoped by the
+    sleeve.s stable fund categories, its cash reconstructed from its own trades."""
     universe = load_universe(list(p["asset_classes"]), fund_categories=fund_categories)
     strat = _strategy(p)
+    pid = str(p["portfolio_id"])
+    # RESUME: a held name that has left the scored/current universe must still be
+    # priced, marked and exitable — never silently dropped. Add held instruments
+    # (scoped to this sleeve's categories for a blend) back into the universe.
+    if mode == "resume":
+        held = set(open_positions(pid))
+        if capital is not None and fund_categories:
+            held &= set(load_universe(["fund"], fund_categories=fund_categories)["instrument_key"])
+        missing = held - set(universe["instrument_key"])
+        if missing:
+            universe = pd.concat([universe, load_instruments(list(missing))], ignore_index=True)
     lookback = start - dt.timedelta(days=14)  # covers prior sessions for transitions + ffill
     prices = load_prices(universe, lookback, end)
     # Full panel always goes to the engine (valuation carry-forward + inception price
@@ -225,13 +236,21 @@ def _run_slice(
 
     start_positions = start_cash = start_entry_dates = None
     if mode == "resume":
-        keys = set(universe["instrument_key"])
-        all_pos = open_positions(str(p["portfolio_id"]))
-        start_positions = {k: q for k, q in all_pos.items() if k in keys}
-        start_entry_dates = {
-            k: d for k, d in open_entry_dates(str(p["portfolio_id"])).items() if k in keys
-        }
-        start_cash = _slice_cash(str(p["portfolio_id"]), keys, cfg.initial_capital)
+        all_pos = open_positions(pid)
+        all_ent = open_entry_dates(pid)
+        if capital is None:
+            # plain portfolio: the whole book + the authoritative stored cash. NO
+            # universe scoping — that was the drift bug (a de-scored holding would
+            # vanish and its capital get refunded).
+            start_positions, start_entry_dates = all_pos, all_ent
+            start_cash = stored_live_cash(pid)
+        else:
+            # blend sleeve: scope to this sleeve's (stable-category) fund universe;
+            # cash reconstructed from this sleeve's own trades.
+            keys = set(universe["instrument_key"])
+            start_positions = {k: q for k, q in all_pos.items() if k in keys}
+            start_entry_dates = {k: d for k, d in all_ent.items() if k in keys}
+            start_cash = _slice_cash(pid, keys, cfg.initial_capital)
 
     return replay(
         cfg,
