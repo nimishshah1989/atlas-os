@@ -187,6 +187,37 @@ def open_positions(pid: str, run_type: str = "live") -> dict[str, Decimal]:
     }
 
 
+def load_instruments(keys: list[str]) -> pd.DataFrame:
+    """(instrument_key, asset_class, symbol, sector) for arbitrary keys — used to
+    keep a held name in the universe even after it leaves the *scored* set, so the
+    nightly mark still prices, marks and can exit it (never silently drops it)."""
+    if not keys:
+        return pd.DataFrame(columns=pd.Index(["instrument_key", "asset_class", "symbol", "sector"]))
+    eq = _db.read_df(
+        f"""select instrument_id::text as instrument_key, asset_class, symbol, sector
+            from {M}.instrument_master where instrument_id::text = any(:k)""",
+        {"k": list(keys)},
+    )
+    fund = _db.read_df(
+        f"""select mstar_id as instrument_key, 'fund' as asset_class,
+                   scheme_name as symbol, null::text as sector
+            from {M}.atlas_universe_funds where mstar_id = any(:k)""",
+        {"k": list(keys)},
+    )
+    return pd.concat([eq, fund], ignore_index=True)
+
+
+def stored_live_cash(pid: str) -> Decimal:
+    """The last live NAV row's cash — the authoritative resume cash for a plain
+    (non-sleeve) portfolio."""
+    v = _db.scalar(
+        f"select cash from {M}.portfolio_nav_daily where portfolio_id = :p "
+        "and run_type = 'live' order by date desc limit 1",
+        {"p": pid},
+    )
+    return Decimal(str(v)) if v is not None else Decimal(0)
+
+
 def open_entry_dates(pid: str, run_type: str = "live") -> dict:
     """For each still-held instrument, the date its current lot was opened (latest
     buy after the last full exit) — needed so a fund's exit load is charged

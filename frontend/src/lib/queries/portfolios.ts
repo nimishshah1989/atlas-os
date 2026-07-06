@@ -5,7 +5,7 @@
 // beyond joins and percentages.
 import 'server-only'
 import sql from '@/lib/db'
-import { computeSeriesMetrics, computeWindowMetrics, type SeriesMetrics, type WindowMetrics } from '@/lib/portfolioMetrics'
+import { computeWindowMetrics, type WindowMetrics } from '@/lib/portfolioMetrics'
 import { describeStrategy } from '@/lib/strategyDescription'
 
 export type PortfolioCategory = 'rule' | 'system' | 'basket'
@@ -510,7 +510,6 @@ export type LeaderboardRow = {
   isDesk: boolean
   record: string // e.g. "7.5y backtest" | "live 3d"
   blurb: string // one-line what-this-book-does, for the per-row eye icon
-  metrics: SeriesMetrics
   windows: { w1: WindowMetrics; w3: WindowMetrics; w5: WindowMetrics }
   livePct: number | null // since-inception live paper-track, all books
   nPositions: number | null
@@ -575,7 +574,6 @@ export async function getLeaderboard(): Promise<LeaderboardRow[]> {
       isDesk: params?.desk === true,
       record,
       blurb: explain ? `${explain.headline}. ${explain.entry}` : 'FM-picked basket.',
-      metrics: computeSeriesMetrics(pts),
       windows: {
         w1: computeWindowMetrics(pts, 1),
         w3: computeWindowMetrics(pts, 3),
@@ -602,7 +600,6 @@ export async function getLeaderboard(): Promise<LeaderboardRow[]> {
     isDesk: false,
     record: `${(benchSpan / 365.25).toFixed(1)}y index`,
     blurb: 'The NIFTY 500 index itself — the market every book here is trying to beat.',
-    metrics: computeSeriesMetrics(benchPts),
     windows: {
       w1: computeWindowMetrics(benchPts, 1),
       w3: computeWindowMetrics(benchPts, 3),
@@ -612,7 +609,9 @@ export async function getLeaderboard(): Promise<LeaderboardRow[]> {
     nPositions: null,
   })
 
-  return rows.sort((a, b) => (b.metrics.cagr ?? -9) - (a.metrics.cagr ?? -9))
+  const rankKey = (r: LeaderboardRow) =>
+    r.windows.w5.cagr ?? r.windows.w3.cagr ?? r.windows.w1.cagr ?? (r.livePct != null ? r.livePct / 100 : -9)
+  return rows.sort((a, b) => rankKey(b) - rankKey(a))
 }
 
 // UI picks are "stock:SYMBOL" / "etf:SYMBOL" / "fund:MSTAR_ID"; the engine keys

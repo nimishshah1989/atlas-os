@@ -170,11 +170,15 @@ def replay(
 
     def _enter(d, candidates: list[tuple[str, object]], reason: str):
         lookback = reason == "inception"
-        cands = [
-            (k, sig, fill)
-            for k, sig in candidates
-            if k not in positions and (fill := _fill(d, k, lookback)) is not None
-        ]
+        seen_c: set[str] = set()
+        cands = []
+        for k, sig in candidates:
+            if k in positions or k in seen_c:
+                continue  # dedup: never book the same name twice in one execution
+            fill = _fill(d, k, lookback)
+            if fill is not None:
+                seen_c.add(k)
+                cands.append((k, sig, fill))
         open_slots = slots - len(positions)
         if open_slots <= 0 or not cands:
             return
@@ -201,18 +205,26 @@ def replay(
         v = cast("float | None", comp_panel[k].asof(sig_date))
         return float("-inf") if v is None or pd.isna(v) else float(v)
 
+    pending_exits: set[str] = set()  # exits whose execution day had no real print
     for i, d in enumerate(dates):
         if i == 0 and not positions and inception_state is not None:
             picks: list[tuple[str, object]] = [(str(k), d) for k, v in inception_state.items() if v]
             _enter(d, picks, "inception")
         else:
-            for k in exits_at.get(d, []):
+            # today's exit signals + any carried forward from a no-print day
+            for k in list(pending_exits) + exits_at.get(d, []):
+                if k not in positions:
+                    pending_exits.discard(k)
+                    continue
                 price = _px(d, k)
-                if k in positions and price:
-                    qty = positions.pop(k)
-                    el = _exit_load(k, d, (qty * price).quantize(_MONEY))
-                    _book(d, k, "sell", qty, price, "signal", extra_cost=el)
-                    entry_date.pop(k, None)
+                if not price:  # suspended / no print — retry next session, don't drop
+                    pending_exits.add(k)
+                    continue
+                qty = positions.pop(k)
+                el = _exit_load(k, d, (qty * price).quantize(_MONEY))
+                _book(d, k, "sell", qty, price, "signal", extra_cost=el)
+                entry_date.pop(k, None)
+                pending_exits.discard(k)
             _enter(d, entries_at.get(d, []), "signal")
 
         invested = _mark(d).quantize(_MONEY)
