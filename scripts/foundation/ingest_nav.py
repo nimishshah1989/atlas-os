@@ -24,6 +24,7 @@ import os
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import _db
 import psycopg2
 import requests
 from psycopg2.extras import execute_values
@@ -35,7 +36,7 @@ try:
 except Exception:
     pass
 
-DB = os.environ["ATLAS_DB_URL"].replace("postgresql+psycopg2://", "postgresql://", 1)
+DB = _db.psycopg2_url()
 WORKERS = int(os.environ.get("NAV_WORKERS", "8"))
 MFAPI = "https://api.mfapi.in/mf"
 

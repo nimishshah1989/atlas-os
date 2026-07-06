@@ -57,6 +57,14 @@ def db_url() -> str:
     return url
 
 
+def psycopg2_url() -> str:
+    """The DB URL as a raw libpq DSN for `psycopg2.connect()` — the SQLAlchemy
+    `+psycopg2` driver suffix is rejected by libpq. Single source of truth so the
+    raw-psycopg2 ingest scripts can't diverge (a missing strip once broke MF
+    holdings ingestion silently every weekend)."""
+    return db_url().replace("postgresql+psycopg2://", "postgresql://", 1)
+
+
 @lru_cache(maxsize=1)
 def engine() -> Engine:
     """Process-wide SQLAlchemy engine. Modest pool. The statement_timeout is set
@@ -171,3 +179,14 @@ def _split_statements(sql_text: str) -> list[str]:
     if buf:
         out.append("\n".join(buf))
     return out
+
+
+if __name__ == "__main__":
+    # self-check: the raw DSN handed to psycopg2 must be libpq-parseable — a stale
+    # "+psycopg2" suffix is what silently broke MF-holdings ingest every weekend.
+    import psycopg2.extensions as _ext
+
+    d = psycopg2_url()
+    assert d.startswith("postgresql://") and "+psycopg2" not in d, d
+    _ext.parse_dsn(d)
+    print("_db.psycopg2_url OK →", d.rsplit("@", 1)[-1])

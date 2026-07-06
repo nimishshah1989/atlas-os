@@ -19,6 +19,7 @@ import uuid
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import _db
 import psycopg2
 import requests
 from psycopg2.extras import execute_values
@@ -33,7 +34,7 @@ except Exception:
 MSTAR_BASE = "https://api.morningstar.com/v2/service/mf"
 SVC = os.environ.get("MSTAR_HOLDINGS_SERVICE", "fq9mxhk7xeb20f3b")
 AC = os.environ["MSTAR_ACCESSCODE"]
-DB = os.environ["ATLAS_DB_URL"]
+DB = _db.psycopg2_url()
 WORKERS = int(os.environ.get("MSTAR_WORKERS", "6"))
 CACHE = os.environ.get("MSTAR_CACHE_DIR")  # optional disk cache (dev iteration; cron leaves unset)
 

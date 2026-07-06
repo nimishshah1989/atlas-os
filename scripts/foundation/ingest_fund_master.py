@@ -31,6 +31,7 @@ import os
 import sys
 import xml.etree.ElementTree as ET
 
+import _db
 import psycopg2
 import requests
 from psycopg2.extras import execute_values
@@ -47,7 +48,7 @@ SVC = os.environ.get("MSTAR_MASTER_SERVICE", "x6d9w6xxu0hmhrr4")
 UNIV = os.environ.get("MSTAR_MASTER_UNIVERSE", "q3zv6b817mp4fz0f")
 AC = os.environ["MSTAR_ACCESSCODE"]
 # .env carries the SQLAlchemy form (postgresql+psycopg2://); psycopg2 wants plain libpq.
-DB = os.environ["ATLAS_DB_URL"].replace("postgresql+psycopg2://", "postgresql://", 1)
+DB = _db.psycopg2_url()
 
 # Morningstar field tag -> our key. Tags live one level under each <data>/<api>.
 RUPEES_PER_CRORE = 10_000_000  # 1 crore = 1e7

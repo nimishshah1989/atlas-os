@@ -8,8 +8,9 @@
 SHELL=/bin/bash
 PATH=/usr/local/bin:/usr/bin:/bin
 
-# Kite headless TOTP login — 08:50 IST Mon–Fri (fresh access token for the day)
-20 3 * * 1-5  /home/ubuntu/atlas-os/.venv/bin/python /home/ubuntu/atlas-os/scripts/kite_autologin.py >> /home/ubuntu/logs/kite_autologin.log 2>&1
+# Kite headless TOTP login — 08:50 IST Mon–Sat. Sat included so the 12:30 IST
+# weekly job (build_universe needs a live Kite session) isn't stranded tokenless.
+20 3 * * 1-6  /home/ubuntu/atlas-os/.venv/bin/python /home/ubuntu/atlas-os/scripts/kite_autologin.py >> /home/ubuntu/logs/kite_autologin.log 2>&1
 
 # Atlas v4 DAILY EOD orchestrator — 16:00 IST Mon–Fri
 #   Kite ingest (prices/indices/delivery/filings/insider/NAV/bulk) → compute_all →
