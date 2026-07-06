@@ -50,6 +50,8 @@ def replay(
     start_cash: Decimal | None = None,
     loop_dates: list | None = None,
     costs: dict[str, tuple[Decimal, Decimal]] | None = None,
+    exit_load: tuple[Decimal, int] | None = None,
+    start_entry_dates: dict | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Run the day-loop over `loop_dates` (default: all of `prices.index`).
     Pass the FULL price panel even when looping few dates — valuation carry-forward
@@ -98,6 +100,7 @@ def replay(
                 exits_at.setdefault(d, []).append(ev["instrument_key"])
 
     positions: dict[str, Decimal] = dict(start_positions or {})
+    entry_date: dict = dict(start_entry_dates or {})  # k -> buy date, for exit load
     cash = start_cash if start_cash is not None else Decimal(cfg.initial_capital)
     slots = int(Decimal(1) / Decimal(cfg.max_position_pct))
     trades: list[dict] = []
@@ -134,10 +137,21 @@ def replay(
         pair = (costs or {}).get(asset_class.get(k, "stock"))
         return Decimal(0) if pair is None else Decimal(pair[0 if side == "buy" else 1])
 
-    def _book(trade_date, k, side, qty, price, reason):
+    def _exit_load(k, d, value) -> Decimal:
+        """MF redemption load: charged when a fund lot is sold within the load
+        window. Deducted from proceeds AND folded into the trade cost, so the
+        FIFO capital-gains basis nets it (a transfer expense)."""
+        if exit_load is None or asset_class.get(k) != "fund":
+            return Decimal(0)
+        ed = entry_date.get(k)
+        if ed is None or (d - ed).days >= exit_load[1]:
+            return Decimal(0)
+        return (value * exit_load[0]).quantize(_MONEY)
+
+    def _book(trade_date, k, side, qty, price, reason, extra_cost=Decimal(0)):
         nonlocal cash
         value = (qty * price).quantize(_MONEY)
-        cost = (value * _rate(k, side)).quantize(_MONEY)
+        cost = (value * _rate(k, side)).quantize(_MONEY) + extra_cost
         cash = cash - value - cost if side == "buy" else cash + value - cost
         trades.append(
             {
@@ -179,6 +193,7 @@ def replay(
             if qty > 0:
                 _book(trade_date, k, "buy", qty, price, reason)
                 positions[k] = qty
+                entry_date[k] = trade_date
 
     def _comp(k, sig_date) -> float:
         if comp_panel is None or k not in comp_panel.columns:
@@ -194,7 +209,10 @@ def replay(
             for k in exits_at.get(d, []):
                 price = _px(d, k)
                 if k in positions and price:
-                    _book(d, k, "sell", positions.pop(k), price, "signal")
+                    qty = positions.pop(k)
+                    el = _exit_load(k, d, (qty * price).quantize(_MONEY))
+                    _book(d, k, "sell", qty, price, "signal", extra_cost=el)
+                    entry_date.pop(k, None)
             _enter(d, entries_at.get(d, []), "signal")
 
         invested = _mark(d).quantize(_MONEY)

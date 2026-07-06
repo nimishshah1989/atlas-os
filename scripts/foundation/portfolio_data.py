@@ -24,8 +24,12 @@ def load_portfolio(pid: str) -> dict:
     return df.iloc[0].to_dict()
 
 
-def load_universe(asset_classes: list[str]) -> pd.DataFrame:
-    """(instrument_key, asset_class, symbol) for the portfolio's declared universe."""
+def load_universe(
+    asset_classes: list[str], fund_categories: list[str] | None = None
+) -> pd.DataFrame:
+    """(instrument_key, asset_class, symbol, sector) for the declared universe.
+    fund_categories (exact atlas_universe_funds.category_name values) restricts the
+    fund sleeve — e.g. ['India Fund Large-Cap'] for a large-cap MF portfolio."""
     parts = []
     eq = [c for c in asset_classes if c in ("stock", "etf")]
     if eq:
@@ -44,7 +48,14 @@ def load_universe(asset_classes: list[str]) -> pd.DataFrame:
             )
         )
     if "fund" in asset_classes:
-        f = _db.read_df(f"select mstar_id, scheme_name from {M}.atlas_universe_funds")
+        if fund_categories:
+            f = _db.read_df(
+                f"select mstar_id, scheme_name from {M}.atlas_universe_funds "
+                "where category_name = any(:c)",
+                {"c": list(fund_categories)},
+            )
+        else:
+            f = _db.read_df(f"select mstar_id, scheme_name from {M}.atlas_universe_funds")
         parts.append(
             pd.DataFrame(
                 {
@@ -176,6 +187,24 @@ def open_positions(pid: str, run_type: str = "live") -> dict[str, Decimal]:
     }
 
 
+def open_entry_dates(pid: str, run_type: str = "live") -> dict:
+    """For each still-held instrument, the date its current lot was opened (latest
+    buy after the last full exit) — needed so a fund's exit load is charged
+    correctly when the nightly increment sells it. Crossover strategies buy once
+    and hold, so max(buy trade_date) is the entry."""
+    df = _db.read_df(
+        f"""with net as (
+              select instrument_key,
+                     sum(case when side='buy' then qty else -qty end) qty,
+                     max(trade_date) filter (where side='buy') last_buy
+              from {M}.portfolio_trades where portfolio_id = :p and run_type = :r
+              group by 1)
+            select instrument_key, last_buy from net where qty <> 0""",
+        {"p": pid, "r": run_type},
+    )
+    return {r["instrument_key"]: r["last_buy"] for r in df.to_dict("records")}
+
+
 # ── cost / tax knobs (atlas_thresholds, category=portfolio) ────────────────
 
 
@@ -195,7 +224,8 @@ def load_cost_tax():
         ltcg_exemption=m["portfolio_tax_ltcg_exemption_inr"],
         ltcg_days=int(m["portfolio_tax_ltcg_days"]),
     )
-    return costs, rates
+    exit_load = (m["portfolio_exit_load_fund_pct"], int(m["portfolio_exit_load_fund_days"]))
+    return costs, rates, exit_load
 
 
 _TAX_COLS = ["realized_pnl", "holding_days", "tax_bucket", "tax"]

@@ -14,6 +14,7 @@ import datetime as dt
 import json
 import sys
 import uuid
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 from typing import cast
@@ -30,6 +31,7 @@ from portfolio_data import (
     load_prices,
     load_tech,
     load_universe,
+    open_entry_dates,
     open_positions,
 )
 
@@ -71,11 +73,21 @@ def _cfg(p: dict) -> PortfolioConfig:
     )
 
 
+# portfolio-level params consumed by the runner, never passed to the strategy ctor
+_RESERVED_PARAMS = frozenset(
+    {"fund_categories", "sleeves", "picks", "charter", "desk", "standing_constraints"}
+)
+
+
+def _strat_params(params: dict) -> dict:
+    return {k: v for k, v in params.items() if k not in _RESERVED_PARAMS}
+
+
 def _strategy(p: dict):
     if p["kind"] != "strategy":
         return None
     params = p["params"] if isinstance(p["params"], dict) else json.loads(p["params"])
-    return get_strategy(p["strategy_key"], params)
+    return get_strategy(p["strategy_key"], _strat_params(params))
 
 
 def _basket_state(p: dict, universe: pd.DataFrame) -> pd.Series:
@@ -90,15 +102,70 @@ def _basket_state(p: dict, universe: pd.DataFrame) -> pd.Series:
 
 
 def run_window(p: dict, start: dt.date, end: dt.date, mode: str):
-    """Load panels and replay. Modes:
-    backtest — day-loop over trading dates in [start, end], inception-seeded at the first
-    init     — single-day loop at the last trading date <= end; strategies book
-               NOTHING (all-cash first NAV row), baskets book the FM's picks
-    resume   — continue live state over trading dates AFTER `start` (= last marked date);
-               only signals detected on/after `start` are eligible (one shot each,
-               same as backtest semantics)
+    """Load panels and replay. Modes: backtest / init / resume (see _run_slice).
+
+    Fund cap portfolios: params.fund_categories restricts the universe. A capital-
+    weighted BLEND (params.sleeves = [{weight, categories}, ...], e.g. 50/25/25
+    LC/MC/SC) runs one INDEPENDENT slice per sleeve with its own capital budget and
+    the union is merged — each sleeve manages its own cash, which is exactly what a
+    fixed-allocation mandate means.
     """
-    universe = load_universe(list(p["asset_classes"]))
+    params = p["params"] if isinstance(p["params"], dict) else json.loads(p["params"])
+    sleeves = params.get("sleeves")
+    if sleeves:
+        cap = Decimal(p["initial_capital"])
+        results = [
+            _run_slice(
+                p,
+                start,
+                end,
+                mode,
+                fund_categories=s["categories"],
+                capital=(cap * Decimal(str(s["weight"]))).quantize(Decimal("0.01")),
+                sleeve_id=f"sleeve{i}",
+            )
+            for i, s in enumerate(sleeves)
+        ]
+        trades = (
+            pd.concat([t for t, _ in results if not t.empty], ignore_index=True)
+            if any(not t.empty for t, _ in results)
+            else results[0][0]
+        )
+        navs = _merge_navs([n for _, n in results if not n.empty])
+        return trades, navs
+    return _run_slice(p, start, end, mode, fund_categories=params.get("fund_categories"))
+
+
+def _merge_navs(nav_frames: list[pd.DataFrame]) -> pd.DataFrame:
+    """Sum sleeve NAV rows by date (sleeves share the fund session calendar)."""
+    if not nav_frames:
+        import atlas.portfolio.engine as _e
+
+        return _e._empty_navs()
+    alln = pd.concat(nav_frames, ignore_index=True)
+    return pd.DataFrame(
+        alln.groupby("date", as_index=False).agg(
+            nav=("nav", "sum"),
+            cash=("cash", "sum"),
+            invested=("invested", "sum"),
+            n_positions=("n_positions", "sum"),
+        )
+    )
+
+
+def _run_slice(
+    p: dict,
+    start: dt.date,
+    end: dt.date,
+    mode: str,
+    fund_categories: list | None = None,
+    capital: Decimal | None = None,
+    sleeve_id: str | None = None,
+):
+    """One independent replay over a (optionally cap-filtered) universe.
+    `capital`/`sleeve_id` set only for blend sleeves; resume state for a sleeve is
+    reconstructed from the trades of instruments in that sleeve's universe."""
+    universe = load_universe(list(p["asset_classes"]), fund_categories=fund_categories)
     strat = _strategy(p)
     lookback = start - dt.timedelta(days=14)  # covers prior sessions for transitions + ffill
     prices = load_prices(universe, lookback, end)
@@ -151,18 +218,23 @@ def run_window(p: dict, start: dt.date, end: dt.date, mode: str):
     elif mode != "resume":
         inception = _basket_state(p, universe)
 
-    start_positions = start_cash = None
+    costs, _rates, exit_load = load_cost_tax()
+    cfg = _cfg(p)
+    if capital is not None:  # blend sleeve runs on its own capital budget
+        cfg = replace(cfg, initial_capital=capital)
+
+    start_positions = start_cash = start_entry_dates = None
     if mode == "resume":
-        start_positions = open_positions(str(p["portfolio_id"]))
-        last = _db.read_df(
-            f"""select cash from {M}.portfolio_nav_daily
-                where portfolio_id=:p and run_type='live' order by date desc limit 1""",
-            {"p": str(p["portfolio_id"])},
-        )
-        start_cash = Decimal(last.iloc[0]["cash"])
-    costs, _rates = load_cost_tax()
+        keys = set(universe["instrument_key"])
+        all_pos = open_positions(str(p["portfolio_id"]))
+        start_positions = {k: q for k, q in all_pos.items() if k in keys}
+        start_entry_dates = {
+            k: d for k, d in open_entry_dates(str(p["portfolio_id"])).items() if k in keys
+        }
+        start_cash = _slice_cash(str(p["portfolio_id"]), keys, cfg.initial_capital)
+
     return replay(
-        _cfg(p),
+        cfg,
         prices=prices,
         events=events,
         inception_state=inception,
@@ -173,7 +245,29 @@ def run_window(p: dict, start: dt.date, end: dt.date, mode: str):
         start_cash=start_cash,
         loop_dates=loop_dates,
         costs=costs,
+        exit_load=exit_load,
+        start_entry_dates=start_entry_dates,
     )
+
+
+def _slice_cash(pid: str, keys: set, capital: Decimal) -> Decimal:
+    """Reconstruct a sleeve's live cash from the trades of its own instruments:
+    capital − Σ(buy value+cost) + Σ(sell value−cost). Stateless, so a blend never
+    needs per-sleeve cash stored. For a plain (non-sleeve) portfolio keys covers
+    every instrument, so this equals the stored NAV cash."""
+    df = _db.read_df(
+        f"""select instrument_key,
+                   sum(case when side='buy' then -(value + coalesce(cost,0))
+                            else (value - coalesce(cost,0)) end) flow
+            from {M}.portfolio_trades where portfolio_id = :p and run_type = 'live'
+            group by 1""",
+        {"p": pid},
+    )
+    flow = sum(
+        (Decimal(str(r["flow"])) for r in df.to_dict("records") if r["instrument_key"] in keys),
+        Decimal(0),
+    )
+    return (capital + flow).quantize(Decimal("0.01"))
 
 
 def _no_op():
@@ -195,7 +289,7 @@ def cmd_create(a) -> None:
     cap_pct = a.cap_pct or th["portfolio_max_position_pct"]
     params = json.loads(a.params) if a.params else {}
     if a.kind == "strategy":
-        get_strategy(a.strategy, params)  # validates key + params before insert
+        get_strategy(a.strategy, _strat_params(params))  # validates key + params before insert
     pid = str(uuid.uuid4())
     _db.exec_sql(
         f"""insert into {M}.portfolio_master
@@ -232,7 +326,7 @@ def cmd_init(a) -> None:
     run_id = str(uuid.uuid4())
     inc = p["inception_date"]
     trades, navs = run_window(p, inc, inc, "init")
-    _, rates = load_cost_tax()
+    _, rates, _el = load_cost_tax()
     trades = _enrich_new_trades(a.portfolio_id, "live", trades, rates)
     write_results(a.portfolio_id, "live", run_id, trades, navs)
     print(json.dumps({"trades": len(trades), "nav_date": str(navs.iloc[0]["date"])}))
@@ -259,7 +353,7 @@ def cmd_mark(a) -> None:
             continue
         run_id = str(uuid.uuid4())
         trades, navs = run_window(p, last, eod, "resume")
-        _, rates = load_cost_tax()
+        _, rates, _el = load_cost_tax()
         trades = _enrich_new_trades(pid, "live", trades, rates)
         write_results(pid, "live", run_id, trades, navs)
         done += 1
@@ -298,7 +392,7 @@ def rebuild_backtest(pid: str, years: float = 5) -> dict:
                 {"p": pid},
             )
     trades, navs = run_window(p, start, eod, "backtest")
-    _, rates = load_cost_tax()
+    _, rates, _el = load_cost_tax()
     enriched = enrich_trades(trades, rates) if not trades.empty else trades
     persist = enriched.drop(columns=["realized_st", "realized_lt"], errors="ignore")
     write_results(pid, "backtest", run_id, persist, navs)
@@ -343,7 +437,7 @@ def book_trade(pid: str, side: str, ckey: str) -> dict:
     if last.empty:
         raise TradeError("portfolio not initialized")
     nav, cash = Decimal(last.iloc[0]["nav"]), Decimal(last.iloc[0]["cash"])
-    costs, rates = load_cost_tax()
+    costs, rates, exit_load = load_cost_tax()
     buy_rate, sell_rate = costs[ac]
     if side == "buy":
         if key in positions:
@@ -358,6 +452,10 @@ def book_trade(pid: str, side: str, ckey: str) -> dict:
         qty = positions[key]
     value = (qty * price).quantize(Decimal("0.01"))
     cost = (value * (buy_rate if side == "buy" else sell_rate)).quantize(Decimal("0.01"))
+    if side == "sell" and ac == "fund":  # MF exit load if redeemed within the window
+        entry = open_entry_dates(pid).get(key)
+        if entry is not None and (trade_date - entry).days < exit_load[1]:
+            cost += (value * exit_load[0]).quantize(Decimal("0.01"))
     trades = pd.DataFrame(
         [
             {
