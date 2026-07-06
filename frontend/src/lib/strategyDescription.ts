@@ -63,6 +63,40 @@ function describeRankPolicy(
   }
 }
 
+const CAP_LABEL: Record<string, string> = {
+  'India Fund Large-Cap': 'large-cap',
+  'India Fund Mid-Cap': 'mid-cap',
+  'India Fund Small-Cap': 'small-cap',
+}
+const capName = (cats: unknown): string => {
+  const arr = Array.isArray(cats) ? cats.map((c) => CAP_LABEL[String(c)] ?? String(c)) : []
+  return arr.length ? arr.join(' & ') + ' equity mutual funds' : 'equity mutual funds'
+}
+
+function describeFundCrossover(
+  p: Record<string, unknown>,
+  maxPositionPct: number,
+): StrategyExplainer {
+  const fast = Number(p.fast)
+  const slow = Number(p.slow)
+  const slots = Math.floor(1 / maxPositionPct)
+  const sleeves = p.sleeves as { weight: number; categories: string[] }[] | undefined
+  const universe = sleeves
+    ? `A fixed-allocation blend across three capital sleeves: ${sleeves
+        .map((s) => `${Math.round(s.weight * 100)}% ${capName(s.categories)}`)
+        .join(', ')} — each sleeve runs the same crossover on its own budget and manages its own cash.`
+    : `Trades ${capName(p.fund_categories)}${p.fund_categories ? '' : ' — the whole equity-fund set, no cap restriction'}, using each fund's NAV.`
+  return {
+    headline: `A ${fast}/${slow} EMA crossover on mutual-fund NAVs — a long-horizon golden-cross rule`,
+    entry: `Buys a fund on the day its ${ordinal(fast)} NAV moving average crosses ABOVE its ${ordinal(slow)} — a golden cross, the classic long-term uptrend signal (the slow ${slow}-day average suits the smoother, slower-moving nature of fund NAVs).`,
+    exit: `Sells on the day the ${ordinal(fast)} average crosses back BELOW the ${ordinal(slow)} — the death cross.`,
+    universe,
+    selection: 'When more funds qualify than there are slots, they fill in signal order (deterministic).',
+    sizing: `Starts fully in cash, buys only on a fresh golden cross, ${Math.round(maxPositionPct * 100)}% per fund (~${slots} slots). NAV is net of the MF exit load (charged when a fund is redeemed within a year), and post-tax returns apply equity-MF capital-gains rules (20% short-term, 12.5% long-term after a year).`,
+    guards: [],
+  }
+}
+
 export function describeStrategy(
   kind: 'strategy' | 'basket',
   params: Record<string, unknown> | null,
@@ -98,6 +132,8 @@ export function describeStrategy(
   }
 
   if (params && strategyKey === 'rank_policy') return describeRankPolicy(params, assetClasses, maxPositionPct)
+  if (params && strategyKey === 'ema_cross' && assetClasses.includes('fund'))
+    return describeFundCrossover(params, maxPositionPct)
   if (!params || (strategyKey !== 'ema_cross' && strategyKey !== 'atlas_policy')) return null
 
   const fast = Number(params.fast)

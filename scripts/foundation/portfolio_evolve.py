@@ -193,7 +193,7 @@ def evolve_one(pid: str, seed: bool, knobs: dict) -> dict:
     train_start = train_end - dt.timedelta(days=int(knobs["train_years"] * 365))
 
     universe = pr.load_universe(list(p["asset_classes"]))
-    costs, _rates = pr.load_cost_tax()
+    costs, _rates, _el = pr.load_cost_tax()
     cfg = PortfolioConfig(
         portfolio_id=pid,
         kind="strategy",

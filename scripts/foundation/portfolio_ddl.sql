@@ -202,3 +202,17 @@ CREATE TABLE IF NOT EXISTS atlas_foundation.desk_lessons (
     active       boolean NOT NULL DEFAULT true
 );
 CREATE INDEX IF NOT EXISTS ix_desk_lessons ON atlas_foundation.desk_lessons (portfolio_id, active);
+
+-- ── MF exit load (2026-07, fund cap portfolios) ────────────────────────────
+-- Equity-MF redemption load: charged on the redeemed value when a fund lot is
+-- sold within the load window. Deducted from proceeds (reduces cash) AND folded
+-- into the trade cost so the FIFO capital-gains basis nets it too — a transfer
+-- expense. Distinct from STT (portfolio_cost_fund_sell_pct), which always applies.
+INSERT INTO atlas_foundation.atlas_thresholds
+    (threshold_key, threshold_value, category, description, units, min_allowed, max_allowed, default_value, is_active)
+SELECT k, v, 'portfolio', d, u, lo, hi, v, TRUE
+FROM (VALUES
+    ('portfolio_exit_load_fund_pct',  0.01, 'Equity-MF exit load on redemptions within the load window', 'fraction', 0::numeric, 0.05::numeric),
+    ('portfolio_exit_load_fund_days', 365,  'Holding days below which the fund exit load applies',       'days',     0, 1100)
+) AS s(k, v, d, u, lo, hi)
+WHERE NOT EXISTS (SELECT 1 FROM atlas_foundation.atlas_thresholds t WHERE t.threshold_key = s.k);
