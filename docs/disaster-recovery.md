@@ -78,6 +78,14 @@ sudo cp <backup>/atlas.jslwealth.in /etc/nginx/sites-available/ && sudo ln -sf .
 # 5. DNS: point atlas.jslwealth.in A-record at the new box IP.
 ```
 
+> **nginx `/api/` routing (self-contained board).** The board has no separate backend —
+> every `/api/*` route is a Next.js route on :3004. The catch-all `location /api/` MUST
+> `proxy_pass http://127.0.0.1:3004`, NOT `return 404` or proxy to the retired FastAPI
+> (:8010). A `return 404` there silently kills every non-whitelisted API route (portfolio
+> create, add-to-basket, instrument search, thresholds) — pages still render (SSR) so it
+> looks fine, but all client-side writes 404. Only `/api/kite/` and `/api/v1/*` fan out to
+> other ports; everything else is :3004.
+
 ## 3. Canonical crontab (as of 2026-07)
 
 ```
