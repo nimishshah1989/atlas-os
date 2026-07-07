@@ -11,6 +11,8 @@ Checks, per portfolio and run_type:
   C. every trade is priced at the stored adjusted close/NAV for its date
   D. cash never negative on any NAV row
   E. every buy's value respects the position cap vs that day's NAV
+  F. cost/cash identity holds and the FIFO tax ledger reconciles
+  G. hand-built weighted baskets sized each holding to its declared weight of capital
 """
 
 from __future__ import annotations
@@ -212,6 +214,40 @@ def check_f_cost_cash_identity_and_ledger() -> None:
         )
 
 
+def check_g_weighted_baskets() -> None:
+    # A hand-built weighted basket must size each holding to its declared weight of
+    # capital at inception (real close). value <= weight*capital, and within one share.
+    ports = _db.read_df(
+        f"""select portfolio_id::text pid, name, initial_capital, params->'weights' weights
+            from {M}.portfolio_master
+            where status = 'active' and params ? 'weights'"""
+    )
+    for p in ports.to_dict("records"):
+        weights = p["weights"] if isinstance(p["weights"], dict) else {}
+        cap = Decimal(str(p["initial_capital"]))
+        tr = _db.read_df(
+            f"""select instrument_key, value, price from {M}.portfolio_trades
+                where portfolio_id = :p and run_type = 'live' and reason = 'inception'""",
+            {"p": p["pid"]},
+        )
+        booked = {r["instrument_key"]: r for r in tr.to_dict("records")}
+        for pick, frac in weights.items():
+            key = pick.split(":", 1)[1]
+            target = Decimal(str(frac)) * cap
+            row = booked.get(key)
+            if row is None:
+                fail(f"G: {p['name']} weighted holding {key} was never booked")
+                continue
+            value, price = Decimal(str(row["value"])), Decimal(str(row["price"]))
+            if value > target * Decimal("1.0002") or target - value > price + target * Decimal(
+                "0.005"
+            ):
+                fail(
+                    f"G: {p['name']} {key} booked {value} != target weight {target} "
+                    f"(one share = {price})"
+                )
+
+
 def main() -> None:
     n = _db.scalar(f"select count(*) from {M}.portfolio_master where status = 'active'")
     print(f"[validate-portfolios] active portfolios: {n}", flush=True)
@@ -225,6 +261,7 @@ def main() -> None:
         check_d_cash_never_negative,
         check_e_position_cap,
         check_f_cost_cash_identity_and_ledger,
+        check_g_weighted_baskets,
     ):
         print(f"[validate-portfolios] {chk.__name__}", flush=True)
         chk()

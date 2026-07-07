@@ -103,6 +103,16 @@ def _basket_state(p: dict, universe: pd.DataFrame) -> pd.Series:
     return pd.Series(True, index=picks)
 
 
+def _basket_weights(p: dict) -> dict[str, Decimal] | None:
+    """params.weights = {'stock:<uuid>': 0.20, 'fund:<mstar>': 0.15, ...} (fractions
+    of capital) → {instrument_key: Decimal}. None ⇒ equal-weight (legacy baskets)."""
+    params = p["params"] if isinstance(p["params"], dict) else json.loads(p["params"])
+    w = params.get("weights")
+    if not w:
+        return None
+    return {k.split(":", 1)[1]: Decimal(str(v)) for k, v in w.items()}
+
+
 def run_window(p: dict, start: dt.date, end: dt.date, mode: str):
     """Load panels and replay. Modes: backtest / init / resume (see _run_slice).
 
@@ -198,7 +208,7 @@ def _run_slice(
     # rank/rotation strategies need pre-window history for their signals
     sig_lookback = min(lookback, start - dt.timedelta(days=200))
     composite = load_composite(universe, sig_lookback, end)
-    events, inception = None, None
+    events, inception, inception_weights = None, None, None
     if strat is not None:
         if mode != "init":
             cols = strat.required_columns()
@@ -228,6 +238,7 @@ def _run_slice(
                 events = events[events["date"] >= start]
     elif mode != "resume":
         inception = _basket_state(p, universe)
+        inception_weights = _basket_weights(p)
 
     costs, _rates, exit_load = load_cost_tax()
     cfg = _cfg(p)
@@ -266,6 +277,7 @@ def _run_slice(
         costs=costs,
         exit_load=exit_load,
         start_entry_dates=start_entry_dates,
+        inception_weights=inception_weights,
     )
 
 

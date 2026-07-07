@@ -3,6 +3,7 @@
 // expert agent) · FM baskets. Every figure is stored engine output.
 import Link from 'next/link'
 import { Leaderboard } from './Leaderboard'
+import { PortfolioBuilder } from './PortfolioBuilder'
 import { getPortfolios, getCompareCurves, type PortfolioSummary, type PortfolioCategory } from '@/lib/queries/portfolios'
 import { AtlasLightweightChart, type ChartSeries } from '@/components/charts/AtlasLightweightChart'
 import { Panel } from '@/components/ui/Panel'
@@ -105,14 +106,19 @@ export async function PortfoliosPageV4() {
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-7 px-6 py-7">
-      <div>
-        <p className="font-num text-[9px] uppercase tracking-[0.14em] text-txt-3">Paper-traded · marked at every EOD · costs in NAV</p>
-        <h1 className="font-display text-[28px] font-medium tracking-tight text-txt-1">Portfolios</h1>
-        <p className="mt-2 max-w-[860px] font-sans text-[13.5px] text-txt-2">
-          Model portfolios run by the Atlas engine — rule-based strategies, system-generated books,
-          and FM baskets — paper-traded from inception at real EOD closes with execution costs in
-          the NAV and a FIFO tax ledger. Click a card for the full glass-box view.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="font-num text-[9px] uppercase tracking-[0.14em] text-txt-3">Paper-traded · marked at every EOD · costs in NAV</p>
+          <h1 className="font-display text-[28px] font-medium tracking-tight text-txt-1">Portfolios</h1>
+          <p className="mt-2 max-w-[860px] font-sans text-[13.5px] text-txt-2">
+            Model portfolios run by the Atlas engine — rule-based strategies, system-generated books,
+            and FM baskets — paper-traded from inception at real EOD closes with execution costs in
+            the NAV and a FIFO tax ledger. Click a card for the full glass-box view.
+          </p>
+        </div>
+        <div className="shrink-0 pt-1">
+          <PortfolioBuilder />
+        </div>
       </div>
 
       {portfolios.length === 0 && (

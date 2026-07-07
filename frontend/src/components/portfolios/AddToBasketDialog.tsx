@@ -65,7 +65,10 @@ export function AddToBasketDialog({ picks, onClose }: { picks: BasketPick[]; onC
   const canSubmit = !busy && picks.length > 0 && (target !== 'new' || name.trim().length > 1)
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center">
+    // stopPropagation: the dialog renders inside a table row whose onClick navigates —
+    // without this, any click inside the dialog bubbles up (React tree) and opens the
+    // instrument page, dismissing the dialog before you can do anything.
+    <div className="fixed inset-0 z-[70] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative w-[420px] max-w-[92vw] rounded-panel border border-edge-rule bg-surface-panel p-5 shadow-panel">
         <div className="mb-3 flex items-start justify-between">
