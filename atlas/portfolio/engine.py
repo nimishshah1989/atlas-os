@@ -52,6 +52,7 @@ def replay(
     costs: dict[str, tuple[Decimal, Decimal]] | None = None,
     exit_load: tuple[Decimal, int] | None = None,
     start_entry_dates: dict | None = None,
+    inception_weights: dict[str, Decimal] | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Run the day-loop over `loop_dates` (default: all of `prices.index`).
     Pass the FULL price panel even when looping few dates — valuation carry-forward
@@ -179,6 +180,18 @@ def replay(
             if fill is not None:
                 seen_c.add(k)
                 cands.append((k, sig, fill))
+        if inception_weights is not None and reason == "inception":
+            # weighted FM basket: each name sized to its own TARGET WEIGHT of capital
+            # (the FM chose the weight explicitly), bypassing the equal-weight slot cap.
+            # Independent per-name allocation ⇒ order-invariant, no shared-cash division.
+            for k, _sig, (price, trade_date) in cands:
+                alloc = inception_weights.get(k, Decimal(0)) * Decimal(cfg.initial_capital)
+                qty = _qty_for(alloc / (1 + _rate(k, "buy")), price, asset_class.get(k, "stock"))
+                if qty > 0:
+                    _book(trade_date, k, "buy", qty, price, reason)
+                    positions[k] = qty
+                    entry_date[k] = trade_date
+            return
         open_slots = slots - len(positions)
         if open_slots <= 0 or not cands:
             return

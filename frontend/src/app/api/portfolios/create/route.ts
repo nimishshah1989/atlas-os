@@ -40,13 +40,25 @@ const lastJson = (stdout: string): Record<string, unknown> => {
 const err = (status: number, message: string) =>
   NextResponse.json({ error_code: 'basket_failed', message }, { status })
 
+type Holding = { key: string; weightPct: number }
+
 export async function POST(req: Request) {
-  let body: { name?: string; basketId?: string; picks?: string[] }
+  let body: {
+    name?: string
+    basketId?: string
+    picks?: string[]
+    holdings?: Holding[]
+    capital?: number
+  }
   try {
     body = await req.json()
   } catch {
     return err(400, 'invalid JSON body')
   }
+
+  // weighted builder path: { name, capital, holdings:[{key, weightPct}] }
+  if (Array.isArray(body.holdings)) return createWeighted(body)
+
   const picks = Array.isArray(body.picks) ? body.picks.filter((p) => typeof p === 'string') : []
   if (!picks.length || !picks.every((p) => /^(stock|etf|fund):.+$/.test(p)))
     return err(400, 'picks must be ["stock:SYMBOL" | "etf:SYMBOL" | "fund:MSTAR_ID", ...]')
@@ -93,4 +105,58 @@ export async function POST(req: Request) {
   return NextResponse.json({
     data: { portfolioId, init: lastJson(inited.stdout), backtest: 'queued' },
   })
+}
+
+// A hand-built weighted basket: each holding sized to its own % of capital, priced
+// at the last EOD close by the engine. Weights may sum to <=100% (remainder = cash).
+async function createWeighted(body: {
+  name?: string
+  capital?: number
+  holdings?: Holding[]
+}) {
+  const name = (body.name ?? '').trim()
+  if (name.length < 2) return err(400, 'name is required')
+  const capital = Number(body.capital)
+  if (!Number.isFinite(capital) || capital < 100000 || capital > 1e9)
+    return err(400, 'capital must be between 1,00,000 and 1,00,00,00,000')
+  const holdings = (body.holdings ?? []).filter(
+    (h) => typeof h?.key === 'string' && Number.isFinite(h?.weightPct),
+  )
+  if (!holdings.length) return err(400, 'add at least one instrument')
+  if (!holdings.every((h) => /^(stock|etf|fund):.+$/.test(h.key)))
+    return err(400, 'each holding needs a valid instrument')
+  if (holdings.some((h) => h.weightPct <= 0)) return err(400, 'every weight must be > 0%')
+  const total = holdings.reduce((s, h) => s + h.weightPct, 0)
+  if (total > 100.0001) return err(400, `weights sum to ${total.toFixed(1)}% — must be ≤ 100%`)
+
+  const keys = holdings.map((h) => h.key)
+  const { resolved, unknown } = await resolvePicks(keys)
+  if (unknown.length) return err(400, `unknown instruments: ${unknown.join(', ')}`)
+  // resolvePicks preserves order and (since unknown is empty) is 1:1 with input
+  const weights: Record<string, number> = {}
+  holdings.forEach((h, i) => (weights[resolved[i]] = h.weightPct / 100))
+  const classes = [...new Set(resolved.map((p) => p.split(':', 1)[0]))]
+  // the basket's position cap = its largest declared weight, so the nightly cap gate
+  // stays a real guard (a weighted book has no uniform cap — sizing is explicit)
+  const maxWeight = Math.min(1, Math.max(...holdings.map((h) => h.weightPct)) / 100)
+
+  const created = await run([
+    'create', '--name', name, '--kind', 'basket',
+    '--params', JSON.stringify({ picks: resolved, weights }),
+    '--asset-classes', ...classes,
+    '--capital', String(Math.round(capital)),
+    '--cap-pct', String(maxWeight),
+  ])
+  if (created.code !== 0) return err(500, created.stderr.trim().split('\n').pop() ?? 'create failed')
+  const portfolioId = String(lastJson(created.stdout).portfolio_id ?? '')
+  if (!portfolioId) return err(500, 'engine returned no portfolio_id')
+
+  const inited = await run(['init', '--portfolio-id', portfolioId])
+  if (inited.code !== 0) return err(500, inited.stderr.trim().split('\n').pop() ?? 'init failed')
+
+  spawn('python3', [ENGINE, 'backtest', '--portfolio-id', portfolioId], {
+    cwd: REPO_ROOT, env: process.env, detached: true, stdio: 'ignore',
+  }).unref()
+
+  return NextResponse.json({ data: { portfolioId, init: lastJson(inited.stdout), backtest: 'queued' } })
 }
