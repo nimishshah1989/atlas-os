@@ -17,7 +17,9 @@ export function AddToBasketDialog({ picks, onClose }: { picks: BasketPick[]; onC
   const [msg, setMsg] = useState<{ ok: boolean; text: string; href?: string } | null>(null)
 
   useEffect(() => {
-    fetch('/api/portfolios/baskets')
+    // no-store: always show the freshest basket list, so an FM portfolio created
+    // moments ago appears here without needing a hard reload.
+    fetch('/api/portfolios/baskets', { cache: 'no-store' })
       .then((r) => r.json())
       .then((d) => setBaskets(d.baskets ?? []))
       .catch(() => setBaskets([]))
