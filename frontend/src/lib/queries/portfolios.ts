@@ -182,6 +182,7 @@ export type PortfolioDetail = {
   holdings: Holding[]
   liveNav: NavPointRow[]
   backtestNav: NavPointRow[]
+  backtestRawNav: NavPointRow[] // risk-managed-OFF comparison (rank/desk books only)
   benchmark: NavPointRow[] // NIFTY 500 close over the backtest window
   trades: TradeRow[]
   totals: { live: CostTaxTotals; backtest: CostTaxTotals }
@@ -314,7 +315,11 @@ export async function getPortfolioDetail(id: string): Promise<PortfolioDetail | 
     SELECT date::text AS d, nav FROM atlas_foundation.portfolio_nav_daily
     WHERE portfolio_id = ${id} AND run_type = ${runType} ORDER BY date
   `
-  const [liveNav, backtestNav] = await Promise.all([nav('live'), nav('backtest')])
+  const [liveNav, backtestNav, backtestRawNav] = await Promise.all([
+    nav('live'),
+    nav('backtest'),
+    nav('backtest_raw'),
+  ])
   const btStart = backtestNav[0]?.d ?? summary.inceptionDate
   const benchmark = await sql<Array<Record<string, unknown>>>`
     SELECT date::text AS d, close AS nav FROM atlas_foundation.index_prices
@@ -410,6 +415,7 @@ export async function getPortfolioDetail(id: string): Promise<PortfolioDetail | 
     holdings,
     liveNav: toNav(liveNav),
     backtestNav: toNav(backtestNav),
+    backtestRawNav: toNav(backtestRawNav),
     benchmark: toNav(benchmark),
     trades: trades.map((r) => ({
       date: String(r.date),
