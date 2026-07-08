@@ -189,7 +189,8 @@ function HowItWorks({ explain, isSystem }: { explain: NonNullable<ReturnType<typ
 export async function PortfolioDetailV4({ id }: { id: string }) {
   const detail = await getPortfolioDetail(id).catch(() => null)
   if (!detail) notFound()
-  const { summary: s, holdings, liveNav, backtestNav, benchmark, trades, totals, atlas, policyJournal, deskJournal } = detail
+  const { summary: s, holdings, liveNav, backtestNav, backtestRawNav, benchmark, trades, totals, atlas, policyJournal, deskJournal } = detail
+  const hasRawCompare = backtestRawNav.length > 5  // rank/desk books carry a risk-managed-OFF curve
   const isSystem = s.category === 'system'
   const isDesk = s.params?.desk === true
   const explain = describeStrategy(s.kind, s.params, s.assetClasses, s.maxPositionPct, s.strategyKey)
@@ -199,7 +200,10 @@ export async function PortfolioDetailV4({ id }: { id: string }) {
   const stats = { ...btStats, maxDrawdown: btMaxDd ?? btStats.maxDrawdown }
 
   const btSeries: ChartSeries[] = [
-    { name: s.name, data: rebase(backtestNav), color: 'teal', lineWidth: 2 },
+    { name: hasRawCompare ? 'With 10% stop' : s.name, data: rebase(backtestNav), color: 'teal', lineWidth: 2 },
+    ...(hasRawCompare
+      ? [{ name: 'No stop', data: rebase(backtestRawNav), color: 'ink' as const, lineWidth: 1 as const }]
+      : []),
     { name: 'NIFTY 500', data: rebase(benchmark), color: 'warn', lineWidth: 1 },
   ]
   const liveSeries: ChartSeries[] = [
@@ -265,6 +269,20 @@ export async function PortfolioDetailV4({ id }: { id: string }) {
                   {' '}vs {pct(totalPct(backtestNav))} pre-tax.
                 </p>
               )}
+              {hasRawCompare && (
+                <p className="mt-2 rounded-tile border border-edge-hair bg-surface-raised px-3 py-2 font-sans text-[12px] leading-[1.55] text-txt-2">
+                  Two curves: <strong className="text-txt-1">With 10% stop</strong> (the live rule —
+                  exit any position that closes 10% below its entry) vs{' '}
+                  <strong className="text-txt-1">No stop</strong>. On this book the stop is a net win
+                  — it cuts drawdown and lifts return by cutting real losers early.
+                </p>
+              )}
+              <p className="mt-2 rounded-tile border border-sig-warn/30 bg-sig-warn/[0.06] px-3 py-2 font-sans text-[12px] leading-[1.55] text-txt-2">
+                <strong className="text-sig-warn">Survivor-only backtest.</strong> The universe is
+                today’s Atlas-scored names applied backwards, so stocks that delisted or collapsed
+                never appear. Real drawdowns would be worse — read these returns as an optimistic
+                upper bound, not a promise.
+              </p>
             </div>
           </div>
         </Panel>
