@@ -53,6 +53,9 @@ def replay(
     exit_load: tuple[Decimal, int] | None = None,
     start_entry_dates: dict | None = None,
     inception_weights: dict[str, Decimal] | None = None,
+    stop_ema: pd.DataFrame | None = None,
+    stop_pct: Decimal | None = None,
+    stop_trail: Decimal | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Run the day-loop over `loop_dates` (default: all of `prices.index`).
     Pass the FULL price panel even when looping few dates — valuation carry-forward
@@ -102,6 +105,8 @@ def replay(
 
     positions: dict[str, Decimal] = dict(start_positions or {})
     entry_date: dict = dict(start_entry_dates or {})  # k -> buy date, for exit load
+    entry_price: dict[str, Decimal] = {}  # k -> fill price of the open lot, for the % stop
+    peak_price: dict[str, Decimal] = {}  # k -> highest close since entry, for the trailing stop
     cash = start_cash if start_cash is not None else Decimal(cfg.initial_capital)
     slots = int(Decimal(1) / Decimal(cfg.max_position_pct))
     trades: list[dict] = []
@@ -113,6 +118,13 @@ def replay(
         held at its last close; add a delisting sweep if that ever bites."""
         v = prices.at[d, k] if k in prices.columns else None
         return None if v is None or pd.isna(v) else Decimal(v)
+
+    def _ema(d, k):
+        """The fast-EMA stop level at d (crossover books), or None."""
+        if stop_ema is None or k not in stop_ema.columns or d not in stop_ema.index:
+            return None
+        v = stop_ema.at[d, k]
+        return None if v is None or pd.isna(v) else Decimal(str(v))
 
     def _fill(d, k, lookback: bool):
         """(price, trade_date) for a fill at d. Inception fills may look back to the
@@ -154,6 +166,9 @@ def replay(
         value = (qty * price).quantize(_MONEY)
         cost = (value * _rate(k, side)).quantize(_MONEY) + extra_cost
         cash = cash - value - cost if side == "buy" else cash + value - cost
+        if side == "buy":
+            entry_price[k] = price  # open-lot fill price, for the % stop
+            peak_price[k] = price  # peak since entry starts at the fill, for the trailing stop
         trades.append(
             {
                 "trade_date": trade_date,
@@ -224,6 +239,39 @@ def replay(
             picks: list[tuple[str, object]] = [(str(k), d) for k, v in inception_state.items() if v]
             _enter(d, picks, "inception")
         else:
+            # RISK STOP (no lookahead): a stop condition seen at the PRIOR session's
+            # close executes at THIS session's close — same timing model as signals.
+            #   crossover books: prior close < fast EMA (stop_ema)
+            #   rank/desk books: prior close < entry price × (1 − stop_pct)
+            # Re-entry is naturally gated by transition-based entry events (a stopped
+            # name won't re-buy until it exits its state and re-enters).
+            if i > 0 and (stop_ema is not None or stop_pct is not None or stop_trail is not None):
+                prev = dates[i - 1]
+                for k in list(positions):
+                    pv = _px(prev, k)
+                    if pv is None:
+                        continue
+                    if stop_pct is not None:
+                        ep = entry_price.get(k)
+                        hit = ep is not None and pv < ep * (Decimal(1) - stop_pct)
+                    elif stop_trail is not None:
+                        pk = peak_price.get(k)
+                        hit = pk is not None and pv < pk * (Decimal(1) - stop_trail)
+                    else:
+                        ev = _ema(prev, k)
+                        hit = ev is not None and pv < ev
+                    if not hit:
+                        continue
+                    price = _px(d, k)
+                    if not price:  # no print today — re-check next session
+                        continue
+                    qty = positions.pop(k)
+                    el = _exit_load(k, d, (qty * price).quantize(_MONEY))
+                    _book(d, k, "sell", qty, price, "stop", extra_cost=el)
+                    entry_date.pop(k, None)
+                    entry_price.pop(k, None)
+                    peak_price.pop(k, None)
+                    pending_exits.discard(k)
             # today's exit signals + any carried forward from a no-print day
             for k in list(pending_exits) + exits_at.get(d, []):
                 if k not in positions:
@@ -237,8 +285,16 @@ def replay(
                 el = _exit_load(k, d, (qty * price).quantize(_MONEY))
                 _book(d, k, "sell", qty, price, "signal", extra_cost=el)
                 entry_date.pop(k, None)
+                entry_price.pop(k, None)
+                peak_price.pop(k, None)
                 pending_exits.discard(k)
             _enter(d, entries_at.get(d, []), "signal")
+
+        if stop_trail is not None:  # ratchet each held position's peak on today's close
+            for k in positions:
+                c = _px(d, k)
+                if c is not None and (k not in peak_price or c > peak_price[k]):
+                    peak_price[k] = c
 
         invested = _mark(d).quantize(_MONEY)
         navs.append(
