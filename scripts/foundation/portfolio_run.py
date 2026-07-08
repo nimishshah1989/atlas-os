@@ -121,20 +121,17 @@ def _stop_config(p: dict):
     Chosen empirically (8y backtests, see the deep-dive):
       • Rank/desk books hold names that genuinely crater, so a 10%-from-entry floor
         both HALVES drawdown and lifts return (Quality Momentum: DD -52%→-21%,
-        return +325%→+546%).
-      • For crossover books NO simple stop cut drawdown: a fast-EMA trail whipsaws
-        them 4-5x (13/34: +423%→+45%), and a 20%-off-peak trail helped only the
-        slowest book (50/200 -34%→-24%) while HURTING 21/50 (-25%→-29%) and 13/34
-        (-39%→-43%). The 10%-from-entry stop is near-free on the crossover backtest
-        (barely fires on momentum winners) but is kept as a live catastrophe floor:
-        the backtest is survivor-only and cannot see a name going to zero, so capping
-        each live position at ~-10% is the tail protection the backtest hides.
-        Reducing crossover drawdown proper needs regime filters (deep-dive)."""
+        return +325%→+546%; Sector Leaders -38%→-24%; Conviction -34%→-31%).
+      • Crossover books get NO stop: every stop tested was neutral-to-harmful on them.
+        A fast-EMA trail whipsaws them 4-5x (13/34 +423%→+45%); a peak-trail helped
+        only 50/200 and hurt 21/50 & 13/34; the 10%-from-entry stop HALVED 21/50's
+        return (+368%→+200%, DD -26%→-30%) for no gain elsewhere. Momentum crossovers
+        already self-limit via the death-cross exit, so an entry stop mostly just cuts
+        winners that dipped. Their real tail/DD control is a regime filter (deep-dive)."""
     params = p["params"] if isinstance(p["params"], dict) else json.loads(p["params"])
     key = p.get("strategy_key")
     acs = list(p["asset_classes"])
-    stock_strat = key in ("ema_cross", "atlas_policy", "rank_policy") and "fund" not in acs
-    if stock_strat or params.get("desk"):
+    if (key == "rank_policy" and "fund" not in acs) or params.get("desk"):
         return ("pct", Decimal("0.10"))
     return None
 
@@ -480,14 +477,17 @@ def rebuild_backtest(pid: str, years: float = 5) -> dict:
     start = eod - dt.timedelta(days=int(years * 365))
     run_id = str(uuid.uuid4())
     stop = _stop_config(p)
-    run_types = ["backtest", "backtest_raw"] if stop is not None else ["backtest"]
     with _db.engine().begin() as conn:
         from sqlalchemy import text
 
+        # always clear BOTH so a book that drops its stop loses its stale backtest_raw
         for tbl in ("portfolio_trades", "portfolio_nav_daily"):
             conn.execute(
-                text(f"delete from {M}.{tbl} where portfolio_id=:p and run_type = any(:rt)"),
-                {"p": pid, "rt": run_types},
+                text(
+                    f"delete from {M}.{tbl} where portfolio_id=:p "
+                    "and run_type in ('backtest','backtest_raw')"
+                ),
+                {"p": pid},
             )
     _, rates, _el = load_cost_tax()
     # 'backtest' = risk-managed (matches the live track); 'backtest_raw' = no-stops comparison.
