@@ -113,7 +113,33 @@ def _basket_weights(p: dict) -> dict[str, Decimal] | None:
     return {k.split(":", 1)[1]: Decimal(str(v)) for k, v in w.items()}
 
 
-def run_window(p: dict, start: dt.date, end: dt.date, mode: str):
+def _stop_config(p: dict):
+    """The risk-management stop for this book (applied to the RM backtest + live):
+    a uniform 10%-below-entry hard stop on all stock books. None for MF crossover and
+    plain FM baskets.
+
+    Chosen empirically (8y backtests, see the deep-dive):
+      • Rank/desk books hold names that genuinely crater, so a 10%-from-entry floor
+        both HALVES drawdown and lifts return (Quality Momentum: DD -52%→-21%,
+        return +325%→+546%).
+      • For crossover books NO simple stop cut drawdown: a fast-EMA trail whipsaws
+        them 4-5x (13/34: +423%→+45%), and a 20%-off-peak trail helped only the
+        slowest book (50/200 -34%→-24%) while HURTING 21/50 (-25%→-29%) and 13/34
+        (-39%→-43%). The 10%-from-entry stop is near-free on the crossover backtest
+        (barely fires on momentum winners) but is kept as a live catastrophe floor:
+        the backtest is survivor-only and cannot see a name going to zero, so capping
+        each live position at ~-10% is the tail protection the backtest hides.
+        Reducing crossover drawdown proper needs regime filters (deep-dive)."""
+    params = p["params"] if isinstance(p["params"], dict) else json.loads(p["params"])
+    key = p.get("strategy_key")
+    acs = list(p["asset_classes"])
+    stock_strat = key in ("ema_cross", "atlas_policy", "rank_policy") and "fund" not in acs
+    if stock_strat or params.get("desk"):
+        return ("pct", Decimal("0.10"))
+    return None
+
+
+def run_window(p: dict, start: dt.date, end: dt.date, mode: str, risk_managed: bool = False, stop_override=None):
     """Load panels and replay. Modes: backtest / init / resume (see _run_slice).
 
     Fund cap portfolios: params.fund_categories restricts the universe. A capital-
@@ -134,6 +160,8 @@ def run_window(p: dict, start: dt.date, end: dt.date, mode: str):
                 mode,
                 fund_categories=s["categories"],
                 capital=(cap * Decimal(str(s["weight"]))).quantize(Decimal("0.01")),
+                risk_managed=risk_managed,
+                stop_override=stop_override,
             )
             for i, s in enumerate(sleeves)
         ]
@@ -144,7 +172,9 @@ def run_window(p: dict, start: dt.date, end: dt.date, mode: str):
         )
         navs = _merge_navs([n for _, n in results if not n.empty])
         return trades, navs
-    return _run_slice(p, start, end, mode, fund_categories=params.get("fund_categories"))
+    return _run_slice(
+        p, start, end, mode, fund_categories=params.get("fund_categories"), risk_managed=risk_managed, stop_override=stop_override
+    )
 
 
 def _merge_navs(nav_frames: list[pd.DataFrame]) -> pd.DataFrame:
@@ -171,6 +201,8 @@ def _run_slice(
     mode: str,
     fund_categories: list | None = None,
     capital: Decimal | None = None,
+    risk_managed: bool = False,
+    stop_override=None,
 ):
     """One independent replay over a (optionally cap-filtered) universe.
     `capital` is set only for blend sleeves; sleeve resume state is scoped by the
@@ -263,6 +295,26 @@ def _run_slice(
             start_entry_dates = {k: d for k, d in all_ent.items() if k in keys}
             start_cash = _slice_cash(pid, keys, cfg.initial_capital)
 
+    # Risk-management stops (RM variant + live). Kinds: ('pct', x)=x-below-entry,
+    # ('trail', x)=x below the peak-since-entry, ('ema', period)=below the fast EMA.
+    # stop_override lets a sweep inject a specific stop without touching _stop_config.
+    stop_ema = stop_pct = stop_trail = None
+    if risk_managed:
+        sc = stop_override if stop_override is not None else _stop_config(p)
+        if sc and sc[0] == "ema":
+            te = load_tech(universe, (f"ema_{sc[1]}",), lookback, end)
+            stop_ema = (
+                te.pivot_table(index="date", columns="instrument_key", values=f"ema_{sc[1]}", aggfunc="last")
+                .reindex(prices.index)
+                .astype(float)
+                if not te.empty
+                else None
+            )
+        elif sc and sc[0] == "pct":
+            stop_pct = sc[1]
+        elif sc and sc[0] == "trail":
+            stop_trail = sc[1]
+
     return replay(
         cfg,
         prices=prices,
@@ -278,6 +330,9 @@ def _run_slice(
         exit_load=exit_load,
         start_entry_dates=start_entry_dates,
         inception_weights=inception_weights,
+        stop_ema=stop_ema,
+        stop_pct=stop_pct,
+        stop_trail=stop_trail,
     )
 
 
@@ -383,7 +438,7 @@ def cmd_mark(a) -> None:
             skipped += 1
             continue
         run_id = str(uuid.uuid4())
-        trades, navs = run_window(p, last, eod, "resume")
+        trades, navs = run_window(p, last, eod, "resume", risk_managed=True)
         _, rates, _el = load_cost_tax()
         trades = _enrich_new_trades(pid, "live", trades, rates)
         write_results(pid, "live", run_id, trades, navs)
@@ -414,20 +469,31 @@ def rebuild_backtest(pid: str, years: float = 5) -> dict:
     eod = _db.eod_cutoff()
     start = eod - dt.timedelta(days=int(years * 365))
     run_id = str(uuid.uuid4())
+    stop = _stop_config(p)
+    run_types = ["backtest", "backtest_raw"] if stop is not None else ["backtest"]
     with _db.engine().begin() as conn:
         from sqlalchemy import text
 
         for tbl in ("portfolio_trades", "portfolio_nav_daily"):
             conn.execute(
-                text(f"delete from {M}.{tbl} where portfolio_id=:p and run_type='backtest'"),
-                {"p": pid},
+                text(f"delete from {M}.{tbl} where portfolio_id=:p and run_type = any(:rt)"),
+                {"p": pid, "rt": run_types},
             )
-    trades, navs = run_window(p, start, eod, "backtest")
     _, rates, _el = load_cost_tax()
+    # 'backtest' = risk-managed (matches the live track); 'backtest_raw' = no-stops comparison.
+    trades, navs = run_window(p, start, eod, "backtest", risk_managed=True)
     enriched = enrich_trades(trades, rates) if not trades.empty else trades
     persist = enriched.drop(columns=["realized_st", "realized_lt"], errors="ignore")
     write_results(pid, "backtest", run_id, persist, navs)
+    if stop is not None:
+        raw_t, raw_n = run_window(p, start, eod, "backtest", risk_managed=False)
+        raw_p = (enrich_trades(raw_t, rates) if not raw_t.empty else raw_t).drop(
+            columns=["realized_st", "realized_lt"], errors="ignore"
+        )
+        write_results(pid, "backtest_raw", run_id, raw_p, raw_n)
     out = _summary(navs, trades)
+    if stop is not None:
+        out["raw"] = _summary(raw_n, raw_t)
     if not trades.empty and (trades["side"] == "sell").any():
         s = summarize(enriched, rates)
         out["tax_total"] = float(s["tax_total"])
