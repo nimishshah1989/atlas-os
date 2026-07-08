@@ -139,7 +139,9 @@ def _stop_config(p: dict):
     return None
 
 
-def run_window(p: dict, start: dt.date, end: dt.date, mode: str, risk_managed: bool = False, stop_override=None):
+def run_window(
+    p: dict, start: dt.date, end: dt.date, mode: str, risk_managed: bool = False, stop_override=None
+):
     """Load panels and replay. Modes: backtest / init / resume (see _run_slice).
 
     Fund cap portfolios: params.fund_categories restricts the universe. A capital-
@@ -163,7 +165,7 @@ def run_window(p: dict, start: dt.date, end: dt.date, mode: str, risk_managed: b
                 risk_managed=risk_managed,
                 stop_override=stop_override,
             )
-            for i, s in enumerate(sleeves)
+            for s in sleeves
         ]
         trades = (
             pd.concat([t for t, _ in results if not t.empty], ignore_index=True)
@@ -173,7 +175,13 @@ def run_window(p: dict, start: dt.date, end: dt.date, mode: str, risk_managed: b
         navs = _merge_navs([n for _, n in results if not n.empty])
         return trades, navs
     return _run_slice(
-        p, start, end, mode, fund_categories=params.get("fund_categories"), risk_managed=risk_managed, stop_override=stop_override
+        p,
+        start,
+        end,
+        mode,
+        fund_categories=params.get("fund_categories"),
+        risk_managed=risk_managed,
+        stop_override=stop_override,
     )
 
 
@@ -304,7 +312,9 @@ def _run_slice(
         if sc and sc[0] == "ema":
             te = load_tech(universe, (f"ema_{sc[1]}",), lookback, end)
             stop_ema = (
-                te.pivot_table(index="date", columns="instrument_key", values=f"ema_{sc[1]}", aggfunc="last")
+                te.pivot_table(
+                    index="date", columns="instrument_key", values=f"ema_{sc[1]}", aggfunc="last"
+                )
                 .reindex(prices.index)
                 .astype(float)
                 if not te.empty
@@ -485,14 +495,13 @@ def rebuild_backtest(pid: str, years: float = 5) -> dict:
     enriched = enrich_trades(trades, rates) if not trades.empty else trades
     persist = enriched.drop(columns=["realized_st", "realized_lt"], errors="ignore")
     write_results(pid, "backtest", run_id, persist, navs)
+    out = _summary(navs, trades)
     if stop is not None:
         raw_t, raw_n = run_window(p, start, eod, "backtest", risk_managed=False)
         raw_p = (enrich_trades(raw_t, rates) if not raw_t.empty else raw_t).drop(
             columns=["realized_st", "realized_lt"], errors="ignore"
         )
         write_results(pid, "backtest_raw", run_id, raw_p, raw_n)
-    out = _summary(navs, trades)
-    if stop is not None:
         out["raw"] = _summary(raw_n, raw_t)
     if not trades.empty and (trades["side"] == "sell").any():
         s = summarize(enriched, rates)
