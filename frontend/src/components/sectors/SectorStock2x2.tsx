@@ -73,6 +73,11 @@ function Quad({ data, xLabel, yLabel, xDomain, yDomain, xMid, yMid }: {
   )
 }
 
+function missingScoreReason(s: SectorStock): string {
+  if (s.d_tech == null && s.d_fund == null) return 'no technical or fundamental score'
+  return s.d_fund == null ? 'no fundamental score' : 'no technical score'
+}
+
 export function SectorStock2x2({ stocks }: { stocks: SectorStock[] }) {
   const momQual: Pt[] = stocks
     .filter(s => s.d_tech != null && s.d_fund != null)
@@ -80,6 +85,11 @@ export function SectorStock2x2({ stocks }: { stocks: SectorStock[] }) {
   const strLead: Pt[] = stocks
     .filter(s => s.strength != null)
     .map(s => ({ x: Math.round((s.strength as number) * 10) / 10, y: s.lead, z: capZ(s.cap), symbol: s.symbol, lead: s.lead, cap: s.cap }))
+
+  // Stocks visible in the (looser) Strength × Leadership quad but dropped here for missing
+  // a decile — named honestly rather than standing in a fabricated score (CLAUDE.md rule #0).
+  const momQualSymbols = new Set(momQual.map(p => p.symbol))
+  const excludedMomQual = stocks.filter(s => strLead.some(p => p.symbol === s.symbol) && !momQualSymbols.has(s.symbol))
 
   return (
     <section className="px-8 py-10 border-b border-edge-hair" aria-label="Sector stocks 2x2">
@@ -99,6 +109,12 @@ export function SectorStock2x2({ stocks }: { stocks: SectorStock[] }) {
           <div className="font-num text-[11px] text-txt-3 uppercase tracking-wider mb-2">Momentum × Quality <span className="text-txt-2">· {momQual.length} plotted</span></div>
           <Quad data={momQual} xLabel="Technical decile" yLabel="Fundamental decile"
             xDomain={[0.5, 10.5]} yDomain={[0.5, 10.5]} xMid={5.5} yMid={5.5} />
+          {excludedMomQual.length > 0 && (
+            <p className="font-sans text-[11px] text-txt-3 mt-1.5 leading-[1.4]">
+              {excludedMomQual.length} excluded ({excludedMomQual.map(s => `${s.symbol} — ${missingScoreReason(s)}`).join(', ')})
+              — not fabricated with a stand-in score.
+            </p>
+          )}
         </div>
         <div>
           <div className="font-num text-[11px] text-txt-3 uppercase tracking-wider mb-2">Strength × Leadership <span className="text-txt-2">· {strLead.length} plotted</span></div>
