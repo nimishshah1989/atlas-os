@@ -23,6 +23,12 @@ PATH=/usr/local/bin:/usr/bin:/bin
 # Atlas v4 SUNDAY QA — Sun 10:00 IST (freshness / silent-zero / outlier audit → alert)
 30 4 * * 0    /home/ubuntu/atlas-os/scripts/ops/atlas_sunday_qa.sh >> /home/ubuntu/logs/atlas_sunday_qa_cron.log 2>&1
 
+# Atlas intraday sector-RS — every 5 min, 09:30–15:25 IST Mon–Fri (04:00–09:55 UTC).
+# Writes today's live sector-index ÷ NIFTY 50 path to atlas_sector_rs_intraday
+# (today-only retention). Own table, NOT in the EOD freshness guard (empty overnight
+# by design). Feeds the live tail on the sector RS ratio chart's Daily panel.
+*/5 4-9 * * 1-5  /home/ubuntu/atlas-os/scripts/ops/atlas_intraday.sh >> /home/ubuntu/logs/sector_rs_intraday.log 2>&1
+
 # Auto-deploy on push to origin/main — every 5 min (no-op unless HEAD=main & clean)
 */5 * * * *   /home/ubuntu/atlas-auto-deploy.sh
 

@@ -82,7 +82,7 @@ export async function SectorDeepDiveV4({ sector }: { sector: string }) {
       <section className="px-8 py-9 border-b border-edge-hair" aria-label="RS ratio charts">
         <SectionHead title="Relative strength · sector vs Nifty 50" subtitle="Sector index ÷ Nifty 50 across Daily / Weekly / Monthly. Rising = outperforming the broad market." />
         <Suspense fallback={<Skeleton h={360} />}>
-          <SectorRSRatioCharts sectorName={sector} indexCode={ratioSeries.index_code} daily={ratioSeries.daily} />
+          <SectorRSRatioCharts sectorName={sector} indexCode={ratioSeries.index_code} daily={ratioSeries.daily} intraday={ratioSeries.intraday} />
         </Suspense>
       </section>
 
