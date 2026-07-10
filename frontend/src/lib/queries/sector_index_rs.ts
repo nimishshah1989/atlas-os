@@ -138,11 +138,15 @@ export async function getSectorIndexRs(): Promise<SectorIndexRsPayload> {
 // Lightweight Charts — no dependency on TradingView's data-gated public widget.
 
 export type RatioPoint = { time: string; value: number }
+// Intraday RS tick: epoch seconds (lightweight-charts UTCTimestamp), so it merges
+// cleanly onto the daily close series without a business-day/timestamp clash.
+export type IntradayPoint = { time: number; value: number }
 
 export type SectorRatioSeries = {
   sector_name: string
   index_code: string | null
   daily: RatioPoint[]
+  intraday: IntradayPoint[] // today's live path (atlas_sector_rs_intraday), empty off-hours
 }
 
 /**
@@ -165,11 +169,24 @@ export async function getSectorRatioSeries(sectorName: string): Promise<SectorRa
     ORDER BY s.date
   `
 
+  // Today's live intraday path (populated by the */5 market-hours builder; empty
+  // off-hours). Same ratio definition (sector index ÷ NIFTY 50), so it's continuous
+  // with the daily closes. ts → epoch seconds for the chart's UTCTimestamp merge.
+  const intradayRows = await sql<Array<{ epoch: string; ratio: string }>>`
+    SELECT extract(epoch FROM ts)::bigint::text AS epoch, ratio::text AS ratio
+    FROM atlas_foundation.atlas_sector_rs_intraday
+    WHERE sector_name = ${sectorName}
+    ORDER BY ts
+  `
+
   return {
     sector_name: sectorName,
     index_code: rows[0]?.index_code ?? null,
     daily: rows
       .map((r) => ({ time: r.date, value: toNumber(r.ratio) }))
       .filter((p): p is RatioPoint => p.value != null && Number.isFinite(p.value)),
+    intraday: intradayRows
+      .map((r) => ({ time: Number(r.epoch), value: toNumber(r.ratio) }))
+      .filter((p): p is IntradayPoint => p.value != null && Number.isFinite(p.value) && Number.isFinite(p.time)),
   }
 }

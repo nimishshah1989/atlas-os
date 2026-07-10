@@ -13,12 +13,30 @@
 import { useMemo } from 'react'
 import { AtlasLightweightChart, type ChartPoint } from '@/components/charts/AtlasLightweightChart'
 import { sectorRatioSymbol } from '@/lib/sectorTvSymbols'
-import type { RatioPoint } from '@/lib/queries/sector_index_rs'
+import type { RatioPoint, IntradayPoint } from '@/lib/queries/sector_index_rs'
 
 type Props = {
   sectorName: string
   indexCode: string | null
   daily: RatioPoint[]
+  intraday?: IntradayPoint[]
+}
+
+// Splice today's live intraday RS points onto the Daily panel. Daily closes are
+// date strings (whole-day) and intraday points are epoch seconds, so both are
+// coerced to epoch seconds and merged into one strictly-ascending numeric series
+// (lightweight-charts requires monotonic time). With no live tail the daily series
+// is returned untouched, so overnight/weekend rendering is identical to before.
+// Exported for unit testing.
+export function mergeDailyIntraday(dailyTail: RatioPoint[], intraday: IntradayPoint[]): ChartPoint[] {
+  if (intraday.length === 0) return dailyTail.map((p) => ({ time: p.time, value: p.value }))
+  const toEpoch = (d: string) => Math.floor(Date.parse(`${d.slice(0, 10)}T00:00:00Z`) / 1000)
+  const merged = new Map<number, number>()
+  for (const p of dailyTail) merged.set(toEpoch(p.time), p.value)
+  for (const p of intraday) merged.set(p.time, p.value) // live tick wins at its epoch
+  return Array.from(merged.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([time, value]) => ({ time, value }))
 }
 
 // Resample a daily series to the last point of each ISO-week or calendar-month.
@@ -47,16 +65,16 @@ const PANELS: { code: 'D' | 'W' | 'M'; label: string }[] = [
   { code: 'M', label: 'Monthly' },
 ]
 
-export function SectorRSRatioCharts({ sectorName, indexCode, daily }: Props) {
+export function SectorRSRatioCharts({ sectorName, indexCode, daily, intraday = [] }: Props) {
   const panels = useMemo(() => {
     const weekly = resample(daily, 'W')
     const monthly = resample(daily, 'M')
     return {
-      D: daily.slice(-252).map((p) => ({ time: p.time, value: p.value })) as ChartPoint[], // ~1y
+      D: mergeDailyIntraday(daily.slice(-252), intraday), // ~1y daily + today's live tail
       W: weekly.slice(-260), // ~5y
       M: monthly,            // full history
     }
-  }, [daily])
+  }, [daily, intraday])
 
   if (daily.length === 0) {
     return (
@@ -67,6 +85,11 @@ export function SectorRSRatioCharts({ sectorName, indexCode, daily }: Props) {
   }
 
   const asOf = daily.at(-1)?.time?.slice(0, 10)
+  // The Daily panel carries today's live intraday tail, so it's "as of" the last
+  // tick's date, not the last EOD close (the Weekly/Monthly panels stay on the close).
+  const liveAsOf = intraday.length
+    ? new Date(intraday[intraday.length - 1].time * 1000).toISOString().slice(0, 10)
+    : undefined
   const tvSymbol = sectorRatioSymbol(sectorName)
 
   return (
@@ -77,7 +100,7 @@ export function SectorRSRatioCharts({ sectorName, indexCode, daily }: Props) {
             key={p.code}
             title={`${p.label}`}
             yLabel={`${indexCode ?? sectorName} ÷ Nifty 50`}
-            asOf={asOf}
+            asOf={p.code === 'D' && liveAsOf ? liveAsOf : asOf}
             height={320}
             showLastValue
             series={[{ name: `${sectorName} RS`, data: panels[p.code], color: 'teal', lineWidth: 2 }]}

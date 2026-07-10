@@ -15,8 +15,40 @@ vi.mock('@/lib/sectorTvSymbols', () => ({
   sectorRatioSymbol: () => 'NIFTY_IND_DEFENCE/NIFTY',
 }))
 
-import { SectorRSRatioCharts, resample } from '../SectorRSRatioCharts'
+import { SectorRSRatioCharts, resample, mergeDailyIntraday } from '../SectorRSRatioCharts'
 import type { RatioPoint } from '@/lib/queries/sector_index_rs'
+
+describe('mergeDailyIntraday', () => {
+  const daily: RatioPoint[] = [
+    { time: '2026-07-08', value: 1.0 },
+    { time: '2026-07-09', value: 1.1 },
+  ]
+  const jul9midnight = Math.floor(Date.parse('2026-07-09T00:00:00Z') / 1000)
+
+  it('returns the daily series unchanged when there is no intraday tail', () => {
+    expect(mergeDailyIntraday(daily, [])).toEqual([
+      { time: '2026-07-08', value: 1.0 },
+      { time: '2026-07-09', value: 1.1 },
+    ])
+  })
+
+  it('appends the intraday tail after the daily closes, ascending by time', () => {
+    const tick = jul9midnight + 13 * 3600 // 2026-07-09 13:00 UTC
+    const out = mergeDailyIntraday(daily, [{ time: tick, value: 1.2 }])
+    expect(out.map((p) => p.value)).toEqual([1.0, 1.1, 1.2])
+    // all numeric times, strictly ascending (lightweight-charts requires this)
+    const times = out.map((p) => p.time as number)
+    expect(times).toEqual([...times].sort((a, b) => a - b))
+    expect(times[times.length - 1]).toBe(tick)
+  })
+
+  it('lets an intraday point override a daily point at the same epoch', () => {
+    const out = mergeDailyIntraday(daily, [{ time: jul9midnight, value: 9.9 }])
+    const jul9 = out.find((p) => p.time === jul9midnight)
+    expect(jul9?.value).toBe(9.9)
+    expect(out).toHaveLength(2) // no duplicate time
+  })
+})
 
 describe('resample', () => {
   const daily: RatioPoint[] = [
