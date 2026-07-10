@@ -69,11 +69,13 @@ def run() -> int:
         return 0
 
     ts = dt.datetime.now(dt.UTC).replace(second=0, microsecond=0)
-    df = pd.DataFrame({
-        "sector_name": [s for s, _ in rows],
-        "ts": [ts] * len(rows),
-        "ratio": [r for _, r in rows],
-    })
+    df = pd.DataFrame(
+        {
+            "sector_name": [s for s, _ in rows],
+            "ts": [ts] * len(rows),
+            "ratio": [r for _, r in rows],
+        }
+    )
 
     _db.exec_sql(srs.PRUNE_SQL)
     n = _db.upsert_df("atlas_foundation.atlas_sector_rs_intraday", df, ["sector_name", "ts"])
