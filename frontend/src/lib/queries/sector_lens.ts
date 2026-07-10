@@ -61,6 +61,7 @@ export async function getAllSectorLensVectors(): Promise<Record<string, SectorLe
 export type SectorStock = {
   symbol: string; name: string | null; cap: string
   d_tech: number | null; d_fund: number | null; d_cat: number | null; d_flow: number | null; d_val: number | null
+  d_composite: number | null // composite decile within cap cohort (drives the RAG colour on the RS×momentum bubble)
   lead: number; strength: number | null
   ret_1d: number | null; ret_1w: number | null; ret_1m: number | null
   ret_3m: number | null; ret_6m: number | null; ret_12m: number | null
@@ -133,7 +134,7 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
     )
     SELECT d.symbol, d.name, d.cap, d.d_tech, d.d_fund, d.d_cat, d.d_flow, d.d_val,
       d.r1d, d.r1w, d.r1m, d.r3m, d.r6m, d.r12m, d.rs1m, d.rs3m, d.rs6m,
-      d.rs_sec3m AS rs_sector_3m, liq.liq_cr,
+      d.rs_sec3m AS rs_sector_3m, liq.liq_cr, d.d_composite,
       (COALESCE((d.d_composite>=10)::int,0)) AS lead,  -- LEADER = top decile (D10) of composite within cap cohort (one rule; 0/1)
       ((COALESCE(d.d_tech,0)+COALESCE(d.d_flow,0))::float
         / NULLIF((d.d_tech IS NOT NULL)::int+(d.d_flow IS NOT NULL)::int,0)) AS strength,
@@ -149,6 +150,7 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
   return rows.map(r => ({
     symbol: r.symbol, name: r.name, cap: r.cap,
     d_tech: n(r.d_tech), d_fund: n(r.d_fund), d_cat: n(r.d_cat), d_flow: n(r.d_flow), d_val: n(r.d_val),
+    d_composite: n(r.d_composite),
     lead: Number(r.lead ?? 0), strength: n(r.strength),
     ret_1d: n(r.r1d), ret_1w: n(r.r1w), ret_1m: n(r.r1m),
     ret_3m: n(r.r3m), ret_6m: n(r.r6m), ret_12m: n(r.r12m),
