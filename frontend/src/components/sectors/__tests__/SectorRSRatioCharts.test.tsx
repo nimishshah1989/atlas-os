@@ -15,8 +15,29 @@ vi.mock('@/lib/sectorTvSymbols', () => ({
   sectorRatioSymbol: () => 'NIFTY_IND_DEFENCE/NIFTY',
 }))
 
-import { SectorRSRatioCharts, resample, mergeDailyIntraday } from '../SectorRSRatioCharts'
+import { SectorRSRatioCharts, resample, mergeDailyIntraday, foldLiveIntoDaily } from '../SectorRSRatioCharts'
 import type { RatioPoint } from '@/lib/queries/sector_index_rs'
+
+describe('foldLiveIntoDaily', () => {
+  const daily: RatioPoint[] = [
+    { time: '2026-07-08', value: 1.0 },
+    { time: '2026-07-09', value: 1.1 },
+  ]
+  // 2026-07-10 08:00 UTC == 13:30 IST (same calendar day in IST)
+  const liveEpoch = Math.floor(Date.parse('2026-07-10T08:00:00Z') / 1000)
+
+  it('returns the daily series unchanged when there is no live tail', () => {
+    expect(foldLiveIntoDaily(daily, [])).toEqual(daily)
+  })
+
+  it('appends today (IST) with the latest live value so resample reflects it', () => {
+    const folded = foldLiveIntoDaily(daily, [{ time: liveEpoch, value: 1.25 }])
+    expect(folded[folded.length - 1]).toEqual({ time: '2026-07-10', value: 1.25 })
+    // the current week's and month's last point now carries today's live value
+    expect(resample(folded, 'W').at(-1)).toEqual({ time: '2026-07-10', value: 1.25 })
+    expect(resample(folded, 'M').at(-1)).toEqual({ time: '2026-07-10', value: 1.25 })
+  })
+})
 
 describe('mergeDailyIntraday', () => {
   const daily: RatioPoint[] = [

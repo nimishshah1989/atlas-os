@@ -39,6 +39,20 @@ export function mergeDailyIntraday(dailyTail: RatioPoint[], intraday: IntradayPo
     .map(([time, value]) => ({ time, value }))
 }
 
+// IST-shifted (UTC+5:30) parts of an epoch-seconds instant, for labels/keys.
+const istDate = (epoch: number) => new Date((epoch + 19800) * 1000).toISOString().slice(0, 10)
+const istTime = (epoch: number) => new Date((epoch + 19800) * 1000).toISOString().slice(11, 16)
+
+// Fold today's latest live tick into the daily series as a synthetic "today" close,
+// so the CURRENT week and month also reflect "now" (their last point becomes today's
+// live ratio) — not just the Daily panel. Empty tail → daily untouched. Exported for
+// unit testing.
+export function foldLiveIntoDaily(daily: RatioPoint[], intraday: IntradayPoint[]): RatioPoint[] {
+  if (intraday.length === 0) return daily
+  const live = intraday[intraday.length - 1]
+  return [...daily, { time: istDate(live.time), value: live.value }]
+}
+
 // Resample a daily series to the last point of each ISO-week or calendar-month.
 // Exported for unit testing.
 export function resample(daily: RatioPoint[], mode: 'W' | 'M'): ChartPoint[] {
@@ -67,12 +81,13 @@ const PANELS: { code: 'D' | 'W' | 'M'; label: string }[] = [
 
 export function SectorRSRatioCharts({ sectorName, indexCode, daily, intraday = [] }: Props) {
   const panels = useMemo(() => {
-    const weekly = resample(daily, 'W')
-    const monthly = resample(daily, 'M')
+    // Fold today's live tick into the daily series before resampling so the current
+    // week and month also end on today's live value (not just the Daily panel).
+    const withLive = foldLiveIntoDaily(daily, intraday)
     return {
       D: mergeDailyIntraday(daily.slice(-252), intraday), // ~1y daily + today's live tail
-      W: weekly.slice(-260), // ~5y
-      M: monthly,            // full history
+      W: resample(withLive, 'W').slice(-260), // ~5y, current week = today's live value
+      M: resample(withLive, 'M'),             // full history, current month = today's live
     }
   }, [daily, intraday])
 
@@ -85,11 +100,12 @@ export function SectorRSRatioCharts({ sectorName, indexCode, daily, intraday = [
   }
 
   const asOf = daily.at(-1)?.time?.slice(0, 10)
-  // The Daily panel carries today's live intraday tail, so it's "as of" the last
-  // tick's date, not the last EOD close (the Weekly/Monthly panels stay on the close).
-  const liveAsOf = intraday.length
-    ? new Date(intraday[intraday.length - 1].time * 1000).toISOString().slice(0, 10)
-    : undefined
+  // With a live tail every panel is current to "now": the Daily panel shows the
+  // last tick's date + time (IST), Weekly/Monthly show today's date (their current
+  // period now carries today's live value). No tail → all fall back to the EOD close.
+  const liveEpoch = intraday.length ? intraday[intraday.length - 1].time : null
+  const liveDate = liveEpoch != null ? istDate(liveEpoch) : undefined
+  const liveDateTime = liveEpoch != null ? `${liveDate} ${istTime(liveEpoch)} IST` : undefined
   const tvSymbol = sectorRatioSymbol(sectorName)
 
   return (
@@ -100,7 +116,7 @@ export function SectorRSRatioCharts({ sectorName, indexCode, daily, intraday = [
             key={p.code}
             title={`${p.label}`}
             yLabel={`${indexCode ?? sectorName} ÷ Nifty 50`}
-            asOf={p.code === 'D' && liveAsOf ? liveAsOf : asOf}
+            asOf={p.code === 'D' ? (liveDateTime ?? asOf) : (liveDate ?? asOf)}
             height={320}
             showLastValue
             series={[{ name: `${sectorName} RS`, data: panels[p.code], color: 'teal', lineWidth: 2 }]}

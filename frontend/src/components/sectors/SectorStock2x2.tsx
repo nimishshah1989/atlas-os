@@ -18,7 +18,18 @@ import { useThemeTokens } from '@/components/ui/useThemeTokens'
 const CAP_Z: Record<string, number> = { large: 4, mid: 3, small: 2, micro: 1 }
 const capZ = (cap: string) => CAP_Z[cap] ?? 1
 
-type Pt = { x: number; y: number; z: number; symbol: string; lead: number; cap: string }
+// Both axes here are integer deciles / leadership counts, so many stocks land on the
+// exact same grid point and hide each other. Spread each by a DETERMINISTIC per-symbol
+// offset (stable across rerenders, ±0.28 — inside its own cell so the decile stays
+// readable) so all N constituents are visible. Tooltip still shows the true value.
+const jitter = (sym: string, salt: number): number => {
+  let h = salt >>> 0
+  for (let i = 0; i < sym.length; i++) h = (h * 31 + sym.charCodeAt(i)) >>> 0
+  return ((h % 1000) / 1000 - 0.5) * 0.56
+}
+
+// x/y = jittered plot position; tx/ty = true value shown in the tooltip.
+type Pt = { x: number; y: number; tx: number; ty: number; z: number; symbol: string; lead: number; cap: string }
 
 function Quad({ data, xLabel, yLabel, xDomain, yDomain, xMid, yMid }: {
   data: Pt[]; xLabel: string; yLabel: string
@@ -52,7 +63,7 @@ function Quad({ data, xLabel, yLabel, xDomain, yDomain, xMid, yMid }: {
               const p = payload[0].payload as Pt
               return (
                 <div className="rounded-tile border border-edge-rule bg-surface-raised px-2.5 py-1.5 font-num text-[11px] tabular-nums text-txt-1 shadow-panel">
-                  {p.symbol} · {xLabel.split(' ')[0]} {p.x} / {yLabel.split(' ')[0]} {p.y} · {p.lead}/2 · {p.cap}
+                  {p.symbol} · {xLabel.split(' ')[0]} {p.tx} / {yLabel.split(' ')[0]} {p.ty} · {p.lead}/2 · {p.cap}
                 </div>
               )
             }} />
@@ -81,10 +92,16 @@ function missingScoreReason(s: SectorStock): string {
 export function SectorStock2x2({ stocks }: { stocks: SectorStock[] }) {
   const momQual: Pt[] = stocks
     .filter(s => s.d_tech != null && s.d_fund != null)
-    .map(s => ({ x: s.d_tech as number, y: s.d_fund as number, z: capZ(s.cap), symbol: s.symbol, lead: s.lead, cap: s.cap }))
+    .map(s => {
+      const tx = s.d_tech as number, ty = s.d_fund as number
+      return { x: tx + jitter(s.symbol, 1), y: ty + jitter(s.symbol, 2), tx, ty, z: capZ(s.cap), symbol: s.symbol, lead: s.lead, cap: s.cap }
+    })
   const strLead: Pt[] = stocks
     .filter(s => s.strength != null)
-    .map(s => ({ x: Math.round((s.strength as number) * 10) / 10, y: s.lead, z: capZ(s.cap), symbol: s.symbol, lead: s.lead, cap: s.cap }))
+    .map(s => {
+      const tx = Math.round((s.strength as number) * 10) / 10, ty = s.lead
+      return { x: tx + jitter(s.symbol, 3), y: ty + jitter(s.symbol, 4), tx, ty, z: capZ(s.cap), symbol: s.symbol, lead: s.lead, cap: s.cap }
+    })
 
   // Stocks visible in the (looser) Strength × Leadership quad but dropped here for missing
   // a decile — named honestly rather than standing in a fabricated score (CLAUDE.md rule #0).
