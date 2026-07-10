@@ -38,7 +38,7 @@ import type { SectorStock } from '@/lib/queries/sector_lens'
 function makeStock(symbol: string, overrides: Partial<SectorStock> = {}): SectorStock {
   return {
     symbol, name: symbol, cap: 'large',
-    d_tech: 5, d_fund: 5, d_cat: null, d_flow: null, d_val: null,
+    d_tech: 5, d_fund: 5, d_cat: null, d_flow: null, d_val: null, d_composite: 5,
     lead: 0, strength: 5,
     ret_1d: null, ret_1w: null, ret_1m: null, ret_3m: null, ret_6m: null, ret_12m: null,
     rs_1m: null, rs_3m: null, rs_6m: null, rs_sector_3m: null,

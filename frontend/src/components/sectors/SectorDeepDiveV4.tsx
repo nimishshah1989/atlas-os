@@ -17,6 +17,7 @@ import { ScoreDerivationTree } from '@/components/shared/ScoreDerivationTree'
 import { getLensWeights } from '@/lib/queries/lens_weights'
 import { sectorToDerivation } from '@/components/adapters/sectorToDerivation'
 import { SectorStock2x2 } from '@/components/sectors/SectorStock2x2'
+import { SectorRSMomentumBubble } from '@/components/sectors/SectorRSMomentumBubble'
 import { SectorBreadthWithin } from '@/components/sectors/SectorBreadthWithin'
 import { SectorFundamentalsTable } from '@/components/sectors/SectorFundamentalsTable'
 import { SectorFundFlowTable } from '@/components/sectors/SectorFundFlowTable'
@@ -99,6 +100,7 @@ export async function SectorDeepDiveV4({ sector }: { sector: string }) {
         </section>
       )}
       {stocks.length > 0 && <SectorStock2x2 stocks={stocks} />}
+      {stocks.length > 0 && <SectorRSMomentumBubble stocks={stocks} />}
       {stocks.length > 0 && <SectorBreadthWithin stocks={stocks} />}
 
       {/* Fundamentals + fund flow, side-by-side — both clickable to the within-sector drill */}
