@@ -201,6 +201,44 @@ def check_l_cvar_journaled() -> None:
         fail(f"L: {r['name']} ({r['cycle_date']}) journaled no CVaR tripwire state")
 
 
+def check_m_charter_provenance() -> None:
+    rows = _db.read_df(
+        f"""select m.name, dj.cycle_date
+            from {M}.desk_journal dj join {M}.portfolio_master m using (portfolio_id)
+            where (dj.inputs_digest->>'desk_version')::int >= 3
+              and not (dj.inputs_digest ? 'charter_sha')"""
+    )
+    for r in rows.to_dict("records"):
+        fail(f"M: {r['name']} ({r['cycle_date']}) cycle not tied to a charter sha")
+    orphans = _db.read_df(
+        f"""select distinct m.params->>'charter' ch from {M}.portfolio_master m
+            where m.status = 'active' and m.params->>'desk' = 'true'
+              and not exists (select 1 from {M}.desk_charters c
+                              where c.charter_key = m.params->>'charter')"""
+    )
+    for r in orphans.to_dict("records"):
+        fail(f"M: active desk charter {r['ch']!r} missing from desk_charters")
+
+
+def check_n_hypothesis_cadence() -> None:
+    latest = _db.scalar(f"select max(ts) from {M}.desk_hypotheses")
+    if latest is None:
+        return  # loop not bootstrapped yet
+    if _db.scalar(f"select 1 from {M}.desk_hypotheses having max(ts) < now() - interval '8 days'"):
+        fail("N: no hypothesis journaled in the last 8 days — research loop stalled")
+
+
+def check_o_masked_audit() -> None:
+    latest = _db.scalar(f"select max(ts) from {M}.desk_audit")
+    if latest is None:
+        return  # audit not bootstrapped yet
+    if _db.scalar(f"select 1 from {M}.desk_audit having max(ts) < now() - interval '14 days'"):
+        fail("O: no masked-ticker audit in the last 14 days")
+    bad = _db.read_df(f"select id, jaccard from {M}.desk_audit where jaccard < 0 or jaccard > 1")
+    for r in bad.to_dict("records"):
+        fail(f"O: audit {r['id']} jaccard {r['jaccard']} out of [0,1]")
+
+
 def check_e_trader_liveness() -> None:
     # only meaningful once Desk v2 cycles exist (trader column populated)
     row = _db.read_df(
@@ -227,6 +265,9 @@ def main() -> int:
         check_j_stance_consensus,
         check_k_lesson_memory,
         check_l_cvar_journaled,
+        check_m_charter_provenance,
+        check_n_hypothesis_cadence,
+        check_o_masked_audit,
     ):
         print(f"[validate_desk] {check.__name__}", flush=True)
         check()

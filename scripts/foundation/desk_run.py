@@ -45,6 +45,7 @@ from desk_credibility import (
 from desk_orders import (
     attach_plans,
     build_memo,
+    load_charter,
     queue_order,
     run_risk_stances,
     send_memo,
@@ -347,6 +348,7 @@ def run_cycle(p: dict, knobs: dict, dry: bool = False) -> dict:
     # PM-only payload: keep it OUT of `inputs` — the scout request already runs
     # near the LLM's per-request token ceiling (413 above ~8k with Groq free tier)
     track = fetch_track_record(str(p["portfolio_id"]), charter)
+    charter_text, charter_sha = load_charter(charter)
     cvar = compute_cvar(
         str(p["portfolio_id"]), knobs["cvar_tail"], knobs["cvar_floor"], knobs["cvar_min_n"]
     )
@@ -354,11 +356,12 @@ def run_cycle(p: dict, knobs: dict, dry: bool = False) -> dict:
     journal["inputs_digest"] = {
         "desk_version": 3,
         "credibility_rows": len(track),
+        "charter_sha": charter_sha,
         "cvar": cvar,
     }
 
     try:
-        scout = llm_call(build_scout_messages(charter, inputs))
+        scout = llm_call(build_scout_messages(charter, inputs, charter_text))
         journal["scout"] = scout
         errs = validate_scout(scout, known)
         if errs:
@@ -445,6 +448,7 @@ def run_cycle(p: dict, knobs: dict, dry: bool = False) -> dict:
                     "regime": inputs["regime"],
                     "track_record": track,
                 },
+                charter_text,
             )
         )
         journal["pm"] = pm

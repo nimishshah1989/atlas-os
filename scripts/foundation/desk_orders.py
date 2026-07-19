@@ -10,6 +10,7 @@ desks) or is not queued (approval desks) — never an invented number.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from collections.abc import Callable
@@ -26,6 +27,18 @@ from portfolio_run import TradeError, book_trade
 from atlas.desk import build_trader_messages, check_plan, validate_trader
 
 M = "atlas_foundation"
+
+
+def load_charter(key: str) -> tuple[str, str]:
+    """Charter text from the DB (admin-editable) with code-dict fallback; the
+    sha lands in every cycle's inputs_digest so each decision is provably tied
+    to the charter text that drove it."""
+    from atlas.desk import CHARTERS
+
+    txt = _db.scalar(
+        f"select charter_text from {M}.desk_charters where charter_key = :k", {"k": key}
+    ) or CHARTERS.get(key, CHARTERS["sector_leaders"])
+    return str(txt), hashlib.sha1(str(txt).encode(), usedforsecurity=False).hexdigest()[:8]
 
 
 # ── trade-plan levels + EXECUTION TRADER call ───────────────────────────────

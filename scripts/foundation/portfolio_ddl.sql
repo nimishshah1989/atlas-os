@@ -330,3 +330,47 @@ FROM (VALUES
     ('desk_cvar_min_sessions', 40,    'Minimum NAV sessions before the CVaR tripwire can arm',          'sessions', 10, 250)
 ) AS s(k, v, d, u, lo, hi)
 WHERE NOT EXISTS (SELECT 1 FROM atlas_foundation.atlas_thresholds t WHERE t.threshold_key = s.k);
+
+-- ── Desk v2 wave 4: research loop + DB charters + memorization audit ───────
+-- Charters live in the DB (admin-editable, journaled per cycle via charter_sha);
+-- a weekly hypothesis agent proposes ONE falsifiable desk-threshold change and
+-- code evaluates it against the desk's own stamped decision corpus (RD-Agent
+-- pattern, forward evidence only — the desk itself is never backtested); a
+-- masked-ticker audit (anonymized scout rerun) measures how much decisions
+-- depend on name priors vs supplied data (Profit Mirage control).
+CREATE TABLE IF NOT EXISTS atlas_foundation.desk_charters (
+    charter_key  text PRIMARY KEY,
+    charter_text text NOT NULL,
+    updated_at   timestamptz NOT NULL DEFAULT now(),
+    updated_by   text NOT NULL DEFAULT 'seed'
+);
+
+CREATE TABLE IF NOT EXISTS atlas_foundation.desk_hypotheses (
+    id             bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    ts             timestamptz NOT NULL DEFAULT now(),
+    hypothesis     text NOT NULL,
+    threshold_key  text NOT NULL,
+    proposed_value numeric NOT NULL,
+    current_value  numeric NOT NULL,
+    verdict        text NOT NULL CHECK (verdict IN ('supported', 'unsupported', 'insufficient_data')),
+    effect         jsonb NOT NULL DEFAULT '{}',
+    adopted        boolean NOT NULL DEFAULT false
+);
+
+CREATE TABLE IF NOT EXISTS atlas_foundation.desk_audit (
+    id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    portfolio_id uuid NOT NULL REFERENCES atlas_foundation.portfolio_master(portfolio_id),
+    cycle_date   date NOT NULL,
+    jaccard      numeric(4, 3) NOT NULL,
+    real_set     jsonb NOT NULL,
+    masked_set   jsonb NOT NULL,
+    ts           timestamptz NOT NULL DEFAULT now()
+);
+
+INSERT INTO atlas_foundation.atlas_thresholds
+    (threshold_key, threshold_value, category, description, units, min_allowed, max_allowed, default_value, is_active)
+SELECT k, v, 'portfolio', d, u, lo, hi, v, TRUE
+FROM (VALUES
+    ('desk_hypo_min_n', 20, 'Minimum stamped decisions before a hypothesis can reach a verdict', 'decisions', 5::numeric, 200::numeric)
+) AS s(k, v, d, u, lo, hi)
+WHERE NOT EXISTS (SELECT 1 FROM atlas_foundation.atlas_thresholds t WHERE t.threshold_key = s.k);

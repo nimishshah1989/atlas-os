@@ -26,6 +26,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import _db
+from desk_orders import load_charter
 from desk_run import llm_call
 
 from atlas.desk import build_reflect_messages, validate_reflect
@@ -94,6 +95,7 @@ def reflect_one(pid: str) -> dict:
 
     best, worst = _contrast_candidates(outcomes)
     contrast_syms = ({r["symbol"] for r in best}, {r["symbol"] for r in worst}) if best else None
+    charter_text, _sha = load_charter(charter)
     reply = llm_call(
         build_reflect_messages(
             charter,
@@ -107,6 +109,7 @@ def reflect_one(pid: str) -> dict:
                     "order by date desc limit 1"
                 ),
             },
+            charter_text,
         ),
         max_tokens=6000,  # gpt-oss reasons before emitting; 3000 starved the JSON (400 json_validate_failed)
     )

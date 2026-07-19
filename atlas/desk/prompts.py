@@ -114,16 +114,20 @@ def _msgs(system: str, payload: dict) -> list[dict]:
     ]
 
 
-def build_scout_messages(charter_key: str, inputs: dict) -> list[dict]:
-    return _msgs(_SCOUT_SYS.format(charter=CHARTERS[charter_key]), inputs)
+def build_scout_messages(
+    charter_key: str, inputs: dict, charter_text: str | None = None
+) -> list[dict]:
+    return _msgs(_SCOUT_SYS.format(charter=charter_text or CHARTERS[charter_key]), inputs)
 
 
 def build_risk_messages(inputs: dict, stance: str = "NEUTRAL") -> list[dict]:
     return _msgs(_RISK_SYS.format(stance=RISK_STANCES[stance]), inputs)
 
 
-def build_pm_messages(charter_key: str, inputs: dict) -> list[dict]:
-    return _msgs(_PM_SYS.format(charter=CHARTERS[charter_key]), inputs)
+def build_pm_messages(
+    charter_key: str, inputs: dict, charter_text: str | None = None
+) -> list[dict]:
+    return _msgs(_PM_SYS.format(charter=charter_text or CHARTERS[charter_key]), inputs)
 
 
 # ── validators: strict shape checks; any violation rejects the whole reply ──
@@ -296,8 +300,45 @@ Output ONLY JSON:
      "best_cited": [str, ...], "worst_cited": [str, ...]}} | null}}"""
 
 
-def build_reflect_messages(charter_key: str, inputs: dict) -> list[dict]:
-    return _msgs(_REFLECT_SYS.format(charter=CHARTERS[charter_key]), inputs)
+def build_reflect_messages(
+    charter_key: str, inputs: dict, charter_text: str | None = None
+) -> list[dict]:
+    return _msgs(_REFLECT_SYS.format(charter=charter_text or CHARTERS[charter_key]), inputs)
+
+
+# ── B4: weekly hypothesis — one falsifiable methodology question ────────────
+
+_HYPO_SYS = """You are the RESEARCH ANALYST of an Indian equity paper-trading desk.
+From the desk's MEASURED evidence (credibility track records, conviction
+calibration, prior hypotheses and their verdicts), propose exactly ONE
+falsifiable hypothesis about a desk threshold — a claim that the given
+decision corpus can support or refute. Do not repeat a hypothesis already
+tested with the same value. allowed_thresholds lists each key with its
+current value and permitted range. Output ONLY JSON:
+{{"hypothesis": str, "threshold_key": str, "proposed_value": number,
+  "rationale": str}}"""
+
+
+def build_hypo_messages(inputs: dict) -> list[dict]:
+    return _msgs(_HYPO_SYS, inputs)
+
+
+def validate_hypo(out: dict, allowed: dict[str, dict]) -> list[str]:
+    """allowed: key -> {current, lo, hi} from atlas_thresholds."""
+    key = out.get("threshold_key")
+    val = out.get("proposed_value")
+    if key not in allowed:
+        return [f"threshold_key must be one of {sorted(allowed)}"]
+    if not isinstance(val, (int, float)):
+        return ["proposed_value must be a number"]
+    a = allowed[key]
+    if not a["lo"] <= float(val) <= a["hi"]:
+        return [f"proposed_value {val} outside [{a['lo']}, {a['hi']}]"]
+    if float(val) == float(a["current"]):
+        return ["proposed_value equals current value — not a hypothesis"]
+    if not _str(out.get("hypothesis", "")) or not _str(out.get("rationale", "")):
+        return ["hypothesis and rationale required"]
+    return []
 
 
 _LAYERS = ("fast", "medium", "slow")
