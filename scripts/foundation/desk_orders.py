@@ -104,6 +104,56 @@ def attach_plans(
     return plans, trader, out_errs
 
 
+def run_risk_stances(
+    llm_call: Callable[..., dict], payload: dict, proposed: set[str], consensus_min: int
+) -> dict:
+    """Three independent RISK stances (SAFE/NEUTRAL/RISKY) merged by code into
+    selective consensus: approve needs >= consensus_min stances; a split vote
+    is flagged reduced (sized down by the engine). Fewer than 2 valid stances
+    → error and the desk holds — doing nothing is always safe."""
+    from atlas.desk import RISK_STANCES, build_risk_messages, validate_risk
+
+    stances: dict[str, dict] = {}
+    for name in RISK_STANCES:
+        try:
+            reply = llm_call(build_risk_messages(payload, name), max_tokens=1500)
+        except RuntimeError:
+            continue
+        if not validate_risk(reply, proposed):
+            stances[name.lower()] = reply
+    if len(stances) < 2:
+        return {
+            "stances": stances,
+            "verdicts": [],
+            "errors": ["risk: <2 valid stances — desk holds"],
+        }
+    approvals: dict[str, int] = {}
+    for reply in stances.values():
+        for v in reply["verdicts"]:
+            if v["verdict"] == "approve":
+                approvals[v["symbol"]] = approvals.get(v["symbol"], 0) + 1
+    verdicts = []
+    for sym in sorted(proposed):
+        n = approvals.get(sym, 0)
+        verdict = "approve" if n >= consensus_min else "veto"
+        reasons = [
+            f"{name}: {v['verdict']} — {v['reason']}"
+            for name, reply in stances.items()
+            for v in reply["verdicts"]
+            if v["symbol"] == sym
+        ]
+        verdicts.append(
+            {
+                "symbol": sym,
+                "verdict": verdict,
+                "consensus": n,
+                "reduced": verdict == "approve" and n < len(stances),
+                "reason": " | ".join(reasons),
+            }
+        )
+    return {"stances": stances, "verdicts": verdicts, "errors": []}
+
+
 # ── approval queue ──────────────────────────────────────────────────────────
 
 
@@ -180,10 +230,10 @@ def write_journal(pid: str, eod: Any, journal: dict) -> None:
     _db.exec_sql(
         f"""insert into {M}.desk_journal
             (portfolio_id, cycle_date, scout, risk, pm, debates, trader, applied,
-             queued, errors)
+             queued, errors, inputs_digest)
             values (:p, :d, cast(:s as jsonb), cast(:r as jsonb), cast(:m as jsonb),
                     cast(:db as jsonb), cast(:tr as jsonb), cast(:ap as jsonb),
-                    cast(:qu as jsonb), cast(:er as jsonb))""",
+                    cast(:qu as jsonb), cast(:er as jsonb), cast(:dig as jsonb))""",
         {
             "p": pid,
             "d": eod,
@@ -195,6 +245,7 @@ def write_journal(pid: str, eod: Any, journal: dict) -> None:
             "ap": json.dumps(journal["applied"], default=str),
             "qu": json.dumps(journal.get("queued", []), default=str),
             "er": json.dumps(journal["errors"], default=str),
+            "dig": json.dumps(journal.get("inputs_digest"), default=str),
         },
     )
 

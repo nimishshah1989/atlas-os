@@ -518,11 +518,13 @@ def cmd_backtest(a) -> None:
     print(json.dumps(rebuild_backtest(a.portfolio_id, a.years), default=str))
 
 
-def book_trade(pid: str, side: str, ckey: str) -> dict:
+def book_trade(pid: str, side: str, ckey: str, frac: Decimal = Decimal("1")) -> dict:
     """Book ONE trade for a basket-kind portfolio at the last EOD close, with
     cost + FIFO tax enrichment and a refreshed NAV row. `ckey` = <asset_class>:<key>.
-    Shared by the manual CLI and the Atlas Desk orchestrator — every booked trade
-    goes through this single audited path. Raises TradeError on any refusal."""
+    `frac` scales a buy's allocation below the position cap (desk consensus
+    size-down); sells always close the full position. Shared by the manual CLI
+    and the Atlas Desk orchestrator — every booked trade goes through this
+    single audited path. Raises TradeError on any refusal."""
     p = load_portfolio(pid)
     if p["kind"] != "basket":
         raise TradeError("manual trades are for baskets only")
@@ -548,7 +550,7 @@ def book_trade(pid: str, side: str, ckey: str) -> dict:
     if side == "buy":
         if key in positions:
             raise TradeError("already held — sell first or extend engine for top-ups")
-        alloc = min(nav * Decimal(p["max_position_pct"]), cash)
+        alloc = min(nav * Decimal(p["max_position_pct"]) * frac, cash)
         qty = _qty_for(alloc / (1 + buy_rate), price, ac)
         if qty <= 0:
             raise TradeError("insufficient cash for one unit")

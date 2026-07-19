@@ -8,6 +8,7 @@ price, breach a cap, or bypass the audited book_trade path (rule #0).
 
 from .prompts import (
     CHARTERS,
+    RISK_STANCES,
     build_debate_messages,
     build_pm_messages,
     build_reflect_messages,
@@ -25,6 +26,7 @@ from .prompts import (
 
 __all__ = [
     "CHARTERS",
+    "RISK_STANCES",
     "build_debate_messages",
     "build_pm_messages",
     "build_reflect_messages",

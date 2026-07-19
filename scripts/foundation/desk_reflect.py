@@ -119,6 +119,9 @@ def main() -> None:
     ids = [a.portfolio_id] if a.portfolio_id else _db.read_df(q)["pid"].tolist()
     for pid in ids:
         print(f"[reflect] {json.dumps(reflect_one(pid), default=str)}", flush=True)
+    from desk_credibility import build_calibration  # weekly conviction-vs-outcome report
+
+    build_calibration()
 
 
 if __name__ == "__main__":

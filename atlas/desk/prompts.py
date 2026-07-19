@@ -51,11 +51,28 @@ state, risk flags, market regime), identify:
 
 Rules: cite the specific numbers that changed (e.g. "composite 71→64 in 5
 sessions"). At most 5 proposals. Never propose a buy when regime is Risk-Off or
-DISLOCATION_SUSPENDED. Output ONLY JSON:
+DISLOCATION_SUSPENDED. conviction is a 5-tier scale (1 = weak/marginal,
+3 = solid, 5 = table-pounding) — your stated tier is later scored against the
+realized outcome, so calibrate honestly. Output ONLY JSON:
 {{"proposals": [{{"symbol": str, "action": "add"|"exit"|"watch",
-  "evidence": [str, ...], "urgency": "low"|"high"}}, ...], "note": str}}"""
+  "evidence": [str, ...], "urgency": "low"|"high",
+  "conviction": 1|2|3|4|5}}, ...], "note": str}}"""
+
+# three stances, one officer prompt: the desk trades only where at least
+# `desk_stance_consensus_min` of the three independent stances agree (enforced
+# in code), and a 2/3 split sizes down — disagreement gates size, not prose.
+RISK_STANCES = {
+    "SAFE": "Your stance is CAPITAL PRESERVATION: when in doubt, defer or veto. "
+    "Weight drawdown risk, crowding and tax friction over missed upside.",
+    "NEUTRAL": "Your stance is BALANCED: judge each proposal strictly on the "
+    "evidence and costs given, with no directional bias.",
+    "RISKY": "Your stance is OPPORTUNITY COST: missing a strong move is also a "
+    "loss. Approve when the evidence is real even if imperfect; veto only "
+    "clear rule-breakers or thesis-free trades.",
+}
 
 _RISK_SYS = """You are the RISK & TAX OFFICER of an Indian equity paper-trading desk.
+{stance}
 Hard limits (position cap, sector cap, order count, Risk-Off entry block) are
 enforced by the system in code — your job is JUDGMENT on each proposal:
 
@@ -74,15 +91,20 @@ Charter: {charter}
 
 Decide today's orders. You may ONLY act on proposals the Risk officer APPROVED
 (list provided). You may drop approved proposals; you may not add new names.
-Position sizing is fixed by the system (one standard slot per buy; sells close
-the full position). For every order write:
+Position sizing is fixed by the system (one standard slot per buy — halved in
+code when the risk stances split 2/3; sells close the full position).
+Your payload includes track_record: MEASURED rolling hit-rates and T+20 alpha
+vs NIFTY 500 for this desk, its charter, sectors and decision kinds — weight
+proposals from historically strong pockets more, and say so in the thesis when
+you do. For every order write:
 - thesis: what you believe and which Atlas evidence supports it (one sentence);
 - invalidation: the observable condition that proves you wrong and triggers exit
-  (e.g. "composite < 60 for 5 sessions or sector drops from top-3").
+  (e.g. "composite < 60 for 5 sessions or sector drops from top-3");
+- conviction: 1-5 (scored later against the realized outcome — calibrate honestly).
 Doing nothing is a decision — if you place no orders, say why in the note.
 Output ONLY JSON:
-{{"orders": [{{"symbol": str, "side": "buy"|"sell",
-  "thesis": str, "invalidation": str}}, ...], "note": str}}"""
+{{"orders": [{{"symbol": str, "side": "buy"|"sell", "thesis": str,
+  "invalidation": str, "conviction": 1|2|3|4|5}}, ...], "note": str}}"""
 
 
 def _msgs(system: str, payload: dict) -> list[dict]:
@@ -96,8 +118,8 @@ def build_scout_messages(charter_key: str, inputs: dict) -> list[dict]:
     return _msgs(_SCOUT_SYS.format(charter=CHARTERS[charter_key]), inputs)
 
 
-def build_risk_messages(inputs: dict) -> list[dict]:
-    return _msgs(_RISK_SYS, inputs)
+def build_risk_messages(inputs: dict, stance: str = "NEUTRAL") -> list[dict]:
+    return _msgs(_RISK_SYS.format(stance=RISK_STANCES[stance]), inputs)
 
 
 def build_pm_messages(charter_key: str, inputs: dict) -> list[dict]:
@@ -125,6 +147,8 @@ def validate_scout(out: dict, known_symbols: set[str]) -> list[str]:
             errs.append(f"{p['symbol']}: evidence required")
         elif p.get("urgency") not in ("low", "high"):
             errs.append(f"{p['symbol']}: bad urgency")
+        elif p.get("conviction") not in (1, 2, 3, 4, 5):
+            errs.append(f"{p['symbol']}: conviction 1-5 required")
     return errs
 
 
@@ -159,6 +183,8 @@ def validate_pm(out: dict, approved: dict[str, str]) -> list[str]:
             errs.append(f"{sym}: {o['side']} was not Risk-approved")
         if not _str(o.get("thesis", "")) or not _str(o.get("invalidation", "")):
             errs.append(f"{sym}: thesis and invalidation required")
+        elif o.get("conviction") not in (1, 2, 3, 4, 5):
+            errs.append(f"{sym}: conviction 1-5 required")
     return errs
 
 

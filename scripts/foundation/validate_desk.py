@@ -125,6 +125,52 @@ def check_g_alert_validity() -> None:
         fail(f"G: {r['symbol']} {r['kind']} alert quote {r['quote']} never crossed {r['level']}")
 
 
+def check_h_credibility() -> None:
+    stamped = _db.scalar(
+        f"select count(*) from {M}.desk_outcomes where coalesce(t20_alpha, t5_alpha) is not null"
+    )
+    if not stamped:
+        return
+    n = _db.scalar(f"select count(*) from {M}.desk_credibility")
+    if not n:
+        fail("H: alpha stamps exist but desk_credibility is empty")
+        return
+    if _db.scalar(
+        f"select 1 from {M}.desk_credibility having max(built_at) < now() - interval '2 days'"
+    ):
+        fail("H: desk_credibility stale (>2 days old)")
+
+
+def check_i_conviction() -> None:
+    rows = _db.read_df(
+        f"""select dj.cycle_date, u.x->>'symbol' sym
+            from {M}.desk_journal dj
+            cross join lateral (
+                select x from jsonb_array_elements(coalesce(dj.scout->'proposals', '[]'::jsonb)) t(x)
+                union all
+                select x from jsonb_array_elements(dj.applied || coalesce(dj.queued, '[]'::jsonb)) t2(x)
+            ) u
+            where (dj.inputs_digest->>'desk_version')::int >= 2
+              and not ((u.x->>'conviction') ~ '^[1-5]$')"""
+    )
+    for r in rows.to_dict("records"):
+        fail(f"I: {r['sym']} ({r['cycle_date']}) lacks a 1-5 conviction tier")
+
+
+def check_j_stance_consensus() -> None:
+    rows = _db.read_df(
+        f"""select dj.cycle_date, m.name
+            from {M}.desk_journal dj join {M}.portfolio_master m using (portfolio_id)
+            where (dj.inputs_digest->>'desk_version')::int >= 2
+              and dj.risk is not null and jsonb_array_length(dj.risk->'verdicts') > 0
+              and ((select count(*) from jsonb_object_keys(dj.risk->'stances') k) < 2
+                   or exists (select 1 from jsonb_array_elements(dj.risk->'verdicts') v
+                              where not (v ? 'consensus')))"""
+    )
+    for r in rows.to_dict("records"):
+        fail(f"J: {r['name']} ({r['cycle_date']}) verdicts without >=2-stance consensus")
+
+
 def check_e_trader_liveness() -> None:
     # only meaningful once Desk v2 cycles exist (trader column populated)
     row = _db.read_df(
@@ -146,6 +192,9 @@ def main() -> int:
         check_e_trader_liveness,
         check_f_queue_settlement,
         check_g_alert_validity,
+        check_h_credibility,
+        check_i_conviction,
+        check_j_stance_consensus,
     ):
         print(f"[validate_desk] {check.__name__}", flush=True)
         check()

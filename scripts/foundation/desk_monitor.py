@@ -54,7 +54,7 @@ from latest l
 join pos p on p.portfolio_id = l.portfolio_id
 join {M}.portfolio_master m on m.portfolio_id = l.portfolio_id
 join {M}.instrument_master i
-  on i.instrument_id::text = split_part(p.instrument_key, ':', 2) and i.symbol = l.sym
+  on i.instrument_id::text = p.instrument_key and i.symbol = l.sym
 where i.kite_token is not null
 """
 

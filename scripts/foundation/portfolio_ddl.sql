@@ -273,3 +273,39 @@ CREATE TABLE IF NOT EXISTS atlas_foundation.desk_alerts (
     created_at   timestamptz NOT NULL DEFAULT now(),
     UNIQUE (portfolio_id, symbol, kind, alert_date)
 );
+
+-- ── Desk v2 wave 2: benchmark-relative stamps + measured credibility ───────
+-- Alpha vs NIFTY 500 on every outcome stamp; rolling track records per desk/
+-- charter/sector/decision-kind rebuilt nightly and injected into the PM's
+-- payload; weekly conviction-vs-outcome calibration.
+ALTER TABLE atlas_foundation.desk_outcomes ADD COLUMN IF NOT EXISTS t5_alpha  numeric(10, 4);
+ALTER TABLE atlas_foundation.desk_outcomes ADD COLUMN IF NOT EXISTS t20_alpha numeric(10, 4);
+ALTER TABLE atlas_foundation.desk_outcomes ADD COLUMN IF NOT EXISTS t60_alpha numeric(10, 4);
+
+CREATE TABLE IF NOT EXISTS atlas_foundation.desk_credibility (
+    id        bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    dim       text NOT NULL CHECK (dim IN ('desk', 'charter', 'sector', 'kind')),
+    dim_value text NOT NULL,
+    n         int NOT NULL,
+    hit_rate  numeric(4, 3) NOT NULL,
+    avg_alpha numeric(8, 2) NOT NULL,
+    built_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS atlas_foundation.desk_calibration (
+    id        bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    tier      int NOT NULL CHECK (tier BETWEEN 1 AND 5),
+    n         int NOT NULL,
+    avg_alpha numeric(8, 2),
+    hit_rate  numeric(4, 3),
+    built_at  timestamptz NOT NULL DEFAULT now()
+);
+
+INSERT INTO atlas_foundation.atlas_thresholds
+    (threshold_key, threshold_value, category, description, units, min_allowed, max_allowed, default_value, is_active)
+SELECT k, v, 'portfolio', d, u, lo, hi, v, TRUE
+FROM (VALUES
+    ('desk_stance_consensus_min', 2,   'Risk stances (of 3) that must approve for a desk order to proceed', 'stances',  1::numeric, 3::numeric),
+    ('desk_reduced_frac',         0.5, 'Position-size fraction when stance consensus is split 2/3',         'fraction', 0.1, 1)
+) AS s(k, v, d, u, lo, hi)
+WHERE NOT EXISTS (SELECT 1 FROM atlas_foundation.atlas_thresholds t WHERE t.threshold_key = s.k);
