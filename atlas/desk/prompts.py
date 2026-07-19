@@ -162,6 +162,59 @@ def validate_pm(out: dict, approved: dict[str, str]) -> list[str]:
     return errs
 
 
+# ── B3: Execution Trader — exit levels for PM buy orders ────────────────────
+
+_TRADER_SYS = """You are the EXECUTION TRADER on an Indian equity paper-trading desk.
+The PM has already decided WHAT to buy; you set the exit levels. For each buy
+order you get real price levels: last_close (the entry reference), ema_21,
+ema_50, ema_200, atr_14, low_20d, high_20d.
+
+Rules:
+- stop: a real support level BELOW last_close (an EMA, the 20-day low, or
+  last_close minus a small ATR multiple) — never an arbitrary percentage.
+- target: a realistic objective ABOVE last_close grounded in the given levels
+  (e.g. prior 20-day high, or a level implying reward-to-risk >= {min_rr}).
+- reward-to-risk (target - last_close) / (last_close - stop) must be >= {min_rr}.
+- basis: one line naming WHICH level anchors the stop and target.
+- Ground every number in the provided levels; never invent prices.
+Output ONLY JSON:
+{{"plans": [{{"symbol": str, "stop": number, "target": number, "basis": str}}, ...]}}"""
+
+
+def build_trader_messages(inputs: dict, min_rr: float) -> list[dict]:
+    return _msgs(_TRADER_SYS.format(min_rr=min_rr), inputs)
+
+
+def validate_trader(out: dict, expected: set[str]) -> list[str]:
+    errs = []
+    plans = out.get("plans")
+    if not isinstance(plans, list) or len(plans) > len(expected):
+        return [f"plans must be list of <={len(expected)}"]
+    for p in plans:
+        if not isinstance(p, dict) or p.get("symbol") not in expected:
+            errs.append(f"plan for unexpected symbol: {p}")
+        elif not isinstance(p.get("stop"), (int, float)) or not isinstance(
+            p.get("target"), (int, float)
+        ):
+            errs.append(f"{p['symbol']}: stop/target must be numbers")
+        elif not _str(p.get("basis", "")):
+            errs.append(f"{p['symbol']}: basis required")
+    return errs
+
+
+def check_plan(entry, stop, target, min_rr) -> tuple[float | None, list[str]]:
+    """Pure sanity gate on a buy plan (Decimal in, code-enforced — never the model).
+    Returns (reward_to_risk, errors); rr is None when the geometry is invalid."""
+    if not stop < entry:
+        return None, [f"stop {stop} must be below entry {entry}"]
+    if not target > entry:
+        return None, [f"target {target} must be above entry {entry}"]
+    rr = float((target - entry) / (entry - stop))
+    if rr < float(min_rr):
+        return rr, [f"reward-to-risk {rr:.2f} below minimum {min_rr}"]
+    return rr, []
+
+
 # ── B2: Bull/Bear debate (contested moves only) + weekly Reflection ─────────
 
 _DEBATE_SYS = """You are the {side} in a structured debate on an Indian equity

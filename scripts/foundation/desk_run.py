@@ -36,6 +36,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import _db
 import pandas as pd
 import portfolio_data as pdata
+from desk_orders import (
+    attach_plans,
+    build_memo,
+    queue_order,
+    send_memo,
+    settle_pending,
+    write_journal,
+)
 from portfolio_run import TradeError, book_trade
 
 from atlas.desk import (
@@ -303,10 +311,12 @@ def _knobs() -> dict:
         "max_orders": int(m["desk_max_orders_per_cycle"]),
         "sector_cap": int(m["desk_sector_cap"]),
         "watchlist": int(m["desk_watchlist_size"]),
+        "min_rr": m["desk_min_rr"],
+        "expiry_days": int(m["desk_pending_expiry_days"]),
     }
 
 
-def run_cycle(p: dict, knobs: dict) -> dict:
+def run_cycle(p: dict, knobs: dict, dry: bool = False) -> dict:
     charter = p["params"].get("charter", "sector_leaders")
     inputs = assemble_inputs(p, knobs)
     sym2key = inputs.pop("_universe_sym2key")
@@ -316,7 +326,9 @@ def run_cycle(p: dict, knobs: dict) -> dict:
         "risk": None,
         "pm": None,
         "debates": None,
+        "trader": None,
         "applied": [],
+        "queued": [],
         "errors": [],
     }
 
@@ -418,14 +430,36 @@ def run_cycle(p: dict, knobs: dict) -> dict:
             pm.get("orders", []), inputs, knobs, p["params"].get("standing_constraints")
         )
         journal["errors"] += rejected
+        try:  # trader failure degrades to plan-less orders, never a lost cycle
+            plans, trader, perrs = attach_plans(
+                [o for o in orders if o["side"] == "buy"], knobs["min_rr"], llm_call
+            )
+        except RuntimeError as e:
+            plans, trader, perrs = {}, None, [f"trader: {e}"]
+        journal["trader"] = trader
+        journal["errors"] += perrs
+        approval = str(p["params"].get("approval", "")).lower() == "true"
         for o in orders:
             ckey = sym2key.get(o["symbol"])
             if ckey is None:
                 journal["errors"].append(f"{o['symbol']}: no instrument key")
                 continue
+            card = {**o, **plans.get(o["symbol"], {})}
+            if approval:
+                if o["side"] == "buy" and o["symbol"] not in plans:
+                    journal["errors"].append(f"{o['symbol']}: no valid plan — not queued")
+                    continue
+                if not dry:
+                    queue_order(str(p["portfolio_id"]), _db.eod_cutoff(), card, ckey)
+                journal["queued"].append(card)
+                continue
             try:
-                res = book_trade(str(p["portfolio_id"]), o["side"], ckey)
-                journal["applied"].append({**o, **res})
+                res = (
+                    {"dry_run": True}
+                    if dry
+                    else book_trade(str(p["portfolio_id"]), o["side"], ckey)
+                )
+                journal["applied"].append({**card, **res})
             except TradeError as e:
                 journal["errors"].append(f"{o['symbol']}: {e}")
     except RuntimeError as e:
@@ -456,7 +490,13 @@ def stamp_outcomes() -> None:
             from {M}.desk_journal dj, jsonb_array_elements(dj.scout->'proposals') pr
             where pr->>'action' in ('add','exit')
               and not exists (select 1 from jsonb_array_elements(dj.applied) a2
-                              where a2->>'symbol' = pr->>'symbol')"""
+                              where a2->>'symbol' = pr->>'symbol')
+            union
+            select portfolio_id::text, cycle_date, symbol, side, 'order'
+            from {M}.desk_pending_orders where status = 'booked'
+            union
+            select portfolio_id::text, cycle_date, symbol, side, 'rejected'
+            from {M}.desk_pending_orders where status in ('rejected', 'expired')"""
     )
     n = 0
     for r in decisions.to_dict("records"):
@@ -507,6 +547,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Atlas Desk nightly cycle")
     ap.add_argument("--portfolio-id")
     ap.add_argument("--force", action="store_true", help="rerun even if today's cycle exists")
+    ap.add_argument("--dry-run", action="store_true", help="full cycle, print memo, no writes")
     a = ap.parse_args()
     eod = _db.eod_cutoff()
     q = f"""select portfolio_id::text pid from {M}.portfolio_master
@@ -517,8 +558,13 @@ def main() -> None:
         print("[desk] no desk portfolios — nothing to do", flush=True)
         return
     knobs = _knobs()
+    try:  # settlement of approved/expired cards runs before any new cycle
+        settle_notes = settle_pending(knobs["expiry_days"], dry=a.dry_run)
+    except Exception as e:
+        settle_notes = [f"❌ settlement failed: {e}"]
+    summaries: list[dict] = []
     for pid in ids:
-        if not a.force and _db.scalar(
+        if not (a.force or a.dry_run) and _db.scalar(
             f"select 1 from {M}.desk_journal where portfolio_id=:p and cycle_date=:d limit 1",
             {"p": pid, "d": eod},
         ):
@@ -526,38 +572,27 @@ def main() -> None:
             continue
         p = pdata.load_portfolio(pid)
         try:
-            journal = run_cycle(p, knobs)
+            journal = run_cycle(p, knobs, dry=a.dry_run)
         except Exception as e:  # one desk's crash must never starve the others
-            journal = {
-                "scout": None,
-                "risk": None,
-                "pm": None,
-                "debates": None,
+            journal = {k: None for k in ("scout", "risk", "pm", "debates", "trader")} | {
                 "applied": [],
+                "queued": [],
                 "errors": [f"cycle crashed: {type(e).__name__}: {e}"],
             }
-        _db.exec_sql(
-            f"""insert into {M}.desk_journal
-                (portfolio_id, cycle_date, scout, risk, pm, debates, applied, errors)
-                values (:p, :d, cast(:s as jsonb), cast(:r as jsonb), cast(:m as jsonb),
-                        cast(:db as jsonb), cast(:ap as jsonb), cast(:er as jsonb))""",
-            {
-                "p": pid,
-                "d": eod,
-                "s": json.dumps(journal["scout"], default=str),
-                "r": json.dumps(journal["risk"], default=str),
-                "m": json.dumps(journal["pm"], default=str),
-                "db": json.dumps(journal.get("debates"), default=str),
-                "ap": json.dumps(journal["applied"], default=str),
-                "er": json.dumps(journal["errors"], default=str),
-            },
+        if not a.dry_run:
+            write_journal(pid, eod, journal)
+        summaries.append(
+            {"name": p["name"], **{k: journal[k] for k in ("applied", "queued", "errors")}}
         )
         print(
             f"[desk] {p['name']}: applied={len(journal['applied'])} "
-            f"errors={len(journal['errors'])}",
+            f"queued={len(journal['queued'])} errors={len(journal['errors'])}",
             flush=True,
         )
-    stamp_outcomes()
+    if not a.dry_run:
+        stamp_outcomes()
+    memo = build_memo(eod, summaries, settle_notes)
+    print(memo, flush=True) if a.dry_run else send_memo(memo)
 
 
 if __name__ == "__main__":

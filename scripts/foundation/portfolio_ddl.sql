@@ -216,3 +216,45 @@ FROM (VALUES
     ('portfolio_exit_load_fund_days', 365,  'Holding days below which the fund exit load applies',       'days',     0, 1100)
 ) AS s(k, v, d, u, lo, hi)
 WHERE NOT EXISTS (SELECT 1 FROM atlas_foundation.atlas_thresholds t WHERE t.threshold_key = s.k);
+
+-- ── Desk v2 wave 1 (2026-07): trade plans + human approval queue ───────────
+-- EXECUTION TRADER agent sets stop/target per buy (grounded in real levels,
+-- geometry + R:R re-checked in code). Desks with params.approval='true' queue
+-- orders here instead of auto-booking; approval books via the audited
+-- book_trade path at next settlement; unapproved cards auto-expire.
+ALTER TABLE atlas_foundation.desk_journal ADD COLUMN IF NOT EXISTS trader jsonb;
+ALTER TABLE atlas_foundation.desk_journal ADD COLUMN IF NOT EXISTS queued jsonb NOT NULL DEFAULT '[]';
+
+CREATE TABLE IF NOT EXISTS atlas_foundation.desk_pending_orders (
+    id             bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    portfolio_id   uuid NOT NULL REFERENCES atlas_foundation.portfolio_master(portfolio_id),
+    cycle_date     date NOT NULL,
+    symbol         text NOT NULL,
+    side           text NOT NULL CHECK (side IN ('buy', 'sell')),
+    instrument_key text NOT NULL,
+    thesis         text NOT NULL,
+    invalidation   text NOT NULL,
+    entry_ref      numeric(14, 2),
+    stop           numeric(14, 2),
+    target         numeric(14, 2),
+    rr             numeric(6, 2),
+    plan_basis     text,
+    status         text NOT NULL DEFAULT 'pending'
+                   CHECK (status IN ('pending', 'approved', 'rejected', 'expired', 'booked', 'failed')),
+    decided_at     timestamptz,
+    decided_by     text,
+    booked_at      timestamptz,
+    note           text,
+    created_at     timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (portfolio_id, symbol, cycle_date)
+);
+CREATE INDEX IF NOT EXISTS ix_desk_pending ON atlas_foundation.desk_pending_orders (status, cycle_date);
+
+INSERT INTO atlas_foundation.atlas_thresholds
+    (threshold_key, threshold_value, category, description, units, min_allowed, max_allowed, default_value, is_active)
+SELECT k, v, 'portfolio', d, u, lo, hi, v, TRUE
+FROM (VALUES
+    ('desk_min_rr',               1.5, 'Minimum reward-to-risk for a desk buy trade plan', 'ratio', 1::numeric, 5::numeric),
+    ('desk_pending_expiry_days',  3,   'Sessions before an unapproved desk order expires', 'days',  1, 10)
+) AS s(k, v, d, u, lo, hi)
+WHERE NOT EXISTS (SELECT 1 FROM atlas_foundation.atlas_thresholds t WHERE t.threshold_key = s.k);

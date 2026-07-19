@@ -13,11 +13,14 @@ from .prompts import (
     build_reflect_messages,
     build_risk_messages,
     build_scout_messages,
+    build_trader_messages,
+    check_plan,
     validate_debate,
     validate_pm,
     validate_reflect,
     validate_risk,
     validate_scout,
+    validate_trader,
 )
 
 __all__ = [
@@ -27,9 +30,12 @@ __all__ = [
     "build_reflect_messages",
     "build_risk_messages",
     "build_scout_messages",
+    "build_trader_messages",
+    "check_plan",
     "validate_debate",
     "validate_pm",
     "validate_reflect",
     "validate_risk",
     "validate_scout",
+    "validate_trader",
 ]
