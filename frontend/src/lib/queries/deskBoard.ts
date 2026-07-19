@@ -28,6 +28,7 @@ export type DeskCycle = {
   name: string
   charter: string
   nav: number | null
+  startCapital: number | null
   cycleDate: string
   applied: DeskCard[]
   queued: DeskCard[]
@@ -64,7 +65,8 @@ export async function getDeskCycles(): Promise<{ cycles: DeskCycle[]; regime: st
            dj.portfolio_id::text as pid, m.name,
            coalesce(m.params->>'charter', 'sector_leaders') as charter,
            dj.cycle_date::text as cycle_date, dj.scout, dj.risk, dj.pm,
-           dj.applied, dj.queued, dj.errors, dj.inputs_digest, n.nav
+           dj.applied, dj.queued, dj.errors, dj.inputs_digest, n.nav,
+           m.initial_capital as start_capital
     from atlas_foundation.desk_journal dj
     join atlas_foundation.portfolio_master m using (portfolio_id)
     left join lateral (
@@ -87,6 +89,7 @@ export async function getDeskCycles(): Promise<{ cycles: DeskCycle[]; regime: st
         name: String(r.name),
         charter: String(r.charter),
         nav: num(r.nav),
+        startCapital: num(r.start_capital),
         cycleDate: String(r.cycle_date),
         applied: ((r.applied ?? []) as Json[]).map(card),
         queued: ((r.queued ?? []) as Json[]).map(card),

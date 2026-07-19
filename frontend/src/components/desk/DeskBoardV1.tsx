@@ -1,128 +1,162 @@
-// The Desk — glass-box board for the nightly agent trading cycle. Everything
-// rendered here is journaled engine output: scout proposals, 3-stance risk
-// consensus, PM orders with code-verified trade plans, bookings/queue, and the
-// desk's measured track record. Server component; approval actions live in the
-// (client) DeskQueue.
+// The Desk — plain-language view of the nightly AI trading cycle. Written for a
+// reader who does not speak quant: money first, one plain sentence per action,
+// jargon translated (no "alpha", "conviction 3/5", "R:R", "Jaccard"). Every
+// number is journaled engine output from the desk_* tables — nothing derived.
 import { getPendingOrders } from '@/lib/queries/desk'
 import { getDeskCycles, getDeskIntel, type DeskCard, type DeskCycle } from '@/lib/queries/deskBoard'
 import { DeskQueue } from '@/components/portfolios/DeskQueue'
 import { Panel } from '@/components/ui/Panel'
 
-const inr = (v: number | null) =>
-  v === null ? '—' : `₹${(v / 100000).toFixed(2)}L`
+const rupees = (v: number | null) =>
+  v === null ? '—' : `₹${(v / 100000).toFixed(2)} lakh`
 
-function Chip({ tone, children }: { tone: 'pos' | 'neg' | 'mut'; children: React.ReactNode }) {
-  const color =
-    tone === 'pos' ? 'text-pos' : tone === 'neg' ? 'text-neg' : 'text-txt-3'
-  return (
-    <span className={`rounded-md border border-edge-hair px-1.5 py-0.5 font-num text-[10px] uppercase tracking-[0.1em] ${color}`}>
-      {children}
-    </span>
-  )
+// what each desk is trying to do, in one plain sentence
+const CHARTER_PLAIN: Record<string, string> = {
+  sector_leaders: 'Backs the strongest stocks inside the strongest sectors.',
+  conviction: 'Owns the market’s highest-conviction names, wherever they are.',
+  quality_momentum: 'Only strong stocks that are also beating the market and trending up.',
+  rotation: 'Tries to catch sectors early, as they turn from weak to strong.',
 }
 
-function Card({ c, tag }: { c: DeskCard; tag: string }) {
+const confidenceWord = (c: number | null) =>
+  c === null ? null : c >= 4 ? 'high confidence' : c === 3 ? 'medium confidence' : 'low confidence'
+
+function money(v: number | null) {
+  return v === null ? '—' : `₹${Math.round(v).toLocaleString('en-IN')}`
+}
+
+// one plain sentence summarising what the desk did tonight
+function headline(d: DeskCycle): string {
+  const sells = [...d.applied, ...d.queued].filter((c) => c.side === 'sell').length
+  const buys = [...d.applied, ...d.queued].filter((c) => c.side === 'buy').length
+  const queued = d.queued.length > 0
+  if (sells + buys === 0) return 'No changes today — nothing looked worth acting on, so it held everything.'
+  const parts: string[] = []
+  if (buys) parts.push(`${buys} ${buys === 1 ? 'buy' : 'buys'}`)
+  if (sells) parts.push(`${sells} ${sells === 1 ? 'sell' : 'sells'}`)
+  const verb = queued ? 'proposed' : 'made'
+  const tail = queued ? ' — waiting for your approval below' : ''
+  return `Today it ${verb} ${parts.join(' and ')}${tail}.`
+}
+
+function ActionRow({ c }: { c: DeskCard }) {
+  const bought = c.side === 'buy'
+  const conf = confidenceWord(c.conviction)
   return (
-    <li className="rounded-lg border border-edge-hair px-4 py-2.5">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <Chip tone={c.side === 'buy' ? 'pos' : 'neg'}>{c.side}</Chip>
+    <li className="border-t border-edge-hair pt-3 first:border-t-0 first:pt-0">
+      <div className="flex flex-wrap items-baseline gap-x-2">
+        <span className={`font-num text-[12px] font-semibold ${bought ? 'text-pos' : 'text-neg'}`}>
+          {bought ? 'BUY' : 'SELL'}
+        </span>
         <span className="font-display text-[15px] font-medium text-txt-1">{c.symbol}</span>
-        <span className="font-num text-[11px] text-txt-3">{tag}</span>
-        {c.conviction !== null && (
-          <span className="font-num text-[11px] text-txt-3">conviction {c.conviction}/5</span>
+        {bought && c.entryRef !== null && (
+          <span className="font-num text-[13px] text-txt-2">around {money(c.entryRef)} a share</span>
         )}
-        {c.reduced && <Chip tone="mut">half size · split vote</Chip>}
-        {c.stop !== null && (
-          <span className="ml-auto font-num text-[12px] text-txt-2">
-            entry {c.entryRef} · stop {c.stop} · target {c.target} · R:R {c.rr}
-          </span>
+        {conf && <span className="font-num text-[11px] text-txt-3">· {conf}</span>}
+        {c.reduced && (
+          <span className="font-num text-[11px] text-txt-3">· smaller-than-usual size (the reviewers were split)</span>
         )}
       </div>
-      <p className="mt-1 font-sans text-[13px] text-txt-2">{c.thesis}</p>
-      <p className="mt-0.5 font-sans text-[12px] text-txt-3">Exit if: {c.invalidation}</p>
-      {c.planBasis && (
-        <p className="mt-0.5 font-num text-[11px] text-txt-3">levels: {c.planBasis}</p>
+
+      <p className="mt-1 font-sans text-[13px] text-txt-2">
+        <span className="text-txt-3">Why: </span>
+        {c.thesis}
+      </p>
+
+      {bought && c.stop !== null && c.target !== null && (
+        <p className="mt-1 font-sans text-[13px] text-txt-2">
+          <span className="text-txt-3">Safety net: </span>
+          if it drops to <b className="font-num">{money(c.stop)}</b> the desk sells to cap the loss; it aims to
+          take profit near <b className="font-num">{money(c.target)}</b>.
+        </p>
+      )}
+
+      {c.invalidation && (
+        <p className="mt-1 font-sans text-[13px] text-txt-2">
+          <span className="text-txt-3">It will change its mind if: </span>
+          {c.invalidation}
+        </p>
       )}
     </li>
   )
 }
 
-function CycleCard({ d }: { d: DeskCycle }) {
-  const acted = d.applied.length + d.queued.length > 0
+function DeskCard_({ d }: { d: DeskCycle }) {
+  const gain = d.nav !== null && d.startCapital !== null ? d.nav - d.startCapital : null
+  const gainPct =
+    gain !== null && d.startCapital ? (gain / d.startCapital) * 100 : null
+  const actions = [...d.applied, ...d.queued]
+  const shortName = d.name.replace('Atlas Desk — ', '')
+
   return (
-    <Panel
-      eyebrow={`cycle ${d.cycleDate} · ${d.charter.replace('_', ' ')}`}
-      title={d.name.replace('Atlas Desk — ', '')}
-      action={
-        <span className="flex items-center gap-2">
-          {d.cvar && d.cvar.state === 'derisk' && <Chip tone="neg">de-risk</Chip>}
-          <span className="font-num text-[12px] text-txt-2">{inr(d.nav)} paper NAV</span>
-        </span>
-      }
-      bodyClassName="px-5 py-4"
-    >
-      {acted ? (
-        <ul className="space-y-2.5">
-          {d.applied.map((c) => (
-            <Card key={`a-${c.symbol}`} c={c} tag={c.price !== null ? `booked @ ${c.price}` : 'booked'} />
-          ))}
-          {d.queued.map((c) => (
-            <Card key={`q-${c.symbol}`} c={c} tag="awaiting your approval" />
+    <Panel bodyClassName="px-5 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 className="font-display text-[17px] font-medium text-txt-1">{shortName}</h3>
+          <p className="mt-0.5 font-sans text-[12px] text-txt-3">
+            {CHARTER_PLAIN[d.charter] ?? ''}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="font-num text-[17px] font-medium text-txt-1">{rupees(d.nav)}</p>
+          <p className="font-num text-[11px] text-txt-3">
+            {gain !== null && gainPct !== null ? (
+              <>
+                <span className={gain >= 0 ? 'text-pos' : 'text-neg'}>
+                  {gain >= 0 ? '▲' : '▼'} {money(Math.abs(gain))} ({gainPct >= 0 ? '+' : ''}
+                  {gainPct.toFixed(1)}%)
+                </span>{' '}
+                since it started with {rupees(d.startCapital)}
+              </>
+            ) : (
+              'paper money'
+            )}
+          </p>
+        </div>
+      </div>
+
+      <p className="mt-3 font-sans text-[13.5px] text-txt-1">{headline(d)}</p>
+
+      {actions.length > 0 && (
+        <ul className="mt-3 space-y-3">
+          {actions.map((c) => (
+            <ActionRow key={`${c.side}-${c.symbol}`} c={c} />
           ))}
         </ul>
-      ) : (
-        <p className="font-sans text-[13px] text-txt-3">
-          No action — {d.pmNote ?? d.errors[0] ?? 'nothing material changed; holding is a decision.'}
-        </p>
       )}
 
-      {(d.proposals.length > 0 || d.verdicts.length > 0) && (
+      {d.proposals.length > 0 && (
         <details className="mt-3">
-          <summary className="cursor-pointer font-num text-[11px] uppercase tracking-[0.12em] text-txt-3">
-            Full reasoning — scout &amp; risk votes
+          <summary className="cursor-pointer font-sans text-[12px] text-txt-3 underline decoration-dotted underline-offset-2">
+            What it looked at and decided against
           </summary>
-          <div className="mt-2 space-y-2">
-            {d.proposals.map((p) => (
-              <div key={`p-${p.symbol}-${p.action}`} className="rounded-lg border border-edge-hair px-3 py-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Chip tone={p.action === 'add' ? 'pos' : p.action === 'exit' ? 'neg' : 'mut'}>{p.action}</Chip>
-                  <span className="font-display text-[13px] text-txt-1">{p.symbol}</span>
-                  <span className="font-num text-[11px] text-txt-3">
-                    urgency {p.urgency}
-                    {p.conviction !== null ? ` · conviction ${p.conviction}/5` : ''}
-                  </span>
-                  {(() => {
-                    const v = d.verdicts.find((x) => x.symbol === p.symbol)
-                    return v ? (
-                      <span className="ml-auto font-num text-[11px] text-txt-2">
-                        risk: {v.verdict}
-                        {v.consensus !== null ? ` (${v.consensus}/3 stances)` : ''}
-                      </span>
-                    ) : null
-                  })()}
-                </div>
-                <ul className="mt-1 list-disc pl-5 font-sans text-[12px] text-txt-3">
-                  {p.evidence.slice(0, 3).map((e) => (
-                    <li key={e.slice(0, 40)}>{e}</li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
+          <ul className="mt-2 space-y-1.5">
+            {d.proposals.map((p) => {
+              const v = d.verdicts.find((x) => x.symbol === p.symbol)
+              const acted = actions.some((c) => c.symbol === p.symbol)
+              return (
+                <li key={`${p.symbol}-${p.action}`} className="font-sans text-[12px] text-txt-2">
+                  <b>{p.symbol}</b> — considered {p.action === 'add' ? 'buying' : p.action === 'exit' ? 'selling' : 'watching'};{' '}
+                  {acted
+                    ? 'went ahead.'
+                    : v && v.verdict !== 'approve'
+                      ? 'the risk reviewers said no, so it held off.'
+                      : 'decided to wait.'}
+                  {p.evidence[0] ? <span className="text-txt-3"> ({p.evidence[0]})</span> : null}
+                </li>
+              )
+            })}
+          </ul>
         </details>
-      )}
-      {d.errors.length > 0 && acted && (
-        <p className="mt-2 font-num text-[11px] text-txt-3">⚠ {d.errors.length} filtered/errors journaled</p>
       )}
     </Panel>
   )
 }
 
-const DIM_LABEL: Record<string, string> = {
-  desk: 'Desk',
-  charter: 'Charter',
-  sector: 'Sector',
-  kind: 'Decision kind',
+const DESK_PLAIN: Record<string, string> = {
+  Sector: 'sector',
+  Charter: 'strategy',
+  'Decision kind': 'buys vs sells',
 }
 
 export async function DeskBoardV1() {
@@ -131,134 +165,142 @@ export async function DeskBoardV1() {
     getDeskIntel(),
     getPendingOrders(),
   ])
-  const cred = intel.credibility.filter((c) => c.dim !== 'desk')
+  // show the most telling track-record rows: by strategy and by sector, skip the internal "kind"
+  const track = intel.credibility
+    .filter((c) => c.dim === 'charter' || c.dim === 'sector')
+    .filter((c) => c.n >= 5)
+    .slice(0, 10)
+
   return (
-    <div className="mx-auto max-w-[1400px] space-y-7 px-6 py-7">
+    <div className="mx-auto max-w-[1200px] space-y-7 px-6 py-7">
       <div>
-        <p className="font-num text-txt-3">
-          Paper-traded agent desk · regime {regime ?? '—'} · latest cycle{' '}
-          {cycles[0]?.cycleDate ?? '—'}
-        </p>
-        <h1 className="font-display font-medium tracking-tight text-txt-1">The Desk</h1>
-        <p className="mt-2 max-w-[900px] font-sans text-txt-2">
-          Every evening after close, four AI desks scan Atlas&apos;s scores, debate risk from
-          three stances, and issue orders with code-enforced stops, targets and position
-          caps — on paper money, journaled in full. This page is that journal.
+        <p className="font-num text-txt-3">Updated after each market close · market mood today: {regime ?? '—'}</p>
+        <h1 className="font-display font-medium tracking-tight text-txt-1">Trading Desk</h1>
+        <p className="mt-2 max-w-[760px] font-sans text-txt-2">
+          Four AI-run model funds, each given <b>₹10 lakh of play money</b> (no real funds are
+          connected). Every evening after the market closes, each one reviews Atlas’s scores and
+          decides what to buy or sell — always with a built-in loss limit on each trade. This page
+          shows exactly what each fund did and why.
         </p>
       </div>
 
-      <DeskQueue orders={pending} />
+      {pending.length > 0 && (
+        <div>
+          <h2 className="mb-2 font-display text-[15px] font-medium text-txt-1">Waiting for your decision</h2>
+          <DeskQueue orders={pending} />
+        </div>
+      )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {cycles.map((d) => (
-          <CycleCard key={d.portfolioId} d={d} />
-        ))}
+      <div>
+        <h2 className="mb-3 font-display text-[15px] font-medium text-txt-1">
+          What each fund did {cycles[0] ? `· ${cycles[0].cycleDate}` : ''}
+        </h2>
+        <div className="grid gap-4 lg:grid-cols-2">
+          {cycles.map((d) => (
+            <DeskCard_ key={d.portfolioId} d={d} />
+          ))}
+        </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      {track.length > 0 && (
         <Panel
-          eyebrow="Measured, not claimed"
-          title="Track record by pocket"
+          eyebrow="Its report card"
+          title="How good have the desk’s past calls been?"
           info={{
-            body: 'Rolling hit-rate and average alpha vs NIFTY 500 of every stamped desk decision, grouped by charter, sector and decision kind. The PM sees these numbers before every order.',
+            body: 'Every buy and sell the desks have made, checked 20 trading days later against the overall market (NIFTY 500). “Beat the market” is the share of those calls that did better than simply holding the index. “Average edge” is how much better, on average — a positive number means the desk added value.',
           }}
           bodyClassName="px-5 py-3"
         >
-          <table className="w-full font-num text-[12px]">
+          <table className="w-full font-num text-[13px]">
             <thead>
-              <tr className="text-left text-[10px] uppercase tracking-[0.12em] text-txt-3">
-                <th className="py-1 font-normal">Pocket</th>
-                <th className="py-1 text-right font-normal">n</th>
-                <th className="py-1 text-right font-normal">hit</th>
-                <th className="py-1 text-right font-normal">α</th>
+              <tr className="text-left text-[11px] uppercase tracking-[0.1em] text-txt-3">
+                <th className="py-1.5 font-normal">Grouped by</th>
+                <th className="py-1.5 text-right font-normal">Calls made</th>
+                <th className="py-1.5 text-right font-normal">Beat the market</th>
+                <th className="py-1.5 text-right font-normal">Average edge</th>
               </tr>
             </thead>
             <tbody className="text-txt-2">
-              {cred.slice(0, 12).map((c) => (
+              {track.map((c) => (
                 <tr key={`${c.dim}-${c.dimValue}`} className="border-t border-edge-hair">
-                  <td className="py-1">
-                    <span className="text-txt-3">{DIM_LABEL[c.dim] ?? c.dim} · </span>
+                  <td className="py-1.5">
+                    <span className="text-txt-3">{DESK_PLAIN[c.dim === 'charter' ? 'Charter' : 'Sector']}: </span>
                     {c.dimValue.replace('_', ' ')}
                   </td>
-                  <td className="py-1 text-right">{c.n}</td>
-                  <td className="py-1 text-right">{(c.hitRate * 100).toFixed(0)}%</td>
-                  <td className={`py-1 text-right ${c.avgAlpha >= 0 ? 'text-pos' : 'text-neg'}`}>
-                    {c.avgAlpha.toFixed(2)}
+                  <td className="py-1.5 text-right">{c.n}</td>
+                  <td className="py-1.5 text-right">{(c.hitRate * 100).toFixed(0)}%</td>
+                  <td className={`py-1.5 text-right ${c.avgAlpha >= 0 ? 'text-pos' : 'text-neg'}`}>
+                    {c.avgAlpha >= 0 ? '+' : ''}
+                    {c.avgAlpha.toFixed(1)}%
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </Panel>
+      )}
 
-        <Panel
-          eyebrow="Earned, decaying memory"
-          title="Lessons the desk believes"
-          info={{
-            body: 'Written weekly by reflecting on stamped outcomes. Confidence rises when later results confirm a lesson and decays when they don’t — fast-layer lessons fade in weeks, slow-layer principles persist. Contrast lessons come from comparing the best and worst realized calls.',
-          }}
-          bodyClassName="px-5 py-3"
-        >
-          <ul className="space-y-2">
-            {intel.lessons.slice(0, 6).map((l) => (
-              <li key={l.lesson.slice(0, 50)} className="border-t border-edge-hair pt-2 first:border-t-0 first:pt-0">
-                <div className="flex items-center gap-2">
-                  <Chip tone="mut">{l.layer}</Chip>
-                  {l.contrast && <Chip tone="mut">contrast</Chip>}
-                  <span className="font-num text-[11px] text-txt-3">
-                    {l.desk.replace('Atlas Desk — ', '')} · conf {l.confidence.toFixed(2)}
-                  </span>
-                </div>
-                <p className="mt-1 font-sans text-[12px] text-txt-2">{l.lesson.split(' [basis:')[0]}</p>
-              </li>
-            ))}
-          </ul>
-        </Panel>
-
-        <Panel
-          eyebrow="The desk questions itself"
-          title="Research &amp; audits"
-          info={{
-            body: 'Weekly: a falsifiable hypothesis about the desk’s own rules, evaluated against its realized decisions; and a masked-ticker audit — the scout re-run with anonymized names. Low overlap means name familiarity, not data, drove the picks.',
-          }}
-          bodyClassName="px-5 py-3"
-        >
-          <div className="space-y-3">
-            {intel.hypotheses.slice(0, 2).map((h) => (
-              <div key={h.ts + h.thresholdKey}>
-                <p className="font-num text-[11px] uppercase tracking-[0.1em] text-txt-3">
-                  hypothesis · {h.ts} · {h.verdict.replace('_', ' ')}
-                </p>
-                <p className="font-sans text-[12px] text-txt-2">
-                  {h.hypothesis} <span className="font-num text-txt-3">({h.thresholdKey} → {h.proposedValue})</span>
-                </p>
-              </div>
-            ))}
+      <details className="rounded-panel border border-edge-hair bg-surface-panel px-5 py-4">
+        <summary className="cursor-pointer font-display text-[15px] font-medium text-txt-1">
+          Under the hood — how the desk learns and stays honest
+        </summary>
+        <div className="mt-4 space-y-5">
+          {intel.lessons.length > 0 && (
             <div>
-              <p className="font-num text-[11px] uppercase tracking-[0.1em] text-txt-3">
-                masked-ticker audit (1.0 = data-driven)
+              <p className="mb-1.5 font-num text-[11px] uppercase tracking-[0.12em] text-txt-3">
+                What it has learned from its own results
               </p>
-              {intel.audits.map((a) => (
-                <p key={a.ts + a.desk} className="font-num text-[12px] text-txt-2">
-                  {a.ts} · {a.desk.replace('Atlas Desk — ', '')} · overlap {a.jaccard.toFixed(2)}
-                </p>
-              ))}
-            </div>
-            {intel.alerts.length > 0 && (
-              <div>
-                <p className="font-num text-[11px] uppercase tracking-[0.1em] text-txt-3">
-                  intraday breach alerts
-                </p>
-                {intel.alerts.slice(0, 5).map((a) => (
-                  <p key={a.date + a.symbol + a.kind} className="font-num text-[12px] text-txt-2">
-                    {a.date} · {a.symbol} {a.kind === 'stop' ? '🛑 stop' : '🎯 target'} {a.level} (quote {a.quote})
-                  </p>
+              <ul className="space-y-1.5">
+                {intel.lessons.slice(0, 5).map((l) => (
+                  <li key={l.lesson.slice(0, 50)} className="font-sans text-[13px] text-txt-2">
+                    • {l.lesson.split(' [basis:')[0]}
+                    <span className="font-num text-[11px] text-txt-3">
+                      {' '}
+                      ({l.desk.replace('Atlas Desk — ', '')}, confidence {(l.confidence * 100).toFixed(0)}%)
+                    </span>
+                  </li>
                 ))}
-              </div>
-            )}
-          </div>
-        </Panel>
-      </div>
+              </ul>
+            </div>
+          )}
+
+          {intel.audits.length > 0 && (
+            <div>
+              <p className="mb-1.5 font-num text-[11px] uppercase tracking-[0.12em] text-txt-3">
+                Honesty check: is it trading on data, or on famous names?
+              </p>
+              <p className="font-sans text-[13px] text-txt-2">
+                Each week we hide the company names and ask a desk to pick again. If it makes the same
+                picks, it’s reacting to the numbers, not to brand familiarity.
+              </p>
+              <ul className="mt-1.5">
+                {intel.audits.slice(0, 3).map((a) => (
+                  <li key={a.ts + a.desk} className="font-num text-[12px] text-txt-2">
+                    {a.ts} · {a.desk.replace('Atlas Desk — ', '')}: {(a.jaccard * 100).toFixed(0)}% of picks
+                    stayed the same with names hidden
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {intel.alerts.length > 0 && (
+            <div>
+              <p className="mb-1.5 font-num text-[11px] uppercase tracking-[0.12em] text-txt-3">
+                Recent price alerts
+              </p>
+              <ul>
+                {intel.alerts.slice(0, 5).map((a) => (
+                  <li key={a.date + a.symbol + a.kind} className="font-sans text-[13px] text-txt-2">
+                    {a.date} · {a.symbol} {a.kind === 'stop' ? 'hit its loss limit' : 'reached its profit target'} (₹
+                    {Math.round(a.level).toLocaleString('en-IN')})
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      </details>
     </div>
   )
 }
