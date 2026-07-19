@@ -14,6 +14,7 @@ import os
 import sys
 from decimal import Decimal
 from pathlib import Path
+from typing import Any, cast
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -118,7 +119,7 @@ def main() -> None:
     kite = KiteConnect(api_key=os.environ["KITE_API_KEY"])
     kite.set_access_token(get_valid_access_token(conn_str=_db.db_url()))
     tokens = [int(r["kite_token"]) for r in rows]
-    raw = kite.quote(tokens)
+    raw = cast(dict[str, Any], kite.quote(tokens))  # kiteconnect stubs under-type this
     quotes = {int(v["instrument_token"]): Decimal(str(v["last_price"])) for v in raw.values()}
     alerts = breaches(rows, quotes)
     n = record_and_notify(alerts)
