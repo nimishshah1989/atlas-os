@@ -278,19 +278,36 @@ Tasks:
    confirmed, contradicted, or untested → new confidence (0.1-0.95; small steps,
    ±0.1 max; untested decays slightly).
 2. Write AT MOST 3 NEW lessons — only patterns the outcomes actually support,
-   phrased as actionable guidance. No platitudes; cite the pattern.
+   phrased as actionable guidance. No platitudes; cite the pattern. Each lesson
+   gets a memory layer: "fast" = this week's regime/market observation (fades in
+   weeks), "medium" = sector/style pattern (fades in months), "slow" = durable
+   principle (near-permanent). Choose honestly — durable claims need repeated
+   evidence.
+3. If contrast_candidates are provided (your BEST and WORST stamped outcomes),
+   extract the ONE conceptual difference between what worked and what failed —
+   not a description, a transferable rule. Cite at least one symbol from each
+   side. If none are provided, set contrast_insight to null.
 Output ONLY JSON:
 {{"updates": [{{"id": int, "confidence": float, "basis": str}}, ...],
-  "new_lessons": [{{"lesson": str,
+  "new_lessons": [{{"lesson": str, "layer": "fast"|"medium"|"slow",
      "tags": {{"regime": str|null, "sector": str|null, "action": str|null}},
-     "basis": str}}, ...]}}"""
+     "basis": str}}, ...],
+  "contrast_insight": {{"insight": str, "layer": "fast"|"medium"|"slow",
+     "best_cited": [str, ...], "worst_cited": [str, ...]}} | null}}"""
 
 
 def build_reflect_messages(charter_key: str, inputs: dict) -> list[dict]:
     return _msgs(_REFLECT_SYS.format(charter=CHARTERS[charter_key]), inputs)
 
 
-def validate_reflect(out: dict, known_ids: set[int]) -> list[str]:
+_LAYERS = ("fast", "medium", "slow")
+
+
+def validate_reflect(
+    out: dict, known_ids: set[int], contrast_syms: tuple[set[str], set[str]] | None = None
+) -> list[str]:
+    """contrast_syms = (best, worst) symbol sets when candidates were provided —
+    the contrast insight must cite at least one real symbol from each side."""
     errs = []
     ups = out.get("updates", [])
     news = out.get("new_lessons", [])
@@ -306,4 +323,18 @@ def validate_reflect(out: dict, known_ids: set[int]) -> list[str]:
     for n in news:
         if not isinstance(n, dict) or not _str(n.get("lesson", "")) or not _str(n.get("basis", "")):
             errs.append(f"bad new lesson: {n}")
+        elif n.get("layer") not in _LAYERS:
+            errs.append(f"new lesson needs layer fast|medium|slow: {n.get('lesson', '')[:40]}")
+    ci = out.get("contrast_insight")
+    if contrast_syms is not None:
+        best, worst = contrast_syms
+        if not isinstance(ci, dict):
+            errs.append("contrast_insight required when candidates provided")
+        elif (
+            not _str(ci.get("insight", ""))
+            or ci.get("layer") not in _LAYERS
+            or not set(ci.get("best_cited") or []) & best
+            or not set(ci.get("worst_cited") or []) & worst
+        ):
+            errs.append("contrast_insight must cite >=1 real best and worst symbol")
     return errs

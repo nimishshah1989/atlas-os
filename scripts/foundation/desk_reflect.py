@@ -32,7 +32,38 @@ from atlas.desk import build_reflect_messages, validate_reflect
 
 M = "atlas_foundation"
 _CONFIDENCE_FLOOR = 0.15
-_UNTESTED_DECAY = 0.97
+
+
+def _layer_decay() -> dict[str, float]:
+    df = _db.read_df(
+        f"""select threshold_key k, threshold_value v from {M}.atlas_thresholds
+            where threshold_key like 'desk_decay_%' and is_active"""
+    )
+    return {r["k"].removeprefix("desk_decay_"): float(r["v"]) for r in df.to_dict("records")}
+
+
+def _contrast_candidates(outcomes) -> tuple[list[dict], list[dict]]:
+    """Best/worst matured decisions by direction-aware alpha (FinCon CVRF):
+    positive alpha is good for buys/adds, avoided-drawdown good for exits."""
+    rows = []
+    for r in outcomes.to_dict("records"):
+        alpha = r.get("t20_alpha") if r.get("t20_alpha") is not None else r.get("t5_alpha")
+        if alpha is None:
+            continue
+        score = float(alpha) if r["side"] in ("buy", "add") else -float(alpha)
+        rows.append(
+            {
+                "symbol": r["symbol"],
+                "side": r["side"],
+                "kind": r["kind"],
+                "decision_date": r["decision_date"],
+                "realized_alpha_score": round(score, 2),
+            }
+        )
+    rows.sort(key=lambda r: r["realized_alpha_score"])
+    if len(rows) < 4:
+        return [], []
+    return rows[-3:][::-1], rows[:3]
 
 
 def reflect_one(pid: str) -> dict:
@@ -41,14 +72,15 @@ def reflect_one(pid: str) -> dict:
     ).iloc[0]
     charter = (p["params"] or {}).get("charter", "sector_leaders")
 
+    # ponytail: 40 rows / 6 cols — the full 60×9 payload 413s Groq's 8k request cap
     outcomes = _db.read_df(
-        f"""select kind, symbol, side, decision_date, t5_pct, t20_pct, t60_pct
+        f"""select kind, symbol, side, decision_date, t5_alpha, t20_alpha
             from {M}.desk_outcomes where portfolio_id = :p
-            order by decision_date desc limit 60""",
+            order by decision_date desc limit 40""",
         {"p": pid},
     )
     lessons = _db.read_df(
-        f"select id, lesson, tags, confidence from {M}.desk_lessons "
+        f"select id, lesson, tags, confidence, layer from {M}.desk_lessons "
         "where portfolio_id = :p and active",
         {"p": pid},
     )
@@ -60,6 +92,8 @@ def reflect_one(pid: str) -> dict:
     if outcomes.empty and lessons.empty:
         return {"desk": p["name"], "skipped": "no outcomes yet"}
 
+    best, worst = _contrast_candidates(outcomes)
+    contrast_syms = ({r["symbol"] for r in best}, {r["symbol"] for r in worst}) if best else None
     reply = llm_call(
         build_reflect_messages(
             charter,
@@ -67,22 +101,24 @@ def reflect_one(pid: str) -> dict:
                 "decisions_with_outcomes": outcomes.to_dict("records"),
                 "existing_lessons": lessons.to_dict("records"),
                 "recent_cycle_notes": notes.to_dict("records"),
+                "contrast_candidates": {"best": best, "worst": worst} if best else None,
                 "regime_now": _db.scalar(
                     f"select regime_state from {M}.atlas_market_regime_daily "
                     "order by date desc limit 1"
                 ),
             },
         ),
-        max_tokens=3000,
+        max_tokens=6000,  # gpt-oss reasons before emitting; 3000 starved the JSON (400 json_validate_failed)
     )
-    errs = validate_reflect(reply, set(lessons["id"].tolist()))
+    errs = validate_reflect(reply, set(lessons["id"].tolist()), contrast_syms)
     if errs:
         return {"desk": p["name"], "errors": errs}
 
+    decay = _layer_decay()
     updated = {u["id"]: float(u["confidence"]) for u in reply.get("updates", [])}
     retired = 0
     for r in lessons.to_dict("records"):
-        conf = updated.get(r["id"], float(r["confidence"]) * _UNTESTED_DECAY)
+        conf = updated.get(r["id"], float(r["confidence"]) * decay.get(r["layer"], 0.97))
         if conf < _CONFIDENCE_FLOOR:
             _db.exec_sql(
                 f"update {M}.desk_lessons set active = false, confidence = :c where id = :i",
@@ -95,14 +131,26 @@ def reflect_one(pid: str) -> dict:
                 {"c": round(conf, 3), "i": r["id"]},
             )
     added = 0
-    for n in reply.get("new_lessons", []):
+    new_rows = list(reply.get("new_lessons", []))
+    ci = reply.get("contrast_insight")
+    if isinstance(ci, dict):  # the contrastive rule is itself a lesson, tagged as such
+        new_rows.append(
+            {
+                "lesson": ci["insight"],
+                "layer": ci["layer"],
+                "tags": {"contrast": {"best": ci["best_cited"], "worst": ci["worst_cited"]}},
+                "basis": "contrast of best-vs-worst stamped outcomes",
+            }
+        )
+    for n in new_rows:
         _db.exec_sql(
-            f"""insert into {M}.desk_lessons (portfolio_id, lesson, tags)
-                values (:p, :l, cast(:t as jsonb))""",
+            f"""insert into {M}.desk_lessons (portfolio_id, lesson, tags, layer)
+                values (:p, :l, cast(:t as jsonb), :ly)""",
             {
                 "p": pid,
                 "l": f"{n['lesson']} [basis: {n['basis']}]",
                 "t": json.dumps(n.get("tags") or {}),
+                "ly": n["layer"],
             },
         )
         added += 1
@@ -118,7 +166,10 @@ def main() -> None:
               and params->>'desk' = 'true'"""
     ids = [a.portfolio_id] if a.portfolio_id else _db.read_df(q)["pid"].tolist()
     for pid in ids:
-        print(f"[reflect] {json.dumps(reflect_one(pid), default=str)}", flush=True)
+        try:  # one desk's reflection crash must never starve the others
+            print(f"[reflect] {json.dumps(reflect_one(pid), default=str)}", flush=True)
+        except Exception as e:
+            print(f"[reflect] {pid}: {type(e).__name__}: {e}", flush=True)
     from desk_credibility import build_calibration  # weekly conviction-vs-outcome report
 
     build_calibration()

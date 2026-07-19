@@ -309,3 +309,24 @@ FROM (VALUES
     ('desk_reduced_frac',         0.5, 'Position-size fraction when stance consensus is split 2/3',         'fraction', 0.1, 1)
 ) AS s(k, v, d, u, lo, hi)
 WHERE NOT EXISTS (SELECT 1 FROM atlas_foundation.atlas_thresholds t WHERE t.threshold_key = s.k);
+
+-- ── Desk v2 wave 3: layered lesson memory + CVaR tripwire ──────────────────
+-- Lessons carry a memory layer (fast/medium/slow decay — FinMem-style) so
+-- regime observations fade quickly while durable principles persist; the
+-- weekly reflection is contrastive (best-vs-worst stamped outcomes, FinCon
+-- CVRF). CVaR tripwire: nightly tail-average of worst daily NAV returns; a
+-- breach forces de-risk mode (no new entries) in code, never by prompt.
+ALTER TABLE atlas_foundation.desk_lessons ADD COLUMN IF NOT EXISTS layer text NOT NULL DEFAULT 'medium';
+
+INSERT INTO atlas_foundation.atlas_thresholds
+    (threshold_key, threshold_value, category, description, units, min_allowed, max_allowed, default_value, is_active)
+SELECT k, v, 'portfolio', d, u, lo, hi, v, TRUE
+FROM (VALUES
+    ('desk_decay_fast',        0.90,  'Weekly confidence decay for fast-layer (regime/week) lessons',   'factor',   0.5::numeric, 1::numeric),
+    ('desk_decay_medium',      0.97,  'Weekly confidence decay for medium-layer (sector/style) lessons','factor',   0.5, 1),
+    ('desk_decay_slow',        0.995, 'Weekly confidence decay for slow-layer (principle) lessons',     'factor',   0.5, 1),
+    ('desk_cvar_tail_pct',     0.05,  'Tail share of worst daily NAV returns averaged for the tripwire','fraction', 0.01, 0.2),
+    ('desk_cvar_floor_pct',    -2.0,  'Tail-average floor (%) below which the desk enters de-risk',    'percent',  -10, 0),
+    ('desk_cvar_min_sessions', 40,    'Minimum NAV sessions before the CVaR tripwire can arm',          'sessions', 10, 250)
+) AS s(k, v, d, u, lo, hi)
+WHERE NOT EXISTS (SELECT 1 FROM atlas_foundation.atlas_thresholds t WHERE t.threshold_key = s.k);

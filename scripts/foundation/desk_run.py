@@ -36,7 +36,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import _db
 import pandas as pd
 import portfolio_data as pdata
-from desk_credibility import build_credibility, fetch_track_record, stamp_outcomes
+from desk_credibility import (
+    build_credibility,
+    compute_cvar,
+    fetch_track_record,
+    stamp_outcomes,
+)
 from desk_orders import (
     attach_plans,
     build_memo,
@@ -214,7 +219,7 @@ def assemble_inputs(p: dict, knobs: dict) -> dict:
 
     # distilled memory: this desk's active lessons, highest conviction first
     lessons = _db.read_df(
-        f"""select lesson, tags, confidence from {M}.desk_lessons
+        f"""select lesson, tags, confidence, layer from {M}.desk_lessons
             where portfolio_id = :p and active order by confidence desc, ts desc limit 5""",
         {"p": str(p["portfolio_id"])},
     )
@@ -277,6 +282,8 @@ def hard_filter(
             rejected.append(f"{sym}: duplicate order")
         elif side == "buy" and risk_off:
             rejected.append(f"{sym}: regime {inputs['regime']} blocks new entries")
+        elif side == "buy" and inputs.get("derisk"):
+            rejected.append(f"{sym}: CVaR tripwire active — de-risk mode blocks new entries")
         elif side == "buy" and sym in held:
             rejected.append(f"{sym}: already held")
         elif side == "sell" and sym not in held:
@@ -315,6 +322,9 @@ def _knobs() -> dict:
         "expiry_days": int(m["desk_pending_expiry_days"]),
         "consensus_min": int(m["desk_stance_consensus_min"]),
         "reduced_frac": m["desk_reduced_frac"],
+        "cvar_tail": float(m["desk_cvar_tail_pct"]),
+        "cvar_floor": float(m["desk_cvar_floor_pct"]),
+        "cvar_min_n": int(m["desk_cvar_min_sessions"]),
     }
 
 
@@ -337,7 +347,15 @@ def run_cycle(p: dict, knobs: dict, dry: bool = False) -> dict:
     # PM-only payload: keep it OUT of `inputs` — the scout request already runs
     # near the LLM's per-request token ceiling (413 above ~8k with Groq free tier)
     track = fetch_track_record(str(p["portfolio_id"]), charter)
-    journal["inputs_digest"] = {"desk_version": 2, "credibility_rows": len(track)}
+    cvar = compute_cvar(
+        str(p["portfolio_id"]), knobs["cvar_tail"], knobs["cvar_floor"], knobs["cvar_min_n"]
+    )
+    inputs["derisk"] = cvar["state"] == "derisk"
+    journal["inputs_digest"] = {
+        "desk_version": 3,
+        "credibility_rows": len(track),
+        "cvar": cvar,
+    }
 
     try:
         scout = llm_call(build_scout_messages(charter, inputs))

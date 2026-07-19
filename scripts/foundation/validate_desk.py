@@ -171,6 +171,36 @@ def check_j_stance_consensus() -> None:
         fail(f"J: {r['name']} ({r['cycle_date']}) verdicts without >=2-stance consensus")
 
 
+def check_k_lesson_memory() -> None:
+    bad = _db.read_df(
+        f"""select id, layer from {M}.desk_lessons
+            where active and layer not in ('fast', 'medium', 'slow')"""
+    )
+    for r in bad.to_dict("records"):
+        fail(f"K: lesson {r['id']} has invalid layer {r['layer']!r}")
+    ghost = _db.read_df(
+        f"""select l.id from {M}.desk_lessons l
+            cross join lateral jsonb_array_elements_text(
+                (l.tags->'contrast'->'best') || (l.tags->'contrast'->'worst')) s(sym)
+            where l.tags ? 'contrast'
+              and not exists (select 1 from {M}.desk_outcomes o
+                              where o.portfolio_id = l.portfolio_id and o.symbol = s.sym)"""
+    )
+    for r in ghost.to_dict("records"):
+        fail(f"K: contrast lesson {r['id']} cites a symbol with no stamped outcome")
+
+
+def check_l_cvar_journaled() -> None:
+    rows = _db.read_df(
+        f"""select m.name, dj.cycle_date
+            from {M}.desk_journal dj join {M}.portfolio_master m using (portfolio_id)
+            where (dj.inputs_digest->>'desk_version')::int >= 3
+              and not (dj.inputs_digest ? 'cvar')"""
+    )
+    for r in rows.to_dict("records"):
+        fail(f"L: {r['name']} ({r['cycle_date']}) journaled no CVaR tripwire state")
+
+
 def check_e_trader_liveness() -> None:
     # only meaningful once Desk v2 cycles exist (trader column populated)
     row = _db.read_df(
@@ -195,6 +225,8 @@ def main() -> int:
         check_h_credibility,
         check_i_conviction,
         check_j_stance_consensus,
+        check_k_lesson_memory,
+        check_l_cvar_journaled,
     ):
         print(f"[validate_desk] {check.__name__}", flush=True)
         check()

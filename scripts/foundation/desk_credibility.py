@@ -166,6 +166,28 @@ def fetch_track_record(pid: str, charter: str) -> list[dict]:
     return df.to_dict("records")
 
 
+def compute_cvar(pid: str, tail_pct: float, floor_pct: float, min_sessions: int) -> dict:
+    """FinCon-style within-episode tripwire: average of the worst tail_pct of
+    daily NAV returns over the trailing ~6 months. Breaching floor_pct forces
+    de-risk mode (no new entries) — enforced in hard_filter code, not prompt."""
+    df = _db.read_df(
+        f"""select nav from (
+                select date, nav from {M}.portfolio_nav_daily
+                where portfolio_id = :p and run_type = 'live'
+                order by date desc limit 121) w
+            order by date""",
+        {"p": pid},
+    )
+    navs = [float(x) for x in df["nav"]]
+    rets = [(b / a - 1) * 100 for a, b in zip(navs, navs[1:], strict=False) if a > 0]
+    if len(rets) < min_sessions:
+        return {"state": "unarmed", "n": len(rets)}
+    k = max(1, int(len(rets) * tail_pct))
+    tail_avg = sum(sorted(rets)[:k]) / k
+    state = "derisk" if tail_avg <= floor_pct else "normal"
+    return {"state": state, "n": len(rets), "tail_avg": round(tail_avg, 2), "k": k}
+
+
 def build_calibration() -> int:
     """Weekly: stated conviction tier vs realized T+20 alpha, per tier."""
     rows = _db.read_df(
