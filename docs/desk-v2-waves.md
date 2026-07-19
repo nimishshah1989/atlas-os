@@ -41,23 +41,26 @@ expiry, `desk_approve.py`, nightly Telegram memo, `--dry-run` (PR #183).
 - D: every booked order ≥ 15 days old has a T+5 outcome stamp
 - E: trader liveness — recent cycles with booked buys produced ≥ 1 plan
 
-### Wave 1b — approval and monitoring reach the human in time · **status: open, next**
+### Wave 1b — approval and monitoring reach the human in time · **status: gate live (checks F/G), closing window running**
 
-**Goal.** Approve/reject from the board in under a minute; a stop or
-invalidation breach on an open desk position alerts within 10 minutes during
-market hours.
+**Built 2026-07-19.** `desk_monitor.py` on the existing market-hours intraday
+cron (batched `kite.quote` on open desk positions with plans → `desk_alerts`,
+one per position/kind/IST-day, + Telegram); DeskQueue panel on /portfolios
+with one-tap approve/reject via `/api/desk/orders` (status flip only — booking
+stays in the audited settlement path).
 
-**Build.** /portfolios queue UI + API route; intraday monitor reusing the
-sector-RS cron pattern (`kite.quote` on open desk positions → breach rows →
-Telegram via `atlas/intraday/notify.py`).
+**Gate.** F: every queue decision carries an audit trail and settles at the
+next cycle. G: every alert row's quote actually crossed its stored level.
 
-**Gate (to add as checks F/G).** F: every queue decision taken via the API has
-an audit row and settled correctly at next cycle. G: every breach row
-corresponds to a real quote crossing the stored stop/invalidation level;
-no open position with a plan lacks monitoring coverage on a session with
-intraday data.
+### Wave 2 — decisions weighted by measured credibility · **status: gate live (checks H/I/J), closing window running**
 
-### Wave 2 — decisions weighted by measured credibility · **status: open**
+**Built 2026-07-19.** Alpha-vs-NIFTY-500 on all outcome stamps; `desk_credibility`
+rebuilt nightly (desk/charter/sector/kind, longest matured horizon) and injected
+into the PM payload (provable via `inputs_digest.credibility_rows`); SCOUT+PM
+emit 5-tier conviction; RISK is three stances (SAFE/NEUTRAL/RISKY) merged by
+code — `desk_stance_consensus_min` of 3 to approve, 2/3 split halves the buy
+(`book_trade` frac), <2 valid stances = desk holds; weekly conviction
+calibration (`desk_calibration`). Original goal text follows.
 
 **Goal.** The PM sees, for every proposal, the rolling stamped track record
 (hit rate + T+20 alpha vs Nifty 500) of the agent/charter/sector that produced
@@ -75,7 +78,14 @@ realized T+20 alpha) generated weekly. Outcome metric reviewed at close:
 high-credibility cohort alpha > low-credibility cohort over the trailing 60
 sessions.
 
-### Wave 3 — the desk remembers and learns contrastively · **status: open**
+### Wave 3 — the desk remembers and learns contrastively · **status: gate live (checks K/L), closing window running**
+
+**Built 2026-07-19.** Contrastive weekly reflection (best-vs-worst stamped
+outcomes → one transferable rule, contrast-tagged, citations validator-enforced
+verbatim); lesson layers fast/medium/slow with per-layer weekly decay from
+`atlas_thresholds`; CVaR tripwire journaled nightly per desk (`inputs_digest.cvar`,
+arms at `desk_cvar_min_sessions` NAV sessions) — breach blocks new entries in
+`hard_filter` code. Original goal text follows.
 
 **Goal.** Weekly reflection diffs the best vs worst stamped closed positions
 and writes layered lessons (fast/medium/slow decay) that are retrieved into
@@ -87,7 +97,16 @@ position; every lesson row has layer + decay and stale lessons auto-retire
 (observed, not asserted-in-theory); tripwire state computed nightly from the
 real NAV series and journaled.
 
-### Wave 4 — the desk improves its own methodology · **status: open**
+### Wave 4 — the desk improves its own methodology · **status: gate live (checks M/N/O), closing window running**
+
+**Built 2026-07-19.** Weekly `desk_hypothesis.py`: RESEARCH ANALYST proposes one
+falsifiable threshold change (allowlisted, range-validated); code evaluates it
+on the desk's own stamped decision corpus and journals verdict+effect to
+`desk_hypotheses` (adoption stays an FM action). Charters in `desk_charters`
+(DB, editable; `charter_sha` journaled per cycle). Weekly masked-ticker audit
+(`desk_audit_masked.py`, rotating desk): anonymized SCOUT rerun vs real —
+Jaccard to `desk_audit` (first reading: Rotation 0.25, name priors measurably
+steer proposals). Original goal text follows.
 
 **Goal.** A hypothesis loop (RD-Agent(Q) pattern) proposes one falsifiable
 threshold/lens change per week, walk-forward tests it via the existing
