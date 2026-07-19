@@ -182,7 +182,7 @@ def validate_risk(out: dict, proposed_symbols: set[str]) -> list[str]:
     if not errs and seen != proposed_symbols:
         errs.append(
             f"verdicts must cover every proposal (missing {sorted(proposed_symbols - seen)})"
-        )  # noqa: E501
+        )
     return errs
 
 
