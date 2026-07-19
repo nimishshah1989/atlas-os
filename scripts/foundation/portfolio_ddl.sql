@@ -258,3 +258,18 @@ FROM (VALUES
     ('desk_pending_expiry_days',  3,   'Sessions before an unapproved desk order expires', 'days',  1, 10)
 ) AS s(k, v, d, u, lo, hi)
 WHERE NOT EXISTS (SELECT 1 FROM atlas_foundation.atlas_thresholds t WHERE t.threshold_key = s.k);
+
+-- ── Desk v2 wave 1b: intraday breach alerts ────────────────────────────────
+-- One row per (desk, symbol, kind, IST day): stop breach or target hit on an
+-- open desk position, detected by desk_monitor.py during market hours.
+CREATE TABLE IF NOT EXISTS atlas_foundation.desk_alerts (
+    id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    portfolio_id uuid NOT NULL REFERENCES atlas_foundation.portfolio_master(portfolio_id),
+    symbol       text NOT NULL,
+    kind         text NOT NULL CHECK (kind IN ('stop', 'target')),
+    level        numeric(14, 2) NOT NULL,
+    quote        numeric(14, 2) NOT NULL,
+    alert_date   date NOT NULL DEFAULT ((now() AT TIME ZONE 'Asia/Kolkata')::date),
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (portfolio_id, symbol, kind, alert_date)
+);

@@ -104,6 +104,27 @@ def check_d_stamps_advance() -> None:
         fail(f"D: {r['sym']} booked {r['cycle_date']} has no T+5 stamp")
 
 
+def check_f_queue_settlement() -> None:
+    rows = _db.read_df(
+        f"""select p.symbol, p.status from {M}.desk_pending_orders p
+            where (p.status in ('approved', 'rejected', 'expired') and p.decided_by is null)
+               or (p.status = 'approved' and exists (
+                     select 1 from {M}.desk_journal j
+                     where j.portfolio_id = p.portfolio_id and j.ts > p.decided_at))"""
+    )
+    for r in rows.to_dict("records"):
+        fail(f"F: {r['symbol']} {r['status']} lacks audit trail or missed settlement")
+
+
+def check_g_alert_validity() -> None:
+    rows = _db.read_df(
+        f"""select symbol, kind, level, quote from {M}.desk_alerts
+            where (kind = 'stop' and quote > level) or (kind = 'target' and quote < level)"""
+    )
+    for r in rows.to_dict("records"):
+        fail(f"G: {r['symbol']} {r['kind']} alert quote {r['quote']} never crossed {r['level']}")
+
+
 def check_e_trader_liveness() -> None:
     # only meaningful once Desk v2 cycles exist (trader column populated)
     row = _db.read_df(
@@ -123,6 +144,8 @@ def main() -> int:
         check_c_queue_state,
         check_d_stamps_advance,
         check_e_trader_liveness,
+        check_f_queue_settlement,
+        check_g_alert_validity,
     ):
         print(f"[validate_desk] {check.__name__}", flush=True)
         check()
