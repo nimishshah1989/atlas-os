@@ -109,8 +109,14 @@ def main() -> None:
                 from {M}.desk_hypotheses order by ts desc limit 10"""
         ).to_dict("records"),
     }
+    priors = {
+        (r["threshold_key"], float(r["proposed_value"]))
+        for r in _db.read_df(
+            f"select threshold_key, proposed_value from {M}.desk_hypotheses"
+        ).to_dict("records")
+    }
     reply = llm_call(build_hypo_messages(evidence), max_tokens=2000)
-    errs = validate_hypo(reply, allowed)
+    errs = validate_hypo(reply, allowed, priors)
     if errs:
         print(f"[hypo] rejected: {errs}", flush=True)
         return

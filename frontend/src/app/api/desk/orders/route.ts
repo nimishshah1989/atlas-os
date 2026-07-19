@@ -1,6 +1,9 @@
 // POST /api/desk/orders — approve or reject a pending desk order from the board.
 // The status flip is the ONLY write here; booking happens in desk_run's next
 // settlement through the audited book_trade path (never from the frontend).
+// AUTH: trade approvals require the atlas_auth cookie (set by /login against
+// ATLAS_PASSWORD) — fail closed, this route is reachable on the public domain.
+import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 
 import sql from '@/lib/db'
@@ -8,6 +11,14 @@ import sql from '@/lib/db'
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
+  const pass = process.env.ATLAS_PASSWORD
+  const cookie = (await cookies()).get('atlas_auth')?.value
+  if (!pass || cookie !== pass) {
+    return NextResponse.json(
+      { error_code: 'unauthorized', message: 'log in at /login to approve desk orders' },
+      { status: 401 },
+    )
+  }
   let body: { id?: unknown; action?: unknown } = {}
   try {
     body = await req.json()

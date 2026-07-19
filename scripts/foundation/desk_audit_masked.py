@@ -14,8 +14,10 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import re
 import sys
 from pathlib import Path
+from typing import cast
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -30,23 +32,40 @@ M = "atlas_foundation"
 
 
 def mask_inputs(inputs: dict) -> tuple[dict, dict[str, str]]:
-    """Deterministically replace every symbol and sector with anonymous codes,
-    everywhere they appear (including free-text invalidation notes)."""
-    syms: list[str] = sorted(
+    """Deterministically replace every symbol and sector with anonymous codes.
+    Structural walk (never a bare substring replace over the JSON, which would
+    corrupt tokens that merely contain a name): exact string values are mapped
+    directly; free text (theses/invalidations) gets word-boundary substitution.
+    Covers watchlist, holdings, and the deterministic twin's full-universe set."""
+    syms: set[str] = (
         {w["symbol"] for w in inputs["watchlist_top_by_composite"]}
         | {h["symbol"] for h in inputs["portfolio"]["holdings"]}
+        | {str(s) for s in inputs.get("deterministic_twin_targets", [])}
     )
-    sectors: list[str] = sorted(
-        {str(w.get("sector")) for w in inputs["watchlist_top_by_composite"]}
-        | {str(h.get("sector")) for h in inputs["portfolio"]["holdings"]}
+    sectors: set[str] = {
+        str(x.get("sector"))
+        for x in [*inputs["watchlist_top_by_composite"], *inputs["portfolio"]["holdings"]]
+        if x.get("sector")
+    } | {str(r.get("sector")) for r in inputs.get("sector_strength_ranks", []) if r.get("sector")}
+    sym_map = {s: f"SYM{i:03d}" for i, s in enumerate(sorted(syms), 1)}
+    sec_map = {s: f"SEC{i:02d}" for i, s in enumerate(sorted(sectors), 1)}
+    both = sym_map | sec_map
+    # word-boundary pattern, longest names first so "MCX" never clobbers "MCXINDIA"
+    pat = re.compile(
+        r"\b(" + "|".join(re.escape(n) for n in sorted(both, key=len, reverse=True)) + r")\b"
     )
-    sym_map = {s: f"SYM{i:03d}" for i, s in enumerate(syms, 1)}
-    sec_map = {s: f"SEC{i:02d}" for i, s in enumerate(sectors, 1)}
-    text = json.dumps(inputs, default=str)
-    # longest names first so e.g. "MCX" never clobbers "MCXINDIA"
-    for name, code in sorted((sym_map | sec_map).items(), key=lambda x: -len(x[0])):
-        text = text.replace(f'"{name}"', f'"{code}"').replace(name, code)
-    return json.loads(text), {v: k for k, v in sym_map.items()}
+
+    def walk(x):
+        if isinstance(x, dict):
+            return {k: walk(v) for k, v in x.items()}
+        if isinstance(x, list):
+            return [walk(v) for v in x]
+        if isinstance(x, str):
+            return both.get(x) or pat.sub(lambda m: both[m.group(1)], x)
+        return x
+
+    masked = cast(dict, walk(json.loads(json.dumps(inputs, default=str))))
+    return masked, {v: k for k, v in sym_map.items()}
 
 
 def jaccard(a: set[str], b: set[str]) -> float:
@@ -70,9 +89,11 @@ def main() -> None:
     charter = p["params"].get("charter", "sector_leaders")
     inputs = assemble_inputs(p, _knobs())
     inputs.pop("_universe_sym2key", None)
-    known = {w["symbol"] for w in inputs["watchlist_top_by_composite"]} | {
-        h["symbol"] for h in inputs["portfolio"]["holdings"]
-    }
+    known = (
+        {w["symbol"] for w in inputs["watchlist_top_by_composite"]}
+        | {h["symbol"] for h in inputs["portfolio"]["holdings"]}
+        | {str(s) for s in inputs.get("deterministic_twin_targets", [])}
+    )
 
     real = llm_call(build_scout_messages(charter, inputs))
     if validate_scout(real, known):

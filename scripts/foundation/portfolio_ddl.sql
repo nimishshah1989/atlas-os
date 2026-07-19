@@ -374,3 +374,6 @@ FROM (VALUES
     ('desk_hypo_min_n', 20, 'Minimum stamped decisions before a hypothesis can reach a verdict', 'decisions', 5::numeric, 200::numeric)
 ) AS s(k, v, d, u, lo, hi)
 WHERE NOT EXISTS (SELECT 1 FROM atlas_foundation.atlas_thresholds t WHERE t.threshold_key = s.k);
+
+-- Desk v2 review fix: persist split-consensus size-down through the approval queue
+ALTER TABLE atlas_foundation.desk_pending_orders ADD COLUMN IF NOT EXISTS reduced boolean NOT NULL DEFAULT false;

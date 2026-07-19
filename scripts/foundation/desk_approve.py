@@ -29,13 +29,13 @@ def main() -> None:
 
     for ids, status in ((a.approve, "approved"), (a.reject, "rejected")):
         for i in ids:
-            _db.exec_sql(
+            done = _db.scalar(
                 f"""update {M}.desk_pending_orders
                     set status = :st, decided_at = now(), decided_by = :by
-                    where id = :i and status = 'pending'""",
+                    where id = :i and status = 'pending' returning id""",
                 {"st": status, "by": a.by, "i": i},
             )
-            print(f"{status}: #{i}")
+            print(f"{status}: #{i}" if done else f"#{i}: not pending — no change")
 
     df = _db.read_df(
         f"""select o.id, m.name, o.cycle_date, o.side, o.symbol, o.entry_ref,

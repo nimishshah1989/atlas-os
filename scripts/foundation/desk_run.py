@@ -52,7 +52,7 @@ from desk_orders import (
     settle_pending,
     write_journal,
 )
-from portfolio_run import TradeError, book_trade
+from portfolio_run import book_trade
 
 from atlas.desk import (
     build_debate_messages,
@@ -498,8 +498,8 @@ def run_cycle(p: dict, knobs: dict, dry: bool = False) -> dict:
                     else book_trade(str(p["portfolio_id"]), o["side"], ckey, frac=frac)
                 )
                 journal["applied"].append({**card, **res})
-            except TradeError as e:
-                journal["errors"].append(f"{o['symbol']}: {e}")
+            except Exception as e:  # any booking failure skips the order, never the cycle
+                journal["errors"].append(f"{o['symbol']}: {type(e).__name__}: {e}")
     except RuntimeError as e:
         journal["errors"].append(str(e))
     return journal
@@ -519,9 +519,13 @@ def main() -> None:
     if not ids:
         print("[desk] no desk portfolios — nothing to do", flush=True)
         return
-    knobs = _knobs()
+    try:  # a missing threshold row must not silently kill every desk
+        knobs = _knobs()
+    except Exception as e:
+        print(f"[desk] knobs unavailable — desks do nothing: {e}", flush=True)
+        return
     try:  # settlement of approved/expired cards runs before any new cycle
-        settle_notes = settle_pending(knobs["expiry_days"], dry=a.dry_run)
+        settle_notes = settle_pending(knobs, dry=a.dry_run)
     except Exception as e:
         settle_notes = [f"❌ settlement failed: {e}"]
     summaries: list[dict] = []
@@ -554,8 +558,11 @@ def main() -> None:
             flush=True,
         )
     if not a.dry_run:
-        stamp_outcomes()
-        build_credibility()
+        try:  # stamping/credibility failures must never block the decision memo
+            stamp_outcomes()
+            build_credibility()
+        except Exception as e:
+            print(f"[desk] stamping/credibility failed: {e}", flush=True)
     memo = build_memo(eod, summaries, settle_notes)
     print(memo, flush=True) if a.dry_run else send_memo(memo)
 

@@ -53,6 +53,8 @@ def stamp_outcomes() -> None:
             where pr->>'action' in ('add','exit')
               and not exists (select 1 from jsonb_array_elements(dj.applied) a2
                               where a2->>'symbol' = pr->>'symbol')
+              and not exists (select 1 from jsonb_array_elements(coalesce(dj.queued, '[]'::jsonb)) q2
+                              where q2->>'symbol' = pr->>'symbol')
             union
             select portfolio_id::text, cycle_date, symbol, side, 'order'
             from {M}.desk_pending_orders where status = 'booked'
@@ -62,6 +64,10 @@ def stamp_outcomes() -> None:
     )
     n = 0
     for r in decisions.to_dict("records"):
+        if r["cycle_date"] < sessions[0]:
+            # older than the session window: stamps matured long ago — recomputing
+            # with a truncated calendar would silently overwrite them with garbage
+            continue
         base = _db.scalar(_PX_SQL, {"s": r["symbol"], "d": r["cycle_date"]})
         idx_base = _db.scalar(_IDX_SQL, {"d": r["cycle_date"]})
         if not base:
@@ -135,21 +141,32 @@ group by 1, 2
 """
 
 
+def _atomic_rebuild(table: str, cols: list[str], rows: list[dict], keymap: list[str]) -> None:
+    """ONE delete+insert statement (CTE) so the rebuild commits atomically —
+    a crash or concurrent reader never observes an empty/partial table."""
+    if not rows:
+        _db.exec_sql(f"delete from {M}.{table}")
+        return
+    values, params = [], {}
+    for i, r in enumerate(rows):
+        values.append("(" + ", ".join(f":p{i}_{j}" for j in range(len(cols))) + ")")
+        for j, k in enumerate(keymap):
+            params[f"p{i}_{j}"] = r[k]
+    _db.exec_sql(
+        f"""with del as (delete from {M}.{table})
+            insert into {M}.{table} ({", ".join(cols)}) values {", ".join(values)}""",
+        params,
+    )
+
+
 def build_credibility() -> int:
     rows = _db.read_df(_CRED_SQL).to_dict("records")
-    _db.exec_sql(f"delete from {M}.desk_credibility")
-    for r in rows:
-        _db.exec_sql(
-            f"""insert into {M}.desk_credibility (dim, dim_value, n, hit_rate, avg_alpha)
-                values (:dim, :dv, :n, :hr, :aa)""",
-            {
-                "dim": r["dim"],
-                "dv": r["dim_value"],
-                "n": r["n"],
-                "hr": r["hit_rate"],
-                "aa": r["avg_alpha"],
-            },
-        )
+    _atomic_rebuild(
+        "desk_credibility",
+        ["dim", "dim_value", "n", "hit_rate", "avg_alpha"],
+        rows,
+        ["dim", "dim_value", "n", "hit_rate", "avg_alpha"],
+    )
     print(f"[desk] credibility rows: {len(rows)}", flush=True)
     return len(rows)
 
@@ -196,7 +213,7 @@ def build_calibration() -> int:
                 select dj.portfolio_id, dj.cycle_date, a->>'symbol' symbol,
                        (a->>'conviction')::int tier
                 from {M}.desk_journal dj, jsonb_array_elements(dj.applied) a
-                where a ? 'conviction'
+                where a->>'conviction' ~ '^[1-5]$'
             )
             select c.tier, count(*) n,
                    round(avg(o.t20_alpha)::numeric, 2) avg_alpha,
@@ -208,13 +225,12 @@ def build_calibration() -> int:
             where o.t20_alpha is not null
             group by 1"""
     ).to_dict("records")
-    _db.exec_sql(f"delete from {M}.desk_calibration")
-    for r in rows:
-        _db.exec_sql(
-            f"""insert into {M}.desk_calibration (tier, n, avg_alpha, hit_rate)
-                values (:t, :n, :aa, :hr)""",
-            {"t": r["tier"], "n": r["n"], "aa": r["avg_alpha"], "hr": r["hit_rate"]},
-        )
+    _atomic_rebuild(
+        "desk_calibration",
+        ["tier", "n", "avg_alpha", "hit_rate"],
+        rows,
+        ["tier", "n", "avg_alpha", "hit_rate"],
+    )
     print(f"[desk] calibration tiers: {len(rows)}", flush=True)
     return len(rows)
 

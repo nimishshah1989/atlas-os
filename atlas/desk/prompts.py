@@ -133,6 +133,12 @@ def build_pm_messages(
 # ── validators: strict shape checks; any violation rejects the whole reply ──
 
 
+def _tier(x) -> bool:
+    """Strict 1-5 int — `x in (1,...,5)` would accept 3.0 and True (== semantics),
+    which later breaks the (conviction)::int SQL cast and the ^[1-5]$ gate."""
+    return type(x) is int and 1 <= x <= 5
+
+
 def _str(x) -> bool:
     return isinstance(x, str) and 0 < len(x) <= 2000
 
@@ -151,7 +157,7 @@ def validate_scout(out: dict, known_symbols: set[str]) -> list[str]:
             errs.append(f"{p['symbol']}: evidence required")
         elif p.get("urgency") not in ("low", "high"):
             errs.append(f"{p['symbol']}: bad urgency")
-        elif p.get("conviction") not in (1, 2, 3, 4, 5):
+        elif not _tier(p.get("conviction")):
             errs.append(f"{p['symbol']}: conviction 1-5 required")
     return errs
 
@@ -161,13 +167,22 @@ def validate_risk(out: dict, proposed_symbols: set[str]) -> list[str]:
     vs = out.get("verdicts")
     if not isinstance(vs, list):
         return ["verdicts must be a list"]
+    seen: set[str] = set()
     for v in vs:
         if not isinstance(v, dict) or v.get("verdict") not in ("approve", "defer", "veto"):
             errs.append(f"bad verdict shape: {v}")
         elif v.get("symbol") not in proposed_symbols:
             errs.append(f"verdict for unproposed symbol: {v.get('symbol')}")
+        elif v["symbol"] in seen:  # duplicates would double-count in stance consensus
+            errs.append(f"{v['symbol']}: duplicate verdict")
         elif not _str(v.get("reason", "")):
             errs.append(f"{v['symbol']}: reason required")
+        else:
+            seen.add(v["symbol"])
+    if not errs and seen != proposed_symbols:
+        errs.append(
+            f"verdicts must cover every proposal (missing {sorted(proposed_symbols - seen)})"
+        )  # noqa: E501
     return errs
 
 
@@ -187,7 +202,7 @@ def validate_pm(out: dict, approved: dict[str, str]) -> list[str]:
             errs.append(f"{sym}: {o['side']} was not Risk-approved")
         if not _str(o.get("thesis", "")) or not _str(o.get("invalidation", "")):
             errs.append(f"{sym}: thesis and invalidation required")
-        elif o.get("conviction") not in (1, 2, 3, 4, 5):
+        elif not _tier(o.get("conviction")):
             errs.append(f"{sym}: conviction 1-5 required")
     return errs
 
@@ -323,19 +338,24 @@ def build_hypo_messages(inputs: dict) -> list[dict]:
     return _msgs(_HYPO_SYS, inputs)
 
 
-def validate_hypo(out: dict, allowed: dict[str, dict]) -> list[str]:
-    """allowed: key -> {current, lo, hi} from atlas_thresholds."""
+def validate_hypo(
+    out: dict, allowed: dict[str, dict], priors: set[tuple[str, float]] | None = None
+) -> list[str]:
+    """allowed: key -> {current, lo, hi} from atlas_thresholds; priors = already
+    tested (key, value) pairs — the no-repeat rule enforced in code, not prose."""
     key = out.get("threshold_key")
     val = out.get("proposed_value")
     if key not in allowed:
         return [f"threshold_key must be one of {sorted(allowed)}"]
-    if not isinstance(val, (int, float)):
+    if not isinstance(val, (int, float)) or isinstance(val, bool):
         return ["proposed_value must be a number"]
     a = allowed[key]
     if not a["lo"] <= float(val) <= a["hi"]:
         return [f"proposed_value {val} outside [{a['lo']}, {a['hi']}]"]
     if float(val) == float(a["current"]):
         return ["proposed_value equals current value — not a hypothesis"]
+    if priors and (key, float(val)) in priors:
+        return [f"{key}={val} already tested — propose something new"]
     if not _str(out.get("hypothesis", "")) or not _str(out.get("rationale", "")):
         return ["hypothesis and rationale required"]
     return []

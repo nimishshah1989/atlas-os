@@ -175,8 +175,8 @@ def queue_order(pid: str, cycle_date: Any, o: dict, ckey: str) -> None:
     _db.exec_sql(
         f"""insert into {M}.desk_pending_orders
             (portfolio_id, cycle_date, symbol, side, instrument_key, thesis,
-             invalidation, entry_ref, stop, target, rr, plan_basis)
-            values (:p, :d, :sym, :side, :ck, :th, :inv, :e, :st, :tg, :rr, :b)
+             invalidation, entry_ref, stop, target, rr, plan_basis, reduced)
+            values (:p, :d, :sym, :side, :ck, :th, :inv, :e, :st, :tg, :rr, :b, :red)
             on conflict (portfolio_id, symbol, cycle_date) do nothing""",
         {
             "p": pid,
@@ -191,18 +191,33 @@ def queue_order(pid: str, cycle_date: Any, o: dict, ckey: str) -> None:
             "tg": o.get("target"),
             "rr": o.get("rr"),
             "b": o.get("plan_basis"),
+            "red": bool(o.get("reduced")),
         },
     )
 
 
-def settle_pending(expiry_days: int, dry: bool = False) -> list[str]:
+def _latest_close(symbol: str) -> Decimal | None:
+    v = _db.scalar(
+        f"""select o.close_adj from {M}.ohlcv_stock o
+            join {M}.instrument_master i using (instrument_id)
+            where i.symbol = :s order by o.date desc limit 1""",
+        {"s": symbol},
+    )
+    return Decimal(str(v)) if v else None
+
+
+def settle_pending(knobs: dict, dry: bool = False) -> list[str]:
     """Cycle-start settlement: expire stale cards, book approved ones through
-    the audited book_trade path. Returns memo lines."""
+    the audited book_trade path. Before booking a buy, the plan is re-validated
+    against the CURRENT close (price may have gapped since plan day): below the
+    stop or beyond the target → the card fails instead of opening a position
+    the desk would immediately alert on. Split-consensus cards book at reduced
+    size. Returns memo lines."""
     notes: list[str] = []
     stale = _db.read_df(
         f"""select id, symbol from {M}.desk_pending_orders
             where status = 'pending' and cycle_date < current_date - :n""",
-        {"n": expiry_days},
+        {"n": int(knobs["expiry_days"])},
     )
     for r in stale.to_dict("records"):
         if not dry:
@@ -213,25 +228,38 @@ def settle_pending(expiry_days: int, dry: bool = False) -> list[str]:
             )
         notes.append(f"⌛ expired unapproved: {r['symbol']}")
     appr = _db.read_df(
-        f"""select id, portfolio_id::text pid, symbol, side, instrument_key
+        f"""select id, portfolio_id::text pid, symbol, side, instrument_key,
+                   stop, target, reduced
             from {M}.desk_pending_orders where status = 'approved'"""
     )
     for r in appr.to_dict("records"):
         if dry:
             notes.append(f"(dry) would book {r['side']} {r['symbol']}")
             continue
+        # claim first (idempotent under overlap/rerun): only one settle books a card
+        claimed = _db.scalar(
+            f"""update {M}.desk_pending_orders set status = 'booked', booked_at = now()
+                where id = :i and status = 'approved' returning id""",
+            {"i": r["id"]},
+        )
+        if claimed is None:
+            continue
         try:
-            res = book_trade(r["pid"], r["side"], r["instrument_key"])
-            _db.exec_sql(
-                f"""update {M}.desk_pending_orders set status = 'booked',
-                    booked_at = now() where id = :i""",
-                {"i": r["id"]},
-            )
+            if r["side"] == "buy" and r["stop"] is not None:
+                px = _latest_close(r["symbol"])
+                if px is not None and (
+                    px <= Decimal(str(r["stop"])) or px >= Decimal(str(r["target"]))
+                ):
+                    raise TradeError(
+                        f"price {px} gapped outside plan (stop {r['stop']} / target {r['target']})"
+                    )
+            frac = knobs["reduced_frac"] if r["reduced"] and r["side"] == "buy" else Decimal("1")
+            res = book_trade(r["pid"], r["side"], r["instrument_key"], frac=frac)
             notes.append(f"✅ booked on approval: {r['side']} {r['symbol']} @ {res.get('price')}")
         except (TradeError, RuntimeError) as e:
             _db.exec_sql(
                 f"""update {M}.desk_pending_orders set status = 'failed',
-                    note = :n where id = :i""",
+                    booked_at = null, note = :n where id = :i""",
                 {"i": r["id"], "n": str(e)},
             )
             notes.append(f"❌ booking failed: {r['symbol']} — {e}")

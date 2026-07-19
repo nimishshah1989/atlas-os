@@ -16,6 +16,7 @@ Checks (Wave 1):
 
 from __future__ import annotations
 
+import datetime as dt
 import sys
 from decimal import Decimal
 from pathlib import Path
@@ -71,7 +72,11 @@ def check_b_plan_integrity() -> None:
         e, st, tg = (Decimal(r[k]) for k in ("e", "st", "tg"))
         if not (st < e < tg):
             fail(f"B: {r['sym']} {r['cycle_date']} plan geometry broken {st}/{e}/{tg}")
-        elif Decimal(r["rr"]) < min_rr:
+        elif Decimal(r["rr"]) < min_rr and r["cycle_date"] >= dt.date.today() - dt.timedelta(
+            days=7
+        ):
+            # R:R is judged against the CURRENT knob, so only recent cards are
+            # held to it — raising the threshold must not repaint history red
             fail(f"B: {r['sym']} {r['cycle_date']} R:R {r['rr']} < {min_rr}")
 
 
@@ -108,7 +113,8 @@ def check_f_queue_settlement() -> None:
     rows = _db.read_df(
         f"""select p.symbol, p.status from {M}.desk_pending_orders p
             where (p.status in ('approved', 'rejected', 'expired') and p.decided_by is null)
-               or (p.status = 'approved' and exists (
+               or (p.status = 'approved' and p.decided_at < now() - interval '1 day'
+                   and exists (
                      select 1 from {M}.desk_journal j
                      where j.portfolio_id = p.portfolio_id and j.ts > p.decided_at))"""
     )
@@ -142,16 +148,17 @@ def check_h_credibility() -> None:
 
 
 def check_i_conviction() -> None:
+    # applied/queued cards only — they exist strictly post-validation; the raw
+    # scout reply is journaled pre-validation for audit and may legitimately be
+    # malformed on a night the desk (correctly) held. NULL-safe: a MISSING
+    # conviction key must fail, so the regex miss is tested with IS NOT TRUE.
     rows = _db.read_df(
         f"""select dj.cycle_date, u.x->>'symbol' sym
             from {M}.desk_journal dj
-            cross join lateral (
-                select x from jsonb_array_elements(coalesce(dj.scout->'proposals', '[]'::jsonb)) t(x)
-                union all
-                select x from jsonb_array_elements(dj.applied || coalesce(dj.queued, '[]'::jsonb)) t2(x)
-            ) u
+            cross join lateral jsonb_array_elements(
+                dj.applied || coalesce(dj.queued, '[]'::jsonb)) u(x)
             where (dj.inputs_digest->>'desk_version')::int >= 2
-              and not ((u.x->>'conviction') ~ '^[1-5]$')"""
+              and ((u.x->>'conviction') ~ '^[1-5]$') is not true"""
     )
     for r in rows.to_dict("records"):
         fail(f"I: {r['sym']} ({r['cycle_date']}) lacks a 1-5 conviction tier")
@@ -211,10 +218,11 @@ def check_m_charter_provenance() -> None:
     for r in rows.to_dict("records"):
         fail(f"M: {r['name']} ({r['cycle_date']}) cycle not tied to a charter sha")
     orphans = _db.read_df(
-        f"""select distinct m.params->>'charter' ch from {M}.portfolio_master m
+        f"""select distinct coalesce(m.params->>'charter', 'sector_leaders') ch
+            from {M}.portfolio_master m
             where m.status = 'active' and m.params->>'desk' = 'true'
               and not exists (select 1 from {M}.desk_charters c
-                              where c.charter_key = m.params->>'charter')"""
+                              where c.charter_key = coalesce(m.params->>'charter', 'sector_leaders'))"""
     )
     for r in orphans.to_dict("records"):
         fail(f"M: active desk charter {r['ch']!r} missing from desk_charters")

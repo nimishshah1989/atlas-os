@@ -121,7 +121,12 @@ def reflect_one(pid: str) -> dict:
     updated = {u["id"]: float(u["confidence"]) for u in reply.get("updates", [])}
     retired = 0
     for r in lessons.to_dict("records"):
-        conf = updated.get(r["id"], float(r["confidence"]) * decay.get(r["layer"], 0.97))
+        prior = float(r["confidence"])
+        if r["id"] in updated:
+            # the prompt's ±0.1/week contract, enforced in code not prose
+            conf = max(prior - 0.1, min(prior + 0.1, updated[r["id"]]))
+        else:
+            conf = prior * decay.get(r["layer"], 0.97)
         if conf < _CONFIDENCE_FLOOR:
             _db.exec_sql(
                 f"update {M}.desk_lessons set active = false, confidence = :c where id = :i",
@@ -136,6 +141,8 @@ def reflect_one(pid: str) -> dict:
     added = 0
     new_rows = list(reply.get("new_lessons", []))
     ci = reply.get("contrast_insight")
+    if contrast_syms is None:
+        ci = None  # no candidates were offered — an unsolicited insight is ungrounded
     if isinstance(ci, dict):  # the contrastive rule is itself a lesson, tagged as such
         new_rows.append(
             {
