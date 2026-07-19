@@ -104,6 +104,7 @@ gate "freshness_guard"   $PY scripts/ops/freshness_guard.py --eod "$EOD"
 # Portfolio accounting checks alert but don't block the board deploy (step, not gate);
 # promote to gate() after a clean month.
 step "validate_portfolios"       $PY scripts/foundation/validate_portfolios.py
+step "validate_desk"             $PY scripts/foundation/validate_desk.py
 
 # 4. SERVE — REBUILD then reload, with a .next backup + rollback on build failure
 #    (mirrors atlas-auto-deploy.sh). The board's home/sectors/stocks pages are static-ISR:
