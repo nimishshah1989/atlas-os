@@ -12,6 +12,7 @@ build_calibration compares stated conviction tiers to realized T+20 alpha.
 
 from __future__ import annotations
 
+import itertools
 import sys
 from pathlib import Path
 
@@ -179,7 +180,7 @@ def compute_cvar(pid: str, tail_pct: float, floor_pct: float, min_sessions: int)
         {"p": pid},
     )
     navs = [float(x) for x in df["nav"]]
-    rets = [(b / a - 1) * 100 for a, b in zip(navs, navs[1:], strict=False) if a > 0]
+    rets = [(b / a - 1) * 100 for a, b in itertools.pairwise(navs) if a > 0]
     if len(rets) < min_sessions:
         return {"state": "unarmed", "n": len(rets)}
     k = max(1, int(len(rets) * tail_pct))

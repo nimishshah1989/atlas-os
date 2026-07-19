@@ -330,11 +330,15 @@ def validate_reflect(
         best, worst = contrast_syms
         if not isinstance(ci, dict):
             errs.append("contrast_insight required when candidates provided")
-        elif (
-            not _str(ci.get("insight", ""))
-            or ci.get("layer") not in _LAYERS
-            or not set(ci.get("best_cited") or []) & best
-            or not set(ci.get("worst_cited") or []) & worst
-        ):
-            errs.append("contrast_insight must cite >=1 real best and worst symbol")
+        else:
+            b, w = set(ci.get("best_cited") or []), set(ci.get("worst_cited") or [])
+            if (
+                not _str(ci.get("insight", ""))
+                or ci.get("layer") not in _LAYERS
+                or not b
+                or not w
+                or not b <= best  # every citation verbatim from the candidate list —
+                or not w <= worst  # no decorated symbols like "MCX (sell)"
+            ):
+                errs.append("contrast_insight citations must come verbatim from candidates")
     return errs
