@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { Leaderboard } from './Leaderboard'
 import { PortfolioBuilder } from './PortfolioBuilder'
 import { getPortfolios, getCompareCurves, type PortfolioSummary, type PortfolioCategory } from '@/lib/queries/portfolios'
+import { getPendingOrders } from '@/lib/queries/desk'
+import { DeskQueue } from '@/components/portfolios/DeskQueue'
 import { AtlasLightweightChart, type ChartSeries } from '@/components/charts/AtlasLightweightChart'
 import { Panel } from '@/components/ui/Panel'
 
@@ -91,7 +93,11 @@ const CURVE_COLOR: Record<PortfolioCategory, ChartSeries['color']> = {
 }
 
 export async function PortfoliosPageV4() {
-  const [portfolios, curves] = await Promise.all([getPortfolios(), getCompareCurves()])
+  const [portfolios, curves, pending] = await Promise.all([
+    getPortfolios(),
+    getCompareCurves(),
+    getPendingOrders(),
+  ])
   const compareSeries: ChartSeries[] = curves.map((c) => ({
     name: c.name,
     data: c.points.map((p) => ({ time: p.d, value: p.v })),
@@ -124,6 +130,8 @@ export async function PortfoliosPageV4() {
       {portfolios.length === 0 && (
         <p className="font-sans text-[13px] italic text-txt-3">No portfolios yet.</p>
       )}
+
+      <DeskQueue orders={pending} />
 
       <Leaderboard />
 

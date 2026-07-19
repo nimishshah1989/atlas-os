@@ -216,3 +216,164 @@ FROM (VALUES
     ('portfolio_exit_load_fund_days', 365,  'Holding days below which the fund exit load applies',       'days',     0, 1100)
 ) AS s(k, v, d, u, lo, hi)
 WHERE NOT EXISTS (SELECT 1 FROM atlas_foundation.atlas_thresholds t WHERE t.threshold_key = s.k);
+
+-- ── Desk v2 wave 1 (2026-07): trade plans + human approval queue ───────────
+-- EXECUTION TRADER agent sets stop/target per buy (grounded in real levels,
+-- geometry + R:R re-checked in code). Desks with params.approval='true' queue
+-- orders here instead of auto-booking; approval books via the audited
+-- book_trade path at next settlement; unapproved cards auto-expire.
+ALTER TABLE atlas_foundation.desk_journal ADD COLUMN IF NOT EXISTS trader jsonb;
+ALTER TABLE atlas_foundation.desk_journal ADD COLUMN IF NOT EXISTS queued jsonb NOT NULL DEFAULT '[]';
+
+CREATE TABLE IF NOT EXISTS atlas_foundation.desk_pending_orders (
+    id             bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    portfolio_id   uuid NOT NULL REFERENCES atlas_foundation.portfolio_master(portfolio_id),
+    cycle_date     date NOT NULL,
+    symbol         text NOT NULL,
+    side           text NOT NULL CHECK (side IN ('buy', 'sell')),
+    instrument_key text NOT NULL,
+    thesis         text NOT NULL,
+    invalidation   text NOT NULL,
+    entry_ref      numeric(14, 2),
+    stop           numeric(14, 2),
+    target         numeric(14, 2),
+    rr             numeric(6, 2),
+    plan_basis     text,
+    status         text NOT NULL DEFAULT 'pending'
+                   CHECK (status IN ('pending', 'approved', 'rejected', 'expired', 'booked', 'failed')),
+    decided_at     timestamptz,
+    decided_by     text,
+    booked_at      timestamptz,
+    note           text,
+    created_at     timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (portfolio_id, symbol, cycle_date)
+);
+CREATE INDEX IF NOT EXISTS ix_desk_pending ON atlas_foundation.desk_pending_orders (status, cycle_date);
+
+INSERT INTO atlas_foundation.atlas_thresholds
+    (threshold_key, threshold_value, category, description, units, min_allowed, max_allowed, default_value, is_active)
+SELECT k, v, 'portfolio', d, u, lo, hi, v, TRUE
+FROM (VALUES
+    ('desk_min_rr',               1.5, 'Minimum reward-to-risk for a desk buy trade plan', 'ratio', 1::numeric, 5::numeric),
+    ('desk_pending_expiry_days',  3,   'Sessions before an unapproved desk order expires', 'days',  1, 10)
+) AS s(k, v, d, u, lo, hi)
+WHERE NOT EXISTS (SELECT 1 FROM atlas_foundation.atlas_thresholds t WHERE t.threshold_key = s.k);
+
+-- ── Desk v2 wave 1b: intraday breach alerts ────────────────────────────────
+-- One row per (desk, symbol, kind, IST day): stop breach or target hit on an
+-- open desk position, detected by desk_monitor.py during market hours.
+CREATE TABLE IF NOT EXISTS atlas_foundation.desk_alerts (
+    id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    portfolio_id uuid NOT NULL REFERENCES atlas_foundation.portfolio_master(portfolio_id),
+    symbol       text NOT NULL,
+    kind         text NOT NULL CHECK (kind IN ('stop', 'target')),
+    level        numeric(14, 2) NOT NULL,
+    quote        numeric(14, 2) NOT NULL,
+    alert_date   date NOT NULL DEFAULT ((now() AT TIME ZONE 'Asia/Kolkata')::date),
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (portfolio_id, symbol, kind, alert_date)
+);
+
+-- ── Desk v2 wave 2: benchmark-relative stamps + measured credibility ───────
+-- Alpha vs NIFTY 500 on every outcome stamp; rolling track records per desk/
+-- charter/sector/decision-kind rebuilt nightly and injected into the PM's
+-- payload; weekly conviction-vs-outcome calibration.
+ALTER TABLE atlas_foundation.desk_outcomes ADD COLUMN IF NOT EXISTS t5_alpha  numeric(10, 4);
+ALTER TABLE atlas_foundation.desk_outcomes ADD COLUMN IF NOT EXISTS t20_alpha numeric(10, 4);
+ALTER TABLE atlas_foundation.desk_outcomes ADD COLUMN IF NOT EXISTS t60_alpha numeric(10, 4);
+
+CREATE TABLE IF NOT EXISTS atlas_foundation.desk_credibility (
+    id        bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    dim       text NOT NULL CHECK (dim IN ('desk', 'charter', 'sector', 'kind')),
+    dim_value text NOT NULL,
+    n         int NOT NULL,
+    hit_rate  numeric(4, 3) NOT NULL,
+    avg_alpha numeric(8, 2) NOT NULL,
+    built_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS atlas_foundation.desk_calibration (
+    id        bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    tier      int NOT NULL CHECK (tier BETWEEN 1 AND 5),
+    n         int NOT NULL,
+    avg_alpha numeric(8, 2),
+    hit_rate  numeric(4, 3),
+    built_at  timestamptz NOT NULL DEFAULT now()
+);
+
+INSERT INTO atlas_foundation.atlas_thresholds
+    (threshold_key, threshold_value, category, description, units, min_allowed, max_allowed, default_value, is_active)
+SELECT k, v, 'portfolio', d, u, lo, hi, v, TRUE
+FROM (VALUES
+    ('desk_stance_consensus_min', 2,   'Risk stances (of 3) that must approve for a desk order to proceed', 'stances',  1::numeric, 3::numeric),
+    ('desk_reduced_frac',         0.5, 'Position-size fraction when stance consensus is split 2/3',         'fraction', 0.1, 1)
+) AS s(k, v, d, u, lo, hi)
+WHERE NOT EXISTS (SELECT 1 FROM atlas_foundation.atlas_thresholds t WHERE t.threshold_key = s.k);
+
+-- ── Desk v2 wave 3: layered lesson memory + CVaR tripwire ──────────────────
+-- Lessons carry a memory layer (fast/medium/slow decay — FinMem-style) so
+-- regime observations fade quickly while durable principles persist; the
+-- weekly reflection is contrastive (best-vs-worst stamped outcomes, FinCon
+-- CVRF). CVaR tripwire: nightly tail-average of worst daily NAV returns; a
+-- breach forces de-risk mode (no new entries) in code, never by prompt.
+ALTER TABLE atlas_foundation.desk_lessons ADD COLUMN IF NOT EXISTS layer text NOT NULL DEFAULT 'medium';
+
+INSERT INTO atlas_foundation.atlas_thresholds
+    (threshold_key, threshold_value, category, description, units, min_allowed, max_allowed, default_value, is_active)
+SELECT k, v, 'portfolio', d, u, lo, hi, v, TRUE
+FROM (VALUES
+    ('desk_decay_fast',        0.90,  'Weekly confidence decay for fast-layer (regime/week) lessons',   'factor',   0.5::numeric, 1::numeric),
+    ('desk_decay_medium',      0.97,  'Weekly confidence decay for medium-layer (sector/style) lessons','factor',   0.5, 1),
+    ('desk_decay_slow',        0.995, 'Weekly confidence decay for slow-layer (principle) lessons',     'factor',   0.5, 1),
+    ('desk_cvar_tail_pct',     0.05,  'Tail share of worst daily NAV returns averaged for the tripwire','fraction', 0.01, 0.2),
+    ('desk_cvar_floor_pct',    -2.0,  'Tail-average floor (%) below which the desk enters de-risk',    'percent',  -10, 0),
+    ('desk_cvar_min_sessions', 40,    'Minimum NAV sessions before the CVaR tripwire can arm',          'sessions', 10, 250)
+) AS s(k, v, d, u, lo, hi)
+WHERE NOT EXISTS (SELECT 1 FROM atlas_foundation.atlas_thresholds t WHERE t.threshold_key = s.k);
+
+-- ── Desk v2 wave 4: research loop + DB charters + memorization audit ───────
+-- Charters live in the DB (admin-editable, journaled per cycle via charter_sha);
+-- a weekly hypothesis agent proposes ONE falsifiable desk-threshold change and
+-- code evaluates it against the desk's own stamped decision corpus (RD-Agent
+-- pattern, forward evidence only — the desk itself is never backtested); a
+-- masked-ticker audit (anonymized scout rerun) measures how much decisions
+-- depend on name priors vs supplied data (Profit Mirage control).
+CREATE TABLE IF NOT EXISTS atlas_foundation.desk_charters (
+    charter_key  text PRIMARY KEY,
+    charter_text text NOT NULL,
+    updated_at   timestamptz NOT NULL DEFAULT now(),
+    updated_by   text NOT NULL DEFAULT 'seed'
+);
+
+CREATE TABLE IF NOT EXISTS atlas_foundation.desk_hypotheses (
+    id             bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    ts             timestamptz NOT NULL DEFAULT now(),
+    hypothesis     text NOT NULL,
+    threshold_key  text NOT NULL,
+    proposed_value numeric NOT NULL,
+    current_value  numeric NOT NULL,
+    verdict        text NOT NULL CHECK (verdict IN ('supported', 'unsupported', 'insufficient_data')),
+    effect         jsonb NOT NULL DEFAULT '{}',
+    adopted        boolean NOT NULL DEFAULT false
+);
+
+CREATE TABLE IF NOT EXISTS atlas_foundation.desk_audit (
+    id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    portfolio_id uuid NOT NULL REFERENCES atlas_foundation.portfolio_master(portfolio_id),
+    cycle_date   date NOT NULL,
+    jaccard      numeric(4, 3) NOT NULL,
+    real_set     jsonb NOT NULL,
+    masked_set   jsonb NOT NULL,
+    ts           timestamptz NOT NULL DEFAULT now()
+);
+
+INSERT INTO atlas_foundation.atlas_thresholds
+    (threshold_key, threshold_value, category, description, units, min_allowed, max_allowed, default_value, is_active)
+SELECT k, v, 'portfolio', d, u, lo, hi, v, TRUE
+FROM (VALUES
+    ('desk_hypo_min_n', 20, 'Minimum stamped decisions before a hypothesis can reach a verdict', 'decisions', 5::numeric, 200::numeric)
+) AS s(k, v, d, u, lo, hi)
+WHERE NOT EXISTS (SELECT 1 FROM atlas_foundation.atlas_thresholds t WHERE t.threshold_key = s.k);
+
+-- Desk v2 review fix: persist split-consensus size-down through the approval queue
+ALTER TABLE atlas_foundation.desk_pending_orders ADD COLUMN IF NOT EXISTS reduced boolean NOT NULL DEFAULT false;

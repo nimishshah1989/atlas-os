@@ -7,4 +7,6 @@ REPO="/home/ubuntu/atlas-os"
 cd "$REPO"
 export PYTHONPATH="$REPO:$REPO/scripts/foundation"   # covers atlas.* and _db imports
 set -a; source .env; set +a
-exec "$REPO/.venv/bin/python" scripts/foundation/build_sector_rs_intraday.py
+"$REPO/.venv/bin/python" scripts/foundation/build_sector_rs_intraday.py
+# Desk v2 wave 1b: stop/target breach monitor on open desk positions (non-fatal)
+"$REPO/.venv/bin/python" scripts/foundation/desk_monitor.py || true

@@ -46,6 +46,10 @@ step "portfolio_evolve"    $PY scripts/foundation/portfolio_evolve.py
 # (confidence earned/decayed), retires dead lessons. Needs the week's desk_journal
 # + desk_outcomes rows, both written nightly by desk_run.
 step "desk_reflect"        $PY scripts/foundation/desk_reflect.py
+# Desk v2 wave 4: one falsifiable methodology hypothesis + one masked-ticker
+# memorization audit per week (rotating desk). Both journal to their tables.
+step "desk_hypothesis"     $PY scripts/foundation/desk_hypothesis.py
+step "desk_audit_masked"   $PY scripts/foundation/desk_audit_masked.py
 
 if [ ${#FAILURES[@]} -eq 0 ]; then echo "=== atlas_weekly COMPLETE — all green ===" | tee -a "$LOG"
 else MSG="atlas_weekly FAILURES: ${FAILURES[*]}"; echo "=== $MSG ===" | tee -a "$LOG"

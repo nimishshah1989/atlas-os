@@ -51,11 +51,28 @@ state, risk flags, market regime), identify:
 
 Rules: cite the specific numbers that changed (e.g. "composite 71→64 in 5
 sessions"). At most 5 proposals. Never propose a buy when regime is Risk-Off or
-DISLOCATION_SUSPENDED. Output ONLY JSON:
+DISLOCATION_SUSPENDED. conviction is a 5-tier scale (1 = weak/marginal,
+3 = solid, 5 = table-pounding) — your stated tier is later scored against the
+realized outcome, so calibrate honestly. Output ONLY JSON:
 {{"proposals": [{{"symbol": str, "action": "add"|"exit"|"watch",
-  "evidence": [str, ...], "urgency": "low"|"high"}}, ...], "note": str}}"""
+  "evidence": [str, ...], "urgency": "low"|"high",
+  "conviction": 1|2|3|4|5}}, ...], "note": str}}"""
+
+# three stances, one officer prompt: the desk trades only where at least
+# `desk_stance_consensus_min` of the three independent stances agree (enforced
+# in code), and a 2/3 split sizes down — disagreement gates size, not prose.
+RISK_STANCES = {
+    "SAFE": "Your stance is CAPITAL PRESERVATION: when in doubt, defer or veto. "
+    "Weight drawdown risk, crowding and tax friction over missed upside.",
+    "NEUTRAL": "Your stance is BALANCED: judge each proposal strictly on the "
+    "evidence and costs given, with no directional bias.",
+    "RISKY": "Your stance is OPPORTUNITY COST: missing a strong move is also a "
+    "loss. Approve when the evidence is real even if imperfect; veto only "
+    "clear rule-breakers or thesis-free trades.",
+}
 
 _RISK_SYS = """You are the RISK & TAX OFFICER of an Indian equity paper-trading desk.
+{stance}
 Hard limits (position cap, sector cap, order count, Risk-Off entry block) are
 enforced by the system in code — your job is JUDGMENT on each proposal:
 
@@ -74,15 +91,20 @@ Charter: {charter}
 
 Decide today's orders. You may ONLY act on proposals the Risk officer APPROVED
 (list provided). You may drop approved proposals; you may not add new names.
-Position sizing is fixed by the system (one standard slot per buy; sells close
-the full position). For every order write:
+Position sizing is fixed by the system (one standard slot per buy — halved in
+code when the risk stances split 2/3; sells close the full position).
+Your payload includes track_record: MEASURED rolling hit-rates and T+20 alpha
+vs NIFTY 500 for this desk, its charter, sectors and decision kinds — weight
+proposals from historically strong pockets more, and say so in the thesis when
+you do. For every order write:
 - thesis: what you believe and which Atlas evidence supports it (one sentence);
 - invalidation: the observable condition that proves you wrong and triggers exit
-  (e.g. "composite < 60 for 5 sessions or sector drops from top-3").
+  (e.g. "composite < 60 for 5 sessions or sector drops from top-3");
+- conviction: 1-5 (scored later against the realized outcome — calibrate honestly).
 Doing nothing is a decision — if you place no orders, say why in the note.
 Output ONLY JSON:
-{{"orders": [{{"symbol": str, "side": "buy"|"sell",
-  "thesis": str, "invalidation": str}}, ...], "note": str}}"""
+{{"orders": [{{"symbol": str, "side": "buy"|"sell", "thesis": str,
+  "invalidation": str, "conviction": 1|2|3|4|5}}, ...], "note": str}}"""
 
 
 def _msgs(system: str, payload: dict) -> list[dict]:
@@ -92,19 +114,29 @@ def _msgs(system: str, payload: dict) -> list[dict]:
     ]
 
 
-def build_scout_messages(charter_key: str, inputs: dict) -> list[dict]:
-    return _msgs(_SCOUT_SYS.format(charter=CHARTERS[charter_key]), inputs)
+def build_scout_messages(
+    charter_key: str, inputs: dict, charter_text: str | None = None
+) -> list[dict]:
+    return _msgs(_SCOUT_SYS.format(charter=charter_text or CHARTERS[charter_key]), inputs)
 
 
-def build_risk_messages(inputs: dict) -> list[dict]:
-    return _msgs(_RISK_SYS, inputs)
+def build_risk_messages(inputs: dict, stance: str = "NEUTRAL") -> list[dict]:
+    return _msgs(_RISK_SYS.format(stance=RISK_STANCES[stance]), inputs)
 
 
-def build_pm_messages(charter_key: str, inputs: dict) -> list[dict]:
-    return _msgs(_PM_SYS.format(charter=CHARTERS[charter_key]), inputs)
+def build_pm_messages(
+    charter_key: str, inputs: dict, charter_text: str | None = None
+) -> list[dict]:
+    return _msgs(_PM_SYS.format(charter=charter_text or CHARTERS[charter_key]), inputs)
 
 
 # ── validators: strict shape checks; any violation rejects the whole reply ──
+
+
+def _tier(x) -> bool:
+    """Strict 1-5 int — `x in (1,...,5)` would accept 3.0 and True (== semantics),
+    which later breaks the (conviction)::int SQL cast and the ^[1-5]$ gate."""
+    return type(x) is int and 1 <= x <= 5
 
 
 def _str(x) -> bool:
@@ -125,6 +157,8 @@ def validate_scout(out: dict, known_symbols: set[str]) -> list[str]:
             errs.append(f"{p['symbol']}: evidence required")
         elif p.get("urgency") not in ("low", "high"):
             errs.append(f"{p['symbol']}: bad urgency")
+        elif not _tier(p.get("conviction")):
+            errs.append(f"{p['symbol']}: conviction 1-5 required")
     return errs
 
 
@@ -133,13 +167,22 @@ def validate_risk(out: dict, proposed_symbols: set[str]) -> list[str]:
     vs = out.get("verdicts")
     if not isinstance(vs, list):
         return ["verdicts must be a list"]
+    seen: set[str] = set()
     for v in vs:
         if not isinstance(v, dict) or v.get("verdict") not in ("approve", "defer", "veto"):
             errs.append(f"bad verdict shape: {v}")
         elif v.get("symbol") not in proposed_symbols:
             errs.append(f"verdict for unproposed symbol: {v.get('symbol')}")
+        elif v["symbol"] in seen:  # duplicates would double-count in stance consensus
+            errs.append(f"{v['symbol']}: duplicate verdict")
         elif not _str(v.get("reason", "")):
             errs.append(f"{v['symbol']}: reason required")
+        else:
+            seen.add(v["symbol"])
+    if not errs and seen != proposed_symbols:
+        errs.append(
+            f"verdicts must cover every proposal (missing {sorted(proposed_symbols - seen)})"
+        )
     return errs
 
 
@@ -159,7 +202,62 @@ def validate_pm(out: dict, approved: dict[str, str]) -> list[str]:
             errs.append(f"{sym}: {o['side']} was not Risk-approved")
         if not _str(o.get("thesis", "")) or not _str(o.get("invalidation", "")):
             errs.append(f"{sym}: thesis and invalidation required")
+        elif not _tier(o.get("conviction")):
+            errs.append(f"{sym}: conviction 1-5 required")
     return errs
+
+
+# ── B3: Execution Trader — exit levels for PM buy orders ────────────────────
+
+_TRADER_SYS = """You are the EXECUTION TRADER on an Indian equity paper-trading desk.
+The PM has already decided WHAT to buy; you set the exit levels. For each buy
+order you get real price levels: last_close (the entry reference), ema_21,
+ema_50, ema_200, atr_14, low_20d, high_20d.
+
+Rules:
+- stop: a real support level BELOW last_close (an EMA, the 20-day low, or
+  last_close minus a small ATR multiple) — never an arbitrary percentage.
+- target: a realistic objective ABOVE last_close grounded in the given levels
+  (e.g. prior 20-day high, or a level implying reward-to-risk >= {min_rr}).
+- reward-to-risk (target - last_close) / (last_close - stop) must be >= {min_rr}.
+- basis: one line naming WHICH level anchors the stop and target.
+- Ground every number in the provided levels; never invent prices.
+Output ONLY JSON:
+{{"plans": [{{"symbol": str, "stop": number, "target": number, "basis": str}}, ...]}}"""
+
+
+def build_trader_messages(inputs: dict, min_rr: float) -> list[dict]:
+    return _msgs(_TRADER_SYS.format(min_rr=min_rr), inputs)
+
+
+def validate_trader(out: dict, expected: set[str]) -> list[str]:
+    errs = []
+    plans = out.get("plans")
+    if not isinstance(plans, list) or len(plans) > len(expected):
+        return [f"plans must be list of <={len(expected)}"]
+    for p in plans:
+        if not isinstance(p, dict) or p.get("symbol") not in expected:
+            errs.append(f"plan for unexpected symbol: {p}")
+        elif not isinstance(p.get("stop"), (int, float)) or not isinstance(
+            p.get("target"), (int, float)
+        ):
+            errs.append(f"{p['symbol']}: stop/target must be numbers")
+        elif not _str(p.get("basis", "")):
+            errs.append(f"{p['symbol']}: basis required")
+    return errs
+
+
+def check_plan(entry, stop, target, min_rr) -> tuple[float | None, list[str]]:
+    """Pure sanity gate on a buy plan (Decimal in, code-enforced — never the model).
+    Returns (reward_to_risk, errors); rr is None when the geometry is invalid."""
+    if not stop < entry:
+        return None, [f"stop {stop} must be below entry {entry}"]
+    if not target > entry:
+        return None, [f"target {target} must be above entry {entry}"]
+    rr = float((target - entry) / (entry - stop))
+    if rr < float(min_rr):
+        return rr, [f"reward-to-risk {rr:.2f} below minimum {min_rr}"]
+    return rr, []
 
 
 # ── B2: Bull/Bear debate (contested moves only) + weekly Reflection ─────────
@@ -199,19 +297,78 @@ Tasks:
    confirmed, contradicted, or untested → new confidence (0.1-0.95; small steps,
    ±0.1 max; untested decays slightly).
 2. Write AT MOST 3 NEW lessons — only patterns the outcomes actually support,
-   phrased as actionable guidance. No platitudes; cite the pattern.
+   phrased as actionable guidance. No platitudes; cite the pattern. Each lesson
+   gets a memory layer: "fast" = this week's regime/market observation (fades in
+   weeks), "medium" = sector/style pattern (fades in months), "slow" = durable
+   principle (near-permanent). Choose honestly — durable claims need repeated
+   evidence.
+3. If contrast_candidates are provided (your BEST and WORST stamped outcomes),
+   extract the ONE conceptual difference between what worked and what failed —
+   not a description, a transferable rule. Cite at least one symbol from each
+   side. If none are provided, set contrast_insight to null.
 Output ONLY JSON:
 {{"updates": [{{"id": int, "confidence": float, "basis": str}}, ...],
-  "new_lessons": [{{"lesson": str,
+  "new_lessons": [{{"lesson": str, "layer": "fast"|"medium"|"slow",
      "tags": {{"regime": str|null, "sector": str|null, "action": str|null}},
-     "basis": str}}, ...]}}"""
+     "basis": str}}, ...],
+  "contrast_insight": {{"insight": str, "layer": "fast"|"medium"|"slow",
+     "best_cited": [str, ...], "worst_cited": [str, ...]}} | null}}"""
 
 
-def build_reflect_messages(charter_key: str, inputs: dict) -> list[dict]:
-    return _msgs(_REFLECT_SYS.format(charter=CHARTERS[charter_key]), inputs)
+def build_reflect_messages(
+    charter_key: str, inputs: dict, charter_text: str | None = None
+) -> list[dict]:
+    return _msgs(_REFLECT_SYS.format(charter=charter_text or CHARTERS[charter_key]), inputs)
 
 
-def validate_reflect(out: dict, known_ids: set[int]) -> list[str]:
+# ── B4: weekly hypothesis — one falsifiable methodology question ────────────
+
+_HYPO_SYS = """You are the RESEARCH ANALYST of an Indian equity paper-trading desk.
+From the desk's MEASURED evidence (credibility track records, conviction
+calibration, prior hypotheses and their verdicts), propose exactly ONE
+falsifiable hypothesis about a desk threshold — a claim that the given
+decision corpus can support or refute. Do not repeat a hypothesis already
+tested with the same value. allowed_thresholds lists each key with its
+current value and permitted range. Output ONLY JSON:
+{{"hypothesis": str, "threshold_key": str, "proposed_value": number,
+  "rationale": str}}"""
+
+
+def build_hypo_messages(inputs: dict) -> list[dict]:
+    return _msgs(_HYPO_SYS, inputs)
+
+
+def validate_hypo(
+    out: dict, allowed: dict[str, dict], priors: set[tuple[str, float]] | None = None
+) -> list[str]:
+    """allowed: key -> {current, lo, hi} from atlas_thresholds; priors = already
+    tested (key, value) pairs — the no-repeat rule enforced in code, not prose."""
+    key = out.get("threshold_key")
+    val = out.get("proposed_value")
+    if key not in allowed:
+        return [f"threshold_key must be one of {sorted(allowed)}"]
+    if not isinstance(val, (int, float)) or isinstance(val, bool):
+        return ["proposed_value must be a number"]
+    a = allowed[key]
+    if not a["lo"] <= float(val) <= a["hi"]:
+        return [f"proposed_value {val} outside [{a['lo']}, {a['hi']}]"]
+    if float(val) == float(a["current"]):
+        return ["proposed_value equals current value — not a hypothesis"]
+    if priors and (key, float(val)) in priors:
+        return [f"{key}={val} already tested — propose something new"]
+    if not _str(out.get("hypothesis", "")) or not _str(out.get("rationale", "")):
+        return ["hypothesis and rationale required"]
+    return []
+
+
+_LAYERS = ("fast", "medium", "slow")
+
+
+def validate_reflect(
+    out: dict, known_ids: set[int], contrast_syms: tuple[set[str], set[str]] | None = None
+) -> list[str]:
+    """contrast_syms = (best, worst) symbol sets when candidates were provided —
+    the contrast insight must cite at least one real symbol from each side."""
     errs = []
     ups = out.get("updates", [])
     news = out.get("new_lessons", [])
@@ -227,4 +384,22 @@ def validate_reflect(out: dict, known_ids: set[int]) -> list[str]:
     for n in news:
         if not isinstance(n, dict) or not _str(n.get("lesson", "")) or not _str(n.get("basis", "")):
             errs.append(f"bad new lesson: {n}")
+        elif n.get("layer") not in _LAYERS:
+            errs.append(f"new lesson needs layer fast|medium|slow: {n.get('lesson', '')[:40]}")
+    ci = out.get("contrast_insight")
+    if contrast_syms is not None:
+        best, worst = contrast_syms
+        if not isinstance(ci, dict):
+            errs.append("contrast_insight required when candidates provided")
+        else:
+            b, w = set(ci.get("best_cited") or []), set(ci.get("worst_cited") or [])
+            if (
+                not _str(ci.get("insight", ""))
+                or ci.get("layer") not in _LAYERS
+                or not b
+                or not w
+                or not b <= best  # every citation verbatim from the candidate list —
+                or not w <= worst  # no decorated symbols like "MCX (sell)"
+            ):
+                errs.append("contrast_insight citations must come verbatim from candidates")
     return errs
