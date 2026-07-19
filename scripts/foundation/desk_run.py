@@ -225,6 +225,14 @@ def assemble_inputs(p: dict, knobs: dict) -> dict:
         {"p": str(p["portfolio_id"])},
     )
 
+    # payload diet: the scout request rides ~8k tokens against Groq's TPM cap —
+    # long floats and verbose lessons were tipping cycles into 413 holds
+    watchlist = watchlist.round(3)
+    if not holdings.empty:
+        holdings = holdings.round(3)
+    sector_ranks = sector_ranks.round(2)
+    if not lessons.empty:
+        lessons["lesson"] = lessons["lesson"].str.slice(0, 240)
     return {
         "cycle_date": str(eod),
         "regime": regime,
