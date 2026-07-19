@@ -334,11 +334,49 @@ def build_memo(cycle_date: Any, desks: list[dict], settle_notes: list[str]) -> s
     return "\n".join(lines)
 
 
+def _email_memo(text: str) -> None:
+    """Nightly brief by email — stdlib SMTP, env-driven (SMTP_USER/SMTP_PASS/
+    DESK_MEMO_TO in .env; Gmail app password works). No-op until configured."""
+    import os
+    import re
+    import smtplib
+    from email.message import EmailMessage
+
+    user = os.environ.get("SMTP_USER", "")
+    pw = os.environ.get("SMTP_PASS", "")
+    to = os.environ.get("DESK_MEMO_TO", "")
+    if not (user and pw and to) or "REPLACE" in pw:
+        print("[desk] memo email not configured (SMTP_USER/SMTP_PASS/DESK_MEMO_TO)", flush=True)
+        return
+    msg = EmailMessage()
+    msg["Subject"] = re.sub(r"<[^>]+>", "", text.split("\n", 1)[0])
+    msg["From"] = user
+    msg["To"] = to
+    msg.set_content(re.sub(r"<[^>]+>", "", text))
+    msg.add_alternative(
+        "<html><body style='font-family:ui-monospace,Menlo,monospace;font-size:14px'>"
+        + text.replace("\n", "<br>\n")
+        + "</body></html>",
+        subtype="html",
+    )
+    host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+    with smtplib.SMTP(host, int(os.environ.get("SMTP_PORT", "587")), timeout=30) as s:
+        s.starttls()
+        s.login(user, pw)
+        s.send_message(msg)
+    print(f"[desk] memo emailed to {to}", flush=True)
+
+
 def send_memo(text: str) -> None:
-    """Telegram delivery; graceful no-op when unconfigured, never fatal."""
+    """Email + Telegram delivery; each a graceful no-op when unconfigured,
+    neither may ever break the desk cycle."""
+    try:
+        _email_memo(text)
+    except Exception as e:
+        print(f"[desk] memo email failed: {e}", flush=True)
     try:
         from atlas.intraday.notify import send_message_sync
 
         send_message_sync(text)
-    except Exception as e:  # memo must never break the desk cycle
-        print(f"[desk] memo send failed: {e}", flush=True)
+    except Exception as e:
+        print(f"[desk] memo telegram failed: {e}", flush=True)
