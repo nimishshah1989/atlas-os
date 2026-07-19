@@ -585,8 +585,8 @@ def main() -> None:
             {"name": p["name"], **{k: journal[k] for k in ("applied", "queued", "errors")}}
         )
         print(
-            f"[desk] {p['name']}: applied={len(journal['applied'])} "
-            f"queued={len(journal['queued'])} errors={len(journal['errors'])}",
+            f"[desk] {p['name']}: applied={len(journal['applied'] or [])} "
+            f"queued={len(journal['queued'] or [])} errors={len(journal['errors'] or [])}",
             flush=True,
         )
     if not a.dry_run:
