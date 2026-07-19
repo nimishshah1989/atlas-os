@@ -20,6 +20,7 @@ import { TopNav, GROUPS } from '@/components/nav/TopNav'
 const LIVE_ROUTES = new Set([
   '/', '/sectors', '/stocks', '/etfs', '/funds', '/health', '/methodology',
   '/admin', '/admin/thresholds', '/admin/data-status', '/admin/methodology', '/thresholds',
+  '/desk', '/portfolios',
 ])
 
 describe('TopNav', () => {
@@ -34,13 +35,13 @@ describe('TopNav', () => {
     }
   })
 
-  it('sections are the three live groups', () => {
-    expect(GROUPS.map(g => g.key)).toEqual(['today', 'deepdive', 'admin'])
+  it('sections are the four live groups', () => {
+    expect(GROUPS.map(g => g.key)).toEqual(['today', 'deepdive', 'desk', 'admin'])
   })
 
   it('renders the section labels', () => {
     render(<TopNav />)
-    for (const label of ['MARKETS TODAY', 'DEEP DIVE', 'ADMIN']) {
+    for (const label of ['MARKETS TODAY', 'DEEP DIVE', 'DESK', 'ADMIN']) {
       expect(screen.getAllByText(label).length).toBeGreaterThanOrEqual(1)
     }
   })
