@@ -43,8 +43,15 @@ function Card({ p }: { p: PortfolioSummary }) {
       className={`block rounded-panel border border-edge-hair border-l-[3px] ${cat.accent} bg-surface-panel p-4 no-underline shadow-tile transition-colors hover:border-edge-strong`}
     >
       <div className="mb-1 flex items-start justify-between gap-2">
-        <span className={`shrink-0 rounded-tile border px-2 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wider ${cat.chip}`}>
-          {cat.label}
+        <span className="flex flex-wrap items-center gap-1.5">
+          <span className={`shrink-0 rounded-tile border px-2 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wider ${cat.chip}`}>
+            {cat.label}
+          </span>
+          {p.params?.desk === true && (
+            <span className="shrink-0 rounded-tile border border-accent/40 bg-accent/10 px-2 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wider text-accent">
+              AI desk
+            </span>
+          )}
         </span>
         <span className="font-num text-[10px] tabular-nums text-txt-3">since {p.inceptionDate}</span>
       </div>
@@ -119,7 +126,11 @@ export async function PortfoliosPageV4() {
           <p className="mt-2 max-w-[860px] font-sans text-[13.5px] text-txt-2">
             Model portfolios run by the Atlas engine — rule-based strategies, system-generated books,
             and FM baskets — paper-traded from inception at real EOD closes with execution costs in
-            the NAV and a FIFO tax ledger. Click a card for the full glass-box view.
+            the NAV and a FIFO tax ledger. Click a card for the full glass-box view. The{' '}
+            <Link href="/desk" className="text-accent no-underline hover:underline">
+              AI desks
+            </Link>{' '}
+            decide their own trades each evening — see all four side by side.
           </p>
         </div>
         <div className="shrink-0 pt-1">

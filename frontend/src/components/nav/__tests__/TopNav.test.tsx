@@ -36,12 +36,12 @@ describe('TopNav', () => {
   })
 
   it('sections are the four live groups', () => {
-    expect(GROUPS.map(g => g.key)).toEqual(['today', 'deepdive', 'desk', 'admin'])
+    expect(GROUPS.map(g => g.key)).toEqual(['today', 'deepdive', 'portfolios', 'admin'])
   })
 
   it('renders the section labels', () => {
     render(<TopNav />)
-    for (const label of ['MARKETS TODAY', 'DEEP DIVE', 'DESK', 'ADMIN']) {
+    for (const label of ['MARKETS TODAY', 'DEEP DIVE', 'PORTFOLIOS', 'ADMIN']) {
       expect(screen.getAllByText(label).length).toBeGreaterThanOrEqual(1)
     }
   })
