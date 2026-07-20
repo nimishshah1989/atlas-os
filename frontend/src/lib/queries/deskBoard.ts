@@ -59,14 +59,50 @@ function card(c: Json): DeskCard {
   }
 }
 
+function mapCycle(r: Json): DeskCycle {
+  const scout = (r.scout ?? {}) as Json
+  const risk = (r.risk ?? {}) as Json
+  const pm = (r.pm ?? {}) as Json
+  const digest = (r.inputs_digest ?? {}) as Json
+  return {
+    portfolioId: String(r.pid),
+    name: String(r.name),
+    charter: String(r.charter),
+    nav: num(r.nav),
+    startCapital: num(r.start_capital),
+    cycleDate: String(r.cycle_date),
+    applied: ((r.applied ?? []) as Json[]).map(card),
+    queued: ((r.queued ?? []) as Json[]).map(card),
+    proposals: ((scout.proposals ?? []) as Json[]).map((p) => ({
+      symbol: String(p.symbol ?? ''),
+      action: String(p.action ?? ''),
+      urgency: String(p.urgency ?? ''),
+      conviction: num(p.conviction),
+      evidence: ((p.evidence ?? []) as unknown[]).map(String),
+    })),
+    verdicts: ((risk.verdicts ?? []) as Json[]).map((v) => ({
+      symbol: String(v.symbol ?? ''),
+      verdict: String(v.verdict ?? ''),
+      consensus: num(v.consensus),
+      reduced: v.reduced === true,
+      reason: String(v.reason ?? ''),
+    })),
+    pmNote: pm.note == null ? null : String(pm.note),
+    errors: ((r.errors ?? []) as unknown[]).map(String),
+    cvar: (digest.cvar as DeskCycle['cvar']) ?? null,
+    credibilityRows: num(digest.credibility_rows),
+  }
+}
+
+const CYCLE_COLS = `dj.portfolio_id::text as pid, m.name,
+    coalesce(m.params->>'charter', 'sector_leaders') as charter,
+    dj.cycle_date::text as cycle_date, dj.scout, dj.risk, dj.pm,
+    dj.applied, dj.queued, dj.errors, dj.inputs_digest, n.nav,
+    m.initial_capital as start_capital`
+
 export async function getDeskCycles(): Promise<{ cycles: DeskCycle[]; regime: string | null }> {
   const rows = await sql`
-    select distinct on (dj.portfolio_id)
-           dj.portfolio_id::text as pid, m.name,
-           coalesce(m.params->>'charter', 'sector_leaders') as charter,
-           dj.cycle_date::text as cycle_date, dj.scout, dj.risk, dj.pm,
-           dj.applied, dj.queued, dj.errors, dj.inputs_digest, n.nav,
-           m.initial_capital as start_capital
+    select distinct on (dj.portfolio_id) ${sql.unsafe(CYCLE_COLS)}
     from atlas_foundation.desk_journal dj
     join atlas_foundation.portfolio_master m using (portfolio_id)
     left join lateral (
@@ -78,43 +114,41 @@ export async function getDeskCycles(): Promise<{ cycles: DeskCycle[]; regime: st
   const regime = await sql`
     select regime_state from atlas_foundation.atlas_market_regime_daily
     order by date desc limit 1`
-  const cycles = rows
-    .map((r): DeskCycle => {
-      const scout = (r.scout ?? {}) as Json
-      const risk = (r.risk ?? {}) as Json
-      const pm = (r.pm ?? {}) as Json
-      const digest = (r.inputs_digest ?? {}) as Json
-      return {
-        portfolioId: String(r.pid),
-        name: String(r.name),
-        charter: String(r.charter),
-        nav: num(r.nav),
-        startCapital: num(r.start_capital),
-        cycleDate: String(r.cycle_date),
-        applied: ((r.applied ?? []) as Json[]).map(card),
-        queued: ((r.queued ?? []) as Json[]).map(card),
-        proposals: ((scout.proposals ?? []) as Json[]).map((p) => ({
-          symbol: String(p.symbol ?? ''),
-          action: String(p.action ?? ''),
-          urgency: String(p.urgency ?? ''),
-          conviction: num(p.conviction),
-          evidence: ((p.evidence ?? []) as unknown[]).map(String),
-        })),
-        verdicts: ((risk.verdicts ?? []) as Json[]).map((v) => ({
-          symbol: String(v.symbol ?? ''),
-          verdict: String(v.verdict ?? ''),
-          consensus: num(v.consensus),
-          reduced: v.reduced === true,
-          reason: String(v.reason ?? ''),
-        })),
-        pmNote: pm.note == null ? null : String(pm.note),
-        errors: ((r.errors ?? []) as unknown[]).map(String),
-        cvar: (digest.cvar as DeskCycle['cvar']) ?? null,
-        credibilityRows: num(digest.credibility_rows),
-      }
-    })
-    .sort((a, b) => a.name.localeCompare(b.name))
+  const cycles = (rows as Json[]).map(mapCycle).sort((a, b) => a.name.localeCompare(b.name))
   return { cycles, regime: regime.length ? String(regime[0].regime_state) : null }
+}
+
+// One desk's latest cycle — for the portfolio detail page.
+export async function getDeskCycleFor(portfolioId: string): Promise<DeskCycle | null> {
+  const rows = await sql`
+    select ${sql.unsafe(CYCLE_COLS)}
+    from atlas_foundation.desk_journal dj
+    join atlas_foundation.portfolio_master m using (portfolio_id)
+    left join lateral (
+        select nav from atlas_foundation.portfolio_nav_daily
+        where portfolio_id = dj.portfolio_id and run_type = 'live'
+        order by date desc limit 1) n on true
+    where dj.portfolio_id = ${portfolioId}
+    order by dj.cycle_date desc, dj.ts desc limit 1`
+  return rows.length ? mapCycle(rows[0] as Json) : null
+}
+
+export type TrackRow = { dim: string; dimValue: string; n: number; hitRate: number; avgAlpha: number }
+
+// This desk's report-card rows (its own charter + the sectors it trades).
+export async function getDeskTrackFor(charter: string): Promise<TrackRow[]> {
+  const rows = await sql`
+    select dim, dim_value, n, hit_rate, avg_alpha
+    from atlas_foundation.desk_credibility
+    where n >= 5 and (dim = 'sector' or (dim = 'charter' and dim_value = ${charter}))
+    order by dim, n desc limit 8`
+  return rows.map((r) => ({
+    dim: String(r.dim),
+    dimValue: String(r.dim_value),
+    n: Number(r.n),
+    hitRate: Number(r.hit_rate),
+    avgAlpha: Number(r.avg_alpha),
+  }))
 }
 
 export type DeskIntel = {

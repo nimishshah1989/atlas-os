@@ -5,7 +5,8 @@ import { notFound } from 'next/navigation'
 import { getPortfolioDetail, type NavPointRow, type Holding, type AtlasRead } from '@/lib/queries/portfolios'
 import { TradesTable } from './TradesTable'
 import { PolicyJournal } from './PolicyJournal'
-import { DeskLog } from './DeskLog'
+import { getDeskCycleFor, getDeskTrackFor } from '@/lib/queries/deskBoard'
+import { DeskCycleBody, DeskReportCard } from '@/components/desk/DeskCyclePlain'
 import { describeStrategy } from '@/lib/strategyDescription'
 import { decileColor } from '@/components/ui/decile'
 import { computeFundRiskStats, type NavPoint } from '@/lib/fundStats'
@@ -188,8 +189,10 @@ function HowItWorks({ explain, isSystem }: { explain: NonNullable<ReturnType<typ
 
 export async function PortfolioDetailV4({ id }: { id: string }) {
   const detail = await getPortfolioDetail(id).catch(() => null)
+  const deskCycle = detail?.summary.params?.desk === true ? await getDeskCycleFor(id) : null
+  const deskTrack = deskCycle ? await getDeskTrackFor(deskCycle.charter) : []
   if (!detail) notFound()
-  const { summary: s, holdings, liveNav, backtestNav, backtestRawNav, benchmark, trades, totals, atlas, policyJournal, deskJournal } = detail
+  const { summary: s, holdings, liveNav, backtestNav, backtestRawNav, benchmark, trades, totals, atlas, policyJournal } = detail
   const hasRawCompare = backtestRawNav.length > 5  // rank/desk books carry a risk-managed-OFF curve
   const isSystem = s.category === 'system'
   const isDesk = s.params?.desk === true
@@ -329,27 +332,35 @@ export async function PortfolioDetailV4({ id }: { id: string }) {
         <HoldingsTable holdings={holdings} nav={s.nav} />
       </Panel>
 
-      {isDesk && (
+      {isDesk && deskCycle && (
         <Panel
-          eyebrow="Desk log"
-          title="The desk's nightly judgment"
-          info={{ body: 'Every night after the marks: the Scout reads the fresh Atlas ranks and flags what changed; the Risk & Tax officer approves, defers or vetoes each proposal (weighing STCG vs LTCG and concentration); the PM issues orders, each with a thesis and a falsifiable exit condition. All of it is journaled — including the nights it correctly does nothing.' }}
+          eyebrow="AI desk"
+          title="What this fund did lately, and why"
+          info={{ body: 'Every evening after the market closes, an AI desk reviews Atlas’s scores and decides what to buy or sell — each buy with a built-in loss limit and profit target. This is its latest decision in plain terms; the full night-by-night log is in the transactions below.' }}
           bodyClassName="px-5 py-4"
         >
+          <DeskCycleBody cycle={deskCycle} />
           {detail.deskLessons.length > 0 && (
-            <div className="mb-4 rounded-tile border border-edge-hair bg-surface-raised px-3 py-2.5">
+            <div className="mt-4 rounded-tile border border-edge-hair bg-surface-raised px-3 py-2.5">
               <p className="mb-1.5 font-num text-[9px] uppercase tracking-wider text-txt-3">
-                Lessons earned from outcomes (confidence-weighted, weekly reflection)
+                What it has learned from its own results
               </p>
               {detail.deskLessons.map((l, i) => (
                 <p key={i} className="font-sans text-[12px] leading-[1.5] text-txt-2">
-                  <span className="font-num text-[10.5px] tabular-nums text-txt-3">{(l.confidence * 100).toFixed(0)}%</span>{' '}
-                  {l.lesson}
+                  • {l.lesson.split(' [basis:')[0]}
+                  <span className="font-num text-[10.5px] tabular-nums text-txt-3"> ({(l.confidence * 100).toFixed(0)}% confidence)</span>
                 </p>
               ))}
             </div>
           )}
-          <DeskLog cycles={deskJournal} />
+          {deskTrack.length > 0 && (
+            <div className="mt-4">
+              <p className="mb-1.5 font-num text-[9px] uppercase tracking-wider text-txt-3">
+                How good the desk’s past calls have been (checked 20 days later vs the market)
+              </p>
+              <DeskReportCard track={deskTrack} />
+            </div>
+          )}
         </Panel>
       )}
 
