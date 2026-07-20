@@ -8,7 +8,7 @@ import sql from '@/lib/db'
 import { computeWindowMetrics, type WindowMetrics } from '@/lib/portfolioMetrics'
 import { describeStrategy } from '@/lib/strategyDescription'
 
-export type PortfolioCategory = 'rule' | 'system' | 'basket'
+export type PortfolioCategory = 'desk' | 'rule' | 'system' | 'basket'
 
 export type PortfolioSummary = {
   id: string
@@ -103,7 +103,13 @@ export async function getPortfolios(): Promise<PortfolioSummary[]> {
     id: String(r.portfolio_id),
     name: String(r.name),
     kind: r.kind as 'strategy' | 'basket',
-    category: (r.origin === 'system' ? 'system' : r.kind === 'basket' ? 'basket' : 'rule') as PortfolioCategory,
+    category: ((r.params as Record<string, unknown> | null)?.desk === true
+      ? 'desk'
+      : r.origin === 'system'
+        ? 'system'
+        : r.kind === 'basket'
+          ? 'basket'
+          : 'rule') as PortfolioCategory,
     strategyLabel: strategyLabel(r.strategy_key as string | null, r.params as Record<string, unknown> | null),
     assetClasses: (r.asset_classes as string[]) ?? [],
     initialCapital: Number(r.initial_capital),
