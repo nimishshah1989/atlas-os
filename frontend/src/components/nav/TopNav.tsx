@@ -53,10 +53,9 @@ export const GROUPS: Group[] = [
     ],
   },
   {
-    key: 'desk',
-    label: 'DESK',
+    key: 'portfolios',
+    label: 'PORTFOLIOS',
     links: [
-      { href: '/desk',       label: 'The Desk' },
       { href: '/portfolios', label: 'Portfolios' },
     ],
   },
@@ -77,7 +76,7 @@ function activeGroup(pathname: string): Group {
       pathname.startsWith('/health'))                                         return byKey('admin')
   if (pathname.startsWith('/sectors') || pathname.startsWith('/stocks') ||
       pathname.startsWith('/etfs')    || pathname.startsWith('/funds'))       return byKey('deepdive')
-  if (pathname.startsWith('/desk') || pathname.startsWith('/portfolios'))     return byKey('desk')
+  if (pathname.startsWith('/desk') || pathname.startsWith('/portfolios'))     return byKey('portfolios')
   return byKey('today') // markets-today is default for /
 }
 
