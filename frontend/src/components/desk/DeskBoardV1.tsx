@@ -1,6 +1,8 @@
 // The Desk overview — all four AI-run funds side by side, in plain language.
 // Each card links through to that fund's full history on its portfolio page.
 // Shares DeskCycleBody / DeskReportCard with the detail page so they never drift.
+import Link from 'next/link'
+
 import { getPendingOrders } from '@/lib/queries/desk'
 import { getDeskCycles, getDeskIntel } from '@/lib/queries/deskBoard'
 import { DeskCycleBody, DeskReportCard } from '@/components/desk/DeskCyclePlain'
@@ -39,9 +41,14 @@ export async function DeskBoardV1() {
       )}
 
       <div>
-        <h2 className="mb-3 font-display text-[15px] font-medium text-txt-1">
-          What each fund did {cycles[0] ? `· ${cycles[0].cycleDate}` : ''}
-        </h2>
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="font-display text-[15px] font-medium text-txt-1">
+            What each fund did {cycles[0] ? `· ${cycles[0].cycleDate}` : ''}
+          </h2>
+          <Link href="/desk/engine-room" className="font-sans text-[12px] text-accent no-underline hover:underline">
+            Engine Room — replay a night, agent by agent →
+          </Link>
+        </div>
         <div className="grid gap-4 lg:grid-cols-2">
           {cycles.map((d) => (
             <Panel key={d.portfolioId} bodyClassName="px-5 py-4">

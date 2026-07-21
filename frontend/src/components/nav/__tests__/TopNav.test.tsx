@@ -20,7 +20,7 @@ import { TopNav, GROUPS } from '@/components/nav/TopNav'
 const LIVE_ROUTES = new Set([
   '/', '/sectors', '/stocks', '/etfs', '/funds', '/health', '/methodology',
   '/admin', '/admin/thresholds', '/admin/data-status', '/admin/methodology', '/thresholds',
-  '/desk', '/portfolios',
+  '/desk', '/desk/engine-room', '/portfolios',
 ])
 
 describe('TopNav', () => {
