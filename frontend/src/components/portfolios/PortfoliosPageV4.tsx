@@ -18,13 +18,18 @@ const retTone = (v: number | null) =>
   v == null ? 'text-txt-3' : v >= 0 ? 'text-sig-pos' : 'text-sig-neg'
 
 const CATEGORY: Record<PortfolioCategory, { label: string; accent: string; chip: string }> = {
+  desk: {
+    label: 'AI Desk — autonomous agents',
+    accent: 'border-l-accent',
+    chip: 'border-accent/40 bg-accent/10 text-accent',
+  },
   rule: {
     label: 'Rule-based',
     accent: 'border-l-brand',
     chip: 'border-brand/30 bg-brand/10 text-brand',
   },
   system: {
-    label: 'System-generated',
+    label: 'Atlas Rank — algorithmic',
     accent: 'border-l-sig-warn',
     chip: 'border-sig-warn/30 bg-sig-warn/10 text-sig-warn',
   },
@@ -94,6 +99,7 @@ function Card({ p }: { p: PortfolioSummary }) {
 }
 
 const CURVE_COLOR: Record<PortfolioCategory, ChartSeries['color']> = {
+  desk: 'ink', // forward-only, absent from the backtest chart; present for exhaustiveness
   rule: 'teal',
   system: 'warn',
   basket: 'ink',
@@ -112,7 +118,7 @@ export async function PortfoliosPageV4() {
     lineWidth: c.category === 'system' ? 2 : 1,
   }))
   const groups: { cat: PortfolioCategory; items: PortfolioSummary[] }[] = (
-    ['rule', 'system', 'basket'] as PortfolioCategory[]
+    ['desk', 'rule', 'system', 'basket'] as PortfolioCategory[]
   )
     .map((cat) => ({ cat, items: portfolios.filter((p) => p.category === cat) }))
     .filter((g) => g.items.length > 0)
@@ -156,16 +162,36 @@ export async function PortfoliosPageV4() {
           <AtlasLightweightChart series={compareSeries} height={320} yLabel="Growth of ₹100 · backtest" precision={0} />
         </Panel>
       )}
-      {groups.map(({ cat, items }) => (
-        <section key={cat} aria-label={CATEGORY[cat].label}>
-          <h2 className="mb-2.5 font-num text-[10px] uppercase tracking-[0.14em] text-txt-3">
-            {CATEGORY[cat].label} · {items.length}
-          </h2>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {items.map((p) => <Card key={p.id} p={p} />)}
-          </div>
-        </section>
-      ))}
+      {groups.map(({ cat, items }) =>
+        cat === 'desk' ? (
+          <section key={cat} aria-label={CATEGORY[cat].label} className="rounded-panel border border-accent/25 bg-accent/[0.03] p-4">
+            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="font-num text-[10px] uppercase tracking-[0.14em] text-accent">
+                {CATEGORY[cat].label} · {items.length}
+              </h2>
+              <Link href="/desk" className="font-sans text-[12px] text-accent no-underline hover:underline">
+                Watch the agents work →
+              </Link>
+            </div>
+            <p className="mb-4 max-w-[760px] font-sans text-[12.5px] text-txt-3">
+              Each of these funds is run by a team of AI agents that scan the market after close,
+              debate the risk, and place their own trades on paper money — every decision journaled.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {items.map((p) => <Card key={p.id} p={p} />)}
+            </div>
+          </section>
+        ) : (
+          <section key={cat} aria-label={CATEGORY[cat].label}>
+            <h2 className="mb-2.5 font-num text-[10px] uppercase tracking-[0.14em] text-txt-3">
+              {CATEGORY[cat].label} · {items.length}
+            </h2>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {items.map((p) => <Card key={p.id} p={p} />)}
+            </div>
+          </section>
+        ),
+      )}
     </div>
   )
 }
