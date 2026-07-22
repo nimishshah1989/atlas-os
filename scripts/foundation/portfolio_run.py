@@ -21,6 +21,7 @@ from typing import cast
 
 import _db
 import pandas as pd
+import portfolio_alerts
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from portfolio_data import (
@@ -77,7 +78,7 @@ def _cfg(p: dict) -> PortfolioConfig:
 
 # portfolio-level params consumed by the runner, never passed to the strategy ctor
 _RESERVED_PARAMS = frozenset(
-    {"fund_categories", "sleeves", "picks", "charter", "desk", "standing_constraints"}
+    {"fund_categories", "sleeves", "picks", "charter", "desk", "standing_constraints", "notify"}
 )
 
 
@@ -467,8 +468,13 @@ def cmd_mark(a) -> None:
         _, rates, _el = load_cost_tax()
         trades = _enrich_new_trades(pid, "live", trades, rates)
         write_results(pid, "live", run_id, trades, navs)
+        alerts = portfolio_alerts.notify_new_trades(p, trades)
         done += 1
-        print(f"[mark] {p['name']}: +{len(navs)} nav rows, {len(trades)} trades", flush=True)
+        print(
+            f"[mark] {p['name']}: +{len(navs)} nav rows, {len(trades)} trades"
+            f"{f', {alerts} alerts' if alerts else ''}",
+            flush=True,
+        )
     print(f"[mark] COMPLETE marked={done} skipped={skipped}", flush=True)
 
 
