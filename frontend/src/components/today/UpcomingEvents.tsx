@@ -75,9 +75,14 @@ export function UpcomingEvents({ events, today }: { events: UpcomingEvent[]; tod
         </div>
       }
     >
-      <p className="mb-3 font-num text-[11px] tabular-nums text-txt-3">
-        {count} event{count === 1 ? '' : 's'} in the next {win} days
-      </p>
+      <div className="mb-3 flex items-baseline justify-between gap-2">
+        <p className="font-num text-[11px] tabular-nums text-txt-3">
+          {count} event{count === 1 ? '' : 's'} in the next {win} days
+        </p>
+        <span className="flex items-center gap-1 font-num text-[10px] text-txt-3">
+          <span className="text-brand">★</span> Atlas top-decile conviction
+        </span>
+      </div>
       {groups.length === 0 ? (
         <p className="px-1 py-6 text-center font-sans text-[12px] text-txt-3">No scheduled events in this window.</p>
       ) : (

@@ -116,46 +116,73 @@ export function MoversPanel({ gainers, losers }: { gainers: Mover[]; losers: Mov
   )
 }
 
-// ── 3. Catalysts ─────────────────────────────────────────────────────────────
-// Priority chip styling mirrors StockAnnouncementsPanel (kept local — 3 lines of Tailwind).
-function priorityChip(priority: string | null): string {
-  switch ((priority ?? '').toUpperCase()) {
-    case 'HIGH': return 'bg-sig-pos/10 text-sig-pos border-sig-pos/30'
-    case 'MEDIUM': return 'bg-sig-warn/10 text-sig-warn border-sig-warn/30'
-    default: return 'text-txt-3 border-edge-hair'
-  }
+// ── 3. Announcements ─────────────────────────────────────────────────────────
+// Each filing gets a plain-language ONE-LINER (from its category — "Outcome of
+// Board Meeting" alone tells you nothing) plus a TONE dot. Tone reflects the
+// NATURE of the action type — a buyback is structurally shareholder-positive, a
+// director/auditor exit is a governance watch — NOT a read on the specific
+// numbers (we don't parse the filing body; the NSE link carries the detail).
+type AnnTone = 'pos' | 'watch' | 'neutral'
+const TONE_DOT: Record<AnnTone, string> = { pos: 'bg-sig-pos', watch: 'bg-sig-warn', neutral: 'bg-txt-3/40' }
+const TONE_LABEL: Record<AnnTone, string> = { pos: 'Positive', watch: 'Watch', neutral: 'Neutral' }
+
+const CATEGORY_INFO: Record<string, { line: string; tone: AnnTone }> = {
+  'financial results': { line: 'Results declared', tone: 'neutral' },
+  'outcome of board': { line: 'Board-meeting outcome', tone: 'neutral' },
+  concall: { line: 'Earnings call', tone: 'neutral' },
+  'analyst meet': { line: 'Analyst / investor meet', tone: 'neutral' },
+  'investor presentation': { line: 'Investor presentation', tone: 'neutral' },
+  'annual report': { line: 'Annual report', tone: 'neutral' },
+  buyback: { line: 'Share buyback', tone: 'pos' },
+  dividend: { line: 'Dividend declared', tone: 'pos' },
+  bonus: { line: 'Bonus issue', tone: 'pos' },
+  split: { line: 'Stock split', tone: 'neutral' },
+  acquisition: { line: 'Acquisition', tone: 'pos' },
+  amalgamation: { line: 'Amalgamation / scheme', tone: 'neutral' },
+  merger: { line: 'Merger', tone: 'neutral' },
+  'credit rating': { line: 'Credit-rating update', tone: 'neutral' },
+  'press release': { line: 'Press release', tone: 'neutral' },
+  takeover: { line: 'Takeover / SAST disclosure', tone: 'neutral' },
+  appointment: { line: 'Board / KMP appointment', tone: 'neutral' },
+  'change in director': { line: 'Change in directorate', tone: 'watch' },
+  resignation: { line: 'Resignation — director / KMP', tone: 'watch' },
+  cessation: { line: 'Cessation — director / KMP', tone: 'watch' },
+  'change in auditor': { line: 'Auditor change', tone: 'watch' },
+}
+function annInfo(c: TodayCatalyst): { line: string; tone: AnnTone } {
+  const hit = c.category ? CATEGORY_INFO[c.category.toLowerCase()] : undefined
+  if (hit) return hit
+  return { line: c.subject?.trim() || 'Exchange filing', tone: 'neutral' } // 'other' → raw subject
 }
 
 function AnnRow({ c }: { c: TodayCatalyst }) {
+  const { line, tone } = annInfo(c)
+  const isHigh = (c.priority ?? '').toUpperCase() === 'HIGH'
   return (
-    <li className="flex flex-col gap-1 border-b border-edge-hair px-1 py-2 last:border-b-0 sm:flex-row sm:items-baseline sm:gap-3">
-      <span className="w-[52px] shrink-0 font-num text-[10px] tabular-nums text-txt-3">{shortDate(c.date)}</span>
-      <span className={`shrink-0 rounded-tile border px-1.5 py-0.5 font-num text-[9px] uppercase ${priorityChip(c.priority)}`}>
-        {(c.priority ?? 'LOW').toUpperCase()}
+    <li className="flex items-center gap-2 border-b border-edge-hair py-1.5 last:border-b-0">
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${TONE_DOT[tone]}`} title={TONE_LABEL[tone]} />
+      {c.symbol ? (
+        <Link href={`/stocks/${c.symbol}`} className="w-[84px] shrink-0 truncate font-num text-[12px] font-medium text-txt-1 hover:text-brand">{c.symbol}</Link>
+      ) : (
+        <span className="w-[84px] shrink-0 font-num text-[12px] text-txt-3">—</span>
+      )}
+      {c.liked && <span className="shrink-0 font-num text-[10px] text-brand" title="Atlas top-2-decile conviction">★</span>}
+      <span
+        className={`min-w-0 flex-1 truncate font-sans text-[12px] ${isHigh ? 'font-medium text-txt-1' : 'text-txt-2'}`}
+        title={c.subject ?? undefined}
+      >
+        {line}
       </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <div className="flex items-center gap-1.5">
-          {c.symbol ? (
-            <Link href={`/stocks/${c.symbol}`} className="font-num text-[12px] font-medium text-txt-1 hover:text-brand">{c.symbol}</Link>
-          ) : (
-            <span className="font-num text-[12px] text-txt-2">—</span>
-          )}
-          {c.liked && <span className="font-num text-[10px] text-brand" title={`Atlas conviction: top ${11 - LEAD_DECILE} deciles`}>★</span>}
-        </div>
-        <span className="truncate font-sans text-[12px] text-txt-2">{c.subject ?? '—'}</span>
-      </div>
+      <span className="shrink-0 font-num text-[10px] tabular-nums text-txt-3">{shortDate(c.date)}</span>
       {c.url && (
-        <a href={c.url} target="_blank" rel="noopener noreferrer" className="shrink-0 self-start font-num text-[10px] text-txt-3 hover:text-brand sm:self-center">
-          NSE ↗
-        </a>
+        <a href={c.url} target="_blank" rel="noopener noreferrer" className="shrink-0 font-num text-[10px] text-txt-3 hover:text-brand">NSE ↗</a>
       )}
     </li>
   )
 }
 
-// Classified into the three catalyst buckets, most material first (HIGH before
-// MEDIUM/LOW). Each bucket is a native <details> "dropdown" — earnings + capital
-// open, governance collapsed (routine housekeeping the FM scans only if curious).
+// Three catalyst buckets, most material first (HIGH before MEDIUM/LOW). Each is a
+// native <details> dropdown — earnings + capital open, governance collapsed.
 const ANN_BUCKETS: { key: string; label: string; open: boolean }[] = [
   { key: 'earnings', label: 'Earnings & results', open: true },
   { key: 'capital', label: 'Capital actions', open: true },
@@ -163,6 +190,16 @@ const ANN_BUCKETS: { key: string; label: string; open: boolean }[] = [
 ]
 const PRIO_RANK: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 }
 const prio = (p: string | null) => PRIO_RANK[(p ?? 'LOW').toUpperCase()] ?? 2
+const BUCKET_CAP = 10 // keep each group short; HIGH-first sort means the cap keeps the material ones
+
+function LegendDot({ cls, children }: { cls: string; children: React.ReactNode }) {
+  return (
+    <span className="flex items-center gap-1">
+      <span className={`h-1.5 w-1.5 rounded-full ${cls}`} />
+      {children}
+    </span>
+  )
+}
 
 export function AnnouncementsPanel({ catalysts, total }: { catalysts: TodayCatalyst[]; total: number }) {
   const byBucket = new Map<string, TodayCatalyst[]>()
@@ -179,30 +216,43 @@ export function AnnouncementsPanel({ catalysts, total }: { catalysts: TodayCatal
     <Panel
       eyebrow="Filings · classified"
       title="Announcements"
-      info={{ title: 'Announcements', body: 'Recent NSE filings (trailing 60 days) grouped by type, most material first. ★ marks names Atlas rates highly. Expand a group to scan it.' }}
+      info={{ title: 'Announcements', body: 'Recent NSE filings (trailing 60 days), grouped by type and most-material-first. Each carries a plain-language one-liner and a tone dot — positive (shareholder-friendly action), watch (governance/risk), neutral (informational). The dot is the nature of the action type, not a read on the numbers. ★ = a name in Atlas’s top 2 deciles. Open the NSE link for the full filing.' }}
       action={<span className="font-num text-[10px] text-txt-3">{catalysts.length} of {total}</span>}
     >
       {sections.length === 0 ? (
         <EmptyRow>No recent filings.</EmptyRow>
       ) : (
-        <div className="flex flex-col gap-2">
-          {sections.map((s) => {
-            const high = s.items.filter((i) => (i.priority ?? '').toUpperCase() === 'HIGH').length
-            return (
-              <details key={s.key} open={s.open} className="group/ann rounded-tile border border-edge-hair">
-                <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 [&::-webkit-details-marker]:hidden">
-                  <span className="font-num text-[10px] text-txt-3 transition-transform group-open/ann:rotate-90">▸</span>
-                  <span className="font-display text-[13px] font-medium text-txt-1">{s.label}</span>
-                  {high > 0 && <span className="rounded-tile bg-sig-pos/10 px-1.5 py-0.5 font-num text-[9px] text-sig-pos">{high} HIGH</span>}
-                  <span className="ml-auto font-num text-[11px] tabular-nums text-txt-3">{s.items.length}</span>
-                </summary>
-                <ul className="border-t border-edge-hair px-3 pb-1">
-                  {s.items.map((c, i) => <AnnRow key={`${c.date}-${c.symbol}-${i}`} c={c} />)}
-                </ul>
-              </details>
-            )
-          })}
-        </div>
+        <>
+          <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-num text-[10px] text-txt-3">
+            <LegendDot cls="bg-sig-pos">Positive</LegendDot>
+            <LegendDot cls="bg-sig-warn">Watch</LegendDot>
+            <LegendDot cls="bg-txt-3/40">Neutral</LegendDot>
+            <span className="ml-auto flex items-center gap-1"><span className="text-brand">★</span>Atlas top decile</span>
+          </div>
+          <div className="flex flex-col gap-2">
+            {sections.map((s) => {
+              const high = s.items.filter((i) => (i.priority ?? '').toUpperCase() === 'HIGH').length
+              const shown = s.items.slice(0, BUCKET_CAP)
+              const more = s.items.length - shown.length
+              return (
+                <details key={s.key} open={s.open} className="group/ann rounded-tile border border-edge-hair">
+                  <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 [&::-webkit-details-marker]:hidden">
+                    <span className="font-num text-[10px] text-txt-3 transition-transform group-open/ann:rotate-90">▸</span>
+                    <span className="font-display text-[13px] font-medium text-txt-1">{s.label}</span>
+                    {high > 0 && <span className="rounded-tile bg-sig-pos/10 px-1.5 py-0.5 font-num text-[9px] text-sig-pos">{high} HIGH</span>}
+                    <span className="ml-auto font-num text-[11px] tabular-nums text-txt-3">{s.items.length}</span>
+                  </summary>
+                  <ul className="border-t border-edge-hair px-3 pb-1">
+                    {shown.map((c, i) => <AnnRow key={`${c.date}-${c.symbol}-${i}`} c={c} />)}
+                  </ul>
+                  {more > 0 && (
+                    <p className="px-3 py-1.5 font-num text-[10px] text-txt-3">+{more} more this week</p>
+                  )}
+                </details>
+              )
+            })}
+          </div>
+        </>
       )}
     </Panel>
   )
