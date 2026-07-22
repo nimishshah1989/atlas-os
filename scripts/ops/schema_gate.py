@@ -26,6 +26,7 @@ BACKEND = [
     "scripts/foundation/fetch_delivery.py",
     "scripts/foundation/backfill_delivery.py",
     "scripts/foundation/ingest_filings.py",
+    "scripts/foundation/ingest_events.py",
     "scripts/foundation/ingest_insider.py",
     "scripts/foundation/ingest_shareholding.py",
     "scripts/foundation/ingest_screener.py",
