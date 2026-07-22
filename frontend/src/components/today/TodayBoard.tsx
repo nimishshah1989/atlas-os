@@ -47,8 +47,8 @@ export async function TodayBoard() {
         {/* header */}
         <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="font-num text-[10px] uppercase tracking-[0.2em] text-txt-3">Pulse · Today</p>
-            <h1 className="mt-1.5 font-display text-[32px] font-bold leading-none tracking-tight text-txt-1">What changed</h1>
+            <p className="font-num text-[10px] uppercase tracking-[0.2em] text-txt-3">Markets · Today</p>
+            <h1 className="mt-1.5 font-display text-[32px] font-bold leading-none tracking-tight text-txt-1">Movers &amp; Shakers</h1>
             {asOf && (
               <p className="mt-2 font-num text-[11px] tabular-nums text-txt-3">
                 as of {longDate(asOf)}

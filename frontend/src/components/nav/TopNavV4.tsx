@@ -1,22 +1,18 @@
 'use client'
 // Atlas v4 nav — flat IA, Graphite Terminal skin. Replaces the 2-tier group nav
-// when LENS_V4 is on. "Pulse" is a section holding two pages: Today (the change-feed)
-// and Market Pulse (the structural snapshot at /). Everything else stays flat.
+// when LENS_V4 is on. Movers & Shakers (/today) sits alongside Market Pulse as its
+// own tab. Market Pulse (/) is unchanged.
 import Link from 'next/link'
 import { useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { Menu, X, ChevronDown } from 'lucide-react'
+import { Menu, X } from 'lucide-react'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 
 type NavItem = { href: string; label: string; exact?: boolean }
 
-// The Pulse section — Today first (the showcase), Market Pulse keeps /.
-export const PULSE_ITEMS: NavItem[] = [
-  { href: '/today', label: 'Today' },
-  { href: '/', label: 'Market Pulse', exact: true },
-]
-
 export const NAV_V4: NavItem[] = [
+  { href: '/', label: 'Market Pulse', exact: true },
+  { href: '/today', label: 'Movers & Shakers' },
   { href: '/sectors', label: 'Sector View' },
   { href: '/stocks', label: 'Stocks' },
   { href: '/etfs', label: 'ETF' },
@@ -28,7 +24,6 @@ export const NAV_V4: NavItem[] = [
 function isActive(pathname: string, item: NavItem): boolean {
   return item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + '/')
 }
-const pulseActive = (pathname: string) => PULSE_ITEMS.some(i => isActive(pathname, i))
 
 export function TopNavV4({ healthDot }: { healthDot?: React.ReactNode }) {
   const pathname = usePathname()
@@ -37,39 +32,12 @@ export function TopNavV4({ healthDot }: { healthDot?: React.ReactNode }) {
   return (
     <>
       <nav className="fixed inset-x-0 top-0 z-50 flex h-12 items-center gap-1 border-b border-edge-rule bg-surface-base/95 px-5 backdrop-blur">
-        <Link href="/today" className="mr-4 flex shrink-0 items-center gap-2">
+        <Link href="/" className="mr-4 flex shrink-0 items-center gap-2">
           <span className="h-2 w-2 rounded-full bg-brand" style={{ boxShadow: '0 0 8px -1px var(--color-brand)' }} />
           <span className="font-display text-[16px] font-bold tracking-tight text-txt-1">Atlas</span>
         </Link>
 
         <div className="hidden items-center gap-0.5 md:flex">
-          {/* Pulse dropdown (native <details> — no JS, closes on route remount) */}
-          <details className="group relative">
-            <summary
-              className={`relative flex cursor-pointer list-none items-center gap-1 rounded-tile px-3 py-1.5 font-sans text-[12px] font-medium transition-colors [&::-webkit-details-marker]:hidden ${
-                pulseActive(pathname) ? 'text-txt-1' : 'text-txt-3 hover:text-txt-1'
-              }`}
-            >
-              Pulse
-              <ChevronDown size={12} className="transition-transform group-open:rotate-180" />
-              {pulseActive(pathname) && <span className="absolute inset-x-3 -bottom-px h-[2px] rounded-full bg-brand" />}
-            </summary>
-            <div className="absolute left-0 top-full z-50 mt-1 min-w-[168px] rounded-tile border border-edge-rule bg-surface-panel p-1 shadow-panel">
-              {PULSE_ITEMS.map(item => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  prefetch={false}
-                  className={`block rounded-tile px-3 py-1.5 font-sans text-[12px] transition-colors ${
-                    isActive(pathname, item) ? 'bg-surface-raised text-txt-1' : 'text-txt-2 hover:bg-surface-raised hover:text-txt-1'
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </div>
-          </details>
-
           {NAV_V4.map((item) => {
             const active = isActive(pathname, item)
             return (
@@ -110,24 +78,6 @@ export function TopNavV4({ healthDot }: { healthDot?: React.ReactNode }) {
               <button onClick={() => setOpen(false)} aria-label="Close menu"><X size={18} className="text-txt-3" /></button>
             </div>
             <div className="flex-1 p-3">
-              {/* Pulse section */}
-              <div className="mb-1 px-3 pt-1 font-num text-[10px] uppercase tracking-[0.12em] text-txt-3">Pulse</div>
-              {PULSE_ITEMS.map(item => {
-                const active = isActive(pathname, item)
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setOpen(false)}
-                    className={`block rounded-tile px-3 py-2 font-sans text-[13px] transition-colors ${
-                      active ? 'bg-surface-raised text-txt-1' : 'text-txt-2 hover:bg-surface-raised hover:text-txt-1'
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                )
-              })}
-              <div className="my-2 border-t border-edge-hair" />
               {NAV_V4.map((item) => {
                 const active = isActive(pathname, item)
                 return (
