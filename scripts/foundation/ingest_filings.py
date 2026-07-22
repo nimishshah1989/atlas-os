@@ -170,8 +170,20 @@ def targets(only_pending: bool, limit):
     )
     df["instrument_id"] = df["instrument_id"].astype(str)
     if only_pending:
-        done = _db.read_df(f"select instrument_id from {M}.lens_filings_state where status='done'")
-        df = df[~df["instrument_id"].isin(set(done["instrument_id"].astype(str)))]
+        # Re-fetch every symbol DAILY. Skip only those successfully fetched in the
+        # last 20h, which gives same-night resume (a mid-run restart doesn't redo
+        # completed symbols) WITHOUT freezing the feed. 'done' is NOT terminal: the
+        # upsert is idempotent on (instrument_id, nse_seq_id), so a daily re-fetch
+        # simply adds any new announcements.
+        #
+        # Bug this fixes: the old query skipped every 'done' symbol forever, so once
+        # the backfill marked ~all symbols done (~Jun-Jul 2026) the nightly cron
+        # stopped ingesting new filings entirely (24 filings in Jul vs 6,267 in Jun).
+        recent = _db.read_df(
+            f"select instrument_id from {M}.lens_filings_state "
+            "where status='done' and updated_at > now() - interval '20 hours'"
+        )
+        df = df[~df["instrument_id"].isin(set(recent["instrument_id"].astype(str)))]
     return df.head(limit) if limit else df
 
 
