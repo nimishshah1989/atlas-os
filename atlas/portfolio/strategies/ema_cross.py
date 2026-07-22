@@ -27,16 +27,26 @@ from .base import StateStrategy
 class EmaCross(StateStrategy):
     key = "ema_cross"
 
-    def __init__(self, fast: int, slow: int, intraday: bool = False):
+    def __init__(
+        self,
+        fast: int,
+        slow: int,
+        intraday: bool = False,
+        same_day_fill: bool | None = None,
+    ):
         if int(fast) >= int(slow):
             raise ValueError(f"fast EMA ({fast}) must be shorter than slow ({slow})")
         self.fast, self.slow = int(fast), int(slow)
         self.intraday = bool(intraday)
+        # Intraday detection implies same-day fill; but same-day fill can also be
+        # used with plain daily-close confirmation (removes the +1-session lag
+        # without the intraday fakeouts).
+        self._same_day_fill = bool(intraday if same_day_fill is None else same_day_fill)
 
     @property
     def same_day_fill(self) -> bool:
-        """Intraday events execute at the SAME day's close (no +1-session lag)."""
-        return self.intraday
+        """Execute an event at its OWN session's close, not the next (no lag)."""
+        return self._same_day_fill
 
     @property
     def needs_ohlc(self) -> bool:
