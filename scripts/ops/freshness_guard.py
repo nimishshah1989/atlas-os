@@ -215,7 +215,9 @@ def check_filings_ingestion(eod: dt.date) -> list[str]:
     )
     frac = fresh / total if total else 0.0
     status = "OK" if frac >= FILINGS_REFETCH_MIN_FRAC else "STALLED"
-    print(f"  [{status}] lens_filings ingestion    {fresh}/{total} symbols re-fetched <2d ({frac:.0%})")
+    print(
+        f"  [{status}] lens_filings ingestion    {fresh}/{total} symbols re-fetched <2d ({frac:.0%})"
+    )
     if total and frac < FILINGS_REFETCH_MIN_FRAC:
         return [
             f"lens_filings ingestion STALLED: only {fresh}/{total} symbols re-fetched in 2d "

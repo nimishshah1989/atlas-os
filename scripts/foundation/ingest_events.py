@@ -106,7 +106,7 @@ def run(days: int = 45) -> dict:
     im = _db.read_df(
         f"select instrument_id::text iid, symbol from {M}.instrument_master where asset_class='stock'"
     )
-    sym2iid = dict(zip(im["symbol"], im["iid"]))
+    sym2iid = dict(zip(im["symbol"], im["iid"], strict=True))
 
     today = dt.date.today()
     s = _session()
@@ -136,17 +136,19 @@ def run(days: int = 45) -> dict:
             continue
         purpose = (rec.get("purpose") or "").strip() or "Event"
         etype, prio = classify_purpose(purpose)
-        rows.append({
-            "instrument_id": iid,
-            "symbol": sym,
-            "event_date": ev_date,
-            "purpose": purpose,
-            "event_type": etype,
-            "priority": prio,
-            "description": (rec.get("bm_desc") or None),
-            "company": (rec.get("company") or None),
-            "ingested_at": dt.datetime.now(dt.UTC),
-        })
+        rows.append(
+            {
+                "instrument_id": iid,
+                "symbol": sym,
+                "event_date": ev_date,
+                "purpose": purpose,
+                "event_type": etype,
+                "priority": prio,
+                "description": (rec.get("bm_desc") or None),
+                "company": (rec.get("company") or None),
+                "ingested_at": dt.datetime.now(dt.UTC),
+            }
+        )
 
     if rows:
         _db.upsert_df(
@@ -155,7 +157,9 @@ def run(days: int = 45) -> dict:
             ["instrument_id", "event_date", "purpose"],
         )
     # Drop events that have aged out so the table stays a forward window.
-    _db.exec_sql(f"delete from {M}.lens_events where event_date < :d", {"d": today - dt.timedelta(days=3)})
+    _db.exec_sql(
+        f"delete from {M}.lens_events where event_date < :d", {"d": today - dt.timedelta(days=3)}
+    )
     print(f"[events] upserted={len(rows)} tracked, dropped_unmapped={unmapped}", flush=True)
     return {"fetched": len(raw), "upserted": len(rows), "unmapped": unmapped}
 
