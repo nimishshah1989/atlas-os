@@ -44,6 +44,7 @@ step "ingest_bhavcopy (indices)" $PY scripts/foundation/ingest_bhavcopy.py --dat
 step "fetch_delivery"            $PY scripts/foundation/fetch_delivery.py
 step "backfill_delivery"         $PY scripts/foundation/backfill_delivery.py
 step "ingest_filings"            $PY scripts/foundation/ingest_filings.py
+step "ingest_events (calendar)"  $PY scripts/foundation/ingest_events.py
 step "ingest_insider"            $PY scripts/foundation/ingest_insider.py
 step "ingest_nav (AMFI)"         $PY scripts/foundation/ingest_nav.py
 step "ingest_bulk_deals"         $PY scripts/foundation/ingest_bulk_deals.py

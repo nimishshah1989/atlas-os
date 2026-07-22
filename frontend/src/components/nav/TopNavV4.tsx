@@ -1,8 +1,7 @@
 'use client'
-// Atlas v4 nav — flat 7-page IA (§2), Graphite Terminal skin. Replaces the
-// 2-tier group nav when LENS_V4 is on. India-Pulse retired (its breadth table
-// moved to Market Pulse). Admin's sub-pages (Methodology · Data Health ·
-// Thresholds · IC Optimization) live on the Admin page itself for now.
+// Atlas v4 nav — flat IA, Graphite Terminal skin. Replaces the 2-tier group nav
+// when LENS_V4 is on. Movers & Shakers (/today) sits alongside Market Pulse as its
+// own tab. Market Pulse (/) is unchanged.
 import Link from 'next/link'
 import { useState } from 'react'
 import { usePathname } from 'next/navigation'
@@ -13,6 +12,7 @@ type NavItem = { href: string; label: string; exact?: boolean }
 
 export const NAV_V4: NavItem[] = [
   { href: '/', label: 'Market Pulse', exact: true },
+  { href: '/today', label: 'Movers & Shakers' },
   { href: '/sectors', label: 'Sector View' },
   { href: '/stocks', label: 'Stocks' },
   { href: '/etfs', label: 'ETF' },
@@ -22,7 +22,7 @@ export const NAV_V4: NavItem[] = [
 ]
 
 function isActive(pathname: string, item: NavItem): boolean {
-  return item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + '/') || pathname === item.href
+  return item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + '/')
 }
 
 export function TopNavV4({ healthDot }: { healthDot?: React.ReactNode }) {

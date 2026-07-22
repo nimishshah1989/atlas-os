@@ -84,6 +84,9 @@ def ddl() -> None:
         status text not null, filings integer, error text,
         updated_at timestamptz not null default now()
     );
+    -- summary_text = NSE's own extracted-text précis of the attachment (attchmntText):
+    -- the 2-3 lines of what the filing is actually about, so the FM needn't open the PDF.
+    alter table {M}.lens_filings add column if not exists summary_text text;
     """)
 
 
@@ -144,6 +147,8 @@ def ingest_symbol(s: requests.Session, iid: str, symbol: str) -> int:
             if att.startswith("http")
             else (f"https://archives.nseindia.com/corporate/ann/{att}" if att else None)
         )
+        # NSE's own extracted précis of the attachment — the substance of the filing.
+        summary = (rec.get("attchmntText") or "").strip()[:2000] or None
         rows.append(
             {
                 "instrument_id": iid,
@@ -153,6 +158,7 @@ def ingest_symbol(s: requests.Session, iid: str, symbol: str) -> int:
                 "category_bucket": bucket,
                 "signal_priority": prio,
                 "subject_text": subject,
+                "summary_text": summary,
                 "source_url": url,
                 "nse_seq_id": seq,
             }
@@ -170,8 +176,20 @@ def targets(only_pending: bool, limit):
     )
     df["instrument_id"] = df["instrument_id"].astype(str)
     if only_pending:
-        done = _db.read_df(f"select instrument_id from {M}.lens_filings_state where status='done'")
-        df = df[~df["instrument_id"].isin(set(done["instrument_id"].astype(str)))]
+        # Re-fetch every symbol DAILY. Skip only those successfully fetched in the
+        # last 20h, which gives same-night resume (a mid-run restart doesn't redo
+        # completed symbols) WITHOUT freezing the feed. 'done' is NOT terminal: the
+        # upsert is idempotent on (instrument_id, nse_seq_id), so a daily re-fetch
+        # simply adds any new announcements.
+        #
+        # Bug this fixes: the old query skipped every 'done' symbol forever, so once
+        # the backfill marked ~all symbols done (~Jun-Jul 2026) the nightly cron
+        # stopped ingesting new filings entirely (24 filings in Jul vs 6,267 in Jun).
+        recent = _db.read_df(
+            f"select instrument_id from {M}.lens_filings_state "
+            "where status='done' and updated_at > now() - interval '20 hours'"
+        )
+        df = df[~df["instrument_id"].isin(set(recent["instrument_id"].astype(str)))]
     return df.head(limit) if limit else df
 
 
