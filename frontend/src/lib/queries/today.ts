@@ -152,7 +152,7 @@ export async function getTodayCatalysts(): Promise<{ catalysts: TodayCatalyst[];
     FROM atlas_foundation.lens_filings f
     JOIN atlas_foundation.instrument_master im ON im.instrument_id = f.instrument_id
     LEFT JOIN ln ON ln.instrument_id = f.instrument_id
-    WHERE f.filing_date >= (SELECT d FROM latest) - ${CATALYST_WINDOW_DAYS}
+    WHERE f.filing_date >= (SELECT d FROM latest) - (${CATALYST_WINDOW_DAYS} || ' days')::interval
     ORDER BY f.filing_date DESC,
              CASE upper(f.signal_priority) WHEN 'HIGH' THEN 0 WHEN 'MEDIUM' THEN 1 ELSE 2 END,
              ln.dec DESC NULLS LAST, f.nse_seq_id DESC`
