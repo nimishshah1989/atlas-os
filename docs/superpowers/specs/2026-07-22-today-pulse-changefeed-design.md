@@ -118,6 +118,33 @@ Intraday liveness · portfolio-personalization ("my names") · global search / �
 richer instrument pages · any new table / ingestion / cron. Each is a separately-scoped
 future track.
 
+## Eng review findings (2026-07-22, folded)
+
+Verified against the real DB (Rule #0), then locked these engineering decisions:
+
+- **Data precondition SATISFIED (was the #1 risk):** `atlas_lens_scores_daily`
+  holds **1875 distinct trading days** (2019-01-01 → 2026-07-21), 498 stocks/day,
+  all `composite`-scored. The overnight-diff flagship module has 7+ years of real
+  history. T=2026-07-21, T−1=2026-07-20. No backfill needed; the "≥2 days" empty
+  state is a safety net that won't trigger in practice.
+- **T−1 = prior *distinct trading date*, not calendar −1.** Compute T−1 as the
+  second-most-recent `DISTINCT date` in the table (holiday/weekend safe). Never `date - 1`.
+- **Universe is naturally liquid (movers junk risk resolved):** the scored set is
+  **498 names (Nifty 500)**. Deciles and movers operate over this set only — no
+  micro-cap ±20% noise. Gainers/losers join the scored universe, not all of `ohlcv_stock`.
+- **Decile consistency:** reuse the exact `cap` CTE from `getStockDecile`
+  (`de_index_constituents` index_code → large/mid/small/micro) and the same
+  `ntile(10) PARTITION BY cap ORDER BY composite`, computed independently for T and
+  T−1, so "entered D≥`LEAD_DECILE`" is apples-to-apples across days.
+- **Cap-tier drift edge case (P3, accepted):** a name whose `cap` changes between
+  T−1 and T shifts decile partitions. Rare; surfaces as a move, not a crash. Not special-cased in v1.
+- **Connection discipline:** 498 rows × 2 days is small, but still respect the
+  `max=14` session pooler — don't fan every module query into one unbounded `Promise.all`.
+- **Empty states per module (Rule #0):** a date with no HIGH filings, or a thin
+  history, renders an explicit "nothing today" state — never a fabricated row.
+- **Outside voice (Codex) not run** — low-risk, no-schema, feature-flaggable aggregation;
+  the user greenlit the build. Available on demand.
+
 ## Perf / deploy
 
 - Query cost: ~2k lens rows × 2 days + one filings read + one ohlcv delta read — all
