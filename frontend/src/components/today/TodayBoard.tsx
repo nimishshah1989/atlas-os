@@ -6,10 +6,11 @@
 import Link from 'next/link'
 import { getCurrentRegime } from '@/lib/queries/regime'
 import { getBreadthSeries } from '@/lib/queries/breadth'
-import { getConvictionMoves, getTodayMovers, getTodayCatalysts, getUpcomingEvents } from '@/lib/queries/today'
+import { getConvictionMoves, getTodayMovers, getAnnouncements, getUpcomingEvents } from '@/lib/queries/today'
 import { RegimeChip } from '../market-pulse/MarketPulsePanels'
 import { StatCard, type Tone } from '../ui/StatCard'
-import { ConvictionMovesPanel, MoversPanel, AnnouncementsPanel } from './TodayModules'
+import { ConvictionMovesPanel, MoversPanel } from './TodayModules'
+import { Announcements } from './Announcements'
 import { UpcomingEvents } from './UpcomingEvents'
 
 const MON = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -30,7 +31,7 @@ export async function TodayBoard() {
   const [regime, breadth, catalysts, events] = await Promise.all([
     getCurrentRegime().catch(() => null),
     getBreadthSeries(1).catch(() => []),
-    getTodayCatalysts().catch(() => ({ catalysts: [], asOf: null, total: 0 })),
+    getAnnouncements().catch(() => ({ catalysts: [], today: null, total: 0 })),
     getUpcomingEvents().catch(() => ({ today: null, events: [] })),
   ])
 
@@ -85,7 +86,7 @@ export async function TodayBoard() {
         {/* movers + announcements */}
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <MoversPanel gainers={movers.gainers} losers={movers.losers} />
-          <AnnouncementsPanel catalysts={catalysts.catalysts} total={catalysts.total} />
+          <Announcements catalysts={catalysts.catalysts} today={catalysts.today} />
         </div>
       </div>
     </div>

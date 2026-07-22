@@ -118,25 +118,21 @@ export async function getConvictionMoves(): Promise<ConvictionMoves> {
 // ── 2. Catalysts today ───────────────────────────────────────────────────────
 export type TodayCatalyst = {
   date: string; category: string | null; bucket: string | null; priority: string | null
-  subject: string | null; url: string | null
+  subject: string | null; summary: string | null; url: string | null
   symbol: string | null; name: string | null
   composite: number | null; decile: number | null; liked: boolean
 }
 
-const CATALYST_LIMIT = 60
-const CATALYST_WINDOW_DAYS = 60
+const ANN_WINDOW_DAYS = 30 // rolling fetch window; the client sub-filters to 1/7/15/30
+const ANN_LIMIT = 500
 
-// The most recent exchange filings (trailing CATALYST_WINDOW_DAYS), tagged with each
-// name's current Atlas conviction (composite + within-cohort decile) so the "★ liked"
-// names stand out. Recency-first: newest filings lead, priority + conviction break ties.
-//
-// A trailing window (not "just the latest day") because the catalyst feed runs sparse —
-// a single day often carries 0-2 filings, so a one-day cut would leave the module empty.
-// Each row shows its own date, which also makes feed staleness visible rather than hidden.
-export async function getTodayCatalysts(): Promise<{ catalysts: TodayCatalyst[]; asOf: string | null; total: number }> {
+// Recent exchange filings for the SCORED universe (Nifty 500 — the FM's names), over a
+// rolling 30-day window. INNER JOIN ln scopes to scored names; each filing carries its
+// category (→ a plain-language one-liner) + NSE's own summary_text précis (the substance,
+// so the FM needn't open the PDF) + conviction (★). Newest first; HIGH + conviction break ties.
+export async function getAnnouncements(): Promise<{ catalysts: TodayCatalyst[]; today: string | null; total: number }> {
   const rows = await sql<Record<string, string>[]>`
-    WITH latest AS (SELECT max(filing_date) AS d FROM atlas_foundation.lens_filings),
-    lens_latest AS (SELECT max(date) AS d FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock'),
+    WITH lens_latest AS (SELECT max(date) AS d FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock'),
     ${CAP_CTE},
     ln AS (
       SELECT l.instrument_id, l.composite::float AS comp,
@@ -147,26 +143,28 @@ export async function getTodayCatalysts(): Promise<{ catalysts: TodayCatalyst[];
       WHERE l.asset_class='stock' AND l.date=(SELECT d FROM lens_latest)
     )
     SELECT to_char(f.filing_date,'YYYY-MM-DD') AS date, f.category, f.category_bucket AS bucket,
-           f.signal_priority AS priority, f.subject_text AS subject, f.source_url AS url,
-           im.symbol, im.name, ln.comp AS composite, ln.dec AS decile
+           f.signal_priority AS priority, f.subject_text AS subject, f.summary_text AS summary,
+           f.source_url AS url, im.symbol, im.name, ln.comp AS composite, ln.dec AS decile
     FROM atlas_foundation.lens_filings f
     JOIN atlas_foundation.instrument_master im ON im.instrument_id = f.instrument_id
-    LEFT JOIN ln ON ln.instrument_id = f.instrument_id
-    WHERE f.filing_date >= (SELECT d FROM latest) - (${CATALYST_WINDOW_DAYS} || ' days')::interval
+    JOIN ln ON ln.instrument_id = f.instrument_id
+    WHERE f.filing_date >= CURRENT_DATE - (${ANN_WINDOW_DAYS} || ' days')::interval
     ORDER BY f.filing_date DESC,
              CASE upper(f.signal_priority) WHEN 'HIGH' THEN 0 WHEN 'MEDIUM' THEN 1 ELSE 2 END,
-             ln.dec DESC NULLS LAST, f.nse_seq_id DESC`
+             ln.dec DESC NULLS LAST, f.nse_seq_id DESC
+    LIMIT ${ANN_LIMIT}`
 
+  const today = await sql<{ d: string }[]>`SELECT to_char(CURRENT_DATE,'YYYY-MM-DD') AS d`
   const n = (v: string | null) => (v == null ? null : toNumber(v))
-  const catalysts: TodayCatalyst[] = rows.slice(0, CATALYST_LIMIT).map(r => {
+  const catalysts: TodayCatalyst[] = rows.map(r => {
     const decile = n(r.decile)
     return {
       date: r.date, category: r.category, bucket: r.bucket, priority: r.priority,
-      subject: r.subject, url: r.url, symbol: r.symbol, name: r.name,
+      subject: r.subject, summary: r.summary, url: r.url, symbol: r.symbol, name: r.name,
       composite: n(r.composite), decile, liked: decile != null && decile >= LEAD_DECILE,
     }
   })
-  return { catalysts, asOf: rows[0]?.date ?? null, total: rows.length }
+  return { catalysts, today: today[0]?.d ?? null, total: catalysts.length }
 }
 
 // ── 3. Movers ────────────────────────────────────────────────────────────────
