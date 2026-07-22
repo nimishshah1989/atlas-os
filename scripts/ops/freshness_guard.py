@@ -187,6 +187,43 @@ def check(eod: dt.date) -> list[str]:
     return stale
 
 
+# The NSE announcements feed (lens_filings) can't use the row-count completeness check:
+# filings are event-driven and genuinely sparse on some days, so a low daily count is not
+# proof of breakage. The reliable health signal is whether the INGESTER is still running —
+# i.e. lens_filings_state.updated_at is recent for most symbols. A collapse here means the
+# daily re-fetch stopped, which is exactly what froze the feed in Jul 2026 (the terminal
+# 'done' bug: 24 filings that month vs 6,267 the prior one) with NO alert. WARN-tier: a
+# stale news feed should page the FM, not block the whole board deploy.
+FILINGS_REFETCH_MIN_FRAC = 0.5
+
+
+def check_filings_ingestion(eod: dt.date) -> list[str]:
+    total = (
+        _db.scalar(
+            f"select count(*) from {M}.instrument_master "
+            "where asset_class='stock' and kite_token is not null"
+        )
+        or 0
+    )
+    cutoff = dt.datetime.combine(eod, dt.time()) - dt.timedelta(days=2)
+    fresh = (
+        _db.scalar(
+            f"select count(*) from {M}.lens_filings_state where updated_at > :cut",
+            {"cut": cutoff},
+        )
+        or 0
+    )
+    frac = fresh / total if total else 0.0
+    status = "OK" if frac >= FILINGS_REFETCH_MIN_FRAC else "STALLED"
+    print(f"  [{status}] lens_filings ingestion    {fresh}/{total} symbols re-fetched <2d ({frac:.0%})")
+    if total and frac < FILINGS_REFETCH_MIN_FRAC:
+        return [
+            f"lens_filings ingestion STALLED: only {fresh}/{total} symbols re-fetched in 2d "
+            f"(<{int(FILINGS_REFETCH_MIN_FRAC * 100)}%) — the announcements feed is not updating"
+        ]
+    return []
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Assert all KEY tables are fresh to the EOD")
     ap.add_argument("--eod", type=dt.date.fromisoformat, default=None)
@@ -203,6 +240,7 @@ def main() -> int:
     stale = check(eod)
     print("  ── derived board tables (warn-only) ──")
     warn = check_board(eod)
+    warn += check_filings_ingestion(eod)
     if warn:
         print(
             f"[freshness_guard] ⚠️  WARN — {len(warn)} derived board table(s) stale (NOT blocking):"
