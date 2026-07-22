@@ -84,6 +84,9 @@ def ddl() -> None:
         status text not null, filings integer, error text,
         updated_at timestamptz not null default now()
     );
+    -- summary_text = NSE's own extracted-text précis of the attachment (attchmntText):
+    -- the 2-3 lines of what the filing is actually about, so the FM needn't open the PDF.
+    alter table {M}.lens_filings add column if not exists summary_text text;
     """)
 
 
@@ -144,6 +147,8 @@ def ingest_symbol(s: requests.Session, iid: str, symbol: str) -> int:
             if att.startswith("http")
             else (f"https://archives.nseindia.com/corporate/ann/{att}" if att else None)
         )
+        # NSE's own extracted précis of the attachment — the substance of the filing.
+        summary = (rec.get("attchmntText") or "").strip()[:2000] or None
         rows.append(
             {
                 "instrument_id": iid,
@@ -153,6 +158,7 @@ def ingest_symbol(s: requests.Session, iid: str, symbol: str) -> int:
                 "category_bucket": bucket,
                 "signal_priority": prio,
                 "subject_text": subject,
+                "summary_text": summary,
                 "source_url": url,
                 "nse_seq_id": seq,
             }
