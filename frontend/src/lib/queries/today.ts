@@ -123,7 +123,7 @@ export type TodayCatalyst = {
   composite: number | null; decile: number | null; liked: boolean
 }
 
-const CATALYST_LIMIT = 15
+const CATALYST_LIMIT = 60
 const CATALYST_WINDOW_DAYS = 60
 
 // The most recent exchange filings (trailing CATALYST_WINDOW_DAYS), tagged with each
@@ -209,4 +209,51 @@ export async function getTodayMovers(): Promise<{ gainers: Mover[]; losers: Move
     losers: all.slice(-MOVER_LIMIT).reverse(),
     asOf,
   }
+}
+
+// ── 4. Upcoming events (forward earnings/actions calendar) ───────────────────
+export type UpcomingEvent = {
+  date: string; symbol: string; name: string | null
+  event_type: string; purpose: string; priority: string
+  composite: number | null; decile: number | null; liked: boolean
+}
+
+// The forward calendar from lens_events (ingest_events.py → NSE event-calendar):
+// who reports / pays a dividend / splits in the days ahead, tagged with current
+// Atlas conviction so a name Atlas rates highly stands out on the schedule. The
+// client filters this to a 7/15/30-day window; we return the full 45-day horizon.
+export async function getUpcomingEvents(): Promise<{ today: string | null; events: UpcomingEvent[] }> {
+  const rows = await sql<Record<string, string>[]>`
+    WITH lens_latest AS (SELECT max(date) AS d FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock'),
+    ${CAP_CTE},
+    ln AS (
+      SELECT l.instrument_id, l.composite::float AS comp,
+             CASE WHEN l.composite IS NULL THEN NULL
+                  ELSE ntile(10) OVER (PARTITION BY COALESCE(c.cap,'micro'), (l.composite IS NULL) ORDER BY l.composite) END AS dec
+      FROM atlas_foundation.atlas_lens_scores_daily l
+      LEFT JOIN cap c ON c.instrument_id = l.instrument_id
+      WHERE l.asset_class='stock' AND l.date=(SELECT d FROM lens_latest)
+    )
+    -- INNER JOIN ln: scope the calendar to the SCORED universe (Nifty 500) — the
+    -- names the FM tracks. In earnings season the raw NSE calendar is 300+/week,
+    -- mostly micro-caps; scoping keeps it scannable and relevant.
+    SELECT to_char(e.event_date,'YYYY-MM-DD') AS date, e.symbol, im.name,
+           e.event_type, e.purpose, e.priority, ln.comp AS composite, ln.dec AS decile
+    FROM atlas_foundation.lens_events e
+    JOIN atlas_foundation.instrument_master im ON im.instrument_id = e.instrument_id
+    JOIN ln ON ln.instrument_id = e.instrument_id
+    WHERE e.event_date >= CURRENT_DATE AND e.event_date <= CURRENT_DATE + 45
+    ORDER BY e.event_date, (ln.dec IS NULL), ln.dec DESC, e.symbol`
+
+  const today = await sql<{ d: string }[]>`SELECT to_char(CURRENT_DATE,'YYYY-MM-DD') AS d`
+  const n = (v: string | null) => (v == null ? null : toNumber(v))
+  const events = rows.map(r => {
+    const decile = n(r.decile)
+    return {
+      date: r.date, symbol: r.symbol, name: r.name,
+      event_type: r.event_type, purpose: r.purpose, priority: r.priority,
+      composite: n(r.composite), decile, liked: decile != null && decile >= LEAD_DECILE,
+    }
+  })
+  return { today: today[0]?.d ?? null, events }
 }

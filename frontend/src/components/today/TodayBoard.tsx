@@ -6,10 +6,11 @@
 import Link from 'next/link'
 import { getCurrentRegime } from '@/lib/queries/regime'
 import { getBreadthSeries } from '@/lib/queries/breadth'
-import { getConvictionMoves, getTodayMovers, getTodayCatalysts } from '@/lib/queries/today'
+import { getConvictionMoves, getTodayMovers, getTodayCatalysts, getUpcomingEvents } from '@/lib/queries/today'
 import { RegimeChip } from '../market-pulse/MarketPulsePanels'
 import { StatCard, type Tone } from '../ui/StatCard'
-import { ConvictionMovesPanel, MoversPanel, CatalystsPanel } from './TodayModules'
+import { ConvictionMovesPanel, MoversPanel, AnnouncementsPanel } from './TodayModules'
+import { UpcomingEvents } from './UpcomingEvents'
 
 const MON = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 function longDate(d: string | null): string | null {
@@ -26,10 +27,11 @@ export async function TodayBoard() {
     getTodayMovers().catch(() => ({ gainers: [], losers: [], asOf: null })),
   ])
   // Wave 2 — the light context reads.
-  const [regime, breadth, catalysts] = await Promise.all([
+  const [regime, breadth, catalysts, events] = await Promise.all([
     getCurrentRegime().catch(() => null),
     getBreadthSeries(1).catch(() => []),
     getTodayCatalysts().catch(() => ({ catalysts: [], asOf: null, total: 0 })),
+    getUpcomingEvents().catch(() => ({ today: null, events: [] })),
   ])
 
   const asOf = conviction.asOf ?? movers.asOf
@@ -72,13 +74,18 @@ export async function TodayBoard() {
           </div>
         )}
 
+        {/* the week ahead — upcoming events calendar */}
+        {events.events.length > 0 && (
+          <div className="mb-6"><UpcomingEvents events={events.events} today={events.today} /></div>
+        )}
+
         {/* flagship — conviction moves */}
         <div className="mb-6"><ConvictionMovesPanel data={conviction} /></div>
 
-        {/* movers + catalysts */}
+        {/* movers + announcements */}
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <MoversPanel gainers={movers.gainers} losers={movers.losers} />
-          <CatalystsPanel catalysts={catalysts.catalysts} total={catalysts.total} />
+          <AnnouncementsPanel catalysts={catalysts.catalysts} total={catalysts.total} />
         </div>
       </div>
     </div>

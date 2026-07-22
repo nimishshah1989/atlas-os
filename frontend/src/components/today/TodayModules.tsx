@@ -126,9 +126,9 @@ function priorityChip(priority: string | null): string {
   }
 }
 
-function CatalystRow({ c }: { c: TodayCatalyst }) {
+function AnnRow({ c }: { c: TodayCatalyst }) {
   return (
-    <li className="flex flex-col gap-1 border-b border-edge-hair px-1 py-2.5 last:border-b-0 sm:flex-row sm:items-baseline sm:gap-3">
+    <li className="flex flex-col gap-1 border-b border-edge-hair px-1 py-2 last:border-b-0 sm:flex-row sm:items-baseline sm:gap-3">
       <span className="w-[52px] shrink-0 font-num text-[10px] tabular-nums text-txt-3">{shortDate(c.date)}</span>
       <span className={`shrink-0 rounded-tile border px-1.5 py-0.5 font-num text-[9px] uppercase ${priorityChip(c.priority)}`}>
         {(c.priority ?? 'LOW').toUpperCase()}
@@ -141,7 +141,6 @@ function CatalystRow({ c }: { c: TodayCatalyst }) {
             <span className="font-num text-[12px] text-txt-2">—</span>
           )}
           {c.liked && <span className="font-num text-[10px] text-brand" title={`Atlas conviction: top ${11 - LEAD_DECILE} deciles`}>★</span>}
-          {c.bucket && <span className="font-num text-[9px] uppercase tracking-wider text-txt-3">{c.bucket}</span>}
         </div>
         <span className="truncate font-sans text-[12px] text-txt-2">{c.subject ?? '—'}</span>
       </div>
@@ -154,18 +153,56 @@ function CatalystRow({ c }: { c: TodayCatalyst }) {
   )
 }
 
-export function CatalystsPanel({ catalysts, total }: { catalysts: TodayCatalyst[]; total: number }) {
+// Classified into the three catalyst buckets, most material first (HIGH before
+// MEDIUM/LOW). Each bucket is a native <details> "dropdown" — earnings + capital
+// open, governance collapsed (routine housekeeping the FM scans only if curious).
+const ANN_BUCKETS: { key: string; label: string; open: boolean }[] = [
+  { key: 'earnings', label: 'Earnings & results', open: true },
+  { key: 'capital', label: 'Capital actions', open: true },
+  { key: 'governance', label: 'Governance', open: false },
+]
+const PRIO_RANK: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 }
+const prio = (p: string | null) => PRIO_RANK[(p ?? 'LOW').toUpperCase()] ?? 2
+
+export function AnnouncementsPanel({ catalysts, total }: { catalysts: TodayCatalyst[]; total: number }) {
+  const byBucket = new Map<string, TodayCatalyst[]>()
+  for (const c of catalysts) {
+    const k = (c.bucket ?? 'governance').toLowerCase()
+    ;(byBucket.get(k) ?? byBucket.set(k, []).get(k)!).push(c)
+  }
+  const sections = ANN_BUCKETS.map((b) => ({
+    ...b,
+    items: (byBucket.get(b.key) ?? []).slice().sort((a, z) => prio(a.priority) - prio(z.priority)),
+  })).filter((b) => b.items.length > 0)
+
   return (
     <Panel
-      eyebrow="Filings · recent"
-      title="Catalysts"
-      info={{ title: 'Catalysts', body: 'The most recent exchange filings (trailing 60 days), newest first. ★ marks names Atlas already rates highly. The feed runs sparse — a quiet stretch is real, not a bug.' }}
-      action={total > catalysts.length ? <span className="font-num text-[10px] text-txt-3">{catalysts.length} of {total}</span> : undefined}
+      eyebrow="Filings · classified"
+      title="Announcements"
+      info={{ title: 'Announcements', body: 'Recent NSE filings (trailing 60 days) grouped by type, most material first. ★ marks names Atlas rates highly. Expand a group to scan it.' }}
+      action={<span className="font-num text-[10px] text-txt-3">{catalysts.length} of {total}</span>}
     >
-      {catalysts.length === 0 ? (
+      {sections.length === 0 ? (
         <EmptyRow>No recent filings.</EmptyRow>
       ) : (
-        <ul>{catalysts.map((c, i) => <CatalystRow key={`${c.date}-${c.symbol}-${i}`} c={c} />)}</ul>
+        <div className="flex flex-col gap-2">
+          {sections.map((s) => {
+            const high = s.items.filter((i) => (i.priority ?? '').toUpperCase() === 'HIGH').length
+            return (
+              <details key={s.key} open={s.open} className="group/ann rounded-tile border border-edge-hair">
+                <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 [&::-webkit-details-marker]:hidden">
+                  <span className="font-num text-[10px] text-txt-3 transition-transform group-open/ann:rotate-90">▸</span>
+                  <span className="font-display text-[13px] font-medium text-txt-1">{s.label}</span>
+                  {high > 0 && <span className="rounded-tile bg-sig-pos/10 px-1.5 py-0.5 font-num text-[9px] text-sig-pos">{high} HIGH</span>}
+                  <span className="ml-auto font-num text-[11px] tabular-nums text-txt-3">{s.items.length}</span>
+                </summary>
+                <ul className="border-t border-edge-hair px-3 pb-1">
+                  {s.items.map((c, i) => <AnnRow key={`${c.date}-${c.symbol}-${i}`} c={c} />)}
+                </ul>
+              </details>
+            )
+          })}
+        </div>
       )}
     </Panel>
   )
