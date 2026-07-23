@@ -22,9 +22,7 @@ def test_cross_price_is_where_provisional_emas_meet() -> None:
     # Real MRPL confirmed EMAs at 2026-07-15.
     ema_fast, ema_slow = 154.459081, 155.315088
     p = ema_cross_price(ema_fast, ema_slow, fast=13, slow=34)
-    assert _provisional(ema_fast, p, 13) == pytest.approx(
-        _provisional(ema_slow, p, 34), abs=1e-9
-    )
+    assert _provisional(ema_fast, p, 13) == pytest.approx(_provisional(ema_slow, p, 34), abs=1e-9)
 
 
 def test_cross_price_matches_mrpl_16th_threshold() -> None:

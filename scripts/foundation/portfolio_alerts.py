@@ -78,9 +78,16 @@ def notify_new_trades(portfolio: dict, trades) -> int:
         ef, es = _emas_at(str(t["instrument_key"]), fast, slow, t["trade_date"])
         send_message_sync(
             format_cross_alert(
-                fast=fast, slow=slow, symbol=t["symbol"], side=t["side"],
-                qty=t["qty"], price=t["price"], reason=t.get("reason", "signal"),
-                trade_date=t["trade_date"], ema_fast=ef, ema_slow=es,
+                fast=fast,
+                slow=slow,
+                symbol=t["symbol"],
+                side=t["side"],
+                qty=t["qty"],
+                price=t["price"],
+                reason=t.get("reason", "signal"),
+                trade_date=t["trade_date"],
+                ema_fast=ef,
+                ema_slow=es,
             )
         )
         sent += 1

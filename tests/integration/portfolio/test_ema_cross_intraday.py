@@ -113,14 +113,22 @@ def _entry_fill(*, same_day: bool) -> tuple[date, Decimal]:
         {"instrument_key": [_MRPL], "date": [date(2026, 7, 16)], "event": ["entry"]}
     )
     cfg = PortfolioConfig(
-        portfolio_id="t", kind="strategy",
-        initial_capital=Decimal("1000000"), max_position_pct=Decimal("0.08"),
+        portfolio_id="t",
+        kind="strategy",
+        initial_capital=Decimal("1000000"),
+        max_position_pct=Decimal("0.08"),
     )
     loop = [d for d in prices.index if d >= date(2026, 7, 16)]
     trades, _ = replay(
-        cfg, prices=prices, events=events, inception_state=None, composite=None,
-        asset_class={_MRPL: "stock"}, symbols={_MRPL: "MRPL"},
-        loop_dates=loop, same_day_fill=same_day,
+        cfg,
+        prices=prices,
+        events=events,
+        inception_state=None,
+        composite=None,
+        asset_class={_MRPL: "stock"},
+        symbols={_MRPL: "MRPL"},
+        loop_dates=loop,
+        same_day_fill=same_day,
     )
     row = trades[trades["side"] == "buy"].iloc[0]
     return pd.Timestamp(row["trade_date"]).date(), row["price"]

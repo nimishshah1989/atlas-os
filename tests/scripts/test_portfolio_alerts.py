@@ -24,8 +24,16 @@ pytestmark = pytest.mark.unit
 
 def test_buy_alert_reads_as_a_golden_cross() -> None:
     msg = A.format_cross_alert(
-        fast=13, slow=34, symbol="MRPL", side="buy", qty=476, price=174.49,
-        reason="signal", trade_date=date(2026, 7, 20), ema_fast=157.52, ema_slow=156.46,
+        fast=13,
+        slow=34,
+        symbol="MRPL",
+        side="buy",
+        qty=476,
+        price=174.49,
+        reason="signal",
+        trade_date=date(2026, 7, 20),
+        ema_fast=157.52,
+        ema_slow=156.46,
     )
     assert "EMA 13/34" in msg
     assert "BUY" in msg
@@ -37,8 +45,16 @@ def test_buy_alert_reads_as_a_golden_cross() -> None:
 
 def test_sell_signal_reads_as_a_death_cross() -> None:
     msg = A.format_cross_alert(
-        fast=13, slow=34, symbol="MRPL", side="sell", qty=476, price=150.53,
-        reason="signal", trade_date=date(2026, 5, 8), ema_fast=150.10, ema_slow=151.30,
+        fast=13,
+        slow=34,
+        symbol="MRPL",
+        side="sell",
+        qty=476,
+        price=150.53,
+        reason="signal",
+        trade_date=date(2026, 5, 8),
+        ema_fast=150.10,
+        ema_slow=151.30,
     )
     assert "SELL" in msg
     assert "below" in msg  # EMA13 crossed below EMA34
@@ -47,8 +63,16 @@ def test_sell_signal_reads_as_a_death_cross() -> None:
 
 def test_sell_stop_names_the_stop_not_a_cross() -> None:
     msg = A.format_cross_alert(
-        fast=50, slow=200, symbol="GRAVITA", side="sell", qty=100, price=1500.0,
-        reason="stop", trade_date=date(2026, 6, 1), ema_fast=None, ema_slow=None,
+        fast=50,
+        slow=200,
+        symbol="GRAVITA",
+        side="sell",
+        qty=100,
+        price=1500.0,
+        reason="stop",
+        trade_date=date(2026, 6, 1),
+        ema_fast=None,
+        ema_slow=None,
     )
     assert "SELL" in msg
     assert "stop" in msg.lower()
