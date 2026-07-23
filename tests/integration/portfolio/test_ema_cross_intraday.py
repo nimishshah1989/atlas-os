@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
+from typing import cast
 
 import pandas as pd
 import pytest
@@ -53,7 +54,7 @@ def _panel(a: date, b: date) -> pd.DataFrame:
 
 def _dates(ev: pd.DataFrame, kind: str) -> list[date]:
     rows = ev[ev["event"] == kind]
-    return [pd.Timestamp(d).date() for d in rows["date"]]
+    return [cast(date, pd.Timestamp(d).date()) for d in rows["date"]]
 
 
 @pytest.mark.integration
@@ -131,7 +132,7 @@ def _entry_fill(*, same_day: bool) -> tuple[date, Decimal]:
         same_day_fill=same_day,
     )
     row = trades[trades["side"] == "buy"].iloc[0]
-    return pd.Timestamp(row["trade_date"]).date(), row["price"]
+    return cast(date, pd.Timestamp(row["trade_date"]).date()), cast(Decimal, row["price"])
 
 
 @pytest.mark.integration

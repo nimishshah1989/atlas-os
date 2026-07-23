@@ -17,6 +17,8 @@ Two modes:
 
 from __future__ import annotations
 
+from typing import cast
+
 import pandas as pd
 
 from atlas.primitives import ema_cross_price
@@ -82,8 +84,8 @@ class EmaCross(StateStrategy):
         frames: list[pd.DataFrame] = []
         for k, g in tech.groupby("instrument_key", sort=False):
             g = g.sort_values("date")
-            pf = g[ef].astype(float).shift()
-            ps = g[es].astype(float).shift()
+            pf = cast("pd.Series", g[ef].astype(float).shift())
+            ps = cast("pd.Series", g[es].astype(float).shift())
             below = pf < ps
             level = ema_cross_price(pf, ps, fast=self.fast, slow=self.slow)
             hi = g["high"].astype(float)

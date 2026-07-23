@@ -17,7 +17,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts" / "foundation"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
-import portfolio_alerts as A  # noqa: E402
+import portfolio_alerts as A  # noqa: E402  # pyright: ignore[reportMissingImports]
 
 pytestmark = pytest.mark.unit
 
