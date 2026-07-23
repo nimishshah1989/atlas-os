@@ -20,12 +20,11 @@ Read-only against the live DB.
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 
 import pandas as pd
 import pytest
 from sqlalchemy import text
-
-from decimal import Decimal
 
 from atlas.db import get_engine
 from atlas.portfolio import PortfolioConfig, replay
