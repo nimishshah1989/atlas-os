@@ -25,10 +25,10 @@ CATEGORY_RULES = [
 def sebi_ranks(conn):
     cur = conn.cursor()
     cur.execute(
-        """select im.isin, row_number() over (order by m.market_cap_cr desc) rk
-           from atlas_foundation.equity_marketcap m
+        """select im.isin, row_number() over (order by sr.market_cap desc) rk
+           from atlas_foundation.screener_ratios sr
            join atlas_foundation.instrument_master im using (instrument_id)
-           where im.isin is not null and m.market_cap_cr is not null""")
+           where im.isin is not null and sr.market_cap is not null""")
     return {isin: ("large" if rk <= 100 else "mid" if rk <= 250 else "small")
             for isin, rk in cur.fetchall()}
 

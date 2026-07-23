@@ -10,7 +10,7 @@ def test_sebi_ranks_and_one_real_large_cap():
     ranks = sebi_ranks(conn)
     assert sum(1 for v in ranks.values() if v == "large") == 100
     assert sum(1 for v in ranks.values() if v == "mid") == 150
-    # a real held large-cap fund with data should classify something as large
+    # a real held large-cap fund must classify majority-large
     cur = conn.cursor()
     cur.execute("""select s.mstar_id from wealth.schemes s
                    join wealth.holdings h using (scheme_id)
@@ -18,7 +18,10 @@ def test_sebi_ranks_and_one_real_large_cap():
                      and s.mstar_id is not null limit 1""")
     mid = cur.fetchone()[0]
     res = classify_fund(conn, mid, ranks)
-    # equity_pct should be sum of large+mid+small from holdings in equity_marketcap
-    # large_pct is the large portion; should be positive and dominate if fund does its job
-    assert res["equity_pct"] >= 0 and res["large_pct"] >= 0
-    assert res["large_pct"] >= res["mid_pct"]  # large cap fund should have more large than mid
+    assert res["equity_pct"] > 60 and res["large_pct"] > 50
+
+    # sanity check: average unclassified_pct < 50% across held equity-labelled funds
+    cur.execute("""select avg(unclassified_pct) from wealth.fund_label_check
+                   where category in ('Large Cap', 'Mid Cap', 'Small Cap', 'Multi Cap', 'Large & Mid Cap')""")
+    avg_unclass = cur.fetchone()[0] or 0
+    assert avg_unclass < 50, f"avg unclassified_pct {avg_unclass}% too high for equity funds"
