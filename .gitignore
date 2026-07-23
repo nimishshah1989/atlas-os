@@ -65,3 +65,8 @@ package-lock.json
 scripts/foundation/.loopC_rebuild_state.json
 scripts/validator_night_run.log
 frontend/.next.bak*
+
+# Local research papers + scratch reading material / HTML scratch (never commit)
+/scratch/
+/*.pdf
+/*.txt
