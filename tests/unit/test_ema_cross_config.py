@@ -9,7 +9,11 @@ Three configurations matter:
 
 from __future__ import annotations
 
+import pytest
+
 from atlas.portfolio.strategies import EmaCross
+
+pytestmark = pytest.mark.unit
 
 
 def test_default_is_daily_close_next_session() -> None:

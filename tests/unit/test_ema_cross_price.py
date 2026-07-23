@@ -11,6 +11,8 @@ import pytest
 
 from atlas.primitives import ema_cross_price
 
+pytestmark = pytest.mark.unit
+
 
 def _provisional(ema_prev: float, price: float, n: int) -> float:
     """One EMA step: yesterday's EMA + today's price as the forming bar."""
