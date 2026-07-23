@@ -40,6 +40,16 @@ def _f(x):
     return round(v, 4)
 
 
+def lcr_py(n: float) -> str:
+    """₹ in L/cr, en-IN style (mirror of the JS lcr for build-time story text)."""
+    a = abs(n)
+    if a >= 1e7:
+        return f"₹{n/1e7:.2f} cr"
+    if a >= 1e5:
+        return f"₹{n/1e5:.2f} L"
+    return f"₹{round(n):,}"
+
+
 # ----------------------------------------------------------------- fetch --
 
 def fetch(conn) -> dict:
@@ -52,12 +62,8 @@ def fetch(conn) -> dict:
     book_row = q("""
         select (select count(distinct household_name) from wealth.households) families,
                (select count(*) from wealth.clients) clients,
-               (select round(sum(mv_total)/1e7, 1) from wealth.client_reports
-                  where as_on_date = (select max(as_on_date) from wealth.client_reports
-                                        r2 where r2.client_id = client_reports.client_id)) mv_cr,
                (select extract(year from min(txn_date))::int from wealth.transactions) since
     """).iloc[0]
-    # mv_cr via a simpler robust total (latest report per client)
     mv_cr = _f(q("""select round(sum(mv_total)/1e7,1) v from (
         select distinct on (client_id) mv_total from wealth.client_reports
         order by client_id, as_on_date desc) t""").v.iloc[0])
@@ -86,18 +92,31 @@ def fetch(conn) -> dict:
             return None, None
         return int(rows.client_id.iloc[0]), rows.reason.iloc[0]
 
+    # cards 1 & 2 open their matching call list; card 3 (dividends) has no call
+    # list, so it opens a real high-dividend-leakage client's own page — headline,
+    # number, story and click-through all agree.
     ch4 = []
     for key, title, amt, verb in [
         ("crash_sellers", "Held through the crashes", stay,
          "protected by clients who stayed invested through every major fall"),
         ("sip_fragile", "Stopped SIPs", sip_cost,
          "the running total left behind when steady monthly investing was switched off"),
-        ("disengaged", "Dividends taken as cash", div_cost,
-         "paid out and spent instead of being reinvested to compound"),
     ]:
         cid, reason = top_call(key)
-        ch4.append({"list": key, "title": title, "amount_cr": amt, "subtitle": verb,
-                    "story": reason, "sample_ids": [cid] if cid else []})
+        ch4.append({"href": f"calls:{key}", "title": title, "amount_cr": amt,
+                    "subtitle": verb, "story": reason, "sample_ids": [cid] if cid else []})
+
+    dl = q("""select b.client_id, b.div_leak_rs, c.full_name
+              from wealth.client_behaviour b join wealth.clients c on c.client_id = b.client_id
+              where b.div_leak_rs > 0 order by b.div_leak_rs desc limit 1""")
+    dl_id = int(dl.client_id.iloc[0]) if not dl.empty else None
+    dl_story = (f"One client alone has taken about {lcr_py(float(dl.div_leak_rs.iloc[0]))} of "
+                f"dividends as cash instead of letting it compound — open their page to see it."
+                if not dl.empty else None)
+    ch4.append({"href": f"client:{dl_id}" if dl_id else "calls:disengaged",
+                "title": "Dividends taken as cash", "amount_cr": div_cost,
+                "subtitle": "paid out and spent instead of being reinvested to compound",
+                "story": dl_story, "sample_ids": [dl_id] if dl_id else []})
 
     # ch5 — our advice, marked honestly
     ledg = q("""select count(*) n, sum(case when alpha_1y_pp>0 then 1 else 0 end) ahead
@@ -170,11 +189,15 @@ def fetch(conn) -> dict:
     clients = {}
     for row in packs.itertuples():
         cid = row.client_id
+        pack = row.payload
+        # value.summary is engine-provenance text (never rendered) — don't embed it
+        if isinstance(pack.get("value"), dict):
+            pack["value"].pop("summary", None)
         clients[str(cid)] = {
             "name": name_by.get(cid),
             "household": hh_by.get(cid),
             "chips": chips(cid),
-            "pack": row.payload,      # already strict-JSON clean (build_audit_packs)
+            "pack": pack,             # already strict-JSON clean (build_audit_packs)
             "prose": row.prose or {},  # NULL for most; JS falls back to a template line
         }
 
@@ -347,25 +370,17 @@ function svgDots(filled){
   }
   return `<svg viewBox="0 0 400 48" width="100%" style="max-width:420px" role="img" aria-label="${filled} of 10 ahead of the index fund">${out}</svg>`;
 }
-function svgDial(eff, total){
-  // arc: eff genuinely-different bets out of total funds
-  const frac=total?Math.max(0.02,Math.min(1,eff/total)):0.02, R=54, C=Math.PI*R;
+function svgDial(eff, stocks){
+  // arc: eff genuinely-different bets out of the underlying stocks actually held
+  const frac=(stocks&&eff!=null)?Math.max(0.02,Math.min(1,eff/stocks)):0.02, R=54, C=Math.PI*R;
   const off=C*(1-frac);
-  return `<svg viewBox="0 0 140 90" width="160" role="img" aria-label="${eff} genuinely different bets from ${total} funds">
+  const lab=eff==null?"unknown":eff.toFixed(1);
+  return `<svg viewBox="0 0 140 90" width="160" role="img" aria-label="About ${lab} genuinely different bets out of ${stocks==null?"the":stocks} underlying stocks held">
     <path d="M16 78 A62 62 0 0 1 124 78" fill="none" stroke="var(--line)" stroke-width="12" stroke-linecap="round"/>
     <path d="M16 78 A62 62 0 0 1 124 78" fill="none" stroke="var(--accent)" stroke-width="12" stroke-linecap="round"
       stroke-dasharray="${C}" stroke-dashoffset="${off}"/>
-    <text x="70" y="72" text-anchor="middle" font-family="var(--serif)" font-size="26" fill="var(--ink)">${eff==null?"—":eff.toFixed(1)}</text>
+    <text x="70" y="72" text-anchor="middle" font-family="var(--serif)" font-size="26" fill="var(--ink)">${lab}</text>
   </svg>`;
-}
-function svgTwoBar(a, b, la, lb){
-  const max=Math.max(a,b,1), W=320,H=90;
-  const bar=(v,y,col,lab)=>{const w=(v/max)*(W-120);
-    return `<text x="0" y="${y+14}" font-size="11" fill="var(--muted)">${lab}</text>
-      <rect x="110" y="${y}" width="${w}" height="18" rx="3" fill="${col}"/>
-      <text x="${115+w}" y="${y+14}" font-size="11" fill="var(--ink)">${lcr(v)}</text>`;};
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:360px" role="img" aria-label="${la} versus ${lb}">
-    ${bar(a,14,"var(--crit)",la)}${bar(b,52,"var(--good)",lb)}</svg>`;
 }
 function svgTwoLine(rClient, rBench){
   // two growth curves from yearly-growth rates over 8 years
@@ -427,13 +442,18 @@ function renderBook(){
     svgDots(c.ch3.dots_filled),
     `<div class="method">For each client we took their real money-in and money-out dates and put the same amounts into an ICICI Pru Nifty-50 index fund on the same days, then compared. ${c.ch3.pct_ahead}% of clients ended ahead of the index. Note: this is our current book — clients who left over the years are not in it.</div>`));
 
-  const cards=c.ch4.map(card=>`
-    <a class="card" href="#calls" onclick="sessionStorage.setItem('callfilter','${card.list}')">
+  const cardHref=card=>{
+    const [kind,arg]=card.href.split(":");
+    if(kind==="client") return {href:`#client/${arg}`,click:""};
+    return {href:"#calls",click:`sessionStorage.setItem('callfilter','${arg}')`};
+  };
+  const cards=c.ch4.map(card=>{const h=cardHref(card);return `
+    <a class="card" href="${h.href}" onclick="${h.click}">
       <h3>${esc(card.title)}</h3>
       <div class="big">₹${card.amount_cr==null?"—":card.amount_cr} cr</div>
       <p>${esc(card.subtitle)}.</p>
       <p style="margin-top:8px;color:var(--ink)">${esc(card.story||"")}</p>
-    </a>`).join("");
+    </a>`;}).join("");
   chaps.push(chapter(4,"What habits cost, and saved",
     "The same three habits, measured across the whole book. Each card opens the clients it affects.",
     "",
@@ -545,8 +565,7 @@ function fallbackProse(key,p,name){
 }
 function visualFor(key,p){
   if(p.insufficient) return "";
-  if(key==="overlap") return svgDial(p.eff_bets, p.n_funds);
-  if(key==="fees" && p.fee_save_yr_rs>0) return svgTwoBar(p.fee_save_yr_rs, 0.0001, "could save/yr", "");
+  if(key==="overlap") return svgDial(p.eff_bets, p.n_stocks);
   if(key==="benchmark" && p.xirr_client!=null) return svgTwoLine(p.xirr_client, p.xirr_bench);
   return "";
 }
@@ -554,7 +573,8 @@ function tableFor(key,p){
   const rows=[];
   const R=(k,v)=>rows.push(`<tr><td>${k}</td><td class="n">${v}</td></tr>`);
   if(key==="map"){R("Book value",lcr(p.total_mv));R("Funds",p.n_funds);R("Stocks underneath",p.n_stocks);R("Years with us",p.tenure_years);}
-  else if(key==="label_check"){(p.funds||[]).slice(0,12).forEach(f=>rows.push(`<tr><td>${esc(f.fund)}</td><td class="n">${esc(f.verdict)}</td></tr>`));}
+  else if(key==="label_check"){(p.funds||[]).slice(0,12).forEach(f=>rows.push(
+    `<tr><td>${esc(f.fund)}${f.coverage_note?`<div class="method" style="margin-top:2px">${esc(f.coverage_note)}</div>`:""}</td><td class="n">${esc(f.verdict)}</td></tr>`));}
   else if(key==="overlap"){R("Genuinely different bets",p.eff_bets==null?"—":p.eff_bets.toFixed(1));R("Biggest single stock",esc(p.top_stock_name)+" · "+lcr(p.top_stock_rs));R("Top-10 stocks share",p.top10_share==null?"—":(p.top10_share*100).toFixed(0)+"%");if(p.worst_fund_pair)R("Most-overlapping pair",esc(p.worst_fund_pair.fund_a)+" / "+esc(p.worst_fund_pair.fund_b)+" ("+(p.worst_fund_pair.overlap_pct).toFixed(0)+"%)");}
   else if(key==="fees"){R("Estimated saving / year",lcr(p.fee_save_yr_rs));(p.flags||[]).forEach(f=>rows.push(`<tr><td>${esc(f.rule||f.evidence)}</td><td class="n">${lcr(f.est_value)}</td></tr>`));}
   else if(key==="benchmark"){R("Your yearly growth",pct(p.xirr_client));R("Index-fund yearly growth",pct(p.xirr_bench));R("Ahead / behind",p.alpha==null?"—":(p.alpha>=0?"+":"")+p.alpha.toFixed(1)+"%/yr");R("Money-in / money-out events",p.n_flows);}

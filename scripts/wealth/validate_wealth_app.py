@@ -34,6 +34,44 @@ BROWSE = Path.home() / ".claude/skills/gstack/browse/dist/browse"
 DATA_RE = re.compile(
     r'<script id="data" type="application/json">(.*?)</script>', re.DOTALL)
 
+# Jargon that must never reach a client-facing screen (plain-language rule).
+BANNED = re.compile(r'\b(xirr|alpha|disposition|pgr|plr|counterfactual)\b', re.I)
+# Keys whose VALUES are proper nouns (real fund/stock/person names — e.g. the
+# fund literally named "Tata Nifty200 Alpha 30") or are embedded-but-never-
+# rendered: excluded so the gate flags only jargon in narration we author.
+SKIP_KEYS = {"name", "fund", "fund_a", "fund_b", "top_stock_name", "household_name",
+             "full_name", "from", "to", "detail", "summary", "basis"}
+
+
+def renderable_strings(obj):
+    """Yield string VALUES the app renders as prose/labels (dict keys, proper
+    nouns and non-rendered fields excluded)."""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k not in SKIP_KEYS:
+                yield from renderable_strings(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            yield from renderable_strings(v)
+    elif isinstance(obj, str):
+        yield obj
+
+
+def banned_hits(data: dict, html: str) -> list[str]:
+    """Banned words in the JSON blob's renderable fields + static HTML text."""
+    hits = []
+    for s in renderable_strings(data):
+        m = BANNED.search(s)
+        if m:
+            hits.append(f"json[{m.group(0).lower()}]: …{s[max(0, m.start()-20):m.end()+20]}…")
+    # static HTML text nodes (strip <script>/<style> — those are code/CSS)
+    stripped = re.sub(r'<(script|style)\b[^>]*>.*?</\1>', ' ', html,
+                      flags=re.DOTALL | re.I)
+    text = re.sub(r'<[^>]+>', ' ', stripped)
+    for m in BANNED.finditer(text):
+        hits.append(f"html-text[{m.group(0).lower()}]: …{text[max(0, m.start()-20):m.end()+20]}…")
+    return hits
+
 
 def fail(msg: str) -> int:
     print(f"FAIL: {msg}")
@@ -125,6 +163,15 @@ def main() -> int:
 
     print(f"static checks PASS: {size/1e6:.2f} MB, {len(client_ids)} clients, "
           f"{len(referenced)} referenced ids all resolvable, strict JSON, no NaN")
+
+    # ---- banned-word gate (plain-language rule, defense-in-depth) ----
+    hits = banned_hits(data, html)
+    if hits:
+        print(f"FAIL: {len(hits)} banned jargon word(s) in UI-visible text:")
+        for h in hits[:15]:
+            print(f"  - {h}")
+        return 1
+    print("banned-word gate PASS: no xirr/alpha/disposition/pgr/plr/counterfactual in rendered text")
 
     # ---- headless browse gate ----
     if not BROWSE.exists():

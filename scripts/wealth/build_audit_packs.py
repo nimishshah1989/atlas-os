@@ -131,6 +131,14 @@ def load_frames(conn) -> dict:
 
     flags = pd.read_sql(
         "select client_id, rule, evidence, action, est_value, basis from wealth.client_flags", conn)
+    # flag evidence is rendered verbatim in the UI action list — swap the one
+    # bit of jargon the rules-engine emits ("XIRR n%") for plain language so no
+    # banned term reaches a client-facing screen (validator enforces this).
+    for _col in ("rule", "evidence", "action"):
+        flags[_col] = flags[_col].astype("object").where(flags[_col].notna(), None)
+        flags[_col] = flags[_col].map(
+            lambda s: None if s is None else __import__("re").sub(
+                r"(?i)\bXIRR\b", "yearly growth", s))
     f["flags"] = {cid: g.drop(columns="client_id").to_dict("records")
                   for cid, g in flags.groupby("client_id")}
     closet = flags[flags.rule.str.contains("closet", case=False, na=False)]
@@ -269,8 +277,9 @@ def sec_benchmark(cid, f) -> dict:
         "approx": bool(b["approx"]) if b["approx"] is not None else None,
         "bench_overdrawn": bool(b["bench_overdrawn"]) if b["bench_overdrawn"] is not None else None,
         "headline_value": _num(b["alpha"]),
-        "method": "Every real external flow replayed date-matched into ICICI Pru Nifty 50 "
-                  "Index Reg-G; client XIRR and bench XIRR computed on the identical flow set.",
+        "method": "Every real deposit and withdrawal replayed date-matched into an ICICI Pru "
+                  "Nifty-50 index fund; your yearly growth and the index fund's yearly growth "
+                  "computed on the identical set of cashflows.",
     }
 
 
@@ -295,9 +304,9 @@ def sec_habits(cid, f) -> dict:
         "cf_no_panic_rs": _num(cf.get("cf_no_panic_rs")),
         "cf_sip_alive_rs": _num(cf.get("cf_sip_alive_rs")),
         "headline_value": panic_share,
-        "method": "wealth.client_behaviour fingerprint (share of lifetime external outflow "
-                  "sold inside a drawdown window, SIP-active share, chase-the-hot-fund share) "
-                  "+ wealth.counterfactuals upper-bound cost replays.",
+        "method": "Behaviour fingerprint (share of lifetime withdrawals sold inside a "
+                  "market-fall window, SIP-active share, chase-the-hot-fund share) plus "
+                  "what-if cost replays of those same habits.",
     }
 
 
@@ -386,9 +395,10 @@ def main() -> int:
     rows = compute_all(conn)
 
     cur = conn.cursor()
-    cur.execute("drop table if exists wealth.audit_packs")
+    # Non-destructive refresh: upsert payloads, PRESERVE existing prose (a plain
+    # drop-and-recreate would wipe narrate_audit_packs.py's prose column).
     cur.execute(
-        """create table wealth.audit_packs (
+        """create table if not exists wealth.audit_packs (
              client_id bigint primary key references wealth.clients(client_id),
              payload jsonb not null,
              prose jsonb
@@ -396,7 +406,8 @@ def main() -> int:
     )
     execute_values(
         cur,
-        "insert into wealth.audit_packs (client_id, payload) values %s",
+        """insert into wealth.audit_packs (client_id, payload) values %s
+           on conflict (client_id) do update set payload = excluded.payload""",
         [(r["client_id"], Json(r["payload"])) for r in rows],
         page_size=200,
     )
