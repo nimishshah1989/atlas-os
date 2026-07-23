@@ -7,12 +7,22 @@ a source, so every client in wealth.clients gets exactly one output row:
   sip_discipline_rs    realized. Value today of SIP units bought inside a
                         bench drawdown window, minus the cash paid for them —
                         the reward for not stopping the SIP through a crash.
-  staying_power_rs     realized, non-panic clients only (panic_share < 0.10).
-                        Units held at a drawdown-window start that were still
-                        held at the window end (i.e. not sold into it) ×
-                        NAV growth from window-end to today.
-  advice_outcome_rs    realized. Sum of alpha_1y_rs across the client's
-                        scored switches (wealth.advice_ledger).
+  staying_power_rs     realized, non-panic clients only (panic_share < 0.10,
+                        NULL treated as non-panic — no behaviour row yet is
+                        not evidence of panic-selling). Per (client, scheme,
+                        folio) position, single-credited to the EARLIEST
+                        drawdown window it survived: units held at that
+                        window's start that were still held at its end ×
+                        NAV growth from that window's end to today. Credited
+                        once per position, not once per window survived —
+                        a position that outlived 13 windows only pays out
+                        on the first (its growth-since-then already contains
+                        every later window's recovery).
+  advice_outcome_rs    realized, SIGNED. Sum of alpha_1y_rs across the
+                        client's scored switches (wealth.advice_ledger) —
+                        stored as-is, including net-negative for the clients
+                        whose switches underperformed (this is a value
+                        statement, not a highlight reel).
   fee_save_yr_rs       realized/certain annual figure. Sum of est_value for
                         closet-index-style flags in wealth.client_flags.
   tax_headroom_rs       this-FY harvestable saving (wealth.tax_harvest).
@@ -20,10 +30,11 @@ a source, so every client in wealth.clients gets exactly one output row:
                         sells + dividend leakage + the stopped-SIP
                         counterfactual, each clamped >= 0 before summing.
 
-Every component is floored at 0 in the stored row (a handful of clients have
-net-negative advice alpha or a net-negative stopped-SIP counterfactual; the
-value statement reports value delivered/recoverable, not a debit column —
-the pre-floor number is not discarded, it just isn't a fit for this table).
+The four spec-mandated realized components other than advice_outcome_rs
+(sip_discipline, staying_power, fee_save, tax_headroom) and the three
+coaching_opportunity legs are floored at 0 in the stored row.
+advice_outcome_rs is NOT floored — it is the one component the spec and the
+reviewed test explicitly require to carry its true sign.
 
 Usage: .venv/bin/python scripts/wealth/build_value_statement.py
 """
@@ -95,6 +106,7 @@ def compute_all(conn) -> list[dict]:
     # ---- 2. staying_power_rs: non-panic clients, held start->end of a window ----
     behaviour = pd.read_sql("select client_id, panic_share from wealth.client_behaviour", conn)
     non_panic = set(behaviour.loc[behaviour.panic_share.fillna(0) < 0.10, "client_id"])
+    null_panic_share = set(behaviour.loc[behaviour.panic_share.isna(), "client_id"])
 
     stay: dict[int, float] = defaultdict(float)
     mapped = txns[txns.mstar_id.notna()]
@@ -113,13 +125,16 @@ def compute_all(conn) -> list[dict]:
             ib = dates.searchsorted(b.to_datetime64(), side="right") - 1
             if ia < 0 or ib < 0:
                 continue
-            held = min(bals[ia], bals[ib])
+            held = min(bals[ia], bals[ib], bals[-1])  # also capped at units
+            # still held today — growth on units since exited isn't real value
             if held <= 0:
                 continue
             j = s_nav.index.searchsorted(b, side="right") - 1
             if j < 0:
                 continue
             stay[cid] += held * (nav_today - float(s_nav.iloc[j]))
+            break  # single-credit: earliest window survived only — its
+            # growth-to-today already contains every later window's recovery
 
     # ---- 3. advice_outcome_rs ----
     adv = pd.read_sql(
@@ -135,7 +150,7 @@ def compute_all(conn) -> list[dict]:
     if closet_rules:
         fee = pd.read_sql(
             "select client_id, sum(est_value)::float s from wealth.client_flags "
-            "where rule like %s group by 1",
+            "where rule ilike %s group by 1",
             conn, params=("%closet%",),
         )
         fee_save = dict(zip(fee.client_id, fee.s))
@@ -163,8 +178,7 @@ def compute_all(conn) -> list[dict]:
     for cid in client_ids:
         sip_v = max(0.0, sip_disc.get(cid, 0.0))
         stay_v = max(0.0, stay.get(cid, 0.0))
-        adv_raw = advice.get(cid, 0.0)
-        adv_v = max(0.0, adv_raw)
+        adv_v = advice.get(cid, 0.0)  # signed — not floored, see module docstring
         fee_v = max(0.0, fee_save.get(cid, 0.0))
         tax_v = max(0.0, tax_headroom.get(cid, 0.0))
         panic_c = max(0.0, panic_map.get(cid, 0.0))
@@ -176,10 +190,12 @@ def compute_all(conn) -> list[dict]:
         notes = []
         if cid not in non_panic:
             notes.append("staying_power_rs=0: client is in the drawdown-seller cohort (panic_share >= 0.10)")
+        elif cid in null_panic_share:
+            notes.append("panic_share: missing→treated non-panic")
         if not closet_rules:
             notes.append("no closet-index-style fee flag in wealth.client_flags; fee_save_yr_rs=0")
-        if adv_raw < 0:
-            notes.append(f"advice_outcome_rs floored at 0 (raw alpha sum ₹{round(adv_raw):,})")
+        if adv_v < 0:
+            notes.append(f"advice_outcome_rs is net-negative (₹{round(adv_v):,}) — switches underperformed")
         if sipcf_raw < 0:
             notes.append(f"dead-SIP counterfactual floored at 0 in coaching_opportunity (raw ₹{round(sipcf_raw):,})")
 
@@ -187,7 +203,7 @@ def compute_all(conn) -> list[dict]:
             "realized": {
                 "sip_discipline_rs": round(sip_v),
                 "staying_power_rs": round(stay_v),
-                "advice_outcome_rs": round(adv_v),
+                "advice_outcome_rs": round(adv_v),  # signed — may be negative
                 "fee_save_yr_rs": round(fee_v),
                 "tax_headroom_rs": round(tax_v),
             },
