@@ -73,8 +73,20 @@ plain language mandatory), **book first → drill to client**, delivered as an
   needs fund-document ingestion we don't have; the Audit Pack ships with 7 sections
   now, Bloat Check slot designed but marked "coming".
 - **PREDICT lists** (`build_call_lists.py`): materialise the three standing lists
-  (crash-sellers ranked by panic history & book size; SIP-fragile; disengagement top
-  20 with reasons) → `wealth.call_lists`, regenerated on each run.
+  (crash-sellers ranked by panic history & book size — with a freak-out score per the
+  MIT panic-prediction precedent, armed during drawdowns; SIP-fragile; disengagement
+  top 20 with reasons) → `wealth.call_lists`, regenerated on each run. Nudge scripts
+  follow the one-action rule, persona-framed (see capability atlas §B3).
+- **`build_value_statement.py`** — per client per year, realized ₹ value of advice:
+  behavioural saves (counterfactual-based until call outcomes accumulate, labelled),
+  tax harvested, fee savings, switch outcomes. The regular-vs-direct answer; feeds an
+  eighth Audit Pack section ("What our advice was worth") + chapter 6 book total.
+- **`build_tax_harvest.py`** — per client per FY: ₹1.25L gain-harvest headroom,
+  loss-harvest candidates net of the exemption-before-set-off rule, carry-forward
+  ledger + ITR-deadline flag, exact lots to sell/re-buy. Powers the Action List's
+  tax lines and a Jan–Mar campaign list.
+- **Household roll-up** — family_group aggregation (true family exposure/overlap) +
+  succession-risk flags; shown in book view and client-page header.
 
 **The frontend (new artifact, replaces nothing until approved):**
 - Single HTML app-like artifact, own visual identity (NOT the current dossier look),
@@ -133,6 +145,11 @@ command. Existing dossier artifacts untouched.
   present, every number traceable to its source table.
 - `validate_wealth_app.py`: post-build gate — JSON parses, no NaN, all 220 clients
   resolvable in the app, zero console errors in headless browse.
+
+Research grounding for all of the above: `docs/wealth-capability-atlas.md`
+(advisor-value frameworks, tax-alpha mechanics, panic-prediction and nudge evidence,
+compliance rails — every engine output stays scheme-fact-based, suitability-logged,
+RM-approved).
 
 ## Out of scope (explicit)
 
