@@ -1,10 +1,6 @@
-import os, subprocess, psycopg2, pytest
+import os, psycopg2
 
 DSN = os.environ["ATLAS_DB_URL"].replace("postgresql+psycopg2://", "postgresql://")
-
-def q(sql, args=()):
-    with psycopg2.connect(DSN) as c, c.cursor() as cur:
-        cur.execute(sql, args); return cur.fetchall()
 
 def test_pairwise_overlap_symmetric_and_bounded():
     import sys; sys.path.insert(0, "scripts/wealth")
@@ -19,3 +15,8 @@ def test_pairwise_overlap_symmetric_and_bounded():
     oab, oba = pairwise_overlap(fw[a], fw[b]), pairwise_overlap(fw[b], fw[a])
     assert oab == oba and 0 <= oab <= 100
     assert pairwise_overlap(fw[a], fw[a]) > 60  # self-overlap ~= sum of mapped weights
+    # verify no self-pair rows in real DB (scheme_a = scheme_b means folio duplicates)
+    cur = conn.cursor()
+    cur.execute("select count(*) from wealth.client_fund_overlap where scheme_a = scheme_b")
+    self_pairs = cur.fetchone()[0]
+    assert self_pairs == 0, f"found {self_pairs} self-pair rows (multi-folio duplicates)"
