@@ -23,22 +23,20 @@ def test_one_row_per_client():
 
 
 def test_household_count_in_expected_range():
-    """Brief's ballpark was ~120-160 households across 234 clients. Real data
-    is 242 clients and resolves to ~111 households — under that ballpark by
-    design, not a bug: the surname-within-family_group rule is unconditional
-    (required so the Amin cluster resolves to one household — see
-    test_amin_family_shows_transmission_seen — Nanditaben Amin shares no
-    joint_holders link and only merges via plain surname+family_group), and
-    on the 191931 default batch (175/242 clients, an RM territory not a real
-    family — see build_household.py docstring) that produces two large
-    legitimate surname clusters (Shah 38, Patel 27) that a real per-nuclear-
-    family split would count as ~15-20 households, not 2. Both stay well
-    under the mega-household cap (test_no_mega_household_dominates_the_book),
-    so this is loosened to the real, verified range rather than gamed to hit
-    an approximate estimate."""
+    """Brief's ballpark: ~120-160 households across 234 clients (real data:
+    242 clients). The unconditional surname+family_group edge alone produced
+    ~111 households because it dragged the two RM-territory mega-clusters
+    inside the 191931 batch (Shah 38, Patel 27 — see build_household.py
+    docstring) into two giant households instead of many small ones. Fixed
+    by size-gating that edge at _SURNAME_CLUSTER_MAX (8): clusters above the
+    gate no longer merge on surname alone, only on a genuine joint_holders
+    link, which splits the two mega-clusters back into their real family
+    sub-groups + singletons while leaving every genuine small family
+    (Zinzuvadia, Amin, etc.) untouched. Lands the count back inside the
+    brief's original range."""
     _, rows = _rows()
     n_households = len({r["household_id"] for r in rows})
-    assert 100 <= n_households <= 165, f"expected ~100-165 households, got {n_households}"
+    assert 120 <= n_households <= 160, f"expected ~120-160 households, got {n_households}"
 
 
 def test_zinzuvadia_cluster_resolves_to_one_household_with_ge_3_members():
