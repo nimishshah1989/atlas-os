@@ -36,9 +36,10 @@ def main() -> int:
     conn = connect(); cur = conn.cursor()
     fw = latest_fund_weights(conn)
     cur.execute(
-        """select h.client_id, h.scheme_id, s.mstar_id, h.market_value::float
+        """select h.client_id, h.scheme_id, s.mstar_id, sum(h.market_value::float)
            from wealth.holdings h join wealth.schemes s using (scheme_id)
-           where h.market_value > 0 and s.mstar_id is not null"""
+           where h.market_value > 0 and s.mstar_id is not null
+           group by h.client_id, h.scheme_id, s.mstar_id"""
     )
     rows = cur.fetchall()
     by_client = defaultdict(list)
