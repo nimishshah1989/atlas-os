@@ -5,6 +5,9 @@ money is Decimal.
 Timing contract: an event detected at the close of session `e` executes at the
 close of the NEXT session in `dates` — EOD data only exists after the close, so
 same-close fills would be lookahead. This makes live and backtest identical.
+Exception: `same_day_fill=True` executes on session `e` itself — used by the
+intraday-cross portfolios, where the crossover is detected intraday (from the
+day's high/low, or the live 15-min feed) and known before that close.
 
 Slot model: slots = floor(1 / max_position_pct). When entry candidates exceed
 open slots, the FM rule is hold the top names by Atlas composite (as of the
@@ -56,6 +59,7 @@ def replay(
     stop_ema: pd.DataFrame | None = None,
     stop_pct: Decimal | None = None,
     stop_trail: Decimal | None = None,
+    same_day_fill: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Run the day-loop over `loop_dates` (default: all of `prices.index`).
     Pass the FULL price panel even when looping few dates — valuation carry-forward
@@ -88,13 +92,17 @@ def replay(
         comp_panel = composite.pivot(index="date", columns="instrument_key", values="composite")
         comp_panel = comp_panel.sort_index().ffill()
 
-    # Map each event to its execution date: first trading date AFTER the event.
+    # Map each event to its execution date. Default: the first trading date AFTER
+    # the event (no-lookahead — EOD data only exists after the close). With
+    # same_day_fill (intraday-cross portfolios): the event's OWN session, because
+    # the intraday breach is already known before that close.
     entries_at: dict[object, list[tuple[str, object]]] = {}
     exits_at: dict[object, list[str]] = {}
     if events is not None and not events.empty:
         date_idx = pd.Index(dates)
+        side = "left" if same_day_fill else "right"
         for ev in events.to_dict("records"):
-            pos = int(date_idx.searchsorted(ev["date"], side="right"))
+            pos = int(date_idx.searchsorted(ev["date"], side=side))
             if pos >= len(dates):
                 continue  # signal at the last close — executes on a future run
             d = dates[pos]

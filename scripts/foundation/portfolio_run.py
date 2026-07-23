@@ -21,6 +21,7 @@ from typing import cast
 
 import _db
 import pandas as pd
+import portfolio_alerts
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from portfolio_data import (
@@ -77,7 +78,7 @@ def _cfg(p: dict) -> PortfolioConfig:
 
 # portfolio-level params consumed by the runner, never passed to the strategy ctor
 _RESERVED_PARAMS = frozenset(
-    {"fund_categories", "sleeves", "picks", "charter", "desk", "standing_constraints"}
+    {"fund_categories", "sleeves", "picks", "charter", "desk", "standing_constraints", "notify"}
 )
 
 
@@ -266,6 +267,23 @@ def _run_slice(
                     {"a": sig_lookback, "b": end},
                 )
                 tech = tech.merge(regime, on="date", how="left")
+            if getattr(strat, "needs_ohlc", False):
+                # intraday-cross detection needs the day's adjusted high/low (same
+                # price basis as the EMAs — close_adj); stocks only.
+                hl = _db.read_df(
+                    f"""select instrument_id::text as instrument_key, date,
+                               high_adj as high, low_adj as low
+                        from {M}.ohlcv_stock
+                        where instrument_id::text = any(:ks) and date between :a and :b""",
+                    {
+                        "ks": universe.loc[
+                            universe["asset_class"] == "stock", "instrument_key"
+                        ].tolist(),
+                        "a": sig_lookback,
+                        "b": end,
+                    },
+                )
+                tech = tech.merge(hl, on=["instrument_key", "date"], how="left")
             if getattr(strat, "membership", False):
                 # membership strategies: state before `start` informs the scan;
                 # emissions begin AT `start` (current members enter at next close)
@@ -340,6 +358,7 @@ def _run_slice(
         stop_ema=stop_ema,
         stop_pct=stop_pct,
         stop_trail=stop_trail,
+        same_day_fill=getattr(strat, "same_day_fill", False),
     )
 
 
@@ -449,8 +468,13 @@ def cmd_mark(a) -> None:
         _, rates, _el = load_cost_tax()
         trades = _enrich_new_trades(pid, "live", trades, rates)
         write_results(pid, "live", run_id, trades, navs)
+        alerts = portfolio_alerts.notify_new_trades(p, trades)
         done += 1
-        print(f"[mark] {p['name']}: +{len(navs)} nav rows, {len(trades)} trades", flush=True)
+        print(
+            f"[mark] {p['name']}: +{len(navs)} nav rows, {len(trades)} trades"
+            f"{f', {alerts} alerts' if alerts else ''}",
+            flush=True,
+        )
     print(f"[mark] COMPLETE marked={done} skipped={skipped}", flush=True)
 
 
