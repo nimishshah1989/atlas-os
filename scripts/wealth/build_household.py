@@ -17,14 +17,28 @@ Two independent edge types feed one union-find over client_id:
      _surname() below) equal AND same family_group. Restricting to
      family_group is the brief's explicit guardrail — it keeps a common
      surname (Shah, Patel) from merging clients that only coincidentally
-     share it across unrelated ledger batches. It does NOT stop same-surname,
-     same-batch strangers from merging (e.g. ~34 unrelated "...Shah" clients
-     inside the 191931 mega-batch cluster into one "Shah Family" household,
-     ~12.5% of book MV, verified below 30% by
-     test_no_mega_household_dominates_the_book) — a known false-positive
-     ceiling of this heuristic on this data, documented rather than
-     special-cased away (real disambiguation needs father's-name/PAN-family
-     data this ledger text doesn't reliably carry).
+     share it across unrelated ledger batches.
+
+     SIZE GATE (_SURNAME_CLUSTER_MAX): this edge is applied unconditionally
+     only when the (family_group, surname) bucket has <= 8 members. A real
+     nuclear/extended family sharing one surname inside one ledger batch
+     tops out at 7 in this data (members-distribution counts: 1:76 2:16 3:7
+     4:6 5:1 6:2 7:1 households) — every cluster above that is one of the
+     two RM-territory false positives inside the 191931 mega-batch (Shah 38,
+     Patel 27: unrelated clients who only share a surname + the RM's ledger
+     folder, not a family). 8 sits exactly between the largest genuine
+     cluster (7) and the smallest mega-cluster (27), so it separates the two
+     populations cleanly on this data without needing to guess a family
+     count. Clusters above the gate get NO surname edge at all — members
+     still merge into a household if (and only if) a joint_holders edge
+     (type 2 below) independently links them, which is how the Amin
+     4-member household (well under the gate) is unaffected, while the two
+     mega-clusters shrink to just their genuine joint-holder-linked pairs
+     plus singletons. Kept as a documented module constant, not an
+     atlas_thresholds row: it's a structural shape of this normalization
+     heuristic (a batch-size crossover point empirically read off this one
+     ledger import), not a business/methodology knob anyone would tune from
+     /admin/thresholds — unlike e.g. the composite lens weights.
   2. joint_holders containment: wealth.client_profile_ext.joint_holders is a
      '/'-separated list of the names on that folio, primary holder first
      (verified against every sampled record: segment 0 is always that row's
@@ -79,6 +93,9 @@ from collections import defaultdict
 import pandas as pd
 from engine_common import connect
 from psycopg2.extras import execute_values
+
+# Size gate for the surname+family_group edge — see module docstring.
+_SURNAME_CLUSTER_MAX = 8
 
 # Generic tokens dropped before taking the surname / matching joint-holder names.
 _STRIP = {
@@ -138,10 +155,14 @@ def compute_all(conn) -> list[dict]:
 
     uf = _UnionFind(clients.client_id.tolist())
 
-    # ---- edge type 1: surname match within family_group ----
+    # ---- edge type 1: surname match within family_group, size-gated (see
+    # module docstring _SURNAME_CLUSTER_MAX) — clusters above the gate rely
+    # solely on edge type 2 (joint_holders) to merge any of their members ----
     clients["surname"] = clients.full_name.apply(_surname)
     for _, g in clients[clients.surname.notna()].groupby(["family_group", "surname"]):
         ids = g.client_id.tolist()
+        if len(ids) > _SURNAME_CLUSTER_MAX:
+            continue
         for cid in ids[1:]:
             uf.union(ids[0], cid)
 
