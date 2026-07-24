@@ -1,11 +1,12 @@
 """Real-data tests for the PREDICT call-list engine (Rule #0: no fixtures —
 every assertion runs against the live wealth.* tables)."""
+
 import sys
 
 sys.path.insert(0, "scripts/wealth")
 
-from build_call_lists import TOP_N, compute_all  # noqa: E402
-from engine_common import connect  # noqa: E402
+from build_call_lists import TOP_N, compute_all
+from engine_common import connect
 
 
 def _rows():
@@ -68,17 +69,21 @@ def test_known_panic_client_ranks_top_of_crash_sellers():
     )
     (cid,) = cur.fetchone()
     crash_ids = {r["client_id"] for r in rows if r["list_type"] == "crash_sellers"}
-    assert cid in crash_ids, f"client {cid} (highest panic_share among above-median books) not in crash_sellers"
+    assert cid in crash_ids, (
+        f"client {cid} (highest panic_share among above-median books) not in crash_sellers"
+    )
 
 
 def test_crash_sellers_reason_mentions_armed_only_when_bench_is_down():
-    _, rows, armed, drawdown_now, armed_floor = _rows()
+    _, rows, armed, drawdown_now, _armed_floor = _rows()
     crash = [r for r in rows if r["list_type"] == "crash_sellers"]
     mentions = [r for r in crash if "armed" in r["reason"].lower()]
     if armed:
         assert mentions, f"bench is {drawdown_now:+.1%} off peak (armed) but no reason text says so"
     else:
-        assert not mentions, f"bench is {drawdown_now:+.1%} off peak (not armed) but a reason claims armed"
+        assert not mentions, (
+            f"bench is {drawdown_now:+.1%} off peak (not armed) but a reason claims armed"
+        )
 
 
 def test_book_values_match_ledger_blocks():
@@ -106,7 +111,9 @@ def test_sip_fragile_ranks_on_its_own_key_not_freak_out():
 
     # observed bound: two lists sharing a risk-adjacent population will
     # overlap some — but nowhere near the 18/20 a shared ranking key produced
-    assert len(overlap) <= 10, f"crash_sellers/sip_fragile overlap {len(overlap)}/{TOP_N} — too close to identical"
+    assert len(overlap) <= 10, (
+        f"crash_sellers/sip_fragile overlap {len(overlap)}/{TOP_N} — too close to identical"
+    )
     assert crash_ids[0] != sip_ids[0], (
         "rank-1 client identical across both lists — suspicious for two independently-ranked lists"
     )

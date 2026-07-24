@@ -54,7 +54,7 @@ def main() -> int:
 
     rows = []
     for cid, grp in flows.groupby("client_id"):
-        fl = sorted(zip(grp.txn_date, grp.signed), key=lambda t: t[0])
+        fl = sorted(zip(grp.txn_date, grp.signed, strict=True), key=lambda t: t[0])
         gross_in = float(-sum(a for _, a in fl if a < 0))
         gross_out = float(sum(a for _, a in fl if a > 0))
         if gross_in <= 0:
@@ -72,14 +72,25 @@ def main() -> int:
                 pre_bench += 1
             units += (-a) / nav  # in (a<0) buys, out (a>0) sells
         bench_terminal = units * (lookup.at(mv_date) or bench_last_nav)
-        bxirr = xirr(fl + [(mv_date, bench_terminal)])
-        cxirr = xirr(fl + [(mv_date, terminal)]) if terminal is not None else None
+        bxirr = xirr([*fl, (mv_date, bench_terminal)])
+        cxirr = xirr([*fl, (mv_date, terminal)]) if terminal is not None else None
         alpha = round(cxirr - bxirr, 2) if (cxirr is not None and bxirr is not None) else None
         rows.append(
             (
-                int(cid), cxirr, bxirr, alpha, len(fl), fl[0][0], fl[-1][0],
-                gross_in, gross_out, terminal, round(bench_terminal, 2),
-                pre_bench, bool(cid in approx_clients), bench_terminal < 0,
+                int(cid),
+                cxirr,
+                bxirr,
+                alpha,
+                len(fl),
+                fl[0][0],
+                fl[-1][0],
+                gross_in,
+                gross_out,
+                terminal,
+                round(bench_terminal, 2),
+                pre_bench,
+                bool(cid in approx_clients),
+                bench_terminal < 0,
             )
         )
 
@@ -111,13 +122,27 @@ def main() -> int:
     df = pd.DataFrame(
         rows,
         columns=[
-            "cid", "cx", "bx", "alpha", "n", "f0", "f1", "gin", "gout", "tmv", "btv",
-            "pre", "approx", "over",
+            "cid",
+            "cx",
+            "bx",
+            "alpha",
+            "n",
+            "f0",
+            "f1",
+            "gin",
+            "gout",
+            "tmv",
+            "btv",
+            "pre",
+            "approx",
+            "over",
         ],
     )
     ok = df.dropna(subset=["alpha"])
     clean = ok[~ok.approx]
-    print(f"clients replayed: {len(df)}, with alpha: {len(ok)}, flow-complete (non-approx): {len(clean)}")
+    print(
+        f"clients replayed: {len(df)}, with alpha: {len(ok)}, flow-complete (non-approx): {len(clean)}"
+    )
     print(
         f"median client XIRR {ok.cx.median():.2f}% vs bench {ok.bx.median():.2f}% "
         f"→ median alpha {ok.alpha.median():+.2f}pp; beating bench: {(ok.alpha > 0).sum()}/{len(ok)}"

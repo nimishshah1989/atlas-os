@@ -27,6 +27,7 @@ Violations -> that section's prose is replaced with template_only(section,
 payload) (a deterministic, self-validating fallback) and the incident is
 counted in the run summary; the client's other sections are untouched.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -67,35 +68,35 @@ source data and will be rejected.
 
 SECTION_ANGLE = {
     "map": "Introduce the client: household, how much they have with us "
-           "right now, how many funds and stocks that spans, how long "
-           "they've been investing with us.",
+    "right now, how many funds and stocks that spans, how long "
+    "they've been investing with us.",
     "label_check": "Tell them plainly whether their funds' names match what "
-                    "those funds actually hold inside, and name any that "
-                    "don't. If a mismatch has a coverage_note, say the check "
-                    "is lower-confidence there rather than asserting drift "
-                    "as settled fact.",
+    "those funds actually hold inside, and name any that "
+    "don't. If a mismatch has a coverage_note, say the check "
+    "is lower-confidence there rather than asserting drift "
+    "as settled fact.",
     "overlap": "Tell them how concentrated their real stock exposure is "
-               "(effective independent bets -- the number that matters, not "
-               "the fund count), their single biggest stock exposure in "
-               "rupees, and which two funds duplicate each other the most.",
+    "(effective independent bets -- the number that matters, not "
+    "the fund count), their single biggest stock exposure in "
+    "rupees, and which two funds duplicate each other the most.",
     "fees": "Tell them plainly whether any of their funds are quietly "
-            "tracking an index while charging active fees, and what that is "
-            "costing them a year -- or that none are, if so.",
+    "tracking an index while charging active fees, and what that is "
+    "costing them a year -- or that none are, if so.",
     "benchmark": "Compare their actual yearly growth to what a plain Nifty "
-                 "50 index fund would have given them, replaying the exact "
-                 "same money moving in and out on the exact same dates. "
-                 "Never say XIRR or alpha.",
+    "50 index fund would have given them, replaying the exact "
+    "same money moving in and out on the exact same dates. "
+    "Never say XIRR or alpha.",
     "habits": "Describe their investing behaviour honestly and kindly -- do "
-              "they sell winners and keep losers during drops, chase hot "
-              "funds, keep SIPs running, let dividends sit in cash instead "
-              "of staying invested -- and what that has cost in what-if "
-              "terms. Never say PGR, PLR, or disposition.",
+    "they sell winners and keep losers during drops, chase hot "
+    "funds, keep SIPs running, let dividends sit in cash instead "
+    "of staying invested -- and what that has cost in what-if "
+    "terms. Never say PGR, PLR, or disposition.",
     "value": "Tell them, in rupees, what the advice relationship has "
-             "actually put in their pocket, versus what more is possible if "
-             "a few habits change.",
+    "actually put in their pocket, versus what more is possible if "
+    "a few habits change.",
     "actions": "Tell them plainly what to actually do next -- how many "
-               "concrete actions are open, and the size of the tax-harvest "
-               "opportunity this FY if any.",
+    "concrete actions are open, and the size of the tax-harvest "
+    "opportunity this FY if any.",
 }
 
 
@@ -204,7 +205,9 @@ def template_only(section: str, payload: dict) -> str:
         mv = _fmt_rs(sub.get("total_mv"))
         parts = [f"{name}'s book is worth {mv} as of {sub.get('as_on_date')}"]
         if sub.get("n_funds") is not None and sub.get("n_stocks") is not None:
-            parts.append(f"held across {sub['n_funds']} funds reaching into {sub['n_stocks']} stocks")
+            parts.append(
+                f"held across {sub['n_funds']} funds reaching into {sub['n_stocks']} stocks"
+            )
         if sub.get("tenure_years") is not None:
             parts.append(f"you've been investing with us for {sub['tenure_years']} years")
         return ", ".join(parts) + "."
@@ -212,15 +215,19 @@ def template_only(section: str, payload: dict) -> str:
     if section == "label_check":
         n, m = sub.get("n_funds_checked"), sub.get("n_mismatch")
         if m:
-            return (f"We checked {n} of your funds against what they actually hold. "
-                     f"{m} of them don't match their own label -- the fund's name says "
-                     f"one thing, its real portfolio says another.")
+            return (
+                f"We checked {n} of your funds against what they actually hold. "
+                f"{m} of them don't match their own label -- the fund's name says "
+                f"one thing, its real portfolio says another."
+            )
         return f"We checked {n} of your funds against what they actually hold -- every one matches its own label."
 
     if section == "overlap":
-        s = (f"Across your funds you really only have about {sub.get('eff_bets')} "
-             f"independent bets running -- that's the number that matters, not the "
-             f"fund count.")
+        s = (
+            f"Across your funds you really only have about {sub.get('eff_bets')} "
+            f"independent bets running -- that's the number that matters, not the "
+            f"fund count."
+        )
         if sub.get("top_stock_name"):
             s += f" Your single biggest stock exposure is {sub['top_stock_name']} at {_fmt_rs(sub.get('top_stock_rs'))}."
         wp = sub.get("worst_fund_pair")
@@ -231,30 +238,42 @@ def template_only(section: str, payload: dict) -> str:
     if section == "fees":
         fee = sub.get("fee_save_yr_rs") or 0
         if fee > 0:
-            return (f"You could save about {_fmt_rs(fee)} a year by moving out of "
-                     f"funds that quietly track an index while charging active fees.")
+            return (
+                f"You could save about {_fmt_rs(fee)} a year by moving out of "
+                f"funds that quietly track an index while charging active fees."
+            )
         return "None of your funds are flagged as quietly tracking an index while charging active fees -- no fee saving sitting on the table here."
 
     if section == "benchmark":
         xc, xb, alpha = sub.get("xirr_client"), sub.get("xirr_bench"), sub.get("alpha") or 0
         direction = "ahead of" if alpha >= 0 else "behind"
-        return (f"Replaying every rupee you put in and took out through a plain "
-                f"Nifty 50 index fund instead, your money grew {xc}% a year with "
-                f"us versus {xb}% a year in the index -- you're {abs(alpha)} "
-                f"percentage points a year {direction} what a simple index fund "
-                f"would have given you.")
+        return (
+            f"Replaying every rupee you put in and took out through a plain "
+            f"Nifty 50 index fund instead, your money grew {xc}% a year with "
+            f"us versus {xb}% a year in the index -- you're {abs(alpha)} "
+            f"percentage points a year {direction} what a simple index fund "
+            f"would have given you."
+        )
 
     if section == "habits":
         bits = []
-        bits.append("you tend to sell winners and keep losers during drops"
-                     if (sub.get("panic_share") or 0) > 0
-                     else "you have not sold into a downturn in your history with us")
+        bits.append(
+            "you tend to sell winners and keep losers during drops"
+            if (sub.get("panic_share") or 0) > 0
+            else "you have not sold into a downturn in your history with us"
+        )
         if sub.get("cf_no_panic_rs"):
-            bits.append(f"that has cost you roughly {_fmt_rs(sub['cf_no_panic_rs'])} in what-if growth")
+            bits.append(
+                f"that has cost you roughly {_fmt_rs(sub['cf_no_panic_rs'])} in what-if growth"
+            )
         if sub.get("cf_sip_alive_rs"):
-            bits.append(f"SIPs that stopped early cost you about {_fmt_rs(sub['cf_sip_alive_rs'])} in what-if growth")
+            bits.append(
+                f"SIPs that stopped early cost you about {_fmt_rs(sub['cf_sip_alive_rs'])} in what-if growth"
+            )
         if sub.get("div_leak_rs"):
-            bits.append(f"{_fmt_rs(sub['div_leak_rs'])} in dividends were paid out in cash instead of staying invested")
+            bits.append(
+                f"{_fmt_rs(sub['div_leak_rs'])} in dividends were paid out in cash instead of staying invested"
+            )
         return "; ".join(bits).capitalize() + "."
 
     if section == "value":
@@ -267,9 +286,11 @@ def template_only(section: str, payload: dict) -> str:
         s = f"There are {sub.get('n_actions')} concrete actions open on this account right now."
         tax = sub.get("tax")
         if tax and tax.get("n_gain_candidates"):
-            s += (f" That includes {tax['n_gain_candidates']} tax-harvest candidates "
-                  f"worth about {_fmt_rs(tax.get('tax_saved_if_harvested'))} in tax "
-                  f"saved this FY.")
+            s += (
+                f" That includes {tax['n_gain_candidates']} tax-harvest candidates "
+                f"worth about {_fmt_rs(tax.get('tax_saved_if_harvested'))} in tax "
+                f"saved this FY."
+            )
         return s
 
     return "No narration available for this section."
@@ -293,7 +314,10 @@ def _call_claude(prompt: str) -> dict | None:
     try:
         result = subprocess.run(
             ["claude", "-p", "--output-format", "text", "--tools", "", "--no-session-persistence"],
-            input=prompt, capture_output=True, text=True, timeout=180,
+            input=prompt,
+            capture_output=True,
+            text=True,
+            timeout=180,
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
@@ -305,7 +329,7 @@ def _call_claude(prompt: str) -> dict | None:
     if start == -1 or end == -1 or end <= start:
         return None
     try:
-        obj = json.loads(text[start:end + 1])
+        obj = json.loads(text[start : end + 1])
     except json.JSONDecodeError:
         return None
     return obj if isinstance(obj, dict) else None
@@ -340,15 +364,18 @@ def narrate(conn, client_id) -> dict:
         else:
             prose[section] = text.strip()
 
-    cur.execute("update wealth.audit_packs set prose = %s where client_id = %s",
-                (Json(prose), client_id))
+    cur.execute(
+        "update wealth.audit_packs set prose = %s where client_id = %s", (Json(prose), client_id)
+    )
     conn.commit()
     return {"client_id": client_id, "incidents": incidents}
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--limit", type=int, default=None, help="narrate at most N clients (smoke runs)")
+    ap.add_argument(
+        "--limit", type=int, default=None, help="narrate at most N clients (smoke runs)"
+    )
     args = ap.parse_args()
 
     conn = connect()

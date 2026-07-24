@@ -5,9 +5,12 @@ overlap(A,B) = sum over shared ISINs of min(weight_A, weight_B) — the standard
 client's look-through stock weights.
 Usage: .venv/bin/python scripts/wealth/build_overlap.py
 """
+
 from __future__ import annotations
+
 import sys
 from collections import defaultdict
+
 from engine_common import connect
 from psycopg2.extras import execute_values
 
@@ -33,7 +36,8 @@ def pairwise_overlap(wa: dict, wb: dict) -> float:
 
 
 def main() -> int:
-    conn = connect(); cur = conn.cursor()
+    conn = connect()
+    cur = conn.cursor()
     fw = latest_fund_weights(conn)
     cur.execute(
         """select h.client_id, h.scheme_id, s.mstar_id, sum(h.market_value::float)
@@ -48,7 +52,8 @@ def main() -> int:
             by_client[cid].append((sid, mid, mv))
     o_rows, p_rows = [], []
     for cid, funds in by_client.items():
-        stock = defaultdict(float); names = {}
+        stock = defaultdict(float)
+        names = {}
         total_mv = sum(mv for _, _, mv in funds)
         for _, mid, mv in funds:
             for isin, (name, w) in fw[mid].items():
@@ -61,8 +66,18 @@ def main() -> int:
         eff = round(1.0 / herf, 2) if herf > 0 else None
         top = sorted(stock.items(), key=lambda kv: -kv[1])
         top10 = round(sum(v for _, v in top[:10]) / total_mv, 3)
-        o_rows.append((cid, eff, top[0][0], names[top[0][0]][:80], round(top[0][1]),
-                       top10, len(funds), len(stock)))
+        o_rows.append(
+            (
+                cid,
+                eff,
+                top[0][0],
+                names[top[0][0]][:80],
+                round(top[0][1]),
+                top10,
+                len(funds),
+                len(stock),
+            )
+        )
         for i in range(len(funds)):
             for j in range(i + 1, len(funds)):
                 ov = pairwise_overlap(fw[funds[i][1]], fw[funds[j][1]])
@@ -81,8 +96,10 @@ def main() -> int:
     for t in ("client_overlap", "client_fund_overlap"):
         cur.execute(f"revoke all on wealth.{t} from anon, authenticated")
     conn.commit()
-    print(f"overlap: {len(o_rows)} clients, {len(p_rows)} heavy pairs (>=20%), "
-          f"median eff_bets {sorted(r[1] for r in o_rows if r[1])[len(o_rows)//2]}")
+    print(
+        f"overlap: {len(o_rows)} clients, {len(p_rows)} heavy pairs (>=20%), "
+        f"median eff_bets {sorted(r[1] for r in o_rows if r[1])[len(o_rows) // 2]}"
+    )
     return 0
 
 

@@ -25,16 +25,34 @@ from __future__ import annotations
 import sys
 from collections import defaultdict
 
-import numpy as np
 import pandas as pd
 from engine_common import BENCH_ID, connect, nav_series
 from psycopg2.extras import execute_values
 
-ADD_TYPES = {"purchase", "sip", "switch_in", "div_reinvest", "bonus", "dtp_in",
-             "merger_in", "transfer_in", "transmission_in", "opening_balance",
-             "segregation", "balance_adjust"}
-REMOVE_TYPES = {"redemption", "swp", "switch_out", "dtp_out", "merger_out",
-                "transfer_out", "transmission_out", "balance_adjust"}
+ADD_TYPES = {
+    "purchase",
+    "sip",
+    "switch_in",
+    "div_reinvest",
+    "bonus",
+    "dtp_in",
+    "merger_in",
+    "transfer_in",
+    "transmission_in",
+    "opening_balance",
+    "segregation",
+    "balance_adjust",
+}
+REMOVE_TYPES = {
+    "redemption",
+    "swp",
+    "switch_out",
+    "dtp_out",
+    "merger_out",
+    "transfer_out",
+    "transmission_out",
+    "balance_adjust",
+}
 EXTERNAL_SELL = {"redemption", "swp"}
 
 
@@ -76,7 +94,10 @@ def main() -> int:
     )
     navs["nav_date"] = pd.to_datetime(navs.nav_date)
     nav_by = {
-        mid: g.sort_values("nav_date").drop_duplicates("nav_date", keep="last").set_index("nav_date").nav
+        mid: g.sort_values("nav_date")
+        .drop_duplicates("nav_date", keep="last")
+        .set_index("nav_date")
+        .nav
         for mid, g in navs.groupby("mstar_id")
     }
 
@@ -96,7 +117,9 @@ def main() -> int:
 
     bench = nav_series(conn, BENCH_ID)
     dd_windows = drawdown_windows(bench)
-    print(f"bench drawdown(>10%) windows: {[(str(a.date()), str(b.date())) for a, b in dd_windows]}")
+    print(
+        f"bench drawdown(>10%) windows: {[(str(a.date()), str(b.date())) for a, b in dd_windows]}"
+    )
 
     def in_drawdown(d) -> bool:
         return any(a <= d <= b for a, b in dd_windows)
@@ -113,7 +136,11 @@ def main() -> int:
             units = r.units or 0.0
             mid = r.mstar_id
             # --- chase (equity buys with real cash) ---
-            if r.txn_type in ("purchase", "sip", "switch_in") and r.asset_class == "Equity" and r.amount:
+            if (
+                r.txn_type in ("purchase", "sip", "switch_in")
+                and r.asset_class == "Equity"
+                and r.amount
+            ):
                 tr = ret_3m(mid, r.txn_date) if mid else None
                 if tr is not None:
                     chase_val += r.amount
@@ -128,7 +155,11 @@ def main() -> int:
                 cost = (
                     units * r.nav
                     if r.txn_type == "div_reinvest" and r.nav
-                    else (r.amount if r.amount else (units * (nav_at(mid, r.txn_date) or r.nav or 0.0)))
+                    else (
+                        r.amount
+                        if r.amount
+                        else (units * (nav_at(mid, r.txn_date) or r.nav or 0.0))
+                    )
                 )
                 pos[key][0] += units
                 pos[key][1] += cost or 0.0
@@ -150,8 +181,20 @@ def main() -> int:
                         sell_gain_rs += (sell_px - avg_cost) * take
                     else:
                         sell_loss_rs += (avg_cost - sell_px) * take
-        out_rows.append([int(cid), chase_val, chase_wret, chase_hot, panic_out,
-                         panic_loss_out, total_out, div_leak, sell_gain_rs, sell_loss_rs])
+        out_rows.append(
+            [
+                int(cid),
+                chase_val,
+                chase_wret,
+                chase_hot,
+                panic_out,
+                panic_loss_out,
+                total_out,
+                div_leak,
+                sell_gain_rs,
+                sell_loss_rs,
+            ]
+        )
 
     # ---- second pass: exact PGR/PLR with paper gains/losses at each sell date ----
     # rebuild positions per client with a running frame, but evaluate paper signs
@@ -169,7 +212,11 @@ def main() -> int:
                 cost = (
                     units * r.nav
                     if r.txn_type == "div_reinvest" and r.nav
-                    else (r.amount if r.amount else (units * (nav_at(r.mstar_id, r.txn_date) or r.nav or 0.0)))
+                    else (
+                        r.amount
+                        if r.amount
+                        else (units * (nav_at(r.mstar_id, r.txn_date) or r.nav or 0.0))
+                    )
                 )
                 pos[key][0] += units
                 pos[key][1] += cost or 0.0
@@ -199,9 +246,15 @@ def main() -> int:
         pgr = RG / (RG + PG) if (RG + PG) else None
         plr = RL / (RL + PL) if (RL + PL) else None
         de = round(pgr - plr, 3) if (pgr is not None and plr is not None) else None
-        de_rows[cid] = (RG, PG, RL, PL,
-                        round(pgr, 3) if pgr is not None else None,
-                        round(plr, 3) if plr is not None else None, de)
+        de_rows[cid] = (
+            RG,
+            PG,
+            RL,
+            PL,
+            round(pgr, 3) if pgr is not None else None,
+            round(plr, 3) if plr is not None else None,
+            de,
+        )
 
     # ---- SIP persistence ----
     sips = txns[txns.txn_type == "sip"].copy()
@@ -247,12 +300,28 @@ def main() -> int:
         st, sa, ss, sd = sip_stats.get(cid, (0, 0, 0, 0))
         ins.append(
             (
-                cid, pgr, plr, de, rg, pg, rl, pl,
-                round(cval, 2), round(cwret / cval * 100, 2) if cval else None,
+                cid,
+                pgr,
+                plr,
+                de,
+                rg,
+                pg,
+                rl,
+                pl,
+                round(cval, 2),
+                round(cwret / cval * 100, 2) if cval else None,
                 round(chot / cval, 3) if cval else None,
-                round(pout, 2), round(plout, 2), round(tout, 2),
+                round(pout, 2),
+                round(plout, 2),
+                round(tout, 2),
                 round(pout / tout, 3) if tout else None,
-                round(dleak, 2), round(sgain, 2), round(sloss, 2), st, sa, ss, sd,
+                round(dleak, 2),
+                round(sgain, 2),
+                round(sloss, 2),
+                st,
+                sa,
+                ss,
+                sd,
             )
         )
     execute_values(
@@ -284,7 +353,9 @@ def main() -> int:
         f"inside drawdowns; ₹{df.panic_loss_out_rs.sum() / 1e7:.1f} cr sold below cost in drawdowns"
     )
     print(f"dividend leakage: ₹{df.div_leak_rs.sum() / 1e7:.1f} cr taken as payouts")
-    print(f"SIPs: {int(df.sip_stopped.sum())} stopped ({int(df.sip_stops_in_drawdown.sum())} in drawdowns)")
+    print(
+        f"SIPs: {int(df.sip_stopped.sum())} stopped ({int(df.sip_stops_in_drawdown.sum())} in drawdowns)"
+    )
     conn.close()
     return 0
 

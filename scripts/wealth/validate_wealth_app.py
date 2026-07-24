@@ -18,6 +18,7 @@ Checks (all must pass):
 Usage: .venv/bin/python scripts/wealth/validate_wealth_app.py
 Exit 0 = all green; non-zero = a specific failure printed.
 """
+
 from __future__ import annotations
 
 import json
@@ -32,16 +33,27 @@ from pathlib import Path
 APP = Path("/home/ubuntu/jhaveri_data/reports/jhaveri-capability-app.html")
 MAX_BYTES = 6 * 1024 * 1024
 BROWSE = Path.home() / ".claude/skills/gstack/browse/dist/browse"
-DATA_RE = re.compile(
-    r'<script id="data" type="application/json">(.*?)</script>', re.DOTALL)
+DATA_RE = re.compile(r'<script id="data" type="application/json">(.*?)</script>', re.DOTALL)
 
 # Jargon that must never reach a client-facing screen (plain-language rule).
-BANNED = re.compile(r'\b(xirr|alpha|disposition|pgr|plr|counterfactual)\b', re.I)
+BANNED = re.compile(r"\b(xirr|alpha|disposition|pgr|plr|counterfactual)\b", re.I)
 # Keys whose VALUES are proper nouns (real fund/stock/person names — e.g. the
 # fund literally named "Tata Nifty200 Alpha 30") or are embedded-but-never-
 # rendered: excluded so the gate flags only jargon in narration we author.
-SKIP_KEYS = {"name", "fund", "fund_a", "fund_b", "top_stock_name", "household_name",
-             "full_name", "from", "to", "detail", "summary", "basis"}
+SKIP_KEYS = {
+    "name",
+    "fund",
+    "fund_a",
+    "fund_b",
+    "top_stock_name",
+    "household_name",
+    "full_name",
+    "from",
+    "to",
+    "detail",
+    "summary",
+    "basis",
+}
 
 
 def renderable_strings(obj):
@@ -64,13 +76,14 @@ def banned_hits(data: dict, html: str) -> list[str]:
     for s in renderable_strings(data):
         m = BANNED.search(s)
         if m:
-            hits.append(f"json[{m.group(0).lower()}]: …{s[max(0, m.start()-20):m.end()+20]}…")
+            hits.append(f"json[{m.group(0).lower()}]: …{s[max(0, m.start() - 20) : m.end() + 20]}…")
     # static HTML text nodes (strip <script>/<style> — those are code/CSS)
-    stripped = re.sub(r'<(script|style)\b[^>]*>.*?</\1>', ' ', html,
-                      flags=re.DOTALL | re.I)
-    text = re.sub(r'<[^>]+>', ' ', stripped)
+    stripped = re.sub(r"<(script|style)\b[^>]*>.*?</\1>", " ", html, flags=re.DOTALL | re.I)
+    text = re.sub(r"<[^>]+>", " ", stripped)
     for m in BANNED.finditer(text):
-        hits.append(f"html-text[{m.group(0).lower()}]: …{text[max(0, m.start()-20):m.end()+20]}…")
+        hits.append(
+            f"html-text[{m.group(0).lower()}]: …{text[max(0, m.start() - 20) : m.end() + 20]}…"
+        )
     return hits
 
 
@@ -93,8 +106,14 @@ def browse_routes(html_path: Path, routes: list[str]) -> list[str]:
     problems = []
 
     def run(*args):
-        return subprocess.run([str(BROWSE), *args], env=env,
-                              capture_output=True, text=True, timeout=90)
+        # BROWSE is a fixed local binary path, not attacker-controlled input.
+        return subprocess.run(  # noqa: S603
+            [str(BROWSE), *args],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=90,
+        )
 
     for i, route in enumerate(routes):
         # distinct query string forces a full reload so each route's router
@@ -102,15 +121,18 @@ def browse_routes(html_path: Path, routes: list[str]) -> list[str]:
         target = f"{url}?r={i}#{route}"
         nav = run("goto", target)
         if nav.returncode != 0 or "(200)" not in nav.stdout:
-            problems.append(f"#{route}: navigation failed ({nav.stdout.strip()} {nav.stderr.strip()})")
+            problems.append(
+                f"#{route}: navigation failed ({nav.stdout.strip()} {nav.stderr.strip()})"
+            )
             continue
         run("wait", "--load")
         con = run("console", "--errors")
         out = con.stdout
         if "(no console errors)" not in out:
             # strip the untrusted-content wrapper lines for a compact report
-            body = "\n".join(l for l in out.splitlines()
-                             if "UNTRUSTED EXTERNAL CONTENT" not in l).strip()
+            body = "\n".join(
+                l for l in out.splitlines() if "UNTRUSTED EXTERNAL CONTENT" not in l
+            ).strip()
             problems.append(f"#{route}: {body}")
         run("console", "--clear")
     run("stop")
@@ -124,7 +146,7 @@ def main() -> int:
     html = APP.read_text(encoding="utf-8")
     size = len(html.encode("utf-8"))
     if size >= MAX_BYTES:
-        return fail(f"file is {size/1e6:.2f} MB (>= 6 MB cap)")
+        return fail(f"file is {size / 1e6:.2f} MB (>= 6 MB cap)")
 
     if "NaN" in html:
         return fail("literal token 'NaN' present in file (strict-JSON violation)")
@@ -152,8 +174,10 @@ def main() -> int:
             referenced.add(str(cid))
     missing = referenced - client_ids
     if missing:
-        return fail(f"{len(missing)} referenced client(s) not resolvable in datalist: "
-                    f"{sorted(missing)[:10]}")
+        return fail(
+            f"{len(missing)} referenced client(s) not resolvable in datalist: "
+            f"{sorted(missing)[:10]}"
+        )
 
     # each client must carry a name (datalist label) and a pack
     for cid, c in clients.items():
@@ -162,10 +186,12 @@ def main() -> int:
         if not c.get("pack"):
             return fail(f"client {cid} has no pack payload")
 
-    print(f"static checks PASS: {size/1e6:.2f} MB, {len(client_ids)} clients, "
-          f"{len(referenced)} referenced ids all resolvable, strict JSON, no NaN")
+    print(
+        f"static checks PASS: {size / 1e6:.2f} MB, {len(client_ids)} clients, "
+        f"{len(referenced)} referenced ids all resolvable, strict JSON, no NaN"
+    )
     headroom = (MAX_BYTES - size) / 1e6
-    print(f"byte-headroom watch: app {size/1e6:.2f} MB, {headroom:.2f} MB under the 6 MB cap")
+    print(f"byte-headroom watch: app {size / 1e6:.2f} MB, {headroom:.2f} MB under the 6 MB cap")
 
     # ---- banned-word gate (plain-language rule, defense-in-depth) ----
     hits = banned_hits(data, html)
@@ -174,7 +200,9 @@ def main() -> int:
         for h in hits[:15]:
             print(f"  - {h}")
         return 1
-    print("banned-word gate PASS: no xirr/alpha/disposition/pgr/plr/counterfactual in rendered text")
+    print(
+        "banned-word gate PASS: no xirr/alpha/disposition/pgr/plr/counterfactual in rendered text"
+    )
 
     # ---- headless browse gate ----
     if not BROWSE.exists():
@@ -183,8 +211,11 @@ def main() -> int:
     shutil.copy(APP, tmp)
 
     sample = sorted(client_ids, key=lambda x: int(x))[:3]
-    routes = (["book", "calls", "cohort", "guide"] + [f"client/{cid}" for cid in sample]
-              + ["segment/crash_sellers"])
+    routes = (
+        ["book", "calls", "cohort", "guide"]
+        + [f"client/{cid}" for cid in sample]
+        + ["segment/crash_sellers"]
+    )
     problems = browse_routes(tmp, routes)
     if problems:
         print("FAIL: console errors in headless browse:")

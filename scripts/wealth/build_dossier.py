@@ -78,22 +78,32 @@ def assemble_ext(conn) -> dict:
     s3 = adv.dropna(subset=["alpha_3y_pp"])
     beh_rows = [
         dict(
-            id=int(r.client_id), name=r.full_name,
-            de=jr(r.disposition, 3), chase=jr(r.chase_avg_3m_pct),
-            hot=jr(r.chase_hot_share, 3), panic=jr(r.panic_share, 3),
-            panic_rs=jr(r.panic_out_rs, 0), leak=jr(r.div_leak_rs, 0),
-            sips=int(r.sip_streams or 0), sipstop=int(r.sip_stopped or 0),
+            id=int(r.client_id),
+            name=r.full_name,
+            de=jr(r.disposition, 3),
+            chase=jr(r.chase_avg_3m_pct),
+            hot=jr(r.chase_hot_share, 3),
+            panic=jr(r.panic_share, 3),
+            panic_rs=jr(r.panic_out_rs, 0),
+            leak=jr(r.div_leak_rs, 0),
+            sips=int(r.sip_streams or 0),
+            sipstop=int(r.sip_stopped or 0),
             sipdd=int(r.sip_stops_in_drawdown or 0),
-            gap=jr(r.gap_pp), gaprs=jr(r.gap_rs, 0),
+            gap=jr(r.gap_pp),
+            gaprs=jr(r.gap_rs, 0),
         )
         for r in beh.itertuples()
     ]
     cf_rows = [
         dict(
-            id=int(r.client_id), name=r.full_name,
-            index_=jr(r.cf_index_rs, 0), panic=jr(r.cf_no_panic_rs, 0),
-            sip=jr(r.cf_sip_alive_rs, 0), switch=jr(r.cf_no_switch_rs, 0),
-            nswitch=int(r.switches or 0), npanic=int(r.panic_sells or 0),
+            id=int(r.client_id),
+            name=r.full_name,
+            index_=jr(r.cf_index_rs, 0),
+            panic=jr(r.cf_no_panic_rs, 0),
+            sip=jr(r.cf_sip_alive_rs, 0),
+            switch=jr(r.cf_no_switch_rs, 0),
+            nswitch=int(r.switches or 0),
+            npanic=int(r.panic_sells or 0),
         )
         for r in cf.itertuples()
     ]
@@ -101,9 +111,14 @@ def assemble_ext(conn) -> dict:
     best = adv.dropna(subset=["alpha_3y_rs"]).nlargest(5, "alpha_3y_rs")
     sw_rows = [
         dict(
-            d=str(r.switch_date), amt=jr(r.amount, 0), frm=(r.from_name or "?")[:42],
-            to=(r.to_name or "?")[:42], a1=jr(r.alpha_1y_pp), a3=jr(r.alpha_3y_pp),
-            rs3=jr(r.alpha_3y_rs, 0), adv=r.advisor_name,
+            d=str(r.switch_date),
+            amt=jr(r.amount, 0),
+            frm=(r.from_name or "?")[:42],
+            to=(r.to_name or "?")[:42],
+            a1=jr(r.alpha_1y_pp),
+            a3=jr(r.alpha_3y_pp),
+            rs3=jr(r.alpha_3y_rs, 0),
+            adv=r.advisor_name,
         )
         for r in pd.concat([worst, best]).itertuples()
     ]
@@ -124,18 +139,31 @@ def assemble_ext(conn) -> dict:
             ),
         ),
         advice=dict(
-            n=len(adv), moved_cr=jr(adv.amount.sum() / 1e7),
-            s1=dict(n=len(s1), good=jr((s1.alpha_1y_pp > 0).mean(), 3),
-                    med=jr(s1.alpha_1y_pp.median()), net_l=jr(s1.alpha_1y_rs.sum() / 1e5, 1)),
-            s3=dict(n=len(s3), good=jr((s3.alpha_3y_pp > 0).mean(), 3),
-                    med=jr(s3.alpha_3y_pp.median()), net_l=jr(s3.alpha_3y_rs.sum() / 1e5, 1)),
+            n=len(adv),
+            moved_cr=jr(adv.amount.sum() / 1e7),
+            s1=dict(
+                n=len(s1),
+                good=jr((s1.alpha_1y_pp > 0).mean(), 3),
+                med=jr(s1.alpha_1y_pp.median()),
+                net_l=jr(s1.alpha_1y_rs.sum() / 1e5, 1),
+            ),
+            s3=dict(
+                n=len(s3),
+                good=jr((s3.alpha_3y_pp > 0).mean(), 3),
+                med=jr(s3.alpha_3y_pp.median()),
+                net_l=jr(s3.alpha_3y_rs.sum() / 1e5, 1),
+            ),
             switches=sw_rows,
             waves=[
                 dict(
-                    fund=(r.scheme_name or "?")[:46], start=str(r.window_start),
-                    n=int(r.n_clients), cr=jr(pd.to_numeric(r.inflow_rs) / 1e7),
-                    f1=jr(pd.to_numeric(r.fwd1y_scheme)), b1=jr(pd.to_numeric(r.fwd1y_bench)),
-                    f3=jr(pd.to_numeric(r.fwd3y_scheme)), b3=jr(pd.to_numeric(r.fwd3y_bench)),
+                    fund=(r.scheme_name or "?")[:46],
+                    start=str(r.window_start),
+                    n=int(r.n_clients),
+                    cr=jr(pd.to_numeric(r.inflow_rs) / 1e7),
+                    f1=jr(pd.to_numeric(r.fwd1y_scheme)),
+                    b1=jr(pd.to_numeric(r.fwd1y_bench)),
+                    f3=jr(pd.to_numeric(r.fwd3y_scheme)),
+                    b3=jr(pd.to_numeric(r.fwd3y_bench)),
                 )
                 for r in waves.head(12).itertuples()
             ],
@@ -144,12 +172,19 @@ def assemble_ext(conn) -> dict:
             rows=cf_rows,
             cohort={
                 k: jr(pd.to_numeric(cf[c]).sum() / 1e7)
-                for k, c in [("index", "cf_index_rs"), ("panic", "cf_no_panic_rs"),
-                             ("sip", "cf_sip_alive_rs"), ("switch", "cf_no_switch_rs")]
+                for k, c in [
+                    ("index", "cf_index_rs"),
+                    ("panic", "cf_no_panic_rs"),
+                    ("sip", "cf_sip_alive_rs"),
+                    ("switch", "cf_no_switch_rs"),
+                ]
             },
         ),
         ledger=dict(
-            n=int(led.n), clients=int(led.nc), d0=str(led.d0), d1=str(led.d1),
+            n=int(led.n),
+            clients=int(led.nc),
+            d0=str(led.d0),
+            d1=str(led.d1),
             approx=int(led.n_approx),
         ),
     )
@@ -260,15 +295,22 @@ def patch_main(data: dict) -> None:
         "const P = ['overview','bench','risk','alloc','fees','rules','behaviour','advice','whatif','method']",
     )
     # sections before the Method page
-    html = html.replace('<section class="page" id="pg-method"', MAIN_SECTIONS + '\n<section class="page" id="pg-method"')
+    html = html.replace(
+        '<section class="page" id="pg-method"',
+        MAIN_SECTIONS + '\n<section class="page" id="pg-method"',
+    )
     # exactness copy on the bench page
     html = html.replace(
         "same dated rupees into the index fund",
         "same dated rupees — every ledger cash flow, exact — into the index fund",
     )
     # render JS as its own script before </body> (or at end)
-    js = f'<script>{MAIN_JS}</script>'
-    html = html.rstrip() + "\n" + BEGIN + js + END + "\n" if "</body>" not in html else html.replace("</body>", BEGIN + js + END + "</body>")
+    js = f"<script>{MAIN_JS}</script>"
+    html = (
+        html.rstrip() + "\n" + BEGIN + js + END + "\n"
+        if "</body>" not in html
+        else html.replace("</body>", BEGIN + js + END + "</body>")
+    )
     MAIN.write_text(html)
     print(f"patched {MAIN.name}: {len(html)} bytes")
 

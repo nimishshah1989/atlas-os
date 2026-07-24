@@ -33,6 +33,7 @@ independently here, not copied).
 
 Usage: .venv/bin/python scripts/wealth/build_segments.py
 """
+
 from __future__ import annotations
 
 import sys
@@ -46,13 +47,21 @@ MATERIAL_COST_FLOOR_KEY = "wealth_segment_material_cost_rs"
 MATERIAL_COST_FLOOR_DEFAULT = 50_000  # fallback only if the seed insert below can't run
 
 # Documented demo heuristics (not DB-driven — v1 precedent, see build_call_lists.py):
-CHASER_MIN_SHARE = 0.25          # chase_hot_share >= this -> chaser trait
-DISENGAGED_QUIET_MONTHS = 12     # no fresh money in this many months...
-DISENGAGED_SIP_STOP_MIN_SHARE = 1.0  # ...and SIPs stopped (fully; no SIP history counts as "stopped" too)
-CHURN_TOP_QUARTILE = 0.75        # high_churn_risk = top quartile of disengagement_score
+CHASER_MIN_SHARE = 0.25  # chase_hot_share >= this -> chaser trait
+DISENGAGED_QUIET_MONTHS = 12  # no fresh money in this many months...
+DISENGAGED_SIP_STOP_MIN_SHARE = (
+    1.0  # ...and SIPs stopped (fully; no SIP history counts as "stopped" too)
+)
+CHURN_TOP_QUARTILE = 0.75  # high_churn_risk = top quartile of disengagement_score
 
-SEGMENTS = ("Too New to Tell", "Crash Sellers", "Dividend Spenders",
-            "SIP Quitters", "Drifted Away", "Steady Compounders")
+SEGMENTS = (
+    "Too New to Tell",
+    "Crash Sellers",
+    "Dividend Spenders",
+    "SIP Quitters",
+    "Drifted Away",
+    "Steady Compounders",
+)
 
 
 def load_material_cost_floor(cur) -> float:
@@ -100,9 +109,11 @@ def compute_all(conn) -> list[dict]:
 
     bench_ids = set(pd.read_sql("select client_id from wealth.client_benchmark", conn).client_id)
 
-    cf = pd.read_sql(
-        "select client_id, cf_sip_alive_rs::float c from wealth.counterfactuals", conn
-    ).set_index("client_id").c.fillna(0.0)
+    cf = (
+        pd.read_sql("select client_id, cf_sip_alive_rs::float c from wealth.counterfactuals", conn)
+        .set_index("client_id")
+        .c.fillna(0.0)
+    )
 
     churn = pd.read_sql(
         "select client_id, months_since_inflow::float months, sip_stop_share::float sip_stop, "
@@ -147,7 +158,9 @@ def compute_all(conn) -> list[dict]:
                 reason = f"Sold ₹{p / 1e5:.1f}L at a loss during market falls — their largest controllable cost."
             elif d >= c:
                 segment = "Dividend Spenders"
-                reason = f"₹{d / 1e5:.1f}L leaked out via dividend payouts instead of staying invested."
+                reason = (
+                    f"₹{d / 1e5:.1f}L leaked out via dividend payouts instead of staying invested."
+                )
             else:
                 segment = "SIP Quitters"
                 reason = f"Stopping their SIP cost an estimated ₹{c / 1e5:.1f}L versus staying the course."
@@ -161,13 +174,15 @@ def compute_all(conn) -> list[dict]:
 
         whatif = sum(Decimal(str(x)) for x in (p, d, c) if x >= 0)
 
-        rows.append(dict(
-            client_id=int(cid),
-            segment=segment,
-            reason=reason,
-            whatif_rs=int(whatif.to_integral_value()),
-            traits=traits,
-        ))
+        rows.append(
+            dict(
+                client_id=int(cid),
+                segment=segment,
+                reason=reason,
+                whatif_rs=int(whatif.to_integral_value()),
+                traits=traits,
+            )
+        )
     return rows
 
 
@@ -186,7 +201,10 @@ def main() -> int:
     execute_values(
         cur,
         "insert into wealth.client_segments values %s",
-        [(r["client_id"], r["segment"], r["reason"], r["whatif_rs"], Json(r["traits"])) for r in rows],
+        [
+            (r["client_id"], r["segment"], r["reason"], r["whatif_rs"], Json(r["traits"]))
+            for r in rows
+        ],
         page_size=500,
     )
     cur.execute("revoke all on wealth.client_segments from anon, authenticated")
@@ -199,14 +217,25 @@ def main() -> int:
         (MATERIAL_COST_FLOOR_KEY,),
     )
     floor = float(cur.fetchone()[0])
-    print(f"client_segments: {n} clients (material-cost floor ₹{floor:,.0f} "
-          f"from atlas_thresholds.{MATERIAL_COST_FLOOR_KEY})")
+    print(
+        f"client_segments: {n} clients (material-cost floor ₹{floor:,.0f} "
+        f"from atlas_thresholds.{MATERIAL_COST_FLOOR_KEY})"
+    )
     for seg in SEGMENTS:
         print(f"  {seg:20s} {counts.get(seg, 0)}")
     assert int(counts.sum()) == n, "segment counts must sum to client count"
 
-    trait_counts = {k: sum(1 for r in rows if r["traits"][k]) for k in
-                     ("crash_seller", "chaser", "div_spender", "sip_quitter", "disengaged", "high_churn_risk")}
+    trait_counts = {
+        k: sum(1 for r in rows if r["traits"][k])
+        for k in (
+            "crash_seller",
+            "chaser",
+            "div_spender",
+            "sip_quitter",
+            "disengaged",
+            "high_churn_risk",
+        )
+    }
     print("traits (independent, can overlap):")
     for k, v in trait_counts.items():
         print(f"  {k:16s} {v}")

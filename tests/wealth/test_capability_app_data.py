@@ -1,12 +1,13 @@
 """Real-data tests for the v2 capability-app data layer widening (Rule #0: no
 fixtures — every assertion runs against the live wealth.* tables)."""
+
 import json
 import sys
 
 sys.path.insert(0, "scripts/wealth")
 
-from build_capability_app import fetch, render  # noqa: E402
-from engine_common import connect  # noqa: E402
+from build_capability_app import fetch, render
+from engine_common import connect
 
 # client_id=1: confirmed (via live psql) to have real rows in every source
 # table this task widens — holdings, client_scorecard, client_flags,
@@ -25,8 +26,16 @@ def _data():
 def test_sampled_client_has_all_v2_keys_with_real_content():
     data = _data()
     c = data["clients"][SAMPLE_CLIENT]
-    for key in ("holdings", "scorecard", "flags", "churn", "stock_exposure",
-                "segment", "curve", "cut_list"):
+    for key in (
+        "holdings",
+        "scorecard",
+        "flags",
+        "churn",
+        "stock_exposure",
+        "segment",
+        "curve",
+        "cut_list",
+    ):
         assert key in c, f"missing key {key!r} on client {SAMPLE_CLIENT}"
     assert c["holdings"], "client should have >=1 holding row"
     assert c["scorecard"] is not None
@@ -76,8 +85,14 @@ def test_segment_bar_sums_to_full_client_count():
 def test_six_histograms_present_with_medians():
     data = _data()
     hist = data["cohort"]["histograms"]
-    expected = {"book_size_l", "tenure_years", "growth_gap_pp",
-                "freak_out_pct", "effective_bets", "sip_health_pct"}
+    expected = {
+        "book_size_l",
+        "tenure_years",
+        "growth_gap_pp",
+        "freak_out_pct",
+        "effective_bets",
+        "sip_health_pct",
+    }
     assert set(hist) == expected
     for name, h in hist.items():
         assert h["n"] > 0, f"{name} histogram has no real data"

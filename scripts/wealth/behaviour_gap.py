@@ -52,7 +52,10 @@ def main() -> int:
     )
     navs["nav_date"] = pd.to_datetime(navs.nav_date)
     nav_by_scheme = {
-        mid: g.sort_values("nav_date").drop_duplicates("nav_date", keep="last").set_index("nav_date").nav
+        mid: g.sort_values("nav_date")
+        .drop_duplicates("nav_date", keep="last")
+        .set_index("nav_date")
+        .nav
         for mid, g in navs.groupby("mstar_id")
     }
 
@@ -64,7 +67,7 @@ def main() -> int:
             continue
         last_date, last_nav = s.index[-1], float(s.iloc[-1])
 
-        def nav_at(d):
+        def nav_at(d, s=s):
             i = s.index.searchsorted(d, side="right") - 1
             return float(s.iloc[i]) if i >= 0 else None
 
@@ -99,11 +102,26 @@ def main() -> int:
         # average invested capital ≈ time-weighted average of units-held × NAV at flow points
         invested = float(-sum(a for _, a in flows if a < 0))
         gap_pp = round(mwr - twr, 2)
-        avg_cap = invested / 2 if invested else 0.0  # ponytail: flat-average proxy, upgrade to daily curve if needed
+        avg_cap = (
+            invested / 2 if invested else 0.0
+        )  # ponytail: flat-average proxy, upgrade to daily curve if needed
         gap_rs = round(gap_pp / 100 * avg_cap * min(yrs, 25), 0)
         rows.append(
-            (int(cid), int(sid), mid, str(d0.date()), float(yrs), len(flows), invested,
-             mwr, twr, gap_pp, avg_cap, gap_rs, skipped)
+            (
+                int(cid),
+                int(sid),
+                mid,
+                str(d0.date()),
+                float(yrs),
+                len(flows),
+                invested,
+                mwr,
+                twr,
+                gap_pp,
+                avg_cap,
+                gap_rs,
+                skipped,
+            )
         )
 
     cur = conn.cursor()
@@ -131,9 +149,24 @@ def main() -> int:
     cur.execute("revoke all on wealth.behaviour_gap from anon, authenticated")
     conn.commit()
 
-    df = pd.DataFrame(rows, columns=[
-        "cid", "sid", "mid", "d0", "yrs", "n", "inv", "mwr", "twr", "gap", "cap", "gaprs", "part"
-    ])
+    df = pd.DataFrame(
+        rows,
+        columns=[
+            "cid",
+            "sid",
+            "mid",
+            "d0",
+            "yrs",
+            "n",
+            "inv",
+            "mwr",
+            "twr",
+            "gap",
+            "cap",
+            "gaprs",
+            "part",
+        ],
+    )
     w = df[df.inv > 0]
     wavg = float(np.average(w.gap, weights=w.inv)) if len(w) else float("nan")
     print(f"client×scheme rows: {len(df)} ({df.cid.nunique()} clients, {df.sid.nunique()} schemes)")

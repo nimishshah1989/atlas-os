@@ -27,7 +27,6 @@ import os
 import re
 import sys
 from collections import defaultdict
-from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
@@ -51,18 +50,51 @@ def norm_name(n: str) -> str:
 # valuation snapshot writes "Reg-G" style; ledgers write "Regular-Growth [Weekly]"
 # style. Canonical key = (cleaned base name, plan, option) bridges the two.
 ALIASES = [
-    ("adity birla", "aditya birla"), ("sun life", "sunlife"), ("&", " and "),
+    ("adity birla", "aditya birla"),
+    ("sun life", "sunlife"),
+    ("&", " and "),
     ("segregated", "seg"),  # valuation prints "Seg Portfolio", ledger "Segregated Portfolio"
     ("l and t", "hsbc"),  # L&T MF absorbed by HSBC
     ("idfc", "bandhan"),  # IDFC MF renamed Bandhan
     ("fof", "fund of fund"),
 ]
 STOP_TOKS = {
-    "fund", "scheme", "plan", "option", "opt", "the", "an", "of", "reg", "regular",
-    "dir", "direct", "g", "gr", "growth", "idcw", "div", "dividend", "payout",
-    "reinvest", "reinvestment", "weekly", "daily", "monthly", "quarterly", "qtly",
-    "annual", "annually", "yearly", "half", "halfyearly", "retail", "institutional",
-    "inst", "super", "premium",
+    "fund",
+    "scheme",
+    "plan",
+    "option",
+    "opt",
+    "the",
+    "an",
+    "of",
+    "reg",
+    "regular",
+    "dir",
+    "direct",
+    "g",
+    "gr",
+    "growth",
+    "idcw",
+    "div",
+    "dividend",
+    "payout",
+    "reinvest",
+    "reinvestment",
+    "weekly",
+    "daily",
+    "monthly",
+    "quarterly",
+    "qtly",
+    "annual",
+    "annually",
+    "yearly",
+    "half",
+    "halfyearly",
+    "retail",
+    "institutional",
+    "inst",
+    "super",
+    "premium",
 }
 
 
@@ -92,9 +124,16 @@ def g2_ok(r: dict, fund_name: str = "") -> bool:
     """Era-aware units×nav≈amount (mirrors parse-time check, independent code path)."""
     if r["approx"] or not (r["units"] and r["nav"] and r["amount"]):
         return True
-    if r["txn_type"] in ("transfer_in", "transfer_out", "merger_in", "merger_out",
-                         "transmission_in", "transmission_out", "consolidation_in",
-                         "consolidation_out"):
+    if r["txn_type"] in (
+        "transfer_in",
+        "transfer_out",
+        "merger_in",
+        "merger_out",
+        "transmission_in",
+        "transmission_out",
+        "consolidation_in",
+        "consolidation_out",
+    ):
         return True  # units implied from balance column; no printed amount to check
     if G2_EXEMPT_RE.search(fund_name):
         return True  # side-pocket/ULIP: printed NAV is not the effective unit price
@@ -132,7 +171,9 @@ def main() -> int:
             print(f"  {d['source_file']}: {d['errors'][:2]}")
         return 1
     n_warn = sum(len(d.get("warnings", [])) for d in data)
-    print(f"G1 PASS — {len(data)} files parse-clean ({n_warn} balance-column warnings across corpus)")
+    print(
+        f"G1 PASS — {len(data)} files parse-clean ({n_warn} balance-column warnings across corpus)"
+    )
 
     # ---- G2 re-check ----
     g2_bad = []
@@ -213,8 +254,12 @@ def main() -> int:
         nn = norm_name(d["client_name"] or "")
         cands = by_code.get(code, [])
         cid = next((c for c, n in cands if n == nn), None)
-        if cid is None and len(cands) == 1 and not any(
-            norm_name(x["client_name"] or "") == cands[0][1] and x is not d for x in data
+        if (
+            cid is None
+            and len(cands) == 1
+            and not any(
+                norm_name(x["client_name"] or "") == cands[0][1] and x is not d for x in data
+            )
         ):
             cid = cands[0][0]  # unique code match, name drifted (case/initials)
         if cid is None:
@@ -223,7 +268,13 @@ def main() -> int:
                    values (null,%s,%s,%s,%s,%s)
                    on conflict (full_name, client_code) do update set updated_at = now()
                    returning client_id""",
-                (d["client_code"], d["client_name"], d["advisor_folder"], d.get("email"), d.get("mobile")),
+                (
+                    d["client_code"],
+                    d["client_name"],
+                    d["advisor_folder"],
+                    d.get("email"),
+                    d.get("mobile"),
+                ),
             )
             cid = cur.fetchone()[0]
             by_code[code].append((cid, nn))
@@ -243,9 +294,17 @@ def main() -> int:
             seen_profile.add(cid)
             profile_rows.append(
                 (
-                    cid, p.get("joint_holders"), p.get("holding_mode"), p.get("tax_status"),
-                    p.get("kyc_ok"), p.get("account_type"), p.get("advisor_name"),
-                    p.get("advisor_code"), p.get("branch"), d.get("report_date"), d["source_file"],
+                    cid,
+                    p.get("joint_holders"),
+                    p.get("holding_mode"),
+                    p.get("tax_status"),
+                    p.get("kyc_ok"),
+                    p.get("account_type"),
+                    p.get("advisor_name"),
+                    p.get("advisor_code"),
+                    p.get("branch"),
+                    d.get("report_date"),
+                    d["source_file"],
                 )
             )
         for b in d["blocks"]:
@@ -264,32 +323,62 @@ def main() -> int:
                     ssid = resolve_scheme(sname, b["isin"] if q["idx"] == 0 else None)
                 seq_ident[q["idx"]] = (sname, norm_folio(sfolio), ssid)
             n_unmapped_here = sum(
-                1 for r in b["rows"] if seq_ident.get(r.get("seq", 0), (None, None, None))[2] is None
+                1
+                for r in b["rows"]
+                if seq_ident.get(r.get("seq", 0), (None, None, None))[2] is None
             )
             if n_unmapped_here:
                 first_un = next(
-                    (seq_ident[r.get("seq", 0)][0] for r in b["rows"]
-                     if seq_ident.get(r.get("seq", 0), (None, None, None))[2] is None),
+                    (
+                        seq_ident[r.get("seq", 0)][0]
+                        for r in b["rows"]
+                        if seq_ident.get(r.get("seq", 0), (None, None, None))[2] is None
+                    ),
                     b["fund_name"],
                 )
                 unmapped_schemes[(first_un, b["isin"])] += n_unmapped_here
             mv = b.get("mv") or {}
             block_rows.append(
                 (
-                    cid, seq_ident.get(0, (None, None, None))[2], b["isin"], b["fund_name"],
-                    norm_folio(b["folio"]), mv.get("mv_date"), mv.get("market_value"),
-                    mv.get("nav"), mv.get("abs_ret_pct"), mv.get("xirr_pct"),
-                    len(b["rows"]), d["source_file"],
+                    cid,
+                    seq_ident.get(0, (None, None, None))[2],
+                    b["isin"],
+                    b["fund_name"],
+                    norm_folio(b["folio"]),
+                    mv.get("mv_date"),
+                    mv.get("market_value"),
+                    mv.get("nav"),
+                    mv.get("abs_ret_pct"),
+                    mv.get("xirr_pct"),
+                    len(b["rows"]),
+                    d["source_file"],
                 )
             )
             for r in b["rows"]:
-                sname, sfolio, ssid = seq_ident.get(r.get("seq", 0), (b["fund_name"], norm_folio(b["folio"]), None))
+                sname, sfolio, ssid = seq_ident.get(
+                    r.get("seq", 0), (b["fund_name"], norm_folio(b["folio"]), None)
+                )
                 txn_rows.append(
                     (
-                        cid, ssid, b["isin"], sname, sfolio, r["txn_date"], r["txn_type"],
-                        r["description_raw"], r["nav"], r["units"], r["amount"], r["stt"],
-                        r["stamp_duty"], r.get("tds"), r["balance_units"], r["is_debit"],
-                        d["source_file"], r["page"], r["approx"],
+                        cid,
+                        ssid,
+                        b["isin"],
+                        sname,
+                        sfolio,
+                        r["txn_date"],
+                        r["txn_type"],
+                        r["description_raw"],
+                        r["nav"],
+                        r["units"],
+                        r["amount"],
+                        r["stt"],
+                        r["stamp_duty"],
+                        r.get("tds"),
+                        r["balance_units"],
+                        r["is_debit"],
+                        d["source_file"],
+                        r["page"],
+                        r["approx"],
                     )
                 )
 
@@ -331,7 +420,9 @@ def main() -> int:
     )
     if unmapped_schemes:
         n_un = sum(unmapped_schemes.values())
-        print(f"  scheme mapping: {len(unmapped_schemes)} unmapped fund names ({n_un} rows, scheme_id null):")
+        print(
+            f"  scheme mapping: {len(unmapped_schemes)} unmapped fund names ({n_un} rows, scheme_id null):"
+        )
         for (name, isin), cnt in sorted(unmapped_schemes.items(), key=lambda kv: -kv[1])[:15]:
             print(f"    {cnt:6d}  {name}  [{isin}]")
 
@@ -358,7 +449,9 @@ def main() -> int:
            from snap s left join led l using (client_id, scheme_id, folio)"""
     )
     ok, no_ledger, total = cur.fetchone()
-    print(f"G3: {ok}/{total} holdings match ledger balance at txn_upto (no-ledger-block: {no_ledger})")
+    print(
+        f"G3: {ok}/{total} holdings match ledger balance at txn_upto (no-ledger-block: {no_ledger})"
+    )
     cur.execute(
         """with snap as (
              select h.client_id, h.scheme_id, regexp_replace(h.folio, '\\s*/\\s*', '/', 'g') folio,
@@ -384,7 +477,9 @@ def main() -> int:
     )
     g3_bad = cur.fetchall()
     for name, disp, folio, snap_bal, led_bal in g3_bad:
-        print(f"  G3 MISMATCH {name} | {disp[:45]} f{folio}: snapshot {snap_bal} vs ledger {led_bal}")
+        print(
+            f"  G3 MISMATCH {name} | {disp[:45]} f{folio}: snapshot {snap_bal} vs ledger {led_bal}"
+        )
 
     # ---- G4: per-holding flow columns vs ledger sums (same folio, same window) ----
     # The valuation's client-level flow summary covers only currently-open folios,
@@ -418,7 +513,9 @@ def main() -> int:
         join wealth.schemes sch on sch.scheme_id = snap.scheme_id
     """
     cur.execute(
-        "with base as (" + g4_sql_base + """)
+        "with base as ("
+        + g4_sql_base
+        + """)
         select count(*) total,
                count(*) filter (where abs(coalesce(ins,0) - coalesce(investments,0))
                                 <= greatest(100, 0.01 * coalesce(investments,0))) ins_ok,
@@ -434,7 +531,9 @@ def main() -> int:
         f"div-reinvest {reinv_ok}/{total4} within 1%"
     )
     cur.execute(
-        "with base as (" + g4_sql_base + """)
+        "with base as ("
+        + g4_sql_base
+        + """)
         select full_name, display_name, folio, investments, ins
         from base
         where abs(coalesce(ins,0) - coalesce(investments,0))
@@ -459,7 +558,9 @@ def main() -> int:
     # G3/G4 are cross-dataset trust reports: mismatches are listed loudly above but
     # the ledger stays loaded — it is the ground truth the snapshot is checked against.
     print(
-        "GATES:", "G1 PASS · G2 PASS ·", f"G3 {ok}/{total} ·",
+        "GATES:",
+        "G1 PASS · G2 PASS ·",
+        f"G3 {ok}/{total} ·",
         f"G4 ins {in_ok}/{total4} outs {out_ok}/{total4} reinv {reinv_ok}/{total4}",
     )
     return 0

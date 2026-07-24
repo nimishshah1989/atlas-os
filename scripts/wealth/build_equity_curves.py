@@ -30,6 +30,7 @@ engine_common.external_flows' XIRR convention where inflows are negative).
 
 Usage: set -a; source .env; set +a; .venv/bin/python scripts/wealth/build_equity_curves.py
 """
+
 from __future__ import annotations
 
 import sys
@@ -99,7 +100,7 @@ def compute_all(conn) -> tuple[list[dict], list[dict]]:
     nav_by_mstar = _bulk_navs(conn, schemes.mstar_id.unique().tolist())
     nav_lookup = {
         int(sid): NavLookup(nav_by_mstar[mid])
-        for sid, mid in zip(schemes.scheme_id, schemes.mstar_id)
+        for sid, mid in zip(schemes.scheme_id, schemes.mstar_id, strict=True)
         if mid in nav_by_mstar and len(nav_by_mstar[mid])
     }
 
@@ -154,12 +155,15 @@ def compute_all(conn) -> tuple[list[dict], list[dict]]:
                     value += u * nav
 
             net_flow = -float(flow_by_month.get((cid, month_end.to_period("M")), 0.0))
-            curve_rows.append(dict(
-                client_id=int(cid), month=month_end.date(),
-                value_rs=int(round(max(value, 0.0))),
-                net_flow_rs=int(round(net_flow)),
-                coverage_pct=cov_pct,
-            ))
+            curve_rows.append(
+                dict(
+                    client_id=int(cid),
+                    month=month_end.date(),
+                    value_rs=round(max(value, 0.0)),
+                    net_flow_rs=round(net_flow),
+                    coverage_pct=cov_pct,
+                )
+            )
 
         # -- story events, all traced to real wealth.transactions rows --
         cext = ext_by_client.get(cid)
@@ -167,30 +171,44 @@ def compute_all(conn) -> tuple[list[dict], list[dict]]:
             thresh = cext.amount.quantile(0.9)
             for r in cext.itertuples():
                 if r.txn_type in EXTERNAL_SELL and in_dd(pd.Timestamp(r.txn_date)):
-                    event_rows.append(dict(
-                        client_id=int(cid), event_date=r.txn_date, kind="panic_sell",
-                        amount_rs=int(round(r.amount)),
-                        note=f"{r.txn_type} of ~Rs {r.amount:,.0f} during a >10% NAV drawdown",
-                    ))
+                    event_rows.append(
+                        dict(
+                            client_id=int(cid),
+                            event_date=r.txn_date,
+                            kind="panic_sell",
+                            amount_rs=round(r.amount),
+                            note=f"{r.txn_type} of ~Rs {r.amount:,.0f} during a >10% NAV drawdown",
+                        )
+                    )
                 if thresh > 0 and r.amount >= thresh:
                     kind = "big_inflow" if r.txn_type in EXTERNAL_IN else "big_outflow"
-                    event_rows.append(dict(
-                        client_id=int(cid), event_date=r.txn_date, kind=kind,
-                        amount_rs=int(round(r.amount)),
-                        note=f"{r.txn_type} of Rs {r.amount:,.0f}, top decile for this client",
-                    ))
+                    event_rows.append(
+                        dict(
+                            client_id=int(cid),
+                            event_date=r.txn_date,
+                            kind=kind,
+                            amount_rs=round(r.amount),
+                            note=f"{r.txn_type} of Rs {r.amount:,.0f}, top decile for this client",
+                        )
+                    )
 
         sips = dated[dated.txn_type == "sip"]
-        for (_sid, fname, folio), sg in sips.groupby(["scheme_id", "fund_name", "folio"], dropna=False):
+        for (_sid, fname, folio), sg in sips.groupby(
+            ["scheme_id", "fund_name", "folio"], dropna=False
+        ):
             if sg.txn_date.dt.to_period("M").nunique() < 3:
                 continue
             last = sg.loc[sg.txn_date.idxmax()]
             if (ledger_end - last.txn_date).days > SIP_STOP_GAP_DAYS:
-                event_rows.append(dict(
-                    client_id=int(cid), event_date=last.txn_date.date(), kind="sip_stop",
-                    amount_rs=int(round(last.amount)) if pd.notna(last.amount) else 0,
-                    note=f"SIP into {fname} (folio {folio}) stopped; last payment {last.txn_date.date()}",
-                ))
+                event_rows.append(
+                    dict(
+                        client_id=int(cid),
+                        event_date=last.txn_date.date(),
+                        kind="sip_stop",
+                        amount_rs=round(last.amount) if pd.notna(last.amount) else 0,
+                        note=f"SIP into {fname} (folio {folio}) stopped; last payment {last.txn_date.date()}",
+                    )
+                )
 
     return curve_rows, event_rows
 
@@ -215,7 +233,10 @@ def main() -> int:
     execute_values(
         cur,
         "insert into wealth.client_curves (client_id, month, value_rs, net_flow_rs, coverage_pct) values %s",
-        [(r["client_id"], r["month"], r["value_rs"], r["net_flow_rs"], r["coverage_pct"]) for r in curve_rows],
+        [
+            (r["client_id"], r["month"], r["value_rs"], r["net_flow_rs"], r["coverage_pct"])
+            for r in curve_rows
+        ],
         page_size=2000,
     )
     cur.execute("revoke all on wealth.client_curves from anon, authenticated")
@@ -233,7 +254,10 @@ def main() -> int:
     execute_values(
         cur,
         "insert into wealth.client_curve_events (client_id, event_date, kind, amount_rs, note) values %s",
-        [(r["client_id"], r["event_date"], r["kind"], r["amount_rs"], r["note"]) for r in event_rows],
+        [
+            (r["client_id"], r["event_date"], r["kind"], r["amount_rs"], r["note"])
+            for r in event_rows
+        ],
         page_size=2000,
     )
     cur.execute("create index on wealth.client_curve_events (client_id)")

@@ -1,12 +1,13 @@
 """Real-data tests for the household roll-up + succession-flag engine
 (Rule #0: no fixtures — every assertion runs against the live wealth.* tables).
 Client ids are resolved by name via SQL in the test itself — never hardcoded."""
+
 import sys
 
 sys.path.insert(0, "scripts/wealth")
 
-from build_household import compute_all  # noqa: E402
-from engine_common import connect  # noqa: E402
+from build_household import compute_all
+from engine_common import connect
 
 
 def _rows():
@@ -44,7 +45,9 @@ def test_zinzuvadia_cluster_resolves_to_one_household_with_ge_3_members():
     cur = conn.cursor()
     cur.execute("select client_id from wealth.clients where full_name ilike '%zinzuvadia%'")
     ids = {r[0] for r in cur.fetchall()}
-    assert len(ids) >= 3, "expected the known Zinzuvadia cluster (>=3 real clients) in wealth.clients"
+    assert len(ids) >= 3, (
+        "expected the known Zinzuvadia cluster (>=3 real clients) in wealth.clients"
+    )
 
     by_id = {r["client_id"]: r for r in rows}
     household_ids = {by_id[i]["household_id"] for i in ids if i in by_id}
@@ -72,7 +75,9 @@ def test_succession_flag_domain():
     _, rows = _rows()
     domain = {"transmission_seen", "single_holder_concentrated", "none"}
     for r in rows:
-        assert r["succession_flag"] in domain, f"client {r['client_id']}: bad flag {r['succession_flag']!r}"
+        assert r["succession_flag"] in domain, (
+            f"client {r['client_id']}: bad flag {r['succession_flag']!r}"
+        )
 
 
 def test_household_mv_matches_ledger_blocks_sum():

@@ -1,11 +1,12 @@
-import os, sys
+import sys
 
 
 def test_headroom_and_candidates_real_client():
     sys.path.insert(0, "scripts/wealth")
-    from build_tax_harvest import compute_client, current_fy_start
     import build_tax_harvest
     import engine_common
+    from build_tax_harvest import compute_client
+
     conn = engine_common.connect()
     cur = conn.cursor()
     cur.execute("""select l.client_id from wealth.lots l join wealth.schemes s using (scheme_id)
@@ -14,6 +15,7 @@ def test_headroom_and_candidates_real_client():
     result = cur.fetchone()
     if not result:
         import pytest
+
         pytest.skip("No client found with open equity LTCG lot with unrealized_gain > 50000")
     cid = result[0]
     r = compute_client(conn, cid)

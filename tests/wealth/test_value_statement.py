@@ -1,11 +1,12 @@
 """Real-data tests for the per-client value statement engine (Rule #0: no
 fixtures — every assertion runs against the live wealth.* tables)."""
+
 import sys
 
 sys.path.insert(0, "scripts/wealth")
 
-from build_value_statement import compute_all  # noqa: E402
-from engine_common import connect  # noqa: E402
+from build_value_statement import compute_all
+from engine_common import connect
 
 
 def _rows():
@@ -24,7 +25,9 @@ def test_one_row_per_client():
 def test_sip_discipline_positive_somewhere():
     _, rows = _rows()
     some_sip = [r for r in rows if r["sip_discipline_rs"] > 0]
-    assert some_sip, "book has thousands of SIP txns inside drawdown windows; discipline value must exist"
+    assert some_sip, (
+        "book has thousands of SIP txns inside drawdown windows; discipline value must exist"
+    )
 
 
 def test_five_components_nonnegative_advice_outcome_signed():
@@ -32,13 +35,19 @@ def test_five_components_nonnegative_advice_outcome_signed():
     signed alpha — a value statement must show underperforming switches, not
     hide them). The other five are spec-mandated floors."""
     _, rows = _rows()
-    floored_keys = ("sip_discipline_rs", "staying_power_rs",
-                    "fee_save_yr_rs", "tax_headroom_rs", "coaching_opportunity_rs")
+    floored_keys = (
+        "sip_discipline_rs",
+        "staying_power_rs",
+        "fee_save_yr_rs",
+        "tax_headroom_rs",
+        "coaching_opportunity_rs",
+    )
     for r in rows:
         for k in floored_keys:
             assert r[k] >= 0, f"client {r['client_id']}: {k}={r[k]} < 0"
-    assert any(r["advice_outcome_rs"] < 0 for r in rows), \
+    assert any(r["advice_outcome_rs"] < 0 for r in rows), (
         "18 clients have net-negative alpha_1y_rs; advice_outcome_rs must surface it, not floor it"
+    )
 
 
 def test_advice_outcome_matches_independent_sql_positive_client():

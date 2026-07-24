@@ -16,6 +16,7 @@ Not committed — lives outside the repo. Gate it with validate_wealth_app.py.
 
 Usage: set -a; source .env; set +a; .venv/bin/python scripts/wealth/build_capability_app.py
 """
+
 from __future__ import annotations
 
 import json
@@ -27,7 +28,6 @@ from collections import defaultdict
 from pathlib import Path
 
 import pandas as pd
-
 from build_audit_packs import SECTION_NAMES
 from build_segments import SEGMENTS
 from engine_common import connect
@@ -55,13 +55,14 @@ def lcr_py(n: float) -> str:
     """₹ in L/cr, en-IN style (mirror of the JS lcr for build-time story text)."""
     a = abs(n)
     if a >= 1e7:
-        return f"₹{n/1e7:.2f} cr"
+        return f"₹{n / 1e7:.2f} cr"
     if a >= 1e5:
-        return f"₹{n/1e5:.2f} L"
+        return f"₹{n / 1e5:.2f} L"
     return f"₹{round(n):,}"
 
 
 # ----------------------------------------------------------------- fetch --
+
 
 def _degarble(s):
     """Same XIRR->plain-language swap build_audit_packs applies to flags/
@@ -84,7 +85,12 @@ def _hist(values, n_bins=10):
     for v in vals:
         counts[min(int((v - lo) / width), n_bins - 1)] += 1
     edges = [round(lo + i * width, 2) for i in range(n_bins + 1)]
-    return {"edges": edges, "counts": counts, "median": round(statistics.median(vals), 2), "n": len(vals)}
+    return {
+        "edges": edges,
+        "counts": counts,
+        "median": round(statistics.median(vals), 2),
+        "n": len(vals),
+    }
 
 
 def _widen_clients(conn, clients: dict) -> dict:
@@ -114,10 +120,16 @@ def _widen_clients(conn, clients: dict) -> dict:
     """)
     hold_by: dict[int, list] = defaultdict(list)
     for r in hold.itertuples():
-        hold_by[r.client_id].append({
-            "scheme_id": int(r.scheme_id), "fund": r.fund, "asset_class": r.asset_class,
-            "mv": _f(r.market_value), "verdict": r.verdict, "quality": _f(r.composite),
-        })
+        hold_by[r.client_id].append(
+            {
+                "scheme_id": int(r.scheme_id),
+                "fund": r.fund,
+                "asset_class": r.asset_class,
+                "mv": _f(r.market_value),
+                "verdict": r.verdict,
+                "quality": _f(r.composite),
+            }
+        )
 
     # fund_performance is embedded ONCE, top-level, keyed by scheme_id (string,
     # so it survives JSON) — not per client. Each fund is held by many clients;
@@ -129,12 +141,15 @@ def _widen_clients(conn, clients: dict) -> dict:
                      benchmark_note, verdict from wealth.fund_performance""")
     fp_map = {
         str(int(r.scheme_id)): {
-            "roll_3y_pct": _f(r.roll_3y_pct), "roll_5y_pct": _f(r.roll_5y_pct),
-            "dn_capture_pct": _f(r.dn_capture_pct), "best_year_stripped_pct": _f(r.best_year_stripped_pct),
+            "roll_3y_pct": _f(r.roll_3y_pct),
+            "roll_5y_pct": _f(r.roll_5y_pct),
+            "dn_capture_pct": _f(r.dn_capture_pct),
+            "best_year_stripped_pct": _f(r.best_year_stripped_pct),
             "full_period_pct": _f(r.full_period_pct),
             "beat_count": None if pd.isna(r.beat_count) else int(r.beat_count),
             "windows": None if pd.isna(r.windows) else int(r.windows),
-            "benchmark_note": r.benchmark_note, "verdict": r.verdict,
+            "benchmark_note": r.benchmark_note,
+            "verdict": r.verdict,
         }
         for r in fp.itertuples()
     }
@@ -153,10 +168,15 @@ def _widen_clients(conn, clients: dict) -> dict:
               from wealth.client_flags order by client_id, est_value desc nulls last""")
     fl_by: dict[int, list] = defaultdict(list)
     for r in fl.itertuples():
-        fl_by[r.client_id].append({
-            "rule": _degarble(r.rule), "evidence": _degarble(r.evidence),
-            "action": _degarble(r.action), "est_value": _f(r.est_value), "basis": r.basis,
-        })
+        fl_by[r.client_id].append(
+            {
+                "rule": _degarble(r.rule),
+                "evidence": _degarble(r.evidence),
+                "action": _degarble(r.action),
+                "est_value": _f(r.est_value),
+                "basis": r.basis,
+            }
+        )
 
     ch = q("""select client_id, mv, months_since_inflow, sip_stop_share, out12_share,
                      disengagement_score, clv_aum_l_years, computed_asof
@@ -172,9 +192,14 @@ def _widen_clients(conn, clients: dict) -> dict:
     """)
     se_by: dict[int, list] = defaultdict(list)
     for r in se.itertuples():
-        se_by[r.client_id].append({
-            "name": r.holding_name, "isin": r.isin, "exposure": _f(r.exposure), "bucket": r.bucket,
-        })
+        se_by[r.client_id].append(
+            {
+                "name": r.holding_name,
+                "isin": r.isin,
+                "exposure": _f(r.exposure),
+                "bucket": r.bucket,
+            }
+        )
 
     sg = q("select client_id, segment, reason, whatif_rs, traits from wealth.client_segments")
     sg_by = {int(r.client_id): r for r in sg.itertuples()}
@@ -184,8 +209,10 @@ def _widen_clients(conn, clients: dict) -> dict:
     # byte-gate lever 2: net_flow_rs dropped from the embed (still <6MB target
     # needed it) — coverage_pct + events carry the story, net_flow_rs stays a
     # DB-only field for now.
-    cv = q("select client_id, month, value_rs, coverage_pct "
-           "from wealth.client_curves order by client_id, month")
+    cv = q(
+        "select client_id, month, value_rs, coverage_pct "
+        "from wealth.client_curves order by client_id, month"
+    )
     curve_by: dict[int, dict] = {}
     for cid, g in cv.groupby("client_id"):
         curve_by[int(cid)] = {
@@ -198,8 +225,10 @@ def _widen_clients(conn, clients: dict) -> dict:
     # kind + amount + date already carry every story marker the client-360
     # curve needs (panic dot / SIP-stop marker / big-flow tick); the sentence
     # is reconstructable client-side from `kind`, no DB prose required.
-    ev = q("select client_id, event_date, kind, amount_rs "
-           "from wealth.client_curve_events order by client_id, event_date")
+    ev = q(
+        "select client_id, event_date, kind, amount_rs "
+        "from wealth.client_curve_events order by client_id, event_date"
+    )
     for cid, g in ev.groupby("client_id"):
         if int(cid) in curve_by:
             curve_by[int(cid)]["events"] = {
@@ -215,36 +244,64 @@ def _widen_clients(conn, clients: dict) -> dict:
         cid = int(cid_str)
         c["holdings"] = hold_by.get(cid, [])
         r = sc_by.get(cid)
-        c["scorecard"] = None if r is None else {
-            "grade": r.outcome_grade, "needs_attention": bool(r.needs_attention),
-            "reasons": _degarble(r.attention_reasons), "laggard_pct": _f(r.laggard_pct),
-            "wcomp": _f(r.wcomp), "mv_total": _f(r.mv_total), "equity_pct": _f(r.equity_pct),
-            "top10_stock_pct": _f(r.top10_stock_pct), "financials_pct": _f(r.financials_pct),
-            "dup_cats": None if pd.isna(r.dup_cats) else int(r.dup_cats),
-            "side_pockets": None if pd.isna(r.side_pockets) else int(r.side_pockets),
-            "dust_lines": None if pd.isna(r.dust_lines) else int(r.dust_lines),
-            "n_lines": None if pd.isna(r.n_lines) else int(r.n_lines),
-        }
+        c["scorecard"] = (
+            None
+            if r is None
+            else {
+                "grade": r.outcome_grade,
+                "needs_attention": bool(r.needs_attention),
+                "reasons": _degarble(r.attention_reasons),
+                "laggard_pct": _f(r.laggard_pct),
+                "wcomp": _f(r.wcomp),
+                "mv_total": _f(r.mv_total),
+                "equity_pct": _f(r.equity_pct),
+                "top10_stock_pct": _f(r.top10_stock_pct),
+                "financials_pct": _f(r.financials_pct),
+                "dup_cats": None if pd.isna(r.dup_cats) else int(r.dup_cats),
+                "side_pockets": None if pd.isna(r.side_pockets) else int(r.side_pockets),
+                "dust_lines": None if pd.isna(r.dust_lines) else int(r.dust_lines),
+                "n_lines": None if pd.isna(r.n_lines) else int(r.n_lines),
+            }
+        )
         c["flags"] = fl_by.get(cid, [])
         r = ch_by.get(cid)
-        c["churn"] = None if r is None else {
-            "mv": _f(r.mv), "months_since_inflow": _f(r.months_since_inflow),
-            "sip_stop_share": _f(r.sip_stop_share), "out12_share": _f(r.out12_share),
-            "score": _f(r.disengagement_score), "clv_l_years": _f(r.clv_aum_l_years),
-            "asof": r.computed_asof.isoformat(),
-        }
+        c["churn"] = (
+            None
+            if r is None
+            else {
+                "mv": _f(r.mv),
+                "months_since_inflow": _f(r.months_since_inflow),
+                "sip_stop_share": _f(r.sip_stop_share),
+                "out12_share": _f(r.out12_share),
+                "score": _f(r.disengagement_score),
+                "clv_l_years": _f(r.clv_aum_l_years),
+                "asof": r.computed_asof.isoformat(),
+            }
+        )
         c["stock_exposure"] = se_by.get(cid, [])
         r = sg_by.get(cid)
-        c["segment"] = None if r is None else {
-            "segment": r.segment, "reason": r.reason, "whatif_rs": _f(r.whatif_rs), "traits": r.traits,
-        }
+        c["segment"] = (
+            None
+            if r is None
+            else {
+                "segment": r.segment,
+                "reason": r.reason,
+                "whatif_rs": _f(r.whatif_rs),
+                "traits": r.traits,
+            }
+        )
         c["curve"] = curve_by.get(cid)
         r = cl_by.get(cid)
-        c["cut_list"] = None if r is None else {
-            "keep": r.keep, "cut": r.cut,
-            "min_fund_count": None if pd.isna(r.min_fund_count) else int(r.min_fund_count),
-            "note": r.note,
-        }
+        c["cut_list"] = (
+            None
+            if r is None
+            else {
+                "keep": r.keep,
+                "cut": r.cut,
+                "min_fund_count": None if pd.isna(r.min_fund_count) else int(r.min_fund_count),
+                "note": r.note,
+            }
+        )
 
     return fp_map
 
@@ -265,17 +322,24 @@ def _build_cohort(conn, book: dict) -> dict:
                      sum(coaching_opportunity_rs) coaching
               from wealth.value_statements""").iloc[0]
     headline = {
-        "book_cr": book["mv_cr"], "clients": book["clients"], "families": book["families"],
+        "book_cr": book["mv_cr"],
+        "clients": book["clients"],
+        "families": book["families"],
         "realized_cr": _f(float(vs.realized) / 1e7) if vs.realized is not None else None,
         "coaching_cr": _f(float(vs.coaching) / 1e7) if vs.coaching is not None else None,
     }
 
     # ---- segment bar: counts sum to book['clients'], ₹ what-if per segment ----
-    seg = q("select segment, count(*) n, sum(whatif_rs) whatif from wealth.client_segments group by 1")
+    seg = q(
+        "select segment, count(*) n, sum(whatif_rs) whatif from wealth.client_segments group by 1"
+    )
     seg_by = {r.segment: r for r in seg.itertuples()}
     segment_bar = [
-        {"segment": s, "count": int(seg_by[s].n) if s in seg_by else 0,
-         "whatif_cr": _f(float(seg_by[s].whatif or 0) / 1e7) if s in seg_by else 0.0}
+        {
+            "segment": s,
+            "count": int(seg_by[s].n) if s in seg_by else 0,
+            "whatif_cr": _f(float(seg_by[s].whatif or 0) / 1e7) if s in seg_by else 0.0,
+        }
         for s in SEGMENTS
     ]
 
@@ -323,8 +387,10 @@ def _build_cohort(conn, book: dict) -> dict:
 
     # ---- behaviour-cost waterfall: panic + dividend leak + dead SIPs -> total
     # (same >=0-only convention as build_segments.whatif_rs) ----
-    beh = q("select sum(greatest(panic_loss_out_rs,0)) panic, "
-            "sum(greatest(div_leak_rs,0)) div_leak from wealth.client_behaviour").iloc[0]
+    beh = q(
+        "select sum(greatest(panic_loss_out_rs,0)) panic, "
+        "sum(greatest(div_leak_rs,0)) div_leak from wealth.client_behaviour"
+    ).iloc[0]
     sipv = q("select sum(greatest(cf_sip_alive_rs,0)) sip from wealth.counterfactuals").iloc[0]
     panic_cr = float(beh.panic or 0) / 1e7
     div_cr = float(beh.div_leak or 0) / 1e7
@@ -338,16 +404,22 @@ def _build_cohort(conn, book: dict) -> dict:
 
     # ---- churn x book scatter (top-right = valuable AND at risk) ----
     cr = q("select client_id, disengagement_score, mv from wealth.client_churn_risk")
-    seg_of = {int(r.client_id): r.segment for r in
-              q("select client_id, segment from wealth.client_segments").itertuples()}
+    seg_of = {
+        int(r.client_id): r.segment
+        for r in q("select client_id, segment from wealth.client_segments").itertuples()
+    }
     # medians must be computed over the SAME both-non-null population as `points`,
     # not two independently-dropna'd full columns, else the quadrant split is off.
     both = [r for r in cr.itertuples() if r.disengagement_score is not None and r.mv is not None]
     scores = [float(r.disengagement_score) for r in both]
     mvs = [float(r.mv) for r in both]
     points = [
-        {"client_id": int(r.client_id), "churn_score": _f(r.disengagement_score),
-         "book_cr": _f(float(r.mv) / 1e7), "segment": seg_of.get(int(r.client_id))}
+        {
+            "client_id": int(r.client_id),
+            "churn_score": _f(r.disengagement_score),
+            "book_cr": _f(float(r.mv) / 1e7),
+            "segment": seg_of.get(int(r.client_id)),
+        }
         for r in both
     ]
     scatter = {
@@ -357,11 +429,19 @@ def _build_cohort(conn, book: dict) -> dict:
     }
 
     # ---- call-list funnel: segments -> armed -> on a list -> tonight's 20 ----
-    armed_n = int(q("select count(*) n from wealth.client_segments where segment = any(%(segs)s)",
-                     params={"segs": list(ARMED_SEGMENTS)}).n.iloc[0])
+    armed_n = int(
+        q(
+            "select count(*) n from wealth.client_segments where segment = any(%(segs)s)",
+            params={"segs": list(ARMED_SEGMENTS)},
+        ).n.iloc[0]
+    )
     on_list_n = int(q("select count(distinct client_id) n from wealth.call_lists").n.iloc[0])
-    tonight_n = len(q("select client_id, max(score) mx from wealth.call_lists "
-                       "group by 1 order by mx desc nulls last limit 20"))
+    tonight_n = len(
+        q(
+            "select client_id, max(score) mx from wealth.call_lists "
+            "group by 1 order by mx desc nulls last limit 20"
+        )
+    )
     funnel = [
         {"stage": "All clients", "n": book["clients"]},
         {"stage": "In an armed segment", "n": armed_n},
@@ -370,8 +450,12 @@ def _build_cohort(conn, book: dict) -> dict:
     ]
 
     return {
-        "headline": headline, "segment_bar": segment_bar, "histograms": histograms,
-        "waterfall": waterfall, "scatter": scatter, "funnel": funnel,
+        "headline": headline,
+        "segment_bar": segment_bar,
+        "histograms": histograms,
+        "waterfall": waterfall,
+        "scatter": scatter,
+        "funnel": funnel,
     }
 
 
@@ -385,27 +469,40 @@ def _build_guide(conn) -> dict:
     def q(sql):
         return pd.read_sql(sql, conn)
 
-    ov = q("select count(*) n, percentile_cont(0.5) within group (order by eff_bets) med "
-           "from wealth.client_overlap").iloc[0]
-    heavy = q("select count(distinct client_id) n from wealth.client_fund_overlap "
-              "where overlap_pct >= 20").iloc[0]
+    ov = q(
+        "select count(*) n, percentile_cont(0.5) within group (order by eff_bets) med "
+        "from wealth.client_overlap"
+    ).iloc[0]
+    heavy = q(
+        "select count(distinct client_id) n from wealth.client_fund_overlap where overlap_pct >= 20"
+    ).iloc[0]
     lbl = q("select verdict, count(*) n from wealth.fund_label_check group by 1")
     lbl_by = {r.verdict: int(r.n) for r in lbl.itertuples()}
-    tax = q("select round(sum(tax_saved_if_harvested)/1e5,1) l, "
-            "count(*) filter (where headroom > 0) n from wealth.tax_harvest").iloc[0]
+    tax = q(
+        "select round(sum(tax_saved_if_harvested)/1e5,1) l, "
+        "count(*) filter (where headroom > 0) n from wealth.tax_harvest"
+    ).iloc[0]
     hh = q("""select count(distinct household_id) hh,
                      count(*) filter (where succession_flag = 'transmission_seen') trans,
                      count(*) filter (where succession_flag = 'single_holder_concentrated') conc
               from wealth.households""").iloc[0]
-    beh = q("select count(*) filter (where sip_stops_in_drawdown > 0) n, count(*) tot "
-            "from wealth.client_behaviour").iloc[0]
-    sc = q("select count(*) filter (where needs_attention) n, count(*) tot "
-           "from wealth.client_scorecard").iloc[0]
+    beh = q(
+        "select count(*) filter (where sip_stops_in_drawdown > 0) n, count(*) tot "
+        "from wealth.client_behaviour"
+    ).iloc[0]
+    sc = q(
+        "select count(*) filter (where needs_attention) n, count(*) tot "
+        "from wealth.client_scorecard"
+    ).iloc[0]
     fp = q("select verdict, count(*) n from wealth.fund_performance group by 1")
     fp_by = {r.verdict: int(r.n) for r in fp.itertuples()}
-    cut = q("select count(*) tot, count(*) filter (where cut is not null and cut::text <> '[]') n "
-            "from wealth.cut_list").iloc[0]
-    cv = q("select count(distinct client_id) clients, count(*) points from wealth.client_curves").iloc[0]
+    cut = q(
+        "select count(*) tot, count(*) filter (where cut is not null and cut::text <> '[]') n "
+        "from wealth.cut_list"
+    ).iloc[0]
+    cv = q(
+        "select count(distinct client_id) clients, count(*) points from wealth.client_curves"
+    ).iloc[0]
     # coverage_pct is one honest value per client (share of current book value
     # traced through mapped-fund NAV) — dedup to one row/client before the
     # median, same population build_equity_curves.py itself prints at build time.
@@ -419,19 +516,34 @@ def _build_guide(conn) -> dict:
               from wealth.client_curve_events""").iloc[0]
 
     return {
-        "overlap_clients": int(ov.n), "overlap_med_bets": _f(ov.med), "overlap_heavy_clients": int(heavy.n),
-        "label_total": sum(lbl_by.values()), "label_mismatch": lbl_by.get("mismatch", 0),
+        "overlap_clients": int(ov.n),
+        "overlap_med_bets": _f(ov.med),
+        "overlap_heavy_clients": int(heavy.n),
+        "label_total": sum(lbl_by.values()),
+        "label_mismatch": lbl_by.get("mismatch", 0),
         "label_no_data": lbl_by.get("no_data", 0),
-        "tax_saved_l": _f(tax.l), "tax_clients": int(tax.n),
-        "hh_count": int(hh.hh), "hh_transmission": int(hh.trans), "hh_concentrated": int(hh.conc),
-        "beh_sip_in_drawdown": int(beh.n), "beh_total": int(beh.tot),
-        "sc_attention": int(sc.n), "sc_total": int(sc.tot),
-        "fp_scored": fp_by.get("scored", 0), "fp_insufficient": fp_by.get("insufficient_history", 0),
+        "tax_saved_l": _f(tax.l),
+        "tax_clients": int(tax.n),
+        "hh_count": int(hh.hh),
+        "hh_transmission": int(hh.trans),
+        "hh_concentrated": int(hh.conc),
+        "beh_sip_in_drawdown": int(beh.n),
+        "beh_total": int(beh.tot),
+        "sc_attention": int(sc.n),
+        "sc_total": int(sc.tot),
+        "fp_scored": fp_by.get("scored", 0),
+        "fp_insufficient": fp_by.get("insufficient_history", 0),
         "fp_total": sum(fp_by.values()),
-        "cut_clients": int(cut.n), "cut_total": int(cut.tot),
-        "curve_clients": int(cv.clients), "curve_points": int(cv.points),
-        "curve_panic": int(ev.panic), "curve_sipstop": int(ev.sipstop), "curve_total_events": int(ev.tot),
-        "curve_cov_med": _f(cvg.med), "curve_cov_below70": int(cvg.below70), "curve_cov_tot": int(cvg.tot),
+        "cut_clients": int(cut.n),
+        "cut_total": int(cut.tot),
+        "curve_clients": int(cv.clients),
+        "curve_points": int(cv.points),
+        "curve_panic": int(ev.panic),
+        "curve_sipstop": int(ev.sipstop),
+        "curve_total_events": int(ev.tot),
+        "curve_cov_med": _f(cvg.med),
+        "curve_cov_below70": int(cvg.below70),
+        "curve_cov_tot": int(cvg.tot),
     }
 
 
@@ -447,26 +559,44 @@ def fetch(conn) -> dict:
                (select count(*) from wealth.clients) clients,
                (select extract(year from min(txn_date))::int from wealth.transactions) since
     """).iloc[0]
-    mv_cr = _f(q("""select round(sum(mv_total)/1e7,1) v from (
+    mv_cr = _f(
+        q("""select round(sum(mv_total)/1e7,1) v from (
         select distinct on (client_id) mv_total from wealth.client_reports
-        order by client_id, as_on_date desc) t""").v.iloc[0])
-    book = {"families": int(book_row.families), "clients": int(book_row.clients),
-            "mv_cr": mv_cr, "since": int(book_row.since)}
+        order by client_id, as_on_date desc) t""").v.iloc[0]
+    )
+    book = {
+        "families": int(book_row.families),
+        "clients": int(book_row.clients),
+        "mv_cr": mv_cr,
+        "since": int(book_row.since),
+    }
 
     # ch2 — typical yearly growth + a ₹10L growth strip
-    growth = _f(q("""select percentile_cont(0.5) within group (order by xirr_client) m
-                     from wealth.client_benchmark where xirr_client is not null""").m.iloc[0])
+    growth = _f(
+        q("""select percentile_cont(0.5) within group (order by xirr_client) m
+                     from wealth.client_benchmark where xirr_client is not null""").m.iloc[0]
+    )
     r = (growth or 0) / 100.0
     strip = [{"year": y, "value": round(1_000_000 * (1 + r) ** y)} for y in range(0, 11)]
 
     # ch3 — share of clients ahead of the index fund (never say "alpha")
-    pct_ahead = int(round(_f(q("""select 100.0*sum(case when alpha>0 then 1 else 0 end)/count(*) p
-        from wealth.client_benchmark where alpha is not null""").p.iloc[0])))
+    pct_ahead = round(
+        _f(
+            q("""select 100.0*sum(case when alpha>0 then 1 else 0 end)/count(*) p
+        from wealth.client_benchmark where alpha is not null""").p.iloc[0]
+        )
+    )
 
     # ch4 — what habits cost / protected, each card opens a real call list
-    stay = _f(q("select round(sum(staying_power_rs)/1e7,1) v from wealth.value_statements").v.iloc[0])
-    sip_cost = _f(q("select round(sum(cf_sip_alive_rs)/1e7,1) v from wealth.counterfactuals").v.iloc[0])
-    div_cost = _f(q("select round(sum(div_leak_rs)/1e7,1) v from wealth.client_behaviour").v.iloc[0])
+    stay = _f(
+        q("select round(sum(staying_power_rs)/1e7,1) v from wealth.value_statements").v.iloc[0]
+    )
+    sip_cost = _f(
+        q("select round(sum(cf_sip_alive_rs)/1e7,1) v from wealth.counterfactuals").v.iloc[0]
+    )
+    div_cost = _f(
+        q("select round(sum(div_leak_rs)/1e7,1) v from wealth.client_behaviour").v.iloc[0]
+    )
 
     def top_call(list_type):
         rows = q(f"""select client_id, reason from wealth.call_lists
@@ -480,41 +610,77 @@ def fetch(conn) -> dict:
     # number, story and click-through all agree.
     ch4 = []
     for key, title, amt, verb in [
-        ("crash_sellers", "Held through the crashes", stay,
-         "protected by clients who stayed invested through every major fall"),
-        ("sip_fragile", "Stopped SIPs", sip_cost,
-         "the running total left behind when steady monthly investing was switched off"),
+        (
+            "crash_sellers",
+            "Held through the crashes",
+            stay,
+            "protected by clients who stayed invested through every major fall",
+        ),
+        (
+            "sip_fragile",
+            "Stopped SIPs",
+            sip_cost,
+            "the running total left behind when steady monthly investing was switched off",
+        ),
     ]:
         cid, reason = top_call(key)
-        ch4.append({"href": f"calls:{key}", "title": title, "amount_cr": amt,
-                    "subtitle": verb, "story": reason, "sample_ids": [cid] if cid else []})
+        ch4.append(
+            {
+                "href": f"calls:{key}",
+                "title": title,
+                "amount_cr": amt,
+                "subtitle": verb,
+                "story": reason,
+                "sample_ids": [cid] if cid else [],
+            }
+        )
 
     dl = q("""select b.client_id, b.div_leak_rs, c.full_name
               from wealth.client_behaviour b join wealth.clients c on c.client_id = b.client_id
               where b.div_leak_rs > 0 order by b.div_leak_rs desc limit 1""")
     dl_id = int(dl.client_id.iloc[0]) if not dl.empty else None
-    dl_story = (f"One client alone has taken about {lcr_py(float(dl.div_leak_rs.iloc[0]))} of "
-                f"dividends as cash instead of letting it compound — open their page to see it."
-                if not dl.empty else None)
-    ch4.append({"href": f"client:{dl_id}" if dl_id else "calls:disengaged",
-                "title": "Dividends taken as cash", "amount_cr": div_cost,
-                "subtitle": "paid out and spent instead of being reinvested to compound",
-                "story": dl_story, "sample_ids": [dl_id] if dl_id else []})
+    dl_story = (
+        f"One client alone has taken about {lcr_py(float(dl.div_leak_rs.iloc[0]))} of "
+        f"dividends as cash instead of letting it compound — open their page to see it."
+        if not dl.empty
+        else None
+    )
+    ch4.append(
+        {
+            "href": f"client:{dl_id}" if dl_id else "calls:disengaged",
+            "title": "Dividends taken as cash",
+            "amount_cr": div_cost,
+            "subtitle": "paid out and spent instead of being reinvested to compound",
+            "story": dl_story,
+            "sample_ids": [dl_id] if dl_id else [],
+        }
+    )
 
     # ch5 — our advice, marked honestly
     ledg = q("""select count(*) n, sum(case when alpha_1y_pp>0 then 1 else 0 end) ahead
                 from wealth.advice_ledger where alpha_1y_pp is not null""").iloc[0]
-    waves = q("select count(*) n, sum(n_clients) fam, round(sum(inflow_rs)/1e7,1) cr from wealth.advice_waves").iloc[0]
+    waves = q(
+        "select count(*) n, sum(n_clients) fam, round(sum(inflow_rs)/1e7,1) cr from wealth.advice_waves"
+    ).iloc[0]
     wave_list = q("""select scheme_name, window_start, window_end, n_clients,
                             fwd1y_scheme, fwd1y_bench from wealth.advice_waves
                      where fwd1y_scheme is not null order by inflow_rs desc limit 12""")
     ch5 = {
-        "switch_ahead": int(ledg.ahead), "switch_total": int(ledg.n),
-        "waves": int(waves.n), "families_nudged": int(waves.fam),
+        "switch_ahead": int(ledg.ahead),
+        "switch_total": int(ledg.n),
+        "waves": int(waves.n),
+        "families_nudged": int(waves.fam),
         "wave_rows": [
-            {"fund": w.scheme_name, "from": str(w.window_start), "to": str(w.window_end),
-             "n": int(w.n_clients), "scheme": _f(w.fwd1y_scheme), "bench": _f(w.fwd1y_bench)}
-            for w in wave_list.itertuples()],
+            {
+                "fund": w.scheme_name,
+                "from": str(w.window_start),
+                "to": str(w.window_end),
+                "n": int(w.n_clients),
+                "scheme": _f(w.fwd1y_scheme),
+                "bench": _f(w.fwd1y_bench),
+            }
+            for w in wave_list.itertuples()
+        ],
     }
 
     chapters = {
@@ -537,17 +703,31 @@ def fetch(conn) -> dict:
     call_lists = {}
     for lt, g in calls_df.groupby("list_type"):
         call_lists[lt] = [
-            {"id": str(row.client_id), "name": row.full_name, "book_rs": _f(row.mv_total),
-             "reason": row.reason, "script": row.script}
-            for row in g.itertuples()]
+            {
+                "id": str(row.client_id),
+                "name": row.full_name,
+                "book_rs": _f(row.mv_total),
+                "reason": row.reason,
+                "script": row.script,
+            }
+            for row in g.itertuples()
+        ]
 
     # ---- per-client packs + prose + chips ----
     names = q("select client_id, full_name from wealth.clients")
-    name_by = dict(zip(names.client_id, names.full_name))
-    hh = q("select client_id, household_name, members, household_mv, succession_flag from wealth.households")
-    hh_by = {r.client_id: {"name": r.household_name, "members": int(r.members),
-                            "mv": _f(r.household_mv), "succession": r.succession_flag}
-             for r in hh.itertuples()}
+    name_by = dict(zip(names.client_id, names.full_name, strict=True))
+    hh = q(
+        "select client_id, household_name, members, household_mv, succession_flag from wealth.households"
+    )
+    hh_by = {
+        r.client_id: {
+            "name": r.household_name,
+            "members": int(r.members),
+            "mv": _f(r.household_mv),
+            "succession": r.succession_flag,
+        }
+        for r in hh.itertuples()
+    }
     beh = q("""select client_id, panic_share, sip_streams, sip_active, div_leak_rs,
                       chase_hot_share from wealth.client_behaviour""")
     beh_by = {r.client_id: r for r in beh.itertuples()}
@@ -559,14 +739,26 @@ def fetch(conn) -> dict:
             return ["Not enough history yet"]
         out = []
         ps = float(b.panic_share or 0)
-        out.append("Sells in market falls" if ps >= 0.25
-                   else "Sometimes sells in falls" if ps > 0 else "Holds through falls")
+        out.append(
+            "Sells in market falls"
+            if ps >= 0.25
+            else "Sometimes sells in falls"
+            if ps > 0
+            else "Holds through falls"
+        )
         streams, active = int(b.sip_streams or 0), int(b.sip_active or 0)
-        out.append("No active SIPs" if streams == 0
-                   else "Keeps every SIP running" if active >= streams
-                   else "Some SIPs stopped" if active > 0 else "All SIPs stopped")
-        out.append("Takes dividends as cash" if float(b.div_leak_rs or 0) > 0
-                   else "Reinvests dividends")
+        out.append(
+            "No active SIPs"
+            if streams == 0
+            else "Keeps every SIP running"
+            if active >= streams
+            else "Some SIPs stopped"
+            if active > 0
+            else "All SIPs stopped"
+        )
+        out.append(
+            "Takes dividends as cash" if float(b.div_leak_rs or 0) > 0 else "Reinvests dividends"
+        )
         return out
 
     clients = {}
@@ -580,7 +772,7 @@ def fetch(conn) -> dict:
             "name": name_by.get(cid),
             "household": hh_by.get(cid),
             "chips": chips(cid),
-            "pack": pack,             # already strict-JSON clean (build_audit_packs)
+            "pack": pack,  # already strict-JSON clean (build_audit_packs)
             "prose": row.prose or {},  # NULL for most; JS falls back to a template line
         }
 
@@ -588,12 +780,21 @@ def fetch(conn) -> dict:
     cohort = _build_cohort(conn, book)
     guide = _build_guide(conn)
 
-    return {"asof": asof, "book": book, "chapters": chapters,
-            "sections": SECTION_NAMES, "call_lists": call_lists, "clients": clients,
-            "cohort": cohort, "guide": guide, "fund_performance": fund_performance}
+    return {
+        "asof": asof,
+        "book": book,
+        "chapters": chapters,
+        "sections": SECTION_NAMES,
+        "call_lists": call_lists,
+        "clients": clients,
+        "cohort": cohort,
+        "guide": guide,
+        "fund_performance": fund_performance,
+    }
 
 
 # --------------------------------------------------------------- render --
+
 
 def render(data: dict) -> str:
     blob = json.dumps(data, allow_nan=False, ensure_ascii=False, separators=(",", ":"))
@@ -609,8 +810,10 @@ def main() -> int:
     html = render(data)
     OUT.write_text(html, encoding="utf-8")
     size = len(html.encode("utf-8"))
-    print(f"wrote {OUT} ({size/1e6:.2f} MB, {len(data['clients'])} clients, "
-          f"{sum(len(v) for v in data['call_lists'].values())} call rows)")
+    print(
+        f"wrote {OUT} ({size / 1e6:.2f} MB, {len(data['clients'])} clients, "
+        f"{sum(len(v) for v in data['call_lists'].values())} call rows)"
+    )
     return 0
 
 

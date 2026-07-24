@@ -1,5 +1,6 @@
 """Real-data tests for the behaviour segmentation engine (Rule #0: no
 fixtures — every assertion runs against the live wealth.* tables)."""
+
 import sys
 from decimal import Decimal
 
@@ -7,8 +8,8 @@ import pytest
 
 sys.path.insert(0, "scripts/wealth")
 
-from build_segments import SEGMENTS, compute_all  # noqa: E402
-from engine_common import connect  # noqa: E402
+from build_segments import SEGMENTS, compute_all
+from engine_common import connect
 
 
 def _rows():
@@ -22,7 +23,8 @@ def _independent_whatif(cur, cid) -> Decimal:
     {panic_loss_out_rs, div_leak_rs, cf_sip_alive_rs} — a negative component
     is dropped, not subtracted."""
     cur.execute(
-        "select panic_loss_out_rs, div_leak_rs from wealth.client_behaviour where client_id = %s", (cid,)
+        "select panic_loss_out_rs, div_leak_rs from wealth.client_behaviour where client_id = %s",
+        (cid,),
     )
     row = cur.fetchone()
     p = row[0] if row and row[0] is not None else Decimal(0)
@@ -59,7 +61,9 @@ def test_top_panic_loss_client_lands_in_crash_sellers():
     )
     (cid,) = cur.fetchone()
     got = next(r["segment"] for r in rows if r["client_id"] == cid)
-    assert got == "Crash Sellers", f"top panic_loss_out_rs client {cid} landed in {got!r}, not Crash Sellers"
+    assert got == "Crash Sellers", (
+        f"top panic_loss_out_rs client {cid} landed in {got!r}, not Crash Sellers"
+    )
     conn.close()
 
 
@@ -111,6 +115,8 @@ def test_whatif_rs_matches_independent_sql_sum():
     for cid in (positive_cid, negative_cid):
         expected = _independent_whatif(cur, cid)
         got = next(r["whatif_rs"] for r in rows if r["client_id"] == cid)
-        assert got == round(expected), f"client {cid}: whatif_rs {got} != independent sum {round(expected)}"
+        assert got == round(expected), (
+            f"client {cid}: whatif_rs {got} != independent sum {round(expected)}"
+        )
 
     conn.close()

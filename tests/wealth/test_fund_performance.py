@@ -4,17 +4,23 @@ Rule #0: no fixtures. Every assertion runs against the live
 atlas_foundation.* / wealth.* tables via compute_all(), asserting on
 relationships in the real computed output — never magic numbers.
 """
+
 import math
 import sys
 
 sys.path.insert(0, "scripts/wealth")
 
-from build_fund_performance import compute_all  # noqa: E402
-from engine_common import connect  # noqa: E402
+from build_fund_performance import compute_all
+from engine_common import connect
 
 NUMERIC_KEYS = (
-    "roll_3y_pct", "roll_5y_pct", "dn_capture_pct", "best_year_stripped_pct",
-    "full_period_pct", "beat_count", "windows",
+    "roll_3y_pct",
+    "roll_5y_pct",
+    "dn_capture_pct",
+    "best_year_stripped_pct",
+    "full_period_pct",
+    "beat_count",
+    "windows",
 )
 
 _CACHE = None
@@ -46,8 +52,9 @@ def test_no_nan_or_inf_in_any_numeric_column():
     for r in rows:
         for k in NUMERIC_KEYS:
             v = r[k]
-            assert v is None or (isinstance(v, (int, float)) and math.isfinite(v)), \
+            assert v is None or (isinstance(v, (int, float)) and math.isfinite(v)), (
                 f"scheme {r['scheme_id']}: {k}={v!r} is not None/finite"
+            )
 
 
 def test_known_long_largecap_is_scored():
@@ -102,16 +109,18 @@ def test_best_year_stripped_below_full_period():
     life the strip-a-year arithmetic legitimately inverts)."""
     _, rows = _rows()
     sampled = [
-        r for r in rows
+        r
+        for r in rows
         if r["best_year_stripped_pct"] is not None
         and r["full_period_pct"] is not None
         and r["full_period_pct"] > 0
     ]
     assert len(sampled) > 50, "expected many long positive-return funds in the book"
     for r in sampled:
-        assert r["best_year_stripped_pct"] <= r["full_period_pct"] + 1e-9, \
-            f"scheme {r['scheme_id']}: stripped {r['best_year_stripped_pct']} " \
+        assert r["best_year_stripped_pct"] <= r["full_period_pct"] + 1e-9, (
+            f"scheme {r['scheme_id']}: stripped {r['best_year_stripped_pct']} "
             f"> full {r['full_period_pct']}"
+        )
 
 
 def test_dn_capture_positive_and_plausible():
@@ -128,10 +137,11 @@ def test_dn_capture_positive_and_plausible():
 
 def test_benchmark_legs_present_and_nulls_are_explained():
     _, rows = _rows()
-    assert any(
-        r["beat_count"] is not None and r["windows"] and r["windows"] > 0 for r in rows
-    ), "funds with a mappable benchmark must have beat_count over real windows"
+    assert any(r["beat_count"] is not None and r["windows"] and r["windows"] > 0 for r in rows), (
+        "funds with a mappable benchmark must have beat_count over real windows"
+    )
     for r in rows:
         if r["beat_count"] is None:
-            assert r["benchmark_note"], \
+            assert r["benchmark_note"], (
                 f"scheme {r['scheme_id']}: null benchmark legs but no explanatory note"
+            )

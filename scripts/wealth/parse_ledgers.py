@@ -80,8 +80,16 @@ TXN_TYPES = [  # (regex on normalized description, canonical type)
     (re.compile(r"^consolidation out", re.I), "consolidation_out"),
 ]
 # rows that may carry units only in the balance column (implied by the jump)
-JUMP_TYPES = {"transfer_in", "transfer_out", "merger_in", "merger_out",
-              "transmission_in", "transmission_out", "consolidation_in", "consolidation_out"}
+JUMP_TYPES = {
+    "transfer_in",
+    "transfer_out",
+    "merger_in",
+    "merger_out",
+    "transmission_in",
+    "transmission_out",
+    "consolidation_in",
+    "consolidation_out",
+}
 # product families whose printed NAV column is not the effective unit price
 # (side-pocket paise NAVs, insurance-linked premium splits) — units+amounts still real
 G2_EXEMPT_RE = re.compile(r"segregated|unit linked insurance", re.I)
@@ -107,7 +115,15 @@ def _is_bold(line: list[dict]) -> bool:
     return all("Bold" in w.get("fontname", "") for w in line if w["text"].strip())
 
 
-COL_NAMES = ["nav", "debit_amount", "stt", "debit_units", "credit_amount", "credit_units", "balance_units"]
+COL_NAMES = [
+    "nav",
+    "debit_amount",
+    "stt",
+    "debit_units",
+    "credit_amount",
+    "credit_units",
+    "balance_units",
+]
 
 
 def _header_anchors(line: list[dict]) -> list[float] | None:
@@ -123,12 +139,19 @@ def _header_anchors(line: list[dict]) -> list[float] | None:
     if not (len(price) == 1 and len(amounts) == 2 and len(stt) == 1 and len(units) == 3):
         return None
     return [
-        price[0]["x1"], amounts[0]["x1"], stt[0]["x1"], units[0]["x1"],
-        amounts[1]["x1"], units[1]["x1"], units[2]["x1"],
+        price[0]["x1"],
+        amounts[0]["x1"],
+        stt[0]["x1"],
+        units[0]["x1"],
+        amounts[1]["x1"],
+        units[1]["x1"],
+        units[2]["x1"],
     ]
 
 
-def _assign_columns(line: list[dict], anchors: list[float], errs: list[str], tol: float = ANCHOR_TOL) -> dict:
+def _assign_columns(
+    line: list[dict], anchors: list[float], errs: list[str], tol: float = ANCHOR_TOL
+) -> dict:
     """Assign numeric (and '-') tokens right of the description zone to columns
     by nearest right-edge anchor."""
     cells: dict[str, Decimal | None] = {c: None for c in COL_NAMES}
@@ -164,8 +187,10 @@ def _new_seq(name: str | None) -> dict:
         "rows": [],
         "balance": None,  # last verified (day-end) printed balance
         "prev_balance": None,
-        "day": None, "day_acc": Decimal("0"),
-        "day_last_bal": None, "prev_printed": None,
+        "day": None,
+        "day_acc": Decimal("0"),
+        "day_last_bal": None,
+        "prev_printed": None,
         "last_date": None,
         "pending_ob": None,  # Opening Balance awaiting resolution against the next row
         "folio": None,  # resolved folio (multi-folio blocks); block folio when None
@@ -247,7 +272,11 @@ def parse_pdf(path: Path) -> dict:
             else:
                 # ahead-shifted block-start opening? dropping it may reconcile exactly
                 first = q["rows"][0] if q["rows"] else None
-                ob_u = Decimal(first["units"]) if (first and first["txn_type"] == "opening_balance") else None
+                ob_u = (
+                    Decimal(first["units"])
+                    if (first and first["txn_type"] == "opening_balance")
+                    else None
+                )
                 if ob_u is not None and abs(expected - printed - ob_u) <= tol:
                     q["rows"].pop(0)
                 elif q["pending_break"] is None:
@@ -280,12 +309,25 @@ def parse_pdf(path: Path) -> dict:
                 r["seq"] = idx
                 rows.append(r)
             final = q["rows"][-1]["balance_units"] if q["rows"] else None
-            seq_meta.append({"idx": idx, "name": q["name"], "folio": q["folio"],
-                             "n_rows": len(q["rows"]), "final_balance": final})
+            seq_meta.append(
+                {
+                    "idx": idx,
+                    "name": q["name"],
+                    "folio": q["folio"],
+                    "n_rows": len(q["rows"]),
+                    "final_balance": final,
+                }
+            )
         res["blocks"].append(
             {
-                "fund_name": b.fund_name, "isin": b.isin, "folio": b.folio, "page": b.page + 1,
-                "rows": rows, "sequences": seq_meta, "totals": b.totals, "mv": b.mv,
+                "fund_name": b.fund_name,
+                "isin": b.isin,
+                "folio": b.folio,
+                "page": b.page + 1,
+                "rows": rows,
+                "sequences": seq_meta,
+                "totals": b.totals,
+                "mv": b.mv,
             }
         )
 
@@ -320,14 +362,21 @@ def parse_pdf(path: Path) -> dict:
                         res["client_name"] = m.group(1).strip()
                         res["client_code"] = m.group(2)
                         if m.group(4):
-                            res["report_date"] = datetime.strptime(m.group(4).strip(), "%d-%b-%Y").date().isoformat()
+                            res["report_date"] = (
+                                datetime.strptime(m.group(4).strip(), "%d-%b-%Y").date().isoformat()
+                            )
                         i += 1
                         continue
                 if res["email"] is None and text.startswith("Email ID :"):
                     res["email"] = text.split(":", 1)[1].strip() or None
                     i += 1
                     continue
-                if res["mobile"] is None and text.startswith("Mobile No :") and pno == 0 and first_x < 60:
+                if (
+                    res["mobile"] is None
+                    and text.startswith("Mobile No :")
+                    and pno == 0
+                    and first_x < 60
+                ):
                     res["mobile"] = text.split(":", 1)[1].strip() or None
                     i += 1
                     continue
@@ -346,7 +395,9 @@ def parse_pdf(path: Path) -> dict:
                 if text.startswith("Your Advisor"):
                     p = res["profile"]
                     if "advisor_name" not in p:
-                        m = re.match(r"Your Advisor : (.+?) \[(\d+)\] Branch : (.+?)\s*(KYC:(\w+))?$", text)
+                        m = re.match(
+                            r"Your Advisor : (.+?) \[(\d+)\] Branch : (.+?)\s*(KYC:(\w+))?$", text
+                        )
                         if m:
                             p["advisor_name"], p["advisor_code"] = m.group(1).strip(), m.group(2)
                             p["branch"] = m.group(3).strip()
@@ -370,7 +421,8 @@ def parse_pdf(path: Path) -> dict:
                         ftext = ftext + " " + " ".join(w["text"] for w in nxt)
                         i += 1
                     fm = re.match(
-                        r"^Fund (.+?)(?: / ([A-Z]{2}[A-Z0-9]{9}\d))? Folio No\. (\S+(?: / \d+)?)$", ftext
+                        r"^Fund (.+?)(?: / ([A-Z]{2}[A-Z0-9]{9}\d))? Folio No\. (\S+(?: / \d+)?)$",
+                        ftext,
                     )
                     if not fm:
                         errs.append(f"unparsed fund line p{pno + 1}: {ftext[:90]}")
@@ -428,7 +480,8 @@ def parse_pdf(path: Path) -> dict:
                     else:
                         b.mv = {
                             "mv_date": datetime.strptime(m.group(1), "%d/%m/%Y").date().isoformat()
-                            if m.group(1) else None,
+                            if m.group(1)
+                            else None,
                             "market_value": str(_num(m.group(2))),
                             "nav": str(_num(m.group(3))),
                             "abs_ret_pct": str(_num(m.group(4))) if m.group(4) else None,
@@ -447,7 +500,12 @@ def parse_pdf(path: Path) -> dict:
                     if ob is None:
                         errs.append(f"Opening Balance without balance units p{pno + 1}")
                     else:
-                        ok_vals = {q["day_last_bal"], q["prev_printed"], q["balance"], q["prev_balance"]}
+                        ok_vals = {
+                            q["day_last_bal"],
+                            q["prev_printed"],
+                            q["balance"],
+                            q["prev_balance"],
+                        }
                         if any(v is not None and abs(v - ob) <= Decimal("0.001") for v in ok_vals):
                             pass  # page-break carry-forward (often one row stale) — drop
                         elif q["day_last_bal"] is None and q["balance"] is None and not q["rows"]:
@@ -455,11 +513,20 @@ def parse_pdf(path: Path) -> dict:
                             # retro-dropped by flush_day if the day-ends disprove it)
                             q["rows"].append(
                                 {
-                                    "txn_date": None, "txn_type": "opening_balance",
-                                    "description_raw": text, "raw": {}, "nav": None, "units": str(ob),
-                                    "amount": None, "stt": None, "stamp_duty": None, "tds": None,
-                                    "balance_units": str(ob), "is_debit": False,
-                                    "page": pno + 1, "approx": True,
+                                    "txn_date": None,
+                                    "txn_type": "opening_balance",
+                                    "description_raw": text,
+                                    "raw": {},
+                                    "nav": None,
+                                    "units": str(ob),
+                                    "amount": None,
+                                    "stt": None,
+                                    "stamp_duty": None,
+                                    "tds": None,
+                                    "balance_units": str(ob),
+                                    "is_debit": False,
+                                    "page": pno + 1,
+                                    "approx": True,
                                 }
                             )
                             q["balance"] = ob
@@ -480,7 +547,9 @@ def parse_pdf(path: Path) -> dict:
                         amt = cells["credit_amount"] or cells["debit_amount"]
                         tgt = b.cur["rows"][-1] if b.cur["rows"] else None
                         if tgt is None or tgt["txn_date"] != dt:
-                            errs.append(f"charge annotation with no matching txn p{pno + 1}: {desc[:50]}")
+                            errs.append(
+                                f"charge annotation with no matching txn p{pno + 1}: {desc[:50]}"
+                            )
                         elif amt is None:
                             errs.append(f"charge annotation without amount p{pno + 1}: {desc[:50]}")
                         elif "stamp duty" in label:
@@ -493,14 +562,25 @@ def parse_pdf(path: Path) -> dict:
                             errs.append(f"unknown annotation p{pno + 1}: {desc[:60]}")
                         if tgt is not None and amt is not None:
                             # some generators fold charge rows into the stated totals
-                            col = "credit_amount" if cells["credit_amount"] is not None else "debit_amount"
+                            col = (
+                                "credit_amount"
+                                if cells["credit_amount"] is not None
+                                else "debit_amount"
+                            )
                             tgt.setdefault("annot_raw", []).append([col, str(amt)])
                         i += 1
                         continue
                     ttype = classify(desc)
                     if ttype is None and not desc.strip():
-                        moving = [cells[k] for k in ("debit_amount", "debit_units",
-                                                     "credit_amount", "credit_units")]
+                        moving = [
+                            cells[k]
+                            for k in (
+                                "debit_amount",
+                                "debit_units",
+                                "credit_amount",
+                                "credit_units",
+                            )
+                        ]
                         if not any(moving):  # dated marker row (record-date NAV print)
                             i += 1
                             continue
@@ -511,10 +591,16 @@ def parse_pdf(path: Path) -> dict:
                     is_debit = bool(du and du != 0)
                     units = du if is_debit else cu
                     amount = cells["debit_amount"] if is_debit else cells["credit_amount"]
-                    if (units is None or units == 0) and (cells["credit_amount"] in (None, 0)) and cells[
-                        "debit_amount"
-                    ] not in (None, 0):
-                        is_debit, units, amount = True, du, cells["debit_amount"]  # cash-out, no units (payouts)
+                    if (
+                        (units is None or units == 0)
+                        and (cells["credit_amount"] in (None, 0))
+                        and cells["debit_amount"] not in (None, 0)
+                    ):
+                        is_debit, units, amount = (
+                            True,
+                            du,
+                            cells["debit_amount"],
+                        )  # cash-out, no units (payouts)
                     bal = cells["balance_units"]
                     approx_row = False
                     if bal is None:
@@ -524,13 +610,19 @@ def parse_pdf(path: Path) -> dict:
                         if q["pending_ob"] is not None:
                             ob, ob_page, ob_text = q["pending_ob"]
                             q["pending_ob"] = None
-                            base = (q["balance"] if q["balance"] is not None else Decimal("0")) + q["day_acc"]
-                            delta0 = (units or Decimal("0")) * (Decimal(-1) if is_debit else Decimal(1))
+                            base = (q["balance"] if q["balance"] is not None else Decimal("0")) + q[
+                                "day_acc"
+                            ]
+                            delta0 = (units or Decimal("0")) * (
+                                Decimal(-1) if is_debit else Decimal(1)
+                            )
                             from_ob = ob + delta0
                             from_base = base + delta0
-                            if bal is not None and abs(from_ob - bal) <= Decimal("0.002") and abs(
-                                from_base - bal
-                            ) > Decimal("0.002"):
+                            if (
+                                bal is not None
+                                and abs(from_ob - bal) <= Decimal("0.002")
+                                and abs(from_base - bal) > Decimal("0.002")
+                            ):
                                 # the ledger restates the balance (its own carry across a
                                 # sub-report page); record the difference as an approx
                                 # adjustment so units stay accounted, never silently
@@ -538,12 +630,20 @@ def parse_pdf(path: Path) -> dict:
                                 flush_day(b)
                                 q["rows"].append(
                                     {
-                                        "txn_date": None, "txn_type": "balance_adjust",
-                                        "description_raw": ob_text + " [restated]", "raw": {},
-                                        "nav": None, "units": str(abs(adj)), "amount": None,
-                                        "stt": None, "stamp_duty": None, "tds": None,
-                                        "balance_units": str(ob), "is_debit": adj < 0,
-                                        "page": ob_page, "approx": True,
+                                        "txn_date": None,
+                                        "txn_type": "balance_adjust",
+                                        "description_raw": ob_text + " [restated]",
+                                        "raw": {},
+                                        "nav": None,
+                                        "units": str(abs(adj)),
+                                        "amount": None,
+                                        "stt": None,
+                                        "stamp_duty": None,
+                                        "tds": None,
+                                        "balance_units": str(ob),
+                                        "is_debit": adj < 0,
+                                        "page": ob_page,
+                                        "approx": True,
                                     }
                                 )
                                 q["balance"] = ob
@@ -563,7 +663,9 @@ def parse_pdf(path: Path) -> dict:
                         q["last_date"] = dt
                         if ttype in JUMP_TYPES and (units is None or units == 0):
                             # transfer/merger rows carry units only in the balance column
-                            base = (q["balance"] if q["balance"] is not None else Decimal("0")) + q["day_acc"]
+                            base = (q["balance"] if q["balance"] is not None else Decimal("0")) + q[
+                                "day_acc"
+                            ]
                             implied = bal - base
                             is_debit = implied < 0
                             units = abs(implied)
@@ -572,24 +674,36 @@ def parse_pdf(path: Path) -> dict:
                         if ttype in ("pledge", "unpledge"):
                             delta = Decimal("0")  # lien marker — printed balance unchanged
                         else:
-                            delta = (units or Decimal("0")) * (Decimal(-1) if is_debit else Decimal(1))
+                            delta = (units or Decimal("0")) * (
+                                Decimal(-1) if is_debit else Decimal(1)
+                            )
                         q["day_acc"] += delta
                         q["prev_printed"] = q["day_last_bal"]
                         q["day_last_bal"] = bal
                     row = {
-                        "txn_date": dt, "txn_type": ttype, "description_raw": desc,
+                        "txn_date": dt,
+                        "txn_type": ttype,
+                        "description_raw": desc,
                         "raw": {
                             k: str(cells[k])
-                            for k in ("debit_amount", "debit_units", "credit_amount", "credit_units")
+                            for k in (
+                                "debit_amount",
+                                "debit_units",
+                                "credit_amount",
+                                "credit_units",
+                            )
                             if cells[k] is not None
                         },
                         "nav": str(cells["nav"]) if cells["nav"] is not None else None,
                         "units": str(units) if units is not None else None,
                         "amount": str(amount) if amount is not None else None,
                         "stt": str(cells["stt"]) if cells["stt"] is not None else None,
-                        "stamp_duty": None, "tds": None,
+                        "stamp_duty": None,
+                        "tds": None,
                         "balance_units": str(bal) if bal is not None else None,
-                        "is_debit": is_debit, "page": pno + 1, "approx": approx_row,
+                        "is_debit": is_debit,
+                        "page": pno + 1,
+                        "approx": approx_row,
                     }
                     b.cur["rows"].append(row)
                     page_has_body = True
@@ -641,7 +755,11 @@ def _validate(res: dict) -> None:
             u, n, a = Decimal(r["units"]), Decimal(r["nav"]), Decimal(r["amount"])
             if u == 0 or a == 0:
                 continue
-            eff = a - Decimal(r["stamp_duty"] or "0") if not r["is_debit"] else a + Decimal(r["stt"] or "0")
+            eff = (
+                a - Decimal(r["stamp_duty"] or "0")
+                if not r["is_debit"]
+                else a + Decimal(r["stt"] or "0")
+            )
             # G2 catches column misparses (orders of magnitude off), not tax eras.
             # One-sided windows absorb what the ledger legitimately nets out:
             #   div reinvest: DDT (up to ~34% corporate-debt era) / 10% TDS / 20% NRI
@@ -659,7 +777,9 @@ def _validate(res: dict) -> None:
             else:
                 ok = abs(u * n - eff) <= max(Decimal("3"), abs(a) * Decimal("0.002"))
             if not ok:
-                errs.append(f"units*nav!=amount {fid} {r['txn_date']} {r['txn_type']}: {u * n:.2f} vs {eff}")
+                errs.append(
+                    f"units*nav!=amount {fid} {r['txn_date']} {r['txn_type']}: {u * n:.2f} vs {eff}"
+                )
         # totals row vs sums
         if b["totals"]:
             t = b["totals"]
@@ -684,7 +804,8 @@ def _validate(res: dict) -> None:
         # combined MV that a single NAV can only verify when ≤1 sequence is open)
         if b["mv"] and rows:
             finals = [
-                Decimal(q["final_balance"]) for q in b.get("sequences", [])
+                Decimal(q["final_balance"])
+                for q in b.get("sequences", [])
                 if q["final_balance"] is not None
             ]
             nonzero = [f for f in finals if abs(f) > Decimal("0.0005")]
@@ -700,9 +821,13 @@ def _validate(res: dict) -> None:
 def _safe_parse(path: Path) -> dict:
     try:
         return parse_pdf(path)
-    except Exception as e:  # noqa: BLE001 — surface, never crash the sweep
-        return {"source_file": path.name, "advisor_folder": path.parent.name,
-                "errors": [f"EXCEPTION {e!r}"], "blocks": []}
+    except Exception as e:
+        return {
+            "source_file": path.name,
+            "advisor_folder": path.parent.name,
+            "errors": [f"EXCEPTION {e!r}"],
+            "blocks": [],
+        }
 
 
 def main() -> int:

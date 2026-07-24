@@ -1,14 +1,15 @@
 """Real-data tests for the per-client audit-pack assembler (Rule #0: no
 fixtures — every assertion runs against the live wealth.* tables). Clients
 are resolved by query (highest-MV, a source-absent client), never hardcoded."""
+
 import functools
 import json
 import sys
 
 sys.path.insert(0, "scripts/wealth")
 
-from build_audit_packs import SECTION_NAMES, compute_all  # noqa: E402
-from engine_common import connect  # noqa: E402
+from build_audit_packs import SECTION_NAMES, compute_all
+from engine_common import connect
 
 
 @functools.lru_cache(maxsize=1)
@@ -33,13 +34,20 @@ def _top_mv_client_ids(conn, n=3):
            order by client_id, as_on_date desc"""
     )
     latest = cur.fetchall()
-    latest.sort(key=lambda r: (r[1] or 0), reverse=True)
+    latest.sort(key=lambda r: r[1] or 0, reverse=True)
     return [cid for cid, _ in latest[:n]]
 
 
 def test_section_order_is_the_spec_contract():
     assert SECTION_NAMES == [
-        "map", "label_check", "overlap", "fees", "benchmark", "habits", "value", "actions",
+        "map",
+        "label_check",
+        "overlap",
+        "fees",
+        "benchmark",
+        "habits",
+        "value",
+        "actions",
     ]
 
 
@@ -61,14 +69,19 @@ def test_top_3_mv_clients_all_8_sections_present_in_order_with_headline():
     conn, packs = _packs()
     for cid in _top_mv_client_ids(conn, 3):
         pack = packs[cid]
-        assert list(pack.keys()) == SECTION_NAMES, f"client {cid}: section order {list(pack.keys())}"
+        assert list(pack.keys()) == SECTION_NAMES, (
+            f"client {cid}: section order {list(pack.keys())}"
+        )
         for name in SECTION_NAMES:
             section = pack[name]
             if section.get("insufficient") is True:
-                assert isinstance(section.get("reason"), str) and section["reason"], \
+                assert isinstance(section.get("reason"), str) and section["reason"], (
                     f"client {cid}.{name}: insufficient with no reason"
+                )
             else:
-                assert section.get("headline_value") is not None, f"client {cid}.{name}: missing headline_value"
+                assert section.get("headline_value") is not None, (
+                    f"client {cid}.{name}: missing headline_value"
+                )
         assert pack["map"]["total_mv"] > 0, f"client {cid}: map.total_mv not > 0"
 
 
@@ -128,7 +141,7 @@ def test_payload_is_strict_json_no_nan():
 
 
 def test_payload_size_sane():
-    conn, packs = _packs()
+    _conn, packs = _packs()
     for cid, payload in packs.items():
         size = len(json.dumps(payload, default=str))
         assert size < 100_000, f"client {cid}: payload {size} bytes"

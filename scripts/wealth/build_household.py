@@ -84,6 +84,7 @@ succession_flag (one value per household, stamped on every member row):
 
 Usage: .venv/bin/python scripts/wealth/build_household.py
 """
+
 from __future__ import annotations
 
 import re
@@ -99,8 +100,24 @@ _SURNAME_CLUSTER_MAX = 8
 
 # Generic tokens dropped before taking the surname / matching joint-holder names.
 _STRIP = {
-    "HUF", "MINOR", "TRUST", "LTD", "LIMITED", "PVT", "PRIVATE", "CO",
-    "COMPANY", "GRAT", "AND", "THE", "OF", "MR", "MRS", "DR", "SHRI", "SMT",
+    "HUF",
+    "MINOR",
+    "TRUST",
+    "LTD",
+    "LIMITED",
+    "PVT",
+    "PRIVATE",
+    "CO",
+    "COMPANY",
+    "GRAT",
+    "AND",
+    "THE",
+    "OF",
+    "MR",
+    "MRS",
+    "DR",
+    "SHRI",
+    "SMT",
 }
 
 
@@ -151,7 +168,9 @@ def compute_all(conn) -> list[dict]:
         "where txn_type in ('transmission_in','transmission_out')",
         conn,
     )
-    overlap = pd.read_sql("select client_id, top10_share::float t10 from wealth.client_overlap", conn)
+    overlap = pd.read_sql(
+        "select client_id, top10_share::float t10 from wealth.client_overlap", conn
+    )
 
     uf = _UnionFind(clients.client_id.tolist())
 
@@ -168,7 +187,10 @@ def compute_all(conn) -> list[dict]:
 
     # ---- edge type 2: joint_holders containment (>=2 shared significant tokens,
     # co-holder segments only — segment 0 is the primary/self holder, skipped) ----
-    name_tokens = {cid: frozenset(_tokens(nm)) for cid, nm in zip(clients.client_id, clients.full_name)}
+    name_tokens = {
+        cid: frozenset(_tokens(nm))
+        for cid, nm in zip(clients.client_id, clients.full_name, strict=True)
+    }
     for row in profile.itertuples():
         if not row.joint_holders or "/" not in row.joint_holders:
             continue  # no '/' -> single-holder listing, no co-holder evidence
@@ -185,11 +207,11 @@ def compute_all(conn) -> list[dict]:
     for cid in clients.client_id:
         groups[uf.find(cid)].append(cid)
 
-    mv_by = dict(zip(mv.client_id, mv.mv))
-    surname_by = dict(zip(clients.client_id, clients.surname))
-    name_by = dict(zip(clients.client_id, clients.full_name))
+    mv_by = dict(zip(mv.client_id, mv.mv, strict=True))
+    surname_by = dict(zip(clients.client_id, clients.surname, strict=True))
+    name_by = dict(zip(clients.client_id, clients.full_name, strict=True))
     transmission_ids = set(txns.client_id)
-    top10_by = dict(zip(overlap.client_id, overlap.t10))
+    top10_by = dict(zip(overlap.client_id, overlap.t10, strict=True))
     conc_floor = float(overlap.t10.quantile(0.75)) if len(overlap) else None
 
     rows: list[dict] = []
@@ -199,7 +221,11 @@ def compute_all(conn) -> list[dict]:
 
         if any(c in transmission_ids for c in members):
             flag = "transmission_seen"
-        elif len(members) == 1 and conc_floor is not None and top10_by.get(members[0], -1.0) >= conc_floor:
+        elif (
+            len(members) == 1
+            and conc_floor is not None
+            and top10_by.get(members[0], -1.0) >= conc_floor
+        ):
             flag = "single_holder_concentrated"
         else:
             flag = "none"
@@ -212,10 +238,16 @@ def compute_all(conn) -> list[dict]:
             hname = f"{common.title()} Family" if common else f"{name_by[members[0]]} Household"
 
         for cid in members:
-            rows.append(dict(
-                household_id=hh_id, client_id=int(cid), household_name=hname,
-                members=len(members), household_mv=hh_mv, succession_flag=flag,
-            ))
+            rows.append(
+                dict(
+                    household_id=hh_id,
+                    client_id=int(cid),
+                    household_name=hname,
+                    members=len(members),
+                    household_mv=hh_mv,
+                    succession_flag=flag,
+                )
+            )
     return rows
 
 
@@ -241,8 +273,17 @@ def main() -> int:
         """insert into wealth.households
              (household_id, client_id, household_name, members, household_mv, succession_flag)
            values %s""",
-        [(r["household_id"], r["client_id"], r["household_name"], r["members"],
-          r["household_mv"], r["succession_flag"]) for r in rows],
+        [
+            (
+                r["household_id"],
+                r["client_id"],
+                r["household_name"],
+                r["members"],
+                r["household_mv"],
+                r["succession_flag"],
+            )
+            for r in rows
+        ],
         page_size=500,
     )
     cur.execute("revoke all on wealth.households from anon, authenticated")
@@ -258,9 +299,11 @@ def main() -> int:
     print(hh_df.members.value_counts().sort_index().to_string())
     print("succession flag counts:")
     print(hh_df.succession_flag.value_counts().to_string())
-    print(f"largest household: {biggest.household_name!r} ({biggest.members} members, "
-          f"₹{float(biggest.household_mv) / 1e7:.2f} cr = "
-          f"{float(biggest.household_mv) / total_mv:.1%} of total book)")
+    print(
+        f"largest household: {biggest.household_name!r} ({biggest.members} members, "
+        f"₹{float(biggest.household_mv) / 1e7:.2f} cr = "
+        f"{float(biggest.household_mv) / total_mv:.1%} of total book)"
+    )
     conn.close()
     return 0
 

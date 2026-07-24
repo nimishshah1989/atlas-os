@@ -3,6 +3,7 @@ fixtures -- every assertion runs against real wealth.audit_packs.payload
 rows pulled from the live DB, never invented inputs). Does NOT call the
 claude CLI (cost/time) -- that path is covered by the required smoke run,
 per the task brief."""
+
 import functools
 import sys
 

@@ -69,11 +69,14 @@ def main() -> int:
         if not rows:
             miss += 1
             continue
-        execute_values(cur,
-                       "insert into atlas_foundation.de_mf_nav_daily "
-                       "(nav_date, mstar_id, nav, data_status) values %s "
-                       "on conflict (nav_date, mstar_id) do nothing",
-                       rows, page_size=5000)
+        execute_values(
+            cur,
+            "insert into atlas_foundation.de_mf_nav_daily "
+            "(nav_date, mstar_id, nav, data_status) values %s "
+            "on conflict (nav_date, mstar_id) do nothing",
+            rows,
+            page_size=5000,
+        )
         conn.commit()
         ok += 1
         total_rows += len(rows)

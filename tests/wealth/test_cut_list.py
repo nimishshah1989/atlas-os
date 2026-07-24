@@ -5,7 +5,9 @@ engine's own output and cross-checked against an independent SQL sum over the
 real wealth.lots / wealth.client_fund_overlap / wealth.holdings tables.
 Run: .venv/bin/python -m pytest tests/wealth/test_cut_list.py -v
 """
+
 import os
+
 import psycopg2
 
 DSN = os.environ["ATLAS_DB_URL"].replace("postgresql+psycopg2://", "postgresql://")
@@ -31,8 +33,7 @@ def test_heavy_overlap_client_gets_tax_efficient_ordered_cuts():
 
     # redundancy is real: the client actually has a >50% look-through overlap pair
     cur.execute(
-        "select count(*) from wealth.client_fund_overlap "
-        "where client_id = %s and overlap_pct > 50",
+        "select count(*) from wealth.client_fund_overlap where client_id = %s and overlap_pct > 50",
         (cid,),
     )
     assert cur.fetchone()[0] > 0, f"client {cid} cut but has no >50% pair"
@@ -64,12 +65,11 @@ def test_diversified_client_gets_empty_cut_and_plain_note():
     )
     row = cur.fetchone()
     assert row is not None, "no client hit the evidence-gate clean note"
-    cid, note, cut = row
+    cid, _note, cut = row
     assert cut == [], f"clean client {cid} still has cuts: {cut}"
     # genuinely diversified: no >50% overlap pair backs the plain-language note
     cur.execute(
-        "select count(*) from wealth.client_fund_overlap "
-        "where client_id = %s and overlap_pct > 50",
+        "select count(*) from wealth.client_fund_overlap where client_id = %s and overlap_pct > 50",
         (cid,),
     )
     assert cur.fetchone()[0] == 0, f"client {cid} has a >50% pair but was called clean"

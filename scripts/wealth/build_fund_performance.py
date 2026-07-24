@@ -44,10 +44,10 @@ from behaviour_fingerprints import drawdown_windows
 from engine_common import BENCH_ID, NavLookup, connect, nav_series
 from psycopg2.extras import execute_values
 
-FRESH_DAYS = 45          # a fund is "current" if its last NAV is within this of as-of
-N_ROLL_ANCHORS = 12      # trailing monthly anchors averaged for roll_3y / roll_5y
-N_BEAT_WINDOWS = 20      # trailing monthly-spaced rolling-1y windows for beat_count
-WORST_N = 3              # deepest market drawdowns used for dn_capture
+FRESH_DAYS = 45  # a fund is "current" if its last NAV is within this of as-of
+N_ROLL_ANCHORS = 12  # trailing monthly anchors averaged for roll_3y / roll_5y
+N_BEAT_WINDOWS = 20  # trailing monthly-spaced rolling-1y windows for beat_count
+WORST_N = 3  # deepest market drawdowns used for dn_capture
 
 # primary_benchmark (Morningstar text) -> (NSE index_code, kind).
 #   'direct' = the same Nifty index family exists in atlas_foundation.index_prices.
@@ -61,17 +61,17 @@ WORST_N = 3              # deepest market drawdowns used for dn_capture
 # DEEP-history code (e.g. 'NIFTY SMLCAP 250', not the 20-day 'NIFTY SMALLCAP
 # 250'), else 62 funds' benchmark legs would be spuriously NULL.
 BENCHMARK_MAP = {
-    "Nifty Midcap 150 TR INR":            ("NIFTY MIDCAP 150", "direct"),
-    "Nifty LargeMidcap 250 TR INR":       ("NIFTY LARGEMID250", "direct"),
-    "Nifty Smallcap 250 TR INR":          ("NIFTY SMLCAP 250", "direct"),
+    "Nifty Midcap 150 TR INR": ("NIFTY MIDCAP 150", "direct"),
+    "Nifty LargeMidcap 250 TR INR": ("NIFTY LARGEMID250", "direct"),
+    "Nifty Smallcap 250 TR INR": ("NIFTY SMLCAP 250", "direct"),
     "Nifty 500 Multicap 50:25:25 TR INR": ("NIFTY500 MULTICAP", "direct"),
-    "Nifty Infrastructure TR INR":        ("NIFTY INFRA", "direct"),
-    "Nifty Financial Services TR INR":    ("NIFTY FIN SERVICE", "direct"),
-    "Nifty IT TR INR":                    ("NIFTY IT", "direct"),
-    "Nifty Energy TR INR":                ("NIFTY ENERGY", "direct"),
-    "BSE 500 India TR INR":               ("NIFTY 500", "proxy"),   # broad ~500 name
-    "BSE 100 India TR INR":               ("NIFTY 100", "proxy"),   # large-cap 100
-    "BSE Healthcare PR INR":              ("NIFTY HEALTHCARE", "proxy"),
+    "Nifty Infrastructure TR INR": ("NIFTY INFRA", "direct"),
+    "Nifty Financial Services TR INR": ("NIFTY FIN SERVICE", "direct"),
+    "Nifty IT TR INR": ("NIFTY IT", "direct"),
+    "Nifty Energy TR INR": ("NIFTY ENERGY", "direct"),
+    "BSE 500 India TR INR": ("NIFTY 500", "proxy"),  # broad ~500 name
+    "BSE 100 India TR INR": ("NIFTY 100", "proxy"),  # large-cap 100
+    "BSE Healthcare PR INR": ("NIFTY HEALTHCARE", "proxy"),
 }
 
 MONTH = pd.DateOffset(months=1)
@@ -92,12 +92,15 @@ def _bulk_navs(conn, mstar_ids: list[str]) -> dict[str, pd.Series]:
     df = pd.read_sql(
         "select mstar_id, nav_date, nav::float nav from atlas_foundation.de_mf_nav_daily "
         "where mstar_id = any(%s) and nav > 0",
-        conn, params=(mstar_ids,),
+        conn,
+        params=(mstar_ids,),
     )
     df["nav_date"] = pd.to_datetime(df.nav_date)
     return {
-        mid: g.sort_values("nav_date").drop_duplicates("nav_date", keep="last")
-              .set_index("nav_date").nav
+        mid: g.sort_values("nav_date")
+        .drop_duplicates("nav_date", keep="last")
+        .set_index("nav_date")
+        .nav
         for mid, g in df.groupby("mstar_id")
     }
 
@@ -106,7 +109,8 @@ def _bulk_indices(conn, codes: list[str]) -> dict[str, pd.Series]:
     df = pd.read_sql(
         "select index_code, date, close::float close from atlas_foundation.index_prices "
         "where index_code = any(%s) and close > 0",
-        conn, params=(codes,),
+        conn,
+        params=(codes,),
     )
     df["date"] = pd.to_datetime(df.date)
     return {
@@ -182,7 +186,7 @@ def _best_year_stripped_cagr(s: pd.Series) -> float | None:
     if yrs < 2.0 or g_full <= 0:
         return None
     past = s.index - YEAR
-    prior = s.asof(past).to_numpy()          # last NAV on/before each (date - 1y)
+    prior = s.asof(past).to_numpy()  # last NAV on/before each (date - 1y)
     factors = s.to_numpy() / prior
     factors = factors[(past >= first) & np.isfinite(factors) & (prior > 0)]
     if not len(factors):
@@ -250,21 +254,24 @@ def _benchmark_note(pb: str | None) -> tuple[str | None, str]:
     if not hit:
         return None, f"no NSE index match for benchmark {pb!r}; benchmark legs NULL"
     code, kind = hit
-    note = (f"approx: NSE price-return index {code!r}, not the fund's "
-            f"total-return benchmark {pb!r}")
+    note = f"approx: NSE price-return index {code!r}, not the fund's total-return benchmark {pb!r}"
     if kind == "proxy":
         note += " (nearest-NSE proxy for a non-NSE benchmark)"
     return code, note
 
 
 def compute_all(conn) -> list[dict]:
-    funds = pd.read_sql(
-        """select s.scheme_id, s.mstar_id, s.display_name, m.primary_benchmark
+    funds = (
+        pd.read_sql(
+            """select s.scheme_id, s.mstar_id, s.display_name, m.primary_benchmark
            from wealth.schemes s join wealth.holdings h using(scheme_id)
            left join atlas_foundation.de_mf_master m on m.mstar_id = s.mstar_id
            where s.asset_class = 'Equity'""",
-        conn,
-    ).drop_duplicates("scheme_id").sort_values("scheme_id")
+            conn,
+        )
+        .drop_duplicates("scheme_id")
+        .sort_values("scheme_id")
+    )
 
     mstar_ids = [m for m in funds.mstar_id.dropna().unique().tolist()]
     nav_by = _bulk_navs(conn, mstar_ids)
@@ -285,15 +292,23 @@ def compute_all(conn) -> list[dict]:
         s = nav_by.get(f.mstar_id) if f.mstar_id else None
 
         if s is None or len(s) < 2:
-            rows.append(dict(
-                scheme_id=int(f.scheme_id), mstar_id=f.mstar_id,
-                roll_3y_pct=None, roll_5y_pct=None, dn_capture_pct=None,
-                best_year_stripped_pct=None, full_period_pct=None,
-                beat_count=None, windows=None,
-                benchmark_note=("no mstar_id: no NAV series" if not f.mstar_id
-                                else "no usable NAV series"),
-                verdict="insufficient_history",
-            ))
+            rows.append(
+                dict(
+                    scheme_id=int(f.scheme_id),
+                    mstar_id=f.mstar_id,
+                    roll_3y_pct=None,
+                    roll_5y_pct=None,
+                    dn_capture_pct=None,
+                    best_year_stripped_pct=None,
+                    full_period_pct=None,
+                    beat_count=None,
+                    windows=None,
+                    benchmark_note=(
+                        "no mstar_id: no NAV series" if not f.mstar_id else "no usable NAV series"
+                    ),
+                    verdict="insufficient_history",
+                )
+            )
             continue
 
         first, last = s.index[0], s.index[-1]
@@ -318,21 +333,43 @@ def compute_all(conn) -> list[dict]:
             verdict = "scored"
         else:
             verdict = "insufficient_history"
-            note += (f"; stale: last NAV {last.date()} (no current 5y return)"
-                     if not fresh else "; <5y NAV history")
+            note += (
+                f"; stale: last NAV {last.date()} (no current 5y return)"
+                if not fresh
+                else "; <5y NAV history"
+            )
 
-        rows.append(dict(
-            scheme_id=int(f.scheme_id), mstar_id=f.mstar_id,
-            roll_3y_pct=_pct(roll3), roll_5y_pct=_pct(roll5), dn_capture_pct=_pct(dn),
-            best_year_stripped_pct=_pct(best_strip), full_period_pct=_pct(full),
-            beat_count=beat, windows=nwin, benchmark_note=note, verdict=verdict,
-        ))
+        rows.append(
+            dict(
+                scheme_id=int(f.scheme_id),
+                mstar_id=f.mstar_id,
+                roll_3y_pct=_pct(roll3),
+                roll_5y_pct=_pct(roll5),
+                dn_capture_pct=_pct(dn),
+                best_year_stripped_pct=_pct(best_strip),
+                full_period_pct=_pct(full),
+                beat_count=beat,
+                windows=nwin,
+                benchmark_note=note,
+                verdict=verdict,
+            )
+        )
     return rows
 
 
-COLS = ("scheme_id", "mstar_id", "roll_3y_pct", "roll_5y_pct", "dn_capture_pct",
-        "best_year_stripped_pct", "full_period_pct", "beat_count", "windows",
-        "benchmark_note", "verdict")
+COLS = (
+    "scheme_id",
+    "mstar_id",
+    "roll_3y_pct",
+    "roll_5y_pct",
+    "dn_capture_pct",
+    "best_year_stripped_pct",
+    "full_period_pct",
+    "beat_count",
+    "windows",
+    "benchmark_note",
+    "verdict",
+)
 
 
 def main() -> int:
@@ -363,18 +400,24 @@ def main() -> int:
     insuf = [r for r in rows if r["verdict"] == "insufficient_history"]
     with_bench = [r for r in rows if r["beat_count"] is not None]
     dn_vals = [r["dn_capture_pct"] for r in rows if r["dn_capture_pct"] is not None]
-    print(f"fund_performance: {len(rows)} held equity funds "
-          f"({len(scored)} scored, {len(insuf)} insufficient_history)")
-    print(f"  benchmark legs computed on {len(with_bench)} funds "
-          f"({len(rows) - len(with_bench)} funds have no mappable benchmark -> NULL legs)")
+    print(
+        f"fund_performance: {len(rows)} held equity funds "
+        f"({len(scored)} scored, {len(insuf)} insufficient_history)"
+    )
+    print(
+        f"  benchmark legs computed on {len(with_bench)} funds "
+        f"({len(rows) - len(with_bench)} funds have no mappable benchmark -> NULL legs)"
+    )
     if dn_vals:
         dn_vals.sort()
-        print(f"  dn_capture on {len(dn_vals)} funds: "
-              f"median {dn_vals[len(dn_vals)//2]:.0f}% "
-              f"(protected <100%: {sum(1 for v in dn_vals if v < 100)})")
+        print(
+            f"  dn_capture on {len(dn_vals)} funds: "
+            f"median {dn_vals[len(dn_vals) // 2]:.0f}% "
+            f"(protected <100%: {sum(1 for v in dn_vals if v < 100)})"
+        )
     if scored:
         r5 = sorted(r["roll_5y_pct"] for r in scored)
-        print(f"  roll_5y median {r5[len(r5)//2]:.1f}% over {len(scored)} scored funds")
+        print(f"  roll_5y median {r5[len(r5) // 2]:.1f}% over {len(scored)} scored funds")
     conn.close()
     return 0
 

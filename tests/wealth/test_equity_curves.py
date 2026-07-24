@@ -6,6 +6,7 @@ wealth.client_behaviour and the same behaviour_fingerprints.drawdown_windows
 used across the rest of the book.
 Run: .venv/bin/python -m pytest tests/wealth/test_equity_curves.py -v
 """
+
 import os
 import sys
 
@@ -14,8 +15,8 @@ import pytest
 
 sys.path.insert(0, "scripts/wealth")
 
-from behaviour_fingerprints import drawdown_windows  # noqa: E402
-from engine_common import BENCH_ID, nav_series  # noqa: E402
+from behaviour_fingerprints import drawdown_windows
+from engine_common import BENCH_ID, nav_series
 
 DSN = os.environ["ATLAS_DB_URL"].replace("postgresql+psycopg2://", "postgresql://")
 
@@ -99,9 +100,10 @@ def test_sampled_exotic_type_client_final_point_matches_holdings_mv_times_covera
     conn = _conn()
     cur = conn.cursor()
     cur.execute(
-        f"""select client_id, count(*) from wealth.transactions
-           where txn_type in {EXOTIC_UNIT_TYPES}
-           group by client_id order by count(*) desc limit 1"""
+        """select client_id, count(*) from wealth.transactions
+           where txn_type in %s
+           group by client_id order by count(*) desc limit 1""",
+        (EXOTIC_UNIT_TYPES,),
     )
     row = cur.fetchone()
     if row is None:
@@ -187,6 +189,6 @@ def test_known_panic_seller_has_panic_sell_event_in_a_drawdown_window():
     windows = drawdown_windows(nav_series(conn, BENCH_ID))
     import pandas as pd
 
-    assert any(
-        any(a <= pd.Timestamp(d) <= b for a, b in windows) for d in dates
-    ), f"client {cid}'s panic_sell dates {dates} fall outside every drawdown window"
+    assert any(any(a <= pd.Timestamp(d) <= b for a, b in windows) for d in dates), (
+        f"client {cid}'s panic_sell dates {dates} fall outside every drawdown window"
+    )

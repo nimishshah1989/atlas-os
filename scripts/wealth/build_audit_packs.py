@@ -28,6 +28,7 @@ prose jsonb) — prose left NULL; Task 8's narrate_audit_packs.py fills it.
 
 Usage: .venv/bin/python scripts/wealth/build_audit_packs.py
 """
+
 from __future__ import annotations
 
 import json
@@ -37,9 +38,8 @@ from datetime import date, datetime
 from decimal import Decimal
 
 import pandas as pd
-from psycopg2.extras import Json, execute_values
-
 from engine_common import connect
+from psycopg2.extras import Json, execute_values
 
 MISMATCH_COVERAGE_CATEGORIES = {"Small Cap", "Multi Cap"}
 COVERAGE_NOTE = (
@@ -78,32 +78,53 @@ def _insufficient(reason: str) -> dict:
 
 
 def _index_by_client(df: pd.DataFrame) -> dict:
-    return {r["client_id"]: {k: v for k, v in r.items() if k != "client_id"} for r in df.to_dict("records")}
+    return {
+        r["client_id"]: {k: v for k, v in r.items() if k != "client_id"}
+        for r in df.to_dict("records")
+    }
 
 
 # ---------------------------------------------------------------- loaders --
 
+
 def load_frames(conn) -> dict:
     f = {}
-    f["clients"] = _index_by_client(pd.read_sql(
-        "select client_id, full_name from wealth.clients", conn))
+    f["clients"] = _index_by_client(
+        pd.read_sql("select client_id, full_name from wealth.clients", conn)
+    )
 
-    f["reports"] = _index_by_client(pd.read_sql(
-        """select distinct on (client_id) client_id, mv_total, as_on_date
-           from wealth.client_reports order by client_id, as_on_date desc""", conn))
+    f["reports"] = _index_by_client(
+        pd.read_sql(
+            """select distinct on (client_id) client_id, mv_total, as_on_date
+           from wealth.client_reports order by client_id, as_on_date desc""",
+            conn,
+        )
+    )
 
-    f["tenure"] = _index_by_client(pd.read_sql(
-        """select client_id, min(inv_since) inv_since,
+    f["tenure"] = _index_by_client(
+        pd.read_sql(
+            """select client_id, min(inv_since) inv_since,
                   count(distinct scheme_id) n_schemes_held
-           from wealth.holdings group by 1""", conn))
+           from wealth.holdings group by 1""",
+            conn,
+        )
+    )
 
-    f["households"] = _index_by_client(pd.read_sql(
-        "select client_id, household_name, members, household_mv, succession_flag "
-        "from wealth.households", conn))
+    f["households"] = _index_by_client(
+        pd.read_sql(
+            "select client_id, household_name, members, household_mv, succession_flag "
+            "from wealth.households",
+            conn,
+        )
+    )
 
-    f["overlap"] = _index_by_client(pd.read_sql(
-        """select client_id, eff_bets, top_stock_name, top_stock_rs, top10_share,
-                  n_funds, n_stocks from wealth.client_overlap""", conn))
+    f["overlap"] = _index_by_client(
+        pd.read_sql(
+            """select client_id, eff_bets, top_stock_name, top_stock_rs, top10_share,
+                  n_funds, n_stocks from wealth.client_overlap""",
+            conn,
+        )
+    )
 
     worst_pair = pd.read_sql(
         """select distinct on (cfo.client_id) cfo.client_id,
@@ -111,7 +132,9 @@ def load_frames(conn) -> dict:
            from wealth.client_fund_overlap cfo
            join wealth.schemes sa on sa.scheme_id = cfo.scheme_a
            join wealth.schemes sb on sb.scheme_id = cfo.scheme_b
-           order by cfo.client_id, cfo.overlap_pct desc""", conn)
+           order by cfo.client_id, cfo.overlap_pct desc""",
+        conn,
+    )
     f["worst_pair"] = _index_by_client(worst_pair)
 
     labels = pd.read_sql(
@@ -120,62 +143,97 @@ def load_frames(conn) -> dict:
            from wealth.holdings h
            join wealth.schemes s on s.scheme_id = h.scheme_id
            join wealth.fund_label_check flc on flc.scheme_id = h.scheme_id
-           order by h.client_id, flc.verdict desc, s.display_name""", conn)
-    f["labels"] = {cid: g.drop(columns="client_id").to_dict("records")
-                   for cid, g in labels.groupby("client_id")}
+           order by h.client_id, flc.verdict desc, s.display_name""",
+        conn,
+    )
+    f["labels"] = {
+        cid: g.drop(columns="client_id").to_dict("records")
+        for cid, g in labels.groupby("client_id")
+    }
 
-    f["value"] = _index_by_client(pd.read_sql(
-        """select client_id, sip_discipline_rs, staying_power_rs, advice_outcome_rs,
+    f["value"] = _index_by_client(
+        pd.read_sql(
+            """select client_id, sip_discipline_rs, staying_power_rs, advice_outcome_rs,
                   fee_save_yr_rs, tax_headroom_rs, coaching_opportunity_rs, summary
-           from wealth.value_statements""", conn))
+           from wealth.value_statements""",
+            conn,
+        )
+    )
 
     flags = pd.read_sql(
-        "select client_id, rule, evidence, action, est_value, basis from wealth.client_flags", conn)
+        "select client_id, rule, evidence, action, est_value, basis from wealth.client_flags", conn
+    )
     # flag evidence is rendered verbatim in the UI action list — swap the one
     # bit of jargon the rules-engine emits ("XIRR n%") for plain language so no
     # banned term reaches a client-facing screen (validator enforces this).
     for _col in ("rule", "evidence", "action"):
         flags[_col] = flags[_col].astype("object").where(flags[_col].notna(), None)
         flags[_col] = flags[_col].map(
-            lambda s: None if s is None else __import__("re").sub(
-                r"(?i)\bXIRR\b", "yearly growth", s))
-    f["flags"] = {cid: g.drop(columns="client_id").to_dict("records")
-                  for cid, g in flags.groupby("client_id")}
+            lambda s: (
+                None if s is None else __import__("re").sub(r"(?i)\bXIRR\b", "yearly growth", s)
+            )
+        )
+    f["flags"] = {
+        cid: g.drop(columns="client_id").to_dict("records") for cid, g in flags.groupby("client_id")
+    }
     closet = flags[flags.rule.str.contains("closet", case=False, na=False)]
-    f["closet_flags"] = {cid: g.drop(columns="client_id").to_dict("records")
-                          for cid, g in closet.groupby("client_id")}
+    f["closet_flags"] = {
+        cid: g.drop(columns="client_id").to_dict("records")
+        for cid, g in closet.groupby("client_id")
+    }
 
-    f["benchmark"] = _index_by_client(pd.read_sql(
-        """select client_id, xirr_client, xirr_bench, alpha, first_flow, last_flow,
-                  n_flows, approx, bench_overdrawn from wealth.client_benchmark""", conn))
+    f["benchmark"] = _index_by_client(
+        pd.read_sql(
+            """select client_id, xirr_client, xirr_bench, alpha, first_flow, last_flow,
+                  n_flows, approx, bench_overdrawn from wealth.client_benchmark""",
+            conn,
+        )
+    )
 
-    f["behaviour"] = _index_by_client(pd.read_sql(
-        """select client_id, panic_share, chase_hot_share, sip_active, sip_streams,
-                  div_leak_rs, pgr, plr, disposition from wealth.client_behaviour""", conn))
+    f["behaviour"] = _index_by_client(
+        pd.read_sql(
+            """select client_id, panic_share, chase_hot_share, sip_active, sip_streams,
+                  div_leak_rs, pgr, plr, disposition from wealth.client_behaviour""",
+            conn,
+        )
+    )
 
-    f["counterfactuals"] = _index_by_client(pd.read_sql(
-        """select client_id, cf_no_panic_rs, cf_sip_alive_rs, cf_index_rs
-           from wealth.counterfactuals""", conn))
+    f["counterfactuals"] = _index_by_client(
+        pd.read_sql(
+            """select client_id, cf_no_panic_rs, cf_sip_alive_rs, cf_index_rs
+           from wealth.counterfactuals""",
+            conn,
+        )
+    )
 
-    f["tax_harvest"] = _index_by_client(pd.read_sql(
-        """select client_id, fy, headroom, gain_value, tax_saved_if_harvested,
-                  gain_candidates, loss_note, carry_forward from wealth.tax_harvest""", conn))
+    f["tax_harvest"] = _index_by_client(
+        pd.read_sql(
+            """select client_id, fy, headroom, gain_value, tax_saved_if_harvested,
+                  gain_candidates, loss_note, carry_forward from wealth.tax_harvest""",
+            conn,
+        )
+    )
 
     calls = pd.read_sql(
-        "select client_id, list_type, rank, reason, script, score from wealth.call_lists", conn)
-    f["call_lists"] = {cid: g.drop(columns="client_id").to_dict("records")
-                        for cid, g in calls.groupby("client_id")}
+        "select client_id, list_type, rank, reason, script, score from wealth.call_lists", conn
+    )
+    f["call_lists"] = {
+        cid: g.drop(columns="client_id").to_dict("records") for cid, g in calls.groupby("client_id")
+    }
 
     return f
 
 
 # --------------------------------------------------------------- sections --
 
+
 def sec_map(cid, f) -> dict:
     rep = f["reports"].get(cid)
     if rep is None:
-        return _insufficient("no valuation report parsed for this client — only ledger "
-                              "transactions on file, no MV/holdings snapshot to report")
+        return _insufficient(
+            "no valuation report parsed for this client — only ledger "
+            "transactions on file, no MV/holdings snapshot to report"
+        )
     ten = f["tenure"].get(cid, {})
     ov = f["overlap"].get(cid, {})
     hh = f["households"].get(cid, {})
@@ -197,16 +255,18 @@ def sec_map(cid, f) -> dict:
         "tenure_years": tenure_years,
         "headline_value": total_mv,
         "method": "Book MV = header total on the client's latest valuation report; "
-                  "household = surname + joint-holder roll-up (build_household.py); "
-                  "fund/stock counts = look-through overlap engine.",
+        "household = surname + joint-holder roll-up (build_household.py); "
+        "fund/stock counts = look-through overlap engine.",
     }
 
 
 def sec_label_check(cid, f) -> dict:
     rows = f["labels"].get(cid)
     if not rows:
-        return _insufficient("none of this client's held funds have a mapped SEBI "
-                              "label-check row (unmatched to Morningstar look-through)")
+        return _insufficient(
+            "none of this client's held funds have a mapped SEBI "
+            "label-check row (unmatched to Morningstar look-through)"
+        )
     out_rows = []
     for r in rows:
         item = dict(r)
@@ -220,20 +280,25 @@ def sec_label_check(cid, f) -> dict:
         "n_mismatch": n_mismatch,
         "headline_value": n_mismatch,
         "method": "Actual large/mid/small-cap equity split (Morningstar look-through, SEBI "
-                  "100/250 market-cap-rank bands) vs the fund's own category-name mandate.",
+        "100/250 market-cap-rank bands) vs the fund's own category-name mandate.",
     }
 
 
 def sec_overlap(cid, f) -> dict:
     ov = f["overlap"].get(cid)
     if ov is None:
-        return _insufficient("fewer than the minimum mapped fund holdings with "
-                              "look-through data to compute an overlap")
+        return _insufficient(
+            "fewer than the minimum mapped fund holdings with "
+            "look-through data to compute an overlap"
+        )
     pair = f["worst_pair"].get(cid)
     worst_pair = None
     if pair is not None:
-        worst_pair = {"fund_a": pair["fund_a"], "fund_b": pair["fund_b"],
-                       "overlap_pct": _num(pair["overlap_pct"])}
+        worst_pair = {
+            "fund_a": pair["fund_a"],
+            "fund_b": pair["fund_b"],
+            "overlap_pct": _num(pair["overlap_pct"]),
+        }
     return {
         "eff_bets": _num(ov["eff_bets"]),
         "top_stock_name": ov["top_stock_name"],
@@ -244,7 +309,7 @@ def sec_overlap(cid, f) -> dict:
         "worst_fund_pair": worst_pair,
         "headline_value": _num(ov["eff_bets"]),
         "method": "Effective independent bets = 1/HHI over true look-through stock weights "
-                  "across all held funds; worst pair = highest pairwise min-weight overlap %.",
+        "across all held funds; worst pair = highest pairwise min-weight overlap %.",
     }
 
 
@@ -257,16 +322,18 @@ def sec_fees(cid, f) -> dict:
         "flags": flags,
         "headline_value": fee_save,
         "method": "Sum of est_value on closet-index-style rule flags (wealth.client_flags) "
-                  "= wealth.value_statements.fee_save_yr_rs; 0 with no flag is a clean result, "
-                  "not missing data.",
+        "= wealth.value_statements.fee_save_yr_rs; 0 with no flag is a clean result, "
+        "not missing data.",
     }
 
 
 def sec_benchmark(cid, f) -> dict:
     b = f["benchmark"].get(cid)
     if b is None:
-        return _insufficient("not enough external cash-flow history (need at least one real "
-                              "inflow and one outflow) to run the exact index-fund replay")
+        return _insufficient(
+            "not enough external cash-flow history (need at least one real "
+            "inflow and one outflow) to run the exact index-fund replay"
+        )
     return {
         "xirr_client": _num(b["xirr_client"]),
         "xirr_bench": _num(b["xirr_bench"]),
@@ -278,16 +345,18 @@ def sec_benchmark(cid, f) -> dict:
         "bench_overdrawn": bool(b["bench_overdrawn"]) if b["bench_overdrawn"] is not None else None,
         "headline_value": _num(b["alpha"]),
         "method": "Every real deposit and withdrawal replayed date-matched into an ICICI Pru "
-                  "Nifty-50 index fund; your yearly growth and the index fund's yearly growth "
-                  "computed on the identical set of cashflows.",
+        "Nifty-50 index fund; your yearly growth and the index fund's yearly growth "
+        "computed on the identical set of cashflows.",
     }
 
 
 def sec_habits(cid, f) -> dict:
     beh = f["behaviour"].get(cid)
     if beh is None:
-        return _insufficient("no behaviour-fingerprint row (client has no scored buy/sell "
-                              "or SIP history to fingerprint)")
+        return _insufficient(
+            "no behaviour-fingerprint row (client has no scored buy/sell "
+            "or SIP history to fingerprint)"
+        )
     cf = f["counterfactuals"].get(cid, {})
     sip_active_share = None
     if beh.get("sip_streams"):
@@ -305,8 +374,8 @@ def sec_habits(cid, f) -> dict:
         "cf_sip_alive_rs": _num(cf.get("cf_sip_alive_rs")),
         "headline_value": panic_share,
         "method": "Behaviour fingerprint (share of lifetime withdrawals sold inside a "
-                  "market-fall window, SIP-active share, chase-the-hot-fund share) plus "
-                  "what-if cost replays of those same habits.",
+        "market-fall window, SIP-active share, chase-the-hot-fund share) plus "
+        "what-if cost replays of those same habits.",
     }
 
 
@@ -327,8 +396,8 @@ def sec_value(cid, f) -> dict:
         "summary": vs["summary"],
         "headline_value": realized_total,
         "method": "wealth.value_statements: 5 realized components (SIP-discipline, "
-                  "staying-power, signed advice-outcome, fee-save, tax-headroom) summed; "
-                  "coaching_opportunity_rs is a labelled upper bound, not realized.",
+        "staying-power, signed advice-outcome, fee-save, tax-headroom) summed; "
+        "coaching_opportunity_rs is a labelled upper bound, not realized.",
     }
 
 
@@ -355,9 +424,9 @@ def sec_actions(cid, f) -> dict:
         "n_actions": n_actions,
         "headline_value": n_actions,
         "method": "Call-list entries (wealth.call_lists), rule-engine flags "
-                  "(wealth.client_flags), and this-FY harvest candidates "
-                  "(wealth.tax_harvest) for this client; 0 is a genuinely clean client, "
-                  "not missing data.",
+        "(wealth.client_flags), and this-FY harvest candidates "
+        "(wealth.tax_harvest) for this client; 0 is a genuinely clean client, "
+        "not missing data.",
     }
 
 
@@ -414,8 +483,9 @@ def main() -> int:
     cur.execute("revoke all on wealth.audit_packs from anon, authenticated")
     conn.commit()
 
-    full = sum(1 for r in rows if all(
-        "insufficient" not in r["payload"][s] for s, _ in SECTION_BUILDERS))
+    full = sum(
+        1 for r in rows if all("insufficient" not in r["payload"][s] for s, _ in SECTION_BUILDERS)
+    )
     max_bytes = max(len(json.dumps(r["payload"])) for r in rows)
     print(f"audit packs: {len(rows)} clients x 8 sections ({full} clients all-8-sufficient)")
     print(f"largest payload: {max_bytes / 1024:.1f} KB")

@@ -38,6 +38,7 @@ reviewed test explicitly require to carry its true sign.
 
 Usage: .venv/bin/python scripts/wealth/build_value_statement.py
 """
+
 from __future__ import annotations
 
 import bisect
@@ -59,7 +60,10 @@ def load_navs(conn) -> dict[str, pd.Series]:
     )
     navs["nav_date"] = pd.to_datetime(navs.nav_date)
     return {
-        mid: g.sort_values("nav_date").drop_duplicates("nav_date", keep="last").set_index("nav_date").nav
+        mid: g.sort_values("nav_date")
+        .drop_duplicates("nav_date", keep="last")
+        .set_index("nav_date")
+        .nav
         for mid, g in navs.groupby("mstar_id")
     }
 
@@ -89,9 +93,12 @@ def compute_all(conn) -> list[dict]:
     # ---- 1. sip_discipline_rs: SIP buys dated inside a drawdown window ----
     sip_disc: dict[int, float] = defaultdict(float)
     sip = txns[
-        (txns.txn_type == "sip") & txns.mstar_id.notna()
-        & txns.amount.notna() & (txns.amount > 0)
-        & txns.units.notna() & (txns.units > 0)
+        (txns.txn_type == "sip")
+        & txns.mstar_id.notna()
+        & txns.amount.notna()
+        & (txns.amount > 0)
+        & txns.units.notna()
+        & (txns.units > 0)
     ]
     for r in sip.itertuples():
         i = bisect.bisect_right(starts, r.txn_date) - 1
@@ -141,7 +148,7 @@ def compute_all(conn) -> list[dict]:
         "select client_id, coalesce(sum(alpha_1y_rs),0)::float s from wealth.advice_ledger group by 1",
         conn,
     )
-    advice = dict(zip(adv.client_id, adv.s))
+    advice = dict(zip(adv.client_id, adv.s, strict=True))
 
     # ---- 4. fee_save_yr_rs: closet-index-style flags (verify rule text first) ----
     cur.execute("select distinct rule from wealth.client_flags order by 1")
@@ -151,17 +158,22 @@ def compute_all(conn) -> list[dict]:
         fee = pd.read_sql(
             "select client_id, sum(est_value)::float s from wealth.client_flags "
             "where rule ilike %s group by 1",
-            conn, params=("%closet%",),
+            conn,
+            params=("%closet%",),
         )
-        fee_save = dict(zip(fee.client_id, fee.s))
+        fee_save = dict(zip(fee.client_id, fee.s, strict=True))
     else:
         fee_save = {}
-        print(f"NOTE: no closet-index-style rule in wealth.client_flags; rules present: {all_rules}; "
-              f"fee_save_yr_rs=0 for all clients")
+        print(
+            f"NOTE: no closet-index-style rule in wealth.client_flags; rules present: {all_rules}; "
+            f"fee_save_yr_rs=0 for all clients"
+        )
 
     # ---- 5. tax_headroom_rs ----
-    tax = pd.read_sql("select client_id, tax_saved_if_harvested::float s from wealth.tax_harvest", conn)
-    tax_headroom = dict(zip(tax.client_id, tax.s))
+    tax = pd.read_sql(
+        "select client_id, tax_saved_if_harvested::float s from wealth.tax_harvest", conn
+    )
+    tax_headroom = dict(zip(tax.client_id, tax.s, strict=True))
 
     # ---- 6. coaching_opportunity_rs: panic loss + div leak + dead-SIP cf, each >= 0 ----
     beh = pd.read_sql(
@@ -169,10 +181,12 @@ def compute_all(conn) -> list[dict]:
         "from wealth.client_behaviour",
         conn,
     )
-    panic_map = dict(zip(beh.client_id, beh.p))
-    leak_map = dict(zip(beh.client_id, beh.d))
-    cfd = pd.read_sql("select client_id, coalesce(cf_sip_alive_rs,0)::float c from wealth.counterfactuals", conn)
-    cf_map = dict(zip(cfd.client_id, cfd.c))
+    panic_map = dict(zip(beh.client_id, beh.p, strict=True))
+    leak_map = dict(zip(beh.client_id, beh.d, strict=True))
+    cfd = pd.read_sql(
+        "select client_id, coalesce(cf_sip_alive_rs,0)::float c from wealth.counterfactuals", conn
+    )
+    cf_map = dict(zip(cfd.client_id, cfd.c, strict=True))
 
     rows = []
     for cid in client_ids:
@@ -189,15 +203,21 @@ def compute_all(conn) -> list[dict]:
 
         notes = []
         if cid not in non_panic:
-            notes.append("staying_power_rs=0: client is in the drawdown-seller cohort (panic_share >= 0.10)")
+            notes.append(
+                "staying_power_rs=0: client is in the drawdown-seller cohort (panic_share >= 0.10)"
+            )
         elif cid in null_panic_share:
             notes.append("panic_share: missing→treated non-panic")
         if not closet_rules:
             notes.append("no closet-index-style fee flag in wealth.client_flags; fee_save_yr_rs=0")
         if adv_v < 0:
-            notes.append(f"advice_outcome_rs is net-negative (₹{round(adv_v):,}) — switches underperformed")
+            notes.append(
+                f"advice_outcome_rs is net-negative (₹{round(adv_v):,}) — switches underperformed"
+            )
         if sipcf_raw < 0:
-            notes.append(f"dead-SIP counterfactual floored at 0 in coaching_opportunity (raw ₹{round(sipcf_raw):,})")
+            notes.append(
+                f"dead-SIP counterfactual floored at 0 in coaching_opportunity (raw ₹{round(sipcf_raw):,})"
+            )
 
         summary = {
             "realized": {
@@ -218,16 +238,18 @@ def compute_all(conn) -> list[dict]:
             },
             "notes": notes,
         }
-        rows.append(dict(
-            client_id=int(cid),
-            sip_discipline_rs=round(sip_v),
-            staying_power_rs=round(stay_v),
-            advice_outcome_rs=round(adv_v),
-            fee_save_yr_rs=round(fee_v),
-            tax_headroom_rs=round(tax_v),
-            coaching_opportunity_rs=round(coach_v),
-            summary=summary,
-        ))
+        rows.append(
+            dict(
+                client_id=int(cid),
+                sip_discipline_rs=round(sip_v),
+                staying_power_rs=round(stay_v),
+                advice_outcome_rs=round(adv_v),
+                fee_save_yr_rs=round(fee_v),
+                tax_headroom_rs=round(tax_v),
+                coaching_opportunity_rs=round(coach_v),
+                summary=summary,
+            )
+        )
     return rows
 
 
@@ -248,25 +270,45 @@ def main() -> int:
     execute_values(
         cur,
         "insert into wealth.value_statements values %s",
-        [(r["client_id"], r["sip_discipline_rs"], r["staying_power_rs"], r["advice_outcome_rs"],
-          r["fee_save_yr_rs"], r["tax_headroom_rs"], r["coaching_opportunity_rs"], Json(r["summary"]))
-         for r in rows],
+        [
+            (
+                r["client_id"],
+                r["sip_discipline_rs"],
+                r["staying_power_rs"],
+                r["advice_outcome_rs"],
+                r["fee_save_yr_rs"],
+                r["tax_headroom_rs"],
+                r["coaching_opportunity_rs"],
+                Json(r["summary"]),
+            )
+            for r in rows
+        ],
         page_size=500,
     )
     cur.execute("revoke all on wealth.value_statements from anon, authenticated")
     conn.commit()
 
     n = len(rows)
-    tot = {k: sum(r[k] for r in rows) for k in
-           ("sip_discipline_rs", "staying_power_rs", "advice_outcome_rs",
-            "fee_save_yr_rs", "tax_headroom_rs", "coaching_opportunity_rs")}
+    tot = {
+        k: sum(r[k] for r in rows)
+        for k in (
+            "sip_discipline_rs",
+            "staying_power_rs",
+            "advice_outcome_rs",
+            "fee_save_yr_rs",
+            "tax_headroom_rs",
+            "coaching_opportunity_rs",
+        )
+    }
     print(f"value statements: {n} clients")
     print(f"  sip_discipline_rs       ₹{tot['sip_discipline_rs'] / 1e7:.2f} cr")
     print(f"  staying_power_rs        ₹{tot['staying_power_rs'] / 1e7:.2f} cr")
     print(f"  advice_outcome_rs       ₹{tot['advice_outcome_rs'] / 1e7:.2f} cr")
     print(f"  fee_save_yr_rs          ₹{tot['fee_save_yr_rs'] / 1e5:.1f} L/yr")
     print(f"  tax_headroom_rs         ₹{tot['tax_headroom_rs'] / 1e5:.1f} L")
-    print(f"  coaching_opportunity_rs ₹{tot['coaching_opportunity_rs'] / 1e7:.2f} cr (upper bound, not realized)")
+    print(
+        f"  coaching_opportunity_rs ₹{tot['coaching_opportunity_rs'] / 1e7:.2f} cr (upper bound, not realized)"
+    )
     conn.close()
     return 0
 

@@ -39,7 +39,10 @@ def main() -> int:
     )
     navs["nav_date"] = pd.to_datetime(navs.nav_date)
     nav_by = {
-        mid: g.sort_values("nav_date").drop_duplicates("nav_date", keep="last").set_index("nav_date").nav
+        mid: g.sort_values("nav_date")
+        .drop_duplicates("nav_date", keep="last")
+        .set_index("nav_date")
+        .nav
         for mid, g in navs.groupby("mstar_id")
     }
 
@@ -80,11 +83,12 @@ def main() -> int:
     sells["in_dd"] = sells.txn_date.map(lambda d: any(a <= d <= b for a, b in windows))
     panic = sells[sells.in_dd].copy()
     panic["nav_now"] = panic.mstar_id.map(lambda m: nav_last(m)[1])
-    panic["nav_then"] = [nav_at(m, d) for m, d in zip(panic.mstar_id, panic.txn_date)]
+    panic["nav_then"] = [nav_at(m, d) for m, d in zip(panic.mstar_id, panic.txn_date, strict=True)]
     panic = panic.dropna(subset=["nav_now", "nav_then"])
     panic["cf"] = panic.units * panic.nav_now - panic.amount
-    cf_panic = panic.groupby("client_id").agg(cf_no_panic_rs=("cf", "sum"),
-                                              panic_sells=("cf", "size"))
+    cf_panic = panic.groupby("client_id").agg(
+        cf_no_panic_rs=("cf", "sum"), panic_sells=("cf", "size")
+    )
 
     # ---- scenario 3: stopped SIPs continued ----
     sips = pd.read_sql(
@@ -100,7 +104,7 @@ def main() -> int:
     ledger_end = pd.read_sql("select max(txn_date) d from wealth.transactions", conn).d.iloc[0]
     ledger_end = pd.Timestamp(ledger_end)
     sip_rows = []
-    for (cid, sid, fn, fo), g in sips.groupby(["client_id", "scheme_id", "fund_name", "folio"]):
+    for (cid, _sid, _fn, _fo), g in sips.groupby(["client_id", "scheme_id", "fund_name", "folio"]):
         months = g.txn_date.dt.to_period("M").drop_duplicates()
         if len(months) < 3:
             continue
@@ -136,9 +140,13 @@ def main() -> int:
            from wealth.advice_ledger""",
         conn,
     )
-    scheme_mid = pd.read_sql(
-        "select scheme_id, mstar_id from wealth.schemes where mstar_id is not null", conn
-    ).set_index("scheme_id").mstar_id
+    scheme_mid = (
+        pd.read_sql(
+            "select scheme_id, mstar_id from wealth.schemes where mstar_id is not null", conn
+        )
+        .set_index("scheme_id")
+        .mstar_id
+    )
     sw_rows = []
     for r in adv.itertuples():
         mfrom = scheme_mid.get(r.from_scheme_id)
@@ -185,10 +193,15 @@ def main() -> int:
             sip_cash, sip_streams, cf_no_switch_rs, switches) values %s""",
         [
             (
-                int(cid), round(r.cf_index_rs), round(r.cf_no_panic_rs),
-                int(r.get("panic_sells", 0)), round(r.cf_sip_alive_rs),
-                round(r.get("sip_cash", 0)), int(r.get("sip_streams", 0)),
-                round(r.cf_no_switch_rs), int(r.get("switches", 0)),
+                int(cid),
+                round(r.cf_index_rs),
+                round(r.cf_no_panic_rs),
+                int(r.get("panic_sells", 0)),
+                round(r.cf_sip_alive_rs),
+                round(r.get("sip_cash", 0)),
+                int(r.get("sip_streams", 0)),
+                round(r.cf_no_switch_rs),
+                int(r.get("switches", 0)),
             )
             for cid, r in out.iterrows()
         ],

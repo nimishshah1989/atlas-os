@@ -48,7 +48,10 @@ def main() -> int:
     )
     navs["nav_date"] = pd.to_datetime(navs.nav_date)
     nav_by = {
-        mid: g.sort_values("nav_date").drop_duplicates("nav_date", keep="last").set_index("nav_date").nav
+        mid: g.sort_values("nav_date")
+        .drop_duplicates("nav_date", keep="last")
+        .set_index("nav_date")
+        .nav
         for mid, g in navs.groupby("mstar_id")
     }
 
@@ -104,16 +107,25 @@ def main() -> int:
                 sid_i = int(i_["scheme_id"]) if pd.notna(i_["scheme_id"]) else None
                 events.append(
                     (
-                        int(cid), str(d.date()), float(o["amount"]),
-                        sid_o, o["display_name"], sid_i, i_["display_name"],
-                        r1a, r1b,
+                        int(cid),
+                        str(d.date()),
+                        float(o["amount"]),
+                        sid_o,
+                        o["display_name"],
+                        sid_i,
+                        i_["display_name"],
+                        r1a,
+                        r1b,
                         round(r1b - r1a, 2) if (r1a is not None and r1b is not None) else None,
                         round((r1b - r1a) * o["amount"] / 100, 0)
-                        if (r1a is not None and r1b is not None) else None,
-                        r3a, r3b,
+                        if (r1a is not None and r1b is not None)
+                        else None,
+                        r3a,
+                        r3b,
                         round(r3b - r3a, 2) if (r3a is not None and r3b is not None) else None,
                         round((r3b - r3a) * o["amount"] / 100, 0)
-                        if (r3a is not None and r3b is not None) else None,
+                        if (r3a is not None and r3b is not None)
+                        else None,
                         adv.advisor_name if adv is not None else None,
                         adv.advisor_code if adv is not None else None,
                         adv.branch if adv is not None else None,
@@ -121,7 +133,9 @@ def main() -> int:
                 )
 
     # ---- push waves ----
-    entries = tx[(tx.txn_type == "switch_in") | ((tx.txn_type == "purchase") & (tx.amount >= 25000))]
+    entries = tx[
+        (tx.txn_type == "switch_in") | ((tx.txn_type == "purchase") & (tx.amount >= 25000))
+    ]
     waves = []
     for sid, g in entries.dropna(subset=["scheme_id"]).groupby("scheme_id"):
         g = g.sort_values("txn_date")
@@ -139,10 +153,16 @@ def main() -> int:
                 mid = g.mstar_id.iloc[0]
                 waves.append(
                     (
-                        int(sid), g.display_name.iloc[0], str(pd.Timestamp(lo).date()),
-                        str(pd.Timestamp(hi).date()), len(ucids), float(amts[in_win].sum()),
-                        fwd_ret(mid, pd.Timestamp(med), 365), fwd_ret(BENCH_ID, pd.Timestamp(med), 365),
-                        fwd_ret(mid, pd.Timestamp(med), 1095), fwd_ret(BENCH_ID, pd.Timestamp(med), 1095),
+                        int(sid),
+                        g.display_name.iloc[0],
+                        str(pd.Timestamp(lo).date()),
+                        str(pd.Timestamp(hi).date()),
+                        len(ucids),
+                        float(amts[in_win].sum()),
+                        fwd_ret(mid, pd.Timestamp(med), 365),
+                        fwd_ret(BENCH_ID, pd.Timestamp(med), 365),
+                        fwd_ret(mid, pd.Timestamp(med), 1095),
+                        fwd_ret(BENCH_ID, pd.Timestamp(med), 1095),
                     )
                 )
                 i += int(in_win.sum())  # jump past this wave
@@ -198,8 +218,26 @@ def main() -> int:
 
     df = pd.DataFrame(
         events,
-        columns=["cid", "d", "amt", "fs", "fn", "ts", "tn", "r1a", "r1b", "a1", "a1rs",
-                 "r3a", "r3b", "a3", "a3rs", "an", "ac", "br"],
+        columns=[
+            "cid",
+            "d",
+            "amt",
+            "fs",
+            "fn",
+            "ts",
+            "tn",
+            "r1a",
+            "r1b",
+            "a1",
+            "a1rs",
+            "r3a",
+            "r3b",
+            "a3",
+            "a3rs",
+            "an",
+            "ac",
+            "br",
+        ],
     )
     print(f"advice events: {len(df)} paired switches, ₹{df.amt.sum() / 1e7:.1f} cr moved")
     s1 = df.dropna(subset=["a1"])

@@ -69,7 +69,10 @@ def main() -> int:
     )
     navs["nav_date"] = pd.to_datetime(navs.nav_date)
     nav_by = {
-        mid: g.sort_values("nav_date").drop_duplicates("nav_date", keep="last").set_index("nav_date").nav
+        mid: g.sort_values("nav_date")
+        .drop_duplicates("nav_date", keep="last")
+        .set_index("nav_date")
+        .nav
         for mid, g in navs.groupby("mstar_id")
     }
 
@@ -84,10 +87,14 @@ def main() -> int:
         return float(s.iloc[i1] / s.iloc[i0] - 1)
 
     # ---- 0. client-level survivorship statement (no model — refuse fake precision) ----
-    mv = pd.read_sql(
-        "select client_id, coalesce(sum(market_value),0)::float mv from wealth.ledger_blocks group by 1",
-        conn,
-    ).set_index("client_id").mv
+    mv = (
+        pd.read_sql(
+            "select client_id, coalesce(sum(market_value),0)::float mv from wealth.ledger_blocks group by 1",
+            conn,
+        )
+        .set_index("client_id")
+        .mv
+    )
     life = txns.groupby("client_id").txn_date.agg(["min", "max"])
     life["mv"] = mv.reindex(life.index).fillna(0)
     life["departed"] = (life.mv < 1000) & (
@@ -108,7 +115,9 @@ def main() -> int:
     # ---- 1. SIP-stream survival ----
     sips = txns[txns.txn_type == "sip"]
     streams = []
-    for (cid, sid, fn, fo), g in sips.groupby(["client_id", "scheme_id", "fund_name", "folio"], dropna=False):
+    for (cid, _sid, _fn, _fo), g in sips.groupby(
+        ["client_id", "scheme_id", "fund_name", "folio"], dropna=False
+    ):
         months = g.txn_date.dt.to_period("M").nunique()
         if months < 3:
             continue
@@ -118,7 +127,9 @@ def main() -> int:
         r3 = ret_3m(g.mstar_id.iloc[0], first) if pd.notna(g.mstar_id.iloc[0]) else None
         streams.append(
             dict(
-                client_id=int(cid), months=dur_m, stopped=not active,
+                client_id=int(cid),
+                months=dur_m,
+                stopped=not active,
                 equity=1 if g.asset_class.iloc[0] == "Equity" else 0,
                 rally_start=1 if (r3 is not None and r3 > 0.10) else 0,
                 monthly=float(g.amount.tail(6).median() or 0),
@@ -136,7 +147,8 @@ def main() -> int:
     cox = CoxPHFitter()
     cox.fit(
         sdf[["months", "stopped", "equity", "rally_start", "amt_high"]],
-        duration_col="months", event_col="stopped",
+        duration_col="months",
+        event_col="stopped",
     )
     print("Cox PH on stream stop (HR > 1 = stops sooner):")
     for cov in ("equity", "rally_start", "amt_high"):
@@ -153,9 +165,13 @@ def main() -> int:
            from wealth.transactions group by 1, 2, 3""",
         conn,
     )
-    fin_key = {(int(r.client_id), r.fund_name, r.folio): (r.fb or 0) < 0.01 for r in fin.itertuples()}
+    fin_key = {
+        (int(r.client_id), r.fund_name, r.folio): (r.fb or 0) < 0.01 for r in fin.itertuples()
+    }
     hold = []
-    for (cid, sid, fn, fo), g in txns.groupby(["client_id", "scheme_id", "fund_name", "folio"], dropna=False):
+    for (cid, _sid, fn, fo), g in txns.groupby(
+        ["client_id", "scheme_id", "fund_name", "folio"], dropna=False
+    ):
         first, last = g.txn_date.min(), g.txn_date.max()
         hold.append(
             dict(
@@ -168,8 +184,12 @@ def main() -> int:
     hdf = pd.DataFrame(hold)
     kmh = KaplanMeierFitter()
     kmh.fit(hdf.years, hdf.closed, label="all holdings")
-    kme = KaplanMeierFitter().fit(hdf[hdf.equity == 1].years, hdf[hdf.equity == 1].closed, label="equity")
-    kmn = KaplanMeierFitter().fit(hdf[hdf.equity == 0].years, hdf[hdf.equity == 0].closed, label="non-equity")
+    kme = KaplanMeierFitter().fit(
+        hdf[hdf.equity == 1].years, hdf[hdf.equity == 1].closed, label="equity"
+    )
+    kmn = KaplanMeierFitter().fit(
+        hdf[hdf.equity == 0].years, hdf[hdf.equity == 0].closed, label="non-equity"
+    )
     print(
         f"\nholdings: {len(hdf)} fund-folios ({int(hdf.closed.sum())} fully closed) — "
         f"median relationship life {kmh.median_survival_time_:.1f}y "
@@ -180,8 +200,14 @@ def main() -> int:
     ext_in = txns[txns.txn_type.isin(["purchase", "sip"]) & txns.amount.gt(0)]
     ext_out = txns[txns.txn_type.isin(["redemption", "swp"]) & txns.amount.gt(0)]
     last_in = ext_in.groupby("client_id").txn_date.max()
-    out12 = ext_out[ext_out.txn_date > ledger_end - pd.Timedelta(days=365)].groupby("client_id").amount.sum()
-    sip_stats = sdf.groupby("client_id").agg(streams=("stopped", "size"), stopped=("stopped", "sum"))
+    out12 = (
+        ext_out[ext_out.txn_date > ledger_end - pd.Timedelta(days=365)]
+        .groupby("client_id")
+        .amount.sum()
+    )
+    sip_stats = sdf.groupby("client_id").agg(
+        streams=("stopped", "size"), stopped=("stopped", "sum")
+    )
 
     rows = []
     for cid in life[~life.departed].index:
@@ -201,7 +227,15 @@ def main() -> int:
             (int(cid), cmv, round(months_quiet, 1), sip_stop_share, round(out_share, 3), score)
         )
     ew = pd.DataFrame(
-        rows, columns=["client_id", "mv", "months_since_inflow", "sip_stop_share", "out12_share", "score"]
+        rows,
+        columns=[
+            "client_id",
+            "mv",
+            "months_since_inflow",
+            "sip_stop_share",
+            "out12_share",
+            "score",
+        ],
     )
     # expected remaining years from the all-holdings KM restricted-mean (cap 25y)
     from lifelines.utils import restricted_mean_survival_time
@@ -214,7 +248,11 @@ def main() -> int:
         f"(no trail-rate assumption made)"
     )
 
-    names = pd.read_sql("select client_id, full_name from wealth.clients", conn).set_index("client_id").full_name
+    names = (
+        pd.read_sql("select client_id, full_name from wealth.clients", conn)
+        .set_index("client_id")
+        .full_name
+    )
     top = ew.sort_values("score", ascending=False).head(12)
     print("highest disengagement risk (call list):")
     for r in top.itertuples():
@@ -244,8 +282,13 @@ def main() -> int:
             disengagement_score, clv_aum_l_years, computed_asof) values %s""",
         [
             (
-                int(r.client_id), r.mv, r.months_since_inflow,
-                r.sip_stop_share, r.out12_share, r.score, r.clv_aum_years,
+                int(r.client_id),
+                r.mv,
+                r.months_since_inflow,
+                r.sip_stop_share,
+                r.out12_share,
+                r.score,
+                r.clv_aum_years,
                 str(ledger_end.date()),
             )
             for r in ew.itertuples()
@@ -260,7 +303,7 @@ def main() -> int:
            )"""
     )
     curve_rows = []
-    for label, fitter, unit in (
+    for label, fitter, _unit in (
         ("sip_stream_months", km, 1.0),
         ("holding_years_all", kmh, 1.0),
         ("holding_years_equity", kme, 1.0),
@@ -271,13 +314,17 @@ def main() -> int:
         for t, v in sf[col].items():
             curve_rows.append((label, round(float(t), 2), round(float(v), 5)))
     execute_values(
-        cur, "insert into wealth.churn_curves (curve, t, s) values %s on conflict do nothing",
-        curve_rows, page_size=1000,
+        cur,
+        "insert into wealth.churn_curves (curve, t, s) values %s on conflict do nothing",
+        curve_rows,
+        page_size=1000,
     )
     cur.execute("revoke all on wealth.client_churn_risk from anon, authenticated")
     cur.execute("revoke all on wealth.churn_curves from anon, authenticated")
     conn.commit()
-    print(f"\nwrote wealth.client_churn_risk ({len(ew)}) + wealth.churn_curves ({len(curve_rows)} pts)")
+    print(
+        f"\nwrote wealth.client_churn_risk ({len(ew)}) + wealth.churn_curves ({len(curve_rows)} pts)"
+    )
     conn.close()
     return 0
 

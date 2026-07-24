@@ -68,6 +68,7 @@ one action verb, no semicolons — the RM reads it on the phone.
 
 Usage: .venv/bin/python scripts/wealth/build_call_lists.py
 """
+
 from __future__ import annotations
 
 import sys
@@ -133,10 +134,24 @@ def compute_all(conn) -> tuple[list[dict], bool, float, float]:
            from wealth.client_behaviour""",
         conn,
     )
-    beh[["panic_out_rs", "panic_loss_out_rs", "sip_streams", "sip_active",
-         "sip_stopped", "sip_stops_in_drawdown"]] = beh[
-        ["panic_out_rs", "panic_loss_out_rs", "sip_streams", "sip_active",
-         "sip_stopped", "sip_stops_in_drawdown"]
+    beh[
+        [
+            "panic_out_rs",
+            "panic_loss_out_rs",
+            "sip_streams",
+            "sip_active",
+            "sip_stopped",
+            "sip_stops_in_drawdown",
+        ]
+    ] = beh[
+        [
+            "panic_out_rs",
+            "panic_loss_out_rs",
+            "sip_streams",
+            "sip_active",
+            "sip_stopped",
+            "sip_stops_in_drawdown",
+        ]
     ].fillna(0.0)
     mv = pd.read_sql(
         "select client_id, coalesce(sum(market_value),0)::float mv from wealth.ledger_blocks group by 1",
@@ -191,13 +206,24 @@ def compute_all(conn) -> tuple[list[dict], bool, float, float]:
             f"₹{r.panic_loss_out_rs / 1e5:.1f}L of it below cost."
         )
         if armed:
-            reason += f" Market is currently {abs(drawdown_now):.0%} off its peak — this list is armed."
+            reason += (
+                f" Market is currently {abs(drawdown_now):.0%} off its peak — this list is armed."
+            )
         script = (
             f"Last big fall they pulled out ₹{r.panic_out_rs / 1e5:.0f}L near the bottom — "
             f"call now and ask them to do nothing for 72 hours."
         )
-        rows.append(dict(list_type="crash_sellers", rank=i, client_id=int(r.client_id),
-                          mv=round(r.mv, 2), reason=reason, script=script, score=round(r.freak_out, 2)))
+        rows.append(
+            dict(
+                list_type="crash_sellers",
+                rank=i,
+                client_id=int(r.client_id),
+                mv=round(r.mv, 2),
+                reason=reason,
+                script=script,
+                score=round(r.freak_out, 2),
+            )
+        )
 
     # sip_fragile — ranked on its own SIP-centric key (sip_risk), not freak_out
     pool = df[(df.mv > 0) & (df.sip_streams > 0)].copy()
@@ -218,8 +244,17 @@ def compute_all(conn) -> tuple[list[dict], bool, float, float]:
                 f"Their last SIP stopped {int(r.sip_stopped)} stream(s) back — "
                 f"call and ask if they'd restart it now that prices are down."
             )
-        rows.append(dict(list_type="sip_fragile", rank=i, client_id=int(r.client_id),
-                          mv=round(r.mv, 2), reason=reason, script=script, score=round(r.sip_risk, 2)))
+        rows.append(
+            dict(
+                list_type="sip_fragile",
+                rank=i,
+                client_id=int(r.client_id),
+                mv=round(r.mv, 2),
+                reason=reason,
+                script=script,
+                score=round(r.sip_risk, 2),
+            )
+        )
 
     # disengaged (reuses wealth.client_churn_risk's own score, not recomputed)
     churn = pd.read_sql(
@@ -230,7 +265,11 @@ def compute_all(conn) -> tuple[list[dict], bool, float, float]:
     churn["mv"] = churn.mv.fillna(0.0).astype(float)
     top = _blend_rank(churn, "disengagement_score")
     for i, r in enumerate(top.itertuples(), start=1):
-        sip_txt = "no SIP history" if pd.isna(r.sip_stop_share) else f"{r.sip_stop_share:.0%} of SIPs stopped"
+        sip_txt = (
+            "no SIP history"
+            if pd.isna(r.sip_stop_share)
+            else f"{r.sip_stop_share:.0%} of SIPs stopped"
+        )
         reason = (
             f"No fresh money in {r.months_since_inflow:.0f} months, {sip_txt}, "
             f"{r.out12_share:.0%} of book pulled out in the last year."
@@ -239,9 +278,17 @@ def compute_all(conn) -> tuple[list[dict], bool, float, float]:
             f"It's been {r.months_since_inflow:.0f} months since new money came in — "
             f"call to reconnect and ask if anything's changed."
         )
-        rows.append(dict(list_type="disengaged", rank=i, client_id=int(r.client_id),
-                          mv=round(r.mv, 2), reason=reason, script=script,
-                          score=round(float(r.disengagement_score), 2)))
+        rows.append(
+            dict(
+                list_type="disengaged",
+                rank=i,
+                client_id=int(r.client_id),
+                mv=round(r.mv, 2),
+                reason=reason,
+                script=script,
+                score=round(float(r.disengagement_score), 2),
+            )
+        )
 
     return rows, armed, drawdown_now, armed_floor
 
@@ -264,8 +311,18 @@ def main() -> int:
     execute_values(
         cur,
         "insert into wealth.call_lists (list_type, rank, client_id, mv, reason, script, score) values %s",
-        [(r["list_type"], r["rank"], r["client_id"], r["mv"], r["reason"], r["script"], r["score"])
-         for r in rows],
+        [
+            (
+                r["list_type"],
+                r["rank"],
+                r["client_id"],
+                r["mv"],
+                r["reason"],
+                r["script"],
+                r["score"],
+            )
+            for r in rows
+        ],
         page_size=500,
     )
     cur.execute("revoke all on wealth.call_lists from anon, authenticated")
@@ -273,13 +330,19 @@ def main() -> int:
 
     n_lists = len({r["list_type"] for r in rows})
     print(f"call lists: {n_lists} lists × {TOP_N} rows")
-    print(f"crash_sellers ARMED={armed} (bench {drawdown_now:+.1%} off running peak, "
-          f"floor {armed_floor:+.1%} from atlas_thresholds.{ARMED_FLOOR_KEY})")
+    print(
+        f"crash_sellers ARMED={armed} (bench {drawdown_now:+.1%} off running peak, "
+        f"floor {armed_floor:+.1%} from atlas_thresholds.{ARMED_FLOOR_KEY})"
+    )
     crash_ids = {r["client_id"] for r in rows if r["list_type"] == "crash_sellers"}
     sip_ids = {r["client_id"] for r in rows if r["list_type"] == "sip_fragile"}
     overlap = crash_ids & sip_ids
     print(f"crash_sellers/sip_fragile overlap: {len(overlap)}/{TOP_N}")
-    names = pd.read_sql("select client_id, full_name from wealth.clients", conn).set_index("client_id").full_name
+    names = (
+        pd.read_sql("select client_id, full_name from wealth.clients", conn)
+        .set_index("client_id")
+        .full_name
+    )
     for lt in ("crash_sellers", "sip_fragile", "disengaged"):
         print(f"\n{lt} top 3:")
         for r in [r for r in rows if r["list_type"] == lt][:3]:

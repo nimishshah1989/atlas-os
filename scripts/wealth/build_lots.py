@@ -34,10 +34,28 @@ import psycopg2
 from psycopg2.extras import execute_values
 
 D = Decimal
-BUY_TYPES = {"purchase", "sip", "switch_in", "div_reinvest", "bonus", "opening_balance",
-             "dtp_in", "transfer_in", "merger_in", "transmission_in", "balance_adjust"}
-SELL_TYPES = {"redemption", "switch_out", "swp", "transfer_out", "merger_out",
-              "transmission_out", "balance_adjust"}
+BUY_TYPES = {
+    "purchase",
+    "sip",
+    "switch_in",
+    "div_reinvest",
+    "bonus",
+    "opening_balance",
+    "dtp_in",
+    "transfer_in",
+    "merger_in",
+    "transmission_in",
+    "balance_adjust",
+}
+SELL_TYPES = {
+    "redemption",
+    "switch_out",
+    "swp",
+    "transfer_out",
+    "merger_out",
+    "transmission_out",
+    "balance_adjust",
+}
 GF_DATE = date(2018, 1, 31)
 
 
@@ -62,9 +80,7 @@ def main() -> int:
     cur = conn.cursor()
     rates = load_rates(cur)
 
-    cur.execute(
-        """select s.scheme_id, s.asset_class, s.mstar_id from wealth.schemes s"""
-    )
+    cur.execute("""select s.scheme_id, s.asset_class, s.mstar_id from wealth.schemes s""")
     scheme_class = {sid: (ac, mid) for sid, ac, mid in cur.fetchall()}
 
     # NAV lookups: 31-Jan-2018 FMV (nearest on/before) + latest NAV per mapped scheme
@@ -103,11 +119,27 @@ def main() -> int:
         ltcg_days = rates["eq_ltcg_days"] if is_equity else rates["ne_ltcg_days"]
         fmv = gf_nav.get(mid) if is_equity and mid else None
         lnav = last_nav.get(mid) if mid else None
-        first_nav = next((D(str(r[8])) for r in rows if r[8] is not None and r[6] is not None), None)
-        lots: deque = deque()  # (buy_date|None, units, unit_cost|None, buy_txn_id, buy_type, approx)
+        first_nav = next(
+            (D(str(r[8])) for r in rows if r[8] is not None and r[6] is not None), None
+        )
+        lots: deque = (
+            deque()
+        )  # (buy_date|None, units, unit_cost|None, buy_txn_id, buy_type, approx)
         for (
-            txn_id, _cid, _sid, _isin, _fn, _fo, txn_date, txn_type,
-            nav, units, amount, stamp_duty, is_debit, approx,
+            txn_id,
+            _cid,
+            _sid,
+            _isin,
+            _fn,
+            _fo,
+            txn_date,
+            txn_type,
+            nav,
+            units,
+            amount,
+            _stamp_duty,
+            is_debit,
+            approx,
         ) in rows:
             nav = D(str(nav)) if nav is not None else None
             units = D(str(units)) if units is not None else None
@@ -137,7 +169,12 @@ def main() -> int:
                     # grandfathered basis per CBDT: max(cost, min(FMV_31Jan18, sale price))
                     basis = b_cost
                     gf_applied = False
-                    if fmv is not None and (b_date is None or b_date < GF_DATE) and b_cost is not None and sell_pu is not None:
+                    if (
+                        fmv is not None
+                        and (b_date is None or b_date < GF_DATE)
+                        and b_cost is not None
+                        and sell_pu is not None
+                    ):
                         basis = max(b_cost, min(fmv, sell_pu))
                         gf_applied = basis != b_cost
                         n_gf_applied += gf_applied
@@ -152,15 +189,29 @@ def main() -> int:
                     )
                     out_rows.append(
                         (
-                            client_id, scheme_id, fund_name, folio, "closed",
-                            b_date, b_type, b_txn,
-                            float(take), float(b_cost) if b_cost is not None else None,
-                            float(basis) if basis is not None else None, gf_applied,
-                            txn_date, txn_type, txn_id,
+                            client_id,
+                            scheme_id,
+                            fund_name,
+                            folio,
+                            "closed",
+                            b_date,
+                            b_type,
+                            b_txn,
+                            float(take),
+                            float(b_cost) if b_cost is not None else None,
+                            float(basis) if basis is not None else None,
+                            gf_applied,
+                            txn_date,
+                            txn_type,
+                            txn_id,
                             float(sell_pu) if sell_pu is not None else None,
                             float(gain) if gain is not None else None,
-                            days, "ltcg" if long_term else "stcg",
-                            None, None, None, b_approx,
+                            days,
+                            "ltcg" if long_term else "stcg",
+                            None,
+                            None,
+                            None,
+                            b_approx,
                         )
                     )
                     if take == b_units:
@@ -172,16 +223,23 @@ def main() -> int:
                     n_oversell += 1
             # dividends/segregation/other: no lot effect
 
-        asof, cur_nav = (lnav if lnav else (None, None))
+        asof, cur_nav = lnav if lnav else (None, None)
         for b_date, b_units, b_cost, b_txn, b_type, b_approx in lots:
             days = (asof - b_date).days if (asof and b_date) else None
             long_term = days >= ltcg_days if days is not None else True
             basis = b_cost
             gf_applied = False
-            if fmv is not None and (b_date is None or b_date < GF_DATE) and b_cost is not None and cur_nav is not None:
+            if (
+                fmv is not None
+                and (b_date is None or b_date < GF_DATE)
+                and b_cost is not None
+                and cur_nav is not None
+            ):
                 basis = max(b_cost, min(fmv, cur_nav))
                 gf_applied = basis != b_cost
-            unreal = (cur_nav - basis) * b_units if (cur_nav is not None and basis is not None) else None
+            unreal = (
+                (cur_nav - basis) * b_units if (cur_nav is not None and basis is not None) else None
+            )
             if unreal is not None and unreal > 0:
                 rate = (
                     (rates["eq_ltcg"] if long_term else rates["eq_stcg"])
@@ -193,15 +251,29 @@ def main() -> int:
                 tax_now = D("0") if unreal is not None else None
             out_rows.append(
                 (
-                    client_id, scheme_id, fund_name, folio, "open",
-                    b_date, b_type, b_txn,
-                    float(b_units), float(b_cost) if b_cost is not None else None,
-                    float(basis) if basis is not None else None, gf_applied,
-                    None, None, None, None, None, days,
+                    client_id,
+                    scheme_id,
+                    fund_name,
+                    folio,
+                    "open",
+                    b_date,
+                    b_type,
+                    b_txn,
+                    float(b_units),
+                    float(b_cost) if b_cost is not None else None,
+                    float(basis) if basis is not None else None,
+                    gf_applied,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    days,
                     "ltcg" if long_term else "stcg",
                     float(cur_nav) if cur_nav is not None else None,
                     float(unreal) if unreal is not None else None,
-                    float(tax_now) if tax_now is not None else None, b_approx,
+                    float(tax_now) if tax_now is not None else None,
+                    b_approx,
                 )
             )
 
@@ -270,7 +342,9 @@ def main() -> int:
     )
     ok, total = cur.fetchone()
     print(f"lots-vs-ledger balance check: {ok}/{total} fund-folios reconcile")
-    print(f"grandfathering: {n_gf_applied} slices stepped up, {n_gf_missing} pre-2018 equity slices without FMV NAV")
+    print(
+        f"grandfathering: {n_gf_applied} slices stepped up, {n_gf_missing} pre-2018 equity slices without FMV NAV"
+    )
     if n_oversell:
         print(f"WARN {n_oversell} sells exceeded available lot units (units unaccounted)")
     conn.close()

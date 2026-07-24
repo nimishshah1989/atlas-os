@@ -17,6 +17,7 @@ Money (tax_if_sold_now sums) is computed in Decimal; only display-only look-thro
 rupee aggregates use float.
 Usage: set -a; source .env; set +a; .venv/bin/python scripts/wealth/build_cut_list.py
 """
+
 from __future__ import annotations
 
 import json
@@ -111,8 +112,8 @@ def set_cover(fund_stocks: dict, port_exp: dict, total_exp: float):
 def main() -> int:
     conn = connect()
     cur = conn.cursor()
-    fw = latest_fund_weights(conn)          # mstar_id -> {isin: (name, weight_pct)}
-    weak = weak_funds(conn)                 # scheme_id -> [reasons]
+    fw = latest_fund_weights(conn)  # mstar_id -> {isin: (name, weight_pct)}
+    weak = weak_funds(conn)  # scheme_id -> [reasons]
 
     cur.execute(
         """select h.client_id, h.scheme_id, s.mstar_id, s.display_name, sum(h.market_value)

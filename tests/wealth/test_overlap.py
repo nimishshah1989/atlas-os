@@ -1,11 +1,15 @@
-import os, psycopg2
+import os
 
 DSN = os.environ["ATLAS_DB_URL"].replace("postgresql+psycopg2://", "postgresql://")
 
+
 def test_pairwise_overlap_symmetric_and_bounded():
-    import sys; sys.path.insert(0, "scripts/wealth")
-    from build_overlap import latest_fund_weights, pairwise_overlap
+    import sys
+
+    sys.path.insert(0, "scripts/wealth")
     import engine_common
+    from build_overlap import latest_fund_weights, pairwise_overlap
+
     conn = engine_common.connect()
     fw = latest_fund_weights(conn)
     # two real, populated funds
