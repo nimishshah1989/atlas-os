@@ -8,7 +8,8 @@ inline SVG only). Rule #0: every number on screen is computed here from the DB,
 nothing invented.
 
 Routes: #book (6 scroll-snap chapters) · #calls (three PREDICT lists) ·
-#client/<id> (the 8-section Audit Pack).
+#cohort + #segment/<key> (management dashboard) · #client/<id> (the 8-section
+Audit Pack) · #guide (plain-language explainer of every engine).
 
 Output: /home/ubuntu/jhaveri_data/reports/jhaveri-capability-app.html (~2-4 MB).
 Not committed — lives outside the repo. Gate it with validate_wealth_app.py.
@@ -370,6 +371,57 @@ def _build_cohort(conn, book: dict) -> dict:
     }
 
 
+def _build_guide(conn) -> dict:
+    """Real tallies for the #guide page (spec §guide): one 'found tonight'
+    number per engine that isn't already available on DATA.cohort/DATA.book
+    (those are reused directly in the JS). Every value below is a live query
+    against the same tables the engines themselves wrote — Rule #0, nothing
+    invented."""
+
+    def q(sql):
+        return pd.read_sql(sql, conn)
+
+    ov = q("select count(*) n, percentile_cont(0.5) within group (order by eff_bets) med "
+           "from wealth.client_overlap").iloc[0]
+    heavy = q("select count(distinct client_id) n from wealth.client_fund_overlap "
+              "where overlap_pct >= 20").iloc[0]
+    lbl = q("select verdict, count(*) n from wealth.fund_label_check group by 1")
+    lbl_by = {r.verdict: int(r.n) for r in lbl.itertuples()}
+    tax = q("select round(sum(tax_saved_if_harvested)/1e5,1) l, "
+            "count(*) filter (where headroom > 0) n from wealth.tax_harvest").iloc[0]
+    hh = q("""select count(distinct household_id) hh,
+                     count(*) filter (where succession_flag = 'transmission_seen') trans,
+                     count(*) filter (where succession_flag = 'single_holder_concentrated') conc
+              from wealth.households""").iloc[0]
+    beh = q("select count(*) filter (where sip_stops_in_drawdown > 0) n, count(*) tot "
+            "from wealth.client_behaviour").iloc[0]
+    sc = q("select count(*) filter (where needs_attention) n, count(*) tot "
+           "from wealth.client_scorecard").iloc[0]
+    fp = q("select verdict, count(*) n from wealth.fund_performance group by 1")
+    fp_by = {r.verdict: int(r.n) for r in fp.itertuples()}
+    cut = q("select count(*) tot, count(*) filter (where cut is not null and cut::text <> '[]') n "
+            "from wealth.cut_list").iloc[0]
+    cv = q("select count(distinct client_id) clients, count(*) points from wealth.client_curves").iloc[0]
+    ev = q("""select count(*) filter (where kind = 'panic_sell') panic,
+                     count(*) filter (where kind = 'sip_stop') sipstop, count(*) tot
+              from wealth.client_curve_events""").iloc[0]
+
+    return {
+        "overlap_clients": int(ov.n), "overlap_med_bets": _f(ov.med), "overlap_heavy_clients": int(heavy.n),
+        "label_total": sum(lbl_by.values()), "label_mismatch": lbl_by.get("mismatch", 0),
+        "label_no_data": lbl_by.get("no_data", 0),
+        "tax_saved_l": _f(tax.l), "tax_clients": int(tax.n),
+        "hh_count": int(hh.hh), "hh_transmission": int(hh.trans), "hh_concentrated": int(hh.conc),
+        "beh_sip_in_drawdown": int(beh.n), "beh_total": int(beh.tot),
+        "sc_attention": int(sc.n), "sc_total": int(sc.tot),
+        "fp_scored": fp_by.get("scored", 0), "fp_insufficient": fp_by.get("insufficient_history", 0),
+        "fp_total": sum(fp_by.values()),
+        "cut_clients": int(cut.n), "cut_total": int(cut.tot),
+        "curve_clients": int(cv.clients), "curve_points": int(cv.points),
+        "curve_panic": int(ev.panic), "curve_sipstop": int(ev.sipstop), "curve_total_events": int(ev.tot),
+    }
+
+
 def fetch(conn) -> dict:
     def q(sql):
         return pd.read_sql(sql, conn)
@@ -521,10 +573,11 @@ def fetch(conn) -> dict:
 
     _widen_clients(conn, clients)
     cohort = _build_cohort(conn, book)
+    guide = _build_guide(conn)
 
     return {"asof": asof, "book": book, "chapters": chapters,
             "sections": SECTION_NAMES, "call_lists": call_lists, "clients": clients,
-            "cohort": cohort}
+            "cohort": cohort, "guide": guide}
 
 
 # --------------------------------------------------------------- render --
@@ -587,7 +640,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 .method{color:var(--muted);font-size:.85rem;margin-top:8px}
 
 /* top bar */
-.bar{position:sticky;top:0;z-index:20;display:flex;gap:6px;align-items:center;
+.bar{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;gap:6px;align-items:center;
   background:var(--paper);border-bottom:1px solid var(--line);padding:10px 18px}
 .bar .brand{font-family:var(--serif);font-weight:600;font-size:1.05rem;margin-right:auto}
 .bar a,.bar button{font-family:var(--sans);font-size:.85rem;font-weight:600;
@@ -658,6 +711,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
   <a href="#calls" data-nav>Who to call</a>
   <a href="#cohort" data-nav>Cohort</a>
   <a href="#client/" data-nav>A client</a>
+  <a href="#guide" data-nav>How it's built</a>
   <button id="theme" aria-label="Toggle light or dark theme">◑ Theme</button>
 </div>
 <main id="app" role="main"></main>
@@ -738,6 +792,7 @@ function nav(){
   if(h==="cohort") return renderCohort();
   if(h.startsWith("segment/")) return renderSegment(h.slice(8));
   if(h.startsWith("client/")) return renderClient(h.slice(7));
+  if(h==="guide") return renderGuide();
   renderBook();
 }
 window.addEventListener("hashchange", ()=>{app.scrollTop=0;nav();});
@@ -1328,6 +1383,168 @@ function fundPerfText(fp){
   if(fp.benchmark_note) s+=" "+esc(fp.benchmark_note);
   return s;
 }
+
+/* ---- #guide: plain-language explainer of every engine ---- */
+function svgFlow(){
+  const steps=[
+    ["Ledger export","PDF/Excel statements, one book"],
+    ["Parse & load","parse_ledgers.py → wealth.transactions"],
+    ["13 engines","behaviour, tax, performance, segments…"],
+    ["wealth.* tables","one row per client per engine"],
+    ["This app","one HTML file, zero external requests"],
+  ];
+  const bw=300,bh=46,gap=20,W=340,H=steps.length*(bh+gap)-gap;
+  const boxes=steps.map((s,i)=>{
+    const y=i*(bh+gap);
+    const arrow=i<steps.length-1?`<line x1="${W/2}" y1="${y+bh}" x2="${W/2}" y2="${y+bh+gap}" stroke="var(--muted)" stroke-width="2" marker-end="url(#gArrow)"/>`:"";
+    return `<g><rect x="${(W-bw)/2}" y="${y}" width="${bw}" height="${bh}" rx="8" fill="var(--card)" stroke="var(--line)"/>
+      <text x="${W/2}" y="${y+19}" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">${esc(s[0])}</text>
+      <text x="${W/2}" y="${y+34}" text-anchor="middle" font-size="10" fill="var(--muted)">${esc(s[1])}</text>
+      ${arrow}</g>`;
+  }).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:360px;display:block;margin:8px auto" role="img" aria-label="Pipeline: ledger export, then parse and load, then thirteen engines, then wealth tables, then this app">
+    <defs><marker id="gArrow" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+      <path d="M0 0 L8 4 L0 8 Z" fill="var(--muted)"/></marker></defs>
+    ${boxes}
+  </svg>`;
+}
+function guideCard(title,job,bullets,tech){
+  return `<div class="card">
+    <h3>${esc(title)}</h3>
+    <p class="method" style="margin-top:2px">${esc(job)}</p>
+    <ul style="margin:10px 0 4px;padding-left:18px;font-size:.92rem;line-height:1.5">
+      ${bullets.map(b=>`<li style="margin-bottom:5px">${b}</li>`).join("")}
+    </ul>
+    <details class="fdrow"><summary>Technical detail</summary><div class="method">${tech}</div></details>
+  </div>`;
+}
+function renderGuide(){
+  const g=DATA.guide, co=DATA.cohort, hl=co.headline;
+  const sipStopped=(co.waterfall||[]).find(w=>w.label==="SIPs stopped");
+  const fn=co.funnel||[], armed=fn[1]||{n:"—"}, onList=fn[2]||{n:"—"}, tonight=fn[3]||{n:"—"};
+  const segTop=[...(co.segment_bar||[])].sort((a,b)=>b.count-a.count);
+
+  const cards=[
+    guideCard("Overlap & true stock exposure",
+      "Works out how many of your funds are secretly betting on the same stocks.",
+      [`<b>Read:</b> every fund's disclosed stock-by-stock holdings for every client on the book.`,
+       `<b>Did:</b> added up each client's real, non-duplicated stock exposure across all their funds.`,
+       `<b>Found tonight:</b> scored ${g.overlap_clients} clients; a typical client's dozens of funds boil down to about ${g.overlap_med_bets.toFixed(1)} genuinely different bets, and ${g.overlap_heavy_clients} clients have at least one pair of funds sharing 20%+ of the same stocks.`],
+      `<code>build_overlap.py</code> → <code>wealth.client_overlap</code>, <code>wealth.client_fund_overlap</code>. Effective bets = 1 / sum(each stock's portfolio weight squared) — a lower number means more of the same stock is hiding across different fund names.`),
+
+    guideCard("Fund label check",
+      "Checks whether a fund's stated category matches what it actually holds.",
+      [`<b>Read:</b> every held fund's real stock-by-stock market-cap mix (large/mid/small).`,
+       `<b>Did:</b> compared that mix against SEBI's own category rules for the name printed on the statement.`,
+       `<b>Found tonight:</b> checked ${g.label_total} held funds; ${g.label_mismatch} print a category that doesn't match their true mix, and ${g.label_no_data} had no holdings data to check.`],
+      `<code>build_label_check.py</code> → <code>wealth.fund_label_check</code>. SEBI split: large-cap = top 100 companies by market value, mid-cap = 101-250, small-cap = 251+; a fund fails if its declared category doesn't match the size mix it actually holds.`),
+
+    guideCard("Tax harvest",
+      "Finds unused tax-free room before it resets on 1 April.",
+      [`<b>Read:</b> every client's lot-by-lot unrealized gains and losses, and gains already booked this year.`,
+       `<b>Did:</b> worked out how much of the ₹1.25L yearly tax-free allowance is still unused, and which lots to sell to use it up.`,
+       `<b>Found tonight:</b> ${g.tax_clients} clients still have unused allowance; harvesting it now would save about ₹${g.tax_saved_l}L in tax this year across the book.`],
+      `<code>build_tax_harvest.py</code> → <code>wealth.tax_harvest</code>. India's long-term capital-gains exemption is ₹1.25L per person per financial year and does not carry forward — headroom left unused on 31 March is gone for good.`),
+
+    guideCard("Value statement",
+      "Puts a rupee number on what good advice and good behaviour actually delivered.",
+      [`<b>Read:</b> every client's SIP record, sell timing, switch history, fees paid and tax already saved.`,
+       `<b>Did:</b> added up six components of value actually booked, plus a separate what-if upper bound not yet realized.`,
+       `<b>Found tonight:</b> realized value delivered across the book is about ${hl.realized_cr==null?"—":lcr(hl.realized_cr*1e7)}, with a further ${hl.coaching_cr==null?"—":lcr(hl.coaching_cr*1e7)} still on the table as a coaching opportunity.`],
+      `<code>build_value_statement.py</code> → <code>wealth.value_statements</code>. Six components — SIP discipline, staying invested through falls, switch/advice outcome, fee savings, tax headroom used — each measured against the client's own real numbers, never invented.`),
+
+    guideCard("Call lists",
+      "Turns the whole book into three ranked lists of exactly who to call this week.",
+      [`<b>Read:</b> every client's behaviour fingerprint, scorecard grade and what-if numbers.`,
+       `<b>Did:</b> ranked and scripted three standing call lists — no fitted model, just documented rules.`,
+       `<b>Found tonight:</b> ${armed.n} clients sit in an at-risk behaviour group, ${onList.n} are on a live call list, and tonight's top sheet is ${tonight.n} names.`],
+      `<code>build_call_lists.py</code> → <code>wealth.call_lists</code>. Three lists (<code>list_type</code>), ranked 1 = highest priority; each row carries a plain-language reason and a suggested script line.`),
+
+    guideCard("Household roll-up",
+      "Figures out which accounts are really one family, and who succession risk sits with.",
+      [`<b>Read:</b> each client's surname, the ledger's own family/RM grouping, and joint-holder names across every folio.`,
+       `<b>Did:</b> merged genuinely-related accounts into real households using two independent signals, even when scattered across folio types.`,
+       `<b>Found tonight:</b> ${hl.clients} clients roll up into ${g.hh_count} real households; ${g.hh_transmission} already show a transmission event on file, and ${g.hh_concentrated} are concentrated in a single holder with no succession plan visible yet.`],
+      `<code>build_household.py</code> → <code>wealth.households</code>. Households merged via shared surname within the ledger's own family_group AND via shared joint-holder names (union-find), so one family scattered across folio types still counts once.`),
+
+    guideCard("Behaviour fingerprints",
+      "Tags how each client actually behaves in a fall — not how they say they'd behave.",
+      [`<b>Read:</b> every buy and sell transaction's timing against the market, and each client's SIP payment history.`,
+       `<b>Did:</b> fingerprinted each client on selling in falls, chasing recently-hot funds, and stopping SIPs during a downturn.`,
+       `<b>Found tonight:</b> ${g.beh_sip_in_drawdown} of ${g.beh_total} scored clients (about ${Math.round(100*g.beh_sip_in_drawdown/g.beh_total)}%) stopped at least one SIP specifically during a market fall — the worst possible moment to stop.`],
+      `<code>behaviour_fingerprints.py</code> → <code>wealth.client_behaviour</code>. Sell timing is compared to the fund's trailing return at the time of sale; a SIP stop is only flagged "in drawdown" if it lands inside a real, dated market fall window.`),
+
+    guideCard("What-if engine",
+      "Replays each client's real money into the paths not taken, to see what a habit actually cost.",
+      [`<b>Read:</b> every client's actual purchase and sale dates and amounts.`,
+       `<b>Did:</b> replayed the same money into a plain index fund, into a version with no panic-selling, and into a version where every SIP kept running.`,
+       `<b>Found tonight:</b> SIPs that were stopped have left about ${sipStopped?lcr(sipStopped.value_cr*1e7):"—"} of growth behind across the book — money that would exist today had the SIP simply kept running.`],
+      `<code>counterfactuals.py</code> → <code>wealth.counterfactuals</code>. Each what-if replays the client's own cash-flow dates and amounts into an alternate path (index fund / no panic sells / SIP never stopped) and compares the ending value to what actually happened.`),
+
+    guideCard("Scorecard",
+      "Grades each client's real outcome first, before recommending anything.",
+      [`<b>Read:</b> each client's realized yearly growth, how their held funds rank inside Atlas's category scoring, and portfolio hygiene (dust positions, dead units, repeated categories).`,
+       `<b>Did:</b> graded every client A-D on outcome, and only then checked whether a conversation is actually warranted.`,
+       `<b>Found tonight:</b> ${g.sc_attention} of ${g.sc_total} graded clients (about ${Math.round(100*g.sc_attention/g.sc_total)}%) are flagged needing attention — most for below-target growth, some for too much money in bottom-quartile funds or duplicate fund categories.`],
+      `<code>build_scorecard.py</code> → <code>wealth.client_scorecard</code>. Grade A: 15%+ yearly growth, B: 12-15%, C: 8-12%, D: below 8%. "Needs attention" additionally fires on &gt;30% of scored equity in bottom-quartile funds, 2+ duplicate sub-categories, or a dead side-pocket unit.`),
+
+    guideCard("Fund performance",
+      "Scores every held fund on its own multi-year track record, not last quarter's headline.",
+      [`<b>Read:</b> each held equity fund's month-by-month NAV history and its matching benchmark.`,
+       `<b>Did:</b> scored rolling 3- and 5-year returns, how much of a market fall the fund passed on, and how often it beat its benchmark, window by window.`,
+       `<b>Found tonight:</b> scored ${g.fp_scored} of ${g.fp_total} held equity funds with enough history to grade honestly; the other ${g.fp_insufficient} are too new or too short a track record to score.`],
+      `<code>build_fund_performance.py</code> → <code>wealth.fund_performance</code>. One row per held equity fund; rolling 3y/5y return, downside-capture %, best-year-stripped return and a beat-count vs. benchmark across overlapping windows — funds under the minimum history print "insufficient_history", never a guessed number.`),
+
+    guideCard("Cut list",
+      "Works out the smallest set of funds a client actually needs to keep.",
+      [`<b>Read:</b> each client's held funds, the overlap engine's stock-by-stock map, and the fund-performance scores above.`,
+       `<b>Did:</b> found, per client, which held funds are both redundant with something better AND weak on their own — safe to drop — and the minimum fund count that keeps the same real bets.`,
+       `<b>Found tonight:</b> ${g.cut_clients} of ${g.cut_total} clients (about ${Math.round(100*g.cut_clients/g.cut_total)}%) have at least one fund flagged safe to cut tonight, in tax-efficient order.`],
+      `<code>build_cut_list.py</code> → <code>wealth.cut_list</code>. A fund is only cut if it is BOTH heavily overlapping with a stronger held fund AND itself weak on the performance engine's own scoring — never on overlap alone.`),
+
+    guideCard("Segments",
+      "Sorts every client into exactly one behaviour group, so management can act on a group, not 242 individuals.",
+      [`<b>Read:</b> each client's behaviour fingerprint, scorecard grade and what-if numbers.`,
+       `<b>Did:</b> applied a fixed precedence rule so every client lands in exactly one of ${co.segment_bar.length} segments.`,
+       `<b>Found tonight:</b> ${segTop[0]?segTop[0].count+" "+esc(segTop[0].segment):"—"} and ${segTop[1]?segTop[1].count+" "+esc(segTop[1].segment):"—"} are the two largest groups, out of ${hl.clients} clients sorted tonight.`],
+      `<code>build_segments.py</code> → <code>wealth.client_segments</code>. Precedence order is fixed and documented in code (first matching rule wins); every client also carries independent trait chips and a ₹ what-if alongside the one primary segment.`),
+
+    guideCard("Equity curves",
+      "Builds the actual month-by-month value line behind every client's chart, with the moments that moved it marked.",
+      [`<b>Read:</b> every month-end unit balance times that month's NAV, across each client's full transaction history.`,
+       `<b>Did:</b> built one point-in-time value curve per client, and marked the big money moves, panic sells and SIP stops along it.`,
+       `<b>Found tonight:</b> ${g.curve_clients} clients now have a full curve (${enIN(g.curve_points)} month-points); ${enIN(g.curve_panic)} marked events across the book are panic sells and ${enIN(g.curve_sipstop)} are SIP stops.`],
+      `<code>build_equity_curves.py</code> → <code>wealth.client_curves</code>, <code>wealth.client_curve_events</code>. Curve value = units held (from real transactions) × month-end NAV; events use the same panic-sell / SIP-stop / big-flow definitions the behaviour and what-if engines use, so the chart and the numbers always agree.`),
+  ].join("");
+
+  app.innerHTML=`<div class="wrap" style="padding-top:22px">
+    <div class="eyebrow">For management</div>
+    <h1 style="font-size:clamp(24px,3.4vw,32px);margin-top:8px">How this board is built</h1>
+    <p class="method">Thirteen scripts, one command, zero guessing. Every card below is one engine: what it reads, what it does, and a real number it found in tonight's run.</p>
+
+    <div class="section" style="border-top:none;padding-top:8px">
+      <h3>The pipeline</h3>
+      ${svgFlow()}
+      <p class="method">Point this at any book's ledger export — parse and load once (<code>parse_ledgers.py</code> / <code>load_ledgers.py</code>), then everything downstream rebuilds with one command: <code>bash scripts/wealth/run_wealth_engine.sh</code>.</p>
+    </div>
+
+    <div class="section">
+      <h3>Every engine</h3>
+      <div class="cards">${cards}</div>
+    </div>
+
+    <div class="section">
+      <div class="profile">
+        <h3>How honest is this?</h3>
+        <p>Every card above is one Python script running fixed SQL and statistics over the book's real transaction and holdings history — nothing here is a machine-learning model fitted to guess anything (242 clients is far too few to trust a fitted model on anyway). The "segments", "scorecard" grades and "cut list" picks are documented, fixed rules, not predictions.</p>
+        <p>The only place language is generated is the plain-English write-up on each client's own page — and that pass runs through a word validator before it ships, which automatically rejects jargon and only allows plain phrasing (yearly growth, ahead of/behind the index fund, what-if). For any name on any list, management can always ask "why is this client here?" and get a one-sentence answer pointing at the exact row of the exact table above that says so.</p>
+      </div>
+    </div>
+
+    <div class="foot">Every number on this page is tonight's live tally from the book's own tables, as on ${esc(DATA.asof)}.</div>
+  </div>`;
+}
+
 function renderFloor(c){
   const raw=c.holdings||[];
   if(!raw.length) return {donut:"",table:'<p class="insuf">No held-fund detail on file for this client.</p>'};

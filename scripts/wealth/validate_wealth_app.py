@@ -11,8 +11,9 @@ Checks (all must pass):
   4. every client_id referenced anywhere (call_lists, chapters) resolves to a
      client present in `clients` (the datalist source)
   5. byte size < 6 MB
-  6. headless browse: ZERO console errors on #book, #calls and 3 real
-     #client/<id> pages (GSTACK_CHROMIUM_NO_SANDBOX=1, file copied under /tmp)
+  6. headless browse: ZERO console errors on #book, #calls, #cohort, #guide,
+     3 real #client/<id> pages and one #segment/<key> page
+     (GSTACK_CHROMIUM_NO_SANDBOX=1, file copied under /tmp)
 
 Usage: .venv/bin/python scripts/wealth/validate_wealth_app.py
 Exit 0 = all green; non-zero = a specific failure printed.
@@ -163,6 +164,8 @@ def main() -> int:
 
     print(f"static checks PASS: {size/1e6:.2f} MB, {len(client_ids)} clients, "
           f"{len(referenced)} referenced ids all resolvable, strict JSON, no NaN")
+    headroom = (MAX_BYTES - size) / 1e6
+    print(f"byte-headroom watch: app {size/1e6:.2f} MB, {headroom:.2f} MB under the 6 MB cap")
 
     # ---- banned-word gate (plain-language rule, defense-in-depth) ----
     hits = banned_hits(data, html)
@@ -180,7 +183,8 @@ def main() -> int:
     shutil.copy(APP, tmp)
 
     sample = sorted(client_ids, key=lambda x: int(x))[:3]
-    routes = ["book", "calls"] + [f"client/{cid}" for cid in sample]
+    routes = (["book", "calls", "cohort", "guide"] + [f"client/{cid}" for cid in sample]
+              + ["segment/crash_sellers"])
     problems = browse_routes(tmp, routes)
     if problems:
         print("FAIL: console errors in headless browse:")
