@@ -31,8 +31,8 @@ from build_audit_packs import SECTION_NAMES
 from build_segments import SEGMENTS
 from engine_common import connect
 
-# segments the call-list engine actually arms (mirrors build_call_lists' scope —
-# "Too New to Tell" has no signal yet, "Steady Compounders" needs no call).
+# segment-based proxy for the armed pool; not a 1:1 map of build_call_lists'
+# candidate rows (that engine pools from client_behaviour/sip_streams/client_churn_risk).
 ARMED_SEGMENTS = tuple(s for s in SEGMENTS if s not in ("Too New to Tell", "Steady Compounders"))
 
 _XIRR_RE = re.compile(r"(?i)\bXIRR\b")
@@ -95,10 +95,14 @@ def _widen_clients(conn, clients: dict) -> None:
     def q(sql, params=None):
         return pd.read_sql(sql, conn, params=params)
 
+    # A client can have >1 wealth.client_reports snapshot (e.g. client 198 has 2) —
+    # restrict to each client's LATEST snapshot so holdings aren't double-counted.
     hold = q("""
         select h.client_id, s.scheme_id, s.display_name as fund, s.asset_class,
                h.market_value, flc.verdict, fr.composite
         from wealth.holdings h
+        join (select distinct on (client_id) report_id from wealth.client_reports
+              order by client_id, as_on_date desc) latest on latest.report_id = h.report_id
         join wealth.schemes s using (scheme_id)
         left join wealth.fund_label_check flc on flc.scheme_id = h.scheme_id
         left join atlas_foundation.fund_rank_daily fr
@@ -331,12 +335,15 @@ def _build_cohort(conn, book: dict) -> dict:
     cr = q("select client_id, disengagement_score, mv from wealth.client_churn_risk")
     seg_of = {int(r.client_id): r.segment for r in
               q("select client_id, segment from wealth.client_segments").itertuples()}
-    scores = [float(x) for x in cr.disengagement_score.dropna()]
-    mvs = [float(x) for x in cr.mv.dropna()]
+    # medians must be computed over the SAME both-non-null population as `points`,
+    # not two independently-dropna'd full columns, else the quadrant split is off.
+    both = [r for r in cr.itertuples() if r.disengagement_score is not None and r.mv is not None]
+    scores = [float(r.disengagement_score) for r in both]
+    mvs = [float(r.mv) for r in both]
     points = [
         {"client_id": int(r.client_id), "churn_score": _f(r.disengagement_score),
          "book_cr": _f(float(r.mv) / 1e7), "segment": seg_of.get(int(r.client_id))}
-        for r in cr.itertuples() if r.disengagement_score is not None and r.mv is not None
+        for r in both
     ]
     scatter = {
         "points": points,
