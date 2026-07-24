@@ -642,6 +642,11 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
   border-radius:10px;padding:14px 16px;margin-bottom:10px}
 .act .verb{font-weight:700}
 .act .tax{color:var(--muted);font-size:.88rem;margin-top:4px}
+.win{flex:1 1 200px;background:var(--card);border:1px solid var(--line);border-left:3px solid var(--good);
+  border-radius:10px;padding:14px 16px;margin-bottom:10px}
+.win .verb{font-weight:700}
+.fdrow{margin-top:0;border-top:none;padding-top:0}
+.fdrow summary{font-size:.88rem;font-weight:600}
 .foot{color:var(--muted);font-size:.8rem;padding:30px 20px;text-align:center}
 </style>
 
@@ -911,6 +916,243 @@ function actionsHTML(p){
   if(p.tax && p.tax.n_gain_candidates>0)cards.push(`<div class="act"><div class="verb">Harvest gains this year (${esc(p.tax.fy)})</div><div>${p.tax.n_gain_candidates} lot(s) with tax-free headroom of ${lcr(p.tax.headroom)}.</div><div class="tax">Est. tax saved: ${lcr(p.tax.tax_saved_if_harvested)}${p.tax.loss_note?" · "+esc(p.tax.loss_note):""}</div></div>`);
   return cards.length?cards.join(""):`<div class="insuf">Nothing pressing on this account right now.</div>`;
 }
+/* ---- client 360 ("the Kundli") ---- */
+function slug(s){ return String(s||"").toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,""); }
+
+// Part 2: story curve — monthly value line, drawdown-to-peak shaded, event markers.
+function svgStoryCurve(curve){
+  if(!curve || !curve.months || !curve.months.length){
+    return '<p class="insuf">Not enough NAV history in mapped funds to trace this client’s value over time.</p>';
+  }
+  const months=curve.months, vals=curve.values, n=vals.length, cov=curve.coverage_pct;
+  const W=680,H=220,padL=6,padR=6,padT=10,padB=24;
+  const lo=Math.min(...vals), hi=Math.max(...vals), span=(hi-lo)||1;
+  const x=i=>padL+i*(W-padL-padR)/(n-1||1);
+  const y=v=>H-padB-(v-lo)/span*(H-padT-padB);
+  let peak=-Infinity; const peaks=vals.map(v=>{peak=Math.max(peak,v);return peak;});
+  const line=vals.map((v,i)=>(i?"L":"M")+x(i).toFixed(1)+" "+y(v).toFixed(1)).join(" ");
+  const underPeak=peaks.map((v,i)=>"L"+x(n-1-i).toFixed(1)+" "+y(peaks[n-1-i]).toFixed(1)).join(" ");
+  const area=line+" "+underPeak+" Z";
+  const partial=cov!=null && cov<70;   // build_equity_curves.py: <70% is the app's own insufficient flag
+  const monthIdx={}; months.forEach((m,i)=>monthIdx[m]=i);
+  let markers="";
+  const ev=curve.events, tickTop=H-padB+4, tickBot=H-padB+16;
+  if(ev){
+    for(let k=0;k<ev.dates.length;k++){
+      const i=monthIdx[String(ev.dates[k]).slice(0,7)];
+      if(i==null) continue;
+      const cx=x(i).toFixed(1), kind=ev.kinds[k], amt=lcr(Math.abs(ev.amounts[k])), d=esc(ev.dates[k]);
+      if(kind==="panic_sell") markers+=`<circle cx="${cx}" cy="${y(vals[i]).toFixed(1)}" r="4.5" fill="var(--crit)"><title>Sold in a market fall — ${amt} on ${d}</title></circle>`;
+      else if(kind==="sip_stop") markers+=`<rect x="${cx-3}" y="${tickTop}" width="6" height="${tickBot-tickTop}" fill="var(--warn)"><title>SIP stopped — ${amt} on ${d}</title></rect>`;
+      else if(kind==="big_inflow") markers+=`<line x1="${cx}" y1="${tickTop}" x2="${cx}" y2="${tickBot}" stroke="var(--good)" stroke-width="2.5"><title>Large inflow — ${amt} on ${d}</title></line>`;
+      else if(kind==="big_outflow") markers+=`<line x1="${cx}" y1="${tickTop}" x2="${cx}" y2="${tickBot}" stroke="var(--muted)" stroke-width="2.5"><title>Large withdrawal — ${amt} on ${d}</title></line>`;
+    }
+  }
+  const banner=partial?`<p class="insuf">We can only trace ${cov.toFixed(0)}% of this client’s current book back through mapped-fund NAV history — the line below covers just that share, marked partial.</p>`:"";
+  const caption=(cov!=null&&cov<100)?`reconstructed from mapped funds, ${cov.toFixed(0)}% of book covered`:"";
+  return `<div class="curvewrap">${banner}
+    <svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Value over time, ${lcr(vals[n-1])} today">
+      <path d="${area}" fill="var(--crit)" opacity="0.10"></path>
+      <path d="${line}" fill="none" stroke="${partial?"var(--muted)":"var(--accent)"}" stroke-width="2.4" ${partial?'stroke-dasharray="5 4"':""}></path>
+      ${markers}
+    </svg>
+    <div class="method">${esc(months[0])} → ${esc(months[n-1])}${caption?" · "+caption:""} ·
+      <span style="color:var(--crit)">●</span> sold in a fall &nbsp;
+      <span style="color:var(--warn)">▮</span> SIP stopped &nbsp;
+      <span style="color:var(--good)">│</span> large inflow &nbsp;
+      <span style="color:var(--muted)">│</span> large withdrawal</div>
+  </div>`;
+}
+
+// Allocation donut (Part 3) + a generic 0-100 gauge (Part 1, churn risk).
+function svgDonut(segs){
+  const total=segs.reduce((s,d)=>s+d.v,0)||1;
+  const R=44,C=2*Math.PI*R; let off=0;
+  const COLORS=["var(--accent)","var(--good)","var(--warn)","var(--crit)","var(--muted)"];
+  const arcs=segs.map((s,i)=>{
+    const len=C*s.v/total, rot=(off/C*360-90).toFixed(1); off+=len;
+    return `<circle cx="60" cy="60" r="${R}" fill="none" stroke="${COLORS[i%COLORS.length]}" stroke-width="16" stroke-dasharray="${len.toFixed(1)} ${(C-len).toFixed(1)}" transform="rotate(${rot} 60 60)"><title>${esc(s.k)} · ${pct(s.v/total*100)}</title></circle>`;
+  }).join("");
+  const legend=segs.map((s,i)=>`<div style="display:flex;align-items:center;gap:6px;font-size:.85rem"><span style="width:10px;height:10px;border-radius:50%;background:${COLORS[i%COLORS.length]};display:inline-block"></span>${esc(s.k)} · ${lcr(s.v)}</div>`).join("");
+  return `<div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+    <svg viewBox="0 0 120 120" width="130" role="img" aria-label="Allocation by asset class">${arcs}</svg>
+    <div style="display:flex;flex-direction:column;gap:4px">${legend}</div>
+  </div>`;
+}
+function svgGauge(value,color,label){
+  const v=Math.max(0,Math.min(100,value)), R=40,C=Math.PI*R, off=C*(1-v/100);
+  return `<svg viewBox="0 0 120 70" width="104" role="img" aria-label="${esc(label)}: ${Math.round(value)} of 100">
+    <path d="M14 62 A46 46 0 0 1 106 62" fill="none" stroke="var(--line)" stroke-width="10" stroke-linecap="round"/>
+    <path d="M14 62 A46 46 0 0 1 106 62" fill="none" stroke="${color}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"/>
+    <text x="60" y="52" text-anchor="middle" font-family="var(--serif)" font-size="22" fill="var(--ink)">${Math.round(value)}</text>
+  </svg>`;
+}
+
+// Part 4 (wins) + Part 5 (behaviour costs) — gated on real segment traits, never invented.
+function clientWins(c){
+  const v=(c.pack&&c.pack.value)||{}, r=v.realized||{};
+  const bench=(c.pack&&c.pack.benchmark&&!c.pack.benchmark.insufficient)?c.pack.benchmark:{};
+  // GOOD maps a chip to its own description + the win title it duplicates
+  // when a ₹ figure already covers the same fact (skip the bare chip then).
+  const GOOD={"Holds through falls":["Never sold out during a market downturn.","Held through market falls"],
+    "Keeps every SIP running":["Every SIP has stayed active without a gap.","Kept SIPs running"],
+    "Reinvests dividends":["Dividend payouts are reinvested instead of taken as cash.",null]};
+  const out=[]; const titles=new Set();
+  if(r.staying_power_rs>0){ out.push({t:"Held through market falls",v:r.staying_power_rs,d:"Stayed invested through drops instead of selling at a loss."}); titles.add("Held through market falls"); }
+  if(r.sip_discipline_rs>0){ out.push({t:"Kept SIPs running",v:r.sip_discipline_rs,d:"Stuck to monthly investing instead of timing the market."}); titles.add("Kept SIPs running"); }
+  if(r.advice_outcome_rs>0) out.push({t:"Our switches paid off",v:r.advice_outcome_rs,d:"Fund switches we recommended came out ahead of the old fund."});
+  if(bench.alpha!=null && bench.alpha>0) out.push({t:"Ahead of the index fund",d:`Real money, real dates, replayed into a Nifty-50 index fund — came out ${pct(bench.alpha)}/yr ahead.`});
+  (c.chips||[]).forEach(ch=>{ const g=GOOD[ch]; if(g && !titles.has(g[1])) out.push({t:ch,d:g[0]}); });
+  if(!out.length){
+    const m=(c.pack&&c.pack.map)||{};
+    if(!m.insufficient && m.tenure_years!=null && m.total_mv!=null)
+      out.push({t:"Building a track record",d:`${m.tenure_years} years invested with us, a book now worth ${lcr(m.total_mv)}.`});
+    else
+      out.push({t:"Still early days",d:"Not enough history yet to call out a specific win — the relationship is still new."});
+  }
+  return out;
+}
+function clientCosts(c){
+  const seg=c.segment||{}, tr=seg.traits||{};
+  if(seg.segment==="Too New to Tell") return [];
+  const hb=(c.pack&&c.pack.habits&&!c.pack.habits.insufficient)?c.pack.habits:{};
+  const out=[];
+  if(tr.crash_seller) out.push({t:"Sells in market falls",v:hb.cf_no_panic_rs,d:`About ${Math.round((hb.panic_share||0)*100)}% of past withdrawals were sold during a market fall.`});
+  if(tr.div_spender) out.push({t:"Takes dividends as cash",v:hb.div_leak_rs,d:"Dividend payouts taken as cash instead of reinvested."});
+  if(tr.sip_quitter) out.push({t:"Stopped a SIP",v:hb.cf_sip_alive_rs,d:"A running SIP was stopped instead of continued."});
+  if(tr.chaser) out.push({t:"Chases recently hot funds",v:null,d:`${Math.round((hb.chase_hot_share||0)*100)}% of switches followed a fund that had just outperformed.`});
+  return out;
+}
+
+// Part 3 (the floor) — holdings grouped by asset class, deduped by scheme_id
+// (a client can carry the same scheme_id twice across folios); per-fund
+// expander doubles as Part 7's per-fund prompt 2 (label) + prompt 5 (performance).
+function fmtVerdict(v){ return v==null?"—":v==="mismatch"?"Off-label":v==="ok"?"On-label":esc(v); }
+function qualityDot(q){
+  if(q==null) return '<span style="color:var(--muted)">—</span>';
+  const c=q>=65?"var(--good)":q>=40?"var(--warn)":"var(--crit)";
+  return `<span style="color:${c};font-weight:700">${q.toFixed(0)}</span>`;
+}
+function fundPerfText(fp){
+  if(!fp) return "Not equity, or no rolling-performance signal computed for this fund.";
+  if(fp.verdict==="insufficient_history") return "Not enough NAV history yet to score rolling returns.";
+  const parts=[`3-yr yearly growth ${pct(fp.roll_3y_pct)}`];
+  if(fp.roll_5y_pct!=null) parts.push(`5-yr ${pct(fp.roll_5y_pct)}`);
+  if(fp.dn_capture_pct!=null) parts.push(`fell ${fp.dn_capture_pct.toFixed(0)}% as much as the market in its worst falls`);
+  if(fp.beat_count!=null && fp.windows) parts.push(`beat its benchmark in ${fp.beat_count} of ${fp.windows} rolling 1-year windows`);
+  if(fp.best_year_stripped_pct!=null && fp.full_period_pct!=null) parts.push(`full-period growth ${pct(fp.full_period_pct)}, ${pct(fp.best_year_stripped_pct)} with its single best year stripped out`);
+  let s=parts.join("; ")+".";
+  if(fp.benchmark_note) s+=" "+esc(fp.benchmark_note);
+  return s;
+}
+function renderFloor(c){
+  const raw=c.holdings||[];
+  if(!raw.length) return {donut:"",table:'<p class="insuf">No held-fund detail on file for this client.</p>'};
+  const bySid=new Map();
+  raw.forEach(h=>{
+    const cur=bySid.get(h.scheme_id);
+    if(cur) cur.mv=(cur.mv||0)+(h.mv||0); else bySid.set(h.scheme_id,Object.assign({},h,{mv:h.mv||0}));
+  });
+  const holds=[...bySid.values()];
+  const byClass={};
+  holds.forEach(h=>{ const k=h.asset_class||"Other"; (byClass[k]=byClass[k]||[]).push(h); });
+  const fpBySid={}; (c.fund_performance||[]).forEach(f=>fpBySid[f.scheme_id]=f);
+  const lc=(c.pack&&c.pack.label_check&&!c.pack.label_check.insufficient)?c.pack.label_check:{};
+  const labelByName={}; (lc.funds||[]).forEach(f=>labelByName[f.fund]=f);
+  const classEntries=Object.entries(byClass).sort((a,b)=>b[1].reduce((s,h)=>s+h.mv,0)-a[1].reduce((s,h)=>s+h.mv,0));
+  const donut=svgDonut(classEntries.map(([k,hs])=>({k,v:hs.reduce((s,h)=>s+h.mv,0)})));
+  const table=classEntries.map(([cls,hs])=>{
+    const rows=hs.sort((a,b)=>b.mv-a.mv).map(h=>{
+      const lbl=labelByName[h.fund], fp=fpBySid[h.scheme_id];
+      return `<tr><td>
+          <details class="fdrow"><summary>${esc(h.fund)}</summary>
+            <div class="method">Label check — does it do what its name promises? ${fmtVerdict(h.verdict)}${lbl&&lbl.detail?": "+esc(lbl.detail):""}${lbl&&lbl.coverage_note?` <em>(${esc(lbl.coverage_note)})</em>`:""}</div>
+            <div class="method">Rolling performance: ${fundPerfText(fp)}</div>
+          </details>
+        </td><td class="n">${lcr(h.mv)}</td><td class="n">${qualityDot(h.quality)}</td></tr>`;
+    }).join("");
+    return `<h4 style="margin:16px 0 2px">${esc(cls)} · ${lcr(hs.reduce((s,h)=>s+h.mv,0))}</h4>
+      <table><thead><tr><th>Fund (tap to expand)</th><th class="n">Value</th><th class="n">Quality</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }).join("");
+  return {donut,table};
+}
+function renderOverlap(c){
+  const p=(c.pack&&c.pack.overlap)||{};
+  if(p.insufficient) return '<p class="insuf">Not enough mapped fund holdings to compute overlap.</p>';
+  const wp=p.worst_fund_pair;
+  return `<div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+    ${svgDial(p.eff_bets,p.n_stocks)}
+    <div style="max-width:34ch;font-size:.92rem">
+      Biggest single stock: <b>${esc(p.top_stock_name)}</b> (${lcr(p.top_stock_rs)}, ${p.top10_share==null?"—":(p.top10_share*100).toFixed(0)+"%"} of the top 10)<br>
+      ${wp?`Most-overlapping pair: <b>${esc(wp.fund_a)}</b> / <b>${esc(wp.fund_b)}</b> (${wp.overlap_pct.toFixed(0)}% overlap)`:"No fund pair overlaps meaningfully."}
+    </div>
+  </div>`;
+}
+
+// Part 7 (portfolio half): prompt 7's cut list, evidence-gated.
+function cutListHTML(c){
+  const cl=c.cut_list;
+  if(!cl) return '<p class="insuf">Not enough mapped-fund holdings to compute a cut list.</p>';
+  const cuts=cl.cut||[], keep=cl.keep||[];
+  if(!cuts.length) return `<p class="prose">${esc(cl.note)}</p>`;
+  const rows=cuts.map(f=>`<tr><td>${esc(f.fund)}</td><td>${esc(f.reason)}</td><td class="n">${lcr(f.exit_tax_rs)}</td><td class="n">${f.unwind_order}</td></tr>`).join("");
+  return `<p class="prose">${esc(cl.note)}</p>
+    <details><summary>See the ${cuts.length} fund${cuts.length===1?"":"s"} to cut, in order</summary>
+      <table><thead><tr><th>Fund</th><th>Why</th><th class="n">Tax if sold now</th><th class="n">Order</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="method">Keeping just ${cl.min_fund_count} fund${cl.min_fund_count===1?"":"s"} — ${keep.map(k=>esc(k.fund)).join(", ")} — covers essentially the same look-through exposure.</div>
+    </details>`;
+}
+// Part 7 (fund-audit half): prompts 1/3/4 restated + the new prompt 7 cut list.
+function sevenPromptHTML(c){
+  const m=(c.pack&&c.pack.map)||{}, ov=(c.pack&&c.pack.overlap)||{}, fees=(c.pack&&c.pack.fees)||{};
+  const wp=ov.worst_fund_pair, nClosets=(fees.flags||[]).length;
+  return `<ul style="padding-left:18px;margin:6px 0 16px">
+    <li><b>The map:</b> ${m.n_funds==null?"—":m.n_funds} funds across ${m.n_stocks==null?"—":m.n_stocks} underlying stocks, worth ${lcr(m.total_mv)}.</li>
+    <li><b>The overlap trap:</b> about ${ov.eff_bets==null?"—":ov.eff_bets.toFixed(1)} genuinely different bets${wp?`; the most overlap is ${esc(wp.fund_a)} / ${esc(wp.fund_b)} (${wp.overlap_pct.toFixed(0)}%)`:""}.</li>
+    <li><b>What you actually pay:</b> ${nClosets} closet-index fund${nClosets===1?"":"s"} flagged, ${lcr(fees.fee_save_yr_rs)}/yr potential saving.</li>
+  </ul>
+  <h4 style="margin:0 0 6px">What to cut</h4>
+  ${cutListHTML(c)}
+  <div class="method" style="margin-top:10px">Fund labels and rolling performance for each holding are in the expander next to its name in the holdings table above. A sixth check (fund-manager tenure / AUM bloat) needs factsheet data we don’t have yet, so it’s left out rather than guessed.</div>`;
+}
+
+// Part 6 — scorecard grade + gate verdict, then ranked client_flags actions + one FY tax note.
+function recommendHTML(c){
+  const sc=c.scorecard;
+  if(!sc) return '<p class="insuf">Not enough on record yet to grade this account or recommend changes.</p>';
+  const gateLine=sc.needs_attention?esc(sc.reasons||"Some attention areas flagged."):"Compounding well — no changes forced.";
+  const flags=c.flags||[];
+  const tax=(c.pack&&c.pack.actions&&c.pack.actions.tax)||null;
+  const body=flags.length
+    ? flags.map(f=>`<div class="act"><div class="verb">${esc(f.action||"Review")}</div><div>${esc(f.evidence)}${f.est_value?" — "+lcr(f.est_value):""}</div></div>`).join("")
+    : (sc.needs_attention?'<p class="prose">No single action flagged, but the scorecard above still calls for a closer look.</p>':'<p class="prose">No changes forced — compounding well.</p>');
+  const taxNote=(tax&&tax.n_gain_candidates>0)?`<div class="method">Tax picture this FY (${esc(tax.fy)}): ${tax.n_gain_candidates} gain-lot(s) worth ${lcr(tax.gain_value)}, ${lcr(tax.headroom)} exemption headroom, up to ${lcr(tax.tax_saved_if_harvested)} saved if harvested.${tax.loss_note?" "+esc(tax.loss_note):""}</div>`:"";
+  return `<div class="eyebrow">Grade ${esc(sc.grade||"—")}</div><p class="prose">${gateLine}</p>${body}${taxNote}`;
+}
+
+// Part 8 — the 8 v1 audit sections, reusing SEC_META/bigFor/fallbackProse/visualFor/
+// tableFor/actionsHTML AS-IS, now collapsed as a "how we know this" proof layer.
+function auditExpanders(c){
+  return DATA.sections.map(key=>{
+    const p=(c.pack||{})[key]||{}; const meta=SEC_META[key];
+    if(p.insufficient){
+      return `<details><summary>${esc(meta[0])}</summary><p class="insuf">We can’t say this honestly for you yet — ${esc(p.reason)}.</p></details>`;
+    }
+    const prose=(c.prose&&c.prose[key])||fallbackProse(key,p,c.name);
+    const vis=visualFor(key,p);
+    const body = key==="actions"
+      ? actionsHTML(p)
+      : `<p class="prose">${esc(prose)}</p>
+         ${bigFor(key,p)?`<div class="big" style="font-size:clamp(26px,4vw,40px)">${bigFor(key,p)}</div>`:""}
+         ${vis?`<div class="visual">${vis}</div>`:""}
+         <details><summary>How we know this</summary>
+           ${tableFor(key,p)}
+           <div class="method">${esc(p.method||"")}</div>
+         </details>`;
+    return `<details><summary>${esc(meta[0])}</summary><div class="eyebrow">${esc(meta[1])}</div>${body}</details>`;
+  }).join("");
+}
+
 function renderClient(id){
   const opts=Object.entries(DATA.clients).map(([cid,c])=>`<option value="${esc(c.name)}" data-id="${cid}">`).join("");
   const search=`<div class="searchbox">
@@ -920,40 +1162,70 @@ function renderClient(id){
   const c=DATA.clients[id];
   if(!c){
     app.innerHTML=`<div class="wrap" style="padding-top:26px"><div class="eyebrow">Prescribe</div>
-      <h1 style="font-size:clamp(24px,3.4vw,32px);margin-top:8px">The client audit</h1>${search}
-      <p class="insuf">Pick a client above to open their audit pack.</p></div>`;
+      <h1 style="font-size:clamp(24px,3.4vw,32px);margin-top:8px">The client 360</h1>${search}
+      <p class="insuf">Pick a client above to open their 360.</p></div>`;
     wireSearch(); return;
   }
-  const hh=c.household||{};
+  const hh=c.household||{}, seg=c.segment||{}, ch=c.churn||{}, pack=c.pack||{};
+  const segChip=seg.segment?`<button class="chip on" onclick="location.hash='segment/${slug(seg.segment)}'">${esc(seg.segment)}</button>`:"";
   const hchips=[hh.name?`<span class="hchip">🏠 ${esc(hh.name)} · ${hh.members} member${hh.members===1?"":"s"}</span>`:"",
-    ...(c.chips||[]).map(ch=>`<span class="hchip">${esc(ch)}</span>`)].join("");
-  const secs=DATA.sections.map(key=>{
-    const p=(c.pack||{})[key]||{}; const meta=SEC_META[key];
-    if(p.insufficient){
-      return `<div class="section" id="sec-${key}"><div class="eyebrow">${esc(meta[1])}</div>
-        <h3>${esc(meta[0])}</h3><p class="insuf">We can't say this honestly for you yet — ${esc(p.reason)}.</p></div>`;
-    }
-    const prose=(c.prose&&c.prose[key])||fallbackProse(key,p,c.name);
-    const vis=visualFor(key,p);
-    const body = key==="actions"
-      ? actionsHTML(p)
-      : `<p class="prose">${esc(prose)}</p>
-         ${bigFor(key,p)?`<div class="big">${bigFor(key,p)}</div>`:""}
-         ${vis?`<div class="visual">${vis}</div>`:""}
-         <details><summary>How we know this</summary>
-           ${tableFor(key,p)}
-           <div class="method">${esc(p.method||"")}</div>
-         </details>`;
-    return `<div class="section" id="sec-${key}"><div class="eyebrow">${esc(meta[1])}</div>
-      <h3>${esc(meta[0])}</h3>${body}</div>`;
-  }).join("");
+    ...(c.chips||[]).map(ch2=>`<span class="hchip">${esc(ch2)}</span>`)].join("");
+  const mv=(pack.map && !pack.map.insufficient)?pack.map.total_mv:ch.mv;
+  const tenure=(pack.map && !pack.map.insufficient)?pack.map.tenure_years:null;
+  const habitsOK=pack.habits && !pack.habits.insufficient;
+
+  const wins=clientWins(c), costs=clientCosts(c);
+  const winsHTML=wins.map(w=>`<div class="win"><div class="verb">${esc(w.t)}</div>${w.v?`<div class="big" style="font-size:clamp(24px,3.6vw,34px)">${lcr(w.v)}</div>`:""}<p style="color:var(--muted);font-size:.9rem;margin:4px 0 0">${esc(w.d)}</p></div>`).join("");
+  const costsHTML=costs.length
+    ? costs.map(w=>`<div class="act" style="border-left-color:var(--warn)"><div class="verb">${esc(w.t)}</div>${w.v?`<div class="big" style="font-size:clamp(22px,3.2vw,30px)">${lcr(w.v)}</div>`:""}<p style="color:var(--muted);font-size:.9rem;margin:4px 0 0">${esc(w.d)}</p></div>`).join("")
+    : `<p class="insuf">${seg.segment==="Too New to Tell"?"Not enough history yet to assess behaviour costs.":"No costly habits worth flagging — clean behaviour record."}</p>`;
+
+  const floor=renderFloor(c);
+
   app.innerHTML=`<div class="wrap" style="padding-top:22px">
-    <div class="eyebrow">Prescribe · client audit</div>${search}
+    <div class="eyebrow">Prescribe · client 360</div>${search}
+
     <div class="profile">
       <h1>${esc(c.name)}</h1>
-      <div>${hchips}</div>
+      <div>${hchips}${segChip?" "+segChip:""}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:26px;margin-top:14px;align-items:center">
+        <div><div class="eyebrow">Book value</div><div class="big" style="font-size:clamp(24px,3.6vw,36px)">${lcr(mv)}</div></div>
+        ${tenure!=null?`<div><div class="eyebrow">Years with us</div><div class="big" style="font-size:clamp(24px,3.6vw,36px)">${tenure}</div></div>`:""}
+        ${ch.score!=null?`<div><div class="eyebrow">Churn risk</div>${svgGauge(ch.score,ch.score>=66?"var(--crit)":ch.score>=33?"var(--warn)":"var(--good)","Churn risk score")}</div>`:""}
+        ${habitsOK&&pack.habits.panic_share!=null?`<div><div class="eyebrow">Freak-out score</div><div class="big" style="font-size:clamp(24px,3.6vw,36px)">${Math.round(pack.habits.panic_share*100)}%</div></div>`:""}
+      </div>
     </div>
-    ${secs}
+
+    <div class="section"><div class="eyebrow">The story</div><h3>Value over time</h3>
+      ${svgStoryCurve(c.curve)}
+    </div>
+
+    <div class="section"><div class="eyebrow">The floor</div><h3>What they hold</h3>
+      ${floor.donut}
+      <div style="margin-top:16px">${renderOverlap(c)}</div>
+      <details><summary>Holdings, by asset class</summary>${floor.table}</details>
+    </div>
+
+    <div class="section"><div class="eyebrow">What they did right</div><h3>Wins, in rupees</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:14px">${winsHTML}</div>
+    </div>
+
+    <div class="section"><div class="eyebrow">Areas of improvement</div><h3>What their habits cost</h3>
+      ${costsHTML}
+    </div>
+
+    <div class="section"><div class="eyebrow">Changes we recommend</div><h3>What to do next, and why</h3>
+      ${recommendHTML(c)}
+    </div>
+
+    <div class="section"><div class="eyebrow">Seven-prompt MF audit</div><h3>Every fund, under one lens</h3>
+      ${sevenPromptHTML(c)}
+    </div>
+
+    <div class="section"><div class="eyebrow">Audit trail</div><h3>How we know all of this</h3>
+      ${auditExpanders(c)}
+    </div>
+
     <div class="foot">Every number above is computed from ${esc(c.name)}'s own transaction and holdings history, as on ${esc(DATA.asof)}.</div>
   </div>`;
   wireSearch();
