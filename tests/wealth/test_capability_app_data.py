@@ -26,7 +26,7 @@ def test_sampled_client_has_all_v2_keys_with_real_content():
     data = _data()
     c = data["clients"][SAMPLE_CLIENT]
     for key in ("holdings", "scorecard", "flags", "churn", "stock_exposure",
-                "segment", "curve", "fund_performance", "cut_list"):
+                "segment", "curve", "cut_list"):
         assert key in c, f"missing key {key!r} on client {SAMPLE_CLIENT}"
     assert c["holdings"], "client should have >=1 holding row"
     assert c["scorecard"] is not None
@@ -35,8 +35,13 @@ def test_sampled_client_has_all_v2_keys_with_real_content():
     assert len(c["stock_exposure"]) <= 10, "stock_exposure embed must be top-10 only"
     assert c["segment"] is not None
     assert c["curve"] is not None and c["curve"]["months"]
-    assert c["fund_performance"], "client should have >=1 fund_performance row"
     assert c["cut_list"] is not None
+    # fund_performance is embedded ONCE as a top-level {scheme_id: perf} map
+    # (deduped per final review); the client's held funds resolve into it.
+    fp = data["fund_performance"]
+    assert isinstance(fp, dict) and fp, "top-level fund_performance map must be non-empty"
+    held = {str(h["scheme_id"]) for h in c["holdings"] if h.get("scheme_id") is not None}
+    assert held & set(fp), "client's held funds should resolve in the fund_performance map"
 
 
 def test_holdings_carry_asset_class_and_quality_tint():
