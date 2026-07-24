@@ -19,13 +19,23 @@ from __future__ import annotations
 
 import json
 import math
+import re
+import statistics
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 import pandas as pd
 
 from build_audit_packs import SECTION_NAMES
+from build_segments import SEGMENTS
 from engine_common import connect
+
+# segments the call-list engine actually arms (mirrors build_call_lists' scope —
+# "Too New to Tell" has no signal yet, "Steady Compounders" needs no call).
+ARMED_SEGMENTS = tuple(s for s in SEGMENTS if s not in ("Too New to Tell", "Steady Compounders"))
+
+_XIRR_RE = re.compile(r"(?i)\bXIRR\b")
 
 OUT = Path("/home/ubuntu/jhaveri_data/reports/jhaveri-capability-app.html")
 
@@ -51,6 +61,307 @@ def lcr_py(n: float) -> str:
 
 
 # ----------------------------------------------------------------- fetch --
+
+def _degarble(s):
+    """Same XIRR->plain-language swap build_audit_packs applies to flags/
+    evidence text — client_flags.evidence and client_scorecard.attention_reasons
+    contain literal 'XIRR' that would trip the banned-word gate otherwise."""
+    return None if s is None else _XIRR_RE.sub("yearly growth", s)
+
+
+def _hist(values, n_bins=10):
+    """Equal-width histogram over the REAL observed min/max + median. Honest
+    binning: no fabricated category thresholds, stdlib only."""
+    vals = sorted(float(v) for v in values if v is not None and math.isfinite(float(v)))
+    if not vals:
+        return {"edges": [], "counts": [], "median": None, "n": 0}
+    lo, hi = vals[0], vals[-1]
+    if lo == hi:
+        return {"edges": [lo, hi], "counts": [len(vals)], "median": lo, "n": len(vals)}
+    width = (hi - lo) / n_bins
+    counts = [0] * n_bins
+    for v in vals:
+        counts[min(int((v - lo) / width), n_bins - 1)] += 1
+    edges = [round(lo + i * width, 2) for i in range(n_bins + 1)]
+    return {"edges": edges, "counts": counts, "median": round(statistics.median(vals), 2), "n": len(vals)}
+
+
+def _widen_clients(conn, clients: dict) -> None:
+    """Mutate `clients` in place: add the v2 per-client keys (holdings,
+    scorecard, flags, churn, stock_exposure, segment, curve, fund_performance,
+    cut_list). A client missing a source row gets None/[] — never a fabricated
+    stand-in (Rule #0)."""
+
+    def q(sql, params=None):
+        return pd.read_sql(sql, conn, params=params)
+
+    hold = q("""
+        select h.client_id, s.scheme_id, s.display_name as fund, s.asset_class,
+               h.market_value, flc.verdict, fr.composite
+        from wealth.holdings h
+        join wealth.schemes s using (scheme_id)
+        left join wealth.fund_label_check flc on flc.scheme_id = h.scheme_id
+        left join atlas_foundation.fund_rank_daily fr
+               on fr.mstar_id = s.mstar_id
+              and fr.date = (select max(date) from atlas_foundation.fund_rank_daily)
+    """)
+    hold_by: dict[int, list] = defaultdict(list)
+    for r in hold.itertuples():
+        hold_by[r.client_id].append({
+            "scheme_id": int(r.scheme_id), "fund": r.fund, "asset_class": r.asset_class,
+            "mv": _f(r.market_value), "verdict": r.verdict, "quality": _f(r.composite),
+        })
+
+    fp = q("""select scheme_id, roll_3y_pct, roll_5y_pct, dn_capture_pct,
+                     best_year_stripped_pct, full_period_pct, beat_count, windows,
+                     benchmark_note, verdict from wealth.fund_performance""")
+    fp_by = {int(r.scheme_id): r for r in fp.itertuples()}
+
+    def fp_row(h):
+        r = fp_by.get(h["scheme_id"])
+        if r is None:
+            return None
+        return {
+            "scheme_id": h["scheme_id"], "fund": h["fund"],
+            "roll_3y_pct": _f(r.roll_3y_pct), "roll_5y_pct": _f(r.roll_5y_pct),
+            "dn_capture_pct": _f(r.dn_capture_pct), "best_year_stripped_pct": _f(r.best_year_stripped_pct),
+            "full_period_pct": _f(r.full_period_pct),
+            "beat_count": None if pd.isna(r.beat_count) else int(r.beat_count),
+            "windows": None if pd.isna(r.windows) else int(r.windows),
+            "benchmark_note": r.benchmark_note, "verdict": r.verdict,
+        }
+
+    # ponytail: client_scorecard fans out to 2 rows for the one client with a
+    # duplicate wealth.client_reports snapshot (build_scorecard.py joins the
+    # raw table, no dedup) — pick the latest (highest mv_total) deterministically
+    # instead of letting a dict comprehension silently pick an arbitrary one.
+    sc = q("""select distinct on (client_id) client_id, outcome_grade, needs_attention,
+                     attention_reasons, laggard_pct, wcomp, mv_total, equity_pct,
+                     top10_stock_pct, financials_pct, dup_cats, side_pockets, dust_lines, n_lines
+              from wealth.client_scorecard order by client_id, mv_total desc nulls last""")
+    sc_by = {int(r.client_id): r for r in sc.itertuples()}
+
+    fl = q("""select client_id, rule, evidence, action, est_value, basis
+              from wealth.client_flags order by client_id, est_value desc nulls last""")
+    fl_by: dict[int, list] = defaultdict(list)
+    for r in fl.itertuples():
+        fl_by[r.client_id].append({
+            "rule": _degarble(r.rule), "evidence": _degarble(r.evidence),
+            "action": _degarble(r.action), "est_value": _f(r.est_value), "basis": r.basis,
+        })
+
+    ch = q("""select client_id, mv, months_since_inflow, sip_stop_share, out12_share,
+                     disengagement_score, clv_aum_l_years, computed_asof
+              from wealth.client_churn_risk""")
+    ch_by = {int(r.client_id): r for r in ch.itertuples()}
+
+    se = q("""
+        select client_id, holding_name, isin, exposure, bucket from (
+          select client_id, holding_name, isin, exposure, bucket,
+                 row_number() over (partition by client_id order by exposure desc) rn
+          from wealth.client_stock_exposure) t
+        where rn <= 10
+    """)
+    se_by: dict[int, list] = defaultdict(list)
+    for r in se.itertuples():
+        se_by[r.client_id].append({
+            "name": r.holding_name, "isin": r.isin, "exposure": _f(r.exposure), "bucket": r.bucket,
+        })
+
+    sg = q("select client_id, segment, reason, whatif_rs, traits from wealth.client_segments")
+    sg_by = {int(r.client_id): r for r in sg.itertuples()}
+
+    # curve + events: compact PARALLEL-ARRAY encoding (byte-gate lever 1) —
+    # array-of-dicts would repeat every JSON key name once per row/event.
+    # byte-gate lever 2: net_flow_rs dropped from the embed (still <6MB target
+    # needed it) — coverage_pct + events carry the story, net_flow_rs stays a
+    # DB-only field for now.
+    cv = q("select client_id, month, value_rs, coverage_pct "
+           "from wealth.client_curves order by client_id, month")
+    curve_by: dict[int, dict] = {}
+    for cid, g in cv.groupby("client_id"):
+        curve_by[int(cid)] = {
+            "months": [d.strftime("%Y-%m") for d in g.month],
+            "values": [int(v) for v in g.value_rs],
+            "coverage_pct": _f(g.coverage_pct.iloc[0]),
+        }
+    # byte-gate lever 3: the free-text `note` (avg ~50 chars x 24270 events =
+    # 1.28MB, the single largest field measured) is dropped from the embed —
+    # kind + amount + date already carry every story marker the client-360
+    # curve needs (panic dot / SIP-stop marker / big-flow tick); the sentence
+    # is reconstructable client-side from `kind`, no DB prose required.
+    ev = q("select client_id, event_date, kind, amount_rs "
+           "from wealth.client_curve_events order by client_id, event_date")
+    for cid, g in ev.groupby("client_id"):
+        if int(cid) in curve_by:
+            curve_by[int(cid)]["events"] = {
+                "dates": [d.isoformat() for d in g.event_date],
+                "kinds": list(g.kind),
+                "amounts": [int(v) for v in g.amount_rs],
+            }
+
+    cl = q("select client_id, keep, cut, min_fund_count, note from wealth.cut_list")
+    cl_by = {int(r.client_id): r for r in cl.itertuples()}
+
+    for cid_str, c in clients.items():
+        cid = int(cid_str)
+        c["holdings"] = hold_by.get(cid, [])
+        c["fund_performance"] = [fp_row(h) for h in c["holdings"] if fp_row(h) is not None]
+        r = sc_by.get(cid)
+        c["scorecard"] = None if r is None else {
+            "grade": r.outcome_grade, "needs_attention": bool(r.needs_attention),
+            "reasons": _degarble(r.attention_reasons), "laggard_pct": _f(r.laggard_pct),
+            "wcomp": _f(r.wcomp), "mv_total": _f(r.mv_total), "equity_pct": _f(r.equity_pct),
+            "top10_stock_pct": _f(r.top10_stock_pct), "financials_pct": _f(r.financials_pct),
+            "dup_cats": None if pd.isna(r.dup_cats) else int(r.dup_cats),
+            "side_pockets": None if pd.isna(r.side_pockets) else int(r.side_pockets),
+            "dust_lines": None if pd.isna(r.dust_lines) else int(r.dust_lines),
+            "n_lines": None if pd.isna(r.n_lines) else int(r.n_lines),
+        }
+        c["flags"] = fl_by.get(cid, [])
+        r = ch_by.get(cid)
+        c["churn"] = None if r is None else {
+            "mv": _f(r.mv), "months_since_inflow": _f(r.months_since_inflow),
+            "sip_stop_share": _f(r.sip_stop_share), "out12_share": _f(r.out12_share),
+            "score": _f(r.disengagement_score), "clv_l_years": _f(r.clv_aum_l_years),
+            "asof": r.computed_asof.isoformat(),
+        }
+        c["stock_exposure"] = se_by.get(cid, [])
+        r = sg_by.get(cid)
+        c["segment"] = None if r is None else {
+            "segment": r.segment, "reason": r.reason, "whatif_rs": _f(r.whatif_rs), "traits": r.traits,
+        }
+        c["curve"] = curve_by.get(cid)
+        r = cl_by.get(cid)
+        c["cut_list"] = None if r is None else {
+            "keep": r.keep, "cut": r.cut,
+            "min_fund_count": None if pd.isna(r.min_fund_count) else int(r.min_fund_count),
+            "note": r.note,
+        }
+
+
+def _build_cohort(conn, book: dict) -> dict:
+    """Management-dashboard binning, done in Python at build time (spec §3):
+    headline / segment bar / 6 histograms / behaviour-cost waterfall /
+    churn x book scatter / call-list funnel. Every number sourced straight
+    from the same tables the v1 chapters use — bin honestly, no fabrication."""
+
+    def q(sql, params=None):
+        return pd.read_sql(sql, conn, params=params)
+
+    # ---- headline: realized value delivered + coaching opportunity (exact
+    # mirror of build_audit_packs.sec_value's per-client definition, summed) ----
+    vs = q("""select sum(sip_discipline_rs + staying_power_rs + advice_outcome_rs
+                          + fee_save_yr_rs + tax_headroom_rs) realized,
+                     sum(coaching_opportunity_rs) coaching
+              from wealth.value_statements""").iloc[0]
+    headline = {
+        "book_cr": book["mv_cr"], "clients": book["clients"], "families": book["families"],
+        "realized_cr": _f(float(vs.realized) / 1e7) if vs.realized is not None else None,
+        "coaching_cr": _f(float(vs.coaching) / 1e7) if vs.coaching is not None else None,
+    }
+
+    # ---- segment bar: counts sum to book['clients'], ₹ what-if per segment ----
+    seg = q("select segment, count(*) n, sum(whatif_rs) whatif from wealth.client_segments group by 1")
+    seg_by = {r.segment: r for r in seg.itertuples()}
+    segment_bar = [
+        {"segment": s, "count": int(seg_by[s].n) if s in seg_by else 0,
+         "whatif_cr": _f(float(seg_by[s].whatif or 0) / 1e7) if s in seg_by else 0.0}
+        for s in SEGMENTS
+    ]
+
+    # ---- 6 histograms (book size / tenure / growth-gap / freak-out / effective
+    # bets / SIP health), driven from client_scorecard (dedup'd, see _widen_clients) ----
+    hdf = q("""
+        with sc as (
+          select distinct on (client_id) client_id, mv_total
+          from wealth.client_scorecard order by client_id, mv_total desc nulls last)
+        select sc.client_id, sc.mv_total,
+               cb.alpha as growth_gap_pp, be.panic_share, ov.eff_bets,
+               be.sip_active, be.sip_streams, t.inv_since, r.as_on_date
+        from sc
+        left join wealth.client_benchmark cb on cb.client_id = sc.client_id
+        left join wealth.client_behaviour be on be.client_id = sc.client_id
+        left join wealth.client_overlap ov on ov.client_id = sc.client_id
+        left join (select client_id, min(inv_since) inv_since from wealth.holdings group by 1) t
+               on t.client_id = sc.client_id
+        left join (select distinct on (client_id) client_id, as_on_date from wealth.client_reports
+                   order by client_id, as_on_date desc) r on r.client_id = sc.client_id
+    """)
+    book_l, tenure_y, growth_gap, freak_out, eff_bets, sip_health = [], [], [], [], [], []
+    for row in hdf.itertuples():
+        if row.mv_total is not None:
+            book_l.append(float(row.mv_total) / 1e5)
+        if row.inv_since is not None and row.as_on_date is not None:
+            tenure_y.append((row.as_on_date - row.inv_since).days / 365.25)
+        if row.growth_gap_pp is not None:
+            growth_gap.append(float(row.growth_gap_pp))
+        if row.panic_share is not None:
+            freak_out.append(float(row.panic_share) * 100)
+        if row.eff_bets is not None:
+            eff_bets.append(float(row.eff_bets))
+        if row.sip_streams and row.sip_active is not None:
+            sip_health.append(100.0 * float(row.sip_active) / float(row.sip_streams))
+
+    histograms = {
+        "book_size_l": _hist(book_l),
+        "tenure_years": _hist(tenure_y),
+        "growth_gap_pp": _hist(growth_gap),
+        "freak_out_pct": _hist(freak_out),
+        "effective_bets": _hist(eff_bets),
+        "sip_health_pct": _hist(sip_health),
+    }
+
+    # ---- behaviour-cost waterfall: panic + dividend leak + dead SIPs -> total
+    # (same >=0-only convention as build_segments.whatif_rs) ----
+    beh = q("select sum(greatest(panic_loss_out_rs,0)) panic, "
+            "sum(greatest(div_leak_rs,0)) div_leak from wealth.client_behaviour").iloc[0]
+    sipv = q("select sum(greatest(cf_sip_alive_rs,0)) sip from wealth.counterfactuals").iloc[0]
+    panic_cr = float(beh.panic or 0) / 1e7
+    div_cr = float(beh.div_leak or 0) / 1e7
+    sip_cr = float(sipv.sip or 0) / 1e7
+    waterfall = [
+        {"label": "Panic selling", "value_cr": _f(panic_cr)},
+        {"label": "Dividend payouts taken as cash", "value_cr": _f(div_cr)},
+        {"label": "SIPs stopped", "value_cr": _f(sip_cr)},
+        {"label": "Total behaviour cost", "value_cr": _f(panic_cr + div_cr + sip_cr)},
+    ]
+
+    # ---- churn x book scatter (top-right = valuable AND at risk) ----
+    cr = q("select client_id, disengagement_score, mv from wealth.client_churn_risk")
+    seg_of = {int(r.client_id): r.segment for r in
+              q("select client_id, segment from wealth.client_segments").itertuples()}
+    scores = [float(x) for x in cr.disengagement_score.dropna()]
+    mvs = [float(x) for x in cr.mv.dropna()]
+    points = [
+        {"client_id": int(r.client_id), "churn_score": _f(r.disengagement_score),
+         "book_cr": _f(float(r.mv) / 1e7), "segment": seg_of.get(int(r.client_id))}
+        for r in cr.itertuples() if r.disengagement_score is not None and r.mv is not None
+    ]
+    scatter = {
+        "points": points,
+        "churn_threshold": _f(statistics.median(scores)) if scores else None,
+        "book_threshold_cr": _f(statistics.median(mvs) / 1e7) if mvs else None,
+    }
+
+    # ---- call-list funnel: segments -> armed -> on a list -> tonight's 20 ----
+    armed_n = int(q("select count(*) n from wealth.client_segments where segment = any(%(segs)s)",
+                     params={"segs": list(ARMED_SEGMENTS)}).n.iloc[0])
+    on_list_n = int(q("select count(distinct client_id) n from wealth.call_lists").n.iloc[0])
+    tonight_n = len(q("select client_id, max(score) mx from wealth.call_lists "
+                       "group by 1 order by mx desc nulls last limit 20"))
+    funnel = [
+        {"stage": "All clients", "n": book["clients"]},
+        {"stage": "In an armed segment", "n": armed_n},
+        {"stage": "On a call list", "n": on_list_n},
+        {"stage": "Tonight's call sheet", "n": tonight_n},
+    ]
+
+    return {
+        "headline": headline, "segment_bar": segment_bar, "histograms": histograms,
+        "waterfall": waterfall, "scatter": scatter, "funnel": funnel,
+    }
+
 
 def fetch(conn) -> dict:
     def q(sql):
@@ -201,8 +512,12 @@ def fetch(conn) -> dict:
             "prose": row.prose or {},  # NULL for most; JS falls back to a template line
         }
 
+    _widen_clients(conn, clients)
+    cohort = _build_cohort(conn, book)
+
     return {"asof": asof, "book": book, "chapters": chapters,
-            "sections": SECTION_NAMES, "call_lists": call_lists, "clients": clients}
+            "sections": SECTION_NAMES, "call_lists": call_lists, "clients": clients,
+            "cohort": cohort}
 
 
 # --------------------------------------------------------------- render --
