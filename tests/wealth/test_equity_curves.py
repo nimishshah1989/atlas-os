@@ -10,6 +10,7 @@ import os
 import sys
 
 import psycopg2
+import pytest
 
 sys.path.insert(0, "scripts/wealth")
 
@@ -79,9 +80,64 @@ def test_sampled_client_final_point_matches_holdings_mv_times_coverage():
     expected = holdings_mv * float(coverage_pct) / 100.0
     # holdings snapshot (client_reports.as_on_date) trails "now" by ~1-2 weeks, so
     # allow generous NAV-drift tolerance rather than a tight same-day match.
-    tol = max(expected, value_rs) * 0.20
+    tol = max(expected, value_rs) * 0.10
     assert abs(value_rs - expected) <= tol, (
         f"client {cid}: final value_rs={value_rs:,.0f} vs holdings_mv*coverage="
+        f"{expected:,.0f} (coverage {coverage_pct}%), "
+        f"diff {abs(value_rs - expected):,.0f} > tol {tol:,.0f}"
+    )
+
+
+EXOTIC_UNIT_TYPES = ("pledge", "dtp_in", "dtp_out", "merger_in", "consolidation_in", "transfer_in")
+
+
+def test_sampled_exotic_type_client_final_point_matches_holdings_mv_times_coverage():
+    """Same check as above, but for a client whose ledger includes an atypical
+    unit-moving txn_type (not one of the special-cased buy/sell/redemption
+    types) — this exercises the generic is_debit-driven reconstruction that
+    NO_UNIT_EFFECT doesn't special-case."""
+    conn = _conn()
+    cur = conn.cursor()
+    cur.execute(
+        f"""select client_id, count(*) from wealth.transactions
+           where txn_type in {EXOTIC_UNIT_TYPES}
+           group by client_id order by count(*) desc limit 1"""
+    )
+    row = cur.fetchone()
+    if row is None:
+        conn.close()
+        pytest.skip(f"no client has any of {EXOTIC_UNIT_TYPES} transactions")
+    cid, _n = row
+
+    cur.execute(
+        """select sum(h.market_value) from wealth.holdings h
+           where h.client_id = %s and h.market_value > 0
+           group by h.client_id""",
+        (cid,),
+    )
+    row = cur.fetchone()
+    if row is None:
+        conn.close()
+        pytest.skip(f"exotic-type client {cid} has no positive holdings to compare against")
+    (holdings_mv,) = row
+    holdings_mv = float(holdings_mv)
+
+    cur.execute(
+        "select month, value_rs, coverage_pct from wealth.client_curves "
+        "where client_id = %s order by month desc limit 1",
+        (cid,),
+    )
+    row = cur.fetchone()
+    conn.close()
+    assert row is not None, f"exotic-type client {cid} has no curve rows"
+    _month, value_rs, coverage_pct = row
+    assert coverage_pct is not None, f"client {cid} has real holdings but null coverage_pct"
+
+    value_rs = float(value_rs)
+    expected = holdings_mv * float(coverage_pct) / 100.0
+    tol = max(expected, value_rs) * 0.10
+    assert abs(value_rs - expected) <= tol, (
+        f"exotic-type client {cid}: final value_rs={value_rs:,.0f} vs holdings_mv*coverage="
         f"{expected:,.0f} (coverage {coverage_pct}%), "
         f"diff {abs(value_rs - expected):,.0f} > tol {tol:,.0f}"
     )

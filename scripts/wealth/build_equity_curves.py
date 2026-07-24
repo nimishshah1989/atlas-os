@@ -84,7 +84,7 @@ def _coverage(conn) -> dict[int, float | None]:
 def compute_all(conn) -> tuple[list[dict], list[dict]]:
     txns = pd.read_sql(
         """select client_id, scheme_id, fund_name, folio, txn_date, txn_type,
-                  is_debit, units::float units
+                  is_debit, units::float units, amount::float amount
            from wealth.transactions
            order by client_id, txn_date nulls first, txn_id""",
         conn,
@@ -135,7 +135,12 @@ def compute_all(conn) -> tuple[list[dict], list[dict]]:
         for month_end in months:
             while idx < n and (pd.isna(recs[idx].txn_date) or recs[idx].txn_date <= month_end):
                 r = recs[idx]
-                if pd.notna(r.scheme_id) and r.units and r.txn_type not in NO_UNIT_EFFECT:
+                if (
+                    pd.notna(r.scheme_id)
+                    and pd.notna(r.units)
+                    and r.units
+                    and r.txn_type not in NO_UNIT_EFFECT
+                ):
                     units[int(r.scheme_id)] += -r.units if r.is_debit else r.units
                 idx += 1
 
@@ -183,7 +188,7 @@ def compute_all(conn) -> tuple[list[dict], list[dict]]:
             if (ledger_end - last.txn_date).days > SIP_STOP_GAP_DAYS:
                 event_rows.append(dict(
                     client_id=int(cid), event_date=last.txn_date.date(), kind="sip_stop",
-                    amount_rs=0,
+                    amount_rs=int(round(last.amount)) if pd.notna(last.amount) else 0,
                     note=f"SIP into {fname} (folio {folio}) stopped; last payment {last.txn_date.date()}",
                 ))
 
