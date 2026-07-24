@@ -87,10 +87,12 @@ def _hist(values, n_bins=10):
     return {"edges": edges, "counts": counts, "median": round(statistics.median(vals), 2), "n": len(vals)}
 
 
-def _widen_clients(conn, clients: dict) -> None:
+def _widen_clients(conn, clients: dict) -> dict:
     """Mutate `clients` in place: add the v2 per-client keys (holdings,
-    scorecard, flags, churn, stock_exposure, segment, curve, fund_performance,
-    cut_list). A client missing a source row gets None/[] — never a fabricated
+    scorecard, flags, churn, stock_exposure, segment, curve, cut_list).
+    Returns the top-level {scheme_id: perf} fund_performance map (embedded
+    once, not per client — see comment above `fp_map`). A client missing a
+    source row gets None/[] — never a fabricated
     stand-in (Rule #0)."""
 
     def q(sql, params=None):
@@ -117,17 +119,16 @@ def _widen_clients(conn, clients: dict) -> None:
             "mv": _f(r.market_value), "verdict": r.verdict, "quality": _f(r.composite),
         })
 
+    # fund_performance is embedded ONCE, top-level, keyed by scheme_id (string,
+    # so it survives JSON) — not per client. Each fund is held by many clients;
+    # a per-client list re-embedded the same ~745KB row set once per holder.
+    # renderClient looks it up via fpBySid[scheme_id] against its own holdings,
+    # so each client still only shows its own funds' performance.
     fp = q("""select scheme_id, roll_3y_pct, roll_5y_pct, dn_capture_pct,
                      best_year_stripped_pct, full_period_pct, beat_count, windows,
                      benchmark_note, verdict from wealth.fund_performance""")
-    fp_by = {int(r.scheme_id): r for r in fp.itertuples()}
-
-    def fp_row(h):
-        r = fp_by.get(h["scheme_id"])
-        if r is None:
-            return None
-        return {
-            "scheme_id": h["scheme_id"], "fund": h["fund"],
+    fp_map = {
+        str(int(r.scheme_id)): {
             "roll_3y_pct": _f(r.roll_3y_pct), "roll_5y_pct": _f(r.roll_5y_pct),
             "dn_capture_pct": _f(r.dn_capture_pct), "best_year_stripped_pct": _f(r.best_year_stripped_pct),
             "full_period_pct": _f(r.full_period_pct),
@@ -135,6 +136,8 @@ def _widen_clients(conn, clients: dict) -> None:
             "windows": None if pd.isna(r.windows) else int(r.windows),
             "benchmark_note": r.benchmark_note, "verdict": r.verdict,
         }
+        for r in fp.itertuples()
+    }
 
     # ponytail: client_scorecard fans out to 2 rows for the one client with a
     # duplicate wealth.client_reports snapshot (build_scorecard.py joins the
@@ -211,7 +214,6 @@ def _widen_clients(conn, clients: dict) -> None:
     for cid_str, c in clients.items():
         cid = int(cid_str)
         c["holdings"] = hold_by.get(cid, [])
-        c["fund_performance"] = [fp_row(h) for h in c["holdings"] if fp_row(h) is not None]
         r = sc_by.get(cid)
         c["scorecard"] = None if r is None else {
             "grade": r.outcome_grade, "needs_attention": bool(r.needs_attention),
@@ -243,6 +245,8 @@ def _widen_clients(conn, clients: dict) -> None:
             "min_fund_count": None if pd.isna(r.min_fund_count) else int(r.min_fund_count),
             "note": r.note,
         }
+
+    return fp_map
 
 
 def _build_cohort(conn, book: dict) -> dict:
@@ -402,6 +406,14 @@ def _build_guide(conn) -> dict:
     cut = q("select count(*) tot, count(*) filter (where cut is not null and cut::text <> '[]') n "
             "from wealth.cut_list").iloc[0]
     cv = q("select count(distinct client_id) clients, count(*) points from wealth.client_curves").iloc[0]
+    # coverage_pct is one honest value per client (share of current book value
+    # traced through mapped-fund NAV) — dedup to one row/client before the
+    # median, same population build_equity_curves.py itself prints at build time.
+    cvg = q("""select percentile_cont(0.5) within group (order by coverage_pct) med,
+                      count(*) filter (where coverage_pct < 70) below70, count(*) tot
+               from (select distinct on (client_id) client_id, coverage_pct
+                     from wealth.client_curves order by client_id, month) t
+               where coverage_pct is not null""").iloc[0]
     ev = q("""select count(*) filter (where kind = 'panic_sell') panic,
                      count(*) filter (where kind = 'sip_stop') sipstop, count(*) tot
               from wealth.client_curve_events""").iloc[0]
@@ -419,6 +431,7 @@ def _build_guide(conn) -> dict:
         "cut_clients": int(cut.n), "cut_total": int(cut.tot),
         "curve_clients": int(cv.clients), "curve_points": int(cv.points),
         "curve_panic": int(ev.panic), "curve_sipstop": int(ev.sipstop), "curve_total_events": int(ev.tot),
+        "curve_cov_med": _f(cvg.med), "curve_cov_below70": int(cvg.below70), "curve_cov_tot": int(cvg.tot),
     }
 
 
@@ -571,13 +584,13 @@ def fetch(conn) -> dict:
             "prose": row.prose or {},  # NULL for most; JS falls back to a template line
         }
 
-    _widen_clients(conn, clients)
+    fund_performance = _widen_clients(conn, clients)
     cohort = _build_cohort(conn, book)
     guide = _build_guide(conn)
 
     return {"asof": asof, "book": book, "chapters": chapters,
             "sections": SECTION_NAMES, "call_lists": call_lists, "clients": clients,
-            "cohort": cohort, "guide": guide}
+            "cohort": cohort, "guide": guide, "fund_performance": fund_performance}
 
 
 # --------------------------------------------------------------- render --
@@ -727,6 +740,9 @@ function lcr(n){ if(n==null) return "—"; const a=Math.abs(n);
   if(a>=1e5) return "₹"+(n/1e5).toFixed(2)+" L";
   return "₹"+enIN(n); }
 function pct(n){ return n==null?"—":(n>=0?"":"")+n.toFixed(1)+"%"; }
+// ponytail: overlap_pct has a known upstream dup-ISIN bug (max observed 192) —
+// clamp the DISPLAYED value to 100 here, never touch the underlying data.
+function ovPct(n){ return n==null?"—":Math.min(100,n).toFixed(0)+"%"; }
 
 /* ---- theme ---- */
 document.getElementById("theme").onclick = () => {
@@ -1240,7 +1256,7 @@ function tableFor(key,p){
   if(key==="map"){R("Book value",lcr(p.total_mv));R("Funds",p.n_funds);R("Stocks underneath",p.n_stocks);R("Years with us",p.tenure_years);}
   else if(key==="label_check"){(p.funds||[]).slice(0,12).forEach(f=>rows.push(
     `<tr><td>${esc(f.fund)}${f.coverage_note?`<div class="method" style="margin-top:2px">${esc(f.coverage_note)}</div>`:""}</td><td class="n">${esc(f.verdict)}</td></tr>`));}
-  else if(key==="overlap"){R("Genuinely different bets",p.eff_bets==null?"—":p.eff_bets.toFixed(1));R("Biggest single stock",esc(p.top_stock_name)+" · "+lcr(p.top_stock_rs));R("Top-10 stocks share",p.top10_share==null?"—":(p.top10_share*100).toFixed(0)+"%");if(p.worst_fund_pair)R("Most-overlapping pair",esc(p.worst_fund_pair.fund_a)+" / "+esc(p.worst_fund_pair.fund_b)+" ("+(p.worst_fund_pair.overlap_pct).toFixed(0)+"%)");}
+  else if(key==="overlap"){R("Genuinely different bets",p.eff_bets==null?"—":p.eff_bets.toFixed(1));R("Biggest single stock",esc(p.top_stock_name)+" · "+lcr(p.top_stock_rs));R("Top-10 stocks share",p.top10_share==null?"—":(p.top10_share*100).toFixed(0)+"%");if(p.worst_fund_pair)R("Most-overlapping pair",esc(p.worst_fund_pair.fund_a)+" / "+esc(p.worst_fund_pair.fund_b)+" ("+ovPct(p.worst_fund_pair.overlap_pct)+")");}
   else if(key==="fees"){R("Estimated saving / year",lcr(p.fee_save_yr_rs));(p.flags||[]).forEach(f=>rows.push(`<tr><td>${esc(f.rule||f.evidence)}</td><td class="n">${lcr(f.est_value)}</td></tr>`));}
   else if(key==="benchmark"){R("Your yearly growth",pct(p.xirr_client));R("Index-fund yearly growth",pct(p.xirr_bench));R("Ahead / behind",p.alpha==null?"—":(p.alpha>=0?"+":"")+p.alpha.toFixed(1)+"%/yr");R("Money-in / money-out events",p.n_flows);}
   else if(key==="habits"){R("Withdrawn during falls",Math.round((p.panic_share||0)*100)+"%");if(p.sip_active_share!=null)R("SIPs still running",Math.round(p.sip_active_share*100)+"%");R("Dividends taken as cash",lcr(p.div_leak_rs));if(p.cf_no_panic_rs!=null)R("Est. value if never sold in falls",lcr(p.cf_no_panic_rs));}
@@ -1513,7 +1529,7 @@ function renderGuide(){
       "Builds the actual month-by-month value line behind every client's chart, with the moments that moved it marked.",
       [`<b>Read:</b> every month-end unit balance times that month's NAV, across each client's full transaction history.`,
        `<b>Did:</b> built one point-in-time value curve per client, and marked the big money moves, panic sells and SIP stops along it.`,
-       `<b>Found tonight:</b> ${g.curve_clients} clients now have a full curve (${enIN(g.curve_points)} month-points); ${enIN(g.curve_panic)} marked events across the book are panic sells and ${enIN(g.curve_sipstop)} are SIP stops.`],
+       `<b>Found tonight:</b> ${g.curve_clients} clients now have a curve (${enIN(g.curve_points)} month-points), covering a median ~${g.curve_cov_med==null?"—":g.curve_cov_med.toFixed(0)}% of book value through mapped-fund NAV — ${g.curve_cov_below70} of ${g.curve_cov_tot} clients trace back less than 70% and are marked partial on their own page; ${enIN(g.curve_panic)} marked events across the book are panic sells and ${enIN(g.curve_sipstop)} are SIP stops.`],
       `<code>build_equity_curves.py</code> → <code>wealth.client_curves</code>, <code>wealth.client_curve_events</code>. Curve value = units held (from real transactions) × month-end NAV; events use the same panic-sell / SIP-stop / big-flow definitions the behaviour and what-if engines use, so the chart and the numbers always agree.`),
   ].join("");
 
@@ -1556,14 +1572,14 @@ function renderFloor(c){
   const holds=[...bySid.values()];
   const byClass={};
   holds.forEach(h=>{ const k=h.asset_class||"Other"; (byClass[k]=byClass[k]||[]).push(h); });
-  const fpBySid={}; (c.fund_performance||[]).forEach(f=>fpBySid[f.scheme_id]=f);
+  const fpBySid=DATA.fund_performance||{};  // shared top-level map, not per-client (dedup)
   const lc=(c.pack&&c.pack.label_check&&!c.pack.label_check.insufficient)?c.pack.label_check:{};
   const labelByName={}; (lc.funds||[]).forEach(f=>labelByName[f.fund]=f);
   const classEntries=Object.entries(byClass).sort((a,b)=>b[1].reduce((s,h)=>s+h.mv,0)-a[1].reduce((s,h)=>s+h.mv,0));
   const donut=svgDonut(classEntries.map(([k,hs])=>({k,v:hs.reduce((s,h)=>s+h.mv,0)})));
   const table=classEntries.map(([cls,hs])=>{
     const rows=hs.sort((a,b)=>b.mv-a.mv).map(h=>{
-      const lbl=labelByName[h.fund], fp=fpBySid[h.scheme_id];
+      const lbl=labelByName[h.fund], fp=fpBySid[String(h.scheme_id)];
       return `<tr><td>
           <details class="fdrow"><summary>${esc(h.fund)}</summary>
             <div class="method">Label check — does it do what its name promises? ${fmtVerdict(h.verdict)}${lbl&&lbl.detail?": "+esc(lbl.detail):""}${lbl&&lbl.coverage_note?` <em>(${esc(lbl.coverage_note)})</em>`:""}</div>
@@ -1584,7 +1600,7 @@ function renderOverlap(c){
     ${svgDial(p.eff_bets,p.n_stocks)}
     <div style="max-width:34ch;font-size:.92rem">
       Biggest single stock: <b>${esc(p.top_stock_name)}</b> (${lcr(p.top_stock_rs)}, ${p.top10_share==null?"—":(p.top10_share*100).toFixed(0)+"%"} of the top 10)<br>
-      ${wp?`Most-overlapping pair: <b>${esc(wp.fund_a)}</b> / <b>${esc(wp.fund_b)}</b> (${wp.overlap_pct.toFixed(0)}% overlap)`:"No fund pair overlaps meaningfully."}
+      ${wp?`Most-overlapping pair: <b>${esc(wp.fund_a)}</b> / <b>${esc(wp.fund_b)}</b> (${ovPct(wp.overlap_pct)} overlap)`:"No fund pair overlaps meaningfully."}
     </div>
   </div>`;
 }
@@ -1608,7 +1624,7 @@ function sevenPromptHTML(c){
   const wp=ov.worst_fund_pair, nClosets=(fees.flags||[]).length;
   return `<ul style="padding-left:18px;margin:6px 0 16px">
     <li><b>The map:</b> ${m.n_funds==null?"—":m.n_funds} funds across ${m.n_stocks==null?"—":m.n_stocks} underlying stocks, worth ${lcr(m.total_mv)}.</li>
-    <li><b>The overlap trap:</b> about ${ov.eff_bets==null?"—":ov.eff_bets.toFixed(1)} genuinely different bets${wp?`; the most overlap is ${esc(wp.fund_a)} / ${esc(wp.fund_b)} (${wp.overlap_pct.toFixed(0)}%)`:""}.</li>
+    <li><b>The overlap trap:</b> about ${ov.eff_bets==null?"—":ov.eff_bets.toFixed(1)} genuinely different bets${wp?`; the most overlap is ${esc(wp.fund_a)} / ${esc(wp.fund_b)} (${ovPct(wp.overlap_pct)})`:""}.</li>
     <li><b>What you actually pay:</b> ${nClosets} closet-index fund${nClosets===1?"":"s"} flagged, ${lcr(fees.fee_save_yr_rs)}/yr potential saving.</li>
   </ul>
   <h4 style="margin:0 0 6px">What to cut</h4>
