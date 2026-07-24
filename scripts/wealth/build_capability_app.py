@@ -656,6 +656,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
   <span class="brand">The Book</span>
   <a href="#book" data-nav>Book</a>
   <a href="#calls" data-nav>Who to call</a>
+  <a href="#cohort" data-nav>Cohort</a>
   <a href="#client/" data-nav>A client</a>
   <button id="theme" aria-label="Toggle light or dark theme">◑ Theme</button>
 </div>
@@ -729,10 +730,13 @@ function nav(){
   document.querySelectorAll(".bar a[data-nav]").forEach(a=>{
     const t=a.getAttribute("href").replace(/^#/,"");
     a.classList.toggle("on", h===t || (t==="book"&&h==="book") ||
-      (t==="calls"&&h==="calls") || (t==="client/"&&h.startsWith("client/")));
+      (t==="calls"&&h==="calls") || (t==="client/"&&h.startsWith("client/")) ||
+      (t==="cohort"&&(h==="cohort"||h.startsWith("segment/"))));
   });
   if(h==="book") return renderBook();
   if(h==="calls") return renderCalls();
+  if(h==="cohort") return renderCohort();
+  if(h.startsWith("segment/")) return renderSegment(h.slice(8));
   if(h.startsWith("client/")) return renderClient(h.slice(7));
   renderBook();
 }
@@ -852,6 +856,285 @@ function renderCalls(){
   };
   document.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{sessionStorage.setItem("callfilter",c.dataset.list);paint(c.dataset.list);});
   paint(active);
+}
+
+/* ---- screen: cohort dashboard + segment drill (Task 7) ---- */
+const SEGMENT_COLOR={
+  "Too New to Tell":"var(--muted)", "Crash Sellers":"var(--crit)",
+  "Dividend Spenders":"var(--warn)", "SIP Quitters":"var(--accent)",
+  "Drifted Away":"var(--crit)", "Steady Compounders":"var(--good)",
+};
+function segColor(name){ return SEGMENT_COLOR[name]||"var(--accent)"; }
+
+function svgSegBar(bar){
+  const max=Math.max(...bar.map(s=>s.count),1);
+  return bar.map(s=>{
+    const w=Math.max(2,(s.count/max)*100);
+    return `<a href="#segment/${slug(s.segment)}" style="display:block;margin-bottom:12px;color:inherit;text-decoration:none">
+      <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;font-size:.9rem;margin-bottom:3px">
+        <span style="font-weight:600">${esc(s.segment)}</span>
+        <span class="num" style="color:var(--muted)">${s.count} clients &middot; ${lcr((s.whatif_cr||0)*1e7)} what-if</span>
+      </div>
+      <div style="background:var(--line);border-radius:6px;height:16px;overflow:hidden">
+        <div style="width:${w}%;height:100%;background:${segColor(s.segment)};border-radius:6px"></div>
+      </div>
+    </a>`;
+  }).join("");
+}
+
+function svgHist(h,fmt){
+  if(!h||!h.n) return '<p class="insuf">Not enough data.</p>';
+  const W=280,H=104,pad=4,padB=18,padT=6;
+  const max=Math.max(...h.counts,1);
+  const bw=(W-2*pad)/h.counts.length;
+  const bars=h.counts.map((c,i)=>{
+    const bh=(c/max)*(H-padB-padT), x=pad+i*bw, y=H-padB-bh;
+    return `<rect x="${(x+0.5).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(bw-1,1).toFixed(1)}" height="${bh.toFixed(1)}" fill="var(--accent)" opacity=".78"><title>${fmt(h.edges[i])}–${fmt(h.edges[i+1])}: ${c} client${c===1?"":"s"}</title></rect>`;
+  }).join("");
+  const lo=h.edges[0], hi=h.edges[h.edges.length-1], span=(hi-lo)||1;
+  const medX=h.median==null?null:pad+((h.median-lo)/span)*(W-2*pad);
+  const medLine=medX==null?"":`<line x1="${medX.toFixed(1)}" y1="0" x2="${medX.toFixed(1)}" y2="${H-padB}" stroke="var(--ink)" stroke-width="1.5" stroke-dasharray="3 2"><title>Median ${fmt(h.median)}</title></line>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:280px;display:block" role="img" aria-label="Distribution, median ${h.median==null?"unknown":fmt(h.median)} across ${h.n} clients">
+    ${bars}${medLine}
+    <text x="${pad}" y="${H-4}" font-size="9" fill="var(--muted)">${fmt(lo)}</text>
+    <text x="${W-pad}" y="${H-4}" font-size="9" fill="var(--muted)" text-anchor="end">${fmt(hi)}</text>
+  </svg>
+  <div class="method">Median ${fmt(h.median)} &middot; ${h.n} clients.</div>`;
+}
+
+function svgBarList(rows,barColor){
+  const max=Math.max(...rows.map(r=>r.n),1);
+  return rows.map(r=>{
+    const w=Math.max(2,(r.n/max)*100);
+    const weight=r.bold?700:600;
+    const color=r.bold?"var(--ink)":(barColor||"var(--accent)");
+    const inner=`<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;font-size:.88rem;margin-bottom:3px">
+        <span style="font-weight:${weight}">${esc(r.label)}</span>
+        <span class="num" style="font-weight:${weight}">${r.valueLabel}</span></div>
+      <div style="background:var(--line);border-radius:6px;height:${r.bold?16:12}px;overflow:hidden">
+        <div style="width:${w}%;height:100%;background:${color}"></div></div>`;
+    return r.href
+      ? `<a href="${r.href}" style="display:block;margin-bottom:10px;color:inherit;text-decoration:none">${inner}</a>`
+      : `<div style="margin-bottom:10px">${inner}</div>`;
+  }).join("");
+}
+
+function svgScatter(points,cfg){
+  if(!points.length) return '<p class="insuf">Not enough data.</p>';
+  const W=360,H=240,pad=8;
+  const xs=v=>pad+((v-cfg.xMin)/((cfg.xMax-cfg.xMin)||1))*(W-2*pad);
+  const ys=v=>H-pad-((v-cfg.yMin)/((cfg.yMax-cfg.yMin)||1))*(H-2*pad);
+  const quad=(cfg.thrX!=null&&cfg.thrY!=null)?
+    `<rect x="${xs(cfg.thrX).toFixed(1)}" y="${pad}" width="${Math.max(0,W-pad-xs(cfg.thrX)).toFixed(1)}" height="${Math.max(0,ys(cfg.thrY)-pad).toFixed(1)}" fill="var(--crit)" opacity=".08"></rect>`:"";
+  const lines=(cfg.thrX!=null?`<line x1="${xs(cfg.thrX).toFixed(1)}" y1="${pad}" x2="${xs(cfg.thrX).toFixed(1)}" y2="${H-pad}" stroke="var(--ink)" stroke-width="1" stroke-dasharray="3 3"></line>`:"")+
+    (cfg.thrY!=null?`<line x1="${pad}" y1="${ys(cfg.thrY).toFixed(1)}" x2="${W-pad}" y2="${ys(cfg.thrY).toFixed(1)}" stroke="var(--ink)" stroke-width="1" stroke-dasharray="3 3"></line>`:"");
+  const dots=points.map(p=>{
+    const cx=xs(Math.max(cfg.xMin,Math.min(cfg.xMax,p.x))).toFixed(1);
+    const cy=ys(Math.max(cfg.yMin,Math.min(cfg.yMax,p.y))).toFixed(1);
+    return `<circle cx="${cx}" cy="${cy}" r="3.2" fill="${p.color||"var(--accent)"}" opacity=".55" style="cursor:pointer" onclick="location.hash='client/${p.id}'"><title>${esc(p.label)}</title></circle>`;
+  }).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:380px;display:block;border:1px solid var(--line);border-radius:10px" role="img" aria-label="${esc(cfg.xLabel)} versus ${esc(cfg.yLabel)}, ${points.length} clients, click a dot to open that client">
+    ${quad}${lines}${dots}
+  </svg>
+  <div class="method">x axis: ${esc(cfg.xLabel)} &middot; y axis: ${esc(cfg.yLabel)}${cfg.note?" &middot; "+esc(cfg.note):""}${cfg.quadrantLabel?" &middot; shaded corner = "+esc(cfg.quadrantLabel):""}</div>`;
+}
+
+function svgCompareBars(rows,color){
+  return rows.map(r=>{
+    const sv=r.segVal, av=r.allVal;
+    const max=Math.max(sv||0,av||0,0.0001);
+    const segW=sv==null?0:Math.max(2,(sv/max)*100);
+    const allW=av==null?0:Math.max(2,(av/max)*100);
+    return `<div style="margin-bottom:14px">
+      <div style="font-weight:600;font-size:.9rem;margin-bottom:4px">${esc(r.label)}</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+        <span style="width:92px;font-size:.78rem;color:var(--muted)">This segment</span>
+        <div style="flex:1;background:var(--line);border-radius:6px;height:12px"><div style="width:${segW}%;height:100%;background:${color};border-radius:6px"></div></div>
+        <span class="num" style="width:44px;text-align:right;font-size:.85rem">${sv==null?"—":r.fmt(sv)}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="width:92px;font-size:.78rem;color:var(--muted)">Whole cohort</span>
+        <div style="flex:1;background:var(--line);border-radius:6px;height:12px"><div style="width:${allW}%;height:100%;background:var(--muted);border-radius:6px"></div></div>
+        <span class="num" style="width:44px;text-align:right;font-size:.85rem">${av==null?"—":r.fmt(av)}</span>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function renderCohort(){
+  const co=DATA.cohort, hl=co.headline, H=co.histograms;
+  const totalSeg=co.segment_bar.reduce((s,x)=>s+x.count,0);
+
+  const fmtL=v=>v==null?"—":lcr(v*1e5);
+  const fmtYr=v=>v==null?"—":v.toFixed(1)+"y";
+  const fmtGap=v=>v==null?"—":pct(v)+"/yr";
+  const fmtPct=v=>v==null?"—":Math.round(v)+"%";
+  const fmtBets=v=>v==null?"—":v.toFixed(1);
+  const histCard=(h,title,fmt)=>`<div class="card"><h3>${esc(title)}</h3>${svgHist(h,fmt)}</div>`;
+
+  const wf=co.waterfall.map((w,i)=>({label:w.label,n:Math.max(w.value_cr||0,0),
+    valueLabel:lcr((w.value_cr||0)*1e7), bold:i===co.waterfall.length-1}));
+  const fn=co.funnel.map((f,i)=>({label:f.stage,n:f.n,valueLabel:String(f.n),
+    bold:i===co.funnel.length-1, href:i===co.funnel.length-1?"#calls":null}));
+
+  const sc=co.scatter;
+  const scatterPoints=(sc.points||[]).map(p=>{
+    const cl=DATA.clients[String(p.client_id)]||{};
+    return {x:p.churn_score, y:p.book_cr, id:p.client_id, color:segColor(p.segment),
+      label:`${cl.name||("Client "+p.client_id)} &middot; ${esc(p.segment||"")} &middot; churn ${p.churn_score} &middot; ${lcr((p.book_cr||0)*1e7)} book`};
+  }).filter(p=>p.x!=null&&p.y!=null);
+  const xVals=scatterPoints.map(p=>p.x), yVals=scatterPoints.map(p=>p.y);
+  const scatterHTML=svgScatter(scatterPoints,{
+    xMin:0, xMax:Math.max(100,...xVals), yMin:0, yMax:Math.max(1,...yVals),
+    thrX:sc.churn_threshold, thrY:sc.book_threshold_cr,
+    xLabel:"Churn risk score", yLabel:"Book value",
+    quadrantLabel:"valuable and at risk",
+  });
+
+  app.innerHTML=`<div class="wrap" style="padding-top:22px">
+    <div class="eyebrow">Management dashboard</div>
+    <h1 style="font-size:clamp(24px,3.4vw,32px);margin-top:8px">The cohort</h1>
+    <p class="method">Every client on the book, binned honestly. Click a segment or a dot to open the client behind it.</p>
+
+    <div class="section" style="border-top:none;padding-top:8px">
+      <div class="cards">
+        <div class="card"><h3>Book</h3><div class="big" style="font-size:clamp(26px,4vw,38px)">${lcr(hl.book_cr*1e7)}</div></div>
+        <div class="card"><h3>Clients</h3><div class="big" style="font-size:clamp(26px,4vw,38px)">${hl.clients}</div></div>
+        <div class="card"><h3>Families</h3><div class="big" style="font-size:clamp(26px,4vw,38px)">${hl.families}</div></div>
+        <div class="card"><h3>Realized value delivered</h3><div class="big" style="font-size:clamp(26px,4vw,38px)">${hl.realized_cr==null?"—":lcr(hl.realized_cr*1e7)}</div><p>SIP discipline, staying invested, switch outcomes, fee and tax savings — booked and added up.</p></div>
+        <div class="card"><h3>Coaching opportunity</h3><div class="big" style="font-size:clamp(26px,4vw,38px)">${hl.coaching_cr==null?"—":lcr(hl.coaching_cr*1e7)}</div><p>A labelled what-if upper bound, not booked.</p></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Segments</h3>
+      <p class="method">${totalSeg} clients across ${co.segment_bar.length} segments.</p>
+      ${svgSegBar(co.segment_bar)}
+    </div>
+
+    <div class="section">
+      <h3>Six distributions</h3>
+      <div class="cards">
+        ${histCard(H.book_size_l,"Book size",fmtL)}
+        ${histCard(H.tenure_years,"Tenure",fmtYr)}
+        ${histCard(H.growth_gap_pp,"Growth vs index fund",fmtGap)}
+        ${histCard(H.freak_out_pct,"Freak-out score",fmtPct)}
+        ${histCard(H.effective_bets,"Effective bets",fmtBets)}
+        ${histCard(H.sip_health_pct,"SIP health",fmtPct)}
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>What behaviour has cost the book</h3>
+      ${svgBarList(wf,"var(--crit)")}
+    </div>
+
+    <div class="section">
+      <h3>Churn risk vs. book value</h3>
+      ${scatterHTML}
+    </div>
+
+    <div class="section">
+      <h3>Tonight's call list, from the top</h3>
+      ${svgBarList(fn,"var(--accent)")}
+    </div>
+
+    <div class="foot">Every figure above is computed from the book's own transaction, holdings and behaviour history, as on ${esc(DATA.asof)}.</div>
+  </div>`;
+}
+
+function segAvg(list,f){ const v=list.map(f).filter(x=>x!=null&&isFinite(x)); return v.length?v.reduce((a,b)=>a+b,0)/v.length:null; }
+function clientBookRs(c){ return (c.pack&&c.pack.map&&!c.pack.map.insufficient)?c.pack.map.total_mv:(c.churn?c.churn.mv:null); }
+function clientPanic(c){ return (c.pack&&c.pack.habits&&!c.pack.habits.insufficient)?c.pack.habits.panic_share:null; }
+function clientChase(c){ return (c.pack&&c.pack.habits&&!c.pack.habits.insufficient)?c.pack.habits.chase_hot_share:null; }
+function clientSipStopPct(c){ const h=(c.pack&&c.pack.habits&&!c.pack.habits.insufficient)?c.pack.habits:null; return (h&&h.sip_active_share!=null)?100*(1-h.sip_active_share):null; }
+function clientAlpha(c){ return (c.pack&&c.pack.benchmark&&!c.pack.benchmark.insufficient)?c.pack.benchmark.alpha:null; }
+
+function renderSegment(key){
+  const bar=(DATA.cohort.segment_bar||[]).find(s=>slug(s.segment)===key);
+  if(!bar){
+    app.innerHTML=`<div class="wrap" style="padding-top:26px"><div class="eyebrow">Cohort</div>
+      <h1 style="font-size:clamp(24px,3.4vw,32px)">Segment not found</h1>
+      <p><a href="#cohort">&larr; Back to the cohort</a></p></div>`;
+    return;
+  }
+  const name=bar.segment, color=segColor(name);
+  const entries=Object.entries(DATA.clients).filter(([id,c])=>c.segment&&c.segment.segment===name);
+  const allClients=Object.values(DATA.clients);
+  const segClients=entries.map(([id,c])=>c);
+
+  const rows=[
+    {label:"Sells in market falls",fmt:v=>Math.round(v)+"%",
+     segVal:segAvg(segClients,c=>{const p=clientPanic(c);return p==null?null:p*100;}),
+     allVal:segAvg(allClients,c=>{const p=clientPanic(c);return p==null?null:p*100;})},
+    {label:"Chases recently-hot funds",fmt:v=>Math.round(v)+"%",
+     segVal:segAvg(segClients,c=>{const p=clientChase(c);return p==null?null:p*100;}),
+     allVal:segAvg(allClients,c=>{const p=clientChase(c);return p==null?null:p*100;})},
+    {label:"SIPs stopped",fmt:v=>Math.round(v)+"%",
+     segVal:segAvg(segClients,clientSipStopPct),
+     allVal:segAvg(allClients,clientSipStopPct)},
+  ];
+  const behaviourHTML=svgCompareBars(rows,color);
+
+  const rrPoints=entries.map(([id,c])=>{
+    const a=clientAlpha(c), p=clientPanic(c);
+    return {x:a, y:p==null?null:p*100, id, color,
+      label:`${esc(c.name)} &middot; ${pct(a)}/yr vs index fund &middot; ${p==null?"—":Math.round(p*100)}% sold in falls`};
+  }).filter(p=>p.x!=null&&p.y!=null);
+  let rrHTML;
+  if(rrPoints.length){
+    const xs=rrPoints.map(p=>p.x), ys=rrPoints.map(p=>p.y);
+    rrHTML=svgScatter(rrPoints,{
+      xMin:Math.min(0,...xs), xMax:Math.max(0,...xs), yMin:0, yMax:Math.max(10,...ys),
+      thrX:0, thrY:null, xLabel:"Growth vs index fund (%/yr)", yLabel:"Sold in market falls (%)",
+      note:"dashed line = even with the index fund",
+    });
+  } else {
+    rrHTML='<p class="insuf">Not enough index-fund or behaviour history in this segment yet.</p>';
+  }
+
+  const bookShareRs=segClients.reduce((s,c)=>s+(clientBookRs(c)||0),0);
+  const bookSharePct=DATA.book.mv_cr?100*bookShareRs/(DATA.book.mv_cr*1e7):null;
+  const clientSharePct=100*bar.count/DATA.book.clients;
+
+  const rowsHTML=entries
+    .slice().sort((a,b)=>(b[1].segment.whatif_rs||0)-(a[1].segment.whatif_rs||0))
+    .map(([id,c])=>{
+      const mv=clientBookRs(c), churnScore=(c.churn&&c.churn.score!=null)?Math.round(c.churn.score):null;
+      return `<a class="row" href="#client/${id}">
+        <div class="rline"><span class="rname">${esc(c.name)}</span><span class="rbook">${lcr(mv)} book</span></div>
+        <div class="reason">${esc(c.segment.reason)}</div>
+        <div class="script">What-if ${lcr(c.segment.whatif_rs)}${churnScore!=null?" &middot; churn score "+churnScore:""}</div>
+      </a>`;
+    }).join("");
+
+  app.innerHTML=`<div class="wrap" style="padding-top:22px">
+    <div class="eyebrow"><a href="#cohort">&larr; The cohort</a></div>
+    <div class="profile" style="border-left:4px solid ${color}">
+      <h1>${esc(name)}</h1>
+      <p class="method" style="margin-top:6px">${esc((segClients[0]&&segClients[0].segment.reason)||"")}</p>
+      <div style="display:flex;flex-wrap:wrap;gap:26px;margin-top:14px;align-items:center">
+        <div><div class="eyebrow">Clients</div><div class="big" style="font-size:clamp(24px,3.6vw,36px)">${bar.count}</div><p style="color:var(--muted);font-size:.85rem;margin:2px 0 0">${clientSharePct.toFixed(0)}% of the book</p></div>
+        <div><div class="eyebrow">Book share</div><div class="big" style="font-size:clamp(24px,3.6vw,36px)">${lcr(bookShareRs)}</div><p style="color:var(--muted);font-size:.85rem;margin:2px 0 0">${bookSharePct==null?"—":bookSharePct.toFixed(0)+"% of the book"}</p></div>
+        <div><div class="eyebrow">&#8377; what-if</div><div class="big" style="font-size:clamp(24px,3.6vw,36px)">${lcr((bar.whatif_cr||0)*1e7)}</div><p style="color:var(--muted);font-size:.85rem;margin:2px 0 0">Labelled upper bound, not booked.</p></div>
+      </div>
+    </div>
+
+    <div class="section"><h3>How this segment behaves</h3>
+      <p class="method">This segment versus the whole cohort.</p>
+      ${behaviourHTML}
+    </div>
+
+    <div class="section"><h3>Growth vs. behaviour</h3>
+      ${rrHTML}
+    </div>
+
+    <div class="section"><h3>Every client in this segment</h3>
+      ${rowsHTML || '<p class="insuf">No clients resolved to this segment.</p>'}
+    </div>
+
+    <div class="foot">${esc(name)} &middot; ${bar.count} clients &middot; as on ${esc(DATA.asof)}.</div>
+  </div>`;
 }
 
 /* ---- screen 3: client audit pack ---- */
