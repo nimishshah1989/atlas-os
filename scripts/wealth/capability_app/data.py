@@ -70,16 +70,34 @@ def fetch_book(conn) -> dict:
     """Top-level orchestrator: runs every capability_app data function against
     a live connection and returns the merged dict the render layer reads.
 
-    Task 1 wires only the Holdings-side Q1/Q2/Q3/Q6 functions + the (partial)
-    client-index rollup. Task 2 extends this to call data_behaviour.py's
-    functions too and merge their keys in — do not duplicate that wiring here.
+    Task 1 wired the Holdings-side Q1/Q2/Q3/Q6 functions + the (partial)
+    client-index rollup. Task 2 adds the remaining Holdings exhibits (Q4/Q5/
+    Q7), the Behaviour-side B1-B5, the client_index chronic-laggard/
+    fees-above-median annotation pass, and the per-client Client-360 rollups.
     """
-    from . import data_holdings, data_holdings_overlap
+    from . import (
+        data_behaviour,
+        data_client360_behaviour,
+        data_holdings,
+        data_holdings_fees,
+        data_holdings_overlap,
+    )
 
     data: dict = {}
     data["q1"] = data_holdings.q1_ownership(conn)
     data["q2"] = data_holdings.q2_label_check(conn)
     data["q3"] = data_holdings_overlap.q3_overlap(conn)
+    data["q4"] = data_holdings_fees.q4_fees(conn)
+    data["q5"] = data_holdings_fees.q5_fund_performance(conn)
     data["q6"] = data_holdings_overlap.q6_bloat_check()
-    data["client_index"] = data_holdings_overlap.client_index_rows(conn)
+    data["q7"] = data_holdings_fees.q7_cut_list(conn)
+    data["b1"] = data_behaviour.b1_advice_vs_index(conn)
+    data["b2"] = data_behaviour.b2_behaviour_gap(conn)
+    data["b3"] = data_behaviour.b3_panic_pattern(conn)
+    data["b4"] = data_behaviour.b4_advice_switches(conn)
+    data["b5"] = data_behaviour.b5_what_if_machine(conn)
+
+    client_index = data_holdings_overlap.client_index_rows(conn)
+    data["client_index"] = data_behaviour.annotate_client_index(conn, client_index)
+    data["client360"] = data_client360_behaviour.client_360_all(conn)
     return data
