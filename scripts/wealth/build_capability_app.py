@@ -20,8 +20,6 @@ Usage: set -a; source .env; set +a; .venv/bin/python scripts/wealth/build_capabi
 from __future__ import annotations
 
 import json
-import math
-import re
 import statistics
 import sys
 from collections import defaultdict
@@ -30,67 +28,17 @@ from pathlib import Path
 import pandas as pd
 from build_audit_packs import SECTION_NAMES
 from build_segments import SEGMENTS
+from capability_app.data import _degarble, _f, _hist, lcr_py
 from engine_common import connect
 
 # segment-based proxy for the armed pool; not a 1:1 map of build_call_lists'
 # candidate rows (that engine pools from client_behaviour/sip_streams/client_churn_risk).
 ARMED_SEGMENTS = tuple(s for s in SEGMENTS if s not in ("Too New to Tell", "Steady Compounders"))
 
-_XIRR_RE = re.compile(r"(?i)\bXIRR\b")
-
 OUT = Path("/home/ubuntu/jhaveri_data/reports/jhaveri-capability-app.html")
 
 
-def _f(x):
-    """-> float rounded, or None (never NaN/Inf — strict-JSON safe)."""
-    if x is None:
-        return None
-    v = float(x)
-    if not math.isfinite(v):
-        return None
-    return round(v, 4)
-
-
-def lcr_py(n: float) -> str:
-    """₹ in L/cr, en-IN style (mirror of the JS lcr for build-time story text)."""
-    a = abs(n)
-    if a >= 1e7:
-        return f"₹{n / 1e7:.2f} cr"
-    if a >= 1e5:
-        return f"₹{n / 1e5:.2f} L"
-    return f"₹{round(n):,}"
-
-
 # ----------------------------------------------------------------- fetch --
-
-
-def _degarble(s):
-    """Same XIRR->plain-language swap build_audit_packs applies to flags/
-    evidence text — client_flags.evidence and client_scorecard.attention_reasons
-    contain literal 'XIRR' that would trip the banned-word gate otherwise."""
-    return None if s is None else _XIRR_RE.sub("yearly growth", s)
-
-
-def _hist(values, n_bins=10):
-    """Equal-width histogram over the REAL observed min/max + median. Honest
-    binning: no fabricated category thresholds, stdlib only."""
-    vals = sorted(float(v) for v in values if v is not None and math.isfinite(float(v)))
-    if not vals:
-        return {"edges": [], "counts": [], "median": None, "n": 0}
-    lo, hi = vals[0], vals[-1]
-    if lo == hi:
-        return {"edges": [lo, hi], "counts": [len(vals)], "median": lo, "n": len(vals)}
-    width = (hi - lo) / n_bins
-    counts = [0] * n_bins
-    for v in vals:
-        counts[min(int((v - lo) / width), n_bins - 1)] += 1
-    edges = [round(lo + i * width, 2) for i in range(n_bins + 1)]
-    return {
-        "edges": edges,
-        "counts": counts,
-        "median": round(statistics.median(vals), 2),
-        "n": len(vals),
-    }
 
 
 def _widen_clients(conn, clients: dict) -> dict:
