@@ -33,6 +33,23 @@ def _chips_from_reason(reason: str) -> list[str]:
     return chips
 
 
+def _held_scheme_expense_ratios(conn) -> dict[int, tuple[str, float]]:
+    """scheme_id -> (category_name, expense_ratio_pct) for every held scheme
+    with a resolvable real expense_ratio (own mstar_id -> de_mf_master).
+    Shared by q4_fees (dumbbell's regular-plan side) and q7_cut_list
+    (per-cut-fund TER-implied annual cost) so the two never diverge on what
+    counts as a held scheme's "real" ER."""
+    cur = conn.cursor()
+    cur.execute(
+        """select distinct s.scheme_id, m.category_name, m.expense_ratio::float
+           from wealth.holdings h
+           join wealth.schemes s using (scheme_id)
+           join atlas_foundation.de_mf_master m on m.mstar_id = s.mstar_id
+           where h.market_value > 0 and m.expense_ratio is not null and m.category_name is not null"""
+    )
+    return {sid: (cat, er) for sid, cat, er in cur.fetchall()}
+
+
 def q4_fees(conn) -> dict:
     """What do you actually pay? Book rollup = sum(wealth.value_statements.
     fee_save_yr_rs) — that column is ALREADY the closet-indexer fee-saving
@@ -74,17 +91,10 @@ def q4_fees(conn) -> dict:
     # row in de_mf_master (verified e.g. Axis Large Cap Reg-G -> F000005HAY ->
     # ER 0.68, distinct from the Direct sibling F00000PDM3 -> ER 0.15). Flagged
     # in the task report as a verified brief correction.
-    cur.execute(
-        """select distinct s.scheme_id, m.category_name, m.expense_ratio::float
-           from wealth.holdings h
-           join wealth.schemes s using (scheme_id)
-           join atlas_foundation.de_mf_master m on m.mstar_id = s.mstar_id
-           where h.market_value > 0 and m.expense_ratio is not null and m.category_name is not null"""
-    )
-    held_er = cur.fetchall()
+    held_er = _held_scheme_expense_ratios(conn)
     by_cat_regular: dict[str, list[float]] = defaultdict(list)
-    for _sid, cat, er in held_er:
-        by_cat_regular[cat].append(er)
+    for _cat, _er in held_er.values():
+        by_cat_regular[_cat].append(_er)
 
     cur.execute(
         """select category_name, expense_ratio::float
@@ -371,8 +381,16 @@ def q7_cut_list(conn) -> dict:
     members is in that same client's keep set, emit an edge to the
     highest-overlap such partner. Cut funds with no qualifying partner are
     OMITTED from the sankey — an incomplete sankey is honest, a fabricated
-    edge is not."""
+    edge is not.
+
+    Fee-save and duplication figures reuse existing pieces rather than
+    re-deriving them: TER-implied annual cost of the cut funds comes from
+    the SAME held-scheme expense-ratio lookup q4_fees uses
+    (_held_scheme_expense_ratios), and the duplication percentage is
+    derived from the SAME highest-overlap keep-partner already computed
+    for the sankey edges — no new math, no cross-task import."""
     threshold = _seed_overlap_threshold(conn)
+    held_er = _held_scheme_expense_ratios(conn)
     cur = conn.cursor()
     cur.execute("select client_id, keep, cut, min_fund_count, note from wealth.cut_list")
     cl_rows = cur.fetchall()
@@ -387,8 +405,11 @@ def q7_cut_list(conn) -> dict:
         pairs_by_client[cid].append((a, b, pct))
 
     n_with_cut = 0
+    n_kept_rows = 0
     total_cut_value_rs = 0.0
     total_exit_tax_rs = 0.0
+    total_cut_fee_rs = 0.0
+    dup_value_rs = 0.0
     chip_counts: dict[str, int] = defaultdict(int)
     evidence_rows = []
     edge_agg: dict[tuple[str, str], dict] = {}
@@ -403,6 +424,7 @@ def q7_cut_list(conn) -> dict:
         keep = keep_json or []
         cut = cut_json or []
         keep_by_sid = {k["scheme_id"]: k for k in keep}
+        n_kept_rows += len(keep)
         if cut:
             n_with_cut += 1
         for c in cut:
@@ -414,6 +436,14 @@ def q7_cut_list(conn) -> dict:
             chips = _chips_from_reason(reason)
             for chip in chips:
                 chip_counts[chip] += 1
+
+            # TER-implied annual cost of this cut fund — same held-scheme ER
+            # lookup q4_fees uses, no separate/re-derived expense math.
+            cat_er = held_er.get(sid)
+            fund_fee_rs = value * cat_er[1] / 100.0 if cat_er else None
+            if fund_fee_rs is not None:
+                total_cut_fee_rs += fund_fee_rs
+
             evidence_rows.append(
                 {
                     "client_id": cid,
@@ -422,6 +452,7 @@ def q7_cut_list(conn) -> dict:
                     "chips": chips,
                     "exit_tax_rs": _f(c.get("exit_tax_rs")),
                     "unwind_order": c.get("unwind_order"),
+                    "fee_save_yr_rs": _f(fund_fee_rs),
                 }
             )
 
@@ -435,6 +466,9 @@ def q7_cut_list(conn) -> dict:
                     best = (other, pct)
             if best is not None:
                 to_sid, pct = best
+                # this cut fund's value is `pct`% overlapped with a fund we're
+                # keeping — count that share of its value as duplication removed.
+                dup_value_rs += value * pct / 100.0
                 to_name = keep_by_sid[to_sid]["fund"]
                 key = (c.get("fund"), to_name)
                 agg = edge_agg.setdefault(
@@ -455,10 +489,17 @@ def q7_cut_list(conn) -> dict:
         )
     sankey.sort(key=lambda e: -e["n_clients"])
 
+    n_cut_rows = len(evidence_rows)
+    n_total_rows = n_cut_rows + n_kept_rows
+    duplication_removed_pct = (
+        _f(100 * dup_value_rs / total_cut_value_rs) if total_cut_value_rs else 0.0
+    )
+
     verdict = (
-        f"{n_with_cut} of {len(cl_rows)} clients have >=1 fund we'd cut; "
-        f"{lcr_py(total_cut_value_rs)} in redundant-and-weak positions, "
-        f"{lcr_py(total_exit_tax_rs)} of estimated exit tax."
+        f"Cutting {n_cut_rows} of {n_total_rows} funds ({n_with_cut} of {len(cl_rows)} clients "
+        f"affected) — saves {lcr_py(total_cut_fee_rs)}/yr in fees, removes "
+        f"{duplication_removed_pct:.0f}% duplication ({lcr_py(total_cut_value_rs)} in "
+        f"redundant-and-weak positions, {lcr_py(total_exit_tax_rs)} of estimated exit tax)."
     )
 
     return {
@@ -466,6 +507,8 @@ def q7_cut_list(conn) -> dict:
         "n_with_cut": n_with_cut,
         "total_cut_value_rs": _f(total_cut_value_rs),
         "total_exit_tax_rs": _f(total_exit_tax_rs),
+        "total_cut_fee_rs": _f(total_cut_fee_rs),
+        "duplication_removed_pct": duplication_removed_pct,
         "chip_counts": dict(chip_counts),
         "sankey": sankey,
         "verdict": verdict,
@@ -475,6 +518,11 @@ def q7_cut_list(conn) -> dict:
                 {"label": "Clients with a cut recommendation", "value": n_with_cut},
                 {"label": "₹ in cut positions", "value": _f(total_cut_value_rs)},
                 {"label": "Estimated exit tax", "value": _f(total_exit_tax_rs)},
+                {
+                    "label": "Fee save from cutting (TER-implied, /yr)",
+                    "value": _f(total_cut_fee_rs),
+                },
+                {"label": "Duplication removed", "value": duplication_removed_pct},
             ],
             "rule": (
                 "wealth.cut_list: cut = redundant ∩ weak funds (build_cut_list.py), redundant = "
@@ -486,7 +534,13 @@ def q7_cut_list(conn) -> dict:
                 "keep set (via wealth.client_fund_overlap above the same threshold) — "
                 "build_cut_list.py itself discards this mapping once it decides cut/keep, so it "
                 "is reconstructed here, not read from a stored column. Cut funds with no "
-                "qualifying keep-side partner are omitted from the sankey."
+                "qualifying keep-side partner are omitted from the sankey. Fee save = each cut "
+                "fund's own market_value * its real expense_ratio / 100, using the SAME "
+                "held-scheme ER lookup as q4_fees (_held_scheme_expense_ratios) — summed "
+                "book-wide, cut funds with no resolvable ER contribute 0, not a guess. "
+                "Duplication removed % = value-weighted share of cut-fund money that has a "
+                "highest-overlap keep-side partner (the SAME pairing used for the sankey edges) "
+                "divided by total cut value."
             ),
             "assumptions": [
                 {
@@ -503,10 +557,18 @@ def q7_cut_list(conn) -> dict:
                     "bias": "floor — likely undercounts fee-driven cut rationale versus what a "
                     "fee-aware cut engine might also flag",
                 },
+                {
+                    "text": "a cut fund with no resolvable de_mf_master expense_ratio (own "
+                    "mstar_id join) contributes ₹0 to the fee-save total rather than an "
+                    "estimated/imputed ER",
+                    "bias": "floor — the fee-save figure undercounts if any cut fund's real ER "
+                    "isn't resolvable, never overstates it",
+                },
             ],
             "steps": [
                 {"label": "Clients scanned", "value": len(cl_rows)},
                 {"label": "Cut fund rows", "value": len(evidence_rows)},
+                {"label": "Kept fund rows", "value": n_kept_rows},
                 {"label": "Sankey edges", "value": len(sankey)},
             ],
             "sample_rows": evidence_rows[:20],

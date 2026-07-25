@@ -28,19 +28,28 @@ def _is_working_shaped(obj) -> bool:
     return isinstance(obj, dict) and WORKING_KEYS <= obj.keys()
 
 
-def _find_workings(obj, path="book") -> list[tuple[str, dict]]:
-    """Recursively collect every dict that looks like a `working` object,
-    tagged with a dotted path for failure messages."""
+def _find_exhibits(obj, path="book") -> list[tuple[str, dict]]:
+    """Recursively collect every dict that carries a `working` key shaped like
+    a working object — i.e. an exhibit dict, tagged with a dotted path. The
+    exhibit itself (not just its nested `working`) is what carries the
+    top-level `verdict`/`message` strings actually rendered to a user."""
     found = []
     if isinstance(obj, dict):
-        if _is_working_shaped(obj):
+        if _is_working_shaped(obj.get("working")):
             found.append((path, obj))
         for k, v in obj.items():
-            found.extend(_find_workings(v, f"{path}.{k}"))
+            found.extend(_find_exhibits(v, f"{path}.{k}"))
     elif isinstance(obj, list):
         for i, v in enumerate(obj[:3]):  # a few list entries is enough, this isn't exhaustive
-            found.extend(_find_workings(v, f"{path}[{i}]"))
+            found.extend(_find_exhibits(v, f"{path}[{i}]"))
     return found
+
+
+def _find_workings(obj, path="book") -> list[tuple[str, dict]]:
+    """Thin wrapper over _find_exhibits: same paths (plus `.working`), but
+    returns just the nested `working` object — what most shape/content
+    assertions actually want."""
+    return [(f"{p}.working", exhibit["working"]) for p, exhibit in _find_exhibits(obj, path)]
 
 
 @pytest.fixture(scope="module")
@@ -79,16 +88,23 @@ def test_every_working_object_in_the_book_has_the_required_shape(book):
 
 def test_no_working_object_leaks_a_banned_word(book):
     """The banned-word gate (xirr/alpha/disposition/pgr/plr/counterfactual)
-    applies to every rendered string in a working object — rule text,
-    assumption text/bias, and step/input labels. pgr/plr are matched on word
-    boundaries (bare substring matches common English words like "upgrade")."""
+    applies to every rendered string shown to a user — a working object's
+    rule text, assumption text/bias, and step/input labels, AND the exhibit's
+    own top-level `verdict`/`message` strings that sit alongside `working` in
+    every exhibit's return dict (these are equally rendered UI text; scanning
+    only the nested working object would miss a regression there). pgr/plr
+    are matched on word boundaries (bare substring matches common English
+    words like "upgrade")."""
     banned_re = re.compile(r"xirr|alpha|disposition|\bpgr\b|\bplr\b|counterfactual", re.I)
-    for path, working in _find_workings(book):
+    for path, exhibit in _find_exhibits(book):
+        working = exhibit["working"]
         haystacks = [working["rule"]]
         haystacks += [a["text"] for a in working["assumptions"]]
         haystacks += [a["bias"] for a in working["assumptions"]]
         haystacks += [str(s.get("label", "")) for s in working["steps"]]
         haystacks += [str(i.get("label", "")) for i in working["inputs"]]
+        haystacks += [str(exhibit.get("verdict", ""))]
+        haystacks += [str(exhibit.get("message", ""))]
         text = " ".join(haystacks)
         m = banned_re.search(text)
         assert m is None, f"{path}: banned word {m.group() if m else ''!r} found in {text!r}"

@@ -242,6 +242,15 @@ def test_q7_cut_list_real_data_and_working_shape():
         assert edge["n_clients"] > 0
     assert q7["honesty"] == "estimate"
     _assert_working_shape(q7["working"])
+    # Finding 1 (review of f5c101c9): Q7's verdict must wire in a real
+    # TER-implied fee-save figure (shared expense-ratio lookup with q4_fees)
+    # and a duplication-removed % (derived from the same highest-overlap
+    # keep-partner data used for the sankey) — not just cut-value/exit-tax.
+    assert q7["total_cut_fee_rs"] > 0, "fee delta must not be zero when there are cut funds"
+    assert 0 < q7["duplication_removed_pct"] <= 100
+    assert "saves" in q7["verdict"] and "/yr in fees" in q7["verdict"]
+    assert "duplication" in q7["verdict"]
+    assert "Cutting" in q7["verdict"]
 
 
 def test_b1_advice_vs_index_real_data_and_working_shape():
