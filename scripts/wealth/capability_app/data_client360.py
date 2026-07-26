@@ -378,8 +378,7 @@ def client_funds_table(conn, client_id: int) -> dict:
     ]
     n_scored = sum(1 for f in funds if f["verdict"])
     verdict = (
-        f"{len(funds)} funds held, {lcr_py(total)} total; {n_scored} scored for fund "
-        "performance."
+        f"{len(funds)} funds held, {lcr_py(total)} total; {n_scored} scored for fund performance."
     )
 
     return {

@@ -42,15 +42,13 @@ FRAMING = {
     "funds": "What does this one client actually own — every fund, its category, its "
     "value, and whether it beat its benchmark.",
     "label": "Do this client's fund labels match their actual contents?",
-    "sector": "Look through every fund this client holds to the stocks and sectors "
-    "underneath.",
+    "sector": "Look through every fund this client holds to the stocks and sectors underneath.",
     "overlap": "Do this client's own funds duplicate each other's holdings?",
     "fees": "What is this client actually paying, in rupees, for the funds they hold?",
     "cutlist": "What would we cut for this client, and why — same evidence used book-wide.",
     "behaviour": "This client's own crisis flows, advised switches, SIP streak, and "
     "dividend leakage.",
-    "whatifs": "Four honest replays of this client's own real cash flows under a "
-    "different choice.",
+    "whatifs": "Four honest replays of this client's own real cash flows under a different choice.",
 }
 
 # Display labels for the 4 confirmed-distinct event kinds (data_client360.py's
@@ -101,18 +99,30 @@ def _cols(*specs: tuple[str, str, dict]) -> list[dict]:
 
 
 COLS_HEADER = _cols(
-    ("client_id", "Client", {}), ("grew_pct_per_year", "Grew %/yr", _C), ("worth_now_rs", "Worth now", _F)
+    ("client_id", "Client", {}),
+    ("grew_pct_per_year", "Grew %/yr", _C),
+    ("worth_now_rs", "Worth now", _F),
 )
 COLS_TIMELINE = _cols(("month", "Month", {}), ("value_rs", "Value", _F))
 COLS_FUNDS = _cols(
-    ("fund", "Fund", {}), ("category", "Category", {}), ("value_rs", "Value", _F), ("verdict", "Verdict", {})
+    ("fund", "Fund", {}),
+    ("category", "Category", {}),
+    ("value_rs", "Value", _F),
+    ("verdict", "Verdict", {}),
 )
 COLS_LABEL = _cols(
-    ("fund", "Fund", {}), ("category", "Category", {}), ("verdict", "Verdict", {}), ("value_rs", "Value", _F)
+    ("fund", "Fund", {}),
+    ("category", "Category", {}),
+    ("verdict", "Verdict", {}),
+    ("value_rs", "Value", _F),
 )
-COLS_SECTOR = _cols(("bucket", "Bucket", {}), ("sector", "Sector", {}), ("exposure_rs", "Exposure", _F))
+COLS_SECTOR = _cols(
+    ("bucket", "Bucket", {}), ("sector", "Sector", {}), ("exposure_rs", "Exposure", _F)
+)
 COLS_BUCKET = _cols(("bucket", "Bucket", {}), ("pct", "% of exposure", _C))
-COLS_OVERLAP = _cols(("fund_a", "Fund A", {}), ("fund_b", "Fund B", {}), ("overlap_pct", "Overlap %", _C))
+COLS_OVERLAP = _cols(
+    ("fund_a", "Fund A", {}), ("fund_b", "Fund B", {}), ("overlap_pct", "Overlap %", _C)
+)
 COLS_FEES_SAMPLE = _cols(("fund", "Fund", {}), ("expense_ratio_pct", "Expense ratio %", _C))
 COLS_FEES_FULL = _cols(
     ("fund", "Fund", {}), ("expense_ratio_pct", "Expense ratio %", _C), ("value_rs", "Value", _F)
@@ -124,7 +134,9 @@ COLS_CUTLIST = _cols(
     ("exit_tax_rs", "Exit tax", _F),
     ("unwind_order", "Order", {}),
 )
-COLS_SWITCHES_SAMPLE = _cols(("switch_date", "Date", {}), ("extra_growth_1y_pp", "Extra growth 1y (pp)", _C))
+COLS_SWITCHES_SAMPLE = _cols(
+    ("switch_date", "Date", {}), ("extra_growth_1y_pp", "Extra growth 1y (pp)", _C)
+)
 COLS_SWITCHES_FULL = _cols(
     ("switch_date", "Date", {}),
     ("from_fund", "From", {}),
@@ -189,12 +201,19 @@ def _timeline(book: dict, cid: int) -> str:
     # "insufficient") is the correct empty-state discriminator here.
     if d.get("message"):
         return _insufficient(sid, "Timeline", FRAMING["timeline"], d)
-    value_points = [{"x": _yfrac(f"{m}-01"), "y": v} for m, v in zip(d["months"], d["values_rs"])]
+    value_points = [
+        {"x": _yfrac(f"{m}-01"), "y": v} for m, v in zip(d["months"], d["values_rs"], strict=True)
+    ]
     flow_points = [
-        {"x": _yfrac(f"{m}-01"), "y": v} for m, v in zip(d["months"], d["cumulative_net_flow_rs"])
+        {"x": _yfrac(f"{m}-01"), "y": v}
+        for m, v in zip(d["months"], d["cumulative_net_flow_rs"], strict=True)
     ]
     events = [
-        {"x": _yfrac(e["date"]), "label": CURVE_EVENT_LABELS.get(e["kind"], e["kind"]), "kind": e["kind"]}
+        {
+            "x": _yfrac(e["date"]),
+            "label": CURVE_EVENT_LABELS.get(e["kind"], e["kind"]),
+            "kind": e["kind"],
+        }
         for e in d["events"]
     ]
     shaded = [{"x0": _yfrac(w["start"]), "x1": _yfrac(w["end"])} for w in d["crisis_windows"]]
@@ -331,7 +350,10 @@ def _overlap(book: dict, cid: int) -> str:
     d = book["client360"][cid]["overlap"]
     sid = f"client-{cid}-overlap"
     kpis = [
-        {"label": f"Pairs > {int(d['threshold_pct'])}%", "value": str(d["n_pairs_above_threshold"])},
+        {
+            "label": f"Pairs > {int(d['threshold_pct'])}%",
+            "value": str(d["n_pairs_above_threshold"]),
+        },
         {"label": "Fund pairs held", "value": str(d["n_pairs"])},
     ]
     charts = []

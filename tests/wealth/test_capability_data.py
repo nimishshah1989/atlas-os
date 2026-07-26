@@ -20,9 +20,7 @@ from capability_app.data_behaviour import (
     b5_what_if_machine,
 )
 from capability_app.data_client360 import (
-    client_funds_table,
     client_header,
-    client_label_check,
     client_sector_lookthrough,
     client_timeline,
     crisis_windows_once,
