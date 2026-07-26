@@ -11,6 +11,7 @@ sys.path.insert(0, "scripts/wealth")
 
 from capability_app.data import fetch_book
 from capability_app.data_behaviour import (
+    annotate_behaviour_flags,
     annotate_client_index,
     b1_advice_vs_index,
     b2_behaviour_gap,
@@ -344,6 +345,33 @@ def test_annotate_client_index_flags_sample_client():
         assert isinstance(r["fees_above_median_flag"], bool)
 
 
+def test_annotate_behaviour_flags_sample_client():
+    conn = _conn()
+    try:
+        idx = client_index_rows(conn)
+        idx = annotate_client_index(conn, idx)
+        idx = annotate_behaviour_flags(conn, idx)
+    finally:
+        conn.close()
+    by_id = {r["client_id"]: r for r in idx["rows"]}
+    row = by_id[SAMPLE_CLIENT]
+    # confirmed via psql: client 1 has panic_share=0.12 (<=0.25), sip_streams=26
+    # with sip_active=16 (some SIPs still running), and a switch count of 85
+    # (< the book's own 90th-percentile cutoff ~383) — all three flags False.
+    assert row["panic_seller_flag"] is False
+    assert row["dead_sip_flag"] is False
+    assert row["chronic_switcher_flag"] is False
+    for r in idx["rows"]:
+        assert isinstance(r["panic_seller_flag"], bool)
+        assert isinstance(r["dead_sip_flag"], bool)
+        assert isinstance(r["chronic_switcher_flag"], bool)
+    # at least one client on each side of each flag — a threshold that never
+    # fires (or always fires) would signal a bug in the cutoff, not a real finding.
+    assert any(r["panic_seller_flag"] for r in idx["rows"])
+    assert any(r["dead_sip_flag"] for r in idx["rows"])
+    assert any(r["chronic_switcher_flag"] for r in idx["rows"])
+
+
 def test_client_360_sample_client_all_sections_present():
     conn = _conn()
     try:
@@ -436,4 +464,10 @@ def test_fetch_book_returns_all_task1_and_task2_keys_and_is_json_safe():
     by_id = {r["client_id"]: r for r in data["client_index"]["rows"]}
     assert "chronic_laggard_flag" in by_id[SAMPLE_CLIENT]
     assert "fees_above_median_flag" in by_id[SAMPLE_CLIENT]
+    assert "panic_seller_flag" in by_id[SAMPLE_CLIENT]
+    assert "dead_sip_flag" in by_id[SAMPLE_CLIENT]
+    assert "chronic_switcher_flag" in by_id[SAMPLE_CLIENT]
+    # confirmed via psql: 210,634 rows in wealth.transactions, 1989-05-29 -> 2026-07-21
+    assert data["n_transactions"] == 210634
+    assert data["txn_years"] == 37
     json.dumps(data, allow_nan=False)  # raises ValueError if any NaN/Inf slipped through

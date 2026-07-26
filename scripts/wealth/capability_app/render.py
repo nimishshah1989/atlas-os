@@ -268,26 +268,42 @@ def exhibit(
     )
 
 
-def client_index_table(client_index: dict) -> str:
+_HOLDINGS_FLAGS = [
+    ("off_label_flag", "off-label"),
+    ("overlap_flag", "overlap"),
+    ("chronic_laggard_flag", "laggard"),
+    ("fees_above_median_flag", "fees"),
+]
+
+
+def client_index_table(
+    client_index: dict,
+    flags: list[tuple[str, str]] | None = None,
+    section_id: str = "client-index",
+) -> str:
+    """Searchable client list shared across pages. `flags`: [(row_key,
+    chip_label)] — defaults to Holdings' own 4-flag set for backward
+    compatibility; Behaviour passes its own 3-flag set. `section_id` is
+    parametrized (not hardcoded) because render_document() has no client-side
+    router — every page's HTML lands in the SAME document as literal
+    siblings, so two calls with the same id would collide (duplicate DOM id
+    + a broken search-filter selector on whichever page rendered second)."""
+    flag_spec = flags if flags is not None else _HOLDINGS_FLAGS
     rows = client_index.get("rows", [])
     body = []
     for r in rows:
-        flags = []
-        if r.get("off_label_flag"):
-            flags.append('<span class="chip chip--estimate">off-label</span>')
-        if r.get("overlap_flag"):
-            flags.append('<span class="chip chip--estimate">overlap</span>')
-        if r.get("chronic_laggard_flag"):
-            flags.append('<span class="chip chip--estimate">laggard</span>')
-        if r.get("fees_above_median_flag"):
-            flags.append('<span class="chip chip--estimate">fees</span>')
+        chips = "".join(
+            f'<span class="chip chip--estimate">{esc(label)}</span>'
+            for key, label in flag_spec
+            if r.get(key)
+        )
         body.append(
             "<tr>"
             f"<td>{client_link(r['client_id'], r['name'])}</td>"
             f'<td class="n">{esc(lcr_py(r.get("value_rs")))}</td>'
             f'<td class="n">{esc(r.get("fund_count", "—"))}</td>'
             f"<td>{esc(r.get('segment', '—'))}</td>"
-            f"<td>{''.join(flags)}</td>"
+            f"<td>{chips}</td>"
             "</tr>"
         )
     table = (
@@ -296,12 +312,13 @@ def client_index_table(client_index: dict) -> str:
         f"<tbody>{''.join(body)}</tbody></table>"
     )
     n_clients = client_index.get("n_clients", len(rows))
+    sid = esc(section_id)
     return (
-        f'<section class="exhibit" id="client-index">'
+        f'<section class="exhibit" id="{sid}">'
         f'<div class="exhibit__head"><span class="exhibit__id">Clients</span></div>'
         f"{paragraph(f'{n_clients} clients.')}"
         f'<input type="search" placeholder="Search clients…" '
-        f"oninput=\"var q=this.value.toLowerCase();document.querySelectorAll('#client-index tbody tr')"
+        f"oninput=\"var q=this.value.toLowerCase();document.querySelectorAll('#{sid} tbody tr')"
         f".forEach(function(tr){{tr.style.display=tr.textContent.toLowerCase().indexOf(q)>-1?'':'none';}});\">"
         f"{table}</section>"
     )

@@ -106,11 +106,20 @@ def fetch_book(conn) -> dict:
     data["b5"] = data_behaviour.b5_what_if_machine(conn)
 
     client_index = data_holdings_overlap.client_index_rows(conn)
-    data["client_index"] = data_behaviour.annotate_client_index(conn, client_index)
+    client_index = data_behaviour.annotate_client_index(conn, client_index)
+    data["client_index"] = data_behaviour.annotate_behaviour_flags(conn, client_index)
     data["client360"] = data_client360_behaviour.client_360_all(conn)
 
     with conn.cursor() as cur:
         cur.execute("select max(as_on_date) from wealth.client_reports")
         (asof,) = cur.fetchone()
     data["asof"] = asof.isoformat() if asof else None
+
+    # Behaviour page's frame line quotes a transaction count/year-span — both
+    # must trace to a live query (Rule #0), not be memorized/hardcoded.
+    with conn.cursor() as cur:
+        cur.execute("select count(*), min(txn_date), max(txn_date) from wealth.transactions")
+        n_txns, txn_min, txn_max = cur.fetchone()
+    data["n_transactions"] = n_txns
+    data["txn_years"] = (txn_max.year - txn_min.year) if (txn_min and txn_max) else None
     return data

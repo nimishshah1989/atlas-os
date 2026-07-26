@@ -12,7 +12,7 @@ import statistics
 from behaviour_fingerprints import drawdown_windows
 from engine_common import BENCH_ID, nav_series
 
-from .data import _f, lcr_py
+from .data import _f, _hist, client_names, lcr_py
 
 
 def b1_advice_vs_index(conn) -> dict:
@@ -21,6 +21,7 @@ def b1_advice_vs_index(conn) -> dict:
     Never say 'alpha' in UI text — this is "extra growth vs index, per
     year". approx=True clients (opening-balance/transfer-in units with no
     cash-flow history) are surfaced separately, not silently folded in."""
+    names = client_names(conn)
     cur = conn.cursor()
     cur.execute(
         """select client_id, xirr_client::float, xirr_bench::float, alpha::float, approx
@@ -41,6 +42,7 @@ def b1_advice_vs_index(conn) -> dict:
     sample_rows = [
         {
             "client_id": cid,
+            "name": names.get(cid),
             "client_growth_pct": _f(cx),
             "index_growth_pct": _f(bx),
             "extra_growth_pp": _f(al),
@@ -54,6 +56,9 @@ def b1_advice_vs_index(conn) -> dict:
         "n_clean": len(clean),
         "n_beating_clean": beating,
         "median_extra_growth_pp": _f(statistics.median(extra)) if extra else None,
+        # build-time reshape of the same `extra` list already computed above
+        # (no new query) — feeds B1's hero distribution chart.
+        "extra_growth_hist": _hist(extra),
         "verdict": verdict,
         "honesty": "exact",
         "working": {
@@ -97,6 +102,7 @@ def b2_behaviour_gap(conn) -> dict:
     any MWR-TWR gap is mechanical, not skill-driven — must ship with the
     number, not just a tooltip. avg_capital uses behaviour_gap.py's own flat
     ponytail proxy (invested/2), inherited here verbatim, not recomputed."""
+    names = client_names(conn)
     cur = conn.cursor()
     cur.execute(
         """select client_id, scheme_id, mwr_pct::float, twr_pct::float, gap_pp::float,
@@ -124,6 +130,7 @@ def b2_behaviour_gap(conn) -> dict:
     sample_rows = [
         {
             "client_id": cid,
+            "name": names.get(cid),
             "scheme_id": sid,
             "mwr_pct": _f(mwr),
             "twr_pct": _f(twr),
@@ -139,6 +146,9 @@ def b2_behaviour_gap(conn) -> dict:
         "median_gap_pp": _f(statistics.median(gaps)) if gaps else None,
         "invested_weighted_gap_pp": _f(wavg),
         "total_gap_rs": _f(total_gap_rs),
+        # build-time reshape of the same `gaps` list already computed above
+        # (no new query) — feeds B2's per-client×scheme gap histogram.
+        "gap_hist": _hist(gaps),
         "verdict": verdict,
         "honesty": "exact",
         "working": {
@@ -200,7 +210,16 @@ def b3_panic_pattern(conn) -> dict:
         {"start": str(a.date()), "trough_or_end": str(b.date()), "still_open": b == bench.index[-1]}
         for a, b in windows
     ]
+    # build-time reshape of the same `bench` series already fetched above
+    # (no new query, no new math) — monthly-resampled so the crisis-anatomy
+    # chart's line series stays small (~240 points over the fund's history
+    # instead of ~5000 daily points).
+    monthly = bench.resample("MS").last().dropna()
+    bench_monthly = [
+        {"x": round(t.year + (t.month - 1) / 12, 4), "y": _f(v)} for t, v in monthly.items()
+    ]
 
+    names = client_names(conn)
     cur = conn.cursor()
     cur.execute(
         """select client_id, panic_out_rs::float, panic_loss_out_rs::float, total_out_rs::float,
@@ -223,6 +242,7 @@ def b3_panic_pattern(conn) -> dict:
     sample_rows = [
         {
             "client_id": cid,
+            "name": names.get(cid),
             "panic_out_rs": _f(pout),
             "panic_loss_out_rs": _f(ploss),
             "panic_share": _f(pshare),
@@ -234,6 +254,7 @@ def b3_panic_pattern(conn) -> dict:
 
     return {
         "crisis_windows": crisis_windows,
+        "bench_monthly": bench_monthly,
         "n_windows": len(windows),
         "total_panic_loss_rs": _f(total_panic_loss),
         "total_div_leak_rs": _f(total_div_leak),
@@ -277,6 +298,7 @@ def b4_advice_switches(conn) -> dict:
     """Advice switches. Source: wealth.advice_ledger (paired switches) +
     wealth.advice_waves (push-wave detection). The switch-pairing definition
     is quoted faithfully, not paraphrased loosely."""
+    names = client_names(conn)
     cur = conn.cursor()
     cur.execute(
         """select client_id, switch_date, amount::float, from_name, to_name,
@@ -316,6 +338,7 @@ def b4_advice_switches(conn) -> dict:
     sample_rows = [
         {
             "client_id": cid,
+            "name": names.get(cid),
             "switch_date": str(sd),
             "amount_rs": _f(amt),
             "from_fund": fn,
@@ -387,6 +410,7 @@ def b5_what_if_machine(conn) -> dict:
     consistency. Each what-if's assumption card must render ABOVE its
     headline number, not below — a page-layout requirement for Task 5/6, not
     something this data layer can enforce, so it's called out here too."""
+    names = client_names(conn)
     cur = conn.cursor()
     cur.execute(
         """select client_id, cf_index_rs::float, cf_no_panic_rs::float, panic_sells,
@@ -455,6 +479,7 @@ def b5_what_if_machine(conn) -> dict:
     sample_rows = [
         {
             "client_id": cid,
+            "name": names.get(cid),
             "cf_index_rs": _f(ci),
             "cf_no_panic_rs": _f(cp),
             "cf_sip_alive_rs": _f(cs),
@@ -540,4 +565,35 @@ def annotate_client_index(conn, client_index: dict) -> dict:
         fee = fee_by_client.get(cid) or 0.0
         row["fees_above_median_flag"] = bool(fee_median is not None and fee > fee_median)
         row["fee_save_yr_rs"] = _f(fee)
+    return client_index
+
+
+def annotate_behaviour_flags(conn, client_index: dict) -> dict:
+    """Third-pass client_index enrichment: Behaviour page's own flags.
+    panic_seller_flag reuses b3_panic_pattern's own >25% panic_share cutoff
+    verbatim (agrees with its "n_panic_heavy_clients" headline). dead_sip_flag
+    = sip_streams > 0 but sip_active == 0 today. chronic_switcher_flag = a
+    client's wealth.advice_ledger switch count above the BOOK's own 90th
+    percentile (counts range 1-1201, median ~78.5 — a single absolute cutoff
+    would be arbitrary; a book-relative percentile flags the top decile)."""
+    cur = conn.cursor()
+    cur.execute("select client_id from wealth.client_behaviour where panic_share > 0.25")
+    panic_clients = {r[0] for r in cur.fetchall()}
+
+    cur.execute(
+        "select client_id from wealth.client_behaviour where sip_streams > 0 and sip_active = 0"
+    )
+    dead_sip_clients = {r[0] for r in cur.fetchall()}
+
+    cur.execute("select client_id, count(*) from wealth.advice_ledger group by client_id")
+    switch_counts = cur.fetchall()
+    counts = [c for _cid, c in switch_counts]
+    p90 = statistics.quantiles(counts, n=10)[8] if len(counts) >= 2 else None
+    chronic_clients = {cid for cid, c in switch_counts if p90 is not None and c > p90}
+
+    for row in client_index["rows"]:
+        cid = row["client_id"]
+        row["panic_seller_flag"] = cid in panic_clients
+        row["dead_sip_flag"] = cid in dead_sip_clients
+        row["chronic_switcher_flag"] = cid in chronic_clients
     return client_index

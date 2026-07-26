@@ -13,8 +13,8 @@ Checks (all must pass):
      to the embed, not the whole document — inline chart JS legitimately
      contains "NaN" as a substring of isNaN(...))
   4. byte size < 6 MB
-  5. every exhibit id q1..q7 is present, both in the embed and as a rendered
-     `id="qN"` exhibit in the Holdings page HTML
+  5. every exhibit id q1..q7/b1..b5 is present, both in the embed and as a
+     rendered `id="qN"`/`id="bN"` exhibit in the Holdings/Behaviour page HTML
   6. every exhibit's `working` object round-trips through the embed with all
      five parts (inputs/rule/assumptions/steps/sample_rows) non-empty — q6 is
      the documented honest empty-state (constraint 3: no factsheet/SID feed),
@@ -25,9 +25,9 @@ Checks (all must pass):
   8. zero occurrences of the deleted routes #book, #calls, #cohort,
      #segment/, #guide anywhere in the output HTML
   9. banned-word walk over all renderable JSON strings + rendered HTML text
-  10. headless browse: ZERO console errors on #holdings
-      (#behaviour / #client/<id> — TODO(Task 5/6): add once those routes
-      exist; don't fake them here)
+  10. headless browse: ZERO console errors on #holdings / #behaviour
+      (#client/<id> — TODO(Task 6): add once that route exists; don't fake
+      it here)
       (GSTACK_CHROMIUM_NO_SANDBOX=1, file copied under /tmp)
 
 Usage: .venv/bin/python scripts/wealth/validate_wealth_app.py
@@ -154,7 +154,7 @@ def browse_routes(html_path: Path, routes: list[str]) -> list[str]:
     return problems
 
 
-EXHIBIT_IDS = tuple(f"q{i}" for i in range(1, 8))
+EXHIBIT_IDS = tuple(f"q{i}" for i in range(1, 8)) + tuple(f"b{i}" for i in range(1, 6))
 WORKING_LIST_PARTS = ("inputs", "assumptions", "steps", "sample_rows")
 DELETED_ROUTES = ("#book", "#calls", "#cohort", "#segment/", "#guide")
 
@@ -300,9 +300,9 @@ def main() -> int:
     tmp = Path(tempfile.gettempdir()) / "jhaveri-capability-app.html"
     shutil.copy(APP, tmp)
 
-    # TODO(Task 5/6): add "behaviour" and a few real "client/<id>" routes once
-    # those pages exist — don't fake routes that aren't built yet.
-    routes = ["holdings"]
+    # TODO(Task 6): add a few real "client/<id>" routes once that page
+    # exists — don't fake routes that aren't built yet.
+    routes = ["holdings", "behaviour"]
     problems = browse_routes(tmp, routes)
     if problems:
         print("FAIL: console errors in headless browse:")
