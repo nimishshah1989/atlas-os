@@ -171,7 +171,7 @@ def connected_components_by_threshold(
             if n in comp:
                 continue
             comp.add(n)
-            stack.extend(adj.get(n, ()) - comp)
+            stack.extend(adj.get(n, set()) - comp)
         seen |= comp
         out.append(sorted(comp))
     return out
