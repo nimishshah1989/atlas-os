@@ -323,7 +323,8 @@ Charts.horizontalBar = function (el, data, opts) {
     svg.appendChild(svgText(padL - 8, cy + barH / 2 + 4, truncateLabel(r.label, padL - 12, 11), { "text-anchor": "end", "font-size": 11, fill: "var(--ink)" }));
     var rect = svgEl("rect", { x: padL, y: cy, width: Math.max(0, x1 - padL), height: barH, fill: color, rx: 3 });
     svg.appendChild(rect);
-    svg.appendChild(svgText(x1 + 6, cy + barH / 2 + 4, fmt(r.value), { "font-size": 11, fill: "var(--muted)" }));
+    // ponytail: no value label here (brief: never print a number on every mark) —
+    // wireHit tooltip + table-view toggle below already carry the value.
     var hit = svgEl("rect", { x: 0, y: cy - 2, width: W, height: barH + 4, fill: "transparent" });
     svg.appendChild(hit);
     wireHit(hit, r.label, [{ label: "value", value: fmt(r.value) }]);

@@ -11,11 +11,14 @@
   --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
 
   /* ---- chart-only additions (Task 3) ---- */
-  /* categorical: dataviz skill's documented default 8-hue order, unchanged —
-     validated against THIS app's real card surfaces (#FFFFFF light), see
+  /* categorical: dataviz skill's documented default hue order, trimmed to
+     the brief's <=7-series cap (task-3-brief.md:49 overrides the skill's own
+     8-hue default) — the dropped 8th slot (#e34948) also duplicated
+     --div-neg-1's exact hex, so trimming removes an identity/status overlap
+     too. Re-validated against THIS app's real card surfaces, see
      task-3-report.md. Identity only — never color a bar by its value. */
   --series-1:#2a78d6; --series-2:#eb6834; --series-3:#1baf7a; --series-4:#eda100;
-  --series-5:#e87ba4; --series-6:#008300; --series-7:#4a3aa7; --series-8:#e34948;
+  --series-5:#e87ba4; --series-6:#008300; --series-7:#4a3aa7;
 
   /* sequential: single hue derived from --accent (peacock), light->dark = low->high.
      Linear-interpolated card-tint -> accent; not a categorical-check target
@@ -41,7 +44,7 @@
   --accent:#4FB3C9; --good:#57BE7C; --warn:#DFA83D; --crit:#E06B5F; --soft:#4FB3C91F;
 
   --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70; --series-4:#c98500;
-  --series-5:#d55181; --series-6:#008300; --series-7:#9085e9; --series-8:#e66767;
+  --series-5:#d55181; --series-6:#008300; --series-7:#9085e9;
 
   --seq-1:#233b3f; --seq-2:#2c535b; --seq-3:#356b76;
   --seq-4:#3d8392; --seq-5:#469bad; --seq-6:#4fb3c9;

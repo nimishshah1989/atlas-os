@@ -14,13 +14,14 @@ function _hashStr(s) {
   return Math.abs(h);
 }
 /* keys: the ordered list of unique identities in THIS render (so two keys
-   never collide as long as there are <=8 of them) — falls back to a hash
-   only if the caller can't supply the full set. ponytail: index-in-set
-   beats hashing for our real category counts (<=8), so just require it. */
+   never collide as long as there are <=7 of them — brief's cap, task-3-brief.md:49)
+   — falls back to a hash only if the caller can't supply the full set.
+   ponytail: index-in-set beats hashing for our real category counts (<=7),
+   so just require it. */
 function _seriesColor(el, key, keys) {
   var idx = keys ? keys.indexOf(String(key)) : -1;
   if (idx < 0) idx = _hashStr(String(key));
-  return cssVar(el, "--series-" + ((idx % 8) + 1));
+  return cssVar(el, "--series-" + ((idx % 7) + 1));
 }
 
 /* ---------- treemap ---------- */
@@ -114,9 +115,10 @@ Charts.treemap = function (el, data, opts) {
       var color = _seriesColor(el, r.key, groupKeys);
       var rect = svgEl("rect", { x: r.x0 + 1, y: r.y0 + 1, width: Math.max(0, r.w - 2), height: Math.max(0, r.h - 2), fill: color, opacity: 0.85, rx: 3 });
       svg.appendChild(rect);
+      // ponytail: label only, no value (brief: never print a number on every
+      // mark) — wireHit tooltip + table-view + the legend below carry value/identity.
       if (r.w > 46 && r.h > 20) {
         svg.appendChild(svgText(r.x0 + 6, r.y0 + 16, r.key, { "font-size": 11, fill: "#fff", "font-weight": 600 }));
-        svg.appendChild(svgText(r.x0 + 6, r.y0 + 30, fmt(r.value), { "font-size": 10, fill: "#fff", opacity: 0.9 }));
       }
       wireHit(rect, r.key, [{ label: "value", value: fmt(r.value) }]);
       if (depth < levels.length - 1) {
@@ -126,6 +128,7 @@ Charts.treemap = function (el, data, opts) {
         });
       }
     });
+    legend(el, groupKeys.map(function (k) { return { label: k, color: _seriesColor(el, k, groupKeys) }; }));
     var cols = [
       { key: "key", label: levels[depth] },
       { key: "value", label: "Value", numeric: true, fmt: fmt },
