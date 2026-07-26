@@ -11,7 +11,9 @@ from client_analytics import INDEX_ER
 
 from .data import _f, lcr_py
 from .data_client360 import (
+    client_funds_table,
     client_header,
+    client_label_check,
     client_sector_lookthrough,
     client_timeline,
     crisis_windows_once,
@@ -373,6 +375,8 @@ def client_360(conn, client_id: int, *, crisis_windows: list[dict], threshold: f
         "client_id": client_id,
         "header": client_header(conn, client_id),
         "timeline": client_timeline(conn, client_id, crisis_windows),
+        "funds_table": client_funds_table(conn, client_id),
+        "label_check": client_label_check(conn, client_id),
         "sector_lookthrough": client_sector_lookthrough(conn, client_id),
         "overlap": client_overlap_heatmap(conn, client_id, threshold),
         "fees_and_cuts": client_fees_and_cuts(conn, client_id),

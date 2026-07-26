@@ -25,9 +25,8 @@ Checks (all must pass):
   8. zero occurrences of the deleted routes #book, #calls, #cohort,
      #segment/, #guide anywhere in the output HTML
   9. banned-word walk over all renderable JSON strings + rendered HTML text
-  10. headless browse: ZERO console errors on #holdings / #behaviour
-      (#client/<id> — TODO(Task 6): add once that route exists; don't fake
-      it here)
+  10. headless browse: ZERO console errors on #holdings / #behaviour /
+      #client/<id> for 3 real sample client ids (4, 1, 36)
       (GSTACK_CHROMIUM_NO_SANDBOX=1, file copied under /tmp)
 
 Usage: .venv/bin/python scripts/wealth/validate_wealth_app.py
@@ -300,9 +299,7 @@ def main() -> int:
     tmp = Path(tempfile.gettempdir()) / "jhaveri-capability-app.html"
     shutil.copy(APP, tmp)
 
-    # TODO(Task 6): add a few real "client/<id>" routes once that page
-    # exists — don't fake routes that aren't built yet.
-    routes = ["holdings", "behaviour"]
+    routes = ["holdings", "behaviour", "client/4", "client/1", "client/36"]
     problems = browse_routes(tmp, routes)
     if problems:
         print("FAIL: console errors in headless browse:")

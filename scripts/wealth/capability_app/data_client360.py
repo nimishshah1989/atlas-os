@@ -1,8 +1,9 @@
 """Client 360 ("the Kundli"): per-client parametrized rollups of every book
-exhibit above, for Task 6's client detail page. Header + timeline + sector
-look-through live here; overlap/fees/cut-list and behaviour/what-ifs slices
-live in the sibling data_client360_behaviour.py to stay under the 600-LOC
-file limit. Same contract as every other module: real query output only.
+exhibit above, for Task 6's client detail page. Header + timeline + funds
+table + label check + sector look-through live here; overlap/fees/cut-list
+and behaviour/what-ifs slices live in the sibling data_client360_behaviour.py
+to stay under the 600-LOC file limit. Same contract as every other module:
+real query output only.
 """
 
 from __future__ import annotations
@@ -331,6 +332,177 @@ def client_sector_lookthrough(conn, client_id: int) -> dict:
                 {"bucket": b, "sector": s, "exposure_rs": _f(e)} for b, s, e in rows[:20]
             ],
             "sample_of": len(rows),
+            "honesty": "exact",
+        },
+    }
+
+
+def client_funds_table(conn, client_id: int) -> dict:
+    """This client's own funds table (Q1 slice): every held fund's value,
+    category (asset_class — same field Q1 calls 'category'), and per-fund
+    verdict from wealth.fund_performance where scored (build_fund_performance.py
+    only scores held EQUITY funds — other asset classes have no verdict,
+    rendered as a gap, never a fabricated one)."""
+    cur = conn.cursor()
+    cur.execute(
+        """select h.scheme_id, s.display_name, s.asset_class, h.market_value::float,
+                  fp.verdict
+           from wealth.holdings h
+           join wealth.schemes s using (scheme_id)
+           left join wealth.fund_performance fp using (scheme_id)
+           where h.client_id = %s and h.market_value > 0
+           order by h.market_value desc""",
+        (client_id,),
+    )
+    rows = cur.fetchall()
+    if not rows:
+        return {
+            "client_id": client_id,
+            "insufficient": True,
+            "message": "no held funds for this client",
+            "working": {
+                "inputs": [],
+                "rule": "wealth.holdings has no market_value > 0 rows for this client_id",
+                "assumptions": [],
+                "steps": [],
+                "sample_rows": [],
+                "sample_of": 0,
+                "honesty": None,
+            },
+        }
+
+    total = sum(v for *_rest, v, _vd in rows)
+    funds = [
+        {"scheme_id": sid, "fund": name, "category": cat, "value_rs": _f(v), "verdict": vd}
+        for sid, name, cat, v, vd in rows
+    ]
+    n_scored = sum(1 for f in funds if f["verdict"])
+    verdict = (
+        f"{len(funds)} funds held, {lcr_py(total)} total; {n_scored} scored for fund "
+        "performance."
+    )
+
+    return {
+        "client_id": client_id,
+        "total_value_rs": _f(total),
+        "n_funds": len(funds),
+        "n_scored": n_scored,
+        "funds": funds,
+        "verdict": verdict,
+        "honesty": "exact",
+        "working": {
+            "inputs": [
+                {"label": "Held funds", "value": len(funds)},
+                {"label": "Total value", "value": _f(total)},
+                {"label": "Funds scored (fund_performance)", "value": n_scored},
+            ],
+            "rule": (
+                "wealth.holdings joined to wealth.schemes for held value/category (same "
+                "convention as book-level Q1's client_id, scheme_id, display_name, "
+                "asset_class, market_value select) and left-joined to wealth.fund_performance "
+                "for this client's own held-fund verdict — that table only scores held "
+                "EQUITY funds (build_fund_performance.py), so non-equity holdings show no "
+                "verdict."
+            ),
+            "assumptions": [],
+            "steps": [{"label": "Rows for this client", "value": len(rows)}],
+            "sample_rows": [
+                {
+                    "fund": f["fund"],
+                    "category": f["category"],
+                    "value_rs": f["value_rs"],
+                    "verdict": f["verdict"],
+                }
+                for f in funds[:20]
+            ],
+            "sample_of": len(funds),
+            "honesty": "exact",
+        },
+    }
+
+
+def client_label_check(conn, client_id: int) -> dict:
+    """This client's own label-check hits (Q2 slice): held funds joined to
+    wealth.fund_label_check, same verdict vocabulary as book-level Q2
+    (mismatch/match/no_data), scoped to just this client's holdings."""
+    cur = conn.cursor()
+    cur.execute(
+        """select h.scheme_id, s.display_name, flc.category, flc.verdict, flc.detail,
+                  h.market_value::float
+           from wealth.holdings h
+           join wealth.schemes s using (scheme_id)
+           join wealth.fund_label_check flc using (scheme_id)
+           where h.client_id = %s and h.market_value > 0
+           order by h.market_value desc""",
+        (client_id,),
+    )
+    rows = cur.fetchall()
+    if not rows:
+        return {
+            "client_id": client_id,
+            "insufficient": True,
+            "message": "no label-checked funds held by this client",
+            "working": {
+                "inputs": [],
+                "rule": "wealth.fund_label_check has no row for any fund this client holds",
+                "assumptions": [],
+                "steps": [],
+                "sample_rows": [],
+                "sample_of": 0,
+                "honesty": None,
+            },
+        }
+
+    funds = [
+        {
+            "scheme_id": sid,
+            "fund": name,
+            "category": cat,
+            "verdict": vd,
+            "detail": detail,
+            "value_rs": _f(v),
+        }
+        for sid, name, cat, vd, detail, v in rows
+    ]
+    mismatches = [f for f in funds if f["verdict"] == "mismatch"]
+    mismatch_value = sum(f["value_rs"] or 0.0 for f in mismatches)
+    verdict = (
+        f"{len(mismatches)} of {len(funds)} held funds carry a label mismatch; "
+        f"{lcr_py(mismatch_value)}."
+    )
+
+    return {
+        "client_id": client_id,
+        "n_funds": len(funds),
+        "n_mismatch": len(mismatches),
+        "mismatch_value_rs": _f(mismatch_value),
+        "funds": funds,
+        "verdict": verdict,
+        "honesty": "exact",
+        "working": {
+            "inputs": [
+                {"label": "Held label-checked funds", "value": len(funds)},
+                {"label": "Mismatch funds", "value": len(mismatches)},
+                {"label": "Value in mismatch funds", "value": _f(mismatch_value)},
+            ],
+            "rule": (
+                "wealth.fund_label_check joined to wealth.holdings for this client's held "
+                "value, same verdict vocabulary as book-level Q2 (SEBI large/mid/small "
+                "cap-mandate vs the fund's actual disclosed composition, per "
+                "build_label_check.py's CATEGORY_RULES)."
+            ),
+            "assumptions": [],
+            "steps": [{"label": "Rows for this client", "value": len(rows)}],
+            "sample_rows": [
+                {
+                    "fund": f["fund"],
+                    "category": f["category"],
+                    "verdict": f["verdict"],
+                    "value_rs": f["value_rs"],
+                }
+                for f in funds[:20]
+            ],
+            "sample_of": len(funds),
             "honesty": "exact",
         },
     }

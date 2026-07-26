@@ -20,7 +20,9 @@ from capability_app.data_behaviour import (
     b5_what_if_machine,
 )
 from capability_app.data_client360 import (
+    client_funds_table,
     client_header,
+    client_label_check,
     client_sector_lookthrough,
     client_timeline,
     crisis_windows_once,
@@ -383,6 +385,8 @@ def test_client_360_sample_client_all_sections_present():
     for key in (
         "header",
         "timeline",
+        "funds_table",
+        "label_check",
         "sector_lookthrough",
         "overlap",
         "fees_and_cuts",
@@ -396,6 +400,9 @@ def test_client_360_sample_client_all_sections_present():
     _assert_working_shape(page["header"]["working"])
     assert page["timeline"]["months"], "client 1 has real client_curves rows"
     _assert_working_shape(page["timeline"]["working"])
+    assert page["funds_table"]["n_funds"] > 0  # client 1 has real held funds
+    _assert_working_shape(page["funds_table"]["working"])
+    _assert_working_shape(page["label_check"]["working"], allow_null_honesty=True)
     _assert_working_shape(page["overlap"]["working"])
     assert page["overlap"]["n_pairs"] > 0  # client 1 has real overlap pairs (confirmed via psql)
     _assert_working_shape(page["fees_and_cuts"]["working"])
