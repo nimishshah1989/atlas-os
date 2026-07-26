@@ -1,9 +1,9 @@
 """Post-build gate for the wealth capability app (glass-box redesign).
 
-Runs AFTER a build (today: build_holdings_preview.py; Task 7 rewires
-build_capability_app.py into the real multi-page shim). Written before the
-builder existed so it FAILS red on the missing file, then goes green once
-the app is emitted.
+Runs AFTER a build (scripts/wealth/build_capability_app.py — the thin CLI
+shim over the capability_app package, see run_wealth_engine.sh). Written
+before the builder existed so it FAILS red on the missing file, then goes
+green once the app is emitted.
 
 Checks (all must pass):
   1. output file exists
@@ -194,7 +194,7 @@ def _number_traceable(n: float, pool: set[float], tol: float = 0.05) -> bool:
 
 def main() -> int:
     if not APP.exists():
-        return fail(f"{APP} does not exist (run scripts/wealth/build_holdings_preview.py first)")
+        return fail(f"{APP} does not exist (run scripts/wealth/build_capability_app.py first)")
 
     html = APP.read_text(encoding="utf-8")
     size = len(html.encode("utf-8"))
