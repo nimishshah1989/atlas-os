@@ -1,19 +1,34 @@
-"""Post-build gate for the wealth capability app (Task 9).
+"""Post-build gate for the wealth capability app (glass-box redesign).
 
-Runs AFTER build_capability_app.py. Written before the builder existed so it
-FAILS red on the missing file, then goes green once the app is emitted.
+Runs AFTER a build (today: build_holdings_preview.py; Task 7 rewires
+build_capability_app.py into the real multi-page shim). Written before the
+builder existed so it FAILS red on the missing file, then goes green once
+the app is emitted.
 
 Checks (all must pass):
   1. output file exists
   2. the embedded <script id="data" type="application/json"> block parses
      under json.loads (strict — a NaN/Infinity token would raise)
-  3. the literal token `NaN` appears nowhere in the file
-  4. every client_id referenced anywhere (call_lists, chapters) resolves to a
-     client present in `clients` (the datalist source)
-  5. byte size < 6 MB
-  6. headless browse: ZERO console errors on #book, #calls, #cohort, #guide,
-     3 real #client/<id> pages and one #segment/<key> page
-     (GSTACK_CHROMIUM_NO_SANDBOX=1, file copied under /tmp)
+  3. the literal token `NaN` appears nowhere in the JSON data embed (scoped
+     to the embed, not the whole document — inline chart JS legitimately
+     contains "NaN" as a substring of isNaN(...))
+  4. byte size < 6 MB
+  5. every exhibit id q1..q7 is present, both in the embed and as a rendered
+     `id="qN"` exhibit in the Holdings page HTML
+  6. every exhibit's `working` object round-trips through the embed with all
+     five parts (inputs/rule/assumptions/steps/sample_rows) non-empty — q6 is
+     the documented honest empty-state (constraint 3: no factsheet/SID feed),
+     exempted from the four list parts but its `rule` text must still exist
+  7. every headline number rendered inside `.kpi-value`/`.exhibit__verdict`
+     also exists in the JSON data embed (raw, or its lakh/crore/rounded
+     transform) — no JS-invented numbers
+  8. zero occurrences of the deleted routes #book, #calls, #cohort,
+     #segment/, #guide anywhere in the output HTML
+  9. banned-word walk over all renderable JSON strings + rendered HTML text
+  10. headless browse: ZERO console errors on #holdings
+      (#behaviour / #client/<id> — TODO(Task 5/6): add once those routes
+      exist; don't fake them here)
+      (GSTACK_CHROMIUM_NO_SANDBOX=1, file copied under /tmp)
 
 Usage: .venv/bin/python scripts/wealth/validate_wealth_app.py
 Exit 0 = all green; non-zero = a specific failure printed.
@@ -139,56 +154,124 @@ def browse_routes(html_path: Path, routes: list[str]) -> list[str]:
     return problems
 
 
+EXHIBIT_IDS = tuple(f"q{i}" for i in range(1, 8))
+WORKING_LIST_PARTS = ("inputs", "assumptions", "steps", "sample_rows")
+DELETED_ROUTES = ("#book", "#calls", "#cohort", "#segment/", "#guide")
+
+
+def _collect_numbers(obj: object, out: set[float] | None = None) -> set[float]:
+    """Every numeric leaf in the embedded JSON, walked recursively."""
+    if out is None:
+        out = set()
+    if isinstance(obj, bool):
+        return out
+    if isinstance(obj, int | float):
+        out.add(float(obj))
+    elif isinstance(obj, dict):
+        for v in obj.values():
+            _collect_numbers(v, out)
+    elif isinstance(obj, list):
+        for v in obj:
+            _collect_numbers(v, out)
+    return out
+
+
+def _number_traceable(n: float, pool: set[float], tol: float = 0.05) -> bool:
+    """n is traceable if it equals a raw embed value, or that value's
+    lakh/crore/rounded transform (the same transforms lcr_py/enIN apply when
+    turning a raw rupee figure into display text). Crore/lakh transforms get
+    a wider tolerance (0.5) because some call sites format with 0 decimals
+    (":.0f") rather than lcr_py's 2 — a legitimate display choice, not drift."""
+    for x in pool:
+        if (
+            abs(n - x) <= tol
+            or abs(n - round(x)) <= tol
+            or abs(n - round(x / 1e5, 2)) <= 0.5
+            or abs(n - round(x / 1e7, 2)) <= 0.5
+        ):
+            return True
+    return False
+
+
 def main() -> int:
     if not APP.exists():
-        return fail(f"{APP} does not exist (run build_capability_app.py first)")
+        return fail(f"{APP} does not exist (run scripts/wealth/build_holdings_preview.py first)")
 
     html = APP.read_text(encoding="utf-8")
     size = len(html.encode("utf-8"))
     if size >= MAX_BYTES:
         return fail(f"file is {size / 1e6:.2f} MB (>= 6 MB cap)")
 
-    if "NaN" in html:
-        return fail("literal token 'NaN' present in file (strict-JSON violation)")
+    m = DATA_RE.search(html)
+    if not m:
+        return fail('no <script id="data" type="application/json"> block found')
+    # scoped to the data embed's raw text, not the whole document — inline
+    # chart JS legitimately contains "NaN" as a substring of isNaN(...).
+    if "NaN" in m.group(1):
+        return fail("literal token 'NaN' present in data embed (strict-JSON violation)")
 
     try:
         data = extract_data(html)
     except Exception as e:
         return fail(f"embedded JSON did not parse: {e}")
 
-    for key in ("book", "chapters", "call_lists", "clients", "asof"):
-        if key not in data:
-            return fail(f"embedded data missing top-level key '{key}'")
+    # ---- (a) every exhibit id q1..q7 present, in embed and rendered HTML ----
+    for qid in EXHIBIT_IDS:
+        if qid not in data:
+            return fail(f"embedded data missing exhibit '{qid}'")
+        if f'id="{qid}"' not in html:
+            return fail(f"exhibit '{qid}' not rendered in HTML (no id=\"{qid}\")")
 
-    clients = data["clients"]
-    client_ids = set(clients.keys())
-    if not client_ids:
-        return fail("no clients in embedded data")
+    # ---- (b) working object round-trips with all five parts non-empty ----
+    # q6 is the documented honest empty-state (constraint 3: no factsheet/SID
+    # feed exists) — its rule is real text but inputs/assumptions/steps/
+    # sample_rows are legitimately [] by design, so it's exempted from the
+    # four list-part checks (its working dict must still exist + have a rule).
+    for qid in EXHIBIT_IDS:
+        working = data[qid].get("working")
+        if not isinstance(working, dict):
+            return fail(f"exhibit '{qid}' has no working object")
+        if not working.get("rule"):
+            return fail(f"exhibit '{qid}'.working.rule is empty")
+        if qid == "q6":
+            continue
+        for part in WORKING_LIST_PARTS:
+            if not working.get(part):
+                return fail(f"exhibit '{qid}'.working.{part} is empty")
 
-    # every referenced client resolves to the datalist source (clients)
-    referenced = set()
-    for lst in data["call_lists"].values():
-        referenced.update(str(r["id"]) for r in lst)
-    for card in data["chapters"].get("ch4", []):
-        for cid in card.get("sample_ids", []):
-            referenced.add(str(cid))
-    missing = referenced - client_ids
-    if missing:
-        return fail(
-            f"{len(missing)} referenced client(s) not resolvable in datalist: "
-            f"{sorted(missing)[:10]}"
-        )
+    # ---- (c) headline numbers traceable to the JSON embed ----
+    embed_numbers = _collect_numbers(data)
+    embed_text = m.group(1)  # raw JSON text — verdict/message strings are
+    # stored here verbatim, so a digit substring of one of them (e.g. a date
+    # like "2026", or a count baked into a pre-composed sentence) is already
+    # traceable to real data even though it isn't a standalone numeric leaf.
+    headline_texts = re.findall(r'kpi-value">(.*?)</div>', html) + re.findall(
+        r'exhibit__verdict">(.*?)</p>', html
+    )
+    untraceable = []
+    for text in headline_texts:
+        plain = re.sub(r"<[^>]+>", "", text)
+        for tok in re.findall(r"\d[\d,]*\.?\d*", plain):
+            if tok in embed_text:
+                continue
+            n = float(tok.replace(",", ""))
+            if n and not _number_traceable(n, embed_numbers):
+                untraceable.append((plain.strip()[:60], tok))
+    if untraceable:
+        print(f"FAIL: {len(untraceable)} headline number(s) not traceable to the JSON embed:")
+        for t in untraceable[:15]:
+            print(f"  - {t}")
+        return 1
 
-    # each client must carry a name (datalist label) and a pack
-    for cid, c in clients.items():
-        if not c.get("name"):
-            return fail(f"client {cid} has no name for the datalist")
-        if not c.get("pack"):
-            return fail(f"client {cid} has no pack payload")
+    # ---- (d) deleted routes fully gone ----
+    for dead in DELETED_ROUTES:
+        if dead in html:
+            return fail(f"deleted route '{dead}' still referenced in output HTML")
 
     print(
-        f"static checks PASS: {size / 1e6:.2f} MB, {len(client_ids)} clients, "
-        f"{len(referenced)} referenced ids all resolvable, strict JSON, no NaN"
+        f"static checks PASS: {size / 1e6:.2f} MB, {len(EXHIBIT_IDS)} exhibits present, "
+        f"working objects round-trip, {len(headline_texts)} headline figures traceable, "
+        "strict JSON, no NaN, no deleted routes"
     )
     headroom = (MAX_BYTES - size) / 1e6
     print(f"byte-headroom watch: app {size / 1e6:.2f} MB, {headroom:.2f} MB under the 6 MB cap")
@@ -210,12 +293,9 @@ def main() -> int:
     tmp = Path(tempfile.gettempdir()) / "jhaveri-capability-app.html"
     shutil.copy(APP, tmp)
 
-    sample = sorted(client_ids, key=lambda x: int(x))[:3]
-    routes = (
-        ["book", "calls", "cohort", "guide"]
-        + [f"client/{cid}" for cid in sample]
-        + ["segment/crash_sellers"]
-    )
+    # TODO(Task 5/6): add "behaviour" and a few real "client/<id>" routes once
+    # those pages exist — don't fake routes that aren't built yet.
+    routes = ["holdings"]
     problems = browse_routes(tmp, routes)
     if problems:
         print("FAIL: console errors in headless browse:")

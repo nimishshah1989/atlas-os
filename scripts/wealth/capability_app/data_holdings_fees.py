@@ -314,6 +314,7 @@ def q5_fund_performance(conn) -> dict:
         "funds": funds,
         "n_funds": len(funds),
         "n_laggard_funds": n_laggard_funds,
+        "n_beating_funds": len(funds) - n_laggard_funds,
         "laggard_value_rs": _f(laggard_value),
         "verdict": verdict_str,
         "honesty": "exact",

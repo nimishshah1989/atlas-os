@@ -100,4 +100,9 @@ def fetch_book(conn) -> dict:
     client_index = data_holdings_overlap.client_index_rows(conn)
     data["client_index"] = data_behaviour.annotate_client_index(conn, client_index)
     data["client360"] = data_client360_behaviour.client_360_all(conn)
+
+    with conn.cursor() as cur:
+        cur.execute("select max(as_on_date) from wealth.client_reports")
+        (asof,) = cur.fetchone()
+    data["asof"] = asof.isoformat() if asof else None
     return data
