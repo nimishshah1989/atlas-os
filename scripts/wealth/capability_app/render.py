@@ -70,6 +70,29 @@ def method_note(text: str) -> str:
     return f'<p class="method">{esc(text)}</p>'
 
 
+def assumption_cards(cards: list[dict]) -> str:
+    """A row of what-if / counterfactual scenario cards, each with its
+    assumption paragraph + honesty chip rendered ABOVE its headline number
+    (kpis always render before body_extra in exhibit()'s fixed order, so
+    this layout can't be done via the generic `kpis` param — must be
+    body_extra). Shared by B5 (page_behaviour.py) and per-client what-ifs
+    (page_client.py) so there is exactly one implementation of this markup.
+    Each card: {"assumption": str, "honesty": str, "label": str, "total_rs": float}.
+    """
+    parts = [
+        '<div class="chart-card">'
+        + method_note(c["assumption"])
+        + chip(c["honesty"])
+        + '<div class="kpi-tile"><div class="kpi-label">'
+        + esc(c["label"])
+        + '</div><div class="kpi-value">'
+        + esc(lcr_py(c["total_rs"]))
+        + "</div></div></div>"
+        for c in cards
+    ]
+    return f'<div class="chart-row">{"".join(parts)}</div>'
+
+
 def topbar(active: str, asof: str | None) -> str:
     links = "".join(
         f'<a href="#{slug}"{' class="on"' if slug == active else ""}>{esc(label)}</a>'

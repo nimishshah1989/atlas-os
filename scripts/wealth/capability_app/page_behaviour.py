@@ -11,11 +11,10 @@ from datetime import date
 
 from .data import lcr_py
 from .render import (
+    assumption_cards,
     chart_spec,
-    chip,
     client_index_table,
     data_table,
-    esc,
     exhibit,
     method_note,
     paragraph,
@@ -267,24 +266,10 @@ def _b5(book: dict) -> str:
     q = book["b5"]
     kpis = [{"label": "Clients scored", "value": str(q["n_clients"])}]
     # Layout requirement (task-5 brief): each sub-exhibit's assumption card
-    # renders ABOVE its headline number — done entirely in body_extra (the
-    # generic `kpis` param always renders before body_extra in exhibit()'s
-    # fixed order, so it can't satisfy this by itself).
+    # renders ABOVE its headline number — see assumption_cards()'s docstring
+    # for why this must be body_extra, not the generic `kpis` param.
     order = ["cf_index_rs", "cf_no_panic_rs", "cf_sip_alive_rs", "cf_no_switch_rs"]
-    cards = []
-    for key in order:
-        s = q["scenarios"][key]
-        cards.append(
-            '<div class="chart-card">'
-            + method_note(s["assumption"])
-            + chip(s["honesty"])
-            + '<div class="kpi-tile"><div class="kpi-label">'
-            + esc(s["label"])
-            + '</div><div class="kpi-value">'
-            + esc(lcr_py(s["total_rs"]))
-            + "</div></div></div>"
-        )
-    body_extra = f'<div class="chart-row">{"".join(cards)}</div>'
+    body_extra = assumption_cards([q["scenarios"][key] for key in order])
     return exhibit(
         "b5",
         "B5 · The what-if machine",

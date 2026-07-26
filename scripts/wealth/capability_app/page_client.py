@@ -24,8 +24,8 @@ from datetime import date
 from .data import lcr_py
 from .data_client360 import CURVE_EVENT_KINDS
 from .render import (
+    assumption_cards,
     chart_spec,
-    chip,
     data_table,
     esc,
     exhibit,
@@ -491,23 +491,18 @@ def _whatifs(book: dict, cid: int) -> str:
     if d.get("insufficient"):
         return _insufficient(sid, "What-ifs", FRAMING["whatifs"], d)
     # Same B5 layout rule: each scenario's assumption card renders ABOVE its
-    # headline number (body_extra, since kpis always render before body_extra
-    # in exhibit()'s fixed order).
+    # headline number — see assumption_cards()'s docstring for why this must
+    # be body_extra, not the generic `kpis` param.
     order = ["cf_index_rs", "cf_no_panic_rs", "cf_sip_alive_rs", "cf_no_switch_rs"]
-    cards = []
-    for key in order:
-        s = d["scenarios"][key]
-        meta = SCENARIO_META[key]
-        cards.append(
-            '<div class="chart-card">'
-            + method_note(meta["assumption"])
-            + chip(s["honesty"])
-            + '<div class="kpi-tile"><div class="kpi-label">'
-            + esc(meta["label"])
-            + '</div><div class="kpi-value">'
-            + esc(lcr_py(s["total_rs"]))
-            + "</div></div></div>"
-        )
+    cards = [
+        {
+            "assumption": SCENARIO_META[key]["assumption"],
+            "label": SCENARIO_META[key]["label"],
+            "honesty": d["scenarios"][key]["honesty"],
+            "total_rs": d["scenarios"][key]["total_rs"],
+        }
+        for key in order
+    ]
     return exhibit(
         sid,
         "What-if machine, for this client",
@@ -518,7 +513,7 @@ def _whatifs(book: dict, cid: int) -> str:
         [],
         d["working"],
         COLS_WHATIFS,
-        body_extra=f'<div class="chart-row">{"".join(cards)}</div>',
+        body_extra=assumption_cards(cards),
     )
 
 
