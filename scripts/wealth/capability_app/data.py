@@ -66,6 +66,14 @@ def _hist(values, n_bins=10):
     }
 
 
+def client_names(conn) -> dict[int, str]:
+    """client_id -> full_name, for threading a display name onto any
+    per-client sample row (render layer needs both id and name to link)."""
+    cur = conn.cursor()
+    cur.execute("select client_id, full_name from wealth.clients")
+    return dict(cur.fetchall())
+
+
 def fetch_book(conn) -> dict:
     """Top-level orchestrator: runs every capability_app data function against
     a live connection and returns the merged dict the render layer reads.

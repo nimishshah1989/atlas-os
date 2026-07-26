@@ -167,7 +167,10 @@ def chart_row(charts: list[dict]) -> str:
 
 def data_table(rows: list[dict], columns: list[dict]) -> str:
     """Generic HTML table for a list of dict rows. `columns`: [{key, label,
-    numeric?, fmt?}]. Used both for exhibit drawer sample rows and for
+    numeric?, fmt?, link?}]. `link`: the row key holding the display name —
+    renders this column as client_link(v, row[link]) instead of raw text
+    (used for every client_id column, per "client-name links everywhere
+    client IDs appear"). Used both for exhibit drawer sample rows and for
     page-level evidence tables (e.g. Q2 offenders, Q3 stock overlap)."""
     if not rows:
         return ""
@@ -180,14 +183,16 @@ def data_table(rows: list[dict], columns: list[dict]) -> str:
         for c in columns:
             v = r.get(c["key"])
             if v is None:
-                text = "—"
+                html_ = "—"
+            elif c.get("link"):
+                html_ = client_link(v, r.get(c["link"]) or v)
             elif c.get("fmt"):
-                text = c["fmt"](v)
+                html_ = esc(c["fmt"](v))
             elif isinstance(v, list):
-                text = ", ".join(str(x) for x in v) if v else "—"
+                html_ = esc(", ".join(str(x) for x in v) if v else "—")
             else:
-                text = str(v)
-            cells.append(f"<td{' class="n"' if c.get('numeric') else ''}>{esc(text)}</td>")
+                html_ = esc(str(v))
+            cells.append(f"<td{' class="n"' if c.get('numeric') else ''}>{html_}</td>")
         body_rows.append(f"<tr>{''.join(cells)}</tr>")
     return f"<table><thead><tr>{head}</tr></thead><tbody>{''.join(body_rows)}</tbody></table>"
 

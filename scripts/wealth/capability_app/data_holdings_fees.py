@@ -14,7 +14,7 @@ from datetime import date
 from build_fund_performance import _benchmark_note
 from client_analytics import INDEX_ER  # 0.20 — assumed achievable index ER, not re-derived
 
-from .data import _f, lcr_py
+from .data import _f, client_names, lcr_py
 from .data_holdings_overlap import _seed_overlap_threshold
 
 
@@ -392,6 +392,7 @@ def q7_cut_list(conn) -> dict:
     for the sankey edges — no new math, no cross-task import."""
     threshold = _seed_overlap_threshold(conn)
     held_er = _held_scheme_expense_ratios(conn)
+    names = client_names(conn)
     cur = conn.cursor()
     cur.execute("select client_id, keep, cut, min_fund_count, note from wealth.cut_list")
     cl_rows = cur.fetchall()
@@ -448,6 +449,7 @@ def q7_cut_list(conn) -> dict:
             evidence_rows.append(
                 {
                     "client_id": cid,
+                    "name": names.get(cid),
                     "fund": c.get("fund"),
                     "reason": reason,
                     "chips": chips,

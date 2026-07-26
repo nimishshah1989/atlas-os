@@ -47,6 +47,7 @@ MINI_INDEX = [
 ]
 
 _C, _F = {"numeric": True}, {"numeric": True, "fmt": lcr_py}
+_LINK = {"link": "name"}  # client_id column -> client_link(id, name)
 
 
 def _cols(*specs: tuple[str, str, dict]) -> list[dict]:
@@ -54,34 +55,33 @@ def _cols(*specs: tuple[str, str, dict]) -> list[dict]:
 
 
 COLS_Q1 = _cols(
-    ("client_id", "Client", {}),
+    ("client_id", "Client", _LINK),
     ("fund", "Fund", {}),
     ("category", "Category", {}),
     ("amc", "AMC", {}),
     ("value_rs", "Value", _F),
 )
 COLS_Q2 = _cols(
-    ("client_id", "Client", {}),
+    ("client_id", "Client", _LINK),
     ("fund", "Fund", {}),
     ("category", "Category", {}),
     ("verdict", "Verdict", {}),
     ("value_rs", "Value", _F),
 )
 COLS_Q3 = _cols(
-    ("client_id", "Client", {}),
+    ("client_id", "Client", _LINK),
     ("scheme_a", "Fund A", {}),
     ("scheme_b", "Fund B", {}),
     ("overlap_pct", "Overlap %", _C),
 )
 COLS_Q4 = _cols(
-    ("client_id", "Client", {}),
-    ("name", "Client name", {}),
+    ("client_id", "Client", _LINK),
     ("evidence", "Evidence", {}),
     ("est_value_rs", "Est. value", _F),
 )
 COLS_Q5 = _cols(("scheme_id", "Scheme ID", {}), ("fund", "Fund", {}), ("verdict", "Verdict", {}))
 COLS_Q7 = _cols(
-    ("client_id", "Client", {}),
+    ("client_id", "Client", _LINK),
     ("fund", "Fund", {}),
     ("reason", "Reason", {}),
     ("chips", "Chips", {}),

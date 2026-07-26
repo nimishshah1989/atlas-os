@@ -15,7 +15,7 @@ import statistics
 from collections import defaultdict
 from collections.abc import Callable
 
-from .data import _f, _hist, lcr_py
+from .data import _f, _hist, client_names, lcr_py
 
 # ---------------------------------------------------------------------- Q1 --
 
@@ -76,9 +76,11 @@ def q1_ownership(conn) -> dict:
     if median_funds is not None:
         verdict += f" Median client holds {int(median_funds)} funds."
 
+    names = client_names(conn)
     sample_rows = [
         {
             "client_id": cid,
+            "name": names.get(cid),
             "scheme_id": sid,
             "fund": name,
             "category": category,
@@ -259,9 +261,11 @@ def q2_label_check(conn) -> dict:
         f"contents (as of {month_label})."
     )
 
+    names = client_names(conn)
     sample_rows = [
         {
             "client_id": cid,
+            "name": names.get(cid),
             "scheme_id": sid,
             "fund": name,
             "category": category,

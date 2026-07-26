@@ -242,9 +242,16 @@ def main() -> int:
     # ---- (c) headline numbers traceable to the JSON embed ----
     embed_numbers = _collect_numbers(data)
     embed_text = m.group(1)  # raw JSON text — verdict/message strings are
-    # stored here verbatim, so a digit substring of one of them (e.g. a date
+    # stored here verbatim, so a digit token from one of them (e.g. a date
     # like "2026", or a count baked into a pre-composed sentence) is already
     # traceable to real data even though it isn't a standalone numeric leaf.
+    # NOTE: this must be a delimited-token match, not a bare substring test —
+    # "12" is not traceable just because "112233" appears somewhere in a
+    # 500KB JSON blob. `(?<!\d)...(?!\d)` anchors each token to its full
+    # contiguous digit run, so "112233" only ever matches "112233", never "12".
+    embed_number_tokens = {
+        t.replace(",", "") for t in re.findall(r"(?<!\d)\d[\d,]*\.?\d*(?!\d)", embed_text)
+    }
     headline_texts = re.findall(r'kpi-value">(.*?)</div>', html) + re.findall(
         r'exhibit__verdict">(.*?)</p>', html
     )
@@ -252,7 +259,7 @@ def main() -> int:
     for text in headline_texts:
         plain = re.sub(r"<[^>]+>", "", text)
         for tok in re.findall(r"\d[\d,]*\.?\d*", plain):
-            if tok in embed_text:
+            if tok.replace(",", "") in embed_number_tokens:
                 continue
             n = float(tok.replace(",", ""))
             if n and not _number_traceable(n, embed_numbers):

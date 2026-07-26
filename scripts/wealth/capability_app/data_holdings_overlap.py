@@ -11,7 +11,7 @@ from collections import defaultdict
 
 from build_overlap import latest_fund_weights, pairwise_overlap
 
-from .data import _f, lcr_py
+from .data import _f, client_names, lcr_py
 
 # Mirrors build_cut_list.py's pre-existing hardcoded `overlap_pct > 50` literal
 # (its "redundant" fund-pair cutoff) — constraint 5 requires that cutoff live in
@@ -131,8 +131,15 @@ def q3_overlap(conn) -> dict:
         f"{lcr_py(rupee_duplicated)} sits in effectively duplicated exposure."
     )
 
+    names = client_names(conn)
     sample_rows = [
-        {"client_id": cid, "scheme_a": a, "scheme_b": b, "overlap_pct": _f(pct)}
+        {
+            "client_id": cid,
+            "name": names.get(cid),
+            "scheme_a": a,
+            "scheme_b": b,
+            "overlap_pct": _f(pct),
+        }
         for cid, a, b, pct, _va, _vb in dup_pairs[:20]
     ]
 
@@ -233,10 +240,8 @@ def client_index_rows(conn) -> dict:
     chronic-laggard and fees-above-median flags are added in Task 2 once
     Q4/Q5 land — this rollup returns everything Q1-Q3 can already answer."""
     threshold = _seed_overlap_threshold(conn)
+    names = client_names(conn)
     cur = conn.cursor()
-
-    cur.execute("select client_id, full_name from wealth.clients")
-    names = {cid: name for cid, name in cur.fetchall()}
 
     cur.execute(
         """select client_id, sum(market_value)::float, count(distinct scheme_id)
