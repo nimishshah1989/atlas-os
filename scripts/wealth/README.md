@@ -19,7 +19,7 @@ Loader refuses to load any file that failed parse reconciliation (221/221 clean
 as of 2026-07-18). Schema `wealth` is FM-approved, PII-hardened (no anon grants),
 and outside the single-schema gate's scan surface.
 
-## Capability demo (PROFILE/PREDICT/PRESCRIBE)
+## Capability demo (Holdings / Behaviour / Client 360)
 
 One command refreshes the whole client-intelligence engine chain — analysis
 tables → per-client audit packs → plain-language narration → the standalone
@@ -46,8 +46,13 @@ Tables produced (all `wealth.*`, live Postgres): `overlap`, `label_check`,
 (payload + prose).
 
 Output: `/home/ubuntu/jhaveri_data/reports/jhaveri-capability-app.html` — a
-single self-contained HTML file (hash-routed, zero external requests) gated
-by `validate_wealth_app.py` (JSON parses, no `NaN`, all client_ids resolve,
-< 6 MB, zero console errors on book/calls/3 client pages). Design + build
-notes: `docs/wealth-capability-atlas.md` and the implementation plan / task
-briefs under `.superpowers/sdd/`.
+single self-contained HTML file (three pages — Holdings, Behaviour, Client
+360 — laid out side by side, anchor-routed via `#holdings` / `#behaviour` /
+`#client/<id>`, zero external requests, zero client-side router) gated by
+`validate_wealth_app.py` (JSON parses, no `NaN`, banned-word sweep, ≤ 6 MB,
+zero console errors across `#holdings` / `#behaviour` / `#client/4,1,36`).
+Only 3 curated client ids get a full Client 360 page (all 217 clients'
+holdings/behaviour numbers are covered book-level; a self-contained
+all-217-client build would blow the file-size budget). Design + build notes:
+`docs/wealth-capability-atlas.md` and the implementation plan / task briefs
+under `.superpowers/sdd/`.
