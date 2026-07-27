@@ -1,0 +1,197 @@
+/* Wealth glass-box capability app — design tokens + layout.
+   Read at build time and inlined into the single-file HTML (see render.py).
+   Chart JS (charts.js) reads every color through these custom properties —
+   never hardcode a hex in JS. */
+
+/* ---------- FM-locked base tokens (verbatim from build_capability_app.py) ---------- */
+:root{
+  --paper:#FAF7F1; --card:#FFFFFF; --ink:#232019; --muted:#6B6357; --line:#E7E0D4;
+  --accent:#0E5A6D; --good:#256C3C; --warn:#9A6A0A; --crit:#A63A32; --soft:#0E5A6D12;
+  --serif:Georgia,'Times New Roman',serif;
+  --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+
+  /* ---- chart-only additions (Task 3) ---- */
+  /* categorical: dataviz skill's documented default hue order, trimmed to
+     the brief's <=7-series cap (task-3-brief.md:49 overrides the skill's own
+     8-hue default) — the dropped 8th slot (#e34948) also duplicated
+     --div-neg-1's exact hex, so trimming removes an identity/status overlap
+     too. Re-validated against THIS app's real card surfaces, see
+     task-3-report.md. Identity only — never color a bar by its value. */
+  --series-1:#2a78d6; --series-2:#eb6834; --series-3:#1baf7a; --series-4:#eda100;
+  --series-5:#e87ba4; --series-6:#008300; --series-7:#4a3aa7;
+
+  /* sequential: single hue derived from --accent (peacock), light->dark = low->high.
+     Linear-interpolated card-tint -> accent; not a categorical-check target
+     (see color-formula.md scope note — sequential ramps validate on lightness
+     monotonicity, not adjacency CVD). */
+  --seq-1:#e9f3f4; --seq-2:#bdd4d9; --seq-3:#91b6be;
+  --seq-4:#6697a3; --seq-5:#3a7988; --seq-6:#0e5a6d;
+
+  /* diverging: dataviz skill's documented blue<->red pair (no FM diverging
+     tokens exist to swap in) + neutral gray midpoint. pos=blue/cool,
+     neg=red/warm — matches the finance-dashboard convention every exhibit
+     using this (excess return vs benchmark, drawdown, net flow) relies on:
+     red must read as "below/bad", not the reverse (found by eyeballing the
+     scratch preview — all-red bars for a page of POSITIVE excess returns). */
+  --div-neg-2:#8a1f1e; --div-neg-1:#e34948; --div-mid:#f0efec;
+  --div-pos-1:#2a78d6; --div-pos-2:#0d366b;
+
+  --grid-gutter:20px;
+}
+
+:root[data-theme=dark]{
+  --paper:#14120E; --card:#1C1915; --ink:#EDE7DC; --muted:#9A917F; --line:#2E2A22;
+  --accent:#4FB3C9; --good:#57BE7C; --warn:#DFA83D; --crit:#E06B5F; --soft:#4FB3C91F;
+
+  --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70; --series-4:#c98500;
+  --series-5:#d55181; --series-6:#008300; --series-7:#9085e9;
+
+  --seq-1:#233b3f; --seq-2:#2c535b; --seq-3:#356b76;
+  --seq-4:#3d8392; --seq-5:#469bad; --seq-6:#4fb3c9;
+
+  --div-neg-2:#f0a3a2; --div-neg-1:#e66767; --div-mid:#383835;
+  --div-pos-1:#3987e5; --div-pos-2:#9ec5f4;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);
+  font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased}
+.num,.big,.tnum{font-variant-numeric:tabular-nums}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+.eyebrow{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);font-weight:600}
+.big{font-family:var(--serif);font-size:clamp(40px,7vw,72px);line-height:1.02;
+  letter-spacing:-.02em;font-weight:600}
+h1,h2,h3{font-family:var(--serif);font-weight:600;letter-spacing:-.01em;margin:0}
+
+/* ---------- top nav (exactly two links, per spec section 4) ---------- */
+.topbar{position:sticky;top:0;z-index:30;display:flex;flex-wrap:wrap;gap:10px;
+  align-items:center;background:var(--paper);border-bottom:1px solid var(--line);
+  padding:12px max(16px,calc((100% - 1600px)/2))}
+.topbar .brand{font-family:var(--serif);font-weight:600;font-size:1.05rem;margin-right:auto}
+.topbar nav{display:flex;gap:6px}
+.topbar nav a{font-family:var(--sans);font-size:.85rem;font-weight:600;
+  padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--card);
+  color:var(--ink)}
+.topbar nav a.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.topbar nav a:hover{text-decoration:none;filter:brightness(1.03)}
+
+/* sticky mini-index of exhibit ids within a page */
+.subnav{position:sticky;top:53px;z-index:20;display:flex;flex-wrap:wrap;gap:8px;
+  background:var(--paper);padding:8px max(16px,calc((100% - 1600px)/2));
+  border-bottom:1px solid var(--line);font-size:.82rem}
+.subnav a{color:var(--muted);font-weight:600}
+.subnav a:hover{color:var(--accent)}
+
+/* ---------- 12-col responsive grid — replaces the old 820-920px .wrap cap ---------- */
+.shell{max-width:1600px;margin:0 auto;padding:24px max(16px,calc((100% - 1600px)/2))}
+.grid-12{display:grid;grid-template-columns:repeat(12,1fr);gap:var(--grid-gutter)}
+.span-12{grid-column:span 12}
+.span-8{grid-column:span 8}
+.span-6{grid-column:span 6}
+.span-4{grid-column:span 4}
+.span-3{grid-column:span 3}
+@media (max-width:900px){
+  .span-8,.span-6,.span-4,.span-3{grid-column:span 12}
+}
+
+/* ---------- exhibit anatomy: verdict -> KPI strip -> 2-3 charts -> drawer ---------- */
+.exhibit{grid-column:span 12;background:var(--card);border:1px solid var(--line);
+  border-radius:14px;padding:24px clamp(16px,3vw,32px);margin-bottom:28px}
+.exhibit__head{display:flex;flex-wrap:wrap;gap:10px;align-items:baseline;
+  justify-content:space-between;margin-bottom:6px}
+.exhibit__id{font-family:var(--serif);font-size:1.3rem;font-weight:600}
+.exhibit__verdict{font-size:1.05rem;color:var(--ink);max-width:70ch;margin:6px 0 18px}
+
+.kpi-strip{display:flex;flex-wrap:wrap;gap:var(--grid-gutter);margin-bottom:20px}
+.kpi-tile{flex:1 1 180px;background:var(--soft);border-radius:10px;padding:14px 16px}
+.kpi-tile .kpi-label{font-size:.78rem;color:var(--muted);margin-bottom:4px}
+.kpi-tile .kpi-value{font-family:var(--serif);font-size:1.7rem;font-weight:600;
+  font-variant-numeric:tabular-nums}
+.kpi-tile .kpi-delta{font-size:.82rem;margin-top:2px}
+.kpi-tile .kpi-delta.up{color:var(--good)}
+.kpi-tile .kpi-delta.down{color:var(--crit)}
+
+.chart-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+  gap:var(--grid-gutter);margin-bottom:18px;align-items:start}
+.chart-card{border:1px solid var(--line);border-radius:10px;padding:14px 16px;
+  background:var(--paper);position:relative}
+.chart-card h4{font-size:.85rem;font-weight:600;color:var(--muted);margin:0 0 10px;
+  font-family:var(--sans)}
+.chart-card svg{display:block;width:100%;height:auto;overflow:visible}
+
+/* legend (always present for >=2 series; never for exactly 1) */
+.legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:.78rem;color:var(--muted)}
+.legend .key{display:inline-flex;align-items:center;gap:6px}
+.legend .key .swatch{width:10px;height:10px;border-radius:2px;flex:none}
+.legend .key .stroke{width:14px;height:2px;border-radius:1px;flex:none}
+
+/* table view — accessibility twin, toggled per chart, never omits a value */
+.chart-card .table-toggle{position:absolute;top:12px;right:14px;font-size:.72rem;
+  font-weight:600;color:var(--accent);background:none;border:none;cursor:pointer;
+  padding:2px 4px}
+.chart-card .table-view{display:none;width:100%;border-collapse:collapse;font-size:.82rem;
+  margin-top:8px}
+.chart-card .table-view.on{display:table}
+.chart-card svg.hidden{display:none}
+.chart-card .table-view th,.chart-card .table-view td{text-align:left;padding:5px 8px;
+  border-bottom:1px solid var(--line)}
+.chart-card .table-view td.n,.chart-card .table-view th.n{text-align:right;
+  font-variant-numeric:tabular-nums}
+
+/* tooltip */
+.viz-tooltip{position:fixed;pointer-events:none;z-index:50;background:var(--ink);
+  color:var(--card);font-size:.78rem;line-height:1.4;padding:8px 10px;border-radius:6px;
+  max-width:260px;opacity:0;transition:opacity .08s linear}
+.viz-tooltip.on{opacity:1}
+.viz-tooltip .row{display:flex;gap:8px;justify-content:space-between}
+.viz-tooltip .row b{font-variant-numeric:tabular-nums}
+:root[data-theme=dark] .viz-tooltip{background:var(--card);color:var(--ink);
+  border:1px solid var(--line)}
+
+/* drawer — five fixed parts, always in order */
+.drawer{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
+.drawer summary{cursor:pointer;color:var(--accent);font-size:.9rem;font-weight:600;
+  list-style:none}
+.drawer summary::-webkit-details-marker{display:none}
+.drawer summary::before{content:"▸ ";display:inline-block;transition:transform .1s}
+.drawer[open] summary::before{content:"▾ "}
+.drawer__body{padding-top:12px;font-size:.9rem;color:var(--ink)}
+.drawer__body h5{font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--muted);margin:14px 0 6px;font-family:var(--sans)}
+.drawer__body h5:first-child{margin-top:0}
+.drawer__body .assumption{padding-left:14px;position:relative;margin:4px 0}
+.drawer__body .assumption::before{content:"—";position:absolute;left:0;color:var(--muted)}
+.drawer__body .bias{color:var(--muted);font-style:italic}
+.drawer table{width:100%;border-collapse:collapse;margin-top:6px;font-size:.85rem}
+.drawer th,.drawer td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line)}
+.drawer td.n,.drawer th.n{text-align:right;font-variant-numeric:tabular-nums}
+
+/* honesty + evidence chips */
+.chip{display:inline-flex;align-items:center;font-size:.7rem;font-weight:700;
+  letter-spacing:.02em;padding:2px 8px;border-radius:999px;border:1px solid var(--line);
+  color:var(--muted);text-transform:uppercase}
+.chip--exact{color:var(--good);border-color:var(--good)}
+.chip--estimate{color:var(--warn);border-color:var(--warn)}
+.chip--upper-bound{color:var(--warn);border-color:var(--warn)}
+.chip--floor{color:var(--muted);border-color:var(--muted)}
+.chip--evidence{cursor:pointer;color:var(--accent);border-color:var(--accent)}
+
+/* status text (reserved — never a stand-in for series identity; always icon+label) */
+.status-good{color:var(--good)}
+.status-warn{color:var(--warn)}
+.status-crit{color:var(--crit)}
+
+/* generic table (client index etc.) */
+table{width:100%;border-collapse:collapse;margin-top:10px;font-size:.9rem}
+th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--line)}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.method{color:var(--muted);font-size:.85rem;margin-top:8px}
+
+input[type=search],input[type=text]{font:inherit;padding:8px 12px;border:1px solid var(--line);
+  border-radius:8px;background:var(--card);color:var(--ink)}
+.btn{font:inherit;font-weight:600;font-size:.85rem;padding:6px 12px;border-radius:999px;
+  border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+.btn.on{background:var(--accent);color:#fff;border-color:var(--accent)}

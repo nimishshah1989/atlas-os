@@ -1,5 +1,5 @@
 {
-  "_total": 979,
+  "_total": 848,
   "atlas/compute/breadth.py": 16,
   "atlas/compute/indices.py": 1,
   "atlas/compute/primitives.py": 6,
@@ -46,7 +46,6 @@
   "scripts/wealth/behaviour_gap.py": 13,
   "scripts/wealth/build_audit_packs.py": 1,
   "scripts/wealth/build_call_lists.py": 29,
-  "scripts/wealth/build_capability_app.py": 131,
   "scripts/wealth/build_dossier.py": 50,
   "scripts/wealth/build_equity_curves.py": 36,
   "scripts/wealth/build_fund_performance.py": 24,
