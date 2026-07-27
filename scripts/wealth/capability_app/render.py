@@ -38,6 +38,14 @@ HONESTY_CLASS = {
 
 NAV_LINKS = [("holdings", "Holdings"), ("behaviour", "Behaviour")]
 
+COL_NUMERIC = {"numeric": True}
+COL_MONEY = {"numeric": True, "fmt": lcr_py}
+
+
+def cols(*specs: tuple[str, str, dict]) -> list[dict]:
+    """Build a data_table() column spec list from (key, label, extra) tuples."""
+    return [{"key": k, "label": lb, **extra} for k, lb, extra in specs]
+
 
 def esc(s: object) -> str:
     return (

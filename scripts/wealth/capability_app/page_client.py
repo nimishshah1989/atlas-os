@@ -24,6 +24,8 @@ from datetime import date
 from .data import lcr_py
 from .data_client360 import CURVE_EVENT_KINDS
 from .render import (
+    COL_MONEY,
+    COL_NUMERIC,
     assumption_cards,
     chart_spec,
     data_table,
@@ -32,6 +34,9 @@ from .render import (
     method_note,
     paragraph,
     sticky_subnav,
+)
+from .render import (
+    cols as _cols,
 )
 
 FRAMING = {
@@ -91,11 +96,7 @@ SCENARIO_META = {
     },
 }
 
-_C, _F = {"numeric": True}, {"numeric": True, "fmt": lcr_py}
-
-
-def _cols(*specs: tuple[str, str, dict]) -> list[dict]:
-    return [{"key": k, "label": lb, **extra} for k, lb, extra in specs]
+_C, _F = COL_NUMERIC, COL_MONEY
 
 
 COLS_HEADER = _cols(
