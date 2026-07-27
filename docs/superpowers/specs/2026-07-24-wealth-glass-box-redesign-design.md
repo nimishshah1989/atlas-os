@@ -487,6 +487,16 @@ scripts/wealth/capability_app/
 scripts/wealth/build_capability_app.py   # thin CLI shim → capability_app (keeps run_wealth_engine.sh + validator interfaces)
 ```
 
+> **As-built note (Task 7):** `assets/app.js` was never built as a separate
+> file — no task in the plan's decomposition ended up owning it. Router,
+> drawers, tooltips, and search/filter live inline (native `<details>`,
+> anchor-scroll, inline `oninput`) across `assets/charts.js` and the page
+> templates instead. This ships fine — all gates pass, zero console errors
+> across all five routes — because a client-side router adds complexity with
+> no benefit when every page ships in one self-contained HTML blob anyway.
+> Flagged by the final whole-branch review so a future reader doesn't go
+> looking for a file that was deliberately never built.
+
 `assets/charts.js` — one small hand-rolled SVG kit, no dependencies, exactly
 these forms: treemap, histogram, horizontal bar, diverging bar strip,
 diverging stacked bar, dumbbell, heatmap, line/area (with series emphasis +

@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from .data import lcr_py
 from .render import (
+    COL_MONEY,
+    COL_NUMERIC,
     chart_spec,
     client_index_table,
     connected_components_by_threshold,
@@ -19,6 +21,9 @@ from .render import (
     method_note,
     paragraph,
     sticky_subnav,
+)
+from .render import (
+    cols as _cols,
 )
 
 FRAMING = {
@@ -46,12 +51,8 @@ MINI_INDEX = [
     ("client-index", "Clients"),
 ]
 
-_C, _F = {"numeric": True}, {"numeric": True, "fmt": lcr_py}
+_C, _F = COL_NUMERIC, COL_MONEY
 _LINK = {"link": "name"}  # client_id column -> client_link(id, name)
-
-
-def _cols(*specs: tuple[str, str, dict]) -> list[dict]:
-    return [{"key": k, "label": lb, **extra} for k, lb, extra in specs]
 
 
 COLS_Q1 = _cols(

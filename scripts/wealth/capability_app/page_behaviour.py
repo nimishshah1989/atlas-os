@@ -11,6 +11,8 @@ from datetime import date
 
 from .data import lcr_py
 from .render import (
+    COL_MONEY,
+    COL_NUMERIC,
     assumption_cards,
     chart_spec,
     client_index_table,
@@ -19,6 +21,9 @@ from .render import (
     method_note,
     paragraph,
     sticky_subnav,
+)
+from .render import (
+    cols as _cols,
 )
 
 FRAMING = {
@@ -43,12 +48,8 @@ MINI_INDEX = [
     ("client-index-behaviour", "Clients"),
 ]
 
-_C, _F = {"numeric": True}, {"numeric": True, "fmt": lcr_py}
+_C, _F = COL_NUMERIC, COL_MONEY
 _LINK = {"link": "name"}
-
-
-def _cols(*specs: tuple[str, str, dict]) -> list[dict]:
-    return [{"key": k, "label": lb, **extra} for k, lb, extra in specs]
 
 
 COLS_B1 = _cols(
