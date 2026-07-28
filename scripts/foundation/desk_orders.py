@@ -255,8 +255,12 @@ def settle_pending(knobs: dict, dry: bool = False) -> list[str]:
                     )
             frac = knobs["reduced_frac"] if r["reduced"] and r["side"] == "buy" else Decimal("1")
             res = book_trade(
-                r["pid"], r["side"], r["instrument_key"], frac=frac,
-                reason="desk", rationale=desk_rationale(r.get("thesis")),
+                r["pid"],
+                r["side"],
+                r["instrument_key"],
+                frac=frac,
+                reason="desk",
+                rationale=desk_rationale(r.get("thesis")),
             )
             notes.append(f"✅ booked on approval: {r['side']} {r['symbol']} @ {res.get('price')}")
         except (TradeError, RuntimeError) as e:
