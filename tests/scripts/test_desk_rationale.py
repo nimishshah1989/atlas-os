@@ -1,10 +1,10 @@
-"""Unit tests for ``portfolio_run.desk_rationale``.
+"""Rationale stamp for an Atlas Desk fill (``portfolio_run.desk_rationale``).
 
 Anchored on a REAL desk order (rule #0): the NEULANDLAB buy thesis the Atlas Desk
 PM wrote in atlas_foundation.desk_journal.applied. Every desk fill used to land on
 portfolio_trades with a hardcoded reason of "manual" and no thesis at all — the row
 said nothing about WHY an agent bought. `reason` is a CHECK-constrained kind, so the
-agent's words go in the `rationale` column and this builds that text.
+agent's own words go in the `rationale` column and this builds that text.
 """
 
 from __future__ import annotations
@@ -14,8 +14,11 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "foundation"))
-from portfolio_run import desk_rationale
+SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts" / "foundation"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+from portfolio_run import desk_rationale  # noqa: E402  # pyright: ignore[reportMissingImports]
 
 pytestmark = pytest.mark.unit
 
