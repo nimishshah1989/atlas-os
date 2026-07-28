@@ -27,20 +27,28 @@ REAL_THESIS = (
 )
 
 
+def stamp(thesis: str | None, conviction: object = None) -> str:
+    """desk_rationale, asserted non-None — every case below supplies a thesis, so a
+    None here is the failure itself rather than something to type-guard at each site."""
+    out = desk_rationale(thesis, conviction)
+    assert out is not None
+    return out
+
+
 def test_carries_thesis_and_conviction() -> None:
-    out = desk_rationale(REAL_THESIS, 4)
+    out = stamp(REAL_THESIS, 4)
     assert out.startswith("c4: ")
     assert "Composite 96.8" in out
 
 
 def test_conviction_renders_as_an_int_not_a_float() -> None:
     # pandas reads the journal's 1-5 int as float; "c4.0" is noise on every row.
-    assert desk_rationale(REAL_THESIS, 4.0).startswith("c4: ")
+    assert stamp(REAL_THESIS, 4.0).startswith("c4: ")
 
 
 def test_conviction_omitted_when_the_pm_returns_none() -> None:
     # Every real desk order so far has conviction null — the stamp must not print "cNone".
-    out = desk_rationale(REAL_THESIS)
+    out = stamp(REAL_THESIS)
     assert out.startswith("Composite 96.8")
     assert "None" not in out
 
@@ -48,11 +56,11 @@ def test_conviction_omitted_when_the_pm_returns_none() -> None:
 def test_conviction_omitted_when_pandas_yields_nan() -> None:
     # The journal backfill reads through pandas, where a missing conviction is float nan,
     # which is not None and not "" — this slipped past a naive emptiness check.
-    assert "nan" not in desk_rationale(REAL_THESIS, float("nan"))
+    assert "nan" not in stamp(REAL_THESIS, float("nan"))
 
 
 def test_truncates_so_one_thesis_cannot_dominate_the_row() -> None:
-    out = desk_rationale(REAL_THESIS * 5, 3)
+    out = stamp(REAL_THESIS * 5, 3)
     assert len(out) <= 500 + len("c3: ")
     assert out.endswith("...")
 
