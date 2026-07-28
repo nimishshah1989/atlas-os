@@ -101,7 +101,13 @@ def main():
     ap.add_argument("--limit", type=int)
     ap.add_argument("--redo", "--full", dest="redo", action="store_true")
     args = ap.parse_args()
-    run(incremental=not args.redo, limit=args.limit)
+    res = run(incremental=not args.redo, limit=args.limit)
+    # A per-fund try/except kept this step green for 21 days while EVERY write
+    # failed (technical_fund_daily was missing ema_13/34 after EMA_PERIODS grew),
+    # freezing the fund EMA panel and leaving all 5 MF strategies at 0 positions.
+    # Errors are only tolerable as a minority: half the book failing is a defect.
+    if res["errors"] > res["done"]:
+        raise SystemExit(f"[fund-tech] FAIL — {res['errors']}/{res['targets']} funds errored")
 
 
 if __name__ == "__main__":

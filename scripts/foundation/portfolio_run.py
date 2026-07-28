@@ -542,13 +542,42 @@ def cmd_backtest(a) -> None:
     print(json.dumps(rebuild_backtest(a.portfolio_id, a.years), default=str))
 
 
-def book_trade(pid: str, side: str, ckey: str, frac: Decimal = Decimal("1")) -> dict:
+def desk_rationale(thesis: str | None, conviction: object = None) -> str | None:
+    """The WHY for a desk fill, e.g. 'c4: <thesis>' — stored in portfolio_trades.rationale.
+    `reason` stays a CHECK-constrained kind ('desk'); this column carries the agent's own
+    words, so a fill is auditable from the row instead of via a fuzzy trade_date→cycle_date
+    join back into desk_journal. Returns None when the agent gave no thesis."""
+    try:
+        # int(float(...)) also rejects None/""/NaN — pandas widens the PM's 1-5 int to
+        # float on read, and a bare f-string would stamp every row "c4.0" or "cnan".
+        c = f"c{int(float(conviction))}: "  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        c = ""  # the PM schema allows a null conviction
+    t = " ".join(str(thesis or "").split())
+    if not t:
+        return c.rstrip(": ") or None
+    return f"{c}{t[:497]}..." if len(t) > 500 else f"{c}{t}"
+
+
+def book_trade(
+    pid: str,
+    side: str,
+    ckey: str,
+    frac: Decimal = Decimal("1"),
+    reason: str = "manual",
+    rationale: str | None = None,
+) -> dict:
     """Book ONE trade for a basket-kind portfolio at the last EOD close, with
     cost + FIFO tax enrichment and a refreshed NAV row. `ckey` = <asset_class>:<key>.
     `frac` scales a buy's allocation below the position cap (desk consensus
     size-down); sells always close the full position. Shared by the manual CLI
     and the Atlas Desk orchestrator — every booked trade goes through this
-    single audited path. Raises TradeError on any refusal."""
+    single audited path. Raises TradeError on any refusal.
+
+    `reason` was a hardcoded "manual", so every Atlas Desk fill was logged
+    indistinguishably from a hand-typed CLI trade and the agent's thesis — which the
+    desk already produces — was dropped on the floor. Desk callers now pass
+    reason="desk" plus the `rationale` text, so a fill says WHY on the row itself."""
     p = load_portfolio(pid)
     if p["kind"] != "basket":
         raise TradeError("manual trades are for baskets only")
@@ -600,7 +629,8 @@ def book_trade(pid: str, side: str, ckey: str, frac: Decimal = Decimal("1")) -> 
                 "price": price,
                 "value": value,
                 "cost": cost,
-                "reason": "manual",
+                "reason": reason,
+                "rationale": rationale,
             }
         ]
     )

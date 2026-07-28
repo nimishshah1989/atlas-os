@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import _db
-from portfolio_run import TradeError, book_trade
+from portfolio_run import TradeError, book_trade, desk_rationale
 
 from atlas.desk import build_trader_messages, check_plan, validate_trader
 
@@ -229,7 +229,7 @@ def settle_pending(knobs: dict, dry: bool = False) -> list[str]:
         notes.append(f"⌛ expired unapproved: {r['symbol']}")
     appr = _db.read_df(
         f"""select id, portfolio_id::text pid, symbol, side, instrument_key,
-                   stop, target, reduced
+                   stop, target, reduced, thesis
             from {M}.desk_pending_orders where status = 'approved'"""
     )
     for r in appr.to_dict("records"):
@@ -254,7 +254,10 @@ def settle_pending(knobs: dict, dry: bool = False) -> list[str]:
                         f"price {px} gapped outside plan (stop {r['stop']} / target {r['target']})"
                     )
             frac = knobs["reduced_frac"] if r["reduced"] and r["side"] == "buy" else Decimal("1")
-            res = book_trade(r["pid"], r["side"], r["instrument_key"], frac=frac)
+            res = book_trade(
+                r["pid"], r["side"], r["instrument_key"], frac=frac,
+                reason="desk", rationale=desk_rationale(r.get("thesis")),
+            )
             notes.append(f"✅ booked on approval: {r['side']} {r['symbol']} @ {res.get('price')}")
         except (TradeError, RuntimeError) as e:
             _db.exec_sql(
