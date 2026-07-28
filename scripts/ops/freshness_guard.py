@@ -17,6 +17,8 @@ import datetime as dt
 import sys
 from pathlib import Path
 
+import numpy as np
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "foundation"))
 import _db
 
@@ -138,6 +140,14 @@ COMPLETENESS_TABLES = {
 COMPLETENESS_MIN_FRAC = 0.5  # EOD count must be >= 50% of the prior session's count
 
 
+def _behind(eod: dt.date, mx: dt.date) -> int:
+    """Staleness in TRADING days, not calendar days. Calendar days made every
+    Monday read as 3d behind for feeds that publish after the 19:30 run (AMFI
+    NAV), failing the core gate and silently skipping the board deploy one day
+    a week. Weekday exchange holidays still count — tolerances absorb them."""
+    return int(np.busday_count(mx, eod))
+
+
 def check_board(eod: dt.date) -> list[str]:
     """Derived board tables — reported loudly but NON-blocking (WARN tier). Same
     max(date)-vs-tolerance logic as check(); kept separate so these never fail the gate."""
@@ -147,7 +157,7 @@ def check_board(eod: dt.date) -> list[str]:
         if mx is None:
             warn.append(f"{table}: EMPTY")
             continue
-        behind = (eod - mx).days
+        behind = _behind(eod, mx)
         status = "OK" if behind <= lag else "STALE"
         print(f"  [{status}] {table:<28} max={mx} (eod={eod}, behind={behind}d, tol={lag})")
         if behind > lag:
@@ -162,7 +172,7 @@ def check(eod: dt.date) -> list[str]:
         if mx is None:
             stale.append(f"{table}: EMPTY")
             continue
-        behind = (eod - mx).days
+        behind = _behind(eod, mx)
         status = "OK" if behind <= lag else "STALE"
         print(f"  [{status}] {table:<28} max={mx} (eod={eod}, behind={behind}d, tol={lag})")
         if behind > lag:

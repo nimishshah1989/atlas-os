@@ -52,7 +52,7 @@ from desk_orders import (
     settle_pending,
     write_journal,
 )
-from portfolio_run import book_trade
+from portfolio_run import book_trade, desk_rationale
 
 from atlas.desk import (
     build_debate_messages,
@@ -503,7 +503,14 @@ def run_cycle(p: dict, knobs: dict, dry: bool = False) -> dict:
                 res = (
                     {"dry_run": True}
                     if dry
-                    else book_trade(str(p["portfolio_id"]), o["side"], ckey, frac=frac)
+                    else book_trade(
+                        str(p["portfolio_id"]),
+                        o["side"],
+                        ckey,
+                        frac=frac,
+                        reason="desk",
+                        rationale=desk_rationale(o.get("thesis"), o.get("conviction")),
+                    )
                 )
                 journal["applied"].append({**card, **res})
             except Exception as e:  # any booking failure skips the order, never the cycle
