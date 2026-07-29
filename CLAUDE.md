@@ -93,11 +93,29 @@ Full post-mortem: `docs/deploy-hygiene.md`.
 - `docs/adr/` — architecture decision records · `docs/agents/` — agent-workflow conventions
 - `decisions.jsonl` — append-only hash-chained decision log
 
+## Where development happens
+
+**Write code on the laptop, never on the box.** `scripts/ops/atlas-auto-deploy.sh` refuses to
+deploy when the box's tree is dirty (`tree dirty on $branch — skip`) and only ever runs on
+`main` — so an edit made on the box silently stops every future deploy, with no error surfaced
+anywhere you'd look. The box is a deploy target, not a workstation.
+
+Loop: edit locally → `make check` → push a branch → PR → merge to `main` → the box
+fast-forwards and rebuilds itself. `scripts/ops/promote_box_to_main.sh` force-resyncs the box
+if it ever drifts.
+
+Local setup: `make setup`, then `.env` with `ATLAS_DB_URL` (copy from `frontend/.env.local`).
+`make test` = 49 unit tests, no DB. Integration tests need the direct non-pooler URL — run on
+the box.
+
 ## Local workspace (NEVER under iCloud)
 
 The git tree MUST live outside any iCloud-synced folder — iCloud "Optimize Mac Storage"
 evicts `.git` pack objects and corrupts the repo (`pack … far too short to be a packfile`).
-Canonical local path: **`~/dev/atlas-os`**.
+Canonical local path: **`~/All AI/atlas-os`** (moved out of iCloud 2026-07-29; `git status`
+went from 2-minute timeouts to 0.45s). **If this repo moves again, re-key its Claude memory** —
+memory is keyed by folder path and a move silently orphans it. This repo has already lost its
+memory to path moves twice; `~/.claude/bin/rekey-memory` repairs it.
 
 ## What goes in this file
 
