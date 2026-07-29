@@ -11,6 +11,7 @@ Verified 2026-07-29 on `main` @ `3aefd9c0` (2026-07-28) from `~/All AI/atlas-os`
 
 | What | Command | Result |
 |---|---|---|
+| **Pre-PR gate** | **`make gate`** | **exit 0 in ~7s** — lint + tests + ratchet |
 | Unit tests | `make test` | **49 passed**, 11 deselected, 11s |
 | Lint | `make lint` (ruff) | **All checks passed** |
 | Type gate | `python scripts/ci/pyright_ratchet.py` | **OK** — 848 errors, 848 baselined, no per-file regression |

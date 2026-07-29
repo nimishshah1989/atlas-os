@@ -4,7 +4,7 @@
 # Deploy/backup targets (make deploy / make backup) land with Pillar 3 of the
 # engineering-process plan; not defined yet.
 
-.PHONY: setup test test-int lint format typecheck check heads clean clean-hard
+.PHONY: setup test test-int lint format typecheck gate check heads clean clean-hard
 
 # One-time (and after dependency changes): build the local .venv with dev deps.
 setup:
@@ -28,7 +28,15 @@ format:
 typecheck:
 	uv run --extra dev pyright atlas
 
-# Pre-push gate: lint + types + unit tests. Run this before opening a PR.
+# Pre-push gate — run this before opening a PR. Mirrors what CI enforces.
+# Uses the pyright RATCHET, not raw pyright: ~848 pre-existing errors are
+# grandfathered in ci/pyright-baseline.json and CI fails only when a file's
+# count rises. Raw `make typecheck` therefore exits non-zero by design.
+gate: lint test
+	uv run --extra dev python scripts/ci/pyright_ratchet.py
+
+# Raw pyright over everything, baseline ignored. EXITS NON-ZERO on the
+# grandfathered debt — that is expected. Use it to see the debt, not as a gate.
 check: lint typecheck test
 
 # Read-only: what migration head the code is at (no DB connection).
