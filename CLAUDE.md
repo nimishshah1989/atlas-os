@@ -100,11 +100,13 @@ deploy when the box's tree is dirty (`tree dirty on $branch — skip`) and only 
 `main` — so an edit made on the box silently stops every future deploy, with no error surfaced
 anywhere you'd look. The box is a deploy target, not a workstation.
 
-Loop: edit locally → `make check` → push a branch → PR → merge to `main` → the box
+Loop: edit locally → `make gate` → push a branch → PR → merge to `main` → the box
 fast-forwards and rebuilds itself. `scripts/ops/promote_box_to_main.sh` force-resyncs the box
 if it ever drifts.
 
 Local setup: `make setup`, then `.env` with `ATLAS_DB_URL` (copy from `frontend/.env.local`).
+`make gate` (lint + tests + pyright **ratchet**) is the pre-PR check — ~7s. **Not `make check`**,
+which runs raw pyright and exits non-zero by design on the grandfathered baseline.
 `make test` = 49 unit tests, no DB. Integration tests need the direct non-pooler URL — run on
 the box.
 
