@@ -1,0 +1,259 @@
+// Fold + validation for the Monday confirmations.
+// RULE #0: the starting book below is the FM's REAL Multi-Asset Leaders model
+// portfolio as sent to the desk (Goldbees 10 · Silverbees 5 · Divis 8 · Jana 8 ·
+// Pharmabees 8 · HDFCSML250 12 · PPL 8 · Nykaa 8 · Biocon 8 · Welspun 8 · Lloyds 8
+// · MO Realty 8 = 99% invested, 1% cash). No weight here is invented.
+import { describe, it, expect } from 'vitest'
+
+import {
+  foldBook,
+  validateCalls,
+  cashPct,
+  cashMovement,
+  mondayOf,
+  isoDate,
+  type BookPosition,
+  type Call,
+} from '../confirmations'
+
+// The FM's real book, verbatim.
+const REAL_BOOK: BookPosition[] = [
+  { key: 'etf:GOLDBEES', symbol: 'GOLDBEES', name: 'Nippon Gold ETF', sector: 'Commodity', weightPct: 10 },
+  { key: 'etf:SILVERBEES', symbol: 'SILVERBEES', name: 'Nippon Silver ETF', sector: 'Commodity', weightPct: 5 },
+  { key: 'stock:DIVISLAB', symbol: 'DIVISLAB', name: 'Divis Laboratories', sector: 'Healthcare', weightPct: 8 },
+  { key: 'stock:JSFB', symbol: 'JSFB', name: 'Jana Small Finance Bank', sector: 'Financial Services', weightPct: 8 },
+  { key: 'etf:PHARMABEES', symbol: 'PHARMABEES', name: 'Nippon Pharma ETF', sector: 'Healthcare', weightPct: 8 },
+  { key: 'etf:HDFCSML250', symbol: 'HDFCSML250', name: 'HDFC Smallcap 250 ETF', sector: 'Diversified', weightPct: 12 },
+  { key: 'stock:PPLPHARMA', symbol: 'PPLPHARMA', name: 'Piramal Pharma', sector: 'Healthcare', weightPct: 8 },
+  { key: 'stock:NYKAA', symbol: 'NYKAA', name: 'FSN E-Commerce (Nykaa)', sector: 'Consumer', weightPct: 8 },
+  { key: 'stock:BIOCON', symbol: 'BIOCON', name: 'Biocon', sector: 'Healthcare', weightPct: 8 },
+  { key: 'stock:WELSPUNLIV', symbol: 'WELSPUNLIV', name: 'Welspun Living', sector: 'Consumer', weightPct: 8 },
+  { key: 'stock:LLOYDSENGG', symbol: 'LLOYDSENGG', name: 'Lloyds Engineering Works', sector: 'Capital Goods', weightPct: 8 },
+  { key: 'stock:MOREALTY', symbol: 'MOREALTY', name: 'Motilal Oswal Realty', sector: 'Realty', weightPct: 8 },
+]
+
+const buy = (over: Partial<Call> & Pick<Call, 'key' | 'weightPct'>): Call => ({
+  side: 'buy',
+  symbol: over.key.split(':')[1],
+  name: over.key.split(':')[1],
+  sector: null,
+  comment: 'weight of evidence attached',
+  reasons: [],
+  ...over,
+})
+
+const sell = (over: Partial<Call> & Pick<Call, 'key' | 'weightPct'>): Call => ({
+  side: 'sell',
+  symbol: over.key.split(':')[1],
+  name: over.key.split(':')[1],
+  sector: null,
+  comment: '',
+  reasons: ['Profit booking'],
+  ...over,
+})
+
+const weightOf = (book: BookPosition[], key: string) => book.find((p) => p.key === key)?.weightPct
+
+describe('isoDate — normalising what postgres hands back for a DATE column', () => {
+  it('passes a plain YYYY-MM-DD string through', () => {
+    expect(isoDate('1999-01-04')).toBe('1999-01-04')
+  })
+
+  it('keeps the calendar day of a Date object (String().slice() loses the year)', () => {
+    expect(isoDate(new Date('1999-01-04T00:00:00Z'))).toBe('1999-01-04')
+  })
+
+  it('does not roll backwards for a timezone ahead of UTC', () => {
+    expect(isoDate(new Date('2026-08-03T00:00:00Z'))).toBe('2026-08-03')
+  })
+
+  it('trims a full timestamp string to its date', () => {
+    expect(isoDate('2026-08-03T18:30:00.000Z')).toBe('2026-08-03')
+  })
+})
+
+describe('mondayOf — which week a report belongs to', () => {
+  it('returns the same day for a Monday', () => {
+    expect(mondayOf('2026-07-27')).toBe('2026-07-27')
+  })
+
+  it('returns the week that has started for a mid-week day', () => {
+    expect(mondayOf('2026-07-29')).toBe('2026-07-27') // Wednesday
+  })
+
+  it('rolls a Friday draft forward to the Monday it is for', () => {
+    // The FM drafts on Friday/Saturday for the Monday that follows.
+    expect(mondayOf('2026-07-31')).toBe('2026-08-03') // Friday
+    expect(mondayOf('2026-08-01')).toBe('2026-08-03') // Saturday
+    expect(mondayOf('2026-08-02')).toBe('2026-08-03') // Sunday
+  })
+
+  it('crosses a month boundary correctly', () => {
+    expect(mondayOf('2026-09-30')).toBe('2026-09-28') // Wednesday
+  })
+})
+
+describe('cashPct', () => {
+  it('reports the FM real book as 1% cash', () => {
+    expect(cashPct(REAL_BOOK)).toBe(1)
+  })
+
+  it('reports an empty book as fully in cash', () => {
+    expect(cashPct([])).toBe(100)
+  })
+})
+
+describe('foldBook — buys SET the target weight', () => {
+  it('sets a new name at its stated weight', () => {
+    const out = foldBook(REAL_BOOK, [buy({ key: 'stock:CDSL', weightPct: 6 })])
+    expect(weightOf(out, 'stock:CDSL')).toBe(6)
+  })
+
+  it('replaces the weight of an already-held name rather than adding to it', () => {
+    // Divis is held at 8. A buy stated as 12 means "target 12", not 8+12.
+    const out = foldBook(REAL_BOOK, [buy({ key: 'stock:DIVISLAB', weightPct: 12 })])
+    expect(weightOf(out, 'stock:DIVISLAB')).toBe(12)
+  })
+
+  it('leaves every untouched position exactly as it was', () => {
+    const out = foldBook(REAL_BOOK, [buy({ key: 'stock:CDSL', weightPct: 6 })])
+    expect(weightOf(out, 'etf:HDFCSML250')).toBe(12)
+    expect(weightOf(out, 'etf:GOLDBEES')).toBe(10)
+  })
+})
+
+describe('foldBook — sells SUBTRACT the trimmed weight', () => {
+  it('trims a position by the stated weight', () => {
+    const out = foldBook(REAL_BOOK, [sell({ key: 'etf:HDFCSML250', weightPct: 4 })])
+    expect(weightOf(out, 'etf:HDFCSML250')).toBe(8)
+  })
+
+  it('removes the position entirely when the full held weight is sold', () => {
+    const out = foldBook(REAL_BOOK, [sell({ key: 'etf:GOLDBEES', weightPct: 10 })])
+    expect(weightOf(out, 'etf:GOLDBEES')).toBeUndefined()
+  })
+
+  it('frees the sold weight into cash', () => {
+    const out = foldBook(REAL_BOOK, [sell({ key: 'etf:GOLDBEES', weightPct: 10 })])
+    expect(cashPct(out)).toBe(11)
+  })
+})
+
+describe('foldBook — arithmetic is exact at 2 decimals', () => {
+  it('does not drift when thirds are repeatedly trimmed', () => {
+    // 8 → 7.67 → 7.34 → 7.01 in exact basis points; float folding drifts here.
+    let book = REAL_BOOK
+    for (let i = 0; i < 3; i++) book = foldBook(book, [sell({ key: 'stock:BIOCON', weightPct: 0.33 })])
+    expect(weightOf(book, 'stock:BIOCON')).toBe(7.01)
+  })
+
+  it('exits at exactly zero when trims sum to the held weight', () => {
+    let book = foldBook(REAL_BOOK, [sell({ key: 'stock:NYKAA', weightPct: 7.5 })])
+    expect(weightOf(book, 'stock:NYKAA')).toBe(0.5)
+    book = foldBook(book, [sell({ key: 'stock:NYKAA', weightPct: 0.5 })])
+    expect(weightOf(book, 'stock:NYKAA')).toBeUndefined()
+  })
+})
+
+describe('cashMovement — what the editor banner tells the FM', () => {
+  it('reports gross sold and gross deployed, not just the net swing', () => {
+    // Biocon held 8 → target 10 deploys 2. CDSL is new at 6, deploys 6.
+    // Divis trims 4, Nykaa exits 8 — 12 freed. Cash: 1 + 12 - 8 = 5.
+    const m = cashMovement(REAL_BOOK, [
+      buy({ key: 'stock:BIOCON', weightPct: 10 }),
+      buy({ key: 'stock:CDSL', weightPct: 6 }),
+      sell({ key: 'stock:DIVISLAB', weightPct: 4 }),
+      sell({ key: 'stock:NYKAA', weightPct: 8 }),
+    ])
+    expect(m.freed).toBe(12)
+    expect(m.deployed).toBe(8)
+    expect(m.before).toBe(1)
+    expect(m.after).toBe(5)
+  })
+
+  it('counts a trim down of a held name as freeing cash, not deploying it', () => {
+    // A "buy" stating a LOWER target than held is really a reduction.
+    const m = cashMovement(REAL_BOOK, [buy({ key: 'etf:HDFCSML250', weightPct: 9 })])
+    expect(m.deployed).toBe(0)
+    expect(m.freed).toBe(3)
+  })
+
+  it('balances exactly when buys consume everything the sells free', () => {
+    const m = cashMovement(REAL_BOOK, [
+      sell({ key: 'etf:GOLDBEES', weightPct: 10 }),
+      buy({ key: 'stock:CDSL', weightPct: 10 }),
+    ])
+    expect(m.freed).toBe(10)
+    expect(m.deployed).toBe(10)
+    expect(m.after).toBe(m.before)
+  })
+})
+
+describe('validateCalls', () => {
+  it('accepts a well-formed week', () => {
+    expect(
+      validateCalls(REAL_BOOK, [
+        buy({ key: 'stock:CDSL', weightPct: 6 }),
+        sell({ key: 'etf:GOLDBEES', weightPct: 10 }),
+      ]),
+    ).toEqual([])
+  })
+
+  it('rejects the same instrument on both sides', () => {
+    const problems = validateCalls(REAL_BOOK, [
+      buy({ key: 'stock:BIOCON', weightPct: 10 }),
+      sell({ key: 'stock:BIOCON', weightPct: 8 }),
+    ])
+    expect(problems.map((p) => p.code)).toContain('both_sides')
+    expect(problems[0].message).toContain('BIOCON')
+  })
+
+  it('rejects a sell larger than the position actually held', () => {
+    const problems = validateCalls(REAL_BOOK, [sell({ key: 'stock:NYKAA', weightPct: 9 })])
+    expect(problems.map((p) => p.code)).toEqual(['sell_exceeds_held'])
+    expect(problems[0].message).toContain('8')
+  })
+
+  it('rejects a sell of something not held', () => {
+    const problems = validateCalls(REAL_BOOK, [sell({ key: 'stock:ATHER', weightPct: 3 })])
+    expect(problems.map((p) => p.code)).toEqual(['sell_not_held'])
+  })
+
+  it('rejects a week whose resulting book would exceed 100%', () => {
+    // 99% invested + a 2% new name = 101%.
+    const problems = validateCalls(REAL_BOOK, [buy({ key: 'stock:CDSL', weightPct: 2 })])
+    expect(problems.map((p) => p.code)).toEqual(['over_allocated'])
+  })
+
+  it('allows a buy funded by a same-week sell', () => {
+    expect(
+      validateCalls(REAL_BOOK, [
+        sell({ key: 'etf:GOLDBEES', weightPct: 10 }),
+        buy({ key: 'stock:CDSL', weightPct: 10 }),
+      ]),
+    ).toEqual([])
+  })
+
+  it('rejects a buy with no rationale', () => {
+    const problems = validateCalls(REAL_BOOK, [buy({ key: 'stock:CDSL', weightPct: 1, comment: '  ' })])
+    expect(problems.map((p) => p.code)).toContain('missing_rationale')
+  })
+
+  it('rejects a sell with no reason ticked', () => {
+    const problems = validateCalls(REAL_BOOK, [sell({ key: 'etf:GOLDBEES', weightPct: 10, reasons: [] })])
+    expect(problems.map((p) => p.code)).toContain('missing_reason')
+  })
+
+  it('rejects a non-positive weight', () => {
+    const problems = validateCalls(REAL_BOOK, [buy({ key: 'stock:CDSL', weightPct: 0 })])
+    expect(problems.map((p) => p.code)).toContain('bad_weight')
+  })
+
+  it('rejects the same instrument listed twice on one side', () => {
+    const problems = validateCalls(REAL_BOOK, [
+      buy({ key: 'stock:CDSL', weightPct: 0.5 }),
+      buy({ key: 'stock:CDSL', weightPct: 0.5 }),
+    ])
+    expect(problems.map((p) => p.code)).toContain('duplicate_instrument')
+  })
+})
