@@ -6,11 +6,20 @@ import { useState } from 'react'
 
 import { CAP_TOLERANCE_PCT, type PortfolioCode } from '@/lib/confirmations'
 
-export function MaxCapField({ code, capPct }: { code: PortfolioCode; capPct: number }) {
+export function MaxCapField({
+  code,
+  capPct,
+  canEdit = true,
+}: {
+  code: PortfolioCode
+  capPct: number
+  canEdit?: boolean
+}) {
   const router = useRouter()
   const [value, setValue] = useState(capPct ? String(capPct) : '')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [signedOut, setSignedOut] = useState(false)
 
   const commit = async () => {
     const next = value.trim() === '' ? 0 : Number(value)
@@ -28,7 +37,11 @@ export function MaxCapField({ code, capPct }: { code: PortfolioCode; capPct: num
         body: JSON.stringify({ code, capPct: next }),
       })
       const d = await r.json().catch(() => ({}))
-      if (!r.ok) setErr(d.message ?? 'could not save')
+      if (r.status === 401) {
+        // Session gone (or never signed in) — offer the way out, don't just report it.
+        setSignedOut(true)
+        setValue(capPct ? String(capPct) : '')
+      } else if (!r.ok) setErr(d.message ?? 'could not save')
       else {
         setValue(d.capPct ? String(d.capPct) : '')
         router.refresh()
@@ -48,14 +61,21 @@ export function MaxCapField({ code, capPct }: { code: PortfolioCode; capPct: num
         inputMode="decimal"
         value={value}
         placeholder="—"
-        disabled={busy}
+        disabled={busy || !canEdit || signedOut}
+        readOnly={!canEdit || signedOut}
         onChange={(e) => setValue(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => e.key === 'Enter' && commit()}
-        className="w-14 rounded-tile border border-edge-rule bg-surface-base px-1.5 py-0.5 text-right font-num text-[12px] tabular-nums text-txt-1 outline-none focus:border-brand"
+        className={`w-14 rounded-tile border border-edge-rule px-1.5 py-0.5 text-right font-num text-[12px] tabular-nums text-txt-1 outline-none focus:border-brand ${
+          canEdit && !signedOut ? 'bg-surface-base' : 'cursor-not-allowed bg-surface-inset'
+        }`}
       />
       <span className="font-num text-[11px] text-txt-3">%</span>
-      {err ? (
+      {!canEdit || signedOut ? (
+        <a href="/login" className="font-sans text-[10px] text-accent no-underline hover:underline">
+          Sign in to edit →
+        </a>
+      ) : err ? (
         <span className="font-sans text-[10px] text-sig-neg">{err}</span>
       ) : capPct > 0 ? (
         <span className="font-sans text-[10px] text-txt-3">

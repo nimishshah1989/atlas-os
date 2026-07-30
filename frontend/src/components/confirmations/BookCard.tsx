@@ -22,6 +22,7 @@ export function BookCard({
   history,
   thisMonday,
   maxCapPct,
+  canEdit,
 }: {
   code: PortfolioCode
   name: string
@@ -29,6 +30,7 @@ export function BookCard({
   history: ConfirmationSummary[]
   thisMonday: string
   maxCapPct: number
+  canEdit: boolean
 }) {
   const cash = cashPct(book)
   const top = book.slice(0, TOP_N)
@@ -47,7 +49,7 @@ export function BookCard({
       </div>
 
       <div className="mb-3 border-b border-edge-hair pb-2.5">
-        <MaxCapField code={code} capPct={maxCapPct} />
+        <MaxCapField code={code} capPct={maxCapPct} canEdit={canEdit} />
       </div>
 
       {book.length === 0 ? (
