@@ -38,6 +38,7 @@ from portfolio_data import (
     load_composite,
     load_cost_tax,
     load_instruments,
+    load_open_prices,
     load_portfolio,
     load_prices,
     load_tech,
@@ -350,6 +351,24 @@ def _run_slice(
         elif sc and sc[0] == "trail":
             stop_trail = sc[1]
 
+    # Crossover v2 per-side fill timing, read off the strategy the same way
+    # same_day_fill already is. Only a next-open ENTRY needs the extra panel.
+    entry_fill = getattr(strat, "entry_fill", None)
+    exit_fill = getattr(strat, "exit_fill", None)
+    open_prices = None
+    if entry_fill == "next_open":
+        if (universe["asset_class"] != "stock").any():
+            # ohlcv_etf has no open_adj and funds have no open at all. Mixing a raw
+            # open with close_adj EMAs would silently misprice across every corporate
+            # action, so refuse rather than half-fill the book.
+            raise SystemExit(
+                "entry_fill='next_open' needs adjusted opens, which exist for stocks "
+                f"only — this universe holds {sorted(set(universe['asset_class']))}"
+            )
+        open_prices = load_open_prices(universe, lookback, end)
+        if open_prices.empty:
+            raise SystemExit(f"no adjusted opens in {lookback}..{end} — cannot fill at next open")
+
     return replay(
         cfg,
         prices=prices,
@@ -369,6 +388,9 @@ def _run_slice(
         stop_pct=stop_pct,
         stop_trail=stop_trail,
         same_day_fill=getattr(strat, "same_day_fill", False),
+        entry_fill=entry_fill,
+        exit_fill=exit_fill,
+        open_prices=open_prices,
     )
 
 

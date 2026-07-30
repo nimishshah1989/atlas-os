@@ -163,6 +163,41 @@ def load_prices(universe: pd.DataFrame, since: dt.date, until: dt.date) -> pd.Da
     return panel.reindex(sessions.tolist())
 
 
+def load_open_prices(universe: pd.DataFrame, since: dt.date, until: dt.date) -> pd.DataFrame:
+    """Date-indexed OPEN panel (Decimal) for crossover v2's next-open entry fills.
+
+    STOCKS ONLY, and that is a data constraint rather than a choice: `ohlcv_etf`
+    carries a raw `open` but no `open_adj`, and funds print one NAV a day with no
+    open at all. Using a raw open beside close_adj-based EMAs would mix adjusted and
+    unadjusted prices across corporate actions, so callers must guard on asset class
+    instead — see `_run_slice`, which refuses next_open on a non-stock universe.
+
+    Same NSE session calendar as load_prices, for the same reason: spurious holiday
+    rows in the vendor data once had the engine booking trades on Republic Day.
+    """
+    keys = universe.loc[universe["asset_class"] == "stock", "instrument_key"].tolist()
+    if not keys:
+        return pd.DataFrame()
+    long = _db.read_df(
+        f"""select instrument_id::text as instrument_key, date, open_adj as price
+            from {M}.ohlcv_stock
+            where instrument_id::text = any(:ks) and open_adj > 0
+              and date between :a and :b""",
+        {"ks": keys, "a": since, "b": until},
+    )
+    if long.empty:
+        return pd.DataFrame()
+    panel = long.pivot_table(
+        index="date", columns="instrument_key", values="price", aggfunc="last"
+    ).sort_index()
+    sessions = _db.read_df(
+        f"""select date from {M}.index_prices
+            where index_code = 'NIFTY 50' and date between :a and :b order by date""",
+        {"a": since, "b": until},
+    )["date"]
+    return panel.reindex(sessions.tolist())
+
+
 def load_composite(universe: pd.DataFrame, since: dt.date, until: dt.date) -> pd.DataFrame:
     return _db.read_df(
         f"""select instrument_id::text as instrument_key, date, composite

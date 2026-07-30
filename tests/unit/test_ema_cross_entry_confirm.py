@@ -53,3 +53,26 @@ def test_close_confirmation_defers_the_fill_to_the_next_session() -> None:
 def test_explicit_same_day_fill_still_overrides() -> None:
     s = EmaCross(13, 34, intraday=True, entry_confirm="close", same_day_fill=True)
     assert s.same_day_fill is True
+
+
+# ── derived engine fill timing ─────────────────────────────────────────────
+# The runner reads these off the strategy the same way it already reads
+# same_day_fill, so the books stay declarative and the engine stays dumb.
+
+
+def test_legacy_daily_close_book_fills_next_close_on_both_sides() -> None:
+    # The 9 pre-v2 books. Any drift here re-times every one of their trades.
+    s = EmaCross(13, 34)
+    assert (s.entry_fill, s.exit_fill) == ("next_close", "next_close")
+
+
+def test_intraday_breach_book_fills_same_close_on_both_sides() -> None:
+    s = EmaCross(13, 34, intraday=True)
+    assert (s.entry_fill, s.exit_fill) == ("same_close", "same_close")
+
+
+def test_crossover_v2_book_buys_at_the_next_open_and_sells_at_the_same_close() -> None:
+    # The FM's rule: buys wait for tomorrow's open, sells go out today because
+    # tomorrow can gap down. This asymmetry is the whole point of the pair.
+    s = EmaCross(13, 34, intraday=True, entry_confirm="close")
+    assert (s.entry_fill, s.exit_fill) == ("next_open", "same_close")

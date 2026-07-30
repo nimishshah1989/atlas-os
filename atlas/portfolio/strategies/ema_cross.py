@@ -79,6 +79,28 @@ class EmaCross(StateStrategy):
         return self._same_day_fill
 
     @property
+    def entry_fill(self) -> str:
+        """Engine fill timing for BUYS (see engine.ENTRY_FILLS).
+
+        A close-confirmed entry cannot fill at the confirming close without
+        lookahead, so it takes the next session's OPEN — the FM's "earliest possible
+        price". Everything else keeps the pre-v2 mapping off same_day_fill.
+        """
+        if self.entry_confirm == "close":
+            return "next_open"
+        return "same_close" if self._same_day_fill else "next_close"
+
+    @property
+    def exit_fill(self) -> str:
+        """Engine fill timing for SELLS (see engine.EXIT_FILLS).
+
+        Intraday detection means the 15:15 lock has already decided before the close,
+        so the exit fills at that same close — the FM's rule, because the next open can
+        gap further down. Daily-close detection keeps the next-session fill.
+        """
+        return "same_close" if (self.intraday or self._same_day_fill) else "next_close"
+
+    @property
     def needs_ohlc(self) -> bool:
         """Intraday detection needs the day's adjusted high/low, not just EMAs."""
         return self.intraday
