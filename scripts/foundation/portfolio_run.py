@@ -7,6 +7,15 @@ detected at close of session e execute at the close of the next session;
 everything anchors to the last complete EOD — never a partial candle.
 """
 
+# allow-large: 723 LOC against the 600 limit. This is a PRE-EXISTING overage, not
+# something crossover v2 introduced — the file was already 722 lines and #204 added a
+# single column to one SQL string, which is what surfaced it (the hook only inspects
+# files a commit touches). The reason this valve is used rather than the file being
+# split: the split is real work (cli / runner / writers), it touches every caller of
+# the six subcommands, and bundling it into a signal-semantics change to books that
+# hold live capital would make both diffs unreviewable. It is NOT claimed to be
+# cohesive at this size. Tracked as its own task; see #204's discussion.
+
 from __future__ import annotations
 
 import argparse
@@ -268,11 +277,12 @@ def _run_slice(
                 )
                 tech = tech.merge(regime, on="date", how="left")
             if getattr(strat, "needs_ohlc", False):
-                # intraday-cross detection needs the day's adjusted high/low (same
-                # price basis as the EMAs — close_adj); stocks only.
+                # intraday-cross detection needs the day's adjusted high/low, plus the
+                # close for the 15:15-lock proxy on exits (same price basis as the
+                # EMAs — close_adj); stocks only.
                 hl = _db.read_df(
                     f"""select instrument_id::text as instrument_key, date,
-                               high_adj as high, low_adj as low
+                               high_adj as high, low_adj as low, close_adj as close
                         from {M}.ohlcv_stock
                         where instrument_id::text = any(:ks) and date between :a and :b""",
                     {

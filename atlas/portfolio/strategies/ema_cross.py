@@ -13,6 +13,15 @@ Two modes:
     fill then happens at that same day's close (``same_day_fill``), removing the
     +1-session lag. Used by the stock crossover portfolios that run on the live
     15-min feed. Needs high/low columns (``needs_ohlc``) alongside the EMAs.
+
+Exit rule (``exit``) is independent of both modes — entries are always the golden
+cross; only the close differs:
+  * ``death_cross`` (default): the fast EMA crosses back below the slow. Every
+    book predating crossover v2 uses this, so the default must never move.
+  * ``fast_ema``: price loses the fast EMA itself. Far tighter — on real MRPL at
+    2026-07-29 the EMA13 trigger sat 26.8% above the death-cross level, so the two
+    disagree on the same name on the same day. Run as a twin book, never a silent
+    substitution.
 """
 
 from __future__ import annotations
@@ -25,6 +34,8 @@ from atlas.primitives import ema_cross_price
 
 from .base import StateStrategy
 
+EXIT_RULES = ("death_cross", "fast_ema")
+
 
 class EmaCross(StateStrategy):
     key = "ema_cross"
@@ -35,10 +46,14 @@ class EmaCross(StateStrategy):
         slow: int,
         intraday: bool = False,
         same_day_fill: bool | None = None,
+        exit: str = "death_cross",
     ):
         if int(fast) >= int(slow):
             raise ValueError(f"fast EMA ({fast}) must be shorter than slow ({slow})")
+        if exit not in EXIT_RULES:
+            raise ValueError(f"unknown exit rule {exit!r}; known: {list(EXIT_RULES)}")
         self.fast, self.slow = int(fast), int(slow)
+        self.exit = exit
         self.intraday = bool(intraday)
         # Intraday detection implies same-day fill; but same-day fill can also be
         # used with plain daily-close confirmation (removes the +1-session lag
@@ -72,8 +87,16 @@ class EmaCross(StateStrategy):
     def _intraday_events(self, tech: pd.DataFrame) -> pd.DataFrame:
         """Entry the day the intraday high breaches the provisional up-cross level
         (from the PRIOR close's confirmed EMAs); exit the day the intraday low
-        breaches the down-cross level. One entry/exit per episode — a flat→long
-        state walk suppresses re-firing while a breakout is still unconfirmed.
+        breaches the exit level AND the close still sustains the break. One
+        entry/exit per episode — a flat→long state walk suppresses re-firing while a
+        breakout is still unconfirmed.
+
+        The exit's second condition is the FM's 15:15 lock: a breach that recovers
+        before the close is an alert, not a trade. Daily bars hold no 15:15 price, so
+        the backtest proxies the lock with the close (spec: divergence #2). Real MRPL
+        2026-07-27 is the case that makes this load-bearing — low 161.50 broke EMA13
+        166.74, then closed back up at 169.75. A one-condition rule sells there and is
+        wrong; the sustained break came the next session.
 
         ponytail: an entry whose intraday cross never confirms above (spike that
         closes below and stays there) has no death-cross to exit on. The engine's
@@ -90,8 +113,17 @@ class EmaCross(StateStrategy):
             level = ema_cross_price(pf, ps, fast=self.fast, slow=self.slow)
             hi = g["high"].astype(float)
             lo = g["low"].astype(float)
+            close = g["close"].astype(float)
             up = (below & (hi >= level)).fillna(False)
-            down = (~below & (lo <= level)).fillna(False)
+            # fast_ema books close on price losing the fast EMA itself; death_cross
+            # books on the level where fast would cross below slow. Both need the
+            # break to still hold at the close (the 15:15 lock).
+            exit_level = pf if self.exit == "fast_ema" else level
+            sustained = close <= exit_level
+            down = (lo <= exit_level) & sustained
+            if self.exit == "death_cross":
+                down = down & ~below  # unchanged: only from a confirmed-long state
+            down = down.fillna(False)
 
             state = "flat"
             out: list[tuple[object, str]] = []
