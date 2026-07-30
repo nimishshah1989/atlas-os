@@ -35,6 +35,7 @@ from atlas.primitives import ema_cross_price
 from .base import StateStrategy
 
 EXIT_RULES = ("death_cross", "fast_ema")
+ENTRY_CONFIRMS = ("intraday", "close")
 
 
 class EmaCross(StateStrategy):
@@ -47,18 +48,30 @@ class EmaCross(StateStrategy):
         intraday: bool = False,
         same_day_fill: bool | None = None,
         exit: str = "death_cross",
+        entry_confirm: str = "intraday",
     ):
         if int(fast) >= int(slow):
             raise ValueError(f"fast EMA ({fast}) must be shorter than slow ({slow})")
         if exit not in EXIT_RULES:
             raise ValueError(f"unknown exit rule {exit!r}; known: {list(EXIT_RULES)}")
+        if entry_confirm not in ENTRY_CONFIRMS:
+            raise ValueError(
+                f"unknown entry_confirm {entry_confirm!r}; known: {list(ENTRY_CONFIRMS)}"
+            )
         self.fast, self.slow = int(fast), int(slow)
         self.exit = exit
+        self.entry_confirm = entry_confirm
         self.intraday = bool(intraday)
         # Intraday detection implies same-day fill; but same-day fill can also be
         # used with plain daily-close confirmation (removes the +1-session lag
         # without the intraday fakeouts).
-        self._same_day_fill = bool(intraday if same_day_fill is None else same_day_fill)
+        #
+        # entry_confirm="close" is the exception: there the CONFIRMING CLOSE is the
+        # signal, so filling at that same close would be lookahead. Such an entry
+        # belongs to the next session (at its open, per the runner). An explicit
+        # same_day_fill still wins — sweeps need to force the combination.
+        auto_same_day = intraday and entry_confirm != "close"
+        self._same_day_fill = bool(auto_same_day if same_day_fill is None else same_day_fill)
 
     @property
     def same_day_fill(self) -> bool:
@@ -114,7 +127,15 @@ class EmaCross(StateStrategy):
             hi = g["high"].astype(float)
             lo = g["low"].astype(float)
             close = g["close"].astype(float)
-            up = (below & (hi >= level)).fillna(False)
+            if self.entry_confirm == "close":
+                # The breach only ALERTS; the position opens on the first close that
+                # actually confirms fast > slow. Real MRPL 2026-07-16 is the case this
+                # filters: it breached P* 163.88 on the high of 178.40 but closed at
+                # 157.47, leaving ema13 154.89 still under ema34 155.44 — so the entry
+                # belongs to the 17th, not the 16th.
+                up = (below & (g[ef].astype(float) > g[es].astype(float))).fillna(False)
+            else:
+                up = (below & (hi >= level)).fillna(False)
             # fast_ema books close on price losing the fast EMA itself; death_cross
             # books on the level where fast would cross below slow. Both need the
             # break to still hold at the close (the 15:15 lock).
