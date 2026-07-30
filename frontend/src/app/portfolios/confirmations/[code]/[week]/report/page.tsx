@@ -7,7 +7,13 @@ import Link from 'next/link'
 
 import { PrintButton } from '@/components/confirmations/PrintButton'
 import { SectorPie } from '@/components/confirmations/SectorPie'
-import { cashPct, PORTFOLIO_CODES, PORTFOLIO_NAMES, type PortfolioCode } from '@/lib/confirmations'
+import {
+  cashPct,
+  instrumentHref,
+  PORTFOLIO_CODES,
+  PORTFOLIO_NAMES,
+  type PortfolioCode,
+} from '@/lib/confirmations'
 import { getConfirmation, type CallRow } from '@/lib/queries/confirmations'
 import { formatIST } from '@/lib/format-date'
 
@@ -96,7 +102,12 @@ export default async function ReportPage({ params }: { params: Promise<{ code: s
               {buys.map((k) => (
                 <tr key={k.key} className="border-b border-edge-hair align-top">
                   <td className="py-2">
-                    <div className="font-num font-semibold text-txt-1">{k.symbol}</div>
+                    <Link
+                      href={instrumentHref(k.key)}
+                      className="font-num font-semibold text-txt-1 no-underline hover:text-accent hover:underline"
+                    >
+                      {k.symbol}
+                    </Link>
                     <div className="text-[11.5px] text-txt-3">{k.name}</div>
                   </td>
                   <td className="py-2 text-txt-2">{k.sector ?? '—'}</td>
@@ -127,7 +138,12 @@ export default async function ReportPage({ params }: { params: Promise<{ code: s
               {sells.map((k) => (
                 <tr key={k.key} className="border-b border-edge-hair align-top">
                   <td className="py-2">
-                    <div className="font-num font-semibold text-txt-1">{k.symbol}</div>
+                    <Link
+                      href={instrumentHref(k.key)}
+                      className="font-num font-semibold text-txt-1 no-underline hover:text-accent hover:underline"
+                    >
+                      {k.symbol}
+                    </Link>
                     <div className="text-[11.5px] text-txt-3">{k.name}</div>
                   </td>
                   <td className="py-2 text-txt-2">{k.sector ?? '—'}</td>
@@ -180,7 +196,14 @@ export default async function ReportPage({ params }: { params: Promise<{ code: s
             <tbody>
               {c.resultingBook.map((p) => (
                 <tr key={p.key} className="border-b border-edge-hair">
-                  <td className="py-1.5 font-num text-txt-1">{p.symbol}</td>
+                  <td className="py-1.5">
+                    <Link
+                      href={instrumentHref(p.key)}
+                      className="font-num text-txt-1 no-underline hover:text-accent hover:underline"
+                    >
+                      {p.symbol}
+                    </Link>
+                  </td>
                   <td className="py-1.5 text-txt-2">{p.sector ?? '—'}</td>
                   <td className="py-1.5 text-right font-num tabular-nums text-txt-1">{pct1(p.weightPct)}</td>
                 </tr>

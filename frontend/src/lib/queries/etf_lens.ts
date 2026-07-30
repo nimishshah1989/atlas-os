@@ -141,6 +141,33 @@ export type EtfHolding = {
   lead: number; strength: number | null; rs_3m: number | null
   ret_1d: number | null; ret_1w: number | null; ret_1m: number | null
 }
+/**
+ * The same holdings roll-up, reached by the ETF's NSE price ticker instead of its
+ * Morningstar mstar_id — what the confirmations panel has when the FM picks "etf:MOREALTY".
+ * Reuses SCORED_STOCKS + ROLLUP_SELECT so ETF conviction has exactly ONE definition.
+ *
+ * Returns null in two distinguishable situations the caller must not conflate:
+ *  - the name bridge finds no Morningstar fund for this ticker (~35% of NSE ETFs), or
+ *  - the fund is excluded by EQUITY_ETF_FILTER (gold/silver/debt/international have no
+ *    equity holdings to roll up, so leadership-breadth is undefined, not merely missing).
+ */
+export async function getEtfLensByNseTicker(nseTicker: string): Promise<EtfLensRow | null> {
+  const rows = await sql.unsafe<Record<string, string>[]>(
+    `WITH ${SCORED_STOCKS}
+     SELECT ${ROLLUP_SELECT}
+     FROM atlas_foundation.de_mf_master mm
+     JOIN etf_nse en ON en.mstar_id = mm.mstar_id
+     JOIN atlas_foundation.de_etf_holdings h ON h.ticker = mm.mstar_id AND h.weight IS NOT NULL
+     JOIN scored s ON s.instrument_id = h.instrument_id
+     WHERE en.nse_ticker = $1 AND ${EQUITY_ETF_FILTER}
+     GROUP BY mm.mstar_id, mm.fund_name, mm.category_name, mm.expense_ratio
+     HAVING count(h.instrument_id) > 0
+     LIMIT 1`,
+    [nseTicker],
+  )
+  return rows.length === 0 ? null : mapRow(rows[0])
+}
+
 export type EtfLensDetail = EtfLensRow & {
   isin: string | null; amc: string | null; benchmark: string | null
   holdings: EtfHolding[]
