@@ -7,7 +7,7 @@ import Link from 'next/link'
 
 import { ConfirmationEditor } from '@/components/confirmations/ConfirmationEditor'
 import { PORTFOLIO_CODES, PORTFOLIO_NAMES, type PortfolioCode } from '@/lib/confirmations'
-import { getConfirmation, getOpeningBook } from '@/lib/queries/confirmations'
+import { getConfirmation, getMaxCap, getOpeningBook } from '@/lib/queries/confirmations'
 import { formatIST } from '@/lib/format-date'
 
 export const metadata = { title: 'Confirmation · Atlas' }
@@ -22,7 +22,11 @@ export default async function ConfirmationEditorPage({
   if (!/^\d{4}-\d{2}-\d{2}$/.test(week)) notFound()
   const pf = code as PortfolioCode
 
-  const [existing, openingBook] = await Promise.all([getConfirmation(pf, week), getOpeningBook(pf, week)])
+  const [existing, openingBook, maxCapPct] = await Promise.all([
+    getConfirmation(pf, week),
+    getOpeningBook(pf, week),
+    getMaxCap(pf),
+  ])
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-5 px-6 py-7">
@@ -54,6 +58,7 @@ export default async function ConfirmationEditorPage({
         week={week}
         openingBook={existing?.openingBook ?? openingBook}
         initial={existing}
+        maxCapPct={existing?.maxCapPct ?? maxCapPct}
       />
     </div>
   )

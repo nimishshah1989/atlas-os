@@ -40,7 +40,7 @@ function CallNotes({ calls }: { calls: CallRow[] }) {
   )
 }
 
-const pct2 = (v: number) => `${v.toFixed(2)}%`
+const pct1 = (v: number) => `${v.toFixed(1)}%`
 const inr = (v: number | null) => (v == null ? '—' : `₹${v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)
 
 export default async function ReportPage({ params }: { params: Promise<{ code: string; week: string }> }) {
@@ -100,7 +100,7 @@ export default async function ReportPage({ params }: { params: Promise<{ code: s
                     <div className="text-[11.5px] text-txt-3">{k.name}</div>
                   </td>
                   <td className="py-2 text-txt-2">{k.sector ?? '—'}</td>
-                  <td className="py-2 text-right font-num tabular-nums text-txt-1">{pct2(k.weightPct)}</td>
+                  <td className="py-2 text-right font-num tabular-nums text-txt-1">{pct1(k.weightPct)}</td>
                   <td className="py-2 text-right font-num tabular-nums text-txt-2">{inr(k.triggerPrice)}</td>
                   <td className="py-2 text-right font-num tabular-nums text-txt-2">{inr(k.stopPrice)}</td>
                 </tr>
@@ -131,7 +131,7 @@ export default async function ReportPage({ params }: { params: Promise<{ code: s
                     <div className="text-[11.5px] text-txt-3">{k.name}</div>
                   </td>
                   <td className="py-2 text-txt-2">{k.sector ?? '—'}</td>
-                  <td className="py-2 pr-6 text-right font-num tabular-nums text-txt-1">{pct2(k.weightPct)}</td>
+                  <td className="py-2 pr-6 text-right font-num tabular-nums text-txt-1">{pct1(k.weightPct)}</td>
                   <td className="py-2 text-txt-2">{k.reasons.join(' · ') || '—'}</td>
                 </tr>
               ))}
@@ -182,13 +182,13 @@ export default async function ReportPage({ params }: { params: Promise<{ code: s
                 <tr key={p.key} className="border-b border-edge-hair">
                   <td className="py-1.5 font-num text-txt-1">{p.symbol}</td>
                   <td className="py-1.5 text-txt-2">{p.sector ?? '—'}</td>
-                  <td className="py-1.5 text-right font-num tabular-nums text-txt-1">{pct2(p.weightPct)}</td>
+                  <td className="py-1.5 text-right font-num tabular-nums text-txt-1">{pct1(p.weightPct)}</td>
                 </tr>
               ))}
               <tr className="border-b border-edge-hair">
                 <td className="py-1.5 font-num text-txt-2">Cash</td>
                 <td />
-                <td className="py-1.5 text-right font-num tabular-nums text-txt-2">{pct2(cash)}</td>
+                <td className="py-1.5 text-right font-num tabular-nums text-txt-2">{pct1(cash)}</td>
               </tr>
               <tr>
                 <td className="py-1.5 font-num font-semibold text-txt-1">Total</td>

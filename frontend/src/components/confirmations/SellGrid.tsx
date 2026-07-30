@@ -82,7 +82,7 @@ export function SellGrid({
                 <div>
                   <Label>Held</Label>
                   <div className="py-1.5 text-right font-num text-[12.5px] tabular-nums text-txt-2">
-                    {held.toFixed(2)}%
+                    {held.toFixed(1)}%
                   </div>
                 </div>
 
@@ -90,7 +90,7 @@ export function SellGrid({
                   <Label>Sell %</Label>
                   <input
                     type="number"
-                    step="0.01"
+                    step="0.1"
                     min="0"
                     readOnly={readOnly}
                     value={r.weightPct || ''}
@@ -179,7 +179,7 @@ export function SellGrid({
           <option value="">+ Add sell from the book…</option>
           {available.map((p) => (
             <option key={p.key} value={p.key}>
-              {p.symbol} — {p.weightPct.toFixed(2)}%
+              {p.symbol} — {p.weightPct.toFixed(1)}%
             </option>
           ))}
         </select>

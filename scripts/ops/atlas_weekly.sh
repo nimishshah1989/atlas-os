@@ -24,6 +24,10 @@ step "assign_sectors"      $PY scripts/foundation/assign_sectors.py
 # populate_etf_isin MUST follow build_universe: build_universe recreates ETF rows with a
 # NULL isin, so the Morningstar-holdings bridge has to be re-filled after every rebuild.
 step "populate_etf_isin"   $PY scripts/foundation/populate_etf_isin.py
+# etf_sector MUST follow build_universe for the same reason — recreated ETF rows come back
+# with a NULL sector, which would silently re-break the model-portfolio sector pies (the
+# Passive book is 100% ETFs). Idempotent; fails loudly if any active ETF ends up unlabelled.
+step "etf_sector"          $PY scripts/foundation/etf_sector.py
 
 step "ingest_fund_master"  $PY scripts/foundation/ingest_fund_master.py
 step "ingest_mf_holdings"  $PY scripts/foundation/ingest_mf_holdings.py

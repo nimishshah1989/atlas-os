@@ -1,8 +1,9 @@
 // Fold + validation for the Monday confirmations.
-// RULE #0: the starting book below is the FM's REAL Multi-Asset Leaders model
-// portfolio as sent to the desk (Goldbees 10 · Silverbees 5 · Divis 8 · Jana 8 ·
-// Pharmabees 8 · HDFCSML250 12 · PPL 8 · Nykaa 8 · Biocon 8 · Welspun 8 · Lloyds 8
-// · MO Realty 8 = 99% invested, 1% cash). No weight here is invented.
+// RULE #0: the starting book below is the FM's REAL Multi Asset Alpha model portfolio
+// as sent to the desk (Goldbees 10 · Silverbees 5 · Divis 8 · Jana 8 · Pharmabees 8 ·
+// HDFCSML250 12 · PPL 8 · Nykaa 8 · Biocon 8 · Welspun 8 · Lloyds 8 · MO Realty 8 =
+// 99% invested, 1% cash). Every symbol, name and sector below was resolved against
+// atlas_foundation.instrument_master (2026-07-30) — nothing here is invented.
 import { describe, it, expect } from 'vitest'
 
 import {
@@ -12,24 +13,27 @@ import {
   cashMovement,
   mondayOf,
   isoDate,
+  round1,
+  sellCandidates,
+  instrumentHref,
   type BookPosition,
   type Call,
 } from '../confirmations'
 
 // The FM's real book, verbatim.
 const REAL_BOOK: BookPosition[] = [
-  { key: 'etf:GOLDBEES', symbol: 'GOLDBEES', name: 'Nippon Gold ETF', sector: 'Commodity', weightPct: 10 },
-  { key: 'etf:SILVERBEES', symbol: 'SILVERBEES', name: 'Nippon Silver ETF', sector: 'Commodity', weightPct: 5 },
-  { key: 'stock:DIVISLAB', symbol: 'DIVISLAB', name: 'Divis Laboratories', sector: 'Healthcare', weightPct: 8 },
-  { key: 'stock:JSFB', symbol: 'JSFB', name: 'Jana Small Finance Bank', sector: 'Financial Services', weightPct: 8 },
-  { key: 'etf:PHARMABEES', symbol: 'PHARMABEES', name: 'Nippon Pharma ETF', sector: 'Healthcare', weightPct: 8 },
-  { key: 'etf:HDFCSML250', symbol: 'HDFCSML250', name: 'HDFC Smallcap 250 ETF', sector: 'Diversified', weightPct: 12 },
-  { key: 'stock:PPLPHARMA', symbol: 'PPLPHARMA', name: 'Piramal Pharma', sector: 'Healthcare', weightPct: 8 },
-  { key: 'stock:NYKAA', symbol: 'NYKAA', name: 'FSN E-Commerce (Nykaa)', sector: 'Consumer', weightPct: 8 },
-  { key: 'stock:BIOCON', symbol: 'BIOCON', name: 'Biocon', sector: 'Healthcare', weightPct: 8 },
-  { key: 'stock:WELSPUNLIV', symbol: 'WELSPUNLIV', name: 'Welspun Living', sector: 'Consumer', weightPct: 8 },
-  { key: 'stock:LLOYDSENGG', symbol: 'LLOYDSENGG', name: 'Lloyds Engineering Works', sector: 'Capital Goods', weightPct: 8 },
-  { key: 'stock:MOREALTY', symbol: 'MOREALTY', name: 'Motilal Oswal Realty', sector: 'Realty', weightPct: 8 },
+  { key: 'etf:GOLDBEES', symbol: 'GOLDBEES', name: 'NIPPON INDIA ETF GOLD BEES', sector: 'Gold', weightPct: 10 },
+  { key: 'etf:SILVERBEES', symbol: 'SILVERBEES', name: 'NIPPON INDIA SILVER ETF', sector: 'Silver', weightPct: 5 },
+  { key: 'stock:DIVISLAB', symbol: 'DIVISLAB', name: "Divi's Laboratories Limited", sector: 'Pharma', weightPct: 8 },
+  { key: 'stock:JSFB', symbol: 'JSFB', name: 'Jana Small Finance Bank Limited', sector: 'Banking', weightPct: 8 },
+  { key: 'etf:PHARMABEES', symbol: 'PHARMABEES', name: 'NIPPON INDIA NIFTY PHARMA ETF', sector: 'Pharma', weightPct: 8 },
+  { key: 'etf:HDFCSML250', symbol: 'HDFCSML250', name: 'HDFC NIFTY SMALLCAP 250 ETF', sector: 'Broad Index', weightPct: 12 },
+  { key: 'stock:PPLPHARMA', symbol: 'PPLPHARMA', name: 'Piramal Pharma Limited', sector: 'Pharma', weightPct: 8 },
+  { key: 'stock:NYKAA', symbol: 'NYKAA', name: 'FSN E-Commerce Ventures Limited', sector: 'Digital', weightPct: 8 },
+  { key: 'stock:BIOCON', symbol: 'BIOCON', name: 'Biocon Limited', sector: 'Pharma', weightPct: 8 },
+  { key: 'stock:WELSPUNLIV', symbol: 'WELSPUNLIV', name: 'Welspun Living Limited', sector: 'Consumer Durables', weightPct: 8 },
+  { key: 'stock:LLOYDSENGG', symbol: 'LLOYDSENGG', name: 'LLOYDS ENGINEERING WORKS LIMITED', sector: 'Capital Goods', weightPct: 8 },
+  { key: 'etf:MOREALTY', symbol: 'MOREALTY', name: 'MOTILAL OSWAL NIFTY REALTY ETF', sector: 'Realty', weightPct: 8 },
 ]
 
 const buy = (over: Partial<Call> & Pick<Call, 'key' | 'weightPct'>): Call => ({
@@ -53,6 +57,74 @@ const sell = (over: Partial<Call> & Pick<Call, 'key' | 'weightPct'>): Call => ({
 })
 
 const weightOf = (book: BookPosition[], key: string) => book.find((p) => p.key === key)?.weightPct
+
+describe('instrumentHref — every ticker on the page is a link to its deep dive', () => {
+  it('sends a stock to the stocks page', () => {
+    expect(instrumentHref('stock:BIOCON')).toBe('/stocks/BIOCON')
+  })
+
+  it('sends an ETF to the ETFs page', () => {
+    expect(instrumentHref('etf:GOLDBEES')).toBe('/etfs/GOLDBEES')
+  })
+})
+
+describe('round1 — weights carry one decimal, which is all the desk needs', () => {
+  it('keeps a weight that is already one decimal', () => {
+    expect(round1(7.5)).toBe(7.5)
+  })
+
+  it('rounds a two-decimal entry to one', () => {
+    expect(round1(7.46)).toBe(7.5)
+    expect(round1(7.44)).toBe(7.4)
+  })
+
+  it('leaves whole numbers alone', () => {
+    expect(round1(12)).toBe(12)
+  })
+
+  it('does not introduce float noise', () => {
+    expect(round1(0.1 + 0.2)).toBe(0.3)
+  })
+})
+
+describe('sellCandidates — a position at the cap can only come down', () => {
+  it('pre-fills nothing when no cap has been set', () => {
+    expect(sellCandidates(REAL_BOOK, 0)).toEqual([])
+  })
+
+  it('pre-fills the position that is at the cap', () => {
+    // Alpha's cap is 12: HDFCSML250 sits exactly there.
+    const keys = sellCandidates(REAL_BOOK, 12).map((p) => p.symbol)
+    expect(keys).toEqual(['HDFCSML250'])
+  })
+
+  it('pre-fills within 1% below the cap, not further', () => {
+    // cap 9 => 8%+ qualifies (9-1); the 5% Silverbees must not.
+    const keys = sellCandidates(REAL_BOOK, 9).map((p) => p.symbol)
+    expect(keys).toContain('HDFCSML250') // 12, above cap
+    expect(keys).toContain('GOLDBEES') // 10, above cap
+    expect(keys).toContain('BIOCON') // 8, exactly cap-1
+    expect(keys).not.toContain('SILVERBEES') // 5, well under
+  })
+
+  it('pre-fills every name when the whole book sits at the cap', () => {
+    // India XI holds eleven names at 9% with a 9% cap — all of them are maxed.
+    const flat: BookPosition[] = ['A', 'B', 'C'].map((s) => ({
+      key: `stock:${s}`,
+      symbol: s,
+      name: s,
+      sector: 'IT',
+      weightPct: 9,
+    }))
+    expect(sellCandidates(flat, 9)).toHaveLength(3)
+  })
+
+  it('orders the heaviest position first', () => {
+    const keys = sellCandidates(REAL_BOOK, 8).map((p) => p.symbol)
+    expect(keys[0]).toBe('HDFCSML250')
+    expect(keys[1]).toBe('GOLDBEES')
+  })
+})
 
 describe('isoDate — normalising what postgres hands back for a DATE column', () => {
   it('passes a plain YYYY-MM-DD string through', () => {

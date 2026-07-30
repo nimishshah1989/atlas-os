@@ -8,7 +8,7 @@ import Link from 'next/link'
 import { PortfolioTabs } from '@/components/confirmations/PortfolioTabs'
 import { BookCard } from '@/components/confirmations/BookCard'
 import { PORTFOLIO_CODES, PORTFOLIO_NAMES, mondayOf } from '@/lib/confirmations'
-import { getOpeningBook, listConfirmations } from '@/lib/queries/confirmations'
+import { getMaxCap, getOpeningBook, listConfirmations } from '@/lib/queries/confirmations'
 
 export const metadata = { title: 'Monday confirmations · Atlas' }
 
@@ -20,6 +20,7 @@ export default async function ConfirmationsPage() {
       name: PORTFOLIO_NAMES[code],
       book: await getOpeningBook(code),
       history: await listConfirmations(code),
+      maxCapPct: await getMaxCap(code),
     })),
   )
 

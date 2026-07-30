@@ -7,6 +7,7 @@ import sql from '@/lib/db'
 import {
   foldBook,
   isoDate,
+  round1,
   validateCalls,
   type BookPosition,
   type Call,
@@ -42,6 +43,8 @@ export type Confirmation = {
   openingBook: BookPosition[]
   /** Stored at publish; for a draft this is the live preview of the fold. */
   resultingBook: BookPosition[]
+  /** Max position cap % for this book; 0 = unset, so nothing pre-fills the sell side. */
+  maxCapPct: number
 }
 
 const num = (v: unknown): number | null => (v == null ? null : Number(v))
@@ -66,6 +69,24 @@ const toCall = (r: Record<string, unknown>): CallRow => ({
  * The portfolio as it stands: the most recent published book, ignoring drafts
  * and (when publishing week W) anything dated W or later.
  */
+/** Max position cap % for a book, from atlas_thresholds. 0 means the FM has not set one. */
+export async function getMaxCap(code: PortfolioCode): Promise<number> {
+  const rows = await sql<Array<{ threshold_value: string }>>`
+    SELECT threshold_value FROM atlas_foundation.atlas_thresholds
+    WHERE threshold_key = ${`mpf_max_cap.${code}`} AND is_active`
+  return rows[0] ? round1(Number(rows[0].threshold_value)) : 0
+}
+
+/** Clamped to [0, 100] server-side — the route never trusts the posted number. */
+export async function setMaxCap(code: PortfolioCode, capPct: number): Promise<number> {
+  const clamped = round1(Math.min(100, Math.max(0, capPct)))
+  await sql`
+    UPDATE atlas_foundation.atlas_thresholds
+    SET threshold_value = ${clamped}, last_modified_by = 'confirmations', last_modified_at = now()
+    WHERE threshold_key = ${`mpf_max_cap.${code}`}`
+  return clamped
+}
+
 export async function getOpeningBook(code: PortfolioCode, before?: string): Promise<BookPosition[]> {
   const rows = await sql<Array<{ resulting_book: BookPosition[] }>>`
     SELECT resulting_book
@@ -117,7 +138,7 @@ export async function getConfirmation(code: PortfolioCode, weekOf: string): Prom
   const h = head[0]
   const id = Number(h.confirmation_id)
 
-  const [calls, evidence, openingBook] = await Promise.all([
+  const [calls, evidence, openingBook, maxCapPct] = await Promise.all([
     sql<Array<Record<string, unknown>>>`
       SELECT call_id, side, instrument_key, symbol, name, sector, weight_pct,
              trigger_price, stop_price, reasons, comment, position,
@@ -131,6 +152,7 @@ export async function getConfirmation(code: PortfolioCode, weekOf: string): Prom
       WHERE confirmation_id = ${id}
       ORDER BY position, evidence_id`,
     getOpeningBook(code, weekOf),
+    getMaxCap(code),
   ])
 
   const callRows = calls.map(toCall)
@@ -150,6 +172,7 @@ export async function getConfirmation(code: PortfolioCode, weekOf: string): Prom
     })),
     openingBook,
     resultingBook: (h.resulting_book as BookPosition[] | null) ?? foldBook(openingBook, callRows),
+    maxCapPct,
   }
 }
 
@@ -195,7 +218,7 @@ export async function saveDraft(
             (confirmation_id, side, instrument_key, symbol, name, sector, weight_pct,
              trigger_price, stop_price, reasons, comment, position, chart_image, chart_mime)
           VALUES (${id}, ${c.side}, ${c.key}, ${c.symbol}, ${c.name}, ${c.sector},
-                  ${c.weightPct}, ${c.triggerPrice}, ${c.stopPrice}, ${c.reasons},
+                  ${round1(c.weightPct)}, ${c.triggerPrice}, ${c.stopPrice}, ${c.reasons},
                   ${c.comment}, ${i}, ${img?.chart_image ?? null}, ${img?.chart_mime ?? null})`
       } catch (e) {
         // UNIQUE(confirmation_id, instrument_key) — the name is already on the
