@@ -216,6 +216,115 @@ from the page and must appear:
 10. A link between the twin books so either page reaches the other.
 11. MF golden-cross books: state plainly that they cannot do intraday (one NAV per day) and stay on daily-NAV logic.
 
+### I. Decision trail — every trade says why it happened
+
+**Current state:** `portfolio_trades.rationale` (nullable `text`) already exists and is
+already populated for desk fills via `desk_rationale()`
+([portfolio_run.py:545](../../../scripts/foundation/portfolio_run.py#L545)) — **80/80
+desk trades carry it, 0/25,584 `signal` trades do.** The frontend query never selects
+it, so [TradesTable.tsx:72](../../../frontend/src/components/portfolios/TradesTable.tsx#L72)
+shows only the bare `reason` word. The column is the right home; it is simply unused
+by the strategy path. No new mechanism.
+
+#### I.1 One new column
+
+`reason` stays the CHECK-constrained *kind*; `rationale` carries the prose. Conviction
+is a **number you will want to sort and filter on**, so it gets its own column rather
+than being parsed back out of a sentence:
+
+```sql
+ALTER TABLE atlas_foundation.portfolio_trades
+  ADD COLUMN composite_at_signal numeric(20,4);
+```
+
+Nullable — historical rows stay NULL until their next backtest rebuild repopulates them.
+No change to the `reason` CHECK: a death-cross exit and an EMA13 exit are both `signal`,
+and the book's own `exit` param already says which is which.
+
+#### I.2 Where it is generated
+
+Inside `engine._book()`. The engine is the **only** place that knows the full decision
+context at the moment of the fill: the sorted candidate list, each name's composite, how
+many slots were open, who was passed over, and whether sizing hit the 8% cap or ran out
+of cash. Reconstructing that after the fact is guesswork; generating it there is free.
+
+The engine stays pure — the rationale is composed from values already in scope and
+returned in the trades frame. No new I/O.
+
+#### I.3 What each rationale says
+
+**Buy (signal):** rule fired, both levels, both dates, conviction, rank, slots, who lost
+the slot, and why the size is what it is.
+
+```
+EMA13 crossed above EMA34 intraday on 16-Jul at ₹163.88; close confirmed ₹173.33.
+Filled at 17-Jul open. Conviction 61.4 — ranked #2 of 5 names that crossed, 3 slots
+open. Passed over: SUNPHARMA (54.2), TATAMOTORS (49.8). Sized to the 8% cap.
+```
+
+Cash-constrained variant, so a small position never looks like a mistake:
+
+```
+... Sized to ₹73,673 — cash-limited, not the 8% cap; 4 names shared the remaining cash.
+```
+
+**Sell (signal), death-cross book:**
+
+```
+EMA13 crossed below EMA34 intraday at ₹121.22; still below at 15:15 (₹120.40).
+Closed at that day's close. Exit rule for this book is the death cross.
+```
+
+**Sell (signal), EMA13 book:**
+
+```
+Price broke below EMA13 ₹165.55 intraday at ₹163.40; still below at 15:15 (₹162.90).
+Closed at that day's close. Exit rule for this book is the EMA13 break.
+```
+
+**Sell (stop)** — not used by these books, but the generator is shared:
+
+```
+Stop hit: prior close ₹412.30 is more than 10% below entry ₹458.10. Sold at this
+session's close.
+```
+
+**Buy (inception)** — FM baskets:
+
+```
+FM basket pick at inception, sized to its target weight of 25% of capital.
+```
+
+Rationale carries **reasoning only**. Numbers that already have columns
+(`realized_pnl`, `holding_days`, `cost`, `tax`) are never restated in prose.
+
+#### I.4 Why-this-one-and-not-that-one
+
+The "passed over" clause is the part that answers the FM's actual question. `_enter`
+already builds the ranked candidate list and slices it to `open_slots`
+([engine.py:224-225](../../../atlas/portfolio/engine.py#L224-L225)); the dropped names are
+currently discarded silently. They are not trades, so they get no row of their own —
+naming them in the rationale of the trades that *did* fill is the whole answer at zero
+schema cost.
+
+#### I.5 Shared-engine consequence (deliberate, not scope creep)
+
+`_book()` serves all 19 books and all 5 reasons. Adding the generator there means the
+Rank, Desk and MF books get commentary too. That is the correct outcome: a NULL
+rationale on some rows next to prose on others reads as broken. Desk fills keep their
+agent-authored thesis — `desk_rationale()` wins where it is already set, the generator
+never overwrites it.
+
+Backtest rows get it free on the next rebuild (§H), so the full 8-year trade log
+becomes self-documenting.
+
+#### I.6 Frontend
+
+- Trades query selects `rationale` + `composite_at_signal`.
+- `TradesTable` gains a sortable **Conviction** column and a **Why** cell. Prose is long, so the cell truncates with the full text on hover/expand rather than wrecking the row height.
+- **Twin cross-reference is derived at read time, not stored.** On a 13/34 page, show what the twin book did with the same name on the same date ("twin: still holding"). Both books' trades are already queryable, so this needs no writer-side coupling between books — and it stays live rather than frozen into a string at book time.
+- CSV export includes both new fields (per the frontend rule that every table is exportable).
+
 ### H. Backtest freshness (the FM's original complaint)
 
 The 13/34 backtest curve is frozen at **2026-07-21** because nothing rebuilds it —
@@ -237,8 +346,15 @@ Add `portfolio_backtest_rebuild` as a step in [atlas_weekly.sh](../../../scripts
 
 ## Schema
 
-One new table. No change to `run_type` or `reason` CHECKs (both books use
-`live`/`backtest` and `signal`/`inception`).
+One new table and one new column. No change to `run_type` or `reason` CHECKs (both
+books use `live`/`backtest` and `signal`/`inception`).
+
+```sql
+-- decision trail (§I): conviction gets a real column so it is sortable/filterable;
+-- the prose lives in the existing portfolio_trades.rationale
+ALTER TABLE atlas_foundation.portfolio_trades
+  ADD COLUMN composite_at_signal numeric(20,4);
+```
 
 ```sql
 CREATE TABLE atlas_foundation.crossover_alerts (
@@ -282,6 +398,14 @@ CREATE INDEX ON atlas_foundation.crossover_alerts (instrument_id);
 14. `scripts/ops/schema_gate.py` still 0.
 15. After the weekly orchestrator runs, every book's backtest `max(date)` is within 7 days of EOD.
 16. Zero synthetic data anywhere — every test asserts on real records pulled from `atlas_foundation` (rule #0).
+17. **Every** trade written by the engine has a non-NULL `rationale`. `select count(*) from portfolio_trades where run_type='live' and rationale is null` returns 0 for rows booked after switch-on.
+18. Every `signal` buy has a non-NULL `composite_at_signal` matching `atlas_lens_scores_daily.composite` as-of that trade's signal date, asserted against real stored scores.
+19. A buy rationale on a day where candidates exceeded open slots **names the passed-over instruments and their scores**; the count of named also-rans equals `candidates − slots_filled`.
+20. A cash-limited buy says so explicitly and a cap-limited buy says so; the two are distinguishable from the text alone.
+21. Death-cross and EMA13 sell rationales state different rules and different levels for the same symbol on the same date across the twin books.
+22. Desk fills keep their agent-authored thesis — the generator never overwrites a rationale that `desk_rationale()` already set (assert on a real desk trade).
+23. `TradesTable` renders a sortable Conviction column and a Why cell; CSV export contains both fields.
+24. The twin cross-reference is computed at read time — no stored rationale string mentions the other book.
 
 ---
 
@@ -294,9 +418,11 @@ CREATE INDEX ON atlas_foundation.crossover_alerts (instrument_id);
 | Integration | `EmaCross(exit=...)` over real 13/34 technicals; MRPL 16-Jul entry; both variants' divergence on a real name | +4 |
 | Integration | `replay()` open-fill and same-close-fill against real stored OHLCV; 19-book default-unchanged sweep | +3 |
 | Integration | `crossover_monitor` dedup across repeated runs; 15:15 promote/disarm | +3 |
-| Gate | `validate_portfolios.py` extended to assert both books' fill prices match the stored OHLCV column their `*_fill` param names | +1 |
+| Unit | Rationale generator: all 5 reasons; cap-limited vs cash-limited wording; also-ran clause count; death-cross vs EMA13 phrasing; desk-thesis not overwritten | +7 |
+| Integration | `composite_at_signal` matches `atlas_lens_scores_daily` as-of the signal date on real trades; no NULL rationale after a real replay | +2 |
+| Gate | `validate_portfolios.py` extended to assert both books' fill prices match the stored OHLCV column their `*_fill` param names, **and** that no engine-written trade has a NULL rationale | +1 |
 
-All fixtures are real DB reads. No invented inputs (rule #0).
+All fixtures are real DB reads. No invented inputs (rule #0). **31 tests total.**
 
 ---
 
@@ -307,6 +433,8 @@ All fixtures are real DB reads. No invented inputs (rule #0).
 | Params on 5 books | Restore prior `params` JSONB (captured pre-change). Behaviour is param-driven, so this alone reverts the signal rule. |
 | New EMA13 book | `status='retired'` on `portfolio_master`; its rows are namespaced by `portfolio_id`. |
 | `crossover_alerts` table | `DROP TABLE` — read-only feed, nothing else references it. |
+| `composite_at_signal` column | `DROP COLUMN` — additive and nullable; nothing computes off it. |
+| Rationale generator | Text-only, no behavioural effect. Reverting the commit leaves `rationale` NULL on new rows exactly as today. |
 | Engine `*_fill` enums | Defaults reproduce current behaviour (AC #5), so unset params = today's system. |
 | 5-min cron step | Remove the line from `atlas_intraday.sh`; the alerter writes no trades. |
 | Telegram removals | Revert the commit; `send_message_sync` is a one-line call per site. |
@@ -328,9 +456,12 @@ Deploy per [docs/deploy-hygiene.md](../../deploy-hygiene.md): build to completio
 | F — Telegram reduction (6 sites + systemd unit) | 1h |
 | G — frontend copy, 11 items, both books cross-linked | 3h |
 | H — weekly backtest rebuild step | 30m |
-| Tests (22) + validator gate | 4h |
+| I — rationale generator in `_book()`, all 5 reasons | 2h |
+| I — `composite_at_signal` column + migration | 30m |
+| I — trades-table Conviction + Why columns, twin cross-ref, CSV | 2h |
+| Tests (31) + validator gate | 5h |
 | Backtest re-run + verification of all 4 books | 2h |
-| **Total** | **~21h** |
+| **Total** | **~26h** |
 
 ---
 
@@ -348,11 +479,14 @@ Deploy per [docs/deploy-hygiene.md](../../deploy-hygiene.md): build to completio
 | `scripts/ops/atlas_weekly.sh` | add `portfolio_backtest_rebuild` |
 | `scripts/foundation/desk_monitor.py:103` · `desk_orders.py:385-387` · `qa_weekly.py:106-108` · `atlas_daily.sh:149` · `atlas_weekly.sh:60` | remove `send_message_sync` |
 | `systemd/atlas-intraday-notify.service` | remove (phantom script) |
-| `migrations/versions/` | `crossover_alerts` |
+| `migrations/versions/` | `crossover_alerts` + `portfolio_trades.composite_at_signal` |
+| `atlas/portfolio/engine.py` (`_book`, `_enter`) | rationale generator; conviction + also-rans into the trades frame |
 | `frontend/src/lib/strategyDescription.ts` | crossover-v2 explainer, 11 items |
 | `frontend/src/components/portfolios/PortfolioDetailV4.tsx` | twin-book cross-link; divergence note |
-| `scripts/foundation/validate_portfolios.py` | fill-price assertion |
-| `tests/unit/` · `tests/integration/portfolio/` | 22 tests |
+| `frontend/src/components/portfolios/TradesTable.tsx:72` | sortable Conviction column; Why cell; CSV fields |
+| `frontend/src/lib/queries/portfolios.ts` | select `rationale` + `composite_at_signal`; twin read-time lookup |
+| `scripts/foundation/validate_portfolios.py` | fill-price + no-NULL-rationale assertions |
+| `tests/unit/` · `tests/integration/portfolio/` | 31 tests |
 
 ---
 
