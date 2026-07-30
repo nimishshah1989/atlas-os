@@ -430,7 +430,11 @@ def replay(
                     price,
                     "signal",
                     extra_cost=el,
-                    rationale=notes.get((k, sig)),
+                    # AC17: every engine-written row says something. EmaCross supplies
+                    # the rule and the level; rank/policy strategies supply nothing yet,
+                    # and a NULL beside prose reads as a bug rather than as "no note".
+                    rationale=notes.get((k, sig))
+                    or "Closed on the strategy's exit signal for this book.",
                 )
                 entry_date.pop(k, None)
                 entry_price.pop(k, None)

@@ -148,7 +148,7 @@ class EmaCross(StateStrategy):
             level = ema_cross_price(pf, ps, fast=self.fast, slow=self.slow)
             hi = g["high"].astype(float)
             lo = g["low"].astype(float)
-            close = g["close"].astype(float)
+            close = cast("pd.Series", g["close"].astype(float))
             if self.entry_confirm == "close":
                 # The breach only ALERTS; the position opens on the first close that
                 # actually confirms fast > slow. Real MRPL 2026-07-16 is the case this
@@ -169,21 +169,51 @@ class EmaCross(StateStrategy):
             down = down.fillna(False)
 
             state = "flat"
-            out: list[tuple[object, str]] = []
+            out: list[tuple[object, str, str]] = []
             for idx in g.index[up | down]:
                 if state == "flat" and up.at[idx]:
-                    out.append((g.at[idx, "date"], "entry"))
+                    out.append((g.at[idx, "date"], "entry", self._entry_note(level, close, idx)))
                     state = "long"
                 elif state == "long" and down.at[idx]:
-                    out.append((g.at[idx, "date"], "exit"))
+                    out.append((g.at[idx, "date"], "exit", self._exit_note(exit_level, close, idx)))
                     state = "flat"
             if out:
-                fr = pd.DataFrame(out, columns=pd.Index(["date", "event"]))
+                fr = pd.DataFrame(out, columns=pd.Index(["date", "event", "note"]))
                 fr["instrument_key"] = k
                 frames.append(fr)
 
+        cols = pd.Index(["instrument_key", "date", "event", "note"])
         if not frames:
-            return pd.DataFrame(columns=pd.Index(["instrument_key", "date", "event"]))
+            return pd.DataFrame(columns=cols)
         out_df = pd.DataFrame(pd.concat(frames, ignore_index=True))
-        out_df = pd.DataFrame(out_df[["instrument_key", "date", "event"]]).sort_values(by="date")
-        return out_df.reset_index(drop=True)
+        return pd.DataFrame(out_df[cols]).sort_values(by="date").reset_index(drop=True)
+
+    # ── decision trail, strategy half (spec §I.2) ──────────────────────────
+    # The engine never sees an EMA, so only the strategy can say which rule fired and
+    # at what price. Levels quoted are always from the PRIOR close's confirmed EMAs —
+    # the same no-lookahead basis the signal itself used.
+
+    def _entry_note(self, level: pd.Series, close: pd.Series, idx) -> str:
+        f, s = self.fast, self.slow
+        if self.entry_confirm == "close":
+            return (
+                f"EMA{f} crossed above EMA{s}; the close at ₹{close.at[idx]:,.2f} confirmed it "
+                f"(intraday cross level was ₹{level.at[idx]:,.2f}). Fills at the next open."
+            )
+        return (
+            f"EMA{f} crossed above EMA{s} intraday — price breached ₹{level.at[idx]:,.2f}, "
+            f"the level where the two meet. Closed at ₹{close.at[idx]:,.2f}."
+        )
+
+    def _exit_note(self, exit_level: pd.Series, close: pd.Series, idx) -> str:
+        f, s = self.fast, self.slow
+        lvl, cl = exit_level.at[idx], close.at[idx]
+        what = (
+            f"Price broke below EMA{f} ₹{lvl:,.2f} intraday"
+            if self.exit == "fast_ema"
+            else f"EMA{f} crossed below EMA{s} intraday — price broke ₹{lvl:,.2f}"
+        )
+        return (
+            f"{what}, and was still below at the 15:15 lock "
+            f"(close ₹{cl:,.2f}). Sold at that close."
+        )
