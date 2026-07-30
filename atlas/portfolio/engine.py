@@ -25,6 +25,12 @@ import pandas as pd
 _MONEY = Decimal("0.01")
 _FUND_QTY = Decimal("0.001")  # MF units trade in fractions; stocks/ETFs whole units
 
+# Per-side fill timing. "same_*" executes on the event's OWN session, "next_*" on the
+# following one; the suffix names the price. Crossover v2 needs the two sides on
+# different clocks (entry next_open, exit same_close), which one bool cannot express.
+ENTRY_FILLS = ("next_close", "next_open", "same_close")
+EXIT_FILLS = ("next_close", "same_close")
+
 
 @dataclass(frozen=True)
 class PortfolioConfig:
@@ -60,6 +66,9 @@ def replay(
     stop_pct: Decimal | None = None,
     stop_trail: Decimal | None = None,
     same_day_fill: bool = False,
+    entry_fill: str | None = None,
+    exit_fill: str | None = None,
+    open_prices: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Run the day-loop over `loop_dates` (default: all of `prices.index`).
     Pass the FULL price panel even when looping few dates — valuation carry-forward
@@ -82,6 +91,21 @@ def replay(
     symbol, side, qty, price, value, reason), navs (date, nav, cash, invested,
     n_positions).
     """
+    # Resolve per-side timing from the legacy bool so every pre-v2 caller — and the
+    # 19 books whose stored backtest curves came out of it — keeps byte-identical
+    # fills. An explicit enum always wins.
+    _legacy = "same_close" if same_day_fill else "next_close"
+    entry_fill = entry_fill or _legacy
+    exit_fill = exit_fill or _legacy
+    if entry_fill not in ENTRY_FILLS:
+        raise ValueError(f"unknown entry_fill {entry_fill!r}; known: {list(ENTRY_FILLS)}")
+    if exit_fill not in EXIT_FILLS:
+        raise ValueError(f"unknown exit_fill {exit_fill!r}; known: {list(EXIT_FILLS)}")
+    if entry_fill == "next_open" and open_prices is None:
+        # Never fall back to the close: that would misprice every entry in the book
+        # while looking like it worked.
+        raise ValueError("entry_fill='next_open' requires an open_prices panel")
+
     dates = list(loop_dates) if loop_dates is not None else list(prices.index)
     if not dates:
         return _empty_trades(), _empty_navs()
@@ -100,13 +124,17 @@ def replay(
     exits_at: dict[object, list[str]] = {}
     if events is not None and not events.empty:
         date_idx = pd.Index(dates)
-        side = "left" if same_day_fill else "right"
+        # "same_*" lands on the event's own session (side=left), "next_*" on the one
+        # after (side=right). The two sides resolve independently now.
+        entry_side = "left" if entry_fill.startswith("same") else "right"
+        exit_side = "left" if exit_fill.startswith("same") else "right"
         for ev in events.to_dict("records"):
-            pos = int(date_idx.searchsorted(ev["date"], side=side))
+            is_entry = ev["event"] == "entry"
+            pos = int(date_idx.searchsorted(ev["date"], side=entry_side if is_entry else exit_side))
             if pos >= len(dates):
                 continue  # signal at the last close — executes on a future run
             d = dates[pos]
-            if ev["event"] == "entry":
+            if is_entry:
                 entries_at.setdefault(d, []).append((ev["instrument_key"], ev["date"]))
             else:
                 exits_at.setdefault(d, []).append(ev["instrument_key"])
@@ -134,11 +162,26 @@ def replay(
         v = stop_ema.at[d, k]
         return None if v is None or pd.isna(v) else Decimal(str(v))
 
-    def _fill(d, k, lookback: bool):
+    def _open_px(d, k):
+        """The session's real OPEN print at d, or None. Only ever used for
+        entry_fill='next_open' — validated non-None at entry to replay()."""
+        if open_prices is None or k not in open_prices.columns or d not in open_prices.index:
+            return None
+        v = open_prices.at[d, k]
+        return None if v is None or pd.isna(v) else Decimal(v)
+
+    def _fill(d, k, lookback: bool, use_open: bool = False):
         """(price, trade_date) for a fill at d. Inception fills may look back to the
         instrument's own LAST real print (e.g. fund NAV lags stock EOD by a session)
         — FM rule: inception captures the last available price. Signal fills never
-        look back."""
+        look back.
+
+        use_open takes the session's OPEN instead of its close (crossover v2 entries).
+        A session that prints a close but no open is not tradeable at the open, so it
+        returns None rather than quietly substituting the close."""
+        if use_open:
+            p = _open_px(d, k)
+            return (p, d) if p is not None else None
         p = _px(d, k)
         if p is not None:
             return p, d
@@ -194,12 +237,15 @@ def replay(
 
     def _enter(d, candidates: list[tuple[str, object]], reason: str):
         lookback = reason == "inception"
+        # Inception stays on the close: the FM rule is that a basket pick captures the
+        # last available price, which is a close, not an open.
+        use_open = entry_fill == "next_open" and reason != "inception"
         seen_c: set[str] = set()
         cands = []
         for k, sig in candidates:
             if k in positions or k in seen_c:
                 continue  # dedup: never book the same name twice in one execution
-            fill = _fill(d, k, lookback)
+            fill = _fill(d, k, lookback, use_open)
             if fill is not None:
                 seen_c.add(k)
                 cands.append((k, sig, fill))
