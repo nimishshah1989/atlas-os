@@ -85,16 +85,17 @@ def build(dry_run: bool = False) -> dict:
     )
     de_id = {str(r.symbol).strip(): str(r.id) for r in de.itertuples()}
 
-    # Coverage universe = NIFTY 500. is_active for a stock means "in Atlas coverage",
-    # NOT "tradeable on NSE". The FM-decided universe (2026-06-25) is the Nifty 500;
-    # restricting is_active to it is what scopes the data-integrity gate's "every active
-    # stock has a sector" / "≤21 canonical sectors" checks to the board universe instead
-    # of the full ~2,375. Membership now lives in atlas_foundation (single schema).
-    n500 = _db.read_df(
-        "select instrument_id from atlas_foundation.de_index_constituents "
-        "where index_code = 'NIFTY 500' and effective_to is null"
+    # Coverage universe = NIFTY 500 ∪ NIFTY MICROCAP250 = 750 (NSE's Nifty Total Market
+    # construction; the two indices are disjoint). is_active means "in Atlas coverage",
+    # NOT "tradeable on NSE" — it scopes the data-integrity gate's "every active stock
+    # has a sector" / "≤21 canonical sectors" checks to the board universe.
+    # Widened from 500 to 750 (FM, 2026-07-30): the model portfolios hold microcaps
+    # outside the 500 (JSFB, LLOYDSENGG), so 500 could not represent the desk's book.
+    coverage = _db.read_df(
+        "select distinct instrument_id from atlas_foundation.de_index_constituents "
+        "where index_code in ('NIFTY 500', 'NIFTY MICROCAP250') and effective_to is null"
     )
-    n500_ids = {str(x).strip() for x in n500["instrument_id"]}
+    n500_ids = {str(x).strip() for x in coverage["instrument_id"]}
 
     rows = []
     # stocks

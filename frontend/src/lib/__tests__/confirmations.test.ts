@@ -1,8 +1,9 @@
 // Fold + validation for the Monday confirmations.
-// RULE #0: the starting book below is the FM's REAL Multi-Asset Leaders model
-// portfolio as sent to the desk (Goldbees 10 · Silverbees 5 · Divis 8 · Jana 8 ·
-// Pharmabees 8 · HDFCSML250 12 · PPL 8 · Nykaa 8 · Biocon 8 · Welspun 8 · Lloyds 8
-// · MO Realty 8 = 99% invested, 1% cash). No weight here is invented.
+// RULE #0: the starting book below is the FM's REAL Multi Asset Alpha model portfolio
+// as sent to the desk (Goldbees 10 · Silverbees 5 · Divis 8 · Jana 8 · Pharmabees 8 ·
+// HDFCSML250 12 · PPL 8 · Nykaa 8 · Biocon 8 · Welspun 8 · Lloyds 8 · MO Realty 8 =
+// 99% invested, 1% cash). Every symbol, name and sector below was resolved against
+// atlas_foundation.instrument_master (2026-07-30) — nothing here is invented.
 import { describe, it, expect } from 'vitest'
 
 import {
@@ -18,18 +19,18 @@ import {
 
 // The FM's real book, verbatim.
 const REAL_BOOK: BookPosition[] = [
-  { key: 'etf:GOLDBEES', symbol: 'GOLDBEES', name: 'Nippon Gold ETF', sector: 'Commodity', weightPct: 10 },
-  { key: 'etf:SILVERBEES', symbol: 'SILVERBEES', name: 'Nippon Silver ETF', sector: 'Commodity', weightPct: 5 },
-  { key: 'stock:DIVISLAB', symbol: 'DIVISLAB', name: 'Divis Laboratories', sector: 'Healthcare', weightPct: 8 },
-  { key: 'stock:JSFB', symbol: 'JSFB', name: 'Jana Small Finance Bank', sector: 'Financial Services', weightPct: 8 },
-  { key: 'etf:PHARMABEES', symbol: 'PHARMABEES', name: 'Nippon Pharma ETF', sector: 'Healthcare', weightPct: 8 },
-  { key: 'etf:HDFCSML250', symbol: 'HDFCSML250', name: 'HDFC Smallcap 250 ETF', sector: 'Diversified', weightPct: 12 },
-  { key: 'stock:PPLPHARMA', symbol: 'PPLPHARMA', name: 'Piramal Pharma', sector: 'Healthcare', weightPct: 8 },
-  { key: 'stock:NYKAA', symbol: 'NYKAA', name: 'FSN E-Commerce (Nykaa)', sector: 'Consumer', weightPct: 8 },
-  { key: 'stock:BIOCON', symbol: 'BIOCON', name: 'Biocon', sector: 'Healthcare', weightPct: 8 },
-  { key: 'stock:WELSPUNLIV', symbol: 'WELSPUNLIV', name: 'Welspun Living', sector: 'Consumer', weightPct: 8 },
-  { key: 'stock:LLOYDSENGG', symbol: 'LLOYDSENGG', name: 'Lloyds Engineering Works', sector: 'Capital Goods', weightPct: 8 },
-  { key: 'stock:MOREALTY', symbol: 'MOREALTY', name: 'Motilal Oswal Realty', sector: 'Realty', weightPct: 8 },
+  { key: 'etf:GOLDBEES', symbol: 'GOLDBEES', name: 'NIPPON INDIA ETF GOLD BEES', sector: 'Gold', weightPct: 10 },
+  { key: 'etf:SILVERBEES', symbol: 'SILVERBEES', name: 'NIPPON INDIA SILVER ETF', sector: 'Silver', weightPct: 5 },
+  { key: 'stock:DIVISLAB', symbol: 'DIVISLAB', name: "Divi's Laboratories Limited", sector: 'Pharma', weightPct: 8 },
+  { key: 'stock:JSFB', symbol: 'JSFB', name: 'Jana Small Finance Bank Limited', sector: 'Banking', weightPct: 8 },
+  { key: 'etf:PHARMABEES', symbol: 'PHARMABEES', name: 'NIPPON INDIA NIFTY PHARMA ETF', sector: 'Pharma', weightPct: 8 },
+  { key: 'etf:HDFCSML250', symbol: 'HDFCSML250', name: 'HDFC NIFTY SMALLCAP 250 ETF', sector: 'Broad Index', weightPct: 12 },
+  { key: 'stock:PPLPHARMA', symbol: 'PPLPHARMA', name: 'Piramal Pharma Limited', sector: 'Pharma', weightPct: 8 },
+  { key: 'stock:NYKAA', symbol: 'NYKAA', name: 'FSN E-Commerce Ventures Limited', sector: 'Digital', weightPct: 8 },
+  { key: 'stock:BIOCON', symbol: 'BIOCON', name: 'Biocon Limited', sector: 'Pharma', weightPct: 8 },
+  { key: 'stock:WELSPUNLIV', symbol: 'WELSPUNLIV', name: 'Welspun Living Limited', sector: 'Consumer Durables', weightPct: 8 },
+  { key: 'stock:LLOYDSENGG', symbol: 'LLOYDSENGG', name: 'LLOYDS ENGINEERING WORKS LIMITED', sector: 'Capital Goods', weightPct: 8 },
+  { key: 'etf:MOREALTY', symbol: 'MOREALTY', name: 'MOTILAL OSWAL NIFTY REALTY ETF', sector: 'Realty', weightPct: 8 },
 ]
 
 const buy = (over: Partial<Call> & Pick<Call, 'key' | 'weightPct'>): Call => ({
