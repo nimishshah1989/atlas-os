@@ -65,3 +65,21 @@ CREATE TABLE IF NOT EXISTS atlas_foundation.mpf_evidence (
 
 CREATE INDEX IF NOT EXISTS ix_mpf_evidence_confirmation
     ON atlas_foundation.mpf_evidence (confirmation_id, position);
+
+-- Per-portfolio max position cap (FM, 2026-07-30). Drives the sell-side pre-fill:
+-- any holding at, above, or within 1% of the cap can only come down, so it is a
+-- standing sell candidate. 0 = no cap set for that book yet → nothing pre-fills.
+-- Lives in atlas_thresholds so it stays editable from /admin/thresholds (rule #4);
+-- the confirmations tab edits the same rows inline.
+INSERT INTO atlas_foundation.atlas_thresholds
+    (threshold_key, threshold_value, category, description, units,
+     min_allowed, max_allowed, default_value, is_active)
+SELECT k, 0, 'portfolio', d, 'percent', 0, 100, 0, TRUE
+FROM (VALUES
+    ('mpf_max_cap.alpha',    'Multi Asset Alpha — max position cap % (0 = unset)'),
+    ('mpf_max_cap.passive',  'Passive — max position cap % (0 = unset)'),
+    ('mpf_max_cap.india_xi', 'India XI — max position cap % (0 = unset)')
+) AS v(k, d)
+WHERE NOT EXISTS (
+    SELECT 1 FROM atlas_foundation.atlas_thresholds t WHERE t.threshold_key = v.k
+);

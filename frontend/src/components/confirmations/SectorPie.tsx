@@ -18,9 +18,9 @@ export function SectorPie({ book, cash }: { book: BookPosition[]; cash: number }
     bySector.set(s, (bySector.get(s) ?? 0) + p.weightPct)
   }
   const data = [...bySector.entries()]
-    .map(([name, value]) => ({ name, value: Number(value.toFixed(2)) }))
+    .map(([name, value]) => ({ name, value: Number(value.toFixed(1)) }))
     .sort((a, b) => b.value - a.value)
-  if (cash > 0) data.push({ name: 'Cash', value: Number(cash.toFixed(2)) })
+  if (cash > 0) data.push({ name: 'Cash', value: Number(cash.toFixed(1)) })
 
   if (data.length === 0) return null
 
@@ -31,7 +31,7 @@ export function SectorPie({ book, cash }: { book: BookPosition[]; cash: number }
           <Cell key={d.name} fill={d.name === 'Cash' ? '#9AA5AF' : PALETTE[i % PALETTE.length]} />
         ))}
       </Pie>
-      <Tooltip formatter={(v) => `${Number(v).toFixed(2)}%`} />
+      <Tooltip formatter={(v) => `${Number(v).toFixed(1)}%`} />
       <Legend layout="vertical" align="right" verticalAlign="middle" iconSize={9} />
     </PieChart>
   )
