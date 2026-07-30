@@ -9,6 +9,7 @@ import { getPendingOrders } from '@/lib/queries/desk'
 import { DeskQueue } from '@/components/portfolios/DeskQueue'
 import { AtlasLightweightChart, type ChartSeries } from '@/components/charts/AtlasLightweightChart'
 import { Panel } from '@/components/ui/Panel'
+import { PortfolioTabs } from '@/components/confirmations/PortfolioTabs'
 
 const inr = (v: number | null) =>
   v == null ? '—' : `₹${v.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
@@ -143,6 +144,8 @@ export async function PortfoliosPageV4() {
           <PortfolioBuilder />
         </div>
       </div>
+
+      <PortfolioTabs active="books" />
 
       {portfolios.length === 0 && (
         <p className="font-sans text-[13px] italic text-txt-3">No portfolios yet.</p>

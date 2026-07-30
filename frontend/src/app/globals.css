@@ -119,3 +119,42 @@ html[data-theme="dark"] {
   --decile-1:  #CA827C; --decile-2:  #C98D7A; --decile-3:  #C79A75; --decile-4:  #C6A670; --decile-5:  #C0AE72;
   --decile-6:  #B0B17A; --decile-7:  #98B384; --decile-8:  #80B690; --decile-9:  #70B793; --decile-10: #64B893;
 }
+
+/* ── Print: the Monday confirmation report is a circulated PDF ──────────────
+   Browsers strip backgrounds when printing, so a dark-theme page would print
+   near-white text on white paper — force the paper tokens back for print only.
+   Fixed navs would otherwise repeat on every sheet. */
+@media print {
+  html[data-theme="dark"] {
+    --color-surface-base:   #FFFFFF;
+    --color-surface-panel:  #FFFFFF;
+    --color-surface-raised: #F6F8FB;
+    --color-edge-hair:      #0c142124;
+    --color-edge-rule:      #0c142138;
+    --color-txt-1:          #131922;
+    --color-txt-2:          #4B5666;
+    --color-txt-3:          #6B7382;
+    --color-sig-pos:        #2D8561;
+    --color-sig-neg:        #B84D45;
+    --color-brand:          #2D63D8;
+  }
+
+  /* Nothing pinned to the viewport belongs on paper — the top nav and the
+     sub-nav bar are both position:fixed, and would repeat on every sheet. */
+  nav, .fixed, .print\:hidden { display: none !important; }
+
+  /* reclaim the space the layout reserves for those fixed bars */
+  main { padding-top: 0 !important; }
+
+  .report-page {
+    max-width: none;
+    padding: 0;
+    color: #131922;
+  }
+
+  .report-page img { max-height: 20cm; }
+
+  .break-inside-avoid { break-inside: avoid; }
+
+  @page { margin: 14mm; }
+}

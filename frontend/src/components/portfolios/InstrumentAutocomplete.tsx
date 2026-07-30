@@ -9,6 +9,7 @@ export type Hit = {
   sublabel: string
   assetClass: string
   price: number | null
+  sector: string | null
 }
 
 export function InstrumentAutocomplete({

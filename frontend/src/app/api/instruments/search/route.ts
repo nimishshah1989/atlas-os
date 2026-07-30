@@ -7,7 +7,14 @@ import sql from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
-type Hit = { key: string; label: string; sublabel: string; assetClass: string; price: number | null }
+type Hit = {
+  key: string
+  label: string
+  sublabel: string
+  assetClass: string
+  price: number | null
+  sector: string | null
+}
 
 export async function GET(req: Request) {
   const url = new URL(req.url)
@@ -32,6 +39,7 @@ export async function GET(req: Request) {
       sublabel: String(r.category_name ?? 'Fund'),
       assetClass: 'fund',
       price: r.price != null ? Number(r.price) : null,
+      sector: null, // funds are classified by category, not sector
     }))
     return NextResponse.json({ hits })
   }
@@ -55,6 +63,7 @@ export async function GET(req: Request) {
     sublabel: String(r.name ?? cls),
     assetClass: cls,
     price: r.price != null ? Number(r.price) : null,
+    sector: r.sector == null ? null : String(r.sector),
   }))
   return NextResponse.json({ hits })
 }
