@@ -3,7 +3,6 @@
 // position should END UP at, and say why. Sector fills itself from the pick.
 import { InstrumentAutocomplete, type Hit } from '@/components/portfolios/InstrumentAutocomplete'
 import { ChartAttach } from './ChartAttach'
-import { InstrumentInsight } from './InstrumentInsight'
 import type { DraftCall } from './draftTypes'
 
 export function BuyGrid({
@@ -127,13 +126,6 @@ export function BuyGrid({
                 </button>
               )}
             </div>
-
-            {/* The evidence the engine already holds, so a call is made against it. */}
-            {r.key && (
-              <div className="mt-2">
-                <InstrumentInsight instrumentKey={r.key} />
-              </div>
-            )}
 
             <div className="mt-2">
               <Label>Why this stock</Label>
