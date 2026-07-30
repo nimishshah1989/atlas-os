@@ -3,7 +3,6 @@
 // "Full exit" fills in the whole held position.
 import { SELL_REASONS, type BookPosition } from '@/lib/confirmations'
 import { ChartAttach } from './ChartAttach'
-import { InstrumentInsight } from './InstrumentInsight'
 import type { DraftCall } from './draftTypes'
 
 export function SellGrid({
@@ -153,11 +152,6 @@ export function SellGrid({
                     ✕
                   </button>
                 )}
-              </div>
-
-              {/* Same evidence panel as the buy side — a trim is a decision too. */}
-              <div className="mt-2">
-                <InstrumentInsight instrumentKey={r.key} />
               </div>
 
               <div className="mt-2">
