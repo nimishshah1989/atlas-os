@@ -38,6 +38,39 @@ export type Call = {
 export type Problem = { code: string; message: string }
 
 /**
+ * Weights carry one decimal — the desk sizes in halves and whole percents, so a
+ * second decimal is noise the FM has to read past. Applied server-side at save, so
+ * what is stored and what is displayed can never disagree.
+ */
+export function round1(pct: number): number {
+  return Math.round(pct * 10) / 10
+}
+
+/** Deep-dive page for a holding — no ticker on the board is dead text. */
+export function instrumentHref(key: string): string {
+  const [cls, symbol] = key.split(':')
+  return cls === 'etf' ? `/etfs/${symbol}` : `/stocks/${symbol}`
+}
+
+/** How far below the cap a position still counts as maxed out (FM, 2026-07-30). */
+export const CAP_TOLERANCE_PCT = 1
+
+/**
+ * The holdings that pre-fill the sell side: anything at, above, or within 1% of the
+ * book's max position cap. A position at its cap can only come down, so it is a
+ * standing sell candidate — the FM ticks a reason and attaches the chart rather than
+ * hunting for the name. A cap of 0 means "no cap set for this book", so nothing
+ * pre-fills.
+ */
+export function sellCandidates(book: BookPosition[], capPct: number): BookPosition[] {
+  if (!(capPct > 0)) return []
+  const floor = bps(capPct - CAP_TOLERANCE_PCT)
+  return book
+    .filter((p) => bps(p.weightPct) >= floor)
+    .sort((a, b) => b.weightPct - a.weightPct || a.symbol.localeCompare(b.symbol))
+}
+
+/**
  * Normalise a DATE column to YYYY-MM-DD. postgres.js hands back a Date object,
  * and `String(date).slice(0, 10)` yields "Mon Jan 04" — which re-parses to the
  * wrong year. Always go through the UTC components.

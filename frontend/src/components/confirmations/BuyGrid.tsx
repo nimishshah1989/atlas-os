@@ -175,7 +175,7 @@ function Num({
       <Label>{label}</Label>
       <input
         type="number"
-        step="0.01"
+        step="0.1"
         min="0"
         readOnly={readOnly}
         value={value ?? ''}

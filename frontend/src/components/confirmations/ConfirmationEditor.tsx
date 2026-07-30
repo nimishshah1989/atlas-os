@@ -8,6 +8,7 @@ import {
   cashMovement,
   validateCalls,
   foldBook,
+  sellCandidates,
   type BookPosition,
   type PortfolioCode,
   type Problem,
@@ -34,20 +35,44 @@ const toDraft = (c: Confirmation['calls'][number]): DraftCall => ({
   assetClass: c.key.startsWith('etf:') ? 'etf' : 'stock',
 })
 
+/** A held position turned into a ready-to-review sell row (weight = full exit). */
+const toSellRow = (p: BookPosition): DraftCall => ({
+  side: 'sell',
+  key: p.key,
+  symbol: p.symbol,
+  name: p.name,
+  sector: p.sector,
+  weightPct: p.weightPct,
+  triggerPrice: null,
+  stopPrice: null,
+  reasons: [],
+  comment: '',
+  hasImage: false,
+  assetClass: p.key.startsWith('etf:') ? 'etf' : 'stock',
+})
+
 export function ConfirmationEditor({
   code,
   week,
   openingBook,
   initial,
+  maxCapPct,
 }: {
   code: PortfolioCode
   week: string
   openingBook: BookPosition[]
   initial: Confirmation | null
+  maxCapPct: number
 }) {
   const router = useRouter()
   const published = initial?.status === 'published'
-  const [calls, setCalls] = useState<DraftCall[]>(initial?.calls.map(toDraft) ?? [])
+  // A fresh week opens with the maxed-out positions already on the sell side: they can
+  // only come down, so the FM reviews and attaches evidence rather than re-typing names.
+  const [calls, setCalls] = useState<DraftCall[]>(
+    initial?.calls.length
+      ? initial.calls.map(toDraft)
+      : sellCandidates(openingBook, maxCapPct).map(toSellRow),
+  )
   const [evidence, setEvidence] = useState<DraftEvidence[]>(initial?.evidence ?? [])
   const [confirmationId, setConfirmationId] = useState<number | null>(initial?.confirmationId ?? null)
   const [busy, setBusy] = useState<'save' | 'publish' | null>(null)
@@ -131,16 +156,17 @@ export function ConfirmationEditor({
       )}
 
       <div className="flex flex-wrap items-center gap-x-6 gap-y-1 rounded-panel border border-edge-hair bg-surface-raised px-4 py-3">
-        <Stat label="Buys" value={String(buys.length)} />
-        <Stat label="Sells" value={String(sells.length)} />
-        <Stat label="Sells free" value={`${move.freed.toFixed(2)}%`} />
-        <Stat label="Buys deploy" value={`${move.deployed.toFixed(2)}%`} />
+        <Stat label="Buys" value={String(buys.length)} tone="text-sig-pos" />
+        <Stat label="Sells" value={String(sells.length)} tone="text-sig-neg" />
+        <Stat label="Sells free" value={`${move.freed.toFixed(1)}%`} />
+        <Stat label="Buys deploy" value={`${move.deployed.toFixed(1)}%`} />
         <Stat
           label="Cash"
-          value={`${move.before.toFixed(2)}% → ${move.after.toFixed(2)}%`}
+          value={`${move.before.toFixed(1)}% → ${move.after.toFixed(1)}%`}
           tone={move.after < 0 ? 'text-sig-neg' : 'text-txt-1'}
         />
         <Stat label="Positions after" value={String(resulting.length)} />
+        {maxCapPct > 0 && <Stat label="Max cap" value={`${maxCapPct.toFixed(1)}%`} tone="text-sig-warn" />}
       </div>
 
       {shown.length > 0 && (
