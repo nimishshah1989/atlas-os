@@ -2,20 +2,29 @@
 // on, the momentum and relative-strength ladder, the trend/technical state, and the
 // conviction the engine already computed — with anything worth cross-checking marked.
 //
-// Two honest gaps, surfaced rather than papered over:
-//  - the lens/conviction engine scores STOCKS ONLY (atlas_lens_scores_daily has no ETF
-//    rows), so an ETF returns conviction: null with a reason. A neutral-looking score
-//    standing in for no computation is exactly what rule #0 forbids.
-//  - a stock added in the last universe widening has no lens row until the next nightly
-//    compute; that is also conviction: null, with a different reason.
+// Conviction reaches an instrument by TWO different routes, because Atlas scores the two
+// asset classes differently:
+//  - a STOCK is scored directly in atlas_lens_scores_daily (composite + tier + lenses).
+//  - an ETF has no row there; it is scored as a holdings-weighted roll-up of the stock
+//    atom, headlined by LEADERSHIP-BREADTH (share of holdings weight that are top-decile
+//    leaders) rather than a cap-weighted composite. That definition lives in etf_lens.ts
+//    and is reused here, so ETF conviction has exactly one definition in the codebase.
+//
+// Absence is therefore not one thing, and the three cases must not be conflated:
+//  - commodity/debt/international ETF: no equity holdings, so breadth is UNDEFINED;
+//  - equity ETF whose Morningstar name-bridge fails (~35% of NSE ETFs): identity gap;
+//  - stock newly added by the 750-name widening: no lens row until the next compute.
+// A neutral-looking score standing in for any of these is what rule #0 forbids.
 import 'server-only'
 
 import sql from '@/lib/db'
 import { toPp } from '@/lib/insight'
+import { getEtfLensByNseTicker } from './etf_lens'
 
 export type ReturnLadder = { window: string; retPp: number | null; rsPp: number | null }
 
 export type Conviction = {
+  /** Stock: the engine composite. ETF: the holdings-weighted composite. */
   composite: number | null
   tier: string | null
   technical: number | null
@@ -27,6 +36,12 @@ export type Conviction = {
   degradation: number | null
   smartMoney: number | null
   riskFlags: string[]
+  /** ETFs only — the headline metric for a basket. Percent of holdings weight. */
+  breadthPct: number | null
+  nHoldings: number | null
+  nLeaders: number | null
+  /** Which route produced this, so the UI can label it honestly. */
+  basis: 'stock-lens' | 'etf-holdings-rollup'
 }
 
 export type InstrumentInsight = {
@@ -45,6 +60,10 @@ export type InstrumentInsight = {
   aboveEma200: boolean | null
   pos52w: number | null
   volRatio30d: number | null
+  /** For the price-vs-moving-average stack the FM reads as long/short alignment. */
+  ema21: number | null
+  ema50: number | null
+  ema200: number | null
   conviction: Conviction | null
   /** Why conviction is absent, when it is. */
   convictionAbsentReason: string | null
@@ -97,6 +116,7 @@ export async function getInstrumentInsight(
            t.ret_1d, t.ret_1w, t.ret_1m, t.ret_3m, t.ret_6m, t.ret_12m,
            ${rsCols},
            t.rsi_14, t.above_ema_50, t.above_ema_200, t.pos_52w, t.vol_ratio_30d,
+           t.ema_21, t.ema_50, t.ema_200,
            l.composite, l.conviction_tier, l.technical, l.fundamental, l.flow,
            l.valuation, l.catalyst, l.valuation_zone, l.degradation_score,
            l.smart_money_score, l.risk_flags
@@ -120,22 +140,60 @@ export async function getInstrumentInsight(
     rsPp: toPp(num(r[`rs_${w}`])),
   }))
 
-  const scored = r.composite != null
-  const conviction: Conviction | null = scored
-    ? {
-        composite: num(r.composite),
-        tier: r.conviction_tier == null ? null : String(r.conviction_tier),
-        technical: num(r.technical),
-        fundamental: num(r.fundamental),
-        flow: num(r.flow),
-        valuation: num(r.valuation),
-        catalyst: num(r.catalyst),
-        valuationZone: r.valuation_zone == null ? null : String(r.valuation_zone),
-        degradation: num(r.degradation_score),
-        smartMoney: num(r.smart_money_score),
-        riskFlags: Array.isArray(r.risk_flags) ? r.risk_flags.map(String) : [],
+  let conviction: Conviction | null =
+    r.composite == null
+      ? null
+      : {
+          composite: num(r.composite),
+          tier: r.conviction_tier == null ? null : String(r.conviction_tier),
+          technical: num(r.technical),
+          fundamental: num(r.fundamental),
+          flow: num(r.flow),
+          valuation: num(r.valuation),
+          catalyst: num(r.catalyst),
+          valuationZone: r.valuation_zone == null ? null : String(r.valuation_zone),
+          degradation: num(r.degradation_score),
+          smartMoney: num(r.smart_money_score),
+          riskFlags: Array.isArray(r.risk_flags) ? r.risk_flags.map(String) : [],
+          breadthPct: null,
+          nHoldings: null,
+          nLeaders: null,
+          basis: 'stock-lens',
+        }
+
+  // An ETF has no lens row of its own — its conviction is the holdings roll-up.
+  let absent: string | null = null
+  if (conviction == null && cls === 'etf') {
+    const roll = await getEtfLensByNseTicker(symbol)
+    if (roll) {
+      conviction = {
+        // The weighted lens vector is the descriptive part; breadth is the headline.
+        composite: null,
+        tier: null,
+        technical: roll.v_tech,
+        fundamental: roll.v_fund,
+        flow: roll.v_flow,
+        valuation: roll.v_val,
+        catalyst: roll.v_cat,
+        valuationZone: null,
+        degradation: null,
+        smartMoney: null,
+        riskFlags: [],
+        // breadth is NULL when the basket holds no top-decile leader at all; that is a
+        // real zero, not missing data, so report it as 0%.
+        breadthPct: roll.breadth == null ? 0 : roll.breadth * 100,
+        nHoldings: roll.n_holdings,
+        nLeaders: roll.n_leaders,
+        basis: 'etf-holdings-rollup',
       }
-    : null
+    } else {
+      absent =
+        'No holdings roll-up for this ETF — either it holds no equities (gold, silver, debt) ' +
+        'or its Morningstar identity did not bridge to this NSE ticker.'
+    }
+  } else if (conviction == null) {
+    absent = 'No lens score yet — a newly covered name gets one on the next nightly compute.'
+  }
 
   return {
     key,
@@ -152,11 +210,10 @@ export async function getInstrumentInsight(
     aboveEma200: bool(r.above_ema_200),
     pos52w: num(r.pos_52w),
     volRatio30d: num(r.vol_ratio_30d),
+    ema21: num(r.ema_21),
+    ema50: num(r.ema_50),
+    ema200: num(r.ema_200),
     conviction,
-    convictionAbsentReason: scored
-      ? null
-      : cls === 'etf'
-        ? 'Index and commodity ETFs are not lens-scored — conviction applies to individual companies.'
-        : 'No lens score yet — a newly covered name gets one on the next nightly compute.',
+    convictionAbsentReason: absent,
   }
 }

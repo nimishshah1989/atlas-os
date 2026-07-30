@@ -11,6 +11,42 @@ export function toPp(fraction: number | null | undefined): number | null {
   return fraction == null ? null : fraction * 100
 }
 
+export type StackLink = { label: string; up: boolean }
+export type EmaStack = {
+  links: StackLink[]
+  /** aligned-up = price > 21 > 50 > 200, the FM's buy alignment; null when data is short. */
+  verdict: 'aligned-up' | 'aligned-down' | 'mixed' | null
+}
+
+/**
+ * The price-to-moving-average stack, as a chain of inequalities.
+ *
+ * The FM's rule (2026-07-30): price > EMA21 > EMA50 > EMA200 reads long, the exact
+ * reverse reads short, anything else is mixed. This is his stated methodology, not a
+ * threshold invented here — and each link is reported separately so a broken chain shows
+ * WHERE it broke rather than collapsing to one verdict.
+ */
+export function emaStack(
+  close: number | null | undefined,
+  ema21: number | null | undefined,
+  ema50: number | null | undefined,
+  ema200: number | null | undefined,
+): EmaStack {
+  if (close == null || ema21 == null || ema50 == null || ema200 == null) {
+    return { links: [], verdict: null }
+  }
+  const links: StackLink[] = [
+    { label: 'Price/21', up: close > ema21 },
+    { label: '21/50', up: ema21 > ema50 },
+    { label: '50/200', up: ema50 > ema200 },
+  ]
+  const ups = links.filter((l) => l.up).length
+  return {
+    links,
+    verdict: ups === links.length ? 'aligned-up' : ups === 0 ? 'aligned-down' : 'mixed',
+  }
+}
+
 /** A 0-100 lens score as a 1-10 decile for the board's DecileMeter glyph. */
 export function decileOf(score: number | null | undefined): number | null {
   if (score == null) return null
