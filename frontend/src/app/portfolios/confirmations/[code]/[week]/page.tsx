@@ -8,6 +8,7 @@ import Link from 'next/link'
 import { ConfirmationEditor } from '@/components/confirmations/ConfirmationEditor'
 import { PORTFOLIO_CODES, PORTFOLIO_NAMES, type PortfolioCode } from '@/lib/confirmations'
 import { getConfirmation, getMaxCap, getOpeningBook } from '@/lib/queries/confirmations'
+import { isAuthed } from '@/lib/requireAuth'
 import { formatIST } from '@/lib/format-date'
 
 export const metadata = { title: 'Confirmation · Atlas' }
@@ -22,10 +23,11 @@ export default async function ConfirmationEditorPage({
   if (!/^\d{4}-\d{2}-\d{2}$/.test(week)) notFound()
   const pf = code as PortfolioCode
 
-  const [existing, openingBook, maxCapPct] = await Promise.all([
+  const [existing, openingBook, maxCapPct, canEdit] = await Promise.all([
     getConfirmation(pf, week),
     getOpeningBook(pf, week),
     getMaxCap(pf),
+    isAuthed(),
   ])
 
   return (
@@ -52,6 +54,16 @@ export default async function ConfirmationEditorPage({
           </Link>
         )}
       </div>
+
+      {!canEdit && (
+        <p className="rounded-panel border border-sig-warn/30 bg-sig-warn/[0.06] px-4 py-2.5 font-sans text-[12.5px] text-txt-2">
+          Read-only — you can review this week, but saving or publishing needs a sign-in.{' '}
+          <a href="/login" className="font-semibold text-accent no-underline hover:underline">
+            Sign in
+          </a>
+          .
+        </p>
+      )}
 
       <ConfirmationEditor
         code={pf}

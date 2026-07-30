@@ -9,11 +9,13 @@ import { PortfolioTabs } from '@/components/confirmations/PortfolioTabs'
 import { BookCard } from '@/components/confirmations/BookCard'
 import { PORTFOLIO_CODES, PORTFOLIO_NAMES, mondayOf } from '@/lib/confirmations'
 import { getMaxCap, getOpeningBook, listConfirmations } from '@/lib/queries/confirmations'
+import { isAuthed } from '@/lib/requireAuth'
 
 export const metadata = { title: 'Monday confirmations · Atlas' }
 
 export default async function ConfirmationsPage() {
   const thisMonday = mondayOf(new Date().toISOString().slice(0, 10))
+  const canEdit = await isAuthed()
   const books = await Promise.all(
     PORTFOLIO_CODES.map(async (code) => ({
       code,
@@ -35,6 +37,17 @@ export default async function ConfirmationsPage() {
 
       <PortfolioTabs active="confirmations" />
 
+      {!canEdit && (
+        <p className="rounded-panel border border-sig-warn/30 bg-sig-warn/[0.06] px-4 py-2.5 font-sans text-[12.5px] text-txt-2">
+          You are viewing this read-only — the board is open, but authoring a confirmation needs a
+          sign-in.{' '}
+          <a href="/login" className="font-semibold text-accent no-underline hover:underline">
+            Sign in
+          </a>{' '}
+          to set a max cap, save a draft or publish.
+        </p>
+      )}
+
       <p className="max-w-[860px] font-sans text-[13.5px] text-txt-2">
         Author this week&rsquo;s buy and sell calls against each model portfolio, attach the charts that
         make the case, and publish a report to circulate. Publishing rolls the book forward — next
@@ -43,7 +56,7 @@ export default async function ConfirmationsPage() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         {books.map((b) => (
-          <BookCard key={b.code} {...b} thisMonday={thisMonday} />
+          <BookCard key={b.code} {...b} thisMonday={thisMonday} canEdit={canEdit} />
         ))}
       </div>
 
