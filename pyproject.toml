@@ -158,6 +158,11 @@ ignore = [
 # fragments / table+column names); every user value is bound via :param. Verified
 # not an injection vector. S608 stays ON for new files so each is reviewed once.
 "atlas/agents/tools/atlas_queries.py" = ["S608"]
+# S603 below: two `git` invocations with entirely literal argv and shell=False, used to
+# read origin/main before writing live portfolio params. Scoped to this ONE file rather
+# than scripts/**, so a future script passing untrusted input to subprocess is still
+# flagged. Needed because the pre-commit ruff and the gate ruff disagree on this rule.
+"scripts/ops/apply_crossover_v2.py" = ["S603"]
 "atlas/api/admin/validator.py" = ["S608"]
 "atlas/api/fund_decisions.py" = ["S608"]
 "atlas/compute/lens_composition.py" = ["S608"]

@@ -25,7 +25,9 @@ excluded: a fund prints one NAV a day, so it has no intraday, no high/low and no
 from __future__ import annotations
 
 import argparse
+import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -62,6 +64,66 @@ SCHEMA_SQL = [
     """CREATE INDEX IF NOT EXISTS ix_crossover_alerts_instrument
          ON atlas_foundation.crossover_alerts (instrument_id)""",
 ]
+
+
+def missing_support(ema_cross_src: str) -> list[str]:
+    """Which of the keywords RULES writes are NOT accepted by this EmaCross source.
+
+    Params are only half a switch-on; the code that has to honour them is the other
+    half. On 2026-07-31 the params went live while `main` was still the docs-only spec
+    commit, and the DB started asking a box for `EmaCross(exit=..., entry_confirm=...)`
+    it could not construct — a TypeError on all four books at the next mark, silent
+    because portfolio_mark is a step and the failure alert had just been removed.
+    """
+    sig_start = ema_cross_src.find("def __init__(")
+    if sig_start == -1:
+        return sorted(json.loads(RULES))  # no constructor found — assume nothing works
+    sig = ema_cross_src[sig_start : ema_cross_src.find(")", sig_start)]
+    return sorted(k for k in json.loads(RULES) if k not in sig)
+
+
+def main_branch_source() -> str | None:
+    """EmaCross as it exists on origin/main — the box tracks main, so this is the code
+    that will actually meet these params tonight. None if git cannot answer."""
+    try:
+        # S603: every argument is a literal constant and shell=False — there is no
+        # input here to be untrusted. Same reasoning the repo already applies to
+        # tests/** ("subprocess the project's own binary, no untrusted input").
+        r = subprocess.run(
+            ["git", "show", "origin/main:atlas/portfolio/strategies/ema_cross.py"],
+            capture_output=True,
+            text=True,
+            cwd=REPO,
+            timeout=30,
+            check=False,
+        )
+        return r.stdout if r.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def assert_code_is_deployed(force: bool) -> None:
+    """Refuse to write params that the deployed code cannot honour."""
+    # S603: literal argv, constant cwd, shell=False. No untrusted input.
+    subprocess.run(["git", "fetch", "-q", "origin"], cwd=REPO, timeout=60, check=False)
+    src = main_branch_source()
+    if src is None:
+        print("  ! could not read origin/main — skipping the code check")
+        return
+    missing = missing_support(src)
+    if not missing:
+        print("  ok: origin/main carries the code these params need")
+        return
+    msg = (
+        f"REFUSING: origin/main's EmaCross does not accept {missing}.\n"
+        "The box tracks main, so applying these params would make the next nightly mark\n"
+        "fail with a TypeError on every stock crossover book — silently, because\n"
+        "portfolio_mark is a step, not a gate.\n"
+        "Merge the crossover v2 code to main and let the box deploy it FIRST."
+    )
+    if not force:
+        raise SystemExit(msg)
+    print(f"  ! --force: proceeding anyway\n{msg}")
 
 
 def db_url() -> str:
@@ -127,7 +189,16 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Apply (or roll back) crossover v2")
     ap.add_argument("--dry-run", action="store_true", help="print current state, change nothing")
     ap.add_argument("--rollback", action="store_true", help="remove the params (schema stays)")
+    ap.add_argument(
+        "--force",
+        action="store_true",
+        help="apply even if origin/main lacks the code (you will break the nightly mark)",
+    )
     a = ap.parse_args()
+
+    if not (a.dry_run or a.rollback):
+        # params are only half a switch-on; the deployed code is the other half
+        assert_code_is_deployed(a.force)
 
     engine = sa.create_engine(db_url(), connect_args={"connect_timeout": 20})
     with engine.connect() as conn:
