@@ -108,7 +108,36 @@ def test_sell_trade_uses_net_price_and_carries_source_id() -> None:
     assert trade["source_txn_id"] == 1
 
 
-def test_corpus_and_bonus_rows_are_not_trades() -> None:
-    for kind in ("CORPUS_IN", "BONUS"):
+def test_corpus_in_is_a_buy_marked_inception() -> None:
+    """CORPUS_IN opens a position, so it belongs in the trade log.
+
+    BJ53's whole opening book arrived this way on 2020-09-28 (RELIANCE 15 @ 1730.75,
+    WIPRO 160 @ 298.45, ...). Omitting it would render those names as sold in Oct-2020
+    with no record of ever arriving. reason='inception' already exists in the
+    portfolio_trades CHECK for exactly this case.
+    """
+    row = dict(BJ53_SELL, txn_type="CORPUS_IN")
+    trade = trade_from_txn(row, instrument_key="stock:RELIANCE", asset_class="stock")
+    assert trade is not None
+    assert trade["side"] == "buy"
+    assert trade["reason"] == "inception"
+
+
+def test_bonus_rows_stay_out_of_the_trade_log() -> None:
+    """Bonus shares arrive at price 0 and portfolio_trades has CHECK (price > 0).
+
+    They cannot be stored there at all. FIFO still opens a zero-cost lot for them
+    (atlas.maal.fifo), so realized P&L stays correct — only the log omits them.
+    Two rows on BJ53 as of 2026-07-31, both at price exactly 0.0000.
+    """
+    row = dict(BJ53_SELL, txn_type="BONUS")
+    assert trade_from_txn(row, instrument_key="stock:X", asset_class="stock") is None
+
+
+def test_ordinary_buys_and_sells_are_marked_manual() -> None:
+    # Only a corpus transfer is 'inception'; desk activity stays 'manual'.
+    for kind in ("BUY", "SELL"):
         row = dict(BJ53_SELL, txn_type=kind)
-        assert trade_from_txn(row, instrument_key="stock:X", asset_class="stock") is None
+        trade = trade_from_txn(row, instrument_key="stock:X", asset_class="stock")
+        assert trade is not None
+        assert trade["reason"] == "manual"

@@ -25,9 +25,22 @@ CODE_BY_CLIENT_CODE: dict[str, str] = {
     "JR100PASS": "passive",
 }
 
-# CPP txn_type values that move shares. CORPUS_IN is capital, BONUS is a corporate
-# action — neither is a trade, and counting them as one would corrupt realized P&L.
-_TRADE_TYPES = {"BUY": "buy", "SELL": "sell"}
+# CPP txn_type -> portfolio_trades.side.
+#
+# CORPUS_IN is a securities transfer-IN, not cash (verified 2026-07-31: all 17 rows
+# across the three books carry a real quantity and price). It opens a position, so it
+# belongs in the trade log — otherwise RELIANCE appears SOLD in Oct-2020 with no record
+# of ever arriving. portfolio_trades.reason already has 'inception' for exactly this.
+#
+# BONUS is deliberately absent. Bonus shares arrive at price 0, and portfolio_trades
+# has CHECK (price > 0) — a bonus row physically cannot be stored there. It still
+# opens a zero-cost lot for FIFO (see atlas.maal.fifo), so realized P&L stays correct;
+# only the trade log omits it. Two rows on BJ53 as of 2026-07-31.
+_TRADE_TYPES = {"BUY": "buy", "SELL": "sell", "CORPUS_IN": "buy"}
+
+# Trades sourced from a corpus transfer are marked 'inception', not 'manual' — they
+# were not desk decisions, and the distinction survives into the rendered trade log.
+_INCEPTION_TYPES = {"CORPUS_IN"}
 
 _QUANT = Decimal("0.0001")
 
@@ -63,7 +76,8 @@ def trade_from_txn(
     asset_class: str,
 ) -> dict[str, Any] | None:
     """One CPP transaction as a portfolio_trades row. None when it is not a trade."""
-    side = _TRADE_TYPES.get((txn.get("txn_type") or "").strip().upper())
+    kind = (txn.get("txn_type") or "").strip().upper()
+    side = _TRADE_TYPES.get(kind)
     if side is None:
         return None
     return {
@@ -76,6 +90,6 @@ def trade_from_txn(
         "price": txn["price"],
         "value": txn["amount"],
         "cost": txn["cost_rate"],
-        "reason": "manual",
+        "reason": "inception" if kind in _INCEPTION_TYPES else "manual",
         "source_txn_id": txn["id"],
     }
