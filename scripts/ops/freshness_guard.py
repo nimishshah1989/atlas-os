@@ -207,6 +207,50 @@ def check(eod: dt.date) -> list[str]:
 FILINGS_REFETCH_MIN_FRAC = 0.5
 
 
+# instrument_master identity completeness. Staleness is not the only way a table
+# fails you — this one was FRESH and WRONG. On 2026-07-31, 201 of 318 ETF rows had
+# a NULL isin, including GOLDBEES (15% of the flagship book), SILVERBEES, BANKBEES,
+# LIQUIDCASE and JUNIORBEES. Every ISIN join silently missed them, and because
+# build_universe recreates ETF rows on each run, the weekly build re-emptied the
+# column even after a manual backfill. Nothing noticed for months.
+#
+# Thresholds are floors, not targets: below these, an ISIN join is quietly lossy.
+# Indices legitimately have no ISIN and are excluded.
+_ISIN_COVERAGE_FLOOR = {"stock": 0.99, "etf": 0.95}
+
+
+def check_instrument_identity() -> list[str]:
+    """ISIN coverage per asset class. A NULL isin is a silently broken join."""
+    # :classes, not %(classes)s — _db.read_df wraps the SQL in SQLAlchemy text().
+    df = _db.read_df(
+        f"""
+        SELECT asset_class,
+               count(*) AS total,
+               count(isin) AS with_isin
+        FROM {M}.instrument_master
+        WHERE asset_class = ANY(CAST(:classes AS text[])) AND is_active
+        GROUP BY asset_class
+        """,
+        {"classes": list(_ISIN_COVERAGE_FLOOR)},
+    )
+
+    problems: list[str] = []
+    for r in df.itertuples():
+        floor = _ISIN_COVERAGE_FLOOR[r.asset_class]
+        got = (r.with_isin / r.total) if r.total else 0.0
+        print(f"    {r.asset_class}: isin {r.with_isin}/{r.total} ({got:.1%}, floor {floor:.0%})")
+        if got < floor:
+            problems.append(
+                f"instrument_master.{r.asset_class}: isin on {r.with_isin}/{r.total} "
+                f"({got:.1%}) is below the {floor:.0%} floor — ISIN joins are lossy. "
+                f"Re-run scripts/foundation/build_universe.py (NSE ETF/equity masters)."
+            )
+    for cls in _ISIN_COVERAGE_FLOOR:
+        if cls not in set(df["asset_class"]):
+            problems.append(f"instrument_master: no active {cls} rows at all")
+    return problems
+
+
 def check_filings_ingestion(eod: dt.date) -> list[str]:
     total = (
         _db.scalar(
@@ -250,6 +294,10 @@ def main() -> int:
         for p in prod_problems:
             print(f"    - {p}")
     stale = check(eod)
+    # Identity completeness is a BLOCKING check, same tier as staleness: a fresh
+    # table with half its join keys missing is not a lesser failure than a stale one.
+    print("  ── instrument_master identity ──")
+    stale += check_instrument_identity()
     print("  ── derived board tables (warn-only) ──")
     warn = check_board(eod)
     warn += check_filings_ingestion(eod)

@@ -31,6 +31,13 @@ import requests
 
 _NS = uuid.UUID("6f9b1f6e-0000-4000-8000-a71a5000c0de")  # fixed namespace for uuid5
 EQUITY_L = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
+# NSE's ETF securities master — the authoritative ISIN for every listed ETF.
+# ETF rows used to be built from the Kite dump alone, which carries no ISIN, so
+# two-thirds of ETFs sat at isin NULL and any ISIN join silently missed them
+# (GOLDBEES, SILVERBEES, BANKBEES, LIQUIDCASE, JUNIORBEES...). Worse, this file
+# recreates ETF rows on every run, so the weekly build actively re-emptied the
+# column. Sourcing the ISIN here fixes it at the source instead of downstream.
+ETF_L = "https://archives.nseindia.com/content/equities/eq_etfseclist.csv"
 _H = {"User-Agent": "Mozilla/5.0", "Referer": "https://www.nseindia.com/"}
 
 # An instrument is an ETF if its symbol or name carries one of these markers.
@@ -64,8 +71,31 @@ def fetch_equity_list() -> pd.DataFrame:
     return out
 
 
+def fetch_etf_list() -> dict[str, tuple[str, object]]:
+    """symbol -> (isin, listing_date) from NSE's ETF securities master.
+
+    latin-1: the file carries en-dashes in scheme names and is not UTF-8.
+    Returns {} on any failure — a transient NSE outage must not wipe the ISINs
+    already in the table, and the caller leaves existing values untouched.
+    """
+    try:
+        raw = requests.get(ETF_L, headers=_H, timeout=30).content
+        df = pd.read_csv(io.BytesIO(raw), encoding="latin-1")
+    except Exception as exc:
+        print(f"WARN fetch_etf_list failed ({exc}) — ETF ISINs left as-is")
+        return {}
+    df.columns = [c.strip() for c in df.columns]
+    listed = pd.to_datetime(df["DateofListing"], format="%d-%b-%y", errors="coerce").dt.date
+    return {
+        str(s).strip(): (str(i).strip(), d)
+        for s, i, d in zip(df["Symbol"], df["ISINNumber"], listed, strict=False)
+        if str(i).strip()
+    }
+
+
 def build(dry_run: bool = False) -> dict:
     eq = fetch_equity_list()
+    etf_ident = fetch_etf_list()
     eq_syms = set(eq["symbol"])
 
     kite = ik.kite_client()
@@ -125,19 +155,20 @@ def build(dry_run: bool = False) -> dict:
         if "INAV" in sym.upper() or re.search(r"\bI?NAV\b", nm, re.I):
             continue
         if _ETF_MARKERS.search(sym) or _ETF_MARKERS.search(nm):
+            isin, listed = etf_ident.get(sym, (None, None))
             rows.append(
                 (
                     uuid_for("etf", sym),
                     "etf",
                     sym,
                     cash_name.get(sym),
+                    isin,
                     None,
-                    None,
-                    None,
+                    listed,
                     tok,
                     "NSE",
                     True,
-                    "KITE_NSE_ETF",
+                    "NSE_ETF_L" if isin else "KITE_NSE_ETF",
                 )
             )
     # indices
@@ -193,9 +224,14 @@ def build(dry_run: bool = False) -> dict:
         if added:
             print("    ADDED:  ", ", ".join(sorted(sym.get(i, i) for i in added)))
         if removed:
+            # :ids, not %(ids)s — _db.read_df wraps the SQL in SQLAlchemy text(), which
+            # rejects psycopg2 placeholders. This branch only runs when a symbol LEAVES
+            # the universe, so the error stayed latent: every index reconstitution
+            # aborted the weekly build before it wrote anything, which is why
+            # instrument_master drifted (docs/table-census.md#L187).
             rem = _db.read_df(
                 "select instrument_id::text id, symbol from atlas_foundation.instrument_master "
-                "where instrument_id = any(%(ids)s)",
+                "where instrument_id::text = any(cast(:ids as text[]))",
                 {"ids": list(removed)},
             )
             print("    REMOVED:", ", ".join(sorted(rem["symbol"])))
