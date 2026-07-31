@@ -146,5 +146,7 @@ if [ ${#FAILURES[@]} -eq 0 ]; then
 else
   MSG="atlas_daily $EOD FAILURES: ${FAILURES[*]}"
   echo "=== $MSG ===" | tee -a "$LOG"
-  $PY -c "from atlas.intraday.notify import send_message_sync; send_message_sync('⚠️ $MSG')" >>"$LOG" 2>&1 || true
+  # Telegram removed (FM, 2026-07-30) — that channel carries the crossover books only.
+  # NOTE: failures are now PULL, not push. They surface in this log, in the health
+  # snapshot written above, and on /health + /admin/data-status. Nothing pings you.
 fi

@@ -571,7 +571,36 @@ def rebuild_backtest(pid: str, years: float = 5) -> dict:
 
 
 def cmd_backtest(a) -> None:
-    print(json.dumps(rebuild_backtest(a.portfolio_id, a.years), default=str))
+    """One book, or every active book with --all (the weekly refresh).
+
+    Nothing rebuilt these curves before: `rebuild_backtest` was CLI-only and in no cron,
+    so every book's backtest sat wherever someone last ran it by hand — between 3 and 22
+    days stale when the FM reported the 13/34 chart frozen at 21-Jul.
+
+    --all keeps going after a failure. One book with a bad panel must not leave the other
+    eighteen stale; the non-zero exit tells the orchestrator to flag it.
+    """
+    if not a.all:
+        if not a.portfolio_id:
+            raise SystemExit("pass --portfolio-id, or --all to rebuild every active book")
+        print(json.dumps(rebuild_backtest(a.portfolio_id, a.years), default=str))
+        return
+
+    ports = _db.read_df(
+        f"select portfolio_id::text pid, name from {M}.portfolio_master "
+        "where status='active' order by name"
+    )
+    failed: list[str] = []
+    for r in ports.to_dict("records"):
+        try:
+            out = rebuild_backtest(r["pid"], a.years)
+            print(f"  ok: {r['name']} — {out.get('total_return_pct')}%", flush=True)
+        except Exception as e:
+            failed.append(r["name"])
+            print(f"  FAIL: {r['name']} — {e}", flush=True)
+    print(f"[backtest --all] rebuilt={len(ports) - len(failed)} failed={len(failed)}", flush=True)
+    if failed:
+        raise SystemExit(f"backtest rebuild failed for: {', '.join(failed)}")
 
 
 def desk_rationale(thesis: str | None, conviction: object = None) -> str | None:
@@ -733,7 +762,8 @@ def main():
     i.set_defaults(fn=cmd_init)
 
     b = sub.add_parser("backtest")
-    b.add_argument("--portfolio-id", required=True)
+    b.add_argument("--portfolio-id", default=None)
+    b.add_argument("--all", action="store_true", help="rebuild every active book (weekly)")
     b.add_argument("--years", type=float, default=5)
     b.set_defaults(fn=cmd_backtest)
 

@@ -22,7 +22,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _db
 
 from atlas.intraday.auth import get_valid_access_token
-from atlas.intraday.notify import send_message_sync
 
 M = "atlas_foundation"
 
@@ -99,12 +98,9 @@ def record_and_notify(alerts: list[dict]) -> int:
                 on conflict (portfolio_id, symbol, kind, alert_date) do nothing""",
             {"p": a["pid"], "s": a["sym"], "k": a["kind"], "lv": a["level"], "q": a["quote"]},
         )
-        emoji = "🛑" if a["kind"] == "stop" else "🎯"
-        send_message_sync(
-            f"{emoji} <b>{a['sym']}</b> {a['kind']} {'breached' if a['kind'] == 'stop' else 'hit'} "
-            f"— quote {a['quote']} vs level {a['level']} ({a['name']})\n"
-            "Review: python scripts/foundation/desk_approve.py"
-        )
+        # Telegram removed (FM, 2026-07-30): the channel is the crossover books only.
+        # The breach is still RECORDED above, so /health and desk_approve.py surface it —
+        # this drops the push, not the signal.
         n += 1
     return n
 
