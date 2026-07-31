@@ -82,6 +82,8 @@ All `[stock]`, `max_position_pct = 0.08` → **12 slots**. None carries a risk s
 | **D6** | Timing logic (intraday alert → confirm → fill) applies to **all 4 stock crossover books**. Twin EMA-close books: 13/34 only for now. |
 | **D7** | Telegram: **only** the two 13/34 books alert. Senders 2-7 above are removed. |
 | **D8** | Poll cadence: reuse the existing **5-min** cron rather than the FM's stated 15 min — 3× detection fidelity, zero new infrastructure. *(Recommended, flagged for override.)* |
+| **D9** | **BUY = `entry_confirm="close"`** — the intraday breach only alerts; the position opens on the first close that confirms, and fills at the next session's open. Settled by the 8-year sweep, not by argument. See ADR 0005. |
+| **D10** | **SELL = `exit="death_cross"`** with the 15:15 lock, filling at that day's close. The `fast_ema` twin returned 34.5% against 428.4% over the same 8 years with 5.4× the trades, so it ships as a **paper** book, not a funded one. See ADR 0005. |
 
 ---
 
@@ -387,7 +389,7 @@ CREATE INDEX ON atlas_foundation.crossover_alerts (instrument_id);
 3. `EmaCross(exit="fast_ema")` on real 13/34 data emits a sell for MRPL on the session its low first breaks `ema_13`, and the death-cross variant does **not**.
 4. `replay(entry_fill='next_open')` books the entry at the next session's `open_adj`; `replay(exit_fill='same_close')` books the exit at that session's `close_adj`. Asserted against real stored OHLCV.
 5. `replay()` defaults (`next_close`/`next_close`) reproduce all 19 books' existing backtest NAV series unchanged.
-6. Re-run 13/34 Deathcross Close backtest: MRPL entry moves from 20-Jul @ ₹174.49 to **16-Jul @ ₹157.47**.
+6. Re-run the 13/34 backtest: MRPL's entry confirms at the **17-Jul** close (the 16th's close left ema13 154.89 under ema34 155.44, so it only alerted) and fills at the **20-Jul open, ₹172.00** — against the ₹174.49 the live book actually paid at that day's close. **This criterion originally claimed 16-Jul @ ₹157.47; that outcome is only reachable WITHOUT the close-confirmation step, and D9 rejected that variant.**
 7. Both 13/34 books show ≥8y `backtest` and a `live` series starting 2026-07-07, with different trade counts.
 8. `crossover_monitor.py` on a real Kite session emits exactly one `provisional` row per (book, symbol, direction, day) across repeated 5-min runs.
 9. The 15:15 tick promotes a sustained breach to `confirmed` and marks a recovered one `disarmed`; the nightly `mark` books only `confirmed`.
