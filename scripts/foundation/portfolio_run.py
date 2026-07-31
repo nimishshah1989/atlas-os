@@ -478,8 +478,14 @@ def cmd_init(a) -> None:
 
 def cmd_mark(a) -> None:
     eod = _db.eod_cutoff()
+    # Externally-sourced books (params.source='cpp' — the MaaL portfolios) are marked
+    # by scripts/foundation/sync_maal_books.py from the real broker data. The engine
+    # must not also mark them: two writers on the same portfolio_nav_daily rows means
+    # whichever ran last wins, and the board would show computed NAV for a book whose
+    # whole point is that it reports what actually happened.
     ports = _db.read_df(
-        f"select portfolio_id::text pid from {M}.portfolio_master where status='active'"
+        f"select portfolio_id::text pid from {M}.portfolio_master "
+        "where status='active' and coalesce(params->>'source','') <> 'cpp'"
     )
     done = skipped = 0
     for pid in ports["pid"]:
@@ -586,9 +592,11 @@ def cmd_backtest(a) -> None:
         print(json.dumps(rebuild_backtest(a.portfolio_id, a.years), default=str))
         return
 
+    # Same exclusion as cmd_mark: a CPP-sourced book has no engine strategy to
+    # backtest — it is a record of what a human actually traded.
     ports = _db.read_df(
         f"select portfolio_id::text pid, name from {M}.portfolio_master "
-        "where status='active' order by name"
+        "where status='active' and coalesce(params->>'source','') <> 'cpp' order by name"
     )
     failed: list[str] = []
     for r in ports.to_dict("records"):

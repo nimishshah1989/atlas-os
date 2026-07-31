@@ -23,6 +23,14 @@ PATH=/usr/local/bin:/usr/bin:/bin
 # Atlas v4 SUNDAY QA — Sun 10:00 IST (freshness / silent-zero / outlier audit → alert)
 30 4 * * 0    /home/ubuntu/atlas-os/scripts/ops/atlas_sunday_qa.sh >> /home/ubuntu/logs/atlas_sunday_qa_cron.log 2>&1
 
+# MaaL book sync — 12:00 and 22:00 IST daily (06:30 and 16:30 UTC).
+# Reads the CPP database (clients.jslwealth.in) read-only and lands the three real
+# model books in maal_holding_snapshot + portfolio_nav_daily + portfolio_trades.
+# Runs every day, not just weekdays: a backoffice file uploaded over a weekend
+# should not wait until Monday to reach the book the desk reads on Monday.
+30 6  * * * /home/ubuntu/atlas-os/scripts/ops/maal_sync.sh >> /home/ubuntu/logs/maal_sync.log 2>&1
+30 16 * * * /home/ubuntu/atlas-os/scripts/ops/maal_sync.sh >> /home/ubuntu/logs/maal_sync.log 2>&1
+
 # Atlas intraday sector-RS — every 5 min, 09:30–15:25 IST Mon–Fri (04:00–09:55 UTC).
 # Writes today's live sector-index ÷ NIFTY 50 path to atlas_sector_rs_intraday
 # (today-only retention). Own table, NOT in the EOD freshness guard (empty overnight

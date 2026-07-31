@@ -207,6 +207,91 @@ def check(eod: dt.date) -> list[str]:
 FILINGS_REFETCH_MIN_FRAC = 0.5
 
 
+# instrument_master identity completeness. Staleness is not the only way a table
+# fails you — this one was FRESH and WRONG. On 2026-07-31, 201 of 318 ETF rows had
+# a NULL isin, including GOLDBEES (15% of the flagship book), SILVERBEES, BANKBEES,
+# LIQUIDCASE and JUNIORBEES. Every ISIN join silently missed them, and because
+# build_universe recreates ETF rows on each run, the weekly build re-emptied the
+# column even after a manual backfill. Nothing noticed for months.
+#
+# Thresholds are floors, not targets: below these, an ISIN join is quietly lossy.
+# Indices legitimately have no ISIN and are excluded.
+_ISIN_COVERAGE_FLOOR = {"stock": 0.99, "etf": 0.95}
+
+
+def check_instrument_identity() -> list[str]:
+    """ISIN coverage per asset class. A NULL isin is a silently broken join."""
+    # :classes, not %(classes)s — _db.read_df wraps the SQL in SQLAlchemy text().
+    df = _db.read_df(
+        f"""
+        SELECT asset_class,
+               count(*) AS total,
+               count(isin) AS with_isin
+        FROM {M}.instrument_master
+        WHERE asset_class = ANY(CAST(:classes AS text[])) AND is_active
+        GROUP BY asset_class
+        """,
+        {"classes": list(_ISIN_COVERAGE_FLOOR)},
+    )
+
+    problems: list[str] = []
+    for r in df.itertuples():
+        floor = _ISIN_COVERAGE_FLOOR[r.asset_class]
+        got = (r.with_isin / r.total) if r.total else 0.0
+        print(f"    {r.asset_class}: isin {r.with_isin}/{r.total} ({got:.1%}, floor {floor:.0%})")
+        if got < floor:
+            problems.append(
+                f"instrument_master.{r.asset_class}: isin on {r.with_isin}/{r.total} "
+                f"({got:.1%}) is below the {floor:.0%} floor — ISIN joins are lossy. "
+                f"Re-run scripts/foundation/build_universe.py (NSE ETF/equity masters)."
+            )
+    for cls in _ISIN_COVERAGE_FLOOR:
+        if cls not in set(df["asset_class"]):
+            problems.append(f"instrument_master: no active {cls} rows at all")
+    return problems
+
+
+# The MaaL snapshot carries TWO dates and they fail differently. Conflating them
+# sends you debugging Atlas when the real answer is that nobody uploaded the
+# backoffice file.
+#   as_of        — the day Atlas last LOOKED. Stale ⇒ the sync is dead. Blocking.
+#   source_as_of — the day CPP's data is FROM. Stale ⇒ the upload is lagging.
+#                  Atlas is healthy; warn, do not fail the orchestrator.
+_MAAL_LOOK_MAX_LAG_DAYS = 1
+_MAAL_SOURCE_MAX_LAG_DAYS = 4
+
+
+def check_maal_snapshot(today: dt.date) -> tuple[list[str], list[str]]:
+    """(blocking, warnings) for the MaaL book sync."""
+    df = _db.read_df(f"""
+        SELECT maal_code, max(as_of) AS looked, max(source_as_of) AS sourced
+        FROM {M}.maal_holding_snapshot
+        GROUP BY maal_code
+    """)
+    if df.empty:
+        return ([f"{M}.maal_holding_snapshot is EMPTY — the MaaL sync has never run"], [])
+
+    blocking: list[str] = []
+    warn: list[str] = []
+    for code, looked, sourced in zip(df["maal_code"], df["looked"], df["sourced"], strict=False):
+        look_lag = (today - looked).days
+        src_lag = (today - sourced).days
+        print(
+            f"    {code}: looked {looked} ({look_lag}d ago), data from {sourced} ({src_lag}d old)"
+        )
+        if look_lag > _MAAL_LOOK_MAX_LAG_DAYS:
+            blocking.append(
+                f"maal_holding_snapshot[{code}]: last synced {looked} ({look_lag}d ago) — "
+                f"the sync is DEAD, and the Monday book is quietly serving a stale snapshot"
+            )
+        if src_lag > _MAAL_SOURCE_MAX_LAG_DAYS:
+            warn.append(
+                f"maal_holding_snapshot[{code}]: CPP data is from {sourced} ({src_lag}d old) — "
+                f"Atlas is fine, the backoffice upload is lagging"
+            )
+    return blocking, warn
+
+
 def check_filings_ingestion(eod: dt.date) -> list[str]:
     total = (
         _db.scalar(
@@ -250,8 +335,16 @@ def main() -> int:
         for p in prod_problems:
             print(f"    - {p}")
     stale = check(eod)
+    # Identity completeness is a BLOCKING check, same tier as staleness: a fresh
+    # table with half its join keys missing is not a lesser failure than a stale one.
+    print("  ── instrument_master identity ──")
+    stale += check_instrument_identity()
+    print("  ── MaaL book sync ──")
+    maal_blocking, maal_warn = check_maal_snapshot(dt.date.today())
+    stale += maal_blocking
     print("  ── derived board tables (warn-only) ──")
     warn = check_board(eod)
+    warn += maal_warn
     warn += check_filings_ingestion(eod)
     if warn:
         print(

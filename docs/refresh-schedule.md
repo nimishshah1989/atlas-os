@@ -6,14 +6,29 @@
 All times **IST** (NSE close 15:30).
 
 ## Cadence (FM-directed)
-- **Weekdays (Mon–Fri):** daily job runs **sequentially from 19:30 IST** onwards.
+- **Weekdays (Mon–Fri):** daily job runs **sequentially from 16:00 IST** onwards.
 - **Saturday:** all weekly refreshes (holdings, masters, fundamentals, shareholding).
 - **Sunday:** RESERVED for the **weekly QA / health-audit** job (no ingestion) → emails FM if anything is off.
 - **Intraday (Mon–Fri market hours):** **15-min live refresh** (indices + live sector calc), backend-first.
 
 ---
 
-## A. `atlas_daily.sh` — Mon–Fri, sequential from 19:30 IST
+## A0. `maal_sync.sh` — EVERY day, 12:00 and 22:00 IST
+
+Pulls the three real model books (BJ53 / BJ53IND / JR100PASS) from the
+`clients.jslwealth.in` portal database. Runs on its own schedule, not inside the daily
+chain, because CPP positions move on backoffice upload rather than on market close — the
+noon run catches a morning upload, the 22:00 run an evening one. Runs on weekends too: a
+file uploaded on Saturday should reach the book the desk reads on Monday.
+
+| Seq | Stage | Source/Script | → Table |
+|---|---|---|---|
+| 1 | Book sync | `scripts/foundation/sync_maal_books.py` | `maal_holding_snapshot`, `portfolio_nav_daily` (live), `portfolio_trades` + `maal_trade_link` |
+| 2 | P&L reconcile | `scripts/ops/maal_pnl_reconcile.py` | — (gate, non-fatal) |
+
+Runbook: [docs/maal-process.md](maal-process.md) · Reasoning: [ADR 0005](adr/0005-maal-books-come-from-the-cpp-database.md)
+
+## A. `atlas_daily.sh` — Mon–Fri, sequential from 16:00 IST
 Runs as an ordered chain; each stage must succeed (or log+continue with end-of-run alert). Kite token comes from the morning Telegram login (§E).
 
 | Seq | Stage | Source/Script | → Table |
@@ -62,8 +77,8 @@ Detailed weekly check → **emails FM** (and/or health-check page) if issues. As
 - Reflects mainly in indices + live sector movement.
 
 ## E. Kite auth — Telegram daily login (champion-trader pattern; ALREADY BUILT)
-- `scripts/kite_daily_notify.py` sends a Telegram message ~08:55 IST: if token valid → "already authed"; else → click-to-auth link. FM clicks → Kite OAuth → token stored (`atlas_kite_session`), valid to midnight IST. The 19:30 daily job uses it.
-- **To finish (G2):** (a) confirm `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` are set (NOT in atlas-os/.env today); (b) the login link `/api/kite/login` is not a Next route — confirm/route it to the FastAPI `atlas/api/kite_auth.py` OAuth start+callback (exchange→store); (c) freshness guard alerts if no token by 19:30 IST.
+- `scripts/kite_daily_notify.py` sends a Telegram message ~08:55 IST: if token valid → "already authed"; else → click-to-auth link. FM clicks → Kite OAuth → token stored (`atlas_kite_session`), valid to midnight IST. The 16:00 daily job uses it.
+- **To finish (G2):** (a) confirm `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` are set (NOT in atlas-os/.env today); (b) the login link `/api/kite/login` is not a Next route — confirm/route it to the FastAPI `atlas/api/kite_auth.py` OAuth start+callback (exchange→store); (c) freshness guard alerts if no token by 16:00 IST.
 - TOTP auto-login stays only as an optional fallback; the Telegram click flow is primary (avoids the stale-TOTP lockout risk).
 - Env codified: `talib` (needs C lib) + `pyotp` → `pyproject.toml`; `atlas_kite_session` → `atlas_foundation`.
 
@@ -71,4 +86,4 @@ Detailed weekly check → **emails FM** (and/or health-check page) if issues. As
 JIP crontab (`jip_trigger.sh`, `jip_agent3.sh`, `nightly_compute`), `run_atlas_intelligence_nightly.sh` (retired IC), M2/M3/M4/M5 legacy steps, pg_cron `atlas.mv_*` refreshes (moved into `atlas_foundation` + intraday job), `mfwatch_daily`, us/global crons (`us_daily`/`global_daily`/`stooq`). Frontend healthcheck + auto-deploy stay.
 
 ## Confirmed decisions (2026-07-01)
-- ✅ Daily sequential from 19:30 IST · ✅ Weekly = Saturday · ✅ Sunday = QA/health audit + email · ✅ 15-min intraday (indices+sector) · ✅ Kite = ALL OHLCV · ✅ Telegram daily login (existing flow).
+- ✅ Daily sequential from 16:00 IST · ✅ Weekly = Saturday · ✅ Sunday = QA/health audit + email · ✅ 15-min intraday (indices+sector) · ✅ Kite = ALL OHLCV · ✅ Telegram daily login (existing flow).
