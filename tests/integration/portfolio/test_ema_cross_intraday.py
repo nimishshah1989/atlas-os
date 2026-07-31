@@ -37,7 +37,7 @@ _SQL = text(
     """
     select t.instrument_id::text as instrument_key, t.date,
            t.ema_13, t.ema_34,
-           o.high_adj as high, o.low_adj as low
+           o.high_adj as high, o.low_adj as low, o.close_adj as close
     from atlas_foundation.technical_daily t
     join atlas_foundation.ohlcv_stock o
       on o.instrument_id = t.instrument_id and o.date = t.date

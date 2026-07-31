@@ -102,12 +102,9 @@ def main() -> int:
         report = f"⚠️ Atlas weekly QA FAIL ({eod}):\n" + "\n".join(f"• {c}" for c in checks)
         rc = 1
     print(report)
-    try:
-        from atlas.intraday.notify import send_message_sync
-
-        send_message_sync(report)
-    except Exception as e:
-        print(f"[qa_weekly] notify failed: {e}")
+    # Telegram removed (FM, 2026-07-30) — crossover books only on that channel. The
+    # report still lands in the cron log and the health snapshot; the non-zero rc below
+    # is what actually gates the weekly orchestrator.
     return rc
 
 

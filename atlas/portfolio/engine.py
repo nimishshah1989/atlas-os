@@ -22,8 +22,16 @@ from typing import cast
 
 import pandas as pd
 
+from . import rationale
+
 _MONEY = Decimal("0.01")
 _FUND_QTY = Decimal("0.001")  # MF units trade in fractions; stocks/ETFs whole units
+
+# Per-side fill timing. "same_*" executes on the event's OWN session, "next_*" on the
+# following one; the suffix names the price. Crossover v2 needs the two sides on
+# different clocks (entry next_open, exit same_close), which one bool cannot express.
+ENTRY_FILLS = ("next_close", "next_open", "same_close")
+EXIT_FILLS = ("next_close", "same_close")
 
 
 @dataclass(frozen=True)
@@ -60,6 +68,9 @@ def replay(
     stop_pct: Decimal | None = None,
     stop_trail: Decimal | None = None,
     same_day_fill: bool = False,
+    entry_fill: str | None = None,
+    exit_fill: str | None = None,
+    open_prices: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Run the day-loop over `loop_dates` (default: all of `prices.index`).
     Pass the FULL price panel even when looping few dates — valuation carry-forward
@@ -82,6 +93,21 @@ def replay(
     symbol, side, qty, price, value, reason), navs (date, nav, cash, invested,
     n_positions).
     """
+    # Resolve per-side timing from the legacy bool so every pre-v2 caller — and the
+    # 19 books whose stored backtest curves came out of it — keeps byte-identical
+    # fills. An explicit enum always wins.
+    _legacy = "same_close" if same_day_fill else "next_close"
+    entry_fill = entry_fill or _legacy
+    exit_fill = exit_fill or _legacy
+    if entry_fill not in ENTRY_FILLS:
+        raise ValueError(f"unknown entry_fill {entry_fill!r}; known: {list(ENTRY_FILLS)}")
+    if exit_fill not in EXIT_FILLS:
+        raise ValueError(f"unknown exit_fill {exit_fill!r}; known: {list(EXIT_FILLS)}")
+    if entry_fill == "next_open" and open_prices is None:
+        # Never fall back to the close: that would misprice every entry in the book
+        # while looking like it worked.
+        raise ValueError("entry_fill='next_open' requires an open_prices panel")
+
     dates = list(loop_dates) if loop_dates is not None else list(prices.index)
     if not dates:
         return _empty_trades(), _empty_navs()
@@ -97,19 +123,32 @@ def replay(
     # same_day_fill (intraday-cross portfolios): the event's OWN session, because
     # the intraday breach is already known before that close.
     entries_at: dict[object, list[tuple[str, object]]] = {}
-    exits_at: dict[object, list[str]] = {}
+    # (instrument, signal date) — the date lets an exit find its own strategy note
+    exits_at: dict[object, list[tuple[str, object]]] = {}
+    # spec §I: the strategy's own words about which rule fired and at what level,
+    # keyed by (instrument, signal date). The engine cannot derive this — it never
+    # sees an EMA. Absent for baskets and for any strategy that supplies no note.
+    notes: dict[tuple[str, object], str] = {}
     if events is not None and not events.empty:
+        has_note = "note" in events.columns
         date_idx = pd.Index(dates)
-        side = "left" if same_day_fill else "right"
+        # "same_*" lands on the event's own session (side=left), "next_*" on the one
+        # after (side=right). The two sides resolve independently now.
+        entry_side = "left" if entry_fill.startswith("same") else "right"
+        exit_side = "left" if exit_fill.startswith("same") else "right"
         for ev in events.to_dict("records"):
-            pos = int(date_idx.searchsorted(ev["date"], side=side))
+            is_entry = ev["event"] == "entry"
+            pos = int(date_idx.searchsorted(ev["date"], side=entry_side if is_entry else exit_side))
             if pos >= len(dates):
                 continue  # signal at the last close — executes on a future run
             d = dates[pos]
-            if ev["event"] == "entry":
+            if has_note and ev.get("note"):
+                notes[(ev["instrument_key"], ev["date"])] = str(ev["note"])
+            if is_entry:
                 entries_at.setdefault(d, []).append((ev["instrument_key"], ev["date"]))
             else:
-                exits_at.setdefault(d, []).append(ev["instrument_key"])
+                # carry the signal date so the exit can find its own note
+                exits_at.setdefault(d, []).append((ev["instrument_key"], ev["date"]))
 
     positions: dict[str, Decimal] = dict(start_positions or {})
     entry_date: dict = dict(start_entry_dates or {})  # k -> buy date, for exit load
@@ -134,11 +173,26 @@ def replay(
         v = stop_ema.at[d, k]
         return None if v is None or pd.isna(v) else Decimal(str(v))
 
-    def _fill(d, k, lookback: bool):
+    def _open_px(d, k):
+        """The session's real OPEN print at d, or None. Only ever used for
+        entry_fill='next_open' — validated non-None at entry to replay()."""
+        if open_prices is None or k not in open_prices.columns or d not in open_prices.index:
+            return None
+        v = open_prices.at[d, k]
+        return None if v is None or pd.isna(v) else Decimal(v)
+
+    def _fill(d, k, lookback: bool, use_open: bool = False):
         """(price, trade_date) for a fill at d. Inception fills may look back to the
         instrument's own LAST real print (e.g. fund NAV lags stock EOD by a session)
         — FM rule: inception captures the last available price. Signal fills never
-        look back."""
+        look back.
+
+        use_open takes the session's OPEN instead of its close (crossover v2 entries).
+        A session that prints a close but no open is not tradeable at the open, so it
+        returns None rather than quietly substituting the close."""
+        if use_open:
+            p = _open_px(d, k)
+            return (p, d) if p is not None else None
         p = _px(d, k)
         if p is not None:
             return p, d
@@ -169,7 +223,17 @@ def replay(
             return Decimal(0)
         return (value * exit_load[0]).quantize(_MONEY)
 
-    def _book(trade_date, k, side, qty, price, reason, extra_cost=Decimal(0)):
+    def _book(
+        trade_date,
+        k,
+        side,
+        qty,
+        price,
+        reason,
+        extra_cost=Decimal(0),
+        rationale: str | None = None,
+        composite: float | None = None,
+    ):
         nonlocal cash
         value = (qty * price).quantize(_MONEY)
         cost = (value * _rate(k, side)).quantize(_MONEY) + extra_cost
@@ -189,17 +253,27 @@ def replay(
                 "value": value,
                 "cost": cost,
                 "reason": reason,
+                # spec §I: the row says WHY. `reason` is the CHECK-constrained kind;
+                # these two are the decision trail. -inf is the no-score sentinel and
+                # must not reach the DB as a number.
+                "rationale": rationale,
+                "composite_at_signal": (
+                    None if composite is None or composite == float("-inf") else composite
+                ),
             }
         )
 
     def _enter(d, candidates: list[tuple[str, object]], reason: str):
         lookback = reason == "inception"
+        # Inception stays on the close: the FM rule is that a basket pick captures the
+        # last available price, which is a close, not an open.
+        use_open = entry_fill == "next_open" and reason != "inception"
         seen_c: set[str] = set()
         cands = []
         for k, sig in candidates:
             if k in positions or k in seen_c:
                 continue  # dedup: never book the same name twice in one execution
-            fill = _fill(d, k, lookback)
+            fill = _fill(d, k, lookback, use_open)
             if fill is not None:
                 seen_c.add(k)
                 cands.append((k, sig, fill))
@@ -211,7 +285,15 @@ def replay(
                 alloc = inception_weights.get(k, Decimal(0)) * Decimal(cfg.initial_capital)
                 qty = _qty_for(alloc / (1 + _rate(k, "buy")), price, asset_class.get(k, "stock"))
                 if qty > 0:
-                    _book(trade_date, k, "buy", qty, price, reason)
+                    _book(
+                        trade_date,
+                        k,
+                        "buy",
+                        qty,
+                        price,
+                        reason,
+                        rationale=rationale.inception_clause(weight=inception_weights.get(k)),
+                    )
                     positions[k] = qty
                     entry_date[k] = trade_date
             return
@@ -222,16 +304,42 @@ def replay(
         # in candidate order, so arrival order (SQL scan order) must never matter —
         # replays have to be bit-reproducible run to run
         cands.sort(key=lambda c: (-_comp(c[0], c[1]), c[0]))
+        n_candidates = len(cands)
+        # spec §I.4: the names that crossed and did NOT fit were discarded silently.
+        # They are the answer to "why this one", so keep them for the rationale.
+        passed_over = [(str(symbols.get(k, k)), _comp(k, sig)) for k, sig, _f in cands[open_slots:]]
         cands = cands[:open_slots]
         nav_now = cash + _mark(d)
         remaining = len(cands)
-        for k, _sig, (price, trade_date) in cands:
-            alloc = min(nav_now * Decimal(cfg.max_position_pct), cash / remaining)
+        for rank, (k, sig, (price, trade_date)) in enumerate(cands, start=1):
+            cap_alloc = nav_now * Decimal(cfg.max_position_pct)
+            cash_alloc = cash / remaining
+            alloc = min(cap_alloc, cash_alloc)
             remaining -= 1
             # reserve for the buy-side execution cost so cash never goes negative
             qty = _qty_for(alloc / (1 + _rate(k, "buy")), price, asset_class.get(k, "stock"))
             if qty > 0:
-                _book(trade_date, k, "buy", qty, price, reason)
+                comp = _comp(k, sig)
+                why = (
+                    rationale.inception_clause(weight=None)
+                    if reason == "inception"
+                    else rationale.join(
+                        notes.get((k, sig)),
+                        rationale.slot_clause(
+                            rationale.Slot(
+                                composite=comp,
+                                rank=rank,
+                                n_candidates=n_candidates,
+                                open_slots=open_slots,
+                                passed_over=passed_over,
+                                cap_limited=cap_alloc <= cash_alloc,
+                                alloc=alloc,
+                                cap_pct=Decimal(cfg.max_position_pct),
+                            )
+                        ),
+                    )
+                )
+                _book(trade_date, k, "buy", qty, price, reason, rationale=why, composite=comp)
                 positions[k] = qty
                 entry_date[k] = trade_date
 
@@ -241,7 +349,8 @@ def replay(
         v = cast("float | None", comp_panel[k].asof(sig_date))
         return float("-inf") if v is None or pd.isna(v) else float(v)
 
-    pending_exits: set[str] = set()  # exits whose execution day had no real print
+    # (instrument, signal date) so a carried-forward exit keeps its strategy note
+    pending_exits: set[tuple[str, object]] = set()
     for i, d in enumerate(dates):
         if i == 0 and not positions and inception_state is not None:
             picks: list[tuple[str, object]] = [(str(k), d) for k, v in inception_state.items() if v]
@@ -259,15 +368,20 @@ def replay(
                     pv = _px(prev, k)
                     if pv is None:
                         continue
+                    kind, lvl, pct = "ema", None, None
                     if stop_pct is not None:
                         ep = entry_price.get(k)
-                        hit = ep is not None and pv < ep * (Decimal(1) - stop_pct)
+                        lvl = None if ep is None else ep * (Decimal(1) - stop_pct)
+                        hit = lvl is not None and pv < lvl
+                        kind, pct = "pct", stop_pct
                     elif stop_trail is not None:
                         pk = peak_price.get(k)
-                        hit = pk is not None and pv < pk * (Decimal(1) - stop_trail)
+                        lvl = None if pk is None else pk * (Decimal(1) - stop_trail)
+                        hit = lvl is not None and pv < lvl
+                        kind, pct = "trail", stop_trail
                     else:
-                        ev = _ema(prev, k)
-                        hit = ev is not None and pv < ev
+                        lvl = _ema(prev, k)
+                        hit = lvl is not None and pv < lvl
                     if not hit:
                         continue
                     price = _px(d, k)
@@ -275,27 +389,57 @@ def replay(
                         continue
                     qty = positions.pop(k)
                     el = _exit_load(k, d, (qty * price).quantize(_MONEY))
-                    _book(d, k, "sell", qty, price, "stop", extra_cost=el)
+                    _book(
+                        d,
+                        k,
+                        "sell",
+                        qty,
+                        price,
+                        "stop",
+                        extra_cost=el,
+                        rationale=rationale.stop_clause(
+                            kind=kind,
+                            prior_close=pv,
+                            level=cast(Decimal, lvl),
+                            pct=pct,
+                            entry_price=entry_price.get(k),
+                        ),
+                    )
                     entry_date.pop(k, None)
                     entry_price.pop(k, None)
                     peak_price.pop(k, None)
-                    pending_exits.discard(k)
+                    pending_exits = {p for p in pending_exits if p[0] != k}
             # today's exit signals + any carried forward from a no-print day
-            for k in list(pending_exits) + exits_at.get(d, []):
+            for k, sig in list(pending_exits) + exits_at.get(d, []):
                 if k not in positions:
-                    pending_exits.discard(k)
+                    pending_exits.discard((k, sig))
                     continue
                 price = _px(d, k)
                 if not price:  # suspended / no print — retry next session, don't drop
-                    pending_exits.add(k)
+                    pending_exits.add((k, sig))
                     continue
                 qty = positions.pop(k)
                 el = _exit_load(k, d, (qty * price).quantize(_MONEY))
-                _book(d, k, "sell", qty, price, "signal", extra_cost=el)
+                # the strategy's note IS the whole story for an exit: which rule fired,
+                # at what level, and that the 15:15 lock held. No slot competition.
+                _book(
+                    d,
+                    k,
+                    "sell",
+                    qty,
+                    price,
+                    "signal",
+                    extra_cost=el,
+                    # AC17: every engine-written row says something. EmaCross supplies
+                    # the rule and the level; rank/policy strategies supply nothing yet,
+                    # and a NULL beside prose reads as a bug rather than as "no note".
+                    rationale=notes.get((k, sig))
+                    or "Closed on the strategy's exit signal for this book.",
+                )
                 entry_date.pop(k, None)
                 entry_price.pop(k, None)
                 peak_price.pop(k, None)
-                pending_exits.discard(k)
+                pending_exits.discard((k, sig))
             _enter(d, entries_at.get(d, []), "signal")
 
         if stop_trail is not None:  # ratchet each held position's peak on today's close
@@ -335,6 +479,8 @@ def _empty_trades() -> pd.DataFrame:
                 "value",
                 "cost",
                 "reason",
+                "rationale",
+                "composite_at_signal",
             ]
         )
     )

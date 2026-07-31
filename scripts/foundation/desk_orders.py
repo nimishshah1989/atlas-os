@@ -375,15 +375,13 @@ def _email_memo(text: str) -> None:
 
 
 def send_memo(text: str) -> None:
-    """Email + Telegram delivery; each a graceful no-op when unconfigured,
-    neither may ever break the desk cycle."""
+    """EMAIL delivery only — a graceful no-op when unconfigured, and it may never break
+    the desk cycle.
+
+    Telegram removed (FM, 2026-07-30): that channel now carries the crossover books and
+    nothing else. The memo still arrives by email, so this drops a duplicate, not the
+    memo itself."""
     try:
         _email_memo(text)
     except Exception as e:
         print(f"[desk] memo email failed: {e}", flush=True)
-    try:
-        from atlas.intraday.notify import send_message_sync
-
-        send_message_sync(text)
-    except Exception as e:
-        print(f"[desk] memo telegram failed: {e}", flush=True)

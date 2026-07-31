@@ -107,8 +107,11 @@ if it ever drifts.
 Local setup: `make setup`, then `.env` with `ATLAS_DB_URL` (copy from `frontend/.env.local`).
 `make gate` (lint + tests + pyright **ratchet**) is the pre-PR check — ~7s. **Not `make check`**,
 which runs raw pyright and exits non-zero by design on the grandfathered baseline.
-`make test` = 49 unit tests, no DB. Integration tests need the direct non-pooler URL — run on
-the box.
+`make test` = unit tests only, no DB. Integration tests run fine **on the laptop** via the
+`aws-1-ap-south-1` pooler on 6543 (whole portfolio suite ~30s) — point `ATLAS_DB_URL` at it.
+The direct `db.<ref>.supabase.co:5432` host is IPv6-only and unreachable from macOS, which is
+what "run on the box" was really about. Note `aws-0-` refuses the connection; the `.env`
+comment claiming `aws-1-` "tested negative" is wrong.
 
 ## Local workspace (NEVER under iCloud)
 

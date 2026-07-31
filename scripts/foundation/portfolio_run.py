@@ -7,6 +7,15 @@ detected at close of session e execute at the close of the next session;
 everything anchors to the last complete EOD — never a partial candle.
 """
 
+# allow-large: 723 LOC against the 600 limit. This is a PRE-EXISTING overage, not
+# something crossover v2 introduced — the file was already 722 lines and #204 added a
+# single column to one SQL string, which is what surfaced it (the hook only inspects
+# files a commit touches). The reason this valve is used rather than the file being
+# split: the split is real work (cli / runner / writers), it touches every caller of
+# the six subcommands, and bundling it into a signal-semantics change to books that
+# hold live capital would make both diffs unreviewable. It is NOT claimed to be
+# cohesive at this size. Tracked as its own task; see #204's discussion.
+
 from __future__ import annotations
 
 import argparse
@@ -29,6 +38,7 @@ from portfolio_data import (
     load_composite,
     load_cost_tax,
     load_instruments,
+    load_open_prices,
     load_portfolio,
     load_prices,
     load_tech,
@@ -268,11 +278,12 @@ def _run_slice(
                 )
                 tech = tech.merge(regime, on="date", how="left")
             if getattr(strat, "needs_ohlc", False):
-                # intraday-cross detection needs the day's adjusted high/low (same
-                # price basis as the EMAs — close_adj); stocks only.
+                # intraday-cross detection needs the day's adjusted high/low, plus the
+                # close for the 15:15-lock proxy on exits (same price basis as the
+                # EMAs — close_adj); stocks only.
                 hl = _db.read_df(
                     f"""select instrument_id::text as instrument_key, date,
-                               high_adj as high, low_adj as low
+                               high_adj as high, low_adj as low, close_adj as close
                         from {M}.ohlcv_stock
                         where instrument_id::text = any(:ks) and date between :a and :b""",
                     {
@@ -340,6 +351,24 @@ def _run_slice(
         elif sc and sc[0] == "trail":
             stop_trail = sc[1]
 
+    # Crossover v2 per-side fill timing, read off the strategy the same way
+    # same_day_fill already is. Only a next-open ENTRY needs the extra panel.
+    entry_fill = getattr(strat, "entry_fill", None)
+    exit_fill = getattr(strat, "exit_fill", None)
+    open_prices = None
+    if entry_fill == "next_open":
+        if (universe["asset_class"] != "stock").any():
+            # ohlcv_etf has no open_adj and funds have no open at all. Mixing a raw
+            # open with close_adj EMAs would silently misprice across every corporate
+            # action, so refuse rather than half-fill the book.
+            raise SystemExit(
+                "entry_fill='next_open' needs adjusted opens, which exist for stocks "
+                f"only — this universe holds {sorted(set(universe['asset_class']))}"
+            )
+        open_prices = load_open_prices(universe, lookback, end)
+        if open_prices.empty:
+            raise SystemExit(f"no adjusted opens in {lookback}..{end} — cannot fill at next open")
+
     return replay(
         cfg,
         prices=prices,
@@ -359,6 +388,9 @@ def _run_slice(
         stop_pct=stop_pct,
         stop_trail=stop_trail,
         same_day_fill=getattr(strat, "same_day_fill", False),
+        entry_fill=entry_fill,
+        exit_fill=exit_fill,
+        open_prices=open_prices,
     )
 
 
@@ -539,7 +571,36 @@ def rebuild_backtest(pid: str, years: float = 5) -> dict:
 
 
 def cmd_backtest(a) -> None:
-    print(json.dumps(rebuild_backtest(a.portfolio_id, a.years), default=str))
+    """One book, or every active book with --all (the weekly refresh).
+
+    Nothing rebuilt these curves before: `rebuild_backtest` was CLI-only and in no cron,
+    so every book's backtest sat wherever someone last ran it by hand — between 3 and 22
+    days stale when the FM reported the 13/34 chart frozen at 21-Jul.
+
+    --all keeps going after a failure. One book with a bad panel must not leave the other
+    eighteen stale; the non-zero exit tells the orchestrator to flag it.
+    """
+    if not a.all:
+        if not a.portfolio_id:
+            raise SystemExit("pass --portfolio-id, or --all to rebuild every active book")
+        print(json.dumps(rebuild_backtest(a.portfolio_id, a.years), default=str))
+        return
+
+    ports = _db.read_df(
+        f"select portfolio_id::text pid, name from {M}.portfolio_master "
+        "where status='active' order by name"
+    )
+    failed: list[str] = []
+    for r in ports.to_dict("records"):
+        try:
+            out = rebuild_backtest(r["pid"], a.years)
+            print(f"  ok: {r['name']} — {out.get('total_return_pct')}%", flush=True)
+        except Exception as e:
+            failed.append(r["name"])
+            print(f"  FAIL: {r['name']} — {e}", flush=True)
+    print(f"[backtest --all] rebuilt={len(ports) - len(failed)} failed={len(failed)}", flush=True)
+    if failed:
+        raise SystemExit(f"backtest rebuild failed for: {', '.join(failed)}")
 
 
 def desk_rationale(thesis: str | None, conviction: object = None) -> str | None:
@@ -701,7 +762,8 @@ def main():
     i.set_defaults(fn=cmd_init)
 
     b = sub.add_parser("backtest")
-    b.add_argument("--portfolio-id", required=True)
+    b.add_argument("--portfolio-id", default=None)
+    b.add_argument("--all", action="store_true", help="rebuild every active book (weekly)")
     b.add_argument("--years", type=float, default=5)
     b.set_defaults(fn=cmd_backtest)
 

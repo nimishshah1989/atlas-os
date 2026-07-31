@@ -49,6 +49,10 @@ step "portfolio_evolve"    $PY scripts/foundation/portfolio_evolve.py
 # Desk weekly reflection: updates each desk's lessons from forward outcome stamps
 # (confidence earned/decayed), retires dead lessons. Needs the week's desk_journal
 # + desk_outcomes rows, both written nightly by desk_run.
+# Backtest curves: NOTHING rebuilt these before, so each book's "if this rulebook had run
+# for 5 years" chart sat wherever someone last ran it by hand — the FM found 13/34 frozen
+# at 21-Jul. Weekly is enough for an 8-year replay across 19 books; nightly is wasteful.
+step "portfolio_backtest_rebuild" $PY scripts/foundation/portfolio_run.py backtest --all --years 8
 step "desk_reflect"        $PY scripts/foundation/desk_reflect.py
 # Desk v2 wave 4: one falsifiable methodology hypothesis + one masked-ticker
 # memorization audit per week (rotating desk). Both journal to their tables.
@@ -57,4 +61,4 @@ step "desk_audit_masked"   $PY scripts/foundation/desk_audit_masked.py
 
 if [ ${#FAILURES[@]} -eq 0 ]; then echo "=== atlas_weekly COMPLETE — all green ===" | tee -a "$LOG"
 else MSG="atlas_weekly FAILURES: ${FAILURES[*]}"; echo "=== $MSG ===" | tee -a "$LOG"
-  $PY -c "from atlas.intraday.notify import send_message_sync; send_message_sync('⚠️ $MSG')" >>"$LOG" 2>&1 || true; fi
+  : ; fi  # Telegram removed (FM, 2026-07-30) — crossover books only on that channel

@@ -13,6 +13,15 @@ Two modes:
     fill then happens at that same day's close (``same_day_fill``), removing the
     +1-session lag. Used by the stock crossover portfolios that run on the live
     15-min feed. Needs high/low columns (``needs_ohlc``) alongside the EMAs.
+
+Exit rule (``exit``) is independent of both modes — entries are always the golden
+cross; only the close differs:
+  * ``death_cross`` (default): the fast EMA crosses back below the slow. Every
+    book predating crossover v2 uses this, so the default must never move.
+  * ``fast_ema``: price loses the fast EMA itself. Far tighter — on real MRPL at
+    2026-07-29 the EMA13 trigger sat 26.8% above the death-cross level, so the two
+    disagree on the same name on the same day. Run as a twin book, never a silent
+    substitution.
 """
 
 from __future__ import annotations
@@ -25,6 +34,9 @@ from atlas.primitives import ema_cross_price
 
 from .base import StateStrategy
 
+EXIT_RULES = ("death_cross", "fast_ema")
+ENTRY_CONFIRMS = ("intraday", "close")
+
 
 class EmaCross(StateStrategy):
     key = "ema_cross"
@@ -35,20 +47,58 @@ class EmaCross(StateStrategy):
         slow: int,
         intraday: bool = False,
         same_day_fill: bool | None = None,
+        exit: str = "death_cross",
+        entry_confirm: str = "intraday",
     ):
         if int(fast) >= int(slow):
             raise ValueError(f"fast EMA ({fast}) must be shorter than slow ({slow})")
+        if exit not in EXIT_RULES:
+            raise ValueError(f"unknown exit rule {exit!r}; known: {list(EXIT_RULES)}")
+        if entry_confirm not in ENTRY_CONFIRMS:
+            raise ValueError(
+                f"unknown entry_confirm {entry_confirm!r}; known: {list(ENTRY_CONFIRMS)}"
+            )
         self.fast, self.slow = int(fast), int(slow)
+        self.exit = exit
+        self.entry_confirm = entry_confirm
         self.intraday = bool(intraday)
         # Intraday detection implies same-day fill; but same-day fill can also be
         # used with plain daily-close confirmation (removes the +1-session lag
         # without the intraday fakeouts).
-        self._same_day_fill = bool(intraday if same_day_fill is None else same_day_fill)
+        #
+        # entry_confirm="close" is the exception: there the CONFIRMING CLOSE is the
+        # signal, so filling at that same close would be lookahead. Such an entry
+        # belongs to the next session (at its open, per the runner). An explicit
+        # same_day_fill still wins — sweeps need to force the combination.
+        auto_same_day = intraday and entry_confirm != "close"
+        self._same_day_fill = bool(auto_same_day if same_day_fill is None else same_day_fill)
 
     @property
     def same_day_fill(self) -> bool:
         """Execute an event at its OWN session's close, not the next (no lag)."""
         return self._same_day_fill
+
+    @property
+    def entry_fill(self) -> str:
+        """Engine fill timing for BUYS (see engine.ENTRY_FILLS).
+
+        A close-confirmed entry cannot fill at the confirming close without
+        lookahead, so it takes the next session's OPEN — the FM's "earliest possible
+        price". Everything else keeps the pre-v2 mapping off same_day_fill.
+        """
+        if self.entry_confirm == "close":
+            return "next_open"
+        return "same_close" if self._same_day_fill else "next_close"
+
+    @property
+    def exit_fill(self) -> str:
+        """Engine fill timing for SELLS (see engine.EXIT_FILLS).
+
+        Intraday detection means the 15:15 lock has already decided before the close,
+        so the exit fills at that same close — the FM's rule, because the next open can
+        gap further down. Daily-close detection keeps the next-session fill.
+        """
+        return "same_close" if (self.intraday or self._same_day_fill) else "next_close"
 
     @property
     def needs_ohlc(self) -> bool:
@@ -72,8 +122,16 @@ class EmaCross(StateStrategy):
     def _intraday_events(self, tech: pd.DataFrame) -> pd.DataFrame:
         """Entry the day the intraday high breaches the provisional up-cross level
         (from the PRIOR close's confirmed EMAs); exit the day the intraday low
-        breaches the down-cross level. One entry/exit per episode — a flat→long
-        state walk suppresses re-firing while a breakout is still unconfirmed.
+        breaches the exit level AND the close still sustains the break. One
+        entry/exit per episode — a flat→long state walk suppresses re-firing while a
+        breakout is still unconfirmed.
+
+        The exit's second condition is the FM's 15:15 lock: a breach that recovers
+        before the close is an alert, not a trade. Daily bars hold no 15:15 price, so
+        the backtest proxies the lock with the close (spec: divergence #2). Real MRPL
+        2026-07-27 is the case that makes this load-bearing — low 161.50 broke EMA13
+        166.74, then closed back up at 169.75. A one-condition rule sells there and is
+        wrong; the sustained break came the next session.
 
         ponytail: an entry whose intraday cross never confirms above (spike that
         closes below and stays there) has no death-cross to exit on. The engine's
@@ -90,25 +148,72 @@ class EmaCross(StateStrategy):
             level = ema_cross_price(pf, ps, fast=self.fast, slow=self.slow)
             hi = g["high"].astype(float)
             lo = g["low"].astype(float)
-            up = (below & (hi >= level)).fillna(False)
-            down = (~below & (lo <= level)).fillna(False)
+            close = cast("pd.Series", g["close"].astype(float))
+            if self.entry_confirm == "close":
+                # The breach only ALERTS; the position opens on the first close that
+                # actually confirms fast > slow. Real MRPL 2026-07-16 is the case this
+                # filters: it breached P* 163.88 on the high of 178.40 but closed at
+                # 157.47, leaving ema13 154.89 still under ema34 155.44 — so the entry
+                # belongs to the 17th, not the 16th.
+                up = (below & (g[ef].astype(float) > g[es].astype(float))).fillna(False)
+            else:
+                up = (below & (hi >= level)).fillna(False)
+            # fast_ema books close on price losing the fast EMA itself; death_cross
+            # books on the level where fast would cross below slow. Both need the
+            # break to still hold at the close (the 15:15 lock).
+            exit_level = pf if self.exit == "fast_ema" else level
+            sustained = close <= exit_level
+            down = (lo <= exit_level) & sustained
+            if self.exit == "death_cross":
+                down = down & ~below  # unchanged: only from a confirmed-long state
+            down = down.fillna(False)
 
             state = "flat"
-            out: list[tuple[object, str]] = []
+            out: list[tuple[object, str, str]] = []
             for idx in g.index[up | down]:
                 if state == "flat" and up.at[idx]:
-                    out.append((g.at[idx, "date"], "entry"))
+                    out.append((g.at[idx, "date"], "entry", self._entry_note(level, close, idx)))
                     state = "long"
                 elif state == "long" and down.at[idx]:
-                    out.append((g.at[idx, "date"], "exit"))
+                    out.append((g.at[idx, "date"], "exit", self._exit_note(exit_level, close, idx)))
                     state = "flat"
             if out:
-                fr = pd.DataFrame(out, columns=pd.Index(["date", "event"]))
+                fr = pd.DataFrame(out, columns=pd.Index(["date", "event", "note"]))
                 fr["instrument_key"] = k
                 frames.append(fr)
 
+        cols = pd.Index(["instrument_key", "date", "event", "note"])
         if not frames:
-            return pd.DataFrame(columns=pd.Index(["instrument_key", "date", "event"]))
+            return pd.DataFrame(columns=cols)
         out_df = pd.DataFrame(pd.concat(frames, ignore_index=True))
-        out_df = pd.DataFrame(out_df[["instrument_key", "date", "event"]]).sort_values(by="date")
-        return out_df.reset_index(drop=True)
+        return pd.DataFrame(out_df[cols]).sort_values(by="date").reset_index(drop=True)
+
+    # ── decision trail, strategy half (spec §I.2) ──────────────────────────
+    # The engine never sees an EMA, so only the strategy can say which rule fired and
+    # at what price. Levels quoted are always from the PRIOR close's confirmed EMAs —
+    # the same no-lookahead basis the signal itself used.
+
+    def _entry_note(self, level: pd.Series, close: pd.Series, idx) -> str:
+        f, s = self.fast, self.slow
+        if self.entry_confirm == "close":
+            return (
+                f"EMA{f} crossed above EMA{s}; the close at ₹{close.at[idx]:,.2f} confirmed it "
+                f"(intraday cross level was ₹{level.at[idx]:,.2f}). Fills at the next open."
+            )
+        return (
+            f"EMA{f} crossed above EMA{s} intraday — price breached ₹{level.at[idx]:,.2f}, "
+            f"the level where the two meet. Closed at ₹{close.at[idx]:,.2f}."
+        )
+
+    def _exit_note(self, exit_level: pd.Series, close: pd.Series, idx) -> str:
+        f, s = self.fast, self.slow
+        lvl, cl = exit_level.at[idx], close.at[idx]
+        what = (
+            f"Price broke below EMA{f} ₹{lvl:,.2f} intraday"
+            if self.exit == "fast_ema"
+            else f"EMA{f} crossed below EMA{s} intraday — price broke ₹{lvl:,.2f}"
+        )
+        return (
+            f"{what}, and was still below at the 15:15 lock "
+            f"(close ₹{cl:,.2f}). Sold at that close."
+        )
