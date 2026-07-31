@@ -60,7 +60,7 @@ No synthetic data anywhere, including tests. Every test constant in this plan is
 | `atlas/maal/source.py` | Pure: map a CPP holdings/txn/NAV row to the Atlas shape. No I/O. |
 | `atlas/maal/tests/test_source.py` | pytest over `source.py` using real 2026-07-31 rows. |
 | `scripts/foundation/sync_maal_books.py` | The job: read CPP, write `atlas_foundation`. Thin — all logic lives in `atlas/maal/source.py`. |
-| `scripts/foundation/maal_ddl.sql` | `maal_holding_snapshot` + the `source_txn_id` column and partial unique index on `portfolio_trades`. |
+| `scripts/foundation/maal_ddl.sql` | `portfolio_master` registration + `maal_holding_snapshot` + `maal_trade_link`. Adds tables only — alters nothing that already exists. |
 | `scripts/ops/maal_sync.sh` | Cron wrapper, mirroring `atlas_intraday.sh`. |
 | `scripts/ops/crontab.txt` | Two new lines (12:00 and 22:00 IST). |
 
@@ -302,14 +302,20 @@ CREATE INDEX IF NOT EXISTS ix_maal_snapshot_latest
     ON atlas_foundation.maal_holding_snapshot (maal_code, as_of DESC);
 
 -- portfolio_trades has no natural key, so a re-run would duplicate every trade.
--- Carry the CPP transaction id and make it unique. Partial, so engine-written
--- trades (source_txn_id NULL) are untouched by the constraint.
-ALTER TABLE atlas_foundation.portfolio_trades
-    ADD COLUMN IF NOT EXISTS source_txn_id bigint;
-
-CREATE UNIQUE INDEX IF NOT EXISTS uq_portfolio_trades_source_txn
-    ON atlas_foundation.portfolio_trades (source_txn_id)
-    WHERE source_txn_id IS NOT NULL;
+-- The idempotency key lives in its OWN table rather than as a column on
+-- portfolio_trades, for two reasons:
+--   1. portfolio_trades is written by the engine's nightly mark. Adding a column
+--      to a live table another writer owns widens the blast radius of this change
+--      for no benefit — a link table touches nothing that already exists.
+--   2. ALTER on a production table is a different risk tier than CREATE, and this
+--      change does not need that tier.
+-- The cost is one join on insert, over a few thousand rows. Irrelevant here.
+CREATE TABLE IF NOT EXISTS atlas_foundation.maal_trade_link (
+    source_txn_id bigint PRIMARY KEY,          -- cpp_transactions.id
+    trade_id      bigint NOT NULL UNIQUE
+                  REFERENCES atlas_foundation.portfolio_trades(trade_id) ON DELETE CASCADE,
+    linked_at     timestamptz NOT NULL DEFAULT now()
+);
 ```
 
 - [ ] **Step 2: Apply and verify**
@@ -325,10 +331,19 @@ Verify the table and index exist:
 ```bash
 ssh jprod 'cd /home/ubuntu/atlas-os && set -a && source .env && set +a && \
   U=$(printf "%s" "$ATLAS_DB_URL" | sed -E "s#^postgresql\+[a-z0-9]+://#postgresql://#; s#\?.*##") && \
-  psql "$U" -c "\d atlas_foundation.maal_holding_snapshot" -c "\di atlas_foundation.uq_portfolio_trades_source_txn" 2>&1 | sed -E "s#://[^@]+@#://***@#g"'
+  psql "$U" -c "\d atlas_foundation.maal_holding_snapshot" -c "\d atlas_foundation.maal_trade_link" 2>&1 | sed -E "s#://[^@]+@#://***@#g"'
 ```
 
-Expected: table with 9 columns and the composite PK; the unique index listed.
+Expected: `maal_holding_snapshot` with 10 columns and the composite PK `(as_of, maal_code, isin)`; `maal_trade_link` with its `source_txn_id` PK and the FK to `portfolio_trades`.
+
+**`portfolio_trades` itself must be unchanged** — confirm no `source_txn_id` column was added to it:
+
+```bash
+ssh jprod 'cd /home/ubuntu/atlas-os && set -a && source .env && set +a && \
+  scripts/ops/psql_masked.sh ATLAS_DB_URL -tAc "SELECT count(*) FROM information_schema.columns WHERE table_schema='"'"'atlas_foundation'"'"' AND table_name='"'"'portfolio_trades'"'"' AND column_name='"'"'source_txn_id'"'"'"'
+```
+
+Expected: `0`. This change adds tables; it does not alter existing ones.
 
 - [ ] **Step 3: Run the schema gate**
 
@@ -709,6 +724,52 @@ def _resolve_isins(isins: list[str]) -> dict[str, tuple[str, str]]:
     return {r.isin: (f"{r.ac}:{r.symbol}", r.ac) for r in df.itertuples()}
 
 
+def _write_trades(trade_rows: list[dict]) -> int:
+    """Insert only trades we have never seen, and link them. Returns rows inserted.
+
+    portfolio_trades has no natural key, so idempotency lives in maal_trade_link.
+    The insert and the link MUST share one transaction: a crash between them would
+    leave an unlinked trade that the next run inserts again, silently doubling the
+    book's history. Returns the count so the caller can log inserted-vs-skipped.
+    """
+    if not trade_rows:
+        return 0
+    known = set(
+        _db.read_sql("SELECT source_txn_id FROM atlas_foundation.maal_trade_link")[
+            "source_txn_id"
+        ]
+    )
+    fresh = [r for r in trade_rows if r["source_txn_id"] not in known]
+    log.info("trades: %d seen, %d new", len(trade_rows) - len(fresh), len(fresh))
+    if not fresh:
+        return 0
+
+    with _db.engine().begin() as conn:
+        for r in fresh:
+            txn_id = r.pop("source_txn_id")
+            trade_id = conn.execute(
+                text("""
+                    INSERT INTO atlas_foundation.portfolio_trades
+                        (portfolio_id, run_type, trade_date, asset_class, instrument_key,
+                         symbol, side, qty, price, value, cost, reason,
+                         realized_pnl, holding_days, tax_bucket)
+                    VALUES (:portfolio_id, :run_type, :trade_date, :asset_class,
+                            :instrument_key, :symbol, :side, :qty, :price, :value,
+                            :cost, :reason, :realized_pnl, :holding_days, :tax_bucket)
+                    RETURNING trade_id
+                """),
+                r,
+            ).scalar_one()
+            conn.execute(
+                text("""
+                    INSERT INTO atlas_foundation.maal_trade_link (source_txn_id, trade_id)
+                    VALUES (:txn_id, :trade_id)
+                """),
+                {"txn_id": txn_id, "trade_id": trade_id},
+            )
+    return len(fresh)
+
+
 def sync(as_of: dt.date) -> int:
     """Returns the number of unresolved ISINs — non-zero means the gate must shout."""
     client_codes = list(CODE_BY_CLIENT_CODE)
@@ -802,10 +863,7 @@ def sync(as_of: dt.date) -> int:
         "atlas_foundation.portfolio_nav_daily", nav_rows,
         conflict=("portfolio_id", "run_type", "date"),
     )
-    _db.upsert(
-        "atlas_foundation.portfolio_trades", trade_rows,
-        conflict=("source_txn_id",),
-    )
+    _write_trades(trade_rows)
 
     if unresolved:
         log.error("UNRESOLVED ISINs (not in instrument_master): %s", ", ".join(unresolved))
@@ -862,7 +920,7 @@ Re-run the exact command from Step 2, then:
 ```bash
 ssh jprod 'cd /home/ubuntu/atlas-os && set -a && source .env && set +a && \
   U=$(printf "%s" "$ATLAS_DB_URL" | sed -E "s#^postgresql\+[a-z0-9]+://#postgresql://#; s#\?.*##") && \
-  psql "$U" -c "SELECT count(*) FROM atlas_foundation.portfolio_trades WHERE source_txn_id IS NOT NULL;" 2>&1 | sed -E "s#://[^@]+@#://***@#g"'
+  scripts/ops/psql_masked.sh ATLAS_DB_URL -c "SELECT count(*) FROM atlas_foundation.maal_trade_link;"'
 ```
 
 Expected: the same count as after the first run. A second run must add zero trades.
@@ -1129,7 +1187,7 @@ Unit tests prove the algorithm. This proves the *data* — across all 991 real s
 
 Create `scripts/ops/maal_pnl_reconcile.py`. It must:
 
-1. Read every `portfolio_trades` row with `source_txn_id IS NOT NULL` and `side='sell'` for the three books.
+1. Read every `portfolio_trades` row joined to `maal_trade_link` with `side='sell'`, for the three books. The join is what scopes the gate to MaaL-sourced trades — engine-written trades have no link row and must not be reconciled here.
 2. Assert every sell has a non-NULL `realized_pnl`, **except** those whose instrument has an unmatched-buy history — report those explicitly by symbol and count.
 3. Assert `sum(realized_pnl)` per book is finite and that no single sell's `realized_pnl` exceeds its own `value` (a gain larger than the sale proceeds means the cost basis went negative — the classic FIFO bug).
 4. Assert `holding_days >= 0` on every matched sell, and that `tax_bucket` agrees with `holding_days <= 365`.
