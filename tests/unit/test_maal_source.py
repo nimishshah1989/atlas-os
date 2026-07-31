@@ -96,8 +96,29 @@ def test_client_codes_map_to_maal_codes() -> None:
     }
 
 
+def test_instrument_key_is_the_uuid_and_symbol_is_separate() -> None:
+    """REGRESSION. portfolio_trades.instrument_key holds the instrument_master UUID.
+
+    Found 2026-07-31 against the live board: writing a readable "stock:CDSL" key made
+    getPortfolioDetail's `instrument_id = ANY(...::uuid[])` throw, so every MaaL detail
+    page returned 404 while the list page looked perfectly fine. The engine's own rows
+    carry bare UUIDs (e.g. 001a1ce4-cc25-4639-9795-528a67d97c34); MaaL must match.
+    """
+    iid = "001a1ce4-cc25-4639-9795-528a67d97c34"
+    trade = trade_from_txn(BJ53_SELL, instrument_key=iid, asset_class="stock", symbol="INDUSINDBK")
+    assert trade is not None
+    assert trade["instrument_key"] == iid
+    assert ":" not in trade["instrument_key"]
+    assert trade["symbol"] == "INDUSINDBK"
+
+
 def test_sell_trade_uses_net_price_and_carries_source_id() -> None:
-    trade = trade_from_txn(BJ53_SELL, instrument_key="stock:INDUSINDBK", asset_class="stock")
+    trade = trade_from_txn(
+        BJ53_SELL,
+        instrument_key="001a1ce4-cc25-4639-9795-528a67d97c34",
+        asset_class="stock",
+        symbol="INDUSINDBK",
+    )
     assert trade is not None
     assert trade["side"] == "sell"
     assert trade["price"] == Decimal("992.0000")  # net rate, NOT the all-in cost_rate
@@ -117,7 +138,12 @@ def test_corpus_in_is_a_buy_marked_inception() -> None:
     portfolio_trades CHECK for exactly this case.
     """
     row = dict(BJ53_SELL, txn_type="CORPUS_IN")
-    trade = trade_from_txn(row, instrument_key="stock:RELIANCE", asset_class="stock")
+    trade = trade_from_txn(
+        row,
+        instrument_key="00000000-0000-4000-8000-000000000001",
+        asset_class="stock",
+        symbol="RELIANCE",
+    )
     assert trade is not None
     assert trade["side"] == "buy"
     assert trade["reason"] == "inception"
@@ -131,13 +157,26 @@ def test_bonus_rows_stay_out_of_the_trade_log() -> None:
     Two rows on BJ53 as of 2026-07-31, both at price exactly 0.0000.
     """
     row = dict(BJ53_SELL, txn_type="BONUS")
-    assert trade_from_txn(row, instrument_key="stock:X", asset_class="stock") is None
+    assert (
+        trade_from_txn(
+            row,
+            instrument_key="00000000-0000-4000-8000-000000000001",
+            asset_class="stock",
+            symbol="X",
+        )
+        is None
+    )
 
 
 def test_ordinary_buys_and_sells_are_marked_manual() -> None:
     # Only a corpus transfer is 'inception'; desk activity stays 'manual'.
     for kind in ("BUY", "SELL"):
         row = dict(BJ53_SELL, txn_type=kind)
-        trade = trade_from_txn(row, instrument_key="stock:X", asset_class="stock")
+        trade = trade_from_txn(
+            row,
+            instrument_key="00000000-0000-4000-8000-000000000001",
+            asset_class="stock",
+            symbol="X",
+        )
         assert trade is not None
         assert trade["reason"] == "manual"

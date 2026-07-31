@@ -74,8 +74,16 @@ def trade_from_txn(
     txn: dict[str, Any],
     instrument_key: str,
     asset_class: str,
+    symbol: str,
 ) -> dict[str, Any] | None:
-    """One CPP transaction as a portfolio_trades row. None when it is not a trade."""
+    """One CPP transaction as a portfolio_trades row. None when it is not a trade.
+
+    ``instrument_key`` MUST be the instrument_master UUID, not a "stock:SYMBOL"
+    string. That is the engine's existing convention for this column, and the
+    portfolio detail page casts it with ``::uuid[]`` — a readable key makes that
+    query throw, and the page 404s instead of failing loudly. ``symbol`` is
+    therefore passed in rather than parsed back out of the key.
+    """
     kind = (txn.get("txn_type") or "").strip().upper()
     side = _TRADE_TYPES.get(kind)
     if side is None:
@@ -84,7 +92,7 @@ def trade_from_txn(
         "trade_date": txn["txn_date"],
         "asset_class": asset_class,
         "instrument_key": instrument_key,
-        "symbol": instrument_key.split(":", 1)[1],
+        "symbol": symbol,
         "side": side,
         "qty": txn["quantity"],
         "price": txn["price"],

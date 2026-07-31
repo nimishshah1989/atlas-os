@@ -130,21 +130,27 @@ def _fetch_source(engine, codes: list[str]) -> dict[str, list[dict[str, Any]]]:
     return {"holdings": holdings, "nav": nav, "txns": txns}
 
 
-def _resolve_isins(isins: list[str]) -> dict[str, tuple[str, str]]:
-    """ISIN -> (instrument_key, atlas asset_class). Missing ISINs are simply absent."""
+def _resolve_isins(isins: list[str]) -> dict[str, tuple[str, str, str]]:
+    """ISIN -> (instrument_id UUID, asset_class, symbol). Missing ISINs are absent.
+
+    The UUID is what portfolio_trades.instrument_key holds — the engine's existing
+    convention, and the portfolio detail page casts that column with ::uuid[]. The
+    readable "stock:SYMBOL" form belongs only in maal_holding_snapshot, which is
+    our own table and feeds the book UI.
+    """
     if not isins:
         return {}
     df = _db.read_df(
         """
-        SELECT isin, symbol, asset_class
+        SELECT isin, instrument_id::text AS iid, symbol, asset_class
         FROM atlas_foundation.instrument_master
         WHERE isin = ANY(CAST(:isins AS text[]))
         """,
         {"isins": isins},
     )
     return {
-        str(i): (f"{a}:{s}", str(a))
-        for i, s, a in zip(df["isin"], df["symbol"], df["asset_class"], strict=False)
+        str(i): (str(u), str(a), str(s))
+        for i, u, s, a in zip(df["isin"], df["iid"], df["symbol"], df["asset_class"], strict=False)
     }
 
 
@@ -284,7 +290,9 @@ def sync(as_of: dt.date) -> int:
                     "maal_code": maal_code,
                     "isin": r["isin"],
                     "source_symbol": r["symbol"],
-                    "instrument_key": key_ac[0] if key_ac else None,
+                    # Readable key here on purpose: this is our table, and the book UI
+                    # keys positions as "stock:SYMBOL" / "etf:SYMBOL".
+                    "instrument_key": f"{key_ac[1]}:{key_ac[2]}" if key_ac else None,
                     "asset_class": r["asset_class"],
                     "quantity": r["quantity"],
                     "avg_cost": r["avg_cost"],
@@ -329,7 +337,11 @@ def sync(as_of: dt.date) -> int:
             key_ac = resolved.get(t["isin"])
             if key_ac is None:
                 continue  # counted in unresolved_txn and reported below
-            trade = trade_from_txn(t, instrument_key=key_ac[0], asset_class=key_ac[1])
+            # UUID here — portfolio_trades.instrument_key is the engine's convention
+            # and the detail page casts it ::uuid[].
+            trade = trade_from_txn(
+                t, instrument_key=key_ac[0], asset_class=key_ac[1], symbol=key_ac[2]
+            )
             if trade is None:
                 continue
             trade.update(fifo.get(t["id"], {}))
