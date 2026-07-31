@@ -103,7 +103,7 @@ def _fetch_source(engine, codes: list[str]) -> dict[str, list[dict[str, Any]]]:
             """
             SELECT DISTINCT ON (p.client_code)
                    p.client_code, n.nav_date, n.current_value,
-                   n.invested_amount, n.cash_value, n.bank_balance
+                   n.invested_amount, n.cash_value, n.bank_balance, n.etf_value
             FROM cpp_nav_series n
             JOIN cpp_portfolios p ON p.id = n.portfolio_id
             WHERE p.client_code = ANY(:codes)
@@ -291,7 +291,18 @@ def sync(as_of: dt.date) -> int:
                 }
             )
 
-        cash = Decimal(str(n["cash_value"] or 0)) + Decimal(str(n["bank_balance"] or 0))
+        # Cash = idle balance + bank + the LIQUID-ETF sleeve. etf_value is where CPP
+        # keeps the value of LIQUIDBEES / LIQUIDCASE / LIQUIDETF, and the FM's rule is
+        # that those ARE cash (2026-07-31). Verified against CPP's own cash_pct on all
+        # three books: BJ53 33.29%, BJ53IND 45.26%, JR100PASS 6.45% — reproduced exactly.
+        # Omitting etf_value understated JR100PASS's cash as 0.1% against a true 6.45%.
+        # GOLDBEES and SILVERBEES are NOT in here: they are asset-class exposure, and
+        # CPP classifies them EQUITY, so they stay positions.
+        cash = (
+            Decimal(str(n["cash_value"] or 0))
+            + Decimal(str(n["bank_balance"] or 0))
+            + Decimal(str(n["etf_value"] or 0))
+        )
         total = Decimal(str(n["current_value"] or 0))
         nav_rows.append(
             {
