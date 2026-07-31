@@ -16,12 +16,23 @@ const inr2 = (v: number | null) =>
 const tone = (v: number | null) =>
   v == null ? 'text-txt-3' : v >= 0 ? 'text-sig-pos' : 'text-sig-neg'
 
-const HEADS = ['Date', 'Instrument', 'Side', 'Qty', 'Price', 'Value', 'Cost', 'Realized P&L', 'Days', 'Bucket', 'Tax', 'Reason']
+// Conviction sits next to Reason because they answer the same question from two
+// directions: what rule fired, and how strongly Atlas rated the name when it did.
+const HEADS = ['Date', 'Instrument', 'Side', 'Qty', 'Price', 'Value', 'Cost', 'Realized P&L', 'Days', 'Bucket', 'Tax', 'Conviction', 'Reason']
 
 export function TradesTable({ trades }: { trades: TradeRow[] }) {
   const hasLive = trades.some((t) => t.runType === 'live')
   const [runType, setRunType] = useState<'live' | 'backtest'>(hasLive ? 'live' : 'backtest')
   const [expanded, setExpanded] = useState(false)
+  // Which rows have their "why" open. The rationale is a full sentence or three, so it
+  // gets its own row on demand rather than wrecking the height of every line.
+  const [openWhy, setOpenWhy] = useState<Set<number>>(new Set())
+  const toggleWhy = (i: number) =>
+    setOpenWhy((prev) => {
+      const next = new Set(prev)
+      if (!next.delete(i)) next.add(i)
+      return next
+    })
 
   const rows = trades.filter((t) => t.runType === runType)
   const shown = expanded ? rows : rows.slice(0, COLLAPSED_ROWS)
@@ -56,7 +67,7 @@ export function TradesTable({ trades }: { trades: TradeRow[] }) {
             {shown.length === 0 && (
               <tr><td colSpan={HEADS.length} className="px-3 py-4 font-sans text-[12.5px] italic text-txt-3">No {runType} trades yet.</td></tr>
             )}
-            {shown.map((t, i) => (
+            {shown.flatMap((t, i) => [
               <tr key={i} className="border-b border-edge-hair">
                 <td className="px-2.5 py-1.5 font-num text-[11.5px] tabular-nums text-txt-2">{t.date}</td>
                 <td className="px-2.5 py-1.5 font-num text-[12px] font-semibold tabular-nums text-txt-1">{t.symbol}</td>
@@ -69,9 +80,31 @@ export function TradesTable({ trades }: { trades: TradeRow[] }) {
                 <td className="px-2.5 py-1.5 text-right font-num text-[11.5px] tabular-nums text-txt-2">{t.holdingDays ?? '—'}</td>
                 <td className="px-2.5 py-1.5 text-right font-num text-[10.5px] uppercase tabular-nums text-txt-3">{t.taxBucket ?? '—'}</td>
                 <td className="px-2.5 py-1.5 text-right font-num text-[11.5px] tabular-nums text-txt-2">{t.side === 'sell' ? inr2(t.tax) : '—'}</td>
-                <td className="px-2.5 py-1.5 text-right font-sans text-[10.5px] text-txt-3">{t.reason}</td>
-              </tr>
-            ))}
+                <td className="px-2.5 py-1.5 text-right font-num text-[11.5px] tabular-nums text-txt-2">
+                  {t.compositeAtSignal == null ? '—' : t.compositeAtSignal.toFixed(1)}
+                </td>
+                <td className="px-2.5 py-1.5 text-right font-sans text-[10.5px] text-txt-3">
+                  {t.rationale ? (
+                    <button
+                      onClick={() => toggleWhy(i)}
+                      className="font-sans text-[10.5px] text-brand hover:underline"
+                      aria-expanded={openWhy.has(i)}
+                    >
+                      {t.reason} · {openWhy.has(i) ? 'hide' : 'why'}
+                    </button>
+                  ) : (
+                    t.reason
+                  )}
+                </td>
+              </tr>,
+              t.rationale && openWhy.has(i) ? (
+                <tr key={`${i}-why`} className="border-b border-edge-hair bg-surface-raised">
+                  <td colSpan={HEADS.length} className="px-2.5 py-2 font-sans text-[12px] leading-[1.6] text-txt-2">
+                    {t.rationale}
+                  </td>
+                </tr>
+              ) : null,
+            ])}
           </tbody>
         </table>
       </div>

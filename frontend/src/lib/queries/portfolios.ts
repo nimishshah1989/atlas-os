@@ -1,3 +1,9 @@
+// allow-large: 665 LOC against the 600 limit. PRE-EXISTING overage — this file was
+// already 655 lines and #204 added ten (rationale + composite_at_signal through the
+// query, the type and the mapping), which is what surfaced it: the hook only inspects
+// files a commit touches. NOT claimed to be cohesive at this size. The split is real
+// work — one module per page section, touching every caller — and bundling it into a
+// change to books holding live capital would make both diffs unreviewable.
 // Portfolio board data — atlas_foundation.portfolio_* ONLY. Holdings are DERIVED
 // from the immutable trade log (no positions table); NAV/backtest series come from
 // portfolio_nav_daily written by scripts/foundation/portfolio_run.py. RULE #0: every
@@ -174,6 +180,10 @@ export type TradeRow = {
   tax: number | null
   reason: string
   runType: string
+  /** Plain-English why, written by the engine at fill time. Null pre-2026-07-31. */
+  rationale: string | null
+  /** Atlas composite at the signal date — the conviction that won the slot. */
+  compositeAtSignal: number | null
 }
 
 export type CostTaxTotals = {
@@ -333,7 +343,11 @@ export async function getPortfolioDetail(id: string): Promise<PortfolioDetail | 
   `
   const trades = await sql<Array<Record<string, unknown>>>`
     SELECT trade_date::text AS date, symbol, side, qty, price, value, cost,
-           realized_pnl, holding_days, tax_bucket, tax, reason, run_type
+           realized_pnl, holding_days, tax_bucket, tax, reason, run_type,
+           -- the decision trail: WHY this fill happened, and the conviction it carried.
+           -- NULL on anything booked before 2026-07-31; the column renders "—" there
+           -- rather than pretending a reason existed.
+           rationale, composite_at_signal
     FROM atlas_foundation.portfolio_trades
     WHERE portfolio_id = ${id}
     ORDER BY trade_date DESC, trade_id DESC LIMIT 400
@@ -437,6 +451,8 @@ export async function getPortfolioDetail(id: string): Promise<PortfolioDetail | 
       tax: r.tax != null ? Number(r.tax) : null,
       reason: String(r.reason),
       runType: String(r.run_type),
+      rationale: r.rationale ? String(r.rationale) : null,
+      compositeAtSignal: r.composite_at_signal != null ? Number(r.composite_at_signal) : null,
     })),
     totals: { live: totalsFor('live'), backtest: totalsFor('backtest') },
     atlas,

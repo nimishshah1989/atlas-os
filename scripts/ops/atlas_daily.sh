@@ -77,6 +77,10 @@ step "regime"                    $PY -c "from atlas.compute.regime import run_da
 # strategy signals + mark-to-market every active portfolio. Runs after lens_daily —
 # entry overflow ranks by the same-day composite.
 step "compute_fund_technicals"   $PY scripts/foundation/compute_fund_technicals.py
+# Crossover v2 §E: resolve today's armed BUY alerts against the close that just
+# landed. Must run AFTER compute_all (needs today's EMAs) and BEFORE the mark, so
+# the FM gets "will execute at tomorrow's open" before the fill, not after.
+step "crossover_confirm_buys"    $PY scripts/foundation/crossover_monitor.py --confirm-buys
 step "portfolio_mark"            $PY scripts/foundation/portfolio_run.py mark
 # Atlas Desk: agent cycle AFTER the mark (agents see tonight's marked book).
 # Missing LLM key or malformed agent output ⇒ the desk does nothing (safe).
