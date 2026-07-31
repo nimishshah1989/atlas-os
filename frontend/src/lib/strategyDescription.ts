@@ -155,6 +155,34 @@ export function describeStrategy(
     ? ` To enter, all of the following must ALSO hold at the same time: ${guards.map((g) => g.split(' — ')[0]).join('; ')}.`
     : ''
 
+  // Crossover v2 (ADR 0005): the book watches a live 5-min feed, so a signal is a
+  // three-stage thing rather than a single daily-close event. Only books that opted in
+  // via params.intraday describe themselves this way; everything else keeps the
+  // original daily-close wording, which is still exactly what those books do.
+  const v2 = strategyKey === 'ema_cross' && params.intraday === true
+  const closeConfirmed = params.entry_confirm === 'close'
+  const fastEmaExit = params.exit === 'fast_ema'
+
+  if (v2) {
+    const exitLevel = fastEmaExit
+      ? `price closes below the ${ordinal(fast)} average itself — a tighter exit that gets out sooner and trades far more often`
+      : `the ${ordinal(fast)} average crosses back BELOW the ${ordinal(slow)} — the death cross`
+    return {
+      headline: `A ${fast}/${slow} EMA crossover, watched live and executed in three stages`,
+      entry: closeConfirmed
+        ? `Watched every 5 minutes through the day. The moment price crosses the level where the ${ordinal(fast)} average would overtake the ${ordinal(slow)}, you get an alert — but that is only a heads-up, not a trade. The buy happens only if the CLOSE still confirms the cross, and it is then filled at the NEXT session's opening price. A spike that gives it all back by the close buys nothing.`
+        : `Watched every 5 minutes. The moment price crosses the level where the ${ordinal(fast)} average would overtake the ${ordinal(slow)}, the position opens and fills at that same day's close — the earliest possible entry, which also means it will sometimes buy a spike that reverses.`,
+      exit: `Watched the same way: an alert fires the moment ${fastEmaExit ? `price breaks the ${ordinal(fast)} average` : 'price breaks the down-cross level'}, then the break must STILL hold at 15:15. If it does, the position is sold at that day's close rather than waiting for tomorrow — because the next open can gap further down. If price recovers before 15:15, nothing is sold and the near-miss is logged. Formally: ${exitLevel}.`,
+      universe: universeText(assetClasses),
+      selection: `When more names cross than there are open slots, the highest Atlas composite score on the signal day wins the slot; ties break by instrument id, which is deterministic rather than meaningful. Names that miss out are DROPPED, not queued — they only get another chance if they cross again. Every booked trade records the conviction it carried and names the candidates it beat.`,
+      sizing: `Starts 100% in cash and only ever buys on a fresh signal. Each position is capped at ${capPct}% of portfolio value — about ${slots} equal slots. When several names fill at once they share the remaining cash, so a later name can come in below the cap; the trade log says when that happened. Buys fill at the next session's OPEN, sells at that day's CLOSE. Prices are adjusted for splits and bonuses, so they will not always match a raw broker screen. This book carries NO stop-loss — deliberately: every stop tested made these crossover books worse.`,
+      guards: [
+        'The backtest and the live feed cannot agree perfectly, by construction. The backtest sees the day\'s full high and low, so it catches every intraday touch; the live monitor samples every 5 minutes and will miss some. Expect the backtest to show slightly more signals than actually fire.',
+        'The 15:15 lock has no equivalent in daily history either — the backtest uses the closing price as its stand-in for the 15:15 check.',
+      ],
+    }
+  }
+
   return {
     headline:
       strategyKey === 'ema_cross'

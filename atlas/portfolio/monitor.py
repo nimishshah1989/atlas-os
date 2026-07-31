@@ -41,6 +41,24 @@ class Tick:
     already: frozenset[tuple[str, str]]  # (direction, stage) pairs already fired today
 
 
+def buy_confirmed(*, ema_fast: float | None, ema_slow: float | None) -> bool:
+    """Did today's CLOSE actually confirm the cross the monitor armed intraday?
+
+    The third stage the monitor cannot produce. It runs after the EOD compute lands,
+    against the confirmed EMAs rather than a live quote.
+
+    Real MRPL is the pair that defines it: the 16th breached P* on a 9% intraday run
+    and closed at ₹157.47 with ema13 154.89 still UNDER ema34 155.44 — not confirmed.
+    The 17th closed 173.33 with 157.52 over 156.46 — confirmed, filling at the 20th open.
+
+    A missing EMA is never a confirmation. A data gap is not evidence, and this one
+    spends money. Strictly greater, too: equal is the knife edge, not a cross.
+    """
+    if ema_fast is None or ema_slow is None:
+        return False
+    return float(ema_fast) > float(ema_slow)
+
+
 def decide(t: Tick) -> tuple[str, str] | None:
     """(direction, stage) to record and send, or None to stay quiet."""
     if t.held:

@@ -21,6 +21,7 @@ tested against real MRPL levels. This file is the I/O shell around it.
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
@@ -38,7 +39,7 @@ import _db
 from atlas.intraday.auth import get_valid_access_token
 from atlas.intraday.notify import send_message_sync
 from atlas.portfolio import alerts
-from atlas.portfolio.monitor import Tick, decide
+from atlas.portfolio.monitor import Tick, buy_confirmed, decide
 from atlas.primitives import ema_cross_price
 
 M = "atlas_foundation"
@@ -122,7 +123,72 @@ def _record(pid: str, row: dict, direction: str, stage: str, level: Decimal, quo
     )
 
 
+# Today's armed buys, with the CLOSE that just landed and its confirmed EMAs.
+_CONFIRM_SQL = f"""
+select a.portfolio_id::text pid, a.instrument_id::text iid, a.symbol, a.level,
+       m.name, m.params::text params,
+       t.date, t.ema_10, t.ema_13, t.ema_21, t.ema_34, t.ema_50, t.ema_200,
+       o.close_adj
+from {M}.crossover_alerts a
+join {M}.portfolio_master m on m.portfolio_id = a.portfolio_id
+join {M}.technical_daily t
+  on t.instrument_id = a.instrument_id and t.date = a.alert_date
+join {M}.ohlcv_stock o
+  on o.instrument_id = a.instrument_id and o.date = a.alert_date
+where a.direction = 'buy' and a.stage = 'provisional'
+  and a.alert_date = (now() at time zone 'Asia/Kolkata')::date
+  and not exists (
+    select 1 from {M}.crossover_alerts b
+    where b.portfolio_id = a.portfolio_id and b.instrument_id = a.instrument_id
+      and b.direction = 'buy' and b.alert_date = a.alert_date
+      and b.stage in ('confirmed','disarmed'))
+"""
+
+
+def confirm_buys() -> None:
+    """The 🟢 stage. Runs AFTER the EOD compute, never during the session.
+
+    A buy confirms on the close, which no intraday tick can see — so the monitor arms
+    and this resolves. Confirmed buys fill at the NEXT session's open, which is why the
+    message says so rather than implying the trade already happened.
+    """
+    rows = _db.read_df(_CONFIRM_SQL).to_dict("records")
+    if not rows:
+        print("[crossover_monitor] no armed buys to resolve", flush=True)
+        return
+    sent = 0
+    for row in rows:
+        params = json.loads(row["params"]) if isinstance(row["params"], str) else row["params"]
+        fast, slow = int(params["fast"]), int(params["slow"])
+        ok = buy_confirmed(ema_fast=row.get(f"ema_{fast}"), ema_slow=row.get(f"ema_{slow}"))
+        close = Decimal(str(row["close_adj"]))
+        stage = "confirmed" if ok else "disarmed"
+        _record(row["pid"], row, "buy", stage, Decimal(str(row["level"])), close)
+        if ok:
+            send_message_sync(
+                alerts.confirmed(
+                    book=row["name"],
+                    symbol=row["symbol"],
+                    side="buy",
+                    level=Decimal(str(row["level"])),
+                    quote=close,
+                )
+            )
+            sent += 1
+    print(f"[crossover_monitor] resolved={len(rows)} confirmed_sent={sent}", flush=True)
+
+
 def main() -> None:
+    ap = argparse.ArgumentParser(description="Intraday crossover monitor")
+    ap.add_argument(
+        "--confirm-buys",
+        action="store_true",
+        help="post-close pass: resolve today's armed buys against the confirmed EMAs",
+    )
+    if ap.parse_args().confirm_buys:
+        confirm_buys()
+        return
+
     rows = _db.read_df(_WATCH_SQL).to_dict("records")
     if not rows:
         print(
