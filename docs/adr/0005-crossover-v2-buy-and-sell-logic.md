@@ -65,17 +65,25 @@ those fills.
 
 The 10/21 book made the artifact impossible to miss:
 
-| book | variant | 8y return | plausible? |
+| book | stored (old rule) | v2 close-confirmed | v2 intraday |
 |---|---|---|---|
-| 13/34 | close-confirmed | 409.7% | yes — stored curve ends at 407.6% |
-| 13/34 | intraday | 428.4% | borderline |
-| 10/21 | close-confirmed | 219.6% | yes |
-| 10/21 | **intraday** | **178,972.9%** | **no** |
+| 13/34 | 407.6% | 409.7% | 428.4% |
+| 10/21 | 298.6% | 219.6% | **178,972.9%** |
 
 A 155% CAGR on a 12-slot equity book is not an edge. The faster the EMA pair, the more
-crossings, the more the artifact compounds. The close-confirmed variant touches no
-high/low on the entry side at all, and it reproduces the stored curve to within 2
-percentage points — which is why it is trusted and the other is not.
+crossings, the more the artifact compounds.
+
+**Read that table carefully — the close-confirmed column is not a reproduction of the
+stored curve, and should not be sold as one.** 13/34 lands within 2 points, but 10/21
+comes in 79 points LOWER, because the v2 sell rule adds the 15:15 sustain condition and
+so exits later and less often than the old close-only rule. That is a real behaviour
+change, working as designed.
+
+The argument for close-confirmation is therefore plausibility, not agreement: it stays
+in the same order of magnitude as eight years of stored history (219–410% against a
+stored 299–417%), while the intraday variant returns a number 600× the stored curve. The
+close-confirmed entry touches no high or low at all, so it has no mechanism to harvest
+the artifact; the intraday entry is built on one.
 
 ### 2. Exit on price losing the fast EMA (the "EMA13 close" twin)
 
