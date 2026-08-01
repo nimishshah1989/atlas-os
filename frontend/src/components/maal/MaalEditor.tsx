@@ -78,7 +78,7 @@ export function MaalEditor({
   )
   const [evidence, setEvidence] = useState<DraftEvidence[]>(initial?.evidence ?? [])
   const [confirmationId, setConfirmationId] = useState<number | null>(initial?.confirmationId ?? null)
-  const [busy, setBusy] = useState<'save' | 'publish' | null>(null)
+  const [busy, setBusy] = useState<'save' | 'publish' | 'reopen' | null>(null)
   const [problems, setProblems] = useState<Problem[]>([])
   const [note, setNote] = useState<string | null>(null)
 
@@ -162,15 +162,60 @@ export function MaalEditor({
     }
   }
 
+  // Publish stays one-way by default (ADR 0003): a circulated report must render the
+  // same forever. Reopening is the deliberate exception, so a mistake does not have to
+  // wait a week — and it is loud, because the week goes back to DRAFT until republished.
+  const reopen = async () => {
+    setBusy('reopen')
+    setNote(null)
+    setProblems([])
+    try {
+      const r = await fetch('/api/maal/reopen', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, week }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setProblems([
+          r.status === 401
+            ? { code: 'unauthorized', message: SIGN_IN_MESSAGE }
+            : { code: d.error_code ?? 'error', message: d.message ?? 'could not reopen' },
+        ])
+      } else {
+        setNote('Reopened — this week is a draft again. Publish when the changes are ready.')
+        router.refresh()
+      }
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const shown = problems.length > 0 ? problems : localProblems
 
   return (
     <div className="space-y-4">
       {published && (
-        <p className="rounded-panel border border-sig-pos/30 bg-sig-pos/[0.06] px-4 py-2.5 font-sans text-[12.5px] text-txt-2">
-          {initial?.publishedAt ? `Published ${formatIST(initial.publishedAt, true)}` : 'Published'} — this
-          week is frozen. Start the next Monday to make further changes.
-        </p>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-panel border border-sig-pos/30 bg-sig-pos/[0.06] px-4 py-2.5">
+          <p className="font-sans text-[12.5px] text-txt-2">
+            {initial?.publishedAt
+              ? `Published ${formatIST(initial.publishedAt, true)}`
+              : 'Published'}{' '}
+            — frozen so the circulated report keeps rendering the same.
+          </p>
+          <button
+            type="button"
+            onClick={reopen}
+            disabled={busy !== null}
+            className="rounded-tile border border-edge-rule bg-surface-base px-3 py-1 font-sans text-[12px] text-txt-1 hover:border-edge-strong disabled:opacity-50"
+          >
+            {busy === 'reopen' ? 'Reopening…' : 'Edit this week'}
+          </button>
+          <span className="font-sans text-[11px] text-txt-3">
+            Reopening returns it to draft — anyone already holding the PDF will have an
+            older copy until you publish again.
+          </span>
+        </div>
       )}
 
       <div className="flex flex-wrap items-center gap-x-6 gap-y-1 rounded-panel border border-edge-hair bg-surface-raised px-4 py-3">
@@ -200,6 +245,7 @@ export function MaalEditor({
 
       <BuyGrid
         rows={buys}
+        blockedKeys={sells.map((s) => s.key).filter(Boolean)}
         confirmationId={confirmationId}
         readOnly={published}
         onChange={setSide('buy')}

@@ -8,12 +8,14 @@ export function ChartAttach({
   target,
   refKey,
   attached,
+  readOnly = false,
   onDone,
 }: {
   confirmationId: number | null
   target: 'call' | 'evidence'
   refKey: string
   attached: boolean
+  readOnly?: boolean
   onDone: () => void
 }) {
   const input = useRef<HTMLInputElement>(null)
@@ -58,6 +60,35 @@ export function ChartAttach({
 
   const done = preview !== null || attached
 
+  // Attaching the wrong screenshot used to be permanent for the week, which made
+  // the FM hesitant to attach at all. Removing is the other half of attaching.
+  const remove = async () => {
+    if (confirmationId == null) return
+    setBusy(true)
+    setError(null)
+    try {
+      const r = await fetch('/api/maal/image', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmationId, target, ref: refKey }),
+      })
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}))
+        setError(d.message ?? 'could not remove')
+      } else {
+        setPreview((old) => {
+          if (old) URL.revokeObjectURL(old)
+          return null
+        })
+        onDone()
+      }
+    } catch {
+      setError('could not remove')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-0.5">
       <input
@@ -81,8 +112,19 @@ export function ChartAttach({
             : 'border-edge-rule bg-surface-base text-txt-3 hover:text-txt-2'
         }`}
       >
-        {busy ? 'Uploading…' : done ? '✓ Chart attached' : '+ Chart'}
+        {busy ? 'Working…' : done ? '✓ Chart attached' : '+ Chart'}
       </button>
+
+      {done && !readOnly && (
+        <button
+          type="button"
+          onClick={remove}
+          disabled={busy}
+          className="self-start font-sans text-[10px] text-txt-3 underline hover:text-sig-neg"
+        >
+          Remove chart
+        </button>
+      )}
 
       {/* The thumbnail is the confirmation. A tick alone leaves the FM wondering
           whether the RIGHT screenshot went up — seeing it removes the doubt.

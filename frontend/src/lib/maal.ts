@@ -150,6 +150,11 @@ export function foldBook(prior: BookPosition[], calls: Call[]): BookPosition[] {
 
 /**
  * Everything that would make this week unpublishable. Empty array = publishable.
+ *
+ * Only STRUCTURAL rules remain (FM, 2026-08-01). A missing rationale or sell reason no
+ * longer blocks publishing — those are the FM's own notes, and refusing to publish over
+ * a blank text box helps nobody. What stays is what would make the document WRONG: a
+ * name on both sides, a weight of zero, selling more than is held, or a book over 100%.
  * Runs server-side at publish against the stored book, so a stale editor tab
  * cannot slip a sell past a position that is no longer there.
  */
@@ -175,13 +180,7 @@ export function validateCalls(prior: BookPosition[], calls: Call[]): Problem[] {
     if (!(c.weightPct > 0)) {
       problems.push({ code: 'bad_weight', message: `${at} needs a weight above 0%` })
     }
-    if (c.side === 'buy' && c.comment.trim() === '') {
-      problems.push({ code: 'missing_rationale', message: `${at} needs a rationale` })
-    }
     if (c.side === 'sell') {
-      if (c.reasons.length === 0) {
-        problems.push({ code: 'missing_reason', message: `${at} needs at least one reason` })
-      }
       const heldBps = held.get(c.key)
       if (heldBps === undefined) {
         problems.push({ code: 'sell_not_held', message: `${at} is not in the portfolio` })
