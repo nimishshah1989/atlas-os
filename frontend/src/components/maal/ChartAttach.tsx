@@ -19,6 +19,11 @@ export function ChartAttach({
   const input = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Local preview of the file just uploaded. router.refresh() takes a beat to come
+  // back, and until it does the button falls straight back to "+ Chart" — so the FM
+  // sees no confirmation at all and re-uploads. Showing the file we already have in
+  // the browser makes success immediate and needs no round trip.
+  const [preview, setPreview] = useState<string | null>(null)
 
   const send = async (file: File) => {
     if (confirmationId == null) {
@@ -37,13 +42,21 @@ export function ChartAttach({
       if (!r.ok) {
         const d = await r.json().catch(() => ({}))
         setError(d.message ?? 'upload failed')
-      } else onDone()
+      } else {
+        setPreview((old) => {
+          if (old) URL.revokeObjectURL(old)
+          return URL.createObjectURL(file)
+        })
+        onDone()
+      }
     } catch {
       setError('upload failed')
     } finally {
       setBusy(false)
     }
   }
+
+  const done = preview !== null || attached
 
   return (
     <div className="flex flex-col gap-0.5">
@@ -63,13 +76,30 @@ export function ChartAttach({
         onClick={() => input.current?.click()}
         disabled={busy}
         className={`rounded-tile border px-2 py-1 font-sans text-[11px] ${
-          attached
+          done
             ? 'border-sig-pos/40 bg-sig-pos/10 text-sig-pos'
             : 'border-edge-rule bg-surface-base text-txt-3 hover:text-txt-2'
         }`}
       >
-        {busy ? 'Uploading…' : attached ? '✓ Chart' : '+ Chart'}
+        {busy ? 'Uploading…' : done ? '✓ Chart attached' : '+ Chart'}
       </button>
+
+      {/* The thumbnail is the confirmation. A tick alone leaves the FM wondering
+          whether the RIGHT screenshot went up — seeing it removes the doubt.
+          Click to open the full image. */}
+      {preview && (
+        <a href={preview} target="_blank" rel="noreferrer" title="Open full size">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={preview}
+            alt="Attached chart"
+            className="h-10 w-16 rounded-tile border border-sig-pos/40 object-cover"
+          />
+        </a>
+      )}
+      {!preview && attached && (
+        <span className="font-sans text-[10px] text-txt-3">saved earlier</span>
+      )}
       {error && <span className="font-sans text-[10px] text-sig-neg">{error}</span>}
     </div>
   )

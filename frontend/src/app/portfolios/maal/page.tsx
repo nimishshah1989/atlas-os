@@ -50,8 +50,9 @@ export default async function ConfirmationsPage() {
 
       <p className="max-w-[860px] font-sans text-[13.5px] text-txt-2">
         Author this week&rsquo;s buy and sell calls against each model portfolio, attach the charts that
-        make the case, and publish a report to circulate. Publishing rolls the book forward — next
-        week&rsquo;s sell list is whatever the book holds after this one.
+        make the case, and publish a report to circulate. The book below is the REAL portfolio,
+        synced twice daily from the client portal — so the sell list is whatever the desk
+        actually holds, not what was recommended.
       </p>
 
       <div className="grid gap-4 lg:grid-cols-3">
