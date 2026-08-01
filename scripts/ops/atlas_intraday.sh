@@ -14,3 +14,7 @@ set -a; source .env; set +a
 # crossover books. READ-ONLY — it writes crossover_alerts and sends Telegram, never a
 # trade; the nightly mark stays the only writer of portfolio_trades. Non-fatal.
 "$REPO/.venv/bin/python" scripts/foundation/crossover_monitor.py || true
+
+# MaaL live marks: LTP for the three real books, refreshed every 5 min. Non-fatal —
+# a missed tick is cosmetic, and the twice-daily sync is the source of record.
+"$REPO/.venv/bin/python" scripts/foundation/maal_live_mark.py || true
