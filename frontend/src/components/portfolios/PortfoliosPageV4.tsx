@@ -9,7 +9,7 @@ import { getPendingOrders } from '@/lib/queries/desk'
 import { DeskQueue } from '@/components/portfolios/DeskQueue'
 import { AtlasLightweightChart, type ChartSeries } from '@/components/charts/AtlasLightweightChart'
 import { Panel } from '@/components/ui/Panel'
-import { PortfolioTabs } from '@/components/confirmations/PortfolioTabs'
+import { PortfolioTabs } from '@/components/maal/PortfolioTabs'
 
 const inr = (v: number | null) =>
   v == null ? '—' : `₹${v.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
