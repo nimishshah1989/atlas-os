@@ -84,3 +84,19 @@ CREATE TABLE IF NOT EXISTS atlas_foundation.maal_trade_link (
                   REFERENCES atlas_foundation.portfolio_trades(trade_id) ON DELETE CASCADE,
     linked_at     timestamptz NOT NULL DEFAULT now()
 );
+
+-- ── Intraday live marks ──────────────────────────────────────────────────────
+-- Today only, like atlas_sector_rs_intraday. Written every 5 min by the EXISTING
+-- intraday cron; NOT in the EOD freshness guard, because it is empty overnight by
+-- design.
+--
+-- The PK deliberately omits the timestamp: each tick overwrites the last. There is
+-- no reason to keep a 5-minute history of a mark that is superseded five minutes
+-- later — the EOD close is already stored in ohlcv_stock.
+CREATE TABLE IF NOT EXISTS atlas_foundation.maal_live_mark (
+    maal_code  text NOT NULL CHECK (maal_code IN ('leaders', 'passive', 'ind11')),
+    isin       text NOT NULL,
+    ltp        numeric(18,4) NOT NULL CHECK (ltp > 0),
+    as_of_ts   timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (maal_code, isin)
+);

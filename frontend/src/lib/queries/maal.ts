@@ -102,7 +102,10 @@ export async function setMaxCap(code: MaalCode, capPct: number): Promise<number>
 export async function getOpeningBook(code: MaalCode, before?: string): Promise<BookPosition[]> {
   const rows = await sql<Array<Record<string, unknown>>>`
     WITH latest AS (
-      SELECT max(source_as_of) AS d
+      -- max(as_of), NOT max(source_as_of). as_of is unique per look; source_as_of is
+      -- shared by every look at the same unmoved CPP data, so keying on it matched
+      -- several snapshots at once and rendered the book DOUBLED.
+      SELECT max(as_of) AS a
       FROM atlas_foundation.maal_holding_snapshot
       WHERE maal_code = ${code}
         ${before ? sql`AND source_as_of < ${before}` : sql``}
@@ -110,19 +113,28 @@ export async function getOpeningBook(code: MaalCode, before?: string): Promise<B
     priced AS (
       SELECT s.instrument_key, s.source_symbol, s.asset_class,
              im.name AS company_name, im.sector,
-             s.quantity * o.close AS value
+             s.quantity * coalesce(st.close, et.close) AS value
       FROM atlas_foundation.maal_holding_snapshot s
-      JOIN latest ON latest.d = s.source_as_of
+      JOIN latest ON latest.a = s.as_of
       JOIN atlas_foundation.instrument_master im ON im.isin = s.isin
-      JOIN LATERAL (
+      -- Prices live in two tables: stocks in ohlcv_stock (keyed by symbol), ETFs in
+      -- ohlcv_etf (keyed by TICKER — its isin column is mostly NULL). Reading only
+      -- ohlcv_stock silently dropped every ETF, which on Leaders is GOLDBEES,
+      -- NIFTYBEES, SILVERBEES and HDFCSML250 — 43% of the book by weight.
+      LEFT JOIN LATERAL (
         SELECT close FROM atlas_foundation.ohlcv_stock x
         WHERE x.symbol = im.symbol ORDER BY x.date DESC LIMIT 1
-      ) o ON true
+      ) st ON true
+      LEFT JOIN LATERAL (
+        SELECT close FROM atlas_foundation.ohlcv_etf y
+        WHERE y.ticker = im.symbol ORDER BY y.date DESC LIMIT 1
+      ) et ON true
       WHERE s.maal_code = ${code}
         AND s.instrument_key IS NOT NULL
         -- CASH-class rows (LIQUIDBEES/LIQUIDCASE/LIQUIDETF) are cash, not positions.
         -- They belong in the cash line, never in the holdings list.
         AND s.asset_class <> 'CASH'
+        AND coalesce(st.close, et.close) IS NOT NULL
     )
     SELECT instrument_key, source_symbol, company_name, sector,
            value / nullif(sum(value) OVER (), 0) AS share
