@@ -13,7 +13,7 @@ import Link from 'next/link'
 
 import { PrintButton } from '@/components/maal/PrintButton'
 import { SectorPie } from '@/components/maal/SectorPie'
-import { ActionChecklist, InstrumentCard } from '@/components/maal/ReportActions'
+import { SideSummary, SideDetail } from '@/components/maal/ReportActions'
 import { cashPct, instrumentHref, MAAL_CODES, MAAL_NAMES, type MaalCode } from '@/lib/maal'
 import { getConfirmation, type CallRow } from '@/lib/queries/maal'
 import { formatIST } from '@/lib/format-date'
@@ -37,15 +37,10 @@ export default async function ReportPage({
   const c = await getConfirmation(pf, week)
   if (!c) notFound()
 
-  // Sells first: freeing the money comes before deploying it, and that is the order
-  // the desk works in.
-  const actions = [
-    ...c.calls.filter((k) => k.side === 'sell'),
-    ...c.calls.filter((k) => k.side === 'buy'),
-  ]
+  const buys = c.calls.filter((k) => k.side === 'buy')
+  const sells = c.calls.filter((k) => k.side === 'sell')
+  const actions = [...buys, ...sells]
   const cash = cashPct(c.resultingBook)
-  const buyCount = c.calls.filter((k) => k.side === 'buy').length
-  const sellCount = c.calls.length - buyCount
 
   return (
     <div className="report-page mx-auto max-w-[1000px] space-y-6 px-6 py-7">
@@ -60,20 +55,12 @@ export default async function ReportPage({
       </div>
 
       <header className="border-b border-edge-rule pb-4">
-        <p className="font-num text-[9px] uppercase tracking-[0.14em] text-txt-3">
-          MaaL Process · weekly buy / sell document
-        </p>
         <h1 className="font-display text-[26px] font-medium tracking-tight text-txt-1">
           {MAAL_NAMES[pf]}
         </h1>
         <p className="font-sans text-[13px] text-txt-2">
           Week of {formatIST(week)}
-          {c.status === 'published' && c.publishedAt
-            ? ` · published ${formatIST(c.publishedAt, true)}`
-            : ' · DRAFT'}
-          {' · '}
-          {sellCount} sell{sellCount === 1 ? '' : 's'}, {buyCount} buy
-          {buyCount === 1 ? '' : 's'}
+          {c.status === 'draft' && ' · DRAFT'}
         </p>
       </header>
 
@@ -83,28 +70,14 @@ export default async function ReportPage({
         </p>
       ) : (
         <>
-          {/* ── 1. THE CHECKLIST ─────────────────────────────────────────────
-              Everything to be done, in execution order, on one page. The tick
-              boxes are for the person working the list on paper. */}
-          <section className="break-inside-avoid">
-            <h2 className="mb-2 font-num text-[10px] uppercase tracking-[0.14em] text-txt-3">
-              What to do this week
-            </h2>
-            <ActionChecklist actions={actions} />
-          </section>
-
-          {/* ── 2. THE EVIDENCE ──────────────────────────────────────────────
-              One card per instrument, in the same order as the checklist. */}
-          <section>
-            <h2 className="mb-2 font-num text-[10px] uppercase tracking-[0.14em] text-txt-3">
-              The case, instrument by instrument
-            </h2>
-            <div className="space-y-3">
-              {actions.map((k) => (
-                <InstrumentCard key={`card:${k.side}:${k.key}`} k={k} />
-              ))}
-            </div>
-          </section>
+          {/* Sequence set by the FM (2026-08-01): both summaries first so the desk
+              can see the whole week's work on one page, then the detail behind each
+              side. Buy before sell throughout, so the two halves of the document
+              read in the same order. */}
+          <SideSummary side="buy" actions={buys} />
+          <SideSummary side="sell" actions={sells} />
+          <SideDetail side="buy" actions={buys} />
+          <SideDetail side="sell" actions={sells} />
         </>
       )}
 

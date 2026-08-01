@@ -309,14 +309,23 @@ describe('validateCalls', () => {
     ).toEqual([])
   })
 
-  it('rejects a buy with no rationale', () => {
+  it('publishes a buy with no rationale — the note is the FM\'s, not a gate', () => {
+    // Refusing to publish over a blank text box helps nobody (FM, 2026-08-01).
     const problems = validateCalls(REAL_BOOK, [buy({ key: 'stock:CDSL', weightPct: 1, comment: '  ' })])
-    expect(problems.map((p) => p.code)).toContain('missing_rationale')
+    expect(problems).toEqual([])
   })
 
-  it('rejects a sell with no reason ticked', () => {
+  it('publishes a sell with no reason ticked', () => {
     const problems = validateCalls(REAL_BOOK, [sell({ key: 'etf:GOLDBEES', weightPct: 10, reasons: [] })])
-    expect(problems.map((p) => p.code)).toContain('missing_reason')
+    expect(problems).toEqual([])
+  })
+
+  it('still refuses a name on BOTH sides — that one would make the document wrong', () => {
+    const problems = validateCalls(REAL_BOOK, [
+      buy({ key: 'etf:GOLDBEES', weightPct: 12 }),
+      sell({ key: 'etf:GOLDBEES', weightPct: 4 }),
+    ])
+    expect(problems.map((p) => p.code)).toContain('both_sides')
   })
 
   it('rejects a non-positive weight', () => {

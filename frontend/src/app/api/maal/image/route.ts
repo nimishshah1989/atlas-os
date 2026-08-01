@@ -5,7 +5,12 @@
 import { NextResponse } from 'next/server'
 
 import { requireAuth } from '@/lib/requireAuth'
-import { saveCallImage, saveEvidenceImage } from '@/lib/queries/maal'
+import {
+  clearCallImage,
+  clearEvidenceImage,
+  saveCallImage,
+  saveEvidenceImage,
+} from '@/lib/queries/maal'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,4 +65,45 @@ export async function POST(req: Request) {
     )
   }
   return NextResponse.json({ attached: true, bytes: bytes.length })
+}
+
+/**
+ * DELETE /api/maal/image — detach a chart.
+ *
+ * Clears the bytes; the call row itself stands. Attaching the wrong screenshot was
+ * previously permanent for the week, which made the FM hesitant to attach at all.
+ */
+export async function DELETE(req: Request) {
+  const denied = await requireAuth('remove a chart')
+  if (denied) return denied
+
+  const body = await req.json().catch(() => null)
+  const confirmationId = Number(body?.confirmationId)
+  const target = body?.target
+  const ref = body?.ref
+  if (
+    !Number.isInteger(confirmationId) ||
+    confirmationId <= 0 ||
+    (target !== 'call' && target !== 'evidence') ||
+    typeof ref !== 'string' ||
+    ref === ''
+  ) {
+    return NextResponse.json(
+      { error_code: 'bad_request', message: 'bad image reference' },
+      { status: 400 },
+    )
+  }
+
+  const cleared =
+    target === 'evidence'
+      ? await clearEvidenceImage(confirmationId, Number(ref))
+      : await clearCallImage(confirmationId, ref)
+
+  if (!cleared) {
+    return NextResponse.json(
+      { error_code: 'not_found', message: 'no chart to remove' },
+      { status: 404 },
+    )
+  }
+  return NextResponse.json({ attached: false })
 }

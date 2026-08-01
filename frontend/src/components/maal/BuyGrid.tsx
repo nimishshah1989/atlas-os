@@ -1,18 +1,23 @@
 'use client'
 // Buy side: pick an instrument from the Atlas universe, state the weight the
 // position should END UP at, and say why. Sector fills itself from the pick.
+import { useState } from 'react'
+
 import { InstrumentAutocomplete, type Hit } from '@/components/portfolios/InstrumentAutocomplete'
 import { ChartAttach } from './ChartAttach'
 import type { DraftCall } from './draftTypes'
 
 export function BuyGrid({
   rows,
+  blockedKeys,
   confirmationId,
   readOnly,
   onChange,
   onRefresh,
 }: {
   rows: DraftCall[]
+  /** Keys already on the SELL side — the same name cannot be on both. */
+  blockedKeys: string[]
   confirmationId: number | null
   readOnly: boolean
   onChange: (rows: DraftCall[]) => void
@@ -40,8 +45,19 @@ export function BuyGrid({
       },
     ])
 
-  const pick = (i: number, h: Hit) =>
+  const [pickError, setPickError] = useState<string | null>(null)
+
+  // The same name cannot be on both sides. The database enforces it and publish
+  // validates it, but both of those tell the FM only AFTER the work is done —
+  // refusing the pick is the moment it is cheap to correct.
+  const pick = (i: number, h: Hit) => {
+    if (blockedKeys.includes(h.key)) {
+      setPickError(`${h.label} is already on the sell side — remove it there first.`)
+      return
+    }
+    setPickError(null)
     update(i, { key: h.key, symbol: h.label, name: h.sublabel, sector: h.sector })
+  }
 
   return (
     <section className="rounded-panel border border-edge-hair bg-surface-panel p-4 shadow-tile">
@@ -49,6 +65,9 @@ export function BuyGrid({
 
       {rows.length === 0 && (
         <p className="mb-3 font-sans text-[12.5px] italic text-txt-3">No buys this week.</p>
+      )}
+      {pickError && (
+        <p className="mb-3 font-sans text-[12px] text-sig-neg">{pickError}</p>
       )}
 
       <div className="space-y-3">

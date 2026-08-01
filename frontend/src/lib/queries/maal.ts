@@ -360,6 +360,28 @@ export async function publish(
   return { ok: true, book }
 }
 
+/**
+ * Reopen a published week for editing (FM, 2026-08-01).
+ *
+ * ADR 0003 made publish one-way so a circulated report would render identically
+ * forever. That still holds for an untouched report — but the FM needs to correct a
+ * mistake without waiting a week, so reopening is now possible AS AN EXPLICIT ACT.
+ * It flips the row back to draft and clears published_at, so the document stops
+ * claiming to be published while it is being changed, and the report re-renders
+ * marked DRAFT until it is published again.
+ *
+ * The tradeoff, stated plainly: a report already sent to the group can now diverge
+ * from the copy people are holding. Republishing is what makes it authoritative again.
+ */
+export async function reopenConfirmation(code: MaalCode, weekOf: string): Promise<boolean> {
+  const rows = await sql`
+    UPDATE atlas_foundation.maal_confirmation
+    SET status = 'draft', published_at = NULL, updated_at = now()
+    WHERE maal_code = ${code} AND week_of = ${weekOf} AND status = 'published'
+    RETURNING confirmation_id`
+  return rows.length > 0
+}
+
 export async function saveCallImage(
   confirmationId: number,
   instrumentKey: string,
@@ -383,6 +405,34 @@ export async function saveEvidenceImage(
   const rows = await sql`
     UPDATE atlas_foundation.maal_evidence
     SET image = ${bytes}, mime = ${mime}
+    WHERE confirmation_id = ${confirmationId} AND position = ${position}
+    RETURNING evidence_id`
+  return rows.length > 0
+}
+
+/**
+ * Detach a chart. Clears the bytes rather than deleting the row — the call itself
+ * still stands; only its evidence is being replaced or withdrawn.
+ */
+export async function clearCallImage(
+  confirmationId: number,
+  instrumentKey: string,
+): Promise<boolean> {
+  const rows = await sql`
+    UPDATE atlas_foundation.maal_call
+    SET chart_image = NULL, chart_mime = NULL
+    WHERE confirmation_id = ${confirmationId} AND instrument_key = ${instrumentKey}
+    RETURNING call_id`
+  return rows.length > 0
+}
+
+export async function clearEvidenceImage(
+  confirmationId: number,
+  position: number,
+): Promise<boolean> {
+  const rows = await sql`
+    UPDATE atlas_foundation.maal_evidence
+    SET image = NULL, mime = NULL
     WHERE confirmation_id = ${confirmationId} AND position = ${position}
     RETURNING evidence_id`
   return rows.length > 0

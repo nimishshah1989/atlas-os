@@ -34,21 +34,35 @@ const actionOf = (k: CallRow) =>
   k.side === 'buy' ? `Take to ${pct1(k.weightPct)}` : `Trim ${pct1(k.weightPct)}`
 
 /**
- * Everything to be done this week, on one page, in execution order. The tick boxes
- * are for whoever works the list on paper.
+ * One side's summary — buys or sells, never mixed (FM, 2026-08-01). Keeping them in
+ * separate, colour-coded blocks means the desk can see at a glance what it is doing,
+ * rather than reading an Action column down a combined list.
  */
-export function ActionChecklist({ actions }: { actions: CallRow[] }) {
+export function SideSummary({ side, actions }: { side: 'buy' | 'sell'; actions: CallRow[] }) {
+  if (actions.length === 0) return null
+  const buy = side === 'buy'
   return (
-    <table className="w-full border-collapse font-sans text-[12.5px]">
+    <section
+      className={`break-inside-avoid rounded-panel border p-4 ${
+        buy ? 'border-sig-pos/35 bg-sig-pos/[0.05]' : 'border-sig-neg/35 bg-sig-neg/[0.05]'
+      }`}
+    >
+      <h2
+        className={`mb-2.5 font-num text-[11px] font-semibold uppercase tracking-[0.14em] ${
+          buy ? 'text-sig-pos' : 'text-sig-neg'
+        }`}
+      >
+        {buy ? `Buy — ${actions.length} to add` : `Sell — ${actions.length} to trim`}
+      </h2>
+      <table className="w-full border-collapse font-sans text-[12.5px]">
       <thead>
         <tr className="border-b border-edge-rule text-left font-num text-[9px] uppercase tracking-wider text-txt-3">
           <th className="w-7 py-1.5" aria-label="Done" />
-          <th className="py-1.5">Action</th>
           <th className="py-1.5">Instrument</th>
           <th className="py-1.5">Sector</th>
-          <th className="py-1.5 text-right">Target / trim</th>
-          <th className="py-1.5 text-right">Trigger</th>
-          <th className="py-1.5 text-right">Stop</th>
+          <th className="py-1.5 text-right">{buy ? 'Target weight' : 'Trim'}</th>
+          {buy && <th className="py-1.5 text-right">Trigger</th>}
+          {buy && <th className="py-1.5 text-right">Stop</th>}
           <th className="py-1.5 pl-4">Why</th>
         </tr>
       </thead>
@@ -57,9 +71,6 @@ export function ActionChecklist({ actions }: { actions: CallRow[] }) {
           <tr key={`${k.side}:${k.key}`} className="border-b border-edge-hair align-top">
             <td className="py-2">
               <span className="inline-block h-3 w-3 rounded-[2px] border border-edge-strong align-middle" />
-            </td>
-            <td className="py-2">
-              <ActionTag side={k.side} />
             </td>
             <td className="py-2">
               <Link
@@ -73,12 +84,16 @@ export function ActionChecklist({ actions }: { actions: CallRow[] }) {
             <td className="py-2 text-right font-num font-semibold tabular-nums text-txt-1">
               {pct1(k.weightPct)}
             </td>
-            <td className="py-2 text-right font-num tabular-nums text-txt-2">
-              {k.side === 'buy' ? inr(k.triggerPrice) : '—'}
-            </td>
-            <td className="py-2 text-right font-num tabular-nums text-txt-2">
-              {k.side === 'buy' ? inr(k.stopPrice) : '—'}
-            </td>
+            {buy && (
+              <td className="py-2 text-right font-num tabular-nums text-txt-2">
+                {inr(k.triggerPrice)}
+              </td>
+            )}
+            {buy && (
+              <td className="py-2 text-right font-num tabular-nums text-txt-2">
+                {inr(k.stopPrice)}
+              </td>
+            )}
             <td className="py-2 pl-4 text-txt-2">
               {k.side === 'sell'
                 ? k.reasons.join(' · ') || '—'
@@ -88,16 +103,43 @@ export function ActionChecklist({ actions }: { actions: CallRow[] }) {
             </td>
           </tr>
         ))}
-      </tbody>
-    </table>
+        </tbody>
+      </table>
+    </section>
+  )
+}
+
+/** One side's detailed cards, under a matching colour-coded heading. */
+export function SideDetail({ side, actions }: { side: 'buy' | 'sell'; actions: CallRow[] }) {
+  if (actions.length === 0) return null
+  const buy = side === 'buy'
+  return (
+    <section>
+      <h2
+        className={`mb-2 font-num text-[11px] font-semibold uppercase tracking-[0.14em] ${
+          buy ? 'text-sig-pos' : 'text-sig-neg'
+        }`}
+      >
+        {buy ? 'Buy — the case' : 'Sell — the case'}
+      </h2>
+      <div className="space-y-3">
+        {actions.map((k) => (
+          <InstrumentCard key={`card:${k.side}:${k.key}`} k={k} />
+        ))}
+      </div>
+    </section>
   )
 }
 
 /** One instrument: the numbers, the reasoning, and the chart that makes the case. */
-export function InstrumentCard({ k }: { k: CallRow }) {
+function InstrumentCard({ k }: { k: CallRow }) {
   const hasChart = k.hasImage && k.callId != null
   return (
-    <article className="break-inside-avoid rounded-panel border border-edge-hair bg-surface-panel p-4">
+    <article
+      className={`break-inside-avoid rounded-panel border-l-[3px] border-y border-r border-edge-hair bg-surface-panel p-4 ${
+        k.side === 'buy' ? 'border-l-sig-pos/60' : 'border-l-sig-neg/60'
+      }`}
+    >
       <div className="mb-2 flex flex-wrap items-baseline gap-x-2.5 gap-y-1 border-b border-edge-hair pb-2">
         <ActionTag side={k.side} />
         <Link
