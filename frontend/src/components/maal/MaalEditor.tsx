@@ -89,6 +89,17 @@ export function MaalEditor({
   const resulting = foldBook(openingBook, named)
   const localProblems = validateCalls(openingBook, named)
 
+  // Why publish is unavailable, in the FM's words rather than a greyed-out button.
+  // One reason at a time: naming the first blocker is actionable, listing five is noise.
+  const publishBlockedBy =
+    busy !== null
+      ? null
+      : named.length === 0
+        ? 'Add at least one buy or sell before publishing.'
+        : localProblems.length > 0
+          ? `Fix ${localProblems.length} issue${localProblems.length > 1 ? 's' : ''} above: ${localProblems[0].message}`
+          : null
+
   const setSide = (side: 'buy' | 'sell') => (rows: DraftCall[]) =>
     setCalls([...(side === 'buy' ? rows : buys), ...(side === 'buy' ? sells : rows)])
 
@@ -225,12 +236,18 @@ export function MaalEditor({
             type="button"
             onClick={publish}
             disabled={busy !== null || named.length === 0 || localProblems.length > 0}
+            title={publishBlockedBy ?? 'Publish this week and build its report'}
             className="rounded-tile border border-brand/40 bg-brand/10 px-4 py-2 font-sans text-[13px] font-semibold text-brand hover:bg-brand/15 disabled:opacity-40"
           >
             {busy === 'publish' ? 'Publishing…' : 'Publish & build report'}
           </button>
-          <span className="font-sans text-[11.5px] text-txt-3">
-            Publishing rolls the book forward and freezes this week.
+          {/* A greyed-out button that will not say WHY is the actual defect. Name the
+              one thing standing in the way, so the FM is never left guessing. */}
+          <span
+            className={`font-sans text-[11.5px] ${publishBlockedBy ? 'text-sig-neg' : 'text-txt-3'}`}
+          >
+            {publishBlockedBy ??
+              'Publishing freezes this week and builds the report you can download as a PDF.'}
           </span>
         </div>
       )}
