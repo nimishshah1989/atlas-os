@@ -10,10 +10,12 @@ import { instrumentHref } from '@/lib/maal'
 import type { CallRow } from '@/lib/queries/maal'
 
 const pct1 = (v: number) => `${v.toFixed(1)}%`
+
+// Whole rupees, Indian grouping, no symbol and no paise. The currency never varies
+// and paise are below the desk's decision resolution, so both were pure noise repeated
+// on every row — the ₹ now sits once in the column header instead.
 const inr = (v: number | null) =>
-  v == null
-    ? '—'
-    : `₹${v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  v == null ? '—' : Math.round(v).toLocaleString('en-IN')
 
 /** BUY / SELL pill. Colour carries the meaning; the word carries it in print. */
 function ActionTag({ side }: { side: 'buy' | 'sell' }) {
@@ -43,36 +45,45 @@ export function SideSummary({ side, actions }: { side: 'buy' | 'sell'; actions: 
   const buy = side === 'buy'
   return (
     <section
-      className={`break-inside-avoid rounded-panel border p-4 ${
+      className={`break-inside-avoid rounded-panel border px-5 py-4 ${
         buy ? 'border-sig-pos/35 bg-sig-pos/[0.05]' : 'border-sig-neg/35 bg-sig-neg/[0.05]'
       }`}
     >
       <h2
-        className={`mb-2.5 font-num text-[11px] font-semibold uppercase tracking-[0.14em] ${
+        className={`mb-3.5 font-num text-[11.5px] font-semibold uppercase tracking-[0.16em] ${
           buy ? 'text-sig-pos' : 'text-sig-neg'
         }`}
       >
         {buy ? `Buy — ${actions.length} to add` : `Sell — ${actions.length} to trim`}
       </h2>
-      <table className="w-full border-collapse font-sans text-[12.5px]">
-      <thead>
-        <tr className="border-b border-edge-rule text-left font-num text-[9px] uppercase tracking-wider text-txt-3">
-          <th className="w-7 py-1.5" aria-label="Done" />
-          <th className="py-1.5">Instrument</th>
-          <th className="py-1.5">Sector</th>
-          <th className="py-1.5 text-right">{buy ? 'Target weight' : 'Trim'}</th>
-          {buy && <th className="py-1.5 text-right">Trigger</th>}
-          {buy && <th className="py-1.5 text-right">Stop</th>}
-          <th className="py-1.5 pl-4">Why</th>
-        </tr>
-      </thead>
-      <tbody>
-        {actions.map((k) => (
-          <tr key={`${k.side}:${k.key}`} className="border-b border-edge-hair align-top">
-            <td className="py-2">
-              <span className="inline-block h-3 w-3 rounded-[2px] border border-edge-strong align-middle" />
-            </td>
-            <td className="py-2">
+      <table className="w-full table-fixed border-collapse font-sans text-[13px]">
+        <colgroup>
+          <col className="w-8" />
+          <col className="w-[15%]" />
+          <col className="w-[15%]" />
+          <col className="w-[11%]" />
+          {buy && <col className="w-[10%]" />}
+          {buy && <col className="w-[10%]" />}
+          <col />
+        </colgroup>
+        <thead>
+          <tr className="border-b border-edge-rule text-left font-num text-[9.5px] uppercase tracking-wider text-txt-3">
+            <th className="pb-2.5" aria-label="Done" />
+            <th className="pb-2.5">Instrument</th>
+            <th className="pb-2.5">Sector</th>
+            <th className="pb-2.5 text-right">{buy ? 'Target' : 'Trim'}</th>
+            {buy && <th className="pb-2.5 text-right">Trigger ₹</th>}
+            {buy && <th className="pb-2.5 text-right">Stop ₹</th>}
+            <th className="pb-2.5 pl-5">Why</th>
+          </tr>
+        </thead>
+        <tbody>
+          {actions.map((k) => (
+            <tr key={`${k.side}:${k.key}`} className="border-b border-edge-hair align-top">
+              <td className="py-3">
+                <span className="inline-block h-3.5 w-3.5 rounded-[3px] border border-edge-strong align-middle" />
+              </td>
+              <td className="py-3">
               <Link
                 href={instrumentHref(k.key)}
                 className="font-num font-semibold text-txt-1 no-underline hover:text-accent hover:underline"
@@ -80,29 +91,29 @@ export function SideSummary({ side, actions }: { side: 'buy' | 'sell'; actions: 
                 {k.symbol}
               </Link>
             </td>
-            <td className="py-2 text-txt-2">{k.sector ?? '—'}</td>
-            <td className="py-2 text-right font-num font-semibold tabular-nums text-txt-1">
-              {pct1(k.weightPct)}
-            </td>
-            {buy && (
-              <td className="py-2 text-right font-num tabular-nums text-txt-2">
-                {inr(k.triggerPrice)}
+              <td className="py-3 text-txt-2">{k.sector ?? '—'}</td>
+              <td className="py-3 text-right font-num text-[14px] font-semibold tabular-nums text-txt-1">
+                {pct1(k.weightPct)}
               </td>
-            )}
-            {buy && (
-              <td className="py-2 text-right font-num tabular-nums text-txt-2">
-                {inr(k.stopPrice)}
+              {buy && (
+                <td className="py-3 text-right font-num tabular-nums text-txt-2">
+                  {inr(k.triggerPrice)}
+                </td>
+              )}
+              {buy && (
+                <td className="py-3 text-right font-num tabular-nums text-txt-2">
+                  {inr(k.stopPrice)}
+                </td>
+              )}
+              {/* Wraps rather than truncating. A rationale cut mid-word told the
+                  reader nothing and still cost the same row. */}
+              <td className="py-3 pl-5 leading-relaxed text-txt-2">
+                {k.side === 'sell'
+                  ? k.reasons.join(' · ') || '—'
+                  : k.comment || '—'}
               </td>
-            )}
-            <td className="py-2 pl-4 text-txt-2">
-              {k.side === 'sell'
-                ? k.reasons.join(' · ') || '—'
-                : k.comment
-                  ? `${k.comment.slice(0, 60)}${k.comment.length > 60 ? '…' : ''}`
-                  : '—'}
-            </td>
-          </tr>
-        ))}
+            </tr>
+          ))}
         </tbody>
       </table>
     </section>
@@ -116,13 +127,13 @@ export function SideDetail({ side, actions }: { side: 'buy' | 'sell'; actions: C
   return (
     <section>
       <h2
-        className={`mb-2 font-num text-[11px] font-semibold uppercase tracking-[0.14em] ${
+        className={`mb-3 font-num text-[11.5px] font-semibold uppercase tracking-[0.16em] ${
           buy ? 'text-sig-pos' : 'text-sig-neg'
         }`}
       >
         {buy ? 'Buy — the case' : 'Sell — the case'}
       </h2>
-      <div className="space-y-3">
+      <div className="space-y-4">
         {actions.map((k) => (
           <InstrumentCard key={`card:${k.side}:${k.key}`} k={k} />
         ))}
@@ -136,15 +147,15 @@ function InstrumentCard({ k }: { k: CallRow }) {
   const hasChart = k.hasImage && k.callId != null
   return (
     <article
-      className={`break-inside-avoid rounded-panel border-l-[3px] border-y border-r border-edge-hair bg-surface-panel p-4 ${
+      className={`break-inside-avoid rounded-panel border-l-[3px] border-y border-r border-edge-hair bg-surface-panel px-5 py-4 ${
         k.side === 'buy' ? 'border-l-sig-pos/60' : 'border-l-sig-neg/60'
       }`}
     >
-      <div className="mb-2 flex flex-wrap items-baseline gap-x-2.5 gap-y-1 border-b border-edge-hair pb-2">
+      <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-edge-hair pb-2.5">
         <ActionTag side={k.side} />
         <Link
           href={instrumentHref(k.key)}
-          className="font-num text-[15px] font-semibold text-txt-1 no-underline hover:text-accent hover:underline"
+          className="font-num text-[16px] font-semibold text-txt-1 no-underline hover:text-accent hover:underline"
         >
           {k.symbol}
         </Link>
@@ -154,7 +165,7 @@ function InstrumentCard({ k }: { k: CallRow }) {
         </span>
       </div>
 
-      <dl className="mb-2 flex flex-wrap gap-x-6 gap-y-1 font-sans text-[11.5px]">
+      <dl className="mb-3 flex flex-wrap gap-x-8 gap-y-1.5 font-sans text-[12px]">
         <div className="flex gap-1.5">
           <dt className="text-txt-3">Sector</dt>
           <dd className="text-txt-2">{k.sector ?? '—'}</dd>
@@ -162,11 +173,11 @@ function InstrumentCard({ k }: { k: CallRow }) {
         {k.side === 'buy' && (
           <>
             <div className="flex gap-1.5">
-              <dt className="text-txt-3">Trigger</dt>
+              <dt className="text-txt-3">Trigger ₹</dt>
               <dd className="font-num tabular-nums text-txt-2">{inr(k.triggerPrice)}</dd>
             </div>
             <div className="flex gap-1.5">
-              <dt className="text-txt-3">Stop</dt>
+              <dt className="text-txt-3">Stop ₹</dt>
               <dd className="font-num tabular-nums text-txt-2">{inr(k.stopPrice)}</dd>
             </div>
           </>
@@ -181,9 +192,9 @@ function InstrumentCard({ k }: { k: CallRow }) {
 
       {/* Chart beside the words on screen, stacked on paper — a side-by-side split
           at print width squeezes the chart to unreadable. */}
-      <div className={hasChart ? 'grid gap-3 md:grid-cols-[1.1fr_1fr] print:block' : ''}>
+      <div className={hasChart ? 'grid gap-5 md:grid-cols-[1.1fr_1fr] print:block' : ''}>
         {k.comment ? (
-          <p className="font-sans text-[12.5px] leading-relaxed text-txt-2">{k.comment}</p>
+          <p className="font-sans text-[13px] leading-[1.65] text-txt-2">{k.comment}</p>
         ) : (
           <p className="font-sans text-[12px] italic text-txt-3">No written rationale.</p>
         )}
