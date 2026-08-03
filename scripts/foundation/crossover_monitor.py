@@ -4,9 +4,13 @@
 Runs every 5 minutes in market hours off atlas_intraday.sh. One batched kite.quote()
 for the union of names the notify-enabled crossover books care about, then per name:
 
-    not held, quote >= P*        -> provisional BUY  (arm only; the CLOSE confirms)
-    held,     quote <= level     -> provisional SELL (arm only)
-    held, armed, at/after 15:15  -> SELL confirmed, or disarmed if it recovered
+    not held, fast UNDER slow, quote >= P*  -> provisional BUY  (arm; the CLOSE confirms)
+    held,     quote <= level                -> provisional SELL (arm only)
+    held, armed, at/after 15:15             -> SELL confirmed, or disarmed if recovered
+
+The "fast UNDER slow" half is not decoration. P* is where the two EMAs meet, and read
+from the wrong side it is a cross-DOWN level sitting below price — so on 2026-08-03 the
+gateless version armed 421 of 739 names when 22 had actually crossed.
 
 Levels come from the PRIOR close's confirmed EMAs — never the forming day's — which is
 the same no-lookahead basis the backtest uses, so live and replay cannot quietly drift.
@@ -90,9 +94,15 @@ def _fired_today() -> set[tuple[str, str, str, str]]:
     return {(r["pid"], r["iid"], r["direction"], r["stage"]) for r in df.to_dict("records")}
 
 
-def _levels(row: dict, params: dict) -> tuple[Decimal, Decimal] | None:
-    """(buy_level, sell_level) from the prior close's confirmed EMAs, or None if this
-    name has no usable EMA pair yet (a recent listing, a data gap — never invented)."""
+def _levels(row: dict, params: dict) -> tuple[Decimal, Decimal, bool] | None:
+    """(buy_level, sell_level, fast_below_slow) from the prior close's confirmed EMAs,
+    or None if this name has no usable EMA pair yet (a recent listing, a data gap —
+    never invented).
+
+    The EMA ORDER travels with the levels because P* alone cannot carry it: the same
+    formula that gives a cross-up level from below gives a cross-down level from above,
+    and the monitor has to know which side it is standing on.
+    """
     fast, slow = int(params["fast"]), int(params["slow"])
     ef, es = row.get(f"ema_{fast}"), row.get(f"ema_{slow}")
     if ef is None or es is None:
@@ -101,7 +111,7 @@ def _levels(row: dict, params: dict) -> tuple[Decimal, Decimal] | None:
     # fast_ema books sell when price loses the fast EMA itself; death_cross books at the
     # level where fast would cross below slow — the same number as the buy level.
     sell = Decimal(str(ef)) if params.get("exit") == "fast_ema" else buy
-    return buy, sell
+    return buy, sell, float(ef) < float(es)
 
 
 def _record(pid: str, row: dict, direction: str, stage: str, level: Decimal, quote: Decimal):
@@ -215,12 +225,13 @@ def main() -> None:
         lv = _levels(row, params)
         if lv is None:
             continue
-        buy_level, sell_level = lv
+        buy_level, sell_level, fast_below_slow = lv
         pid, iid = row["pid"], row["iid"]
         already = frozenset((d, s) for (p, i, d, s) in fired if p == pid and i == iid)
         verdict = decide(
             Tick(
                 held=bool(row["held"]),
+                fast_below_slow=fast_below_slow,
                 buy_level=buy_level,
                 sell_level=sell_level,
                 quote=quote,
