@@ -22,9 +22,7 @@ export const metadata = { title: 'MaaL report · Atlas' }
 
 const pct1 = (v: number) => `${v.toFixed(1)}%`
 const inr = (v: number | null) =>
-  v == null
-    ? '—'
-    : `₹${v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  v == null ? '—' : Math.round(v).toLocaleString('en-IN')
 
 export default async function ReportPage({
   params,
@@ -43,7 +41,7 @@ export default async function ReportPage({
   const cash = cashPct(c.resultingBook)
 
   return (
-    <div className="report-page mx-auto max-w-[1000px] space-y-6 px-6 py-7">
+    <div className="report-page mx-auto max-w-[1120px] space-y-8 px-8 py-9">
       <div className="flex items-start justify-between gap-4 print:hidden">
         <Link
           href={`/portfolios/maal/${pf}/${week}`}
@@ -54,7 +52,7 @@ export default async function ReportPage({
         <PrintButton />
       </div>
 
-      <header className="border-b border-edge-rule pb-4">
+      <header className="border-b border-edge-rule pb-5">
         <h1 className="font-display text-[26px] font-medium tracking-tight text-txt-1">
           {MAAL_NAMES[pf]}
         </h1>
@@ -118,8 +116,8 @@ export default async function ReportPage({
         <h2 className="mb-2 font-num text-[10px] uppercase tracking-[0.14em] text-txt-3">
           Model portfolio after these changes
         </h2>
-        <div className="flex flex-wrap items-start gap-8">
-          <table className="min-w-[300px] flex-1 border-collapse font-sans text-[12.5px]">
+        <div className="flex flex-wrap items-start gap-10">
+          <table className="min-w-[340px] flex-1 border-collapse font-sans text-[13px]">
             <thead>
               <tr className="border-b border-edge-rule text-left font-num text-[9px] uppercase tracking-wider text-txt-3">
                 <th className="py-1.5">Instrument</th>
@@ -130,7 +128,7 @@ export default async function ReportPage({
             <tbody>
               {c.resultingBook.map((p) => (
                 <tr key={p.key} className="border-b border-edge-hair">
-                  <td className="py-1.5">
+                  <td className="py-2.5">
                     <Link
                       href={instrumentHref(p.key)}
                       className="font-num text-txt-1 no-underline hover:text-accent hover:underline"
@@ -138,21 +136,21 @@ export default async function ReportPage({
                       {p.symbol}
                     </Link>
                   </td>
-                  <td className="py-1.5 text-txt-2">{p.sector ?? '—'}</td>
-                  <td className="py-1.5 text-right font-num tabular-nums text-txt-1">
+                  <td className="py-2.5 text-txt-2">{p.sector ?? '—'}</td>
+                  <td className="py-2.5 text-right font-num tabular-nums text-txt-1">
                     {pct1(p.weightPct)}
                   </td>
                 </tr>
               ))}
               <tr className="border-b border-edge-hair">
-                <td className="py-1.5 font-num text-txt-2">Cash</td>
+                <td className="py-2.5 font-num text-txt-2">Cash</td>
                 <td />
-                <td className="py-1.5 text-right font-num tabular-nums text-txt-2">{pct1(cash)}</td>
+                <td className="py-2.5 text-right font-num tabular-nums text-txt-2">{pct1(cash)}</td>
               </tr>
               <tr>
-                <td className="py-1.5 font-num font-semibold text-txt-1">Total</td>
+                <td className="py-2.5 font-num font-semibold text-txt-1">Total</td>
                 <td />
-                <td className="py-1.5 text-right font-num font-semibold tabular-nums text-txt-1">
+                <td className="py-2.5 text-right font-num font-semibold tabular-nums text-txt-1">
                   100.0%
                 </td>
               </tr>
