@@ -4,10 +4,15 @@ The monitor's whole job is deciding, for one name on one tick: is this a fresh
 provisional breach, the 15:15 confirmation of an armed sell, a disarm, or nothing.
 
 Levels are REAL MRPL records (rule #0):
-  * 2026-07-16 buy level P* = 163.88, from the 15th's confirmed EMAs.
+  * 2026-07-16 buy level P* = 163.88, from the 15th's confirmed EMAs
+    (ema13 154.46 UNDER ema34 155.32 — the setup a golden cross needs).
   * 2026-07-28 sell level = the 27th's confirmed EMA13, 167.17 (fast_ema book) —
     the day the break actually sustained. The 27th itself broke intraday to 161.50
     and recovered to close 169.75, which is the case the lock exists to reject.
+
+The false-positive case is REAL KALYANKJIL at 2026-07-31: ema13 570.02 already ABOVE
+ema34 495.07, which puts P* at ₹-254.45. Every quote clears a negative level, so a
+monitor that looks only at the level buys a name that never crossed anything.
 """
 
 from __future__ import annotations
@@ -25,6 +30,7 @@ pytestmark = pytest.mark.unit
 def _tick(**kw) -> Tick:
     base = dict(
         held=False,
+        fast_below_slow=True,
         buy_level=Decimal("163.88"),
         sell_level=Decimal("167.17"),
         quote=Decimal("160.00"),
@@ -41,6 +47,21 @@ def test_a_quote_through_the_buy_level_arms_a_provisional_buy() -> None:
 
 def test_a_quote_below_the_buy_level_does_nothing_for_an_unheld_name() -> None:
     assert decide(_tick(quote=Decimal("160.00"))) is None
+
+
+def test_a_name_whose_fast_ema_is_already_above_the_slow_never_arms_a_buy() -> None:
+    # Real KALYANKJIL 2026-07-31: ema13 570.02 over ema34 495.07, so there is no cross
+    # left to make and P* is ₹-254.45. Quoting 620.00 clears that level trivially — the
+    # level alone cannot tell a golden cross from a name that crossed weeks ago.
+    d = decide(_tick(fast_below_slow=False, buy_level=Decimal("-254.45"), quote=Decimal("620.00")))
+    assert d is None
+
+
+def test_a_held_name_still_sells_when_its_fast_ema_is_above_the_slow() -> None:
+    # The buy gate must not mute exits: every held name is by definition one whose fast
+    # EMA already crossed above, and that is exactly the state a stop has to fire from.
+    d = decide(_tick(held=True, fast_below_slow=False, quote=Decimal("161.50")))
+    assert d == ("sell", "provisional")
 
 
 def test_a_held_name_breaking_the_sell_level_arms_a_provisional_sell() -> None:

@@ -34,6 +34,7 @@ class Tick:
     """Everything knowable about one name at one instant."""
 
     held: bool
+    fast_below_slow: bool  # PRIOR close's confirmed EMAs — the pre-cross state
     buy_level: Decimal  # P*, from the PRIOR close's confirmed EMAs
     sell_level: Decimal  # P* or the fast EMA, per the book's exit rule
     quote: Decimal
@@ -76,6 +77,13 @@ def decide(t: Tick) -> tuple[str, str] | None:
 
     # Not held: the only thing that can happen is arming a buy. The monitor cannot
     # confirm it, because confirmation is a property of the close.
-    if t.quote >= t.buy_level and ("buy", "provisional") not in t.already:
+    #
+    # fast_below_slow is the half the level cannot express. P* is where the two EMAs
+    # MEET — approached from below that is the golden cross, but a name whose fast EMA
+    # is already above reads the same formula backwards and P* lands below price, or
+    # below zero (real KALYANKJIL 2026-07-31: ₹-254.45). Every quote clears that, so
+    # without this the monitor arms the entire trending half of the universe daily.
+    # Same precondition the backtest applies (EmaCross._intraday_events: `below`).
+    if t.fast_below_slow and t.quote >= t.buy_level and ("buy", "provisional") not in t.already:
         return ("buy", "provisional")
     return None
