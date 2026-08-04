@@ -157,7 +157,8 @@ export default async function ComparePage({
           <ReturnsTable rows={shown} categoryLabel={label} indexLabel={indexLabel} />
           <RollingStatsTable rows={rows} shown={shown} windowYears={windowYears}
                              categoryLabel={label} indexLabel={indexLabel} />
-          <ConstituentsTable funds={funds} from={from} to={to} />
+          <ConstituentsTable funds={funds} rows={shown} from={from} to={to}
+                             categoryLabel={label} indexLabel={indexLabel} />
         </div>
       )}
 
