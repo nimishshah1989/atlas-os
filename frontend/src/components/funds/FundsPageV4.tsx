@@ -139,6 +139,10 @@ export async function FundsPageV4() {
           <h1 className="font-display text-[32px] font-bold tracking-tight text-txt-1">Funds</h1>
           <span className="font-num text-[12px] tabular-nums text-txt-3">{universeCount} equity funds (Regular Growth) · holdings-weighted lens roll-up</span>
           {asOf && <span className="font-sans text-[11px] text-txt-3">· holdings as of {asOf}</span>}
+          <a href="/funds/compare"
+             className="ml-auto rounded-tile border border-edge-hair px-3 py-1.5 font-sans text-[12px] text-txt-2 no-underline transition-colors hover:border-edge-strong hover:text-txt-1">
+            Compare a category →
+          </a>
         </div>
         <p className="max-w-[880px] font-sans text-[15px] text-txt-2">
           Each fund is a <strong>holdings-weighted roll-up</strong> of the stock atom. The headline is

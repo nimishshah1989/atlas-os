@@ -13,6 +13,10 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),
+      // src/lib/db.ts imports 'server-only', which throws outside a React Server Component.
+      // Vitest is neither; point it at the package's own no-op so query modules are testable.
+      // Resolved by path, not specifier — the package's exports field hides ./empty.
+      'server-only': resolve(__dirname, 'node_modules/server-only/empty.js'),
     },
   },
 })
