@@ -55,6 +55,9 @@ export type CompositeRow = {
 export type ConstituentRow = {
   mstarId: string
   name: string
+  amc: string | null
+  /** Fund size in ₹ crore — a 20% return on ₹50 cr is a different fact from one on ₹20,000 cr. */
+  aumCr: number | null
   first: string
   last: string
   /** Simple return over the fund's own span inside the window, in percent. */
@@ -282,7 +285,8 @@ export async function getCategoryConstituents(
   to: string,
 ): Promise<ConstituentRow[]> {
   const rows = await sql<{
-    mstar_id: string; name: string; first_d: string; last_d: string
+    mstar_id: string; name: string; amc: string | null; aum_cr: string | null
+    first_d: string; last_d: string
     first_nav: string; last_nav: string; window_first: string; window_last: string
   }[]>`
     WITH nav AS (
@@ -303,7 +307,7 @@ export async function getCategoryConstituents(
       SELECT DISTINCT ON (mstar_id) mstar_id, nav_date AS last_d, nav AS last_nav
       FROM nav ORDER BY mstar_id, nav_date DESC
     )
-    SELECT e.mstar_id, m.fund_name AS name,
+    SELECT e.mstar_id, m.fund_name AS name, u.amc, u.aum_cr::text AS aum_cr,
            to_char(e.first_d, 'YYYY-MM-DD') AS first_d,
            to_char(t.last_d, 'YYYY-MM-DD') AS last_d,
            e.first_nav::text AS first_nav, t.last_nav::text AS last_nav,
@@ -312,12 +316,15 @@ export async function getCategoryConstituents(
     FROM ends e
     JOIN tails t USING (mstar_id)
     JOIN atlas_foundation.de_mf_master m ON m.mstar_id = e.mstar_id
+    JOIN atlas_foundation.atlas_universe_funds u ON u.mstar_id = e.mstar_id
     CROSS JOIN span s
     WHERE e.first_d < t.last_d`
   return rows
     .map((r) => ({
       mstarId: r.mstar_id,
       name: r.name,
+      amc: r.amc,
+      aumCr: toNumber(r.aum_cr),
       first: r.first_d,
       last: r.last_d,
       pct: (toNumberOr(r.last_nav, 0) / toNumberOr(r.first_nav, 1) - 1) * 100,
