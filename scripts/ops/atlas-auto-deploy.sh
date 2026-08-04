@@ -34,13 +34,35 @@ cd "$REPO" || { log "repo missing"; exit 1; }
 branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
 [ "$branch" = "$DEPLOY_BRANCH" ] || exit 0
 
-# Guard 2: never act on a dirty tree (don't clobber WIP; don't pull onto changes)
-[ -z "$(git status --porcelain)" ] || { log "tree dirty on $branch — skip"; exit 0; }
+# Guard 2: a dirty tree used to mean "skip forever, silently" — one stray file could stop
+# every future deploy with nothing surfacing anywhere anyone looks. Stash it instead: that is
+# lossless and reversible (`git stash list` on the box), and the deploy proceeds.
+if [ -n "$(git status --porcelain)" ]; then
+  n=$(git status --porcelain | wc -l | tr -d ' ')
+  if git stash push -u -m "auto-deploy: box dirt $(date -u +%FT%TZ)" >>"$LOG" 2>&1; then
+    log "ALERT: tree was dirty ($n paths) — stashed and continuing; inspect with 'git stash list'"
+  else
+    log "ALERT: tree dirty ($n paths) and stash FAILED — deploy blocked, needs a human"
+    exit 1
+  fi
+fi
 
 git fetch origin "$DEPLOY_BRANCH" --quiet 2>>"$LOG" || { log "fetch failed"; exit 0; }
 LOCAL=$(git rev-parse HEAD)
 REMOTE=$(git rev-parse "origin/$DEPLOY_BRANCH")
-[ "$LOCAL" = "$REMOTE" ] && exit 0   # already current — nothing to do
+
+# Converge on the commit that is actually BUILT, not merely checked out. A build that failed
+# after the fast-forward left HEAD == REMOTE with the old .next still serving, and every later
+# run exited here — stale production, for as long as nobody noticed. The stamp is written only
+# after a build succeeds and pm2 reloads, so a mismatch means "retry".
+BUILT_STAMP="$FRONTEND/.next/DEPLOYED_SHA"
+BUILT=$(cat "$BUILT_STAMP" 2>/dev/null || echo none)
+if [ "$LOCAL" = "$REMOTE" ] && [ "$BUILT" = "$REMOTE" ]; then
+  exit 0   # current AND built — nothing to do
+fi
+if [ "$LOCAL" = "$REMOTE" ] && [ "$BUILT" != "$REMOTE" ]; then
+  log "ALERT: $REMOTE is checked out but not built (last built: $BUILT) — rebuilding"
+fi
 
 STAMP=$(date +%Y%m%d_%H%M%S)
 log "deploy $LOCAL -> $REMOTE"
@@ -59,15 +81,27 @@ if ! git diff --quiet "$LOCAL" "$REMOTE" -- package-lock.json 2>/dev/null; then
   npm ci >>"$LOG" 2>&1 || { log "npm ci failed"; exit 1; }
 fi
 
+# The toolchain must actually be there. A deploy once died on `sh: 1: next: not found`
+# because something re-installed node_modules while the build was starting; the build then
+# "failed" for a reason that had nothing to do with the code.
+if [ ! -x node_modules/.bin/next ]; then
+  log "ALERT: node_modules/.bin/next missing — running npm ci before build"
+  npm ci >>"$LOG" 2>&1 || { log "ALERT: npm ci failed — deploy aborted"; exit 1; }
+fi
+
 [ -d .next ] && cp -r .next ".next.bak.$STAMP"
 rm -rf .next/cache/fetch-cache
 if NEXT_PUBLIC_LENS_V4=1 NODE_OPTIONS='--max-old-space-size=3072' npm run build >>"$LOG" 2>&1; then
   rm -rf .next/cache/fetch-cache
   pm2 reload "$PM2_APP" --update-env >>"$LOG" 2>&1
+  # Written only here: the stamp means "this commit is built AND serving", which is what the
+  # convergence check at the top reads. A rollback restores the old .next and with it the old
+  # stamp, so the next run correctly sees the deploy as still outstanding and retries.
+  echo "$REMOTE" > .next/DEPLOYED_SHA
   log "OK $REMOTE"
   ls -1dt "$FRONTEND"/.next.bak.* 2>/dev/null | tail -n +4 | xargs -r rm -rf   # keep 3 backups
 else
-  log "BUILD FAILED — rolling back to previous .next"
+  log "ALERT: BUILD FAILED for $REMOTE — rolling back to previous .next; will retry next run"
   rm -rf .next && mv ".next.bak.$STAMP" .next 2>/dev/null || log "rollback: no backup"
   pm2 reload "$PM2_APP" --update-env >>"$LOG" 2>&1
   exit 1

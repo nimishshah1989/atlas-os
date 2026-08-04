@@ -43,7 +43,7 @@ export function ReturnsTable({
 
   return (
     <Panel eyebrow="Trailing returns" title="Composite vs benchmarks"
-           bodyClassName="overflow-x-auto break-inside-avoid p-0">
+           bodyClassName="overflow-x-auto p-0">
       <table className="w-full border-collapse">
         <thead className="border-b border-edge-rule">
           <tr>
@@ -111,7 +111,7 @@ export function RollingStatsTable({
   return (
     <Panel eyebrow={`Rolling ${windowYears}-year returns`}
            title={`Distribution across ${cs.n} window${cs.n === 1 ? '' : 's'}`}
-           bodyClassName="overflow-x-auto break-inside-avoid p-0">
+           bodyClassName="overflow-x-auto p-0">
       <table className="w-full border-collapse">
         <thead className="border-b border-edge-rule">
           <tr>
@@ -154,7 +154,7 @@ export function ConstituentsTable({
   return (
     <Panel eyebrow="Constituents"
            title={`${funds.length} fund${funds.length === 1 ? '' : 's'} in the composite`}
-           bodyClassName="overflow-x-auto break-inside-avoid p-0">
+           bodyClassName="overflow-x-auto p-0">
       <table className="w-full border-collapse">
         <thead className="border-b border-edge-rule">
           <tr>
