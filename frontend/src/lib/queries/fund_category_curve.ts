@@ -171,6 +171,110 @@ export async function getCategoryComposite(
   }))
 }
 
+/** One row of the all-categories board. Growth factors, not percentages — the CAGR gate is
+ *  applied by growthReturn() so there is one place that decides absolute-vs-annualised. */
+export type CategorySummaryRow = {
+  category: string
+  /** Earliest composite date in the window; a period starting before it is not covered. */
+  first: string
+  /** exp(sum(ln(1+r))) over each trailing period, or null where history is short. */
+  comp: { y1: number | null; y3: number | null; y5: number | null }
+  bench: { y1: number | null; y3: number | null; y5: number | null }
+  indexCode: string
+}
+
+/**
+ * Trailing 1/3/5-year growth for EVERY category and its benchmark, in two queries.
+ *
+ * The composite is exp(cumsum(ln(1+r))), so the growth between two dates is just
+ * exp(sum(ln(1+r))) over the dates in between — an aggregate, no series needed. That turns
+ * "15 categories × 3 periods" into one grouped scan (~3s) instead of 15 separate composite
+ * queries. Benchmarks are 15 codes × 4 as-of lookups, which is trivial.
+ */
+export async function getCategorySummary(
+  anchors: { to: string; y1: string; y3: string; y5: string },
+): Promise<CategorySummaryRow[]> {
+  const codes = [...new Set(Object.values(CATEGORY_INDEX))]
+  const [comp, bench, births] = await Promise.all([
+    sql<{ cat: string; first_d: string; g1: string | null; g3: string | null; g5: string | null }[]>`
+      WITH nav AS (
+        SELECT m.category_name AS cat, n.mstar_id, n.nav_date, n.nav,
+               lag(n.nav) OVER (PARTITION BY n.mstar_id ORDER BY n.nav_date) AS prev
+        FROM atlas_foundation.de_mf_nav_daily n
+        JOIN atlas_foundation.de_mf_master m USING (mstar_id)
+        JOIN atlas_foundation.atlas_universe_funds u ON u.mstar_id = n.mstar_id
+        WHERE n.nav_date BETWEEN ${anchors.y5} AND ${anchors.to}
+          AND n.nav > 0 AND m.category_name IS NOT NULL
+      ),
+      daily AS (
+        SELECT cat, nav_date, avg(nav / prev - 1) AS r
+        FROM nav WHERE prev IS NOT NULL AND prev > 0 AND nav / prev - 1 > -1
+        GROUP BY cat, nav_date
+      )
+      SELECT cat, to_char(min(nav_date), 'YYYY-MM-DD') AS first_d,
+             (exp(sum(ln(1 + r)) FILTER (WHERE nav_date > ${anchors.y1})))::text AS g1,
+             (exp(sum(ln(1 + r)) FILTER (WHERE nav_date > ${anchors.y3})))::text AS g3,
+             (exp(sum(ln(1 + r)) FILTER (WHERE nav_date > ${anchors.y5})))::text AS g5
+      FROM daily GROUP BY cat ORDER BY cat`,
+    sql<{ code: string; label: string; close: string | null }[]>`
+      SELECT c.code, a.label, b.close::text AS close
+      FROM unnest(${codes}::text[]) c(code)
+      CROSS JOIN (VALUES ('end', ${anchors.to}), ('y1', ${anchors.y1}),
+                         ('y3', ${anchors.y3}), ('y5', ${anchors.y5})) a(label, d)
+      LEFT JOIN LATERAL (
+        SELECT close FROM atlas_foundation.index_prices
+        WHERE index_code = c.code AND date <= a.d::date
+        ORDER BY date DESC LIMIT 1) b ON true`,
+    // Each category's true earliest NAV, unbounded. The composite query is windowed, so its
+    // own min(nav_date) is just the first trading day inside the window and says nothing about
+    // whether the category existed at the anchor.
+    sql<{ cat: string; born: string }[]>`
+      SELECT m.category_name AS cat, to_char(min(n.nav_date), 'YYYY-MM-DD') AS born
+      FROM atlas_foundation.de_mf_nav_daily n
+      JOIN atlas_foundation.de_mf_master m USING (mstar_id)
+      JOIN atlas_foundation.atlas_universe_funds u ON u.mstar_id = n.mstar_id
+      WHERE m.category_name IS NOT NULL
+      GROUP BY m.category_name`,
+  ])
+  const born = new Map(births.map((b) => [b.cat, b.born]))
+
+  const idx = new Map<string, Record<string, number | null>>()
+  for (const r of bench) {
+    const e = idx.get(r.code) ?? {}
+    e[r.label] = toNumber(r.close)
+    idx.set(r.code, e)
+  }
+  const ratio = (code: string, k: string): number | null => {
+    const e = idx.get(code)
+    const end = e?.end
+    const at = e?.[k]
+    return end == null || at == null || at <= 0 ? null : end / at
+  }
+
+  return comp.map((r) => {
+    const code = CATEGORY_INDEX[r.cat] ?? 'NIFTY 500'
+    const first = born.get(r.cat) ?? r.first_d
+    // A period beginning before the category existed is not covered by it. Reporting a
+    // two-year number in the 5Y column would be the worst kind of wrong: plausible.
+    const has = (anchor: string) => first <= anchor
+    return {
+      category: r.cat,
+      first,
+      indexCode: code,
+      comp: {
+        y1: has(anchors.y1) ? toNumber(r.g1) : null,
+        y3: has(anchors.y3) ? toNumber(r.g3) : null,
+        y5: has(anchors.y5) ? toNumber(r.g5) : null,
+      },
+      bench: {
+        y1: has(anchors.y1) ? ratio(code, 'y1') : null,
+        y3: has(anchors.y3) ? ratio(code, 'y3') : null,
+        y5: has(anchors.y5) ? ratio(code, 'y5') : null,
+      },
+    }
+  })
+}
+
 /** Every fund in the composite, with its own return over its own span inside the window. */
 export async function getCategoryConstituents(
   category: string,

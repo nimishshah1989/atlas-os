@@ -128,3 +128,35 @@ describe.skipIf(!hasDb)('getCategoryOptions', () => {
     expect(names).not.toContain('India Fund Equity - ESG')
   })
 })
+
+describe.skipIf(!hasDb)('getCategorySummary', () => {
+  const anchors = { to: '2026-08-03', y1: '2025-08-03', y3: '2023-08-03', y5: '2021-08-03' }
+
+  it('returns every offered category with its benchmark in one pass', async () => {
+    const rows = await db().getCategorySummary(anchors)
+    expect(rows.length).toBeGreaterThanOrEqual(15)
+    for (const r of rows) expect(r.indexCode).toBeTruthy()
+  })
+
+  it('reproduces the real FMCG composite growth over 1/3/5 years', async () => {
+    const rows = await db().getCategorySummary(anchors)
+    const fmcg = rows.find((r) => r.category === 'India Fund Sector - FMCG')!
+    expect(fmcg.comp.y1).toBeCloseTo(0.877336, 4) // -12.27% over the year
+    expect(fmcg.comp.y3).toBeCloseTo(0.954303, 4)
+    expect(fmcg.comp.y5).toBeCloseTo(1.408537, 4)
+    // NIFTY FMCG 49121.20 / 36826.05 over five years
+    expect(fmcg.bench.y5).toBeCloseTo(1.333866, 4)
+  })
+
+  it('reports null, never a partial return, where history is short', async () => {
+    // Sector - Energy's first universe NAV is 2024-03-04, so its 3Y and 5Y are not covered.
+    // Filling them with a ~2-year number would be plausible and wrong.
+    const rows = await db().getCategorySummary(anchors)
+    const energy = rows.find((r) => r.category === 'India Fund Sector - Energy')!
+    expect(energy.first > anchors.y3).toBe(true)
+    expect(energy.comp.y1).not.toBeNull()
+    expect(energy.comp.y3).toBeNull()
+    expect(energy.comp.y5).toBeNull()
+    expect(energy.bench.y3).toBeNull()
+  })
+})
