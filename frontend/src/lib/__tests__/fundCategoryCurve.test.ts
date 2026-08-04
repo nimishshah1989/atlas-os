@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  fetchStart, minusMonths, PERIODS, rebase, rollingReturns, rollingStats, spanReturn,
+  fetchStart, growthReturn, minusMonths, PERIODS, rebase, rollingReturns, rollingStats,
+  spanReturn,
   thinCoverage,
   trailingReturn,
   type CurvePoint,
@@ -265,5 +266,38 @@ describe('fetchStart', () => {
   it('leaves a one-point series where the window equals the whole period', () => {
     // Why the default (3-year period, 3-year window) drew a blank chart: one point is not a line.
     expect(rollingReturns(FMCG, 3).length).toBeLessThanOrEqual(2)
+  })
+})
+
+describe('growthReturn', () => {
+  // The summary table gets growth FACTORS from SQL (exp of summed log-returns) rather than a
+  // series, so it needs the same CAGR gate applied to a factor plus a known span.
+  it('annualises a multi-year growth factor on actual day count', () => {
+    // Real: FMCG composite grew 1.408537x over 2021-08-03 -> 2026-08-03 (1826 days).
+    const r = growthReturn(1.408537, 1826)!
+    expect(r.annualised).toBe(true)
+    expect(r.days).toBe(1826)
+    expect(r.pct).toBeCloseTo(7.092172, 4)
+  })
+
+  it('annualises a loss correctly', () => {
+    // Real: FMCG composite over 3 years (1096 days) shrank to 0.954303x.
+    expect(growthReturn(0.954303, 1096)!.pct).toBeCloseTo(-1.546693, 4)
+  })
+
+  it('reports a one-year span as an absolute return, not a CAGR', () => {
+    const r = growthReturn(0.877336, 365)!
+    expect(r.annualised).toBe(false)
+    expect(r.pct).toBeCloseTo(-12.2664, 3)
+  })
+
+  it('returns null for a period the data does not cover', () => {
+    // Sector - Energy has no NAV before 2024-03-04, so its 3Y and 5Y cells must read "—".
+    expect(growthReturn(null, 1826)).toBeNull()
+  })
+
+  it('returns null for a non-positive or unusable growth factor', () => {
+    expect(growthReturn(0, 365)).toBeNull()
+    expect(growthReturn(1.5, 0)).toBeNull()
   })
 })

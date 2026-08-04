@@ -43,9 +43,19 @@ export function spanReturn(pts: CurvePoint[]): SpanReturn | null {
   const a = pts[0]
   const b = pts.at(-1)
   if (a == null || b == null || a === b || a.v <= 0) return null
-  const days = daysBetween(a.d, b.d)
-  if (days <= 0) return null
-  const growth = b.v / a.v
+  return growthReturn(b.v / a.v, daysBetween(a.d, b.d))
+}
+
+/**
+ * Same CAGR gate as spanReturn, but from a growth factor and a known span rather than a
+ * series — the summary table gets `exp(sum(ln(1+r)))` straight out of SQL for 15 categories
+ * at once, and pulling 15 full series back just to divide two endpoints would be silly.
+ *
+ * A null factor means the category has no data reaching that far back; it stays null so the
+ * cell reads "—" instead of passing off a two-year return as a five-year one.
+ */
+export function growthReturn(growth: number | null, days: number): SpanReturn | null {
+  if (growth == null || growth <= 0 || days <= 0) return null
   const annualised = days > 365
   const pct = annualised ? growth ** (365.25 / days) - 1 : growth - 1
   return { pct: pct * 100, annualised, days }

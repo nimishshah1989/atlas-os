@@ -7,12 +7,14 @@ import { Suspense } from 'react'
 import { PrintButton } from '@/components/maal/PrintButton'
 import { CategoryCompareControls } from '@/components/funds/CategoryCompareControls'
 import { CategoryCompareChart } from '@/components/funds/CategoryCompareChart'
+import { CategorySummaryTable } from '@/components/funds/CategorySummaryTable'
 import {
   ConstituentsTable, ReturnsTable, RollingStatsTable,
 } from '@/components/funds/CategoryCompareTables'
 import { fetchStart, minusMonths, thinCoverage } from '@/lib/fundCategoryCurve'
 import {
   CATEGORY_INDEX, getCategoryComposite, getCategoryConstituents, getCategoryOptions,
+  getCategorySummary,
 } from '@/lib/queries/fund_category_curve'
 
 const PERIOD_MONTHS: Record<string, number | null> = {
@@ -67,12 +69,24 @@ export default async function ComparePage({
     ? (one('from') || minusMonths(to, 36))
     : months == null ? '1990-01-01' : minusMonths(to, months)
 
-  // Reach back a full rolling window before the displayed period, or a rolling chart as long
-  // as its own period has nothing to plot. `shown` is what the growth chart and the returns
-  // table use; the rolling views use the full series.
-  const [rows, funds] = await Promise.all([
+  // The summary board is anchored on the data's own last date, independent of the period the
+  // reader picked — it is a fixed 1/3/5-year scan of every category, not a view of this one.
+  const sumAnchors = {
+    to: anchorTo,
+    y1: minusMonths(anchorTo, 12),
+    y3: minusMonths(anchorTo, 36),
+    y5: minusMonths(anchorTo, 60),
+  }
+  const dayCount = (a: string) =>
+    Math.round((Date.parse(anchorTo) - Date.parse(a)) / 86400000)
+
+  // fetchStart reaches back a full rolling window before the displayed period, or a rolling
+  // chart as long as its own period has nothing to plot. `shown` is what the growth chart and
+  // the returns table use; the rolling views use the full series.
+  const [rows, funds, summary] = await Promise.all([
     getCategoryComposite(chosen.category, fetchStart(from, windowYears), to),
     getCategoryConstituents(chosen.category, from, to),
+    getCategorySummary(sumAnchors),
   ])
   const shown = rows.filter((r) => r.d >= from)
 
@@ -122,6 +136,14 @@ export default async function ComparePage({
         <Suspense fallback={null}>
           <CategoryCompareControls options={options} staleBefore={staleBefore} />
         </Suspense>
+      </div>
+
+      <div className="mb-6">
+        <CategorySummaryTable
+          rows={summary}
+          days={{ y1: dayCount(sumAnchors.y1), y3: dayCount(sumAnchors.y3), y5: dayCount(sumAnchors.y5) }}
+          activeCategory={chosen.category}
+        />
       </div>
 
       {shown.length < 2 ? (
