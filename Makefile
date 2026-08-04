@@ -21,6 +21,7 @@ test-int:
 
 lint:
 	uv run ruff check atlas tests scripts
+	uv run ruff format --check atlas tests scripts
 
 format:
 	uv run ruff format atlas tests scripts

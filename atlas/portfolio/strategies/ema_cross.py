@@ -214,6 +214,5 @@ class EmaCross(StateStrategy):
             else f"EMA{f} crossed below EMA{s} intraday — price broke ₹{lvl:,.2f}"
         )
         return (
-            f"{what}, and was still below at the 15:15 lock "
-            f"(close ₹{cl:,.2f}). Sold at that close."
+            f"{what}, and was still below at the 15:15 lock (close ₹{cl:,.2f}). Sold at that close."
         )

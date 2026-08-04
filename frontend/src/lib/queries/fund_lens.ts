@@ -204,8 +204,17 @@ export async function getFundEquityCurve(mstarId: string): Promise<FundEquityPoi
       i50.close::text  AS nifty50,
       i500.close::text AS nifty500
     FROM atlas_foundation.de_mf_nav_daily v
-    LEFT JOIN atlas_foundation.index_prices i50  ON i50.index_code='NIFTY 50'  AND i50.date  = v.nav_date
-    LEFT JOIN atlas_foundation.index_prices i500 ON i500.index_code='NIFTY 500' AND i500.date = v.nav_date
+    -- As-of, not equality: 31 March is India's fiscal year end, so AMCs publish a NAV while
+    -- the exchange is shut and index_prices has no row. An equality join silently dropped
+    -- the benchmark on the most-looked-at month-end of the year, three times in five years.
+    LEFT JOIN LATERAL (
+      SELECT close FROM atlas_foundation.index_prices
+      WHERE index_code='NIFTY 50' AND date <= v.nav_date
+      ORDER BY date DESC LIMIT 1) i50 ON true
+    LEFT JOIN LATERAL (
+      SELECT close FROM atlas_foundation.index_prices
+      WHERE index_code='NIFTY 500' AND date <= v.nav_date
+      ORDER BY date DESC LIMIT 1) i500 ON true
     WHERE v.mstar_id = ${mstarId} AND v.nav > 0 AND v.nav_date >= (SELECT start FROM range)
     ORDER BY v.nav_date ASC`
   return rows.map((r) => ({

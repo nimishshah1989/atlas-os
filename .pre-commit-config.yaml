@@ -23,10 +23,14 @@ repos:
       - id: check-json
       - id: check-toml
 
+  # Pinned to the version in the dev extra. When these drifted (hook v0.7.4 vs project
+  # 0.15.15) the two disagreed about S603, so a commit could fail a check `make gate`
+  # had just passed — and the older one flagged subprocess calls with literal argv that
+  # the newer one correctly accepts. Bump both together.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.7.4
+    rev: v0.15.15
     hooks:
-      - id: ruff
+      - id: ruff-check
         args: [--fix]
       - id: ruff-format
 

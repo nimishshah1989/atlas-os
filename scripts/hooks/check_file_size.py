@@ -35,6 +35,10 @@ LIMIT_PAGE_SHELL = 250
 # Files in these globs are allowed to exceed any limit (no enforcement).
 WHITELIST_PREFIXES: tuple[str, ...] = (
     "migrations/versions/",
+    # The baseline is a generated pg_dump of the live schema — the payload that
+    # migrations/versions/0001_baseline_*.py loads. Same category as a migration,
+    # and its size tracks how big prod is, not how sloppy anyone was.
+    "migrations/baseline/",
     "decisions.jsonl",
     "package-lock.json",
     "frontend/package-lock.json",
