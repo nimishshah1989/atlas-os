@@ -157,4 +157,25 @@ html[data-theme="dark"] {
   .break-inside-avoid { break-inside: avoid; }
 
   @page { margin: 14mm; }
+
+  /* ── Wide reports (the fund category board) ───────────────────────────────
+     A named page, so flipping to landscape affects only the reports that ask
+     for it and never the portrait ones. Chrome honours `page:` in print. */
+  @page wide { size: A4 landscape; margin: 10mm; }
+  .report-wide { page: wide; }
+
+  /* A long table must be allowed to break, with its header repeating on each
+     sheet. `break-inside: avoid` on a table taller than a page does not keep it
+     together — it shunts the whole block to the next sheet and leaves most of
+     the previous one blank, which is what made this report look scattered. */
+  .report-wide table { break-inside: auto; }
+  .report-wide thead { display: table-header-group; }
+  .report-wide tr { break-inside: avoid; }
+
+  /* Horizontal scrollers clip on paper; there is no scrollbar to drag. */
+  .report-wide .overflow-x-auto { overflow: visible !important; }
+
+  /* Third-party chart watermark does not belong on a client-facing report. */
+  .report-wide #tv-attr-logo,
+  .report-wide a[id^="tv-attr"] { display: none !important; }
 }

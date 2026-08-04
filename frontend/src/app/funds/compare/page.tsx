@@ -36,7 +36,7 @@ export default async function ComparePage({
   const options = await getCategoryOptions()
   if (options.length === 0) {
     return (
-      <main className="report-page mx-auto max-w-[1180px] px-6 py-8">
+      <main className="report-page report-wide mx-auto max-w-[1180px] px-6 py-8">
         <p className="font-sans text-[14px] text-txt-2">No fund categories carry NAV history.</p>
       </main>
     )
@@ -100,7 +100,7 @@ export default async function ComparePage({
   const coverage = { first: shown.find((r) => r.n > 0)?.n ?? 0, peak: thin.peak }
 
   return (
-    <main className="report-page mx-auto max-w-[1180px] px-6 py-8">
+    <main className="report-page report-wide mx-auto max-w-[1180px] px-6 py-8">
       <header className="mb-6">
         <p className="font-num text-[9px] uppercase tracking-[0.14em] text-txt-3">
           Funds · Category vs benchmark
