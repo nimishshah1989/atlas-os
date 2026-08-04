@@ -149,7 +149,11 @@ ignore = [
 "tests/**" = ["S101", "S106", "N802", "S603"]  # N802: uppercase verdict labels (BUY/SELL); S603: CLI smoke tests subprocess the project's own binary, no untrusted input
 # S608/S607: internal data-eng + ops scripts build SQL from code constants and
 # call known binaries; query values are bound, never user input.
-"scripts/**" = ["S101", "E501", "S608", "S607"]
+# S603 joins S607 here: pre-commit pins ruff v0.7.4 while the project runs 0.15.15, and
+# the older one flags subprocess calls the newer one accepts — so `make gate` passed while
+# the commit hook failed. Same justification either way: these are literal argv lists with
+# shell=False, no untrusted input.
+"scripts/**" = ["S101", "E501", "S608", "S607", "S603"]
 "migrations/**" = ["E501"]  # SQL string literals in migrations have long lines by nature
 "atlas/validation/m1_data_quality.py" = ["E501"]
 "atlas/preflight.py" = ["E501"]
