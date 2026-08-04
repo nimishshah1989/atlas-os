@@ -72,10 +72,20 @@ export function ReturnsTable({
 }
 
 export function RollingStatsTable({
-  rows, windowYears, categoryLabel, indexLabel,
-}: { rows: CompositeRow[]; windowYears: number; categoryLabel: string; indexLabel: string }) {
-  const comp = rollingReturns(rows.map((r) => ({ d: r.d, v: r.v })), windowYears)
-  const bench = rollingReturns(rebase(pick(rows, 'catIndex')), windowYears)
+  rows, shown, windowYears, categoryLabel, indexLabel,
+}: {
+  /** Full series, reaching back a rolling window before `shown`. */
+  rows: CompositeRow[]
+  /** The displayed period — windows are trimmed to it so the stats describe what is on screen. */
+  shown: CompositeRow[]
+  windowYears: number
+  categoryLabel: string
+  indexLabel: string
+}) {
+  const from = shown[0]?.d ?? ''
+  const trim = (pts: CurvePoint[]) => pts.filter((p) => p.d >= from)
+  const comp = trim(rollingReturns(rows.map((r) => ({ d: r.d, v: r.v })), windowYears))
+  const bench = trim(rollingReturns(rebase(pick(rows, 'catIndex')), windowYears))
   const cs = rollingStats(comp, bench)
   const bs = rollingStats(bench, [])
 

@@ -1,6 +1,7 @@
-// Growth and rolling chart modes for /funds/compare, plus a strip showing how many funds
-// were in the composite on each date — a curve built from three funds should not look like
-// one built from ninety.
+// Growth and rolling chart modes for /funds/compare.
+//
+// `rows` reaches back a full rolling window before `shown` so the rolling view has history to
+// work with; the growth view plots `shown` alone, which is the period the reader asked for.
 import { AtlasLightweightChart, type ChartSeries } from '@/components/charts/AtlasLightweightChart'
 import { Panel } from '@/components/ui/Panel'
 import { rebase, rollingReturns, type CurvePoint } from '@/lib/fundCategoryCurve'
@@ -12,37 +13,39 @@ const pick = (rows: CompositeRow[], key: 'nifty50' | 'nifty500' | 'catIndex'): C
 const toChart = (pts: CurvePoint[]) => pts.map((p) => ({ time: p.d, value: p.v }))
 
 export function CategoryCompareChart({
-  rows, view, windowYears, categoryLabel, indexLabel,
+  rows, shown, view, windowYears, categoryLabel, indexLabel,
 }: {
+  /** Full series, reaching back a rolling window before `shown`. */
   rows: CompositeRow[]
+  /** The displayed period only. */
+  shown: CompositeRow[]
   view: 'growth' | 'rolling'
   windowYears: number
   categoryLabel: string
   indexLabel: string
 }) {
-  const composite: CurvePoint[] = rows.map((r) => ({ d: r.d, v: r.v }))
-  const catIdx = pick(rows, 'catIndex')
+  // Rolling returns are computed over the full series, then trimmed to the displayed period —
+  // the extra history is there to give the earliest displayed dates a window, not to be plotted.
+  const from = shown[0]?.d ?? ''
+  const trim = (pts: CurvePoint[]) => pts.filter((p) => p.d >= from)
+  const rollOf = (pts: CurvePoint[]) => toChart(trim(rollingReturns(pts, windowYears)))
 
   const series: ChartSeries[] = view === 'rolling'
     ? [
         { name: `${categoryLabel} rolling ${windowYears}Y`,
-          data: toChart(rollingReturns(composite, windowYears)), color: 'teal', lineWidth: 2 },
+          data: rollOf(rows.map((r) => ({ d: r.d, v: r.v }))), color: 'teal', lineWidth: 2 },
         { name: `${indexLabel} rolling ${windowYears}Y`,
-          data: toChart(rollingReturns(rebase(catIdx), windowYears)), color: 'warn', lineWidth: 2 },
+          data: rollOf(rebase(pick(rows, 'catIndex'))), color: 'warn', lineWidth: 2 },
+        { name: 'Zero', data: rollOf(rows.map((r) => ({ d: r.d, v: r.v }))).map((p) => ({ time: p.time, value: 0 })),
+          color: 'ink', lineWidth: 1 },
       ]
     : [
-        { name: `${categoryLabel} composite`, data: toChart(composite), color: 'teal', lineWidth: 2 },
-        { name: indexLabel, data: toChart(rebase(catIdx)), color: 'warn', lineWidth: 1 },
-        { name: 'Nifty 500', data: toChart(rebase(pick(rows, 'nifty500'))), color: 'pos', lineWidth: 1 },
-        { name: 'Nifty 50', data: toChart(rebase(pick(rows, 'nifty50'))), color: 'ink', lineWidth: 1 },
+        { name: `${categoryLabel} composite`,
+          data: toChart(rebase(shown.map((r) => ({ d: r.d, v: r.v })))), color: 'teal', lineWidth: 2 },
+        { name: indexLabel, data: toChart(rebase(pick(shown, 'catIndex'))), color: 'warn', lineWidth: 1 },
+        { name: 'Nifty 500', data: toChart(rebase(pick(shown, 'nifty500'))), color: 'pos', lineWidth: 1 },
+        { name: 'Nifty 50', data: toChart(rebase(pick(shown, 'nifty50'))), color: 'ink', lineWidth: 1 },
       ]
-
-  const counts: ChartSeries[] = [{
-    name: 'Funds in composite',
-    data: rows.slice(1).map((r) => ({ time: r.d, value: r.n })),
-    color: 'ink',
-    lineWidth: 1,
-  }]
 
   return (
     <Panel
@@ -67,12 +70,6 @@ export function CategoryCompareChart({
         yLabel={view === 'rolling' ? 'Return %' : 'Index (start = 100)'}
         precision={1}
       />
-      <div className="mt-3 border-t border-edge-hair pt-3">
-        <p className="mb-1 font-num text-[9px] uppercase tracking-[0.14em] text-txt-3">
-          Funds in the composite
-        </p>
-        <AtlasLightweightChart series={counts} height={72} precision={0} compact />
-      </div>
     </Panel>
   )
 }

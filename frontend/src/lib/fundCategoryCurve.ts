@@ -101,6 +101,17 @@ export function rollingReturns(pts: CurvePoint[], years: number): CurvePoint[] {
   return out
 }
 
+/**
+ * How far back a query must reach for a rolling window to cover the whole displayed period.
+ *
+ * A rolling N-year return needs N years of history BEFORE its first plotted point. Fetching
+ * only the period on screen is the bug this exists to prevent: with the default 3-year period
+ * and 3-year window it left exactly one point, and one point is not a line.
+ */
+export function fetchStart(displayFrom: string, windowYears: number): string {
+  return minusMonths(displayFrom, windowYears * 12)
+}
+
 export type RollingStats = {
   n: number
   min: number

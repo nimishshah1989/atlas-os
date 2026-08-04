@@ -10,7 +10,7 @@ import { CategoryCompareChart } from '@/components/funds/CategoryCompareChart'
 import {
   ConstituentsTable, ReturnsTable, RollingStatsTable,
 } from '@/components/funds/CategoryCompareTables'
-import { minusMonths, thinCoverage } from '@/lib/fundCategoryCurve'
+import { fetchStart, minusMonths, thinCoverage } from '@/lib/fundCategoryCurve'
 import {
   CATEGORY_INDEX, getCategoryComposite, getCategoryConstituents, getCategoryOptions,
 } from '@/lib/queries/fund_category_curve'
@@ -67,15 +67,23 @@ export default async function ComparePage({
     ? (one('from') || minusMonths(to, 36))
     : months == null ? '1990-01-01' : minusMonths(to, months)
 
+  // Reach back a full rolling window before the displayed period, or a rolling chart as long
+  // as its own period has nothing to plot. `shown` is what the growth chart and the returns
+  // table use; the rolling views use the full series.
   const [rows, funds] = await Promise.all([
-    getCategoryComposite(chosen.category, from, to),
+    getCategoryComposite(chosen.category, fetchStart(from, windowYears), to),
     getCategoryConstituents(chosen.category, from, to),
   ])
+  const shown = rows.filter((r) => r.d >= from)
 
   const label = cleanCat(chosen.category)
   const indexLabel = CATEGORY_INDEX[chosen.category] ?? 'NIFTY 500'
   const stale = chosen.lastNav != null && chosen.lastNav < staleBefore
-  const thin = thinCoverage(rows)
+  // Coverage is stated in words, not charted: plotted against a 0–90 axis the holiday dips
+  // (one scheme reporting) look like the category collapsed to zero, which is what a reader
+  // actually took from the strip that used to sit here.
+  const thin = thinCoverage(shown)
+  const coverage = { first: shown.find((r) => r.n > 0)?.n ?? 0, peak: thin.peak }
 
   return (
     <main className="report-page mx-auto max-w-[1180px] px-6 py-8">
@@ -99,14 +107,15 @@ export default async function ComparePage({
             {freshest}. The curve below ends there and is not current.
           </p>
         )}
-        {thin.days > 0 && thin.worst && (
-          <p className="mt-2 font-sans text-[12px] text-txt-3">
-            On {thin.days} of {rows.length - 1} days fewer than half the category reported a NAV
-            (worst: {thin.worst.n} of {thin.peak} on {thin.worst.d}). Those are mostly weekends and
-            holidays where a few schemes still stamp a NAV; the composite averages whoever reported,
-            so treat single-day moves on those dates as noise.
-          </p>
-        )}
+        <p className="mt-2 font-sans text-[12px] text-txt-3">
+          Coverage over the window ran {coverage.first}–{coverage.peak} funds.
+          {thin.days > 0 && thin.worst && (
+            <> On {thin.days} of {shown.length - 1} days fewer than half the category reported a NAV
+            (worst: {thin.worst.n} on {thin.worst.d}) — mostly weekends and holidays where a few
+            schemes still stamp one. The composite averages whoever reported, so treat single-day
+            moves on those dates as noise rather than a collapse in the category.</>
+          )}
+        </p>
       </header>
 
       <div className="mb-6">
@@ -115,16 +124,16 @@ export default async function ComparePage({
         </Suspense>
       </div>
 
-      {rows.length < 2 ? (
+      {shown.length < 2 ? (
         <p className="font-sans text-[14px] text-txt-2">
           No NAV data for {label} between {from} and {to}.
         </p>
       ) : (
         <div className="flex flex-col gap-6">
-          <CategoryCompareChart rows={rows} view={view} windowYears={windowYears}
+          <CategoryCompareChart rows={rows} shown={shown} view={view} windowYears={windowYears}
                                 categoryLabel={label} indexLabel={indexLabel} />
-          <ReturnsTable rows={rows} categoryLabel={label} indexLabel={indexLabel} />
-          <RollingStatsTable rows={rows} windowYears={windowYears}
+          <ReturnsTable rows={shown} categoryLabel={label} indexLabel={indexLabel} />
+          <RollingStatsTable rows={rows} shown={shown} windowYears={windowYears}
                              categoryLabel={label} indexLabel={indexLabel} />
           <ConstituentsTable funds={funds} from={from} to={to} />
         </div>

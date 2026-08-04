@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  minusMonths, PERIODS, rebase, rollingReturns, rollingStats, spanReturn, thinCoverage,
+  fetchStart, minusMonths, PERIODS, rebase, rollingReturns, rollingStats, spanReturn,
+  thinCoverage,
   trailingReturn,
   type CurvePoint,
 } from '../fundCategoryCurve'
@@ -235,5 +236,34 @@ describe('thinCoverage', () => {
 
   it('reports nothing for an empty series', () => {
     expect(thinCoverage([])).toEqual({ days: 0, worst: null, peak: 0 })
+  })
+})
+
+describe('fetchStart', () => {
+  it('reaches back a full rolling window before the displayed period', () => {
+    expect(fetchStart('2023-08-03', 3)).toBe('2020-08-03')
+    expect(fetchStart('2024-07-31', 1)).toBe('2023-07-31')
+  })
+
+  it('gives every displayed date a rolling window, which the display range alone does not', () => {
+    // The shipped bug: /funds/compare queried only the displayed period, so a rolling window
+    // as long as that period left almost nothing to plot. Real FMCG month-ends, displaying
+    // 2024-07-31 onward (25 dates) with a 1-year rolling window.
+    const displayFrom = '2024-07-31'
+    const displayed = FMCG.filter((p) => p.d >= displayFrom)
+    expect(displayed).toHaveLength(25)
+
+    // Querying only what is displayed loses the first year of it.
+    expect(rollingReturns(displayed, 1)).toHaveLength(13)
+
+    // Reaching back one window covers every displayed date.
+    const extended = FMCG.filter((p) => p.d >= fetchStart(displayFrom, 1))
+    const covered = rollingReturns(extended, 1).filter((p) => p.d >= displayFrom)
+    expect(covered).toHaveLength(25)
+  })
+
+  it('leaves a one-point series where the window equals the whole period', () => {
+    // Why the default (3-year period, 3-year window) drew a blank chart: one point is not a line.
+    expect(rollingReturns(FMCG, 3).length).toBeLessThanOrEqual(2)
   })
 })
