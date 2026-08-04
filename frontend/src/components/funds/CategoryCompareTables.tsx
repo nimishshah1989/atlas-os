@@ -4,7 +4,7 @@
 import Link from 'next/link'
 import { Panel } from '@/components/ui/Panel'
 import {
-  PERIODS, rebase, rollingReturns, rollingStats, spanReturn, trailingReturn,
+  growthReturn, PERIODS, rebase, rollingReturns, rollingStats, spanReturn, trailingReturn,
   type CurvePoint, type SpanReturn,
 } from '@/lib/fundCategoryCurve'
 import type { CompositeRow, ConstituentRow } from '@/lib/queries/fund_category_curve'
@@ -37,7 +37,10 @@ export function ReturnsTable({
   const series: { label: string; pts: CurvePoint[] }[] = [
     { label: `${categoryLabel} composite`, pts: rows.map((r) => ({ d: r.d, v: r.v })) },
     { label: indexLabel, pts: pick(rows, 'catIndex') },
-    { label: 'Nifty 500', pts: pick(rows, 'nifty500') },
+    // Skipped when the category index IS Nifty 500 (Flexi Cap, ELSS, Focused) — it was
+    // listing the same series twice under two spellings.
+    ...(indexLabel.toUpperCase() === 'NIFTY 500'
+      ? [] : [{ label: 'Nifty 500', pts: pick(rows, 'nifty500') }]),
     { label: 'Nifty 50', pts: pick(rows, 'nifty50') },
   ]
 
@@ -167,13 +170,37 @@ export function ConstituentsTable({
   categoryLabel: string
   indexLabel: string
 }) {
-  const catPct = spanReturn(rows.map((r) => ({ d: r.d, v: r.v })))?.pct ?? null
-  const benchPct = spanReturn(pick(rows, 'catIndex'))?.pct ?? null
+  const compPts = rows.map((r) => ({ d: r.d, v: r.v }))
+  const benchPts = pick(rows, 'catIndex')
 
-  const ranked = funds.filter((f) => f.full).sort((a, b) => b.pct - a.pct)
-  const partial = funds.filter((f) => !f.full).sort((a, b) => b.pct - a.pct)
-  const beatCat = catPct == null ? null : ranked.filter((f) => f.pct > catPct).length
-  const beatBench = benchPct == null ? null : ranked.filter((f) => f.pct > benchPct).length
+  // Every comparison is made over the FUND'S OWN span. The first cut compared each fund's
+  // cumulative return against the composite's CAGR — different units, so every fund "beat"
+  // the category and the excess column read +123%. Annualising both, over the same dates,
+  // is the only way the subtraction means anything.
+  const between = (pts: CurvePoint[], a: string, b: string): SpanReturn | null =>
+    spanReturn(pts.filter((p) => p.d >= a && p.d <= b))
+  const days = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000)
+
+  const withRet = funds.map((f) => {
+    const self = growthReturn(1 + f.pct / 100, days(f.first, f.last))
+    const cat = between(compPts, f.first, f.last)
+    const bench = between(benchPts, f.first, f.last)
+    return {
+      ...f,
+      ret: self,
+      vsCat: self && cat ? self.pct - cat.pct : null,
+      vsBench: self && bench ? self.pct - bench.pct : null,
+    }
+  })
+  type Row = (typeof withRet)[number]
+
+  const bySelf = (a: Row, b: Row) => (b.ret?.pct ?? -Infinity) - (a.ret?.pct ?? -Infinity)
+  const ranked = withRet.filter((f) => f.full).sort(bySelf)
+  const partial = withRet.filter((f) => !f.full).sort(bySelf)
+  const beatCat = ranked.filter((f) => (f.vsCat ?? -1) > 0).length
+  const beatBench = ranked.filter((f) => (f.vsBench ?? -1) > 0).length
+  const catWhole = spanReturn(compPts)
+  const benchWhole = spanReturn(benchPts)
 
   const quartile = (i: number): string =>
     ranked.length < 4 ? '' : `Q${Math.min(4, Math.floor((i * 4) / ranked.length) + 1)}`
@@ -181,7 +208,7 @@ export function ConstituentsTable({
   const aum = (v: number | null): string =>
     v == null ? '—' : v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toFixed(0)
 
-  const row = (f: ConstituentRow, i: number | null) => (
+  const row = (f: Row, i: number | null) => (
     <tr key={f.mstarId} className="border-b border-edge-hair last:border-0">
       <td className={txt}>
         <Link href={`/funds/${f.mstarId}`} className="text-txt-1 no-underline hover:text-brand hover:underline">
@@ -190,13 +217,12 @@ export function ConstituentsTable({
         {f.amc && <span className="ml-2 font-sans text-[10px] text-txt-3">{f.amc}</span>}
       </td>
       <td className={`${num} text-txt-2`}>{aum(f.aumCr)}</td>
-      <td className={`${num} ${tone(f.pct)}`}>{pct(f.pct)}</td>
-      <td className={`${num} ${tone(catPct == null ? null : f.pct - catPct)}`}>
-        {catPct == null ? '—' : pct(f.pct - catPct)}
+      <td className={`${num} ${tone(f.ret?.pct)}`}>
+        {pct(f.ret?.pct)}
+        {f.ret?.annualised && <span className="ml-1 text-[9px] text-txt-3">p.a.</span>}
       </td>
-      <td className={`${num} ${tone(benchPct == null ? null : f.pct - benchPct)}`}>
-        {benchPct == null ? '—' : pct(f.pct - benchPct)}
-      </td>
+      <td className={`${num} ${tone(f.vsCat)}`}>{pct(f.vsCat)}</td>
+      <td className={`${num} ${tone(f.vsBench)}`}>{pct(f.vsBench)}</td>
       <td className={`${num} text-txt-3`}>
         {i == null ? `${f.first} → ${f.last}` : quartile(i)}
       </td>
@@ -242,12 +268,12 @@ export function ConstituentsTable({
         </tbody>
       </table>
       <p className="px-3 py-2 font-sans text-[11px] text-txt-3">
-        {beatCat != null && beatBench != null && ranked.length > 0 ? (
+        {ranked.length > 0 ? (
           <>
             <strong className="text-txt-2">{beatCat} of {ranked.length}</strong> beat the{' '}
-            {categoryLabel} composite ({pct(catPct)}) and{' '}
+            {categoryLabel} composite ({pct(catWhole?.pct)}) and{' '}
             <strong className="text-txt-2">{beatBench} of {ranked.length}</strong> beat{' '}
-            {indexLabel} ({pct(benchPct)}) over {from} → {to}.{' '}
+            {indexLabel} ({pct(benchWhole?.pct)}) over {from} → {to}.{' '}
           </>
         ) : (
           <>Returns cover {from} → {to}. </>

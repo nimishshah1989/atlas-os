@@ -43,7 +43,11 @@ export function CategoryCompareChart({
         { name: `${categoryLabel} composite`,
           data: toChart(rebase(shown.map((r) => ({ d: r.d, v: r.v })))), color: 'teal', lineWidth: 2 },
         { name: indexLabel, data: toChart(rebase(pick(shown, 'catIndex'))), color: 'warn', lineWidth: 1 },
-        { name: 'Nifty 500', data: toChart(rebase(pick(shown, 'nifty500'))), color: 'pos', lineWidth: 1 },
+        // Omitted when the category index IS Nifty 500 — otherwise the same line is drawn
+        // twice and the legend shows "NIFTY 500" and "Nifty 500" as if they differed.
+        ...(indexLabel.toUpperCase() === 'NIFTY 500' ? [] : [{
+          name: 'Nifty 500', data: toChart(rebase(pick(shown, 'nifty500'))),
+          color: 'pos' as const, lineWidth: 1 as const }]),
         { name: 'Nifty 50', data: toChart(rebase(pick(shown, 'nifty50'))), color: 'ink', lineWidth: 1 },
       ]
 
