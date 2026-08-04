@@ -10,6 +10,23 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-04-fund-category-compare-design.md`
 
+> **Built and shipped. Where the build diverged from this plan** — the spec is the accurate
+> record; this file is kept for the reasoning, not as a description of the result.
+>
+> 1. **Universe scoping.** The plan treats "categories with NAV history" as the population. It
+>    is not: `atlas_universe_funds` is curated and only its 592 funds still refresh, so all three
+>    queries join it. 15 categories, not 18. See spec §1.3–1.4 — the plan's "dead NAV feed"
+>    framing below was a wrong diagnosis, corrected there.
+> 2. **Entry/exit fixtures** moved to real universe funds (Kotak Energy opening 2025-05-02,
+>    Sundaram Fin Services Instl winding down after 2025-01-22). The plan's Groww BSE Power FOF
+>    "exit" turned out to be a tracking artifact, which is what exposed point 1.
+> 3. **`thinCoverage`** was added after rendering revealed days where the composite rests on a
+>    handful of funds. Not in this plan.
+> 4. **Test harness.** Query modules were untestable under vitest (`server-only` throws, and Next's
+>    env files are not loaded). Fixed in `vitest.config.ts` / `vitest.setup.ts`; integration
+>    suites import lazily so they skip rather than fail without a DB.
+> 5. **Counts.** 31 unit tests and 18 integration tests, not the 25/7 written below.
+
 ---
 
 ## Data findings that drive this plan

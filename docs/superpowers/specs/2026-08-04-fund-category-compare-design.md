@@ -18,17 +18,18 @@ These facts constrain the design and must be surfaced on the page itself.
 | Fact | Number | Consequence |
 |---|---|---|
 | Active funds in `de_mf_master` | 4,207 | — |
-| Funds with **any** NAV history | 953 | "all funds in the category" means *all funds we hold NAV for* |
+| Funds with **any** NAV history | 953 | but only 592 still refresh — see §1.4 |
+| Funds in `atlas_universe_funds` | **592** | the curated set, and the composite's real population |
 | Funds with **current** NAV | 584 | some categories have thin recent coverage |
 | Inactive funds with NAV **and** category | **0** | dead funds are absent from the source snapshot |
 | `de_mf_nav_daily` span / rows | 2006-04-01 → 2026-07-31, 2.41M | deep history available |
 | `index_prices` latest date | 2026-08-03 | NAV lags the index by ~3 days |
 | TRI rows in `index_prices` | **0** | every benchmark is price-return |
 | Broad categories present | Equity only | no debt or hybrid categories |
-| Distinct categories | 18 | plus 36 funds with a NULL category (excluded) |
-| Categories with a dead NAV feed | **3** | see §1.3 — the page must warn, not render silently |
+| Distinct categories | 18 | of which **15** are offered — see §1.4 |
 
-Per-category NAV coverage (active funds with any NAV / total active):
+Per-category NAV coverage (active funds with any NAV / total active). Note this counts NAV
+history, not what the page offers — see §1.4 for the universe-scoped counts that actually apply:
 
 ```
 Index Funds                    245/1278    Focused Fund                 30/177
@@ -63,27 +64,52 @@ here.)
 
 ---
 
-### 1.3 Three categories have a dead NAV feed
+### 1.3 361 funds carry NAV history that will never update again
 
-Discovered while verifying the composite query. This is a pre-existing pipeline defect, not
-something this page introduces, but a four-month-old curve rendered without comment would read as
-current:
+This looked at first like a broken ingestion feed — several categories stop dead in April/May 2026,
+238 Index Funds on the same day. **It is not a break.** `ingest_nav.py` refreshes NAVs for exactly
+this join:
 
-| Category | Funds w/ NAV | Fresh (≥2026-07-25) | Newest NAV |
+```sql
+FROM atlas_foundation.atlas_universe_funds u
+JOIN atlas_foundation.de_mf_master m ON m.mstar_id = u.mstar_id
+WHERE m.amfi_code IS NOT NULL
+```
+
+`atlas_universe_funds` is **curated** — `ingest_fund_master.py` updates it in place and never
+inserts. So the 592 funds in it refresh nightly and the other 361 are frozen leftovers from older,
+universe-unaware backfills. Working as designed.
+
+| Category | Funds w/ NAV | In universe | Newest NAV |
 |---|---:|---:|---|
 | India Fund Index Funds | 245 | **0** | 2026-05-15 |
 | India Fund Focused Fund | 30 | **0** | 2026-05-15 |
 | India Fund Equity - ESG | 12 | **0** | 2026-04-06 |
 | India Fund Value | 23 | **1** | 2026-07-31 |
 
-Every other category is fresh to 2026-07-31. 238 of the 245 Index Funds stopped on the same day
-(2026-04-02), which points at an ingestion break rather than fund-level attrition.
+The `fresh` count tracks `in universe` almost exactly across all 18 categories, which is what
+confirms the mechanism.
 
-The page shows each category's last NAV date in the picker and puts a warning banner above a stale
-curve. Fixing the feed is separate ingestion work, out of scope here.
+### 1.4 Therefore: the composite is universe-scoped
 
-Note also that "Index Funds" mixes gilt and bond index funds in with equity ones, so its composite
-is not an equity read. Not a defect; the constituents table makes it visible.
+All three queries join `atlas_universe_funds`. Including frozen funds does not merely add noise —
+it **fabricates events**. Groww BSE Power ETF FOF appeared to exit the Energy composite on
+2026-04-02; it never closed, we just stopped tracking it. A performance page that invents fund
+closures is worse than one with narrower coverage.
+
+Consequences, all intended:
+
+- 15 categories offered, not 18. Index Funds, Focused Fund and Equity-ESG have zero universe funds
+  and disappear until someone curates them in.
+- Every offered category is current to the same date. An integration test asserts this, so a feed
+  that genuinely dies later fails CI rather than quietly drawing a frozen curve.
+- The staleness banner remains as a guard. It should never fire; if it does, something broke.
+
+**Open decision for the FM.** Focused Fund (30), Equity-ESG (12) and Value (22 of 23) are active
+equity categories that look accidentally excluded from the curated universe. Index Funds (245) are
+passive and plausibly excluded on purpose — and that category also mixes gilt and bond index funds
+in with equity ones, so its composite would not be an equity read anyway. Curating the first three
+in is a data change to a prod table and needs explicit approval; it is not done here.
 
 ## 2. Route, controls, and state
 
@@ -95,15 +121,16 @@ navigation. No client state library, no date-picker dependency — native `<sele
 
 | Param | Values | Default |
 |---|---|---|
-| `cat` | one of the 18 `category_name` values | `India Fund Flexi Cap` |
+| `cat` | one of the 15 offered `category_name` values (§1.4) | `India Fund Flexi Cap` |
 | `period` | `1m` `3m` `6m` `1y` `2y` `3y` `5y` `max` `custom` | `3y` |
 | `from`, `to` | ISO dates, used only when `period=custom` | — |
 | `view` | `growth` `rolling` | `growth` |
 | `window` | `1y` `3y` `5y` — rolling window, used only when `view=rolling` | `3y` |
 
-Category options are labelled with their fund count and, where the feed has stopped, its last NAV
-date — e.g. `Flexi Cap · 91 funds`, `Index Funds · 245 funds · stale to 2026-05-15` — so thin or
-dead coverage is visible before selection rather than after. The `India Fund ` display prefix is stripped for labels via the
+Category options are labelled with their universe fund count — e.g. `Flexi Cap · 89 funds`,
+`Sector - FMCG · 1 fund` — so thin coverage is visible before selection rather than after. The
+label also carries a last-NAV date if a category ever goes stale, which §1.4 makes unreachable in
+practice. The `India Fund ` display prefix is stripped for labels via the
 existing `cleanCat` convention in `FundsPageV4.tsx`; filtering uses the raw value.
 
 Invalid or unknown param values fall back to the defaults rather than erroring.
@@ -128,6 +155,7 @@ WITH nav AS (
          lag(n.nav) OVER (PARTITION BY n.mstar_id ORDER BY n.nav_date) AS prev
   FROM atlas_foundation.de_mf_nav_daily n
   JOIN atlas_foundation.de_mf_master m USING (mstar_id)
+  JOIN atlas_foundation.atlas_universe_funds u ON u.mstar_id = n.mstar_id  -- §1.4
   WHERE m.category_name = $cat
     AND n.nav_date BETWEEN $from AND $to
     AND n.nav > 0
@@ -211,8 +239,8 @@ When a category index has a shorter history than the selected window (only `NIFT
 ## 5. Page composition
 
 1. **Header** — category name, window, fund count, composite as-of date, and the staleness note
-   (NAV runs ~3 days behind the index). For a category whose feed has stopped (§1.3), a warning
-   banner naming the last NAV date sits directly above the chart. A second note counts the dates
+   (NAV runs ~3 days behind the index). A staleness banner guards against a feed dying (§1.4);
+   with universe scoping it should never fire. A second note counts the dates
    where fewer than half the category reported a NAV — mostly weekends and holidays where a few
    schemes still stamp one (Small-Cap over 5y: 22 of 1,240 days, worst 2 funds of 71 on
    2025-11-02). The composite averages whoever reported, so those single-day moves are noise, and
@@ -342,8 +370,8 @@ materialized view.
 
 ## 9. Out of scope
 
-- Repairing the dead NAV feeds for Index Funds, Focused Fund and Equity-ESG (§1.3) — 287 funds. The
-  page exposes the defect; the cause is in `scripts/foundation/`.
+- Curating Focused Fund, Equity-ESG and Value into `atlas_universe_funds` so they refresh and
+  become selectable again (§1.4). A prod data change; needs the FM's explicit approval.
 - Backfilling closed and merged funds (fixes the survivorship bias; separate ingestion work).
 - Ingesting NSE TRI series (fixes the PR/TR mismatch; separate pipeline work).
 - Fixing the equality join in `FundEquityCurves.tsx:207-208`, which drops benchmark points on dates
