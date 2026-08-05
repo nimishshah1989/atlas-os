@@ -210,29 +210,33 @@ export type CategorySummaryRow = {
   /** Earliest composite date in the window; a period starting before it is not covered. */
   first: string
   /** exp(sum(ln(1+r))) over each trailing period, or null where history is short. */
-  comp: { y1: number | null; y3: number | null; y5: number | null }
-  bench: { y1: number | null; y3: number | null; y5: number | null }
+  comp: { y1: number | null; y2: number | null; y3: number | null; y5: number | null }
+  bench: { y1: number | null; y2: number | null; y3: number | null; y5: number | null }
   indexCode: string
 }
 
 /**
- * Trailing 1/3/5-year growth for EVERY category and its benchmark, in two queries.
+ * Trailing 1/2/3/5-year growth for EVERY category and its benchmark, in two queries.
  *
  * The composite is exp(cumsum(ln(1+r))), so the growth between two dates is just
  * exp(sum(ln(1+r))) over the dates in between — an aggregate, no series needed. That turns
- * "15 categories × 3 periods" into one grouped scan (~3s) instead of 15 separate composite
- * queries. Benchmarks are 15 codes × 4 as-of lookups, which is trivial.
+ * "15 categories × 4 periods" into one grouped scan (~2s) instead of 15 separate composite
+ * queries; another period is one more FILTER over a scan already paid for. Benchmarks are
+ * 15 codes × 5 as-of lookups, which is trivial.
  *
  * The daily return is built exactly as getCategoryComposite builds it — divided by the funds
  * ALIVE that day, not the funds that reported. See that function for why; every figure on
  * this board was overstated until it was.
  */
 export async function getCategorySummary(
-  anchors: { to: string; y1: string; y3: string; y5: string },
+  anchors: { to: string; y1: string; y2: string; y3: string; y5: string },
 ): Promise<CategorySummaryRow[]> {
   const codes = [...new Set(Object.values(CATEGORY_INDEX))]
   const [comp, bench, births] = await Promise.all([
-    sql<{ cat: string; first_d: string; g1: string | null; g3: string | null; g5: string | null }[]>`
+    sql<{
+      cat: string; first_d: string
+      g1: string | null; g2: string | null; g3: string | null; g5: string | null
+    }[]>`
       WITH nav AS (
         SELECT m.category_name AS cat, n.mstar_id, n.nav_date, n.nav,
                lag(n.nav) OVER (PARTITION BY n.mstar_id ORDER BY n.nav_date) AS prev
@@ -263,13 +267,14 @@ export async function getCategorySummary(
       )
       SELECT cat, to_char(min(nav_date), 'YYYY-MM-DD') AS first_d,
              (exp(sum(ln(1 + r)) FILTER (WHERE nav_date > ${anchors.y1})))::text AS g1,
+             (exp(sum(ln(1 + r)) FILTER (WHERE nav_date > ${anchors.y2})))::text AS g2,
              (exp(sum(ln(1 + r)) FILTER (WHERE nav_date > ${anchors.y3})))::text AS g3,
              (exp(sum(ln(1 + r)) FILTER (WHERE nav_date > ${anchors.y5})))::text AS g5
       FROM daily GROUP BY cat ORDER BY cat`,
     sql<{ code: string; label: string; close: string | null }[]>`
       SELECT c.code, a.label, b.close::text AS close
       FROM unnest(${codes}::text[]) c(code)
-      CROSS JOIN (VALUES ('end', ${anchors.to}), ('y1', ${anchors.y1}),
+      CROSS JOIN (VALUES ('end', ${anchors.to}), ('y1', ${anchors.y1}), ('y2', ${anchors.y2}),
                          ('y3', ${anchors.y3}), ('y5', ${anchors.y5})) a(label, d)
       LEFT JOIN LATERAL (
         SELECT close FROM atlas_foundation.index_prices
@@ -313,11 +318,13 @@ export async function getCategorySummary(
       indexCode: code,
       comp: {
         y1: has(anchors.y1) ? toNumber(r.g1) : null,
+        y2: has(anchors.y2) ? toNumber(r.g2) : null,
         y3: has(anchors.y3) ? toNumber(r.g3) : null,
         y5: has(anchors.y5) ? toNumber(r.g5) : null,
       },
       bench: {
         y1: has(anchors.y1) ? ratio(code, 'y1') : null,
+        y2: has(anchors.y2) ? ratio(code, 'y2') : null,
         y3: has(anchors.y3) ? ratio(code, 'y3') : null,
         y5: has(anchors.y5) ? ratio(code, 'y5') : null,
       },

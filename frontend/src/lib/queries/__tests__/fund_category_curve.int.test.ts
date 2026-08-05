@@ -139,7 +139,9 @@ describe.skipIf(!hasDb)('getCategoryOptions', () => {
 })
 
 describe.skipIf(!hasDb)('getCategorySummary', () => {
-  const anchors = { to: '2026-08-03', y1: '2025-08-03', y3: '2023-08-03', y5: '2021-08-03' }
+  const anchors = {
+    to: '2026-08-03', y1: '2025-08-03', y2: '2024-08-03', y3: '2023-08-03', y5: '2021-08-03',
+  }
 
   it('returns every offered category with its benchmark in one pass', async () => {
     const rows = await db().getCategorySummary(anchors)
@@ -147,14 +149,16 @@ describe.skipIf(!hasDb)('getCategorySummary', () => {
     for (const r of rows) expect(r.indexCode).toBeTruthy()
   })
 
-  it('reproduces the real FMCG composite growth over 1/3/5 years', async () => {
+  it('reproduces the real FMCG composite growth over 1/2/3/5 years', async () => {
     const rows = await db().getCategorySummary(anchors)
     const fmcg = rows.find((r) => r.category === 'India Fund Sector - FMCG')!
     expect(fmcg.comp.y1).toBeCloseTo(0.877336, 4) // -12.27% over the year
+    expect(fmcg.comp.y2).toBeCloseTo(0.817662, 4) // -9.58% p.a. over two
     expect(fmcg.comp.y3).toBeCloseTo(0.954303, 4)
     expect(fmcg.comp.y5).toBeCloseTo(1.408537, 4)
     // NIFTY FMCG 49121.20 / 36826.05 over five years
     expect(fmcg.bench.y5).toBeCloseTo(1.333866, 4)
+    expect(fmcg.bench.y2).toBeCloseTo(0.795548, 4)
   })
 
   it('does not inflate a many-fund category by double-counting NAV gaps', async () => {
@@ -165,6 +169,7 @@ describe.skipIf(!hasDb)('getCategorySummary', () => {
     const rows = await db().getCategorySummary(anchors)
     const small = rows.find((r) => r.category === 'India Fund Small-Cap')!
     expect(small.comp.y1).toBeCloseTo(1.120353, 4)
+    expect(small.comp.y2).toBeCloseTo(1.107338, 4)
     expect(small.comp.y3).toBeCloseTo(1.638789, 4)
     expect(small.comp.y5).toBeCloseTo(2.170593, 4)
     const mid = rows.find((r) => r.category === 'India Fund Mid-Cap')!
@@ -173,12 +178,18 @@ describe.skipIf(!hasDb)('getCategorySummary', () => {
   })
 
   it('reports null, never a partial return, where history is short', async () => {
-    // Sector - Energy's first universe NAV is 2024-03-04, so its 3Y and 5Y are not covered.
-    // Filling them with a ~2-year number would be plausible and wrong.
+    // Sector - Energy's first universe NAV is 2024-03-01, so its 3Y and 5Y are not covered.
+    // Filling them with a ~2-year number would be plausible and wrong. 2Y IS covered — the
+    // category predates 2024-08-03 by five months — which is the point of the column.
     const rows = await db().getCategorySummary(anchors)
     const energy = rows.find((r) => r.category === 'India Fund Sector - Energy')!
+    expect(energy.first < anchors.y2).toBe(true)
     expect(energy.first > anchors.y3).toBe(true)
-    expect(energy.comp.y1).not.toBeNull()
+    // toBeGreaterThan, not .not.toBeNull() — undefined passes a null check, so a period the
+    // query never computed at all would sail through it.
+    expect(energy.comp.y1).toBeGreaterThan(0)
+    expect(energy.comp.y2).toBeGreaterThan(0)
+    expect(energy.bench.y2).toBeGreaterThan(0)
     expect(energy.comp.y3).toBeNull()
     expect(energy.comp.y5).toBeNull()
     expect(energy.bench.y3).toBeNull()

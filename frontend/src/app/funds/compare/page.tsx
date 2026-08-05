@@ -74,6 +74,7 @@ export default async function ComparePage({
   const sumAnchors = {
     to: anchorTo,
     y1: minusMonths(anchorTo, 12),
+    y2: minusMonths(anchorTo, 24),
     y3: minusMonths(anchorTo, 36),
     y5: minusMonths(anchorTo, 60),
   }
@@ -135,7 +136,10 @@ export default async function ComparePage({
       <div className="mb-6">
         <CategorySummaryTable
           rows={summary}
-          days={{ y1: dayCount(sumAnchors.y1), y3: dayCount(sumAnchors.y3), y5: dayCount(sumAnchors.y5) }}
+          days={{
+            y1: dayCount(sumAnchors.y1), y2: dayCount(sumAnchors.y2),
+            y3: dayCount(sumAnchors.y3), y5: dayCount(sumAnchors.y5),
+          }}
           activeCategory={chosen.category}
         />
       </div>
