@@ -160,34 +160,25 @@ export function rollingStats(comp: CurvePoint[], bench: CurvePoint[]): RollingSt
   }
 }
 
-export type ThinCoverage = {
-  /** Dates where fewer than half the category's peak contributor count reported. */
-  days: number
-  worst: { d: string; n: number } | null
-  peak: number
-}
-
 /**
- * Dates where the composite rested on far fewer funds than the category actually holds.
- * Mostly Saturdays and holidays, where a handful of schemes still stamp a NAV — the average
- * that day is over those few, not over the category, and it compounds into the curve like
- * any other day. Worth naming on the page; the chart's coverage strip alone squashes these
- * into a spike the eye reads as noise.
+ * The narrowest and widest the composite ever ran, over the alive-fund count.
  *
- * Peak is tracked as a running maximum, so a category that grew from 40 funds to 70 is not
- * retroactively judged thin for its early years.
+ * Low is the minimum, not where the window opened: a category that shed a fund mid-window
+ * opens at its widest, and reporting that as the low renders "23–23 funds" and hides the exit.
+ *
+ * This replaced a thin-coverage warning that counted the days where far fewer funds REPORTED
+ * than the category holds. That warning existed because the composite used to average over
+ * the reporters, so a Saturday with two NAVs really did put two funds' moves into the curve
+ * at full weight. The divisor is now every fund alive, so those days move the composite by
+ * two funds' share of the category and there is nothing left to warn about.
  */
-export function thinCoverage(counts: { d: string; n: number }[]): ThinCoverage {
-  let peak = 0
-  let days = 0
-  let worst: { d: string; n: number } | null = null
+export function coverage(counts: { n: number }[]): { low: number; high: number } {
+  let low = 0
+  let high = 0
   for (const c of counts) {
     if (c.n === 0) continue // the anchor row has no contributors by construction
-    peak = Math.max(peak, c.n)
-    if (c.n < peak / 2) {
-      days++
-      if (worst == null || c.n < worst.n) worst = { d: c.d, n: c.n }
-    }
+    if (low === 0 || c.n < low) low = c.n
+    if (c.n > high) high = c.n
   }
-  return { days, worst, peak }
+  return { low, high }
 }
