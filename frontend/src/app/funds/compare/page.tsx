@@ -120,7 +120,7 @@ export default async function ComparePage({
           </p>
         )}
         <p className="mt-2 font-sans text-[12px] text-txt-3">
-          Coverage over the window ran {cover.first}–{cover.peak} funds. Funds do not all publish
+          Coverage over the window ran {cover.low}–{cover.high} funds. Funds do not all publish
           a NAV every day; one that skips is held flat and its whole move lands on the day it next
           reports, so it is counted once and its own total return stays exact.
         </p>

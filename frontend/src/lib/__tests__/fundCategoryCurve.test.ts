@@ -210,23 +210,31 @@ describe('coverage', () => {
   // REAL per-date ALIVE-fund counts (the composite's divisor), from atlas_foundation
   // on 2026-08-05. NO synthetic inputs (rule #0).
 
-  it('reports the widest the composite ever ran, ignoring the anchor row', () => {
+  it('reports a steady category as a flat count, ignoring the anchor row', () => {
     // "India Fund Sector - Healthcare", 2026-01-29 → 2026-02-05. 2026-01-31 is a Saturday
     // where only 2 of 19 funds publish a NAV — but all 19 are alive and in the divisor, so
     // coverage is flat at 19. Under the old reporter-count divisor this read as a dip to 2.
     const healthcare = [{ n: 0 }, { n: 19 }, { n: 19 }, { n: 19 }, { n: 19 }, { n: 19 }, { n: 19 }]
-    expect(coverage(healthcare)).toEqual({ first: 19, peak: 19 })
+    expect(coverage(healthcare)).toEqual({ low: 19, high: 19 })
   })
 
-  it('shows a category taking in a new fund as a range, not a jump', () => {
+  it('shows a category taking in a new fund as a range', () => {
     // "India Fund Sector - Energy", 2025-04-28 → 2025-05-07: Kotak Energy Opportunities
     // starts reporting on 2025-05-02 and joins the divisor on 2025-05-05.
     expect(coverage([{ n: 0 }, { n: 3 }, { n: 3 }, { n: 3 }, { n: 4 }, { n: 4 }, { n: 4 }]))
-      .toEqual({ first: 3, peak: 4 })
+      .toEqual({ low: 3, high: 4 })
+  })
+
+  it('shows a category losing a fund as a range, not a flat count', () => {
+    // "India Fund Sector - Financial Services", 2025-01-17 → 2025-01-28: Sundaram Fin Services
+    // Opp Instl stops reporting after 01-22 and the divisor falls 23 → 22. Reporting where the
+    // window STARTED rather than its low would render "23–23 funds" and hide the exit.
+    expect(coverage([{ n: 0 }, { n: 23 }, { n: 23 }, { n: 23 }, { n: 22 }, { n: 22 }, { n: 22 }, { n: 22 }]))
+      .toEqual({ low: 22, high: 23 })
   })
 
   it('reports zeroes for an empty series', () => {
-    expect(coverage([])).toEqual({ first: 0, peak: 0 })
+    expect(coverage([])).toEqual({ low: 0, high: 0 })
   })
 })
 

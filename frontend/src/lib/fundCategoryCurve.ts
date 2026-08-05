@@ -161,7 +161,10 @@ export function rollingStats(comp: CurvePoint[], bench: CurvePoint[]): RollingSt
 }
 
 /**
- * How many funds the composite actually ran on, first to widest.
+ * The narrowest and widest the composite ever ran, over the alive-fund count.
+ *
+ * Low is the minimum, not where the window opened: a category that shed a fund mid-window
+ * opens at its widest, and reporting that as the low renders "23–23 funds" and hides the exit.
  *
  * This replaced a thin-coverage warning that counted the days where far fewer funds REPORTED
  * than the category holds. That warning existed because the composite used to average over
@@ -169,13 +172,13 @@ export function rollingStats(comp: CurvePoint[], bench: CurvePoint[]): RollingSt
  * at full weight. The divisor is now every fund alive, so those days move the composite by
  * two funds' share of the category and there is nothing left to warn about.
  */
-export function coverage(counts: { n: number }[]): { first: number; peak: number } {
-  let first = 0
-  let peak = 0
+export function coverage(counts: { n: number }[]): { low: number; high: number } {
+  let low = 0
+  let high = 0
   for (const c of counts) {
     if (c.n === 0) continue // the anchor row has no contributors by construction
-    if (first === 0) first = c.n
-    if (c.n > peak) peak = c.n
+    if (low === 0 || c.n < low) low = c.n
+    if (c.n > high) high = c.n
   }
-  return { first, peak }
+  return { low, high }
 }
