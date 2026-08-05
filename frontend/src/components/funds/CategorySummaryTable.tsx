@@ -1,5 +1,5 @@
 // The all-categories board: every category's composite against its own benchmark over
-// 1/3/5 years, each name a link into that category's deep dive. Sorted by 1-year excess,
+// 1/2/3/5 years, each name a link into that category's deep dive. Sorted by 1-year excess,
 // so the categories beating their benchmark sit at the top.
 import { Fragment } from 'react'
 import Link from 'next/link'
@@ -9,6 +9,7 @@ import type { CategorySummaryRow } from '@/lib/queries/fund_category_curve'
 
 const PERIODS = [
   { key: 'y1' as const, label: '1 year' },
+  { key: 'y2' as const, label: '2 years' },
   { key: 'y3' as const, label: '3 years' },
   { key: 'y5' as const, label: '5 years' },
 ]
@@ -41,9 +42,12 @@ function excessClass(v: number | null): string {
   return 'font-semibold text-sig-neg'
 }
 
-const num = 'px-2.5 py-1.5 text-right font-num text-[12px] tabular-nums'
-const head = 'px-2.5 py-1.5 font-num text-[9px] uppercase tracking-[0.14em] text-txt-3'
-/** Rule that opens each period block, so 1Y / 3Y / 5Y read as three separate panels. */
+// Fourteen columns overrun A4 landscape: at screen padding the board measures 1278px against
+// 1047px of printable width, and the whole 5-year block falls off the sheet. Tightened in
+// print only, so the screen keeps its spacing. Adding a sixth period will need this remeasured.
+const num = 'px-2.5 py-1.5 text-right font-num text-[12px] tabular-nums print:px-1 print:text-[10px]'
+const head = 'px-2.5 py-1.5 font-num text-[9px] uppercase tracking-[0.14em] text-txt-3 print:px-1'
+/** Rule that opens each period block, so 1Y / 2Y / 3Y / 5Y read as four separate panels. */
 const groupEdge = 'border-l border-edge-rule'
 
 /** Excess is only meaningful when both legs cover the same span. */
@@ -58,7 +62,7 @@ export function CategorySummaryTable({
 }: {
   rows: CategorySummaryRow[]
   /** Actual day count per period, so the CAGR gate uses real spans. */
-  days: { y1: number; y3: number; y5: number }
+  days: { y1: number; y2: number; y3: number; y5: number }
   activeCategory: string
 }) {
   const computed = rows
@@ -66,11 +70,13 @@ export function CategorySummaryTable({
       ...r,
       comp: {
         y1: growthReturn(r.comp.y1, days.y1),
+        y2: growthReturn(r.comp.y2, days.y2),
         y3: growthReturn(r.comp.y3, days.y3),
         y5: growthReturn(r.comp.y5, days.y5),
       },
       bench: {
         y1: growthReturn(r.bench.y1, days.y1),
+        y2: growthReturn(r.bench.y2, days.y2),
         y3: growthReturn(r.bench.y3, days.y3),
         y5: growthReturn(r.bench.y5, days.y5),
       },
@@ -122,13 +128,13 @@ export function CategorySummaryTable({
             <tr key={r.category}
                 className={`border-b border-edge-hair last:border-0 ${
                   r.category === activeCategory ? 'bg-surface-raised' : ''}`}>
-              <td className="px-2.5 py-1.5 text-left font-sans text-[12px]">
+              <td className="px-2.5 py-1.5 text-left font-sans text-[12px] print:px-1 print:text-[10px]">
                 <Link href={`/funds/compare?cat=${encodeURIComponent(r.category)}`}
                       className="text-txt-1 no-underline hover:text-brand hover:underline">
                   {cleanCat(r.category)}
                 </Link>
               </td>
-              <td className="px-2.5 py-1.5 text-left font-num text-[10px] uppercase tracking-wider text-txt-3">
+              <td className="px-2.5 py-1.5 text-left font-num text-[10px] uppercase tracking-wider text-txt-3 print:px-1 print:text-[9px]">
                 {r.indexCode}
               </td>
               {PERIODS.map((p) => {
