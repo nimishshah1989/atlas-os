@@ -45,7 +45,11 @@ export type CompositeRow = {
   d: string
   /** Chain-linked equal-weighted index, 100 at the first date in range. */
   v: number
-  /** Funds contributing a return on this date. 0 on the anchor date by construction. */
+  /**
+   * Funds alive on this date — past their first NAV, not yet past their last. This is the
+   * composite's divisor, which is NOT the number of funds that reported: a fund that skipped
+   * the day is flat, and counts. 0 on the anchor date by construction.
+   */
   n: number
   nifty50: number | null
   nifty500: number | null
@@ -100,13 +104,24 @@ export async function getCategoryOptions(): Promise<CategoryOption[]> {
  *
  * Chain-linked, not an average of rebased NAVs: 215 funds' NAV histories start in 2026
  * alone, and averaging levels would let a newcomer rebased at 100 drag the whole curve.
- * Averaging daily returns across the funds alive on both ends of each day, then
- * compounding, makes fund entry and exit a non-event.
+ * Averaging daily returns across the funds alive on each day, then compounding, makes fund
+ * entry and exit a non-event.
+ *
+ * THE DIVISOR IS EVERY FUND ALIVE, NOT EVERY FUND THAT REPORTED. Funds skip days. Averaging
+ * over the reporters counted the market's move at full weight on the day the reporters moved,
+ * and then a second time inside the multi-day move of each fund that resumed later. The error
+ * compounded and always upward: it read Small-Cap at +17.8% over the year against a true
+ * +12.0%, and grew with the fund count — which is why single-fund categories were exact.
+ *
+ * So each fund contributes exactly one day of return per date: its own move on the days it
+ * reports, and zero on the days it does not (its NAV is carried forward, never interpolated,
+ * so the whole move lands intact on the day it resumes). That keeps each fund's own total
+ * return exact and is the standard construction for an equal-weighted index from irregularly
+ * reported NAVs. Verified against an independent pandas LOCF panel over the same NAVs.
  *
  * Postgres has no product aggregate, so exp(sum(ln(1+r))) does the compounding. The
  * r > -1 guard keeps ln defined — one NAV collapsing to zero would otherwise abort the
- * whole series. nav > 0 and prev > 0 together mean a missing NAV yields no return for that
- * fund that day rather than a zero return: a data gap must never read as a flat day.
+ * whole series.
  *
  * Benchmarks join as-of (last close on or before the NAV date), not on equality —
  * index_prices has no row for 2024-03-31, 2025-03-31 or 2026-03-31 while NAVs do, and an
@@ -132,11 +147,25 @@ export async function getCategoryComposite(
         AND n.nav_date BETWEEN ${from} AND ${to}
         AND n.nav > 0
     ),
-    daily AS (
-      SELECT nav_date, avg(nav / prev - 1) AS r, count(*)::int AS n
+    spans AS (
+      SELECT mstar_id, min(nav_date) AS born, max(nav_date) AS died
+      FROM nav GROUP BY mstar_id
+    ),
+    active AS (
+      SELECT g.nav_date, count(*)::int AS n
+      FROM (SELECT DISTINCT nav_date FROM nav) g
+      JOIN spans s ON g.nav_date > s.born AND g.nav_date <= s.died
+      GROUP BY g.nav_date
+    ),
+    moved AS (
+      SELECT nav_date, sum(nav / prev - 1) AS total
       FROM nav
       WHERE prev IS NOT NULL AND prev > 0 AND nav / prev - 1 > -1
       GROUP BY nav_date
+    ),
+    daily AS (
+      SELECT a.nav_date, coalesce(m.total, 0) / a.n AS r, a.n
+      FROM active a LEFT JOIN moved m USING (nav_date)
     ),
     anchored AS (
       SELECT min(nav_date) AS nav_date, 0::numeric AS r, 0 AS n
@@ -193,6 +222,10 @@ export type CategorySummaryRow = {
  * exp(sum(ln(1+r))) over the dates in between — an aggregate, no series needed. That turns
  * "15 categories × 3 periods" into one grouped scan (~3s) instead of 15 separate composite
  * queries. Benchmarks are 15 codes × 4 as-of lookups, which is trivial.
+ *
+ * The daily return is built exactly as getCategoryComposite builds it — divided by the funds
+ * ALIVE that day, not the funds that reported. See that function for why; every figure on
+ * this board was overstated until it was.
  */
 export async function getCategorySummary(
   anchors: { to: string; y1: string; y3: string; y5: string },
@@ -209,10 +242,24 @@ export async function getCategorySummary(
         WHERE n.nav_date BETWEEN ${anchors.y5} AND ${anchors.to}
           AND n.nav > 0 AND m.category_name IS NOT NULL
       ),
-      daily AS (
-        SELECT cat, nav_date, avg(nav / prev - 1) AS r
+      spans AS (
+        SELECT cat, mstar_id, min(nav_date) AS born, max(nav_date) AS died
+        FROM nav GROUP BY cat, mstar_id
+      ),
+      active AS (
+        SELECT g.cat, g.nav_date, count(*)::int AS n
+        FROM (SELECT DISTINCT cat, nav_date FROM nav) g
+        JOIN spans s ON s.cat = g.cat AND g.nav_date > s.born AND g.nav_date <= s.died
+        GROUP BY g.cat, g.nav_date
+      ),
+      moved AS (
+        SELECT cat, nav_date, sum(nav / prev - 1) AS total
         FROM nav WHERE prev IS NOT NULL AND prev > 0 AND nav / prev - 1 > -1
         GROUP BY cat, nav_date
+      ),
+      daily AS (
+        SELECT a.cat, a.nav_date, coalesce(m.total, 0) / a.n AS r
+        FROM active a LEFT JOIN moved m ON m.cat = a.cat AND m.nav_date = a.nav_date
       )
       SELECT cat, to_char(min(nav_date), 'YYYY-MM-DD') AS first_d,
              (exp(sum(ln(1 + r)) FILTER (WHERE nav_date > ${anchors.y1})))::text AS g1,

@@ -160,34 +160,22 @@ export function rollingStats(comp: CurvePoint[], bench: CurvePoint[]): RollingSt
   }
 }
 
-export type ThinCoverage = {
-  /** Dates where fewer than half the category's peak contributor count reported. */
-  days: number
-  worst: { d: string; n: number } | null
-  peak: number
-}
-
 /**
- * Dates where the composite rested on far fewer funds than the category actually holds.
- * Mostly Saturdays and holidays, where a handful of schemes still stamp a NAV — the average
- * that day is over those few, not over the category, and it compounds into the curve like
- * any other day. Worth naming on the page; the chart's coverage strip alone squashes these
- * into a spike the eye reads as noise.
+ * How many funds the composite actually ran on, first to widest.
  *
- * Peak is tracked as a running maximum, so a category that grew from 40 funds to 70 is not
- * retroactively judged thin for its early years.
+ * This replaced a thin-coverage warning that counted the days where far fewer funds REPORTED
+ * than the category holds. That warning existed because the composite used to average over
+ * the reporters, so a Saturday with two NAVs really did put two funds' moves into the curve
+ * at full weight. The divisor is now every fund alive, so those days move the composite by
+ * two funds' share of the category and there is nothing left to warn about.
  */
-export function thinCoverage(counts: { d: string; n: number }[]): ThinCoverage {
+export function coverage(counts: { n: number }[]): { first: number; peak: number } {
+  let first = 0
   let peak = 0
-  let days = 0
-  let worst: { d: string; n: number } | null = null
   for (const c of counts) {
     if (c.n === 0) continue // the anchor row has no contributors by construction
-    peak = Math.max(peak, c.n)
-    if (c.n < peak / 2) {
-      days++
-      if (worst == null || c.n < worst.n) worst = { d: c.d, n: c.n }
-    }
+    if (first === 0) first = c.n
+    if (c.n > peak) peak = c.n
   }
-  return { days, worst, peak }
+  return { first, peak }
 }

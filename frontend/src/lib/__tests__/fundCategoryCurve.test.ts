@@ -1,26 +1,26 @@
 import { describe, it, expect } from 'vitest'
 import {
   fetchStart, growthReturn, minusMonths, PERIODS, rebase, rollingReturns, rollingStats,
+  coverage,
   spanReturn,
-  thinCoverage,
   trailingReturn,
   type CurvePoint,
 } from '../fundCategoryCurve'
 
 // REAL composite output for "India Fund Sector - Energy" over 2026-03-30 → 2026-04-07,
 // produced by the chain-link SQL in lib/queries/fund_category_curve.ts against
-// atlas_foundation on 2026-08-04. NO synthetic inputs (rule #0).
-// This window is chosen because it exercises three real conditions at once:
-//   • 2026-03-31 n=4 — SBI Energy (F00001JAQ0) has no 03-30 NAV, so no return that day
-//   • 2026-04-01 n=3 — two funds missing entirely (a real NAV gap)
-//   • after 2026-04-02 n=4 — Groww BSE Power FOF (F00001RXVU) stops reporting (real exit)
+// atlas_foundation on 2026-08-05. NO synthetic inputs (rule #0).
+// This window is chosen because it exercises the NAV gaps the composite has to survive:
+//   • 2026-03-31 — SBI Energy (F00001JAQ0) has no 03-30 NAV, so no return that day
+//   • 2026-04-01 — only ICICI and Kotak report; Baroda and SBI skip to 04-02, and their
+//     two-day moves land whole on 04-02 rather than being counted twice
 const ENERGY: CurvePoint[] = [
   { d: '2026-03-30', v: 100.000000 },
-  { d: '2026-03-31', v: 99.995804 },
-  { d: '2026-04-01', v: 101.772909 },
-  { d: '2026-04-02', v: 102.067793 },
-  { d: '2026-04-06', v: 102.120648 },
-  { d: '2026-04-07', v: 102.398542 },
+  { d: '2026-03-31', v: 99.994732 },
+  { d: '2026-04-01', v: 100.779574 },
+  { d: '2026-04-02', v: 101.390296 },
+  { d: '2026-04-06', v: 101.442800 },
+  { d: '2026-04-07', v: 101.718849 },
 ]
 
 describe('rebase', () => {
@@ -39,7 +39,7 @@ describe('rebase', () => {
   it('leaves a series already anchored at 100 unchanged', () => {
     const out = rebase(ENERGY)
     expect(out.map((p) => p.d)).toEqual(ENERGY.map((p) => p.d))
-    // Element-wise, not toEqual: 100 * 99.995804 / 100 need not be bit-identical.
+    // Element-wise, not toEqual: 100 * 99.994732 / 100 need not be bit-identical.
     out.forEach((p, i) => expect(p.v).toBeCloseTo(ENERGY[i].v, 9))
   })
 
@@ -206,37 +206,27 @@ describe('minusMonths', () => {
   })
 })
 
-describe('thinCoverage', () => {
-  // REAL per-date constituent counts for "India Fund Sector - Healthcare",
-  // 2026-01-29 → 2026-02-05, from atlas_foundation on 2026-08-04. 2026-01-31 is a Saturday:
-  // only 2 of 21 funds publish a NAV, so the composite that day averages almost nothing.
-  const HEALTHCARE = [
-    { d: '2026-01-29', n: 21 }, { d: '2026-01-30', n: 20 }, { d: '2026-01-31', n: 2 },
-    { d: '2026-02-02', n: 21 }, { d: '2026-02-03', n: 21 }, { d: '2026-02-04', n: 21 },
-    { d: '2026-02-05', n: 21 },
-  ]
+describe('coverage', () => {
+  // REAL per-date ALIVE-fund counts (the composite's divisor), from atlas_foundation
+  // on 2026-08-05. NO synthetic inputs (rule #0).
 
-  it('flags the dates where far fewer funds reported than the category carries', () => {
-    const t = thinCoverage(HEALTHCARE)
-    expect(t.days).toBe(1)
-    expect(t.worst).toEqual({ d: '2026-01-31', n: 2 })
-    expect(t.peak).toBe(21)
+  it('reports the widest the composite ever ran, ignoring the anchor row', () => {
+    // "India Fund Sector - Healthcare", 2026-01-29 → 2026-02-05. 2026-01-31 is a Saturday
+    // where only 2 of 19 funds publish a NAV — but all 19 are alive and in the divisor, so
+    // coverage is flat at 19. Under the old reporter-count divisor this read as a dip to 2.
+    const healthcare = [{ n: 0 }, { n: 19 }, { n: 19 }, { n: 19 }, { n: 19 }, { n: 19 }, { n: 19 }]
+    expect(coverage(healthcare)).toEqual({ first: 19, peak: 19 })
   })
 
-  it('ignores the anchor row, which has no contributors by construction', () => {
-    const t = thinCoverage([{ d: '2026-01-28', n: 0 }, ...HEALTHCARE])
-    expect(t.days).toBe(1)
-    expect(t.worst!.d).toBe('2026-01-31')
+  it('shows a category taking in a new fund as a range, not a jump', () => {
+    // "India Fund Sector - Energy", 2025-04-28 → 2025-05-07: Kotak Energy Opportunities
+    // starts reporting on 2025-05-02 and joins the divisor on 2025-05-05.
+    expect(coverage([{ n: 0 }, { n: 3 }, { n: 3 }, { n: 3 }, { n: 4 }, { n: 4 }, { n: 4 }]))
+      .toEqual({ first: 3, peak: 4 })
   })
 
-  it('reports nothing when coverage is steady', () => {
-    const t = thinCoverage([{ d: '2026-02-02', n: 21 }, { d: '2026-02-03', n: 20 }])
-    expect(t.days).toBe(0)
-    expect(t.worst).toBeNull()
-  })
-
-  it('reports nothing for an empty series', () => {
-    expect(thinCoverage([])).toEqual({ days: 0, worst: null, peak: 0 })
+  it('reports zeroes for an empty series', () => {
+    expect(coverage([])).toEqual({ first: 0, peak: 0 })
   })
 })
 

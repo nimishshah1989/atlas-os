@@ -53,17 +53,26 @@ describe.skipIf(!hasDb)('getCategoryComposite', () => {
     ])
   })
 
-  it('drops a fund from the average on a day it did not report, rather than reading it flat', async () => {
-    // Real NAV gaps: SBI Energy has no 2026-03-30 NAV, and on 2026-04-01 only two of the four
-    // funds reported. A missing NAV must yield no return for that fund, never a zero return.
+  it('divides by every fund alive on the date, not just the ones that reported', async () => {
+    // The double-count guard. Real gaps: on 2026-04-01 only ICICI and Kotak stamped a NAV;
+    // Baroda skipped to 04-02 and SBI to 04-02. Averaging over the TWO reporters put the
+    // market's 04-01 move into the composite at full weight, and then counted it a second
+    // time on 04-02 inside Baroda's and SBI's two-day moves.
+    //
+    // Each fund must contribute exactly one day of return per date. A fund that skipped is
+    // flat for that date (never interpolated) and lands its whole move when it resumes, so
+    // 04-01 is 2/4 of the reporters' move — not all of it.
+    //
+    // Expected values reproduced independently by a pandas LOCF panel over the same NAVs:
+    // 04-01 = 100.779574 (not 101.564416), 04-07 = 101.718849 (not 102.511006).
     const rows = await db().getCategoryComposite('India Fund Sector - Energy', '2026-03-30', '2026-04-07')
     expect(rows.map((r) => [r.d, Number(r.v.toFixed(6)), r.n])).toEqual([
       ['2026-03-30', 100.000000, 0],
-      ['2026-03-31', 99.994732, 3], // SBI Energy has no 03-30 NAV -> contributes no return
-      ['2026-04-01', 101.564416, 2], // two funds missing entirely — a real gap
-      ['2026-04-02', 102.179894, 4],
-      ['2026-04-06', 102.232807, 4],
-      ['2026-04-07', 102.511006, 4],
+      ['2026-03-31', 99.994732, 3], // SBI's first in-window NAV — no prior, so no return
+      ['2026-04-01', 100.779574, 4], // two funds silent, still four in the denominator
+      ['2026-04-02', 101.390296, 4], // Baroda's and SBI's two-day moves land here, once
+      ['2026-04-06', 101.442800, 4],
+      ['2026-04-07', 101.718849, 4],
     ])
   })
 
@@ -146,6 +155,21 @@ describe.skipIf(!hasDb)('getCategorySummary', () => {
     expect(fmcg.comp.y5).toBeCloseTo(1.408537, 4)
     // NIFTY FMCG 49121.20 / 36826.05 over five years
     expect(fmcg.bench.y5).toBeCloseTo(1.333866, 4)
+  })
+
+  it('does not inflate a many-fund category by double-counting NAV gaps', async () => {
+    // The headline the double-count bug distorted most: 4.6% of Small-Cap fund-days span a
+    // gap, and each one had its move counted twice — reading +17.8% over the year against a
+    // true +12.0%. The error grew with the fund count, which is why FMCG (one fund) was exact
+    // and this was not. Values reproduced independently by a pandas LOCF panel.
+    const rows = await db().getCategorySummary(anchors)
+    const small = rows.find((r) => r.category === 'India Fund Small-Cap')!
+    expect(small.comp.y1).toBeCloseTo(1.120353, 4)
+    expect(small.comp.y3).toBeCloseTo(1.638789, 4)
+    expect(small.comp.y5).toBeCloseTo(2.170593, 4)
+    const mid = rows.find((r) => r.category === 'India Fund Mid-Cap')!
+    expect(mid.comp.y1).toBeCloseTo(1.115096, 4)
+    expect(mid.comp.y5).toBeCloseTo(2.164400, 4)
   })
 
   it('reports null, never a partial return, where history is short', async () => {

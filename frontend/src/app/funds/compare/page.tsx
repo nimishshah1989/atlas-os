@@ -11,7 +11,7 @@ import { CategorySummaryTable } from '@/components/funds/CategorySummaryTable'
 import {
   ConstituentsTable, ReturnsTable, RollingStatsTable,
 } from '@/components/funds/CategoryCompareTables'
-import { fetchStart, minusMonths, thinCoverage } from '@/lib/fundCategoryCurve'
+import { coverage, fetchStart, minusMonths } from '@/lib/fundCategoryCurve'
 import {
   CATEGORY_INDEX, getCategoryComposite, getCategoryConstituents, getCategoryOptions,
   getCategorySummary,
@@ -93,11 +93,9 @@ export default async function ComparePage({
   const label = cleanCat(chosen.category)
   const indexLabel = CATEGORY_INDEX[chosen.category] ?? 'NIFTY 500'
   const stale = chosen.lastNav != null && chosen.lastNav < staleBefore
-  // Coverage is stated in words, not charted: plotted against a 0–90 axis the holiday dips
-  // (one scheme reporting) look like the category collapsed to zero, which is what a reader
-  // actually took from the strip that used to sit here.
-  const thin = thinCoverage(shown)
-  const coverage = { first: shown.find((r) => r.n > 0)?.n ?? 0, peak: thin.peak }
+  // Coverage is one sentence, not a chart: the strip that used to sit here plotted the count
+  // against a 0–90 axis, and readers took the shape for a signal.
+  const cover = coverage(shown)
 
   return (
     <main className="report-page report-wide mx-auto max-w-[1180px] px-6 py-8">
@@ -122,13 +120,9 @@ export default async function ComparePage({
           </p>
         )}
         <p className="mt-2 font-sans text-[12px] text-txt-3">
-          Coverage over the window ran {coverage.first}–{coverage.peak} funds.
-          {thin.days > 0 && thin.worst && (
-            <> On {thin.days} of {shown.length - 1} days fewer than half the category reported a NAV
-            (worst: {thin.worst.n} on {thin.worst.d}) — mostly weekends and holidays where a few
-            schemes still stamp one. The composite averages whoever reported, so treat single-day
-            moves on those dates as noise rather than a collapse in the category.</>
-          )}
+          Coverage over the window ran {cover.first}–{cover.peak} funds. Funds do not all publish
+          a NAV every day; one that skips is held flat and its whole move lands on the day it next
+          reports, so it is counted once and its own total return stays exact.
         </p>
       </header>
 
