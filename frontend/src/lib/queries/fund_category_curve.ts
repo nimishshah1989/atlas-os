@@ -216,12 +216,13 @@ export type CategorySummaryRow = {
 }
 
 /**
- * Trailing 1/3/5-year growth for EVERY category and its benchmark, in two queries.
+ * Trailing 1/2/3/5-year growth for EVERY category and its benchmark, in two queries.
  *
  * The composite is exp(cumsum(ln(1+r))), so the growth between two dates is just
  * exp(sum(ln(1+r))) over the dates in between — an aggregate, no series needed. That turns
- * "15 categories × 3 periods" into one grouped scan (~3s) instead of 15 separate composite
- * queries. Benchmarks are 15 codes × 4 as-of lookups, which is trivial.
+ * "15 categories × 4 periods" into one grouped scan (~2s) instead of 15 separate composite
+ * queries; another period is one more FILTER over a scan already paid for. Benchmarks are
+ * 15 codes × 5 as-of lookups, which is trivial.
  *
  * The daily return is built exactly as getCategoryComposite builds it — divided by the funds
  * ALIVE that day, not the funds that reported. See that function for why; every figure on
