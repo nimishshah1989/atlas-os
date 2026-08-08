@@ -32,15 +32,20 @@ CODE_BY_CLIENT_CODE: dict[str, str] = {
 # belongs in the trade log — otherwise RELIANCE appears SOLD in Oct-2020 with no record
 # of ever arriving. portfolio_trades.reason already has 'inception' for exactly this.
 #
-# BONUS is deliberately absent. Bonus shares arrive at price 0, and portfolio_trades
-# has CHECK (price > 0) — a bonus row physically cannot be stored there. It still
-# opens a zero-cost lot for FIFO (see atlas.maal.fifo), so realized P&L stays correct;
-# only the trade log omits it. Two rows on BJ53 as of 2026-07-31.
-_TRADE_TYPES = {"BUY": "buy", "SELL": "sell", "CORPUS_IN": "buy"}
+# BONUS is a buy that cost nothing. It used to be absent here, because bonus shares
+# arrive at price 0 and portfolio_trades' CHECK (price > 0) physically refused them —
+# so the two real BJ53 rows (AARTIDRUGS 84, CDSL 136) were dropped and Atlas's trade
+# log could not account for 220 shares CPP holds. maal_cpp_ddl.sql relaxes that CHECK
+# for reason='bonus' only, so they are now recorded as what they are.
+_TRADE_TYPES = {"BUY": "buy", "SELL": "sell", "CORPUS_IN": "buy", "BONUS": "buy"}
 
-# Trades sourced from a corpus transfer are marked 'inception', not 'manual' — they
-# were not desk decisions, and the distinction survives into the rendered trade log.
-_INCEPTION_TYPES = {"CORPUS_IN"}
+# The reason a trade carries, when it is not ordinary desk activity.
+#   CORPUS_IN -> 'inception': a securities transfer-in, not a decision. BJ53's whole
+#     opening book arrived this way; without it those names read as sold with no
+#     record of ever arriving.
+#   BONUS -> 'bonus': the string the relaxed price CHECK keys on. The engine never
+#     writes it, so a zero-price engine trade is still rejected.
+_REASON_BY_TYPE = {"CORPUS_IN": "inception", "BONUS": "bonus"}
 
 _QUANT = Decimal("0.0001")
 
@@ -98,6 +103,6 @@ def trade_from_txn(
         "price": txn["price"],
         "value": txn["amount"],
         "cost": txn["cost_rate"],
-        "reason": "inception" if kind in _INCEPTION_TYPES else "manual",
+        "reason": _REASON_BY_TYPE.get(kind, "manual"),
         "source_txn_id": txn["id"],
     }

@@ -1,0 +1,47 @@
+[
+  {
+    "as_of": "2026-08-06",
+    "source_as_of": "2026-08-02",
+    "maal_code": "leaders",
+    "isin": "INE361B01024",
+    "source_symbol": "DIVISLAB",
+    "instrument_key": "stock:DIVISLAB",
+    "asset_class": "EQUITY",
+    "quantity": "29.0000",
+    "avg_cost": "7008.5000",
+    "synced_at": "2026-08-06 06:30:03.271603+00:00",
+    "cpp_price": null,
+    "cpp_value": null,
+    "cpp_weight_pct": null
+  },
+  {
+    "as_of": "2026-08-07",
+    "source_as_of": "2026-08-05",
+    "maal_code": "leaders",
+    "isin": "INE148O01028",
+    "source_symbol": "DELHIVERY",
+    "instrument_key": "stock:DELHIVERY",
+    "asset_class": "EQUITY",
+    "quantity": "808.0000",
+    "avg_cost": "506.2200",
+    "synced_at": "2026-08-07 06:30:03.668857+00:00",
+    "cpp_price": null,
+    "cpp_value": null,
+    "cpp_weight_pct": null
+  },
+  {
+    "as_of": "2026-08-07",
+    "source_as_of": "2026-08-05",
+    "maal_code": "ind11",
+    "isin": "INE397D01024",
+    "source_symbol": "BHARTIARTL",
+    "instrument_key": "stock:BHARTIARTL",
+    "asset_class": "EQUITY",
+    "quantity": "51.0000",
+    "avg_cost": "1961.9800",
+    "synced_at": "2026-08-07 06:30:03.668857+00:00",
+    "cpp_price": null,
+    "cpp_value": null,
+    "cpp_weight_pct": null
+  }
+]

@@ -36,6 +36,35 @@ export type PortfolioSummary = {
   btCagr5Pct: number | null
   params: Record<string, unknown> | null
   strategyKey: string | null
+  /** CPP's own figures for the three real client books. Null for every other portfolio. */
+  cpp: CppBookMetrics | null
+}
+
+/**
+ * What clients.jslwealth.in says about a MaaL book, copied verbatim.
+ *
+ * Read from the `maal_book_metrics` view, which has already applied the FM's rule that
+ * XIRR and CAGR mean nothing under a year — so `cagr`/`xirr` arrive as null for a young
+ * book and the period returns beside them carry the answer instead. Nothing on this
+ * object is computed here; recomputing any of it is how the two systems drift apart.
+ */
+export type CppBookMetrics = {
+  computedDate: string
+  ageDays: number
+  annualisedOk: boolean
+  absoluteReturn: number | null
+  benchReturnInception: number | null
+  cagr: number | null
+  xirr: number | null
+  return1m: number | null
+  return3m: number | null
+  return6m: number | null
+  return1y: number | null
+  maxDrawdown: number | null
+  volatility: number | null
+  sharpe: number | null
+  alpha: number | null
+  beta: number | null
 }
 
 const DESK_CHARTER_LABEL: Record<string, string> = {
@@ -75,8 +104,29 @@ export async function getPortfolios(): Promise<PortfolioSummary[]> {
     SELECT m.portfolio_id, m.name, m.kind, m.origin, m.strategy_key, m.params, m.asset_classes,
            m.initial_capital, m.max_position_pct, m.inception_date::text AS inception_date,
            ln.date::text AS nav_date, ln.nav, ln.cash, ln.n_positions,
-           bt.total_pct AS bt_total_pct, bt.years AS bt_years, bt.cagr5_pct AS bt_cagr5_pct
+           bt.total_pct AS bt_total_pct, bt.years AS bt_years, bt.cagr5_pct AS bt_cagr5_pct,
+           cm.computed_date::text AS cpp_computed_date, cm.age_days AS cpp_age_days,
+           cm.annualised_ok AS cpp_annualised_ok, cm.absolute_return, cm.bench_return_inception,
+           cm.cagr AS cpp_cagr, cm.xirr AS cpp_xirr,
+           cm.return_1m, cm.return_3m, cm.return_6m, cm.return_1y,
+           cm.max_drawdown AS cpp_max_drawdown, cm.volatility AS cpp_volatility,
+           cm.sharpe_ratio AS cpp_sharpe, cm.alpha AS cpp_alpha, cm.beta AS cpp_beta,
+           -- Since-inception, chosen by PROVENANCE. A book sourced from CPP takes the
+           -- number CPP already computed and reconciled to the client's PMS statement;
+           -- nothing else may produce that figure for it. The nav/initial_capital form
+           -- survives only for engine books, where initial_capital is a real corpus.
+           --
+           -- For these three it is a CHECK-satisfying placeholder of Rs 1,00,000 that
+           -- maal_ddl.sql documents as fake, and dividing a Rs 50 lakh NAV by it is
+           -- exactly how a 4,975.1% return reached a client page. If CPP has no row,
+           -- this is NULL and the card shows an em-dash — a missing number, loudly,
+           -- never a fabricated one.
+           CASE WHEN m.params->>'source' = 'cpp' THEN cm.absolute_return
+                ELSE (ln.nav / nullif(m.initial_capital, 0) - 1) * 100
+           END AS since_inception_pct
     FROM atlas_foundation.portfolio_master m
+    LEFT JOIN atlas_foundation.maal_book_metrics cm
+      ON m.params->>'source' = 'cpp' AND cm.maal_code = m.params->>'maal_code'
     LEFT JOIN LATERAL (
       SELECT date, nav, cash, n_positions FROM atlas_foundation.portfolio_nav_daily n
       WHERE n.portfolio_id = m.portfolio_id AND n.run_type = 'live'
@@ -125,14 +175,41 @@ export async function getPortfolios(): Promise<PortfolioSummary[]> {
     nav: r.nav != null ? Number(r.nav) : null,
     cash: r.cash != null ? Number(r.cash) : null,
     nPositions: r.n_positions != null ? Number(r.n_positions) : null,
-    sinceInceptionPct:
-      r.nav != null ? (Number(r.nav) / Number(r.initial_capital) - 1) * 100 : null,
+    // Read, never derived. The SQL above already chose the source by provenance.
+    sinceInceptionPct: r.since_inception_pct != null ? Number(r.since_inception_pct) : null,
     btTotalPct: r.bt_total_pct != null ? Number(r.bt_total_pct) : null,
     btYears: r.bt_years != null ? Number(r.bt_years) : null,
     btCagr5Pct: r.bt_cagr5_pct != null ? Number(r.bt_cagr5_pct) : null,
     params: (r.params as Record<string, unknown> | null) ?? null,
     strategyKey: r.strategy_key ? String(r.strategy_key) : null,
+    cpp: cppMetrics(r),
   }))
+}
+
+const numOrNull = (v: unknown): number | null => (v == null ? null : Number(v))
+
+function cppMetrics(r: Record<string, unknown>): CppBookMetrics | null {
+  if (r.cpp_computed_date == null) return null
+  return {
+    computedDate: String(r.cpp_computed_date),
+    ageDays: Number(r.cpp_age_days),
+    annualisedOk: Boolean(r.cpp_annualised_ok),
+    absoluteReturn: numOrNull(r.absolute_return),
+    benchReturnInception: numOrNull(r.bench_return_inception),
+    // Already withheld by the view when the book is under a year old — this layer
+    // must not second-guess that, in either direction.
+    cagr: numOrNull(r.cpp_cagr),
+    xirr: numOrNull(r.cpp_xirr),
+    return1m: numOrNull(r.return_1m),
+    return3m: numOrNull(r.return_3m),
+    return6m: numOrNull(r.return_6m),
+    return1y: numOrNull(r.return_1y),
+    maxDrawdown: numOrNull(r.cpp_max_drawdown),
+    volatility: numOrNull(r.cpp_volatility),
+    sharpe: numOrNull(r.cpp_sharpe),
+    alpha: numOrNull(r.cpp_alpha),
+    beta: numOrNull(r.cpp_beta),
+  }
 }
 
 export type Holding = {
@@ -331,8 +408,17 @@ export async function getPortfolioDetail(id: string): Promise<PortfolioDetail | 
     SELECT date::text AS d, nav FROM atlas_foundation.portfolio_nav_daily
     WHERE portfolio_id = ${id} AND run_type = ${runType} ORDER BY date
   `
+  // A CPP book's live curve is CPP's whole NAV history — 2,134 days on Leaders, back
+  // to 2020-09-28. portfolio_nav_daily holds only the days Atlas has been syncing, so
+  // reading it here charted six years as a handful of points.
+  const maalCode = summary.params?.source === 'cpp' ? String(summary.params.maal_code) : null
+  const liveNavQuery = maalCode
+    ? sql<Array<Record<string, unknown>>>`
+        SELECT nav_date::text AS d, current_value AS nav
+        FROM atlas_foundation.maal_cpp_nav WHERE maal_code = ${maalCode} ORDER BY nav_date`
+    : nav('live')
   const [liveNav, backtestNav, backtestRawNav] = await Promise.all([
-    nav('live'),
+    liveNavQuery,
     nav('backtest'),
     nav('backtest_raw'),
   ])

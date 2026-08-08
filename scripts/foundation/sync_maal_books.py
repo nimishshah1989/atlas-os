@@ -2,15 +2,23 @@
 """Pull the three MaaL books out of the CPP database into atlas_foundation.
 
 Reads (read-only, via MAAL_SOURCE_DB_URL): cpp_portfolios, cpp_holdings,
-cpp_transactions, cpp_nav_series.
-Writes: maal_holding_snapshot, portfolio_nav_daily (run_type='live'),
-portfolio_trades + maal_trade_link.
+cpp_transactions, cpp_nav_series, cpp_risk_metrics.
+Writes: maal_holding_snapshot, maal_cpp_metrics, maal_cpp_nav,
+portfolio_nav_daily (run_type='live'), portfolio_trades + maal_trade_link.
 
-Positions are snapshotted per day and never overwritten, so the series IS the
-change log. Prices are NOT taken from CPP — Atlas marks positions with its own
-NSE close. CPP is the source of WHAT is held and at what cost, not of what it is
-worth: CPP's own weight_pct divides by invested value alone, so its weights always
-sum to 100 and cash reads 0%.
+THE RULE: Atlas copies, it does not recompute. Every figure CPP already stores —
+returns, XIRR, CAGR, drawdown, prices, position values — lands here verbatim. Two
+systems computing the same number always drift; one computing and one copying cannot.
+Deriving a return from the placeholder corpus in portfolio_master is what put a
+4,975.1% figure on a client page.
+
+Positions are snapshotted per day and never overwritten, so the series IS the change
+log. Prices come from CPP (cpp_holdings.current_price), NOT from Atlas's own NSE
+close: a second price source cannot reproduce the client's statement, it can only
+disagree with it. Weights are still recomputed against TOTAL value — that one is a
+deliberate re-basing, not a re-derivation, because CPP's weight_pct divides by
+invested value alone so its weights sum to 100 and cash reads 0%. CPP's own figure is
+carried alongside in cpp_weight_pct.
 
 Run: PYTHONPATH=<repo>:<repo>/scripts/foundation python sync_maal_books.py [--as-of YYYY-MM-DD]
 """
@@ -30,6 +38,7 @@ import _db
 import pandas as pd
 from sqlalchemy import create_engine, text
 
+from atlas.maal.cpp_metrics import COPIED_FIELDS
 from atlas.maal.fifo import match_fifo
 from atlas.maal.source import (
     CODE_BY_CLIENT_CODE,
@@ -90,7 +99,11 @@ def _fetch_source(engine, codes: list[str]) -> dict[str, list[dict[str, Any]]]:
             conn,
             """
             SELECT p.client_code, h.symbol, h.isin, h.asset_class,
-                   h.quantity, h.avg_cost
+                   h.quantity, h.avg_cost,
+                   -- CPP's own valuation of the position. Copied, never recomputed:
+                   -- marking these books with Atlas's NSE close guaranteed the board
+                   -- disagreed with the client's statement by design.
+                   h.current_price, h.current_value, h.weight_pct
             FROM cpp_holdings h
             JOIN cpp_portfolios p ON p.id = h.portfolio_id
             WHERE p.client_code = ANY(:codes) AND h.quantity > 0
@@ -98,16 +111,34 @@ def _fetch_source(engine, codes: list[str]) -> dict[str, list[dict[str, Any]]]:
         """,
             p,
         )
+        # EVERY nav row, not just the newest. Taking nav[0] discarded 4,045 days of
+        # real history across the three books, which is why a six-year book charted
+        # as four points. ~4k rows is one cheap query, not a pagination problem.
         nav = _rows(
             conn,
             """
-            SELECT DISTINCT ON (p.client_code)
-                   p.client_code, n.nav_date, n.current_value,
-                   n.invested_amount, n.cash_value, n.bank_balance, n.etf_value
+            SELECT p.client_code, n.nav_date, n.nav_value, n.current_value,
+                   n.invested_amount, n.benchmark_value, n.cash_pct,
+                   n.cash_value, n.bank_balance, n.etf_value
             FROM cpp_nav_series n
             JOIN cpp_portfolios p ON p.id = n.portfolio_id
             WHERE p.client_code = ANY(:codes)
-            ORDER BY p.client_code, n.nav_date DESC
+            ORDER BY p.client_code, n.nav_date
+        """,
+            p,
+        )
+        # CPP's own risk metrics — the numbers the client's statement carries. Only
+        # the newest computed_date per book: CPP does not compute daily, so its stamp
+        # is the honest one and backfilling older rows would add nothing any page reads.
+        metrics = _rows(
+            conn,
+            f"""
+            SELECT DISTINCT ON (p.client_code)
+                   p.client_code, r.computed_date, {", ".join("r." + f for f in COPIED_FIELDS)}
+            FROM cpp_risk_metrics r
+            JOIN cpp_portfolios p ON p.id = r.portfolio_id
+            WHERE p.client_code = ANY(:codes)
+            ORDER BY p.client_code, r.computed_date DESC
         """,
             p,
         )
@@ -127,7 +158,90 @@ def _fetch_source(engine, codes: list[str]) -> dict[str, list[dict[str, Any]]]:
         """,
             p,
         )
-    return {"holdings": holdings, "nav": nav, "txns": txns}
+    return {"holdings": holdings, "nav": nav, "txns": txns, "metrics": metrics}
+
+
+def _write_snapshot(as_of: dt.date, rows: list[dict[str, Any]]) -> int:
+    """Replace today's snapshot outright, one book at a time, in one transaction.
+
+    An upsert keyed on (as_of, maal_code, isin) is NOT enough, because it only touches
+    the ISINs CPP still returns: a name sold between the noon and 22:00 runs kept its
+    morning row alive under the evening's as_of. Found 2026-08-08 — ind11 carried
+    ETERNAL from source_as_of 2026-08-06 beside seven positions from 2026-08-07, and
+    the desk places sells off that book.
+
+    A snapshot is a complete look or it is nothing, so today's rows are written and
+    anything else still sitting under today's as_of is then removed. Earlier as_of dates
+    are untouched — the series is still the change log.
+
+    Write first, prune second, deliberately. The reverse order would leave a book with
+    NO positions if the run died in between, and an empty book reads as "sold
+    everything". This way a crash leaves the stale extra row that was already there,
+    and the next run clears it.
+    """
+    if not rows:
+        return 0
+    df = pd.DataFrame(rows)
+    written = _db.upsert_df(
+        "atlas_foundation.maal_holding_snapshot", df, ["as_of", "maal_code", "isin"]
+    )
+    stale = 0
+    with _db.engine().begin() as conn:
+        for code, held in df.groupby("maal_code")["isin"]:
+            stale += conn.execute(
+                text("""
+                    DELETE FROM atlas_foundation.maal_holding_snapshot
+                    WHERE as_of = :as_of AND maal_code = :code
+                      AND isin <> ALL(CAST(:isins AS text[]))
+                """),
+                {"as_of": as_of, "code": code, "isins": sorted(held)},
+            ).rowcount
+    if stale:
+        log.info("snapshot: dropped %d position(s) CPP no longer holds as of %s", stale, as_of)
+    return written
+
+
+def _write_cpp_mirror(src: dict[str, list[dict[str, Any]]]) -> tuple[int, int]:
+    """Copy CPP's NAV history and risk metrics across verbatim. Returns (navs, metrics).
+
+    Nothing in here is derived. ``inception_date`` is the book's first nav_date — a
+    selection, not a calculation — and it is stored beside the metrics so the FM's
+    annualisation rule (XIRR/CAGR only past a year, applied by the maal_book_metrics
+    view) is driven by the same source as the figures it withholds.
+    """
+    nav_rows = [
+        {
+            "maal_code": CODE_BY_CLIENT_CODE[r["client_code"]],
+            **{k: v for k, v in r.items() if k != "client_code"},
+        }
+        for r in src["nav"]
+    ]
+    inception = {r["maal_code"]: r["nav_date"] for r in reversed(nav_rows)}
+
+    metric_rows = []
+    for r in src["metrics"]:
+        code = CODE_BY_CLIENT_CODE[r["client_code"]]
+        if code not in inception:
+            log.error("%s has risk metrics but no NAV history — refusing to date it", code)
+            continue
+        metric_rows.append(
+            {
+                "maal_code": code,
+                "computed_date": r["computed_date"],
+                "inception_date": inception[code],
+                **{f: r[f] for f in COPIED_FIELDS},
+            }
+        )
+
+    navs = _db.upsert_df(
+        "atlas_foundation.maal_cpp_nav", pd.DataFrame(nav_rows), ["maal_code", "nav_date"]
+    )
+    mets = _db.upsert_df(
+        "atlas_foundation.maal_cpp_metrics",
+        pd.DataFrame(metric_rows),
+        ["maal_code", "computed_date"],
+    )
+    return navs, mets
 
 
 def _resolve_isins(isins: list[str]) -> dict[str, tuple[str, str, str]]:
@@ -275,7 +389,7 @@ def sync(as_of: dt.date) -> int:
         if not nav_row:
             log.error("no cpp_nav_series row for %s — skipping this book entirely", client_code)
             continue
-        n = nav_row[0]
+        n = nav_row[-1]  # the pull is ordered by nav_date ASC, so the newest is last
         source_as_of = n["nav_date"]
         if isinstance(source_as_of, pd.Timestamp):
             source_as_of = source_as_of.date()
@@ -296,6 +410,11 @@ def sync(as_of: dt.date) -> int:
                     "asset_class": r["asset_class"],
                     "quantity": r["quantity"],
                     "avg_cost": r["avg_cost"],
+                    # CPP's mark, copied. The board values the book from these, so a
+                    # position's value on Atlas is the same number the client sees.
+                    "cpp_price": r["current_price"],
+                    "cpp_value": r["current_value"],
+                    "cpp_weight_pct": r["weight_pct"],
                 }
             )
 
@@ -356,24 +475,24 @@ def sync(as_of: dt.date) -> int:
                 }
             )
 
-    _db.upsert_df(
-        "atlas_foundation.maal_holding_snapshot",
-        pd.DataFrame(snap_rows),
-        ["as_of", "maal_code", "isin"],
-    )
+    _write_snapshot(as_of, snap_rows)
     _db.upsert_df(
         "atlas_foundation.portfolio_nav_daily",
         pd.DataFrame(nav_rows),
         ["portfolio_id", "run_type", "date"],
     )
     inserted = _write_trades(trade_rows)
+    mirror_navs, mirror_metrics = _write_cpp_mirror(src)
 
     log.info(
-        "as_of=%s snapshot=%d nav=%d trades_new=%d unresolved_held=%d unresolved_txn=%d",
+        "as_of=%s snapshot=%d nav=%d trades_new=%d cpp_nav=%d cpp_metrics=%d "
+        "unresolved_held=%d unresolved_txn=%d",
         as_of,
         len(snap_rows),
         len(nav_rows),
         inserted,
+        mirror_navs,
+        mirror_metrics,
         len(unresolved_held),
         len(unresolved_txn),
     )
