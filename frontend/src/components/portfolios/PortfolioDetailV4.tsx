@@ -2,7 +2,7 @@
 // backtest growth vs NIFTY 500, risk box (reusing the fund math), holdings by
 // sector, and the raw trade log. Everything rendered is stored engine output.
 import { notFound } from 'next/navigation'
-import { getPortfolioDetail, type NavPointRow, type Holding, type AtlasRead } from '@/lib/queries/portfolios'
+import { getPortfolioDetail, type NavPointRow, type Holding, type AtlasRead, type CppBookMetrics } from '@/lib/queries/portfolios'
 import { TradesTable } from './TradesTable'
 import { PolicyJournal } from './PolicyJournal'
 import { getDeskCycleFor, getDeskTrackFor } from '@/lib/queries/deskBoard'
@@ -47,6 +47,62 @@ const totalPct = (pts: NavPointRow[]): number | null =>
 
 const postTaxTotalPct = (pts: NavPointRow[], tax: number): number | null =>
   pts.length > 1 ? ((pts[pts.length - 1].nav - tax) / pts[0].nav - 1) * 100 : null
+
+/**
+ * A real client book's figures, exactly as clients.jslwealth.in reports them.
+ *
+ * Nothing is computed here — `cpp` is a straight read of the maal_book_metrics view,
+ * which has already withheld the annualised figures for a book under a year old. So
+ * the branch below renders what it was given: it never decides to hide a number, it
+ * only reacts to one that is absent. That is the point — a display convention is
+ * something a future page forgets, and IND11's −94.51% XIRR is what forgetting looks
+ * like on a three-month-old book.
+ */
+function CppStats({ cpp }: { cpp: CppBookMetrics }) {
+  return (
+    <Panel
+      eyebrow={`Client statement · computed ${cpp.computedDate}`}
+      title="Performance, as the client's portal reports it"
+      info={{
+        body:
+          'Copied from clients.jslwealth.in, not recalculated here. The headline is the ' +
+          'portal’s Modified-Dietz adjusted return, the same figure the official PMS ' +
+          'statement carries. XIRR and CAGR annualise, so they are only shown once a book ' +
+          'is past one year — below that the absolute 1m/3m/6m returns are the honest answer.',
+      }}
+      bodyClassName="px-5 py-4"
+    >
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
+        <Stat label="Since inception" value={pct(cpp.absoluteReturn)} tone={retTone(cpp.absoluteReturn)} />
+        <Stat label="Benchmark" value={pct(cpp.benchReturnInception)} tone={retTone(cpp.benchReturnInception)} />
+        <Stat label="Max drawdown" value={pct(cpp.maxDrawdown, false)} />
+        <Stat label="Volatility" value={pct(cpp.volatility, false)} />
+        {cpp.annualisedOk ? (
+          <>
+            <Stat label="XIRR" value={pct(cpp.xirr)} tone={retTone(cpp.xirr)} />
+            <Stat label="CAGR" value={pct(cpp.cagr)} tone={retTone(cpp.cagr)} />
+            <Stat label="1 year" value={pct(cpp.return1y)} tone={retTone(cpp.return1y)} />
+            <Stat label="Sharpe" value={cpp.sharpe == null ? '—' : cpp.sharpe.toFixed(2)} />
+          </>
+        ) : (
+          <>
+            <Stat label="1 month" value={pct(cpp.return1m)} tone={retTone(cpp.return1m)} />
+            <Stat label="3 months" value={pct(cpp.return3m)} tone={retTone(cpp.return3m)} />
+            <Stat label="6 months" value={pct(cpp.return6m)} tone={retTone(cpp.return6m)} />
+            <Stat label="Sharpe" value={cpp.sharpe == null ? '—' : cpp.sharpe.toFixed(2)} />
+          </>
+        )}
+      </div>
+      {!cpp.annualisedOk && (
+        <p className="mt-3 rounded-tile border border-edge-hair bg-surface-raised px-3 py-2 font-sans text-[12px] leading-[1.55] text-txt-2">
+          This book is {cpp.ageDays} days old. XIRR and CAGR annualise a partial year, which
+          turns a small move into a large-looking one, so they are withheld until the book is
+          past twelve months. The period returns above are absolute and need no such caveat.
+        </p>
+      )}
+    </Panel>
+  )
+}
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
@@ -220,8 +276,14 @@ export async function PortfolioDetailV4({ id }: { id: string }) {
           {isSystem ? `System-generated · ${s.strategyLabel}` : s.kind === 'strategy' ? `Rule-based · ${s.strategyLabel}` : 'FM basket'} · {s.assetClasses.join(' + ')} · inception {s.inceptionDate}
         </p>
         <h1 className="font-display text-[28px] font-medium tracking-tight text-txt-1">{s.name}</h1>
+        {/* A CPP book's initial_capital is a CHECK-satisfying placeholder, not a corpus —
+            printing it told the client this book started with Rs 1,00,000. Its real
+            figures come from CPP and are shown in the panel below. */}
         <p className="mt-1 max-w-[860px] font-sans text-[13px] text-txt-2">
-          Started with {inr(s.initialCapital)} · max {Math.round(s.maxPositionPct * 100)}% per position
+          {s.cpp
+            ? `Mirrored from clients.jslwealth.in as of ${s.cpp.computedDate}`
+            : `Started with ${inr(s.initialCapital)}`}{' '}
+          · max {Math.round(s.maxPositionPct * 100)}% per position
           ({Math.floor(1 / s.maxPositionPct)} slots).
         </p>
       </div>
@@ -248,6 +310,8 @@ export async function PortfolioDetailV4({ id }: { id: string }) {
           value={s.nav != null ? `${inr(totals.live.tax)} · ${inr(s.nav - totals.live.tax)}` : '—'}
         />
       </div>
+
+      {s.cpp && <CppStats cpp={s.cpp} />}
 
       {backtestNav.length > 5 && (
         <Panel

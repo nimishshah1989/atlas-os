@@ -85,6 +85,11 @@ step "portfolio_mark"            $PY scripts/foundation/portfolio_run.py mark
 # Atlas Desk: agent cycle AFTER the mark (agents see tonight's marked book).
 # Missing LLM key or malformed agent output ⇒ the desk does nothing (safe).
 step "desk_run"                  $PY scripts/foundation/desk_run.py
+# MaaL books: re-pull CPP immediately before the gate below reconciles against it. The
+# 12:00/22:00 crons already sync, but CPP can recompute in between, and a gate comparing
+# a six-hour-old mirror against live CPP would fail on staleness rather than on anything
+# being wrong. Idempotent and ~2s, so running it again here costs nothing.
+step "maal_sync"                 $PY scripts/foundation/sync_maal_books.py
 
 # 3. GATES (assert on REAL produced output — rule #0). Deploy only if ALL pass.
 # Run gates DIRECTLY (not via step): step() records a failure but always returns 0,
@@ -106,6 +111,13 @@ gate "validate_lenses_A" $PY scripts/foundation/validate_lenses.py --check A
 gate "validate_lenses_B" $PY scripts/foundation/validate_lenses.py --check B
 gate "validate_lenses_C" $PY scripts/foundation/validate_lenses.py --check C
 gate "freshness_guard"   $PY scripts/ops/freshness_guard.py --eod "$EOD"
+# Every MaaL figure the board displays, compared field-for-field against cpp_risk_metrics
+# in the client portal's own database. gate(), not step(): these three books belong to
+# real clients, and a number Atlas invented for one of them is the single worst thing this
+# system can publish — a 4,975.1% return once sat on a client page with nothing objecting.
+# If CPP is unreachable this fails and the board keeps its last-good state, which is the
+# safe direction to fail in.
+gate "maal_cpp_reconcile" $PY scripts/ops/maal_cpp_reconcile.py
 # Portfolio accounting checks alert but don't block the board deploy (step, not gate);
 # promote to gate() after a clean month.
 step "validate_portfolios"       $PY scripts/foundation/validate_portfolios.py

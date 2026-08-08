@@ -44,6 +44,33 @@ JR100PASS_LIQUIDCASE = (
     Decimal("1000"),
 )
 
+# The only two BONUS rows across all three books, read from cpp_transactions
+# 2026-08-08. Both at price exactly 0.0000 — bonus shares cost nothing.
+BJ53_BONUS = [
+    {
+        "id": 2,
+        "txn_date": "2020-10-05",
+        "txn_type": "BONUS",
+        "symbol": "AARTIDRUGS",
+        "isin": "INE767A01016",
+        "quantity": Decimal("84.000000"),
+        "price": Decimal("0.0000"),
+        "cost_rate": Decimal("0.0000"),
+        "amount": Decimal("0.00"),
+    },
+    {
+        "id": 3,
+        "txn_date": "2024-08-24",
+        "txn_type": "BONUS",
+        "symbol": "CDSL",
+        "isin": "INE736A01011",
+        "quantity": Decimal("136.000000"),
+        "price": Decimal("0.0000"),
+        "cost_rate": Decimal("0.0000"),
+        "amount": Decimal("0.00"),
+    },
+]
+
 # Real BJ53 SELL, 2026-07-28: 420 INDUSINDBK at 992.00 net / 984.9938 all-in.
 BJ53_SELL = {
     "id": 1,
@@ -149,23 +176,32 @@ def test_corpus_in_is_a_buy_marked_inception() -> None:
     assert trade["reason"] == "inception"
 
 
-def test_bonus_rows_stay_out_of_the_trade_log() -> None:
-    """Bonus shares arrive at price 0 and portfolio_trades has CHECK (price > 0).
+@pytest.mark.parametrize("bonus", BJ53_BONUS)
+def test_bonus_shares_are_recorded_as_a_zero_price_buy(bonus: dict) -> None:
+    """Dropping a bonus row makes Atlas's quantities drift from CPP's.
 
-    They cannot be stored there at all. FIFO still opens a zero-cost lot for them
-    (atlas.maal.fifo), so realized P&L stays correct — only the log omits them.
-    Two rows on BJ53 as of 2026-07-31, both at price exactly 0.0000.
+    Bonus shares arrive at price 0, and portfolio_trades' old CHECK (price > 0)
+    physically refused them, so the sync discarded both real BJ53 rows — 220 shares
+    that CPP holds and whose arrival Atlas's trade log could not explain. The CHECK is
+    now relaxed for rows that SAY they are bonus (see maal_cpp_ddl.sql), so they are
+    recorded as what they are: a buy that cost nothing.
     """
-    row = dict(BJ53_SELL, txn_type="BONUS")
-    assert (
-        trade_from_txn(
-            row,
-            instrument_key="00000000-0000-4000-8000-000000000001",
-            asset_class="stock",
-            symbol="X",
-        )
-        is None
+    trade = trade_from_txn(
+        bonus,
+        instrument_key="00000000-0000-4000-8000-000000000001",
+        asset_class="stock",
+        symbol=bonus["symbol"],
     )
+    assert trade is not None, f"{bonus['symbol']} bonus dropped — quantities drift from CPP"
+    assert trade["side"] == "buy"
+    assert trade["qty"] == bonus["quantity"]
+    # Zero, never a substituted market price: these shares genuinely cost nothing, and
+    # inventing a cost basis would understate every eventual gain on them.
+    assert trade["price"] == Decimal("0.0000")
+    assert trade["value"] == Decimal("0.00")
+    # Its own reason, because that string is what the relaxed CHECK keys on — the
+    # engine never writes it, so a zero-price engine trade is still rejected.
+    assert trade["reason"] == "bonus"
 
 
 def test_ordinary_buys_and_sells_are_marked_manual() -> None:

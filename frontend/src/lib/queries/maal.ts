@@ -89,7 +89,7 @@ export async function setMaxCap(code: MaalCode, capPct: number): Promise<number>
 
 /**
  * The book this week starts from: the latest synced snapshot of the REAL portfolio,
- * priced with Atlas's own close.
+ * priced with CPP's own marks so it values the same as the client's statement.
  *
  * NOT a fold of prior recommendations. The FM's calls are a superset of what actually
  * executes, so a folded book drifts from the real portfolio every week it compounds —
@@ -113,13 +113,23 @@ export async function getOpeningBook(code: MaalCode, before?: string): Promise<B
     priced AS (
       SELECT s.instrument_key, s.source_symbol, s.asset_class,
              im.name AS company_name, im.sector,
-             s.quantity * coalesce(st.close, et.close) AS value
+             -- CPP's own valuation FIRST. Marking these books with Atlas's NSE close
+             -- guaranteed the weights disagreed with the client's statement — a second
+             -- price source cannot reproduce the first, it can only diverge from it.
+             --
+             -- The Atlas close survives only as a fallback for snapshots taken before
+             -- cpp_value existed: cpp_holdings is current-state only, so there is no
+             -- historical CPP price to backfill an old snapshot with, and a historical
+             -- report rendering an empty book would be worse than one priced the way it
+             -- was priced at the time. Every snapshot from the sync onward is CPP-priced,
+             -- and maal_cpp_reconcile asserts the LATEST one fully is.
+             coalesce(s.cpp_value, s.quantity * coalesce(st.close, et.close)) AS value
       FROM atlas_foundation.maal_holding_snapshot s
       JOIN latest ON latest.a = s.as_of
       JOIN atlas_foundation.instrument_master im ON im.isin = s.isin
-      -- Prices live in two tables: stocks in ohlcv_stock (keyed by symbol), ETFs in
-      -- ohlcv_etf (keyed by TICKER — its isin column is mostly NULL). Reading only
-      -- ohlcv_stock silently dropped every ETF, which on Leaders is GOLDBEES,
+      -- Fallback prices live in two tables: stocks in ohlcv_stock (keyed by symbol),
+      -- ETFs in ohlcv_etf (keyed by TICKER — its isin column is mostly NULL). Reading
+      -- only ohlcv_stock silently dropped every ETF, which on Leaders is GOLDBEES,
       -- NIFTYBEES, SILVERBEES and HDFCSML250 — 43% of the book by weight.
       LEFT JOIN LATERAL (
         SELECT close FROM atlas_foundation.ohlcv_stock x
@@ -134,7 +144,7 @@ export async function getOpeningBook(code: MaalCode, before?: string): Promise<B
         -- CASH-class rows (LIQUIDBEES/LIQUIDCASE/LIQUIDETF) are cash, not positions.
         -- They belong in the cash line, never in the holdings list.
         AND s.asset_class <> 'CASH'
-        AND coalesce(st.close, et.close) IS NOT NULL
+        AND coalesce(s.cpp_value, s.quantity * coalesce(st.close, et.close)) IS NOT NULL
     )
     SELECT instrument_key, source_symbol, company_name, sector,
            value / nullif(sum(value) OVER (), 0) AS share

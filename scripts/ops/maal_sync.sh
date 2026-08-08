@@ -18,3 +18,8 @@ set -a; source .env; set +a
 # Non-fatal — a reconciliation failure must not stop tomorrow's position sync,
 # and the exit code above already gates the thing that matters.
 "$REPO/.venv/bin/python" scripts/ops/maal_pnl_reconcile.py || true
+
+# CPP reconciliation: catches a drifted figure at 12:00/22:00 rather than waiting for
+# the nightly gate. Non-fatal here for the same reason — atlas_daily runs it as a real
+# gate, and that is where a mismatch stops the board.
+"$REPO/.venv/bin/python" scripts/ops/maal_cpp_reconcile.py || true
