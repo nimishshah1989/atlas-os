@@ -23,7 +23,7 @@ holds only the sequence, the locked decisions, and the cross-project constraints
 | # | Project | Rationale for position |
 |---|---|---|
 | 1 | Stock universe 739 → 1,050 | Widest leverage; sets the universe every later project measures against |
-| 2 | Funds — all Regular/Growth: equity + hybrid + debt | The worst coverage number; ingestion-gated, not universe-gated |
+| 2 | Funds — all Regular/Growth: **equity + hybrid** | The worst coverage number; ingestion-gated, not universe-gated |
 | 3 | Contextual news → holdings | Independent, greenfield |
 | 4 | "Ask anything" NL layer | Benefits most from a wide, stable base |
 | 5 | Signal validation (IC / decile spread) | **Last.** Baseline gets frozen once, on the final universe |
@@ -60,10 +60,10 @@ everything else, so the history clock starts immediately.
 
 | Decision | Choice | Where |
 |---|---|---|
-| Stock universe rule | Index union kept whole ∪ top-N eligible non-index by median traded value; total 1,050 | P1 |
+| Stock universe rule | **One liquidity floor**: trailing 60-day median traded value ≥ ₹2.5 cr → ~1,271 names | P1 |
 | Universe history | Daily snapshot table, from day one | P1 |
-| Fund scope | All **Regular / Growth**: equity + hybrid + debt | P2 |
-| Debt/hybrid ranking | Ingest all, **build a debt-specific composite** | P2 |
+| Fund scope | All **Regular / Growth**: equity + hybrid. **Debt dropped** (FM, 2026-08-23) | P2 |
+| Hybrid ranking | Existing composite, ranked within category — no new methodology needed | P2 |
 | Validation shape | Nightly gate + `/admin` surface | P5 |
 | Validation failure mode | Baseline + ratchet — block regressions only | P5 |
 | Validation scope | Stocks first, engine written universe-agnostic | P5 |
@@ -80,25 +80,50 @@ everything else, so the history clock starts immediately.
   `analyze_earnings_call` / `analyze_red_flags` cover unstructured text Atlas has
   never ingested. That is genuinely new signal and a much smaller integration.
 - **Index-union + manual add list to reach 1,050.** Maximum control, silent rot.
+- **Eligibility gates on the stock universe** (OHLCV history, financials, filings).
+  Measured against the current 747 it would have evicted 94 — 82 of them recent
+  listings. It also duplicated `compute_composite()`'s coverage-adjusted weighting,
+  which already returns NULL for a lens with no inputs. Liquidity decides membership;
+  data sufficiency decides which lenses may speak, and that half already exists.
+- **A debt-fund composite.** Dropped with debt itself.
 - **Auto-demoting lens weights on IC decay.** A data outage looks identical to signal
   decay. Surface it; let the FM decide.
 
-## Known blocker — project 2 cannot be specced yet
+## Project 2 — unblocked by dropping debt
 
-The chosen debt composite needs yield-to-maturity, modified duration, credit-quality
-mix and maturity profile. **None exist in Atlas.** `ingest_fund_master.py` parses one
-field from that family (`ARF-NetExpenseRatio`); `de_mf_holdings` has no rating or
-maturity columns.
+An earlier revision chose "ingest all, build a debt-specific composite". That needed
+yield-to-maturity, modified duration, credit-quality mix and maturity profile — **none
+of which exist in Atlas**. `ingest_fund_master.py` parses one field from that family
+(`ARF-NetExpenseRatio`); `de_mf_holdings` has no rating or maturity columns. It would
+have opened with an open-ended discovery chunk.
 
-Project 2 therefore opens with a **discovery chunk**: dump the raw Morningstar MASTER
-response for a known debt scheme and inventory the available fields. Outcome decides
-whether the debt composite is (a) parse more fields, (b) a different Morningstar
-service, or (c) infeasible without a new source. No chunks past discovery until that
-is answered.
+**Debt is dropped (FM, 2026-08-23). That blocker is gone.** Hybrid needs no new
+methodology either:
+
+- `fund_rank_core.rank_in_category()` already ranks **within category**, so each hybrid
+  category forms its own peer group automatically. An aggressive hybrid is never
+  compared against a pure equity fund.
+- `fund_rank_core.composite()` uses the same coverage-adjusted renormalisation as
+  stocks — a NULL lens does not participate.
+
+So project 2 reduces to: widen the Morningstar MASTER universe to include hybrid, let
+NAV follow (mfapi.in already carries every AMFI scheme), and let category-relative
+ranking do its job.
+
+**Carry-forward caveat.** The composite's inputs (`v_tech`, `v_fund`, `v_flow`,
+`v_cat`) derive from NAV technicals plus look-through equity holdings. A
+debt-dominant hybrid has little look-through equity, so `v_fund` / `v_flow` will be
+thin or NULL and it will score mostly on NAV momentum. Coverage-adjusted weighting
+handles that honestly, but `lenses_active` must be surfaced on the funds board so an
+FM can see a two-lens score is not a six-lens score.
+
+**Separate, still real:** only **953 of 4,206** active schemes have any NAV at all and
+**441** have three years of current NAV. Widening the master does not fix that — there
+is an `mstar_id → amfi_code` mapping gap underneath. Size it before writing chunks.
 
 ## Specs
 
 - P1 — `2026-08-23-stock-universe-1050-design.md`
-- P2 — blocked on discovery (above)
+- P2 — unblocked; spec next
 - P3, P4 — not yet started
 - P5 — `2026-08-23-lens-signal-validation-design.md` (complete, shelved until P1–P4 land)
