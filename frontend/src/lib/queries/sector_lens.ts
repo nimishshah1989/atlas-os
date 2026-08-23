@@ -79,14 +79,10 @@ export async function getSectorStocks(sector: string): Promise<SectorStock[]> {
     WITH latest AS (
       SELECT max(date) d FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock'
     ),
+    -- cap comes from atlas_foundation.v_stock_cap (market-cap rank), NOT index
+    -- membership: under the liquidity-floor universe most names are in no index.
     cap AS (
-      SELECT instrument_id,
-        CASE WHEN bool_or(index_code='NIFTY 100') THEN 'large'
-             WHEN bool_or(index_code='NIFTY MIDCAP 150') THEN 'mid'
-             WHEN bool_or(index_code='NIFTY SMLCAP 250') THEN 'small' ELSE 'micro' END AS cap
-      FROM atlas_foundation.de_index_constituents
-      WHERE effective_to IS NULL AND index_code IN ('NIFTY 100','NIFTY MIDCAP 150','NIFTY SMLCAP 250')
-      GROUP BY instrument_id
+      SELECT instrument_id, cap FROM atlas_foundation.v_stock_cap
     ),
     liq AS (  -- ≈20-session avg traded value (₹ Cr)
       SELECT instrument_id, avg(close * volume) / 1e7 AS liq_cr
