@@ -65,8 +65,9 @@ and breaks historical comparison. 60 days is already what §3.3 declares.
 
 *Median, not mean* — one block deal must not promote an illiquid name.
 
-*Recomputed monthly*, not daily, so membership cannot thrash around the boundary
-intraweek.
+*Recomputed weekly* — `build_universe.py` already runs in `atlas_weekly.sh`, so this
+needs no scheduling change. Weekly re-evaluation of a 60-day median is not daily thrash:
+measured churn is ~5% per month, so ~1% per weekly run.
 
 ### Two one-line additions (FM to accept or drop)
 
