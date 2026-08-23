@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import re
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 
@@ -66,19 +67,49 @@ def _topval(html: str, label: str) -> float | None:
     return float(m.group(1).replace(",", "")) if m else None
 
 
+_gate = threading.Lock()
+_next_at = 0.0
+
+
+def _throttle(gap: float = 1.0) -> None:
+    """One request per `gap` seconds across every worker. Screener 429s on bursts
+    (4 workers tripped it within 5 requests); sequential-at-1/s stays 200."""
+    global _next_at
+    with _gate:
+        wait = _next_at - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        _next_at = time.monotonic() + gap
+
+
+def _fetch(url: str) -> requests.Response | None:
+    """Retry through 429s. Without this a throttled name is indistinguishable from
+    a name Screener does not carry, and gets silently recorded as a miss."""
+    s = _session()
+    for backoff in (0, 20, 60, 120):
+        if backoff:
+            time.sleep(backoff)
+        _throttle()
+        try:
+            r = s.get(url, timeout=25)
+        except requests.RequestException as e:
+            print(f"  {url}: {e}", flush=True)
+            continue
+        if r.status_code != 429:
+            return r
+    print(f"  {url}: still 429 after 4 tries", flush=True)
+    return None
+
+
 def _get(sym: str) -> str | None:
     """Consolidated first, standalone fallback. A company with no consolidated
     financials still serves 200 with the ratio block rendered but empty
     (`<span class="number"></span>`), so the guard has to be a successful parse —
     a `"Market Cap" in text` guard accepts that stub and never falls back."""
-    s = _session()
     for path in (f"company/{sym}/consolidated/", f"company/{sym}/"):
-        try:
-            r = s.get(f"https://www.screener.in/{path}", timeout=25)
-            if r.status_code == 200 and _topval(r.text, "Market Cap"):
-                return r.text
-        except Exception:
-            pass
+        r = _fetch(f"https://www.screener.in/{path}")
+        if r is not None and r.status_code == 200 and _topval(r.text, "Market Cap"):
+            return r.text
     return None
 
 
