@@ -11,8 +11,11 @@ setup:
 	uv sync --extra dev
 
 # Fast unit suite — no DB. Mirrors what CI/EC2 run.
+# tests/scripts holds unit tests for scripts/foundation modules (fund_rank_core,
+# universe_core, ...). It was omitted here and in ci.yml, so 38 tests — including the
+# fund-composite/frontend parity guard — never ran anywhere. Adding it costs 0.04s.
 test:
-	uv run --extra dev pytest tests/unit -m unit -q
+	uv run --extra dev pytest tests/unit tests/scripts -m unit -q
 
 # Integration tests hit the live DB (read-only / rollback-wrapped). Run on EC2
 # or locally with a direct (non-pooler) DB URL in .env.
