@@ -18,6 +18,15 @@ meaning when the universe stops being the indices.
 Ranked over ACTIVE stocks only: cap is a statement about position within Atlas's
 coverage, exactly as the index rule was.
 
+The cap itself is resolved by ISIN, not instrument_id, because market cap is an
+attribute of the SECURITY. An NSE symbol rename leaves instrument_master holding two
+rows for one security, and equity_marketcap keyed on instrument_id then carries the
+number on whichever ticker Screener still serves — usually NOT the one holding the
+OHLCV history that gets scored. Resolving here, freshest fetch wins, fixes that once
+for every consumer instead of asking each of them to work around it, and it needs no
+stored-data change. GUJGASLTD reads its ISIN's freshest cap, so it tracks GUJENERGY's
+refresh automatically rather than freezing at first fetch.
+
     python cap_cohort.py            # create or replace the view
     python cap_cohort.py --report   # create, then print cohort sizes
 """
@@ -36,13 +45,19 @@ LARGE_MAX, MID_MAX, SMALL_MAX = 100, 250, 500
 
 DDL = f"""
 CREATE OR REPLACE VIEW {M}.v_stock_cap AS
-WITH r AS (
-    SELECT im.instrument_id,
-           row_number() OVER (ORDER BY m.market_cap_cr DESC, im.symbol) AS mcap_rank
+WITH cap_by_isin AS (
+    SELECT DISTINCT ON (im.isin) im.isin, e.market_cap_cr
     FROM {M}.instrument_master im
-    JOIN {M}.equity_marketcap m ON m.instrument_id = im.instrument_id
+    JOIN {M}.equity_marketcap e ON e.instrument_id = im.instrument_id
+    WHERE im.asset_class = 'stock' AND im.isin IS NOT NULL AND e.market_cap_cr > 0
+    ORDER BY im.isin, e.fetched_at DESC NULLS LAST, im.symbol
+),
+r AS (
+    SELECT im.instrument_id,
+           row_number() OVER (ORDER BY c.market_cap_cr DESC, im.symbol) AS mcap_rank
+    FROM {M}.instrument_master im
+    JOIN cap_by_isin c ON c.isin = im.isin
     WHERE im.asset_class = 'stock' AND im.is_active
-      AND m.market_cap_cr IS NOT NULL AND m.market_cap_cr > 0
 )
 SELECT instrument_id,
        mcap_rank,
@@ -66,16 +81,20 @@ def build(report: bool = False) -> dict:
     """
     _db.exec_sql(DDL)
     uncovered = _db.read_df(
-        f"""SELECT im.symbol FROM {M}.instrument_master im
+        f"""SELECT im.symbol || CASE WHEN im.isin IS NULL THEN ' (no ISIN)'
+                                     ELSE ' (no market cap)' END AS why
+            FROM {M}.instrument_master im
             LEFT JOIN {M}.v_stock_cap v ON v.instrument_id = im.instrument_id
             WHERE im.asset_class = 'stock' AND im.is_active AND v.cap IS NULL
             ORDER BY im.symbol"""
-    )["symbol"].tolist()
+    )["why"].tolist()
     if uncovered:
         raise SystemExit(
-            f"cap_cohort: {len(uncovered)} active stocks have no market cap, so they are "
-            f"absent from v_stock_cap — they would fall through to 'micro' AND shift the "
-            f"rank cuts for every other name: {uncovered[:20]}. Re-run fetch_marketcap.py."
+            f"cap_cohort: {len(uncovered)} active stocks are absent from v_stock_cap — "
+            f"they would fall through to 'micro' AND shift the rank cuts for every other "
+            f"name: {uncovered[:20]}. 'no market cap' -> re-run fetch_marketcap.py; "
+            f"'no ISIN' -> the cap is resolved by ISIN and instrument_master must carry "
+            f"one for every stock (0 were missing when this was written)."
         )
     sizes = _db.read_df(
         f"""SELECT cap, count(*) n FROM {M}.v_stock_cap

@@ -199,3 +199,55 @@ def test_renamed_symbol_fill_leaves_no_isin_pair_half_capped() -> None:
         f"capless side would fall through to micro: {list(half['symbols'])} — "
         "run fetch_marketcap.fill_renamed_symbols()"
     )
+
+
+def test_both_rows_of_a_rename_pair_resolve_to_one_cap_and_one_tier() -> None:
+    """v_stock_cap resolves market cap by ISIN, so the two instrument_master rows an NSE
+    rename leaves behind must read the SAME number and land in the SAME tier.
+
+    This is the invariant that breaks if someone later "simplifies" the join back to
+    instrument_id: equity_marketcap carries the cap on whichever ticker Screener still
+    serves, which is usually NOT the one holding the OHLCV history that gets scored, so
+    the scored row would silently read a stale number or none at all.
+
+    Compares the cap the VIEW resolves for every duplicate-ISIN row — not the stored
+    equity_marketcap value, which genuinely differs across two of the four pairs
+    (AEROPLANE/AMIRCHAND, ASHIKA/ASHIKAG) because Screener serves both slugs and one
+    page is stale. Resolution is freshest-fetch-wins, so those collapse to one value
+    here even though the underlying rows still disagree.
+    """
+    split = _db.read_df(
+        """WITH cap_by_isin AS (
+               SELECT DISTINCT ON (im.isin) im.isin, e.market_cap_cr
+               FROM atlas_foundation.instrument_master im
+               JOIN atlas_foundation.equity_marketcap e USING (instrument_id)
+               WHERE im.asset_class='stock' AND im.isin IS NOT NULL AND e.market_cap_cr > 0
+               ORDER BY im.isin, e.fetched_at DESC NULLS LAST, im.symbol),
+           pairs AS (
+               SELECT im.isin, im.symbol, c.market_cap_cr
+               FROM atlas_foundation.instrument_master im
+               JOIN cap_by_isin c ON c.isin = im.isin
+               WHERE im.asset_class='stock' AND im.isin IN (
+                   SELECT isin FROM atlas_foundation.instrument_master
+                   WHERE asset_class='stock' AND isin IS NOT NULL
+                   GROUP BY isin HAVING count(*) > 1))
+           SELECT isin, string_agg(symbol, '/' ORDER BY symbol) AS symbols,
+                  count(DISTINCT market_cap_cr) AS distinct_caps
+           FROM pairs GROUP BY isin HAVING count(DISTINCT market_cap_cr) > 1"""
+    )
+    assert split.empty, (
+        "rename pairs whose two rows resolve to different caps — the view is joining "
+        f"equity_marketcap on instrument_id, not isin: {list(split['symbols'])}"
+    )
+    # Second arm: same security, one tier. Vacuous until Task 5 — no rename-pair row is
+    # active yet, so the view holds neither side. It arms itself exactly when the risk
+    # appears (a pair going active is also the duplicate-slot watch item for Task 5).
+    tiers = _db.read_df(
+        """SELECT im.isin, string_agg(im.symbol, '/' ORDER BY im.symbol) AS symbols,
+                  count(DISTINCT v.cap) AS distinct_tiers
+           FROM atlas_foundation.instrument_master im
+           JOIN atlas_foundation.v_stock_cap v USING (instrument_id)
+           WHERE im.asset_class='stock' AND im.isin IS NOT NULL
+           GROUP BY im.isin HAVING count(*) > 1 AND count(DISTINCT v.cap) > 1"""
+    )
+    assert tiers.empty, f"one security in two cap tiers: {list(tiers['symbols'])}"
