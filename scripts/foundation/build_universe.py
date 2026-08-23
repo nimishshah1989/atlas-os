@@ -23,11 +23,13 @@ import argparse
 import io
 import re
 import uuid
+from decimal import Decimal
 
 import _db
-import ingest_kite as ik
+import build_universe_snapshot as _snap
 import pandas as pd
 import requests
+import universe_core as U
 
 _NS = uuid.UUID("6f9b1f6e-0000-4000-8000-a71a5000c0de")  # fixed namespace for uuid5
 EQUITY_L = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
@@ -93,7 +95,37 @@ def fetch_etf_list() -> dict[str, tuple[str, object]]:
     }
 
 
+def liquid_universe(floor_inr: Decimal | None = None) -> set[str]:
+    """instrument_ids in Atlas coverage: ADV over the floor, or held in a book.
+
+    Composes the shipped rule — it does not restate it. The ADV SQL lives in
+    build_universe_snapshot.adv_frame() and the membership test in
+    universe_core.members(); a second copy of either is how ten copies of the cap rule
+    happened.
+
+    floor_inr defaults to atlas_thresholds.liquidity_min_traded_value_inr. It is a
+    parameter only so tests can prove the threshold drives the rule (a stricter floor
+    must yield a strict subset) — production never passes it.
+    """
+    as_of = _snap.snapshot_date()
+    if as_of is None:
+        raise RuntimeError("no atlas_foundation.ohlcv_stock rows at or before the cutoff")
+    adv = _snap.adv_frame(
+        as_of,
+        int(_snap.threshold(U.THRESHOLD_KEY_MIN_OBS)),
+        int(_snap.threshold(U.THRESHOLD_KEY_RECENCY)),
+    )
+    floor = _snap.threshold(U.THRESHOLD_KEY) if floor_inr is None else floor_inr
+    return U.members(adv, floor, _snap.held_ids(as_of))
+
+
 def build(dry_run: bool = False) -> dict:
+    # Imported here, not at module scope: ingest_kite pulls in the talib native
+    # extension, which is installed on the box but is not a declared dependency — a
+    # module-scope import makes liquid_universe() unimportable (and so untestable)
+    # anywhere talib is absent. Single call site, two lines below.
+    import ingest_kite as ik
+
     eq = fetch_equity_list()
     etf_ident = fetch_etf_list()
     eq_syms = set(eq["symbol"])
@@ -115,17 +147,18 @@ def build(dry_run: bool = False) -> dict:
     )
     de_id = {str(r.symbol).strip(): str(r.id) for r in de.itertuples()}
 
-    # Coverage universe = NIFTY 500 ∪ NIFTY MICROCAP250 = 750 (NSE's Nifty Total Market
-    # construction; the two indices are disjoint). is_active means "in Atlas coverage",
-    # NOT "tradeable on NSE" — it scopes the data-integrity gate's "every active stock
-    # has a sector" / "≤21 canonical sectors" checks to the board universe.
-    # Widened from 500 to 750 (FM, 2026-07-30): the model portfolios hold microcaps
-    # outside the 500 (JSFB, LLOYDSENGG), so 500 could not represent the desk's book.
-    coverage = _db.read_df(
-        "select distinct instrument_id from atlas_foundation.de_index_constituents "
-        "where index_code in ('NIFTY 500', 'NIFTY MICROCAP250') and effective_to is null"
-    )
-    n500_ids = {str(x).strip() for x in coverage["instrument_id"]}
+    # Coverage universe = ONE liquidity floor: trailing 60-day MEDIAN daily traded value
+    # >= atlas_thresholds.liquidity_min_traded_value_inr (methodology §3.3), plus any
+    # stock held in a portfolio book. is_active means "in Atlas coverage", NOT
+    # "tradeable on NSE" — it scopes the data-integrity gate's "every active stock has a
+    # sector" / "≤21 canonical sectors" checks to the board universe.
+    #
+    # Was NIFTY 500 ∪ NIFTY MICROCAP250 = 750, which IS NSE's Nifty Total Market — the
+    # largest index that exists, so the index rule could never exceed 750 (FM, 2026-08-23).
+    # Data sufficiency is NOT gated here: compute_composite() already does a
+    # coverage-adjusted weighted average, so a liquid name with no financials gets a
+    # NULL fundamental lens rather than a fabricated score (rule #0).
+    coverage_ids = liquid_universe()
 
     rows = []
     # stocks
@@ -142,7 +175,7 @@ def build(dry_run: bool = False) -> dict:
                 r.listing_date,
                 cash_tok.get(r.symbol),
                 "NSE",
-                iid in n500_ids,
+                iid in coverage_ids,
                 "NSE_EQUITY_L",
             )
         )
@@ -206,7 +239,7 @@ def build(dry_run: bool = False) -> dict:
     df = pd.DataFrame(rows, columns=cols).drop_duplicates("instrument_id")
 
     # Before/after guardrail: prove the scored universe (active stocks) is stable before
-    # the write. Membership can legitimately drift on an NSE NIFTY-500 reconstitution;
+    # the write. Membership can legitimately drift as names cross the liquidity floor;
     # the diff surfaces exactly which symbols flip so a change is never silent.
     cur_active = set(
         _db.read_df(
