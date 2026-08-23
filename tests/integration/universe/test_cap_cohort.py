@@ -12,8 +12,10 @@ only meaningful while is_active is still the index-derived 747.
 from __future__ import annotations
 
 import sys
+from collections import Counter
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[3] / "scripts" / "foundation"
@@ -44,7 +46,16 @@ def test_view_exists_and_covers_every_active_stock() -> None:
 _TIER_ORDER = {"large": 0, "mid": 1, "small": 2, "micro": 3}
 
 
-def _old_vs_new():
+def _old_vs_new() -> pd.DataFrame:
+    """Old index label vs new rank label, per active stock.
+
+    Skips once the universe has flipped. The two tests below are ONE-WAY MIGRATION
+    GATES: they only mean something while is_active is still the index-derived 747.
+    Task 5 takes it to ~1,207 with every new name outside all NSE indices, so old_cap
+    becomes 'micro' for ~460 names at once and the symmetry check blows apart — through
+    no fault of the view. Skipping is the honest outcome; the alternative is that
+    whoever hits the failure loosens the threshold or deletes the tier-skip audit.
+    """
     df = _db.read_df(
         """WITH old AS (
                SELECT instrument_id,
@@ -64,6 +75,11 @@ def _old_vs_new():
            LEFT JOIN old ON old.instrument_id = im.instrument_id
            WHERE im.asset_class='stock' AND im.is_active"""
     )
+    if len(df) > 800:
+        pytest.skip(
+            f"universe has flipped ({len(df)} active stocks) — this was a one-way "
+            "migration gate against the index-derived 747 and no longer applies"
+        )
     assert len(df) > 700, "expected the current active universe"
     return df
 
@@ -71,11 +87,13 @@ def _old_vs_new():
 def test_disagreements_are_boundary_drift_not_bias() -> None:
     """Equal numbers must cross each boundary in each direction. Systematic one-way
     flow would mean the market-cap basis is wrong, not merely out of phase."""
-    df = _old_vs_new()
-    d = df[df["old_cap"] != df["new_cap"]]
+    flow = Counter(
+        (r["old_cap"], r["new_cap"])
+        for r in _old_vs_new().to_dict("records")
+        if r["old_cap"] != r["new_cap"]
+    )
     for a, b in (("large", "mid"), ("mid", "small"), ("small", "micro")):
-        out = len(d[(d["old_cap"] == a) & (d["new_cap"] == b)])
-        back = len(d[(d["old_cap"] == b) & (d["new_cap"] == a)])
+        out, back = flow[(a, b)], flow[(b, a)]
         assert abs(out - back) <= max(5, 0.25 * max(out, back, 1)), (
             f"asymmetric flow across {a}/{b}: {out} out vs {back} back — "
             "that is bias, not reconstitution lag"
@@ -93,19 +111,28 @@ def test_every_tier_skip_is_individually_justified() -> None:
       index label is stale.
     """
     justified = {"CUPID"}
-    df = _old_vs_new()
-    d = df[df["old_cap"] != df["new_cap"]].copy()
-    d["jump"] = (d["new_cap"].map(_TIER_ORDER) - d["old_cap"].map(_TIER_ORDER)).abs()
-    skips = d[(d["jump"] > 1) & (~d["symbol"].isin(justified))]
-    assert skips.empty, (
+    skips = [
+        f"{r['symbol']}: {r['old_cap']} -> {r['new_cap']} "
+        f"(rank {r['mcap_rank']}, {r['market_cap_cr']} cr)"
+        for r in _old_vs_new().to_dict("records")
+        if r["symbol"] not in justified
+        and abs(_TIER_ORDER[r["new_cap"]] - _TIER_ORDER[r["old_cap"]]) > 1
+    ]
+    assert not skips, (
         "unexplained tier skips — verify each market cap against an external source "
-        f"before accepting:\n{skips.to_string(index=False)}"
+        "before accepting:\n" + "\n".join(skips)
     )
 
 
 def test_no_universe_member_is_missing_a_market_cap() -> None:
     """A NULL cap must never fall through to 'micro' — that would drop a real mid-cap
-    into the micro cohort and distort its deciles."""
+    into the micro cohort and distort its deciles.
+
+    Checks equity_marketcap rather than v_stock_cap.cap because the view ranks ACTIVE
+    stocks only, and today's universe members are mostly not active yet — the view-level
+    check would fail on ~250 names for a reason that is not a defect. Tighten this to
+    `v.cap IS NULL` once Task 5 lands and is_active IS the universe.
+    """
     missing = _db.read_df(
         """SELECT im.symbol FROM atlas_foundation.atlas_universe_snapshot s
            JOIN atlas_foundation.instrument_master im USING (instrument_id)
@@ -144,3 +171,31 @@ def test_rank_is_strictly_ordered_by_market_cap() -> None:
     )
     assert list(top["mcap_rank"]) == [1, 2, 3]
     assert top["market_cap_cr"].is_monotonic_decreasing
+
+
+def test_renamed_symbol_fill_leaves_no_isin_pair_half_capped() -> None:
+    """The post-condition of fetch_marketcap.fill_renamed_symbols(): if one row of an
+    ISIN pair has a cap, its twin must too. Asserting non-NULL alone (as the test above
+    does) passes just as happily if the fill copies the wrong twin or writes 0.
+
+    Deliberately NOT asserting the two sides AGREE. Two pairs carry genuinely different
+    Screener values — AEROPLANE 2,075 vs AMIRCHAND 1,367, and ASHIKA 2,934 vs ASHIKAG
+    3,225 — because Screener serves both slugs of a renamed company and one page is
+    stale. That is a pre-existing ingest problem, not something the fill caused or can
+    fix (it never overwrites a fetched value), and it is a Task 5 watch item.
+    """
+    half = _db.read_df(
+        """SELECT im.isin, string_agg(im.symbol, '/' ORDER BY im.symbol) AS symbols
+           FROM atlas_foundation.instrument_master im
+           LEFT JOIN atlas_foundation.equity_marketcap m USING (instrument_id)
+           WHERE im.asset_class = 'stock' AND im.isin IS NOT NULL
+           GROUP BY im.isin
+           HAVING count(*) > 1
+              AND count(*) FILTER (WHERE m.market_cap_cr IS NULL) > 0
+              AND count(*) FILTER (WHERE m.market_cap_cr IS NOT NULL) > 0"""
+    )
+    assert half.empty, (
+        "one side of an ISIN pair has a market cap and its twin does not, so the "
+        f"capless side would fall through to micro: {list(half['symbols'])} — "
+        "run fetch_marketcap.fill_renamed_symbols()"
+    )

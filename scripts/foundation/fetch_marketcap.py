@@ -5,7 +5,8 @@ The weighting source for roll-ups (D24/D21a follow-up): every in-DB candidate fa
 (de_index_constituents weights NULL, tv_metrics.market_cap inconsistent, shares_outstanding
 empty). Screener's Market Cap is reliable (RELIANCE ₹17.9L Cr, TCS ₹7.7L Cr — verified) and
 we already have the warm-session fetcher. Shares = market_cap / our OHLCV close; free-float
-cap = shares × price × (1 − promoter%). Rate-limited, resumable (skips already-fetched).
+cap = shares × price × (1 − promoter%). Rate-limited, and resumable within a run —
+but a cap already fetched is re-scraped once it passes REFRESH_DAYS (see run()).
 
     python fetch_marketcap.py            # all stocks
     python fetch_marketcap.py --limit 50 # smoke test
@@ -52,6 +53,10 @@ def _session() -> requests.Session:
 
 M = "atlas_foundation"
 TGT = f"{M}.equity_marketcap"
+
+# Re-scrape a cap older than this. Data-hygiene cadence, not methodology: caps drift
+# continuously, and ~80-280 re-scrapes a week at ~1 req/s costs a few minutes.
+REFRESH_DAYS = 30
 
 
 def ensure_table() -> None:
@@ -152,7 +157,7 @@ def fill_renamed_symbols() -> list[str]:
         LEFT JOIN {TGT} own ON own.instrument_id = gap.instrument_id
         WHERE gap.asset_class = 'stock' AND gap.isin IS NOT NULL
           AND own.market_cap_cr IS NULL
-        ORDER BY gap.instrument_id, src.fetched_at DESC
+        ORDER BY gap.instrument_id, src.fetched_at DESC NULLS LAST
         ON CONFLICT (instrument_id) DO UPDATE
           SET market_cap_cr = EXCLUDED.market_cap_cr,
               face_value    = EXCLUDED.face_value,
@@ -165,8 +170,17 @@ def fill_renamed_symbols() -> list[str]:
 
 def run(limit: int | None, workers: int = 6) -> None:
     ensure_table()
+    # Skip only caps fetched RECENTLY. Resume-only (skip anything non-null) froze every
+    # cap at whatever it was on first fetch: 280 rows were already >30 days old, 146 of
+    # them prospective universe members. That was survivable while market cap was one
+    # weighting input among many; it is not now that cap RANK decides which cohort a
+    # stock's deciles and Leader badge are computed inside. A NULL fetched_at re-fetches
+    # (NULL > x is NULL, so the row never counts as done).
     done = set(
-        _db.read_df(f"SELECT symbol FROM {TGT} WHERE market_cap_cr IS NOT NULL")["symbol"].tolist()
+        _db.read_df(
+            f"SELECT symbol FROM {TGT} WHERE market_cap_cr IS NOT NULL "
+            f"AND fetched_at > now() - interval '{REFRESH_DAYS} days'"
+        )["symbol"].tolist()
     )
     uni = _db.read_df(
         f"SELECT instrument_id, symbol FROM {M}.instrument_master "

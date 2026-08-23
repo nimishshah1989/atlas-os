@@ -55,7 +55,28 @@ FROM r
 
 
 def build(report: bool = False) -> dict:
+    """Create/replace the view, then fail loudly if it does not cover every active stock.
+
+    Partial coverage is the one failure mode that produces no error on its own and
+    changes what every cohort MEANS. An uncovered name gets no row at all, so a
+    consumer's LEFT JOIN defaults it to 'micro' — and worse, the names that remain get
+    re-ranked, so the 100/250/500 cuts land somewhere else entirely. At 300 covered
+    stocks instead of 747 nothing is micro and a genuine small-cap is labelled 'large'.
+    Silence there would defeat the point of centralising the rule.
+    """
     _db.exec_sql(DDL)
+    uncovered = _db.read_df(
+        f"""SELECT im.symbol FROM {M}.instrument_master im
+            LEFT JOIN {M}.v_stock_cap v ON v.instrument_id = im.instrument_id
+            WHERE im.asset_class = 'stock' AND im.is_active AND v.cap IS NULL
+            ORDER BY im.symbol"""
+    )["symbol"].tolist()
+    if uncovered:
+        raise SystemExit(
+            f"cap_cohort: {len(uncovered)} active stocks have no market cap, so they are "
+            f"absent from v_stock_cap — they would fall through to 'micro' AND shift the "
+            f"rank cuts for every other name: {uncovered[:20]}. Re-run fetch_marketcap.py."
+        )
     sizes = _db.read_df(
         f"""SELECT cap, count(*) n FROM {M}.v_stock_cap
             GROUP BY 1 ORDER BY min(mcap_rank)"""
@@ -70,4 +91,4 @@ def build(report: bool = False) -> dict:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--report", action="store_true", help="print cohort sizes")
-    print(build(report=ap.parse_args().report))
+    build(report=ap.parse_args().report)
