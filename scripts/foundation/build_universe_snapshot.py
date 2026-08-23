@@ -11,14 +11,16 @@ Writes one row per stock per run, whether or not it is in the universe, with the
 that produced the decision — so a past membership call can be re-derived, not just
 looked up.
 
-    python build_universe_snapshot.py            # append today
+    python build_universe_snapshot.py            # append the latest trading day
     python build_universe_snapshot.py --dry-run  # compute + report, no write
+    python build_universe_snapshot.py --as-of 2026-08-18   # rebuild one past day
 """
 
 from __future__ import annotations
 
 import argparse
 import datetime as dt
+from decimal import Decimal
 
 import _db
 import pandas as pd
@@ -34,7 +36,6 @@ def ensure_table() -> None:
         instrument_id uuid NOT NULL,
         in_universe boolean NOT NULL,
         adv_median_60d numeric(20,4),
-        liquidity_rank integer,
         floor_inr numeric(18,6) NOT NULL,
         computed_at timestamptz NOT NULL DEFAULT now(),
         PRIMARY KEY (date, instrument_id))""")
@@ -43,7 +44,17 @@ def ensure_table() -> None:
     )
 
 
-def snapshot_date() -> dt.date | None:
+def threshold(key: str) -> Decimal:
+    v = _db.scalar(
+        f"SELECT threshold_value FROM {M}.atlas_thresholds WHERE threshold_key = :k AND is_active",
+        {"k": key},
+    )
+    if v is None:
+        raise RuntimeError(f"{key} missing from {M}.atlas_thresholds")
+    return v
+
+
+def snapshot_date(cutoff: dt.date | None = None) -> dt.date | None:
     """The trading day this snapshot describes.
 
     eod_cutoff() is an upper BOUND, not a trading date — it returns weekends and
@@ -55,17 +66,29 @@ def snapshot_date() -> dt.date | None:
     instead a no-op upsert over Friday's row.
     """
     return _db.scalar(
-        f"SELECT max(date) FROM {M}.ohlcv_stock WHERE date <= :c", {"c": _db.eod_cutoff()}
+        f"SELECT max(date) FROM {M}.ohlcv_stock WHERE date <= :c",
+        {"c": cutoff or _db.eod_cutoff()},
     )
 
 
-def adv_frame() -> pd.DataFrame:
+def adv_frame(cutoff: dt.date, min_obs: int) -> pd.DataFrame:
     """One row per stock: trailing-60-trading-day MEDIAN traded value, in rupees.
 
-    LEFT JOIN, so a stock with no recent trading gets adv_median_60d = NULL — "no
-    signal", never 0. The window is the most recent 60 DISTINCT trading dates at or
-    before the EOD cutoff, not 60 calendar days, so holidays and long weekends cannot
-    shorten it and today's partial in-session candle can never enter it.
+    Traded value is `close * volume` — the raw close, not close_adj. volume has no
+    adjusted twin, so close_adj * volume is neither actual rupees transacted nor a
+    consistently adjusted series: after a split the adjusted close drops by the split
+    factor while volume does not, and the name's traded value would collapse for 60
+    sessions for a reason that has nothing to do with liquidity.
+
+    A median needs a middle, so a name with fewer than `min_obs` traded sessions in
+    the window — or whose last print is older than the window's final few dates — gets
+    adv_median_60d = NULL. NULL is "no signal", never 0 and never "low": members()
+    already excludes it, so the guard needs no second code path. The LEFT JOIN then
+    keeps a row for every stock regardless.
+
+    The window is the most recent 60 DISTINCT trading dates at or before `cutoff`, so
+    holidays and long weekends cannot shorten it and today's partial in-session candle
+    can never enter it.
     """
     return _db.read_df(
         f"""
@@ -75,78 +98,86 @@ def adv_frame() -> pd.DataFrame:
               AND date > (CAST(:cutoff AS date) - INTERVAL '{U.LOOKBACK_CALENDAR_DAYS} days')
             ORDER BY date DESC LIMIT {U.LOOKBACK_TRADING_DAYS}
         ),
+        recent AS (
+            SELECT date FROM d ORDER BY date DESC LIMIT {U.RECENCY_TRADING_DAYS}
+        ),
         liq AS (
             SELECT instrument_id,
-                   percentile_cont(0.5) WITHIN GROUP (ORDER BY close_adj * volume)::numeric
+                   percentile_cont(0.5) WITHIN GROUP (ORDER BY close * volume)::numeric
                        AS adv_median_60d
             FROM {M}.ohlcv_stock
             WHERE date IN (SELECT date FROM d)
-              AND close_adj IS NOT NULL AND volume IS NOT NULL
+              AND close IS NOT NULL AND volume IS NOT NULL
             GROUP BY instrument_id
+            HAVING count(*) >= :min_obs
+               AND max(date) IN (SELECT date FROM recent)
         )
         SELECT im.instrument_id::text AS instrument_id, im.symbol, liq.adv_median_60d
         FROM {M}.instrument_master im
         LEFT JOIN liq ON liq.instrument_id = im.instrument_id
         WHERE im.asset_class = 'stock'
         """,
-        {"cutoff": _db.eod_cutoff()},
+        {"cutoff": cutoff, "min_obs": min_obs},
     )
 
 
 def held_ids() -> frozenset[str]:
-    """instrument_ids with any trade in a portfolio book.
+    """instrument_ids CURRENTLY held in a portfolio book — net open position > 0.
 
-    portfolio_trades.instrument_key holds the instrument_id UUID as text — NOT the
-    symbol, despite the name. Joining it against instrument_master.symbol matches zero
-    rows, which silently voids the whole retention guarantee, so the join goes through
-    instrument_id. Still joined (rather than read straight off the trade) to confirm
-    the key is a live stock instrument and to keep etf/fund books out.
+    Not "ever traded": the clause exists so a live position cannot silently lose its
+    conviction score, and an exited position has no score to lose. Ever-traded turns a
+    safety valve into a ratchet that only grows (654 ever-traded against 150 actually
+    held, of which 504 are fully exited).
+
+    Netting is per (portfolio_id, instrument_key) — netting across books would let one
+    book's sell cancel another's buy. portfolio_trades.instrument_key holds the
+    instrument_id UUID as text, NOT the symbol despite the name; joining it against
+    instrument_master.symbol matches zero rows and silently voids the whole guarantee.
     """
     df = _db.read_df(
-        f"""SELECT DISTINCT im.instrument_id::text AS instrument_id
-            FROM {M}.portfolio_trades pt
+        f"""WITH net AS (
+                SELECT portfolio_id, instrument_key,
+                       SUM(CASE WHEN side = 'buy' THEN qty ELSE -qty END) AS net_qty
+                FROM {M}.portfolio_trades
+                WHERE asset_class = 'stock'
+                GROUP BY portfolio_id, instrument_key
+            )
+            SELECT DISTINCT im.instrument_id::text AS instrument_id
+            FROM net
             JOIN {M}.instrument_master im
-              ON im.instrument_id::text = pt.instrument_key AND im.asset_class = 'stock'"""
+              ON im.instrument_id::text = net.instrument_key AND im.asset_class = 'stock'
+            WHERE net.net_qty > 0"""
     )
     return frozenset(df["instrument_id"].tolist())
 
 
-def run(dry_run: bool = False) -> dict:
-    ensure_table()
-    floor = _db.scalar(
-        f"SELECT threshold_value FROM {M}.atlas_thresholds WHERE threshold_key = :k AND is_active",
-        {"k": U.THRESHOLD_KEY},
-    )
-    if floor is None:
-        raise RuntimeError(f"{U.THRESHOLD_KEY} missing from {M}.atlas_thresholds")
-    as_of = snapshot_date()
+def run(dry_run: bool = False, as_of: dt.date | None = None) -> dict:
+    floor = threshold(U.THRESHOLD_KEY)
+    min_obs = int(threshold(U.THRESHOLD_KEY_MIN_OBS))
+    as_of = snapshot_date(as_of)
     if as_of is None:
-        raise RuntimeError(f"no {M}.ohlcv_stock rows at or before {_db.eod_cutoff()}")
+        raise RuntimeError(f"no {M}.ohlcv_stock rows at or before the cutoff")
 
-    adv = adv_frame()
-    held = held_ids()
-    inside = U.members(adv, floor, held)
+    adv = adv_frame(as_of, min_obs)
+    inside = U.members(adv, floor, held_ids())
 
     adv["in_universe"] = adv["instrument_id"].isin(list(inside))
-    adv["liquidity_rank"] = (
-        pd.Series(pd.to_numeric(adv["adv_median_60d"], errors="coerce"))
-        .rank(ascending=False, method="first")
-        .astype("Int64")
-    )
     adv["floor_inr"] = floor
     adv["date"] = as_of
+    adv["computed_at"] = pd.Timestamp.now(tz="Asia/Kolkata")
 
     n_in = int(adv["in_universe"].sum())
     print(
         f"  universe: {n_in} / {len(adv)} stocks at floor "
-        f"₹{float(floor) / 1e7:.2f} cr, as of {as_of}"
+        f"₹{float(floor) / 1e7:.2f} cr, min {min_obs} obs, as of {as_of}"
     )
 
     if dry_run:
         print("  DRY RUN — no write.")
         return {"written": 0, "dry_run": True, "in_universe": n_in, "date": as_of}
 
-    cols = ["date", "instrument_id", "in_universe", "adv_median_60d", "liquidity_rank", "floor_inr"]
+    ensure_table()
+    cols = ["date", "instrument_id", "in_universe", "adv_median_60d", "floor_inr", "computed_at"]
     n = _db.upsert_df(TGT, adv.loc[:, cols], ["date", "instrument_id"])
     return {"written": n, "in_universe": n_in, "date": as_of}
 
@@ -154,4 +185,11 @@ def run(dry_run: bool = False) -> dict:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true", help="compute + report, no write")
-    print(run(dry_run=ap.parse_args().dry_run))
+    ap.add_argument(
+        "--as-of",
+        type=dt.date.fromisoformat,
+        default=None,
+        help="rebuild one past day (YYYY-MM-DD)",
+    )
+    a = ap.parse_args()
+    print(run(dry_run=a.dry_run, as_of=a.as_of))

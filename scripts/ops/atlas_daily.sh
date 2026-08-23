@@ -91,6 +91,10 @@ step "desk_run"                  $PY scripts/foundation/desk_run.py
 # being wrong. Idempotent and ~2s, so running it again here costs nothing.
 step "maal_sync"                 $PY scripts/foundation/sync_maal_books.py
 
+# Universe membership journal. step, not gate: a missed snapshot is a gap in history,
+# not a reason to withhold a correct board. Promote to gate() after a clean month.
+step "universe_snapshot" $PY scripts/foundation/build_universe_snapshot.py
+
 # 3. GATES (assert on REAL produced output — rule #0). Deploy only if ALL pass.
 # Run gates DIRECTLY (not via step): step() records a failure but always returns 0,
 # so `step ... || GATE_OK=0` never fired — a failed gate could still deploy. And
@@ -111,9 +115,6 @@ gate "validate_lenses_A" $PY scripts/foundation/validate_lenses.py --check A
 gate "validate_lenses_B" $PY scripts/foundation/validate_lenses.py --check B
 gate "validate_lenses_C" $PY scripts/foundation/validate_lenses.py --check C
 gate "freshness_guard"   $PY scripts/ops/freshness_guard.py --eod "$EOD"
-# Universe membership journal. step, not gate: a missed snapshot is a gap in history,
-# not a reason to withhold a correct board. Promote to gate() after a clean month.
-step "universe_snapshot" $PY scripts/foundation/build_universe_snapshot.py
 # Every MaaL figure the board displays, compared field-for-field against cpp_risk_metrics
 # in the client portal's own database. gate(), not step(): these three books belong to
 # real clients, and a number Atlas invented for one of them is the single worst thing this

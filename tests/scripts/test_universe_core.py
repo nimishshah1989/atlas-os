@@ -65,7 +65,24 @@ def test_a_five_crore_floor_is_stricter_than_two_and_a_half() -> None:
 
 def test_held_names_stay_in_regardless_of_liquidity() -> None:
     got = U.members(REAL_ADV, floor_inr=FLOOR_2P5CR, held_ids=frozenset({"d"}))
-    assert "d" in got, "a name held in a portfolio book must never lose its score"
+    assert "d" in got, "a name currently held in a portfolio book must never lose its score"
+
+
+def test_a_value_exactly_at_the_floor_passes() -> None:
+    """The rule is >=, not >. ORIENTCEM's real ADV used as its own floor must pass —
+    a name is excluded for being BELOW the floor, never for merely reaching it."""
+    exactly = Decimal("26252683.66")  # ORIENTCEM's measured ADV, to the paisa
+    got = U.members(REAL_ADV, floor_inr=exactly, held_ids=frozenset())
+    assert "b" in got, "a name sitting exactly on the floor must be in the universe"
+    assert got == {"a", "b"}
+
+
+def test_empty_frame_yields_only_the_held_names() -> None:
+    """No ADV rows at all (a fresh window, an ingestion outage) must not raise and must
+    not invent members — the held names, and nothing else."""
+    empty = REAL_ADV.iloc[0:0]
+    assert U.members(empty, floor_inr=FLOOR_2P5CR, held_ids=frozenset()) == set()
+    assert U.members(empty, floor_inr=FLOOR_2P5CR, held_ids=frozenset({"d"})) == {"d"}
 
 
 def test_null_adv_is_excluded_never_treated_as_zero_or_passing() -> None:
@@ -78,3 +95,11 @@ def test_null_adv_is_excluded_never_treated_as_zero_or_passing() -> None:
     )
     got = U.members(with_null, floor_inr=FLOOR_2P5CR, held_ids=frozenset())
     assert "e" not in got, "a NULL ADV means no signal — it must not pass the floor"
+
+
+def test_a_thin_name_is_null_not_low_so_it_cannot_be_rescued_by_a_lower_floor() -> None:
+    """Below the minimum session count the SQL emits NULL, not a small number. That
+    distinction is the whole guard: a 2-print median can be enormous, so if it were
+    stored as a value rather than NULL it would sail over any floor."""
+    thin = pd.DataFrame([{"instrument_id": "f", "symbol": "THIN", "adv_median_60d": None}])
+    assert U.members(thin, floor_inr=Decimal("1"), held_ids=frozenset()) == set()
