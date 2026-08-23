@@ -1,6 +1,6 @@
 // ETFDetailV4 — the v4 ETF detail page (behind LENS_V4). Lens-first, native atlas_foundation.
 // An ETF is a holdings-weighted roll-up of the stock atom (D26/D27): the HEADLINE is
-// LEADERSHIP-BREADTH (% of holdings weight that are top-decile leaders in ≥2 conviction lenses),
+// LEADERSHIP-BREADTH (% of holdings weight that are leaders — top-decile composite in cap cohort),
 // NOT a composite. The 6-lens vector + look-through are a TRANSPARENCY view of what's held and
 // how it scores — descriptive, explicitly NOT positioned as an outperformance predictor.
 import Link from 'next/link'
@@ -28,7 +28,7 @@ const HOLDING_CAP = 50
 const decileStyle = (d: number | null) => ({ color: d == null ? 'var(--color-txt-3)' : decileColor(d) })
 
 const leadText = (lead: number) =>
-  lead >= 2 ? 'text-sig-pos' : lead === 1 ? 'text-sig-warn' : 'text-txt-3'
+  lead >= 1 ? 'text-sig-pos' : 'text-txt-3'  // leader = top-decile composite (0/1)
 
 const pctText = (v: number | null) =>
   v == null ? 'text-txt-3' : v >= 0 ? 'text-sig-pos' : 'text-sig-neg'
@@ -67,7 +67,7 @@ function HoldingsTable({ holdings }: { holdings: EtfHolding[] }) {
               <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={decileStyle(h.d_cat)}>{h.d_cat ?? '—'}</td>
               <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={decileStyle(h.d_flow)}>{h.d_flow ?? '—'}</td>
               <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={decileStyle(h.d_val)}>{h.d_val ?? '—'}</td>
-              <td className={`px-2 py-1.5 text-right font-num text-[12px] tabular-nums ${leadText(h.lead)}`}>{h.lead}/2</td>
+              <td className={`px-2 py-1.5 text-right font-num text-[12px] tabular-nums ${leadText(h.lead)}`}>{h.lead >= 1 ? 'Leader' : '—'}</td>
               <td className={`px-2 py-1.5 text-right font-num text-[12px] tabular-nums ${pctText(h.rs_3m)}`}>{fmtRs(h.rs_3m)}</td>
             </tr>
           ))}
@@ -130,7 +130,7 @@ export async function ETFDetailV4({ fcode }: { fcode: string }) {
               label="Leadership-breadth"
               value={breadthPct}
               tone="pos"
-              sub={`${etf.n_leaders} of ${etf.n_holdings} holdings lead ≥2 lenses`}
+              sub={`${etf.n_leaders} of ${etf.n_holdings} holdings are leaders`}
             />
           </div>
         </div>

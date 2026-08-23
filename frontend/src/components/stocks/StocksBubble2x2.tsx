@@ -27,13 +27,13 @@ export function StocksBubble2x2({ stocks }: { stocks: StockListRow[] }) {
   const liqVals = scored.map((s) => s.liq_cr).filter((v): v is number => v != null)
   const liqFloor = liqVals.length ? Math.min(...liqVals) : 1
 
-  // Leadership is an integer 0–4, so all ~500 stocks would stack onto 5 lines and hide each other.
-  // Spread each within a ±0.32 band by a DETERMINISTIC per-symbol offset (stable across rerenders),
-  // so every stock is a visible dot. The tooltip still shows the exact lead count.
+  // The leader flag is 0/1, so all ~500 stocks would stack onto two lines and hide each other.
+  // Spread each within a ±0.28 band by a DETERMINISTIC per-symbol offset (stable across rerenders,
+  // inside the axis domain), so every stock is a visible dot. The tooltip still names the flag.
   const jitter = (sym: string): number => {
     let h = 0
     for (let i = 0; i < sym.length; i++) h = (h * 31 + sym.charCodeAt(i)) >>> 0
-    return ((h % 1000) / 1000 - 0.5) * 0.64
+    return ((h % 1000) / 1000 - 0.5) * 0.56
   }
 
   const data: Pt[] = scored.map((s) => {
@@ -57,11 +57,11 @@ export function StocksBubble2x2({ stocks }: { stocks: StockListRow[] }) {
           <CartesianGrid stroke={grid} />
           <XAxis type="number" dataKey="x" domain={[0.5, 10.5]} tick={{ fontSize: 10, fill: tick }}
             label={{ value: 'Strength (avg decile)', position: 'bottom', fontSize: 11, fill: label }} />
-          <YAxis type="number" dataKey="y" domain={[-0.3, 2.3]} ticks={[0, 1, 2]} tick={{ fontSize: 10, fill: tick }}
+          <YAxis type="number" dataKey="y" domain={[-0.3, 1.3]} ticks={[0, 1]} tick={{ fontSize: 10, fill: tick }}
             label={{ value: 'Leader (top-decile composite)', angle: -90, position: 'insideLeft', fontSize: 11, fill: label }} />
           <ZAxis type="number" dataKey="z" range={[30, 400]} />
           <ReferenceLine x={5.5} stroke={ref} strokeDasharray="3 3" />
-          <ReferenceLine y={1.5} stroke={ref} strokeDasharray="3 3" />
+          <ReferenceLine y={0.5} stroke={ref} strokeDasharray="3 3" />
           <Tooltip cursor={{ strokeDasharray: '3 3' }}
             content={({ active, payload }) => {
               if (!active || !payload?.length) return null

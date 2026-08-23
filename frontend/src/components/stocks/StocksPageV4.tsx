@@ -90,8 +90,8 @@ export async function StocksPageV4() {
         </div>
         <p className="font-sans text-[15px] text-txt-2 max-w-[860px]">
           The universe as a funnel into each name. Every lens is a <strong>decile within its cap cohort</strong>;
-          leadership counts how many of the two active conviction lenses (technical · flow) a stock leads at
-          D9/D10. Screen, then click through to the stock&apos;s evidence.
+          a stock is a <strong>leader</strong> when it is top-decile on composite within that cohort.
+          Screen, then click through to the stock&apos;s evidence.
         </p>
 
         <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">

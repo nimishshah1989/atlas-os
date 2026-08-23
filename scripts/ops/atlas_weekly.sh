@@ -47,6 +47,11 @@ step "fetch_marketcap"     $PY scripts/foundation/fetch_marketcap.py
 # only wherever it was last typed by hand. Fails loudly if any active stock ends up
 # without a cap: it would silently become 'micro' and shift everyone else's rank cuts.
 step "cap_cohort"          $PY scripts/foundation/cap_cohort.py
+# v_stock_leader cuts the composite decile WITHIN those cohorts, so it re-applies after
+# cap_cohort. Same reasoning as above: CREATE OR REPLACE, and the step exists so the
+# board's one leader definition has a producer. Fails loudly if a scored stock is missing
+# from the view — every fund/ETF roll-up INNER-joins it, so a gap shrinks the breadth base.
+step "leader_flag"         $PY scripts/foundation/leader_flag.py
 step "ingest_xbrl"         $PY scripts/foundation/ingest_xbrl.py
 
 # System-generated portfolios: the walk-forward expert agent. Weekly cadence (its own

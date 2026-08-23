@@ -8,9 +8,10 @@ holdings snapshot) to today by, for each trading day D:
 
   1. CARRY-FORWARD holdings: the latest monthly snapshot with as_of_date <= D.
   2. Score each holding with that day's stock lens scores (atlas_lens_scores_daily @ D),
-     deciles computed within the cap cohort exactly as the live SCORED_STOCKS CTE does.
+     reading the leader flag for THAT day from atlas_foundation.v_stock_leader — the one
+     view the funds page reads, so the rule cannot drift between page and history.
   3. Roll up to a holdings-weighted lens vector (v_tech/v_fund/v_cat/v_flow + breadth) —
-     the SAME FILTER expressions as frontend/src/lib/queries/v6/fund_lens.ts (ROLLUP).
+     the SAME FILTER expressions as frontend/src/lib/queries/fund_lens.ts (ROLLUP).
   4. Blend to a composite and rank WITHIN the SEBI category over funds with >= 5 scored
      holdings — via fund_rank_core (the faithful port of fundScore.ts), so the D = today
      row equals exactly what the funds page renders.
@@ -65,43 +66,32 @@ CREATE INDEX IF NOT EXISTS ix_fund_rank_daily_cat_date ON {TGT} (category, date)
 """
 
 # Per-day rollup: holdings-weighted lens vector per fund @ date :d, carry-forward holdings.
-# Mirrors fund_lens.ts ROLLUP + SCORED_STOCKS for the cap cohort (both read v_stock_cap)
-# and for the v_* lens-vector FILTER expressions.
-# It does NOT mirror the LEADER rule: production SCORED_STOCKS uses lead = (d_composite>=10)
-# and filters breadth on lead>=1, while this builder uses lead = (d_tech>=9)+(d_flow>=9)
-# and filters on lead>=2. On 2026-08-18 that is 73 leaders vs 25 (17 in common), so the
-# `breadth` column here is NOT the funds page's breadth. Composite and cat_rank are
-# unaffected (they derive from the v_* vectors, not from lead), which is why
-# verify_fund_rank.py still agrees — it shares this same stale leader rule.
-# Reconciling the two needs an FM call on which leader rule fund breadth should use.
+# Mirrors fund_lens.ts ROLLUP for the v_* lens-vector FILTER expressions.
+# The LEADER rule is NOT mirrored — it is READ, from atlas_foundation.v_stock_leader, the same
+# view the funds page reads. It used to be re-typed here as lead = (d_tech>=9)+(d_flow>=9)
+# filtered on >=2, against production's (d_composite>=10) filtered on >=1: 73 leaders vs 25 on
+# 2026-08-18, only 17 in common, so this `breadth` column was not the funds page's breadth at
+# all. The view is keyed by date, so the historical backfill scores each day :d against THAT
+# day's deciles exactly as `--latest` scores today's.
 ROLLUP_SQL = (
     """
-WITH cap AS (
-  -- cap comes from atlas_foundation.v_stock_cap (market-cap rank), NOT index
-  -- membership: under the liquidity-floor universe most names are in no index.
-  SELECT instrument_id, cap FROM atlas_foundation.v_stock_cap),
-j AS (
+WITH scored AS (
   -- INNER JOIN instrument_master mirrors the production SCORED_STOCKS CTE exactly, so the
-  -- ntile decile cohort is identical. (The lead -> breadth rule is NOT — see above.)
-  SELECT l.instrument_id, COALESCE(c.cap,'micro') AS cap,
-         l.technical::float t, l.fundamental::float f, l.catalyst::float ca, l.flow::float fl
+  -- roll-up's holdings base is identical. lead is 0/1; a leader has lead = 1.
+  SELECT l.instrument_id,
+         l.technical::float t, l.fundamental::float f, l.catalyst::float ca, l.flow::float fl,
+         COALESCE(v.lead,0) AS lead
   FROM atlas_foundation.atlas_lens_scores_daily l
   JOIN atlas_foundation.instrument_master im ON im.instrument_id = l.instrument_id
-  LEFT JOIN cap c ON c.instrument_id = l.instrument_id
+  LEFT JOIN atlas_foundation.v_stock_leader v
+    ON v.instrument_id = l.instrument_id AND v.date = l.date
   WHERE l.asset_class='stock' AND l.date = :d),
-dec AS (
-  SELECT instrument_id, t, f, ca, fl,
-    CASE WHEN t  IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(t  IS NULL) ORDER BY t)  END d_tech,
-    CASE WHEN fl IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(fl IS NULL) ORDER BY fl) END d_flow
-  FROM j),
-scored AS (
-  SELECT instrument_id, t, f, ca, fl,
-    (COALESCE((d_tech>=9)::int,0)+COALESCE((d_flow>=9)::int,0)) AS lead
-  FROM dec),
 snap AS (SELECT max(as_of_date) AS d FROM atlas_foundation.de_mf_holdings WHERE as_of_date <= :d)
 SELECT mm.mstar_id, mm.category_name AS category,
   count(h.instrument_id) AS n_scored,
-  sum(h.weight_pct) FILTER (WHERE COALESCE(s.lead,0) >= 2) / NULLIF(sum(h.weight_pct),0) AS breadth,
+  -- COALESCE the NUMERATOR: a fund holding scored names of which none lead has breadth 0%,
+  -- not "unknown". NULLIF on the denominator keeps the real unknown (no weighted holdings) NULL.
+  COALESCE(sum(h.weight_pct) FILTER (WHERE COALESCE(s.lead,0) >= 1),0) / NULLIF(sum(h.weight_pct),0) AS breadth,
   sum(h.weight_pct*s.t)  FILTER (WHERE s.t  IS NOT NULL) / NULLIF(sum(h.weight_pct) FILTER (WHERE s.t  IS NOT NULL),0) AS v_tech,
   sum(h.weight_pct*s.f)  FILTER (WHERE s.f  IS NOT NULL) / NULLIF(sum(h.weight_pct) FILTER (WHERE s.f  IS NOT NULL),0) AS v_fund,
   sum(h.weight_pct*s.ca) FILTER (WHERE s.ca IS NOT NULL) / NULLIF(sum(h.weight_pct) FILTER (WHERE s.ca IS NOT NULL),0) AS v_cat,

@@ -122,7 +122,7 @@ export async function FundsPageV4() {
 
   const strip: { label: string; value: string; tone: Tone; sub: string }[] = [
     { label: 'Equity funds', value: String(universeCount), tone: 'neutral', sub: 'Regular Growth · holdings-weighted roll-up' },
-    { label: 'Breadth ≥ 20%', value: String(withBreadth), tone: 'pos', sub: '≥20% of weight leads ≥2 lenses' },
+    { label: 'Breadth ≥ 20%', value: String(withBreadth), tone: 'pos', sub: '≥20% of weight is in leaders' },
     { label: 'Categories', value: String(categoryCount), tone: 'neutral', sub: 'Distinct SEBI categories' },
     { label: 'AMCs', value: String(amcCount), tone: 'neutral', sub: 'Distinct asset managers' },
     { label: 'Avg expense', value: avgExpense == null ? '—' : `${avgExpense.toFixed(2)}%`, tone: 'neutral', sub: 'Mean expense ratio across the set' },

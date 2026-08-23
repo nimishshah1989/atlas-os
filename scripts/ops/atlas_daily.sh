@@ -171,7 +171,21 @@ if [ ${#FAILURES[@]} -eq 0 ]; then
 else
   MSG="atlas_daily $EOD FAILURES: ${FAILURES[*]}"
   echo "=== $MSG ===" | tee -a "$LOG"
-  # Telegram removed (FM, 2026-07-30) — that channel carries the crossover books only.
-  # NOTE: failures are now PULL, not push. They surface in this log, in the health
-  # snapshot written above, and on /health + /admin/data-status. Nothing pings you.
+  # Pull-only reporting (health snapshot, /health, /admin/data-status) is right for a
+  # STEP failure — those are usually one-off and self-healing.
+  #
+  # A GATE failure is different: it means the board did NOT update and is serving the
+  # last-good build. On 2026-08-19 Kite auth started failing; freshness_guard correctly
+  # caught the staleness and correctly withheld the deploy for FOUR CONSECUTIVE DAYS —
+  # and because nothing pushed, the only way to find out was to visit /health. The gate
+  # worked; the silence did not. So gate failures push, step failures still pull.
+  #
+  # curl, not the intraday notify helper: no new dependency, no cross-context import,
+  # and a no-op when the vars are unset (local runs stay quiet).
+  if [ "$GATE_OK" != "1" ] && [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
+    curl -sf -m 10 "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+      --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+      --data-urlencode "text=BOARD NOT UPDATED — atlas_daily $EOD gate failed, serving last-good build. Failed: ${FAILURES[*]}" \
+      -o /dev/null || echo "  (gate alert send failed — check /health)" | tee -a "$LOG"
+  fi
 fi

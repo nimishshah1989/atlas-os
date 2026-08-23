@@ -7,11 +7,12 @@ import 'server-only'
 import sql from '@/lib/db'
 import { toNumber, toNumberOr } from '@/lib/decimal'
 
-// 2-LENS MODEL: a stock "leads" a lens when it is top-2-decile (D9/D10) of its cap cohort,
-// and leadership counts ONLY the two active conviction lenses — Technical & Flow (Fundamental
-// and Catalyst carry weight 0, so they no longer count toward leadership). lead is therefore
-// 0..2 (a leader has lead = 2), matching the funds/ETFs roll-up (etf_lens.ts SCORED_STOCKS) so
-// "leader" means the same thing everywhere. Single source of truth for the threshold.
+// `lead` is a 0/1 FLAG, not a tally: a stock leads when it is top-decile (D10) on COMPOSITE
+// within its cap cohort — one rule, matching the funds/ETFs roll-up (etf_lens.ts SCORED_STOCKS)
+// and atlas_foundation.v_stock_leader, so "leader" means the same thing everywhere. It used to
+// count how many lenses a stock led, and stale `lead >= 2` call sites read as a permanent zero.
+// LEAD_DECILE below is a SEPARATE threshold: the per-lens "leads this lens" cut (D9+) used by
+// the Today tape and Market Pulse breadth. Single source of truth for that threshold.
 export const LEAD_DECILE = 9
 
 // ── RS matrix ─────────────────────────────────────────────────────────────

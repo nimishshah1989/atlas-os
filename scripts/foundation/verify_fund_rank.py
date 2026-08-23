@@ -2,7 +2,7 @@
 """DoD gate for fund_rank_daily (rule #0: assert on REAL produced output).
 
 The history's newest row MUST equal what the funds page renders. This reproduces the
-production query the page runs — frontend/src/lib/queries/v6/fund_lens.ts
+production query the page runs — frontend/src/lib/queries/fund_lens.ts
 (getFundLensList) with the SCORED_STOCKS CTE from etf_lens.ts — then applies the same
 composite + rank core, and diffs the resulting per-fund category ranks against the
 stored fund_rank_daily rows for max(date).
@@ -11,12 +11,16 @@ This is an INDEPENDENT data path for what it actually checks (cat_size, composit
 cat_rank): those derive from the holdings-weighted v_* lens vectors, so agreement
 proves the builder's "today" row reproduces the live page's RANKING.
 
-CAVEAT — the leader rule below is NOT a verbatim copy of the current etf_lens.ts
-SCORED_STOCKS. Production uses lead = (d_composite>=10) filtered on lead>=1; this copy
-(like build_fund_rank_history.py) uses lead = (d_tech>=9)+(d_flow>=9) filtered on
-lead>=2 — 73 leaders vs 25 on 2026-08-18. Because verifier and builder share the same
-stale rule, this gate does NOT independently check `breadth`; it only checks the
-rank/composite path, which the leader rule does not feed. Needs an FM call.
+WHAT "INDEPENDENT" MEANS HERE. This used to carry its own copy of the leader rule —
+the same stale one build_fund_rank_history.py carried, not production's — so the gate
+agreed with the builder by construction and could not see that stored breadth was a
+different number from displayed breadth. The rule now lives in ONE place,
+atlas_foundation.v_stock_leader, which the page, the builder and this file all read.
+So nothing re-derives it and nothing can drift; what this gate independently checks is
+that the STORED rows reproduce a freshly-computed production roll-up.
+
+BREADTH is reported below, not asserted: the stored history predates this rule change
+and will not match until the Task-5 rebuild. Promote it to a hard check then.
 
     python verify_fund_rank.py        # exit 0 iff stored ranks == production ranks
 """
@@ -31,31 +35,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _db
 import fund_rank_core as core
 
-# --- etf_lens.ts SCORED_STOCKS (the production nightly CTE); cap + v_* vectors match,
-# --- the leader rule below is stale vs production — see the module docstring CAVEAT ----
+# --- etf_lens.ts SCORED_STOCKS (the production nightly CTE), reduced to the columns the
+# --- roll-up below needs. The leader flag is READ from atlas_foundation.v_stock_leader,
+# --- the same view the page reads — see the module docstring.
 SCORED_STOCKS = """
   latest AS (SELECT max(date) d FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock'),
-  tdl AS (SELECT max(date) d FROM atlas_foundation.technical_daily WHERE asset_class='stock'),
-  -- cap comes from atlas_foundation.v_stock_cap (market-cap rank), NOT index
-  -- membership: under the liquidity-floor universe most names are in no index.
-  cap AS (
-    SELECT instrument_id, cap FROM atlas_foundation.v_stock_cap),
-  j AS (
-    SELECT l.instrument_id, COALESCE(c.cap,'micro') AS cap,
-           l.technical::float t, l.fundamental::float f, l.catalyst::float ca, l.flow::float fl, l.valuation::float va
+  scored AS (
+    SELECT l.instrument_id,
+           l.technical::float t, l.fundamental::float f, l.catalyst::float ca, l.flow::float fl, l.valuation::float va,
+           COALESCE(v.lead,0) AS lead
     FROM atlas_foundation.atlas_lens_scores_daily l
     JOIN atlas_foundation.instrument_master im ON im.instrument_id = l.instrument_id
-    LEFT JOIN cap c ON c.instrument_id = l.instrument_id
-    WHERE l.asset_class='stock' AND l.date=(SELECT d FROM latest)),
-  dec AS (
-    SELECT instrument_id, cap, t, f, ca, fl, va,
-      CASE WHEN t  IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(t  IS NULL) ORDER BY t)  END d_tech,
-      CASE WHEN fl IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(fl IS NULL) ORDER BY fl) END d_flow
-    FROM j),
-  scored AS (
-    SELECT d.instrument_id, d.t, d.f, d.ca, d.fl, d.va,
-      (COALESCE((d.d_tech>=9)::int,0)+COALESCE((d.d_flow>=9)::int,0)) AS lead
-    FROM dec d)
+    LEFT JOIN atlas_foundation.v_stock_leader v
+      ON v.instrument_id = l.instrument_id AND v.date = l.date
+    WHERE l.asset_class='stock' AND l.date=(SELECT d FROM latest))
 """
 
 EQUITY_FUND_FILTER = """NOT mm.is_etf AND mm.is_active
@@ -65,7 +58,7 @@ EQUITY_FUND_FILTER = """NOT mm.is_etf AND mm.is_active
 PROD_QUERY = f"""
 WITH {SCORED_STOCKS}
 SELECT mm.mstar_id, mm.category_name AS category,
-  sum(h.weight_pct) FILTER (WHERE COALESCE(s.lead,0) >= 2) / NULLIF(sum(h.weight_pct),0) AS breadth,
+  COALESCE(sum(h.weight_pct) FILTER (WHERE COALESCE(s.lead,0) >= 1),0) / NULLIF(sum(h.weight_pct),0) AS breadth,
   sum(h.weight_pct*s.t)  FILTER (WHERE s.t  IS NOT NULL) / NULLIF(sum(h.weight_pct) FILTER (WHERE s.t  IS NOT NULL),0) AS v_tech,
   sum(h.weight_pct*s.f)  FILTER (WHERE s.f  IS NOT NULL) / NULLIF(sum(h.weight_pct) FILTER (WHERE s.f  IS NOT NULL),0) AS v_fund,
   sum(h.weight_pct*s.ca) FILTER (WHERE s.ca IS NOT NULL) / NULLIF(sum(h.weight_pct) FILTER (WHERE s.ca IS NOT NULL),0) AS v_cat,
@@ -78,6 +71,15 @@ WHERE {EQUITY_FUND_FILTER}
 GROUP BY mm.mstar_id, mm.category_name
 HAVING count(h.instrument_id) >= 5
 """
+
+
+def _close(a: object, b: object, eps: float = 1e-6) -> bool:
+    """Two breadth values agree. A missing value (SQL NULL, or the NaN pandas reads it as)
+    agrees only with another missing value — never with 0, which is a real 0% breadth."""
+    fa, fb = (None if x is None or x != x else float(x) for x in (a, b))  # type: ignore[arg-type]
+    if fa is None or fb is None:
+        return fa is fb
+    return abs(fa - fb) <= eps
 
 
 def main() -> None:
@@ -111,7 +113,7 @@ def main() -> None:
 
     mx = _db.scalar("SELECT max(date) FROM atlas_foundation.fund_rank_daily")
     stored_df = _db.read_df(
-        "SELECT mstar_id, cat_rank, cat_size, composite, pct_band FROM atlas_foundation.fund_rank_daily WHERE date = :d",
+        "SELECT mstar_id, cat_rank, cat_size, composite, pct_band, breadth FROM atlas_foundation.fund_rank_daily WHERE date = :d",
         {"d": str(mx)},
     )
     stored = {r.mstar_id: r for r in stored_df.itertuples()}
@@ -149,6 +151,15 @@ def main() -> None:
     print(f"verify fund_rank_daily @ {mx}: {n} production funds vs {len(stored)} stored")
     print(f"  cohort:    only-in-production={len(only_prod)}  only-in-stored={len(only_stored)}")
     print(f"  cat_size mismatches: {len(size_mismatch)}")
+    # REPORTED, not asserted — see the module docstring. Stored breadth predates the leader-rule
+    # reconciliation and only converges at the Task-5 rebuild; make this fatal once it has.
+    stored_breadth = dict(zip(stored_df["mstar_id"], stored_df["breadth"], strict=True))
+    n_breadth_off = sum(
+        1
+        for mid, pr in prod_ranked.items()
+        if mid in stored_breadth and not _close(stored_breadth[mid], pr["breadth"])
+    )
+    print(f"  breadth mismatches (reported only): {n_breadth_off}")
     print(f"  composite mismatches (>0.01): {len(comp_mismatch)}")
     print(
         f"  rank: {len(tie_swaps)} benign tie-swaps (equal composite), {len(real_rank_errors)} REAL errors"

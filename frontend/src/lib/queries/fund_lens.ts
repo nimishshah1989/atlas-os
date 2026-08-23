@@ -1,7 +1,7 @@
 // src/lib/queries/fund_lens.ts
 // Native mutual-fund lens roll-up — all from atlas_foundation. Funds are a holdings-weighted
 // roll-up of the stock atom (D26/D27/D21b): the headline is LEADERSHIP-BREADTH (% of holdings
-// weight that are top-decile leaders in ≥2 conviction lenses), ranked WITHIN the SEBI category —
+// weight that are leaders — top-decile composite within their cap cohort), ranked WITHIN the SEBI category —
 // NOT a composite. The fund-specific differentiator is ACTIVE-MOVEMENT: the month-over-month
 // holdings delta (is the manager adding leaders?), from the append-only de_mf_holdings snapshots.
 // Roll-ups are a TRANSPARENCY view (what's held, how it scores) — not an outperformance predictor.
@@ -51,7 +51,11 @@ const ROLLUP = `
   mm.primary_benchmark AS benchmark, mm.expense_ratio AS expense,
   count(h.instrument_id) AS n_holdings,
   count(*) FILTER (WHERE COALESCE(s.lead,0) >= 1) AS n_leaders,
-  sum(h.weight_pct) FILTER (WHERE COALESCE(s.lead,0) >= 1) / NULLIF(sum(h.weight_pct),0) AS breadth,
+  -- COALESCE the NUMERATOR: with no leader held, sum(...) FILTER returns NULL, and a fund whose
+  -- holdings are all scored but none lead has breadth 0%, not "unknown" — it was reading as
+  -- "no signal" for 14 of 389 funds. The NULLIF on the denominator keeps the real unknown (no
+  -- weighted holdings at all) as NULL.
+  COALESCE(sum(h.weight_pct) FILTER (WHERE COALESCE(s.lead,0) >= 1),0) / NULLIF(sum(h.weight_pct),0) AS breadth,
   sum(h.weight_pct*s.t)  FILTER (WHERE s.t  IS NOT NULL) / NULLIF(sum(h.weight_pct) FILTER (WHERE s.t  IS NOT NULL),0) AS v_tech,
   sum(h.weight_pct*s.f)  FILTER (WHERE s.f  IS NOT NULL) / NULLIF(sum(h.weight_pct) FILTER (WHERE s.f  IS NOT NULL),0) AS v_fund,
   sum(h.weight_pct*s.ca) FILTER (WHERE s.ca IS NOT NULL) / NULLIF(sum(h.weight_pct) FILTER (WHERE s.ca IS NOT NULL),0) AS v_cat,
@@ -169,8 +173,8 @@ export async function getFundActiveMovement(mstarId: string): Promise<FundActive
   const exited = rows.filter(r => r.kind === 'exited' && r.symbol).map(mk).sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))
   return {
     prior_date: prvD,
-    leaders_added: added.filter(m => m.lead >= 2).length,
-    leaders_dropped: exited.filter(m => m.lead >= 2).length,
+    leaders_added: added.filter(m => m.lead >= 1).length,
+    leaders_dropped: exited.filter(m => m.lead >= 1).length,
     added: added.slice(0, 12), exited: exited.slice(0, 12),
   }
 }
