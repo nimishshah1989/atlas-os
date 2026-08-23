@@ -71,7 +71,7 @@ def snapshot_date(cutoff: dt.date | None = None) -> dt.date | None:
     )
 
 
-def adv_frame(cutoff: dt.date, min_obs: int) -> pd.DataFrame:
+def adv_frame(cutoff: dt.date, min_obs: int, recency_days: int) -> pd.DataFrame:
     """One row per stock: trailing-60-trading-day MEDIAN traded value, in rupees.
 
     Traded value is `close * volume` — the raw close, not close_adj. volume has no
@@ -81,8 +81,8 @@ def adv_frame(cutoff: dt.date, min_obs: int) -> pd.DataFrame:
     sessions for a reason that has nothing to do with liquidity.
 
     A median needs a middle, so a name with fewer than `min_obs` traded sessions in
-    the window — or whose last print is older than the window's final few dates — gets
-    adv_median_60d = NULL. NULL is "no signal", never 0 and never "low": members()
+    the window — or whose last print falls outside its final `recency_days` dates —
+    gets adv_median_60d = NULL. NULL is "no signal", never 0 and never "low": members()
     already excludes it, so the guard needs no second code path. The LEFT JOIN then
     keeps a row for every stock regardless.
 
@@ -99,7 +99,7 @@ def adv_frame(cutoff: dt.date, min_obs: int) -> pd.DataFrame:
             ORDER BY date DESC LIMIT {U.LOOKBACK_TRADING_DAYS}
         ),
         recent AS (
-            SELECT date FROM d ORDER BY date DESC LIMIT {U.RECENCY_TRADING_DAYS}
+            SELECT date FROM d ORDER BY date DESC LIMIT :recency_days
         ),
         liq AS (
             SELECT instrument_id,
@@ -117,14 +117,20 @@ def adv_frame(cutoff: dt.date, min_obs: int) -> pd.DataFrame:
         LEFT JOIN liq ON liq.instrument_id = im.instrument_id
         WHERE im.asset_class = 'stock'
         """,
-        {"cutoff": cutoff, "min_obs": min_obs},
+        {"cutoff": cutoff, "min_obs": min_obs, "recency_days": recency_days},
     )
 
 
-def held_ids() -> frozenset[str]:
-    """instrument_ids CURRENTLY held in a portfolio book — net open position > 0.
+def held_ids(as_of: dt.date) -> frozenset[str]:
+    """instrument_ids held in a portfolio book AS OF `as_of` — net open position > 0
+    counting only trades on or before that date.
 
-    Not "ever traded": the clause exists so a live position cannot silently lose its
+    The date is not decoration. This journal exists to make a past membership decision
+    re-derivable, and reading the book as it stands today would stamp today's holdings
+    onto a row describing an earlier day — the liquidity arm would be historical while
+    the retention arm was not.
+
+    Not "ever traded": the clause exists so an open position cannot silently lose its
     conviction score, and an exited position has no score to lose. Ever-traded turns a
     safety valve into a ratchet that only grows (654 ever-traded against 150 actually
     held, of which 504 are fully exited).
@@ -139,14 +145,15 @@ def held_ids() -> frozenset[str]:
                 SELECT portfolio_id, instrument_key,
                        SUM(CASE WHEN side = 'buy' THEN qty ELSE -qty END) AS net_qty
                 FROM {M}.portfolio_trades
-                WHERE asset_class = 'stock'
+                WHERE asset_class = 'stock' AND trade_date <= :as_of
                 GROUP BY portfolio_id, instrument_key
             )
             SELECT DISTINCT im.instrument_id::text AS instrument_id
             FROM net
             JOIN {M}.instrument_master im
               ON im.instrument_id::text = net.instrument_key AND im.asset_class = 'stock'
-            WHERE net.net_qty > 0"""
+            WHERE net.net_qty > 0""",
+        {"as_of": as_of},
     )
     return frozenset(df["instrument_id"].tolist())
 
@@ -154,12 +161,13 @@ def held_ids() -> frozenset[str]:
 def run(dry_run: bool = False, as_of: dt.date | None = None) -> dict:
     floor = threshold(U.THRESHOLD_KEY)
     min_obs = int(threshold(U.THRESHOLD_KEY_MIN_OBS))
+    recency_days = int(threshold(U.THRESHOLD_KEY_RECENCY))
     as_of = snapshot_date(as_of)
     if as_of is None:
         raise RuntimeError(f"no {M}.ohlcv_stock rows at or before the cutoff")
 
-    adv = adv_frame(as_of, min_obs)
-    inside = U.members(adv, floor, held_ids())
+    adv = adv_frame(as_of, min_obs, recency_days)
+    inside = U.members(adv, floor, held_ids(as_of))
 
     adv["in_universe"] = adv["instrument_id"].isin(list(inside))
     adv["floor_inr"] = floor
@@ -169,7 +177,8 @@ def run(dry_run: bool = False, as_of: dt.date | None = None) -> dict:
     n_in = int(adv["in_universe"].sum())
     print(
         f"  universe: {n_in} / {len(adv)} stocks at floor "
-        f"₹{float(floor) / 1e7:.2f} cr, min {min_obs} obs, as of {as_of}"
+        f"₹{float(floor) / 1e7:.2f} cr, min {min_obs} obs, "
+        f"traded within {recency_days}d, as of {as_of}"
     )
 
     if dry_run:

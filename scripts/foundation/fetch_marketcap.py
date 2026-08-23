@@ -67,11 +67,15 @@ def _topval(html: str, label: str) -> float | None:
 
 
 def _get(sym: str) -> str | None:
+    """Consolidated first, standalone fallback. A company with no consolidated
+    financials still serves 200 with the ratio block rendered but empty
+    (`<span class="number"></span>`), so the guard has to be a successful parse —
+    a `"Market Cap" in text` guard accepts that stub and never falls back."""
     s = _session()
     for path in (f"company/{sym}/consolidated/", f"company/{sym}/"):
         try:
             r = s.get(f"https://www.screener.in/{path}", timeout=25)
-            if r.status_code == 200 and "Market Cap" in r.text:
+            if r.status_code == 200 and _topval(r.text, "Market Cap"):
                 return r.text
         except Exception:
             pass

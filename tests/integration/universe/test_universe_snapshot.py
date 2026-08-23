@@ -8,6 +8,7 @@ being read against today's membership, which is survivorship bias.
 
 from __future__ import annotations
 
+import datetime as dt
 import sys
 from pathlib import Path
 
@@ -26,7 +27,11 @@ pytestmark = pytest.mark.integration
 
 def _frame():
     as_of = S.snapshot_date()
-    return as_of, S.adv_frame(as_of, int(S.threshold(U.THRESHOLD_KEY_MIN_OBS)))
+    return as_of, S.adv_frame(
+        as_of,
+        int(S.threshold(U.THRESHOLD_KEY_MIN_OBS)),
+        int(S.threshold(U.THRESHOLD_KEY_RECENCY)),
+    )
 
 
 def test_adv_frame_covers_the_whole_stock_master() -> None:
@@ -78,6 +83,55 @@ def test_thin_traders_get_a_null_adv_not_a_small_one() -> None:
     )
 
 
+def test_a_stale_name_is_dropped_however_liquid_it_used_to_be() -> None:
+    """The recency arm, which the observation arm does not cover: DIACABS traded 44 of
+    the window's 60 sessions with a median of ₹133.44 cr — comfortably past both the
+    session minimum and any floor — but its last print was 2026-08-03, outside the
+    window's final 5 dates (which begin 2026-08-12). A median of a name that stopped
+    trading is a historical fact, not a current liquidity signal, so it must be NULL.
+
+    Measured on the live DB 2026-08-23; this arm removes 10 names at the ₹2.5 cr floor
+    (1,215 -> 1,205)."""
+    as_of, adv = _frame()
+    recency_days = int(S.threshold(U.THRESHOLD_KEY_RECENCY))
+    stale = _db.read_df(
+        """WITH d AS (SELECT DISTINCT date FROM atlas_foundation.ohlcv_stock
+                      WHERE date <= :c AND date > (CAST(:c AS date) - INTERVAL '150 days')
+                      ORDER BY date DESC LIMIT 60),
+                recent AS (SELECT date FROM d ORDER BY date DESC LIMIT :r)
+           SELECT o.instrument_id::text AS instrument_id, im.symbol, count(*) n,
+                  max(o.date) AS last_traded
+           FROM atlas_foundation.ohlcv_stock o
+           JOIN atlas_foundation.instrument_master im USING (instrument_id)
+           WHERE o.date IN (SELECT date FROM d) AND im.asset_class = 'stock'
+             AND o.close IS NOT NULL AND o.volume IS NOT NULL
+           GROUP BY 1, 2
+           HAVING count(*) >= :m AND max(o.date) NOT IN (SELECT date FROM recent)""",
+        {"c": as_of, "m": int(S.threshold(U.THRESHOLD_KEY_MIN_OBS)), "r": recency_days},
+    )
+    assert len(stale) > 0, "no stale-but-well-observed names — this test proves nothing"
+    got = adv[adv["instrument_id"].isin(stale["instrument_id"].tolist())]
+    assert got["adv_median_60d"].notna().sum() == 0, (
+        f"{got['adv_median_60d'].notna().sum()} names last traded outside the final "
+        f"{recency_days} sessions kept an ADV"
+    )
+    # the arm must bite on names the observation arm would have passed
+    assert (stale["n"] >= 40).all()
+
+
+def test_held_ids_are_as_of_the_snapshot_date_not_today() -> None:
+    """A journal row must be re-derivable, so the retention arm has to be historical
+    too — reading today's book while computing an old window would stamp today's
+    holdings onto an earlier day. Verified by walking backwards: the book shrinks."""
+    now = S.held_ids(S.snapshot_date())
+    older = S.held_ids(dt.date(2026, 6, 15))
+    assert len(older) > 0, "no holdings resolved at the earlier date"
+    assert len(older) < len(now), (
+        f"held set did not shrink going back in time ({len(now)} -> {len(older)}); "
+        "the as-of filter is not being applied"
+    )
+
+
 def test_snapshot_is_dated_a_real_trading_day() -> None:
     """The journal is keyed on the date it describes, so that date must be one the
     market actually traded — eod_cutoff() alone returns weekends, and a Sunday row
@@ -99,7 +153,7 @@ def test_held_ids_are_resolvable_and_actually_currently_held() -> None:
 
     Also pins the currently-held semantics: the set must be a STRICT subset of
     ever-traded, or the net-open-position filter is not filtering."""
-    held = S.held_ids()
+    held = S.held_ids(S.snapshot_date())
     assert len(held) > 0, "no held names resolved — the UUID-vs-symbol join is back"
     ever = set(
         _db.read_df(
