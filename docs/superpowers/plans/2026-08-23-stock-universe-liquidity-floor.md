@@ -630,21 +630,80 @@ def test_view_exists_and_covers_every_active_stock() -> None:
     assert n_missing == 0, f"{n_missing} active stocks have no cap label"
 
 
-def test_new_rule_agrees_with_index_rule_on_at_least_95_percent() -> None:
+# Cap tiers in rank order. Disagreement between the two rules is EXPECTED and is not
+# an error: NSE selects index membership on a 6-MONTH AVERAGE market cap and
+# reconstitutes semi-annually, while v_stock_cap ranks point-in-time. Names near ranks
+# 100/250/500 therefore swap sides between reconstitutions. Measured 2026-08-23:
+# 77.4% agreement, with near-perfectly symmetric flow across each boundary
+# (large<->mid 11/11, mid<->small 19/18, small<->micro 54/55). What would signal a REAL
+# defect is asymmetry (bias, not drift) or a tier-skip that cannot be explained.
+_TIER_ORDER = {"large": 0, "mid": 1, "small": 2, "micro": 3}
+
+
+def _old_vs_new() -> "pd.DataFrame":
     df = _db.read_df(
         f"""WITH old AS ({OLD_CAP_SQL})
-            SELECT im.symbol, COALESCE(old.cap,'micro') AS old_cap, v.cap AS new_cap
+            SELECT im.symbol, COALESCE(old.cap,'micro') AS old_cap, v.cap AS new_cap,
+                   v.mcap_rank, m.market_cap_cr
             FROM atlas_foundation.instrument_master im
             JOIN atlas_foundation.v_stock_cap v USING (instrument_id)
+            JOIN atlas_foundation.equity_marketcap m USING (instrument_id)
             LEFT JOIN old ON old.instrument_id = im.instrument_id
             WHERE im.asset_class='stock' AND im.is_active"""
     )
     assert len(df) > 700, "expected the current active universe"
-    agree = (df["old_cap"] == df["new_cap"]).mean()
-    disagreements = df[df["old_cap"] != df["new_cap"]]
-    assert agree >= 0.95, (
-        f"only {agree:.1%} agreement; disagreements:\n"
-        f"{disagreements.to_string(index=False)}"
+    return df
+
+
+def test_disagreements_are_boundary_drift_not_bias() -> None:
+    """Equal numbers must cross each boundary in each direction. Systematic one-way
+    flow would mean the market-cap basis is wrong, not merely out of phase."""
+    df = _old_vs_new()
+    d = df[df["old_cap"] != df["new_cap"]]
+    for a, b in (("large", "mid"), ("mid", "small"), ("small", "micro")):
+        out = len(d[(d["old_cap"] == a) & (d["new_cap"] == b)])
+        back = len(d[(d["old_cap"] == b) & (d["new_cap"] == a)])
+        assert abs(out - back) <= max(5, 0.25 * max(out, back, 1)), (
+            f"asymmetric flow across {a}/{b}: {out} out vs {back} back — "
+            "that is bias, not reconstitution lag"
+        )
+
+
+def test_every_tier_skip_is_individually_justified() -> None:
+    """A name moving more than one tier is either a stale index label on a re-rated
+    company or a bad market cap. Each must be named and explained, never bulk-accepted.
+
+    KNOWN AND VERIFIED (2026-08-23):
+      CUPID — index says micro, market-cap rank 240. The cap is REAL (Rs 38,192 cr
+      confirmed externally 19-Aug-2026; the stock traded Rs 1,842 cr in one session on
+      2026-08-18). NSE simply has not reconstituted. The new rule is right here and the
+      index label is stale.
+    """
+    justified = {"CUPID"}
+    df = _old_vs_new()
+    d = df[df["old_cap"] != df["new_cap"]].copy()
+    d["jump"] = (d["new_cap"].map(_TIER_ORDER) - d["old_cap"].map(_TIER_ORDER)).abs()
+    skips = d[(d["jump"] > 1) & (~d["symbol"].isin(justified))]
+    assert skips.empty, (
+        "unexplained tier skips — verify each market cap against an external source "
+        f"before accepting:\n{skips.to_string(index=False)}"
+    )
+
+
+def test_no_universe_member_is_missing_a_market_cap() -> None:
+    """A NULL cap must never fall through to 'micro' — that would drop a real mid-cap
+    into the micro cohort and distort its deciles. GUJGASLTD is the known case: it
+    clears the liquidity floor but Screener has no obtainable cap for it."""
+    missing = _db.read_df(
+        """SELECT im.symbol FROM atlas_foundation.atlas_universe_snapshot s
+           JOIN atlas_foundation.instrument_master im USING (instrument_id)
+           LEFT JOIN atlas_foundation.v_stock_cap v USING (instrument_id)
+           WHERE s.date = (SELECT max(date) FROM atlas_foundation.atlas_universe_snapshot)
+             AND s.in_universe AND v.cap IS NULL"""
+    )
+    assert missing.empty, (
+        f"universe members with no cap label: {list(missing['symbol'])} — "
+        "these must be resolved or explicitly excluded, never defaulted to micro"
     )
 
 
