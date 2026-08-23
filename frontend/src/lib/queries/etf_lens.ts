@@ -38,14 +38,10 @@ export async function getEtfChartSeries(nseTicker: string, years = 5): Promise<S
 export const SCORED_STOCKS = `
   latest AS (SELECT max(date) d FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock'),
   tdl AS (SELECT max(date) d FROM atlas_foundation.technical_daily WHERE asset_class='stock'),  -- asset_class filter uses the class_date index (unfiltered max(date) seq-scans 6.9M rows)
+  -- cap comes from atlas_foundation.v_stock_cap (market-cap rank), NOT index
+  -- membership: under the liquidity-floor universe most names are in no index.
   cap AS (
-    SELECT instrument_id,
-      CASE WHEN bool_or(index_code='NIFTY 100') THEN 'large'
-           WHEN bool_or(index_code='NIFTY MIDCAP 150') THEN 'mid'
-           WHEN bool_or(index_code='NIFTY SMLCAP 250') THEN 'small' ELSE 'micro' END AS cap
-    FROM atlas_foundation.de_index_constituents
-    WHERE effective_to IS NULL AND index_code IN ('NIFTY 100','NIFTY MIDCAP 150','NIFTY SMLCAP 250')
-    GROUP BY instrument_id),
+    SELECT instrument_id, cap FROM atlas_foundation.v_stock_cap),
   rs AS (SELECT instrument_id, rs_3m_n500, rs_1m_n500, ret_1d, ret_1w, ret_1m FROM atlas_foundation.technical_daily
          WHERE asset_class='stock' AND date=(SELECT d FROM tdl)),
   j AS (

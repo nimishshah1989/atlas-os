@@ -2,13 +2,21 @@
 """DoD gate for fund_rank_daily (rule #0: assert on REAL produced output).
 
 The history's newest row MUST equal what the funds page renders. This reproduces the
-EXACT production query the page runs — frontend/src/lib/queries/v6/fund_lens.ts
-(getFundLensList) with the full SCORED_STOCKS CTE from etf_lens.ts, copied verbatim —
-then applies the same composite + rank core, and diffs the resulting per-fund category
-ranks against the stored fund_rank_daily rows for max(date).
+production query the page runs — frontend/src/lib/queries/v6/fund_lens.ts
+(getFundLensList) with the SCORED_STOCKS CTE from etf_lens.ts — then applies the same
+composite + rank core, and diffs the resulting per-fund category ranks against the
+stored fund_rank_daily rows for max(date).
 
-This is an INDEPENDENT data path (the full nightly CTE, not the slim per-day builder
-SQL), so agreement proves the builder's "today" row reproduces the live page.
+This is an INDEPENDENT data path for what it actually checks (cat_size, composite,
+cat_rank): those derive from the holdings-weighted v_* lens vectors, so agreement
+proves the builder's "today" row reproduces the live page's RANKING.
+
+CAVEAT — the leader rule below is NOT a verbatim copy of the current etf_lens.ts
+SCORED_STOCKS. Production uses lead = (d_composite>=10) filtered on lead>=1; this copy
+(like build_fund_rank_history.py) uses lead = (d_tech>=9)+(d_flow>=9) filtered on
+lead>=2 — 73 leaders vs 25 on 2026-08-18. Because verifier and builder share the same
+stale rule, this gate does NOT independently check `breadth`; it only checks the
+rank/composite path, which the leader rule does not feed. Needs an FM call.
 
     python verify_fund_rank.py        # exit 0 iff stored ranks == production ranks
 """
@@ -23,18 +31,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _db
 import fund_rank_core as core
 
-# --- verbatim copy of etf_lens.ts SCORED_STOCKS (the production nightly CTE) -----------
+# --- etf_lens.ts SCORED_STOCKS (the production nightly CTE); cap + v_* vectors match,
+# --- the leader rule below is stale vs production — see the module docstring CAVEAT ----
 SCORED_STOCKS = """
   latest AS (SELECT max(date) d FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock'),
   tdl AS (SELECT max(date) d FROM atlas_foundation.technical_daily WHERE asset_class='stock'),
+  -- cap comes from atlas_foundation.v_stock_cap (market-cap rank), NOT index
+  -- membership: under the liquidity-floor universe most names are in no index.
   cap AS (
-    SELECT instrument_id,
-      CASE WHEN bool_or(index_code='NIFTY 100') THEN 'large'
-           WHEN bool_or(index_code='NIFTY MIDCAP 150') THEN 'mid'
-           WHEN bool_or(index_code='NIFTY SMLCAP 250') THEN 'small' ELSE 'micro' END AS cap
-    FROM atlas_foundation.de_index_constituents
-    WHERE effective_to IS NULL AND index_code IN ('NIFTY 100','NIFTY MIDCAP 150','NIFTY SMLCAP 250')
-    GROUP BY instrument_id),
+    SELECT instrument_id, cap FROM atlas_foundation.v_stock_cap),
   j AS (
     SELECT l.instrument_id, COALESCE(c.cap,'micro') AS cap,
            l.technical::float t, l.fundamental::float f, l.catalyst::float ca, l.flow::float fl, l.valuation::float va

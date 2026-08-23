@@ -65,20 +65,24 @@ CREATE INDEX IF NOT EXISTS ix_fund_rank_daily_cat_date ON {TGT} (category, date)
 """
 
 # Per-day rollup: holdings-weighted lens vector per fund @ date :d, carry-forward holdings.
-# Mirrors fund_lens.ts ROLLUP + SCORED_STOCKS (deciles within cap cohort) EXACTLY.
+# Mirrors fund_lens.ts ROLLUP + SCORED_STOCKS for the cap cohort (both read v_stock_cap)
+# and for the v_* lens-vector FILTER expressions.
+# It does NOT mirror the LEADER rule: production SCORED_STOCKS uses lead = (d_composite>=10)
+# and filters breadth on lead>=1, while this builder uses lead = (d_tech>=9)+(d_flow>=9)
+# and filters on lead>=2. On 2026-08-18 that is 73 leaders vs 25 (17 in common), so the
+# `breadth` column here is NOT the funds page's breadth. Composite and cat_rank are
+# unaffected (they derive from the v_* vectors, not from lead), which is why
+# verify_fund_rank.py still agrees — it shares this same stale leader rule.
+# Reconciling the two needs an FM call on which leader rule fund breadth should use.
 ROLLUP_SQL = (
     """
 WITH cap AS (
-  SELECT instrument_id,
-    CASE WHEN bool_or(index_code='NIFTY 100') THEN 'large'
-         WHEN bool_or(index_code='NIFTY MIDCAP 150') THEN 'mid'
-         WHEN bool_or(index_code='NIFTY SMLCAP 250') THEN 'small' ELSE 'micro' END AS cap
-  FROM atlas_foundation.de_index_constituents
-  WHERE effective_to IS NULL AND index_code IN ('NIFTY 100','NIFTY MIDCAP 150','NIFTY SMLCAP 250')
-  GROUP BY instrument_id),
+  -- cap comes from atlas_foundation.v_stock_cap (market-cap rank), NOT index
+  -- membership: under the liquidity-floor universe most names are in no index.
+  SELECT instrument_id, cap FROM atlas_foundation.v_stock_cap),
 j AS (
   -- INNER JOIN instrument_master mirrors the production SCORED_STOCKS CTE exactly, so the
-  -- ntile decile cohort (and therefore lead -> breadth, the rank tiebreaker) is identical.
+  -- ntile decile cohort is identical. (The lead -> breadth rule is NOT — see above.)
   SELECT l.instrument_id, COALESCE(c.cap,'micro') AS cap,
          l.technical::float t, l.fundamental::float f, l.catalyst::float ca, l.flow::float fl
   FROM atlas_foundation.atlas_lens_scores_daily l
