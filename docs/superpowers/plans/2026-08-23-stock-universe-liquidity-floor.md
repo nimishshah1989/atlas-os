@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace Atlas's index-derived stock universe (739 scored) with a single liquidity rule — trailing 60-day median daily traded value ≥ ₹2.5 crore — taking coverage to ~1,271 names without fabricating a single score.
+**Goal:** Replace Atlas's index-derived stock universe (739 scored) with a single liquidity rule — trailing 60-day median daily traded value ≥ ₹2.5 crore — taking coverage to ~1,207 names without fabricating a single score.
 
 **Architecture:** The rule already exists as `atlas_thresholds.liquidity_min_traded_value_inr` (methodology §3.3) and is read by no code anywhere in the repo. This plan wires it up. Two prerequisites land first: a daily universe-membership snapshot (so history exists from day one), and a cap-cohort rule derived from market-cap rank instead of index membership (because every new name is in no index and would otherwise collapse into `micro`). Data sufficiency needs no new code — `compute_composite()` already does coverage-adjusted weighting, returning NULL for a lens with no inputs.
 
@@ -48,6 +48,32 @@ The spec flagged two one-liners with no answer. Judgment calls made here, both r
 ---
 
 ## Task 1: Universe snapshot — the history clock
+
+> **AS BUILT — this task is COMPLETE.** Commits `b048184d`, `90f1ea61`, `a6186773`.
+> The code below is the plan as drafted; review found three defects in it and the
+> shipped version diverges deliberately. Read the commits, not this section, for what
+> actually exists. Divergences:
+> - `held_ids()` — the plan joined on `im.symbol = pt.instrument_key`. That column holds
+>   the instrument_id UUID as text; the join matched 0 of 654 rows and would have failed
+>   silently forever. It is also now **currently-held** (net open position > 0, netted
+>   per book) and takes an `as_of` date, not ever-traded.
+> - **Minimum-observation guard added.** `percentile_cont` returns a median over however
+>   many rows exist; 39 names were passing the floor on fewer than 10 observations, one
+>   with a ₹433cr "median" from two days. The `liq` CTE now requires ≥ `min_obs` rows
+>   plus recency. Two new threshold rows: `liquidity_min_observations_60d` (40) and
+>   `liquidity_recency_trading_days` (5).
+> - `close_adj * volume` → `close * volume`. Adjusted price × raw volume is neither
+>   actual traded rupees nor a consistent series. Numerically identical today (0 of
+>   116,904 rows in-window differ) but prevents a split from evicting a name.
+> - `liquidity_rank` column **dropped** — derivable at read time, no consumer, and
+>   `method="first"` over an unordered query made tied ranks nondeterministic.
+> - `snapshot_date()` added: `eod_cutoff()` can return a weekend, and in a date-keyed
+>   journal that appends rows the market never traded.
+> - Unit fixture `ALOKINDS ₹50,000,000` replaced — its true ADV is ₹49,985,288, i.e.
+>   *below* the ₹5cr line the test asserted it was above.
+>
+> **Measured result: 1,205 names clear the ₹2.5cr floor, 1,207 with held rescues; 990
+> at ₹5cr. Only 2 current active names drop. The guard evicts no current name.**
 
 Lands first and alone. `de_index_constituents` has no reconstitution history (every row
 `effective_to IS NULL`), so today's membership is being applied to 2019 data. That record
@@ -506,7 +532,7 @@ SELECT symbol, market_cap_cr FROM atlas_foundation.equity_marketcap
  WHERE market_cap_cr IS NOT NULL ORDER BY market_cap_cr DESC LIMIT 10;"
 ```
 
-Expected: `covered` ≥ 1,271. The top 10 must be recognisably India's largest listed
+Expected: `covered` ≥ 1,207. The top 10 must be recognisably India's largest listed
 companies (RELIANCE, HDFCBANK, TCS, BHARTIARTL, ICICIBANK and similar). If the top of
 the list contains obscure names, the parser is picking up the wrong number — **stop
 and report**.
@@ -943,18 +969,21 @@ pytestmark = pytest.mark.integration
 
 
 def test_active_set_at_the_two_and_a_half_crore_floor() -> None:
-    """Measured 2026-08-23: 1,271 names at ₹2.5 cr. Liquidity drifts, so the band is
-    wide; a large miss means the rule changed meaning."""
+    """Measured 2026-08-23 through the SHIPPED rule (60-day median of close*volume,
+    >=40 observations, recency, plus currently-held rescues): 1,207 names at ₹2.5 cr.
+    Liquidity drifts, so the band is wide; a large miss means the rule changed
+    meaning."""
     ids = B.liquid_universe(Decimal("25000000"))
-    assert 1150 <= len(ids) <= 1400, f"got {len(ids)}, expected ~1271"
+    assert 1120 <= len(ids) <= 1320, f"got {len(ids)}, expected ~1207"
 
 
 def test_a_higher_floor_is_a_strict_subset() -> None:
-    """Proves the threshold drives the rule. Measured: 1,037 at ₹5 cr."""
+    """Proves the threshold drives the rule. Measured: 993 at ₹5 cr (990 over the
+    floor + 3 held rescues)."""
     lo = B.liquid_universe(Decimal("25000000"))
     hi = B.liquid_universe(Decimal("50000000"))
     assert hi < lo, "a higher floor must yield a strict subset"
-    assert 950 <= len(hi) <= 1150, f"got {len(hi)} at ₹5 cr, expected ~1037"
+    assert 900 <= len(hi) <= 1100, f"got {len(hi)} at ₹5 cr, expected ~993"
 
 
 def test_held_names_are_retained_regardless_of_liquidity() -> None:
@@ -969,8 +998,10 @@ def test_held_names_are_retained_regardless_of_liquidity() -> None:
 
 
 def test_current_active_names_are_almost_entirely_retained() -> None:
-    """At ₹2.5 cr, exactly two of today's 747 fall below the floor (AHLUCONT,
-    PRSMJOHNSN) and both are unheld. More than a handful means the rule is wrong."""
+    """Measured against the shipped rule: 735 of today's 747 clear the floor outright,
+    10 more are retained as currently-held, and exactly 2 drop. The observation guard
+    added in Task 1 evicts NO current name. More than a handful means the rule is
+    wrong."""
     import _db
 
     cur = set(
@@ -1122,11 +1153,11 @@ Expected: `threshold_value = 25000000.000000`
 Run: `.venv/bin/python scripts/foundation/build_universe.py --dry-run`
 
 Expected output includes a line like
-`active stocks: 747 -> 1271 (+526 / -2)` followed by the full ADDED and REMOVED lists.
+`active stocks: 747 -> 1207 (+462 / -2)` followed by the full ADDED and REMOVED lists.
 
-**Read the REMOVED list.** It should contain exactly AHLUCONT and PRSMJOHNSN. Anything
-else — especially a recognisable large or mid-cap — means the rule is wrong. **Stop and
-report; do not proceed to Task 7.**
+**Read the REMOVED list.** It should contain exactly 2 names, both illiquid and neither
+held. Anything else — especially a recognisable large or mid-cap — means the rule is
+wrong. **Stop and report; do not proceed to Task 7.**
 
 - [ ] **Step 8: Run the gate and commit**
 
@@ -1149,9 +1180,11 @@ no inputs, so a liquid name with thin data gets a null lens, not a fake score."
 
 ## Task 6: Sectors for the new names
 
-Measured 2026-08-23: of the 526 names entering, **488 already carry a sector** and
-**38 do not**. The canonical set is at exactly **21** sectors, which is the FM-locked
-ceiling — so those 38 must fold into existing sectors, never add a 22nd.
+Measured 2026-08-23 against the SHIPPED rule: of the 470 names entering, **460 already
+carry a sector** and **10 do not**. (It was 38 before Task 1's observation guard — the
+guard removed exactly the obscure thin-data names that lacked sectors.) The canonical
+set is at exactly **21** sectors, the FM-locked ceiling, so those 10 must fold into
+existing sectors, never add a 22nd.
 
 `assign_sectors.py` deliberately never fabricates a sector (rule #0); it reports and
 guards. Filling them is an FM step, and this task produces the list to fill.
@@ -1176,7 +1209,7 @@ JOIN liq USING (instrument_id)
 WHERE im.asset_class='stock' AND liq.adv >= 25000000 AND im.sector IS NULL
 ORDER BY liq.adv DESC;"
 ```
-Expected: ~38 rows. Save the output — this is the FM's worklist.
+Expected: ~10 rows. Save the output — this is the FM's worklist.
 
 - [ ] **Step 2: Print the 21 canonical sectors the FM must map into**
 
@@ -1191,7 +1224,7 @@ FM-held and the `≤21` guard in `assign_sectors.py` will fail the run.
 
 - [ ] **Step 3: Apply the FM's mappings**
 
-Once the FM returns `symbol -> sector` for the 38, apply them with an explicit UPDATE
+Once the FM returns `symbol -> sector` for the 10, apply them with an explicit UPDATE
 per symbol. Do not infer, do not pattern-match on the company name — that is
 fabricating a classification (rule #0). Example shape, one row per FM-supplied pair:
 
@@ -1211,7 +1244,7 @@ actionable sectors ≤ 21.
 - [ ] **Step 5: Commit any mapping changes**
 
 Sector values live in the database, not in code, so there may be nothing to commit.
-Record the 38 symbols and their assigned sectors in the PR description so the decision
+Record the 10 symbols and their assigned sectors in the PR description so the decision
 is auditable.
 
 ---
@@ -1220,7 +1253,7 @@ is auditable.
 
 **Files:** none modified. This runs the pipeline.
 
-Runtime is the live risk: 739 → ~1,271 is **+72%** on every lens, and it must still fit
+Runtime is the live risk: 739 → ~1,207 is **+63%** on every lens, and it must still fit
 inside the 16:00 IST cron window.
 
 - [ ] **Step 1: Record the baseline runtime BEFORE the flip**
@@ -1239,7 +1272,7 @@ Save the `compute_all` duration. This is the number Step 4 is compared against.
 
 Run: `.venv/bin/python scripts/foundation/build_universe.py`
 
-Expected: `active stocks: 747 -> 1271 (+526 / -2)` and a written-row count.
+Expected: `active stocks: 747 -> 1207 (+462 / -2)` and a written-row count.
 
 - [ ] **Step 3: Verify the write landed**
 
@@ -1248,14 +1281,14 @@ Expected: `active stocks: 747 -> 1271 (+526 / -2)` and a written-row count.
 SELECT count(*) FILTER (WHERE is_active) AS active, count(*) AS total
 FROM atlas_foundation.instrument_master WHERE asset_class='stock';"
 ```
-Expected: `active` ≈ 1,271.
+Expected: `active` ≈ 1,207.
 
 - [ ] **Step 4: Rebuild the cap view over the new universe and check cohorts**
 
 ```bash
 .venv/bin/python scripts/foundation/cap_cohort.py --report
 ```
-Expected: `large 100 / mid 150 / small 250 / micro ~771`.
+Expected: `large 100 / mid 150 / small 250 / micro ~707`.
 
 If micro is far larger than ~771, some names are missing market caps and defaulting.
 Re-run Task 2 Step 5's gap query.
@@ -1390,7 +1423,7 @@ REFRESH MATERIALIZED VIEW atlas_foundation.mv_sector_rrg;"
 ```bash
 ./scripts/foundation/psql.sh -c "SELECT count(*) FROM atlas_foundation.mv_stock_landscape;"
 ```
-Expected: ~1,271 (was 747).
+Expected: ~1,207 (was 747).
 
 - [ ] **Step 3: Build the frontend to completion**
 
@@ -1404,7 +1437,7 @@ completes.**
 
 With the dev server running (`cd frontend && npm run dev`), load and confirm:
 
-- `/stocks` — cap counts read large 100 / mid 150 / small 250 / micro ~771; the screener
+- `/stocks` — cap counts read large 100 / mid 150 / small 250 / micro ~707; the screener
   filters return sane counts; the page does not time out
 - `/sectors` — sector cards render; no sector shows a zero constituent count
 - `/today` — renders; the "as of" date is current
@@ -1414,7 +1447,7 @@ With the dev server running (`cd frontend && npm run dev`), load and confirm:
 
 - [ ] **Step 5: Compare page load times against the pre-change baseline**
 
-Any page more than ~30% slower needs its query looked at before deploy — a 72% larger
+Any page more than ~30% slower needs its query looked at before deploy — a 63% larger
 universe hitting an unindexed path will show up here.
 
 - [ ] **Step 6: Run the full nightly orchestrator end to end**
