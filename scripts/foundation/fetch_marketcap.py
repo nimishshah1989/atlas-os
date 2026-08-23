@@ -127,6 +127,42 @@ def _fetch_one(r) -> dict | None:
     }
 
 
+def fill_renamed_symbols() -> list[str]:
+    """Carry a fetched cap across an NSE symbol rename, matching on ISIN.
+
+    A rename leaves instrument_master holding both tickers for one security (same ISIN):
+    the old one carries the whole OHLCV history — so it is the row the pipeline actually
+    scores — while Screener only serves the new one, and `company/<old>/` 404s. The old
+    row is then silently capless, which would drop it into the micro cohort.
+    (GUJGASLTD/GUJENERGY, ISIN INE844O01030: 5,617 bars on the old ticker, 0 on the new.)
+
+    Market cap is an attribute of the security, so the ISIN join is identity, not
+    inference. Fills only rows that have no cap — never overwrites a fetched value.
+    """
+    filled = _db.read_df(f"""
+        INSERT INTO {TGT} (instrument_id, symbol, market_cap_cr, face_value, fetched_at)
+        SELECT DISTINCT ON (gap.instrument_id)
+               gap.instrument_id, gap.symbol, src.market_cap_cr, src.face_value,
+               src.fetched_at
+        FROM {M}.instrument_master gap
+        JOIN {M}.instrument_master twin
+          ON twin.isin = gap.isin AND twin.instrument_id <> gap.instrument_id
+        JOIN {TGT} src
+          ON src.instrument_id = twin.instrument_id AND src.market_cap_cr IS NOT NULL
+        LEFT JOIN {TGT} own ON own.instrument_id = gap.instrument_id
+        WHERE gap.asset_class = 'stock' AND gap.isin IS NOT NULL
+          AND own.market_cap_cr IS NULL
+        ORDER BY gap.instrument_id, src.fetched_at DESC
+        ON CONFLICT (instrument_id) DO UPDATE
+          SET market_cap_cr = EXCLUDED.market_cap_cr,
+              face_value    = EXCLUDED.face_value,
+              fetched_at    = EXCLUDED.fetched_at
+          WHERE {TGT}.market_cap_cr IS NULL
+        RETURNING symbol""")["symbol"].tolist()
+    print(f"renamed-symbol fill: {len(filled)} {sorted(filled)}", flush=True)
+    return filled
+
+
 def run(limit: int | None, workers: int = 6) -> None:
     ensure_table()
     done = set(
@@ -158,6 +194,7 @@ def run(limit: int | None, workers: int = 6) -> None:
                 print(f"  {n}/{len(todo)} ok={ok} miss={miss}", flush=True)
     if batch:
         _db.upsert_df(TGT, pd.DataFrame(batch), ["instrument_id"])
+    fill_renamed_symbols()
     print(
         f"DONE: ok={ok} miss={miss}; total in table="
         f"{_db.scalar(f'SELECT count(*) FROM {TGT} WHERE market_cap_cr IS NOT NULL')}",

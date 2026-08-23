@@ -38,6 +38,11 @@ step "ingest_screener"     $PY scripts/foundation/ingest_screener.py
 step "ingest_shareholding" $PY scripts/foundation/ingest_shareholding.py
 # Market cap (screener scrape — slow, weekly cadence is fine) + fundamentals (XBRL filings).
 step "fetch_marketcap"     $PY scripts/foundation/fetch_marketcap.py
+# v_stock_cap ranks the caps fetched above, so it re-applies right after them. The view
+# itself never goes stale (it is a view, not a MV) — this is CREATE OR REPLACE so the
+# board's one cap-cohort definition has a producer in the pipeline rather than living
+# only wherever it was last typed by hand.
+step "cap_cohort"          $PY scripts/foundation/cap_cohort.py
 step "ingest_xbrl"         $PY scripts/foundation/ingest_xbrl.py
 
 # System-generated portfolios: the walk-forward expert agent. Weekly cadence (its own
