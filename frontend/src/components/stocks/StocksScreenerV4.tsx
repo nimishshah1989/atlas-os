@@ -187,7 +187,7 @@ export function StocksScreenerV4({ stocks }: { stocks: StockListRow[] }) {
         title="Strength × Leadership"
         info={{
           title: 'How to read the 2×2',
-          body: 'Each dot is a stock — x = average decile across the active lenses (Technical & Flow), y = how many of those 2 lenses it leads (D9/D10). Bubble size = ~20-session liquidity, colour = leadership. Click any dot for its evidence.',
+          body: 'Each dot is a stock — x = average decile across the active lenses (Technical & Flow), y = whether it is a leader (top-decile composite within its cap cohort): 1 = leader, 0 = not. Bubble size = ~20-session liquidity, colour = leadership. Click any dot for its evidence.',
         }}
       >
         <StocksBubble2x2 stocks={filtered} />
@@ -228,13 +228,10 @@ export function StocksScreenerV4({ stocks }: { stocks: StockListRow[] }) {
             </select>
           </Field>
 
-          <Field label="Min leadership">
+          <Field label="Leadership">
             <select className={CONTROL} value={minLead} onChange={e => setMinLead(parseInt(e.target.value, 10))}>
-              <option value={0}>0</option>
-              <option value={1}>≥1</option>
-              <option value={2}>≥2</option>
-              <option value={3}>≥3</option>
-              <option value={4}>4</option>
+              <option value={0}>All</option>
+              <option value={1}>Leaders only</option>
             </select>
           </Field>
 

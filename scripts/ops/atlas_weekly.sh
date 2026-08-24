@@ -37,7 +37,21 @@ step "ingest_etf_holdings" $PY scripts/foundation/ingest_etf_holdings.py
 step "ingest_screener"     $PY scripts/foundation/ingest_screener.py
 step "ingest_shareholding" $PY scripts/foundation/ingest_shareholding.py
 # Market cap (screener scrape — slow, weekly cadence is fine) + fundamentals (XBRL filings).
+# fetch_marketcap fills new names AND re-scrapes any cap older than REFRESH_DAYS (30).
+# It used to be resume-only, which meant a cap never moved after its first fetch — fine
+# when it was one weighting input, not fine now that cap RANK cuts the cohorts below.
 step "fetch_marketcap"     $PY scripts/foundation/fetch_marketcap.py
+# v_stock_cap ranks the caps refreshed above, so it re-applies right after them. The view
+# itself never goes stale (it is a view, not a MV) — this is CREATE OR REPLACE so the
+# board's one cap-cohort definition has a producer in the pipeline rather than living
+# only wherever it was last typed by hand. Fails loudly if any active stock ends up
+# without a cap: it would silently become 'micro' and shift everyone else's rank cuts.
+step "cap_cohort"          $PY scripts/foundation/cap_cohort.py
+# v_stock_leader cuts the composite decile WITHIN those cohorts, so it re-applies after
+# cap_cohort. Same reasoning as above: CREATE OR REPLACE, and the step exists so the
+# board's one leader definition has a producer. Fails loudly if a scored stock is missing
+# from the view — every fund/ETF roll-up INNER-joins it, so a gap shrinks the breadth base.
+step "leader_flag"         $PY scripts/foundation/leader_flag.py
 step "ingest_xbrl"         $PY scripts/foundation/ingest_xbrl.py
 
 # System-generated portfolios: the walk-forward expert agent. Weekly cadence (its own

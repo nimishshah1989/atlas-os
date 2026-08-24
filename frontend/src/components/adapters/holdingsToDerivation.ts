@@ -91,8 +91,8 @@ export function holdingsToDerivation(name: string, vector: HoldingsVector, holdi
       decile: breadthPct == null ? null : Math.max(1, Math.min(10, Math.round(breadthPct / 10))),
     },
     formula: vector.n_leaders != null && vector.n_holdings != null
-      ? `= ${vector.n_leaders} of ${vector.n_holdings} holdings lead ≥2 lenses (weighted) · lenses below are holdings-weighted`
-      : '= weighted share of holdings leading ≥2 conviction lenses · lenses below are holdings-weighted',
+      ? `= ${vector.n_leaders} of ${vector.n_holdings} holdings are leaders (weighted) · lenses below are holdings-weighted`
+      : '= weighted share of holdings that are leaders · lenses below are holdings-weighted',
     lenses,
   }
 }

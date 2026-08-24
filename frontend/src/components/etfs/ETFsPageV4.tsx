@@ -1,7 +1,7 @@
 // ETFsPageV4 — lens-first /etfs (behind LENS_V4). All data native atlas_foundation.
 // The list is a FUNNEL into the ETF roll-up atom. ETFs are a holdings-weighted roll-up of
 // the stock atom (D26/D27): the HEADLINE is LEADERSHIP-BREADTH (% of holdings weight that are
-// top-decile leaders in ≥2 conviction lenses), NOT a composite. This is a TRANSPARENCY view —
+// leaders — top-decile composite in cap cohort), NOT a composite. This is a TRANSPARENCY view —
 // what's held, how it scores — explicitly NOT an outperformance predictor.
 // Order: 1. leadership-breadth strip + a few top cards · 2. the sortable lens table.
 import Link from 'next/link'
@@ -106,7 +106,7 @@ export async function ETFsPageV4() {
     { label: 'NSE equity ETFs', value: String(universeCount), tone: 'neutral',
       sub: 'Holdings-weighted lens roll-up' },
     { label: 'Breadth ≥ 10%', value: String(withBreadth), tone: 'pos',
-      sub: '≥10% of weight leads ≥2 lenses' },
+      sub: '≥10% of weight is in leaders' },
     { label: 'Sector ETFs', value: String(sectorCount), tone: 'neutral', sub: 'Category names a sector' },
     { label: 'Index / broad', value: String(broadCount), tone: 'neutral', sub: 'Index / broad-market mandate' },
     { label: 'Avg expense', value: avgExpense == null ? '—' : `${avgExpense.toFixed(2)}%`,

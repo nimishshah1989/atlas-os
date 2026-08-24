@@ -1,6 +1,6 @@
 // FundDetailV4 — the v4 mutual-fund detail page. Lens-first, native atlas_foundation.
 // A fund is a holdings-weighted roll-up of the stock atom (D26/D27): the HEADLINE is
-// LEADERSHIP-BREADTH (% of holdings weight that are top-decile leaders in ≥2 conviction lenses),
+// LEADERSHIP-BREADTH (% of holdings weight that are leaders — top-decile composite in cap cohort),
 // NOT a composite. The fund-specific differentiator is ACTIVE-MOVEMENT — the month-over-month
 // holdings delta (is the manager adding leaders?). The 6-lens vector + look-through are a
 // TRANSPARENCY view of what's held and how it scores — descriptive, NOT an outperformance predictor.
@@ -31,7 +31,7 @@ const HOLDING_CAP = 50
 const decileStyle = (d: number | null) => ({ color: d == null ? 'var(--color-txt-3)' : decileColor(d) })
 
 const leadText = (lead: number) =>
-  lead >= 2 ? 'text-sig-pos' : lead === 1 ? 'text-sig-warn' : 'text-txt-3'
+  lead >= 1 ? 'text-sig-pos' : 'text-txt-3'  // leader = top-decile composite (0/1)
 
 const pctText = (v: number | null) =>
   v == null ? 'text-txt-3' : v >= 0 ? 'text-sig-pos' : 'text-sig-neg'
@@ -53,7 +53,7 @@ function MoveList({ moves }: { moves: FundMove[] }) {
           </a>
           <span className="min-w-0 flex-1 truncate font-sans text-[11px] text-txt-3">{m.name ?? ''}</span>
           <span className="shrink-0 font-num text-[12px] tabular-nums text-txt-2">{fmtWeight(m.weight)}</span>
-          <span className={`shrink-0 font-num text-[11px] tabular-nums ${m.lead >= 2 ? 'text-sig-pos' : 'text-txt-3'}`}>{m.lead}/2</span>
+          <span className={`shrink-0 font-num text-[11px] tabular-nums ${leadText(m.lead)}`}>{m.lead >= 1 ? 'Leader' : '—'}</span>
         </div>
       ))}
     </div>
@@ -123,7 +123,7 @@ function HoldingsTable({ holdings }: { holdings: FundHolding[] }) {
               <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={decileStyle(h.d_cat)}>{h.d_cat ?? '—'}</td>
               <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={decileStyle(h.d_flow)}>{h.d_flow ?? '—'}</td>
               <td className="px-2 py-1.5 text-right font-num text-[12px] tabular-nums" style={decileStyle(h.d_val)}>{h.d_val ?? '—'}</td>
-              <td className={`px-2 py-1.5 text-right font-num text-[12px] tabular-nums ${leadText(h.lead)}`}>{h.lead}/2</td>
+              <td className={`px-2 py-1.5 text-right font-num text-[12px] tabular-nums ${leadText(h.lead)}`}>{h.lead >= 1 ? 'Leader' : '—'}</td>
               <td className={`px-2 py-1.5 text-right font-num text-[12px] tabular-nums ${pctText(h.rs_3m)}`}>{fmtRs(h.rs_3m)}</td>
             </tr>
           ))}
@@ -158,7 +158,7 @@ export async function FundDetailV4({ mstarId }: { mstarId: string }) {
 
   // headline stat tiles (real numbers at a glance)
   const tiles: { label: string; value: string; sub?: string; tone?: Tone }[] = [
-    { label: 'Leadership-breadth', value: breadthPct, tone: 'pos', sub: `${fund.n_leaders} of ${fund.n_holdings} lead ≥2 lenses` },
+    { label: 'Leadership-breadth', value: breadthPct, tone: 'pos', sub: `${fund.n_leaders} of ${fund.n_holdings} holdings are leaders` },
     { label: 'Holdings', value: String(fund.n_holdings), sub: 'scored look-through names' },
     { label: 'NAV', value: fund.nav == null ? '—' : `₹${fund.nav.toFixed(2)}`, sub: fund.nav_date ?? 'latest disclosure' },
     { label: 'Expense', value: fund.expense == null ? '—' : `${fund.expense.toFixed(2)}%`, sub: 'regular-plan TER' },

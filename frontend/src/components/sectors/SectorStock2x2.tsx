@@ -2,7 +2,7 @@
 
 // SectorStock2x2 — two 2x2 maps of the sector's stocks, deciles cut within cap cohort (D27):
 //   A) Momentum (Technical decile) × Quality (Fundamental decile — context lens)
-//   B) Strength (avg of the 2 active deciles) × Leadership (# of Technical & Flow top-2-decile, 0..2)
+//   B) Strength (avg of the 2 active deciles) × Leadership (top-decile composite in cap cohort, 0/1)
 // Bubble SIZE = cap tier (large→largest … micro→smallest), a market-cap proxy.
 // Dot COLOUR = leadership badge. Click a dot → /stocks/<symbol>. Theme-aware: colours
 // come from useThemeTokens so the chart recolours live with the day/night toggle.
@@ -37,8 +37,9 @@ function Quad({ data, xLabel, yLabel, xDomain, yDomain, xMid, yMid }: {
 }) {
   const router = useRouter()
   const t = useThemeTokens()
+  // lead is 0/1: 1 = top-decile composite within cap cohort = leader (green); 0 = not (grey).
   const leadColor = (lead: number) =>
-    !t ? '#888888' : lead >= 2 ? t.pos : lead === 1 ? t.warn : t.tick
+    !t ? '#888888' : lead >= 1 ? t.pos : t.tick
 
   const grid = t?.grid ?? '#88888822'
   const tick = t?.tick ?? '#888888'
@@ -63,7 +64,7 @@ function Quad({ data, xLabel, yLabel, xDomain, yDomain, xMid, yMid }: {
               const p = payload[0].payload as Pt
               return (
                 <div className="rounded-tile border border-edge-rule bg-surface-raised px-2.5 py-1.5 font-num text-[11px] tabular-nums text-txt-1 shadow-panel">
-                  {p.symbol} · {xLabel.split(' ')[0]} {p.tx} / {yLabel.split(' ')[0]} {p.ty} · {p.lead}/2 · {p.cap}
+                  {p.symbol} · {xLabel.split(' ')[0]} {p.tx} / {yLabel.split(' ')[0]} {p.ty} · {p.lead >= 1 ? 'Leader' : 'Not a leader'} · {p.cap}
                 </div>
               )
             }} />
@@ -116,8 +117,8 @@ export function SectorStock2x2({ stocks }: { stocks: SectorStock[] }) {
         </h2>
         <p className="font-sans text-[13px] text-txt-3 max-w-[760px] leading-[1.45] mt-1">
           Each dot is a constituent; deciles are cut within its cap cohort. Bubble size = cap tier
-          (large → micro). Colour = how many of the 2 active lenses (Technical &amp; Flow) it leads at
-          D9/D10 (grey 0 · amber 1 · green 2). Click a dot → that stock. A small sector simply has few
+          (large → micro). Colour = leadership: green if the stock is top-decile on composite within
+          its cap cohort, grey if not. Click a dot → that stock. A small sector simply has few
           dots (e.g. a 4-name sector shows 4).
         </p>
       </div>
@@ -135,8 +136,8 @@ export function SectorStock2x2({ stocks }: { stocks: SectorStock[] }) {
         </div>
         <div>
           <div className="font-num text-[11px] text-txt-3 uppercase tracking-wider mb-2">Strength × Leadership <span className="text-txt-2">· {strLead.length} plotted</span></div>
-          <Quad data={strLead} xLabel="Strength (avg decile)" yLabel="Leadership (# of 2)"
-            xDomain={[0.5, 10.5]} yDomain={[-0.3, 2.3]} xMid={5.5} yMid={1.5} />
+          <Quad data={strLead} xLabel="Strength (avg decile)" yLabel="Leadership (leader = 1)"
+            xDomain={[0.5, 10.5]} yDomain={[-0.3, 1.3]} xMid={5.5} yMid={0.5} />
         </div>
       </div>
     </section>

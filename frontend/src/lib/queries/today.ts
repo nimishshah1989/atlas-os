@@ -20,18 +20,12 @@ import sql from '@/lib/db'
 import { toNumber } from '@/lib/decimal'
 import { LEAD_DECILE } from './stock_lens'
 
-// The cap-cohort CTE, verbatim from getStockDecile / getStocksDecileList. Duplicated
-// (not shared) to match the existing codebase convention and keep each query self-contained.
-// large/mid/small by NSE index membership; everything else is micro.
+// The cap-cohort CTE, matching getStockDecile / getStocksDecileList.
+// cap comes from atlas_foundation.v_stock_cap (market-cap rank), NOT index
+// membership: under the liquidity-floor universe most names are in no index.
 const CAP_CTE = sql`
   cap AS (
-    SELECT instrument_id,
-      CASE WHEN bool_or(index_code='NIFTY 100') THEN 'large'
-           WHEN bool_or(index_code='NIFTY MIDCAP 150') THEN 'mid'
-           WHEN bool_or(index_code='NIFTY SMLCAP 250') THEN 'small' ELSE 'micro' END AS cap
-    FROM atlas_foundation.de_index_constituents
-    WHERE effective_to IS NULL AND index_code IN ('NIFTY 100','NIFTY MIDCAP 150','NIFTY SMLCAP 250')
-    GROUP BY instrument_id
+    SELECT instrument_id, cap FROM atlas_foundation.v_stock_cap
   )`
 
 export type TodayDates = { asOf: string | null; prevOf: string | null }

@@ -13,7 +13,7 @@ Sources (all fresh to EOD):
         through these index metrics (getSectorIndexRs), so cards now match.
   * technical_daily × instrument_master.sector
       → bottom-up breadth (%>EMA21/50/200, %at-52wH), movers, strength quintiles.
-  * atlas_lens_scores_daily × de_index_constituents (cap cohort)
+  * atlas_lens_scores_daily × v_stock_cap (cap cohort)
       → leaders = TOP DECILE (D10) of composite within cap cohort (the one
         canonical leader rule, reused from etf_lens.SCORED_STOCKS) + conviction
         distribution.
@@ -93,15 +93,10 @@ def _stock_frame() -> pd.DataFrame:
     return _db.read_df(f"""
         WITH tdl AS (SELECT max(date) d FROM {M}.technical_daily WHERE asset_class='stock'),
              ll  AS (SELECT max(date) d FROM {M}.atlas_lens_scores_daily WHERE asset_class='stock'),
+             -- cap comes from {M}.v_stock_cap (market-cap rank), NOT index membership:
+             -- under the liquidity-floor universe most names are in no index.
              cap AS (
-               SELECT instrument_id,
-                 CASE WHEN bool_or(index_code='NIFTY 100') THEN 'large'
-                      WHEN bool_or(index_code='NIFTY MIDCAP 150') THEN 'mid'
-                      WHEN bool_or(index_code='NIFTY SMLCAP 250') THEN 'small' ELSE 'micro' END AS cap
-               FROM {M}.de_index_constituents
-               WHERE effective_to IS NULL
-                 AND index_code IN ('NIFTY 100','NIFTY MIDCAP 150','NIFTY SMLCAP 250')
-               GROUP BY instrument_id),
+               SELECT instrument_id, cap FROM {M}.v_stock_cap),
              dec AS (
                SELECT l.instrument_id, l.conviction_tier,
                  ntile(10) OVER (PARTITION BY COALESCE(c.cap,'micro') ORDER BY l.composite) AS d_comp

@@ -66,17 +66,32 @@ def kite_client():
     return kite
 
 
+class StaleInstrumentTokenError(Exception):
+    """This instrument's kite_token is no longer valid at Kite (delisted, renamed, or
+    re-tokenised). Permanent for this instrument; the caller skips it and carries on."""
+
+
 def _historical_with_retry(kite, token: int, start: date, end: date, retries: int = 4):
-    """Kite's historical API throttles a sustained burst (2000+ calls) by rejecting
-    with a transient 'invalid token'/network error even though the token is valid.
-    Retry with exponential backoff so a whole-universe pull doesn't die mid-run."""
+    """Fetch one instrument's daily candles, retrying only what is actually transient.
+
+    The classification here was inverted (2026-08-24). Kite returns "invalid token"
+    for a bad INSTRUMENT token — not a bad access token — so it is permanent for that
+    instrument, yet it was being retried 4x (burning the rate budget) and then raised,
+    killing a whole-universe pull on its first delisted symbol. Meanwhile "Too many
+    requests", the one genuinely transient error, was not retried at all.
+
+    Measured: a 2,158-stock backfill died at instrument 45 (AARNAV, token 195026177),
+    three times running, having written 45 of 2,150 rows per day.
+    """
     for attempt in range(retries):
         _rate_limit()
         try:
             return kite.historical_data(token, start, end, "day")
         except Exception as e:
             msg = str(e).lower()
-            transient = "invalid token" in msg or "timed out" in msg or "network" in msg
+            if "invalid token" in msg:
+                raise StaleInstrumentTokenError(f"kite_token {token} rejected by Kite") from e
+            transient = "too many" in msg or "timed out" in msg or "network" in msg
             if attempt == retries - 1 or not transient:
                 raise
             time.sleep(2**attempt)  # 1s, 2s, 4s — lets the throttle window clear
@@ -258,11 +273,13 @@ def ingest(asset_classes=None, start: date | None = None, end: date | None = Non
     tgt = targets(asset_classes)
     written = {"stock": 0, "etf": 0, "index": 0}
     missing: list[str] = []
+    stale_tokens: list[str] = []
     for ac in sorted(tgt["asset_class"].unique()):
         floors = _last_dates(ac) if start is None else {}
         sub = tgt[tgt["asset_class"] == ac]
         for n, r in enumerate(sub.itertuples(index=False), 1):
             key = r.instrument_id if ac == "stock" else r.symbol
+            sym = r.symbol  # hoisted: pandas-stubs types itertuples() as tuple[Any, ...]
             st = start or (
                 floors[str(key)] - timedelta(days=_INCR_BUFFER)
                 if floors.get(str(key))
@@ -270,17 +287,31 @@ def ingest(asset_classes=None, start: date | None = None, end: date | None = Non
             )
             if st > end:
                 continue
-            df = fetch_history(kite, int(r.kite_token), st, end)
+            # One dead instrument must never abort the universe. A stale kite_token is
+            # data to report, not a reason to leave every later symbol unfetched.
+            try:
+                df = fetch_history(kite, int(r.kite_token), st, end)
+            except StaleInstrumentTokenError:
+                stale_tokens.append(sym)
+                continue
             if df.empty:
-                missing.append(r.symbol)
+                missing.append(sym)
                 continue
             written[ac] += _db.upsert_df(
                 f"{STAGING_SCHEMA}.{_TABLE[ac]}", _rows(df, ac, r), _PK[ac]
             )
             if n % 50 == 0:
                 print(f"[kite] {ac} {n}/{len(sub)} written={written[ac]:,}", flush=True)
-    print(f"[kite] COMPLETE written={written} missing={len(missing)}", flush=True)
-    return {"written": written, "missing": missing}
+    print(
+        f"[kite] COMPLETE written={written} missing={len(missing)} "
+        f"stale_tokens={len(stale_tokens)}",
+        flush=True,
+    )
+    if stale_tokens:
+        # Loud, not silent: a growing list means instrument_master's kite_token column
+        # is drifting from Kite's live instrument list and needs a build_universe run.
+        print(f"[kite] STALE kite_token, skipped: {', '.join(sorted(stale_tokens))}", flush=True)
+    return {"written": written, "missing": missing, "stale_tokens": stale_tokens}
 
 
 def verify(symbol: str, start: date = HIST_START, end: date | None = None) -> dict:

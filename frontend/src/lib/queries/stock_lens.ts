@@ -7,11 +7,12 @@ import 'server-only'
 import sql from '@/lib/db'
 import { toNumber, toNumberOr } from '@/lib/decimal'
 
-// 2-LENS MODEL: a stock "leads" a lens when it is top-2-decile (D9/D10) of its cap cohort,
-// and leadership counts ONLY the two active conviction lenses — Technical & Flow (Fundamental
-// and Catalyst carry weight 0, so they no longer count toward leadership). lead is therefore
-// 0..2 (a leader has lead = 2), matching the funds/ETFs roll-up (etf_lens.ts SCORED_STOCKS) so
-// "leader" means the same thing everywhere. Single source of truth for the threshold.
+// `lead` is a 0/1 FLAG, not a tally: a stock leads when it is top-decile (D10) on COMPOSITE
+// within its cap cohort — one rule, matching the funds/ETFs roll-up (etf_lens.ts SCORED_STOCKS)
+// and atlas_foundation.v_stock_leader, so "leader" means the same thing everywhere. It used to
+// count how many lenses a stock led, and stale `lead >= 2` call sites read as a permanent zero.
+// LEAD_DECILE below is a SEPARATE threshold: the per-lens "leads this lens" cut (D9+) used by
+// the Today tape and Market Pulse breadth. Single source of truth for that threshold.
 export const LEAD_DECILE = 9
 
 // ── RS matrix ─────────────────────────────────────────────────────────────
@@ -100,14 +101,10 @@ const SUB_COLS = Object.values(SUBS).flat().map(([c]) => c)
 export async function getStockDecile(symbol: string): Promise<StockDecile | null> {
   const rows = await sql<Record<string, string>[]>`
     WITH latest AS (SELECT max(date) d FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock'),
+    -- cap comes from atlas_foundation.v_stock_cap (market-cap rank), NOT index
+    -- membership: under the liquidity-floor universe most names are in no index.
     cap AS (
-      SELECT instrument_id,
-        CASE WHEN bool_or(index_code='NIFTY 100') THEN 'large'
-             WHEN bool_or(index_code='NIFTY MIDCAP 150') THEN 'mid'
-             WHEN bool_or(index_code='NIFTY SMLCAP 250') THEN 'small' ELSE 'micro' END AS cap
-      FROM atlas_foundation.de_index_constituents
-      WHERE effective_to IS NULL AND index_code IN ('NIFTY 100','NIFTY MIDCAP 150','NIFTY SMLCAP 250')
-      GROUP BY instrument_id
+      SELECT instrument_id, cap FROM atlas_foundation.v_stock_cap
     ),
     j AS (
       SELECT l.*, im.symbol, im.name, im.sector, COALESCE(c.cap,'micro') AS cap,
@@ -303,14 +300,10 @@ export async function getStocksDecileList(): Promise<StockListRow[]> {
     WITH latest AS (SELECT max(date) d FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock'),
     tdl AS (SELECT max(date) d FROM atlas_foundation.technical_daily WHERE asset_class='stock'),  -- RS/ret as-of (asset_class filter uses the class_date index — an unfiltered max(date) seq-scans 6.9M rows)
 
+    -- cap comes from atlas_foundation.v_stock_cap (market-cap rank), NOT index
+    -- membership: under the liquidity-floor universe most names are in no index.
     cap AS (
-      SELECT instrument_id,
-        CASE WHEN bool_or(index_code='NIFTY 100') THEN 'large'
-             WHEN bool_or(index_code='NIFTY MIDCAP 150') THEN 'mid'
-             WHEN bool_or(index_code='NIFTY SMLCAP 250') THEN 'small' ELSE 'micro' END AS cap
-      FROM atlas_foundation.de_index_constituents
-      WHERE effective_to IS NULL AND index_code IN ('NIFTY 100','NIFTY MIDCAP 150','NIFTY SMLCAP 250')
-      GROUP BY instrument_id
+      SELECT instrument_id, cap FROM atlas_foundation.v_stock_cap
     ),
     rs AS (  -- rs_3m_sector is the CANONICAL stored RS-vs-sector (stock 3M − sector-index 3M,
              -- both calendar-anchored via backfill_sector_rs); read it, never recompute inline.

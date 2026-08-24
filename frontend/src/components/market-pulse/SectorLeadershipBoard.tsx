@@ -75,7 +75,7 @@ function SectorBreakdown({ name, stocks }: { name: string; stocks: StockLensRow[
               {LENSES.map(([k]) => (
                 <td key={k} className="px-2 py-1.5 text-right"><DChip d={s[k] as number | null} /></td>
               ))}
-              <td className="px-3 py-1.5 text-right font-num text-[11px] tabular-nums text-txt-2">{s.lead}<span className="text-txt-3">/4</span></td>
+              <td className={`px-3 py-1.5 text-right font-num text-[11px] tabular-nums ${s.lead >= 1 ? 'text-sig-pos' : 'text-txt-3'}`}>{s.lead >= 1 ? 'Leader' : '—'}</td>
             </tr>
           ))}
         </tbody>

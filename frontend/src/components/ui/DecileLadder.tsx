@@ -22,7 +22,7 @@ export type LadderLens = {
 export type DecileLadderProps = {
   lenses: LadderLens[]
   strength?: number | null
-  leadership?: { n: number; of: number }
+  leadership?: { lead: number }   // 0/1 leader flag — top-decile composite within the cap cohort
   cohortLabel?: string
   note?: ReactNode
   defaultOpenKey?: string
@@ -100,11 +100,11 @@ export function DecileLadder({ lenses, strength, leadership, cohortLabel, note, 
               <div className="font-num text-[9px] uppercase tracking-[0.14em] text-txt-3">Leadership</div>
               <div
                 className="mt-0.5 font-display text-[22px] font-semibold leading-none tabular-nums"
-                style={{ color: leadership.n >= 2 ? 'var(--color-sig-pos)' : leadership.n === 1 ? 'var(--color-sig-warn)' : 'var(--color-txt-3)' }}
+                style={{ color: leadership.lead >= 1 ? 'var(--color-sig-pos)' : 'var(--color-txt-3)' }}
               >
-                {leadership.n}/{leadership.of}
+                {leadership.lead >= 1 ? 'Leader' : '—'}
               </div>
-              <div className="mt-0.5 font-sans text-[10px] text-txt-3">active lenses · Tech &amp; Flow</div>
+              <div className="mt-0.5 font-sans text-[10px] text-txt-3">top-decile composite in cohort</div>
             </div>
           )}
           {note && <div className="min-w-[200px] flex-1 self-center font-sans text-[12px] leading-[1.5] text-txt-2">{note}</div>}

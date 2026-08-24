@@ -185,12 +185,9 @@ def check_C(g: Gate):
     #    the leader flag is actually computed from composite, not stale / mis-joined.
     dviol = _q(
         f"""
-        with cap as (select instrument_id,
-            case when bool_or(index_code='NIFTY 100') then 'large'
-                 when bool_or(index_code='NIFTY MIDCAP 150') then 'mid'
-                 when bool_or(index_code='NIFTY SMLCAP 250') then 'small' else 'micro' end cap
-          from atlas_foundation.de_index_constituents where effective_to is null
-            and index_code in ('NIFTY 100','NIFTY MIDCAP 150','NIFTY SMLCAP 250') group by 1),
+        -- cap comes from atlas_foundation.v_stock_cap (market-cap rank), NOT index
+        -- membership: under the liquidity-floor universe most names are in no index.
+        with cap as (select instrument_id, cap from atlas_foundation.v_stock_cap),
         dec as (select l.composite, coalesce(c.cap,'micro') cap,
             ntile(10) over (partition by coalesce(c.cap,'micro') order by l.composite) d
           from {L} l left join cap c on c.instrument_id=l.instrument_id

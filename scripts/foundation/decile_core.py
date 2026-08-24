@@ -2,9 +2,9 @@
 """Shared decile/leadership computation (D27 methodology) — single source used by the
 instrument view and every roll-up. Read-only, on-read (nothing materialised here).
 
-Deciles are cut WITHIN market-cap cohort (large/mid/small/micro); the cohort is the
-official Indian cap class via index-ETF free-float-weight rank inside Nifty Total Market
-(ETF weight = free-float cap). Decile is computed over NON-NULL values only — null = 'no
+Deciles are cut WITHIN market-cap cohort (large/mid/small/micro); the cohort comes from
+atlas_foundation.v_stock_cap (market-cap rank over the active universe), the one rule the
+frontend queries read too. Decile is computed over NON-NULL values only — null = 'no
 signal' (NaN), never fabricated into a rank. Leadership badge counts how many of the 4
 conviction lenses (technical/fundamental/catalyst/flow) are top-decile; valuation is its
 own decile and never feeds the badge. Strength = mean conviction decile (1-10).
@@ -25,23 +25,15 @@ MIN_COHORT = 20  # need >=20 non-null to rank
 
 
 def cap_bucket() -> pd.DataFrame:
-    """instrument_id -> cap cohort via free-float-weight rank inside the broad index."""
+    """instrument_id -> cap cohort, from atlas_foundation.v_stock_cap.
+
+    Was derived here from free-float weight rank inside the broad index ETF. That
+    ranked only names the ETF holds (the 750), so under the liquidity-floor universe
+    every other name defaulted to 'micro'. The view ranks on full market cap over the
+    whole active universe and is the single rule the frontend also reads.
+    """
     w = _db.read_df(
-        """WITH r AS (
-             SELECT instrument_id, weight,
-                    row_number() OVER (PARTITION BY instrument_id ORDER BY
-                      CASE ticker WHEN :b1 THEN 1 WHEN :b2 THEN 2 ELSE 3 END, weight DESC) rn
-             FROM atlas_foundation.de_etf_holdings WHERE ticker IN (:b1, :b2) AND weight > 0)
-           SELECT instrument_id, weight FROM r WHERE rn = 1""",
-        {"b1": BROAD, "b2": BROAD2},
-    )
-    w["instrument_id"] = w["instrument_id"].astype(str)
-    w = w.sort_values("weight", ascending=False).reset_index(drop=True)
-    w["rank"] = np.arange(1, len(w) + 1)
-    w["cap"] = np.select(
-        [w["rank"] <= 100, w["rank"] <= 250, w["rank"] <= 500],
-        ["large", "mid", "small"],
-        default="micro",
+        "SELECT instrument_id::text AS instrument_id, cap FROM atlas_foundation.v_stock_cap"
     )
     return w[["instrument_id", "cap"]]
 

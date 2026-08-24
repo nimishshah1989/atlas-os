@@ -39,3 +39,18 @@ describe.skipIf(!hasDb)('getFundEquityCurve', () => {
     expect(pts.filter((p) => p.nifty50 == null || p.nifty500 == null)).toEqual([])
   })
 })
+
+describe.skipIf(!hasDb)('getFundActiveMovement', () => {
+  it('counts the leaders a manager actually added and dropped', async () => {
+    // lead is the 0/1 leader flag from v_stock_leader — a leader has lead = 1. Counting
+    // on lead >= 2 (the retired 4-lens tally) made both headline numbers structurally 0
+    // for every fund on the board. Verified 2026-08-23 against atlas_foundation: this
+    // fund's latest two holdings snapshots add 4 leaders and drop 2.
+    const m = await db().getFundActiveMovement('F0000142R9') // Motilal Oswal Nifty 500 Reg Gr
+    expect(m).not.toBeNull()
+    expect(m!.leaders_added).toBeGreaterThan(0)
+    expect(m!.leaders_dropped).toBeGreaterThan(0)
+    // and the flag itself only ever takes the two values the count is built on
+    for (const mv of [...m!.added, ...m!.exited]) expect([0, 1]).toContain(mv.lead)
+  })
+})

@@ -157,7 +157,7 @@ export type StockLadder = {
   strength: number | null
   composite: number | null
   conviction_tier: string | null
-  leadership: { n: number; of: number }
+  leadership: { lead: number }
   cohortLabel: string
   topLensKey: string | null
   evidence: unknown   // raw per-lens evidence JSONB → catalyst filings + flow inputs for the score tree
@@ -186,7 +186,7 @@ export function stockToLadder(decile: StockDecile, ev: StockEvidence | null): St
     strength: decile.strength,
     composite: decile.composite,
     conviction_tier: decile.conviction_tier,
-    leadership: { n: decile.lead, of: 2 }, // 2-lens: D9/D10 in Technical & Flow
+    leadership: { lead: decile.lead }, // 0/1: top-decile composite within the cap cohort
     cohortLabel: CAP_LABEL[decile.cap] ?? decile.cap,
     topLensKey,
     evidence: decile.evidence,

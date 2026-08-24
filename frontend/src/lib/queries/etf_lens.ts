@@ -1,7 +1,7 @@
 // src/lib/queries/etf_lens.ts
 // Native ETF lens roll-up — all from atlas_foundation. ETFs are a holdings-weighted roll-up
 // of the stock atom (D26/D27): the headline is LEADERSHIP-BREADTH (% of holdings weight that are
-// top-decile leaders in ≥2 conviction lenses), NOT a cap-weighted composite. Plus the
+// leaders — top-decile composite within their cap cohort), NOT a cap-weighted composite. Plus the
 // holdings-weighted 6-lens vector (descriptive) and a look-through to each holding's deciles.
 //
 // IDENTITY: the ETF universe is de_mf_master (Morningstar, is_etf) — fund_name / category /
@@ -38,44 +38,44 @@ export async function getEtfChartSeries(nseTicker: string, years = 5): Promise<S
 export const SCORED_STOCKS = `
   latest AS (SELECT max(date) d FROM atlas_foundation.atlas_lens_scores_daily WHERE asset_class='stock'),
   tdl AS (SELECT max(date) d FROM atlas_foundation.technical_daily WHERE asset_class='stock'),  -- asset_class filter uses the class_date index (unfiltered max(date) seq-scans 6.9M rows)
+  -- cap comes from atlas_foundation.v_stock_cap (market-cap rank), NOT index
+  -- membership: under the liquidity-floor universe most names are in no index.
   cap AS (
-    SELECT instrument_id,
-      CASE WHEN bool_or(index_code='NIFTY 100') THEN 'large'
-           WHEN bool_or(index_code='NIFTY MIDCAP 150') THEN 'mid'
-           WHEN bool_or(index_code='NIFTY SMLCAP 250') THEN 'small' ELSE 'micro' END AS cap
-    FROM atlas_foundation.de_index_constituents
-    WHERE effective_to IS NULL AND index_code IN ('NIFTY 100','NIFTY MIDCAP 150','NIFTY SMLCAP 250')
-    GROUP BY instrument_id),
+    SELECT instrument_id, cap FROM atlas_foundation.v_stock_cap),
   rs AS (SELECT instrument_id, rs_3m_n500, rs_1m_n500, ret_1d, ret_1w, ret_1m FROM atlas_foundation.technical_daily
          WHERE asset_class='stock' AND date=(SELECT d FROM tdl)),
+  -- LEADER = top decile (D10) of composite within the stock's cap cohort. The rule lives
+  -- ONCE, in atlas_foundation.v_stock_leader (scripts/foundation/leader_flag.py) — it used
+  -- to be re-typed here and in the fund-rank backfill, and the two drifted apart.
+  -- The date filter is REQUIRED: the view spans every scored day.
+  ldr AS (
+    SELECT instrument_id, lead FROM atlas_foundation.v_stock_leader WHERE date=(SELECT d FROM latest)),
   j AS (
     SELECT l.instrument_id, im.symbol, COALESCE(c.cap,'micro') AS cap,
-           l.technical::float t, l.fundamental::float f, l.catalyst::float ca, l.flow::float fl, l.valuation::float va,
-           l.composite::float comp
+           l.technical::float t, l.fundamental::float f, l.catalyst::float ca, l.flow::float fl, l.valuation::float va
     FROM atlas_foundation.atlas_lens_scores_daily l
     JOIN atlas_foundation.instrument_master im ON im.instrument_id = l.instrument_id
     LEFT JOIN cap c ON c.instrument_id = l.instrument_id
     WHERE l.asset_class='stock' AND l.date=(SELECT d FROM latest)),
   dec AS (
-    SELECT instrument_id, symbol, cap, t, f, ca, fl, va, comp,
+    SELECT instrument_id, symbol, cap, t, f, ca, fl, va,
       CASE WHEN t  IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(t  IS NULL) ORDER BY t)  END d_tech,
       CASE WHEN f  IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(f  IS NULL) ORDER BY f)  END d_fund,
       CASE WHEN ca IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(ca IS NULL) ORDER BY ca) END d_cat,
       CASE WHEN fl IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(fl IS NULL) ORDER BY fl) END d_flow,
-      CASE WHEN va IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(va IS NULL) ORDER BY va) END d_val,
-      CASE WHEN comp IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(comp IS NULL) ORDER BY comp) END d_composite
+      CASE WHEN va IS NULL THEN NULL ELSE ntile(10) OVER (PARTITION BY cap,(va IS NULL) ORDER BY va) END d_val
     FROM j),
   scored AS (
     SELECT d.instrument_id, d.symbol, d.cap, d.t, d.f, d.ca, d.fl, d.va,
-      d.d_tech, d.d_fund, d.d_cat, d.d_flow, d.d_val, d.d_composite,
-      -- LEADER = TOP DECILE (D10) by composite within the stock's cap cohort (FM 2026-06-30:
-      -- one simple rule). lead is 0/1; a leader has lead = 1. Roll-ups filter on lead >= 1.
-      (COALESCE((d.d_composite>=10)::int,0)) AS lead,
+      d.d_tech, d.d_fund, d.d_cat, d.d_flow, d.d_val,
+      -- lead is 0/1; a leader has lead = 1. Roll-ups filter on lead >= 1.
+      COALESCE(ldr.lead,0) AS lead,
       -- strength = mean of the ACTIVE-lens deciles (Technical & Flow), matching the 2-lens conviction.
       ((COALESCE(d.d_tech,0)+COALESCE(d.d_flow,0))::float
         / NULLIF((d.d_tech IS NOT NULL)::int+(d.d_flow IS NOT NULL)::int,0)) AS strength,
       rs.rs_1m_n500, rs.rs_3m_n500, rs.ret_1d, rs.ret_1w, rs.ret_1m
-    FROM dec d LEFT JOIN rs ON rs.instrument_id = d.instrument_id),
+    FROM dec d LEFT JOIN rs ON rs.instrument_id = d.instrument_id
+               LEFT JOIN ldr ON ldr.instrument_id = d.instrument_id),
   etf_nse AS (  -- deterministic ETF identity bridge: Morningstar fund_name ⇄ NSE instrument name.
                 -- 1 row per mstar_id (min ticker) so a name matching >1 NSE row can't fan out the holdings join.
     SELECT mstar_id, min(nse_ticker) AS nse_ticker FROM (
@@ -113,7 +113,10 @@ const ROLLUP_SELECT = `
   max(en.nse_ticker) AS nse_ticker,
   count(h.instrument_id) AS n_holdings,
   count(*) FILTER (WHERE COALESCE(s.lead,0) >= 1) AS n_leaders,
-  sum(h.weight) FILTER (WHERE COALESCE(s.lead,0) >= 1) / NULLIF(sum(h.weight),0) AS breadth,
+  -- COALESCE the NUMERATOR: with no leader held, sum(...) FILTER returns NULL, and an ETF whose
+  -- holdings are all scored but none lead has breadth 0%, not "unknown". The NULLIF on the
+  -- denominator keeps the real unknown — an ETF with no weighted holdings at all — as NULL.
+  COALESCE(sum(h.weight) FILTER (WHERE COALESCE(s.lead,0) >= 1),0) / NULLIF(sum(h.weight),0) AS breadth,
   sum(h.weight*s.t)  FILTER (WHERE s.t  IS NOT NULL) / NULLIF(sum(h.weight) FILTER (WHERE s.t  IS NOT NULL),0) AS v_tech,
   sum(h.weight*s.f)  FILTER (WHERE s.f  IS NOT NULL) / NULLIF(sum(h.weight) FILTER (WHERE s.f  IS NOT NULL),0) AS v_fund,
   sum(h.weight*s.ca) FILTER (WHERE s.ca IS NOT NULL) / NULLIF(sum(h.weight) FILTER (WHERE s.ca IS NOT NULL),0) AS v_cat,
