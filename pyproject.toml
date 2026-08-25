@@ -151,6 +151,11 @@ ignore = [
 # call known binaries; query values are bound, never user input.
 "scripts/**" = ["S101", "E501", "S608", "S607"]
 "migrations/**" = ["E501"]  # SQL string literals in migrations have long lines by nature
+# S608: the only interpolated value is the scratch-journal name, a module constant
+# (`f"{E.M}.atlas_signal_ic_pytest"`) that eval_signal.ensure_table() re-validates against
+# a lowercase schema.name regex before any DDL runs. A table NAME cannot be bound as a
+# :param in Postgres, so there is no non-interpolating spelling. Reviewed 2026-08-25.
+"tests/integration/signal/test_eval_signal.py" = ["S608"]
 "atlas/validation/m1_data_quality.py" = ["E501"]
 "atlas/preflight.py" = ["E501"]
 "atlas/trading/genome.py" = ["S311"]  # non-crypto RNG OK for genome seeding

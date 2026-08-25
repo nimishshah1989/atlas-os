@@ -14,7 +14,11 @@ export default async function MethodologyPage() {
   const [weights, thresholds] = await Promise.all([getLensWeights(), getMethodologyThresholds()])
   return (
     <main className="min-h-screen bg-surface-base">
-      <div className="mx-auto flex max-w-[1100px] items-center justify-end px-6 pt-4">
+      <div className="mx-auto flex max-w-[1100px] items-center justify-end gap-2 px-6 pt-4">
+        <a href="/methodology/signal"
+          className="rounded-tile border border-edge-rule px-3 py-1.5 font-num text-[12px] text-txt-1 no-underline hover:bg-surface-raised">
+          Does it work? — measured predictive power →
+        </a>
         <a href="/thresholds"
           className="rounded-tile border border-edge-rule px-3 py-1.5 font-num text-[12px] text-txt-1 no-underline hover:bg-surface-raised">
           Control panel — edit thresholds &amp; weights →
