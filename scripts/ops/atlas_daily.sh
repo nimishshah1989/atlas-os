@@ -95,6 +95,17 @@ step "maal_sync"                 $PY scripts/foundation/sync_maal_books.py
 # not a reason to withhold a correct board. Promote to gate() after a clean month.
 step "universe_snapshot" $PY scripts/foundation/build_universe_snapshot.py
 
+# Rolling signal quality: rank-IC + decile spread per lens/horizon/cohort/era over the
+# trailing two years. step, not gate: a lens losing predictive power is a finding for the
+# FM to act on, not a reason to withhold a correct board. Promote to gate() only once a
+# baseline exists and has held for a month.
+#
+# The window start is computed in Python, not `date -d '2 years ago'` — that spelling is
+# GNU-only, so it works on this box and dies on the laptop where the script is edited and
+# syntax-checked. $PY is already the interpreter that produced $EOD two dozen lines up.
+IC_START=$($PY -c "import datetime as d, _db; print(_db.eod_cutoff() - d.timedelta(days=730))")
+step "signal_ic" $PY scripts/foundation/eval_signal.py --start "$IC_START" --end "$EOD"
+
 # 3. GATES (assert on REAL produced output — rule #0). Deploy only if ALL pass.
 # Run gates DIRECTLY (not via step): step() records a failure but always returns 0,
 # so `step ... || GATE_OK=0` never fired — a failed gate could still deploy. And
