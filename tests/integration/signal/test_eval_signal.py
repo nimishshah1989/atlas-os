@@ -12,6 +12,7 @@ loader that drops the filter fails instead of agreeing with itself.
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -220,6 +221,22 @@ def test_cap_cohorts_cover_the_scored_universe() -> None:
 # 473. test_era_boundaries_land_on_the_real_universe_breaks holds that to the live DB.
 
 
+@pytest.fixture(scope="module")
+def journal() -> Iterator[str]:
+    """A scratch journal for the tests that WRITE, so they never touch the live one.
+
+    atlas_signal_ic is keyed by (lens, horizon_d, cohort, era) with no window in the key,
+    so `backfill(2023-01-01 .. 2023-06-30)` replaces the full 2019-2024 'wide' row for that
+    key with a six-month recompute. Nothing heals it: the nightly step spans the trailing
+    two years and so never recomputes the wide era at all. Pointing the tests at a window
+    that cannot collide is not available — every window inside an era maps to the same key.
+    """
+    table = f"{E.M}.atlas_signal_ic_pytest"
+    E.ensure_table(table)
+    yield table
+    _db.exec_sql(f"DROP TABLE IF EXISTS {table}")
+
+
 def _scored_on(day: str) -> int:
     return int(
         _db.scalar(
@@ -274,15 +291,16 @@ def test_era_boundaries_land_on_the_real_universe_breaks() -> None:
             )
 
 
-def test_backfill_writes_one_row_per_lens_horizon_cohort_era() -> None:
-    E.ensure_table()
-    E.backfill(start="2023-01-01", end="2023-06-30", lenses=("technical",), horizons=(21,))
+def test_backfill_writes_one_row_per_lens_horizon_cohort_era(journal: str) -> None:
+    E.backfill(
+        start="2023-01-01", end="2023-06-30", lenses=("technical",), horizons=(21,), table=journal
+    )
 
     df = _db.read_df(
-        """SELECT lens, horizon_d, cohort, era, n_dates, mean_n, mean_ic, hit_rate,
-                  mean_spread, cap_coverage
-           FROM atlas_foundation.atlas_signal_ic
-           WHERE lens = 'technical' AND horizon_d = 21 AND era = 'wide'"""
+        f"""SELECT lens, horizon_d, cohort, era, n_dates, mean_n, mean_ic, hit_rate,
+                   mean_spread, cap_coverage
+            FROM {journal}
+            WHERE lens = 'technical' AND horizon_d = 21 AND era = 'wide'"""
     )
     assert not df.empty
     assert set(df["cohort"]) <= {"all", "large", "mid", "small", "micro"}
@@ -291,15 +309,16 @@ def test_backfill_writes_one_row_per_lens_horizon_cohort_era() -> None:
     assert df.set_index("cohort").loc["all", "cap_coverage"] == 1
 
 
-def test_cap_less_rows_are_dropped_from_the_bands_never_defaulted_to_micro() -> None:
+def test_cap_less_rows_are_dropped_from_the_bands_never_defaulted_to_micro(journal: str) -> None:
     """v_stock_cap has no date dimension, so 43% of the wide era's scored rows carry no
     cap band. Defaulting them to 'micro' would invent a cohort label for exactly the
     names that later left the universe. They belong in 'all' and nowhere else."""
-    E.ensure_table()
-    E.backfill(start="2023-01-01", end="2023-06-30", lenses=("technical",), horizons=(21,))
+    E.backfill(
+        start="2023-01-01", end="2023-06-30", lenses=("technical",), horizons=(21,), table=journal
+    )
     df = _db.read_df(
-        """SELECT cohort, mean_n, cap_coverage FROM atlas_foundation.atlas_signal_ic
-           WHERE lens='technical' AND horizon_d=21 AND era='wide'"""
+        f"""SELECT cohort, mean_n, cap_coverage FROM {journal}
+            WHERE lens='technical' AND horizon_d=21 AND era='wide'"""
     ).set_index("cohort")
 
     pooled = float(df.loc["all", "mean_n"])
@@ -320,23 +339,95 @@ def test_cap_less_rows_are_dropped_from_the_bands_never_defaulted_to_micro() -> 
     assert float(df.loc["micro", "cap_coverage"]) == pytest.approx(float(covered), abs=0.02)
 
 
-def test_backfill_is_idempotent() -> None:
-    E.ensure_table()
-    E.backfill(start="2023-01-01", end="2023-06-30", lenses=("technical",), horizons=(21,))
-    n1 = _db.scalar("SELECT count(*) FROM atlas_foundation.atlas_signal_ic")
-    E.backfill(start="2023-01-01", end="2023-06-30", lenses=("technical",), horizons=(21,))
-    n2 = _db.scalar("SELECT count(*) FROM atlas_foundation.atlas_signal_ic")
+def test_backfill_is_idempotent(journal: str) -> None:
+    E.backfill(
+        start="2023-01-01", end="2023-06-30", lenses=("technical",), horizons=(21,), table=journal
+    )
+    n1 = _db.scalar(f"SELECT count(*) FROM {journal}")
+    E.backfill(
+        start="2023-01-01", end="2023-06-30", lenses=("technical",), horizons=(21,), table=journal
+    )
+    n2 = _db.scalar(f"SELECT count(*) FROM {journal}")
     assert n1 == n2, f"re-running duplicated rows: {n1} -> {n2}"
 
 
-def test_eras_are_reported_separately_never_blended() -> None:
+def test_eras_are_reported_separately_never_blended(journal: str) -> None:
     """The scored cross-section goes 1,936 names/date (to 2024-05-31) -> 473 the next
     session -> 1,198 from 2026-08-21. A single blended IC across those breaks is
     uninterpretable, so era is part of the key."""
-    E.ensure_table()
-    E.backfill(start="2023-01-01", end="2023-03-31", lenses=("technical",), horizons=(21,))
-    E.backfill(start="2025-01-01", end="2025-03-31", lenses=("technical",), horizons=(21,))
-    eras = _db.read_df(
-        "SELECT DISTINCT era FROM atlas_foundation.atlas_signal_ic WHERE lens='technical'"
+    E.backfill(
+        start="2023-01-01", end="2023-03-31", lenses=("technical",), horizons=(21,), table=journal
     )
+    E.backfill(
+        start="2025-01-01", end="2025-03-31", lenses=("technical",), horizons=(21,), table=journal
+    )
+    eras = _db.read_df(f"SELECT DISTINCT era FROM {journal} WHERE lens='technical'")
     assert {"wide", "narrow"} <= set(eras["era"]), "2023 and 2025 collapsed into one era"
+
+
+# --- Task 4: sanity gates on the LIVE journal -----------------------------------------
+#
+# These read atlas_signal_ic itself — the production result, not a scratch table. That is
+# the point: they are gates on what the board will publish, so they must see what it sees.
+
+
+def test_no_lens_reports_an_implausibly_high_ic() -> None:
+    """|IC| > 0.15 sustained does not happen in equities. If it appears, the most likely
+    causes are NULL placeholder rows leaking in (composite = 0.00 for 839 instruments)
+    or a forward return overlapping the scoring date. Fail loudly rather than celebrate.
+
+    The ceiling is 0.15 and stays there. The largest |mean_ic| in the journal today is
+    0.125 (technical/63/narrow/micro, 61 names), so this has real headroom — tightening it
+    to hug that number would make it fire on ordinary drift instead of on a bug.
+    """
+    df = _db.read_df(
+        "SELECT lens, era, cohort, horizon_d, mean_ic, n_dates "
+        "FROM atlas_foundation.atlas_signal_ic WHERE abs(mean_ic) > 0.15 AND n_dates > 60"
+    )
+    assert df.empty, f"implausible IC — investigate before trusting:\n{df.to_string()}"
+
+
+def test_the_cross_section_matches_the_known_era_shape() -> None:
+    """Guards the NULL-exclusion. 2,093 of 2,093 rows on a 2019 date are non-NULL for
+    composite and policy, of which 755 predate their instrument's listing. If those
+    placeholders leak in, the pooled wide-era cross-section jumps toward 2,093 instead of
+    the measured 1,343-1,769 — so the bound is on mean_n, the cross-section itself, not
+    only on how many dates were covered."""
+    n = _db.scalar("SELECT max(n_dates) FROM atlas_foundation.atlas_signal_ic WHERE era = 'wide'")
+    assert n and n > 100, "wide era should span hundreds of dates"
+
+    widest = _db.read_df(
+        """SELECT lens, horizon_d, mean_n FROM atlas_foundation.atlas_signal_ic
+           WHERE era = 'wide' AND cohort = 'all' ORDER BY mean_n DESC LIMIT 1"""
+    )
+    assert not widest.empty, "wide era should carry a pooled cohort"
+    assert float(widest["mean_n"].iloc[0]) < 2000, (
+        f"pooled wide-era cross-section is {widest['mean_n'].iloc[0]:.0f} names/date — "
+        f"the 2,093 placeholder rows are leaking in:\n{widest.to_string()}"
+    )
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "KNOWN UNFIXED DEFECT in atlas_foundation.ohlcv_stock, not in this study. 28,507 "
+        "rows across 86 instruments carry close_adj < 1 before 2024-06 — PRIVISCL closes at "
+        "0.05 on 2020-03-23 with adj_factor = 1.0, so the RAW close is wrong and no "
+        "adjustment can be blamed. A 0.05 -> 539 recovery is a 10,777x return. Rank-IC "
+        "shrugs (it ranks first either way), the arithmetic decile spread does not: "
+        "composite/126/wide/small reads +2811%. Fix the prices in ohlcv_stock, then remove "
+        "this xfail — strict=True makes it fail the moment the fix lands."
+    ),
+)
+def test_no_decile_spread_is_large_enough_to_be_a_price_defect() -> None:
+    """A top-minus-bottom decile spread past +/-100% over 126 sessions is not a market
+    move, it is a broken price. mean_spread is an arithmetic mean of per-date decile
+    spreads, so one 10,777x forward return drags the whole era's number with it."""
+    df = _db.read_df(
+        """SELECT lens, horizon_d, cohort, era, n_dates, mean_n, mean_ic, mean_spread
+           FROM atlas_foundation.atlas_signal_ic
+           WHERE abs(mean_spread) > 1.0 ORDER BY abs(mean_spread) DESC"""
+    )
+    assert df.empty, (
+        f"{len(df)} decile spreads exceed +/-100% — a price defect, not a return:\n{df.to_string()}"
+    )

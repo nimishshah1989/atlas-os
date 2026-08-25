@@ -29,6 +29,7 @@ TWO THINGS THIS FILE EXISTS TO GET RIGHT:
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from typing import cast
 
@@ -179,8 +180,21 @@ def era_series(dates) -> pd.Series:
     return out
 
 
-def ensure_table() -> None:
-    _db.exec_sql(f"""CREATE TABLE IF NOT EXISTS {TGT} (
+_IDENT = re.compile(r"^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$")
+
+
+def ensure_table(table: str = TGT) -> None:
+    """Create the journal if it is absent.
+
+    `table` is here so the integration tests can write somewhere other than the live
+    journal. The primary key is (lens, horizon_d, cohort, era) and carries NO window, so a
+    test backfilling six months of 2023 replaces the full-study 'wide' row for that key with
+    a six-month recompute — and the nightly step only ever spans the trailing two years, so
+    the wide era is never recomputed and the damage does not heal on its own.
+    """
+    if not _IDENT.match(table):
+        raise ValueError(f"table must be a lowercase schema.name identifier; got {table!r}")
+    _db.exec_sql(f"""CREATE TABLE IF NOT EXISTS {table} (
         lens          text        NOT NULL,
         horizon_d     integer     NOT NULL,
         cohort        text        NOT NULL,
@@ -239,12 +253,19 @@ def _rows_for(
 
 
 def backfill(
-    start: str, end: str, lenses: Sequence[str] = LENSES, horizons: Sequence[int] = HORIZONS
+    start: str,
+    end: str,
+    lenses: Sequence[str] = LENSES,
+    horizons: Sequence[int] = HORIZONS,
+    table: str = TGT,
 ) -> dict:
-    """Evaluate each (lens, horizon) over [start, end]; upsert one row per cohort+era."""
+    """Evaluate each (lens, horizon) over [start, end]; upsert one row per cohort+era.
+
+    `table` defaults to the live journal; see ensure_table() for why the tests override it.
+    """
     from atlas.compute.signal_eval import evaluate
 
-    ensure_table()
+    ensure_table(table)
     fwd = forward_returns(start, end, horizons)
     caps = cap_cohorts()
     written = 0
@@ -269,7 +290,7 @@ def backfill(
                 rows += _rows_for(lens, int(h), evaluate(frame, horizon=int(h)), coverage)
         if rows:
             written += _db.upsert_df(
-                TGT, pd.DataFrame(rows), ["lens", "horizon_d", "cohort", "era"]
+                table, pd.DataFrame(rows), ["lens", "horizon_d", "cohort", "era"]
             )
         print(f"  {lens}: {len(rows)} rows", flush=True)
     return {"written": written}
