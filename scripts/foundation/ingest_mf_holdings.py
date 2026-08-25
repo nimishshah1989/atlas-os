@@ -12,7 +12,6 @@ Config from env (defaults = the configured holdings service):
 
 from __future__ import annotations
 
-import datetime
 import os
 import time
 import uuid
@@ -107,7 +106,13 @@ def main() -> None:
     funds = [r[0] for r in cur.fetchall()]
     print(f"fetching holdings for {len(funds)} funds @ {WORKERS} workers ...", flush=True)
 
-    today = datetime.date.today()
+    # Anchor to the last COMPLETE EOD, not the wall-clock date (house rule D11). The box
+    # runs UTC, so date.today() rolls over at 05:30 IST and stamps a snapshot with a date
+    # the scored layer has not reached — and every consumer selects
+    # `max(as_of_date) <= <lens date>`, so a future-stamped snapshot is invisible rather
+    # than merely early. On 2026-08-25 that hid a fresh 777-fund pull behind a month-old
+    # one, and 185 hybrid funds stayed unranked despite having complete data.
+    today = _db.eod_cutoff()
     rows, ok, miss = [], 0, 0
     with ThreadPoolExecutor(max_workers=WORKERS) as ex:
         futs = {ex.submit(fetch_one, f): f for f in funds}
