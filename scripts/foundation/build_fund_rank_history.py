@@ -43,7 +43,7 @@ TGT = "atlas_foundation.fund_rank_daily"
 
 # Identical to fund_lens.ts EQUITY_FUND_FILTER — one scheme per portfolio (no Direct/IDCW dupes),
 # equity only. Keeps the ranked cohort identical to what the funds page displays.
-EQUITY_FUND_FILTER = """NOT mm.is_etf AND mm.is_active
+EQUITY_FUND_FILTER = """NOT COALESCE(mm.is_etf, false) AND mm.is_active
   AND mm.broad_category NOT ILIKE ALL(ARRAY['%debt%','%liquid%','%money%','%overnight%','%gilt%','%bond%'])
   AND mm.fund_name NOT ILIKE '%Direct%' AND mm.fund_name NOT ILIKE '%Dir Gr%' AND mm.fund_name NOT ILIKE '%IDCW%'"""
 

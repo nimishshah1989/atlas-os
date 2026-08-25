@@ -51,7 +51,7 @@ SCORED_STOCKS = """
     WHERE l.asset_class='stock' AND l.date=(SELECT d FROM latest))
 """
 
-EQUITY_FUND_FILTER = """NOT mm.is_etf AND mm.is_active
+EQUITY_FUND_FILTER = """NOT COALESCE(mm.is_etf, false) AND mm.is_active
   AND mm.broad_category NOT ILIKE ALL(ARRAY['%debt%','%liquid%','%money%','%overnight%','%gilt%','%bond%'])
   AND mm.fund_name NOT ILIKE '%Direct%' AND mm.fund_name NOT ILIKE '%Dir Gr%' AND mm.fund_name NOT ILIKE '%IDCW%'"""
 

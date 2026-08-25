@@ -16,7 +16,10 @@ import { SCORED_STOCKS } from './etf_lens'
 const LATEST = `(SELECT max(as_of_date) FROM atlas_foundation.de_mf_holdings)`
 // Universe (D21b): Regular plan · Equity · Growth option. Drop debt/liquid/gilt, and the Direct-plan
 // + dividend (IDCW) duplicates of the same portfolio so each scheme appears once.
-const EQUITY_FUND_FILTER = `NOT mm.is_etf AND mm.is_active
+// COALESCE, not bare NOT: ingest_fund_master.py never writes is_etf, so any fund added
+// after the original curated set has it NULL — and `NOT NULL` is NULL, which silently
+// drops the row rather than keeping it. That hid all 185 hybrid funds (2026-08-24).
+const EQUITY_FUND_FILTER = `NOT COALESCE(mm.is_etf, false) AND mm.is_active
   AND mm.broad_category NOT ILIKE ALL(ARRAY['%debt%','%liquid%','%money%','%overnight%','%gilt%','%bond%'])
   AND mm.fund_name NOT ILIKE '%Direct%' AND mm.fund_name NOT ILIKE '%Dir Gr%' AND mm.fund_name NOT ILIKE '%IDCW%'`
 
