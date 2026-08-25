@@ -30,6 +30,7 @@ TWO THINGS THIS FILE EXISTS TO GET RIGHT:
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import cast
 
 import _db
 import pandas as pd
@@ -133,3 +134,153 @@ def cap_cohorts() -> pd.DataFrame:
     cap needs equity_marketcap as of the date instead.
     """
     return _db.read_df(f"SELECT instrument_id::text AS instrument_id, cap FROM {M}.v_stock_cap")
+
+
+TGT = f"{M}.atlas_signal_ic"
+
+# The scored cross-section has three structural breaks. An IC spanning one is
+# uninterpretable, so era is part of the primary key and results are never blended.
+# Measured 2026-08-25 from atlas_lens_scores_daily (rows carrying signal, per date):
+#   wide       2019-01-01..2024-05-31   1,343 grows to 1,936 names/date
+#   narrow     2024-06-03..2026-07-29     473 grows to     498  (universe cut)
+#   expanded   2026-07-30..2026-08-20     739 to           743  (universe widened)
+#   liquidity  2026-08-21..             1,198               (one liquidity floor)
+#
+# The plan's boundary of 2024-04-01 was wrong: 2024-05-31 carries 1,936 names and
+# 2024-06-03 carries 473. The break is between those two sessions, not in March.
+#
+# The last two eras hold ~16 and ~2 trading dates and sit inside the forward-return
+# lookahead (prices end 2026-08-24), so they legitimately produce no rows. That is
+# the horizon running past the data edge, not a filter.
+ERAS = (
+    ("wide", "2019-01-01", "2024-05-31"),
+    ("narrow", "2024-06-03", "2026-07-29"),
+    ("expanded", "2026-07-30", "2026-08-20"),
+    ("liquidity", "2026-08-21", "2099-12-31"),
+)
+
+# Cohorts. 'all' is the whole scored cross-section and is the honest headline in every
+# era; the four cap bands are a SECOND partition drawn only from rows v_stock_cap can
+# label. See cap_cohorts(): the view has no date dimension, so in the wide era it covers
+# only 57.1% of scored rows (100% from 2024-06 on) and labels a 2019 row with a 2026
+# band. A cap-less row is therefore NOT defaulted to 'micro' — that would invent a cohort
+# label for exactly the names that later left the universe. It is dropped from the cap
+# partition and kept in 'all', and every row records cap_coverage so the trim is visible
+# in the result table rather than in a comment.
+POOLED = "all"
+
+
+def era_series(dates) -> pd.Series:
+    """Era label per date. Vectorised — this runs over ~2.3M rows per lens."""
+    d = pd.to_datetime(pd.Series(dates).reset_index(drop=True))
+    out = pd.Series("unknown", index=d.index, dtype=object)
+    for name, lo, hi in ERAS:
+        out[(d >= lo) & (d <= hi)] = name
+    return out
+
+
+def ensure_table() -> None:
+    _db.exec_sql(f"""CREATE TABLE IF NOT EXISTS {TGT} (
+        lens          text        NOT NULL,
+        horizon_d     integer     NOT NULL,
+        cohort        text        NOT NULL,
+        era           text        NOT NULL,
+        n_dates       integer     NOT NULL,
+        mean_n        numeric(10,2),
+        mean_ic       numeric(8,5),
+        hit_rate      numeric(6,4),
+        t_stat        numeric(10,4),
+        mean_spread   numeric(10,6),
+        cap_coverage  numeric(6,4),
+        first_date    date,
+        last_date     date,
+        computed_at   timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY (lens, horizon_d, cohort, era))""")
+
+
+def _rows_for(
+    lens: str, horizon: int, per_date: pd.DataFrame, coverage: dict[str, float]
+) -> list[dict]:
+    """Collapse a per-(date, cohort) frame into one journal row per (cohort, era)."""
+    from atlas.compute.signal_eval import summarise
+
+    if per_date.empty:
+        return []
+    per_date = per_date.assign(era=era_series(per_date["date"]).to_numpy())
+    now = pd.Timestamp.now(tz="Asia/Kolkata")
+    rows: list[dict] = []
+    for key, g in per_date.groupby(["cohort", "era"], sort=True):
+        cohort, era = cast("tuple[str, str]", key)
+        s = summarise(g)
+        if not s["n_dates"]:
+            continue
+        rows.append(
+            {
+                "lens": lens,
+                "horizon_d": horizon,
+                "cohort": cohort,
+                "era": era,
+                "n_dates": s["n_dates"],
+                "mean_n": float(pd.Series(g["n"]).mean()),
+                "mean_ic": s["mean_ic"],
+                "hit_rate": s["hit_rate"],
+                "t_stat": s["t_stat"],
+                "mean_spread": s["mean_spread"],
+                # 1.0 for the pooled cohort by construction — it draws on every scored
+                # row. For a cap band it is the era's share of scored rows v_stock_cap
+                # could label at all, i.e. how much of the cross-section this number saw.
+                "cap_coverage": 1.0 if cohort == POOLED else coverage.get(era),
+                "first_date": min(g["date"]),
+                "last_date": max(g["date"]),
+                "computed_at": now,
+            }
+        )
+    return rows
+
+
+def backfill(
+    start: str, end: str, lenses: Sequence[str] = LENSES, horizons: Sequence[int] = HORIZONS
+) -> dict:
+    """Evaluate each (lens, horizon) over [start, end]; upsert one row per cohort+era."""
+    from atlas.compute.signal_eval import evaluate
+
+    ensure_table()
+    fwd = forward_returns(start, end, horizons)
+    caps = cap_cohorts()
+    written = 0
+    for lens in lenses:
+        scores = lens_scores(lens, start, end)
+        if scores.empty:
+            print(f"  {lens}: no scored rows in window", flush=True)
+            continue
+        joined = scores.merge(fwd, on=["instrument_id", "date"], how="inner").merge(
+            caps, on="instrument_id", how="left"
+        )
+        era = era_series(joined["date"])
+        coverage = {
+            str(k): float(v)
+            for k, v in pd.Series(joined["cap"].to_numpy()).notna().groupby(era).mean().items()
+        }
+        banded = joined.dropna(subset=["cap"])  # never fillna — see the POOLED comment
+        pooled = joined.assign(cap=POOLED)
+        rows: list[dict] = []
+        for h in horizons:
+            for frame in (pooled, banded):
+                rows += _rows_for(lens, int(h), evaluate(frame, horizon=int(h)), coverage)
+        if rows:
+            written += _db.upsert_df(
+                TGT, pd.DataFrame(rows), ["lens", "horizon_d", "cohort", "era"]
+            )
+        print(f"  {lens}: {len(rows)} rows", flush=True)
+    return {"written": written}
+
+
+if __name__ == "__main__":
+    import argparse
+
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--start", default="2019-01-01")
+    ap.add_argument("--end", default="2026-08-24")
+    ap.add_argument("--lens", nargs="*", default=list(LENSES))
+    a = ap.parse_args()
+    print(backfill(a.start, a.end, tuple(a.lens)), flush=True)

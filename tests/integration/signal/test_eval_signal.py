@@ -211,3 +211,132 @@ def test_cap_cohorts_cover_the_scored_universe() -> None:
     scored = E.lens_scores(lens="technical", start="2026-08-21", end="2026-08-21")
     covered = scored["instrument_id"].isin(caps["instrument_id"]).mean()
     assert covered > 0.9, f"only {covered:.1%} of scored names have a cap cohort"
+
+
+# --- Task 3: journal table + backfill driver ---------------------------------------
+#
+# The plan's era boundary (2024-04-01) is not where the break is. Measured here, in the
+# test, rather than trusted: 2024-05-31 carries 1,936 scored names and 2024-06-03 carries
+# 473. test_era_boundaries_land_on_the_real_universe_breaks holds that to the live DB.
+
+
+def _scored_on(day: str) -> int:
+    return int(
+        _db.scalar(
+            """SELECT count(*) FROM atlas_foundation.atlas_lens_scores_daily
+               WHERE asset_class='stock' AND date = :d
+                 AND (technical IS NOT NULL OR fundamental IS NOT NULL
+                      OR valuation IS NOT NULL OR catalyst IS NOT NULL OR flow IS NOT NULL)""",
+            {"d": day},
+        )
+    )
+
+
+def test_era_boundaries_land_on_the_real_universe_breaks() -> None:
+    """An era exists to stop an IC being averaged across a change in the universe, so
+    each boundary must sit ON the change. The last session of an era and the first
+    session of the next one must differ sharply in cross-section size; two sessions
+    inside one era must not."""
+    for _, lo, hi in E.ERAS:
+        if hi > "2026-08-24":  # open-ended final era: nothing after it to compare
+            continue
+        last = _db.scalar(
+            """SELECT max(date) FROM atlas_foundation.atlas_lens_scores_daily
+               WHERE asset_class='stock' AND date <= :d
+                 AND (technical IS NOT NULL OR fundamental IS NOT NULL
+                      OR valuation IS NOT NULL OR catalyst IS NOT NULL OR flow IS NOT NULL)""",
+            {"d": hi},
+        )
+        nxt = _db.scalar(
+            """SELECT min(date) FROM atlas_foundation.atlas_lens_scores_daily
+               WHERE asset_class='stock' AND date > :d
+                 AND (technical IS NOT NULL OR fundamental IS NOT NULL
+                      OR valuation IS NOT NULL OR catalyst IS NOT NULL OR flow IS NOT NULL)""",
+            {"d": hi},
+        )
+        a, b = _scored_on(str(last)), _scored_on(str(nxt))
+        assert abs(b - a) / max(a, b) > 0.25, (
+            f"era ending {hi}: {last} has {a} scored names, {nxt} has {b} — "
+            "that is not a structural break, the boundary is in the wrong place"
+        )
+        # ...and the era is internally stable across the session before its own end.
+        prev = _db.scalar(
+            """SELECT max(date) FROM atlas_foundation.atlas_lens_scores_daily
+               WHERE asset_class='stock' AND date < :d
+                 AND (technical IS NOT NULL OR fundamental IS NOT NULL
+                      OR valuation IS NOT NULL OR catalyst IS NOT NULL OR flow IS NOT NULL)""",
+            {"d": str(last)},
+        )
+        if prev is not None and str(prev) >= lo:
+            p = _scored_on(str(prev))
+            assert abs(a - p) / max(a, p) < 0.25, (
+                f"{prev} -> {last} jumps {p} -> {a} inside era ending {hi}"
+            )
+
+
+def test_backfill_writes_one_row_per_lens_horizon_cohort_era() -> None:
+    E.ensure_table()
+    E.backfill(start="2023-01-01", end="2023-06-30", lenses=("technical",), horizons=(21,))
+
+    df = _db.read_df(
+        """SELECT lens, horizon_d, cohort, era, n_dates, mean_n, mean_ic, hit_rate,
+                  mean_spread, cap_coverage
+           FROM atlas_foundation.atlas_signal_ic
+           WHERE lens = 'technical' AND horizon_d = 21 AND era = 'wide'"""
+    )
+    assert not df.empty
+    assert set(df["cohort"]) <= {"all", "large", "mid", "small", "micro"}
+    assert "all" in set(df["cohort"]), "the pooled cross-section is the headline number"
+    assert (df["n_dates"] > 0).all()
+    assert df.set_index("cohort").loc["all", "cap_coverage"] == 1
+
+
+def test_cap_less_rows_are_dropped_from_the_bands_never_defaulted_to_micro() -> None:
+    """v_stock_cap has no date dimension, so 43% of the wide era's scored rows carry no
+    cap band. Defaulting them to 'micro' would invent a cohort label for exactly the
+    names that later left the universe. They belong in 'all' and nowhere else."""
+    E.ensure_table()
+    E.backfill(start="2023-01-01", end="2023-06-30", lenses=("technical",), horizons=(21,))
+    df = _db.read_df(
+        """SELECT cohort, mean_n, cap_coverage FROM atlas_foundation.atlas_signal_ic
+           WHERE lens='technical' AND horizon_d=21 AND era='wide'"""
+    ).set_index("cohort")
+
+    pooled = float(df.loc["all", "mean_n"])
+    banded = float(df.drop(index="all")["mean_n"].sum())
+    covered = _db.scalar(
+        """SELECT avg((c.instrument_id IS NOT NULL)::int)
+           FROM atlas_foundation.atlas_lens_scores_daily s
+           LEFT JOIN atlas_foundation.v_stock_cap c USING (instrument_id)
+           WHERE s.asset_class='stock' AND s.date BETWEEN '2023-01-01' AND '2023-06-30'
+             AND (s.technical IS NOT NULL OR s.fundamental IS NOT NULL
+                  OR s.valuation IS NOT NULL OR s.catalyst IS NOT NULL OR s.flow IS NOT NULL)"""
+    )
+    assert float(covered) < 0.95, "fixture window must actually contain cap-less rows"
+    assert banded < pooled * 0.95, (
+        f"bands sum to {banded:.0f} of a {pooled:.0f}-name cross-section — cap-less rows "
+        "are being defaulted into a band instead of dropped"
+    )
+    assert float(df.loc["micro", "cap_coverage"]) == pytest.approx(float(covered), abs=0.02)
+
+
+def test_backfill_is_idempotent() -> None:
+    E.ensure_table()
+    E.backfill(start="2023-01-01", end="2023-06-30", lenses=("technical",), horizons=(21,))
+    n1 = _db.scalar("SELECT count(*) FROM atlas_foundation.atlas_signal_ic")
+    E.backfill(start="2023-01-01", end="2023-06-30", lenses=("technical",), horizons=(21,))
+    n2 = _db.scalar("SELECT count(*) FROM atlas_foundation.atlas_signal_ic")
+    assert n1 == n2, f"re-running duplicated rows: {n1} -> {n2}"
+
+
+def test_eras_are_reported_separately_never_blended() -> None:
+    """The scored cross-section goes 1,936 names/date (to 2024-05-31) -> 473 the next
+    session -> 1,198 from 2026-08-21. A single blended IC across those breaks is
+    uninterpretable, so era is part of the key."""
+    E.ensure_table()
+    E.backfill(start="2023-01-01", end="2023-03-31", lenses=("technical",), horizons=(21,))
+    E.backfill(start="2025-01-01", end="2025-03-31", lenses=("technical",), horizons=(21,))
+    eras = _db.read_df(
+        "SELECT DISTINCT era FROM atlas_foundation.atlas_signal_ic WHERE lens='technical'"
+    )
+    assert {"wide", "narrow"} <= set(eras["era"]), "2023 and 2025 collapsed into one era"
