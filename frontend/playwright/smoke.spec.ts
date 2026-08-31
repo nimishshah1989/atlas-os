@@ -1,42 +1,9 @@
 // frontend/playwright/smoke.spec.ts
 import { test, expect } from '@playwright/test'
 
-const PASSWORD = process.env.ATLAS_PASSWORD ?? 'test123'
-
-test.describe('Auth gate', () => {
-  test('redirects unauthenticated users to /login', async ({ page }) => {
-    await page.goto('/')
-    await expect(page).toHaveURL(/\/login/)
-  })
-
-  test('login page renders the form', async ({ page }) => {
-    await page.goto('/login')
-    await expect(page.getByRole('heading', { name: 'Atlas-OS' })).toBeVisible()
-    await expect(page.getByPlaceholder('Password')).toBeVisible()
-  })
-
-  test('correct password grants access', async ({ page }) => {
-    await page.goto('/login')
-    await page.getByPlaceholder('Password').fill(PASSWORD)
-    await page.getByRole('button', { name: 'Sign in' }).click()
-    await expect(page).toHaveURL('/')
-  })
-
-  test('wrong password stays on login', async ({ page }) => {
-    await page.goto('/login')
-    await page.getByPlaceholder('Password').fill('wrong')
-    await page.getByRole('button', { name: 'Sign in' }).click()
-    await expect(page).toHaveURL(/\/login/)
-  })
-})
-
 test.describe('Regime page', () => {
   test.beforeEach(async ({ page }) => {
-    // Authenticate first
-    await page.goto('/login')
-    await page.getByPlaceholder('Password').fill(PASSWORD)
-    await page.getByRole('button', { name: 'Sign in' }).click()
-    await page.waitForURL('/')
+    await page.goto('/')
   })
 
   test('renders regime state headline', async ({ page }) => {

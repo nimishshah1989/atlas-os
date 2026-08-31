@@ -5,16 +5,12 @@
 // shows DRAFT until it is published again.
 import { NextResponse } from 'next/server'
 
-import { requireAuth } from '@/lib/requireAuth'
 import { MAAL_CODES, type MaalCode } from '@/lib/maal'
 import { reopenConfirmation } from '@/lib/queries/maal'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
-  const denied = await requireAuth('reopen a published week')
-  if (denied) return denied
-
   const body = await req.json().catch(() => null)
   const code = body?.code
   const week = body?.week

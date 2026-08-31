@@ -4,15 +4,11 @@
 import { NextResponse } from 'next/server'
 
 import { MAAL_CODES, type MaalCode } from '@/lib/maal'
-import { requireAuth } from '@/lib/requireAuth'
 import { setMaxCap } from '@/lib/queries/maal'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
-  const denied = await requireAuth('set the max position cap')
-  if (denied) return denied
-
   let body: { code?: unknown; capPct?: unknown } = {}
   try {
     body = await req.json()
