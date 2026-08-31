@@ -8,7 +8,6 @@ import Link from 'next/link'
 import { MaalEditor } from '@/components/maal/MaalEditor'
 import { MAAL_CODES, MAAL_NAMES, type MaalCode } from '@/lib/maal'
 import { getConfirmation, getMaxCap, getOpeningBook } from '@/lib/queries/maal'
-import { isAuthed } from '@/lib/requireAuth'
 import { formatIST } from '@/lib/format-date'
 
 export const metadata = { title: 'Confirmation · Atlas' }
@@ -23,11 +22,10 @@ export default async function MaalEditorPage({
   if (!/^\d{4}-\d{2}-\d{2}$/.test(week)) notFound()
   const pf = code as MaalCode
 
-  const [existing, openingBook, maxCapPct, canEdit] = await Promise.all([
+  const [existing, openingBook, maxCapPct] = await Promise.all([
     getConfirmation(pf, week),
     getOpeningBook(pf, week),
     getMaxCap(pf),
-    isAuthed(),
   ])
 
   return (
@@ -54,16 +52,6 @@ export default async function MaalEditorPage({
           </Link>
         )}
       </div>
-
-      {!canEdit && (
-        <p className="rounded-panel border border-sig-warn/30 bg-sig-warn/[0.06] px-4 py-2.5 font-sans text-[12.5px] text-txt-2">
-          Read-only — you can review this week, but saving or publishing needs a sign-in.{' '}
-          <a href="/login" className="font-semibold text-accent no-underline hover:underline">
-            Sign in
-          </a>
-          .
-        </p>
-      )}
 
       <MaalEditor
         code={pf}

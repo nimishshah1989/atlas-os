@@ -3,7 +3,6 @@
 import { NextResponse } from 'next/server'
 
 import { MAAL_CODES, type MaalCode } from '@/lib/maal'
-import { requireAuth } from '@/lib/requireAuth'
 import { saveDraft, type CallRow, type EvidenceSection } from '@/lib/queries/maal'
 
 export const dynamic = 'force-dynamic'
@@ -19,9 +18,6 @@ const str = (v: unknown, fallback = '') => (typeof v === 'string' ? v : fallback
 const numOrNull = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null)
 
 export async function POST(req: Request) {
-  const denied = await requireAuth('save a confirmation')
-  if (denied) return denied
-
   let body: Body = {}
   try {
     body = await req.json()

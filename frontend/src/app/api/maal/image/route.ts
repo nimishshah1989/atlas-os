@@ -4,7 +4,6 @@
 // `client_max_body_size 5m;` or these 413 before Next ever sees them.
 import { NextResponse } from 'next/server'
 
-import { requireAuth } from '@/lib/requireAuth'
 import {
   clearCallImage,
   clearEvidenceImage,
@@ -18,9 +17,6 @@ const MAX_BYTES = 2 * 1024 * 1024
 const ALLOWED = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 
 export async function POST(req: Request) {
-  const denied = await requireAuth('attach a chart')
-  if (denied) return denied
-
   let form: FormData
   try {
     form = await req.formData()
@@ -74,9 +70,6 @@ export async function POST(req: Request) {
  * previously permanent for the week, which made the FM hesitant to attach at all.
  */
 export async function DELETE(req: Request) {
-  const denied = await requireAuth('remove a chart')
-  if (denied) return denied
-
   const body = await req.json().catch(() => null)
   const confirmationId = Number(body?.confirmationId)
   const target = body?.target

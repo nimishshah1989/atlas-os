@@ -20,9 +20,6 @@ import { SellGrid } from './SellGrid'
 import { EvidenceSections } from './EvidenceSections'
 import type { DraftCall, DraftEvidence } from './draftTypes'
 
-const SIGN_IN_MESSAGE =
-  'Not signed in — open /login in a new tab, sign in, then press Save again. Your rows are still here.'
-
 const toDraft = (c: Confirmation['calls'][number]): DraftCall => ({
   side: c.side,
   key: c.key,
@@ -139,11 +136,7 @@ export function MaalEditor({
       })
       if (!saved.ok) {
         const d = await saved.json().catch(() => ({}))
-        setProblems([
-          saved.status === 401
-            ? { code: 'unauthorized', message: SIGN_IN_MESSAGE }
-            : { code: d.error_code ?? 'error', message: d.message ?? 'save failed' },
-        ])
+        setProblems([{ code: d.error_code ?? 'error', message: d.message ?? 'save failed' }])
         return
       }
       const r = await fetch('/api/maal/publish', {
@@ -177,11 +170,7 @@ export function MaalEditor({
       })
       const d = await r.json().catch(() => ({}))
       if (!r.ok) {
-        setProblems([
-          r.status === 401
-            ? { code: 'unauthorized', message: SIGN_IN_MESSAGE }
-            : { code: d.error_code ?? 'error', message: d.message ?? 'could not reopen' },
-        ])
+        setProblems([{ code: d.error_code ?? 'error', message: d.message ?? 'could not reopen' }])
       } else {
         setNote('Reopened — this week is a draft again. Publish when the changes are ready.')
         router.refresh()

@@ -4,15 +4,11 @@
 import { NextResponse } from 'next/server'
 
 import { MAAL_CODES, type MaalCode } from '@/lib/maal'
-import { requireAuth } from '@/lib/requireAuth'
 import { publish } from '@/lib/queries/maal'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
-  const denied = await requireAuth('publish a confirmation')
-  if (denied) return denied
-
   let body: { code?: unknown; week?: unknown } = {}
   try {
     body = await req.json()
