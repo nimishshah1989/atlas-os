@@ -29,8 +29,15 @@ coverage.json
 .coverage
 htmlcov/
 
-# Tool-internal state (not project code)
-.claude/
+# Tool-internal state (not project code). The repo DOES carry its vendored skills, the
+# session-start hook and project settings so laptop and cloud sessions get the same tooling.
+.claude/*
+!.claude/skills/
+!.claude/hooks/
+!.claude/settings.json
+!.claude/CLAUDE.md
+.claude/settings.local.json
+graphify-out/
 .ruflo/
 .superpowers/
 
