@@ -1,0 +1,24 @@
+// src/components/ui/Section.tsx — a titled block (serif 22/28) with an optional note beside it.
+import type { ReactNode } from 'react'
+
+export function Section({ title, note, children }: { title: string; note?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="mt-10">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 className="font-serif text-section text-ink">{title}</h2>
+        {note && <span className="text-meta text-ink-3">{note}</span>}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+/** What a table shows when a query failed: what failed, and what to do. */
+export function QueryFailed({ error }: { error: string }) {
+  return (
+    <p className="panel px-4 py-3 text-body text-ink-2">
+      The database did not answer this query. Check the pooler URL and the atlas_global_app grants, then
+      reload. It said: <span className="text-neg">{error}</span>
+    </p>
+  )
+}

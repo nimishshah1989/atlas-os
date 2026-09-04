@@ -141,3 +141,33 @@ jobs:
 
       - name: Unit tests (vitest)
         run: npm test
+
+  frontend-global:
+    name: Global board types + tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The Global Atlas board (frontend-global/) reads atlas_global through the transaction
+    # pooler and deploys from Vercel, not the box. Same gate as the India board: tsc guards
+    # the schema→page coupling, vitest covers the pure formatters and the Lens bar's shape.
+    # Playwright is local-only (playwright/smoke.spec.ts); it is not run here.
+    defaults:
+      run:
+        working-directory: frontend-global
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend-global/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck (tsc --noEmit)
+        run: npx tsc --noEmit
+
+      - name: Unit tests (vitest)
+        run: npm test

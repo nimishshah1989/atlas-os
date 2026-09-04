@@ -1,0 +1,242 @@
+/* src/app/globals.css — Global Atlas design tokens (docs/global/frontend-design.md §2).
+   Light ("Daylight Desk" lineage) is the default; dark ("Graphite Terminal" lineage) is the
+   html[data-theme="dark"] override, set before first paint by layout.tsx and flipped by the rail
+   toggle. No colour exists outside this token set: Tailwind's stock palette, font families and
+   text sizes are cleared so only the named tokens produce utilities. */
+@import "tailwindcss";
+
+@theme {
+  --color-*: initial;
+  --font-*: initial;
+  --text-*: initial;
+  --radius-*: initial;
+
+  /* surfaces */
+  --color-ground: #ECEFF3;
+  --color-panel:  #FFFFFF;
+  --color-raised: #F5F7FA;
+  --color-inset:  #E2E7ED;
+
+  /* lines */
+  --color-hair:   rgba(12, 20, 33, 0.10);
+  --color-rule:   rgba(12, 20, 33, 0.16);
+
+  /* ink */
+  --color-ink:    #15202E;
+  --color-ink-2:  #4A5665;
+  --color-ink-3:  #7C8797;
+
+  /* signal — muted RAG (FM-approved on India) and one accent, spent sparingly */
+  --color-accent: #2D63D8;
+  --color-pos:    #2D8561;
+  --color-neg:    #B84D45;
+  --color-warn:   #A07A2B;
+
+  /* type — the families are set by next/font in layout.tsx */
+  --font-sans:  var(--font-instrument-sans), system-ui, sans-serif;
+  --font-serif: var(--font-instrument-serif), Georgia, serif;
+
+  /* scale: px / line-height */
+  --text-meta: 12px;       --text-meta--line-height: 16px;
+  --text-table: 13px;      --text-table--line-height: 18px;
+  --text-body: 14px;       --text-body--line-height: 20px;
+  --text-lead: 16px;       --text-lead--line-height: 24px;
+  --text-section: 22px;    --text-section--line-height: 28px;
+  --text-title: 32px;      --text-title--line-height: 36px;
+  --text-composite: 44px;  --text-composite--line-height: 44px;
+
+  /* one radius */
+  --radius-panel: 6px;
+}
+
+:root {
+  /* decile ramp (light) — India's muted red → olive → green; deciles only */
+  --decile-1:  #AF635D; --decile-2:  #AD6F58; --decile-3:  #A77C4F; --decile-4:  #9E834A; --decile-5:  #91884E;
+  --decile-6:  #818B55; --decile-7:  #6D8B60; --decile-8:  #5B8B6B; --decile-9:  #4F8C70; --decile-10: #4C8B70;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --color-ground: #0D1014;
+  --color-panel:  #161B22;
+  --color-raised: #1C232D;
+  --color-inset:  #0A0D11;
+  --color-hair:   rgba(255, 255, 255, 0.08);
+  --color-rule:   rgba(255, 255, 255, 0.14);
+  --color-ink:    #E8ECF1;
+  --color-ink-2:  #99A3B2;
+  --color-ink-3:  #5E6979;
+  --color-accent: #5B9DF9;
+  --color-pos:    #4FC490;
+  --color-neg:    #DE7870;
+  --color-warn:   #DDAC4A;
+  /* decile ramp (dark) — India's muted coral → olive → mint */
+  --decile-1:  #CA827C; --decile-2:  #C98D7A; --decile-3:  #C79A75; --decile-4:  #C6A670; --decile-5:  #C0AE72;
+  --decile-6:  #B0B17A; --decile-7:  #98B384; --decile-8:  #80B690; --decile-9:  #70B793; --decile-10: #64B893;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 20px;
+    background-color: var(--color-ground);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+    /* Instrument Sans's space is narrow (~0.19 em, 2 px at 12 px): open the words up a little */
+    word-spacing: 0.08em;
+  }
+  .font-serif { word-spacing: normal; }
+  body { min-height: 100vh; }
+  /* two families only: an identifier is set in the sans, on the inset surface, not in a mono */
+  code {
+    font-family: var(--font-sans); font-weight: 500; font-size: 0.93em;
+    padding: 1px 5px; border-radius: var(--radius-panel); background: var(--color-inset);
+  }
+  :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+  ::selection { background: color-mix(in oklab, var(--color-accent) 22%, transparent); }
+}
+
+@layer components {
+  /* every numeric cell */
+  .num { font-variant-numeric: tabular-nums; }
+
+  .skip-link {
+    position: absolute; left: 8px; top: -48px; z-index: 30;
+    padding: 6px 10px; border-radius: var(--radius-panel);
+    background: var(--color-panel); color: var(--color-ink);
+    border: 1px solid var(--color-rule);
+  }
+  .skip-link:focus { top: 8px; }
+
+  /* ── shell: 232 px rail + 48 px top bar ─────────────────────────────── */
+  .rail {
+    position: fixed; top: 0; bottom: 0; left: 0; width: 232px; z-index: 20;
+    display: flex; flex-direction: column;
+    padding: 20px 16px 16px;
+    border-right: 1px solid var(--color-hair);
+    background: var(--color-ground);
+  }
+  .rail-mark { display: block; padding: 0 8px; }
+  .rail-nav { flex: 1; margin-top: 28px; }
+  .rail-nav ul { display: flex; flex-direction: column; gap: 2px; }
+  .rail-link {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 8px; border-radius: var(--radius-panel);
+    color: var(--color-ink-2);
+  }
+  .rail-link:hover { color: var(--color-ink); background: var(--color-raised); }
+  .rail-link[aria-current="page"] {
+    color: var(--color-ink); background: var(--color-panel); font-weight: 500;
+    box-shadow: inset 0 0 0 1px var(--color-hair);
+  }
+  .rail-foot {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding-top: 12px; border-top: 1px solid var(--color-hair);
+  }
+
+  .topbar {
+    position: fixed; top: 0; right: 0; left: 232px; height: 48px; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 0 24px;
+    border-bottom: 1px solid var(--color-hair);
+    background: var(--color-ground);
+  }
+  .search {
+    display: flex; align-items: center; gap: 8px;
+    width: 360px; max-width: 100%; height: 32px; padding: 0 10px;
+    border: 1px solid var(--color-hair); border-radius: var(--radius-panel);
+    background: var(--color-panel); color: var(--color-ink-3);
+  }
+  .search input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; color: var(--color-ink); }
+  .search input::placeholder { color: var(--color-ink-3); }
+  .search kbd {
+    font-family: inherit; font-size: 12px; line-height: 16px; padding: 0 5px;
+    border: 1px solid var(--color-hair); border-radius: var(--radius-panel); color: var(--color-ink-3);
+  }
+
+  .main { margin-left: 232px; padding-top: 48px; }
+  .page { max-width: 1120px; padding: 32px 40px 64px; }
+
+  /* ── surfaces: hairlines, one radius, no shadows ────────────────────── */
+  .panel { background: var(--color-panel); border: 1px solid var(--color-hair); border-radius: var(--radius-panel); }
+  .tile  { background: var(--color-raised); border: 1px solid var(--color-hair); border-radius: var(--radius-panel); padding: 12px 14px; }
+
+  .tbl { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 18px; }
+  .tbl th {
+    text-align: left; font-weight: 500; font-size: 12px; line-height: 16px;
+    color: var(--color-ink-3); background: var(--color-raised);
+    padding: 7px 12px; border-bottom: 1px solid var(--color-rule); white-space: nowrap;
+  }
+  .tbl td { padding: 8px 12px; border-bottom: 1px solid var(--color-hair); vertical-align: top; }
+  .tbl tbody tr:last-child td { border-bottom: 0; }
+  .tbl tbody tr:hover td { background: var(--color-raised); }
+  .tbl .r { text-align: right; }
+
+  /* ── controls ───────────────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    height: 36px; padding: 0 14px; border-radius: var(--radius-panel);
+    border: 1px solid var(--color-rule); background: var(--color-panel); color: var(--color-ink);
+    font-weight: 500; cursor: pointer;
+  }
+  .btn:hover { background: var(--color-raised); }
+  .btn-primary { background: var(--color-ink); border-color: var(--color-ink); color: var(--color-ground); }
+  .btn-primary:hover { background: var(--color-ink-2); border-color: var(--color-ink-2); }
+  .btn-quiet { height: 28px; padding: 0 8px; border-color: transparent; background: transparent; color: var(--color-ink-2); }
+  .btn-quiet:hover { color: var(--color-ink); background: var(--color-raised); }
+
+  .field {
+    display: block; width: 100%; height: 36px; padding: 0 10px;
+    border: 1px solid var(--color-rule); border-radius: var(--radius-panel);
+    background: var(--color-panel); color: var(--color-ink);
+  }
+  .field::placeholder { color: var(--color-ink-3); }
+
+  /* ── instrument pieces ──────────────────────────────────────────────── */
+  .decile-chip {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 22px; height: 18px; padding: 0 5px; border-radius: var(--radius-panel);
+    font-size: 12px; line-height: 16px; font-weight: 600; color: #FFFFFF;
+  }
+  html[data-theme="dark"] .decile-chip { color: #0D1014; }
+
+  /* the one motion: the Lens bar fills on first paint of a detail page */
+  .lens-fill--animate { transform-origin: left; animation: lens-fill 240ms ease-out; }
+}
+
+@keyframes lens-fill {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lens-fill--animate { animation: none; }
+}
+
+/* rail collapses under 1024 px into a strip above the content */
+@media (max-width: 1023px) {
+  .rail {
+    position: static; width: auto; flex-direction: row; align-items: center; gap: 12px;
+    padding: 8px 12px; border-right: 0; border-bottom: 1px solid var(--color-hair); overflow-x: auto;
+  }
+  .rail-mark { white-space: nowrap; }
+  .rail-mark .rail-sub { display: none; }
+  .rail-nav { flex: 1; margin: 0; }
+  .rail-nav ul { flex-direction: row; }
+  .rail-foot { padding: 0; border: 0; }
+  .topbar { position: sticky; left: 0; }
+  .main { margin-left: 0; padding-top: 0; }
+  .page { padding: 24px 16px 48px; }
+}
+
+@media print {
+  .rail, .topbar, .skip-link { display: none !important; }
+  .main { margin: 0; padding: 0; }
+  html[data-theme="dark"] {
+    --color-ground: #FFFFFF; --color-panel: #FFFFFF; --color-raised: #F5F7FA; --color-inset: #E2E7ED;
+    --color-hair: rgba(12, 20, 33, 0.16); --color-rule: rgba(12, 20, 33, 0.24);
+    --color-ink: #15202E; --color-ink-2: #4A5665; --color-ink-3: #7C8797;
+    --color-accent: #2D63D8; --color-pos: #2D8561; --color-neg: #B84D45; --color-warn: #A07A2B;
+  }
+}

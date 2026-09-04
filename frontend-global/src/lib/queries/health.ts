@@ -1,0 +1,159 @@
+// src/lib/queries/health.ts — the operator surface. Reads ONLY atlas_global (rule #1; the schema
+// gate scans this directory): atlas_pipeline_runs, atlas_validator_results, atlas_health_daily.
+// Shapes follow India's frontend/src/lib/queries/health.ts so the panels port 1:1.
+import 'server-only'
+import { db, dbAvailable } from '@/lib/db'
+
+// ── pipeline runs ───────────────────────────────────────────────────────────
+
+export type PipelineRun = {
+  run_id: string
+  script_name: string
+  milestone: string | null
+  phase: string | null
+  started_at: Date
+  ended_at: Date | null
+  status: 'queued' | 'running' | 'success' | 'failed'
+  rows_written: number | null
+  error_message: string | null
+  host: string | null
+  git_sha: string | null
+  duration_seconds: number | null
+}
+
+const RUN_COLUMNS = `
+  run_id::text                                        AS run_id,
+  script_name, milestone, phase, started_at, ended_at, status,
+  rows_written::float8                                AS rows_written,
+  error_message, host, git_sha,
+  EXTRACT(EPOCH FROM (ended_at - started_at))::int    AS duration_seconds`
+
+/** The last N runs, newest first. */
+export async function getPipelineRuns(limit = 30): Promise<PipelineRun[]> {
+  if (!dbAvailable) return []
+  return db()<PipelineRun[]>`
+    SELECT ${db().unsafe(RUN_COLUMNS)}
+    FROM atlas_global.atlas_pipeline_runs
+    ORDER BY started_at DESC
+    LIMIT ${limit}
+  `
+}
+
+/** One row per script — its most recent run. */
+export async function getLatestRunPerScript(): Promise<PipelineRun[]> {
+  if (!dbAvailable) return []
+  return db()<PipelineRun[]>`
+    SELECT DISTINCT ON (script_name) ${db().unsafe(RUN_COLUMNS)}
+    FROM atlas_global.atlas_pipeline_runs
+    ORDER BY script_name, started_at DESC
+  `
+}
+
+// ── freshness: the "as of" stamp on every surface ──────────────────────────
+
+// A run that finished within one US session plus the overnight window is current; anything
+// older is shown amber and said to be stale in words. An ops display threshold, not methodology.
+export const FRESH_WITHIN_HOURS = 30
+
+export type Freshness =
+  | { state: 'no-db' }
+  | { state: 'none' }
+  | { state: 'error'; error: string }
+  | { state: 'fresh' | 'stale'; ended_at: Date; script_name: string; age_hours: number }
+
+/** The latest successful pipeline step, and whether it is recent enough to trust. */
+export async function getFreshness(): Promise<Freshness> {
+  if (!dbAvailable) return { state: 'no-db' }
+  const rows = await db()<{ script_name: string; ended_at: Date }[]>`
+    SELECT script_name, ended_at
+    FROM atlas_global.atlas_pipeline_runs
+    WHERE status = 'success' AND ended_at IS NOT NULL
+    ORDER BY ended_at DESC
+    LIMIT 1
+  `
+  const r = rows[0]
+  if (!r) return { state: 'none' }
+  const ended_at = new Date(r.ended_at)
+  const age_hours = (Date.now() - ended_at.getTime()) / 3_600_000
+  return {
+    state: age_hours <= FRESH_WITHIN_HOURS ? 'fresh' : 'stale',
+    ended_at,
+    script_name: r.script_name,
+    age_hours,
+  }
+}
+
+// ── validators ─────────────────────────────────────────────────────────────
+
+export type ValidatorRun = {
+  run_id: string
+  validator: string
+  ran_at: Date
+  total_checks: number
+  failures: number
+  status: 'PASS' | 'FAIL'
+}
+
+/** The latest result per validator. */
+export async function getValidatorLatest(): Promise<ValidatorRun[]> {
+  if (!dbAvailable) return []
+  return db()<ValidatorRun[]>`
+    SELECT DISTINCT ON (validator)
+      run_id::text AS run_id, validator, ran_at, total_checks, failures, status
+    FROM atlas_global.atlas_validator_results
+    ORDER BY validator, ran_at DESC
+  `
+}
+
+/** Every result inside the window, for pass rates. */
+export async function getValidatorHistory(days = 30): Promise<ValidatorRun[]> {
+  if (!dbAvailable) return []
+  return db()<ValidatorRun[]>`
+    SELECT run_id::text AS run_id, validator, ran_at, total_checks, failures, status
+    FROM atlas_global.atlas_validator_results
+    WHERE ran_at >= NOW() - (${days}::int * INTERVAL '1 day')
+    ORDER BY validator, ran_at DESC
+  `
+}
+
+// ── anomalies (the health snapshot's flagged metrics) ──────────────────────
+
+export type AnomalyRow = {
+  data_date: string
+  table_name: string
+  metric_name: string
+  value_today: number | null
+  value_prior_day: number | null
+  pct_change_dod: number | null
+  z_score: number | null
+  severity: 'info' | 'warn' | 'critical' | null
+  notes: string | null
+}
+
+export type AnomalySnapshot = { data_date: string | null; rows: AnomalyRow[] }
+
+/** Flagged metrics on the most recent snapshot date (data_date selected as text: no zone shift). */
+export async function getLatestAnomalies(): Promise<AnomalySnapshot> {
+  if (!dbAvailable) return { data_date: null, rows: [] }
+  const latest = await db()<{ d: string | null }[]>`
+    SELECT MAX(data_date)::text AS d FROM atlas_global.atlas_health_daily
+  `
+  const d = latest[0]?.d ?? null
+  if (!d) return { data_date: null, rows: [] }
+  const rows = await db()<AnomalyRow[]>`
+    SELECT
+      data_date::text          AS data_date,
+      table_name, metric_name,
+      value_today::float8      AS value_today,
+      value_prior_day::float8  AS value_prior_day,
+      pct_change_dod::float8   AS pct_change_dod,
+      z_score::float8          AS z_score,
+      severity, notes
+    FROM atlas_global.atlas_health_daily
+    WHERE data_date = ${d}::date AND is_anomaly = TRUE
+    ORDER BY
+      CASE severity WHEN 'critical' THEN 0 WHEN 'warn' THEN 1 WHEN 'info' THEN 2 ELSE 3 END,
+      table_name, metric_name
+  `
+  return { data_date: d, rows }
+}

@@ -56,6 +56,13 @@ node_modules/
 package-lock.json
 .claude-flow/
 
+# Global board (frontend-global/) — its lockfile IS tracked, like frontend/package-lock.json
+frontend-global/node_modules/
+frontend-global/.next/
+frontend-global/.env.local
+frontend-global/.vercel
+!frontend-global/package-lock.json
+
 # Local-only working dirs (added 2026-05-27 cleanup)
 .claire/
 .playwright-mcp/
