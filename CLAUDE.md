@@ -10,119 +10,51 @@ scale: large
 
 # atlas-os
 
-Atlas is a discovery-first **equity-intelligence board** for Indian markets: it
-ingests real market data nightly, scores stocks / ETFs / funds / sectors through a
-lens methodology, and serves it as a glass-box web board. Global engineering rules
-live at `~/.claude/CLAUDE.md`; this file holds only Atlas-specific substance.
+Discovery-first equity-intelligence boards: nightly REAL market data → lens scoring → glass-box Next.js board over
+Supabase Postgres. Two platforms: **Atlas India** (`atlas_foundation`, `frontend/`) and **Global Atlas** (US S&P 500 + ETFs:
+`atlas_global`, `atlas/global_market/`, `scripts/global_market/`, `frontend-global/`; `docs/global/`). Keep this file ≤60 lines.
+<!-- gstack:verify: make gate -->
 
-## ⛔ ABSOLUTE RULE #0 — NO SYNTHETIC OR DERIVED DATA (ZERO TOLERANCE)
+## ⛔ RULE #0 — NO SYNTHETIC OR DERIVED DATA (zero tolerance)
 
-**NEVER use synthetic, mocked, fabricated, placeholder, stubbed, or made-up data
-ANYWHERE — not in code, not in fixtures, and NOT IN UNIT TESTS.** Every single number
-must trace to a REAL source: the database, a real feed, a real instrument. Tests run
-against REAL records pulled from the data layer — never invented inputs. No
-default/neutral/stub score may stand in for a real computation. Do not introduce ANY
-number that is synthetic or derived in nature without the FM's **explicit prior
-knowledge and approval**.
+Never use synthetic, mocked, placeholder or stubbed data — not in code, fixtures, or unit tests. Every
+number traces to a real source; tests assert on REAL records; no default score stands in for a computation;
+any synthetic/derived number needs the FM's explicit prior approval. (Fake test data once went green while the
+real catalyst feed scored every filing-rich name 0.) Gates assert on produced output: `validate_lenses.py`, `validate_global.py`.
 
-*Why this is rule #0:* synthetic-data unit tests went green while the real catalyst
-feed was broken — every filing-rich name scored 0, and fake test data hid a real defect
-in a system that allocates capital. Definition-of-done gates MUST assert on REAL produced
-output (e.g. `scripts/foundation/validate_lenses.py`), never on synthetic fixtures.
+## Shape
 
-## Shape of the system
+- **One schema per market, zero cross-schema references** (`scripts/ops/schema_gate.py --market`; ADR-0006).
+- Ingestion (`scripts/foundation/`, `atlas/global_market/providers/`) is the ONLY off-box boundary. India: Kite, NSE,
+  AMFI, Morningstar, screener.in. Global: Alpaca, SEC EDGAR, issuer holdings CSVs, Nasdaq Trader, FRED (+ Stooq CSVs).
+- `atlas/` is a modulith: each top-level package is a bounded context; cross-context imports only via
+  `atlas.primitives`/`atlas.db`/`atlas.config` or an edge declared in `scripts/hooks/check_module_boundaries.py`.
+- Boards read Postgres directly — no internal APIs, no Python spawned from route handlers. India: pm2
+  `atlas-frontend-v3` :3004 on the box. Global: Vercel, transaction pooler, auth on from day one.
+- Orchestrators `scripts/ops/atlas_daily.sh` (16:00 IST) and `atlas_global_daily.sh` (01:00 UTC): gates withhold
+  publish; every guarded table names its producer (`freshness_guard.py` + `test_producer_registry.py`).
+- Migrations: `0001_baseline_*` (verbatim prod dump) + `0002_atlas_global`. Prod DDL is managed directly.
 
-- **One database schema: `atlas_foundation`** (Supabase Postgres). There is no other
-  data schema. Every read and write goes here. `scripts/ops/schema_gate.py` keeps it 0.
-- **Ingestion (`scripts/foundation/`)** pulls from real sources only — Kite (OHLCV),
-  NSE (bhavcopy/filings/bulk-deals), AMFI (NAV), Morningstar (holdings), screener.in
-  (fundamentals). These are the ONLY external boundaries; nothing else calls off-box.
-- **Compute (`atlas/` modulith + `scripts/foundation/compute_all.py`)** derives the
-  lenses and composite; results land in `atlas_foundation`.
-- **Board (`frontend/`)** is Next.js reading `atlas_foundation` directly via Supabase.
-  No FastAPI backend, no internal-service HTTP calls — the board is self-contained.
-- **Orchestrator: `scripts/ops/atlas_daily.sh`** (16:00 IST cron) runs the whole
-  pipeline + gates + writes the health snapshot. Weekly/QA orchestrators alongside.
-- **Migrations** are squashed to a single baseline (`migrations/versions/0001_baseline_*`
-  = a verbatim dump of the live schema). Prod schema is managed directly, not by alembic.
+## Rules (hook-enforced where marked)
 
-## Architectural rules (some HOOK-ENFORCED — don't fight)
+1. No hardcoded methodology numbers — every weight/threshold lives in `<schema>.atlas_thresholds` (hook).
+2. Decimal for money (INR/USD); tz-aware datetimes (IST / America/New_York). Float-for-money is rejected (hook).
+3. File-size tiers 600 source / 800 tests / 250 page shells; escape valve `# allow-large: <reason>` (hook).
+4. Model proposes, deterministic code executes — every LLM step. The repo is PUBLIC: no keys, positions, client data.
+5. The box IS prod: never `pm2 reload` mid-build — rebuild → `.next/BUILD_ID` → clear fetch-cache → reload once.
 
-1. **Single schema.** All tables in `atlas_foundation`. No new schemas. No cross-schema refs.
-2. **Self-contained.** No runtime dependency on any external service except the ingestion
-   sources above. The frontend never proxies to an internal API.
-3. **Modulith.** Each top-level `atlas/` package (`compute`, `intraday`, `lenses`) is a
-   bounded context. No cross-context imports except via `atlas.primitives`/`atlas.db`/`atlas.config`.
-4. **No hardcoded methodology numbers.** Every weight/threshold lives in
-   `atlas_foundation.atlas_thresholds`, editable from `/admin/thresholds`.
-5. **Decimal for money. Tz-aware datetimes.** Float-for-money is rejected by global hooks.
-6. **Tiered file-size limits**: 600 LOC source / 800 LOC tests / 250 LOC page shells.
-   Escape valve: `# allow-large: <reason>` (Python) / `// allow-large: <reason>` (TS).
-7. A PreToolUse hook gates edits to `atlas/**`, `frontend/src/**`, `migrations/versions/**`
-   until a planning skill (`/tdd`, `/grill-with-docs`, or `/plan-eng-review`) runs in the session.
+## Workflow
 
-## Deploy hygiene (a prod outage came from breaking this)
+Code on the laptop (`~/All AI/atlas-os`, never under iCloud), never on the box. `make gate` (lint + unit +
+pyright ratchet, ~7s; not `make check`) → branch → PR → merge `main` → the box fast-forwards. Codebase
+questions: `graphify query "…"` first (`graphify-out/`, rebuilt by `.claude/hooks/session-start.sh`). Details
+and tooling install: `docs/dev-workflow.md`. Pointers: `CONTEXT.md` (glossary) · `docs/global/` · `docs/adr/` ·
+`docs/refresh-schedule.md` · `docs/table-census.md` · `docs/deploy.md` · `docs/deploy-hygiene.md` ·
+`docs/engineering-process.md` · `docs/health-audit-rules.md` · `decisions.jsonl` (hash-chained decision log).
 
-This box IS prod (pm2 `atlas-frontend-v3` :3004 + live Supabase). NEVER `pm2 reload` while a
-build runs — it corrupts `.next` and 500s the board. Deploy = rebuild to completion → confirm
-`frontend/.next/BUILD_ID` exists → `rm -rf .next/cache/fetch-cache` → **reload once**. Home/
-sectors/stocks are static-ISR (the "as of" date bakes at build), so only a rebuild advances it.
-Full post-mortem: `docs/deploy-hygiene.md`.
-
-## Skill cadence — invoke BEFORE coding
-
-| Situation | Skill |
+| Situation | Skill (vendored in `.claude/skills/`; gstack installed by the session hook) |
 |---|---|
-| Bugfix or new feature | `/tdd` |
-| New feature / module | `/plan-eng-review` (or `/grill-with-docs` for a mini review) |
-| Refactor existing | `simplify` (and `/ponytail-review` the diff) |
-| UI components | `frontend-design:frontend-design` |
-| Unclear scope | `superpowers:brainstorming` |
-| Before claiming done | `superpowers:verification-before-completion` |
-| Pre-merge | `/review` + `/ponytail-review` (over-engineering) |
-| Ship | `/ship` then `/land-and-deploy` |
-| Stuck > 3 attempts | `/diagnose` |
-
-## Pointers (read on demand)
-
-- `CONTEXT.md` — domain glossary (auto-loaded with this file)
-- `docs/refresh-schedule.md` · `docs/table-census.md` — the data pipeline + table inventory
-- `docs/deploy.md` · `docs/deploy-hygiene.md` — deploy process + the outage post-mortem
-- `docs/engineering-process.md` — CI gates (pragma coverage, pyright ratchet)
-- `docs/health-audit-rules.md` — compute/frontend/arch audit guardrails
-- `docs/adr/` — architecture decision records · `docs/agents/` — agent-workflow conventions
-- `decisions.jsonl` — append-only hash-chained decision log
-
-## Where development happens
-
-**Write code on the laptop, never on the box.** `scripts/ops/atlas-auto-deploy.sh` refuses to
-deploy when the box's tree is dirty (`tree dirty on $branch — skip`) and only ever runs on
-`main` — so an edit made on the box silently stops every future deploy, with no error surfaced
-anywhere you'd look. The box is a deploy target, not a workstation.
-
-Loop: edit locally → `make gate` → push a branch → PR → merge to `main` → the box
-fast-forwards and rebuilds itself. `scripts/ops/promote_box_to_main.sh` force-resyncs the box
-if it ever drifts.
-
-Local setup: `make setup`, then `.env` with `ATLAS_DB_URL` (copy from `frontend/.env.local`).
-`make gate` (lint + tests + pyright **ratchet**) is the pre-PR check — ~7s. **Not `make check`**,
-which runs raw pyright and exits non-zero by design on the grandfathered baseline.
-`make test` = unit tests only, no DB. Integration tests run fine **on the laptop** via the
-`aws-1-ap-south-1` pooler on 6543 (whole portfolio suite ~30s) — point `ATLAS_DB_URL` at it.
-The direct `db.<ref>.supabase.co:5432` host is IPv6-only and unreachable from macOS, which is
-what "run on the box" was really about. Note `aws-0-` refuses the connection; the `.env`
-comment claiming `aws-1-` "tested negative" is wrong.
-
-## Local workspace (NEVER under iCloud)
-
-The git tree MUST live outside any iCloud-synced folder — iCloud "Optimize Mac Storage"
-evicts `.git` pack objects and corrupts the repo (`pack … far too short to be a packfile`).
-Canonical local path: **`~/All AI/atlas-os`** (moved out of iCloud 2026-07-29; `git status`
-went from 2-minute timeouts to 0.45s). **If this repo moves again, re-key its Claude memory** —
-memory is keyed by folder path and a move silently orphans it. This repo has already lost its
-memory to path moves twice; `~/.claude/bin/rekey-memory` repairs it.
-
-## What goes in this file
-
-Atlas-only conventions, paths, and pointers — not a copy of global rules. Keep it under
-120 lines; long CLAUDE.md files dilute their own enforcement.
+| Bugfix / feature | `test-driven-development`; new module → `plan-eng-review` |
+| Refactor | `simplify`, then `ponytail-review` the diff |
+| UI · unclear scope · stuck > 3 tries | `frontend-design` · `brainstorming` · `investigate` |
+| Done / ship | `verification-before-completion` → `review` → `ship` → `land-and-deploy` |
