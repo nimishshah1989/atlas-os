@@ -11,47 +11,26 @@ Two markets share the one Supabase project, one schema each (ADR-0006):
 from __future__ import annotations
 
 from decimal import Decimal
-from functools import lru_cache
+from functools import cache
 
 import structlog
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Engine
 
-from atlas.config import Config
+from atlas.config import MARKETS, Config
 
 log = structlog.get_logger()
 
 
-# Session timezones an engine may be created for — one per market plus UTC. ``SET TIME
-# ZONE`` cannot take a bound parameter, so the value is interpolated into the statement,
-# but only after validation against this allowlist; an arbitrary string never reaches SQL
-# (the same discipline as ``_VALID_SCHEMAS`` below).
-_SESSION_TIMEZONES = frozenset({"Asia/Kolkata", "America/New_York", "UTC"})
+@cache  # unbounded on purpose: only our code calls this, with one zone per market
+def _engine(session_tz: str, /) -> Engine:
+    """Build — once per timezone value — the engine ``get_engine`` hands out.
 
-
-@lru_cache(maxsize=4)
-def get_engine(session_tz: str = "Asia/Kolkata") -> Engine:
-    """Return the process-wide SQLAlchemy engine for ``session_tz``.
-
-    Cached per timezone so repeated callers share one pool. ``pool_pre_ping``
-    recovers from Supabase transient drops without surfacing them to callers.
-
-    Every new connection runs ``SET TIME ZONE '<session_tz>'`` — so TIMESTAMPTZ
-    columns display in that zone when SELECTed. Internal storage stays UTC; this
-    only affects the wire-format the client sees.
-
-    India callers keep calling ``get_engine()`` and get IST, exactly as before.
-    The global-market pipeline calls ``get_engine("America/New_York")`` and gets
-    its own pool. The cache is keyed by the argument as passed, so use one
-    spelling per market (zero-arg for India) to share the pool.
-
-    Raises:
-        ValueError: if ``session_tz`` is not in ``_SESSION_TIMEZONES``.
+    Positional-only so the cache key is the timezone VALUE, whatever spelling the caller
+    used: ``get_engine()``, ``get_engine("Asia/Kolkata")`` and
+    ``get_engine(session_tz="Asia/Kolkata")`` all land on this one pool. (A keyword-vs-
+    positional cache miss once meant three pools against a session pooler with 15 slots.)
     """
-    if session_tz not in _SESSION_TIMEZONES:
-        raise ValueError(
-            f"session_tz must be one of {sorted(_SESSION_TIMEZONES)}, got {session_tz!r}"
-        )
     db_url = Config.assert_db_url()
     engine = create_engine(
         db_url,
@@ -63,8 +42,10 @@ def get_engine(session_tz: str = "Asia/Kolkata") -> Engine:
     @event.listens_for(engine, "connect")
     def _set_session_timezone(dbapi_connection, _connection_record):
         with dbapi_connection.cursor() as cur:
-            # session_tz validated against _SESSION_TIMEZONES above — never arbitrary input.
-            cur.execute(f"SET TIME ZONE '{session_tz}'")
+            # psycopg2 interpolates client-side, so the server receives the literal
+            # `SET TIME ZONE 'Asia/Kolkata'` (quotes escaped); Postgres itself rejects an
+            # unknown zone — InvalidParameterValue: invalid value for parameter "TimeZone".
+            cur.execute("SET TIME ZONE %s", (session_tz,))
 
     log.info(
         "engine_created",
@@ -75,27 +56,53 @@ def get_engine(session_tz: str = "Asia/Kolkata") -> Engine:
     return engine
 
 
+def get_engine(session_tz: str = "Asia/Kolkata") -> Engine:
+    """Return the process-wide SQLAlchemy engine for ``session_tz``.
+
+    One engine (one pool) per timezone for the life of the process, however the argument
+    is spelled. ``pool_pre_ping`` recovers from Supabase transient drops without
+    surfacing them to callers.
+
+    Every new connection runs ``SET TIME ZONE '<session_tz>'`` — so TIMESTAMPTZ
+    columns display in that zone when SELECTed. Internal storage stays UTC; this
+    only affects the wire-format the client sees. Postgres validates the zone name,
+    so a typo fails loudly on the engine's first connection rather than silently.
+
+    India callers keep calling ``get_engine()`` and get IST, exactly as before.
+    The global-market pipeline calls ``get_engine("America/New_York")`` and gets
+    its own pool.
+    """
+    return _engine(session_tz)
+
+
+_SCHEMA_EXISTS = text(
+    "SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = :schema)"
+)
+
+
 def sanity_check() -> dict[str, str]:
-    """Connect and run a trivial query. Used by ``scripts/healthcheck.py``."""
+    """Connect, run a trivial query and report whether each market's schema exists.
+
+    ``python -m atlas.db`` prints the result (the Phase 0 DoD: it must show
+    ``atlas_global``). ``atlas_schema_exists`` is India's original key, kept so callers
+    that predate the second market keep working; ``<schema>_exists`` is the per-market form.
+    """
     engine = get_engine()
     with engine.connect() as conn:
         version = conn.execute(text("SELECT version()")).scalar()
         db_name = conn.execute(text("SELECT current_database()")).scalar()
         user = conn.execute(text("SELECT current_user")).scalar()
-        atlas_schema_exists = conn.execute(
-            text(
-                "SELECT EXISTS ("
-                "  SELECT 1 FROM information_schema.schemata WHERE schema_name = :schema"
-                ")"
-            ),
-            {"schema": Config.SCHEMA_NAME},
-        ).scalar()
+        schema_exists = {
+            m.schema: bool(conn.execute(_SCHEMA_EXISTS, {"schema": m.schema}).scalar())
+            for m in MARKETS.values()
+        }
 
     result = {
         "version": str(version),
         "database": str(db_name),
         "user": str(user),
-        "atlas_schema_exists": str(atlas_schema_exists),
+        "atlas_schema_exists": str(schema_exists[MARKETS["india"].schema]),
+        **{f"{schema}_exists": str(exists) for schema, exists in schema_exists.items()},
     }
     log.info("sanity_check_passed", **result)
     return result

@@ -2,12 +2,14 @@
 """Seed atlas_global.atlas_thresholds with the plan's STARTING values (Methodology §B / §C).
 
 FM APPROVAL IS REQUIRED BEFORE THIS RUNS — do not execute it on prod until the FM has read
-the ``--dry-run`` table and said yes. Rule #4 (no hardcoded methodology numbers) is why the
+the ``--dry-run`` table and said yes. The no-hardcoded-methodology-numbers rule is why the
 values live in ``atlas_thresholds`` and not in code; rule #0 is why they must be understood as
 INPUTS the FM owns, not conclusions the code reached: a lens keeps its seed weight only after
 the IC report (§E) shows it carries signal on the full backfill, and the FM locks the final
 weights from ``/admin/thresholds``. Every row here is a transcription of a number written in
-the approved plan; nothing is derived or invented.
+the approved plan (``docs/global/plan.md``) or in India's documented threshold rows; a key
+the plan names WITHOUT a value is deliberately absent, so the step that needs it fails loudly
+until the FM supplies one.
 
 What is seeded (each row: key, value, category, description, units, min, max, default = value):
 
@@ -21,16 +23,21 @@ What is seeded (each row: key, value, category, description, units, min, max, de
   cut-offs, Δ-shares bands, beta bands, ``etf_lookthrough_min_coverage`` 0.60,
   ``quality_w_composite`` 0.7 / ``quality_w_leaders`` 0.3.
 * §D ``rollup_breadth_min`` 60 · §E ``ic_floor_{1m,3m,6m,12m}`` 0.02 / 0.04 / 0.05 / 0.04.
-* Classification (L2 rules + LLM gate): ``cls_country_pure_min_weight`` 0.80,
-  ``cls_country_equity_min`` 0.85, ``cls_sector_pure_min`` 0.70, ``cls_llm_min_confidence`` 0.75.
-* Universe: ``liquidity_min_traded_value_usd`` (placeholder 1,000,000 — the FM sets the real
-  floor from the Phase 1 ADV$ distribution), ``liquidity_min_observations_60d`` 40,
-  ``liquidity_recency_trading_days`` 5.
+* Universe: ``liquidity_min_observations_60d`` 40 and ``liquidity_recency_trading_days`` 5 —
+  India's rows, ported (docs/superpowers/plans/2026-08-23-stock-universe-liquidity-floor.md).
 
-NOT seeded, on purpose: fundamental / valuation bands (§B: seeded from the live S&P 500
-cross-section on the first run — India's numbers are wrong for this index), ETF-specific
-conviction tiers (values not fixed in the plan), per-event catalyst points and the flow
-insider / 13F ladders (key names not fixed in the plan). Those land with their lens modules.
+NOT seeded, on purpose:
+* ``liquidity_min_traded_value_usd`` — the plan has the FM set the floor from the REAL ADV$
+  distribution ``build_universe_snapshot`` prints in Phase 1; ``universe_core.members`` reads
+  the key, so with no row the universe step fails instead of cutting on an invented floor.
+* ``cls_country_pure_min_weight``, ``cls_country_equity_min``, ``cls_sector_pure_min``,
+  ``cls_llm_min_confidence`` — the plan names the keys and leaves the values to Phase 2
+  (risk #10: country-product semantics are locked with the FM then). Seeding a guess would
+  make an invented number FM-approved by default.
+* fundamental / valuation bands (§B: seeded from the live S&P 500 cross-section on the first
+  run — India's numbers are wrong for this index), ETF-specific conviction tiers (values not
+  fixed in the plan), per-event catalyst points and the flow insider / 13F ladders (key names
+  not fixed in the plan). Those land with their lens modules.
 
 Writes are ``INSERT … ON CONFLICT (threshold_key) DO NOTHING`` — re-running never overwrites
 an FM edit; delete a row deliberately if a seed must be re-issued.
@@ -210,19 +217,8 @@ SEEDS: list[dict[str, object]] = [
          "A lens keeps its weight only if rank-IC at 6m clears this"),
     _row("ic_floor_12m", "0.04", "signal", "E", "ic", "0", "1",
          "A lens keeps its weight only if rank-IC at 12m clears this"),
-    # ── Classification engine (L2 rules + LLM gate) ───────────────────────────────────────
-    _row("cls_country_pure_min_weight", "0.80", "classification", "classification", "fraction", "0", "1",
-         "single_country iff top_country_w >= this (with equity gate)"),
-    _row("cls_country_equity_min", "0.85", "classification", "classification", "fraction", "0", "1",
-         "single_country also requires equity_w >= this"),
-    _row("cls_sector_pure_min", "0.70", "classification", "classification", "fraction", "0", "1",
-         "sector_id assigned by rule when one sector weight >= this"),
-    _row("cls_llm_min_confidence", "0.75", "classification", "classification", "fraction", "0", "1",
-         "LLM confidence below this sends the row to review"),
-    # ── Universe (universe_core.members predicate, USD) ───────────────────────────────────
-    _row("liquidity_min_traded_value_usd", "1000000", "universe", "universe", "usd", "0", USD_CEILING,
-         "Trailing-60d MEDIAN $ volume floor for scoring/basket scope — "
-         "placeholder; FM sets from the Phase 1 ADV$ distribution"),
+    # ── Universe (universe_core.members predicate). liquidity_min_traded_value_usd is NOT
+    # seeded: the FM sets it from the real ADV$ distribution (see the module docstring). ──
     _row("liquidity_min_observations_60d", "40", "universe", "universe", "sessions", "1", "60",
          "Minimum traded sessions in the 60-session window for a valid median"),
     _row("liquidity_recency_trading_days", "5", "universe", "universe", "sessions", "1", "60",

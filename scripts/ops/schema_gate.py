@@ -5,15 +5,17 @@ Atlas serves two markets from one Supabase project, one schema each:
 
     india    atlas_foundation   the LIVE India path: orchestrator-invoked scripts + the atlas
                                 modules they import + the reachable frontend/ queries
-    global   atlas_global       scripts/global_market/**, atlas/global_market/**,
+    global   atlas_global       scripts/global_market/** (.py + ddl/*.sql — the schema's
+                                source of truth), atlas/global_market/**,
                                 frontend-global/src/lib/queries/**  (globbed — the tree may
                                 not exist yet; an empty tree scans clean)
 
 A tree may name ONLY its own schema in SQL context. Any other `<schema>.<object>` token —
 the sibling market's schema, or one of the dropped schemas (`atlas`, `us_atlas`,
 `global_atlas`, `mfwatch`, `public`) — is a hit, printed as file:line. Imports
-(`from atlas.lenses …`) and comment lines are not SQL and are skipped; so is
-`atlas.<code module>` (a docstring naming a module, not the dead `atlas` schema).
+(`from atlas.lenses …`) and comment lines (`#`, `//`, `*`, SQL `--`) are not SQL and are
+skipped; so is `atlas.<code module>` (a docstring naming a module, not the dead `atlas`
+schema).
 
 Why a mechanical gate: the first US platform (`us_atlas`, dropped under FM decision D7) and
 the `atlas.*` / `foundation_staging.*` mirror both rotted through quiet cross-schema reads —
@@ -95,7 +97,11 @@ def _rglob(rel_dir: str, pattern: str) -> list[str]:
     )
 
 
-GLOBAL_BACKEND = _rglob("scripts/global_market", "*.py") + _rglob("atlas/global_market", "*.py")
+GLOBAL_BACKEND = (
+    _rglob("scripts/global_market", "*.py")
+    + _rglob("scripts/global_market/ddl", "*.sql")  # where a cross-schema FK would appear
+    + _rglob("atlas/global_market", "*.py")
+)
 GLOBAL_FRONTEND = _rglob("frontend-global/src/lib/queries", "*.ts")
 
 # A DB reference to a foreign schema, in SQL context. Each tree forbids the dropped schemas
@@ -105,7 +111,7 @@ _OBJ = r"\.[a-z_][a-z0-9_]+"
 FOREIGN_INDIA = re.compile(rf"\b({_DROPPED}|atlas_global){_OBJ}", re.I)
 FOREIGN_GLOBAL = re.compile(rf"\b({_DROPPED}|atlas_foundation){_OBJ}", re.I)
 IMPORT = re.compile(r"^\s*(from|import)\s+atlas\.")
-COMMENT = re.compile(r"^\s*(#|//|\*)")
+COMMENT = re.compile(r"^\s*(#|//|\*|--)")  # py / ts / block-comment body / SQL
 # atlas.<submodule> that are code modules, not schemas:
 CODE_MODULES = {
     "lenses",

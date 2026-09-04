@@ -2,7 +2,7 @@
 
 ``MARKETS`` is imported at module level ON PURPOSE. If ``atlas.config`` has no US market
 this module must fail at import time, loudly — never fall back to an inline default
-(rule #0 / rule #4: nothing silent, nothing invented). Keys live in ``.env`` (loaded by
+(rule #0: nothing silent, nothing invented). Keys live in ``.env`` (loaded by
 ``atlas.config``) or the process environment; they are never read from any other file.
 """
 
@@ -15,7 +15,6 @@ from atlas.config import MARKETS
 CONFIG = MARKETS["us"]
 
 PRICE_PROVIDERS = frozenset({"alpaca", "stooq_bulk"})
-_DEFAULT_PRICE_PROVIDER = "alpaca"
 
 
 def _require(name: str, hint: str) -> str:
@@ -32,11 +31,6 @@ def alpaca_keys() -> tuple[str, str]:
     return key, secret
 
 
-def edgar_identity() -> str:
-    """SEC requires a ``"Name email"`` User-Agent on every EDGAR request."""
-    return _require("EDGAR_IDENTITY", 'set it in .env as "Firstname Lastname email@domain"')
-
-
 def fred_key() -> str:
     return _require(
         "FRED_API_KEY", "set the FRED API key in .env (same key India's ingest_macro uses)"
@@ -44,8 +38,15 @@ def fred_key() -> str:
 
 
 def price_provider() -> str:
-    """Which PriceProvider ``ingest_prices.py`` uses: ``alpaca`` (default) or ``stooq_bulk``."""
-    value = os.environ.get("GLOBAL_PRICE_PROVIDER", _DEFAULT_PRICE_PROVIDER).strip().lower()
+    """Which PriceProvider the nightly ``ingest_prices.py`` uses: ``alpaca`` or ``stooq_bulk``.
+
+    No default on purpose: the SIP gate decides the spine, and a forgotten env var must not
+    quietly ingest IEX-only bars under ``source='alpaca'``.
+    """
+    value = _require(
+        "GLOBAL_PRICE_PROVIDER",
+        f"set it in .env to one of {sorted(PRICE_PROVIDERS)} once the SIP gate has run",
+    ).lower()
     if value not in PRICE_PROVIDERS:
         raise RuntimeError(
             f"GLOBAL_PRICE_PROVIDER={value!r} is not one of {sorted(PRICE_PROVIDERS)}"

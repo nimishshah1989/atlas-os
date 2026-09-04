@@ -2,7 +2,7 @@
 """Freshness guard for the US platform — fail LOUD if a KEY atlas_global table is stale.
 
 Structure copied from scripts/ops/freshness_guard.py (India). The one deliberate
-difference is _behind(): staleness is counted in SPY SESSIONS — the anchor's own bars
+difference: staleness is counted in SPY SESSIONS — the anchor's own bars
 (atlas.global_market.calendar.sessions_behind) — never np.busday_count. A weekday
 exchange holiday is not a session and must not read as lag.
 
@@ -27,7 +27,7 @@ import _gdb
 
 from atlas.global_market import calendar as gcal
 
-M = "atlas_global"
+M = _gdb.M
 
 # (table, date_col, max_lag_SESSIONS). Empty in Phase 0. Phase 1 registers, per the plan:
 #   ("ohlcv_daily", "date", 0), ("technical_daily", "date", 0),
@@ -93,11 +93,6 @@ def spy_sessions() -> list[dt.date]:
     return gcal.sessions(df["date"])
 
 
-def _behind(eod: dt.date, mx: dt.date, cal: list[dt.date]) -> int:
-    """Staleness in SPY SESSIONS in (mx, eod] — not calendar days, not weekdays."""
-    return gcal.sessions_behind(cal, mx, eod)
-
-
 def check_board(eod: dt.date, cal: list[dt.date]) -> list[str]:
     """Derived board tables — reported loudly but NON-blocking (WARN tier)."""
     warn = []
@@ -106,7 +101,7 @@ def check_board(eod: dt.date, cal: list[dt.date]) -> list[str]:
         if mx is None:
             warn.append(f"{table}: EMPTY")
             continue
-        behind = _behind(eod, mx, cal)
+        behind = gcal.sessions_behind(cal, mx, eod)
         status = "OK" if behind <= lag else "STALE"
         print(f"  [{status}] {table:<28} max={mx} (eod={eod}, behind={behind}s, tol={lag})")
         if behind > lag:
@@ -121,7 +116,7 @@ def check(eod: dt.date, cal: list[dt.date]) -> list[str]:
         if mx is None:
             stale.append(f"{table}: EMPTY")
             continue
-        behind = _behind(eod, mx, cal)
+        behind = gcal.sessions_behind(cal, mx, eod)
         status = "OK" if behind <= lag else "STALE"
         print(f"  [{status}] {table:<28} max={mx} (eod={eod}, behind={behind}s, tol={lag})")
         if behind > lag:

@@ -1,10 +1,10 @@
-"""The build-time half of the US platform's freshness contract
-(scripts/global_market/freshness_guard.py) — a copy of tests/unit/test_producer_registry.py.
+"""Global-only checks on scripts/global_market/freshness_guard.py.
 
-India's 2026-07 incident: the consolidation deleted builders while the board still read
-their tables, and nothing tied a guarded table to a producer. Here the registry exists
-from day one, EMPTY but valid in Phase 0, so the first producer that lands without its
-cron step (or whose step is later dropped) goes red in CI before it can merge.
+The registry invariants shared by both markets — every guarded table has a producer, every
+producer is wired into an orchestrator, no stale producer entries — run against this guard
+too, parametrised over both markets in tests/unit/test_producer_registry.py. What is left
+here is specific to the US guard: the Phase 0 orchestrators carry the whole Phase 1 step
+list COMMENTED OUT, and the orchestrator paths the guard reads must be the real files.
 
 Pure filesystem — no DB, no network.
 """
@@ -29,33 +29,6 @@ def _guard():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
-
-
-def test_every_guarded_table_has_a_registered_producer():
-    g = _guard()
-    guarded = {t for t, _c, _l in g.KEY_TABLES + g.BOARD_TABLES}
-    missing = guarded - set(g.PRODUCERS)
-    assert not missing, (
-        f"guarded table(s) with no producer in PRODUCERS: {sorted(missing)} — "
-        "register the builder that writes each, or remove it from the guard."
-    )
-
-
-def test_every_producer_is_wired_into_an_orchestrator():
-    """The exact invariant the incident violated — a producer that no cron runs."""
-    g = _guard()
-    problems = g.check_producers()
-    assert not problems, "orphaned guarded table(s):\n  " + "\n  ".join(problems)
-
-
-def test_registered_producers_are_only_for_guarded_tables():
-    """Keep the registry honest — no stale producer entries for tables no longer guarded."""
-    g = _guard()
-    guarded = {t for t, _c, _l in g.KEY_TABLES + g.BOARD_TABLES}
-    orphan_entries = set(g.PRODUCERS) - guarded
-    assert not orphan_entries, (
-        f"PRODUCERS lists table(s) that aren't guarded: {sorted(orphan_entries)}"
-    )
 
 
 def test_a_commented_out_step_does_not_satisfy_the_registry():

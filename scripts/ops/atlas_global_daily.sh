@@ -8,12 +8,12 @@
 # global board is Vercel + ISR, so "publish" is ONE revalidate webhook, fired only when
 # every gate passes. Gate failures push to Telegram; step failures pull (/health).
 #
-# PHASE 0 SKELETON: only what exists is wired (freshness_guard + validate_global A, which
-# reports "not implemented" and fails — correct: nothing publishes yet). Every Phase 1 step
-# is listed below, commented, in the plan's order. Uncomment a step ONLY in the PR that
-# lands its producer WITH its board surface, and register the table in
-# scripts/global_market/freshness_guard.py PRODUCERS in the same PR (commented steps do
-# not satisfy the registry — check_producers ignores comment lines).
+# PHASE 0 SKELETON: only freshness_guard is wired (registry contract; tables empty-but-valid).
+# Every Phase 1 step and gate is listed below, commented, in the plan's order. Uncomment a
+# step ONLY in the PR that lands its producer WITH its board surface, and register the table
+# in scripts/global_market/freshness_guard.py PRODUCERS in the same PR (commented steps do
+# not satisfy the registry — check_producers ignores comment lines). A gate is wired only
+# once its check exists: a gate known to fail every night trains the FM to ignore the push.
 #
 #   bash scripts/ops/atlas_global_daily.sh
 set -uo pipefail
@@ -76,7 +76,7 @@ gate() {  # gate "name" cmd...
   printf '%s\t%s\t%s\t%s\n' "$name" "$start" "$(date -Is)" "$st" >> "$RUNFILE"
 }
 gate "freshness_guard"   $PY scripts/global_market/freshness_guard.py --eod "$EOD"
-gate "validate_global_A" $PY scripts/global_market/validate_global.py --check A
+# gate "validate_global_A" $PY scripts/global_market/validate_global.py --check A   # Phase 1
 # gate "validate_global_B" $PY scripts/global_market/validate_global.py --check B   # Phase 3
 # gate "validate_global_C" $PY scripts/global_market/validate_global.py --check C   # Phase 3
 # gate "validate_global_D" $PY scripts/global_market/validate_global.py --check D   # Phase 3

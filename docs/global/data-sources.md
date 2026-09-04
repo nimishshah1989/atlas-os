@@ -17,7 +17,7 @@ as a source until its gate has passed on real rows.
 | OHLCV 2016→ | **Alpaca Market Data, free plan**: 7+ yrs daily bars, 200 req/min, multi-symbol bars (≤10,000 points/page, `page_token`), `adjustment=split` and `all` (two pulls, merged), `feed=sip` for history older than 15 min; paper-only account = email signup, no KYC, international | nightly incremental; backfill ≈ 4,000 symbols × 7 yrs in minutes | **Stooq importer** (FM-downloaded `d_us_txt.zip`); yfinance only as a cross-check | **Phase 0 SIP gate** (protocol below). Fail → Stooq spine + paid slot (Polygon Starter / Tiingo) |
 | Corporate actions | Alpaca corporate-actions endpoint (16 event types incl. splits, cash/stock dividends, spin-offs, mergers) — **plan-tier access unverified** | daily | derive from `all` vs `split` bar ratios, flagged `source='derived_from_adjustment'` (needs FM approval — rule #0) | every `\|ret_1d\| > 0.5` on `close_adj` has a matching action |
 | Index / macro | FRED (`SP500`, `VIXCLS`, `DGS10`, `DTB3`, `DTWEXBGS`) — key already in India `.env` | daily | — | through EOD-1 |
-| ETF universe | Nasdaq Trader `nasdaqlisted.txt` + `otherlisted.txt` (ETF = Y, exchange, test-issue flag) | weekly | Alpaca `/v2/assets` | 3,300–4,000 rows, every one with an exchange |
+| ETF universe | Nasdaq Trader `nasdaqlisted.txt` + `otherlisted.txt` (ETF = Y, exchange, test-issue flag) | weekly | Alpaca `/v2/assets` | ≥ 5,000 ETF rows, every one with an exchange (measured 2026-09-04: 5,655 = 1,257 Nasdaq-listed + 4,398 other exchanges — the plan's "3,300–4,000" was an estimate) |
 | S&P 500 | **SSGA SPY daily holdings CSV** (constituents, weights, GICS sector column — verify columns on first fetch) via `etf-scraper`; history `fja05680/sp500` | daily / one-time | Wikipedia list | 500–505 names, weights ≈ 100% |
 | Identity | Nasdaq directory; SEC `company_tickers.json` (stocks → CIK) and `company_tickers_mf.json` (funds → CIK/series/class; verify field names); SEC `submissions` API (SIC code); Alpaca assets (tradable, fractionable) | weekly | `symbol_alias` manual rows | CIK on 100% of stocks; series_id on ≥95% of ETFs; alias round-trip for 20 punctuation tickers |
 | ETF holdings + exposures | **EDGAR N-PORT via `edgartools`** for the whole universe — per holding `name, cusip, ticker, balance, value_usd, pct_value, asset_category, investment_country`; per fund `net_assets, total_assets, series_id` (`Fund(ticker).get_portfolio()`); public only for the quarter-end month, ~60-day lag | weekly | — | holdings on ≥90% of ETFs by count, ≥98% by AUM |
@@ -31,11 +31,12 @@ as a source until its gate has passed on real rows.
 manual). **Rejected as a library:** OpenBB Platform (AGPLv3 — unacceptable ambiguity for a
 licensed commercial product; 30 providers where we need four).
 
-Packages: `pyproject.toml` extra `global` — `alpaca-py`, `edgartools`, `financedatabase`,
-`exchange_calendars` (names and version floors verified on PyPI 2026-09-04; `financetoolkit`
-arrives transitively via `financedatabase`, so the Phase 3 "add or not" decision costs
-nothing either way). Every other library the global tree uses is already a core or extra
-dependency.
+Packages: `pyproject.toml` extra `global` holds `alpaca-py` today. A package is added in the
+PR that first imports it, never ahead of its importer: `edgartools` and `financedatabase`
+arrive with Phase 2 (`financetoolkit` comes transitively via `financedatabase`, so the Phase 3
+"add or not" decision costs nothing either way), `exchange_calendars` with Phase 1's gate A
+(names and version floors verified on PyPI 2026-09-04). Every other library the global tree
+uses is already a core or extra dependency.
 
 **`etf-scraper` is not installable in this project.** Its only release (0.1.2) and its
 `main` branch both pin `numpy<2.0`, while Atlas's core `pandas-ta==0.4.71b0` needs NumPy 2
@@ -67,20 +68,28 @@ gitleaks stays on.
 
 ## SIP gate protocol — `validate_global.py --check SIP` (Phase 0, first gate)
 
-The gate compares 40 sessions of real Alpaca bars against two independent real sources and
-asserts on the produced numbers. It is run once before any other Phase 0 work depends on
-the spine, and its result is recorded in the log below, pass or fail.
+The gate compares the last 40 sessions of real Alpaca bars against two independent real
+sources and asserts on the produced numbers. It is run once before any other Phase 0 work
+depends on the spine, and its result is recorded in the log below, pass or fail. The steps
+below are what `validate_global.py --check SIP` executes — the log records a protocol that
+ran, not one that was planned.
 
-1. **Pull** 40 sessions of daily bars for `SPY`, `AAPL`, `QQQ` with `feed=sip`, both
-   `adjustment=split` and `adjustment=all`, `end` clamped to `eod_cutoff() − 1 min`.
-2. **Returns agree with FRED.** Correlation of SPY daily returns (from the `all`-adjusted
-   close) with FRED `SP500` daily returns over the same sessions must be **≥ 0.999**.
-3. **Volume is consolidated, not IEX-only.** Per-session ratio of Alpaca SPY volume to the
-   Stooq `SPY.US` file's volume must lie in **[0.9, 1.1]**. An IEX-only feed fails this by a
-   factor of ~40 — that is the check the entitlement question hangs on.
-4. **No session gaps.** The set of Alpaca dates for each of the three symbols equals the
-   set of sessions FRED and Stooq report in the window (and `exchange_calendars` NYSE
-   sessions, used only as the expected-session cross-check).
+1. **Pull** daily bars for `SPY`, `AAPL`, `QQQ` over the last 70 calendar days with
+   `feed=sip` and `adjustment=raw` — one pull, raw on purpose: FRED's `SP500` is a price
+   index and Stooq's volume is unadjusted, so both comparisons need like-for-like bars.
+   `end` is clamped to now − 16 minutes (the free plan's 15-minute SIP delay plus margin).
+   SPY must have **≥ 40 sessions** in the window, and AAPL / QQQ a bar on every SPY session.
+2. **Returns agree with FRED.** Pearson correlation of SPY daily returns with FRED `SP500`
+   daily returns over the overlapping sessions (≥ 10 of them) must be **≥ 0.999**; the worst
+   residual is printed (an SPY ex-dividend day shows there, as expected for raw bars).
+3. **Volume is consolidated, not IEX-only.** Median over overlapping sessions of Alpaca SPY
+   volume ÷ the Stooq `SPY.US` file's volume must lie in **[0.9, 1.1]** (needs
+   `--stooq-file`; without it this check is reported FAIL "not run", never PASS). An IEX-only
+   feed fails it by a factor of ~40 — that is the check the entitlement question hangs on.
+   The median |close difference| between the two files is printed alongside.
+4. **No session gaps.** Every session FRED reports inside SPY's window, and every session the
+   Stooq file reports there, is present in Alpaca's SPY bars. (`exchange_calendars` is not
+   used here; it arrives with Phase 1's gate A as the expected-session cross-check.)
 5. **Decide.**
    - **PASS** → Alpaca is the spine (`GLOBAL_PRICE_PROVIDER=alpaca`); `ingest_prices.py`
      writes `source='alpaca'` per row; Stooq becomes the cross-source-agreement check.
@@ -98,18 +107,21 @@ vs FRED correlation ≥ 0.999 over the full history, Alpaca-vs-Stooq closes with
 
 **Provider abstraction** (`atlas/global_market/providers/base.py`, Protocols; adapters do
 the I/O and are the only off-box boundary): `PriceProvider.bars(symbols, start, end,
-adjustment)`, `AssetProvider.assets()`, `HoldingsProvider.holdings(instrument, as_of)`.
-Selected by `GLOBAL_PRICE_PROVIDER=alpaca|stooq_bulk`; `ingest_prices.py` writes `source`
-per row and never mixes sources within one instrument-day without `--override`.
+adjustment)` (implemented by `alpaca` and `stooq_bulk`), `AssetProvider.assets()`; a
+`HoldingsProvider` Protocol is added with its first adapter in Phase 2. The nightly spine is
+selected by `GLOBAL_PRICE_PROVIDER=alpaca|stooq_bulk` — required, no default, so a forgotten
+setting can never ingest an untested feed; `ingest_prices.py` writes `source` per row and
+never mixes sources within one instrument-day without `--override`.
 
 **Stooq importer** (`import_stooq.py --zip d_us_txt.zip`): walks
 `data/daily/us/{nasdaq,nyse,nysemkt} {etfs,stocks}/…/<ticker>.us.txt`
 (`<TICKER>,<PER>,<DATE>,<TIME>,<OPEN>,<HIGH>,<LOW>,<CLOSE>,<VOL>,<OPENINT>`);
-`AAPL.US → AAPL`, `BRK-B.US → BRK.B` via `symbology.normalise()` + `symbol_alias(source='stooq')`;
+`AAPL.US → AAPL`, `BRK-B.US → BRK.B` via `symbology.stooq_symbol()` + `symbol_alias(source='stooq')`;
 unmapped tickers are logged, never dropped silently. Adjustment is auto-detected per file
 against overlapping Alpaca `close_adj` / `close_tr` (min |diff| wins, written to
 `adjustment_source`); a file whose best match exceeds 0.5% median error is refused and
-logged — no guessing.
+logged — no guessing. That cross-check is a Phase 1 step after the SIP gate; until it runs,
+every imported row carries `adjustment_source='stooq:unknown'` (see "Stooq importer" below).
 
 **Free-tier budget is a monitored metric**: every provider call lands in
 `atlas_global.provider_calls`, and `/health` shows the day's count against the plan limit.
@@ -133,12 +145,64 @@ One row per run, appended by hand from the gate's printed output — never edite
 - Index licensing (naming "S&P 500", showing membership in a commercial adviser product) —
   legal to confirm before launch.
 
-## Stooq archive — what the FM's `d_us_txt.zip` actually contains (inspected 2026-09-04)
+## Stooq importer (`scripts/global_market/import_stooq.py`)
 
-- 541 MB, 13,366 files, layout `data/daily/us/{nasdaq etfs, nasdaq stocks/<n>, nyse etfs/<n>, nyse stocks/<n>, nysemkt …}/<ticker>.us.txt`
-  — folder names contain spaces and numbered sub-folders, so the importer must walk the zip, not glob a flat directory.
-- Row format `<TICKER>,<PER>,<DATE>,<TIME>,<OPEN>,<HIGH>,<LOW>,<CLOSE>,<VOL>,<OPENINT>`; `spy.us.txt` runs 2005-02-25 → 2026-09-03 (5,415 rows).
-- The SPY series looks **dividend-adjusted** (a 2005 close near 93.7 against a ~120 unadjusted close), so the importer's
-  adjustment auto-detect must compare against Alpaca `adjustment=all`, not raw closes — exactly the case the plan anticipates.
-- `stooq.com` is not reachable from the Claude Code cloud sandbox (egress reset); the archive came via Google Drive with
-  link sharing on. The full import runs on the laptop or the box.
+**What it does.** `atlas/global_market/providers/stooq_bulk.py` (`StooqBulkProvider`, `name="stooq_bulk"`)
+reads the FM's `d_us_txt.zip` in place: `list_symbols()` derives `(symbol, kind, exchange)` from the six
+`data/daily/us/{nasdaq,nyse,nysemkt} {etfs,stocks}` folders (names carry spaces and numbered sub-folders,
+so it walks the zip's central directory, never a glob), and `bars()` opens only the requested members and
+returns the `PriceProvider` frame — `Decimal` prices built from the file's own digits, volume rounded to
+whole shares, `trade_count`/`vwap` None. The importer upserts `open/high/low/close/volume` into
+`atlas_global.ohlcv_daily` with `source='stooq_csv'` and `close_adj`/`close_tr` NULL;
+`ON CONFLICT … DO UPDATE … WHERE ohlcv_daily.source <> 'alpaca'` means a row Alpaca wrote is never
+overwritten (protected rows are counted). Progress lands in `ingest_state(source='stooq_csv',
+key=<symbol>)` as the member's zip CRC + size + `--since`, so a rerun resumes and a newer archive
+re-imports only the files that changed. Every member's outcome (`imported` / `empty` / `unmapped` /
+`skipped_resumed` / `refused_bar`) goes to a CSV report — nothing is dropped silently.
+
+**Adjustment labelling rule.** Stooq does not document what adjustment its files carry, and the archive
+shows both kinds at once: dividend adjustment (SPY's 2005-02-25 close is 93.6948 against a ~120 raw
+close) and split adjustment (48.1 % of rows have fractional volumes, e.g.
+`AADR.US,D,20100721,…,45503.680330826`). So the provider accepts only `adjustment="unknown"` —
+`"raw"`, `"split"` and `"all"` raise `ValueError` — and every imported row carries
+`adjustment_source='stooq:unknown'` with `close_adj`/`close_tr` NULL; nothing scores on these rows.
+The Phase 1 cross-check (after the SIP gate; the `TODO` at the top of the importer) compares each
+instrument's overlapping closes with Alpaca `adjustment=split` and `adjustment=all`, labels the closer
+match (`stooq:split` / `stooq:all`) and leaves any file whose best match exceeds 0.5 % median error at
+`stooq:unknown`, listed. Bars that are not valid (a price ≤ 0, high < low, open/close outside
+[low, high]) are refused into the report by symbol and date, never imported.
+
+**Identity-bridge rule.** Each member maps to exactly one `instrument_master` row and the importer never
+mints one (`build_identity.py` is the only writer). Lookup order: `symbol_alias(source='stooq',
+source_symbol='<TICKER>.US', valid_to IS NULL)` — Stooq's own spelling — then
+`instrument_master.symbol = symbology.stooq_symbol(<ticker>)` (`SPY.US → SPY`, `BRK-B.US → BRK.B`,
+`AAC-U.US → AAC.U`: Stooq's `-` is the class/unit/warrant separator that Nasdaq's ACT and CQS columns
+spell `.`). Stooq's `_` marks a preferred series (`agm_d` is `AGM$D` in the ACT column and `AGM-D` in the
+NASDAQ Symbol column; `eti_` a preferred with no series; 391 members) and is left untouched: those map
+only through an alias and are reported unmapped until build_identity fixes the canonical spelling. A kind
+mismatch between the folder and `instrument_master.asset_class` is noted in the report, not resolved
+silently; with an empty `instrument_master` every member is reported unmapped and the importer exits 2.
+
+**How to run — on the laptop** (stooq.com is unreachable from the cloud sandbox; the FM downloads the
+archive by hand and it travels by Google Drive):
+
+```
+uv run python scripts/global_market/import_stooq.py --zip ~/Downloads/d_us_txt.zip --dry-run             # parse + report, no DB (~4 min)
+uv run python scripts/global_market/import_stooq.py --zip ~/Downloads/d_us_txt.zip --symbols SPY,AAPL,BRK.B
+uv run python scripts/global_market/import_stooq.py --zip ~/Downloads/d_us_txt.zip --since 2016-01-01    # a rerun resumes
+```
+
+`ATLAS_DB_URL` selects the database; `--report PATH` names the CSV (a live run writes one next to the
+zip by default). Proof against the real archive:
+`STOOQ_ARCHIVE=~/Downloads/d_us_txt.zip uv run --extra dev pytest tests/integration/global_market/test_stooq_archive.py -m integration`
+(without the zip it skips — it never passes vacuously). The directory parsers in `providers/symbology.py`
+run in `make test` against the dated verbatim snapshot of the real Nasdaq Trader / SEC files in
+`tests/fixtures/global/symbology/` (provenance and hashes in its `SOURCE.md`); point them at fresher
+downloads with `SYMBOLOGY_DIR=<dir with nasdaqlisted.txt, otherlisted.txt, company_tickers.json>`.
+
+**The archive, as measured** (`--dry-run` 2026-09-04 on the FM's file): 541 MB; 13,352 price files —
+ETFs 948 NASDAQ + 2,801 NYSE, stocks 4,728 NASDAQ + 4,547 NYSE + 328 NYSEMKT (`nysemkt etfs/` is empty),
+39 of them zero-byte; 27,972,711 valid daily bars from 1962-01-02 (IBM, GE) to 2026-09-03; 106 refused
+bars in 49 files (35 with a price ≤ 0, 35 with high < low, 36 with open/close outside the high–low range);
+13,468,390 fractional volumes (48.1 %); header, `PER=D`, ticker and date order verified on every row;
+parsed in 248 s. `spy.us.txt` runs 2005-02-25 → 2026-09-03 (5,414 bars).

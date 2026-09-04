@@ -98,9 +98,19 @@ def test_sessions_behind_counts_sessions_in_the_half_open_window(
     assert cal.sessions_behind(_WEEK, mx, eod) == expected
 
 
+# The week of Washington's Birthday 2026: NYSE is closed on Mon 02-16 (the third Monday of
+# February), so the anchor has bars on Fri 02-13, Tue 02-17 and Wed 02-18 and none on the
+# Monday. A real closure, not a session removed by hand.
+_PRESIDENTS_DAY_WEEK = [
+    date(2026, 2, 12),
+    date(2026, 2, 13),
+    date(2026, 2, 17),
+    date(2026, 2, 18),
+]
+
+
 def test_a_weekday_holiday_is_not_a_session() -> None:
-    """The reason this is not busday_count: with Monday 03-09 absent from the anchor's
-    bars, a table last written on Friday is 0 behind an EOD of Monday, not 1."""
-    without_monday = [d for d in _WEEK if d != date(2026, 3, 9)]
-    assert cal.sessions_behind(without_monday, date(2026, 3, 6), date(2026, 3, 9)) == 0
-    assert cal.sessions_behind(without_monday, date(2026, 3, 6), date(2026, 3, 10)) == 1
+    """The reason this is not busday_count: with the Monday absent from the anchor's bars, a
+    table last written on Friday is 0 behind an EOD of Monday (a weekday), not 1."""
+    assert cal.sessions_behind(_PRESIDENTS_DAY_WEEK, date(2026, 2, 13), date(2026, 2, 16)) == 0
+    assert cal.sessions_behind(_PRESIDENTS_DAY_WEEK, date(2026, 2, 13), date(2026, 2, 17)) == 1
