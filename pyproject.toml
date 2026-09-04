@@ -121,6 +121,7 @@ ui = [
 # on PyPI 2026-09-04), never ahead of its importer.
 global = [
     "alpaca-py>=0.30",           # price spine, assets, corporate actions (0.44.0)
+    "openpyxl>=3.1.5",           # SSGA SPY daily-holdings workbook (.xlsx) → index_membership (3.1.5)
 ]
 
 [project.scripts]
