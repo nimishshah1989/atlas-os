@@ -10,12 +10,16 @@ were checked on this date (`docs/global/plan.md`, "Data sources"). Anything mark
 *unverified* is a claim we still have to test against a real account; nothing here counts
 as a source until its gate has passed on real rows.
 
+## Decision 2026-09-04 — the price spine is Tiingo, not Alpaca and not Stooq
+
+The FM ruled Alpaca out ("too cumbersome to start"). Stooq cannot be the spine (no nightly refresh, undocumented and moving adjustment basis, no events). The spine is **Tiingo** — raw + adjusted bars with `divCash`/`splitFactor` per row, 99.9% coverage of today's listed ETFs (measured), delisted names kept — behind the same `PriceProvider` Protocol; Stooq stays the cross-check and emergency fallback. Licence tiers, the vendor comparison and the FEED gate that replaces the SIP gate: `docs/global/phase1.md` §1. The OHLCV and corporate-actions rows below are superseded accordingly; `--check SIP` is replaced by `--check FEED` (same checks, vendor-agnostic).
+
 ## Sources, cadence, fallbacks, gates
 
 | Need | Primary (free, official) | Cadence | Fallback | Gate |
 |---|---|---|---|---|
-| OHLCV 2016→ | **Alpaca Market Data, free plan**: 7+ yrs daily bars, 200 req/min, multi-symbol bars (≤10,000 points/page, `page_token`), `adjustment=split` and `all` (two pulls, merged), `feed=sip` for history older than 15 min; paper-only account = email signup, no KYC, international | nightly incremental; backfill ≈ 4,000 symbols × 7 yrs in minutes | **Stooq importer** (FM-downloaded `d_us_txt.zip`); yfinance only as a cross-check | **Phase 0 SIP gate** (protocol below). Fail → Stooq spine + paid slot (Polygon Starter / Tiingo) |
-| Corporate actions | Alpaca corporate-actions endpoint (16 event types incl. splits, cash/stock dividends, spin-offs, mergers) — **plan-tier access unverified** | daily | derive from `all` vs `split` bar ratios, flagged `source='derived_from_adjustment'` (needs FM approval — rule #0) | every `\|ret_1d\| > 0.5` on `close_adj` has a matching action |
+| OHLCV 2016→ | **Tiingo** (decided 2026-09-04; Alpaca out — see the decision note above and `phase1.md` §1): per-ticker daily bars with raw + adjusted OHLCV and `divCash`/`splitFactor` per row, 60+ yrs, 5,649 of today's 5,655 listed ETFs, delisted kept | nightly per-ticker (~6,200 calls); backfill in one call per ticker | **Stooq importer** (FM-downloaded `d_us_txt.zip`) as cross-check and emergency spine; yfinance only as a third cross-check | **FEED gate** (`validate_global --check FEED`), then gate A |
+| Corporate actions | Tiingo per-row `splitFactor` / `divCash` (amended 2026-09-04; Alpaca out) | daily | derive from `all` vs `split` bar ratios, flagged `source='derived_from_adjustment'` (needs FM approval — rule #0) | every `\|ret_1d\| > 0.5` on `close_adj` has a matching action |
 | Index / macro | FRED (`SP500`, `VIXCLS`, `DGS10`, `DTB3`, `DTWEXBGS`) — key already in India `.env` | daily | — | through EOD-1 |
 | ETF universe | Nasdaq Trader `nasdaqlisted.txt` + `otherlisted.txt` (ETF = Y, exchange, test-issue flag) | weekly | Alpaca `/v2/assets` | ≥ 5,000 ETF rows, every one with an exchange (measured 2026-09-04: 5,655 = 1,257 Nasdaq-listed + 4,398 other exchanges — the plan's "3,300–4,000" was an estimate) |
 | S&P 500 | **SSGA SPY daily holdings CSV** (constituents, weights, GICS sector column — verify columns on first fetch) via `etf-scraper`; history `fja05680/sp500` | daily / one-time | Wikipedia list | 500–505 names, weights ≈ 100% |
@@ -126,7 +130,7 @@ every imported row carries `adjustment_source='stooq:unknown'` (see "Stooq impor
 **Free-tier budget is a monitored metric**: every provider call lands in
 `atlas_global.provider_calls`, and `/health` shows the day's count against the plan limit.
 
-## SIP gate log
+## Feed gate log (was: SIP gate log)
 
 One row per run, appended by hand from the gate's printed output — never edited in place.
 
