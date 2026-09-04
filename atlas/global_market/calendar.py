@@ -6,6 +6,10 @@ Sessions are never derived from weekday arithmetic or a holiday table: a day the
 not deliver is not a day we scored, and a day it did deliver is a session even if some
 calendar says otherwise. Callers run ``select distinct date … where instrument_id = SPY``
 and hand the resulting dates to the helpers here.
+
+The market's timezone and close hour come from ``atlas.config.MARKETS["us"]`` — the ONE
+place those structural facts are written; ``scripts/global_market/_gdb.eod_cutoff`` is a
+thin wrapper over :func:`eod_cutoff` so every writer stamps from the same anchor.
 """
 
 from __future__ import annotations
@@ -15,10 +19,13 @@ from collections.abc import Iterable, Sequence
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-NEW_YORK = "America/New_York"
+from atlas.global_market.config import CONFIG
+
+NEW_YORK = CONFIG.timezone
+CLOSE_HOUR = CONFIG.close_hour
 
 
-def eod_cutoff(now: datetime, close_hour: int = 17, tz: str = NEW_YORK) -> date:
+def eod_cutoff(now: datetime, close_hour: int = CLOSE_HOUR, tz: str = NEW_YORK) -> date:
     """The last COMPLETE trading day as of ``now`` (tz-aware), in the market's local time.
 
     Mirrors India's ``_db.eod_cutoff`` (16:00 IST): once the local clock reaches
@@ -28,7 +35,7 @@ def eod_cutoff(now: datetime, close_hour: int = 17, tz: str = NEW_YORK) -> date:
     with :func:`latest_session_on_or_before`, which is what skips weekends and holidays.
     """
     if now.tzinfo is None or now.utcoffset() is None:
-        raise ValueError("eod_cutoff: `now` must be tz-aware (rule #5)")
+        raise ValueError("eod_cutoff: `now` must be tz-aware")
     local = now.astimezone(ZoneInfo(tz))
     cutoff = local.date()
     if local.hour < close_hour:

@@ -96,8 +96,8 @@ cross-schema read.
   through `scripts/global_market/_gdb.py` with `SCHEMA = "atlas_global"` and an
   `eod_cutoff()` at 17:00 ET.
 - **Shared kernel, parameterised:** `atlas.db.get_engine(session_tz)` — one pool per
-  session timezone, `lru_cache` keyed by it; India callers still call `get_engine()` and get
-  IST. `atlas.db.load_thresholds(schema=...)` validates against
+  session timezone value, however the argument is spelled (the cache sits on a
+  positional-only builder); India callers still call `get_engine()` and get IST. `atlas.db.load_thresholds(schema=...)` validates against
   `_VALID_SCHEMAS = {atlas_foundation, atlas_global}`. `atlas.config.MARKETS` carries each
   market's schema, timezone, close hour, calendar anchor, currency and history start.
 - **Copy + US parameters:** `compute_composite` → `blend()` (parity-tested on real

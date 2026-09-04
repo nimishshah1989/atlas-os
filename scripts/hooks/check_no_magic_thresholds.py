@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
 """Pre-commit hook: warn when methodology thresholds appear hardcoded.
 
-The atlas.atlas_thresholds table is the single source of truth for all
-classifier cutoffs (RS quintiles, AUM percentages, regime thresholds, etc.).
-Code should read them via load_thresholds(), not hardcode them.
+The <schema>.atlas_thresholds table — one per market: atlas_foundation (India),
+atlas_global (US) — is the single source of truth for all classifier cutoffs
+(RS quintiles, AUM percentages, regime thresholds, etc.). Code should read them
+via load_thresholds(), not hardcode them.
 
-This is a HEURISTIC check: it scans staged .py files in atlas/compute/ for
+This is a HEURISTIC check: it scans staged .py files under SCANNED_PREFIXES
+(atlas/compute/, atlas/global_market/, scripts/global_market/) for
 module-level numeric assignments that look like methodology thresholds (e.g.
 RS_QUINTILE_TOP = 0.80, FUND_STRONG_HOLDINGS_MIN_PCT = 0.60). If a name
 matches a methodology pattern AND isn't in the documented allowlist, the
 hook flags it.
 
 Suppress per-line with `# noqa: threshold` if the constant is genuinely
-not a methodology threshold (e.g. a numerical-stability epsilon).
+not a methodology threshold (e.g. a numerical-stability epsilon, a
+data-quality floor such as a minimum coverage fraction).
 """
 
 from __future__ import annotations
@@ -44,13 +47,22 @@ SUSPICIOUS_PATTERNS = re.compile(
 )
 
 
-def staged_compute_files() -> list[Path]:
+# Trees the hook scans. atlas/lenses/ is deliberately absent: it carries grandfathered
+# module-level constants, and adding it would change India's pre-commit behaviour.
+SCANNED_PREFIXES: tuple[str, ...] = (
+    "atlas/compute/",
+    "atlas/global_market/",
+    "scripts/global_market/",
+)
+
+
+def staged_files() -> list[Path]:
     out = subprocess.check_output(
         ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
         text=True,
     )
     paths = [Path(line.strip()) for line in out.splitlines() if line.strip()]
-    return [p for p in paths if p.suffix == ".py" and str(p).startswith("atlas/compute/")]
+    return [p for p in paths if p.suffix == ".py" and str(p).startswith(SCANNED_PREFIXES)]
 
 
 def find_threshold_assignments(path: Path) -> list[tuple[int, str, float]]:
@@ -84,7 +96,7 @@ def find_threshold_assignments(path: Path) -> list[tuple[int, str, float]]:
 
 def main() -> int:
     failures: list[str] = []
-    for f in staged_compute_files():
+    for f in staged_files():
         for line_no, name, value in find_threshold_assignments(f):
             if name in ALLOWLIST:
                 continue

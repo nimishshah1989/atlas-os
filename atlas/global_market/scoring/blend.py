@@ -6,7 +6,7 @@ its float arithmetic and two-stage rounding — so the parity test on real
 not approximate. What differs is the contract: the lens set, weights and tiers are
 ARGUMENTS (stocks blend four lenses, ETFs five) and there are NO defaults anywhere. A lens
 whose weight key is missing raises ``KeyError``; so does a tier missing from ``tiers``.
-Every number comes from ``atlas_global.atlas_thresholds`` (rule #4) or not at all.
+Every number comes from ``atlas_global.atlas_thresholds`` or not at all.
 
 Scores are not money: the float path is kept deliberately (it is India's), and the result
 is quantised to 0.01 ROUND_HALF_UP exactly as India stores it.

@@ -56,7 +56,7 @@ surface that reads it, in the same phase.
 ### Repo layout (new paths)
 
 ```
-atlas/db.py                        + get_engine(session_tz="Asia/Kolkata") (lru_cache keyed by tz); _VALID_SCHEMAS = {atlas_foundation, atlas_global}
+atlas/db.py                        + get_engine(session_tz="Asia/Kolkata") (one cached engine per tz value); _VALID_SCHEMAS = {atlas_foundation, atlas_global}
 atlas/config.py                    + MarketConfig dataclass, MARKETS["india"|"us"] (schema, tz, close_hour, calendar anchor, ccy, history_start)
 atlas/global_market/               NEW bounded context (`atlas/global` is a Python keyword)
   calendar.py                      sessions = presence of SPY bars (membership-by-presence, as India does with NIFTY 50)
@@ -106,10 +106,14 @@ docs/adr/0006-second-schema-atlas-global.md · docs/global/{taxonomy,data-source
 
 ### Schema `atlas_global` — core tables (USD `numeric`, one weight scale)
 
-- `instrument_master` — `instrument_id uuid` (uuid5 of `us:{class}:{symbol}`), `asset_class`
-  (stock|etf), `symbol` UNIQUE, `name`, `exchange`, `cik`, `series_id`, `class_id`,
-  `alpaca_asset_id`, `tradable`, `fractionable`, `listing_date`, `delisted_at`, `is_active`,
-  `sector_gics`, `sub_sector_id`, `source`. `build_identity.py` is its **only** writer.
+- `instrument_master` — `instrument_id uuid` (uuid5 over a **stable** identity:
+  `us:{class}:{cik}:{symbol}` when the SEC identity is known, else
+  `us:{class}:{symbol}:{listing_date}` — never the bare symbol: US tickers are recycled after
+  delistings and a recycled ticker is a new instrument; amended 2026-09-04 after review),
+  `asset_class` (stock|etf), `symbol` unique among **active** rows (partial index), `name`,
+  `exchange`, `cik`, `series_id`, `class_id`, `alpaca_asset_id`, `tradable`, `fractionable`,
+  `listing_date`, `delisted_at`, `is_active`, `sector_gics`, `sub_sector_id`, `source`.
+  `build_identity.py` is its **only** writer.
 - `symbol_alias` — `(source, source_symbol, valid_from)` → `instrument_id` (`AAPL.US`, `BRK-B` vs
   `BRK.B`; renames create an alias, never a second instrument).
 - `ohlcv_daily` — PK `(instrument_id, date)`: raw `open/high/low/close/volume`, `close_adj`

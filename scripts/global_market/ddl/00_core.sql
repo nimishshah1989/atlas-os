@@ -2,7 +2,7 @@
 -- Tables: instrument_master, symbol_alias, benchmark_master, macro_daily, index_membership,
 --         atlas_thresholds, atlas_thresholds_audit, atlas_pipeline_runs, atlas_validator_results,
 --         atlas_health_daily, ingest_state, provider_calls, app_user.
--- Plan: "Schema `atlas_global` — core tables" + "Non-negotiables" (rule #4: every weight/threshold
+-- Plan: "Schema `atlas_global` — core tables" + "Non-negotiables" (every weight/threshold
 --       lives in atlas_thresholds). Apply order 00 → 06 (scripts/global_market/apply_ddl.py).
 -- Idempotent: every statement is CREATE … IF NOT EXISTS; no DROP, no function bodies (Phase 0).
 -- Conventions: USD money = numeric; timestamps = timestamptz; dates = date; enums = CHECK.
@@ -12,8 +12,14 @@
 
 CREATE SCHEMA IF NOT EXISTS atlas_global;
 
--- instrument_master — one row per US-listed stock / ETF. instrument_id = uuid5 of
--- "us:{asset_class}:{symbol}", minted by build_identity.py (its ONLY writer).
+-- instrument_master — one row per US-listed stock / ETF, minted by build_identity.py (its
+-- ONLY writer). instrument_id = uuid5 over a STABLE identity, never the bare symbol: US
+-- tickers are recycled after delistings, and a recycled ticker is a NEW instrument that must
+-- not inherit the dead one's bars (survivorship honesty). The key build_identity.py hashes is
+-- "us:{asset_class}:{cik}:{symbol}" when the SEC identity is known (stocks: CIK; funds: CIK,
+-- with series_id/class_id stored alongside) and "us:{asset_class}:{symbol}:{listing_date}"
+-- otherwise. Hence symbol is unique among ACTIVE rows only (partial index below): the
+-- delisted holder of a recycled symbol stays, is_active = false, with its history intact.
 CREATE TABLE IF NOT EXISTS atlas_global.instrument_master (
     instrument_id    uuid        NOT NULL,
     asset_class      text        NOT NULL,
@@ -35,9 +41,14 @@ CREATE TABLE IF NOT EXISTS atlas_global.instrument_master (
     created_at       timestamptz NOT NULL DEFAULT now(),
     updated_at       timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT instrument_master_pkey PRIMARY KEY (instrument_id),
-    CONSTRAINT ux_instrument_master_symbol UNIQUE (symbol),
     CONSTRAINT chk_instrument_master_asset_class CHECK (asset_class IN ('stock', 'etf'))
 );
+-- One ACTIVE instrument per symbol; upserts by symbol target it with
+-- ON CONFLICT (symbol) WHERE is_active. Delisted rows may share a symbol with the live one.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_instrument_master_symbol_active
+    ON atlas_global.instrument_master (symbol) WHERE is_active;
+CREATE INDEX IF NOT EXISTS ix_instrument_master_symbol
+    ON atlas_global.instrument_master (symbol);
 CREATE INDEX IF NOT EXISTS ix_instrument_master_class_active
     ON atlas_global.instrument_master (asset_class, is_active);
 CREATE INDEX IF NOT EXISTS ix_instrument_master_cik

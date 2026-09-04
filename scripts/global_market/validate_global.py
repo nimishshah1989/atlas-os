@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 """INDEPENDENT output gate for the US platform — the Gate pattern from validate_lenses.py.
 
-Every assertion here queries REAL produced output or a REAL feed (rule #0). Checks A–E are
-the Phase 1–3 definitions of done from the plan; in Phase 0 they report "not implemented"
-and exit 2, so an orchestrator that wires them fails loudly instead of publishing on a
-vacuous pass.
+Every assertion here queries REAL produced output or a REAL feed (rule #0). The Phase 1–3
+definitions of done (checks A–E in the plan) are added here in the PR that lands each
+phase's producers; a check that does not exist yet is not a choice, so an orchestrator
+cannot wire it early and fail (or pass) vacuously.
 
     python scripts/global_market/validate_global.py --check SIP [--stooq-file SPY.US.txt]
-    python scripts/global_market/validate_global.py --check A       # exit 2 until Phase 1
 
 --check SIP — the Phase 0 gate (result recorded in docs/global/data-sources.md):
-  (1) Pearson correlation of SPY daily returns (Alpaca, raw bars) vs FRED SP500 daily
-      returns on the overlap ≥ SIP_MIN_RETURN_CORR — proves the bars are SPY at all.
+  One pull of SPY / AAPL / QQQ daily bars, ``adjustment="raw"`` and ``feed=sip``, over the
+  last SIP_LOOKBACK_DAYS calendar days (raw, because FRED's SP500 is a price index and
+  Stooq's volume is unadjusted — the comparisons below need like for like).
+  (0) SPY has ≥ SIP_SESSIONS sessions in the window; AAPL and QQQ have a bar on every one.
+  (1) Pearson correlation of SPY daily returns vs FRED SP500 daily returns on the overlap
+      ≥ SIP_MIN_RETURN_CORR — proves the bars are SPY at all.
   (2) median(Alpaca SPY volume ÷ Stooq SPY volume) on overlapping sessions within
       SIP_VOLUME_RATIO_BAND — the check that actually discriminates SIP from IEX-only
       (IEX prints ~2–3% of consolidated volume). Needs --stooq-file; without it the
@@ -41,14 +44,6 @@ SIP_VOLUME_RATIO_BAND = (0.9, 1.1)
 SIP_MIN_OVERLAP = 10  # fewer overlapping points than this is no evidence either way
 SIP_LOOKBACK_DAYS = 70  # calendar days that comfortably contain 40 sessions
 SIP_SYMBOLS = ("SPY", "AAPL", "QQQ")
-
-_NOT_IMPLEMENTED = {
-    "A": "Phase 1 DoD — identity, prices, technicals, universe snapshot",
-    "B": "Phase 3 DoD — stock scoring coverage",
-    "C": "Phase 3 DoD — scoring-math wrong-number guards",
-    "D": "Phase 3 DoD — ETF scoring + country views",
-    "E": "Phase 2 DoD — classification coverage",
-}
 
 
 class Gate:
@@ -113,7 +108,8 @@ def check_SIP(g: Gate, stooq_file: str | None) -> None:
     per = {s: bars.loc[bars["symbol"] == s].sort_values(by="date") for s in SIP_SYMBOLS}
     for s, df in per.items():
         span = f"{df['date'].min()} → {df['date'].max()}" if len(df) else "none"
-        print(f"  {s}: {len(df)} daily bars ({span}), {provider.counter.count()} request(s) so far")
+        n_calls = sum(provider.calls.values())
+        print(f"  {s}: {len(df)} daily bars ({span}), {n_calls} request(s) so far")
 
     spy = per["SPY"].tail(SIP_SESSIONS).reset_index(drop=True)
     g.check(
@@ -206,19 +202,13 @@ def check_SIP(g: Gate, stooq_file: str | None) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="US-platform output gates (rule #0: real data only)")
-    ap.add_argument("--check", choices=["SIP", *_NOT_IMPLEMENTED], required=True)
+    ap.add_argument("--check", choices=["SIP"], required=True)
     ap.add_argument(
         "--stooq-file",
         default=None,
         help="Stooq SPY.US.txt (from d_us_txt.zip) for the SIP volume-ratio discriminator",
     )
     args = ap.parse_args()
-    if args.check != "SIP":
-        print(
-            f"== Gate {args.check}: not implemented in Phase 0 "
-            f"({_NOT_IMPLEMENTED[args.check]}) — nothing publishes yet =="
-        )
-        sys.exit(2)
     g = Gate()
     try:
         check_SIP(g, args.stooq_file)

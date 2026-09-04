@@ -95,7 +95,7 @@ class MarketConfig:
 
     One schema per market, zero cross-schema references (ADR-0006). Everything here is a
     structural fact of the market or of our storage — never a methodology number; those
-    live in ``<schema>.atlas_thresholds`` (rule #4).
+    live in ``<schema>.atlas_thresholds``.
     """
 
     market: str  # "india" | "us"
