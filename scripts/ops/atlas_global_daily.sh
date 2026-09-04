@@ -19,7 +19,7 @@
 set -uo pipefail
 REPO=/home/ubuntu/atlas-os
 cd "$REPO"
-export PYTHONPATH="$REPO:$REPO/scripts/foundation:$REPO/scripts/global_market"
+export PYTHONPATH="$REPO:$REPO/scripts/global_market:$REPO/scripts/foundation"   # global before foundation: same-named India scripts must not shadow ours
 source "$REPO/.venv/bin/activate"
 set -a; source .env; set +a
 PY="$REPO/.venv/bin/python"
@@ -45,7 +45,7 @@ step() {  # step "name" cmd...   (non-fatal; records failures + a run row)
 #    anchor calendar is membership-by-presence of SPY bars, so a missing anchor means no
 #    session to score, not a quiet carry-forward.
 # step "ingest_prices"           $PY scripts/global_market/ingest_prices.py --eod "$EOD"
-# step "ingest_macro"            $PY scripts/global_market/ingest_macro.py
+step "ingest_macro"            $PY scripts/global_market/ingest_macro.py --eod "$EOD"
 # step "ingest_filings_8k"       $PY scripts/global_market/ingest_filings_8k.py
 # step "ingest_form4"            $PY scripts/global_market/ingest_form4.py
 # step "ingest_issuer_holdings"  $PY scripts/global_market/ingest_issuer_holdings.py

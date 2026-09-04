@@ -16,7 +16,7 @@
 set -uo pipefail
 REPO=/home/ubuntu/atlas-os
 cd "$REPO"
-export PYTHONPATH="$REPO:$REPO/scripts/foundation:$REPO/scripts/global_market"
+export PYTHONPATH="$REPO:$REPO/scripts/global_market:$REPO/scripts/foundation"   # global before foundation: same-named India scripts must not shadow ours
 source "$REPO/.venv/bin/activate"
 set -a; source .env; set +a
 PY="$REPO/.venv/bin/python"
@@ -40,8 +40,13 @@ step() {  # step "name" cmd...   (non-fatal; records failures + a run row)
 
 # 1. IDENTITY first — build_identity is instrument_master's ONLY writer; everything below
 #    keys off a fresh master (renames become symbol_alias rows, never a second instrument).
-# step "build_identity"           $PY scripts/global_market/build_identity.py
-# step "ingest_index_membership"  $PY scripts/global_market/ingest_index_membership.py
+#    The Stooq archive (hand-downloaded; docs/global/data-sources.md) supplies the delisted
+#    names — passed only when it is on the box, never invented.
+STOOQ_ZIP="${STOOQ_ARCHIVE:-/home/ubuntu/data/stooq/d_us_txt.zip}"
+STOOQ_ARG=(); [ -f "$STOOQ_ZIP" ] && STOOQ_ARG=(--stooq-zip "$STOOQ_ZIP")
+step "build_identity"           $PY scripts/global_market/build_identity.py --snapshot-dir "/home/ubuntu/logs/identity/$EOD" "${STOOQ_ARG[@]}"
+step "seed_benchmarks"          $PY scripts/global_market/seed_benchmarks.py
+step "ingest_index_membership"  $PY scripts/global_market/ingest_index_membership.py --eod "$EOD"
 # 2. SLOW FEEDS (EDGAR / FINRA).
 # step "ingest_nport"             $PY scripts/global_market/ingest_nport.py             # long tail + AUM (Phase 2)
 # step "ingest_financials"        $PY scripts/global_market/ingest_financials.py        # companyfacts, changed filers (Phase 3)
