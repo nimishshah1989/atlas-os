@@ -106,6 +106,22 @@ ui = [
     "altair>=5.2",
 ]
 
+# Global Atlas (US market, schema atlas_global — ADR-0006, docs/global/plan.md
+# "Open-source building blocks"). The only new off-box boundaries; everything else
+# the global tree needs (TA-Lib, pandas-ta, empyrical, alphalens, PyPortfolioOpt,
+# anthropic, yfinance) is already declared above. Names + floors verified against
+# PyPI on 2026-09-04 (latest that day in brackets).
+# NOT included: etf-scraper. Its only release (0.1.2) and its `main` branch both pin
+# numpy<2.0, which cannot coexist with the core pandas-ta==0.4.71b0 (NumPy 2; locked
+# 2.2.6) — `uv lock` fails outright. Issuer holdings CSVs are plain downloads; the
+# options are recorded in docs/global/data-sources.md for the Phase 1–2 owner.
+global = [
+    "alpaca-py>=0.30",           # price spine, assets, corporate actions (0.44.0)
+    "edgartools>=4.0",           # XBRL facts, 8-K, Form 4, 13F, N-PORT (5.56.0)
+    "financedatabase>=2.2",      # seed taxonomy, cross-check only (2.4.0)
+    "exchange_calendars>=4.5",   # expected NYSE sessions for the missing-session gate (4.13.2)
+]
+
 [project.scripts]
 atlas-lab = "atlas.trading.cli:main"
 atlas-inference = "atlas.inference.cli:main"

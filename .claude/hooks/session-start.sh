@@ -47,6 +47,15 @@ if [ ! -d "$HOME/.claude/skills/gstack/bin" ]; then
   fi
 fi
 
+# 4b. gstack verify gate — a Stop hook that refuses to end a turn while `make gate` (declared in
+#     CLAUDE.md as `gstack:verify:`) is red; this is the "loop until the goal is green" mechanism.
+#     Registration is global (~/.claude/settings.json); trust is per repo and audit-logged.
+G="$HOME/.claude/skills/gstack/bin"
+if [ -x "$G/gstack-verify-gate" ] && [ -x "$G/gstack-settings-hook" ]; then
+  "$G/gstack-settings-hook" add-event --event Stop --command "$G/gstack-verify-gate" --source verify-gate >/dev/null 2>&1 || true
+  "$G/gstack-verify-gate" --trust >/dev/null 2>&1 && log "verify gate armed (make gate)" || log "verify gate trust FAILED"
+fi
+
 # 5. headroom MCP tools (the compression proxy itself is laptop-side: `headroom wrap claude`).
 if command -v headroom >/dev/null 2>&1; then
   headroom mcp install --agent claude >/dev/null 2>&1 || true

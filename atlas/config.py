@@ -12,6 +12,7 @@ not from this file.
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -86,3 +87,45 @@ class Config:
                 "Format: postgresql+psycopg2://user:pass@host:5432/dbname"
             )
         return cls.DB_URL
+
+
+@dataclass(frozen=True)
+class MarketConfig:
+    """The fixed identity of one market: where it lives and how its trading day is anchored.
+
+    One schema per market, zero cross-schema references (ADR-0006). Everything here is a
+    structural fact of the market or of our storage — never a methodology number; those
+    live in ``<schema>.atlas_thresholds`` (rule #4).
+    """
+
+    market: str  # "india" | "us"
+    schema: str  # "atlas_foundation" | "atlas_global"
+    timezone: str  # "Asia/Kolkata" | "America/New_York" — the get_engine() session tz
+    close_hour: int  # local hour after which the day is a complete EOD (India 16, US 17)
+    # "NIFTY 50" (index_prices row) | "SPY" (ohlcv_daily row) — a session exists iff this
+    # instrument has a bar for the date (membership-by-presence; no holiday tables).
+    calendar_anchor: str
+    currency: str  # "INR" | "USD"
+    history_start: str  # "2016-04-07" | "2016-01-04" — first session of ingested history
+
+
+MARKETS: dict[str, MarketConfig] = {
+    "india": MarketConfig(
+        market="india",
+        schema=Config.SCHEMA_NAME,
+        timezone="Asia/Kolkata",
+        close_hour=16,
+        calendar_anchor="NIFTY 50",
+        currency="INR",
+        history_start=Config.HISTORICAL_START_DATE,
+    ),
+    "us": MarketConfig(
+        market="us",
+        schema="atlas_global",
+        timezone="America/New_York",
+        close_hour=17,
+        calendar_anchor="SPY",
+        currency="USD",
+        history_start="2016-01-04",
+    ),
+}

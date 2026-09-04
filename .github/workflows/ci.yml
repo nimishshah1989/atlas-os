@@ -43,6 +43,15 @@ jobs:
       - name: Unit tests (fast, no DB)
         run: uv run --extra dev pytest tests/unit tests/scripts -m unit -q
 
+      # Rule #1 (ADR-0006): one schema per market, zero cross-schema references.
+      # The India tree may not name atlas_global.*; the global tree may not name
+      # atlas_foundation.* (an absent global tree scans clean).
+      - name: Schema gate (india)
+        run: uv run python scripts/ops/schema_gate.py --market india
+
+      - name: Schema gate (global)
+        run: uv run python scripts/ops/schema_gate.py --market global
+
       - name: Pragma finance-critical coverage gate (100%)
         run: uv run --extra dev bash scripts/ci/gate_pragma_coverage.sh
 

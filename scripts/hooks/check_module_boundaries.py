@@ -5,6 +5,9 @@ Each top-level package under atlas/ is a bounded context. They MUST NOT
 reach into each other's internals. Allowed exchange happens through:
   - The package's __init__.py public exports
   - The shared kernel (atlas/primitives/, atlas/db.py)
+  - An explicit edge: a whole context (ALLOWED_EDGES) or, narrower, one module
+    subtree of a context (ALLOWED_SUBTREE_EDGES — e.g. the pure scorers under
+    atlas.lenses.compute, but not the I/O in atlas.lenses.data)
 
 This stops the modulith from quietly turning into a tangle of cross-cutting
 imports. The day you outgrow it and need to extract a context into its own
@@ -30,6 +33,9 @@ CONTEXTS: tuple[str, ...] = (
     "atlas.lenses",
     "atlas.portfolio",  # pure strategy/engine math; I/O lives in scripts/foundation
     "atlas.desk",  # pure agent prompts/validators; I/O lives in scripts/foundation
+    # US market (ADR-0006): its own schema (atlas_global), its own pipelines. Reuses
+    # India's PURE code only, through the subtree edges below — never India's I/O.
+    "atlas.global_market",
 )
 
 SHARED_KERNEL: tuple[str, ...] = (
@@ -81,6 +87,30 @@ ALLOWED_EDGES: set[tuple[str, str]] = {
     ("atlas.api", "atlas.intelligence"),
 }
 
+# Subtree edges: (importing context, allowed module PREFIX in another context).
+# Narrower than ALLOWED_EDGES — an import `imp` from `my_ctx` passes only if
+# `imp == prefix` or `imp.startswith(prefix + ".")`, so the rest of the target
+# context stays forbidden. Widening one is a visible diff, which is the point.
+ALLOWED_SUBTREE_EDGES: set[tuple[str, str]] = {
+    # global_market → lenses.compute: the PURE scorers (score_technical,
+    # score_fundamental, score_valuation — dict in, dict out) are reused verbatim
+    # on US inputs (ADR-0006 Decision 2). atlas.lenses.data and
+    # atlas.lenses.pipeline read atlas_foundation and stay forbidden: the global
+    # tree must never see the India schema, even transitively.
+    ("atlas.global_market", "atlas.lenses.compute"),
+    # global_market → compute.signal_eval: rank-IC / decile-spread math behind
+    # /methodology/signal — pure functions over DataFrames the caller loads.
+    ("atlas.global_market", "atlas.compute.signal_eval"),
+    # global_market → compute._session: open_compute_session (statement_timeout=0
+    # reset on the pooled connection). Same long-term fix as the ALLOWED_EDGES
+    # users above — promote the session manager into atlas.db.
+    ("atlas.global_market", "atlas.compute._session"),
+    # global_market → portfolio.engine: buy-and-hold replay with a fractional
+    # quantum is the book of record for basket NAV (plan M2); one accounting
+    # truth, not a second engine.
+    ("atlas.global_market", "atlas.portfolio.engine"),
+}
+
 
 def staged_python_files() -> list[Path]:
     out = subprocess.check_output(
@@ -100,6 +130,14 @@ def context_of(module: str) -> str | None:
 
 def is_kernel(module: str) -> bool:
     return any(module == k or module.startswith(k + ".") for k in SHARED_KERNEL)
+
+
+def subtree_allowed(my_ctx: str, module: str) -> bool:
+    """True if ``module`` falls under a prefix ``my_ctx`` is explicitly allowed to import."""
+    return any(
+        ctx == my_ctx and (module == prefix or module.startswith(prefix + "."))
+        for ctx, prefix in ALLOWED_SUBTREE_EDGES
+    )
 
 
 def imports_in(path: Path) -> list[str]:
@@ -124,22 +162,35 @@ def context_of_path(path: Path) -> str | None:
     return f"atlas.{parts[1]}"
 
 
+def forbidden_imports(my_ctx: str, imports: list[str]) -> list[tuple[str, str]]:
+    """Return ``(target_context, module)`` for each import that crosses a boundary illegally.
+
+    Pure: the rule in one place, so it can be exercised without staging files.
+    """
+    out: list[tuple[str, str]] = []
+    for imp in imports:
+        if not imp.startswith("atlas."):
+            continue
+        if is_kernel(imp):
+            continue
+        other_ctx = context_of(imp)
+        if other_ctx is None or other_ctx == my_ctx:
+            continue
+        if (my_ctx, other_ctx) in ALLOWED_EDGES:
+            continue
+        if subtree_allowed(my_ctx, imp):
+            continue
+        out.append((other_ctx, imp))
+    return out
+
+
 def main() -> int:
     failures: list[str] = []
     for f in staged_python_files():
         my_ctx = context_of_path(f)
         if my_ctx not in CONTEXTS:
             continue
-        for imp in imports_in(f):
-            if not imp.startswith("atlas."):
-                continue
-            if is_kernel(imp):
-                continue
-            other_ctx = context_of(imp)
-            if other_ctx is None or other_ctx == my_ctx:
-                continue
-            if (my_ctx, other_ctx) in ALLOWED_EDGES:
-                continue
+        for other_ctx, imp in forbidden_imports(my_ctx, imports_in(f)):
             failures.append(f"{f}: {my_ctx} → {other_ctx} (forbidden) — `{imp}`")
 
     if failures:
@@ -150,9 +201,11 @@ def main() -> int:
             "\nRule: each top-level package under atlas/ is a bounded context.\n"
             "Cross-context imports go through the shared kernel\n"
             "(atlas/primitives, atlas/db, atlas/config) or through the public\n"
-            "__init__.py of the target context. If you need a new edge,\n"
-            "add it to ALLOWED_EDGES in scripts/hooks/check_module_boundaries.py\n"
-            "and document why in a commit message.",
+            "__init__.py of the target context. If you need a new edge, add it\n"
+            "to ALLOWED_EDGES (whole context) or, preferably, ALLOWED_SUBTREE_EDGES\n"
+            "(one module prefix, e.g. atlas.lenses.compute for the pure scorers)\n"
+            "in scripts/hooks/check_module_boundaries.py and document why in a\n"
+            "commit message.",
             file=sys.stderr,
         )
         return 1

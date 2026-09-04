@@ -1,13 +1,30 @@
 #!/usr/bin/env python3
-"""SINGLE-SCHEMA GATE — the mechanical definition of "G1 done".
+"""SCHEMA GATE — one schema per tree, zero cross-schema references (rule #1, ADR-0006).
 
-Scans ONLY the live-imported files (the scripts the orchestrator runs + the modules
-they import + the reachable frontend queries) for any DB reference to a schema other
-than atlas_foundation. Prints every hit as file:line and exits 1 if the count is
-not zero. No eyeballing, no orphan-file confusion — a provable number.
+Atlas serves two markets from one Supabase project, one schema each:
 
-    python scripts/ops/schema_gate.py            # full report + exit code
-    python scripts/ops/schema_gate.py --count    # just the number
+    india    atlas_foundation   the LIVE India path: orchestrator-invoked scripts + the atlas
+                                modules they import + the reachable frontend/ queries
+    global   atlas_global       scripts/global_market/**, atlas/global_market/**,
+                                frontend-global/src/lib/queries/**  (globbed — the tree may
+                                not exist yet; an empty tree scans clean)
+
+A tree may name ONLY its own schema in SQL context. Any other `<schema>.<object>` token —
+the sibling market's schema, or one of the dropped schemas (`atlas`, `us_atlas`,
+`global_atlas`, `mfwatch`, `public`) — is a hit, printed as file:line. Imports
+(`from atlas.lenses …`) and comment lines are not SQL and are skipped; so is
+`atlas.<code module>` (a docstring naming a module, not the dead `atlas` schema).
+
+Why a mechanical gate: the first US platform (`us_atlas`, dropped under FM decision D7) and
+the `atlas.*` / `foundation_staging.*` mirror both rotted through quiet cross-schema reads —
+two copies of one fact, disagreeing with nobody watching (docs/table-census.md §4b, §6).
+No eyeballing, no orphan-file confusion — a provable number, run in CI for both trees.
+
+    python scripts/ops/schema_gate.py                        # both trees: report + exit code
+    python scripts/ops/schema_gate.py --market india         # one tree
+    python scripts/ops/schema_gate.py --market global --count  # just the number
+
+Exit 1 on any hit in the selected tree(s).
 """
 
 from __future__ import annotations
@@ -15,12 +32,16 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 
-# Live backend: orchestrator-invoked scripts + the atlas modules they import.
-BACKEND = [
+# ---------------------------------------------------------------------------------------
+# india tree — LIVE files only: orchestrator-invoked scripts + the atlas modules they
+# import + the reachable frontend queries. Orphan files are not this gate's business.
+# ---------------------------------------------------------------------------------------
+INDIA_BACKEND = [
     "scripts/foundation/ingest_kite.py",
     "scripts/foundation/ingest_bhavcopy.py",
     "scripts/foundation/fetch_delivery.py",
@@ -49,19 +70,40 @@ BACKEND = [
     "atlas/compute/indices.py",
     "atlas/intraday/auth.py",
 ]
-BACKEND += [str(p.relative_to(REPO)) for p in (REPO / "atlas/lenses").rglob("*.py")]
+INDIA_BACKEND += [str(p.relative_to(REPO)) for p in (REPO / "atlas/lenses").rglob("*.py")]
 
 # Live frontend: reachable queries only (v6/* + the 3 reachable root files).
 _V6 = REPO / "frontend/src/lib/queries/v6"
-FRONTEND = [str(p.relative_to(REPO)) for p in _V6.glob("*.ts") if "__tests__" not in str(p)]
-FRONTEND += [
+INDIA_FRONTEND = [str(p.relative_to(REPO)) for p in _V6.glob("*.ts") if "__tests__" not in str(p)]
+INDIA_FRONTEND += [
     "frontend/src/lib/queries/health.ts",
     "frontend/src/lib/queries/lens-scores.ts",
     "frontend/src/lib/queries/regime.ts",
 ]
 
-# A DB reference to another schema, in SQL context — not a python import, not a comment.
-SQL_REF = re.compile(r"\b(atlas|public|us_atlas|global_atlas|mfwatch)\.[a-z_][a-z0-9_]+", re.I)
+
+# ---------------------------------------------------------------------------------------
+# global tree — everything under the global paths. Globbed, not listed: the tree is new
+# and every file in it is in scope; a missing directory simply contributes no files.
+# ---------------------------------------------------------------------------------------
+def _rglob(rel_dir: str, pattern: str) -> list[str]:
+    root = REPO / rel_dir
+    if not root.is_dir():
+        return []
+    return sorted(
+        str(p.relative_to(REPO)) for p in root.rglob(pattern) if "__tests__" not in p.parts
+    )
+
+
+GLOBAL_BACKEND = _rglob("scripts/global_market", "*.py") + _rglob("atlas/global_market", "*.py")
+GLOBAL_FRONTEND = _rglob("frontend-global/src/lib/queries", "*.ts")
+
+# A DB reference to a foreign schema, in SQL context. Each tree forbids the dropped schemas
+# plus the OTHER market's schema; its own schema is never in its pattern.
+_DROPPED = "atlas|public|us_atlas|global_atlas|mfwatch"
+_OBJ = r"\.[a-z_][a-z0-9_]+"
+FOREIGN_INDIA = re.compile(rf"\b({_DROPPED}|atlas_global){_OBJ}", re.I)
+FOREIGN_GLOBAL = re.compile(rf"\b({_DROPPED}|atlas_foundation){_OBJ}", re.I)
 IMPORT = re.compile(r"^\s*(from|import)\s+atlas\.")
 COMMENT = re.compile(r"^\s*(#|//|\*)")
 # atlas.<submodule> that are code modules, not schemas:
@@ -74,10 +116,31 @@ CODE_MODULES = {
     "intelligence",
     "api",
     "primitives",
+    "global_market",
+    "portfolio",
 }
 
 
-def scan(files: list[str]) -> list[str]:
+@dataclass(frozen=True)
+class Tree:
+    market: str
+    schema: str  # the ONE schema this tree may reference
+    backend: tuple[str, ...]
+    frontend: tuple[str, ...]
+    foreign: re.Pattern[str]  # any match in SQL context is a cross-schema reference
+
+
+TREES: dict[str, Tree] = {
+    "india": Tree(
+        "india", "atlas_foundation", tuple(INDIA_BACKEND), tuple(INDIA_FRONTEND), FOREIGN_INDIA
+    ),
+    "global": Tree(
+        "global", "atlas_global", tuple(GLOBAL_BACKEND), tuple(GLOBAL_FRONTEND), FOREIGN_GLOBAL
+    ),
+}
+
+
+def scan(files: tuple[str, ...], foreign: re.Pattern[str]) -> list[str]:
     hits = []
     for rel in files:
         p = REPO / rel
@@ -86,7 +149,7 @@ def scan(files: list[str]) -> list[str]:
         for i, line in enumerate(p.read_text(errors="ignore").splitlines(), 1):
             if IMPORT.match(line) or COMMENT.match(line):
                 continue
-            for m in SQL_REF.finditer(line):
+            for m in foreign.finditer(line):
                 schema, obj = m.group(0).split(".", 1)
                 if schema == "atlas" and obj in CODE_MODULES:
                     continue
@@ -95,23 +158,48 @@ def scan(files: list[str]) -> list[str]:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--count", action="store_true")
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    ap.add_argument(
+        "--market",
+        choices=("india", "global", "all"),
+        default="all",
+        help="which tree(s) to scan (default: all)",
+    )
+    ap.add_argument("--count", action="store_true", help="print only the total hit count")
     args = ap.parse_args()
-    be, fe = scan(BACKEND), scan(FRONTEND)
-    total = len(be) + len(fe)
+    selected = list(TREES) if args.market == "all" else [args.market]
+
+    report = {
+        m: (scan(TREES[m].backend, TREES[m].foreign), scan(TREES[m].frontend, TREES[m].foreign))
+        for m in selected
+    }
+    total = sum(len(be) + len(fe) for be, fe in report.values())
     if args.count:
         print(total)
         return 0 if total == 0 else 1
-    print("=== SINGLE-SCHEMA GATE — references outside atlas_foundation in LIVE code ===")
-    print(f"\nBACKEND ({len(be)}):")
-    for h in be:
-        print(f"  {h}")
-    print(f"\nFRONTEND ({len(fe)}):")
-    for h in fe:
-        print(f"  {h}")
-    print(f"\nTOTAL outside-schema references in live path: {total}")
-    print("GATE:", "PASS ✅ (single schema)" if total == 0 else "FAIL ❌ — must reach 0 for G1")
+
+    print("=== SCHEMA GATE — one schema per tree, zero cross-schema references (ADR-0006) ===")
+    for m in selected:
+        tree = TREES[m]
+        be, fe = report[m]
+        n_files = sum((REPO / f).exists() for f in tree.backend + tree.frontend)
+        note = "" if n_files else " (tree not present yet — nothing to scan)"
+        print(f"\n[{m}] may reference only `{tree.schema}` — {n_files} live files scanned{note}")
+        print(f"  BACKEND ({len(be)}):")
+        for h in be:
+            print(f"    {h}")
+        print(f"  FRONTEND ({len(fe)}):")
+        for h in fe:
+            print(f"    {h}")
+    print(f"\nTOTAL cross-schema references: {total}")
+    print(
+        "GATE:",
+        "PASS ✅ (one schema per tree)"
+        if total == 0
+        else "FAIL ❌ — must be 0 (rule #1: one schema per market, zero cross-schema references)",
+    )
     return 0 if total == 0 else 1
 
 

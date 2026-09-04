@@ -10,10 +10,10 @@ scale: large
 
 # atlas-os
 
-Discovery-first equity-intelligence boards: nightly REAL market data → lens scoring → glass-box
-Next.js board over Supabase Postgres. Two platforms: **Atlas India** (`atlas_foundation`, `frontend/`)
-and **Global Atlas** (US S&P 500 + ETFs: `atlas_global`, `atlas/global_market/`, `scripts/global_market/`,
-`frontend-global/`; plan + methodology in `docs/global/`). Global rules: `~/.claude/CLAUDE.md`. Keep this file ≤60 lines.
+Discovery-first equity-intelligence boards: nightly REAL market data → lens scoring → glass-box Next.js board over
+Supabase Postgres. Two platforms: **Atlas India** (`atlas_foundation`, `frontend/`) and **Global Atlas** (US S&P 500 + ETFs:
+`atlas_global`, `atlas/global_market/`, `scripts/global_market/`, `frontend-global/`; `docs/global/`). Keep this file ≤60 lines.
+<!-- gstack:verify: make gate -->
 
 ## ⛔ RULE #0 — NO SYNTHETIC OR DERIVED DATA (zero tolerance)
 
