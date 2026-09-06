@@ -1,6 +1,8 @@
 # ruff: noqa: S608 -- SQL here is assembled from the schema constant _gdb.M; every value is bound.
 """build_universe_snapshot on a REAL database (rule #0): the ADV$ window and its two guards,
-``in_sp500``'s exclusive end, the percentile table, the exit-2 gate and the write.
+``in_sp500``'s exclusive end, the percentile table, the exit-2 gate, the write — and
+``exclusion_reason``: that the seven reasons partition the excluded rows on the real archive,
+and that the table's two CHECKs refuse a row where flag and reason disagree.
 
 Needs ``ATLAS_DB_URL`` pointing at a Postgres with the atlas_global DDL applied, the committed
 seeds (``seed_thresholds.py``, including ``liquidity_min_traded_value_usd`` since the FM set it
@@ -188,8 +190,9 @@ def snapshot_teardown(as_of: date):
 
 def _snapshot(as_of: date) -> pd.DataFrame:
     return _gdb.read_df(
-        f"select instrument_id::text as instrument_id, in_universe, in_sp500, adv_usd_median_60d, "
-        f"floor_usd, aum_usd, basket_eligible, computed_at from {M}.universe_snapshot "
+        f"select instrument_id::text as instrument_id, in_universe, exclusion_reason, in_sp500, "
+        f"adv_usd_median_60d, floor_usd, aum_usd, basket_eligible, computed_at "
+        f"from {M}.universe_snapshot "
         "where date = :d order by instrument_id",
         {"d": as_of},
         coerce_float=False,
@@ -341,3 +344,67 @@ def test_the_universe_is_the_liquidity_predicate_minus_the_two_fm_rules(
         assert reason in set(listed["status"]), reason
         assert f"{int(mask.sum()):,d}" in out, reason
     print(f"liquid {len(liquid):,d} → universe {len(inside):,d} ({len(liquid - inside):,d} cut)")
+
+
+def test_every_excluded_row_says_why_and_the_seven_reasons_partition_them(
+    as_of: date, thr: dict[str, Decimal], tmp_path, snapshot_teardown
+) -> None:
+    """The board's promise, read back from the journal rather than from the frame that wrote
+    it: every instrument that is out names the ONE rule that took it out, and the seven names
+    cover the excluded set exactly once each."""
+    csv = tmp_path / "u.csv"
+    args = ["--eod", as_of.isoformat(), "--report-dir", str(tmp_path), "--report", str(csv)]
+    assert bus.main(args) == 0
+    rows = _snapshot(as_of)
+    inside, reason = pd.Series(rows["in_universe"]), pd.Series(rows["exclusion_reason"])
+    assert bool(reason.loc[inside].isna().all()), "an instrument that is IN needs no excuse"
+    assert bool(reason.loc[~inside].notna().all()), "no row may say only that it is excluded"
+    counts = reason.value_counts()
+    assert set(counts.index) == set(bus.EXCLUSION_REASONS), "this archive carries all seven"
+    assert int(counts.sum()) == int((~inside).sum())  # one reason per excluded row, never two
+
+    # Against the run's own CSV, row by row: the ladder's answer where it had one, and
+    # below_floor exactly where universe_status said `ok` and the floor still said no.
+    listed = pd.read_csv(csv, dtype=str, keep_default_na=False).set_index("instrument_id")
+    both = rows.set_index("instrument_id").join(listed[["status"]], how="inner")
+    assert len(both) == len(rows)
+    ladder = both["status"] != bus.STATUS_OK
+    assert (both.loc[ladder, "exclusion_reason"] == both.loc[ladder, "status"]).all()
+    cleared = both.loc[~ladder]
+    assert set(cleared.loc[~cleared["in_universe"], "exclusion_reason"]) == {bus.STATUS_BELOW_FLOOR}
+    text = (tmp_path / f"adv_usd_{as_of}.md").read_text()
+    for r, n in counts.items():
+        assert f"| `{r}` | {n:,d} |" in text  # the FM's report says the same numbers
+    print(", ".join(f"{r} {n:,d}" for r, n in counts.items()) + f"; in {int(inside.sum()):,d}")
+
+
+_BAD_ROW = f"""insert into {M}.universe_snapshot
+    (date, instrument_id, in_universe, exclusion_reason, floor_usd) values (%s, %s, %s, %s, %s)"""
+_IFF = "chk_universe_snapshot_reason_iff_excluded"
+
+
+@pytest.mark.parametrize(
+    ("in_universe", "reason", "constraint"),
+    [
+        (False, None, _IFF),
+        (True, bus.STATUS_BELOW_FLOOR, _IFF),
+        (False, "delisted", "chk_universe_snapshot_exclusion_reason"),
+    ],
+    ids=["out-with-no-reason", "in-but-blamed", "a-reason-the-writer-cannot-produce"],
+)
+def test_the_database_itself_refuses_a_row_whose_reason_and_flag_disagree(
+    as_of: date, thr: dict[str, Decimal], in_universe: bool, reason: str | None, constraint: str
+) -> None:
+    """ddl/05_scores.sql, not a comment: each INSERT is really attempted against the real table
+    (SPY, the anchor date, the FM's floor) and rolled back. A schema that has drifted back to a
+    bare boolean accepts all three and fails here."""
+    spy = _gdb.scalar(f"select instrument_id from {M}.instrument_master where symbol = 'SPY'")
+    conn = psycopg2.connect(_gdb.psycopg2_url())
+    try:
+        with conn.cursor() as cur:
+            with pytest.raises(psycopg2.errors.CheckViolation) as e:
+                cur.execute(_BAD_ROW, (as_of, spy, in_universe, reason, thr[bus.THRESHOLD_KEY]))
+            assert e.value.diag.constraint_name == constraint
+    finally:
+        conn.rollback()  # nothing of this test reaches the journal
+        conn.close()

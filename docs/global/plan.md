@@ -157,7 +157,7 @@ docs/adr/0006-second-schema-atlas-global.md · docs/global/{taxonomy,data-source
   `etf_scores_daily` (`technical, risk, cost_liquidity, flow, quality` + sub-scores, `composite`,
   `conviction_tier`, `peer_group`, `asset_group`, `lenses_active`, `evidence`, `compute_run_id`),
   `country_daily` (`iso2, date, representative_id, n_etfs, composite, rs_{w}_spy, aum_usd_total`),
-  `universe_snapshot` (`in_universe, in_sp500, adv_usd_median_60d, floor_usd, aum_usd, basket_eligible`),
+  `universe_snapshot` (`in_universe, exclusion_reason, in_sp500, adv_usd_median_60d, floor_usd, aum_usd, basket_eligible`),
   `atlas_signal_ic` (+ `entity` stock|etf).
 - `atlas_thresholds` — identical 13 columns to India's (so `load_thresholds(schema="atlas_global")`
   and the admin panel work unchanged) + `atlas_thresholds_audit`.

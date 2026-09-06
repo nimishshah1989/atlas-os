@@ -31,8 +31,8 @@ export type InstrumentDbRow = {
   pos_52w: string | null
   adv_usd: string | null
   in_universe: boolean | null
-  /** Why the snapshot left the row out of the universe (below the floor, not an S&P 500 member,
-   *  leveraged, inverse) — null while in, or until the snapshot carries the reason. */
+  /** The ONE reason the snapshot left the row out — universe_snapshot.exclusion_reason, one of
+   *  the seven its CHECK allows; null exactly when the row is in (or the snapshot has not run). */
   universe_exclusion: string | null
 }
 
@@ -97,6 +97,26 @@ export function universeValue(r: Pick<InstrumentRow, 'in_universe' | 'universe_e
   if (r.in_universe == null) return 'unknown'
   return r.in_universe ? 'in' : (r.universe_exclusion ?? 'excluded')
 }
+
+/** Those values as English. The seven reasons are `universe_snapshot.exclusion_reason`'s CHECK
+ *  (scripts/global_market/ddl/05_scores.sql); `excluded` covers a journal row written before the
+ *  column existed, `unknown` a session the snapshot has not run for. */
+export const UNIVERSE_LABEL: Record<string, string> = {
+  in: 'In universe',
+  no_bars: 'No price bars',
+  too_few_observations: 'Too few sessions',
+  stale: 'Not traded lately',
+  not_sp500: 'Not in the S&P 500',
+  leveraged: 'Leveraged ETF',
+  inverse: 'Inverse ETF',
+  below_floor: 'Below the floor',
+  excluded: 'Excluded',
+  unknown: 'Not marked yet',
+}
+
+/** What the universe column and facet show: the reason in English, or the token as words if a
+ *  reason ever reaches the board before this map does. */
+export const universeLabel = (value: string) => UNIVERSE_LABEL[value] ?? words(value)
 
 // ── index membership ────────────────────────────────────────────────────────
 

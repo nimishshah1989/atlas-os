@@ -26,7 +26,9 @@ Two FM rules of 2026-09-06 sit AROUND that predicate — never inside it, so Ind
   ``derivatives_share``). The rules run on ETFs only: a company can be called 10x Genomics.
 
 Every active instrument still gets a ROW either way — survivorship honesty and the journal
-contract are unchanged. Only ``in_universe`` narrows, and ``--report`` names the reason.
+contract are unchanged. Only ``in_universe`` narrows, and ``exclusion_reason`` names the reason
+— in the TABLE, not only in ``--report``: the board reads Postgres directly, so a reason that
+lives in a run's CSV is a reason nobody can see.
 
 * ``adv_usd_median_60d`` — median of RAW ``close × volume`` (volume has no adjusted twin) over
   the most recent 60 DISTINCT sessions within 150 calendar days at or before the anchor, the
@@ -40,6 +42,10 @@ contract are unchanged. Only ``in_universe`` narrows, and ``--report`` names the
   ``fractionable``; ``floor_usd`` = the threshold in force that day, so a later change never
   rewrites history; ``in_universe`` = ``members(adv, floor, held_ids)`` with ``held_ids`` = ∅
   until M2 (``basket_constituents``).
+* ``exclusion_reason`` — NULL when ``in_universe``, else the FIRST reason the row is out:
+  ``universe_status``'s answer, or ``below_floor`` when it says ``ok`` (the row cleared every
+  structural rule and failed only the liquidity floor). The seven PARTITION the excluded set —
+  asserted on the frame before the upsert, and again by the DDL's two CHECKs on every INSERT.
 
 THE FLOOR IS THE FM'S, NOT THE CODE'S. ``liquidity_min_traded_value_usd`` was set to $1,000,000
 on 2026-09-06 from the REAL distribution this script printed
@@ -96,6 +102,16 @@ STATUS_OK = "ok"
 STATUS_NOT_SP500 = "not_sp500"
 STATUS_LEVERAGED = "leveraged"
 STATUS_INVERSE = "inverse"
+STATUS_BELOW_FLOOR = "below_floor"
+ADV_REASONS = ("no_bars", "too_few_observations", "stale")  # the ladder, in the order it bites
+# Everything ``exclusion_reason`` may hold, and everything ddl/05_scores.sql's CHECK allows.
+EXCLUSION_REASONS = (
+    *ADV_REASONS,
+    STATUS_NOT_SP500,
+    STATUS_LEVERAGED,
+    STATUS_INVERSE,
+    STATUS_BELOW_FLOOR,
+)
 REPORT_COLUMNS = (
     "asset_class",
     "symbol",
@@ -235,6 +251,55 @@ def exclusions(adv: pd.DataFrame) -> dict[str, pd.Series]:
     }
 
 
+def exclusion_reasons(status: pd.Series, in_universe: pd.Series) -> pd.Series:
+    """The ``exclusion_reason`` column: the ONE reason each excluded row is out, NULL for a
+    row that is in. ``universe_status`` has already named the first STRUCTURAL reason; a row
+    it calls ``ok`` that is still out cleared all three and failed only the liquidity floor —
+    which is why ``below_floor`` is derived HERE, at the write site, from the liquidity mask:
+    the floor moves whenever the FM moves it and those three rules do not. The result
+    PARTITIONS the excluded set, one of :data:`EXCLUSION_REASONS` each (:func:`assert_partition`)."""
+    return status.where(status != STATUS_OK, STATUS_BELOW_FLOOR).where(~in_universe, None)
+
+
+def assert_partition(adv: pd.DataFrame) -> None:
+    """Refuse to write a frame whose reasons do not partition the excluded set — checked on
+    the frame, before the upsert, so a later change to the ladder stops the run here instead
+    of publishing a row the board can only render as a bare "excluded". The DDL's two CHECKs
+    say the same to anyone else's INSERT; this says it while the diagnosis is still in hand."""
+    reason, inside = adv["exclusion_reason"], adv["in_universe"]
+    unexplained = list(adv.loc[~inside & reason.isna(), "symbol"])
+    explained = list(adv.loc[inside & reason.notna(), "symbol"])
+    unknown = sorted(set(reason.dropna()) - set(EXCLUSION_REASONS))
+    if unexplained or explained or unknown:
+        raise RuntimeError(
+            f"exclusion_reason does not partition the excluded rows — nothing written: "
+            f"{len(unexplained)} out with no reason {unexplained[:5]}; {len(explained)} in "
+            f"the universe with one {explained[:5]}; outside {EXCLUSION_REASONS}: {unknown}"
+        )
+
+
+def reason_section(adv: pd.DataFrame) -> list[str]:
+    """The report's ``exclusion_reason`` table: what the journal now says about every row."""
+    counts = {r: int((adv["exclusion_reason"] == r).sum()) for r in EXCLUSION_REASONS}
+    return [
+        "## Why each excluded instrument is out (`universe_snapshot.exclusion_reason`)",
+        "",
+        "The STORED reason, one per row: the ADV$ ladder first, then the FM's rules, then the "
+        "floor. The table above counts every instrument a rule TOUCHES (overlapping, and "
+        "independent of the floor); these count the rows each reason was the FIRST to take "
+        "out, so they PARTITION the excluded set and sum to it.",
+        "",
+        _md(
+            ["`exclusion_reason`", "instruments"],
+            [
+                *([f"`{r}`", f"{n:,d}"] for r, n in counts.items()),
+                ["NULL (in the universe)", f"{int(adv['exclusion_reason'].isna().sum()):,d}"],
+            ],
+        ),
+        "",
+    ]
+
+
 def exclusion_line(adv: pd.DataFrame, liquid: pd.Series) -> str:
     """One line per run: what each FM rule took out and what the floor took out on its own, in
     the report's own words — so a universe that shrinks overnight says WHY on the console."""
@@ -300,12 +365,11 @@ def render_report(
     floor = thr.get(THRESHOLD_KEY)
     first, last, n_sessions = bars.iloc[0][["first_session", "last_session", "n_sessions"]]
     classes = list(table["asset_class"])
-    reasons = ("no_bars", "too_few_observations", "stale")
     missing = [
         [
             cls,
-            *(f"{counts[f'{cls}:{r}']:,d}" for r in reasons),
-            f"{sum(counts[f'{cls}:{r}'] for r in reasons):,d}",
+            *(f"{counts[f'{cls}:{r}']:,d}" for r in ADV_REASONS),
+            f"{sum(counts[f'{cls}:{r}'] for r in ADV_REASONS):,d}",
         ]
         for cls in classes
     ]
@@ -388,6 +452,7 @@ def render_report(
             ([f"`{k}`", f"{int(v.sum()):,d}"] for k, v in exclusions(adv).items()),
         ),
         "",
+        *(() if floor is None else reason_section(adv)),
         "## Rows",
         "",
         f"- active `instrument_master` rows: {int(table['n_active'].sum()):,d} "
@@ -459,6 +524,13 @@ def main(argv: list[str] | None = None) -> int:
 
     written = 0
     if floor is not None:
+        # Only with a floor in force: without one nothing is written, and nothing is below it.
+        # pd.Series() wraps for pyright, as in universe_core.members: a frame column is typed
+        # as a broad union, and the bare values cost ratchet errors.
+        adv["exclusion_reason"] = exclusion_reasons(
+            pd.Series(adv["status"]), pd.Series(adv["in_universe"])
+        )
+        assert_partition(adv)
         out = adv.rename(columns={"adv_median_60d": "adv_usd_median_60d"}).assign(
             date=as_of,
             floor_usd=floor,
@@ -470,6 +542,7 @@ def main(argv: list[str] | None = None) -> int:
             "date",
             "instrument_id",
             "in_universe",
+            "exclusion_reason",
             "in_sp500",
             "adv_usd_median_60d",
             "floor_usd",

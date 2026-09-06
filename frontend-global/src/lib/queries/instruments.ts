@@ -63,7 +63,7 @@ const listInner = eodCached(async (assetClass: AssetClass): Promise<InstrumentLi
       t.pos_52w::text              AS pos_52w,
       t.adv_usd_60d_median::text   AS adv_usd,
       u.in_universe,
-      NULL::text                   AS universe_exclusion, -- the snapshot's reason column, once build_universe_snapshot writes one
+      u.exclusion_reason           AS universe_exclusion,
       a.eod, a.as_of
     FROM atlas_global.instrument_master m
     CROSS JOIN a

@@ -6,7 +6,7 @@
 import Link from 'next/link'
 import { useMemo } from 'react'
 import type { FacetGroup } from '@/lib/explorer'
-import { expandRows, hasPrices, hasUniverse, SEC_KIND_LABEL, universeValue, words, type AssetClass, type InstrumentRow } from '@/lib/facts'
+import { expandRows, hasPrices, hasUniverse, SEC_KIND_LABEL, universeLabel, UNIVERSE_LABEL, universeValue, type AssetClass, type InstrumentRow } from '@/lib/facts'
 import { formatDecimal, formatIsoDate, formatPct, formatUsd } from '@/lib/format'
 import type { InstrumentList } from '@/lib/queries/instruments'
 import type { Column } from './DataTable'
@@ -25,9 +25,9 @@ const SECTOR: FacetGroup<InstrumentRow> = {
   key: 'sector', label: 'GICS sector', kind: 'any', value: (r) => r.sector ?? 'none', labels: { none: 'No sector' },
 }
 const SEC: FacetGroup<InstrumentRow> = { key: 'sec', label: 'SEC identity', kind: 'any', value: (r) => r.sec_kind, labels: SEC_KIND_LABEL }
-// In universe, or the snapshot's reason for leaving the row out (below the floor, not a member, leveraged, inverse).
+// In universe, or the snapshot's reason for leaving the row out — in English, never the enum.
 const UNIVERSE: FacetGroup<InstrumentRow> = {
-  key: 'universe', label: 'Universe', kind: 'any', value: universeValue, labels: { in: 'In universe', excluded: 'Excluded' },
+  key: 'universe', label: 'Universe', kind: 'any', value: universeValue, labels: UNIVERSE_LABEL,
 }
 
 // ── columns ─────────────────────────────────────────────────────────────────
@@ -60,8 +60,9 @@ const WEIGHT: Column<InstrumentRow> = {
 }
 const SEC_COL: Column<InstrumentRow> = { key: 'sec', label: 'SEC identity', width: 100, sortValue: (r) => r.sec_kind, render: (r) => SEC_KIND_LABEL[r.sec_kind] }
 const UNIVERSE_COL: Column<InstrumentRow> = {
-  key: 'universe', label: 'Universe', width: 128, sortValue: universeValue,
-  render: (r) => (r.in_universe == null ? '' : words(universeValue(r))),
+  key: 'universe', label: 'Universe', width: 168, sortValue: universeValue,
+  title: 'In the universe at EOD, or the reason the snapshot left the instrument out',
+  render: (r) => (r.in_universe == null ? '' : universeLabel(universeValue(r))),
 }
 
 const ret = (key: 'ret_1m' | 'ret_3m' | 'ret_6m' | 'ret_12m', label: string): Column<InstrumentRow> => ({

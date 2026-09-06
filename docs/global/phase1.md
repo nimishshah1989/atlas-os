@@ -259,7 +259,8 @@ instruments differs by < 1e-6.
 
 GOAL: `universe_snapshot` has one row per active instrument at EOD with `adv_usd_60d_median`,
 `in_sp500`, `aum_usd` (NULL until Phase 2), `basket_eligible` (NULL until the execution provider supplies
-`fractionable`), and `in_universe` computed by the reused `universe_core.members` — and the step fails
+`fractionable`), `in_universe` computed by the reused `universe_core.members`, and `exclusion_reason`
+— the ONE reason an excluded row is out, NULL when it is in — and the step fails
 loudly while `liquidity_min_traded_value_usd` is unset, after printing and saving the ADV$ percentile
 table the FM needs to set it.
 - Reuse verbatim: `scripts/foundation/universe_core.py:members(adv, floor, held_ids)` (a Decimal floor
@@ -271,7 +272,10 @@ table the FM needs to set it.
   never in code.
 - DoD: 100% of active instruments have a row at EOD; `in_sp500` matches `index_membership` for the
   date; the report file exists with the real distribution; with the floor unset the step exits 2 and the
-  gate fails; with it set, `in_universe` count printed and `universe_snapshot` registered (weekly lag).
+  gate fails; with it set, `in_universe` count printed and `universe_snapshot` registered (weekly lag);
+  every excluded row carries exactly one `exclusion_reason` and every in-universe row carries none —
+  asserted on the frame before the upsert (`assert_partition`) and by two CHECKs on the table, so the
+  board can name the rule that took each instrument out instead of showing a bare "excluded".
 
 **FM decisions, 2026-09-06** — taken from `docs/global/reports/adv_usd_2026-09-03.md`, the real
 distribution this step printed, and now implemented. Universe on 2026-09-03: **2,254** of 13,155
@@ -309,6 +313,15 @@ active instruments (**1,751 ETFs + 503 stocks**), down from 6,006 on liquidity a
      **RSST and RSSB**, clear the floor and ARE in the universe today. So are **FIAT** and
      **WNTR**, YieldMax "Short <ticker> Option Income" funds that carry inverse exposure inside
      an option wrapper. `derivatives_share` + holdings settle all six in Phase 2.
+4. **Every excluded instrument says WHY, in the table** — `exclusion_reason`, one of `no_bars`,
+   `too_few_observations`, `stale`, `not_sp500`, `leveraged`, `inverse`, `below_floor`, and NULL
+   exactly when the row is in. On 2026-09-03 the FIRST rule to take each row out was `not_sp500`
+   6,016, `below_floor` 2,323, `too_few_observations` 1,809, `leveraged` 595, `no_bars` 117,
+   `inverse` 38, `stale` 3 — 10,901, the whole excluded set, each row counted once. Smaller than
+   the rule counts in 3, which count every instrument a rule TOUCHES: 980 of the 6,996
+   non-members never had an ADV$ at all, 154 of the 749 geared ETFs were already out on the
+   ladder, and of the 166 inverse ETFs 21 had no ADV$ and 107 are geared too (an UltraShort
+   reports as `leveraged`). The reason is the board's Universe column, in English.
 
 ### P1-F — Ops: orchestration, health, runbook
 
