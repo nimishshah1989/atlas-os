@@ -129,6 +129,10 @@ CREATE INDEX IF NOT EXISTS ix_index_membership_current
 
 -- atlas_thresholds — India's 13 columns 1:1 (load_thresholds(schema="atlas_global") and the
 -- admin panel read the same names) + PRIMARY KEY (threshold_key) so seeds can ON CONFLICT.
+-- is_active carries NOT NULL DEFAULT true because load_thresholds() filters `WHERE is_active
+-- = TRUE`: a hand-written insert that omits the column (the runbook tells the FM to write one
+-- to set the liquidity floor) would otherwise land NULL and be INVISIBLE to every reader,
+-- while the row plainly sits in the table. Found by making exactly that mistake, 2026-09-06.
 CREATE TABLE IF NOT EXISTS atlas_global.atlas_thresholds (
     threshold_key        varchar(64)   NOT NULL,
     threshold_value      numeric(18,6),
@@ -141,7 +145,7 @@ CREATE TABLE IF NOT EXISTS atlas_global.atlas_thresholds (
     default_value        numeric(18,6),
     last_modified_by     varchar(64),
     last_modified_at     timestamptz,
-    is_active            boolean,
+    is_active            boolean       NOT NULL DEFAULT true,
     created_at           timestamptz,
     CONSTRAINT atlas_thresholds_pkey PRIMARY KEY (threshold_key)
 );

@@ -68,12 +68,14 @@ step "ingest_macro"            $PY scripts/global_market/ingest_macro.py --eod "
 # step "ingest_issuer_holdings"  $PY scripts/global_market/ingest_issuer_holdings.py
 
 # 2. COMPUTE cascade (EOD-anchored, single schema).
-# step "compute_technicals"      $PY scripts/global_market/compute_technicals.py
+# step "compute_technicals"      $PY scripts/global_market/compute_technicals.py   # (P1-D) slots in here, between ingest_macro and build_universe_snapshot
+# build_universe_snapshot exits 2 (step FAIL, nothing written) until the FM sets
+# liquidity_min_traded_value_usd from the ADV$ table it prints and saves to $LOG_DIR/adv_usd_$EOD.md (runbook §7).
+step "build_universe_snapshot" $PY scripts/global_market/build_universe_snapshot.py --eod "$EOD" --report "$LOG_DIR/universe_snapshot_$EOD.csv" --report-dir "$LOG_DIR"
 # step "build_exposures"         $PY scripts/global_market/build_exposures.py --changed
 # step "score_stocks"            $PY scripts/global_market/score_stocks.py --as-of "$EOD"
 # step "score_etfs"              $PY scripts/global_market/score_etfs.py --as-of "$EOD"
 # step "build_country_views"     $PY scripts/global_market/build_country_views.py
-# step "build_universe_snapshot" $PY scripts/global_market/build_universe_snapshot.py
 # Rolling signal quality — step, not gate (a lens losing IC is a finding for the FM, not a
 # reason to withhold a correct board). Window start computed in Python (no GNU `date -d`).
 # IC_START=$($PY -c "import datetime as d, _gdb; print(_gdb.eod_cutoff() - d.timedelta(days=730))")

@@ -159,6 +159,26 @@ Every row on the page is a real row in `atlas_global`; nothing is computed in th
 2. The log names the check; fix the data (never the assertion), re-run the step, re-run the gate.
 3. The board keeps its last-good data until every gate passes; nothing is republished by hand
    — the publish step is the only caller of `/api/revalidate`.
+4. `build_universe_snapshot` exits 2 (`REFUSED: liquidity_min_traded_value_usd is not in
+   atlas_global.atlas_thresholds`, `universe_snapshot` EMPTY on `/health`) until the FM sets the
+   floor from the ADV$ table the step printed and saved — `$ATLAS_LOG_DIR/adv_usd_<EOD>.md` on the
+   box, `docs/global/reports/adv_usd_<EOD>.md` on a laptop run — via `/admin/thresholds`, or an
+   `atlas_thresholds` insert plus an `atlas_thresholds_audit` row with `changed_by` and
+   `change_reason`; never in code, a test or a seed. The next run writes the rows.
+   Name `is_active` in that insert — `load_thresholds()` reads only `is_active = TRUE`:
+
+   ```sql
+   INSERT INTO atlas_global.atlas_thresholds
+       (threshold_key, threshold_value, category, description, units,
+        last_modified_by, last_modified_at, is_active, created_at)
+   VALUES ('liquidity_min_traded_value_usd', <floor>, 'universe',
+           'ADV$ floor for scoring and basket eligibility', 'usd',
+           '<email>', now(), true, now());
+   ```
+
+   The column defaults to `true` on a freshly applied schema, so an insert that omits it still
+   works; naming it makes the row's visibility explicit. If a run still refuses after the row
+   is in, it now prints whether the row is missing or merely inactive.
 
 ## 8. First night checklist
 

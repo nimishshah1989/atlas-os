@@ -105,11 +105,15 @@ def eod_cutoff() -> dt.date:
     return cutoff
 
 
-def read_df(sql: str, params: dict | None = None) -> pd.DataFrame:
-    """Run a read query and return a DataFrame (with a reliable statement_timeout)."""
+def read_df(sql: str, params: dict | None = None, *, coerce_float: bool = True) -> pd.DataFrame:
+    """Run a read query and return a DataFrame (with a reliable statement_timeout).
+
+    ``coerce_float=False`` keeps ``numeric`` columns as ``Decimal`` — pandas' default turns
+    them into float64, which a money column must never be written back from.
+    """
     with engine().begin() as conn:  # one transaction → one backend → SET LOCAL sticks
         _apply_timeout(conn)
-        return pd.read_sql_query(text(sql), conn, params=params or {})
+        return pd.read_sql_query(text(sql), conn, params=params or {}, coerce_float=coerce_float)
 
 
 def scalar(sql: str, params: dict | None = None):

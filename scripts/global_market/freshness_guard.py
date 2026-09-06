@@ -50,6 +50,7 @@ KEY_TABLES: list[tuple[str, str, int]] = [
 BOARD_TABLES: list[tuple[str, str, int]] = [
     ("instrument_master", "updated_at", 8),  # weekly build_identity touches every listed row (P1-A)
     ("index_membership", "updated_at", 8),  # weekly SSGA pass touches every current row (P1-C)
+    ("universe_snapshot", "date", 8),  # nightly once the FM sets the floor (P1-E)
 ]
 
 # ── PRODUCER REGISTRY (the build-time half of the freshness contract) ──
@@ -61,6 +62,7 @@ PRODUCERS: dict[str, str] = {
     "instrument_master": "build_identity.py",
     "macro_daily": "ingest_macro.py",
     "index_membership": "ingest_index_membership.py",
+    "universe_snapshot": "build_universe_snapshot.py",
 }
 
 
