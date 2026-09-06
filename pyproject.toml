@@ -213,5 +213,6 @@ addopts = "-ra --strict-markers --strict-config"
 markers = [
     "unit: fast, no I/O",
     "integration: requires database",
+    "live: real files fetched at test time (SSGA workbooks, fja05680 CSVs); never `unit`",
     "validation: tier 2/3/4 hand-validation checks",
 ]
