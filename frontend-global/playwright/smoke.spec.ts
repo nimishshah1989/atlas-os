@@ -14,6 +14,8 @@ test('/login renders the sign-in surface', async ({ page }) => {
 })
 
 test('an unauthenticated visit to / lands on /login', async ({ page }) => {
+  // Under the dev-only sign-in bypass (playwright.config.ts) there is no unauthenticated visit.
+  test.skip(Boolean(process.env.ATLAS_E2E_BYPASS), 'ATLAS_E2E_BYPASS is set')
   await page.goto('/')
   await expect(page).toHaveURL(/\/login/)
 })

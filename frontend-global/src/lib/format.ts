@@ -114,6 +114,13 @@ export function formatPct(
   return `${sign}${group(int)}${frac ? '.' + frac : ''}%`
 }
 
+/** A NUMERIC string that is already in display units (a 0–100 position, a count): "57.1234" → "57". */
+export function formatDecimal(value: string | null | undefined, decimals = 0): string {
+  if (value == null || value === '') return '—'
+  const { negative, int, frac } = roundDecimal(value, decimals)
+  return `${negative ? '-' : ''}${group(int)}${frac ? '.' + frac : ''}`
+}
+
 // ── plain numbers (counts, scores, statistics — never money) ───────────────
 
 export function formatNum(n: number | null | undefined, decimals = 0): string {
