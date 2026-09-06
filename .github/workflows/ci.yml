@@ -29,7 +29,9 @@ jobs:
           enable-cache: true
 
       - name: Install dev dependencies
-        run: uv sync --extra dev
+        # + the global extra (openpyxl): the global-market unit tests import the SSGA parser
+        # and the pyright ratchet resolves it — `uv sync` is exact, so it must be asked for.
+        run: uv sync --extra dev --extra global
 
       - name: Ruff lint
         run: uv run ruff check atlas tests scripts
@@ -42,6 +44,14 @@ jobs:
 
       - name: Unit tests (fast, no DB)
         run: uv run --extra dev pytest tests/unit tests/scripts -m unit -q
+
+      # Rule #0 on files that cannot be committed (SSGA's notice; a 5.5 MB CSV): the
+      # `live`-marked global-market tests fetch the real SSGA workbooks and fja05680 files at
+      # test time. `required` makes an unreachable source a FAILURE, not a skip — these must RUN.
+      - name: Live-file tests (global market, real downloads)
+        env:
+          ATLAS_LIVE_FIXTURES: required
+        run: uv run --extra dev --extra global pytest tests/unit/global_market -m live -q
 
       # Rule #1 (ADR-0006): one schema per market, zero cross-schema references.
       # The India tree may not name atlas_global.*; the global tree may not name
@@ -111,6 +121,16 @@ jobs:
 
       - name: alembic upgrade head
         run: uv run alembic upgrade head
+
+      # The identity build's apply() path on a real Postgres: build_identity.py runs twice
+      # from the committed 2026-09-04 snapshot (13,154 listings; the second run must plan
+      # nothing), then the rename / recycle / refusal scenarios. The migration above applied
+      # the atlas_global DDL; the test truncates only the tables the script writes, before
+      # and after, so the job's database is left as the migration made it.
+      - name: Identity build round trip (build_identity.py on the fresh DB)
+        env:
+          ATLAS_IDENTITY_TEST_DB_URL: ${{ env.ATLAS_DB_URL }}
+        run: uv run --extra dev pytest tests/integration/global_market/test_build_identity_db.py -m integration -q
 
   frontend:
     name: Frontend types + tests

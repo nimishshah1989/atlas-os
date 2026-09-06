@@ -31,6 +31,18 @@ def alpaca_keys() -> tuple[str, str]:
     return key, secret
 
 
+def edgar_identity() -> str:
+    """SEC fair-access: every EDGAR request carries a ``User-Agent`` naming a real contact
+    (``"Firstname Lastname email@domain"``). The identity fetch refuses to run without it,
+    and without an ``@`` in it — a name alone is not a contact."""
+    value = _require("EDGAR_IDENTITY", 'set it in .env as "Firstname Lastname email@domain"')
+    if "@" not in value:
+        raise RuntimeError(
+            'EDGAR_IDENTITY must name a contact address: "Firstname Lastname email@domain"'
+        )
+    return value
+
+
 def fred_key() -> str:
     return _require(
         "FRED_API_KEY", "set the FRED API key in .env (same key India's ingest_macro uses)"

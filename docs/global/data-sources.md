@@ -22,8 +22,8 @@ The FM ruled Alpaca out ("too cumbersome to start"). Stooq cannot be the spine (
 | Corporate actions | Tiingo per-row `splitFactor` / `divCash` (amended 2026-09-04; Alpaca out) | daily | derive from `all` vs `split` bar ratios, flagged `source='derived_from_adjustment'` (needs FM approval — rule #0) | every `\|ret_1d\| > 0.5` on `close_adj` has a matching action |
 | Index / macro | FRED (`SP500`, `VIXCLS`, `DGS10`, `DTB3`, `DTWEXBGS`) — key already in India `.env` | daily | — | through EOD-1 |
 | ETF universe | Nasdaq Trader `nasdaqlisted.txt` + `otherlisted.txt` (ETF = Y, exchange, test-issue flag) | weekly | Alpaca `/v2/assets` | ≥ 5,000 ETF rows, every one with an exchange (measured 2026-09-04: 5,655 = 1,257 Nasdaq-listed + 4,398 other exchanges — the plan's "3,300–4,000" was an estimate) |
-| S&P 500 | **SSGA SPY daily holdings CSV** (constituents, weights, GICS sector column — verify columns on first fetch) via `etf-scraper`; history `fja05680/sp500` | daily / one-time | Wikipedia list | 500–505 names, weights ≈ 100% |
-| Identity | Nasdaq directory; SEC `company_tickers.json` (stocks → CIK) and `company_tickers_mf.json` (funds → CIK/series/class; verify field names); SEC `submissions` API (SIC code); Alpaca assets (tradable, fractionable) | weekly | `symbol_alias` manual rows | CIK on 100% of stocks; series_id on ≥95% of ETFs; alias round-trip for 20 punctuation tickers |
+| S&P 500 | **SSGA SPY daily holdings workbook** (`.xlsx` via `openpyxl`: constituents, weights, CUSIP; verified 2026-09-04 — the `Sector` column is present but `-` on all 505 rows) + **the eleven Select Sector SPDR workbooks** (XLB…XLY, same layout) for `sector_gics` by membership — `providers/ssga.py`; history `fja05680/sp500` (MIT; `providers/sp500_history.py`). SSGA's notice forbids reproducing the workbooks: never committed, fetched live by tests and the weekly step | weekly / one-time | Wikipedia list | 500–505 names, weights ≈ 100% (505 rows, Σ 0.99936 on 2026-09-03); ≥ 98% of ticker rows in exactly one sector file (504/504 on 2026-09-03) |
+| Identity | Nasdaq directory (`nasdaqlisted.txt` + `otherlisted.txt`: ETF flag, exchange legend, ACT/CQS/NASDAQ spellings); SEC `company_tickers.json` + `company_tickers_exchange.json` (registrants → CIK) and `company_tickers_mf.json` (1940-Act funds → CIK/series/class; field names verified 2026-09-04); Tiingo `supported_tickers.zip` (listing dates, spelling proof); the Stooq archive's members (delisted names, `is_active=false`) — `build_identity.py`, `providers/directories.py` (P1-A) | weekly | `symbol_alias` manual rows | measured 2026-09-04: 13,154 listings, exchange on 100%; CIK on 99.6% of stock-flagged rows (the rest: rights, which the SEC does not list, and bank holding companies filing with their regulator) and on 82.5% of ETFs (79.3% with a series/class id — trusts, commodity pools and ETNs are registrants, not 1940-Act funds); alias round-trip on all 543 punctuation tickers; `import_stooq --dry-run` maps 13,334 of the archive's 13,352 members (99.9%; the 18 unmapped are empty files of names absent from the directory) |
 | ETF holdings + exposures | **EDGAR N-PORT via `edgartools`** for the whole universe — per holding `name, cusip, ticker, balance, value_usd, pct_value, asset_category, investment_country`; per fund `net_assets, total_assets, series_id` (`Fund(ticker).get_portfolio()`); public only for the quarter-end month, ~60-day lag | weekly | — | holdings on ≥90% of ETFs by count, ≥98% by AUM |
 | Fresh holdings (big four) | Issuer CSVs via `etf-scraper` (iShares daily incl. history since 2010; SSGA, Vanguard, Invesco current); `query_listings()` for issuer product lists (AUM, expense) | daily | N-PORT | Σ\|weight_frac\| ∈ [0.9, 1.1] for ≥97% of non-leveraged ETFs |
 | Stock fundamentals | **EDGAR XBRL company facts via `edgartools`** (`filed` per fact = PIT) | weekly (changed filers) | — | ≥95% of S&P 500 with ≥8 quarters; continuity checks |
@@ -182,10 +182,15 @@ source_symbol='<TICKER>.US', valid_to IS NULL)` — Stooq's own spelling — the
 `instrument_master.symbol = symbology.stooq_symbol(<ticker>)` (`SPY.US → SPY`, `BRK-B.US → BRK.B`,
 `AAC-U.US → AAC.U`: Stooq's `-` is the class/unit/warrant separator that Nasdaq's ACT and CQS columns
 spell `.`). Stooq's `_` marks a preferred series (`agm_d` is `AGM$D` in the ACT column and `AGM-D` in the
-NASDAQ Symbol column; `eti_` a preferred with no series; 391 members) and is left untouched: those map
-only through an alias and are reported unmapped until build_identity fixes the canonical spelling. A kind
-mismatch between the folder and `instrument_master.asset_class` is noted in the report, not resolved
-silently; with an empty `instrument_master` every member is reported unmapped and the importer exits 2.
+NASDAQ Symbol column; `eti_` a preferred with no series; 391 members) and is left untouched by the
+normaliser: `build_identity.py` writes the `symbol_alias(source='stooq')` row for every listing from the
+CQS spelling (`AGMpD → AGM_D.US`, `ACHR.WS → ACHR-WS.US` — the ACT column says `ACHR.W`, so warrants also
+need the alias), and archive members absent from the directory get an inactive row of their own, so the
+whole archive maps (13,352 of 13,352 members on the 2026-09-04 files; `--dry-run` prints the count). A
+kind mismatch between the folder and `instrument_master.asset_class` is noted in the report, not resolved
+silently (2,035 members on 2026-09-04 — the archive's `etfs`/`stocks` folders do not follow the
+directory's ETF flag); with an empty `instrument_master` every member is reported unmapped and the
+importer exits 2.
 
 **How to run — on the laptop** (stooq.com is unreachable from the cloud sandbox; the FM downloads the
 archive by hand and it travels by Google Drive):

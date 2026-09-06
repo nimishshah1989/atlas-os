@@ -28,7 +28,9 @@ Flow
    it stopped and a newer archive re-imports only the files that changed.
 
 ``--dry-run`` parses the whole archive through the same code path and prints the report
-without touching the database.
+without writing to the database; when ``ATLAS_DB_URL`` is configured it also runs the
+identity bridge (read-only) and prints how many members map, by alias and by symbol, so
+``build_identity.py``'s coverage can be checked before any bar is written.
 
 TODO(phase-1, after the SIP gate): ``stooq_adjustment_check`` — for every imported instrument,
 compare overlapping Stooq closes against Alpaca ``adjustment=split`` and ``adjustment=all``;
@@ -41,7 +43,6 @@ NULL and nothing scores on these rows.
 from __future__ import annotations
 
 import argparse
-import csv
 import sys
 import time
 from collections import Counter
@@ -54,6 +55,7 @@ from typing import Any
 import _gdb
 import pandas as pd
 import psycopg2
+from _report import Report
 from psycopg2.extras import Json, execute_values
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -277,31 +279,16 @@ def chunks_by_size[T](
 # ── report ──
 
 
-class Report:
-    """One CSV row per member outcome (and per refused bar) — the 'never silent' artefact."""
+def note(report: Report, m: ArchiveMember, status: str, rows: int = 0, detail: str = "") -> None:
+    """One member outcome in the shared report (``REPORT_COLUMNS`` order)."""
+    report.add(m.stooq_ticker, m.symbol, m.kind, m.exchange, status, rows, detail)
 
-    def __init__(self, path: Path | None) -> None:
-        self.path = path
-        self.counts: Counter[str] = Counter()
-        self._fh = path.open("w", newline="") if path else None
-        self._w = csv.writer(self._fh) if self._fh else None
-        if self._w:
-            self._w.writerow(REPORT_COLUMNS)
 
-    def add(self, m: ArchiveMember, status: str, rows: int = 0, detail: str = "") -> None:
-        self.counts[status] += 1
-        if self._w:
-            self._w.writerow((m.stooq_ticker, m.symbol, m.kind, m.exchange, status, rows, detail))
-
-    def refused(
-        self, by_symbol: Mapping[str, ArchiveMember], rows: list[tuple[str, date, str]]
-    ) -> None:
-        for s, d, reason in rows:
-            self.add(by_symbol[s], "refused_bar", 1, f"{d}: {reason}")
-
-    def close(self) -> None:
-        if self._fh:
-            self._fh.close()
+def note_refused(
+    report: Report, by_symbol: Mapping[str, ArchiveMember], rows: list[tuple[str, date, str]]
+) -> None:
+    for s, d, reason in rows:
+        note(report, by_symbol[s], "refused_bar", 1, f"{d}: {reason}")
 
 
 # ── the two modes ──
@@ -331,6 +318,38 @@ def select_members(provider: StooqBulkProvider, symbols: str | None) -> list[Arc
     return picked
 
 
+def bridge(members: list[ArchiveMember], report: Report) -> tuple[list[Mapped], list[Unmapped]]:
+    """The identity bridge against the live table (read-only); every unmapped member is
+    written to the report with its reason before anything else happens."""
+    by_alias, by_symbol = load_identity()
+    mapped, unmapped = map_members(members, by_alias, by_symbol)
+    for u in unmapped:
+        note(report, u.member, "unmapped", 0, u.reason)
+    return mapped, unmapped
+
+
+def dry_run_identity(members: list[ArchiveMember], report: Report) -> None:
+    """How many members map, and through what. Skipped — and said so — when no database
+    is configured; a configured but unreachable one raises."""
+    try:
+        _gdb.db_url()
+    except RuntimeError as e:
+        print(f"  identity bridge skipped: {e}")
+        return
+    mapped, unmapped = bridge(members, report)
+    via = Counter(x.via for x in mapped)
+    kind_notes = sum(1 for x in mapped if x.note)
+    print(
+        f"  identity: {len(mapped):,d} of {len(members):,d} members map to instrument_master "
+        f"({len(mapped) / max(len(members), 1):.1%}) — via alias {via['alias']:,d}, "
+        f"via symbol {via['symbol']:,d}; {len(unmapped):,d} unmapped; "
+        f"{kind_notes:,d} archive-folder/asset_class disagreements (noted, not resolved)"
+    )
+    if unmapped:
+        sample = ", ".join(u.member.stooq_ticker for u in unmapped[:10])
+        print(f"  unmapped {report.where()}: {sample}{', …' if len(unmapped) > 10 else ''}")
+
+
 def dry_run(
     provider: StooqBulkProvider, members: list[ArchiveMember], since: date | None, report: Report
 ) -> None:
@@ -338,12 +357,13 @@ def dry_run(
     start = since or date.min
     end = _gdb.eod_cutoff()
     mb = provider.path.stat().st_size / 1e6
-    print(f"== Stooq archive {provider.path.name} ({mb:,.0f} MB), dry run — no DB ==")
+    print(f"== Stooq archive {provider.path.name} ({mb:,.0f} MB), dry run — no writes ==")
     by_bucket = Counter((m.kind, m.exchange) for m in members)
     for (kind, exchange), n in sorted(by_bucket.items()):
         print(f"  {kind:5s} {exchange:8s} {n:6,d} members")
     empty = sum(1 for m in members if m.size == 0)
     print(f"  total {len(members):,d} members ({empty} empty files); window {start} → {end}")
+    dry_run_identity(members, report)
 
     per_symbol: dict[str, tuple[int, date, date]] = {}
     refused_rows = 0
@@ -351,14 +371,14 @@ def dry_run(
         frame = provider.bars([m.symbol for m in chunk], start, end, ADJUSTMENT_UNKNOWN)
         good, refused = split_valid_bars(frame)
         refused_rows += len(refused)
-        report.refused({m.symbol: m for m in chunk}, refused)
+        note_refused(report, {m.symbol: m for m in chunk}, refused)
         if not good.empty:
             agg = good.groupby("symbol")["date"].agg(["size", "min", "max"])
             for s, n, lo, hi in zip(agg.index, agg["size"], agg["min"], agg["max"], strict=True):
                 per_symbol[str(s)] = (int(n), lo, hi)
         for m in chunk:
             n = per_symbol.get(m.symbol, (0, date.min, date.min))[0]
-            report.add(m, "parsed" if n else "empty", n)
+            note(report, m, "parsed" if n else "empty", n)
 
     if not per_symbol:
         print("\n  no bars in the window")
@@ -373,8 +393,7 @@ def dry_run(
         f"  fractional volumes (Stooq split adjustment; stored rounded to whole shares): "
         f"{frac:,d} ({frac / max(rows + refused_rows, 1):.1%})"
     )
-    where = f"listed in {report.path}" if report.path else "pass --report to list them"
-    print(f"  refused bars (not a valid bar): {refused_rows:,d} — {where}")
+    print(f"  refused bars (not a valid bar): {refused_rows:,d} {report.where()}")
     print("\n  10 largest members:")
     for m in sorted(members, key=lambda m: m.size, reverse=True)[:10]:
         n, lo, hi = per_symbol.get(m.symbol, (0, date.min, date.min))
@@ -389,10 +408,7 @@ def run_import(
     provider: StooqBulkProvider, members: list[ArchiveMember], since: date | None, report: Report
 ) -> int:
     t0 = time.monotonic()
-    by_alias, by_symbol = load_identity()
-    mapped, unmapped = map_members(members, by_alias, by_symbol)
-    for u in unmapped:
-        report.add(u.member, "unmapped", 0, u.reason)
+    mapped, unmapped = bridge(members, report)
     print(
         f"== identity: {len(mapped):,d} of {len(members):,d} members map to instrument_master "
         f"({len(unmapped):,d} unmapped → {report.path}) =="
@@ -405,7 +421,7 @@ def run_import(
     todo_symbols = {x.member.symbol for x in todo}
     for x in mapped:
         if x.member.symbol not in todo_symbols:
-            report.add(x.member, "skipped_resumed", 0, "same CRC/size already imported")
+            note(report, x.member, "skipped_resumed", 0, "same CRC/size already imported")
     print(f"  resume: {len(mapped) - len(todo):,d} already imported, {len(todo):,d} to do")
 
     start = since or date.min
@@ -417,7 +433,7 @@ def run_import(
             frame = provider.bars([x.member.symbol for x in chunk], start, end, ADJUSTMENT_UNKNOWN)
             good, refused = split_valid_bars(frame)
             refused_rows += len(refused)
-            report.refused({x.member.symbol: x.member for x in chunk}, refused)
+            note_refused(report, {x.member.symbol: x.member for x in chunk}, refused)
             rows: list[tuple[object, ...]] = []
             spans: dict[str, tuple[int, date | None, date | None]] = {}
             for x in chunk:
@@ -452,7 +468,7 @@ def run_import(
                     protected = (
                         f"{n - w} rows protected (source='{PROTECTED_SOURCE}')" if n != w else ""
                     )
-                    report.add(x.member, "imported" if n else "empty", n, x.note or protected)
+                    note(report, x.member, "imported" if n else "empty", n, x.note or protected)
                 execute_values(cur, STATE_SQL, state_rows, page_size=1000)
             sent += len(rows)
             written += len(returned)
@@ -477,7 +493,11 @@ def main() -> int:
     )
     ap.add_argument("--zip", required=True, help="path to Stooq's d_us_txt.zip")
     ap.add_argument("--symbols", default=None, help="comma-separated subset, e.g. SPY,AAPL,BRK.B")
-    ap.add_argument("--dry-run", action="store_true", help="parse the archive and report; no DB")
+    ap.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="parse the archive and report; reads identity from the DB when configured, writes nothing",
+    )
     ap.add_argument(
         "--since", type=date.fromisoformat, default=None, help="only bars on/after YYYY-MM-DD"
     )
@@ -499,7 +519,7 @@ def main() -> int:
     if path is None and not args.dry_run:
         stamp = f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}"
         path = provider.path.with_name(f"import_stooq_{stamp}.csv")
-    report = Report(path)
+    report = Report(path, REPORT_COLUMNS)
     try:
         if args.dry_run:
             dry_run(provider, members, args.since, report)
