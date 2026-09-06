@@ -273,6 +273,43 @@ table the FM needs to set it.
   date; the report file exists with the real distribution; with the floor unset the step exits 2 and the
   gate fails; with it set, `in_universe` count printed and `universe_snapshot` registered (weekly lag).
 
+**FM decisions, 2026-09-06** — taken from `docs/global/reports/adv_usd_2026-09-03.md`, the real
+distribution this step printed, and now implemented. Universe on 2026-09-03: **2,254** of 13,155
+active instruments (**1,751 ETFs + 503 stocks**), down from 6,006 on liquidity alone.
+
+1. **Stocks: S&P 500 only.** `in_universe` for a stock = `in_sp500` on the date AND ADV$ >= floor.
+   3,389 liquid non-members left the universe; all 503 members clear $1M, so stocks in = 503.
+   `in_sp500` is computed per date from `index_membership`, so trailing members keep their
+   membership on the dates they held it — no special case for history, and every active
+   instrument still gets a snapshot ROW.
+2. **`liquidity_min_traded_value_usd` = $1,000,000, SEEDED** (`seed_thresholds.py`, now 61 rows,
+   with the decision and the report cited in the row's `description`). One floor for both asset
+   classes: 2,114 of 5,656 ETFs clear it, and so does every S&P 500 member. The exit-2 refusal
+   is unchanged and stays — it is the guard for a database where the row is missing or inactive,
+   not a placeholder, and the message now distinguishes the two.
+3. **Leveraged and inverse ETFs are out**, via `atlas/global_market/classify/rules.py`
+   (`leverage_flags(name) -> leveraged, inverse, multiple, rule`; the plan's L2 `rules.py`, name
+   half only, started early). Measured over all 5,656 active ETF names: **749 leveraged, 166
+   inverse, 125 both, 790 distinct**; 363 of those clear the floor, which is the whole
+   difference between 2,114 and 1,751. Rule counts: `explicit_multiple` 665, `proshares_ultra`
+   60, `proshares_ultrashort` 41, `proshares_short` 17, `leverage_word` 6,
+   `inverse_leveraged_words` 2, `inverse_word` 1, `leveraged_loan_asset_class` 1 (an exclusion —
+   LVLN's "Leveraged Loan" is an asset class), `no_leverage_pattern` 4,863.
+   - Why the ordered table looks the way it does: **ProShares is the only issuer in this market
+     whose leverage words carry no number** — every Direxion / Tradr / T-REX / Corgi /
+     GraniteShares / Defiance / Leverage Shares / MicroSectors geared product states its
+     multiple. So three anchored patterns (`^ProShares Ultra…`, `^ProShares Short`, plus the
+     issuer-stripped `UltraPro` rows the directory carries) do all the issuer work, and "Ultra
+     Short" / "Short-Term" / "Ultra-Small" / "Ultra Buffer" from anyone else stay clean without
+     a second rule. `multiple` is filled only from a number the NAME states: ProShares "Ultra"
+     is 2x for most funds but 1.5x for UVXY, and "Short" is -1x except -0.5x for SVXY.
+   - **Known recall gap for Phase 2** (name-only cannot see it): return-stacked and
+     "100% A & 100% B" funds carry ~200% notional with no multiple in the name — 8 Return
+     Stacked funds, `BTGD`, `ISBG`, `ISSB`, and `UPAR` (a 1.4x risk-parity fund). Two of them,
+     **RSST and RSSB**, clear the floor and ARE in the universe today. So are **FIAT** and
+     **WNTR**, YieldMax "Short <ticker> Option Income" funds that carry inverse exposure inside
+     an option wrapper. `derivatives_share` + holdings settle all six in Phase 2.
+
 ### P1-F — Ops: orchestration, health, runbook
 
 GOAL: `atlas_global_daily.sh` runs end to end on a real EOD (ingest_prices → ingest_macro →

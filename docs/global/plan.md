@@ -326,6 +326,22 @@ cross-source-agreement check for Alpaca.
   Phase 1 prints the ADV$ percentile table so the FM sets the floor from data.
 - Delisted ETFs keep their bars, `is_active=false` (survivorship honesty).
 
+**FM decisions of 2026-09-06**, taken from the real distribution in
+`docs/global/reports/adv_usd_2026-09-03.md` and implemented in `build_universe_snapshot.py`:
+
+1. **Stocks: S&P 500 only.** `in_universe` for a stock requires `in_sp500` on that date AND the
+   ADV$ floor — the snapshot had been wider than this section. 3,389 liquid non-members dropped
+   out; all 503 members on 2026-09-03 clear the floor, so stocks in the universe = 503. Trailing
+   members stay `in_universe` on the dates they were members (`in_sp500` is per date), so the
+   backtest history is unaffected.
+2. **The floor is $1,000,000**, seeded from that decision (`seed_thresholds.py`, 61 rows). 2,114
+   of 5,656 ETFs clear it. ONE floor serves both asset classes. `build_universe_snapshot` still
+   exits 2 when the row is missing or inactive — the guard for a half-provisioned schema.
+3. **Leveraged and inverse ETFs are out of the universe** — 749 leveraged, 166 inverse, 125
+   both, 790 distinct (363 of them clear the floor), leaving 1,751 ETFs. They keep their
+   snapshot row with `in_universe = false` and the rule that excluded them in `--report`.
+   Universe on 2026-09-03: **2,254** of 13,155 active instruments (1,751 ETFs + 503 stocks).
+
 ## Classification engine (the moat)
 
 Dimensions per ETF: `asset_class` (equity / fixed_income / commodity / currency / multi_asset /
@@ -344,7 +360,13 @@ Layers — deterministic first, model last, human final:
   `equity_w`, HHI, top-10, `lookthrough_scored_w`. Unit-tested on real snapshots.
 - **L2 rules** (`rules.py`, pure; ordered first-match like `etf_sector.py`, but on structured
   inputs) — leveraged/inverse from name regex (`2X|3X|ULTRA|BEAR|INVERSE|-1X|DAILY…BULL`) ∧ issuer ∧
-  `derivatives_share`; hedged from name; active from N-PORT/issuer; `single_country` iff
+  `derivatives_share`. **This file exists** as `atlas/global_market/classify/rules.py`, started
+  early on 2026-09-06 for the universe filter above: `leverage_flags(name)` is the name half only,
+  over all 5,656 ETF names, with the issuer read off the front of the name. Phase 2 SUPERSEDES it
+  with holdings + `derivatives_share` + `etf_meta`; the known name-only misses (return-stacked
+  and "100% A & 100% B" funds, whose 200 % notional is nowhere in the name) are listed in the
+  file's docstring and in phase1.md P1-E. Hedged from name; active from N-PORT/issuer;
+  `single_country` iff
   `top_country_w ≥ cls_country_pure_min_weight` ∧ `equity_w ≥ cls_country_equity_min`; region/global
   by ISO→region roll-up; `sector_id` when one sector ≥ `cls_sector_pure_min`. All thresholds in
   `atlas_thresholds`. Unambiguous rows get `status='auto'`.

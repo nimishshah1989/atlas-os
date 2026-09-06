@@ -24,12 +24,14 @@ landed yet are marked with their chunk (P1-B, P1-D, P1-E); everything else is ac
 ```
 uv run python scripts/global_market/apply_ddl.py --dry-run      # lists 00_core … 06_baskets
 uv run python scripts/global_market/apply_ddl.py                # idempotent; 41 tables
-uv run python scripts/global_market/seed_thresholds.py --dry-run # READ the 60 rows first
+uv run python scripts/global_market/seed_thresholds.py --dry-run # READ the 61 rows first
 uv run python scripts/global_market/seed_thresholds.py           # ON CONFLICT DO NOTHING
 python -m atlas.db                                               # atlas_global_exists True
 ```
-`liquidity_min_traded_value_usd` and the four `cls_*` thresholds are NOT seeded — set them from
-`/admin/thresholds` once the Phase 1 ADV$ table (P1-E) and the Phase 2 taxonomy work exist.
+The four `cls_*` thresholds are NOT seeded — set them from `/admin/thresholds` once the Phase 2
+taxonomy work exists. `liquidity_min_traded_value_usd` IS seeded, at $1,000,000: the FM set the
+floor on 2026-09-06 from the real P1-E distribution (`docs/global/reports/adv_usd_2026-09-03.md`),
+and the seed row carries that decision in its `description`.
 
 ## 3. The board's database role (one-off, psql as the project owner)
 
@@ -159,12 +161,15 @@ Every row on the page is a real row in `atlas_global`; nothing is computed in th
 2. The log names the check; fix the data (never the assertion), re-run the step, re-run the gate.
 3. The board keeps its last-good data until every gate passes; nothing is republished by hand
    — the publish step is the only caller of `/api/revalidate`.
-4. `build_universe_snapshot` exits 2 (`REFUSED: liquidity_min_traded_value_usd is not in
-   atlas_global.atlas_thresholds`, `universe_snapshot` EMPTY on `/health`) until the FM sets the
-   floor from the ADV$ table the step printed and saved — `$ATLAS_LOG_DIR/adv_usd_<EOD>.md` on the
-   box, `docs/global/reports/adv_usd_<EOD>.md` on a laptop run — via `/admin/thresholds`, or an
-   `atlas_thresholds` insert plus an `atlas_thresholds_audit` row with `changed_by` and
-   `change_reason`; never in code, a test or a seed. The next run writes the rows.
+4. `build_universe_snapshot` exits 2 (`REFUSED: liquidity_min_traded_value_usd …`,
+   `universe_snapshot` EMPTY on `/health`) whenever that row is missing or inactive. Since
+   2026-09-06 the floor SHIPS SEEDED at $1,000,000 (§2, the FM's decision from the P1-E ADV$
+   table), so on a correctly provisioned schema this refusal means the seed never ran — run
+   `seed_thresholds.py`. The refusal stays because it is the guard: nothing may cut the universe
+   on a floor nobody chose. To change the floor, use `/admin/thresholds`, or an
+   `atlas_thresholds` UPDATE (INSERT if the row is genuinely absent) plus an
+   `atlas_thresholds_audit` row with `changed_by` and `change_reason`; never in code or a test.
+   The next run writes the rows and prints the counts per exclusion reason.
    Name `is_active` in that insert — `load_thresholds()` reads only `is_active = TRUE`:
 
    ```sql

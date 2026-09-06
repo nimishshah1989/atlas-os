@@ -7,12 +7,26 @@ the FM sets the liquidity floor from.
 
 One row per ACTIVE instrument (stock or ETF) per session, whether or not it is in the universe,
 with the ADV$ that produced the decision — India's ``scripts/foundation/build_universe_snapshot.py``
-in USD. The membership rule is ``universe_core.members`` VERBATIM (a Decimal floor is
+in USD. The LIQUIDITY rule is ``universe_core.members`` VERBATIM (a Decimal floor is
 currency-agnostic); the window is India's ``adv_frame`` logic on ``ohlcv_daily`` — copied, not
 imported, because that function is bound to India's ``_db`` and ``ohlcv_stock`` — with ONE
 difference: the sessions are SPY's bars (the platform's calendar, membership-by-presence), not
 the table's distinct dates. Stooq carries stray bars on exchange holidays (Memorial Day,
 Juneteenth and 3 July 2026 in the FM's archive) and a holiday is not a session.
+
+Two FM rules of 2026-09-06 sit AROUND that predicate — never inside it, so India's
+``universe_core`` is untouched:
+
+* a STOCK must also be an S&P 500 member on the date (``docs/global/plan.md``: "scored =
+  current members"). ``in_sp500`` is computed per date from ``index_membership``, so a trailing
+  member is still ``in_universe`` on the dates it was one — history is not special-cased.
+* an ETF must also be neither leveraged nor inverse
+  (``atlas.global_market.classify.leverage_flags`` over the instrument name — the ONLY L0 fact
+  Phase 1 has for all 5,656 of them; Phase 2 supersedes it with holdings and
+  ``derivatives_share``). The rules run on ETFs only: a company can be called 10x Genomics.
+
+Every active instrument still gets a ROW either way — survivorship honesty and the journal
+contract are unchanged. Only ``in_universe`` narrows, and ``--report`` names the reason.
 
 * ``adv_usd_median_60d`` — median of RAW ``close × volume`` (volume has no adjusted twin) over
   the most recent 60 DISTINCT sessions within 150 calendar days at or before the anchor, the
@@ -27,14 +41,17 @@ Juneteenth and 3 July 2026 in the FM's archive) and a holiday is not a session.
   rewrites history; ``in_universe`` = ``members(adv, floor, held_ids)`` with ``held_ids`` = ∅
   until M2 (``basket_constituents``).
 
-THE FLOOR IS NEVER SEEDED (``seed_thresholds.py``): the FM sets ``liquidity_min_traded_value_usd``
-from the REAL distribution. Every run prints the ADV$ percentile table and saves it to
-``<report-dir>/adv_usd_<date>.md``; while the floor is unset the run then exits 2 with nothing
-written, so the step fails loudly every night until the floor is set from ``/admin/thresholds``
-(or an ``atlas_thresholds`` insert with an ``atlas_thresholds_audit`` row naming who and why).
-With it set the rows are upserted — idempotent, ``computed_at`` moves — and the ``in_universe``
-count is printed. ``--report`` lists every instrument's outcome (no bars / too few observations /
-stale / ok) in a CSV.
+THE FLOOR IS THE FM'S, NOT THE CODE'S. ``liquidity_min_traded_value_usd`` was set to $1,000,000
+on 2026-09-06 from the REAL distribution this script printed
+(``docs/global/reports/adv_usd_2026-09-03.md``) and is seeded from that decision
+(``seed_thresholds.py``). The refusal path is unchanged and is not a placeholder: on any
+database where the row is missing or inactive, the run prints and saves the ADV$ percentile
+table to ``<report-dir>/adv_usd_<date>.md``, writes nothing and exits 2 — so a half-provisioned
+schema fails loudly instead of cutting the universe on an invented floor. With the floor in
+force the rows are upserted (idempotent, ``computed_at`` moves) and the counts per exclusion
+reason are printed. ``--report`` lists every instrument's outcome — no bars / too few
+observations / stale / not_sp500 / leveraged / inverse / ok, plus the leverage rule that
+fired — in a CSV.
 """
 
 from __future__ import annotations
@@ -58,6 +75,7 @@ from _report import Report
 from atlas.db import load_thresholds
 from atlas.global_market import calendar as gcal
 from atlas.global_market import index_membership as imx
+from atlas.global_market.classify import CLEAN, LeverageFlags, leverage_flags
 
 if TYPE_CHECKING:
     from scripts.foundation import universe_core as U
@@ -66,13 +84,18 @@ else:
 
 M = _gdb.M
 TGT = f"{M}.universe_snapshot"
-THRESHOLD_KEY = "liquidity_min_traded_value_usd"  # the FM's floor: never seeded, never a literal
+THRESHOLD_KEY = "liquidity_min_traded_value_usd"  # the FM's floor: a table row, never a literal
 REPORTS_DIR = Path(__file__).resolve().parents[2] / "docs" / "global" / "reports"
 # The FM's question, not a methodology number: the percentiles reported and the candidate
 # floors counted (docs/global/phase1.md P1-E). The floor itself comes from atlas_thresholds.
 PERCENTILES = (10, 25, 50, 75, 90, 95, 99)
 CANDIDATE_FLOORS_USD = (500_000, 1_000_000, 2_000_000, 5_000_000, 10_000_000)
 STATUS_OK = "ok"
+# The FM's two structural rules (2026-09-06), as report statuses. An instrument out on one of
+# these is listed with its reason instead of vanishing into a smaller universe count.
+STATUS_NOT_SP500 = "not_sp500"
+STATUS_LEVERAGED = "leveraged"
+STATUS_INVERSE = "inverse"
 REPORT_COLUMNS = (
     "asset_class",
     "symbol",
@@ -82,6 +105,7 @@ REPORT_COLUMNS = (
     "last_date",
     "adv_usd_median_60d",
     "in_sp500",
+    "leverage_rule",
     "in_universe",
 )
 
@@ -107,7 +131,7 @@ ADV_SQL = f"""
         WHERE date IN (SELECT date FROM d) AND close IS NOT NULL AND volume IS NOT NULL
         GROUP BY instrument_id
     )
-    SELECT im.instrument_id::text AS instrument_id, im.symbol, im.asset_class,
+    SELECT im.instrument_id::text AS instrument_id, im.symbol, im.asset_class, im.name,
            coalesce(liq.n_obs, 0) AS n_obs, liq.last_date,
            coalesce(liq.last_date IN (SELECT date FROM recent), false) AS is_recent,
            CASE WHEN liq.n_obs >= :min_obs AND liq.last_date IN (SELECT date FROM recent)
@@ -181,6 +205,57 @@ def status(n_obs: int, is_recent: bool, min_obs: int) -> str:
     return STATUS_OK if is_recent else "stale"
 
 
+def universe_status(adv_status: str, asset_class: str, in_sp500: bool, flags: LeverageFlags) -> str:
+    """The FIRST reason an instrument is out of the universe, or ``ok``.
+
+    The ADV$ ladder bites first: no signal is no signal, whatever the instrument is. The two
+    2026-09-06 rules follow, ETF flags last (an UltraShort ETF is both, and is reported as
+    ``leveraged``). Below the floor stays ``ok`` here — that is the ADV$ column's own story,
+    and it moves whenever the FM moves the floor; these three do not."""
+    if adv_status != STATUS_OK:
+        return adv_status
+    if asset_class == "stock" and not in_sp500:
+        return STATUS_NOT_SP500
+    if asset_class == "etf" and flags.leveraged:
+        return STATUS_LEVERAGED
+    if asset_class == "etf" and flags.inverse:
+        return STATUS_INVERSE
+    return STATUS_OK
+
+
+def exclusions(adv: pd.DataFrame) -> dict[str, pd.Series]:
+    """The FM's 2026-09-06 rules, one boolean mask per reason. NOT disjoint — an UltraShort ETF
+    is leveraged AND inverse — so the counts never sum to the total; their union is what
+    ``in_universe`` subtracts from the liquidity predicate."""
+    etf, stock = adv["asset_class"] == "etf", adv["asset_class"] == "stock"
+    return {
+        STATUS_NOT_SP500: stock & ~adv["in_sp500"],
+        STATUS_LEVERAGED: etf & adv["leveraged"],
+        STATUS_INVERSE: etf & adv["inverse"],
+    }
+
+
+def exclusion_line(adv: pd.DataFrame, liquid: pd.Series) -> str:
+    """One line per run: what each FM rule took out and what the floor took out on its own, in
+    the report's own words — so a universe that shrinks overnight says WHY on the console."""
+    m = exclusions(adv)
+    both = int((m[STATUS_LEVERAGED] & m[STATUS_INVERSE]).sum())
+    counts = ", ".join(f"{int(v.sum()):,d} {k}" for k, v in m.items())
+    return (
+        f"excluded: {counts} (of which {both:,d} both); "
+        f"{int((~liquid).sum()):,d} below the floor or without an ADV$"
+    )
+
+
+def structure_flags(adv: pd.DataFrame) -> list[LeverageFlags]:
+    """``leverage_flags`` per row — ETFs only. A stock's name is a company's name, and one of
+    them is 10x Genomics; its universe test is S&P 500 membership, never a word."""
+    return [
+        leverage_flags(str(name)) if cls == "etf" and name is not None else CLEAN
+        for cls, name in zip(adv["asset_class"], adv["name"], strict=True)
+    ]
+
+
 def sp500_members(d: dt.date) -> frozenset[str]:
     df = _gdb.read_df(SP500_SQL, {"code": imx.INDEX_CODE, "d": d})
     return frozenset(df["instrument_id"])
@@ -219,6 +294,7 @@ def render_report(
     table: pd.DataFrame,
     counts: Counter[str],
     written: int,
+    adv: pd.DataFrame,
 ) -> str:
     """The FM's floor-decision report, in markdown — printed and saved on every run."""
     floor = thr.get(THRESHOLD_KEY)
@@ -301,6 +377,17 @@ def render_report(
             missing,
         ),
         "",
+        "## Excluded by the FM's universe rules (2026-09-06)",
+        "",
+        "Independent of the floor, and not disjoint — an UltraShort ETF is both. Every one of "
+        "these still has a `universe_snapshot` row; only `in_universe` is false, and "
+        "`--report` names the rule.",
+        "",
+        _md(
+            ["`--report` status", "instruments"],
+            ([f"`{k}`", f"{int(v.sum()):,d}"] for k, v in exclusions(adv).items()),
+        ),
+        "",
         "## Rows",
         "",
         f"- active `instrument_master` rows: {int(table['n_active'].sum()):,d} "
@@ -340,8 +427,24 @@ def main(argv: list[str] | None = None) -> int:
     adv = adv_frame(as_of, min_obs, recency)
     members = sp500_members(as_of)
     adv["in_sp500"] = adv["instrument_id"].isin(list(members))
+    flags = structure_flags(adv)
+    adv["leveraged"] = [f.leveraged for f in flags]
+    adv["inverse"] = [f.inverse for f in flags]
+    adv["leverage_rule"] = [f.rule for f in flags]
+    adv["status"] = [
+        universe_status(s, c, m, f)
+        for s, c, m, f in zip(
+            adv["status"], adv["asset_class"], adv["in_sp500"], flags, strict=True
+        )
+    ]
+    # The liquidity predicate is India's, VERBATIM; the FM's two rules are filters around it.
     inside = U.members(adv, floor, frozenset()) if floor is not None else set()
-    adv["in_universe"] = adv["instrument_id"].isin(list(inside))
+    # pd.Series() wrap for pyright, as in universe_core.members: isin is typed as a broad union.
+    liquid = pd.Series(adv["instrument_id"].isin(list(inside)))
+    out = exclusions(adv)
+    adv["in_universe"] = liquid & ~(
+        out[STATUS_NOT_SP500] | out[STATUS_LEVERAGED] | out[STATUS_INVERSE]
+    )
     print(
         f"== {len(adv):,d} active instruments as of {as_of} (EOD {eod}): "
         f"{int(adv['adv_median_60d'].notna().sum()):,d} with ADV$ over {min_obs}+ of the last "
@@ -383,6 +486,7 @@ def main(argv: list[str] | None = None) -> int:
         percentile_table(adv),
         report.counts,
         written,
+        adv,
     )
     print(text)
     args.report_dir.mkdir(parents=True, exist_ok=True)
@@ -406,11 +510,13 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
     by_class = adv.loc[adv["in_universe"]].groupby("asset_class").size()
+    n_in = int(adv["in_universe"].sum())
     print(
-        f"  universe: {len(inside):,d} / {len(adv):,d} active instruments at floor {_usd(floor)} "
+        f"  universe: {n_in:,d} / {len(adv):,d} active instruments at floor {_usd(floor)} "
         f"({', '.join(f'{c} {n:,d}' for c, n in by_class.items())}); {written:,d} rows upserted "
         f"into {TGT} for {as_of}"
     )
+    print(f"  {exclusion_line(adv, liquid)}")
     return 0
 
 
