@@ -23,6 +23,13 @@ PATH=/usr/local/bin:/usr/bin:/bin
 # Atlas v4 SUNDAY QA — Sun 10:00 IST (freshness / silent-zero / outlier audit → alert)
 30 4 * * 0    /home/ubuntu/atlas-os/scripts/ops/atlas_sunday_qa.sh >> /home/ubuntu/logs/atlas_sunday_qa_cron.log 2>&1
 
+# Global Atlas (atlas_global; docs/global/runbook.md §6) — 01:00 UTC Tue–Sat daily (= 21:00 ET,
+# after extended hours), Sat 01:30 UTC weekly after the daily. One lock: the weekly waits up to
+# two hours for Saturday's daily, the daily never starts twice. Weekly rc 75 = the lock was still
+# held after two hours; any other rc is the script's own exit.
+0 1 * * 2-6   flock -n /tmp/atlas_global.lock /home/ubuntu/atlas-os/scripts/ops/atlas_global_daily.sh >> /home/ubuntu/logs/atlas_global_daily_cron.log 2>&1
+30 1 * * 6    flock -w 7200 -E 75 /tmp/atlas_global.lock /home/ubuntu/atlas-os/scripts/ops/atlas_global_weekly.sh >> /home/ubuntu/logs/atlas_global_weekly_cron.log 2>&1 || echo "$(date -Is) weekly skipped: lock held (rc=$?)" >> /home/ubuntu/logs/atlas_global_weekly_cron.log
+
 # MaaL book sync — 12:00 and 22:00 IST daily (06:30 and 16:30 UTC).
 # Reads the CPP database (clients.jslwealth.in) read-only and lands the three real
 # model books in maal_holding_snapshot + portfolio_nav_daily + portfolio_trades.

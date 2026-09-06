@@ -103,7 +103,9 @@ order above; the integrator (this session) runs the DoD checks on a real DB befo
 ### P1-A — Identity (`build_identity.py`, `providers/directories.py`)
 
 GOAL: `instrument_master` holds one row per US-listed stock and ETF from the real directories — every
-active row with an exchange, every stock with a CIK, ≥ 95% of ETFs with an SEC series id — minted
+active row with an exchange, ≥ 99% of stocks with a CIK, an SEC identity (CIK via either file) on
+≥ 80% of ETFs (series/class ids on the 1940-Act funds among them; trusts, commodity pools and ETNs
+are registrants, not funds) — minted
 under the confirmed identity rule (uuid5 of `us:{class}:{cik}:{symbol}`, else
 `us:{class}:{symbol}:{listing_date}`), with `symbol_alias` bridging Stooq's and the vendor's
 spellings, and the Stooq importer mapping ≥ 99% of the archive's members that are still listed.
@@ -118,15 +120,30 @@ spellings, and the Stooq importer mapping ≥ 99% of the archive's members that 
   recording `provider_calls`. Downloads are the ONLY network in this chunk.
 - Canonical spelling = the Nasdaq **ACT symbol** (`BRK.B`, `AAC.U`, `AGM$D`); aliases: `stooq`
   (`BRK-B.US`, `AGM_D.US`), `tiingo` (`BRK-B`, verified in its ticker list), `nasdaq_symbol` (`AGM-D`), `cqs` (`AGMpD`).
-  Renames: a symbol that leaves the directory while its CIK stays → alias with `valid_to`, same uuid.
-- Weekly step; re-runs are idempotent (`ON CONFLICT (instrument_id) DO UPDATE` on identity columns;
-  `ON CONFLICT (symbol) WHERE is_active` never fires because a recycled symbol carries a different uuid
-  and the previous holder is deactivated first — proven by a unit test on the real 2026-09-04 snapshot).
+  Renames: a symbol that leaves the directory while another appears under the SAME registrant (stocks:
+  the CIK, with exactly one active listing before and after; funds: CIK + series + class) is paired —
+  same uuid, new symbol, the old spellings closed (`valid_to` = run date), the new ones opened; a CIK
+  with several listings (share classes, a trust's funds) is never paired, the new row carries a
+  `possible rename` note. Recycles: a symbol whose CIK changes between runs — another registrant, none
+  → one, one → none — is a new instrument (old row deactivated); with no CIK on either side a Tiingo
+  listing start that jumps forward > 30 days is the recycle signal, a backward move a plain update. A
+  deactivated no-CIK row that reappears with an agreeing name is reactivated (same uuid). The planner
+  refuses to deactivate more than min(2% of active rows, 200) unless `--allow-mass-deactivation`; a
+  Nasdaq file without its `File Creation Time` trailer does not parse; `source='manual'` rows are never
+  auto-deactivated; cross-file CIK conflicts (4 on 2026-09-04: IA, SPCX, AEMC, ISRL) and directory-name
+  vs SEC-title disagreements (117 of 7,650) are recorded per row in the report.
+- Weekly step; re-runs are idempotent. Active rows are matched by symbol and updated in place; the
+  writer never relies on `ON CONFLICT (symbol) WHERE is_active` — the previous holder of a recycled
+  symbol is deactivated FIRST in the same transaction, new rows are inserted by primary key and renames
+  / reactivations upserted with `ON CONFLICT (instrument_id)`; the partial unique index is an assertion
+  (proven by unit tests on the real 2026-09-04 snapshot and the DB round trip in CI).
 - DoD (thresholds measured on the 2026-09-04 files, not assumed): ≥ 5,000 ETF rows + every S&P 500
-  name (from P1-C) with an exchange; CIK on 100% of S&P 500 stocks; an SEC identity (CIK via either
-  file) on ≥ 80% of active ETFs — today's files give 82.5% (4,666 of 5,655; series/class ids alone cover
-  79.3%), the rest are new launches, ETNs and trusts that fall to the `symbol + listing_date` key, each
-  listed with its reason; alias round-trip for the 20
+  name (from P1-C) with an exchange; CIK on 100% of S&P 500 stocks and ≥ 99% of directory stocks (measured
+  99.6% = 7,467 of 7,499 once SEC's own spellings `AAC-UN`/`ACHR-WT`/`AGM-PD` are matched; the misses are
+  rights, one warrant tranche and bank holding companies that file with their banking regulator); an SEC
+  identity (CIK via either file) on ≥ 80% of active ETFs — today's files give 82.5% (4,666 of 5,655;
+  series/class ids alone cover 79.3%), the rest are new launches, ETNs and trusts that fall to the
+  `symbol + listing_date` key, each listed with its reason; alias round-trip for the 20
   punctuation tickers in `tests/fixtures/global/symbology`; `import_stooq --dry-run` maps ≥ 99% of
   members whose ticker is in the directory (the `_` preferred forms via aliases); `python -m atlas.db`
   + `freshness_guard` register `instrument_master` (weekly, lag 8) with `build_identity.py`.
@@ -192,11 +209,27 @@ S&P member carries `sector_gics` from the holdings file.
 - Reuse: `atlas/global_market/providers/fred.py:fred_series` (Decimal, drops "."), NOT India's
   `ingest_macro._fred` (float, INR carry columns). Calendar = SPY sessions (`gcal.sessions`), forward-fill
   onto sessions exactly as India's `_ffill_onto` does (`scripts/foundation/ingest_macro.py:63`).
-- Index history: `fja05680/sp500` CSV (`S&P 500 Historical Components & Changes(<date>).csv`, columns
-  `date,tickers` — VERIFY on first fetch) → `(index_code='SP500', instrument_id, effective_from, effective_to)`;
-  current weights from the SSGA file (`weight_frac` = percent/100; gate Σ ∈ [0.99, 1.01]).
+- Index history: `fja05680/sp500`'s `sp500_ticker_start_end.csv` (`ticker,start_date,end_date`; start
+  INCLUSIVE, end EXCLUSIVE — verified row by row against the repository's components file, which only
+  the tests fetch) → `(index_code='SP500', instrument_id, effective_from, effective_to)` with
+  `source='fja05680'`; the non-`ssga` rows are RE-DERIVED from the file on every `--history` run (a
+  row no longer in the spell set is deleted; nothing is lost, the file reproduces it), `ssga` rows are
+  never touched, and the writing transaction asserts two invariants — no instrument with two open
+  intervals, no overlapping intervals — rolling back on violation. Departure dates on `ssga` rows are
+  the weekly OBSERVATION date (up to 7 sessions late). Current weights from the SSGA file
+  (`weight_frac` = percent/100).
+- Gates before any write (exit 2): the file's as-of is not after the EOD and not OLDER than the as-of
+  recorded in `ingest_state(ssga/spy_holdings)` (`--allow-older-as-of` for a documented rollback);
+  500–505 equity rows (ticker AND SEDOL) and Σ `weight_frac` ∈ [0.99, 1.01]; ≤ 2% unresolved; ≥ 98%
+  in exactly one sector file. `provider_calls` is banked in its own transaction before the gates.
+  `ingest_macro` exits 2 without a SPY session calendar (`--allow-raw-dates`, development only).
+  `sector_gics` is written without bumping `instrument_master.updated_at`.
+- Tests: the SSGA workbooks (not redistributable) and the 5.5 MB components file are fetched at test
+  time under the `live` pytest marker (never `unit`); CI runs them with `ATLAS_LIVE_FIXTURES=required`
+  (`make test-live`), where an unreachable source is a failure, not a skip.
 - DoD: 5 series present through EOD−1 (`--check A` row); 500–505 members with Σ weight ≈ 1.00;
-  `sector_gics` non-null on 100% of current members; benchmarks 7/7 resolved; producers registered
+  `sector_gics` non-null on 100% of current members (a member without one is listed in the weekly
+  `--report` CSV and counted in the log); benchmarks 7/7 resolved; producers registered
   (`macro_daily` daily lag 3; `index_membership` weekly).
 
 ### P1-D — Technicals (`compute_technicals.py`)
@@ -282,6 +315,9 @@ deployed on Vercel with ISR + the `eod` tag, and the FM can compute any-period r
   `adjustment_source`, first/last bar, sessions count). Empty states say what is missing and why.
 - `/health`: already reads the three ops tables — wire freshness of `ohlcv_daily`/`technical_daily`
   from `atlas_health_daily` and the vendor call budget from `provider_calls`.
+- Cache tag: every board query that feeds an ISR page wraps in `unstable_cache(..., { tags: ['eod'] })`
+  — the `'eod'` literal `/api/revalidate` flushes (`src/lib/revalidate.ts`); until a page's queries carry
+  it, the nightly publish is a no-op for that page.
 - Design decisions taken now (FM may override): density default **calm**; no client-facing pages
   until M2 (all pages `fm|analyst`); `/etfs/[symbol]` written for an analyst, plain-English
   translation deferred to M2.

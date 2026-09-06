@@ -8,36 +8,53 @@
 # global board is Vercel + ISR, so "publish" is ONE revalidate webhook, fired only when
 # every gate passes. Gate failures push to Telegram; step failures pull (/health).
 #
-# PHASE 0 SKELETON: only freshness_guard is wired (registry contract; tables empty-but-valid).
-# Every Phase 1 step and gate is listed below, commented, in the plan's order. Uncomment a
-# step ONLY in the PR that lands its producer WITH its board surface, and register the table
-# in scripts/global_market/freshness_guard.py PRODUCERS in the same PR (commented steps do
-# not satisfy the registry — check_producers ignores comment lines). A gate is wired only
-# once its check exists: a gate known to fail every night trains the FM to ignore the push.
+# PHASE 1: ingest_macro, freshness_guard, the health snapshot and the revalidate publish are
+# wired; the remaining Phase 1–3 steps are listed below, commented, in the plan's order.
+# Uncomment a step ONLY in the PR that lands its producer WITH its board surface, and register
+# the table in scripts/global_market/freshness_guard.py PRODUCERS in the same PR (commented
+# steps do not satisfy the registry — check_producers ignores comment lines). A gate is wired
+# only once its check exists: a gate known to fail every night trains the FM to ignore the push.
 #
 #   bash scripts/ops/atlas_global_daily.sh
+#   ATLAS_REPO=$PWD ATLAS_LOG_DIR=/tmp/atlas-logs bash scripts/ops/atlas_global_daily.sh   # local dry run (runbook §6)
 set -uo pipefail
-REPO=/home/ubuntu/atlas-os
-cd "$REPO"
+REPO="${ATLAS_REPO:-/home/ubuntu/atlas-os}"
+cd "$REPO" || exit 1
 export PYTHONPATH="$REPO:$REPO/scripts/global_market:$REPO/scripts/foundation"   # global before foundation: same-named India scripts must not shadow ours
-source "$REPO/.venv/bin/activate"
-set -a; source .env; set +a
-PY="$REPO/.venv/bin/python"
-LOG=/home/ubuntu/logs/atlas_global_daily_$(date +%Y%m%d_%H%M%S).log
-mkdir -p /home/ubuntu/logs
-EOD=$($PY -c "import _gdb; print(_gdb.eod_cutoff())")
+if [ -n "${ATLAS_REPO:-}" ]; then
+  # DRY RUN (runbook §6): the checkout's venv and the caller's environment — .env is never sourced,
+  # ATLAS_DB_URL must be exported, and its host must be localhost unless ATLAS_ALLOW_REMOTE_DB=1,
+  # so a laptop run can never reach prod by accident.
+  PY="$REPO/.venv/bin/python"; [ -x "$PY" ] || PY="$(command -v python3)"
+  [ -n "${ATLAS_DB_URL:-}" ] || { echo "FATAL: dry-run mode: export ATLAS_DB_URL pointing at a scratch database" >&2; exit 1; }
+  DB_HOST="${ATLAS_DB_URL##*@}"; DB_HOST="${DB_HOST%%/*}"; DB_HOST="${DB_HOST%%:*}"
+  if [ "${ATLAS_ALLOW_REMOTE_DB:-}" != "1" ] && [ "$DB_HOST" != "localhost" ] && [ "$DB_HOST" != "127.0.0.1" ]; then
+    echo "FATAL: dry-run mode: ATLAS_DB_URL host is '$DB_HOST', not localhost (ATLAS_ALLOW_REMOTE_DB=1 overrides)" >&2; exit 1
+  fi
+else
+  # THE BOX: .venv and .env are mandatory.
+  [ -x "$REPO/.venv/bin/python" ] || { echo "FATAL: $REPO/.venv is missing" >&2; exit 1; }
+  [ -f "$REPO/.env" ] || { echo "FATAL: $REPO/.env is missing" >&2; exit 1; }
+  source "$REPO/.venv/bin/activate"; PY="$REPO/.venv/bin/python"
+  set -a; source "$REPO/.env"; set +a
+fi
+LOG_DIR="${ATLAS_LOG_DIR:-/home/ubuntu/logs}"
+mkdir -p "$LOG_DIR"
+LOG="$LOG_DIR/atlas_global_daily_$(date +%Y%m%d_%H%M%S).log"
+EOD=$($PY -c "import _gdb; print(_gdb.eod_cutoff())") || { echo "FATAL: $PY cannot import _gdb" >&2; exit 1; }
 echo "=== atlas_global_daily EOD=$EOD  $(date -Is) ===" | tee -a "$LOG"
 
 FAILURES=()
 RUNFILE=$(mktemp /tmp/atlas_global_daily_runs.XXXXXX)   # per-step timings → health snapshot
-trap 'rm -f "$RUNFILE"' EXIT
-step() {  # step "name" cmd...   (non-fatal; records failures + a run row)
+PUBLISH_CFG=                                             # the publish step's curl config (bearer)
+trap 'rm -f "$RUNFILE" "$PUBLISH_CFG"' EXIT
+step() {  # step "name" cmd...   (non-fatal; records failures + a run row; cmd may set STEP_WHY)
   local name="$1"; shift
   local start; start=$(date -Is)
   echo "--- $name ---" | tee -a "$LOG"
-  local st
+  local st; STEP_WHY=
   if "$@" >>"$LOG" 2>&1; then echo "  ok: $name" | tee -a "$LOG"; st=success
-  else echo "  FAIL: $name (rc=$?)" | tee -a "$LOG"; FAILURES+=("$name"); st=failed; fi
+  else echo "  FAIL: $name (${STEP_WHY:-rc=$?})" | tee -a "$LOG"; FAILURES+=("$name"); st=failed; fi
   printf '%s\t%s\t%s\t%s\n' "$name" "$start" "$(date -Is)" "$st" >> "$RUNFILE"
 }
 
@@ -81,26 +98,35 @@ gate "freshness_guard"   $PY scripts/global_market/freshness_guard.py --eod "$EO
 # gate "validate_global_C" $PY scripts/global_market/validate_global.py --check C   # Phase 3
 # gate "validate_global_D" $PY scripts/global_market/validate_global.py --check D   # Phase 3
 
-# 4. PUBLISH — the board advances by ISR revalidation, never a rebuild here. Phase 1 wires
-#    the Vercel on-demand revalidate route (tag 'eod'); until then this only logs.
-if [ "$GATE_OK" = "1" ]; then
-  echo "--- publish (revalidate tag 'eod') ---" | tee -a "$LOG"
-  # curl -sf -m 15 -X POST "${GLOBAL_REVALIDATE_URL}" \
-  #   -H "Authorization: Bearer ${GLOBAL_REVALIDATE_SECRET}" \
-  #   -H 'Content-Type: application/json' -d '{"tag":"eod"}' -o /dev/null \
-  #   && echo "  ok: publish" | tee -a "$LOG" \
-  #   || { echo "  FAIL: publish" | tee -a "$LOG"; FAILURES+=("publish"); }
-  echo "  SKIP publish — Phase 0: no revalidate webhook wired yet" | tee -a "$LOG"
+# 4. PUBLISH — the board advances by ISR revalidation, never a rebuild here: ONE POST to the board's
+#    /api/revalidate (frontend-global/src/app/api/revalidate/route.ts) with the shared bearer and tag
+#    'eod', only when every gate passed and both env vars are set; through step(), so the outcome is a
+#    run row on /health. The bearer travels in a 0600 curl config file (never argv, so never in ps, and
+#    never in the log); only HTTP 200 is success — a 3xx is a misconfigured URL, and -L would follow it
+#    blind, so a redirect surfaces as "FAIL: publish (http 308)".
+publish() {
+  PUBLISH_CFG=$(mktemp /tmp/atlas_global_publish.XXXXXX) || return 1   # mktemp creates it 0600
+  printf 'header = "Authorization: Bearer %s"\n' "$GLOBAL_REVALIDATE_SECRET" > "$PUBLISH_CFG"
+  local code
+  code=$(curl -sS -m 15 -K "$PUBLISH_CFG" -X POST "$GLOBAL_REVALIDATE_URL" \
+         -H 'Content-Type: application/json' -d '{"tag":"eod"}' -o /dev/null -w '%{http_code}')
+  rm -f "$PUBLISH_CFG"; PUBLISH_CFG=
+  [ "$code" = "200" ] && return 0
+  STEP_WHY="http $code"; return 1
+}
+skip() { echo "--- $1 ---" | tee -a "$LOG"; echo "  SKIP $1 — $2" | tee -a "$LOG"; }
+if [ "$GATE_OK" != "1" ]; then
+  skip publish "a gate failed; the board keeps its last-good data"
+elif [ -z "${GLOBAL_REVALIDATE_URL:-}" ] || [ -z "${GLOBAL_REVALIDATE_SECRET:-}" ]; then
+  skip publish "GLOBAL_REVALIDATE_URL / GLOBAL_REVALIDATE_SECRET unset (box .env)"
 else
-  echo "  SKIP publish — a gate failed; the board keeps its last-good data" | tee -a "$LOG"
+  step "publish" publish
 fi
 
-# 4b. OBSERVABILITY (Phase 1): the nightly health snapshot — per-step runs + validator
-#     outcomes + live freshness — a 1:1 copy of scripts/ops/write_health_snapshot.py over
-#     atlas_global, read by the global /health route. Non-fatal.
-# $PY scripts/global_market/write_health_snapshot.py --runfile "$RUNFILE" --eod "$EOD" >>"$LOG" 2>&1 \
-#   && echo "  ok: write_health_snapshot" | tee -a "$LOG" \
-#   || { echo "  FAIL: write_health_snapshot" | tee -a "$LOG"; FAILURES+=("write_health_snapshot"); }
+# 4b. OBSERVABILITY — the health snapshot (runs, validators, freshness in SPY sessions) for /health: runs even when a gate failed; non-fatal; idempotent.
+$PY scripts/global_market/write_health_snapshot.py --runfile "$RUNFILE" --eod "$EOD" --milestone daily >>"$LOG" 2>&1 \
+  && echo "  ok: write_health_snapshot" | tee -a "$LOG" \
+  || { echo "  FAIL: write_health_snapshot" | tee -a "$LOG"; FAILURES+=("write_health_snapshot"); }
 
 # 5. REPORT. Gate failures PUSH (the board did not update and nothing else would say so —
 #    India's 2026-08-19 four-silent-days lesson); step failures pull via /health.

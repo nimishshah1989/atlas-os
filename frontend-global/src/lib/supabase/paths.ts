@@ -2,8 +2,9 @@
 // the callback route (kept dependency-free so they are unit-testable).
 
 // Reachable without a session. /health is the operator surface and must stay visible when auth
-// is broken; /login covers the form and its /login/callback exchange.
-const PUBLIC_PREFIXES = ['/login', '/health']
+// is broken; /login covers the form and its /login/callback exchange; /api/revalidate is the
+// orchestrator's publish webhook, guarded by its own bearer secret (src/lib/revalidate.ts).
+const PUBLIC_PREFIXES = ['/login', '/health', '/api/revalidate']
 
 export function isPublicPath(pathname: string): boolean {
   return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))

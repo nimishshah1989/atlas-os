@@ -1,8 +1,8 @@
 # Global Atlas — runbook (Phase 1)
 
 Everything an operator does by hand for the US platform. Keys and passwords live in `.env` on the
-laptop/box and in Vercel env — never in this repo (it is public). Sections marked **(P1-F)** are
-completed by that chunk; the rest is actionable now.
+laptop/box and in Vercel env — never in this repo (it is public). Steps whose producer has not
+landed yet are marked with their chunk (P1-B, P1-D, P1-E); everything else is actionable now.
 
 ## 1. Keys and environment
 
@@ -15,7 +15,8 @@ completed by that chunk; the rest is actionable now.
 | `FRED_API_KEY` | laptop/box `.env` | India's key works (same account) |
 | `ATLAS_GLOBAL_DB_URL` | Vercel env | `postgresql://atlas_global_app:<pw>@…pooler.supabase.com:6543/postgres?sslmode=require` — the **transaction** pooler (6543), never the session pooler |
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Vercel env | Supabase Auth (magic link) |
-| `GLOBAL_REVALIDATE_SECRET` | Vercel env + box `.env` | bearer token the orchestrator's publish step sends to `/api/revalidate` **(P1-F)** |
+| `GLOBAL_REVALIDATE_SECRET` | Vercel env + box `.env` | bearer token the orchestrator's publish step sends to `/api/revalidate` (`openssl rand -hex 32`; the same value on both sides) |
+| `GLOBAL_REVALIDATE_URL` | box `.env` | `https://<vercel-origin>/api/revalidate` — where the publish step POSTs `{"tag":"eod"}`; unset = the step is skipped and the log says so |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | box `.env` | gate-failure pushes (India's values) |
 
 ## 2. Prod schema (one-off, then per DDL change)
@@ -76,17 +77,103 @@ uv run python scripts/global_market/build_universe_snapshot.py                  
 uv run python scripts/global_market/validate_global.py --check A
 ```
 
-## 6. Cron on the box **(P1-F)**
+## 6. Cron on the box
 
 ```
-0 1 * * 2-6  /home/ubuntu/atlas-os/scripts/ops/atlas_global_daily.sh   # 01:00 UTC Tue–Sat = 21:00 ET
-30 1 * * 6   /home/ubuntu/atlas-os/scripts/ops/atlas_global_weekly.sh  # Sat 01:30 UTC
+# 01:00 UTC Tue–Sat daily (= 21:00 ET), Sat 01:30 UTC weekly after the daily. One lock: the weekly waits up to
+# two hours for Saturday's daily, the daily never starts twice. Weekly rc 75 = the lock was still held after
+# two hours; any other rc is the script's own exit.
+# Install these two lines only after ingest_prices (P1-B) has landed and SPY bars exist: the freshness gate
+# needs the SPY session anchor, and ingest_macro refuses to write without it (exit 2; --allow-raw-dates is dev-only).
+0 1 * * 2-6   flock -n /tmp/atlas_global.lock /home/ubuntu/atlas-os/scripts/ops/atlas_global_daily.sh >> /home/ubuntu/logs/atlas_global_daily_cron.log 2>&1
+30 1 * * 6    flock -w 7200 -E 75 /tmp/atlas_global.lock /home/ubuntu/atlas-os/scripts/ops/atlas_global_weekly.sh >> /home/ubuntu/logs/atlas_global_weekly_cron.log 2>&1 || echo "$(date -Is) weekly skipped: lock held (rc=$?)" >> /home/ubuntu/logs/atlas_global_weekly_cron.log
 ```
-Both scripts are Python-only (no pm2, no `.next`) and cannot collide with the India runs
-(07:00 / 10:30 UTC). Logs: `/home/ubuntu/logs/atlas_global_*.log`.
+The same two lines sit in `scripts/ops/crontab.txt` (the box's tracked crontab). Both scripts are
+Python-only (no pm2, no `.next`) and cannot collide with the India runs (07:00 / 10:30 UTC). A failed
+step never aborts the chain; the snapshot is written whether or not a gate failed, so a bad night is
+visible on `/health` (§7); a failed gate pushes to Telegram. Each run writes
+`$ATLAS_LOG_DIR/atlas_global_<daily|weekly>_<timestamp>.log`; cron's own output lands in the
+`_cron.log` files above.
 
-## 7. When a gate fails (the Telegram push says "GLOBAL BOARD NOT UPDATED")
+**Identity snapshots.** The weekly saves the directories it fetched under
+`$ATLAS_LOG_DIR/identity/<EOD>/` (the six files,
+`MANIFEST.json` with sha256 + fetched-at, `build_identity_<EOD>.csv` with every row's outcome —
+a run without `--snapshot-dir` writes the report to `$ATLAS_LOG_DIR`, never the working directory),
+keeping the newest 8 dated directories (`--keep`). `build_identity` exits 2 with
+`REFUSED: refusing to deactivate N of M active rows` when a directory would delist more than
+min(2 percent, 200) of the active rows — a truncated or wrong download, nothing is written: check
+the saved files, re-fetch, and pass `--allow-mass-deactivation` only when the delistings are real. A
+Nasdaq file without its `File Creation Time` trailer does not parse at all. The report's
+`sec_conflict` (four tickers on 2026-09-04: IA, SPCX, AEMC, ISRL carry two CIKs across the SEC
+files) and `name_agrees` columns are the FM's review list; `source = 'manual'` rows are never
+auto-deactivated, they are reported.
 
-1. `/health` → the failed validator row and the flagged metrics.
+**Environment overrides** (all optional; the box uses the defaults):
+
+| Variable | Default | Effect |
+|---|---|---|
+| `ATLAS_REPO` | `/home/ubuntu/atlas-os` | the checkout to run from. Set = **dry-run mode**: `.env` is never sourced, `ATLAS_DB_URL` must be exported, and its host must be `localhost`/`127.0.0.1` (else the script exits 1 naming the host). Unset = the box: `.venv` and `.env` are mandatory |
+| `ATLAS_ALLOW_REMOTE_DB` | unset | `1` lets a dry run use a non-localhost `ATLAS_DB_URL` — deliberate, never the default |
+| `ATLAS_LOG_DIR` | `/home/ubuntu/logs` | where logs and the weekly's identity snapshots (`identity/<EOD>/`) go |
+| `ATLAS_IDENTITY_SNAPSHOT` | unset | weekly: replay a saved `identity/<EOD>` directory (`build_identity --from-snapshot`) instead of fetching — a dry run, or the SEC's ten-minute 429 window |
+| `STOOQ_ARCHIVE` | `/home/ubuntu/data/stooq/d_us_txt.zip` | weekly: the Stooq archive for delisted names; passed only if the file exists |
+
+**Dry run on a laptop** — a scratch database with the DDL applied (§2), e.g. a clone of the identity
+database. With `ATLAS_REPO` set the scripts never source `.env`: `ATLAS_DB_URL` must be exported, and
+one whose host is not `localhost`/`127.0.0.1` is refused (exit 1, host printed) unless
+`ATLAS_ALLOW_REMOTE_DB=1` — a laptop run cannot write prod by accident.
+
+```
+export ATLAS_REPO=$PWD ATLAS_LOG_DIR=/tmp/atlas-logs
+export ATLAS_DB_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/atlas_scratch   # exported, localhost
+export EDGAR_IDENTITY="Firstname Lastname email@domain"        # + FRED_API_KEY for ingest_macro
+bash scripts/ops/atlas_global_weekly.sh                         # identity (live fetch), benchmarks, S&P 500, gate, snapshot
+bash scripts/ops/atlas_global_daily.sh                          # macro, gate, publish (skipped: no URL), snapshot
+psql postgresql://postgres:postgres@localhost:5432/atlas_scratch \
+  -c "select script_name, milestone, status from atlas_global.atlas_pipeline_runs order by started_at"
+```
+Without a FRED key the gate fails on `macro_daily: EMPTY` (the honest outcome) and publish is skipped;
+both snapshots still land, one row per step, and a re-run over the same runfile updates its rows in
+place (only `updated_at` / `computed_at` move). To exercise the publish step against a local board:
+`cd frontend-global && npm run build && GLOBAL_REVALIDATE_SECRET=<s> npm run start -- -p 3100`, then
+`GLOBAL_REVALIDATE_URL=http://localhost:3100/api/revalidate GLOBAL_REVALIDATE_SECRET=<s>` in the
+daily's environment — it fires only once every gate passes; `ok: publish` is HTTP 200, anything else
+`FAIL: publish (http NNN)` (a 308 = a trailing slash in the URL).
+
+## 7. Reading `/health`
+
+Every row on the page is a real row in `atlas_global`; nothing is computed in the browser.
+
+| Panel | Table | What a row means |
+|---|---|---|
+| Headline + tiles | `atlas_pipeline_runs`, `atlas_validator_results`, `atlas_health_daily` | the newest run row's status in words; scripts with a run; failures in the last 30 runs; validators passing; metrics flagged on the latest snapshot |
+| Latest run per script · Recent runs | `atlas_pipeline_runs` | one row per orchestrator **step** (`script_name` = the step name in the `.sh`; `publish` = the revalidate POST), `milestone` daily/weekly, `status` = the step's exit code (`success`/`failed`), started/ended, host, git sha — one row per step; re-runs update in place |
+| Validators | `atlas_validator_results` | one row per **gate** step: `freshness_guard`, `gate_A` (`validate_global --check A`). PASS/FAIL is the gate's exit code; any FAIL withholds publish. Pass rate is over the 30-day window |
+| Freshness | `atlas_health_daily` (`freshness_lag_sessions`) | one row per tracked table (`instrument_master`, `index_membership`, `macro_daily`, `ohlcv_daily`, `technical_daily`, `universe_snapshot`): lag in SPY sessions (0 = the table has the EOD), tolerance and tier from `freshness_guard.py`'s registries — **critical** withholds publish, **warn** only reports, "not guarded yet" = the producer chunk has not landed; `EMPTY` = no rows; a blank lag with "no SPY bar" = `ohlcv_daily` has no anchor bar yet |
+| Flagged metrics | `atlas_health_daily` (`is_anomaly`) | the subset above that breached its tolerance, plus any other flagged metric a later snapshot adds |
+| Provider calls | `provider_calls` | requests per (provider, endpoint) on the latest run date — every script adds its adapter's counter when it commits, so a re-run within the day accumulates. Compare against the plan limits in `phase1.md` §1 (Tiingo) and the SEC fair-access ceiling (10 req/s) |
+
+**When a gate fails** (the Telegram push says "GLOBAL BOARD NOT UPDATED"):
+
+1. `/health` → the failed validator row, the critical freshness row, the failed step's log line.
 2. The log names the check; fix the data (never the assertion), re-run the step, re-run the gate.
-3. The board keeps its last-good data until every gate passes; nothing is republished by hand.
+3. The board keeps its last-good data until every gate passes; nothing is republished by hand
+   — the publish step is the only caller of `/api/revalidate`.
+
+## 8. First night checklist
+
+1. Box `.env` carries `ATLAS_DB_URL`, `EDGAR_IDENTITY`, `FRED_API_KEY`, `TIINGO_API_KEY`,
+   `GLOBAL_PRICE_PROVIDER`, `GLOBAL_REVALIDATE_URL`, `GLOBAL_REVALIDATE_SECRET`,
+   `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`; `python scripts/global_market/_gdb.py` prints the
+   pooler host and today's EOD; `python -m atlas.db` says `atlas_global_exists True`.
+2. §5 has been run through `ingest_macro` at least once (the gate fails on an empty
+   `macro_daily`, by design).
+3. Run the weekly by hand, then the daily, and read both logs end to end:
+   `bash scripts/ops/atlas_global_weekly.sh; bash scripts/ops/atlas_global_daily.sh`.
+4. `select script_name, milestone, status from atlas_global.atlas_pipeline_runs order by started_at`
+   shows one row per step; `/health` on the Vercel deployment renders them, the validator
+   rows, the freshness table and the provider-call counts.
+5. `curl -sS -o /dev/null -w '%{http_code}\n' -X POST "$GLOBAL_REVALIDATE_URL" -H 'Authorization: Bearer wrong' -d '{"tag":"eod"}'`
+   → `401`; with the real secret → `200` and `{"revalidated":true,"tag":"eod",…}`.
+6. Install the two cron lines (§6). Next morning: the log, `/health`, and — only if a gate
+   failed — the Telegram push.
