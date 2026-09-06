@@ -23,9 +23,12 @@ fi
 
 log() { echo "[session-start] $*"; }
 
-# 1. Python toolchain — `make gate` needs the dev extra (ruff, pytest, pyright).
+# 1. Python toolchain — `make gate` needs BOTH extras, exactly as CI installs them:
+# dev for the tooling (ruff, pytest, pyright), global for the global-market imports the
+# unit tests and the pyright ratchet resolve (openpyxl via providers/ssga.py). `uv sync` is
+# exact, so an extra that is not asked for is not installed and collection fails.
 if command -v uv >/dev/null 2>&1; then
-  if uv sync --extra dev -q; then log "uv sync ok"; else log "uv sync FAILED (continuing)"; fi
+  if uv sync --extra dev --extra global -q; then log "uv sync ok"; else log "uv sync FAILED (continuing)"; fi
 else
   log "uv not found — skipping python setup"
 fi
