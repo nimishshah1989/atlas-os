@@ -7,7 +7,14 @@
 Series (plan, "macro_daily"): ``SP500`` (price index — the SPY cross-check, never a displayed
 price), ``VIXCLS``, ``DGS10``, ``DTB3`` (the risk-free rate), ``DTWEXBGS``. Column = series id
 lower-cased; ``source='fred'``. Values come through ``providers/fred.py:fred_series`` — Decimal,
-FRED's ``"."`` marker dropped — never India's float ``_fred``.
+FRED's missing marker dropped — never India's float ``_fred``.
+
+Key: OPTIONAL. ``config.fred_key()`` returns ``None`` when ``FRED_API_KEY`` is unset, and
+``fred_series`` then reads FRED's keyless CSV export instead of the JSON API — the same
+observations from the same publisher, so the run is not blocked on a credential. The
+transport is printed, recorded in ``ingest_state`` and counted under its OWN
+``provider_calls`` endpoint (``graph/fredgraph.csv`` vs ``series/observations``), so the
+ledger never claims a call was spent on an API that was never reached.
 
 Calendar: the SPY sessions (``gcal.sessions`` over ``ohlcv_daily`` where the SPY instrument has
 bars) in the window. Each session takes the latest observation on or before it — India's
@@ -47,7 +54,7 @@ from psycopg2.extras import execute_values
 
 from atlas.global_market import calendar as gcal
 from atlas.global_market.config import CONFIG, fred_key
-from atlas.global_market.providers.fred import fred_series
+from atlas.global_market.providers.fred import CSV_ENDPOINT, JSON_ENDPOINT, fred_series
 
 SOURCE = "fred"
 # column → FRED series id
@@ -57,7 +64,8 @@ HISTORY_START = date.fromisoformat(CONFIG.history_start)
 REPULL_DAYS = (
     14  # allow-threshold: data-quality: refetch window below max(date), FRED revises recent prints
 )
-ENDPOINT = "series/observations"
+# Which FRED door this run used — printed, and the key the spend is recorded under.
+TRANSPORT = {JSON_ENDPOINT: "JSON API (FRED_API_KEY set)", CSV_ENDPOINT: "keyless CSV export"}
 
 UPSERT_SQL = f"""
 insert into {_gdb.M}.macro_daily (date, {", ".join(SERIES)}, source, ingested_at)
@@ -177,11 +185,13 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     key = fred_key()
+    endpoint = JSON_ENDPOINT if key else CSV_ENDPOINT
+    print(f"  transport: {TRANSPORT[endpoint]} → {endpoint}")
     calls: Counter[str] = Counter()
     series: dict[str, pd.DataFrame] = {}
     try:
         for col, sid in SERIES.items():
-            calls[ENDPOINT] += 1
+            calls[endpoint] += 1
             df = fred_series(sid, since, key, end=eod)
             series[col] = df
             span = f"{df['date'].iloc[0]} → {df['date'].iloc[-1]}" if len(df) else "no observations"
@@ -206,6 +216,7 @@ def main(argv: list[str] | None = None) -> int:
                     "rows": len(frame),
                     "sessions": len(cal),
                     "raw_dates": not cal,
+                    "endpoint": endpoint,
                     "last_obs": {
                         c: (df["date"].iloc[-1].isoformat() if len(df) else None)
                         for c, df in series.items()
@@ -216,7 +227,8 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         conn.close()
     print(
-        f"  upserted {len(frame):,d} rows into {_gdb.M}.macro_daily ({sum(calls.values())} FRED calls)"
+        f"  upserted {len(frame):,d} rows into {_gdb.M}.macro_daily "
+        f"({sum(calls.values())} FRED calls to {endpoint})"
     )
     return 0
 

@@ -381,7 +381,8 @@ deployed on Vercel with ISR + the `eod` tag, and the FM can compute any-period r
 1. Tiingo account: the FREE key first (`TIINGO_API_KEY` in `.env`, `GLOBAL_PRICE_PROVIDER=tiingo`) so the
    FEED gate and the adapter tests run; upgrade to Power/Commercial (§1) only after the gate PASSES.
 2. `EDGAR_IDENTITY="Nimish Shah <email>"` in `.env` (the SEC fair-access User-Agent) — never in-repo.
-3. `FRED_API_KEY` (India's key) in the global `.env`.
+3. `FRED_API_KEY` (India's key) in the global `.env` — OPTIONAL; unset, `ingest_macro` uses FRED's
+   keyless CSV export. Supply it for the JSON API's revision vintages, not to unblock anything.
 4. Prod: `python scripts/global_market/apply_ddl.py` (41 tables) → `seed_thresholds.py --dry-run` →
    approve → `seed_thresholds.py`; create the `atlas_global_app` role per the runbook.
 5. Vercel project (root `frontend-global/`, region bom1) + Supabase Auth (magic link, redirect

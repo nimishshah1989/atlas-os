@@ -31,10 +31,13 @@ Done when: the two lines are in `.env`. The gate itself is step 7.
 
 ```
 EDGAR_IDENTITY="Nimish Shah nimish.shah1989@gmail.com"   # SEC fair-access User-Agent
-FRED_API_KEY=<India's key, same account>
+FRED_API_KEY=<India's key, same account>          # OPTIONAL — see below
 ```
 
-`build_identity.py` refuses to run without the first; `ingest_macro.py` without the second.
+`build_identity.py` refuses to run without the first. The second is OPTIONAL: without it
+`ingest_macro.py` reads FRED's keyless CSV export instead of the JSON API — the same observations
+from the same publisher — so nothing is blocked on it. Supply it when convenient; the JSON API
+carries revision vintages the export does not.
 
 Done when: `grep -c EDGAR_IDENTITY .env` prints 1.
 

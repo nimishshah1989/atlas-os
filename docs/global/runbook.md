@@ -12,7 +12,7 @@ landed yet are marked with their chunk (P1-B, P1-D, P1-E); everything else is ac
 | `GLOBAL_PRICE_PROVIDER` | laptop/box `.env` | `tiingo` — no default on purpose; a missing value stops `ingest_prices` |
 | `TIINGO_API_KEY` | laptop/box `.env` | the FREE key first (`validate_global --check FEED` runs on it); upgrade the plan only after the gate passes (`docs/global/phase1.md` §1) |
 | `EDGAR_IDENTITY` | laptop/box `.env` | `"Firstname Lastname email@domain"` — the SEC fair-access User-Agent; `build_identity.py` refuses to run without it |
-| `FRED_API_KEY` | laptop/box `.env` | India's key works (same account) |
+| `FRED_API_KEY` | laptop/box `.env` | **OPTIONAL.** Unset, `ingest_macro` reads FRED's keyless CSV export (`graph/fredgraph.csv`) — same observations, no registration; the run prints which transport it used and `provider_calls` records it under that endpoint. Set it (India's key works, same account) for the JSON API's revision vintages |
 | `ATLAS_GLOBAL_DB_URL` | Vercel env | `postgresql://atlas_global_app:<pw>@…pooler.supabase.com:6543/postgres?sslmode=require` — the **transaction** pooler (6543), never the session pooler |
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Vercel env | Supabase Auth (magic link) |
 | `GLOBAL_REVALIDATE_SECRET` | Vercel env + box `.env` | bearer token the orchestrator's publish step sends to `/api/revalidate` (`openssl rand -hex 32`; the same value on both sides) |
@@ -128,7 +128,7 @@ one whose host is not `localhost`/`127.0.0.1` is refused (exit 1, host printed) 
 ```
 export ATLAS_REPO=$PWD ATLAS_LOG_DIR=/tmp/atlas-logs
 export ATLAS_DB_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/atlas_scratch   # exported, localhost
-export EDGAR_IDENTITY="Firstname Lastname email@domain"        # + FRED_API_KEY for ingest_macro
+export EDGAR_IDENTITY="Firstname Lastname email@domain"        # FRED_API_KEY optional: unset = keyless CSV
 bash scripts/ops/atlas_global_weekly.sh                         # identity (live fetch), benchmarks, S&P 500, gate, snapshot
 bash scripts/ops/atlas_global_daily.sh                          # macro, gate, publish (skipped: no URL), snapshot
 psql postgresql://postgres:postgres@localhost:5432/atlas_scratch \

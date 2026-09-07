@@ -12,5 +12,7 @@ marks a day the bond market did not publish (e.g. 2025-10-13, Columbus Day — t
 open, so SPY has a session that day and the macro forward-fill must carry 2025-10-10's 3.86 onto
 it). It exists so `tests/unit/global_market/test_ingest_macro.py` exercises the session
 forward-fill on real observations without a FRED API key (the API tests themselves run only with
-`FRED_API_KEY`). The nightly ingest uses the JSON API via `providers/fred.py`, never this export.
+`FRED_API_KEY`). The nightly ingest reads this SAME keyless export through
+`providers/fred.py:fred_series` whenever no key is set — the export is the production path, not
+just a fixture — and the JSON API only when `FRED_API_KEY` is present.
 Refresh by re-fetching, never by editing.
