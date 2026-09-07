@@ -108,7 +108,10 @@ step "build_universe_snapshot" $PY scripts/global_market/build_universe_snapshot
 # otherwise still publish. Gate outcomes are recorded into the runfile too. gate() is defined
 # beside step() above, because BASIS has to run before the compute cascade it guards.
 gate "freshness_guard"   $PY scripts/global_market/freshness_guard.py --eod "$EOD"
-# gate "validate_global_A" $PY scripts/global_market/validate_global.py --check A   # Phase 1
+# Gate A asserts over the SCORED universe, so it runs AFTER build_universe_snapshot; on a
+# night where that step exits 2 (the floor unset) the universe is empty and gate A says so
+# rather than passing on nothing.
+gate "validate_global_A" $PY scripts/global_market/validate_global.py --check A --eod "$EOD"
 # gate "validate_global_B" $PY scripts/global_market/validate_global.py --check B   # Phase 3
 # gate "validate_global_C" $PY scripts/global_market/validate_global.py --check C   # Phase 3
 # gate "validate_global_D" $PY scripts/global_market/validate_global.py --check D   # Phase 3

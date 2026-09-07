@@ -8,6 +8,7 @@ cannot wire it early and fail (or pass) vacuously.
 
     python scripts/global_market/validate_global.py --check SIP [--stooq-file SPY.US.txt]
     python scripts/global_market/validate_global.py --check BASIS
+    python scripts/global_market/validate_global.py --check A [--eod YYYY-MM-DD]
 
 --check SIP — the Phase 0 gate (result recorded in docs/global/data-sources.md):
   One pull of SPY / AAPL / QQQ daily bars, ``adjustment="raw"`` and ``feed=sip``, over the
@@ -21,6 +22,13 @@ cannot wire it early and fail (or pass) vacuously.
       (IEX prints ~2–3% of consolidated volume). Needs --stooq-file; without it the
       check FAILS as "not run" — an inconclusive gate must not read as PASS.
   (3) no session in the FRED (and Stooq) calendar missing from Alpaca.
+
+--check A — the Phase 1 definition of done for the price spine, over the SCORED universe
+  (``gate_a.py``, which carries the reasoning): the anchor session, completeness against
+  the previous session, impossible daily moves, unexplained split-sized jumps, the
+  re-basing seam detector, and the anchor's returns against FRED. It lives in its own
+  module because this file is near its size tier, not because it is a different kind of
+  gate — it runs on the same ``Gate`` and reports through the same verdict line.
 
 --check BASIS — WHICH price series ``ohlcv_daily.close`` actually carries. The archive
   arrives with ``adjustment_source='stooq:unknown'``: Stooq documents no adjustment policy,
@@ -420,7 +428,10 @@ def _gdb_schema() -> str:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="US-platform output gates (rule #0: real data only)")
-    ap.add_argument("--check", choices=["SIP", "BASIS"], required=True)
+    ap.add_argument("--check", choices=["SIP", "BASIS", "A"], required=True)
+    ap.add_argument(
+        "--eod", type=date.fromisoformat, default=None, help="gate A anchor; default eod_cutoff()"
+    )
     ap.add_argument(
         "--stooq-file",
         default=None,
@@ -431,8 +442,14 @@ def main() -> None:
     try:
         if args.check == "SIP":
             check_SIP(g, args.stooq_file)
-        else:
+        elif args.check == "BASIS":
             check_BASIS(g)
+        else:
+            # Lazily, like the others: gate A needs a DB URL and the universe snapshot, and a
+            # run of SIP or BASIS must not.
+            from gate_a import check_A
+
+            check_A(g, args.eod)
     except Exception as e:
         print(f"  \033[31mFAIL\033[0m gate raised: {e!r}")
         g.fails += 1

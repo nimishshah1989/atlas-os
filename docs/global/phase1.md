@@ -218,21 +218,46 @@ away by changing vendor. Returns are invariant to the base; absolute levels are 
   now corroborated by the vendor: SPY → `stooq:all` (the archive's 171.85 for 2016-01-04 sits 0.44 %
   from Alpaca's total-return 171.10 and nowhere near the 201.0192 that actually traded). Stooq rows
   never overwrite vendor rows (the importer's existing guard).
-- DoD = **gate A** (`validate_global --check A`, each row a real assertion; `--check` today accepts
-  only `SIP` and `BASIS`, and gate A is added by this chunk): SPY has a bar at EOD; completeness
-  ≥ 99% of the prior session's row count; ≥ 5,000 ETFs and 500/500 S&P names with bars since
-  2016-01-04 or inception; 0 rows with |ret_1d| > 1 on `close_tr`; `max_abs_log_jump(close_adj)`
-  < 0.4 on ≥ 99% of instruments (the unit-bug/missed-split detector); SPY `close_tr` daily returns vs
-  FRED `SP500` correlation ≥ 0.999 over the full history; every |ret_1d| > 0.5 on `close_adj` has a
-  matching split in `corporate_actions`; the `close_tr` ÷ `close` ratio never FALLS through time
-  per instrument by more than cent-rounding can explain (the re-basing seam detector). Both columns
-  are published to the cent, so the ratio is not exactly monotone — measured on SPY it wobbles by
-  ~4e-5, while a dividend step is ~5e-3, a hundred times larger; the tolerance is computed per row
-  from the prices, not picked. Verified to bite: injecting one dividend's worth of stale base into
-  the older half of SPY's history is caught at the exact seam date, 0.0050 against a 0.000052 budget;
-  Stooq labelled on ≥ 95% of overlapping instruments and a 50-ticker sample of labelled closes within
-  0.1%; `provider_calls` written; freshness registered (`ohlcv_daily` lag 0, completeness table) with
-  `ingest_prices.py` in the daily orchestrator.
+- DoD = **gate A** (`validate_global --check A`, in `gate_a.py`; each row a real assertion on
+  produced output). Built and run 2026-09-07, and three rows of the 2026-09-04 draft were wrong
+  against real data — each corrected from a measurement, not by loosening until it passed:
+  - **Everything runs over the SCORED universe**, not every listing with bars. Of 203 real
+    instruments, 19 carried a 0.4 log jump, and all 19 were already excluded by the FM: ten were
+    geared products doing their job (2x single-stock funds, ProShares Ultra Silver), and seven
+    were sub-floor shells with genuinely broken prints (ACTS 2.14 → 24.79 with no action reported,
+    AMEM 24.52 → 53.00 → 24.82 across two days). A gate over everything fails nightly for reasons
+    nobody acts on. What is excluded is still counted and printed, so nothing hides there.
+  - **A gap is not a move.** `lag()` walks rows, not sessions, so an instrument that halts and
+    resumes gets a multi-year difference reported as a daily one: ACII read +149.9 % "in a
+    session" whose previous bar was 1,029 days earlier. Moves now require consecutive sessions
+    (≤ 5 calendar days), and listing gaps are reported in their own right, because a period
+    return spanning one is a fiction.
+  - **The FRED correlation floor is 0.99, not 0.999.** The draft carried 0.999 over from the SIP
+    gate, which measures 40 calm sessions. Over the full history it reads 0.99316 on 2,513
+    returns, and the tail is 2020-03-12 → 03-25 and 2025-04-09/10 — SPY returned 5.86 % on
+    2020-03-13 against the index's 9.29 %. An ETF is not its index in a dislocation.
+  - **The seam detector compares `close_tr` to `close_adj`, not to `close`.** Both are
+    split-adjusted, so a split cancels and only dividend re-basing moves the ratio. Against the
+    raw close it fires on every reverse split and says nothing true (AMZA 2020-03-31 "fell" 4.87
+    against a 0.032 rounding budget; AMLP 2020-05-18, 2.37 — both reverse splits, neither a seam).
+  - **There is no reliable automatic test separating a missed split from a real crash**, and the
+    gate says so rather than pretending. AMZA fell 42 % on 2020-03-09, the Saudi-Russia price war,
+    on four times its usual volume, and was the ONLY scored name to move that hard — so breadth
+    calls a real crash an outlier exactly as it would a missed split. Large jumps are therefore
+    surfaced with what a human needs to judge them; the gate hard-fails only on the impossible.
+  - **A share is asserted only where a share means something.** Over 38 scored instruments one
+    name is 2.6 points, so "≥ 99 %" and "≥ 97 %" are the same claim; under 200 the check reports
+    and says why.
+  Hard rows, at any size: SPY has an anchor bar at or before the EOD (the EOD is a CALENDAR date —
+  2026-09-06 was a Sunday — and callers anchor to the latest session on or before it, so demanding
+  a bar ON it fails every weekend); completeness ≥ 99 % of the previous session; no move over 100 %
+  between consecutive sessions on `close_tr`; no `close_tr`/`close_adj` seam beyond cent rounding;
+  SPY vs FRED ≥ 0.99. Both the seam and impossible-move rows were verified to BITE by injection —
+  a stale base in the older half of SPY's history is caught at the exact seam date (0.0050 against
+  a 0.000052 budget), and a tripled AMLP close is caught at +195.8 %. Staleness in SESSIONS is
+  deliberately left to `freshness_guard.py`, which already owns `ohlcv_daily` at lag 0; two owners
+  would drift. Still to land with `label_stooq.py`: Stooq labelled on ≥ 95 % of overlapping
+  instruments and a 50-ticker sample of labelled closes within 0.1 %.
 ### P1-C — Macro, index membership, benchmarks (`ingest_macro.py`, `ingest_index_membership.py`, `seed_benchmarks.py`)
 
 GOAL: `macro_daily` carries FRED `SP500, VIXCLS, DGS10, DTB3, DTWEXBGS` through EOD−1; `index_membership`

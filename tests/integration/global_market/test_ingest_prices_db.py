@@ -130,17 +130,9 @@ def test_a_split_is_invisible_in_the_adjusted_return_and_glaring_in_the_raw_one(
 def test_the_total_return_basis_is_below_the_traded_price_and_converges_to_it() -> None:
     """``close_tr`` is a dividend-back-adjusted series anchored to the present.
 
-    So for a dividend payer it sits BELOW the traded price in the past and rises to meet it
-    at the latest bar, and the ratio between them only ever climbs. A history written half on
-    an old base and half on a new one puts a STEP in that ratio — the re-basing seam this
-    chunk exists to prevent, and the one thing about it that nothing on the row itself says.
-
-    The ratio is not exactly monotone, and expecting it to be would be a bug in the test:
-    both columns are published to the CENT, so their ratio carries quantisation noise of
-    roughly ``ratio x (half a cent / price)`` on each side — about 5e-5 for SPY near $200,
-    and measured wobbling by ~4e-5. A dividend step is two orders of magnitude bigger (SPY's
-    ~$1.08 on a ~$200 price is 5.4e-3), so the two are never in danger of being confused.
-    The tolerance below is computed per row from the prices themselves rather than picked.
+    So for a dividend payer it sits BELOW the price actually traded in the past and rises to
+    meet it at the latest bar. That comparison is against the RAW close on purpose: it is a
+    statement about the total-return series versus what a buyer paid.
     """
     if not have("SPY"):
         pytest.skip("no vendor bars for SPY in this database")
@@ -148,25 +140,48 @@ def test_the_total_return_basis_is_below_the_traded_price_and_converges_to_it() 
         BARS_SQL, {"symbol": "SPY", "start": dt.date(2016, 1, 4), "end": dt.date(2100, 1, 1)}
     )
     assert len(got) > 250, "too few SPY sessions to say anything about the basis"
+    ratios = [r[3] / r[1] for r in got if r[1] and r[3]]
+    assert ratios[0] < Decimal("0.95"), "the oldest total-return close is not below the price"
+    assert ratios[-1] > Decimal("0.99"), "the newest total-return close has not met the price"
 
-    ratios = [(r[0], r[3] / r[1], r[1], r[3]) for r in got if r[1] and r[3]]
-    assert ratios[0][1] < Decimal("0.95"), "the oldest total-return close is not below the price"
-    assert ratios[-1][1] > Decimal("0.99"), "the newest total-return close has not met the price"
+
+def test_no_re_basing_seam_in_the_dividend_factor() -> None:
+    """The seam detector, over ``close_tr`` / ``close_adj``.
+
+    Both are split-adjusted, so a split cancels and what remains is the cumulative dividend
+    factor — which only ever climbs. Compared against the RAW close instead, this fires on
+    every reverse split and says nothing true: measured on real rows, AMZA 2020-03-31 "falls"
+    4.87 against a rounding budget of 0.032 and AMLP 2020-05-18 falls 2.37, and both are
+    reverse splits rather than seams.
+
+    A real seam is a history written half on an old base and half on a new one, which yields a
+    wrong return across the join and nothing on the row to say so. It is not exactly monotone
+    either: both columns are published to the CENT, so the ratio carries quantisation noise of
+    roughly ``ratio x (half a cent / price)`` per side — about 5e-5 for SPY near $200, measured
+    wobbling by ~4e-5, against a dividend step two orders of magnitude bigger. The tolerance
+    below is computed per row from the prices rather than picked.
+    """
+    if not have("SPY"):
+        pytest.skip("no vendor bars for SPY in this database")
+    got = rows(
+        BARS_SQL, {"symbol": "SPY", "start": dt.date(2016, 1, 4), "end": dt.date(2100, 1, 1)}
+    )
+    series = [(r[0], r[3] / r[2], r[2], r[3]) for r in got if r[2] and r[3]]
+    assert len(series) > 250, "too few SPY sessions to say anything about the basis"
 
     half_cent = CENT / 2
     seams = []
-    for (date, ratio, close, tr), (_, prev, prev_c, prev_tr) in zip(
-        ratios[1:], ratios, strict=False
+    for (date, ratio, adj, tr), (_, prev, prev_adj, prev_tr) in zip(
+        series[1:], series, strict=False
     ):
         if ratio >= prev:
             continue
-        # What a pure rounding artefact could account for across these two sessions.
-        noise = ratio * (half_cent / close + half_cent / tr) + prev * (
-            half_cent / prev_c + half_cent / prev_tr
+        noise = ratio * (half_cent / adj + half_cent / tr) + prev * (
+            half_cent / prev_adj + half_cent / prev_tr
         )
         if prev - ratio > noise:
             seams.append((date, str(prev - ratio), str(noise)))
-    assert not seams, f"close_tr/close falls further than rounding can explain at {seams[:3]}"
+    assert not seams, f"close_tr/close_adj falls further than rounding can explain at {seams[:3]}"
 
 
 def test_every_vendor_row_says_which_pulls_produced_its_adjusted_columns() -> None:
