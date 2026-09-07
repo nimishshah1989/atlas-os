@@ -23,6 +23,7 @@ superuser proves nothing about what the app can see.
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 import traceback
@@ -52,10 +53,16 @@ def _repo_root() -> Path:
 
 
 BOARD_URL = "http://localhost:3004"
-EMPTY_PANEL_MARKER = "No regime data"
+# BOTH empty states, counted separately. Collapsing them was a real bug: the board gained
+# "Market Pulse is temporarily unavailable" for a thrown query, this file kept counting only
+# the other string, and so in the EXACT failure it exists to detect it found zero markers and
+# announced "node serves DATA" — the opposite of the truth.
+MARKER_QUERY_FAILED = "Market Pulse is temporarily unavailable"
+MARKER_NO_ROWS = "No regime data"
 
-# The exact statement frontend/src/lib/queries/regime.ts sends. Kept verbatim so a
-# difference here IS a difference the board would see.
+# The statement frontend/src/lib/queries/regime.ts sends, column for column. Trimming the
+# SELECT list would defeat the purpose: if the board's query fails on a column this one omits,
+# this returns a row happily and the Node layer gets blamed for a schema problem.
 REGIME_SQL = """
 WITH latest_full AS (
   SELECT * FROM atlas_foundation.atlas_market_regime_daily
@@ -65,8 +72,30 @@ latest_any AS (
   SELECT * FROM atlas_foundation.atlas_market_regime_daily
   ORDER BY date DESC LIMIT 1
 )
-SELECT la.date, la.regime_state, la.deployment_multiplier,
-       COALESCE(la.pct_above_ema_50, lf.pct_above_ema_50) AS pct_above_ema_50
+SELECT
+  la.date,
+  la.nifty500_close, la.nifty500_ema_50, la.nifty500_ema_200,
+  la.nifty500_above_ema_50, la.nifty500_above_ema_200,
+  la.nifty500_ema_50_slope, la.nifty500_ema_200_slope,
+  COALESCE(la.pct_above_ema_20,  lf.pct_above_ema_20)  AS pct_above_ema_20,
+  COALESCE(la.pct_above_ema_50,  lf.pct_above_ema_50)  AS pct_above_ema_50,
+  COALESCE(la.pct_above_ema_200, lf.pct_above_ema_200) AS pct_above_ema_200,
+  COALESCE(la.advances_count,    lf.advances_count)    AS advances_count,
+  COALESCE(la.declines_count,    lf.declines_count)    AS declines_count,
+  COALESCE(la.unchanged_count,   lf.unchanged_count)   AS unchanged_count,
+  COALESCE(la.ad_ratio,          lf.ad_ratio)          AS ad_ratio,
+  COALESCE(la.ad_line,           lf.ad_line)           AS ad_line,
+  COALESCE(la.ad_line_slope_21,  lf.ad_line_slope_21)  AS ad_line_slope_21,
+  COALESCE(la.mcclellan_oscillator, lf.mcclellan_oscillator) AS mcclellan_oscillator,
+  COALESCE(la.mcclellan_summation,  lf.mcclellan_summation)  AS mcclellan_summation,
+  COALESCE(la.new_52w_highs,     lf.new_52w_highs)     AS new_52w_highs,
+  COALESCE(la.new_52w_lows,      lf.new_52w_lows)      AS new_52w_lows,
+  COALESCE(la.net_new_highs,     lf.net_new_highs)     AS net_new_highs,
+  COALESCE(la.new_high_low_ratio, lf.new_high_low_ratio) AS new_high_low_ratio,
+  COALESCE(la.pct_in_strong_states, lf.pct_in_strong_states) AS pct_in_strong_states,
+  COALESCE(la.pct_weinstein_pass,   lf.pct_weinstein_pass)   AS pct_weinstein_pass,
+  la.india_vix, la.realized_vol_5d_nifty500, la.vol_252_median_nifty500,
+  la.regime_state, la.deployment_multiplier, la.dislocation_active, la.dislocation_started
 FROM latest_any la LEFT JOIN latest_full lf ON true
 """
 
@@ -84,6 +113,14 @@ def _find_db_url() -> tuple[str, str]:
     raise SystemExit(f"no ATLAS_DB_URL in any of {ENV_CANDIDATES} under {root}")
 
 
+def _libpq(url: str) -> str:
+    """Strip SQLAlchemy's dialect prefix. The root `.env` spells ATLAS_DB_URL as
+    `postgresql+psycopg2://` (seven scripts under scripts/wealth/ already strip it the same
+    way); psycopg2.connect rejects that form, so a fallback to the root env file would have
+    died before a single diagnostic ran."""
+    return url.replace("postgresql+psycopg2://", "postgresql://", 1)
+
+
 def _redact(url: str) -> str:
     s = urlsplit(url)
     user = s.username or "?"
@@ -96,12 +133,22 @@ def section(title: str) -> None:
 
 def main() -> int:
     url, src = _find_db_url()
-    print(f"connection taken from {src} -> {_redact(url)}")
+    print(f"connection taken from {src} -> {_redact(_libpq(url))}")
+
+    # The env FILE is what pm2 was started from and what `next build` reads, so it is the
+    # right default. But a shell can carry a different ATLAS_DB_URL, and if the two disagree
+    # that disagreement is itself a candidate cause of the very bug being chased — so say so
+    # instead of silently preferring either.
+    shell_url = os.environ.get("ATLAS_DB_URL", "").strip()
+    if shell_url and _libpq(shell_url) != _libpq(url):
+        print(f"  WARNING: this shell's ATLAS_DB_URL DIFFERS -> {_redact(_libpq(shell_url))}")
+        print("  Diagnosing the file's, since that is what the board was built and started")
+        print("  with. If the board actually runs on the shell's, that mismatch is the bug.")
 
     import psycopg2
 
     section("P1a — identity the BOARD connects as (not your psql session)")
-    conn = psycopg2.connect(url)
+    conn = psycopg2.connect(_libpq(url))
     conn.set_session(readonly=True)
     with conn.cursor() as cur:
         cur.execute(
@@ -130,6 +177,9 @@ def main() -> int:
     except Exception:
         print("  -> The query RAISED. This is the error MarketPulseV4 was swallowing:")
         traceback.print_exc(file=sys.stdout)
+        # Without this the connection stays in an aborted transaction and every check below
+        # reports "current transaction is aborted" instead of what it went to measure.
+        conn.rollback()
 
     section("P1c — table visibility for this role")
     with conn.cursor() as cur:
@@ -184,13 +234,21 @@ def main() -> int:
     try:
         with urllib.request.urlopen(BOARD_URL, timeout=20) as resp:  # noqa: S310 — fixed localhost
             out = resp.read().decode("utf-8", "replace")
-        hits = out.count(EMPTY_PANEL_MARKER)
-        print(f"  {BOARD_URL}: {len(out)} bytes, '{EMPTY_PANEL_MARKER}' x{hits}")
-        print(
-            "  -> node itself is serving the empty panel."
-            if hits
-            else "  -> node serves DATA. The public URL is stale: an nginx/CDN cache, not the app."
-        )
+        failed = out.count(MARKER_QUERY_FAILED)
+        empty = out.count(MARKER_NO_ROWS)
+        print(f"  {BOARD_URL}: {len(out)} bytes")
+        print(f"    '{MARKER_QUERY_FAILED}' x{failed}")
+        print(f"    '{MARKER_NO_ROWS}' x{empty}")
+        if failed:
+            print("  -> node is serving the QUERY-FAILED panel: the board cannot reach its")
+            print("     data source. P1b above has the exception.")
+        elif empty:
+            print("  -> node is serving the NO-ROWS panel: the query succeeded and returned")
+            print("     nothing for this role. Compare with P1b/P1c above.")
+        else:
+            print(
+                "  -> node serves DATA. The public URL is stale: an nginx/CDN cache, not the app."
+            )
     except Exception as exc:
         print(f"  request to {BOARD_URL} failed: {type(exc).__name__}: {exc}")
     return 0
