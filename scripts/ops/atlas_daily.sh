@@ -154,7 +154,12 @@ if [ "$GATE_OK" = "1" ]; then
   STAMP=$(date +%Y%m%d_%H%M%S)
   [ -d .next ] && cp -r .next ".next.bak.$STAMP"
   rm -rf .next/cache/fetch-cache
-  if NEXT_PUBLIC_LENS_V4=1 NODE_OPTIONS='--max-old-space-size=3072' npm run build >>"$LOG" 2>&1 \
+  # flock: the box is 2 vCPU and this build asks for 3 GB. Since the Global Atlas board is served
+  # from the same box (docs/global/deploy-subpath.md), its build takes the same lock — two Next
+  # builds at once OOM and take the LIVE India board with them. Waiting 45 min is the safe
+  # outcome; a timeout returns non-zero and lands in the rollback branch, keeping last-good .next.
+  if NEXT_PUBLIC_LENS_V4=1 NODE_OPTIONS='--max-old-space-size=3072' \
+     flock -w 2700 "${NEXT_BUILD_LOCK:-/tmp/atlas-next-build.lock}" npm run build >>"$LOG" 2>&1 \
      && [ -f .next/BUILD_ID ]; then
     rm -rf .next/cache/fetch-cache
     pm2 reload atlas-frontend-v3 --update-env >>"$LOG" 2>&1 && echo "  ok: deploy (rebuild + reload)" | tee -a "$LOG"

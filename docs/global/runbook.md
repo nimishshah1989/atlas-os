@@ -1,8 +1,15 @@
 # Global Atlas — runbook (Phase 1)
 
 Everything an operator does by hand for the US platform. Keys and passwords live in `.env` on the
-laptop/box and in Vercel env — never in this repo (it is public). Steps whose producer has not
-landed yet are marked with their chunk (P1-B, P1-D, P1-E); everything else is actionable now.
+laptop/box and in the board's own `.env.local` — never in this repo (it is public).
+
+Steps whose producer has not landed yet are marked with their chunk (P1-B, P1-D, P1-E);
+everything else is actionable now.
+
+> **Hosting: the board is served from the box at `atlas.jslwealth.in/global`, not from Vercel**
+> (FM, 2026-09-07). `docs/global/deploy-subpath.md` is the deployment package and **supersedes the
+> Vercel half of §4**; "board `.env.local`" in §1 is `frontend-global/.env.local` in the serving
+> directory on the box. §2, §3 and §5–§8 are unchanged.
 
 ## 1. Keys and environment
 
@@ -13,10 +20,11 @@ landed yet are marked with their chunk (P1-B, P1-D, P1-E); everything else is ac
 | `TIINGO_API_KEY` | laptop/box `.env` | the FREE key first (`validate_global --check FEED` runs on it); upgrade the plan only after the gate passes (`docs/global/phase1.md` §1) |
 | `EDGAR_IDENTITY` | laptop/box `.env` | `"Firstname Lastname email@domain"` — the SEC fair-access User-Agent; `build_identity.py` refuses to run without it |
 | `FRED_API_KEY` | laptop/box `.env` | **OPTIONAL.** Unset, `ingest_macro` reads FRED's keyless CSV export (`graph/fredgraph.csv`) — same observations, no registration; the run prints which transport it used and `provider_calls` records it under that endpoint. Set it (India's key works, same account) for the JSON API's revision vintages |
-| `ATLAS_GLOBAL_DB_URL` | Vercel env | `postgresql://atlas_global_app:<pw>@…pooler.supabase.com:6543/postgres?sslmode=require` — the **transaction** pooler (6543), never the session pooler |
-| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Vercel env | Supabase Auth (magic link) |
-| `GLOBAL_REVALIDATE_SECRET` | Vercel env + box `.env` | bearer token the orchestrator's publish step sends to `/api/revalidate` (`openssl rand -hex 32`; the same value on both sides) |
-| `GLOBAL_REVALIDATE_URL` | box `.env` | `https://<vercel-origin>/api/revalidate` — where the publish step POSTs `{"tag":"eod"}`; unset = the step is skipped and the log says so |
+| `ATLAS_GLOBAL_DB_URL` | board `.env.local` | `postgresql://atlas_global_app:<pw>@…pooler.supabase.com:6543/postgres?sslmode=require` — the **transaction** pooler (6543), never the session pooler; India's session pool already holds 14 of its 15 slots |
+| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | board `.env.local` | Supabase Auth (magic link) |
+| `ATLAS_GLOBAL_BASE_PATH` | board `.env.local` + the deploy shell | `/global` on the box, unset at the root. Needed at BUILD time *and* RUN time, same value (`docs/global/deploy-subpath.md` §2) |
+| `GLOBAL_REVALIDATE_SECRET` | board `.env.local` + box `.env` | bearer token the orchestrator's publish step sends to `/api/revalidate` (`openssl rand -hex 32`; the same value on both sides) |
+| `GLOBAL_REVALIDATE_URL` | box `.env` | `http://127.0.0.1:<port>/global/api/revalidate` — loopback, so the publish cannot fail on the proxy; **no trailing slash** (a 308 fails the step). Unset = the step is skipped and the log says so |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | box `.env` | gate-failure pushes (India's values) |
 
 ## 2. Prod schema (one-off, then per DDL change)
@@ -52,9 +60,14 @@ REVOKE ALL ON SCHEMA atlas_foundation FROM atlas_global_app;
 ```
 The India role gets no grant on `atlas_global`. Verify: `psql -U atlas_global_app -c "select count(*) from atlas_foundation.instrument_master"` must fail with permission denied.
 
-## 4. Vercel + Supabase Auth (one-off)
+## 4. Serving the board + Supabase Auth (one-off)
 
-1. Vercel project → Git integration on this repo, **root directory `frontend-global`**, region `bom1`
+**Steps 1 and 4 are superseded by `docs/global/deploy-subpath.md`** (pm2 + nginx on the box), and
+in step 2 the redirect URL is `https://atlas.jslwealth.in/global/login/callback` — the Site URL
+must move to `https://atlas.jslwealth.in/global` as well, or a link that fails the allow-list
+check silently goes to Vercel. Steps 2 and 3 otherwise stand.
+
+1. ~~Vercel project~~ → Git integration on this repo, **root directory `frontend-global`**, region `bom1`
    (`vercel.json`; fall back to `sin1` if bom1 is not offered), env vars from §1.
 2. Supabase → Authentication → enable Email (magic link); add `<vercel-origin>/login/callback` to the
    redirect allowlist; disable public sign-ups if the dashboard offers it (the board's own allowlist
@@ -196,8 +209,10 @@ Every row on the page is a real row in `atlas_global`; nothing is computed in th
 3. Run the weekly by hand, then the daily, and read both logs end to end:
    `bash scripts/ops/atlas_global_weekly.sh; bash scripts/ops/atlas_global_daily.sh`.
 4. `select script_name, milestone, status from atlas_global.atlas_pipeline_runs order by started_at`
-   shows one row per step; `/health` on the Vercel deployment renders them, the validator
-   rows, the freshness table and the provider-call counts.
+   shows one row per step; `https://atlas.jslwealth.in/global/health` renders them, the validator
+   rows, the freshness table and the provider-call counts. That page is reachable **without a
+   session** by design — `docs/global/deploy-subpath.md` §6.2 is the decision about leaving it so
+   on the public domain.
 5. `curl -sS -o /dev/null -w '%{http_code}\n' -X POST "$GLOBAL_REVALIDATE_URL" -H 'Authorization: Bearer wrong' -d '{"tag":"eod"}'`
    → `401`; with the real secret → `200` and `{"revalidated":true,"tag":"eod",…}`.
 6. Install the two cron lines (§6). Next morning: the log, `/health`, and — only if a gate

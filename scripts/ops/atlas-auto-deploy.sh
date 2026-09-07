@@ -91,7 +91,13 @@ fi
 
 [ -d .next ] && cp -r .next ".next.bak.$STAMP"
 rm -rf .next/cache/fetch-cache
-if NEXT_PUBLIC_LENS_V4=1 NODE_OPTIONS='--max-old-space-size=3072' npm run build >>"$LOG" 2>&1; then
+# flock: shared with atlas_daily.sh and with the Global Atlas board's build
+# (scripts/ops/atlas_global_deploy.sh). Two Next builds at once on a 2-vCPU box, each asking for
+# 3 GB, OOM and take the live board down. A timeout is a non-zero exit → the rollback branch below.
+# NOTE: the copy cron actually runs is /home/ubuntu/atlas-auto-deploy.sh — this edit reaches the
+# box only when that copy is refreshed from here (docs/global/deploy-subpath.md §1).
+if NEXT_PUBLIC_LENS_V4=1 NODE_OPTIONS='--max-old-space-size=3072' \
+   flock -w 2700 "${NEXT_BUILD_LOCK:-/tmp/atlas-next-build.lock}" npm run build >>"$LOG" 2>&1; then
   rm -rf .next/cache/fetch-cache
   pm2 reload "$PM2_APP" --update-env >>"$LOG" 2>&1
   # Written only here: the stamp means "this commit is built AND serving", which is what the
