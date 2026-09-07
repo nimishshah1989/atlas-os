@@ -15,9 +15,9 @@ Flow
    ``BRK-B.US → BRK.B``). The importer never mints an instrument — ``build_identity.py`` is
    ``instrument_master``'s only writer. Unmapped members are COUNTED and written to the
    report file with a reason; nothing is dropped silently.
-3. Bars — ``open/high/low/close/volume`` from the file; ``close_adj`` / ``close_tr`` NULL;
-   ``source='stooq_csv'``; ``adjustment_source='stooq:unknown'`` (Stooq does not say what
-   adjustment its files carry — see the provider docstring). A row that is not a valid bar
+3. Bars — ``open/high/low/close/volume`` from the file; ``source='stooq_csv'``;
+   ``close_adj`` NULL; ``close_tr`` and ``adjustment_source`` from the MEASURED basis
+   (see "Labelling the adjustment", below). A row that is not a valid bar
    (a price ≤ 0, high < low, open/close outside [low, high]) is refused and listed in the
    report by symbol and date; the FM's archive has about a hundred such rows in 28 million.
 4. Upsert — ``ON CONFLICT (instrument_id, date) DO UPDATE … WHERE ohlcv_daily.source <> 'alpaca'``:
@@ -32,16 +32,40 @@ without writing to the database; when ``ATLAS_DB_URL`` is configured it also run
 identity bridge (read-only) and prints how many members map, by alias and by symbol, so
 ``build_identity.py``'s coverage can be checked before any bar is written.
 
-TODO(phase-1, after the SIP gate): ``stooq_adjustment_check`` — for every imported instrument,
-compare overlapping Stooq closes against Alpaca ``adjustment=split`` and ``adjustment=all``;
-the closer match (min |diff|) labels the rows' ``adjustment_source`` (``stooq:split`` /
-``stooq:all``); a file whose best match exceeds 0.5 percent median error keeps
-``stooq:unknown`` and is listed — no guessing. Until then ``close_adj`` / ``close_tr`` stay
-NULL and nothing scores on these rows.
+Labelling the adjustment (replaces the Alpaca-labelling TODO this file used to carry)
+------------------------------------------------------------------------------------
+The old plan was a ``stooq_adjustment_check`` labelling each file against Alpaca
+``adjustment=split`` / ``=all``. It never ran, and cheaper evidence now exists:
+``validate_global.py --check BASIS`` MEASURES the basis from the stored bars against FRED's
+SP500 price index — an unrelated publisher, no key, dividends absent by construction.
+
+So this importer decides nothing about the archive; it ASKS, via
+:func:`measured_total_return`, and labels from the answer. Gate passes → ``close_tr`` = the
+file's close under ``stooq:total_return``. Gate does not pass, or cannot run → ``close_tr``
+NULL under ``stooq:unknown``, said loudly; ``price_basis.basis_of`` resolves nothing for that
+label, so ``compute_technicals.py`` skips and lists those instruments rather than score bars
+whose meaning nobody established.
+
+That is what stops a STALE label. Were Stooq to switch to a split-only series, no run could
+go on stamping ``total_return``: the measurement is redone whenever bars are written or
+relabelled, and the nightly BASIS gate re-measures and withholds the publish. A constant in
+the code would have kept looking right and being wrong. ``close_adj`` stays NULL on Stooq
+rows either way — split-only prices cannot be recovered from a total-return series without
+the dividend events, and inventing them is the derived number rule #0 forbids.
+
+A per-instrument Alpaca cross-check is still worth having (the FRED measurement is SPY-wide;
+one mislabelled file would not show in it) and is left to ``ingest_prices.py`` — as a
+confirmation now, not the labelling itself.
 """
 
 from __future__ import annotations
 
+# allow-large: one archive, one importer — parse, identity-bridge, validate, label, upsert and
+# resume are the SAME transaction's concerns, and the docstring above carries the provenance
+# rules the FM audits. This file was 533 lines before the basis work; the +121 are the
+# measured-label path (measured_total_return, --relabel) and the reasoning for it. Splitting
+# the labelling into a sibling module would put the label in a different file from the write
+# it justifies, which is the coupling this script exists to keep visible.
 import argparse
 import sys
 import time
@@ -59,6 +83,7 @@ from _report import Report
 from psycopg2.extras import Json, execute_values
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from atlas.global_market.price_basis import STOOQ_TOTAL_RETURN, STOOQ_UNKNOWN
 from atlas.global_market.providers.stooq_bulk import (
     ADJUSTMENT_UNKNOWN,
     ArchiveMember,
@@ -67,7 +92,8 @@ from atlas.global_market.providers.stooq_bulk import (
 from atlas.global_market.providers.symbology import stooq_symbol
 
 SOURCE = "stooq_csv"
-ADJUSTMENT_SOURCE = "stooq:unknown"
+LABELLED = STOOQ_TOTAL_RETURN  # minted only behind the BASIS gate — see measured_total_return
+UNLABELLED = STOOQ_UNKNOWN  # the honest label when nothing has measured these bars
 PROTECTED_SOURCE = "alpaca"
 REASON_NO_IDENTITY = "no identity row (instrument_master.symbol or symbol_alias source='stooq')"
 CHUNK_BYTES = 20_000_000  # uncompressed text per provider call ≈ 400k bars; one transaction each
@@ -245,9 +271,52 @@ def split_valid_bars(frame: pd.DataFrame) -> tuple[pd.DataFrame, list[tuple[str,
     return frame.loc[~bad], refused
 
 
-def bar_rows(frame: pd.DataFrame, instrument_id: str) -> list[tuple[object, ...]]:
+def measured_total_return() -> bool:
+    """Ask the BASIS gate what the bars already in ohlcv_daily actually carry.
+
+    ``validate_global.py --check BASIS`` is the ONE place the basis is measured, and it
+    passes only when the evidence says total return. Anything that stops it — no bars yet on
+    a first import, FRED unreachable, a split-only or indeterminate verdict — returns False,
+    and the caller labels ``stooq:unknown`` rather than guess. The gate prints its reasoning.
+    """
+    from validate_global import Gate, check_BASIS
+
+    gate = Gate()
+    try:
+        check_BASIS(gate)
+    except Exception as error:  # an unreachable FRED is "not measured", never "total return"
+        print(f"  BASIS gate could not run: {error!r}")
+        return False
+    return gate.fails == 0
+
+
+def bar_rows(
+    frame: pd.DataFrame, instrument_id: str, *, total_return: bool
+) -> list[tuple[object, ...]]:
+    """Column order is UPSERT_SQL's.
+
+    ``total_return`` is the BASIS gate's verdict, not an assumption: when it holds the file's
+    close IS the total-return close and lands in ``close_tr`` under ``stooq:total_return``.
+    When it does not, the bar is still stored — the prices are real — but ``close_tr`` stays
+    NULL under ``stooq:unknown``, so nothing scores it. ``close_adj`` is NULL either way.
+    """
+    label = LABELLED if total_return else UNLABELLED
     return [
-        (instrument_id, d, o, h, lo, c, v, None, None, None, None, SOURCE, ADJUSTMENT_SOURCE)
+        (
+            instrument_id,
+            d,
+            o,
+            h,
+            lo,
+            c,
+            v,
+            None,
+            c if total_return else None,
+            None,
+            None,
+            SOURCE,
+            label,
+        )
         for d, o, h, lo, c, v in zip(
             frame["date"].tolist(),
             frame["open"].tolist(),
@@ -424,6 +493,15 @@ def run_import(
             note(report, x.member, "skipped_resumed", 0, "same CRC/size already imported")
     print(f"  resume: {len(mapped) - len(todo):,d} already imported, {len(todo):,d} to do")
 
+    # ONE measurement for the run: the archive is one download, so its basis is one answer.
+    total_return = measured_total_return()
+    print(
+        f"  basis: rows will be labelled {LABELLED} with close_tr set"
+        if total_return
+        else f"  basis: NOT measured as total return — rows labelled {UNLABELLED} with "
+        f"close_tr NULL; nothing will score them until --relabel succeeds"
+    )
+
     start = since or date.min
     end = _gdb.eod_cutoff()
     sent = written = refused_rows = done = 0
@@ -438,7 +516,7 @@ def run_import(
             spans: dict[str, tuple[int, date | None, date | None]] = {}
             for x in chunk:
                 g = good.loc[good["symbol"] == x.member.symbol]
-                rows.extend(bar_rows(g, x.instrument_id))
+                rows.extend(bar_rows(g, x.instrument_id, total_return=total_return))
                 dates = g["date"].tolist()
                 spans[x.member.symbol] = (
                     len(dates),
@@ -487,11 +565,55 @@ def run_import(
     return 0
 
 
+RELABEL_SQL = f"""
+update {_gdb.M}.ohlcv_daily
+   set close_tr = close, adjustment_source = %s, ingested_at = now()
+ where source = %s and adjustment_source = %s and close is not null
+"""
+
+
+def relabel() -> int:
+    """Label rows imported before the basis was measured — if, and only if, it measures now.
+
+    Runs the BASIS gate against the rows themselves, then touches only rows this importer
+    wrote (``source='stooq_csv'``) still carrying ``stooq:unknown``, and only their label and
+    ``close_tr``. No price changes: the close was always the total-return close, the database
+    just had no evidence for saying so. Idempotent, and safe beside Alpaca rows (other
+    source). A gate that does not pass exits 2 with nothing written — relabelling anyway is
+    exactly the stale label this design prevents.
+    """
+    print("== measuring the basis before labelling anything ==")
+    if not measured_total_return():
+        print(
+            f"\n== REFUSED: the BASIS gate did not pass, so no row is labelled {LABELLED}. "
+            f"Rows keep {UNLABELLED} and compute_technicals will skip them. =="
+        )
+        return 2
+    conn = psycopg2.connect(_gdb.psycopg2_url())
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute(RELABEL_SQL, (LABELLED, SOURCE, UNLABELLED))
+            rows = cur.rowcount
+    finally:
+        conn.close()
+    print(
+        f"\n== relabelled {rows:,d} rows {UNLABELLED} -> {LABELLED} "
+        f"(close_tr = close); re-run compute_technicals.py to score them =="
+    )
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="Import a Stooq d_us_txt.zip into atlas_global.ohlcv_daily"
     )
-    ap.add_argument("--zip", required=True, help="path to Stooq's d_us_txt.zip")
+    ap.add_argument("--zip", help="path to Stooq's d_us_txt.zip (not needed with --relabel)")
+    ap.add_argument(
+        "--relabel",
+        action="store_true",
+        help=f"measure the basis, then set close_tr and adjustment_source={LABELLED} on "
+        f"already-imported {UNLABELLED} rows; reads no archive",
+    )
     ap.add_argument("--symbols", default=None, help="comma-separated subset, e.g. SPY,AAPL,BRK.B")
     ap.add_argument(
         "--dry-run",
@@ -509,6 +631,11 @@ def main() -> int:
         "--dry-run writes one only when asked)",
     )
     args = ap.parse_args()
+
+    if args.relabel:
+        return relabel()
+    if not args.zip:
+        ap.error("--zip is required (or pass --relabel to label already-imported rows)")
 
     provider = StooqBulkProvider(args.zip)
     members = select_members(provider, args.symbols)

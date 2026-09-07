@@ -58,6 +58,17 @@ step() {  # step "name" cmd...   (non-fatal; records failures + a run row; cmd m
   printf '%s\t%s\t%s\t%s\n' "$name" "$start" "$(date -Is)" "$st" >> "$RUNFILE"
 }
 
+GATE_OK=1
+gate() {  # gate "name" cmd...
+  local name="$1"; shift
+  local start; start=$(date -Is)
+  echo "--- $name ---" | tee -a "$LOG"
+  local st
+  if "$@" >>"$LOG" 2>&1; then echo "  ok: $name" | tee -a "$LOG"; st=success
+  else echo "  FAIL: $name" | tee -a "$LOG"; FAILURES+=("$name"); GATE_OK=0; st=failed; fi
+  printf '%s\t%s\t%s\t%s\n' "$name" "$start" "$(date -Is)" "$st" >> "$RUNFILE"
+}
+
 # 1. INGEST (Phase 1). ingest_prices must abort loudly if SPY has no bar for $EOD — the
 #    anchor calendar is membership-by-presence of SPY bars, so a missing anchor means no
 #    session to score, not a quiet carry-forward.
@@ -68,7 +79,18 @@ step "ingest_macro"            $PY scripts/global_market/ingest_macro.py --eod "
 # step "ingest_issuer_holdings"  $PY scripts/global_market/ingest_issuer_holdings.py
 
 # 2. COMPUTE cascade (EOD-anchored, single schema).
-# step "compute_technicals"      $PY scripts/global_market/compute_technicals.py   # (P1-D) slots in here, between ingest_macro and build_universe_snapshot
+# BASIS runs BEFORE the cascade, not with the output gates: it MEASURES which price series
+# ohlcv_daily carries (against FRED's price index) and compute_technicals stamps that basis on
+# every metric it writes. A night where the archive's adjustment changed must not be scored
+# first and questioned afterwards — a failure here withholds the publish, so the board keeps
+# its last-good data rather than advancing on metrics computed against an unverified basis.
+gate "validate_global_BASIS" $PY scripts/global_market/validate_global.py --check BASIS
+
+# compute_technicals is INCREMENTAL by default: it recomputes each instrument from its full
+# history but writes only the sessions beyond what technical_daily already holds, so a normal
+# night is about one upsert per instrument. --scope universe (the default) is the scored set
+# plus former index members plus the benchmarks; --redo rewrites all history.
+step "compute_technicals"      $PY scripts/global_market/compute_technicals.py --eod "$EOD" --report "$LOG_DIR/compute_technicals_$EOD.csv"
 # build_universe_snapshot exits 2 (step FAIL, nothing written) until the FM sets
 # liquidity_min_traded_value_usd from the ADV$ table it prints and saves to $LOG_DIR/adv_usd_$EOD.md (runbook §7).
 step "build_universe_snapshot" $PY scripts/global_market/build_universe_snapshot.py --eod "$EOD" --report "$LOG_DIR/universe_snapshot_$EOD.csv" --report-dir "$LOG_DIR"
@@ -83,17 +105,8 @@ step "build_universe_snapshot" $PY scripts/global_market/build_universe_snapshot
 
 # 3. GATES (assert on REAL produced output — rule #0). Publish only if ALL pass.
 # Run gates DIRECTLY (not via step): step() always returns 0, so a failed gate could
-# otherwise still publish. Gate outcomes are recorded into the runfile too.
-GATE_OK=1
-gate() {  # gate "name" cmd...
-  local name="$1"; shift
-  local start; start=$(date -Is)
-  echo "--- $name ---" | tee -a "$LOG"
-  local st
-  if "$@" >>"$LOG" 2>&1; then echo "  ok: $name" | tee -a "$LOG"; st=success
-  else echo "  FAIL: $name" | tee -a "$LOG"; FAILURES+=("$name"); GATE_OK=0; st=failed; fi
-  printf '%s\t%s\t%s\t%s\n' "$name" "$start" "$(date -Is)" "$st" >> "$RUNFILE"
-}
+# otherwise still publish. Gate outcomes are recorded into the runfile too. gate() is defined
+# beside step() above, because BASIS has to run before the compute cascade it guards.
 gate "freshness_guard"   $PY scripts/global_market/freshness_guard.py --eod "$EOD"
 # gate "validate_global_A" $PY scripts/global_market/validate_global.py --check A   # Phase 1
 # gate "validate_global_B" $PY scripts/global_market/validate_global.py --check B   # Phase 3

@@ -122,6 +122,13 @@ ui = [
 global = [
     "alpaca-py>=0.30",           # price spine, assets, corporate actions (0.44.0)
     "openpyxl>=3.1.5",           # SSGA SPY daily-holdings workbook (.xlsx) → index_membership (3.1.5)
+    # TA-Lib was named in the comment above as "already declared" and never actually was:
+    # scripts/foundation/technicals.py imports it, India's nightly compute_all.py runs on it,
+    # and it was installed on the box by hand. scripts/global_market/technicals_global.py
+    # imports the same module, so the dependency is declared here rather than left to a box
+    # someone remembered to set up. >=0.6 is where the project ships manylinux wheels that
+    # bundle the C library, so `uv sync` no longer needs a system libta-lib (0.7.1).
+    "TA-Lib>=0.6",
 ]
 
 [project.scripts]

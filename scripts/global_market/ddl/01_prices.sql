@@ -9,6 +9,11 @@
 -- close_adj (split-only) drives charts + trend technicals; close_tr (splits + dividends) drives
 -- every return / RS / risk metric. open/high/low_adj are split-only too: ATR-14, IBS and
 -- Bollinger need split-consistent H/L (India carries the same three columns).
+-- Stooq rows carry close_tr ONLY: the archive's close is a measured total-return series
+-- (atlas/global_market/price_basis.py), and split-only prices cannot be recovered from it
+-- without the dividend events, so close_adj / *_adj stay NULL there rather than be invented.
+-- adjustment_source is what says which of the two an instrument has; technical_daily.price_basis
+-- carries that fact forward onto every metric computed from it.
 CREATE TABLE IF NOT EXISTS atlas_global.ohlcv_daily (
     instrument_id      uuid          NOT NULL REFERENCES atlas_global.instrument_master (instrument_id),
     date               date          NOT NULL,
@@ -53,10 +58,24 @@ CREATE INDEX IF NOT EXISTS ix_corporate_actions_ex_date
     ON atlas_global.corporate_actions (ex_date);
 
 -- technical_daily — nightly per-instrument metrics (India technical_daily shape, US windows).
--- Trading-session windows: 1w=5, 1m=21, 3m=63, 6m=126, 12m=252, 24m=504, 36m=756.
--- EMAs / ATR / Bollinger / RSI on close_adj; ret_* / rs_* / risk on close_tr.
+-- Windows: ret_* / rs_* at 1m and longer are anchored by CALENDAR duration (the last close
+-- on or before t − N months), NOT by a row offset — a row offset silently lands on the wrong
+-- calendar date across any trading-day gap and can inflate a "3-month return" by points
+-- (scripts/foundation/technicals.py carries the cross-validation). 1d/1w stay session
+-- offsets (1, 5). The RISK block is genuinely session-counted: 20 / 63 / 252 sessions, and
+-- 12m = 252, 36m = 756, because volatility and drawdown are per-observation statistics.
 -- rs_* is the RELATIVE form (1+r_i)/(1+r_b) − 1 (ADR-0002); peer = GICS-sector ETF for stocks,
 -- taxonomy peer-group median for ETFs. Precision follows India (ret/rs numeric(16,8)).
+--
+-- price_basis — WHICH of ohlcv_daily's two adjusted closes produced this row, and therefore
+-- what the numbers mean. It is NOT decoration: a total-return series drifts upward against a
+-- split-only one by the dividend yield (about 1.6 percent a year for SPY, measured against
+-- FRED's SP500 price index over 2,513 sessions — atlas/global_market/price_basis.py), so an
+-- EMA-200 or a Bollinger band computed on total return sits a little low and reads a little
+-- bullish. EMAs / RSI / ATR / Bollinger conventionally run on split-only prices; on a
+-- total-return row they did not, and this column is what says so instead of hiding it.
+-- Returns / RS / risk are CORRECT on total return — that is the series they want.
+-- NOT NULL with no default: a row that cannot name its basis is not a row.
 CREATE TABLE IF NOT EXISTS atlas_global.technical_daily (
     instrument_id        uuid          NOT NULL REFERENCES atlas_global.instrument_master (instrument_id),
     asset_class          text          NOT NULL,
@@ -123,12 +142,28 @@ CREATE TABLE IF NOT EXISTS atlas_global.technical_daily (
     sharpe_12m           numeric(12,6),
     sortino_12m          numeric(12,6),
     calmar_36m           numeric(12,6),
+    price_basis          text          NOT NULL,   -- total_return | split_only (see above)
     compute_run_id       uuid,
     computed_at          timestamptz   NOT NULL DEFAULT now(),
     CONSTRAINT technical_daily_pkey PRIMARY KEY (instrument_id, date),
-    CONSTRAINT chk_technical_daily_asset_class CHECK (asset_class IN ('stock', 'etf'))
+    CONSTRAINT chk_technical_daily_asset_class CHECK (asset_class IN ('stock', 'etf')),
+    CONSTRAINT chk_technical_daily_price_basis CHECK (price_basis IN ('total_return', 'split_only'))
 );
 CREATE INDEX IF NOT EXISTS ix_technical_daily_date
     ON atlas_global.technical_daily (date);
 CREATE INDEX IF NOT EXISTS ix_technical_daily_class_date
     ON atlas_global.technical_daily (asset_class, date);
+
+-- price_basis on a database whose technical_daily predates the column: CREATE TABLE IF NOT
+-- EXISTS above is a no-op there, so the column and its CHECK are added here as well. Both
+-- paths converge on the same table. NOT NULL is safe without a DEFAULT because the producer
+-- (compute_technicals.py) had not landed when the table was created, so it is empty — and a
+-- DEFAULT is exactly the silent assumption this column exists to prevent. ADD CONSTRAINT has
+-- no IF NOT EXISTS, so it is preceded by the matching DROP (of that constraint only, never a
+-- table or a column) to stay re-runnable.
+ALTER TABLE atlas_global.technical_daily
+    ADD COLUMN IF NOT EXISTS price_basis text NOT NULL;
+ALTER TABLE atlas_global.technical_daily
+    DROP CONSTRAINT IF EXISTS chk_technical_daily_price_basis;
+ALTER TABLE atlas_global.technical_daily
+    ADD CONSTRAINT chk_technical_daily_price_basis CHECK (price_basis IN ('total_return', 'split_only'));

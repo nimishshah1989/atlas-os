@@ -215,7 +215,10 @@ def test_freshness_rows_query_each_tracked_table_once_on_the_guards_registries(
         assert f"tolerance {lag} session(s), warn when exceeded" in by_table[table]["notes"]
     assert by_table["macro_daily"]["is_anomaly"] is True  # EMPTY on a KEY table: critical
     assert by_table["macro_daily"]["severity"] == "critical"
-    assert by_table["technical_daily"]["is_anomaly"] is False  # EMPTY but not guarded yet
+    # technical_daily joined KEY_TABLES with P1-D, so an EMPTY one is now critical, not
+    # ignorable: the board's returns, relative strength and risk all read from it.
+    assert by_table["technical_daily"]["is_anomaly"] is True
+    assert by_table["technical_daily"]["severity"] == "critical"
 
 
 def test_a_table_that_cannot_be_read_is_skipped_not_fatal(
