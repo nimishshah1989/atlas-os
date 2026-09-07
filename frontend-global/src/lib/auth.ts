@@ -55,7 +55,18 @@ const BOARD_ROLES: readonly Role[] = ['fm', 'analyst']
 
 export async function requireUser(): Promise<AppUser> {
   const email = e2eBypassEmail() ?? (await sessionEmail())
-  if (!dbAvailable) return { email, role: null, display_name: null, allowlist_checked: false }
+  // No directory, no entry. The allowlist is the ONLY thing standing between a valid Supabase
+  // session and this board, so a run that cannot read it has not authorised anyone — it has
+  // merely failed to check. In production that must close, not open: `dbAvailable` is only
+  // `Boolean(url)`, so a pm2 process started without ATLAS_GLOBAL_DB_URL in its environment
+  // would otherwise serve every page to anyone holding any Supabase account. Outside
+  // production the unchecked path stays, so a laptop or a preview with no database still
+  // builds and renders its honest "not configured" state — the same dev-only shape as
+  // e2eBypassEmail(), which `next build` compiles to a constant.
+  if (!dbAvailable) {
+    if (process.env.NODE_ENV === 'production') redirect('/login?reason=no-directory')
+    return { email, role: null, display_name: null, allowlist_checked: false }
+  }
   const row = await allowlistRow(email)
   if (!row) redirect('/login?reason=not-invited')
   if (!BOARD_ROLES.includes(row.role)) redirect('/login?reason=role')
