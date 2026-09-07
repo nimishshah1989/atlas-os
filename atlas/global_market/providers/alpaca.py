@@ -163,12 +163,31 @@ class AlpacaProvider:
         Only the types in :data:`_SPLIT_TYPES` and :data:`_CASH_TYPES` are returned. Both
         read a documented pair of fields with one meaning: splits carry ``new_rate``/
         ``old_rate`` (ratio = new ÷ old, so a 4:1 forward is 4.0 and a 1:10 reverse is 0.1)
-        and cash dividends carry ``rate`` in USD per share. Everything else — stock dividends,
-        spin-offs, mergers, rights — is DROPPED and counted in ``self.unmapped_actions``.
-        A stock dividend also carries ``.rate``, but as shares rather than dollars, and I
-        could not establish from the API alone whether it means the additional shares (0.1
-        for a 10 % dividend) or the total (1.1). Guessing there would mis-scale every price
-        before its ex-date, so it waits for an observed answer.
+        and cash dividends carry ``rate`` in USD per share. Everything else is DROPPED and
+        counted in ``self.unmapped_actions``. A real backfill of 6,159 instruments dropped
+        264 events this way — 131 name changes, 65 stock mergers, 44 cash mergers, 13
+        spin-offs, 7 stock-and-cash mergers and 4 unit splits — and each is dropped for a
+        reason, not for want of effort:
+
+        * **Symbol-changing restructurings** (unit splits, spin-offs, every merger). These
+          look like ratio events and are not. ``UnitSplit`` carries ``old_symbol`` and
+          ``new_symbol`` plus an ``alternate_symbol``, and no ``ex_date`` at all — it has
+          ``effective_date`` — because a unit separating into shares and warrants is two or
+          three instruments, not one instrument re-priced. ``SpinOff`` is the same shape with
+          ``source_symbol`` and ``new_symbol``. ``corporate_actions`` is keyed
+          ``(instrument_id, ex_date, action_type)`` and holds one ratio and one cash amount,
+          so it cannot express any of them. Forcing one in would put a ratio belonging to a
+          pair of instruments onto a single row, and reading ``.ex_date`` off a UnitSplit
+          raises outright. Recording these properly needs a table that names both sides.
+        * **Stock dividends.** These carry ``.rate`` as shares rather than dollars, and I
+          could not establish from the API alone whether it means the additional shares (0.1
+          for a 10 % dividend) or the total (1.1). Guessing would mis-scale every price
+          before the ex-date, so it waits for an observed answer.
+
+        None of this touches a price: ``close_adj`` and ``close_tr`` are the vendor's own
+        adjusted series, not something reconstructed from these rows. A dropped event costs
+        the events table a row, and costs gate A the ability to say "a split explains this
+        jump" for that one instrument-day.
         """
         from alpaca.data.historical.corporate_actions import (  # pyright: ignore[reportMissingImports]
             CorporateActionsClient,
