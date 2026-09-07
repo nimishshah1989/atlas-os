@@ -79,9 +79,28 @@ that already exist. A 2x bitcoin fund is `crypto` with `leveraged=true`, which s
 it tracks and how it is built. The plan's `leveraged` strategy value said only the second and
 threw the first away, so it is removed.
 
-**Rules alone reach 82.1%.** The remaining 17.9% go to the LLM layer with a `review` status
-and a human confirmation step. That split is the design working, not a shortfall: the rules
-layer exists for precision, not recall.
+**Rules alone reach 77.5%** (4,383 of the 5,655 real ETF names), measured 2026-09-07 by
+`atlas/global_market/classify/strategy.py` and asserted by `test_coverage_is_what_we_claim`.
+
+An earlier draft of this document claimed 82.1%. That number came from an unordered probe
+where a fund matching several vocabularies was counted under whichever I happened to test
+first; the shipped classifier is an ordered first-match table, which is strictly stricter. The
+count in the table above has the same provenance and should be read as approximate — the
+per-strategy figures the classifier actually produces are in its test output, not here.
+
+The remaining 22.5% go to the LLM layer with a `review` status and a human confirmation step.
+That split is the design working, not a shortfall: the rules layer exists for precision, not
+recall, and coverage was deliberately not chased by widening patterns. Two decisions that cost
+coverage on purpose:
+
+- **A US-market fund is not a `country` fund.** Every S&P 500 tracker states "U.S.", so taking
+  the word at face value would file the entire American core of the universe as
+  "country: United States" and leave `broad_market` holding nothing. A US-listed fund's home
+  market is the default, not a bet on it. **Open for the FM** — this is the fifth question.
+- **`AI` and `FANG` are excluded from the single-stock symbol match.** Both are real tickers
+  (C3.ai, Diamondback Energy) and in every one of the 5,655 names measured, both were the
+  theme or basket acronym instead. A genuine single-stock fund on either is a known miss here
+  and is answered by holdings, never by widening the pattern.
 
 ## 2. Sector — the hierarchy, for the 539 funds it fits
 
@@ -163,3 +182,7 @@ answer for every fund that is not an equity sector or theme bet.
    the scorer fall back to the parent sector, so the board can still show a theme page.
 4. **The 150-label eval set.** Still yours to produce, and it is what gates automatic
    confirmation. Stratify by strategy using the table in section 1 rather than by issuer.
+5. **Is a plain US equity fund `broad_market` or `country`?** The classifier says
+   `broad_market` (or `size_style`), for the reason in section 1. If you want US treated as a
+   country like any other, say so — it is a one-line change, and it moves roughly a third of
+   the universe.
