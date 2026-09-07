@@ -431,6 +431,15 @@ def main(argv: list[str] | None = None) -> int:
     actions_ok = True
     try:
         actions = provider.actions(symbols, actions_from, eod)
+    except ImportError:
+        # A missing package is a BROKEN INSTALL, not a feed outage, and the two deserve
+        # opposite responses. Seen on a real first run: the `global` extra was not installed,
+        # `import alpaca` raised, and this block cheerfully announced the vendor unavailable
+        # and elected to rewrite all 5,656 instruments from scratch. It crashed two lines
+        # later on the same missing module so nothing was lost, but a variant where only the
+        # actions path failed to import would have run a full re-backfill nightly and looked
+        # like a vendor problem while being an `uv sync` away from correct.
+        raise
     except Exception as exc:
         actions_ok = False
         print(f"  WARNING: corporate actions unavailable ({exc})")
