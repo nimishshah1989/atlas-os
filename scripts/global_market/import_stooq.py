@@ -494,12 +494,16 @@ def run_import(
     print(f"  resume: {len(mapped) - len(todo):,d} already imported, {len(todo):,d} to do")
 
     # ONE measurement for the run: the archive is one download, so its basis is one answer.
+    # On a COLD database this necessarily fails — the gate measures rows that are not in the
+    # table yet, SPY's own included — so the rows land unlabelled and the second pass below
+    # picks them up once they exist. Cold start therefore stays ONE command, and the label is
+    # still measured from stored bars rather than assumed.
     total_return = measured_total_return()
     print(
         f"  basis: rows will be labelled {LABELLED} with close_tr set"
         if total_return
-        else f"  basis: NOT measured as total return — rows labelled {UNLABELLED} with "
-        f"close_tr NULL; nothing will score them until --relabel succeeds"
+        else f"  basis: not measurable yet (a cold database has no bars to measure) — "
+        f"rows land as {UNLABELLED}; the basis is re-measured after the import"
     )
 
     start = since or date.min
@@ -562,6 +566,13 @@ def run_import(
         f"({PROTECTED_SOURCE}), {refused_rows:,d} refused bars; {len(unmapped):,d} unmapped; "
         f"report {report.path} =="
     )
+    if not total_return and written:
+        # The bars the gate needed now EXIST. Re-measure and label them, so a first import
+        # into an empty database is one command and not a footgun. Advisory: the import
+        # itself succeeded either way, and rows that still cannot be measured keep
+        # `stooq:unknown` — which compute_technicals skips and lists, never scores.
+        print("\n== the bars are in; re-measuring the basis to label them ==")
+        relabel()
     return 0
 
 
