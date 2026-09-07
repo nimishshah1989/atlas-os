@@ -11,6 +11,8 @@ All inputs are adjusted close series ordered ascending by date.
 
 from __future__ import annotations
 
+# TA-Lib ships no py.typed re-exports: pyright reads every `talib.EMA` as a private import.
+# pyright: reportPrivateImportUsage=false
 import numpy as np
 import pandas as pd
 import talib
