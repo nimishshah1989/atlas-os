@@ -272,12 +272,12 @@ def _rank_trend(values: pd.Series) -> float:
 
     Rank correlation, not Pearson: back-adjustment guarantees the ratio walks ONE WAY, not
     that it walks in a straight line, and a rank measure says exactly that without assuming
-    the shape. Pearson on the ranks IS Spearman, so no extra dependency is needed.
+    the shape. ``method="spearman"`` is pandas' own — no ranking by hand, and no extra
+    dependency either; it returns NaN for the zero-variance ratio that never moves, which is
+    the answer (no trend) and fails the floor.
     """
-    ranks = values.rank().to_numpy(dtype=float)
-    if len(ranks) < 2 or ranks.std() == 0.0:
-        return float("nan")  # a ratio that never moves has no trend — and NaN fails the floor
-    return float(np.corrcoef(ranks, np.arange(len(ranks), dtype=float))[0, 1])
+    position = pd.Series(np.arange(len(values), dtype=float), index=values.index)
+    return float(values.corr(position, method="spearman"))
 
 
 def basis_verdict(cagr_excess: float, trend: float) -> str:

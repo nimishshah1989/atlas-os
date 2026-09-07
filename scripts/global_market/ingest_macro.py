@@ -81,19 +81,24 @@ on conflict (date) do update set
 
 def ffill_onto(sessions: Sequence[date], obs: pd.DataFrame) -> dict[date, Decimal | None]:
     """Each session → the latest observation on or before it; ``None`` before the first
-    observation and — deliberately — after the last one (no trailing extrapolation)."""
-    obs = obs.sort_values("date", ignore_index=True)
-    dates = list(obs["date"])
-    values = list(obs["value"])
-    out: dict[date, Decimal | None] = {}
-    j, last = 0, None
-    last_obs = dates[-1] if dates else None
-    for d in sessions:
-        while j < len(dates) and dates[j] <= d:
-            last = values[j]
-            j += 1
-        out[d] = last if (last_obs is not None and d <= last_obs) else None
-    return out
+    observation and — deliberately — after the last one (no trailing extrapolation).
+
+    ``reindex(method="ffill")`` IS the as-of join, and it looks back into the OBSERVATIONS,
+    so a print on a day that is not a session still fills the sessions after it (Columbus
+    Day: the bond market is shut, SPY trades). The values are ``Decimal`` and the Series
+    stays object-dtype — which ffill handles and ``merge_asof`` would not, which is why this
+    is the reindex form. ``compute_technicals.risk_free_daily`` fills the same DTB3 onto the
+    same calendar the same way; two hand-rolled copies of that could drift apart.
+    """
+    ordered = obs.sort_values("date").drop_duplicates("date", keep="last").set_index("date")
+    if ordered.empty:
+        return dict.fromkeys(sessions)
+    filled = ordered["value"].reindex(pd.Index(sessions), method="ffill")
+    trailing = pd.Index(sessions) > ordered.index[-1]
+    return {
+        day: None if (missing or pd.isna(value)) else value
+        for day, value, missing in zip(sessions, filled, trailing, strict=True)
+    }
 
 
 def wide_frame(sessions: Sequence[date], series: Mapping[str, pd.DataFrame]) -> pd.DataFrame:

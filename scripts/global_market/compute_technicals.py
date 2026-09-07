@@ -47,6 +47,7 @@ import datetime as dt
 import sys
 import time
 import uuid
+from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -67,21 +68,15 @@ M = _gdb.M
 BENCHMARK_SYMBOL = "SPY"
 KEY_COLUMNS = ["instrument_id", "date"]
 IDENTITY_COLUMNS = ["instrument_id", "asset_class", "symbol", "date"]
-LIQUIDITY_COLUMNS = ["adv_usd_20d_mean", "adv_usd_60d_median", "zero_volume_days_60d"]
 WRITTEN_COLUMNS = (
     IDENTITY_COLUMNS
     + G.METRIC_COLUMNS
-    + LIQUIDITY_COLUMNS
+    + G.LIQUIDITY_COLUMNS
     + ["price_basis", "compute_run_id", "computed_at"]
 )
 BOOLEAN_COLUMNS = [f"above_ema_{p}" for p in G.T.EMA_PERIODS]
 
-# Liquidity windows. The 60-session median is build_universe_snapshot's ADV$ — the number the
-# FM set the universe floor from — so it is computed with that script's exact window and
-# guard, and tests/integration/global_market/test_compute_technicals_db.py asserts the two
-# agree row for row. The 20-session mean is this table's own column.
-ADV_MEAN_SESSIONS = 20
-ADV_MEDIAN_SESSIONS = 60
+ADV_SCALE = Decimal(1).scaleb(-4)  # allow-threshold: technical_daily.adv_usd_* is numeric(20,4)
 MIN_OBSERVATIONS_KEY = "liquidity_min_observations_60d"
 
 # The status vocabulary of the per-instrument report.
@@ -130,12 +125,19 @@ ORDER BY im.asset_class, im.symbol
 """
 
 # One row per instrument: its adjustment_source labels, and the dates it has bars for.
+# Aggregated in two steps on purpose. `array_agg(DISTINCT ...)` over the raw bars cannot be
+# hashed, so Postgres SORTS all 8.4M rows for it and spills ~585 MB of temp files to do it;
+# grouping by (instrument_id, adjustment_source) FIRST is a hash aggregate down to one row
+# per label, and the DISTINCT then runs over ~2.3k rows. Measured on the real archive: 4.17 s
+# -> 0.79 s, no spill, and byte-identical output for all 2,346 instruments.
 COVERAGE_SQL = f"""
-SELECT o.instrument_id::text AS instrument_id,
-       count(*) AS bars, max(o.date) AS last_date,
-       array_agg(DISTINCT o.adjustment_source) AS adjustment_sources
-FROM {M}.ohlcv_daily o
-WHERE o.instrument_id = ANY(CAST(:ids AS uuid[])) AND o.date <= :cutoff
+SELECT d.instrument_id::text AS instrument_id,
+       sum(d.bars)::bigint AS bars, max(d.last_date) AS last_date,
+       array_agg(DISTINCT d.adjustment_source) AS adjustment_sources
+FROM (SELECT o.instrument_id, o.adjustment_source, count(*) AS bars, max(o.date) AS last_date
+      FROM {M}.ohlcv_daily o
+      WHERE o.instrument_id = ANY(CAST(:ids AS uuid[])) AND o.date <= :cutoff
+      GROUP BY 1, 2) d
 GROUP BY 1
 """
 
@@ -144,38 +146,17 @@ SELECT instrument_id::text AS instrument_id, max(date) AS last_date
 FROM {M}.technical_daily GROUP BY 1
 """
 
-# ADV$ on the SPY calendar, in numeric throughout (money is never a float). The window and
-# the >= min_obs guard are build_universe_snapshot.ADV_SQL's, so the 60-session median is the
-# SAME number the universe gate used; percentile_cont is likewise the same aggregate (it
-# resolves in double precision and is cast back, exactly as the sibling does it) so the two
-# cannot differ by an interpolation rule. `traded` is the archive's own close x volume — for
-# a total-return instrument that close is re-based, which is a constant factor per file and
-# is what the FM's ADV$ table and floor were measured in.
-ADV_SQL = f"""
-WITH sess AS (
-    SELECT date, row_number() OVER (ORDER BY date) AS k
-    FROM {M}.ohlcv_daily
-    WHERE instrument_id = (SELECT instrument_id FROM {M}.instrument_master
-                           WHERE symbol = :symbol AND is_active)
-      AND date <= :cutoff
-),
-bars AS (
-    SELECT o.instrument_id, s.k, o.close * o.volume AS traded, (o.volume = 0) AS zero_volume
-    FROM {M}.ohlcv_daily o JOIN sess s USING (date)
-    WHERE o.instrument_id = ANY(CAST(:ids AS uuid[]))
-      AND o.close IS NOT NULL AND o.volume IS NOT NULL
-)
-SELECT a.instrument_id::text AS instrument_id, s.date,
-       avg(b.traded) FILTER (WHERE b.k > a.k - :mean_sessions) AS adv_usd_20d_mean,
-       count(*) FILTER (WHERE b.zero_volume) AS zero_volume_days_60d,
-       CASE WHEN count(b.traded) >= :min_obs
-            THEN percentile_cont(0.5) WITHIN GROUP (ORDER BY b.traded) END::numeric
-            AS adv_usd_60d_median
-FROM bars a
-JOIN bars b ON b.instrument_id = a.instrument_id
-           AND b.k BETWEEN a.k - :median_sessions + 1 AND a.k
-JOIN sess s ON s.k = a.k
-GROUP BY 1, 2
+# The bars the ADV$ block is computed FROM; the window itself is pandas' (liquidity_frame).
+# `traded` is the archive's own close x volume — the quantity the FM's ADV$ table and the
+# $1,000,000 floor were measured in. Postgres multiplies it in exact numeric and hands over
+# one float8, so that conversion is the only rounding between the archive and the window.
+TRADED_SQL = f"""
+SELECT o.instrument_id::text AS instrument_id, o.date,
+       (o.close * o.volume)::float8 AS traded, (o.volume = 0) AS zero_volume
+FROM {M}.ohlcv_daily o
+WHERE o.instrument_id = ANY(CAST(:ids AS uuid[]))
+  AND o.date BETWEEN :since AND :cutoff
+  AND o.close IS NOT NULL AND o.volume IS NOT NULL
 """
 
 RISK_FREE_SQL = f"SELECT date, dtb3 FROM {M}.macro_daily WHERE dtb3 IS NOT NULL ORDER BY date"
@@ -271,23 +252,43 @@ def uniform_basis(adjustment_sources: list[str | None]) -> str | None:
     return bases.pop()
 
 
-def liquidity_frame(ids: list[str], cutoff: dt.date, min_observations: int) -> pd.DataFrame:
-    """ADV$ (20-session mean, 60-session median), and zero-volume days, keyed by (id, date)."""
-    frame = _gdb.read_df(
-        ADV_SQL,
-        {
-            "symbol": BENCHMARK_SYMBOL,
-            "ids": ids,
-            "cutoff": cutoff,
-            "mean_sessions": ADV_MEAN_SESSIONS,
-            "median_sessions": ADV_MEDIAN_SESSIONS,
-            "min_obs": min_observations,
-        },
-        coerce_float=False,  # numeric stays Decimal: money is never a float
-    )
-    if frame.empty:
-        return frame.reindex(columns=["instrument_id", "date", *LIQUIDITY_COLUMNS])
-    return frame.set_index(["instrument_id", "date"])
+def liquidity_window(
+    cal: pd.DatetimeIndex, ids: list[str], floor: dict[str, dt.date], incremental: bool
+) -> pd.DatetimeIndex:
+    """The slice of the session calendar the ADV$ block has to be computed over.
+
+    A 60-session window needs 59 sessions of run-up before the first row that will be WRITTEN
+    and nothing before that, so a normal night reads sixty sessions and not sixty years. A
+    target never computed has no floor and needs its whole history — as does ``--redo``.
+    """
+    if not incremental or not ids or any(instrument_id not in floor for instrument_id in ids):
+        return cal
+    first_written = min(floor[instrument_id] for instrument_id in ids)
+    start = int(np.searchsorted(cal.to_numpy(), np.datetime64(first_written)))
+    start -= G.ADV_MEDIAN_SESSIONS - 1
+    return cal[max(start, 0) :]
+
+
+def liquidity_frame(
+    ids: list[str], cutoff: dt.date, window: pd.DatetimeIndex, min_observations: int
+) -> pd.DataFrame:
+    """ADV$ (20-session mean, 60-session median) and zero-volume days, keyed by (id, date).
+
+    The window is ``build_universe_snapshot.ADV_SQL``'s — the last 60 SPY SESSIONS, the same
+    ``>= min_obs`` guard — so the median is the SAME number the universe gate set the
+    liquidity floor from, and ``test_adv_matches_build_universe_snapshot`` asserts it. It is
+    rolled the way India rolls a window (``scripts/foundation/technicals.py``): pandas, in
+    :func:`technicals_global.rolling_liquidity`, over the whole universe in one pass.
+
+    Measured at 2026-09-03 over all 2,345 instruments against the sibling's exact ``::numeric``
+    percentile_cont: worst disagreement 3.0e-06 USD on an ADV\\$ of 2.2e+10 (2.4e-16 relative),
+    1,827 bit-identical, and no NULL landing anywhere different.
+    """
+    if not ids or window.empty:
+        return G.rolling_liquidity(pd.DataFrame(), window, min_observations)
+    since = G.as_dates(window)[0]
+    raw = _gdb.read_df(TRADED_SQL, {"ids": ids, "since": since, "cutoff": cutoff})
+    return G.rolling_liquidity(raw, window, min_observations)
 
 
 def targets(scope: str, limit: int | None) -> pd.DataFrame:
@@ -336,48 +337,52 @@ def rows_for(
     out["instrument_id"] = instrument_id
     out["asset_class"] = asset_class
     out["symbol"] = symbol
-    out["date"] = [stamp.date() for stamp in bars.index]
+    out["date"] = G.as_dates(bars.index)
     for column in G.METRIC_COLUMNS:
         out[column] = metrics[column]
     out["price_basis"] = basis
     out["compute_run_id"] = run_id
     out["computed_at"] = dt.datetime.now(ZoneInfo(gcal.NEW_YORK))
     if floor is not None:
-        out = out.loc[[day > floor for day in out["date"]]]
+        out = out.loc[out.index > pd.Timestamp(floor)]
     attach_liquidity(out, instrument_id, liquidity)
     return out
 
 
 def attach_liquidity(out: pd.DataFrame, instrument_id: str, liquidity: pd.DataFrame) -> None:
-    """Join the per-session ADV$ block on (instrument_id, date), keeping Decimals intact."""
-    if liquidity.empty:
-        for column in LIQUIDITY_COLUMNS:
-            out[column] = None
-        return
-    try:
-        mine = liquidity.loc[instrument_id]
-    except KeyError:
-        for column in LIQUIDITY_COLUMNS:
-            out[column] = None
-        return
-    for column in LIQUIDITY_COLUMNS:
-        lookup = dict(zip(mine.index, mine[column], strict=True))
-        out[column] = [lookup.get(day) for day in out["date"]]
+    """Join the per-session ADV$ block onto this instrument's rows, back in Decimal.
+
+    A reindex IS the left join: an instrument the block has no rows for — or a session it has
+    none for — falls out as NaN, the all-NULL column the hand-written branches built by hand.
+    Money is never a float in storage, so the dollar columns go back to exact Decimals at the
+    column's own scale on the way to the upsert.
+    """
+    mine = liquidity.reindex(pd.MultiIndex.from_product([[instrument_id], out["date"]]))
+    for column in G.LIQUIDITY_COLUMNS:
+        values = mine[column].to_numpy(dtype="float64")
+        if column == "zero_volume_days_60d":
+            out[column] = pd.array(values, dtype="Int64")  # a count, not an amount
+        else:  # .tolist() for PYTHON floats: repr(numpy.float64) is "np.float64(...)"
+            out[column] = [
+                None if v != v else Decimal(repr(v)).quantize(ADV_SCALE) for v in values.tolist()
+            ]
 
 
 def clean(out: pd.DataFrame) -> pd.DataFrame:
-    """NaN / +-inf to NULL, numpy booleans to Python booleans, Decimals untouched.
+    """+-inf to NaN, and the boolean columns onto a dtype psycopg2 can adapt.
 
-    An infinity is an undefined metric (a ratio over a zero denominator), not a large one,
-    so it is stored as NULL. psycopg2 has no adapter for ``numpy.bool_``, which is what a
-    pandas boolean column becomes under ``astype(object)``.
+    An infinity is an undefined metric (a ratio over a zero denominator), not a large one, so
+    it is stored as NULL. NaN-to-NULL itself is NOT done here: ``_db.upsert_df`` does that
+    object cast for every producer in both markets, and doing it twice built a second object
+    copy of the whole frame. What is left is this table's own — the infinity mask, and
+    pandas' nullable ``boolean``, whose object form is a Python ``bool`` (psycopg2 has no
+    adapter for the ``numpy.bool_`` a plain bool column casts to).
     """
     floats = list(out.select_dtypes(include=["floating"]).columns)
     if floats:
         out[floats] = out[floats].mask(~np.isfinite(out[floats]))
-    out = out.astype(object).where(pd.notna(out), None)
     for column in BOOLEAN_COLUMNS:
-        out[column] = [None if value is None else bool(value) for value in out[column]]
+        out[column] = out[column].astype("boolean")
     return out
 
 
@@ -426,8 +431,16 @@ def run(
     picked = targets(scope, limit)
     ids = [str(i) for i in picked["instrument_id"]]
     coverage = _gdb.read_df(COVERAGE_SQL, {"ids": ids, "cutoff": cutoff}).set_index("instrument_id")
-    liquidity = liquidity_frame(ids, cutoff, min_observations)
     floor = floors() if incremental else {}
+    # The ADV$ block only has to cover what will actually be WRITTEN: an instrument with no
+    # bars, or none past what technical_daily holds, is skipped below before a metric is run.
+    known = coverage.index
+    todo = [
+        i for i in ids if i in known and (not incremental or extends_beyond(coverage, i, floor))
+    ]
+    liquidity = liquidity_frame(
+        todo, cutoff, liquidity_window(cal, todo, floor, incremental), min_observations
+    )
     print(
         f"[technicals] targets={len(picked):,d} scope={scope} eod={cutoff} "
         f"sessions={len(cal):,d} benchmark={BENCHMARK_SYMBOL}({benchmark_basis}) "

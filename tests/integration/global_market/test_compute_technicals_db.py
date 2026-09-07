@@ -156,13 +156,25 @@ def _floats(frame: pd.DataFrame, column: str) -> pd.Series:
 
 
 def _diff(stored: pd.Series, expected: pd.Series, scale: int) -> float:
-    """Largest absolute difference, with the expectation rounded to the column's own scale."""
+    """Largest absolute difference BEYOND the column's own storage rounding.
+
+    The stored value has been through ``numeric(_, scale)`` and the recomputed one has not,
+    so half a unit in the last kept place (:func:`_storable`) is not drift — it is the column.
+    Rounding the expected side instead does NOT remove that difference, it hides one and
+    invents another: ``numpy.round`` rounds halves to EVEN and Postgres rounds them AWAY FROM
+    ZERO, so a value landing exactly on a half disagrees by a WHOLE unit for that reason
+    alone. Measured on this archive: ``pos_52w`` for ACGL on 2026-08-17 recomputes to exactly
+    60.15625 both times — Postgres stored 60.1563, ``np.round`` says 60.1562, and the
+    identical computation read as 1e-4 of drift. So the comparison is against the bound, as
+    :func:`_within_storage` already does for the liquidity block.
+    """
     lhs = G.as_series(pd.to_numeric(stored, errors="coerce")).to_numpy(dtype="float64")
-    rhs = np.round(np.asarray(expected, dtype="float64"), scale)
+    rhs = np.asarray(expected, dtype="float64")
     both = ~np.isnan(lhs) & ~np.isnan(rhs)  # positional: both come from the same date list
     if not both.any():
         return 0.0
-    return float(np.abs(lhs[both] - rhs[both]).max())
+    storable = 0.5 * 10.0**-scale
+    return float(max(np.abs(lhs[both] - rhs[both]).max() - storable, 0.0))
 
 
 def _storable(scale: int) -> Decimal:
@@ -241,7 +253,7 @@ def test_every_metric_reproduces_on_the_real_sample(
     assert not over, f"recompute drifted beyond {TOLERANCE}: {over}"
 
 
-def test_the_liquidity_block_reproduces_to_the_stored_precision(sample, anchor, scales):
+def test_the_liquidity_block_reproduces_to_the_stored_precision(sample, anchor, calendar, scales):
     """ADV\\$ is money — Decimal end to end, never a float — so a rerun must reproduce it to
     the last digit the column KEEPS, not to a hand-picked tolerance.
 
@@ -252,17 +264,17 @@ def test_the_liquidity_block_reproduces_to_the_stored_precision(sample, anchor, 
     """
     thresholds = ct.load_thresholds(_gdb.SCHEMA, engine=_gdb.engine())
     ids = [str(i) for i in sample["instrument_id"]]
-    fresh = ct.liquidity_frame(ids, anchor, int(thresholds[ct.MIN_OBSERVATIONS_KEY]))
+    fresh = ct.liquidity_frame(ids, anchor, calendar, int(thresholds[ct.MIN_OBSERVATIONS_KEY]))
     stored = _gdb.read_df(
         f"select instrument_id::text as instrument_id, date, "
-        f"{', '.join(ct.LIQUIDITY_COLUMNS)} from {M}.technical_daily "
+        f"{', '.join(G.LIQUIDITY_COLUMNS)} from {M}.technical_daily "
         "where instrument_id = any(cast(:ids as uuid[]))",
         {"ids": ids},
         coerce_float=False,
     ).set_index(["instrument_id", "date"])
     joined = stored.join(fresh, how="inner", rsuffix="_fresh")
     assert len(joined) > 0
-    for column in ct.LIQUIDITY_COLUMNS:
+    for column in G.LIQUIDITY_COLUMNS:
         scale = scales[column]
         bad = [
             (key, mine, theirs)
@@ -272,6 +284,38 @@ def test_the_liquidity_block_reproduces_to_the_stored_precision(sample, anchor, 
             if not _within_storage(mine, theirs, scale)
         ]
         assert not bad, f"{column} changed on rerun beyond numeric(_,{scale}): {bad[:3]}"
+
+
+def test_the_bounded_incremental_window_gives_the_unbounded_liquidity_answer(
+    sample, anchor, calendar
+):
+    """A normal night reads only the sessions the ADV\\$ window needs, not the whole archive.
+
+    That bound — 59 sessions of run-up before the first row that will be written — is one
+    off-by-one away from a silently SHORTER 60-session window, and a short window moves the
+    median that the $1,000,000 universe floor is set from. So it is checked against the same
+    computation over the FULL calendar, on real bars: every row the incremental run would
+    actually WRITE (dates past the floor) must be identical. Rows at or before the floor are
+    the run-up and are discarded by ``rows_for``, so they are deliberately not compared.
+    """
+    thresholds = ct.load_thresholds(_gdb.SCHEMA, engine=_gdb.engine())
+    min_obs = int(thresholds[ct.MIN_OBSERVATIONS_KEY])
+    ids = [str(i) for i in sample["instrument_id"].head(20)]
+    floor_day = G.as_dates(calendar)[-5]  # as if the last four sessions were unwritten
+    window = ct.liquidity_window(calendar, ids, dict.fromkeys(ids, floor_day), incremental=True)
+    assert 0 < len(window) < len(calendar), "the incremental bound did not bind"
+    bounded = ct.liquidity_frame(ids, anchor, window, min_obs).sort_index()
+    whole = ct.liquidity_frame(ids, anchor, calendar, min_obs).sort_index()
+    tail = whole.loc[whole.index.get_level_values("date") > floor_day]
+    assert len(tail) >= len(ids), f"only {len(tail)} rows past the floor — nothing was compared"
+    mine = bounded.reindex(tail.index)
+    # The median and the zero-volume count are order-independent: BIT-identical or the window
+    # moved. The 20-session mean is a rolling SUM, so pandas accumulates it from wherever the
+    # frame starts and the two runs differ in the last bits of a float — measured 6e-08 USD
+    # on a $2e+08 mean, 1e-16 relative and nine orders inside numeric(20,4).
+    for column in ("adv_usd_60d_median", "zero_volume_days_60d"):
+        pd.testing.assert_series_equal(mine[column], tail[column], check_exact=True)
+    pd.testing.assert_series_equal(mine["adv_usd_20d_mean"], tail["adv_usd_20d_mean"], rtol=1e-12)
 
 
 # ── cross-check 1: SPY's own 12-month return, computed by hand from raw closes ──
@@ -337,7 +381,7 @@ def test_spy_is_its_own_benchmark_and_lands_on_the_fixed_points(anchor):
 # ── cross-check 3: the risk block against empyrical itself ──
 
 
-def test_the_risk_block_equals_empyrical_on_the_deepest_instrument(anchor, calendar):
+def test_the_risk_block_equals_empyrical_on_the_deepest_instrument(anchor, calendar, benchmark):
     """The vectorised rolling forms vs the library the methodology names, same window, same bars.
 
     Only an instrument with the full lookback can be checked; on a thin archive that is SPY.
@@ -355,6 +399,11 @@ def test_the_risk_block_equals_empyrical_on_the_deepest_instrument(anchor, calen
     bars = ct.bar_frame(instrument_id, basis, anchor, calendar)
     close = bars["close"]
     returns = close.pct_change()
+    # SPY's returns on THIS instrument's sessions — reindexed before differencing, exactly as
+    # risk_frame does it. Passing `returns` here (as this test once did) asks empyrical for
+    # the beta of a series against ITSELF, which is 1 by construction and checks nothing; it
+    # only looked right while the deepest instrument in the archive happened to be SPY.
+    market_returns = G.as_series(benchmark.reindex(bars.index)).pct_change()
 
     def window(n: int) -> pd.Series:
         return returns.iloc[-n:]
@@ -366,7 +415,7 @@ def test_the_risk_block_equals_empyrical_on_the_deepest_instrument(anchor, calen
         checks.append(
             (
                 "beta_spy_252",
-                float(empyrical.beta(window(252), returns.iloc[-252:])),
+                float(empyrical.beta(window(252), market_returns.iloc[-252:])),
             )
         )
     if len(returns.dropna()) >= G.DOWNSIDE_SESSIONS:
