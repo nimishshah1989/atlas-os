@@ -30,8 +30,20 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import urlsplit
 
-BOX_ROOT = Path(__file__).resolve().parents[2]
 ENV_CANDIDATES = ("frontend/.env.local", "frontend/.env", ".env")
+
+
+def _repo_root() -> Path:
+    """The checkout holding the env file. Two candidates because this script is meant to be
+    curl'd to a scratch path on the box as well as run in place: the working directory is
+    right when it IS the checkout, and parents[2] is right when the file sits in scripts/ops/.
+    Getting this wrong silently reads the wrong env and diagnoses the wrong database."""
+    for root in (Path.cwd(), Path(__file__).resolve().parents[2]):
+        if any((root / rel).exists() for rel in ENV_CANDIDATES):
+            return root
+    return Path.cwd()
+
+
 BOARD_URL = "http://localhost:3004"
 EMPTY_PANEL_MARKER = "No regime data"
 
@@ -54,14 +66,15 @@ FROM latest_any la LEFT JOIN latest_full lf ON true
 
 def _find_db_url() -> tuple[str, str]:
     """Return (url, source_path). Prefers the frontend's env: that is the board's identity."""
+    root = _repo_root()
     for rel in ENV_CANDIDATES:
-        p = BOX_ROOT / rel
+        p = root / rel
         if not p.exists():
             continue
         m = re.search(r"^\s*(?:export\s+)?ATLAS_DB_URL\s*=\s*(.+)$", p.read_text(), re.M)
         if m:
             return m.group(1).strip().strip("'\""), str(p)
-    raise SystemExit(f"no ATLAS_DB_URL in any of {ENV_CANDIDATES} under {BOX_ROOT}")
+    raise SystemExit(f"no ATLAS_DB_URL in any of {ENV_CANDIDATES} under {root}")
 
 
 def _redact(url: str) -> str:
