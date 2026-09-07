@@ -10,16 +10,33 @@ were checked on this date (`docs/global/plan.md`, "Data sources"). Anything mark
 *unverified* is a claim we still have to test against a real account; nothing here counts
 as a source until its gate has passed on real rows.
 
-## Decision 2026-09-04 — the price spine is Tiingo, not Alpaca and not Stooq
+## Decision 2026-09-07 — the price spine is Alpaca; the SIP gate PASSED on real bars
 
-The FM ruled Alpaca out ("too cumbersome to start"). Stooq cannot be the spine (no nightly refresh, undocumented and moving adjustment basis, no events). The spine is **Tiingo** — raw + adjusted bars with `divCash`/`splitFactor` per row, 99.9% coverage of today's listed ETFs (measured), delisted names kept — behind the same `PriceProvider` Protocol; Stooq stays the cross-check and emergency fallback. Licence tiers, the vendor comparison and the FEED gate that replaces the SIP gate: `docs/global/phase1.md` §1. The OHLCV and corporate-actions rows below are superseded accordingly; `--check SIP` is replaced by `--check FEED` (same checks, vendor-agnostic).
+**This supersedes the 2026-09-04 decision recorded below, and no feed is bought.** On 2026-09-06 the FM opened an Alpaca paper account, which removed the only reason Alpaca had been struck — a process reason ("too cumbersome to start"), never a data one. The free-first rule then applied again: no feed is bought until a free one has failed a gate on real bars. On 2026-09-07 `validate_global.py --check SIP` ran on that account and **passed every check** (the log below carries the numbers). So the spine is **Alpaca**, `GLOBAL_PRICE_PROVIDER=alpaca`, and the $30/month Tiingo subscription is not spent.
+
+**The entitlement question is settled by measurement, not by documentation.** It had been open since Phase 0: a paper-only account might be served the consolidated (SIP) tape or only IEX, and IEX alone prints a small fraction of true volume — which would have silently poisoned the $1,000,000 liquidity floor and every ADV$ band built on it. Two independent readings answer it:
+
+- The gate's own check (2): median Alpaca ÷ Stooq SPY volume = **1.0017** over 39 sessions (min 0.9982, max 1.0163). Consolidated. An IEX-only entitlement reads ~0.02–0.03 there.
+- The account as its own control: the SAME four sessions pulled with `feed=iex` return **2.79 %** of the `feed=sip` volume (SPY 2026-08-25: 766,153 against 27,475,227). The two feeds are genuinely different, and the one we are served is the consolidated one.
+
+**Both price bases are available, so `close_adj` and `close_tr` come from the vendor, not from us.** Measured on SPY 2016-01-04: `adjustment=split` closes 201.0192 (the price actually traded) and `adjustment=all` closes 171.10 (dividends back-adjusted). Two pulls, merged, exactly as the plan specified — and no derived-from-adjustment estimator is needed, so rule #0 is never strained. As a bonus this independently corroborates `--check BASIS`: the Stooq archive's 171.85 for that day sits 0.44 % from Alpaca's total-return close and nowhere near the traded price, which is what a total-return series re-based to a different date looks like.
+
+**The one real limit: history stops at 2016-01-04.** A request starting in 1990 returns 2,684 bars beginning 2016-01-04 for SPY, and *exactly the same count and start* for AAPL, which listed in 1980. That is a plan-wide floor, not a listing date. It happens to be precisely the history the plan asks for, with zero margin, so: **Alpaca is the spine for 2016→ and every nightly increment; the Stooq archive is the permanent source of anything older** (it reaches 1970 for names like JPM and KO) and stays the cross-source-agreement check. I am not certain whether the floor is fixed at 2016 or a rolling ~10-year window — worth re-checking against the vendor's own documentation before anyone depends on pre-2016 coverage arriving later.
+
+**What survives from 2026-09-04.** Everything except the vendor line. Stooq still cannot be the spine (no nightly refresh, undocumented and moving adjustment basis, no events) — since proven by `--check BASIS`, which measured the archive as total-return and re-based to the download date. And the vendor comparison in `phase1.md` §1 is not withdrawn: it is now the contingency if Alpaca lapses or its terms change, with **Tiingo Power** the named fallback.
+
+**Still unverified, and not assumed anywhere:** the corporate-actions endpoint's plan tier, and Alpaca's terms on displaying derived data in a commercial adviser product. Both are confirmed against the account before Phase 3, not before.
+
+### Superseded — decision 2026-09-04 (kept for the record)
+
+> The FM ruled Alpaca out ("too cumbersome to start"). Stooq cannot be the spine (no nightly refresh, undocumented and moving adjustment basis, no events). The spine is **Tiingo** — raw + adjusted bars with `divCash`/`splitFactor` per row, 99.9% coverage of today's listed ETFs (measured), delisted names kept — behind the same `PriceProvider` Protocol; Stooq stays the cross-check and emergency fallback. Licence tiers, the vendor comparison and the FEED gate that replaces the SIP gate: `docs/global/phase1.md` §1. The OHLCV and corporate-actions rows below are superseded accordingly; `--check SIP` is replaced by `--check FEED` (same checks, vendor-agnostic).
 
 ## Sources, cadence, fallbacks, gates
 
 | Need | Primary (free, official) | Cadence | Fallback | Gate |
 |---|---|---|---|---|
-| OHLCV 2016→ | **Tiingo** (decided 2026-09-04; Alpaca out — see the decision note above and `phase1.md` §1): per-ticker daily bars with raw + adjusted OHLCV and `divCash`/`splitFactor` per row, 60+ yrs, 5,649 of today's 5,655 listed ETFs, delisted kept | nightly per-ticker (~6,200 calls); backfill in one call per ticker | **Stooq importer** (FM-downloaded `d_us_txt.zip`) as cross-check and emergency spine; yfinance only as a third cross-check | **FEED gate** (`validate_global --check FEED`), then gate A |
-| Corporate actions | Tiingo per-row `splitFactor` / `divCash` (amended 2026-09-04; Alpaca out) | daily | derive from `all` vs `split` bar ratios, flagged `source='derived_from_adjustment'` (needs FM approval — rule #0) | every `\|ret_1d\| > 0.5` on `close_adj` has a matching action |
+| OHLCV 2016→ | **Alpaca** (SIP gate PASS 2026-09-07): free plan, `feed=sip`, `adjustment=split` → `close_adj` and `adjustment=all` → `close_tr`, 200 req/min, multi-symbol bars ≤ 10,000 points per page. **History floor 2016-01-04, plan-wide** | nightly incremental once `ingest_prices.py` lands (P1-B) | **Stooq importer** for pre-2016 history (permanent, not emergency) and as the cross-source check; Tiingo Power if Alpaca lapses (`phase1.md` §1); yfinance only as a third cross-check | **SIP gate PASSED** (log below), then gate A (P1-B) |
+| Corporate actions | Alpaca corporate-actions endpoint (16 event types incl. splits and cash/stock dividends) — **plan-tier access unverified**, confirmed against the account, not assumed | daily | derive from `all` vs `split` bar ratios, flagged `source='derived_from_adjustment'` (needs FM approval — rule #0) | every `\|ret_1d\| > 0.5` on `close_adj` has a matching action |
 | Index / macro | FRED (`SP500`, `VIXCLS`, `DGS10`, `DTB3`, `DTWEXBGS`) — key already in India `.env` | daily | — | through EOD-1 |
 | ETF universe | Nasdaq Trader `nasdaqlisted.txt` + `otherlisted.txt` (ETF = Y, exchange, test-issue flag) | weekly | Alpaca `/v2/assets` | ≥ 5,000 ETF rows, every one with an exchange (measured 2026-09-04: 5,655 = 1,257 Nasdaq-listed + 4,398 other exchanges — the plan's "3,300–4,000" was an estimate) |
 | S&P 500 | **SSGA SPY daily holdings workbook** (`.xlsx` via `openpyxl`: constituents, weights, CUSIP; verified 2026-09-04 — the `Sector` column is present but `-` on all 505 rows) + **the eleven Select Sector SPDR workbooks** (XLB…XLY, same layout) for `sector_gics` by membership — `providers/ssga.py`; history `fja05680/sp500` (MIT; `providers/sp500_history.py`). SSGA's notice forbids reproducing the workbooks: never committed, fetched live by tests and the weekly step | weekly / one-time | Wikipedia list | 500–505 names, weights ≈ 100% (505 rows, Σ 0.99936 on 2026-09-03); ≥ 98% of ticker rows in exactly one sector file (504/504 on 2026-09-03) |
@@ -130,13 +147,13 @@ every imported row carries `adjustment_source='stooq:unknown'` (see "Stooq impor
 **Free-tier budget is a monitored metric**: every provider call lands in
 `atlas_global.provider_calls`, and `/health` shows the day's count against the plan limit.
 
-## Feed gate log (was: SIP gate log)
+## SIP gate log
 
 One row per run, appended by hand from the gate's printed output — never edited in place.
 
 | Run date (ET) | Account | Window (sessions) | SPY ret corr vs FRED | SPY volume ratio vs Stooq (median) | Session gaps | Result | Decision |
 |---|---|---|---|---|---|---|---|
-| — | — | — | — | — | — | **not yet run** | spine undecided until this row is real |
+| 2026-09-07 | paper, free plan | 2026-06-29 → 2026-09-04 (40) | 0.99921 on 39 returns (worst residual 0.0650 % on 2026-08-27, an ex-dividend day) | 1.0017 (min 0.9982, max 1.0163, 39 sessions); median \|close diff\| 0.0000 % | none — 40 FRED and 39 Stooq sessions all present | **PASS** (8/8) | Alpaca is the spine; `GLOBAL_PRICE_PROVIDER=alpaca`; no paid feed bought |
 
 ## Open questions carried from the plan
 

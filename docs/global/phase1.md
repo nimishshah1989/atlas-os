@@ -1,7 +1,9 @@
 # Global Atlas — Phase 1 plan: identity, prices, technicals, universe, first surfaces
 
-Status: DRAFT (2026-09-04). Supersedes the Phase 1 paragraph of `plan.md` where they differ.
-Amends the data-source table: **Alpaca is out** (FM 2026-09-04: "too cumbersome to start").
+Status: DRAFT (2026-09-04), **amended 2026-09-07**. Supersedes the Phase 1 paragraph of `plan.md`
+where they differ. The 2026-09-04 line "Alpaca is out" is **reversed**: the FM opened an Alpaca
+account on 2026-09-06 and the SIP gate passed on real bars on 2026-09-07, so Alpaca is the spine and
+no feed is bought. §1's vendor comparison is kept as the contingency; P1-B carries the amendment.
 
 ## 1. The price-spine decision
 
@@ -148,58 +150,85 @@ spellings, and the Stooq importer mapping ≥ 99% of the archive's members that 
   members whose ticker is in the directory (the `_` preferred forms via aliases); `python -m atlas.db`
   + `freshness_guard` register `instrument_master` (weekly, lag 8) with `build_identity.py`.
 
-### P1-B — The price spine (`providers/tiingo.py`, `ingest_prices.py`, `ingest_corporate_actions.py`, `adjust.py`, `label_stooq.py`, `validate_global --check FEED|A`)
+### P1-B — The price spine (`ingest_prices.py`, `ingest_corporate_actions.py`, `label_stooq.py`, `validate_global --check A`)
 
-GOAL: `ohlcv_daily` holds raw bars 2016-01-04 → EOD for every active instrument from the licensed
-feed, `corporate_actions` holds its split and cash-dividend events, `close_adj`/`close_tr` (and the
-`*_adj` OHL columns) are computed by us from raw + events and match the vendor's own adjusted close
-within 1e-4 relative on every instrument-day where the vendor supplies one, the Stooq archive's rows
+**Amended 2026-09-07: the vendor is Alpaca, and the SIP gate has PASSED.** The 2026-09-04 draft of
+this chunk named Tiingo, a $30/month feed, and a `--check FEED` gate to replace `--check SIP`. None
+of that was ever built — no `providers/tiingo.py` exists, `PRICE_PROVIDERS` has always been
+`{alpaca, stooq_bulk}`, and `--check` has always accepted only `SIP` and `BASIS`. The FM opened an
+Alpaca account on 2026-09-06, the free-first rule reapplied, and the SIP gate passed 8/8 on real
+bars on 2026-09-07 (`data-sources.md` carries the numbers and the decision). **Nothing is bought.**
+The vendor comparison in §1 stands as the contingency if Alpaca lapses; Tiingo Power is the named
+fallback. The adapter already exists: `atlas/global_market/providers/alpaca.py`.
+
+GOAL: `ohlcv_daily` holds bars 2016-01-04 → EOD for every active instrument on all three bases the
+vendor serves, `corporate_actions` holds its split and cash-dividend events, the Stooq archive's rows
 are labelled by the cross-check, and gate A passes on the real rows.
-- **FEED gate first** (`--check FEED`, the SIP gate generalised: `Gate`, `read_stooq`,
-  `_returns_on_overlap` reused): with the vendor key, pull SPY/AAPL/QQQ + 25 ETFs drawn at random from
-  the directory; (0) ≥ 40 sessions and no session gaps vs FRED; (1) SPY daily-return correlation vs FRED
-  `SP500` ≥ 0.999 on raw closes; (2) median vendor÷Stooq volume ratio ∈ [0.9, 1.1] (consolidated tape,
-  not one venue); (3) history reaches ≤ 2016-01-04 for ≥ 95% of the sample; (4) splits/dividends
-  present for AAPL (2020-08-31 4:1 split, quarterly cash dividends) and SPY (quarterly); (5) coverage:
-  ≥ 98% of the 5,655 directory ETF symbols resolve. Result logged in `data-sources.md` (the "SIP gate
-  log" table becomes the "feed gate log"). FAIL → try the alternate vendor; both FAIL → Stooq-weekly +
-  yfinance fallback (§1) with the FM's sign-off.
-- Adapter `providers/tiingo.py`: `PriceProvider` (`bars(symbols, start, end, adjustment="raw")` →
-  `GET https://api.tiingo.com/tiingo/daily/{ticker}/prices?startDate=&endDate=&format=json`, one call
-  per ticker, the full range in one response; the adjusted columns and `divCash`/`splitFactor` are
-  returned by a second method `bars_with_factors(...)` so `adjust.py` can be parity-tested) +
-  `AssetProvider` (`assets()` → `supported_tickers.zip`: ticker, exchange, assetType, priceCurrency,
-  startDate, endDate) + `actions(symbols, start, end)` derived from the per-row factors
-  (`splitFactor != 1` → split with that ratio; `divCash > 0` → cash dividend). `calls` Counter,
-  min-interval limiter (the `ingest_kite._rate_limit` pattern; 50 req/hour on the free key, 10k on
-  Power), `Decimal(str(x))` at the boundary, plain `requests` — no vendor SDK. Tests key on
-  `TIINGO_API_KEY` and hit the real endpoint for SPY/AAPL (skip without a key — never vacuous).
+
+**What the gate measured, and what it therefore removes from this chunk.** Three questions were open
+since Phase 0; all three are now answered against the account rather than the documentation:
+
+- **The feed is consolidated, not IEX.** Median Alpaca ÷ Stooq SPY volume = 1.0017 over 39 sessions.
+  The account is its own control here: the same sessions pulled with `feed=iex` return 2.79 % of the
+  `feed=sip` volume. Had it been IEX-only, the $1,000,000 liquidity floor and every ADV$ band would
+  have been built on roughly a fortieth of real volume.
+- **Both adjusted bases come from the vendor**, so `adjust.py` is NOT built. `adjustment=split` is
+  `close_adj` and `adjustment=all` is `close_tr`, measured on SPY 2016-01-04 as 201.0192 and 171.10.
+  The 2026-09-04 draft made a CRSP-style back-adjustment "the ONE bespoke formula" of the platform;
+  three pulls per instrument delete it, along with its parity test and its whole class of bug. Rule
+  #0 is satisfied more cleanly, not less: these are the vendor's prints, not our arithmetic.
+- **History stops at 2016-01-04, plan-wide.** A request from 1990 returns 2,684 bars starting
+  2016-01-04 for SPY and *the identical count and start* for AAPL, listed in 1980. So this is a floor
+  on the plan, not a listing date, and it is exactly the history the plan wants with zero margin.
+  **Stooq is therefore the permanent source of pre-2016 history** (it reaches 1970 for names like JPM
+  and KO), not the emergency fallback it was called before. Worth verifying against the vendor's own
+  documentation whether that floor is fixed at 2016 or a rolling ~10-year window — I could not settle
+  it from the API alone, and the answer decides whether pre-2016 coverage ever arrives on its own.
+
+**The re-basing rule survives the vendor change, and still binds.** Alpaca's `adjustment=all` is
+anchored to the present, not to the request window — the same historical date returns the same value
+whatever `end` is asked for (verified on SPY 2016-01-04 against `end` of 2016-01-07 and 2026-09-05:
+identical to the printed digit). That is a strictly better property than the Stooq archive's, which
+re-bases to its download date. But "anchored to the present" still means every cash dividend rescales
+the entire history, so **`close_tr` is recomputed over the instrument's full window on every pull,
+never appended.** A history half-written on an old base and half on a new one yields a wrong return
+across the seam — the exact failure the 2026-09-04 draft identified for Stooq, and it does not go
+away by changing vendor. Returns are invariant to the base; absolute levels are not.
+
+- Adapter `providers/alpaca.py` (exists; extended here): `bars(symbols, start, end, adjustment)` over
+  `GET https://data.alpaca.markets/v2/stocks/bars?symbols=…` — multi-symbol, `feed=sip`,
+  `limit=10000` with the `page_token` loop, 200 req/min limiter (`ingest_kite._rate_limit` pattern),
+  `Decimal(str(x))` at the boundary, `calls` Counter, plain `requests` — no vendor SDK. Three pulls
+  per window (`raw`, `split`, `all`) merged on `(symbol, date)`; a date present in one basis and
+  absent in another is reported, never filled. Plus `actions(symbols, start, end)` over the
+  corporate-actions endpoint — **whose plan tier is unverified**; if the free plan does not serve it,
+  splits are detected from the `raw` ÷ `split` ratio and the row is flagged
+  `source='derived_from_adjustment'`, which needs the FM's prior approval under rule #0 and is not
+  taken silently. Tests key on `ALPACA_API_KEY` and hit the real endpoint (skip without keys — never
+  vacuous).
 - `ingest_prices.py --eod / --backfill --since 2016-01-04 [--symbols]`: targets = active
-  `instrument_master` rows (+ inactive with bars for the nightly = none); floor = per-instrument
-  `max(date)` − 5 sessions (India's buffer), cap = EOD; writes raw OHLCV + `source='tiingo'`; then
-  `adjust.py` recomputes the adjusted columns for every instrument whose raw rows or events changed
-  (a dividend re-bases the whole history — recompute, never append). Aborts loudly if SPY has no bar
-  for the EOD (no anchor session = nothing to score).
-- `adjust.py` (pure; the ONE bespoke formula, parity-tested): CRSP-style back-adjustment. Split ratio
-  r on ex-date d: prices before d ÷ r, volume × r (cumulative product over later ex-dates); cash
-  dividend D on ex-date d: factor `1 − D / close_adj[d−1]` applied to all prices before d;
-  `close_tr` = split-and-dividend adjusted, `close_adj` = split-only. Parity test vs the vendor's
-  adjusted close on EVERY instrument-day (|rel diff| ≤ 1e-4, else the instrument is listed and its
-  adjusted columns left NULL — never a guess). DDL: `ohlcv_daily.source` and `corporate_actions.source`
-  CHECK constraints gain the vendor value (Alpaca stays allowed; nothing writes it).
+  `instrument_master` rows; floor = per-instrument `max(date)` − 5 sessions (India's buffer), cap =
+  EOD; writes `open/high/low/close/volume/trade_count/vwap` + `close_adj` + `close_tr` +
+  `source='alpaca'` + `adjustment_source='alpaca:sip'`. On any new dividend for an instrument, its
+  `close_tr` column is rewritten for the whole window (the rule above). Aborts loudly if SPY has no
+  bar for the EOD — no anchor session, nothing to score.
 - `label_stooq.py` (the importer's TODO, executed): per instrument, median |Stooq close ÷ x − 1| over
   the overlap for x ∈ {close (raw), close_adj, close_tr}; best match < 0.5% → `adjustment_source` =
-  `stooq:raw|split|all`; else stays `stooq:unknown` and is listed. Expected from §1: SPY → `stooq:all`.
-  Stooq rows never overwrite vendor rows (the importer's guard, generalised from `'alpaca'` to "any
-  source that is not stooq_csv").
-- DoD = **gate A** (`validate_global --check A`, each row a real assertion): SPY has a bar at EOD;
-  completeness ≥ 99% of the prior session's row count; ≥ 5,000 ETFs and 500/500 S&P names with bars
-  since 2016-01-04 or inception; 0 rows with |ret_1d| > 1 on `close_tr`; `max_abs_log_jump(close_adj)`
+  `stooq:raw|split|all`; else stays `stooq:unknown` and is listed. Expected from `--check BASIS`, and
+  now corroborated by the vendor: SPY → `stooq:all` (the archive's 171.85 for 2016-01-04 sits 0.44 %
+  from Alpaca's total-return 171.10 and nowhere near the 201.0192 that actually traded). Stooq rows
+  never overwrite vendor rows (the importer's existing guard).
+- DoD = **gate A** (`validate_global --check A`, each row a real assertion; `--check` today accepts
+  only `SIP` and `BASIS`, and gate A is added by this chunk): SPY has a bar at EOD; completeness
+  ≥ 99% of the prior session's row count; ≥ 5,000 ETFs and 500/500 S&P names with bars since
+  2016-01-04 or inception; 0 rows with |ret_1d| > 1 on `close_tr`; `max_abs_log_jump(close_adj)`
   < 0.4 on ≥ 99% of instruments (the unit-bug/missed-split detector); SPY `close_tr` daily returns vs
-  FRED `SP500` correlation ≥ 0.999 over the full history; adjusted-close parity holds on 100% of
-  instrument-days where the vendor supplies one; Stooq labelled on ≥ 95% of overlapping instruments and
-  a 50-ticker sample of labelled closes within 0.1%; `provider_calls` written; freshness registered
-  (`ohlcv_daily` lag 0, completeness table) with `ingest_prices.py` in the daily orchestrator.
+  FRED `SP500` correlation ≥ 0.999 over the full history; every |ret_1d| > 0.5 on `close_adj` has a
+  matching split in `corporate_actions`; the `close_tr` ÷ `close_adj` ratio is monotone non-increasing
+  backwards in time per instrument (the re-basing seam detector — a mixed-base history breaks it);
+  Stooq labelled on ≥ 95% of overlapping instruments and a 50-ticker sample of labelled closes within
+  0.1%; `provider_calls` written; freshness registered (`ohlcv_daily` lag 0, completeness table) with
+  `ingest_prices.py` in the daily orchestrator.
 ### P1-C — Macro, index membership, benchmarks (`ingest_macro.py`, `ingest_index_membership.py`, `seed_benchmarks.py`)
 
 GOAL: `macro_daily` carries FRED `SP500, VIXCLS, DGS10, DTB3, DTWEXBGS` through EOD−1; `index_membership`
@@ -378,8 +407,8 @@ deployed on Vercel with ISR + the `eod` tag, and the FM can compute any-period r
   on user pages; `revalidateTag('eod')` verified by a manual POST.
 
 ## 5. FM actions (blocking, in order)
-1. Tiingo account: the FREE key first (`TIINGO_API_KEY` in `.env`, `GLOBAL_PRICE_PROVIDER=tiingo`) so the
-   FEED gate and the adapter tests run; upgrade to Power/Commercial (§1) only after the gate PASSES.
+1. ~~Alpaca account~~ **DONE 2026-09-06/07.** `ALPACA_API_KEY` + `ALPACA_API_SECRET` (paper, free) and
+   `GLOBAL_PRICE_PROVIDER=alpaca` in `.env`; the SIP gate PASSED 8/8 on real bars. Nothing is bought.
 2. `EDGAR_IDENTITY="Nimish Shah <email>"` in `.env` (the SEC fair-access User-Agent) — never in-repo.
 3. `FRED_API_KEY` (India's key) in the global `.env` — OPTIONAL; unset, `ingest_macro` uses FRED's
    keyless CSV export. Supply it for the JSON API's revision vintages, not to unblock anything.
@@ -397,7 +426,8 @@ deployed on Vercel with ISR + the `eod` tag, and the FM can compute any-period r
 - Phase 1 DoD: "≥ 3,300 ETFs" → "≥ 5,000 ETFs" (5,655 listed on 2026-09-04); "series_id ≥ 95%" →
   "SEC identity ≥ 80%" (measured 82.5%; series/class ids exist only for 1940-Act funds).
 - `ohlcv_daily.source` / `corporate_actions.source` CHECK constraints gain the vendor value.
-- `validate_global --check SIP` is replaced by `--check FEED` (same checks, vendor-agnostic); the
+- ~~`--check SIP` is replaced by `--check FEED`~~ — **withdrawn 2026-09-07.** `--check SIP` was never
+  replaced, it was RUN, and it passed. `--check` accepts `SIP` and `BASIS`; gate A arrives with P1-B. The
   "SIP gate log" becomes the "feed gate log".
 
 ## 7. Verification, end to end

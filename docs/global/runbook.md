@@ -16,8 +16,8 @@ everything else is actionable now.
 | Variable | Where | What it is |
 |---|---|---|
 | `ATLAS_DB_URL` | laptop/box `.env` | `postgresql+psycopg2://…` — the same Supabase project as India (session pooler on the box; the `aws-1-ap-south-1` pooler works from the laptop, `aws-0-` does not) |
-| `GLOBAL_PRICE_PROVIDER` | laptop/box `.env` | `tiingo` — no default on purpose; a missing value stops `ingest_prices` |
-| `TIINGO_API_KEY` | laptop/box `.env` | the FREE key first (`validate_global --check FEED` runs on it); upgrade the plan only after the gate passes (`docs/global/phase1.md` §1) |
+| `GLOBAL_PRICE_PROVIDER` | laptop/box `.env` | `alpaca` (the spine since the SIP gate passed, 2026-09-07) or `stooq_bulk`. **No default and no third value** — anything else raises rather than ingesting an untested feed |
+| `ALPACA_API_KEY` / `ALPACA_API_SECRET` | laptop/box `.env` | the paper account's key pair from `app.alpaca.markets` (Home → Generate New Key). Free plan; the secret is shown once and regenerating invalidates the old pair |
 | `EDGAR_IDENTITY` | laptop/box `.env` | `"Firstname Lastname email@domain"` — the SEC fair-access User-Agent; `build_identity.py` refuses to run without it |
 | `FRED_API_KEY` | laptop/box `.env` | **OPTIONAL.** Unset, `ingest_macro` reads FRED's keyless CSV export (`graph/fredgraph.csv`) — same observations, no registration; the run prints which transport it used and `provider_calls` records it under that endpoint. Set it (India's key works, same account) for the JSON API's revision vintages |
 | `ATLAS_GLOBAL_DB_URL` | board `.env.local` | `postgresql://atlas_global_app:<pw>@…pooler.supabase.com:6543/postgres?sslmode=require` — the **transaction** pooler (6543), never the session pooler; India's session pool already holds 14 of its 15 slots |
@@ -80,7 +80,7 @@ check silently goes to Vercel. Steps 2 and 3 otherwise stand.
 ## 5. Identity, prices, first backfill (order matters)
 
 ```
-uv run python scripts/global_market/validate_global.py --check FEED            # Tiingo free key; PASS before any spend
+uv run python scripts/global_market/validate_global.py --check SIP --stooq-file <archive>/spy.us.txt   # PASSED 2026-09-07; re-run only if the account changes
 uv run python scripts/global_market/build_identity.py --stooq-zip ~/Downloads/d_us_txt.zip --report identity.csv
 uv run python scripts/global_market/seed_benchmarks.py
 uv run python scripts/global_market/ingest_index_membership.py --history --eod <eod>
@@ -89,7 +89,7 @@ uv run python scripts/global_market/import_stooq.py --zip ~/Downloads/d_us_txt.z
 uv run python scripts/global_market/ingest_macro.py --since 2016-01-01
 uv run python scripts/global_market/compute_technicals.py                              # (P1-D)
 uv run python scripts/global_market/build_universe_snapshot.py                         # (P1-E) prints the ADV$ table, exits 2 until the floor is set
-uv run python scripts/global_market/validate_global.py --check A
+uv run python scripts/global_market/validate_global.py --check A                       # (P1-B) not landed yet; --check today accepts only SIP and BASIS
 ```
 
 ## 6. Cron on the box
@@ -200,8 +200,8 @@ Every row on the page is a real row in `atlas_global`; nothing is computed in th
 
 ## 8. First night checklist
 
-1. Box `.env` carries `ATLAS_DB_URL`, `EDGAR_IDENTITY`, `FRED_API_KEY`, `TIINGO_API_KEY`,
-   `GLOBAL_PRICE_PROVIDER`, `GLOBAL_REVALIDATE_URL`, `GLOBAL_REVALIDATE_SECRET`,
+1. Box `.env` carries `ATLAS_DB_URL`, `EDGAR_IDENTITY`, `FRED_API_KEY`, `ALPACA_API_KEY`,
+   `ALPACA_API_SECRET`, `GLOBAL_PRICE_PROVIDER=alpaca`, `GLOBAL_REVALIDATE_URL`, `GLOBAL_REVALIDATE_SECRET`,
    `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`; `python scripts/global_market/_gdb.py` prints the
    pooler host and today's EOD; `python -m atlas.db` says `atlas_global_exists True`.
 2. §5 has been run through `ingest_macro` at least once (the gate fails on an empty

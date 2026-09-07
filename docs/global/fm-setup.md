@@ -11,21 +11,30 @@ lands, and design feedback is cheapest before the scored surfaces are built on t
 
 ---
 
-## 1. The Tiingo key — 2 minutes, do it first
+## 1. The Alpaca keys — 2 minutes, do it first
 
-Free tier, email signup, no card. It unblocks three chunks that are otherwise idle: prices,
-technicals, and every price-derived surface on the board.
+Paper account, email signup, no card, no KYC. It unblocks the three chunks that are otherwise
+idle: prices, technicals, and every price-derived surface on the board.
+
+`app.alpaca.markets` → **Home**, right-hand panel → **Generate New Key**. The secret is shown
+**once**; regenerating invalidates the previous pair. Paste both as text — a screenshot cannot be
+transcribed reliably (the first attempt misread five characters and every call returned 401).
 
 ```
-TIINGO_API_KEY=<key>
-GLOBAL_PRICE_PROVIDER=tiingo
+ALPACA_API_KEY=<key>          # 20 characters, starts PK for a paper account
+ALPACA_API_SECRET=<secret>    # 40 characters
+GLOBAL_PRICE_PROVIDER=alpaca
 ```
 
-into the laptop and box `.env`. **No spend yet** — the free key exists to run
-`validate_global.py --check FEED`, and the paid tier is only chosen after that gate passes
-(`phase1.md` §1 has the tiers and what each one licenses).
+into the laptop and box `.env`. **Nothing is bought.** The free plan already passed the gate that
+decides the spine — `validate_global.py --check SIP`, run 2026-09-07, 8 of 8 checks green on real
+bars (`data-sources.md` carries the numbers). The $30/month feed the earlier draft asked you to buy
+is not needed and stays the contingency.
 
-Done when: the two lines are in `.env`. The gate itself is step 7.
+Only these three values are read. `GLOBAL_PRICE_PROVIDER` accepts `alpaca` or `stooq_bulk` and
+nothing else — any other value stops `ingest_prices` rather than quietly ingesting an untested feed.
+
+Done when: the three lines are in `.env`. The gate itself is step 7.
 
 ## 2. The other two keys — 1 minute
 
@@ -80,11 +89,20 @@ Done when: the board's ETF and stock lists render real rows, and a detail page s
 aliases and index membership. Price columns are honestly empty at this point — that is the design,
 not a fault.
 
-## 7. Prices — after step 1, when `ingest_prices` lands (P1-B)
+## 7. Prices — nothing for you to do until `ingest_prices` lands (P1-B)
 
-`runbook.md` §5, in that order. `--check FEED` first and it must PASS before any spend. The
-backfill to 2016 runs overnight. Only after prices exist do technicals, returns, relative strength,
-the charts and the return calculator have anything to compute.
+The gate that stood in front of this is done: `--check SIP` PASSED on 2026-09-07 with your keys,
+so the feed question is closed and the backfill is mine to run. Re-run it yourself only if the
+account changes (`runbook.md` §5 has the command).
+
+One limit worth knowing, because it shapes what the board can show: **Alpaca's history stops at
+2016-01-04** — for every symbol, including ones listed in 1980. That is exactly the ten years the
+plan asks for and not a day more. Anything older comes from the Stooq archive you downloaded, which
+reaches 1970 for the oldest names. So Stooq is not the emergency fallback any more; it is the
+permanent deep-history source, and it stays the nightly cross-check on top of that.
+
+The backfill to 2016 runs overnight. Only after prices exist do technicals, returns, relative
+strength, the charts and the return calculator have anything to compute.
 
 ## 8. Cron — last
 
@@ -100,5 +118,5 @@ installing the cron before prices exist just produces failing runs every night.
 | Liquidity floor | $1,000,000 median daily value, set 2026-09-06 from the real distribution in `reports/adv_usd_2026-09-03.md` |
 | Stock universe | S&P 500 members only |
 | Leveraged and inverse ETFs | excluded from the universe |
-| Price spine | Tiingo; Stooq is the cross-check and emergency fallback |
-| Still open | the Tiingo paid tier (after the FEED gate), the Phase 2 classification thresholds, the 150-ETF labelling set |
+| Price spine | **Alpaca**, free plan, decided 2026-09-07 by the SIP gate (8/8 on real bars). Stooq is the permanent pre-2016 source and the nightly cross-check |
+| Still open | Alpaca's corporate-actions tier and its display terms (before Phase 3, not now), the Phase 2 classification thresholds, the 150-ETF labelling set |
