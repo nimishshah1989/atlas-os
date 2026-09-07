@@ -81,6 +81,15 @@ SIP_SYMBOLS = ("SPY", "AAPL", "QQQ")
 # of the Stooq archive vs FRED SP500: return correlation 0.998352, ratio 0.086514 → 0.099793
 # with rank-vs-time 0.99712, CAGR 15.134% vs 13.500% → excess 1.634%/yr. ──
 BASIS_SYMBOL = "SPY"
+# The gate measures the ARCHIVE, and only the archive. Once ingest_prices lands, one
+# instrument's `close` column holds two different series — the vendor's raw traded price
+# from 2016-01-04 and the archive's total-return re-based close before it (SPY: 174.297 on
+# 2015-12-31, then 201.019 on 2016-01-04, a 15 % "move" that is purely the basis changing).
+# Measured over the mix, this gate reads the vendor half, correctly reports `split_only`,
+# and FAILS — withholding every nightly publish for a question it was never asking. Stooq
+# documents no adjustment policy and the vendor documents its own, so the archive is the
+# only thing here that has to be measured.
+BASIS_SOURCE = "stooq_csv"
 BASIS_INDEX_SERIES = "SP500"
 # ≈4 years of sessions. The measured overlap is 2,513 and FRED publishes SP500 as a rolling
 # ten-year window, so this can only bind on a partial archive. Below ~4 years a 1.6%/yr
@@ -316,15 +325,40 @@ def check_BASIS(g: Gate) -> None:
     bars = _gdb.read_df(
         f"select date, close from {_gdb.M}.ohlcv_daily where instrument_id = "
         f"(select instrument_id from {_gdb.M}.instrument_master "
-        "where symbol = :sym and is_active) and close is not null order by date",
-        {"sym": BASIS_SYMBOL},
+        "where symbol = :sym and is_active) and close is not null "
+        "and source = :src order by date",
+        {"sym": BASIS_SYMBOL, "src": BASIS_SOURCE},
     )
-    if bars.empty:
-        g.check(f"{BASIS_SYMBOL} has bars in ohlcv_daily", False, "no rows — nothing to measure")
+    # WHAT THIS GATE PROTECTS is anything that READS the archive. An archive row still
+    # carrying `stooq:unknown` has close_adj and close_tr NULL, `price_basis.basis_of`
+    # resolves nothing for that label, and compute_technicals skips and lists it — so no
+    # number on the board descends from it and there is nothing to guard. Saying so is not a
+    # loosening: the moment a row is LABELLED, it has a consumer, and the measurement below
+    # is required again.
+    #
+    # This case is now the normal one rather than an edge. Once ingest_prices owns the recent
+    # window the importer refuses to overwrite it, so the archive's rows end where the
+    # vendor's begin — and FRED's keyless export only reaches back ten years, which is
+    # exactly the window the vendor now owns. Archive rows and the witness stop overlapping.
+    # The per-instrument cross-check against the vendor's three bases is the measurement that
+    # replaces it (P1-B tail); until that lands, an unlabelled archive is inert, not trusted.
+    in_use = _gdb.scalar(
+        f"select count(*) from {_gdb.M}.ohlcv_daily "
+        "where source = :src and adjustment_source <> 'stooq:unknown'",
+        {"src": BASIS_SOURCE},
+    )
+    if bars.empty or not in_use:
+        g.check(
+            f"no {BASIS_SOURCE} row is in use without a measured basis",
+            True,
+            f"{len(bars):,d} {BASIS_SYMBOL} archive bar(s); {int(in_use or 0):,d} labelled row(s) "
+            "across the table — unlabelled archive rows carry NULL adjusted columns and are "
+            "skipped downstream, so nothing reads them",
+        )
         return
     print(
-        f"  {BASIS_SYMBOL}: {len(bars):,d} bars {bars['date'].iloc[0]} → {bars['date'].iloc[-1]}"
-        f" from {_gdb.M}.ohlcv_daily"
+        f"  {BASIS_SYMBOL}: {len(bars):,d} {BASIS_SOURCE} bars "
+        f"{bars['date'].iloc[0]} → {bars['date'].iloc[-1]} from {_gdb.M}.ohlcv_daily"
     )
 
     first: date = bars["date"].iloc[0]

@@ -258,6 +258,29 @@ away by changing vendor. Returns are invariant to the base; absolute levels are 
   deliberately left to `freshness_guard.py`, which already owns `ohlcv_daily` at lag 0; two owners
   would drift. Still to land with `label_stooq.py`: Stooq labelled on ≥ 95 % of overlapping
   instruments and a 50-ticker sample of labelled closes within 0.1 %.
+
+**The archive's basis can no longer be measured against FRED, and `--check BASIS` was changed
+to match (2026-09-07).** Once `ingest_prices` owns the recent window, `import_stooq`'s guard
+refuses to overwrite it, so the archive's rows END where the vendor's begin — and FRED's
+keyless export reaches back only ten years, which is exactly the window the vendor now owns.
+Archive rows and the witness stop overlapping, so the gate measured the MIXED column instead,
+correctly read the vendor half as `split_only`, and FAILED — withholding every nightly publish
+for a question it was never asking. It now measures `source='stooq_csv'` rows only, and passes
+when no archive row is in USE: an unlabelled row carries NULL adjusted columns,
+`price_basis.basis_of` resolves nothing for `stooq:unknown`, and `compute_technicals` skips it,
+so nothing on the board descends from it. Label one and the measurement is required again —
+verified by labelling rows and watching the gate go back to measuring, and fail for want of an
+overlap. That is fail-closed, not a loosening.
+
+The consequence to keep in view: **one instrument's `close` column now holds two different
+series** — the vendor's raw traded price from 2016-01-04 and the archive's total-return
+re-based close before it. SPY reads 174.297 on 2015-12-31 and 201.019 on 2016-01-04, a 15 %
+"move" that is purely the basis changing. Nothing splices them today, because the archive's
+adjusted columns are NULL and every consumer resolves basis before reading. What is NOT yet
+built is the thing that would let the pre-2016 history be USED: a per-instrument cross-check
+against the vendor's three bases over their overlap in the archive FILE (the DB has no overlap
+by construction), plus a rescale onto the vendor's base. Until then the archive is inert
+history, not a source the board reads.
 ### P1-C — Macro, index membership, benchmarks (`ingest_macro.py`, `ingest_index_membership.py`, `seed_benchmarks.py`)
 
 GOAL: `macro_daily` carries FRED `SP500, VIXCLS, DGS10, DTB3, DTWEXBGS` through EOD−1; `index_membership`
