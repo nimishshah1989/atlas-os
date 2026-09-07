@@ -122,9 +122,16 @@ def _libpq(url: str) -> str:
 
 
 def _redact(url: str) -> str:
-    s = urlsplit(url)
-    user = s.username or "?"
-    return f"{user}@{s.hostname}:{s.port}/{(s.path or '/').lstrip('/')}"
+    """Identity without the secret. Never raises: this is handed URLs from OTHER processes,
+    which are arbitrary strings, and `urlsplit(...).port` parses lazily and raises on a
+    non-numeric port. Letting that escape aborted the whole run over one unrelated process —
+    the sections it would have skipped are the ones that diagnose the outage."""
+    try:
+        parts = urlsplit(url)
+        user = parts.username or "?"
+        return f"{user}@{parts.hostname}:{parts.port}/{(parts.path or '/').lstrip('/')}"
+    except ValueError:
+        return "<unparseable URL>"
 
 
 def _differing_parts(a: str, b: str) -> list[str]:
@@ -135,7 +142,13 @@ def _differing_parts(a: str, b: str) -> list[str]:
     single most likely thing to differ, because rotating it updates the file and leaves every
     already-running process holding the old one.
     """
-    x, y = urlsplit(a), urlsplit(b)
+    try:
+        x, y = urlsplit(a), urlsplit(b)
+        _ = (x.port, y.port)  # .port parses lazily and raises on a non-numeric port
+    except ValueError:
+        # A URL this cannot parse is itself worth reporting, and is never a reason to abort
+        # the remaining sections — those are what diagnose the outage.
+        return ["unparseable"]
     parts = {
         "host": (x.hostname, y.hostname),
         "port": (x.port, y.port),
@@ -162,7 +175,11 @@ def _runtime_env_urls(exclude_pid: int) -> list[tuple[int, str, str]]:
     process (another user, already exited) is skipped, never fatal.
     """
     found: list[tuple[int, str, str]] = []
-    for entry in Path("/proc").iterdir():
+    try:
+        entries = list(Path("/proc").iterdir())
+    except OSError:
+        return found  # no /proc (macOS, or unreadable) — report nothing, never abort
+    for entry in entries:
         if not entry.name.isdigit() or int(entry.name) == exclude_pid:
             continue
         try:
@@ -171,8 +188,16 @@ def _runtime_env_urls(exclude_pid: int) -> list[tuple[int, str, str]]:
             url = pairs.get("ATLAS_DB_URL", "").strip()
             if not url:
                 continue
-            cmd = (entry / "cmdline").read_bytes().decode("utf-8", "replace")
-            cmd = " ".join(cmd.split("\0")).strip()[:70] or "?"
+            # NEVER the command line. `psql "postgresql://user:password@host/db"` puts a
+            # live credential in argv, and this tool exists to avoid printing exactly that.
+            # /proc/<pid>/comm is the executable name with no arguments; the working
+            # directory identifies WHICH node process this is (the board runs from
+            # frontend/) and a directory path carries no secret.
+            cmd = (entry / "comm").read_bytes().decode("utf-8", "replace").strip() or "?"
+            try:
+                cmd = f"{cmd}  (cwd {(entry / 'cwd').resolve()})"
+            except OSError:
+                pass
         except (OSError, ValueError):
             continue
         found.append((int(entry.name), cmd, url))
