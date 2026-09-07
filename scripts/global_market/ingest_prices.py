@@ -238,32 +238,43 @@ def rebasing_targets(
 
 def action_rows(
     actions: pd.DataFrame, ids: dict[str, str]
-) -> tuple[list[tuple[Any, ...]], list[tuple[Any, ...]]]:
+) -> tuple[list[tuple[Any, ...]], list[tuple[tuple[str, Any, str], list[Any]]]]:
     """Vendor action records → ``(rows_to_write, conflicts)``, dropping symbols we do not hold.
 
     ``ratio`` is new-shares-per-old (a 4:1 forward split is 4.0, a 1-for-8 reverse is 0.125)
     so one column reads the same way in both directions; ``cash_amount`` is USD per share and
-    is NULL for anything that is not cash.
+    is NULL for anything that is not cash. Each conflict is returned as its key plus EVERY
+    competing value, because a report naming one of two numbers cannot be acted on.
 
-    THE FEED REPEATS ITSELF, and the table's key does not let it. ``corporate_actions`` is
-    keyed ``(instrument_id, ex_date, action_type)``, but the vendor can return two records
-    for one event — observed 2026-09-07 on GE's 2021-06-25 $0.01 dividend, which comes back
-    twice with different record ids. Postgres refuses that outright inside one statement
-    ("ON CONFLICT DO UPDATE command cannot affect row a second time"), so the run died rather
-    than writing a wrong number, which is the right failure but not a usable one.
+    TWO RECORDS, ONE KEY. ``corporate_actions`` is keyed ``(instrument_id, ex_date,
+    action_type)`` and the feed does not respect that. Postgres refuses two such rows inside
+    one statement ("ON CONFLICT DO UPDATE command cannot affect row a second time"), which is
+    the right failure and an unusable one — the whole run dies. Two distinct things turned up
+    on real data, and they are handled differently:
 
-    The rule, which invents nothing:
+    * **The same record twice** (GE's 2021-06-25 $0.01 dividend, identical in every stored
+      column, differing only in the vendor's record id). Collapsed to ONE. Provably lossless:
+      there is no number to choose between.
+    * **Two records that DISAGREE on the amount.** Written NOWHERE, and reported. Measured on
+      a 200-ETF backfill: 11 of 973 events, ~1.1 %, and EVERY ONE of them in December —
+      the month ETFs pay a year-end capital-gains distribution alongside the regular income
+      one. AAA on 2021-12-29 is the shape of all of them: 0.0161075 and 0.00161, identical
+      CUSIP, identical ex/record/payable/process dates, both ``special=False``, both
+      ``foreign=False``. Nothing the feed publishes says which is right, or whether they are
+      two components that ought to be added.
 
-    * Records identical in every stored column collapse to ONE. Provably lossless — there is
-      no number to choose between.
-    * Records sharing the key but DISAGREEING on ratio or cash are returned as conflicts and
-      NONE of them is written. Picking one would be arbitrary and adding them up would be a
-      computation the feed never stated (a regular and a special dividend on one ex-date do
-      sum for the shareholder, but the feed says ``special`` on a flag this table has no
-      column for). They are listed in the report instead, and the schema gets the extra key
-      column the day one actually shows up.
+    So neither is written. Adding them up would be arithmetic the feed never stated; keeping
+    the larger, or the last one seen, would be arbitrary — and this is a dividend, so a wrong
+    choice is a wrong yield and a wrong distribution history. Note that no PRICE depends on
+    this: ``close_tr`` is the vendor's own total-return series, not something reconstructed
+    from these rows, so a withheld action costs the events table a row and costs the board
+    nothing. That is what makes withholding affordable rather than merely principled.
+
+    OPEN, for the FM: ask the vendor whether a same-key pair is two components of one
+    distribution (in which case they sum) or a data error. Until then the report is the record.
     """
     keep: dict[tuple[str, Any, str], tuple[Any, ...]] = {}
+    seen: dict[tuple[str, Any, str], list[Any]] = {}
     disagreed: set[tuple[str, Any, str]] = set()
     for r in actions.to_dict("records"):
         iid = ids.get(str(r["symbol"]))
@@ -271,11 +282,13 @@ def action_rows(
             continue
         key = (iid, r["ex_date"], str(r["action_type"]))
         row = (iid, r["ex_date"], r["action_type"], r["ratio"], r["cash_amount"])
+        value = r["cash_amount"] if r["ratio"] is None else r["ratio"]
         prior = keep.get(key)
         if prior is not None and prior != row:
             disagreed.add(key)
+        seen.setdefault(key, []).append(value)
         keep[key] = row
-    conflicts = [keep[k] for k in disagreed]
+    conflicts = [(k, seen[k]) for k in sorted(disagreed, key=lambda k: (k[1], k[0]))]
     return [row for k, row in keep.items() if k not in disagreed], conflicts
 
 
@@ -505,14 +518,15 @@ def main(argv: list[str] | None = None) -> int:
                 written = len(rows)
 
             arows, aconflicts = action_rows(actions, ids)
-            for c in aconflicts:
+            for (iid, ex_date, kind), values in aconflicts:
                 report.add(
-                    str(c[0]),
+                    iid,
                     "action_conflict",
-                    1,
-                    c[1],
-                    c[1],
-                    f"{c[2]}: two records disagree (ratio={c[3]}, cash={c[4]}) — none written",
+                    len(values),
+                    ex_date,
+                    ex_date,
+                    f"{kind}: {len(values)} records disagree "
+                    f"({', '.join(str(v) for v in values)}) — none written",
                 )
             if arows:
                 execute_values(

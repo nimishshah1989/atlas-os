@@ -205,7 +205,11 @@ def test_records_that_disagree_are_withheld_rather_than_guessed(
     ids = ids_for(frame["symbol"].unique())
     rows, conflicts = prices.action_rows(frame, ids)
     assert len(conflicts) == 1
-    assert conflicts[0][1] == cash["ex_date"]
+    (_, ex_date, kind), values = conflicts[0]
+    assert ex_date == cash["ex_date"]
+    assert kind == cash["action_type"]
+    # BOTH amounts are reported: naming one of two numbers cannot be acted on.
+    assert sorted(values) == sorted([cash["cash_amount"], clash["cash_amount"]])
     written = {(r[1], r[2]) for r in rows}
     assert (cash["ex_date"], cash["action_type"]) not in written
 
