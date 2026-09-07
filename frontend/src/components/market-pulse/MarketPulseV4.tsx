@@ -39,12 +39,41 @@ function fmtDate(d: unknown): string | null {
 
 export async function MarketPulseV4() {
   // Regime first (alone) so we can early-return without holding other connections.
-  const regime = await getCurrentRegime().catch(soft('getCurrentRegime', null))
+  //
+  // The two ways this can come back empty need DIFFERENT copy, because they are different
+  // problems with different owners and the board is the only place anyone looks. On
+  // 2026-09-07 the query threw on every render and the panel said "Run the nightly pipeline
+  // first" — so the pipeline was investigated for hours while the pipeline was fine. The
+  // distinction below is deliberately visible in the rendered HTML: an operator can tell the
+  // two apart by loading the page, with no shell access and no log hunting.
+  //
+  // What is NOT shown is the exception itself. This board answers unauthenticated requests,
+  // and a driver error names the host, the role and often the statement. The cause goes to
+  // the server log via soft(); the page carries only which of the two happened.
+  let regime: Awaited<ReturnType<typeof getCurrentRegime>> = null
+  let queryFailed = false
+  try {
+    regime = await getCurrentRegime()
+  } catch (e) {
+    queryFailed = true
+    soft('getCurrentRegime', null)(e)
+  }
   if (!regime) {
     return (
       <div className="min-h-screen bg-surface-base font-sans text-txt-1">
         <div className="mx-auto max-w-[1680px] px-6 py-10">
-          <Panel title="No regime data"><p className="font-sans text-[13px] text-txt-2">Run the nightly pipeline first.</p></Panel>
+          {queryFailed ? (
+            <Panel title="Market Pulse is temporarily unavailable">
+              <p className="font-sans text-[13px] text-txt-2">
+                The board could not read the market-regime data. This is a data-source
+                problem, not a missing overnight run — the cause is in the server log.
+              </p>
+            </Panel>
+          ) : (
+            <Panel title="No regime data">
+              <p className="font-sans text-[13px] text-txt-2">Run the nightly pipeline first.</p>
+            </Panel>
+          )}
         </div>
       </div>
     )
