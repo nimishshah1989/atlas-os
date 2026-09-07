@@ -15,6 +15,20 @@ import { RegimeChip, BreadthTablePanel, TierReturnsPanel, SectorLeadershipPanel,
 import { IndexStrip } from './IndexStrip'
 import { MarketPulseBreadthCharts } from './MarketPulseBreadthCharts'
 
+// Fall back on failure, but SAY SO. A bare `.catch(() => x)` turns a broken database
+// connection into a panel that reads "No regime data — run the nightly pipeline first",
+// which describes a completely different problem and logs nothing at all. That exact
+// combination cost hours on 2026-09-07: the board was serving an old build against a moved
+// schema, the query threw on every render, and the page calmly blamed the pipeline while
+// pm2 logs stayed clean. The fallbacks below are still the right UX — a dead sector panel
+// should not blank the whole page — but a swallowed cause is not.
+function soft<T>(label: string, fallback: T): (e: unknown) => T {
+  return (e) => {
+    console.error(`[MarketPulseV4] ${label} failed; rendering the empty state instead:`, e)
+    return fallback
+  }
+}
+
 const fmtInt = (n: number | null | undefined) => (n == null ? '—' : Math.round(n).toLocaleString('en-IN'))
 const fmtSigned = (n: number | null | undefined) => (n == null ? '—' : `${n >= 0 ? '+' : ''}${Math.round(n).toLocaleString('en-IN')}`)
 const pctTone = (pct: number | null): Tone => (pct == null ? 'neutral' : pct >= 50 ? 'pos' : 'neg')
@@ -25,7 +39,7 @@ function fmtDate(d: unknown): string | null {
 
 export async function MarketPulseV4() {
   // Regime first (alone) so we can early-return without holding other connections.
-  const regime = await getCurrentRegime().catch(() => null)
+  const regime = await getCurrentRegime().catch(soft('getCurrentRegime', null))
   if (!regime) {
     return (
       <div className="min-h-screen bg-surface-base font-sans text-txt-1">
@@ -39,15 +53,15 @@ export async function MarketPulseV4() {
   // The scored universe is the heavy query (~2k rows) — fetch it ALONE so it never
   // holds a connection alongside the others, keeping Market Pulse within the dev
   // session pooler's 15-client cap under concurrent browser load.
-  const stocksList = await getStocksDecileList().catch(() => [])
+  const stocksList = await getStocksDecileList().catch(soft('getStocksDecileList', []))
 
   // The remaining native-fs panels — light, batched together.
   const [breadthSeries, tier, indexStrip, indexRs, sectorBreadth] = await Promise.all([
-    getBreadthSeries(10).catch(() => []),
-    getTierReturns().catch(() => ({ windows: [], smallcap_rs_z: null })),
-    getIndexStrip().catch(() => []),
-    getSectorIndexRs().catch(() => null),
-    getSectorBreadthMV().catch(() => []),
+    getBreadthSeries(10).catch(soft('getBreadthSeries', [])),
+    getTierReturns().catch(soft('getTierReturns', { windows: [], smallcap_rs_z: null })),
+    getIndexStrip().catch(soft('getIndexStrip', [])),
+    getSectorIndexRs().catch(soft('getSectorIndexRs', null)),
+    getSectorBreadthMV().catch(soft('getSectorBreadthMV', [])),
   ])
   // Per-sector enrichment for the leadership table: RS vs Nifty 50 (sector index − Nifty 50, per
   // window) and the count of constituents above EMA21/EMA50 (pct × tracked count). Real fs only.
