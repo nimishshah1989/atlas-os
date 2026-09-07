@@ -38,7 +38,14 @@ def _repo_root() -> Path:
     curl'd to a scratch path on the box as well as run in place: the working directory is
     right when it IS the checkout, and parents[2] is right when the file sits in scripts/ops/.
     Getting this wrong silently reads the wrong env and diagnoses the wrong database."""
-    for root in (Path.cwd(), Path(__file__).resolve().parents[2]):
+    candidates = [Path.cwd()]
+    here = Path(__file__).resolve()
+    # Guarded, and the guard is the point: a tuple literal would build BOTH entries before the
+    # loop ran, so `parents[2]` raised IndexError from /tmp — killing the very case this
+    # function exists to serve, before the working candidate was ever tried.
+    if len(here.parents) > 2:
+        candidates.append(here.parents[2])
+    for root in candidates:
         if any((root / rel).exists() for rel in ENV_CANDIDATES):
             return root
     return Path.cwd()
