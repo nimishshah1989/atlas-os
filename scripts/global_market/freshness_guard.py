@@ -40,6 +40,7 @@ M = _gdb.M
 #   ("lens_scores_daily", "date", 0), ("etf_scores_daily", "date", 0),
 #   ("country_daily", "date", 0), ("macro_daily", "date", 3)
 KEY_TABLES: list[tuple[str, str, int]] = [
+    ("ohlcv_daily", "date", 0),  # the spine: every board number descends from it (P1-B)
     ("macro_daily", "date", 3),  # FRED posts DGS10/DTB3 the next business day (P1-C)
     ("technical_daily", "date", 0),  # nightly from ohlcv_daily, same session (P1-D)
 ]
@@ -61,6 +62,7 @@ BOARD_TABLES: list[tuple[str, str, int]] = [
 ORCHESTRATORS = ["scripts/ops/atlas_global_daily.sh", "scripts/ops/atlas_global_weekly.sh"]
 PRODUCERS: dict[str, str] = {
     "instrument_master": "build_identity.py",
+    "ohlcv_daily": "ingest_prices.py",
     "macro_daily": "ingest_macro.py",
     "index_membership": "ingest_index_membership.py",
     "universe_snapshot": "build_universe_snapshot.py",

@@ -43,6 +43,19 @@ ASSET_COLUMNS: tuple[str, ...] = (
     "fractionable",
     "provider_id",
 )
+# One row per corporate action, keyed by (symbol, ex_date, action_type). The two value
+# columns are mutually exclusive by action type and NEVER by field name: a share-ratio event
+# (any split, a stock dividend) fills `ratio` = new shares per old share, and a cash event
+# fills `cash_amount` in USD per share. Providers name both "rate" — Alpaca's CashDividend
+# and StockDividend both carry `.rate`, meaning dollars in one and shares in the other — so
+# an adapter that keys on the field rather than the type records stock dividends as cash.
+ACTION_COLUMNS: tuple[str, ...] = (
+    "symbol",
+    "ex_date",
+    "action_type",
+    "ratio",
+    "cash_amount",
+)
 
 
 class PriceProvider(Protocol):
@@ -73,4 +86,18 @@ class AssetProvider(Protocol):
 
     def assets(self) -> pd.DataFrame:
         """One row per asset with :data:`ASSET_COLUMNS`."""
+        ...
+
+
+class ActionProvider(Protocol):
+    """Splits and dividends by ex-date — the events that re-base an adjusted price series."""
+
+    name: str
+
+    def actions(self, symbols: Sequence[str], start: date, end: date) -> pd.DataFrame:
+        """One row per (symbol, ex_date, action_type) with :data:`ACTION_COLUMNS`; empty
+        frame when none. An event type the adapter cannot read UNAMBIGUOUSLY is omitted and
+        reported, never mapped on a guess — a mis-read action silently corrupts every
+        adjusted price before its ex-date.
+        """
         ...

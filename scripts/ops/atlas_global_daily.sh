@@ -72,7 +72,7 @@ gate() {  # gate "name" cmd...
 # 1. INGEST (Phase 1). ingest_prices must abort loudly if SPY has no bar for $EOD — the
 #    anchor calendar is membership-by-presence of SPY bars, so a missing anchor means no
 #    session to score, not a quiet carry-forward.
-# step "ingest_prices"           $PY scripts/global_market/ingest_prices.py --eod "$EOD"
+step "ingest_prices"           $PY scripts/global_market/ingest_prices.py --eod "$EOD" --report "$LOG_DIR/ingest_prices_$EOD.csv"
 step "ingest_macro"            $PY scripts/global_market/ingest_macro.py --eod "$EOD"
 # step "ingest_filings_8k"       $PY scripts/global_market/ingest_filings_8k.py
 # step "ingest_form4"            $PY scripts/global_market/ingest_form4.py

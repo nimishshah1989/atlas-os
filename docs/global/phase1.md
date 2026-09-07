@@ -224,8 +224,12 @@ away by changing vendor. Returns are invariant to the base; absolute levels are 
   2016-01-04 or inception; 0 rows with |ret_1d| > 1 on `close_tr`; `max_abs_log_jump(close_adj)`
   < 0.4 on ≥ 99% of instruments (the unit-bug/missed-split detector); SPY `close_tr` daily returns vs
   FRED `SP500` correlation ≥ 0.999 over the full history; every |ret_1d| > 0.5 on `close_adj` has a
-  matching split in `corporate_actions`; the `close_tr` ÷ `close_adj` ratio is monotone non-increasing
-  backwards in time per instrument (the re-basing seam detector — a mixed-base history breaks it);
+  matching split in `corporate_actions`; the `close_tr` ÷ `close` ratio never FALLS through time
+  per instrument by more than cent-rounding can explain (the re-basing seam detector). Both columns
+  are published to the cent, so the ratio is not exactly monotone — measured on SPY it wobbles by
+  ~4e-5, while a dividend step is ~5e-3, a hundred times larger; the tolerance is computed per row
+  from the prices, not picked. Verified to bite: injecting one dividend's worth of stale base into
+  the older half of SPY's history is caught at the exact seam date, 0.0050 against a 0.000052 budget;
   Stooq labelled on ≥ 95% of overlapping instruments and a 50-ticker sample of labelled closes within
   0.1%; `provider_calls` written; freshness registered (`ohlcv_daily` lag 0, completeness table) with
   `ingest_prices.py` in the daily orchestrator.
