@@ -127,6 +127,58 @@ def _redact(url: str) -> str:
     return f"{user}@{s.hostname}:{s.port}/{(s.path or '/').lstrip('/')}"
 
 
+def _differing_parts(a: str, b: str) -> list[str]:
+    """Which components of two connection URLs differ, named but never printed.
+
+    Redaction hides the password, so two URLs differing ONLY by password render as the same
+    string and a bare "DIFFERS" flag looks like a bug in the tool. The password is also the
+    single most likely thing to differ, because rotating it updates the file and leaves every
+    already-running process holding the old one.
+    """
+    x, y = urlsplit(a), urlsplit(b)
+    parts = {
+        "host": (x.hostname, y.hostname),
+        "port": (x.port, y.port),
+        "user": (x.username, y.username),
+        "database": (x.path, y.path),
+        "password": (x.password, y.password),
+        "options": (x.query, y.query),
+    }
+    return [name for name, (lhs, rhs) in parts.items() if lhs != rhs]
+
+
+def _runtime_env_urls(exclude_pid: int) -> list[tuple[int, str, str]]:
+    """(pid, command, ATLAS_DB_URL) for every LIVE process that carries one.
+
+    This is the check the 2026-09-07 outage needed and nobody had. The board's build and the
+    board's SERVER are different processes with different environments: `next build` reads
+    frontend/.env.local, while the long-running `next start` under pm2 keeps whatever it was
+    started with — and a real environment variable BEATS the .env file, so correcting the file
+    does not correct a running server. A stale URL there fails every query at runtime while
+    every build renders perfectly, which is exactly the shape that outage had.
+
+    /proc/<pid>/environ is the running process's ACTUAL environment, not pm2's record of what
+    it meant to set, so it cannot be out of date. Linux-only and best-effort: an unreadable
+    process (another user, already exited) is skipped, never fatal.
+    """
+    found: list[tuple[int, str, str]] = []
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit() or int(entry.name) == exclude_pid:
+            continue
+        try:
+            environ = (entry / "environ").read_bytes().decode("utf-8", "replace")
+            pairs = dict(kv.split("=", 1) for kv in environ.split("\0") if "=" in kv)
+            url = pairs.get("ATLAS_DB_URL", "").strip()
+            if not url:
+                continue
+            cmd = (entry / "cmdline").read_bytes().decode("utf-8", "replace")
+            cmd = " ".join(cmd.split("\0")).strip()[:70] or "?"
+        except (OSError, ValueError):
+            continue
+        found.append((int(entry.name), cmd, url))
+    return found
+
+
 def section(title: str) -> None:
     print(f"\n{'=' * 72}\n{title}\n{'=' * 72}")
 
@@ -144,6 +196,28 @@ def main() -> int:
         print(f"  WARNING: this shell's ATLAS_DB_URL DIFFERS -> {_redact(_libpq(shell_url))}")
         print("  Diagnosing the file's, since that is what the board was built and started")
         print("  with. If the board actually runs on the shell's, that mismatch is the bug.")
+
+    section("P0 — what the LIVE processes actually carry (not the file, not this shell)")
+    running = _runtime_env_urls(os.getpid())
+    if not running:
+        print("  no live process carries ATLAS_DB_URL (or /proc is unreadable here).")
+        print("  On the box the board SHOULD appear below; if it does not, it is not running")
+        print("  with one, and Next is falling back to the .env file at boot.")
+    for pid, cmd, running_url in running:
+        differs = _differing_parts(_libpq(running_url), _libpq(url))
+        flag = (
+            f"*** DIFFERS FROM THE FILE: {', '.join(differs)} ***"
+            if differs
+            else "matches the file"
+        )
+        print(f"  pid {pid}: {_redact(_libpq(running_url))}  [{flag}]")
+        print(f"      {cmd}")
+    if any(_differing_parts(_libpq(u), _libpq(url)) for _, _, u in running):
+        print("  -> A live process is using a DIFFERENT database URL than the file. A running")
+        print("     process keeps the environment it was started with, and a real environment")
+        print("     variable overrides the .env file, so editing the file alone does not reach")
+        print("     it. That is a complete explanation for builds working while the served")
+        print("     board fails: restart it so it picks the corrected value up.")
 
     import psycopg2
 
