@@ -23,8 +23,10 @@ expected value does NOT come from this repo's compute path:
 * **empyrical** — the library the methodology names, called directly on the same window, vs
   the vectorised rolling forms the writer uses. This is the check that keeps the fast path
   honest.
-* **build_universe_snapshot's ADV\\$** — the number the FM set the liquidity floor from, read
-  from the OTHER script, must equal this table's column to the cent.
+* **build_universe_snapshot's ADV\\$** — the number the FM set the liquidity floor from. Two
+  scripts compute it because the dependency is circular (the universe needs ADV\\$; this
+  journal's scope needs the universe), so it is read from the OTHER script and must agree
+  here to within the rounding this table's ``numeric(20,4)`` column applies, and no more.
 * **Cross-column ties** — ``above_ema_N`` against the stored EMA and the raw close, ``ibs``
   and ``atr_14_pct`` against raw bars. Sixty columns go into one INSERT; these catch the
   off-by-one column list that a value-level diff never would.
@@ -163,6 +165,37 @@ def _diff(stored: pd.Series, expected: pd.Series, scale: int) -> float:
     return float(np.abs(lhs[both] - rhs[both]).max())
 
 
+def _storable(scale: int) -> Decimal:
+    """The largest error storing a value in a ``numeric(_, scale)`` column can introduce.
+
+    Half a unit in the last kept place. A value READ BACK from the journal has been through
+    that rounding; a value recomputed in flight has not, so the two legitimately differ by up
+    to this much and by nothing else. Comparing against it — rather than re-rounding one side
+    — keeps the check independent of whose rounding mode is whose (Postgres rounds halves
+    away from zero, Python's Decimal defaults to half-even, and a value landing exactly on a
+    half would disagree by one unit in the last place for that reason alone).
+    """
+    return Decimal(1).scaleb(-scale) / 2
+
+
+def _missing(value: object) -> bool:
+    """SQL NULL, however pandas hands it back — None from a read, NaN from an outer join."""
+    return value is None or (isinstance(value, float) and np.isnan(value))
+
+
+def _within_storage(mine: object, theirs: object, scale: int) -> bool:
+    """Are two Decimals the same number, allowing only the column's own rounding?
+
+    A NULL on ONE side is a real disagreement: it means a guard fired for one producer and
+    not the other, which is exactly the drift this comparison exists to find.
+    """
+    if _missing(mine) and _missing(theirs):
+        return True
+    if _missing(mine) or _missing(theirs):
+        return False
+    return abs(Decimal(str(mine)) - Decimal(str(theirs))) <= _storable(scale)
+
+
 # ── recompute and diff ──
 
 
@@ -208,9 +241,15 @@ def test_every_metric_reproduces_on_the_real_sample(
     assert not over, f"recompute drifted beyond {TOLERANCE}: {over}"
 
 
-def test_the_liquidity_block_reproduces_exactly(sample, anchor):
-    """ADV\\$ is money: it is Decimal end to end, so a rerun must match to the cent, not to
-    a tolerance."""
+def test_the_liquidity_block_reproduces_to_the_stored_precision(sample, anchor, scales):
+    """ADV\\$ is money — Decimal end to end, never a float — so a rerun must reproduce it to
+    the last digit the column KEEPS, not to a hand-picked tolerance.
+
+    The stored side has been through ``numeric(20,4)``; the recomputed side is the unbounded
+    ``::numeric`` the query returns. They may therefore differ by up to half a hundredth of a
+    cent and by NOTHING else — :func:`_storable` is that bound, and a real drift in the
+    window, the guard or the aggregate would be orders of magnitude larger.
+    """
     thresholds = ct.load_thresholds(_gdb.SCHEMA, engine=_gdb.engine())
     ids = [str(i) for i in sample["instrument_id"]]
     fresh = ct.liquidity_frame(ids, anchor, int(thresholds[ct.MIN_OBSERVATIONS_KEY]))
@@ -224,8 +263,15 @@ def test_the_liquidity_block_reproduces_exactly(sample, anchor):
     joined = stored.join(fresh, how="inner", rsuffix="_fresh")
     assert len(joined) > 0
     for column in ct.LIQUIDITY_COLUMNS:
-        mismatched = joined[joined[column].astype(str) != joined[f"{column}_fresh"].astype(str)]
-        assert mismatched.empty, f"{column} changed on rerun: {mismatched.head(3).to_dict()}"
+        scale = scales[column]
+        bad = [
+            (key, mine, theirs)
+            for key, mine, theirs in zip(
+                joined.index, joined[column], joined[f"{column}_fresh"], strict=True
+            )
+            if not _within_storage(mine, theirs, scale)
+        ]
+        assert not bad, f"{column} changed on rerun beyond numeric(_,{scale}): {bad[:3]}"
 
 
 # ── cross-check 1: SPY's own 12-month return, computed by hand from raw closes ──
@@ -354,9 +400,20 @@ def test_annual_volatility_is_the_annualised_standard_deviation(anchor, calendar
 # ── cross-check 4: the ADV$ the universe gate used ──
 
 
-def test_adv_matches_build_universe_snapshot_to_the_cent(anchor):
+def test_adv_matches_build_universe_snapshot(anchor, scales):
     """``adv_usd_60d_median`` is the same quantity ``build_universe_snapshot`` sets the
-    liquidity floor from. Read it from THAT script and require exact Decimal equality.
+    liquidity floor from, and TWO scripts legitimately compute it.
+
+    They have to: the universe needs ADV\\$ to decide membership, and this journal needs the
+    universe to decide its scope, so the dependency is circular and the number cannot simply
+    be read from one by the other. That makes drift a real risk — a changed window, a changed
+    minimum-observations guard, a different median — and this is the check that catches it.
+    So it is read from the OTHER script here, not recomputed locally.
+
+    The two sides differ only by storage: this journal's value has been through
+    ``numeric(20,4)``, ``bus.adv_frame`` returns the unbounded ``::numeric``. Half a hundredth
+    of a cent is allowed (:func:`_storable`); anything more is the drift being hunted. Do not
+    "restore" exact equality here — it never held, and the failure it produces is noise.
 
     Only instruments whose last bar IS the anchor are comparable: the snapshot writes a row
     for every active instrument and NULLs a stale one, while the journal only has rows on an
@@ -377,15 +434,22 @@ def test_adv_matches_build_universe_snapshot_to_the_cent(anchor):
     ).set_index("instrument_id")
     shared = journal.index.intersection(snapshot.index)
     assert len(shared) > 100, f"only {len(shared)} instruments in both — nothing was compared"
-    mismatches = []
-    for instrument_id in shared:
-        mine = journal.loc[instrument_id, "adv_usd_60d_median"]
-        theirs = snapshot.loc[instrument_id, "adv_median_60d"]
-        if mine is None and theirs is None:
-            continue
-        if mine is None or theirs is None or Decimal(mine) != Decimal(theirs):
-            mismatches.append((instrument_id, mine, theirs))
-    assert not mismatches, f"{len(mismatches)} ADV$ disagreements, e.g. {mismatches[:3]}"
+    scale = scales["adv_usd_60d_median"]
+    mismatches = [
+        (instrument_id, mine, theirs)
+        for instrument_id in shared
+        for mine, theirs in [
+            (
+                journal.loc[instrument_id, "adv_usd_60d_median"],
+                snapshot.loc[instrument_id, "adv_median_60d"],
+            )
+        ]
+        if not _within_storage(mine, theirs, scale)
+    ]
+    assert not mismatches, (
+        f"{len(mismatches)} of {len(shared)} ADV$ values differ by more than the "
+        f"numeric(_,{scale}) rounding — the two producers have drifted: {mismatches[:3]}"
+    )
 
 
 # ── cross-check 5: columns tied to each other and to the raw bars ──

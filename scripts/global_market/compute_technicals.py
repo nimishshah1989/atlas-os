@@ -301,6 +301,19 @@ def floors() -> dict[str, dt.date]:
     return dict(zip(frame["instrument_id"], frame["last_date"], strict=True))
 
 
+def extends_beyond(coverage: pd.DataFrame, instrument_id: str, floor: dict[str, dt.date]) -> bool:
+    """Do this instrument's bars reach past the last date technical_daily holds for it?
+
+    ``coverage`` carries each instrument's newest bar at or before the EOD cutoff, so an
+    instrument that has not traded since its last computed row needs no work at all. Never
+    computed yet (no floor) always counts as extending.
+    """
+    stored = floor.get(instrument_id)
+    if stored is None:
+        return True
+    return bool(coverage.loc[instrument_id, "last_date"] > stored)
+
+
 def rows_for(
     instrument: tuple[str, str, str],
     bars: pd.DataFrame,
@@ -435,6 +448,12 @@ def run(
         try:
             if instrument_id not in coverage.index:
                 status, written, out = STATUS_NO_BARS, 0, pd.DataFrame()
+            elif incremental and not extends_beyond(coverage, instrument_id, floor):
+                # India's compute_all rule: an instrument whose bars do not reach past what
+                # technical_daily already holds is SKIPPED here, before its history is read
+                # or a metric computed. Filtering the rows afterwards would still pay for the
+                # whole recompute, which is the cost a nightly incremental exists to avoid.
+                status, written, out = STATUS_UP_TO_DATE, 0, pd.DataFrame()
             elif basis is None:
                 labels = sorted(str(s) for s in coverage.loc[instrument_id, "adjustment_sources"])
                 status = STATUS_MIXED_BASIS if len(labels) > 1 else STATUS_NO_BASIS
