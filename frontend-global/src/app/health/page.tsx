@@ -28,19 +28,31 @@ export const revalidate = 0
 export const metadata = { title: 'Health' }
 
 const RECENT_RUNS = 30
+// Per-query settle budget. Twelve seconds is two orders of magnitude above what any of these
+// ops-table reads takes when the pooler answers, and short enough that the page — and the
+// deploy's 20-second /health probe — returns with the stalled query named rather than nothing.
+const QUERY_BUDGET_MS = 12_000
 const VALIDATOR_WINDOW_DAYS = 30
 
 export default async function HealthPage() {
   if (!dbAvailable) return <NoDatabase />
 
+  // EVERY QUERY IS NAMED AND BOUNDED (src/lib/result.ts). This page answered 0 bytes for a day
+  // while each of these statements ran in under 0.1s one at a time — a hang, not an error, and
+  // an unbounded await cannot say which of seven promises never settled. Now each has a budget:
+  // a stall renders as "<name> did not answer within 12s" in its own section, and the page
+  // still returns. Promise.all is kept deliberately: if the cause is the transaction pooler
+  // refusing a slot, WHICH queries time out together is the fingerprint — the last one or two
+  // says pool size, all seven says the pool is exhausted, one specific statement says that
+  // statement. Sequencing them would hide exactly that.
   const [latest, recent, validators, history, anomalies, freshness, calls] = await Promise.all([
-    attempt(getLatestRunPerScript()),
-    attempt(getPipelineRuns(RECENT_RUNS)),
-    attempt(getValidatorLatest()),
-    attempt(getValidatorHistory(VALIDATOR_WINDOW_DAYS)),
-    attempt(getLatestAnomalies()),
-    attempt(getFreshnessRows()),
-    attempt(getProviderCalls()),
+    attempt(getLatestRunPerScript(), { label: 'latest run per script', timeoutMs: QUERY_BUDGET_MS }),
+    attempt(getPipelineRuns(RECENT_RUNS), { label: 'recent runs', timeoutMs: QUERY_BUDGET_MS }),
+    attempt(getValidatorLatest(), { label: 'validators (latest)', timeoutMs: QUERY_BUDGET_MS }),
+    attempt(getValidatorHistory(VALIDATOR_WINDOW_DAYS), { label: 'validators (history)', timeoutMs: QUERY_BUDGET_MS }),
+    attempt(getLatestAnomalies(), { label: 'flagged metrics', timeoutMs: QUERY_BUDGET_MS }),
+    attempt(getFreshnessRows(), { label: 'freshness rows', timeoutMs: QUERY_BUDGET_MS }),
+    attempt(getProviderCalls(), { label: 'provider calls', timeoutMs: QUERY_BUDGET_MS }),
   ])
   const freshnessNote =
     freshness.ok && freshness.value.data_date

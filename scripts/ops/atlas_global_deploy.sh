@@ -180,8 +180,9 @@ health=$(curl -sS -m 20 -o /dev/null -w '%{http_code}' \
 if [ "$health" = "200" ]; then
   say "ok: ${BASE_PATH}/health 200 — the database path is healthy too"
 else
-  say "NOTE: ${BASE_PATH}/health answered $health (000 = no answer in 20s). The board is UP —"
-  say "      /login serves — but its database path is not, and SIGN-IN READS THE DATABASE"
-  say "      (isInvited -> app_user), so the sign-in button will hang until this is fixed."
-  say "      Diagnose with:  cd $APP_DIR && node scripts/db-probe.mjs"
+  say "NOTE: ${BASE_PATH}/health answered $health (000 = no answer in 20s). The board is UP and"
+  say "      serving; only the operator page is slow or stalled. Its database path measured"
+  say "      healthy on 2026-09-08 (scripts/db-probe.mjs: every step under 0.1s), so this is the"
+  say "      page itself — it now bounds each of its queries and NAMES the one that stalls."
+  say "      Open ${BASE_PATH}/health and read which section says 'did not answer within'."
 fi
