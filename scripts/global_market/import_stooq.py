@@ -42,7 +42,7 @@ SP500 price index — an unrelated publisher, no key, dividends absent by constr
 So this importer decides nothing about the archive; it ASKS, via
 :func:`measured_total_return`, and labels from the answer. Gate passes → ``close_tr`` = the
 file's close under ``stooq:total_return``. Gate does not pass, or cannot run → ``close_tr``
-NULL under ``stooq:unknown``, said loudly; ``price_basis.basis_of`` resolves nothing for that
+NULL under ``stooq:unknown``, said loudly; ``price_basis.plan_for`` resolves nothing for that
 label, so ``compute_technicals.py`` skips and lists those instruments rather than score bars
 whose meaning nobody established.
 

@@ -135,10 +135,33 @@ def _stored(instrument_id: str) -> pd.DataFrame:
     return frame.set_index("date")
 
 
-def _raw_bars(instrument_id: str, column: str = "close_tr") -> pd.DataFrame:
-    """Bars straight from ohlcv_daily — never through compute_technicals' own reader."""
+def _plan(instrument_id: str) -> PB.BasisPlan:
+    """The basis plan this instrument's bars carry, resolved the way the producer resolves it.
+
+    Read from ``adjustment_source`` on the bars, NOT from the stored ``price_basis``: the
+    stamp is one of the things under test, so deriving the recompute from it would let a
+    wrong stamp agree with itself.
+    """
+    sources = _gdb.read_df(
+        f"select distinct adjustment_source from {M}.ohlcv_daily "
+        "where instrument_id = cast(:i as uuid)",
+        {"i": instrument_id},
+    )
+    plan = ct.uniform_plan(list(sources["adjustment_source"]))
+    assert plan is not None, f"{instrument_id}: bars carry no single basis plan"
+    return plan
+
+
+def _raw_bars(instrument_id: str, series: str = PB.TOTAL_RETURN) -> pd.DataFrame:
+    """Bars straight from ohlcv_daily — never through compute_technicals' own reader.
+
+    ``series`` picks the whole OHLC family, not just the close: a split-only ATR or IBS is a
+    statement about the split-only high and low, and checking it against the raw ones would
+    only agree on instruments that never split.
+    """
+    _, high, low, close = PB.price_columns(series)
     return _gdb.read_df(
-        f"select date, high, low, {column} as close from {M}.ohlcv_daily "
+        f"select date, {high} as high, {low} as low, {close} as close from {M}.ohlcv_daily "
         "where instrument_id = cast(:i as uuid) order by date",
         {"i": instrument_id},
     ).set_index("date")
@@ -221,9 +244,8 @@ def test_every_metric_reproduces_on_the_real_sample(
         stored = _stored(row.instrument_id)
         if stored.empty:
             continue
-        basis = str(stored["price_basis"].iloc[0])
-        bars = ct.bar_frame(row.instrument_id, basis, anchor, calendar)
-        metrics = G.metric_frame(bars, benchmark, risk_free)
+        bars = ct.bar_frame(row.instrument_id, _plan(row.instrument_id), anchor, calendar)
+        metrics = G.metric_frame(bars, G.series(bars, "close_ret"), benchmark, risk_free)
         metrics.index = [stamp.date() for stamp in metrics.index]
         common = [d for d in stored.index if d in set(metrics.index)]
         assert len(common) == len(stored), f"{row.symbol}: stored dates absent from a rerun"
@@ -395,10 +417,10 @@ def test_the_risk_block_equals_empyrical_on_the_deepest_instrument(anchor, calen
     )
     instrument_id = str(deepest["instrument_id"].iloc[0])
     stored = _stored(instrument_id)
-    basis = str(stored["price_basis"].iloc[0])
-    bars = ct.bar_frame(instrument_id, basis, anchor, calendar)
-    close = bars["close"]
-    returns = close.pct_change()
+    bars = ct.bar_frame(instrument_id, _plan(instrument_id), anchor, calendar)
+    # The RETURN series, which is what every risk metric is computed on — `close` is the
+    # trend series, and on a feed carrying both they are different columns.
+    returns = bars["close_ret"].pct_change()
     # SPY's returns on THIS instrument's sessions — reindexed before differencing, exactly as
     # risk_frame does it. Passing `returns` here (as this test once did) asks empyrical for
     # the beta of a series against ITSELF, which is 1 by construction and checks nothing; it
@@ -440,8 +462,8 @@ def test_annual_volatility_is_the_annualised_standard_deviation(anchor, calendar
         "group by instrument_id order by count(*) desc limit 1"
     )
     stored = _stored(deepest)
-    bars = ct.bar_frame(deepest, str(stored["price_basis"].iloc[0]), anchor, calendar)
-    returns = bars["close"].pct_change().to_numpy()[-20:]
+    bars = ct.bar_frame(deepest, _plan(deepest), anchor, calendar)
+    returns = bars["close_ret"].pct_change().to_numpy()[-20:]
     by_hand = float(np.std(returns, ddof=1) * np.sqrt(252))
     assert abs(float(stored.loc[anchor, "vol_20d_ann"]) - by_hand) < TOLERANCE
 
@@ -509,7 +531,7 @@ def test_above_flags_agree_with_the_stored_emas_and_the_raw_close(sample):
     passes (every column reproduces — into the wrong column); this does not."""
     for row in sample.head(15).itertuples(index=False):
         stored = _stored(row.instrument_id)
-        bars = _raw_bars(row.instrument_id, PB.price_columns(str(stored["price_basis"].iloc[0]))[3])
+        bars = _raw_bars(row.instrument_id, _plan(row.instrument_id).trend)
         close = _floats(bars, "close")
         for period in G.T.EMA_PERIODS:
             ema = _floats(stored, f"ema_{period}")
@@ -529,8 +551,7 @@ def test_ibs_and_atr_percent_agree_with_the_raw_bars(sample):
     """IBS and ATR-percent are ties between columns and the bar they came from."""
     for row in sample.head(15).itertuples(index=False):
         stored = _stored(row.instrument_id)
-        close_column = PB.price_columns(str(stored["price_basis"].iloc[0]))[3]
-        bars = _raw_bars(row.instrument_id, close_column).reindex(stored.index)
+        bars = _raw_bars(row.instrument_id, _plan(row.instrument_id).trend).reindex(stored.index)
         high = _floats(bars, "high")
         low = _floats(bars, "low")
         close = _floats(bars, "close")
@@ -560,7 +581,9 @@ def test_every_row_declares_the_basis_its_bars_actually_carry(anchor):
     )
     assert not frame.empty
     for basis, source in zip(frame["price_basis"], frame["adjustment_source"], strict=True):
-        assert PB.basis_of(source) == basis, f"{source!r} stored as price_basis={basis!r}"
+        plan = PB.plan_for(source)
+        assert plan is not None, f"{source!r} resolves to no basis, yet rows were written"
+        assert plan.stamp == basis, f"{source!r} stored as price_basis={basis!r}"
 
 
 def test_bounded_metrics_stay_inside_their_bounds_on_every_real_row():

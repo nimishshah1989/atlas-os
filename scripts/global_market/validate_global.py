@@ -330,7 +330,7 @@ def check_BASIS(g: Gate) -> None:
         {"sym": BASIS_SYMBOL, "src": BASIS_SOURCE},
     )
     # WHAT THIS GATE PROTECTS is anything that READS the archive. An archive row still
-    # carrying `stooq:unknown` has close_adj and close_tr NULL, `price_basis.basis_of`
+    # carrying `stooq:unknown` has close_adj and close_tr NULL, `price_basis.plan_for`
     # resolves nothing for that label, and compute_technicals skips and lists it — so no
     # number on the board descends from it and there is nothing to guard. Saying so is not a
     # loosening: the moment a row is LABELLED, it has a consumer, and the measurement below

@@ -1,8 +1,8 @@
 """Every ``atlas_global.technical_daily`` number for ONE instrument, as a pure frame.
 
-No database, no arguments beyond the bars: :func:`metric_frame` takes an instrument's OHLCV,
-SPY's close and a daily risk-free series and returns one row per session with every metric
-column the DDL declares. :mod:`compute_technicals` does the I/O around it. Keeping the math
+No database, no arguments beyond the bars: :func:`metric_frame` takes an instrument's OHLCV
+on the trend series, its close on the return series, SPY's close and a daily risk-free series,
+and returns one row per session with every metric column the DDL declares. :mod:`compute_technicals` does the I/O around it. Keeping the math
 here is what makes "recompute the stored rows and diff" a real test rather than a tautology
 — the test calls this function, the writer calls this function, and nothing else computes a
 technical.
@@ -346,21 +346,30 @@ def relative_strength(close: pd.Series, benchmark: pd.Series) -> pd.DataFrame:
 
 
 def metric_frame(
-    bars: pd.DataFrame, benchmark_close: pd.Series, risk_free: pd.Series
+    bars: pd.DataFrame,
+    return_close: pd.Series,
+    benchmark_close: pd.Series,
+    risk_free: pd.Series,
 ) -> pd.DataFrame:
     """Every technical_daily metric column for one instrument, indexed by session.
 
-    ``bars`` carries open/high/low/close/volume for ONE price basis (the caller picked the
-    columns from ``adjustment_source``), ascending, already restricted to SPY sessions.
-    ``benchmark_close`` is SPY's close on the same basis; ``risk_free`` is the daily rate.
-    Both are reindexed onto ``bars.index`` here.
+    TWO series, because the two metric families want different ones (see
+    ``atlas.global_market.price_basis``). ``bars`` carries open/high/low/close/volume on the
+    TREND series — split-only wherever the feed has it — ascending and already restricted to
+    SPY sessions; it feeds EMA / RSI / ATR / Bollinger / IBS and the volume ratios.
+    ``return_close`` is the close on the RETURN series — total return wherever the feed has
+    it — and feeds every return, relative-strength and risk metric. Where the feed carries
+    only one series the caller passes that one twice, and the row's ``price_basis`` says so.
+
+    ``benchmark_close`` is SPY's close on the SAME series as ``return_close`` (the caller
+    checks); ``risk_free`` is the daily rate. Both are reindexed onto ``bars.index`` here.
 
     ``rs_*_peer`` is left NULL on purpose. A peer group needs the Phase 2 classification
     engine (GICS sector for stocks, taxonomy peer group for ETFs); until it exists there is
     no peer set to be relative TO, and a stand-in — "all ETFs", "the whole index" — would be
     a fabricated benchmark wearing a real column's name (rule #0).
     """
-    close = series(bars, "close")
+    close = cast(pd.Series, return_close.reindex(bars.index))
     benchmark = cast(pd.Series, benchmark_close.reindex(bars.index))
     out = pd.concat(
         [
