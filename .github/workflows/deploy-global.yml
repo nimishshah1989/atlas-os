@@ -56,26 +56,21 @@ jobs:
 
             # ATLAS_GLOBAL_PORT has no default in the deploy script ON PURPOSE — the port is a
             # fact about this box, not a constant, and guessing it would reload pm2 onto a port
-            # nginx does not proxy. Three places it can honestly come from, in order:
+            # nginx does not proxy. Two places it can honestly come from, in order:
             #   1. the box .env, where it belongs
             #   2. the pm2 process that is already serving on it — true by construction
-            #   3. nowhere, which is a setup error and says so
-            PORT=$(grep -sE '^ATLAS_GLOBAL_PORT=' "$REPO/.env" | tail -1 | cut -d= -f2- | tr -d '"'"'"' ' || true)
-            if [ -z "${PORT:-}" ]; then
-              PORT=$(pm2 jlist 2>/dev/null | python3 -c "
-import json, sys
-try:
-    procs = json.load(sys.stdin)
-except Exception:
-    sys.exit(0)
-for p in procs:
-    if p.get('name') == 'atlas-global':
-        print(p.get('pm2_env', {}).get('PORT', ''))
-        break
-" || true)
-              [ -n "${PORT:-}" ] && echo "port $PORT taken from the running atlas-global process"
-            else
+            # Both are read as "the digits on that line", which survives quotes and stray spaces
+            # in .env without a quoting expression nobody can read six months from now.
+            PORT=$(grep -sE '^ATLAS_GLOBAL_PORT=' "$REPO/.env" | tail -1 | grep -oE '[0-9]+' | tail -1 || true)
+            if [ -n "${PORT:-}" ]; then
               echo "port $PORT taken from $REPO/.env"
+            else
+              # One line, deliberately: a multi-line script indented BELOW this block scalar's
+              # own indent silently ENDS the scalar, and YAML then tries to parse Python. That
+              # is exactly how the first version of this workflow failed — startup_failure, zero
+              # jobs, no log to read. Keep every command on one line.
+              PORT=$(pm2 jlist 2>/dev/null | python3 -c "import json,sys; print(next((str(p.get('pm2_env',{}).get('PORT','')) for p in json.load(sys.stdin) if p.get('name')=='atlas-global'), ''))" 2>/dev/null || true)
+              [ -n "${PORT:-}" ] && echo "port $PORT taken from the running atlas-global process"
             fi
             if [ -z "${PORT:-}" ]; then
               echo "REFUSED: cannot determine ATLAS_GLOBAL_PORT."
