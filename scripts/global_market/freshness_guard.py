@@ -43,6 +43,7 @@ KEY_TABLES: list[tuple[str, str, int]] = [
     ("ohlcv_daily", "date", 0),  # the spine: every board number descends from it (P1-B)
     ("macro_daily", "date", 3),  # FRED posts DGS10/DTB3 the next business day (P1-C)
     ("technical_daily", "date", 0),  # nightly from ohlcv_daily, same session (P1-D)
+    ("country_daily", "date", 0),  # nightly read over technical_daily, same session
 ]
 
 # Derived board tables — WARN tier (reported + written to the health snapshot, never a
@@ -67,6 +68,7 @@ PRODUCERS: dict[str, str] = {
     "index_membership": "ingest_index_membership.py",
     "universe_snapshot": "build_universe_snapshot.py",
     "technical_daily": "compute_technicals.py",
+    "country_daily": "build_country_views.py",
 }
 
 

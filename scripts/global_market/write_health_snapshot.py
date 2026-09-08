@@ -49,6 +49,7 @@ TRACKED: list[tuple[str, str]] = [
     ("macro_daily", "date"),
     ("ohlcv_daily", "date"),
     ("technical_daily", "date"),
+    ("country_daily", "date"),
     ("universe_snapshot", "date"),
 ]
 
