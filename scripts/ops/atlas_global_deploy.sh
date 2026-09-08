@@ -63,12 +63,13 @@ cd "$APP_DIR" || die "cannot cd $APP_DIR"
 export ATLAS_GLOBAL_BASE_PATH="$BASE_PATH"
 export PORT="$ATLAS_GLOBAL_PORT"
 
-# A deploy once died on `sh: 1: next: not found` (atlas-auto-deploy.sh's lesson). Run `npm ci` by
-# hand as well whenever the lockfile has moved — this only catches the missing-toolchain case.
-if [ ! -x node_modules/.bin/next ]; then
-  say "node_modules/.bin/next missing — npm ci"
-  npm ci >>"$LOG" 2>&1 || die "npm ci failed"
-fi
+# `npm ci` on EVERY deploy, exactly as India's deploy-frontend.yml does. The old rule ran it
+# only when node_modules/.bin/next was missing, which leaves a stale node_modules in place the
+# moment package-lock.json moves — and a build that is green in CI (fresh install) then fails
+# on the box (old install) for a reason that never appears in the diff. --prefer-offline keeps
+# it to seconds when nothing changed.
+say "npm ci --prefer-offline"
+npm ci --prefer-offline >>"$LOG" 2>&1 || { say "npm ci FAILED — last 40 lines of $LOG:"; tail -n 40 "$LOG" | sed 's/^/    /'; die "npm ci failed"; }
 
 # `|| die`, because an UNCHECKED cp is how a full disk turns a failed build into a broken
 # board: it leaves a partial .next.bak that the rollback below would then install.
@@ -105,7 +106,12 @@ if NODE_OPTIONS='--max-old-space-size=3072' \
   fi
   ls -1dt "$APP_DIR"/.next.bak.* 2>/dev/null | tail -n +4 | xargs -r rm -rf   # keep 3 backups
 else
-  say "FAIL: build — rolling back to the previous .next; the board keeps serving it"
+  BUILD_RC=$?
+  say "FAIL: build (exit $BUILD_RC; 137 = killed, usually OOM) — rolling back to the previous .next; the board keeps serving it"
+  # The reason, on stdout, where the Actions log can see it. Without this the only copy of the
+  # compiler's complaint is a file on the box, and the deploy reads as "it failed" with no why.
+  say "last 60 lines of $LOG:"
+  tail -n 60 "$LOG" | sed 's/^/    /'
   # Never `rm -rf .next` first: with no backup that turns a failed deploy into an outage.
   if [ -n "$BACKUP" ]; then
     rm -rf .next && mv "$BACKUP" .next && say "rollback: restored $(cat .next/BUILD_ID)"
