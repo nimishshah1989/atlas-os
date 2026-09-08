@@ -18,10 +18,21 @@ const url = process.env.ATLAS_GLOBAL_DB_URL
 /** True when this deployment has a database. Every page checks it before querying. */
 export const dbAvailable = Boolean(url)
 
+// REFUSES, rather than warns. A warning goes to a pm2 log nobody is reading at the moment it
+// matters, and the failure it precedes is not this board's: India's `db.ts` is sized at max 14
+// against a hard cap of 15 SESSION-mode slots, so one global process on port 5432 takes the
+// last one and the LIVE India board stops answering. The board's own pages degrade to an
+// honest "no database" state, which is the right trade against taking down the other market.
+//
+// This is also the guard against an environment mistake that cannot be seen by reading
+// .env.local: the box's .env is `set -a; source`d by the nightly, and @next/env prefers a real
+// process env var over the file — so an ATLAS_GLOBAL_DB_URL exported there SILENTLY wins.
 if (url && !url.includes(':6543/')) {
-  console.warn(
-    '[atlas-global] ATLAS_GLOBAL_DB_URL is not the transaction-mode pooler (port 6543). ' +
-      'The global board is sized for it (max 5 per instance); session mode shares India\'s 15 slots.',
+  throw new Error(
+    '[atlas-global] ATLAS_GLOBAL_DB_URL must be the transaction-mode pooler (port 6543), not ' +
+      "session mode. India's session pool holds 14 of the cluster's 15 slots; taking the last " +
+      'one stops the live India board. Fix the URL in frontend-global/.env.local — and check ' +
+      'the box .env, whose exported value would override the file.',
   )
 }
 

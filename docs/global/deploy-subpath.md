@@ -1,42 +1,43 @@
 # Global Atlas at `atlas.jslwealth.in/global` — the deployment package
 
-> ## ⛔ DO NOT RUN THIS YET — three independent adversarial reviews said so
+> ## Cleared to run, 2026-09-08 — with two things to check on the box first
 >
-> This document is **blocked**, not draft. Three reviewers (nginx/process, auth/exposure,
-> rollback-under-pressure) each tried to break the live India board with it and each succeeded by a
-> different route. The nginx design itself is sound and all three said so; what is unsafe is
-> everything around it. Fix these first, then delete this banner:
+> This document was blocked: three adversarial reviews each broke the live India board with it by
+> a different route. Six of the seven were code, and are fixed (PR "global: make the box deploy
+> safe beside the India board"):
 >
-> 1. **The build lock has a hole exactly where the traffic is.** India has THREE deployers and the
->    repo contradicts itself about which is live (`docs/deploy.md:16-21` vs
->    `scripts/ops/atlas-src-sync.sh:5-11` vs `STATE.md:44-48`). The GitHub Action
->    `deploy-frontend.yml` builds ON THE BOX and does NOT take the lock added here. One `frontend/**`
->    merge during a global build = two 3 GB builds on 2 vCPU = the live India process OOM-killed.
-> 2. **Nothing checks disk.** `df`/`disk`/`space` appear zero times in 460 lines. The second app is
->    548 MB of `node_modules` + 110 MB of `.next` + three `.next.bak.*`. All three India build paths
->    do `cp -r .next .next.bak.$STAMP` with the exit status UNCHECKED and, on failure,
->    `mv` the backup back — so ENOSPC makes India's own rollback install a truncated build.
-> 3. **The rollback `sed` can silently do nothing, and poisons India's rollback while it does.**
->    `sed -i` exits 0 whether or not it matched, and on the standard `sites-enabled` symlink layout
->    it replaces the symlink with a regular file — disabling the documented `3004`→`3002` break-glass
->    that `docs/deploy.md:29` promises. Discovered during the next India incident.
-> 4. **Port 3002 looks free and is not.** It is India's instant-rollback target; that process is
->    STOPPED, so `ss -ltnp` does not show it, and §0 tells the operator to trust `ss` over the docs.
-> 5. **The Supabase cookie is `Path=/`.** `@supabase/ssr` defaults to the whole domain and no
->    `cookieOptions` are passed, so a Global session attaches to every India request including
->    static assets, and can overflow nginx's header buffer into `400 Bad Request` — for the FM and
->    the analysts specifically, i.e. the loudest reporters, on a board that works for everyone else.
-> 6. **A session-mode `ATLAS_GLOBAL_DB_URL` in the deploy shell beats the `.env.local` guard**
->    (`@next/env` prefers `process.env`) and takes India's last Postgres session slot; India's
->    `db.ts` is sized at `max: 14` against a hard cap of 15.
-> 7. **`git pull` on the box while this lives on a branch** ships untested code to real clients:
->    `atlas_daily.sh` has no branch guard, and `atlas-auto-deploy.sh` `git stash`es a dirty tree and
->    carries on rather than stopping.
+> | Was | Now |
+> |---|---|
+> | The GitHub Action `deploy-frontend.yml` built on the box without the shared lock — two 3 GB builds on 2 vCPU OOM the live board | takes `$NEXT_BUILD_LOCK`, like every other build path |
+> | `cp -r .next .next.bak` exit status unchecked — a full disk leaves a truncated backup the rollback then installs | `\|\| die`; and the rollback never `rm -rf .next` before it has a backup to put back |
+> | The Supabase cookie was `Path=/`, so a Global session rode on every India request and could overflow nginx's header buffer into `400 Bad Request` | scoped to the board's own sub-path (`src/lib/supabase/cookieScope.ts`), on all three clients |
+> | `db.ts` only `console.warn`ed a session-mode URL, which would take India's last Postgres slot | refuses to start |
+> | Deploying from a branch | merged to `main` |
+> | The fail-open auth path | closed (`src/lib/auth.ts`) |
 >
-> Also unresolved and listed here so it is not lost: the fail-open auth path
-> (`frontend-global/src/lib/auth.ts`) must be closed before `/global` is reachable from the public
-> internet, and the box `.env` is `set -a; source`d by the nightly and then handed to
-> `pm2 reload --update-env`, so anything added there lands in the India server process's environment.
+> **Two things this document cannot know, so you check them on the box:**
+>
+> 1. **The port.** `ATLAS_GLOBAL_PORT` has no default on purpose. Read `ss -ltnp` — and do NOT
+>    take **3002**: it looks free because that process is STOPPED, and it is India's break-glass
+>    rollback target (`docs/deploy.md:29`). 3004 is India live.
+> 2. **Free disk.** `df -h /home/ubuntu`. A Next build plus a backup wants a couple of GB; India
+>    keeps its own `.next.bak.*` there too. Tight, clear them before you start.
+>
+> **A subdomain is now the better route (FM, 2026-09-08).** `global.jslwealth.in` with its own
+> nginx server block, rather than a `location /global` inside India's, makes three of the six
+> fixes above structurally unnecessary instead of merely fixed: cookies are scoped by HOST, so a
+> Global session cannot reach the India board at all; India's live nginx config is never edited,
+> so its break-glass rollback is untouched; and `ATLAS_GLOBAL_BASE_PATH` goes away entirely,
+> along with the class of bug where a build-time and a run-time value disagree and send a
+> signed-in reader to India's `/etfs`. What a subdomain does NOT separate is CPU, RAM and disk —
+> both apps still build on 2 vCPU — which is what the build lock and the checked backup are for.
+> This document still describes the sub-path route and is correct for it; a subdomain version is
+> shorter and is the one to write next.
+>
+> One thing is deliberately still true and is a decision, not an oversight: `/health` answers
+> without a session, by design — it is the ops page the nightly gates report to. It shows table
+> names, row counts and run timestamps; no client data, no positions. Say so if you want it
+> behind auth before a real domain points here.
 
 Serving the Global Atlas board from the prod box, under the existing domain, beside the live India
 board. Written to be run top to bottom by a human on the box. **Nothing here was executed against

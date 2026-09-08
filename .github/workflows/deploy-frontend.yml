@@ -79,7 +79,12 @@ jobs:
             # NEXT_PUBLIC_LENS_V4 is BAKED at build time (feature-flags.ts). Without it the bundle
             # falls back to the pre-v4 nav (the 2026-06-27 "old Atlas glimpses" regression). The
             # serving-dir .env.local also carries it, but set it here too so a fresh box can't drift.
-            if NODE_OPTIONS="--max-old-space-size=3072" NEXT_PUBLIC_LENS_V4=1 LENS_V4_ENABLED=1 npm run build >> "$LOG" 2>&1; then
+            # flock: the box is 2 vCPU and each Next build asks for 3 GB. This Action, atlas_daily.sh,
+            # atlas-auto-deploy.sh and atlas_global_deploy.sh all build ON THIS BOX; two at once OOMs
+            # and takes the LIVE board down. Every other path already takes this lock — this one did
+            # not, which was the hole. -w 2700: wait for the other build, never skip this one.
+            if NODE_OPTIONS="--max-old-space-size=3072" NEXT_PUBLIC_LENS_V4=1 LENS_V4_ENABLED=1 \
+               flock -w 2700 "${NEXT_BUILD_LOCK:-/tmp/atlas-next-build.lock}" npm run build >> "$LOG" 2>&1; then
               echo "[deploy ${STAMP}] build OK; pm2 reload (rolling, zero-downtime)" | tee -a "$LOG"
               pm2 reload atlas-frontend-v3 >> "$LOG" 2>&1
             else

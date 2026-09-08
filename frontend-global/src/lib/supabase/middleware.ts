@@ -4,7 +4,9 @@
 // operator surface and the sign-in page, which explains what is missing.
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { basePath } from '@/lib/basePath'
 import { e2eBypassEmail } from '@/lib/e2e'
+import { cookieScope } from './cookieScope'
 import { readSupabaseEnv } from './env'
 import { isPublicPath } from './paths'
 
@@ -24,7 +26,12 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   if (!env) return isPublicPath(pathname) ? NextResponse.next({ request }) : toLogin(request)
 
   let response = NextResponse.next({ request })
+  // Every refresh writes the session cookie, so this is the hot path for the Path=/ problem
+  // (./cookieScope.ts): the middleware runs on every request, India's included if it ever
+  // shared a process. Scoped on the library AND on the response cookie we set ourselves.
+  const path = cookieScope(basePath)
   const supabase = createServerClient(env.url, env.anonKey, {
+    cookieOptions: { path },
     cookies: {
       getAll() {
         return request.cookies.getAll()
@@ -32,7 +39,9 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
       setAll(cookiesToSet) {
         cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
         response = NextResponse.next({ request })
-        cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options))
+        cookiesToSet.forEach(({ name, value, options }) =>
+          response.cookies.set(name, value, { ...options, path }),
+        )
       },
     },
   })
