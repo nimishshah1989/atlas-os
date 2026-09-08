@@ -26,6 +26,21 @@ export const metadata: Metadata = {
   robots: 'noindex, nofollow',
 }
 
+// EVERY ROUTE IS RENDERED ON REQUEST, exactly as it was before the board opened
+// (src/lib/openAccess.ts). Until then requireUser() redirected, and a redirect makes a route
+// dynamic; once the board opened nothing did, so `next build` on the box tried to PRERENDER
+// /stocks at build time and met Explorer's useSearchParams() with no Suspense boundary:
+//
+//     ⨯ useSearchParams() should be wrapped in a suspense boundary at page "/stocks"
+//     Export encountered an error on /stocks/page: /stocks, exiting the build.
+//
+// That error exists only at prerender, and only when a real, populated database mounts the
+// explorer — which is why no local build reproduces it and CI (tsc + vitest) never saw it.
+// Prerendering is also the wrong contract here: it would bake one session's data into HTML at
+// deploy time. Dynamic per request, with unstable_cache under the 'eod' tag, is what the
+// nightly's revalidate publishes against. Pinned by src/lib/__tests__/root-layout-dynamic.test.ts.
+export const dynamic = 'force-dynamic'
+
 // Runs before paint: the remembered theme, else the system preference, else light.
 const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem('atlas-global-theme');if(t!=='dark'&&t!=='light'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}document.documentElement.setAttribute('data-theme',t)}catch(e){document.documentElement.setAttribute('data-theme','light')}})()`
 
