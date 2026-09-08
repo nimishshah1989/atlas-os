@@ -4,6 +4,33 @@
 import 'server-only'
 import { db, dbAvailable } from '@/lib/db'
 
+// EVERY READ ON THIS PAGE HAS A SERVER-SIDE BUDGET. On 2026-09-08 two of these — the two that
+// touch atlas_health_daily — stopped returning, on a six-row table, while count(*) on the same
+// table answered in 0.0s. The page's client-side budget (src/lib/result.ts) makes that a named
+// error instead of a hang, but it cancels nothing: the statement keeps running in Postgres and
+// holds its pooler connection until it returns — which, if it is waiting on a lock, is never.
+// With max 5 connections per process, a handful of stalled /health renders would exhaust the
+// pool and every page that queries would hang — the pages readers actually use. So the budget
+// is applied where the cancel is real: `SET LOCAL statement_timeout` inside one transaction.
+// Postgres cancels the statement at the limit, the error names itself ("canceling statement
+// due to statement timeout"), and the connection is released.
+//
+// This is the transaction-mode pooler's ONE supported use of SET LOCAL — scoped to a single
+// sql.begin(), which pins a connection for exactly that transaction. It is the same pattern
+// scripts/foundation/_db.py::_apply_timeout uses ("pooler-proof"). db.ts's rule that nothing
+// may rely on SET LOCAL is about session state across statements; this is not that.
+const STATEMENT_BUDGET = '10s'
+
+type Tx = Parameters<Parameters<ReturnType<typeof db>['begin']>[0]>[0]
+
+/** Run `fn` in one transaction whose statements are cancelled server-side after the budget. */
+async function bounded<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return db().begin(async (tx) => {
+    await tx.unsafe(`SET LOCAL statement_timeout = '${STATEMENT_BUDGET}'`)
+    return fn(tx)
+  }) as Promise<T>
+}
+
 // ── pipeline runs ───────────────────────────────────────────────────────────
 
 export type PipelineRun = {
@@ -30,22 +57,22 @@ const RUN_COLUMNS = `
 /** The last N runs, newest first. */
 export async function getPipelineRuns(limit = 30): Promise<PipelineRun[]> {
   if (!dbAvailable) return []
-  return db()<PipelineRun[]>`
-    SELECT ${db().unsafe(RUN_COLUMNS)}
+  return bounded((tx) => tx<PipelineRun[]>`
+    SELECT ${tx.unsafe(RUN_COLUMNS)}
     FROM atlas_global.atlas_pipeline_runs
     ORDER BY started_at DESC
     LIMIT ${limit}
-  `
+  `)
 }
 
 /** One row per script — its most recent run. */
 export async function getLatestRunPerScript(): Promise<PipelineRun[]> {
   if (!dbAvailable) return []
-  return db()<PipelineRun[]>`
-    SELECT DISTINCT ON (script_name) ${db().unsafe(RUN_COLUMNS)}
+  return bounded((tx) => tx<PipelineRun[]>`
+    SELECT DISTINCT ON (script_name) ${tx.unsafe(RUN_COLUMNS)}
     FROM atlas_global.atlas_pipeline_runs
     ORDER BY script_name, started_at DESC
-  `
+  `)
 }
 
 // ── freshness: the "as of" stamp on every surface ──────────────────────────
@@ -63,13 +90,13 @@ export type Freshness =
 /** The latest successful pipeline step, and whether it is recent enough to trust. */
 export async function getFreshness(): Promise<Freshness> {
   if (!dbAvailable) return { state: 'no-db' }
-  const rows = await db()<{ script_name: string; ended_at: Date }[]>`
+  const rows = await bounded((tx) => tx<{ script_name: string; ended_at: Date }[]>`
     SELECT script_name, ended_at
     FROM atlas_global.atlas_pipeline_runs
     WHERE status = 'success' AND ended_at IS NOT NULL
     ORDER BY ended_at DESC
     LIMIT 1
-  `
+  `)
   const r = rows[0]
   if (!r) return { state: 'none' }
   const ended_at = new Date(r.ended_at)
@@ -96,23 +123,23 @@ export type ValidatorRun = {
 /** The latest result per validator. */
 export async function getValidatorLatest(): Promise<ValidatorRun[]> {
   if (!dbAvailable) return []
-  return db()<ValidatorRun[]>`
+  return bounded((tx) => tx<ValidatorRun[]>`
     SELECT DISTINCT ON (validator)
       run_id::text AS run_id, validator, ran_at, total_checks, failures, status
     FROM atlas_global.atlas_validator_results
     ORDER BY validator, ran_at DESC
-  `
+  `)
 }
 
 /** Every result inside the window, for pass rates. */
 export async function getValidatorHistory(days = 30): Promise<ValidatorRun[]> {
   if (!dbAvailable) return []
-  return db()<ValidatorRun[]>`
+  return bounded((tx) => tx<ValidatorRun[]>`
     SELECT run_id::text AS run_id, validator, ran_at, total_checks, failures, status
     FROM atlas_global.atlas_validator_results
     WHERE ran_at >= NOW() - (${days}::int * INTERVAL '1 day')
     ORDER BY validator, ran_at DESC
-  `
+  `)
 }
 
 // ── anomalies (the health snapshot's flagged metrics) ──────────────────────
@@ -134,27 +161,29 @@ export type AnomalySnapshot = { data_date: string | null; rows: AnomalyRow[] }
 /** Flagged metrics on the most recent snapshot date (data_date selected as text: no zone shift). */
 export async function getLatestAnomalies(): Promise<AnomalySnapshot> {
   if (!dbAvailable) return { data_date: null, rows: [] }
-  const latest = await db()<{ d: string | null }[]>`
-    SELECT MAX(data_date)::text AS d FROM atlas_global.atlas_health_daily
-  `
-  const d = latest[0]?.d ?? null
-  if (!d) return { data_date: null, rows: [] }
-  const rows = await db()<AnomalyRow[]>`
-    SELECT
-      data_date::text          AS data_date,
-      table_name, metric_name,
-      value_today::float8      AS value_today,
-      value_prior_day::float8  AS value_prior_day,
-      pct_change_dod::float8   AS pct_change_dod,
-      z_score::float8          AS z_score,
-      severity, notes
-    FROM atlas_global.atlas_health_daily
-    WHERE data_date = ${d}::date AND is_anomaly = TRUE
-    ORDER BY
-      CASE severity WHEN 'critical' THEN 0 WHEN 'warn' THEN 1 WHEN 'info' THEN 2 ELSE 3 END,
-      table_name, metric_name
-  `
-  return { data_date: d, rows }
+  return bounded(async (tx) => {
+    const latest = await tx<{ d: string | null }[]>`
+      SELECT MAX(data_date)::text AS d FROM atlas_global.atlas_health_daily
+    `
+    const d = latest[0]?.d ?? null
+    if (!d) return { data_date: null, rows: [] }
+    const rows = await tx<AnomalyRow[]>`
+      SELECT
+        data_date::text          AS data_date,
+        table_name, metric_name,
+        value_today::float8      AS value_today,
+        value_prior_day::float8  AS value_prior_day,
+        pct_change_dod::float8   AS pct_change_dod,
+        z_score::float8          AS z_score,
+        severity, notes
+      FROM atlas_global.atlas_health_daily
+      WHERE data_date = ${d}::date AND is_anomaly = TRUE
+      ORDER BY
+        CASE severity WHEN 'critical' THEN 0 WHEN 'warn' THEN 1 WHEN 'info' THEN 2 ELSE 3 END,
+        table_name, metric_name
+    `
+    return { data_date: d, rows }
+  })
 }
 
 // ── freshness rows (the snapshot's lag per tracked table, in SPY sessions) ─
@@ -178,7 +207,7 @@ export type FreshnessSnapshot = { data_date: string | null; rows: FreshnessRow[]
 /** Every tracked table's lag on the most recent snapshot date that carries the metric. */
 export async function getFreshnessRows(): Promise<FreshnessSnapshot> {
   if (!dbAvailable) return { data_date: null, rows: [] }
-  const rows = await db()<FreshnessRow[]>`
+  const rows = await bounded((tx) => tx<FreshnessRow[]>`
     SELECT
       data_date::text      AS data_date,
       table_name,
@@ -190,7 +219,7 @@ export async function getFreshnessRows(): Promise<FreshnessSnapshot> {
         SELECT MAX(data_date) FROM atlas_global.atlas_health_daily WHERE metric_name = ${FRESHNESS_METRIC}
       )
     ORDER BY table_name
-  `
+  `)
   return { data_date: rows[0]?.data_date ?? null, rows }
 }
 
@@ -209,11 +238,11 @@ export type ProviderCallsSnapshot = { run_date: string | null; rows: ProviderCal
 /** Calls per (provider, endpoint) on the most recent run date, as the scripts recorded them. */
 export async function getProviderCalls(): Promise<ProviderCallsSnapshot> {
   if (!dbAvailable) return { run_date: null, rows: [] }
-  const rows = await db()<ProviderCallRow[]>`
+  const rows = await bounded((tx) => tx<ProviderCallRow[]>`
     SELECT run_date::text AS run_date, provider, endpoint, calls, updated_at
     FROM atlas_global.provider_calls
     WHERE run_date = (SELECT MAX(run_date) FROM atlas_global.provider_calls)
     ORDER BY provider, endpoint
-  `
+  `)
   return { run_date: rows[0]?.run_date ?? null, rows }
 }
