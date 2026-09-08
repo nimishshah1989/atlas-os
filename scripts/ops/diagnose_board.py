@@ -128,6 +128,12 @@ def _redact(url: str) -> str:
     the sections it would have skipped are the ones that diagnose the outage."""
     try:
         parts = urlsplit(url)
+        # FAIL CLOSED. Without an authority section — `postgresql:user:pw@host/db`, a typo
+        # away from the real thing — urlsplit puts the WHOLE credential in .path, and
+        # printing .path then publishes the password. username/hostname/port are all None
+        # in that case anyway, so there is nothing worth rendering and every reason not to.
+        if not parts.netloc:
+            return "<unparseable URL>"
         user = parts.username or "?"
         return f"{user}@{parts.hostname}:{parts.port}/{(parts.path or '/').lstrip('/')}"
     except ValueError:
