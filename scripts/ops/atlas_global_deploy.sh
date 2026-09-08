@@ -110,8 +110,27 @@ else
   exit 1
 fi
 
-# Assert on behaviour, never on the build having "probably" picked the variable up. /health is the
-# one page that renders without a session (src/lib/supabase/paths.ts).
+# ── smoke ────────────────────────────────────────────────────────────────────
+# Assert on behaviour, never on the build having "probably" picked the variable up.
+#
+# THE SMOKE ROUTE IS /login, NOT /health, and the difference is the whole point. This gate used
+# to curl /health, which is the ONE route that queries the database on an unauthenticated
+# request — so when the database path stalled, a perfectly good build was rolled back. That is
+# backwards twice over: the rollback cannot fix a database, and the build it restores has the
+# identical problem, so the only thing the gate achieved was to block the deploy that carried
+# the fix. It kept the board off the air for hours over a dependency it does not control.
+#
+# /login proves what a smoke test is FOR: the port is bound, Next resolves a route at
+# ${BASE_PATH}, and the board returns HTML to a stranger. It is also the first page any human
+# sees, so if it is broken nothing else matters. Rendering it runs no query, which is what makes
+# it a liveness check rather than a dependency check.
+#
+# It does NOT prove sign-in works, and the log line below must not be read as if it did: the
+# sign-in Server Action calls isInvited() (src/app/login/actions.ts -> src/lib/auth.ts:34),
+# which reads atlas_global.app_user. So a board whose database path is stalled serves this page
+# in full and then hangs the moment anyone presses the button — the same fault as /health,
+# wearing a different symptom. That is precisely why /health is still measured below.
+#
 # WAIT for the port, do not race it. `pm2 start` returns as soon as it has forked; Next then
 # compiles its manifest and binds, which takes a second or two on this box. Curling once
 # immediately answered `000 — Couldn't connect after 0 ms` and killed a deploy that had in
@@ -120,7 +139,7 @@ fi
 code=000
 for _ in $(seq 20); do
   code=$(curl -sS -m 5 -o /dev/null -w '%{http_code}' \
-    "http://127.0.0.1:$ATLAS_GLOBAL_PORT${BASE_PATH}/health" 2>/dev/null || echo 000)
+    "http://127.0.0.1:$ATLAS_GLOBAL_PORT${BASE_PATH}/login" 2>/dev/null || echo 000)
   [ "$code" = "200" ] && break
   sleep 0.5
 done
@@ -129,6 +148,22 @@ if [ "$code" != "200" ]; then
   # between "smoke failed" and a diagnosis, on a deploy the operator is watching right now.
   say "smoke FAILED — last 30 lines of the board's pm2 log:"
   pm2 logs "$PM2_APP" --lines 30 --nostream 2>&1 | tee -a "$LOG" || true
-  die "smoke: ${BASE_PATH}/health answered $code on :$ATLAS_GLOBAL_PORT (expected 200)"
+  die "smoke: ${BASE_PATH}/login answered $code on :$ATLAS_GLOBAL_PORT (expected 200)"
 fi
-say "ok: smoke ${BASE_PATH}/health 200 on :$ATLAS_GLOBAL_PORT"
+say "ok: smoke ${BASE_PATH}/login 200 on :$ATLAS_GLOBAL_PORT"
+
+# The database path, REPORTED and never fatal. /health is worth knowing about on every deploy —
+# it is the operator page and the only unauthenticated route that queries — but it depends on
+# Supabase being reachable, which is not something this deploy did or can undo. So it is a line
+# in the log, not a veto. A short timeout because the failure mode being watched for IS a hang:
+# 20s of curl, then say so and carry on.
+health=$(curl -sS -m 20 -o /dev/null -w '%{http_code}' \
+  "http://127.0.0.1:$ATLAS_GLOBAL_PORT${BASE_PATH}/health" 2>/dev/null || echo 000)
+if [ "$health" = "200" ]; then
+  say "ok: ${BASE_PATH}/health 200 — the database path is healthy too"
+else
+  say "NOTE: ${BASE_PATH}/health answered $health (000 = no answer in 20s). The board is UP —"
+  say "      /login serves — but its database path is not, and SIGN-IN READS THE DATABASE"
+  say "      (isInvited -> app_user), so the sign-in button will hang until this is fixed."
+  say "      Diagnose with:  cd $APP_DIR && node scripts/db-probe.mjs"
+fi
