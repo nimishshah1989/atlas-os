@@ -2,6 +2,7 @@
 // gate scans this directory): atlas_pipeline_runs, atlas_validator_results, atlas_health_daily.
 // Shapes follow India's frontend/src/lib/queries/health.ts so the panels port 1:1.
 import 'server-only'
+import type { TransactionSql } from 'postgres'
 import { db, dbAvailable } from '@/lib/db'
 
 // EVERY READ ON THIS PAGE HAS A SERVER-SIDE BUDGET. On 2026-09-08 two of these — the two that
@@ -21,14 +22,13 @@ import { db, dbAvailable } from '@/lib/db'
 // may rely on SET LOCAL is about session state across statements; this is not that.
 const STATEMENT_BUDGET = '10s'
 
-type Tx = Parameters<Parameters<ReturnType<typeof db>['begin']>[0]>[0]
-
 /** Run `fn` in one transaction whose statements are cancelled server-side after the budget. */
-async function bounded<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
-  return db().begin(async (tx) => {
+async function bounded<T>(fn: (tx: TransactionSql) => Promise<T>): Promise<T> {
+  const result = await db().begin(async (tx) => {
     await tx.unsafe(`SET LOCAL statement_timeout = '${STATEMENT_BUDGET}'`)
     return fn(tx)
-  }) as Promise<T>
+  })
+  return result as T
 }
 
 // ── pipeline runs ───────────────────────────────────────────────────────────
