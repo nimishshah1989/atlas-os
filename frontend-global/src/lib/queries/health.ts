@@ -10,7 +10,6 @@ export type PipelineRun = {
   run_id: string
   script_name: string
   milestone: string | null
-  phase: string | null
   started_at: Date
   ended_at: Date | null
   status: 'queued' | 'running' | 'success' | 'failed'
@@ -23,7 +22,7 @@ export type PipelineRun = {
 
 const RUN_COLUMNS = `
   run_id::text                                        AS run_id,
-  script_name, milestone, phase, started_at, ended_at, status,
+  script_name, milestone, started_at, ended_at, status,
   rows_written::float8                                AS rows_written,
   error_message, host, git_sha,
   EXTRACT(EPOCH FROM (ended_at - started_at))::int    AS duration_seconds`
@@ -156,4 +155,65 @@ export async function getLatestAnomalies(): Promise<AnomalySnapshot> {
       table_name, metric_name
   `
   return { data_date: d, rows }
+}
+
+// ── freshness rows (the snapshot's lag per tracked table, in SPY sessions) ─
+
+// The metric write_health_snapshot writes once per tracked table: lag in SPY sessions (null with a
+// "no SPY bar" note while ohlcv_daily has no anchor bar, or "EMPTY") and the guard's tolerance.
+export const FRESHNESS_METRIC = 'freshness_lag_sessions'
+
+export type FreshnessRow = {
+  data_date: string
+  table_name: string
+  value_today: number | null
+  is_anomaly: boolean
+  severity: 'info' | 'warn' | 'critical' | null
+  notes: string | null
+  computed_at: Date
+}
+
+export type FreshnessSnapshot = { data_date: string | null; rows: FreshnessRow[] }
+
+/** Every tracked table's lag on the most recent snapshot date that carries the metric. */
+export async function getFreshnessRows(): Promise<FreshnessSnapshot> {
+  if (!dbAvailable) return { data_date: null, rows: [] }
+  const rows = await db()<FreshnessRow[]>`
+    SELECT
+      data_date::text      AS data_date,
+      table_name,
+      value_today::float8  AS value_today,
+      is_anomaly, severity, notes, computed_at
+    FROM atlas_global.atlas_health_daily
+    WHERE metric_name = ${FRESHNESS_METRIC}
+      AND data_date = (
+        SELECT MAX(data_date) FROM atlas_global.atlas_health_daily WHERE metric_name = ${FRESHNESS_METRIC}
+      )
+    ORDER BY table_name
+  `
+  return { data_date: rows[0]?.data_date ?? null, rows }
+}
+
+// ── provider calls (the budget the run date spent) ─────────────────────────
+
+export type ProviderCallRow = {
+  run_date: string
+  provider: string
+  endpoint: string
+  calls: number
+  updated_at: Date
+}
+
+export type ProviderCallsSnapshot = { run_date: string | null; rows: ProviderCallRow[] }
+
+/** Calls per (provider, endpoint) on the most recent run date, as the scripts recorded them. */
+export async function getProviderCalls(): Promise<ProviderCallsSnapshot> {
+  if (!dbAvailable) return { run_date: null, rows: [] }
+  const rows = await db()<ProviderCallRow[]>`
+    SELECT run_date::text AS run_date, provider, endpoint, calls, updated_at
+    FROM atlas_global.provider_calls
+    WHERE run_date = (SELECT MAX(run_date) FROM atlas_global.provider_calls)
+    ORDER BY provider, endpoint
+  `
+  return { run_date: rows[0]?.run_date ?? null, rows }
 }

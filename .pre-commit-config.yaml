@@ -19,6 +19,10 @@ repos:
       - id: check-case-conflict           # blocks names that collide on case-insensitive FS
       - id: check-added-large-files       # blocks a stray big blob sneaking in
         args: [--maxkb=1024]
+        # The dated, verbatim identity snapshot (rule #0: real records, never edited;
+        # tests/fixtures/global/symbology/SOURCE.md carries each file's sha256). SEC's
+        # company_tickers_mf.json is 1.2 MB; every other fixture there is under the cap.
+        exclude: ^tests/fixtures/global/symbology/company_tickers_mf\.json$
       - id: check-yaml
       - id: check-json
       - id: check-toml

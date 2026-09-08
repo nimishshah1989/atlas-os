@@ -143,18 +143,29 @@ CREATE INDEX IF NOT EXISTS ix_country_daily_date
 
 -- universe_snapshot — forward-only daily membership journal (India's atlas_universe_snapshot
 -- shape in USD + in_sp500 / aum_usd / basket_eligible). floor_usd is the threshold that was in
--- force that day, so a later floor change never rewrites history.
+-- force that day, so a later floor change never rewrites history. exclusion_reason is stored
+-- beside the decision, not left in the run's CSV, because the board reads this table directly:
+-- a journal that says an instrument is out without saying why is not a glass box. The two
+-- CHECKs keep the pair inseparable — the reason is one of the seven the writer can derive, and
+-- it is present exactly when the row is out (so no row can say "excluded" and nothing more).
 CREATE TABLE IF NOT EXISTS atlas_global.universe_snapshot (
     date                date          NOT NULL,
     instrument_id       uuid          NOT NULL REFERENCES atlas_global.instrument_master (instrument_id),
     in_universe         boolean       NOT NULL,
+    exclusion_reason    text,
     in_sp500            boolean       NOT NULL DEFAULT false,
     adv_usd_median_60d  numeric(20,4),
     floor_usd           numeric(18,6) NOT NULL,
     aum_usd             numeric,
     basket_eligible     boolean       NOT NULL DEFAULT false,
     computed_at         timestamptz   NOT NULL DEFAULT now(),
-    CONSTRAINT universe_snapshot_pkey PRIMARY KEY (date, instrument_id)
+    CONSTRAINT universe_snapshot_pkey PRIMARY KEY (date, instrument_id),
+    CONSTRAINT chk_universe_snapshot_exclusion_reason
+        CHECK (exclusion_reason IS NULL OR exclusion_reason IN
+               ('no_bars', 'too_few_observations', 'stale',
+                'not_sp500', 'leveraged', 'inverse', 'below_floor')),
+    CONSTRAINT chk_universe_snapshot_reason_iff_excluded
+        CHECK (in_universe = (exclusion_reason IS NULL))
 );
 CREATE INDEX IF NOT EXISTS ix_universe_snapshot_instrument
     ON atlas_global.universe_snapshot (instrument_id);

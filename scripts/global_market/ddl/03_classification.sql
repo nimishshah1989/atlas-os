@@ -103,7 +103,9 @@ CREATE TABLE IF NOT EXISTS atlas_global.etf_classification (
                ('equity', 'fixed_income', 'commodity', 'currency', 'multi_asset', 'alternative')),
     CONSTRAINT chk_etf_classification_strategy
         CHECK (strategy IS NULL OR strategy IN
-               ('broad', 'factor', 'sector', 'thematic', 'country', 'commodity', 'bond_duration', 'leveraged')),
+               ('broad_market', 'size_style', 'factor', 'dividend_income', 'sector', 'thematic',
+                'country', 'region', 'single_stock', 'fixed_income', 'commodity', 'currency',
+                'crypto', 'defined_outcome', 'options_income', 'multi_asset', 'alternative')),
     CONSTRAINT chk_etf_classification_geo_focus
         CHECK (geo_focus_type IS NULL OR geo_focus_type IN ('single_country', 'region', 'global')),
     CONSTRAINT chk_etf_classification_status
@@ -147,3 +149,31 @@ CREATE TABLE IF NOT EXISTS atlas_global.classification_validation_log (
 );
 CREATE INDEX IF NOT EXISTS ix_classification_validation_log_instrument
     ON atlas_global.classification_validation_log (instrument_id, run_at);
+
+-- ── strategy vocabulary, widened 2026-09-07 from the real universe ──────────────────────
+-- The original eight values could not express most of what is actually listed. Counted over
+-- all 5,656 active ETF names (docs/global/taxonomy.md carries the method and the table):
+-- defined-outcome and buffer products are 543 funds, options-income 188, crypto 114,
+-- multi-asset 87 and geared single-stock funds 394 — and NONE of those had a value. Under the
+-- old list they would all have become 'broad', which is how a taxonomy stops meaning anything.
+--
+-- 'leveraged' is REMOVED rather than renamed. Gearing is a structure FLAG and this table
+-- already has `leveraged` and `inverse` booleans, so a 2x bitcoin fund is strategy='crypto'
+-- with leveraged=true. That says what the fund tracks AND how it is built; a 'leveraged'
+-- strategy value said only the second and threw away the first.
+--
+-- 'bond_duration' is replaced by 'fixed_income'. Duration is one attribute of a bond fund and
+-- not its strategy; the 873 fixed-income funds here split by credit type at least as much as
+-- by duration, and sub-sector is where that detail belongs.
+--
+-- Idempotent, and safe on a database that already carries the old constraint: ADD CONSTRAINT
+-- has no IF NOT EXISTS, so the matching DROP precedes it. No row can violate the new list —
+-- the table is empty until classify_etfs lands.
+ALTER TABLE atlas_global.etf_classification
+    DROP CONSTRAINT IF EXISTS chk_etf_classification_strategy;
+ALTER TABLE atlas_global.etf_classification
+    ADD CONSTRAINT chk_etf_classification_strategy
+        CHECK (strategy IS NULL OR strategy IN
+               ('broad_market', 'size_style', 'factor', 'dividend_income', 'sector', 'thematic',
+                'country', 'region', 'single_stock', 'fixed_income', 'commodity', 'currency',
+                'crypto', 'defined_outcome', 'options_income', 'multi_asset', 'alternative'));

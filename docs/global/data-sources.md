@@ -10,16 +10,37 @@ were checked on this date (`docs/global/plan.md`, "Data sources"). Anything mark
 *unverified* is a claim we still have to test against a real account; nothing here counts
 as a source until its gate has passed on real rows.
 
+## Decision 2026-09-07 — the price spine is Alpaca; the SIP gate PASSED on real bars
+
+**This supersedes the 2026-09-04 decision recorded below, and no feed is bought.** On 2026-09-06 the FM opened an Alpaca paper account, which removed the only reason Alpaca had been struck — a process reason ("too cumbersome to start"), never a data one. The free-first rule then applied again: no feed is bought until a free one has failed a gate on real bars. On 2026-09-07 `validate_global.py --check SIP` ran on that account and **passed every check** (the log below carries the numbers). So the spine is **Alpaca**, `GLOBAL_PRICE_PROVIDER=alpaca`, and the $30/month Tiingo subscription is not spent.
+
+**The entitlement question is settled by measurement, not by documentation.** It had been open since Phase 0: a paper-only account might be served the consolidated (SIP) tape or only IEX, and IEX alone prints a small fraction of true volume — which would have silently poisoned the $1,000,000 liquidity floor and every ADV$ band built on it. Two independent readings answer it:
+
+- The gate's own check (2): median Alpaca ÷ Stooq SPY volume = **1.0017** over 39 sessions (min 0.9982, max 1.0163). Consolidated. An IEX-only entitlement reads ~0.02–0.03 there.
+- The account as its own control: the SAME four sessions pulled with `feed=iex` return **2.79 %** of the `feed=sip` volume (SPY 2026-08-25: 766,153 against 27,475,227). The two feeds are genuinely different, and the one we are served is the consolidated one.
+
+**Both price bases are available, so `close_adj` and `close_tr` come from the vendor, not from us.** Measured on SPY 2016-01-04: `adjustment=split` closes 201.0192 (the price actually traded) and `adjustment=all` closes 171.10 (dividends back-adjusted). Two pulls, merged, exactly as the plan specified — and no derived-from-adjustment estimator is needed, so rule #0 is never strained. As a bonus this independently corroborates `--check BASIS`: the Stooq archive's 171.85 for that day sits 0.44 % from Alpaca's total-return close and nowhere near the traded price, which is what a total-return series re-based to a different date looks like.
+
+**The one real limit: history stops at 2016-01-04.** A request starting in 1990 returns 2,684 bars beginning 2016-01-04 for SPY, and *exactly the same count and start* for AAPL, which listed in 1980. That is a plan-wide floor, not a listing date. It happens to be precisely the history the plan asks for, with zero margin, so: **Alpaca is the spine for 2016→ and every nightly increment; the Stooq archive is the permanent source of anything older** (it reaches 1970 for names like JPM and KO) and stays the cross-source-agreement check. I am not certain whether the floor is fixed at 2016 or a rolling ~10-year window — worth re-checking against the vendor's own documentation before anyone depends on pre-2016 coverage arriving later.
+
+**What survives from 2026-09-04.** Everything except the vendor line. Stooq still cannot be the spine (no nightly refresh, undocumented and moving adjustment basis, no events) — since proven by `--check BASIS`, which measured the archive as total-return and re-based to the download date. And the vendor comparison in `phase1.md` §1 is not withdrawn: it is now the contingency if Alpaca lapses or its terms change, with **Tiingo Power** the named fallback.
+
+**Still unverified, and not assumed anywhere:** the corporate-actions endpoint's plan tier, and Alpaca's terms on displaying derived data in a commercial adviser product. Both are confirmed against the account before Phase 3, not before.
+
+### Superseded — decision 2026-09-04 (kept for the record)
+
+> The FM ruled Alpaca out ("too cumbersome to start"). Stooq cannot be the spine (no nightly refresh, undocumented and moving adjustment basis, no events). The spine is **Tiingo** — raw + adjusted bars with `divCash`/`splitFactor` per row, 99.9% coverage of today's listed ETFs (measured), delisted names kept — behind the same `PriceProvider` Protocol; Stooq stays the cross-check and emergency fallback. Licence tiers, the vendor comparison and the FEED gate that replaces the SIP gate: `docs/global/phase1.md` §1. The OHLCV and corporate-actions rows below are superseded accordingly; `--check SIP` is replaced by `--check FEED` (same checks, vendor-agnostic).
+
 ## Sources, cadence, fallbacks, gates
 
 | Need | Primary (free, official) | Cadence | Fallback | Gate |
 |---|---|---|---|---|
-| OHLCV 2016→ | **Alpaca Market Data, free plan**: 7+ yrs daily bars, 200 req/min, multi-symbol bars (≤10,000 points/page, `page_token`), `adjustment=split` and `all` (two pulls, merged), `feed=sip` for history older than 15 min; paper-only account = email signup, no KYC, international | nightly incremental; backfill ≈ 4,000 symbols × 7 yrs in minutes | **Stooq importer** (FM-downloaded `d_us_txt.zip`); yfinance only as a cross-check | **Phase 0 SIP gate** (protocol below). Fail → Stooq spine + paid slot (Polygon Starter / Tiingo) |
-| Corporate actions | Alpaca corporate-actions endpoint (16 event types incl. splits, cash/stock dividends, spin-offs, mergers) — **plan-tier access unverified** | daily | derive from `all` vs `split` bar ratios, flagged `source='derived_from_adjustment'` (needs FM approval — rule #0) | every `\|ret_1d\| > 0.5` on `close_adj` has a matching action |
+| OHLCV 2016→ | **Alpaca** (SIP gate PASS 2026-09-07): free plan, `feed=sip`, `adjustment=split` → `close_adj` and `adjustment=all` → `close_tr`, 200 req/min, multi-symbol bars ≤ 10,000 points per page. **History floor 2016-01-04, plan-wide** | nightly incremental once `ingest_prices.py` lands (P1-B) | **Stooq importer** for pre-2016 history (permanent, not emergency) and as the cross-source check; Tiingo Power if Alpaca lapses (`phase1.md` §1); yfinance only as a third cross-check | **SIP gate PASSED** (log below), then gate A (P1-B) |
+| Corporate actions | Alpaca corporate-actions endpoint (16 event types incl. splits and cash/stock dividends) — **plan-tier access unverified**, confirmed against the account, not assumed | daily | derive from `all` vs `split` bar ratios, flagged `source='derived_from_adjustment'` (needs FM approval — rule #0) | every `\|ret_1d\| > 0.5` on `close_adj` has a matching action |
 | Index / macro | FRED (`SP500`, `VIXCLS`, `DGS10`, `DTB3`, `DTWEXBGS`) — key already in India `.env` | daily | — | through EOD-1 |
 | ETF universe | Nasdaq Trader `nasdaqlisted.txt` + `otherlisted.txt` (ETF = Y, exchange, test-issue flag) | weekly | Alpaca `/v2/assets` | ≥ 5,000 ETF rows, every one with an exchange (measured 2026-09-04: 5,655 = 1,257 Nasdaq-listed + 4,398 other exchanges — the plan's "3,300–4,000" was an estimate) |
-| S&P 500 | **SSGA SPY daily holdings CSV** (constituents, weights, GICS sector column — verify columns on first fetch) via `etf-scraper`; history `fja05680/sp500` | daily / one-time | Wikipedia list | 500–505 names, weights ≈ 100% |
-| Identity | Nasdaq directory; SEC `company_tickers.json` (stocks → CIK) and `company_tickers_mf.json` (funds → CIK/series/class; verify field names); SEC `submissions` API (SIC code); Alpaca assets (tradable, fractionable) | weekly | `symbol_alias` manual rows | CIK on 100% of stocks; series_id on ≥95% of ETFs; alias round-trip for 20 punctuation tickers |
+| S&P 500 | **SSGA SPY daily holdings workbook** (`.xlsx` via `openpyxl`: constituents, weights, CUSIP; verified 2026-09-04 — the `Sector` column is present but `-` on all 505 rows) + **the eleven Select Sector SPDR workbooks** (XLB…XLY, same layout) for `sector_gics` by membership — `providers/ssga.py`; history `fja05680/sp500` (MIT; `providers/sp500_history.py`). SSGA's notice forbids reproducing the workbooks: never committed, fetched live by tests and the weekly step | weekly / one-time | Wikipedia list | 500–505 names, weights ≈ 100% (505 rows, Σ 0.99936 on 2026-09-03); ≥ 98% of ticker rows in exactly one sector file (504/504 on 2026-09-03) |
+| Identity | Nasdaq directory (`nasdaqlisted.txt` + `otherlisted.txt`: ETF flag, exchange legend, ACT/CQS/NASDAQ spellings); SEC `company_tickers.json` + `company_tickers_exchange.json` (registrants → CIK) and `company_tickers_mf.json` (1940-Act funds → CIK/series/class; field names verified 2026-09-04); Tiingo `supported_tickers.zip` (listing dates, spelling proof); the Stooq archive's members (delisted names, `is_active=false`) — `build_identity.py`, `providers/directories.py` (P1-A) | weekly | `symbol_alias` manual rows | measured 2026-09-04: 13,154 listings, exchange on 100%; CIK on 99.6% of stock-flagged rows (the rest: rights, which the SEC does not list, and bank holding companies filing with their regulator) and on 82.5% of ETFs (79.3% with a series/class id — trusts, commodity pools and ETNs are registrants, not 1940-Act funds); alias round-trip on all 543 punctuation tickers; `import_stooq --dry-run` maps 13,334 of the archive's 13,352 members (99.9%; the 18 unmapped are empty files of names absent from the directory) |
 | ETF holdings + exposures | **EDGAR N-PORT via `edgartools`** for the whole universe — per holding `name, cusip, ticker, balance, value_usd, pct_value, asset_category, investment_country`; per fund `net_assets, total_assets, series_id` (`Fund(ticker).get_portfolio()`); public only for the quarter-end month, ~60-day lag | weekly | — | holdings on ≥90% of ETFs by count, ≥98% by AUM |
 | Fresh holdings (big four) | Issuer CSVs via `etf-scraper` (iShares daily incl. history since 2010; SSGA, Vanguard, Invesco current); `query_listings()` for issuer product lists (AUM, expense) | daily | N-PORT | Σ\|weight_frac\| ∈ [0.9, 1.1] for ≥97% of non-leveraged ETFs |
 | Stock fundamentals | **EDGAR XBRL company facts via `edgartools`** (`filed` per fact = PIT) | weekly (changed filers) | — | ≥95% of S&P 500 with ≥8 quarters; continuity checks |
@@ -132,7 +153,7 @@ One row per run, appended by hand from the gate's printed output — never edite
 
 | Run date (ET) | Account | Window (sessions) | SPY ret corr vs FRED | SPY volume ratio vs Stooq (median) | Session gaps | Result | Decision |
 |---|---|---|---|---|---|---|---|
-| — | — | — | — | — | — | **not yet run** | spine undecided until this row is real |
+| 2026-09-07 | paper, free plan | 2026-06-29 → 2026-09-04 (40) | 0.99921 on 39 returns (worst residual 0.0650 % on 2026-08-27, an ex-dividend day) | 1.0017 (min 0.9982, max 1.0163, 39 sessions); median \|close diff\| 0.0000 % | none — 40 FRED and 39 Stooq sessions all present | **PASS** (8/8) | Alpaca is the spine; `GLOBAL_PRICE_PROVIDER=alpaca`; no paid feed bought |
 
 ## Open questions carried from the plan
 
@@ -178,10 +199,15 @@ source_symbol='<TICKER>.US', valid_to IS NULL)` — Stooq's own spelling — the
 `instrument_master.symbol = symbology.stooq_symbol(<ticker>)` (`SPY.US → SPY`, `BRK-B.US → BRK.B`,
 `AAC-U.US → AAC.U`: Stooq's `-` is the class/unit/warrant separator that Nasdaq's ACT and CQS columns
 spell `.`). Stooq's `_` marks a preferred series (`agm_d` is `AGM$D` in the ACT column and `AGM-D` in the
-NASDAQ Symbol column; `eti_` a preferred with no series; 391 members) and is left untouched: those map
-only through an alias and are reported unmapped until build_identity fixes the canonical spelling. A kind
-mismatch between the folder and `instrument_master.asset_class` is noted in the report, not resolved
-silently; with an empty `instrument_master` every member is reported unmapped and the importer exits 2.
+NASDAQ Symbol column; `eti_` a preferred with no series; 391 members) and is left untouched by the
+normaliser: `build_identity.py` writes the `symbol_alias(source='stooq')` row for every listing from the
+CQS spelling (`AGMpD → AGM_D.US`, `ACHR.WS → ACHR-WS.US` — the ACT column says `ACHR.W`, so warrants also
+need the alias), and archive members absent from the directory get an inactive row of their own, so the
+whole archive maps (13,352 of 13,352 members on the 2026-09-04 files; `--dry-run` prints the count). A
+kind mismatch between the folder and `instrument_master.asset_class` is noted in the report, not resolved
+silently (2,035 members on 2026-09-04 — the archive's `etfs`/`stocks` folders do not follow the
+directory's ETF flag); with an empty `instrument_master` every member is reported unmapped and the
+importer exits 2.
 
 **How to run — on the laptop** (stooq.com is unreachable from the cloud sandbox; the FM downloads the
 archive by hand and it travels by Google Drive):

@@ -203,6 +203,82 @@ html[data-theme="dark"] {
 
   /* the one motion: the Lens bar fills on first paint of a detail page */
   .lens-fill--animate { transform-origin: left; animation: lens-fill 240ms ease-out; }
+
+  /* a status dot: green fresh, amber warning, grey inert */
+  .dot { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 999px; }
+
+  /* ── explorer: facet rail 260 px + the virtualised table ─────────────── */
+  .page-wide { max-width: none; padding-right: 24px; }
+  .explorer { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 24px; align-items: start; }
+
+  .notice {
+    display: flex; align-items: baseline; gap: 10px;
+    margin-bottom: 16px; padding: 9px 14px; max-width: 96ch;
+    border: 1px solid var(--color-hair); border-radius: var(--radius-panel);
+    background: var(--color-raised); color: var(--color-ink-2);
+  }
+  .notice .dot { position: relative; top: -1px; }
+
+  .facets { display: flex; flex-direction: column; gap: 18px; padding-top: 28px; }
+  .facet { margin: 0; padding: 0; border: 0; min-width: 0; }
+  .facet-title { padding: 0 0 4px; font-weight: 500; color: var(--color-ink-3); }
+  .facet-opt {
+    display: flex; align-items: center; gap: 8px;
+    margin: 0 -6px; padding: 3px 6px; border-radius: var(--radius-panel);
+    color: var(--color-ink-2); cursor: pointer;
+  }
+  .facet-opt:hover { color: var(--color-ink); background: var(--color-raised); }
+  .facet-opt.is-on { color: var(--color-ink); font-weight: 500; }
+  .facet-opt input { margin: 0; accent-color: var(--color-accent); }
+  .facet-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .facet-n { color: var(--color-ink-3); }
+
+  /* fills the viewport below the page header; DataTable refits it exactly after hydration */
+  .dt { overflow: auto; overscroll-behavior: contain; height: calc(100vh - 372px); min-height: 320px; }
+  .dt-table { table-layout: fixed; width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; line-height: 18px; }
+  .dt-table th {
+    position: sticky; top: 0; z-index: 1;
+    height: 36px; padding: 0 12px; text-align: left; white-space: nowrap;
+    font-weight: 500; font-size: 12px; line-height: 16px; color: var(--color-ink-3);
+    background: var(--color-raised); border-bottom: 1px solid var(--color-rule);
+  }
+  .dt-table th.r, .dt-table td.r { text-align: right; }
+  .dt-sort {
+    display: inline-flex; align-items: center; gap: 4px; max-width: 100%; height: 36px;
+    padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer;
+  }
+  .dt-table th.r .dt-sort { flex-direction: row-reverse; }
+  .dt-sort:hover, .dt-table th[aria-sort] .dt-sort { color: var(--color-ink); }
+  .dt-table td {
+    box-sizing: border-box; height: 44px; padding: 0 12px; vertical-align: middle;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    border-bottom: 1px solid var(--color-hair);
+  }
+  .dt-table tr[data-row]:hover td { background: var(--color-raised); }
+  /* the symbol stays put while a wide table scrolls sideways */
+  .dt-table th:first-child, .dt-table td:first-child { position: sticky; left: 0; }
+  .dt-table th:first-child { z-index: 2; }
+  .dt-table td:first-child { z-index: 1; background: var(--color-panel); }
+  .dt-table .dt-spacer td { height: auto; padding: 0; border: 0; background: transparent; }
+  .dt-table .dt-empty { height: auto; padding: 16px 12px; white-space: normal; }
+  .dt-symbol { font-weight: 500; color: var(--color-ink); }
+  .dt-symbol:hover { color: var(--color-accent); }
+
+  /* ── entity pages: 7/5 columns, fact lists on hairlines ─────────────── */
+  .detail { display: grid; grid-template-columns: 7fr 5fr; gap: 0 40px; align-items: start; }
+  .facts { display: grid; grid-template-columns: max-content minmax(0, 1fr) fit-content(40%); column-gap: 20px; }
+  .fact { display: contents; }
+  .fact > * { padding: 7px 0; border-bottom: 1px solid var(--color-hair); }
+  .fact:last-child > * { border-bottom: 0; }
+  .fact dt { padding-top: 9px; }
+  .fact-src { text-align: right; padding-top: 9px; }
+  .timeline { display: flex; flex-direction: column; gap: 10px; }
+  .timeline-item { display: flex; align-items: flex-start; gap: 10px; }
+  .timeline-item .dot { margin-top: 6px; }
+  .slots { display: flex; flex-direction: column; }
+  .slot { padding: 10px 0; border-bottom: 1px solid var(--color-hair); }
+  .slot:first-child { padding-top: 0; }
+  .slot:last-child { border-bottom: 0; }
 }
 
 @keyframes lens-fill {
@@ -228,6 +304,9 @@ html[data-theme="dark"] {
   .topbar { position: sticky; left: 0; }
   .main { margin-left: 0; padding-top: 0; }
   .page { padding: 24px 16px 48px; }
+  /* explorer and entity pages stack; the table keeps scrolling inside its own panel */
+  .explorer, .detail { grid-template-columns: minmax(0, 1fr); }
+  .facets { padding-top: 0; max-width: 360px; }
 }
 
 @media print {

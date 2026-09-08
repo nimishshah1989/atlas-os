@@ -9,9 +9,14 @@ exchange holiday is not a session and must not read as lag.
     python scripts/global_market/freshness_guard.py --eod 2026-09-03
     python scripts/global_market/freshness_guard.py            # defaults to _gdb.eod_cutoff()
 
-Phase 0: nothing publishes yet, so KEY_TABLES / BOARD_TABLES / PRODUCERS are EMPTY but
-VALID — tests/unit/global_market/test_producer_registry.py enforces the registry contract
-from day one, so the first producer that lands without its cron step goes red in CI.
+The registries fill as Phase 1 producers land (P1-A identity, P1-C macro + index
+membership, …); tests/unit/global_market/test_producer_registry.py enforces the registry
+contract, so a producer that lands without its cron step goes red in CI.
+
+``--eod`` on a non-session date (a weekend, a holiday) anchors to the latest SPY session on
+or before it. With no SPY bar at all there is no calendar and the guard FAILS; a missing bar
+on a session day is gate A's check (``SPY has a bar at EOD``), not this guard's — by
+membership-by-presence a day without a bar is not a session.
 """
 
 from __future__ import annotations
@@ -20,6 +25,7 @@ import argparse
 import datetime as dt
 import sys
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # _gdb (sibling module)
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # atlas package, run as a script
@@ -33,20 +39,35 @@ M = _gdb.M
 #   ("ohlcv_daily", "date", 0), ("technical_daily", "date", 0),
 #   ("lens_scores_daily", "date", 0), ("etf_scores_daily", "date", 0),
 #   ("country_daily", "date", 0), ("macro_daily", "date", 3)
-KEY_TABLES: list[tuple[str, str, int]] = []
+KEY_TABLES: list[tuple[str, str, int]] = [
+    ("ohlcv_daily", "date", 0),  # the spine: every board number descends from it (P1-B)
+    ("macro_daily", "date", 3),  # FRED posts DGS10/DTB3 the next business day (P1-C)
+    ("technical_daily", "date", 0),  # nightly from ohlcv_daily, same session (P1-D)
+]
 
 # Derived board tables — WARN tier (reported + written to the health snapshot, never a
 # blocked publish). Phase 1/2 register (date column per the DDL):
 #   etf_holdings 8, etf_exposure_daily 8, etf_meta 8, etf_classification 8,
 #   stock_financials_pit 95
-BOARD_TABLES: list[tuple[str, str, int]] = []
+BOARD_TABLES: list[tuple[str, str, int]] = [
+    ("instrument_master", "updated_at", 8),  # weekly build_identity touches every listed row (P1-A)
+    ("index_membership", "updated_at", 8),  # weekly SSGA pass touches every current row (P1-C)
+    ("universe_snapshot", "date", 8),  # nightly once the FM sets the floor (P1-E)
+]
 
 # ── PRODUCER REGISTRY (the build-time half of the freshness contract) ──
 # Every guarded table maps to a producer TOKEN (script filename or function) that MUST
 # appear in an orchestrator. Delete a builder, or drop its cron step, and
 # tests/unit/global_market/test_producer_registry.py goes RED before it can merge.
 ORCHESTRATORS = ["scripts/ops/atlas_global_daily.sh", "scripts/ops/atlas_global_weekly.sh"]
-PRODUCERS: dict[str, str] = {}
+PRODUCERS: dict[str, str] = {
+    "instrument_master": "build_identity.py",
+    "ohlcv_daily": "ingest_prices.py",
+    "macro_daily": "ingest_macro.py",
+    "index_membership": "ingest_index_membership.py",
+    "universe_snapshot": "build_universe_snapshot.py",
+    "technical_daily": "compute_technicals.py",
+}
 
 
 def _live_lines(text: str) -> str:
@@ -79,7 +100,7 @@ def check_producers() -> list[str]:
 # Per-instrument tables whose EOD row-count should stay ~stable vs the prior session
 # (a fresh max(date) with a collapsed count is an INCOMPLETE ingest — India's 07-01
 # blank board). Phase 1: {ohlcv_daily, technical_daily, lens_scores_daily, etf_scores_daily}.
-COMPLETENESS_TABLES: set[str] = set()
+COMPLETENESS_TABLES: set[str] = {"technical_daily"}
 COMPLETENESS_MIN_FRAC = 0.5  # EOD count must be >= 50% of the prior session's count
 
 
@@ -93,14 +114,25 @@ def spy_sessions() -> list[dt.date]:
     return gcal.sessions(df["date"])
 
 
+def _as_date(mx: dt.date) -> dt.date:
+    """``max(col)`` as a New York calendar date. A ``date`` column comes back as-is; a
+    ``timestamptz`` column (instrument_master.updated_at) comes back as an aware datetime,
+    which ``sessions_behind`` cannot compare with the EOD date — take the market-local day."""
+    if isinstance(mx, dt.datetime):
+        return mx.astimezone(ZoneInfo(gcal.NEW_YORK)).date()
+    return mx
+
+
 def check_board(eod: dt.date, cal: list[dt.date]) -> list[str]:
     """Derived board tables — reported loudly but NON-blocking (WARN tier)."""
     warn = []
     for table, col, lag in BOARD_TABLES:
         mx = _gdb.scalar(f"select max({col}) from {M}.{table}")
         if mx is None:
+            print(f"  [EMPTY] {table:<28} no rows (eod={eod}, tol={lag})")
             warn.append(f"{table}: EMPTY")
             continue
+        mx = _as_date(mx)
         behind = gcal.sessions_behind(cal, mx, eod)
         status = "OK" if behind <= lag else "STALE"
         print(f"  [{status}] {table:<28} max={mx} (eod={eod}, behind={behind}s, tol={lag})")
@@ -114,8 +146,10 @@ def check(eod: dt.date, cal: list[dt.date]) -> list[str]:
     for table, col, lag in KEY_TABLES:
         mx = _gdb.scalar(f"select max({col}) from {M}.{table}")
         if mx is None:
+            print(f"  [EMPTY] {table:<28} no rows (eod={eod}, tol={lag})")
             stale.append(f"{table}: EMPTY")
             continue
+        mx = _as_date(mx)
         behind = gcal.sessions_behind(cal, mx, eod)
         status = "OK" if behind <= lag else "STALE"
         print(f"  [{status}] {table:<28} max={mx} (eod={eod}, behind={behind}s, tol={lag})")
@@ -162,9 +196,18 @@ def main() -> int:
     if (KEY_TABLES or BOARD_TABLES) and not cal:
         print("[freshness_guard:global] FAIL — no SPY bars in ohlcv_daily: no anchor calendar")
         return 1
-    stale = check(eod, cal)
+    anchor = gcal.latest_session_on_or_before(cal, eod) if cal else eod
+    if anchor is None:
+        print(
+            f"[freshness_guard:global] FAIL — no SPY session on or before EOD {eod} "
+            f"(first bar {cal[0]})"
+        )
+        return 1
+    if anchor != eod:
+        print(f"[freshness_guard:global] EOD {eod} is not a SPY session — anchoring to {anchor}")
+    stale = check(anchor, cal)
     print("  ── derived board tables (warn-only) ──")
-    warn = check_board(eod, cal)
+    warn = check_board(anchor, cal)
     if warn:
         print(
             f"[freshness_guard:global] ⚠️  WARN — {len(warn)} derived table(s) stale (NOT blocking):"

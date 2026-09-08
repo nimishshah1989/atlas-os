@@ -157,7 +157,7 @@ docs/adr/0006-second-schema-atlas-global.md · docs/global/{taxonomy,data-source
   `etf_scores_daily` (`technical, risk, cost_liquidity, flow, quality` + sub-scores, `composite`,
   `conviction_tier`, `peer_group`, `asset_group`, `lenses_active`, `evidence`, `compute_run_id`),
   `country_daily` (`iso2, date, representative_id, n_etfs, composite, rs_{w}_spy, aum_usd_total`),
-  `universe_snapshot` (`in_universe, in_sp500, adv_usd_median_60d, floor_usd, aum_usd, basket_eligible`),
+  `universe_snapshot` (`in_universe, exclusion_reason, in_sp500, adv_usd_median_60d, floor_usd, aum_usd, basket_eligible`),
   `atlas_signal_ic` (+ `entity` stock|etf).
 - `atlas_thresholds` — identical 13 columns to India's (so `load_thresholds(schema="atlas_global")`
   and the admin panel work unchanged) + `atlas_thresholds_audit`.
@@ -240,8 +240,8 @@ SPY sessions. Its registry test lands in Phase 0 (empty-but-valid).
 
 | Need | Primary (free, official) | Cadence | Fallback | Gate |
 |---|---|---|---|---|
-| OHLCV 2016→ | **Alpaca Market Data, free plan**: 7+ yrs daily bars, 200 req/min, multi-symbol bars (≤10,000 points/page, `page_token`), `adjustment=split` and `all` (two pulls, merged), `feed=sip` for history older than 15 min; paper-only account = email signup, no KYC, international | nightly incremental; backfill ≈ 4,000 symbols × 7 yrs in minutes | **Stooq importer** (FM-downloaded `d_us_txt.zip`); yfinance only as a cross-check | **Phase 0 SIP gate**: 40 sessions of SPY/AAPL/QQQ — SPY daily-return correlation vs FRED `SP500` ≥ 0.999, volume ratio vs a Stooq `SPY.US` file in [0.9, 1.1] (IEX-only would show ~2–3% of consolidated volume), no session gaps. Fail → Stooq spine + paid slot (Polygon Starter / Tiingo). |
-| Corporate actions | Alpaca corporate-actions endpoint (16 event types incl. splits, cash/stock dividends, spin-offs, mergers) — **plan-tier access unverified** | daily | derive from `all` vs `split` bar ratios, flagged `source='derived_from_adjustment'` (needs FM approval — rule #0) | every `|ret_1d| > 0.5` on `close_adj` has a matching action |
+| OHLCV 2016→ | **Alpaca** (SIP gate PASS 2026-09-07 — the 2026-09-04 Tiingo decision is reversed; `docs/global/data-sources.md` carries the measurements): free plan, `feed=sip` proven consolidated (IEX reads 2.79 % of the same volume), `adjustment=split` → `close_adj` and `adjustment=all` → `close_tr` straight from the vendor, multi-symbol bars ≤ 10,000 points per page, 200 req/min. **History floor 2016-01-04 for every symbol** | nightly incremental (P1-B); `close_tr` rewritten over the full window whenever a dividend lands, never appended | **Stooq importer** as the permanent pre-2016 source and the cross-source check; Tiingo Power if Alpaca lapses (`phase1.md` §1); yfinance only as a third cross-check | **SIP gate PASSED**, then gate A (P1-B) |
+| Corporate actions | Tiingo per-row `splitFactor` / `divCash` (amended 2026-09-04; Alpaca out) | daily | derive from `all` vs `split` bar ratios, flagged `source='derived_from_adjustment'` (needs FM approval — rule #0) | every `|ret_1d| > 0.5` on `close_adj` has a matching action |
 | Index / macro | FRED (`SP500`, `VIXCLS`, `DGS10`, `DTB3`, `DTWEXBGS`) — key already in India `.env` | daily | — | through EOD-1 |
 | ETF universe | Nasdaq Trader `nasdaqlisted.txt` + `otherlisted.txt` (ETF = Y, exchange, test-issue flag) | weekly | Alpaca `/v2/assets` | 3,300–4,000 rows, every one with an exchange |
 | S&P 500 | **SSGA SPY daily holdings CSV** (constituents, weights, GICS sector column — verify columns on first fetch) via `etf-scraper`; history `fja05680/sp500` | daily / one-time | Wikipedia list | 500–505 names, weights ≈ 100% |
@@ -326,6 +326,22 @@ cross-source-agreement check for Alpaca.
   Phase 1 prints the ADV$ percentile table so the FM sets the floor from data.
 - Delisted ETFs keep their bars, `is_active=false` (survivorship honesty).
 
+**FM decisions of 2026-09-06**, taken from the real distribution in
+`docs/global/reports/adv_usd_2026-09-03.md` and implemented in `build_universe_snapshot.py`:
+
+1. **Stocks: S&P 500 only.** `in_universe` for a stock requires `in_sp500` on that date AND the
+   ADV$ floor — the snapshot had been wider than this section. 3,389 liquid non-members dropped
+   out; all 503 members on 2026-09-03 clear the floor, so stocks in the universe = 503. Trailing
+   members stay `in_universe` on the dates they were members (`in_sp500` is per date), so the
+   backtest history is unaffected.
+2. **The floor is $1,000,000**, seeded from that decision (`seed_thresholds.py`, 61 rows). 2,114
+   of 5,656 ETFs clear it. ONE floor serves both asset classes. `build_universe_snapshot` still
+   exits 2 when the row is missing or inactive — the guard for a half-provisioned schema.
+3. **Leveraged and inverse ETFs are out of the universe** — 749 leveraged, 166 inverse, 125
+   both, 790 distinct (363 of them clear the floor), leaving 1,751 ETFs. They keep their
+   snapshot row with `in_universe = false` and the rule that excluded them in `--report`.
+   Universe on 2026-09-03: **2,254** of 13,155 active instruments (1,751 ETFs + 503 stocks).
+
 ## Classification engine (the moat)
 
 Dimensions per ETF: `asset_class` (equity / fixed_income / commodity / currency / multi_asset /
@@ -344,7 +360,13 @@ Layers — deterministic first, model last, human final:
   `equity_w`, HHI, top-10, `lookthrough_scored_w`. Unit-tested on real snapshots.
 - **L2 rules** (`rules.py`, pure; ordered first-match like `etf_sector.py`, but on structured
   inputs) — leveraged/inverse from name regex (`2X|3X|ULTRA|BEAR|INVERSE|-1X|DAILY…BULL`) ∧ issuer ∧
-  `derivatives_share`; hedged from name; active from N-PORT/issuer; `single_country` iff
+  `derivatives_share`. **This file exists** as `atlas/global_market/classify/rules.py`, started
+  early on 2026-09-06 for the universe filter above: `leverage_flags(name)` is the name half only,
+  over all 5,656 ETF names, with the issuer read off the front of the name. Phase 2 SUPERSEDES it
+  with holdings + `derivatives_share` + `etf_meta`; the known name-only misses (return-stacked
+  and "100% A & 100% B" funds, whose 200 % notional is nowhere in the name) are listed in the
+  file's docstring and in phase1.md P1-E. Hedged from name; active from N-PORT/issuer;
+  `single_country` iff
   `top_country_w ≥ cls_country_pure_min_weight` ∧ `equity_w ≥ cls_country_equity_min`; region/global
   by ISO→region roll-up; `sector_id` when one sector ≥ `cls_sector_pure_min`. All thresholds in
   `atlas_thresholds`. Unambiguous rows get `status='auto'`.

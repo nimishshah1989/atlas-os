@@ -20,6 +20,12 @@ CREATE SCHEMA IF NOT EXISTS atlas_global;
 -- with series_id/class_id stored alongside) and "us:{asset_class}:{symbol}:{listing_date}"
 -- otherwise. Hence symbol is unique among ACTIVE rows only (partial index below): the
 -- delisted holder of a recycled symbol stays, is_active = false, with its history intact.
+-- The registrant is the identity: a symbol whose CIK changes between weekly runs (another
+-- registrant, none to one, one to none) is RECYCLED — old row deactivated, new uuid; with
+-- no CIK on either side, a Tiingo listing start that jumps forward is the recycle signal.
+-- A registrant that changes symbol (same CIK — funds: same CIK, series and class — with
+-- exactly one listing before and after) is RENAMED: same uuid, new symbol, old spellings
+-- closed in symbol_alias. source = 'manual' rows are never deactivated by the directory.
 CREATE TABLE IF NOT EXISTS atlas_global.instrument_master (
     instrument_id    uuid        NOT NULL,
     asset_class      text        NOT NULL,
@@ -35,16 +41,19 @@ CREATE TABLE IF NOT EXISTS atlas_global.instrument_master (
     listing_date     date,
     delisted_at      date,
     is_active        boolean     NOT NULL DEFAULT true,     -- delisted names keep their bars (survivorship honesty)
-    sector_gics      text,                                  -- stocks: GICS sector from the SPY holdings CSV
+    sector_gics      text,                                  -- stocks: GICS sector by Select Sector SPDR membership — the ONE column written outside build_identity.py (ingest_index_membership.py), and written WITHOUT bumping updated_at (build_identity's freshness signal)
     sub_sector_id    text,                                  -- taxonomy_sector(id) level 2; no FK: taxonomy is created in 03_*
-    source           text        NOT NULL,                  -- nasdaq_trader | sec | alpaca | manual
+    source           text        NOT NULL,                  -- nasdaq_trader | stooq (archive-only, delisted) | alpaca | manual
     created_at       timestamptz NOT NULL DEFAULT now(),
     updated_at       timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT instrument_master_pkey PRIMARY KEY (instrument_id),
     CONSTRAINT chk_instrument_master_asset_class CHECK (asset_class IN ('stock', 'etf'))
 );
--- One ACTIVE instrument per symbol; upserts by symbol target it with
--- ON CONFLICT (symbol) WHERE is_active. Delisted rows may share a symbol with the live one.
+-- One ACTIVE instrument per symbol. build_identity.py never targets this index: it
+-- deactivates the previous holder FIRST, in the same transaction, then inserts new rows by
+-- the primary key and upserts renames / reactivations with ON CONFLICT (instrument_id) —
+-- so the index is an assertion on the planner's bookkeeping, never a merge target.
+-- Delisted rows may share a symbol with the live one.
 CREATE UNIQUE INDEX IF NOT EXISTS ux_instrument_master_symbol_active
     ON atlas_global.instrument_master (symbol) WHERE is_active;
 CREATE INDEX IF NOT EXISTS ix_instrument_master_symbol
@@ -54,11 +63,13 @@ CREATE INDEX IF NOT EXISTS ix_instrument_master_class_active
 CREATE INDEX IF NOT EXISTS ix_instrument_master_cik
     ON atlas_global.instrument_master (cik);
 
--- symbol_alias — how each source spells a symbol (AAPL.US, BRK-B vs BRK.B). Renames create a
--- new alias row, never a second instrument.
+-- symbol_alias — how each source spells a symbol (AAPL.US, BRK-B vs BRK.B). A rename keeps
+-- the uuid: the old spellings are closed (valid_to = the run date) and the new ones opened
+-- on the SAME instrument_id — never a second instrument. A recycled ticker's open aliases
+-- move to the new holder (closed on the old row, re-opened on the new one).
 CREATE TABLE IF NOT EXISTS atlas_global.symbol_alias (
-    source         text        NOT NULL,                    -- stooq | alpaca | nasdaq_trader | sec | manual
-    source_symbol  text        NOT NULL,
+    source         text        NOT NULL,                    -- stooq | tiingo | sec | nasdaq_symbol | cqs | alpaca | manual
+    source_symbol  text        NOT NULL,                    -- that source's own spelling: BRK-B.US, BRK-B, AGM-PD, AGM-D, AGMpD
     valid_from     date        NOT NULL,
     valid_to       date,                                    -- NULL = current
     instrument_id  uuid        NOT NULL REFERENCES atlas_global.instrument_master (instrument_id),
@@ -105,9 +116,9 @@ CREATE TABLE IF NOT EXISTS atlas_global.index_membership (
     index_code      text        NOT NULL,                   -- 'SP500'
     instrument_id   uuid        NOT NULL REFERENCES atlas_global.instrument_master (instrument_id),
     effective_from  date        NOT NULL,
-    effective_to    date,                                   -- NULL = current member
+    effective_to    date,                                   -- NULL = current member; EXCLUSIVE end (the member is out on that date). On an ssga row it is the weekly OBSERVATION date — up to 7 sessions after the true change — and frozen once written; fja05680 rows are re-derived from the file on every --history run (a departure observed on one before the file caught up is provisional until then)
     weight_frac     numeric(12,8),
-    source          text        NOT NULL,                   -- ssga_spy_holdings | fja05680_sp500 | wikipedia
+    source          text        NOT NULL,                   -- ssga | fja05680 (the values ingest_index_membership.py writes)
     updated_at      timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT index_membership_pkey PRIMARY KEY (index_code, instrument_id, effective_from),
     CONSTRAINT chk_index_membership_weight
@@ -118,6 +129,10 @@ CREATE INDEX IF NOT EXISTS ix_index_membership_current
 
 -- atlas_thresholds — India's 13 columns 1:1 (load_thresholds(schema="atlas_global") and the
 -- admin panel read the same names) + PRIMARY KEY (threshold_key) so seeds can ON CONFLICT.
+-- is_active carries NOT NULL DEFAULT true because load_thresholds() filters `WHERE is_active
+-- = TRUE`: a hand-written insert that omits the column (the runbook tells the FM to write one
+-- to set the liquidity floor) would otherwise land NULL and be INVISIBLE to every reader,
+-- while the row plainly sits in the table. Found by making exactly that mistake, 2026-09-06.
 CREATE TABLE IF NOT EXISTS atlas_global.atlas_thresholds (
     threshold_key        varchar(64)   NOT NULL,
     threshold_value      numeric(18,6),
@@ -130,7 +145,7 @@ CREATE TABLE IF NOT EXISTS atlas_global.atlas_thresholds (
     default_value        numeric(18,6),
     last_modified_by     varchar(64),
     last_modified_at     timestamptz,
-    is_active            boolean,
+    is_active            boolean       NOT NULL DEFAULT true,
     created_at           timestamptz,
     CONSTRAINT atlas_thresholds_pkey PRIMARY KEY (threshold_key)
 );
@@ -224,7 +239,7 @@ CREATE TABLE IF NOT EXISTS atlas_global.ingest_state (
 -- provider_calls — free-tier budget is a monitored metric: calls per (day, provider, endpoint).
 CREATE TABLE IF NOT EXISTS atlas_global.provider_calls (
     run_date    date        NOT NULL,
-    provider    text        NOT NULL,                       -- alpaca | edgar | fred | issuer | nasdaq_trader | finra
+    provider    text        NOT NULL,                       -- alpaca | edgar | fred | issuer | nasdaq_trader | tiingo | finra
     endpoint    text        NOT NULL,
     calls       integer     NOT NULL DEFAULT 0,
     updated_at  timestamptz NOT NULL DEFAULT now(),

@@ -3,13 +3,16 @@
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { isInvited } from '@/lib/auth'
+import { basePath } from '@/lib/basePath'
 import { dbAvailable } from '@/lib/db'
 import { isSupabaseConfigured } from '@/lib/supabase/env'
-import { safeNext } from '@/lib/supabase/paths'
+import { magicLinkRedirect, safeNext } from '@/lib/supabase/paths'
 import { createServerSupabase } from '@/lib/supabase/server'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+// Scheme + host only, from the proxy's headers — so nginx must pass Host / X-Forwarded-Host and
+// X-Forwarded-Proto through, or the emailed link points at http, or at 127.0.0.1.
 async function requestOrigin(): Promise<string> {
   const h = await headers()
   const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'localhost:3000'
@@ -33,7 +36,9 @@ export async function sendMagicLink(formData: FormData): Promise<void> {
   const { error } = await supabase.auth.signInWithOtp({
     email,
     options: {
-      emailRedirectTo: `${origin}/login/callback?next=${encodeURIComponent(next)}`,
+      // The origin carries no path, so the sub-path is added here — and the same URL must be on
+      // the Supabase project's redirect allowlist or the link silently falls back to Site URL.
+      emailRedirectTo: magicLinkRedirect(origin, basePath, next),
       shouldCreateUser: dbAvailable,
     },
   })

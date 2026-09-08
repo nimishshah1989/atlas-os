@@ -6,14 +6,12 @@ import { usePathname } from 'next/navigation'
 import { Icon, type IconName } from './icons'
 import { ThemeToggle } from './ThemeToggle'
 
+// The sections that exist. Countries, Sectors, Baskets, Methodology and Admin join the rail with
+// their pages (docs/global/frontend-design.md §4) — a link to nothing is not navigation.
 const SECTIONS: { href: string; label: string; icon: IconName }[] = [
   { href: '/', label: 'Today', icon: 'today' },
   { href: '/etfs', label: 'ETFs', icon: 'etfs' },
-  { href: '/countries', label: 'Countries', icon: 'countries' },
-  { href: '/sectors', label: 'Sectors', icon: 'sectors' },
   { href: '/stocks', label: 'Stocks', icon: 'stocks' },
-  { href: '/baskets', label: 'Baskets', icon: 'baskets' },
-  { href: '/methodology', label: 'Methodology', icon: 'methodology' },
 ]
 
 function isActive(pathname: string, href: string): boolean {
@@ -48,13 +46,9 @@ export function Rail() {
       </nav>
 
       <div className="rail-foot">
-        <Link
-          href="/admin/thresholds"
-          className="rail-link text-body"
-          aria-current={pathname.startsWith('/admin') ? 'page' : undefined}
-        >
-          <Icon name="admin" />
-          <span>Admin</span>
+        <Link href="/health" className="rail-link text-body" aria-current={isActive(pathname, '/health') ? 'page' : undefined}>
+          <Icon name="health" />
+          <span>Health</span>
         </Link>
         <ThemeToggle />
       </div>

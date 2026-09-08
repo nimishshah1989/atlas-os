@@ -4,6 +4,7 @@
 // operator surface and the sign-in page, which explains what is missing.
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { e2eBypassEmail } from '@/lib/e2e'
 import { readSupabaseEnv } from './env'
 import { isPublicPath } from './paths'
 
@@ -16,6 +17,8 @@ function toLogin(request: NextRequest): NextResponse {
 }
 
 export async function updateSession(request: NextRequest): Promise<NextResponse> {
+  // The smoke's dev-only bypass (src/lib/e2e.ts): compiled away by `next build`.
+  if (e2eBypassEmail()) return NextResponse.next({ request })
   const { pathname } = request.nextUrl
   const env = readSupabaseEnv()
   if (!env) return isPublicPath(pathname) ? NextResponse.next({ request }) : toLogin(request)

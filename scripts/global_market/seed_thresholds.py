@@ -24,12 +24,16 @@ What is seeded (each row: key, value, category, description, units, min, max, de
   ``quality_w_composite`` 0.7 / ``quality_w_leaders`` 0.3.
 * §D ``rollup_breadth_min`` 60 · §E ``ic_floor_{1m,3m,6m,12m}`` 0.02 / 0.04 / 0.05 / 0.04.
 * Universe: ``liquidity_min_observations_60d`` 40 and ``liquidity_recency_trading_days`` 5 —
-  India's rows, ported (docs/superpowers/plans/2026-08-23-stock-universe-liquidity-floor.md).
+  India's rows, ported (docs/superpowers/plans/2026-08-23-stock-universe-liquidity-floor.md) —
+  and, since 2026-09-06, ``liquidity_min_traded_value_usd`` $1,000,000. That last row is NOT a
+  ported number and NOT a guess: the plan's process was "Phase 1 prints the ADV$ table so the FM
+  sets the floor from data", P1-E printed it (``docs/global/reports/adv_usd_2026-09-03.md``), and
+  the FM read the real distribution and chose. ONE floor serves both asset classes because all
+  503 S&P 500 members on that date clear it. The refusal path in ``build_universe_snapshot``
+  stays exactly as it was — it is the guard for any database where the row is missing or
+  inactive, not a placeholder waiting for this seed.
 
 NOT seeded, on purpose:
-* ``liquidity_min_traded_value_usd`` — the plan has the FM set the floor from the REAL ADV$
-  distribution ``build_universe_snapshot`` prints in Phase 1; ``universe_core.members`` reads
-  the key, so with no row the universe step fails instead of cutting on an invented floor.
 * ``cls_country_pure_min_weight``, ``cls_country_equity_min``, ``cls_sector_pure_min``,
   ``cls_llm_min_confidence`` — the plan names the keys and leaves the values to Phase 2
   (risk #10: country-product semantics are locked with the FM then). Seeding a guess would
@@ -217,12 +221,16 @@ SEEDS: list[dict[str, object]] = [
          "A lens keeps its weight only if rank-IC at 6m clears this"),
     _row("ic_floor_12m", "0.04", "signal", "E", "ic", "0", "1",
          "A lens keeps its weight only if rank-IC at 12m clears this"),
-    # ── Universe (universe_core.members predicate). liquidity_min_traded_value_usd is NOT
-    # seeded: the FM sets it from the real ADV$ distribution (see the module docstring). ──
+    # ── Universe (universe_core.members predicate) ────────────────────────────────────────
     _row("liquidity_min_observations_60d", "40", "universe", "universe", "sessions", "1", "60",
          "Minimum traded sessions in the 60-session window for a valid median"),
     _row("liquidity_recency_trading_days", "5", "universe", "universe", "sessions", "1", "60",
          "Latest trade must be within this many sessions of the window end"),
+    _row("liquidity_min_traded_value_usd", "1000000", "universe", "universe", "usd", "0",
+         USD_CEILING,
+         "ADV$ floor for scoring and basket eligibility. FM decision 2026-09-06, read off the "
+         "REAL distribution in docs/global/reports/adv_usd_2026-09-03.md (2,114 of 5,656 ETFs "
+         "clear $1M; so do all 503 S&P 500 members, so one floor serves both asset classes)"),
 ]
 # fmt: on
 

@@ -27,6 +27,14 @@ So: **merge to main → live updates within ~5 minutes, automatically.**
   `atlas.jslwealth.in` → `127.0.0.1:3004`.
 - Rollback (instant): point nginx back to the previous prod on `:3002`
   (`atlas-frontend-v2`): `sudo sed -i 's|3004|3002|g' /etc/nginx/sites-enabled/atlas.jslwealth.in && sudo nginx -t && sudo systemctl reload nginx`.
+  That `sed` is a blind substitution of the string `3004` in the whole file — check what else in
+  the file contains it before running it.
+- **Global Atlas shares this domain at `/global`** — see `docs/global/deploy-subpath.md`. It is a
+  second pm2 app on its own port, added to the vhost as a single `include` line, so the two
+  rollbacks are independent: this one does not take `/global` down, and removing `/global` does
+  not touch the India board. Both boards' builds now share `flock /tmp/atlas-next-build.lock`
+  (2 vCPU, 3 GB per build) — the box's `/home/ubuntu/atlas-auto-deploy.sh` must be refreshed from
+  `scripts/ops/atlas-auto-deploy.sh` for that lock to have two parties.
 
 ## atlas-auto-deploy.sh — safety properties
 

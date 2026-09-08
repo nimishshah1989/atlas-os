@@ -52,9 +52,17 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             on this device.
           </p>
         )}
-        {reason === 'not-invited' && (
+        {(reason === 'not-invited' || reason === 'role' || reason === 'no-directory') && (
           <div className="mb-4 text-body text-ink">
-            <p>This address is not on the invite list. Ask the FM to add it, then try again.</p>
+            <p>
+              {reason === 'role'
+                ? 'This is a client account. The board is open to the FM and analysts only until client pages arrive.'
+                : reason === 'no-directory'
+                  ? // requireUser() could not reach the invite list, so nobody has been checked.
+                    // Says what is wrong without naming the missing setting to a stranger.
+                    'The board cannot reach its invite list, so it cannot let anyone in. This is a configuration fault, not your account — tell the FM.'
+                  : 'This address is not on the invite list. Ask the FM to add it, then try again.'}
+            </p>
             <form action={signOut} className="mt-2">
               <button type="submit" className="btn">
                 Use a different account

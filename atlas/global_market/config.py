@@ -31,10 +31,29 @@ def alpaca_keys() -> tuple[str, str]:
     return key, secret
 
 
-def fred_key() -> str:
-    return _require(
-        "FRED_API_KEY", "set the FRED API key in .env (same key India's ingest_macro uses)"
-    )
+def edgar_identity() -> str:
+    """SEC fair-access: every EDGAR request carries a ``User-Agent`` naming a real contact
+    (``"Firstname Lastname email@domain"``). The identity fetch refuses to run without it,
+    and without an ``@`` in it — a name alone is not a contact."""
+    value = _require("EDGAR_IDENTITY", 'set it in .env as "Firstname Lastname email@domain"')
+    if "@" not in value:
+        raise RuntimeError(
+            'EDGAR_IDENTITY must name a contact address: "Firstname Lastname email@domain"'
+        )
+    return value
+
+
+def fred_key() -> str | None:
+    """``FRED_API_KEY`` if one is set, else ``None`` — which selects the KEYLESS transport.
+
+    The ONLY accessor here that does not ``_require``. FRED publishes the same observations
+    two ways: the JSON API (key, revision vintages, richer metadata) and the keyless CSV
+    export behind its own "Download → CSV" button. Both are REAL prints from the same
+    source, so a missing key is not a reason to refuse — it is a reason to take the other
+    door, and ``providers/fred.fred_series`` dispatches on exactly this ``None``. Setting the
+    key later moves every caller onto the JSON API with no code change.
+    """
+    return os.environ.get("FRED_API_KEY", "").strip() or None
 
 
 def price_provider() -> str:

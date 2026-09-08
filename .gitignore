@@ -92,3 +92,6 @@ frontend/.next.bak*
 
 # aislop scan artifacts (tool output, not source)
 .aislop/
+
+# Local run logs and identity reports (scripts/global_market/build_identity.py default_report_dir)
+logs/

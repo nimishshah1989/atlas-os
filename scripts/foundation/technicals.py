@@ -60,16 +60,25 @@ def trailing_return(close: pd.Series, window: int) -> pd.Series:
     return close / close.shift(window) - 1.0
 
 
+def calendar_return(close: pd.Series, months: int) -> pd.Series:
+    """Trailing return anchored `months` CALENDAR months back: c[t] / c.asof(t − N months) − 1.
+
+    The anchoring rule above, for any month count — the US tree needs 24m/36m as well as
+    India's 1/3/6/12, and both markets must anchor returns the same way.
+    """
+    anchors = close.index - pd.DateOffset(months=months)
+    # asof → last close at/before each anchor date (NaN before the series starts)
+    base = close.asof(anchors)
+    return pd.Series(close.to_numpy() / base.to_numpy() - 1.0, index=close.index)
+
+
 def windowed_return(close: pd.Series, name: str) -> pd.Series:
     """Trailing return for a named window. 1m/3m/6m/12m are calendar-anchored:
     c[t] / (last close on/before t − N months) − 1. 1d/1w are session offsets."""
     months = _CALENDAR_MONTHS.get(name)
     if months is None:
         return trailing_return(close, RETURN_WINDOWS[name])
-    anchors = close.index - pd.DateOffset(months=months)
-    # asof → last close at/before each anchor date (NaN before the series starts)
-    base = close.asof(anchors)
-    return pd.Series(close.to_numpy() / base.to_numpy() - 1.0, index=close.index)
+    return calendar_return(close, months)
 
 
 def compute_price_technicals(close: pd.Series) -> pd.DataFrame:

@@ -1,17 +1,23 @@
 // src/app/health/page.tsx — the operator surface. Reachable without a session; reads only the
-// three ops tables in atlas_global. With no database it says so instead of pretending.
+// ops tables in atlas_global (runs, validators, health snapshot, provider calls). With no
+// database it says so instead of pretending.
 import { AnomaliesTable } from '@/components/health/AnomaliesTable'
+import { FreshnessTable } from '@/components/health/FreshnessTable'
 import { HealthStatus } from '@/components/health/HealthStatus'
 import { NoDatabase } from '@/components/health/NoDatabase'
 import { PipelineRunsTable } from '@/components/health/PipelineRunsTable'
+import { ProviderCallsTable } from '@/components/health/ProviderCallsTable'
 import { ValidatorScorecard } from '@/components/health/ValidatorScorecard'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { QueryFailed, Section } from '@/components/ui/Section'
 import { dbAvailable } from '@/lib/db'
+import { formatIsoDate } from '@/lib/format'
 import {
+  getFreshnessRows,
   getLatestAnomalies,
   getLatestRunPerScript,
   getPipelineRuns,
+  getProviderCalls,
   getValidatorHistory,
   getValidatorLatest,
 } from '@/lib/queries/health'
@@ -27,19 +33,29 @@ const VALIDATOR_WINDOW_DAYS = 30
 export default async function HealthPage() {
   if (!dbAvailable) return <NoDatabase />
 
-  const [latest, recent, validators, history, anomalies] = await Promise.all([
+  const [latest, recent, validators, history, anomalies, freshness, calls] = await Promise.all([
     attempt(getLatestRunPerScript()),
     attempt(getPipelineRuns(RECENT_RUNS)),
     attempt(getValidatorLatest()),
     attempt(getValidatorHistory(VALIDATOR_WINDOW_DAYS)),
     attempt(getLatestAnomalies()),
+    attempt(getFreshnessRows()),
+    attempt(getProviderCalls()),
   ])
+  const freshnessNote =
+    freshness.ok && freshness.value.data_date
+      ? `snapshot for EOD ${formatIsoDate(freshness.value.data_date)}, lag in SPY sessions`
+      : 'lag in SPY sessions'
+  const callsNote =
+    calls.ok && calls.value.run_date
+      ? `run date ${formatIsoDate(calls.value.run_date)}, ${calls.value.rows.reduce((n, r) => n + r.calls, 0)} calls`
+      : undefined
 
   return (
     <div className="page">
       <PageHeader
         title="Health"
-        lead="What the nightly pipeline did, whether its gates passed, and which metrics the snapshot flagged."
+        lead="What the pipeline did, whether its gates passed, how fresh each table is, which metrics the snapshot flagged, and what the run spent of each provider's budget."
       />
 
       <HealthStatus latest={latest} recent={recent} validators={validators} anomalies={anomalies} />
@@ -71,8 +87,16 @@ export default async function HealthPage() {
         )}
       </Section>
 
+      <Section title="Freshness" note={freshnessNote}>
+        {freshness.ok ? <FreshnessTable snapshot={freshness.value} /> : <QueryFailed error={freshness.error} />}
+      </Section>
+
       <Section title="Flagged metrics" note="from the latest health snapshot">
         {anomalies.ok ? <AnomaliesTable snapshot={anomalies.value} /> : <QueryFailed error={anomalies.error} />}
+      </Section>
+
+      <Section title="Provider calls" note={callsNote}>
+        {calls.ok ? <ProviderCallsTable snapshot={calls.value} /> : <QueryFailed error={calls.error} />}
       </Section>
     </div>
   )

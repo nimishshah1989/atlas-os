@@ -1,10 +1,10 @@
 // src/components/health/NoDatabase.tsx — the honest state when the deployment has no database.
 import { PageHeader } from '@/components/ui/PageHeader'
 
-export function NoDatabase() {
+export function NoDatabase({ title = 'Health' }: { title?: string }) {
   return (
     <div className="page">
-      <PageHeader title="Health" lead="No database configured." />
+      <PageHeader title={title} lead="No database configured." />
       <div className="panel max-w-[64ch] px-5 py-4 text-body text-ink-2">
         <p>
           This deployment has no <code className="text-ink">ATLAS_GLOBAL_DB_URL</code>. Point it at the Supabase

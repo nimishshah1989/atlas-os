@@ -4,11 +4,13 @@
 # Deploy/backup targets (make deploy / make backup) land with Pillar 3 of the
 # engineering-process plan; not defined yet.
 
-.PHONY: setup test test-int lint format typecheck gate check heads clean clean-hard
+.PHONY: setup test test-int test-live lint format typecheck gate check heads clean clean-hard
 
-# One-time (and after dependency changes): build the local .venv with dev deps.
+# One-time (and after dependency changes): build the local .venv with dev deps. The global
+# extra (openpyxl, alpaca-py) is part of it: the global-market unit tests import the SSGA
+# parser, and `uv sync` is exact — without it a fresh venv cannot even collect them.
 setup:
-	uv sync --extra dev
+	uv sync --extra dev --extra global
 
 # Fast unit suite — no DB. Mirrors what CI/EC2 run.
 # tests/scripts holds unit tests for scripts/foundation modules (fund_rank_core,
@@ -21,6 +23,12 @@ test:
 # or locally with a direct (non-pooler) DB URL in .env.
 test-int:
 	uv run --extra dev pytest tests/integration -m integration -q
+
+# Live-file tests (`live` marker, never `unit`): the SSGA workbooks and the fja05680 CSVs are
+# fetched at test time — rule #0 on files that cannot be committed. ATLAS_LIVE_FIXTURES=required
+# turns an unreachable source into a FAILURE (the tests must RUN, never quietly skip).
+test-live:
+	ATLAS_LIVE_FIXTURES=required uv run --extra dev --extra global pytest tests/unit/global_market -m live -q
 
 lint:
 	uv run ruff check atlas tests scripts

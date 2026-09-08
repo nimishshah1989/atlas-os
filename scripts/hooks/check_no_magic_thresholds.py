@@ -13,9 +13,10 @@ RS_QUINTILE_TOP = 0.80, FUND_STRONG_HOLDINGS_MIN_PCT = 0.60). If a name
 matches a methodology pattern AND isn't in the documented allowlist, the
 hook flags it.
 
-Suppress per-line with `# noqa: threshold` if the constant is genuinely
+Suppress per-line with `# allow-threshold: <reason>` if the constant is genuinely
 not a methodology threshold (e.g. a numerical-stability epsilon, a
-data-quality floor such as a minimum coverage fraction).
+data-quality floor such as a minimum coverage fraction). The older
+`# noqa: threshold` form still works but ruff warns on it (not a ruff code).
 """
 
 from __future__ import annotations
@@ -74,7 +75,9 @@ def find_threshold_assignments(path: Path) -> list[tuple[int, str, float]]:
         return []
 
     suppress_lines = {
-        i + 1 for i, line in enumerate(text.splitlines()) if "# noqa: threshold" in line
+        i + 1
+        for i, line in enumerate(text.splitlines())
+        if "# allow-threshold:" in line or "# noqa: threshold" in line
     }
 
     out: list[tuple[int, str, float]] = []
@@ -104,7 +107,7 @@ def main() -> int:
                 continue
             failures.append(
                 f"{f}:{line_no}: {name} = {value!r}  "
-                "→ move to atlas_thresholds table or add `# noqa: threshold`"
+                "→ move to atlas_thresholds table or add `# allow-threshold: <reason>`"
             )
 
     if failures:

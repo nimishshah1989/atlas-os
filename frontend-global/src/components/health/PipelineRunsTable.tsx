@@ -16,7 +16,7 @@ export function PipelineRunsTable({ runs, empty }: { runs: PipelineRun[]; empty:
         <thead>
           <tr>
             <th>Script</th>
-            <th>Phase</th>
+            <th>Milestone</th>
             <th>Started (ET)</th>
             <th className="r">Duration</th>
             <th className="r">Rows</th>
@@ -27,7 +27,7 @@ export function PipelineRunsTable({ runs, empty }: { runs: PipelineRun[]; empty:
           {runs.map((r) => (
             <tr key={r.run_id}>
               <td className="text-ink">{r.script_name}</td>
-              <td className="text-ink-3">{r.phase ?? '—'}</td>
+              <td className="text-ink-3">{r.milestone ?? '—'}</td>
               <td className="num whitespace-nowrap">{formatShortDateTime(r.started_at)}</td>
               <td className="num r">{formatDuration(r.duration_seconds)}</td>
               <td className="num r">{formatNum(r.rows_written)}</td>
