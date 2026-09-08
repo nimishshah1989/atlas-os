@@ -126,6 +126,61 @@ for (const [label, run] of HEALTH_READS) {
   const rows = await timed(`4. read ${label}`, run)
   if (rows) console.log(`       ${rows[0].n} row(s)`)
 }
+// THE TWO STATEMENTS /health COULD NOT GET BACK on 2026-09-08 — while count(*) on the same
+// six-row table answered in 0.0s. Exactly as the page runs them. If these hang here too, the
+// reads after them say why: a session holding the table, a lock not granted, an index that is
+// not valid, or a table whose dead tuples dwarf its live ones. Each is clocked, so a stalled
+// catalogue read cannot hang the probe either. Note: atlas_global_app may lack the right to
+// see OTHER sessions' query text in pg_stat_activity (that needs pg_read_all_stats) — state,
+// wait_event and timing are still visible, and that is what matters.
+await timed('4b. THE STALLED ONE: max(data_date) on atlas_health_daily', async () => {
+  const [row] = await sql`SELECT MAX(data_date)::text AS d FROM atlas_global.atlas_health_daily`
+  console.log(`       max data_date = ${row.d}`)
+  return row
+})
+await timed('4c. THE OTHER STALLED ONE: freshness rows on atlas_health_daily', async () => {
+  const rows = await sql`
+    SELECT table_name, value_today::float8 AS v FROM atlas_global.atlas_health_daily
+    WHERE metric_name = 'freshness_lag_sessions'
+      AND data_date = (SELECT MAX(data_date) FROM atlas_global.atlas_health_daily WHERE metric_name = 'freshness_lag_sessions')
+    ORDER BY table_name`
+  console.log(`       ${rows.length} freshness row(s)`)
+  return rows
+})
+await timed('4d. sessions touching atlas_health_daily (pg_stat_activity)', async () => {
+  const rows = await sql`
+    SELECT pid, state, wait_event_type, wait_event,
+           to_char(now() - xact_start, 'HH24:MI:SS') AS xact_age,
+           left(query, 90) AS query
+    FROM pg_stat_activity
+    WHERE datname = current_database()
+      AND (query ILIKE '%atlas_health_daily%' OR state = 'idle in transaction')
+      AND pid <> pg_backend_pid()
+    ORDER BY xact_start NULLS LAST`
+  for (const r of rows) console.log(`       pid=${r.pid} ${r.state} wait=${r.wait_event_type ?? '-'}/${r.wait_event ?? '-'} xact=${r.xact_age ?? '-'} | ${r.query}`)
+  if (!rows.length) console.log('       (no other session on it, and none idle in transaction)')
+  return rows
+})
+await timed('4e. locks on atlas_health_daily not granted (pg_locks)', async () => {
+  const rows = await sql`
+    SELECT l.pid, l.mode, l.granted
+    FROM pg_locks l JOIN pg_class c ON c.oid = l.relation
+    WHERE c.relname = 'atlas_health_daily'
+    ORDER BY l.granted, l.pid`
+  for (const r of rows) console.log(`       pid=${r.pid} ${r.mode} granted=${r.granted}`)
+  if (!rows.length) console.log('       (no locks held or waiting on it)')
+  return rows
+})
+await timed('4f. its primary-key index valid? dead vs live tuples?', async () => {
+  const [ix] = await sql`
+    SELECT i.indisvalid, i.indisready FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
+    WHERE c.relname = 'atlas_health_daily_pkey'`
+  const [st] = await sql`
+    SELECT n_live_tup, n_dead_tup, last_vacuum, last_autovacuum
+    FROM pg_stat_user_tables WHERE relname = 'atlas_health_daily'`
+  console.log(`       pkey valid=${ix?.indisvalid} ready=${ix?.indisready}; live=${st?.n_live_tup} dead=${st?.n_dead_tup} last_autovacuum=${st?.last_autovacuum ?? '-'}`)
+  return { ix, st }
+})
 await timed('5. the country grid /countries reads', async () => {
   const [row] = await sql`SELECT count(*)::int AS n FROM atlas_global.country_daily`
   console.log(`       ${row.n} country_daily row(s) — 0 means build_country_views.py has not run`)
