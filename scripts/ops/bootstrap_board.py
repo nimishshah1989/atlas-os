@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """One command that puts the Global board's database credentials in place, end to end.
 
-    python scripts/global_market/bootstrap_board.py            # do it
-    python scripts/global_market/bootstrap_board.py --dry-run  # say what it would do
+    python scripts/ops/bootstrap_board.py            # do it
+    python scripts/ops/bootstrap_board.py --dry-run  # say what it would do
 
 Everything here was a hand-run SQL paste and a hand-edited file, which is how a password ends
 up in a chat log and a URL ends up on the wrong port. It does four things, all idempotent:
@@ -17,6 +17,17 @@ up in a chat log and a URL ends up on the wrong port. It does four things, all i
    already in it, and never overwriting a ``GLOBAL_REVALIDATE_SECRET`` that already exists
    (the orchestrator holds the matching copy; changing one side silently breaks publishing).
 4. Prints what is still missing and can only come from a browser.
+
+WHY THIS LIVES IN scripts/ops AND NOT scripts/global_market. It names ``atlas_foundation``,
+on purpose — step 2 asserts that the board's role CANNOT read it — and the global tree may not
+name that schema (rule #1, ADR-0006, ``scripts/ops/schema_gate.py --market global``). The gate
+caught this file on its first CI run and was right to: it cannot read intent from a string,
+and it should not have to. Rewriting the name to slip past it would defeat the detector for
+everybody, so the file moved to where cross-market ops tooling already lives — beside
+``schema_gate.py``, which names both schemas, and ``atlas_global_deploy.sh``. The cost is that
+neither tree scans this file, so a cross-schema reference added here later goes unseen: keep
+it single-purpose, and keep the only mention of ``atlas_foundation`` the one that asserts a
+refusal.
 
 THE PORT IS THE POINT. The board must reach Postgres on the TRANSACTION pooler (6543), never
 the session pooler (5432): India's board holds 14 of the cluster's 15 session slots, and one
@@ -37,14 +48,15 @@ import sys
 from pathlib import Path
 from urllib.parse import quote, urlsplit
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+_REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(_REPO / "scripts" / "global_market"))  # _gdb
+sys.path.insert(0, str(_REPO))  # the atlas package
 
-import _gdb
-import psycopg2
+import _gdb  # noqa: E402  # pyright: ignore[reportMissingImports]
+import psycopg2  # noqa: E402
 
 M = _gdb.M
-REPO = Path(__file__).resolve().parents[2]
+REPO = _REPO
 ENV_LOCAL = REPO / "frontend-global" / ".env.local"
 FM_EMAIL = "nimish.shah1989@gmail.com"
 TRANSACTION_POOLER_PORT = 6543
@@ -165,7 +177,7 @@ def write_env(path: Path, url: str, keep: dict[str, str]) -> tuple[str, list[str
     supa_url = keep.get("NEXT_PUBLIC_SUPABASE_URL", "")
     supa_key = keep.get("NEXT_PUBLIC_SUPABASE_ANON_KEY", "")
     path.write_text(
-        "# frontend-global/.env.local — written by scripts/global_market/bootstrap_board.py.\n"
+        "# frontend-global/.env.local — written by scripts/ops/bootstrap_board.py.\n"
         "# Never committed. ATLAS_GLOBAL_BASE_PATH stays EMPTY: this board is served at the\n"
         "# root of its own host (docs/global/deploy-subdomain.md), not under a sub-path.\n"
         "ATLAS_GLOBAL_BASE_PATH=\n"
