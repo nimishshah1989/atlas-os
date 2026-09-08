@@ -79,8 +79,27 @@ bash /home/ubuntu/atlas-os/scripts/ops/atlas_global_deploy.sh
 
 The script backs up `.next` (refusing to build if the backup fails), waits on `$NEXT_BUILD_LOCK`
 so it can never build while India is building, asserts `.next/BUILD_ID` before it reloads pm2, and
-smoke-tests `/health` on the loopback port. It is the only command you run to deploy, now and on
+smoke-tests **`/login`** on the loopback port. It is the only command you run to deploy, now and on
 every future update.
+
+The smoke is `/login` and not `/health` on purpose. `/health` is the one route that queries the
+database without a session, so pointing the gate at it made a stalled database roll back a good
+build — a remedy that cannot fix a database, restoring a build with the same fault, and blocking
+the deploy that carried the fix. `/login` renders without a query, so it answers the question a
+smoke test is asking: is this build serving?
+
+`/health` is still measured, and reported in the log rather than enforced. When it does not answer,
+the deploy prints a note and keeps going, because **sign-in reads the database too** — the sign-in
+Server Action calls `isInvited()` (`src/lib/auth.ts`), which reads `atlas_global.app_user`. A board
+whose database path is stalled serves `/login` in full and then hangs when the button is pressed.
+So a green smoke means the board is up, never that anyone can get in. Diagnose the difference with:
+
+```bash
+cd /home/ubuntu/atlas-os/frontend-global && node scripts/db-probe.mjs
+```
+
+It times each step of the database path — connect, identity, schema, each table `/health` reads —
+with a 15-second clock on every one, and prints where the time goes. The password is redacted.
 
 ## §4 — nginx, in its own file
 
