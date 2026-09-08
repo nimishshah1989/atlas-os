@@ -65,8 +65,14 @@ if [ ! -x node_modules/.bin/next ]; then
   npm ci >>"$LOG" 2>&1 || die "npm ci failed"
 fi
 
+# `|| die`, because an UNCHECKED cp is how a full disk turns a failed build into a broken
+# board: it leaves a partial .next.bak that the rollback below would then install.
 STAMP=$(date +%Y%m%d_%H%M%S)
-[ -d .next ] && cp -r .next ".next.bak.$STAMP"
+BACKUP=""
+if [ -d .next ]; then
+  cp -r .next ".next.bak.$STAMP" || die "backup of .next failed (disk?) — not building"
+  BACKUP=".next.bak.$STAMP"
+fi
 rm -rf .next/cache/fetch-cache            # before: stale unstable_cache entries
 say "build (basePath=$BASE_PATH) — waiting on $NEXT_BUILD_LOCK if India is building"
 
@@ -89,7 +95,12 @@ if NODE_OPTIONS='--max-old-space-size=3072' \
   ls -1dt "$APP_DIR"/.next.bak.* 2>/dev/null | tail -n +4 | xargs -r rm -rf   # keep 3 backups
 else
   say "FAIL: build — rolling back to the previous .next; the board keeps serving it"
-  rm -rf .next && mv ".next.bak.$STAMP" .next 2>/dev/null || say "rollback: no backup to restore"
+  # Never `rm -rf .next` first: with no backup that turns a failed deploy into an outage.
+  if [ -n "$BACKUP" ]; then
+    rm -rf .next && mv "$BACKUP" .next && say "rollback: restored $(cat .next/BUILD_ID)"
+  else
+    say "rollback: no backup (first deploy) — .next left as the build left it"
+  fi
   pm2 describe "$PM2_APP" >/dev/null 2>&1 && pm2 reload "$PM2_APP" --update-env >>"$LOG" 2>&1
   exit 1
 fi

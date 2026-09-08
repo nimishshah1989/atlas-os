@@ -30,7 +30,7 @@ real catalyst feed scored every filing-rich name 0.) Gates assert on produced ou
 - `atlas/` is a modulith: each top-level package is a bounded context; cross-context imports only via
   `atlas.primitives`/`atlas.db`/`atlas.config` or an edge declared in `scripts/hooks/check_module_boundaries.py`.
 - Boards read Postgres directly — no internal APIs, no Python spawned from route handlers. India: pm2
-  `atlas-frontend-v3` :3004 on the box. Global: Vercel, transaction pooler, auth on from day one.
+  `atlas-frontend-v3` :3004 on the box. Global: the same box on its own host `global.jslwealth.in`, transaction pooler, auth from day one.
 - Orchestrators `scripts/ops/atlas_daily.sh` (16:00 IST) and `atlas_global_daily.sh` (01:00 UTC): gates withhold
   publish; every guarded table names its producer (`freshness_guard.py` + `test_producer_registry.py`).
 - Migrations: `0001_baseline_*` (verbatim prod dump) + `0002_atlas_global`. Prod DDL is managed directly.
