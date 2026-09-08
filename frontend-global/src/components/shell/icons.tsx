@@ -6,6 +6,7 @@ export type IconName =
   | 'today'
   | 'etfs'
   | 'stocks'
+  | 'countries'
   | 'search'
   | 'sun'
   | 'moon'
@@ -30,6 +31,15 @@ const GLYPHS: Record<IconName, ReactNode> = {
     <>
       <path d="M2 12l4-5 3 3 5-6" />
       <path d="M10.5 4H14v3.5" />
+    </>
+  ),
+  // A globe: circle, equator, meridian. Same 16-box, same single stroke as its neighbours —
+  // an icon set reads as one set or it reads as a mistake.
+  countries: (
+    <>
+      <circle cx="8" cy="8" r="6" />
+      <path d="M2 8h12" />
+      <path d="M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12" />
     </>
   ),
   search: (

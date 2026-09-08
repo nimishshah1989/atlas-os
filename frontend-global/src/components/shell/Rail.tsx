@@ -6,10 +6,11 @@ import { usePathname } from 'next/navigation'
 import { Icon, type IconName } from './icons'
 import { ThemeToggle } from './ThemeToggle'
 
-// The sections that exist. Countries, Sectors, Baskets, Methodology and Admin join the rail with
-// their pages (docs/global/frontend-design.md §4) — a link to nothing is not navigation.
+// The sections that exist. Sectors, Baskets, Methodology and Admin join the rail with their
+// pages (docs/global/frontend-design.md §4) — a link to nothing is not navigation.
 const SECTIONS: { href: string; label: string; icon: IconName }[] = [
   { href: '/', label: 'Today', icon: 'today' },
+  { href: '/countries', label: 'Countries', icon: 'countries' },
   { href: '/etfs', label: 'ETFs', icon: 'etfs' },
   { href: '/stocks', label: 'Stocks', icon: 'stocks' },
 ]
