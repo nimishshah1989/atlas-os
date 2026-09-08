@@ -116,17 +116,35 @@ def verify(url: str) -> int:
     with psycopg2.connect(url) as conn, conn.cursor() as cur:
         cur.execute(VERIFY_SQL)
         row = cur.fetchone()
-        n = int(row[0]) if row else 0
-        # The read that must FAIL. A grant is only proved by what it refuses.
-        try:
+        return int(row[0]) if row else 0
+
+
+def verify_cannot_read_india(url: str) -> None:
+    """The read that must FAIL. A grant is only proved by what it refuses.
+
+    Its OWN connection, deliberately. The failing statement aborts its transaction, and
+    sharing one with the count above would make a passing check depend on rollback ordering.
+
+    ANY database refusal counts. Without USAGE on the schema Postgres raises
+    InsufficientPrivilege, but a role that cannot see the schema at all can surface
+    UndefinedTable instead, and here they mean the same thing. Only a statement that SUCCEEDS
+    is a failure — catching one specific error class would have turned the other into a
+    traceback on the one run that matters.
+    """
+    conn = psycopg2.connect(url)
+    try:
+        with conn.cursor() as cur:
             cur.execute("SELECT count(*) FROM atlas_foundation.instrument_master")
-            raise SystemExit(
-                "REFUSING: atlas_global_app can read atlas_foundation. ADR-0006 says one "
-                "schema per market with zero cross-references, and the REVOKE did not take."
-            )
-        except psycopg2.errors.InsufficientPrivilege:
-            conn.rollback()
-    return n
+    except psycopg2.Error:
+        return  # refused, which is the whole point
+    finally:
+        conn.rollback()
+        conn.close()
+    raise SystemExit(
+        "REFUSING: atlas_global_app CAN read atlas_foundation. ADR-0006 is one schema per "
+        "market with zero cross-references, and the REVOKE did not take. Do not deploy: the "
+        "board would carry a live credential into the India market's data."
+    )
 
 
 def existing(path: Path) -> dict[str, str]:
@@ -187,8 +205,10 @@ def main() -> None:
     url = board_url(admin, password)
     n = verify(url)
     print(
-        f"  verified AS atlas_global_app through the transaction pooler — {n:,d} instruments in universe"
+        f"  verified AS atlas_global_app through the transaction pooler "
+        f"— {n:,d} instruments in universe"
     )
+    verify_cannot_read_india(url)
     print("  verified it CANNOT read atlas_foundation (ADR-0006)")
 
     keep = existing(ENV_LOCAL)
