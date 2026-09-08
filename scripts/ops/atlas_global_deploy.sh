@@ -27,7 +27,12 @@ set -uo pipefail
 REPO="${ATLAS_REPO:-/home/ubuntu/atlas-os}"
 APP_DIR="$REPO/frontend-global"
 PM2_APP="${PM2_APP:-atlas-global}"
-BASE_PATH="${ATLAS_GLOBAL_BASE_PATH:-/global}"
+# Default EMPTY: the board is served at the ROOT of its own host, global.jslwealth.in
+# (docs/global/deploy-subdomain.md). The old default was /global, from the superseded sub-path
+# deployment — and `:-` treats an EMPTY value as unset, so an operator who set the variable to
+# "" in .env.local still got a /global build whose every route 404s at the root. `-` without
+# the colon is the difference: unset falls back, empty is respected.
+BASE_PATH="${ATLAS_GLOBAL_BASE_PATH-}"
 LOG_DIR="${ATLAS_LOG_DIR:-/home/ubuntu/logs}"
 LOG="$LOG_DIR/atlas_global_deploy.log"
 NEXT_BUILD_LOCK="${NEXT_BUILD_LOCK:-/tmp/atlas-next-build.lock}"
@@ -74,7 +79,7 @@ if [ -d .next ]; then
   BACKUP=".next.bak.$STAMP"
 fi
 rm -rf .next/cache/fetch-cache            # before: stale unstable_cache entries
-say "build (basePath=$BASE_PATH) — waiting on $NEXT_BUILD_LOCK if India is building"
+say "build (basePath=${BASE_PATH:-<root>}) port=$ATLAS_GLOBAL_PORT — waiting on $NEXT_BUILD_LOCK if India is building"
 
 if NODE_OPTIONS='--max-old-space-size=3072' \
    flock -w 2700 "$NEXT_BUILD_LOCK" npm run build >>"$LOG" 2>&1 \
@@ -107,6 +112,23 @@ fi
 
 # Assert on behaviour, never on the build having "probably" picked the variable up. /health is the
 # one page that renders without a session (src/lib/supabase/paths.ts).
-code=$(curl -sS -m 10 -o /dev/null -w '%{http_code}' "http://127.0.0.1:$ATLAS_GLOBAL_PORT$BASE_PATH/health")
-[ "$code" = "200" ] || die "smoke: $BASE_PATH/health answered $code on :$ATLAS_GLOBAL_PORT (expected 200)"
-say "ok: smoke $BASE_PATH/health 200 on :$ATLAS_GLOBAL_PORT"
+# WAIT for the port, do not race it. `pm2 start` returns as soon as it has forked; Next then
+# compiles its manifest and binds, which takes a second or two on this box. Curling once
+# immediately answered `000 — Couldn't connect after 0 ms` and killed a deploy that had in
+# fact worked. Twenty attempts, half a second apart: a board that has not answered in ten
+# seconds is not slow, it is broken.
+code=000
+for _ in $(seq 20); do
+  code=$(curl -sS -m 5 -o /dev/null -w '%{http_code}' \
+    "http://127.0.0.1:$ATLAS_GLOBAL_PORT${BASE_PATH}/health" 2>/dev/null || echo 000)
+  [ "$code" = "200" ] && break
+  sleep 0.5
+done
+if [ "$code" != "200" ]; then
+  # The board's OWN log is the only thing that says why. Printing it here is the difference
+  # between "smoke failed" and a diagnosis, on a deploy the operator is watching right now.
+  say "smoke FAILED — last 30 lines of the board's pm2 log:"
+  pm2 logs "$PM2_APP" --lines 30 --nostream 2>&1 | tee -a "$LOG" || true
+  die "smoke: ${BASE_PATH}/health answered $code on :$ATLAS_GLOBAL_PORT (expected 200)"
+fi
+say "ok: smoke ${BASE_PATH}/health 200 on :$ATLAS_GLOBAL_PORT"
