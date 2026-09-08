@@ -161,6 +161,16 @@ jobs:
 
       - name: Unit tests (vitest)
         run: npm test
+      # `next build` is the check tsc and vitest are not. On 2026-09-08 this job was green while
+      # the build failed on the box. The empty DB URL is deliberate: db.ts treats an empty value
+      # as "no database" and every page renders its honest no-database state, so the build
+      # exercises routing, config and bundling without a Postgres. It CANNOT catch prerender
+      # errors that need data to mount a component — root layout is force-dynamic for that.
+      - name: Production build (next build)
+        run: npm run build
+        env:
+          ATLAS_GLOBAL_DB_URL: ''
+          ATLAS_GLOBAL_BASE_PATH: ''
 
   frontend-global:
     name: Global board types + tests
