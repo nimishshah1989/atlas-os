@@ -192,8 +192,16 @@ def _sql(template: str, schema: str, **kw: Any) -> str:
     return template.format(M=schema, universe=UNIVERSE_SQL.format(M=schema), **kw)
 
 
-def check_A(g: Gate, eod: Any = None) -> None:
-    """Every assertion reads rows the nightly produced; nothing here writes."""
+def check_A(g: Gate, eod: Any = None, report: str | None = None) -> None:
+    """Every assertion reads rows the nightly produced; nothing here writes.
+
+    ``report`` writes every row the jump check asserted on to a CSV. The console names four,
+    because a gate that prints sixty is a gate nobody reads; but four is not something you can
+    ACT on, and the whole point of surfacing a jump is that a human judges it. The file is the
+    working copy: symbol, date, both moves, the gap to the previous bar, how many other scored
+    names moved as hard that day (breadth separates a market event from a missed split), and
+    whether a corporate action shares the date.
+    """
     import _gdb
 
     from atlas.global_market.providers.fred import fred_series
@@ -313,6 +321,14 @@ def check_A(g: Gate, eod: Any = None) -> None:
         + (f"; {listing}" if listing else "")
         + f" [{excluded:,d} more outside the universe, not asserted on]"
     )
+    if report:
+        out = pd.DataFrame(unexplained).copy()
+        out["ret_tr_pct"] = out["ret_tr"] * 100.0
+        out.to_csv(report, index=False)
+        print(
+            f"  wrote {len(out):,d} unexplained jump row(s) over {dirty:,d} instrument(s) → {report}"
+        )
+
     if scored < A_MIN_N_FOR_SHARE:
         g.check(
             f"unexplained {A_MAX_ABS_LOG_JUMP} log jumps on close_adj (reported: the universe "
