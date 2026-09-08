@@ -6,10 +6,12 @@ laptop/box and in the board's own `.env.local` — never in this repo (it is pub
 Steps whose producer has not landed yet are marked with their chunk (P1-B, P1-D, P1-E);
 everything else is actionable now.
 
-> **Hosting: the board is served from the box at `atlas.jslwealth.in/global`, not from Vercel**
-> (FM, 2026-09-07). `docs/global/deploy-subpath.md` is the deployment package and **supersedes the
-> Vercel half of §4**; "board `.env.local`" in §1 is `frontend-global/.env.local` in the serving
-> directory on the box. §2, §3 and §5–§8 are unchanged.
+> **Hosting: the board is served from the box, not from Vercel** (FM, 2026-09-07), on its own
+> host `global.jslwealth.in` (FM, 2026-09-08). `docs/global/deploy-subdomain.md` is the deployment
+> package and **supersedes the Vercel half of §4**; `deploy-subpath.md` is the earlier
+> `atlas.jslwealth.in/global` route, kept for the record. "board `.env.local`" in §1 is
+> `frontend-global/.env.local` in the serving directory on the box. §2, §3 and §5–§8 are unchanged.
+> `ATLAS_GLOBAL_BASE_PATH` is UNSET on a subdomain.
 
 ## 1. Keys and environment
 
