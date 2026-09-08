@@ -64,6 +64,12 @@ RS_WINDOWS = ("1w", "1m", "3m", "6m", "12m", "24m")
 RS_COLUMNS = [f"rs_{w}_spy" for w in RS_WINDOWS]
 COUNTRY_KEY = ["iso2"]
 DAILY_KEY = ["iso2", "date"]
+# ``status`` is the outcome word every global report carries, and it is not decoration: it is
+# what ``_report.Report`` counts by default, so the run prints "picked=44 no_eligible_fund=6"
+# without anyone reading the CSV. Its absence here is what made the first run of this script
+# die inside the Report constructor.
+PICKED = "picked"
+NO_ELIGIBLE = "no_eligible_fund"
 REPORT_COLUMNS = (
     "iso2",
     "country",
@@ -75,7 +81,7 @@ REPORT_COLUMNS = (
     "n_eligible",
     "rs_3m_spy",
     "rs_12m_spy",
-    "note",
+    "status",
 )
 
 # The anchor: the newest session technical_daily holds at or before the cutoff. One date for
@@ -186,9 +192,7 @@ def daily_rows(frame: pd.DataFrame, anchor: dt.date, run_id: str) -> tuple[pd.Da
                 n_eligible,
                 None if pick is None else pick["rs_3m_spy"],
                 None if pick is None else pick["rs_12m_spy"],
-                ""
-                if pick is not None
-                else "no eligible fund — every member is geared, inverse or currency-hedged",
+                PICKED if pick is not None else NO_ELIGIBLE,
             ]
         )
     return pd.DataFrame(rows), report
@@ -215,6 +219,8 @@ def run(*, eod: dt.date | None, dry_run: bool, report: Report | None) -> dict[st
     if report is not None:
         for line in lines:
             report.add(*line)
+        outcomes = " ".join(f"{k}={v:,d}" for k, v in sorted(report.counts.items()))
+        print(f"[countries] {outcomes} {report.where()}")
     if dry_run:
         print("[countries] --dry-run: nothing written")
         return {"countries": len(countries), "with_representative": with_rep, "written": 0}
@@ -225,12 +231,23 @@ def run(*, eod: dt.date | None, dry_run: bool, report: Report | None) -> dict[st
     return {"countries": len(countries), "with_representative": with_rep, "written": written}
 
 
-def main() -> None:
+def parser() -> argparse.ArgumentParser:
+    """The CLI, reachable from a test — the two defects it carried were both invisible here.
+
+    ``--report`` is a ``Path`` and not a string: ``Report`` opens what it is handed, and a
+    ``str`` fails on ``.open`` only once the script has already connected and queried.
+    """
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0] if __doc__ else None)
     ap.add_argument("--eod", type=dt.date.fromisoformat, default=None)
     ap.add_argument("--dry-run", action="store_true", help="print the grid, write nothing")
-    ap.add_argument("--report", default=None, help="per-country CSV: what was picked and why")
-    args = ap.parse_args()
+    ap.add_argument(
+        "--report", type=Path, default=None, help="per-country CSV: what was picked and why"
+    )
+    return ap
+
+
+def main() -> None:
+    args = parser().parse_args()
     report = Report(args.report, REPORT_COLUMNS) if args.report else None
     try:
         run(eod=args.eod, dry_run=args.dry_run, report=report)
