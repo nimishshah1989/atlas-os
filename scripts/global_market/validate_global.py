@@ -8,7 +8,7 @@ cannot wire it early and fail (or pass) vacuously.
 
     python scripts/global_market/validate_global.py --check SIP [--stooq-file SPY.US.txt]
     python scripts/global_market/validate_global.py --check BASIS
-    python scripts/global_market/validate_global.py --check A [--eod YYYY-MM-DD]
+    python scripts/global_market/validate_global.py --check A [--eod YYYY-MM-DD] [--report a.csv]
 
 --check SIP — the Phase 0 gate (result recorded in docs/global/data-sources.md):
   One pull of SPY / AAPL / QQQ daily bars, ``adjustment="raw"`` and ``feed=sip``, over the
@@ -467,6 +467,11 @@ def main() -> None:
         "--eod", type=date.fromisoformat, default=None, help="gate A anchor; default eod_cutoff()"
     )
     ap.add_argument(
+        "--report",
+        default=None,
+        help="gate A: write every unexplained jump row to this CSV (the console names four)",
+    )
+    ap.add_argument(
         "--stooq-file",
         default=None,
         help="Stooq SPY.US.txt (from d_us_txt.zip) for the SIP volume-ratio discriminator",
@@ -483,7 +488,7 @@ def main() -> None:
             # run of SIP or BASIS must not.
             from gate_a import check_A
 
-            check_A(g, args.eod)
+            check_A(g, args.eod, args.report)
     except Exception as e:
         print(f"  \033[31mFAIL\033[0m gate raised: {e!r}")
         g.fails += 1
