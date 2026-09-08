@@ -23,18 +23,25 @@ scored and never a benchmark, so the default does not spend the night on them.
 
 The price basis
 ---------------
-Each instrument's bars are read on ONE basis, taken from the ``ohlcv_daily.adjustment_source``
-label ON THE ROWS via :mod:`atlas.global_market.price_basis`, and that basis is stamped on
-every row written. Nothing here decides what a feed carries: the label is minted by the
-ingester only after ``validate_global.py --check BASIS`` has MEASURED the basis from real
-bars, and the orchestrator re-runs that gate ahead of this step every night, so a feed that
-changes its adjustment cannot be scored under its old label.
+Each instrument's ``ohlcv_daily.adjustment_source`` label says WHICH adjusted series its rows
+carry, and :func:`atlas.global_market.price_basis.plan_for` turns that into the pair this
+file computes on: the trend block (EMA / RSI / ATR / Bollinger / IBS) on the SPLIT-ONLY
+series, and every return, relative-strength and risk metric on the TOTAL-RETURN one. The
+vendor is pulled on three adjustments per window, so an ``alpaca:split+all`` row holds both
+and neither family has to settle. ``price_basis`` on the written row records the pair.
 
-An instrument whose bars carry no basis this code knows — or, worse, two — is SKIPPED and
-listed in the report: there is no safe default, and a raw close is neither split- nor
-dividend-adjusted. On a total-return basis the trend block (EMA / RSI / ATR / Bollinger) runs
-on a dividend-adjusted series, which drifts up against a price series and so reads slightly
-bullish; ``price_basis`` on the row is what declares that rather than hiding it.
+Where a feed carries only ONE series both families read it, and the stamp says so rather than
+hiding it: the Stooq archive has ``close_tr`` alone, so its EMAs run on a dividend-adjusted
+series, which drifts up against a price series and reads slightly bullish. Nothing here
+decides what a feed carries: the label is minted by the ingester only after
+``validate_global.py --check BASIS`` has MEASURED the basis from real bars, and the
+orchestrator re-runs that gate ahead of this step every night, so a feed that changes its
+adjustment cannot be scored under its old label.
+
+Three ways an instrument is SKIPPED and listed in the report rather than guessed at: its bars
+carry no label this code knows (there is no safe default — a raw close is neither split- nor
+dividend-adjusted), they carry two, or its return series differs from SPY's, which would make
+every ``rs_*_spy`` a ratio of a total return to a price return.
 
 Sessions are SPY's bars, exactly as ``build_universe_snapshot.py`` defines them: Stooq
 carries stray bars on exchange holidays, and a holiday is not a session.
@@ -86,6 +93,7 @@ STATUS_NO_BARS = "no_bars"
 STATUS_TOO_SHORT = "too_short"
 STATUS_NO_BASIS = "no_price_basis"
 STATUS_MIXED_BASIS = "mixed_price_basis"
+STATUS_BENCHMARK_BASIS = "benchmark_basis_mismatch"
 STATUS_ERROR = "error"
 REPORT_COLUMNS = (
     "instrument_id",
@@ -161,12 +169,18 @@ WHERE o.instrument_id = ANY(CAST(:ids AS uuid[]))
 
 RISK_FREE_SQL = f"SELECT date, dtb3 FROM {M}.macro_daily WHERE dtb3 IS NOT NULL ORDER BY date"
 
+# Both series in one read. `close` is the TREND series (split-only where the feed has it),
+# `close_ret` the RETURN series (total return where it has it); where a feed carries only one
+# the two names resolve to the same column and the duplicated predicate is a no-op. A session
+# missing EITHER close is dropped, so the two series always span the same index — a trend
+# metric and a return metric on a row are then statements about the same set of sessions.
 BARS_SQL_TEMPLATE = f"""
 SELECT o.date, o.{{open}} AS open, o.{{high}} AS high, o.{{low}} AS low,
-       o.{{close}} AS close, o.volume
+       o.{{close}} AS close, o.{{close_ret}} AS close_ret, o.volume
 FROM {M}.ohlcv_daily o
 WHERE o.instrument_id = CAST(:iid AS uuid) AND o.date <= :cutoff
   AND o.{{close}} IS NOT NULL AND o.{{close}} > 0
+  AND o.{{close_ret}} IS NOT NULL AND o.{{close_ret}} > 0
 ORDER BY o.date
 """
 
@@ -180,18 +194,25 @@ def sessions(cutoff: dt.date) -> pd.DatetimeIndex:
 
 
 def bar_frame(
-    instrument_id: str, basis: str, cutoff: dt.date, cal: pd.DatetimeIndex
+    instrument_id: str, plan: PB.BasisPlan, cutoff: dt.date, cal: pd.DatetimeIndex
 ) -> pd.DataFrame:
-    """One instrument's OHLCV on ``basis``, restricted to SPY sessions, ascending by date."""
-    columns = PB.price_columns(basis)
+    """One instrument's OHLCV on ``plan``, restricted to SPY sessions, ascending by date.
+
+    ``open/high/low/close/volume`` are the trend series; ``close_ret`` is the return series.
+    """
+    trend = PB.price_columns(plan.trend)
     sql = BARS_SQL_TEMPLATE.format(
-        open=columns[0], high=columns[1], low=columns[2], close=columns[3]
+        open=trend[0],
+        high=trend[1],
+        low=trend[2],
+        close=trend[3],
+        close_ret=PB.price_columns(plan.returns)[3],
     )
     frame = _gdb.read_df(sql, {"iid": instrument_id, "cutoff": cutoff})
     if frame.empty:
         return frame
     frame.index = pd.DatetimeIndex(pd.to_datetime(G.series(frame, "date")))
-    for column in ("open", "high", "low", "close", "volume"):
+    for column in ("open", "high", "low", "close", "close_ret", "volume"):
         frame[column] = G.as_series(pd.to_numeric(frame[column], errors="coerce")).astype("float64")
     return frame.loc[frame.index.isin(cal)]
 
@@ -217,8 +238,13 @@ def risk_free_daily(cal: pd.DatetimeIndex) -> pd.Series:
     return G.as_series(daily.reindex(cal)).ffill()
 
 
-def benchmark_close(cutoff: dt.date, cal: pd.DatetimeIndex) -> tuple[pd.Series, str]:
-    """SPY's close on its own basis — the RS denominator and the beta / correlation factor."""
+def benchmark_close(cutoff: dt.date, cal: pd.DatetimeIndex) -> tuple[pd.Series, PB.BasisPlan]:
+    """SPY's RETURN-series close — the RS denominator and the beta / correlation factor.
+
+    Only the return series is needed: nothing in the trend block reads the benchmark. Every
+    instrument's own return series must match this one, or its relative strength would divide
+    a total return by a price return; :func:`run` refuses the mismatch rather than store it.
+    """
     row = _gdb.read_df(
         f"SELECT instrument_id::text AS instrument_id FROM {M}.instrument_master "
         "WHERE symbol = :symbol AND is_active",
@@ -228,28 +254,26 @@ def benchmark_close(cutoff: dt.date, cal: pd.DatetimeIndex) -> tuple[pd.Series, 
         raise SystemExit(f"{BENCHMARK_SYMBOL} is not an active instrument")
     instrument_id = str(row["instrument_id"].iloc[0])
     sources = _gdb.read_df(COVERAGE_SQL, {"ids": [instrument_id], "cutoff": cutoff})
-    basis = (
-        uniform_basis(list(sources["adjustment_sources"].iloc[0])) if not sources.empty else None
-    )
-    if basis is None:
+    plan = uniform_plan(list(sources["adjustment_sources"].iloc[0])) if not sources.empty else None
+    if plan is None:
         raise SystemExit(
             f"{BENCHMARK_SYMBOL} bars carry no price basis this build knows "
             f"({list(sources['adjustment_sources'].iloc[0]) if not sources.empty else 'no bars'}); "
             "re-run import_stooq.py --relabel, or ingest SPY from a labelled source"
         )
-    return G.series(bar_frame(instrument_id, basis, cutoff, cal), "close"), basis
+    return G.series(bar_frame(instrument_id, plan, cutoff, cal), "close_ret"), plan
 
 
-def uniform_basis(adjustment_sources: list[str | None]) -> str | None:
-    """The ONE basis an instrument's bars carry, or ``None`` if none or more than one.
+def uniform_plan(adjustment_sources: list[str | None]) -> PB.BasisPlan | None:
+    """The ONE basis plan an instrument's bars carry, or ``None`` if none or more than one.
 
     Mixing bases inside one series would put a dividend-adjusted close next to a split-only
     one and call the step between them a return, so a mixed instrument is refused outright.
     """
-    bases = {PB.basis_of(source) for source in adjustment_sources}
-    if len(bases) != 1:
+    plans = {PB.plan_for(source) for source in adjustment_sources}
+    if len(plans) != 1:
         return None
-    return bases.pop()
+    return plans.pop()
 
 
 def liquidity_window(
@@ -318,7 +342,7 @@ def extends_beyond(coverage: pd.DataFrame, instrument_id: str, floor: dict[str, 
 def rows_for(
     instrument: tuple[str, str, str],
     bars: pd.DataFrame,
-    basis: str,
+    plan: PB.BasisPlan,
     benchmark: pd.Series,
     risk_free: pd.Series,
     liquidity: pd.DataFrame,
@@ -332,7 +356,7 @@ def rows_for(
     returned, so a normal night writes one row per instrument and not the whole journal.
     """
     instrument_id, asset_class, symbol = instrument
-    metrics = G.metric_frame(bars, benchmark, risk_free)
+    metrics = G.metric_frame(bars, G.series(bars, "close_ret"), benchmark, risk_free)
     out = pd.DataFrame(index=bars.index)
     out["instrument_id"] = instrument_id
     out["asset_class"] = asset_class
@@ -340,7 +364,7 @@ def rows_for(
     out["date"] = G.as_dates(bars.index)
     for column in G.METRIC_COLUMNS:
         out[column] = metrics[column]
-    out["price_basis"] = basis
+    out["price_basis"] = plan.stamp
     out["compute_run_id"] = run_id
     out["computed_at"] = dt.datetime.now(ZoneInfo(gcal.NEW_YORK))
     if floor is not None:
@@ -388,7 +412,7 @@ def clean(out: pd.DataFrame) -> pd.DataFrame:
 
 def compute_one(
     instrument: tuple[str, str, str],
-    basis: str,
+    plan: PB.BasisPlan,
     cutoff: dt.date,
     cal: pd.DatetimeIndex,
     benchmark: pd.Series,
@@ -399,12 +423,12 @@ def compute_one(
 ) -> tuple[str, int, pd.DataFrame]:
     """(status, rows written, the rows) for one instrument."""
     instrument_id = instrument[0]
-    bars = bar_frame(instrument_id, basis, cutoff, cal)
+    bars = bar_frame(instrument_id, plan, cutoff, cal)
     if bars.empty:
         return STATUS_NO_BARS, 0, bars
     if len(bars) < 2:
         return STATUS_TOO_SHORT, 0, bars  # a return needs two closes
-    out = rows_for(instrument, bars, basis, benchmark, risk_free, liquidity, run_id, floor)
+    out = rows_for(instrument, bars, plan, benchmark, risk_free, liquidity, run_id, floor)
     if out.empty:
         return STATUS_UP_TO_DATE, 0, out
     out = clean(out.reindex(columns=WRITTEN_COLUMNS))
@@ -424,7 +448,7 @@ def run(
     run_id = str(uuid.uuid4())
     cutoff = eod or _gdb.eod_cutoff()
     cal = sessions(cutoff)
-    benchmark, benchmark_basis = benchmark_close(cutoff, cal)
+    benchmark, benchmark_plan = benchmark_close(cutoff, cal)
     risk_free = risk_free_daily(cal)
     thresholds = load_thresholds(_gdb.SCHEMA, engine=_gdb.engine())
     min_observations = int(thresholds[MIN_OBSERVATIONS_KEY])
@@ -443,7 +467,7 @@ def run(
     )
     print(
         f"[technicals] targets={len(picked):,d} scope={scope} eod={cutoff} "
-        f"sessions={len(cal):,d} benchmark={BENCHMARK_SYMBOL}({benchmark_basis}) "
+        f"sessions={len(cal):,d} benchmark={BENCHMARK_SYMBOL}({benchmark_plan.returns}) "
         f"mode={'incremental' if incremental else 'full'} "
         f"risk_free={'macro_daily.dtb3' if risk_free.notna().any() else 'ABSENT (Sharpe/Sortino NULL)'}",
         flush=True,
@@ -455,9 +479,9 @@ def run(
     for n, (raw_id, raw_class, raw_symbol) in enumerate(rows, 1):
         instrument = (str(raw_id), str(raw_class), str(raw_symbol))
         instrument_id = instrument[0]
-        basis = None
+        plan = None
         if instrument_id in coverage.index:
-            basis = uniform_basis(list(coverage.loc[instrument_id, "adjustment_sources"]))
+            plan = uniform_plan(list(coverage.loc[instrument_id, "adjustment_sources"]))
         try:
             if instrument_id not in coverage.index:
                 status, written, out = STATUS_NO_BARS, 0, pd.DataFrame()
@@ -467,9 +491,20 @@ def run(
                 # or a metric computed. Filtering the rows afterwards would still pay for the
                 # whole recompute, which is the cost a nightly incremental exists to avoid.
                 status, written, out = STATUS_UP_TO_DATE, 0, pd.DataFrame()
-            elif basis is None:
+            elif plan is None or plan.returns != benchmark_plan.returns:
                 labels = sorted(str(s) for s in coverage.loc[instrument_id, "adjustment_sources"])
-                status = STATUS_MIXED_BASIS if len(labels) > 1 else STATUS_NO_BASIS
+                if plan is None:
+                    status = STATUS_MIXED_BASIS if len(labels) > 1 else STATUS_NO_BASIS
+                    note = ",".join(labels)
+                else:
+                    # RS divides this instrument's return by SPY's. One of them being a price
+                    # return and the other a total return makes that ratio a number about the
+                    # dividend yield, not about relative strength — so it is not computed.
+                    status = STATUS_BENCHMARK_BASIS
+                    note = (
+                        f"{','.join(labels)} → {plan.returns}, but "
+                        f"{BENCHMARK_SYMBOL} is {benchmark_plan.returns}"
+                    )
                 written, out = 0, pd.DataFrame()
                 report.add(
                     *instrument[:1],
@@ -480,14 +515,14 @@ def run(
                     None,
                     None,
                     None,
-                    ",".join(labels),
+                    note,
                 )
                 counts[status] = counts.get(status, 0) + 1
                 continue
             else:
                 status, written, out = compute_one(
                     instrument,
-                    basis,
+                    plan,
                     cutoff,
                     cal,
                     benchmark,
@@ -506,7 +541,7 @@ def run(
                 0,
                 None,
                 None,
-                basis,
+                plan.stamp if plan else None,
                 repr(error)[:300],
             )
             counts[status] = counts.get(status, 0) + 1
@@ -514,7 +549,15 @@ def run(
         first = out["date"].iloc[0] if written else None
         last = out["date"].iloc[-1] if written else None
         report.add(
-            instrument_id, instrument[2], instrument[1], status, written, first, last, basis, ""
+            instrument_id,
+            instrument[2],
+            instrument[1],
+            status,
+            written,
+            first,
+            last,
+            plan.stamp if plan else None,
+            "",
         )
         counts[status] = counts.get(status, 0) + 1
         rows_total += written

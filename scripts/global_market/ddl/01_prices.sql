@@ -12,8 +12,9 @@
 -- Stooq rows carry close_tr ONLY: the archive's close is a measured total-return series
 -- (atlas/global_market/price_basis.py), and split-only prices cannot be recovered from it
 -- without the dividend events, so close_adj / *_adj stay NULL there rather than be invented.
--- adjustment_source is what says which of the two an instrument has; technical_daily.price_basis
--- carries that fact forward onto every metric computed from it.
+-- adjustment_source is what says which of the two an instrument has — an alpaca:split+all row
+-- has BOTH, a stooq row only close_tr; technical_daily.price_basis carries that fact forward
+-- onto every metric computed from it.
 CREATE TABLE IF NOT EXISTS atlas_global.ohlcv_daily (
     instrument_id      uuid          NOT NULL REFERENCES atlas_global.instrument_master (instrument_id),
     date               date          NOT NULL,
@@ -67,14 +68,22 @@ CREATE INDEX IF NOT EXISTS ix_corporate_actions_ex_date
 -- rs_* is the RELATIVE form (1+r_i)/(1+r_b) − 1 (ADR-0002); peer = GICS-sector ETF for stocks,
 -- taxonomy peer-group median for ETFs. Precision follows India (ret/rs numeric(16,8)).
 --
--- price_basis — WHICH of ohlcv_daily's two adjusted closes produced this row, and therefore
--- what the numbers mean. It is NOT decoration: a total-return series drifts upward against a
+-- price_basis — WHICH of ohlcv_daily's adjusted closes produced this row, and therefore what
+-- the numbers mean. It is NOT decoration: a total-return series drifts upward against a
 -- split-only one by the dividend yield (about 1.6 percent a year for SPY, measured against
--- FRED's SP500 price index over 2,513 sessions — atlas/global_market/price_basis.py), so an
--- EMA-200 or a Bollinger band computed on total return sits a little low and reads a little
--- bullish. EMAs / RSI / ATR / Bollinger conventionally run on split-only prices; on a
--- total-return row they did not, and this column is what says so instead of hiding it.
--- Returns / RS / risk are CORRECT on total return — that is the series they want.
+-- FRED's SP500 price index over 2,513 sessions — atlas/global_market/price_basis.py). EMAs /
+-- RSI / ATR / Bollinger conventionally run on split-only prices, and on total return sit a
+-- little low against the close and so read a little bullish; returns / RS / risk are CORRECT
+-- on total return — that is the series they want. Three values, because a row can carry both:
+--   split_only+total_return  each family on its own series — trend split-only, returns / RS /
+--                            risk total-return. What every alpaca:split+all row gets, and the
+--                            only value in which no metric is on a series it did not want.
+--   total_return             ONE series was available and it was total return, so the trend
+--                            block ran on it too (the Stooq archive: it has no split-only
+--                            close, and one cannot be recovered without the dividend events).
+--   split_only               ONE series was available and it was split-only, so the returns
+--                            are PRICE returns, understating a dividend payer.
+-- The single-series values are a fact about the feed being declared, never a choice.
 -- NOT NULL with no default: a row that cannot name its basis is not a row.
 CREATE TABLE IF NOT EXISTS atlas_global.technical_daily (
     instrument_id        uuid          NOT NULL REFERENCES atlas_global.instrument_master (instrument_id),
@@ -142,12 +151,12 @@ CREATE TABLE IF NOT EXISTS atlas_global.technical_daily (
     sharpe_12m           numeric(12,6),
     sortino_12m          numeric(12,6),
     calmar_36m           numeric(12,6),
-    price_basis          text          NOT NULL,   -- total_return | split_only (see above)
+    price_basis          text          NOT NULL,   -- see the note above the table
     compute_run_id       uuid,
     computed_at          timestamptz   NOT NULL DEFAULT now(),
     CONSTRAINT technical_daily_pkey PRIMARY KEY (instrument_id, date),
     CONSTRAINT chk_technical_daily_asset_class CHECK (asset_class IN ('stock', 'etf')),
-    CONSTRAINT chk_technical_daily_price_basis CHECK (price_basis IN ('total_return', 'split_only'))
+    CONSTRAINT chk_technical_daily_price_basis CHECK (price_basis IN ('total_return', 'split_only', 'split_only+total_return'))
 );
 CREATE INDEX IF NOT EXISTS ix_technical_daily_date
     ON atlas_global.technical_daily (date);
@@ -166,4 +175,4 @@ ALTER TABLE atlas_global.technical_daily
 ALTER TABLE atlas_global.technical_daily
     DROP CONSTRAINT IF EXISTS chk_technical_daily_price_basis;
 ALTER TABLE atlas_global.technical_daily
-    ADD CONSTRAINT chk_technical_daily_price_basis CHECK (price_basis IN ('total_return', 'split_only'));
+    ADD CONSTRAINT chk_technical_daily_price_basis CHECK (price_basis IN ('total_return', 'split_only', 'split_only+total_return'));
