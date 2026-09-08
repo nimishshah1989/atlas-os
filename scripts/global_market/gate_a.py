@@ -134,6 +134,20 @@ FROM moves WHERE abs(log_jump) >= {jump} AND gap_days <= {gap}
   AND instrument_id NOT IN (SELECT instrument_id FROM u)
 """
 
+# What the corporate-actions table actually HOLDS. Printed beside the jump check, because
+# "unexplained" is a claim ABOUT that table and is worthless without it: a jump has no matching
+# action either because the vendor reports none, or because nobody ever fetched actions that far
+# back. ingest_prices.py pulls the full history only under --backfill; a nightly asks for roughly
+# ten days before the oldest watermark (REPULL_SESSIONS * 2), which is right for a nightly and
+# means an incremental-only database knows nothing about a 2019 split. One is a data defect in
+# the feed, the other is an operator gap here, and the fix is different — so the gate says which
+# instead of leaving the reader to assume.
+ACTIONS_COVERAGE_SQL = """
+SELECT count(*) AS events, count(DISTINCT instrument_id) AS instruments,
+       min(ex_date) AS first_ex_date, max(ex_date) AS last_ex_date
+FROM {M}.corporate_actions
+"""
+
 COUNTS_SQL = """
 WITH u AS ({universe})
 SELECT (SELECT count(*) FROM u) AS scored,
@@ -321,6 +335,22 @@ def check_A(g: Gate, eod: Any = None, report: str | None = None) -> None:
         + (f"; {listing}" if listing else "")
         + f" [{excluded:,d} more outside the universe, not asserted on]"
     )
+    cov = _gdb.read_df(ACTIONS_COVERAGE_SQL.format(M=m)).iloc[0]
+    events = int(cov["events"])
+    if events:
+        print(
+            f"  corporate_actions holds {events:,d} event(s) over "
+            f"{int(cov['instruments']):,d} instrument(s), {cov['first_ex_date']} → "
+            f'{cov["last_ex_date"]} — an "unexplained" jump before that first date means '
+            "NOBODY ASKED (ingest_prices pulls the full history only under --backfill), not "
+            "that the vendor reports no action"
+        )
+    else:
+        print(
+            "  corporate_actions is EMPTY — every jump below is 'unexplained' by construction. "
+            "Run ingest_prices.py --backfill before reading anything into this check."
+        )
+
     if report:
         out = pd.DataFrame(unexplained).copy()
         out["ret_tr_pct"] = out["ret_tr"] * 100.0
