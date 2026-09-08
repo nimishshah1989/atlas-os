@@ -5,6 +5,7 @@ import 'server-only'
 import { redirect } from 'next/navigation'
 import { db, dbAvailable } from '@/lib/db'
 import { e2eBypassEmail } from '@/lib/e2e'
+import { authRequired } from '@/lib/openAccess'
 import { isSupabaseConfigured } from '@/lib/supabase/env'
 import { createServerSupabase } from '@/lib/supabase/server'
 
@@ -53,7 +54,20 @@ async function sessionEmail(): Promise<string> {
  */
 const BOARD_ROLES: readonly Role[] = ['fm', 'analyst']
 
+/** The reader of an open board: nobody in particular, and no page renders this. */
+const ANONYMOUS: AppUser = {
+  email: '',
+  role: null,
+  display_name: null,
+  allowlist_checked: false,
+}
+
 export async function requireUser(): Promise<AppUser> {
+  // An OPEN board admits everyone (src/lib/openAccess.ts). Returning early rather than
+  // redirecting is what makes every page render for a reader with no session; the returned
+  // object is awaited and never displayed, which is why an empty identity is honest here
+  // rather than a fiction the UI would repeat.
+  if (!authRequired()) return ANONYMOUS
   const email = e2eBypassEmail() ?? (await sessionEmail())
   // No directory, no entry. The allowlist is the ONLY thing standing between a valid Supabase
   // session and this board, so a run that cannot read it has not authorised anyone — it has

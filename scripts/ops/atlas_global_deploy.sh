@@ -79,6 +79,12 @@ if [ -d .next ]; then
   BACKUP=".next.bak.$STAMP"
 fi
 rm -rf .next/cache/fetch-cache            # before: stale unstable_cache entries
+# WHAT IS BEING BUILT, named before a line of it is compiled. On 2026-09-08 the board served a
+# build seven hours stale — every deploy since had died on the old /health smoke — while four
+# fixes were merged, deployed in nobody's mind but mine, and debugged as if they were running.
+# The question "is the code I am debugging the code that is serving?" has to be answerable from
+# the log, not from memory.
+say "building $(git -C "$REPO" log --oneline -1 2>/dev/null || echo '(not a git checkout)')"
 say "build (basePath=${BASE_PATH:-<root>}) port=$ATLAS_GLOBAL_PORT — waiting on $NEXT_BUILD_LOCK if India is building"
 
 if NODE_OPTIONS='--max-old-space-size=3072' \
@@ -127,9 +133,12 @@ fi
 #
 # It does NOT prove sign-in works, and the log line below must not be read as if it did: the
 # sign-in Server Action calls isInvited() (src/app/login/actions.ts -> src/lib/auth.ts:34),
-# which reads atlas_global.app_user. So a board whose database path is stalled serves this page
-# in full and then hangs the moment anyone presses the button — the same fault as /health,
-# wearing a different symptom. That is precisely why /health is still measured below.
+# which reads atlas_global.app_user. So a stalled database would serve this page in full and
+# then hang when the button is pressed. That is a MECHANISM to know about, not a diagnosis:
+# scripts/db-probe.mjs measured the real path on 2026-09-08 and every step answered in under
+# 0.1s, so a dead sign-in button is far more likely to be a Server Action rejected for its
+# Origin (next.config.js allowedOrigins), which fails silently — no page error, no log line.
+# Measure before concluding; that is what the probe is for.
 #
 # WAIT for the port, do not race it. `pm2 start` returns as soon as it has forked; Next then
 # compiles its manifest and binds, which takes a second or two on this box. Curling once
@@ -151,6 +160,9 @@ if [ "$code" != "200" ]; then
   die "smoke: ${BASE_PATH}/login answered $code on :$ATLAS_GLOBAL_PORT (expected 200)"
 fi
 say "ok: smoke ${BASE_PATH}/login 200 on :$ATLAS_GLOBAL_PORT"
+# The line to grep for when someone says "the fix isn't working". If this commit is not the one
+# they merged, the board is not running their code and nothing else in the log matters.
+say "NOW SERVING $(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo '?') build=$(cat .next/BUILD_ID) built=$(date -u -r .next/BUILD_ID +%FT%TZ 2>/dev/null || echo '?')"
 
 # The database path, REPORTED and never fatal. /health is worth knowing about on every deploy —
 # it is the operator page and the only unauthenticated route that queries — but it depends on

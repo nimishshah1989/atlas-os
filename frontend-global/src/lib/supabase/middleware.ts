@@ -1,11 +1,15 @@
 // src/lib/supabase/middleware.ts — refresh the session cookie on every request and gate the board.
-// Without a session every route except /login and /health redirects to /login. When auth itself
-// is not configured the same rule applies — a deployment without auth exposes nothing but the
-// operator surface and the sign-in page, which explains what is missing.
+//
+// ONLY WHEN THE BOARD IS CLOSED. src/lib/openAccess.ts decides, and its default is open, so on
+// the deployment as it stands this file returns on its first line. When auth IS required and a
+// reader has no session, every route except /login and /health redirects to /login; when auth is
+// required but not configured, the same rule applies, so such a deployment exposes nothing but
+// the operator surface and a sign-in page that explains what is missing.
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { basePath } from '@/lib/basePath'
 import { e2eBypassEmail } from '@/lib/e2e'
+import { authRequired } from '@/lib/openAccess'
 import { cookieScope } from './cookieScope'
 import { readSupabaseEnv } from './env'
 import { isPublicPath } from './paths'
@@ -19,6 +23,11 @@ function toLogin(request: NextRequest): NextResponse {
 }
 
 export async function updateSession(request: NextRequest): Promise<NextResponse> {
+  // An OPEN board has no session to refresh and nothing to gate (src/lib/openAccess.ts). Return
+  // before touching Supabase: on a board nobody signs in to, calling getUser() on every request
+  // would be a network round trip per page view to learn "still nobody", which is latency spent
+  // to reach a foregone conclusion.
+  if (!authRequired()) return NextResponse.next({ request })
   // The smoke's dev-only bypass (src/lib/e2e.ts): compiled away by `next build`.
   if (e2eBypassEmail()) return NextResponse.next({ request })
   const { pathname } = request.nextUrl

@@ -30,10 +30,16 @@ vi.mock('@/lib/supabase/server', () => ({
   }),
 }))
 
-/** Load auth.ts fresh with a chosen NODE_ENV and a chosen "is the directory reachable" answer. */
+/** Load auth.ts fresh with a chosen NODE_ENV and a chosen "is the directory reachable" answer.
+ *
+ * ATLAS_GLOBAL_REQUIRE_AUTH=1 on every load: these tests are about what happens once a reader
+ * HAS to sign in, and the board's default is now open (src/lib/openAccess.ts), where requireUser
+ * returns before any of this. Without the stub every assertion below would pass for the wrong
+ * reason — the fail-closed path would never run, and the test would be green and blind. */
 async function loadAuth(nodeEnv: string, dbAvailable: boolean) {
   vi.resetModules()
   vi.stubEnv('NODE_ENV', nodeEnv)
+  vi.stubEnv('ATLAS_GLOBAL_REQUIRE_AUTH', '1')
   vi.doMock('@/lib/db', () => ({ dbAvailable, db: () => { throw new Error('no directory') } }))
   return import('@/lib/auth')
 }

@@ -1,6 +1,8 @@
 // src/app/login/page.tsx — magic-link sign-in. Invite-only: the address must be on
 // atlas_global.app_user. Without Supabase configured the page says so and never crashes.
+import Link from 'next/link'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { authRequired } from '@/lib/openAccess'
 import { isSupabaseConfigured } from '@/lib/supabase/env'
 import { safeNext } from '@/lib/supabase/paths'
 import { sendMagicLink, signOut } from './actions'
@@ -31,7 +33,31 @@ function AuthNotConfigured() {
   )
 }
 
+/** Nothing to sign in to. Shown rather than a form that would send a link nobody needs. */
+function BoardIsOpen() {
+  return (
+    <div className="page">
+      <PageHeader title="Sign in" lead="This board does not ask for one." />
+      <div className="panel max-w-[64ch] px-5 py-4 text-body text-ink-2">
+        <p>
+          Global Atlas is open: everything on it — prices, returns, relative strength, one fund
+          per country — is public market data. There are no accounts and no positions to guard.
+          Sign-in returns with the first page that shows something private.
+        </p>
+        <p className="mt-3">
+          <Link className="underline text-ink" href="/">
+            Go to the board
+          </Link>
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export default async function LoginPage({ searchParams }: { searchParams: Promise<Search> }) {
+  // Checked BEFORE the Supabase-configured branch: on an open board the reader needs neither
+  // this form nor an explanation of a setting that has no bearing on getting in.
+  if (!authRequired()) return <BoardIsOpen />
   if (!isSupabaseConfigured()) return <AuthNotConfigured />
   const sp = await searchParams
   const sent = first(sp.sent)

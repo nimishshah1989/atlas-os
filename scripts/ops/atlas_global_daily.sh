@@ -97,7 +97,11 @@ step "build_universe_snapshot" $PY scripts/global_market/build_universe_snapshot
 # step "build_exposures"         $PY scripts/global_market/build_exposures.py --changed
 # step "score_stocks"            $PY scripts/global_market/score_stocks.py --as-of "$EOD"
 # step "score_etfs"              $PY scripts/global_market/score_etfs.py --as-of "$EOD"
-# step "build_country_views"     $PY scripts/global_market/build_country_views.py
+# Countries: one tradeable fund per market, read off technical_daily. Uncommented once its
+# board surface existed (/countries, #240) and its builder ran (#241) — the rule at the top
+# of this file. Without it country_daily stays empty and the page says so honestly, which
+# is what it did until now.
+step "build_country_views"     $PY scripts/global_market/build_country_views.py --eod "$EOD" --report "$LOG_DIR/country_views_$EOD.csv"
 # Rolling signal quality — step, not gate (a lens losing IC is a finding for the FM, not a
 # reason to withhold a correct board). Window start computed in Python (no GNU `date -d`).
 # IC_START=$($PY -c "import datetime as d, _gdb; print(_gdb.eod_cutoff() - d.timedelta(days=730))")

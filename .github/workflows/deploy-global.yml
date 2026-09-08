@@ -1,0 +1,98 @@
+name: Deploy Global Board
+
+# Global Atlas had no deploy automation while India had one (deploy-frontend.yml), so every
+# global release was a human typing a command into an SSH session. On 2026-09-08 that gap cost
+# a day: four merged fixes sat undeployed for seven hours because the person who had to run the
+# command was also the person waiting for the fixes, and nothing in the loop said "the board is
+# still on this morning's build".
+#
+# Deploying is not a decision. It should not need a person.
+on:
+  push:
+    branches: [main]
+    paths:
+      # The served bundle, and the script that builds it. NOT atlas/global_market/** or
+      # scripts/global_market/** — those are the nightly's Python and change no served byte;
+      # rebuilding on them would burn the shared build lock for nothing.
+      - 'frontend-global/**'
+      - 'scripts/ops/atlas_global_deploy.sh'
+      - '.github/workflows/deploy-global.yml'
+  workflow_dispatch:
+
+# One global deploy at a time. Two would race on .next and on the shared build lock; the
+# second would win the file and the first would reload pm2 onto a half-written directory.
+# Never cancel-in-progress: a half-finished deploy is the one thing worse than a slow one.
+concurrency:
+  group: deploy-global
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Pull main and run atlas_global_deploy.sh on the box
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: git pull + deploy on EC2
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          # The same secrets India's workflow already uses. Nothing new to configure.
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          command_timeout: 18m
+          script: |
+            set -euo pipefail
+            REPO=/home/ubuntu/atlas-os
+
+            # This box serves DIRECTLY from its own checkout (pm2 atlas-global runs in
+            # $REPO/frontend-global), unlike India, which rsyncs from a separate clean source
+            # tree. So the pull IS the deploy source. --ff-only, never a merge: if the box has
+            # diverged that is a fact a human must see, not something a deploy should resolve.
+            cd "$REPO"
+            git fetch origin main
+            git checkout main
+            git pull --ff-only origin main
+
+            # ATLAS_GLOBAL_PORT has no default in the deploy script ON PURPOSE — the port is a
+            # fact about this box, not a constant, and guessing it would reload pm2 onto a port
+            # nginx does not proxy. Three places it can honestly come from, in order:
+            #   1. the box .env, where it belongs
+            #   2. the pm2 process that is already serving on it — true by construction
+            #   3. nowhere, which is a setup error and says so
+            PORT=$(grep -sE '^ATLAS_GLOBAL_PORT=' "$REPO/.env" | tail -1 | cut -d= -f2- | tr -d '"'"'"' ' || true)
+            if [ -z "${PORT:-}" ]; then
+              PORT=$(pm2 jlist 2>/dev/null | python3 -c "
+import json, sys
+try:
+    procs = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+for p in procs:
+    if p.get('name') == 'atlas-global':
+        print(p.get('pm2_env', {}).get('PORT', ''))
+        break
+" || true)
+              [ -n "${PORT:-}" ] && echo "port $PORT taken from the running atlas-global process"
+            else
+              echo "port $PORT taken from $REPO/.env"
+            fi
+            if [ -z "${PORT:-}" ]; then
+              echo "REFUSED: cannot determine ATLAS_GLOBAL_PORT."
+              echo "  Add one line to $REPO/.env:   ATLAS_GLOBAL_PORT=<the port nginx proxies>"
+              echo "  Find it with:                 sudo ss -ltnp | grep node"
+              exit 1
+            fi
+            export ATLAS_GLOBAL_PORT="$PORT"
+
+            # The board is served at the ROOT of its own host (global.jslwealth.in), so the base
+            # path is EMPTY. Exported explicitly because the deploy script distinguishes unset
+            # (falls back) from empty (respected) — see its BASE_PATH comment.
+            export ATLAS_GLOBAL_BASE_PATH=""
+
+            # Everything real lives in the script: the shared build lock so this can never build
+            # while India is building on the same 2 vCPU, the .next backup and rollback, the
+            # /login smoke, and the NOW SERVING line naming the commit. Duplicating any of it
+            # here would give two deploy paths that drift — which is the bug India's workflow
+            # comments are still apologising for.
+            bash "$REPO/scripts/ops/atlas_global_deploy.sh"
