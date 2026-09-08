@@ -128,6 +128,12 @@ def _redact(url: str) -> str:
     the sections it would have skipped are the ones that diagnose the outage."""
     try:
         parts = urlsplit(url)
+        # FAIL CLOSED. Without an authority section — `postgresql:user:pw@host/db`, a typo
+        # away from the real thing — urlsplit puts the WHOLE credential in .path, and
+        # printing .path then publishes the password. username/hostname/port are all None
+        # in that case anyway, so there is nothing worth rendering and every reason not to.
+        if not parts.netloc:
+            return "<unparseable URL>"
         user = parts.username or "?"
         return f"{user}@{parts.hostname}:{parts.port}/{(parts.path or '/').lstrip('/')}"
     except ValueError:
@@ -261,11 +267,18 @@ def main() -> int:
         with conn.cursor() as cur:
             cur.execute(REGIME_SQL)
             rows = cur.fetchall()
+            names = [d[0] for d in cur.description or ()]
         print(f"  rows returned: {len(rows)}")
+        # BY NAME, never by position. The first version printed r[0..3] against hardcoded
+        # labels; restoring the full 32-column SELECT then silently relabelled three index
+        # levels as regime_state / deployment_multiplier / pct_above_ema_50, and the board
+        # duly reported `regime_state=23254.1500`. Nonsense on its face, but a reader
+        # skimming for "did a row come back" would not look twice — which is exactly the
+        # confidently-wrong output this whole file exists to stop producing.
+        shown = ("date", "regime_state", "deployment_multiplier", "pct_above_ema_50")
         for r in rows:
-            print(
-                f"    date={r[0]}  regime_state={r[1]}  deployment_multiplier={r[2]}  pct_above_ema_50={r[3]}"
-            )
+            row = dict(zip(names, r, strict=True))
+            print("    " + "  ".join(f"{k}={row.get(k, '<absent>')}" for k in shown))
         if not rows:
             print("  -> ZERO ROWS. The board's null check fires and the empty panel is CORRECT")
             print("     behaviour for what this role can see. Look at row visibility for this")
