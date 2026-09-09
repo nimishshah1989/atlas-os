@@ -1,11 +1,11 @@
-// src/components/ui/Section.tsx — a titled block (serif 22/28) with an optional note beside it.
+// src/components/ui/Section.tsx — a titled block (h2 1.05rem/600) with an optional note beside it.
 import type { ReactNode } from 'react'
 
 export function Section({ title, note, children }: { title: string; note?: ReactNode; children: ReactNode }) {
   return (
-    <section className="mt-10">
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 className="font-serif text-section text-ink">{title}</h2>
+    <section className="mt-8">
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 className="font-serif text-h2 text-ink">{title}</h2>
         {note && <span className="text-meta text-ink-3">{note}</span>}
       </div>
       {children}

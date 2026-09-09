@@ -1,8 +1,11 @@
 /* src/app/globals.css — Global Atlas design tokens (docs/global/frontend-design.md §2).
-   Light ("Daylight Desk" lineage) is the default; dark ("Graphite Terminal" lineage) is the
-   html[data-theme="dark"] override, set before first paint by layout.tsx and flipped by the rail
-   toggle. No colour exists outside this token set: Tailwind's stock palette, font families and
-   text sizes are cleared so only the named tokens produce utilities. */
+   One theme, light only. The language is the Jhaveri Rebalance desk tool's: its stylesheet's live
+   `html.rb` token set and component rules are copied here verbatim — cream paper, navy ink, one
+   serif for display and body, gold for focus and the active tab, muted RAG for signal. No colour
+   exists outside this token set: Tailwind's stock palette, font families, text sizes, radii and
+   shadows are cleared so only the named tokens produce utilities. The token NAMES the components
+   reference (--color-ground … --color-warn, --font-sans / --font-serif, --text-meta … --text-composite,
+   --radius-panel, --decile-1..10) are kept; their VALUES are the desk's. */
 @import "tailwindcss";
 
 @theme {
@@ -10,91 +13,98 @@
   --font-*: initial;
   --text-*: initial;
   --radius-*: initial;
+  --shadow-*: initial;
 
   /* surfaces */
-  --color-ground: #ECEFF3;
-  --color-panel:  #FFFFFF;
-  --color-raised: #F5F7FA;
-  --color-inset:  #E2E7ED;
+  --color-ground: #f4f0e5;        /* cream paper: the page, cards, chips, controls */
+  --color-panel: #ffffff94;       /* translucent white on cream: tables, tiles, notices */
+  --color-panel-solid: #fbf9f4;   /* what panel composites to on ground: sticky heads and columns */
+  --color-raised: #fbf9f4;        /* table heads and group rows (= panel-solid) */
+  --color-inset: #25394a17;       /* meter tracks, code, wells (= accent-soft) */
 
-  /* lines */
-  --color-hair:   rgba(12, 20, 33, 0.10);
-  --color-rule:   rgba(12, 20, 33, 0.16);
+  /* lines — the desk has one hairline; a 2 px rule, not a darker one, carries emphasis */
+  --color-line: #25394a29;
+  --color-hair: #25394a29;
+  --color-rule: #25394a29;
 
-  /* ink */
-  --color-ink:    #15202E;
-  --color-ink-2:  #4A5665;
-  --color-ink-3:  #7C8797;
+  /* ink — the desk's muted and grey are one value, so ink-2 and ink-3 are too */
+  --color-ink: #25394a;
+  --color-ink-2: #5e6b75;
+  --color-ink-3: #5e6b75;
+  --color-muted: #5e6b75;
 
-  /* signal — muted RAG (FM-approved on India) and one accent, spent sparingly */
-  --color-accent: #2D63D8;
-  --color-pos:    #2D8561;
-  --color-neg:    #B84D45;
-  --color-warn:   #A07A2B;
+  /* accent — the navy is the ink itself; links are ink and underline on hover */
+  --color-accent: #25394a;
+  --color-accent-soft: #25394a17;
+  --color-navy-deep: #16294d;     /* the top bar */
 
-  /* type — the families are set by next/font in layout.tsx */
-  --font-sans:  var(--font-instrument-sans), system-ui, sans-serif;
-  --font-serif: var(--font-instrument-serif), Georgia, serif;
+  /* the bar's whites: text, dimmed text, the stamp, hover; -18 (the search box border) is ours */
+  --color-white: #ffffff;
+  --color-white-72: #ffffffb8;
+  --color-white-60: #fff9;
+  --color-white-18: #ffffff2e;
+  --color-white-6: #ffffff0f;
 
-  /* scale: px / line-height */
-  --text-meta: 12px;       --text-meta--line-height: 16px;
-  --text-table: 13px;      --text-table--line-height: 18px;
-  --text-body: 14px;       --text-body--line-height: 20px;
-  --text-lead: 16px;       --text-lead--line-height: 24px;
-  --text-section: 22px;    --text-section--line-height: 28px;
-  --text-title: 32px;      --text-title--line-height: 36px;
-  --text-composite: 44px;  --text-composite--line-height: 44px;
+  /* signal */
+  --color-pos: #2c6b41;   --color-pos-soft: #e3ede5;
+  --color-neg: #ab4425;   --color-neg-soft: #f3e1d9;
+  --color-warn: #8a5d10;  --color-amber: #8a5d10;  --color-amber-soft: #f5ebd0;
+  --color-gold: #a17c2b;  --color-gold-soft: #f5ebd0;
 
-  /* one radius */
+  /* tints */
+  --color-tint-info: #f1f5fc;
+  --color-tint-pos: #f0f7f2;
+  --color-tint-neg: #fdf1ed;
+  --color-tint-warn: #fdf7e8;
+
+  /* type — display and body are the one serif; both names resolve to it so every utility keeps working */
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+  --font-sans: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+
+  /* scale — the desk's xs .78 · sm .86 · md .95 · lg 1.05 · xl 1.45 · hero 2 rem; body 14.5 px / 1.5 */
+  --text-meta: 0.78rem;       --text-meta--line-height: 1.35;
+  --text-table: 0.86rem;      --text-table--line-height: 1.4;
+  --text-body: 14.5px;        --text-body--line-height: 1.5;
+  --text-lead: 0.95rem;       --text-lead--line-height: 1.5;
+  --text-h2: 1.05rem;         --text-h2--line-height: 1.3;
+  --text-section: 1.28rem;    --text-section--line-height: 1.25;   /* a card's value; the status headline */
+  --text-title: 1.3rem;       --text-title--line-height: 1.25;     /* h1 */
+  --text-composite: 2rem;     --text-composite--line-height: 1;    /* hero: the composite numeral */
+
   --radius-panel: 6px;
+  --radius-lg: 10px;
+  --shadow-lift: 0 1px 2px #16212b0d, 0 4px 14px #16212b0d;
 }
 
 :root {
-  /* decile ramp (light) — India's muted red → olive → green; deciles only */
-  --decile-1:  #AF635D; --decile-2:  #AD6F58; --decile-3:  #A77C4F; --decile-4:  #9E834A; --decile-5:  #91884E;
-  --decile-6:  #818B55; --decile-7:  #6D8B60; --decile-8:  #5B8B6B; --decile-9:  #4F8C70; --decile-10: #4C8B70;
-}
-
-html[data-theme="dark"] {
-  color-scheme: dark;
-  --color-ground: #0D1014;
-  --color-panel:  #161B22;
-  --color-raised: #1C232D;
-  --color-inset:  #0A0D11;
-  --color-hair:   rgba(255, 255, 255, 0.08);
-  --color-rule:   rgba(255, 255, 255, 0.14);
-  --color-ink:    #E8ECF1;
-  --color-ink-2:  #99A3B2;
-  --color-ink-3:  #5E6979;
-  --color-accent: #5B9DF9;
-  --color-pos:    #4FC490;
-  --color-neg:    #DE7870;
-  --color-warn:   #DDAC4A;
-  /* decile ramp (dark) — India's muted coral → olive → mint */
-  --decile-1:  #CA827C; --decile-2:  #C98D7A; --decile-3:  #C79A75; --decile-4:  #C6A670; --decile-5:  #C0AE72;
-  --decile-6:  #B0B17A; --decile-7:  #98B384; --decile-8:  #80B690; --decile-9:  #70B793; --decile-10: #64B893;
+  color-scheme: light only;
+  /* prose measure */
+  --measure: 66ch;
+  /* decile ramp — neg #ab4425 → amber #b8860b → pos #2c6b41 at equal OKLab arc length; 1 = worst */
+  --decile-1:  #ab4425; --decile-2:  #af5622; --decile-3:  #b3671e; --decile-4:  #b67816; --decile-5:  #b58510;
+  --decile-6:  #9d8125; --decile-7:  #847c30; --decile-8:  #6a7738; --decile-9:  #4e713d; --decile-10: #2c6b41;
 }
 
 @layer base {
   html {
-    font-family: var(--font-sans);
-    font-size: 14px;
-    line-height: 20px;
+    font-family: var(--font-serif);
     background-color: var(--color-ground);
     color: var(--color-ink);
     -webkit-font-smoothing: antialiased;
-    /* Instrument Sans's space is narrow (~0.19 em, 2 px at 12 px): open the words up a little */
-    word-spacing: 0.08em;
   }
-  .font-serif { word-spacing: normal; }
-  body { min-height: 100vh; }
-  /* two families only: an identifier is set in the sans, on the inset surface, not in a mono */
+  body { min-height: 100vh; font-size: 14.5px; line-height: 1.5; }
+  /* page head: h1 1.3rem, h2 1.05rem, both 600; the components place them */
+  h1 { font-size: 1.3rem; font-weight: 600; line-height: 1.25; }
+  h2 { font-size: 1.05rem; font-weight: 600; line-height: 1.3; }
+  /* links are ink and underline on hover only (the bar's links and buttons opt out below) */
+  a:hover { text-decoration: underline; }
+  /* one family only: an identifier is set in the serif on the inset surface, not in a mono */
   code {
-    font-family: var(--font-sans); font-weight: 500; font-size: 0.93em;
+    font-family: inherit; font-weight: 500; font-size: 0.93em;
     padding: 1px 5px; border-radius: var(--radius-panel); background: var(--color-inset);
   }
-  :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-  ::selection { background: color-mix(in oklab, var(--color-accent) 22%, transparent); }
+  :focus-visible { outline: 2px solid var(--color-gold); outline-offset: -2px; }
+  ::selection { background: color-mix(in srgb, var(--color-gold) 35%, transparent); }
 }
 
 @layer components {
@@ -102,146 +112,203 @@ html[data-theme="dark"] {
   .num { font-variant-numeric: tabular-nums; }
 
   .skip-link {
-    position: absolute; left: 8px; top: -48px; z-index: 30;
+    position: absolute; left: 8px; top: -48px; z-index: 50;
     padding: 6px 10px; border-radius: var(--radius-panel);
-    background: var(--color-panel); color: var(--color-ink);
-    border: 1px solid var(--color-rule);
+    background: var(--color-panel-solid); color: var(--color-ink);
+    border: 1px solid var(--color-line);
   }
   .skip-link:focus { top: 8px; }
 
-  /* ── shell: 232 px rail + 48 px top bar ─────────────────────────────── */
-  .rail {
-    position: fixed; top: 0; bottom: 0; left: 0; width: 232px; z-index: 20;
-    display: flex; flex-direction: column;
-    padding: 20px 16px 16px;
-    border-right: 1px solid var(--color-hair);
-    background: var(--color-ground);
-  }
-  .rail-mark { display: block; padding: 0 8px; }
-  .rail-nav { flex: 1; margin-top: 28px; }
-  .rail-nav ul { display: flex; flex-direction: column; gap: 2px; }
-  .rail-link {
-    display: flex; align-items: center; gap: 10px;
-    padding: 6px 8px; border-radius: var(--radius-panel);
-    color: var(--color-ink-2);
-  }
-  .rail-link:hover { color: var(--color-ink); background: var(--color-raised); }
-  .rail-link[aria-current="page"] {
-    color: var(--color-ink); background: var(--color-panel); font-weight: 500;
-    box-shadow: inset 0 0 0 1px var(--color-hair);
-  }
-  .rail-foot {
-    display: flex; align-items: center; justify-content: space-between; gap: 8px;
-    padding-top: 12px; border-top: 1px solid var(--color-hair);
-  }
-
+  /* ── shell: the navy bar — mark, sections, search, the "as of" stamp ─────────────────── */
   .topbar {
-    position: fixed; top: 0; right: 0; left: 232px; height: 48px; z-index: 10;
-    display: flex; align-items: center; justify-content: space-between; gap: 16px;
-    padding: 0 24px;
-    border-bottom: 1px solid var(--color-hair);
-    background: var(--color-ground);
+    position: sticky; top: 0; z-index: 40;
+    display: flex; align-items: center; gap: 26px;
+    height: 48px; padding: 0 24px;
+    background: var(--color-navy-deep); color: var(--color-white);
   }
+  .rail { display: flex; align-items: center; gap: 26px; height: 100%; min-width: 0; }
+  .rail-mark {
+    font-size: 1.05rem; font-weight: 600; letter-spacing: 0.01em; white-space: nowrap;
+    color: var(--color-white);
+  }
+  .rail-mark:hover { text-decoration: none; }
+  .rail-nav { display: flex; height: 100%; }
+  .rail-nav li { display: flex; }
+  .rail-link {
+    display: flex; align-items: center; padding: 0 13px;
+    font-size: 13px; color: var(--color-white-72); white-space: nowrap;
+    border-bottom: 2px solid transparent;
+  }
+  .rail-link:hover { color: var(--color-white); background: var(--color-white-6); text-decoration: none; }
+  .rail-link[aria-current="page"] { color: var(--color-white); border-bottom-color: var(--color-gold); font-weight: 600; }
+
   .search {
     display: flex; align-items: center; gap: 8px;
-    width: 360px; max-width: 100%; height: 32px; padding: 0 10px;
-    border: 1px solid var(--color-hair); border-radius: var(--radius-panel);
-    background: var(--color-panel); color: var(--color-ink-3);
+    flex: 0 1 300px; min-width: 140px; height: 30px; padding: 0 10px; margin-left: auto;
+    border: 1px solid var(--color-white-18); border-radius: var(--radius-panel);
+    background: var(--color-white-6); color: var(--color-white-72); font-size: 13px;
   }
-  .search input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; color: var(--color-ink); }
-  .search input::placeholder { color: var(--color-ink-3); }
+  .search:focus-within { border-color: var(--color-gold); box-shadow: 0 0 0 1px var(--color-gold); }
+  .search input {
+    flex: 1; min-width: 0; appearance: none; background: transparent; border: 0; outline: 0;
+    color: var(--color-white); font: inherit;
+  }
+  .search input::placeholder { color: var(--color-white-72); }
   .search kbd {
-    font-family: inherit; font-size: 12px; line-height: 16px; padding: 0 5px;
-    border: 1px solid var(--color-hair); border-radius: var(--radius-panel); color: var(--color-ink-3);
+    font-family: inherit; font-size: 11px; line-height: 16px; padding: 0 5px;
+    border: 1px solid var(--color-white-18); border-radius: var(--radius-panel); color: var(--color-white-60);
   }
+  /* the right side: 11.5 px, dimmed; the freshness dot lightens so it reads on navy */
+  .who { flex: none; text-align: right; font-size: 11.5px; color: var(--color-white-60); white-space: nowrap; }
+  .who .dot-pos  { background: color-mix(in srgb, var(--color-pos) 55%, var(--color-white)); }
+  .who .dot-warn { background: color-mix(in srgb, var(--color-amber) 55%, var(--color-white)); }
+  .who .dot-grey { background: var(--color-white-60); }
 
-  .main { margin-left: 232px; padding-top: 48px; }
-  .page { max-width: 1120px; padding: 32px 40px 64px; }
+  .main { max-width: 1440px; margin: 0 auto; padding: 0 24px 60px; }
+  .page { max-width: 1120px; padding-top: 24px; }
 
-  /* ── surfaces: hairlines, one radius, no shadows ────────────────────── */
-  .panel { background: var(--color-panel); border: 1px solid var(--color-hair); border-radius: var(--radius-panel); }
-  .tile  { background: var(--color-raised); border: 1px solid var(--color-hair); border-radius: var(--radius-panel); padding: 12px 14px; }
+  /* ── surfaces: one hairline, one radius ──────────────────────────────────────────────── */
+  .panel { background: var(--color-panel); border: 1px solid var(--color-line); border-radius: var(--radius-panel); }
 
-  .tbl { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 18px; }
-  .tbl th {
-    text-align: left; font-weight: 500; font-size: 12px; line-height: 16px;
-    color: var(--color-ink-3); background: var(--color-raised);
-    padding: 7px 12px; border-bottom: 1px solid var(--color-rule); white-space: nowrap;
+  /* a card holds an entity: label .k, value .v, sub .s; .hero is the one that matters */
+  .card { background: var(--color-ground); border: 1px solid var(--color-line); border-radius: var(--radius-panel); padding: 12px 14px; }
+  .card.hero { background: var(--color-accent-soft); border-color: var(--color-accent); }
+  .card .k { text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-muted); font-size: 11px; }
+  .card .v { font-size: 1.28rem; font-weight: 650; line-height: 1.25; }
+  .card .s { color: var(--color-muted); font-size: 12px; }
+
+  /* a KPI tile: label .l, value .v, sub .s. The health tiles put the label first with no class,
+     so the first child is the label. */
+  .tile { background: var(--color-panel); border: 1px solid var(--color-line); border-radius: var(--radius-panel); padding: 12px 14px; }
+  .tile .l, .tile > :first-child { text-transform: uppercase; letter-spacing: 0.07em; font-weight: 700; color: var(--color-muted); font-size: 10.5px; }
+  .tile .v { font-size: 1.45rem; font-weight: 650; line-height: 1.25; }
+  .tile .s { color: var(--color-muted); font-size: 11.5px; }
+
+  /* chips: a fact or a filter; .on is selected, .ghost is a placeholder */
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid var(--color-line); border-radius: 20px; padding: 3px 12px;
+    background: var(--color-ground); color: var(--color-ink); font-size: 12.5px; line-height: 1.3; white-space: nowrap;
   }
-  .tbl td { padding: 8px 12px; border-bottom: 1px solid var(--color-hair); vertical-align: top; }
+  .chip b { font-weight: 650; }
+  .chip.on { background: var(--color-accent-soft); border-color: var(--color-accent); color: var(--color-accent); font-weight: 600; }
+  .chip.ghost { color: var(--color-muted); border-style: dashed; font-style: italic; }
+
+  /* ── tables ──────────────────────────────────────────────────────────────────────────── */
+  .tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  /* every table head in a panel, the countries grid's included: the desk's small uppercase */
+  .tbl th, .dt-table th, .panel table th {
+    background: var(--color-panel-solid); text-align: center;
+    text-transform: uppercase; letter-spacing: 0.06em; font-size: 10.5px; font-weight: 600;
+    color: var(--color-muted); border-bottom: 1px solid var(--color-line);
+    white-space: nowrap; padding: 9px 12px;
+  }
+  .tbl td { padding: 9px 12px; border-bottom: 1px solid var(--color-line); vertical-align: top; }
+  /* numbers and dates never wrap; a notes column may (the desk's tables are all numeric) */
+  .tbl td.num, .tbl td.r { white-space: nowrap; }
   .tbl tbody tr:last-child td { border-bottom: 0; }
-  .tbl tbody tr:hover td { background: var(--color-raised); }
+  .tbl tbody tr:hover td { background: var(--color-tint-info); }
   .tbl .r { text-align: right; }
+  .tbl td .sub, .dt-table td .sub { color: var(--color-muted); margin-left: 4px; font-size: 11px; }
+  .tbl tfoot td, .dt-table tfoot td { background: var(--color-panel); border-top: 2px solid var(--color-line); font-weight: 650; }
+  /* a section row across the table, its left edge coloured by state */
+  tr.sec td { background: var(--color-panel); padding: 6px 10px; font-size: 12px; }
+  tr.sec.red td:first-child   { border-left: 3px solid var(--color-neg); }
+  tr.sec.amber td:first-child { border-left: 3px solid var(--color-amber); }
+  tr.sec.grey td:first-child  { border-left: 3px solid var(--color-muted); }
+  /* a value bar under a number: width is --w (0–100), 2 px, accent at .34 (.neg: neg at .4) */
+  td.valbar { position: relative; }
+  td.valbar::after {
+    content: ""; position: absolute; left: 12px; bottom: 5px; height: 2px;
+    width: calc(var(--w) * 1%); max-width: calc(100% - 24px);
+    background: var(--color-accent); opacity: 0.34;
+  }
+  td.valbar.neg::after { background: var(--color-neg); opacity: 0.4; }
 
-  /* ── controls ───────────────────────────────────────────────────────── */
+  /* ── controls ────────────────────────────────────────────────────────────────────────── */
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-    height: 36px; padding: 0 14px; border-radius: var(--radius-panel);
-    border: 1px solid var(--color-rule); background: var(--color-panel); color: var(--color-ink);
-    font-weight: 500; cursor: pointer;
+    min-height: 30px; padding: 4px 10px; border-radius: var(--radius-panel);
+    border: 1px solid var(--color-line); background: var(--color-ground); color: var(--color-ink);
+    font-size: 12.5px; font-weight: 500; white-space: nowrap; cursor: pointer;
   }
-  .btn:hover { background: var(--color-raised); }
-  .btn-primary { background: var(--color-ink); border-color: var(--color-ink); color: var(--color-ground); }
-  .btn-primary:hover { background: var(--color-ink-2); border-color: var(--color-ink-2); }
-  .btn-quiet { height: 28px; padding: 0 8px; border-color: transparent; background: transparent; color: var(--color-ink-2); }
-  .btn-quiet:hover { color: var(--color-ink); background: var(--color-raised); }
+  .btn:hover { background: var(--color-accent-soft); text-decoration: none; }
+  .btn-primary { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-white); }
+  .btn-primary:hover { background: var(--color-navy-deep); border-color: var(--color-navy-deep); }
+  .btn-quiet { border-color: transparent; background: transparent; color: var(--color-muted); }
+  .btn-quiet:hover { color: var(--color-ink); background: var(--color-accent-soft); }
 
   .field {
-    display: block; width: 100%; height: 36px; padding: 0 10px;
-    border: 1px solid var(--color-rule); border-radius: var(--radius-panel);
-    background: var(--color-panel); color: var(--color-ink);
+    display: block; width: 100%; min-height: 32px; padding: 4px 8px;
+    border: 1px solid var(--color-line); border-radius: var(--radius-panel);
+    background: var(--color-ground); color: var(--color-ink); font-size: 12.5px;
   }
-  .field::placeholder { color: var(--color-ink-3); }
+  .field::placeholder { color: var(--color-muted); }
 
-  /* ── instrument pieces ──────────────────────────────────────────────── */
+  /* a segmented control: one button per option, the chosen one in navy */
+  .seg { display: inline-flex; border: 1px solid var(--color-line); border-radius: var(--radius-panel); overflow: hidden; }
+  .seg button {
+    padding: 4px 10px; border: 0; border-right: 1px solid var(--color-line);
+    background: var(--color-ground); color: var(--color-muted); font: inherit; font-size: 11.5px; cursor: pointer;
+  }
+  .seg button:last-child { border-right: 0; }
+  .seg button.on { background: var(--color-accent); color: var(--color-white); font-weight: 650; }
+
+  /* ── instrument pieces ───────────────────────────────────────────────────────────────── */
+  /* a peer decile: ink on a tint of its ramp step (≥ 6.9:1 on every step), the step as its border;
+     DecileChip sets --decile */
   .decile-chip {
     display: inline-flex; align-items: center; justify-content: center;
-    min-width: 22px; height: 18px; padding: 0 5px; border-radius: var(--radius-panel);
-    font-size: 12px; line-height: 16px; font-weight: 600; color: #FFFFFF;
+    min-width: 26px; height: 20px; padding: 0 8px; border-radius: 20px;
+    border: 1px solid var(--decile, var(--color-line));
+    background: color-mix(in srgb, var(--decile, var(--color-ground)) 30%, var(--color-ground));
+    color: var(--color-ink); font-size: 12px; line-height: 1; font-weight: 650;
   }
-  html[data-theme="dark"] .decile-chip { color: #0D1014; }
 
   /* the one motion: the Lens bar fills on first paint of a detail page */
   .lens-fill--animate { transform-origin: left; animation: lens-fill 240ms ease-out; }
 
   /* a status dot: green fresh, amber warning, grey inert */
   .dot { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 999px; }
+  .dot-pos  { background: var(--color-pos); }
+  .dot-warn { background: var(--color-amber); }
+  .dot-grey { background: var(--color-muted); }
 
-  /* ── explorer: facet rail 260 px + the virtualised table ─────────────── */
-  .page-wide { max-width: none; padding-right: 24px; }
+  /* ── explorer: facet rail 260 px + the virtualised table ─────────────────────────────── */
+  .page-wide { max-width: none; }
   .explorer { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 24px; align-items: start; }
 
   .notice {
     display: flex; align-items: baseline; gap: 10px;
     margin-bottom: 16px; padding: 9px 14px; max-width: 96ch;
-    border: 1px solid var(--color-hair); border-radius: var(--radius-panel);
-    background: var(--color-raised); color: var(--color-ink-2);
+    border: 1px solid var(--color-line); border-radius: var(--radius-panel);
+    background: var(--color-tint-warn); color: var(--color-ink-2);
   }
   .notice .dot { position: relative; top: -1px; }
 
-  .facets { display: flex; flex-direction: column; gap: 18px; padding-top: 28px; }
-  .facet { margin: 0; padding: 0; border: 0; min-width: 0; }
-  .facet-title { padding: 0 0 4px; font-weight: 500; color: var(--color-ink-3); }
-  .facet-opt {
-    display: flex; align-items: center; gap: 8px;
-    margin: 0 -6px; padding: 3px 6px; border-radius: var(--radius-panel);
-    color: var(--color-ink-2); cursor: pointer;
+  /* each facet group is a row of chips; a chosen value is a chip that is .on */
+  .facets { display: flex; flex-direction: column; gap: 18px; padding-top: 30px; }
+  .facet { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; border: 0; min-width: 0; }
+  .facet-title {
+    display: block; width: 100%; padding: 0 0 2px;
+    text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; color: var(--color-muted);
   }
-  .facet-opt:hover { color: var(--color-ink); background: var(--color-raised); }
-  .facet-opt.is-on { color: var(--color-ink); font-weight: 500; }
-  .facet-opt input { margin: 0; accent-color: var(--color-accent); }
-  .facet-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .facet-n { color: var(--color-ink-3); }
+  .facet-opt {
+    display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+    padding: 3px 10px 3px 8px; border: 1px solid var(--color-line); border-radius: 20px;
+    background: var(--color-ground); color: var(--color-ink); cursor: pointer;
+  }
+  .facet-opt:hover { border-color: var(--color-muted); }
+  .facet-opt.is-on { background: var(--color-accent-soft); border-color: var(--color-accent); color: var(--color-accent); font-weight: 600; }
+  .facet-opt input { margin: 0; width: 12px; height: 12px; accent-color: var(--color-accent); }
+  .facet-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .facet-n { color: var(--color-muted); font-size: 11px; }
 
   /* fills the viewport below the page header; DataTable refits it exactly after hydration */
   .dt { overflow: auto; overscroll-behavior: contain; height: calc(100vh - 372px); min-height: 320px; }
-  .dt-table { table-layout: fixed; width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; line-height: 18px; }
-  .dt-table th {
-    position: sticky; top: 0; z-index: 1;
-    height: 36px; padding: 0 12px; text-align: left; white-space: nowrap;
-    font-weight: 500; font-size: 12px; line-height: 16px; color: var(--color-ink-3);
-    background: var(--color-raised); border-bottom: 1px solid var(--color-rule);
-  }
+  .dt-table { table-layout: fixed; width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13.5px; line-height: 1.4; }
+  /* the head stays put; 36 px tall, the sort button fills it */
+  .dt-table th { position: sticky; top: 0; z-index: 1; height: 36px; padding: 0 12px; }
   .dt-table th.r, .dt-table td.r { text-align: right; }
   .dt-sort {
     display: inline-flex; align-items: center; gap: 4px; max-width: 100%; height: 36px;
@@ -249,34 +316,36 @@ html[data-theme="dark"] {
   }
   .dt-table th.r .dt-sort { flex-direction: row-reverse; }
   .dt-sort:hover, .dt-table th[aria-sort] .dt-sort { color: var(--color-ink); }
+  /* ROWS ARE 44 PX (DataTable's ROW_HEIGHT): the height is set outright, so the 9 px padding
+     never changes it */
   .dt-table td {
-    box-sizing: border-box; height: 44px; padding: 0 12px; vertical-align: middle;
+    box-sizing: border-box; height: 44px; padding: 9px 12px; vertical-align: middle;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    border-bottom: 1px solid var(--color-hair);
+    border-bottom: 1px solid var(--color-line);
   }
-  .dt-table tr[data-row]:hover td { background: var(--color-raised); }
-  /* the symbol stays put while a wide table scrolls sideways */
+  .dt-table tr[data-row]:hover td { background: var(--color-tint-info); }
+  /* the symbol stays put while a wide table scrolls sideways — on the solid panel colour, so
+     nothing shows through it */
   .dt-table th:first-child, .dt-table td:first-child { position: sticky; left: 0; }
   .dt-table th:first-child { z-index: 2; }
-  .dt-table td:first-child { z-index: 1; background: var(--color-panel); }
+  .dt-table td:first-child { z-index: 1; background: var(--color-panel-solid); }
   .dt-table .dt-spacer td { height: auto; padding: 0; border: 0; background: transparent; }
   .dt-table .dt-empty { height: auto; padding: 16px 12px; white-space: normal; }
-  .dt-symbol { font-weight: 500; color: var(--color-ink); }
-  .dt-symbol:hover { color: var(--color-accent); }
+  .dt-symbol { font-weight: 600; color: var(--color-ink); }
 
-  /* ── entity pages: 7/5 columns, fact lists on hairlines ─────────────── */
+  /* ── entity pages: 7/5 columns, fact lists on hairlines with the card's uppercase labels ── */
   .detail { display: grid; grid-template-columns: 7fr 5fr; gap: 0 40px; align-items: start; }
   .facts { display: grid; grid-template-columns: max-content minmax(0, 1fr) fit-content(40%); column-gap: 20px; }
   .fact { display: contents; }
-  .fact > * { padding: 7px 0; border-bottom: 1px solid var(--color-hair); }
+  .fact > * { padding: 7px 0; border-bottom: 1px solid var(--color-line); }
   .fact:last-child > * { border-bottom: 0; }
-  .fact dt { padding-top: 9px; }
+  .fact dt { padding-top: 9px; text-transform: uppercase; letter-spacing: 0.06em; }
   .fact-src { text-align: right; padding-top: 9px; }
   .timeline { display: flex; flex-direction: column; gap: 10px; }
   .timeline-item { display: flex; align-items: flex-start; gap: 10px; }
   .timeline-item .dot { margin-top: 6px; }
   .slots { display: flex; flex-direction: column; }
-  .slot { padding: 10px 0; border-bottom: 1px solid var(--color-hair); }
+  .slot { padding: 10px 0; border-bottom: 1px solid var(--color-line); }
   .slot:first-child { padding-top: 0; }
   .slot:last-child { border-bottom: 0; }
 }
@@ -290,32 +359,25 @@ html[data-theme="dark"] {
   .lens-fill--animate { animation: none; }
 }
 
-/* rail collapses under 1024 px into a strip above the content */
+/* the bar tightens under 1024 px and scrolls sideways under 720; explorer and entity pages stack */
 @media (max-width: 1023px) {
-  .rail {
-    position: static; width: auto; flex-direction: row; align-items: center; gap: 12px;
-    padding: 8px 12px; border-right: 0; border-bottom: 1px solid var(--color-hair); overflow-x: auto;
-  }
-  .rail-mark { white-space: nowrap; }
-  .rail-mark .rail-sub { display: none; }
-  .rail-nav { flex: 1; margin: 0; }
-  .rail-nav ul { flex-direction: row; }
-  .rail-foot { padding: 0; border: 0; }
-  .topbar { position: sticky; left: 0; }
-  .main { margin-left: 0; padding-top: 0; }
-  .page { padding: 24px 16px 48px; }
-  /* explorer and entity pages stack; the table keeps scrolling inside its own panel */
+  .topbar { gap: 12px; padding: 0 12px; }
+  .rail { gap: 12px; }
+  .rail-link { padding: 0 9px; }
+  .search { flex-basis: 180px; }
+  .who { display: none; }
+  .main { padding: 0 12px 48px; }
+  .page { padding-top: 16px; }
   .explorer, .detail { grid-template-columns: minmax(0, 1fr); }
-  .facets { padding-top: 0; max-width: 360px; }
+  .facets { padding-top: 0; }
+}
+@media (max-width: 719px) {
+  .topbar { overflow-x: auto; }
+  .search { flex: 0 0 160px; min-width: 0; }
 }
 
 @media print {
-  .rail, .topbar, .skip-link { display: none !important; }
-  .main { margin: 0; padding: 0; }
-  html[data-theme="dark"] {
-    --color-ground: #FFFFFF; --color-panel: #FFFFFF; --color-raised: #F5F7FA; --color-inset: #E2E7ED;
-    --color-hair: rgba(12, 20, 33, 0.16); --color-rule: rgba(12, 20, 33, 0.24);
-    --color-ink: #15202E; --color-ink-2: #4A5665; --color-ink-3: #7C8797;
-    --color-accent: #2D63D8; --color-pos: #2D8561; --color-neg: #B84D45; --color-warn: #A07A2B;
-  }
+  .topbar, .skip-link { display: none !important; }
+  .main { max-width: none; padding: 0; }
+  html, .panel, .tile, .card { background: var(--color-white); }
 }

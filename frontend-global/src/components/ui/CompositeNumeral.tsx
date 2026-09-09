@@ -1,5 +1,6 @@
 // src/components/ui/CompositeNumeral.tsx — the composite as one large tabular numeral beside the
-// Lens bar: 44/44 on a detail page, 22/28 in a row or card. NUMERIC arrives as a string.
+// Lens bar: the hero size (2rem) on a detail page, the card value size in a row or card. NUMERIC
+// arrives as a string.
 import { formatNum } from '@/lib/format'
 
 export function CompositeNumeral({
@@ -17,7 +18,7 @@ export function CompositeNumeral({
   const text = n == null || Number.isNaN(n) ? '—' : formatNum(n)
   return (
     <span
-      className={`num font-sans font-medium text-ink ${size === 'lg' ? 'text-composite' : 'text-section'} ${className}`}
+      className={`num font-serif font-semibold text-ink ${size === 'lg' ? 'text-composite' : 'text-section'} ${className}`}
       aria-label={`${label} ${text}`}
       data-composite=""
     >
