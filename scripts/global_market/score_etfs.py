@@ -144,6 +144,34 @@ def assign_groups(frame: pd.DataFrame, min_members: int) -> pd.DataFrame:
     records which happened, so the board can say "ranked among 34 sector funds" or "ranked
     among 210 equity funds (too few sector-thematic peers)" rather than implying a precision
     the group size does not support.
+
+    THE FALLBACK CHAIN HAS AN END, and the first live run found it. Six in-universe
+    multi-asset funds against a floor of eight: the original code fell back to the asset class
+    unconditionally and handed gate C a group of six to rank in. There is nowhere further to
+    fall that means anything — a multi-asset fund ranked against equity sector funds is a
+    league table of nothing, which is the whole reason peer groups exist. So such a fund gets
+    NO peer group: ``peer_group`` is None and ``grouped_by`` says ``unranked``.
+
+    THE FALLBACK GROUP IS THE FUNDS THAT FELL BACK, not every fund of that asset class, and
+    its OWN size is what decides. This is not obvious and a test caught it: twelve
+    equity-sector funds and two equity-thematic ones make an asset class of fourteen, but the
+    two thematic funds fall into a group containing only each other, because the twelve are
+    ranked in ``equity:sector``. Sizing the fallback by the asset class would have passed them
+    straight back into a group of two — the very thing this function exists to prevent.
+
+    The cost is deliberate: a fund can be unranked while its asset class is large. Ranking it
+    against all fourteen would be more useful and is the obvious next step, but it needs a
+    ranking POPULATION stored apart from the group LABEL, since the gate and the board both
+    count rows by label today. That is a schema change, not a line here. Conservative is the
+    safe direction: an absent rank is honest, an overclaimed one is not.
+
+    An unranked fund is not a dropped fund. It is scored and shown under its asset group; what
+    it does not get is a rank, because a rank is a statement about a population and there is
+    no population. It also falls out of the peer percentile for free — pandas drops a NaN
+    group key — so that sub-score is absent rather than invented and the composite
+    renormalises over the rest, as it does for any missing input. Its RISK percentiles
+    survive: those are cut within the asset group by design (``add_percentiles``), and an
+    asset group exists even when it is too small to rank in.
     """
     out = frame.copy()
     out["asset_group"] = out["asset_class"].fillna("unclassified")
@@ -152,10 +180,21 @@ def assign_groups(frame: pd.DataFrame, min_members: int) -> pd.DataFrame:
     # stubs declare a callable, and the ratchet counts that as a new error every run.
     counts: dict[str, int] = narrow.value_counts().to_dict()
     big_enough = pd.Series([counts[n] >= min_members for n in narrow], index=out.index)
-    out["peer_group"] = narrow.where(big_enough, out["asset_group"])
-    out["grouped_by"] = pd.Series("strategy", index=out.index).where(big_enough, "asset_class")
+    # Counted over the FALLERS only — see the docstring. Sizing this by the whole asset class
+    # is the plausible-looking version of this line that puts two funds back in a group of two.
+    faller_counts: dict[str, int] = out.loc[~big_enough, "asset_group"].value_counts().to_dict()
+    asset_ok = pd.Series(
+        [faller_counts.get(a, 0) >= min_members for a in out["asset_group"]], index=out.index
+    )
+
+    out["peer_group"] = narrow.where(big_enough, out["asset_group"].where(asset_ok, None))
+    out["grouped_by"] = pd.Series("strategy", index=out.index).where(
+        big_enough, pd.Series("asset_class", index=out.index).where(asset_ok, "unranked")
+    )
     peer_counts: dict[str, int] = out["peer_group"].value_counts().to_dict()
-    out["peer_n"] = [peer_counts[g] for g in out["peer_group"]]
+    # peer_n is NaN, not 0, where there is no group: "no peers" and "zero peers" read the same
+    # in a count and mean different things on a card.
+    out["peer_n"] = [peer_counts.get(g) if g is not None else None for g in out["peer_group"]]
     return out
 
 
