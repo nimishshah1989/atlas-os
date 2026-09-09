@@ -6,8 +6,9 @@ name: Run Global Nightly
 # state read — from GitHub without a person typing on the box.
 #
 # Two modes:
-#   status  read-only: cron entries for the nightly, the last nightly log's tail, then
-#           scripts/ops/atlas_global_status.sh (code, build, process, routes, database, nightly)
+#   status  read-only: cron entries for the nightly, the last nightly log's tail, the newest
+#           gate A findings CSV, then scripts/ops/atlas_global_status.sh (code, build,
+#           process, routes, database, nightly)
 #   run     the nightly itself, holding the SAME lock the cron uses for the WHOLE step, so a
 #           run started here can neither overlap a scheduled one nor mistake a scheduled run's
 #           log for its own; then the FAIL lines with their recorded reasons.
@@ -108,6 +109,20 @@ jobs:
             echo "== newest nightly log =="
             LAST=$(ls -1t "$LOGS"/atlas_global_daily_[0-9]*.log 2>/dev/null | head -1 || true)
             if [ -n "$LAST" ]; then echo "$LAST ($(date -u -r "$LAST" +%FT%TZ))"; tail -n 25 "$LAST" | redact; else echo "none under $LOGS"; fi
+
+            # The gate that withholds the board's publish, in full. Gate A hard-fails on price
+            # moves that cannot be prices, names three of them in the log, and writes the rest
+            # to a CSV on the box that nobody off the box can read — so the failure has been
+            # visible and un-actionable at the same time. The file is symbols, dates and ratios
+            # over public market data, no positions and no client data, and it goes through the
+            # same redact() as everything else here. No input names it: the newest is always the
+            # one the last run wrote, and a free-text filename would be a path this script
+            # interpolates into a shell command.
+            GATE_A=$(ls -1t "$LOGS"/gate_a_*.csv 2>/dev/null | head -1 || true)
+            if [ -n "$GATE_A" ]; then
+              echo "== $(basename "$GATE_A"): $(($(wc -l < "$GATE_A") - 1)) finding(s) =="
+              head -n 120 "$GATE_A" | redact
+            fi
 
             if [ "$MODE" = "status" ]; then
               echo "== atlas_global_status.sh =="
