@@ -29,6 +29,7 @@ from atlas.global_market.fundamentals.metrics import (
     metrics_as_of,
     quarters_as_of,
 )
+from atlas.global_market.fundamentals.metrics import rows_from_records as metrics_from_records
 
 pytestmark = pytest.mark.unit
 
@@ -39,6 +40,7 @@ PAYLOADS = {
     "VZ": ("companyfacts_VZ_CIK0000732712.json", False),
 }
 TODAY = dt.date(2026, 9, 8)  # a fixed anchor: these are dated fixtures, not a live feed
+IID = "6f9619ff-8b86-d011-b42d-00c04fc964ff"  # a valid uuid; nothing here reads it
 
 
 @cache
@@ -169,3 +171,44 @@ def test_total_debt_takes_whichever_component_the_filer_reported() -> None:
     m = metrics("VZ")
     assert m is not None
     assert m.debt_to_equity is not None and m.debt_to_equity > 0
+
+
+# ── the round trip through the table ──
+
+
+def test_the_table_round_trips_to_the_same_metric_set() -> None:
+    """``ingest_financials`` writes a PeriodRow into columns and ``rows_from_records`` reads it
+    back. If the two column maps ever disagree, a concept stops being scored — silently, since
+    an absent input is a legitimate answer everywhere else in this module.
+
+    So the metric set is built twice on Verizon's real payload: once from the parsed filings,
+    once from the records the writer would have stored, and the two must agree field for field.
+    """
+    from tests.unit.global_market.script_loader import load_global_script
+
+    fin = load_global_script("ingest_financials")
+    parsed = list(rows("VZ"))
+    records = fin.db_rows(parsed, IID, is_financial=False)
+    replayed = metrics_from_records(records)
+
+    direct = metrics_as_of(parsed, TODAY, is_financial=False)
+    through_table = metrics_as_of(replayed, TODAY, is_financial=False)
+    assert direct is not None and through_table is not None
+    assert direct == through_table
+
+
+def test_a_null_column_is_an_absent_concept_and_not_a_none_value() -> None:
+    """``.get`` must not be able to tell them apart, so the reader leaves NULLs out."""
+    [row] = metrics_from_records(
+        [
+            {
+                "period_end": dt.date(2026, 3, 31),
+                "form": "10-Q",
+                "filed": dt.date(2026, 4, 30),
+                "revenue": Decimal("100"),
+                "operating_income": None,
+            }
+        ]
+    )
+    assert row.values == {"revenue": Decimal("100")}
+    assert row.period_class == "quarter"

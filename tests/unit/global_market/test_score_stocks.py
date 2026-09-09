@@ -39,6 +39,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from atlas.global_market.fundamentals import cross_section as xsec
 from tests.unit.global_market.scaffold_identity import scaffold_rows
 from tests.unit.global_market.script_loader import load_global_script
 
@@ -344,3 +345,100 @@ def test_the_report_line_the_writer_builds_fits_the_header_it_declares() -> None
     report = ss.Report(None, ss.REPORT_COLUMNS)
     report.add(*lines[0])
     assert report.counts == {ss.STATUS_NO_LENS: 1}
+
+
+# ── the fundamental lens: it needs BOTH a metric set and the FM's bands ──
+
+
+def _apple_metrics(as_of: dt.date = dt.date(2026, 9, 4)):
+    """Apple's real point-in-time metric set, from the committed company-facts payload."""
+    import json
+
+    from atlas.global_market.fundamentals.facts import extract_rows
+    from atlas.global_market.fundamentals.metrics import metrics_as_of
+
+    payload = json.loads(
+        (
+            Path(__file__).resolve().parents[3]
+            / "tests"
+            / "fixtures"
+            / "global"
+            / "edgar"
+            / "companfacts.json".replace("companfacts", "companyfacts_AAPL_CIK0000320193")
+        ).read_text()
+    )
+    found = metrics_as_of(extract_rows(payload), as_of, is_financial=False)
+    assert found is not None
+    return found
+
+
+def test_the_seed_table_does_not_carry_the_fundamental_bands_yet() -> None:
+    """The 37 US bands are the FM's to lock from the live cross-section. Until the seed carries
+    them the lens must not score — India's numbers are named for India's index."""
+    missing = ss.missing_bands(seeded_thresholds())
+    assert set(missing) == set(ss.FUNDAMENTAL_KEYS)
+
+
+def test_metrics_without_bands_do_not_score_the_lens() -> None:
+    """The refusal that matters: real inputs, no approved bands, so ``fundamental`` is NULL and
+    the composite is the technical read alone."""
+    frame = pd.DataFrame([unmeasured_row("AAPL")])
+    iid = frame.iloc[0]["instrument_id"]
+    table, _ = ss.score_rows(
+        frame,
+        dt.date(2026, 9, 4),
+        seeded_thresholds(),
+        "run",
+        {str(iid): _apple_metrics()},
+        bands_locked=False,
+    )
+    assert table.iloc[0]["fundamental"] is None
+    assert table.iloc[0]["lenses_active"] == 0
+
+
+def test_with_bands_locked_a_real_metric_set_scores_the_lens() -> None:
+    """India's own numbers stand in for the bands ONLY here, to prove the wiring: real Apple
+    ratios in, a fundamental score and its five sub-scores out, and the composite now counts
+    two lenses instead of one."""
+    import re
+
+    india = dict(seeded_thresholds())
+    source = (
+        Path(__file__).resolve().parents[3] / "atlas" / "lenses" / "compute" / "fundamental.py"
+    ).read_text()
+    india |= {
+        key: Decimal(value)
+        for key, value in re.findall(r'_t\(\s*th,\s*"([a-z0-9_]+)",\s*([0-9.]+)\)', source)
+    }
+    assert not ss.missing_bands(india)
+
+    frame = pd.DataFrame([unmeasured_row("AAPL")])
+    iid = frame.iloc[0]["instrument_id"]
+    table, lines = ss.score_rows(
+        frame, dt.date(2026, 9, 4), india, "run", {str(iid): _apple_metrics()}, bands_locked=True
+    )
+    row = table.iloc[0]
+    assert row["fundamental"] is not None and Decimal(0) <= row["fundamental"] <= Decimal(100)
+    assert row["fund_profitability"] is not None
+    assert row["composite"] is not None
+    assert row["lenses_active"] == 1  # technical still has no inputs on an unmeasured row
+    assert lines[0][-1] == ss.STATUS_SCORED
+
+
+def test_the_cross_section_reports_every_metric_the_lens_bands() -> None:
+    """The table the FM sets bands from: one row per lens input, per-cent for the six rates and
+    a plain multiple for the three balance-sheet ratios, over the names that HAVE each."""
+    table = ss.cross_section({"a": _apple_metrics()}, None)
+    assert list(table.columns) == list(xsec.COLUMNS)
+    assert list(table["metric"]) == [name for name, _ in xsec.LENS_METRICS]
+    assert set(table["unit"]) <= {"percent", "ratio"}
+    roe = table.loc[table["metric"] == "roe"].iloc[0]
+    assert roe["unit"] == "percent"
+    assert roe["names"] == 1
+    apple_roe = _apple_metrics().roe
+    assert apple_roe is not None
+    assert roe["p50"] == pytest.approx(float(apple_roe) * 100, rel=1e-6)
+    # Apple files no quarterly interest expense, so the metric has no cross-section at all.
+    absent = table.loc[table["metric"] == "interest_cover"].iloc[0]
+    assert absent["names"] == 0 and pd.isna(absent["p50"])
+    ss.print_cross_section(table, ss.missing_bands(seeded_thresholds()))  # must not print "nan"

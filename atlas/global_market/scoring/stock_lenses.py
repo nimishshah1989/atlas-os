@@ -4,9 +4,10 @@ The six stock lenses of ``docs/global/plan.md`` §B. This module implements the 
 today's nightly data can answer, and does not pretend about the rest:
 
     technical    ✅ every sub-score the lens has, from technical_daily
-    fundamental  ◐  the scorer is complete and tested; ``score_stocks.py`` does not call it
-                    yet, because its 37 bands are India's cross-section and the FM has to lock
-                    the US ones first (see FUNDAMENTAL_KEYS, and the trap above it)
+    fundamental  ◐  complete and wired; it scores the moment ``atlas_global.atlas_thresholds``
+                    carries all 37 bands. India's are named for India's index, so until the FM
+                    locks the US ones the lens is NULL rather than borrowed
+                    (see FUNDAMENTAL_KEYS, and the unit trap above it)
     valuation    ✗  same source, and its bands must be seeded from the live S&P 500
                     cross-section first (India's "PE under 8 is cheap" is nonsense here)
     catalyst     ✗  needs filings_8k + insider_form4 — no producer yet (P3-B)

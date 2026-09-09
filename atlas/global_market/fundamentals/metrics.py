@@ -42,9 +42,10 @@ earned nothing.
 from __future__ import annotations
 
 import datetime as dt
-from collections.abc import Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import Any
 
 from atlas.global_market.fundamentals import ratios
 from atlas.global_market.fundamentals.facts import ANNUAL, QUARTER, PeriodRow
@@ -80,6 +81,10 @@ BALANCE_CONCEPTS = frozenset(
         "liabilities_current",
         "debt_long",
         "debt_short",
+        # stock_financials_pit stores the SUM of the two under this name (a company with debt
+        # filed under only one element has that much debt, not none), so a metric set built
+        # from the table sees this and one built from a raw payload sees the components.
+        "total_debt",
         "shares_diluted",
     }
 )
@@ -131,6 +136,62 @@ class Metrics:
     eps_diluted_ttm: Decimal | None = None
     free_cash_flow_ttm: Decimal | None = None
     ebitda_ttm: Decimal | None = None
+
+
+# concept → the ``stock_financials_pit`` column that holds it. ONE definition, read in both
+# directions: ``ingest_financials`` writes through it and :func:`rows_from_records` reads back
+# through it, so a column renamed on one side cannot silently stop being read on the other.
+# ``cost_of_revenue`` is mapped by xbrl_map and has no column in the table; it is extracted and
+# reported, never stored, so it is absent here.
+CONCEPT_COLUMNS: dict[str, str] = {
+    "revenue": "revenue",
+    "gross_profit": "gross_profit",
+    "operating_income": "operating_income",
+    "net_income": "net_income",
+    "eps_diluted": "eps_diluted",
+    "shares_diluted": "shares_diluted",
+    "depreciation_amortization": "dep_amort",
+    "interest_expense": "interest_expense",
+    "equity": "equity",
+    "assets": "total_assets",
+    "cash": "cash",
+    "assets_current": "current_assets",
+    "liabilities_current": "current_liabilities",
+    "operating_cash_flow": "operating_cash_flow",
+    "capex": "capex",
+    "dividends_paid": "dividends_paid",
+    "total_debt": "total_debt",
+}
+
+
+def rows_from_records(records: Iterable[Mapping[str, Any]]) -> list[PeriodRow]:
+    """``stock_financials_pit`` rows → :class:`PeriodRow`, the shape the assembly reads.
+
+    The inverse of what ``ingest_financials`` wrote. A NULL column is a concept the filer did
+    not report, so it is left OUT of ``values`` rather than stored as ``None`` — the assembly
+    asks ``.get`` and an absent key and a null value must not mean different things.
+    """
+    out: list[PeriodRow] = []
+    for record in records:
+        values = {
+            concept: value
+            for concept, column in CONCEPT_COLUMNS.items()
+            if (value := record.get(column)) is not None
+        }
+        out.append(
+            PeriodRow(
+                period_end=record["period_end"],
+                form=str(record["form"]),
+                filed=record["filed"],
+                period_class=ANNUAL if str(record["form"]).startswith("10-K") else QUARTER,
+                period_start=record.get("period_start"),
+                accession_no=record.get("accession_no"),
+                fiscal_year=record.get("fiscal_year"),
+                fiscal_period=record.get("fiscal_period"),
+                values={k: Decimal(str(v)) for k, v in values.items()},
+            )
+        )
+    return out
 
 
 def _visible(rows: Sequence[PeriodRow], as_of: dt.date) -> list[PeriodRow]:
@@ -232,9 +293,16 @@ def _balance_latest(window: Sequence[Quarter], concept: str) -> Decimal | None:
 
 
 def _total_debt(window: Sequence[Quarter]) -> Decimal | None:
-    """Long- plus short-term debt as most recently filed. A company with debt filed under only
-    one of the two elements has that much debt, not none — the same rule
-    ``ingest_financials.db_rows`` applies to the stored column."""
+    """Long- plus short-term debt as most recently filed, or the stored total.
+
+    ``ingest_financials`` sums the two components into one column, so a metric set read back
+    from the table finds ``total_debt`` and one built from a raw payload finds the parts. The
+    stored total wins where both are somehow present: it is the number the row was written
+    with, and a reader should see what the table says.
+    """
+    stored = _balance_latest(window, "total_debt")
+    if stored is not None:
+        return stored
     parts = [_balance_latest(window, c) for c in ("debt_long", "debt_short")]
     present = [p for p in parts if p is not None]
     return sum(present, Decimal(0)) if present else None
