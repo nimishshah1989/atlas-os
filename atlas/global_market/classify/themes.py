@@ -313,8 +313,8 @@ RULES: tuple[tuple[re.Pattern[str], str, str], ...] = (
         "shipping_words",
     ),
     # ── the two widest umbrellas, last, so every narrower claim above has already been
-    # taken: 12 of the 51 "Infrastructure" names are a data centre, a grid or an energy
-    # pipeline first ────────────────────────────────────────────────────────────────────
+    # taken: 10 of the 51 "Infrastructure" names are a data centre, a grid, a chain or an
+    # AI build-out first ────────────────────────────────────────────────────────────────
     (re.compile(r"\breits?\b", re.I), "reits", "reit_word"),
     (
         # `(?! capital)` excludes InfraCap's four funds — "Infrastructure Capital Bond

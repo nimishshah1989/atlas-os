@@ -109,7 +109,7 @@ PRECEDENCE_CASES = [
         "grid_electrification",
         "infrastructure",
         "'Electrification Infrastructure' — infrastructure is the last rule in the table for "
-        "this reason: 12 of the 51 names carrying the word are something narrower first",
+        "this reason: 10 of the 51 names carrying the word are something narrower first",
     ),
     (
         "DTCR",
