@@ -57,7 +57,7 @@ import argparse
 import datetime as dt
 import sys
 import uuid
-from collections.abc import Container, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -68,6 +68,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # the atlas packag
 
 import _gdb
 import pandas as pd
+from _financials import GICS_FINANCIALS, financial_metrics
 from _report import Report
 from psycopg2.extras import Json
 
@@ -75,11 +76,10 @@ from atlas.db import load_thresholds
 from atlas.global_market import calendar as gcal
 from atlas.global_market import index_membership as imx
 from atlas.global_market.fundamentals import cross_section as xsec
-from atlas.global_market.fundamentals import metrics as fundamentals
 from atlas.global_market.fundamentals.metrics import Metrics
 from atlas.global_market.scoring import blend, tiers_from_thresholds, weights_from_thresholds
 from atlas.global_market.scoring.stock_lenses import (
-    FUNDAMENTAL_KEYS,
+    REACHABLE_KEYS,
     score_fundamental,
     score_technical,
 )
@@ -102,7 +102,6 @@ LIGHTEST_COHORT = COHORTS_LIGHTEST_FIRST[0]
 COHORT_FROM_WEIGHT = "spy_weight"  # the member's own index weight put it in its cohort
 COHORT_NO_WEIGHT = "no_weight_lowest_cohort"  # index_membership carried no weight_frac
 
-GICS_FINANCIALS = "Financials"  # instrument_master.sector_gics, from the Select Sector SPDRs
 
 # The distribution the FM sets the 37 bands from lives in ``fundamentals.cross_section``: it is
 # pure (metric sets in, percentiles out) and the units it reports are the ones the lens adapter
@@ -178,46 +177,20 @@ ORDER BY im.symbol
 """
 
 
-# Every point-in-time row a reader on the anchor could have seen, for the stocks being scored.
-# The filter is `filed <= anchor`, which is the whole reason the table is keyed by `filed`:
-# a restatement must be invisible until the day it was filed.
-FINANCIALS_SQL = f"""
-SELECT f.instrument_id::text AS instrument_id, f.period_end, f.form, f.filed, f.period_start,
-       f.accession_no, f.fiscal_year, f.fiscal_period,
-       {", ".join("f." + c for c in sorted(set(fundamentals.CONCEPT_COLUMNS.values())))}
-FROM {M}.stock_financials_pit f
-JOIN {M}.universe_snapshot u
-  ON u.instrument_id = f.instrument_id
- AND u.date = (SELECT max(date) FROM {M}.universe_snapshot)
- AND u.in_universe
-WHERE f.filed <= :anchor
-ORDER BY f.instrument_id, f.period_end, f.filed
-"""
-
-
 def missing_bands(th: Mapping[str, Decimal]) -> list[str]:
     """The fundamental bands ``atlas_global.atlas_thresholds`` does not carry yet.
 
-    India's scorer falls back to India's own numbers for every one of the 37, so a partial set
+    India's scorer falls back to India's own numbers for every one of them, so a partial set
     would score the S&P 500 on a methodology this market never approved — invisibly. The lens
-    is therefore all-or-nothing: until the FM has locked the US bands from the cross-section
-    this run prints, ``fundamental`` is NULL and the run says so (rule #1, rule #0).
+    is therefore all-or-nothing: until the US bands are in the table, ``fundamental`` is NULL
+    and the run says so (rule #1, rule #0).
+
+    REACHABLE, not all 37: the three quick-ratio rungs grade an input no US filer supplies here
+    (``stock_lenses.QUICK_RATIO_KEYS`` says why), and a band no code path reads cannot fall back
+    to India's number. ``seed_thresholds.py --fundamental-bands`` cuts the rest from this run's
+    own cross-section.
     """
-    return sorted(set(FUNDAMENTAL_KEYS) - set(th))
-
-
-def financial_metrics(anchor: dt.date, financial_ids: Container[str]) -> dict[str, Metrics]:
-    """``instrument_id -> Metrics`` as of the anchor, for every stock with a full TTM window."""
-    frame = _gdb.read_df(FINANCIALS_SQL, {"anchor": anchor}, coerce_float=False)
-    if frame.empty:
-        return {}
-    out: dict[str, Metrics] = {}
-    for iid, block in frame.groupby("instrument_id", sort=False):
-        rows = fundamentals.rows_from_records(block.to_dict("records"))
-        found = fundamentals.metrics_as_of(rows, anchor, is_financial=str(iid) in financial_ids)
-        if found is not None:
-            out[str(iid)] = found
-    return out
+    return sorted(REACHABLE_KEYS - set(th))
 
 
 def cross_section(by_id: Mapping[str, Metrics], report: Report | None) -> pd.DataFrame:
@@ -248,7 +221,7 @@ def print_cross_section(table: pd.DataFrame, missing: Sequence[str]) -> None:
         print(f"  {r['metric']:<20}{r['unit']:<9}{r['names']:>6}{cells}")
     if missing:
         print(
-            f"  the fundamental lens is NOT scored: {len(missing)} of {len(FUNDAMENTAL_KEYS)} "
+            f"  the fundamental lens is NOT scored: {len(missing)} of {len(REACHABLE_KEYS)} "
             f"band(s) are missing from {M}.atlas_thresholds, first {missing[0]!r}. Set them "
             "from the table above (seed_thresholds.py, FM approval first) — a partial set "
             "would score this market on India's numbers."

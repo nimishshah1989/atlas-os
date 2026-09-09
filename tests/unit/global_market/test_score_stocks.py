@@ -40,6 +40,11 @@ import pandas as pd
 import pytest
 
 from atlas.global_market.fundamentals import cross_section as xsec
+from atlas.global_market.scoring.stock_lenses import (
+    FUNDAMENTAL_KEYS,
+    QUICK_RATIO_KEYS,
+    REACHABLE_KEYS,
+)
 from tests.unit.global_market.scaffold_identity import scaffold_rows
 from tests.unit.global_market.script_loader import load_global_script
 
@@ -373,10 +378,17 @@ def _apple_metrics(as_of: dt.date = dt.date(2026, 9, 4)):
 
 
 def test_the_seed_table_does_not_carry_the_fundamental_bands_yet() -> None:
-    """The 37 US bands are the FM's to lock from the live cross-section. Until the seed carries
-    them the lens must not score — India's numbers are named for India's index."""
+    """The US bands are cut from the live cross-section, not written into the seed file. Until
+    they are in the table the lens must not score — India's numbers are named for India's index.
+
+    The gate asks for the REACHABLE set, not all 37: the three quick-ratio rungs grade an input
+    no US filer supplies (``stock_lenses.QUICK_RATIO_KEYS``), and a band no code path reads
+    cannot fall back to India's number, which is the only thing this gate exists to prevent.
+    """
     missing = ss.missing_bands(seeded_thresholds())
-    assert set(missing) == set(ss.FUNDAMENTAL_KEYS)
+    assert set(missing) == set(REACHABLE_KEYS)
+    assert not (set(missing) & QUICK_RATIO_KEYS)
+    assert REACHABLE_KEYS | QUICK_RATIO_KEYS == set(FUNDAMENTAL_KEYS)
 
 
 def test_metrics_without_bands_do_not_score_the_lens() -> None:

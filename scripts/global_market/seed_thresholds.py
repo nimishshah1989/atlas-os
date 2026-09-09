@@ -71,7 +71,13 @@ import sys
 from decimal import Decimal
 
 import _gdb
+import pandas as pd
 import psycopg2
+from _financials import financial_ids, financial_metrics
+
+from atlas.global_market.fundamentals import bands
+from atlas.global_market.fundamentals import cross_section as xsec
+from atlas.global_market.scoring.stock_lenses import REACHABLE_KEYS
 
 MODIFIED_BY = "seed_thresholds.py"
 
@@ -319,17 +325,80 @@ ON CONFLICT (threshold_key) DO NOTHING
 """
 
 
+# ── the fundamental bands, cut from the index's own distribution ────────────────────────────
+#
+# These are the only seeds NOT written down in this file, and they cannot be: India's ladder
+# starts at ROE 20 because that is where India's index sits, and a ladder whose rungs all sit
+# below the S&P 500 puts every name on the top rung — the sub-score stops discriminating and the
+# board reads "these companies are all excellent" rather than "this measure is switched off".
+# plan.md §B: "seeded from the actual S&P 500 cross-sectional quartiles on the first run".
+#
+# So they are DERIVED, by the stated formula in atlas.global_market.fundamentals.bands, over the
+# real assembled filings in stock_financials_pit — a computation over real data, printed in full
+# before it is written, and seeded (never overwriting a value the FM has tuned).
+
+#: (units, min, max) per metric, for the admin panel's clamps. Rates arrive in PER CENT from
+#: cross_section; the ratios are plain multiples.
+_BAND_BOUNDS: dict[str, tuple[str, str, str]] = {
+    "roe": ("percent", "-200", "200"),
+    "roce": ("percent", "-200", "200"),
+    "operating_margin": ("percent", "-200", "200"),
+    "net_margin": ("percent", "-200", "200"),
+    "revenue_growth": ("percent", "-100", "500"),
+    "eps_growth": ("percent", "-100", "500"),
+    "debt_to_equity": ("ratio", "0", "50"),
+    "current_ratio": ("ratio", "0", "50"),
+}
+
+_BAND_METRIC: dict[str, str] = {
+    key: metric for metric, _d, rungs in bands.LADDERS for key, _p in rungs
+}
+_BAND_PERCENTILE: dict[str, int] = {
+    key: pct for _m, _d, rungs in bands.LADDERS for key, pct in rungs
+}
+
+
+def fundamental_band_rows(table: pd.DataFrame, anchor: str) -> list[dict[str, object]]:
+    """The derived fundamental bands as seed rows, each saying which percentile it is.
+
+    A threshold whose description does not say where it came from is a number the FM cannot
+    argue with, so every row names its metric, its percentile, the population size and the
+    session — the four things needed to reproduce it.
+    """
+    derived = bands.bands_from_cross_section(table)
+    names = {str(r["metric"]): int(r["names"]) for r in table.to_dict("records")}
+    out: list[dict[str, object]] = []
+    for key, value in sorted(derived.items()):
+        metric = _BAND_METRIC[key]
+        units, lo, hi = _BAND_BOUNDS[metric]
+        out.append(
+            _row(
+                key,
+                str(value),
+                "fundamental",
+                "B",
+                units,
+                lo,
+                hi,
+                f"P{_BAND_PERCENTILE[key]} of {metric} across {names.get(metric, 0)} S&P 500 "
+                f"members with a full trailing-twelve-month window at EOD {anchor}. Cut from the "
+                f"index's own distribution because India's ladder describes India's index; edit "
+                f"it here and the lens re-scores on the next run",
+            )
+        )
+    return out
+
+
 def check_seeds(rows: list[dict[str, object]]) -> None:
     """Internal consistency of the seed table itself (keys unique, weights sum to 1)."""
     keys = [str(r["threshold_key"]) for r in rows]
     dupes = {k for k in keys if keys.count(k) > 1}
     assert not dupes, f"duplicate seed keys: {sorted(dupes)}"
     for prefix in ("lens_weight_", "etf_lens_weight_"):
-        total = sum(
-            Decimal(str(r["threshold_value"]))
-            for r in rows
-            if str(r["threshold_key"]).startswith(prefix)
-        )
+        weights = [r for r in rows if str(r["threshold_key"]).startswith(prefix)]
+        if not weights:
+            continue  # a bands-only run carries no weights; only a FULL set must sum to one
+        total = sum(Decimal(str(r["threshold_value"])) for r in weights)
         assert total == Decimal("1"), f"{prefix}* seeds sum to {total}, expected 1"
     for r in rows:
         v, lo, hi = (Decimal(str(r[c])) for c in ("threshold_value", "min_allowed", "max_allowed"))
@@ -371,22 +440,60 @@ def main(argv: list[str] | None = None) -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     ap.add_argument("--dry-run", action="store_true", help="print the seed table; write nothing")
+    ap.add_argument(
+        "--fundamental-bands",
+        action="store_true",
+        help="ALSO cut the 34 reachable fundamental bands from the live S&P 500 cross-section "
+        "(reads stock_financials_pit; prints the whole ladder before writing)",
+    )
     args = ap.parse_args(argv)
 
-    check_seeds(SEEDS)
+    rows = list(SEEDS)
+    if args.fundamental_bands:
+        rows += band_rows_from_prod()
+
+    check_seeds(rows)
     if args.dry_run:
-        print_table(SEEDS)
+        print_table(rows)
         return 0
 
     dsn = _gdb.psycopg2_url()
     print(f"target {dsn.rsplit('@', 1)[-1]}  table {_gdb.M}.atlas_thresholds")
     try:
-        inserted, present = seed(SEEDS, dsn)
+        inserted, present = seed(rows, dsn)
     except psycopg2.Error as e:
         print(f"FAILED (rolled back): {e}", file=sys.stderr)
         return 1
     print(f"inserted {inserted}, already present {present} (left untouched)")
     return 0
+
+
+def band_rows_from_prod() -> list[dict[str, object]]:
+    """Assemble the index's fundamentals at the latest session and cut the ladder from them.
+
+    Prints the cross-section it cut from AND the ladder it produced: a threshold nobody watched
+    being derived is a threshold nobody can check.
+    """
+    # The SAME anchor score_stocks uses: the latest technical_daily session at or before the
+    # EOD cutoff. Cutting the ladder on a different session from the one the lens is scored on
+    # would set the market's methodology from a population the scorer never sees.
+    anchor = _gdb.read_df(
+        f"SELECT max(date) AS d FROM {_gdb.M}.technical_daily WHERE date <= :cutoff",
+        {"cutoff": _gdb.eod_cutoff()},
+    )["d"].iloc[0]
+    if anchor is None:
+        print("technical_daily is empty — run compute_technicals.py first", file=sys.stderr)
+        return []
+    metrics = financial_metrics(anchor, financial_ids())
+    table = xsec.cross_section(metrics.values())
+    print(f"\n[seed_thresholds] S&P 500 fundamental cross-section at EOD {anchor}")
+    print(table.to_string(index=False))
+    rows = fundamental_band_rows(table, str(anchor))
+    print(f"[seed_thresholds] cut {len(rows)} band(s) from it")
+    undecided = bands.undecidable(REACHABLE_KEYS)
+    if undecided:
+        print(f"  NOT derivable and NOT required: {sorted(undecided)}")
+    return rows
 
 
 if __name__ == "__main__":

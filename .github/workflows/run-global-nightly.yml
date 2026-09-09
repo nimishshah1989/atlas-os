@@ -43,6 +43,16 @@ name: Run Global Nightly
 #           without an SSH session.
 #   seed_thresholds  (run mode) inserts any atlas_thresholds seed row the box has never had.
 #           The same run lost mark_baskets to five missing basket keys.
+#   fundamental_bands  (with seed_thresholds) ALSO cuts the 34 reachable fundamental bands from
+#           the LIVE S&P 500 cross-section and seeds them. They are the only thresholds not
+#           written down in seed_thresholds.py and they cannot be: India's ladder starts at ROE
+#           20 because that is where India's index sits, and a ladder whose rungs all sit below
+#           the S&P 500 puts every name on the top rung — the sub-score stops discriminating and
+#           the board reads "all excellent" instead of "switched off". So they are DERIVED, by
+#           the stated formula in atlas.global_market.fundamentals.bands over the real assembled
+#           filings, printed in full before writing, and seeded — never overwriting a value the
+#           FM has tuned. The three quick-ratio rungs are not cut: their input needs inventory,
+#           which stock_financials_pit does not carry.
 # Those six are everything this workflow ever writes to the box.
 #
 # EVERYTHING THIS PRINTS IS REDACTED FIRST. Actions logs on a public repository are public, and
@@ -87,6 +97,11 @@ on:
         type: boolean
       seed_thresholds:
         description: "run mode only: insert missing atlas_thresholds seed rows (never overwrites an edit)"
+        required: false
+        default: false
+        type: boolean
+      fundamental_bands:
+        description: "with seed_thresholds: ALSO cut the 34 fundamental bands from the live S&P 500 cross-section"
         required: false
         default: false
         type: boolean
@@ -249,12 +264,14 @@ jobs:
             fi
 
             if [ "${{ inputs.seed_thresholds }}" = "true" ]; then
-              echo "== atlas_global.atlas_thresholds: inserting any seed row the box has never had =="
+              BANDS=""
+              [ "${{ inputs.fundamental_bands }}" = "true" ] && BANDS="--fundamental-bands"
+              echo "== atlas_global.atlas_thresholds: inserting any seed row the box has never had $BANDS =="
               # The writer is INSERT … ON CONFLICT (threshold_key) DO NOTHING, so a value the FM
               # tuned from /admin/thresholds is left exactly as it is; only never-seen keys are
               # added. Sourced .env never reaches the log: the script prints the DSN with its
               # credentials already stripped, and redact() runs over the output regardless.
-              ( set -a; source "$REPO/.env"; set +a; cd "$REPO"; PYTHONPATH="$REPO:$REPO/scripts/global_market:$REPO/scripts/foundation" "$REPO/.venv/bin/python" scripts/global_market/seed_thresholds.py ) 2>&1 | redact || echo "SEEDING FAILED — mark_baskets will fail below for the same reason"
+              ( set -a; source "$REPO/.env"; set +a; cd "$REPO"; PYTHONPATH="$REPO:$REPO/scripts/global_market:$REPO/scripts/foundation" "$REPO/.venv/bin/python" scripts/global_market/seed_thresholds.py $BANDS ) 2>&1 | redact || echo "SEEDING FAILED — mark_baskets will fail below for the same reason"
             fi
 
             if [ "${{ inputs.set_box_env }}" = "true" ]; then
