@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import re
 import socket
 import subprocess
 import sys
@@ -62,6 +63,31 @@ _GATE_VALIDATORS = {"freshness_guard": "freshness_guard", "validate_global_A": "
 Step = tuple[str, str, str, str, str]
 
 
+# A reason is rendered on the OPEN board, and a traceback is where credentials surface: requests
+# puts the whole URL in an HTTPError ("... for url: ...&api_key=..."), a driver can echo a
+# connection string. The orchestrator redacts once (atlas_global_daily.sh::redact_secrets);
+# this is the second layer, on the single writer to the database, so a runfile from any
+# producer — the weekly, a hand-run, an older orchestrator — is covered too. Over-redaction is
+# the acceptable failure: "token:" in prose loses a word, a leaked key loses a board.
+_SECRET_URL_PASSWORD = re.compile(r"://([^:/@\s]+):[^@\s]*@")
+_SECRET_PATTERNS = [
+    re.compile(r"((?:bearer|basic)\s+)[^\s\"']+", re.I),
+    re.compile(
+        r"((?:api[_-]?key|apikey|access[_-]?token|client[_-]?secret|secret[_-]?key|secret|token"
+        r"|password|passwd|pwd|authorization|apca-api-[a-z-]+)[\"']?\s*[=:]\s*[\"']?)[^&\s\"']+",
+        re.I,
+    ),
+]
+
+
+def redact(text: str) -> str:
+    """Every credential-shaped value in ``text`` → ``***``; everything else untouched."""
+    text = _SECRET_URL_PASSWORD.sub(r"://\1:***@", text)
+    for rx in _SECRET_PATTERNS:
+        text = rx.sub(r"\1***", text)
+    return text
+
+
 def run_id(milestone: str, name: str, started: str) -> str:
     """Deterministic per orchestrator step — the idempotency key of both run tables."""
     ns = uuid.UUID("6f1c2a54-9b7e-4d3a-8e51-0d4b2c7a9e10")
@@ -71,7 +97,9 @@ def run_id(milestone: str, name: str, started: str) -> str:
 def read_runfile(path: str | Path) -> list[Step]:
     """The orchestrator's TSV, malformed lines skipped (a step name is mandatory)."""
     steps: list[Step] = []
-    with open(path) as fh:
+    # errors="replace": a reason the orchestrator cut mid-character must not take the whole
+    # snapshot down with a UnicodeDecodeError — one odd glyph in one row is the honest outcome.
+    with open(path, encoding="utf-8", errors="replace") as fh:
         for line in fh:
             parts = line.rstrip("\n").split("\t")
             if len(parts) < 4 or not parts[0]:
@@ -102,7 +130,7 @@ def run_rows(
             "status": status,
             # The reason, or NULL — never "" — so /health's error column stays empty on success
             # instead of rendering a blank line under every green row.
-            "error_message": why[:500] or None,
+            "error_message": redact(why).strip()[:500] or None,
             "host": host,
             "git_sha": sha,
             "updated_at": now,

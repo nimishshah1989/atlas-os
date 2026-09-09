@@ -56,10 +56,28 @@ trap 'rm -f "$RUNFILE" "$PUBLISH_CFG"' EXIT
 # step started at (the log is append-only and shared, so an offset is the honest cursor), tabs
 # and newlines flattened because the runfile is a TSV, capped so a stack trace cannot bloat a
 # row. STEP_WHY, when a command sets it, leads.
-why_tail() {  # why_tail <log byte offset> <rc>  → one line, ≤ 500 chars
+#
+# THE REASON IS RENDERED ON A PUBLIC PAGE. The board is open (openAccess.ts), so whatever lands
+# in error_message is readable by anyone, and a Python traceback is exactly where a credential
+# turns up: requests puts the full URL in an HTTPError ("403 ... for url: ...&api_key=..."),
+# psycopg2 can echo a connection string. So every reason passes redact_secrets before it is
+# written anywhere — the runfile, the log's FAIL line — and write_health_snapshot.py redacts
+# again (its own patterns, tested) before the row reaches the database. Two layers, because
+# the second one is the single writer and the first keeps the box's own files clean too.
+redact_secrets() {  # stdin → stdout; anything shaped like a credential becomes ***
+  sed -E \
+    -e "s#://([^:/@[:space:]]+):[^@[:space:]]*@#://\\1:***@#g" \
+    -e "s#((bearer|basic)[[:space:]]+)[^[:space:]\"']+#\\1***#Ig" \
+    -e "s#((api[_-]?key|apikey|access[_-]?token|client[_-]?secret|secret[_-]?key|secret|token|password|passwd|pwd|authorization|apca-api-[a-z-]+)[\"']?[[:space:]]*[=:][[:space:]]*[\"']?)[^&[:space:]\"']+#\\1***#Ig"
+}
+why_tail() {  # why_tail <log byte offset> <rc>  → one line, ≤ 500 bytes, valid UTF-8, no credentials
   local off="$1" rc="$2" t
-  t=$(tail -c +"$((off + 1))" "$LOG" 2>/dev/null | grep -v '^--- \|^  FAIL: \|^  ok: ' | tail -n 3 | tr '\t\r\n' '   ' | sed 's/  */ /g' | cut -c1-500)
-  printf '%s' "${STEP_WHY:+$STEP_WHY — }rc=$rc: ${t:-<no output>}"
+  t=$(tail -c +"$((off + 1))" "$LOG" 2>/dev/null | grep -v '^--- \|^  FAIL: \|^  ok: ' | tail -n 3 | tr '\t\r\n' '   ')
+  # Composed first, THEN flattened, redacted and capped: a cap on the tail alone let the
+  # STEP_WHY prefix push the row past 500, and a byte cut can split a multibyte character,
+  # which Postgres rejects as invalid UTF-8 — iconv -c drops the broken tail byte.
+  printf '%s' "${STEP_WHY:+$STEP_WHY — }rc=$rc: ${t:-<no output>}" \
+    | tr '\t\r\n' '   ' | sed 's/  */ /g' | redact_secrets | cut -c1-500 | iconv -c -f UTF-8 -t UTF-8
 }
 step() {  # step "name" cmd...   (non-fatal; records failures + a run row; cmd may set STEP_WHY)
   local name="$1"; shift

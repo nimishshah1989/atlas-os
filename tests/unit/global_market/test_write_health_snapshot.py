@@ -263,3 +263,30 @@ def test_failed_step_reason_reaches_error_message_and_green_row_has_none(tmp_pat
     assert rows["compute_technicals"]["error_message"] is None  # four columns: no reason recorded
     # gate rows unpack the wider tuple without complaint
     assert whs.validator_rows(whs.read_runfile(p), "daily", "vm", None, NOW) == []
+
+
+def test_a_reason_never_carries_a_credential_onto_the_open_board() -> None:
+    """The shapes a traceback takes — requests' HTTPError with the keyed URL, a connection
+    string, an Authorization header, Alpaca's key headers — each lose the value and nothing
+    else. Placeholder values, deliberately low-entropy: this asserts on text shape, not data."""
+    fred = (
+        "403 Client Error: Forbidden for url: https://api.stlouisfed.org/fred/series/"
+        "observations?series_id=SP500&api_key=aaaaaaaaaaaaaaaa&file_type=json"
+    )
+    assert whs.redact(fred) == (
+        "403 Client Error: Forbidden for url: https://api.stlouisfed.org/fred/series/"
+        "observations?series_id=SP500&api_key=***&file_type=json"
+    )
+    dsn = "connection to postgresql://atlas_global_app.abc:pw@aws-1.pooler.supabase.com:6543/pg"
+    assert whs.redact(dsn) == (
+        "connection to postgresql://atlas_global_app.abc:***@aws-1.pooler.supabase.com:6543/pg"
+    )
+    hdr = (
+        "{'Authorization': 'Bearer aaaaaaaaaaaa', 'APCA-API-KEY-ID': 'aaaa', "
+        "'APCA-API-SECRET-KEY': 'bbbb'}"
+    )
+    out = whs.redact(hdr)
+    assert "aaaaaaaaaaaa" not in out and "'aaaa'" not in out and "'bbbb'" not in out
+    assert "APCA-API-KEY-ID" in out  # the NAME survives, so the reader knows which header
+    plain = "rc=1: ingest_prices: SPY has no bar for 2026-09-08 (series_id=SP500 checked)"
+    assert whs.redact(plain) == plain
