@@ -16,6 +16,7 @@
 import Link from 'next/link'
 import { Chip } from '@/components/ui/Chip'
 import { DecileChip, LeaderMark } from '@/components/ui/DecileChip'
+import { DecileMeter } from '@/components/ui/DecileMeter'
 import { LensBar } from '@/components/ui/LensBar'
 import type { AssetClass, InstrumentRow } from '@/lib/facts'
 import { formatDecimal, formatPct, formatUsd } from '@/lib/format'
@@ -103,21 +104,29 @@ const COHORT: Column<InstrumentRow> = {
 const COMPOSITE: Column<InstrumentRow> = {
   key: 'composite',
   label: 'Composite',
-  width: 100,
+  width: 124,
   align: 'right',
   title: 'The blended score, 0–100, with its decile within the peer group',
   sortValue: (r) => orderBy(r.composite),
   // One em dash, not two: an unscored row says "nothing here" once. The chip joins the numeral
   // only when there is a rank to show, because a decile without a composite is not a thing.
+  //
+  // The METER under the numeral is the glyph India's board uses everywhere a decile appears, and
+  // it is what makes a two-thousand-row table scannable: a reader finds the full bars without
+  // reading a single number. The chip beside the numeral keeps the digit, so the column still
+  // reads in greyscale and in a screenshot.
   render: (r) =>
     r.composite == null ? (
       <span className="num text-ink-3">—</span>
     ) : (
-      <span className="flex items-center justify-end gap-1.5">
-        <span className="num text-section font-medium text-ink" data-composite="">
-          {formatDecimal(r.composite, 0)}
+      <span className="flex flex-col items-end gap-0.5">
+        <span className="flex items-center gap-1.5">
+          <span className="num text-section font-medium text-ink" data-composite="">
+            {formatDecimal(r.composite, 0)}
+          </span>
+          <DecileChip decile={r.composite_decile} title={rankSentence(r.peer_rank, r.peer_n, r.peer_group)} />
         </span>
-        <DecileChip decile={r.composite_decile} title={rankSentence(r.peer_rank, r.peer_n, r.peer_group)} />
+        <DecileMeter decile={r.composite_decile} title={rankSentence(r.peer_rank, r.peer_n, r.peer_group)} />
       </span>
     ),
 }
@@ -144,7 +153,9 @@ const lenses = (ctx: ColumnContext): Column<InstrumentRow> => ({
   label: 'Lenses',
   width: 70,
   align: 'right',
-  title: 'How many of the blend’s lenses this composite was built from. Four of five have no producer yet.',
+  // COUNTED, never asserted: this used to say "four of five have no producer yet", which was true
+  // the week it was written and wrong the week a lens landed. The denominator is the weight table's.
+  title: `How many of the blend’s ${ctx.lensTotal} lenses this composite was built from.`,
   sortValue: (r) => r.lenses_active,
   render: (r) => (
     <span className={r.lenses_active == null ? 'text-ink-3' : 'text-ink-2'} title={lensesLabel(r.lenses_active, ctx.lensTotal)}>

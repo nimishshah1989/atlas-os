@@ -57,7 +57,7 @@ import argparse
 import datetime as dt
 import sys
 import uuid
-from collections.abc import Container, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -68,6 +68,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # the atlas packag
 
 import _gdb
 import pandas as pd
+from _cross_section import cross_section, print_cross_section
+from _financials import GICS_FINANCIALS, financial_metrics
+from _lens_inputs import lens_inputs
 from _report import Report
 from psycopg2.extras import Json
 
@@ -75,11 +78,15 @@ from atlas.db import load_thresholds
 from atlas.global_market import calendar as gcal
 from atlas.global_market import index_membership as imx
 from atlas.global_market.fundamentals import cross_section as xsec
-from atlas.global_market.fundamentals import metrics as fundamentals
 from atlas.global_market.fundamentals.metrics import Metrics
+from atlas.global_market.providers.finra import ShortInterest
 from atlas.global_market.scoring import blend, tiers_from_thresholds, weights_from_thresholds
+from atlas.global_market.scoring.stock_catalyst import Filing, score_catalyst
+from atlas.global_market.scoring.stock_catalyst import missing_keys as missing_catalyst_keys
+from atlas.global_market.scoring.stock_flow import missing_keys as missing_flow_keys
+from atlas.global_market.scoring.stock_flow import score_flow
 from atlas.global_market.scoring.stock_lenses import (
-    FUNDAMENTAL_KEYS,
+    REACHABLE_KEYS,
     score_fundamental,
     score_technical,
 )
@@ -102,7 +109,6 @@ LIGHTEST_COHORT = COHORTS_LIGHTEST_FIRST[0]
 COHORT_FROM_WEIGHT = "spy_weight"  # the member's own index weight put it in its cohort
 COHORT_NO_WEIGHT = "no_weight_lowest_cohort"  # index_membership carried no weight_frac
 
-GICS_FINANCIALS = "Financials"  # instrument_master.sector_gics, from the Select Sector SPDRs
 
 # The distribution the FM sets the 37 bands from lives in ``fundamentals.cross_section``: it is
 # pure (metric sets in, percentiles out) and the units it reports are the ones the lens adapter
@@ -178,81 +184,20 @@ ORDER BY im.symbol
 """
 
 
-# Every point-in-time row a reader on the anchor could have seen, for the stocks being scored.
-# The filter is `filed <= anchor`, which is the whole reason the table is keyed by `filed`:
-# a restatement must be invisible until the day it was filed.
-FINANCIALS_SQL = f"""
-SELECT f.instrument_id::text AS instrument_id, f.period_end, f.form, f.filed, f.period_start,
-       f.accession_no, f.fiscal_year, f.fiscal_period,
-       {", ".join("f." + c for c in sorted(set(fundamentals.CONCEPT_COLUMNS.values())))}
-FROM {M}.stock_financials_pit f
-JOIN {M}.universe_snapshot u
-  ON u.instrument_id = f.instrument_id
- AND u.date = (SELECT max(date) FROM {M}.universe_snapshot)
- AND u.in_universe
-WHERE f.filed <= :anchor
-ORDER BY f.instrument_id, f.period_end, f.filed
-"""
-
-
 def missing_bands(th: Mapping[str, Decimal]) -> list[str]:
     """The fundamental bands ``atlas_global.atlas_thresholds`` does not carry yet.
 
-    India's scorer falls back to India's own numbers for every one of the 37, so a partial set
+    India's scorer falls back to India's own numbers for every one of them, so a partial set
     would score the S&P 500 on a methodology this market never approved — invisibly. The lens
-    is therefore all-or-nothing: until the FM has locked the US bands from the cross-section
-    this run prints, ``fundamental`` is NULL and the run says so (rule #1, rule #0).
+    is therefore all-or-nothing: until the US bands are in the table, ``fundamental`` is NULL
+    and the run says so (rule #1, rule #0).
+
+    REACHABLE, not all 37: the three quick-ratio rungs grade an input no US filer supplies here
+    (``stock_lenses.QUICK_RATIO_KEYS`` says why), and a band no code path reads cannot fall back
+    to India's number. ``seed_thresholds.py --fundamental-bands`` cuts the rest from this run's
+    own cross-section.
     """
-    return sorted(set(FUNDAMENTAL_KEYS) - set(th))
-
-
-def financial_metrics(anchor: dt.date, financial_ids: Container[str]) -> dict[str, Metrics]:
-    """``instrument_id -> Metrics`` as of the anchor, for every stock with a full TTM window."""
-    frame = _gdb.read_df(FINANCIALS_SQL, {"anchor": anchor}, coerce_float=False)
-    if frame.empty:
-        return {}
-    out: dict[str, Metrics] = {}
-    for iid, block in frame.groupby("instrument_id", sort=False):
-        rows = fundamentals.rows_from_records(block.to_dict("records"))
-        found = fundamentals.metrics_as_of(rows, anchor, is_financial=str(iid) in financial_ids)
-        if found is not None:
-            out[str(iid)] = found
-    return out
-
-
-def cross_section(by_id: Mapping[str, Metrics], report: Report | None) -> pd.DataFrame:
-    """The pure table, with each row also written to the FM's CSV."""
-    table = xsec.cross_section(by_id.values())
-    if report is not None:
-        for row in table.to_dict("records"):
-            report.add(*(row[c] for c in METRIC_REPORT_COLUMNS))
-    return table
-
-
-def print_cross_section(table: pd.DataFrame, missing: Sequence[str]) -> None:
-    """The same table on the console, and — when the bands are not all there — why the lens
-    did not score."""
-    header = f"{'metric':<20}{'unit':<9}{'names':>6}" + "".join(
-        f"{'P' + str(p):>10}" for p in xsec.PERCENTILES
-    )
-    print("\n[score_stocks] S&P 500 fundamental cross-section — the FM sets the bands from this")
-    print("  " + header)
-    for r in table.to_dict("records"):
-        # pd.isna, not `is None`: DataFrame.from_records turns a None into NaN in a float
-        # column, and NaN formats as "nan" through the same "{:>10.2f}" that would show a
-        # number. The CSV is written from the dicts and keeps the empty cell either way.
-        cells = "".join(
-            f"{'—':>10}" if pd.isna(r[f"p{p}"]) else f"{r[f'p{p}']:>10.2f}"
-            for p in xsec.PERCENTILES
-        )
-        print(f"  {r['metric']:<20}{r['unit']:<9}{r['names']:>6}{cells}")
-    if missing:
-        print(
-            f"  the fundamental lens is NOT scored: {len(missing)} of {len(FUNDAMENTAL_KEYS)} "
-            f"band(s) are missing from {M}.atlas_thresholds, first {missing[0]!r}. Set them "
-            "from the table above (seed_thresholds.py, FM approval first) — a partial set "
-            "would score this market on India's numbers."
-        )
+    return sorted(REACHABLE_KEYS - set(th))
 
 
 def anchor_date(cutoff: dt.date) -> dt.date:
@@ -328,15 +273,25 @@ def score_rows(
     run_id: str,
     by_id: Mapping[str, Metrics] | None = None,
     bands_locked: bool = False,
+    filings: Mapping[str, Sequence[Filing]] | None = None,
+    short: Mapping[str, Sequence[ShortInterest]] | None = None,
 ) -> tuple[pd.DataFrame, list[list[Any]]]:
     """One ``lens_scores_daily`` row per stock, plus the per-stock report lines.
 
     ``by_id`` carries the point-in-time metric set per instrument and ``bands_locked`` says the
-    37 US bands exist. Both are needed for a fundamental score: metrics without bands would be
+    US bands exist. Both are needed for a fundamental score: metrics without bands would be
     scored on India's cross-section, and bands without metrics have nothing to score.
+
+    ``filings`` carries each stock's 8-K history for the catalyst lens. A stock absent from it
+    has filed nothing in the window, which the scorer answers with ``None`` — no news is not bad
+    news — rather than with a 50 that would claim the news netted out.
     """
     weights = weights_from_thresholds(th, LENSES, prefix="lens_weight_")
     tiers = tiers_from_thresholds(th)
+    # Same all-or-nothing rule as the fundamental bands, for the same reason: a partial set
+    # would weight the buckets by whatever happened to be seeded, invisibly.
+    catalyst_ready = not missing_catalyst_keys(th)
+    flow_ready = not missing_flow_keys(th)
     total_weight = sum(weights.values())
     now = dt.datetime.now(ZoneInfo(gcal.NEW_YORK))
     rows: list[dict[str, Any]] = []
@@ -387,11 +342,21 @@ def score_rows(
         # An absent lens is None, not 0 — a company is not weak on something we did not
         # measure. catalyst and flow have no producer at all (P3-B); fundamental has its feed
         # and waits only on the FM's bands.
+        catalyst = (
+            score_catalyst(filings.get(str(r["instrument_id"]), ()), anchor, th)
+            if filings is not None and catalyst_ready
+            else None
+        )
+        flow = (
+            score_flow(short.get(str(r["instrument_id"]), ()), anchor, th)
+            if short is not None and flow_ready
+            else None
+        )
         lenses: dict[str, Decimal | None] = {
             "technical": technical.value,
             "fundamental": None if fundamental is None else fundamental.value,
-            "catalyst": None,  # filings_8k / insider_form4 — no producer yet (P3-B)
-            "flow": None,  # insider_form4 / holders_13f_q — no producer yet (P3-B)
+            "catalyst": None if catalyst is None else catalyst.value,
+            "flow": None if flow is None else flow.value,
         }
         # NO ``order=`` HERE. blend()'s fourth argument is the CONVICTION-TIER ladder
         # (HIGHEST → HIGH → MEDIUM → WATCH → BELOW_THRESHOLD) and its default is the right
@@ -418,6 +383,10 @@ def score_rows(
                 **dict(technical.subs),
                 "fundamental": None if fundamental is None else fundamental.value,
                 **({} if fundamental is None else dict(fundamental.subs)),
+                "catalyst": None if catalyst is None else catalyst.value,
+                **({} if catalyst is None else dict(catalyst.subs)),
+                "flow": None if flow is None else flow.value,
+                **({} if flow is None else dict(flow.subs)),
                 "composite": result.composite,
                 "conviction_tier": result.conviction_tier,
                 "cap_cohort": r["cap_cohort"],
@@ -431,6 +400,8 @@ def score_rows(
                         # exact database numeric as an approximation of itself.
                         "weight_frac": None if weight is None else str(weight),
                         "technical": technical.evidence,
+                        **({} if catalyst is None else {"catalyst": catalyst.evidence}),
+                        **({} if flow is None else {"flow": flow.evidence}),
                         "blend": result.evidence,
                     }
                 ),
@@ -545,13 +516,18 @@ def run(
     }
     by_id = financial_metrics(anchor, financial_ids)
     missing = missing_bands(th)
+    events = lens_inputs(anchor, th)
     print(
         f"[score_stocks] fundamentals: {len(by_id):,d} of {len(frame):,d} name(s) have a full "
         f"trailing-twelve-month window as of {anchor}; {len(financial_ids)} financial(s)"
     )
     print_cross_section(cross_section(by_id, metric_report), missing)
 
-    table, lines = score_rows(frame, anchor, th, run_id, by_id, not missing)
+    for line in events.lines(M, len(frame)):
+        print(f"[score_stocks] {line}")
+    table, lines = score_rows(
+        frame, anchor, th, run_id, by_id, not missing, events.filings, events.short
+    )
     for line in lines:
         report.add(*line)
     scored = print_summary(table, frame, anchor, report)

@@ -134,5 +134,17 @@ CREATE TABLE IF NOT EXISTS atlas_global.short_interest (
     ingested_at       timestamptz   NOT NULL DEFAULT now(),
     CONSTRAINT short_interest_pkey PRIMARY KEY (instrument_id, settlement_date)
 );
+
+-- FOUR COLUMNS THE FLOW LENS READS, added rather than assumed: the table predates the scorer.
+-- previous_short_interest and change_percent are FINRA's OWN figures, stored as published rather
+-- than recomputed here, so the journal is faithful to the source and the lens reads the same
+-- arithmetic FINRA did. split_flag matters because a split between settlements makes the two share
+-- counts incomparable and the change percent across one is meaningless; revision_flag marks a
+-- settlement FINRA restated after publication, which is a different fact from the original.
+ALTER TABLE atlas_global.short_interest ADD COLUMN IF NOT EXISTS previous_short_interest bigint;
+ALTER TABLE atlas_global.short_interest ADD COLUMN IF NOT EXISTS change_percent          numeric(12,4);
+ALTER TABLE atlas_global.short_interest ADD COLUMN IF NOT EXISTS split_flag              boolean;
+ALTER TABLE atlas_global.short_interest ADD COLUMN IF NOT EXISTS revision_flag           boolean;
+
 CREATE INDEX IF NOT EXISTS ix_short_interest_settlement_date
     ON atlas_global.short_interest (settlement_date);

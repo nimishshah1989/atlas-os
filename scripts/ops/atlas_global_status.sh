@@ -117,7 +117,14 @@ if [ "$PORT" != "?" ]; then
     kv "$path" "$CODE  ${T}s${LOC:+  → $LOC}"
     case "$path:$CODE" in
       /:200)      ok "/ renders without a session — the board is OPEN";;
-      /:307|/:302) bad "/ redirects to sign-in — AUTH IS ON in the serving build (${LOC})";;
+      # A redirect is only evidence of AUTH when it points AT the sign-in page. `/` redirects
+      # to /countries by design (app/page.tsx), and reading that as "auth is on" sent a reader
+      # hunting a session bug that did not exist while the board was open all along.
+      /:307|/:302)
+        case "$LOC" in
+          */login*) bad "/ redirects to sign-in — AUTH IS ON in the serving build (${LOC})";;
+          *)        ok "/ redirects to ${LOC##*/} without a session — the board is OPEN";;
+        esac;;
       /:000)      bad "/ did not answer in 15s on :$PORT — the process is not serving";;
       /health:000) bad "/health did not answer in 15s (database path or render stall)";;
       *:200|*:30[1278]) : ;;   # a page, or a redirect already shown on its line
@@ -170,6 +177,59 @@ else
   kv "last log" "none under $LOG_DIR"
 fi
 kv "cron" "$(crontab -l 2>/dev/null | grep -c atlas_global_daily || true) entry/entries for atlas_global_daily"
+
+# The WEEKLY writes its own log and none of the above would ever show it. Its N-PORT step is
+# the long one, so "nothing is happening" and "the weekly is two hours into a fetch" look the
+# same from here without this line.
+LAST_WEEKLY=$(ls -1t "$LOG_DIR"/atlas_global_weekly_[0-9]*.log 2>/dev/null | head -1 || true)
+if [ -n "$LAST_WEEKLY" ]; then
+  kv "last weekly log" "$LAST_WEEKLY  ($(date -u -r "$LAST_WEEKLY" +%FT%TZ 2>/dev/null))"
+  kv "last lines" ""; tail -3 "$LAST_WEEKLY" 2>/dev/null | sed 's/^/    /'
+fi
+
+# ── 7b. WHO HOLDS THE PIPELINE LOCK ─────────────────────────────────────────
+# Both orchestrators serialise on /tmp/atlas_global.lock, and a run refused for want of it
+# printed "a scheduled nightly is running now" and nothing else — no pid, no command, no
+# elapsed time. A job three minutes in and a job wedged since yesterday were indistinguishable,
+# and the only way to tell them apart was an SSH session, which is what this file exists to
+# avoid. `flock` holds the lock on an open descriptor, so the holder is whichever process has
+# the file open — fuser when it is installed, else /proc, which needs no package.
+h "pipeline lock (/tmp/atlas_global.lock)"
+LOCK=/tmp/atlas_global.lock
+if [ ! -e "$LOCK" ]; then
+  kv "lock file" "does not exist — no run has taken it since the last reboot"
+else
+  HOLDERS=$(fuser "$LOCK" 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' || true)
+  if [ -z "$HOLDERS" ]; then
+    HOLDERS=$(for d in /proc/[0-9]*; do for fd in "$d"/fd/*; do [ "$(readlink "$fd" 2>/dev/null)" = "$LOCK" ] && basename "$d" && break; done; done 2>/dev/null || true)
+  fi
+  if [ -z "$HOLDERS" ]; then
+    kv "held by" "nobody — the lock is FREE (the file itself is never deleted)"
+    ok "pipeline lock is free"
+  else
+    for pid in $HOLDERS; do
+      kv "held by pid $pid" "$(ps -o etime=,args= -p "$pid" 2>/dev/null | sed 's/^ *//' | cut -c1-120 || echo 'gone')"
+      CHILD=$(pgrep -P "$pid" 2>/dev/null | head -3 || true)
+      for c in $CHILD; do kv "  running" "$(ps -o etime=,args= -p "$c" 2>/dev/null | sed 's/^ *//' | cut -c1-120 || true)"; done
+    done
+    bad "pipeline lock is HELD — a 'run'/'weekly' dispatch will be refused until it clears"
+  fi
+fi
+
+# ── 7c. the cross-section the fundamental bands are set from ────────────────
+# score_stocks prints the S&P 500 fundamental distribution on EVERY run, because the 37 US
+# bands are the FM's to set and India's numbers are wrong for this market. It was printed into
+# a log file on the box that nobody off the box could read, so the decision it exists to
+# inform could not be made from anywhere else. Public market data at seven percentiles: no
+# positions, no client data, and it goes through the same redaction as everything else.
+h "S&P 500 fundamental cross-section (newest run that printed one)"
+XSEC_LOG=$(grep -l 'fundamental cross-section' $(ls -1t "$LOG_DIR"/atlas_global_daily_[0-9]*.log 2>/dev/null | head -5) 2>/dev/null | head -1 || true)
+if [ -n "$XSEC_LOG" ]; then
+  kv "from" "$XSEC_LOG"
+  awk '/fundamental cross-section/{n=1} n && n++<16' "$XSEC_LOG" | sed 's/^/  /'
+else
+  kv "cross-section" "no recent nightly log printed one — has score_stocks run?"
+fi
 
 # ── verdicts ─────────────────────────────────────────────────────────────────
 h "VERDICTS — read these first"

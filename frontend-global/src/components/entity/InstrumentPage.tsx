@@ -11,6 +11,7 @@ import type { AssetClass } from '@/lib/facts'
 import { getFundHoldings, type FundHoldings } from '@/lib/queries/holdings'
 import { getInstrumentDetail } from '@/lib/queries/instruments'
 import { getClassification, getScoreDetail } from '@/lib/queries/scores'
+import { getInstrumentSeries, type InstrumentSeries } from '@/lib/queries/series'
 import { attempt } from '@/lib/result'
 import { InstrumentDetailView } from './InstrumentDetailView'
 
@@ -36,11 +37,13 @@ export async function InstrumentPage({ assetClass, symbol }: { assetClass: Asset
   // The score and the classification are their own awaits: a journal that has not been written
   // yet must leave the identity page standing, saying what is missing, not take it down with it.
   const empty: FundHoldings = { meta: null, exposure: null, holdings: [] }
-  const [d, score, classification, holdings] = await Promise.all([
+  const noSeries: InstrumentSeries = { points: [], benchmark: [], technical: null }
+  const [d, score, classification, holdings, series] = await Promise.all([
     attempt(getInstrumentDetail(assetClass, symbol)),
     attempt(getScoreDetail(assetClass, symbol)),
     attempt(assetClass === 'etf' ? getClassification(symbol) : Promise.resolve(null)),
     attempt(assetClass === 'etf' ? getFundHoldings(symbol) : Promise.resolve(empty)),
+    attempt(getInstrumentSeries(symbol)),
   ])
   if (!d.ok) {
     return (
@@ -57,6 +60,7 @@ export async function InstrumentPage({ assetClass, symbol }: { assetClass: Asset
       score={score.ok ? score.value : null}
       classification={classification.ok ? classification.value : null}
       holdings={holdings.ok ? holdings.value : empty}
+      series={series.ok ? series.value : noSeries}
     />
   )
 }

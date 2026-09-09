@@ -22,10 +22,17 @@ export function FacetRail<R>({ groups, values, counts, selected, onChange, onCle
     <aside className="facets" aria-label="Filters">
       {groups.map((g) => {
         const sel = selected[g.key] ?? []
-        // `one`: its fixed radio values plus the implicit "all". `flag`: the single checkbox that
-        // lets the excluded rows back in. `any`: every value the list actually takes.
+        // `one`, `min` and `max` are single-choice rails: their own fixed option list plus the
+        // implicit "all" (a threshold rail's options are ascending numbers in the row's unit).
+        // `flag`: the single checkbox that lets the excluded rows back in. `any`: every value the
+        // list actually takes.
         const options =
-          g.kind === 'one' ? [...(g.options ?? []), ALL] : g.kind === 'flag' ? [ON] : (values[g.key] ?? [])
+          g.kind === 'one' || g.kind === 'min' || g.kind === 'max'
+            ? [...(g.options ?? []), ALL]
+            : g.kind === 'flag'
+              ? [ON]
+              : (values[g.key] ?? [])
+        const single = g.kind === 'one' || g.kind === 'min' || g.kind === 'max'
         return (
           <fieldset key={g.key} className="facet">
             <legend className="facet-title text-meta">{g.label}</legend>
@@ -35,13 +42,13 @@ export function FacetRail<R>({ groups, values, counts, selected, onChange, onCle
               return (
                 <label key={v} className={`facet-opt text-table${checked ? ' is-on' : ''}`}>
                   <input
-                    type={g.kind === 'one' ? 'radio' : 'checkbox'}
+                    type={single ? 'radio' : 'checkbox'}
                     aria-label={label}
                     name={g.key}
                     value={v}
                     checked={checked}
                     onChange={() =>
-                      onChange(g.key, g.kind === 'one' ? [v] : checked ? sel.filter((x) => x !== v) : [...sel, v])
+                      onChange(g.key, single ? [v] : checked ? sel.filter((x) => x !== v) : [...sel, v])
                     }
                   />
                   <span className="facet-name">{label}</span>

@@ -9,13 +9,17 @@ import { formatAsOf, formatIsoDate, formatPct } from '@/lib/format'
 import type { FundHoldings } from '@/lib/queries/holdings'
 import type { InstrumentDetail, SymbolAlias } from '@/lib/queries/instruments'
 import type { Classification, ScoreDetail } from '@/lib/queries/scores'
+import type { InstrumentSeries } from '@/lib/queries/series'
 import { BarsProvenance } from './BarsProvenance'
 import { ClassificationCard } from './ClassificationCard'
 import { EntityHeader } from './EntityHeader'
 import { FactList, type Fact } from './FactList'
 import { HoldingsSection } from './HoldingsSection'
 import { MembershipTimeline } from './MembershipTimeline'
+import { PriceSection } from './PriceSection'
+import { ReturnCalculator } from './ReturnCalculator'
 import { ScoreSection } from './ScoreSection'
+import { StrengthSection } from './StrengthSection'
 
 const IDENTITY_SOURCE: Record<string, string> = { nasdaq_trader: 'Nasdaq Trader directory', stooq: 'Stooq archive', alpaca: 'Alpaca', manual: 'Manual' }
 const ALIAS_SOURCE: Record<string, string> = {
@@ -53,24 +57,18 @@ function AliasTable({ aliases }: { aliases: SymbolAlias[] }) {
   )
 }
 
-// What each price instrument will show and what it is built from. They arrive with the price
-// spine (labelled bars + the nightly technicals); nothing is drawn from unlabelled bars.
-const SLOTS = [
-  { title: 'Price chart', text: 'Adjusted and total-return closes with SPY as the overlay, from the spine’s labelled bars.' },
-  { title: 'Relative strength', text: 'Strength against SPY over 1 week to 12 months, from the nightly technicals on total-return closes.' },
-  { title: 'Return calculator', text: 'Two dates in; the total return, the price return and SPY’s over the same window out, from total-return closes.' },
-]
-
 export function InstrumentDetailView({
   d,
   score,
   classification,
   holdings,
+  series,
 }: {
   d: InstrumentDetail
   score: ScoreDetail | null
   classification: Classification | null
   holdings: FundHoldings
+  series: InstrumentSeries
 }) {
   const f = d.facts
   const stock = f.asset_class === 'stock'
@@ -119,6 +117,10 @@ export function InstrumentDetailView({
 
       <ScoreSection assetClass={f.asset_class} symbol={f.symbol} score={score} eod={d.eod} />
 
+      <PriceSection series={series} symbol={f.symbol} />
+      <StrengthSection technical={series.technical} symbol={f.symbol} />
+      <ReturnCalculator series={series} symbol={f.symbol} />
+
       <div className="detail">
         <div>
           <Section title="Identity" note="as the SEC and the vendors spell it">
@@ -140,16 +142,6 @@ export function InstrumentDetailView({
         </div>
 
         <div>
-          <Section title="Prices" note="arrive with the price spine">
-            <ul className="slots">
-              {SLOTS.map((s) => (
-                <li key={s.title} className="slot">
-                  <p className="font-medium text-body text-ink">{s.title}</p>
-                  <p className="mt-1 text-body text-ink-2">{s.text}</p>
-                </li>
-              ))}
-            </ul>
-          </Section>
           <Section title="Bars" note="what ohlcv_daily holds">
             <BarsProvenance bars={d.bars} symbol={f.symbol} />
           </Section>

@@ -80,6 +80,8 @@ from atlas.lenses.compute import technical as india_technical
 # from this module. __all__ makes the re-export explicit rather than an unused import.
 __all__ = [
     "FUNDAMENTAL_KEYS",
+    "QUICK_RATIO_KEYS",
+    "REACHABLE_KEYS",
     "TECHNICAL_KEYS",
     "india_thresholds",
     "score_fundamental",
@@ -222,6 +224,25 @@ FUNDAMENTAL_KEYS: tuple[str, ...] = (
     "prof_roe_low",
     "prof_roe_ok",
 )
+
+# THE THREE BANDS NOTHING CAN READ. `bs_qr_{ok,good,high}` grade a QUICK ratio, which needs
+# inventory; ``stock_financials_pit`` carries none, ``Metrics`` has no ``quick_ratio`` field, and
+# India's balance-sheet sub-score skips an absent input rather than penalising it — so these
+# rungs are never evaluated for any US filer today.
+#
+# They are excluded from the gate below, and the exclusion is NOT a weakening of it. The gate
+# exists so that no band silently falls back to India's number (``.get(key, default)``); a band
+# no code path reads cannot fall back to anything. Requiring them would instead hold a working
+# lens hostage to a threshold nothing consults.
+#
+# ``test_fundamental_lens`` ties this set to its REASON — the absence of a ``quick_ratio`` on
+# ``Metrics`` — so the day inventory lands in the table, that test goes red and forces the three
+# keys back into the required set at the same moment their input arrives.
+QUICK_RATIO_KEYS: frozenset[str] = frozenset({"bs_qr_ok", "bs_qr_good", "bs_qr_high"})
+
+#: The bands a US filer's score can actually depend on — what ``score_stocks`` requires before
+#: it will score the fundamental lens at all.
+REACHABLE_KEYS: frozenset[str] = frozenset(FUNDAMENTAL_KEYS) - QUICK_RATIO_KEYS
 
 # lens_scores_daily's fundamental sub-score columns (ddl/05_scores.sql) ← FundamentalResult.
 FUNDAMENTAL_SUBS: tuple[tuple[str, str], ...] = (

@@ -9,6 +9,7 @@ const SECTIONS: { href: string; label: string }[] = [
   // Countries leads because it IS the front door (the FM's D1): / redirects here, so there is
   // no separate Today section to link to until one has scored movement to show.
   { href: '/countries', label: 'Countries' },
+  { href: '/pulse', label: 'Pulse' },
   { href: '/etfs', label: 'ETFs' },
   { href: '/stocks', label: 'Stocks' },
   { href: '/portfolios', label: 'Portfolios' },

@@ -60,6 +60,8 @@ TRACKED: list[tuple[str, str]] = [
     ("etf_holdings", "as_of_date"),
     ("etf_meta", "updated_at"),
     ("etf_exposure_daily", "as_of_date"),
+    ("filings_8k", "filed"),
+    ("short_interest", "settlement_date"),
 ]
 
 # Gate step (runfile) → validator name (<= 16 chars, the column's width); PASS/FAIL status.

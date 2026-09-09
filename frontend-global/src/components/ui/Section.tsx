@@ -1,12 +1,27 @@
 // src/components/ui/Section.tsx — a titled block (h2 1.05rem/600) with an optional note beside it.
 import type { ReactNode } from 'react'
 
-export function Section({ title, note, children }: { title: string; note?: ReactNode; children: ReactNode }) {
+export function Section({
+  title,
+  note,
+  aside,
+  children,
+}: {
+  title: string
+  note?: ReactNode
+  /** A control that belongs to this section — a range picker, a toggle. It sits on the title row
+   *  rather than above the content, so a section's own switch is never mistaken for the page's. */
+  aside?: ReactNode
+  children: ReactNode
+}) {
   return (
     <section className="mt-8">
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 className="font-serif text-h2 text-ink">{title}</h2>
-        {note && <span className="text-meta text-ink-3">{note}</span>}
+        <span className="flex flex-wrap items-center gap-3">
+          {note && <span className="text-meta text-ink-3">{note}</span>}
+          {aside}
+        </span>
       </div>
       {children}
     </section>
