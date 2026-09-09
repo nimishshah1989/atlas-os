@@ -8,6 +8,7 @@ import { QueryFailed } from '@/components/ui/Section'
 import { requireUser } from '@/lib/auth'
 import { dbAvailable } from '@/lib/db'
 import type { AssetClass } from '@/lib/facts'
+import { getFundHoldings, type FundHoldings } from '@/lib/queries/holdings'
 import { getInstrumentDetail } from '@/lib/queries/instruments'
 import { getClassification, getScoreDetail } from '@/lib/queries/scores'
 import { attempt } from '@/lib/result'
@@ -34,10 +35,12 @@ export async function InstrumentPage({ assetClass, symbol }: { assetClass: Asset
   if (!dbAvailable) return <NoDatabase title={LIST[assetClass]} />
   // The score and the classification are their own awaits: a journal that has not been written
   // yet must leave the identity page standing, saying what is missing, not take it down with it.
-  const [d, score, classification] = await Promise.all([
+  const empty: FundHoldings = { meta: null, exposure: null, holdings: [] }
+  const [d, score, classification, holdings] = await Promise.all([
     attempt(getInstrumentDetail(assetClass, symbol)),
     attempt(getScoreDetail(assetClass, symbol)),
     attempt(assetClass === 'etf' ? getClassification(symbol) : Promise.resolve(null)),
+    attempt(assetClass === 'etf' ? getFundHoldings(symbol) : Promise.resolve(empty)),
   ])
   if (!d.ok) {
     return (
@@ -53,6 +56,7 @@ export async function InstrumentPage({ assetClass, symbol }: { assetClass: Asset
       d={d.value}
       score={score.ok ? score.value : null}
       classification={classification.ok ? classification.value : null}
+      holdings={holdings.ok ? holdings.value : empty}
     />
   )
 }
