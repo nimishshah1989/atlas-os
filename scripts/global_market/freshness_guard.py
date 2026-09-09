@@ -81,6 +81,11 @@ BOARD_TABLES: list[tuple[str, str, int]] = [
     # Keyed by the SNAPSHOT's date, not the session it was computed on: exposures change only
     # when holdings do, so this date is the holdings' date and carries their lag exactly.
     ("etf_exposure_daily", "as_of_date", 95),  # build_exposures.py over those holdings
+    # 8-Ks are event-driven, so quiet weeks are normal for ONE company — but not across five
+    # hundred of them: an S&P 500 member files results four times a year, so the newest 8-K in
+    # this table is days old whenever the producer is running. 8 sessions catches a stopped
+    # feed without failing on a genuinely quiet fortnight.
+    ("filings_8k", "filed", 8),  # SEC submissions → the catalyst lens (P3-B)
 ]
 
 # ── PRODUCER REGISTRY (the build-time half of the freshness contract) ──
@@ -104,6 +109,7 @@ PRODUCERS: dict[str, str] = {
     "etf_holdings": "ingest_nport.py",
     "etf_meta": "ingest_nport.py",
     "etf_exposure_daily": "build_exposures.py",
+    "filings_8k": "ingest_filings_8k.py",
 }
 
 

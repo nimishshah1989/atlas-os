@@ -155,17 +155,22 @@ SEEDS: list[dict[str, object]] = [
          "RS-structure points when EMA21 > EMA50"),
     # ── §B catalyst lens (stock_catalyst.py; India's 3-bucket shape and decay) ────────────
     _row("catalyst_w_earnings", "0.55", "catalyst", "B", "weight", "0", "1",
-         "Catalyst bucket weight: earnings / strategy (8-K 2.02, 1.01, 2.01, 8.01)"),
+         "Catalyst bucket weight: earnings and strategy (8-K 2.02, 1.01, 1.02, 2.01, 2.05, 2.06). "
+         "NOT 8.01: Other Events says only that something happened, and reading it needs a parser "
+         "of the attached press release, which is the keyword-matching this lens avoids"),
     _row("catalyst_w_capital", "0.30", "catalyst", "B", "weight", "0", "1",
-         "Catalyst bucket weight: capital action (dividends, buybacks, offerings, 3.02)"),
+         "Catalyst bucket weight: capital action (8-K 2.03, 2.04, 3.02, 3.03, 5.01). NOT dividends "
+         "or buybacks: neither has an item code — both arrive as a press release on an 8.01"),
     _row("catalyst_w_governance", "0.15", "catalyst", "B", "weight", "0", "1",
-         "Catalyst bucket weight: governance (4.01, 5.02, 4.02, 3.01, 1.03, NT 10-K/Q)"),
-    _row("catalyst_recency_t1", "90", "catalyst", "B", "days", "1", "1000",
-         "Recency window 1: full weight up to this many days"),
-    _row("catalyst_recency_t2", "180", "catalyst", "B", "days", "1", "1000",
-         "Recency window 2: second decay step ends here"),
-    _row("catalyst_recency_t3", "365", "catalyst", "B", "days", "1", "1000",
-         "Recency window 3: third decay step ends here (older events carry the tail weight)"),
+         "Catalyst bucket weight: governance and distress (8-K 1.03, 3.01, 4.01, 4.02, 5.02)"),
+    _row("catalyst_recency_t1", "90", "catalyst", "B", "days", "1", "3650",
+         "News this old or newer keeps catalyst_decay_t1 of its points"),
+    _row("catalyst_recency_t2", "180", "catalyst", "B", "days", "1", "3650",
+         "News this old or newer keeps catalyst_decay_t2 of its points"),
+    _row("catalyst_recency_t3", "365", "catalyst", "B", "days", "1", "3650",
+         "The catalyst lens's whole lookback: older news keeps catalyst_decay_old. "
+         "ingest_filings_8k.py reads this row to decide whose SEC feed is too shallow to score "
+         "over — filings.recent is capped by COUNT, so a heavy filer's 8-K history is short"),
     # ── §B flow lens + risk flags ─────────────────────────────────────────────────────────
     _row("flow_si_extreme_pct", "20", "flow", "B", "percent", "0", "100",
          "Short interest above this % of float raises the risk flag"),
@@ -303,6 +308,53 @@ SEEDS: list[dict[str, object]] = [
     _row("basket_min_weight_frac", "0.01", "basket", "M2", "fraction", "0", "1",
          "Smallest target weight a constituent may carry (below it a name is noise, not a position)"),
     # ── P3-A company fundamentals (ingest_financials.py → stock_financials_pit) ───────────
+    # ── §B catalyst lens: bucket weights, decay, and one row per SEC 8-K item code ─────────
+    # These ARE written down, unlike the fundamental bands, because they are not percentiles of
+    # anything: they are the FM's opinion of what a filing is worth. plan.md §B's figures where
+    # it names one; the rest follow its shape — distress costs more than good news pays, because
+    # a bankruptcy is a fact about the future and a results filing is a fact about the past.
+    _row("catalyst_decay_t1", "1.0", "catalyst", "B", "multiple", "0", "1",
+         "Share of an event's points surviving inside catalyst_recency_t1"),
+    _row("catalyst_decay_t2", "0.8", "catalyst", "B", "multiple", "0", "1",
+         "Share surviving between t1 and catalyst_recency_t2"),
+    _row("catalyst_decay_t3", "0.5", "catalyst", "B", "multiple", "0", "1",
+         "Share surviving between t2 and catalyst_recency_t3"),
+    _row("catalyst_decay_old", "0.3", "catalyst", "B", "multiple", "0", "1",
+         "Share surviving beyond catalyst_recency_t3"),
+    # Points per 8-K item code. The key is the code with its dot as an underscore
+    # (stock_catalyst.points_key), and the scorer reads NOTHING it cannot find here.
+    _row("catalyst_pts_2_02", "6", "catalyst", "B", "points", "-50", "50",
+         "8-K 2.02 Results of Operations and Financial Condition — the company reported"),
+    _row("catalyst_pts_1_01", "10", "catalyst", "B", "points", "-50", "50",
+         "8-K 1.01 Entry into a Material Definitive Agreement"),
+    _row("catalyst_pts_1_02", "-6", "catalyst", "B", "points", "-50", "50",
+         "8-K 1.02 Termination of a Material Definitive Agreement"),
+    _row("catalyst_pts_2_01", "8", "catalyst", "B", "points", "-50", "50",
+         "8-K 2.01 Completion of an Acquisition or Disposition of Assets"),
+    _row("catalyst_pts_2_05", "-6", "catalyst", "B", "points", "-50", "50",
+         "8-K 2.05 Costs Associated with Exit or Disposal Activities"),
+    _row("catalyst_pts_2_06", "-10", "catalyst", "B", "points", "-50", "50",
+         "8-K 2.06 Material Impairments"),
+    _row("catalyst_pts_2_03", "-4", "catalyst", "B", "points", "-50", "50",
+         "8-K 2.03 Creation of a Direct Financial Obligation"),
+    _row("catalyst_pts_2_04", "-12", "catalyst", "B", "points", "-50", "50",
+         "8-K 2.04 Triggering Events That Accelerate a Direct Financial Obligation"),
+    _row("catalyst_pts_3_02", "-8", "catalyst", "B", "points", "-50", "50",
+         "8-K 3.02 Unregistered Sales of Equity Securities — dilution"),
+    _row("catalyst_pts_3_03", "-3", "catalyst", "B", "points", "-50", "50",
+         "8-K 3.03 Material Modification to Rights of Security Holders"),
+    _row("catalyst_pts_5_01", "-5", "catalyst", "B", "points", "-50", "50",
+         "8-K 5.01 Changes in Control of Registrant"),
+    _row("catalyst_pts_1_03", "-25", "catalyst", "B", "points", "-50", "50",
+         "8-K 1.03 Bankruptcy or Receivership — the heaviest single event on the form"),
+    _row("catalyst_pts_3_01", "-15", "catalyst", "B", "points", "-50", "50",
+         "8-K 3.01 Notice of Delisting or Failure to Satisfy a Continued Listing Rule"),
+    _row("catalyst_pts_4_01", "-12", "catalyst", "B", "points", "-50", "50",
+         "8-K 4.01 Changes in the Registrant's Certifying Accountant"),
+    _row("catalyst_pts_4_02", "-15", "catalyst", "B", "points", "-50", "50",
+         "8-K 4.02 Non-Reliance on Previously Issued Financial Statements — a restatement"),
+    _row("catalyst_pts_5_02", "-8", "catalyst", "B", "points", "-50", "50",
+         "8-K 5.02 Departure or Election of Directors or Certain Officers"),
     _row("fund_min_quarters", "8", "fundamental", "B", "quarters", "1", "40",
          "Quarterly filings a stock needs before the fundamental lens may score it. 8 = two "
          "years, which is the shortest window that carries a year-on-year growth rate AND the "

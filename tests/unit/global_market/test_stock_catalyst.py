@@ -29,6 +29,7 @@ import pytest
 
 from atlas.global_market.providers.submissions import parse_submissions, submissions_url
 from atlas.global_market.scoring.stock_catalyst import (
+    BUCKET_WEIGHT_KEY,
     BUCKETS,
     CATALYST_KEYS,
     ITEM_BUCKET,
@@ -49,8 +50,8 @@ FORMS = {"8-K", "8-K/A"}
 # positively). They live in atlas_thresholds in prod — this is the table under test, not a
 # default: score_catalyst has none and raises on a missing key.
 TH: dict[str, Decimal] = {
-    "catalyst_w_earnings_strategy": Decimal("0.55"),
-    "catalyst_w_capital_action": Decimal("0.30"),
+    "catalyst_w_earnings": Decimal("0.55"),
+    "catalyst_w_capital": Decimal("0.30"),
     "catalyst_w_governance": Decimal("0.15"),
     "catalyst_recency_t1": Decimal(90),
     "catalyst_recency_t2": Decimal(180),
@@ -161,7 +162,7 @@ def test_the_lens_is_the_weighted_mean_of_the_buckets_that_are_PRESENT() -> None
     """A company with two of three buckets is scored on those two, renormalised — not on two
     thirds of a guess."""
     r = score_catalyst(eight_ks("AAPL"), AS_OF, TH)
-    w_e = TH["catalyst_w_earnings_strategy"]
+    w_e = TH["catalyst_w_earnings"]
     w_g = TH["catalyst_w_governance"]
     assert r.earnings_strategy is not None and r.governance is not None
     expected = (r.earnings_strategy * w_e + r.governance * w_g) / (w_e + w_g)
@@ -238,6 +239,19 @@ def test_the_declared_keys_and_the_seeded_table_agree_exactly() -> None:
     assert set(CATALYST_KEYS) == set(TH)
 
 
+def test_the_bucket_weights_use_the_keys_ALREADY_SEEDED_INTO_PROD() -> None:
+    """``catalyst_w_earnings`` and ``catalyst_w_capital`` were seeded before this scorer existed.
+    Renaming them to match the bucket names would leave two orphan rows in the live table that
+    the FM could tune with no effect — a worse trap than a one-line mapping. This pins the
+    mapping so a later tidy-up cannot quietly create those orphans."""
+    assert BUCKET_WEIGHT_KEY == {
+        "earnings_strategy": "catalyst_w_earnings",
+        "capital_action": "catalyst_w_capital",
+        "governance": "catalyst_w_governance",
+    }
+    assert set(BUCKET_WEIGHT_KEY) == set(BUCKETS)
+
+
 def test_removing_any_key_the_run_ACTUALLY_reads_raises_rather_than_defaulting() -> None:
     """There are no defaults. India's `.get(key, default)` would put India's number into a US
     score invisibly, which is the failure the whole thresholds rule exists to prevent.
@@ -247,7 +261,7 @@ def test_removing_any_key_the_run_ACTUALLY_reads_raises_rather_than_defaulting()
     """
     filings = eight_ks("AAPL") + eight_ks("VZ") + eight_ks("JPM")
     read = {
-        *(f"catalyst_w_{b}" for b in BUCKETS),
+        *(BUCKET_WEIGHT_KEY[b] for b in BUCKETS),
         "catalyst_recency_t1",
         "catalyst_recency_t2",
         "catalyst_recency_t3",

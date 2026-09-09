@@ -110,6 +110,10 @@ step "ingest_macro"            $PY scripts/global_market/ingest_macro.py --eod "
 # SEC EDGAR company facts → stock_financials_pit, point-in-time by `filed`. Filing-driven:
 # most nights add nothing, and a quiet stretch is normal rather than a fault.
 step "ingest_financials"       $PY scripts/global_market/ingest_financials.py --eod "$EOD" --report "$LOG_DIR/ingest_financials_$EOD.csv"
+# The catalyst lens's feed. One submissions request per CIK, watermarked, so the nightly cost is
+# ~500 requests at the SEC's 10/s ceiling — under a minute. It reports which filers' feeds are
+# shallower than the lens's lookback rather than scoring them on a window that quietly shrank.
+step "ingest_filings_8k"       $PY scripts/global_market/ingest_filings_8k.py --report "$LOG_DIR/filings_8k_$EOD.csv"
 # step "ingest_filings_8k"       $PY scripts/global_market/ingest_filings_8k.py
 # step "ingest_form4"            $PY scripts/global_market/ingest_form4.py
 # step "ingest_issuer_holdings"  $PY scripts/global_market/ingest_issuer_holdings.py

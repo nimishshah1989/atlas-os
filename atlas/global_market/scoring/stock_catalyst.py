@@ -43,10 +43,12 @@ from typing import Any
 
 __all__ = [
     "BUCKETS",
+    "BUCKET_WEIGHT_KEY",
     "CATALYST_KEYS",
     "ITEM_BUCKET",
     "CatalystResult",
     "Filing",
+    "missing_keys",
     "score_catalyst",
 ]
 
@@ -56,6 +58,16 @@ FLOOR = Decimal(0)
 CEILING = Decimal(100)
 
 BUCKETS: tuple[str, ...] = ("earnings_strategy", "capital_action", "governance")
+
+# Bucket → the ``atlas_thresholds`` key carrying its weight. The two are NOT the same string,
+# and deliberately so: ``catalyst_w_earnings`` and ``catalyst_w_capital`` were seeded into prod
+# before this scorer existed. Renaming them would leave two orphan rows in the live table that
+# the FM could tune with no effect, which is a worse trap than a mapping one line wide.
+BUCKET_WEIGHT_KEY: dict[str, str] = {
+    "earnings_strategy": "catalyst_w_earnings",
+    "capital_action": "catalyst_w_capital",
+    "governance": "catalyst_w_governance",
+}
 
 # 8-K item code → the bucket it belongs to. The threshold key for its points is
 # ``catalyst_pts_<code with the dot as an underscore>``: item 2.02 reads
@@ -98,7 +110,7 @@ def points_key(item: str) -> str:
 #: carries all of them, for the same reason the fundamental bands are all-or-nothing: a partial
 #: set would weight the buckets by whatever happened to be seeded.
 CATALYST_KEYS: tuple[str, ...] = (
-    *(f"catalyst_w_{b}" for b in BUCKETS),
+    *(BUCKET_WEIGHT_KEY[b] for b in BUCKETS),
     "catalyst_recency_t1",
     "catalyst_recency_t2",
     "catalyst_recency_t3",
@@ -108,6 +120,16 @@ CATALYST_KEYS: tuple[str, ...] = (
     "catalyst_decay_old",
     *(points_key(item) for item in sorted(ITEM_BUCKET)),
 )
+
+
+def missing_keys(th: Mapping[str, Decimal]) -> list[str]:
+    """The keys this scorer reads that ``atlas_thresholds`` does not carry.
+
+    The lens is all-or-nothing on them, the same rule the fundamental bands follow and for the
+    same reason: there are no defaults, so a partial set is not a partly-tuned lens — it is a
+    KeyError on the first company that files that item, at one in the morning.
+    """
+    return sorted(set(CATALYST_KEYS) - set(th))
 
 
 @dataclass(frozen=True, slots=True)
@@ -221,7 +243,7 @@ def score_catalyst(
 
     present = [(name, v) for name, v in buckets.items() if v is not None]
     if present:
-        weights = {name: _t(th, f"catalyst_w_{name}") for name, _v in present}
+        weights = {name: _t(th, BUCKET_WEIGHT_KEY[name]) for name, _v in present}
         total_weight = sum(weights.values(), Decimal(0))
         value = (
             None
