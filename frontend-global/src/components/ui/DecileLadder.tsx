@@ -15,6 +15,7 @@
 // instrument is not bad at something nobody has looked at yet.
 import type { ReactNode } from 'react'
 import { formatNum } from '@/lib/format'
+import { decileColour } from '@/lib/scores'
 import { LensBar } from './LensBar'
 
 /** This board's one phrase for an absent measurement. Everywhere, so it can be searched for. */
@@ -30,6 +31,9 @@ export type LadderLens = {
   label: string
   /** The lens score, 0–100; null when no producer has reached it. */
   score: number | null
+  /** Where that score sits among the cohort, 1 (weakest) to 10. Null when the lens has no score,
+   *  and null for every lens on an instrument whose cohort is too small to cut into ten. */
+  decile?: number | null
   /** Its weight in the blend, as a fraction. 0 is a real answer — an overlay, not a gap. */
   weight: number
   numbers?: LadderNumber[]
@@ -51,6 +55,7 @@ export type DecileLadderProps = {
 }
 
 const COL_LENS = 'w-[112px] shrink-0'
+const COL_DECILE = 'w-[34px] shrink-0 text-right'
 const COL_SCORE = 'w-[46px] shrink-0 text-right'
 const COL_WEIGHT = 'w-[54px] shrink-0 text-right'
 const HEAD = 'font-num text-[9px] uppercase tracking-[0.14em] text-txt-3'
@@ -69,6 +74,21 @@ function LadderRow({ lens, open }: { lens: LadderLens; open: boolean }) {
             track when the score is null. Its title carries the real weight and the real score. */}
         <span className="flex-1">
           <LensBar segments={[{ key: lens.key, label: lens.label, weight: lens.weight, score: lens.score }]} />
+        </span>
+        {/* THE DECILE, on the same ramp as everything else. It is cut on read within the
+            instrument's own cohort (src/lib/queries/scores.ts), so "D8 on technical" means eighth
+            band among the funds it is actually compared with — not against the whole board. The
+            figure takes the ramp colour so the number and any meter beside it always agree. */}
+        <span
+          className={`${COL_DECILE} font-display text-[15px] font-semibold tabular-nums`}
+          style={{ color: decileColour(lens.decile) ?? 'var(--color-txt-3)' }}
+          title={
+            lens.decile == null
+              ? 'No decile: this lens has no score, or the cohort is too small to cut into ten.'
+              : `Decile ${lens.decile} of 10 within its cohort`
+          }
+        >
+          {lens.decile == null ? '—' : `D${lens.decile}`}
         </span>
         <span className={`${COL_SCORE} font-display text-[15px] font-semibold tabular-nums text-txt-1`}>
           {lens.score == null ? <span className="text-txt-3">—</span> : formatNum(lens.score, 1)}
@@ -156,6 +176,7 @@ export function DecileLadder({ lenses, tiles, cohortLabel, note, defaultOpenKey 
       <div className="flex items-center gap-3 border-b border-edge-rule pb-2">
         <span className={`${COL_LENS} ${HEAD}`}>Lens</span>
         <span className={`flex-1 ${HEAD}`}>{cohortLabel ? `Lens score · ${cohortLabel}` : 'Lens score'}</span>
+        <span className={`${COL_DECILE} ${HEAD}`}>D</span>
         <span className={`${COL_SCORE} ${HEAD}`}>/100</span>
         <span className={`${COL_WEIGHT} ${HEAD}`}>Weight</span>
         <span className="w-[14px] shrink-0" />

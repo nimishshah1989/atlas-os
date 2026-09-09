@@ -23,7 +23,12 @@
  */
 import { describe, expect, it } from 'vitest'
 import { scoreToLadder, SUB_MAX, topLens } from '@/lib/ladder'
-import type { ScoreDetail } from '@/lib/queries/scores'
+import {
+  ETF_LENSES as ETF_LENS_COLUMNS,
+  lensDeciles,
+  STOCK_LENSES as STOCK_LENS_COLUMNS,
+  type ScoreDetail,
+} from '@/lib/queries/scores'
 import { lensSubs, type LensWeight } from '@/lib/scores'
 
 // select threshold_key, threshold_value from atlas_global.atlas_thresholds
@@ -47,6 +52,8 @@ const STOCK_LENSES: LensWeight[] = [
 /** SPY, EOD 2026-09-03: a journal row exists, and no lens had data. */
 const DEGENERATE: ScoreDetail = {
   scored_on: '2026-09-03',
+  // Every lens in this fixture is null, so no lens carries a decile — the real shape, not a gap.
+  deciles: {},
   values: { composite: null, technical: null, risk: null, cost_liquidity: null, flow: null, quality: null },
   conviction_tier: 'BELOW_THRESHOLD',
   peer_group: 'equity:broad_market',
@@ -173,6 +180,53 @@ describe('the evidence trail', () => {
     for (const evidence of [null, undefined, 'not an object', { technical: 'flat' }, {}]) {
       const rows = scoreToLadder('etf', { ...SCORED, evidence })
       expect(rows.find((r) => r.key === 'technical')?.evidence).toEqual([])
+    }
+  })
+})
+
+// ── the per-lens decile ─────────────────────────────────────────────────────
+//
+// India's ladder shows a decile beside every lens, cut within cap cohort, and this board now cuts
+// the same thing on read (src/lib/queries/scores.ts::lensDeciles). Two things are worth pinning:
+// the SQL asks for exactly one decile per lens, in the right cohort; and a lens with no score
+// carries no decile at all rather than a low one.
+describe('every lens carries its own decile, cut in its own cohort', () => {
+  it('asks postgres for one ntile per lens, partitioned by the cohort that lens is judged in', () => {
+    const sql = lensDeciles(ETF_LENS_COLUMNS, 'peer_group')
+    for (const lens of ETF_LENS_COLUMNS) {
+      expect(sql).toContain(`ORDER BY s.${lens}`)
+      expect(sql).toContain(`AS ${lens}_decile`)
+    }
+    // One ntile each, and no more.
+    expect(sql.match(/ntile\(10\)/g)).toHaveLength(ETF_LENS_COLUMNS.length)
+    expect(sql.match(/PARTITION BY s\.date, s\.peer_group/g)).toHaveLength(ETF_LENS_COLUMNS.length)
+  })
+
+  it('puts the rows a lens could not score into their own partition, so they never dilute it', () => {
+    // India's trick, and the reason it is here: `(lens IS NULL)` in the PARTITION BY keeps the
+    // unmeasured funds out of the ranking of the measured ones.
+    const sql = lensDeciles(STOCK_LENS_COLUMNS, 'cap_cohort')
+    for (const lens of STOCK_LENS_COLUMNS) expect(sql).toContain(`(s.${lens} IS NULL) ORDER BY s.${lens}`)
+    expect(sql).not.toContain('peer_group')
+  })
+
+  it('refuses a decile for an ETF whose asset class is too small to rank at all', () => {
+    // score_etfs leaves peer_group NULL there; with no population, no lens has a standing in one.
+    expect(lensDeciles(ETF_LENS_COLUMNS, 'peer_group')).toContain('OR s.peer_group IS NULL')
+    // Stocks always have a cap cohort — score_stocks assigns one to every scored name — so only
+    // the ETF side carries that escape. Both sides keep the OTHER null guard, which is a different
+    // rule: a lens with no score has no decile, whatever the cohort.
+    expect(lensDeciles(STOCK_LENS_COLUMNS, 'cap_cohort')).not.toContain('OR s.peer_group IS NULL')
+    for (const lens of STOCK_LENS_COLUMNS) {
+      expect(lensDeciles(STOCK_LENS_COLUMNS, 'cap_cohort')).toContain(`CASE WHEN s.${lens} IS NULL THEN NULL`)
+    }
+  })
+
+  it('gives a lens with no score no decile — an empty track, never a low one', () => {
+    // SPY on 2026-09-03: the journal's degenerate row, every lens null. Real, and the honest case.
+    for (const l of scoreToLadder('etf', DEGENERATE)) {
+      expect(l.score).toBeNull()
+      expect(l.decile ?? null).toBeNull()
     }
   })
 })
