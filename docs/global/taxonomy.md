@@ -21,24 +21,24 @@ secondary attribute. The universe says the opposite.** Sector funds are a minori
 
 | what the fund IS | funds | share |
 |---|---:|---:|
-| fixed income | 902 | 15.9% |
+| fixed income | 937 | 16.6% |
 | defined outcome and buffer | 545 | 9.6% |
 | region | 535 | 9.5% |
 | single stock (geared) | 461 | 8.2% |
 | size and style | 458 | 8.1% |
-| sector | 372 | 6.6% |
+| sector | 371 | 6.6% |
 | thematic | 272 | 4.8% |
-| options income | 256 | 4.5% |
-| factor | 168 | 3.0% |
+| options income | 257 | 4.5% |
+| factor | 171 | 3.0% |
 | country | 150 | 2.7% |
 | crypto | 133 | 2.4% |
 | commodity | 131 | 2.3% |
 | dividend and income | 129 | 2.3% |
 | broad market | 71 | 1.3% |
 | alternative | 58 | 1.0% |
-| multi-asset | 27 | 0.5% |
+| multi-asset | 28 | 0.5% |
 | currency | 20 | 0.4% |
-| **unmatched, and therefore the LLM's job** | **968** | **17.1%** |
+| **unmatched, and therefore the LLM's job** | **929** | **16.4%** |
 
 Buffer and defined-outcome products alone outnumber every sector fund. Under the schema's
 original eight strategy values — `broad, factor, sector, thematic, country, commodity,
@@ -79,7 +79,7 @@ that already exist. A 2x bitcoin fund is `crypto` with `leveraged=true`, which s
 it tracks and how it is built. The plan's `leveraged` strategy value said only the second and
 threw the first away, so it is removed.
 
-**Rules alone reach 82.9%** (4,688 of the 5,656 real ETF names), measured 2026-09-09 by
+**Rules alone reach 83.6%** (4,727 of the 5,656 real ETF names), measured 2026-09-09 by
 `atlas/global_market/classify/strategy.py` and asserted by `test_coverage_is_what_we_claim`.
 
 The table above is now the classifier's own output, one row per fund through the ordered
@@ -102,7 +102,16 @@ four false positives the first draft produced are now regression tests
 a stablecoin-technology fund holds equity, not coins; and a "Dividend Accelerator" is not a
 structured accelerator.
 
-The remaining 17.1% go to the LLM layer with a `review` status and a human confirmation step.
+A second pass took it to 83.6%, and its two REJECTED terms are the more useful record.
+"Hedged equity" reads as an options overlay at Fidelity and as CURRENCY hedging at WisdomTree,
+so adding it filed seven well-known hedged country funds as options income; the term is out,
+and the currency case stays where it already was, on `is_currency_hedged`. "High yield" alone
+is a junk-bond fund, but "High Yield Equity Dividend Achievers" is not, so the term refuses to
+match before equity, dividend or stock. Both are regression tests
+(`test_the_terms_that_were_tried_and_rejected_stay_out`), because both look obviously right
+until they are run over all 5,656 names.
+
+The remaining 16.4% go to the LLM layer with a `review` status and a human confirmation step.
 That split is the design working, not a shortfall: the rules layer exists for precision, not
 recall, and coverage was deliberately not chased by widening patterns. Two decisions that cost
 coverage on purpose:

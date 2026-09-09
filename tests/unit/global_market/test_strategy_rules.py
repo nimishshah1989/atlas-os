@@ -110,6 +110,34 @@ ISSUER_WORD_CASES = [
     ("BOAT", "sector", "'SonicShares Global Shipping' was filed as a REGION fund"),
 ]
 
+# A second pass over the same 5,656 names, after the first one shipped: 968 -> 929 unmatched.
+SECOND_PASS_CASES = [
+    ("ACIO", "options_income", "'Collared' — the first pass wrote `collar` and never saw it"),
+    ("AHYB", "fixed_income", "'Select High Yield' — the rule required the word 'bond'"),
+    ("ABFL", "factor", "'FCF' is how issuers abbreviate the free-cash-flow factor"),
+    ("AOA", "multi_asset", "'80/20 Aggressive Allocation', beside the two already listed"),
+    ("BUSM", "size_style", "'Ultra-Small Company' is a size cut `micro cap` cannot see"),
+]
+
+# Two terms the second pass TRIED and rejected, each kept out by a specific fund. They are
+# here because the next person to widen these rules will reach for both.
+REJECTED_TERM_CASES = [
+    (
+        "DXJ",
+        "country",
+        "'WisdomTree Japan Hedged Equity' is CURRENCY-hedged, not an options overlay — so "
+        "`hedged equity` is not an options_income term, however much Fidelity's use of it "
+        "looks like one. The currency case is already carried by is_currency_hedged.",
+    ),
+    (
+        "PEY",
+        "dividend_income",
+        "'Invesco High Yield Equity Dividend Achievers' is an equity fund that happens to use "
+        "the junk-bond words, so the fixed-income term refuses 'high yield' before "
+        "equity/dividend/stock.",
+    ),
+]
+
 # Not precedence cases: `country` correctly outranks `region`, and these two reach `region`
 # because the country pattern DECLINES to match an excluded country — a different mechanism,
 # asserted in test_a_country_named_after_ex_is_not_the_bet.
@@ -125,6 +153,8 @@ ALL_SYMBOLS = (
     + [c[0] for c in WIDENING_CASES]
     + [c[0] for c in FALSE_POSITIVE_CASES]
     + [c[0] for c in ISSUER_WORD_CASES]
+    + [c[0] for c in SECOND_PASS_CASES]
+    + [c[0] for c in REJECTED_TERM_CASES]
 )
 
 
@@ -216,7 +246,7 @@ def test_coverage_is_what_we_claim(etf_names: list[str], stock_symbols: set[str]
     vocabulary that has drifted away from the market."""
     matched = sum(1 for n in etf_names if classify_strategy(n, stock_symbols).strategy)
     share = matched / len(etf_names)
-    assert 0.78 <= share <= 0.90, f"rules matched {share:.1%} of {len(etf_names)} real names"
+    assert 0.79 <= share <= 0.90, f"rules matched {share:.1%} of {len(etf_names)} real names"
 
 
 def test_the_widened_rules_read_the_funds_they_were_widened_for(
@@ -235,6 +265,23 @@ def test_the_widening_does_not_reintroduce_its_own_false_positives(
     for symbol, expected, wrong, why in FALSE_POSITIVE_CASES:
         got = classify_strategy(names[symbol], stock_symbols)
         assert got.strategy == expected, f"{symbol} is {expected}, NOT {wrong}: {why}"
+
+
+def test_the_second_pass_reads_the_funds_it_was_widened_for(
+    names: dict[str, str], stock_symbols: set[str]
+) -> None:
+    for symbol, expected, why in SECOND_PASS_CASES:
+        got = classify_strategy(names[symbol], stock_symbols)
+        assert got.strategy == expected, f"{symbol} {why} -> {got.strategy}"
+
+
+def test_the_terms_that_were_tried_and_rejected_stay_out(
+    names: dict[str, str], stock_symbols: set[str]
+) -> None:
+    """Both look obviously right until you run them over all 5,656 names."""
+    for symbol, expected, why in REJECTED_TERM_CASES:
+        got = classify_strategy(names[symbol], stock_symbols)
+        assert got.strategy == expected, f"{symbol} must stay {expected}: {why}"
 
 
 def test_an_issuer_name_is_not_a_geography(names: dict[str, str], stock_symbols: set[str]) -> None:
