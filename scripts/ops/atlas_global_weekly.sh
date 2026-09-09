@@ -73,7 +73,12 @@ step "ingest_index_membership"  $PY scripts/global_market/ingest_index_membershi
 # so a steady week is cheap and a quarter-end week is not. The FIRST run has no watermarks and
 # fetches every document (hours, ~1.4 GB streamed, nothing kept); docs/global/runbook.md says to
 # seed it in batches with --limit before this step is left to the cron.
-step "ingest_nport"             $PY scripts/global_market/ingest_nport.py --report "$LOG_DIR/nport_$EOD.csv"
+# BOUNDED, and the bound is the point. Unlimited, this step walks the whole ~5,600-fund ETF
+# universe in one pass: on 2026-09-09 it held /tmp/atlas_global.lock for over two hours and
+# every nightly, every weekly and every dispatched run was refused for as long as it ran. The
+# feed is watermarked and resumable, so a bounded batch each week loses nothing and finishes.
+# ATLAS_NPORT_WEEKLY_LIMIT raises it for a deliberate catch-up run.
+step "ingest_nport"             $PY scripts/global_market/ingest_nport.py --limit "${ATLAS_NPORT_WEEKLY_LIMIT:-400}" --report "$LOG_DIR/nport_$EOD.csv"
 # step "ingest_financials"        $PY scripts/global_market/ingest_financials.py        # companyfacts, changed filers (Phase 3)
 # step "ingest_13f"               $PY scripts/global_market/ingest_13f.py               # Phase 3
 # step "ingest_short_interest"    $PY scripts/global_market/ingest_short_interest.py    # Phase 3

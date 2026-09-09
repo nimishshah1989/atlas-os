@@ -143,18 +143,17 @@ describe('a measurement nobody made is never a zero', () => {
     expect(container.querySelector('[title="0 of 5 lenses"]')?.textContent).toBe('0/5')
   })
 
-  it('COUNTS the active lenses in its own sentence rather than asserting a number', () => {
-    // The paragraph used to say "while one lens is active", which was true the day it was
-    // written and false the day the risk and cost lenses landed — and it promised a MEDIUM cap
-    // that no longer applied. The board was explaining its own methodology wrongly, on the live
-    // site, which is the exact failure it exists to prevent. It now reads the count off the rows
-    // and states the tier rule as a rule, so it stays true as each new lens lands.
+  it('COUNTS the active lenses in its own status line rather than asserting a number', () => {
+    // The line used to say "while one lens is active", which was true the day it was written and
+    // false the day the risk and cost lenses landed — and it promised a MEDIUM cap that no longer
+    // applied. The board was explaining its own methodology wrongly, on the live site, which is
+    // the exact failure it exists to prevent. It now reads the count off the rows.
     search.current = new URLSearchParams()
     const asIs = render(<InstrumentExplorer assetClass="etf" list={list(ETFS)} />)
     expect(asIs.container.textContent).toContain('0 of 5 lenses') // every fixture row has none
 
     // Same component, a row that carries three: if the sentence were hardcoded it would still
-    // say zero. This is the assertion that makes the paragraph impossible to leave stale.
+    // say zero. This is the assertion that makes the line impossible to leave stale.
     asIs.unmount()
     const richer = ETFS.map((r) => (r.symbol === 'SPY' ? { ...r, lenses_active: 3 } : r))
     const { container } = render(<InstrumentExplorer assetClass="etf" list={list(richer)} />)
@@ -162,7 +161,19 @@ describe('a measurement nobody made is never a zero', () => {
     expect(text).toContain('3 of 5 lenses')
     expect(text).not.toContain('0 of 5 lenses')
     expect(text).not.toContain('MEDIUM however strong')
-    expect(text).toContain('several independent')
+  })
+
+  it('states the board’s own rules ONCE, by linking to them, not by reprinting them', () => {
+    // The FM's note of 2026-09-09: the board is far too verbose. Five paragraphs of methodology
+    // stood between a reader and the ranking on every visit — all of it true, none of it read.
+    // The explanation now lives on /methodology and the surface carries the facts that CHANGE
+    // with the data. This pins the trade: the link is always there, the essay never comes back.
+    search.current = new URLSearchParams()
+    const { container } = render(<InstrumentExplorer assetClass="etf" list={list(ETFS)} />)
+    const status = container.querySelector('[role="status"]')
+    expect(status?.querySelector('a[href="/methodology"]')).not.toBeNull()
+    // The whole status line, link included, is one short line — not a paragraph of prose.
+    expect((status?.textContent ?? '').length).toBeLessThan(240)
   })
 
   it('prints the tier the ladder actually returned, in words', () => {

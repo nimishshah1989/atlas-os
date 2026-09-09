@@ -13,14 +13,17 @@ export type SortState = { key: string; dir: SortDir }
 export type FacetGroup<R> = {
   key: string
   label: string
-  kind: 'any' | 'one' | 'flag'
+  kind: 'any' | 'one' | 'flag' | 'min' | 'max'
   value: (r: R) => string
   /** Display names for values that are tokens rather than words (e.g. `none`, `member`). A `flag`
    *  group names its single `on` option; a `one` group may rename the implicit `all`. */
   labels?: Record<string, string>
   /** Display names for values not known ahead of time (a peer group, a country). */
   format?: (value: string) => string
-  /** `one` groups only: the radio's values (fixed by design, not scanned from rows) … */
+  /** `min` / `max` groups: the value the threshold compares, in the row's own unit. Null never
+   *  passes — see `Threshold`. */
+  numeric?: (r: R) => number | null
+  /** `one`, `min` and `max` groups: the radio's values (fixed by design, not scanned from rows) … */
   options?: string[]
   /** … and the one selected when the URL says nothing. */
   default?: string
@@ -29,18 +32,32 @@ export type FacetGroup<R> = {
 /** A `flag` group's only value: the rows the default view leaves out. */
 export const ON = 'on'
 
+/** `min` / `max`: a THRESHOLD rail rather than a set of buckets. Its options are numbers in the
+ *  row's own unit, ascending, and picking one keeps the rows at or beyond it — "traded value at
+ *  least $10M a day", "volatility at most 25 percent a year". Buckets would answer a different
+ *  question ("which funds are between 10 and 25?"), which is not how anyone screens: an FM sets a
+ *  floor on liquidity and a ceiling on risk and reads what survives.
+ *
+ *  A row whose number is MISSING never passes a threshold. An unmeasured fund is not a calm one
+ *  (rule #0), and letting nulls through a "volatility at most 15 percent" filter would put the
+ *  funds nobody has measured at the top of the safest screen. */
+export type Threshold = { kind: 'min' | 'max'; numeric: (r: unknown) => number | null }
+
 export type ExplorerState = { q: string; facets: Record<string, string[]>; sort: SortState }
 
 export const ALL = 'all'
 
-const defaultSelection = <R>(g: FacetGroup<R>): string[] => (g.kind === 'one' ? [g.default ?? ALL] : [])
+/** `one`, `min` and `max` are all single-choice rails with an implicit "all". */
+const single = (kind: FacetGroup<unknown>['kind']) => kind === 'one' || kind === 'min' || kind === 'max'
+
+const defaultSelection = <R>(g: FacetGroup<R>): string[] => (single(g.kind) ? [g.default ?? ALL] : [])
 
 export function parseState<R>(params: URLSearchParams, groups: FacetGroup<R>[], defaultSort: SortState): ExplorerState {
   const facets: Record<string, string[]> = {}
   for (const g of groups) {
     const given = params.getAll(g.key).filter(Boolean)
     if (!params.has(g.key)) facets[g.key] = defaultSelection(g)
-    else if (g.kind === 'one') facets[g.key] = given[0] === ALL || g.options?.includes(given[0]) ? [given[0]] : defaultSelection(g)
+    else if (single(g.kind)) facets[g.key] = given[0] === ALL || g.options?.includes(given[0]) ? [given[0]] : defaultSelection(g)
     else facets[g.key] = given
   }
   const sortParam = params.get('sort')
@@ -85,6 +102,13 @@ function passes<R>(r: R, g: FacetGroup<R>, sel: string[]): boolean {
   // Checked before the empty-selection shortcut: an unticked flag FILTERS, it does not pass all.
   if (g.kind === 'flag') return sel.includes(ON) || g.value(r) !== ON
   if (sel.length === 0) return true
+  if (g.kind === 'min' || g.kind === 'max') {
+    if (sel[0] === ALL) return true
+    const limit = Number(sel[0])
+    const v = g.numeric?.(r)
+    if (v == null || !Number.isFinite(v) || !Number.isFinite(limit)) return false
+    return g.kind === 'min' ? v >= limit : v <= limit
+  }
   if (g.kind === 'one') return sel[0] === ALL || g.value(r) === sel[0]
   return sel.includes(g.value(r))
 }
@@ -103,14 +127,22 @@ export function facetCounts<R extends Named>(rows: readonly R[], state: Explorer
   for (const g of groups) {
     const counts: Record<string, number> = {}
     let total = 0
+    const threshold = g.kind === 'min' || g.kind === 'max'
     for (const r of rows) {
       if (!matchesQuery(r, state.q)) continue
       if (!groups.every((o) => o === g || passes(r, o, state.facets[o.key] ?? []))) continue
-      const v = g.value(r)
-      counts[v] = (counts[v] ?? 0) + 1
       total += 1
+      if (threshold) {
+        // CUMULATIVE: a threshold's count is how many rows it would KEEP, which is the number the
+        // reader is choosing between. Counting rows per exact value would print the size of a
+        // bucket nobody selected.
+        for (const opt of g.options ?? []) if (passes(r, g, [opt])) counts[opt] = (counts[opt] ?? 0) + 1
+      } else {
+        const v = g.value(r)
+        counts[v] = (counts[v] ?? 0) + 1
+      }
     }
-    if (g.kind === 'one') counts[ALL] = total
+    if (single(g.kind)) counts[ALL] = total
     out[g.key] = counts
   }
   return out

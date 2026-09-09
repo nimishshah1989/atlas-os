@@ -12,6 +12,7 @@
 // GROUPS BEFORE ROWS. The peer-group strip sits above the table so thousands of funds read as two
 // dozen jobs first — a gold-miners fund, a Treasury fund and an S&P tracker have nothing to say to
 // each other, and a league table containing all three ranks nothing.
+import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useMemo } from 'react'
 import { ALL, ON, type FacetGroup, type SortState } from '@/lib/explorer'
@@ -31,6 +32,7 @@ import type { InstrumentList } from '@/lib/queries/scores'
 import { lensesLabel, peerGroupLabel, peerGroupOf, TIER_LABEL } from '@/lib/scores'
 import { boardColumns, universeColumn, type ColumnContext } from './columns'
 import { Explorer } from './Explorer'
+import { StrengthRiskBubble } from './StrengthRiskBubble'
 
 // ── facets ──────────────────────────────────────────────────────────────────
 
@@ -125,6 +127,70 @@ const INVERSE: FacetGroup<InstrumentRow> = {
   labels: { [ON]: 'Include inverse' },
 }
 
+// ── the threshold rails ─────────────────────────────────────────────────────
+//
+// A facet list of categories answers "what kind is it". These answer "is it worth my time": a
+// floor on liquidity, a ceiling on what it costs to hold, a floor on what it has actually done.
+// They are `min`/`max` rails (src/lib/explorer.ts), so each option's count is how many funds it
+// would KEEP, and a fund missing the number never passes — an unmeasured fund is not a calm one.
+
+const money = (n: number) => (n >= 1e9 ? `$${n / 1e9}bn` : n >= 1e6 ? `$${n / 1e6}M` : `$${n / 1e3}k`)
+const num = (s: string | null): number | null => (s == null || s === '' ? null : Number(s))
+
+const ADV: FacetGroup<InstrumentRow> = {
+  key: 'adv',
+  label: 'Traded a day, at least',
+  kind: 'min',
+  value: (r) => r.adv_usd ?? 'none',
+  numeric: (r) => num(r.adv_usd),
+  options: ['1000000', '10000000', '50000000', '250000000'],
+  format: (v) => money(Number(v)),
+  labels: { [ALL]: 'Any' },
+  default: ALL,
+}
+
+// Annualised volatility, as a fraction. The ceiling an FM sets before they look at a score.
+const VOL: FacetGroup<InstrumentRow> = {
+  key: 'vol',
+  label: 'Volatility a year, at most',
+  kind: 'max',
+  value: (r) => r.vol_ann ?? 'none',
+  numeric: (r) => num(r.vol_ann),
+  options: ['0.15', '0.25', '0.40'],
+  format: (v) => `${Math.round(Number(v) * 100)} percent`,
+  labels: { [ALL]: 'Any' },
+  default: ALL,
+}
+
+// mdd_12m is negative (a drawdown is a fall), so the rail compares its DEPTH and the option reads
+// as the depth too: "at most 20 percent" keeps funds that fell no further than 20 percent.
+const MDD: FacetGroup<InstrumentRow> = {
+  key: 'mdd',
+  label: 'Worst 12m fall, at most',
+  kind: 'max',
+  value: (r) => r.mdd_12m ?? 'none',
+  numeric: (r) => {
+    const v = num(r.mdd_12m)
+    return v == null ? null : Math.abs(v)
+  },
+  options: ['0.10', '0.20', '0.35', '0.50'],
+  format: (v) => `${Math.round(Number(v) * 100)} percent`,
+  labels: { [ALL]: 'Any' },
+  default: ALL,
+}
+
+const RS: FacetGroup<InstrumentRow> = {
+  key: 'rs',
+  label: 'Beating the S&P over 12m by',
+  kind: 'min',
+  value: (r) => r.rs_12m_spy ?? 'none',
+  numeric: (r) => num(r.rs_12m_spy),
+  options: ['0', '0.10', '0.25'],
+  format: (v) => (Number(v) === 0 ? 'Any margin' : `${Math.round(Number(v) * 100)} points`),
+  labels: { [ALL]: 'Any' },
+  default: ALL,
+}
+
 const NOUN: Record<AssetClass, string> = { etf: 'ETFs', stock: 'stocks' }
 
 // ── the surface ─────────────────────────────────────────────────────────────
@@ -165,9 +231,11 @@ export function InstrumentExplorer({ assetClass, list }: { assetClass: AssetClas
       if (scored) g.push(COHORT)
     }
     if (scored) g.push(DECILE, TIER)
-    if (etf && classified) g.push(COUNTRY, REGION, GEARED, INVERSE)
+    if (etf && classified) g.push(COUNTRY, REGION)
+    if (priced) g.push(ADV, RS, VOL, MDD)
+    if (etf && classified) g.push(GEARED, INVERSE)
     return g
-  }, [universe, etf, classified, scored])
+  }, [universe, etf, classified, scored, priced])
 
   // Strongest first is the only ordering that answers "what is working"; unscored rows fall to the
   // bottom on their own (sortRows keeps nulls last in both directions). With no scores yet the
@@ -178,75 +246,37 @@ export function InstrumentExplorer({ assetClass, list }: { assetClass: AssetClas
   )
 
   const session = list.eod ? formatIsoDate(list.eod) : 'any session'
-  const notices: { lead: string; text: string }[] = []
 
+  // ── what the board says about itself, in clauses rather than paragraphs ────
+  //
+  // This block used to be five paragraphs explaining the blend, the tier ladder and the decile
+  // cut on every visit. All of it was true and none of it was read: a screen a reader has to
+  // wade through is a screen they stop reading, and the explanation belongs where someone goes
+  // WHEN THEY ASK — /methodology — not in front of the ranking every time. What stays here is
+  // only what changes with the data and would mislead if it were missing: how many lenses the
+  // scores are actually made of, and which producers have not run.
+  const activeLenses = rows.reduce((n, r) => Math.max(n, r.lenses_active ?? 0), 0)
+  const notes: string[] = []
   if (scored) {
-    // COUNTED, not asserted. This paragraph used to say "while one lens is active", which was
-    // true the day it was written and false the day the risk and cost lenses landed — and it
-    // went on to promise a MEDIUM cap that no longer applied. A board whose own explanation of
-    // its methodology is out of date is exactly the failure it exists to prevent, so the number
-    // is read off the rows and the tier rule is stated as a RULE rather than as today's state.
-    const active = rows.reduce((n, r) => Math.max(n, r.lenses_active ?? 0), 0)
-    notices.push({
-      lead: 'Every composite says how many lenses it is made of.',
-      text:
-        `The blend carries ${list.lenses.length} lenses and only the ones with a producer today ` +
-        `contribute, so each row prints its own count — “${lensesLabel(active, list.lenses.length)}” — ` +
-        `beside the score. The tier ladder’s own minimum-layer rule needs several independent ` +
-        `lenses to agree before the top tiers open, so a fund with few active lenses cannot reach ` +
-        `them however strong it looks. That is the methodology working, not a defect. Deciles are ` +
-        `cut within the peer group, on read, over scored funds only; Leader is that group’s top decile.`,
-    })
+    notes.push(`Scores are ${lensesLabel(activeLenses, list.lenses.length)}`)
     if (list.scored_on && list.eod && list.scored_on !== list.eod) {
-      notices.push({
-        lead: `Scores are from ${formatIsoDate(list.scored_on)}, prices from ${session}.`,
-        text: 'The scorer has not run for the latest session yet; the ranking below is the last one it wrote.',
-      })
+      notes.push(`scored ${formatIsoDate(list.scored_on)}, priced ${session}`)
     }
   } else {
-    notices.push({
-      lead: 'Not scored yet — no ranking on this board.',
-      text:
-        etf
-          ? `Composite, conviction, decile and the technical lens join this table once ` +
-            `scripts/global_market/score_etfs.py has written ${session}. Nothing below is a score.`
-          : `Composite, conviction, decile and the technical lens join this table once the stock ` +
-            `scorer has written lens_scores_daily for ${session}. Nothing below is a score.`,
-    })
+    notes.push(`Not scored for ${session} — nothing below is a score`)
   }
-  if (etf && !classified) {
-    notices.push({
-      lead: 'Funds are not grouped yet.',
-      text: 'The peer-group strip and the country, region and gearing facets appear once scripts/global_market/classify_etfs.py has run.',
-    })
-  }
-  if (!universe) {
-    notices.push({
-      lead: 'Universe not marked yet.',
-      text: `The board shows every listed instrument until the universe snapshot has run for ${session}: S&P 500 members for stocks, and ETFs above the liquidity floor that are neither leveraged nor inverse.`,
-    })
-  }
-  if (!priced) {
-    notices.push({
-      lead: 'Prices not loaded yet.',
-      text: `Relative strength, 52-week position, traded value, volatility and drawdown join this table once the price spine has run; no row carries one for ${session}.`,
-    })
-  }
+  if (etf && !classified) notes.push('not grouped yet: no peer groups, no country or gearing filters')
+  if (!universe) notes.push('universe not marked: every listed instrument is shown')
+  if (!priced) notes.push('no prices: relative strength, volatility and traded value are empty')
 
   return (
     <>
-      {notices.length > 0 && (
-        <div className="notice text-body" role="status">
-          <span aria-hidden="true" className="dot bg-warn" />
-          <div className="space-y-1">
-            {notices.map((m) => (
-              <p key={m.lead}>
-                <span className="font-medium text-ink">{m.lead}</span> {m.text}
-              </p>
-            ))}
-          </div>
-        </div>
-      )}
+      <p className="mb-3 text-meta text-ink-2" role="status">
+        {notes.join(' · ')} ·{' '}
+        <Link href="/methodology" className="underline">
+          how a score is built
+        </Link>
+      </p>
       <Explorer
         rows={rows}
         columns={columns}
@@ -256,6 +286,11 @@ export function InstrumentExplorer({ assetClass, list }: { assetClass: AssetClas
         noun={NOUN[assetClass]}
         stripKey={etf ? PEER.key : SECTOR.key}
         empty={`No ${NOUN[assetClass]} match these filters. Clear a facet, widen the universe, or shorten the search.`}
+        chart={
+          scored && priced
+            ? (shown) => <StrengthRiskBubble rows={shown} assetClass={assetClass} noun={NOUN[assetClass]} />
+            : undefined
+        }
       />
     </>
   )
