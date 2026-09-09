@@ -352,11 +352,26 @@ def check_A(g: Gate, eod: Any = None, report: str | None = None) -> None:
         )
 
     if report:
-        out = pd.DataFrame(unexplained).copy()
+        # BOTH failing populations, labelled, in one file. Check (3) hard-fails the gate and
+        # therefore withholds the whole board's publish, and until now it printed three example
+        # rows and wrote nothing — so the operator could see THAT the board was held back but
+        # not the full set of instruments holding it back, which is the only thing that lets
+        # anyone act. A gate that stops a publish owes its evidence in full.
+        labelled = [
+            pd.DataFrame(impossible).assign(finding="impossible_move_on_close_tr"),
+            pd.DataFrame(unexplained).assign(finding="unexplained_log_jump_on_close_adj"),
+        ]
+        # Empty frames are dropped before the concat, not after: concatenating one makes pandas
+        # warn about a dtype rule that is changing, and on a clean run BOTH are empty.
+        populated = [f for f in labelled if len(f)]
+        out = pd.concat(populated, ignore_index=True) if populated else labelled[0]
         out["ret_tr_pct"] = out["ret_tr"] * 100.0
+        out = out.sort_values(["finding", "symbol", "date"])
         out.to_csv(report, index=False)
         print(
-            f"  wrote {len(out):,d} unexplained jump row(s) over {dirty:,d} instrument(s) → {report}"
+            f"  wrote {len(impossible):,d} impossible move(s) over "
+            f"{impossible['symbol'].nunique() if len(impossible) else 0:,d} instrument(s) and "
+            f"{len(unexplained):,d} unexplained jump(s) over {dirty:,d} instrument(s) → {report}"
         )
 
     if scored < A_MIN_N_FOR_SHARE:
