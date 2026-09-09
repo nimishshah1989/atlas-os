@@ -173,7 +173,47 @@ SEEDS: list[dict[str, object]] = [
          "over — filings.recent is capped by COUNT, so a heavy filer's 8-K history is short"),
     # ── §B flow lens + risk flags ─────────────────────────────────────────────────────────
     _row("flow_si_extreme_pct", "20", "flow", "B", "percent", "0", "100",
-         "Short interest above this % of float raises the risk flag"),
+         "Short interest above this percent of float raises the risk flag. NOT read by the flow "
+         "lens: nothing in atlas_global carries a float, and inferring one would be a derived "
+         "number wearing a real one's clothes. The lens uses days to cover instead"),
+    # ── §B flow lens on FINRA short interest (stock_flow.py) ──────────────────────────────
+    # plan.md orders this lens "Form 4 first". The census in tests/fixtures/global/form4/SOURCE.md
+    # measured what that gives: zero open-market purchases in a year across three megacaps, and
+    # every sale under a 10b5-1 plan adopted months earlier. Short interest is dense, free and
+    # nine years deep, so it goes first; Form 4 stays worth adding as a sparse overlay.
+    _row("flow_si_max_age_days", "45", "flow", "B", "days", "1", "365",
+         "The newest settlement may be at most this old or the lens refuses to score. FINRA "
+         "publishes ~8 business days after a twice-monthly settlement, so a fresh reading is "
+         "routinely three weeks old; beyond this it is last quarter's positioning, not today's"),
+    _row("flow_dtc_low", "2", "flow", "B", "days", "0", "100",
+         "Days to cover at or below this is an uncrowded short — the best rung"),
+    _row("flow_dtc_ok", "4", "flow", "B", "days", "0", "100",
+         "Days to cover at or below this is ordinary"),
+    _row("flow_dtc_high", "8", "flow", "B", "days", "0", "100",
+         "Days to cover at or below this is crowded; beyond it is the extreme rung"),
+    _row("flow_dtc_pts_low", "10", "flow", "B", "points", "-50", "50",
+         "Points from 50 when days to cover is at or below flow_dtc_low"),
+    _row("flow_dtc_pts_ok", "4", "flow", "B", "points", "-50", "50",
+         "Points when days to cover is at or below flow_dtc_ok"),
+    _row("flow_dtc_pts_high", "-6", "flow", "B", "points", "-50", "50",
+         "Points when days to cover is at or below flow_dtc_high"),
+    _row("flow_dtc_pts_extreme", "-14", "flow", "B", "points", "-50", "50",
+         "Points beyond flow_dtc_high. UNEXERCISED by the committed fixtures — three healthy "
+         "megacaps are never crowded shorts — so its size is the least evidenced number here"),
+    _row("flow_si_change_big", "20", "flow", "B", "percent", "0", "500",
+         "A move of this size in the short position since the last settlement is a big one"),
+    _row("flow_si_change_mod", "8", "flow", "B", "percent", "0", "500",
+         "A move of this size is a moderate one; smaller is flat"),
+    _row("flow_si_pts_covering_big", "8", "flow", "B", "points", "-50", "50",
+         "Points when the short position fell by flow_si_change_big or more — shorts covering"),
+    _row("flow_si_pts_covering_mod", "4", "flow", "B", "points", "-50", "50",
+         "Points when the short position fell by flow_si_change_mod or more"),
+    _row("flow_si_pts_building_mod", "-4", "flow", "B", "points", "-50", "50",
+         "Points when the short position rose by flow_si_change_mod or more. Gentler than the "
+         "level ladder on purpose: convertible, index and merger arbitrage all short against a "
+         "hedge, so a rising position is not necessarily a bearish view"),
+    _row("flow_si_pts_building_big", "-8", "flow", "B", "points", "-50", "50",
+         "Points when the short position rose by flow_si_change_big or more"),
     _row("degradation_floor", "-30", "risk", "B", "points", "-100", "0",
          "Floor of the stored (not applied) degradation overlay"),
     # ── §C ETF lens weights (renormalised over present lenses; risk = overlay until FM sets) ─

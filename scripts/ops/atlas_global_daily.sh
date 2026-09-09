@@ -114,6 +114,9 @@ step "ingest_financials"       $PY scripts/global_market/ingest_financials.py --
 # ~500 requests at the SEC's 10/s ceiling — under a minute. It reports which filers' feeds are
 # shallower than the lens's lookback rather than scoring them on a window that quietly shrank.
 step "ingest_filings_8k"       $PY scripts/global_market/ingest_filings_8k.py --report "$LOG_DIR/filings_8k_$EOD.csv"
+# The flow lens's feed. Settlements are twice a month, so most nights this fetches nothing and
+# costs one query; when a new one lands it is five pages of ~22,500 rows.
+step "ingest_short_interest"   $PY scripts/global_market/ingest_short_interest.py --report "$LOG_DIR/short_interest_$EOD.csv"
 # step "ingest_filings_8k"       $PY scripts/global_market/ingest_filings_8k.py
 # step "ingest_form4"            $PY scripts/global_market/ingest_form4.py
 # step "ingest_issuer_holdings"  $PY scripts/global_market/ingest_issuer_holdings.py

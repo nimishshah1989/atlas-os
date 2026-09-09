@@ -86,6 +86,11 @@ BOARD_TABLES: list[tuple[str, str, int]] = [
     # this table is days old whenever the producer is running. 8 sessions catches a stopped
     # feed without failing on a genuinely quiet fortnight.
     ("filings_8k", "filed", 8),  # SEC submissions → the catalyst lens (P3-B)
+    # Twice a month, published ~8 business days after each settlement, so the newest row is
+    # routinely three weeks old and can never be recent. 30 sessions ≈ six weeks: past two
+    # settlements, so a stopped producer is caught before the lens starts refusing readings as
+    # stale (flow_si_max_age_days, seeded at 45 days).
+    ("short_interest", "settlement_date", 30),  # FINRA → the flow lens (P3-B)
 ]
 
 # ── PRODUCER REGISTRY (the build-time half of the freshness contract) ──
@@ -110,6 +115,7 @@ PRODUCERS: dict[str, str] = {
     "etf_meta": "ingest_nport.py",
     "etf_exposure_daily": "build_exposures.py",
     "filings_8k": "ingest_filings_8k.py",
+    "short_interest": "ingest_short_interest.py",
 }
 
 

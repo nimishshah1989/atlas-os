@@ -68,8 +68,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # the atlas packag
 
 import _gdb
 import pandas as pd
-from _filings import filings_by_instrument
 from _financials import GICS_FINANCIALS, financial_metrics
+from _lens_inputs import lens_inputs
 from _report import Report
 from psycopg2.extras import Json
 
@@ -78,9 +78,12 @@ from atlas.global_market import calendar as gcal
 from atlas.global_market import index_membership as imx
 from atlas.global_market.fundamentals import cross_section as xsec
 from atlas.global_market.fundamentals.metrics import Metrics
+from atlas.global_market.providers.finra import ShortInterest
 from atlas.global_market.scoring import blend, tiers_from_thresholds, weights_from_thresholds
 from atlas.global_market.scoring.stock_catalyst import Filing, score_catalyst
 from atlas.global_market.scoring.stock_catalyst import missing_keys as missing_catalyst_keys
+from atlas.global_market.scoring.stock_flow import missing_keys as missing_flow_keys
+from atlas.global_market.scoring.stock_flow import score_flow
 from atlas.global_market.scoring.stock_lenses import (
     REACHABLE_KEYS,
     score_fundamental,
@@ -305,6 +308,7 @@ def score_rows(
     by_id: Mapping[str, Metrics] | None = None,
     bands_locked: bool = False,
     filings: Mapping[str, Sequence[Filing]] | None = None,
+    short: Mapping[str, Sequence[ShortInterest]] | None = None,
 ) -> tuple[pd.DataFrame, list[list[Any]]]:
     """One ``lens_scores_daily`` row per stock, plus the per-stock report lines.
 
@@ -321,6 +325,7 @@ def score_rows(
     # Same all-or-nothing rule as the fundamental bands, for the same reason: a partial set
     # would weight the buckets by whatever happened to be seeded, invisibly.
     catalyst_ready = not missing_catalyst_keys(th)
+    flow_ready = not missing_flow_keys(th)
     total_weight = sum(weights.values())
     now = dt.datetime.now(ZoneInfo(gcal.NEW_YORK))
     rows: list[dict[str, Any]] = []
@@ -376,11 +381,16 @@ def score_rows(
             if filings is not None and catalyst_ready
             else None
         )
+        flow = (
+            score_flow(short.get(str(r["instrument_id"]), ()), anchor, th)
+            if short is not None and flow_ready
+            else None
+        )
         lenses: dict[str, Decimal | None] = {
             "technical": technical.value,
             "fundamental": None if fundamental is None else fundamental.value,
             "catalyst": None if catalyst is None else catalyst.value,
-            "flow": None,  # insider_form4 / holders_13f_q — no producer yet (P3-B)
+            "flow": None if flow is None else flow.value,
         }
         # NO ``order=`` HERE. blend()'s fourth argument is the CONVICTION-TIER ladder
         # (HIGHEST → HIGH → MEDIUM → WATCH → BELOW_THRESHOLD) and its default is the right
@@ -409,6 +419,8 @@ def score_rows(
                 **({} if fundamental is None else dict(fundamental.subs)),
                 "catalyst": None if catalyst is None else catalyst.value,
                 **({} if catalyst is None else dict(catalyst.subs)),
+                "flow": None if flow is None else flow.value,
+                **({} if flow is None else dict(flow.subs)),
                 "composite": result.composite,
                 "conviction_tier": result.conviction_tier,
                 "cap_cohort": r["cap_cohort"],
@@ -423,6 +435,7 @@ def score_rows(
                         "weight_frac": None if weight is None else str(weight),
                         "technical": technical.evidence,
                         **({} if catalyst is None else {"catalyst": catalyst.evidence}),
+                        **({} if flow is None else {"flow": flow.evidence}),
                         "blend": result.evidence,
                     }
                 ),
@@ -536,23 +549,19 @@ def run(
         if r.get("sector_gics") == GICS_FINANCIALS
     }
     by_id = financial_metrics(anchor, financial_ids)
-    missing, missing_catalyst = missing_bands(th), missing_catalyst_keys(th)
-    window = 0 if missing_catalyst else int(th["catalyst_recency_t3"])
-    filings = {} if missing_catalyst else filings_by_instrument(anchor, window)
+    missing = missing_bands(th)
+    events = lens_inputs(anchor, th)
     print(
         f"[score_stocks] fundamentals: {len(by_id):,d} of {len(frame):,d} name(s) have a full "
         f"trailing-twelve-month window as of {anchor}; {len(financial_ids)} financial(s)"
     )
     print_cross_section(cross_section(by_id, metric_report), missing)
 
-    print(
-        f"[score_stocks] the catalyst lens is NOT scored: {len(missing_catalyst)} key(s) missing "
-        f"from {M}.atlas_thresholds, first {missing_catalyst[0]!r} — run seed_thresholds.py"
-        if missing_catalyst
-        else f"[score_stocks] catalyst: {len(filings):,d} of {len(frame):,d} name(s) filed an 8-K "
-        f"inside the {int(th['catalyst_recency_t3'])}-day window"
+    for line in events.lines(M, len(frame)):
+        print(f"[score_stocks] {line}")
+    table, lines = score_rows(
+        frame, anchor, th, run_id, by_id, not missing, events.filings, events.short
     )
-    table, lines = score_rows(frame, anchor, th, run_id, by_id, not missing, filings)
     for line in lines:
         report.add(*line)
     scored = print_summary(table, frame, anchor, report)
