@@ -45,6 +45,7 @@ KEY_TABLES: list[tuple[str, str, int]] = [
     ("technical_daily", "date", 0),  # nightly from ohlcv_daily, same session (P1-D)
     ("country_daily", "date", 0),  # nightly read over technical_daily, same session
     ("etf_scores_daily", "date", 0),  # nightly blend over technical_daily, same session (P2-C)
+    ("lens_scores_daily", "date", 0),  # nightly blend over technical_daily, same session (P2-D)
 ]
 
 # Derived board tables — WARN tier (reported + written to the health snapshot, never a
@@ -62,6 +63,9 @@ BOARD_TABLES: list[tuple[str, str, int]] = [
     # M2: every active basket is re-marked nightly; EMPTY (warn) until the first basket exists,
     # and a basket built during the day is booked by the 5-minute worker, not this table's max.
     ("basket_nav_daily", "date", 8),
+    # Filing-driven, not nightly: a 10-Q lands ~40 days after the quarter it covers, so a
+    # long quiet stretch is the normal state of this table rather than a stalled producer.
+    ("stock_financials_pit", "filed", 95),  # SEC EDGAR company facts (P3-A)
 ]
 
 # ── PRODUCER REGISTRY (the build-time half of the freshness contract) ──
@@ -80,6 +84,8 @@ PRODUCERS: dict[str, str] = {
     "etf_classification": "classify_etfs.py",
     "etf_scores_daily": "score_etfs.py",
     "basket_nav_daily": "mark_baskets.py",
+    "lens_scores_daily": "score_stocks.py",
+    "stock_financials_pit": "ingest_financials.py",
 }
 
 

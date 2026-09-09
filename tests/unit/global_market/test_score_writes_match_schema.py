@@ -167,3 +167,71 @@ def test_a_fund_with_no_metrics_still_produces_a_writable_row(
     assert row["composite"] is None
     assert row["technical"] is None
     assert row["lenses_active"] == 0
+
+
+# ── the percentile transform: alignment is the thing that fails silently ──────
+
+
+def test_percentiles_are_cut_within_the_group_and_land_on_the_right_row() -> None:
+    """The failure this guards is invisible by construction: if a group-wise percentile is
+    misaligned, every fund gets some OTHER fund's percentile, every score stays inside 0-100,
+    and no gate can tell. The frame below interleaves two groups deliberately, so a transform
+    that grouped correctly but reassembled wrongly would put A's rank on B's row.
+
+    The inputs are orderings, not market observations: what is asserted is that the best row
+    in each group ranks 1.0 and the worst 0.0, whatever the values are (rule #0).
+    """
+    frame = pd.DataFrame(
+        {
+            # rows alternate between the two groups, and the groups' value ranges overlap —
+            # so ranking globally instead of per-group gives visibly different answers.
+            "peer_group": ["equity:sector", "equity:country"] * 3,
+            "asset_group": ["equity"] * 6,
+            "ret_6m": [0.10, 0.30, 0.20, 0.40, 0.30, 0.50],
+            # add_percentiles ranks the three risk measures too; they are not what this test
+            # asserts, but leaving them out would make it fail for the wrong reason.
+            "vol_63d_ann": [0.10] * 6,
+            "mdd_12m": [-0.10] * 6,
+            "downside_dev_63d": [0.05] * 6,
+        }
+    )
+    out = score_etfs.add_percentiles(frame)
+    sector = out.loc[out["peer_group"] == "equity:sector", "peer_pct_6m"].tolist()
+    country = out.loc[out["peer_group"] == "equity:country", "peer_pct_6m"].tolist()
+    assert sector == [pytest.approx(1 / 3), pytest.approx(2 / 3), pytest.approx(1.0)]
+    assert country == [pytest.approx(1 / 3), pytest.approx(2 / 3), pytest.approx(1.0)]
+
+
+def test_a_missing_metric_gets_no_percentile_rather_than_the_bottom_of_its_group() -> None:
+    frame = pd.DataFrame(
+        {
+            "peer_group": ["equity:sector"] * 3,
+            "asset_group": ["equity"] * 3,
+            "ret_6m": [0.10, float("nan"), 0.30],
+            "vol_63d_ann": [0.10, 0.20, float("nan")],
+            "mdd_12m": [-0.05, -0.40, -0.10],
+            "downside_dev_63d": [0.05, 0.10, 0.15],
+        }
+    )
+    out = score_etfs.add_percentiles(frame)
+    assert pd.isna(out["peer_pct_6m"].iloc[1]), "no 6m return → no peer percentile"
+    assert pd.isna(out["vol_pct"].iloc[2]), "no volatility → no volatility percentile"
+
+
+def test_low_volatility_and_a_shallow_drawdown_are_the_good_end() -> None:
+    """Getting either orientation backwards would rank the wildest fund safest, and every
+    downstream number would still look perfectly reasonable."""
+    frame = pd.DataFrame(
+        {
+            "peer_group": ["equity:sector"] * 2,
+            "asset_group": ["equity"] * 2,
+            "ret_6m": [0.10, 0.20],
+            "vol_63d_ann": [0.10, 0.40],  # the first fund is calmer
+            "mdd_12m": [-0.05, -0.40],  # the first fund fell less
+            "downside_dev_63d": [0.05, 0.20],
+        }
+    )
+    out = score_etfs.add_percentiles(frame)
+    assert out["vol_pct"].iloc[0] > out["vol_pct"].iloc[1]
+    assert out["mdd_pct"].iloc[0] > out["mdd_pct"].iloc[1]
+    assert out["downside_pct"].iloc[0] > out["downside_pct"].iloc[1]

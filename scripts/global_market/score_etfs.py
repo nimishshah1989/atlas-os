@@ -159,14 +159,23 @@ def assign_groups(frame: pd.DataFrame, min_members: int) -> pd.DataFrame:
     return out
 
 
-def percentile(series: pd.Series, *, higher_is_better: bool) -> pd.Series:
-    """Position in [0, 1] within one group, 1 = best, NaN preserved.
+def percentile_within(
+    frame: pd.DataFrame, group: str, column: str, *, higher_is_better: bool
+) -> pd.Series:
+    """Each row's position in [0, 1] within its own ``group``: 1 = best, NaN preserved.
 
-    ``rank(pct=True)`` over non-null values only: a fund with no volatility figure gets no
-    volatility percentile rather than being placed at the bottom of the group, which would be
-    a measurement we never took.
+    ``groupby(...)[col].rank(pct=True)`` is a TRANSFORM — pandas guarantees the result is
+    aligned to the original index, one value per input row. The obvious alternative,
+    ``groupby(...).apply(...)``, returns a frame whose index depends on what the callable
+    returned, and a misalignment there is invisible: every fund silently gets some OTHER
+    fund's percentile, the scores stay in range, and no gate can tell. Not worth the risk for
+    a line of code that does the same thing.
+
+    ``na_option="keep"`` ranks over non-null values only: a fund with no volatility figure gets
+    no volatility percentile, rather than being placed at the bottom of its group — which would
+    be a measurement nobody took.
     """
-    ranked = series.rank(pct=True, na_option="keep")
+    ranked = frame.groupby(group)[column].rank(pct=True, na_option="keep").astype(float)
     return ranked if higher_is_better else 1.0 - ranked
 
 
@@ -176,25 +185,17 @@ def add_percentiles(frame: pd.DataFrame) -> pd.DataFrame:
     enough funds to describe a distribution of volatility, and volatility compares across a
     whole asset class in a way relative strength does not."""
     out = frame.copy()
-    out["peer_pct_6m"] = (
-        out.groupby("peer_group", group_keys=False)["ret_6m"]
-        .apply(lambda s: percentile(s, higher_is_better=True))
-        .astype(float)
-    )
-    for column, target in (
-        ("vol_63d_ann", "vol_pct"),
-        ("mdd_12m", "mdd_pct"),
-        ("downside_dev_63d", "downside_pct"),
+    out["peer_pct_6m"] = percentile_within(out, "peer_group", "ret_6m", higher_is_better=True)
+    for column, target, higher_is_better in (
+        # Low volatility and low downside deviation are the good end, so those two are
+        # inverted. mdd_12m is stored as a NEGATIVE fraction, so higher is already better on
+        # the raw number: -0.05 is a shallower drawdown than -0.40 and must rank above it.
+        ("vol_63d_ann", "vol_pct", False),
+        ("mdd_12m", "mdd_pct", True),
+        ("downside_dev_63d", "downside_pct", False),
     ):
-        # Low volatility, shallow drawdown and low downside deviation are the good end, so the
-        # percentile is inverted before it reaches the ladder. mdd_12m is stored as a negative
-        # fraction (a drawdown), so "higher is better" is already true of the raw number: -0.05
-        # ranks above -0.40. Only the two positive-scale measures are flipped.
-        flip = column != "mdd_12m"
-        out[target] = (
-            out.groupby("asset_group", group_keys=False)[column]
-            .apply(lambda s, f=flip: percentile(s, higher_is_better=not f))
-            .astype(float)
+        out[target] = percentile_within(
+            out, "asset_group", column, higher_is_better=higher_is_better
         )
     return out
 

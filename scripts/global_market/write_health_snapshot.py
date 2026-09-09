@@ -54,6 +54,8 @@ TRACKED: list[tuple[str, str]] = [
     ("universe_snapshot", "date"),
     ("etf_classification", "valid_from"),
     ("etf_scores_daily", "date"),
+    ("lens_scores_daily", "date"),
+    ("stock_financials_pit", "filed"),
     ("basket_nav_daily", "date"),
 ]
 

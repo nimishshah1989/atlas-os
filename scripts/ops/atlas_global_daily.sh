@@ -107,6 +107,9 @@ gate() {  # gate "name" cmd...
 #    session to score, not a quiet carry-forward.
 step "ingest_prices"           $PY scripts/global_market/ingest_prices.py --eod "$EOD" --report "$LOG_DIR/ingest_prices_$EOD.csv"
 step "ingest_macro"            $PY scripts/global_market/ingest_macro.py --eod "$EOD"
+# SEC EDGAR company facts → stock_financials_pit, point-in-time by `filed`. Filing-driven:
+# most nights add nothing, and a quiet stretch is normal rather than a fault.
+step "ingest_financials"       $PY scripts/global_market/ingest_financials.py --eod "$EOD" --report "$LOG_DIR/ingest_financials_$EOD.csv"
 # step "ingest_filings_8k"       $PY scripts/global_market/ingest_filings_8k.py
 # step "ingest_form4"            $PY scripts/global_market/ingest_form4.py
 # step "ingest_issuer_holdings"  $PY scripts/global_market/ingest_issuer_holdings.py
@@ -128,7 +131,10 @@ step "compute_technicals"      $PY scripts/global_market/compute_technicals.py -
 # liquidity_min_traded_value_usd from the ADV$ table it prints and saves to $LOG_DIR/adv_usd_$EOD.md (runbook §7).
 step "build_universe_snapshot" $PY scripts/global_market/build_universe_snapshot.py --eod "$EOD" --report "$LOG_DIR/universe_snapshot_$EOD.csv" --report-dir "$LOG_DIR"
 # step "build_exposures"         $PY scripts/global_market/build_exposures.py --changed
-# step "score_stocks"            $PY scripts/global_market/score_stocks.py --as-of "$EOD"
+# Stocks: the technical lens over the in-universe S&P 500, cohorts = SPY-weight terciles.
+# After build_universe_snapshot (it reads in_universe, which for a stock already means
+# current membership); independent of classify_etfs/score_etfs, so it may sit either side.
+step "score_stocks"            $PY scripts/global_market/score_stocks.py --eod "$EOD" --report "$LOG_DIR/score_stocks_$EOD.csv"
 # CLASSIFY then SCORE, in that order and before the country view: score_etfs INNER-joins the
 # classification to get each fund's peer group, and build_country_views reads the composite the
 # scorer writes. classify_etfs is cheap (a regex over ~5,600 names, no feed) and runs nightly

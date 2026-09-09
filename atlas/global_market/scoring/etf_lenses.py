@@ -42,6 +42,32 @@ from typing import Any
 
 from atlas.lenses.compute.technical import _score_relative_strength, _score_trend
 
+# Every threshold key India's `_score_trend` and `_score_relative_strength` read. Indexed,
+# never defaulted — see the module docstring. Kept in sync with India's source by
+# test_stock_lenses.test_technical_keys_covers_every_threshold_india_reads.
+TECHNICAL_KEYS: tuple[str, ...] = (
+    "ema_aligned_all",
+    "ema_aligned_partial",
+    "price_above_ema200_strong",
+    "price_below_ema200_weak",
+    "slope_strong_pct",
+    "slope_weak_pct",
+    "rs_golden_cross_pts",
+    "rs_fast_above_mid_pts",
+)
+
+
+def india_thresholds(th: Mapping[str, Decimal]) -> dict[str, Any]:
+    """The keys India's technical scorer reads, as the floats it does arithmetic in.
+
+    Converting AT THIS BOUNDARY and nowhere else keeps the reuse honest — the values are
+    still the global table's rows, and no money or stored score is touched: these are
+    dimensionless band edges and point counts. ``etf_lenses.score_technical`` does the same
+    at the same boundary, for the same two functions.
+    """
+    return {key: float(th[key]) for key in TECHNICAL_KEYS}
+
+
 # Each sub-score is 0–25 and a lens is the mean of the PRESENT sub-scores × 4, so a lens is
 # 0–100 whether it had four inputs or two. Same shape as India's technical lens.
 SUB_MAX = Decimal("25")
@@ -169,11 +195,11 @@ def score_technical(
     trend and structure are India's own scorers, unmodified, reading the same threshold keys
     out of the global table. rs_spy and peer_rs are this market's own.
     """
-    # India's scorers mix their threshold values with float literals (`pts * 1.25`), so they
-    # want floats; our loader hands out Decimal. Converting AT THIS BOUNDARY and nowhere else
-    # keeps the reuse honest — the values are still the global table's, and no Decimal money
-    # or score is touched: these are dimensionless band edges and point counts.
-    thd: dict[str, Any] = {k: float(v) for k, v in th.items()}
+    # india_thresholds INDEXES the eight keys India reads. The earlier version passed the
+    # whole table converted to float, which looks equivalent and is not: India's scorer uses
+    # `th.get(key, <literal>)`, so a key missing from the global table fell through to INDIA'S
+    # number and scored US funds on it, silently. Indexing raises KeyError by name instead.
+    thd = india_thresholds(th)
     trend, trend_ev = _score_trend(ema_21, ema_50, ema_200, price, rsi_14, ret_1w, thd)
     structure, structure_ev = _score_relative_strength(ema_21, ema_50, ema_200, thd)
     rs_spy, rs_ev = score_rs_spy(rs_3m_spy, rs_6m_spy, rs_12m_spy, th)

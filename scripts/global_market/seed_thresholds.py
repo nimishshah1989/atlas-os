@@ -32,6 +32,11 @@ What is seeded (each row: key, value, category, description, units, min, max, de
   503 S&P 500 members on that date clear it. The refusal path in ``build_universe_snapshot``
   stays exactly as it was — it is the guard for any database where the row is missing or
   inactive, not a placeholder waiting for this seed.
+* P3-A fundamentals: ``fund_min_quarters`` 8 — the quarterly history a stock needs before the
+  fundamental lens may score it, and the number ``ingest_financials.py`` counts filers against
+  every night. Two years is the shortest window carrying a year-on-year growth rate and the
+  prior-year comparison it is measured against; it is a COVERAGE floor, not one of the §B
+  scoring bands below.
 
 * M2 baskets (category ``basket``, section M2) — the FM's basket instruction of 2026-09-09, the
   numbers India's ``portfolio_*`` rows carry translated to USD and fractional shares:
@@ -291,6 +296,13 @@ SEEDS: list[dict[str, object]] = [
          "Execution cost on a sell, basis points of value; 0 until an execution provider names one"),
     _row("basket_min_weight_frac", "0.01", "basket", "M2", "fraction", "0", "1",
          "Smallest target weight a constituent may carry (below it a name is noise, not a position)"),
+    # ── P3-A company fundamentals (ingest_financials.py → stock_financials_pit) ───────────
+    _row("fund_min_quarters", "8", "fundamental", "B", "quarters", "1", "40",
+         "Quarterly filings a stock needs before the fundamental lens may score it. 8 = two "
+         "years, which is the shortest window that carries a year-on-year growth rate AND the "
+         "prior-year comparison it is measured against. P3-A's definition of done reads this "
+         "row: >=95% of S&P 500 members at or above it. ingest_financials.py counts filers "
+         "below it every night and refuses to run if this row is missing"),
 ]
 # fmt: on
 

@@ -61,22 +61,20 @@ from collections.abc import Mapping
 from decimal import Decimal
 from typing import Any
 
-from atlas.global_market.scoring.etf_lenses import LensResult
+# TECHNICAL_KEYS and india_thresholds live in etf_lenses (the lower module: stock_lenses
+# imports it, so the definition cannot live here without a cycle). Re-exported so this
+# module's own name for them, and the tests that pin it, keep working.
+from atlas.global_market.scoring.etf_lenses import (
+    TECHNICAL_KEYS,
+    LensResult,
+    india_thresholds,
+)
 from atlas.lenses.compute import technical as india_technical
 
-# Every threshold key India's `_score_trend` and `_score_relative_strength` read. Indexed,
-# never defaulted — see the module docstring. Kept in sync with India's source by
-# test_stock_lenses.test_technical_keys_covers_every_threshold_india_reads.
-TECHNICAL_KEYS: tuple[str, ...] = (
-    "ema_aligned_all",
-    "ema_aligned_partial",
-    "price_above_ema200_strong",
-    "price_below_ema200_weak",
-    "slope_strong_pct",
-    "slope_weak_pct",
-    "rs_golden_cross_pts",
-    "rs_fast_above_mid_pts",
-)
+# Re-exported: `TECHNICAL_KEYS` is pinned against India's own source by
+# test_stock_lenses.test_technical_keys_covers_every_threshold_india_reads, which reads it
+# from this module. __all__ makes the re-export explicit rather than an unused import.
+__all__ = ["TECHNICAL_KEYS", "india_thresholds", "score_technical"]
 
 # The lens_scores_daily sub-score columns, in India's own order (ddl/05_scores.sql), mapped
 # from the TechnicalResult attribute each one carries. `vol_contraction` and `volume` are the
@@ -88,17 +86,6 @@ TECHNICAL_SUBS: tuple[tuple[str, str], ...] = (
     ("tech_vol_contraction", "vol_contraction"),
     ("tech_volume", "volume"),
 )
-
-
-def india_thresholds(th: Mapping[str, Decimal]) -> dict[str, Any]:
-    """The keys India's technical scorer reads, as the floats it does arithmetic in.
-
-    Converting AT THIS BOUNDARY and nowhere else keeps the reuse honest — the values are
-    still the global table's rows, and no money or stored score is touched: these are
-    dimensionless band edges and point counts. ``etf_lenses.score_technical`` does the same
-    at the same boundary, for the same two functions.
-    """
-    return {key: float(th[key]) for key in TECHNICAL_KEYS}
 
 
 def score_technical(
