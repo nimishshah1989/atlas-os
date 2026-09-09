@@ -6,16 +6,20 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 const SECTIONS: { href: string; label: string }[] = [
-  { href: '/', label: 'Today' },
+  // Countries leads because it IS the front door (the FM's D1): / redirects here, so there is
+  // no separate Today section to link to until one has scored movement to show.
   { href: '/countries', label: 'Countries' },
   { href: '/etfs', label: 'ETFs' },
   { href: '/stocks', label: 'Stocks' },
+  { href: '/portfolios', label: 'Portfolios' },
+  { href: '/methodology', label: 'Methodology' },
   { href: '/health', label: 'Health' },
-  // PORTFOLIOS HOOK — once src/app/portfolios exists, add: { href: '/portfolios', label: 'Portfolios' },
 ]
 
 function isActive(pathname: string, href: string): boolean {
-  if (href === '/') return pathname === '/'
+  // `/` redirects to /countries, so the root is Countries' own section rather than a link of
+  // its own — otherwise landing on the board would leave every item unlit.
+  if (href === '/countries' && pathname === '/') return true
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 
