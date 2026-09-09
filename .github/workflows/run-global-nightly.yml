@@ -234,8 +234,16 @@ jobs:
                 if [ -z "${VAL:-}" ]; then echo "  $VAR: no repo secret set — left alone"; continue; fi
                 # Rewrite rather than sed -i: a value containing the delimiter would corrupt
                 # the file, and a key or an email very well might. Only the NAME is printed.
+                #
+                # SINGLE-QUOTED, and this is not cosmetic. .env is SOURCED by the orchestrators
+                # (`set -a; source .env`), so an unquoted value containing a space is parsed as
+                # a command: EDGAR_IDENTITY=Nimish Shah nimish@... set the variable to "Nimish"
+                # and then tried to RUN "Shah", which is exactly what the box reported —
+                # ".env: line 75: Shah: command not found" — leaving the SEC contact truncated
+                # to one word. Embedded single quotes are escaped the POSIX way ('"'"'\''"'"').
                 grep -v "^$VAR=" "$REPO/.env" > "$REPO/.env.new" || true
-                printf '%s=%s\n' "$VAR" "$VAL" >> "$REPO/.env.new"
+                ESC=$(printf '%s' "$VAL" | sed "s/'/'\\\\''/g")
+                printf "%s='%s'\n" "$VAR" "$ESC" >> "$REPO/.env.new"
                 mv "$REPO/.env.new" "$REPO/.env" && chmod 600 "$REPO/.env"
                 echo "  $VAR: written"
               done
