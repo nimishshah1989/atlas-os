@@ -134,7 +134,13 @@ RULES: tuple[tuple[re.Pattern[str], str, str], ...] = (
             r"\b(?:covered call|buy-?write|option income|options income|"
             r"premium income|yieldmax|yieldboost|call writing|put write|"
             r"weekly ?pay|premium yield|enhanced yield|income boost|max income|"
-            r"option strategy|collar|target income)\b",
+            # "hedged equity" is NOT here, and that is the whole lesson of this rule group.
+            # Fidelity and Calamos use it for an options overlay; Xtrackers and WisdomTree use
+            # it for CURRENCY hedging ("MSCI Japan Hedged Equity"). Adding it filed seven
+            # well-known currency-hedged country funds as options income. The currency case is
+            # already captured by is_currency_hedged, so the term buys 16 funds at the price of
+            # being wrong about ones anybody would recognise. Precision over recall.
+            r"option strategy|collar\w*|target income)\b",
             re.I,
         ),
         "options_income",
@@ -157,7 +163,11 @@ RULES: tuple[tuple[re.Pattern[str], str, str], ...] = (
     (
         re.compile(
             r"\b(?:bond|bonds|treasur(?:y|ies)|municipal|muni|aggregate|"
-            r"investment grade|high yield bond|senior loan|leveraged loan|clo|"
+            # "High Yield" alone is a junk-bond fund; "High Yield EQUITY Dividend Achievers"
+            # is an equity fund that happens to use the same two words. The lookahead is what
+            # keeps Invesco's PEY in dividend_income where it belongs.
+            r"investment grade|high[- ]yield(?!\s+(?:equity|dividend|stock))|"
+            r"senior loan|leveraged loan|clo|"
             r"mortgage|mbs|tips|duration|maturity|fixed income|credit|debt|"
             r"convertible|preferred|t-?bills?|treasury bills?|"
             r"floating rate|securitiz\w+|cash management|money market|"
@@ -194,7 +204,7 @@ RULES: tuple[tuple[re.Pattern[str], str, str], ...] = (
     (
         re.compile(
             r"\b(?:asset allocation|balanced|target date|multi-?asset|"
-            r"target risk|retirement \d{4}|conservative allocation|"
+            r"target risk|retirement \d{4}|conservative allocation|aggressive allocation|"
             r"moderate allocation|growth allocation)\b",
             re.I,
         ),
@@ -302,7 +312,7 @@ RULES: tuple[tuple[re.Pattern[str], str, str], ...] = (
             r"\b(?:quality|momentum|low volatility|minimum volatility|"
             r"equal ?weight|multi-?factor|factor|smart beta|"
             r"fundamental index|research enhanced|moat|buyback|"
-            r"free cash flow|profitab\w*)\b",
+            r"free cash flow|\bfcf\b|profitab\w*)\b",
             re.I,
         ),
         "factor",
@@ -311,7 +321,8 @@ RULES: tuple[tuple[re.Pattern[str], str, str], ...] = (
     (
         re.compile(
             r"\b(?:large[ -]?cap|mid[ -]?cap|small[ -]?cap|micro[ -]?cap|"
-            r"mega[ -]?cap|smid|small[ -]?(?:and[ -]?)?mid|growth|value|blend|"
+            r"mega[ -]?cap|smid|small[ -]?(?:and[ -]?)?mid|ultra[- ]small|"
+            r"growth|value|blend|"
             r"top \d{2,4})\b",
             re.I,
         ),
