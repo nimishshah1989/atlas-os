@@ -68,6 +68,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # the atlas packag
 
 import _gdb
 import pandas as pd
+from _cross_section import cross_section, print_cross_section
 from _financials import GICS_FINANCIALS, financial_metrics
 from _lens_inputs import lens_inputs
 from _report import Report
@@ -197,41 +198,6 @@ def missing_bands(th: Mapping[str, Decimal]) -> list[str]:
     own cross-section.
     """
     return sorted(REACHABLE_KEYS - set(th))
-
-
-def cross_section(by_id: Mapping[str, Metrics], report: Report | None) -> pd.DataFrame:
-    """The pure table, with each row also written to the FM's CSV."""
-    table = xsec.cross_section(by_id.values())
-    if report is not None:
-        for row in table.to_dict("records"):
-            report.add(*(row[c] for c in METRIC_REPORT_COLUMNS))
-    return table
-
-
-def print_cross_section(table: pd.DataFrame, missing: Sequence[str]) -> None:
-    """The same table on the console, and — when the bands are not all there — why the lens
-    did not score."""
-    header = f"{'metric':<20}{'unit':<9}{'names':>6}" + "".join(
-        f"{'P' + str(p):>10}" for p in xsec.PERCENTILES
-    )
-    print("\n[score_stocks] S&P 500 fundamental cross-section — the FM sets the bands from this")
-    print("  " + header)
-    for r in table.to_dict("records"):
-        # pd.isna, not `is None`: DataFrame.from_records turns a None into NaN in a float
-        # column, and NaN formats as "nan" through the same "{:>10.2f}" that would show a
-        # number. The CSV is written from the dicts and keeps the empty cell either way.
-        cells = "".join(
-            f"{'—':>10}" if pd.isna(r[f"p{p}"]) else f"{r[f'p{p}']:>10.2f}"
-            for p in xsec.PERCENTILES
-        )
-        print(f"  {r['metric']:<20}{r['unit']:<9}{r['names']:>6}{cells}")
-    if missing:
-        print(
-            f"  the fundamental lens is NOT scored: {len(missing)} of {len(REACHABLE_KEYS)} "
-            f"band(s) are missing from {M}.atlas_thresholds, first {missing[0]!r}. Set them "
-            "from the table above (seed_thresholds.py, FM approval first) — a partial set "
-            "would score this market on India's numbers."
-        )
 
 
 def anchor_date(cutoff: dt.date) -> dt.date:
