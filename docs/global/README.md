@@ -3,6 +3,7 @@
 The US-market sibling platform: S&P 500 stocks + US-listed ETFs, schema `atlas_global`, its own board (`frontend-global/`).
 
 - [plan.md](plan.md) — the approved plan (2026-09-04): decisions, architecture, schema, orchestration, methodology, phases and their definition-of-done gates. **The versioned source of truth.**
+- [phase2.md](phase2.md) — the FM plan of 2026-09-09: the universe cut, ETF and stock scoring, ranking by decile within peer group, the country front door, the desk design language, portfolios.
 - [data-sources.md](data-sources.md) — every feed with its cadence, fallback and gate; the Alpaca paper-only caveat; the SIP gate protocol and its result log.
 - Methodology — lives inside [plan.md](plan.md) ("Methodology spec — metrics, lenses, weights") until Phase 3 splits it out as `methodology.md`.
 - [ADR-0006](../adr/0006-second-schema-atlas-global.md) — why a second schema: one schema per market, zero cross-schema references, the modulith context and its four subtree edges.

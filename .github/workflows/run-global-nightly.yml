@@ -1,0 +1,80 @@
+name: Run Global Nightly
+
+# The global nightly is a cron on the box, and on 2026-09-09 it had not run for a day and
+# nobody could say why without an SSH session. This is the same SSH path deploy-global.yml
+# uses, pointed at the orchestrator instead of the build, so the pipeline can be run — and its
+# state read — from GitHub without a person typing on the box.
+#
+# Two modes:
+#   status  read-only: cron entries for the nightly, the last nightly log's tail, then
+#           scripts/ops/atlas_global_status.sh (code, build, process, routes, database, nightly)
+#   run     the nightly itself, under the SAME lock the cron uses, so a run started here can
+#           never overlap a scheduled one; then the FAIL lines with their recorded reasons and
+#           the health-snapshot line. install_cron=true adds the runbook's cron line first if
+#           no atlas_global_daily entry exists (docs/global/runbook.md §5) — nothing else is
+#           ever written to the box by this workflow.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "status (read-only) or run (the nightly, under flock)"
+        required: true
+        default: status
+        type: choice
+        options: [status, run]
+      install_cron:
+        description: "run mode only: install the runbook cron line if the box has none"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: global-nightly
+  cancel-in-progress: false
+
+jobs:
+  nightly:
+    name: ${{ inputs.mode }} the global nightly on the box
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+
+    steps:
+      - name: ${{ inputs.mode }} on EC2
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          command_timeout: 70m
+          # Every command on ONE line where it carries quotes: a line indented below this
+          # block scalar's indent ENDS the scalar (tests/unit/test_workflow_files_parse.py).
+          script: |
+            set -uo pipefail
+            REPO=/home/ubuntu/atlas-os
+            LOGS=/home/ubuntu/logs
+            MODE="${{ inputs.mode }}"
+            CRON_LINE='0 1 * * 2-6   flock -n /tmp/atlas_global.lock /home/ubuntu/atlas-os/scripts/ops/atlas_global_daily.sh >> /home/ubuntu/logs/atlas_global_daily_cron.log 2>&1'
+            echo "== cron entries mentioning atlas_global_daily =="
+            crontab -l 2>/dev/null | grep -n atlas_global_daily || echo "NONE — the nightly is not scheduled on this box"
+            echo "== newest nightly log =="
+            LAST=$(ls -1t "$LOGS"/atlas_global_daily_[0-9]*.log 2>/dev/null | head -1 || true)
+            if [ -n "$LAST" ]; then echo "$LAST ($(date -u -r "$LAST" +%FT%TZ))"; tail -n 25 "$LAST"; else echo "none under $LOGS"; fi
+            if [ "$MODE" = "status" ]; then
+              echo "== atlas_global_status.sh =="
+              bash "$REPO/scripts/ops/atlas_global_status.sh" || true
+              exit 0
+            fi
+            if [ "${{ inputs.install_cron }}" = "true" ] && ! crontab -l 2>/dev/null | grep -q atlas_global_daily; then
+              ( crontab -l 2>/dev/null; echo "$CRON_LINE" ) | crontab - && echo "installed cron line: $CRON_LINE"
+            fi
+            echo "== running the nightly under /tmp/atlas_global.lock (started $(date -u +%FT%TZ)) =="
+            if ! flock -n /tmp/atlas_global.lock bash "$REPO/scripts/ops/atlas_global_daily.sh" >> "$LOGS/atlas_global_daily_cron.log" 2>&1; then echo "nightly exited non-zero, or the lock was held by a scheduled run"; fi
+            echo "== finished $(date -u +%FT%TZ) =="
+            NEW=$(ls -1t "$LOGS"/atlas_global_daily_[0-9]*.log 2>/dev/null | head -1 || true)
+            if [ -z "$NEW" ] || [ "$NEW" = "$LAST" ]; then echo "NO NEW LOG — the orchestrator did not start (lock held? .venv or .env missing?)"; tail -n 20 "$LOGS/atlas_global_daily_cron.log" 2>/dev/null; exit 1; fi
+            echo "== $NEW: step outcomes =="
+            grep -E '^  (ok|FAIL): ' "$NEW" || true
+            echo "== health snapshot =="
+            grep -E 'health snapshot|write_health_snapshot' "$NEW" || true
+            echo "== last 40 lines =="
+            tail -n 40 "$NEW"
