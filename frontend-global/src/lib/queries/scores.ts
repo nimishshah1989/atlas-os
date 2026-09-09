@@ -234,6 +234,10 @@ export type Classification = {
   classified_by: string
   valid_from: string
   evidence: unknown
+  /** The taxonomy id of the fund's primary theme — what /themes/[id] is keyed on. */
+  theme_id: string | null
+  /** That theme's display name. Null on a fund whose name names no theme, which is most of them. */
+  theme: string | null
 }
 
 type ScoreRow = Record<string, unknown>
@@ -340,9 +344,13 @@ export async function getScoreDetail(assetClass: AssetClass, symbol: string): Pr
 const classificationInner = eodCached(async (symbol: string): Promise<Classification | null> => {
   const rows = await db()<Classification[]>`
     SELECT c.strategy, c.asset_class, c.country_codes, c.leveraged, c.inverse, c.hedged,
-           c.status, c.classified_by, c.valid_from::text AS valid_from, c.evidence
+           c.status, c.classified_by, c.valid_from::text AS valid_from, c.evidence,
+           -- the theme the rule table settled first, with the id the /themes page is keyed on, so
+           -- the card can say "this is a uranium fund" AND take the reader to the other uranium funds
+           c.theme_ids[1] AS theme_id, tx.name AS theme
     FROM atlas_global.etf_classification c
     JOIN atlas_global.instrument_master m ON m.instrument_id = c.instrument_id
+    LEFT JOIN atlas_global.taxonomy_sector tx ON tx.id = c.theme_ids[1]
     WHERE m.is_active AND m.asset_class = 'etf' AND m.symbol = ${symbol}
     ORDER BY (c.valid_to IS NOT NULL), c.version DESC
     LIMIT 1
