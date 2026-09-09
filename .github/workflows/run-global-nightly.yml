@@ -9,6 +9,13 @@ name: Run Global Nightly
 #   status  read-only: cron entries for the nightly, the last nightly log's tail, the newest
 #           gate A findings CSV, then scripts/ops/atlas_global_status.sh (code, build,
 #           process, routes, database, nightly)
+#   weekly  atlas_global_weekly.sh: build_identity, seed_benchmarks, ingest_index_membership.
+#           MEMBERSHIP IS ONLY REFRESHED HERE, and the weekly had never been run — so
+#           universe_snapshot was carrying whatever index_membership was first loaded with.
+#           Gate A's two worst findings on 2026-09-09 were LAZR, which the live SSGA holdings
+#           file says is NOT an S&P 500 member: a stale membership table was scoring a stock
+#           that should not be in the universe at all. Same lock as the nightly, because both
+#           write universe_snapshot.
 #   run     the nightly itself, holding the SAME lock the cron uses for the WHOLE step, so a
 #           run started here can neither overlap a scheduled one nor mistake a scheduled run's
 #           log for its own; then the FAIL lines with their recorded reasons.
@@ -48,11 +55,11 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "status (read-only) or run (the nightly, holding the cron's lock)"
+        description: "status (read-only), run (the nightly), or weekly (identity, benchmarks, S&P 500 membership)"
         required: true
         default: status
         type: choice
-        options: [status, run]
+        options: [status, run, weekly]
       install_cron:
         description: "run mode only: install the runbook cron line if the box has none"
         required: false
@@ -240,6 +247,13 @@ jobs:
               # a time. If it does run long, the step's own 70m command_timeout bounds it and
               # the nightly below still runs on whatever landed — the writer is an upsert.
               ( set -a; source "$REPO/.env"; set +a; cd "$REPO"; PYTHONPATH="$REPO:$REPO/scripts/global_market:$REPO/scripts/foundation" "$REPO/.venv/bin/python" scripts/global_market/ingest_prices.py --backfill ) 2>&1 | tail -n 30 | redact || echo "BACKFILL FAILED — check ALPACA_API_KEY and ALPACA_API_SECRET are in $REPO/.env (that spelling: not ALPACA_SECRET_KEY)"
+            fi
+
+            if [ "$MODE" = "weekly" ]; then
+              echo "== running the WEEKLY (started $(date -u +%FT%TZ)) =="
+              bash "$REPO/scripts/ops/atlas_global_weekly.sh" 2>&1 | tail -n 60 | redact
+              echo "== weekly finished $(date -u +%FT%TZ) =="
+              exit 0
             fi
 
             echo "== running the nightly (started $(date -u +%FT%TZ)) =="
