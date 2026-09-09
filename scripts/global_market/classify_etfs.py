@@ -21,6 +21,8 @@ symbols, because "MSCI Brazil" states a ticker and tracks no company:
 
     strategy        classify_strategy  17 buckets, ordered first-match
     asset_class     derived from the strategy (STRATEGY_ASSET_CLASS below)
+    theme_ids       classify_theme     32 themes, ordered first-match; EMPTY (not NULL) when
+                                       the name states no theme, which is most of the market
     leveraged       leverage_flags     name-anchored: 2X, -3x, Ultra, UltraShort, Bear …
     inverse         leverage_flags
     hedged          is_currency_hedged
@@ -32,11 +34,20 @@ symbols, because "MSCI Brazil" states a ticker and tracks no company:
 NO NUMBER IS INVENTED (rule #0). ``confidence`` stays NULL: a regex either matched or it did
 not, and a deterministic match has no probability to report — the rule that fired and the text
 it matched are in ``evidence`` instead, which is the auditable version of the same thing.
-``sector_id``, ``sub_sector_id``, ``theme_ids`` and ``role_id`` need the taxonomy tables and
-the LLM pass (plan.md §Classification L3), which is gated on the FM's 150-name eval set and is
-NOT in this chunk. ``basket_eligible`` stays NULL because ``universe_snapshot`` already answers
-it with the liquidity floor included; two columns of the same name with different answers is
-how a board starts contradicting itself.
+``sector_id``, ``sub_sector_id`` and ``role_id`` still need the LLM pass (plan.md
+§Classification L3), which is gated on the FM's 150-name eval set and is NOT in this chunk.
+``theme_ids`` no longer waits for it: the FM asked for the theme layer by name — "it's not
+just energy, it's energy sources … funds around gold and silver miners … water and food
+security" — and 424 of the 5,655 names settle it from the words alone, so those go in tonight
+with the rule that read them, and the LLM's job shrinks to the funds the words do not settle.
+``basket_eligible`` stays NULL because ``universe_snapshot`` already answers it with the
+liquidity floor included; two columns of the same name with different answers is how a board
+starts contradicting itself.
+
+A THEME IS NOT A REVIEW FLAG. ``status`` is still decided by the STRATEGY alone. Most funds
+have no theme and never will — a Treasury ladder is not an unclassified theme, it is a fund
+with no theme — so an empty ``theme_ids`` sends nothing to the queue. Only a NULL strategy
+does that, exactly as before.
 
 THE 22% THAT MATCH NOTHING ARE NOT HIDDEN. A name no rule reads gets ``status='review'`` with
 a NULL strategy, and the board shows them as their own "Unclassified" group with their names
@@ -50,6 +61,7 @@ import argparse
 import datetime as dt
 import sys
 import uuid
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -64,6 +76,8 @@ from psycopg2.extras import Json
 from atlas.global_market.classify.countries import country_of, is_currency_hedged
 from atlas.global_market.classify.rules import leverage_flags
 from atlas.global_market.classify.strategy import classify_strategy
+from atlas.global_market.classify.themes import NO_MATCH as NO_THEME_RULE
+from atlas.global_market.classify.themes import classify_theme
 
 M = _gdb.M
 
@@ -134,12 +148,20 @@ GEO_REGION = "region"
 # which is NULL for an empty array in Postgres and simply does not match).
 NO_COUNTRIES: list[str] = []
 
+# "This name states no theme" is an EMPTY LIST for the same two reasons: `theme_ids` is
+# `text[] NOT NULL DEFAULT '{}'` in the same DDL, and a set-valued column has no "unknown"
+# state to express. The difference from country_codes is that emptiness here needs no second
+# column to explain it — a fund with no theme is not withholding one, and 5,231 of the 5,655
+# real names are exactly that: index, bond and wrapper products with no theme to find.
+NO_THEMES: list[str] = []
+
 KEY = ["instrument_id", "version"]
 REPORT_COLUMNS = (
     "symbol",
     "name",
     "strategy",
     "asset_class",
+    "theme",
     "country",
     "leveraged",
     "inverse",
@@ -168,11 +190,12 @@ def classify_one(name: str, active_symbols: set[str]) -> dict[str, Any]:
 
     Returns the column values ``etf_classification`` takes, plus ``rule``/``evidence_text``
     for the report. A field the name does not determine is ``None`` — never a default — with
-    one deliberate exception: ``country_codes`` is the empty list, because a set-valued column
-    has no "unknown" state to express and its NOT NULL constraint would reject one anyway
-    (NO_COUNTRIES above).
+    two deliberate exceptions, ``country_codes`` and ``theme_ids``: both are set-valued
+    columns, a set has no "unknown" state to express, and both NOT NULL constraints would
+    reject one anyway (NO_COUNTRIES and NO_THEMES above).
     """
     match = classify_strategy(name, active_symbols)
+    theme = classify_theme(name)
     flags = leverage_flags(name)
     country = country_of(name)
     hedged = is_currency_hedged(name)
@@ -189,6 +212,11 @@ def classify_one(name: str, active_symbols: set[str]) -> dict[str, Any]:
     return {
         "strategy": match.strategy,
         "asset_class": STRATEGY_ASSET_CLASS.get(match.strategy) if match.strategy else None,
+        # A LIST because the column is `text[] NOT NULL DEFAULT '{}'` and the schema allows up
+        # to three. The rules layer writes at most ONE: an ordered first-match table has a
+        # single answer by construction, and a second theme would have to be guessed rather
+        # than read. The LLM layer is what may add the other two.
+        "theme_ids": [theme.theme] if theme is not None else NO_THEMES,
         "geo_focus_type": geo_focus,
         "country_codes": country_codes,
         "country_pure": None if country is None else True,
@@ -199,6 +227,8 @@ def classify_one(name: str, active_symbols: set[str]) -> dict[str, Any]:
         "status": STATUS_AUTO if match.strategy is not None else STATUS_REVIEW,
         "rule": match.rule,
         "evidence_text": match.evidence,
+        "theme_rule": theme.rule if theme is not None else NO_THEME_RULE,
+        "theme_text": theme.evidence if theme is not None else None,
         "leverage_rule": flags.rule,
         "country_name": None if country is None else country.name,
     }
@@ -220,6 +250,7 @@ def rows(
                 "version": VERSION,
                 "asset_class": verdict["asset_class"],
                 "strategy": verdict["strategy"],
+                "theme_ids": verdict["theme_ids"],
                 "geo_focus_type": verdict["geo_focus_type"],
                 "country_codes": verdict["country_codes"],
                 "country_pure": verdict["country_pure"],
@@ -233,6 +264,8 @@ def rows(
                     {
                         "strategy_rule": verdict["rule"],
                         "matched_text": verdict["evidence_text"],
+                        "theme_rule": verdict["theme_rule"],
+                        "theme_matched_text": verdict["theme_text"],
                         "leverage_rule": verdict["leverage_rule"],
                         "name": str(record["name"]),
                     }
@@ -249,6 +282,8 @@ def rows(
                 str(record["name"])[:60],
                 verdict["strategy"],
                 verdict["asset_class"],
+                # one id or nothing — the list is the column's shape, not the rule's answer
+                next(iter(verdict["theme_ids"]), None),
                 verdict["country_name"],
                 verdict["leveraged"],
                 verdict["inverse"],
@@ -274,7 +309,11 @@ def run(*, dry_run: bool, report: Report | None) -> dict[str, object]:
     table, lines = rows(frame, active_symbols, now)
 
     by_strategy = table["strategy"].value_counts(dropna=False)
+    # Counted in Python rather than with `.explode().value_counts()`: theme_ids is a column of
+    # LISTS, and the pandas idiom for that reads as a DataFrame call to the type checker.
+    by_theme = Counter(theme for ids in table["theme_ids"] for theme in ids)
     unmatched = int(table["strategy"].isna().sum())
+    themed = sum(1 for ids in table["theme_ids"] if ids)
     geared = int((table["leveraged"] | table["inverse"]).sum())
     print(
         f"[classify] run={run_id[:8]} etfs={len(table):,d} strategies={by_strategy.count()} "
@@ -283,6 +322,11 @@ def run(*, dry_run: bool, report: Report | None) -> dict[str, object]:
     for strategy, count in by_strategy.items():
         label = strategy if isinstance(strategy, str) else "(unclassified)"
         print(f"    {label:<18} {count:>6,d}")
+    print(
+        f"[classify] themed={themed:,d} ({themed / len(table):.1%}) across {len(by_theme)} themes"
+    )
+    for theme, count in by_theme.most_common():
+        print(f"    {theme:<22} {count:>6,d}")
 
     if report is not None:
         for line in lines:
@@ -294,11 +338,11 @@ def run(*, dry_run: bool, report: Report | None) -> dict[str, object]:
 
     if dry_run:
         print("[classify] --dry-run: nothing written")
-        return {"etfs": len(table), "unclassified": unmatched, "written": 0}
+        return {"etfs": len(table), "unclassified": unmatched, "themed": themed, "written": 0}
 
     written = _gdb.upsert_df(f"{M}.etf_classification", table, KEY)
     print(f"[classify] wrote {written:,d} etf_classification row(s)")
-    return {"etfs": len(table), "unclassified": unmatched, "written": written}
+    return {"etfs": len(table), "unclassified": unmatched, "themed": themed, "written": written}
 
 
 def parser() -> argparse.ArgumentParser:

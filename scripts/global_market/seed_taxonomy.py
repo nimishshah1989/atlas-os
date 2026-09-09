@@ -101,27 +101,72 @@ SECTORS_L2: list[tuple[str, str, str]] = [
 ]
 
 # ── level 3: theme ─────────────────────────────────────────────────────────────────────
-# Measured fund counts in the comment. NINE of these sixteen sit below
-# `peer_group_min_members` (8), so a fund scored inside them would be ranked against too few
-# competitors to mean anything and the scorer falls back to the parent sector. They are
-# seeded anyway so the board can browse and filter by them — see taxonomy.md, open question 3.
+# THE ALLOWLIST FOR `etf_classification.theme_ids`, and the executable half of it is
+# `atlas/global_market/classify/themes.py`: every id below is a theme that rule table can
+# emit, and every theme it emits is below. They are asserted equal in
+# `tests/unit/global_market/test_themes.py`, because a theme with no row is a fund pointing
+# at a category that does not exist, and a row with no rule is a page that is always empty.
+#
+# The counts are that table's own FIRST-CLAIM output over the 5,655 real listed ETF names in
+# the committed 2026-09-04 Nasdaq/SEC directory snapshot — not term frequencies. A fund is
+# counted once, under the first rule that reads it: "VanEck Gold Miners" is one gold_silver_
+# miners fund, not a gold fund as well.
+#
+# v1 seeded sixteen themes and the FM's verdict was "the current classification is not
+# useful". Fifteen of those ids survive here; `space_defence` is the one that does not, split
+# into `space` (14) and `defence` (24) because they are two mandates that happen to share a
+# supply chain, and each clears the peer-group minimum alone. The rest of the change is the
+# FM's own brief — "it's not just energy, it's energy sources", "funds around gold and silver
+# miners", "water and food security" — so the energy sources are four separate themes here
+# (solar, nuclear_uranium, grid_electrification, clean_energy) and the metals are five.
+#
+# FIFTEEN OF THE 32 SIT BELOW `peer_group_min_members` (8), so a fund scored inside them would be
+# ranked against too few competitors to mean anything and the scorer falls back to the parent
+# sector. They are seeded anyway so the board can browse and filter by them — see taxonomy.md,
+# open question 3. `solar` is the extreme case and is kept because the FM named it: the market
+# has listed exactly ONE solar ETF, and a theme page that says "1 fund" is a truer answer than
+# folding it into `clean_energy` and pretending the distinction was never asked for.
 THEMES: list[tuple[str, str, str, int]] = [
-    ("ai", "information_technology", "Artificial Intelligence", 64),
-    ("infrastructure", "industrials", "Infrastructure", 51),
-    ("space_defence", "industrials", "Space & Defence", 37),
-    ("semiconductors", "information_technology", "Semiconductors", 34),
-    ("genomics", "health_care", "Genomics", 21),
-    ("cybersecurity", "information_technology", "Cybersecurity", 16),
-    ("robotics", "industrials", "Robotics & Automation", 14),
-    ("ev_battery", "consumer_discretionary", "Electric Vehicles & Batteries", 13),
-    ("nuclear_uranium", "energy", "Nuclear & Uranium", 12),
-    ("clean_energy", "energy", "Clean Energy", 10),
-    ("quantum", "information_technology", "Quantum Computing", 8),
-    ("cloud", "information_technology", "Cloud Computing", 6),
-    ("fintech", "financials", "Financial Technology", 6),
+    # metals and mining — the physical thing, and the FM's headline example
+    ("precious_metals", "materials", "Precious Metals", 53),
+    ("gold_silver_miners", "materials", "Gold & Silver Miners", 27),
+    ("copper", "materials", "Copper", 12),
+    ("critical_minerals", "materials", "Rare Earths & Critical Minerals", 12),
+    ("lithium", "materials", "Lithium", 5),
+    ("timber_forestry", "materials", "Timber & Forestry", 2),
+    # energy SOURCES, not "energy"
+    ("nuclear_uranium", "energy", "Nuclear & Uranium", 16),
+    ("clean_energy", "energy", "Clean & Renewable Energy", 12),
+    ("grid_electrification", "utilities", "Grid & Electrification", 7),
+    ("solar", "energy", "Solar", 1),
+    # the two the FM named that no sector hierarchy can express
     ("water", "utilities", "Water", 6),
-    ("gaming_esports", "communication_services", "Gaming & Esports", 6),
-    ("cannabis", "health_care", "Cannabis", 4),
+    ("food_agriculture", "consumer_staples", "Food & Agriculture", 10),
+    # technology
+    ("ai", "information_technology", "Artificial Intelligence", 43),
+    ("semiconductors", "information_technology", "Semiconductors", 28),
+    ("robotics", "industrials", "Robotics & Automation", 16),
+    ("cybersecurity", "information_technology", "Cybersecurity", 10),
+    ("blockchain", "financials", "Blockchain & Digital Assets", 9),
+    ("quantum", "information_technology", "Quantum Computing", 7),
+    ("cloud", "information_technology", "Cloud Computing", 6),
+    ("fintech", "financials", "Financial Technology", 5),
+    ("data_centres", "real_estate", "Data Centres", 2),
+    # mandates
+    ("defence", "industrials", "Aerospace & Defence", 24),
+    ("space", "industrials", "Space", 14),
+    # life sciences
+    ("genomics", "health_care", "Genomics & Precision Medicine", 6),
+    ("cannabis", "health_care", "Cannabis", 5),
+    ("longevity", "health_care", "Longevity & Ageing", 2),
+    # consumer and mobility
+    ("gaming_esports", "communication_services", "Gaming & Esports", 11),
+    ("ev_battery", "consumer_discretionary", "Electric Vehicles & Batteries", 7),
+    ("shipping", "industrials", "Shipping", 4),
+    ("homebuilders", "consumer_discretionary", "Homebuilders", 3),
+    # the two widest, last in the rule table so every narrower claim is taken first
+    ("infrastructure", "industrials", "Infrastructure", 37),
+    ("reits", "real_estate", "REITs", 22),
 ]
 
 # ── geography: regions and global only (see the module docstring on countries) ──────────
@@ -189,7 +234,7 @@ def sector_rows() -> list[tuple[object, ...]]:
             parent,
             name,
             None,
-            f"{funds} funds in the 2026-09-07 universe"
+            f"{funds} funds in the 2026-09-04 directory snapshot"
             + (
                 ""
                 if funds >= 8
