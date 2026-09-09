@@ -128,8 +128,9 @@ export function ScoreSection({
       <p className="mt-4 max-w-[72ch] text-body text-ink-2">
         Each segment’s width is that lens’s weight in the blend and its fill is the score. An empty
         track is a lens with no producer yet — it contributes nothing and is counted in neither the
-        composite nor the conviction tier. While one lens is active the tier ladder caps at MEDIUM
-        by its own minimum-layer rule: conviction means agreement between independent reads.
+        composite nor the conviction tier. The tier ladder&rsquo;s own minimum-layer rule needs
+        several independent lenses to agree before the top tiers open: conviction is agreement
+        between independent reads, not a high number from one of them.
       </p>
 
       <div className="slots mt-4">

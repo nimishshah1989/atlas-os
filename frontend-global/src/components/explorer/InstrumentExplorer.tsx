@@ -181,14 +181,20 @@ export function InstrumentExplorer({ assetClass, list }: { assetClass: AssetClas
   const notices: { lead: string; text: string }[] = []
 
   if (scored) {
+    // COUNTED, not asserted. This paragraph used to say "while one lens is active", which was
+    // true the day it was written and false the day the risk and cost lenses landed — and it
+    // went on to promise a MEDIUM cap that no longer applied. A board whose own explanation of
+    // its methodology is out of date is exactly the failure it exists to prevent, so the number
+    // is read off the rows and the tier rule is stated as a RULE rather than as today's state.
+    const active = rows.reduce((n, r) => Math.max(n, r.lenses_active ?? 0), 0)
     notices.push({
       lead: 'Every composite says how many lenses it is made of.',
       text:
         `The blend carries ${list.lenses.length} lenses and only the ones with a producer today ` +
-        `contribute, so each row prints its own count — “${lensesLabel(1, list.lenses.length)}” — ` +
-        `beside the score. While one lens is active the tier ladder’s own minimum-layer rule caps ` +
-        `the result at MEDIUM however strong it is: conviction means agreement between independent ` +
-        `reads, and there is one read. That is the methodology working, not a defect. Deciles are ` +
+        `contribute, so each row prints its own count — “${lensesLabel(active, list.lenses.length)}” — ` +
+        `beside the score. The tier ladder’s own minimum-layer rule needs several independent ` +
+        `lenses to agree before the top tiers open, so a fund with few active lenses cannot reach ` +
+        `them however strong it looks. That is the methodology working, not a defect. Deciles are ` +
         `cut within the peer group, on read, over scored funds only; Leader is that group’s top decile.`,
     })
     if (list.scored_on && list.eod && list.scored_on !== list.eod) {

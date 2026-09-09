@@ -127,8 +127,9 @@ const CONVICTION: Column<InstrumentRow> = {
   label: 'Conviction',
   width: 124,
   title:
-    'The tier ladder’s verdict. Its own minimum-layer rule caps at MEDIUM while one lens is ' +
-    'active — conviction means agreement between independent reads. Leader = top decile in the peer group.',
+    'The tier ladder’s verdict. Its own minimum-layer rule needs several independent lenses to ' +
+    'agree before the top tiers open — conviction is agreement between independent reads, so a ' +
+    'fund with few active lenses cannot reach them. Leader = top decile in the peer group.',
   sortValue: (r) => tierLabel(r.conviction_tier),
   render: (r) => (
     <span className="flex items-center gap-2">

@@ -141,10 +141,28 @@ describe('a measurement nobody made is never a zero', () => {
     const { container } = render(<InstrumentExplorer assetClass="etf" list={list(ETFS)} />)
     expect(cell(container, 'SPY', 'Lenses')).toBe('0/5')
     expect(container.querySelector('[title="0 of 5 lenses"]')?.textContent).toBe('0/5')
-    // …and the page says the same thing in a sentence, with the tier ladder's own cap named.
-    expect(container.textContent).toContain('1 of 5 lenses')
-    expect(container.textContent).toContain('caps')
-    expect(container.textContent).toContain('MEDIUM')
+  })
+
+  it('COUNTS the active lenses in its own sentence rather than asserting a number', () => {
+    // The paragraph used to say "while one lens is active", which was true the day it was
+    // written and false the day the risk and cost lenses landed — and it promised a MEDIUM cap
+    // that no longer applied. The board was explaining its own methodology wrongly, on the live
+    // site, which is the exact failure it exists to prevent. It now reads the count off the rows
+    // and states the tier rule as a rule, so it stays true as each new lens lands.
+    search.current = new URLSearchParams()
+    const asIs = render(<InstrumentExplorer assetClass="etf" list={list(ETFS)} />)
+    expect(asIs.container.textContent).toContain('0 of 5 lenses') // every fixture row has none
+
+    // Same component, a row that carries three: if the sentence were hardcoded it would still
+    // say zero. This is the assertion that makes the paragraph impossible to leave stale.
+    asIs.unmount()
+    const richer = ETFS.map((r) => (r.symbol === 'SPY' ? { ...r, lenses_active: 3 } : r))
+    const { container } = render(<InstrumentExplorer assetClass="etf" list={list(richer)} />)
+    const text = container.textContent ?? ''
+    expect(text).toContain('3 of 5 lenses')
+    expect(text).not.toContain('0 of 5 lenses')
+    expect(text).not.toContain('MEDIUM however strong')
+    expect(text).toContain('several independent')
   })
 
   it('prints the tier the ladder actually returned, in words', () => {
