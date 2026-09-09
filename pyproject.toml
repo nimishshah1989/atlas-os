@@ -129,6 +129,12 @@ global = [
     # someone remembered to set up. >=0.6 is where the project ships manylinux wheels that
     # bundle the C library, so `uv sync` no longer needs a system libta-lib (0.7.1).
     "TA-Lib>=0.6",
+    # P3-A: SEC EDGAR XBRL company facts → stock_financials_pit (the first importer is
+    # scripts/global_market/ingest_financials.py). Floor is the version the plan named;
+    # 5.57.0 is what this PR resolved and ran against on 2026-09-09. It brings its own httpx
+    # cache/throttle stack (httpxthrottlecache, pyrate-limiter, stamina) which is how the SEC
+    # 10 req/s courtesy limit is honoured on top of our own min-interval spacing.
+    "edgartools>=5.56",
 ]
 
 [project.scripts]
