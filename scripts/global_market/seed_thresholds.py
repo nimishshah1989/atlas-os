@@ -32,6 +32,20 @@ What is seeded (each row: key, value, category, description, units, min, max, de
   503 S&P 500 members on that date clear it. The refusal path in ``build_universe_snapshot``
   stays exactly as it was — it is the guard for any database where the row is missing or
   inactive, not a placeholder waiting for this seed.
+* P3-A fundamentals: ``fund_min_quarters`` 8 — the quarterly history a stock needs before the
+  fundamental lens may score it, and the number ``ingest_financials.py`` counts filers against
+  every night. Two years is the shortest window carrying a year-on-year growth rate and the
+  prior-year comparison it is measured against; it is a COVERAGE floor, not one of the §B
+  scoring bands below.
+
+* M2 baskets (category ``basket``, section M2) — the FM's basket instruction of 2026-09-09, the
+  numbers India's ``portfolio_*`` rows carry translated to USD and fractional shares:
+  ``basket_default_capital_usd`` $100,000 (the builder's default and floor),
+  ``basket_max_position_pct`` 0.25 (no constituent above a quarter of capital),
+  ``basket_cost_bps_buy`` / ``basket_cost_bps_sell`` 0 bps (paper baskets: no execution cost
+  until an execution provider names one), ``basket_min_weight_frac`` 0.01 (a name below 1
+  percent is noise, not a position). Read by ``mark_baskets.py``, ``validate_baskets.py`` and
+  the board's basket builder; none of them carries a fallback.
 
 NOT seeded, on purpose:
 * ``cls_country_pure_min_weight``, ``cls_country_equity_min``, ``cls_sector_pure_min``,
@@ -231,6 +245,64 @@ SEEDS: list[dict[str, object]] = [
          "ADV$ floor for scoring and basket eligibility. FM decision 2026-09-06, read off the "
          "REAL distribution in docs/global/reports/adv_usd_2026-09-03.md (2,114 of 5,656 ETFs "
          "clear $1M; so do all 503 S&P 500 members, so one floor serves both asset classes)"),
+    # ── P2-C: the POINT VALUES the ETF lens sub-scores award (docs/global/phase2.md) ────────
+    # The bands above say WHERE a fund falls; these say what that is worth. Both belong in the
+    # table for the same reason: the FM re-tunes a ladder from /admin without a deploy, and a
+    # score nobody can trace to a row is a score nobody should act on (rule #4).
+    _row("etf_quintile_q1_pts", "25", "etf_scoring", "C", "points", "0", "25",
+         "Top-quintile points on any percentile sub-score (peer RS, vol, drawdown, expense)"),
+    _row("etf_quintile_q2_pts", "20", "etf_scoring", "C", "points", "0", "25",
+         "Second-quintile points on any percentile sub-score"),
+    _row("etf_quintile_q3_pts", "15", "etf_scoring", "C", "points", "0", "25",
+         "Middle-quintile points on any percentile sub-score"),
+    _row("etf_quintile_q4_pts", "10", "etf_scoring", "C", "points", "0", "25",
+         "Fourth-quintile points on any percentile sub-score"),
+    _row("etf_quintile_q5_pts", "5", "etf_scoring", "C", "points", "0", "25",
+         "Bottom-quintile points on any percentile sub-score"),
+    _row("etf_rs_spy_3m_pts", "8", "etf_scoring", "C", "points", "0", "25",
+         "Points when 3-month RS vs SPY clears rs_spy_strong"),
+    _row("etf_rs_spy_6m_pts", "8", "etf_scoring", "C", "points", "0", "25",
+         "Points when 6-month RS vs SPY clears rs_spy_strong"),
+    _row("etf_rs_spy_12m_pts", "9", "etf_scoring", "C", "points", "0", "25",
+         "Points when 12-month RS vs SPY clears rs_spy_strong (the three sum to 25)"),
+    _row("etf_rs_spy_partial_frac", "0.5", "etf_scoring", "C", "fraction", "0", "1",
+         "Fraction of a window's points for beating SPY but not by rs_spy_strong"),
+    _row("etf_risk_beta_t1_pts", "25", "etf_scoring", "C", "points", "0", "25",
+         "Beta band 1 points (beta <= risk_beta_t1)"),
+    _row("etf_risk_beta_t2_pts", "18", "etf_scoring", "C", "points", "0", "25",
+         "Beta band 2 points"),
+    _row("etf_risk_beta_t3_pts", "10", "etf_scoring", "C", "points", "0", "25",
+         "Beta band 3 points"),
+    _row("etf_risk_beta_t4_pts", "3", "etf_scoring", "C", "points", "0", "25",
+         "Beta band 4 points (above risk_beta_t3)"),
+    _row("etf_cost_adv_t1_pts", "25", "etf_scoring", "C", "points", "0", "25",
+         "ADV$/AUM band 1 points (at or above cost_adv_usd_t1 / cost_aum_usd_t1)"),
+    _row("etf_cost_adv_t2_pts", "20", "etf_scoring", "C", "points", "0", "25",
+         "ADV$/AUM band 2 points"),
+    _row("etf_cost_adv_t3_pts", "15", "etf_scoring", "C", "points", "0", "25",
+         "ADV$/AUM band 3 points"),
+    _row("etf_cost_adv_t4_pts", "10", "etf_scoring", "C", "points", "0", "25",
+         "ADV$/AUM band 4 points"),
+    _row("etf_cost_adv_t5_pts", "3", "etf_scoring", "C", "points", "0", "25",
+         "ADV$/AUM below every band"),
+    # ── M2 baskets (mark_baskets.py, validate_baskets.py, the board's basket builder) ─────
+    _row("basket_default_capital_usd", "100000", "basket", "M2", "usd", "1", USD_CEILING,
+         "Starting capital a new basket is booked with, and the floor the builder accepts"),
+    _row("basket_max_position_pct", "0.25", "basket", "M2", "fraction", "0", "1",
+         "No constituent may exceed this fraction of capital at inception (position cap)"),
+    _row("basket_cost_bps_buy", "0", "basket", "M2", "bps", "0", "10000",
+         "Execution cost on a buy, basis points of value; 0 until an execution provider names one"),
+    _row("basket_cost_bps_sell", "0", "basket", "M2", "bps", "0", "10000",
+         "Execution cost on a sell, basis points of value; 0 until an execution provider names one"),
+    _row("basket_min_weight_frac", "0.01", "basket", "M2", "fraction", "0", "1",
+         "Smallest target weight a constituent may carry (below it a name is noise, not a position)"),
+    # ── P3-A company fundamentals (ingest_financials.py → stock_financials_pit) ───────────
+    _row("fund_min_quarters", "8", "fundamental", "B", "quarters", "1", "40",
+         "Quarterly filings a stock needs before the fundamental lens may score it. 8 = two "
+         "years, which is the shortest window that carries a year-on-year growth rate AND the "
+         "prior-year comparison it is measured against. P3-A's definition of done reads this "
+         "row: >=95% of S&P 500 members at or above it. ingest_financials.py counts filers "
+         "below it every night and refuses to run if this row is missing"),
 ]
 # fmt: on
 

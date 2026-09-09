@@ -1,22 +1,12 @@
-// src/app/page.tsx — Today. A placeholder until the nightly pipeline has written a session:
-// the shell, the title, what will appear here, and the freshness stamp. No numbers.
-import { FreshnessStamp } from '@/components/ui/FreshnessStamp'
-import { requireUser } from '@/lib/auth'
+// src/app/page.tsx — the board's front door is the country grid (the FM's decision D1 of
+// 2026-09-09: "Global gets one tab, and it is Countries").
+//
+// A redirect rather than a copy of the grid: two routes rendering the same query would be two
+// places to keep in step, and the country page already owns that job. A Today page earns this
+// slot back when there is a day's worth of scored movement to put on it — not before, because
+// a front door full of placeholders is worse than no front door.
+import { redirect } from 'next/navigation'
 
-export default async function TodayPage() {
-  await requireUser()
-  return (
-    <div className="page">
-      <h1 className="font-serif text-title text-ink">Today</h1>
-      <p className="mt-4 max-w-[64ch] text-lead text-ink-2">
-        Once the nightly pipeline has scored its first session, this page shows where the US market closed and what
-        moved, by classification: the benchmark strip (SPY, QQQ, IWM, VXUS, AGG, GLD), breadth by peer group, and the
-        day’s top and bottom movers with their Lens bars. Every figure will be dated and traceable to a real row;
-        nothing appears before it has been computed.
-      </p>
-      <div className="mt-6">
-        <FreshnessStamp size="lg" />
-      </div>
-    </div>
-  )
+export default async function HomePage() {
+  redirect('/countries')
 }

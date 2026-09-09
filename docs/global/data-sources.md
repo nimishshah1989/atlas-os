@@ -43,7 +43,7 @@ as a source until its gate has passed on real rows.
 | Identity | Nasdaq directory (`nasdaqlisted.txt` + `otherlisted.txt`: ETF flag, exchange legend, ACT/CQS/NASDAQ spellings); SEC `company_tickers.json` + `company_tickers_exchange.json` (registrants → CIK) and `company_tickers_mf.json` (1940-Act funds → CIK/series/class; field names verified 2026-09-04); Tiingo `supported_tickers.zip` (listing dates, spelling proof); the Stooq archive's members (delisted names, `is_active=false`) — `build_identity.py`, `providers/directories.py` (P1-A) | weekly | `symbol_alias` manual rows | measured 2026-09-04: 13,154 listings, exchange on 100%; CIK on 99.6% of stock-flagged rows (the rest: rights, which the SEC does not list, and bank holding companies filing with their regulator) and on 82.5% of ETFs (79.3% with a series/class id — trusts, commodity pools and ETNs are registrants, not 1940-Act funds); alias round-trip on all 543 punctuation tickers; `import_stooq --dry-run` maps 13,334 of the archive's 13,352 members (99.9%; the 18 unmapped are empty files of names absent from the directory) |
 | ETF holdings + exposures | **EDGAR N-PORT via `edgartools`** for the whole universe — per holding `name, cusip, ticker, balance, value_usd, pct_value, asset_category, investment_country`; per fund `net_assets, total_assets, series_id` (`Fund(ticker).get_portfolio()`); public only for the quarter-end month, ~60-day lag | weekly | — | holdings on ≥90% of ETFs by count, ≥98% by AUM |
 | Fresh holdings (big four) | Issuer CSVs via `etf-scraper` (iShares daily incl. history since 2010; SSGA, Vanguard, Invesco current); `query_listings()` for issuer product lists (AUM, expense) | daily | N-PORT | Σ\|weight_frac\| ∈ [0.9, 1.1] for ≥97% of non-leveraged ETFs |
-| Stock fundamentals | **EDGAR XBRL company facts via `edgartools`** (`filed` per fact = PIT) | weekly (changed filers) | — | ≥95% of S&P 500 with ≥8 quarters; continuity checks |
+| Stock fundamentals | **EDGAR XBRL company facts via `edgartools`** — `data.sec.gov/api/xbrl/companyfacts/CIK##########.json`, ONE request per filer for the entire history, `filed` per fact = PIT. Built 2026-09-09 (`ingest_financials.py` → `stock_financials_pit`); the measured shape of the feed is below | nightly, incremental on each filer's stored `max(filed)` | — | ≥95% of S&P 500 with ≥8 quarters (`fund_min_quarters`); continuity checks |
 | Catalysts / flow | EDGAR 8-K (item codes), Form 4, 13F via `edgartools`; **FINRA Equity Short Interest** (free files + `api.finra.org`, twice monthly, archives to 2014) | daily / per publication | — | filing-rich names score catalyst > 0 |
 | Taxonomy seed | `FinanceDatabase` (MIT) sector/industry approximations + ETF category/family — seed and cross-check only | one-time | — | — |
 
@@ -52,11 +52,11 @@ as a source until its gate has passed on real rows.
 manual). **Rejected as a library:** OpenBB Platform (AGPLv3 — unacceptable ambiguity for a
 licensed commercial product; 30 providers where we need four).
 
-Packages: `pyproject.toml` extra `global` holds `alpaca-py` today. A package is added in the
-PR that first imports it, never ahead of its importer: `edgartools` and `financedatabase`
-arrive with Phase 2 (`financetoolkit` comes transitively via `financedatabase`, so the Phase 3
-"add or not" decision costs nothing either way), `exchange_calendars` with Phase 1's gate A
-(names and version floors verified on PyPI 2026-09-04). Every other library the global tree
+Packages: `pyproject.toml` extra `global` holds `alpaca-py`, `openpyxl`, `TA-Lib` and — since P3-A — `edgartools` (floor `>=5.56`; resolved and run against **5.57.0** on 2026-09-09). A package is added in the
+PR that first imports it, never ahead of its importer: `edgartools` landed with
+`ingest_financials.py`, and `financedatabase` arrives with the taxonomy seed (`financetoolkit`
+comes transitively via it, so the Phase 3 "add or not" decision costs nothing either way),
+`exchange_calendars` with Phase 1's gate A (floors verified on PyPI 2026-09-04). Every other library the global tree
 uses is already a core or extra dependency.
 
 **`etf-scraper` is not installable in this project.** Its only release (0.1.2) and its
@@ -69,6 +69,69 @@ Vanguard / Invesco holdings endpoints are plain CSV/XLSX downloads and the packa
 `requests` + `pandas` wrapper over them; (2) vendor its parsers with attribution (MIT);
 (3) a project-wide `[tool.uv] override-dependencies` on numpy, which needs FM approval
 because it silences every package's numpy pin, not just this one. Not decided here.
+
+### EDGAR XBRL company facts — what the feed actually looks like (measured 2026-09-09, P3-A)
+
+Verified against real payloads for AAPL, JPM, VZ (committed under
+`tests/fixtures/global/edgar/`, provenance in its `SOURCE.md`) plus KO and PG, and against the
+SEC `frames` API for CY2025Q1. Everything here changed a design decision, so it is recorded
+rather than left to the next reader to rediscover.
+
+* **One request per filer, whole history.** `companyfacts` returns every fact the company ever
+  tagged — 3.8 MB for Apple, 7.9 MB for JPMorgan, 20 years deep. There is no windowed request,
+  so an incremental run costs the same fetch as a backfill; what is incremental is the write.
+  Requests are spaced by `SEC_MIN_INTERVAL_S` (0.11 s ≈ 9/s, under SEC's stated 10/s), and the
+  contact `User-Agent` comes from `EDGAR_IDENTITY` — never a literal, this repo is public.
+* **No filer tags a discrete fourth quarter after 2020.** The SEC dropped the
+  selected-quarterly-data requirement, so a 10-K carries only the twelve-month duration.
+  Apple's last real Q4 is FY2020 and Verizon's FY2019. Q4 is therefore the identity
+  FY − Q1 − Q2 − Q3 (`ratios.implied_q4`, tested against Apple's real FY2020 Q4, which it
+  reproduces to the dollar). **Without it there is no TTM for three quarters in four.**
+* **A 10-Q's cash-flow statement is cumulative.** Only the first fiscal quarter's operating
+  cash flow, capex and dividends are three-month durations; Q2 and Q3 publish six- and
+  nine-month figures, which are dropped rather than stored in a column read as a quarter. So
+  **FCF is present on Q1 rows and annual rows only** — the fundamental lens must renormalise,
+  or read TTM FCF off the last 10-K. The fix, if it becomes a constraint, is a `period_months`
+  column in the primary key (see the hand-over notes).
+* **Duration ambiguity is resolved by form.** Several durations end on the same date (a 10-Q
+  carries the quarter and the YTD; a pre-2021 10-K carries a Q4 beside the year). The primary
+  key admits one row per `(period_end, form, filed)`, so the row takes the filing's own class —
+  a year for 10-K/20-F/40-F, a quarter for 10-Q.
+* **`fy`/`fp` on a fact describe the FILING, not the fact.** The prior-year quarter shown as a
+  comparative in a 2026 Q1 10-Q is stamped `fy=2026 fp=Q1`. Copied verbatim it mislabels the
+  period by a year, so the stamp is taken only for the filing's own period and a comparative
+  keeps `FY` (which its duration proves) or nothing.
+* **Forms beyond the periodic reports appear.** Verizon, Coca-Cola and JPMorgan tag `8-K`
+  earnings releases and `DEF 14A` proxy tables in the same payload;
+  `chk_stock_financials_pit_form` admits neither, so they are filtered before the insert.
+* **Restatements are real and material.** Apple's FY2019 diluted share count is 4,648,913
+  thousand as filed in 2019 and 18,595,651 thousand as re-filed in 2020, restated for the
+  four-for-one split — the same `(period_end, form)` under two `filed` dates. Keying the table
+  on `(instrument, period_end)` would have destroyed the first, and every pre-split backtest.
+* **Banks are a different chart of accounts, not a gap to fill.** JPMorgan files no
+  `OperatingIncomeLoss`, no `GrossProfit`, no `AssetsCurrent`/`LiabilitiesCurrent` and no
+  capital expenditure at all, and its only quarterly top line is `RevenuesNetOfInterestExpense`.
+  EBIT, EBITDA, ROCE, operating margin, interest cover and FCF are therefore genuinely absent
+  for financials — `None`, never a zero — on top of the D/E and current-ratio suppression the
+  `is_financial` flag applies.
+* **Verizon files no `PaymentsToAcquirePropertyPlantAndEquipment`** since 2019 (it splits capex
+  across `PaymentsToAcquireIntangibleAssets` and `PaymentsToAcquireOtherProductiveAssets`), so
+  its capex and free cash flow are null. Summing the two would be a derived number; it is left
+  absent and said out loud.
+* **The element a filer uses is not the element you expect, and one tag per concept scores
+  half the index null.** Measured on 15 real members: Caterpillar tags **no** `NetIncomeLoss`
+  on any quarterly duration (only `ProfitLoss`); Exxon and Berkshire tag no `OperatingIncomeLoss`
+  in the current period; Berkshire files no diluted EPS, no diluted share count and no debt
+  element at all. Each of those is the filer's own practice, not a bug — the ordered fallbacks
+  cover what can honestly be covered and the rest is `None`.
+* **`GrossProfit` is not universal.** JPMorgan, Verizon and P&G tag none. Cost of revenue is
+  mapped (`atlas.global_market.fundamentals.xbrl_map`) but `stock_financials_pit` has no column
+  for it, so gross margin is unavailable for those filers until one is added.
+
+The tag map itself, with the ordered fallbacks and the corrections made to the plan's starting
+list, is `atlas/global_market/fundamentals/xbrl_map.py` — every tag verified against a real
+payload, with the SEC `frames` filer count for the ones absent from all five samples.
+
 
 ## The Alpaca paper-only caveat
 

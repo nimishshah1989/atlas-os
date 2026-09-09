@@ -1,58 +1,44 @@
 'use client'
-// src/components/shell/Rail.tsx — the 232 px left rail: product mark in serif, the sections,
-// Admin and the theme toggle at the foot (docs/global/frontend-design.md § Layout).
+// src/components/shell/Rail.tsx — the primary navigation, a row in the navy top bar: the product
+// mark, then the sections, the current one underlined in gold (docs/global/frontend-design.md
+// § Layout). A section joins the rail with its page — a link to nothing is not navigation.
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Icon, type IconName } from './icons'
-import { ThemeToggle } from './ThemeToggle'
 
-// The sections that exist. Sectors, Baskets, Methodology and Admin join the rail with their
-// pages (docs/global/frontend-design.md §4) — a link to nothing is not navigation.
-const SECTIONS: { href: string; label: string; icon: IconName }[] = [
-  { href: '/', label: 'Today', icon: 'today' },
-  { href: '/countries', label: 'Countries', icon: 'countries' },
-  { href: '/etfs', label: 'ETFs', icon: 'etfs' },
-  { href: '/stocks', label: 'Stocks', icon: 'stocks' },
+const SECTIONS: { href: string; label: string }[] = [
+  // Countries leads because it IS the front door (the FM's D1): / redirects here, so there is
+  // no separate Today section to link to until one has scored movement to show.
+  { href: '/countries', label: 'Countries' },
+  { href: '/etfs', label: 'ETFs' },
+  { href: '/stocks', label: 'Stocks' },
+  { href: '/portfolios', label: 'Portfolios' },
+  { href: '/methodology', label: 'Methodology' },
+  { href: '/health', label: 'Health' },
 ]
 
 function isActive(pathname: string, href: string): boolean {
-  if (href === '/') return pathname === '/'
+  // `/` redirects to /countries, so the root is Countries' own section rather than a link of
+  // its own — otherwise landing on the board would leave every item unlit.
+  if (href === '/countries' && pathname === '/') return true
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 
 export function Rail() {
   const pathname = usePathname() ?? '/'
   return (
-    <aside className="rail" aria-label="Sections">
+    <nav className="rail" aria-label="Primary">
       <Link href="/" className="rail-mark">
-        <span className="font-serif text-section text-ink">Global Atlas</span>
-        <span className="rail-sub block text-meta text-ink-3">US ETFs and the S&amp;P 500</span>
+        Global Atlas
       </Link>
-
-      <nav className="rail-nav" aria-label="Primary">
-        <ul>
-          {SECTIONS.map(({ href, label, icon }) => (
-            <li key={href}>
-              <Link
-                href={href}
-                className="rail-link text-body"
-                aria-current={isActive(pathname, href) ? 'page' : undefined}
-              >
-                <Icon name={icon} />
-                <span>{label}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </nav>
-
-      <div className="rail-foot">
-        <Link href="/health" className="rail-link text-body" aria-current={isActive(pathname, '/health') ? 'page' : undefined}>
-          <Icon name="health" />
-          <span>Health</span>
-        </Link>
-        <ThemeToggle />
-      </div>
-    </aside>
+      <ul className="rail-nav">
+        {SECTIONS.map(({ href, label }) => (
+          <li key={href}>
+            <Link href={href} className="rail-link" aria-current={isActive(pathname, href) ? 'page' : undefined}>
+              {label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
   )
 }

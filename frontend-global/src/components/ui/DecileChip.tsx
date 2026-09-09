@@ -1,5 +1,7 @@
-// src/components/ui/DecileChip.tsx — a peer decile, 1 (weakest) to 10 (strongest), on the muted
-// ramp shared with India (`--decile-N` in globals.css, theme-scoped). Deciles only.
+// src/components/ui/DecileChip.tsx — a peer decile, 1 (weakest) to 10 (strongest), on the ramp
+// `--decile-N` in globals.css (neg → amber → pos). The chip names its step as `--decile`; the
+// stylesheet draws ink on a tint of it with the step as the border. Deciles only.
+import type { CSSProperties } from 'react'
 
 export function DecileChip({ decile, className = '' }: { decile: number | string | null | undefined; className?: string }) {
   const n = decile == null || decile === '' ? NaN : Math.round(Number(decile))
@@ -9,7 +11,7 @@ export function DecileChip({ decile, className = '' }: { decile: number | string
   return (
     <span
       className={`decile-chip num ${className}`}
-      style={{ backgroundColor: `var(--decile-${n})` }}
+      style={{ '--decile': `var(--decile-${n})` } as CSSProperties}
       aria-label={`Decile ${n} of 10`}
       data-decile={n}
     >

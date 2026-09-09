@@ -107,6 +107,9 @@ gate() {  # gate "name" cmd...
 #    session to score, not a quiet carry-forward.
 step "ingest_prices"           $PY scripts/global_market/ingest_prices.py --eod "$EOD" --report "$LOG_DIR/ingest_prices_$EOD.csv"
 step "ingest_macro"            $PY scripts/global_market/ingest_macro.py --eod "$EOD"
+# SEC EDGAR company facts → stock_financials_pit, point-in-time by `filed`. Filing-driven:
+# most nights add nothing, and a quiet stretch is normal rather than a fault.
+step "ingest_financials"       $PY scripts/global_market/ingest_financials.py --eod "$EOD" --report "$LOG_DIR/ingest_financials_$EOD.csv"
 # step "ingest_filings_8k"       $PY scripts/global_market/ingest_filings_8k.py
 # step "ingest_form4"            $PY scripts/global_market/ingest_form4.py
 # step "ingest_issuer_holdings"  $PY scripts/global_market/ingest_issuer_holdings.py
@@ -128,13 +131,25 @@ step "compute_technicals"      $PY scripts/global_market/compute_technicals.py -
 # liquidity_min_traded_value_usd from the ADV$ table it prints and saves to $LOG_DIR/adv_usd_$EOD.md (runbook §7).
 step "build_universe_snapshot" $PY scripts/global_market/build_universe_snapshot.py --eod "$EOD" --report "$LOG_DIR/universe_snapshot_$EOD.csv" --report-dir "$LOG_DIR"
 # step "build_exposures"         $PY scripts/global_market/build_exposures.py --changed
-# step "score_stocks"            $PY scripts/global_market/score_stocks.py --as-of "$EOD"
-# step "score_etfs"              $PY scripts/global_market/score_etfs.py --as-of "$EOD"
+# Stocks: the technical lens over the in-universe S&P 500, cohorts = SPY-weight terciles.
+# After build_universe_snapshot (it reads in_universe, which for a stock already means
+# current membership); independent of classify_etfs/score_etfs, so it may sit either side.
+step "score_stocks"            $PY scripts/global_market/score_stocks.py --eod "$EOD" --report "$LOG_DIR/score_stocks_$EOD.csv"
+# CLASSIFY then SCORE, in that order and before the country view: score_etfs INNER-joins the
+# classification to get each fund's peer group, and build_country_views reads the composite the
+# scorer writes. classify_etfs is cheap (a regex over ~5,600 names, no feed) and runs nightly
+# rather than weekly so a fund listed today is groupable tonight.
+step "classify_etfs"           $PY scripts/global_market/classify_etfs.py --report "$LOG_DIR/classify_etfs_$EOD.csv"
+step "score_etfs"              $PY scripts/global_market/score_etfs.py --eod "$EOD" --report "$LOG_DIR/score_etfs_$EOD.csv"
 # Countries: one tradeable fund per market, read off technical_daily. Uncommented once its
 # board surface existed (/countries, #240) and its builder ran (#241) — the rule at the top
 # of this file. Without it country_daily stays empty and the page says so honestly, which
 # is what it did until now.
 step "build_country_views"     $PY scripts/global_market/build_country_views.py --eod "$EOD" --report "$LOG_DIR/country_views_$EOD.csv"
+# Baskets (M2): book inception for any basket the 5-minute worker has not reached, then replay every
+# active basket's NAV from inception through this EOD (total return on close_tr; runbook §9). Its table
+# is registered in freshness_guard.py PRODUCERS (warn tier) and the gate below asserts on what it wrote.
+step "mark_baskets"            $PY scripts/global_market/mark_baskets.py --eod "$EOD" --report "$LOG_DIR/mark_baskets_$EOD.csv"
 # Rolling signal quality — step, not gate (a lens losing IC is a finding for the FM, not a
 # reason to withhold a correct board). Window start computed in Python (no GNU `date -d`).
 # IC_START=$($PY -c "import datetime as d, _gdb; print(_gdb.eod_cutoff() - d.timedelta(days=730))")
@@ -149,6 +164,12 @@ gate "freshness_guard"   $PY scripts/global_market/freshness_guard.py --eod "$EO
 # night where that step exits 2 (the floor unset) the universe is empty and gate A says so
 # rather than passing on nothing.
 gate "validate_global_A" $PY scripts/global_market/validate_global.py --check A --eod "$EOD"
+# Gate C: the scores are USABLE — in range, discriminating, every fund in a group big
+# enough to rank in, no geared fund scored, every composite traceable to an active lens.
+gate "validate_global_C" $PY scripts/global_market/validate_global.py --check C --eod "$EOD"
+# Basket books reconcile to real rows (checks A–G over basket_* and ohlcv_daily). PASS with no
+# active basket; a basket the worker has not booked yet is noted, never failed.
+gate "validate_baskets"  $PY scripts/global_market/validate_baskets.py --eod "$EOD"
 # gate "validate_global_B" $PY scripts/global_market/validate_global.py --check B   # Phase 3
 # gate "validate_global_C" $PY scripts/global_market/validate_global.py --check C   # Phase 3
 # gate "validate_global_D" $PY scripts/global_market/validate_global.py --check D   # Phase 3

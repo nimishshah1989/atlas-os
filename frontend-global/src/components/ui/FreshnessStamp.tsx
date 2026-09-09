@@ -7,7 +7,8 @@ import { getFreshness, type Freshness } from '@/lib/queries/health'
 
 type Tone = 'green' | 'amber' | 'grey'
 
-const DOT: Record<Tone, string> = { green: 'bg-pos', amber: 'bg-warn', grey: 'bg-ink-3' }
+// The dot is a class, not a colour utility, so the top bar's `.who` can lighten it on navy.
+const DOT: Record<Tone, string> = { green: 'dot dot-pos', amber: 'dot dot-warn', grey: 'dot dot-grey' }
 
 export function describeFreshness(f: Freshness): { tone: Tone; text: string } {
   switch (f.state) {
@@ -34,12 +35,10 @@ export async function FreshnessStamp({ size = 'sm' }: { size?: 'sm' | 'lg' }) {
     f = { state: 'error', error: e instanceof Error ? e.message : String(e) }
   }
   const { tone, text } = describeFreshness(f)
+  // sm takes its size and colour from its slot (the top bar's `.who`); lg is a line on the page.
   return (
-    <span
-      className={`inline-flex items-center gap-2 text-ink-2 ${size === 'lg' ? 'text-body' : 'text-meta'}`}
-      data-freshness={f.state}
-    >
-      <span aria-hidden="true" className={`inline-block h-2 w-2 rounded-full ${DOT[tone]}`} />
+    <span className={`inline-flex items-center gap-2 ${size === 'lg' ? 'text-body text-ink-2' : ''}`} data-freshness={f.state}>
+      <span aria-hidden="true" className={DOT[tone]} />
       <span>{text}</span>
     </span>
   )

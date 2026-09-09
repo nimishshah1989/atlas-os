@@ -14,57 +14,102 @@ designed around baskets rather than single-stock calls.
 
 ## 2. Design language
 
+**Source (2026-09-09):** the Jhaveri Rebalance desk tool's stylesheet — its live `html.rb` token
+set and its component rules (top bar, cards, KPI tiles, chips, tables, segmented control, buttons,
+inputs, links, focus), copied into `frontend-global/src/app/globals.css` verbatim so the board and
+the desk tool read as one product. Where the board needed something the desk's stylesheet does not
+define (a search box on the bar, a decile ramp, prose columns in tables) it is marked *extension*.
+
 ### Principles
 1. **Instrument, not dashboard.** One memorable element — the **Lens bar**: a proportional bar
    whose segments are the lens weights and whose fill is each lens score, with the composite as a
    single large tabular numeral beside it. It appears identically on every row, card and detail
    page, so a reader learns it once.
 2. **Prose explains, numbers don't.** The rationale behind a classification or a score is written
-   in sentences (serif), never as a raw stat. Raw statistics live only on `/methodology` and admin.
+   in sentences, never as a raw stat. Raw statistics live only on `/methodology` and admin.
 3. **Structure by hairlines, not cards.** Tables and rules carry the hierarchy; a card is reserved
-   for an entity (an ETF, a country, a basket). One radius (6 px), one hairline (10% ink), no
-   stacked shadows.
-4. **Calm density.** 14 px UI type, 13 px tables with tabular numerals, 8 px spacing grid,
-   line length under 80 characters for prose. Colour is spent on signal (RAG) and one accent.
+   for an entity (an ETF, a country, a basket). One radius (6 px), one hairline (`line`, navy at
+   16%); a 2 px rule, not a darker one, carries emphasis. No stacked shadows (`--shadow-lift` is
+   the one lift).
+4. **Calm density.** 14.5 px body on cream, 13.5 px tables with tabular numerals, 4/8/12/16/24/32
+   spacing, prose at `--measure` (66ch). Colour is spent on signal (RAG) and the navy accent;
+   gold marks focus and the active section.
 5. **Dated everywhere.** Every surface carries "as of <session>" and a freshness dot; a stale
    surface says so in words.
-6. **Both themes from day one.** Tokens define light ("Daylight Desk" lineage) and dark
-   ("Graphite Terminal" lineage); no colour exists outside the token set.
+6. **One theme, light only** (`color-scheme: light only`). No dark theme, no theme toggle, no
+   `data-theme` bootstrap; print uses the same tokens on white.
 
-### Tokens (light · dark)
-| Token | Light | Dark | Use |
+### Tokens
+The names are the CSS custom properties in `globals.css`. `--color-*`, `--font-*`, `--text-*`,
+`--radius-*` and `--shadow-*` sit under Tailwind's `@theme`, so each also produces its utility
+(`bg-panel`, `text-ink-2`, `text-meta`, `rounded-panel`, `shadow-lift`, …); `--decile-*` and
+`--measure` are on `:root`. Names the components already referenced are kept with new values.
+
+| Token | Value | Desk name | Use |
 |---|---|---|---|
-| `--ground` | `#ECEFF3` | `#0D1014` | page |
-| `--panel` | `#FFFFFF` | `#161B22` | tables, entity cards |
-| `--raised` | `#F5F7FA` | `#1C232D` | table heads, stat tiles |
-| `--inset` | `#E2E7ED` | `#0A0D11` | meter tracks, wells |
-| `--hair` | `rgba(12,20,33,.10)` | `rgba(255,255,255,.08)` | hairlines |
-| `--rule` | `rgba(12,20,33,.16)` | `rgba(255,255,255,.14)` | table rules |
-| `--ink` | `#15202E` | `#E8ECF1` | primary text |
-| `--ink-2` | `#4A5665` | `#99A3B2` | secondary |
-| `--ink-3` | `#7C8797` | `#5E6979` | tertiary |
-| `--accent` | `#2D63D8` | `#5B9DF9` | links, selection, Leader mark (sparingly) |
-| `--pos` / `--neg` / `--warn` | `#2D8561` / `#B84D45` / `#A07A2B` | `#4FC490` / `#DE7870` / `#DDAC4A` | RAG, muted (FM-approved on India) |
-| decile ramp | India's muted red→olive→green (`--decile-1..10`) | India's dark ramp | deciles only |
+| `--color-ground` | `#f4f0e5` | ground | page, cards, chips, controls (cream paper) |
+| `--color-panel` | `#ffffff94` | panel | tables, tiles, notices (translucent white on cream) |
+| `--color-panel-solid` | `#fbf9f4` | panel-solid | what panel composites to: sticky heads and the sticky symbol column |
+| `--color-raised` | `#fbf9f4` | panel-solid | table heads, group rows |
+| `--color-inset` | `#25394a17` | accent-soft | meter tracks, code, wells |
+| `--color-line` = `--color-hair` = `--color-rule` | `#25394a29` | line | the one hairline |
+| `--color-ink` | `#25394a` | ink | primary text |
+| `--color-ink-2` = `--color-muted` | `#5e6b75` | muted | secondary text, labels |
+| `--color-ink-3` | `#5e6b75` | grey | tertiary text (the desk has one muted level; size and case carry the rest) |
+| `--color-accent` | `#25394a` | accent | links, selection, the primary button, value bars (navy: the ink itself) |
+| `--color-accent-soft` | `#25394a17` | accent-soft | selected chips, the hero card, hover |
+| `--color-navy-deep` | `#16294d` | navy-deep | the top bar |
+| `--color-pos` / `--color-pos-soft` | `#2c6b41` / `#e3ede5` | pos / pos-soft | RAG green |
+| `--color-neg` / `--color-neg-soft` | `#ab4425` / `#f3e1d9` | neg / neg-soft | RAG red |
+| `--color-warn` = `--color-amber` / `--color-amber-soft` | `#8a5d10` / `#f5ebd0` | amber / amber-soft | RAG amber |
+| `--color-gold` / `--color-gold-soft` | `#a17c2b` / `#f5ebd0` | gold / gold-soft | focus ring, the active section, selection |
+| `--color-tint-info` / `-pos` / `-neg` / `-warn` | `#f1f5fc` / `#f0f7f2` / `#fdf1ed` / `#fdf7e8` | tints | row hover (info), notices (warn) |
+| `--color-white`, `-72`, `-60`, `-6` | `#ffffff`, `#ffffffb8`, `#fff9`, `#ffffff0f` | the bar's whites | text, nav links, `.who`, link hover on navy |
+| `--color-white-18` | `#ffffff2e` | *extension* | the search box's border on navy |
+| `--shadow-lift` | `0 1px 2px #16212b0d, 0 4px 14px #16212b0d` | lift | the one shadow |
+| `--radius-panel` / `--radius-lg` | `6px` / `10px` | radius / radius-lg | |
+| `--measure` | `66ch` | measure | prose width |
+| `--decile-1..10` | `#ab4425` `#af5622` `#b3671e` `#b67816` `#b58510` `#9d8125` `#847c30` `#6a7738` `#4e713d` `#2c6b41` | *extension* | deciles only: neg → amber `#b8860b` → pos, ten steps at equal OKLab arc length; 1 = worst. The chip is ink on a 30% tint of its step (≥ 6.9:1 on all ten) with the step as its border |
 
 ### Type
-- **Instrument Sans** — UI, body, all numbers (`font-variant-numeric: tabular-nums` on every numeric
-  cell). Fallback `system-ui`.
-- **Instrument Serif** — page titles, entity names on detail pages, and the written rationale.
-  Fallback `Georgia`.
-- Scale (px / line-height): 12/16 meta · 13/18 table · 14/20 body · 16/24 lead · 22/28 section ·
-  32/36 page title · 44/44 the composite numeral. Weights: 400/500/600 only.
+- One family for display and body: `"Iowan Old Style", "Palatino Linotype", Palatino, Georgia,
+  "Times New Roman", serif`. Both `--font-serif` and `--font-sans` resolve to it, so `font-serif`
+  and `font-sans` utilities keep working; nothing is loaded through next/font.
+- Body 14.5 px / 1.5. Scale: `--text-meta` .78rem (xs) · `--text-table` .86rem (sm) ·
+  `--text-body` 14.5px · `--text-lead` .95rem (md) · `--text-h2` 1.05rem (lg, the h2) ·
+  `--text-section` 1.28rem (a card's value, the status headline) · `--text-title` 1.3rem (the h1) ·
+  `--text-composite` 2rem (hero). Tables are 13.5 px with 10.5 px uppercase heads, chips 12.5 px,
+  labels 11 px, the bar's links 13 px, `.who` 11.5 px — set directly, as the desk does.
+- Weights 400 / 500 / 600 / 650 / 700. `.num { font-variant-numeric: tabular-nums }` on every
+  numeric cell.
 
 ### Layout
-- Left rail 232 px: product mark, sections (Today · ETFs · Countries · Sectors · Stocks · Baskets ·
-  Methodology · Admin), theme toggle, user. Top bar: global symbol search (⌘K), "as of" stamp
-  with freshness dot.
-- Explorer pages: facet rail 260 px + a virtualised table; row height 44 px; sticky header; sort
-  on any column; the Lens bar in every row.
+- Top bar (`.topbar`): navy-deep, 48 px, sticky. The product mark (serif 1.05rem/600, white), the
+  sections — Today · Countries · ETFs · Stocks · Health; Portfolios joins with its page (the hook
+  is one commented line in `Rail.tsx`) — as 13 px links, gold-underlined when current; the search
+  box (⌘K); and `.who` at the right, 11.5 px dimmed, holding the "as of" stamp and its dot.
+- Main: `max-width: 1440px`, centred, `padding: 0 24px 60px`. Page head: h1 1.3rem/600, h2
+  1.05rem/600.
+- Explorer pages: facet rail 260 px of chips (a chosen value is a chip that is `.on`) + a
+  virtualised table; row height 44 px (`DataTable`'s `ROW_HEIGHT`, set outright in CSS); sticky
+  uppercase header; sort on any column; the Lens bar in every row.
 - Detail pages: two columns 7/5 — left = identity, classification card, written rationale,
-  holdings; right = the score instrument, exposures, risk, any-period return calculator.
-- Responsive: rail collapses under 1024 px; tables become card lists under 720 px (read-only
+  holdings; right = the score instrument, exposures, risk, any-period return calculator. Fact
+  lists sit on hairlines with the card's uppercase labels.
+- Responsive: under 1024 px the bar tightens and hides the stamp, explorer and detail pages stack;
+  under 720 px the bar scrolls sideways. Tables become card lists under 720 px later (read-only
   surfaces first; admin stays desktop).
+
+### Component contracts
+Every class the pages use keeps its name and restyles in place: `.page` / `.page-wide`, `.panel`,
+`.tile`, `.tbl`, `.btn` / `.btn-primary` / `.btn-quiet`, `.field`, `.decile-chip`,
+`.lens-fill--animate`, `.dot`, `.explorer`, `.notice`, `.facets` / `.facet-*`, `.dt` / `.dt-table`
+/ `.dt-sort` / `.dt-symbol`, `.detail`, `.facts` / `.fact`, `.timeline`, `.slots`, `.num`, `.main`,
+`.topbar`, `.search`, `.rail`. Added from the desk: `.card` (+ `.hero`, `.k` / `.v` / `.s`),
+`.tile .l` / `.v` / `.s`, `.chip` (+ `.on`, `.ghost`), `.seg`, `td.valbar` (+ `.neg`), `tr.sec`
+(+ `.red` / `.amber` / `.grey`), `.who`, `.dot-pos` / `.dot-warn` / `.dot-grey`. Deviations from the
+desk, on purpose: `.tbl` prose cells may wrap (only `.num` / `.r` cells are nowrap) because the
+health tables carry notes columns; the last row of a bordered panel drops its hairline.
 
 ### Motion and states
 - One motion: the Lens bar fills on first paint of a detail page (240 ms, respects

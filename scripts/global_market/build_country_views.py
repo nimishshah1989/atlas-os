@@ -34,10 +34,21 @@ which are a bet on the currency as much as the market. A reader who wants "the J
 not mean "2x Japan daily" — and putting one there is the kind of wrong that is only noticed
 after somebody buys it.
 
-WHAT IS DELIBERATELY LEFT NULL. ``composite`` and ``breadth_pct`` need lens scores, which are
-Phase 3 and do not exist yet; ``aum_usd_total`` needs ``etf_meta``, which is not built. A
-column with no honest source stays empty rather than carrying a number nobody can trace
-(rule #0). The page renders what is present and says what is not.
+RANK, NOT JUST RELATIVE STRENGTH (P2-E, the FM's decision D2 of 2026-09-09). ``composite`` is
+the representative fund's own composite from ``etf_scores_daily`` — the same number the ETF
+board shows for that fund, read here rather than recomputed, so a country and its fund can
+never disagree. ``breadth_pct`` is the share of that market's SCORED funds at or above
+``rollup_breadth_min``: it separates "one strong fund" from "the whole market is working",
+which is the difference between a trade and a theme. Its denominator is the scored members,
+not all members, and the report carries both counts so the page can say which.
+
+Countries are then RANKED ACROSS MARKETS on read — deciles and quartiles cut over the
+composite, the same way every other Atlas ranking is cut. Nothing is materialised here: a
+rank is a statement about a population on a date.
+
+WHAT IS STILL DELIBERATELY NULL. ``aum_usd_total`` needs ``etf_meta``, which has no producer
+until phase2.md P3-C. A column with no honest source stays empty rather than carrying a number
+nobody can trace (rule #0). The page renders what is present and says what is not.
 """
 
 from __future__ import annotations
@@ -46,6 +57,7 @@ import argparse
 import datetime as dt
 import sys
 import uuid
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -56,6 +68,7 @@ import _gdb
 import pandas as pd
 from _report import Report
 
+from atlas.db import load_thresholds
 from atlas.global_market.classify.countries import COUNTRIES, country_of, is_currency_hedged
 from atlas.global_market.classify.rules import leverage_flags
 
@@ -79,6 +92,9 @@ REPORT_COLUMNS = (
     "adv_usd_60d_median",
     "n_etfs",
     "n_eligible",
+    "n_scored",
+    "composite",
+    "breadth_pct",
     "rs_3m_spy",
     "rs_12m_spy",
     "status",
@@ -94,9 +110,12 @@ ANCHOR_SQL = f"SELECT max(date) AS d FROM {M}.technical_daily WHERE date <= :cut
 # An ETF with no row on the anchor has not traded into it and cannot represent anything.
 MEMBERS_SQL = f"""
 SELECT im.instrument_id::text AS instrument_id, im.symbol, im.name,
-       t.adv_usd_60d_median, {", ".join(f"t.{c}" for c in RS_COLUMNS)}
+       t.adv_usd_60d_median, {", ".join(f"t.{c}" for c in RS_COLUMNS)},
+       s.composite
 FROM {M}.instrument_master im
 JOIN {M}.technical_daily t USING (instrument_id)
+LEFT JOIN {M}.etf_scores_daily s
+       ON s.instrument_id = im.instrument_id AND s.date = :anchor
 WHERE im.asset_class = 'etf' AND im.is_active AND t.date = :anchor
 """
 
@@ -163,18 +182,43 @@ def country_rows(frame: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def daily_rows(frame: pd.DataFrame, anchor: dt.date, run_id: str) -> tuple[pd.DataFrame, list]:
+def breadth(group: pd.DataFrame, minimum: Decimal) -> tuple[int, float | None]:
+    """``(n_scored, percent of them at or above the cut)`` for one country.
+
+    The denominator is the SCORED members, not every member: geared, inverse and
+    below-floor funds carry no composite by design (they are excluded from ``in_universe``),
+    and counting them as failures would make every market look weak in proportion to how many
+    leveraged products someone launched on it. A market with nothing scored gets ``None`` —
+    not 0, which reads as "measured, and bad".
+    """
+    scored = group["composite"].dropna()
+    if scored.empty:
+        return 0, None
+    above = int((scored >= float(minimum)).sum())
+    return len(scored), round(100.0 * above / len(scored), 2)
+
+
+def daily_rows(
+    frame: pd.DataFrame, anchor: dt.date, run_id: str, breadth_min: Decimal
+) -> tuple[pd.DataFrame, list]:
     """One ``country_daily`` row per country, plus the per-country report lines."""
     rows: list[dict[str, Any]] = []
     report: list[list[Any]] = []
     for iso2, group in frame.groupby("iso2", sort=True):
         pick = representative(group)
         n_eligible = int(group["eligible"].sum())
+        n_scored, breadth_pct = breadth(group, breadth_min)
+        # The country's composite IS its representative's, read from the scorer's own row.
+        # Averaging the market's funds would blend a strong tracker with the thin products
+        # nobody would buy, and the number would then describe no instrument at all.
+        composite = None if pick is None else pick["composite"]
         row: dict[str, Any] = {
             "iso2": iso2,
             "date": anchor,
             "representative_id": None if pick is None else pick["instrument_id"],
             "n_etfs": len(group),
+            "composite": composite,
+            "breadth_pct": breadth_pct,
             "compute_run_id": run_id,
         }
         for column in RS_COLUMNS:
@@ -190,6 +234,9 @@ def daily_rows(frame: pd.DataFrame, anchor: dt.date, run_id: str) -> tuple[pd.Da
                 None if pick is None else pick["adv_usd_60d_median"],
                 len(group),
                 n_eligible,
+                n_scored,
+                composite,
+                breadth_pct,
                 None if pick is None else pick["rs_3m_spy"],
                 None if pick is None else pick["rs_12m_spy"],
                 PICKED if pick is not None else NO_ELIGIBLE,
@@ -209,12 +256,14 @@ def run(*, eod: dt.date | None, dry_run: bool, report: Report | None) -> dict[st
             "view from"
         )
     countries = country_rows(frame)
-    daily, lines = daily_rows(frame, anchor, run_id)
+    breadth_min = load_thresholds(_gdb.SCHEMA, engine=_gdb.engine())["rollup_breadth_min"]
+    daily, lines = daily_rows(frame, anchor, run_id, breadth_min)
     with_rep = int(daily["representative_id"].notna().sum())
     print(
         f"[countries] anchor={anchor} etfs_scanned={len(frame):,d} "
         f"countries={len(countries)} of {len(set(c.iso2 for c in COUNTRIES.values()))} known "
-        f"with_representative={with_rep}"
+        f"with_representative={with_rep} "
+        f"with_composite={int(daily['composite'].notna().sum())}"
     )
     if report is not None:
         for line in lines:
