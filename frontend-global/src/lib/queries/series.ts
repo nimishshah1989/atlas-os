@@ -24,9 +24,13 @@ import 'server-only'
 import { eodCached } from '@/lib/cache'
 import { db, dbAvailable } from '@/lib/db'
 
-/** Roughly five years of sessions — the longest window the chart offers. Ranges shorter than this
- *  are cut from the same fetch in the browser, so switching range costs no round trip. */
-export const MAX_SESSIONS = 1260
+/** Roughly TEN years of sessions — the longest window the chart offers. Ranges shorter than this
+ *  are cut from the same fetch in the browser, so switching range costs no round trip.
+ *
+ *  It is a ceiling, not a promise: `lastSessions` returns whatever the spine actually holds, so a
+ *  fund listed in 2021 draws five years on the 10Y button and the axis says so. The spine's own
+ *  reach is a separate question the chart's provenance line answers (BarsProvenance). */
+export const MAX_SESSIONS = 2520
 
 export type SeriesPoint = {
   date: string
