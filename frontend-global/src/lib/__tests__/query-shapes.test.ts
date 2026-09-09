@@ -1,4 +1,5 @@
-// src/lib/__tests__/sql-double-to-text.test.ts — the guard for the defect that took /pulse down.
+// src/lib/__tests__/query-shapes.test.ts — the guards for two defects that reached production
+// in hand-written SQL, neither of which tsc, eslint or any database-free test can see.
 //
 // WHAT HAPPENED. `percentile_cont(0.5) WITHIN GROUP (ORDER BY t.ret_3m)::text` looks harmless.
 // percentile_cont returns DOUBLE PRECISION, and postgres renders a double in SCIENTIFIC NOTATION
@@ -27,6 +28,41 @@ function sources(): { file: string; text: string }[] {
     .filter((f) => f.endsWith('.ts'))
     .map((f) => ({ file: f, text: readFileSync(join(QUERIES, f), 'utf8') }))
 }
+
+// The second defect this file guards, found the same way: /themes went out reading
+// `SELECT value FROM atlas_global.atlas_thresholds WHERE key = …`. The columns are
+// `threshold_key` and `threshold_value` — India's shape, which this table copies verbatim so
+// `load_thresholds` and the admin panel work unchanged on both boards. The page failed honestly
+// ("column \"value\" does not exist") rather than crashing, which is the design working, but the
+// FM saw an error where a list of themes should have been. A guessed column name in a
+// hand-written query is not caught by tsc, by eslint or by any test that does not touch a
+// database, so it is caught here instead.
+describe('a threshold is read by the column names the table actually has', () => {
+  it('never reaches for `key` or `value` on atlas_thresholds', () => {
+    const offenders: string[] = []
+    for (const { file, text } of sources()) {
+      // every statement that names the table, up to the next backtick that closes the template
+      for (const m of text.matchAll(/atlas_global\.atlas_thresholds[\s\S]{0,400}?`/g)) {
+        const stmt = m[0]
+        if (/\bWHERE\b[\s\S]*?\bkey\s*(=|IN|LIKE)/i.test(stmt) && !/threshold_key/i.test(stmt)) {
+          offenders.push(`${file}: filters atlas_thresholds on \`key\`, not \`threshold_key\``)
+        }
+        if (/SELECT\s+value\b/i.test(stmt)) {
+          offenders.push(`${file}: selects \`value\` from atlas_thresholds, not \`threshold_value\``)
+        }
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+
+  it('reads only ACTIVE rows — a retired threshold is not a threshold in force', () => {
+    for (const { file, text } of sources()) {
+      for (const m of text.matchAll(/atlas_global\.atlas_thresholds[\s\S]{0,400}?`/g)) {
+        if (/\bWHERE\b/i.test(m[0])) expect(m[0], file).toMatch(/is_active/)
+      }
+    }
+  })
+})
 
 describe('a double never reaches the browser as text', () => {
   it('casts every double-precision aggregate through numeric before text', () => {

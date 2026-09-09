@@ -90,10 +90,13 @@ const rsOf = (r: Record<`rs_${ThemeWindow}`, string | null>) =>
 const MIN_MEMBERS_KEY = 'peer_group_min_members'
 
 export async function peerGroupMinMembers(): Promise<number> {
-  const [row] = await db()<{ value: string }[]>`
-    SELECT value::text AS value
+  // The columns are `threshold_key` / `threshold_value` and the row must be active — India's
+  // shape, which this table copies verbatim so load_thresholds and the admin panel work on both
+  // boards. Guessing `key` / `value` is what took /themes down on its first deploy.
+  const [row] = await db()<{ threshold_value: string }[]>`
+    SELECT threshold_value::text AS threshold_value
     FROM atlas_global.atlas_thresholds
-    WHERE key = ${MIN_MEMBERS_KEY}
+    WHERE is_active AND threshold_key = ${MIN_MEMBERS_KEY}
   `
   if (!row) {
     throw new Error(
@@ -101,7 +104,7 @@ export async function peerGroupMinMembers(): Promise<number> {
         'scripts/global_market/seed_thresholds.py (FM approval first); there are no defaults.',
     )
   }
-  return Number(row.value)
+  return Number(row.threshold_value)
 }
 
 const listInner = eodCached(async (): Promise<ThemeList> => {
