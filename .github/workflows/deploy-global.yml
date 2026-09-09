@@ -52,7 +52,18 @@ jobs:
             cd "$REPO"
             git fetch origin main
             git checkout main
-            git pull --ff-only origin main
+            # `git merge --ff-only origin/main`, NOT `git pull --ff-only origin main`.
+            #
+            # The pull form failed on 2026-09-09 with "fatal: Cannot fast-forward to multiple
+            # branches" and left the box a commit behind while reporting a failed deploy. `git
+            # pull` runs its own second fetch and merges whatever FETCH_HEAD marks for merging;
+            # if the box's refspec configuration puts more than one entry there, git refuses
+            # rather than guessing — correctly, but the deploy has no business being exposed to
+            # that at all. `origin/main` is ONE ref, just updated by the fetch above, and
+            # --ff-only keeps the property that matters: a diverged box is a fact a human must
+            # see, never something a deploy resolves on its own.
+            git merge --ff-only origin/main
+            echo "checkout now at $(git rev-parse --short HEAD)"
 
             # ATLAS_GLOBAL_PORT has no default in the deploy script ON PURPOSE — the port is a
             # fact about this box, not a constant, and guessing it would reload pm2 onto a port
