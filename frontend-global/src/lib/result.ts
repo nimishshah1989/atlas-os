@@ -9,7 +9,10 @@
 //
 // The budget does NOT cancel anything: postgres.js has no cancel for a queued query, so the
 // statement keeps running server-side and its connection stays held until it returns or the
-// pool recycles it. The page stops waiting; the database does not. The message says so.
+// pool recycles it. The page stops waiting; the database does not. Nor can the budget tell a
+// query that is RUNNING from one still QUEUED for a pool slot (max 5 connections, and /health
+// starts seven reads) — so the message claims neither. See src/lib/queries/health.ts for the
+// server-side bound that does the cancelling.
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string }
 
@@ -26,8 +29,8 @@ function withBudget<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
       () =>
         reject(
           new Error(
-            `${label} did not answer within ${ms / 1000}s — the query is still running server-side; ` +
-              'nothing was cancelled. See src/lib/result.ts.',
+            `${label} did not answer within ${ms / 1000}s — it may still be queued for a pool slot ` +
+              'or running server-side; nothing was cancelled. See src/lib/result.ts.',
           ),
         ),
       ms,

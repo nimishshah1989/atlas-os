@@ -132,7 +132,10 @@ for (const [label, run] of HEALTH_READS) {
 // not valid, or a table whose dead tuples dwarf its live ones. Each is clocked, so a stalled
 // catalogue read cannot hang the probe either. Note: atlas_global_app may lack the right to
 // see OTHER sessions' query text in pg_stat_activity (that needs pg_read_all_stats) — state,
-// wait_event and timing are still visible, and that is what matters.
+// wait_event and timing are still visible, and that is what matters — so a session whose text
+// is hidden is kept when it is waiting on a lock or shows '<insufficient privilege>', rather
+// than filtered out by the text match it can never satisfy. The catalogue reads name the
+// schema: atlas_foundation.atlas_health_daily exists in the same database.
 await timed('4b. THE STALLED ONE: max(data_date) on atlas_health_daily', async () => {
   const [row] = await sql`SELECT MAX(data_date)::text AS d FROM atlas_global.atlas_health_daily`
   console.log(`       max data_date = ${row.d}`)
@@ -154,7 +157,8 @@ await timed('4d. sessions touching atlas_health_daily (pg_stat_activity)', async
            left(query, 90) AS query
     FROM pg_stat_activity
     WHERE datname = current_database()
-      AND (query ILIKE '%atlas_health_daily%' OR state = 'idle in transaction')
+      AND (query ILIKE '%atlas_health_daily%' OR state = 'idle in transaction'
+           OR wait_event_type = 'Lock' OR query = '<insufficient privilege>')
       AND pid <> pg_backend_pid()
     ORDER BY xact_start NULLS LAST`
   for (const r of rows) console.log(`       pid=${r.pid} ${r.state} wait=${r.wait_event_type ?? '-'}/${r.wait_event ?? '-'} xact=${r.xact_age ?? '-'} | ${r.query}`)
@@ -164,22 +168,31 @@ await timed('4d. sessions touching atlas_health_daily (pg_stat_activity)', async
 await timed('4e. locks on atlas_health_daily not granted (pg_locks)', async () => {
   const rows = await sql`
     SELECT l.pid, l.mode, l.granted
-    FROM pg_locks l JOIN pg_class c ON c.oid = l.relation
-    WHERE c.relname = 'atlas_health_daily'
+    FROM pg_locks l
+      JOIN pg_class c ON c.oid = l.relation
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'atlas_global' AND c.relname = 'atlas_health_daily'
     ORDER BY l.granted, l.pid`
   for (const r of rows) console.log(`       pid=${r.pid} ${r.mode} granted=${r.granted}`)
   if (!rows.length) console.log('       (no locks held or waiting on it)')
   return rows
 })
-await timed('4f. its primary-key index valid? dead vs live tuples?', async () => {
+await timed('4f. its primary-key index valid?', async () => {
   const [ix] = await sql`
-    SELECT i.indisvalid, i.indisready FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
-    WHERE c.relname = 'atlas_health_daily_pkey'`
+    SELECT i.indisvalid, i.indisready
+    FROM pg_index i
+      JOIN pg_class c ON c.oid = i.indexrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'atlas_global' AND c.relname = 'atlas_health_daily_pkey'`
+  console.log(`       pkey valid=${ix?.indisvalid} ready=${ix?.indisready}`)
+  return ix
+})
+await timed('4g. dead vs live tuples?', async () => {
   const [st] = await sql`
     SELECT n_live_tup, n_dead_tup, last_vacuum, last_autovacuum
-    FROM pg_stat_user_tables WHERE relname = 'atlas_health_daily'`
-  console.log(`       pkey valid=${ix?.indisvalid} ready=${ix?.indisready}; live=${st?.n_live_tup} dead=${st?.n_dead_tup} last_autovacuum=${st?.last_autovacuum ?? '-'}`)
-  return { ix, st }
+    FROM pg_stat_user_tables WHERE schemaname = 'atlas_global' AND relname = 'atlas_health_daily'`
+  console.log(`       live=${st?.n_live_tup} dead=${st?.n_dead_tup} last_autovacuum=${st?.last_autovacuum ?? '-'}`)
+  return st
 })
 await timed('5. the country grid /countries reads', async () => {
   const [row] = await sql`SELECT count(*)::int AS n FROM atlas_global.country_daily`

@@ -20,7 +20,14 @@ import { db, dbAvailable } from '@/lib/db'
 // sql.begin(), which pins a connection for exactly that transaction. It is the same pattern
 // scripts/foundation/_db.py::_apply_timeout uses ("pooler-proof"). db.ts's rule that nothing
 // may rely on SET LOCAL is about session state across statements; this is not that.
-const STATEMENT_BUDGET = '10s'
+//
+// 5s, not 10s: statement_timeout is PER STATEMENT, and getLatestAnomalies runs two in one
+// transaction, so a transaction can hold its pooler connection for up to twice the budget.
+// The page gives up at 12s (health/page.tsx QUERY_BUDGET_MS); the connection must be released
+// before that, not after, or a stalled render leaves a connection pinned past the page that
+// asked for it. Every read here is on a table of hundreds of rows and answers in well under
+// a second when the database is healthy — 5s is headroom, not a ceiling anyone should meet.
+const STATEMENT_BUDGET = '5s'
 
 /** Run `fn` in one transaction whose statements are cancelled server-side after the budget. */
 async function bounded<T>(fn: (tx: TransactionSql) => Promise<T>): Promise<T> {
