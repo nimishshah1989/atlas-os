@@ -15,17 +15,20 @@
 
 const FULL_TINT = 0.2 // |RS| at which the tint saturates — beyond ±20 percent, more is not louder
 
-export function RsCell({ value }: { value: string | null }) {
+export function RsCell({ value, first = false }: { value: string | null; first?: boolean }) {
+  // `first` draws the rule that separates the relative-strength band from the score band, the
+  // same single hairline Atlas India uses between its Return and RS groups.
+  const edge = first ? 'border-l border-rule ' : ''
   const n = value === null ? null : Number(value)
   if (n === null || !Number.isFinite(n)) {
     // An em dash, not a zero. A window a fund is too young to have is not a flat one.
-    return <td className="px-3 py-2 text-right text-table text-ink-3">—</td>
+    return <td className={`${edge}px-3 py-2 text-right text-table text-ink-3`}>—</td>
   }
   const share = Math.min(Math.abs(n) / FULL_TINT, 1) * 100
   const token = n >= 0 ? 'var(--color-pos)' : 'var(--color-neg)'
   return (
     <td
-      className="px-3 py-2 text-right text-table tabular-nums text-ink"
+      className={`${edge}px-3 py-2 text-right text-table tabular-nums text-ink`}
       style={{ backgroundColor: `color-mix(in srgb, ${token} ${share.toFixed(0)}%, transparent)` }}
     >
       {n >= 0 ? '+' : '−'}
