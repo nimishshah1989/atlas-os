@@ -13,13 +13,19 @@ name: Run Global Nightly
 #           log for its own; then the FAIL lines with their recorded reasons.
 #   install_cron  (run mode) adds the runbook's cron line if no atlas_global_daily entry
 #           exists.
+#   update_checkout  (run mode) fast-forwards the box to origin/main first. deploy-global.yml
+#           is the ONLY thing that moves the box's checkout, and it fires on frontend paths
+#           alone — deliberately, since the nightly's Python changes no served byte. The cost
+#           is that a Python-only fix to scripts/global_market/** never reaches the box, and a
+#           run started here would then execute the OLD code and report a failure already
+#           fixed. So run mode always PRINTS what it is about to run, and this input moves it.
 #   sync_deps     (run mode) installs the [global] extra into the box venv. The first real
 #           nightly lost ingest_financials to `ModuleNotFoundError: No module named 'edgar'`
 #           — the box venv had drifted from pyproject.toml and there was no way to repair it
 #           without an SSH session.
 #   seed_thresholds  (run mode) inserts any atlas_thresholds seed row the box has never had.
 #           The same run lost mark_baskets to five missing basket keys.
-# Those three are everything this workflow ever writes to the box.
+# Those four are everything this workflow ever writes to the box.
 #
 # EVERYTHING THIS PRINTS IS REDACTED FIRST. Actions logs on a public repository are public, and
 # the orchestrator's own log is full of raw tracebacks — `requests` puts the whole request URL
@@ -38,6 +44,11 @@ on:
         options: [status, run]
       install_cron:
         description: "run mode only: install the runbook cron line if the box has none"
+        required: false
+        default: false
+        type: boolean
+      update_checkout:
+        description: "run mode only: fast-forward the box checkout to origin/main before running"
         required: false
         default: false
         type: boolean
@@ -119,6 +130,19 @@ jobs:
             if [ "${{ inputs.install_cron }}" = "true" ] && ! crontab -l 2>/dev/null | grep -q atlas_global_daily; then
               ( crontab -l 2>/dev/null; echo "$CRON_LINE" ) | crontab - || { echo "FAILED to install the cron line — not running the nightly"; exit 1; }
               echo "installed cron line: $(printf '%s' "$CRON_LINE" | redact)"
+            fi
+
+            # WHAT CODE IS THIS ABOUT TO RUN? Unconditional, because a nightly that quietly
+            # executes a commit older than the fix you just merged reports a failure you have
+            # already fixed, and nothing else in run mode would say so.
+            timeout 20 git -C "$REPO" fetch origin main --quiet 2>/dev/null || echo "  (fetch failed — 'behind' is measured against the last known origin/main)"
+            BEHIND=$(git -C "$REPO" rev-list --count HEAD..origin/main 2>/dev/null || echo "?")
+            echo "== box checkout: $(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo '?') ($BEHIND commit(s) behind origin/main) =="
+            if [ "${{ inputs.update_checkout }}" = "true" ]; then
+              git -C "$REPO" checkout main --quiet && git -C "$REPO" merge --ff-only origin/main || echo "REFUSED to fast-forward — the box has diverged, which a person must look at"
+              echo "  checkout now at $(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo '?')"
+            elif [ "$BEHIND" != "0" ] && [ "$BEHIND" != "?" ]; then
+              echo "  WARNING: running code $BEHIND commit(s) behind main. Re-run with update_checkout=true to move it."
             fi
 
             if [ "${{ inputs.sync_deps }}" = "true" ]; then
