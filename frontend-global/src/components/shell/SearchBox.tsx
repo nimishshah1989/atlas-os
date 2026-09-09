@@ -55,7 +55,7 @@ export function SearchBox() {
   }
 
   return (
-    <label className="search text-body">
+    <label className="search">
       <Icon name="search" />
       <input
         ref={input}

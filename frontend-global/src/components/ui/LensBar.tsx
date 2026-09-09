@@ -57,7 +57,7 @@ export function LensBar({
             {s.score != null && (
               <div
                 data-lens-fill=""
-                className={`absolute inset-y-0 left-0 bg-ink-2 ${animate ? 'lens-fill--animate' : ''}`}
+                className={`absolute inset-y-0 left-0 bg-accent ${animate ? 'lens-fill--animate' : ''}`}
                 style={{ width: `${clamp(s.score)}%` }}
               />
             )}
