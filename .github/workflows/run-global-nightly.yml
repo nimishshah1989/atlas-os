@@ -12,7 +12,14 @@ name: Run Global Nightly
 #           run started here can neither overlap a scheduled one nor mistake a scheduled run's
 #           log for its own; then the FAIL lines with their recorded reasons.
 #   install_cron  (run mode) adds the runbook's cron line if no atlas_global_daily entry
-#           exists. Nothing else is ever written to the box by this workflow.
+#           exists.
+#   sync_deps     (run mode) installs the [global] extra into the box venv. The first real
+#           nightly lost ingest_financials to `ModuleNotFoundError: No module named 'edgar'`
+#           — the box venv had drifted from pyproject.toml and there was no way to repair it
+#           without an SSH session.
+#   seed_thresholds  (run mode) inserts any atlas_thresholds seed row the box has never had.
+#           The same run lost mark_baskets to five missing basket keys.
+# Those three are everything this workflow ever writes to the box.
 #
 # EVERYTHING THIS PRINTS IS REDACTED FIRST. Actions logs on a public repository are public, and
 # the orchestrator's own log is full of raw tracebacks — `requests` puts the whole request URL
@@ -31,6 +38,16 @@ on:
         options: [status, run]
       install_cron:
         description: "run mode only: install the runbook cron line if the box has none"
+        required: false
+        default: false
+        type: boolean
+      sync_deps:
+        description: "run mode only: install the [global] extra into the box venv (adds only, removes nothing)"
+        required: false
+        default: false
+        type: boolean
+      seed_thresholds:
+        description: "run mode only: insert missing atlas_thresholds seed rows (never overwrites an edit)"
         required: false
         default: false
         type: boolean
@@ -102,6 +119,38 @@ jobs:
             if [ "${{ inputs.install_cron }}" = "true" ] && ! crontab -l 2>/dev/null | grep -q atlas_global_daily; then
               ( crontab -l 2>/dev/null; echo "$CRON_LINE" ) | crontab - || { echo "FAILED to install the cron line — not running the nightly"; exit 1; }
               echo "installed cron line: $(printf '%s' "$CRON_LINE" | redact)"
+            fi
+
+            if [ "${{ inputs.sync_deps }}" = "true" ]; then
+              echo "== box venv: installing the [global] extra (adds only) =="
+              # NOT `uv sync`. uv sync is EXACT — it removes every package outside the extras it
+              # is given, and INDIA'S PRODUCTION NIGHTLY RUNS FROM THIS SAME .venv with
+              # [simulation]/[intelligence]/[optimizer]/[crawler]/[ui]. `uv sync --extra global`
+              # would strip those and break atlas_daily.sh the same night. So read the [global]
+              # extra's own requirement strings out of pyproject.toml — one source of truth, no
+              # package list duplicated here — and `uv pip install` exactly those, which adds.
+              REQ=/tmp/atlas_global_extra_reqs.txt
+              "$REPO/.venv/bin/python" -c "import tomllib,pathlib,sys; d=tomllib.loads(pathlib.Path(sys.argv[1]).read_text()); pathlib.Path(sys.argv[2]).write_text(chr(10).join(d['project']['optional-dependencies']['global'])+chr(10))" "$REPO/pyproject.toml" "$REQ" || echo "could not read the [global] extra out of pyproject.toml"
+              if [ -s "$REQ" ]; then
+                echo "the [global] extra declares:"; sed 's/^/  /' "$REQ"
+                UV="$(command -v uv || true)"
+                for c in "$HOME/.local/bin/uv" "$HOME/.cargo/bin/uv" /usr/local/bin/uv; do [ -n "${UV:-}" ] && break; [ -x "$c" ] && UV="$c"; done
+                if [ -n "${UV:-}" ]; then
+                  VIRTUAL_ENV="$REPO/.venv" "$UV" pip install -r "$REQ" 2>&1 | tail -n 15 | redact || echo "INSTALL FAILED — ingest_financials will fail below for the same reason"
+                else
+                  echo "no uv on this box — run by hand:  VIRTUAL_ENV=$REPO/.venv uv pip install -r $REQ"
+                fi
+              fi
+              rm -f "$REQ"
+            fi
+
+            if [ "${{ inputs.seed_thresholds }}" = "true" ]; then
+              echo "== atlas_global.atlas_thresholds: inserting any seed row the box has never had =="
+              # The writer is INSERT … ON CONFLICT (threshold_key) DO NOTHING, so a value the FM
+              # tuned from /admin/thresholds is left exactly as it is; only never-seen keys are
+              # added. Sourced .env never reaches the log: the script prints the DSN with its
+              # credentials already stripped, and redact() runs over the output regardless.
+              ( set -a; source "$REPO/.env"; set +a; cd "$REPO"; PYTHONPATH="$REPO:$REPO/scripts/global_market:$REPO/scripts/foundation" "$REPO/.venv/bin/python" scripts/global_market/seed_thresholds.py ) 2>&1 | redact || echo "SEEDING FAILED — mark_baskets will fail below for the same reason"
             fi
 
             echo "== running the nightly (started $(date -u +%FT%TZ)) =="

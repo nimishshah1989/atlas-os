@@ -24,7 +24,9 @@ symbols, because "MSCI Brazil" states a ticker and tracks no company:
     leveraged       leverage_flags     name-anchored: 2X, -3x, Ultra, UltraShort, Bear …
     inverse         leverage_flags
     hedged          is_currency_hedged
-    country_codes   country_of         ISO-3166-1 alpha-2, from the country the name names
+    country_codes   country_of         ISO-3166-1 alpha-2, from the country the name names;
+                                       EMPTY (not NULL) when the name names none — see
+                                       NO_COUNTRIES below for why the distinction matters
     geo_focus_type  single_country when a country is named, region for the region bucket
 
 NO NUMBER IS INVENTED (rule #0). ``confidence`` stays NULL: a regex either matched or it did
@@ -113,6 +115,25 @@ STRATEGY_ASSET_CLASS: dict[str, str] = {
 GEO_SINGLE = "single_country"
 GEO_REGION = "region"
 
+# "This name names no country" is an EMPTY LIST, not NULL. ``etf_classification.country_codes``
+# is ``text[] NOT NULL DEFAULT '{}'`` (03_classification.sql), so writing None fails the whole
+# upsert — which is exactly what it did on the first live run: every one of the ~4,000 funds
+# whose name states no country took the NULL branch, classify_etfs died on the first of them,
+# and score_etfs, freshness_guard and gate C all failed behind it with nothing to score.
+#
+# The empty list is also the right answer, not just the writable one. A set-valued column has
+# no use for three states: "no countries" IS the empty set. What the emptiness does NOT tell
+# you is WHY it is empty, and that is ``geo_focus_type``'s job —
+#
+#     single_country + ['JP']  a country the name states
+#     region         + []      a region whose members this layer has not enumerated
+#     NULL           + []      a name that states no geography at all
+#
+# — so no reader may infer geography from the array alone. Both readers today are already
+# written that way (ClassificationCard checks length; scores.ts joins on country_codes[1],
+# which is NULL for an empty array in Postgres and simply does not match).
+NO_COUNTRIES: list[str] = []
+
 KEY = ["instrument_id", "version"]
 REPORT_COLUMNS = (
     "symbol",
@@ -146,7 +167,10 @@ def classify_one(name: str, active_symbols: set[str]) -> dict[str, Any]:
     """Every classification field for one fund name. Pure: no I/O, no clock, no database.
 
     Returns the column values ``etf_classification`` takes, plus ``rule``/``evidence_text``
-    for the report. A field the name does not determine is ``None`` — never a default.
+    for the report. A field the name does not determine is ``None`` — never a default — with
+    one deliberate exception: ``country_codes`` is the empty list, because a set-valued column
+    has no "unknown" state to express and its NOT NULL constraint would reject one anyway
+    (NO_COUNTRIES above).
     """
     match = classify_strategy(name, active_symbols)
     flags = leverage_flags(name)
@@ -156,11 +180,11 @@ def classify_one(name: str, active_symbols: set[str]) -> dict[str, Any]:
     if country is not None:
         geo_focus, country_codes = GEO_SINGLE, [country.iso2]
     elif match.strategy == "region":
-        geo_focus, country_codes = GEO_REGION, None
+        geo_focus, country_codes = GEO_REGION, NO_COUNTRIES
     else:
         # Not "global" — a fund whose name names no place has an unstated geography, and
         # asserting `global` would put US-only broad funds on a world map.
-        geo_focus, country_codes = None, None
+        geo_focus, country_codes = None, NO_COUNTRIES
 
     return {
         "strategy": match.strategy,
