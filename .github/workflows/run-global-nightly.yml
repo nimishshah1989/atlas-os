@@ -20,13 +20,23 @@ name: Run Global Nightly
 #           is that a Python-only fix to scripts/global_market/** never reaches the box, and a
 #           run started here would then execute the OLD code and report a failure already
 #           fixed. So run mode always PRINTS what it is about to run, and this input moves it.
+#   set_box_env   (run mode) copies ALPACA_API_KEY, ALPACA_API_SECRET and EDGAR_IDENTITY from
+#           GitHub Actions secrets into the box .env, so nobody has to SSH to add a key and no
+#           credential is ever typed into this file. The values reach the box through the
+#           action's `envs` passthrough, never interpolated into the script text, and only the
+#           variable NAME is ever printed. A secret that is not set is skipped, not blanked.
+#   backfill_prices  (run mode) runs ingest_prices.py --backfill once, before the nightly.
+#           The nightly ingests prices INCREMENTALLY from a watermark and never pulls action
+#           HISTORY, so putting the Alpaca key on the box fixes tomorrow's prices and leaves
+#           gate A failing on splits from 2019 that were never adjusted for. This is the
+#           one-off that fills that history and clears gate A's fourteen findings.
 #   sync_deps     (run mode) installs the [global] extra into the box venv. The first real
 #           nightly lost ingest_financials to `ModuleNotFoundError: No module named 'edgar'`
 #           — the box venv had drifted from pyproject.toml and there was no way to repair it
 #           without an SSH session.
 #   seed_thresholds  (run mode) inserts any atlas_thresholds seed row the box has never had.
 #           The same run lost mark_baskets to five missing basket keys.
-# Those four are everything this workflow ever writes to the box.
+# Those six are everything this workflow ever writes to the box.
 #
 # EVERYTHING THIS PRINTS IS REDACTED FIRST. Actions logs on a public repository are public, and
 # the orchestrator's own log is full of raw tracebacks — `requests` puts the whole request URL
@@ -50,6 +60,16 @@ on:
         type: boolean
       update_checkout:
         description: "run mode only: fast-forward the box checkout to origin/main before running"
+        required: false
+        default: false
+        type: boolean
+      set_box_env:
+        description: "run mode only: write the Alpaca keys / EDGAR identity to the box .env from repo secrets"
+        required: false
+        default: false
+        type: boolean
+      backfill_prices:
+        description: "run mode only: pull FULL price + corporate-action history first (needs the Alpaca key on the box)"
         required: false
         default: false
         type: boolean
@@ -77,7 +97,14 @@ jobs:
     steps:
       - name: ${{ inputs.mode }} on EC2
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          # Empty when the secret is not set; the script skips an empty value rather than
+          # writing a blank line over a working one.
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_API_SECRET: ${{ secrets.ALPACA_API_SECRET }}
+          EDGAR_IDENTITY: ${{ secrets.EDGAR_IDENTITY }}
         with:
+          envs: ALPACA_API_KEY,ALPACA_API_SECRET,EDGAR_IDENTITY
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
@@ -190,6 +217,29 @@ jobs:
               # added. Sourced .env never reaches the log: the script prints the DSN with its
               # credentials already stripped, and redact() runs over the output regardless.
               ( set -a; source "$REPO/.env"; set +a; cd "$REPO"; PYTHONPATH="$REPO:$REPO/scripts/global_market:$REPO/scripts/foundation" "$REPO/.venv/bin/python" scripts/global_market/seed_thresholds.py ) 2>&1 | redact || echo "SEEDING FAILED — mark_baskets will fail below for the same reason"
+            fi
+
+            if [ "${{ inputs.set_box_env }}" = "true" ]; then
+              echo "== box .env: taking credentials from repo secrets =="
+              cp -p "$REPO/.env" "$REPO/.env.bak" && echo "  previous .env kept as .env.bak"
+              for VAR in ALPACA_API_KEY ALPACA_API_SECRET EDGAR_IDENTITY; do
+                eval "VAL=\${$VAR:-}"
+                if [ -z "${VAL:-}" ]; then echo "  $VAR: no repo secret set — left alone"; continue; fi
+                # Rewrite rather than sed -i: a value containing the delimiter would corrupt
+                # the file, and a key or an email very well might. Only the NAME is printed.
+                grep -v "^$VAR=" "$REPO/.env" > "$REPO/.env.new" || true
+                printf '%s=%s\n' "$VAR" "$VAL" >> "$REPO/.env.new"
+                mv "$REPO/.env.new" "$REPO/.env" && chmod 600 "$REPO/.env"
+                echo "  $VAR: written"
+              done
+            fi
+
+            if [ "${{ inputs.backfill_prices }}" = "true" ]; then
+              echo "== ingest_prices --backfill: full history, and the corporate actions gate A needs =="
+              # Minutes, not hours: Alpaca's multi-symbol bars endpoint pages 10,000 points at
+              # a time. If it does run long, the step's own 70m command_timeout bounds it and
+              # the nightly below still runs on whatever landed — the writer is an upsert.
+              ( set -a; source "$REPO/.env"; set +a; cd "$REPO"; PYTHONPATH="$REPO:$REPO/scripts/global_market:$REPO/scripts/foundation" "$REPO/.venv/bin/python" scripts/global_market/ingest_prices.py --backfill ) 2>&1 | tail -n 30 | redact || echo "BACKFILL FAILED — check ALPACA_API_KEY and ALPACA_API_SECRET are in $REPO/.env (that spelling: not ALPACA_SECRET_KEY)"
             fi
 
             echo "== running the nightly (started $(date -u +%FT%TZ)) =="
