@@ -71,11 +71,25 @@ SELECT count(*)                                            AS rows,
 FROM {M}.etf_scores_daily WHERE date = :anchor
 """
 
+# peer_group IS NULL is the deliberate "no peer set large enough to rank in" case that
+# score_etfs.assign_groups writes (its docstring says why there is nowhere further to fall).
+# Those rows are not a group and must not be counted as an undersized one — a NULL group would
+# otherwise be the ONLY group that could ever fail the size check, by construction.
 GROUPS_SQL = f"""
 SELECT peer_group, count(*) AS n, count(composite) AS scored,
        stddev_pop(composite) AS sd
-FROM {M}.etf_scores_daily WHERE date = :anchor
+FROM {M}.etf_scores_daily WHERE date = :anchor AND peer_group IS NOT NULL
 GROUP BY peer_group ORDER BY n DESC
+"""
+
+# The funds that got no peer group, and how big their asset class actually is. A fund may be
+# unranked ONLY because its own asset class is under the floor; one that landed here with a
+# large asset class means the fallback dropped it, which is a bug that would silently remove
+# real funds from every ranking on the board.
+UNRANKED_SQL = f"""
+SELECT asset_group, count(*) AS n
+FROM {M}.etf_scores_daily WHERE date = :anchor AND peer_group IS NULL
+GROUP BY asset_group ORDER BY n DESC
 """
 
 # A geared or inverse fund must have no score row at all. The join proves it from the
@@ -133,7 +147,6 @@ def check_C(g: Gate, eod: date | None) -> None:
         sd >= MIN_COMPOSITE_STDDEV,
         f"stddev {sd:.2f} (floor {MIN_COMPOSITE_STDDEV}) — below it the ranking is noise",
     )
-    g.check("every scored row has a peer group", int(s["no_peer_group"]) == 0)
     g.check("every scored row has an asset group", int(s["no_asset_group"]) == 0)
     g.check(
         "no composite without an active lens",
@@ -172,6 +185,33 @@ def check_C(g: Gate, eod: date | None) -> None:
         if not too_small.empty
         else f"{len(groups)} groups, smallest {int(groups['n'].min())}, cut at {minimum}",
     )
+
+    # The other half of the same rule. Above: nothing is ranked in a group too small. Here:
+    # nothing was left UNRANKED that had a group big enough to rank in — which is what a
+    # broken fallback would look like, and it would quietly delete real funds from the board's
+    # every ranking while every other check in this gate stayed green.
+    unranked = [
+        (str(r["asset_group"]), int(r["n"]))
+        for r in _gdb.read_df(UNRANKED_SQL, {"anchor": anchor}).to_dict("records")
+    ]
+    total_unranked = sum(n for _, n in unranked)
+    wrongly = [(a, n) for a, n in unranked if n >= minimum]
+    g.check(
+        "no fund was left unranked that had peers enough to rank",
+        not wrongly,
+        f"{len(wrongly)} asset class(es) with ≥ {minimum} members got no peer group: "
+        + ", ".join(f"{a}={n}" for a, n in wrongly[:5])
+        if wrongly
+        else f"{total_unranked:,d} fund(s) unranked, all in asset classes under {minimum}",
+    )
+    if total_unranked:
+        print(
+            f"  [\033[33mNOTE\033[0m] {total_unranked:,d} fund(s) are scored but NOT ranked — "
+            f"their whole asset class has fewer than {minimum} in-universe members "
+            f"({', '.join(f'{a}={n}' for a, n in unranked)}). They carry a composite from "
+            "their absolute sub-scores and no decile, because a rank is a statement about a "
+            "population and there is no population."
+        )
 
     geared = _gdb.read_df(GEARED_SCORED_SQL, {"anchor": anchor})
     g.check(

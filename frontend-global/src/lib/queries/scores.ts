@@ -62,18 +62,23 @@ const etfListInner = eodCached(async (): Promise<ListRow[]> => {
       FROM atlas_global.etf_scores_daily s, a
       WHERE s.date <= a.as_of_d
     ),
+    -- A fund whose whole asset class has fewer than atlas_thresholds.peer_group_min_members
+    -- in-universe members gets peer_group = NULL from score_etfs (its assign_groups docstring
+    -- says why there is nowhere further to fall). It is scored and listed; it is NOT ranked,
+    -- because ntile(10) over six rows would print "decile 6 of 10" for sixth of six.
     ranked AS (
       SELECT s.instrument_id, s.technical, s.composite, s.conviction_tier, s.peer_group,
              s.lenses_active,
-             CASE WHEN s.composite IS NULL THEN NULL ELSE
+             CASE WHEN s.composite IS NULL OR s.peer_group IS NULL THEN NULL ELSE
                ntile(10) OVER (PARTITION BY s.date, s.peer_group, (s.composite IS NULL)
                                ORDER BY s.composite)
              END AS composite_decile,
-             CASE WHEN s.composite IS NULL THEN NULL ELSE
+             CASE WHEN s.composite IS NULL OR s.peer_group IS NULL THEN NULL ELSE
                rank() OVER (PARTITION BY s.date, s.peer_group, (s.composite IS NULL)
                             ORDER BY s.composite DESC)
              END AS peer_rank,
-             count(s.composite) OVER (PARTITION BY s.date, s.peer_group) AS peer_n
+             CASE WHEN s.peer_group IS NULL THEN NULL ELSE
+               count(s.composite) OVER (PARTITION BY s.date, s.peer_group) END AS peer_n
       FROM atlas_global.etf_scores_daily s
       WHERE s.date = (SELECT d FROM scored_on)
     )
@@ -234,17 +239,22 @@ const etfScoreRow = (symbol: string) => db()<ScoreRow[]>`
   scored_on AS (
     SELECT MAX(s.date) AS d FROM atlas_global.etf_scores_daily s, a WHERE s.date <= a.as_of_d
   ),
+    -- A fund whose whole asset class has fewer than atlas_thresholds.peer_group_min_members
+    -- in-universe members gets peer_group = NULL from score_etfs (its assign_groups docstring
+    -- says why there is nowhere further to fall). It is scored and listed; it is NOT ranked,
+    -- because ntile(10) over six rows would print "decile 6 of 10" for sixth of six.
   ranked AS (
     SELECT s.*, s.peer_group AS cohort,
-           CASE WHEN s.composite IS NULL THEN NULL ELSE
+           CASE WHEN s.composite IS NULL OR s.peer_group IS NULL THEN NULL ELSE
              ntile(10) OVER (PARTITION BY s.date, s.peer_group, (s.composite IS NULL)
                              ORDER BY s.composite)
            END AS composite_decile,
-           CASE WHEN s.composite IS NULL THEN NULL ELSE
+           CASE WHEN s.composite IS NULL OR s.peer_group IS NULL THEN NULL ELSE
              rank() OVER (PARTITION BY s.date, s.peer_group, (s.composite IS NULL)
                           ORDER BY s.composite DESC)
            END AS peer_rank,
-           count(s.composite) OVER (PARTITION BY s.date, s.peer_group) AS peer_n
+           CASE WHEN s.peer_group IS NULL THEN NULL ELSE
+               count(s.composite) OVER (PARTITION BY s.date, s.peer_group) END AS peer_n
     FROM atlas_global.etf_scores_daily s
     WHERE s.date = (SELECT d FROM scored_on)
   )

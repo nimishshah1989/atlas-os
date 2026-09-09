@@ -266,6 +266,99 @@ def test_score_etfs_sends_no_null_into_a_not_null_column(
     assert_no_null_in_a_not_null_column(table, "05_scores.sql", "etf_scores_daily")
 
 
+# ── the fallback chain has an end ────────────────────────────────────────────
+
+
+def _groupable(spec: list[tuple[str, str, int]]) -> pd.DataFrame:
+    """``(asset_class, strategy, how many)`` → the frame ``assign_groups`` takes."""
+    rows = [{"asset_class": a, "strategy": st} for a, st, n in spec for _ in range(n)]
+    frame = pd.DataFrame(rows)
+    frame["ret_6m"] = [0.01 * i for i in range(len(frame))]
+    for column in ("vol_63d_ann", "mdd_12m", "downside_dev_63d"):
+        frame[column] = 0.1
+    return frame
+
+
+def test_a_group_too_small_falls_back_to_its_asset_class() -> None:
+    """The documented behaviour, pinned so the new branch below cannot break it.
+
+    Five sector and four thematic funds are each too few to rank among themselves, but the
+    NINE of them that fall back make a group over the floor — so they are ranked together as
+    equity funds. The ten country funds are big enough on their own and are untouched.
+    """
+    out = score_etfs.assign_groups(
+        _groupable([("equity", "sector", 5), ("equity", "thematic", 4), ("equity", "country", 10)]),
+        8,
+    )
+    fell = out.loc[out["strategy"].isin(["sector", "thematic"])]
+    assert set(fell["peer_group"]) == {"equity"}
+    assert set(fell["grouped_by"]) == {"asset_class"}
+    assert set(fell["peer_n"]) == {9}, "ranked among the nine that fell back, not all nineteen"
+    country = out.loc[out["strategy"] == "country"]
+    assert set(country["peer_group"]) == {"equity:country"}
+    assert set(country["grouped_by"]) == {"strategy"}
+
+
+def test_a_fund_whose_asset_class_is_also_too_small_is_not_ranked_at_all() -> None:
+    """The first live run's gate C failure: six in-universe multi-asset funds against a floor
+    of eight. The old code fell back to the asset class unconditionally and produced a group
+    of six — and there is nowhere further to fall that means anything, because a multi-asset
+    fund ranked against equity sector funds is a league table of nothing."""
+    out = score_etfs.assign_groups(
+        _groupable([("equity", "sector", 10), ("multi_asset", "allocation", 6)]), 8
+    )
+    small = out.loc[out["asset_class"] == "multi_asset"]
+    assert small["peer_group"].isna().all(), "no peer group, rather than a group of six"
+    assert set(small["grouped_by"]) == {"unranked"}
+    assert small["peer_n"].isna().all(), "'no peers' must not read as a count"
+    assert set(small["asset_group"]) == {"multi_asset"}, "it still shows under its asset class"
+
+
+def test_no_surviving_peer_group_is_under_the_minimum() -> None:
+    """The invariant gate C asserts on the box, asserted here over an awkward mix so it is
+    checked before a nightly rather than by one."""
+    minimum = 8
+    out = score_etfs.assign_groups(
+        _groupable(
+            [
+                ("equity", "sector", 12),
+                # These two fall back to "equity" — a group of TWO, because the twelve sector
+                # funds are ranked in their own group and are not in it. Sizing the fallback by
+                # the asset class (fourteen) would wrongly let this stand.
+                ("equity", "thematic", 2),
+                ("commodity", "commodity", 3),  # asset class is also 3 — unranked
+                ("fixed_income", "fixed_income", 8),  # exactly at the floor
+            ]
+        ),
+        minimum,
+    )
+    sizes = out["peer_group"].value_counts().to_dict()
+    assert all(n >= minimum for n in sizes.values()), sizes
+    assert set(out.loc[out["asset_class"] == "commodity", "grouped_by"]) == {"unranked"}
+    assert out.loc[out["strategy"] == "thematic", "peer_group"].isna().all()
+    assert set(out.loc[out["strategy"] == "thematic", "grouped_by"]) == {"unranked"}
+    assert set(out.loc[out["asset_class"] == "fixed_income", "peer_group"]) == {
+        "fixed_income:fixed_income"
+    }
+
+
+def test_an_unranked_fund_gets_no_peer_relative_sub_score_rather_than_a_made_up_one() -> None:
+    """Falling out of the percentile step is the point, not a side effect: a fund with no
+    peers has no percentile among them, and rule #0 says the answer to that is absence."""
+    out = score_etfs.add_percentiles(
+        score_etfs.assign_groups(
+            _groupable([("equity", "sector", 10), ("multi_asset", "allocation", 6)]), 8
+        )
+    )
+    unranked = out.loc[out["grouped_by"] == "unranked"]
+    assert unranked["peer_pct_6m"].isna().all(), "no peer group, so no percentile among peers"
+    assert out.loc[out["peer_group"] == "equity:sector", "peer_pct_6m"].notna().all()
+    # Risk percentiles DO survive, and that is not an oversight: add_percentiles cuts them
+    # within the asset group on purpose, and an asset group exists even when it is too small
+    # to rank in. Pinned so a later change cannot quietly take them away either.
+    assert unranked["vol_pct"].notna().all()
+
+
 # ── the step's own summary, on the dtype the writer actually produces ────────
 
 
