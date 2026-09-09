@@ -246,6 +246,17 @@ def _f(value: Any) -> float | None:
     return float(value)
 
 
+def _i(value: Any) -> int | None:
+    """A count as an int, or None where there is no count to give.
+
+    ``peer_n`` is None for an unranked fund (``assign_groups``), and pandas carries that as
+    NaN in a numeric column. ``int(NaN)`` raises, which is how this crashed a whole nightly
+    step after it had scored every fund correctly."""
+    if value is None or (isinstance(value, float) and value != value):
+        return None
+    return int(value)
+
+
 def score_rows(
     frame: pd.DataFrame, anchor: dt.date, th: dict[str, Decimal], run_id: str
 ) -> tuple[pd.DataFrame, list]:
@@ -318,7 +329,7 @@ def score_rows(
                 "evidence": Json(
                     {
                         "grouped_by": r["grouped_by"],
-                        "peer_n": int(r["peer_n"]),
+                        "peer_n": _i(r["peer_n"]),
                         "technical": technical.evidence,
                         "risk": risk.evidence,
                         "cost_liquidity": cost.evidence,
@@ -333,7 +344,7 @@ def score_rows(
                 r["symbol"],
                 str(r["name"])[:48],
                 r["peer_group"],
-                int(r["peer_n"]),
+                _i(r["peer_n"]),
                 r["grouped_by"],
                 technical.value,
                 risk.value,

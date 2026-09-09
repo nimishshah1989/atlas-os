@@ -359,6 +359,53 @@ def test_an_unranked_fund_gets_no_peer_relative_sub_score_rather_than_a_made_up_
     assert unranked["vol_pct"].notna().all()
 
 
+# ── the whole chain, in the order the step walks it ──────────────────────────
+
+
+def test_the_full_chain_survives_a_group_with_no_peers(
+    thresholds: dict[str, Decimal],
+) -> None:
+    """assign_groups → add_percentiles → score_rows, in that order, over a frame that contains
+    an UNRANKED group. Every earlier test in this file exercised one link at a time, and the
+    step crashed on the box at the join between them:
+
+        "peer_n": int(r["peer_n"])
+        ValueError: cannot convert float NaN to integer
+
+    An unranked fund has no peer count, pandas carries that as NaN in a numeric column, and
+    int(NaN) raises — after every fund had been scored correctly. So this walks the actual
+    sequence rather than any single function, which is the only shape of test that could have
+    caught it.
+    """
+    n_sector, n_multi = 10, 4
+    total = n_sector + n_multi
+    frame = pd.DataFrame(
+        {
+            "instrument_id": [f"00000000-0000-0000-0000-{i:012d}" for i in range(total)],
+            "symbol": [f"S{i:02d}" for i in range(total)],
+            "name": [f"Fund {i}" for i in range(total)],
+            "asset_class": ["equity"] * n_sector + ["multi_asset"] * n_multi,
+            "strategy": ["sector"] * n_sector + ["allocation"] * n_multi,
+            **{c: [float("nan")] * total for c in METRIC_COLUMNS},
+            "ret_6m": [0.01 * i for i in range(total)],
+        }
+    )
+    grouped = score_etfs.add_percentiles(score_etfs.assign_groups(frame, 8))
+    assert grouped["peer_n"].isna().any(), "the fixture must actually contain an unranked group"
+
+    table, lines = score_etfs.score_rows(grouped, dt.date(2026, 9, 8), thresholds, "run")
+
+    assert len(table) == total and len(lines) == total
+    assert set(table.columns) <= table_columns("05_scores.sql", "etf_scores_daily")
+    assert_no_null_in_a_not_null_column(table, "05_scores.sql", "etf_scores_daily")
+    # The report line carries the count as an absence, not as a zero or a crash.
+    peer_n_at = score_etfs.REPORT_COLUMNS.index("peer_n")
+    assert [line[peer_n_at] for line in lines].count(None) == n_multi
+    assert lines[0][peer_n_at] == n_sector
+    # And the summary the step prints still runs over the mixed frame.
+    assert score_etfs.summary_lines(table, dt.date(2026, 9, 8), 8, 0)
+
+
 # ── the step's own summary, on the dtype the writer actually produces ────────
 
 
