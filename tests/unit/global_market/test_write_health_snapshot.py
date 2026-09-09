@@ -104,7 +104,8 @@ def test_a_malformed_runfile_line_is_skipped(tmp_path: Path) -> None:
         "freshness_guard\t2026-09-04T14:44:20+00:00\t\tfailed\n"  # no end: allowed
     )
     steps = whs.read_runfile(p)
-    assert steps == [("freshness_guard", "2026-09-04T14:44:20+00:00", "", "failed")]
+    # Four columns in, five out: the reason column is "" when the line never carried one.
+    assert steps == [("freshness_guard", "2026-09-04T14:44:20+00:00", "", "failed", "")]
     (row,) = whs.run_rows(steps, "daily", "vm", None, NOW)
     assert row["ended_at"] is None
     (v,) = whs.validator_rows(steps, "daily", "vm", None, NOW)
@@ -245,7 +246,7 @@ def test_a_table_that_cannot_be_read_is_skipped_not_fatal(
 # ── the fifth column: why a step failed ──────────────────────────────────────
 
 
-def test_a_failed_steps_reason_reaches_error_message_and_a_green_row_has_none(tmp_path: Path) -> None:
+def test_failed_step_reason_reaches_error_message_and_green_row_has_none(tmp_path: Path) -> None:
     """Four-column lines (every runfile before 2026-09-09) still parse; a fifth column lands in
     error_message; success rows carry NULL, never "". The lines are TSV shapes, not data."""
     p = tmp_path / "runs.tsv"
@@ -255,7 +256,8 @@ def test_a_failed_steps_reason_reaches_error_message_and_a_green_row_has_none(tm
         "ingest_macro\t2026-09-08T01:00:12+00:00\t2026-09-08T01:00:19+00:00\tsuccess\t\n"
         "compute_technicals\t2026-09-08T01:00:19+00:00\t2026-09-08T01:00:24+00:00\tfailed\n"
     )
-    rows = {r["script_name"]: r for r in whs.run_rows(whs.read_runfile(p), "daily", "vm", None, NOW)}
+    steps = whs.read_runfile(p)
+    rows = {r["script_name"]: r for r in whs.run_rows(steps, "daily", "vm", None, NOW)}
     assert rows["ingest_prices"]["error_message"].startswith("rc=1: alpaca: 403")
     assert rows["ingest_macro"]["error_message"] is None
     assert rows["compute_technicals"]["error_message"] is None  # four columns: no reason recorded

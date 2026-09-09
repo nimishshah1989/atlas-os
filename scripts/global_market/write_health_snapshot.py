@@ -76,7 +76,9 @@ def read_runfile(path: str | Path) -> list[Step]:
             parts = line.rstrip("\n").split("\t")
             if len(parts) < 4 or not parts[0]:
                 continue
-            steps.append((parts[0], parts[1], parts[2], parts[3], parts[4] if len(parts) > 4 else ""))
+            steps.append(
+                (parts[0], parts[1], parts[2], parts[3], parts[4] if len(parts) > 4 else "")
+            )
     return steps
 
 
