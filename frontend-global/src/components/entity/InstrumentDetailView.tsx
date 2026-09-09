@@ -1,15 +1,19 @@
-// src/components/entity/InstrumentDetailView.tsx — one instrument, two columns (7/5): identity
-// on the left (facts, SEC ids, vendor spellings, index membership for a stock); on the right the
-// price instruments in their honest state — three slots that say what will appear and what each
-// waits on, then what ohlcv_daily actually holds. No series, no placeholder numbers.
+// src/components/entity/InstrumentDetailView.tsx — one instrument, two columns (7/5). The score
+// leads, because it is what the reader came for and what the board's ranking is asserting: the
+// composite, where it puts the instrument in its peer group, and the derivation down to the
+// sub-scores. Then identity on the left (facts, SEC ids, vendor spellings, index membership for a
+// stock) and, on the right, what ohlcv_daily actually holds. No series, no placeholder numbers.
 import { Section } from '@/components/ui/Section'
 import { SEC_KIND_LABEL, secIdentityKind } from '@/lib/facts'
 import { formatAsOf, formatIsoDate, formatPct } from '@/lib/format'
 import type { InstrumentDetail, SymbolAlias } from '@/lib/queries/instruments'
+import type { Classification, ScoreDetail } from '@/lib/queries/scores'
 import { BarsProvenance } from './BarsProvenance'
+import { ClassificationCard } from './ClassificationCard'
 import { EntityHeader } from './EntityHeader'
 import { FactList, type Fact } from './FactList'
 import { MembershipTimeline } from './MembershipTimeline'
+import { ScoreSection } from './ScoreSection'
 
 const IDENTITY_SOURCE: Record<string, string> = { nasdaq_trader: 'Nasdaq Trader directory', stooq: 'Stooq archive', alpaca: 'Alpaca', manual: 'Manual' }
 const ALIAS_SOURCE: Record<string, string> = {
@@ -55,7 +59,15 @@ const SLOTS = [
   { title: 'Return calculator', text: 'Two dates in; the total return, the price return and SPY’s over the same window out, from total-return closes.' },
 ]
 
-export function InstrumentDetailView({ d }: { d: InstrumentDetail }) {
+export function InstrumentDetailView({
+  d,
+  score,
+  classification,
+}: {
+  d: InstrumentDetail
+  score: ScoreDetail | null
+  classification: Classification | null
+}) {
   const f = d.facts
   const stock = f.asset_class === 'stock'
   const identitySource = `${IDENTITY_SOURCE[f.source] ?? f.source}, as of ${formatAsOf(new Date(f.updated_at))}`
@@ -101,6 +113,8 @@ export function InstrumentDetailView({ d }: { d: InstrumentDetail }) {
         facts={facts}
       />
 
+      <ScoreSection assetClass={f.asset_class} symbol={f.symbol} score={score} eod={d.eod} />
+
       <div className="detail">
         <div>
           <Section title="Identity" note="as the SEC and the vendors spell it">
@@ -109,10 +123,12 @@ export function InstrumentDetailView({ d }: { d: InstrumentDetail }) {
               <AliasTable aliases={d.aliases} />
             </div>
           </Section>
-          {stock && (
+          {stock ? (
             <Section title="S&P 500 membership" note="every recorded interval">
               <MembershipTimeline intervals={d.membership} />
             </Section>
+          ) : (
+            <ClassificationCard c={classification} />
           )}
         </div>
 

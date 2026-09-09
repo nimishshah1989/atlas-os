@@ -7,18 +7,18 @@ import { QueryFailed } from '@/components/ui/Section'
 import { requireUser } from '@/lib/auth'
 import { dbAvailable } from '@/lib/db'
 import type { AssetClass } from '@/lib/facts'
-import { getInstrumentList } from '@/lib/queries/instruments'
+import { getInstrumentList } from '@/lib/queries/scores'
 import { attempt } from '@/lib/result'
 import { InstrumentExplorer } from './InstrumentExplorer'
 
 const COPY: Record<AssetClass, { title: string; lead: string }> = {
   etf: {
     title: 'ETFs',
-    lead: 'Every US-listed ETF in the Nasdaq Trader directory, with its identity as the SEC and the price vendors spell it. Prices, returns and relative strength join once the price spine runs.',
+    lead: 'Ranked inside the job each fund does, strongest first. The board opens on the funds that clear the liquidity floor and are neither leveraged nor inverse — widen it to everything listed, with each fund’s reason for being out, from the rail.',
   },
   stock: {
     title: 'Stocks',
-    lead: 'The S&P 500 at the latest session, with its sector and weight in SPY; widen the index facet for every other listed stock. Prices, returns and relative strength join once the price spine runs.',
+    lead: 'The S&P 500 at the latest session, ranked within its cap cohort, strongest first. Membership is the universe, not a filter — widen it to every listed stock, with each name’s reason for being out, from the rail.',
   },
 }
 

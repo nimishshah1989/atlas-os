@@ -1,13 +1,16 @@
 // The explorer's pure pieces: URL state, facets with counts, sort, search. The rows are REAL
-// instrument_master rows copied verbatim from the scratch database atlas_p1_base (psql, 2026-09-06;
-// membership and weight as of EOD 2026-09-03, price columns NULL because technical_daily and
-// universe_snapshot hold no rows there yet). Nothing is invented (rule #0).
+// instrument_master rows copied verbatim from the scratch database atlas_p1_base (psql, 2026-09-06),
+// carrying the REAL universe_snapshot verdicts of EOD 2026-09-03 (13,155 active instruments, floor
+// $1,000,000). Every score column is null because etf_scores_daily held no rows on that date —
+// which is the state the board must render, not a stand-in for one it does not have (rule #0).
 import { describe, expect, it } from 'vitest'
 import {
+  ALL,
   applyFilters,
   facetCounts,
   facetValues,
   matchesQuery,
+  ON,
   parseState,
   serialiseState,
   sortRows,
@@ -15,53 +18,66 @@ import {
   type SortState,
 } from '@/lib/explorer'
 import { toInstrumentRow, type InstrumentDbRow, type InstrumentRow } from '@/lib/facts'
+import { orderBy, universeSide } from '@/lib/scores'
 
-const NULL_PRICES = {
-  price_adj: null, ret_1m: null, ret_3m: null, ret_6m: null, ret_12m: null, rs_3m_spy: null, pos_52w: null,
-  adv_usd: null, in_universe: null, universe_exclusion: null,
+const UNSCORED = {
+  strategy: null, class_asset_class: null, leveraged: null, inverse: null, hedged: null,
+  class_status: null, country: null, region: null,
+  composite: null, technical: null, conviction_tier: null, peer_group: null, lenses_active: null,
+  composite_decile: null, peer_rank: null, peer_n: null,
+  rs_3m_spy: null, rs_6m_spy: null, rs_12m_spy: null, pos_52w: null, adv_usd: null,
+  vol_ann: null, mdd_12m: null,
 } as const
 
-// select symbol, name, exchange, asset_class, listing_date, cik, series_id, class_id, sector_gics, <sp500 at
-// EOD>, <open ssga weight_frac> from atlas_global.instrument_master where is_active and symbol in (…)
+// select m.symbol, m.name, m.asset_class, m.sector_gics, u.in_universe, u.exclusion_reason
+// from atlas_global.instrument_master m
+// left join atlas_global.universe_snapshot u on … and u.date = '2026-09-03'
+// where m.is_active and m.symbol in (…)
 const RAW: InstrumentDbRow[] = [
-  { symbol: 'QQQ', name: 'Invesco QQQ Trust, Series 1', exchange: 'NASDAQ', asset_class: 'etf', listing_date: '1999-03-10', cik: '0001067839', series_id: 'S000101292', class_id: 'C000271435', sector_gics: null, sp500: false, spy_weight: null, ...NULL_PRICES },
-  { symbol: 'SPY', name: 'State Street SPDR S&P 500 ETF Trust', exchange: 'NYSEARCA', asset_class: 'etf', listing_date: '1993-01-29', cik: '0000884394', series_id: null, class_id: null, sector_gics: null, sp500: false, spy_weight: null, ...NULL_PRICES },
-  { symbol: 'VOO', name: 'Vanguard S&P 500 ETF', exchange: 'NYSEARCA', asset_class: 'etf', listing_date: '2010-09-09', cik: '0000036405', series_id: 'S000002839', class_id: 'C000092055', sector_gics: null, sp500: false, spy_weight: null, ...NULL_PRICES },
-  { symbol: 'XLK', name: 'State Street Technology Select Sector SPDR ETF', exchange: 'NYSEARCA', asset_class: 'etf', listing_date: '1998-12-22', cik: '0001064641', series_id: 'S000006415', class_id: 'C000017601', sector_gics: null, sp500: false, spy_weight: null, ...NULL_PRICES },
-  { symbol: 'AAOG', name: 'Leverage Shares 2X Long AAOI Daily ETF', exchange: 'BATS', asset_class: 'etf', listing_date: '2026-05-12', cik: null, series_id: null, class_id: null, sector_gics: null, sp500: false, spy_weight: null, ...NULL_PRICES },
-  { symbol: 'AAPL', name: 'Apple Inc. - Common Stock', exchange: 'NASDAQ', asset_class: 'stock', listing_date: '1980-12-12', cik: '0000320193', series_id: null, class_id: null, sector_gics: 'Information Technology', sp500: true, spy_weight: '0.07219673', ...NULL_PRICES },
-  { symbol: 'BRK.B', name: 'Berkshire Hathaway Inc. New Common Stock', exchange: 'NYSE', asset_class: 'stock', listing_date: '1996-05-09', cik: '0001067983', series_id: null, class_id: null, sector_gics: 'Financials', sp500: true, spy_weight: '0.01395152', ...NULL_PRICES },
-  { symbol: 'ABR$D', name: 'Arbor Realty Trust 6.375% Series D Cumulative Redeemable Preferred Stock, Liquidation Preference $25.00 per Share', exchange: 'NYSE', asset_class: 'stock', listing_date: '2021-05-26', cik: '0001253986', series_id: null, class_id: null, sector_gics: null, sp500: false, spy_weight: null, ...NULL_PRICES },
-  { symbol: 'AIIA.R', name: 'AI Infrastructure Acquisition Corp. Rights, each entitling the holder to receive one-fifth (1/5) of one Class A Ordinary Share', exchange: 'NYSE', asset_class: 'stock', listing_date: '2025-11-24', cik: null, series_id: null, class_id: null, sector_gics: null, sp500: false, spy_weight: null, ...NULL_PRICES },
+  { symbol: 'QQQ', name: 'Invesco QQQ Trust, Series 1', asset_class: 'etf', sector_gics: null, in_universe: true, universe_exclusion: null, ...UNSCORED },
+  { symbol: 'SPY', name: 'State Street SPDR S&P 500 ETF Trust', asset_class: 'etf', sector_gics: null, in_universe: true, universe_exclusion: null, ...UNSCORED },
+  { symbol: 'TQQQ', name: 'ProShares UltraPro QQQ', asset_class: 'etf', sector_gics: null, in_universe: false, universe_exclusion: 'leveraged', ...UNSCORED, leveraged: true, inverse: false },
+  { symbol: 'SH', name: 'ProShares Short S&P500', asset_class: 'etf', sector_gics: null, in_universe: false, universe_exclusion: 'inverse', ...UNSCORED, leveraged: false, inverse: true },
+  { symbol: 'ILCB', name: 'iShares Morningstar Large-Cap ETF', asset_class: 'etf', sector_gics: null, in_universe: false, universe_exclusion: 'below_floor', ...UNSCORED, leveraged: false, inverse: false },
+  { symbol: 'AAPL', name: 'Apple Inc. - Common Stock', asset_class: 'stock', sector_gics: 'Information Technology', in_universe: true, universe_exclusion: null, ...UNSCORED },
+  { symbol: 'BRK.B', name: 'Berkshire Hathaway Inc. New Common Stock', asset_class: 'stock', sector_gics: 'Financials', in_universe: true, universe_exclusion: null, ...UNSCORED },
+  { symbol: 'AA', name: 'Alcoa Corporation Common Stock', asset_class: 'stock', sector_gics: null, in_universe: false, universe_exclusion: 'not_sp500', ...UNSCORED },
 ]
 const ROWS: InstrumentRow[] = RAW.map(toInstrumentRow)
+const ETFS = ROWS.filter((r) => r.asset_class === 'etf')
 const STOCKS = ROWS.filter((r) => r.asset_class === 'stock')
 
-const GROUPS: FacetGroup<InstrumentRow>[] = [
-  { key: 'exchange', label: 'Exchange', kind: 'any', value: (r) => r.exchange ?? 'none' },
-  { key: 'sp500', label: 'S&P 500', kind: 'one', value: (r) => (r.sp500 ? 'member' : 'other'), options: ['member', 'other'], default: 'member' },
-  { key: 'sec', label: 'SEC identity', kind: 'any', value: (r) => r.sec_kind },
-]
+// The board's own three group kinds, as InstrumentExplorer declares them.
+const UNIVERSE: FacetGroup<InstrumentRow> = {
+  key: 'universe', label: 'Universe', kind: 'one', value: universeSide,
+  options: ['in'], labels: { in: 'The board’s universe', [ALL]: 'Everything listed' }, default: 'in',
+}
+const SECTOR: FacetGroup<InstrumentRow> = {
+  key: 'sector', label: 'GICS sector', kind: 'any', value: (r) => r.sector ?? 'none',
+}
+const GEARED: FacetGroup<InstrumentRow> = {
+  key: 'geared', label: 'Leveraged funds', kind: 'flag', value: (r) => (r.leveraged ? ON : 'off'),
+}
+const GROUPS = [UNIVERSE, SECTOR, GEARED]
 const BY_SYMBOL: SortState = { key: 'symbol', dir: 'asc' }
-const sortValue = (r: InstrumentRow, key: string) =>
-  key === 'listed' ? r.listing_date : key === 'weight' ? (r.spy_weight == null ? null : Number(r.spy_weight)) : r.symbol
 
 describe('parseState / serialiseState', () => {
-  it('defaults: empty query, default sort, "one" groups on their default, "any" groups unselected', () => {
+  it('defaults: the universe, no sector chosen, geared funds off', () => {
     const s = parseState(new URLSearchParams(''), GROUPS, BY_SYMBOL)
-    expect(s).toEqual({ q: '', sort: BY_SYMBOL, facets: { exchange: [], sp500: ['member'], sec: [] } })
+    expect(s).toEqual({ q: '', sort: BY_SYMBOL, facets: { universe: ['in'], sector: [], geared: [] } })
     expect(serialiseState(s, GROUPS, BY_SYMBOL)).toBe('')
   })
   it('reads repeated keys, a "-" sort prefix, and round-trips', () => {
-    const p = new URLSearchParams('exchange=NYSE&exchange=NASDAQ&sp500=all&sort=-listed&q=apple')
+    const p = new URLSearchParams('universe=all&sector=Financials&geared=on&sort=-composite&q=apple')
     const s = parseState(p, GROUPS, BY_SYMBOL)
     expect(s).toEqual({
-      q: 'apple', sort: { key: 'listed', dir: 'desc' }, facets: { exchange: ['NYSE', 'NASDAQ'], sp500: ['all'], sec: [] },
+      q: 'apple', sort: { key: 'composite', dir: 'desc' },
+      facets: { universe: [ALL], sector: ['Financials'], geared: [ON] },
     })
-    expect(serialiseState(s, GROUPS, BY_SYMBOL)).toBe('exchange=NYSE&exchange=NASDAQ&sp500=all&sort=-listed&q=apple')
+    expect(serialiseState(s, GROUPS, BY_SYMBOL)).toBe('universe=all&sector=Financials&geared=on&sort=-composite&q=apple')
   })
   it('falls back to the default for a "one" group given an unknown value', () => {
-    expect(parseState(new URLSearchParams('sp500=maybe'), GROUPS, BY_SYMBOL).facets.sp500).toEqual(['member'])
+    expect(parseState(new URLSearchParams('universe=maybe'), GROUPS, BY_SYMBOL).facets.universe).toEqual(['in'])
   })
 })
 
@@ -69,7 +85,7 @@ describe('matchesQuery', () => {
   it('matches a symbol prefix or a name substring, case-insensitively', () => {
     expect(matchesQuery(ROWS[5], 'aa')).toBe(true) // AAPL
     expect(matchesQuery(ROWS[5], 'apple')).toBe(true)
-    expect(matchesQuery(ROWS[5], 'xyz')).toBe(false) // not a prefix, not in the name
+    expect(matchesQuery(ROWS[5], 'xyz')).toBe(false)
     expect(matchesQuery(ROWS[1], '')).toBe(true)
   })
   it("accepts the dash spelling of a dotted share class (Stooq's BRK-B is instrument_master's BRK.B)", () => {
@@ -77,51 +93,73 @@ describe('matchesQuery', () => {
   })
 })
 
-describe('applyFilters', () => {
-  it('applies the S&P default on stocks: the two members at EOD 2026-09-03', () => {
+// The defect this chunk exists to fix: the board listed all 5,655 funds because it ignored a flag
+// the nightly already writes. These are the real verdicts of EOD 2026-09-03.
+describe('the universe toggle', () => {
+  it('shows only the in-universe set by default', () => {
     const s = parseState(new URLSearchParams(''), GROUPS, BY_SYMBOL)
+    expect(applyFilters(ETFS, s, GROUPS).map((r) => r.symbol)).toEqual(['QQQ', 'SPY'])
     expect(applyFilters(STOCKS, s, GROUPS).map((r) => r.symbol)).toEqual(['AAPL', 'BRK.B'])
   })
-  it('"all" lifts a "one" group; "any" groups OR their values and AND across groups', () => {
-    const s = parseState(new URLSearchParams('sp500=all&exchange=NYSE&sec=none'), GROUPS, BY_SYMBOL)
-    expect(applyFilters(STOCKS, s, GROUPS).map((r) => r.symbol)).toEqual(['AIIA.R'])
+  it('"Everything listed" reveals the rest — nothing is hidden, it is not the default', () => {
+    const s = parseState(new URLSearchParams('universe=all&geared=on'), GROUPS, BY_SYMBOL)
+    expect(applyFilters(ETFS, s, GROUPS).map((r) => r.symbol)).toEqual(['QQQ', 'SPY', 'TQQQ', 'SH', 'ILCB'])
   })
-  it('combines the query with the facets', () => {
-    const s = parseState(new URLSearchParams('sp500=all&q=arbor'), GROUPS, BY_SYMBOL)
-    expect(applyFilters(STOCKS, s, GROUPS).map((r) => r.symbol)).toEqual(['ABR$D'])
+  it('keeps geared funds out even under "Everything listed" until the toggle is ticked', () => {
+    const s = parseState(new URLSearchParams('universe=all'), GROUPS, BY_SYMBOL)
+    expect(applyFilters(ETFS, s, GROUPS).map((r) => r.symbol)).toEqual(['QQQ', 'SPY', 'SH', 'ILCB'])
+  })
+  it('treats a row the snapshot has not marked as out — the explorer only offers the toggle once one is', () => {
+    const unmarked = { ...ETFS[0], in_universe: null }
+    expect(universeSide(unmarked)).toBe('out')
   })
 })
 
 describe('facetCounts', () => {
-  it('counts each value under the query and the OTHER groups, so a group never hides its own alternatives', () => {
-    const s = parseState(new URLSearchParams('exchange=NASDAQ'), GROUPS, BY_SYMBOL)
-    const c = facetCounts(STOCKS, s, GROUPS)
-    // exchange counts ignore the exchange selection but honour sp500=member
-    expect(c.exchange).toEqual({ NASDAQ: 1, NYSE: 1 })
-    // sp500 counts honour exchange=NASDAQ: AAPL is the only NASDAQ stock here; "all" is the total
-    expect(c.sp500).toEqual({ member: 1, all: 1 })
-    expect(c.sec).toEqual({ cik: 1 })
+  it('counts each value under the query and the OTHER groups, so a group never hides its alternatives', () => {
+    const s = parseState(new URLSearchParams('universe=all'), GROUPS, BY_SYMBOL)
+    const c = facetCounts(ETFS, s, GROUPS)
+    // the geared count is what ticking the box would ADD, under the other groups' selections
+    expect(c.geared).toEqual({ off: 4, on: 1 })
+    // the universe counts honour the geared toggle, which is still off: TQQQ is not in either
+    expect(c.universe).toEqual({ in: 2, out: 2, [ALL]: 4 })
   })
 })
 
 describe('facetValues', () => {
   it('lists a group’s values most frequent first, the none token last whatever its count', () => {
-    expect(facetValues(STOCKS, GROUPS[0])).toEqual(['NYSE', 'NASDAQ'])
-    const sector: FacetGroup<InstrumentRow> = { key: 'sector', label: 'Sector', kind: 'any', value: (r) => r.sector ?? 'none' }
-    expect(facetValues(STOCKS, sector)).toEqual(['Financials', 'Information Technology', 'none'])
+    expect(facetValues(STOCKS, SECTOR)).toEqual(['Financials', 'Information Technology', 'none'])
   })
 })
 
-describe('sortRows', () => {
-  it('sorts strings and numbers, nulls last in both directions, without mutating the input', () => {
-    const asc = sortRows(STOCKS, { key: 'weight', dir: 'asc' }, sortValue).map((r) => r.symbol)
-    expect(asc).toEqual(['BRK.B', 'AAPL', 'ABR$D', 'AIIA.R'])
-    const desc = sortRows(STOCKS, { key: 'weight', dir: 'desc' }, sortValue).map((r) => r.symbol)
-    expect(desc).toEqual(['AAPL', 'BRK.B', 'ABR$D', 'AIIA.R'])
-    expect(STOCKS.map((r) => r.symbol)).toEqual(['AAPL', 'BRK.B', 'ABR$D', 'AIIA.R'])
+// Ordering only. No row below is an instrument and no number below is a score for one: the values
+// are the SEEDED conviction cut-points of atlas_global.atlas_thresholds (lens_conviction_highest 70,
+// _high 58, _medium 45, _watch 30 — scripts/global_market/seed_thresholds.py), used here because a
+// comparator needs distinct ordered values and inventing four would be inventing scores.
+describe('sortRows over a composite', () => {
+  const CUTS = [
+    { key: 'watch', composite: '30' },
+    { key: 'highest', composite: '70' },
+    { key: 'unscored', composite: null },
+    { key: 'medium', composite: '45' },
+    { key: 'also-unscored', composite: null },
+    { key: 'high', composite: '58' },
+  ]
+  const byComposite = (r: (typeof CUTS)[number]) => orderBy(r.composite)
+
+  it('puts the strongest first and every unscored row last, in ITS OWN incoming order', () => {
+    const desc = sortRows(CUTS, { key: 'composite', dir: 'desc' }, byComposite).map((r) => r.key)
+    expect(desc).toEqual(['highest', 'high', 'medium', 'watch', 'unscored', 'also-unscored'])
   })
-  it('sorts ISO dates as text', () => {
-    const oldest = sortRows(ROWS, { key: 'listed', dir: 'asc' }, sortValue)[0]
-    expect(oldest.symbol).toBe('AAPL')
+  it('keeps unscored rows last when the sort is reversed — a null is not a zero', () => {
+    const asc = sortRows(CUTS, { key: 'composite', dir: 'asc' }, byComposite).map((r) => r.key)
+    expect(asc).toEqual(['watch', 'medium', 'high', 'highest', 'unscored', 'also-unscored'])
+  })
+  it('does not mutate the input', () => {
+    sortRows(CUTS, { key: 'composite', dir: 'desc' }, byComposite)
+    expect(CUTS.map((r) => r.key)).toEqual(['watch', 'highest', 'unscored', 'medium', 'also-unscored', 'high'])
+  })
+  it('sorts the real rows by symbol without a score column', () => {
+    expect(sortRows(ETFS, BY_SYMBOL, (r) => r.symbol).map((r) => r.symbol)).toEqual(['ILCB', 'QQQ', 'SH', 'SPY', 'TQQQ'])
   })
 })

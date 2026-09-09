@@ -3,7 +3,7 @@
 // facet group, native checkboxes (any of) or radios (one of), a tabular count beside each value.
 // Counts come from the explorer (the query and the other groups), so a value never hides its
 // alternatives; a value with no rows stays listed at 0 rather than vanishing.
-import { ALL, type FacetGroup } from '@/lib/explorer'
+import { ALL, ON, type FacetGroup } from '@/lib/explorer'
 import { words } from '@/lib/facts'
 import { formatNum } from '@/lib/format'
 
@@ -22,17 +22,21 @@ export function FacetRail<R>({ groups, values, counts, selected, onChange, onCle
     <aside className="facets" aria-label="Filters">
       {groups.map((g) => {
         const sel = selected[g.key] ?? []
-        const options = g.kind === 'one' ? [...(g.options ?? []), ALL] : (values[g.key] ?? [])
+        // `one`: its fixed radio values plus the implicit "all". `flag`: the single checkbox that
+        // lets the excluded rows back in. `any`: every value the list actually takes.
+        const options =
+          g.kind === 'one' ? [...(g.options ?? []), ALL] : g.kind === 'flag' ? [ON] : (values[g.key] ?? [])
         return (
           <fieldset key={g.key} className="facet">
             <legend className="facet-title text-meta">{g.label}</legend>
             {options.map((v) => {
               const checked = sel.includes(v)
-              const label = v === ALL ? 'All' : (g.labels?.[v] ?? words(v))
+              const label = g.labels?.[v] ?? (v === ALL ? 'All' : (g.format?.(v) ?? words(v)))
               return (
                 <label key={v} className={`facet-opt text-table${checked ? ' is-on' : ''}`}>
                   <input
                     type={g.kind === 'one' ? 'radio' : 'checkbox'}
+                    aria-label={label}
                     name={g.key}
                     value={v}
                     checked={checked}

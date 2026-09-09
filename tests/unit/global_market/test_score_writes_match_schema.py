@@ -55,6 +55,31 @@ METRIC_COLUMNS = (
 )
 
 
+def not_null_columns(filename: str, table: str) -> set[str]:
+    """The columns one CREATE TABLE declares NOT NULL. A writer that sends None for any of them
+    fails the whole upsert on the box — never in CI, which has no database.
+
+    This is the shape of the bug that took out the first live nightly: ``classify_etfs`` wrote
+    an explicit None into ``country_codes text[] NOT NULL DEFAULT '{}'``, and a DEFAULT does not
+    save you — a default fills a column the INSERT omits, not one it names with a NULL. So the
+    step died on its first row and score_etfs, freshness_guard and gate C all failed behind it.
+    """
+    sql = (DDL / filename).read_text()
+    start = sql.lower().index(f"create table if not exists atlas_global.{table}")
+    body = sql[sql.index("(", start) : sql.index("\n);", start)]
+    names: set[str] = set()
+    for line in body.splitlines():
+        stripped = line.strip().lstrip("(").strip().rstrip(",")
+        if not stripped or stripped.startswith("--"):
+            continue
+        if re.match(r"(?i)^(primary key|constraint|unique|check|foreign|references)", stripped):
+            continue
+        match = re.match(r"^([a-z_][a-z0-9_]*)\s+(.*)$", stripped)
+        if match and re.search(r"(?i)\bnot\s+null\b", match.group(2).split("--")[0]):
+            names.add(match.group(1))
+    return names
+
+
 def table_columns(filename: str, table: str) -> set[str]:
     """The column names of one CREATE TABLE in a DDL file."""
     sql = (DDL / filename).read_text()
@@ -167,6 +192,78 @@ def test_a_fund_with_no_metrics_still_produces_a_writable_row(
     assert row["composite"] is None
     assert row["technical"] is None
     assert row["lenses_active"] == 0
+
+
+# ── no writer sends NULL into a NOT NULL column ───────────────────────────────
+
+
+def assert_no_null_in_a_not_null_column(table: pd.DataFrame, filename: str, name: str) -> None:
+    """Every value the writer would send for a NOT NULL column is a value, on every row."""
+    required = not_null_columns(filename, name) & set(table.columns)
+    assert required, f"parsed no NOT NULL columns for {name} — the check would pass vacuously"
+    # bool(...) around .any(): on an object column holding lists pandas returns a numpy bool
+    # that pyright will not accept as a conditional, and `isna` is element-wise, so an empty
+    # list reads as present (which is the whole point) while a None reads as missing.
+    offending = sorted(c for c in required if bool(table[c].isna().any()))
+    assert not offending, (
+        f"{name} would send NULL in NOT NULL column(s) {offending} — the upsert fails on the "
+        f"box at 01:00, and every step downstream of it fails with it"
+    )
+
+
+def test_the_not_null_parser_finds_the_columns_that_actually_are() -> None:
+    """Guards the guard: a parser that matched nothing would make every check below vacuous,
+    and a parser that matched everything would make them all fail for the wrong reason."""
+    required = not_null_columns("03_classification.sql", "etf_classification")
+    assert {"instrument_id", "version", "country_codes", "classified_by", "status"} <= required
+    assert "confidence" not in required and "rationale" not in required
+
+
+def test_classify_etfs_sends_no_null_into_a_not_null_column() -> None:
+    """The regression test for the first live nightly failure. Both no-country branches are
+    exercised: a fund whose name states a country, and one whose name states none."""
+    frame = pd.DataFrame(
+        {
+            "instrument_id": ["00000000-0000-0000-0000-000000000000"] * 2,
+            "symbol": ["EWJ", "AAA"],
+            # AAA is the real fund the box died on — its name states no country at all.
+            "name": [
+                "iShares MSCI Japan ETF",
+                "Alternative Access First Priority CLO Bond ETF",
+            ],
+        }
+    )
+    table, _ = classify_etfs.rows(frame, set(), dt.datetime(2026, 9, 8, tzinfo=dt.UTC))
+    assert_no_null_in_a_not_null_column(table, "03_classification.sql", "etf_classification")
+    assert list(table["country_codes"]) == [["JP"], []]
+
+
+def test_score_etfs_sends_no_null_into_a_not_null_column(
+    thresholds: dict[str, Decimal],
+) -> None:
+    """The fund with no metrics at all is the worst case: every lens is None and the composite
+    is None, and the row must STILL be writable — those columns are nullable by design, and the
+    keys around them are not."""
+    frame = pd.DataFrame(
+        {
+            "instrument_id": ["00000000-0000-0000-0000-000000000000"],
+            "symbol": ["NEWF"],
+            "name": ["A fund listed this week"],
+            "asset_class": [None],
+            "strategy": [None],
+            "peer_group": ["unclassified"],
+            "asset_group": ["unclassified"],
+            "grouped_by": ["asset_class"],
+            "peer_n": [1],
+            "peer_pct_6m": [float("nan")],
+            "vol_pct": [float("nan")],
+            "mdd_pct": [float("nan")],
+            "downside_pct": [float("nan")],
+            **{c: [float("nan")] for c in METRIC_COLUMNS},
+        }
+    )
+    table, _ = score_etfs.score_rows(frame, dt.date(2026, 9, 8), thresholds, "run")
+    assert_no_null_in_a_not_null_column(table, "05_scores.sql", "etf_scores_daily")
 
 
 # ── the percentile transform: alignment is the thing that fails silently ──────

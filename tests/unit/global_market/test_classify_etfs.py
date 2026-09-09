@@ -120,8 +120,36 @@ def test_an_ex_country_fund_is_not_filed_under_the_country_it_excludes() -> None
     wrong answer that reads perfectly plausibly on a card, and would put the fund in the wrong
     peer group as well as the wrong country."""
     v = ce.classify_one("iShares MSCI All Country Asia ex Japan ETF", set())
-    assert v["country_codes"] is None
+    assert v["country_codes"] == []
     assert v["geo_focus_type"] != ce.GEO_SINGLE
+
+
+def test_a_name_that_states_no_country_gets_an_empty_list_not_null() -> None:
+    """The first live run died here, on the first fund it reached: ``country_codes`` is
+    ``text[] NOT NULL DEFAULT '{}'``, a None is a NOT NULL violation, and the whole upsert
+    fails — taking score_etfs, freshness_guard and gate C down behind it. Both no-country
+    branches are asserted, because they were written on separate lines and only one of them
+    would have to regress."""
+    unstated = ce.classify_one("iShares 20+ Year Treasury Bond ETF", set())
+    assert unstated["country_codes"] == [], "a bond fund names no country"
+    assert unstated["geo_focus_type"] is None
+
+    region = ce.classify_one("iShares MSCI Emerging Markets ETF", set())
+    assert region["country_codes"] == [], "a region fund names no single country"
+
+
+def test_the_only_field_that_defaults_is_the_one_the_schema_will_not_let_be_null() -> None:
+    """``classify_one`` promises "a field the name does not determine is None". That promise is
+    what keeps a guessed classification out of the database, so the ONE exception to it is
+    pinned here: if a second field starts defaulting, this test names it."""
+    v = ce.classify_one("Amplius Aggressive Asset Allocation ETF", set())
+    defaulted = [
+        k for k, value in v.items() if value is not None and value in ([], {}, "") and k != "rule"
+    ]
+    assert defaulted == ["country_codes"], (
+        f"unexpected empty-but-not-None field(s): {defaulted} — a field the name does not "
+        "determine must be None, so the board shows 'unknown' rather than a made-up answer"
+    )
 
 
 def test_a_bond_fund_is_fixed_income_not_equity() -> None:

@@ -5,19 +5,29 @@
 export type SortDir = 'asc' | 'desc'
 export type SortState = { key: string; dir: SortDir }
 
-/** `any`: checkboxes, OR within the group. `one`: a radio with an implicit "all" option. */
+/** `any`: checkboxes, OR within the group. `one`: a radio with an implicit "all" option.
+ *  `flag`: ONE checkbox, off by default — off shows only the rows whose value is not `on`, and
+ *  ticking it lets them back in. That is the shape of "geared funds are not on this board unless
+ *  you ask for them": the default hides nothing that the reader has not been told about, and the
+ *  count beside the box says how many rows the tick would add. */
 export type FacetGroup<R> = {
   key: string
   label: string
-  kind: 'any' | 'one'
+  kind: 'any' | 'one' | 'flag'
   value: (r: R) => string
-  /** Display names for values that are tokens rather than words (e.g. `none`, `member`). */
+  /** Display names for values that are tokens rather than words (e.g. `none`, `member`). A `flag`
+   *  group names its single `on` option; a `one` group may rename the implicit `all`. */
   labels?: Record<string, string>
+  /** Display names for values not known ahead of time (a peer group, a country). */
+  format?: (value: string) => string
   /** `one` groups only: the radio's values (fixed by design, not scanned from rows) … */
   options?: string[]
   /** … and the one selected when the URL says nothing. */
   default?: string
 }
+
+/** A `flag` group's only value: the rows the default view leaves out. */
+export const ON = 'on'
 
 export type ExplorerState = { q: string; facets: Record<string, string[]>; sort: SortState }
 
@@ -72,6 +82,8 @@ export function matchesQuery(r: { symbol: string; name: string | null }, q: stri
 // ── facets ──────────────────────────────────────────────────────────────────
 
 function passes<R>(r: R, g: FacetGroup<R>, sel: string[]): boolean {
+  // Checked before the empty-selection shortcut: an unticked flag FILTERS, it does not pass all.
+  if (g.kind === 'flag') return sel.includes(ON) || g.value(r) !== ON
   if (sel.length === 0) return true
   if (g.kind === 'one') return sel[0] === ALL || g.value(r) === sel[0]
   return sel.includes(g.value(r))

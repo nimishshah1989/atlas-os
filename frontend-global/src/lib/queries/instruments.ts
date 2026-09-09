@@ -1,6 +1,8 @@
-// src/lib/queries/instruments.ts — the facts surfaces: /etfs, /stocks and their detail pages.
+// src/lib/queries/instruments.ts — one instrument's IDENTITY: the detail page's facts, vendor
+// spellings, index membership and bars provenance. The ranked list surfaces (/etfs, /stocks) and
+// everything score-shaped live in ./scores.ts, which reuses the anchor exported here.
 // Reads ONLY atlas_global (the schema gate scans this directory): instrument_master, index_membership,
-// symbol_alias, ohlcv_daily, technical_daily, universe_snapshot. Every query is cached under the
+// symbol_alias, ohlcv_daily. Every query is cached under the
 // `eod` tag (src/lib/cache.ts) so the nightly publish flushes these pages.
 //
 // The anchor is the latest SPY session on or before today's New York date — SPY's bars define the
@@ -9,18 +11,12 @@
 import 'server-only'
 import { eodCached } from '@/lib/cache'
 import { db, dbAvailable } from '@/lib/db'
-import {
-  packRows,
-  toInstrumentRow,
-  type AssetClass,
-  type BarsRow,
-  type InstrumentDbRow,
-  type MembershipInterval,
-  type PackedRows,
-} from '@/lib/facts'
+import type { AssetClass, BarsRow, MembershipInterval } from '@/lib/facts'
 
 // One row: eod (text, null with no SPY bar), as_of (text) and as_of_d (date) = eod, else today.
-const ANCHOR = `
+// Exported so ./scores.ts anchors its lists on the SAME session this page anchors its facts on —
+// two definitions of "today" is how two surfaces start disagreeing about what they are showing.
+export const ANCHOR = `
   WITH today AS (SELECT (now() AT TIME ZONE 'America/New_York')::date AS d),
   anchor AS (
     SELECT (SELECT MAX(o.date) FROM atlas_global.ohlcv_daily o
@@ -31,7 +27,7 @@ const ANCHOR = `
   ),
   a AS (SELECT eod::text AS eod, COALESCE(eod, today)::text AS as_of, COALESCE(eod, today) AS as_of_d FROM anchor)`
 
-type Anchor = { eod: string | null; as_of: string }
+export type Anchor = { eod: string | null; as_of: string }
 
 // Membership at the anchor date. effective_to is EXCLUSIVE: the member is out on that date.
 const MEMBERSHIP_COLUMNS = `
@@ -41,47 +37,6 @@ const MEMBERSHIP_COLUMNS = `
   (SELECT im.weight_frac::text FROM atlas_global.index_membership im
    WHERE im.instrument_id = m.instrument_id AND im.index_code = 'SP500' AND im.source = 'ssga' AND im.effective_to IS NULL
    ORDER BY im.effective_from DESC LIMIT 1) AS spy_weight`
-
-// ── the explorer list ───────────────────────────────────────────────────────
-
-/** The anchor and every row, packed (src/lib/facts.ts expandRows restores InstrumentRow[]). */
-export type InstrumentList = Anchor & PackedRows
-
-const listInner = eodCached(async (assetClass: AssetClass): Promise<InstrumentList> => {
-  const rows = await db()<(InstrumentDbRow & Anchor)[]>`
-    ${db().unsafe(ANCHOR)}
-    SELECT
-      m.symbol, m.name, m.exchange, m.asset_class, m.listing_date::text AS listing_date,
-      m.cik, m.series_id, m.class_id, m.sector_gics,
-      ${db().unsafe(MEMBERSHIP_COLUMNS)},
-      o.close_adj::text            AS price_adj,
-      t.ret_1m::text               AS ret_1m,
-      t.ret_3m::text               AS ret_3m,
-      t.ret_6m::text               AS ret_6m,
-      t.ret_12m::text              AS ret_12m,
-      t.rs_3m_spy::text            AS rs_3m_spy,
-      t.pos_52w::text              AS pos_52w,
-      t.adv_usd_60d_median::text   AS adv_usd,
-      u.in_universe,
-      u.exclusion_reason           AS universe_exclusion,
-      a.eod, a.as_of
-    FROM atlas_global.instrument_master m
-    CROSS JOIN a
-    LEFT JOIN atlas_global.technical_daily t   ON t.instrument_id = m.instrument_id AND t.date = a.as_of_d
-    LEFT JOIN atlas_global.universe_snapshot u ON u.instrument_id = m.instrument_id AND u.date = a.as_of_d
-    LEFT JOIN atlas_global.ohlcv_daily o       ON o.instrument_id = m.instrument_id AND o.date = a.as_of_d
-    WHERE m.is_active AND m.asset_class = ${assetClass}
-    ORDER BY m.symbol
-  `
-  const first = rows[0]
-  return { eod: first?.eod ?? null, as_of: first?.as_of ?? '', ...packRows(rows.map(toInstrumentRow)) }
-}, 'instrument-list')
-
-/** Every active instrument of the class with its facts and the price-derived columns at EOD. */
-export async function getInstrumentList(assetClass: AssetClass): Promise<InstrumentList> {
-  if (!dbAvailable) return { eod: null, as_of: '', keys: [], cells: [] }
-  return listInner(assetClass)
-}
 
 // ── one instrument ──────────────────────────────────────────────────────────
 
