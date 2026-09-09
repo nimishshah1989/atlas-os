@@ -51,6 +51,7 @@ METRIC_COLUMNS = (
     "downside_dev_63d",
     "beta_spy_252",
     "adv_usd_60d_median",
+    "aum_usd",  # etf_meta, LEFT JOINed: NULL for a fund whose series has several classes
     "price",
 )
 

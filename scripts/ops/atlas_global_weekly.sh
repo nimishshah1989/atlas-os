@@ -69,7 +69,11 @@ step "build_identity"           $PY scripts/global_market/build_identity.py "${I
 step "seed_benchmarks"          $PY scripts/global_market/seed_benchmarks.py
 step "ingest_index_membership"  $PY scripts/global_market/ingest_index_membership.py --eod "$EOD" --report "$LOG_DIR/index_membership_$EOD.csv"
 # 2. SLOW FEEDS (EDGAR / FINRA).
-# step "ingest_nport"             $PY scripts/global_market/ingest_nport.py             # long tail + AUM (Phase 2)
+# N-PORT: one small index request per fund, and the document only when the accession changed —
+# so a steady week is cheap and a quarter-end week is not. The FIRST run has no watermarks and
+# fetches every document (hours, ~1.4 GB streamed, nothing kept); docs/global/runbook.md says to
+# seed it in batches with --limit before this step is left to the cron.
+step "ingest_nport"             $PY scripts/global_market/ingest_nport.py --report "$LOG_DIR/nport_$EOD.csv"
 # step "ingest_financials"        $PY scripts/global_market/ingest_financials.py        # companyfacts, changed filers (Phase 3)
 # step "ingest_13f"               $PY scripts/global_market/ingest_13f.py               # Phase 3
 # step "ingest_short_interest"    $PY scripts/global_market/ingest_short_interest.py    # Phase 3

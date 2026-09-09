@@ -106,3 +106,39 @@ CREATE TABLE IF NOT EXISTS atlas_global.etf_exposure_daily (
 );
 CREATE INDEX IF NOT EXISTS ix_etf_exposure_daily_as_of_date
     ON atlas_global.etf_exposure_daily (as_of_date);
+
+-- ── what Form N-PORT turned out to carry (ingest_nport.py) ────────────────────────────────
+-- Added rather than folded into the CREATEs above: both paths converge on the same tables,
+-- and a database created before this producer landed is upgraded by exactly these lines.
+
+-- etf_holdings: four columns without which a row cannot be read back correctly.
+--   isin   — the ONLY identifier on 176 of EWJ's 182 holdings (Japanese equities have no
+--            CUSIP). Without it a non-US holding can never be resolved to an instrument.
+--   units  — N-PORT's NS | PA | NC | OU. `balance` is 4,027,521 SHARES or 4,027,521 DOLLARS
+--            of principal depending on this column; a number that cannot be interpreted is
+--            worse than no number.
+--   payoff_profile      — Long | Short. Two rows of equal |weight| are opposite exposures.
+--   derivative_category — FUT | SWP | FWD | … when the line is a derivative. Look-through
+--            must not read a swap's MARK as an equity position.
+ALTER TABLE atlas_global.etf_holdings ADD COLUMN IF NOT EXISTS isin                text;
+ALTER TABLE atlas_global.etf_holdings ADD COLUMN IF NOT EXISTS units               text;
+ALTER TABLE atlas_global.etf_holdings ADD COLUMN IF NOT EXISTS payoff_profile      text;
+ALTER TABLE atlas_global.etf_holdings ADD COLUMN IF NOT EXISTS derivative_category text;
+CREATE INDEX IF NOT EXISTS ix_etf_holdings_isin ON atlas_global.etf_holdings (isin);
+
+-- etf_meta: the series-level facts, stored under their true names.
+-- One N-PORT filing covers one SERIES, and `net_assets` is the series'. VOO is one of FOUR
+-- share classes of the Vanguard 500 Index Fund, so that fund's $1.67tn is NOT VOO's AUM, and
+-- N-PORT carries no class-level assets at all. Writing it into aum_usd would be a wrong
+-- number on a card (rule #0), so the series figure lives here under its own name and
+-- ingest_nport.py copies it into aum_usd ONLY when series_class_count = 1.
+ALTER TABLE atlas_global.etf_meta
+    ADD COLUMN IF NOT EXISTS series_net_assets_usd numeric;
+ALTER TABLE atlas_global.etf_meta
+    ADD COLUMN IF NOT EXISTS series_class_count    integer;
+-- Σ|notionalAmt| ÷ net assets. The ONLY structural evidence of gearing in the form: a swap's
+-- pctVal is its mark, not its notional, so TQQQ (three times) sums to 101.26% of net assets
+-- against IVV's 100.12% — the weights cannot tell them apart, and this can (TQQQ 2.70,
+-- IVV 0.0016, measured on the fixtures).
+ALTER TABLE atlas_global.etf_meta
+    ADD COLUMN IF NOT EXISTS derivative_notional_share numeric;

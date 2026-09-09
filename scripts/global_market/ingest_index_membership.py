@@ -227,6 +227,65 @@ def write_sectors(cur: Any, sectors: Mapping[str, str]) -> None:
         cur.execute(SECTOR_SQL, (sector, iid))
 
 
+# CUSIP -> instrument_id, carried by symbol_alias, which is exactly what that table is for
+# ("that source's own spelling"). This workbook is the ONLY place in the repo that holds a
+# real (symbol, CUSIP) pair: the SEC's directories carry CIK and ticker, never a CUSIP.
+# ingest_nport.py reads these rows to resolve a fund's N-PORT holdings to scored instruments,
+# and that resolution is the whole of lookthrough_scored_w — without it the ETF quality lens
+# has no input at all. ONE OPEN ROW PER CUSIP: a CUSIP belongs to a security for life (a
+# reorganisation mints a new one), so a change of instrument means the ticker was recycled —
+# the old row is closed at the observation date rather than overwritten.
+ALIAS_SOURCE = "cusip"
+ALIAS_MOVE_SQL = (
+    f"update {_gdb.M}.symbol_alias set valid_to = %s "
+    f"where source = '{ALIAS_SOURCE}' and source_symbol = %s and valid_to is null "
+    "and instrument_id <> %s"
+)
+ALIAS_OPEN_SQL = f"""
+insert into {_gdb.M}.symbol_alias (source, source_symbol, valid_from, instrument_id, note)
+select '{ALIAS_SOURCE}', %s, %s, %s, %s
+where not exists (
+    select 1 from {_gdb.M}.symbol_alias
+    where source = '{ALIAS_SOURCE}' and source_symbol = %s and valid_to is null
+)
+on conflict (source, source_symbol, valid_from) do nothing
+"""
+
+
+def cusip_aliases(holdings: pd.DataFrame, by_ticker: Mapping[str, str]) -> dict[str, str]:
+    """``CUSIP -> instrument_id`` over the ticker rows that resolved and carry an Identifier.
+
+    Pure. A CUSIP claimed by two resolved tickers in one file is DROPPED rather than guessed:
+    one of the two would be wrong, and a wrong look-through is worse than a missing one.
+    """
+    pairs: dict[str, str] = {}
+    contested: set[str] = set()
+    rows = holdings.loc[holdings["ticker"].notna() & holdings["cusip"].notna()]
+    for ticker, cusip in rows[["ticker", "cusip"]].itertuples(index=False):
+        iid = by_ticker.get(str(ticker))
+        key = str(cusip).strip().upper()
+        if iid is None or not key:
+            continue
+        if key in pairs and pairs[key] != iid:
+            contested.add(key)
+        pairs[key] = iid
+    for key in contested:
+        pairs.pop(key, None)
+    return pairs
+
+
+def write_cusip_aliases(cur: Any, aliases: Mapping[str, str], as_of: date) -> int:
+    """Open a ``cusip`` alias for every CUSIP that has none, closing one whose instrument
+    changed. Returns how many rows the insert actually created."""
+    note = f"ssga spy holdings {as_of.isoformat()}"
+    opened = 0
+    for cusip, iid in aliases.items():
+        cur.execute(ALIAS_MOVE_SQL, (as_of, cusip, iid))
+        cur.execute(ALIAS_OPEN_SQL, (cusip, as_of, iid, note, cusip))
+        opened += max(cur.rowcount, 0)
+    return opened
+
+
 def assert_invariants(cur: Any) -> None:
     """No instrument with two open intervals; no overlapping intervals of one instrument —
     asserted inside the writing transaction, so a violation rolls the whole run back."""
@@ -457,6 +516,7 @@ def main(argv: list[str] | None = None) -> int:
             existing = [iv for iv in existing if iv.source == imx.SOURCE_CURRENT] + history.rows
 
         weights, by_ticker = resolve_holdings(holdings, ident, report)
+        aliases = cusip_aliases(holdings, by_ticker)
         unresolved = n_tickers - len(weights)
         sector_rows = sectors_for(mapping, by_ticker, report)
         n_no_sector = report.counts["sector:unmapped"]
@@ -468,7 +528,7 @@ def main(argv: list[str] | None = None) -> int:
             f"  current: {len(weights)} resolved, {unresolved} unresolved ({frac:.1%} of "
             f"{n_tickers}); plan: open {len(plan.opens)}, close {len(plan.closes)}, confirm "
             f"{len(plan.confirms)}; sector_gics to write {len(sector_rows)}, members without a "
-            f"sector {n_no_sector} {where}"
+            f"sector {n_no_sector}, cusip aliases {len(aliases)} {where}"
         )
         if frac > MAX_UNRESOLVED_FRAC:
             print(
@@ -492,6 +552,7 @@ def main(argv: list[str] | None = None) -> int:
                 write_history(cur, history)
                 write_current(cur, plan, as_of)
                 write_sectors(cur, sector_rows)
+                n_aliases = write_cusip_aliases(cur, aliases, as_of)
                 assert_invariants(cur)
                 _gdb.record_state(
                     cur,
@@ -512,6 +573,8 @@ def main(argv: list[str] | None = None) -> int:
                         "sectors_mapped": n_mapped,
                         "sectors_written": len(sector_rows),
                         "members_without_sector": n_no_sector,
+                        "cusip_aliases_seen": len(aliases),
+                        "cusip_aliases_opened": n_aliases,
                         "sector_as_of_mismatch": off_date,
                         "run_at": datetime.now(UTC).isoformat(),
                     },
@@ -523,8 +586,8 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"  written: {len(history.deletes)} stale history rows deleted, {len(history.rows)} "
             f"history rows upserted, {len(plan.opens)} opened, {len(plan.closes)} closed, "
-            f"{len(plan.confirms)} confirmed, {len(sector_rows)} sector_gics updates; invariants "
-            f"hold {where}"
+            f"{len(plan.confirms)} confirmed, {len(sector_rows)} sector_gics updates, "
+            f"{n_aliases} cusip alias(es) opened; invariants hold {where}"
         )
         return 0
     finally:
