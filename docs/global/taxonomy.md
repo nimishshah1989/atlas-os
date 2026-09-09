@@ -21,24 +21,24 @@ secondary attribute. The universe says the opposite.** Sector funds are a minori
 
 | what the fund IS | funds | share |
 |---|---:|---:|
-| fixed income | 873 | 15.4% |
-| defined outcome and buffer | 543 | 9.6% |
-| region | 515 | 9.1% |
-| size and style | 405 | 7.2% |
-| single stock (geared) | 394 | 7.0% |
-| sector | 352 | 6.2% |
-| dividend and income | 308 | 5.4% |
-| options income | 188 | 3.3% |
-| thematic | 187 | 3.3% |
-| country | 164 | 2.9% |
-| factor | 159 | 2.8% |
-| commodity | 159 | 2.8% |
-| crypto | 114 | 2.0% |
-| broad market | 94 | 1.7% |
-| multi-asset | 87 | 1.5% |
-| alternative | 82 | 1.4% |
+| fixed income | 902 | 15.9% |
+| defined outcome and buffer | 545 | 9.6% |
+| region | 535 | 9.5% |
+| single stock (geared) | 461 | 8.2% |
+| size and style | 458 | 8.1% |
+| sector | 372 | 6.6% |
+| thematic | 272 | 4.8% |
+| options income | 256 | 4.5% |
+| factor | 168 | 3.0% |
+| country | 150 | 2.7% |
+| crypto | 133 | 2.4% |
+| commodity | 131 | 2.3% |
+| dividend and income | 129 | 2.3% |
+| broad market | 71 | 1.3% |
+| alternative | 58 | 1.0% |
+| multi-asset | 27 | 0.5% |
 | currency | 20 | 0.4% |
-| **unmatched, and therefore the LLM's job** | **1,012** | **17.9%** |
+| **unmatched, and therefore the LLM's job** | **968** | **17.1%** |
 
 Buffer and defined-outcome products alone outnumber every sector fund. Under the schema's
 original eight strategy values — `broad, factor, sector, thematic, country, commodity,
@@ -79,16 +79,30 @@ that already exist. A 2x bitcoin fund is `crypto` with `leveraged=true`, which s
 it tracks and how it is built. The plan's `leveraged` strategy value said only the second and
 threw the first away, so it is removed.
 
-**Rules alone reach 77.5%** (4,383 of the 5,655 real ETF names), measured 2026-09-07 by
+**Rules alone reach 82.9%** (4,688 of the 5,656 real ETF names), measured 2026-09-09 by
 `atlas/global_market/classify/strategy.py` and asserted by `test_coverage_is_what_we_claim`.
 
-An earlier draft of this document claimed 82.1%. That number came from an unordered probe
-where a fund matching several vocabularies was counted under whichever I happened to test
-first; the shipped classifier is an ordered first-match table, which is strictly stricter. The
-count in the table above has the same provenance and should be read as approximate — the
-per-strategy figures the classifier actually produces are in its test output, not here.
+The table above is now the classifier's own output, one row per fund through the ordered
+first-match table, and is exact rather than approximate. Earlier versions of this document
+carried figures from an unordered probe that counted a fund under whichever vocabulary was
+tested first; that provenance is gone.
 
-The remaining 22.5% go to the LLM layer with a `review` status and a human confirmation step.
+Coverage moved from 77.5% on 2026-09-07 by widening nine rule groups against every listed
+name rather than by guessing: the market had listed vocabulary the rules had never seen —
+Innovator's "Defined Protection", Roundhill's "WeeklyPay", the short end of the curve
+("T-Bill", "Ultra Short"), coins listed since (Chainlink, Avalanche), and "Large-Cap" written
+with a hyphen, which `large ?cap` had never matched. Widening also FIXED wrong answers: a
+Treasury-bill fund was filed as a region fund because its issuer is "Global X", and a shipping
+fund for the same reason.
+
+Precision was measured, not assumed. Every change was diffed against all 5,656 names, and the
+four false positives the first draft produced are now regression tests
+(`test_the_widening_does_not_reintroduce_its_own_false_positives`): ProShares spells -2x as
+"UltraShort", which is not a duration; "AI Enhanced Value" uses AI as a method, not a theme;
+a stablecoin-technology fund holds equity, not coins; and a "Dividend Accelerator" is not a
+structured accelerator.
+
+The remaining 17.1% go to the LLM layer with a `review` status and a human confirmation step.
 That split is the design working, not a shortfall: the rules layer exists for precision, not
 recall, and coverage was deliberately not chased by widening patterns. Two decisions that cost
 coverage on purpose:

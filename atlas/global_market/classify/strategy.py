@@ -117,7 +117,13 @@ RULES: tuple[tuple[re.Pattern[str], str, str], ...] = (
     (
         re.compile(
             r"\b(?:buffer(?:ed)?|defined outcome|target outcome|autocallable|"
-            r"accelerated|premium outcome|floor)\b",
+            r"(?<!dividend )accelerat\w+|premium outcome|floor|defined protection|"
+            r"target range|"
+            r"dual directional|managed floor|structured (?:alt|outcome)|"
+            # "protection" alone: Innovator files 42 funds as "Equity Defined Protection"
+            # and Calamos as "Structured Alt Protection". No other product type in the real
+            # 5,656-name directory uses the word, so it is specific enough to stand alone.
+            r"protection)\b|\bbuffer\s?\d+",
             re.I,
         ),
         "defined_outcome",
@@ -126,7 +132,9 @@ RULES: tuple[tuple[re.Pattern[str], str, str], ...] = (
     (
         re.compile(
             r"\b(?:covered call|buy-?write|option income|options income|"
-            r"premium income|yieldmax|yieldboost|call writing|put write)\b",
+            r"premium income|yieldmax|yieldboost|call writing|put write|"
+            r"weekly ?pay|premium yield|enhanced yield|income boost|max income|"
+            r"option strategy|collar|target income)\b",
             re.I,
         ),
         "options_income",
@@ -139,7 +147,8 @@ RULES: tuple[tuple[re.Pattern[str], str, str], ...] = (
         # by `thematic` below. Coins and coin-trusts only.
         re.compile(
             r"\b(?:bitcoin|btc|ether(?:eum)?|crypto(?:currency)?|digital asset|"
-            r"solana|litecoin|dogecoin|xrp)\b",
+            r"solana|litecoin|dogecoin|xrp|avalanche|cardano|chainlink|polkadot|"
+            r"hedera|hbar|toncoin)\b",
             re.I,
         ),
         "crypto",
@@ -150,7 +159,12 @@ RULES: tuple[tuple[re.Pattern[str], str, str], ...] = (
             r"\b(?:bond|bonds|treasur(?:y|ies)|municipal|muni|aggregate|"
             r"investment grade|high yield bond|senior loan|leveraged loan|clo|"
             r"mortgage|mbs|tips|duration|maturity|fixed income|credit|debt|"
-            r"convertible|preferred)\b",
+            r"convertible|preferred|t-?bills?|treasury bills?|"
+            r"floating rate|securitiz\w+|cash management|money market|"
+            # A SEPARATOR is required: ProShares spells -2x leverage "UltraShort" as one
+            # word ("UltraShort MSCI Brazil Capped"), which is not a duration at all.
+            r"ultra[- ]short|"
+            r"government|govt|income bucket|yield curve)\b",
             re.I,
         ),
         "fixed_income",
@@ -160,7 +174,9 @@ RULES: tuple[tuple[re.Pattern[str], str, str], ...] = (
         re.compile(
             r"\b(?:gold|silver|copper|platinum|palladium|crude oil|natural gas|"
             r"commodit(?:y|ies)|agriculture|precious metals|base metals|"
-            r"livestock|wheat|corn|soybean|cocoa|coffee|sugar)\b",
+            r"livestock|wheat|corn|soybean|cocoa|coffee|sugar|"
+            r"oil fund|gas fund|gasoline|heating oil|brent|carbon allowance|"
+            r"carbon credit|bullion)\b",
             re.I,
         ),
         "commodity",
@@ -207,7 +223,11 @@ RULES: tuple[tuple[re.Pattern[str], str, str], ...] = (
             r"semiconductor|genomic\w*|biotech innovation|clean energy|solar|wind|"
             r"uranium|nuclear|lithium|battery|electric vehicle|cloud computing|"
             r"fintech|blockchain|quantum|space|defense tech|cannabis|"
-            r"esports|gaming|water|infrastructure|innovation|disrupt\w*)\b",
+            r"esports|gaming|water|infrastructure|innovation|disrupt\w*|"
+            r"self-?driving|autonomous|3d printing|smart factor\w+|next gen\w*|"
+            r"\bai\b(?![- ](?:enhanced|managed|powered|driven|select))|"
+            r"agentic|metaverse|obesity|longevity|drone|satellite|"
+            r"rare earth|electrification|megatrend|thematic)\b",
             re.I,
         ),
         "thematic",
@@ -219,7 +239,10 @@ RULES: tuple[tuple[re.Pattern[str], str, str], ...] = (
             r"industrials?|materials|real estate|consumer discretionary|"
             r"consumer staples|communication services|banks?|insurance|"
             r"biotech\w*|pharmaceutical|retail|transportation|aerospace|mining|"
-            r"homebuilder|semiconductors?)\b",
+            r"homebuilder|semiconductors?|software|internet|media|telecom\w*|"
+            r"reits?|agribusiness|food|beverage|staples|discretionary|airlines?|"
+            r"auto(?:s|motive| industry)?|chemicals|leisure|travel|hotels?|"
+            r"restaurants?|steel|shipping)\b",
             re.I,
         ),
         "sector",
@@ -256,7 +279,8 @@ RULES: tuple[tuple[re.Pattern[str], str, str], ...] = (
             r"developing world|international|global|world|ex-?u\.?s\.?|"
             r"ex-?china|asia|europe|eurozone|latin america|"
             r"pacific|nordic|acwi|eafe|africa|middle east|"
-            r"all country|worldwide|foreign)\b",
+            r"all country|worldwide|foreign|emerging|developed|em\b|"
+            r"ex-?japan|asean|brics|chinext)\b",
             re.I,
         ),
         "region",
@@ -286,8 +310,9 @@ RULES: tuple[tuple[re.Pattern[str], str, str], ...] = (
     ),
     (
         re.compile(
-            r"\b(?:large ?cap|mid ?cap|small ?cap|micro ?cap|mega ?cap|"
-            r"smid|small-?mid|growth|value|blend)\b",
+            r"\b(?:large[ -]?cap|mid[ -]?cap|small[ -]?cap|micro[ -]?cap|"
+            r"mega[ -]?cap|smid|small[ -]?(?:and[ -]?)?mid|growth|value|blend|"
+            r"top \d{2,4})\b",
             re.I,
         ),
         "size_style",
