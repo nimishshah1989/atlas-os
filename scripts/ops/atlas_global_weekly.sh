@@ -67,6 +67,12 @@ IDENTITY_SRC=(--snapshot-dir "$LOG_DIR/identity/$EOD")
 [ -n "${ATLAS_IDENTITY_SNAPSHOT:-}" ] && IDENTITY_SRC=(--from-snapshot "$ATLAS_IDENTITY_SNAPSHOT")
 step "build_identity"           $PY scripts/global_market/build_identity.py "${IDENTITY_SRC[@]}" ${STOOQ_ARG[@]+"${STOOQ_ARG[@]}"}
 step "seed_benchmarks"          $PY scripts/global_market/seed_benchmarks.py
+# The taxonomy is reference data the classifier writes AGAINST: classify_etfs puts a theme id into
+# etf_classification.theme_ids, and /themes reads taxonomy_sector for its name. Until this step
+# existed there was no path from the repository to prod for those rows at all — no orchestrator
+# step, no runbook line — so a theme added in code would have rendered an empty page while every
+# producer reported success. ON CONFLICT DO NOTHING, so an FM edit is never overwritten.
+step "seed_taxonomy"            $PY scripts/global_market/seed_taxonomy.py
 step "ingest_index_membership"  $PY scripts/global_market/ingest_index_membership.py --eod "$EOD" --report "$LOG_DIR/index_membership_$EOD.csv"
 # 2. SLOW FEEDS (EDGAR / FINRA).
 # N-PORT: one small index request per fund, and the document only when the accession changed —

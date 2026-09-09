@@ -41,6 +41,9 @@ name: Run Global Nightly
 #           nightly lost ingest_financials to `ModuleNotFoundError: No module named 'edgar'`
 #           — the box venv had drifted from pyproject.toml and there was no way to repair it
 #           without an SSH session.
+#   seed_taxonomy  (run mode) inserts any taxonomy_sector / _geo / _role row the box has never
+#           had. The theme table is reference data the classifier WRITES AGAINST, and it had no
+#           path to prod at all until this existed.
 #   seed_thresholds  (run mode) inserts any atlas_thresholds seed row the box has never had.
 #           The same run lost mark_baskets to five missing basket keys.
 #   fundamental_bands  (with seed_thresholds) ALSO cuts the 34 reachable fundamental bands from
@@ -92,6 +95,11 @@ on:
         type: boolean
       sync_deps:
         description: "run mode only: install the [global] extra into the box venv (adds only, removes nothing)"
+        required: false
+        default: false
+        type: boolean
+      seed_taxonomy:
+        description: "run mode only: insert missing taxonomy_sector / _geo / _role rows — the themes the classifier writes"
         required: false
         default: false
         type: boolean
@@ -286,6 +294,17 @@ jobs:
               # normal way a new column reaches prod: merge the DDL edit, then run this once.
               # One transaction per file — a bad statement rolls back that file and stops.
               ( set -a; source "$REPO/.env"; set +a; cd "$REPO"; PYTHONPATH="$REPO:$REPO/scripts/global_market:$REPO/scripts/foundation" "$REPO/.venv/bin/python" scripts/global_market/apply_ddl.py ) 2>&1 | tail -n 30 | redact || echo "DDL FAILED — a writer whose column is missing will fail below for the same reason"
+            fi
+
+            if [ "${{ inputs.seed_taxonomy }}" = "true" ]; then
+              echo "== atlas_global.taxonomy_*: inserting any reference row the box has never had =="
+              # The SECTORS, THEMES, REGIONS and ROLES tables are reference data that changes when
+              # the code does, and until this input existed there was NO path from the repository
+              # to prod for them: no orchestrator step, no runbook line, nothing. A theme the
+              # classifier writes into etf_classification.theme_ids but taxonomy_sector has never
+              # heard of renders /themes as an empty page while every producer reports success.
+              # Same ON CONFLICT DO NOTHING shape as the thresholds seed: an FM edit survives.
+              ( set -a; source "$REPO/.env"; set +a; cd "$REPO"; PYTHONPATH="$REPO:$REPO/scripts/global_market:$REPO/scripts/foundation" "$REPO/.venv/bin/python" scripts/global_market/seed_taxonomy.py ) 2>&1 | tail -n 25 | redact || echo "TAXONOMY SEEDING FAILED — /themes and /sectors will be empty"
             fi
 
             if [ "${{ inputs.seed_thresholds }}" = "true" ]; then

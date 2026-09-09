@@ -34,6 +34,8 @@ everything else is actionable now.
 ```
 uv run python scripts/global_market/apply_ddl.py --dry-run      # lists 00_core … 06_baskets
 uv run python scripts/global_market/apply_ddl.py                # idempotent; 41 tables
+uv run python scripts/global_market/seed_taxonomy.py --dry-run   # sectors, 32 themes, regions, roles
+uv run python scripts/global_market/seed_taxonomy.py             # ON CONFLICT DO NOTHING
 uv run python scripts/global_market/seed_thresholds.py --dry-run # READ the 61 rows first
 uv run python scripts/global_market/seed_thresholds.py           # ON CONFLICT DO NOTHING
 python -m atlas.db                                               # atlas_global_exists True
