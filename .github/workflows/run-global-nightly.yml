@@ -169,6 +169,15 @@ jobs:
             fi
 
             if [ "$MODE" = "status" ]; then
+              echo "== who holds /tmp/atlas_global.lock =="
+              LH=$(fuser /tmp/atlas_global.lock 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' || true)
+              [ -z "$LH" ] && LH=$(for d in /proc/[0-9]*; do for fd in "$d"/fd/*; do [ "$(readlink "$fd" 2>/dev/null)" = "/tmp/atlas_global.lock" ] && basename "$d" && break; done; done 2>/dev/null || true)
+              if [ -z "$LH" ]; then echo "  FREE"; else for pid in $LH; do echo "  pid $pid  $(ps -o etime=,args= -p "$pid" 2>/dev/null | sed 's/^ *//' | cut -c1-140 | redact || true)"; done; fi
+
+              echo "== S&P 500 fundamental cross-section (the 37 bands are set from this) =="
+              XL=$(grep -l 'fundamental cross-section' $(ls -1t "$LOGS"/atlas_global_daily_[0-9]*.log 2>/dev/null | head -5) 2>/dev/null | head -1 || true)
+              if [ -n "$XL" ]; then echo "  from $XL"; awk '/fundamental cross-section/{n=1} n && n++<16' "$XL" | redact; else echo "  no recent nightly log printed one"; fi
+
               echo "== atlas_global_status.sh =="
               bash "$REPO/scripts/ops/atlas_global_status.sh" 2>&1 | redact || true
               exit 0
@@ -181,7 +190,11 @@ jobs:
             # instead of a confusing partial report.
             exec 9>/tmp/atlas_global.lock
             if ! flock -n 9; then
-              echo "REFUSED: /tmp/atlas_global.lock is held — a scheduled nightly is running now."
+              echo "REFUSED: /tmp/atlas_global.lock is held — another run has the pipeline."
+              HOLDERS=$(fuser /tmp/atlas_global.lock 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' || true)
+              [ -z "$HOLDERS" ] && HOLDERS=$(for d in /proc/[0-9]*; do for fd in "$d"/fd/*; do [ "$(readlink "$fd" 2>/dev/null)" = "/tmp/atlas_global.lock" ] && basename "$d" && break; done; done 2>/dev/null || true)
+              for pid in $HOLDERS; do echo "  pid $pid  $(ps -o etime=,args= -p "$pid" 2>/dev/null | sed 's/^ *//' | cut -c1-140 | redact || true)"; done
+              [ -z "$HOLDERS" ] && echo "  (no process holds it — a stale flock, or ps is restricted)"
               echo "  Nothing was started. Re-run this workflow once it finishes."
               exit 1
             fi
