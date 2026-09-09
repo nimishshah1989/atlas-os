@@ -57,6 +57,9 @@ TRACKED: list[tuple[str, str]] = [
     ("lens_scores_daily", "date"),
     ("stock_financials_pit", "filed"),
     ("basket_nav_daily", "date"),
+    ("etf_holdings", "as_of_date"),
+    ("etf_meta", "updated_at"),
+    ("etf_exposure_daily", "as_of_date"),
 ]
 
 # Gate step (runfile) → validator name (<= 16 chars, the column's width); PASS/FAIL status.

@@ -35,7 +35,7 @@ number hiding in code, and the first anyone knew of it would be a score nobody c
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
@@ -57,15 +57,23 @@ TECHNICAL_KEYS: tuple[str, ...] = (
 )
 
 
-def india_thresholds(th: Mapping[str, Decimal]) -> dict[str, Any]:
-    """The keys India's technical scorer reads, as the floats it does arithmetic in.
+def india_thresholds(
+    th: Mapping[str, Decimal], keys: Sequence[str] = TECHNICAL_KEYS
+) -> dict[str, Any]:
+    """The keys one of India's scorers reads, as the floats it does arithmetic in.
 
     Converting AT THIS BOUNDARY and nowhere else keeps the reuse honest — the values are
     still the global table's rows, and no money or stored score is touched: these are
     dimensionless band edges and point counts. ``etf_lenses.score_technical`` does the same
     at the same boundary, for the same two functions.
+
+    INDEXED, never ``.get(key, default)``. India's scorers fall back to India's own numbers
+    when a key is absent, so a missing row here would score this market on a methodology it
+    never approved — invisibly, inside a number nobody could explain. Indexing raises
+    ``KeyError`` by name at the first scored row instead. ``keys`` defaults to the technical
+    lens's; ``stock_lenses.FUNDAMENTAL_KEYS`` passes its own.
     """
-    return {key: float(th[key]) for key in TECHNICAL_KEYS}
+    return {key: float(th[key]) for key in keys}
 
 
 # Each sub-score is 0–25 and a lens is the mean of the PRESENT sub-scores × 4, so a lens is

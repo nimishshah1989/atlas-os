@@ -58,6 +58,7 @@ from psycopg2.extras import execute_values
 
 from atlas.db import load_thresholds
 from atlas.global_market.config import edgar_identity
+from atlas.global_market.fundamentals import metrics
 from atlas.global_market.fundamentals.facts import (
     PeriodRow,
     extract_rows,
@@ -78,25 +79,15 @@ MIN_QUARTERS_KEY = "fund_min_quarters"
 
 GICS_FINANCIALS = "Financials"  # instrument_master.sector_gics, from Select Sector SPDR (XLF)
 
-# concept (xbrl_map) → stock_financials_pit column. ``cost_of_revenue`` is mapped by
-# xbrl_map but has no column in the table today; it is extracted and reported, not written.
+# concept (xbrl_map) → stock_financials_pit column. ONE definition, in the module that reads
+# the table back (``fundamentals.metrics``), so a rename cannot leave the writer and the
+# reader disagreeing. ``total_debt`` is this file's own: it is the SUM of the two debt
+# components below, not a concept xbrl_map extracts, so it is dropped from what is written
+# per-concept and written separately.
 CONCEPT_COLUMNS: dict[str, str] = {
-    "revenue": "revenue",
-    "gross_profit": "gross_profit",
-    "operating_income": "operating_income",
-    "net_income": "net_income",
-    "eps_diluted": "eps_diluted",
-    "shares_diluted": "shares_diluted",
-    "depreciation_amortization": "dep_amort",
-    "interest_expense": "interest_expense",
-    "equity": "equity",
-    "assets": "total_assets",
-    "cash": "cash",
-    "assets_current": "current_assets",
-    "liabilities_current": "current_liabilities",
-    "operating_cash_flow": "operating_cash_flow",
-    "capex": "capex",
-    "dividends_paid": "dividends_paid",
+    concept: column
+    for concept, column in metrics.CONCEPT_COLUMNS.items()
+    if concept != "total_debt"
 }
 DEBT_CONCEPTS = ("debt_long", "debt_short")  # summed into the table's single total_debt column
 DB_COLUMNS: tuple[str, ...] = (

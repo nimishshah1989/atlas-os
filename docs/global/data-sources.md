@@ -41,7 +41,7 @@ as a source until its gate has passed on real rows.
 | ETF universe | Nasdaq Trader `nasdaqlisted.txt` + `otherlisted.txt` (ETF = Y, exchange, test-issue flag) | weekly | Alpaca `/v2/assets` | ≥ 5,000 ETF rows, every one with an exchange (measured 2026-09-04: 5,655 = 1,257 Nasdaq-listed + 4,398 other exchanges — the plan's "3,300–4,000" was an estimate) |
 | S&P 500 | **SSGA SPY daily holdings workbook** (`.xlsx` via `openpyxl`: constituents, weights, CUSIP; verified 2026-09-04 — the `Sector` column is present but `-` on all 505 rows) + **the eleven Select Sector SPDR workbooks** (XLB…XLY, same layout) for `sector_gics` by membership — `providers/ssga.py`; history `fja05680/sp500` (MIT; `providers/sp500_history.py`). SSGA's notice forbids reproducing the workbooks: never committed, fetched live by tests and the weekly step | weekly / one-time | Wikipedia list | 500–505 names, weights ≈ 100% (505 rows, Σ 0.99936 on 2026-09-03); ≥ 98% of ticker rows in exactly one sector file (504/504 on 2026-09-03) |
 | Identity | Nasdaq directory (`nasdaqlisted.txt` + `otherlisted.txt`: ETF flag, exchange legend, ACT/CQS/NASDAQ spellings); SEC `company_tickers.json` + `company_tickers_exchange.json` (registrants → CIK) and `company_tickers_mf.json` (1940-Act funds → CIK/series/class; field names verified 2026-09-04); Tiingo `supported_tickers.zip` (listing dates, spelling proof); the Stooq archive's members (delisted names, `is_active=false`) — `build_identity.py`, `providers/directories.py` (P1-A) | weekly | `symbol_alias` manual rows | measured 2026-09-04: 13,154 listings, exchange on 100%; CIK on 99.6% of stock-flagged rows (the rest: rights, which the SEC does not list, and bank holding companies filing with their regulator) and on 82.5% of ETFs (79.3% with a series/class id — trusts, commodity pools and ETNs are registrants, not 1940-Act funds); alias round-trip on all 543 punctuation tickers; `import_stooq --dry-run` maps 13,334 of the archive's 13,352 members (99.9%; the 18 unmapped are empty files of names absent from the directory) |
-| ETF holdings + exposures | **EDGAR N-PORT via `edgartools`** for the whole universe — per holding `name, cusip, ticker, balance, value_usd, pct_value, asset_category, investment_country`; per fund `net_assets, total_assets, series_id` (`Fund(ticker).get_portfolio()`); public only for the quarter-end month, ~60-day lag | weekly | — | holdings on ≥90% of ETFs by count, ≥98% by AUM |
+| ETF holdings + exposures | **EDGAR Form N-PORT-P**, fetched directly — one `browse-edgar` index request per SERIES (`CIK=S000004310&type=NPORT-P&output=atom`) then that filing's `Archives/.../primary_doc.xml`; `providers/nport.py` parses it and `ingest_nport.py` writes `etf_holdings` + `etf_meta`. Built 2026-09-09 (P2-A); the measured shape of the feed is below | weekly, incremental on each fund's stored accession | — | Σ\|weight_frac\| ∈ [0.9, 1.1]; holdings on ≥90% of ETFs by count, ≥98% by AUM |
 | Fresh holdings (big four) | Issuer CSVs via `etf-scraper` (iShares daily incl. history since 2010; SSGA, Vanguard, Invesco current); `query_listings()` for issuer product lists (AUM, expense) | daily | N-PORT | Σ\|weight_frac\| ∈ [0.9, 1.1] for ≥97% of non-leveraged ETFs |
 | Stock fundamentals | **EDGAR XBRL company facts via `edgartools`** — `data.sec.gov/api/xbrl/companyfacts/CIK##########.json`, ONE request per filer for the entire history, `filed` per fact = PIT. Built 2026-09-09 (`ingest_financials.py` → `stock_financials_pit`); the measured shape of the feed is below | nightly, incremental on each filer's stored `max(filed)` | — | ≥95% of S&P 500 with ≥8 quarters (`fund_min_quarters`); continuity checks |
 | Catalysts / flow | EDGAR 8-K (item codes), Form 4, 13F via `edgartools`; **FINRA Equity Short Interest** (free files + `api.finra.org`, twice monthly, archives to 2014) | daily / per publication | — | filing-rich names score catalyst > 0 |
@@ -69,6 +69,67 @@ Vanguard / Invesco holdings endpoints are plain CSV/XLSX downloads and the packa
 `requests` + `pandas` wrapper over them; (2) vendor its parsers with attribution (MIT);
 (3) a project-wide `[tool.uv] override-dependencies` on numpy, which needs FM approval
 because it silences every package's numpy pin, not just this one. Not decided here.
+
+### EDGAR Form N-PORT-P — what the feed actually looks like (measured 2026-09-09, P2-A)
+
+Measured on four real filings, kept verbatim under `tests/fixtures/global/nport/` (that
+directory's `SOURCE.md` carries each accession and hash) and on three more fetched live.
+Five things differ from what the plan assumed, and each one is a way to be wrong:
+
+1. **`pctVal` is a PERCENT.** IVV's CBRE line is `0.061079735228` and `valUSD / netAssets` for
+   the same row is `0.00061079…`. Stored as a fraction it would put every S&P 500 constituent
+   at a hundred times its weight. `weight_frac` is divided by a hundred exactly once, in
+   `providers/nport.py`.
+2. **The period is the filer's FISCAL quarter, not the calendar's.** iShares reports 30 June,
+   ProShares 31 May, and `repPdEnd` is the fiscal YEAR end (2027-03-31 on a filing whose
+   holdings are as of 2026-06-30) — nine months adrift if read as the snapshot date. The lag
+   from period to filing is real and close to the plan's estimate: 56 days (IVV), 58 (TQQQ),
+   57 (EWJ).
+3. **`netAssets` is the SERIES', and a series can have several share classes.** VOO is one of
+   FOUR classes of the Vanguard 500 Index Fund, whose filed net assets are $1.671tn; that is
+   not VOO's AUM, and N-PORT carries no class-level assets at all. `ingest_nport.py` fills
+   `etf_meta.aum_usd` only where `series_class_count = 1` and keeps the series figure under
+   `series_net_assets_usd` — a missing sub-score rather than a wrong number (rule #0).
+4. **Leverage is invisible in the weights.** A swap's `pctVal` is its MARK. TQQQ — a
+   three-times fund — sums to 101.26% of net assets against IVV's 100.12%. The only structural
+   evidence is `derivativeInfo/*/notionalAmt`: TQQQ's ten swaps total $107.5bn against $39.8bn
+   of net assets (`derivative_notional_share` **2.70**), where IVV reads **0.0016**. Both the
+   mark (`derivatives_share`) and the notional share are stored, because they answer different
+   questions.
+5. **"N/A" is a value the filers write** — as a `cusip`, an `lei`, an `isin`, an `invCountry`
+   and a `payoffProfile`. `country_iso2` is `char(2)`: unhandled, VOO's twelve futures lines
+   would store the country `N/`. And the *categories* move to an attribute when they are off
+   enum (`<assetConditional assetCat="OTHER" desc="Right"/>`), so reading only the elements
+   loses a CVR, an ETF position and every futures line's issuer.
+
+**Identity.** CUSIP is missing on 176 of EWJ's 182 holdings (Japanese equities have none) and
+ISIN on 16 of VOO's 520, so neither alone is a key: `holding_key` takes the first that exists,
+with an occurrence suffix because IVV really does hold one money-market CUSIP on two lines.
+Look-through resolves by CUSIP then ISIN through `symbol_alias(source='cusip')`, which
+`ingest_index_membership.py` writes from the SSGA workbook — the only place in the repo that
+holds a real (symbol, CUSIP) pair.
+
+**Size, and why the writer batches.** A filing is 157 KB (TQQQ, 127 holdings) to **15.9 MB**
+(AGG, **13,269 holdings**), against IVV's 512 KB / 508. A full first pass over several
+thousand funds is therefore millions of records, which is why `ingest_nport.py` commits every
+50,000 rows rather than at the end: bounded memory on a 2-vCPU box, and a long first run that
+resumes from its watermarks instead of restarting. Retention of old snapshots is an open
+question for the FM — nothing prunes `etf_holdings` today.
+
+**Not in this feed, whatever the plan hoped:** expense ratio, shares outstanding, inception
+date. The cost lens's expense sub-score and `etf_shares_daily` still need an issuer feed;
+`etf_shares_daily` is deliberately left empty rather than filled with quarterly points, since
+its documented job is a 21-session Δ-shares proxy.
+
+**SPY is absent and that is correct.** It is a unit investment trust, and UITs do not file
+N-PORT; it is not in `company_tickers_mf.json` either. QQQ is present (S000101292).
+
+**Bulk alternative, not taken.** SEC publishes quarterly N-PORT data sets as flat files
+(`https://www.sec.gov/files/dera/data/form-n-port-data-sets/<yyyy>q<n>_nport.zip`; verified
+2026-09-09: 2026q1 463 MB, 2026q2 441 MB, 2025q4 418 MB). One download covers every fund, but
+it is organised by the quarter the filings were MADE, so it trails the per-fund fetch by up to
+a quarter and costs gigabytes of disk on the box. It is the backfill route if we ever want
+history, not the nightly one.
 
 ### EDGAR XBRL company facts — what the feed actually looks like (measured 2026-09-09, P3-A)
 

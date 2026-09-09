@@ -283,3 +283,45 @@ past the builder), `initial_capital is NULL`. The basket stays active and unmark
 — until the constituents are fixed; `validate_baskets` check G names the same faults nightly. Fix the
 data, never the assertion. A basket with trades other than its inception buys is refused too: marking a
 rebalanced book needs the versioning work (`current_version` > 1), which is not built.
+
+## 10. Seeding ETF holdings from N-PORT (one-off, then the weekly step keeps it)
+
+`ingest_nport.py` is incremental on a per-fund watermark (`ingest_state`, source `nport`), so a
+steady week is one small index request per fund and almost no downloads. The FIRST pass has no
+watermarks and fetches every document — thousands of them, 157 KB to 15.9 MB each — which is
+hours of paced requests. Seed it in batches before leaving it to the Saturday cron, heaviest
+traded funds first (that is the default order):
+
+```bash
+cd /home/ubuntu/atlas-os && set -a && source .env && set +a
+uv run python scripts/global_market/ingest_nport.py --in-universe --limit 250 \
+    --report /home/ubuntu/logs/nport_seed_1.csv
+# repeat: each run skips what the previous one watermarked
+uv run python scripts/global_market/ingest_nport.py --in-universe --limit 250 \
+    --report /home/ubuntu/logs/nport_seed_2.csv
+# then, once the scored universe is covered, the long tail (classification wants it too)
+uv run python scripts/global_market/ingest_nport.py --limit 500 --report /home/ubuntu/logs/nport_tail.csv
+```
+
+A batch commits every 50,000 holding rows, so an interrupted run keeps what it wrote and the
+next one resumes. `--dry-run` fetches and parses but writes nothing; `--full` ignores the
+watermarks and re-fetches every document (only after a parser change).
+
+**Read the report, not just the exit code.** One row per fund, counted by `status`:
+`written` · `unchanged` (the accession was already loaded) · `no_filing` (a young fund, or a
+unit investment trust — SPY files no N-PORT and never will) · `no_holdings` · `series_mismatch`
+· `fetch_failed` · `parse_failed`. `sum_abs_weight` should sit in [0.9, 1.1]; a fund far outside
+it is worth reading before its holdings reach the board.
+
+**The look-through needs the CUSIP bridge.** `holding_instrument_id` is resolved through
+`symbol_alias(source='cusip')`, which `ingest_index_membership.py` writes from the SSGA
+workbook. Run the weekly membership step at least once before the first N-PORT pass, or every
+`holding_instrument_id` is NULL — the script prints a NOTE when it finds no aliases.
+
+```sql
+-- after a seeding run
+select count(*) filter (where aum_usd is not null) as with_aum,
+       count(*) filter (where series_class_count > 1) as multi_class,
+       count(*) from atlas_global.etf_meta;
+select max(as_of_date), count(distinct instrument_id), count(*) from atlas_global.etf_holdings;
+```

@@ -52,6 +52,8 @@ KEY_TABLES: list[tuple[str, str, int]] = [
 # blocked publish). Phase 1/2 register (date column per the DDL):
 #   etf_holdings 8, etf_exposure_daily 8, etf_meta 8, etf_classification 8,
 #   stock_financials_pit 95
+# etf_holdings/etf_meta landed on N-PORT, whose cadence the plan's 8 did not anticipate; the
+# lags below are that feed's own and the reason is written beside each.
 BOARD_TABLES: list[tuple[str, str, int]] = [
     ("instrument_master", "updated_at", 8),  # weekly build_identity touches every listed row (P1-A)
     ("index_membership", "updated_at", 8),  # weekly SSGA pass touches every current row (P1-C)
@@ -66,6 +68,19 @@ BOARD_TABLES: list[tuple[str, str, int]] = [
     # Filing-driven, not nightly: a 10-Q lands ~40 days after the quarter it covers, so a
     # long quiet stretch is the normal state of this table rather than a stalled producer.
     ("stock_financials_pit", "filed", 95),  # SEC EDGAR company facts (P3-A)
+    # N-PORT is public for the third month of each filer's FISCAL quarter and appears ~60 days
+    # later, so the newest snapshot in the table is two months old on the day it lands and this
+    # date can never be recent. 95 sessions ≈ four and a half months: past the natural lag and
+    # inside one quarter, so a producer that stopped is caught before the next filings would
+    # have refreshed it anyway.
+    ("etf_holdings", "as_of_date", 95),  # SEC N-PORT-P holdings snapshots
+    # updated_at, not a period: this row is TOUCHED whenever its fund files, and with several
+    # thousand funds on staggered fiscal years something files most weeks — but not every week,
+    # which is why this is 30 sessions and not the weekly tier's 8.
+    ("etf_meta", "updated_at", 30),  # SEC N-PORT-P fund facts
+    # Keyed by the SNAPSHOT's date, not the session it was computed on: exposures change only
+    # when holdings do, so this date is the holdings' date and carries their lag exactly.
+    ("etf_exposure_daily", "as_of_date", 95),  # build_exposures.py over those holdings
 ]
 
 # ── PRODUCER REGISTRY (the build-time half of the freshness contract) ──
@@ -86,6 +101,9 @@ PRODUCERS: dict[str, str] = {
     "basket_nav_daily": "mark_baskets.py",
     "lens_scores_daily": "score_stocks.py",
     "stock_financials_pit": "ingest_financials.py",
+    "etf_holdings": "ingest_nport.py",
+    "etf_meta": "ingest_nport.py",
+    "etf_exposure_daily": "build_exposures.py",
 }
 
 

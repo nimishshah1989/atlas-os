@@ -69,13 +69,19 @@ step "build_identity"           $PY scripts/global_market/build_identity.py "${I
 step "seed_benchmarks"          $PY scripts/global_market/seed_benchmarks.py
 step "ingest_index_membership"  $PY scripts/global_market/ingest_index_membership.py --eod "$EOD" --report "$LOG_DIR/index_membership_$EOD.csv"
 # 2. SLOW FEEDS (EDGAR / FINRA).
-# step "ingest_nport"             $PY scripts/global_market/ingest_nport.py             # long tail + AUM (Phase 2)
+# N-PORT: one small index request per fund, and the document only when the accession changed —
+# so a steady week is cheap and a quarter-end week is not. The FIRST run has no watermarks and
+# fetches every document (hours, ~1.4 GB streamed, nothing kept); docs/global/runbook.md says to
+# seed it in batches with --limit before this step is left to the cron.
+step "ingest_nport"             $PY scripts/global_market/ingest_nport.py --report "$LOG_DIR/nport_$EOD.csv"
 # step "ingest_financials"        $PY scripts/global_market/ingest_financials.py        # companyfacts, changed filers (Phase 3)
 # step "ingest_13f"               $PY scripts/global_market/ingest_13f.py               # Phase 3
 # step "ingest_short_interest"    $PY scripts/global_market/ingest_short_interest.py    # Phase 3
 # 3. CLASSIFY + RE-SCORE.
 # step "classify_etfs"            $PY scripts/global_market/classify_etfs.py --delta    # rules + LLM for new/changed only (Phase 2)
-# step "build_exposures"          $PY scripts/global_market/build_exposures.py --all    # Phase 2
+# Exposures are a pure function of a holdings snapshot, so only the NEW snapshots are
+# computed — no --all, which is for a change to the exposure arithmetic itself.
+step "build_exposures"          $PY scripts/global_market/build_exposures.py --report "$LOG_DIR/exposures_$EOD.csv"
 # step "score_etfs_backfill"      $PY scripts/global_market/score_etfs.py --backfill-week   # Phase 3
 
 # 4. GATES (assert on REAL produced output — rule #0). Run directly, never via step().

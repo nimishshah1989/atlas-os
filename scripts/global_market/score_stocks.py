@@ -14,8 +14,11 @@ but the run COUNTS AND NAMES those members, because "503 members, 470 scored" is
 P2-D's done-condition is written against and a silently smaller denominator would hide it.
 
 WHAT IS HONESTLY ABSENT. ``atlas.global_market.scoring.stock_lenses`` says it in full: the
-technical lens is complete from ``technical_daily``; fundamental and valuation need
-``stock_financials_pit`` (phase2.md P3-A), catalyst and flow need ``filings_8k`` /
+technical lens is complete from ``technical_daily``; the fundamental lens is wired to
+``stock_financials_pit`` through ``fundamentals.metrics`` and scores as soon as the FM has
+locked the 37 US bands — until then it is NULL and every run prints the live S&P 500
+cross-section to set them from; valuation needs the same feed plus its own bands, catalyst and
+flow need ``filings_8k`` /
 ``insider_form4`` (P3-B), and policy is not ported. Those four columns stay NULL — never 0,
 which would say a company is weak at something nobody has measured (rule #0). ``blend()``
 renormalises over the lenses PRESENT, ``lenses_active`` records how many that was, and
@@ -54,6 +57,7 @@ import argparse
 import datetime as dt
 import sys
 import uuid
+from collections.abc import Container, Mapping, Sequence
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -70,8 +74,15 @@ from psycopg2.extras import Json
 from atlas.db import load_thresholds
 from atlas.global_market import calendar as gcal
 from atlas.global_market import index_membership as imx
+from atlas.global_market.fundamentals import cross_section as xsec
+from atlas.global_market.fundamentals import metrics as fundamentals
+from atlas.global_market.fundamentals.metrics import Metrics
 from atlas.global_market.scoring import blend, tiers_from_thresholds, weights_from_thresholds
-from atlas.global_market.scoring.stock_lenses import score_technical
+from atlas.global_market.scoring.stock_lenses import (
+    FUNDAMENTAL_KEYS,
+    score_fundamental,
+    score_technical,
+)
 
 M = _gdb.M
 KEY = ["instrument_id", "date"]
@@ -90,6 +101,13 @@ LIGHTEST_COHORT = COHORTS_LIGHTEST_FIRST[0]
 
 COHORT_FROM_WEIGHT = "spy_weight"  # the member's own index weight put it in its cohort
 COHORT_NO_WEIGHT = "no_weight_lowest_cohort"  # index_membership carried no weight_frac
+
+GICS_FINANCIALS = "Financials"  # instrument_master.sector_gics, from the Select Sector SPDRs
+
+# The distribution the FM sets the 37 bands from lives in ``fundamentals.cross_section``: it is
+# pure (metric sets in, percentiles out) and the units it reports are the ones the lens adapter
+# reads them back on, so the two cannot drift onto different scales.
+METRIC_REPORT_COLUMNS = xsec.COLUMNS
 
 STATUS_SCORED = "scored"
 STATUS_NO_LENS = "no_lens_had_inputs"
@@ -123,6 +141,7 @@ SELECT im.instrument_id::text AS instrument_id, im.symbol, im.name,
        t.rs_1m_spy, t.rs_3m_spy, t.rs_6m_spy, t.rs_12m_spy,
        t.rs_1m_peer, t.rs_3m_peer, t.rs_6m_peer, t.rs_12m_peer,
        t.atr_14, t.bb_width, t.vol_ratio_30d, t.vol_ratio_60d, t.pos_52w,
+       im.sector_gics,
        o.close_adj AS price,
        (SELECT mem.weight_frac FROM {M}.index_membership mem
          WHERE mem.instrument_id = im.instrument_id AND mem.index_code = :index_code
@@ -157,6 +176,83 @@ WHERE im.asset_class = 'stock' AND im.is_active
                    WHERE t.instrument_id = im.instrument_id AND t.date = :anchor)
 ORDER BY im.symbol
 """
+
+
+# Every point-in-time row a reader on the anchor could have seen, for the stocks being scored.
+# The filter is `filed <= anchor`, which is the whole reason the table is keyed by `filed`:
+# a restatement must be invisible until the day it was filed.
+FINANCIALS_SQL = f"""
+SELECT f.instrument_id::text AS instrument_id, f.period_end, f.form, f.filed, f.period_start,
+       f.accession_no, f.fiscal_year, f.fiscal_period,
+       {", ".join("f." + c for c in sorted(set(fundamentals.CONCEPT_COLUMNS.values())))}
+FROM {M}.stock_financials_pit f
+JOIN {M}.universe_snapshot u
+  ON u.instrument_id = f.instrument_id
+ AND u.date = (SELECT max(date) FROM {M}.universe_snapshot)
+ AND u.in_universe
+WHERE f.filed <= :anchor
+ORDER BY f.instrument_id, f.period_end, f.filed
+"""
+
+
+def missing_bands(th: Mapping[str, Decimal]) -> list[str]:
+    """The fundamental bands ``atlas_global.atlas_thresholds`` does not carry yet.
+
+    India's scorer falls back to India's own numbers for every one of the 37, so a partial set
+    would score the S&P 500 on a methodology this market never approved — invisibly. The lens
+    is therefore all-or-nothing: until the FM has locked the US bands from the cross-section
+    this run prints, ``fundamental`` is NULL and the run says so (rule #1, rule #0).
+    """
+    return sorted(set(FUNDAMENTAL_KEYS) - set(th))
+
+
+def financial_metrics(anchor: dt.date, financial_ids: Container[str]) -> dict[str, Metrics]:
+    """``instrument_id -> Metrics`` as of the anchor, for every stock with a full TTM window."""
+    frame = _gdb.read_df(FINANCIALS_SQL, {"anchor": anchor}, coerce_float=False)
+    if frame.empty:
+        return {}
+    out: dict[str, Metrics] = {}
+    for iid, block in frame.groupby("instrument_id", sort=False):
+        rows = fundamentals.rows_from_records(block.to_dict("records"))
+        found = fundamentals.metrics_as_of(rows, anchor, is_financial=str(iid) in financial_ids)
+        if found is not None:
+            out[str(iid)] = found
+    return out
+
+
+def cross_section(by_id: Mapping[str, Metrics], report: Report | None) -> pd.DataFrame:
+    """The pure table, with each row also written to the FM's CSV."""
+    table = xsec.cross_section(by_id.values())
+    if report is not None:
+        for row in table.to_dict("records"):
+            report.add(*(row[c] for c in METRIC_REPORT_COLUMNS))
+    return table
+
+
+def print_cross_section(table: pd.DataFrame, missing: Sequence[str]) -> None:
+    """The same table on the console, and — when the bands are not all there — why the lens
+    did not score."""
+    header = f"{'metric':<20}{'unit':<9}{'names':>6}" + "".join(
+        f"{'P' + str(p):>10}" for p in xsec.PERCENTILES
+    )
+    print("\n[score_stocks] S&P 500 fundamental cross-section — the FM sets the bands from this")
+    print("  " + header)
+    for r in table.to_dict("records"):
+        # pd.isna, not `is None`: DataFrame.from_records turns a None into NaN in a float
+        # column, and NaN formats as "nan" through the same "{:>10.2f}" that would show a
+        # number. The CSV is written from the dicts and keeps the empty cell either way.
+        cells = "".join(
+            f"{'—':>10}" if pd.isna(r[f"p{p}"]) else f"{r[f'p{p}']:>10.2f}"
+            for p in xsec.PERCENTILES
+        )
+        print(f"  {r['metric']:<20}{r['unit']:<9}{r['names']:>6}{cells}")
+    if missing:
+        print(
+            f"  the fundamental lens is NOT scored: {len(missing)} of {len(FUNDAMENTAL_KEYS)} "
+            f"band(s) are missing from {M}.atlas_thresholds, first {missing[0]!r}. Set them "
+            "from the table above (seed_thresholds.py, FM approval first) — a partial set "
+            "would score this market on India's numbers."
+        )
 
 
 def anchor_date(cutoff: dt.date) -> dt.date:
@@ -226,9 +322,19 @@ def _missing(value: Any) -> bool:
 
 
 def score_rows(
-    frame: pd.DataFrame, anchor: dt.date, th: dict[str, Decimal], run_id: str
+    frame: pd.DataFrame,
+    anchor: dt.date,
+    th: dict[str, Decimal],
+    run_id: str,
+    by_id: Mapping[str, Metrics] | None = None,
+    bands_locked: bool = False,
 ) -> tuple[pd.DataFrame, list[list[Any]]]:
-    """One ``lens_scores_daily`` row per stock, plus the per-stock report lines."""
+    """One ``lens_scores_daily`` row per stock, plus the per-stock report lines.
+
+    ``by_id`` carries the point-in-time metric set per instrument and ``bands_locked`` says the
+    37 US bands exist. Both are needed for a fundamental score: metrics without bands would be
+    scored on India's cross-section, and bands without metrics have nothing to score.
+    """
     weights = weights_from_thresholds(th, LENSES, prefix="lens_weight_")
     tiers = tiers_from_thresholds(th)
     total_weight = sum(weights.values())
@@ -262,10 +368,28 @@ def score_rows(
             pos_52w=_f(r["pos_52w"]),
             th=th,
         )
-        # The three unbuilt lenses are None, not 0 — their producers do not exist (P3-A/P3-B).
+        found = (by_id or {}).get(str(r["instrument_id"]))
+        fundamental = (
+            score_fundamental(
+                roe=found.roe,
+                roce=found.roce,
+                operating_margin=found.operating_margin,
+                net_margin=found.net_margin,
+                revenue_growth=found.revenue_growth,
+                eps_growth=found.eps_growth,
+                debt_to_equity=found.debt_to_equity,
+                current_ratio=found.current_ratio,
+                th=th,
+            )
+            if found is not None and bands_locked
+            else None
+        )
+        # An absent lens is None, not 0 — a company is not weak on something we did not
+        # measure. catalyst and flow have no producer at all (P3-B); fundamental has its feed
+        # and waits only on the FM's bands.
         lenses: dict[str, Decimal | None] = {
             "technical": technical.value,
-            "fundamental": None,  # stock_financials_pit — no producer yet (phase2.md P3-A)
+            "fundamental": None if fundamental is None else fundamental.value,
             "catalyst": None,  # filings_8k / insider_form4 — no producer yet (P3-B)
             "flow": None,  # insider_form4 / holders_13f_q — no producer yet (P3-B)
         }
@@ -292,6 +416,8 @@ def score_rows(
                 "asset_class": "stock",
                 "technical": technical.value,
                 **dict(technical.subs),
+                "fundamental": None if fundamental is None else fundamental.value,
+                **({} if fundamental is None else dict(fundamental.subs)),
                 "composite": result.composite,
                 "conviction_tier": result.conviction_tier,
                 "cap_cohort": r["cap_cohort"],
@@ -385,7 +511,13 @@ def print_unmeasured(anchor: dt.date) -> int:
     return len(missing)
 
 
-def run(*, eod: dt.date | None, dry_run: bool, report: Report) -> dict[str, object]:
+def run(
+    *,
+    eod: dt.date | None,
+    dry_run: bool,
+    report: Report,
+    metric_report: Report | None = None,
+) -> dict[str, object]:
     run_id = str(uuid.uuid4())
     cutoff = eod or _gdb.eod_cutoff()
     anchor = anchor_date(cutoff)
@@ -405,7 +537,21 @@ def run(*, eod: dt.date | None, dry_run: bool, report: Report) -> dict[str, obje
         )
     frame["cap_cohort"] = cap_cohorts(pd.Series(frame["weight_frac"]))
     frame["cohort_source"] = cohort_sources(pd.Series(frame["weight_frac"]))
-    table, lines = score_rows(frame, anchor, th, run_id)
+
+    financial_ids = {
+        str(r["instrument_id"])
+        for r in frame.to_dict("records")
+        if r.get("sector_gics") == GICS_FINANCIALS
+    }
+    by_id = financial_metrics(anchor, financial_ids)
+    missing = missing_bands(th)
+    print(
+        f"[score_stocks] fundamentals: {len(by_id):,d} of {len(frame):,d} name(s) have a full "
+        f"trailing-twelve-month window as of {anchor}; {len(financial_ids)} financial(s)"
+    )
+    print_cross_section(cross_section(by_id, metric_report), missing)
+
+    table, lines = score_rows(frame, anchor, th, run_id, by_id, not missing)
     for line in lines:
         report.add(*line)
     scored = print_summary(table, frame, anchor, report)
@@ -427,6 +573,12 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument(
         "--report", type=Path, default=None, help="per-stock CSV: lenses, cohort and composite"
     )
+    ap.add_argument(
+        "--report-metrics",
+        type=Path,
+        default=None,
+        help="CSV of the S&P 500 fundamental cross-section — the distribution the FM sets bands on",
+    )
     return ap
 
 
@@ -435,9 +587,11 @@ def main() -> None:
     # Always a Report, with or without a path: without one it writes nothing and still counts,
     # so every run can print how many names ended in each outcome (`_report.Report`).
     report = Report(args.report, REPORT_COLUMNS)
+    metric_report = Report(args.report_metrics, METRIC_REPORT_COLUMNS, count_by=("metric",))
     try:
-        run(eod=args.eod, dry_run=args.dry_run, report=report)
+        run(eod=args.eod, dry_run=args.dry_run, report=report, metric_report=metric_report)
     finally:
+        metric_report.close()
         report.close()
 
 

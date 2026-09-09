@@ -90,6 +90,16 @@ on:
         required: false
         default: false
         type: boolean
+      apply_ddl:
+        description: "apply scripts/global_market/ddl/*.sql to prod (idempotent; adds missing tables and columns)"
+        required: false
+        default: false
+        type: boolean
+      nport_funds:
+        description: "seed ETF holdings from SEC N-PORT: how many funds to fetch this run (0 skips it)"
+        required: false
+        default: "0"
+        type: string
 
 concurrency:
   group: global-nightly
@@ -217,6 +227,14 @@ jobs:
               rm -f "$REQ"
             fi
 
+            if [ "${{ inputs.apply_ddl }}" = "true" ]; then
+              echo "== atlas_global DDL: applying scripts/global_market/ddl/*.sql =="
+              # Idempotent by construction (IF NOT EXISTS throughout, no DROP), so this IS the
+              # normal way a new column reaches prod: merge the DDL edit, then run this once.
+              # One transaction per file — a bad statement rolls back that file and stops.
+              ( set -a; source "$REPO/.env"; set +a; cd "$REPO"; PYTHONPATH="$REPO:$REPO/scripts/global_market:$REPO/scripts/foundation" "$REPO/.venv/bin/python" scripts/global_market/apply_ddl.py ) 2>&1 | tail -n 30 | redact || echo "DDL FAILED — a writer whose column is missing will fail below for the same reason"
+            fi
+
             if [ "${{ inputs.seed_thresholds }}" = "true" ]; then
               echo "== atlas_global.atlas_thresholds: inserting any seed row the box has never had =="
               # The writer is INSERT … ON CONFLICT (threshold_key) DO NOTHING, so a value the FM
@@ -255,6 +273,16 @@ jobs:
               # a time. If it does run long, the step's own 70m command_timeout bounds it and
               # the nightly below still runs on whatever landed — the writer is an upsert.
               ( set -a; source "$REPO/.env"; set +a; cd "$REPO"; PYTHONPATH="$REPO:$REPO/scripts/global_market:$REPO/scripts/foundation" "$REPO/.venv/bin/python" scripts/global_market/ingest_prices.py --backfill ) 2>&1 | tail -n 30 | redact || echo "BACKFILL FAILED — check ALPACA_API_KEY and ALPACA_API_SECRET are in $REPO/.env (that spelling: not ALPACA_SECRET_KEY)"
+            fi
+
+            NPORT_FUNDS="${{ inputs.nport_funds }}"
+            if [ -n "$NPORT_FUNDS" ] && [ "$NPORT_FUNDS" != "0" ]; then
+              echo "== ingest_nport: seeding ETF holdings for up to $NPORT_FUNDS fund(s) =="
+              # The FIRST pass has no watermarks and fetches every document (AGG alone is
+              # 15.9 MB), so it is seeded in batches rather than left to one 70-minute step —
+              # heaviest traded funds first, and each run skips what the last one watermarked.
+              # It commits every 50,000 rows, so being cut off by the timeout loses nothing.
+              ( set -a; source "$REPO/.env"; set +a; cd "$REPO"; PYTHONPATH="$REPO:$REPO/scripts/global_market:$REPO/scripts/foundation" "$REPO/.venv/bin/python" scripts/global_market/ingest_nport.py --limit "$NPORT_FUNDS" --report "$LOGS/nport_seed_$(date -u +%FT%TZ).csv" ) 2>&1 | tail -n 40 | redact || echo "N-PORT SEEDING FAILED — check EDGAR_IDENTITY is in $REPO/.env and the DDL has been applied"
             fi
 
             if [ "$MODE" = "weekly" ]; then
