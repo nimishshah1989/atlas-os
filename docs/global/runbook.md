@@ -38,6 +38,19 @@ uv run python scripts/global_market/seed_thresholds.py --dry-run # READ the 61 r
 uv run python scripts/global_market/seed_thresholds.py           # ON CONFLICT DO NOTHING
 python -m atlas.db                                               # atlas_global_exists True
 ```
+**A DDL CHANGE IS NOT DEPLOYED BY MERGING IT.** `deploy-global.yml` builds the board and nothing
+else; `atlas_global_daily.sh` never applies DDL. So a column added to `ddl/*.sql` reaches prod only
+when somebody runs `apply_ddl.py` — by hand as above, or by dispatching `run-global-nightly.yml`
+with `apply_ddl: true`. On 2026-09-09 the four columns the flow lens needs
+(`short_interest.previous_short_interest`, `change_percent`, `split_flag`, `revision_flag`) shipped
+in a merge and were never applied, and BOTH `ingest_short_interest` and `score_stocks` then failed
+every night on `column ... does not exist` while the code looked correct in the repository.
+
+**A HUNG STEP HOLDS THE PIPELINE LOCK AND EVERY DISPATCH IS REFUSED.** `run-global-nightly.yml`
+with `clear_lock: true` kills the holders, TERM then KILL, and prints them first. It is manual on
+purpose: from outside, a slow run and a hung one look identical. Read the elapsed times in the
+`status` output before using it.
+
 The four `cls_*` thresholds are NOT seeded — set them from `/admin/thresholds` once the Phase 2
 taxonomy work exists. `liquidity_min_traded_value_usd` IS seeded, at $1,000,000: the FM set the
 floor on 2026-09-06 from the real P1-E distribution (`docs/global/reports/adv_usd_2026-09-03.md`),
