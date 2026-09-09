@@ -95,7 +95,18 @@ SELECT im.symbol, s.date, s.log_jump, s.ret_tr, s.gap_days,
        coalesce(b.movers, 0) AS movers_that_day,
        EXISTS (SELECT 1 FROM {M}.corporate_actions ca
                WHERE ca.instrument_id = s.instrument_id AND ca.ex_date = s.date
-                 AND ca.ratio IS NOT NULL) AS has_split
+                 AND ca.ratio IS NOT NULL) AS has_split,
+       -- "No action ON THIS DATE" and "no action EVER PULLED for this instrument" look
+       -- identical in has_split and mean opposite things: the first is a price defect to
+       -- investigate, the second is a gap in what we asked the vendor for. Actions come with
+       -- ingest_prices --backfill only, so an instrument that has never been backfilled has
+       -- an empty action history and EVERY split it ever did reads as unexplained.
+       (SELECT count(*) FROM {M}.corporate_actions ca
+        WHERE ca.instrument_id = s.instrument_id) AS actions_on_record,
+       -- The ratio a reverse split would have to have had. Ten of the fourteen findings on
+       -- 2026-09-08 sat within a few percent of a whole number (1-for-2, 1-for-3, 1-for-9),
+       -- which is what a missed reverse split looks like and a broken price does not.
+       round((1 + s.ret_tr)::numeric, 2) AS price_multiple
 FROM scored s
 LEFT JOIN breadth b ON b.date = s.date
 JOIN {M}.instrument_master im USING (instrument_id)
@@ -295,6 +306,20 @@ def check_A(g: Gate, eod: Any = None, report: str | None = None) -> None:
         )
     )
     impossible = pd.DataFrame(ext[ext["ret_tr"].abs() > A_MAX_ABS_RET_1D])
+    # WHY it is impossible, not just THAT it is. A move of exactly 3x on an instrument whose
+    # action history is empty is a reverse split nobody pulled; the same move on an instrument
+    # with a full action history is a bad price. Those need opposite responses, and the gate
+    # was reporting them identically — three symbols and a percentage, with the diagnosis left
+    # to whoever went looking. It still FAILS either way: an unadjusted split is a wrong number
+    # in every return and score computed across it.
+    never_pulled = int((impossible["actions_on_record"] == 0).sum()) if len(impossible) else 0
+    diagnosis = ""
+    if never_pulled:
+        diagnosis = (
+            f" — {never_pulled} of them on instrument(s) with NO corporate action on record at "
+            "all, so an unadjusted split reads as a price move; run ingest_prices.py --backfill "
+            "(it is the only step that pulls action history) before treating these as bad prices"
+        )
     g.check(
         f"no scored instrument moves more than {A_MAX_ABS_RET_1D:.0%} between consecutive "
         "sessions on close_tr",
@@ -303,9 +328,10 @@ def check_A(g: Gate, eod: Any = None, report: str | None = None) -> None:
         if impossible.empty
         else f"{len(impossible)} row(s): "
         + ", ".join(
-            f"{r['symbol']} {r['date']} {r['ret_tr']:+.1%}"
+            f"{r['symbol']} {r['date']} ×{r['price_multiple']}"
             for _, r in impossible.head(3).iterrows()
-        ),
+        )
+        + diagnosis,
     )
 
     # (4) large jumps. There is NO reliable automatic test that separates a missed split from
