@@ -34,11 +34,12 @@ right and the earlier framing was wrong. Precisely:
   facts (per-company financials, point-in-time by `filed`), EDGAR 8-K item codes, EDGAR Form 4
   (insider), EDGAR 13F (institutional), EDGAR N-PORT (fund holdings and net assets for the entire
   ETF universe), FINRA short interest, issuer product files (expense ratio, AUM, daily holdings).
-* **None of their ingestors were ever written.** `ingest_financials`, `ingest_filings_8k`,
-  `ingest_form4`, `ingest_13f`, `ingest_short_interest`, `ingest_nport`, `ingest_issuer_holdings`,
-  `build_exposures` are all commented out of `scripts/ops/atlas_global_daily.sh` and the scripts do
-  not exist. `edgartools` is not yet a declared dependency (repo rule: a package is added in the PR
-  that first imports it).
+* **None of their ingestors were ever written.** Four are commented out of
+  `scripts/ops/atlas_global_daily.sh` — `ingest_filings_8k`, `ingest_form4`,
+  `ingest_issuer_holdings`, `build_exposures`. The other four are absent from it entirely:
+  `ingest_financials`, `ingest_13f`, `ingest_short_interest`, `ingest_nport`. **No script behind
+  any of the eight exists.** `edgartools` is not yet a declared dependency (repo rule: a package
+  is added in the PR that first imports it).
 * **FRED is macro only** — SP500 index level, VIX, DGS10, DTB3, DTWEXBGS. It feeds the pulse strip
   and the price cross-check. It can never feed a per-company fundamental lens; nothing in FRED knows
   what Apple's return on equity is.

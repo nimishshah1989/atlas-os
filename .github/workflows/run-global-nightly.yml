@@ -8,16 +8,23 @@ name: Run Global Nightly
 # Two modes:
 #   status  read-only: cron entries for the nightly, the last nightly log's tail, then
 #           scripts/ops/atlas_global_status.sh (code, build, process, routes, database, nightly)
-#   run     the nightly itself, under the SAME lock the cron uses, so a run started here can
-#           never overlap a scheduled one; then the FAIL lines with their recorded reasons and
-#           the health-snapshot line. install_cron=true adds the runbook's cron line first if
-#           no atlas_global_daily entry exists (docs/global/runbook.md §5) — nothing else is
-#           ever written to the box by this workflow.
+#   run     the nightly itself, holding the SAME lock the cron uses for the WHOLE step, so a
+#           run started here can neither overlap a scheduled one nor mistake a scheduled run's
+#           log for its own; then the FAIL lines with their recorded reasons.
+#   install_cron  (run mode) adds the runbook's cron line if no atlas_global_daily entry
+#           exists. Nothing else is ever written to the box by this workflow.
+#
+# EVERYTHING THIS PRINTS IS REDACTED FIRST. Actions logs on a public repository are public, and
+# the orchestrator's own log is full of raw tracebacks — `requests` puts the whole request URL
+# in an HTTPError, so one FRED 403 would publish an api_key to the internet. The orchestrator
+# redacts the reason it stores in the database (scripts/ops/atlas_global_daily.sh::redact_secrets);
+# this redacts the SAME patterns again on the way out of the box, because the log file itself
+# was never redacted and never should be — it is the operator's full record.
 on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "status (read-only) or run (the nightly, under flock)"
+        description: "status (read-only) or run (the nightly, holding the cron's lock)"
         required: true
         default: status
         type: choice
@@ -46,35 +53,73 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           command_timeout: 70m
-          # Every command on ONE line where it carries quotes: a line indented below this
-          # block scalar's indent ENDS the scalar (tests/unit/test_workflow_files_parse.py).
+          # Every command carrying quotes stays on ONE line: a line indented below this block
+          # scalar's indent ENDS the scalar (tests/unit/test_workflow_files_parse.py).
           script: |
             set -uo pipefail
             REPO=/home/ubuntu/atlas-os
-            LOGS=/home/ubuntu/logs
             MODE="${{ inputs.mode }}"
-            CRON_LINE='0 1 * * 2-6   flock -n /tmp/atlas_global.lock /home/ubuntu/atlas-os/scripts/ops/atlas_global_daily.sh >> /home/ubuntu/logs/atlas_global_daily_cron.log 2>&1'
+
+            # The log directory the ORCHESTRATOR will use, by its own precedence: an exported
+            # ATLAS_LOG_DIR wins, then the box .env, then its default. Hardcoding
+            # /home/ubuntu/logs would make `run` report "NO NEW LOG" after a perfectly good run
+            # on any box that overrides it, and `status` would read nothing at all.
+            ENV_LOG_DIR=$(grep -sE '^ATLAS_LOG_DIR=' "$REPO/.env" | tail -1 | sed -E 's/^[^=]*=//; s/#.*$//; s/^[[:space:]]*"?//; s/"?[[:space:]]*$//' || true)
+            LOGS="${ATLAS_LOG_DIR:-${ENV_LOG_DIR:-/home/ubuntu/logs}}"
+            echo "log directory: $LOGS"
+            CRON_LINE="0 1 * * 2-6   flock -n /tmp/atlas_global.lock $REPO/scripts/ops/atlas_global_daily.sh >> $LOGS/atlas_global_daily_cron.log 2>&1"
+
+            # The redaction every line printed from this box passes through: URL passwords,
+            # Bearer/Basic credentials, and the value after any key/token/secret/password/
+            # authorization/APCA-API-* assignment. Same patterns as the orchestrator's.
+            redact() { sed -E -e 's#://([^:/@[:space:]]+):[^@[:space:]]*@#://\1:***@#g' -e 's#((api[_-]?key|apikey|access[_-]?token|client[_-]?secret|secret[_-]?key|secret|token|password|passwd|pwd|authorization)[[:space:]]*[=:][[:space:]]*)[^\&[:space:]]+#\1***#Ig' -e 's#((bearer|basic|apca-api-[a-z-]+)[[:space:]:=]+)[^[:space:]]+#\1***#Ig'; }
+
             echo "== cron entries mentioning atlas_global_daily =="
-            crontab -l 2>/dev/null | grep -n atlas_global_daily || echo "NONE — the nightly is not scheduled on this box"
+            crontab -l 2>/dev/null | grep -n atlas_global_daily | redact || echo "NONE — the nightly is not scheduled on this box"
+
             echo "== newest nightly log =="
             LAST=$(ls -1t "$LOGS"/atlas_global_daily_[0-9]*.log 2>/dev/null | head -1 || true)
-            if [ -n "$LAST" ]; then echo "$LAST ($(date -u -r "$LAST" +%FT%TZ))"; tail -n 25 "$LAST"; else echo "none under $LOGS"; fi
+            if [ -n "$LAST" ]; then echo "$LAST ($(date -u -r "$LAST" +%FT%TZ))"; tail -n 25 "$LAST" | redact; else echo "none under $LOGS"; fi
+
             if [ "$MODE" = "status" ]; then
               echo "== atlas_global_status.sh =="
-              bash "$REPO/scripts/ops/atlas_global_status.sh" || true
+              bash "$REPO/scripts/ops/atlas_global_status.sh" 2>&1 | redact || true
               exit 0
             fi
-            if [ "${{ inputs.install_cron }}" = "true" ] && ! crontab -l 2>/dev/null | grep -q atlas_global_daily; then
-              ( crontab -l 2>/dev/null; echo "$CRON_LINE" ) | crontab - && echo "installed cron line: $CRON_LINE"
+
+            # TAKE THE LOCK OURSELVES AND HOLD IT for the rest of the step, rather than letting
+            # `flock <file> <cmd>` release it the moment the orchestrator exits. Two reasons:
+            # a scheduled run cannot start while we pick our log (which would let us read ITS
+            # log and report it as ours), and a lock we could not get is a hard refusal here
+            # instead of a confusing partial report.
+            exec 9>/tmp/atlas_global.lock
+            if ! flock -n 9; then
+              echo "REFUSED: /tmp/atlas_global.lock is held — a scheduled nightly is running now."
+              echo "  Nothing was started. Re-run this workflow once it finishes."
+              exit 1
             fi
-            echo "== running the nightly under /tmp/atlas_global.lock (started $(date -u +%FT%TZ)) =="
-            if ! flock -n /tmp/atlas_global.lock bash "$REPO/scripts/ops/atlas_global_daily.sh" >> "$LOGS/atlas_global_daily_cron.log" 2>&1; then echo "nightly exited non-zero, or the lock was held by a scheduled run"; fi
-            echo "== finished $(date -u +%FT%TZ) =="
+
+            if [ "${{ inputs.install_cron }}" = "true" ] && ! crontab -l 2>/dev/null | grep -q atlas_global_daily; then
+              ( crontab -l 2>/dev/null; echo "$CRON_LINE" ) | crontab - || { echo "FAILED to install the cron line — not running the nightly"; exit 1; }
+              echo "installed cron line: $(printf '%s' "$CRON_LINE" | redact)"
+            fi
+
+            echo "== running the nightly (started $(date -u +%FT%TZ)) =="
+            bash "$REPO/scripts/ops/atlas_global_daily.sh" >> "$LOGS/atlas_global_daily_cron.log" 2>&1
+            RC=$?
+            echo "== finished $(date -u +%FT%TZ), orchestrator rc=$RC =="
+
             NEW=$(ls -1t "$LOGS"/atlas_global_daily_[0-9]*.log 2>/dev/null | head -1 || true)
-            if [ -z "$NEW" ] || [ "$NEW" = "$LAST" ]; then echo "NO NEW LOG — the orchestrator did not start (lock held? .venv or .env missing?)"; tail -n 20 "$LOGS/atlas_global_daily_cron.log" 2>/dev/null; exit 1; fi
+            if [ -z "$NEW" ] || [ "$NEW" = "$LAST" ]; then
+              echo "NO NEW LOG — the orchestrator did not get as far as opening one (.venv or .env missing?)"
+              tail -n 20 "$LOGS/atlas_global_daily_cron.log" 2>/dev/null | redact
+              exit 1
+            fi
+
             echo "== $NEW: step outcomes =="
-            grep -E '^  (ok|FAIL): ' "$NEW" || true
+            grep -E '^  (ok|FAIL): ' "$NEW" | redact || true
             echo "== health snapshot =="
-            grep -E 'health snapshot|write_health_snapshot' "$NEW" || true
+            grep -E 'health snapshot|write_health_snapshot' "$NEW" | redact || true
             echo "== last 40 lines =="
-            tail -n 40 "$NEW"
+            tail -n 40 "$NEW" | redact
+            exit "$RC"
