@@ -6,7 +6,7 @@ import { BasketBuilder, type BuilderLimits } from '@/components/portfolios/Baske
 import { PageHeader } from '@/components/ui/PageHeader'
 import { QueryFailed } from '@/components/ui/Section'
 import { requireUser } from '@/lib/auth'
-import { fracToMicro, microToPct } from '@/lib/basketDraft'
+import { fracToMicro, microToPct, seedRows } from '@/lib/basketDraft'
 import { dbAvailable } from '@/lib/db'
 import { getBasketLimits, latestSession } from '@/lib/queries/baskets'
 import { attempt } from '@/lib/result'
@@ -15,8 +15,16 @@ export const metadata = { title: 'New basket' }
 
 const QUERY_BUDGET_MS = 12_000
 
-export default async function NewBasketPage() {
+// `?symbols=URA,NLR,URNM&name=Nuclear+%26+Uranium` — the way in from a theme or a market page.
+// The seed only fills the form; every symbol, every weight and the Σ=1 rule are checked again by
+// the action against instrument_master and the FM's thresholds, so a hand-edited URL can open a
+// form the action then refuses, and never write a basket nobody validated.
+type Params = { searchParams: Promise<{ symbols?: string; name?: string }> }
+
+export default async function NewBasketPage({ searchParams }: Params) {
   await requireUser()
+  const { symbols, name } = await searchParams
+  const seed = seedRows(symbols)
   if (!dbAvailable) return <NoDatabase title="New basket" />
   const [limits, session] = await Promise.all([
     attempt(getBasketLimits(), { label: 'basket thresholds', timeoutMs: QUERY_BUDGET_MS }),
@@ -36,10 +44,19 @@ export default async function NewBasketPage() {
     <div className="page">
       <PageHeader
         title="New basket"
-        lead="A name, a kind, capital, and the names with their weights. Saved as version 1; booked at the last session close by the next mark."
+        lead={
+          seed.length
+            ? `${seed.length} names, equal-weighted to start. Change any weight; the total must reach 100%.`
+            : 'A name, a kind, capital, and the names with their weights. Saved as version 1; booked at the last session close by the next mark.'
+        }
       />
       {builder ? (
-        <BasketBuilder limits={builder} session={session.ok ? session.value : null} />
+        <BasketBuilder
+          limits={builder}
+          session={session.ok ? session.value : null}
+          seed={seed.length ? seed : undefined}
+          seedName={name?.slice(0, 80)}
+        />
       ) : (
         <QueryFailed error={limits.ok ? 'thresholds unavailable' : limits.error} />
       )}

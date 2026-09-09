@@ -9,6 +9,7 @@ import { RsCell } from '@/components/countries/RsCell'
 import { formatPct, formatUsd } from '@/lib/format'
 import { THEME_WINDOWS, type ThemeDetail, type ThemeWindow } from '@/lib/themes'
 import { decileColour } from '@/lib/scores'
+import { BuildBasketLink, SEED_LIMIT } from '@/components/portfolios/BuildBasketLink'
 import { ThemeFundTable } from './ThemeFundTable'
 
 const WINDOW_LABEL: Record<ThemeWindow, string> = { '3m': '3 months', '6m': '6 months', '12m': '1 year' }
@@ -18,6 +19,9 @@ export function ThemeView({ detail, minMembers }: { detail: ThemeDetail; minMemb
   const median = row.median_composite == null ? null : Number(row.median_composite)
   const top = row.top_composite == null ? null : Number(row.top_composite)
   const showDecile = row.n_scored >= minMembers
+  // Rank order, and only what carries a rank: an unranked fund was never scored, so seeding one
+  // into a basket would propose buying something the board refused to grade.
+  const ranked = funds.filter((f) => f.rank != null).map((f) => f.symbol)
 
   return (
     <div className="page">
@@ -82,6 +86,13 @@ export function ThemeView({ detail, minMembers }: { detail: ThemeDetail; minMemb
 
       <Section
         title="Which fund to own"
+        aside={
+          <BuildBasketLink
+            symbols={ranked}
+            name={row.name}
+            label={`Build a basket from the top ${Math.min(ranked.length, SEED_LIMIT)}`}
+          />
+        }
         note={
           showDecile
             ? `ranked and decile-cut across the ${row.n_scored} scored members`

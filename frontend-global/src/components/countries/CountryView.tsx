@@ -17,6 +17,7 @@ import { formatUsd } from '@/lib/format'
 import { RS_WINDOWS, type CountryDetail, type RsWindow } from '@/lib/countries'
 import { decileColour } from '@/lib/scores'
 import type { InstrumentSeries } from '@/lib/queries/series'
+import { BuildBasketLink, SEED_LIMIT } from '@/components/portfolios/BuildBasketLink'
 import { CountryFundTable } from './CountryFundTable'
 import { RsCell } from './RsCell'
 
@@ -38,7 +39,8 @@ export function CountryView({ detail, series }: { detail: CountryDetail; series:
   const { row, funds, date } = detail
   const composite = num(row.composite)
   const breadth = num(row.breadth_pct)
-  const scored = funds.filter((f) => f.rank != null).length
+  const ranked = funds.filter((f) => f.rank != null).map((f) => f.symbol)
+  const scored = ranked.length
 
   return (
     <div className="page">
@@ -113,6 +115,13 @@ export function CountryView({ detail, series }: { detail: CountryDetail; series:
 
       <Section
         title="Every fund covering this market"
+        aside={
+          <BuildBasketLink
+            symbols={ranked}
+            name={row.name}
+            label={`Build a basket from the top ${Math.min(ranked.length, SEED_LIMIT)}`}
+          />
+        }
         note={
           scored > 0
             ? `ranked over the ${scored} that carry a score`
