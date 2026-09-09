@@ -6,12 +6,14 @@
 import { Section } from '@/components/ui/Section'
 import { SEC_KIND_LABEL, secIdentityKind } from '@/lib/facts'
 import { formatAsOf, formatIsoDate, formatPct } from '@/lib/format'
+import type { FundHoldings } from '@/lib/queries/holdings'
 import type { InstrumentDetail, SymbolAlias } from '@/lib/queries/instruments'
 import type { Classification, ScoreDetail } from '@/lib/queries/scores'
 import { BarsProvenance } from './BarsProvenance'
 import { ClassificationCard } from './ClassificationCard'
 import { EntityHeader } from './EntityHeader'
 import { FactList, type Fact } from './FactList'
+import { HoldingsSection } from './HoldingsSection'
 import { MembershipTimeline } from './MembershipTimeline'
 import { ScoreSection } from './ScoreSection'
 
@@ -63,10 +65,12 @@ export function InstrumentDetailView({
   d,
   score,
   classification,
+  holdings,
 }: {
   d: InstrumentDetail
   score: ScoreDetail | null
   classification: Classification | null
+  holdings: FundHoldings
 }) {
   const f = d.facts
   const stock = f.asset_class === 'stock'
@@ -128,7 +132,10 @@ export function InstrumentDetailView({
               <MembershipTimeline intervals={d.membership} />
             </Section>
           ) : (
-            <ClassificationCard c={classification} />
+            <>
+              <ClassificationCard c={classification} />
+              <HoldingsSection data={holdings} symbol={f.symbol} />
+            </>
           )}
         </div>
 
