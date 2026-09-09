@@ -54,6 +54,9 @@ BOARD_TABLES: list[tuple[str, str, int]] = [
     ("instrument_master", "updated_at", 8),  # weekly build_identity touches every listed row (P1-A)
     ("index_membership", "updated_at", 8),  # weekly SSGA pass touches every current row (P1-C)
     ("universe_snapshot", "date", 8),  # nightly once the FM sets the floor (P1-E)
+    # M2: every active basket is re-marked nightly; EMPTY (warn) until the first basket exists,
+    # and a basket built during the day is booked by the 5-minute worker, not this table's max.
+    ("basket_nav_daily", "date", 8),
 ]
 
 # ── PRODUCER REGISTRY (the build-time half of the freshness contract) ──
@@ -69,6 +72,7 @@ PRODUCERS: dict[str, str] = {
     "universe_snapshot": "build_universe_snapshot.py",
     "technical_daily": "compute_technicals.py",
     "country_daily": "build_country_views.py",
+    "basket_nav_daily": "mark_baskets.py",
 }
 
 

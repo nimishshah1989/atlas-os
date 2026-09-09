@@ -165,8 +165,8 @@ Every row on the page is a real row in `atlas_global`; nothing is computed in th
 |---|---|---|
 | Headline + tiles | `atlas_pipeline_runs`, `atlas_validator_results`, `atlas_health_daily` | the newest run row's status in words; scripts with a run; failures in the last 30 runs; validators passing; metrics flagged on the latest snapshot |
 | Latest run per script · Recent runs | `atlas_pipeline_runs` | one row per orchestrator **step** (`script_name` = the step name in the `.sh`; `publish` = the revalidate POST), `milestone` daily/weekly, `status` = the step's exit code (`success`/`failed`), started/ended, host, git sha — one row per step; re-runs update in place |
-| Validators | `atlas_validator_results` | one row per **gate** step: `freshness_guard`, `gate_A` (`validate_global --check A`). PASS/FAIL is the gate's exit code; any FAIL withholds publish. Pass rate is over the 30-day window |
-| Freshness | `atlas_health_daily` (`freshness_lag_sessions`) | one row per tracked table (`instrument_master`, `index_membership`, `macro_daily`, `ohlcv_daily`, `technical_daily`, `universe_snapshot`): lag in SPY sessions (0 = the table has the EOD), tolerance and tier from `freshness_guard.py`'s registries — **critical** withholds publish, **warn** only reports, "not guarded yet" = the producer chunk has not landed; `EMPTY` = no rows; a blank lag with "no SPY bar" = `ohlcv_daily` has no anchor bar yet |
+| Validators | `atlas_validator_results` | one row per **gate** step: `freshness_guard`, `gate_A` (`validate_global --check A`), `gate_baskets` (`validate_baskets.py`, §9). PASS/FAIL is the gate's exit code; any FAIL withholds publish. Pass rate is over the 30-day window |
+| Freshness | `atlas_health_daily` (`freshness_lag_sessions`) | one row per tracked table (`instrument_master`, `index_membership`, `macro_daily`, `ohlcv_daily`, `technical_daily`, `universe_snapshot`, `basket_nav_daily` — EMPTY, warn-only, until the first basket exists): lag in SPY sessions (0 = the table has the EOD), tolerance and tier from `freshness_guard.py`'s registries — **critical** withholds publish, **warn** only reports, "not guarded yet" = the producer chunk has not landed; `EMPTY` = no rows; a blank lag with "no SPY bar" = `ohlcv_daily` has no anchor bar yet |
 | Flagged metrics | `atlas_health_daily` (`is_anomaly`) | the subset above that breached its tolerance, plus any other flagged metric a later snapshot adds |
 | Provider calls | `provider_calls` | requests per (provider, endpoint) on the latest run date — every script adds its adapter's counter when it commits, so a re-run within the day accumulates. Compare against the plan limits in `phase1.md` §1 (Tiingo) and the SEC fair-access ceiling (10 req/s) |
 
@@ -219,3 +219,67 @@ Every row on the page is a real row in `atlas_global`; nothing is computed in th
    → `401`; with the real secret → `200` and `{"revalidated":true,"tag":"eod",…}`.
 6. Install the two cron lines (§6). Next morning: the log, `/health`, and — only if a gate
    failed — the Telegram push.
+
+## 9. Baskets (M2)
+
+A basket is built on the board (`/portfolios/new` → `basket_master` + `basket_constituents`, one
+transaction, nothing else written) and BOOKED by Python — never by the route: no Python is spawned
+from a Next.js handler. `scripts/global_market/mark_baskets.py` books the inception fills at the
+last SPY session's close (fractional shares to 6 dp, each name at its target weight of capital) and
+replays the NAV from inception through the EOD with `atlas.portfolio.engine.replay` as a pure marker
+(the marker's docstring explains the total-return mark and why it is a ratio of `close_tr`, not a
+level). `basket_job_worker.py` runs it every five minutes for baskets with no NAV row, so the page
+shows a first mark within minutes; the nightly runs it for every active basket (`step mark_baskets`,
+after `build_country_views`) and `validate_baskets.py` gates on what it wrote (checks A–G).
+
+**Thresholds** (category `basket`, section M2; seeded by `seed_thresholds.py` — FM approval first,
+`--dry-run` shows the rows): `basket_default_capital_usd` 100000 · `basket_max_position_pct` 0.25 ·
+`basket_cost_bps_buy` 0 · `basket_cost_bps_sell` 0 · `basket_min_weight_frac` 0.01. The builder, the
+marker and the gate all read them and none carries a fallback: a missing row is a refusal that names
+the key.
+
+**The board's role.** `/portfolios/new` INSERTs as `atlas_global_app`; §3's one-off grant already
+covers `basket_master`, `basket_constituents` (and `basket_trades`). Verify before the first save,
+and re-run the §3 line if either is false:
+
+```sql
+select has_table_privilege('atlas_global_app', 'atlas_global.basket_master', 'INSERT'),
+       has_table_privilege('atlas_global_app', 'atlas_global.basket_constituents', 'INSERT');
+-- if not:
+GRANT INSERT, UPDATE, DELETE ON atlas_global.basket_master, atlas_global.basket_constituents,
+  atlas_global.basket_trades TO atlas_global_app;
+```
+
+**Auth.** `src/lib/openAccess.ts` states the rule: the first surface that is not public market data —
+a saved basket is one — turns the sign-in back on, `ATLAS_GLOBAL_REQUIRE_AUTH=1` at BUILD time on the
+box (`.env.local`, then `atlas_global_deploy.sh`). With it off `created_by` is `''`.
+
+**Cron** (the worker's OWN lock, never the nightly's — holding `/tmp/atlas_global.lock` at 01:00 UTC
+would skip the night; meeting the nightly on one basket is safe, the booking transaction locks the
+row and re-checks). Silent when idle; the same line sits in `scripts/ops/crontab.txt`:
+
+```
+*/5 * * * *   flock -n /tmp/atlas_global_baskets.lock /home/ubuntu/atlas-os/.venv/bin/python /home/ubuntu/atlas-os/scripts/global_market/basket_job_worker.py >> /home/ubuntu/logs/basket_job_worker.log 2>&1
+```
+
+**First run, in order** (box, after the merge fast-forwards):
+
+```
+uv run python scripts/global_market/seed_thresholds.py --dry-run     # read the five basket_* rows
+uv run python scripts/global_market/seed_thresholds.py               # inserts only what is missing
+psql "$ATLAS_DB_URL" -c "select has_table_privilege('atlas_global_app','atlas_global.basket_master','INSERT')"   # true, else §3's GRANT
+cd frontend-global && npm ci && cd ..                                # lightweight-charts 5.2.1 is new
+bash scripts/ops/atlas_global_deploy.sh                              # build → BUILD_ID → reload once (rule #5)
+crontab -e                                                           # add the */5 worker line above
+# build a basket on /portfolios/new, then within five minutes:
+tail -n 20 /home/ubuntu/logs/basket_job_worker.log                   # one summary line per basket booked
+uv run python scripts/global_market/validate_baskets.py              # ALL CHECKS PASS
+uv run python scripts/global_market/mark_baskets.py --dry-run        # re-marks identically: idempotent
+```
+
+**Reading a refusal.** `REFUSED — <symbol>: no print within 5 sessions of <anchor>` (a halted or
+delisted name), `weights sum to …, not 1` / `weight … exceeds basket_max_position_pct` (a row inserted
+past the builder), `initial_capital is NULL`. The basket stays active and unmarked — its page says so
+— until the constituents are fixed; `validate_baskets` check G names the same faults nightly. Fix the
+data, never the assertion. A basket with trades other than its inception buys is refused too: marking a
+rebalanced book needs the versioning work (`current_version` > 1), which is not built.
