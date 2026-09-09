@@ -123,10 +123,13 @@ const listInner = eodCached(async (): Promise<ThemeList> => {
            count(m.instrument_id)                                  AS n_funds,
            count(m.composite)                                      AS n_scored,
            sum(m.aum_usd)::text                                    AS aum_usd,
+           -- ::numeric before ::text on every one of these: see the note in pulse.ts. A double
+           -- rendered as "5e-17" is what a percentile between two near-equal returns produces,
+           -- and the board's formatters refuse that string by design.
            percentile_cont(0.5) WITHIN GROUP (ORDER BY m.composite)::numeric(6,2)::text  AS median_composite,
-           percentile_cont(0.5) WITHIN GROUP (ORDER BY m.rs_3m_spy)::text                AS rs_3m,
-           percentile_cont(0.5) WITHIN GROUP (ORDER BY m.rs_6m_spy)::text                AS rs_6m,
-           percentile_cont(0.5) WITHIN GROUP (ORDER BY m.rs_12m_spy)::text               AS rs_12m,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY m.rs_3m_spy)::numeric::text                AS rs_3m,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY m.rs_6m_spy)::numeric::text                AS rs_6m,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY m.rs_12m_spy)::numeric::text               AS rs_12m,
            -- share of MEASURED members above their own 200-day EMA: count(x) is the measured
            -- denominator, so a theme whose members are too young for a 200-day line is null
            -- rather than 0% (rule #0).
