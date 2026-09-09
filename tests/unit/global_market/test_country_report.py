@@ -16,8 +16,11 @@ feed, a fixture or a number (rule #0): nothing here asserts on market data.
 
 from __future__ import annotations
 
+import datetime as dt
+from decimal import Decimal
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 from tests.unit.global_market.script_loader import load_global_script
@@ -39,12 +42,31 @@ def test_status_is_a_report_column() -> None:
 
 
 def test_report_line_width_matches_the_columns() -> None:
-    """``Report.add`` is positional, so a column added without a value is a runtime error.
+    """``Report.add`` is positional and raises when the row is not exactly as wide as the
+    header, so a column added on one side only is a runtime error on the box.
 
-    ``daily_rows`` builds one list per country; every one has the same literal shape, so the
-    contract is a width check against the header.
+    This calls the real ``daily_rows`` rather than asserting a count, which is what let the
+    header and the emitted line drift apart the moment P2-E added three columns. Every metric
+    below is NaN — a country whose funds have no data yet is a real state, and NaN is what the
+    query returns for it, so nothing here is an invented market number (rule #0).
     """
-    assert len(bcv.REPORT_COLUMNS) == 11
+    frame = pd.DataFrame(
+        {
+            "instrument_id": ["00000000-0000-0000-0000-000000000000"],
+            "symbol": ["EWJ"],
+            "name": ["iShares MSCI Japan ETF"],
+            "iso2": ["JP"],
+            "country_name": ["Japan"],
+            "region": ["asia_pacific"],
+            "eligible": [True],
+            "adv_usd_60d_median": [float("nan")],
+            "composite": [float("nan")],
+            **{c: [float("nan")] for c in bcv.RS_COLUMNS},
+        }
+    )
+    _rows, lines = bcv.daily_rows(frame, dt.date(2026, 9, 8), "run", Decimal("60"))
+    assert len(lines) == 1
+    assert len(lines[0]) == len(bcv.REPORT_COLUMNS)
 
 
 def test_report_argument_parses_to_a_path() -> None:
@@ -61,3 +83,32 @@ def test_no_report_is_none_not_an_empty_path() -> None:
 def test_the_two_status_words_are_distinct() -> None:
     """They key the printed counter; one value for both outcomes would hide the failures."""
     assert bcv.PICKED != bcv.NO_ELIGIBLE
+
+
+# ── P2-E: the country ranking ────────────────────────────────────────────────
+
+
+def test_breadth_counts_only_the_funds_that_carry_a_score() -> None:
+    """Geared, inverse and below-floor funds are excluded from ``in_universe`` and therefore
+    have no composite. Counting them in the denominator would make a market look weak in
+    proportion to how many leveraged products someone happened to launch on it."""
+    group = pd.DataFrame({"composite": [72.0, 55.0, float("nan"), float("nan")]})
+    n_scored, pct = bcv.breadth(group, Decimal("60"))
+    assert n_scored == 2, "the two unscored funds are not in the denominator"
+    assert pct == 50.0
+
+
+def test_a_market_with_nothing_scored_has_no_breadth_rather_than_zero() -> None:
+    """Zero reads as 'measured, and every fund failed'. None is the truth: not measured."""
+    n_scored, pct = bcv.breadth(pd.DataFrame({"composite": [float("nan")]}), Decimal("60"))
+    assert n_scored == 0
+    assert pct is None
+
+
+def test_the_cut_is_the_seeded_threshold_not_a_literal() -> None:
+    """Both funds sit either side of the value the caller passes, so moving the seeded
+    ``rollup_breadth_min`` moves the answer — which is the point of it being a table row."""
+    group = pd.DataFrame({"composite": [65.0, 55.0]})
+    assert bcv.breadth(group, Decimal("60"))[1] == 50.0
+    assert bcv.breadth(group, Decimal("50"))[1] == 100.0
+    assert bcv.breadth(group, Decimal("70"))[1] == 0.0
