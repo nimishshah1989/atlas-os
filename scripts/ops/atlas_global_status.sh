@@ -25,6 +25,7 @@ PM2_APP="${PM2_APP:-atlas-global}"
 HOST="${ATLAS_GLOBAL_HOST:-global.jslwealth.in}"
 LOG_DIR="${ATLAS_LOG_DIR:-/home/ubuntu/logs}"
 VERDICTS=()
+FAILED_ROUTES=()
 
 h()   { printf '\n== %s ==\n' "$*"; }
 kv()  { printf '  %-22s %s\n' "$1" "$2"; }
@@ -111,8 +112,20 @@ probe() {  # probe PATH → "CODE  SECONDS  [→ Location]"
   local out; out=$(curl -sS -o /dev/null -m 15 -w '%{http_code} %{time_total} %{redirect_url}' "http://127.0.0.1:$PORT$1" 2>/dev/null || echo "000 - -")
   printf '%s' "$out"
 }
+# THE LIST IS DERIVED, NOT TYPED. It used to be six paths written by hand, and on the day
+# /pulse shipped it 500ed in public while this script reported every verdict green — because
+# /pulse was not on the list. A status check that cannot see a page cannot tell you it is down.
+# So the routes come from the app directory itself: every `src/app/**/page.tsx` without a
+# dynamic `[segment]` (a segment needs a real id, which this script has no way to pick).
+routes() {
+  local dir="$APP/src/app"
+  [ -d "$dir" ] || { printf '/\n'; return; }
+  find "$dir" -name 'page.tsx' -not -path '*/\[*' -printf '%P\n' 2>/dev/null \
+    | sed -e 's#/\?page\.tsx$##' -e 's#^(.*)/##' -e 's#^#/#' -e 's#^/$#/#' \
+    | sed -e 's#^//#/#' | sort -u
+}
 if [ "$PORT" != "?" ]; then
-  for path in / /countries /etfs /stocks /login /health; do
+  for path in $(routes); do
     R=$(probe "$path"); CODE=${R%% *}; REST=${R#* }; T=${REST%% *}; LOC=${REST#* }
     kv "$path" "$CODE  ${T}s${LOC:+  → $LOC}"
     case "$path:$CODE" in
@@ -128,9 +141,19 @@ if [ "$PORT" != "?" ]; then
       /:000)      bad "/ did not answer in 15s on :$PORT — the process is not serving";;
       /health:000) bad "/health did not answer in 15s (database path or render stall)";;
       *:200|*:30[1278]) : ;;   # a page, or a redirect already shown on its line
-      *)          bad "$path answered $CODE on :$PORT — an error page, not the board";;
+      *)          bad "$path answered $CODE on :$PORT — an error page, not the board"; FAILED_ROUTES+=("$path");;
     esac
   done
+  # A 5xx is a thrown exception, and its stack is in pm2's error log and nowhere a reader of
+  # this output can otherwise reach. Print the tail once, not per route.
+  if [ "${#FAILED_ROUTES[@]}" -gt 0 ] && command -v pm2 >/dev/null 2>&1; then
+    h "why ${FAILED_ROUTES[*]} failed (pm2 error log, last 40 lines)"
+    ERR=$(pm2 jlist 2>/dev/null | python3 -c 'import json,sys
+try: print(next(p["pm2_env"]["pm_err_log_path"] for p in json.load(sys.stdin) if p.get("name")=="'"$PM2_APP"'"))
+except Exception: print("")' 2>/dev/null || echo "")
+    if [ -n "$ERR" ] && [ -f "$ERR" ]; then tail -n 40 "$ERR" | redact | sed 's/^/  /'
+    else kv "pm2 error log" "not found"; fi
+  fi
 else
   kv "routes" "skipped — no port known"
 fi

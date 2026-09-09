@@ -85,7 +85,7 @@ const etfListInner = eodCached(async (): Promise<ListRow[]> => {
     SELECT
       m.symbol, m.name, m.asset_class, m.sector_gics,
       u.in_universe, u.exclusion_reason AS universe_exclusion,
-      c.strategy, c.asset_class AS class_asset_class,
+      c.strategy, c.asset_class AS class_asset_class, tx.name AS theme,
       c.leveraged, c.inverse, c.hedged, c.status AS class_status,
       co.name AS country, co.region,
       r.composite::text        AS composite,
@@ -109,13 +109,17 @@ const etfListInner = eodCached(async (): Promise<ListRow[]> => {
     LEFT JOIN atlas_global.technical_daily   t ON t.instrument_id = m.instrument_id AND t.date = a.as_of_d
     LEFT JOIN ranked r ON r.instrument_id = m.instrument_id
     LEFT JOIN LATERAL (
-      SELECT ec.strategy, ec.asset_class, ec.leveraged, ec.inverse, ec.hedged, ec.status, ec.country_codes
+      SELECT ec.strategy, ec.asset_class, ec.leveraged, ec.inverse, ec.hedged, ec.status,
+             ec.country_codes, ec.theme_ids
       FROM atlas_global.etf_classification ec
       WHERE ec.instrument_id = m.instrument_id
       ORDER BY (ec.valid_to IS NOT NULL), ec.version DESC
       LIMIT 1
     ) c ON true
     LEFT JOIN atlas_global.country co ON co.iso2::text = c.country_codes[1]
+    -- The theme the rule table settled FIRST — its primary bet. A fund can carry up to three and
+    -- /themes shows it under each; this column is the one word the explorer filters on.
+    LEFT JOIN atlas_global.taxonomy_sector tx ON tx.id = c.theme_ids[1]
     WHERE m.is_active AND m.asset_class = 'etf'
     ORDER BY m.symbol
   `
@@ -152,7 +156,7 @@ const stockListInner = eodCached(async (): Promise<ListRow[]> => {
     SELECT
       m.symbol, m.name, m.asset_class, m.sector_gics,
       u.in_universe, u.exclusion_reason AS universe_exclusion,
-      NULL::text AS strategy, NULL::text AS class_asset_class,
+      NULL::text AS strategy, NULL::text AS class_asset_class, NULL::text AS theme,
       NULL::boolean AS leveraged, NULL::boolean AS inverse, NULL::boolean AS hedged,
       NULL::text AS class_status, NULL::text AS country, NULL::text AS region,
       r.composite::text        AS composite,
@@ -230,6 +234,10 @@ export type Classification = {
   classified_by: string
   valid_from: string
   evidence: unknown
+  /** The taxonomy id of the fund's primary theme — what /themes/[id] is keyed on. */
+  theme_id: string | null
+  /** That theme's display name. Null on a fund whose name names no theme, which is most of them. */
+  theme: string | null
 }
 
 type ScoreRow = Record<string, unknown>
@@ -336,9 +344,13 @@ export async function getScoreDetail(assetClass: AssetClass, symbol: string): Pr
 const classificationInner = eodCached(async (symbol: string): Promise<Classification | null> => {
   const rows = await db()<Classification[]>`
     SELECT c.strategy, c.asset_class, c.country_codes, c.leveraged, c.inverse, c.hedged,
-           c.status, c.classified_by, c.valid_from::text AS valid_from, c.evidence
+           c.status, c.classified_by, c.valid_from::text AS valid_from, c.evidence,
+           -- the theme the rule table settled first, with the id the /themes page is keyed on, so
+           -- the card can say "this is a uranium fund" AND take the reader to the other uranium funds
+           c.theme_ids[1] AS theme_id, tx.name AS theme
     FROM atlas_global.etf_classification c
     JOIN atlas_global.instrument_master m ON m.instrument_id = c.instrument_id
+    LEFT JOIN atlas_global.taxonomy_sector tx ON tx.id = c.theme_ids[1]
     WHERE m.is_active AND m.asset_class = 'etf' AND m.symbol = ${symbol}
     ORDER BY (c.valid_to IS NOT NULL), c.version DESC
     LIMIT 1

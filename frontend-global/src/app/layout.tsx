@@ -1,8 +1,14 @@
 // src/app/layout.tsx — the shell: one serif, one light theme, the navy top bar over the page.
 // The desk tool's language (globals.css): no font loading, no theme script, nothing before paint.
 import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
 import './globals.css'
 import { TopBar } from '@/components/shell/TopBar'
+
+// Atlas India's face, for the same reason it uses it: Inter's tabular figures line a return
+// matrix up column by column, and the FM reads the two boards side by side. `display: 'swap'`
+// so a slow font never holds the first paint of a page whose whole job is numbers.
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' })
 
 export const metadata: Metadata = {
   title: { default: 'Global Atlas', template: '%s — Global Atlas' },
@@ -27,8 +33,8 @@ export const dynamic = 'force-dynamic'
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className="bg-ground font-serif text-ink">
+    <html lang="en" className={inter.variable}>
+      <body className="bg-ground font-sans text-ink">
         <a href="#main" className="skip-link text-body">
           Skip to content
         </a>

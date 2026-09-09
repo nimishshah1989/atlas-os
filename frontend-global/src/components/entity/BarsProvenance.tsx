@@ -8,8 +8,8 @@ import { FactList } from './FactList'
 export function BarsProvenance({ bars, symbol }: { bars: BarsRow[]; symbol: string }) {
   if (bars.length === 0) {
     return (
-      <p className="max-w-[64ch] text-body text-ink-2" data-testid="no-bars">
-        No bars yet: ohlcv_daily has no row for {symbol}. They arrive with the price spine.
+      <p className="text-body text-ink-2" data-testid="no-bars" title="Bars arrive with the price spine.">
+        No row in ohlcv_daily for {symbol} yet.
       </p>
     )
   }

@@ -1,8 +1,9 @@
 // src/components/entity/InstrumentDetailView.tsx — one instrument, two columns (7/5). The score
-// leads, because it is what the reader came for and what the board's ranking is asserting: the
-// composite, where it puts the instrument in its peer group, and the derivation down to the
-// sub-scores. Then identity on the left (facts, SEC ids, vendor spellings, index membership for a
-// stock) and, on the right, what ohlcv_daily actually holds. No series, no placeholder numbers.
+// leads, because it is what the reader came for and what the board's ranking is asserting: Atlas's
+// DecileLadder, composite and decile in its header tiles and one collapsible row per lens down to
+// the sub-scores. Then identity on the left (facts, SEC ids, vendor spellings, index membership
+// for a stock) and, on the right, what ohlcv_daily actually holds. No series, no placeholder
+// numbers, and every fact's source said ONCE rather than on every row.
 import { Section } from '@/components/ui/Section'
 import { SEC_KIND_LABEL, secIdentityKind } from '@/lib/facts'
 import { formatAsOf, formatIsoDate, formatPct } from '@/lib/format'
@@ -76,9 +77,12 @@ export function InstrumentDetailView({
   const anchor = d.eod ? `EOD ${formatIsoDate(d.eod)}` : `${formatIsoDate(d.as_of)} (no price session yet)`
   const exchange = f.exchange ?? 'exchange not recorded'
 
+  // `identitySource` used to sit on EVERY row of both lists — the same 45 characters, five times
+  // down one column. It is a fact and it stays, but it is said ONCE: on the identity line here and
+  // in the Identity section's note below. A row keeps a source only where its source DIFFERS.
   const facts: Fact[] = [
-    { label: 'Listed', value: f.listing_date ? formatIsoDate(f.listing_date) : 'not recorded', source: identitySource },
-    { label: 'Exchange', value: exchange, source: identitySource },
+    { label: 'Listed', value: f.listing_date ? formatIsoDate(f.listing_date) : 'not recorded' },
+    { label: 'Exchange', value: exchange },
   ]
   if (stock) {
     facts.push({ label: 'S&P 500', value: f.sp500 ? 'Member' : 'Not a member', source: `index_membership at ${anchor}` })
@@ -95,11 +99,11 @@ export function InstrumentDetailView({
   const kind = secIdentityKind(f)
   const secFacts: Fact[] = [
     { label: 'SEC identity', value: SEC_KIND_LABEL[kind], source: 'derived from the ids below' },
-    { label: 'CIK', value: f.cik ?? 'none', source: identitySource },
+    { label: 'CIK', value: f.cik ?? 'none' },
   ]
   if (kind === 'series_class') {
-    secFacts.push({ label: 'Series', value: f.series_id ?? 'none', source: identitySource })
-    secFacts.push({ label: 'Class', value: f.class_id ?? 'none', source: identitySource })
+    secFacts.push({ label: 'Series', value: f.series_id ?? 'none' })
+    secFacts.push({ label: 'Class', value: f.class_id ?? 'none' })
   }
 
   return (
@@ -107,10 +111,10 @@ export function InstrumentDetailView({
       <EntityHeader
         name={f.name ?? f.symbol}
         line={
-          <>
+          <span title={identitySource}>
             <span className="font-medium text-ink">{f.symbol}</span> on {exchange}, {stock ? 'a stock' : 'an ETF'}
             {f.listing_date && ` listed ${formatIsoDate(f.listing_date)}`}
-          </>
+          </span>
         }
         facts={facts}
       />
@@ -123,7 +127,7 @@ export function InstrumentDetailView({
 
       <div className="detail">
         <div>
-          <Section title="Identity" note="as the SEC and the vendors spell it">
+          <Section title="Identity" note={identitySource}>
             <FactList facts={secFacts} />
             <div className="mt-4">
               <AliasTable aliases={d.aliases} />

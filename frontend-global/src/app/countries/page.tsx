@@ -1,5 +1,6 @@
-// src/app/countries/page.tsx — the country product's front door.
-// One tradeable fund per market, and how that market has done against the S&P.
+// src/app/countries/page.tsx — the country product's front door: one tradeable fund per market,
+// scored, ranked, and clickable through to the market's own page.
+import Link from 'next/link'
 import { CountryGrid } from '@/components/countries/CountryGrid'
 import { EodStamp } from '@/components/ui/EodStamp'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -17,7 +18,7 @@ export default async function CountriesPage() {
     <div className="page">
       <PageHeader
         title="Countries"
-        lead="One fund per market — the most-traded plain ETF that gives you exposure to it — ranked by its score, with what that market has done against the S&P 500."
+        lead="The most-traded plain fund covering each market, ranked by its score. Click a market."
         aside={
           list.ok && list.value.date ? (
             // The grid is anchored on ONE session, so eod and as-of are the same date: there is
@@ -27,16 +28,10 @@ export default async function CountriesPage() {
         }
       />
       {list.ok ? <CountryGrid list={list.value} /> : <QueryFailed error={list.error} />}
-      <p className="mt-4 max-w-[80ch] text-meta text-ink-3">
-        Every figure is relative to the S&P 500 in the form (1+r)/(1+r<sub>SPY</sub>) − 1, so
-        +8.0% means the market beat the index by eight percent over that window, not that it rose
-        eight percent. Membership comes from the fund&rsquo;s own name; the fund shown is the
-        most-traded one that is not geared, inverse or currency-hedged, on its 60-session median
-        dollar volume. The score is that fund&rsquo;s own composite, and the rank and decile are cut
-        across every market carrying one on this session. Breadth is the share of a market&rsquo;s
-        SCORED funds at or above the breadth cut, so it separates one strong fund from a market
-        that is working. Geared, inverse and below-floor funds are never scored, so they are
-        counted in Funds but never in Breadth.
+      <p className="mt-4 max-w-(--measure) text-meta text-ink-3">
+        Relative strength is (1+r)/(1+r<sub>SPY</sub>) − 1: +8.0% means the market beat the index by
+        eight percent over that window, not that it rose eight. Geared, inverse and below-floor
+        funds are counted in Funds but never scored. <Link href="/methodology">How this is built</Link>.
       </p>
     </div>
   )

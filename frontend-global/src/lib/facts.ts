@@ -26,6 +26,11 @@ export type InstrumentDbRow = {
   universe_exclusion: string | null
   // ── etf_classification, current row (null on stocks, and on a fund classify_etfs has not read)
   strategy: string | null
+  /** What the fund is a BET ON, as `atlas/global_market/classify/themes.py` settled it: the
+   *  display name of the first theme in `etf_classification.theme_ids`, which is the first rule
+   *  in that ordered table to read the fund's name. Null on stocks, and on a fund whose name
+   *  names no theme — most broad-market funds are a bet on nothing narrower than the market. */
+  theme: string | null
   class_asset_class: string | null
   leveraged: boolean | null
   inverse: boolean | null

@@ -26,10 +26,12 @@ export function PulseView({ pulse }: { pulse: Pulse }) {
 
   if (breadth.length === 0) {
     return (
-      <p className="panel px-4 py-3 text-body text-ink-2">
-        Breadth needs both a universe snapshot and the nightly technicals for the same session.
-        One of them has not run for {pulse.eod ? formatIsoDate(pulse.eod) : 'this session'}, so
-        nothing is counted here rather than a count over the wrong population.
+      <p
+        className="panel px-4 py-3 text-body text-ink-2"
+        title="Counting one without the other would count over the wrong population, so nothing is counted."
+      >
+        Breadth needs the universe snapshot and the nightly technicals for the same session; one of
+        them has not run for {pulse.eod ? formatIsoDate(pulse.eod) : 'this session'}.
       </p>
     )
   }
@@ -84,9 +86,11 @@ export function PulseView({ pulse }: { pulse: Pulse }) {
               <BreadthBar label="At a 52-week high" count={b.near_high} measured={b.measured_52w} note="Within 2 percent of the top of its own 52-week range." />
               <BreadthBar label="At a 52-week low" count={b.near_low} measured={b.measured_52w} note="Within 2 percent of the bottom of its own 52-week range." />
             </div>
-            <p className="mt-1 text-meta text-ink-3">
-              Middle member’s 3-month total return: <Pct value={b.median_ret_3m} />. The median, not
-              the average — one runaway does not move it.
+            <p
+              className="mt-1 text-meta text-ink-3"
+              title="The median, not the average — one runaway does not move it."
+            >
+              Median member, 3-month total return: <Pct value={b.median_ret_3m} />
             </p>
           </Section>
         )

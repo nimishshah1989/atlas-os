@@ -28,6 +28,7 @@ export const RANGES = [
   { key: '1y', label: '1Y', sessions: 252 },
   { key: '3y', label: '3Y', sessions: 756 },
   { key: '5y', label: '5Y', sessions: 1260 },
+  { key: '10y', label: '10Y', sessions: 2520 },
   { key: 'max', label: 'Max', sessions: Number.POSITIVE_INFINITY },
 ] as const
 

@@ -99,7 +99,13 @@ const BREADTH_COLUMNS = `
   count(*) FILTER (WHERE t.rs_3m_spy > 0)                           AS beating_3m,
   count(t.rs_12m_spy)                                               AS measured_rs_12m,
   count(*) FILTER (WHERE t.rs_12m_spy > 0)                          AS beating_12m,
-  percentile_cont(0.5) WITHIN GROUP (ORDER BY t.ret_3m)::text       AS median_ret_3m`
+  -- ::numeric BEFORE ::text, ALWAYS. percentile_cont returns DOUBLE PRECISION, and postgres
+  -- renders a double in scientific notation whenever the magnitude is small enough —
+  -- "-1.4210854715202004e-14" is what interpolating between two neighbouring returns produces
+  -- when they nearly cancel. The board's formatters refuse a string like that on purpose (a
+  -- NUMERIC must never pass through a double, src/lib/format.ts), so the page threw and /pulse
+  -- answered 500 in public for as long as it existed. numeric always renders plain decimal.
+  percentile_cont(0.5) WITHIN GROUP (ORDER BY t.ret_3m)::numeric::text AS median_ret_3m`
 
 const inner = eodCached(async (): Promise<Pulse> => {
   const sql = db()
@@ -149,7 +155,7 @@ const inner = eodCached(async (): Promise<Pulse> => {
            count(*) FILTER (WHERE t.above_ema_200)                     AS above_ema200,
            count(t.rs_3m_spy)                                          AS measured_rs_3m,
            count(*) FILTER (WHERE t.rs_3m_spy > 0)                     AS beating_3m,
-           percentile_cont(0.5) WITHIN GROUP (ORDER BY t.ret_3m)::text AS median_ret_3m,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY t.ret_3m)::numeric::text AS median_ret_3m,
            avg(scored.composite)::text                                 AS mean_composite
     FROM u
     JOIN atlas_global.technical_daily t

@@ -9,6 +9,11 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Manually, on any branch. GitHub does not raise a `pull_request` event for every way a branch
+  # can change — a pull request opened by an app token is one — and a branch that has been pushed
+  # eight times with no CI run is a branch nobody can merge with confidence. This is the way to
+  # ask for the same four jobs on demand; it runs exactly what a pull request runs.
+  workflow_dispatch:
 
 # A new push to a PR cancels the previous in-flight run for that ref.
 concurrency:

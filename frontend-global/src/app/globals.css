@@ -1,11 +1,15 @@
-/* src/app/globals.css — Global Atlas design tokens (docs/global/frontend-design.md §2).
-   One theme, light only. The language is the Jhaveri Rebalance desk tool's: its stylesheet's live
-   `html.rb` token set and component rules are copied here verbatim — cream paper, navy ink, one
-   serif for display and body, gold for focus and the active tab, muted RAG for signal. No colour
-   exists outside this token set: Tailwind's stock palette, font families, text sizes, radii and
-   shadows are cleared so only the named tokens produce utilities. The token NAMES the components
-   reference (--color-ground … --color-warn, --font-sans / --font-serif, --text-meta … --text-composite,
-   --radius-panel, --decile-1..10) are kept; their VALUES are the desk's. */
+/* src/app/globals.css — Global Atlas design tokens.
+   THE LANGUAGE IS ATLAS INDIA'S (frontend/src/app/globals.css, the "Daylight Desk" v4 set):
+   a cool slate canvas, white glass panels, Inter for display and figures, and the calibrated
+   D1→D10 perceptual ramp. Values are copied from that stylesheet so a decile, a positive number
+   and a panel edge mean the same thing on both boards — the FM reads them side by side.
+
+   TWO NAMING SYSTEMS, ONE PALETTE. Atlas's own names (--color-surface-*, --color-txt-*,
+   --color-edge-*, --color-sig-*, --radius-tile, --shadow-panel) are declared here so components
+   PORTED from Atlas compile unchanged; this board's original names (--color-ground, --color-ink,
+   --color-hair, --color-panel …) are kept as aliases onto the same values so nothing already
+   written had to be rewritten to change how the board looks. Neither set is decorative: adding a
+   colour outside them is how two boards stop matching. */
 @import "tailwindcss";
 
 @theme {
@@ -15,74 +19,87 @@
   --radius-*: initial;
   --shadow-*: initial;
 
-  /* surfaces */
-  --color-ground: #f4f0e5;        /* cream paper: the page, cards, chips, controls */
-  --color-panel: #ffffff94;       /* translucent white on cream: tables, tiles, notices */
-  --color-panel-solid: #fbf9f4;   /* what panel composites to on ground: sticky heads and columns */
-  --color-raised: #fbf9f4;        /* table heads and group rows (= panel-solid) */
-  --color-inset: #25394a17;       /* meter tracks, code, wells (= accent-soft) */
+  /* ── Atlas v4 surfaces (Daylight Desk) ── */
+  --color-surface-base:   #edf1f6;   /* cool light canvas */
+  --color-surface-panel:  #ffffff;   /* raised white glass panel */
+  --color-surface-raised: #f6f8fb;   /* further raised: stat tiles, table heads */
+  --color-surface-inset:  #e4e9f0;   /* recessed: meter tracks, wells */
+  --color-edge-hair:      #0c142114; /* ~8% cool ink — hairline */
+  --color-edge-rule:      #0c142124; /* ~14% — table rules */
+  --color-edge-strong:    #0c142138; /* ~22% — emphasis dividers */
+  --color-txt-1:          #131922;   /* near-black cool slate */
+  --color-txt-2:          #4b5666;
+  --color-txt-3:          #8a94a4;
+  --color-sig-pos:        #2d8561;   /* RAG green — muted emerald */
+  --color-sig-neg:        #b84d45;   /* RAG red — muted brick */
+  --color-sig-warn:       #a07a2b;   /* RAG amber — muted gold */
+  --color-sig-pos-soft:   #2d856114;
+  --color-sig-neg-soft:   #b84d4514;
+  --color-brand:          #25394a;
 
-  /* lines — the desk has one hairline; a 2 px rule, not a darker one, carries emphasis */
-  --color-line: #25394a29;
-  --color-hair: #25394a29;
-  --color-rule: #25394a29;
-
-  /* ink — the desk's muted and grey are one value, so ink-2 and ink-3 are too */
-  --color-ink: #25394a;
-  --color-ink-2: #5e6b75;
-  --color-ink-3: #5e6b75;
-  --color-muted: #5e6b75;
-
-  /* accent — the navy is the ink itself; links are ink and underline on hover */
+  /* ── this board's original names, aliased onto the same values ── */
+  --color-ground: #edf1f6;
+  --color-panel: #ffffff;
+  --color-panel-solid: #ffffff;
+  --color-raised: #f6f8fb;
+  --color-inset: #e4e9f0;
+  --color-line: #0c142124;
+  --color-hair: #0c142114;
+  --color-rule: #0c142124;
+  --color-ink: #131922;
+  --color-ink-2: #4b5666;
+  --color-ink-3: #8a94a4;
+  --color-muted: #4b5666;
   --color-accent: #25394a;
-  --color-accent-soft: #25394a17;
-  --color-navy-deep: #16294d;     /* the top bar */
-
-  /* the bar's whites: text, dimmed text, the stamp, hover; -18 (the search box border) is ours */
+  --color-accent-soft: #25394a14;
+  --color-navy-deep: #16213a;     /* the top bar */
   --color-white: #ffffff;
   --color-white-72: #ffffffb8;
   --color-white-60: #fff9;
   --color-white-18: #ffffff2e;
   --color-white-6: #ffffff0f;
+  --color-pos: #2d8561;   --color-pos-soft: #2d856114;
+  --color-neg: #b84d45;   --color-neg-soft: #b84d4514;
+  --color-warn: #a07a2b;  --color-amber: #a07a2b;  --color-amber-soft: #a07a2b14;
+  --color-gold: #a07a2b;  --color-gold-soft: #a07a2b14;
+  --color-tint-info: #eef2f8;
+  --color-tint-pos: #2d856110;
+  --color-tint-neg: #b84d4510;
+  --color-tint-warn: #a07a2b10;
 
-  /* signal */
-  --color-pos: #2c6b41;   --color-pos-soft: #e3ede5;
-  --color-neg: #ab4425;   --color-neg-soft: #f3e1d9;
-  --color-warn: #8a5d10;  --color-amber: #8a5d10;  --color-amber-soft: #f5ebd0;
-  --color-gold: #a17c2b;  --color-gold-soft: #f5ebd0;
+  /* ── type: Atlas's Inter for everything, tabular figures throughout ── */
+  --font-display: var(--font-inter, system-ui, sans-serif);
+  --font-num:     var(--font-inter, system-ui, sans-serif);
+  --font-sans:    var(--font-inter, system-ui, sans-serif);
+  --font-serif:   var(--font-inter, system-ui, sans-serif);
 
-  /* tints */
-  --color-tint-info: #f1f5fc;
-  --color-tint-pos: #f0f7f2;
-  --color-tint-neg: #fdf1ed;
-  --color-tint-warn: #fdf7e8;
+  /* ── scale ── */
+  --text-meta: 0.72rem;       --text-meta--line-height: 1.35;
+  --text-table: 0.8rem;       --text-table--line-height: 1.4;
+  --text-body: 13.5px;        --text-body--line-height: 1.5;
+  --text-lead: 0.88rem;       --text-lead--line-height: 1.5;
+  --text-h2: 0.95rem;         --text-h2--line-height: 1.3;
+  --text-section: 1.15rem;    --text-section--line-height: 1.25;
+  --text-title: 1.4rem;       --text-title--line-height: 1.2;
+  --text-composite: 2rem;     --text-composite--line-height: 1;
 
-  /* type — display and body are the one serif; both names resolve to it so every utility keeps working */
-  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
-  --font-sans: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
-
-  /* scale — the desk's xs .78 · sm .86 · md .95 · lg 1.05 · xl 1.45 · hero 2 rem; body 14.5 px / 1.5 */
-  --text-meta: 0.78rem;       --text-meta--line-height: 1.35;
-  --text-table: 0.86rem;      --text-table--line-height: 1.4;
-  --text-body: 14.5px;        --text-body--line-height: 1.5;
-  --text-lead: 0.95rem;       --text-lead--line-height: 1.5;
-  --text-h2: 1.05rem;         --text-h2--line-height: 1.3;
-  --text-section: 1.28rem;    --text-section--line-height: 1.25;   /* a card's value; the status headline */
-  --text-title: 1.3rem;       --text-title--line-height: 1.25;     /* h1 */
-  --text-composite: 2rem;     --text-composite--line-height: 1;    /* hero: the composite numeral */
-
-  --radius-panel: 6px;
-  --radius-lg: 10px;
-  --shadow-lift: 0 1px 2px #16212b0d, 0 4px 14px #16212b0d;
+  /* ── Atlas's softer corners and layered glass ── */
+  --radius-panel: 12px;
+  --radius-tile:  9px;
+  --radius-lg:    12px;
+  --shadow-panel: 0 1px 2px 0 #1018280a, 0 12px 28px -14px #10182824;
+  --shadow-tile:  0 1px 2px 0 #10182810;
+  --shadow-lift:  0 1px 2px 0 #10182810;
 }
 
 :root {
   color-scheme: light only;
   /* prose measure */
   --measure: 66ch;
-  /* decile ramp — neg #ab4425 → amber #b8860b → pos #2c6b41 at equal OKLab arc length; 1 = worst */
-  --decile-1:  #ab4425; --decile-2:  #af5622; --decile-3:  #b3671e; --decile-4:  #b67816; --decile-5:  #b58510;
-  --decile-6:  #9d8125; --decile-7:  #847c30; --decile-8:  #6a7738; --decile-9:  #4e713d; --decile-10: #2c6b41;
+  /* Atlas v4's calibrated D1→D10 perceptual ramp (coral → amber → mint), copied verbatim so a
+     decile's colour means the same thing on both boards. 1 = worst. */
+  --decile-1:  #af635d; --decile-2:  #ad6f58; --decile-3:  #a77c4f; --decile-4:  #9e834a; --decile-5:  #91884e;
+  --decile-6:  #818b55; --decile-7:  #6d8b60; --decile-8:  #5b8b6b; --decile-9:  #4f8c70; --decile-10: #4c8b70;
 }
 
 @layer base {
@@ -164,8 +181,12 @@
   .who .dot-warn { background: color-mix(in srgb, var(--color-amber) 55%, var(--color-white)); }
   .who .dot-grey { background: var(--color-white-60); }
 
-  .main { max-width: 1440px; margin: 0 auto; padding: 0 24px 60px; }
-  .page { max-width: 1120px; padding-top: 24px; }
+  /* THE PAGE IS NOT CAPPED. It was: `.page { max-width: 1120px }` inside a 1440 px `.main`,
+     left-aligned, so a wide screen carried 300 px of dead margin down its right-hand side — the
+     "led spaces on the screen" the FM saw. A twelve-column return matrix wants the width; prose
+     does not, so the measure is capped where prose is written (`.lead`, `.note`) instead. */
+  .main { max-width: 1720px; margin: 0 auto; padding: 0 24px 60px; }
+  .page { padding-top: 24px; }
 
   /* ── surfaces: one hairline, one radius ──────────────────────────────────────────────── */
   .panel { background: var(--color-panel); border: 1px solid var(--color-line); border-radius: var(--radius-panel); }
@@ -304,11 +325,15 @@
   .facet-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .facet-n { color: var(--color-muted); font-size: 11px; }
 
-  /* fills the viewport below the page header; DataTable refits it exactly after hydration */
-  .dt { overflow: auto; overscroll-behavior: contain; height: calc(100vh - 372px); min-height: 320px; }
+  /* SIDEWAYS ONLY. The page scrolls as one document (DataTable windows over the viewport), so
+     this box never owns a vertical scrollport — a wide matrix scrolls under the cursor and
+     nothing else does. `overflow-y: visible` is deliberate: pairing it with `overflow-x: auto`
+     is the one combination CSS resolves back to `auto`, which is why the header is not sticky. */
+  .dt { overflow-x: auto; overflow-y: visible; }
   .dt-table { table-layout: fixed; width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13.5px; line-height: 1.4; }
-  /* the head stays put; 36 px tall, the sort button fills it */
-  .dt-table th { position: sticky; top: 0; z-index: 1; height: 36px; padding: 0 12px; }
+  /* 36 px tall, the sort button fills it. NOT sticky: the page owns the scroll now, and a head
+     stuck to a box that no longer scrolls would sit in the middle of the screen. */
+  .dt-table th { height: 36px; padding: 0 12px; }
   .dt-table th.r, .dt-table td.r { text-align: right; }
   .dt-sort {
     display: inline-flex; align-items: center; gap: 4px; max-width: 100%; height: 36px;

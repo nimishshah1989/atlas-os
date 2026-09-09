@@ -11,6 +11,7 @@
 import { Chip } from '@/components/ui/Chip'
 import { Section } from '@/components/ui/Section'
 import { formatIsoDate } from '@/lib/format'
+import Link from 'next/link'
 import type { Classification } from '@/lib/queries/scores'
 import { peerGroupLabel } from '@/lib/scores'
 import { FactList, type Fact } from './FactList'
@@ -45,6 +46,21 @@ export function ClassificationCard({ c }: { c: Classification | null }) {
       label: 'Peer group',
       value: <Chip>{peerGroupLabel(c.strategy ? `${c.asset_class ?? 'unclassified'}:${c.strategy}` : null)}</Chip>,
       source: 'asset class × strategy',
+    },
+    {
+      // What the fund is a BET ON, beside what KIND of fund it is. The peer group above answers
+      // "what shelf does this sit on"; this answers "what is it about", and the link takes the
+      // reader to every other fund making the same bet, ranked against this one.
+      label: 'Theme',
+      value: c.theme ? (
+        <Link href={`/themes/${c.theme_id}`}>
+          <Chip>{c.theme}</Chip>
+        </Link>
+      ) : (
+        // Not a gap: a broad-market fund is a bet on nothing narrower than the market.
+        <span className="text-ink-3">no theme in the name</span>
+      ),
+      source: 'atlas/global_market/classify/themes.py, first matching rule',
     },
     {
       label: 'Rule that fired',

@@ -26,6 +26,7 @@ from pathlib import Path
 import pytest
 
 from atlas.global_market.classify.strategy import STRATEGIES
+from atlas.global_market.classify.themes import THEMES
 from tests.unit.global_market.script_loader import load_global_script
 
 pytestmark = pytest.mark.unit
@@ -138,18 +139,61 @@ def test_a_name_that_states_no_country_gets_an_empty_list_not_null() -> None:
     assert region["country_codes"] == [], "a region fund names no single country"
 
 
-def test_the_only_field_that_defaults_is_the_one_the_schema_will_not_let_be_null() -> None:
+def test_the_only_fields_that_default_are_the_ones_the_schema_will_not_let_be_null() -> None:
     """``classify_one`` promises "a field the name does not determine is None". That promise is
-    what keeps a guessed classification out of the database, so the ONE exception to it is
-    pinned here: if a second field starts defaulting, this test names it."""
+    what keeps a guessed classification out of the database, so the TWO exceptions to it are
+    pinned here: if a third field starts defaulting, this test names it.
+
+    Both exceptions are the same fact about the schema, not a judgement — ``country_codes`` and
+    ``theme_ids`` are ``text[] NOT NULL DEFAULT '{}'``, so a None is a constraint violation and
+    an empty set is what "none of these" means for a set-valued column anyway."""
     v = ce.classify_one("Amplius Aggressive Asset Allocation ETF", set())
     defaulted = [
         k for k, value in v.items() if value is not None and value in ([], {}, "") and k != "rule"
     ]
-    assert defaulted == ["country_codes"], (
+    assert defaulted == ["theme_ids", "country_codes"], (
         f"unexpected empty-but-not-None field(s): {defaulted} — a field the name does not "
         "determine must be None, so the board shows 'unknown' rather than a made-up answer"
     )
+
+
+def test_a_fund_with_no_theme_is_not_a_fund_needing_review() -> None:
+    """The theme layer must not widen the review queue. Most of the market has no theme — a
+    Treasury ladder is not an unclassified theme — so an empty ``theme_ids`` leaves ``status``
+    exactly where the strategy put it. If this ever flips, 5,231 funds join the work queue
+    overnight and the queue stops meaning anything."""
+    v = ce.classify_one("iShares 20+ Year Treasury Bond ETF", set())
+    assert v["theme_ids"] == []
+    assert v["status"] == ce.STATUS_AUTO
+    assert v["theme_rule"] == "no_theme_pattern", "the rule that ran is still recorded"
+
+
+def test_a_theme_is_written_with_the_rule_and_the_words_that_produced_it() -> None:
+    """Same audit contract as the strategy verdict: a label with no rule beside it cannot be
+    reviewed in /admin/classify, and a theme nobody can check is a theme nobody should trust."""
+    v = ce.classify_one("VanEck Gold Miners ETF", set())
+    assert v["theme_ids"] == ["gold_silver_miners"]
+    assert v["theme_rule"] == "precious_metal_miners"
+    assert v["theme_text"] == "Gold Miners"
+
+
+def test_the_rules_layer_writes_at_most_one_theme() -> None:
+    """The column takes three; an ordered first-match table has one answer by construction. A
+    second id here would have to be guessed, and the LLM layer is where that belongs."""
+    for name in (
+        "Global X Uranium ETF",
+        "First Trust NASDAQ Clean Edge Smart Grid Infrastructure Index Fund",
+        "Global X Robotics & Artificial Intelligence ETF",
+    ):
+        assert len(ce.classify_one(name, set())["theme_ids"]) == 1, name
+
+
+def test_every_theme_written_is_one_the_taxonomy_seeds() -> None:
+    """``theme_ids`` holds ``taxonomy_sector`` level-3 ids. A theme this script writes that
+    ``seed_taxonomy.py`` never seeds is a fund pointing at a category that does not exist — the
+    array has no foreign key to catch it, so this test is the only thing that does."""
+    seeded = {row[0] for row in load_global_script("seed_taxonomy").THEMES}
+    assert set(THEMES) <= seeded, f"themes with no taxonomy row: {sorted(set(THEMES) - seeded)}"
 
 
 def test_a_bond_fund_is_fixed_income_not_equity() -> None:

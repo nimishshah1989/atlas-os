@@ -1,8 +1,18 @@
 'use client'
-// src/components/explorer/DataTable.tsx — the one table of design §5: virtualised, sortable,
-// tabular. Rows are 44 px and the layout is fixed, so the window over the list is arithmetic:
-// only the rows in view (plus an overscan) are in the DOM, with spacer rows holding the scroll
-// height. Sorting is the caller's (the header buttons report the wanted sort).
+// src/components/explorer/DataTable.tsx — the one table of design §5: sortable, tabular, and
+// windowed over the PAGE's scroll rather than its own.
+//
+// IT USED TO OWN A SCROLLPORT — `height: calc(100vh - 372px)` with `overflow: auto` — so the
+// list scrolled inside a box while the page around it stood still. The FM's words on seeing it:
+// "the tables are not scrolling properly. There is no need for any scroll, only at least on the
+// horizontal side." He is right, and it is also how Atlas India's tables have always worked: a
+// div with `overflow-x: auto` and nothing else, the page scrolling as one document.
+//
+// So the box now scrolls only sideways and the window follows the VIEWPORT: rows above the fold
+// are `-getBoundingClientRect().top`, the window is `innerHeight` tall. Rows are 44 px and the
+// layout is fixed, so that window is still arithmetic — only the rows in view (plus an overscan)
+// are in the DOM, with spacer rows holding the height — and four thousand funds do not all mount.
+// Sorting is the caller's (the header buttons report the wanted sort).
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Icon } from '@/components/shell/icons'
 import type { SortState } from '@/lib/explorer'
@@ -12,9 +22,8 @@ import type { SortState } from '@/lib/explorer'
 // virtualiser reports the wrong rows for a scroll position. Change them together.
 const ROW_HEIGHT = 44
 const OVERSCAN = 10
-const MIN_HEIGHT = 320
-/** The stylesheet's pre-hydration height (.dt: 100vh minus the header) at a 900 px viewport. */
-const DEFAULT_HEIGHT = 528
+/** What the first, server-rendered pass assumes the viewport is, before any measurement. */
+const DEFAULT_HEIGHT = 900
 
 export type Column<R> = {
   key: string
@@ -73,30 +82,43 @@ function Spacer({ height, span }: { height: number; span: number }) {
 
 export function DataTable<R>({ rows, columns, rowKey, sort, onSort, empty }: Props<R>) {
   const box = useRef<HTMLDivElement>(null)
-  const [scrollTop, setScrollTop] = useState(0)
-  // Until hydration the stylesheet's default height stands (.dt in globals.css); then the box is
-  // fitted to the viewport below its top edge and re-fitted on resize.
-  const [height, setHeight] = useState<number | null>(null)
+  // How far the table's top edge has passed above the fold, and how tall the fold is. Both are
+  // measured from the document's own scroll, so there is no inner scrollport to get out of step.
+  const [view, setView] = useState({ above: 0, height: DEFAULT_HEIGHT })
 
   useLayoutEffect(() => {
-    const fit = () => {
+    let queued = false
+    const measure = () => {
+      queued = false
       const top = box.current?.getBoundingClientRect().top ?? 0
-      setHeight(Math.max(MIN_HEIGHT, window.innerHeight - top - 24))
+      setView({ above: Math.max(0, -top), height: window.innerHeight })
     }
-    fit()
-    window.addEventListener('resize', fit)
-    return () => window.removeEventListener('resize', fit)
+    // Scroll fires far faster than paint; one measurement per frame is enough and keeps the
+    // listener passive, so it never blocks the scroll it is watching.
+    const onScroll = () => {
+      if (!queued) {
+        queued = true
+        requestAnimationFrame(measure)
+      }
+    }
+    measure()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', measure)
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', measure)
+    }
   }, [])
 
-  // A new sort or filter starts at the top.
+  // A new sort or filter re-measures: the list under the same scroll position is a different list.
   useEffect(() => {
-    if (box.current) box.current.scrollTop = 0
-    setScrollTop(0)
+    const top = box.current?.getBoundingClientRect().top ?? 0
+    setView({ above: Math.max(0, -top), height: window.innerHeight })
   }, [rows, sort])
 
   const n = rows.length
-  const start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN)
-  const end = Math.min(n, Math.ceil((scrollTop + (height ?? DEFAULT_HEIGHT)) / ROW_HEIGHT) + OVERSCAN)
+  const start = Math.max(0, Math.floor(view.above / ROW_HEIGHT) - OVERSCAN)
+  const end = Math.min(n, Math.ceil((view.above + view.height) / ROW_HEIGHT) + OVERSCAN)
   const minWidth = columns.reduce((w, c) => w + (c.width || c.minWidth || 160), 0)
 
   function toggle(c: Column<R>) {
@@ -104,12 +126,7 @@ export function DataTable<R>({ rows, columns, rowKey, sort, onSort, empty }: Pro
   }
 
   return (
-    <div
-      ref={box}
-      className="dt panel"
-      style={height ? { height } : undefined}
-      onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
-    >
+    <div ref={box} className="dt panel">
       <table className="dt-table" style={{ minWidth }}>
         <colgroup>
           {columns.map((c) => (

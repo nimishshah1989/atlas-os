@@ -43,7 +43,7 @@ const ETF_LENSES: LensWeight[] = [
 ]
 
 const UNSCORED = {
-  strategy: null, class_asset_class: null, leveraged: null, inverse: null, hedged: null,
+  strategy: null, theme: null, class_asset_class: null, leveraged: null, inverse: null, hedged: null,
   class_status: null, country: null, region: null,
   composite: null, technical: null, conviction_tier: null, peer_group: null, lenses_active: null,
   composite_decile: null, peer_rank: null, peer_n: null,
@@ -202,5 +202,46 @@ describe('the name column can never lose its width', () => {
     const long = 'PIMCO Active Bond Exchange-Traded Fund Exchange-Traded Fund'
     expect(cell(container, 'BOND', 'Name')).toBe(long)
     expect(container.querySelector(`[title="${long}"]`)).not.toBeNull()
+  })
+})
+
+// ── the theme facet ─────────────────────────────────────────────────────────
+//
+// The FM's ask, in his words: "if there is something like an ETF which is focused on AI, then
+// creating that artificial intelligence … funds around gold and silver miners … water and food
+// security". `atlas/global_market/classify/themes.py` settles which; this is the filter over it.
+//
+// The two rows below are the real classification of two real funds, taken by running
+// `classify_theme` over their Nasdaq Trader names: URA reads as Nuclear & Uranium, SPY as no
+// theme at all — a broad-market fund is a bet on nothing narrower than the market, which is a
+// finding rather than a gap, and the facet labels it that way.
+describe('a fund can be filtered by what it is a bet ON', () => {
+  const THEMED: InstrumentDbRow[] = [
+    {
+      ...BASE, symbol: 'URA', name: 'Global X Uranium ETF', in_universe: true,
+      universe_exclusion: null, class_status: 'auto', theme: 'Nuclear & Uranium',
+      peer_group: 'equity:thematic',
+    },
+    {
+      ...BASE, symbol: 'SPY', name: 'State Street SPDR S&P 500 ETF Trust', in_universe: true,
+      universe_exclusion: null, class_status: 'auto', theme: null,
+      peer_group: 'equity:broad_market',
+    },
+  ]
+
+  it('offers the theme as a facet, and names the no-theme case rather than leaving it blank', () => {
+    render(<InstrumentExplorer list={list(THEMED)} assetClass="etf" />)
+    expect(screen.getByText('Theme')).toBeInTheDocument()
+    expect(screen.getByText('Nuclear & Uranium')).toBeInTheDocument()
+    expect(screen.getByText('No theme in the name')).toBeInTheDocument()
+  })
+
+  it('does not offer it on stocks, which carry no fund classification at all', () => {
+    const stocks: InstrumentDbRow[] = [
+      { ...BASE, asset_class: 'stock', symbol: 'AAPL', name: 'Apple Inc. - Common Stock',
+        sector_gics: 'Information Technology', in_universe: true, universe_exclusion: null },
+    ]
+    render(<InstrumentExplorer list={list(stocks)} assetClass="stock" />)
+    expect(screen.queryByText('Theme')).not.toBeInTheDocument()
   })
 })

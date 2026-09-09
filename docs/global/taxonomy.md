@@ -1,6 +1,7 @@
 # Global Atlas — taxonomy v1
 
-**Status: DRAFT for FM review, 2026-09-07.** Seeded into `atlas_global.taxonomy_sector`,
+**Status: DRAFT for FM review. Strategy and sector 2026-09-07; the theme layer rebuilt
+2026-09-09 against the FM's brief — see section 2, "Level 3 is theme".** Seeded into `atlas_global.taxonomy_sector`,
 `taxonomy_geo` and `taxonomy_role` by `scripts/global_market/seed_taxonomy.py`. Nothing
 classifies anything until this is reviewed: the vocabulary here is the allowlist the LLM
 layer is constrained to, so an omission is not a gap the model can route around — it is a
@@ -150,23 +151,106 @@ plan named four examples and they all survive contact with the data: `energy_ren
 `energy_midstream_transmission`, `energy_nuclear_uranium`, `utilities_grid`. Sub-sectors are
 seeded only where funds exist to fill them; an empty sub-sector is a category nobody can use.
 
-**Level 3 is theme**, and here is a caution worth the FM's attention. Themes are small:
+**Level 3 is theme**, and this is the layer the FM sent back. v1 seeded sixteen theme rows
+and nothing assigned one: `strategy.py` marked 272 funds `thematic` and stopped, so an AI
+fund, a uranium fund and a water fund all sat in one undifferentiated bucket. The FM's words:
 
-| theme | funds | | theme | funds |
-|---|---:|---|---|---:|
-| `ai` | 64 | | `nuclear_uranium` | 12 |
-| `infrastructure` | 51 | | `clean_energy` | 10 |
-| `space_defence` | 37 | | `quantum` | 8 |
-| `semiconductors` | 34 | | `cloud` | 6 |
-| `genomics` | 21 | | `fintech` | 6 |
-| `cybersecurity` | 16 | | `water` | 6 |
-| `robotics` | 14 | | `gaming_esports` | 6 |
-| `ev_battery` | 13 | | `cannabis` | 4 |
+> "If there is something like an ETF which is focused on AI, then creating that artificial
+> intelligence… it's not just energy, it's energy sources… We want to create funds around,
+> let's just say, gold and silver miners. We want to create funds around water and food
+> security. That's the kind of categorization I was looking for."
 
-`peer_group_min_members` is 8. **Nine of these sixteen themes cannot form their own peer
-group**, so a fund scored within its theme would be ranked against too few competitors to
-mean anything, and the scorer falls back to the parent sector. That is the correct behaviour
-and it is worth knowing before anyone reads a theme decile as a real ranking.
+**There is now a rule table that assigns one.** `atlas/global_market/classify/themes.py` is an
+ordered first-match table over the fund's name, run beside the strategy table rather than
+under it: a gold-bullion trust is `commodity` by strategy and `precious_metals` by theme; a
+uranium fund is `thematic` by strategy and `nuclear_uranium` by theme. `classify_etfs.py`
+writes the verdict into `etf_classification.theme_ids` with the rule and the matched words in
+`evidence`, so every label is explainable and reviewable.
+
+**32 themes, and the counts are the classifier's own first-claim output** over the 5,655 real
+listed ETF names in the committed 2026-09-04 directory snapshot — a fund is counted once,
+under the first rule that reads it, so "VanEck Gold Miners" is one `gold_silver_miners` fund
+and not a gold fund as well:
+
+| theme | funds | | theme | funds | | theme | funds |
+|---|---:|---|---|---:|---|---|---:|
+| `precious_metals` | 53 | | `nuclear_uranium` | 16 | | `cloud` | 6 |
+| `ai` | 43 | | `space` | 14 | | `genomics` | 6 |
+| `infrastructure` | 37 | | `copper` | 12 | | `water` | 6 |
+| `semiconductors` | 28 | | `clean_energy` | 12 | | `cannabis` | 5 |
+| `gold_silver_miners` | 27 | | `critical_minerals` | 12 | | `fintech` | 5 |
+| `defence` | 24 | | `gaming_esports` | 11 | | `lithium` | 5 |
+| `reits` | 22 | | `cybersecurity` | 10 | | `shipping` | 4 |
+| `robotics` | 16 | | `food_agriculture` | 10 | | `homebuilders` | 3 |
+| | | | `blockchain` | 9 | | `data_centres` | 2 |
+| | | | `ev_battery` | 7 | | `longevity` | 2 |
+| | | | `grid_electrification` | 7 | | `timber_forestry` | 2 |
+| | | | `quantum` | 7 | | `solar` | 1 |
+
+**424 of the 5,655 names (7.5%) settle a theme from their words.** That is the whole point of
+the layer being rules-first: the 7.5% are decided tonight, for free and auditably, and the
+LLM's job shrinks to the funds the words do not settle. A fund with no theme is NOT sent to
+review — an empty `theme_ids` is an answer, not a gap, and a Treasury ladder is not an
+unclassified theme.
+
+**What the ordering decides.** 56 names match two or more rules, and one principle sets the
+order: **the input beats the trend.** A fund that names a physical thing it holds — a metal, a
+fuel, a machine — is a fund about that thing; the trend it is sold on is the story, and the
+stories are the widest rules at the bottom. So:
+
+| fund | theme | over | because |
+|---|---|---|---|
+| VanEck Gold Miners | `gold_silver_miners` | `precious_metals` | miners are equity levered to the metal, not the metal — the FM's own example |
+| Global X Lithium & Battery Tech | `lithium` | `ev_battery` | the metal is what it is priced off |
+| Clean Edge Smart Grid Infrastructure | `grid_electrification` | `clean_energy`, `infrastructure` | the grid is what it holds |
+| Global X AI Semiconductor & Quantum | `semiconductors` | `ai`, `quantum` | it is a chip fund |
+| Global X Robotics & AI | `robotics` | `ai` | robots are the physical thing |
+| ARK Space & Defense Innovation | `space` | `defence` | the narrower mandate, and ARKX is the market's space fund |
+| Nicholas Defense and Rare Earth Income | `critical_minerals` | `defence` | **the case where the order costs something** — both labels are true; say the word and it moves |
+
+`ai` is deliberately LAST in the technology group. Half of these funds name AI in passing, and
+a theme that absorbs every fund saying "AI" is the undifferentiated bucket you rejected.
+
+**Six phrases in this market mean something else**, each measured over all 5,655 names after
+producing a wrong answer: "Blue Chip" is not a semiconductor (6 funds); "Infrastructure
+Capital" (4), "CYBER HORNET" (4) and "Ai Funds" (1) are ISSUERS, not assets — one of the
+InfraCap funds is a bond fund; "Grayscale Bitcoin **Mini** Trust" is not a bitcoin miner;
+"LifeX … Longevity Income" is an annuity ladder, not a bet on ageing (8 funds, against only
+two real ageing funds); and "AI Enhanced / Managed / Powered" is AI as the METHOD (11 funds).
+Every one is a regression test in `tests/unit/global_market/test_themes.py`.
+
+**Twenty-one plausible terms were written and then deleted** because no issuer uses them —
+`photovoltaic`, `atomic`, `military`, `homeland security`, `marijuana`, `maritime`,
+`fertilizer`, `gene editing`, `financial technology` and twelve more. Vocabulary that matches
+nothing cannot be reviewed or tested, and it hides how small the theme it was meant to widen
+really is. `test_no_rule_is_dead` holds the line.
+
+**Themes are small, and `peer_group_min_members` is 8.** Fifteen of the 32 cannot form their
+own peer group, so a fund scored within its theme would be ranked against too few competitors
+to mean anything and the scorer falls back to the parent sector. That is the correct behaviour
+and it is worth knowing before anyone reads a theme decile as a real ranking. `solar` is the
+extreme case — **the market has listed exactly one solar ETF** (Invesco's TAN) — and it is
+seeded anyway because you named solar as an energy source: a theme page reading "1 fund" is a
+truer answer than folding it into `clean_energy` and losing the question.
+
+**What changed from v1.** Fifteen of the sixteen v1 theme ids survive. `space_defence` is the
+one that does not: it is split into `space` (14) and `defence` (24), two mandates that share a
+supply chain and each clear the peer-group minimum alone. Seventeen themes are new, and they are
+mostly your brief made executable — the five metals (`precious_metals`, `gold_silver_miners`,
+`copper`, `lithium`, `critical_minerals`), the two energy sources v1 lacked (`solar`,
+`grid_electrification`), `food_agriculture`, and the rest read off the market
+(`blockchain`, `reits`, `shipping`, `homebuilders`, `timber_forestry`, `data_centres`,
+`longevity`). The taxonomy version stays 1: v1 was never FM-reviewed, so this replaces it
+rather than succeeding it.
+
+**Three known gaps, stated rather than patched.** (1) Eight MLP and energy-pipeline funds land
+in `infrastructure` because "Energy Infrastructure" is what their names say; a
+`midstream_pipelines` theme is the obvious next row if you want them separated. (2) Four
+generic metals-and-mining funds (XME, PICK, METL, DBB) reach no theme, because "Metals &
+Mining" is the `materials` sector rather than a theme. (3) `reits`, `homebuilders`
+and `shipping` overlap sub-sectors that already exist at level 2; they are themes today only
+because the rules layer fills `theme_ids` and not `sub_sector_id`, and they should fold into
+the sub-sector when the LLM layer starts filling it. See open question 6.
 
 ## 3. Geography
 
@@ -201,11 +285,21 @@ answer for every fund that is not an equity sector or theme bet.
    labels, and the schema has one strategy column. If you want them separated, that is a new
    column rather than more strategy values.
 3. **Themes below the peer-group minimum.** Seed them anyway for browsing and filtering, or
-   only seed the seven with enough funds to score? Recommendation: seed all sixteen, and let
-   the scorer fall back to the parent sector, so the board can still show a theme page.
+   only seed the seventeen with enough funds to score? Recommendation: seed all 32, and let
+   the scorer fall back to the parent sector, so the board can still show a theme page — a
+   `solar` page reading "1 fund" answers your question honestly; deleting the theme does not.
 4. **The 150-label eval set.** Still yours to produce, and it is what gates automatic
    confirmation. Stratify by strategy using the table in section 1 rather than by issuer.
 5. **Is a plain US equity fund `broad_market` or `country`?** The classifier says
    `broad_market` (or `size_style`), for the reason in section 1. If you want US treated as a
    country like any other, say so — it is a one-line change, and it moves roughly a third of
    the universe.
+6. **`reits` (22), `homebuilders` (3) and `shipping` (4) are themes that repeat a level-2
+   sub-sector.** They are here because the rules layer fills `theme_ids` and nothing yet fills
+   `sub_sector_id`, so today the theme is the only grouping those funds get. Fold them into
+   the sub-sector once the LLM layer runs, or keep them as themes so the board's theme filter
+   covers them? Recommendation: keep for now, revisit at the LLM cut-over.
+7. **One theme per fund, or up to three?** The column takes three; an ordered first-match rule
+   table produces exactly one, because a second would have to be guessed rather than read.
+   `Nicholas Defense and Rare Earth Income` is the fund that shows the cost — it is genuinely
+   both. If you want multi-theme funds, that is an LLM field, not a rules field.
