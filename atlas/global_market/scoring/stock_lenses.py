@@ -4,7 +4,9 @@ The six stock lenses of ``docs/global/plan.md`` §B. This module implements the 
 today's nightly data can answer, and does not pretend about the rest:
 
     technical    ✅ every sub-score the lens has, from technical_daily
-    fundamental  ✗  needs stock_financials_pit (EDGAR XBRL) — no producer yet (phase2.md P3-A)
+    fundamental  ◐  the scorer is complete and tested; ``score_stocks.py`` does not call it
+                    yet, because its 37 bands are India's cross-section and the FM has to lock
+                    the US ones first (see FUNDAMENTAL_KEYS, and the trap above it)
     valuation    ✗  same source, and its bands must be seeded from the live S&P 500
                     cross-section first (India's "PE under 8 is cheap" is nonsense here)
     catalyst     ✗  needs filings_8k + insider_form4 — no producer yet (P3-B)
@@ -69,12 +71,19 @@ from atlas.global_market.scoring.etf_lenses import (
     LensResult,
     india_thresholds,
 )
+from atlas.lenses.compute import fundamental as india_fundamental
 from atlas.lenses.compute import technical as india_technical
 
 # Re-exported: `TECHNICAL_KEYS` is pinned against India's own source by
 # test_stock_lenses.test_technical_keys_covers_every_threshold_india_reads, which reads it
 # from this module. __all__ makes the re-export explicit rather than an unused import.
-__all__ = ["TECHNICAL_KEYS", "india_thresholds", "score_technical"]
+__all__ = [
+    "FUNDAMENTAL_KEYS",
+    "TECHNICAL_KEYS",
+    "india_thresholds",
+    "score_fundamental",
+    "score_technical",
+]
 
 # The lens_scores_daily sub-score columns, in India's own order (ddl/05_scores.sql), mapped
 # from the TechnicalResult attribute each one carries. `vol_contraction` and `volume` are the
@@ -151,5 +160,139 @@ def score_technical(
     present = [value for value in subs.values() if value is not None]
     evidence: dict[str, Any] = dict(result.evidence)
     # The same evidence contract etf_lenses._lens writes, so one board component renders both.
+    evidence |= {"subs_present": len(present)} if present else {"reason": "no sub-score had inputs"}
+    return LensResult(result.score, subs, evidence)
+
+
+# ── the fundamental lens ──────────────────────────────────────────────────────────────────
+
+# THE UNIT TRAP, and it is the reason this adapter exists rather than a direct call.
+# ``fundamentals.ratios`` returns FRACTIONS — return on equity is net income ÷ equity, 0.20 for
+# twenty per cent — because that is what a ratio is and what the columns store. India's scorer
+# reads PERCENTS: its ROE ladder starts at 20, its margin ladder at 20, its revenue-growth
+# ladder at 25. Hand it 0.20 and every S&P 500 company falls below the bottom rung of every
+# profitability, margin and growth band — a full cross-section of plausible, evenly
+# distributed, uniformly wrong scores that nothing downstream could flag.
+#
+# So the six RATE inputs are multiplied by a hundred here, at the boundary, and the three
+# PURE RATIOS (debt/equity, current, quick — 0.3, 2.0, 1.5 on India's ladders) are not. Which
+# is which is the whole content of this function, and
+# ``test_stock_lenses.test_a_fraction_is_not_a_percent`` pins it on real filings.
+RATE_INPUTS = ("roe", "roce", "operating_margin", "net_margin", "revenue_growth", "eps_growth")
+RATIO_INPUTS = ("debt_to_equity", "current_ratio", "quick_ratio")
+PERCENT = Decimal(100)
+
+FUNDAMENTAL_KEYS: tuple[str, ...] = (
+    "bs_cr_good",
+    "bs_cr_high",
+    "bs_cr_ok",
+    "bs_de_high",
+    "bs_de_low",
+    "bs_de_med",
+    "bs_de_ok",
+    "bs_qr_good",
+    "bs_qr_high",
+    "bs_qr_ok",
+    "growth_eps_good",
+    "growth_eps_high",
+    "growth_eps_ok",
+    "growth_rev_good",
+    "growth_rev_high",
+    "growth_rev_ok",
+    "margin_net_good",
+    "margin_net_high",
+    "margin_net_ok",
+    "margin_op_good",
+    "margin_op_high",
+    "margin_op_low",
+    "margin_op_ok",
+    "olev_de_low",
+    "olev_margin_expand",
+    "olev_rev_high",
+    "olev_rev_mod",
+    "prof_nm_high",
+    "prof_nm_ok",
+    "prof_roce_good",
+    "prof_roce_high",
+    "prof_roce_low",
+    "prof_roce_ok",
+    "prof_roe_good",
+    "prof_roe_high",
+    "prof_roe_low",
+    "prof_roe_ok",
+)
+
+# lens_scores_daily's fundamental sub-score columns (ddl/05_scores.sql) ← FundamentalResult.
+FUNDAMENTAL_SUBS: tuple[tuple[str, str], ...] = (
+    ("fund_profitability", "profitability"),
+    ("fund_margin", "margin"),
+    ("fund_growth", "growth"),
+    ("fund_balance_sheet", "balance_sheet"),
+    ("fund_op_leverage", "op_leverage"),
+)
+
+
+def _percent(value: Decimal | None) -> float | None:
+    """A fraction as the per-cent number India's ladders are written in."""
+    return None if value is None else float(value * PERCENT)
+
+
+def _plain(value: Decimal | None) -> float | None:
+    """A ratio that is already on India's scale — a multiplier, not a rate."""
+    return None if value is None else float(value)
+
+
+def score_fundamental(
+    *,
+    roe: Decimal | None,
+    roce: Decimal | None,
+    operating_margin: Decimal | None,
+    net_margin: Decimal | None,
+    revenue_growth: Decimal | None,
+    eps_growth: Decimal | None,
+    debt_to_equity: Decimal | None,
+    current_ratio: Decimal | None,
+    quick_ratio: Decimal | None = None,
+    th: Mapping[str, Decimal],
+) -> LensResult:
+    """The fundamental lens (0–100) for one US stock — India's scorer, US inputs, US bands.
+
+    Every argument is a ``fundamentals.ratios`` output: a FRACTION for the six rates, a plain
+    multiple for the three balance-sheet ratios. The conversion is above; do not pass
+    per-cent numbers in.
+
+    ``quick_ratio`` is ``None`` for every filer today: it needs inventory, which
+    ``stock_financials_pit`` does not carry. India's balance-sheet sub-score skips an absent
+    input rather than penalising it, so the sub-score is the debt/equity and current-ratio
+    read — honestly two of three, not a guess at the third.
+
+    A financial company arrives with ``debt_to_equity`` and ``current_ratio`` already ``None``
+    (``ratios`` suppresses them at the source), so its balance-sheet sub-score is absent and
+    the lens renormalises over the four that are not — India's own stance on banks.
+    """
+    result = india_fundamental.score_fundamental(
+        roe=_percent(roe),
+        roce=_percent(roce),
+        operating_margin=_percent(operating_margin),
+        net_margin=_percent(net_margin),
+        revenue_growth_yoy=_percent(revenue_growth),
+        eps_growth_yoy=_percent(eps_growth),
+        debt_to_equity=_plain(debt_to_equity),
+        current_ratio=_plain(current_ratio),
+        quick_ratio=_plain(quick_ratio),
+        # Accepted by India's signature and read by none of its sub-scorers; passed as None
+        # rather than invented, so the day a sub-score starts reading one, nothing here lies.
+        roa=None,
+        roic=None,
+        gross_margin=None,
+        revenue_ttm=None,
+        eps_diluted_ttm=None,
+        thresholds=india_thresholds(th, FUNDAMENTAL_KEYS),
+    )
+    subs: dict[str, Decimal | None] = {
+        column: getattr(result, attribute) for column, attribute in FUNDAMENTAL_SUBS
+    }
+    present = [value for value in subs.values() if value is not None]
+    evidence: dict[str, Any] = dict(result.evidence)
     evidence |= {"subs_present": len(present)} if present else {"reason": "no sub-score had inputs"}
     return LensResult(result.score, subs, evidence)
