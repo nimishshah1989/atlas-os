@@ -139,6 +139,11 @@ step "score_stocks"            $PY scripts/global_market/score_stocks.py --eod "
 # classification to get each fund's peer group, and build_country_views reads the composite the
 # scorer writes. classify_etfs is cheap (a regex over ~5,600 names, no feed) and runs nightly
 # rather than weekly so a fund listed today is groupable tonight.
+# Exposures before scoring: score_etfs reads etf_exposure_daily.top10_w for the cost lens's
+# concentration sub-score, so a holdings snapshot that landed since the last run has to be
+# turned into an exposure row first. A no-op on a night with no new snapshot (N-PORT is
+# quarterly), which is most nights.
+step "build_exposures"         $PY scripts/global_market/build_exposures.py --report "$LOG_DIR/exposures_$EOD.csv"
 step "classify_etfs"           $PY scripts/global_market/classify_etfs.py --report "$LOG_DIR/classify_etfs_$EOD.csv"
 step "score_etfs"              $PY scripts/global_market/score_etfs.py --eod "$EOD" --report "$LOG_DIR/score_etfs_$EOD.csv"
 # Countries: one tradeable fund per market, read off technical_daily. Uncommented once its

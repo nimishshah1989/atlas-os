@@ -19,11 +19,12 @@ and the row records which was used, because a reader comparing two funds needs t
 were measured against different fields.
 
 WHAT IS SCORED, AND WHAT IS HONESTLY ABSENT. ``atlas.global_market.scoring.etf_lenses`` says
-it in full: technical and risk are complete from ``technical_daily``; cost_liquidity has the
-ADV$ and AUM sub-scores (``ingest_nport.py`` fills ``etf_meta.aum_usd``, and leaves it NULL
-for a multi-class series, where the filed net assets are the whole fund's and not this share
-class's) — expense waits on an issuer feed and concentration on ``etf_exposure_daily``; flow
-and quality have no inputs at all until their ingestors land. ``blend()`` renormalises over the lenses PRESENT, ``lenses_active``
+it in full: technical and risk are complete from ``technical_daily``; cost_liquidity has three
+of its four sub-scores — ADV$, AUM (``ingest_nport.py`` fills ``etf_meta.aum_usd``, and leaves
+it NULL for a multi-class series, where the filed net assets are the whole fund's and not this
+share class's) and concentration (``build_exposures.py`` fills ``etf_exposure_daily.top10_w``
+from the latest holdings snapshot at or before the anchor). Expense waits on an issuer feed;
+flow and quality have no producer at all yet. ``blend()`` renormalises over the lenses PRESENT, ``lenses_active``
 records how many there were, and the board prints "n of 5 lenses" beside every score. A lens
 with no data is NULL — never zero, which would say the fund is bad at something we did not
 measure (rule #0).
@@ -112,6 +113,7 @@ SELECT im.instrument_id::text AS instrument_id, im.symbol, im.name,
        t.vol_63d_ann, t.mdd_12m, t.downside_dev_63d, t.beta_spy_252,
        t.adv_usd_60d_median,
        m.aum_usd,
+       e.top10_w,
        o.close_adj AS price
 FROM {M}.instrument_master im
 JOIN {M}.universe_snapshot u
@@ -124,6 +126,14 @@ JOIN {M}.technical_daily t
   ON t.instrument_id = im.instrument_id AND t.date = :anchor
 LEFT JOIN {M}.etf_meta m
   ON m.instrument_id = im.instrument_id
+-- The LATEST exposure snapshot at or before the anchor, never a join on every one of them:
+-- N-PORT is quarterly, so a fund has several, and a plain join would multiply its row and
+-- fail the upsert ("ON CONFLICT DO UPDATE cannot affect row a second time").
+LEFT JOIN LATERAL (
+    SELECT x.top10_w FROM {M}.etf_exposure_daily x
+     WHERE x.instrument_id = im.instrument_id AND x.as_of_date <= :anchor
+     ORDER BY x.as_of_date DESC LIMIT 1
+) e ON true
 LEFT JOIN {M}.ohlcv_daily o
   ON o.instrument_id = im.instrument_id AND o.date = :anchor
 WHERE im.asset_class = 'etf' AND im.is_active
@@ -296,7 +306,10 @@ def score_rows(
             th=th,
         )
         cost = score_cost_liquidity(
-            adv_usd_60d=_f(r["adv_usd_60d_median"]), aum_usd=_f(r["aum_usd"]), th=th
+            adv_usd_60d=_f(r["adv_usd_60d_median"]),
+            aum_usd=_f(r["aum_usd"]),
+            top10_weight=_f(r["top10_w"]),
+            th=th,
         )
 
         lenses: dict[str, Decimal | None] = {

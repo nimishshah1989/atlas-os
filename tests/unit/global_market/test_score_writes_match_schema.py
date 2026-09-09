@@ -52,6 +52,7 @@ METRIC_COLUMNS = (
     "beta_spy_252",
     "adv_usd_60d_median",
     "aum_usd",  # etf_meta, LEFT JOINed: NULL for a fund whose series has several classes
+    "top10_w",  # etf_exposure_daily, the latest snapshot at or before the anchor
     "price",
 )
 

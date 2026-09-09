@@ -78,6 +78,9 @@ BOARD_TABLES: list[tuple[str, str, int]] = [
     # thousand funds on staggered fiscal years something files most weeks — but not every week,
     # which is why this is 30 sessions and not the weekly tier's 8.
     ("etf_meta", "updated_at", 30),  # SEC N-PORT-P fund facts
+    # Keyed by the SNAPSHOT's date, not the session it was computed on: exposures change only
+    # when holdings do, so this date is the holdings' date and carries their lag exactly.
+    ("etf_exposure_daily", "as_of_date", 95),  # build_exposures.py over those holdings
 ]
 
 # ── PRODUCER REGISTRY (the build-time half of the freshness contract) ──
@@ -100,6 +103,7 @@ PRODUCERS: dict[str, str] = {
     "stock_financials_pit": "ingest_financials.py",
     "etf_holdings": "ingest_nport.py",
     "etf_meta": "ingest_nport.py",
+    "etf_exposure_daily": "build_exposures.py",
 }
 
 

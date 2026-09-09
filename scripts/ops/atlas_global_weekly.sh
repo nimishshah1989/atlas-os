@@ -79,7 +79,9 @@ step "ingest_nport"             $PY scripts/global_market/ingest_nport.py --repo
 # step "ingest_short_interest"    $PY scripts/global_market/ingest_short_interest.py    # Phase 3
 # 3. CLASSIFY + RE-SCORE.
 # step "classify_etfs"            $PY scripts/global_market/classify_etfs.py --delta    # rules + LLM for new/changed only (Phase 2)
-# step "build_exposures"          $PY scripts/global_market/build_exposures.py --all    # Phase 2
+# Exposures are a pure function of a holdings snapshot, so only the NEW snapshots are
+# computed — no --all, which is for a change to the exposure arithmetic itself.
+step "build_exposures"          $PY scripts/global_market/build_exposures.py --report "$LOG_DIR/exposures_$EOD.csv"
 # step "score_etfs_backfill"      $PY scripts/global_market/score_etfs.py --backfill-week   # Phase 3
 
 # 4. GATES (assert on REAL produced output — rule #0). Run directly, never via step().
