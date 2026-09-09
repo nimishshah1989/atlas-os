@@ -33,6 +33,7 @@ from atlas.global_market.fundamentals.facts import extract_rows
 from atlas.global_market.scoring.stock_lenses import (
     FUNDAMENTAL_KEYS,
     PERCENT,
+    REACHABLE_KEYS,
     score_fundamental,
 )
 
@@ -105,6 +106,56 @@ def test_a_missing_band_raises_by_name_rather_than_scoring_on_indias() -> None:
             debt_to_equity=None,
             current_ratio=None,
             th=incomplete,
+        )
+
+
+def test_the_lens_scores_when_the_table_HAS_NO_QUICK_RATIO_BANDS() -> None:
+    """The prod state, and the bug it caught.
+
+    `bs_qr_*` grade a QUICK ratio, which needs inventory that `stock_financials_pit` does not
+    carry, so `Metrics` has no quick_ratio and those three rungs can never fire. The gate that
+    checks the table before a run was changed to stop requiring them (`REACHABLE_KEYS`) — and the
+    SCORER was not, so it went on indexing all 37. The gate said "you have what you need" and the
+    scorer raised `KeyError: 'bs_qr_good'` on the first company of the first real run, every
+    night, while the stock composite stayed empty.
+
+    Two halves of one decision, and only one of them was made. This asserts the other half: a
+    table seeded exactly as prod is seeded scores a real company without raising.
+    """
+    reachable = {key: india_defaults()[key] for key in REACHABLE_KEYS}
+    assert not any(key.startswith("bs_qr_") for key in reachable), "the prod state, precisely"
+    result = score_fundamental(
+        roe=Decimal("0.35"),
+        roce=Decimal("0.28"),
+        operating_margin=Decimal("0.31"),
+        net_margin=Decimal("0.24"),
+        revenue_growth=Decimal("0.08"),
+        eps_growth=Decimal("0.13"),
+        debt_to_equity=Decimal("1.45"),
+        current_ratio=Decimal("0.87"),
+        th=reachable,
+    )
+    assert result.value is not None
+    # The balance-sheet sub-score is still computed — debt/equity and the current ratio are both
+    # present. It is the quick-ratio RUNG inside it that never fires, not the sub-score.
+    assert result.subs["fund_balance_sheet"] is not None
+
+
+def test_a_missing_band_THAT_A_RUN_ACTUALLY_READS_still_raises() -> None:
+    """The guard the test above must not have weakened. Dropping a reachable band still fails by
+    name rather than falling back to India's number for this index."""
+    short = {key: india_defaults()[key] for key in REACHABLE_KEYS if key != "bs_de_low"}
+    with pytest.raises(KeyError, match="bs_de_low"):
+        score_fundamental(
+            roe=None,
+            roce=None,
+            operating_margin=None,
+            net_margin=None,
+            revenue_growth=None,
+            eps_growth=None,
+            debt_to_equity=Decimal("1.45"),
+            current_ratio=None,
+            th=short,
         )
 
 

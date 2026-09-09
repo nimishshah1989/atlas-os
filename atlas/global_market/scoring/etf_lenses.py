@@ -35,7 +35,7 @@ number hiding in code, and the first anyone knew of it would be a score nobody c
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
@@ -58,7 +58,10 @@ TECHNICAL_KEYS: tuple[str, ...] = (
 
 
 def india_thresholds(
-    th: Mapping[str, Decimal], keys: Sequence[str] = TECHNICAL_KEYS
+    # Iterable, not Sequence: it only iterates, and the fundamental lens passes a frozenset
+    # (REACHABLE_KEYS) because the set of bands a run can read is a set, not an order.
+    th: Mapping[str, Decimal],
+    keys: Iterable[str] = TECHNICAL_KEYS,
 ) -> dict[str, Any]:
     """The keys one of India's scorers reads, as the floats it does arithmetic in.
 
