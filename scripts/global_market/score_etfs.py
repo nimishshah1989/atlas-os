@@ -308,6 +308,46 @@ def score_rows(
     return pd.DataFrame(rows), lines
 
 
+def summary_lines(
+    table: pd.DataFrame, anchor: dt.date, min_members: int, fell_back: int
+) -> list[str]:
+    """What the step prints about what it just scored. Pure, so it can be TESTED.
+
+    It lives out here because it was inside ``run`` and crashed the whole step on its first
+    live execution: ``composite`` is a column of ``Decimal | None`` — object dtype, which is
+    what the upsert needs — and ``nlargest`` refuses an object column outright. Nothing had
+    exercised it, because the only caller was the one function that needs a database.
+
+    So the ORDERING reads a float view and the WRITTEN column keeps its Decimals. Note that
+    ``median()`` happens to work on the object column via a Python fallback; it is computed
+    from the same float view anyway, because "works today by accident" is not a property to
+    build a nightly on.
+    """
+    # Wrapped in a Series with an explicit dtype: to_numeric's return type is a union that
+    # pyright will not let anything be called on, and coerce (rather than a bare astype) keeps
+    # a value that is somehow neither Decimal nor None out of the summary instead of raising.
+    as_float = pd.Series(pd.to_numeric(table["composite"], errors="coerce"), dtype=float)
+    scored = int(as_float.notna().sum())
+    out = [
+        f"[score_etfs] anchor={anchor} etfs={len(table):,d} scored={scored:,d} "
+        f"peer_groups={table['peer_group'].nunique()} fell_back_to_asset_class={fell_back:,d} "
+        f"min_members={min_members}"
+    ]
+    if not scored:
+        return out
+    for group, count in table["peer_group"].value_counts().head(12).items():
+        # An explicit boolean Series and an emptiness test, rather than a mask expression and
+        # a NaN check: both of those are unions in the pandas stubs, and "is this group empty"
+        # is the question being asked anyway.
+        member = pd.Series(table["peer_group"] == group, dtype=bool)
+        values = as_float.loc[member].dropna()
+        shown = "—" if values.empty else f"{float(values.median()):.2f}"
+        out.append(f"    {group:<28} n={count:>4,d}  median composite={shown}")
+    top = table.loc[as_float.nlargest(min(5, scored)).index, ["peer_group", "composite"]]
+    out.append(f"    highest composite: {list(top.itertuples(index=False, name=None))}")
+    return out
+
+
 def run(*, eod: dt.date | None, dry_run: bool, report: Report | None) -> dict[str, object]:
     run_id = str(uuid.uuid4())
     cutoff = eod or _gdb.eod_cutoff()
@@ -327,19 +367,9 @@ def run(*, eod: dt.date | None, dry_run: bool, report: Report | None) -> dict[st
     table, lines = score_rows(frame, anchor, th, run_id)
 
     scored = int(table["composite"].notna().sum())
-    groups = table["peer_group"].nunique()
     fell_back = int((frame["grouped_by"] == "asset_class").sum())
-    print(
-        f"[score_etfs] anchor={anchor} etfs={len(table):,d} scored={scored:,d} "
-        f"peer_groups={groups} fell_back_to_asset_class={fell_back:,d} "
-        f"min_members={min_members}"
-    )
-    if scored:
-        top = table.nlargest(min(5, scored), "composite")[["peer_group", "composite"]]
-        for group, count in table["peer_group"].value_counts().head(12).items():
-            median = table.loc[table["peer_group"] == group, "composite"].median()
-            print(f"    {group:<28} n={count:>4,d}  median composite={median}")
-        print(f"    highest composite: {list(top.itertuples(index=False, name=None))}")
+    for line in summary_lines(table, anchor, min_members, fell_back):
+        print(line)
 
     if report is not None:
         for line in lines:
