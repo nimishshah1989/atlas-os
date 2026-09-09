@@ -52,6 +52,64 @@ PRECEDENCE_CASES = [
     ("EUO", "currency", "region", "'UltraShort Euro' — the currency, not Europe"),
 ]
 
+# The 2026-09-09 widening, measured over all 5,656 REAL listed ETF names in the directory.
+# It moved unmatched from 22.5% to 17.1% by adding vocabulary the market had listed since the
+# rules were written. One case per rule group that was widened, so a term deleted from any of
+# them fails here with the fund that needed it.
+WIDENING_CASES = [
+    ("AAPR", "defined_outcome", "Innovator 'Equity Defined Protection' — 42 funds of it"),
+    ("AAPW", "options_income", "Roundhill 'WeeklyPay' — the whole line was unmatched"),
+    ("CHNL", "crypto", "'Chainlink' — a coin listed after the rule was written"),
+    ("BIL", "fixed_income", "SPDR '1-3 Month T-Bill' — the short end had no vocabulary"),
+    ("USO", "commodity", "'United States Oil Fund' holds the barrel"),
+    ("IDRV", "thematic", "iShares 'Self-Driving EV and Tech'"),
+    ("BDRY", "sector", "Breakwave 'Dry Bulk Shipping'"),
+    ("CVLC", "size_style", "Calvert 'Large-Cap' — a HYPHEN, which `large ?cap` never matched"),
+    ("EEM", "region", "iShares MSCI 'Emerging' Index Fund — without the word 'Markets'"),
+]
+
+# Widening a rule is where a classifier acquires false positives, and each of these four was
+# a REAL wrong answer this change produced and then had to fix. They are the reason the
+# widening is worth trusting: the vocabulary was tested against every listed name, not chosen.
+FALSE_POSITIVE_CASES = [
+    (
+        "BZQ",
+        "country",
+        "fixed_income",
+        "ProShares writes -2x as one word: 'UltraShort MSCI Brazil' is gearing, not duration, "
+        "so the fixed-income term requires a separator",
+    ),
+    (
+        "AIVI",
+        "region",
+        "thematic",
+        "'International AI Enhanced Value' uses AI as the METHOD; the theme is not AI, so the "
+        "thematic rule refuses `ai` before enhanced/managed/powered/driven/select",
+    ),
+    (
+        "STBQ",
+        "sector",
+        "crypto",
+        "'Stablecoin Technology Leaders' holds the EQUITY of stablecoin companies — the same "
+        "case the crypto rule's own comment excludes for blockchain",
+    ),
+    (
+        "VSDA",
+        "dividend_income",
+        "defined_outcome",
+        "'Dividend Accelerator' buys companies whose dividends accelerate; it is not a "
+        "structured accelerator note",
+    ),
+]
+
+# Two funds whose old answer was simply wrong, both because an ISSUER's name was read as
+# geography. Worth naming: they are the clearest evidence the widening fixed real defects
+# rather than only adding reach.
+ISSUER_WORD_CASES = [
+    ("CLIP", "fixed_income", "'Global X 1-3 Month T-Bill' was filed as a REGION fund"),
+    ("BOAT", "sector", "'SonicShares Global Shipping' was filed as a REGION fund"),
+]
+
 # Not precedence cases: `country` correctly outranks `region`, and these two reach `region`
 # because the country pattern DECLINES to match an excluded country — a different mechanism,
 # asserted in test_a_country_named_after_ex_is_not_the_bet.
@@ -64,6 +122,9 @@ ALL_SYMBOLS = (
     [c[0] for c in STRATEGY_CASES]
     + [c[0] for c in PRECEDENCE_CASES]
     + [c[0] for c in EXCLUSION_CASES]
+    + [c[0] for c in WIDENING_CASES]
+    + [c[0] for c in FALSE_POSITIVE_CASES]
+    + [c[0] for c in ISSUER_WORD_CASES]
 )
 
 
@@ -155,4 +216,30 @@ def test_coverage_is_what_we_claim(etf_names: list[str], stock_symbols: set[str]
     vocabulary that has drifted away from the market."""
     matched = sum(1 for n in etf_names if classify_strategy(n, stock_symbols).strategy)
     share = matched / len(etf_names)
-    assert 0.70 <= share <= 0.85, f"rules matched {share:.1%} of {len(etf_names)} real names"
+    assert 0.78 <= share <= 0.90, f"rules matched {share:.1%} of {len(etf_names)} real names"
+
+
+def test_the_widened_rules_read_the_funds_they_were_widened_for(
+    names: dict[str, str], stock_symbols: set[str]
+) -> None:
+    for symbol, expected, why in WIDENING_CASES:
+        got = classify_strategy(names[symbol], stock_symbols)
+        assert got.strategy == expected, f"{symbol} {why} -> {got.strategy}"
+
+
+def test_the_widening_does_not_reintroduce_its_own_false_positives(
+    names: dict[str, str], stock_symbols: set[str]
+) -> None:
+    """Each of these was produced by a first draft of the widening and then fixed. A term
+    loosened back to that draft fails here, with the fund and the reason."""
+    for symbol, expected, wrong, why in FALSE_POSITIVE_CASES:
+        got = classify_strategy(names[symbol], stock_symbols)
+        assert got.strategy == expected, f"{symbol} is {expected}, NOT {wrong}: {why}"
+
+
+def test_an_issuer_name_is_not_a_geography(names: dict[str, str], stock_symbols: set[str]) -> None:
+    """ "Global X" and "SonicShares Global" are brands. Reading them as a region put a Treasury
+    bill fund on the world map, which every downstream peer group then inherited."""
+    for symbol, expected, why in ISSUER_WORD_CASES:
+        got = classify_strategy(names[symbol], stock_symbols)
+        assert got.strategy == expected, f"{symbol} {why} -> {got.strategy}"
