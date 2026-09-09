@@ -33,7 +33,7 @@ const SEC_IDS = {
 // state the board must render honestly, not a stand-in for one it does not have.
 const UNWRITTEN = {
   in_universe: null, universe_exclusion: null,
-  strategy: null, class_asset_class: null, leveraged: null, inverse: null, hedged: null,
+  strategy: null, theme: null, class_asset_class: null, leveraged: null, inverse: null, hedged: null,
   class_status: null, country: null, region: null,
   composite: null, technical: null, conviction_tier: null, peer_group: null, lenses_active: null,
   composite_decile: null, peer_rank: null, peer_n: null,

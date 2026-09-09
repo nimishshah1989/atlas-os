@@ -21,7 +21,7 @@ const BASE = {
   asset_class: 'etf', sector_gics: null, universe_exclusion: null, in_universe: true,
   leveraged: false, inverse: false, hedged: false, class_status: 'auto', country: null,
   region: null, technical: null, peer_rank: null, peer_n: null, pos_52w: null,
-  rs_3m_spy: null, rs_6m_spy: null, strategy: null, class_asset_class: null,
+  rs_3m_spy: null, rs_6m_spy: null, strategy: null, theme: null, class_asset_class: null,
   conviction_tier: 'HIGH', lenses_active: 3,
 } as const
 

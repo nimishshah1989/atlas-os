@@ -72,6 +72,18 @@ const SECTOR: FacetGroup<InstrumentRow> = {
   labels: { none: 'No sector' },
 }
 
+// The FM's own words for why this facet exists: "if there is something like an ETF which is
+// focused on AI, then creating that artificial intelligence … funds around gold and silver miners
+// … water and food security". A fund with no theme is a fund whose name names none — usually a
+// broad-market one — so it is labelled as that rather than as a gap in the data.
+const THEME: FacetGroup<InstrumentRow> = {
+  key: 'theme',
+  label: 'Theme',
+  kind: 'any',
+  value: (r) => r.theme ?? 'none',
+  labels: { none: 'No theme in the name' },
+}
+
 const COUNTRY: FacetGroup<InstrumentRow> = {
   key: 'country',
   label: 'Country',
@@ -225,7 +237,9 @@ export function InstrumentExplorer({ assetClass, list }: { assetClass: AssetClas
     const g: FacetGroup<InstrumentRow>[] = []
     if (universe) g.push(UNIVERSE)
     if (etf) {
-      if (classified) g.push(PEER)
+      // Theme sits directly under the peer group: the peer group says what KIND of fund it is,
+      // the theme says what it is a bet ON, and the FM reads them in that order.
+      if (classified) g.push(PEER, THEME)
     } else {
       g.push(SECTOR)
       if (scored) g.push(COHORT)

@@ -17,6 +17,10 @@ import { toInstrumentRow, type InstrumentDbRow, type InstrumentRow } from '@/lib
 
 const BASE = {
   asset_class: 'etf',
+  // Every fund in this fixture is broad-market, factor, dividend or bond: the theme rule table
+  // reads none of their names, verified by running classify_theme over all ten. Null is the real
+  // value here, not a stand-in (rule #0).
+  theme: null,
   sector_gics: null,
   universe_exclusion: null,
   in_universe: true,
