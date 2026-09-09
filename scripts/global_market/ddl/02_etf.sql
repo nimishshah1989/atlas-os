@@ -137,8 +137,10 @@ ALTER TABLE atlas_global.etf_meta
 ALTER TABLE atlas_global.etf_meta
     ADD COLUMN IF NOT EXISTS series_class_count    integer;
 -- Σ|notionalAmt| ÷ net assets. The ONLY structural evidence of gearing in the form: a swap's
--- pctVal is its mark, not its notional, so TQQQ (three times) sums to 101.26% of net assets
--- against IVV's 100.12% — the weights cannot tell them apart, and this can (TQQQ 2.70,
--- IVV 0.0016, measured on the fixtures).
+-- pctVal is its mark, not its notional, so the weights of TQQQ (three times) sum to 1.0126 of
+-- net assets against IVV's 1.0012 — they cannot tell the two apart, and this can (TQQQ 2.70,
+-- IVV 0.0016, measured on the fixtures). No per-cent sign anywhere in this file: apply_ddl's
+-- check_no_percent refuses one even in a comment, because psycopg2 reads it as a parameter
+-- marker on the migration's path.
 ALTER TABLE atlas_global.etf_meta
     ADD COLUMN IF NOT EXISTS derivative_notional_share numeric;
