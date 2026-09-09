@@ -44,6 +44,7 @@ KEY_TABLES: list[tuple[str, str, int]] = [
     ("macro_daily", "date", 3),  # FRED posts DGS10/DTB3 the next business day (P1-C)
     ("technical_daily", "date", 0),  # nightly from ohlcv_daily, same session (P1-D)
     ("country_daily", "date", 0),  # nightly read over technical_daily, same session
+    ("etf_scores_daily", "date", 0),  # nightly blend over technical_daily, same session (P2-C)
 ]
 
 # Derived board tables — WARN tier (reported + written to the health snapshot, never a
@@ -54,6 +55,10 @@ BOARD_TABLES: list[tuple[str, str, int]] = [
     ("instrument_master", "updated_at", 8),  # weekly build_identity touches every listed row (P1-A)
     ("index_membership", "updated_at", 8),  # weekly SSGA pass touches every current row (P1-C)
     ("universe_snapshot", "date", 8),  # nightly once the FM sets the floor (P1-E)
+    # Nightly, but WARN not KEY: a stale classification degrades peer groups, it does not make
+    # a price wrong, and withholding the whole board's publish over a name-reading rule that
+    # changes monthly would be the wrong trade.
+    ("etf_classification", "valid_from", 8),  # nightly regex pass over fund names (P2-B)
 ]
 
 # ── PRODUCER REGISTRY (the build-time half of the freshness contract) ──
@@ -69,6 +74,8 @@ PRODUCERS: dict[str, str] = {
     "universe_snapshot": "build_universe_snapshot.py",
     "technical_daily": "compute_technicals.py",
     "country_daily": "build_country_views.py",
+    "etf_classification": "classify_etfs.py",
+    "etf_scores_daily": "score_etfs.py",
 }
 
 

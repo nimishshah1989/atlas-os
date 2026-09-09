@@ -129,7 +129,12 @@ step "compute_technicals"      $PY scripts/global_market/compute_technicals.py -
 step "build_universe_snapshot" $PY scripts/global_market/build_universe_snapshot.py --eod "$EOD" --report "$LOG_DIR/universe_snapshot_$EOD.csv" --report-dir "$LOG_DIR"
 # step "build_exposures"         $PY scripts/global_market/build_exposures.py --changed
 # step "score_stocks"            $PY scripts/global_market/score_stocks.py --as-of "$EOD"
-# step "score_etfs"              $PY scripts/global_market/score_etfs.py --as-of "$EOD"
+# CLASSIFY then SCORE, in that order and before the country view: score_etfs INNER-joins the
+# classification to get each fund's peer group, and build_country_views reads the composite the
+# scorer writes. classify_etfs is cheap (a regex over ~5,600 names, no feed) and runs nightly
+# rather than weekly so a fund listed today is groupable tonight.
+step "classify_etfs"           $PY scripts/global_market/classify_etfs.py --report "$LOG_DIR/classify_etfs_$EOD.csv"
+step "score_etfs"              $PY scripts/global_market/score_etfs.py --eod "$EOD" --report "$LOG_DIR/score_etfs_$EOD.csv"
 # Countries: one tradeable fund per market, read off technical_daily. Uncommented once its
 # board surface existed (/countries, #240) and its builder ran (#241) — the rule at the top
 # of this file. Without it country_daily stays empty and the page says so honestly, which

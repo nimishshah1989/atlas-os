@@ -231,6 +231,46 @@ SEEDS: list[dict[str, object]] = [
          "ADV$ floor for scoring and basket eligibility. FM decision 2026-09-06, read off the "
          "REAL distribution in docs/global/reports/adv_usd_2026-09-03.md (2,114 of 5,656 ETFs "
          "clear $1M; so do all 503 S&P 500 members, so one floor serves both asset classes)"),
+    # ── P2-C: the POINT VALUES the ETF lens sub-scores award (docs/global/phase2.md) ────────
+    # The bands above say WHERE a fund falls; these say what that is worth. Both belong in the
+    # table for the same reason: the FM re-tunes a ladder from /admin without a deploy, and a
+    # score nobody can trace to a row is a score nobody should act on (rule #4).
+    _row("etf_quintile_q1_pts", "25", "etf_scoring", "C", "points", "0", "25",
+         "Top-quintile points on any percentile sub-score (peer RS, vol, drawdown, expense)"),
+    _row("etf_quintile_q2_pts", "20", "etf_scoring", "C", "points", "0", "25",
+         "Second-quintile points on any percentile sub-score"),
+    _row("etf_quintile_q3_pts", "15", "etf_scoring", "C", "points", "0", "25",
+         "Middle-quintile points on any percentile sub-score"),
+    _row("etf_quintile_q4_pts", "10", "etf_scoring", "C", "points", "0", "25",
+         "Fourth-quintile points on any percentile sub-score"),
+    _row("etf_quintile_q5_pts", "5", "etf_scoring", "C", "points", "0", "25",
+         "Bottom-quintile points on any percentile sub-score"),
+    _row("etf_rs_spy_3m_pts", "8", "etf_scoring", "C", "points", "0", "25",
+         "Points when 3-month RS vs SPY clears rs_spy_strong"),
+    _row("etf_rs_spy_6m_pts", "8", "etf_scoring", "C", "points", "0", "25",
+         "Points when 6-month RS vs SPY clears rs_spy_strong"),
+    _row("etf_rs_spy_12m_pts", "9", "etf_scoring", "C", "points", "0", "25",
+         "Points when 12-month RS vs SPY clears rs_spy_strong (the three sum to 25)"),
+    _row("etf_rs_spy_partial_frac", "0.5", "etf_scoring", "C", "fraction", "0", "1",
+         "Fraction of a window's points for beating SPY but not by rs_spy_strong"),
+    _row("etf_risk_beta_t1_pts", "25", "etf_scoring", "C", "points", "0", "25",
+         "Beta band 1 points (beta <= risk_beta_t1)"),
+    _row("etf_risk_beta_t2_pts", "18", "etf_scoring", "C", "points", "0", "25",
+         "Beta band 2 points"),
+    _row("etf_risk_beta_t3_pts", "10", "etf_scoring", "C", "points", "0", "25",
+         "Beta band 3 points"),
+    _row("etf_risk_beta_t4_pts", "3", "etf_scoring", "C", "points", "0", "25",
+         "Beta band 4 points (above risk_beta_t3)"),
+    _row("etf_cost_adv_t1_pts", "25", "etf_scoring", "C", "points", "0", "25",
+         "ADV$/AUM band 1 points (at or above cost_adv_usd_t1 / cost_aum_usd_t1)"),
+    _row("etf_cost_adv_t2_pts", "20", "etf_scoring", "C", "points", "0", "25",
+         "ADV$/AUM band 2 points"),
+    _row("etf_cost_adv_t3_pts", "15", "etf_scoring", "C", "points", "0", "25",
+         "ADV$/AUM band 3 points"),
+    _row("etf_cost_adv_t4_pts", "10", "etf_scoring", "C", "points", "0", "25",
+         "ADV$/AUM band 4 points"),
+    _row("etf_cost_adv_t5_pts", "3", "etf_scoring", "C", "points", "0", "25",
+         "ADV$/AUM below every band"),
 ]
 # fmt: on
 
