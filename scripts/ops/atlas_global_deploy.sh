@@ -68,8 +68,21 @@ export PORT="$ATLAS_GLOBAL_PORT"
 # moment package-lock.json moves — and a build that is green in CI (fresh install) then fails
 # on the box (old install) for a reason that never appears in the diff. --prefer-offline keeps
 # it to seconds when nothing changed.
-say "npm ci --prefer-offline"
-npm ci --prefer-offline >>"$LOG" 2>&1 || { say "npm ci FAILED — last 40 lines of $LOG:"; tail -n 40 "$LOG" | sed 's/^/    /'; die "npm ci failed"; }
+#
+# BUT NOT ON A LIVE TREE FOR NOTHING. `npm ci` deletes node_modules and rebuilds it while pm2
+# is still serving from this directory, and a route chunk that requires a module in that
+# window fails the request. So the install runs when it can change something — the lockfile
+# differs from the one the current node_modules was installed from, or node_modules is gone —
+# and is skipped otherwise. The marker lives INSIDE node_modules, so a wiped tree reinstalls
+# by construction. FORCE_NPM_CI=1 forces it.
+LOCK_SHA=$(sha256sum package-lock.json | cut -c1-64)
+if [ "${FORCE_NPM_CI:-0}" != "1" ] && [ -d node_modules ] && [ "$(cat node_modules/.atlas-lock-sha 2>/dev/null)" = "$LOCK_SHA" ]; then
+  say "npm ci skipped — package-lock.json unchanged since the last install (FORCE_NPM_CI=1 overrides)"
+else
+  say "npm ci --prefer-offline"
+  npm ci --prefer-offline >>"$LOG" 2>&1 || { say "npm ci FAILED — last 40 lines of $LOG:"; tail -n 40 "$LOG" | sed 's/^/    /'; die "npm ci failed"; }
+  printf '%s' "$LOCK_SHA" > node_modules/.atlas-lock-sha || say "warning: could not write node_modules/.atlas-lock-sha — the next deploy installs again"
+fi
 
 # `|| die`, because an UNCHECKED cp is how a full disk turns a failed build into a broken
 # board: it leaves a partial .next.bak that the rollback below would then install.
@@ -180,9 +193,9 @@ health=$(curl -sS -m 20 -o /dev/null -w '%{http_code}' \
 if [ "$health" = "200" ]; then
   say "ok: ${BASE_PATH}/health 200 — the database path is healthy too"
 else
-  say "NOTE: ${BASE_PATH}/health answered $health (000 = no answer in 20s). The board is UP and"
-  say "      serving; only the operator page is slow or stalled. Its database path measured"
-  say "      healthy on 2026-09-08 (scripts/db-probe.mjs: every step under 0.1s), so this is the"
-  say "      page itself — it now bounds each of its queries and NAMES the one that stalls."
-  say "      Open ${BASE_PATH}/health and read which section says 'did not answer within'."
+  say "NOTE: ${BASE_PATH}/health answered $health (000 = no answer in 20s). The board is UP —"
+  say "      the smoke on ${BASE_PATH}/login passed — and this line is about the operator page only."
+  say "      A stalled query does NOT produce this: the page bounds each query and renders the"
+  say "      stall as its own section, with HTTP 200. A non-200 here is the page failing to"
+  say "      render at all: read \`pm2 logs $PM2_APP --lines 100\` and curl ${BASE_PATH}/health again."
 fi

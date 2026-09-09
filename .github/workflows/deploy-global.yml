@@ -59,9 +59,10 @@ jobs:
             # nginx does not proxy. Two places it can honestly come from, in order:
             #   1. the box .env, where it belongs
             #   2. the pm2 process that is already serving on it — true by construction
-            # Both are read as "the digits on that line", which survives quotes and stray spaces
-            # in .env without a quoting expression nobody can read six months from now.
-            PORT=$(grep -sE '^ATLAS_GLOBAL_PORT=' "$REPO/.env" | tail -1 | grep -oE '[0-9]+' | tail -1 || true)
+            # Both are read as "the first digits on that line, comment stripped", which survives
+            # quotes and stray spaces in .env — and a trailing "# was 3005" — without a quoting
+            # expression nobody can read six months from now.
+            PORT=$(grep -sE '^ATLAS_GLOBAL_PORT=' "$REPO/.env" | tail -1 | sed -E 's/#.*$//' | grep -oE '[0-9]+' | head -1 || true)
             if [ -n "${PORT:-}" ]; then
               echo "port $PORT taken from $REPO/.env"
             else
@@ -69,7 +70,7 @@ jobs:
               # own indent silently ENDS the scalar, and YAML then tries to parse Python. That
               # is exactly how the first version of this workflow failed — startup_failure, zero
               # jobs, no log to read. Keep every command on one line.
-              PORT=$(pm2 jlist 2>/dev/null | python3 -c "import json,sys; print(next((str(p.get('pm2_env',{}).get('PORT','')) for p in json.load(sys.stdin) if p.get('name')=='atlas-global'), ''))" 2>/dev/null || true)
+              PORT=$(pm2 jlist 2>/dev/null | python3 -c "import json,sys; e=next((p.get('pm2_env',{}) for p in json.load(sys.stdin) if p.get('name')=='atlas-global'), {}); print(str(e.get('PORT') or e.get('env',{}).get('PORT') or ''))" 2>/dev/null || true)
               [ -n "${PORT:-}" ] && echo "port $PORT taken from the running atlas-global process"
             fi
             if [ -z "${PORT:-}" ]; then

@@ -104,7 +104,8 @@ def test_a_malformed_runfile_line_is_skipped(tmp_path: Path) -> None:
         "freshness_guard\t2026-09-04T14:44:20+00:00\t\tfailed\n"  # no end: allowed
     )
     steps = whs.read_runfile(p)
-    assert steps == [("freshness_guard", "2026-09-04T14:44:20+00:00", "", "failed")]
+    # Four columns in, five out: the reason column is "" when the line never carried one.
+    assert steps == [("freshness_guard", "2026-09-04T14:44:20+00:00", "", "failed", "")]
     (row,) = whs.run_rows(steps, "daily", "vm", None, NOW)
     assert row["ended_at"] is None
     (v,) = whs.validator_rows(steps, "daily", "vm", None, NOW)
@@ -240,3 +241,52 @@ def test_a_table_that_cannot_be_read_is_skipped_not_fatal(
         t for t, _c in whs.TRACKED if t != "universe_snapshot"
     ]
     assert "skip universe_snapshot: relation" in capsys.readouterr().err
+
+
+# ── the fifth column: why a step failed ──────────────────────────────────────
+
+
+def test_failed_step_reason_reaches_error_message_and_green_row_has_none(tmp_path: Path) -> None:
+    """Four-column lines (every runfile before 2026-09-09) still parse; a fifth column lands in
+    error_message; success rows carry NULL, never "". The lines are TSV shapes, not data."""
+    p = tmp_path / "runs.tsv"
+    p.write_text(
+        "ingest_prices\t2026-09-08T01:00:00+00:00\t2026-09-08T01:00:12+00:00\tfailed\t"
+        "rc=1: alpaca: 403 forbidden — check ALPACA_API_KEY in the box .env\n"
+        "ingest_macro\t2026-09-08T01:00:12+00:00\t2026-09-08T01:00:19+00:00\tsuccess\t\n"
+        "compute_technicals\t2026-09-08T01:00:19+00:00\t2026-09-08T01:00:24+00:00\tfailed\n"
+    )
+    steps = whs.read_runfile(p)
+    rows = {r["script_name"]: r for r in whs.run_rows(steps, "daily", "vm", None, NOW)}
+    assert rows["ingest_prices"]["error_message"].startswith("rc=1: alpaca: 403")
+    assert rows["ingest_macro"]["error_message"] is None
+    assert rows["compute_technicals"]["error_message"] is None  # four columns: no reason recorded
+    # gate rows unpack the wider tuple without complaint
+    assert whs.validator_rows(whs.read_runfile(p), "daily", "vm", None, NOW) == []
+
+
+def test_a_reason_never_carries_a_credential_onto_the_open_board() -> None:
+    """The shapes a traceback takes — requests' HTTPError with the keyed URL, a connection
+    string, an Authorization header, Alpaca's key headers — each lose the value and nothing
+    else. Placeholder values, deliberately low-entropy: this asserts on text shape, not data."""
+    fred = (
+        "403 Client Error: Forbidden for url: https://api.stlouisfed.org/fred/series/"
+        "observations?series_id=SP500&api_key=aaaaaaaaaaaaaaaa&file_type=json"
+    )
+    assert whs.redact(fred) == (
+        "403 Client Error: Forbidden for url: https://api.stlouisfed.org/fred/series/"
+        "observations?series_id=SP500&api_key=***&file_type=json"
+    )
+    dsn = "connection to postgresql://atlas_global_app.abc:pw@aws-1.pooler.supabase.com:6543/pg"
+    assert whs.redact(dsn) == (
+        "connection to postgresql://atlas_global_app.abc:***@aws-1.pooler.supabase.com:6543/pg"
+    )
+    hdr = (
+        "{'Authorization': 'Bearer aaaaaaaaaaaa', 'APCA-API-KEY-ID': 'aaaa', "
+        "'APCA-API-SECRET-KEY': 'bbbb'}"
+    )
+    out = whs.redact(hdr)
+    assert "aaaaaaaaaaaa" not in out and "'aaaa'" not in out and "'bbbb'" not in out
+    assert "APCA-API-KEY-ID" in out  # the NAME survives, so the reader knows which header
+    plain = "rc=1: ingest_prices: SPY has no bar for 2026-09-08 (series_id=SP500 checked)"
+    assert whs.redact(plain) == plain

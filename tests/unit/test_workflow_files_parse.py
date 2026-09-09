@@ -61,6 +61,9 @@ def test_every_job_can_actually_do_something(path: Path) -> None:
     """A job with neither steps nor a reusable-workflow `uses` is a job that runs nothing."""
     jobs = yaml.safe_load(path.read_text())["jobs"]
     for name, job in jobs.items():
+        assert isinstance(job, dict), (
+            f"{path.name}: job '{name}' is not a mapping — emptied by mistake?"
+        )
         assert job.get("steps") or job.get("uses"), (
             f"{path.name}: job '{name}' has no steps and calls no reusable workflow"
         )

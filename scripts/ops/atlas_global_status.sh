@@ -34,7 +34,10 @@ ok()  { VERDICTS+=("✓ $*"); }
 # ── 1. code: is the checkout on main, and is it current? ────────────────────
 h "code on the box"
 if git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
-  git -C "$REPO" fetch origin main --quiet 2>/dev/null || kv "fetch" "FAILED (offline?) — comparing against last known origin/main"
+  # A fetch, deliberately: "is the box behind main" cannot be answered from the local refs.
+  # It touches only origin/main's ref, never the worktree; bounded so an unreachable GitHub
+  # cannot hang a status command.
+  timeout 20 git -C "$REPO" fetch origin main --quiet 2>/dev/null || kv "fetch" "FAILED (offline?) — comparing against last known origin/main"
   BRANCH=$(git -C "$REPO" branch --show-current 2>/dev/null || echo '?')
   HEAD_SHA=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo '?')
   MAIN_SHA=$(git -C "$REPO" rev-parse --short origin/main 2>/dev/null || echo '?')
@@ -91,7 +94,8 @@ for p in procs:
     if p.get('name')=='$PM2_APP':
         env=p.get('pm2_env',{}); up=env.get('pm_uptime',0)
         h=int((time.time()*1000-up)/3600000) if up else 0
-        print(env.get('status','?'), env.get('PORT','?'), f'{h}h', env.get('restart_time','?')); break
+        port=env.get('PORT') or env.get('env',{}).get('PORT') or '?'
+        print(env.get('status','?'), port, f'{h}h', env.get('restart_time','?')); break
 else: print('ABSENT ? ? ?')
 " 2>/dev/null || echo '? ? ? ?')"
   kv "status" "$P_STATUS"; kv "PORT" "$P_PORT"; kv "uptime" "$P_UPTIME"; kv "restarts" "$P_RESTARTS"
@@ -116,6 +120,8 @@ if [ "$PORT" != "?" ]; then
       /:307|/:302) bad "/ redirects to sign-in — AUTH IS ON in the serving build (${LOC})";;
       /:000)      bad "/ did not answer in 15s on :$PORT — the process is not serving";;
       /health:000) bad "/health did not answer in 15s (database path or render stall)";;
+      *:200|*:30[1278]) : ;;   # a page, or a redirect already shown on its line
+      *)          bad "$path answered $CODE on :$PORT — an error page, not the board";;
     esac
   done
 else
@@ -134,6 +140,7 @@ for scheme in http https; do
     https:000) bad "https does not answer — no certificate yet (Cloudflare grey-cloud, then certbot)";;
     http:000)  bad "http://$HOST does not answer — DNS or nginx";;
     http:502|http:504) bad "nginx answers but cannot reach the process — port mismatch? nginx proxies to a different port than pm2 serves";;
+    *) bad "$scheme://$HOST/ answered $CODE — not a page";;
   esac
 done
 
@@ -153,7 +160,9 @@ fi
 
 # ── 7. the nightly ───────────────────────────────────────────────────────────
 h "nightly (atlas_global_daily.sh)"
-LAST_NIGHTLY=$(ls -1t "$LOG_DIR"/atlas_global_daily*.log 2>/dev/null | head -1 || true)
+# Timestamped run logs only: the cron line in the runbook appends to atlas_global_daily_cron.log,
+# which a bare atlas_global_daily*.log would match and report as "the last run".
+LAST_NIGHTLY=$(ls -1t "$LOG_DIR"/atlas_global_daily_[0-9]*.log 2>/dev/null | head -1 || true)
 if [ -n "$LAST_NIGHTLY" ]; then
   kv "last log" "$LAST_NIGHTLY  ($(date -u -r "$LAST_NIGHTLY" +%FT%TZ 2>/dev/null))"
   kv "last lines" ""; tail -3 "$LAST_NIGHTLY" 2>/dev/null | sed 's/^/    /'
