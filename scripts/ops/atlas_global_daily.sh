@@ -158,6 +158,9 @@ gate "freshness_guard"   $PY scripts/global_market/freshness_guard.py --eod "$EO
 # night where that step exits 2 (the floor unset) the universe is empty and gate A says so
 # rather than passing on nothing.
 gate "validate_global_A" $PY scripts/global_market/validate_global.py --check A --eod "$EOD"
+# Gate C: the scores are USABLE — in range, discriminating, every fund in a group big
+# enough to rank in, no geared fund scored, every composite traceable to an active lens.
+gate "validate_global_C" $PY scripts/global_market/validate_global.py --check C --eod "$EOD"
 # Basket books reconcile to real rows (checks A–G over basket_* and ohlcv_daily). PASS with no
 # active basket; a basket the worker has not booked yet is noted, never failed.
 gate "validate_baskets"  $PY scripts/global_market/validate_baskets.py --eod "$EOD"

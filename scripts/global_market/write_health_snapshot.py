@@ -61,6 +61,7 @@ TRACKED: list[tuple[str, str]] = [
 _GATE_VALIDATORS = {
     "freshness_guard": "freshness_guard",
     "validate_global_A": "gate_A",
+    "validate_global_C": "gate_C",
     "validate_baskets": "gate_baskets",
 }
 
