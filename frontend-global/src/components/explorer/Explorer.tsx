@@ -19,6 +19,7 @@ import {
 import { formatNum } from '@/lib/format'
 import { DataTable, type Column } from './DataTable'
 import { FacetRail } from './FacetRail'
+import { PeerStrip } from './PeerStrip'
 
 type Props<R> = {
   rows: readonly R[]
@@ -29,9 +30,12 @@ type Props<R> = {
   /** The plural noun in the count line: "5,656 ETFs". */
   noun: string
   empty: ReactNode
+  /** The facet whose values also render as a chip strip above the table — the grouping a reader
+   *  chooses BEFORE reading a ranking. Omitted, there is no strip. */
+  stripKey?: string
 }
 
-export function Explorer<R extends { symbol: string; name: string | null }>({ rows, columns, groups, defaultSort, rowKey, noun, empty }: Props<R>) {
+export function Explorer<R extends { symbol: string; name: string | null }>({ rows, columns, groups, defaultSort, rowKey, noun, empty, stripKey }: Props<R>) {
   const params = useSearchParams()
   const pathname = usePathname()
   const state = useMemo(() => parseState(params, groups, defaultSort), [params, groups, defaultSort])
@@ -56,6 +60,8 @@ export function Explorer<R extends { symbol: string; name: string | null }>({ ro
       ? `${formatNum(total)} ${noun}`
       : `${formatNum(shown.length)} of ${formatNum(total)} ${noun}${state.q ? ` match “${state.q}”` : ''}`
 
+  const strip = groups.find((g) => g.key === stripKey)
+
   return (
     <div className="explorer">
       <FacetRail
@@ -67,6 +73,18 @@ export function Explorer<R extends { symbol: string; name: string | null }>({ ro
         onClear={filtered ? () => write({ ...state, facets: defaults }) : undefined}
       />
       <div className="min-w-0">
+        {strip && (
+          <PeerStrip
+            values={values[strip.key] ?? []}
+            counts={counts[strip.key] ?? {}}
+            selected={state.facets[strip.key] ?? []}
+            label={(v) => strip.labels?.[v] ?? strip.format?.(v) ?? v}
+            onToggle={(v) => {
+              const sel = state.facets[strip.key] ?? []
+              write({ ...state, facets: { ...state.facets, [strip.key]: sel.includes(v) ? [] : [v] } })
+            }}
+          />
+        )}
         <p className="mb-2 text-body text-ink-2" role="status" data-testid="count" data-total={total} data-shown={shown.length}>
           {line}
         </p>

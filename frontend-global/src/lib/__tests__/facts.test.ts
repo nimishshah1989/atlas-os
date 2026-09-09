@@ -7,6 +7,8 @@ import {
   describeBars,
   describeInterval,
   expandRows,
+  hasClassification,
+  hasScores,
   hasUniverse,
   packRows,
   secIdentityKind,
@@ -17,40 +19,48 @@ import {
   type InstrumentDbRow,
 } from '@/lib/facts'
 
-// select symbol, name, exchange, asset_class, listing_date, cik, series_id, class_id, sector_gics
-// from atlas_global.instrument_master where is_active and symbol in (…)   (+ the EOD membership
-// EXISTS and the open ssga weight_frac, as queries/instruments.ts computes them for 2026-09-03)
+// select cik, series_id, class_id from atlas_global.instrument_master where is_active and symbol in (…)
+const SEC_IDS = {
+  SPY: { cik: '0000884394', series_id: null, class_id: null },
+  QQQ: { cik: '0001067839', series_id: 'S000101292', class_id: 'C000271435' },
+  AAOG: { cik: null, series_id: null, class_id: null },
+  AAPL: { cik: '0000320193', series_id: null, class_id: null },
+}
+
+// select symbol, name, asset_class, sector_gics from atlas_global.instrument_master where is_active
+// and symbol in (…). Every column the producers write — the classification, the score row, the
+// technicals — is NULL here because in the scratch database those tables hold no rows: that is the
+// state the board must render honestly, not a stand-in for one it does not have.
+const UNWRITTEN = {
+  in_universe: null, universe_exclusion: null,
+  strategy: null, class_asset_class: null, leveraged: null, inverse: null, hedged: null,
+  class_status: null, country: null, region: null,
+  composite: null, technical: null, conviction_tier: null, peer_group: null, lenses_active: null,
+  composite_decile: null, peer_rank: null, peer_n: null,
+  rs_3m_spy: null, rs_6m_spy: null, rs_12m_spy: null, pos_52w: null, adv_usd: null,
+  vol_ann: null, mdd_12m: null,
+} as const
+
 const SPY: InstrumentDbRow = {
-  symbol: 'SPY', name: 'State Street SPDR S&P 500 ETF Trust', exchange: 'NYSEARCA', asset_class: 'etf',
-  listing_date: '1993-01-29', cik: '0000884394', series_id: null, class_id: null, sector_gics: null,
-  sp500: false, spy_weight: null,
-  price_adj: null, ret_1m: null, ret_3m: null, ret_6m: null, ret_12m: null, rs_3m_spy: null, pos_52w: null,
-  adv_usd: null, in_universe: null, universe_exclusion: null,
+  symbol: 'SPY', name: 'State Street SPDR S&P 500 ETF Trust', asset_class: 'etf', sector_gics: null, ...UNWRITTEN,
 }
-const QQQ: InstrumentDbRow = {
-  ...SPY, symbol: 'QQQ', name: 'Invesco QQQ Trust, Series 1', exchange: 'NASDAQ', listing_date: '1999-03-10',
-  cik: '0001067839', series_id: 'S000101292', class_id: 'C000271435',
-}
-const AAOG: InstrumentDbRow = {
-  ...SPY, symbol: 'AAOG', name: 'Leverage Shares 2X Long AAOI Daily ETF', exchange: 'BATS', listing_date: '2026-05-12',
-  cik: null, series_id: null, class_id: null,
-}
+const QQQ: InstrumentDbRow = { ...SPY, symbol: 'QQQ', name: 'Invesco QQQ Trust, Series 1' }
+const AAOG: InstrumentDbRow = { ...SPY, symbol: 'AAOG', name: 'Leverage Shares 2X Long AAOI Daily ETF' }
 const AAPL: InstrumentDbRow = {
-  ...SPY, symbol: 'AAPL', name: 'Apple Inc. - Common Stock', exchange: 'NASDAQ', asset_class: 'stock',
-  listing_date: '1980-12-12', cik: '0000320193', sector_gics: 'Information Technology',
-  sp500: true, spy_weight: '0.07219673',
+  ...SPY, symbol: 'AAPL', name: 'Apple Inc. - Common Stock', asset_class: 'stock',
+  sector_gics: 'Information Technology',
 }
 
 describe('secIdentityKind', () => {
   it('is CIK when the SEC knows the issuer but not a fund series/class (SPY is a unit investment trust)', () => {
-    expect(secIdentityKind(SPY)).toBe('cik')
-    expect(secIdentityKind(AAPL)).toBe('cik')
+    expect(secIdentityKind(SEC_IDS.SPY)).toBe('cik')
+    expect(secIdentityKind(SEC_IDS.AAPL)).toBe('cik')
   })
   it('is series + class for a registered fund share class (QQQ)', () => {
-    expect(secIdentityKind(QQQ)).toBe('series_class')
+    expect(secIdentityKind(SEC_IDS.QQQ)).toBe('series_class')
   })
   it('is none when instrument_master carries no SEC identity (AAOG, listed 2026-05-12)', () => {
-    expect(secIdentityKind(AAOG)).toBe('none')
+    expect(secIdentityKind(SEC_IDS.AAOG)).toBe('none')
   })
   it('has a label for every kind', () => {
     expect(SEC_KIND_LABEL).toEqual({ cik: 'CIK', series_class: 'Series + class', none: 'None' })
@@ -58,15 +68,14 @@ describe('secIdentityKind', () => {
 })
 
 describe('toInstrumentRow', () => {
-  it('keeps the facts, derives the SEC kind, drops the raw SEC ids, and leaves price columns null', () => {
-    expect(toInstrumentRow(AAPL)).toEqual({
-      symbol: 'AAPL', name: 'Apple Inc. - Common Stock', exchange: 'NASDAQ', asset_class: 'stock',
-      listing_date: '1980-12-12', sp500: true, sector: 'Information Technology', spy_weight: '0.07219673',
-      sec_kind: 'cik',
-      price_adj: null, ret_1m: null, ret_3m: null, ret_6m: null, ret_12m: null, rs_3m_spy: null, pos_52w: null,
-      adv_usd: null, in_universe: null, universe_exclusion: null,
+  it('renames sector_gics to the board\u2019s own key and passes every other column through', () => {
+    const row = toInstrumentRow(AAPL)
+    expect(row.sector).toBe('Information Technology')
+    expect('sector_gics' in row).toBe(false)
+    expect(row).toEqual({
+      symbol: 'AAPL', name: 'Apple Inc. - Common Stock', asset_class: 'stock',
+      sector: 'Information Technology', ...UNWRITTEN,
     })
-    expect(toInstrumentRow(QQQ).sec_kind).toBe('series_class')
   })
 })
 
@@ -76,17 +85,19 @@ describe('packRows / expandRows', () => {
     const packed = packRows(rows)
     expect(packed.keys[0]).toBe('symbol')
     expect(packed.cells).toHaveLength(4)
-    expect(packed.cells[2]).toContain('0.07219673')
+    expect(packed.cells[2]).toContain('Apple Inc. - Common Stock')
     expect(expandRows(packed)).toEqual(rows)
     expect(packRows([])).toEqual({ keys: [], cells: [] })
   })
 })
 
-describe('universe', () => {
-  // universe_snapshot has no rows in the scratch database: the flag is null on every row today.
-  it('is unknown until the snapshot has run, so neither the column nor the facet appears', () => {
-    const rows = [AAPL, SPY].map(toInstrumentRow)
+describe('what the board knows has run', () => {
+  const rows = [AAPL, SPY].map(toInstrumentRow)
+
+  it('is unknown until each producer has run, so no column and no facet appears', () => {
     expect(hasUniverse(rows)).toBe(false)
+    expect(hasScores(rows)).toBe(false)
+    expect(hasClassification(rows)).toBe(false)
     expect(universeValue(rows[0])).toBe('unknown')
   })
   it('reads in, or the reason the snapshot gave for the exclusion, once it has', () => {

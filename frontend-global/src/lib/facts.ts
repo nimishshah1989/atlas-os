@@ -7,33 +7,53 @@ export type AssetClass = 'etf' | 'stock'
 
 // ── the explorer row ────────────────────────────────────────────────────────
 
-/** What the list query selects per active instrument: facts, plus the price-derived columns
- *  LEFT JOINed at EOD (technical_daily, universe_snapshot, ohlcv_daily.close_adj) — NULL until the
- *  price spine has run. NUMERICs arrive as strings. */
+/** What the list query selects per active instrument. Identity, the universe verdict, the fund's
+ *  classification, the score row at the latest scored session, and the technicals at EOD — every
+ *  one LEFT JOINed, so every column below is null until its producer has run. NUMERICs arrive as
+ *  strings; the counts (`lenses_active`, the decile, the rank) are integers.
+ *
+ *  Exchange, listing date and the SEC identity are NOT here: they are identity facts, not board
+ *  columns, and they live on the detail page (docs/global/phase2.md P2-F). Keeping them out is
+ *  also what makes room for the score columns under Next's 2 MB data-cache entry limit. */
 export type InstrumentDbRow = {
   symbol: string
   name: string | null
-  exchange: string | null
   asset_class: AssetClass
-  listing_date: string | null
-  cik: string | null
-  series_id: string | null
-  class_id: string | null
   sector_gics: string | null
-  sp500: boolean
-  spy_weight: string | null
-  price_adj: string | null
-  ret_1m: string | null
-  ret_3m: string | null
-  ret_6m: string | null
-  ret_12m: string | null
-  rs_3m_spy: string | null
-  pos_52w: string | null
-  adv_usd: string | null
   in_universe: boolean | null
   /** The ONE reason the snapshot left the row out — universe_snapshot.exclusion_reason, one of
    *  the seven its CHECK allows; null exactly when the row is in (or the snapshot has not run). */
   universe_exclusion: string | null
+  // ── etf_classification, current row (null on stocks, and on a fund classify_etfs has not read)
+  strategy: string | null
+  class_asset_class: string | null
+  leveraged: boolean | null
+  inverse: boolean | null
+  hedged: boolean | null
+  /** `auto` where a naming rule fired, `review` where none did — the honest Unclassified queue. */
+  class_status: string | null
+  country: string | null
+  region: string | null
+  // ── the score row (etf_scores_daily / lens_scores_daily) at the latest scored session ≤ EOD
+  composite: string | null
+  technical: string | null
+  conviction_tier: string | null
+  /** ETFs: `etf_scores_daily.peer_group`. Stocks: `lens_scores_daily.cap_cohort`. Both name the
+   *  population the decile below was cut in. */
+  peer_group: string | null
+  lenses_active: number | null
+  /** ntile(10) within (date, peer group) over NON-NULL composites, cut on read — never stored. */
+  composite_decile: number | null
+  peer_rank: number | null
+  peer_n: number | null
+  // ── technical_daily at EOD
+  rs_3m_spy: string | null
+  rs_6m_spy: string | null
+  rs_12m_spy: string | null
+  pos_52w: string | null
+  adv_usd: string | null
+  vol_ann: string | null
+  mdd_12m: string | null
 }
 
 /** A snake_case token as words, for values that arrive as machine tokens (an exclusion reason). */
@@ -43,33 +63,26 @@ export type SecKind = 'cik' | 'series_class' | 'none'
 
 export const SEC_KIND_LABEL: Record<SecKind, string> = { cik: 'CIK', series_class: 'Series + class', none: 'None' }
 
-/** How the SEC knows this instrument: a fund share class (series + class), an issuer (CIK), or not at all. */
-export function secIdentityKind(r: Pick<InstrumentDbRow, 'cik' | 'series_id' | 'class_id'>): SecKind {
+/** How the SEC knows this instrument: a fund share class (series + class), an issuer (CIK), or not
+ *  at all. The ids are detail-page facts (`InstrumentFacts`); the board list does not carry them. */
+export function secIdentityKind(r: { cik: string | null; series_id: string | null; class_id: string | null }): SecKind {
   if (r.series_id || r.class_id) return 'series_class'
   return r.cik ? 'cik' : 'none'
 }
 
-/** The row the explorer ships to the browser: the facts, the derived SEC kind, the price-derived
- *  columns as they are (null-tolerant). The raw SEC ids stay on the detail page. */
-export type InstrumentRow = Omit<InstrumentDbRow, 'cik' | 'series_id' | 'class_id' | 'sector_gics'> & {
-  sector: string | null
-  sec_kind: SecKind
-}
+/** The row the explorer ships to the browser: the query's row with `sector_gics` under the name
+ *  the board uses for it. Everything else passes through unchanged. */
+export type InstrumentRow = Omit<InstrumentDbRow, 'sector_gics'> & { sector: string | null }
 
 export function toInstrumentRow(r: InstrumentDbRow): InstrumentRow {
-  return {
-    symbol: r.symbol, name: r.name, exchange: r.exchange, asset_class: r.asset_class, listing_date: r.listing_date,
-    sp500: r.sp500, sector: r.sector_gics, spy_weight: r.spy_weight, sec_kind: secIdentityKind(r),
-    price_adj: r.price_adj, ret_1m: r.ret_1m, ret_3m: r.ret_3m, ret_6m: r.ret_6m, ret_12m: r.ret_12m,
-    rs_3m_spy: r.rs_3m_spy, pos_52w: r.pos_52w, adv_usd: r.adv_usd, in_universe: r.in_universe,
-    universe_exclusion: r.universe_exclusion,
-  }
+  const { sector_gics, ...rest } = r
+  return { ...rest, sector: sector_gics }
 }
 
 /** The list as cached and shipped: one key list and one array per row — under half the size of
  *  keyed objects, which matters twice: Next's data cache refuses an entry over 2 MB (the keyed
  *  ETF list is 2.2 MB), and the browser receives every row. expandRows restores the row type. */
-export type PackedRows = { keys: (keyof InstrumentRow)[]; cells: (string | boolean | null)[][] }
+export type PackedRows = { keys: (keyof InstrumentRow)[]; cells: (string | number | boolean | null)[][] }
 
 export function packRows(rows: InstrumentRow[]): PackedRows {
   const keys = rows.length ? (Object.keys(rows[0]) as (keyof InstrumentRow)[]) : []
@@ -81,10 +94,21 @@ export function expandRows(p: PackedRows): InstrumentRow[] {
 }
 
 /** The price-derived columns; the list shows them only once at least one row carries a value. */
-export const PRICE_KEYS = ['price_adj', 'ret_1m', 'ret_3m', 'ret_6m', 'ret_12m', 'rs_3m_spy', 'pos_52w', 'adv_usd'] as const
+export const PRICE_KEYS = ['rs_3m_spy', 'rs_6m_spy', 'rs_12m_spy', 'pos_52w', 'adv_usd', 'vol_ann', 'mdd_12m'] as const
 
 export function hasPrices(rows: readonly InstrumentRow[]): boolean {
   return rows.some((r) => PRICE_KEYS.some((k) => r[k] != null))
+}
+
+/** Whether the scorer has reached this list. Null everywhere is the honest "not scored yet" state
+ *  the board renders instead of a wall of em dashes — never a zero (rule #0). */
+export function hasScores(rows: readonly InstrumentRow[]): boolean {
+  return rows.some((r) => r.composite != null || r.technical != null || r.conviction_tier != null)
+}
+
+/** Whether classify_etfs.py has reached this list (the peer-group strip and its facets need it). */
+export function hasClassification(rows: readonly InstrumentRow[]): boolean {
+  return rows.some((r) => r.class_status != null)
 }
 
 /** Whether the universe snapshot has marked any row (the flag and its facet appear only then). */

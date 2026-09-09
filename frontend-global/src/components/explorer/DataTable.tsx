@@ -3,10 +3,13 @@
 // tabular. Rows are 44 px and the layout is fixed, so the window over the list is arithmetic:
 // only the rows in view (plus an overscan) are in the DOM, with spacer rows holding the scroll
 // height. Sorting is the caller's (the header buttons report the wanted sort).
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Icon } from '@/components/shell/icons'
 import type { SortState } from '@/lib/explorer'
 
+// MUST equal `.dt-table td { height }` in src/app/globals.css. The window over the list is
+// arithmetic over this number: if the stylesheet's row height changes and this does not, the
+// virtualiser reports the wrong rows for a scroll position. Change them together.
 const ROW_HEIGHT = 44
 const OVERSCAN = 10
 const MIN_HEIGHT = 320
@@ -16,13 +19,24 @@ const DEFAULT_HEIGHT = 528
 export type Column<R> = {
   key: string
   label: string
-  /** Column width in px; the name column (width 0) takes what is left. */
+  /** Column width in px. 0 means "take what is left": the column gets no `<col>` width, and in a
+   *  `table-layout: fixed` table it absorbs whatever the sized columns do not use. */
   width: number
+  /** The floor for a width-0 column, in px. It is counted into the table's own min-width, so the
+   *  column still has this much when the table is narrower than the viewport and scrolls.
+   *  WITHOUT IT a width-0 column collapses to the 160 px default and every fund name in the ETF
+   *  list rendered as an ellipsis — the defect this whole surface was rebuilt to fix. */
+  minWidth?: number
   align?: 'right'
   sortValue: (r: R) => string | number | null
   render: (r: R) => ReactNode
   /** A fuller header, shown on hover. */
   title?: string
+  /** Per-row cell styling — the relative-strength tint. Colour is never the only channel: a
+   *  tinted cell still prints its value. */
+  cellStyle?: (r: R) => CSSProperties | undefined
+  /** A separating rule to the LEFT of this column: where the risk overlay stops being the score. */
+  divider?: boolean
 }
 
 type Props<R> = {
@@ -33,6 +47,19 @@ type Props<R> = {
   onSort: (sort: SortState) => void
   /** What the empty list says — an instruction, not a mood. */
   empty: ReactNode
+}
+
+// The risk overlay is NOT part of the score, so it is drawn behind a hairline instead of beside
+// the lenses. One rule, one token, no new colour.
+const DIVIDER: CSSProperties = { borderLeft: '1px solid var(--color-rule)' }
+
+const cellClass = <R,>(c: Column<R>, kind: 'th' | 'td') =>
+  [kind === 'td' && c.align === 'right' ? 'num' : '', c.align === 'right' ? 'r' : ''].filter(Boolean).join(' ') || undefined
+
+function cellStyle<R>(c: Column<R>, r: R): CSSProperties | undefined {
+  const tint = c.cellStyle?.(r)
+  if (!c.divider) return tint
+  return { ...DIVIDER, ...tint }
 }
 
 // Holds the scroll height of the rows outside the window (an empty <tr> may collapse to 0).
@@ -70,7 +97,7 @@ export function DataTable<R>({ rows, columns, rowKey, sort, onSort, empty }: Pro
   const n = rows.length
   const start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN)
   const end = Math.min(n, Math.ceil((scrollTop + (height ?? DEFAULT_HEIGHT)) / ROW_HEIGHT) + OVERSCAN)
-  const minWidth = columns.reduce((w, c) => w + (c.width || 160), 0)
+  const minWidth = columns.reduce((w, c) => w + (c.width || c.minWidth || 160), 0)
 
   function toggle(c: Column<R>) {
     onSort({ key: c.key, dir: sort.key === c.key && sort.dir === 'asc' ? 'desc' : 'asc' })
@@ -96,7 +123,8 @@ export function DataTable<R>({ rows, columns, rowKey, sort, onSort, empty }: Pro
               return (
                 <th
                   key={c.key}
-                  className={c.align === 'right' ? 'r' : undefined}
+                  className={cellClass(c, 'th')}
+                  style={c.divider ? DIVIDER : undefined}
                   aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
                 >
                   <button type="button" className="dt-sort" onClick={() => toggle(c)} title={c.title}>
@@ -120,7 +148,7 @@ export function DataTable<R>({ rows, columns, rowKey, sort, onSort, empty }: Pro
           {rows.slice(start, end).map((r) => (
             <tr key={rowKey(r)} data-row="">
               {columns.map((c) => (
-                <td key={c.key} className={c.align === 'right' ? 'num r' : undefined}>
+                <td key={c.key} className={cellClass(c, 'td')} style={cellStyle(c, r)}>
                   {c.render(r)}
                 </td>
               ))}

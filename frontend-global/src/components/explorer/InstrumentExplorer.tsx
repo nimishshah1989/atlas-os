@@ -1,123 +1,239 @@
 'use client'
-// src/components/explorer/InstrumentExplorer.tsx — the columns and facets of /etfs and /stocks over
-// the rows the page loaded (one server query, virtualised here). The price-derived columns and
-// the universe flag are in the row type today and join the table the moment any row carries a
-// value; until then a notice says so, derived from the rows themselves, not from a flag.
-import Link from 'next/link'
+// src/components/explorer/InstrumentExplorer.tsx — /etfs and /stocks: which rows the board shows
+// by default, how they are grouped, and what it says about what it cannot show yet.
+//
+// THE DEFAULT IS THE UNIVERSE, NOT THE DIRECTORY. `universe_snapshot.in_universe` already encodes
+// the FM's cut — current S&P 500 members for stocks; for ETFs everything above the seeded
+// liquidity floor that is neither leveraged nor inverse — and the board ignored it, so the first
+// screen was five thousand funds in alphabetical order with blank metrics. It is applied here.
+// NOTHING IS HIDDEN: "Everything listed" reveals the rest with each row's own exclusion reason
+// beside it, and the geared / inverse toggles say how many funds they would add.
+//
+// GROUPS BEFORE ROWS. The peer-group strip sits above the table so thousands of funds read as two
+// dozen jobs first — a gold-miners fund, a Treasury fund and an S&P tracker have nothing to say to
+// each other, and a league table containing all three ranks nothing.
+import { useSearchParams } from 'next/navigation'
 import { useMemo } from 'react'
-import type { FacetGroup } from '@/lib/explorer'
-import { expandRows, hasPrices, hasUniverse, SEC_KIND_LABEL, universeLabel, UNIVERSE_LABEL, universeValue, type AssetClass, type InstrumentRow } from '@/lib/facts'
-import { formatDecimal, formatIsoDate, formatPct, formatUsd } from '@/lib/format'
-import type { InstrumentList } from '@/lib/queries/instruments'
-import type { Column } from './DataTable'
+import { ALL, ON, type FacetGroup, type SortState } from '@/lib/explorer'
+import {
+  expandRows,
+  hasClassification,
+  hasPrices,
+  hasScores,
+  hasUniverse,
+  universeLabel,
+  universeValue,
+  type AssetClass,
+  type InstrumentRow,
+} from '@/lib/facts'
+import { formatIsoDate } from '@/lib/format'
+import type { InstrumentList } from '@/lib/queries/scores'
+import { lensesLabel, peerGroupLabel, peerGroupOf, TIER_LABEL } from '@/lib/scores'
+import { boardColumns, universeColumn, type ColumnContext } from './columns'
 import { Explorer } from './Explorer'
 
 // ── facets ──────────────────────────────────────────────────────────────────
 
-const EXCHANGE: FacetGroup<InstrumentRow> = {
-  key: 'exchange', label: 'Exchange', kind: 'any', value: (r) => r.exchange ?? 'none', labels: { none: 'Not recorded' },
-}
-const SP500: FacetGroup<InstrumentRow> = {
-  key: 'sp500', label: 'S&P 500', kind: 'one', value: (r) => (r.sp500 ? 'member' : 'other'),
-  options: ['member', 'other'], labels: { member: 'Members', other: 'Not members' }, default: 'member',
-}
-const SECTOR: FacetGroup<InstrumentRow> = {
-  key: 'sector', label: 'GICS sector', kind: 'any', value: (r) => r.sector ?? 'none', labels: { none: 'No sector' },
-}
-const SEC: FacetGroup<InstrumentRow> = { key: 'sec', label: 'SEC identity', kind: 'any', value: (r) => r.sec_kind, labels: SEC_KIND_LABEL }
-// In universe, or the snapshot's reason for leaving the row out — in English, never the enum.
+// The one control that changes what the board IS. A radio, not a checkbox: the two states are
+// exclusive and both are named, so nobody has to guess what the default was filtering out.
 const UNIVERSE: FacetGroup<InstrumentRow> = {
-  key: 'universe', label: 'Universe', kind: 'any', value: universeValue, labels: UNIVERSE_LABEL,
+  key: 'universe',
+  label: 'Universe',
+  kind: 'one',
+  value: (r) => (r.in_universe === true ? 'in' : 'out'),
+  options: ['in'],
+  labels: { in: 'The board’s universe', [ALL]: 'Everything listed' },
+  default: 'in',
 }
 
-// ── columns ─────────────────────────────────────────────────────────────────
-
-// For ORDERING only: a NUMERIC string compared as a double; nothing is computed from it.
-const asNumber = (s: string | null) => (s == null ? null : Number(s))
-const blank = (s: string | null, f: (s: string) => string) => (s == null ? '' : f(s))
-
-const symbol = (assetClass: AssetClass): Column<InstrumentRow> => ({
-  key: 'symbol', label: 'Symbol', width: 80, sortValue: (r) => r.symbol,
-  render: (r) => (
-    <Link href={`/${assetClass}s/${encodeURIComponent(r.symbol)}`} className="dt-symbol">
-      {r.symbol}
-    </Link>
-  ),
-})
-const NAME: Column<InstrumentRow> = {
-  key: 'name', label: 'Name', width: 0, sortValue: (r) => r.name,
-  render: (r) => <span className="text-ink-2" title={r.name ?? undefined}>{r.name ?? ''}</span>,
-}
-const EXCHANGE_COL: Column<InstrumentRow> = { key: 'exchange', label: 'Exchange', width: 88, sortValue: (r) => r.exchange, render: (r) => r.exchange ?? '' }
-const LISTED: Column<InstrumentRow> = {
-  key: 'listed', label: 'Listed', width: 108, sortValue: (r) => r.listing_date, render: (r) => blank(r.listing_date, formatIsoDate),
-}
-const MEMBER: Column<InstrumentRow> = { key: 'sp500', label: 'S&P 500', width: 84, sortValue: (r) => (r.sp500 ? 1 : 0), render: (r) => (r.sp500 ? 'member' : '') }
-const SECTOR_COL: Column<InstrumentRow> = { key: 'sector', label: 'GICS sector', width: 150, sortValue: (r) => r.sector, render: (r) => r.sector ?? '' }
-const WEIGHT: Column<InstrumentRow> = {
-  key: 'weight', label: 'SPY weight', width: 88, align: 'right', sortValue: (r) => asNumber(r.spy_weight),
-  render: (r) => blank(r.spy_weight, (s) => formatPct(s, 2)),
-}
-const SEC_COL: Column<InstrumentRow> = { key: 'sec', label: 'SEC identity', width: 100, sortValue: (r) => r.sec_kind, render: (r) => SEC_KIND_LABEL[r.sec_kind] }
-const UNIVERSE_COL: Column<InstrumentRow> = {
-  key: 'universe', label: 'Universe', width: 168, sortValue: universeValue,
-  title: 'In the universe at EOD, or the reason the snapshot left the instrument out',
-  render: (r) => (r.in_universe == null ? '' : universeLabel(universeValue(r))),
+const PEER: FacetGroup<InstrumentRow> = {
+  key: 'peer',
+  label: 'Peer group',
+  kind: 'any',
+  value: peerGroupOf,
+  format: peerGroupLabel,
 }
 
-const ret = (key: 'ret_1m' | 'ret_3m' | 'ret_6m' | 'ret_12m', label: string): Column<InstrumentRow> => ({
-  key, label, width: 72, align: 'right', title: `Total return, ${label}`, sortValue: (r) => asNumber(r[key]),
-  render: (r) => blank(r[key], (s) => formatPct(s, 1, { sign: true })),
-})
-const PRICE_COLUMNS: Column<InstrumentRow>[] = [
-  { key: 'price', label: 'Price', width: 88, align: 'right', title: 'Adjusted close at EOD', sortValue: (r) => asNumber(r.price_adj), render: (r) => blank(r.price_adj, formatUsd) },
-  ret('ret_1m', '1 month'), ret('ret_3m', '3 months'), ret('ret_6m', '6 months'), ret('ret_12m', '12 months'),
-  { key: 'rs_3m', label: 'RS 3m', width: 76, align: 'right', title: 'Relative strength vs SPY, 3 months', sortValue: (r) => asNumber(r.rs_3m_spy), render: (r) => blank(r.rs_3m_spy, (s) => formatPct(s, 1, { sign: true })) },
-  { key: 'pos_52w', label: '52w', width: 64, align: 'right', title: 'Position in the 52-week range, 0 to 100', sortValue: (r) => asNumber(r.pos_52w), render: (r) => blank(r.pos_52w, (s) => formatDecimal(s, 0)) },
-  { key: 'adv', label: 'ADV$', width: 104, align: 'right', title: 'Median daily traded value over 60 sessions', sortValue: (r) => asNumber(r.adv_usd), render: (r) => blank(r.adv_usd, (s) => formatUsd(s, 0)) },
-]
-
-const FACT_COLUMNS: Record<AssetClass, Column<InstrumentRow>[]> = {
-  etf: [symbol('etf'), NAME, EXCHANGE_COL, LISTED, SEC_COL],
-  stock: [symbol('stock'), NAME, MEMBER, SECTOR_COL, WEIGHT, EXCHANGE_COL, LISTED, SEC_COL],
+const COHORT: FacetGroup<InstrumentRow> = {
+  key: 'cohort',
+  label: 'Cap cohort',
+  kind: 'any',
+  value: (r) => r.peer_group ?? 'none',
+  format: peerGroupLabel,
 }
-const FACT_GROUPS: Record<AssetClass, FacetGroup<InstrumentRow>[]> = { etf: [EXCHANGE, SEC], stock: [SP500, SECTOR, EXCHANGE, SEC] }
 
-const DEFAULT_SORT = { key: 'symbol', dir: 'asc' } as const
+const SECTOR: FacetGroup<InstrumentRow> = {
+  key: 'sector',
+  label: 'GICS sector',
+  kind: 'any',
+  value: (r) => r.sector ?? 'none',
+  labels: { none: 'No sector' },
+}
+
+const COUNTRY: FacetGroup<InstrumentRow> = {
+  key: 'country',
+  label: 'Country',
+  kind: 'any',
+  value: (r) => r.country ?? 'none',
+  labels: { none: 'Not a single-country fund' },
+}
+
+const REGION: FacetGroup<InstrumentRow> = {
+  key: 'region',
+  label: 'Region',
+  kind: 'any',
+  value: (r) => r.region ?? 'none',
+  labels: { none: 'No region' },
+}
+
+// Ten radios in rank order, because a decile facet whose options reorder themselves by count is
+// not a scale. `all` is appended by the rail.
+const DECILE: FacetGroup<InstrumentRow> = {
+  key: 'decile',
+  label: 'Decile in peer group',
+  kind: 'one',
+  value: (r) => (r.composite_decile == null ? 'none' : String(r.composite_decile)),
+  options: ['10', '9', '8', '7', '6', '5', '4', '3', '2', '1'],
+  format: (v) => (v === '10' ? 'Decile 10 — Leader' : `Decile ${v}`),
+  default: ALL,
+}
+
+const TIER: FacetGroup<InstrumentRow> = {
+  key: 'tier',
+  label: 'Conviction',
+  kind: 'any',
+  value: (r) => r.conviction_tier ?? 'none',
+  labels: { ...TIER_LABEL, none: 'Not scored' },
+}
+
+// Off by default: geared and inverse funds are out of the universe by the FM's rule of 2026-09-07,
+// are never scored, and cannot enter a ranking or a basket. The count beside each box says how
+// many rows ticking it would add, so the exclusion is visible rather than silent.
+const GEARED: FacetGroup<InstrumentRow> = {
+  key: 'geared',
+  label: 'Leveraged funds',
+  kind: 'flag',
+  value: (r) => (r.leveraged ? ON : 'off'),
+  labels: { [ON]: 'Include leveraged' },
+}
+
+const INVERSE: FacetGroup<InstrumentRow> = {
+  key: 'inverse',
+  label: 'Inverse funds',
+  kind: 'flag',
+  value: (r) => (r.inverse ? ON : 'off'),
+  labels: { [ON]: 'Include inverse' },
+}
+
 const NOUN: Record<AssetClass, string> = { etf: 'ETFs', stock: 'stocks' }
+
+// ── the surface ─────────────────────────────────────────────────────────────
 
 export function InstrumentExplorer({ assetClass, list }: { assetClass: AssetClass; list: InstrumentList }) {
   const rows = useMemo(() => expandRows(list), [list])
+  const scored = hasScores(rows)
   const priced = hasPrices(rows)
   const universe = hasUniverse(rows)
-  const columns = useMemo(
-    () => [...FACT_COLUMNS[assetClass], ...(universe ? [UNIVERSE_COL] : []), ...(priced ? PRICE_COLUMNS : [])],
-    [assetClass, universe, priced],
-  )
-  const groups = useMemo(() => [...FACT_GROUPS[assetClass], ...(universe ? [UNIVERSE] : [])], [assetClass, universe])
-  const session = list.eod ? formatIsoDate(list.eod) : 'any session'
+  const classified = hasClassification(rows)
+  const etf = assetClass === 'etf'
+  // "Everything listed" is the only view in which "why it is out" is a question, so the column
+  // exists only there. In the default view every row would answer "in universe", which is 148 px
+  // of a column saying nothing — the kind of column that made this table unreadable.
+  const widened = useSearchParams().getAll(UNIVERSE.key).includes(ALL)
 
-  const missing: { lead: string; text: string }[] = []
-  if (!priced) {
-    missing.push({
-      lead: 'Prices not loaded yet — facts only.',
-      text: `Price, returns, relative strength, 52-week position and traded value join this table once the price spine has run; no row carries one for ${session}.`,
+  const ctx: ColumnContext = useMemo(
+    () => ({
+      assetClass,
+      lensTotal: list.lenses.length,
+      technicalWeight: list.lenses.find((l) => l.key === 'technical')?.weight ?? 0,
+    }),
+    [assetClass, list.lenses],
+  )
+
+  const columns = useMemo(() => {
+    const base = boardColumns(ctx, scored)
+    return universe && widened ? [...base, universeColumn((r) => universeLabel(universeValue(r)))] : base
+  }, [ctx, scored, universe, widened])
+
+  const groups = useMemo(() => {
+    const g: FacetGroup<InstrumentRow>[] = []
+    if (universe) g.push(UNIVERSE)
+    if (etf) {
+      if (classified) g.push(PEER)
+    } else {
+      g.push(SECTOR)
+      if (scored) g.push(COHORT)
+    }
+    if (scored) g.push(DECILE, TIER)
+    if (etf && classified) g.push(COUNTRY, REGION, GEARED, INVERSE)
+    return g
+  }, [universe, etf, classified, scored])
+
+  // Strongest first is the only ordering that answers "what is working"; unscored rows fall to the
+  // bottom on their own (sortRows keeps nulls last in both directions). With no scores yet the
+  // board leads with the most traded names rather than the alphabet.
+  const defaultSort: SortState = useMemo(
+    () => (scored ? { key: 'composite', dir: 'desc' } : { key: 'adv', dir: 'desc' }),
+    [scored],
+  )
+
+  const session = list.eod ? formatIsoDate(list.eod) : 'any session'
+  const notices: { lead: string; text: string }[] = []
+
+  if (scored) {
+    notices.push({
+      lead: 'Every composite says how many lenses it is made of.',
+      text:
+        `The blend carries ${list.lenses.length} lenses and only the ones with a producer today ` +
+        `contribute, so each row prints its own count — “${lensesLabel(1, list.lenses.length)}” — ` +
+        `beside the score. While one lens is active the tier ladder’s own minimum-layer rule caps ` +
+        `the result at MEDIUM however strong it is: conviction means agreement between independent ` +
+        `reads, and there is one read. That is the methodology working, not a defect. Deciles are ` +
+        `cut within the peer group, on read, over scored funds only; Leader is that group’s top decile.`,
+    })
+    if (list.scored_on && list.eod && list.scored_on !== list.eod) {
+      notices.push({
+        lead: `Scores are from ${formatIsoDate(list.scored_on)}, prices from ${session}.`,
+        text: 'The scorer has not run for the latest session yet; the ranking below is the last one it wrote.',
+      })
+    }
+  } else {
+    notices.push({
+      lead: 'Not scored yet — no ranking on this board.',
+      text:
+        etf
+          ? `Composite, conviction, decile and the technical lens join this table once ` +
+            `scripts/global_market/score_etfs.py has written ${session}. Nothing below is a score.`
+          : `Composite, conviction, decile and the technical lens join this table once the stock ` +
+            `scorer has written lens_scores_daily for ${session}. Nothing below is a score.`,
+    })
+  }
+  if (etf && !classified) {
+    notices.push({
+      lead: 'Funds are not grouped yet.',
+      text: 'The peer-group strip and the country, region and gearing facets appear once scripts/global_market/classify_etfs.py has run.',
     })
   }
   if (!universe) {
-    missing.push({
+    notices.push({
       lead: 'Universe not marked yet.',
-      text: `The in-universe column and facet appear once the universe snapshot has run for ${session}: S&P 500 members above the liquidity floor, and ETFs above the floor that are neither leveraged nor inverse, each exclusion with its reason.`,
+      text: `The board shows every listed instrument until the universe snapshot has run for ${session}: S&P 500 members for stocks, and ETFs above the liquidity floor that are neither leveraged nor inverse.`,
+    })
+  }
+  if (!priced) {
+    notices.push({
+      lead: 'Prices not loaded yet.',
+      text: `Relative strength, 52-week position, traded value, volatility and drawdown join this table once the price spine has run; no row carries one for ${session}.`,
     })
   }
 
   return (
     <>
-      {missing.length > 0 && (
+      {notices.length > 0 && (
         <div className="notice text-body" role="status">
           <span aria-hidden="true" className="dot bg-warn" />
           <div className="space-y-1">
-            {missing.map((m) => (
+            {notices.map((m) => (
               <p key={m.lead}>
                 <span className="font-medium text-ink">{m.lead}</span> {m.text}
               </p>
@@ -129,10 +245,11 @@ export function InstrumentExplorer({ assetClass, list }: { assetClass: AssetClas
         rows={rows}
         columns={columns}
         groups={groups}
-        defaultSort={DEFAULT_SORT}
+        defaultSort={defaultSort}
         rowKey={(r) => r.symbol}
         noun={NOUN[assetClass]}
-        empty={`No ${NOUN[assetClass]} match these filters. Clear a facet or shorten the search.`}
+        stripKey={etf ? PEER.key : SECTOR.key}
+        empty={`No ${NOUN[assetClass]} match these filters. Clear a facet, widen the universe, or shorten the search.`}
       />
     </>
   )
