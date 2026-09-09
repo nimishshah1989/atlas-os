@@ -140,6 +140,10 @@ step "score_etfs"              $PY scripts/global_market/score_etfs.py --eod "$E
 # of this file. Without it country_daily stays empty and the page says so honestly, which
 # is what it did until now.
 step "build_country_views"     $PY scripts/global_market/build_country_views.py --eod "$EOD" --report "$LOG_DIR/country_views_$EOD.csv"
+# Baskets (M2): book inception for any basket the 5-minute worker has not reached, then replay every
+# active basket's NAV from inception through this EOD (total return on close_tr; runbook §9). Its table
+# is registered in freshness_guard.py PRODUCERS (warn tier) and the gate below asserts on what it wrote.
+step "mark_baskets"            $PY scripts/global_market/mark_baskets.py --eod "$EOD" --report "$LOG_DIR/mark_baskets_$EOD.csv"
 # Rolling signal quality — step, not gate (a lens losing IC is a finding for the FM, not a
 # reason to withhold a correct board). Window start computed in Python (no GNU `date -d`).
 # IC_START=$($PY -c "import datetime as d, _gdb; print(_gdb.eod_cutoff() - d.timedelta(days=730))")
@@ -154,6 +158,9 @@ gate "freshness_guard"   $PY scripts/global_market/freshness_guard.py --eod "$EO
 # night where that step exits 2 (the floor unset) the universe is empty and gate A says so
 # rather than passing on nothing.
 gate "validate_global_A" $PY scripts/global_market/validate_global.py --check A --eod "$EOD"
+# Basket books reconcile to real rows (checks A–G over basket_* and ohlcv_daily). PASS with no
+# active basket; a basket the worker has not booked yet is noted, never failed.
+gate "validate_baskets"  $PY scripts/global_market/validate_baskets.py --eod "$EOD"
 # gate "validate_global_B" $PY scripts/global_market/validate_global.py --check B   # Phase 3
 # gate "validate_global_C" $PY scripts/global_market/validate_global.py --check C   # Phase 3
 # gate "validate_global_D" $PY scripts/global_market/validate_global.py --check D   # Phase 3

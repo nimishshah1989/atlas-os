@@ -54,10 +54,15 @@ TRACKED: list[tuple[str, str]] = [
     ("universe_snapshot", "date"),
     ("etf_classification", "valid_from"),
     ("etf_scores_daily", "date"),
+    ("basket_nav_daily", "date"),
 ]
 
 # Gate step (runfile) → validator name (<= 16 chars, the column's width); PASS/FAIL status.
-_GATE_VALIDATORS = {"freshness_guard": "freshness_guard", "validate_global_A": "gate_A"}
+_GATE_VALIDATORS = {
+    "freshness_guard": "freshness_guard",
+    "validate_global_A": "gate_A",
+    "validate_baskets": "gate_baskets",
+}
 
 # (script_name, started_iso, ended_iso, status, why). `why` is the failed step's own last
 # lines, captured by the orchestrator (atlas_global_daily.sh::why_tail) — empty on success and

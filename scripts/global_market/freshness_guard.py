@@ -59,6 +59,9 @@ BOARD_TABLES: list[tuple[str, str, int]] = [
     # a price wrong, and withholding the whole board's publish over a name-reading rule that
     # changes monthly would be the wrong trade.
     ("etf_classification", "valid_from", 8),  # nightly regex pass over fund names (P2-B)
+    # M2: every active basket is re-marked nightly; EMPTY (warn) until the first basket exists,
+    # and a basket built during the day is booked by the 5-minute worker, not this table's max.
+    ("basket_nav_daily", "date", 8),
 ]
 
 # ── PRODUCER REGISTRY (the build-time half of the freshness contract) ──
@@ -76,6 +79,7 @@ PRODUCERS: dict[str, str] = {
     "country_daily": "build_country_views.py",
     "etf_classification": "classify_etfs.py",
     "etf_scores_daily": "score_etfs.py",
+    "basket_nav_daily": "mark_baskets.py",
 }
 
 

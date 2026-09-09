@@ -33,6 +33,15 @@ What is seeded (each row: key, value, category, description, units, min, max, de
   stays exactly as it was — it is the guard for any database where the row is missing or
   inactive, not a placeholder waiting for this seed.
 
+* M2 baskets (category ``basket``, section M2) — the FM's basket instruction of 2026-09-09, the
+  numbers India's ``portfolio_*`` rows carry translated to USD and fractional shares:
+  ``basket_default_capital_usd`` $100,000 (the builder's default and floor),
+  ``basket_max_position_pct`` 0.25 (no constituent above a quarter of capital),
+  ``basket_cost_bps_buy`` / ``basket_cost_bps_sell`` 0 bps (paper baskets: no execution cost
+  until an execution provider names one), ``basket_min_weight_frac`` 0.01 (a name below 1
+  percent is noise, not a position). Read by ``mark_baskets.py``, ``validate_baskets.py`` and
+  the board's basket builder; none of them carries a fallback.
+
 NOT seeded, on purpose:
 * ``cls_country_pure_min_weight``, ``cls_country_equity_min``, ``cls_sector_pure_min``,
   ``cls_llm_min_confidence`` — the plan names the keys and leaves the values to Phase 2
@@ -271,6 +280,17 @@ SEEDS: list[dict[str, object]] = [
          "ADV$/AUM band 4 points"),
     _row("etf_cost_adv_t5_pts", "3", "etf_scoring", "C", "points", "0", "25",
          "ADV$/AUM below every band"),
+    # ── M2 baskets (mark_baskets.py, validate_baskets.py, the board's basket builder) ─────
+    _row("basket_default_capital_usd", "100000", "basket", "M2", "usd", "1", USD_CEILING,
+         "Starting capital a new basket is booked with, and the floor the builder accepts"),
+    _row("basket_max_position_pct", "0.25", "basket", "M2", "fraction", "0", "1",
+         "No constituent may exceed this fraction of capital at inception (position cap)"),
+    _row("basket_cost_bps_buy", "0", "basket", "M2", "bps", "0", "10000",
+         "Execution cost on a buy, basis points of value; 0 until an execution provider names one"),
+    _row("basket_cost_bps_sell", "0", "basket", "M2", "bps", "0", "10000",
+         "Execution cost on a sell, basis points of value; 0 until an execution provider names one"),
+    _row("basket_min_weight_frac", "0.01", "basket", "M2", "fraction", "0", "1",
+         "Smallest target weight a constituent may carry (below it a name is noise, not a position)"),
 ]
 # fmt: on
 
