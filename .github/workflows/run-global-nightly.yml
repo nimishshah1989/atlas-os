@@ -105,6 +105,11 @@ on:
         required: false
         default: false
         type: boolean
+      clear_lock:
+        description: "kill whatever holds /tmp/atlas_global.lock first — for a run that hung, never for one that is working"
+        required: false
+        default: false
+        type: boolean
       apply_ddl:
         description: "apply scripts/global_market/ddl/*.sql to prod (idempotent; adds missing tables and columns)"
         required: false
@@ -188,6 +193,26 @@ jobs:
               LH=$(fuser /tmp/atlas_global.lock 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' || true)
               [ -z "$LH" ] && LH=$(for d in /proc/[0-9]*; do for fd in "$d"/fd/*; do [ "$(readlink "$fd" 2>/dev/null)" = "/tmp/atlas_global.lock" ] && basename "$d" && break; done; done 2>/dev/null || true)
               if [ -z "$LH" ]; then echo "  FREE"; else for pid in $LH; do echo "  pid $pid  $(ps -o etime=,args= -p "$pid" 2>/dev/null | sed 's/^ *//' | cut -c1-140 | redact || true)"; done; fi
+
+              # THE STUCK-RUN ESCAPE HATCH, and it is deliberately manual. The lock is what keeps
+              # two pipelines off the same tables, so nothing here may clear it on a guess: a run
+              # that is merely SLOW looks exactly like one that has hung. The operator decides,
+              # having just read the holders and their elapsed times above.
+              #
+              # It exists because one did hang: the weekly's ingest_nport step had no --limit, ran
+              # over the whole four-thousand-fund universe, and held the lock for four hours while
+              # every dispatch was refused. TERM first so the orchestrator's own trap can write its
+              # failure row; KILL only what is still there five seconds later.
+              if [ "${{ inputs.clear_lock }}" = "true" ]; then
+                if [ -z "$LH" ]; then echo "  clear_lock: nothing to clear"; else
+                  echo "  clear_lock: TERM $LH"; kill -TERM $LH 2>/dev/null || true
+                  sleep 5
+                  STILL=$(for pid in $LH; do kill -0 "$pid" 2>/dev/null && echo "$pid"; done || true)
+                  if [ -n "$STILL" ]; then echo "  clear_lock: KILL $STILL"; kill -KILL $STILL 2>/dev/null || true; fi
+                  sleep 1
+                  if fuser /tmp/atlas_global.lock >/dev/null 2>&1; then echo "  clear_lock: STILL HELD"; else echo "  clear_lock: lock is FREE"; fi
+                fi
+              fi
 
               echo "== S&P 500 fundamental cross-section (the 37 bands are set from this) =="
               XL=$(grep -l 'fundamental cross-section' $(ls -1t "$LOGS"/atlas_global_daily_[0-9]*.log 2>/dev/null | head -5) 2>/dev/null | head -1 || true)
