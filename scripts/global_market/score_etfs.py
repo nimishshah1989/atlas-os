@@ -248,7 +248,11 @@ def score_rows(
             "flow": None,  # etf_shares_daily — no producer yet (phase2.md P3-C)
             "quality": None,  # etf_holdings look-through — no producer yet (P3-C)
         }
-        result = blend(lenses, weights, tiers, order=LENSES)
+        # blend()'s `order` is the CONVICTION-TIER order, not the lens order — passing LENSES
+        # there raised KeyError on every row (caught by test_score_writes_match_schema before
+        # this ever ran on the box). The lens order that matters for India parity is the order
+        # `lenses` itself is built in, which is LENSES above.
+        result = blend(lenses, weights, tiers)
         present_weight = sum(w for name, w in weights.items() if lenses[name] is not None)
         coverage = (present_weight / total_weight) if total_weight else None
         status = STATUS_SCORED if result.composite is not None else STATUS_NO_LENS
