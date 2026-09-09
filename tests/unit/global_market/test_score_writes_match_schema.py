@@ -266,6 +266,86 @@ def test_score_etfs_sends_no_null_into_a_not_null_column(
     assert_no_null_in_a_not_null_column(table, "05_scores.sql", "etf_scores_daily")
 
 
+# ── the step's own summary, on the dtype the writer actually produces ────────
+
+
+def _scorable(symbols: list[str], groups: list[str], ret_6m: list[float]) -> pd.DataFrame:
+    """A frame shaped exactly as ``run`` builds it before ``score_rows``.
+
+    Rule #0: the only market-shaped inputs are 6-month returns, and what is asserted is an
+    ORDERING over them, never a level. Every other metric is NaN, which is not an invented
+    number — it is what the query returns for a metric that has not been computed.
+    """
+    n = len(symbols)
+    return pd.DataFrame(
+        {
+            "instrument_id": [f"00000000-0000-0000-0000-00000000000{i}" for i in range(n)],
+            "symbol": symbols,
+            "name": [f"{s} fund" for s in symbols],
+            "asset_class": ["equity"] * n,
+            "strategy": ["sector"] * n,
+            "peer_group": groups,
+            "asset_group": ["equity"] * n,
+            "grouped_by": ["strategy"] * n,
+            "peer_n": [n] * n,
+            "peer_pct_6m": [float("nan")] * n,
+            "vol_pct": [float("nan")] * n,
+            "mdd_pct": [float("nan")] * n,
+            "downside_pct": [float("nan")] * n,
+            # ret_6m LAST: it is itself a METRIC_COLUMN, so setting it before the spread would
+            # be silently overwritten with NaN and every fund would score None — which is
+            # exactly what this fixture caught the first time it ran.
+            **{c: [float("nan")] * n for c in METRIC_COLUMNS},
+            "ret_6m": ret_6m,
+        }
+    )
+
+
+def test_the_summary_survives_the_dtype_the_writer_produces(
+    thresholds: dict[str, Decimal],
+) -> None:
+    """The step died here on its first live run. ``composite`` is a column of Decimal-or-None,
+    which is object dtype — what the upsert needs — and ``nlargest`` refuses an object column
+    outright. Nothing exercised it because the only caller needed a database, so the whole
+    step failed after doing all of its work correctly.
+
+    This drives the summary with the REAL writer's output rather than a hand-built frame, so
+    it cannot pass against a dtype the writer does not actually produce.
+    """
+    frame = _scorable(["AAA", "BBB", "CCC"], ["equity:sector"] * 3, [0.10, 0.30, 0.20])
+    frame = score_etfs.add_percentiles(frame)
+    table, _ = score_etfs.score_rows(frame, dt.date(2026, 9, 8), thresholds, "run")
+    assert table["composite"].dtype == object, "the guard is pointless if the dtype changed"
+
+    lines = score_etfs.summary_lines(table, dt.date(2026, 9, 8), 8, 0)
+    assert lines and lines[0].startswith("[score_etfs] anchor=2026-09-08 etfs=3")
+    assert any("equity:sector" in line for line in lines)
+
+
+def test_the_summary_says_nothing_more_when_nothing_could_be_scored() -> None:
+    """A fund with no metrics scores None, and a whole frame of them must print a header and
+    stop rather than divide by an empty set — the shape of a first run on a new market."""
+    table = pd.DataFrame(
+        {"composite": [None, None], "peer_group": ["unclassified"] * 2}, dtype=object
+    )
+    lines = score_etfs.summary_lines(table, dt.date(2026, 9, 8), 8, 2)
+    assert len(lines) == 1 and "scored=0" in lines[0]
+
+
+def test_a_peer_group_with_no_scored_member_prints_a_dash_not_nan() -> None:
+    """`median composite=nan` on the operator's console is a number that is not a number."""
+    table = pd.DataFrame(
+        {
+            "composite": [Decimal("62.50"), None, None],
+            "peer_group": ["equity:sector", "unclassified", "unclassified"],
+        },
+        dtype=object,
+    )
+    lines = score_etfs.summary_lines(table, dt.date(2026, 9, 8), 8, 0)
+    assert any("unclassified" in ln and "median composite=—" in ln for ln in lines)
+    assert not any("nan" in ln for ln in lines)
+
+
 # ── the percentile transform: alignment is the thing that fails silently ──────
 
 
