@@ -48,14 +48,28 @@ FAILURES=()
 RUNFILE=$(mktemp /tmp/atlas_global_daily_runs.XXXXXX)   # per-step timings → health snapshot
 PUBLISH_CFG=                                             # the publish step's curl config (bearer)
 trap 'rm -f "$RUNFILE" "$PUBLISH_CFG"' EXIT
+# WHY A STEP FAILED travels with the run row. Until 2026-09-09 a failed step wrote only its name,
+# its times and the word "failed"; the reason stayed in $LOG on the box, and /health — the one
+# place anyone looks — rendered an empty error column. The 8 Sep run failed at ingest_prices,
+# compute_technicals, freshness_guard and gate A, and nobody could say why from anywhere but
+# an SSH session. So: the step's own last three lines, read back out of $LOG from the byte the
+# step started at (the log is append-only and shared, so an offset is the honest cursor), tabs
+# and newlines flattened because the runfile is a TSV, capped so a stack trace cannot bloat a
+# row. STEP_WHY, when a command sets it, leads.
+why_tail() {  # why_tail <log byte offset> <rc>  → one line, ≤ 500 chars
+  local off="$1" rc="$2" t
+  t=$(tail -c +"$((off + 1))" "$LOG" 2>/dev/null | grep -v '^--- \|^  FAIL: \|^  ok: ' | tail -n 3 | tr '\t\r\n' '   ' | sed 's/  */ /g' | cut -c1-500)
+  printf '%s' "${STEP_WHY:+$STEP_WHY — }rc=$rc: ${t:-<no output>}"
+}
 step() {  # step "name" cmd...   (non-fatal; records failures + a run row; cmd may set STEP_WHY)
   local name="$1"; shift
   local start; start=$(date -Is)
   echo "--- $name ---" | tee -a "$LOG"
-  local st; STEP_WHY=
+  local st why="" off rc; STEP_WHY=
+  off=$(stat -c %s "$LOG" 2>/dev/null || echo 0)
   if "$@" >>"$LOG" 2>&1; then echo "  ok: $name" | tee -a "$LOG"; st=success
-  else echo "  FAIL: $name (${STEP_WHY:-rc=$?})" | tee -a "$LOG"; FAILURES+=("$name"); st=failed; fi
-  printf '%s\t%s\t%s\t%s\n' "$name" "$start" "$(date -Is)" "$st" >> "$RUNFILE"
+  else rc=$?; why=$(why_tail "$off" "$rc"); echo "  FAIL: $name ($why)" | tee -a "$LOG"; FAILURES+=("$name"); st=failed; fi
+  printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$start" "$(date -Is)" "$st" "$why" >> "$RUNFILE"
 }
 
 GATE_OK=1
@@ -63,10 +77,11 @@ gate() {  # gate "name" cmd...
   local name="$1"; shift
   local start; start=$(date -Is)
   echo "--- $name ---" | tee -a "$LOG"
-  local st
+  local st why="" off rc; STEP_WHY=
+  off=$(stat -c %s "$LOG" 2>/dev/null || echo 0)
   if "$@" >>"$LOG" 2>&1; then echo "  ok: $name" | tee -a "$LOG"; st=success
-  else echo "  FAIL: $name" | tee -a "$LOG"; FAILURES+=("$name"); GATE_OK=0; st=failed; fi
-  printf '%s\t%s\t%s\t%s\n' "$name" "$start" "$(date -Is)" "$st" >> "$RUNFILE"
+  else rc=$?; why=$(why_tail "$off" "$rc"); echo "  FAIL: $name ($why)" | tee -a "$LOG"; FAILURES+=("$name"); GATE_OK=0; st=failed; fi
+  printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$start" "$(date -Is)" "$st" "$why" >> "$RUNFILE"
 }
 
 # 1. INGEST (Phase 1). ingest_prices must abort loudly if SPY has no bar for $EOD — the

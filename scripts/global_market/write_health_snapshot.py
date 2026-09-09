@@ -56,7 +56,10 @@ TRACKED: list[tuple[str, str]] = [
 # Gate step (runfile) → validator name (<= 16 chars, the column's width); PASS/FAIL status.
 _GATE_VALIDATORS = {"freshness_guard": "freshness_guard", "validate_global_A": "gate_A"}
 
-Step = tuple[str, str, str, str]  # (script_name, started_iso, ended_iso, status)
+# (script_name, started_iso, ended_iso, status, why). `why` is the failed step's own last
+# lines, captured by the orchestrator (atlas_global_daily.sh::why_tail) — empty on success and
+# on runfiles written before 2026-09-09, which had four columns and still parse.
+Step = tuple[str, str, str, str, str]
 
 
 def run_id(milestone: str, name: str, started: str) -> str:
@@ -73,7 +76,7 @@ def read_runfile(path: str | Path) -> list[Step]:
             parts = line.rstrip("\n").split("\t")
             if len(parts) < 4 or not parts[0]:
                 continue
-            steps.append((parts[0], parts[1], parts[2], parts[3]))
+            steps.append((parts[0], parts[1], parts[2], parts[3], parts[4] if len(parts) > 4 else ""))
     return steps
 
 
@@ -95,11 +98,14 @@ def run_rows(
             "started_at": started,
             "ended_at": ended or None,
             "status": status,
+            # The reason, or NULL — never "" — so /health's error column stays empty on success
+            # instead of rendering a blank line under every green row.
+            "error_message": why[:500] or None,
             "host": host,
             "git_sha": sha,
             "updated_at": now,
         }
-        for name, started, ended, status in steps
+        for name, started, ended, status, why in steps
     ]
 
 
@@ -109,7 +115,7 @@ def validator_rows(
     """The gate steps only. run_id is the gate's own pipeline_runs id, so the two rows of
     one gate outcome share a key."""
     rows = []
-    for name, started, ended, status in steps:
+    for name, started, ended, status, _why in steps:
         vname = _GATE_VALIDATORS.get(name)
         if not vname:
             continue

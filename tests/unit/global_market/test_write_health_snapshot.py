@@ -240,3 +240,24 @@ def test_a_table_that_cannot_be_read_is_skipped_not_fatal(
         t for t, _c in whs.TRACKED if t != "universe_snapshot"
     ]
     assert "skip universe_snapshot: relation" in capsys.readouterr().err
+
+
+# ── the fifth column: why a step failed ──────────────────────────────────────
+
+
+def test_a_failed_steps_reason_reaches_error_message_and_a_green_row_has_none(tmp_path: Path) -> None:
+    """Four-column lines (every runfile before 2026-09-09) still parse; a fifth column lands in
+    error_message; success rows carry NULL, never "". The lines are TSV shapes, not data."""
+    p = tmp_path / "runs.tsv"
+    p.write_text(
+        "ingest_prices\t2026-09-08T01:00:00+00:00\t2026-09-08T01:00:12+00:00\tfailed\t"
+        "rc=1: alpaca: 403 forbidden — check ALPACA_API_KEY in the box .env\n"
+        "ingest_macro\t2026-09-08T01:00:12+00:00\t2026-09-08T01:00:19+00:00\tsuccess\t\n"
+        "compute_technicals\t2026-09-08T01:00:19+00:00\t2026-09-08T01:00:24+00:00\tfailed\n"
+    )
+    rows = {r["script_name"]: r for r in whs.run_rows(whs.read_runfile(p), "daily", "vm", None, NOW)}
+    assert rows["ingest_prices"]["error_message"].startswith("rc=1: alpaca: 403")
+    assert rows["ingest_macro"]["error_message"] is None
+    assert rows["compute_technicals"]["error_message"] is None  # four columns: no reason recorded
+    # gate rows unpack the wider tuple without complaint
+    assert whs.validator_rows(whs.read_runfile(p), "daily", "vm", None, NOW) == []
