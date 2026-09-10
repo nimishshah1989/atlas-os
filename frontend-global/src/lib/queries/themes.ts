@@ -28,6 +28,7 @@
 import 'server-only'
 import { eodCached } from '@/lib/cache'
 import { db, dbAvailable } from '@/lib/db'
+import { themeHistory } from '@/lib/queries/sectors'
 import type { ThemeDetail, ThemeFund, ThemeList, ThemeRow, ThemeWindow } from '@/lib/themes'
 import { THEME_WINDOWS } from '@/lib/themes'
 
@@ -254,6 +255,10 @@ const detailInner = eodCached(async (id: string): Promise<ThemeDetail | null> =>
   if (!row || !list.date) return null
   const min = await peerGroupMinMembers()
 
+  // Sequential, not Promise.all: the box has two cores and the history query is the expensive
+  // half. Racing them makes a cold theme page slower, not faster.
+  const history = await themeHistory(id)
+
   const funds = await db()<FundDbRow[]>`
     ${db().unsafe(MEMBERS)}
     , mine AS (SELECT * FROM member WHERE theme_id = ${id})
@@ -291,6 +296,7 @@ const detailInner = eodCached(async (id: string): Promise<ThemeDetail | null> =>
   return {
     row,
     date: list.date,
+    history,
     funds: funds.map((f): ThemeFund => ({
       instrument_id: f.instrument_id,
       symbol: f.symbol,

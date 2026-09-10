@@ -304,6 +304,90 @@ type StockDbRow = {
 
 type PointDbRow = { date: string; index: string | null; spy: string | null }
 
+/** The three-year median-member line for one node, and SPY on the same two axes.
+ *
+ *  ONE QUERY, TWO SURFACES. A sector's line and a theme's differ in exactly one predicate — a
+ *  sector owns the themes beneath it, a theme owns itself — so writing it twice is how the two
+ *  pages start disagreeing about what a member is. The FM makes his sub-thematic calls at the
+ *  theme level and had a line only at the sector level.
+ *
+ *  WHAT THE LINE IS. Each member fund is rebased to its OWN close on the window's first session;
+ *  the node is the MEDIAN of those growth factors, rebased to 100. Membership is fixed at the
+ *  window's start, so this is a survivorship claim and the caption says so.
+ *
+ *  DRIVEN FROM THE SMALL SETS, NOT FROM ohlcv_daily. The first version of this filtered a
+ *  7.8-million-row table with a date bound that is itself a subquery, which gives the planner a
+ *  value it cannot estimate and makes it scan: 16 to 52 seconds per cold sector, measured live.
+ *  ohlcv_daily is keyed (instrument_id, date), so the driving set is the member funds CROSS JOIN
+ *  the sampled sessions and the join is EXACT EQUALITY on both key columns — about twenty
+ *  thousand index probes, which is what that key is for.
+ */
+async function medianMemberHistory(id: string, scope: 'sector' | 'theme'): Promise<SectorPoint[]> {
+  const bySector = scope === 'sector'
+  const points = await db()<PointDbRow[]>`
+    WITH spy_cal AS (
+      SELECT o.date, o.close_tr, row_number() OVER (ORDER BY o.date DESC) AS rn
+      FROM atlas_global.ohlcv_daily o
+      JOIN atlas_global.instrument_master m USING (instrument_id)
+      WHERE m.symbol = 'SPY' AND m.is_active AND o.close_tr > 0
+    ),
+    cal AS (
+      SELECT date, close_tr FROM spy_cal
+      WHERE rn <= ${HISTORY_SESSIONS}
+        AND (rn % ${HISTORY_STRIDE} = 1 OR rn = ${HISTORY_SESSIONS})
+    ),
+    d0 AS (SELECT min(date) AS d FROM cal),
+    member AS (
+      SELECT DISTINCT im.instrument_id
+      FROM atlas_global.etf_classification c
+      JOIN atlas_global.instrument_master im USING (instrument_id)
+      JOIN atlas_global.taxonomy_sector tx ON tx.id = ANY (c.theme_ids) AND tx.level = 3
+      WHERE c.valid_to IS NULL AND c.status IN ('auto', 'confirmed', 'override')
+        AND im.is_active
+        -- THE COMPARABLE MEMBERS, the same population the card above this chart is measured over.
+        -- A 3x fund's line is three times the thing by construction and would drag the median of a
+        -- theme that never moved; a fund under the liquidity floor is an ordinary fund and stays.
+        AND NOT coalesce(c.leveraged, false) AND NOT coalesce(c.inverse, false)
+        -- The ONE difference between a sector's line and a theme's, and the reason this query is
+        -- written once: a sector owns the themes beneath it, a theme owns itself. Both sides are
+        -- parameters, never interpolated text. taxonomy_sector is a few dozen rows, so the CASE
+        -- costs nothing next to the bar join below.
+        AND CASE WHEN ${bySector} THEN tx.parent_id ELSE tx.id END = ${id}
+    ),
+    base AS (
+      SELECT o.instrument_id, o.close_tr
+      FROM atlas_global.ohlcv_daily o
+      JOIN member USING (instrument_id)
+      WHERE o.date = (SELECT d FROM d0) AND o.close_tr > 0
+    ),
+    spy0 AS (SELECT close_tr FROM cal WHERE date = (SELECT d FROM d0))
+    -- DRIVEN FROM THE SMALL SETS, NOT FROM ohlcv_daily. This is the whole performance story and
+    -- my first attempt at it was wrong: filtering a 7.8-million-row table with a date bound that
+    -- is itself a subquery gives the planner a value it cannot estimate at plan time, so it scans
+    -- the table instead of using the key. Measured live: 16 to 52 seconds per cold sector.
+    --
+    -- ohlcv_daily is keyed (instrument_id, date). So the driving set is the ~150 member funds
+    -- CROSS JOIN the ~156 sampled sessions, and the join to the bar table is EXACT EQUALITY on
+    -- both key columns — about twenty thousand index probes, which is what that key is for.
+    SELECT c.date::text,
+           -- ::numeric before ::text: percentile_cont returns DOUBLE PRECISION and postgres
+           -- renders a small double in scientific notation, which the board's formatters refuse.
+           (percentile_cont(0.5) WITHIN GROUP (ORDER BY o.close_tr / b.close_tr) * 100)
+             ::numeric(12,4)::text                                                  AS index,
+           (max(c.close_tr) / (SELECT close_tr FROM spy0) * 100)::numeric(12,4)::text AS spy
+    FROM base b
+    CROSS JOIN cal c
+    JOIN atlas_global.ohlcv_daily o
+      ON o.instrument_id = b.instrument_id AND o.date = c.date
+    WHERE o.close_tr > 0
+    GROUP BY c.date
+    ORDER BY c.date
+  `
+  return points
+    .filter((p) => p.index != null)
+    .map((p) => ({ date: p.date, index: Number(p.index), spy: p.spy == null ? null : Number(p.spy) }))
+}
+
 const detailInner = eodCached(async (id: string): Promise<SectorDetail | null> => {
   const tree = await treeInner()
   const node = tree.rows.find((r) => r.id === id)
@@ -368,60 +452,8 @@ const detailInner = eodCached(async (id: string): Promise<SectorDetail | null> =
   // one: a fund listed since is not in this line, and one that closed is not either. The honest
   // alternative — a chained index over changing membership — is a producer's job, not a page's,
   // and inventing one here would be a number nobody computed (rule #0).
-  const points = await db()<PointDbRow[]>`
-    WITH spy_cal AS (
-      SELECT o.date, o.close_tr, row_number() OVER (ORDER BY o.date DESC) AS rn
-      FROM atlas_global.ohlcv_daily o
-      JOIN atlas_global.instrument_master m USING (instrument_id)
-      WHERE m.symbol = 'SPY' AND m.is_active AND o.close_tr > 0
-    ),
-    cal AS (
-      SELECT date, close_tr FROM spy_cal
-      WHERE rn <= ${HISTORY_SESSIONS}
-        AND (rn % ${HISTORY_STRIDE} = 1 OR rn = ${HISTORY_SESSIONS})
-    ),
-    d0 AS (SELECT min(date) AS d FROM cal),
-    member AS (
-      SELECT DISTINCT im.instrument_id
-      FROM atlas_global.etf_classification c
-      JOIN atlas_global.instrument_master im USING (instrument_id)
-      JOIN atlas_global.taxonomy_sector tx ON tx.id = ANY (c.theme_ids) AND tx.level = 3
-      WHERE c.valid_to IS NULL AND c.status IN ('auto', 'confirmed', 'override')
-        AND im.is_active AND tx.parent_id = ${id}
-    ),
-    base AS (
-      SELECT o.instrument_id, o.close_tr
-      FROM atlas_global.ohlcv_daily o
-      JOIN member USING (instrument_id)
-      WHERE o.date = (SELECT d FROM d0) AND o.close_tr > 0
-    ),
-    spy0 AS (SELECT close_tr FROM cal WHERE date = (SELECT d FROM d0))
-    -- DRIVEN FROM THE SMALL SETS, NOT FROM ohlcv_daily. This is the whole performance story and
-    -- my first attempt at it was wrong: filtering a 7.8-million-row table with a date bound that
-    -- is itself a subquery gives the planner a value it cannot estimate at plan time, so it scans
-    -- the table instead of using the key. Measured live: 16 to 52 seconds per cold sector.
-    --
-    -- ohlcv_daily is keyed (instrument_id, date). So the driving set is the ~150 member funds
-    -- CROSS JOIN the ~156 sampled sessions, and the join to the bar table is EXACT EQUALITY on
-    -- both key columns — about twenty thousand index probes, which is what that key is for.
-    SELECT c.date::text,
-           -- ::numeric before ::text: percentile_cont returns DOUBLE PRECISION and postgres
-           -- renders a small double in scientific notation, which the board's formatters refuse.
-           (percentile_cont(0.5) WITHIN GROUP (ORDER BY o.close_tr / b.close_tr) * 100)
-             ::numeric(12,4)::text                                                  AS index,
-           (max(c.close_tr) / (SELECT close_tr FROM spy0) * 100)::numeric(12,4)::text AS spy
-    FROM base b
-    CROSS JOIN cal c
-    JOIN atlas_global.ohlcv_daily o
-      ON o.instrument_id = b.instrument_id AND o.date = c.date
-    WHERE o.close_tr > 0
-    GROUP BY c.date
-    ORDER BY c.date
-  `
-
-  const history: SectorPoint[] = points
-    .filter((p) => p.index != null)
-    .map((p) => ({ date: p.date, index: Number(p.index), spy: p.spy == null ? null : Number(p.spy) }))
+  const points = await medianMemberHistory(id, 'sector')
+  const history = points
 
   return {
     node,
@@ -449,6 +481,11 @@ const detailInner = eodCached(async (id: string): Promise<SectorDetail | null> =
 /** One sector: its themes and funds from the same tree /sectors ranks, its S&P 500 members, and
  *  its own three-year line against the index. Null when the id is not a level-1 sector with a
  *  themed fund under it. */
+/** One theme's own three-year line, for `queries/themes.ts`. Exported rather than duplicated. */
+export function themeHistory(id: string): Promise<SectorPoint[]> {
+  return medianMemberHistory(id, 'theme')
+}
+
 export async function getSector(id: string): Promise<SectorDetail | null> {
   if (!dbAvailable) return null
   return detailInner(id)

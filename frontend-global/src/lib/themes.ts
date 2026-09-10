@@ -1,6 +1,10 @@
 // src/lib/themes.ts — the theme view's SHARED SHAPE. No I/O, no `server-only`: the grid and the
 // fund table are client components (rows navigate, headers sort) and the query module is not.
 
+import type { SectorPoint } from './sectors'
+
+export type { SectorPoint }
+
 /** The relative-strength windows a theme is summarised over, shortest first. */
 export const THEME_WINDOWS = ['3m', '6m', '12m'] as const
 export type ThemeWindow = (typeof THEME_WINDOWS)[number]
@@ -70,4 +74,12 @@ export type ThemeFund = {
   rs: Record<ThemeWindow, string | null>
 }
 
-export type ThemeDetail = { row: ThemeRow; funds: ThemeFund[]; date: string }
+export type ThemeDetail = {
+  row: ThemeRow
+  funds: ThemeFund[]
+  date: string
+  /** Three years of the theme's own median-member line, and SPY on the same axes. Empty where the
+   *  theme's funds are too young to have a common base session. Shares its shape and its query
+   *  with the sector line — see `queries/sectors.ts:medianMemberHistory`. */
+  history: SectorPoint[]
+}

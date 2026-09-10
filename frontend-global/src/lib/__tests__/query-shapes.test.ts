@@ -183,3 +183,36 @@ describe('a fund is ranked only among the funds the universe offers', () => {
     expect(counted).toEqual({ 'countries.ts': 4, 'themes.ts': 5, 'sectors.ts': 5 })
   })
 })
+
+// ── one line, two surfaces ────────────────────────────────────────────────────────────────────
+describe('the sector line and the theme line are the same query', () => {
+  // The FM makes his sub-thematic calls at the THEME level and the three-year line existed only
+  // at the sector level. Adding a second copy of a query this carefully tuned — 756 sessions at
+  // stride 5, driven from the member set rather than from a 7.8-million-row bar table, because
+  // the naive version took 16 to 52 seconds per cold sector — is how the two pages start
+  // disagreeing about what a member is and how fast a page loads.
+  const sectors = () => sources().find((s) => s.file === 'sectors.ts')?.text ?? ''
+
+  it('builds the window and the median exactly once', () => {
+    const text = sectors()
+    expect((text.match(/percentile_cont\(0\.5\) WITHIN GROUP \(ORDER BY o\.close_tr \/ b\.close_tr\)/g) ?? []))
+      .toHaveLength(1)
+    expect((text.match(/WITH spy_cal AS \(/g) ?? [])).toHaveLength(1)
+  })
+
+  it('varies only the one predicate that separates a sector from a theme', () => {
+    // A sector owns the themes beneath it; a theme owns itself. Both sides are parameters — an
+    // id interpolated as text here would be an injection in a query the whole board reads.
+    expect(sectors()).toContain('CASE WHEN ${bySector} THEN tx.parent_id ELSE tx.id END = ${id}')
+  })
+
+  it('draws the line over the comparable members, matching the card above it', () => {
+    // A 3x fund's line is three times the thing by construction. A fund under the liquidity floor
+    // is an ordinary fund and belongs in the median — the same cut the score uses.
+    // Anchored on the BUILDER, not on the first "member AS (" in the file — the sector roll-up
+    // has a `sector_member` CTE whose name contains the same substring, and matching that instead
+    // is how this assertion would pass while looking at the wrong query.
+    const builder = sectors().slice(sectors().indexOf('async function medianMemberHistory'))
+    expect(builder).toContain('NOT coalesce(c.leveraged, false) AND NOT coalesce(c.inverse, false)')
+  })
+})

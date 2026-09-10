@@ -1,12 +1,14 @@
 'use client'
-// SectorTrend — how the sector has actually been doing, against the index, over three years.
+// MedianMemberTrend — how a sector OR A THEME has actually been doing, against the index, over
+// three years. It lives here rather than under sectors/ because the FM's sub-thematic calls are
+// made at the theme level and the line is the same line.
 //
 // The FM: "we can have much better representations of sectors at the theme level: different
 // visuals… line charts, historic data, and how these sectors have been doing."
 //
 // WHAT THE LINE IS, EXACTLY. Each member fund is rebased to its OWN close on the window's first
 // session; the sector is the MEDIAN of those growth factors, rebased to 100. Median, not mean and
-// not AUM-weighted — one $30bn fund is not a sector — which is the same rule every roll-up on this
+// not AUM-weighted — one $30bn fund is not a sector or a theme — which is the same rule every roll-up on this
 // board follows. SPY on the same two axes is the baseline, so "up 40" and "up 40 while the index
 // made 55" are visibly different pictures.
 //
@@ -17,7 +19,7 @@
 import { AtlasLightweightChart, type ChartSeries } from '@/components/charts/AtlasLightweightChart'
 import type { SectorPoint } from '@/lib/sectors'
 
-export function SectorTrend({ name, points }: { name: string; points: readonly SectorPoint[] }) {
+export function MedianMemberTrend({ name, points }: { name: string; points: readonly SectorPoint[] }) {
   if (points.length < 2) return null
   const series: ChartSeries[] = [
     { name, data: points.map((p) => ({ time: p.date, value: p.index })), color: 'accent', lineWidth: 2 },

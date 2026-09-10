@@ -7,7 +7,9 @@ import Link from 'next/link'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Section } from '@/components/ui/Section'
 import { RsCell } from '@/components/countries/RsCell'
-import { formatPct, formatUsd } from '@/lib/format'
+import { formatIsoDate, formatPct, formatUsd } from '@/lib/format'
+import { InfoTip } from '@/components/ui/InfoTip'
+import { MedianMemberTrend } from '@/components/shared/MedianMemberTrend'
 import { THEME_WINDOWS, type ThemeDetail, type ThemeWindow } from '@/lib/themes'
 import { decileColour } from '@/lib/scores'
 import { BuildBasketLink, SEED_LIMIT } from '@/components/portfolios/BuildBasketLink'
@@ -16,7 +18,7 @@ import { ThemeFundTable } from './ThemeFundTable'
 const WINDOW_LABEL: Record<ThemeWindow, string> = { '3m': '3 months', '6m': '6 months', '12m': '1 year' }
 
 export function ThemeView({ detail, minMembers }: { detail: ThemeDetail; minMembers: number }) {
-  const { row, funds, date } = detail
+  const { row, funds, date, history } = detail
   const median = row.median_composite == null ? null : Number(row.median_composite)
   const top = row.top_composite == null ? null : Number(row.top_composite)
   const showDecile = row.n_offered >= minMembers
@@ -98,6 +100,30 @@ export function ThemeView({ detail, minMembers }: { detail: ThemeDetail; minMemb
           </table>
         </div>
       </Section>
+
+      {/* THE THEME'S OWN THREE YEARS. The FM: "we can have much better representations of sectors
+          at the theme level: different visuals… line charts, historic data." The sector had this
+          line and the theme did not, which is backwards — a sub-thematic call is made HERE. */}
+      {history.length > 1 && (
+        <Section
+          title="How this theme has been doing"
+          note={`since ${formatIsoDate(history[0].date)}, rebased to 100`}
+        >
+          <div className="panel px-3 py-3">
+            <MedianMemberTrend name={row.name} points={history} />
+            <p className="mt-1 text-meta text-ink-3">
+              The MEDIAN member fund&apos;s total return, each rebased to its own close on the first
+              session shown, against the S&amp;P over the same sessions.{' '}
+              <InfoTip title="What this line leaves out">
+                Membership is fixed at the start of the window, so a fund listed since is not in
+                this line and one that closed is not either. Geared and inverse funds are out of it
+                for the same reason they are out of the score: their line is a multiple or a
+                negation of the theme, not the theme.
+              </InfoTip>
+            </p>
+          </div>
+        </Section>
+      )}
 
       <Section
         title="Which fund to own"
