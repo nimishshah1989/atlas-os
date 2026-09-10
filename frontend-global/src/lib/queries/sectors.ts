@@ -71,26 +71,38 @@ const rollup = (src: string, key: string) => `
   SELECT ${key} AS group_id,
          count(*)                                     AS n_funds,
          count(composite)                             AS n_scored,
+         count(*) FILTER (WHERE in_universe)          AS n_offered,
          sum(aum_usd)                                 AS aum_usd,
-         percentile_cont(0.5) WITHIN GROUP (ORDER BY composite)::numeric(6,2)   AS composite,
-         percentile_cont(0.5) WITHIN GROUP (ORDER BY rs_3m_spy)::numeric        AS rs_3m,
-         percentile_cont(0.5) WITHIN GROUP (ORDER BY rs_6m_spy)::numeric        AS rs_6m,
-         percentile_cont(0.5) WITHIN GROUP (ORDER BY rs_12m_spy)::numeric       AS rs_12m,
-         -- count(x) is the MEASURED denominator: a theme whose funds are all too young for a
-         -- 200-day line is null here, not 0% (rule #0).
-         (count(*) FILTER (WHERE above_ema_200)::numeric
-            / nullif(count(above_ema_200), 0))        AS above_ema200_frac,
-         (array_agg(symbol ORDER BY composite DESC NULLS LAST))[1] AS top_symbol,
-         (array_agg(name   ORDER BY composite DESC NULLS LAST))[1] AS top_name,
-         -- The unscored, split into the three stories they actually tell. Every one is a rule the
-         -- FM set or a fund too young to measure — never a gap in the scorer, which grades
-         -- everything universe_snapshot admits.
-         count(*) FILTER (WHERE composite IS NULL AND exclusion_reason = 'below_floor')  AS n_small,
-         count(*) FILTER (WHERE composite IS NULL AND exclusion_reason IN ('leveraged', 'inverse'))
-                                                                                        AS n_geared,
-         count(*) FILTER (WHERE composite IS NULL
-                            AND exclusion_reason IN ('no_bars', 'too_few_observations', 'stale'))
-                                                                                        AS n_young
+         -- EVERY STATISTIC BELOW IS OVER THE OFFERED FUNDS, and that FILTER is the whole point of
+         -- this change. The board's headline fund for Semiconductors was SMHD — MicroSectors -3x
+         -- SHORT Semiconductor ETNs, top of the theme on a composite of 93.75 earned by the sector
+         -- falling — and for Artificial Intelligence it was COOL, which trades zero dollars a day.
+         -- Eight of thirty-two themes were headed by a fund the FM cannot buy, because the median
+         -- and the argmax were taken over everything MEASURED rather than everything OFFERED.
+         percentile_cont(0.5) WITHIN GROUP (ORDER BY composite)
+           FILTER (WHERE in_universe)::numeric(6,2)   AS composite,
+         percentile_cont(0.5) WITHIN GROUP (ORDER BY rs_3m_spy)
+           FILTER (WHERE in_universe)::numeric        AS rs_3m,
+         percentile_cont(0.5) WITHIN GROUP (ORDER BY rs_6m_spy)
+           FILTER (WHERE in_universe)::numeric        AS rs_6m,
+         percentile_cont(0.5) WITHIN GROUP (ORDER BY rs_12m_spy)
+           FILTER (WHERE in_universe)::numeric        AS rs_12m,
+         -- count(x) is the MEASURED denominator: a theme whose offered funds are all too young for
+         -- a 200-day line is null here, not 0% (rule #0).
+         (count(*) FILTER (WHERE above_ema_200 AND in_universe)::numeric
+            / nullif(count(above_ema_200) FILTER (WHERE in_universe), 0))
+                                                      AS above_ema200_frac,
+         (array_agg(symbol ORDER BY composite DESC NULLS LAST)
+            FILTER (WHERE in_universe))[1]            AS top_symbol,
+         (array_agg(name   ORDER BY composite DESC NULLS LAST)
+            FILTER (WHERE in_universe))[1]            AS top_name,
+         -- The funds the universe does not offer, split into the three stories they actually tell.
+         -- Counted on the exclusion reason alone: they carry composites now, so the old
+         -- "composite IS NULL AND …" made all three read zero and the gap unexplained.
+         count(*) FILTER (WHERE exclusion_reason = 'below_floor')                  AS n_small,
+         count(*) FILTER (WHERE exclusion_reason IN ('leveraged', 'inverse'))      AS n_geared,
+         count(*) FILTER (WHERE exclusion_reason IN ('no_bars', 'too_few_observations', 'stale'))
+                                                                                  AS n_young
   FROM ${src} GROUP BY ${key}
 `
 
@@ -102,6 +114,7 @@ type NodeDbRow = {
   symbol: string | null
   n_funds: number
   n_scored: number
+  n_offered: number
   aum_usd: string | null
   composite: string | null
   above_ema200_frac: string | null
@@ -129,9 +142,10 @@ const treeInner = eodCached(async (): Promise<SectorTree> => {
     , theme_key AS (SELECT DISTINCT tx_theme_id, theme_name, sector_id FROM scoped)
     SELECT 'sector'::text AS level, r.group_id AS id, NULL::text AS parent_id,
            sec.name, NULL::text AS symbol,
-           r.n_funds, r.n_scored, r.aum_usd::text, r.composite::text,
+           r.n_funds, r.n_scored, r.n_offered, r.aum_usd::text, r.composite::text,
            r.rs_3m::text, r.rs_6m::text, r.rs_12m::text, r.above_ema200_frac::text,
-           RANK() OVER (ORDER BY r.composite DESC NULLS LAST)                    AS rank,
+           CASE WHEN r.composite IS NOT NULL
+                THEN RANK() OVER (ORDER BY r.composite DESC NULLS LAST) END      AS rank,
            count(*) FILTER (WHERE r.composite IS NOT NULL) OVER ()                AS n_ranked,
            r.top_symbol, r.top_name, r.n_small, r.n_geared, r.n_young
     FROM sector_roll r
@@ -139,9 +153,10 @@ const treeInner = eodCached(async (): Promise<SectorTree> => {
 
     UNION ALL
     SELECT 'theme', r.group_id, k.sector_id, k.theme_name, NULL,
-           r.n_funds, r.n_scored, r.aum_usd::text, r.composite::text,
+           r.n_funds, r.n_scored, r.n_offered, r.aum_usd::text, r.composite::text,
            r.rs_3m::text, r.rs_6m::text, r.rs_12m::text, r.above_ema200_frac::text,
-           RANK() OVER (PARTITION BY k.sector_id ORDER BY r.composite DESC NULLS LAST),
+           CASE WHEN r.composite IS NOT NULL
+                THEN RANK() OVER (PARTITION BY k.sector_id ORDER BY r.composite DESC NULLS LAST) END,
            count(*) FILTER (WHERE r.composite IS NOT NULL) OVER (PARTITION BY k.sector_id),
            r.top_symbol, r.top_name, r.n_small, r.n_geared, r.n_young
     FROM theme_roll r JOIN theme_key k ON k.tx_theme_id = r.group_id
@@ -151,17 +166,23 @@ const treeInner = eodCached(async (): Promise<SectorTree> => {
     -- readable in the same header: above_ema200_frac is 1 or 0 for ONE fund, and the median of
     -- those same ones and zeros for the node above it.
     SELECT 'fund', s.symbol, s.tx_theme_id, s.name, s.symbol,
-           1, (s.composite IS NOT NULL)::int, s.aum_usd::text, s.composite::text,
+           1, (s.composite IS NOT NULL)::int, s.in_universe::int, s.aum_usd::text, s.composite::text,
            s.rs_3m_spy::text, s.rs_6m_spy::text, s.rs_12m_spy::text,
            s.above_ema_200::int::text,
-           RANK() OVER (PARTITION BY s.tx_theme_id ORDER BY s.composite DESC NULLS LAST),
-           count(*) FILTER (WHERE s.composite IS NOT NULL) OVER (PARTITION BY s.tx_theme_id),
+           -- Ranked among the OFFERED funds of its theme, and NULL when it is not one of them:
+           -- a fund the FM's rules keep out has no place in the ordering, though it keeps the
+           -- composite the scorer measured and stays on the page.
+           CASE WHEN s.in_universe THEN RANK() OVER (
+                  PARTITION BY s.tx_theme_id
+                  ORDER BY (CASE WHEN s.in_universe THEN s.composite END) DESC NULLS LAST) END,
+           count(*) FILTER (WHERE s.composite IS NOT NULL AND s.in_universe)
+                          OVER (PARTITION BY s.tx_theme_id),
            s.symbol, s.name,
            -- At the leaf the three counts are this ONE fund's own answer, 1 or 0, so the columns
            -- mean the same thing at every depth exactly as every other column here does.
-           (s.composite IS NULL AND s.exclusion_reason = 'below_floor')::int,
-           (s.composite IS NULL AND s.exclusion_reason IN ('leveraged', 'inverse'))::int,
-           (s.composite IS NULL AND s.exclusion_reason IN ('no_bars', 'too_few_observations', 'stale'))::int
+           (s.exclusion_reason = 'below_floor')::int,
+           (s.exclusion_reason IN ('leveraged', 'inverse'))::int,
+           (s.exclusion_reason IN ('no_bars', 'too_few_observations', 'stale'))::int
     FROM scoped s
   `
   const [anchor] = await db()<{ date: string | null; n_unthemed: number }[]>`
@@ -181,12 +202,14 @@ const treeInner = eodCached(async (): Promise<SectorTree> => {
     n_children: 0,
     n_funds: Number(r.n_funds),
     n_scored: Number(r.n_scored),
+    n_offered: Number(r.n_offered),
     aum_usd: r.aum_usd,
     composite: r.composite,
     above_ema200_frac: r.above_ema200_frac,
     rs: rsOf(r),
-    // A rank over a population where nothing is scored is not rank 1, it is no rank.
-    rank: r.composite == null ? null : Number(r.rank),
+    // A rank over a population where nothing is offered is not rank 1, it is no rank — and the
+    // SQL says so with a NULL rather than leaving it to be inferred from a null composite.
+    rank: r.rank == null ? null : Number(r.rank),
     n_ranked: Number(r.n_ranked),
     top_symbol: r.top_symbol,
     top_name: r.top_name,

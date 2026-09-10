@@ -34,10 +34,18 @@ is 3 and ``..._high_min_layers`` is 2: a single-lens score cannot be HIGH howeve
 That is the methodology working as designed, not a defect — conviction means agreement between
 independent reads, and there is only one read today.
 
-GEARED AND INVERSE FUNDS ARE NEVER SCORED. They are classified and listed, but
-``universe_snapshot.in_universe`` excludes them (the FM's rule of 2026-09-07) and this script
-scores the in-universe set, so a 3x fund cannot appear in a ranking or be picked up by a
-basket. The same cut removes everything below the FM's ADV$ floor.
+GEARED AND INVERSE FUNDS ARE SCORED, AND MUST NOT BE OFFERED. This paragraph used to say they
+were never scored, on the strength of a join to ``universe_snapshot.in_universe`` that the FM
+himself asked to be removed ("we should score all the funds, irrespective… from a scoring point
+of view, we have coverage that is close to 100%"). Scoring them is right and the docstring simply
+went stale: measuring a fund is not the same as putting it forward.
+
+What keeps a 3x fund out of a ranking is therefore NOT this script. It is two separate things:
+``peer_group`` below, which ranks geared funds only against each other, and
+``universe_snapshot.in_universe``, which every consumer — the board's country, theme and sector
+rankings, and every basket — cuts its population over. The same cut removes everything below the
+FM's ADV$ floor. A consumer that ranks on ``composite`` alone will offer him a bear fund as a way
+to own the thing it bets against, which is exactly what the board did until 2026-09-10.
 
 DECILES ARE NOT STORED. They are cut on read — ``ntile(10) OVER (PARTITION BY date,
 peer_group ORDER BY composite)`` — exactly as India cuts them within cap cohort

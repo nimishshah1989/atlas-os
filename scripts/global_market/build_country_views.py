@@ -37,7 +37,7 @@ after somebody buys it.
 RANK, NOT JUST RELATIVE STRENGTH (P2-E, the FM's decision D2 of 2026-09-09). ``composite`` is
 the representative fund's own composite from ``etf_scores_daily`` — the same number the ETF
 board shows for that fund, read here rather than recomputed, so a country and its fund can
-never disagree. ``breadth_pct`` is the share of that market's SCORED funds at or above
+never disagree. ``breadth_pct`` is the share of that market's OFFERED funds at or above
 ``rollup_breadth_min``: it separates "one strong fund" from "the whole market is working",
 which is the difference between a trade and a theme. Its denominator is the scored members,
 not all members, and the report carries both counts so the page can say which.
@@ -92,7 +92,7 @@ REPORT_COLUMNS = (
     "adv_usd_60d_median",
     "n_etfs",
     "n_eligible",
-    "n_scored",
+    "n_offered",
     "composite",
     "breadth_pct",
     "rs_3m_spy",
@@ -111,11 +111,15 @@ ANCHOR_SQL = f"SELECT max(date) AS d FROM {M}.technical_daily WHERE date <= :cut
 MEMBERS_SQL = f"""
 SELECT im.instrument_id::text AS instrument_id, im.symbol, im.name,
        t.adv_usd_60d_median, {", ".join(f"t.{c}" for c in RS_COLUMNS)},
-       s.composite
+       s.composite,
+       coalesce(u.in_universe, false) AS in_universe
 FROM {M}.instrument_master im
 JOIN {M}.technical_daily t USING (instrument_id)
 LEFT JOIN {M}.etf_scores_daily s
        ON s.instrument_id = im.instrument_id AND s.date = :anchor
+LEFT JOIN {M}.universe_snapshot u
+       ON u.instrument_id = im.instrument_id
+      AND u.date = (SELECT max(date) FROM {M}.universe_snapshot)
 WHERE im.asset_class = 'etf' AND im.is_active AND t.date = :anchor
 """
 
@@ -183,19 +187,23 @@ def country_rows(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def breadth(group: pd.DataFrame, minimum: Decimal) -> tuple[int, float | None]:
-    """``(n_scored, percent of them at or above the cut)`` for one country.
+    """``(n_offered, percent of them at or above the cut)`` for one country.
 
-    The denominator is the SCORED members, not every member: geared, inverse and
-    below-floor funds carry no composite by design (they are excluded from ``in_universe``),
-    and counting them as failures would make every market look weak in proportion to how many
-    leveraged products someone launched on it. A market with nothing scored gets ``None`` —
-    not 0, which reads as "measured, and bad".
+    THE DENOMINATOR IS THE OFFERED MEMBERS, and it has to be stated rather than assumed. This
+    used to say "the scored members", on the reasoning that geared, inverse and below-floor
+    funds carry no composite by design. They all carry one now — ``score_etfs.py`` grades
+    everything the FM asked it to — so that denominator had quietly become "every fund anyone
+    ever launched on this market". Japan's breadth was counting ProShares UltraShort MSCI Japan,
+    a bet AGAINST Japan scoring 7.55, as evidence that Japan is weak.
+
+    So the population is ``universe_snapshot.in_universe``: the funds his own rules offer. A
+    market with nothing offered gets ``None`` — not 0, which reads as "measured, and bad".
     """
-    scored = group["composite"].dropna()
-    if scored.empty:
+    offered = group.loc[group["in_universe"].fillna(False).astype(bool), "composite"].dropna()
+    if offered.empty:
         return 0, None
-    above = int((scored >= float(minimum)).sum())
-    return len(scored), round(100.0 * above / len(scored), 2)
+    above = int((offered >= float(minimum)).sum())
+    return len(offered), round(100.0 * above / len(offered), 2)
 
 
 def daily_rows(
@@ -207,7 +215,7 @@ def daily_rows(
     for iso2, group in frame.groupby("iso2", sort=True):
         pick = representative(group)
         n_eligible = int(group["eligible"].sum())
-        n_scored, breadth_pct = breadth(group, breadth_min)
+        n_offered, breadth_pct = breadth(group, breadth_min)
         # The country's composite IS its representative's, read from the scorer's own row.
         # Averaging the market's funds would blend a strong tracker with the thin products
         # nobody would buy, and the number would then describe no instrument at all.
@@ -234,7 +242,7 @@ def daily_rows(
                 None if pick is None else pick["adv_usd_60d_median"],
                 len(group),
                 n_eligible,
-                n_scored,
+                n_offered,
                 composite,
                 breadth_pct,
                 None if pick is None else pick["rs_3m_spy"],

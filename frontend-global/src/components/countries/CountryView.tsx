@@ -15,10 +15,11 @@ import { Section } from '@/components/ui/Section'
 import { StatCard } from '@/components/ui/StatCard'
 import { formatUsd } from '@/lib/format'
 import { RS_WINDOWS, type CountryDetail, type RsWindow } from '@/lib/countries'
+import { countryPicks, countryRest } from '@/lib/countryPicks'
 import { decileColour } from '@/lib/scores'
 import type { InstrumentSeries } from '@/lib/queries/series'
-import { BuildBasketLink, SEED_LIMIT } from '@/components/portfolios/BuildBasketLink'
 import { CountryFundTable } from './CountryFundTable'
+import { CountryPicks } from './CountryPicks'
 import { RsCell } from './RsCell'
 
 const REGION_NAMES: Record<string, string> = {
@@ -39,8 +40,8 @@ export function CountryView({ detail, series }: { detail: CountryDetail; series:
   const { row, funds, date } = detail
   const composite = num(row.composite)
   const breadth = num(row.breadth_pct)
-  const ranked = funds.filter((f) => f.rank != null).map((f) => f.symbol)
-  const scored = ranked.length
+  const picks = countryPicks(funds)
+  const offered = funds.filter((f) => f.rank != null).length
 
   return (
     <div className="page">
@@ -72,7 +73,7 @@ export function CountryView({ detail, series }: { detail: CountryDetail; series:
           label="Breadth"
           value={breadth == null ? '—' : breadth.toFixed(0)}
           unit={breadth == null ? undefined : '%'}
-          sub={`${scored} of ${row.n_etfs} funds scored`}
+          sub={`${offered} of ${row.n_etfs} funds you can buy`}
         />
         <StatCard label="Funds listed" value={row.n_etfs} sub={REGION_NAMES[row.region ?? ''] ?? row.region ?? '—'} />
         <StatCard
@@ -113,19 +114,21 @@ export function CountryView({ detail, series }: { detail: CountryDetail; series:
 
       {row.symbol && series.points.length > 0 && <PriceSection series={series} symbol={row.symbol} />}
 
+      {/* THE ANSWER, THEN THE EVIDENCE. The FM: "If you have 18, 20 ETFs under Japan, which one
+          will I even buy?" — a ranking answers which is strongest, not which is the one. */}
+      <Section
+        title="Which fund to buy"
+        note="one card per decision, not one per fund"
+      >
+        <CountryPicks picks={picks} rest={countryRest(funds, picks)} />
+      </Section>
+
       <Section
         title="Every fund covering this market"
-        aside={
-          <BuildBasketLink
-            symbols={ranked}
-            name={row.name}
-            label={`Build a basket from the top ${Math.min(ranked.length, SEED_LIMIT)}`}
-          />
-        }
         note={
-          scored > 0
-            ? `ranked over the ${scored} that carry a score`
-            : 'none carries a score — all are geared, hedged or below the liquidity floor'
+          offered > 0
+            ? `ranked over the ${offered} your universe rules offer; the rest keep the score we measured and say which rule left them out`
+            : 'none clears your universe rules — all are geared, inverse or below your liquidity floor'
         }
       >
         <CountryFundTable funds={funds} />

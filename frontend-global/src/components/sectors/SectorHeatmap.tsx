@@ -207,8 +207,11 @@ function Row({ node, open, toggle, span }: RowProps) {
             )}
           </span>
         </td>
-        <td className={`${NUM} text-ink-2`} title={`${node.n_scored} of ${node.n_funds} funds carry a composite`}>
-          {node.level === 'fund' ? '' : `${node.n_scored}/${node.n_funds}`}
+        <td
+          className={`${NUM} text-ink-2`}
+          title={`${node.n_offered} of ${node.n_funds} funds clear your universe rules — every figure on this row is over those. ${node.n_scored} carry a composite at all.`}
+        >
+          {node.level === 'fund' ? '' : `${node.n_offered}/${node.n_funds}`}
         </td>
         <td className={NUM}>
           <ScoreCell node={node} span={span} />

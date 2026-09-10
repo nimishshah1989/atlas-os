@@ -10,9 +10,11 @@
 // weight and the Σ=1 rule are checked again by the server action against instrument_master and the
 // FM's own thresholds, so this link cannot write anything: it can only open a form.
 //
-// ONLY RANKED FUNDS GO IN. A fund with no rank was never scored — it is geared, inverse, hedged or
-// below the liquidity floor — and putting one into a basket seed would propose buying something
-// the board deliberately refused to grade.
+// ONLY RANKED FUNDS GO IN, and what a rank now means is that the FM's universe rules OFFER the
+// fund. Everything is measured, so "has a score" stopped being the test: on the live board the
+// top twelve Japan funds by score included ProShares Ultra MSCI Japan, a 2x geared product, at
+// rank 12 — inside this link's own seed. The rankings are cut over universe_snapshot.in_universe
+// and this link inherits that cut.
 import Link from 'next/link'
 
 /** The most a seeded basket opens with. Beyond this the FM is not choosing, they are indexing —

@@ -25,6 +25,7 @@ const node = (
   n_children: 0,
   n_funds: 1,
   n_scored: composite == null ? 0 : 1,
+  n_offered: composite == null ? 0 : 1,
   aum_usd: null,
   composite,
   above_ema200_frac: null,

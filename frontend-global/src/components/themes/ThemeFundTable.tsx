@@ -17,6 +17,7 @@ import { DecileMeter } from '@/components/ui/DecileMeter'
 import { formatPct, formatUsd } from '@/lib/format'
 import { THEME_WINDOWS, type ThemeFund, type ThemeWindow } from '@/lib/themes'
 import { decileColour } from '@/lib/scores'
+import { whyNotOffered } from '@/lib/universe'
 
 const LABEL: Record<ThemeWindow, string> = { '3m': '3M', '6m': '6M', '12m': '1Y' }
 
@@ -27,10 +28,12 @@ const ROLE: Record<string, string> = {
   not_applicable: '',
 }
 
-/** Why the scorer skipped this fund. Not a judgement — an exclusion, and which one. */
+/** Why this fund is not in the ranking, in the producer's own words. Not a judgement on the fund
+ *  — its composite is right there beside it — but on whether the FM's rules offer it. */
 function flags(f: ThemeFund): string | null {
-  const on = [f.leveraged && 'geared', f.inverse && 'inverse', f.hedged && 'hedged'].filter(Boolean)
-  return on.length ? on.join(' · ') : null
+  const on = [whyNotOffered(f.exclusion_reason), f.hedged ? 'hedged' : null]
+  const set = on.filter((x): x is string => typeof x === 'string' && x.length > 0)
+  return set.length ? set.join(' · ') : null
 }
 
 const lens = (v: string | null) => (v == null ? '—' : Number(v).toFixed(0))

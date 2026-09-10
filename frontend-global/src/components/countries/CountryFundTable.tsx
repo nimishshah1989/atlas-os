@@ -8,24 +8,28 @@
 // is what the market's own score above says. Two different questions, two different populations,
 // and conflating them is how a table starts lying.
 //
-// A fund with no rank is not last. It is geared, inverse, currency-hedged or below the liquidity
-// floor, so the scorer never looked at it — the flags column says which, and it sits below the
-// ranked block rather than at the bottom of it.
+// A FUND WITH NO RANK IS NOT LAST, AND IT IS NOT UNMEASURED EITHER. The scorer grades nearly
+// everything; what a missing rank means is that the FM's universe rules do not OFFER this fund —
+// it is geared, inverse, or below his liquidity floor — so it keeps the composite we measured,
+// sits below the ranked block, and says on its own row which rule kept it out.
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { DecileMeter } from '@/components/ui/DecileMeter'
 import { formatPct, formatUsd } from '@/lib/format'
 import type { CountryFund } from '@/lib/countries'
 import { decileColour } from '@/lib/scores'
+import { whyNotOffered } from '@/lib/universe'
 import { RsCell } from './RsCell'
 
 const SHOWN = ['3m', '6m', '12m'] as const
 const LABEL: Record<(typeof SHOWN)[number], string> = { '3m': '3M', '6m': '6M', '12m': '1Y' }
 
-/** Why the scorer skipped this fund — the same three exclusions build_country_views.py applies. */
+/** Why this fund is not in the ranking, in the producer's own words. A currency hedge is not an
+ *  exclusion — it is a different call on the same market — so it is shown either way. */
 function flags(f: CountryFund): string | null {
-  const on = [f.leveraged && 'geared', f.inverse && 'inverse', f.hedged && 'hedged'].filter(Boolean)
-  return on.length ? on.join(' · ') : null
+  const on = [whyNotOffered(f.exclusion_reason), f.hedged ? 'hedged' : null]
+  const set = on.filter((x): x is string => typeof x === 'string' && x.length > 0)
+  return set.length ? set.join(' · ') : null
 }
 
 export function CountryFundTable({ funds }: { funds: CountryFund[] }) {

@@ -10,6 +10,7 @@ import type { CountryRow } from '@/lib/countries'
 
 const sector = (id: string, name: string, composite: string | null, kids: number): SectorNode => ({
   level: 'sector', id, name, symbol: null, n_children: kids, n_funds: kids, n_scored: kids,
+  n_offered: kids,
   aum_usd: null, composite, above_ema200_frac: null,
   rs: { '3m': '0.05', '6m': null, '12m': null },
   rank: null, n_ranked: 0, top_symbol: null, top_name: null,
@@ -18,6 +19,7 @@ const sector = (id: string, name: string, composite: string | null, kids: number
 
 const theme = (id: string, name: string, median: string | null, scored: number): ThemeRow => ({
   id, name, sector_id: null, sector_name: null, n_funds: scored, n_scored: scored,
+  n_offered: scored,
   aum_usd: null, median_composite: median, above_ema200_frac: null,
   top_symbol: null, top_name: null, top_composite: null, top_decile: null,
   rs: { '3m': null, '6m': null, '12m': null },
@@ -25,7 +27,7 @@ const theme = (id: string, name: string, median: string | null, scored: number):
 
 const country = (iso2: string, name: string, composite: string | null, symbol: string | null): CountryRow => ({
   iso2, name, region: null, symbol, fund_name: null, adv_usd_60d_median: null, n_etfs: 1,
-  composite, breadth_pct: null, decile: null, rank: null, n_ranked: 0,
+  composite, breadth_pct: null, decile: null, rank: null, n_ranked: 0, exclusion_reason: null,
   rs: { '1w': null, '1m': null, '3m': null, '6m': null, '12m': null, '24m': null },
 })
 

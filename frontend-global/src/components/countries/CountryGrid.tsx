@@ -21,6 +21,7 @@ import { formatUsd } from '@/lib/format'
 import type { CountryList, CountryRow, RsWindow } from '@/lib/countries'
 import { RS_WINDOWS } from '@/lib/countries'
 import { decileColour } from '@/lib/scores'
+import { whyNotOffered } from '@/lib/universe'
 import { RsCell } from './RsCell'
 
 const REGION_NAMES: Record<string, string> = {
@@ -72,6 +73,9 @@ function Row({ row }: { row: CountryRow }) {
           <>
             <span className="font-medium text-ink">{row.symbol}</span>
             <span className="ml-2 text-meta text-ink-3">{row.fund_name}</span>
+            {whyNotOffered(row.exclusion_reason) && (
+              <span className="ml-2 text-meta text-neg">{whyNotOffered(row.exclusion_reason)}</span>
+            )}
           </>
         ) : (
           // Not a gap in the data: every fund covering this market is geared, inverse or

@@ -65,19 +65,37 @@ describe('a threshold is read by the column names the table actually has', () =>
 })
 
 describe('a double never reaches the browser as text', () => {
+  // EVERY CALL SITE IS EXAMINED BY CONSTRUCTION: find the call, then read forward to the FIRST
+  // cast that follows it and require that cast to be numeric. Whatever sits in between —
+  // WITHIN GROUP, FILTER, arithmetic, a wrapping paren — cannot switch the check off.
+  //
+  // THAT MATTERS BECAUSE THIS GUARD ONCE WENT BLIND AND STAYED GREEN. It used to match the call,
+  // an optional WITHIN GROUP and then the cast, as one rigid shape. Adding
+  // `FILTER (WHERE in_universe)` between the two made it match NOTHING in themes.ts or
+  // sectors.ts — nine percentile_cont calls, zero inspected, every test passing.
+  function firstCastAfter(text: string, from: number): string | null {
+    const cast = /::\s*(\w+)/.exec(text.slice(from, from + 400))
+    return cast ? cast[1] : null
+  }
+
   it('casts every double-precision aggregate through numeric before text', () => {
     const offenders: string[] = []
+    let inspected = 0
     for (const { file, text } of sources()) {
       for (const agg of DOUBLE_AGGREGATES) {
-        // the call, whatever is between its parentheses and any WITHIN GROUP clause, then the
-        // cast that immediately follows it
-        const re = new RegExp(`${agg}\\s*\\([^)]*\\)(\\s*WITHIN GROUP\\s*\\([^)]*\\))?\\s*::\\s*(\\w+)`, 'gi')
-        for (const m of text.matchAll(re)) {
-          if (!/^numeric$/i.test(m[2])) offenders.push(`${file}: ${agg} → ::${m[2]}`)
+        for (const m of text.matchAll(new RegExp(`${agg}\\s*\\(`, 'gi'))) {
+          inspected++
+          const cast = firstCastAfter(text, m.index + m[0].length)
+          if (cast == null) offenders.push(`${file}: ${agg} with no cast at all`)
+          else if (!/^numeric$/i.test(cast)) offenders.push(`${file}: ${agg} → ::${cast}`)
         }
       }
     }
     expect(offenders).toEqual([])
+    // A guard that inspects nothing passes for the wrong reason. These queries do use these
+    // aggregates; if this ever reaches zero the queries changed shape and the rule needs rewriting,
+    // not deleting.
+    expect(inspected).toBeGreaterThan(0)
   })
 
   it('is worth guarding because the formatter REFUSES the string a double produces', () => {
@@ -89,5 +107,64 @@ describe('a double never reaches the browser as text', () => {
     // The same value written as a decimal formats fine — and prints 0.0%, not −0.0%, because a
     // minus sign in front of a rounded zero claims a direction the number does not have.
     expect(formatPct('-0.00000000000001421085')).toBe('0.0%')
+  })
+})
+
+// ── measured is not offered ───────────────────────────────────────────────────────────────────
+//
+// THE DEFECT THIS GUARDS, measured on the live board on 2026-09-10. score_etfs.py grades nearly
+// every classified fund — the FM asked for that ("we should score all the funds… coverage close to
+// 100%") — so 5,486 funds carried a composite while `universe_snapshot` admitted 1,749. The
+// country, theme and sector surfaces ranked on the composite alone, and inherited every fund the
+// FM's own rules exclude:
+//
+//   • Semiconductors was headed by SMHD, MicroSectors -3x SHORT Semiconductor ETNs, top of the
+//     theme on a composite of 93.75 earned by semiconductors FALLING.
+//   • Artificial Intelligence was headed by COOL, which trades zero dollars a day, and carried a
+//     Direxion AI BEAR 2X inside the ranking.
+//   • Japan's ranking held 18 funds where 9 clear the rules, and "build a basket from the top 12"
+//     seeded ProShares Ultra MSCI Japan, a 2x geared product, at rank 12.
+//   • Ten themes' median composite moved by a point or more once the geared funds came out;
+//     Quantum Computing moved 22.7 → 39.7.
+//
+// The stock half of sectors.ts never had the defect — it joins a `universe AS (… AND in_universe)`
+// CTE — which is the pattern the ETF half now follows.
+describe('a fund is ranked only among the funds the universe offers', () => {
+  const source = (file: string) => sources().find((s) => s.file === file)?.text ?? ''
+
+  // The load-bearing clause of each population cut, by the surface it serves. Deleting one is what
+  // this test exists to notice.
+  const CUTS: [string, string, string][] = [
+    ['countries.ts', 'the market ranking', 'JOIN universe u ON u.instrument_id = g.instrument_id AND u.in_universe'],
+    ['themes.ts', "the theme list's headline fund", 'FROM member m WHERE m.composite IS NOT NULL AND m.in_universe'],
+    ['themes.ts', "one theme's ranking", 'FROM mine WHERE composite IS NOT NULL AND in_universe'],
+    ['sectors.ts', 'the fund leaf of the sector tree', 'CASE WHEN s.in_universe THEN RANK() OVER ('],
+    ['sectors.ts', 'the stock half, which always did this', 'AND in_universe'],
+  ]
+
+  it.each(CUTS)('%s: %s', (file, _what, clause) => {
+    expect(source(file)).toContain(clause)
+  })
+
+  it('cuts every roll-up figure over the offered members, not everything measured', () => {
+    // The offered count, the median, the three relative-strength medians, the above-EMA
+    // denominator and both halves of the headline fund — and a theme whose figures come from funds
+    // nobody can buy the moment any one of them goes.
+    const rollup = source('sectors.ts')
+    expect(rollup.match(/FILTER \(WHERE in_universe\)/g) ?? []).toHaveLength(8)
+    expect(rollup).toContain('count(above_ema_200) FILTER (WHERE in_universe)')
+    expect(rollup).toContain('above_ema_200 AND in_universe')
+  })
+
+  it('has no ranking window it has not been told about', () => {
+    // A pinned count, so a NEW ranking cannot be added without this test being read. If it fails,
+    // add the ranking's own universe cut to CUTS above and then move the number.
+    const counted = Object.fromEntries(
+      ['countries.ts', 'themes.ts', 'sectors.ts'].map((f) => [
+        f,
+        (source(f).match(/(?:RANK|NTILE|ntile)\s*\(/g) ?? []).length,
+      ]),
+    )
+    expect(counted).toEqual({ 'countries.ts': 4, 'themes.ts': 5, 'sectors.ts': 5 })
   })
 })
