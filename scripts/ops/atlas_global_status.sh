@@ -181,7 +181,7 @@ if [ -f "$APP/scripts/db-probe.mjs" ] && [ -f "$APP/.env.local" ]; then
   # database twice for the same answer.
   PROBE_OUT=$(cd "$APP" && timeout 120 node scripts/db-probe.mjs 2>&1 || echo "  (probe did not complete)")
   printf '%s\n' "$PROBE_OUT" | sed 's/^/  /'
-  if printf '%s' "$PROBE_OUT" | grep -q 'HUNG\|FAIL\|did not complete'; then bad "database path has a HUNG or FAIL step above"; else ok "database path healthy"; fi
+  if printf '%s' "$PROBE_OUT" | grep -q 'HUNG\|FAIL\|did not complete'; then bad "the BOARD's database path has a HUNG or FAIL step above"; else ok "the BOARD's database path is healthy (the pipeline's is checked separately, below)"; fi
   ROWS=$(printf '%s' "$PROBE_OUT" | grep -oE '[0-9]+ country_daily row' | grep -oE '^[0-9]+' || echo '?')
   if [ "$ROWS" = "0" ]; then bad "country_daily is EMPTY — /countries will say so until build_country_views.py runs (nightly, or by hand)"; fi
 else
@@ -232,7 +232,12 @@ try:
     url = urllib.parse.urlsplit(_gdb.psycopg2_url())
     print(f"host                   {url.hostname or '?'}:{url.port or '?'}")
     print(f"pooler                 {POOLERS.get(url.port or 0, 'direct, or a port this does not know')}")
-    print(f"role                   {url.username or '?'}")
+    # The role NAME carries the Supabase project ref (`postgres.<ref>`), and this output lands
+    # in a public Actions log. What a reader needs is WHICH role — the cluster superuser or the
+    # board's scoped one — so the part before the dot is printed and the ref is not.
+    role = (url.username or "?").split(".", 1)[0]
+    print(f"role                   {role}{'.***' if '.' in (url.username or '') else ''}"
+          f"{'  (the CLUSTER SUPERUSER, not a scoped role)' if role == 'postgres' else ''}")
 except BaseException as exc:  # noqa: BLE001 - a status check reports its failure, never raises it
     say_failure(exc)
     raise SystemExit(0) from None
