@@ -128,14 +128,43 @@ BASIS_DAYS_PER_YEAR = 365.25  # calendar years for the CAGR exponent, leap years
 
 
 class Gate:
+    """Two kinds of finding, and the difference is what the orchestrator does with one.
+
+    ``check`` ASSERTS: a false one fails the gate, and a failed gate withholds the board's
+    publish for everybody. ``report`` STATES: it prints the same evidence, in the same place,
+    at the same volume, and does not.
+
+    The distinction is not a softening — it is about what a finding is a claim ABOUT. "Tonight's
+    session is missing a third of its rows" is a claim about the run that just happened, and
+    publishing on top of it puts a wrong board in front of the FM. "Eleven of 1,751 instruments
+    have a bad print somewhere in a ten-year archive" is not. Those instruments' numbers are
+    already in Postgres and the board READS Postgres directly, so withholding the publish hides
+    none of them from anybody — it only stops everyone ELSE's numbers from advancing. A gate
+    that protects nothing and costs the whole board its freshness is not a gate, and this one
+    withheld this board for a week.
+
+    The right home for a per-instrument archive defect is a per-instrument exclusion — the
+    quarantine that ``universe_snapshot.exclusion_reason`` already has the shape for — and until
+    that exists those findings are REPORTED, in full, with the CSV they already write.
+    """
+
     def __init__(self) -> None:
         self.fails = 0
+        self.reported = 0
 
     def check(self, name: str, ok: bool, detail: str = "") -> bool:
         tag = "\033[32mPASS\033[0m" if ok else "\033[31mFAIL\033[0m"
         print(f"  [{tag}] {name}{(' — ' + detail) if detail else ''}")
         if not ok:
             self.fails += 1
+        return ok
+
+    def report(self, name: str, ok: bool, detail: str = "") -> bool:
+        """Print a finding exactly as loudly as :meth:`check`, and do not fail the gate."""
+        tag = "\033[32mPASS\033[0m" if ok else "\033[33mWARN\033[0m"
+        print(f"  [{tag}] {name}{(' — ' + detail) if detail else ''}")
+        if not ok:
+            self.reported += 1
         return ok
 
 
@@ -505,6 +534,11 @@ def main() -> None:
         if g.fails == 0
         else f"❌ {args.check} GATE FAIL — {g.fails} check(s) failed"
     )
+    # Reported findings land in the verdict LINE and never in the exit code: the line is read
+    # by a person and the code by the orchestrator. A gate that passes carrying findings has
+    # said so in the one line anybody reads, so "PASS" never means "nothing was found".
+    if g.reported:
+        verdict += f", {g.reported} reported (not blocking)"
     print(f"\n{verdict}")
     sys.exit(0 if g.fails == 0 else 1)
 
