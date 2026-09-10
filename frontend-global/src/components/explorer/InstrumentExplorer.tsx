@@ -15,7 +15,7 @@
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useMemo } from 'react'
-import { ALL, ON, type FacetGroup, type SortState } from '@/lib/explorer'
+import { ALL, ON, UNIVERSE_KEY, type FacetGroup, type SortState } from '@/lib/explorer'
 import {
   expandRows,
   hasClassification,
@@ -46,7 +46,7 @@ import { StrengthRiskBubble } from './StrengthRiskBubble'
 // The one control that changes what the board IS. A radio, not a checkbox: the two states are
 // exclusive and both are named, so nobody has to guess what the default was filtering out.
 const UNIVERSE: FacetGroup<InstrumentRow> = {
-  key: 'universe',
+  key: UNIVERSE_KEY,
   label: 'Universe',
   kind: 'one',
   value: (r) => (r.in_universe === true ? 'in' : 'out'),

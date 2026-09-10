@@ -47,6 +47,12 @@ export type ExplorerState = { q: string; facets: Record<string, string[]>; sort:
 
 export const ALL = 'all'
 
+/** The universe facet's URL key, named ONCE because two readers depend on it: the rail writes it,
+ *  and `ExplorerPage` reads it on the SERVER to decide how many rows to send. If those two ever
+ *  disagreed the page would widen in the browser while the server kept sending the narrow set —
+ *  "Everything listed" showing nothing, with no error anywhere. */
+export const UNIVERSE_KEY = 'universe'
+
 /** `one`, `min` and `max` are all single-choice rails with an implicit "all". */
 const single = (kind: FacetGroup<unknown>['kind']) => kind === 'one' || kind === 'min' || kind === 'max'
 

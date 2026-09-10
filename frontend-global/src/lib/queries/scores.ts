@@ -54,7 +54,7 @@ export async function getLensWeights(assetClass: AssetClass): Promise<LensWeight
 
 // ── the ETF list ────────────────────────────────────────────────────────────
 
-const etfListInner = eodCached(async (): Promise<ListRow[]> => {
+const etfListInner = eodCached(async (all: boolean): Promise<ListRow[]> => {
   return db()<ListRow[]>`
     ${db().unsafe(ANCHOR)},
     scored_on AS (
@@ -136,7 +136,14 @@ const etfListInner = eodCached(async (): Promise<ListRow[]> => {
     -- /themes shows it under each; this column is the one word the explorer filters on.
     LEFT JOIN atlas_global.taxonomy_sector tx ON tx.id = c.theme_ids[1]
     LEFT JOIN atlas_global.etf_meta em ON em.instrument_id = m.instrument_id
+    -- THE DEFAULT VIEW IS THE UNIVERSE, SO THE DEFAULT PAYLOAD SHOULD BE TOO. The explorer opens
+    -- on the funds the FM can trade and offers "Everything listed" from the rail — but the server
+    -- was sending all 5,659 rows either way, to render 1,749. Measured on the live board: the row
+    -- array is 2,219,342 bytes, 85% of a 2.6 MB page, and the widened set is 69% of it. The facet
+    -- is already a URL parameter, so widening re-renders here rather than unhiding rows the
+    -- browser was carrying all along.
     WHERE m.is_active AND m.asset_class = 'etf'
+      AND (${all} OR coalesce(u.in_universe, false))
     ORDER BY m.symbol
   `
 }, 'etf-list')
@@ -146,7 +153,7 @@ const etfListInner = eodCached(async (): Promise<ListRow[]> => {
 // lens_scores_daily's producer is landing alongside this board, so every score column here is a
 // LEFT JOIN over a table that may hold nothing: MAX(date) of an empty journal is NULL, the join
 // matches no row, and the page renders its "not scored yet" state rather than failing.
-const stockListInner = eodCached(async (): Promise<ListRow[]> => {
+const stockListInner = eodCached(async (all: boolean): Promise<ListRow[]> => {
   return db()<ListRow[]>`
     ${db().unsafe(ANCHOR)},
     scored_on AS (
@@ -210,17 +217,24 @@ const stockListInner = eodCached(async (): Promise<ListRow[]> => {
     LEFT JOIN atlas_global.universe_snapshot u ON u.instrument_id = m.instrument_id AND u.date = a.as_of_d
     LEFT JOIN atlas_global.technical_daily   t ON t.instrument_id = m.instrument_id AND t.date = a.as_of_d
     LEFT JOIN ranked r ON r.instrument_id = m.instrument_id
+    -- Same cut as the ETF list above: the page opens on the universe, so that is what is sent.
     WHERE m.is_active AND m.asset_class = 'stock'
+      AND (${all} OR coalesce(u.in_universe, false))
     ORDER BY m.symbol
   `
 }, 'stock-list')
 
 /** Every active instrument of the class, ranked: the universe verdict, the classification, the
  *  score row with its on-read decile and peer rank, and the technicals at EOD. */
-export async function getInstrumentList(assetClass: AssetClass): Promise<InstrumentList> {
+export async function getInstrumentList(
+  assetClass: AssetClass,
+  /** True only when the reader has widened the universe facet, which is a URL parameter — so the
+   *  two payloads are two cache entries rather than one page filtering the other in the browser. */
+  all = false,
+): Promise<InstrumentList> {
   if (!dbAvailable) return { eod: null, as_of: '', scored_on: null, lenses: [], keys: [], cells: [] }
   const [rows, lenses] = await Promise.all([
-    assetClass === 'etf' ? etfListInner() : stockListInner(),
+    assetClass === 'etf' ? etfListInner(all) : stockListInner(all),
     getLensWeights(assetClass),
   ])
   const first = rows[0]

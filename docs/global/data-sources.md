@@ -121,6 +121,23 @@ date. The cost lens's expense sub-score and `etf_shares_daily` still need an iss
 `etf_shares_daily` is deliberately left empty rather than filled with quarterly points, since
 its documented job is a 21-session Δ-shares proxy.
 
+**Nor is it in the SSGA holdings workbook (measured 2026-09-10).** The obvious next guess, since
+`providers/ssga.py` already downloads these files for SPY's membership, is that the workbook's
+header carries fund facts. It does not. Fetched live, `holdings-daily-us-en-spy.xlsx` opens with
+exactly three header rows — `Fund Name:`, `Ticker Symbol:`, `Holdings: As of …` — and then the
+holdings table (Name, Ticker, Identifier, SEDOL, Weight, Sector, Shares Held, Local Currency).
+No expense ratio and no net assets. A HOLDINGS endpoint answers what a fund owns; the fee lives
+in the issuer's PRODUCT LIST or in the prospectus, which is a different fetch either way.
+
+So two candidate sources are now ruled out on measurement rather than on reading: N-PORT (above)
+and the issuer holdings files. `etf_meta.expense_ratio` is NULL for all 5,659 funds on the live
+board, which means three tables render an always-empty Expense column and the `cost_liquidity`
+lens is computed without its cost sub-score — it renormalises over the sub-scores it has, so the
+number is honest, but it is a cost lens with no cost in it. Whoever picks this up starts from the
+three options above, and should note that the big four issuers cannot reach the plan's ≥90%
+coverage BY FUND COUNT however well their files parse — that target needs a source that covers
+the long tail, which today means the prospectus fee table.
+
 **SPY is absent and that is correct.** It is a unit investment trust, and UITs do not file
 N-PORT; it is not in `company_tickers_mf.json` either. QQQ is present (S000101292).
 
