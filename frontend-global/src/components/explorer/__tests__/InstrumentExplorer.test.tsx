@@ -1,3 +1,4 @@
+import { NOT_CAPTURED } from '@/lib/__tests__/laterColumns'
 /**
  * The three defects this surface was rebuilt to fix, each with a test that fails if it returns.
  *
@@ -46,6 +47,7 @@ const UNSCORED = {
   strategy: null, theme: null, class_asset_class: null, leveraged: null, inverse: null, hedged: null,
   class_status: null, country: null, region: null,
   composite: null, technical: null, conviction_tier: null, peer_group: null, lenses_active: null,
+  ...NOT_CAPTURED,
   composite_decile: null, peer_rank: null, peer_n: null,
   rs_3m_spy: null, rs_6m_spy: null, rs_12m_spy: null, pos_52w: null, adv_usd: null,
   vol_ann: null, mdd_12m: null,

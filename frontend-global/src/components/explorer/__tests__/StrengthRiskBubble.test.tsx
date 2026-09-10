@@ -12,6 +12,7 @@
  */
 import { render } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { NOT_CAPTURED } from '@/lib/__tests__/laterColumns'
 import { StrengthRiskBubble } from '@/components/explorer/StrengthRiskBubble'
 import { toInstrumentRow, type InstrumentDbRow, type InstrumentRow } from '@/lib/facts'
 
@@ -23,6 +24,7 @@ const BASE = {
   region: null, technical: null, peer_rank: null, peer_n: null, pos_52w: null,
   rs_3m_spy: null, rs_6m_spy: null, strategy: null, theme: null, class_asset_class: null,
   conviction_tier: 'HIGH', lenses_active: 3,
+  ...NOT_CAPTURED,
 } as const
 
 const RAW: InstrumentDbRow[] = [

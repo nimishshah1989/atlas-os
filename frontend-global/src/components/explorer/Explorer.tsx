@@ -33,19 +33,28 @@ type Props<R> = {
   /** The facet whose values also render as a chip strip above the table — the grouping a reader
    *  chooses BEFORE reading a ranking. Omitted, there is no strip. */
   stripKey?: string
+  /** Named column sets the reader chooses between — the same rows, a different question. The
+   *  chosen one rides in the URL as `cols`, so a view is an address like every other bit of state
+   *  here. Absent, `columns` is the only set and no switch is drawn. */
+  columnSets?: { key: string; label: string; note: string; columns: Column<R>[] }[]
   /** A second way of reading the SAME filtered rows, offered beside the table. The picture is the
    *  faster read for "what is worth looking at"; the table is the read for "what exactly". Both
    *  are the same set, so a filter narrows both and neither can show something the other hides. */
   chart?: (shown: readonly R[]) => ReactNode
 }
 
-export function Explorer<R extends { symbol: string; name: string | null }>({ rows, columns, groups, defaultSort, rowKey, noun, empty, stripKey, chart }: Props<R>) {
+export function Explorer<R extends { symbol: string; name: string | null }>({ rows, columns, groups, defaultSort, rowKey, noun, empty, stripKey, columnSets, chart }: Props<R>) {
   const params = useSearchParams()
   const pathname = usePathname()
   const state = useMemo(() => parseState(params, groups, defaultSort), [params, groups, defaultSort])
   const values = useMemo(() => Object.fromEntries(groups.map((g) => [g.key, facetValues(rows, g)])), [rows, groups])
   const counts = useMemo(() => facetCounts(rows, state, groups), [rows, state, groups])
-  const byKey = useMemo(() => new Map(columns.map((c) => [c.key, c])), [columns])
+  // Which columns are on screen. An unknown `cols` value falls back to the first set rather than
+  // rendering nothing — a stale bookmark should show the board, not a blank one.
+  const colsParam = params.get('cols')
+  const set = columnSets?.find((c) => c.key === colsParam) ?? columnSets?.[0]
+  const shownColumns = set?.columns ?? columns
+  const byKey = useMemo(() => new Map(shownColumns.map((c) => [c.key, c])), [shownColumns])
   const shown = useMemo(
     () => sortRows(applyFilters(rows, state, groups), state.sort, (r, key) => byKey.get(key)?.sortValue(r) ?? null),
     [rows, state, groups, byKey],
@@ -55,10 +64,13 @@ export function Explorer<R extends { symbol: string; name: string | null }>({ ro
   // rows are shown, only how they are drawn, so it must not take part in "have you filtered?".
   const view = chart && params.get('view') === 'chart' ? 'chart' : 'table'
 
-  function write(next: ExplorerState, nextView: 'table' | 'chart' = view) {
+  function write(next: ExplorerState, nextView: 'table' | 'chart' = view, nextCols = set?.key) {
     const qs = serialiseState(next, groups, defaultSort)
     const p = new URLSearchParams(qs)
     if (nextView === 'chart') p.set('view', 'chart')
+    // The first set is the default, so it stays out of the address: a URL should carry the
+    // choices someone made, not the ones they did not.
+    if (nextCols && columnSets && nextCols !== columnSets[0].key) p.set('cols', nextCols)
     const out = p.toString()
     window.history.replaceState(null, '', out ? `${pathname}?${out}` : pathname)
   }
@@ -100,6 +112,23 @@ export function Explorer<R extends { symbol: string; name: string | null }>({ ro
           <p className="text-body text-ink-2" role="status" data-testid="count" data-total={total} data-shown={shown.length}>
             {line}
           </p>
+          <div className="flex flex-wrap items-center gap-2">
+          {view === 'table' && columnSets && columnSets.length > 1 && (
+            <div className="seg" role="group" aria-label="Which columns to show">
+              {columnSets.map((c) => (
+                <button
+                  key={c.key}
+                  type="button"
+                  className={`text-meta${set?.key === c.key ? ' on' : ''}`}
+                  aria-pressed={set?.key === c.key}
+                  title={c.note}
+                  onClick={() => write(state, view, c.key)}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          )}
           {chart && (
             <div className="seg" role="group" aria-label="How to read these rows">
               {(['table', 'chart'] as const).map((v) => (
@@ -115,11 +144,12 @@ export function Explorer<R extends { symbol: string; name: string | null }>({ ro
               ))}
             </div>
           )}
+          </div>
         </div>
         {view === 'chart' && chart ? (
           chart(shown)
         ) : (
-          <DataTable rows={shown} columns={columns} rowKey={rowKey} sort={state.sort} onSort={(sort) => write({ ...state, sort })} empty={empty} />
+          <DataTable rows={shown} columns={shownColumns} rowKey={rowKey} sort={state.sort} onSort={(sort) => write({ ...state, sort })} empty={empty} />
         )}
       </div>
     </div>

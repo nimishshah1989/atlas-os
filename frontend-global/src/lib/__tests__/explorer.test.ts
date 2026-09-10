@@ -4,6 +4,7 @@
 // $1,000,000). Every score column is null because etf_scores_daily held no rows on that date —
 // which is the state the board must render, not a stand-in for one it does not have (rule #0).
 import { describe, expect, it } from 'vitest'
+import { NOT_CAPTURED } from './laterColumns'
 import {
   ALL,
   applyFilters,
@@ -25,6 +26,7 @@ const UNSCORED = {
   strategy: null, theme: null, class_asset_class: null, leveraged: null, inverse: null, hedged: null,
   class_status: null, country: null, region: null,
   composite: null, technical: null, conviction_tier: null, peer_group: null, lenses_active: null,
+  ...NOT_CAPTURED,
   composite_decile: null, peer_rank: null, peer_n: null,
   rs_3m_spy: null, rs_6m_spy: null, rs_12m_spy: null, pos_52w: null, adv_usd: null,
   vol_ann: null, mdd_12m: null,
